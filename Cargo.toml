@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/combat-core",
+    "crates/kh2-formats",
+    "crates/kh2-data",
+    "crates/kh2-combat-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+
+[workspace.dependencies]
+combat-core = { path = "crates/combat-core" }
+kh2-formats = { path = "crates/kh2-formats" }
+kh2-data = { path = "crates/kh2-data" }
+md-5 = "0.10"
+sha2 = "0.10"
+flate2 = "1"
+thiserror = "1"
+
+[profile.release]
+debug = false

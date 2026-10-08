@@ -1,0 +1,20 @@
+kh2-combat
+Copyright 2026 kh2-combat contributors
+
+This product includes software developed at
+The OpenKH GitHub Repository (https://git.openkh.dev/).
+
+    OpenKH - Open Kingdom Hearts Research and Development
+    Copyright 2019-2022 OpenKH Team and Contributors
+    Licensed under the Apache License, Version 2.0
+
+Ported or adapted from OpenKH (see crates/kh2-formats):
+  - OpenKh.Egs/Hed.cs, EgsHdAsset.cs, EgsEncryption.cs -> crates/kh2-formats/src/egs.rs
+  - OpenKh.Kh2/Bar.cs                                  -> crates/kh2-formats/src/bar.rs
+  - OpenKh.Kh2/Battle/*.cs, BaseTable.cs               -> crates/kh2-formats/src/battle.rs
+Changes: rewritten in Rust; cipher rounds folded into one XOR mask; the
+cipher's substitution table is located in the user's own executable at
+runtime instead of being embedded.
+
+Kingdom Hearts is a trademark of Disney and Square Enix. This project is not
+affiliated with or endorsed by them, and contains no game assets or code.

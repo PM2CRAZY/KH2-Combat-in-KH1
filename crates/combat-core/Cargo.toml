@@ -1,0 +1,9 @@
+[package]
+name = "combat-core"
+description = "Engine-agnostic, data-driven action-RPG combat rules modelled on Kingdom Hearts II. No game data, no engine dependencies."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[dependencies]
