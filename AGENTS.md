@@ -34,3 +34,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - ENMP min/max damage × HP is nearly constant, which suggests a fraction of HP
 - Open: the clamp reading, critical_adjust scope, element ids 4–6. Next: an MSET/ANB motion
   trigger reader to get hitbox timing and Sora's combo attack ids.
+
+### 2026-10-07: milestone 2 (movement + combat playground)
+- Added readers for 03system.bin `pref` (prty/fmab/plyr/sstm), PTYA combo rows, MSET/ANB motion
+  headers, root-motion F-curves, motion triggers and model collision.
+- Findings on the user's install:
+  - trigger frames are 60 Hz and relative to the clip start
+  - Sora's keyblade hitbox windows live in `W_EX010.mset` at the same slots as `P_EX100.mset`
+  - root motion: Dodge Roll 438 units, A300 lunge 92
+  - fmab records 0–3 = growth LV1–MAX
+- Built `character-core` (engine-agnostic controller) and `kh2-bevy` (capsule playground).
+  The playground was verified under Xvfb with `--synthetic --autoplay --screenshot N`. The
+  real-data path was verified on the user's machine with `kh2-combat sora`.
+- Open: gravity (estimated), the combo `sub` chain, skeleton-accurate hitboxes, enemy attacks.

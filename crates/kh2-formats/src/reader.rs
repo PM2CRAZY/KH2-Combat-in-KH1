@@ -57,7 +57,6 @@ impl<'a> Reader<'a> {
     pub fn i64(&mut self) -> Result<i64> {
         Ok(i64::from_le_bytes(self.bytes(8)?.try_into().unwrap()))
     }
-    #[allow(dead_code)] // used by upcoming PTYA reader
     pub fn f32(&mut self) -> Result<f32> {
         Ok(f32::from_bits(self.u32()?))
     }

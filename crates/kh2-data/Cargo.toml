@@ -7,5 +7,6 @@ rust-version.workspace = true
 license = "Apache-2.0"
 
 [dependencies]
+character-core = { path = "../character-core" }
 combat-core.workspace = true
 kh2-formats.workspace = true

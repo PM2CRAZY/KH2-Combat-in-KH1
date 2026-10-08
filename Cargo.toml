@@ -5,6 +5,8 @@ members = [
     "crates/kh2-formats",
     "crates/kh2-data",
     "crates/kh2-combat-cli",
+    "crates/character-core",
+    "crates/kh2-bevy",
 ]
 
 [workspace.package]

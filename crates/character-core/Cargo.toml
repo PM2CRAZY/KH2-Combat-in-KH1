@@ -1,0 +1,10 @@
+[package]
+name = "character-core"
+description = "Engine-agnostic 60 Hz action-character controller (movement, growth abilities, combos) modelled on KH2FM. No game data, no engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+combat-core.workspace = true

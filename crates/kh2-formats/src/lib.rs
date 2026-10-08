@@ -6,6 +6,8 @@
 //! - [`egs`]: the `kh2_*.hed` / `kh2_*.pkg` archive pairs
 //! - [`bar`]: the BAR container format used by most KH2 files
 //! - [`battle`]: typed tables inside `00battle.bin`
+//! - [`motion`]: movesets (MSET/ANB), motion timing, motion triggers, model collision
+//! - [`pref`]: movement parameters from `03system.bin`
 //!
 //! Format knowledge comes from the OpenKH project (Apache-2.0). Parts of
 //! this crate are ports of OpenKH's C# readers; see `NOTICE` and
@@ -17,6 +19,8 @@
 pub mod bar;
 pub mod battle;
 pub mod egs;
+pub mod motion;
+pub mod pref;
 mod reader;
 
 #[derive(Debug, thiserror::Error)]

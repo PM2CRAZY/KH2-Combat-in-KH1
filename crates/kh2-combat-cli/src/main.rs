@@ -17,7 +17,14 @@ Commands:
   plrp                      player starting stats
   lvup  [--char N]          player level-up table (0 = Sora)
   fmlv                      drive form levels
+  ptya  [--set N]           combo tree rows for a moveset id (1 = Sora)
   power-stats               histogram of ATKP power values
+  pref                      movement parameters (03system.bin pref: prty, fmab, plyr, sstm)
+  mset --file obj/X.mset [--slot N] [--all] [--root]
+                            moveset slots with timing and combat triggers
+  sora                      load Sora's controller and run scripted checks (jump, roll, combos, glide)
+  collision --file obj/X.mdlx
+                            model collision shapes (hurtboxes / attack boxes)
   hit --attack ID[:SUB] --enemy ID [--level L] [--str S] [--mag M] [--difficulty beginner|standard|proud|critical]
                             simulate one hit and print every step
 
@@ -61,8 +68,13 @@ fn run(args: &Args) -> Result<(), String> {
     let install = Install::locate(game).map_err(|e| e.to_string())?;
     let source = if args.flag("--backup") { Source::Backup } else { Source::Live };
 
-    if cmd == "info" {
-        return info(&install, source);
+    match cmd.as_str() {
+        "info" => return info(&install, source),
+        "pref" => return pref(&install, source),
+        "mset" => return mset(args, &install, source),
+        "collision" => return collision(args, &install, source),
+        "sora" => return sora(&install, source),
+        _ => {}
     }
 
     let mut data = install.load_from(source).map_err(|e| e.to_string())?;
@@ -128,6 +140,20 @@ fn run(args: &Args) -> Result<(), String> {
             }
         }
         "power-stats" => power_stats(&data),
+        "ptya" => {
+            let n = args.num::<usize>("--set")?.unwrap_or(1);
+            let set = b.ptya.set(n).ok_or("no such ptya set")?;
+            println!("pointers {}", b.ptya.pointers.len());
+            println!(" id kind sub cofs     flag  mot next   jump  jmax  jmin  spmin spmax   near    far    low   high  inmin inmax blend dadj  abil score");
+            for e in set {
+                println!(
+                    "{:>3} {:>4} {:>3} {:>4} {:>8x} {:>4} {:>4} {:>6.1} {:>5.1} {:>5.1} {:>6.1} {:>5.1} {:>6.0} {:>6.0} {:>6.0} {:>6.0} {:>5.0} {:>5.0} {:>5.1} {:>4.1} {:>5} {:>5}",
+                    e.id, e.kind, e.sub, e.combo_offset, e.flag, e.motion, e.next_motion, e.jump, e.jump_max, e.jump_min,
+                    e.speed_min, e.speed_max, e.near, e.far, e.low, e.high, e.inner_min, e.inner_max, e.blend_time,
+                    e.distance_adjust, e.ability, e.score
+                );
+            }
+        }
         "hit" => hit(args, &data)?,
         other => return Err(format!("unknown command {other}")),
     }
@@ -190,5 +216,186 @@ fn hit(args: &Args, data: &CombatData) -> Result<(), String> {
     );
     let out = resolve_hit(&rules, &attack, &sora, &mut enemy);
     println!("result:  {out:#?}");
+    Ok(())
+}
+
+fn pref(install: &Install, source: Source) -> Result<(), String> {
+    use kh2_formats::pref::*;
+    let p = install.load_pref(source).map_err(|e| e.to_string())?;
+    let show = |title: &str, t: &PrefTable, names: &[&str]| {
+        println!("== {title} (pointers: {})", t.pointers.len());
+        print!("   ptr ->");
+        for (i, _) in t.pointers.iter().enumerate() {
+            if let Some(u) = t.unique().position(|r| Some(r) == t.get(i)) {
+                print!(" {i}:{u}");
+            }
+        }
+        println!();
+        for (u, rec) in t.unique().enumerate() {
+            println!("  record {u}");
+            for (i, n) in names.iter().enumerate() {
+                if let Some(v) = rec.get(i) {
+                    println!("    {n:<28} {v:>10.3}");
+                }
+            }
+        }
+    };
+    show("prty", &p.prty, PRTY_FIELDS);
+    show("fmab", &p.fmab, FMAB_FIELDS);
+    show("plyr", &p.plyr, PLYR_FIELDS);
+    show("sstm", &p.sstm, SSTM_FIELDS);
+    Ok(())
+}
+
+fn mset(args: &Args, install: &Install, source: Source) -> Result<(), String> {
+    let file = args.value("--file").unwrap_or("obj/P_EX100.mset");
+    let m = install.load_mset(source, file).map_err(|e| e.to_string())?;
+    let only = args.num::<usize>("--slot")?;
+    let all = args.flag("--all");
+    println!("{file}: type {} slots {}", m.kind, m.slots.len());
+    for s in &m.slots {
+        if only.map_or(false, |o| o != s.index) {
+            continue;
+        }
+        let Some(a) = &s.anb else { continue };
+        let interesting = a.triggers.ranges.iter().any(|r| matches!(r.id, 10 | 11 | 27 | 33 | 35 | 50));
+        if !all && only.is_none() && !interesting {
+            continue;
+        }
+        let (fps, fs, fe, fr) = a.motion.as_ref().map_or((0.0, 0.0, 0.0, 0.0), |m| (m.fps, m.frame_start, m.frame_end, m.frame_return));
+        println!(
+            "slot {:>4} (motion {:>3}.{}) {:<5} fps {fps:>4.0} frames {fs:.0}..{fe:.0} return {fr:.0}",
+            s.index, s.index / 4, s.index % 4, s.name
+        );
+        if args.flag("--root") {
+            if let Some(m) = &a.motion {
+                let mut f = m.frame_start;
+                while f <= m.frame_end + 0.01 {
+                    let p = m.root_at(f);
+                    println!("    root lfr {f:>5.1}  x {:>8.2} y {:>8.2} z {:>8.2}", p[0], p[1], p[2]);
+                    f += 2.0;
+                }
+            }
+        }
+        for r in &a.triggers.ranges {
+            println!("    range {:>4}..{:<4} id {:>2} {:?}", r.start, r.end, r.id, r.params);
+        }
+        for f in &a.triggers.frames {
+            println!("    frame {:>4}      id {:>2} {:?}", f.frame, f.id, f.params);
+        }
+    }
+    Ok(())
+}
+
+fn collision(args: &Args, install: &Install, source: Source) -> Result<(), String> {
+    let file = args.value("--file").ok_or("missing --file")?;
+    let bytes = install.read_any(source, file).map_err(|e| e.to_string())?;
+    let c = kh2_formats::motion::parse_model_collision(&bytes).map_err(|e| e.to_string())?;
+    println!("grp parts  arg type shape bone      x      y      z     ph radius height");
+    for o in c {
+        println!(
+            "{:>3} {:>5} {:>4} {:>4} {:>5} {:>4} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}",
+            o.group, o.parts, o.argument, o.kind, o.shape, o.bone, o.position[0], o.position[1], o.position[2],
+            o.position_height, o.radius, o.height
+        );
+    }
+    Ok(())
+}
+
+fn sora(install: &Install, source: Source) -> Result<(), String> {
+    use character_core::*;
+    let data = install.load_sora(source).map_err(|e| e.to_string())?;
+    let base = data.character.clone();
+    println!("params: {:?}", base.params);
+    println!("attack: {:?}", base.attack);
+    println!("growth levels: {}", base.growth.len());
+    println!("clips: {} motions, combo rows: {}", data.motions.len(), base.moveset.combo_rows.len());
+    for m in [3u16, 5, 42, 151, 152, 153, 154, 155, 181, 182, 183, 184, 201, 202, 203, 209] {
+        if let Some(c) = base.moveset.clips.get(&m) {
+            let hits: Vec<String> = c.windows.iter().filter_map(|w| match w.kind {
+                WindowKind::Hitbox { attack, group, .. } => Some(format!("atk{attack}/g{group}@{}..{}", w.start, w.end.map_or("end".into(), |e| e.to_string()))),
+                WindowKind::Guard => Some(format!("guard@{}..{:?}", w.start, w.end)),
+                _ => None,
+            }).collect();
+            let combo = c.first(|k| matches!(k, WindowKind::Combo));
+            let fin = c.first(|k| matches!(k, WindowKind::Finisher));
+            println!("  motion {m:>3}: {:>3} frames, root {:>6.1}, combo@{combo:?} finisher@{fin:?} {}", c.length, c.root_distance(), hits.join(" "));
+        }
+    }
+    println!("blade groups: {:?}", data.blade_groups.keys().collect::<Vec<_>>());
+
+    #[derive(Clone, Copy, Default)]
+    struct Pad { stick: [f32; 2], jump: bool, attack: bool, action: bool }
+    struct W { ch: Character, pos: [f32; 3], prev: [bool; 3], targets: Vec<TargetInfo> }
+    impl W {
+        fn step(&mut self, p: Pad) -> Output {
+            let input = Input {
+                stick: p.stick,
+                jump: Button::from_held(self.prev[0], p.jump),
+                attack: Button::from_held(self.prev[1], p.attack),
+                action: Button::from_held(self.prev[2], p.action),
+                lock: Button::default(),
+            };
+            self.prev = [p.jump, p.attack, p.action];
+            let env = Env { pos: self.pos, grounded: self.pos[1] <= 0.0, height_above_ground: self.pos[1].max(0.0), targets: &self.targets };
+            let o = self.ch.step(&input, &env);
+            for i in 0..3 { self.pos[i] += o.displacement[i]; }
+            self.pos[1] = self.pos[1].max(0.0);
+            o
+        }
+    }
+    let new = |levels: Abilities| { let mut ch = base.clone(); ch.abilities = levels; W { ch, pos: [0.0; 3], prev: [false; 3], targets: Vec::new() } };
+
+    // Jump
+    let mut w = new(Abilities::default());
+    let mut apex = (0.0f32, 0);
+    let mut takeoff = None;
+    for f in 0..200 {
+        let o = w.step(Pad { jump: f == 0, ..Default::default() });
+        if takeoff.is_none() && w.pos[1] > 0.0 { takeoff = Some(f); }
+        if w.pos[1] > apex.0 { apex = (w.pos[1], f); }
+        if f > 5 && w.pos[1] == 0.0 && o.state != StateName::Air { println!("jump: takeoff frame {takeoff:?}, apex {:.1} at frame {}, landed frame {f}", apex.0, apex.1); break; }
+    }
+    // Roll per level
+    for lv in 1..=4u8 {
+        let mut w = new(Abilities { dodge_roll: lv, ..Default::default() });
+        let mut inv = 0; let mut frames = 0;
+        for f in 0..120 {
+            let o = w.step(Pad { stick: [0.0, 1.0], action: f == 0, ..Default::default() });
+            if o.state == StateName::DodgeRoll { frames += 1; if o.invulnerable { inv += 1; } } else if f > 0 { break; }
+        }
+        println!("dodge roll LV{lv}: {frames} frames, {inv} invulnerable, distance {:.1}", w.pos[2]);
+    }
+    // Combo, no target, mashing
+    for (label, targets) in [("no target", vec![]), ("target 120 ahead", vec![TargetInfo { id: 1, pos: [0.0, 0.0, 120.0] }]), ("target 250 ahead", vec![TargetInfo { id: 1, pos: [0.0, 0.0, 250.0] }])] {
+        let mut w = new(Abilities::default());
+        w.targets = targets;
+        let mut seq = Vec::new();
+        for f in 0..300 {
+            let o = w.step(Pad { attack: f % 2 == 0, ..Default::default() });
+            if o.state == StateName::Attack && o.clip_frame == 0 { seq.push(format!("f{f}:m{}", o.motion)); }
+            for h in &o.hitboxes { if seq.last().map_or(false, |s| !s.contains('[')) { let l = seq.pop().unwrap(); seq.push(format!("{l}[hit atk{} from f{f}]", h.attack)); } }
+        }
+        println!("ground combo ({label}): {}", seq.join(" -> "));
+    }
+    // Air combo
+    let mut w = new(Abilities::default());
+    let mut seq = Vec::new();
+    for f in 0..300 {
+        let o = w.step(Pad { jump: f == 0, attack: f > 20 && f % 2 == 0, ..Default::default() });
+        if o.state == StateName::Attack && o.clip_frame == 0 { seq.push(format!("f{f}:m{}@y{:.0}", o.motion, w.pos[1])); }
+    }
+    println!("air combo: {}", seq.join(" -> "));
+    // Glide per level
+    for lv in 1..=4u8 {
+        let mut w = new(Abilities { glide: lv, high_jump: 4, ..Default::default() });
+        let mut glide_frames = 0; let mut start = None;
+        for f in 0..2000 {
+            let o = w.step(Pad { jump: f == 0 || f > 30, stick: [0.0, 1.0], ..Default::default() });
+            if o.state == StateName::Glide { glide_frames += 1; if start.is_none() { start = Some((w.pos[1], w.pos[2])); } }
+            if f > 31 && o.state != StateName::Glide && start.is_some() { break; }
+        }
+        if let Some((y0, z0)) = start { println!("glide LV{lv}: {glide_frames} frames from y {y0:.0}, travelled {:.0}", w.pos[2] - z0); }
+    }
     Ok(())
 }

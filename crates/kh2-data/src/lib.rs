@@ -10,6 +10,8 @@
 //! let shadow = data.enemy(1, None).unwrap();
 //! ```
 
+pub mod sora;
+
 use std::path::{Path, PathBuf};
 
 use combat_core::{
@@ -19,6 +21,8 @@ use combat_core::{
 use kh2_formats::battle::{Atkp, Battle, Enmp};
 use kh2_formats::egs::{Archive, KeyTable};
 pub use kh2_formats::{Error, Result};
+
+const ARCHIVES: [&str; 6] = ["kh2_first", "kh2_second", "kh2_third", "kh2_fourth", "kh2_fifth", "kh2_sixth"];
 
 /// Executable names, in the order tried, that carry the PKG key table.
 const EXECUTABLES: &[&str] = &["KINGDOM HEARTS II FINAL MIX.exe", "KINGDOM HEARTS FINAL MIX.exe"];
@@ -77,6 +81,16 @@ impl Install {
         self.archive_path(Source::Backup, "kh2_first.hed").is_file()
     }
 
+    /// The backup folder only holds the archives a mod manager touched; for
+    /// the others the live file is the original. Falls back accordingly.
+    fn resolve(&self, source: Source, file: &str) -> PathBuf {
+        let p = self.archive_path(source, file);
+        if source == Source::Backup && !p.is_file() {
+            return self.archive_path(Source::Live, file);
+        }
+        p
+    }
+
     pub fn key_table(&self) -> Result<KeyTable> {
         KeyTable::from_executable(&self.executable)
     }
@@ -86,6 +100,33 @@ impl Install {
         let keys = self.key_table()?;
         let archive = Archive::open(self.archive_path(source, "kh2_first.hed"))?;
         archive.read(&keys, name)
+    }
+
+    /// Reads a file from whichever `kh2_*` archive holds it (first match in
+    /// the order first..sixth).
+    pub fn read_any(&self, source: Source, name: &str) -> Result<Vec<u8>> {
+        let keys = self.key_table()?;
+        for part in ARCHIVES {
+            let hed = self.resolve(source, &format!("{part}.hed"));
+            if !hed.is_file() {
+                continue;
+            }
+            let archive = Archive::open(&hed)?;
+            if archive.find(name).is_some() {
+                return archive.read(&keys, name);
+            }
+        }
+        Err(Error::NotFound(name.to_string()))
+    }
+
+    /// Movement parameters from `03system.bin`.
+    pub fn load_pref(&self, source: Source) -> Result<kh2_formats::pref::Pref> {
+        kh2_formats::pref::Pref::from_03system(&self.read_any(source, "03system.bin")?)
+    }
+
+    /// A moveset, e.g. `obj/P_EX100.mset` (Sora).
+    pub fn load_mset(&self, source: Source, name: &str) -> Result<kh2_formats::motion::Mset> {
+        kh2_formats::motion::Mset::parse(&self.read_any(source, name)?)
     }
 
     pub fn load(&self) -> Result<CombatData> {

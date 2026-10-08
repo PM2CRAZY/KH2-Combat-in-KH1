@@ -263,6 +263,101 @@ pub struct Btlv {
     pub world_levels: [u8; 19],
 }
 
+/// One PTYA row: an attack choice in a character's combo tree. 68 bytes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PtyaEntry {
+    pub id: u8,
+    pub kind: u8,
+    pub sub: i8,
+    pub combo_offset: i8,
+    pub flag: u32,
+    /// Motion id (player moveset slot = motion * 4 + relative).
+    pub motion: u16,
+    pub next_motion: u16,
+    pub jump: f32,
+    pub jump_max: f32,
+    pub jump_min: f32,
+    pub speed_min: f32,
+    pub speed_max: f32,
+    pub near: f32,
+    pub far: f32,
+    pub low: f32,
+    pub high: f32,
+    pub inner_min: f32,
+    pub inner_max: f32,
+    pub blend_time: f32,
+    pub distance_adjust: f32,
+    /// Ability (03system item id) that unlocks this row; 0 = always.
+    pub ability: u16,
+    pub score: u16,
+}
+
+/// PTYA: `type u32 | count u32 | count x set offset u32`, each set
+/// `n u32 | n x PtyaEntry`. The pointer index is the moveset id shared with
+/// `pref/prty` (1 = Sora).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Ptya {
+    pub pointers: Vec<u32>,
+    sets: Vec<(u32, Vec<PtyaEntry>)>,
+}
+
+impl Ptya {
+    pub fn set(&self, moveset: usize) -> Option<&[PtyaEntry]> {
+        let p = *self.pointers.get(moveset)?;
+        self.sets.iter().find(|(o, _)| *o == p).map(|(_, v)| v.as_slice())
+    }
+
+    fn parse(d: &[u8]) -> Result<Ptya> {
+        let mut r = Reader::new(d);
+        let _ty = r.u32()?;
+        let n = r.u32()? as usize;
+        if n > 1024 {
+            return bad("ptya: implausible pointer count");
+        }
+        let pointers = (0..n).map(|_| r.u32()).collect::<Result<Vec<_>>>()?;
+        let mut sets: Vec<(u32, Vec<PtyaEntry>)> = Vec::new();
+        for &p in &pointers {
+            if p == 0 || sets.iter().any(|(o, _)| *o == p) {
+                continue;
+            }
+            let mut r = Reader::at(d, p as usize);
+            let count = r.u32()? as usize;
+            if count > 512 {
+                return bad("ptya: implausible set size");
+            }
+            let mut v = Vec::with_capacity(count);
+            for _ in 0..count {
+                v.push(PtyaEntry {
+                    id: r.u8()?,
+                    kind: r.u8()?,
+                    sub: r.i8()?,
+                    combo_offset: r.i8()?,
+                    flag: r.u32()?,
+                    motion: r.u16()?,
+                    next_motion: r.u16()?,
+                    jump: r.f32()?,
+                    jump_max: r.f32()?,
+                    jump_min: r.f32()?,
+                    speed_min: r.f32()?,
+                    speed_max: r.f32()?,
+                    near: r.f32()?,
+                    far: r.f32()?,
+                    low: r.f32()?,
+                    high: r.f32()?,
+                    inner_min: r.f32()?,
+                    inner_max: r.f32()?,
+                    blend_time: r.f32()?,
+                    distance_adjust: r.f32()?,
+                    ability: r.u16()?,
+                    score: r.u16()?,
+                });
+            }
+            sets.push((p, v));
+        }
+        Ok(Ptya { pointers, sets })
+    }
+}
+
 /// The combat-relevant tables of `00battle.bin`.
 #[derive(Clone, Debug, Default)]
 pub struct Battle {
@@ -276,6 +371,8 @@ pub struct Battle {
     pub fmlv: Vec<Fmlv>,
     pub magc: Vec<Magc>,
     pub btlv: Vec<Btlv>,
+    /// Combo trees (attack selection rules) per moveset id.
+    pub ptya: Ptya,
     /// Names of BAR entries present but not parsed by this crate.
     pub unparsed: Vec<String>,
 }
@@ -292,6 +389,7 @@ impl Battle {
                 "plrp" => b.plrp = table("plrp", d, Plrp::SIZE, Plrp::read)?,
                 "lvpm" => b.lvpm = parse_lvpm(d)?,
                 "lvup" => b.lvup = parse_lvup(d)?,
+                "ptya" => b.ptya = Ptya::parse(d)?,
                 "fmlv" => {
                     b.fmlv = table("fmlv", d, 8, |r| {
                         let b0 = r.u8()?;
