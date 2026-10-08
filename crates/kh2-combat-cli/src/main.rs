@@ -22,9 +22,11 @@ Commands:
   pref                      movement parameters (03system.bin pref: prty, fmab, plyr, sstm)
   mset --file obj/X.mset [--slot N] [--all] [--root]
                             moveset slots with timing and combat triggers
-  sora                      load Sora's controller and run scripted checks (jump, roll, combos, glide)
+  sora [--data-dir DIR]     load Sora's controller and run scripted checks (jump, roll, combos, glide)
   collision --file obj/X.mdlx
                             model collision shapes (hurtboxes / attack boxes)
+  extract --file obj/X.mset --out local/X.mset
+                            copy one file out of your archives (for local research; never commit it)
   hit --attack ID[:SUB] --enemy ID [--level L] [--str S] [--mag M] [--difficulty beginner|standard|proud|critical]
                             simulate one hit and print every step
 
@@ -62,12 +64,25 @@ fn main() -> ExitCode {
 
 fn run(args: &Args) -> Result<(), String> {
     let cmd = args.0.first().ok_or("missing command")?.clone();
+    if let (true, Some(dir)) = (cmd == "sora", args.value("--data-dir")) {
+        // Research: Sora's files already extracted into a local folder.
+        let data = kh2_data::sora::load_sora_dir(std::path::Path::new(dir)).map_err(|e| e.to_string())?;
+        return sora_checks(data);
+    }
     let game = args.value("--game").ok_or("missing --game")?;
     let install = Install::locate(game).map_err(|e| e.to_string())?;
     let source = if args.flag("--backup") { Source::Backup } else { Source::Live };
 
     match cmd.as_str() {
         "info" => return info(&install, source),
+        "extract" => {
+            let file = args.value("--file").ok_or("missing --file")?;
+            let out = args.value("--out").ok_or("missing --out")?;
+            let bytes = install.read_any(source, file).map_err(|e| e.to_string())?;
+            std::fs::write(out, &bytes).map_err(|e| e.to_string())?;
+            println!("{} bytes -> {out}", bytes.len());
+            return Ok(());
+        }
         "pref" => return pref(&install, source),
         "mset" => return mset(args, &install, source),
         "collision" => return collision(args, &install, source),
@@ -291,8 +306,18 @@ fn collision(args: &Args, install: &Install, source: Source) -> Result<(), Strin
 }
 
 fn sora(install: &Install, source: Source) -> Result<(), String> {
+    sora_checks(install.load_sora(source).map_err(|e| e.to_string())?)
+}
+
+fn sora_checks(data: kh2_data::sora::SoraData) -> Result<(), String> {
     use character_core::*;
-    let data = install.load_sora(source).map_err(|e| e.to_string())?;
+    match (&data.rig, &data.rig_error) {
+        (Some(r), _) => println!(
+            "rig: {} bones, {} motions; Keyblade {} bones, {} motions, attached to bone {:?}; {} attack spheres",
+            r.skeleton.len(), r.motions.len(), r.weapon_skeleton.len(), r.weapon_motions.len(), r.weapon_bone, r.weapon_attacks.len()
+        ),
+        (None, e) => println!("rig: not loaded ({e:?})"),
+    }
     let base = data.character.clone();
     println!("params: {:?}", base.params);
     println!("attack: {:?}", base.attack);
@@ -379,12 +404,20 @@ fn sora(install: &Install, source: Source) -> Result<(), String> {
         if o.state == StateName::Attack && o.clip_frame == 0 { seq.push(format!("f{f}:m{}@y{:.0}", o.motion, w.pos[1])); }
     }
     println!("air combo: {}", seq.join(" -> "));
+    // Aerial Dodge (all growth MAX), pressed 20 frames after the jump.
+    let mut w = new(Abilities::max_growth());
+    let mut log = Vec::new();
+    for f in 0..90 {
+        let o = w.step(Pad { jump: f == 0 || f == 20, stick: [0.0, 1.0], ..Default::default() });
+        if (16..60).contains(&f) && f % 2 == 0 { log.push(format!("f{f}:{:?}/m{}/y{:.0}", o.state, o.motion, w.pos[1])); }
+    }
+    println!("aerial dodge: {}", log.join(" "));
     // Glide per level
     for lv in 1..=4u8 {
         let mut w = new(Abilities { glide: lv, high_jump: 4, ..Default::default() });
         let mut glide_frames = 0; let mut start = None;
         for f in 0..2000 {
-            let o = w.step(Pad { jump: f == 0 || f > 30, stick: [0.0, 1.0], ..Default::default() });
+            let o = w.step(Pad { jump: f == 0 || f > 30, stick: [0.0, 1.0], ..Default::default() }); // aerial dodge off: jump in air = glide
             if o.state == StateName::Glide { glide_frames += 1; if start.is_none() { start = Some((w.pos[1], w.pos[2])); } }
             if f > 31 && o.state != StateName::Glide && start.is_some() { break; }
         }

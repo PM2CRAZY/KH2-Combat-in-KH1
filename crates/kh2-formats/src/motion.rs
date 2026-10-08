@@ -276,16 +276,20 @@ impl MotionInfo {
 pub struct Anb {
     pub motion: Option<MotionInfo>,
     pub triggers: MotionTriggers,
+    /// The full keyframed motion (for posing a skeleton). `None` for raw
+    /// motions or ANBs without motion data.
+    pub pose: Option<crate::anim::Interpolated>,
 }
 
 impl Anb {
     pub fn parse(buf: &[u8]) -> Result<Anb> {
         let bar = Bar::parse(buf)?;
-        let mut anb = Anb { motion: None, triggers: MotionTriggers::default() };
+        let mut anb = Anb { motion: None, triggers: MotionTriggers::default(), pose: None };
         for e in &bar.entries {
             match e.kind {
                 BAR_TYPE_MOTION if anb.motion.is_none() && !e.data.is_empty() => {
-                    anb.motion = MotionInfo::parse(e.data).ok()
+                    anb.motion = MotionInfo::parse(e.data).ok();
+                    anb.pose = crate::anim::Interpolated::parse(e.data).ok().flatten();
                 }
                 BAR_TYPE_MOTION_TRIGGERS if !e.data.is_empty() => anb.triggers = MotionTriggers::parse(e.data)?,
                 _ => {}

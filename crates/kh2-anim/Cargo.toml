@@ -1,0 +1,11 @@
+[package]
+name = "kh2-anim"
+description = "Poses a KH2 skeleton from an interpolated motion (FK, IK helpers, constraints). No meshes or textures."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+kh2-formats.workspace = true
+glam = "0.29"

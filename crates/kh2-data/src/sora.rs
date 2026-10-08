@@ -4,10 +4,12 @@
 //! and Keyblade hitbox shapes from `obj/W_EX010.mdlx`.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use character_core::{
     AttackParams, Character, Clip, ComboRow, Event, EventKind, GrowthLevel, MoveParams, Moveset, Window, WindowKind,
 };
+use kh2_formats::anim::{parse_skeleton, Bone, Interpolated};
 use kh2_formats::battle::PtyaEntry;
 use kh2_formats::motion::{range_id, Anb, Mset, ObjectCollision};
 use kh2_formats::pref::{field, Pref, FMAB_FIELDS, PLYR_FIELDS, PRTY_FIELDS, SSTM_FIELDS};
@@ -19,6 +21,9 @@ pub const SORA_MOVESET: usize = 1;
 pub const PLAYER_MSET: &str = "obj/P_EX100.mset";
 pub const WEAPON_MSET: &str = "obj/W_EX010.mset";
 pub const WEAPON_MDLX: &str = "obj/W_EX010.mdlx";
+pub const PLAYER_MDLX: &str = "obj/P_EX100.mdlx";
+/// Sora's object-table entry (its weapon-joint id picks the `sklt` row).
+pub const PLAYER_OBJECT: &str = "P_EX100";
 
 /// SSTM float index of "attack distance to speed" (the ground lunge factor).
 pub const SSTM_ATTACK_DISTANCE_TO_SPEED: usize = 42;
@@ -31,6 +36,36 @@ pub struct BladeSphere {
     pub radius: f32,
 }
 
+/// One attack (or hurt) sphere fixed to a bone.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BoneSphere {
+    pub group: u8,
+    /// Bone index, or `None` for the object's root (feet, facing).
+    pub bone: Option<usize>,
+    /// Offset in the bone's space (model units).
+    pub offset: [f32; 3],
+    pub radius: f32,
+}
+
+/// Sora's and the Keyblade's skeletons and motions, for posing a rig. Read
+/// from the user's install; nothing here is a mesh or texture.
+#[derive(Clone, Debug)]
+pub struct Rig {
+    pub skeleton: Vec<Bone>,
+    /// Motion id → keyframed motion (battle-with-weapon slot, with the game's
+    /// fallback order).
+    pub motions: HashMap<u16, Arc<Interpolated>>,
+    pub weapon_skeleton: Vec<Bone>,
+    pub weapon_motions: HashMap<u16, Arc<Interpolated>>,
+    /// Sora bone the Keyblade's root follows (`sklt` right-hand bone).
+    pub weapon_bone: Option<usize>,
+    /// Attack spheres by collision group: the Keyblade's, then Sora's own.
+    pub weapon_attacks: Vec<BoneSphere>,
+    pub body_attacks: Vec<BoneSphere>,
+    /// Sora's hurt spheres (collision kind 2).
+    pub hurt: Vec<BoneSphere>,
+}
+
 /// Everything needed to run Sora.
 #[derive(Clone, Debug)]
 pub struct SoraData {
@@ -40,6 +75,10 @@ pub struct SoraData {
     pub blade_groups: HashMap<u8, Vec<BladeSphere>>,
     /// Motion ids that resolved to a clip.
     pub motions: Vec<u16>,
+    /// Skeletons and keyframed motions (absent in synthetic test data).
+    pub rig: Option<Arc<Rig>>,
+    /// Why the rig failed to load, if it did.
+    pub rig_error: Option<String>,
 }
 
 fn rec<'a>(t: &'a kh2_formats::pref::PrefTable, i: usize) -> &'a [f32] {
@@ -135,15 +174,18 @@ pub fn combo_row(e: &PtyaEntry) -> ComboRow {
 
 /// Converts an ANB into a clip. Trigger frames are 60 Hz game frames
 /// relative to the clip start; root motion is sampled from the motion's
-/// curves at local frame `start + frame * fps / 60`.
+/// curves on the 60 Hz key timeline, from the clip's start.
 pub fn clip_from_anb(motion: u16, player: &Anb, weapon: Option<&Anb>, combat: &CombatData) -> Clip {
     let (len, root) = match &player.motion {
         Some(m) if m.fps > 0.0 && m.frame_end > m.frame_start => {
             let len = ((m.frame_end - m.frame_start) / m.fps * 60.0).round().max(1.0) as u32;
-            let base = m.root_at(m.frame_start);
+            // Key times are 60 Hz frames; the frame range is in the motion's
+            // own rate.
+            let k0 = m.frame_start * 60.0 / m.fps;
+            let base = m.root_at(k0);
             let root = (0..=len)
                 .map(|g| {
-                    let p = m.root_at(m.frame_start + g as f32 * m.fps / 60.0);
+                    let p = m.root_at(k0 + g as f32);
                     [p[0] - base[0], p[1] - base[1], p[2] - base[2]]
                 })
                 .collect();
@@ -155,7 +197,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapon: Option<&Anb>, combat: &C
         }
     };
     let mut clip = Clip { motion, length: len, root, windows: Vec::new(), events: Vec::new() };
-    for anb in std::iter::once(player).chain(weapon) {
+    for (on_weapon, anb) in std::iter::once((false, player)).chain(weapon.map(|w| (true, w))) {
         for r in &anb.triggers.ranges {
             let p = |i: usize| r.params.get(i).copied().unwrap_or(0);
             let deg = |v: i16| (v as f32).to_radians();
@@ -167,7 +209,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapon: Option<&Anb>, combat: &C
                         WindowKind::Guard
                     } else {
                         let combo = (r.id == range_id::ATTACK_HITBOX_COMBO).then(|| p(2));
-                        WindowKind::Hitbox { attack, group: p(1) as u8, combo }
+                        WindowKind::Hitbox { attack, group: p(1) as u8, combo, weapon: on_weapon }
                     }
                 }
                 range_id::ALLOW_COMBO => WindowKind::Combo,
@@ -216,6 +258,30 @@ fn moves(player: &Mset, weapon: &Mset, combat: &CombatData) -> HashMap<u16, Clip
     clips
 }
 
+/// Collision entries of one kind as bone-attached spheres.
+pub fn bone_spheres(collision: &[ObjectCollision], kind: u8) -> Vec<BoneSphere> {
+    collision
+        .iter()
+        .filter(|c| c.kind == kind)
+        .map(|c| BoneSphere {
+            group: c.group,
+            bone: (c.bone >= 0 && c.bone < 0x4000).then_some(c.bone as usize),
+            offset: [c.position[0] as f32, c.position[1] as f32, c.position[2] as f32],
+            radius: c.radius as f32,
+        })
+        .collect()
+}
+
+fn pose_motions(mset: &Mset) -> HashMap<u16, Arc<Interpolated>> {
+    let mut out = HashMap::new();
+    for m in 0..=230u16 {
+        if let Some(p) = mset.slot_for(m as usize, true, true).and_then(|s| s.anb.as_ref()).and_then(|a| a.pose.clone()) {
+            out.insert(m, Arc::new(p));
+        }
+    }
+    out
+}
+
 pub fn blade_groups(collision: &[ObjectCollision]) -> HashMap<u8, Vec<BladeSphere>> {
     let mut g: HashMap<u8, Vec<BladeSphere>> = HashMap::new();
     for c in collision.iter().filter(|c| c.kind == 6) {
@@ -226,19 +292,61 @@ pub fn blade_groups(collision: &[ObjectCollision]) -> HashMap<u8, Vec<BladeSpher
 
 impl Install {
     pub fn load_sora(&self, source: Source) -> Result<SoraData> {
-        let combat = self.load_from(source)?;
-        let pref = self.load_pref(source)?;
-        let player = self.load_mset(source, PLAYER_MSET)?;
-        let weapon = self.load_mset(source, WEAPON_MSET)?;
-        let mdlx = self.read_any(source, WEAPON_MDLX)?;
-        let collision = kh2_formats::motion::parse_model_collision(&mdlx)?;
-
-        let clips = moves(&player, &weapon, &combat);
-        let mut motions: Vec<u16> = clips.keys().copied().collect();
-        motions.sort();
-        let combo_rows = combat.battle.ptya.set(SORA_MOVESET).unwrap_or(&[]).iter().map(combo_row).collect();
-        let moveset = Moveset { clips, combo_rows };
-        let character = Character::new(moveset, move_params(&pref), growth_levels(&pref), attack_params(&pref));
-        Ok(SoraData { character, combat, blade_groups: blade_groups(&collision), motions })
+        load_sora_with(source, &|name| self.read_any(source, name))
     }
+}
+
+/// Loads Sora from files already extracted into `dir` (by their base names,
+/// e.g. `P_EX100.mset`, `00battle.bin`). For local research and tests only.
+pub fn load_sora_dir(dir: &std::path::Path) -> Result<SoraData> {
+    load_sora_with(Source::Live, &|name| {
+        let base = name.rsplit('/').next().unwrap_or(name);
+        Ok(std::fs::read(dir.join(base))?)
+    })
+}
+
+fn load_sora_with(source: Source, read: &dyn Fn(&str) -> Result<Vec<u8>>) -> Result<SoraData> {
+    let combat = CombatData { battle: kh2_formats::battle::Battle::parse(&read("00battle.bin")?)?, source };
+    let pref = kh2_formats::pref::Pref::from_03system(&read("03system.bin")?)?;
+    let player = Mset::parse(&read(PLAYER_MSET)?)?;
+    let weapon = Mset::parse(&read(WEAPON_MSET)?)?;
+    let mdlx = read(WEAPON_MDLX)?;
+    let collision = kh2_formats::motion::parse_model_collision(&mdlx)?;
+
+    let clips = moves(&player, &weapon, &combat);
+    let mut motions: Vec<u16> = clips.keys().copied().collect();
+    motions.sort();
+    let combo_rows = combat.battle.ptya.set(SORA_MOVESET).unwrap_or(&[]).iter().map(combo_row).collect();
+    let moveset = Moveset { clips, combo_rows };
+    let character = Character::new(moveset, move_params(&pref), growth_levels(&pref), attack_params(&pref));
+    let (rig, rig_error) = match load_rig(read, &player, &weapon, &collision) {
+        Ok(r) => (Some(Arc::new(r)), None),
+        Err(e) => (None, Some(e.to_string())),
+    };
+    Ok(SoraData { character, combat, blade_groups: blade_groups(&collision), motions, rig, rig_error })
+}
+
+fn load_rig(read: &dyn Fn(&str) -> Result<Vec<u8>>, player: &Mset, weapon: &Mset, weapon_collision: &[ObjectCollision]) -> Result<Rig> {
+    let player_mdlx = read(PLAYER_MDLX)?;
+    let skeleton = parse_skeleton(&player_mdlx)?;
+    let weapon_skeleton = parse_skeleton(&read(WEAPON_MDLX)?)?;
+    let body = kh2_formats::motion::parse_model_collision(&player_mdlx)?;
+    let objects = kh2_formats::objentry::parse_objentry(&read("00objentry.bin")?)?;
+    let sklt = kh2_formats::objentry::parse_sklt(&read("03system.bin")?)?;
+    let weapon_bone = objects
+        .iter()
+        .find(|o| o.model == PLAYER_OBJECT)
+        .and_then(|o| sklt.iter().find(|s| s.id == o.weapon_joint as u32))
+        .and_then(|s| (s.bones[0] >= 0).then_some(s.bones[0] as usize))
+        .filter(|&b| b < skeleton.len());
+    Ok(Rig {
+        motions: pose_motions(player),
+        weapon_motions: pose_motions(weapon),
+        weapon_bone,
+        weapon_attacks: bone_spheres(weapon_collision, 6),
+        body_attacks: bone_spheres(&body, 6),
+        hurt: bone_spheres(&body, 2),
+        skeleton,
+        weapon_skeleton,
+    })
 }

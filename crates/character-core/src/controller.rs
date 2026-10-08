@@ -109,7 +109,10 @@ pub struct ActiveHitbox {
     /// Unique per swing and window; feed to a hit tracker.
     pub swing: u64,
     pub attack: u16,
+    /// Collision group of the shapes to use.
     pub group: u8,
+    /// The group belongs to the weapon model (else the character model).
+    pub weapon: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -540,18 +543,6 @@ impl Character {
                 self.start_action(ActionKind::DodgeRoll, motion::DODGE_ROLL);
                 return true;
             }
-        } else if a.aerial_dodge > 0 && self.air_dodge_ready {
-            let g = self.growth(a.aerial_dodge).cloned().unwrap_or_default();
-            self.air_dodge_ready = false;
-            let dir = if moving { norm(input.stick) } else { self.forward() };
-            if moving {
-                self.facing = yaw_of(input.stick);
-            }
-            self.start_arc(g.air_dodge_height);
-            self.vel_h = scale(dir, g.air_dodge_speed);
-            self.vel_y = 0.0;
-            self.start_action(ActionKind::AerialDodge, motion::AERIAL_DODGE);
-            return true;
         }
         if a.quick_run > 0 && moving {
             let g = self.growth(a.quick_run).cloned().unwrap_or_default();
@@ -569,7 +560,23 @@ impl Character {
         false
     }
 
-    fn try_jump(&mut self, env: &Env) -> bool {
+    /// Jump button. On the ground: jump. In the air: Aerial Dodge if this
+    /// airtime still allows it, otherwise Glide.
+    fn try_jump(&mut self, input: &Input, env: &Env) -> bool {
+        if self.airborne && self.abilities.aerial_dodge > 0 && self.air_dodge_ready {
+            let g = self.growth(self.abilities.aerial_dodge).cloned().unwrap_or_default();
+            self.air_dodge_ready = false;
+            let moving = len2(input.stick) > DEAD_ZONE;
+            let dir = if moving { norm(input.stick) } else { self.forward() };
+            if moving {
+                self.facing = yaw_of(input.stick);
+            }
+            self.start_arc(g.air_dodge_height);
+            self.vel_h = scale(dir, g.air_dodge_speed);
+            self.vel_y = 0.0;
+            self.start_action(ActionKind::AerialDodge, motion::AERIAL_DODGE);
+            return true;
+        }
         if !self.airborne {
             let high = self.abilities.high_jump > 0;
             let m = if high && self.clip(motion::HIGH_JUMP).is_some() { motion::HIGH_JUMP } else { motion::JUMP };
@@ -686,7 +693,7 @@ impl Character {
         match std::mem::replace(&mut self.mode, Mode::Free) {
             Mode::Free => {
                 if (input.attack.pressed && self.try_attack(input, env))
-                    || (input.jump.pressed && self.try_jump(env))
+                    || (input.jump.pressed && self.try_jump(input, env))
                     || (input.action.pressed && self.try_action_button(input))
                 {
                     return true;
@@ -741,8 +748,8 @@ impl Character {
                 continue;
             }
             match w.kind {
-                WindowKind::Hitbox { attack, group, .. } => {
-                    fo.hitboxes.push(ActiveHitbox { swing: (act.swing << 8) | wi as u64, attack, group })
+                WindowKind::Hitbox { attack, group, weapon, .. } => {
+                    fo.hitboxes.push(ActiveHitbox { swing: (act.swing << 8) | wi as u64, attack, group, weapon })
                 }
                 WindowKind::TurnToLock(rate) | WindowKind::TurnToTarget(rate) => {
                     if let Some(t) = target {
@@ -823,7 +830,16 @@ impl Character {
                     finished = f >= end_len && (end_len > 0 || len2(self.vel_h) < 0.5);
                 }
             }
-            ActionKind::AerialDodge => {}
+            ActionKind::AerialDodge => {
+                // Jump again mid-dodge: straight into Glide.
+                if input.jump.pressed {
+                    let me = std::mem::replace(&mut self.mode, Mode::Free);
+                    if self.try_jump(input, env) {
+                        return true;
+                    }
+                    self.mode = me;
+                }
+            }
             ActionKind::Guard => {}
             ActionKind::Attack { .. } => {
                 if input.attack.pressed {
@@ -863,7 +879,7 @@ impl Character {
         }
         if cancel_allowed || f >= clip.length {
             if (input.attack.pressed && self.try_attack(input, env))
-                || (input.jump.pressed && self.try_jump(env))
+                || (input.jump.pressed && self.try_jump(input, env))
                 || (input.action.pressed && self.try_action_button(input))
             {
                 return true;

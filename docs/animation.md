@@ -1,0 +1,92 @@
+# Skeleton animation model
+
+This is how `kh2-anim` poses Sora's skeleton. The rules were read from the motion evaluator
+in your copy of KH2 Final Mix's executable, using Ghidra. Only plain-language notes are
+written here; no decompiled code is in the repo. The file layouts come from OpenKH's docs
+(MDLX, ANB/motion, objentry), which credit Kenjiuno's msetDoc research.
+
+Status tags: **Checked (exe)** = read from the executable; **Checked** = verified on your
+install; **Approximation** = ours.
+
+## Data, all read at runtime
+
+| What | Where |
+|---|---|
+| Sora's bones: 256 of them, with bind scale, rotation and translation; scale W is the bone length IK uses | `obj/P_EX100.mdlx`, model entry (BAR type 4) |
+| Motions: initial pose, F-curves, IK helpers, joint order, constraints, limiters, expressions | `obj/P_EX100.mset`, each ANB's motion entry (BAR type 9) |
+| Keyblade bones and its own motions (same motion ids) | `obj/W_EX010.mdlx`, `obj/W_EX010.mset` |
+| Which bone holds the weapon | `00objentry.bin` (Sora's weapon-joint id = 1), then `03system.bin` → `sklt` (id 1 → right-hand bone 178, left 86) |
+| Attack spheres and hurt spheres on bones | MDLX collision entries (kind 6 attack, kind 2 hurt) |
+
+## Time
+
+- **Key times are 60 Hz frames.** The motion's frame range and loop point are in its own
+  rate (usually 30 fps), so the key time is `frame_start × 60 / fps + frames since the clip
+  started`. **Checked (exe)**; the keys of every Sora motion run from 0 to twice
+  `frame_end`.
+- Looping wraps from `frame_end` back to `frame_return`.
+- Root motion is sampled on the same timeline. Earlier versions sampled it at half the rate,
+  so lunges were too short; Sora's first ground swing travels 150 units, not 92.
+
+## F-curves
+
+**Checked (exe):**
+- Interpolation per key: constant, linear or Hermite. The Hermite tangents are scaled by
+  the segment length.
+- Before the first key / after the last: hold, extrapolate along the end key's tangent,
+  repeat, or zero.
+- Rotation channels jump instead of interpolating when two keys at most 2 frames apart
+  differ by 3.14 or more (a wrap-around guard).
+
+## The joint pass
+
+**Checked (exe).** Bones are rotated X, then Y, then Z, then translated. Each joint keeps two
+matrices:
+- an **unscaled** one, the rotation chain, which children inherit
+- a **scaled** one, the same rotation with each axis multiplied by the accumulated scale,
+  plus an explicit position
+
+Scale accumulates separately, component by component. Joints are processed in the motion's
+joint-table order; model bones the motion doesn't address keep their bind offsets. For each
+joint:
+1. **Expressions** targeting it set channels; angles are in degrees.
+2. **Active constraints** on it are collected. An activation table, if present, decides
+   on/off by time.
+3. **Position:** the joint's own translation, or the position of one source (or the midpoint
+   of two). A position limiter can clamp the result.
+4. **Rotation:**
+   - **Orientation** copies the source's matrix.
+   - **Direction / two-point** aims the X axis at the source, keeping Y up, then applies the
+     joint's own X rotation as a twist.
+   - Otherwise the joint's Euler rotation, optionally clamped by a rotation limiter. With
+     the "rotation" flag it is in model space instead of relative to the parent.
+5. **IK.** A joint flagged as an IK chain looks for the position constraint on the chain's
+   end and solves analytically:
+   - **One bone:** aim at the target.
+   - **Two bones** (thigh, knee, then ankle): law of cosines with the bone lengths. Flag 3
+     bends the other way. An up-vector constraint sets the bend plane.
+   - The knee is then marked as computed, and the ankle's position comes from the chain.
+   - This is how Sora's feet stay planted: idle has its lowest bone at exactly y = 0.
+     **Checked.**
+
+Not modelled: the game's ground adaptation for feet on slopes and stairs, and its "look at"
+override for the head.
+
+## Placement in the world
+
+- **Root motion.** The hips move forward inside attack motions, and the game also moves the
+  character by the root-motion curve. So the model is drawn at the character's position
+  minus the clip's current root offset; the A300 hips track the root curve to within a few
+  units. **Checked.**
+- **Air poses.** In-air motions (jump, fall, high jump) keep the feet 20–40 units above the
+  physics position, with legs tucked. That is the real data.
+- **Keyblade.** Its own motion is evaluated with the same motion id and frame, then attached
+  to Sora's bone 178.
+- **Blending.** The playground cross-fades into a new motion over 8 frames. **Approximation:**
+  the game uses per-move blend times, for example PTYA `blend_time`.
+
+## What the playground draws
+
+A mannequin of our own capsules between joints, coloured by state; the Keyblade is drawn the
+same way. No mesh, texture or other asset is loaded. Attack spheres (F1) and hurt spheres
+(F2) sit on the real bones, and hits are tested against them.

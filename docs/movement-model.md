@@ -24,6 +24,11 @@ Units are KH2 world units (about 1 cm) and 60 Hz game frames.
 | Keyblade hitbox shapes | `obj/W_EX010.mdlx` collision (type 6) | |
 | Combo table | `00battle.bin` → `ptya`, pointer 1 | 37 rows for Sora |
 
+## Root motion
+
+Root-motion curves are sampled on the motion's 60 Hz key timeline (see `animation.md`).
+Sora's first ground swing (A300) moves him 150 units. **Checked (exe).**
+
 ## Physics tick
 
 **Checked (exe).** Action logic and input run every frame. Velocities are recomputed on a
@@ -64,7 +69,8 @@ for the tilt) is **Hypothesis**.
 ## Growth abilities
 
 All **Checked (exe)** unless noted:
-- **Aerial Dodge.** Only possible if the jump *started* with Aerial Dodge owned. Walking off
+- **Aerial Dodge.** Pressing **jump** again in mid-air. Only possible if the jump *started*
+  with Aerial Dodge owned. Walking off
   a ledge doesn't allow it. Once per airtime. It starts a fresh jump arc of
   `air_dodge_height` with horizontal speed `air_dodge_speed` along the stick.
 - **Quick Run.** Starts at `air_slide_speed` along the stick, with no gravity, and is

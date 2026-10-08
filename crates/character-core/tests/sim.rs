@@ -82,7 +82,7 @@ fn roll_clip() -> Clip {
 
 fn attack_clip(motion: u16, len: u32, hit: (u32, u32), attack: u16, combo_at: u32) -> Clip {
     let mut c = Clip::plain(motion, len);
-    c.windows.push(Window { start: hit.0, end: Some(hit.1), kind: WindowKind::Hitbox { attack, group: 1, combo: None } });
+    c.windows.push(Window { start: hit.0, end: Some(hit.1), kind: WindowKind::Hitbox { attack, group: 1, combo: None, weapon: true } });
     c.windows.push(Window { start: combo_at, end: None, kind: WindowKind::Combo });
     c
 }
@@ -221,6 +221,7 @@ fn ground_combo_buffers_and_ends_with_finisher() {
 #[test]
 fn glide_needs_height_and_held_button() {
     let mut w = World::new(sora());
+    w.ch.abilities.aerial_dodge = 0;
     w.run(1, Pad { jump: true, ..IDLE });
     w.run(12, IDLE);
     assert!(w.pos[1] > 60.0);
@@ -237,10 +238,20 @@ fn aerial_dodge_once_per_airtime() {
     let mut w = World::new(sora());
     w.run(1, Pad { jump: true, ..IDLE });
     w.run(10, IDLE);
-    let o = w.step(Pad { action: true, ..IDLE });
+    // KH2: Aerial Dodge is the jump button in mid-air.
+    let o = w.step(Pad { jump: true, ..IDLE });
     assert_eq!(o.state, StateName::AerialDodge);
+    w.run(20, IDLE);
+    // Second press this airtime: glide instead (high enough), never a second dodge.
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_ne!(o.state, StateName::AerialDodge);
+    assert_eq!(o.state, StateName::Glide);
+    // Walking off a ledge (no jump) never allows the dodge.
+    let mut w = World::new(sora());
+    w.ch.abilities.glide = 0;
+    w.pos[1] = 300.0;
     w.run(3, IDLE);
-    let o = w.step(Pad { action: true, ..IDLE });
+    let o = w.step(Pad { jump: true, ..IDLE });
     assert_ne!(o.state, StateName::AerialDodge);
 }
 

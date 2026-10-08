@@ -2351,12 +2351,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "kh2-anim"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "kh2-formats",
+]
+
+[[package]]
 name = "kh2-bevy"
 version = "0.1.0"
 dependencies = [
  "bevy",
  "character-core",
  "combat-core",
+ "kh2-anim",
  "kh2-data",
  "kh2-formats",
 ]
@@ -2377,6 +2386,7 @@ version = "0.1.0"
 dependencies = [
  "character-core",
  "combat-core",
+ "kh2-anim",
  "kh2-formats",
 ]
 

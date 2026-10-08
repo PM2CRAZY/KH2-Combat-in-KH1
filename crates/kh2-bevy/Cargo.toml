@@ -1,6 +1,6 @@
 [package]
 name = "kh2-bevy"
-description = "Bevy playground: KH2FM movement and combat on a primitive capsule rig, driven by data read from the user's install."
+description = "Bevy playground: KH2FM movement and combat on a primitive mannequin posed by Sora's skeleton and motions, all read from the user's install."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,6 +15,7 @@ character-core = { path = "../character-core" }
 combat-core.workspace = true
 kh2-data.workspace = true
 kh2-formats.workspace = true
+kh2-anim.workspace = true
 bevy = { version = "=0.15.3", default-features = false, features = [
     "bevy_asset",
     "bevy_color",

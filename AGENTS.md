@@ -76,3 +76,29 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - whiffing alternates 151/153
   - connecting gives 151→153→155
 - Open: jump hold, stick-tilt mapping, landing, cancel points, auto-target, timer units.
+
+### 2026-10-08: skeleton, animation and a mannequin
+- Aerial Dodge is the jump button in mid-air (KH2), then Glide; it was on the action button.
+- New readers:
+  - MDLX skeletons
+  - full interpolated motions (initial pose, F-curves with pre/post behaviour, IK helpers,
+    joint table, constraints, activations, limiters, expressions, external effectors)
+  - `00objentry.bin`
+  - `03system.bin` → `sklt` (weapon bones)
+- New crate `kh2-anim`, implemented from plain-language notes on the exe's motion evaluator:
+  - key times are 60 Hz
+  - the unscaled/scaled matrix pair
+  - constraints and limiters
+  - one- and two-bone analytic IK
+  - the expression language
+- Root motion is now sampled at 60 Hz key time. Lunges were half length before: A300 now
+  travels 150.
+- Playground: Sora is a capsule mannequin on his real bones, playing his real motions, with
+  the Keyblade attached to bone 178. Hits use the real bone-attached attack spheres.
+  `--data-dir local/re` runs from extracted files (research only).
+- Verified locally:
+  - every Sora motion poses without NaNs
+  - idle stands at y = 0
+  - screenshots of idle, run, attack, jump, roll and glide look right
+- Open: per-move blend times, foot ground adaptation, head look-at, the Shadow's own
+  skeleton.

@@ -16,10 +16,12 @@
 //! substitution table) is read from the user's own executable at runtime;
 //! this crate only stores its SHA-256 to recognise it.
 
+pub mod anim;
 pub mod bar;
 pub mod battle;
 pub mod egs;
 pub mod motion;
+pub mod objentry;
 pub mod pref;
 mod reader;
 

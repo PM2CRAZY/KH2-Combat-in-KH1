@@ -45,3 +45,19 @@ fn lvpm_level_99_defense_matches_community_example() {
     // The forum example subtracts 51 Defense for a level-99 enemy.
     assert_eq!(data.battle.lvpm_for(99).unwrap().defense, 51);
 }
+
+/// Sora's rig: skeleton, motions, Keyblade attached to the `sklt` hand bone,
+/// and every motion poses without NaNs.
+#[test]
+fn sora_rig_loads_and_poses() {
+    let Some(i) = install() else { return };
+    let sora = i.load_sora(kh2_data::Source::Live).unwrap();
+    let rig = sora.rig.expect("rig");
+    assert_eq!(rig.skeleton.len(), 256);
+    assert_eq!(rig.weapon_bone, Some(178));
+    for (id, m) in &rig.motions {
+        let t = kh2_anim::key_time(m, 10.0, true);
+        let p = kh2_anim::evaluate(&rig.skeleton, m, t, Default::default());
+        assert!(p.bones.iter().all(|b| b.is_finite()), "motion {id}");
+    }
+}

@@ -5,7 +5,8 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum WindowKind {
     /// An attack hitbox is live. `group` picks the collision shapes.
-    Hitbox { attack: u16, group: u8, combo: Option<i16> },
+    /// `weapon`: the shapes are the weapon model's (else the character's own).
+    Hitbox { attack: u16, group: u8, combo: Option<i16>, weapon: bool },
     /// The next combo hit (or another action) may start.
     Combo,
     /// Like `Combo` but only for magic.

@@ -1,13 +1,15 @@
 //! KH2FM movement and combat playground.
 //!
-//! Primitive shapes only: no textures, models or sounds are loaded. Sora's
+//! Primitive shapes only: no textures, meshes or sounds are loaded. Sora's
 //! numbers (speeds, jump heights, growth abilities, every move's length,
-//! root motion, hitbox and combo windows, combo table, attack power) are
-//! read from the user's own install at startup through `kh2-data`.
+//! root motion, hitbox and combo windows, combo table, attack power) and his
+//! skeleton and animations are read from the user's own install at startup
+//! through `kh2-data`. He is drawn as a mannequin of capsules on his bones.
 //!
 //! Run:  kh2-playground --game "D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe"
 //! (or set KH2_GAME). See the HUD for controls.
 
+mod rig;
 mod synthetic;
 mod world;
 
@@ -23,6 +25,7 @@ use combat_core::{AttackDef, Combatant, DamageRules, HitTracker, Stats, Team};
 use kh2_data::sora::BladeSphere;
 use kh2_data::{Install, Source};
 
+use rig::{Part, RigAnim, Segment};
 use world::{Arena, ARENA_BOXES};
 
 /// KH2 units (about 1 cm) to Bevy meters.
@@ -48,11 +51,17 @@ fn main() {
     let gravity: Option<f32> = arg("--gravity").and_then(|v| v.parse().ok());
     let screenshot_after: Option<u32> = arg("--screenshot").and_then(|v| v.parse().ok());
     let autoplay = args.iter().any(|a| a == "--autoplay");
+    // --scene idle|run|combo|jump|roll|glide: scripted input for screenshots.
+    let scene = arg("--scene");
+    let cam_distance: f32 = arg("--cam-distance").and_then(|v| v.parse().ok()).unwrap_or(650.0);
 
     let synthetic = args.iter().any(|a| a == "--synthetic");
     let mut tried = Vec::new();
     let loaded = if synthetic {
         Ok(synthetic::data())
+    } else if let Some(dir) = arg("--data-dir") {
+        // Research: files already extracted into a local folder.
+        kh2_data::sora::load_sora_dir(std::path::Path::new(&dir))
     } else {
         let mut result = Err(kh2_data::Error::Format("no path given".into()));
         for c in &candidates {
@@ -72,6 +81,9 @@ fn main() {
         }
         result
     };
+    if let Ok(Some(e)) = loaded.as_ref().map(|d| d.rig_error.as_ref()) {
+        eprintln!("note: Sora's skeleton/animations could not be loaded ({e}); using the capsule");
+    }
     let loaded = loaded.map(|mut d| {
         if let Some(g) = gravity {
             d.character.params.gravity = g;
@@ -92,10 +104,10 @@ fn main() {
     .insert_resource(AmbientLight { color: Color::WHITE, brightness: 300.0 })
     .insert_resource(Time::<Fixed>::from_hz(60.0))
     .insert_resource(Latch::default())
-    .insert_resource(CameraRig { yaw: 0.0, pitch: 0.35, distance: 650.0, manual_timer: 0.0 })
-    .insert_resource(Debug { show_boxes: true, log: Vec::new(), last: None })
+    .insert_resource(CameraRig { yaw: 0.0, pitch: 0.35, distance: cam_distance, manual_timer: 0.0 })
+    .insert_resource(Debug { show_boxes: true, show_hurt: false, log: Vec::new(), last: None })
     .insert_resource(Shot { after_frames: screenshot_after, frames: 0 })
-    .insert_resource(Autoplay { on: autoplay, frame: 0 })
+    .insert_resource(Autoplay { on: autoplay || scene.is_some(), frame: 0, scene: scene.unwrap_or_default() })
     .add_systems(Startup, (world::spawn_arena, spawn_camera_and_light));
 
     match loaded {
@@ -115,7 +127,9 @@ fn main() {
                 .filter_map(|id| data.combat.attack_at_level(id, 0, level as u8).map(|a| (id, a)))
                 .collect();
             let dummy_template = data.combat.enemy(DUMMY_ENEMY, Some(dummy_level));
+            let anim = data.rig.clone().filter(|_| !args.iter().any(|a| a == "--capsule")).map(RigAnim::new);
             app.insert_resource(Game {
+                anim,
                 character,
                 pos: [0.0, 0.0, -400.0],
                 vel_display: [0.0; 3],
@@ -134,7 +148,7 @@ fn main() {
                 combo_plus: 0,
             })
             .add_systems(Startup, (spawn_player, spawn_dummies))
-            .add_systems(Update, (latch_input, camera_control, sync_visuals, draw_debug, hud, abilities_keys, screenshot))
+            .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, draw_debug, hud, abilities_keys, screenshot))
             .add_systems(FixedUpdate, simulate);
         }
         Err(_) => {
@@ -163,6 +177,8 @@ fn show_error(mut commands: Commands, e: Res<ErrorText>) {
 
 #[derive(Resource)]
 struct Game {
+    /// Skeleton animation (absent with --synthetic / --capsule).
+    anim: Option<RigAnim>,
     character: Character,
     pos: [f32; 3],
     vel_display: [f32; 3],
@@ -184,6 +200,7 @@ struct Game {
 #[derive(Resource)]
 struct Debug {
     show_boxes: bool,
+    show_hurt: bool,
     log: Vec<String>,
     last: Option<String>,
 }
@@ -210,6 +227,7 @@ struct Latch {
 struct Autoplay {
     on: bool,
     frame: u32,
+    scene: String,
 }
 
 #[derive(Resource)]
@@ -249,7 +267,22 @@ fn spawn_camera_and_light(mut commands: Commands) {
     ));
 }
 
-fn spawn_player(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+fn spawn_player(mut commands: Commands, game: Res<Game>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    if let Some(anim) = &game.anim {
+        // Mannequin: one unit capsule per bone segment, placed every frame.
+        let capsule = meshes.add(Capsule3d::new(0.5, 1.0));
+        let body = mats.add(StandardMaterial { base_color: Color::srgb(0.85, 0.2, 0.25), perceptual_roughness: 0.6, ..default() });
+        let blade = mats.add(StandardMaterial { base_color: Color::srgb(0.8, 0.8, 0.9), metallic: 0.6, ..default() });
+        commands.spawn((Player, Transform::default(), Visibility::default()));
+        for (seg, mat) in rig::segments(&anim.rig.skeleton, Part::Body)
+            .into_iter()
+            .map(|s| (s, body.clone()))
+            .chain(rig::segments(&anim.rig.weapon_skeleton, Part::Weapon).into_iter().map(|s| (s, blade.clone())))
+        {
+            commands.spawn((seg, Mesh3d(capsule.clone()), MeshMaterial3d(mat), Transform::default()));
+        }
+        return;
+    }
     let body_len = (SORA_HEIGHT - 2.0 * SORA_RADIUS) * SCALE;
     commands
         .spawn((Player, Transform::default(), Visibility::default()))
@@ -447,6 +480,9 @@ fn abilities_keys(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>, mut d
     if keys.just_pressed(KeyCode::F1) {
         dbg.show_boxes = !dbg.show_boxes;
     }
+    if keys.just_pressed(KeyCode::F2) {
+        dbg.show_hurt = !dbg.show_hurt;
+    }
     if keys.just_pressed(KeyCode::KeyR) {
         game.pos = [0.0, 0.0, -400.0];
     }
@@ -465,6 +501,19 @@ fn blade_pose(pos: [f32; 3], facing: f32, sweep: Option<f32>) -> (Vec3, Vec3) {
     };
     let dir = Quat::from_rotation_y(ang) * fwd;
     (hand + fwd * 25.0, dir)
+}
+
+/// Attack spheres for a live hitbox: on the real bones when the skeleton is
+/// loaded, otherwise the swept approximation.
+fn attack_spheres(game: &Game, facing: f32, group: u8, weapon: bool) -> Vec<(Vec3, f32)> {
+    if let Some(anim) = &game.anim {
+        let s = anim.attack_spheres(group, weapon);
+        if !s.is_empty() {
+            return s;
+        }
+    }
+    let (origin, dir) = blade_pose(game.pos, facing, Some(0.5));
+    hit_spheres(game, group, origin, dir)
 }
 
 fn hit_spheres(game: &Game, group: u8, origin: Vec3, dir: Vec3) -> Vec<(Vec3, f32)> {
@@ -488,12 +537,33 @@ fn simulate(
     if auto.on {
         auto.frame += 1;
         let f = auto.frame;
-        latch.stick = if f < 30 { Vec2::Y } else { Vec2::ZERO };
-        let attack = f >= 30 && f % 8 < 4;
-        if attack && !latch.held[1] {
-            latch.pressed[1] = true;
+        let press = |i: usize, on: bool, latch: &mut Latch| {
+            if on && !latch.held[i] {
+                latch.pressed[i] = true;
+            }
+            latch.held[i] = on;
+        };
+        match auto.scene.as_str() {
+            "idle" => latch.stick = Vec2::ZERO,
+            "run" => latch.stick = Vec2::X,
+            "jump" => press(0, f % 90 == 5, &mut latch),
+            "roll" => {
+                latch.stick = Vec2::X;
+                press(2, f % 60 == 5, &mut latch);
+            }
+            "glide" => {
+                latch.stick = Vec2::X;
+                press(0, f == 5 || f == 30 || f > 50, &mut latch);
+            }
+            "air" => {
+                press(0, f == 5, &mut latch);
+                press(1, f > 30 && f % 8 < 4, &mut latch);
+            }
+            _ => {
+                latch.stick = if f < 30 { Vec2::Y } else { Vec2::ZERO };
+                press(1, f >= 30 && f % 8 < 4, &mut latch);
+            }
         }
-        latch.held[1] = attack;
     }
 
     // Camera-relative stick.
@@ -545,12 +615,14 @@ fn simulate(
     game.ground_y = ground;
     game.vel_display = out.displacement;
     game.pos = p;
+    if let Some(anim) = game.anim.as_mut() {
+        anim.update(&out, &game.character, p);
+    }
 
     // Hits.
     for h in &out.hitboxes {
         let Some(attack) = game.attacks.get(&h.attack).cloned() else { continue };
-        let (origin, dir) = blade_pose(game.pos, out.facing, Some(0.5));
-        let spheres = hit_spheres(game, h.group, origin, dir);
+        let spheres = attack_spheres(game, out.facing, h.group, h.weapon);
         for mut dm in dummies.iter_mut() {
             if dm.respawn > 0 {
                 continue;
@@ -622,6 +694,50 @@ impl Game {
     /// While grounded, snap down onto ground up to 20 units below (stairs).
     fn grounded_was_close(&self, y: f32, ground: f32) -> bool {
         self.grounded && y - ground < 20.0
+    }
+}
+
+fn sync_segments(
+    game: Res<Game>,
+    mut segs: Query<(&Segment, &mut Transform, &MeshMaterial3d<StandardMaterial>)>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut tinted: Local<Option<AssetId<StandardMaterial>>>,
+) {
+    let (Some(anim), Some(out)) = (&game.anim, &game.last) else { return };
+    for (seg, mut t, mat) in &mut segs {
+        let (a, b) = match seg.part {
+            Part::Body => (anim.bone_world(seg.parent), anim.bone_world(seg.child)),
+            Part::Weapon => {
+                if anim.weapon.is_empty() {
+                    continue;
+                }
+                (anim.weapon_world(seg.parent), anim.weapon_world(seg.child))
+            }
+        };
+        let (a, b) = (a * SCALE, b * SCALE);
+        let d = b - a;
+        let len = d.length();
+        let r = seg.radius * 2.0 * SCALE;
+        *t = Transform {
+            translation: (a + b) * 0.5,
+            rotation: Quat::from_rotation_arc(Vec3::Y, d.normalize_or(Vec3::Y)),
+            // The unit capsule is 2 units tall (1 + two 0.5 caps).
+            scale: Vec3::new(r, (len / 2.0).max(r * 0.5), r),
+        };
+        if seg.part == Part::Body && tinted.map_or(true, |id| id == mat.0.id()) {
+            *tinted = Some(mat.0.id());
+            if let Some(m) = mats.get_mut(&mat.0) {
+                m.base_color = if out.invulnerable {
+                    Color::srgb(1.0, 1.0, 1.0)
+                } else if out.guarding {
+                    Color::srgb(0.3, 0.9, 1.0)
+                } else if out.state == StateName::Attack {
+                    Color::srgb(1.0, 0.45, 0.2)
+                } else {
+                    Color::srgb(0.85, 0.2, 0.25)
+                };
+            }
+        }
     }
 }
 
@@ -699,9 +815,13 @@ fn draw_debug(game: Res<Game>, dbg: Res<Debug>, dummies: Query<&Dummy>, mut gizm
         return;
     }
     for h in &out.hitboxes {
-        let (origin, dir) = blade_pose(game.pos, out.facing, Some(0.5));
-        for (c, r) in hit_spheres(&game, h.group, origin, dir) {
+        for (c, r) in attack_spheres(&game, out.facing, h.group, h.weapon) {
             gizmos.sphere(Isometry3d::from_translation(c * SCALE), r * SCALE, Color::srgb(1.0, 0.2, 0.2));
+        }
+    }
+    if let (true, Some(anim)) = (dbg.show_hurt, &game.anim) {
+        for (c, r) in anim.hurt_spheres() {
+            gizmos.sphere(Isometry3d::from_translation(c * SCALE), r * SCALE, Color::srgba(0.3, 0.7, 1.0, 0.35));
         }
     }
     let p = Vec3::from(game.pos) * SCALE;
@@ -735,8 +855,8 @@ fn hud(
          pos ({:.0}, {:.0}, {:.0})  move/frame ({:.1}, {:.1}, {:.1})  {}\n\
          Sora LV{} (Str {} Mag {} Def {})  dummies: Shadow LV{}\n\
          [1] High Jump {}  [2] Quick Run {}  [3] Aerial Dodge {}  [4] Glide {}  [5] Dodge Roll {}\n\
-         [6] Combo Plus x{}  [7] Air Combo Plus x{}  [8] Finishing Plus x{}  [F1] hitboxes  [R] reset\n\
-         WASD move (Alt walk)  Space jump (hold in air: glide)  J/LMB attack  K/Shift guard-roll-dodge  Tab lock-on  Q/E/RMB camera\n",
+         [6] Combo Plus x{}  [7] Air Combo Plus x{}  [8] Finishing Plus x{}  [F1] hitboxes  [F2] hurtboxes  [R] reset\n\
+         WASD move (Alt walk)  Space jump (in air: aerial dodge, then hold: glide)  J/LMB attack  K/Shift guard / roll / quick run  Tab lock-on  Q/E/RMB camera\n",
         out.state,
         out.motion,
         out.clip_frame,

@@ -7,6 +7,7 @@ members = [
     "crates/kh2-combat-cli",
     "crates/character-core",
     "crates/kh2-bevy",
+    "crates/kh2-anim",
 ]
 
 [workspace.package]
@@ -18,6 +19,7 @@ rust-version = "1.75"
 combat-core = { path = "crates/combat-core" }
 kh2-formats = { path = "crates/kh2-formats" }
 kh2-data = { path = "crates/kh2-data" }
+kh2-anim = { path = "crates/kh2-anim" }
 md-5 = "0.10"
 sha2 = "0.10"
 flate2 = "1"
