@@ -37,9 +37,11 @@ const DUMMY_ENEMY: u16 = 34;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
-    let game = arg("--game")
-        .or_else(|| std::env::var("KH2_GAME").ok())
-        .unwrap_or_else(|| r"D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe".to_string());
+    // Candidates in order: --game, KH2_GAME, the default Epic install path.
+    let mut candidates: Vec<String> = Vec::new();
+    candidates.extend(arg("--game"));
+    candidates.extend(std::env::var("KH2_GAME").ok());
+    candidates.push(r"D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe".to_string());
     let level: usize = arg("--level").and_then(|v| v.parse().ok()).unwrap_or(30).clamp(1, 99);
     let dummy_level: u16 = arg("--dummy-level").and_then(|v| v.parse().ok()).unwrap_or(level as u16).clamp(1, 99);
     let source = if args.iter().any(|a| a == "--backup") { Source::Backup } else { Source::Live };
@@ -48,7 +50,28 @@ fn main() {
     let autoplay = args.iter().any(|a| a == "--autoplay");
 
     let synthetic = args.iter().any(|a| a == "--synthetic");
-    let loaded = if synthetic { Ok(synthetic::data()) } else { Install::locate(&game).and_then(|i| i.load_sora(source)) };
+    let mut tried = Vec::new();
+    let loaded = if synthetic {
+        Ok(synthetic::data())
+    } else {
+        let mut result = Err(kh2_data::Error::Format("no path given".into()));
+        for c in &candidates {
+            match Install::locate(c).and_then(|i| i.load_sora(source)) {
+                Ok(d) => {
+                    if c != &candidates[0] {
+                        eprintln!("note: loaded KH2 data from fallback path {c}");
+                    }
+                    result = Ok(d);
+                    break;
+                }
+                Err(e) => {
+                    tried.push(format!("  {c}\n    -> {e}"));
+                    result = Err(e);
+                }
+            }
+        }
+        result
+    };
     let loaded = loaded.map(|mut d| {
         if let Some(g) = gravity {
             d.character.params.gravity = g;
@@ -115,9 +138,10 @@ fn main() {
             .add_systems(Update, (latch_input, camera_control, sync_visuals, draw_debug, hud, abilities_keys, screenshot))
             .add_systems(FixedUpdate, simulate);
         }
-        Err(e) => {
+        Err(_) => {
             let msg = format!(
-                "Could not load KH2 data from:\n  {game}\n\n{e}\n\nPass --game \"<path to KINGDOM HEARTS II FINAL MIX.exe>\" or set KH2_GAME.\nThis playground reads all of Sora's numbers from your own install; it ships none."
+                "Could not load KH2 data. Tried:\n{}\n\nRun (one line):\n  cargo run --release -p kh2-bevy -- --game \"D:\\epic\\KH_1.5_2.5\\KINGDOM HEARTS II FINAL MIX.exe\"\nor add --synthetic to try the controls with made-up numbers.\nThis playground reads all of Sora's numbers from your own install; it ships none.",
+                tried.join("\n")
             );
             eprintln!("{msg}");
             app.insert_resource(ErrorText(msg)).add_systems(Startup, show_error);

@@ -27,6 +27,18 @@ const ARCHIVES: [&str; 6] = ["kh2_first", "kh2_second", "kh2_third", "kh2_fourth
 /// Executable names, in the order tried, that carry the PKG key table.
 const EXECUTABLES: &[&str] = &["KINGDOM HEARTS II FINAL MIX.exe", "KINGDOM HEARTS FINAL MIX.exe"];
 
+/// Cleans up a user-supplied path (see [`Install::locate`]).
+pub fn repair_path(p: &Path) -> PathBuf {
+    let raw = p.to_string_lossy();
+    let mut s = raw.trim().trim_matches(|c| c == '"' || c == '\'').trim().to_string();
+    if !Path::new(&s).exists() {
+        if let Some(i) = s.to_ascii_lowercase().find(".exe") {
+            s.truncate(i + 4);
+        }
+    }
+    PathBuf::from(s)
+}
+
 /// Where the game files are on disk.
 #[derive(Clone, Debug)]
 pub struct Install {
@@ -48,9 +60,16 @@ pub enum Source {
 }
 
 impl Install {
-    /// Accepts the KH2 executable path or the install directory.
+    /// Accepts the KH2 executable path or the install directory. Tolerates
+    /// common copy-paste damage: surrounding quotes or spaces, and text glued
+    /// on after `.exe` (e.g. `...FINAL MIX.execargo` when two pasted lines
+    /// run together).
     pub fn locate(path: impl AsRef<Path>) -> Result<Install> {
-        let p = path.as_ref();
+        let repaired = repair_path(path.as_ref());
+        let p = repaired.as_path();
+        if !p.exists() {
+            return Err(Error::Format(format!("path does not exist: {}", p.display())));
+        }
         let (root, executable) = if p.is_file() {
             (p.parent().unwrap_or(Path::new(".")).to_path_buf(), p.to_path_buf())
         } else {
@@ -234,4 +253,22 @@ pub fn enemy_combatant(e: &Enmp, lv: &kh2_formats::battle::Lvpm, clamp: ClampRea
         _ => {}
     }
     c
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repairs_pasted_paths() {
+        let dir = std::env::temp_dir().join("kh2-combat-locate-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("KINGDOM HEARTS II FINAL MIX.exe");
+        std::fs::write(&exe, b"").unwrap();
+        let e = exe.to_string_lossy().to_string();
+        assert_eq!(repair_path(Path::new(&format!("{e}cargo"))), exe);
+        assert_eq!(repair_path(Path::new(&format!("\"{e}\" "))), exe);
+        assert_eq!(repair_path(Path::new(&e)), exe);
+        assert!(Install::locate(dir.join("nope.exe")).unwrap_err().to_string().contains("does not exist"));
+    }
 }
