@@ -12,21 +12,21 @@
 //! - the `kh2-data` crate, which builds them from a KH2 install the player owns.
 //!
 //! The formula and its sources are documented in `docs/combat-model.md`.
-//! Anything marked *hypothesis* there has not yet been checked against the
-//! real game and is exposed through [`DamageRules`] so it can be tuned.
+//! The formula's order and rounding were checked against KH2 Final Mix's
+//! executable; the difficulty table is exposed through [`DamageRules`].
 //!
 //! ## Minimal example
 //!
 //! ```
 //! use combat_core::*;
 //!
-//! let slash = AttackDef { power: 1.0, ..AttackDef::default() };
+//! let slash = AttackDef { power: 100, ..AttackDef::default() };
 //! let sora = Combatant::new(1, Team::Player, Stats { hp: 20, strength: 30, magic: 10, defense: 5 });
 //! let mut shadow = Combatant::new(2, Team::Enemy, Stats { hp: 50, strength: 8, magic: 8, defense: 4 });
 //!
 //! let rules = DamageRules::default();
 //! let out = resolve_hit(&rules, &slash, &sora, &mut shadow);
-//! assert_eq!(out.damage, 26); // (30 - 4) * 1.0
+//! assert_eq!(out.damage, 26); // (30 - 4) x 100%
 //! assert_eq!(shadow.hp, 24);
 //! ```
 

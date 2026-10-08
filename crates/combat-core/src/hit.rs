@@ -48,7 +48,7 @@ pub fn resolve_hit(
         if defender.is_dead() {
             return blocked(Blocked::AlreadyDead);
         }
-        let amount = compute_healing(attack, attacker);
+        let amount = compute_healing(attack, attacker, defender);
         let before = defender.hp;
         defender.hp = (defender.hp + amount).min(defender.max_hp);
         return HitOutcome { healed: defender.hp - before, ..HitOutcome::default() };
@@ -159,63 +159,60 @@ mod tests {
 
     #[test]
     fn basic_physical_hit() {
-        let a = AttackDef { power: 1.5, ..Default::default() };
+        let a = AttackDef { power: 150, ..Default::default() };
         let mut e = heartless(100);
         let out = resolve_hit(&DamageRules::default(), &a, &sora(), &mut e);
-        assert_eq!(out.damage, 39); // (30-4)*1.5
+        assert_eq!(out.damage, 39); // (30-4) x 1.5
         assert_eq!(e.hp, 61);
+        // rounding is up: 26 x 1.25 = 32.5 -> 33
+        let a = AttackDef { power: 125, ..Default::default() };
+        assert_eq!(resolve_hit(&DamageRules::default(), &a, &sora(), &mut heartless(100)).damage, 33);
     }
 
     #[test]
-    fn forum_worked_example() {
-        // Thundaga (x3.75) vs a 50% thunder-resistant target on Critical,
-        // 80 Magic vs 51 Defense. Community worked example gives 67.
+    fn magic_and_difficulty() {
+        // Thundaga-like row: 375%, Magic, Thunder; 80 Magic vs 51 Defense,
+        // 50% thunder weakness. ceil(50*100*375*29/1e6) = 55; Critical x1.25 -> 69.
         let caster = Combatant::new(1, Team::Player, Stats { hp: 1, strength: 0, magic: 80, defense: 0 });
         let mut target = Combatant::new(2, Team::Enemy, Stats { hp: 999, strength: 0, magic: 0, defense: 51 });
         target.resist.0[Element::Thunder.index()] = 50;
-        // The real Thundaga rows are flagged critical_adjust = Half.
-        let a = AttackDef { power: 3.75, element: Element::Thunder, critical_adjust: CriticalAdjust::Half, ..Default::default() };
+        let a = AttackDef { power: 375, element: Element::Thunder, stat: StatSource::Magic, ..Default::default() };
         let rules = DamageRules { difficulty: Difficulty::Critical, ..Default::default() };
         let out = resolve_hit(&rules, &a, &caster, &mut target);
-        assert_eq!(out.breakdown.after_power, 108);
-        assert_eq!(out.breakdown.after_element, 54);
-        assert_eq!(out.damage, 67);
+        assert_eq!(out.breakdown.after_power, 55);
+        assert_eq!(out.damage, 69);
+        // Enemies hit twice as hard on Critical.
+        let enemy = Combatant::new(2, Team::Enemy, Stats { hp: 1, strength: 30, magic: 0, defense: 0 });
+        let mut p = Combatant::new(1, Team::Player, Stats { hp: 1000, strength: 0, magic: 0, defense: 10 });
+        assert_eq!(resolve_hit(&rules, &AttackDef::default(), &enemy, &mut p).damage, 40);
     }
 
     #[test]
-    fn clamp_and_immunity() {
-        let a = AttackDef { power: 1.0, ..Default::default() };
-        let mut e = heartless(1000).with_base_clamp(BaseClamp { min: 10, max: 20 });
-        assert_eq!(resolve_hit(&DamageRules::default(), &a, &sora(), &mut e).damage, 20);
-        e.stats.defense = 200;
+    fn bounds_and_immunity() {
+        let a = AttackDef::default();
+        // max HP 1000: min 5% = 50, max 2% = 20 (min wins when they cross)
+        let mut e = heartless(1000).with_damage_bounds(StatBounds::from_permyriad(1000, 100, 2000));
+        assert_eq!(e.damage_bounds, StatBounds { min: 10, max: 200 });
+        let strong = Combatant::new(9, Team::Player, Stats { hp: 1, strength: 999, magic: 0, defense: 0 });
+        assert_eq!(resolve_hit(&DamageRules::default(), &a, &strong, &mut e).damage, 200);
+        e.stats.defense = 2000;
         assert_eq!(resolve_hit(&DamageRules::default(), &a, &sora(), &mut e).damage, 10);
+        // attacker cap applies too
+        let capped = strong.clone().with_attack_bounds(StatBounds { min: 1, max: 7 });
+        e.stats.defense = 0;
+        assert_eq!(resolve_hit(&DamageRules::default(), &a, &capped, &mut e).damage, 10);
         e.resist.0[0] = 0;
         assert_eq!(resolve_hit(&DamageRules::default(), &a, &sora(), &mut e).damage, 0);
     }
 
     #[test]
-    fn hit_clamp_is_fraction_of_max_hp() {
-        let a = AttackDef { power: 1.0, ..Default::default() };
-        // max HP 1000: min 5% = 50, max 30% = 300
-        let mut e = heartless(1000).with_hit_clamp(HitClamp { min_permyriad: 500, max_permyriad: 3000 });
-        let weak = Combatant::new(9, Team::Player, Stats { hp: 1, strength: 5, magic: 0, defense: 0 });
-        assert_eq!(resolve_hit(&DamageRules::default(), &a, &weak, &mut e).damage, 50);
-        let strong = Combatant::new(9, Team::Player, Stats { hp: 1, strength: 999, magic: 0, defense: 0 });
-        assert_eq!(resolve_hit(&DamageRules::default(), &a, &strong, &mut e).damage, 300);
-    }
-
-    #[test]
-    fn critical_adjust_scales_damage_taken_by_player() {
-        let rules = DamageRules { difficulty: Difficulty::Critical, ..Default::default() };
-        let enemy = Combatant::new(2, Team::Enemy, Stats { hp: 1, strength: 30, magic: 0, defense: 0 });
-        let hit = |adj| {
-            let mut p = Combatant::new(1, Team::Player, Stats { hp: 1000, strength: 0, magic: 0, defense: 10 });
-            let a = AttackDef { critical_adjust: adj, ..Default::default() };
-            resolve_hit(&rules, &a, &enemy, &mut p).damage
-        };
-        assert_eq!(hit(CriticalAdjust::Normal), 40); // 20 x2
-        assert_eq!(hit(CriticalAdjust::Half), 20);
-        assert_eq!(hit(CriticalAdjust::None), 0);
+    fn combo_boost_adds_per_hit() {
+        let mut s = sora();
+        s.boosts.combo = Some(10);
+        s.combo_hits = 3;
+        let a = AttackDef { combo_finisher: true, ..Default::default() };
+        // 26 + ceil(26 x 30%) = 26 + 8
+        assert_eq!(resolve_hit(&DamageRules::default(), &a, &s, &mut heartless(100)).damage, 34);
     }
 
     #[test]
@@ -230,11 +227,12 @@ mod tests {
 
     #[test]
     fn cure_heals_allies_only() {
-        let cure = AttackDef { kind: AttackKind::Cure, power: 2.0, ..Default::default() };
+        // 100 max HP x 30% x 20 Magic / 10000 = 6
+        let cure = AttackDef { kind: AttackKind::Cure, power: 30, stat: StatSource::Magic, ..Default::default() };
         let mut ally = Combatant::new(3, Team::Player, Stats { hp: 100, ..Default::default() });
         ally.hp = 10;
         let out = resolve_hit(&DamageRules::default(), &cure, &sora(), &mut ally);
-        assert_eq!(out.healed, 40);
+        assert_eq!(out.healed, 6);
         let mut e = heartless(50);
         e.hp = 1;
         assert_eq!(resolve_hit(&DamageRules::default(), &cure, &sora(), &mut e).healed, 0);

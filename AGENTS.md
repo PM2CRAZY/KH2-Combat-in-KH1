@@ -13,6 +13,12 @@ Notes for anyone (human or AI agent) working on this repo.
 - When code is ported from another project, credit it in `NOTICE` and `CREDITS.md`
   and keep its licence.
 
+## Reverse-engineering notes
+
+- Ghidra runs headless on a private copy of the user's executable, outside the repo. Commit
+  only plain-language findings (in `docs/`) and our own Rust. Never commit decompiler output,
+  Ghidra projects or byte dumps.
+
 ## Testing against the game
 
 ```
@@ -47,3 +53,26 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   The playground was verified under Xvfb with `--synthetic --autoplay --screenshot N`. The
   real-data path was verified on the user's machine with `kh2-combat sora`.
 - Open: gravity (estimated), the combo `sub` chain, skeleton-accurate hitboxes, enemy attacks.
+
+### 2026-10-08: Phase 1 from the executable
+- Ghidra 12.1 headless on the user's exe. MSVC RTTI names the action classes, so the
+  action vtables (jump, glide, air slide, hop, idle) were easy to find.
+- Implemented from plain-language notes:
+  - the 30 Hz velocity tick
+  - the double-sine jump with gravity 20/49
+  - air control 0.9/0.95
+  - glide, Quick Run and Aerial Dodge formulas
+  - the PTYA selector (table order, `sub` anti-repeat, kind/flag semantics, `combo_offset`)
+  - the hit-driven combo counter
+  - jump-attack arcs and the lunge factor
+  - the damage routine (stat source byte, base-term clamps, ceil rounding, difficulty table,
+    boosts, Cure)
+  - enemy status init
+  - ATKP level variants
+- Removed: estimated gravity, the approach-assist hack, the `--clamp` and `--power-scale`
+  switches, and the score-based selection.
+- Verified on the install:
+  - the jump peaks at 185 on frame 33
+  - whiffing alternates 151/153
+  - connecting gives 151→153→155
+- Open: jump hold, stick-tilt mapping, landing, cancel points, auto-target, timer units.

@@ -17,31 +17,58 @@ pub struct Stats {
     pub defense: u16,
 }
 
-/// Bounds on the `(attack stat - defense)` term before multipliers.
-/// One of two candidate readings of KH2's per-enemy min/max damage fields;
-/// see [`HitClamp`] for the other (the current default in `kh2-data`).
+/// Bounds on the `(attack stat - defense)` term. KH2 keeps two pairs: one
+/// on the attacker (its strength cap and floor) and one on the defender
+/// (how little or how much one hit may do to it). The tighter of each pair
+/// wins. Players default to `1..=99999`, i.e. no real cap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BaseClamp {
-    pub min: i32,
-    pub max: i32,
+pub struct StatBounds {
+    pub min: u32,
+    pub max: u32,
 }
 
-/// Per-hit bounds on final damage, as parts-per-10000 of the defender's
-/// max HP (10000 = 100%). KH2 enemy tables carry a min/max pair per enemy;
-/// the evidence that they mean this is in `docs/combat-model.md`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct HitClamp {
-    pub min_permyriad: u32,
-    pub max_permyriad: u32,
-}
-
-impl HitClamp {
-    /// `(min, max)` damage for a defender with `max_hp`.
-    pub fn bounds(&self, max_hp: u32) -> (u32, u32) {
-        let lo = (max_hp as u64 * self.min_permyriad as u64 / 10_000) as u32;
-        let hi = (max_hp as u64 * self.max_permyriad as u64 / 10_000) as u32;
-        (lo, hi.max(lo).max(1))
+impl Default for StatBounds {
+    fn default() -> Self {
+        StatBounds { min: 1, max: 99_999 }
     }
+}
+
+impl StatBounds {
+    /// Defender bounds from parts-per-10000 of max HP, rounded up (how KH2
+    /// turns an enemy table's min/max damage pair into absolute values).
+    pub fn from_permyriad(max_hp: u32, min_permyriad: u32, max_permyriad: u32) -> StatBounds {
+        let f = |p: u32| ((max_hp as u64 * p as u64 + 9_999) / 10_000) as u32;
+        StatBounds { min: f(min_permyriad), max: f(max_permyriad) }
+    }
+}
+
+/// Percent bonuses the attacker adds on top of the base hit. 100 = none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Boosts {
+    pub fire: u16,
+    pub blizzard: u16,
+    pub thunder: u16,
+    /// Per combo hit on a combo finisher (Combo Boost). `None` = ability off.
+    pub combo: Option<u16>,
+    /// Per air-combo hit on an air finisher (Air Combo Boost).
+    pub air_combo: Option<u16>,
+    /// On reaction commands (Reaction Boost).
+    pub reaction: Option<u16>,
+}
+
+impl Default for Boosts {
+    fn default() -> Self {
+        Boosts { fire: 100, blizzard: 100, thunder: 100, combo: None, air_combo: None, reaction: None }
+    }
+}
+
+/// Damage reduction that kicks in at low HP (a "damage control" style
+/// ability): when HP is at most `hp_fraction` of max, damage taken is
+/// scaled by `percent`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LowHpGuard {
+    pub hp_fraction: f32,
+    pub percent: u32,
 }
 
 /// A fighter's live combat state.
@@ -53,8 +80,18 @@ pub struct Combatant {
     pub hp: u32,
     pub max_hp: u32,
     pub resist: Resistances,
-    pub base_clamp: Option<BaseClamp>,
-    pub hit_clamp: Option<HitClamp>,
+    /// Attacker-side bounds on the base term (KH2 LVPM max/min strength).
+    pub attack_bounds: StatBounds,
+    /// Defender-side bounds on the base term (KH2 ENMP max/min damage).
+    pub damage_bounds: StatBounds,
+    /// Subtracted from the base term while HP is at or below a quarter of
+    /// max (the Defender ability). 0 = off.
+    pub low_hp_defense: u16,
+    pub low_hp_guard: Option<LowHpGuard>,
+    pub boosts: Boosts,
+    /// Live combo counters, read by combo/air-combo boosts.
+    pub combo_hits: u8,
+    pub air_combo_hits: u8,
     /// Revenge build-up. When it reaches `revenge_limit` the defender is
     /// flagged to retaliate (`HitOutcome::revenge_triggered`).
     pub revenge: u32,
@@ -74,8 +111,13 @@ impl Combatant {
             hp: stats.hp,
             max_hp: stats.hp,
             resist: Resistances::default(),
-            base_clamp: None,
-            hit_clamp: None,
+            attack_bounds: StatBounds::default(),
+            damage_bounds: StatBounds::default(),
+            low_hp_defense: 0,
+            low_hp_guard: None,
+            boosts: Boosts::default(),
+            combo_hits: 0,
+            air_combo_hits: 0,
             revenge: 0,
             revenge_limit: None,
             invincible: false,
@@ -88,13 +130,13 @@ impl Combatant {
         self
     }
 
-    pub fn with_base_clamp(mut self, clamp: BaseClamp) -> Self {
-        self.base_clamp = Some(clamp);
+    pub fn with_attack_bounds(mut self, b: StatBounds) -> Self {
+        self.attack_bounds = b;
         self
     }
 
-    pub fn with_hit_clamp(mut self, clamp: HitClamp) -> Self {
-        self.hit_clamp = Some(clamp);
+    pub fn with_damage_bounds(mut self, b: StatBounds) -> Self {
+        self.damage_bounds = b;
         self
     }
 

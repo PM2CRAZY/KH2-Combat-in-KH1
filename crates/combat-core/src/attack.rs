@@ -46,21 +46,23 @@ impl AttackKind {
     }
 }
 
-/// How an attack is scaled on the hardest difficulty (KH2 "critical adjust").
+/// Which attacker stat an attack's damage scales from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum CriticalAdjust {
+pub enum StatSource {
     #[default]
-    Normal,
-    Half,
+    Strength,
+    Magic,
+    /// No stat: the stat term is 0 (damage then comes only from the
+    /// defender's minimum-damage bound).
     None,
 }
 
-impl CriticalAdjust {
-    pub fn from_id(id: u8) -> CriticalAdjust {
+impl StatSource {
+    pub fn from_id(id: u8) -> StatSource {
         match id {
-            1 => CriticalAdjust::Half,
-            2 => CriticalAdjust::None,
-            _ => CriticalAdjust::Normal,
+            0 => StatSource::Strength,
+            1 => StatSource::Magic,
+            _ => StatSource::None,
         }
     }
 }
@@ -103,11 +105,11 @@ pub struct AttackDef {
     /// Stable id for lookup and logging.
     pub id: u32,
     pub kind: AttackKind,
-    /// Damage multiplier applied to (attack stat - defense).
-    pub power: f32,
+    /// Damage multiplier on (attack stat - defense), in percent (100 = x1).
+    pub power: u16,
     pub element: Element,
     pub targets: TargetFilter,
-    pub critical_adjust: CriticalAdjust,
+    pub stat: StatSource,
     /// Host-defined reaction id (flinch, knock-up, ...). KH2 raw value.
     pub reaction: u8,
     /// Horizontal / vertical knockback strength. The host divides by weight.
@@ -136,10 +138,10 @@ impl Default for AttackDef {
         AttackDef {
             id: 0,
             kind: AttackKind::Normal,
-            power: 1.0,
+            power: 100,
             element: Element::Physical,
             targets: TargetFilter::Opponents,
-            critical_adjust: CriticalAdjust::Normal,
+            stat: StatSource::Strength,
             reaction: 0,
             knockback: (0.0, 0.0),
             hit_interval: 0,

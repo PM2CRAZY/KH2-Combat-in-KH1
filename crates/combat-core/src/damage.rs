@@ -1,7 +1,6 @@
-use crate::{AttackDef, Combatant, CriticalAdjust, Element};
+use crate::{AttackDef, AttackKind, Combatant, Element, StatSource, Team};
 
-/// Difficulty presets. Multipliers live in [`DamageRules`] so they can be
-/// tuned; the defaults are community-reported values (see docs).
+/// Game difficulty.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Difficulty {
     Beginner,
@@ -11,38 +10,21 @@ pub enum Difficulty {
     Critical,
 }
 
-/// Every tunable constant in the damage formula. Values marked
-/// "hypothesis" in `docs/combat-model.md` should be confirmed in-game
-/// before you rely on exact numbers.
+/// The difficulty table. Values are percentages applied with rounding up.
+/// Defaults are the ones KH2 Final Mix's executable uses (checked).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DamageRules {
     pub difficulty: Difficulty,
-    /// Multiplier on damage the player side deals, per difficulty.
-    pub player_dealt: [f32; 4],
-    /// Multiplier on damage the player side takes, per difficulty.
-    pub player_taken: [f32; 4],
-    /// Smallest damage a damaging hit can do after all multipliers.
-    pub min_damage: u32,
-    /// Extra caller-supplied multiplier (ability boosts such as Fire Boost).
-    pub elemental_boost: [f32; 7],
+    /// Damage the player side deals, per difficulty (Beginner, Standard,
+    /// Proud, Critical).
+    pub player_dealt: [u32; 4],
+    /// Damage the player side takes, per difficulty.
+    pub player_taken: [u32; 4],
 }
 
 impl Default for DamageRules {
     fn default() -> Self {
-        DamageRules {
-            difficulty: Difficulty::Standard,
-            // Beginner, Standard, Proud, Critical
-            player_dealt: [1.0, 1.0, 1.0, 1.25],
-            player_taken: [0.5, 1.0, 1.5, 2.0],
-            min_damage: 1,
-            elemental_boost: [1.0; 7],
-        }
-    }
-}
-
-impl DamageRules {
-    fn difficulty_index(&self) -> usize {
-        self.difficulty as usize
+        DamageRules { difficulty: Difficulty::Standard, player_dealt: [150, 100, 100, 125], player_taken: [50, 100, 200, 200] }
     }
 }
 
@@ -52,108 +34,109 @@ impl DamageRules {
 pub struct DamageBreakdown {
     pub attack_stat: i32,
     pub defense: i32,
-    /// `attack_stat - defense`, after the defender's clamp.
+    /// `attack_stat - defense` after both sides' bounds.
     pub base: i32,
+    /// After power, element weakness and general weakness.
     pub after_power: u32,
-    pub after_element: u32,
-    pub after_boost: u32,
     pub after_difficulty: u32,
-    /// After the defender's per-hit [`crate::HitClamp`], if any.
-    pub after_clamp: u32,
+    pub after_boost: u32,
     pub final_damage: u32,
 }
 
-/// Computes damage without changing any state.
+fn ceil_div(n: u64, d: u64) -> u64 {
+    (n + d - 1) / d
+}
+
+fn pct_up(v: u32, pct: u32) -> u32 {
+    ceil_div(v as u64 * pct as u64, 100) as u32
+}
+
+/// Computes damage without changing any state. The order follows KH2 Final
+/// Mix's damage routine (see `docs/combat-model.md`):
 ///
-/// Order of operations (sources in `docs/combat-model.md`):
-/// 1. base = attack stat (Strength, or Magic for spells) - defense,
-///    clamped by the defender's `base_clamp`, floored at 0
-/// 2. x power multiplier, truncated
-/// 3. x element resistance percent / 100, truncated
-/// 4. x elemental boost, truncated
-/// 5. x difficulty multiplier and critical adjust, truncated
-/// 6. clamped by the defender's `hit_clamp` (fraction of max HP)
-/// 7. raised to `rules.min_damage` if the hit is a damaging one
-pub fn compute_damage(
-    rules: &DamageRules,
-    attack: &AttackDef,
-    attacker: &Combatant,
-    defender: &Combatant,
-) -> DamageBreakdown {
-    let attack_stat = if attack.element.is_magical() {
-        attacker.stats.magic
-    } else {
-        attacker.stats.strength
-    } as i32;
+/// 1. base = attacker stat (Strength or Magic, per attack) - Defense, minus
+///    the Defender bonus at <= 25% HP
+/// 2. base capped at the lower of the attacker's and defender's maxima,
+///    then raised to the higher of their minima
+/// 3. x weakness[element] x weakness[general] x power, /1,000,000 rounded up
+/// 4. difficulty percent, rounded up
+/// 5. attacker's Fire/Blizzard/Thunder boost, rounded up
+/// 6. combo / air-combo / reaction boosts (added on top), rounded up
+/// 7. low-HP guard on the defender, rounded up
+///
+/// There is no minimum of 1: an immune target takes 0.
+pub fn compute_damage(rules: &DamageRules, attack: &AttackDef, attacker: &Combatant, defender: &Combatant) -> DamageBreakdown {
+    let attack_stat = match attack.stat {
+        StatSource::Strength => attacker.stats.strength as i32,
+        StatSource::Magic => attacker.stats.magic as i32,
+        StatSource::None => 0,
+    };
     let defense = defender.stats.defense as i32;
-
     let mut base = attack_stat - defense;
-    if let Some(c) = defender.base_clamp {
-        base = base.clamp(c.min, c.max.max(c.min));
+    if defender.hp <= defender.max_hp / 4 {
+        base -= defender.low_hp_defense as i32;
     }
-    let base = base.max(0);
+    let hi = attacker.attack_bounds.max.min(defender.damage_bounds.max) as i32;
+    let lo = attacker.attack_bounds.min.max(defender.damage_bounds.min) as i32;
+    base = base.min(hi).max(lo);
 
-    let after_power = (base as f32 * attack.power.max(0.0)) as u32;
-    let pct = defender.resist.percent(attack.element) as u32;
-    let after_element = after_power * pct / 100;
-    let after_boost =
-        (after_element as f32 * rules.elemental_boost[attack.element.index()]) as u32;
-
-    let i = rules.difficulty_index();
-    let mut diff = if attacker.team == crate::Team::Player && defender.team != crate::Team::Player {
-        rules.player_dealt[i]
-    } else if defender.team == crate::Team::Player && attacker.team != crate::Team::Player {
-        rules.player_taken[i]
+    let weak = defender.resist.percent(attack.element) as u64;
+    let general = defender.resist.percent(Element::Neutral) as u64;
+    let after_power = if base > 0 {
+        ceil_div(weak * general * attack.power as u64 * base as u64, 1_000_000) as u32
     } else {
-        1.0
+        0
     };
-    // Hypothesis: the per-attack critical adjust only scales the extra
-    // damage the *player side takes* on Critical. Applying it to player
-    // attacks too would halve every spell (all of them are flagged "half"),
-    // which contradicts the community worked example in the tests.
-    let hits_player = defender.team == crate::Team::Player && attacker.team != crate::Team::Player;
-    if rules.difficulty == Difficulty::Critical && hits_player {
-        diff *= match attack.critical_adjust {
-            CriticalAdjust::Normal => 1.0,
-            CriticalAdjust::Half => 0.5,
-            CriticalAdjust::None => 0.0,
-        };
-    }
-    let after_difficulty = (after_boost as f32 * diff) as u32;
 
-    let after_clamp = match defender.hit_clamp {
-        Some(c) => {
-            let (lo, hi) = c.bounds(defender.max_hp);
-            after_difficulty.clamp(lo, hi)
+    let dealt_by_player = attacker.team == Team::Player && defender.team != Team::Player;
+    let taken_by_player = defender.team == Team::Player && attacker.team != Team::Player;
+    let i = rules.difficulty as usize;
+    let mut dmg = after_power;
+    if dmg > 0 && rules.difficulty != Difficulty::Standard {
+        if taken_by_player {
+            dmg = pct_up(dmg, rules.player_taken[i]);
+        } else if dealt_by_player {
+            dmg = pct_up(dmg, rules.player_dealt[i]);
         }
-        None => after_difficulty,
-    };
-
-    let final_damage = if pct == 0 || diff == 0.0 {
-        0 // immune or explicitly zeroed: no minimum
-    } else {
-        after_clamp.max(rules.min_damage)
-    };
-
-    DamageBreakdown {
-        attack_stat,
-        defense,
-        base,
-        after_power,
-        after_element,
-        after_boost,
-        after_difficulty,
-        after_clamp,
-        final_damage,
     }
+    let after_difficulty = dmg;
+
+    let b = &attacker.boosts;
+    match attack.element {
+        Element::Fire => dmg = pct_up(dmg, b.fire as u32),
+        Element::Blizzard => dmg = pct_up(dmg, b.blizzard as u32),
+        Element::Thunder => dmg = pct_up(dmg, b.thunder as u32),
+        _ => {}
+    }
+    if let (true, Some(p)) = (attack.combo_finisher, b.combo) {
+        dmg += pct_up(dmg, attacker.combo_hits as u32 * p as u32);
+    } else if let (true, Some(p)) = (attack.air_combo_finisher, b.air_combo) {
+        dmg += pct_up(dmg, attacker.air_combo_hits as u32 * p as u32);
+    } else if let (true, Some(p)) = (attack.reaction_command, b.reaction) {
+        dmg += pct_up(dmg, p as u32);
+    }
+    let after_boost = dmg;
+
+    if let Some(g) = defender.low_hp_guard {
+        if defender.hp as f32 <= defender.max_hp as f32 * g.hp_fraction {
+            dmg = pct_up(dmg, g.percent);
+        }
+    }
+
+    DamageBreakdown { attack_stat, defense, base, after_power, after_difficulty, after_boost, final_damage: dmg }
 }
 
-/// Healing amount for cure-type attacks: power x Magic (hypothesis).
-pub fn compute_healing(attack: &AttackDef, caster: &Combatant) -> u32 {
-    (caster.stats.magic as f32 * attack.power.max(0.0)) as u32
-}
-
-/// Elements that use Magic instead of Strength, exposed for tests and hosts.
-pub fn uses_magic(e: Element) -> bool {
-    e.is_magical()
+/// Healing for cure-type attacks. `Cure`: max HP x power x stat / 10000;
+/// `CureStrong` (KH2 "C-Cure"): power x stat / 100. Both round up.
+pub fn compute_healing(attack: &AttackDef, caster: &Combatant, target: &Combatant) -> u32 {
+    let stat = match attack.stat {
+        StatSource::Strength => caster.stats.strength,
+        StatSource::Magic => caster.stats.magic,
+        StatSource::None => 0,
+    } as u64;
+    match attack.kind {
+        AttackKind::Cure => ceil_div(target.max_hp as u64 * attack.power as u64 * stat, 10_000) as u32,
+        AttackKind::CureStrong => ceil_div(attack.power as u64 * stat, 100) as u32,
+        _ => 0,
+    }
 }

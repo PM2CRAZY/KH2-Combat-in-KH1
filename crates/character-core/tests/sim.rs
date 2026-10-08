@@ -89,9 +89,11 @@ fn attack_clip(motion: u16, len: u32, hit: (u32, u32), attack: u16, combo_at: u3
 
 fn row(id: u8, motion: u16, finisher: bool, air: bool) -> ComboRow {
     ComboRow {
-        id, kind: 3, sub: -1, flag: if finisher { FLAG_FINISHER } else { 0 }, motion, next_motion: 0,
-        jump: if air { 20.0 } else { 0.0 }, speed_min: 0.0, speed_max: 0.0, near: 0.0, far: 0.0,
-        low: 0.0, high: 0.0, ability: 0, score: 1,
+        id, kind: 3, sub: -1, combo_offset: 0,
+        flag: if finisher { FLAG_FINISHER } else { 0 } | if air { FLAG_AIR } else { 0 },
+        motion, next_motion: 0, jump: if air { 20.0 } else { 0.0 }, jump_min: 0.0, jump_max: 0.0,
+        speed_min: 0.0, speed_max: 0.0, near: 0.0, far: 0.0, low: 0.0, high: 0.0, inner_min: -2.0,
+        inner_max: 2.0, blend_time: 0.0, distance_adjust: 0.0, ability: 0, score: 1,
     }
 }
 
@@ -108,7 +110,8 @@ fn sora() -> Character {
     ms.clips.insert(101, attack_clip(101, 40, (10, 16), 2, 20));
     ms.clips.insert(110, attack_clip(110, 50, (12, 20), 3, 60));
     ms.clips.insert(120, attack_clip(120, 30, (5, 10), 4, 15));
-    ms.combo_rows = vec![row(0, 100, false, false), row(1, 110, true, false), row(2, 120, false, true), row(3, 120, true, true)];
+    // Finishers first: the game takes the first valid row in table order.
+    ms.combo_rows = vec![row(1, 110, true, false), row(0, 100, false, false), row(3, 120, true, true), row(2, 120, false, true)];
     let mut ch = Character::new(ms, MoveParams::default(), growth(), AttackParams::default());
     ch.abilities = Abilities::max_growth();
     ch
@@ -140,8 +143,9 @@ fn jump_has_takeoff_frames_and_reaches_height() {
         w.step(IDLE);
         apex = apex.max(w.pos[1]);
     }
-    // High Jump MAX (level 4) = 400 in this fixture.
-    assert!((apex - 400.0).abs() < 15.0, "apex {apex}");
+    // High Jump MAX (level 4) = 400 in this fixture. Sampled every
+    // 2-frame tick, so the apex is within one step of the true height.
+    assert!(apex <= 400.0 + 1e-3 && apex > 399.0, "apex {apex}");
     assert_eq!(w.pos[1], 0.0);
 }
 
@@ -177,21 +181,36 @@ fn dodge_roll_uses_root_motion_and_level_iframes() {
     assert!((w.pos[0] - 400.0).abs() < 1e-3, "rolled along +x by the clip's root motion: {:?}", w.pos);
 }
 
-#[test]
-fn ground_combo_buffers_and_ends_with_finisher() {
-    let mut w = World::new(sora());
+fn mash(w: &mut World, connect: bool) -> (Vec<u16>, Vec<(usize, u16)>) {
     let mut motions = Vec::new();
     let mut hits = Vec::new();
     for f in 0..200 {
-        let mash = f % 2 == 0;
-        let o = w.step(Pad { attack: mash, ..IDLE });
+        let o = w.step(Pad { attack: f % 2 == 0, ..IDLE });
         if o.state == StateName::Attack && o.clip_frame == 0 {
             motions.push(o.motion);
+        }
+        if connect && !o.hitboxes.is_empty() {
+            w.ch.register_hit();
         }
         for h in o.hitboxes {
             hits.push((f, h.attack));
         }
     }
+    (motions, hits)
+}
+
+#[test]
+fn whiffed_swings_do_not_advance_the_combo() {
+    let mut w = World::new(sora());
+    let (motions, _) = mash(&mut w, false);
+    assert!(motions.len() >= 4);
+    assert!(motions.iter().all(|&m| m == 100), "{motions:?}");
+}
+
+#[test]
+fn ground_combo_buffers_and_ends_with_finisher() {
+    let mut w = World::new(sora());
+    let (motions, hits) = mash(&mut w, true);
     // Base combo of 3: two normal hits then the finisher.
     assert_eq!(motions[..3], [100, 100, 110]);
     // The second hit starts exactly when the combo window opens (frame 20).
@@ -228,7 +247,8 @@ fn aerial_dodge_once_per_airtime() {
 #[test]
 fn lock_on_picks_nearest_and_releases() {
     let mut w = World::new(sora());
-    w.targets = vec![TargetInfo { id: 7, pos: [0.0, 0.0, 500.0] }, TargetInfo { id: 9, pos: [0.0, 0.0, 300.0] }];
+    let t = |id, z| TargetInfo { id, pos: [0.0, 0.0, z], radius: 30.0, height: 100.0 };
+    w.targets = vec![t(7, 500.0), t(9, 300.0)];
     let o = w.step(Pad { lock: true, ..IDLE });
     assert_eq!(o.locked, Some(9));
     w.targets[1].pos = [0.0, 0.0, 5000.0];

@@ -44,7 +44,7 @@ docs/
    Options:
    - `--level N`: Sora's level, for stats from LVUP (default 30)
    - `--dummy-level N`
-   - `--gravity G`
+   - `--gravity G` (override the game's 20/49 for experiments)
    - `--backup`: read the untouched archives
    - `--synthetic`: made-up numbers, no install needed
 
@@ -86,20 +86,27 @@ install the player owns.
 - **83 of Sora's motions:** their exact lengths, root motion (attack lunges, the roll), combo-input
   windows, finisher-chain windows, turn-to-target windows, and Keyblade hitbox windows with ATKP
   ids. Guard comes from the guard-type ATKP window.
-- **Combo choice:** Sora's 37 PTYA rows, picked by distance and height to the target. For
-  example, a 250-unit target gets the A302 dash attack.
-- **Damage per hit:** ATKP power × (Strength − Defense) × resistance, clamped per enemy
-  (see `combat-model.md`).
+- **Combo choice:** Sora's 37 PTYA rows, read the way the game reads them:
+  - first valid row in table order, with the anti-repeat `sub` swap
+  - the combo count only advances on swings that connect
+  - finishers when `count + offset ≥ max`
+- **Physics from the executable:**
+  - a 30 Hz velocity tick
+  - double-sine jump arc with gravity 20/49
+  - 0.9/0.95 air control
+  - glide and Quick Run formulas
+  - Aerial Dodge only after a real jump
+- **Damage per hit:** the game's own order and rounding, base-term clamps from ENMP/LVPM, and
+  the exact difficulty table (see `docs/combat-model.md`).
 
-## Approximated or unconfirmed (see `docs/movement-model.md`)
+How the executable was studied: Ghidra headless on your own copy, kept outside the repo. Only
+plain-language notes are in `docs/`.
 
-- **Gravity.** No table holds it. It's estimated at 0.547 from the jump animation length;
-  override it with `--gravity`.
-- **How the combo table is read.** Row kinds, the finisher flag and tie-breaks are inferred
-  from the data's patterns. Without a target the ground combo comes out A300 → A300 → A304;
-  if the real game alternates swings, the `sub` field is probably the missing link.
-- **Glide descent formula, roll cancel point, landing recovery length, and the approach
-  assist before the first hitbox.**
+## Still approximated or open (see `docs/movement-model.md`)
+
+- **Variable jump height.** Whether holding jump changes the height hasn't been traced yet.
+- **Stick tilt → walk/run, landing recovery, and roll / Quick Run cancel points.**
+- **Air-control target speed and invulnerability timer units.**
 - **No skeleton.** Hitboxes use the Keyblade's real sphere sizes, but they're swept in a
   fixed arc in front of Sora rather than following the animated blade.
 - **Dummies don't attack yet.** Guard and invulnerability are shown (cyan / white) but never

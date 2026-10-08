@@ -20,10 +20,8 @@ pub const PLAYER_MSET: &str = "obj/P_EX100.mset";
 pub const WEAPON_MSET: &str = "obj/W_EX010.mset";
 pub const WEAPON_MDLX: &str = "obj/W_EX010.mdlx";
 
-/// Gravity is not in any table found so far. This estimate makes Sora's
-/// normal jump (185 units) peak when his rising animation (A003, 13 frames
-/// at 30 fps = 26 game frames) ends: g = 2h / t^2. See docs/movement-model.md.
-pub const ESTIMATED_GRAVITY: f32 = 2.0 * 185.0 / (26.0 * 26.0);
+/// SSTM float index of "attack distance to speed" (the ground lunge factor).
+pub const SSTM_ATTACK_DISTANCE_TO_SPEED: usize = 42;
 
 /// One attack collision sphere along the Keyblade (model units).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -61,10 +59,9 @@ pub fn move_params(p: &Pref) -> MoveParams {
         jump_height: f(prty, PRTY_FIELDS, "jump_height"),
         turn_speed: f(prty, PRTY_FIELDS, "turn_speed"),
         fall_max: f(sstm, SSTM_FIELDS, "fall_max"),
-        gravity: ESTIMATED_GRAVITY,
-        acceleration: f(prty, PRTY_FIELDS, "acceleration"),
-        brake: f(prty, PRTY_FIELDS, "brake"),
-        run_threshold: 0.5,
+        // Gravity and air control are constants in the executable, not
+        // table values; MoveParams::default() carries them.
+        ..MoveParams::default()
     }
 }
 
@@ -102,14 +99,10 @@ pub fn attack_params(p: &Pref) -> AttackParams {
     let sstm = rec(&p.sstm, 0);
     let g = |n: &str| f(plyr, PLYR_FIELDS, n);
     AttackParams {
-        attack_y_offset: g("attack_y_offset"),
-        first_v0: g("attack_first_v0"),
-        combo_v0: g("attack_combo_v0"),
-        finish_v0: g("attack_finish_v0"),
         auto_lock_on_range: g("auto_lock_on_range"),
         lock_on_range: f(sstm, SSTM_FIELDS, "lock_on_range"),
         lock_on_release_range: f(sstm, SSTM_FIELDS, "lock_on_release_range"),
-        contact_distance: AttackParams::default().contact_distance,
+        distance_to_speed: sstm.get(SSTM_ATTACK_DISTANCE_TO_SPEED).copied().unwrap_or(0.0),
     }
 }
 
@@ -118,16 +111,23 @@ pub fn combo_row(e: &PtyaEntry) -> ComboRow {
         id: e.id,
         kind: e.kind,
         sub: e.sub,
+        combo_offset: e.combo_offset,
         flag: e.flag,
         motion: e.motion,
         next_motion: e.next_motion,
         jump: e.jump,
+        jump_min: e.jump_min,
+        jump_max: e.jump_max,
         speed_min: e.speed_min,
         speed_max: e.speed_max,
         near: e.near,
         far: e.far,
         low: e.low,
         high: e.high,
+        inner_min: e.inner_min,
+        inner_max: e.inner_max,
+        blend_time: e.blend_time,
+        distance_adjust: e.distance_adjust,
         ability: e.ability,
         score: e.score,
     }
@@ -162,7 +162,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapon: Option<&Anb>, combat: &C
             let kind = match r.id {
                 range_id::ATTACK_HITBOX | range_id::ATTACK_HITBOX_COMBO => {
                     let attack = p(0) as u16;
-                    let is_guard = combat.battle.attack(attack, 0).map_or(false, |a| matches!(a.kind, 2 | 3));
+                    let is_guard = combat.battle.attack_for_level(attack, 0, 99).map_or(false, |a| matches!(a.kind, 2 | 3));
                     if is_guard {
                         WindowKind::Guard
                     } else {

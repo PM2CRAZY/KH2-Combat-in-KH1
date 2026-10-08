@@ -30,10 +30,16 @@ fn table<T>(name: &str, buf: &[u8], entry_size: usize, mut f: impl FnMut(&mut Re
 /// ATKP: one row per attack hitbox parameter set. 48 bytes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Atkp {
+    /// Low byte: lowest attacker level this row applies to. High byte: the
+    /// sub id. (Read as one u16 here; see [`Atkp::min_level`] and
+    /// [`Atkp::sub`]. Checked in the executable's ATKP lookup.)
     pub sub_id: u16,
     pub id: u16,
     pub kind: u8,
-    pub critical_adjust: u8,
+    /// Which attacker stat the damage scales from: 0 Strength, 1 Magic,
+    /// anything else none. (OpenKH calls this byte "critical adjust"; the
+    /// executable's damage routine reads it as the stat source.)
+    pub stat_source: u8,
     pub power: u16,
     pub team: u8,
     pub element: u8,
@@ -67,12 +73,21 @@ pub struct Atkp {
 
 impl Atkp {
     pub const SIZE: usize = 48;
+
+    pub fn min_level(&self) -> u8 {
+        self.sub_id as u8
+    }
+
+    pub fn sub(&self) -> u8 {
+        (self.sub_id >> 8) as u8
+    }
+
     fn read(r: &mut Reader) -> Result<Atkp> {
         Ok(Atkp {
             sub_id: r.u16()?,
             id: r.u16()?,
             kind: r.u8()?,
-            critical_adjust: r.u8()?,
+            stat_source: r.u8()?,
             power: r.u16()?,
             team: r.u8()?,
             element: r.u8()?,
@@ -465,6 +480,28 @@ impl Battle {
 
     pub fn attack(&self, id: u16, sub_id: u16) -> Option<&Atkp> {
         self.atkp.iter().find(|a| a.id == id && a.sub_id == sub_id)
+    }
+
+    /// The row the game uses for attack `id`/`sub` at attacker `level`.
+    ///
+    /// Rows sharing an id and sub are stored in ascending level order. The
+    /// game starts from the first and walks forward while the next row's
+    /// minimum level is at most `level`. A row with `switch` 0 always
+    /// replaces the current pick; a row with `switch` 1 or 2 only does so
+    /// when `(level - min_level)` is even (1) or odd (2).
+    pub fn attack_for_level(&self, id: u16, sub: u8, level: u8) -> Option<&Atkp> {
+        let start = self.atkp.iter().position(|a| a.id == id && a.sub() == sub)?;
+        let mut pick = &self.atkp[start];
+        for row in &self.atkp[start + 1..] {
+            if row.id != id || row.sub() != sub || level < row.min_level() {
+                break;
+            }
+            let parity = ((level - row.min_level()) & 1) + 1;
+            if row.switch == 0 || parity == row.switch {
+                pick = row;
+            }
+        }
+        Some(pick)
     }
 }
 

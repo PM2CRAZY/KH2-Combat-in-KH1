@@ -107,13 +107,12 @@ fn main() {
             };
             let mut character = data.character.clone();
             character.abilities = Abilities::max_growth();
-            let attacks: HashMap<u16, AttackDef> = data
-                .combat
-                .battle
-                .atkp
-                .iter()
-                .filter(|a| a.sub_id == 0)
-                .map(|a| (a.id, kh2_data::attack_def(a, data.combat.power_scale)))
+            // Sub 0 of every attack id, at Sora's level (the game picks
+            // level variants this way).
+            let ids: std::collections::BTreeSet<u16> = data.combat.battle.atkp.iter().filter(|a| a.sub() == 0).map(|a| a.id).collect();
+            let attacks: HashMap<u16, AttackDef> = ids
+                .into_iter()
+                .filter_map(|id| data.combat.attack_at_level(id, 0, level as u8).map(|a| (id, a)))
                 .collect();
             let dummy_template = data.combat.enemy(DUMMY_ENEMY, Some(dummy_level));
             app.insert_resource(Game {
@@ -505,7 +504,7 @@ fn simulate(
     let input = CInput { stick: [s.x, s.y], jump: btn(0, &latch), attack: btn(1, &latch), action: btn(2, &latch), lock: btn(3, &latch) };
     latch.pressed = [false; 4];
 
-    let targets: Vec<TargetInfo> = dummies.iter().filter(|d| d.respawn == 0).map(|d| TargetInfo { id: d.id, pos: d.pos }).collect();
+    let targets: Vec<TargetInfo> = dummies.iter().filter(|d| d.respawn == 0).map(|d| TargetInfo { id: d.id, pos: d.pos, radius: DUMMY_RADIUS, height: DUMMY_HEIGHT }).collect();
     let arena = Arena::new(ARENA_BOXES);
     let ground = arena.ground_below(game.pos, SORA_RADIUS);
     let env = Env {
@@ -567,6 +566,7 @@ fn simulate(
             let sora = game.sora.clone();
             let r = game.tracker.try_hit(game.frame, h.swing, &game.rules, &attack, &sora, &mut dm.combatant);
             if r.blocked.is_none() {
+                game.character.register_hit();
                 let fwd = [out.facing.sin(), out.facing.cos()];
                 // Knockback: ATKP strength spread over 10 frames
                 // (approximation; the real push depends on enemy weight).
@@ -575,7 +575,7 @@ fn simulate(
                 dm.knock_frames = 10;
                 dm.flash = 6;
                 let line = format!(
-                    "hit Shadow#{} with atkp {} ({}x): {} dmg  HP {}/{}{}",
+                    "hit Shadow#{} with atkp {} ({}%): {} dmg  HP {}/{}{}",
                     dm.id - 99,
                     h.attack,
                     attack.power,

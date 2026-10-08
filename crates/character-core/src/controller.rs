@@ -4,12 +4,17 @@
 //! and a little world information, moves the body by
 //! [`Output::displacement`] with its own collision, and reports
 //! `grounded` back on the next frame. Hitboxes come out as data; the host
-//! places shapes and resolves hits (e.g. with `combat-core`).
+//! places shapes, resolves hits (e.g. with `combat-core`) and calls
+//! [`Character::register_hit`] when the current swing connects.
+//!
+//! Like KH2, input and action logic run every frame but velocities are
+//! recomputed on a 30 Hz physics tick (every second frame) and held in
+//! between. See `docs/movement-model.md`.
 
 use std::collections::HashMap;
 
 use crate::clip::{Clip, EventKind, WindowKind};
-use crate::combo::{select, ComboRow, Situation, TargetGeom};
+use crate::combo::{select, ComboRow, Situation, TargetGeom, FLAG_JUMP_ADJUST};
 use crate::params::{Abilities, AttackParams, ComboRules, GrowthLevel, MoveParams};
 
 /// Motion ids used by the controller (KH2 player moveset numbering).
@@ -25,9 +30,9 @@ pub mod motion {
     pub const AERIAL_DODGE: u16 = 202;
     pub const QUICK_RUN: u16 = 203;
     pub const QUICK_RUN_END: u16 = 204;
-    pub const GLIDE_START: u16 = 205;
-    pub const GLIDE: u16 = 206;
-    pub const GLIDE_TURN: u16 = 207;
+    pub const GLIDE: u16 = 205;
+    pub const GLIDE_TURN_A: u16 = 206;
+    pub const GLIDE_TURN_B: u16 = 207;
     pub const GLIDE_END: u16 = 208;
     pub const DODGE_ROLL: u16 = 209;
 }
@@ -69,6 +74,9 @@ pub struct TargetInfo {
     pub id: u32,
     /// Feet position.
     pub pos: [f32; 3],
+    /// Collision radius and height (used by the combo table's range checks).
+    pub radius: f32,
+    pub height: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -117,8 +125,63 @@ pub struct Output {
     pub invulnerable: bool,
     pub guarding: bool,
     pub locked: Option<u32>,
+    /// KH2 combo counter (1 on the first swing; only advances on swings
+    /// that follow a connecting one).
     pub combo_count: u8,
     pub events: Vec<EventKind>,
+}
+
+/// KH2's jump curve. Rising: `y = h * sin(pi/2 * sin(pi/2 * t/T))` with
+/// `T = sqrt(2h/g)`; after the apex, `y = h - g/2 * (t - T)^2`. `t` is in
+/// 60 Hz frames.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Arc {
+    pub height: f32,
+    pub t: f32,
+    pub uptime: f32,
+}
+
+impl Arc {
+    pub fn new(height: f32, gravity: f32) -> Arc {
+        let h = height.max(0.0);
+        Arc { height: h, t: 0.0, uptime: uptime(h, gravity) }
+    }
+
+    /// Falling from rest (walked off a ledge, glide ended, ...).
+    pub fn fall() -> Arc {
+        Arc { height: 0.0, t: 0.0, uptime: 0.0 }
+    }
+
+    pub fn y(&self, t: f32, gravity: f32) -> f32 {
+        if t < self.uptime {
+            let half_pi = std::f32::consts::FRAC_PI_2;
+            self.height * (half_pi * (half_pi * t / self.uptime).sin()).sin()
+        } else {
+            let d = t - self.uptime;
+            self.height - 0.5 * gravity * d * d
+        }
+    }
+
+    pub fn rising(&self) -> bool {
+        self.t < self.uptime
+    }
+
+    /// Advances by `dt` frames and returns the height change, with the
+    /// downward step limited to `fall_max` per frame.
+    pub fn advance(&mut self, dt: f32, gravity: f32, fall_max: f32) -> f32 {
+        let dy = self.y(self.t + dt, gravity) - self.y(self.t, gravity);
+        self.t += dt;
+        dy.max(-fall_max * dt)
+    }
+}
+
+/// Frames for a jump of `height` to reach its apex.
+pub fn uptime(height: f32, gravity: f32) -> f32 {
+    if height <= 0.0 {
+        0.0
+    } else {
+        (2.0 * height / gravity.max(1e-6)).sqrt()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -129,7 +192,7 @@ enum ActionKind {
     QuickRun,
     AerialDodge,
     Guard,
-    Attack { row: ComboRow, air: bool },
+    Attack { row: ComboRow },
 }
 
 #[derive(Clone, Debug)]
@@ -138,16 +201,23 @@ struct Action {
     motion: u16,
     frame: u32,
     swing: u64,
-    /// Horizontal speed driven by the action (quick run).
-    speed: f32,
+    /// Quick Run: frames left before braking hard, and the current brake.
+    timer: f32,
+    brake: f32,
+    /// Ground attack lunge speed (until the first hitbox opens).
+    lunge: f32,
 }
 
 #[derive(Clone, Debug)]
 enum Mode {
     Free,
-    Glide { frame: u32, speed: f32 },
+    Glide,
     Action(Action),
 }
+
+/// Physics tick length in frames: KH2 recomputes velocities at 30 Hz.
+const DT: f32 = 2.0;
+const DEAD_ZONE: f32 = 0.1;
 
 /// One controllable character.
 #[derive(Clone, Debug)]
@@ -163,13 +233,17 @@ pub struct Character {
     vel_h: [f32; 2],
     vel_y: f32,
     airborne: bool,
+    arc: Option<Arc>,
+    tick: u64,
     mode: Mode,
     swing_counter: u64,
     lock: Option<u32>,
-    air_dodged: bool,
-    ground_hits: u8,
-    air_hits: u8,
+    /// Set when a jump starts with Aerial Dodge owned; cleared on use.
+    air_dodge_ready: bool,
+    count: u8,
     finishers: u8,
+    /// The current swing has connected.
+    hit: bool,
     buffered_attack: bool,
 }
 
@@ -200,14 +274,25 @@ fn len2(v: [f32; 2]) -> f32 {
     (v[0] * v[0] + v[1] * v[1]).sqrt()
 }
 
-/// Initial upward speed that peaks at `height` under this controller's
-/// per-frame integration (gravity is subtracted before the move each frame):
-/// apex = v0^2 / 2g + v0 / 2 - ... solved exactly for the discrete sum.
-fn jump_velocity(height: f32, gravity: f32) -> f32 {
-    let g = gravity.max(1e-4);
-    let h = height.max(0.0);
-    // Sum of (v0 - k g) for k = 1..n while positive ~= v0^2 / (2g) - v0 / 2.
-    g / 2.0 + (g * g / 4.0 + 2.0 * g * h).sqrt()
+fn norm(v: [f32; 2]) -> [f32; 2] {
+    let l = len2(v);
+    if l > 1e-6 { [v[0] / l, v[1] / l] } else { [0.0; 2] }
+}
+
+fn scale(v: [f32; 2], s: f32) -> [f32; 2] {
+    [v[0] * s, v[1] * s]
+}
+
+#[derive(Default)]
+struct FrameOut {
+    root: [f32; 3],
+    hitboxes: Vec<ActiveHitbox>,
+    invulnerable: bool,
+    guarding: bool,
+    no_gravity: bool,
+    motion: u16,
+    clip_frame: u32,
+    events: Vec<EventKind>,
 }
 
 impl Character {
@@ -223,13 +308,15 @@ impl Character {
             vel_h: [0.0; 2],
             vel_y: 0.0,
             airborne: false,
+            arc: None,
+            tick: 0,
             mode: Mode::Free,
             swing_counter: 0,
             lock: None,
-            air_dodged: false,
-            ground_hits: 0,
-            air_hits: 0,
+            air_dodge_ready: false,
+            count: 0,
             finishers: 0,
+            hit: false,
             buffered_attack: false,
         }
     }
@@ -240,6 +327,16 @@ impl Character {
 
     pub fn set_facing(&mut self, yaw: f32) {
         self.facing = wrap(yaw);
+    }
+
+    /// Tell the controller the current swing connected. In KH2 only a swing
+    /// that follows a connecting swing advances the combo.
+    pub fn register_hit(&mut self) {
+        self.hit = true;
+    }
+
+    pub fn combo_count(&self) -> u8 {
+        self.count
     }
 
     fn growth(&self, level: u8) -> Option<&GrowthLevel> {
@@ -258,7 +355,7 @@ impl Character {
         self.moveset.clips.get(&m)
     }
 
-    fn max_hits(&self, air: bool) -> u8 {
+    fn max_count(&self, air: bool) -> u8 {
         let a = &self.abilities;
         let (base, plus) = if air {
             (self.combo_rules.air_base, a.air_combo_plus)
@@ -268,25 +365,37 @@ impl Character {
         (base + plus).saturating_sub(a.negative_combo).max(1)
     }
 
-    fn target_pos(&self, env: &Env) -> Option<[f32; 3]> {
-        let pick = |id: u32| env.targets.iter().find(|t| t.id == id).map(|t| t.pos);
+    fn max_finishers(&self) -> u8 {
+        self.combo_rules.finisher_base + self.abilities.finishing_plus
+    }
+
+    fn primary_target<'e>(&self, env: &'e Env) -> Option<&'e TargetInfo> {
         if let Some(id) = self.lock {
-            return pick(id);
+            return env.targets.iter().find(|t| t.id == id);
         }
         // Auto-target: nearest within the longest combo-row reach or the
-        // auto lock-on range, whichever is larger (hypothesis).
-        let reach = self
-            .moveset
-            .combo_rows
-            .iter()
-            .map(|r| r.far)
-            .fold(self.attack.auto_lock_on_range, f32::max);
+        // auto lock-on range, whichever is larger (not yet checked).
+        let reach = self.moveset.combo_rows.iter().map(|r| r.far).fold(self.attack.auto_lock_on_range, f32::max);
         env.targets
             .iter()
             .map(|t| (t, dist_h(env.pos, t.pos)))
             .filter(|(_, d)| *d <= reach)
             .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(t, _)| t.pos)
+            .map(|(t, _)| t)
+    }
+
+    fn geom(&self, env: &Env, t: &TargetInfo) -> TargetGeom {
+        let d = [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]];
+        let n = norm(d);
+        let f = self.forward();
+        TargetGeom {
+            id: t.id,
+            distance: len2(d),
+            dy: t.pos[1] - env.pos[1],
+            radius: t.radius,
+            height: t.height,
+            facing_dot: if len2(d) > 1e-3 { n[0] * f[0] + n[1] * f[1] } else { 1.0 },
+        }
     }
 
     fn update_lock(&mut self, input: &Input, env: &Env) {
@@ -314,52 +423,107 @@ impl Character {
 
     fn start_action(&mut self, kind: ActionKind, motion: u16) {
         self.swing_counter += 1;
-        self.mode = Mode::Action(Action { kind, motion, frame: 0, swing: self.swing_counter, speed: 0.0 });
+        self.mode = Mode::Action(Action { kind, motion, frame: 0, swing: self.swing_counter, timer: 0.0, brake: 1.0, lunge: 0.0 });
+    }
+
+    fn start_arc(&mut self, height: f32) {
+        self.arc = Some(Arc::new(height, self.params.gravity));
+        self.airborne = true;
     }
 
     /// Tries to start an attack. Returns false if no combo row fits.
     fn try_attack(&mut self, input: &Input, env: &Env) -> bool {
-        let air = self.airborne;
-        let hits = if air { self.air_hits } else { self.ground_hits };
-        let max = self.max_hits(air);
-        let chaining_finisher = self.finishers > 0;
-        if hits >= max && !chaining_finisher {
-            return false;
+        let (current_motion, in_finisher) = match &self.mode {
+            Mode::Action(Action { kind: ActionKind::Attack { row }, motion, .. }) => (Some(*motion), row.is_finisher()),
+            _ => (None, false),
+        };
+        let in_attack = current_motion.is_some();
+        let hit = self.hit || self.abilities.combo_master;
+        let saved = (self.count, self.finishers);
+        // The counter moves when the next swing starts.
+        if in_finisher && hit && self.finishers < self.max_finishers() {
+            self.count = self.count.saturating_add(1);
+            self.finishers += 1;
+        } else if in_attack && hit {
+            self.count = self.count.saturating_add(1);
+        } else if !in_attack {
+            self.count = 1;
+            self.finishers = 1;
         }
-        let finisher = chaining_finisher || hits + 1 >= max;
-        let target = self.target_pos(env).map(|t| TargetGeom {
-            distance: dist_h(env.pos, t),
-            dy: t[1] - (env.pos[1] + self.attack.attack_y_offset),
-        });
-        let sit = Situation { air, finisher, target, equipped: &self.abilities.equipped };
-        let Some(row) = select(&self.moveset.combo_rows, &sit).cloned() else { return false };
+
+        let air = self.airborne;
+        let all: Vec<TargetGeom> = env.targets.iter().map(|t| self.geom(env, t)).collect();
+        let primary = self.primary_target(env).map(|t| self.geom(env, t));
+        let sit = Situation {
+            air,
+            count: self.count,
+            finishers: self.finishers,
+            max_count: self.max_count(air),
+            current_motion: current_motion.unwrap_or(u16::MAX),
+            primary,
+            all: &all,
+            equipped: &self.abilities.equipped,
+            jump_height: self.params.jump_height,
+        };
+        let Some(choice) = select(&self.moveset.combo_rows, &sit) else {
+            (self.count, self.finishers) = saved;
+            return false;
+        };
+        let row = choice.row.clone();
+        let target = choice.target;
         if self.clip(row.motion).is_none() {
+            (self.count, self.finishers) = saved;
             return false;
         }
         // No target: face the stick direction immediately.
-        if target.is_none() && len2(input.stick) > 0.1 {
+        if target.is_none() && len2(input.stick) > DEAD_ZONE {
             self.facing = yaw_of(input.stick);
         }
-        if air {
-            self.air_hits += 1;
-            if row.jump > 0.0 {
-                self.vel_y = jump_velocity(row.jump, self.params.gravity);
+        let dir = match target.and_then(|t| env.targets.iter().find(|x| x.id == t.id)) {
+            Some(t) => norm([t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]]),
+            None => self.forward(),
+        };
+        let mut lunge = 0.0;
+        if row.is_jump() {
+            if !self.airborne {
+                // Launching into the air restarts the count.
+                self.count = 1;
+                self.finishers = 1;
             }
+            let (height, speed) = match target {
+                Some(t) => {
+                    let extra = if row.flag & FLAG_JUMP_ADJUST != 0 { self.params.jump_height } else { 0.0 };
+                    let h = t.dy.clamp(row.jump_min, (row.jump_max + extra).max(row.jump_min));
+                    let up = uptime(h, self.params.gravity).max(1.0);
+                    let s = ((t.distance - t.radius).max(0.0) / up).clamp(row.speed_min, row.speed_max.max(row.speed_min));
+                    (h, s)
+                }
+                None => (row.jump, row.speed_max),
+            };
+            self.start_arc(height);
+            self.vel_h = scale(dir, speed);
+            self.vel_y = 0.0;
         } else {
-            self.ground_hits += 1;
+            self.vel_h = [0.0; 2];
+            if let Some(t) = target {
+                if row.speed_max > 0.0 {
+                    let gap = (t.distance - t.radius).max(0.0);
+                    lunge = ((gap + row.distance_adjust) * self.attack.distance_to_speed).clamp(row.speed_min, row.speed_max);
+                }
+            }
         }
-        if finisher {
-            self.finishers += 1;
-        }
-        self.vel_h = [0.0; 2];
+        self.hit = false;
         self.buffered_attack = false;
         let motion = row.motion;
-        self.start_action(ActionKind::Attack { row, air }, motion);
+        self.start_action(ActionKind::Attack { row }, motion);
+        if let Mode::Action(a) = &mut self.mode {
+            a.lunge = lunge;
+        }
         true
     }
 
     fn try_action_button(&mut self, input: &Input) -> bool {
-        let moving = len2(input.stick) > 0.1;
+        let moving = len2(input.stick) > DEAD_ZONE;
         let a = self.abilities.clone();
         if !self.airborne {
             if !moving {
@@ -376,392 +540,406 @@ impl Character {
                 self.start_action(ActionKind::DodgeRoll, motion::DODGE_ROLL);
                 return true;
             }
-        } else if a.aerial_dodge > 0 && !self.air_dodged {
+        } else if a.aerial_dodge > 0 && self.air_dodge_ready {
             let g = self.growth(a.aerial_dodge).cloned().unwrap_or_default();
-            self.air_dodged = true;
-            self.vel_y = jump_velocity(g.air_dodge_height, self.params.gravity);
+            self.air_dodge_ready = false;
+            let dir = if moving { norm(input.stick) } else { self.forward() };
             if moving {
                 self.facing = yaw_of(input.stick);
             }
-            let f = self.forward();
-            let s = if moving { g.air_dodge_speed } else { 0.0 };
-            self.vel_h = [f[0] * s, f[1] * s];
+            self.start_arc(g.air_dodge_height);
+            self.vel_h = scale(dir, g.air_dodge_speed);
+            self.vel_y = 0.0;
             self.start_action(ActionKind::AerialDodge, motion::AERIAL_DODGE);
             return true;
         }
         if a.quick_run > 0 && moving {
             let g = self.growth(a.quick_run).cloned().unwrap_or_default();
             self.facing = yaw_of(input.stick);
+            self.vel_h = scale(norm(input.stick), g.quick_run_speed);
+            self.vel_y = 0.0;
+            self.arc = None;
             self.start_action(ActionKind::QuickRun, motion::QUICK_RUN);
             if let Mode::Action(act) = &mut self.mode {
-                act.speed = g.quick_run_speed;
+                act.timer = g.quick_run_time;
+                act.brake = g.quick_run_brake;
             }
             return true;
         }
         false
     }
 
-    fn try_jump(&mut self, input: &Input, env: &Env) -> bool {
+    fn try_jump(&mut self, env: &Env) -> bool {
         if !self.airborne {
             let high = self.abilities.high_jump > 0;
             let m = if high && self.clip(motion::HIGH_JUMP).is_some() { motion::HIGH_JUMP } else { motion::JUMP };
             self.start_action(ActionKind::Jump { high }, m);
             return true;
         }
-        let lv = self.abilities.glide;
-        if let Some(g) = self.growth(lv).cloned() {
-            if env.height_above_ground >= g.glide_start_height && input.jump.held {
-                let speed = len2(self.vel_h);
-                self.vel_y = self.vel_y.min(0.0);
-                self.mode = Mode::Glide { frame: 0, speed };
+        if let Some(g) = self.growth(self.abilities.glide) {
+            if env.height_above_ground > g.glide_start_height {
+                self.arc = None;
+                self.vel_y = 0.0;
+                self.mode = Mode::Glide;
                 return true;
             }
         }
         false
     }
 
-    /// Ground/air movement from the stick, KH2 style: the character turns
-    /// at a capped rate and always moves along its facing.
-    fn free_move(&mut self, input: &Input) {
-        let m = len2(input.stick).min(1.0);
-        let p = &self.params;
-        let target_speed = if m >= p.run_threshold {
-            p.run_speed
-        } else if m > 0.1 {
-            p.walk_speed
-        } else {
-            0.0
-        };
-        if m > 0.1 {
-            self.facing = turn_toward(self.facing, yaw_of(input.stick), p.turn_speed);
-        }
-        let f = self.forward();
-        let want = [f[0] * target_speed, f[1] * target_speed];
-        if p.acceleration > 0.0 && target_speed > 0.0 {
-            let a = p.acceleration;
-            self.vel_h = [self.vel_h[0] * a + want[0] * (1.0 - a), self.vel_h[1] * a + want[1] * (1.0 - a)];
-        } else if p.brake > 0.0 && target_speed == 0.0 {
-            self.vel_h = [self.vel_h[0] * p.brake, self.vel_h[1] * p.brake];
-            if len2(self.vel_h) < 0.05 {
-                self.vel_h = [0.0; 2];
-            }
-        } else {
-            self.vel_h = want;
-        }
-    }
-
-    fn apply_gravity(&mut self, no_gravity: bool) {
-        if !self.airborne {
-            self.vel_y = self.vel_y.max(0.0);
-            return;
-        }
-        if !no_gravity {
-            self.vel_y = (self.vel_y - self.params.gravity).max(-self.params.fall_max);
-        }
-    }
-
     fn reset_combo(&mut self) {
-        self.ground_hits = 0;
-        self.air_hits = 0;
+        self.count = 0;
         self.finishers = 0;
         self.buffered_attack = false;
+    }
+
+    fn free_motion(&self) -> u16 {
+        let p = &self.params;
+        let speed = len2(self.vel_h);
+        if self.airborne {
+            motion::FALL
+        } else if speed >= (p.walk_speed + p.run_speed) * 0.5 {
+            motion::RUN
+        } else if speed > 0.0 {
+            motion::WALK
+        } else {
+            motion::IDLE
+        }
+    }
+
+    fn land(&mut self) {
+        self.arc = None;
+        self.vel_y = 0.0;
+        self.air_dodge_ready = false;
+        let land = self.clip(motion::LAND).is_some();
+        match &self.mode {
+            Mode::Free | Mode::Glide => {
+                self.mode = Mode::Free;
+                self.reset_combo();
+                if land {
+                    self.start_action(ActionKind::Land, motion::LAND);
+                }
+            }
+            Mode::Action(a) => match &a.kind {
+                ActionKind::AerialDodge => {
+                    self.mode = Mode::Free;
+                    if land {
+                        self.start_action(ActionKind::Land, motion::LAND);
+                    }
+                }
+                ActionKind::Attack { row } if row.is_jump() || row.is_air() => {
+                    self.mode = Mode::Free;
+                    self.reset_combo();
+                }
+                _ => {}
+            },
+        }
     }
 
     /// Advances one 60 Hz frame.
     pub fn step(&mut self, input: &Input, env: &Env) -> Output {
         self.update_lock(input, env);
-        let mut events = Vec::new();
         let was_airborne = self.airborne;
-        let rising = self.vel_y > 0.0;
+        let rising = self.arc.map_or(false, |a| a.rising());
         self.airborne = !env.grounded || rising;
-
-        // Landing.
         if was_airborne && !self.airborne {
-            self.air_dodged = false;
-            self.air_hits = 0;
-            match &self.mode {
-                Mode::Free => {
-                    self.reset_combo();
-                    if self.clip(motion::LAND).is_some() {
-                        self.start_action(ActionKind::Land, motion::LAND);
-                    }
-                }
-                Mode::Glide { .. } => {
-                    self.mode = Mode::Free;
-                }
-                Mode::Action(a) => {
-                    // Air attacks and air dodges end on touchdown.
-                    if matches!(a.kind, ActionKind::Attack { air: true, .. } | ActionKind::AerialDodge) {
-                        self.mode = Mode::Free;
-                        self.reset_combo();
-                    }
-                }
-            }
+            self.land();
         }
-        // Walked off a ledge mid-ground-action: keep going, gravity applies.
 
-        let target = self.target_pos(env);
-        let mut root = [0.0f32; 3];
-        let mut hitboxes = Vec::new();
-        let mut invulnerable = false;
-        let mut guarding = false;
-        let mut no_gravity = false;
-        let mut motion_id;
-        let mut clip_frame = 0;
+        let mut fo = FrameOut::default();
+        let release = |b: Button| Button { pressed: false, held: b.held };
+        let mut inp = *input;
+        for _ in 0..4 {
+            if !self.control(&inp, env, &mut fo) {
+                break;
+            }
+            // Something started: run its frame 0 now, without re-reading presses.
+            let events = std::mem::take(&mut fo.events);
+            fo = FrameOut { events, ..FrameOut::default() };
+            inp = Input { attack: release(input.attack), jump: release(input.jump), action: release(input.action), ..*input };
+        }
 
+        if self.tick % 2 == 0 {
+            self.physics(input, env, fo.no_gravity);
+        }
+        self.tick += 1;
+
+        Output {
+            displacement: [self.vel_h[0] + fo.root[0], self.vel_y + fo.root[1], self.vel_h[1] + fo.root[2]],
+            facing: self.facing,
+            state: self.state_name(),
+            motion: fo.motion,
+            clip_frame: fo.clip_frame,
+            hitboxes: fo.hitboxes,
+            invulnerable: fo.invulnerable,
+            guarding: fo.guarding,
+            locked: self.lock,
+            combo_count: self.count,
+            events: fo.events,
+        }
+    }
+
+    /// Per-frame control. Returns true when a new action or mode started
+    /// and its first frame still has to run.
+    fn control(&mut self, input: &Input, env: &Env, fo: &mut FrameOut) -> bool {
+        let moving = len2(input.stick) > DEAD_ZONE;
         match std::mem::replace(&mut self.mode, Mode::Free) {
             Mode::Free => {
-                self.mode = Mode::Free;
-                let acted = (input.attack.pressed && self.try_attack(input, env))
-                    || (input.jump.pressed && self.try_jump(input, env))
-                    || (input.action.pressed && self.try_action_button(input));
-                if !acted {
-                    self.free_move(input);
+                if (input.attack.pressed && self.try_attack(input, env))
+                    || (input.jump.pressed && self.try_jump(env))
+                    || (input.action.pressed && self.try_action_button(input))
+                {
+                    return true;
                 }
-                motion_id = if self.airborne { motion::FALL } else if len2(self.vel_h) > self.params.walk_speed { motion::RUN } else if len2(self.vel_h) > 0.0 { motion::WALK } else { motion::IDLE };
-                if !matches!(self.mode, Mode::Free) {
-                    // Started something this frame: run its frame 0 now.
-                    return self.step_started(input, env, events);
+                if moving {
+                    self.facing = turn_toward(self.facing, yaw_of(input.stick), self.params.turn_speed);
                 }
+                fo.motion = self.free_motion();
+                false
             }
-            Mode::Glide { frame, speed } => {
+            Mode::Glide => {
                 let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
                 if !input.jump.held || env.height_above_ground < g.glide_end_height || !self.airborne {
                     self.mode = Mode::Free;
-                    self.free_move(input);
-                    motion_id = motion::GLIDE_END;
-                } else {
-                    if len2(input.stick) > 0.1 {
-                        self.facing = turn_toward(self.facing, yaw_of(input.stick), g.glide_turn_speed);
+                    self.arc = Some(Arc::fall());
+                    fo.motion = motion::FALL;
+                    return false;
+                }
+                let mut turn = 0;
+                if moving {
+                    let want = yaw_of(input.stick);
+                    let d = wrap(want - self.facing);
+                    if d.abs() > 1e-3 {
+                        turn = if d > 0.0 { 1 } else { -1 };
                     }
-                    let a = g.glide_acceleration;
-                    let speed = speed * a + g.glide_speed * (1.0 - a);
-                    let f = self.forward();
-                    self.vel_h = [f[0] * speed, f[1] * speed];
-                    // Descent accelerates by fall_ratio x speed per frame,
-                    // capped at glide_fall_max (hypothesis, see docs).
-                    self.vel_y = (self.vel_y - g.glide_fall_ratio * speed).max(-g.glide_fall_max);
-                    no_gravity = true;
-                    self.mode = Mode::Glide { frame: frame + 1, speed };
-                    motion_id = if frame < 10 { motion::GLIDE_START } else { motion::GLIDE };
-                    clip_frame = frame;
+                    self.facing = turn_toward(self.facing, want, g.glide_turn_speed);
+                }
+                fo.motion = match turn {
+                    0 => motion::GLIDE,
+                    1 => motion::GLIDE_TURN_A,
+                    _ => motion::GLIDE_TURN_B,
+                };
+                fo.no_gravity = true;
+                self.mode = Mode::Glide;
+                false
+            }
+            Mode::Action(act) => self.run_action(act, input, env, fo),
+        }
+    }
+
+    fn run_action(&mut self, mut act: Action, input: &Input, env: &Env, fo: &mut FrameOut) -> bool {
+        fo.motion = act.motion;
+        fo.clip_frame = act.frame;
+        let clip = self.clip(act.motion).cloned().unwrap_or_else(|| Clip::plain(act.motion, 1));
+        let f = act.frame;
+        let mut finished = f >= clip.length;
+        let mut cancel_allowed = clip.has(f, |k| matches!(k, WindowKind::Combo | WindowKind::Finisher));
+        let target = self.primary_target(env).map(|t| t.pos);
+
+        for (wi, w) in clip.windows.iter().enumerate() {
+            if !w.contains(f) {
+                continue;
+            }
+            match w.kind {
+                WindowKind::Hitbox { attack, group, .. } => {
+                    fo.hitboxes.push(ActiveHitbox { swing: (act.swing << 8) | wi as u64, attack, group })
+                }
+                WindowKind::TurnToLock(rate) | WindowKind::TurnToTarget(rate) => {
+                    if let Some(t) = target {
+                        let d = [t[0] - env.pos[0], t[2] - env.pos[2]];
+                        if len2(d) > 1.0 {
+                            self.facing = turn_toward(self.facing, yaw_of(d), rate);
+                        }
+                    }
+                }
+                WindowKind::Invulnerable => fo.invulnerable = true,
+                WindowKind::NoGravity => fo.no_gravity = true,
+                WindowKind::Guard => fo.guarding = true,
+                _ => {}
+            }
+        }
+        for e in clip.events.iter().filter(|e| e.frame == f) {
+            fo.events.push(e.kind);
+        }
+
+        match &act.kind {
+            ActionKind::Jump { high } => {
+                if len2(input.stick) > DEAD_ZONE {
+                    self.facing = turn_toward(self.facing, yaw_of(input.stick), self.params.turn_speed);
+                }
+                let jump_frame = clip.events.iter().find(|e| e.kind == EventKind::Jump).map_or(0, |e| e.frame);
+                if f >= jump_frame {
+                    let h = if *high {
+                        self.growth(self.abilities.high_jump).map_or(self.params.jump_height, |g| g.high_jump_height)
+                    } else {
+                        self.params.jump_height
+                    };
+                    self.start_arc(h);
+                    self.air_dodge_ready = self.abilities.aerial_dodge > 0;
+                    finished = true;
                 }
             }
-            Mode::Action(mut act) => {
-                motion_id = act.motion;
-                clip_frame = act.frame;
-                let clip = self.clip(act.motion).cloned().unwrap_or_else(|| Clip::plain(act.motion, 1));
-                let f = act.frame;
-                let mut finished = f >= clip.length;
-                let mut cancel_allowed = clip.has(f, |k| matches!(k, WindowKind::Combo | WindowKind::Finisher));
-
-                // Windows.
-                for (wi, w) in clip.windows.iter().enumerate() {
-                    if !w.contains(f) {
-                        continue;
-                    }
-                    match w.kind {
-                        WindowKind::Hitbox { attack, group, .. } => hitboxes.push(ActiveHitbox {
-                            swing: (act.swing << 8) | wi as u64,
-                            attack,
-                            group,
-                        }),
-                        WindowKind::TurnToLock(rate) | WindowKind::TurnToTarget(rate) => {
-                            if let Some(t) = target {
-                                let d = [t[0] - env.pos[0], t[2] - env.pos[2]];
-                                if len2(d) > 1.0 {
-                                    self.facing = turn_toward(self.facing, yaw_of(d), rate);
-                                }
-                            }
-                        }
-                        WindowKind::Invulnerable => invulnerable = true,
-                        WindowKind::NoGravity => no_gravity = true,
-                        WindowKind::Guard => guarding = true,
-                        _ => {}
-                    }
-                }
-                for e in clip.events.iter().filter(|e| e.frame == f) {
-                    events.push(e.kind);
-                }
-
-                match &act.kind {
-                    ActionKind::Jump { high } => {
-                        // Keep running during the takeoff frames.
-                        self.free_move(input);
-                        let jump_frame = clip.events.iter().find(|e| e.kind == EventKind::Jump).map_or(0, |e| e.frame);
-                        if f >= jump_frame {
-                            let h = if *high {
-                                self.growth(self.abilities.high_jump).map_or(self.params.jump_height, |g| g.high_jump_height)
-                            } else {
-                                self.params.jump_height
-                            };
-                            self.vel_y = jump_velocity(h, self.params.gravity);
-                            self.airborne = true;
-                            finished = true;
-                        }
-                    }
-                    ActionKind::Land => {
-                        // Momentum is kept; inputs are accepted once the
-                        // reaction-command window opens (frame 8 for Sora).
-                        let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(0);
-                        if f >= open {
-                            cancel_allowed = true;
-                            if len2(input.stick) > 0.1 {
-                                finished = true;
-                            }
-                        }
-                    }
-                    ActionKind::DodgeRoll => {
-                        let g = self.growth(self.abilities.dodge_roll).cloned().unwrap_or_default();
-                        if (f as f32) < g.dodge_roll_star_time {
-                            invulnerable = true;
-                        }
-                        // Other actions may interrupt from the fall-check
-                        // event (frame 34 for Sora) (hypothesis).
-                        let free_at = clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map_or(clip.length, |e| e.frame);
-                        if f >= free_at {
-                            cancel_allowed = true;
-                        }
-                    }
-                    ActionKind::QuickRun => {
-                        let g = self.growth(self.abilities.quick_run).cloned().unwrap_or_default();
-                        if (f as f32) < g.quick_run_star_time {
-                            invulnerable = true;
-                        }
-                        if (f as f32) >= g.quick_run_time {
-                            act.speed *= g.quick_run_brake;
-                        }
-                        let fw = self.forward();
-                        self.vel_h = [fw[0] * act.speed, fw[1] * act.speed];
-                        no_gravity = true;
-                        finished = act.speed <= self.params.run_speed && (f as f32) >= g.quick_run_time;
-                    }
-                    ActionKind::AerialDodge => {}
-                    ActionKind::Guard => {
-                        self.vel_h = [0.0; 2];
-                    }
-                    ActionKind::Attack { row, .. } => {
-                        if input.attack.pressed {
-                            self.buffered_attack = true;
-                        }
-                        // Approach assist before the first hitbox opens
-                        // (hypothesis using plyr attack v0 values).
-                        let first_hit = clip.first(|k| matches!(k, WindowKind::Hitbox { .. })).unwrap_or(0);
-                        self.vel_h = [0.0; 2];
-                        if let Some(t) = target {
-                            let d = dist_h(env.pos, t);
-                            let gap = d - self.attack.contact_distance;
-                            if f < first_hit && gap > 0.0 && row.needs_target() {
-                                let v0 = if row.is_finisher() {
-                                    self.attack.finish_v0
-                                } else if self.ground_hits + self.air_hits <= 1 {
-                                    self.attack.first_v0
-                                } else {
-                                    self.attack.combo_v0
-                                };
-                                let fw = self.forward();
-                                let s = v0.min(gap);
-                                self.vel_h = [fw[0] * s, fw[1] * s];
-                            }
-                        }
-                        let combo_open = clip.has(f, |k| matches!(k, WindowKind::Combo));
-                        let finisher_open = clip.has(f, |k| matches!(k, WindowKind::Finisher))
-                            && self.finishers <= self.abilities.finishing_plus;
-                        if self.buffered_attack && (combo_open || finisher_open) {
-                            if finisher_open {
-                                // Keep the finisher chain going.
-                            } else {
-                                self.finishers = 0;
-                            }
-                            if self.try_attack(input, env) {
-                                return self.step_started(input, env, events);
-                            }
-                            self.buffered_attack = false;
-                        }
-                    }
-                }
-
-                // Root motion (rotated into world space).
-                let rd = clip.root_delta(f);
-                let fw = self.forward();
-                let right = [fw[1], -fw[0]];
-                root = [rd[0] * right[0] + rd[2] * fw[0], rd[1], rd[0] * right[1] + rd[2] * fw[1]];
-
-                // Cancels into other actions.
-                if !finished && cancel_allowed {
-                    if input.jump.pressed || input.action.pressed || (input.attack.pressed && !matches!(act.kind, ActionKind::Attack { .. })) {
+            ActionKind::Land => {
+                // Inputs are accepted once the reaction-command window opens
+                // (frame 8 for Sora).
+                let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(0);
+                if f >= open {
+                    cancel_allowed = true;
+                    if len2(input.stick) > DEAD_ZONE {
                         finished = true;
                     }
                 }
-
-                act.frame += 1;
-                if finished {
-                    let was_attack = matches!(act.kind, ActionKind::Attack { .. });
-                    self.mode = Mode::Free;
-                    if was_attack && f >= clip.length {
-                        self.reset_combo();
-                    }
-                    // Handle the input that cancelled this action now.
-                    if cancel_allowed || f >= clip.length {
-                        let acted = (input.attack.pressed && self.try_attack(input, env))
-                            || (input.jump.pressed && self.try_jump(input, env))
-                            || (input.action.pressed && self.try_action_button(input));
-                        if acted {
-                            return self.step_started(input, env, events);
-                        }
+            }
+            ActionKind::DodgeRoll => {
+                let g = self.growth(self.abilities.dodge_roll).cloned().unwrap_or_default();
+                if (f as f32) < g.dodge_roll_star_time {
+                    fo.invulnerable = true;
+                }
+                // Other actions may interrupt from the fall-check event
+                // (frame 34 for Sora) (not yet checked).
+                let free_at = clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map_or(clip.length, |e| e.frame);
+                if f >= free_at {
+                    cancel_allowed = true;
+                }
+            }
+            ActionKind::QuickRun => {
+                let g = self.growth(self.abilities.quick_run).cloned().unwrap_or_default();
+                if (f as f32) < g.quick_run_star_time {
+                    fo.invulnerable = true;
+                }
+                fo.no_gravity = true;
+                if act.motion == motion::QUICK_RUN {
+                    finished = false;
+                    act.timer -= 1.0;
+                    if act.timer <= 0.0 {
+                        act.brake = g.quick_run_stop_brake;
+                        act.motion = motion::QUICK_RUN_END;
+                        act.frame = 0;
+                        self.mode = Mode::Action(act);
+                        return false;
                     }
                 } else {
-                    self.mode = Mode::Action(act);
+                    let end_len = self.clip(motion::QUICK_RUN_END).map_or(0, |c| c.length);
+                    finished = f >= end_len && (end_len > 0 || len2(self.vel_h) < 0.5);
+                }
+            }
+            ActionKind::AerialDodge => {}
+            ActionKind::Guard => {}
+            ActionKind::Attack { .. } => {
+                if input.attack.pressed {
+                    self.buffered_attack = true;
+                }
+                let combo_open = clip.has(f, |k| matches!(k, WindowKind::Combo));
+                let finisher_open =
+                    clip.has(f, |k| matches!(k, WindowKind::Finisher)) && self.finishers < self.max_finishers();
+                if self.buffered_attack && (combo_open || finisher_open) {
+                    self.mode = Mode::Action(act.clone());
+                    if self.try_attack(input, env) {
+                        return true;
+                    }
+                    self.buffered_attack = false;
                 }
             }
         }
 
-        self.apply_gravity(no_gravity);
-        if let Mode::Free = self.mode {
-            if self.airborne {
-                motion_id = motion::FALL;
+        // Root motion (rotated into world space).
+        let rd = clip.root_delta(f);
+        let fw = self.forward();
+        let right = [fw[1], -fw[0]];
+        fo.root = [rd[0] * right[0] + rd[2] * fw[0], rd[1], rd[0] * right[1] + rd[2] * fw[1]];
+
+        if !finished && cancel_allowed && (input.jump.pressed || input.action.pressed || (input.attack.pressed && !matches!(act.kind, ActionKind::Attack { .. }))) {
+            finished = true;
+        }
+
+        act.frame += 1;
+        if !finished {
+            self.mode = Mode::Action(act);
+            return false;
+        }
+        self.mode = Mode::Free;
+        if self.airborne && self.arc.is_none() {
+            self.arc = Some(Arc::fall());
+        }
+        if cancel_allowed || f >= clip.length {
+            if (input.attack.pressed && self.try_attack(input, env))
+                || (input.jump.pressed && self.try_jump(env))
+                || (input.action.pressed && self.try_action_button(input))
+            {
+                return true;
             }
         }
-        let state = self.state_name();
-        Output {
-            displacement: [self.vel_h[0] + root[0], self.vel_y + root[1], self.vel_h[1] + root[2]],
-            facing: self.facing,
-            state,
-            motion: motion_id,
-            clip_frame,
-            hitboxes,
-            invulnerable,
-            guarding,
-            locked: self.lock,
-            combo_count: self.ground_hits.max(self.air_hits),
-            events,
-        }
+        false
     }
 
-    /// Runs frame 0 of an action that was just started.
-    fn step_started(&mut self, input: &Input, env: &Env, mut events: Vec<EventKind>) -> Output {
-        let mut out = self.step_action_only(input, env);
-        events.append(&mut out.events);
-        out.events = events;
-        out
-    }
-
-    fn step_action_only(&mut self, input: &Input, env: &Env) -> Output {
-        // Same as `step` but without landing detection and lock update, so
-        // a freshly started action gets its frame 0 this frame.
-        let saved_airborne = self.airborne;
-        let release = |b: Button| Button { pressed: false, held: b.held };
-        let quiet = Input {
-            attack: release(input.attack),
-            jump: release(input.jump),
-            action: release(input.action),
-            ..*input
+    /// The 30 Hz physics tick: recomputes velocities (per frame) for this
+    /// frame and the next.
+    fn physics(&mut self, input: &Input, env: &Env, no_gravity: bool) {
+        let p = self.params.clone();
+        let m = len2(input.stick).min(1.0);
+        let moving = m > DEAD_ZONE;
+        let stick_dir = norm(input.stick);
+        let ground_speed = if !moving { 0.0 } else if m >= p.run_threshold { p.run_speed } else { p.walk_speed };
+        let steer = |v: [f32; 2], target: [f32; 2]| [v[0] * p.air_keep + target[0] * (1.0 - p.air_keep), v[1] * p.air_keep + target[1] * (1.0 - p.air_keep)];
+        let air_control = |c: &Self, stick: bool| -> [f32; 2] {
+            if stick && moving {
+                steer(c.vel_h, scale(stick_dir, ground_speed))
+            } else {
+                scale(c.vel_h, p.air_drag)
+            }
         };
-        let fake_env = Env { grounded: !saved_airborne, ..*env };
-        let lock = self.lock;
-        let out = self.step(&Input { lock: Button::default(), ..quiet }, &fake_env);
-        self.lock = lock;
-        out
+
+        let mut gravity = !no_gravity;
+        let mode = self.mode.clone();
+        match &mode {
+            Mode::Free => {
+                self.vel_h = if self.airborne { air_control(self, true) } else { scale(stick_dir, ground_speed) };
+            }
+            Mode::Glide => {
+                let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
+                let a = g.glide_acceleration;
+                let speed = (1.0 - a) * g.glide_speed + a * len2(self.vel_h);
+                self.vel_h = scale(self.forward(), speed);
+                let fall = ((env.height_above_ground - g.glide_fall_height).max(0.0) * g.glide_fall_ratio).min(g.glide_fall_max);
+                self.vel_y = -fall;
+                gravity = false;
+            }
+            Mode::Action(act) => match &act.kind {
+                ActionKind::Jump { .. } => {
+                    self.vel_h = if self.airborne { air_control(self, true) } else { scale(stick_dir, ground_speed) };
+                }
+                ActionKind::Land => {}
+                ActionKind::DodgeRoll | ActionKind::Guard => self.vel_h = [0.0; 2],
+                ActionKind::QuickRun => {
+                    let b = act.brake;
+                    self.vel_h = scale(self.vel_h, b);
+                    self.vel_y = 0.0;
+                    gravity = false;
+                }
+                ActionKind::AerialDodge => self.vel_h = air_control(self, true),
+                ActionKind::Attack { row } => {
+                    if row.is_jump() || self.airborne {
+                        self.vel_h = air_control(self, false);
+                    } else {
+                        let before_hit = {
+                            let clip = self.moveset.clips.get(&act.motion);
+                            let first = clip.and_then(|c| c.first(|k| matches!(k, WindowKind::Hitbox { .. }))).unwrap_or(0);
+                            act.frame <= first
+                        };
+                        self.vel_h = if act.lunge > 0.0 && before_hit { scale(self.forward(), act.lunge) } else { [0.0; 2] };
+                    }
+                }
+            },
+        }
+
+        if !self.airborne {
+            self.vel_y = 0.0;
+        } else if gravity {
+            let arc = self.arc.get_or_insert_with(Arc::fall);
+            self.vel_y = arc.advance(DT, p.gravity, p.fall_max) / DT;
+        } else if !matches!(self.mode, Mode::Glide) {
+            self.vel_y = 0.0;
+        }
     }
 
     pub fn state_name(&self) -> StateName {
@@ -769,7 +947,7 @@ impl Character {
             Mode::Free => {
                 if self.airborne {
                     StateName::Air
-                } else if len2(self.vel_h) > self.params.walk_speed {
+                } else if len2(self.vel_h) >= (self.params.walk_speed + self.params.run_speed) * 0.5 {
                     StateName::Run
                 } else if len2(self.vel_h) > 0.0 {
                     StateName::Walk
@@ -777,7 +955,7 @@ impl Character {
                     StateName::Idle
                 }
             }
-            Mode::Glide { .. } => StateName::Glide,
+            Mode::Glide => StateName::Glide,
             Mode::Action(a) => match a.kind {
                 ActionKind::Jump { .. } => StateName::Jump,
                 ActionKind::Land => StateName::Land,
@@ -797,4 +975,27 @@ fn dist_h(a: [f32; 3], b: [f32; 3]) -> f32 {
 
 fn dist3(a: [f32; 3], b: [f32; 3]) -> f32 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn arc_peaks_at_height_and_is_continuous() {
+        let g = crate::KH2_GRAVITY;
+        let a = Arc::new(185.0, g);
+        assert!((a.uptime - (2.0 * 185.0 / g).sqrt()).abs() < 1e-4);
+        assert!((a.y(a.uptime, g) - 185.0).abs() < 1e-3);
+        assert!((a.y(a.uptime - 0.01, g) - a.y(a.uptime + 0.01, g)).abs() < 0.01);
+        let mut b = a;
+        let mut y = 0.0;
+        for _ in 0..200 {
+            y += b.advance(2.0, g, 16.0);
+            if y < -1000.0 {
+                break;
+            }
+        }
+        assert!(b.advance(2.0, g, 16.0) >= -32.0 - 1e-4, "fall step capped");
+    }
 }

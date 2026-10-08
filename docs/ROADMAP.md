@@ -24,7 +24,20 @@ local with notes only, never committed.
    - landing, roll cancels, guard
    - damage on a few known enemies on each difficulty
 
-## Phase 1: settle every hypothesis
+## Phase 1: settle every hypothesis (mostly done 2026-10-08, from the executable)
+
+Status:
+- **Done:** 4 (except hold-to-vary height), 6, 7 (except cancel points and landing), 8, 9
+  (ground lunge, air hop), 10.
+- **Open:**
+  - the jump hold check
+  - stick-tilt speed mapping
+  - landing recovery
+  - roll/Quick Run cancel frames
+  - auto-target choice
+  - invulnerability timer units
+
+Details in `movement-model.md` and `combat-model.md`.
 
 Each of these is checked against recordings, or against the executable where measuring is
 impractical. Each one gets marked Checked in the docs or gets fixed.
@@ -87,6 +100,4 @@ impractical. Each one gets marked Checked in the docs or gets fixed.
 
 - Running the recorder script while playing the scenarios. I'll write the script and the
   list of moves to do.
-- A yes or no on looking inside the executable with Ghidra for the formulas that are hard to
-  measure, such as gravity and how the combo table is read. That work stays on your machine,
-  and only plain-language notes are committed.
+- Ghidra: approved and in use. Databases and decompiler output stay outside the repo.

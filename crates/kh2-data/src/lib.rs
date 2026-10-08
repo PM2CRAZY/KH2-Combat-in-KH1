@@ -15,8 +15,8 @@ pub mod sora;
 use std::path::{Path, PathBuf};
 
 use combat_core::{
-    AttackDef, AttackKind, BaseClamp, Combatant, HitClamp, CriticalAdjust, Deflect, Element, Resistances, Stats,
-    TargetFilter, Team,
+    AttackDef, AttackKind, Combatant, Deflect, Element, Resistances, StatBounds, StatSource, Stats, TargetFilter,
+    Team,
 };
 use kh2_formats::battle::{Atkp, Battle, Enmp};
 use kh2_formats::egs::{Archive, KeyTable};
@@ -157,32 +157,8 @@ impl Install {
         Ok(CombatData {
             battle: Battle::parse(&bytes)?,
             source,
-            power_scale: DEFAULT_POWER_SCALE,
-            clamp_reading: ClampReading::default(),
         })
     }
-}
-
-/// ATKP `power` is a percentage: the most common values are 100, 50, 25,
-/// 150 and 200, and the Thunder-element spell rows use 375, matching the
-/// community-reported Thundaga multiplier of x3.75. See `docs/combat-model.md`.
-pub const DEFAULT_POWER_SCALE: f32 = 0.01;
-
-/// How to read ENMP's per-enemy min/max damage pair.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ClampReading {
-    /// Parts-per-10000 of the enemy's max HP, applied to final damage.
-    /// Supported by the table itself (min x base HP is ~50,000 on almost
-    /// every enemy; max x base HP clusters at 150k/200k/300k; mobs use
-    /// 10000 = 100%).
-    #[default]
-    HpFraction,
-    /// Raw bounds on (attack - defense). Matches one forum report of a
-    /// ~80 cap on Data Organization fights (their max is 79), but would
-    /// make normal mobs (min 500-1000) die in one hit.
-    BaseRaw,
-    /// Ignore the fields.
-    Off,
 }
 
 /// KH2's combat tables plus helpers that turn rows into `combat-core` types.
@@ -190,13 +166,16 @@ pub enum ClampReading {
 pub struct CombatData {
     pub battle: Battle,
     pub source: Source,
-    pub power_scale: f32,
-    pub clamp_reading: ClampReading,
 }
 
 impl CombatData {
     pub fn attack(&self, id: u16, sub_id: u16) -> Option<AttackDef> {
-        self.battle.attack(id, sub_id).map(|a| attack_def(a, self.power_scale))
+        self.battle.attack(id, sub_id).map(attack_def)
+    }
+
+    /// The level-appropriate variant, as the game picks it.
+    pub fn attack_at_level(&self, id: u16, sub: u8, level: u8) -> Option<AttackDef> {
+        self.battle.attack_for_level(id, sub, level).map(attack_def)
     }
 
     /// Builds an enemy combatant. `level` overrides the table level (needed
@@ -205,20 +184,20 @@ impl CombatData {
         let e = self.battle.enemy(id)?;
         let lvl = level.unwrap_or(e.level).max(1);
         let lv = self.battle.lvpm_for(lvl)?;
-        Some(enemy_combatant(e, lv, self.clamp_reading))
+        Some(enemy_combatant(e, lv))
     }
 }
 
 /// Converts one ATKP row.
-pub fn attack_def(a: &Atkp, power_scale: f32) -> AttackDef {
+pub fn attack_def(a: &Atkp) -> AttackDef {
     AttackDef {
         id: ((a.id as u32) << 16) | a.sub_id as u32,
         kind: AttackKind::from_id(a.kind),
-        power: a.power as f32 * power_scale,
+        power: a.power,
         element: Element::from_id(a.element),
         // Upstream: 0/1/2 hit enemies, 3/4/5 enemies and allies.
         targets: if a.team >= 3 { TargetFilter::Everyone } else { TargetFilter::Opponents },
-        critical_adjust: CriticalAdjust::from_id(a.critical_adjust),
+        stat: StatSource::from_id(a.stat_source),
         reaction: a.enemy_reaction,
         knockback: (a.knockback_1 as f32, a.knockback_2 as f32),
         hit_interval: a.interval,
@@ -234,25 +213,24 @@ pub fn attack_def(a: &Atkp, power_scale: f32) -> AttackDef {
     }
 }
 
-/// Converts one ENMP row at a level, using that level's LVPM scaling.
-pub fn enemy_combatant(e: &Enmp, lv: &kh2_formats::battle::Lvpm, clamp: ClampReading) -> Combatant {
+/// Converts one ENMP row at a level, the way the game's enemy status init
+/// does: HP scaled by LVPM (rounded up), Strength/Defense and the strength
+/// bounds from LVPM, and ENMP's min/max damage as parts-per-10000 of max HP
+/// (rounded up) bounding the base damage term.
+pub fn enemy_combatant(e: &Enmp, lv: &kh2_formats::battle::Lvpm) -> Combatant {
     let hp = lv.scale_hp(e.health[0].max(0) as i32).max(1) as u32;
-    let mut c = Combatant::new(
+    let mut weakness = [0u16; 7];
+    for (w, &v) in weakness.iter_mut().zip(&e.weakness) {
+        *w = v.min(255); // the game keeps these as bytes
+    }
+    Combatant::new(
         0x1000_0000 | e.id as u32,
         Team::Enemy,
         Stats { hp, strength: lv.strength, magic: lv.strength, defense: lv.defense },
     )
-    .with_resist(Resistances(e.weakness));
-    match clamp {
-        ClampReading::HpFraction if e.max_damage > 0 => {
-            c = c.with_hit_clamp(HitClamp { min_permyriad: e.min_damage as u32, max_permyriad: e.max_damage as u32 })
-        }
-        ClampReading::BaseRaw if e.max_damage > 0 => {
-            c = c.with_base_clamp(BaseClamp { min: e.min_damage as i32, max: e.max_damage as i32 })
-        }
-        _ => {}
-    }
-    c
+    .with_resist(Resistances(weakness))
+    .with_attack_bounds(StatBounds { min: lv.min_strength as u32, max: lv.max_strength as u32 })
+    .with_damage_bounds(StatBounds::from_permyriad(hp, e.min_damage as u32, e.max_damage as u32))
 }
 
 #[cfg(test)]

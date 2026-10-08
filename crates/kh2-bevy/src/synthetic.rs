@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use character_core::*;
 use kh2_data::sora::{BladeSphere, SoraData};
-use kh2_data::{ClampReading, CombatData, Source};
+use kh2_data::{CombatData, Source};
 use kh2_formats::battle::{Atkp, Battle, Enmp, Lvpm, LvupLevel};
 
 fn attack_clip(motion: u16, len: u32, hit: (u32, u32), attack: u16, combo_at: u32, finisher: bool, lunge: f32) -> Clip {
@@ -21,15 +21,17 @@ fn attack_clip(motion: u16, len: u32, hit: (u32, u32), attack: u16, combo_at: u3
 
 fn row(id: u8, motion: u16, finisher: bool, air: bool) -> ComboRow {
     ComboRow {
-        id, kind: 3, sub: -1, flag: if finisher { FLAG_FINISHER } else { 0 }, motion, next_motion: 0,
-        jump: if air { 20.0 } else { 0.0 }, speed_min: 0.0, speed_max: 0.0, near: 0.0, far: 0.0,
-        low: 0.0, high: 0.0, ability: 0, score: 1,
+        id, kind: 3, sub: -1, combo_offset: 0,
+        flag: if finisher { FLAG_FINISHER } else { 0 } | if air { FLAG_AIR } else { 0 },
+        motion, next_motion: 0, jump: if air { 20.0 } else { 0.0 }, jump_min: 0.0, jump_max: 0.0,
+        speed_min: 0.0, speed_max: 0.0, near: 0.0, far: 0.0, low: 0.0, high: 0.0, inner_min: -2.0,
+        inner_max: 2.0, blend_time: 0.0, distance_adjust: 0.0, ability: 0, score: 1,
     }
 }
 
 fn atkp(id: u16, power: u16) -> Atkp {
     Atkp {
-        sub_id: 0, id, kind: 0, critical_adjust: 0, power, team: 0, element: 0, enemy_reaction: 0, effect_on_hit: 0,
+        sub_id: 0, id, kind: 0, stat_source: 0, power, team: 0, element: 0, enemy_reaction: 0, effect_on_hit: 0,
         knockback_1: 100, knockback_2: 0, unknown_16: 0, flags: 0, refact_self: 0, refact_other: 0, reflected_motion: 0,
         reflect_hit_back: 0, reflect_action: 0, hit_sound: 0, reflect_rc: 0, reflect_range: 0, reflect_angle: 0,
         damage_effect: 0, switch: 0, interval: 0, floor_check: 0, drive_drain: 0, revenge_damage: 0, tr_reaction: 0,
@@ -58,7 +60,8 @@ pub fn data() -> SoraData {
     clips.insert(911, attack_clip(911, 66, (12, 24), 4, 30, true, 0.0));
     let moveset = Moveset {
         clips,
-        combo_rows: vec![row(0, 900, false, false), row(1, 901, true, false), row(2, 910, false, true), row(3, 911, true, true)],
+        // Finishers first: the first valid row in table order wins.
+        combo_rows: vec![row(1, 901, true, false), row(0, 900, false, false), row(3, 911, true, true), row(2, 910, false, true)],
     };
     let growth = (1..=4)
         .map(|l| GrowthLevel {
@@ -88,11 +91,11 @@ pub fn data() -> SoraData {
     battle.enmp = vec![Enmp {
         id: 34, level: 0, health: [100; 32], max_damage: 10000, min_damage: 500, weakness: [100; 7], exp: 0, prize: 0, bonus_level: 0,
     }];
-    battle.lvpm = (1..=99u16).map(|l| Lvpm { hp: 20 + 2 * l, strength: 5 + l, defense: 2 + l / 2, max_strength: 0, min_strength: 0, exp: 0 }).collect();
+    battle.lvpm = (1..=99u16).map(|l| Lvpm { hp: 20 + 2 * l, strength: 5 + l, defense: 2 + l / 2, max_strength: 9999, min_strength: 1, exp: 0 }).collect();
     battle.lvup = vec![(1..=99u8)
         .map(|l| LvupLevel { exp: 0, strength: 2 + l, magic: 2 + l, defense: 2 + l / 2, ap: 0, sword_ability: 0, shield_ability: 0, staff_ability: 0 })
         .collect()];
-    let combat = CombatData { battle, source: Source::Live, power_scale: 0.01, clamp_reading: ClampReading::HpFraction };
+    let combat = CombatData { battle, source: Source::Live };
     let blade_groups = HashMap::from([(1u8, vec![BladeSphere { along: 0.0, radius: 40.0 }, BladeSphere { along: 40.0, radius: 40.0 }])]);
     SoraData { character, combat, blade_groups, motions: vec![] }
 }

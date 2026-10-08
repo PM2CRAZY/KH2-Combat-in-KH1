@@ -30,8 +30,6 @@ Commands:
 
 Options:
   --backup                  read Image/<lang>/backup (unmodded originals) instead of the live files
-  --power-scale F           ATKP power -> multiplier factor (default 0.01)
-  --clamp hp|base|off       how to read ENMP min/max damage (default hp, see docs)
 ";
 
 struct Args(Vec<String>);
@@ -77,25 +75,16 @@ fn run(args: &Args) -> Result<(), String> {
         _ => {}
     }
 
-    let mut data = install.load_from(source).map_err(|e| e.to_string())?;
-    if let Some(s) = args.num::<f32>("--power-scale")? {
-        data.power_scale = s;
-    }
-    data.clamp_reading = match args.value("--clamp").unwrap_or("hp") {
-        "hp" => kh2_data::ClampReading::HpFraction,
-        "base" => kh2_data::ClampReading::BaseRaw,
-        "off" => kh2_data::ClampReading::Off,
-        c => return Err(format!("unknown --clamp {c}")),
-    };
+    let data = install.load_from(source).map_err(|e| e.to_string())?;
     let b = &data.battle;
     match cmd.as_str() {
         "atkp" => {
             let id = args.num::<u16>("--id")?;
-            println!("id:sub  kind crit power team elem react fx  kb1  kb2  unk16 flags rs ro ivl drive rev tr cgrp kind hpd");
+            println!("lv:sub  kind stat power team elem react fx  kb1  kb2  unk16 flags rs ro ivl drive rev tr cgrp kind hpd");
             for a in b.atkp.iter().filter(|a| id.map_or(true, |i| a.id == i)) {
                 println!(
-                    "{:>4}:{:<3} {:>3} {:>4} {:>5} {:>4} {:>4} {:>5} {:>3} {:>4} {:>4} {:>6} {:>5} {:>2} {:>2} {:>3} {:>5} {:>3} {:>2} {:>4} {:>4} {:>3}",
-                    a.id, a.sub_id, a.kind, a.critical_adjust, a.power, a.team, a.element, a.enemy_reaction,
+                    "{:>4} {:<5} {:>3} {:>4} {:>5} {:>4} {:>4} {:>5} {:>3} {:>4} {:>4} {:>6} {:>5} {:>2} {:>2} {:>3} {:>5} {:>3} {:>2} {:>4} {:>4} {:>3}",
+                    a.id, format!("{}:{}", a.min_level(), a.sub()), a.kind, a.stat_source, a.power, a.team, a.element, a.enemy_reaction,
                     a.effect_on_hit, a.knockback_1, a.knockback_2, a.unknown_16, a.flags, a.refact_self,
                     a.refact_other, a.interval, a.drive_drain, a.revenge_damage, a.tr_reaction, a.combo_group,
                     a.attack_kind_flags, a.hp_drain
@@ -210,9 +199,8 @@ fn hit(args: &Args, data: &CombatData) -> Result<(), String> {
     };
     let rules = DamageRules { difficulty, ..DamageRules::default() };
     println!("attack:  {attack:?}");
-    println!("enemy:   hp {} str {} def {} resist {:?} base clamp {:?} hit clamp {:?}",
-        enemy.hp, enemy.stats.strength, enemy.stats.defense, enemy.resist.0, enemy.base_clamp,
-        enemy.hit_clamp.map(|c| c.bounds(enemy.max_hp))
+    println!("enemy:   hp {} str {} def {} resist {:?} strength bounds {:?} damage bounds {:?}",
+        enemy.hp, enemy.stats.strength, enemy.stats.defense, enemy.resist.0, enemy.attack_bounds, enemy.damage_bounds
     );
     let out = resolve_hit(&rules, &attack, &sora, &mut enemy);
     println!("result:  {out:#?}");
@@ -367,13 +355,18 @@ fn sora(install: &Install, source: Source) -> Result<(), String> {
         println!("dodge roll LV{lv}: {frames} frames, {inv} invulnerable, distance {:.1}", w.pos[2]);
     }
     // Combo, no target, mashing
-    for (label, targets) in [("no target", vec![]), ("target 120 ahead", vec![TargetInfo { id: 1, pos: [0.0, 0.0, 120.0] }]), ("target 250 ahead", vec![TargetInfo { id: 1, pos: [0.0, 0.0, 250.0] }])] {
+    // Shadow-sized target (radius/height approximate). Swings "connect"
+    // when a hitbox is live and the target is within 200 units.
+    let t = |z: f32| TargetInfo { id: 1, pos: [0.0, 0.0, z], radius: 40.0, height: 90.0 };
+    for (label, targets) in [("no target", vec![]), ("target 120 ahead", vec![t(120.0)]), ("target 250 ahead", vec![t(250.0)])] {
         let mut w = new(Abilities::default());
         w.targets = targets;
         let mut seq = Vec::new();
         for f in 0..300 {
             let o = w.step(Pad { attack: f % 2 == 0, ..Default::default() });
-            if o.state == StateName::Attack && o.clip_frame == 0 { seq.push(format!("f{f}:m{}", o.motion)); }
+            if o.state == StateName::Attack && o.clip_frame == 0 { seq.push(format!("f{f}:m{}#{}", o.motion, o.combo_count)); }
+            let near = w.targets.iter().any(|t| ((t.pos[0] - w.pos[0]).powi(2) + (t.pos[2] - w.pos[2]).powi(2)).sqrt() < 200.0);
+            if near && !o.hitboxes.is_empty() { w.ch.register_hit(); }
             for h in &o.hitboxes { if seq.last().map_or(false, |s| !s.contains('[')) { let l = seq.pop().unwrap(); seq.push(format!("{l}[hit atk{} from f{f}]", h.attack)); } }
         }
         println!("ground combo ({label}): {}", seq.join(" -> "));

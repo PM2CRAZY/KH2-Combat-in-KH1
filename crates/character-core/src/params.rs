@@ -2,7 +2,8 @@
 //! fills them from the player's install (`03system.bin` pref tables).
 //! Units: KH2 world units (about 1 cm) and 60 Hz frames.
 
-/// Base movement (KH2 `prty`, `sstm`).
+/// Base movement (KH2 `prty`, `sstm`) and the physics constants the
+/// original keeps in code.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MoveParams {
     /// Units per frame at partial stick tilt.
@@ -13,22 +14,24 @@ pub struct MoveParams {
     pub jump_height: f32,
     /// Max yaw change per frame (radians).
     pub turn_speed: f32,
-    /// Terminal fall speed (units per frame).
+    /// Largest downward step per frame while falling.
     pub fall_max: f32,
-    /// Downward acceleration (units per frame^2). Not found in any table;
-    /// see `docs/movement-model.md`.
+    /// Gravity for the falling half of a jump (units per frame^2).
+    /// KH2: 20/49.
     pub gravity: f32,
-    /// 0 means instant (KH2's value for Sora). Otherwise the velocity lerp
-    /// factor per frame towards the stick target.
-    pub acceleration: f32,
-    pub brake: f32,
+    /// Fraction of the current air velocity kept per tick when steering
+    /// (KH2: 0.9; the remaining 0.1 is the stick target).
+    pub air_keep: f32,
+    /// Fraction of the air velocity kept per tick with no stick input
+    /// (KH2: 0.95).
+    pub air_drag: f32,
     /// Stick magnitude at or above which the character runs.
     pub run_threshold: f32,
 }
 
 impl Default for MoveParams {
-    /// Placeholder values for hosts that bring their own data. These are
-    /// not KH2's numbers.
+    /// Placeholder speeds for hosts that bring their own data; the physics
+    /// constants are KH2's.
     fn default() -> Self {
         MoveParams {
             walk_speed: 2.0,
@@ -36,13 +39,16 @@ impl Default for MoveParams {
             jump_height: 150.0,
             turn_speed: 0.25,
             fall_max: 16.0,
-            gravity: 0.9,
-            acceleration: 0.0,
-            brake: 0.0,
+            gravity: KH2_GRAVITY,
+            air_keep: 0.9,
+            air_drag: 0.95,
             run_threshold: 0.5,
         }
     }
 }
+
+/// KH2's gravity constant (units per frame^2 at 60 Hz).
+pub const KH2_GRAVITY: f32 = 20.0 / 49.0;
 
 /// One level of the growth abilities (KH2 `fmab` record).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -71,31 +77,18 @@ pub struct GrowthLevel {
 /// Attack targeting numbers (KH2 `plyr`, `sstm`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct AttackParams {
-    /// Height of the attack origin above the feet; combo-row height
-    /// windows are measured from here.
-    pub attack_y_offset: f32,
-    pub first_v0: f32,
-    pub combo_v0: f32,
-    pub finish_v0: f32,
     pub auto_lock_on_range: f32,
     pub lock_on_range: f32,
     pub lock_on_release_range: f32,
-    /// Stop approaching a target when this close (hypothesis).
-    pub contact_distance: f32,
+    /// Ground lunge speed per unit of distance to the target
+    /// (KH2 sstm "attack distance to speed"). Only rows with a nonzero
+    /// speed window lunge; Sora's ground rows don't.
+    pub distance_to_speed: f32,
 }
 
 impl Default for AttackParams {
     fn default() -> Self {
-        AttackParams {
-            attack_y_offset: 60.0,
-            first_v0: 8.0,
-            combo_v0: 6.0,
-            finish_v0: 12.0,
-            auto_lock_on_range: 300.0,
-            lock_on_range: 1200.0,
-            lock_on_release_range: 1500.0,
-            contact_distance: 90.0,
-        }
+        AttackParams { auto_lock_on_range: 300.0, lock_on_range: 1200.0, lock_on_release_range: 1500.0, distance_to_speed: 0.1 }
     }
 }
 
@@ -113,6 +106,8 @@ pub struct Abilities {
     pub air_combo_plus: u8,
     pub finishing_plus: u8,
     pub negative_combo: u8,
+    /// Every swing counts as connecting for the combo counter.
+    pub combo_master: bool,
     /// Item ids of equipped action abilities (for combo rows that need one).
     pub equipped: Vec<u16>,
 }
@@ -130,6 +125,7 @@ impl Default for Abilities {
             air_combo_plus: 0,
             finishing_plus: 0,
             negative_combo: 0,
+            combo_master: false,
             equipped: Vec::new(),
         }
     }
@@ -142,16 +138,18 @@ impl Abilities {
     }
 }
 
-/// Combo lengths. KH2: base combo of 3 (two hits and a finisher);
-/// Combo Plus adds one each, Negative Combo removes one (community).
+/// Combo lengths. KH2: ground and air combos of 3 and one finisher;
+/// Combo Plus / Air Combo Plus add one, Negative Combo removes one from
+/// both, Finishing Plus adds a finisher (checked in the executable).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComboRules {
     pub ground_base: u8,
     pub air_base: u8,
+    pub finisher_base: u8,
 }
 
 impl Default for ComboRules {
     fn default() -> Self {
-        ComboRules { ground_base: 3, air_base: 3 }
+        ComboRules { ground_base: 3, air_base: 3, finisher_base: 1 }
     }
 }
