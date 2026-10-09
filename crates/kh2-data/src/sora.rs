@@ -91,6 +91,10 @@ pub struct Rig {
     /// Motion id → keyframed motion (battle-with-weapon slot, with the game's
     /// fallback order).
     pub motions: HashMap<u16, Arc<Interpolated>>,
+    /// Motion id → the out-of-combat ("field", no weapon) slot, for the
+    /// motions whose field slot differs from the battle one. Sora: idle,
+    /// walk and run.
+    pub field_motions: HashMap<u16, Arc<Interpolated>>,
     /// Weapons, right hand first (Valor, Master and Final carry two).
     pub weapons: Vec<WeaponRig>,
     pub body_shapes: Vec<BoneShape>,
@@ -384,6 +388,27 @@ pub(crate) fn pose_motions(mset: &Mset) -> HashMap<u16, Arc<Interpolated>> {
     out
 }
 
+/// The motions whose field-without-weapon slot (relative slot 2) holds its
+/// own data rather than being what the battle lookup already picks.
+pub(crate) fn field_motions(mset: &Mset) -> HashMap<u16, Arc<Interpolated>> {
+    let mut out = HashMap::new();
+    if mset.kind != 1 {
+        return out;
+    }
+    for m in 0..=255u16 {
+        let i = m as usize * 4 + 2;
+        let Some(slot) = mset.slots.get(i) else { break };
+        let battle = mset.slot_for(m as usize, true, true).map(|s| s.index);
+        if battle == Some(i) {
+            continue;
+        }
+        if let Some(p) = slot.anb.as_ref().and_then(|a| a.pose.clone()) {
+            out.insert(m, Arc::new(p));
+        }
+    }
+    out
+}
+
 pub fn blade_groups(collision: &[ObjectCollision]) -> HashMap<u8, Vec<BladeSphere>> {
     let mut g: HashMap<u8, Vec<BladeSphere>> = HashMap::new();
     for c in collision.iter().filter(|c| c.kind == 6) {
@@ -478,5 +503,5 @@ fn load_rig(read: &dyn Fn(&str) -> Result<Vec<u8>>, spec: PlayerSpec, player: &M
             shapes: bone_shapes(weapon_collision),
         })
         .collect();
-    Ok(Rig { motions: pose_motions(player), weapons, body_shapes: bone_shapes(&body), skeleton })
+    Ok(Rig { motions: pose_motions(player), field_motions: field_motions(player), weapons, body_shapes: bone_shapes(&body), skeleton })
 }

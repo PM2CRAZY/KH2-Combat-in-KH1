@@ -97,6 +97,7 @@ pub(crate) fn load_enemy_with(read: &dyn Fn(&str) -> Result<Vec<u8>>, model: &st
     let rig = Rig {
         skeleton: parse_skeleton(&mdlx)?,
         motions: pose_motions(&mset),
+        field_motions: HashMap::new(),
         weapons: Vec::new(),
         body_shapes: bone_shapes(&collision),
     };

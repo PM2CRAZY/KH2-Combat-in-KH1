@@ -58,3 +58,22 @@ fn drive_forms_load() {
         eprintln!("{}: {} clips, {} combo rows, run {}", spec.model, d.motions.len(), d.character.moveset.combo_rows.len(), d.character.params.run_speed);
     }
 }
+
+/// Sora's out-of-combat motions: the field (no weapon) slots of idle, walk
+/// and run hold their own data; jump/fall/land share one slot.
+#[test]
+fn sora_field_motions() {
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../local/re");
+    if !dir.join("P_EX100.mset").exists() {
+        eprintln!("skipped: no extracted files");
+        return;
+    }
+    let d = kh2_data::sora::load_player_dir(&dir, kh2_data::sora::SORA).unwrap();
+    let rig = d.rig.as_ref().unwrap();
+    let mut ids: Vec<u16> = rig.field_motions.keys().copied().collect();
+    ids.sort();
+    assert_eq!(ids, [0, 1, 2]);
+    // Field idle is its own 90-frame loop (battle idle runs 150).
+    assert_eq!(rig.field_motions[&0].frame_end, 90.0);
+    assert_eq!(rig.motions[&0].frame_end, 150.0);
+}
