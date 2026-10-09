@@ -77,6 +77,8 @@ struct Track {
     motion: u16,
     frame: f32,
     looping: bool,
+    /// Playing the motion's out-of-combat (field) variant.
+    field: bool,
     /// Action clips: subtract the clip's root motion (the controller has
     /// already moved the character by it).
     root: bool,
@@ -97,6 +99,31 @@ pub struct RigAnim {
     blend_from: Option<(Vec<(Vec3, Quat, Vec3)>, Vec<Vec<(Vec3, Quat, Vec3)>>)>,
     blend_t: f32,
     blend_len: f32,
+    /// Out of combat: idle, walk and run use their field variants and the
+    /// weapons are put away while Sora just moves (the host decides when;
+    /// see [`RigAnim::weapons_out`]).
+    pub field: bool,
+}
+
+/// Movement motions that keep the weapons put away out of combat. Attacks,
+/// guard, magic, reactions and the rest bring them out.
+pub fn moves_without_weapon(m: u16) -> bool {
+    matches!(
+        m,
+        motion::IDLE
+            | motion::WALK
+            | motion::RUN
+            | motion::JUMP
+            | motion::FALL
+            | motion::LAND
+            | motion::HIGH_JUMP
+            | motion::AERIAL_DODGE
+            | motion::QUICK_RUN
+            | motion::QUICK_RUN_END
+            | motion::DODGE_ROLL
+            | motion::HANG
+            | motion::CLIMB
+    ) || blend::is_glide(m)
 }
 
 fn decompose(v: &[Mat4]) -> Vec<(Vec3, Quat, Vec3)> {
@@ -119,17 +146,30 @@ impl RigAnim {
     pub fn new(rig: Arc<Rig>) -> RigAnim {
         let bones = kh2_anim::Pose::bind(&rig.skeleton).bones;
         let weapons = rig.weapons.iter().map(|w| kh2_anim::Pose::bind(&w.skeleton).bones).collect();
-        RigAnim { rig, track: None, bones, weapons, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT }
+        RigAnim { rig, track: None, bones, weapons, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT, field: false }
+    }
+
+    /// The keyframes a track plays: the field variant when it asks for one.
+    fn motion_for<'a>(rig: &'a Rig, m: u16, field: bool) -> Option<&'a Arc<Interpolated>> {
+        field.then(|| rig.field_motions.get(&m)).flatten().or_else(|| rig.motions.get(&m))
+    }
+
+    /// Whether to draw the weapons: always in battle; out of combat only
+    /// while something other than plain movement plays.
+    pub fn weapons_out(&self) -> bool {
+        !self.field || self.track.map_or(false, |t| !moves_without_weapon(t.motion))
     }
 
     fn pick(&self, out: &Output) -> Track {
         let prev = self.track;
+        let field_of = |m: u16| self.field && self.rig.field_motions.contains_key(&m);
         let free = |m: u16, looping: bool| {
+            let field = field_of(m);
             let frame = match prev {
-                Some(p) if p.motion == m => p.frame + 1.0,
+                Some(p) if p.motion == m && p.field == field => p.frame + 1.0,
                 _ => 0.0,
             };
-            Track { motion: m, frame, looping, root: false }
+            Track { motion: m, frame, looping, field, root: false }
         };
         // Decide by the motion, not the state: on an action's last frame the
         // controller already reports a free state but still names the
@@ -148,7 +188,7 @@ impl RigAnim {
                     _ => free(motion::FALL, true),
                 }
             }
-            _ => Track { motion: out.motion, frame: out.clip_frame as f32 + 1.0, looping: false, root: true },
+            _ => Track { motion: out.motion, frame: out.clip_frame as f32 + 1.0, looping: false, field: field_of(out.motion), root: true },
         }
     }
 
@@ -156,12 +196,14 @@ impl RigAnim {
     pub fn update(&mut self, out: &Output, character: &Character, pos: [f32; 3]) {
         let mut track = self.pick(out);
         let rig = self.rig.clone();
-        let Some(m) = rig.motions.get(&track.motion).or_else(|| self.track.and_then(|t| rig.motions.get(&t.motion))) else { return };
+        let Some(m) = Self::motion_for(&rig, track.motion, track.field).or_else(|| self.track.and_then(|t| Self::motion_for(&rig, t.motion, t.field))) else { return };
         if !rig.motions.contains_key(&track.motion) {
             track = self.track.unwrap_or(track);
         }
+        // Switching between the battle and field variants blends like a new
+        // motion.
         let restarted = match self.track {
-            Some(p) => p.motion != track.motion || track.frame < p.frame,
+            Some(p) => p.motion != track.motion || p.field != track.field || track.frame < p.frame,
             None => false,
         };
         if let (true, Some(prev)) = (restarted, self.track) {
@@ -170,7 +212,7 @@ impl RigAnim {
             // motion's progress, plus the blend, onto the new one's length).
             let gait = |m: u16| m == motion::WALK || m == motion::RUN;
             if gait(prev.motion) && gait(track.motion) && prev.motion != track.motion {
-                if let Some(pm) = rig.motions.get(&prev.motion) {
+                if let Some(pm) = Self::motion_for(&rig, prev.motion, prev.field) {
                     let (pl, nl) = (kh2_anim::length_frames(pm), kh2_anim::length_frames(m));
                     let pos = key_time(pm, prev.frame, true) - pm.frame_start * 60.0 / pm.fps.max(1e-3);
                     if pl > 0.0 && nl > 0.0 {
@@ -184,8 +226,9 @@ impl RigAnim {
             let via_idle = !blend::is_free(prev.motion) && gait(track.motion);
             let frames = if via_idle { blend::DEFAULT } else { frames };
             if frames > blend::MIN {
-                let idle = Track { motion: motion::IDLE, frame: 0.0, looping: true, root: false };
-                self.blend_from = match (via_idle, rig.motions.get(&motion::IDLE)) {
+                let idle_field = self.field && rig.field_motions.contains_key(&motion::IDLE);
+                let idle = Track { motion: motion::IDLE, frame: 0.0, looping: true, field: idle_field, root: false };
+                self.blend_from = match (via_idle, Self::motion_for(&rig, motion::IDLE, idle_field)) {
                     (true, Some(im)) => {
                         let b = evaluate(&rig.skeleton, im, key_time(im, 0.0, true), Options::default()).bones;
                         let w = self.weapon_poses(&rig, idle, &b);
@@ -251,9 +294,9 @@ impl RigAnim {
                 Some(p) if p.motion == out.motion => p.frame + 1.0,
                 _ => 0.0,
             };
-            Track { motion: out.motion, frame, looping: true, root: false }
+            Track { motion: out.motion, frame, looping: true, field: false, root: false }
         } else {
-            Track { motion: out.motion, frame: out.clip_frame as f32 + 1.0, looping: false, root: out.root_motion }
+            Track { motion: out.motion, frame: out.clip_frame as f32 + 1.0, looping: false, field: false, root: out.root_motion }
         };
         let Some(m) = rig.motions.get(&track.motion).or_else(|| prev.and_then(|t| rig.motions.get(&t.motion))) else { return };
         if !rig.motions.contains_key(&track.motion) {
