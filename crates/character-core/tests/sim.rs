@@ -44,6 +44,10 @@ impl World {
         out
     }
 
+    fn outs_free(&mut self) -> bool {
+        matches!(self.step(IDLE).state, StateName::Idle | StateName::Land)
+    }
+
     fn run(&mut self, frames: usize, pad: Pad) -> Vec<Output> {
         (0..frames).map(|_| self.step(pad)).collect()
     }
@@ -354,14 +358,47 @@ fn grabs_a_ledge_after_the_apex_and_hangs() {
 }
 
 #[test]
-fn holding_toward_the_wall_grabs_and_climbs_at_once() {
+fn holding_toward_the_wall_grabs_then_a_fresh_push_climbs() {
     let mut w = hanger();
     let toward = Pad { stick: [0.0, 0.2], ..IDLE };
     let outs: Vec<_> = (0..120).map(|_| w.step(Pad { jump: true, ..toward })).collect();
-    let i = outs.iter().position(|o| o.state == StateName::Climb).expect("climbed");
-    assert!(outs[..i].iter().all(|o| o.state != StateName::Hang));
+    assert!(outs.iter().any(|o| o.state == StateName::Hang), "grabbed");
+    assert!(outs.iter().all(|o| o.state != StateName::Climb), "still holding: hangs, doesn't climb");
+    w.run(3, IDLE);
+    let o = w.step(Pad { stick: [0.0, 1.0], ..IDLE });
+    assert_eq!(o.state, StateName::Climb);
 }
 
+#[test]
+fn jump_also_climbs_from_a_hang() {
+    let mut w = hanger();
+    let toward = Pad { stick: [0.0, 0.2], ..IDLE };
+    for _ in 0..120 {
+        if w.step(Pad { jump: true, ..toward }).state == StateName::Hang {
+            break;
+        }
+    }
+    w.step(toward);
+    assert_eq!(w.step(Pad { jump: true, ..toward }).state, StateName::Climb);
+}
+
+#[test]
+fn aerial_recovery_rights_sora_mid_launch() {
+    let mut ch = sora();
+    hurt_clips(&mut ch);
+    ch.moveset.clips.insert(motion::AERIAL_DODGE, Clip::plain(motion::AERIAL_DODGE, 20));
+    ch.abilities.aerial_recovery = true;
+    let mut w = World::new(ch);
+    w.step(IDLE);
+    w.ch.take_hit(&reaction::Hit { reaction: 7, knockback: (24, 40), dir: [0.0, -1.0], part: 0 });
+    w.run(10, IDLE);
+    let z = w.pos[2];
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_eq!(o.state, StateName::Hurt);
+    w.run(60, IDLE);
+    assert!((w.pos[2] - z).abs() < 30.0, "stopped flying back: {} -> {}", z, w.pos[2]);
+    assert!(w.outs_free());
+}
 #[test]
 fn no_grab_when_the_ledge_is_too_close_to_the_ground() {
     let mut w = hanger();

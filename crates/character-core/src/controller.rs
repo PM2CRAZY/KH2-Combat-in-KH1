@@ -122,6 +122,15 @@ pub enum StateName {
     Climb,
     Hurt,
     Blown,
+    Magic,
+}
+
+/// A spell's cast motions (MAGC): ground, air, and the combo-finisher one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CastMotions {
+    pub ground: u16,
+    pub air: u16,
+    pub finisher: Option<u16>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -231,14 +240,17 @@ enum ActionKind {
     AerialDodge,
     Guard,
     Attack { row: ComboRow },
-    /// Hanging from a ledge: feet at `at`, wall normal `out`.
-    Hang { at: [f32; 3], out: [f32; 2] },
+    /// Hanging from a ledge: feet at `at`, wall normal `out`. `armed` once
+    /// the stick has stopped pushing toward the wall after the grab.
+    Hang { at: [f32; 3], out: [f32; 2], armed: bool },
     Climb,
     /// Taking a hit (flinch, air flinch, getting up, guard repel).
     Hurt,
     /// Launched by a hit; `step` is the per-frame displacement of the
     /// current physics tick.
     Blow { blow: crate::reaction::Blow },
+    /// Casting a spell (the motion's magic-cast event releases it).
+    Magic,
 }
 
 #[derive(Clone, Debug)]
@@ -264,6 +276,8 @@ enum Mode {
 /// Wall recoil: push-back distance on the ground, hop height in the air
 /// (exe constant 50).
 const WALL_HOP: f32 = 50.0;
+/// Frames into a launch before Aerial Recovery can be used (ours).
+const RECOVERY_AFTER: u32 = 6;
 /// Hit-back starting speed per unit of distance (exe: 0.1).
 const HIT_BACK_SPEED: f32 = 0.1;
 
@@ -429,6 +443,55 @@ impl Character {
             self.push = Some((back, WALL_HOP * HIT_BACK_SPEED));
         }
         true
+    }
+
+    /// Whether a spell could be cast right now: free on the ground or in the
+    /// air, or inside an attack's or spell's "combo magic" window.
+    pub fn can_cast(&self) -> bool {
+        match &self.mode {
+            Mode::Free => true,
+            Mode::Action(a) => {
+                let f = a.frame.saturating_sub(1);
+                let open = |k: &WindowKind| matches!(k, WindowKind::ComboMagic);
+                match a.kind {
+                    ActionKind::Attack { .. } | ActionKind::Magic => self.clip(a.motion).map_or(false, |c| c.has(f, open)),
+                    ActionKind::Land => true,
+                    _ => false,
+                }
+            }
+            Mode::Glide => false,
+        }
+    }
+
+    /// Starts a cast: the air motion when airborne, the finisher motion when
+    /// it lands on the combo's last hit, else the ground one. Returns the
+    /// motion started, or `None` if casting isn't possible now. The spell
+    /// itself is released by the motion's magic-cast event
+    /// (`EventKind::MagicCast` with the motion's own id).
+    pub fn cast(&mut self, m: CastMotions) -> Option<u16> {
+        if !self.can_cast() {
+            return None;
+        }
+        let in_combo = matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. }, .. }));
+        let at_finisher = in_combo && self.count.saturating_add(1) >= self.max_count(self.airborne);
+        let motion = if self.airborne {
+            m.air
+        } else if at_finisher {
+            m.finisher.unwrap_or(m.ground)
+        } else {
+            m.ground
+        };
+        self.clip(motion)?;
+        if in_combo && self.hit {
+            self.count = self.count.saturating_add(1);
+        }
+        self.vel_h = [0.0; 2];
+        if self.airborne {
+            self.vel_y = 0.0;
+            self.arc = None;
+        }
+        self.start_action(ActionKind::Magic, motion);
+        Some(motion)
     }
 
     /// Takes a hit: the game's generic reaction (flinch, air flinch,
@@ -839,7 +902,7 @@ impl Character {
         self.vel_y = 0.0;
         self.reset_combo();
         self.snap = Some(at);
-        self.start_action(ActionKind::Hang { at, out }, motion::HANG);
+        self.start_action(ActionKind::Hang { at, out, armed: false }, motion::HANG);
         true
     }
 
@@ -1146,14 +1209,21 @@ impl Character {
                 }
             }
             ActionKind::Guard => {}
-            ActionKind::Hang { at, out } => {
+            ActionKind::Hang { at, out, armed } => {
                 // Hold on the hang point (the grab moved us there; the hang
                 // motion loops).
                 let _ = at;
                 fo.no_gravity = true;
                 let toward = input.stick[0] * -out[0] + input.stick[1] * -out[1];
                 act.frame += 1;
-                if toward > DEAD_ZONE && self.clip(motion::CLIMB).is_some() {
+                // In the game any push toward the wall climbs, so holding the
+                // stick grabs and climbs in one go. Here the push has to be a
+                // fresh one (let go of the stick first), or press jump, so you
+                // can hang and then choose (our change, by request).
+                let armed = *armed || toward <= DEAD_ZONE;
+                let (at, out) = (*at, *out);
+                act.kind = ActionKind::Hang { at, out, armed };
+                if ((armed && toward > DEAD_ZONE) || input.jump.pressed) && self.clip(motion::CLIMB).is_some() {
                     // Push toward the wall: climb up (exe).
                     self.start_action(ActionKind::Climb, motion::CLIMB);
                     return true;
@@ -1171,6 +1241,13 @@ impl Character {
                 return false;
             }
             ActionKind::Climb => fo.no_gravity = true,
+            ActionKind::Magic => {
+                // Other actions once the reaction-command window opens.
+                let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
+                if f >= open {
+                    cancel_allowed = true;
+                }
+            }
             ActionKind::Hurt => {
                 // Buttons are taken once the reaction-command window opens
                 // (frame 8 for Sora's damage motions); our reading.
@@ -1184,6 +1261,17 @@ impl Character {
                 }
             }
             ActionKind::Blow { .. } => {
+                // Aerial Recovery (ours: the exe's input for it isn't traced):
+                // jump while launched rights Sora with a small hop and the
+                // aerial-dodge flip, and control comes back when it ends.
+                if self.abilities.aerial_recovery && input.jump.pressed && self.airborne && f >= RECOVERY_AFTER {
+                    self.vel_h = [0.0; 2];
+                    self.vel_y = 0.0;
+                    self.arc = Some(Arc::new(WALL_HOP, self.params.gravity));
+                    let m = if self.clip(motion::AERIAL_DODGE).is_some() { motion::AERIAL_DODGE } else { act.motion };
+                    self.start_action(ActionKind::Hurt, m);
+                    return false;
+                }
                 fo.no_gravity = true;
                 // Hold the last frame until landing.
                 finished = false;
@@ -1287,6 +1375,7 @@ impl Character {
                         self.vel_h = [0.0; 2];
                     }
                 }
+                ActionKind::Magic => self.vel_h = if self.airborne { scale(self.vel_h, p.air_drag) } else { [0.0; 2] },
                 ActionKind::Blow { blow } => {
                     let mut b = *blow;
                     let d = b.tick(DT, &self.reaction);
@@ -1356,6 +1445,7 @@ impl Character {
                 ActionKind::Climb => StateName::Climb,
                 ActionKind::Hurt => StateName::Hurt,
                 ActionKind::Blow { .. } => StateName::Blown,
+                ActionKind::Magic => StateName::Magic,
             },
         }
     }

@@ -1,0 +1,356 @@
+//! The KH2-style HUD: HP/MP gauges (bottom right), the command menu
+//! (bottom left: Attack / Magic / Items / Drive, with the Magic list), and
+//! the ability menu (Esc / Start). Labels, costs and names come from the
+//! install via `kh2_data::kit`; the look is our own.
+
+use bevy::prelude::*;
+use kh2_data::kit::{abilities_from, MenuKit};
+
+use crate::Game;
+
+/// Which menu has focus.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Focus {
+    #[default]
+    Root,
+    Magic,
+    Abilities,
+}
+
+#[derive(Resource, Default)]
+pub struct MenuState {
+    pub focus: Focus,
+    pub root: usize,
+    pub magic: usize,
+    pub ability: usize,
+    pub scroll: usize,
+}
+
+/// Root entries.
+pub const ATTACK: usize = 0;
+pub const MAGIC: usize = 1;
+
+#[derive(Component)]
+pub struct CmdRow(pub usize);
+#[derive(Component)]
+pub struct SpellRow(pub usize);
+#[derive(Component)]
+pub struct SpellPanel;
+#[derive(Component)]
+pub struct HpBack;
+#[derive(Component)]
+pub struct HpFill;
+#[derive(Component)]
+pub struct MpBack;
+#[derive(Component)]
+pub struct MpFill;
+#[derive(Component)]
+pub struct GaugeText;
+#[derive(Component)]
+pub struct AbilityPanel;
+#[derive(Component)]
+pub struct AbilityRow(pub usize);
+#[derive(Component)]
+pub struct AbilityHeader;
+
+const ROWS: usize = 16;
+const NAVY: Color = Color::srgba(0.05, 0.09, 0.22, 0.82);
+const NAVY_HI: Color = Color::srgba(0.32, 0.55, 0.95, 0.95);
+const DIM: Color = Color::srgba(0.05, 0.07, 0.14, 0.6);
+const WHITE: Color = Color::srgb(0.95, 0.96, 1.0);
+const GREY: Color = Color::srgb(0.5, 0.52, 0.6);
+
+/// The spell shown for each element: the highest level we let Sora use.
+pub fn spell_list(kit: &MenuKit, level: u8) -> Vec<usize> {
+    let mut out = Vec::new();
+    for e in 0..6u8 {
+        let best = kit
+            .spells
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.element == e && s.level <= level)
+            .max_by_key(|(_, s)| s.level)
+            .map(|(i, _)| i);
+        out.extend(best);
+    }
+    out
+}
+
+pub fn spawn(mut commands: Commands, game: Res<Game>) {
+    let Some(kit) = &game.kit else { return };
+    let font = |size: f32| TextFont { font_size: size, ..default() };
+    // Command menu (bottom left).
+    commands
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(28.0),
+            bottom: Val::Px(28.0),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::FlexEnd,
+            column_gap: Val::Px(8.0),
+            ..default()
+        })
+        .with_children(|p| {
+            p.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), ..default() }).with_children(|col| {
+                col.spawn((Text::new("COMMAND"), font(13.0), TextColor(Color::srgb(0.7, 0.8, 1.0))));
+                for (i, (_, label)) in kit.root.iter().enumerate() {
+                    col.spawn((
+                        CmdRow(i),
+                        Node { width: Val::Px(200.0), height: Val::Px(30.0), padding: UiRect::left(Val::Px(14.0)), align_items: AlignItems::Center, ..default() },
+                        BackgroundColor(NAVY),
+                        BorderRadius::new(Val::Px(4.0), Val::Px(15.0), Val::Px(15.0), Val::Px(4.0)),
+                    ))
+                    .with_children(|r| {
+                        r.spawn((Text::new(label.clone()), font(18.0), TextColor(WHITE)));
+                    });
+                }
+            });
+            p.spawn((
+                SpellPanel,
+                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), display: Display::None, ..default() },
+            ))
+            .with_children(|col| {
+                for i in 0..6 {
+                    col.spawn((
+                        SpellRow(i),
+                        Node { width: Val::Px(230.0), height: Val::Px(28.0), padding: UiRect::horizontal(Val::Px(12.0)), align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, ..default() },
+                        BackgroundColor(NAVY),
+                        BorderRadius::all(Val::Px(4.0)),
+                    ))
+                    .with_children(|r| {
+                        r.spawn((Text::new(""), font(16.0), TextColor(WHITE)));
+                        r.spawn((Text::new(""), font(14.0), TextColor(Color::srgb(0.55, 0.75, 1.0))));
+                    });
+                }
+            });
+        });
+
+    // HP / MP (bottom right).
+    commands
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            right: Val::Px(28.0),
+            bottom: Val::Px(30.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::FlexEnd,
+            row_gap: Val::Px(5.0),
+            ..default()
+        })
+        .with_children(|p| {
+            p.spawn((GaugeText, Text::new(""), font(14.0), TextColor(WHITE)));
+            p.spawn((HpBack, Node { height: Val::Px(14.0), width: Val::Px(200.0), justify_content: JustifyContent::FlexEnd, ..default() }, BackgroundColor(Color::srgba(0.15, 0.02, 0.02, 0.85)), BorderRadius::all(Val::Px(7.0))))
+                .with_children(|b| {
+                    b.spawn((HpFill, Node { height: Val::Percent(100.0), width: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.25, 0.85, 0.3)), BorderRadius::all(Val::Px(7.0))));
+                });
+            p.spawn((MpBack, Node { height: Val::Px(10.0), width: Val::Px(200.0), justify_content: JustifyContent::FlexEnd, ..default() }, BackgroundColor(Color::srgba(0.02, 0.04, 0.15, 0.85)), BorderRadius::all(Val::Px(5.0))))
+                .with_children(|b| {
+                    b.spawn((MpFill, Node { height: Val::Percent(100.0), width: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.25, 0.55, 1.0)), BorderRadius::all(Val::Px(5.0))));
+                });
+        });
+
+    // Ability menu (centre, hidden until opened).
+    commands
+        .spawn((
+            AbilityPanel,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Percent(50.0),
+                top: Val::Percent(50.0),
+                margin: UiRect { left: Val::Px(-280.0), top: Val::Px(-250.0), ..default() },
+                width: Val::Px(560.0),
+                padding: UiRect::all(Val::Px(16.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                display: Display::None,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.03, 0.05, 0.12, 0.94)),
+            BorderRadius::all(Val::Px(10.0)),
+        ))
+        .with_children(|p| {
+            p.spawn((AbilityHeader, Text::new(""), font(18.0), TextColor(WHITE), Node { margin: UiRect::bottom(Val::Px(8.0)), ..default() }));
+            for i in 0..ROWS {
+                p.spawn((
+                    AbilityRow(i),
+                    Node { height: Val::Px(24.0), padding: UiRect::horizontal(Val::Px(10.0)), align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, ..default() },
+                    BackgroundColor(DIM),
+                    BorderRadius::all(Val::Px(3.0)),
+                ))
+                .with_children(|r| {
+                    r.spawn((Text::new(""), font(15.0), TextColor(WHITE)));
+                    r.spawn((Text::new(""), font(14.0), TextColor(Color::srgb(0.95, 0.8, 0.4))));
+                });
+            }
+            p.spawn((
+                Text::new("Up/Down choose   J / Enter / A: equip   U: unlimited AP   Esc / Start: close"),
+                font(12.0),
+                TextColor(GREY),
+                Node { margin: UiRect::top(Val::Px(8.0)), ..default() },
+            ));
+        });
+}
+
+/// AP spent on the equipped abilities.
+pub fn ap_used(game: &Game) -> u32 {
+    let Some(kit) = &game.kit else { return 0 };
+    kit.abilities.iter().filter(|a| game.equipped.contains(&a.id)).map(|a| a.ap as u32).sum()
+}
+
+/// Re-applies the equipped abilities to the controller.
+pub fn apply_abilities(game: &mut Game) {
+    let Some(kit) = &game.kit else { return };
+    game.character.abilities = abilities_from(&game.equipped, kit);
+}
+
+/// The ability menu: open/close, move, equip. Runs while the game is paused.
+pub fn ability_menu(keys: Res<ButtonInput<KeyCode>>, pads: Query<&Gamepad>, mut menu: ResMut<MenuState>, mut game: ResMut<Game>) {
+    let Some(n) = game.kit.as_ref().map(|k| k.abilities.len()) else { return };
+    let pad = |b: GamepadButton| pads.iter().any(|p| p.just_pressed(b));
+    let toggle = keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyP) || pad(GamepadButton::Start);
+    if toggle {
+        menu.focus = if menu.focus == Focus::Abilities { Focus::Root } else { Focus::Abilities };
+        return;
+    }
+    if menu.focus != Focus::Abilities || n == 0 {
+        return;
+    }
+    if keys.just_pressed(KeyCode::ArrowDown) || keys.just_pressed(KeyCode::KeyS) || pad(GamepadButton::DPadDown) {
+        menu.ability = (menu.ability + 1) % n;
+    }
+    if keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::KeyW) || pad(GamepadButton::DPadUp) {
+        menu.ability = (menu.ability + n - 1) % n;
+    }
+    if keys.just_pressed(KeyCode::KeyU) {
+        game.unlimited_ap = !game.unlimited_ap;
+    }
+    if menu.ability < menu.scroll {
+        menu.scroll = menu.ability;
+    } else if menu.ability >= menu.scroll + ROWS {
+        menu.scroll = menu.ability + 1 - ROWS;
+    }
+    if keys.just_pressed(KeyCode::KeyJ) || keys.just_pressed(KeyCode::Enter) || pad(GamepadButton::South) {
+        let Some(info) = game.kit.as_ref().and_then(|k| k.abilities.get(menu.ability)).cloned() else { return };
+        if let Some(i) = game.equipped.iter().position(|&id| id == info.id) {
+            game.equipped.remove(i);
+        } else if game.unlimited_ap || ap_used(&game) + info.ap as u32 <= game.ap_max {
+            game.equipped.push(info.id);
+        }
+        apply_abilities(&mut game);
+    }
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub fn draw(
+    game: Res<Game>,
+    menu: Res<MenuState>,
+    mut rows: Query<(&CmdRow, &mut BackgroundColor, &Children), (Without<SpellRow>, Without<AbilityRow>)>,
+    mut spell_panel: Query<&mut Node, (With<SpellPanel>, Without<AbilityPanel>, Without<HpBack>, Without<MpBack>, Without<HpFill>, Without<MpFill>)>,
+    mut spell_rows: Query<(&SpellRow, &mut BackgroundColor, &Children), (Without<CmdRow>, Without<AbilityRow>)>,
+    mut ability_panel: Query<&mut Node, (With<AbilityPanel>, Without<SpellPanel>, Without<HpBack>, Without<MpBack>, Without<HpFill>, Without<MpFill>)>,
+    mut ability_rows: Query<(&AbilityRow, &mut BackgroundColor, &Children), (Without<CmdRow>, Without<SpellRow>)>,
+    mut header: Query<&mut Text, (With<AbilityHeader>, Without<GaugeText>)>,
+    mut gauge_text: Query<&mut Text, (With<GaugeText>, Without<AbilityHeader>)>,
+    mut hp_back: Query<&mut Node, (With<HpBack>, Without<SpellPanel>, Without<AbilityPanel>, Without<MpBack>, Without<HpFill>, Without<MpFill>)>,
+    mut hp_fill: Query<&mut Node, (With<HpFill>, Without<SpellPanel>, Without<AbilityPanel>, Without<HpBack>, Without<MpBack>, Without<MpFill>)>,
+    mut mp_back: Query<&mut Node, (With<MpBack>, Without<SpellPanel>, Without<AbilityPanel>, Without<HpBack>, Without<HpFill>, Without<MpFill>)>,
+    mut mp_fill: Query<(&mut Node, &mut BackgroundColor), (With<MpFill>, Without<SpellPanel>, Without<AbilityPanel>, Without<HpBack>, Without<HpFill>, Without<MpBack>, Without<CmdRow>, Without<SpellRow>, Without<AbilityRow>)>,
+    mut texts: Query<(&mut Text, &mut TextColor), (Without<AbilityHeader>, Without<GaugeText>)>,
+) {
+    let Some(kit) = &game.kit else { return };
+    // Command menu.
+    let in_magic = menu.focus == Focus::Magic;
+    for (row, mut bg, children) in &mut rows {
+        let selected = row.0 == menu.root;
+        *bg = BackgroundColor(if selected && !in_magic { NAVY_HI } else if selected { Color::srgba(0.2, 0.32, 0.6, 0.9) } else { NAVY });
+        let enabled = row.0 == ATTACK || row.0 == MAGIC;
+        for c in children.iter() {
+            if let Ok((_, mut col)) = texts.get_mut(*c) {
+                *col = TextColor(if enabled { WHITE } else { GREY });
+            }
+        }
+    }
+    if let Ok(mut n) = spell_panel.get_single_mut() {
+        n.display = if in_magic { Display::Flex } else { Display::None };
+    }
+    let spells = spell_list(kit, game.magic_level);
+    for (row, mut bg, children) in &mut spell_rows {
+        let spell = spells.get(row.0).and_then(|&i| kit.spells.get(i));
+        *bg = BackgroundColor(if row.0 == menu.magic { NAVY_HI } else { NAVY });
+        let affordable = spell.map_or(false, |s| game.can_afford(s.mp_cost));
+        for (k, c) in children.iter().enumerate() {
+            if let Ok((mut t, mut col)) = texts.get_mut(*c) {
+                *t = Text::new(match (spell, k) {
+                    (Some(s), 0) => s.name.clone(),
+                    (Some(s), _) if s.mp_cost == 255 => "all MP".into(),
+                    (Some(s), _) => format!("{} MP", s.mp_cost),
+                    _ => String::new(),
+                });
+                if k == 0 {
+                    *col = TextColor(if affordable { WHITE } else { GREY });
+                }
+            }
+        }
+    }
+
+    // Gauges: KH2's bars grow with the maximum.
+    let (hp, max_hp) = (game.sora.hp as f32, game.sora.max_hp.max(1) as f32);
+    if let Ok(mut n) = hp_back.get_single_mut() {
+        n.width = Val::Px((max_hp * 3.0).clamp(120.0, 520.0));
+    }
+    if let Ok(mut n) = hp_fill.get_single_mut() {
+        n.width = Val::Percent(100.0 * hp / max_hp);
+    }
+    if let Ok(mut n) = mp_back.get_single_mut() {
+        n.width = Val::Px((game.max_mp * 2.0).clamp(100.0, 400.0));
+    }
+    if let Ok((mut n, mut bg)) = mp_fill.get_single_mut() {
+        match game.mp_charge {
+            Some(c) => {
+                n.width = Val::Percent(100.0 * c);
+                *bg = BackgroundColor(Color::srgb(0.95, 0.45, 0.75));
+            }
+            None => {
+                n.width = Val::Percent(100.0 * game.mp / game.max_mp.max(1.0));
+                *bg = BackgroundColor(Color::srgb(0.25, 0.55, 1.0));
+            }
+        }
+    }
+    if let Ok(mut t) = gauge_text.get_single_mut() {
+        let mp = match game.mp_charge {
+            Some(_) => "MP CHARGE".to_string(),
+            None => format!("MP {:.0}/{:.0}", game.mp, game.max_mp),
+        };
+        *t = Text::new(format!("HP {}/{}   {}", game.sora.hp, game.sora.max_hp, mp));
+    }
+
+    // Ability menu.
+    let open = menu.focus == Focus::Abilities;
+    if let Ok(mut n) = ability_panel.get_single_mut() {
+        n.display = if open { Display::Flex } else { Display::None };
+    }
+    if !open {
+        return;
+    }
+    if let Ok(mut t) = header.get_single_mut() {
+        let cap = if game.unlimited_ap { "unlimited".to_string() } else { game.ap_max.to_string() };
+        *t = Text::new(format!("ABILITIES      AP {} / {}", ap_used(&game), cap));
+    }
+    for (row, mut bg, children) in &mut ability_rows {
+        let i = menu.scroll + row.0;
+        let info = kit.abilities.get(i);
+        let on = info.map_or(false, |a| game.equipped.contains(&a.id));
+        *bg = BackgroundColor(if i == menu.ability { NAVY_HI } else if info.is_some() { DIM } else { Color::NONE });
+        for (k, c) in children.iter().enumerate() {
+            if let Ok((mut t, mut col)) = texts.get_mut(*c) {
+                *t = Text::new(match (info, k) {
+                    (Some(a), 0) => format!("{} {}", if on { "[x]" } else { "[ ]" }, a.name),
+                    (Some(a), _) => format!("{} AP", a.ap),
+                    _ => String::new(),
+                });
+                if k == 0 {
+                    *col = TextColor(if on { WHITE } else { Color::srgb(0.65, 0.68, 0.78) });
+                }
+            }
+        }
+    }
+}

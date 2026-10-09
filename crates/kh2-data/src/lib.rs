@@ -11,6 +11,7 @@
 //! ```
 
 pub mod enemy;
+pub mod kit;
 pub mod sora;
 
 use std::path::{Path, PathBuf};

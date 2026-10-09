@@ -21,8 +21,10 @@ pub mod bar;
 pub mod battle;
 pub mod egs;
 pub mod motion;
+pub mod msg;
 pub mod objentry;
 pub mod pref;
+pub mod system;
 mod reader;
 
 #[derive(Debug, thiserror::Error)]

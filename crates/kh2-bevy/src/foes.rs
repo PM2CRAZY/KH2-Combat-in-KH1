@@ -130,7 +130,7 @@ fn decide(st: &mut FoeState, pos: [f32; 3], sora: [f32; 3]) -> NpcCommand {
 }
 
 /// One frame for one Shadow: script, controller, movement, pose, shapes.
-pub fn step(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], arena: &Arena, sora_radius: f32) {
+pub fn step(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], arena: &Arena) {
     let Some(st) = dm.foe.as_mut() else { return };
     let cmd = decide(st, dm.pos, sora_pos);
     let out = st.npc.step(&cmd, st.grounded);
@@ -139,15 +139,6 @@ pub fn step(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], arena: &Arena, sor
     p[0] += out.displacement[0];
     p[2] += out.displacement[2];
     p = arena.push_out(p, r, 30.0);
-    // Keep out of Sora's body.
-    let (dx, dz) = (p[0] - sora_pos[0], p[2] - sora_pos[2]);
-    let dist = (dx * dx + dz * dz).sqrt();
-    let min = r + sora_radius;
-    if dist < min && (p[1] - sora_pos[1]).abs() < 120.0 {
-        let (nx, nz) = if dist > 1e-3 { (dx / dist, dz / dist) } else { (0.0, 1.0) };
-        p[0] = sora_pos[0] + nx * min;
-        p[2] = sora_pos[2] + nz * min;
-    }
     let from_y = p[1];
     p[1] += out.displacement[1];
     let ground = arena.ground_crossed(from_y, p, r);
@@ -176,6 +167,24 @@ pub fn step(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], arena: &Arena, sor
         }
     }
     st.out = Some(out);
+}
+
+/// Separates Sora and a Shadow when their bodies overlap, each moving in
+/// inverse proportion to its objentry weight (exe). Returns Sora's push.
+pub fn separate(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], sora_radius: f32, sora_weight: f32) -> [f32; 2] {
+    let r = kit.data.body_radius();
+    let (dx, dz) = (dm.pos[0] - sora_pos[0], dm.pos[2] - sora_pos[2]);
+    let dist = (dx * dx + dz * dz).sqrt();
+    let min = r + sora_radius;
+    if dist >= min || (dm.pos[1] - sora_pos[1]).abs() >= 120.0 {
+        return [0.0; 2];
+    }
+    let (nx, nz) = if dist > 1e-3 { (dx / dist, dz / dist) } else { (0.0, 1.0) };
+    let overlap = min - dist;
+    let (s_sora, s_foe) = character_core::reaction::push_shares(sora_weight, kit.data.weight);
+    dm.pos[0] += nx * overlap * s_foe;
+    dm.pos[2] += nz * overlap * s_foe;
+    [-nx * overlap * s_sora, -nz * overlap * s_sora]
 }
 
 /// Sora's swing connected with a Shadow: the reaction (damage is applied by

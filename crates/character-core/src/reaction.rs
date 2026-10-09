@@ -207,6 +207,19 @@ impl Blow {
     }
 }
 
+/// How two overlapping bodies share the push that separates them (exe):
+/// each moves in inverse proportion to its weight (objentry weight; Sora
+/// and the Shadow are both 100). Weight 0 means immovable. Returns the
+/// fractions of the overlap `a` and `b` each take.
+pub fn push_shares(weight_a: f32, weight_b: f32) -> (f32, f32) {
+    match (weight_a > 0.0, weight_b > 0.0) {
+        (true, true) => (weight_b / (weight_a + weight_b), weight_a / (weight_a + weight_b)),
+        (false, true) => (0.0, 1.0),
+        (true, false) => (1.0, 0.0),
+        (false, false) => (0.0, 0.0),
+    }
+}
+
 /// Attack-versus-attack: which ATKP kinds stop each other (exe table;
 /// kinds 0 normal, 1 pierce armor, 2 guard, 3 special guard, 4 special,
 /// 5 cure, 6 full cure).
@@ -296,6 +309,13 @@ mod tests {
         }
         assert!((b.vel_h[0] - 4.5).abs() < 1e-3, "floored at 10% of the start: {}", b.vel_h[0]);
         assert!(x > 300.0);
+    }
+
+    #[test]
+    fn heavier_bodies_move_less() {
+        assert_eq!(push_shares(100.0, 100.0), (0.5, 0.5));
+        assert_eq!(push_shares(100.0, 300.0), (0.75, 0.25));
+        assert_eq!(push_shares(100.0, 0.0), (1.0, 0.0));
     }
 
     #[test]

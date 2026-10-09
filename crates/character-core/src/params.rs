@@ -133,6 +133,8 @@ pub struct Abilities {
     pub negative_combo: u8,
     /// Every swing counts as connecting for the combo counter.
     pub combo_master: bool,
+    /// Press jump while launched to right yourself in mid-air.
+    pub aerial_recovery: bool,
     /// Item ids of equipped action abilities (for combo rows that need one).
     pub equipped: Vec<u16>,
 }
@@ -151,6 +153,7 @@ impl Default for Abilities {
             finishing_plus: 0,
             negative_combo: 0,
             combo_master: false,
+            aerial_recovery: false,
             equipped: Vec::new(),
         }
     }

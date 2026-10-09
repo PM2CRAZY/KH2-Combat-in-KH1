@@ -97,5 +97,5 @@ pub fn data() -> SoraData {
         .collect()];
     let combat = CombatData { battle, source: Source::Live };
     let blade_groups = HashMap::from([(1u8, vec![BladeSphere { along: 0.0, radius: 40.0 }, BladeSphere { along: 40.0, radius: 40.0 }])]);
-    SoraData { character, combat, blade_groups, motions: vec![], rig: None, rig_error: None }
+    SoraData { character, combat, blade_groups, motions: vec![], rig: None, rig_error: None, weight: 100.0 }
 }

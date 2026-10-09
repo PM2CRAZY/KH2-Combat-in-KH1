@@ -10,6 +10,8 @@
 //! (or set KH2_GAME). See the HUD for controls.
 
 mod foes;
+mod hud;
+mod magic;
 mod rig;
 mod synthetic;
 mod world;
@@ -49,6 +51,7 @@ fn main() {
     let level: usize = arg("--level").and_then(|v| v.parse().ok()).unwrap_or(30).clamp(1, 99);
     let dummy_level: u16 = arg("--dummy-level").and_then(|v| v.parse().ok()).unwrap_or(level as u16).clamp(1, 99);
     let source = if args.iter().any(|a| a == "--backup") { Source::Backup } else { Source::Live };
+    let sora_hp: u32 = arg("--hp").and_then(|v| v.parse().ok()).unwrap_or(60);
     let gravity: Option<f32> = arg("--gravity").and_then(|v| v.parse().ok());
     let screenshot_after: Option<u32> = arg("--screenshot").and_then(|v| v.parse().ok());
     let autoplay = args.iter().any(|a| a == "--autoplay");
@@ -140,7 +143,8 @@ fn main() {
         Ok(data) => {
             let lvup = data.combat.battle.lvup.first().and_then(|c| c.get(level - 1)).copied();
             let stats = match lvup {
-                Some(l) => Stats { hp: 100, strength: l.strength as u16, magic: l.magic as u16, defense: l.defense as u16 },
+                // Max HP depends on story bonuses (not read yet): 60 by default.
+                Some(l) => Stats { hp: sora_hp, strength: l.strength as u16, magic: l.magic as u16, defense: l.defense as u16 },
                 None => Stats { hp: 100, strength: 10, magic: 10, defense: 5 },
             };
             let mut character = data.character.clone();
@@ -153,7 +157,26 @@ fn main() {
                 .filter_map(|id| data.combat.attack_at_level(id, 0, level as u8).map(|a| (id, a)))
                 .collect();
             let dummy_template = data.combat.enemy(DUMMY_ENEMY, Some(dummy_level));
+            // Menus, abilities and magic from the install.
+            let action_ids: Vec<u16> = data.character.moveset.combo_rows.iter().map(|r| r.ability).filter(|a| *a != 0).collect();
+            let kit = match (&used, arg("--data-dir"), synthetic) {
+                (_, _, true) => None,
+                (Some(i), _, _) => i.load_kit(source, &data.combat.battle, &action_ids).map_err(|e| eprintln!("note: menus not loaded ({e})")).ok(),
+                (None, Some(dir), _) => kh2_data::kit::load_kit_dir(std::path::Path::new(&dir), &data.combat.battle, &action_ids).map_err(|e| eprintln!("note: menus not loaded ({e})")).ok(),
+                _ => None,
+            };
             let anim = data.rig.clone().filter(|_| !args.iter().any(|a| a == "--capsule")).map(RigAnim::new);
+            // Every growth ability at MAX, Guard and Aerial Recovery.
+            let equipped: Vec<u16> = kit
+                .as_ref()
+                .map(|k| {
+                    use kh2_data::kit::Effect;
+                    k.abilities.iter().filter(|a| matches!(a.effect, Effect::Growth(_, 4) | Effect::Guard | Effect::AerialRecovery)).map(|a| a.id).collect()
+                })
+                .unwrap_or_default();
+            if let Some(k) = &kit {
+                character.abilities = kh2_data::kit::abilities_from(&equipped, k);
+            }
             app.insert_resource(Game {
                 anim,
                 character,
@@ -170,6 +193,8 @@ fn main() {
                 grounded: true,
                 ground_y: 0.0,
                 dummy_template,
+                weight: data.weight,
+                enemy_count: arg("--enemies").and_then(|v| v.parse().ok()).unwrap_or(1),
                 dummy_level,
                 combo_plus: 0,
                 volumes: HashMap::new(),
@@ -189,9 +214,20 @@ fn main() {
                 sora_hits: Vec::new(),
                 sora_guards: Vec::new(),
                 sora_hit_by: Default::default(),
+                ap_max: kit.as_ref().and_then(|k| k.ap_by_level.get(level - 1)).map_or(0, |&a| a as u32),
+                equipped,
+                unlimited_ap: false,
+                mp: kit.as_ref().map_or(100.0, |k| k.mp as f32),
+                max_mp: kit.as_ref().map_or(100.0, |k| k.mp as f32),
+                mp_charge: None,
+                magic_level: arg("--magic-level").and_then(|v| v.parse().ok()).unwrap_or(3),
+                casting: None,
+                kit,
             })
-            .add_systems(Startup, (spawn_player, spawn_dummies))
+            .insert_resource(hud::MenuState::default())
+            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn))
             .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, foes::sync_pieces, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
+            .add_systems(Update, (hud::ability_menu, hud::draw))
             .add_systems(FixedUpdate, simulate);
         }
         Err(_) => {
@@ -236,6 +272,9 @@ struct Game {
     grounded: bool,
     ground_y: f32,
     dummy_template: Option<Combatant>,
+    enemy_count: usize,
+    /// Sora's objentry weight.
+    weight: f32,
     dummy_level: u16,
     combo_plus: u8,
     /// Live attack windows' shapes from the previous frame (for the sweep),
@@ -259,6 +298,27 @@ struct Game {
     sora_guards: Vec<(character_core::ActiveHitbox, Vec<CShape>)>,
     /// (Shadow id, swing) pairs that already hit or clashed with Sora.
     sora_hit_by: std::collections::HashSet<(u32, u64)>,
+    /// Menus, abilities and magic (absent with --synthetic).
+    kit: Option<kh2_data::kit::MenuKit>,
+    /// Equipped ability item ids.
+    equipped: Vec<u16>,
+    ap_max: u32,
+    unlimited_ap: bool,
+    mp: f32,
+    max_mp: f32,
+    /// MP Charge progress 0..1 once MP has run out.
+    mp_charge: Option<f32>,
+    /// Highest spell level Sora knows (1 = Fire, 3 = Firaga).
+    magic_level: u8,
+    /// The spell being cast (index into the kit), released by the motion's
+    /// magic-cast event.
+    casting: Option<usize>,
+}
+
+impl Game {
+    fn can_afford(&self, cost: u8) -> bool {
+        self.mp_charge.is_none() && if cost == 255 { self.mp > 0.0 } else { self.mp >= cost as f32 }
+    }
 }
 
 #[derive(Resource)]
@@ -288,6 +348,10 @@ struct Latch {
     held: [bool; 4],
     pressed: [bool; 4],
     camera: Vec2,
+    /// Command-menu cursor presses and magic shortcuts since the last step.
+    menu_up: bool,
+    menu_down: bool,
+    shortcut: Option<usize>,
 }
 
 /// `--autoplay`: scripted input for smoke tests and screenshots
@@ -393,7 +457,9 @@ fn spawn_dummies(mut commands: Commands, game: Res<Game>, mut meshes: ResMut<Ass
     let Some(template) = &game.dummy_template else { return };
     let mesh = meshes.add(Cylinder::new(DUMMY_RADIUS * SCALE, DUMMY_HEIGHT * SCALE));
     let mat = mats.add(Color::srgb(0.15, 0.15, 0.2));
-    let spots = [[0.0, 0.0, 0.0], [200.0, 0.0, 150.0], [-250.0, 0.0, 120.0], [600.0, 0.0, 600.0], [-700.0, 0.0, 500.0]];
+    // One Shadow (`--enemies N` for more).
+    let all = [[0.0, 0.0, 0.0], [200.0, 0.0, 150.0], [-250.0, 0.0, 120.0], [600.0, 0.0, 600.0], [-700.0, 0.0, 500.0]];
+    let spots = &all[..game.enemy_count.clamp(1, all.len())];
     let sphere = meshes.add(Sphere::new(0.5).mesh().uv(16, 10));
     let paints: HashMap<Paint, Handle<StandardMaterial>> = Paint::ALL.iter().map(|p| (*p, mats.add(p.material()))).collect();
     for (i, p) in spots.iter().enumerate() {
@@ -466,11 +532,14 @@ fn latch_input(
     if keys.pressed(KeyCode::KeyE) || keys.pressed(KeyCode::ArrowRight) {
         cam.x += 1.0;
     }
-    if keys.pressed(KeyCode::ArrowUp) {
-        cam.y += 1.0;
-    }
-    if keys.pressed(KeyCode::ArrowDown) {
-        cam.y -= 1.0;
+    // Up/down move the command menu cursor (D-pad on a pad); camera pitch
+    // is on the mouse / right stick.
+    latch.menu_up |= keys.just_pressed(KeyCode::ArrowUp);
+    latch.menu_down |= keys.just_pressed(KeyCode::ArrowDown);
+    for (i, k) in [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6].iter().enumerate() {
+        if keys.just_pressed(*k) {
+            latch.shortcut = Some(i);
+        }
     }
     if mouse.pressed(MouseButton::Right) {
         for m in motion.read() {
@@ -488,6 +557,8 @@ fn latch_input(
         if r.length() > 0.2 {
             cam += r;
         }
+        latch.menu_up |= pad.just_pressed(GamepadButton::DPadUp);
+        latch.menu_down |= pad.just_pressed(GamepadButton::DPadDown);
         // Xbox layout: A attack, B jump, X action (guard/roll), R1 lock-on.
         held[0] |= pad.pressed(GamepadButton::East);
         held[1] |= pad.pressed(GamepadButton::South);
@@ -556,30 +627,35 @@ fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
 }
 
 fn abilities_keys(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>, mut dbg: ResMut<Debug>) {
+    // Without the install's menus (--synthetic), the number keys toggle the
+    // growth and combo abilities directly; otherwise they are magic
+    // shortcuts and the ability menu (Esc) equips.
+    let has_kit = game.kit.is_some();
     let a = &mut game.character.abilities;
     let cycle = |v: &mut u8| *v = (*v + 1) % 5;
-    if keys.just_pressed(KeyCode::Digit1) {
+    let keys_on = !has_kit;
+    if keys_on && keys.just_pressed(KeyCode::Digit1) {
         cycle(&mut a.high_jump);
     }
-    if keys.just_pressed(KeyCode::Digit2) {
+    if keys_on && keys.just_pressed(KeyCode::Digit2) {
         cycle(&mut a.quick_run);
     }
-    if keys.just_pressed(KeyCode::Digit3) {
+    if keys_on && keys.just_pressed(KeyCode::Digit3) {
         cycle(&mut a.aerial_dodge);
     }
-    if keys.just_pressed(KeyCode::Digit4) {
+    if keys_on && keys.just_pressed(KeyCode::Digit4) {
         cycle(&mut a.glide);
     }
-    if keys.just_pressed(KeyCode::Digit5) {
+    if keys_on && keys.just_pressed(KeyCode::Digit5) {
         cycle(&mut a.dodge_roll);
     }
-    if keys.just_pressed(KeyCode::Digit6) {
+    if keys_on && keys.just_pressed(KeyCode::Digit6) {
         a.combo_plus = (a.combo_plus + 1) % 4;
     }
-    if keys.just_pressed(KeyCode::Digit7) {
+    if keys_on && keys.just_pressed(KeyCode::Digit7) {
         a.air_combo_plus = (a.air_combo_plus + 1) % 3;
     }
-    if keys.just_pressed(KeyCode::Digit8) {
+    if keys_on && keys.just_pressed(KeyCode::Digit8) {
         a.finishing_plus = (a.finishing_plus + 1) % 4;
     }
     if keys.just_pressed(KeyCode::F1) {
@@ -647,9 +723,18 @@ fn simulate(
     mut dummies: Query<&mut Dummy>,
     mut dbg: ResMut<Debug>,
     shot: Res<Shot>,
+    mut menu: ResMut<hud::MenuState>,
 ) {
     let game = &mut *game;
     if shot.pause_at.is_some_and(|p| game.frame >= p) {
+        return;
+    }
+    if menu.focus == hud::Focus::Abilities {
+        // Paused in the ability menu; drop presses made meanwhile.
+        latch.pressed = [false; 4];
+        latch.menu_up = false;
+        latch.menu_down = false;
+        latch.shortcut = None;
         return;
     }
     game.frame += 1;
@@ -667,6 +752,22 @@ fn simulate(
             "idle" => latch.stick = Vec2::ZERO,
             "run" => latch.stick = Vec2::X,
             "jump" => press(0, f % 90 == 5, &mut latch),
+            // Open the ability menu (pauses the game).
+            "abilities" => {
+                if f == 3 {
+                    menu.focus = hud::Focus::Abilities;
+                    menu.ability = 21;
+                }
+            }
+            // Open the command menu's Magic list and cast, then use shortcuts.
+            "magic" => {
+                latch.stick = Vec2::ZERO;
+                latch.menu_down |= f == 5;
+                press(1, f == 8 || f == 12, &mut latch);
+                if f == 150 {
+                    latch.shortcut = Some(3);
+                }
+            }
             // Stand still and guard every 40 frames: Shadows' swipes bounce off.
             "guard" => {
                 latch.stick = Vec2::ZERO;
@@ -725,6 +826,81 @@ fn simulate(
     let right = Vec2::new(-d.y, d.x);
     // With the camera behind looking along d, screen-right is `right`.
     let s = d * latch.stick.y + right * latch.stick.x;
+    // Command menu: up/down move the cursor; attack confirms the selected
+    // command (Attack just attacks), jump backs out of a submenu (KH2).
+    let mut cast: Option<usize> = latch.shortcut.take();
+    if let Some(kit) = &game.kit {
+        let spells = hud::spell_list(kit, game.magic_level);
+        let n_root = kit.root.len().max(1);
+        let (up, down) = (std::mem::take(&mut latch.menu_up), std::mem::take(&mut latch.menu_down));
+        match menu.focus {
+            hud::Focus::Root => {
+                if down {
+                    menu.root = (menu.root + 1) % n_root;
+                }
+                if up {
+                    menu.root = (menu.root + n_root - 1) % n_root;
+                }
+                if latch.pressed[1] && menu.root != hud::ATTACK {
+                    latch.pressed[1] = false;
+                    if menu.root == hud::MAGIC && !spells.is_empty() {
+                        menu.focus = hud::Focus::Magic;
+                    }
+                }
+            }
+            hud::Focus::Magic => {
+                let n = spells.len().max(1);
+                if down {
+                    menu.magic = (menu.magic + 1) % n;
+                }
+                if up {
+                    menu.magic = (menu.magic + n - 1) % n;
+                }
+                if latch.pressed[1] {
+                    latch.pressed[1] = false;
+                    cast = Some(menu.magic);
+                }
+                if latch.pressed[0] {
+                    latch.pressed[0] = false;
+                    menu.focus = hud::Focus::Root;
+                }
+            }
+            hud::Focus::Abilities => {}
+        }
+        // Cast: MP check, then the controller picks the motion.
+        if let Some(i) = cast.and_then(|c| spells.get(c).copied()) {
+            let sp = kit.spells[i].clone();
+            if game.can_afford(sp.mp_cost) {
+                let m = |v: i16| (v >= 0).then_some(v as u16);
+                if let (Some(ground), Some(air)) = (m(sp.ground_motion), m(sp.air_motion)) {
+                    let motions = character_core::CastMotions { ground, air, finisher: m(sp.finish_motion) };
+                    if game.character.cast(motions).is_some() {
+                        game.mp = if sp.mp_cost == 255 { 0.0 } else { (game.mp - sp.mp_cost as f32).max(0.0) };
+                        if game.mp <= 0.0 {
+                            game.mp_charge = Some(0.0);
+                        }
+                        game.casting = Some(i);
+                        dbg.log.push(format!("cast {} ({} MP)", sp.name, if sp.mp_cost == 255 { "all".into() } else { sp.mp_cost.to_string() }));
+                    }
+                }
+            }
+        }
+    } else {
+        latch.menu_up = false;
+        latch.menu_down = false;
+    }
+    // MP Charge: refills over a fixed time, then MP is full again
+    // (approximation: 10 seconds; the game's rate isn't read yet).
+    if let Some(c) = game.mp_charge {
+        let c = c + 1.0 / 600.0;
+        if c >= 1.0 {
+            game.mp_charge = None;
+            game.mp = game.max_mp;
+        } else {
+            game.mp_charge = Some(c);
+        }
+    }
+
     let btn = |i: usize, l: &Latch| Btn { pressed: l.pressed[i], held: l.held[i] };
     let input = CInput { stick: [s.x, s.y], jump: btn(0, &latch), attack: btn(1, &latch), action: btn(2, &latch), lock: btn(3, &latch) };
     latch.pressed = [false; 4];
@@ -741,14 +917,28 @@ fn simulate(
         ledges: &ledges,
     };
     let out = game.character.step(&input, &env);
+    // The cast motion's magic-cast event releases the spell.
+    if let Some(i) = game.casting {
+        let released = out.events.iter().any(|e| matches!(e, character_core::EventKind::MagicCast(m) if *m as u16 == out.motion));
+        if released {
+            game.casting = None;
+            if let Some(sp) = game.kit.as_ref().map(|k| k.spells[i].clone()) {
+                dbg.log.push(format!("{} released", sp.name));
+                magic::release(game, &sp);
+            }
+        } else if out.state != StateName::Magic {
+            game.casting = None;
+        }
+    }
 
     // Move with collision.
     let mut p = game.pos;
     p[0] += out.displacement[0];
     p[2] += out.displacement[2];
     p = arena.push_out(p, SORA_RADIUS, 30.0);
-    // Body collision with standing dummies.
-    for d in dummies.iter().filter(|d| d.respawn == 0) {
+    // Body collision with standing column dummies (Shadows are separated
+    // by weight after they move).
+    for d in dummies.iter().filter(|d| d.respawn == 0 && d.foe.is_none()) {
         let (dx, dz) = (p[0] - d.pos[0], p[2] - d.pos[2]);
         let dist = (dx * dx + dz * dz).sqrt();
         let min = SORA_RADIUS + DUMMY_RADIUS;
@@ -888,7 +1078,12 @@ fn simulate(
         for mut dm in dummies.iter_mut() {
             let dead_hidden = dm.respawn > 0 && dm.foe.as_ref().map_or(true, |s| !s.npc.is_dead());
             if !dead_hidden {
-                foes::step(&mut dm, kit, game.pos, &arena, SORA_RADIUS);
+                foes::step(&mut dm, kit, game.pos, &arena);
+                if dm.foe.as_ref().is_some_and(|s| !s.npc.is_dead()) {
+                    let push = foes::separate(&mut dm, kit, game.pos, SORA_RADIUS, game.weight);
+                    let q = arena.push_out([game.pos[0] + push[0], game.pos[1], game.pos[2] + push[1]], SORA_RADIUS, 30.0);
+                    game.pos = q;
+                }
             }
         }
         let sora_hurt = game.anim.as_ref().map(|a| a.hurt_shapes()).unwrap_or_default();
@@ -1265,8 +1460,8 @@ fn hud(
         "state {:?}  motion {}  frame {}  combo {}  {}\n\
          pos ({:.0}, {:.0}, {:.0})  move/frame ({:.1}, {:.1}, {:.1})  {}\n\
          Sora LV{} HP {}/{} (Str {} Mag {} Def {})  {}: Shadow LV{}\n\
-         [1] High Jump {}  [2] Quick Run {}  [3] Aerial Dodge {}  [4] Glide {}  [5] Dodge Roll {}\n\
-         [6] Combo Plus x{}  [7] Air Combo Plus x{}  [8] Finishing Plus x{}  [F1] attack/guard shapes  [F2] hurt shapes  [F3] skeleton  [F4] other collision  [R] reset\n\
+         High Jump {}  Quick Run {}  Aerial Dodge {}  Glide {}  Dodge Roll {}  Combo Plus x{}  Air Combo Plus x{}  Finishing Plus x{}\n\
+         [Esc] abilities  [Up/Down] command menu (J confirm, Space back)  [1-6] magic shortcuts  [F1-F4] debug shapes  [R] reset\n\
          WASD move (Alt walk)  Space jump (in air: aerial dodge, then hold: glide)  J/LMB attack  K/Shift guard / roll / quick run  Tab lock-on  Q/E/RMB camera\n",
         out.state,
         out.motion,
