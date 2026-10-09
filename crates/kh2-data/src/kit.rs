@@ -94,6 +94,9 @@ pub struct MenuKit {
     pub revert: String,
     /// Form id → EXP from each level to the next (00battle fmlv).
     pub form_exp: Vec<(u8, Vec<u32>)>,
+    /// Every command row by id with its label (reaction commands read
+    /// their priority, flags and mark from here).
+    pub commands: std::collections::HashMap<u16, (Command, String)>,
 }
 
 /// The ability ids this project models, by what they do. Item ids are the
@@ -185,6 +188,7 @@ pub(crate) fn load_kit_with(read: &dyn Fn(&str) -> Result<Vec<u8>>, battle: &kh2
         anti,
         revert,
         form_exp,
+        commands: cmds.iter().map(|c| (c.id, (c.clone(), name(c.message as u32, format!("Command {}", c.id))))).collect(),
     })
 }
 

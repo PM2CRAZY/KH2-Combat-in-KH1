@@ -32,6 +32,39 @@ pub struct EnemyData {
     /// objentry enemy status id (Heartless 1000.., Nobodies 3000..).
     pub status: u16,
     pub reaction: ReactionParams,
+    /// Collision groups on by default (the model collision header).
+    pub groups: u32,
+    /// Capture slots (reaction commands): slot -> the motions other
+    /// characters play when captured (see [`Capture`]).
+    pub captures: HashMap<usize, Vec<(String, kh2_formats::motion::Anb)>>,
+}
+
+/// A captured motion as a clip for the captured character: the body
+/// motion (tag `<id>0`) with the weapons' windows (`<id>1`, `<id>2`) and
+/// their poses. Character ids: "001" Sora and his Drive Forms, "027" Limit
+/// Form (objentry byte 7).
+#[derive(Clone, Debug)]
+pub struct Capture {
+    pub clip: Clip,
+    pub body: Option<Arc<kh2_formats::anim::Interpolated>>,
+    pub weapons: Vec<Option<Arc<kh2_formats::anim::Interpolated>>>,
+}
+
+impl EnemyData {
+    /// Slot `slot` captured onto a character with id tag `who` ("001"),
+    /// as motion `motion`.
+    pub fn capture(&self, slot: usize, who: &str, motion: u16, combat: &CombatData) -> Option<Capture> {
+        let set = self.captures.get(&slot)?;
+        let tag = |n: u8| set.iter().find(|(t, _)| *t == format!("{who}{n}")).map(|(_, a)| a);
+        let body = tag(0)?;
+        let weapons: Vec<Option<&kh2_formats::motion::Anb>> = vec![tag(1), tag(2)];
+        let clip = clip_from_anb(motion, body, &weapons, combat);
+        Some(Capture {
+            clip,
+            body: body.pose.clone().map(Arc::new),
+            weapons: weapons.iter().map(|w| w.and_then(|a| a.pose.clone()).map(Arc::new)).collect(),
+        })
+    }
 }
 
 impl EnemyData {
@@ -67,7 +100,9 @@ pub(crate) fn load_enemy_with(read: &dyn Fn(&str) -> Result<Vec<u8>>, model: &st
         weapons: Vec::new(),
         body_shapes: bone_shapes(&collision),
     };
-    Ok(EnemyData { model: model.to_string(), clips, rig: Arc::new(rig), weight, status, reaction: reaction_params(&pref) })
+    let groups = kh2_formats::motion::model_collision_groups(&mdlx).unwrap_or(1);
+    let captures = mset.slots.iter().filter(|s| !s.nested.is_empty()).map(|s| (s.index, s.nested.clone())).collect();
+    Ok(EnemyData { model: model.to_string(), clips, rig: Arc::new(rig), weight, status, reaction: reaction_params(&pref), groups, captures })
 }
 
 impl Install {

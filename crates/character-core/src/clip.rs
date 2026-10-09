@@ -29,6 +29,10 @@ pub enum WindowKind {
     /// The guard's shapes are the attack-group shapes of `group` (on the
     /// Keyblade if `weapon`), as the game builds them.
     Guard { attack: u16, group: u8, weapon: u8 },
+    /// The object's collision group `n` is switched on / off (reaction
+    /// command areas open this way).
+    EnableGroup(u8),
+    DisableGroup(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

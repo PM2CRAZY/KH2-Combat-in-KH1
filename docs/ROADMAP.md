@@ -125,12 +125,22 @@ See `combat-model.md` ("Hit reactions", "Clashes and guarding", "Enemies").
 - **Command menu and ability menu:** names, AP costs and the AP cap from the install, with
   growth/combo abilities switching the controller. Aerial Recovery is added for convenience.
 
+- 21: the KH2 camera and lock-on (`camera-model.md`); slopes, steps and ceilings from the
+  game's map-collision solver (`movement-model.md`, crate `map-collision`)
+- 23: Drive Forms (`drive-model.md`):
+  - every form's own object
+  - the Drive and form gauges, the Anti roll
+  - form levels and growth, magic `sub`s
+  - Wisdom's shots from its model's script
+- Reaction commands (`reaction-commands.md`): the per-frame offer from enemies' RC areas, the
+  low-HP Drive, and the Soldier's Cyclone from its capture motions
+
 **Open:**
 - the MP Charge rate
-- Drive Form spell variants
-- Items
-- the remaining 19/20 items (Keyblade stats, more abilities)
-- 23
+- items, Keyblade and form-keyblade stats
+- other enemies' reaction commands (each needs its files and its script's handler)
+- Limits and Summons (not planned for the playground)
+- running enemy scripts instead of our timers
 
 19. Combo and finisher abilities (Combo Plus, Air Combo Plus, Finishing Plus, Negative Combo,
     Berserk, Finishing Leap, Retaliating Slash and others), using ability ids from the

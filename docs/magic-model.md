@@ -26,8 +26,8 @@ read from your files. **Ours** means our own choice where the game's behaviour i
    - the air motion when airborne
    - the combo-finisher motion when the next swing would be the combo finisher
    - otherwise the ground motion
-3. **The sub.** The game computes `sub = level × 2 − 2`, plus 1 for the finisher motion. A
-   Drive Form adds 10, 20 or 30; forms aren't modelled. The sub picks two things:
+3. **The sub.** The game computes `sub = level × 2 − 2`, plus 1 for the finisher motion.
+   Wisdom, Master and Final Form add 10, 20 and 30 (`drive-model.md`). The sub picks two things:
    - the spell's `magi` record (03system `pref`)
    - its ATKP rows
 4. **Targeting.** For Fire, Blizzard, Thunder and Magnet, the caster's target is picked
@@ -112,6 +112,7 @@ effect offsets of −93 put Fire's ring at chest height.
 | Vectors | `vector_add/sub/mul/len/roty/addf/homing` | Checked (exe). `roty` turns a facing of yaw y into y + a. `addf` adds normalize(dir) × speed × frame time. `homing` turns a unit vector toward another by at most max × frame time. NaN inputs are zeroed in place. |
 | Threads, memory | `magic_start_thread`, `memory_alloc/free`, `teamwork_alloc`, `frametime` | `magic_start_thread` takes a code address and one argument, and shares work memory. |
 | World | `bg_ground_pos`, `bg_get_random_pos_air` | Ground: a ray straight down. **Ours:** the random air point is at a horizontal distance between the first two arguments and a height offset between the last two. |
+| Object scripts | `obj_effect_start` | Starts an element from the object's own effect list. Wisdom Form's shot script uses it (`drive-model.md`). |
 | Not modelled | `obj_star` (MP orbs), `status_prize_drain_*`, `saveram_increment_friend_recov`, `attack_set_pax`, `attack_set_system_pax`, `sysobj_is_summon` | No gameplay effect here. |
 
 ### Spell attacks (Checked, exe)
@@ -183,6 +184,7 @@ coloured by element.
 
 - The MP Charge rate. The playground refills MP over 10 seconds once it runs out
   (**ours**).
-- Drive Form variants (the scripts handle them; forms aren't modelled).
+- Drive Form variants run from the same scripts with the form's `sub`. They haven't been
+  checked one by one.
 - Sora's battle-target search when nothing is locked on (**ours**, above).
 - Party members (Cure and some counters look for them; the playground has none).

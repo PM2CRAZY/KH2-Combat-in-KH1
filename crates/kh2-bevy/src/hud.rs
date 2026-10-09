@@ -209,7 +209,8 @@ pub fn apply_abilities(game: &mut Game) {
 }
 
 /// The ability menu: open/close, move, equip. Runs while the game is paused.
-pub fn ability_menu(keys: Res<ButtonInput<KeyCode>>, pads: Query<&Gamepad>, mut menu: ResMut<MenuState>, mut game: ResMut<Game>) {
+pub fn ability_menu(keys: Res<ButtonInput<KeyCode>>, mut wheel: EventReader<bevy::input::mouse::MouseWheel>, pads: Query<&Gamepad>, mut menu: ResMut<MenuState>, mut game: ResMut<Game>) {
+    let scroll: f32 = wheel.read().map(|w| w.y).sum();
     let Some(n) = game.kit.as_ref().map(|k| k.abilities.len()) else { return };
     let pad = |b: GamepadButton| pads.iter().any(|p| p.just_pressed(b));
     let toggle = keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyP) || pad(GamepadButton::Start);
@@ -220,10 +221,10 @@ pub fn ability_menu(keys: Res<ButtonInput<KeyCode>>, pads: Query<&Gamepad>, mut 
     if menu.focus != Focus::Abilities || n == 0 {
         return;
     }
-    if keys.just_pressed(KeyCode::ArrowDown) || keys.just_pressed(KeyCode::KeyS) || pad(GamepadButton::DPadDown) {
+    if keys.just_pressed(KeyCode::ArrowDown) || keys.just_pressed(KeyCode::KeyS) || pad(GamepadButton::DPadDown) || scroll < 0.0 {
         menu.ability = (menu.ability + 1) % n;
     }
-    if keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::KeyW) || pad(GamepadButton::DPadUp) {
+    if keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::KeyW) || pad(GamepadButton::DPadUp) || scroll > 0.0 {
         menu.ability = (menu.ability + n - 1) % n;
     }
     if keys.just_pressed(KeyCode::KeyU) {
@@ -495,5 +496,50 @@ pub fn draw_drive(
     }
     if let Ok(mut bg) = tint.get_single_mut() {
         *bg = BackgroundColor(Color::srgba(0.19, 0.19, 0.19, d.tint));
+    }
+}
+
+#[derive(Component)]
+pub struct RcBox;
+#[derive(Component)]
+pub struct RcText;
+
+/// The reaction-command slot, above the command menu (KH2's green box).
+pub fn spawn_rc(mut commands: Commands) {
+    commands
+        .spawn((
+            RcBox,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(28.0),
+                bottom: Val::Px(186.0),
+                width: Val::Px(200.0),
+                height: Val::Px(32.0),
+                padding: UiRect::left(Val::Px(14.0)),
+                align_items: AlignItems::Center,
+                display: Display::None,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.1, 0.55, 0.25, 0.92)),
+            BorderRadius::new(Val::Px(4.0), Val::Px(15.0), Val::Px(15.0), Val::Px(4.0)),
+        ))
+        .with_children(|r| {
+            r.spawn((RcText, Text::new(""), TextFont { font_size: 18.0, ..default() }, TextColor(WHITE)));
+        });
+}
+
+pub fn draw_rc(game: Res<Game>, mut boxes: Query<(&mut Node, &mut BackgroundColor), With<RcBox>>, mut texts: Query<&mut Text, With<RcText>>) {
+    let offer = game.rc.offer;
+    let name = offer.and_then(|o| game.kit.as_ref().and_then(|k| k.commands.get(&o.cmd)).map(|(_, n)| n.clone()));
+    if let Ok((mut n, mut bg)) = boxes.get_single_mut() {
+        n.display = if name.is_some() { Display::Flex } else { Display::None };
+        let grey = offer.is_some_and(|o| o.greyed);
+        *bg = BackgroundColor(if grey { Color::srgba(0.25, 0.3, 0.27, 0.85) } else { Color::srgba(0.1, 0.55, 0.25, 0.92) });
+    }
+    if let (Ok(mut t), Some(name)) = (texts.get_single_mut(), name) {
+        let want = format!("[L]  {name}");
+        if t.0 != want {
+            *t = Text::new(want);
+        }
     }
 }

@@ -50,6 +50,8 @@ pub struct FoeState {
     pub guards: Vec<(ActiveHitbox, Vec<CShape>)>,
     /// The Magnet attack holding it (spell attack key).
     pub caught_by: Option<u64>,
+    /// Testing: the next action to take, whatever the distance.
+    pub forced: Option<u16>,
 }
 
 impl FoeState {
@@ -69,6 +71,7 @@ impl FoeState {
             live: Vec::new(),
             guards: Vec::new(),
             caught_by: None,
+            forced: None,
         }
     }
 
@@ -102,6 +105,9 @@ fn decide(st: &mut FoeState, pos: [f32; 3], sora: [f32; 3]) -> NpcCommand {
     let dir = if dist > 1e-3 { [d[0] / dist, d[1] / dist] } else { [0.0, 1.0] };
     if st.npc.busy() {
         return NpcCommand::default();
+    }
+    if let Some(a) = st.forced.take() {
+        return NpcCommand { face: Some(dir), action: Some(a), ..Default::default() };
     }
     st.cooldown = st.cooldown.saturating_sub(1);
     if dist > 900.0 {

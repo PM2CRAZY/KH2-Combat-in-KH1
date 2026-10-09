@@ -74,9 +74,21 @@ pub struct Command {
     pub message: i32,
     pub flags: i32,
     pub range: f32,
-    /// MP cost; 255 = all remaining MP.
+    /// MP cost; 255 = all remaining MP. Drive bars for Drive commands.
     pub mp_cost: u8,
     pub group: u8,
+    /// Reaction-command fields (checked against the executable's use):
+    /// facing checks (cosines; -1 = off), the camera mode, priority (higher
+    /// wins), receiver (0 player, 1 target, 2 both), the mark effect index,
+    /// the action on execution (1 idle, 2 jump) and a distance limit.
+    pub dir: f32,
+    pub dir_range: f32,
+    pub camera: u8,
+    pub priority: u8,
+    pub receiver: u8,
+    pub mark: u8,
+    pub action: u8,
+    pub dist: u16,
 }
 
 fn entry<'a>(system: &'a [u8], name: &str) -> Result<&'a [u8]> {
@@ -146,12 +158,21 @@ pub fn parse_commands(system: &[u8]) -> Result<Vec<Command>> {
             let message = e.i32()?;
             let flags = e.i32()?;
             let range = e.f32()?;
-            let _dir = e.f32()?;
-            let _dir_range = e.f32()?;
+            let dir = e.f32()?;
+            let dir_range = e.f32()?;
             let mp_cost = e.u8()?;
-            e.skip(15)?;
+            let camera = e.u8()?;
+            let priority = e.u8()?;
+            let receiver = e.u8()?;
+            let _time = e.u16()?;
+            let _require = e.u16()?;
+            let mark = e.u8()?;
+            let action = e.u8()?;
+            let _rcount = e.u16()?;
+            let dist = e.u16()?;
+            e.skip(4)?;
             let group = e.u8()?;
-            Ok(Command { id, execute, argument, submenu, icon, message, flags, range, mp_cost, group })
+            Ok(Command { id, execute, argument, submenu, icon, message, flags, range, mp_cost, group, dir, dir_range, camera, priority, receiver, mark, action, dist })
         })
         .collect()
 }

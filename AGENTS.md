@@ -203,3 +203,34 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - the target search without lock-on
   - Drive Form variants
   - enemy scripts (the VM is ready)
+
+### 2026-10-09: Phase 4 finished (map collision, camera, Drive Forms, reaction commands)
+- **New crate `map-collision` (exe):** the game's background solver.
+  - one sphere (r 90, centre 115) plus a lower sphere for walls
+  - sub-stepped push-out: faces, then edges
+  - anti-tunnelling segment test
+  - the floor ray with a 24-unit step-down
+  - the 49% ceiling rule with a 16-frame air-command lock
+  - Step-up 25 and the 38.5° slope limit come from the sphere's geometry.
+  - The arena is now polygons: stairs, ramps, a floating slab.
+- **New crate `kh2-camera` (exe):**
+  - the field camera: distance/height curve, swing-behind, spring smoothing, wall pull-in
+  - the lock-on framing
+  - target switching
+- **Drive Forms (exe + data):**
+  - each form's object from objentry/pref/PTYA/wmst, with two weapons where the data has them
+  - `character_core::drive`: the gauges, costs, Anti roll, levels and growth
+  - Sora's Drive motion and invulnerability, the arrival motion, revert, magic subs
+  - Wisdom's shots from its model's BDX script (`Magic::object_effect`, trap
+    `obj_effect_start`)
+- **Reaction commands (exe + data):**
+  - RC areas from type-5 collision with group switching (motion trigger 4)
+  - priority/score selection, the low-HP Drive offer
+  - capture motions read from nested motion sets
+  - the Soldier's Cyclone, as its script runs it
+- **Correction:** the "Shadow" was a Soldier (M_EX010). The real Shadow is M_EX020.
+- **Open:**
+  - enemy scripts
+  - other enemies' RCs
+  - items, form keyblade stats
+  - the MP Charge rate

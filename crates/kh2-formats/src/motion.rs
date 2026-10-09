@@ -306,6 +306,20 @@ pub struct MsetSlot {
     pub name: String,
     /// `None` for dummy slots.
     pub anb: Option<Anb>,
+    /// A "capture" slot (BAR type 20): motions another object plays when
+    /// this one captures it, by tag ("0010" Sora's body, "0011"/"0012" his
+    /// weapons; the first non-empty entry of each tag).
+    pub nested: Vec<(String, Anb)>,
+}
+
+/// BAR entry type of a nested motion set (capture slot).
+pub const BAR_TYPE_NESTED_MSET: u16 = 20;
+
+impl MsetSlot {
+    /// The capture motion for `tag`, if this is a capture slot.
+    pub fn capture(&self, tag: &str) -> Option<&Anb> {
+        self.nested.iter().find(|(t, _)| t == tag).map(|(_, a)| a)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -321,7 +335,19 @@ impl Mset {
         let mut slots = Vec::with_capacity(bar.entries.len());
         for (index, e) in bar.entries.iter().enumerate() {
             let anb = if e.kind == BAR_TYPE_ANB && !e.data.is_empty() { Some(Anb::parse(e.data)?) } else { None };
-            slots.push(MsetSlot { index, name: e.name.clone(), anb });
+            let mut nested: Vec<(String, Anb)> = Vec::new();
+            if e.kind == BAR_TYPE_NESTED_MSET && !e.data.is_empty() {
+                if let Ok(inner) = Bar::parse(e.data) {
+                    for n in inner.entries.iter().filter(|n| n.kind == BAR_TYPE_ANB && !n.data.is_empty()) {
+                        if !nested.iter().any(|(t, _)| *t == n.name) {
+                            if let Ok(a) = Anb::parse(n.data) {
+                                nested.push((n.name.clone(), a));
+                            }
+                        }
+                    }
+                }
+            }
+            slots.push(MsetSlot { index, name: e.name.clone(), anb, nested });
         }
         Ok(Mset { kind: bar.motionset, slots })
     }
@@ -367,6 +393,16 @@ pub struct ObjectCollision {
 }
 
 pub const BAR_TYPE_MODEL_COLLISION: u16 = 23;
+
+/// The collision table's default enabled-group mask (bit g = group g), or
+/// group 0 only when there is no table.
+pub fn model_collision_groups(mdlx: &[u8]) -> Result<u32> {
+    let bar = Bar::parse(mdlx)?;
+    let Some(e) = bar.entries.iter().find(|e| e.kind == BAR_TYPE_MODEL_COLLISION) else { return Ok(1) };
+    let mut r = Reader::new(e.data);
+    let _count = r.u32()?;
+    r.u32()
+}
 
 /// Reads the collision list from an MDLX (a BAR).
 pub fn parse_model_collision(mdlx: &[u8]) -> Result<Vec<ObjectCollision>> {

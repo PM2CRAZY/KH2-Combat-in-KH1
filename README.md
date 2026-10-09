@@ -11,6 +11,9 @@ extracted data and no decompiled code, and the playground loads no meshes or tex
 
 ```
 crates/
+  map-collision/   engine-agnostic: moving a body against level polygons the way KH2 does
+                   (sphere sweep, floor ray, step-up, slopes, ceilings)
+  kh2-camera/      engine-agnostic: KH2's follow and lock-on camera
   combat-core/     engine-agnostic hit rules: damage, resistances, clamps, guard, shapes, the
                    per-target hit record (hit once, re-hit intervals, rows by hit count)
   character-core/  engine-agnostic 60 Hz controller: run/turn, jump, High Jump, Glide, Dodge Roll,
@@ -29,6 +32,9 @@ docs/
   movement-model.md  movement/moveset rules: source and confidence for each
   animation.md       how the skeleton is posed (from the executable's motion evaluator)
   magic-model.md     how spells run: casting, the script machine, every trap the spells use
+  camera-model.md    the field and lock-on camera
+  drive-model.md     Drive Forms: gauges, the change, Anti, levels, Wisdom's shots
+  reaction-commands.md  how reaction commands are offered and run (the Soldier's Cyclone)
 ```
 
 ## Testing it on Windows
@@ -57,8 +63,11 @@ docs/
    - `--backup`: read the untouched archives
    - `--synthetic`: made-up numbers, no install needed (capsule rig)
    - `--capsule`: draw the old capsule instead of the mannequin
-   - `--cam-distance N`: camera distance (default 650)
-   - `--enemies N`: how many Shadows (default 1)
+   - `--cam-distance N`: the camera's default distance (the game's is 420)
+   - `--manual-camera`: no automatic swing-behind
+   - `--enemies N`: how many Soldiers (default 1)
+   - `--drive-max N`: Drive gauge bars (default 9, starts full)
+   - `--form-level N`: every form's level (default 7)
    - `--hp N`: Sora's max HP (default 60; the real value depends on story bonuses)
    - `--magic-level 1|2|3`: Fire/Fira/Firaga and so on (default 3)
 
@@ -70,17 +79,24 @@ docs/
 | Jump (hold for full height); in the air: Aerial Dodge, then hold to Glide | Space | B |
 | Attack | J / left click | A |
 | Guard (standing) / Dodge Roll or Quick Run (moving; hold to keep dashing) | K / Shift | X |
-| Lock-on | Tab / middle click | RT |
-| Camera | Q/E, arrows, right-drag | right stick |
-| Command menu: move / confirm / back out of Magic | Up, Down / J / Space | D-pad / A / B |
+| Lock-on / switch target | Tab / middle click; Z, C | RT; R2 + right stick |
+| Camera turn / zoom / reset | Q/E, right-drag / mouse up-down / F | right stick / R3 |
+| Reaction command | L | Y |
+| Command menu: move / confirm / back out | Up, Down or mouse wheel / J / Space | D-pad / A / B |
+| Drive: Valor, Wisdom, Limit, Master, Final / Revert | 7 8 9 0 - / Backspace | command menu |
 | Magic shortcuts (Fire, Blizzard, Thunder, Cure, Magnet, Reflect) | 1–6 | |
 | Ability menu (equip with J/Enter, U = unlimited AP) | Esc / P | Start |
 | Attack/guard shapes, hit shapes, skeleton, other collision / reset position | F1 F2 F3 F4 / R | |
 
 Jump at a wall that is slightly too high, holding toward it, to grab the ledge (push toward it to climb, pull away to drop).
 
-The arena has steps, a normal-jump ledge, a High Jump ledge and a tall tower to glide from.
-The enemies are Shadows built from your install: their own skeleton and motions (drawn as a
+The arena is made of polygons and runs the game's own map collision. It has:
+- stairs with 20-unit steps
+- a 20° ramp, and a 45° ramp that's too steep to climb
+- a floating slab to bonk your head on
+- a normal-jump ledge, a High Jump ledge, and a tall tower to glide from
+
+The enemies are Soldiers (M_EX010) built from your install: their own skeleton and motions (drawn as a
 dark stick figure), hurt shapes, attacks, HP and stats.
 - **When they're hit** they flinch, slide or get launched by the game's reaction rules.
 - **They come at you** with a simple timer of ours (KH2's enemy scripts aren't run). Their
@@ -89,7 +105,13 @@ dark stick figure), hurt shapes, attacks, HP and stats.
 **Magic** runs from the spell files' own scripts (`docs/magic-model.md`). Each effect shows
 as a glowing orb at its real position, and each spell attack as its real hit volume.
 
-Without the Shadow's files the playground falls back to plain column dummies.
+**Drive Forms** use each form's own motions, weapons, movement and combo table. Wisdom fires
+its shots from its model's script (`docs/drive-model.md`).
+
+**Reaction commands:** while a Soldier does its spinning attack, Cyclone appears above the
+command menu. Press L / Y (`docs/reaction-commands.md`).
+
+Without the Soldier's files the playground falls back to plain column dummies.
 
 ## Using it in another game
 
@@ -141,9 +163,10 @@ plain-language notes are in `docs/`.
 - **Stick tilt → walk/run, landing recovery, and roll / Quick Run cancel points.**
 - **Air-control target speed and invulnerability timer units.**
 - **Animation:** feet don't adapt to slopes and stairs, and there's no head look-at.
-- **Enemy AI:** the Shadows use our own timer, not their scripts.
+- **Enemy AI:** the Soldiers use our own timer, not their scripts.
 - **MP Charge** refills over a fixed 10 seconds (the game's rate isn't read yet).
-- **Not done yet:** drive forms, items, limits, summons, reaction commands.
+- **Not done yet:** items, limits, summons, other enemies' reaction commands, form keyblade
+  stats.
 
 ## Rules this repo follows
 

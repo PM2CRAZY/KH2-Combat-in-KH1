@@ -123,6 +123,8 @@ pub enum StateName {
     Hurt,
     Blown,
     Magic,
+    /// A motion the host asked for (Drive, form arrival, reaction command).
+    Scripted,
 }
 
 /// A spell's cast motions (MAGC): ground, air, and the combo-finisher one.
@@ -622,6 +624,27 @@ impl Character {
         }
         self.start_action(ActionKind::Scripted { invulnerable }, motion);
         true
+    }
+
+    /// Can a command (a reaction command) start now (exe, simplified):
+    /// free movement, landing, or an action in a combo or "allow reaction
+    /// command" window; not while hurt, launched, or in a scripted motion,
+    /// nor during a ceiling lock.
+    pub fn can_take_command(&self) -> bool {
+        if self.ceiling_lock > 0.0 {
+            return false;
+        }
+        match &self.mode {
+            Mode::Free | Mode::Glide => true,
+            Mode::Action(a) => match a.kind {
+                ActionKind::Land => true,
+                ActionKind::Hurt | ActionKind::Blow { .. } | ActionKind::Scripted { .. } | ActionKind::Hang { .. } | ActionKind::Climb => false,
+                _ => self.clip(a.motion).is_some_and(|c| {
+                    let f = a.frame.saturating_sub(1);
+                    c.has(f, |k| matches!(k, WindowKind::Combo | WindowKind::Finisher | WindowKind::AllowReactionCommand))
+                }),
+            },
+        }
     }
 
     /// Playing a motion from [`play`](Self::play).
@@ -1555,7 +1578,7 @@ impl Character {
                 ActionKind::Hurt => StateName::Hurt,
                 ActionKind::Blow { .. } => StateName::Blown,
                 ActionKind::Magic => StateName::Magic,
-                ActionKind::Scripted { .. } => StateName::Hurt,
+                ActionKind::Scripted { .. } => StateName::Scripted,
             },
         }
     }

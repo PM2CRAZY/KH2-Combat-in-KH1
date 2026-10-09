@@ -23,6 +23,9 @@ Units are KH2 world units (about 1 cm) and 60 Hz game frames.
 | Keyblade hitbox windows | `obj/W_EX010.mset` triggers, same slot | |
 | Keyblade hitbox shapes | `obj/W_EX010.mdlx` collision (type 6) | |
 | Combo table | `00battle.bin` → `ptya`, pointer 1 | 37 rows for Sora |
+| Map-collision body | `obj/P_EX100.mdlx` collision, first entry of type 0 or 4 | Sora: sphere radius 90, "height" 90, centre 115 above the feet |
+| Ceiling rule | `pref` → `sstm` `ceiling_stop`, `ceiling_disable_command_time` | 0.49, 16 frames |
+| Drive Forms | `prty`/`plyr` record and PTYA set by moveset id; each form's own `obj/P_EX100_*.mset/.mdlx` | see `drive-model.md` |
 
 ## Root motion
 
@@ -143,8 +146,73 @@ Unit question still open: the invulnerability timers are treated as 60 Hz frames
   carries him 110 forward, then he falls onto the top. So holding toward the wall grabs and
   climbs in one go.
 - **Letting go by pulling away** is ours: the game's release input isn't traced.
-- **Ledges** come from the host. Our arena offers every box's top edges. KH2 takes them from
+- **Ledges** come from the host. Our arena offers its boxes' top edges. KH2 takes them from
   map collision.
+
+## Map collision (slopes, steps, ceilings)
+
+**Checked (exe)** unless marked. Implemented in the `map-collision` crate.
+
+**The body.** Sora moves against the map as **one sphere**: radius 90, centre 115 above his
+feet, so it covers 25 to 205 above them. His shape is type 4 ("map"), which adds a **lower
+sphere** that only meets wall-type polygons:
+- grounded: centre 25 above the feet
+- airborne: centre 45 above the feet (faces), 91.8 above (edges)
+
+The Soldier's shape is type 0: the same sphere, no lower sphere.
+
+**Polygon types.** The low nibble of a polygon's attribute is its surface type:
+| Type | Behaviour |
+|---|---|
+| 1 floor | only the main sphere meets it |
+| 2 | can't be landed on from the air |
+| 4 | ignored |
+| anything else | wall (both spheres) |
+
+The player and party pass through attribute bit 0x10. Bit 0x100000 is seen only by the floor
+ray.
+
+**One frame's move:**
+1. **Grounded moves follow the ground.** The move is laid on the plane of last frame's ground
+   with its length kept, so the speed along a slope equals the flat speed.
+2. **Sweep.** The sphere moves in `floor(|move| / 90) + 1` sub-steps. After each one it is
+   pushed out of polygons:
+   - faces first: when the centre is 0..90 in front of the plane and its foot point is inside
+     the polygon, it is moved to 90.008 in front
+   - then edges and corners: to 90.008 from the nearest point
+   - up to 6 passes per sub-step
+   - more than 9 pushes in one grounded pass means stuck, and the sub-step is cancelled
+3. **No tunnelling.** If the centre's path crosses any polygon from the front, the whole move
+   is cancelled.
+4. **Floor ray.** A ray goes straight down from `115 + min(|move.y|, 100)` above the new feet
+   to 345 below them, and takes the highest upward-facing polygon.
+   - **Grounded:** the feet snap onto it when it is at most **24** below the start (plus any
+     downward move). Floors above the feet are always taken. Anything lower starts a fall.
+   - **Airborne:** Sora lands only when the feet went below the plane and the move isn't going
+     up.
+
+**What follows from that (Inferred from the geometry, and tested in `map-collision`):**
+- **Step-up height is 25.** A wall-type riser up to 25 high stays under the lower sphere, and
+  the floor ray lifts the feet onto it. Higher risers stop the lower sphere like a wall.
+- **Stair treads must be deeper than 90**, or the next riser meets the lower sphere before the
+  feet reach the step. Our stairs use 20-unit risers and 100-unit treads.
+- **Slopes.**
+  - A floor-type slope up to **acos(90/115) = 38.5°** is walked like flat ground.
+  - On a steeper one, the main sphere touches the slope and is pushed out each frame. Standing
+    still, Sora slides down; at 45° even running can't beat the slide.
+  - Sora can't walk onto a steep slope from flat ground: the sphere meets it first, like a
+    wall.
+  - There is no explicit slope limit in the code. The sphere's size sets it.
+- **Ceilings.** When a rise makes less than **49%** of its intended height (sstm
+  `ceiling_stop`), the head hit a ceiling. A jump or launch that is more than 6 frames into
+  its rise then falls from rest at the current height. Air commands are refused for **16**
+  frames (sstm `ceiling_disable_command_time`) or until he lands. Earlier in the rise the
+  ceiling only blocks.
+
+**Ours / not modelled:**
+- moving platforms and the check-ahead probe used on them
+- the per-room camera and limiter objects
+- the collision tree: our arena is small enough to test every polygon
 
 ## Hitting walls
 
@@ -222,6 +290,10 @@ What this produces on your install (`kh2-combat sora`):
 | Air, no target | 181 ↔ 182, sinking slowly |
 
 ## Still approximated
+
+- **Reaction-command acceptance** (`Character::can_take_command`): free movement, landing, and
+  combo or "allow RC" windows. The game's full rule also checks the command's flags (Land,
+  Force, No-combo).
 
 - **Auto-target selection** (nearest within reach).
 - **Dodge Roll / Quick Run cancel points.**

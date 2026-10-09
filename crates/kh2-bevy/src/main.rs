@@ -13,6 +13,7 @@ mod drive;
 mod foes;
 mod hud;
 mod magic;
+mod rc;
 mod rig;
 mod synthetic;
 mod world;
@@ -153,6 +154,11 @@ fn main() {
                 Some(l) => Stats { hp: sora_hp, strength: l.strength as u16, magic: l.magic as u16, defense: l.defense as u16 },
                 None => Stats { hp: 100, strength: 10, magic: 10, defense: 5 },
             };
+            // The enemy's capture motions (reaction commands) on Sora.
+            let mut data = data;
+            if let Some(e) = &enemy {
+                rc::register_captures(&mut data, e, "001");
+            }
             let mut character = data.character.clone();
             character.abilities = Abilities::max_growth();
             let dummy_template = data.combat.enemy(DUMMY_ENEMY, Some(dummy_level));
@@ -175,7 +181,10 @@ fn main() {
                         _ => continue,
                     };
                     match r {
-                        Ok(d) => {
+                        Ok(mut d) => {
+                            if let Some(e) = &enemy {
+                                rc::register_captures(&mut d, e, if spec.form == 3 { "027" } else { "001" });
+                            }
                             kits.insert(spec.form, std::sync::Arc::new(d));
                         }
                         Err(e) => eprintln!("note: {} not loaded ({e})", spec.model),
@@ -257,13 +266,14 @@ fn main() {
                 magic_level: arg("--magic-level").and_then(|v| v.parse().ok()).unwrap_or(3),
                 sora_abilities,
                 drive: drive_state,
+                rc: rc::RcState::default(),
                 casting: None,
                 kit,
             })
             .insert_resource(hud::MenuState::default())
-            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn, hud::spawn_drive, magic::spawn_pool))
+            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn, hud::spawn_drive, hud::spawn_rc, magic::spawn_pool))
             .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, foes::sync_pieces, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
-            .add_systems(Update, (hud::ability_menu, hud::draw, hud::draw_drive.after(hud::draw), magic::draw, rebuild_player))
+            .add_systems(Update, (hud::ability_menu, hud::draw, hud::draw_drive.after(hud::draw), hud::draw_rc, rc::draw_mark, magic::draw, rebuild_player))
             .add_systems(FixedUpdate, (simulate, camera_step).chain());
         }
         Err(_) => {
@@ -326,6 +336,8 @@ struct Game {
     sora_abilities: Abilities,
     /// Drive gauge, form gauge, the form objects and a change in progress.
     drive: drive::DriveState,
+    /// The reaction command offered, and one in progress.
+    rc: rc::RcState,
     dummy_template: Option<Combatant>,
     enemy_count: usize,
     /// Sora's objentry weight.
@@ -411,6 +423,8 @@ struct Latch {
     switch_held: bool,
     /// A Drive shortcut (form id; 0 = Revert).
     drive: Option<u8>,
+    /// The reaction-command button (L / pad Y) was pressed.
+    rc: bool,
     /// Command-menu cursor presses and magic shortcuts since the last step.
     menu_up: bool,
     menu_down: bool,
@@ -616,9 +630,18 @@ fn latch_input(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut motion: EventReader<MouseMotion>,
+    mut wheel: EventReader<bevy::input::mouse::MouseWheel>,
     pads: Query<&Gamepad>,
     mut latch: ResMut<Latch>,
 ) {
+    // The mouse wheel moves the command menu cursor (down = next).
+    for w in wheel.read() {
+        if w.y < 0.0 {
+            latch.menu_down = true;
+        } else if w.y > 0.0 {
+            latch.menu_up = true;
+        }
+    }
     let mut stick = Vec2::ZERO;
     if keys.pressed(KeyCode::KeyW) {
         stick.y += 1.0;
@@ -656,6 +679,7 @@ fn latch_input(
         }
     }
     latch.cam_reset |= keys.just_pressed(KeyCode::KeyF);
+    latch.rc |= keys.just_pressed(KeyCode::KeyL) || pads.iter().any(|p| p.just_pressed(GamepadButton::North));
     // Drive shortcuts: 7 Valor, 8 Wisdom, 9 Limit, 0 Master, - Final,
     // Backspace Revert.
     for (k, f) in [(KeyCode::Digit7, 1u8), (KeyCode::Digit8, 2), (KeyCode::Digit9, 3), (KeyCode::Digit0, 4), (KeyCode::Minus, 5), (KeyCode::Backspace, 0)] {
@@ -1004,6 +1028,35 @@ fn simulate(
                     eprintln!("f{f_} form {} gauge {:?} drive {}+{} motion {:?}", game.drive.form(), game.drive.drive.gauge.map(|g| g.left), game.drive.drive.bars, game.drive.drive.points, game.last.as_ref().map(|o| o.motion));
                 }
             }
+            // The Soldier's Cyclone: stand off, make it do its spinning
+            // attack (which opens the RC area), press the reaction button.
+            "rc" => {
+                if f == 1 {
+                    game.pos = [0.0, 0.0, -400.0];
+                }
+                latch.stick = Vec2::ZERO;
+                if f == 20 || f == 200 {
+                    for mut dm in dummies.iter_mut() {
+                        if let Some(st) = dm.foe.as_mut() {
+                            st.forced = Some(foes::soldier::DASH);
+                        }
+                    }
+                }
+                latch.rc |= game.rc.offer.is_some_and(|o| !o.running && !o.greyed) && f % 20 == 0;
+                if auto.trace && f % 5 == 0 {
+                    eprintln!("f{f} offer {:?} running {:?} motion {:?} pos {:?}", game.rc.offer, game.rc.running, game.last.as_ref().map(|o| o.motion), game.pos);
+                }
+            }
+            // Low HP: a Drive Form is offered as a reaction command.
+            "rcdrive" => {
+                if f == 1 {
+                    game.sora.hp = game.sora.max_hp / 5;
+                }
+                latch.rc |= f == 20;
+                if auto.trace && f % 10 == 0 {
+                    eprintln!("f{f} offer {:?} form {} hp {}", game.rc.offer.map(|o| o.cmd), game.drive.form(), game.sora.hp);
+                }
+            }
             "roll" => {
                 latch.stick = Vec2::X;
                 press(2, f % 60 == 5, &mut latch);
@@ -1127,6 +1180,11 @@ fn simulate(
         latch.menu_up = false;
         latch.menu_down = false;
     }
+    // The reaction command.
+    if std::mem::take(&mut latch.rc) {
+        let battle = dummies.iter().any(|d| d.respawn == 0);
+        rc::press(game, battle, &mut dbg.log);
+    }
     // Drive / Revert. In battle while any enemy is up (Anti Form needs it).
     if let Some(f) = drive_cmd {
         let battle = dummies.iter().any(|d| d.respawn == 0);
@@ -1196,6 +1254,9 @@ fn simulate(
     // standing column dummies, all as one move.
     let start = Vec3::from(game.pos);
     let mut d = Vec3::from(out.displacement);
+    // A reaction command's scripted movement (the enemy script's move
+    // request).
+    d += rc::frame(game, &dummies, out.motion);
     if let Some(sp) = game.spells.as_mut() {
         if let Some((dir, v)) = sp.recoil {
             d.x += dir.x * v;
@@ -1493,6 +1554,8 @@ fn simulate(
         game.sora_hit_by.retain(|k| live_pairs.contains(k));
     }
     game.foe_kit = kit;
+    // The reaction command offered for next frame.
+    rc::select(game, &dummies);
 
     // Hit records: a frame passes; attacks that ended are forgotten.
     let mut swings_now: std::collections::HashSet<u64> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| h.swing).collect();
