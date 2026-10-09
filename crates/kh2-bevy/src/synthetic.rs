@@ -12,7 +12,7 @@ use kh2_formats::battle::{Atkp, Battle, Enmp, Lvpm, LvupLevel};
 fn attack_clip(motion: u16, len: u32, hit: (u32, u32), attack: u16, combo_at: u32, finisher: bool, lunge: f32) -> Clip {
     let mut c = Clip::plain(motion, len);
     c.root = (0..=len).map(|f| [0.0, 0.0, lunge * (f as f32 / len as f32).min(1.0)]).collect();
-    c.windows.push(Window { start: hit.0, end: Some(hit.1), kind: WindowKind::Hitbox { attack, group: 1, combo: None, weapon: true } });
+    c.windows.push(Window { start: hit.0, end: Some(hit.1), kind: WindowKind::Hitbox { attack, group: 1, combo: None, weapon: 1 } });
     c.windows.push(Window { start: 0, end: Some(12), kind: WindowKind::TurnToLock(0.26) });
     let kind = if finisher { WindowKind::Finisher } else { WindowKind::Combo };
     c.windows.push(Window { start: combo_at, end: None, kind });
@@ -52,7 +52,7 @@ pub fn data() -> SoraData {
     roll.events.push(Event { frame: 34, kind: EventKind::FallCheck });
     clips.insert(character_core::motion::DODGE_ROLL, roll);
     let mut guard = Clip::plain(character_core::motion::GUARD, 60);
-    guard.windows.push(Window { start: 0, end: Some(40), kind: WindowKind::Guard { attack: 0, group: 0, weapon: false } });
+    guard.windows.push(Window { start: 0, end: Some(40), kind: WindowKind::Guard { attack: 0, group: 0, weapon: 0 } });
     clips.insert(character_core::motion::GUARD, guard);
     clips.insert(900, attack_clip(900, 48, (15, 23), 1, 23, false, 90.0));
     clips.insert(901, attack_clip(901, 80, (25, 38), 2, 40, true, 120.0));
@@ -97,5 +97,5 @@ pub fn data() -> SoraData {
         .collect()];
     let combat = CombatData { battle, source: Source::Live };
     let blade_groups = HashMap::from([(1u8, vec![BladeSphere { along: 0.0, radius: 40.0 }, BladeSphere { along: 40.0, radius: 40.0 }])]);
-    SoraData { character, combat, blade_groups, motions: vec![], rig: None, rig_error: None, weight: 100.0, magi: Default::default() }
+    SoraData { character, combat, blade_groups, motions: vec![], rig: None, rig_error: None, weight: 100.0, magi: Default::default(), spec: kh2_data::sora::SORA }
 }

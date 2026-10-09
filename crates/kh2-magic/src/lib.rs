@@ -80,6 +80,18 @@ pub struct SpellFile {
 }
 
 impl SpellFile {
+    /// An object's own script and effects: the BDX entry of its model
+    /// (Wisdom Form's `wisd`) and the PAX of its effect archive.
+    pub fn from_parts(name: &str, script: &[u8], pax: &[u8]) -> Result<SpellFile, String> {
+        Ok(SpellFile { name: name.to_string(), program: Program::parse(script).map_err(|e| e.to_string())?, pax: Pax::parse(pax).map_err(|e| e.to_string())? })
+    }
+
+    /// The first BAR entry of `kind` (3 script, 18 PAX) in a file.
+    pub fn bar_entry(file: &[u8], kind: u16) -> Option<Vec<u8>> {
+        let bar = Bar::parse(file).ok()?;
+        bar.entries.iter().find(|e| e.kind == kind).map(|e| e.data.to_vec())
+    }
+
     pub fn parse(name: &str, mag: &[u8]) -> Result<SpellFile, String> {
         let bar = Bar::parse(mag).map_err(|e| e.to_string())?;
         let script = bar.entries.iter().find(|e| e.kind == 3).ok_or("no script in the spell file")?;
@@ -198,6 +210,8 @@ pub struct Cast {
     pub finished: bool,
     /// Started but not run yet.
     fresh: bool,
+    /// An object script run (not a spell cast).
+    pub object: bool,
 }
 
 impl Cast {
@@ -282,10 +296,45 @@ impl Magic {
         vm.mem.write(magi_at, magi)?;
         let main = vm.spawn(None);
         vm.trigger(main, 20, &[Cell::addr(player), Cell::addr(t.pax_rec), Cell::int(sub), Cell::addr(magi_at)])?;
-        self.casts.push(Cast { vm, t, main, released: false, finished: false, fresh: true });
+        self.casts.push(Cast { vm, t, main, released: false, finished: false, fresh: true, object: false });
         // It first runs with the next `update` (the game's magic manager
         // runs every script once per frame, after the player).
         Ok(self.casts.len() - 1)
+    }
+
+    /// An object's motion fired frame trigger 1 with effect id `n` (exe):
+    /// the object's effect element `n` starts, and its script (loaded as
+    /// `file`) runs trigger 0x10 with the object, `n` and that effect.
+    /// Wisdom Form's shots come from here.
+    pub fn object_effect(&mut self, file: usize, owner: ObjId, n: i16, world: &mut dyn World) -> Result<usize, BdxError> {
+        let f = self.spells.get(file).ok_or_else(|| BdxError::Trap("no such object script".into()))?;
+        let mut vm = Vm::new(f.program.clone());
+        vm.frametime = self.frametime;
+        let statics = host::Statics::new(&mut vm);
+        let mut t = Tables {
+            caster: owner,
+            spell: file,
+            objs: HashMap::new(),
+            obj_rec: HashMap::new(),
+            pax_rec: 0,
+            attacks: HashMap::new(),
+            effects: HashMap::new(),
+            targets: HashMap::new(),
+            teamwork: HashMap::new(),
+            statics,
+            threads: Vec::new(),
+            target: world.target_of(owner),
+        };
+        let obj = host::obj_record(&mut vm, &mut t, owner);
+        t.pax_rec = vm.mem.alloc(16);
+        let effect = host::start_object_effect(self, &mut vm, &mut t, n as u16, owner, world);
+        let main = vm.spawn(None);
+        vm.trigger(main, 0x10, &[Cell::addr(obj), Cell::int(n as i32), Cell::addr(effect)])?;
+        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true });
+        // The trigger runs at once (same frame), like the game's call.
+        let i = self.casts.len() - 1;
+        self.run_cast(i, world);
+        Ok(i)
     }
 
     /// The cast motion reached its magic-cast event: trigger 21 on the
@@ -293,7 +342,7 @@ impl Magic {
     /// trigger 20 has not run yet (release on the motion's first frame)
     /// runs it first.
     pub fn release(&mut self, caster: ObjId, world: &mut dyn World) -> bool {
-        let Some(i) = self.casts.iter().rposition(|c| c.t.caster == caster && !c.released) else { return false };
+        let Some(i) = self.casts.iter().rposition(|c| c.t.caster == caster && !c.released && !c.object) else { return false };
         if self.casts[i].fresh {
             self.run_cast(i, world);
         }
@@ -373,7 +422,7 @@ impl Magic {
 
     /// Whether `caster` has a cast in flight.
     pub fn busy(&self, caster: ObjId) -> bool {
-        self.casts.iter().any(|c| c.t.caster == caster)
+        self.casts.iter().any(|c| c.t.caster == caster && !c.object)
     }
 }
 
@@ -401,5 +450,6 @@ fn placeholder() -> Cast {
         released: true,
         finished: true,
         fresh: false,
+        object: false,
     }
 }

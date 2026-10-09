@@ -65,6 +65,16 @@ pub struct SpellInfo {
     pub file: String,
 }
 
+/// A Drive command (03system cmd: execute 4, argument = form, byte 0x1c =
+/// cost in bars).
+#[derive(Clone, Debug, PartialEq)]
+pub struct DriveInfo {
+    pub form: u8,
+    pub command: u16,
+    pub name: String,
+    pub cost: u8,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct MenuKit {
     /// The command menu's top level (Attack, Magic, Items, Drive).
@@ -76,6 +86,14 @@ pub struct MenuKit {
     pub mp: u32,
     /// AP at each level (LVUP).
     pub ap_by_level: Vec<u8>,
+    /// The Drive submenu, in the game's order (Valor, Wisdom, Limit, Master,
+    /// Final), and Anti's row (its cost is charged when Anti triggers).
+    pub drives: Vec<DriveInfo>,
+    pub anti: Option<DriveInfo>,
+    /// The Revert command's name.
+    pub revert: String,
+    /// Form id → EXP from each level to the next (00battle fmlv).
+    pub form_exp: Vec<(u8, Vec<u32>)>,
 }
 
 /// The ability ids this project models, by what they do. Item ids are the
@@ -140,6 +158,20 @@ pub(crate) fn load_kit_with(read: &dyn Fn(&str) -> Result<Vec<u8>>, battle: &kh2
         });
     }
 
+    let drive = |id: u16| {
+        cmd(id).map(|c| DriveInfo { form: c.argument as u8, command: id, name: name(c.message as u32, format!("Form {}", c.argument)), cost: c.mp_cost })
+    };
+    let drives = [6u16, 7, 0x2a1, 0xb, 0xc].iter().filter_map(|&id| drive(id)).collect();
+    let anti = drive(0xd);
+    let revert = cmd(5).map_or("Revert".to_string(), |c| name(c.message as u32, "Revert".into()));
+    let form_exp = (1..=6u8)
+        .map(|f| {
+            let mut rows: Vec<_> = battle.fmlv.iter().filter(|r| r.form == f).collect();
+            rows.sort_by_key(|r| r.level);
+            (f, rows.iter().map(|r| r.exp.max(0) as u32).collect())
+        })
+        .collect();
+
     let sora = battle.plrp.iter().find(|p| p.character == 1);
     let ap_by_level = battle.lvup.first().map(|l| l.iter().map(|x| x.ap).collect()).unwrap_or_default();
     Ok(MenuKit {
@@ -149,6 +181,10 @@ pub(crate) fn load_kit_with(read: &dyn Fn(&str) -> Result<Vec<u8>>, battle: &kh2
         hp: sora.map_or(20, |p| p.hp as u32),
         mp: sora.map_or(100, |p| p.mp as u32),
         ap_by_level,
+        drives,
+        anti,
+        revert,
+        form_exp,
     })
 }
 

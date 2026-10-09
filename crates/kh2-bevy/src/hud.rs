@@ -14,6 +14,7 @@ pub enum Focus {
     #[default]
     Root,
     Magic,
+    Drive,
     Abilities,
 }
 
@@ -22,6 +23,7 @@ pub struct MenuState {
     pub focus: Focus,
     pub root: usize,
     pub magic: usize,
+    pub drive: usize,
     pub ability: usize,
     pub scroll: usize,
 }
@@ -29,6 +31,7 @@ pub struct MenuState {
 /// Root entries.
 pub const ATTACK: usize = 0;
 pub const MAGIC: usize = 1;
+pub const DRIVE: usize = 3;
 
 #[derive(Component)]
 pub struct CmdRow(pub usize);
@@ -199,7 +202,10 @@ pub fn ap_used(game: &Game) -> u32 {
 /// Re-applies the equipped abilities to the controller.
 pub fn apply_abilities(game: &mut Game) {
     let Some(kit) = &game.kit else { return };
-    game.character.abilities = abilities_from(&game.equipped, kit);
+    game.sora_abilities = abilities_from(&game.equipped, kit);
+    if game.drive.form() == 0 && !game.drive.busy() {
+        game.character.abilities = game.sora_abilities.clone();
+    }
 }
 
 /// The ability menu: open/close, move, equip. Runs while the game is paused.
@@ -352,5 +358,142 @@ pub fn draw(
                 }
             }
         }
+    }
+}
+
+#[derive(Component)]
+pub struct DrivePanel;
+#[derive(Component)]
+pub struct DriveRow(pub usize);
+#[derive(Component)]
+pub struct DriveBack;
+#[derive(Component)]
+pub struct DriveFill;
+#[derive(Component)]
+pub struct DriveText;
+#[derive(Component)]
+pub struct Tint;
+
+/// Drive pieces: the Drive submenu (next to the command menu), the Drive /
+/// form gauge under MP, and the screen tint of a form change.
+pub fn spawn_drive(mut commands: Commands, game: Res<Game>) {
+    let Some(kit) = &game.kit else { return };
+    let font = |size: f32| TextFont { font_size: size, ..default() };
+    commands.spawn((
+        Tint,
+        Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        BackgroundColor(Color::NONE),
+        GlobalZIndex(-1),
+    ));
+    commands
+        .spawn((
+            DrivePanel,
+            Node { position_type: PositionType::Absolute, left: Val::Px(236.0), bottom: Val::Px(28.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), display: Display::None, ..default() },
+        ))
+        .with_children(|col| {
+            for i in 0..kit.drives.len() {
+                col.spawn((
+                    DriveRow(i),
+                    Node { width: Val::Px(230.0), height: Val::Px(28.0), padding: UiRect::horizontal(Val::Px(12.0)), align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, ..default() },
+                    BackgroundColor(NAVY),
+                    BorderRadius::all(Val::Px(4.0)),
+                ))
+                .with_children(|r| {
+                    r.spawn((Text::new(kit.drives[i].name.clone()), font(16.0), TextColor(WHITE)));
+                    r.spawn((Text::new(format!("{} bars", kit.drives[i].cost)), font(14.0), TextColor(Color::srgb(0.95, 0.8, 0.4))));
+                });
+            }
+        });
+    commands
+        .spawn(Node { position_type: PositionType::Absolute, right: Val::Px(28.0), bottom: Val::Px(8.0), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() })
+        .with_children(|p| {
+            p.spawn((DriveText, Text::new(""), font(13.0), TextColor(Color::srgb(0.95, 0.85, 0.5))));
+            p.spawn((DriveBack, Node { height: Val::Px(9.0), width: Val::Px(200.0), justify_content: JustifyContent::FlexStart, ..default() }, BackgroundColor(Color::srgba(0.12, 0.1, 0.02, 0.85)), BorderRadius::all(Val::Px(4.0))))
+                .with_children(|b| {
+                    b.spawn((DriveFill, Node { height: Val::Percent(100.0), width: Val::Percent(0.0), ..default() }, BackgroundColor(Color::srgb(0.95, 0.8, 0.2)), BorderRadius::all(Val::Px(4.0))));
+                });
+        });
+}
+
+/// Form colours on the HUD (ours).
+fn form_color(f: u8) -> Color {
+    match f {
+        1 => Color::srgb(0.9, 0.2, 0.2),
+        2 => Color::srgb(0.3, 0.5, 1.0),
+        3 => Color::srgb(0.9, 0.5, 0.3),
+        4 => Color::srgb(0.95, 0.85, 0.2),
+        5 => Color::srgb(0.9, 0.92, 1.0),
+        6 => Color::srgb(0.35, 0.3, 0.45),
+        _ => Color::srgb(0.95, 0.8, 0.2),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn draw_drive(
+    game: Res<Game>,
+    menu: Res<MenuState>,
+    mut panel: Query<&mut Node, (With<DrivePanel>, Without<DriveBack>, Without<DriveFill>)>,
+    mut rows: Query<(&DriveRow, &mut BackgroundColor, &Children), (Without<CmdRow>, Without<DriveFill>, Without<Tint>)>,
+    cmd_rows: Query<(&CmdRow, &Children)>,
+    mut back: Query<&mut Node, (With<DriveBack>, Without<DrivePanel>, Without<DriveFill>)>,
+    mut fill: Query<(&mut Node, &mut BackgroundColor), (With<DriveFill>, Without<DrivePanel>, Without<DriveBack>, Without<DriveRow>, Without<Tint>)>,
+    mut tint: Query<&mut BackgroundColor, (With<Tint>, Without<DriveRow>, Without<DriveFill>)>,
+    mut label: Query<&mut Text, (With<DriveText>, Without<DriveRow>)>,
+    mut texts: Query<(&mut Text, &mut TextColor), Without<DriveText>>,
+) {
+    let Some(kit) = &game.kit else { return };
+    let d = &game.drive;
+    let form = d.form();
+    if let Ok(mut n) = panel.get_single_mut() {
+        n.display = if menu.focus == Focus::Drive { Display::Flex } else { Display::None };
+    }
+    for (row, mut bg, children) in &mut rows {
+        *bg = BackgroundColor(if row.0 == menu.drive { NAVY_HI } else { NAVY });
+        let ok = kit.drives.get(row.0).is_some_and(|x| crate::drive::available(&game, x.form));
+        if let Some(&c) = children.first() {
+            if let Ok((_, mut col)) = texts.get_mut(c) {
+                *col = TextColor(if ok { WHITE } else { GREY });
+            }
+        }
+    }
+    // The command menu's Drive row reads Revert in a form; Magic greys out
+    // where forms can't cast.
+    for (row, children) in &cmd_rows {
+        let Some(&c) = children.first() else { continue };
+        let Ok((mut t, mut col)) = texts.get_mut(c) else { continue };
+        if row.0 == DRIVE {
+            let want = if form != 0 { kit.revert.clone() } else { kit.root.get(DRIVE).map_or("Drive".into(), |r| r.1.clone()) };
+            if t.0 != want {
+                *t = Text::new(want);
+            }
+            let any = kit.drives.iter().any(|x| crate::drive::available(&game, x.form));
+            *col = TextColor(if (form != 0 && !d.busy()) || any { WHITE } else { GREY });
+        } else if row.0 == MAGIC && !crate::drive::magic_allowed(form) {
+            *col = TextColor(GREY);
+        }
+    }
+    // Gauge: bars plus the current bar's points; in a form, the form gauge.
+    let (frac, text, color, width) = match d.drive.gauge {
+        Some(g) => (g.left / g.max.max(1.0), format!("{}  {:.1}", crate::drive::form_name(form).to_uppercase(), g.bars(&d.drive.params)), form_color(form), g.max / d.drive.params.bar_frames * 24.0),
+        None => {
+            let v = d.drive.bars as f32 + if d.drive.full() { 0.0 } else { d.drive.points as f32 / 100.0 };
+            let anti = if d.drive.anti_rate() > 0 { format!("  (Anti {}%)", d.drive.anti_rate()) } else { String::new() };
+            ((v / d.drive.max.max(1) as f32).min(1.0), format!("DRIVE {}{}", d.drive.bars, anti), form_color(0), d.drive.max as f32 * 24.0)
+        }
+    };
+    if let Ok(mut n) = back.get_single_mut() {
+        n.width = Val::Px(width.clamp(60.0, 360.0));
+    }
+    if let Ok((mut n, mut bg)) = fill.get_single_mut() {
+        n.width = Val::Percent(100.0 * frac);
+        *bg = BackgroundColor(color);
+    }
+    if let Ok(mut t) = label.get_single_mut() {
+        if t.0 != text {
+            *t = Text::new(text);
+        }
+    }
+    if let Ok(mut bg) = tint.get_single_mut() {
+        *bg = BackgroundColor(Color::srgba(0.19, 0.19, 0.19, d.tint));
     }
 }

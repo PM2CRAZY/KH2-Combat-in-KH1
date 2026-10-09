@@ -84,12 +84,13 @@ pub struct RigAnim {
     /// Model-space bone matrices (Sora), and the Keyblade's bones in Sora's
     /// model space.
     pub bones: Vec<Mat4>,
-    pub weapon: Vec<Mat4>,
+    /// Each weapon's bones (right hand first).
+    pub weapons: Vec<Vec<Mat4>>,
     /// Model space → world (KH2 units).
     pub to_world: Mat4,
     /// Object root (feet, facing; no root-motion offset) → world.
     pub object: Mat4,
-    blend_from: Option<(Vec<(Vec3, Quat, Vec3)>, Vec<(Vec3, Quat, Vec3)>)>,
+    blend_from: Option<(Vec<(Vec3, Quat, Vec3)>, Vec<Vec<(Vec3, Quat, Vec3)>>)>,
     blend_t: f32,
     blend_len: f32,
 }
@@ -113,8 +114,8 @@ fn blend(from: &[(Vec3, Quat, Vec3)], to: &mut [Mat4], w: f32) {
 impl RigAnim {
     pub fn new(rig: Arc<Rig>) -> RigAnim {
         let bones = kh2_anim::Pose::bind(&rig.skeleton).bones;
-        let weapon = kh2_anim::Pose::bind(&rig.weapon_skeleton).bones;
-        RigAnim { rig, track: None, bones, weapon, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT }
+        let weapons = rig.weapons.iter().map(|w| kh2_anim::Pose::bind(&w.skeleton).bones).collect();
+        RigAnim { rig, track: None, bones, weapons, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT }
     }
 
     fn pick(&self, out: &Output) -> Track {
@@ -183,10 +184,10 @@ impl RigAnim {
                 self.blend_from = match (via_idle, rig.motions.get(&motion::IDLE)) {
                     (true, Some(im)) => {
                         let b = evaluate(&rig.skeleton, im, key_time(im, 0.0, true), Options::default()).bones;
-                        let w = self.weapon_pose(&rig, idle, &b);
-                        Some((decompose(&b), decompose(&w)))
+                        let w = self.weapon_poses(&rig, idle, &b);
+                        Some((decompose(&b), w.iter().map(|w| decompose(w)).collect()))
                     }
-                    _ => Some((decompose(&self.bones), decompose(&self.weapon))),
+                    _ => Some((decompose(&self.bones), self.weapons.iter().map(|w| decompose(w)).collect())),
                 };
                 // The game's blend clock starts at 2 and the weight is
                 // clock / length, ending once it reaches the length.
@@ -216,18 +217,20 @@ impl RigAnim {
         let t = key_time(m, track.frame, track.looping);
         let pose = evaluate(&rig.skeleton, m, t, Options::default());
         let mut bones: Vec<Mat4> = pose.bones.iter().map(|b| unroot * *b).collect();
-        let mut weapon = self.weapon_pose(&rig, track, &bones);
+        let mut weapons = self.weapon_poses(&rig, track, &bones);
         if let Some((fb, fw)) = &self.blend_from {
             self.blend_t += 1.0;
             let w = (self.blend_t / self.blend_len).min(1.0);
             blend(fb, &mut bones, w);
-            blend(fw, &mut weapon, w);
+            for (to, from) in weapons.iter_mut().zip(fw) {
+                blend(from, to, w);
+            }
             if w >= 1.0 {
                 self.blend_from = None;
             }
         }
         self.bones = bones;
-        self.weapon = weapon;
+        self.weapons = weapons;
         self.object = Mat4::from_rotation_translation(Quat::from_rotation_y(out.facing), Vec3::from(pos));
         self.to_world = self.object;
     }
@@ -286,22 +289,36 @@ impl RigAnim {
         self.to_world = self.object;
     }
 
-    fn weapon_pose(&self, rig: &Rig, track: Track, bones: &[Mat4]) -> Vec<Mat4> {
-        let Some(hand) = rig.weapon_bone.and_then(|b| bones.get(b)).copied() else { return Vec::new() };
-        let m: Option<&Arc<Interpolated>> = rig.weapon_motions.get(&track.motion).or_else(|| rig.weapon_motions.get(&0));
-        let local = match m {
-            Some(m) => evaluate(&rig.weapon_skeleton, m, key_time(m, track.frame, track.looping), Options::default()).bones,
-            None => kh2_anim::Pose::bind(&rig.weapon_skeleton).bones,
-        };
-        local.iter().map(|w| hand * *w).collect()
+    fn weapon_poses(&self, rig: &Rig, track: Track, bones: &[Mat4]) -> Vec<Vec<Mat4>> {
+        rig.weapons
+            .iter()
+            .map(|wr| {
+                let Some(hand) = wr.bone.and_then(|b| bones.get(b)).copied() else { return Vec::new() };
+                let m: Option<&Arc<Interpolated>> = wr.motions.get(&track.motion).or_else(|| wr.motions.get(&0));
+                let local = match m {
+                    Some(m) => evaluate(&wr.skeleton, m, key_time(m, track.frame, track.looping), Options::default()).bones,
+                    None => kh2_anim::Pose::bind(&wr.skeleton).bones,
+                };
+                local.iter().map(|w| hand * *w).collect()
+            })
+            .collect()
+    }
+
+    /// Bones of the body (`weapon` 0) or of weapon `weapon − 1`.
+    fn bones_of(&self, weapon: u8) -> &[Mat4] {
+        match weapon {
+            0 => &self.bones,
+            w => self.weapons.get(w as usize - 1).map_or(&[], |v| v.as_slice()),
+        }
     }
 
     /// A collision shape placed in the world (KH2 units, y-up): the offset
     /// through its bone (or the object root), then raised by its lift.
-    pub fn world_shape(&self, s: &BoneShape, weapon: bool) -> Option<CShape> {
+    /// `weapon` 0 is the body, 1.. the weapons.
+    pub fn world_shape(&self, s: &BoneShape, weapon: u8) -> Option<CShape> {
         let kind = ShapeKind::from_u8(s.shape)?;
         let off = Vec3::from(s.offset);
-        let bones = if weapon { &self.weapon } else { &self.bones };
+        let bones = self.bones_of(weapon);
         let c = match s.bone {
             Some(b) => self.to_world.transform_point3(bones.get(b)?.transform_point3(off)),
             None => self.object.transform_point3(off),
@@ -309,18 +326,25 @@ impl RigAnim {
         Some(CShape::new(kind, c.into(), s.radius, s.height))
     }
 
-    /// Every shape of one collision type, with whether it is on the Keyblade.
-    pub fn shapes_of_kind(&self, kind: u8) -> Vec<(CShape, bool)> {
-        let body = self.rig.body_shapes.iter().map(|s| (s, false));
-        let weapon = self.rig.weapon_shapes.iter().map(|s| (s, true));
-        body.chain(weapon).filter(|(s, _)| s.kind == kind).filter_map(|(s, w)| Some((self.world_shape(s, w)?, w))).collect()
+    /// Every shape of one collision type, with what it is on (0 the body,
+    /// 1.. a weapon).
+    pub fn shapes_of_kind(&self, kind: u8) -> Vec<(CShape, u8)> {
+        let body = self.rig.body_shapes.iter().map(|s| (s, 0u8));
+        let weapons = self.rig.weapons.iter().enumerate().flat_map(|(i, w)| w.shapes.iter().map(move |s| (s, i as u8 + 1)));
+        body.chain(weapons).filter(|(s, _)| s.kind == kind).filter_map(|(s, w)| Some((self.world_shape(s, w)?, w))).collect()
     }
 
     /// The shapes an attack (or guard) window switches on: attack- and
     /// guard-type shapes of its group, on the Keyblade or on Sora, in data
     /// order (the game's order, which the sweep relies on).
-    pub fn attack_shapes(&self, group: u8, weapon: bool) -> Vec<CShape> {
-        let list = if weapon { &self.rig.weapon_shapes } else { &self.rig.body_shapes };
+    pub fn attack_shapes(&self, group: u8, weapon: u8) -> Vec<CShape> {
+        let list = match weapon {
+            0 => &self.rig.body_shapes,
+            w => match self.rig.weapons.get(w as usize - 1) {
+                Some(r) => &r.shapes,
+                None => return Vec::new(),
+            },
+        };
         list.iter()
             .filter(|s| s.group == group && (s.kind == kind::ATTACK || s.kind == kind::GUARD))
             .filter_map(|s| self.world_shape(s, weapon))
@@ -329,13 +353,15 @@ impl RigAnim {
 
     /// Sora's hit (hurt) shapes.
     pub fn hurt_shapes(&self) -> Vec<CShape> {
-        self.shapes_of_kind(kind::HIT).into_iter().filter(|(_, w)| !w).map(|(s, _)| s).collect()
+        self.shapes_of_kind(kind::HIT).into_iter().filter(|(_, w)| *w == 0).map(|(s, _)| s).collect()
     }
 
     /// Bone joints as line segments (parent → child), world space.
     pub fn skeleton_lines(&self) -> Vec<(Vec3, Vec3, Part)> {
         let mut out = Vec::new();
-        for (part, skel, bones) in [(Part::Body, &self.rig.skeleton, &self.bones), (Part::Weapon, &self.rig.weapon_skeleton, &self.weapon)] {
+        let parts = std::iter::once((Part::Body, &self.rig.skeleton, &self.bones))
+            .chain(self.rig.weapons.iter().zip(&self.weapons).enumerate().map(|(i, (w, b))| (Part::Weapon(i as u8), &w.skeleton, b)));
+        for (part, skel, bones) in parts {
             for (i, b) in skel.iter().enumerate() {
                 let (Some(m), Some(p)) = (bones.get(i), usize::try_from(b.parent).ok().and_then(|p| bones.get(p))) else { continue };
                 out.push((self.to_world.transform_point3(p.w_axis.truncate()), self.to_world.transform_point3(m.w_axis.truncate()), part));
@@ -346,9 +372,9 @@ impl RigAnim {
 
     /// World position (KH2 units) of an anchor, if its bone exists.
     pub fn anchor(&self, part: Part, a: Anchor) -> Option<Vec3> {
-        let bones = match part {
+        let bones: &[Mat4] = match part {
             Part::Body => &self.bones,
-            Part::Weapon => &self.weapon,
+            Part::Weapon(i) => self.weapons.get(i as usize)?,
         };
         let p = match a {
             Anchor::Bone(i) => bones.get(i)?.w_axis.truncate(),
@@ -363,7 +389,8 @@ impl RigAnim {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Part {
     Body,
-    Weapon,
+    /// A weapon, by index (right hand first).
+    Weapon(u8),
 }
 
 /// A point on the skeleton.
@@ -471,10 +498,13 @@ pub fn pieces(rig: &Rig) -> Vec<Piece> {
             add(Part::Body, Capsule(Bone(s.0), Bone(s.1), s.2), Paint::Jacket);
         }
     }
-    if rig.weapon_skeleton.len() >= 12 {
+    for (i, wr) in rig.weapons.iter().enumerate() {
+        if wr.skeleton.len() < 12 {
+            continue;
+        }
         // The blade is rigid on bone 2 and points along its -X (where the
         // attack spheres sit); bones 3..11 are the dangling keychain.
-        let w = Part::Weapon;
+        let w = Part::Weapon(i as u8);
         let along = |d: f32| Offset(2, Vec3::new(-d, 0.0, 0.0));
         add(w, Capsule(Bone(2), Bone(3), 1.7), Paint::Grip);
         add(w, Capsule(along(3.0), along(-3.0), 4.5), Paint::Gold);

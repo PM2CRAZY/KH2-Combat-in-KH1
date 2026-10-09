@@ -2373,9 +2373,18 @@ dependencies = [
  "character-core",
  "combat-core",
  "kh2-anim",
+ "kh2-camera",
  "kh2-data",
  "kh2-formats",
  "kh2-magic",
+ "map-collision",
+]
+
+[[package]]
+name = "kh2-camera"
+version = "0.1.0"
+dependencies = [
+ "glam",
 ]
 
 [[package]]
@@ -2534,6 +2543,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "map-collision"
+version = "0.1.0"
+dependencies = [
+ "glam",
 ]
 
 [[package]]

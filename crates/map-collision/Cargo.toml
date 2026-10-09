@@ -1,0 +1,10 @@
+[package]
+name = "map-collision"
+description = "KH2FM's way of moving a character against level polygons: sphere sweep with push-out, floor ray, step-up, slopes and ceilings. Engine-agnostic, y-up."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+glam = "0.29"

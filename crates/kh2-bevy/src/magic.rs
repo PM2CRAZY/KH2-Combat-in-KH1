@@ -1,6 +1,6 @@
 //! Spells in the playground. Each spell's behaviour comes from its own
 //! file's script, run by `kh2-magic`; this module answers the scripts'
-//! questions about the arena, Sora and the Shadows, and applies what the
+//! questions about the arena, Sora and the Soldiers, and applies what the
 //! spells' attacks do (damage, reactions, Magnet's pull, Cure's healing,
 //! Reflect's barrier).
 //!
@@ -20,7 +20,7 @@ use crate::rig::RigAnim;
 use crate::world::Arena;
 use crate::SCALE;
 
-/// Sora's object id in the spell scripts' world. Shadows use their own ids.
+/// Sora's object id in the spell scripts' world. Soldiers use their own ids.
 pub const SORA: ObjId = 1;
 
 pub struct Spells {
@@ -33,6 +33,8 @@ pub struct Spells {
     pub rng: u32,
     /// Sora's recoil slide: direction and per-frame speed.
     pub recoil: Option<(Vec3, f32)>,
+    /// Drive Form id -> its object script (Wisdom Form's shots).
+    pub object_scripts: HashMap<u8, usize>,
 }
 
 impl Spells {
@@ -64,7 +66,25 @@ impl Spells {
             };
             file_of.push(idx);
         }
-        Spells { magic, file_of, element_of, magi, rng: 0x1234_5678, recoil: None }
+        let mut sp = Spells { magic, file_of, element_of, magi, rng: 0x1234_5678, recoil: None, object_scripts: HashMap::new() };
+        // Forms whose model carries a script (Wisdom: `wisd`), with the
+        // effects from their effect archive.
+        for (form, model) in [(2u8, "P_EX100_MAGF")] {
+            let script = read(&format!("obj/{model}.mdlx")).and_then(|b| SpellFile::bar_entry(&b, 3));
+            let pax = read(&format!("obj/{model}.a.us")).and_then(|b| SpellFile::bar_entry(&b, 18));
+            match (script, pax) {
+                (Some(s), Some(p)) => match SpellFile::from_parts(model, &s, &p) {
+                    Ok(f) => {
+                        let i = sp.magic.add_spell(f);
+                        sp.element_of.push(255);
+                        sp.object_scripts.insert(form, i);
+                    }
+                    Err(e) => eprintln!("note: {model} script not usable ({e})"),
+                },
+                _ => eprintln!("note: {model} script or effects not found (Wisdom Form fires no shots)"),
+            }
+        }
+        sp
     }
 
 }
@@ -97,19 +117,19 @@ pub struct Snap {
 pub struct Bones {
     pub to_world: Mat4,
     pub bones: Vec<Mat4>,
-    pub weapon: Vec<Mat4>,
+    pub weapons: Vec<Vec<Mat4>>,
 }
 
 impl Bones {
     pub fn of(anim: &RigAnim) -> Bones {
-        Bones { to_world: anim.to_world, bones: anim.bones.clone(), weapon: anim.weapon.clone() }
+        Bones { to_world: anim.to_world, bones: anim.bones.clone(), weapons: anim.weapons.clone() }
     }
 }
 
 impl Snap {
     pub fn from_anim(id: ObjId, pos: [f32; 3], facing: f32, motion: u16, alive: bool, airborne: bool, jumping: bool, anim: Option<&RigAnim>, fallback_height: f32) -> Snap {
         let pos = Vec3::from(pos);
-        let shape_center = |kind: u8| anim.and_then(|a| a.shapes_of_kind(kind).into_iter().find(|(_, w)| !w).map(|(s, _)| Vec3::from(s.center)));
+        let shape_center = |kind: u8| anim.and_then(|a| a.shapes_of_kind(kind).into_iter().find(|(_, w)| *w == 0).map(|(s, _)| Vec3::from(s.center)));
         let mid = pos + Vec3::Y * fallback_height;
         Snap {
             id,
@@ -131,10 +151,14 @@ impl Snap {
 
     /// A bone or special anchor's world transform (see `kh2_magic::World`).
     fn bone(&self, code: u16) -> Mat4 {
+        // Odd codes are the right-hand weapon, even ones the left (falling
+        // back to the right when there is one weapon).
         let weapon_ends = || {
             let b = self.bones.as_ref()?;
-            let first = b.weapon.first()?.w_axis.truncate();
-            let last = b.weapon.last()?.w_axis.truncate();
+            let side = (code - 0x4003) as usize % 2;
+            let w = b.weapons.get(side).filter(|w| !w.is_empty()).or_else(|| b.weapons.first())?;
+            let first = w.first()?.w_axis.truncate();
+            let last = w.last()?.w_axis.truncate();
             Some((b.to_world.transform_point3(first), b.to_world.transform_point3(last)))
         };
         match code {
@@ -164,7 +188,7 @@ impl Snap {
 
 pub struct PlayWorld<'a> {
     pub objs: Vec<Snap>,
-    pub arena: &'a Arena<'a>,
+    pub arena: &'a Arena,
     /// Ability numbers Sora has equipped.
     pub abilities: &'a [u16],
     /// Sora's current target.
@@ -237,10 +261,10 @@ pub fn row(battle: &Battle, id: u16, sub: u8, count: u32) -> Option<&Atkp> {
 }
 
 /// Spell attacks' keys in hit records (kept apart from Sora's and the
-/// Shadows' swing ids).
+/// Soldiers' swing ids).
 pub const SPELL_KEY: u64 = 1 << 60;
 
-/// What a spell attack did to a Shadow, for the log and the reaction.
+/// What a spell attack did to a Soldier, for the log and the reaction.
 pub struct SpellHit {
     /// The attack object.
     pub key: u64,
@@ -250,11 +274,11 @@ pub struct SpellHit {
     /// Hits in a row from this attack's group (0-based).
     pub count: u32,
     pub row: Atkp,
-    /// From the attack's centre toward the Shadow (x, z).
+    /// From the attack's centre toward the Soldier (x, z).
     pub dir: [f32; 2],
 }
 
-/// Tests every live spell attack against one Shadow's hurt shapes using
+/// Tests every live spell attack against one Soldier's hurt shapes using
 /// its hit record (once per attack until the row's re-hit interval runs
 /// out; rows picked by hits in a row from the same group). Returns the
 /// hits that count.

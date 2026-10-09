@@ -20,6 +20,9 @@ pub struct Objentry {
     pub model: String,
     pub moveset: String,
     pub flags: u16,
+    /// Enemy status id ("neo status", +0x4c): keys the enemy's status and
+    /// journal rows; 1000..2011 are Heartless, 3000..4014 Nobodies.
+    pub neo_status: u16,
     pub weight: f32,
 }
 
@@ -47,10 +50,10 @@ pub fn parse_objentry(buf: &[u8]) -> Result<Vec<Objentry>> {
             let flags = e.u16()?;
             let _target = e.u8()?;
             let _pad = e.u8()?;
-            let _neo_status = e.u16()?;
+            let neo_status = e.u16()?;
             let _neo_moveset = e.u16()?;
             let weight = e.f32()?;
-            Ok(Objentry { id, kind, sub_kind, draw_priority, weapon_joint, model, moveset, flags, weight })
+            Ok(Objentry { id, kind, sub_kind, draw_priority, weapon_joint, model, moveset, flags, neo_status, weight })
         })
         .collect()
 }
@@ -75,4 +78,20 @@ pub fn parse_sklt(system: &[u8]) -> Result<Vec<Sklt>> {
             Ok(Sklt { id: s.u32()?, bones: [s.i16()?, s.i16()?] })
         })
         .collect()
+}
+
+/// `03system.bin` → `wmst`: weapon motion-set names, 32 bytes each, indexed
+/// by `moveset × 2 + hand` (0 right, 1 left). An empty name means none.
+/// The playable movesets: 1 Sora, 2 Valor, 3 Wisdom, 4 Master, 5 Final,
+/// 6 Anti, 0x42 Limit (checked against the executable's use of the table).
+pub fn parse_wmst(system: &[u8]) -> Result<Vec<String>> {
+    let bar = Bar::parse(system)?;
+    let Some(e) = bar.entries.iter().find(|e| e.name == "wmst") else { return bad("03system.bin has no wmst") };
+    Ok(e.data
+        .chunks_exact(32)
+        .map(|c| {
+            let end = c.iter().position(|&b| b == 0).unwrap_or(c.len());
+            String::from_utf8_lossy(&c[..end]).into_owned()
+        })
+        .collect())
 }

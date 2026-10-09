@@ -18,6 +18,7 @@
 mod clip;
 mod combo;
 mod controller;
+pub mod drive;
 pub mod npc;
 mod params;
 pub mod reaction;

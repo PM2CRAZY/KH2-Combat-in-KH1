@@ -9,6 +9,7 @@
 //! Run:  kh2-playground --game "D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe"
 //! (or set KH2_GAME). See the HUD for controls.
 
+mod drive;
 mod foes;
 mod hud;
 mod magic;
@@ -29,7 +30,7 @@ use kh2_data::sora::BladeSphere;
 use kh2_data::{Install, Source};
 
 use rig::{Paint, Part, Piece, RigAnim, Shape};
-use world::{Arena, ARENA_BOXES};
+use world::Arena;
 
 /// KH2 units (about 1 cm) to Bevy meters.
 const SCALE: f32 = 0.01;
@@ -37,8 +38,8 @@ const SORA_RADIUS: f32 = 35.0;
 const SORA_HEIGHT: f32 = 150.0;
 const DUMMY_RADIUS: f32 = 50.0;
 const DUMMY_HEIGHT: f32 = 110.0;
-/// Shadow (ENMP id 34).
-const DUMMY_ENEMY: u16 = 34;
+/// The Soldier's ENMP id (33).
+const DUMMY_ENEMY: u16 = 33;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -57,7 +58,12 @@ fn main() {
     let autoplay = args.iter().any(|a| a == "--autoplay");
     // --scene idle|run|combo|jump|roll|glide: scripted input for screenshots.
     let scene = arg("--scene");
-    let cam_distance: f32 = arg("--cam-distance").and_then(|v| v.parse().ok()).unwrap_or(650.0);
+    // The game's field camera (row 0); --cam-distance changes its default.
+    let mut cam_params = kh2_camera::Params::FIELD;
+    if let Some(d) = arg("--cam-distance").and_then(|v| v.parse::<f32>().ok()) {
+        cam_params.dist_default = d;
+        cam_params.dist_max = cam_params.dist_max.max(d);
+    }
 
     let synthetic = args.iter().any(|a| a == "--synthetic");
     let mut tried = Vec::new();
@@ -87,18 +93,18 @@ fn main() {
         }
         result
     };
-    // The Shadows: their own files from the same place.
+    // The Soldiers: their own files from the same place.
     let enemy = match (&loaded, synthetic) {
         (Ok(d), false) => {
             let r = match (&used, arg("--data-dir")) {
-                (Some(i), _) => i.load_enemy(source, kh2_data::enemy::SHADOW, &d.combat),
-                (None, Some(dir)) => kh2_data::enemy::load_enemy_dir(std::path::Path::new(&dir), kh2_data::enemy::SHADOW, &d.combat),
+                (Some(i), _) => i.load_enemy(source, kh2_data::enemy::SOLDIER, &d.combat),
+                (None, Some(dir)) => kh2_data::enemy::load_enemy_dir(std::path::Path::new(&dir), kh2_data::enemy::SOLDIER, &d.combat),
                 _ => Err(kh2_data::Error::Format("no install".into())),
             };
             match r {
                 Ok(e) => Some(e),
                 Err(e) => {
-                    eprintln!("note: the Shadow could not be loaded ({e}); using column dummies");
+                    eprintln!("note: the Soldier could not be loaded ({e}); using column dummies");
                     None
                 }
             }
@@ -128,7 +134,7 @@ fn main() {
     .insert_resource(AmbientLight { color: Color::WHITE, brightness: 300.0 })
     .insert_resource(Time::<Fixed>::from_hz(60.0))
     .insert_resource(Latch::default())
-    .insert_resource(CameraRig { yaw: 0.0, pitch: 0.35, distance: cam_distance, manual_timer: 0.0 })
+    .insert_resource(CameraRig { yaw: 0.0, params: cam_params, cam: None, auto: !args.iter().any(|a| a == "--manual-camera") })
     .insert_resource(Debug {
         show_boxes: true,
         show_hurt: args.iter().any(|a| a == "--show-hurt"),
@@ -159,6 +165,26 @@ fn main() {
                 _ => None,
             };
             let anim = data.rig.clone().filter(|_| !args.iter().any(|a| a == "--capsule")).map(RigAnim::new);
+            // The Drive Forms: each one's own object from the same place.
+            let mut kits = HashMap::new();
+            if !synthetic {
+                for spec in kh2_data::sora::FORMS {
+                    let r = match (&used, arg("--data-dir")) {
+                        (Some(i), _) => i.load_player(source, spec),
+                        (None, Some(d)) => kh2_data::sora::load_player_dir(std::path::Path::new(&d), spec),
+                        _ => continue,
+                    };
+                    match r {
+                        Ok(d) => {
+                            kits.insert(spec.form, std::sync::Arc::new(d));
+                        }
+                        Err(e) => eprintln!("note: {} not loaded ({e})", spec.model),
+                    }
+                }
+            }
+            let drive_max: u8 = arg("--drive-max").and_then(|v| v.parse().ok()).unwrap_or(9);
+            let form_level: u8 = arg("--form-level").and_then(|v| v.parse().ok()).unwrap_or(7);
+            let drive_state = drive::DriveState::new(drive_max, form_level, Some(std::sync::Arc::new(data.clone())), kits);
             // Every growth ability at MAX, Guard and Aerial Recovery.
             let equipped: Vec<u16> = kit
                 .as_ref()
@@ -179,6 +205,7 @@ fn main() {
                     _ => None,
                 })
             });
+            let sora_abilities = character.abilities.clone();
             app.insert_resource(Game {
                 anim,
                 character,
@@ -197,6 +224,8 @@ fn main() {
                 frame: 0,
                 grounded: true,
                 ground_y: 0.0,
+                ground_normal: Vec3::Y,
+                body: world::body_of(data.rig.as_ref().and_then(|r| kh2_data::sora::bg_shape(&r.body_shapes)), true),
                 dummy_template,
                 weight: data.weight,
                 enemy_count: arg("--enemies").and_then(|v| v.parse().ok()).unwrap_or(1),
@@ -226,14 +255,16 @@ fn main() {
                 max_mp: kit.as_ref().map_or(100.0, |k| k.mp as f32),
                 mp_charge: None,
                 magic_level: arg("--magic-level").and_then(|v| v.parse().ok()).unwrap_or(3),
+                sora_abilities,
+                drive: drive_state,
                 casting: None,
                 kit,
             })
             .insert_resource(hud::MenuState::default())
-            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn, magic::spawn_pool))
+            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn, hud::spawn_drive, magic::spawn_pool))
             .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, foes::sync_pieces, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
-            .add_systems(Update, (hud::ability_menu, hud::draw, magic::draw))
-            .add_systems(FixedUpdate, simulate);
+            .add_systems(Update, (hud::ability_menu, hud::draw, hud::draw_drive.after(hud::draw), magic::draw, rebuild_player))
+            .add_systems(FixedUpdate, (simulate, camera_step).chain());
         }
         Err(_) => {
             let msg = format!(
@@ -274,7 +305,7 @@ struct Game {
     battle: std::sync::Arc<kh2_formats::battle::Battle>,
     /// Sora's hit record (what has hit him, and the group timer).
     sora_record: HitRecord,
-    /// Attack windows live last frame (Sora's and the Shadows'), to forget
+    /// Attack windows live last frame (Sora's and the Soldiers'), to forget
     /// them in the hit records when they end.
     live_swings: std::collections::HashSet<u64>,
     /// Spells in flight (absent without the install's menus).
@@ -287,6 +318,14 @@ struct Game {
     frame: u64,
     grounded: bool,
     ground_y: f32,
+    /// The ground's normal under Sora (grounded moves follow it).
+    ground_normal: Vec3,
+    /// Sora's map-collision shape (P_EX100's type-4 sphere).
+    body: map_collision::Body,
+    /// Normal Sora's abilities (a form uses its own, plus his support ones).
+    sora_abilities: Abilities,
+    /// Drive gauge, form gauge, the form objects and a change in progress.
+    drive: drive::DriveState,
     dummy_template: Option<Combatant>,
     enemy_count: usize,
     /// Sora's objentry weight.
@@ -295,7 +334,7 @@ struct Game {
     combo_plus: u8,
     /// Live attack windows' shapes from the previous frame (for the sweep),
     /// by window id.
-    volumes: HashMap<(u64, bool), AttackVolume>,
+    volumes: HashMap<(u64, u8), AttackVolume>,
     /// This frame's attack shapes including sweep copies (for drawing).
     live_attacks: Vec<CShape>,
     /// ATKP id -> (strikes walls, floor-check ray length).
@@ -307,12 +346,12 @@ struct Game {
     sparks: Vec<(Vec3, u32)>,
     /// Every ATKP row (sub 0) by id, for clash and reaction rules.
     atkp_raw: HashMap<u16, kh2_formats::battle::Atkp>,
-    /// Shadows' data (absent without an install or with --synthetic).
+    /// Soldiers' data (absent without an install or with --synthetic).
     foe_kit: Option<foes::FoeKit>,
     /// Sora's live attack / guard windows and their shapes this frame.
     sora_hits: Vec<(character_core::ActiveHitbox, Vec<CShape>)>,
     sora_guards: Vec<(character_core::ActiveHitbox, Vec<CShape>)>,
-    /// (Shadow id, swing) pairs that already hit or clashed with Sora.
+    /// (Soldier id, swing) pairs that already hit or clashed with Sora.
     sora_hit_by: std::collections::HashSet<(u32, u64)>,
     /// Menus, abilities and magic (absent with --synthetic).
     kit: Option<kh2_data::kit::MenuKit>,
@@ -364,6 +403,14 @@ struct Latch {
     held: [bool; 4],
     pressed: [bool; 4],
     camera: Vec2,
+    /// Camera reset pressed (R3 / F).
+    cam_reset: bool,
+    /// Lock-on switch pressed: −1 left, +1 right (R2 + right stick / Z, C).
+    switch: i8,
+    /// R2 + right stick already switched (wait for the stick to return).
+    switch_held: bool,
+    /// A Drive shortcut (form id; 0 = Revert).
+    drive: Option<u8>,
     /// Command-menu cursor presses and magic shortcuts since the last step.
     menu_up: bool,
     menu_down: bool,
@@ -383,10 +430,13 @@ struct Autoplay {
 
 #[derive(Resource)]
 struct CameraRig {
+    /// Horizontal view direction (for camera-relative movement).
     yaw: f32,
-    pitch: f32,
-    distance: f32,
-    manual_timer: f32,
+    params: kh2_camera::Params,
+    /// The game's camera (created on the first frame).
+    cam: Option<kh2_camera::Camera>,
+    /// Swing behind while running (the game's Camera "Auto" option).
+    auto: bool,
 }
 
 #[derive(Component)]
@@ -408,40 +458,86 @@ struct Dummy {
     knock_frames: u32,
     respawn: u32,
     flash: u32,
-    /// A Shadow on its own skeleton (absent: a plain column dummy).
+    /// A Soldier on its own skeleton (absent: a plain column dummy).
     foe: Option<foes::FoeState>,
     /// What has hit it (exe rules: once per attack, rows by hits in a row).
     record: HitRecord,
 }
 
 fn spawn_camera_and_light(mut commands: Commands) {
-    commands.spawn((Camera3d::default(), Transform::from_xyz(0.0, 3.0, -8.0).looking_at(Vec3::ZERO, Vec3::Y)));
+    // The game's vertical field of view (1.5 rad horizontal on 4:3) and
+    // near plane (1 unit).
+    commands.spawn((
+        Camera3d::default(),
+        Projection::Perspective(PerspectiveProjection { fov: kh2_camera::Params::FIELD.fov_v(), near: SCALE, ..default() }),
+        Transform::from_xyz(0.0, 3.0, -8.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
     commands.spawn((
         DirectionalLight { illuminance: 9000.0, shadows_enabled: true, ..default() },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.0, 0.6, 0.0)),
     ));
 }
 
+/// The mannequin's pieces for a rig, coloured for a Drive Form.
+fn spawn_pieces(commands: &mut Commands, rig: &std::sync::Arc<kh2_data::sora::Rig>, form: u8, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>) {
+    let bind = RigAnim::new(rig.clone());
+    let sphere = meshes.add(Sphere::new(0.5).mesh().uv(24, 16));
+    let paints: HashMap<Paint, Handle<StandardMaterial>> = Paint::ALL
+        .iter()
+        .map(|p| {
+            let mut m = p.material();
+            // Each form's outfit colour (our styling).
+            if *p == Paint::Jacket {
+                m.base_color = match form {
+                    1 => Color::srgb(0.62, 0.08, 0.1),
+                    2 => Color::srgb(0.1, 0.22, 0.62),
+                    3 => Color::srgb(0.75, 0.15, 0.15),
+                    4 => Color::srgb(0.8, 0.62, 0.08),
+                    5 => Color::srgb(0.85, 0.86, 0.9),
+                    6 => Color::srgb(0.02, 0.02, 0.03),
+                    _ => m.base_color,
+                };
+            }
+            (*p, mats.add(m))
+        })
+        .collect();
+    for piece in rig::pieces(rig) {
+        // Bones are rigid, so each capsule is sized once from the bind pose.
+        let mesh = match piece.shape {
+            Shape::Capsule(a, b, r) => {
+                let len = match (bind.anchor(piece.part, a), bind.anchor(piece.part, b)) {
+                    (Some(a), Some(b)) => a.distance(b),
+                    _ => 0.0,
+                };
+                meshes.add(Capsule3d::new(r * SCALE, len * SCALE).mesh().rings(4).latitudes(12).longitudes(16))
+            }
+            Shape::Sphere(..) => sphere.clone(),
+        };
+        let paint = if form == 6 && piece.paint != Paint::Eye { Paint::Shade } else { piece.paint };
+        let mat = if form == 6 && paint == Paint::Shade { paints[&Paint::Jacket].clone() } else { paints[&paint].clone() };
+        commands.spawn((piece, Mesh3d(mesh), MeshMaterial3d(mat), Transform::default()));
+    }
+}
+
+/// Rebuilds the mannequin when the player object changes (a Drive or a
+/// revert).
+fn rebuild_player(mut commands: Commands, game: Res<Game>, pieces: Query<Entity, With<Piece>>, mut seen: Local<u32>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
+    if game.drive.rig_version == *seen {
+        return;
+    }
+    *seen = game.drive.rig_version;
+    let Some(anim) = &game.anim else { return };
+    for e in &pieces {
+        commands.entity(e).despawn();
+    }
+    spawn_pieces(&mut commands, &anim.rig, game.drive.form(), &mut meshes, &mut mats);
+}
+
 fn spawn_player(mut commands: Commands, game: Res<Game>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     if let Some(anim) = &game.anim {
         // Mannequin: rounded pieces on the bones, placed every frame.
-        let sphere = meshes.add(Sphere::new(0.5).mesh().uv(24, 16));
-        let paints: HashMap<Paint, Handle<StandardMaterial>> = Paint::ALL.iter().map(|p| (*p, mats.add(p.material()))).collect();
         commands.spawn((Player, Transform::default(), Visibility::default()));
-        for piece in rig::pieces(&anim.rig) {
-            // Bones are rigid, so each capsule is sized once from the bind pose.
-            let mesh = match piece.shape {
-                Shape::Capsule(a, b, r) => {
-                    let len = match (anim.anchor(piece.part, a), anim.anchor(piece.part, b)) {
-                        (Some(a), Some(b)) => a.distance(b),
-                        _ => 0.0,
-                    };
-                    meshes.add(Capsule3d::new(r * SCALE, len * SCALE).mesh().rings(4).latitudes(12).longitudes(16))
-                }
-                Shape::Sphere(..) => sphere.clone(),
-            };
-            commands.spawn((piece, Mesh3d(mesh), MeshMaterial3d(paints[&piece.paint].clone()), Transform::default()));
-        }
+        spawn_pieces(&mut commands, &anim.rig, 0, &mut meshes, &mut mats);
         return;
     }
     let body_len = (SORA_HEIGHT - 2.0 * SORA_RADIUS) * SCALE;
@@ -475,7 +571,7 @@ fn spawn_dummies(mut commands: Commands, game: Res<Game>, mut meshes: ResMut<Ass
     let Some(template) = &game.dummy_template else { return };
     let mesh = meshes.add(Cylinder::new(DUMMY_RADIUS * SCALE, DUMMY_HEIGHT * SCALE));
     let mat = mats.add(Color::srgb(0.15, 0.15, 0.2));
-    // One Shadow (`--enemies N` for more).
+    // One Soldier (`--enemies N` for more).
     let all = [[0.0, 0.0, 0.0], [200.0, 0.0, 150.0], [-250.0, 0.0, 120.0], [600.0, 0.0, 600.0], [-700.0, 0.0, 500.0]];
     let spots = &all[..game.enemy_count.clamp(1, all.len())];
     let sphere = meshes.add(Sphere::new(0.5).mesh().uv(16, 10));
@@ -559,6 +655,20 @@ fn latch_input(
             latch.shortcut = Some(i);
         }
     }
+    latch.cam_reset |= keys.just_pressed(KeyCode::KeyF);
+    // Drive shortcuts: 7 Valor, 8 Wisdom, 9 Limit, 0 Master, - Final,
+    // Backspace Revert.
+    for (k, f) in [(KeyCode::Digit7, 1u8), (KeyCode::Digit8, 2), (KeyCode::Digit9, 3), (KeyCode::Digit0, 4), (KeyCode::Minus, 5), (KeyCode::Backspace, 0)] {
+        if keys.just_pressed(k) {
+            latch.drive = Some(f);
+        }
+    }
+    if keys.just_pressed(KeyCode::KeyZ) {
+        latch.switch = -1;
+    }
+    if keys.just_pressed(KeyCode::KeyC) {
+        latch.switch = 1;
+    }
     if mouse.pressed(MouseButton::Right) {
         for m in motion.read() {
             cam += Vec2::new(m.delta.x, -m.delta.y) * 0.05;
@@ -572,7 +682,18 @@ fn latch_input(
             stick = l.clamp_length_max(1.0);
         }
         let r = pad.right_stick();
-        if r.length() > 0.2 {
+        latch.cam_reset |= pad.just_pressed(GamepadButton::RightThumb);
+        if pad.pressed(GamepadButton::RightTrigger2) {
+            // R2 + right stick left/right switches the lock-on target.
+            if r.x.abs() > 0.5 {
+                if !latch.switch_held {
+                    latch.switch = if r.x > 0.0 { 1 } else { -1 };
+                }
+                latch.switch_held = true;
+            } else {
+                latch.switch_held = false;
+            }
+        } else if r.length() > 0.2 {
             cam += r;
         }
         latch.menu_up |= pad.just_pressed(GamepadButton::DPadUp);
@@ -594,54 +715,36 @@ fn latch_input(
     latch.camera = cam;
 }
 
-fn camera_control(
-    time: Res<Time>,
-    latch: Res<Latch>,
-    game: Res<Game>,
-    dummies: Query<&Dummy>,
-    mut rig: ResMut<CameraRig>,
-    mut cam: Query<&mut Transform, With<Camera3d>>,
-) {
-    let dt = time.delta_secs();
-    if latch.camera.length() > 0.0 {
-        rig.yaw -= latch.camera.x * 2.5 * dt;
-        rig.pitch = (rig.pitch - latch.camera.y * 1.5 * dt).clamp(-0.2, 1.2);
-        rig.manual_timer = 1.5;
-    } else {
-        rig.manual_timer -= dt;
+/// The game's camera, one 60 Hz step after the simulation.
+fn camera_step(game: Res<Game>, mut latch: ResMut<Latch>, dummies: Query<&Dummy>, mut rig: ResMut<CameraRig>, shot: Res<Shot>) {
+    if shot.pause_at.is_some_and(|p| game.frame >= p) {
+        return;
     }
-    let p = Vec3::from(game.pos) * SCALE;
-    let focus = p + Vec3::Y * 1.1;
+    let subject = kh2_camera::Subject { feet: Vec3::from(game.pos), facing: game.character.facing(), run_speed: game.character.params.run_speed };
+    let params = rig.params;
+    let auto = rig.auto;
+    let cam = rig.cam.get_or_insert_with(|| kh2_camera::Camera::new(params, &subject));
+    // The target's camera point (type 7), else its lock-on point (type 3).
     let locked = game.last.as_ref().and_then(|o| o.locked).and_then(|id| dummies.iter().find(|d| d.id == id));
-    if let Some(d) = locked {
-        // Lock-on: keep both in view.
-        let t = Vec3::from(d.pos) * SCALE;
-        let dir = (t - p).with_y(0.0).normalize_or_zero();
-        if dir != Vec3::ZERO {
-            let want = dir.x.atan2(dir.z);
-            rig.yaw = lerp_angle(rig.yaw, want, (4.0 * dt).min(1.0));
-        }
-    } else if rig.manual_timer <= 0.0 && latch.stick.length() > 0.1 {
-        // KH2-style lazy follow: drift behind the character while moving.
-        let want = game.character.facing();
-        rig.yaw = lerp_angle(rig.yaw, want, (0.8 * dt).min(1.0));
-    }
-    let d = Vec3::new(rig.yaw.sin(), 0.0, rig.yaw.cos());
-    let back = -d * rig.pitch.cos() + Vec3::Y * rig.pitch.sin();
-    if let Ok(mut t) = cam.get_single_mut() {
-        let eye = focus + back * rig.distance * SCALE;
-        *t = Transform::from_translation(eye).looking_at(focus, Vec3::Y);
-    }
+    let lock = locked.map(|d| {
+        let from_rig = d.foe.as_ref().and_then(|f| {
+            let pick = |k: u8| f.anim.shapes_of_kind(k).first().map(|(s, _)| Vec3::from(s.center));
+            pick(7).or_else(|| pick(3))
+        });
+        from_rig.unwrap_or(Vec3::from(d.pos) + Vec3::Y * DUMMY_HEIGHT * 0.7)
+    });
+    let ctl = kh2_camera::Controls { move_stick: latch.stick, look_stick: latch.camera.clamp_length_max(1.0), reset: std::mem::take(&mut latch.cam_reset), auto };
+    let arena = Arena::get();
+    let wall = |a: Vec3, b: Vec3| arena.map.segment(a, b, map_collision::attr::PLAYER_PASS).map(|h| (h.point, arena.map.polys[h.poly].normal));
+    cam.update(&subject, &ctl, lock, 1.0, &wall);
+    rig.yaw = rig.cam.as_ref().map_or(0.0, |c| c.view_yaw());
 }
 
-fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
-    let mut d = (b - a) % (2.0 * PI);
-    if d > PI {
-        d -= 2.0 * PI;
-    } else if d < -PI {
-        d += 2.0 * PI;
+fn camera_control(rig: Res<CameraRig>, mut cam: Query<&mut Transform, With<Camera3d>>) {
+    let Some(c) = &rig.cam else { return };
+    if let Ok(mut t) = cam.get_single_mut() {
+        *t = Transform::from_translation(c.eye * SCALE).looking_at(c.at * SCALE, Vec3::Y);
     }
-    a + d * t
 }
 
 fn abilities_keys(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>, mut dbg: ResMut<Debug>) {
@@ -711,7 +814,7 @@ fn blade_pose(pos: [f32; 3], facing: f32, sweep: Option<f32>) -> (Vec3, Vec3) {
 /// Shapes for a live attack or guard window: the group's collision shapes
 /// on the real bones when the skeleton is loaded, otherwise spheres along a
 /// swept stand-in blade (approximation).
-fn attack_shapes(game: &Game, facing: f32, group: u8, weapon: bool) -> Vec<CShape> {
+fn attack_shapes(game: &Game, facing: f32, group: u8, weapon: u8) -> Vec<CShape> {
     if let Some(anim) = &game.anim {
         let s = anim.attack_shapes(group, weapon);
         if !s.is_empty() {
@@ -795,20 +898,20 @@ fn simulate(
                 if name == "cure" && f == 1 {
                     game.sora.hp = game.sora.max_hp / 3;
                 }
-                // Reflect is short: cast it as a Shadow starts a swipe.
+                // Reflect is short: cast it as a Soldier starts a swipe.
                 let hit_at = game
                     .foe_kit
                     .as_ref()
-                    .and_then(|k| k.data.clips.get(&foes::shadow::SWIPE))
+                    .and_then(|k| k.data.clips.get(&foes::soldier::SWIPE))
                     .and_then(|c| c.windows.iter().filter(|w| matches!(w.kind, character_core::WindowKind::Hitbox { .. })).map(|w| w.start).min())
                     .unwrap_or(0);
-                let swiping = dummies.iter().any(|d| d.foe.as_ref().and_then(|s| s.out.as_ref()).is_some_and(|o| o.motion == foes::shadow::SWIPE && o.clip_frame == hit_at.saturating_sub(12)));
+                let swiping = dummies.iter().any(|d| d.foe.as_ref().and_then(|s| s.out.as_ref()).is_some_and(|o| o.motion == foes::soldier::SWIPE && o.clip_frame == hit_at.saturating_sub(12)));
                 let again = if name == "reflect" { swiping } else { f == 20 || f == 160 };
                 if again {
                     latch.shortcut = Some(i);
                 }
             }
-            // Stand still and guard every 40 frames: Shadows' swipes bounce off.
+            // Stand still and guard every 40 frames: Soldiers' swipes bounce off.
             "guard" => {
                 latch.stick = Vec2::ZERO;
                 press(2, f % 40 == 1, &mut latch);
@@ -842,6 +945,65 @@ fn simulate(
                 press(0, f == 5, &mut latch);
                 latch.held[0] = f >= 5 && f < 60;
             }
+            // Map collision: walk up the stairs / the 20° ramp / into the 45°
+            // ramp, or jump under the floating slab.
+            name @ ("stairs" | "ramp" | "steep" | "ceiling") => {
+                let (start, dir) = match name {
+                    "stairs" => ([-1125.0, 0.0, 0.0], Vec2::new(0.0, -1.0)),
+                    "ramp" => ([-1125.0, 0.0, -150.0], Vec2::new(0.0, 1.0)),
+                    "steep" => ([-1625.0, 0.0, -150.0], Vec2::new(0.0, 1.0)),
+                    _ => ([1600.0, 0.0, 600.0], Vec2::new(-1.0, 0.0)),
+                };
+                if f == 1 {
+                    game.pos = start;
+                    if name == "ceiling" {
+                        game.character.abilities.high_jump = 0;
+                    }
+                }
+                let d = Vec2::new(rig.yaw.sin(), rig.yaw.cos());
+                let right = Vec2::new(-d.y, d.x);
+                let to_stick = |w: Vec2| Vec2::new(w.dot(right), w.dot(d));
+                if name == "ceiling" {
+                    latch.stick = if (30..40).contains(&(f % 90)) { to_stick(dir) * 0.3 } else { Vec2::ZERO };
+                    press(0, f % 90 == 5, &mut latch);
+                    latch.held[0] = (5..40).contains(&(f % 90));
+                    // Mash attack while bonked (refused for 16 frames).
+                    press(1, f % 90 > 20 && f % 90 < 50 && f % 4 < 2, &mut latch);
+                } else {
+                    latch.stick = if f > 5 && f < 240 { to_stick(dir) } else { Vec2::ZERO };
+                }
+                if auto.trace && f % 5 == 0 {
+                    eprintln!("f{f} pos {:.1} {:.1} {:.1} grounded {} n {:.2}", game.pos[0], game.pos[1], game.pos[2], game.grounded, game.ground_normal);
+                }
+            }
+            // Lock on to the Soldier and circle it; the camera keeps both in
+            // view.
+            "lock" => {
+                press(3, f == 5, &mut latch);
+                latch.stick = if f > 10 { Vec2::X } else { Vec2::ZERO };
+                if auto.trace && f % 10 == 0 {
+                    if let Some(c) = &rig.cam {
+                        eprintln!("f{f} cam yaw {:.1} dist {:.0} locked {} pos {:?}", c.yaw.to_degrees(), c.dist, c.locked, game.pos);
+                    }
+                }
+            }
+            // Drive into a form, then fight: valor, wisdom, limit, master,
+            // final, anti (Anti forced through the roll).
+            name @ ("valor" | "wisdom" | "limit" | "master" | "final" | "anti") => {
+                let f_ = f;
+                let f = ["valor", "wisdom", "limit", "master", "final", "anti"].iter().position(|n| *n == name).unwrap_or(0) as u8 + 1;
+                if f_ == 3 {
+                    if f == 6 {
+                        game.drive.force_anti = true;
+                    }
+                    latch.drive = Some(if f == 6 { 1 } else { f });
+                }
+                latch.stick = if (190..215).contains(&f_) { Vec2::Y } else { Vec2::ZERO };
+                press(1, f_ >= 215 && f_ % 8 < 4, &mut latch);
+                if auto.trace && f_ % 20 == 0 {
+                    eprintln!("f{f_} form {} gauge {:?} drive {}+{} motion {:?}", game.drive.form(), game.drive.drive.gauge.map(|g| g.left), game.drive.drive.bars, game.drive.drive.points, game.last.as_ref().map(|o| o.motion));
+                }
+            }
             "roll" => {
                 latch.stick = Vec2::X;
                 press(2, f % 60 == 5, &mut latch);
@@ -869,6 +1031,8 @@ fn simulate(
     // Command menu: up/down move the cursor; attack confirms the selected
     // command (Attack just attacks), jump backs out of a submenu (KH2).
     let mut cast: Option<usize> = latch.shortcut.take();
+    // A Drive command (form id; 0 = Revert).
+    let mut drive_cmd: Option<u8> = latch.drive.take();
     if let Some(kit) = &game.kit {
         let spells = hud::spell_list(kit, game.magic_level);
         let n_root = kit.root.len().max(1);
@@ -883,9 +1047,39 @@ fn simulate(
                 }
                 if latch.pressed[1] && menu.root != hud::ATTACK {
                     latch.pressed[1] = false;
-                    if menu.root == hud::MAGIC && !spells.is_empty() {
+                    let form = game.drive.form();
+                    if menu.root == hud::MAGIC && !spells.is_empty() && drive::magic_allowed(form) {
                         menu.focus = hud::Focus::Magic;
                     }
+                    if menu.root == hud::DRIVE {
+                        if form != 0 {
+                            drive_cmd = Some(0);
+                        } else if !game.drive.busy() {
+                            menu.focus = hud::Focus::Drive;
+                        }
+                    }
+                }
+            }
+            hud::Focus::Drive => {
+                let n = kit.drives.len().max(1);
+                if down {
+                    menu.drive = (menu.drive + 1) % n;
+                }
+                if up {
+                    menu.drive = (menu.drive + n - 1) % n;
+                }
+                if latch.pressed[1] {
+                    latch.pressed[1] = false;
+                    if let Some(d) = kit.drives.get(menu.drive) {
+                        if drive::available(game, d.form) {
+                            drive_cmd = Some(d.form);
+                            menu.focus = hud::Focus::Root;
+                        }
+                    }
+                }
+                if latch.pressed[0] {
+                    latch.pressed[0] = false;
+                    menu.focus = hud::Focus::Root;
                 }
             }
             hud::Focus::Magic => {
@@ -906,6 +1100,9 @@ fn simulate(
                 }
             }
             hud::Focus::Abilities => {}
+        }
+        if !drive::magic_allowed(game.drive.form()) || game.drive.busy() {
+            cast = None;
         }
         // Cast: MP check, then the controller picks the motion.
         if let Some(i) = cast.and_then(|c| spells.get(c).copied()) {
@@ -930,6 +1127,17 @@ fn simulate(
         latch.menu_up = false;
         latch.menu_down = false;
     }
+    // Drive / Revert. In battle while any enemy is up (Anti Form needs it).
+    if let Some(f) = drive_cmd {
+        let battle = dummies.iter().any(|d| d.respawn == 0);
+        if f == 0 {
+            if game.drive.form() != 0 && !game.drive.busy() {
+                drive::revert(game, &mut dbg.log);
+            }
+        } else {
+            drive::request(game, f, battle, &mut dbg.log);
+        }
+    }
     // MP Charge: refills over a fixed time, then MP is full again
     // (approximation: 10 seconds; the game's rate isn't read yet).
     if let Some(c) = game.mp_charge {
@@ -947,15 +1155,23 @@ fn simulate(
     latch.pressed = [false; 4];
 
     let targets: Vec<TargetInfo> = dummies.iter().filter(|d| d.respawn == 0).map(|d| TargetInfo { id: d.id, pos: d.pos, radius: DUMMY_RADIUS, height: DUMMY_HEIGHT }).collect();
-    let arena = Arena::new(ARENA_BOXES);
+    // Lock-on switch: screen-right is toward smaller yaw in this world.
+    if latch.switch != 0 {
+        let dir = -(latch.switch as f32);
+        latch.switch = 0;
+        if game.character.switch_lock(dir, game.pos, &targets) {
+            dbg.log.push("lock-on switched".into());
+        }
+    }
+    let arena = Arena::get();
     let ledges = arena.ledges();
-    let ground = arena.ground_below(game.pos, SORA_RADIUS);
+    let ground = arena.ground_below(game.pos);
     let env = Env {
         pos: game.pos,
         grounded: game.grounded,
         height_above_ground: game.pos[1] - ground,
         targets: &targets,
-        ledges: &ledges,
+        ledges,
     };
     let out = game.character.step(&input, &env);
     // The cast motion's magic-cast event releases the spell (trigger 21);
@@ -975,53 +1191,56 @@ fn simulate(
         }
     }
 
-    // Move with collision.
-    let mut p = game.pos;
-    p[0] += out.displacement[0];
-    p[2] += out.displacement[2];
-    // A spell's recoil (Blizzard pushes Sora back).
+    // Move with the map collision (the game's solver): the frame's move,
+    // plus a spell's recoil (Blizzard pushes Sora back) and the push out of
+    // standing column dummies, all as one move.
+    let start = Vec3::from(game.pos);
+    let mut d = Vec3::from(out.displacement);
     if let Some(sp) = game.spells.as_mut() {
-        if let Some((d, v)) = sp.recoil {
-            p[0] += d.x * v;
-            p[2] += d.z * v;
+        if let Some((dir, v)) = sp.recoil {
+            d.x += dir.x * v;
+            d.z += dir.z * v;
             let next = v * 0.9;
-            sp.recoil = (next >= 1.0).then_some((d, next));
+            sp.recoil = (next >= 1.0).then_some((dir, next));
         }
     }
-    p = arena.push_out(p, SORA_RADIUS, 30.0);
-    // Body collision with standing column dummies (Shadows are separated
-    // by weight after they move).
-    for d in dummies.iter().filter(|d| d.respawn == 0 && d.foe.is_none()) {
-        let (dx, dz) = (p[0] - d.pos[0], p[2] - d.pos[2]);
+    for dm in dummies.iter().filter(|d| d.respawn == 0 && d.foe.is_none()) {
+        let p = start + d;
+        let (dx, dz) = (p.x - dm.pos[0], p.z - dm.pos[2]);
         let dist = (dx * dx + dz * dz).sqrt();
         let min = SORA_RADIUS + DUMMY_RADIUS;
-        if dist < min && p[1] < d.pos[1] + DUMMY_HEIGHT {
+        if dist < min && p.y < dm.pos[1] + DUMMY_HEIGHT {
             let (nx, nz) = if dist > 1e-3 { (dx / dist, dz / dist) } else { (0.0, -1.0) };
-            p[0] = d.pos[0] + nx * min;
-            p[2] = d.pos[2] + nz * min;
+            d.x += dm.pos[0] + nx * min - p.x;
+            d.z += dm.pos[2] + nz * min - p.z;
         }
     }
-    p[1] += out.displacement[1];
-    let ground = arena.ground_crossed(game.pos[1], p, SORA_RADIUS);
-    game.grounded = false;
-    if p[1] <= ground + 0.5 && out.displacement[1] <= 0.5 {
-        // Step down small ledges while grounded, otherwise land.
-        p[1] = ground;
-        game.grounded = true;
-    } else if game.grounded_was_close(p[1], ground) && out.displacement[1] <= 0.0 {
-        p[1] = ground;
-        game.grounded = true;
+    let air = game.character.airborne();
+    let mv = if air { d } else { map_collision::along_ground(d, game.ground_normal) };
+    let moved = game.body.solve(&arena.map, start, mv, air);
+    let p = moved.pos.to_array();
+    // A rise that made less than 49% of its height hit a ceiling.
+    if map_collision::hit_ceiling(d.y, moved.pos.y - start.y) {
+        game.character.hit_ceiling();
+        dbg.log.push(format!("ceiling: rose {:.1} of {:.1}", moved.pos.y - start.y, d.y));
     }
+    // Landing needs the move not to be going up (exe).
+    game.grounded = moved.ground && (!air || mv.y <= 0.0);
+    game.ground_normal = if game.grounded { moved.ground_normal(&arena.map) } else { Vec3::Y };
+    let ground = arena.ground_below(p);
     game.ground_y = ground;
     game.vel_display = out.displacement;
     game.pos = p;
+    // Drive: a change in progress, the form gauge.
+    let battle = dummies.iter().any(|d| d.respawn == 0);
+    drive::frame(game, battle, &mut dbg.log);
     if let Some(anim) = game.anim.as_mut() {
         anim.update(&out, &game.character, p);
     }
 
     // Hits: each live window's shapes, plus copies filling the gap since
     // last frame, tested against each target's shapes (the game's test).
-    let live: std::collections::HashSet<(u64, bool)> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| (h.swing, h.weapon)).collect();
+    let live: std::collections::HashSet<(u64, u8)> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| (h.swing, h.weapon)).collect();
     game.volumes.retain(|k, _| live.contains(k));
     game.connected.retain(|s| live.iter().any(|k| k.0 == *s));
     game.clinked.retain(|s| live.iter().any(|k| k.0 == *s));
@@ -1096,6 +1315,7 @@ fn simulate(
             if r.blocked.is_none() {
                 game.connected.insert(h.swing);
                 game.character.register_hit();
+                drive::on_hit(game, row.drive_drain, &mut dbg.log);
                 let fwd = [out.facing.sin(), out.facing.cos()];
                 if dm.foe.is_some() {
                     // The game's generic reaction (flinch / push / launch).
@@ -1109,7 +1329,7 @@ fn simulate(
                 }
                 dm.flash = 6;
                 let line = format!(
-                    "hit Shadow#{} with atkp {} hit {} ({}%): {} dmg  HP {}/{}{}",
+                    "hit Soldier#{} with atkp {} hit {} ({}%): {} dmg  HP {}/{}{}",
                     dm.id - 99,
                     h.attack,
                     adm.count + 1,
@@ -1122,6 +1342,8 @@ fn simulate(
                 dbg.log.push(line);
                 if r.killed {
                     dm.respawn = 120;
+                    let status = game.foe_kit.as_ref().map_or(0, |k| k.data.status);
+                    drive::on_kill(game, status, &mut dbg.log);
                 }
             }
         }
@@ -1130,7 +1352,7 @@ fn simulate(
     // Spells: a cast that started this frame (trigger 20), the release
     // (trigger 21), then every spell script runs once.
     if game.spells.is_some() {
-        spell_frame(game, &out, new_cast, released, &arena, &mut dummies, &mut dbg);
+        spell_frame(game, &out, new_cast, released, arena, &mut dummies, &mut dbg);
     }
 
     if auto.trace {
@@ -1139,17 +1361,22 @@ fn simulate(
         }
     }
     let log_mid = dbg.log.len();
-    // Shadows act, then their attacks meet Sora's guard, attacks and body.
+    // Soldiers act, then their attacks meet Sora's guard, attacks and body.
     let kit = game.foe_kit.take();
     if let Some(kit) = kit.as_ref() {
         for mut dm in dummies.iter_mut() {
             let dead_hidden = dm.respawn > 0 && dm.foe.as_ref().map_or(true, |s| !s.npc.is_dead());
             if !dead_hidden {
-                foes::step(&mut dm, kit, game.pos, &arena);
+                foes::step(&mut dm, kit, game.pos, arena);
                 if dm.foe.as_ref().is_some_and(|s| !s.npc.is_dead()) {
                     let push = foes::separate(&mut dm, kit, game.pos, SORA_RADIUS, game.weight);
-                    let q = arena.push_out([game.pos[0] + push[0], game.pos[1], game.pos[2] + push[1]], SORA_RADIUS, 30.0);
-                    game.pos = q;
+                    if push != [0.0; 2] {
+                        let mv = Vec3::new(push[0], 0.0, push[1]);
+                        let air = !game.grounded;
+                        let mv = if air { mv } else { map_collision::along_ground(mv, game.ground_normal) };
+                        let m = game.body.solve(&arena.map, Vec3::from(game.pos), mv, air);
+                        game.pos = m.pos.to_array();
+                    }
                 }
             }
         }
@@ -1188,7 +1415,7 @@ fn simulate(
                     if let Some(c) = b.first() {
                         game.sparks.push((Vec3::from(c.center), 20));
                     }
-                    dbg.log.push(format!("Reflect blocked Shadow#{}'s atkp {}", *id - 99, h.attack));
+                    dbg.log.push(format!("Reflect blocked Soldier#{}'s atkp {}", *id - 99, h.attack));
                     continue;
                 }
                 // Clash with Sora's guard or attack (exe table and angles).
@@ -1216,7 +1443,7 @@ fn simulate(
                     if let Some(c) = at {
                         game.sparks.push((Vec3::from(c), 20));
                     }
-                    dbg.log.push(format!("clang! Sora's atkp {} met Shadow#{}'s atkp {}", sh.attack, *id - 99, h.attack));
+                    dbg.log.push(format!("clang! Sora's atkp {} met Soldier#{}'s atkp {}", sh.attack, *id - 99, h.attack));
                     continue;
                 }
                 // Sora's body.
@@ -1238,7 +1465,14 @@ fn simulate(
                 if !adm.effective {
                     continue;
                 }
-                let r = resolve_hit(&game.rules, &kh2_data::attack_def(&row), combatant, &mut game.sora);
+                let hp_before = game.sora.hp;
+                let mut r = resolve_hit(&game.rules, &kh2_data::attack_def(&row), combatant, &mut game.sora);
+                if game.drive.form() == character_core::drive::form::ANTI && r.damage > 0 {
+                    // Anti Form takes 1.5x damage (exe).
+                    let dmg = (r.damage as f32 * game.drive.drive.params.anti_damage).ceil() as u32;
+                    game.sora.hp = hp_before.saturating_sub(dmg);
+                    r.damage = dmg;
+                }
                 if r.blocked.is_none() {
                     game.character.take_hit(&character_core::reaction::Hit {
                         reaction: row.enemy_reaction,
@@ -1246,8 +1480,10 @@ fn simulate(
                         dir: [foe_facing.sin(), foe_facing.cos()],
                         part: 0,
                     });
-                    dbg.log.push(format!("Shadow#{} hit Sora with atkp {}: {} dmg  HP {}/{}", *id - 99, h.attack, r.damage, game.sora.hp, game.sora.max_hp));
+                    dbg.log.push(format!("Soldier#{} hit Sora with atkp {}: {} dmg  HP {}/{}", *id - 99, h.attack, r.damage, game.sora.hp, game.sora.max_hp));
                     if game.sora.hp == 0 {
+                        // A KO in a form reverts first (exe).
+                        drive::revert(game, &mut dbg.log);
                         game.sora.hp = game.sora.max_hp;
                         dbg.log.push("Sora would be KO'd: HP refilled (playground)".into());
                     }
@@ -1340,7 +1576,7 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
         };
         objs.push(magic::Snap::from_anim(dm.id, dm.pos, facing, motion, alive, air, air, anim, 60.0));
     }
-    // Sora's target: the lock-on, else the nearest Shadow in front within
+    // Sora's target: the lock-on, else the nearest Soldier in front within
     // 1500, else the nearest (approximation of the game's search).
     let fwd = Vec2::new(out.facing.sin(), out.facing.cos());
     let here = Vec2::new(game.pos[0], game.pos[2]);
@@ -1356,12 +1592,12 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
     let target = out.locked.filter(|id| objs.iter().any(|o| o.id == *id && o.alive)).or(cands.first().map(|c| c.2));
     let abilities = game.character.abilities.equipped.clone();
     let centers: HashMap<u32, Vec3> = objs.iter().map(|o| (o.id, o.center)).collect();
-    let magic::Spells { magic: m, rng, magi, file_of, .. } = &mut sp;
+    let magic::Spells { magic: m, rng, magi, file_of, object_scripts, .. } = &mut sp;
     let mut world = magic::PlayWorld { objs, arena, abilities: &abilities, target, rng, hitbacks: Vec::new() };
 
     if let (Some((i, finisher)), Some(kit)) = (new_cast, game.kit.as_ref()) {
         if let (Some(Some(file)), Some(info)) = (file_of.get(i), kit.spells.get(i)) {
-            let sub = info.level as i32 * 2 - 2 + finisher as i32;
+            let sub = info.level as i32 * 2 - 2 + finisher as i32 + drive::magic_sub(game.drive.form());
             let row = magi.get(sub).map(|r| r.to_vec()).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
             if let Err(e) = m.cast(*file, magic::SORA, info.element, sub, &row, &mut world) {
                 dbg.log.push(format!("{}: {e}", info.name));
@@ -1370,6 +1606,16 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
     }
     if released {
         m.release(magic::SORA, &mut world);
+    }
+    // Frame trigger 1 on a form with a script (Wisdom's shots).
+    if let Some(&file) = object_scripts.get(&game.drive.form()) {
+        for e in &out.events {
+            if let character_core::EventKind::Effect(n) = e {
+                if let Err(err) = m.object_effect(file, magic::SORA, *n, &mut world) {
+                    dbg.log.push(format!("Wisdom script: {err}"));
+                }
+            }
+        }
     }
     let events = m.update(&mut world);
     let hitbacks = std::mem::take(&mut world.hitbacks);
@@ -1395,7 +1641,7 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
         dbg.log.push(format!("Cure: +{} HP (atkp {}, {}%)  HP {}/{}", r.healed, atk, row.power, game.sora.hp, game.sora.max_hp));
     }
 
-    // Spell attacks against the Shadows.
+    // Spell attacks against the Soldiers.
     magic::bg_hits(m, &game.battle, arena);
     for mut dm in dummies.iter_mut() {
         if dm.respawn > 0 || dm.foe.as_ref().is_some_and(|s| s.npc.is_dead()) {
@@ -1416,7 +1662,8 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
             if r.blocked.is_some() {
                 continue;
             }
-            let name = game.kit.as_ref().and_then(|k| k.spells.iter().find(|s| s.file == m.spells[h.spell].name)).map_or("Spell".to_string(), |s| s.name.clone());
+            drive::on_hit(game, h.row.drive_drain, &mut dbg.log);
+            let name = game.kit.as_ref().and_then(|k| k.spells.iter().find(|s| s.file == m.spells[h.spell].name)).map_or(if sp.element_of.get(h.spell) == Some(&255) { "Wisdom shot".to_string() } else { "Spell".to_string() }, |s| s.name.clone());
             if h.row.enemy_reaction == 5 && dm.foe.is_some() {
                 // Magnet: caught and pulled (exe reaction 5).
                 let (k1, k2) = (h.row.knockback_1 as f32, h.row.knockback_2 as f32);
@@ -1428,14 +1675,14 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
                 st.npc.suction(front, radius, swirl);
                 st.caught_by = Some(h.key);
                 if r.killed {
-                    st.npc.die(foes::shadow::DEATH);
+                    st.npc.die(foes::soldier::DEATH);
                 }
             } else if dm.foe.is_some() {
                 foes::react(&mut dm, &h.row, h.dir[0].atan2(h.dir[1]), r.killed);
             }
             dm.flash = 6;
             dbg.log.push(format!(
-                "{name} hit Shadow#{} with atkp {} hit {} ({}%): {} dmg  HP {}/{}{}",
+                "{name} hit Soldier#{} with atkp {} hit {} ({}%): {} dmg  HP {}/{}{}",
                 h.foe - 99,
                 h.atk,
                 h.count + 1,
@@ -1447,6 +1694,8 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
             ));
             if r.killed {
                 dm.respawn = 120;
+                let status = game.foe_kit.as_ref().map_or(0, |k| k.data.status);
+                drive::on_kill(game, status, &mut dbg.log);
             }
         }
     }
@@ -1475,10 +1724,6 @@ fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, r
 }
 
 impl Game {
-    /// While grounded, snap down onto ground up to 20 units below (stairs).
-    fn grounded_was_close(&self, y: f32, ground: f32) -> bool {
-        self.grounded && y - ground < 20.0
-    }
 }
 
 fn sync_segments(
@@ -1686,7 +1931,7 @@ fn draw_skeleton(game: Res<Game>, dbg: Res<Debug>, dummies: Query<&Dummy>, mut g
     }
     if let Some(anim) = &game.anim {
         for (a, b, part) in anim.skeleton_lines() {
-            let color = if part == Part::Weapon { Color::srgb(1.0, 0.85, 0.2) } else { Color::srgb(0.9, 1.0, 0.9) };
+            let color = if matches!(part, Part::Weapon(_)) { Color::srgb(1.0, 0.85, 0.2) } else { Color::srgb(0.9, 1.0, 0.9) };
             gizmos.line(a * SCALE, b * SCALE, color);
         }
     }
@@ -1723,7 +1968,7 @@ fn hud(
     let mut s = format!(
         "state {:?}  motion {}  frame {}  combo {}  {}\n\
          pos ({:.0}, {:.0}, {:.0})  move/frame ({:.1}, {:.1}, {:.1})  {}\n\
-         Sora LV{} HP {}/{} (Str {} Mag {} Def {})  {}: Shadow LV{}\n\
+         Sora LV{} HP {}/{} (Str {} Mag {} Def {})  {}: Soldier LV{}\n\
          High Jump {}  Quick Run {}  Aerial Dodge {}  Glide {}  Dodge Roll {}  Combo Plus x{}  Air Combo Plus x{}  Finishing Plus x{}\n\
          [Esc] abilities  [Up/Down] command menu (J confirm, Space back)  [1-6] magic shortcuts  [F1-F4] debug shapes  [R] reset\n\
          WASD move (Alt walk)  Space jump (in air: aerial dodge, then hold: glide)  J/LMB attack  K/Shift guard / roll / quick run  Tab lock-on  Q/E/RMB camera\n",

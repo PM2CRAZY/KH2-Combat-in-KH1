@@ -88,7 +88,7 @@ fn roll_clip() -> Clip {
 
 fn attack_clip(motion: u16, len: u32, hit: (u32, u32), attack: u16, combo_at: u32) -> Clip {
     let mut c = Clip::plain(motion, len);
-    c.windows.push(Window { start: hit.0, end: Some(hit.1), kind: WindowKind::Hitbox { attack, group: 1, combo: None, weapon: true } });
+    c.windows.push(Window { start: hit.0, end: Some(hit.1), kind: WindowKind::Hitbox { attack, group: 1, combo: None, weapon: 1 } });
     c.windows.push(Window { start: combo_at, end: None, kind: WindowKind::Combo });
     c
 }

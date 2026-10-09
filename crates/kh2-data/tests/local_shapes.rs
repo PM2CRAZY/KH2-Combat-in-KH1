@@ -11,10 +11,10 @@ fn collision_shapes_and_guard_groups_load() {
     // Every MDLX collision entry becomes a shape, not only attacks/hurts.
     assert!(rig.body_shapes.iter().any(|s| s.kind == 2 && s.bone.is_some()));
     assert!(rig.body_shapes.iter().any(|s| s.kind == 4 && s.bone.is_none() && s.lift > 0.0));
-    assert!(rig.weapon_shapes.iter().any(|s| s.kind == 6));
+    assert!(rig.weapons[0].shapes.iter().any(|s| s.kind == 6));
     // Guard keeps its collision group (the game builds guard shapes from it).
     let guard = &sora.character.moveset.clips[&character_core::motion::GUARD];
-    assert!(guard.windows.iter().any(|w| matches!(w.kind, WindowKind::Guard { weapon: true, .. })));
+    assert!(guard.windows.iter().any(|w| matches!(w.kind, WindowKind::Guard { weapon: 1, .. })));
 }
 
 #[test]
@@ -33,4 +33,28 @@ fn the_shadow_loads_with_its_attacks_and_hurt_shapes() {
         assert!(e.clips.contains_key(&m) && e.rig.motions.contains_key(&m), "motion {m}");
     }
     assert_eq!(e.reaction.hit_back, 200.0);
+}
+
+/// Every Drive Form loads from extracted files: its own motions, combo
+/// rows and weapons (two for Valor, Master and Final).
+#[test]
+fn drive_forms_load() {
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../local/re");
+    if !dir.join("P_EX100_BTLF.mset").exists() {
+        eprintln!("skipped: no extracted form files");
+        return;
+    }
+    for spec in kh2_data::sora::FORMS {
+        let d = kh2_data::sora::load_player_dir(&dir, spec).unwrap_or_else(|e| panic!("{}: {e}", spec.model));
+        let rig = d.rig.as_ref().unwrap_or_else(|| panic!("{}: {:?}", spec.model, d.rig_error));
+        let hands = match spec.form {
+            1 | 4 | 5 => 2,
+            6 => 0,
+            _ => 1,
+        };
+        assert_eq!(rig.weapons.len(), hands, "{}", spec.model);
+        assert!(!d.character.moveset.combo_rows.is_empty(), "{}: combo rows", spec.model);
+        assert!(d.character.moveset.clips.contains_key(&53), "{}: arrival motion", spec.model);
+        eprintln!("{}: {} clips, {} combo rows, run {}", spec.model, d.motions.len(), d.character.moveset.combo_rows.len(), d.character.params.run_speed);
+    }
 }

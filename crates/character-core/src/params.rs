@@ -32,6 +32,9 @@ pub struct MoveParams {
     /// Horizontal speed per unit of hop height when repelled in the air
     /// (KH2 `sstm` hit_back_to_jump: 0.048).
     pub hit_back_to_jump: f32,
+    /// Frames of no air commands after the head hits a ceiling (KH2
+    /// `sstm` ceiling_disable_command_time: 16).
+    pub ceiling_lock: f32,
 }
 
 /// Ledge-grab numbers (KH2 `prty` hang_height/hang_margin, `sstm`
@@ -68,6 +71,7 @@ impl Default for MoveParams {
             run_threshold: 0.5,
             hang: HangParams::default(),
             hit_back_to_jump: 0.048,
+            ceiling_lock: 16.0,
         }
     }
 }

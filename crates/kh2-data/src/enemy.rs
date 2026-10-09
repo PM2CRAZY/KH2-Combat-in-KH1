@@ -13,8 +13,11 @@ use kh2_formats::motion::Mset;
 use crate::sora::{bone_shapes, clip_from_anb, pose_motions, reaction_params, Rig};
 use crate::{CombatData, Install, Result, Source};
 
-/// The Shadow (objentry model name).
-pub const SHADOW: &str = "M_EX010";
+/// The Soldier (objentry model name; ENMP 33, status 1000). It has the
+/// Cyclone reaction command.
+pub const SOLDIER: &str = "M_EX010";
+/// The Shadow (ENMP 34).
+pub const SHADOW: &str = "M_EX020";
 
 /// One enemy kind.
 #[derive(Clone, Debug)]
@@ -26,6 +29,8 @@ pub struct EnemyData {
     pub rig: Arc<Rig>,
     /// objentry weight.
     pub weight: f32,
+    /// objentry enemy status id (Heartless 1000.., Nobodies 3000..).
+    pub status: u16,
     pub reaction: ReactionParams,
 }
 
@@ -33,6 +38,11 @@ impl EnemyData {
     /// Radius of the body (OBJ, type 1) shape, for pushing bodies apart.
     pub fn body_radius(&self) -> f32 {
         self.rig.body_shapes.iter().find(|s| s.kind == 1).map_or(50.0, |s| s.radius)
+    }
+
+    /// The map-collision shape (see [`crate::sora::bg_shape`]).
+    pub fn bg_shape(&self) -> Option<&crate::sora::BoneShape> {
+        crate::sora::bg_shape(&self.rig.body_shapes)
     }
 }
 
@@ -42,24 +52,22 @@ pub(crate) fn load_enemy_with(read: &dyn Fn(&str) -> Result<Vec<u8>>, model: &st
     let pref = kh2_formats::pref::Pref::from_03system(&read("03system.bin")?)?;
     let objects = kh2_formats::objentry::parse_objentry(&read("00objentry.bin")?)?;
     let weight = objects.iter().find(|o| o.model == model).map_or(0.0, |o| o.weight);
+    let status = objects.iter().find(|o| o.model == model).map_or(0, |o| o.neo_status);
     let mut clips = HashMap::new();
     for s in &mset.slots {
         if let Some(a) = &s.anb {
             let m = s.index as u16;
-            clips.insert(m, clip_from_anb(m, a, None, combat));
+            clips.insert(m, clip_from_anb(m, a, &[], combat));
         }
     }
     let collision = kh2_formats::motion::parse_model_collision(&mdlx)?;
     let rig = Rig {
         skeleton: parse_skeleton(&mdlx)?,
         motions: pose_motions(&mset),
-        weapon_skeleton: Vec::new(),
-        weapon_motions: HashMap::new(),
-        weapon_bone: None,
-        weapon_shapes: Vec::new(),
+        weapons: Vec::new(),
         body_shapes: bone_shapes(&collision),
     };
-    Ok(EnemyData { model: model.to_string(), clips, rig: Arc::new(rig), weight, reaction: reaction_params(&pref) })
+    Ok(EnemyData { model: model.to_string(), clips, rig: Arc::new(rig), weight, status, reaction: reaction_params(&pref) })
 }
 
 impl Install {

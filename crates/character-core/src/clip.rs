@@ -6,7 +6,7 @@
 pub enum WindowKind {
     /// An attack hitbox is live. `group` picks the collision shapes.
     /// `weapon`: the shapes are the weapon model's (else the character's own).
-    Hitbox { attack: u16, group: u8, combo: Option<i16>, weapon: bool },
+    Hitbox { attack: u16, group: u8, combo: Option<i16>, weapon: u8 },
     /// The next combo hit (or another action) may start.
     Combo,
     /// Like `Combo` but only for magic.
@@ -28,7 +28,7 @@ pub enum WindowKind {
     /// Guard is active: incoming non-piercing hits from the front are blocked.
     /// The guard's shapes are the attack-group shapes of `group` (on the
     /// Keyblade if `weapon`), as the game builds them.
-    Guard { attack: u16, group: u8, weapon: bool },
+    Guard { attack: u16, group: u8, weapon: u8 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,6 +53,9 @@ pub enum EventKind {
     QuickRunCheck,
     FallCheck,
     RevengeCheck,
+    /// Start the object's effect element `n`; an object with a script
+    /// (Wisdom Form) runs its trigger 0x10 with it (frame trigger 1).
+    Effect(i16),
     Other(u8),
 }
 

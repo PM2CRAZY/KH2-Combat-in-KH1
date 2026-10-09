@@ -17,6 +17,8 @@ kh2-data.workspace = true
 kh2-formats.workspace = true
 kh2-anim.workspace = true
 kh2-magic.workspace = true
+map-collision.workspace = true
+kh2-camera.workspace = true
 bevy = { version = "=0.15.3", default-features = false, features = [
     "bevy_asset",
     "bevy_color",

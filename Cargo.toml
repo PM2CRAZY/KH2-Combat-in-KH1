@@ -10,6 +10,8 @@ members = [
     "crates/kh2-anim",
     "crates/kh2-bdx",
     "crates/kh2-magic",
+    "crates/map-collision",
+    "crates/kh2-camera",
 ]
 
 [workspace.package]
@@ -24,6 +26,8 @@ kh2-data = { path = "crates/kh2-data" }
 kh2-anim = { path = "crates/kh2-anim" }
 kh2-bdx = { path = "crates/kh2-bdx" }
 kh2-magic = { path = "crates/kh2-magic" }
+map-collision = { path = "crates/map-collision" }
+kh2-camera = { path = "crates/kh2-camera" }
 md-5 = "0.10"
 sha2 = "0.10"
 flate2 = "1"

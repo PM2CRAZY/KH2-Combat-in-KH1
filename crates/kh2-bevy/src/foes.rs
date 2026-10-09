@@ -1,4 +1,4 @@
-//! Shadows read from the user's install: their own skeleton, motions,
+//! Soldiers read from the user's install: their own skeleton, motions,
 //! collision shapes, attacks and stats, reacting to hits with the game's
 //! generic reaction and attacking Sora. What they decide to do is ours (a
 //! small timer-driven script); KH2 drives enemies with per-enemy scripts
@@ -18,27 +18,31 @@ use crate::rig::{Anchor, Paint, Part, Piece, RigAnim, Shape};
 use crate::world::Arena;
 use crate::{Dummy, SCALE};
 
-/// What a Shadow needs at run time: its data (skeleton, motions, shapes,
+/// What a Soldier needs at run time: its data (skeleton, motions, shapes,
 /// stats). Its attacks' rows are picked when they hit (see `magic::row`).
 pub struct FoeKit {
     pub data: EnemyData,
+    /// Map-collision shape (the model's BG entry).
+    pub body: map_collision::Body,
 }
 
 impl FoeKit {
     pub fn new(data: EnemyData) -> FoeKit {
-        FoeKit { data }
+        let body = crate::world::body_of(data.bg_shape(), false);
+        FoeKit { data, body }
     }
 }
 
-/// Per-Shadow runtime state (on the [`Dummy`] component).
+/// Per-Soldier runtime state (on the [`Dummy`] component).
 pub struct FoeState {
     pub npc: Npc,
     pub anim: RigAnim,
     pub out: Option<NpcOutput>,
     pub grounded: bool,
+    pub ground_normal: Vec3,
     pub cooldown: u32,
     rng: u32,
-    pub volumes: HashMap<(u64, bool), AttackVolume>,
+    pub volumes: HashMap<(u64, u8), AttackVolume>,
     /// Own swings that already landed or clashed.
     pub spent: HashSet<u64>,
     /// This frame's live attack (and guard) windows with their shapes.
@@ -57,6 +61,7 @@ impl FoeState {
             anim: RigAnim::new(kit.data.rig.clone()),
             out: None,
             grounded: true,
+            ground_normal: Vec3::Y,
             cooldown: 60 + seed % 90,
             rng: seed.wrapping_mul(2654435761).max(1),
             volumes: HashMap::new(),
@@ -79,8 +84,8 @@ impl FoeState {
     }
 }
 
-/// Shadow motion ids (slot numbers in `M_EX010.mset`).
-pub mod shadow {
+/// Soldier motion ids (slot numbers in `M_EX010.mset`).
+pub mod soldier {
     /// A swipe.
     pub const SWIPE: u16 = 201;
     /// The sinking dash: guarded while sliding in, then a launch.
@@ -105,11 +110,11 @@ fn decide(st: &mut FoeState, pos: [f32; 3], sora: [f32; 3]) -> NpcCommand {
     if st.cooldown == 0 {
         if dist < 170.0 {
             st.cooldown = 90 + st.rand(90);
-            return NpcCommand { face: Some(dir), action: Some(shadow::SWIPE), ..Default::default() };
+            return NpcCommand { face: Some(dir), action: Some(soldier::SWIPE), ..Default::default() };
         }
         if (300.0..550.0).contains(&dist) && st.rand(3) == 0 {
             st.cooldown = 150 + st.rand(90);
-            return NpcCommand { face: Some(dir), action: Some(shadow::DASH), ..Default::default() };
+            return NpcCommand { face: Some(dir), action: Some(soldier::DASH), ..Default::default() };
         }
     }
     if dist > 150.0 {
@@ -119,35 +124,31 @@ fn decide(st: &mut FoeState, pos: [f32; 3], sora: [f32; 3]) -> NpcCommand {
     }
 }
 
-/// One frame for one Shadow: script, controller, movement, pose, shapes.
+/// One frame for one Soldier: script, controller, movement, pose, shapes.
 pub fn step(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], arena: &Arena) {
     let Some(st) = dm.foe.as_mut() else { return };
     let cmd = decide(st, dm.pos, sora_pos);
     let out = st.npc.step(&cmd, st.grounded);
-    let r = kit.data.body_radius();
-    let mut p = dm.pos;
-    p[0] += out.displacement[0];
-    p[2] += out.displacement[2];
-    p = arena.push_out(p, r, 30.0);
-    let from_y = p[1];
-    p[1] += out.displacement[1];
-    let ground = arena.ground_crossed(from_y, p, r);
-    st.grounded = p[1] <= ground + 0.5 && out.displacement[1] <= 0.5;
-    if st.grounded {
-        p[1] = ground;
-    }
+    // The game's map collision with the enemy's own BG shape.
+    let d = Vec3::from(out.displacement);
+    let air = !st.grounded || d.y > 0.0;
+    let mv = if air { d } else { map_collision::along_ground(d, st.ground_normal) };
+    let moved = kit.body.solve(&arena.map, Vec3::from(dm.pos), mv, air);
+    st.grounded = moved.ground && (!air || mv.y <= 0.0);
+    st.ground_normal = if st.grounded { moved.ground_normal(&arena.map) } else { Vec3::Y };
+    let p = moved.pos.to_array();
     dm.pos = p;
     st.anim.update_npc(&out, &kit.data.clips, p);
 
     // Live attack shapes with their sweep copies.
     st.live.clear();
     st.guards.clear();
-    let keys: HashSet<(u64, bool)> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| (h.swing, h.weapon)).collect();
+    let keys: HashSet<(u64, u8)> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| (h.swing, h.weapon)).collect();
     st.volumes.retain(|k, _| keys.contains(k));
     st.spent.retain(|s| keys.iter().any(|k| k.0 == *s));
     for (list, guard) in [(&out.hitboxes, false), (&out.guard_boxes, true)] {
         for h in list {
-            let shapes = st.anim.attack_shapes(h.group, false);
+            let shapes = st.anim.attack_shapes(h.group, h.weapon);
             let swept = st.volumes.entry((h.swing, h.weapon)).or_default().update(&shapes);
             if guard {
                 st.guards.push((*h, swept));
@@ -159,7 +160,7 @@ pub fn step(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], arena: &Arena) {
     st.out = Some(out);
 }
 
-/// Separates Sora and a Shadow when their bodies overlap, each moving in
+/// Separates Sora and a Soldier when their bodies overlap, each moving in
 /// inverse proportion to its objentry weight (exe). Returns Sora's push.
 pub fn separate(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], sora_radius: f32, sora_weight: f32) -> [f32; 2] {
     let r = kit.data.body_radius();
@@ -177,7 +178,7 @@ pub fn separate(dm: &mut Dummy, kit: &FoeKit, sora_pos: [f32; 3], sora_radius: f
     [-nx * overlap * s_sora, -nz * overlap * s_sora]
 }
 
-/// Sora's swing connected with a Shadow: the reaction (damage is applied by
+/// Sora's swing connected with a Soldier: the reaction (damage is applied by
 /// the caller).
 pub fn react(dm: &mut Dummy, atk: &Atkp, attacker_facing: f32, killed: bool) {
     let Some(st) = dm.foe.as_mut() else { return };
@@ -189,7 +190,7 @@ pub fn react(dm: &mut Dummy, atk: &Atkp, attacker_facing: f32, killed: bool) {
     };
     st.npc.take_hit(&hit);
     if killed {
-        st.npc.die(shadow::DEATH);
+        st.npc.die(soldier::DEATH);
     }
 }
 
@@ -229,7 +230,7 @@ pub fn pieces(kit: &FoeKit) -> Vec<Piece> {
     out
 }
 
-/// Links a mannequin piece to its Shadow.
+/// Links a mannequin piece to its Soldier.
 #[derive(Component)]
 pub struct FoePiece {
     pub owner: Entity,

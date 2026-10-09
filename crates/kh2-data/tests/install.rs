@@ -54,7 +54,7 @@ fn sora_rig_loads_and_poses() {
     let sora = i.load_sora(kh2_data::Source::Live).unwrap();
     let rig = sora.rig.expect("rig");
     assert_eq!(rig.skeleton.len(), 256);
-    assert_eq!(rig.weapon_bone, Some(178));
+    assert_eq!(rig.weapons.first().and_then(|w| w.bone), Some(178));
     for (id, m) in &rig.motions {
         let t = kh2_anim::key_time(m, 10.0, true);
         let p = kh2_anim::evaluate(&rig.skeleton, m, t, Default::default());

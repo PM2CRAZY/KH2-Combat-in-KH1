@@ -46,6 +46,30 @@ pub(crate) fn obj_record(vm: &mut Vm, t: &mut Tables, o: ObjId) -> u32 {
     r
 }
 
+/// Starts PAX element `id` of the file's effects (the record `pax` must be
+/// the file's). Returns the effect record, or 0.
+fn start_effect_in(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, world: &dyn World, pax: u32, id: u16, owner: Option<ObjId>) -> u32 {
+    if pax != t.pax_rec {
+        return 0;
+    }
+    let spell = t.spell;
+    let file = &magic.spells[spell];
+    let Some(element) = file.pax.element(id).cloned() else { return 0 };
+    let timing = file.pax.effect(element.effect).cloned().unwrap_or(kh2_formats::pax::PaxEffect { number: element.effect as u32, emitters: Vec::new() });
+    let eid = magic.fresh_id();
+    let e = Effect::new(eid, spell, element, timing, owner, world);
+    magic.effects.push(e);
+    let rec = vm.mem.alloc(16);
+    t.effects.insert(rec, eid);
+    rec
+}
+
+/// The muzzle effect of an object's frame trigger 1 (its own effect list).
+pub(crate) fn start_object_effect(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, id: u16, owner: ObjId, world: &dyn World) -> u32 {
+    let pax = t.pax_rec;
+    start_effect_in(magic, vm, t, world, pax, id, Some(owner))
+}
+
 pub(crate) fn run(magic: &mut Magic, cast: &mut Cast, world: &mut dyn World) -> Result<(), BdxError> {
     let main = cast.main;
     let vm = &mut cast.vm;
@@ -128,19 +152,7 @@ impl Bridge<'_> {
     }
 
     fn start_effect(&mut self, vm: &mut Vm, pax: u32, id: u16, owner: Option<ObjId>) -> u32 {
-        if pax != self.t.pax_rec {
-            return 0;
-        }
-        let spell = self.t.spell;
-        let file = &self.magic.spells[spell];
-        let Some(element) = file.pax.element(id).cloned() else { return 0 };
-        let timing = file.pax.effect(element.effect).cloned().unwrap_or(kh2_formats::pax::PaxEffect { number: element.effect as u32, emitters: Vec::new() });
-        let eid = self.magic.fresh_id();
-        let e = Effect::new(eid, spell, element, timing, owner, &*self.world);
-        self.magic.effects.push(e);
-        let rec = vm.mem.alloc(16);
-        self.t.effects.insert(rec, eid);
-        rec
+        start_effect_in(self.magic, vm, self.t, &*self.world, pax, id, owner)
     }
 
     fn new_attack(&mut self, vm: &mut Vm, owner: ObjId, atk: u16, sub: u8, swing: Option<(u64, i64)>) -> u32 {
@@ -383,6 +395,13 @@ impl Host for Bridge<'_> {
             }
             (1, 132) => None,
             (1, 138) => Some(Cell::addr(self.start_effect(vm, a(0).v, a(1).v as u16, None))),
+            // obj_effect_start(obj, element, _, _): the object's own effect
+            // list (an object script's file).
+            (1, 21) => {
+                let owner = self.obj_of_ref(vm, a(0).v);
+                let pax = self.t.pax_rec;
+                Some(Cell::addr(self.start_effect(vm, pax, a(1).v as u16, owner)))
+            }
             (1, 139) => {
                 let owner = self.obj_of_ref(vm, a(2).v);
                 Some(Cell::addr(self.start_effect(vm, a(0).v, a(1).v as u16, owner)))

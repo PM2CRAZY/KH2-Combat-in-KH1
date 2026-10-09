@@ -141,7 +141,9 @@ pub struct ActiveHitbox {
     /// Collision group of the shapes to use.
     pub group: u8,
     /// The group belongs to the weapon model (else the character model).
-    pub weapon: bool,
+    /// 0: the character's own shapes; 1, 2, ...: its weapons (right hand
+    /// first).
+    pub weapon: u8,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -251,6 +253,9 @@ enum ActionKind {
     Blow { blow: crate::reaction::Blow },
     /// Casting a spell (the motion's magic-cast event releases it).
     Magic,
+    /// A motion the host asked for (Drive, form arrival, revert): plays to
+    /// the end, takes no input.
+    Scripted { invulnerable: bool },
 }
 
 #[derive(Clone, Debug)]
@@ -321,6 +326,8 @@ pub struct Character {
     /// Hit-back push: direction and speed (units/frame), decaying x0.9 per
     /// frame and dropped below 1 (exe).
     push: Option<([f32; 2], f32)>,
+    /// Frames left without air commands after a ceiling bonk (exe).
+    ceiling_lock: f32,
 }
 
 const TAU: f32 = std::f32::consts::TAU;
@@ -400,6 +407,7 @@ impl Character {
             buffered_attack: false,
             snap: None,
             push: None,
+            ceiling_lock: 0.0,
         }
     }
 
@@ -448,6 +456,9 @@ impl Character {
     /// Whether a spell could be cast right now: free on the ground or in the
     /// air, or inside an attack's or spell's "combo magic" window.
     pub fn can_cast(&self) -> bool {
+        if self.ceiling_lock > 0.0 {
+            return false;
+        }
         match &self.mode {
             Mode::Free => true,
             Mode::Action(a) => {
@@ -564,6 +575,69 @@ impl Character {
         self.push = Some((norm(dir), distance * HIT_BACK_SPEED));
     }
 
+    /// In the air this frame (the host picks the map's air rules with it).
+    pub fn airborne(&self) -> bool {
+        self.airborne
+    }
+
+    /// The map stopped a rise: less than 49% of the desired climb happened
+    /// (exe). A jump or launch more than 6 frames in drops from rest at the
+    /// current height, loses its hold, and air commands are refused for
+    /// `ceiling_lock` frames or until landing. Earlier in the rise the
+    /// ceiling only blocks.
+    pub fn hit_ceiling(&mut self) {
+        let mut bonked = false;
+        if let Some(a) = self.arc {
+            if a.rising() && a.t > HOLD_MIN_FRAMES {
+                self.arc = Some(Arc::fall());
+                self.jump_released = false;
+                self.jump_held = false;
+                bonked = true;
+            }
+        }
+        if let Mode::Action(Action { kind: ActionKind::Blow { blow }, frame, .. }) = &mut self.mode {
+            if blow.vel_y > 0.0 && *frame as f32 > HOLD_MIN_FRAMES {
+                blow.vel_y = 0.0;
+                self.vel_y = 0.0;
+                bonked = true;
+            }
+        }
+        if bonked {
+            self.vel_y = self.vel_y.min(0.0);
+            self.ceiling_lock = self.params.ceiling_lock;
+        }
+    }
+
+    /// Plays `motion` to its end with no control (the host's choice: a
+    /// Drive, a form's arrival, a revert). Returns false if the motion
+    /// doesn't exist.
+    pub fn play(&mut self, motion: u16, invulnerable: bool) -> bool {
+        if self.clip(motion).is_none() {
+            return false;
+        }
+        self.reset_combo();
+        self.vel_h = [0.0; 2];
+        if !self.airborne {
+            self.arc = None;
+        }
+        self.start_action(ActionKind::Scripted { invulnerable }, motion);
+        true
+    }
+
+    /// Playing a motion from [`play`](Self::play).
+    pub fn scripted(&self) -> bool {
+        matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Scripted { .. }, .. }))
+    }
+
+    /// The locked-on target.
+    pub fn lock(&self) -> Option<u32> {
+        self.lock
+    }
+
+    pub fn set_lock(&mut self, id: Option<u32>) {
+        self.lock = id;
+    }
+
     pub fn combo_count(&self) -> u8 {
         self.count
     }
@@ -647,6 +721,29 @@ impl Character {
                 .filter(|(_, d)| *d <= self.attack.lock_on_range)
                 .min_by(|a, b| a.1.total_cmp(&b.1))
                 .map(|(id, _)| id);
+        }
+    }
+
+    /// Switches the lock-on to the next target around the character (exe):
+    /// among the other targets in lock-on range, the one with the smallest
+    /// turn from the current target in direction `dir` (+1 toward larger
+    /// yaw, −1 toward smaller). Returns true when the target changed.
+    pub fn switch_lock(&mut self, dir: f32, pos: [f32; 3], targets: &[TargetInfo]) -> bool {
+        let Some(cur) = self.lock.and_then(|id| targets.iter().find(|t| t.id == id)) else { return false };
+        let yaw = |t: &TargetInfo| (t.pos[0] - pos[0]).atan2(t.pos[2] - pos[2]);
+        let y0 = yaw(cur);
+        let next = targets
+            .iter()
+            .filter(|t| t.id != cur.id && dist3(pos, t.pos) <= self.attack.lock_on_range)
+            .map(|t| (t.id, wrap(yaw(t) - y0) * dir))
+            .filter(|(_, d)| *d > 0.0)
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        match next {
+            Some((id, _)) => {
+                self.lock = Some(id);
+                true
+            }
+            None => false,
         }
     }
 
@@ -982,6 +1079,11 @@ impl Character {
         if was_airborne && !self.airborne {
             self.land();
         }
+        if self.airborne {
+            self.ceiling_lock = (self.ceiling_lock - 1.0).max(0.0);
+        } else {
+            self.ceiling_lock = 0.0;
+        }
 
         if self.jump_held && !input.jump.held {
             self.jump_held = false;
@@ -1042,9 +1144,10 @@ impl Character {
         let moving = len2(input.stick) > DEAD_ZONE;
         match std::mem::replace(&mut self.mode, Mode::Free) {
             Mode::Free => {
-                if (input.attack.pressed && self.try_attack(input, env))
+                if self.ceiling_lock <= 0.0
+                    && ((input.attack.pressed && self.try_attack(input, env))
                     || (input.jump.pressed && self.try_jump(input, env))
-                    || (input.action.pressed && self.try_action_button(input))
+                        || (input.action.pressed && self.try_action_button(input)))
                 {
                     return true;
                 }
@@ -1093,7 +1196,7 @@ impl Character {
         let clip = self.clip(act.motion).cloned().unwrap_or_else(|| Clip::plain(act.motion, 1));
         let f = act.frame;
         let mut finished = f >= clip.length;
-        let mut cancel_allowed = clip.has(f, |k| matches!(k, WindowKind::Combo | WindowKind::Finisher));
+        let mut cancel_allowed = clip.has(f, |k| matches!(k, WindowKind::Combo | WindowKind::Finisher)) && self.ceiling_lock <= 0.0;
         let target = self.primary_target(env).map(|t| t.pos);
 
         for (wi, w) in clip.windows.iter().enumerate() {
@@ -1140,6 +1243,11 @@ impl Character {
                     self.start_held_arc(h);
                     self.air_dodge_ready = self.abilities.aerial_dodge > 0;
                     finished = true;
+                }
+            }
+            ActionKind::Scripted { invulnerable } => {
+                if *invulnerable {
+                    fo.invulnerable = true;
                 }
             }
             ActionKind::Land => {
@@ -1387,6 +1495,7 @@ impl Character {
                     }
                 }
                 ActionKind::DodgeRoll | ActionKind::Guard => self.vel_h = [0.0; 2],
+                ActionKind::Scripted { .. } => self.vel_h = if self.airborne { scale(self.vel_h, p.air_drag) } else { [0.0; 2] },
                 ActionKind::QuickRun => {
                     let b = act.brake;
                     self.vel_h = scale(self.vel_h, b);
@@ -1446,6 +1555,7 @@ impl Character {
                 ActionKind::Hurt => StateName::Hurt,
                 ActionKind::Blow { .. } => StateName::Blown,
                 ActionKind::Magic => StateName::Magic,
+                ActionKind::Scripted { .. } => StateName::Hurt,
             },
         }
     }

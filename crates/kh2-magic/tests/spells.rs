@@ -129,3 +129,41 @@ fn every_spell_runs() {
         }
     }
 }
+
+/// Wisdom Form's shots: frame trigger 1 [25] runs the form model's script
+/// (`wisd`) with its effect archive.
+#[test]
+fn wisdom_fires_a_homing_shot() {
+    let d = dir();
+    let (Ok(mdlx), Ok(archive)) = (std::fs::read(d.join("P_EX100_MAGF.mdlx")), std::fs::read(d.join("P_EX100_MAGF.a.us"))) else {
+        eprintln!("skipped: no Wisdom files in {}", d.display());
+        return;
+    };
+    let script = SpellFile::bar_entry(&mdlx, 3).expect("wisd script");
+    let pax = SpellFile::bar_entry(&archive, 18).expect("effects");
+    let mut magic = Magic::new();
+    let file = magic.add_spell(SpellFile::from_parts("wisdomform", &script, &pax).unwrap());
+    let mut w = Fake { frame: 0, release_at: 0, motion_end: 0, seed: 1 };
+    magic.object_effect(file, SORA, 25, &mut w).unwrap();
+    let mut path = Vec::new();
+    for f in 1..80 {
+        w.frame = f;
+        for e in magic.update(&mut w) {
+            if let Event::Error(s) = e {
+                panic!("{s}");
+            }
+        }
+        if let Some(a) = magic.attacks.iter().find(|a| !a.freed && a.pos.is_some()) {
+            path.push((a.atk, a.sub, a.radius, a.pos.unwrap()));
+        }
+        if magic.casts.is_empty() {
+            break;
+        }
+    }
+    eprintln!("{} positions; first {:?}; last {:?}", path.len(), path.first(), path.last());
+    assert!(path.len() > 10, "the shot flew: {path:?}");
+    assert!(path.iter().all(|p| p.0 == 859 && p.1 == 0 && p.2 == 50.0));
+    // It heads for the target in front (+z) and goes faster.
+    let (a, b) = (path[1].3, path[path.len() - 1].3);
+    assert!(b.z > a.z + 300.0, "{a} -> {b}");
+}

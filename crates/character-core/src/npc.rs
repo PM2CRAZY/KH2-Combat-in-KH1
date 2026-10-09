@@ -429,7 +429,7 @@ mod tests {
             clips.insert(m, Clip::plain(m, 30));
         }
         let mut atk = Clip::plain(201, 40);
-        atk.windows.push(crate::Window { start: 10, end: Some(20), kind: WindowKind::Hitbox { attack: 5, group: 1, combo: None, weapon: false } });
+        atk.windows.push(crate::Window { start: 10, end: Some(20), kind: WindowKind::Hitbox { attack: 5, group: 1, combo: None, weapon: 0 } });
         clips.insert(201, atk);
         Npc::new(clips, ReactionParams::default())
     }
