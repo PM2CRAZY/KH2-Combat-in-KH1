@@ -117,9 +117,114 @@ that frame. Already-hit and team filters apply before this.
 **Playground.** The training dummies have no skeleton, so their hit shape is a column of our
 own (radius 50, 110 tall) until Phase 3 reads enemies' collision lists.
 
+## Hit reactions (`character_core::reaction`)
+
+**Checked (exe).** Sora and enemies share one reaction routine, and the reaction itself
+isn't scripted. (Enemy scripts also receive a "damaged" event, which this project doesn't
+run.)
+
+**Which reaction.** The ATKP reaction byte is folded into groups:
+
+| Group | ATKP reaction ids | Response |
+|---|---|---|
+| 1 | 1, 0xc | hit-back push only |
+| 2 | 2 | flinch |
+| 3 | 3, 6, 8, 10, 0xd, 0x10, 0x12 | flinch + hit-back; in the air, the air flinch |
+| 4 | 4, 7, 9, 0xb, 0xf, 0x11 | launch |
+| 0xe | 0xe | motions 23/24 + hit-back |
+
+**Push direction** is the attacker's facing. "From the front" means the defender faces
+against it.
+
+**Motions** (the same ids for every character):
+- **Flinch:** 10 from the front, 12 from behind. 11 and 13 are alternates for some body
+  parts, and a missing motion falls back to its pair.
+- **Air flinch:** 14 / 15, then fall. The defender turns to face along the push and hops 50
+  up, drifting at hit-back × `hit_back_to_jump`.
+- **Launch:** 16 from the front (facing the attacker), 18 from behind. On landing the next
+  motion (17 / 19: down and up) plays, then idle.
+
+**Hit-back distance:**
+- the ATKP's first knockback value, unless it is 32767
+- otherwise `sstm` hit_back (200), or `hit_back_small` (200) for group 3
+- for launches: the launch speed × `blow_to_hit_back` (8)
+- halved for reactions 0xc and 0xd
+
+The push starts at distance × 0.1 per frame, decays ×0.9 per frame, and stops below 1. That
+is about 0.9 × the distance in all.
+
+**Launch:**
+- **Starting speed:** horizontal = ATKP knockback 2, up = knockback 1. When both are 0, the
+  `sstm` defaults apply (40 and 24).
+- **Each 30 Hz tick:**
+  - horizontal speed × `blow_brake_xz` (0.8), floored at `blow_min_xz` (0.1) × the start
+  - rising speed × `blow_brake_up` (0.8)
+  - then gravity 20/49 is added and the fall is capped at `fall_max`
+
+**Examples on your install:**
+- Sora's first swing (ATKP 126: reaction 3, knockback 125) flinches a Shadow and slides it
+  about 110 back.
+- His finishers (129/130: reaction 7, knockback 3–5 / 45) launch it about 300.
+
+## Clashes and guarding
+
+**Checked (exe).** When an attack's shapes meet another attack's shapes, a 7×7 table by
+ATKP kind decides whether they stop each other:
+- normal stops normal, guard and special guard
+- guard stops normal
+- special guard stops normal and pierce-armor
+- pierce armor is stopped only by special guard
+
+**Angle check:** an attack with a reflect range only clashes when the other attack comes at
+its owner's front within that angle (reflect angle turns the cone).
+
+**What each side does:**
+- **Both attacks** stop, unless their ATKP "refact self" is 2. Each owner becomes immune to
+  the other attack.
+- **Sora (party):** if his attack's "refact self" or the other's "refact other" is 2, nothing
+  happens. Otherwise:
+  - on the ground with either one nonzero: the guard repel (motion 42, face the clash, pushed
+    back 200)
+  - otherwise the wall recoil (motion 41 / 43)
+  - either way the clash counts as a connected swing for the combo
+- **Enemy:** unless its "refact self" is 2, it plays its ATKP "reflected motion" and is
+  pushed back by "reflect hit-back" (−1 = 50).
+
+**Sora's Guard** is ATKP 162: kind guard, refact self 2, reflect range 180°.
+- **Against a Shadow's swipe** (ATKP 5: kind normal, reflected motion 140): the swipe stops,
+  the Shadow is repelled into motion 140, and Sora stays in his guard.
+- **Against its dash** (ATKP 7: refact self 2, refact other 1): the dash carries on, Sora is
+  guard-repelled and becomes immune to that dash.
+
+## Enemies (`character_core::npc`, `kh2_data::enemy`)
+
+Each enemy comes from its own files:
+- **Moveset:** `obj/M_EX010.mset` for the Shadow. Enemy movesets index motions by slot.
+- **Skeleton and collision shapes:** its MDLX.
+- **Stats:** ENMP / LVPM.
+- **Weight:** objentry; read, not used yet.
+
+**Hurt shapes** are its type-2 shapes. For the Shadow these are three spheres: bone 2 r40,
+bone 28 r45 and bone 31 r40.
+
+**Attacks** are its motions' hitbox windows, with their ATKP rows at the enemy's level:
+- **201 swipe:** ATKP 5, group 1 (a claw)
+- **202:** ATKP 1313 / 1314
+- **203 dash:** a guard window (ATKP 405), then ATKP 7, which launches
+- **204:** ATKP 8, which launches
+
+**When an enemy attacks is ours.** In the game, each enemy runs a script (BDX) that picks
+its moves. The playground's Shadows walk up and swipe when close, sometimes dash from
+300–550 away, and wait 1.5–3 s between attacks. Damage to Sora goes through
+`combat-core`, and his reaction uses the same routine as above.
+
 ## Not modelled yet
 
-- Reaction animations and knockback physics: the ids are passed to the host as raw numbers.
-- Enemy AI (BDX scripts) and revenge limits per enemy.
+- Enemy AI (BDX scripts) and revenge limits per enemy. Enemy weight and per-enemy
+  resistance to being pushed.
+- Reaction 5 (a push away from the attack's position) and the alternate-part flinches (11 /
+  13).
+- How long Sora is locked in a damage motion. The playground reads the "allow reaction
+  command" window (frame 8): **Hypothesis**.
 - Multiplayer/co-op damage scaling (a global mode flag divides or multiplies damage).
 - Drive forms, limits and summons beyond reading their tables.

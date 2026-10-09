@@ -116,8 +116,48 @@ Unit question still open: the invulnerability timers are treated as 60 Hz frames
 
 ## Landing
 
-The landing motion is 26 frames long. Input is accepted again from its "allow reaction
-command" window (frame 8). **Hypothesis**; the landing action itself has not been traced.
+**Checked (exe).** Touching down switches straight to the idle action. The landing motion
+(26 frames) is only an animation:
+- **Stick held:** walk/run takes over at once, with no slide and no recovery.
+- **Stick neutral:** the landing motion plays and velocity is the stick's, so Sora stops dead.
+  Air momentum isn't carried (this was the "slide on landing").
+- Buttons are accepted again from the motion's "allow reaction command" window (frame 8);
+  **Hypothesis**.
+
+## Ledge grab
+
+**Checked (exe)** unless marked.
+- **When it's checked:** every frame of a jump or fall (the jump action), once the arc is 6
+  frames past its apex (15 frames into a plain fall), with the stick held.
+- **The search:**
+  - centred `hang_height` (150) above the feet
+  - horizontally within `hang_range_xz` (20) + the body radius (90, from the model's type-4
+    collision shape)
+  - vertically from 60 below to 30 above the centre (`hang_range_l` / `hang_range_h`)
+  - so the ledge must be between 90 and 180 above the feet
+- **Too low:** the ledge must also be at least `hang_margin` (210) above the ground under
+  Sora. Lower edges are just jumped onto.
+- **Hanging:** Sora is placed `hang_height` below the edge and 90 out from the wall, facing
+  it, and plays motion 7 (looping).
+- **Climbing:** pushing toward the wall plays motion 8. Its root motion lifts Sora 200 and
+  carries him 110 forward, then he falls onto the top. So holding toward the wall grabs and
+  climbs in one go.
+- **Letting go by pulling away** is ours: the game's release input isn't traced.
+- **Ledges** come from the host. Our arena offers every box's top edges. KH2 takes them from
+  map collision.
+
+## Hitting walls
+
+**Checked (exe).** Attacks whose ATKP flag 0x01 is set ("hits background"; Sora's 126, 128
+and 131) cast a ray each frame from the first attack shape's previous centre to its new one.
+This starts on the window's second frame and only runs until the swing has hit something.
+If the ray misses, a ray straight down by ATKP `floor_check` is tried.
+- **On contact** the swing stops, the combo counts it as connected, and Sora is repelled:
+  - **Ground:** motion 41 (its combo window opens at frame 16) and a hit-back push of 50.
+    That is 5 units/frame decaying ×0.9 per frame, stopping below 1, about 40 units in all.
+  - **Air:** motion 43, a 50-unit hop, drifting back at 50 × `hit_back_to_jump` (0.048).
+- **Background materials:** one surface class (attribute 1) doesn't repel. The playground's
+  boxes all repel.
 
 ## Combo selection
 
@@ -183,7 +223,5 @@ What this produces on your install (`kh2-combat sora`):
 
 ## Still approximated
 
-- **Hitbox placement.** No skeleton yet (Phase 2). Spheres are swept in front of Sora.
-- **Enemy hurtbox and knockback** in the playground.
 - **Auto-target selection** (nearest within reach).
 - **Dodge Roll / Quick Run cancel points.**

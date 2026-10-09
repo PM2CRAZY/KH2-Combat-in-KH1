@@ -18,7 +18,9 @@
 mod clip;
 mod combo;
 mod controller;
+pub mod npc;
 mod params;
+pub mod reaction;
 
 pub use clip::*;
 pub use combo::*;

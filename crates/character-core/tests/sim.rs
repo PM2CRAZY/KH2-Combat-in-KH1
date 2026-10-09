@@ -6,6 +6,7 @@ struct World {
     ch: Character,
     pos: [f32; 3],
     targets: Vec<TargetInfo>,
+    ledges: Vec<Ledge>,
     prev: [bool; 4],
 }
 
@@ -20,7 +21,7 @@ struct Pad {
 
 impl World {
     fn new(ch: Character) -> World {
-        World { ch, pos: [0.0; 3], targets: Vec::new(), prev: [false; 4] }
+        World { ch, pos: [0.0; 3], targets: Vec::new(), ledges: Vec::new(), prev: [false; 4] }
     }
 
     fn step(&mut self, pad: Pad) -> Output {
@@ -32,7 +33,7 @@ impl World {
             lock: Button::from_held(self.prev[3], pad.lock),
         };
         self.prev = [pad.jump, pad.attack, pad.action, pad.lock];
-        let env = Env { pos: self.pos, grounded: self.pos[1] <= 0.0, height_above_ground: self.pos[1].max(0.0), targets: &self.targets };
+        let env = Env { pos: self.pos, grounded: self.pos[1] <= 0.0, height_above_ground: self.pos[1].max(0.0), targets: &self.targets, ledges: &self.ledges };
         let out = self.ch.step(&input, &env);
         for i in 0..3 {
             self.pos[i] += out.displacement[i];
@@ -151,24 +152,29 @@ fn jump_has_takeoff_frames_and_reaches_height() {
 }
 
 #[test]
-fn landing_recovery_then_free() {
+fn landing_keeps_running_with_the_stick_and_stops_dead_without() {
+    // Holding the stick: landing hands over to walk/run at once.
     let mut w = World::new(sora());
     w.ch.abilities.high_jump = 0;
-    w.run(1, Pad { jump: true, ..IDLE });
-    let mut landed_at = None;
+    w.run(1, Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
+    let outs: Vec<_> = (0..200).map(|_| w.step(Pad { stick: [0.0, 1.0], ..IDLE })).collect();
+    let land = outs.iter().filter(|o| o.state == StateName::Land).count();
+    assert!(land <= 1, "landing frames with stick held: {land}");
+
+    // Neutral stick: the land motion plays and Sora does not slide.
+    let mut w = World::new(sora());
+    w.ch.abilities.high_jump = 0;
+    w.run(1, Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
+    let mut landed = None;
     for f in 0..200 {
-        let o = w.step(Pad { stick: [0.0, 1.0], ..IDLE });
-        if o.state == StateName::Land && landed_at.is_none() {
-            landed_at = Some(f);
-        }
-        if let Some(l) = landed_at {
-            if o.state != StateName::Land {
-                assert_eq!(f - l, 8, "8 recovery frames, then the frame-8 window lets the stick through");
-                return;
-            }
+        let before = w.pos;
+        let o = w.step(if landed.is_none() && f < 10 { Pad { stick: [0.0, 1.0], ..IDLE } } else { IDLE });
+        if o.state == StateName::Land {
+            landed.get_or_insert(f);
+            assert!((w.pos[0] - before[0]).abs() < 1e-4 && (w.pos[2] - before[2]).abs() < 1e-4, "slid while landing");
         }
     }
-    panic!("never landed / recovered");
+    assert!(landed.is_some());
 }
 
 #[test]
@@ -308,4 +314,104 @@ fn holding_through_the_roll_turns_it_into_quick_run() {
     let outs = w.run(20, Pad { stick: [1.0, 0.0], action: true, ..IDLE });
     assert_eq!(outs[5].state, StateName::DodgeRoll);
     assert_eq!(outs[12].state, StateName::QuickRun);
+}
+
+fn hanger() -> World {
+    let mut ch = sora();
+    ch.abilities.high_jump = 0;
+    ch.params.hang = HangParams { height: 150.0, margin: 210.0, range_h: 30.0, range_l: 60.0, range_xz: 20.0, body_radius: 90.0 };
+    ch.moveset.clips.insert(motion::HANG, Clip::plain(motion::HANG, 60));
+    let mut climb = Clip::plain(motion::CLIMB, 30);
+    climb.root = (0..=30).map(|f| [0.0, (f as f32 * 20.0).min(200.0), f as f32 * 110.0 / 30.0]).collect();
+    ch.moveset.clips.insert(motion::CLIMB, climb);
+    let mut w = World::new(ch);
+    // A wall whose top is 280 up, 100 ahead (+z); too high to jump onto.
+    w.ledges.push(Ledge { a: [-500.0, 280.0, 100.0], b: [500.0, 280.0, 100.0], out: [0.0, -1.0] });
+    w
+}
+
+#[test]
+fn grabs_a_ledge_after_the_apex_and_hangs() {
+    let mut w = hanger();
+    // Mostly sideways: grabs (stick toward the wall at all) but doesn't climb.
+    let side = Pad { stick: [0.3, 0.05], ..IDLE };
+    let mut hung = false;
+    for _ in 0..120 {
+        if w.step(Pad { jump: true, ..side }).state == StateName::Hang {
+            hung = true;
+            break;
+        }
+    }
+    assert!(hung, "never grabbed");
+    assert!((w.pos[1] - 130.0).abs() < 1e-3 && (w.pos[2] - 10.0).abs() < 1e-3, "hangs 150 below, 90 out: {:?}", w.pos);
+    let x = w.pos[0];
+    w.run(20, IDLE);
+    assert!((w.pos[1] - 130.0).abs() < 1e-3 && w.pos[0] == x, "holds still");
+    // Push toward the wall: climb by the clip's root motion.
+    let outs = w.run(31, Pad { stick: [0.0, 1.0], ..IDLE });
+    assert_eq!(outs[0].state, StateName::Climb);
+    assert!((w.pos[2] - 120.0).abs() < 1.0 && (w.pos[1] - 330.0).abs() < 1.0, "climbed onto the top: {:?}", w.pos);
+}
+
+#[test]
+fn holding_toward_the_wall_grabs_and_climbs_at_once() {
+    let mut w = hanger();
+    let toward = Pad { stick: [0.0, 0.2], ..IDLE };
+    let outs: Vec<_> = (0..120).map(|_| w.step(Pad { jump: true, ..toward })).collect();
+    let i = outs.iter().position(|o| o.state == StateName::Climb).expect("climbed");
+    assert!(outs[..i].iter().all(|o| o.state != StateName::Hang));
+}
+
+#[test]
+fn no_grab_when_the_ledge_is_too_close_to_the_ground() {
+    let mut w = hanger();
+    w.ledges[0].a[1] = 200.0;
+    w.ledges[0].b[1] = 200.0;
+    let toward = Pad { stick: [0.0, 0.2], ..IDLE };
+    let outs: Vec<_> = (0..120).map(|f| w.step(Pad { jump: f < 60, ..toward })).collect();
+    assert!(outs.iter().all(|o| o.state != StateName::Hang));
+}
+
+fn hurt_clips(ch: &mut Character) {
+    for m in [10u16, 11, 12, 13, 14, 15, 16, 17, 18, 19] {
+        let mut c = Clip::plain(m, 30);
+        c.windows.push(Window { start: 8, end: None, kind: WindowKind::AllowReactionCommand });
+        ch.moveset.clips.insert(m, c);
+    }
+}
+
+#[test]
+fn sora_flinches_and_is_pushed_back_by_a_small_hit() {
+    let mut ch = sora();
+    hurt_clips(&mut ch);
+    let mut w = World::new(ch);
+    w.step(IDLE);
+    // Facing +z, hit from the front (push along -z), knockback 125.
+    w.ch.take_hit(&reaction::Hit { reaction: 3, knockback: (125, 0), dir: [0.0, -1.0], part: 0 });
+    let outs = w.run(30, IDLE);
+    assert_eq!(outs[0].state, StateName::Hurt);
+    assert_eq!(outs[0].motion, 10);
+    assert!(w.pos[2] < -100.0 && w.pos[2] > -125.0, "{:?}", w.pos);
+    // Buttons work again from frame 8.
+    let mut w2 = World::new({ let mut c = sora(); hurt_clips(&mut c); c });
+    w2.step(IDLE);
+    w2.ch.take_hit(&reaction::Hit { reaction: 3, knockback: (125, 0), dir: [0.0, -1.0], part: 0 });
+    w2.run(8, IDLE);
+    let o = w2.step(Pad { attack: true, ..IDLE });
+    assert_eq!(o.state, StateName::Attack);
+}
+
+#[test]
+fn sora_is_launched_lands_and_gets_up() {
+    let mut ch = sora();
+    hurt_clips(&mut ch);
+    let mut w = World::new(ch);
+    w.step(IDLE);
+    w.ch.take_hit(&reaction::Hit { reaction: 7, knockback: (24, 40), dir: [0.0, -1.0], part: 0 });
+    let outs = w.run(120, IDLE);
+    assert_eq!(outs[0].state, StateName::Blown);
+    assert!(outs.iter().any(|o| o.state == StateName::Blown && w.pos[1] >= 0.0));
+    let up = outs.iter().position(|o| o.motion == 17).expect("got up with the motion after the launch");
+    assert!(up > 10);
+    assert!(w.pos[2] < -200.0, "{:?}", w.pos);
 }

@@ -147,3 +147,22 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - the motion freeze during a blend
   - group-enable bits from the collision header
   - enemy collision (Phase 3)
+
+### 2026-10-09: playtest fixes, ledge grab, wall hits, Phase 3
+- **Landing (exe):** landing hands over to the idle action. The stick takes over at once, and
+  with a neutral stick Sora stops dead instead of sliding.
+- **Arena:** a box top crossed during a fast fall now counts as ground, and the support and
+  push-out radii match. This fixes slipping off box tops.
+- **Ledge grab (exe):** the search box, timing and placement, using `hang_*` from prty/sstm
+  and the type-4 radius. Motion 7 hangs; motion 8 climbs.
+- **Wall hits (exe):** the BG-hit ATKP flag, the ray from the previous centre, the
+  floor-check ray, and the recoil (motion 41/43, 50 push or hop). The swing counts as
+  connected.
+- **Reactions and clashes (exe):** the shared reaction routine (groups, motions, hit-back
+  distance, launch physics), the 7×7 clash table with angle checks, and the party and enemy
+  clash reactions.
+- **Enemies:**
+  - `kh2_data::enemy` loads the Shadow (M_EX010) from the install
+  - `character_core::npc` runs it
+  - the playground's Shadows attack on our timer, hit Sora and get guarded
+- **Open:** enemy scripts, weight, revenge, Sora's damage-lock length.

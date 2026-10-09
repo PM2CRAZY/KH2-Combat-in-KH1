@@ -350,7 +350,7 @@ fn sora_checks(data: kh2_data::sora::SoraData) -> Result<(), String> {
                 lock: Button::default(),
             };
             self.prev = [p.jump, p.attack, p.action];
-            let env = Env { pos: self.pos, grounded: self.pos[1] <= 0.0, height_above_ground: self.pos[1].max(0.0), targets: &self.targets };
+            let env = Env { pos: self.pos, grounded: self.pos[1] <= 0.0, height_above_ground: self.pos[1].max(0.0), targets: &self.targets, ledges: &[] };
             let o = self.ch.step(&input, &env);
             for i in 0..3 { self.pos[i] += o.displacement[i]; }
             self.pos[1] = self.pos[1].max(0.0);

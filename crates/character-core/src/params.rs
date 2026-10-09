@@ -27,6 +27,29 @@ pub struct MoveParams {
     pub air_drag: f32,
     /// Stick magnitude at or above which the character runs.
     pub run_threshold: f32,
+    /// Ledge grab. `margin == 0` turns it off (as in the game).
+    pub hang: HangParams,
+    /// Horizontal speed per unit of hop height when repelled in the air
+    /// (KH2 `sstm` hit_back_to_jump: 0.048).
+    pub hit_back_to_jump: f32,
+}
+
+/// Ledge-grab numbers (KH2 `prty` hang_height/hang_margin, `sstm`
+/// hang_range_*, and the character's background-collision radius).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HangParams {
+    /// How far below the ledge the feet hang, and where the search is
+    /// centred above the feet.
+    pub height: f32,
+    /// The ledge must be at least this high above the ground below.
+    pub margin: f32,
+    /// Search window above / below the centre.
+    pub range_h: f32,
+    pub range_l: f32,
+    /// Horizontal search reach beyond the body radius.
+    pub range_xz: f32,
+    /// Background-collision radius: hanging keeps this gap from the wall.
+    pub body_radius: f32,
 }
 
 impl Default for MoveParams {
@@ -43,6 +66,8 @@ impl Default for MoveParams {
             air_keep: 0.9,
             air_drag: 0.95,
             run_threshold: 0.5,
+            hang: HangParams::default(),
+            hit_back_to_jump: 0.048,
         }
     }
 }

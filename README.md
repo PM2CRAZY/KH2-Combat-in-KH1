@@ -69,9 +69,16 @@ docs/
 | Combo Plus / Air Combo Plus / Finishing Plus | 6 7 8 | |
 | Attack/guard shapes, hit shapes, skeleton, other collision / reset position | F1 F2 F3 F4 / R | |
 
+Jump at a wall that is slightly too high, holding toward it, to grab the ledge (push toward it to climb, pull away to drop).
+
 The arena has steps, a normal-jump ledge, a High Jump ledge and a tall tower to glide from.
-The dummies are Shadows: their HP, resistances and damage limits come from ENMP/LVPM, and
-hits go through `combat-core`.
+The enemies are Shadows built from your install: their own skeleton and motions (drawn as a
+dark stick figure), hurt shapes, attacks, HP and stats.
+- **When they're hit** they flinch, slide or get launched by the game's reaction rules.
+- **They come at you** with a simple timer of ours (KH2's enemy scripts aren't run). Their
+  claws can hit Sora, and his Guard bounces them off.
+
+Without the Shadow's files the playground falls back to plain column dummies.
 
 ## Using it in another game
 

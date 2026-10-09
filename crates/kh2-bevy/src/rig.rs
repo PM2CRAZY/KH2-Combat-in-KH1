@@ -6,7 +6,10 @@
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use character_core::{motion, Character, Output, StateName};
+use std::collections::HashMap;
+
+use character_core::npc::{NpcOutput, NpcState};
+use character_core::{motion, Character, Clip, Output, StateName};
 use kh2_anim::{evaluate, key_time, Options};
 use combat_core::{Shape as CShape, ShapeKind};
 use kh2_data::sora::{BoneShape, Rig};
@@ -229,6 +232,60 @@ impl RigAnim {
         self.to_world = self.object;
     }
 
+    /// Advances one frame for an enemy from its controller's output. Loops
+    /// (idle, walk) run freely; actions follow the controller's frame.
+    /// Blends: reactions start at once (the generic reaction passes 0);
+    /// everything else uses the default 8 (the enemy scripts choose theirs).
+    pub fn update_npc(&mut self, out: &NpcOutput, clips: &HashMap<u16, Clip>, pos: [f32; 3]) {
+        let rig = self.rig.clone();
+        let prev = self.track;
+        let mut track = if out.looping {
+            let frame = match prev {
+                Some(p) if p.motion == out.motion => p.frame + 1.0,
+                _ => 0.0,
+            };
+            Track { motion: out.motion, frame, looping: true, root: false }
+        } else {
+            Track { motion: out.motion, frame: out.clip_frame as f32 + 1.0, looping: false, root: out.root_motion }
+        };
+        let Some(m) = rig.motions.get(&track.motion).or_else(|| prev.and_then(|t| rig.motions.get(&t.motion))) else { return };
+        if !rig.motions.contains_key(&track.motion) {
+            track = prev.unwrap_or(track);
+        }
+        if let Some(p) = prev {
+            if p.motion != track.motion || track.frame < p.frame {
+                let instant = matches!(out.state, NpcState::Hurt | NpcState::Blown | NpcState::Down | NpcState::Dead);
+                if instant {
+                    self.blend_from = None;
+                } else {
+                    self.blend_from = Some((decompose(&self.bones), Vec::new()));
+                    self.blend_t = blend::MIN;
+                    self.blend_len = blend::DEFAULT;
+                }
+            }
+        }
+        self.track = Some(track);
+        let root = if track.root {
+            clips.get(&track.motion).and_then(|c| c.root.get((track.frame as usize).min(c.root.len().saturating_sub(1)))).copied().unwrap_or([0.0; 3])
+        } else {
+            [0.0; 3]
+        };
+        let unroot = Mat4::from_translation(-Vec3::from(root));
+        let pose = evaluate(&rig.skeleton, m, key_time(m, track.frame, track.looping), Options::default());
+        let mut bones: Vec<Mat4> = pose.bones.iter().map(|b| unroot * *b).collect();
+        if let Some((fb, _)) = &self.blend_from {
+            self.blend_t += 1.0;
+            let w = (self.blend_t / self.blend_len).min(1.0);
+            blend(fb, &mut bones, w);
+            if w >= 1.0 {
+                self.blend_from = None;
+            }
+        }
+        self.bones = bones;
+        self.object = Mat4::from_rotation_translation(Quat::from_rotation_y(out.facing), Vec3::from(pos));
+        self.to_world = self.object;
+    }
+
     fn weapon_pose(&self, rig: &Rig, track: Track, bones: &[Mat4]) -> Vec<Mat4> {
         let Some(hand) = rig.weapon_bone.and_then(|b| bones.get(b)).copied() else { return Vec::new() };
         let m: Option<&Arc<Interpolated>> = rig.weapon_motions.get(&track.motion).or_else(|| rig.weapon_motions.get(&0));
@@ -335,10 +392,13 @@ pub enum Paint {
     Steel,
     Gold,
     Grip,
+    /// Enemies: near-black body, glowing yellow eyes.
+    Shade,
+    Eye,
 }
 
 impl Paint {
-    pub const ALL: [Paint; 7] = [Paint::Jacket, Paint::Pants, Paint::Skin, Paint::Shoe, Paint::Steel, Paint::Gold, Paint::Grip];
+    pub const ALL: [Paint; 9] = [Paint::Jacket, Paint::Pants, Paint::Skin, Paint::Shoe, Paint::Steel, Paint::Gold, Paint::Grip, Paint::Shade, Paint::Eye];
 
     pub fn material(self) -> StandardMaterial {
         let (c, rough, metal) = match self {
@@ -349,8 +409,11 @@ impl Paint {
             Paint::Steel => (Color::srgb(0.82, 0.84, 0.9), 0.25, 0.8),
             Paint::Gold => (Color::srgb(0.95, 0.75, 0.3), 0.3, 0.9),
             Paint::Grip => (Color::srgb(0.2, 0.2, 0.25), 0.6, 0.2),
+            Paint::Shade => (Color::srgb(0.06, 0.05, 0.09), 0.8, 0.0),
+            Paint::Eye => (Color::srgb(1.0, 0.9, 0.2), 0.4, 0.0),
         };
-        StandardMaterial { base_color: c, perceptual_roughness: rough, metallic: metal, ..default() }
+        let emissive = if matches!(self, Paint::Eye) { LinearRgba::rgb(2.0, 1.6, 0.2) } else { LinearRgba::BLACK };
+        StandardMaterial { base_color: c, perceptual_roughness: rough, metallic: metal, emissive, ..default() }
     }
 }
 

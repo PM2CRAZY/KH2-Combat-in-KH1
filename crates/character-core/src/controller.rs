@@ -35,6 +35,11 @@ pub mod motion {
     pub const GLIDE_TURN_B: u16 = 207;
     pub const GLIDE_END: u16 = 208;
     pub const DODGE_ROLL: u16 = 209;
+    pub const HANG: u16 = 7;
+    /// Repelled by a wall (or a guard) on the ground / in the air.
+    pub const REPELLED: u16 = 41;
+    pub const REPELLED_AIR: u16 = 43;
+    pub const CLIMB: u16 = 8;
 }
 
 /// Everything the controller needs to know about a character's moves.
@@ -79,13 +84,24 @@ pub struct TargetInfo {
     pub height: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
+/// A grabbable edge: the top edge of a wall, from `a` to `b`, with `out`
+/// the horizontal unit normal pointing away from the wall.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ledge {
+    pub a: [f32; 3],
+    pub b: [f32; 3],
+    pub out: [f32; 2],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Env<'a> {
     /// Character feet position.
     pub pos: [f32; 3],
     pub grounded: bool,
     pub height_above_ground: f32,
     pub targets: &'a [TargetInfo],
+    /// Ledges near the character (the host may pass all of them).
+    pub ledges: &'a [Ledge],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,6 +118,10 @@ pub enum StateName {
     AerialDodge,
     Guard,
     Attack,
+    Hang,
+    Climb,
+    Hurt,
+    Blown,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -211,6 +231,14 @@ enum ActionKind {
     AerialDodge,
     Guard,
     Attack { row: ComboRow },
+    /// Hanging from a ledge: feet at `at`, wall normal `out`.
+    Hang { at: [f32; 3], out: [f32; 2] },
+    Climb,
+    /// Taking a hit (flinch, air flinch, getting up, guard repel).
+    Hurt,
+    /// Launched by a hit; `step` is the per-frame displacement of the
+    /// current physics tick.
+    Blow { blow: crate::reaction::Blow },
 }
 
 #[derive(Clone, Debug)]
@@ -233,6 +261,12 @@ enum Mode {
     Action(Action),
 }
 
+/// Wall recoil: push-back distance on the ground, hop height in the air
+/// (exe constant 50).
+const WALL_HOP: f32 = 50.0;
+/// Hit-back starting speed per unit of distance (exe: 0.1).
+const HIT_BACK_SPEED: f32 = 0.1;
+
 /// Physics tick length in frames: KH2 recomputes velocities at 30 Hz.
 const DT: f32 = 2.0;
 const DEAD_ZONE: f32 = 0.1;
@@ -245,6 +279,8 @@ pub struct Character {
     /// Growth ability levels 1..=4 at index 0..=3.
     pub growth: Vec<GrowthLevel>,
     pub attack: AttackParams,
+    /// How hits push and launch this character.
+    pub reaction: crate::reaction::ReactionParams,
     pub abilities: Abilities,
     pub combo_rules: ComboRules,
     facing: f32,
@@ -266,6 +302,11 @@ pub struct Character {
     /// The current swing has connected.
     hit: bool,
     buffered_attack: bool,
+    /// Hang point to move onto this frame (a ledge was just grabbed).
+    snap: Option<[f32; 3]>,
+    /// Hit-back push: direction and speed (units/frame), decaying x0.9 per
+    /// frame and dropped below 1 (exe).
+    push: Option<([f32; 2], f32)>,
 }
 
 const TAU: f32 = std::f32::consts::TAU;
@@ -324,6 +365,7 @@ impl Character {
             params,
             growth,
             attack,
+            reaction: crate::reaction::ReactionParams::default(),
             abilities: Abilities::default(),
             combo_rules: ComboRules::default(),
             facing: 0.0,
@@ -342,6 +384,8 @@ impl Character {
             jump_held: false,
             jump_released: false,
             buffered_attack: false,
+            snap: None,
+            push: None,
         }
     }
 
@@ -357,6 +401,104 @@ impl Character {
     /// that follows a connecting swing advances the combo.
     pub fn register_hit(&mut self) {
         self.hit = true;
+    }
+
+    /// Tell the controller its weapon struck a wall (the attack's ray hit
+    /// the background). As in the game: the swing counts as connected (the
+    /// combo goes on), and Sora is repelled. On the ground he plays the
+    /// repelled motion and is pushed back 50 units' worth (5/frame decaying
+    /// by 0.9); in the air he hops 50 up while drifting back.
+    /// Returns false if not attacking.
+    pub fn register_wall_hit(&mut self) -> bool {
+        let Mode::Action(act) = &mut self.mode else { return false };
+        if !matches!(act.kind, ActionKind::Attack { .. }) || matches!(act.motion, motion::REPELLED | motion::REPELLED_AIR) {
+            return false;
+        }
+        self.hit = true;
+        let back = [-self.facing.sin(), -self.facing.cos()];
+        act.frame = 0;
+        act.lunge = 0.0;
+        if self.airborne && self.moveset.clips.contains_key(&motion::REPELLED_AIR) {
+            act.motion = motion::REPELLED_AIR;
+            self.arc = Some(Arc::new(WALL_HOP, self.params.gravity));
+            self.vel_h = scale(back, WALL_HOP * self.params.hit_back_to_jump);
+            self.vel_y = 0.0;
+        } else if self.moveset.clips.contains_key(&motion::REPELLED) {
+            act.motion = motion::REPELLED;
+            self.vel_h = [0.0; 2];
+            self.push = Some((back, WALL_HOP * HIT_BACK_SPEED));
+        }
+        true
+    }
+
+    /// Takes a hit: the game's generic reaction (flinch, air flinch,
+    /// launch, push), as for enemies. Interrupts whatever was going on.
+    pub fn take_hit(&mut self, hit: &crate::reaction::Hit) {
+        use crate::reaction::Response;
+        let clips = &self.moveset.clips;
+        let r = crate::reaction::respond(hit, self.forward(), self.airborne, |m| clips.contains_key(&m), &self.reaction);
+        match r {
+            Response::None => {}
+            Response::Push { distance } => self.hit_back(hit.dir, distance),
+            Response::Flinch { motion, push } => {
+                self.reset_combo();
+                self.arc = None;
+                self.vel_h = [0.0; 2];
+                self.start_action(ActionKind::Hurt, motion);
+                if let Some(d) = push {
+                    self.hit_back(hit.dir, d);
+                }
+            }
+            Response::AirFlinch { motion, face, hop_speed } => {
+                self.reset_combo();
+                self.facing = yaw_of(face);
+                self.arc = Some(Arc::new(WALL_HOP, self.params.gravity));
+                self.airborne = true;
+                self.vel_h = scale(hit.dir, hop_speed);
+                self.vel_y = 0.0;
+                self.start_action(ActionKind::Hurt, motion);
+            }
+            Response::Blow { motion, face, vel_h, up } => {
+                self.reset_combo();
+                self.facing = yaw_of(face);
+                self.arc = None;
+                self.push = None;
+                self.airborne = true;
+                self.vel_h = [0.0; 2];
+                self.vel_y = 0.0;
+                let blow = crate::reaction::Blow::new(vel_h, up, &self.reaction);
+                self.start_action(ActionKind::Blow { blow }, motion);
+            }
+        }
+    }
+
+    /// An attack of Sora's met another attack or a guard (the game's party
+    /// clash reaction). `mine_self` is Sora's attack's ATKP "refact self",
+    /// `other_other` the other attack's "refact other". 2 on either side:
+    /// nothing happens. Otherwise, on the ground with either nonzero: guard
+    /// repel (face `toward`, play the guard motion, pushed back 200). Else
+    /// the wall-hit recoil.
+    pub fn clash(&mut self, mine_self: u8, other_other: u8, toward: [f32; 2]) {
+        self.hit = true;
+        if mine_self == 2 || other_other == 2 {
+            return;
+        }
+        if !self.airborne && (mine_self != 0 || other_other != 0) && self.clip(motion::GUARD).is_some() {
+            self.facing = yaw_of(toward);
+            self.vel_h = [0.0; 2];
+            self.start_action(ActionKind::Hurt, motion::GUARD);
+            self.hit_back([-toward[0], -toward[1]], 200.0);
+            return;
+        }
+        if !self.register_wall_hit() {
+            self.hit_back([-toward[0], -toward[1]], WALL_HOP);
+        }
+    }
+
+    /// Starts a hit-back push of `distance` along `dir` (x, z): initial
+    /// speed distance x 0.1, decaying x0.9 per frame (exe).
+    pub fn hit_back(&mut self, dir: [f32; 2], distance: f32) {
+        self.push = Some((norm(dir), distance * HIT_BACK_SPEED));
     }
 
     pub fn combo_count(&self) -> u8 {
@@ -653,6 +795,54 @@ impl Character {
         false
     }
 
+    /// KH2's ledge grab, checked every frame of a jump or fall once the
+    /// arc is 6 frames past its apex (15 frames into a plain fall), with the
+    /// stick held (read from the exe; the stick-toward-wall part is ours).
+    fn try_hang(&mut self, input: &Input, env: &Env) -> bool {
+        let h = self.params.hang.clone();
+        if h.margin == 0.0 || len2(input.stick) <= DEAD_ZONE || self.clip(motion::HANG).is_none() {
+            return false;
+        }
+        let Some(arc) = self.arc else { return false };
+        let after = if arc.uptime > 0.0 { arc.uptime + 6.0 } else { 15.0 };
+        if arc.t <= after {
+            return false;
+        }
+        let p = [env.pos[0], env.pos[1] + h.height, env.pos[2]];
+        let reach = h.range_xz + h.body_radius;
+        let ground = env.pos[1] - env.height_above_ground;
+        let stick = norm(input.stick);
+        let mut best: Option<([f32; 3], [f32; 2], f32)> = None;
+        for l in env.ledges {
+            // Pushing toward the wall.
+            if stick[0] * -l.out[0] + stick[1] * -l.out[1] <= 0.0 {
+                continue;
+            }
+            let q = closest_on_segment(l.a, l.b, p);
+            if q[1] < p[1] - h.range_l || q[1] > p[1] + h.range_h {
+                continue;
+            }
+            if q[1] - ground < h.margin {
+                continue;
+            }
+            let d = dist_h(p, q);
+            if d > reach || best.map_or(false, |b| b.2 <= d) {
+                continue;
+            }
+            best = Some((q, l.out, d));
+        }
+        let Some((q, out, _)) = best else { return false };
+        let at = [q[0] + out[0] * h.body_radius, q[1] - h.height, q[2] + out[1] * h.body_radius];
+        self.facing = yaw_of([-out[0], -out[1]]);
+        self.arc = None;
+        self.vel_h = [0.0; 2];
+        self.vel_y = 0.0;
+        self.reset_combo();
+        self.snap = Some(at);
+        self.start_action(ActionKind::Hang { at, out }, motion::HANG);
+        true
+    }
+
     fn reset_combo(&mut self) {
         self.count = 0;
         self.finishers = 0;
@@ -697,6 +887,23 @@ impl Character {
                     self.mode = Mode::Free;
                     self.reset_combo();
                 }
+                ActionKind::Blow { .. } => {
+                    // Landing from a launch: the motion after it (down and up).
+                    let m = a.motion + 1;
+                    self.vel_h = [0.0; 2];
+                    if self.clip(m).is_some() {
+                        self.start_action(ActionKind::Hurt, m);
+                    } else {
+                        self.mode = Mode::Free;
+                    }
+                }
+                ActionKind::Hurt => {
+                    self.vel_h = [0.0; 2];
+                    self.mode = Mode::Free;
+                    if land {
+                        self.start_action(ActionKind::Land, motion::LAND);
+                    }
+                }
                 _ => {}
             },
         }
@@ -706,7 +913,8 @@ impl Character {
     pub fn step(&mut self, input: &Input, env: &Env) -> Output {
         self.update_lock(input, env);
         let was_airborne = self.airborne;
-        let rising = self.arc.map_or(false, |a| a.rising());
+        let rising = self.arc.map_or(false, |a| a.rising())
+            || matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Blow { blow }, frame, .. }) if blow.vel_y > 0.0 || *frame == 0);
         self.airborne = !env.grounded || rising;
         if was_airborne && !self.airborne {
             self.land();
@@ -733,6 +941,17 @@ impl Character {
             inp = Input { attack: release(input.attack), jump: release(input.jump), action: release(input.action), ..*input };
         }
 
+        if let Some((dir, v)) = self.push {
+            fo.root[0] += dir[0] * v;
+            fo.root[2] += dir[1] * v;
+            let next = v * 0.9;
+            self.push = if next < 1.0 { None } else { Some((dir, next)) };
+        }
+        if let Some(at) = self.snap.take() {
+            for i in 0..3 {
+                fo.root[i] += at[i] - env.pos[i];
+            }
+        }
         if self.tick % 2 == 0 {
             self.physics(input, env, fo.no_gravity);
         }
@@ -764,6 +983,9 @@ impl Character {
                     || (input.jump.pressed && self.try_jump(input, env))
                     || (input.action.pressed && self.try_action_button(input))
                 {
+                    return true;
+                }
+                if self.airborne && self.try_hang(input, env) {
                     return true;
                 }
                 if moving {
@@ -858,14 +1080,16 @@ impl Character {
                 }
             }
             ActionKind::Land => {
-                // Inputs are accepted once the reaction-command window opens
-                // (frame 8 for Sora).
+                // Landing hands control to the idle action at once (exe):
+                // the land motion only plays while the stick is neutral, and
+                // moving switches straight to walk/run. Buttons are accepted
+                // once the reaction-command window opens (frame 8 for Sora).
+                if len2(input.stick) > DEAD_ZONE {
+                    finished = true;
+                }
                 let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(0);
                 if f >= open {
                     cancel_allowed = true;
-                    if len2(input.stick) > DEAD_ZONE {
-                        finished = true;
-                    }
                 }
             }
             ActionKind::DodgeRoll => {
@@ -922,6 +1146,51 @@ impl Character {
                 }
             }
             ActionKind::Guard => {}
+            ActionKind::Hang { at, out } => {
+                // Hold on the hang point (the grab moved us there; the hang
+                // motion loops).
+                let _ = at;
+                fo.no_gravity = true;
+                let toward = input.stick[0] * -out[0] + input.stick[1] * -out[1];
+                act.frame += 1;
+                if toward > DEAD_ZONE && self.clip(motion::CLIMB).is_some() {
+                    // Push toward the wall: climb up (exe).
+                    self.start_action(ActionKind::Climb, motion::CLIMB);
+                    return true;
+                }
+                if toward < -DEAD_ZONE {
+                    // Pull away: let go (ours; the game's release input
+                    // isn't traced yet).
+                    self.mode = Mode::Free;
+                    self.arc = Some(Arc::fall());
+                    return false;
+                }
+                let len = clip.length.max(1);
+                fo.clip_frame = f % len;
+                self.mode = Mode::Action(act);
+                return false;
+            }
+            ActionKind::Climb => fo.no_gravity = true,
+            ActionKind::Hurt => {
+                // Buttons are taken once the reaction-command window opens
+                // (frame 8 for Sora's damage motions); our reading.
+                let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
+                if f >= open {
+                    cancel_allowed = true;
+                }
+                if self.airborne && f >= clip.length {
+                    // Air flinch done: keep falling.
+                    finished = true;
+                }
+            }
+            ActionKind::Blow { .. } => {
+                fo.no_gravity = true;
+                // Hold the last frame until landing.
+                finished = false;
+                if f + 1 >= clip.length {
+                    act.frame = f;
+                }
+            }
             ActionKind::Attack { .. } => {
                 if input.attack.pressed {
                     self.buffered_attack = true;
@@ -1005,7 +1274,29 @@ impl Character {
                 ActionKind::Jump { .. } => {
                     self.vel_h = if self.airborne { air_control(self, true) } else { scale(stick_dir, ground_speed) };
                 }
-                ActionKind::Land => {}
+                // Idle-action movement: velocity is the stick, no momentum
+                // carried from the air.
+                ActionKind::Land => self.vel_h = scale(stick_dir, ground_speed),
+                ActionKind::Hang { .. } | ActionKind::Climb => {
+                    self.vel_h = [0.0; 2];
+                    self.vel_y = 0.0;
+                    gravity = false;
+                }
+                ActionKind::Hurt => {
+                    if !self.airborne {
+                        self.vel_h = [0.0; 2];
+                    }
+                }
+                ActionKind::Blow { blow } => {
+                    let mut b = *blow;
+                    let d = b.tick(DT, &self.reaction);
+                    self.vel_h = [d[0] / DT, d[2] / DT];
+                    self.vel_y = d[1] / DT;
+                    gravity = false;
+                    if let Mode::Action(a) = &mut self.mode {
+                        a.kind = ActionKind::Blow { blow: b };
+                    }
+                }
                 ActionKind::DodgeRoll | ActionKind::Guard => self.vel_h = [0.0; 2],
                 ActionKind::QuickRun => {
                     let b = act.brake;
@@ -1034,7 +1325,7 @@ impl Character {
         } else if gravity {
             let arc = self.arc.get_or_insert_with(Arc::fall);
             self.vel_y = arc.advance(DT, p.gravity, p.fall_max) / DT;
-        } else if !matches!(self.mode, Mode::Glide) {
+        } else if !matches!(self.mode, Mode::Glide | Mode::Action(Action { kind: ActionKind::Blow { .. }, .. })) {
             self.vel_y = 0.0;
         }
     }
@@ -1061,9 +1352,20 @@ impl Character {
                 ActionKind::AerialDodge => StateName::AerialDodge,
                 ActionKind::Guard => StateName::Guard,
                 ActionKind::Attack { .. } => StateName::Attack,
+                ActionKind::Hang { .. } => StateName::Hang,
+                ActionKind::Climb => StateName::Climb,
+                ActionKind::Hurt => StateName::Hurt,
+                ActionKind::Blow { .. } => StateName::Blown,
             },
         }
     }
+}
+
+fn closest_on_segment(a: [f32; 3], b: [f32; 3], p: [f32; 3]) -> [f32; 3] {
+    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    let t = if l2 > 0.0 { (((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]
 }
 
 fn dist_h(a: [f32; 3], b: [f32; 3]) -> f32 {

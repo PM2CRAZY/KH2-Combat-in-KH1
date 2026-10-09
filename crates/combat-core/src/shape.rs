@@ -153,6 +153,11 @@ impl AttackVolume {
         AttackVolume::default()
     }
 
+    /// Centres remembered from the previous frame (empty on the first).
+    pub fn previous(&self) -> &[[f32; 3]] {
+        &self.previous
+    }
+
     /// This frame's shapes plus their sweep copies; remembers the centres
     /// for the next frame. Pass the shapes in the same order every frame.
     pub fn update(&mut self, shapes: &[Shape]) -> Vec<Shape> {

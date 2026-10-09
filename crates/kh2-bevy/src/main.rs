@@ -9,6 +9,7 @@
 //! Run:  kh2-playground --game "D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe"
 //! (or set KH2_GAME). See the HUD for controls.
 
+mod foes;
 mod rig;
 mod synthetic;
 mod world;
@@ -57,6 +58,7 @@ fn main() {
 
     let synthetic = args.iter().any(|a| a == "--synthetic");
     let mut tried = Vec::new();
+    let mut used: Option<Install> = None;
     let loaded = if synthetic {
         Ok(synthetic::data())
     } else if let Some(dir) = arg("--data-dir") {
@@ -65,8 +67,9 @@ fn main() {
     } else {
         let mut result = Err(kh2_data::Error::Format("no path given".into()));
         for c in &candidates {
-            match Install::locate(c).and_then(|i| i.load_sora(source)) {
-                Ok(d) => {
+            match Install::locate(c).and_then(|i| i.load_sora(source).map(|d| (i, d))) {
+                Ok((i, d)) => {
+                    used = Some(i);
                     if c != &candidates[0] {
                         eprintln!("note: loaded KH2 data from fallback path {c}");
                     }
@@ -80,6 +83,24 @@ fn main() {
             }
         }
         result
+    };
+    // The Shadows: their own files from the same place.
+    let enemy = match (&loaded, synthetic) {
+        (Ok(d), false) => {
+            let r = match (&used, arg("--data-dir")) {
+                (Some(i), _) => i.load_enemy(source, kh2_data::enemy::SHADOW, &d.combat),
+                (None, Some(dir)) => kh2_data::enemy::load_enemy_dir(std::path::Path::new(&dir), kh2_data::enemy::SHADOW, &d.combat),
+                _ => Err(kh2_data::Error::Format("no install".into())),
+            };
+            match r {
+                Ok(e) => Some(e),
+                Err(e) => {
+                    eprintln!("note: the Shadow could not be loaded ({e}); using column dummies");
+                    None
+                }
+            }
+        }
+        _ => None,
     };
     if let Ok(Some(e)) = loaded.as_ref().map(|d| d.rig_error.as_ref()) {
         eprintln!("note: Sora's skeleton/animations could not be loaded ({e}); using the capsule");
@@ -111,8 +132,8 @@ fn main() {
         show_skeleton: args.iter().any(|a| a == "--show-skeleton"),
         show_other: args.iter().any(|a| a == "--show-other"),
         log: Vec::new(), last: None })
-    .insert_resource(Shot { after_frames: screenshot_after, frames: 0 })
-    .insert_resource(Autoplay { on: autoplay || scene.is_some(), frame: 0, scene: scene.unwrap_or_default() })
+    .insert_resource(Shot { after_frames: screenshot_after, frames: 0, pause_at: arg("--pause-at").and_then(|v| v.parse().ok()) })
+    .insert_resource(Autoplay { on: autoplay || scene.is_some(), frame: 0, scene: scene.unwrap_or_default(), trace: args.iter().any(|a| a == "--trace") })
     .add_systems(Startup, (world::spawn_arena, spawn_camera_and_light));
 
     match loaded {
@@ -153,9 +174,24 @@ fn main() {
                 combo_plus: 0,
                 volumes: HashMap::new(),
                 live_attacks: Vec::new(),
+                bg_flags: data.combat.battle.atkp.iter().filter(|a| a.sub() == 0).map(|a| (a.id, (a.flags & 1 != 0, a.floor_check))).collect(),
+                connected: Default::default(),
+                clinked: Default::default(),
+                sparks: Vec::new(),
+                atkp_raw: {
+                    let mut m = HashMap::new();
+                    for a in data.combat.battle.atkp.iter().filter(|a| a.sub() == 0) {
+                        m.entry(a.id).or_insert_with(|| a.clone());
+                    }
+                    m
+                },
+                foe_kit: enemy.map(|e| foes::FoeKit::new(e, &data.combat, dummy_level)),
+                sora_hits: Vec::new(),
+                sora_guards: Vec::new(),
+                sora_hit_by: Default::default(),
             })
             .add_systems(Startup, (spawn_player, spawn_dummies))
-            .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
+            .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, foes::sync_pieces, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
             .add_systems(FixedUpdate, simulate);
         }
         Err(_) => {
@@ -207,6 +243,22 @@ struct Game {
     volumes: HashMap<(u64, bool), AttackVolume>,
     /// This frame's attack shapes including sweep copies (for drawing).
     live_attacks: Vec<CShape>,
+    /// ATKP id -> (strikes walls, floor-check ray length).
+    bg_flags: HashMap<u16, (bool, u8)>,
+    /// Live windows that already connected with a target / bounced off a wall.
+    connected: std::collections::HashSet<u64>,
+    clinked: std::collections::HashSet<u64>,
+    /// Wall-hit sparks: position and frames left.
+    sparks: Vec<(Vec3, u32)>,
+    /// Every ATKP row (sub 0) by id, for clash and reaction rules.
+    atkp_raw: HashMap<u16, kh2_formats::battle::Atkp>,
+    /// Shadows' data (absent without an install or with --synthetic).
+    foe_kit: Option<foes::FoeKit>,
+    /// Sora's live attack / guard windows and their shapes this frame.
+    sora_hits: Vec<(character_core::ActiveHitbox, Vec<CShape>)>,
+    sora_guards: Vec<(character_core::ActiveHitbox, Vec<CShape>)>,
+    /// (Shadow id, swing) pairs that already hit or clashed with Sora.
+    sora_hit_by: std::collections::HashSet<(u32, u64)>,
 }
 
 #[derive(Resource)]
@@ -223,6 +275,9 @@ struct Debug {
 struct Shot {
     after_frames: Option<u32>,
     frames: u32,
+    /// `--pause-at N`: stop the simulation at frame N (for screenshots of
+    /// a given moment).
+    pause_at: Option<u64>,
 }
 
 /// Button presses seen since the last fixed step, so short taps are never lost.
@@ -242,6 +297,8 @@ struct Autoplay {
     on: bool,
     frame: u32,
     scene: String,
+    /// `--trace`: print state and position every frame (stderr).
+    trace: bool,
 }
 
 #[derive(Resource)]
@@ -271,6 +328,8 @@ struct Dummy {
     knock_frames: u32,
     respawn: u32,
     flash: u32,
+    /// A Shadow on its own skeleton (absent: a plain column dummy).
+    foe: Option<foes::FoeState>,
 }
 
 fn spawn_camera_and_light(mut commands: Commands) {
@@ -335,15 +394,41 @@ fn spawn_dummies(mut commands: Commands, game: Res<Game>, mut meshes: ResMut<Ass
     let mesh = meshes.add(Cylinder::new(DUMMY_RADIUS * SCALE, DUMMY_HEIGHT * SCALE));
     let mat = mats.add(Color::srgb(0.15, 0.15, 0.2));
     let spots = [[0.0, 0.0, 0.0], [200.0, 0.0, 150.0], [-250.0, 0.0, 120.0], [600.0, 0.0, 600.0], [-700.0, 0.0, 500.0]];
+    let sphere = meshes.add(Sphere::new(0.5).mesh().uv(16, 10));
+    let paints: HashMap<Paint, Handle<StandardMaterial>> = Paint::ALL.iter().map(|p| (*p, mats.add(p.material()))).collect();
     for (i, p) in spots.iter().enumerate() {
         let mut c = template.clone();
         c.id = 100 + i as u32;
-        commands.spawn((
-            Dummy { id: c.id, home: *p, pos: *p, combatant: c, knock: [0.0; 2], knock_frames: 0, respawn: 0, flash: 0 },
-            Mesh3d(mesh.clone()),
-            MeshMaterial3d(mat.clone()),
-            Transform::from_xyz(p[0] * SCALE, DUMMY_HEIGHT * 0.5 * SCALE, p[2] * SCALE),
-        ));
+        let mut dm = Dummy { id: c.id, home: *p, pos: *p, combatant: c, knock: [0.0; 2], knock_frames: 0, respawn: 0, flash: 0, foe: None };
+        let Some(kit) = &game.foe_kit else {
+            commands.spawn((dm, Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), Transform::from_xyz(p[0] * SCALE, DUMMY_HEIGHT * 0.5 * SCALE, p[2] * SCALE)));
+            continue;
+        };
+        // Face the arena's centre-ish (toward -z) to start.
+        let mut st = foes::FoeState::new(kit, i as u32 * 7919 + 13, PI);
+        // Pose once so capsule lengths can be measured.
+        let out = st.npc.step(&Default::default(), true);
+        st.anim.update_npc(&out, &kit.data.clips, *p);
+        let pieces = foes::pieces(kit);
+        let lens: Vec<f32> = pieces
+            .iter()
+            .map(|pc| match pc.shape {
+                Shape::Capsule(a, b, _) => match (st.anim.anchor(Part::Body, a), st.anim.anchor(Part::Body, b)) {
+                    (Some(a), Some(b)) => a.distance(b),
+                    _ => 0.0,
+                },
+                _ => 0.0,
+            })
+            .collect();
+        dm.foe = Some(st);
+        let owner = commands.spawn((dm, Transform::default(), Visibility::default())).id();
+        for (pc, len) in pieces.into_iter().zip(lens) {
+            let m = match pc.shape {
+                Shape::Capsule(_, _, r) => meshes.add(Capsule3d::new(r * SCALE, len * SCALE).mesh().rings(2).latitudes(8).longitudes(10)),
+                Shape::Sphere(..) => sphere.clone(),
+            };
+            commands.spawn((foes::FoePiece { owner, piece: pc }, Mesh3d(m), MeshMaterial3d(paints[&pc.paint].clone()), Transform::default(), Visibility::default()));
+        }
     }
 }
 
@@ -561,9 +646,14 @@ fn simulate(
     rig: Res<CameraRig>,
     mut dummies: Query<&mut Dummy>,
     mut dbg: ResMut<Debug>,
+    shot: Res<Shot>,
 ) {
     let game = &mut *game;
+    if shot.pause_at.is_some_and(|p| game.frame >= p) {
+        return;
+    }
     game.frame += 1;
+    let log_before = dbg.log.len();
     if auto.on {
         auto.frame += 1;
         let f = auto.frame;
@@ -577,6 +667,40 @@ fn simulate(
             "idle" => latch.stick = Vec2::ZERO,
             "run" => latch.stick = Vec2::X,
             "jump" => press(0, f % 90 == 5, &mut latch),
+            // Stand still and guard every 40 frames: Shadows' swipes bounce off.
+            "guard" => {
+                latch.stick = Vec2::ZERO;
+                press(2, f % 40 == 1, &mut latch);
+            }
+            // Swing at a wall: the Keyblade clinks off.
+            "wall" => {
+                // The far side of the 300-high block, away from the dummies'
+                // auto-target range; face -x.
+                if f == 1 {
+                    game.pos = [1290.0, 0.0, 0.0];
+                }
+                let d = Vec2::new(rig.yaw.sin(), rig.yaw.cos());
+                let right = Vec2::new(-d.y, d.x);
+                let w = Vec2::new(-1.0, 0.0);
+                latch.stick = if f < 20 { Vec2::new(w.dot(right), w.dot(d)) * 0.3 } else { Vec2::ZERO };
+                press(1, f >= 20 && f % 8 < 4, &mut latch);
+            }
+            // Jump at the 300-high ledge from the floor: grab, then climb.
+            "hang" => {
+                if f == 1 {
+                    game.pos = [700.0, 0.0, -60.0];
+                    game.character.abilities.high_jump = 0;
+                }
+                // World direction -> camera-relative stick.
+                let d = Vec2::new(rig.yaw.sin(), rig.yaw.cos());
+                let right = Vec2::new(-d.y, d.x);
+                let to_stick = |w: Vec2| Vec2::new(w.dot(right), w.dot(d));
+                // Toward the wall (+x) and mostly sideways
+                // (grab and hang) until frame 150, then push in (climb).
+                latch.stick = if f < 150 { to_stick(Vec2::new(0.05, 0.3)) } else { to_stick(Vec2::new(1.0, 0.0)) };
+                press(0, f == 5, &mut latch);
+                latch.held[0] = f >= 5 && f < 60;
+            }
             "roll" => {
                 latch.stick = Vec2::X;
                 press(2, f % 60 == 5, &mut latch);
@@ -607,12 +731,14 @@ fn simulate(
 
     let targets: Vec<TargetInfo> = dummies.iter().filter(|d| d.respawn == 0).map(|d| TargetInfo { id: d.id, pos: d.pos, radius: DUMMY_RADIUS, height: DUMMY_HEIGHT }).collect();
     let arena = Arena::new(ARENA_BOXES);
+    let ledges = arena.ledges();
     let ground = arena.ground_below(game.pos, SORA_RADIUS);
     let env = Env {
         pos: game.pos,
         grounded: game.grounded,
         height_above_ground: game.pos[1] - ground,
         targets: &targets,
+        ledges: &ledges,
     };
     let out = game.character.step(&input, &env);
 
@@ -633,7 +759,7 @@ fn simulate(
         }
     }
     p[1] += out.displacement[1];
-    let ground = arena.ground_below(p, SORA_RADIUS);
+    let ground = arena.ground_crossed(game.pos[1], p, SORA_RADIUS);
     game.grounded = false;
     if p[1] <= ground + 0.5 && out.displacement[1] <= 0.5 {
         // Step down small ledges while grounded, otherwise land.
@@ -654,34 +780,84 @@ fn simulate(
     // last frame, tested against each target's shapes (the game's test).
     let live: std::collections::HashSet<(u64, bool)> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| (h.swing, h.weapon)).collect();
     game.volumes.retain(|k, _| live.contains(k));
+    game.connected.retain(|s| live.iter().any(|k| k.0 == *s));
+    game.clinked.retain(|s| live.iter().any(|k| k.0 == *s));
+    game.sparks.retain_mut(|s| {
+        s.1 -= 1;
+        s.1 > 0
+    });
     game.live_attacks.clear();
+    game.sora_guards.clear();
+    game.sora_hits.clear();
     for h in &out.guard_boxes {
         let shapes = attack_shapes(game, out.facing, h.group, h.weapon);
         let swept = game.volumes.entry((h.swing, h.weapon)).or_default().update(&shapes);
-        game.live_attacks.extend(swept);
+        game.live_attacks.extend(swept.iter().copied());
+        game.sora_guards.push((*h, swept));
     }
     for h in &out.hitboxes {
         let shapes = attack_shapes(game, out.facing, h.group, h.weapon);
+        let prev0 = game.volumes.get(&(h.swing, h.weapon)).and_then(|v| v.previous().first().copied());
         let swept = game.volumes.entry((h.swing, h.weapon)).or_default().update(&shapes);
         game.live_attacks.extend(swept.iter().copied());
+        if game.clinked.contains(&h.swing) {
+            // Bounced off a wall or another attack: no longer live.
+            continue;
+        }
+        game.sora_hits.push((*h, swept.clone()));
+        // Wall strike (exe): attacks flagged to hit the background cast a
+        // ray from the first shape's last centre to its new one (from the
+        // second frame on), then, if that misses, straight down by the
+        // floor-check length. Only while the swing hasn't connected yet.
+        let (bg, floor) = game.bg_flags.get(&h.attack).copied().unwrap_or((false, 0));
+        if bg && !game.connected.contains(&h.swing) && !game.clinked.contains(&h.swing) {
+            if let (Some(p0), Some(s0)) = (prev0, shapes.first()) {
+                let (a, b) = (Vec3::from(p0), Vec3::from(s0.center));
+                let mut at = arena.raycast(a, b);
+                if at.is_none() && floor > 0 {
+                    at = arena.raycast(b, b - Vec3::Y * floor as f32);
+                }
+                if let Some(at) = at {
+                    game.clinked.insert(h.swing);
+                    if game.character.register_wall_hit() {
+                        game.sparks.push((at, 20));
+                        dbg.log.push(format!("clink! atkp {} hit the wall", h.attack));
+                    }
+                    continue;
+                }
+            }
+        }
         let Some(attack) = game.attacks.get(&h.attack).cloned() else { continue };
         for mut dm in dummies.iter_mut() {
             if dm.respawn > 0 {
                 continue;
             }
-            if first_overlap(&swept, &[dummy_shape(dm.pos)]).is_none() {
+            let target = match &dm.foe {
+                Some(st) if st.npc.is_dead() => continue,
+                Some(st) => st.hurt_shapes(),
+                None => vec![dummy_shape(dm.pos)],
+            };
+            if first_overlap(&swept, &target).is_none() {
                 continue;
             }
             let sora = game.sora.clone();
             let r = game.tracker.try_hit(game.frame, h.swing, &game.rules, &attack, &sora, &mut dm.combatant);
             if r.blocked.is_none() {
+                game.connected.insert(h.swing);
                 game.character.register_hit();
                 let fwd = [out.facing.sin(), out.facing.cos()];
-                // Knockback: ATKP strength spread over 10 frames
-                // (approximation; the real push depends on enemy weight).
-                let k = r.knockback.0.clamp(0.0, 400.0) / 10.0 * 0.3;
-                dm.knock = [fwd[0] * k, fwd[1] * k];
-                dm.knock_frames = 10;
+                if dm.foe.is_some() {
+                    // The game's generic reaction (flinch / push / launch).
+                    if let Some(atk) = game.atkp_raw.get(&h.attack).cloned() {
+                        foes::react(&mut dm, &atk, out.facing, r.killed);
+                    }
+                } else {
+                    // Column dummy: ATKP strength spread over 10 frames
+                    // (approximation).
+                    let k = r.knockback.0.clamp(0.0, 400.0) / 10.0 * 0.3;
+                    dm.knock = [fwd[0] * k, fwd[1] * k];
+                    dm.knock_frames = 10;
+                }
                 dm.flash = 6;
                 let line = format!(
                     "hit Shadow#{} with atkp {} ({}%): {} dmg  HP {}/{}{}",
@@ -700,6 +876,111 @@ fn simulate(
             }
         }
     }
+    if auto.trace {
+        for l in &dbg.log[log_before.min(dbg.log.len())..] {
+            eprintln!("log f{} {l}", game.frame);
+        }
+    }
+    let log_mid = dbg.log.len();
+    // Shadows act, then their attacks meet Sora's guard, attacks and body.
+    let kit = game.foe_kit.take();
+    if let Some(kit) = kit.as_ref() {
+        for mut dm in dummies.iter_mut() {
+            let dead_hidden = dm.respawn > 0 && dm.foe.as_ref().map_or(true, |s| !s.npc.is_dead());
+            if !dead_hidden {
+                foes::step(&mut dm, kit, game.pos, &arena, SORA_RADIUS);
+            }
+        }
+        let sora_hurt = game.anim.as_ref().map(|a| a.hurt_shapes()).unwrap_or_default();
+        let sora_facing = out.facing;
+        let mut live_pairs = std::collections::HashSet::new();
+        for mut dm in dummies.iter_mut() {
+            let foe_pos = dm.pos;
+            let Dummy { foe, combatant, id, .. } = &mut *dm;
+            let Some(st) = foe.as_mut() else { continue };
+            if st.npc.is_dead() {
+                continue;
+            }
+            let foe_facing = st.npc.facing();
+            let to_foe = {
+                let d = [foe_pos[0] - game.pos[0], foe_pos[2] - game.pos[2]];
+                let l = (d[0] * d[0] + d[1] * d[1]).sqrt().max(1e-3);
+                [d[0] / l, d[1] / l]
+            };
+            for (h, shapes) in st.live.clone() {
+                live_pairs.insert((*id, h.swing));
+                if st.spent.contains(&h.swing) || game.sora_hit_by.contains(&(*id, h.swing)) {
+                    continue;
+                }
+                let Some(fatk) = game.atkp_raw.get(&h.attack).cloned() else { continue };
+                // Clash with Sora's guard or attack (exe table and angles).
+                let mut clashed = None;
+                for (sh, sshapes) in game.sora_guards.iter().chain(game.sora_hits.iter()) {
+                    let Some(satk) = game.atkp_raw.get(&sh.attack) else { continue };
+                    if !foes::clashes(satk, &fatk) {
+                        continue;
+                    }
+                    let ok = character_core::reaction::clash_angle_ok(satk.reflect_range, satk.reflect_angle, sora_facing, [foe_facing.sin(), foe_facing.cos()])
+                        && character_core::reaction::clash_angle_ok(fatk.reflect_range, fatk.reflect_angle, foe_facing, [sora_facing.sin(), sora_facing.cos()]);
+                    if ok && foes::overlap(sshapes, &shapes) {
+                        clashed = Some((*sh, satk.clone(), sshapes.first().map(|s| s.center)));
+                        break;
+                    }
+                }
+                if let Some((sh, satk, at)) = clashed {
+                    st.spent.insert(h.swing);
+                    game.sora_hit_by.insert((*id, h.swing));
+                    if satk.refact_self != 2 {
+                        game.clinked.insert(sh.swing);
+                    }
+                    game.character.clash(satk.refact_self, fatk.refact_other, to_foe);
+                    foes::foe_clash_reaction(st, &fatk, sora_facing);
+                    if let Some(c) = at {
+                        game.sparks.push((Vec3::from(c), 20));
+                    }
+                    dbg.log.push(format!("clang! Sora's atkp {} met Shadow#{}'s atkp {}", sh.attack, *id - 99, h.attack));
+                    continue;
+                }
+                // Sora's body.
+                if out.invulnerable || !foes::overlap(&shapes, &sora_hurt) {
+                    continue;
+                }
+                let Some(adef) = kit.attacks.get(&h.attack) else { continue };
+                st.spent.insert(h.swing);
+                game.sora_hit_by.insert((*id, h.swing));
+                let attacker = combatant.clone();
+                let r = game.tracker.try_hit(game.frame, ((*id as u64) << 40) | h.swing, &game.rules, adef, &attacker, &mut game.sora);
+                if r.blocked.is_none() {
+                    game.character.take_hit(&character_core::reaction::Hit {
+                        reaction: fatk.enemy_reaction,
+                        knockback: (fatk.knockback_1, fatk.knockback_2),
+                        dir: [foe_facing.sin(), foe_facing.cos()],
+                        part: 0,
+                    });
+                    dbg.log.push(format!("Shadow#{} hit Sora with atkp {}: {} dmg  HP {}/{}", *id - 99, h.attack, r.damage, game.sora.hp, game.sora.max_hp));
+                    if game.sora.hp == 0 {
+                        game.sora.hp = game.sora.max_hp;
+                        dbg.log.push("Sora would be KO'd: HP refilled (playground)".into());
+                    }
+                }
+            }
+        }
+        game.sora_hit_by.retain(|k| live_pairs.contains(k));
+    }
+    game.foe_kit = kit;
+    if auto.trace {
+        for l in &dbg.log[log_mid.min(dbg.log.len())..] {
+            eprintln!("log f{} {l}", game.frame);
+        }
+        for d in dummies.iter() {
+            if let Some(o) = d.foe.as_ref().and_then(|s| s.out.as_ref()) {
+                if game.frame % 10 == 0 {
+                    eprintln!("foe f{} #{} {:?} m{} cf{} pos ({:.0}, {:.0}, {:.0}) hp {}", game.frame, d.id - 99, o.state, o.motion, o.clip_frame, d.pos[0], d.pos[1], d.pos[2], d.combatant.hp);
+                }
+            }
+        }
+    }
+
     if dbg.log.len() > 8 {
         let n = dbg.log.len() - 8;
         dbg.log.drain(..n);
@@ -719,10 +1000,17 @@ fn simulate(
             if dm.respawn == 0 {
                 dm.combatant.hp = dm.combatant.max_hp;
                 dm.pos = dm.home;
+                if let (Some(kit), true) = (&game.foe_kit, dm.foe.is_some()) {
+                    let seed = dm.id.wrapping_mul(31).wrapping_add(game.frame as u32);
+                    dm.foe = Some(foes::FoeState::new(kit, seed, PI));
+                }
             }
         }
     }
 
+    if auto.trace {
+        eprintln!("trace f{} {:?} m{} cf{} pos ({:.1}, {:.1}, {:.1})", game.frame, out.state, out.motion, out.clip_frame, game.pos[0], game.pos[1], game.pos[2]);
+    }
     dbg.last = Some(format!("{:?}", out.state));
     game.last = Some(out);
 }
@@ -846,11 +1134,33 @@ fn draw_debug(game: Res<Game>, dbg: Res<Debug>, dummies: Query<&Dummy>, mut gizm
             gizmos.circle(iso, (DUMMY_RADIUS + 25.0) * SCALE, Color::srgb(1.0, 0.9, 0.2));
         }
     }
+    for (p, left) in &game.sparks {
+        let c = *p * SCALE;
+        let r = 0.15 + 0.015 * (20 - *left) as f32;
+        let col = Color::srgb(1.0, 0.95, 0.5);
+        for d in [Vec3::X, Vec3::Y, Vec3::Z, Vec3::new(1.0, 1.0, 0.0).normalize(), Vec3::new(0.0, 1.0, 1.0).normalize(), Vec3::new(1.0, 0.0, 1.0).normalize()] {
+            gizmos.line(c - d * r, c + d * r, col);
+        }
+    }
     let guard = Color::srgb(0.2, 0.9, 1.0);
     let attack = Color::srgb(1.0, 0.2, 0.2);
     if dbg.show_boxes {
         for s in &game.live_attacks {
             draw_shape(&mut gizmos, s, if out.guarding { guard } else { attack });
+        }
+        for d in &dummies {
+            if let Some(st) = &d.foe {
+                for (_, shapes) in &st.live {
+                    for s in shapes {
+                        draw_shape(&mut gizmos, s, Color::srgb(1.0, 0.5, 0.1));
+                    }
+                }
+                for (_, shapes) in &st.guards {
+                    for s in shapes {
+                        draw_shape(&mut gizmos, s, guard);
+                    }
+                }
+            }
         }
     }
     if dbg.show_hurt {
@@ -860,7 +1170,13 @@ fn draw_debug(game: Res<Game>, dbg: Res<Debug>, dummies: Query<&Dummy>, mut gizm
             }
         }
         for d in dummies.iter().filter(|d| d.respawn == 0) {
-            draw_shape(&mut gizmos, &dummy_shape(d.pos), Color::srgba(0.3, 0.7, 1.0, 0.6));
+            let shapes = match &d.foe {
+                Some(st) => st.hurt_shapes(),
+                None => vec![dummy_shape(d.pos)],
+            };
+            for s in shapes {
+                draw_shape(&mut gizmos, &s, Color::srgba(0.3, 0.7, 1.0, 0.6));
+            }
         }
     }
     if let (true, Some(anim)) = (dbg.show_other, &game.anim) {
@@ -905,11 +1221,22 @@ fn draw_shape(gizmos: &mut Gizmos, s: &CShape, color: Color) {
     }
 }
 
-fn draw_skeleton(game: Res<Game>, dbg: Res<Debug>, mut gizmos: Gizmos) {
-    let (true, Some(anim)) = (dbg.show_skeleton, &game.anim) else { return };
-    for (a, b, part) in anim.skeleton_lines() {
-        let color = if part == Part::Weapon { Color::srgb(1.0, 0.85, 0.2) } else { Color::srgb(0.9, 1.0, 0.9) };
-        gizmos.line(a * SCALE, b * SCALE, color);
+fn draw_skeleton(game: Res<Game>, dbg: Res<Debug>, dummies: Query<&Dummy>, mut gizmos: Gizmos) {
+    if !dbg.show_skeleton {
+        return;
+    }
+    if let Some(anim) = &game.anim {
+        for (a, b, part) in anim.skeleton_lines() {
+            let color = if part == Part::Weapon { Color::srgb(1.0, 0.85, 0.2) } else { Color::srgb(0.9, 1.0, 0.9) };
+            gizmos.line(a * SCALE, b * SCALE, color);
+        }
+    }
+    for d in &dummies {
+        if let Some(st) = &d.foe {
+            for (a, b, _) in st.anim.skeleton_lines() {
+                gizmos.line(a * SCALE, b * SCALE, Color::srgb(0.8, 0.6, 1.0));
+            }
+        }
     }
 }
 
@@ -937,7 +1264,7 @@ fn hud(
     let mut s = format!(
         "state {:?}  motion {}  frame {}  combo {}  {}\n\
          pos ({:.0}, {:.0}, {:.0})  move/frame ({:.1}, {:.1}, {:.1})  {}\n\
-         Sora LV{} (Str {} Mag {} Def {})  dummies: Shadow LV{}\n\
+         Sora LV{} HP {}/{} (Str {} Mag {} Def {})  {}: Shadow LV{}\n\
          [1] High Jump {}  [2] Quick Run {}  [3] Aerial Dodge {}  [4] Glide {}  [5] Dodge Roll {}\n\
          [6] Combo Plus x{}  [7] Air Combo Plus x{}  [8] Finishing Plus x{}  [F1] attack/guard shapes  [F2] hurt shapes  [F3] skeleton  [F4] other collision  [R] reset\n\
          WASD move (Alt walk)  Space jump (in air: aerial dodge, then hold: glide)  J/LMB attack  K/Shift guard / roll / quick run  Tab lock-on  Q/E/RMB camera\n",
@@ -954,9 +1281,12 @@ fn hud(
         game.vel_display[2],
         if game.grounded { "grounded" } else { "airborne" },
         game.level,
+        game.sora.hp,
+        game.sora.max_hp,
         game.sora.stats.strength,
         game.sora.stats.magic,
         game.sora.stats.defense,
+        if game.foe_kit.is_some() { "enemies" } else { "dummies" },
         game.dummy_level,
         lv(a.high_jump),
         lv(a.quick_run),

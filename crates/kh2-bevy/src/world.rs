@@ -41,13 +41,76 @@ impl<'a> Arena<'a> {
     /// Highest surface under the cylinder that is not above its feet by
     /// more than a small step.
     pub fn ground_below(&self, p: [f32; 3], r: f32) -> f32 {
+        self.ground_crossed(p[1], p, r)
+    }
+
+    /// Like [`ground_below`](Self::ground_below), for a move that started at
+    /// height `from_y`: a box top the feet passed through this frame still
+    /// counts, so a fast fall lands on it instead of sinking in. The same
+    /// radius as [`push_out`](Self::push_out) is used, so there is no strip
+    /// at an edge where Sora is neither supported nor pushed away.
+    pub fn ground_crossed(&self, from_y: f32, p: [f32; 3], r: f32) -> f32 {
+        let top = from_y.max(p[1]) + 1.0;
         let mut g = 0.0f32;
         for b in self.boxes {
-            if b.4 <= p[1] + 1.0 && Self::overlaps(b, p, r * 0.6) {
+            if b.4 <= top && Self::overlaps(b, p, r) {
                 g = g.max(b.4);
             }
         }
         g
+    }
+
+    /// First point where the segment `a`→`b` enters a box or goes below
+    /// the floor (y = 0), if any.
+    pub fn raycast(&self, a: Vec3, b: Vec3) -> Option<Vec3> {
+        let d = b - a;
+        let mut best: Option<f32> = None;
+        if a.y >= 0.0 && b.y < 0.0 {
+            best = Some(a.y / (a.y - b.y));
+        }
+        for bx in self.boxes {
+            let lo = Vec3::new(bx.0, 0.0, bx.1);
+            let hi = Vec3::new(bx.2, bx.4, bx.3);
+            let (mut t0, mut t1) = (0.0f32, 1.0f32);
+            let mut ok = true;
+            for i in 0..3 {
+                if d[i].abs() < 1e-6 {
+                    if a[i] < lo[i] || a[i] > hi[i] {
+                        ok = false;
+                        break;
+                    }
+                } else {
+                    let (mut ta, mut tb) = ((lo[i] - a[i]) / d[i], (hi[i] - a[i]) / d[i]);
+                    if ta > tb {
+                        std::mem::swap(&mut ta, &mut tb);
+                    }
+                    t0 = t0.max(ta);
+                    t1 = t1.min(tb);
+                    if t0 > t1 {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok && best.map_or(true, |b| t0 < b) {
+                best = Some(t0);
+            }
+        }
+        best.map(|t| a + d * t)
+    }
+
+    /// Every box's top edges as grabbable ledges.
+    pub fn ledges(&self) -> Vec<character_core::Ledge> {
+        let mut v = Vec::new();
+        for b in self.boxes {
+            let y = b.4;
+            let (x0, z0, x1, z1) = (b.0, b.1, b.2, b.3);
+            v.push(character_core::Ledge { a: [x0, y, z0], b: [x1, y, z0], out: [0.0, -1.0] });
+            v.push(character_core::Ledge { a: [x0, y, z1], b: [x1, y, z1], out: [0.0, 1.0] });
+            v.push(character_core::Ledge { a: [x0, y, z0], b: [x0, y, z1], out: [-1.0, 0.0] });
+            v.push(character_core::Ledge { a: [x1, y, z0], b: [x1, y, z1], out: [1.0, 0.0] });
+        }
+        v
     }
 
     /// Pushes the cylinder out of box sides it walked into. Boxes whose top

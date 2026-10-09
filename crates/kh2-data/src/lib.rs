@@ -10,6 +10,7 @@
 //! let shadow = data.enemy(1, None).unwrap();
 //! ```
 
+pub mod enemy;
 pub mod sora;
 
 use std::path::{Path, PathBuf};

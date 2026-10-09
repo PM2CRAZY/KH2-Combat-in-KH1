@@ -83,7 +83,26 @@ See `combat-model.md` ("Hit detection") and `animation.md`.
 14. Draw the skeleton as debug lines, so movement can be compared visually with no assets
     shown.
 
-## Phase 3: enemies and defence
+## Phase 3: enemies and defence (started 2026-10-09)
+
+**Done:**
+- 15: the Shadow's own skeleton, motions, hurt shapes and attacks, with knockback from the
+  exe's reaction routine
+- 16: reactions (flinch, air flinch, launch, push, get-up) for Sora and enemies alike
+- 18: Sora takes damage and reacts
+- the clash table and guarding
+
+**Partly done:**
+- 17: Shadows attack on our own timer, not their scripts
+
+**Open:**
+- enemy scripts (BDX)
+- weight
+- revenge
+- Sora's damage-lock length
+- reaction 5
+
+See `combat-model.md` ("Hit reactions", "Clashes and guarding", "Enemies").
 
 15. Enemy hurtboxes from their own collision data, plus weight and knockback (objentry,
     sstm blow/hit-back values).

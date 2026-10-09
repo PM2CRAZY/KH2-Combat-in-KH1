@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use character_core::{
-    AttackParams, Character, Clip, ComboRow, Event, EventKind, GrowthLevel, MoveParams, Moveset, Window, WindowKind,
+    reaction::ReactionParams, AttackParams, HangParams, Character, Clip, ComboRow, Event, EventKind, GrowthLevel, MoveParams, Moveset, Window, WindowKind,
 };
 use kh2_formats::anim::{parse_skeleton, Bone, Interpolated};
 use kh2_formats::battle::PtyaEntry;
@@ -92,11 +92,11 @@ pub struct SoraData {
     pub rig_error: Option<String>,
 }
 
-fn rec<'a>(t: &'a kh2_formats::pref::PrefTable, i: usize) -> &'a [f32] {
+pub(crate) fn rec<'a>(t: &'a kh2_formats::pref::PrefTable, i: usize) -> &'a [f32] {
     t.get(i).unwrap_or(&[])
 }
 
-fn f(r: &[f32], names: &[&str], n: &str) -> f32 {
+pub(crate) fn f(r: &[f32], names: &[&str], n: &str) -> f32 {
     field(r, names, n).unwrap_or(0.0)
 }
 
@@ -109,9 +109,39 @@ pub fn move_params(p: &Pref) -> MoveParams {
         jump_height: f(prty, PRTY_FIELDS, "jump_height"),
         turn_speed: f(prty, PRTY_FIELDS, "turn_speed"),
         fall_max: f(sstm, SSTM_FIELDS, "fall_max"),
+        hang: HangParams {
+            height: f(prty, PRTY_FIELDS, "hang_height"),
+            margin: f(prty, PRTY_FIELDS, "hang_margin"),
+            range_h: f(sstm, SSTM_FIELDS, "hang_range_h"),
+            range_l: f(sstm, SSTM_FIELDS, "hang_range_l"),
+            range_xz: f(sstm, SSTM_FIELDS, "hang_range_xz"),
+            // Filled from the model's background-collision shape once the
+            // rig loads (see load_sora_with).
+            body_radius: 0.0,
+        },
+        hit_back_to_jump: f(sstm, SSTM_FIELDS, "hit_back_to_jump"),
         // Gravity and air control are constants in the executable, not
         // table values; MoveParams::default() carries them.
         ..MoveParams::default()
+    }
+}
+
+/// Hit reaction numbers (`sstm`).
+pub fn reaction_params(p: &Pref) -> ReactionParams {
+    let s = rec(&p.sstm, 0);
+    let g = |n: &str| f(s, SSTM_FIELDS, n);
+    ReactionParams {
+        hit_back: g("hit_back"),
+        hit_back_small: g("hit_back_small"),
+        blow_up: g("blow_up"),
+        blow_speed: g("blow_speed"),
+        blow_to_hit_back: g("blow_to_hit_back"),
+        blow_brake_xz: g("blow_brake_xz"),
+        blow_min_xz: g("blow_min_xz"),
+        blow_brake_up: g("blow_brake_up"),
+        hit_back_to_jump: g("hit_back_to_jump"),
+        fall_max: g("fall_max"),
+        ..ReactionParams::default()
     }
 }
 
@@ -287,9 +317,9 @@ pub fn bone_shapes(collision: &[ObjectCollision]) -> Vec<BoneShape> {
         .collect()
 }
 
-fn pose_motions(mset: &Mset) -> HashMap<u16, Arc<Interpolated>> {
+pub(crate) fn pose_motions(mset: &Mset) -> HashMap<u16, Arc<Interpolated>> {
     let mut out = HashMap::new();
-    for m in 0..=230u16 {
+    for m in 0..=255u16 {
         if let Some(p) = mset.slot_for(m as usize, true, true).and_then(|s| s.anb.as_ref()).and_then(|a| a.pose.clone()) {
             out.insert(m, Arc::new(p));
         }
@@ -338,6 +368,13 @@ fn load_sora_with(source: Source, read: &dyn Fn(&str) -> Result<Vec<u8>>) -> Res
         Ok(r) => (Some(Arc::new(r)), None),
         Err(e) => (None, Some(e.to_string())),
     };
+    let mut character = character;
+    character.reaction = reaction_params(&pref);
+    // The background-collision radius is the model's type-4 (BG_PLAYER)
+    // shape; the game reads it the same way.
+    if let Some(r) = rig.as_ref().and_then(|r| r.body_shapes.iter().find(|s| s.kind == 4)) {
+        character.params.hang.body_radius = r.radius;
+    }
     Ok(SoraData { character, combat, blade_groups: blade_groups(&collision), motions, rig, rig_error })
 }
 
