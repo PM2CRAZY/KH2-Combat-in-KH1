@@ -242,6 +242,7 @@ fn main() {
                 dummy_template,
                 weight: data.weight,
                 enemy_count: arg("--enemies").and_then(|v| v.parse().ok()).unwrap_or(1),
+                enemies_away: false,
                 dummy_level,
                 combo_plus: 0,
                 volumes: HashMap::new(),
@@ -344,6 +345,8 @@ struct Game {
     rc: rc::RcState,
     dummy_template: Option<Combatant>,
     enemy_count: usize,
+    /// F6: the enemies are sent away (out of combat until brought back).
+    enemies_away: bool,
     /// Sora's objentry weight.
     weight: f32,
     dummy_level: u16,
@@ -439,6 +442,8 @@ struct Latch {
     short_slot: Option<usize>,
     /// Testing aid: fill the Drive gauge (F5 / pad Select).
     refill: bool,
+    /// F6: send the enemies away / bring them back.
+    away: bool,
 }
 
 /// `--autoplay`: scripted input for smoke tests and screenshots
@@ -690,6 +695,7 @@ fn latch_input(
     }
     latch.cam_reset |= keys.just_pressed(KeyCode::KeyF);
     latch.refill |= keys.just_pressed(KeyCode::F5) || pads.iter().any(|p| p.just_pressed(GamepadButton::Select));
+    latch.away |= keys.just_pressed(KeyCode::F6);
     // The shortcut menu: hold L1 / Ctrl, then a face button casts its slot
     // instead of jumping, attacking and so on (KH2).
     let modifier = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || pads.iter().any(|p| p.pressed(GamepadButton::LeftTrigger));
@@ -948,6 +954,18 @@ fn simulate(
                 press(1, f == 8 || f == 12, &mut latch);
                 if f == 150 {
                     latch.shortcut = Some(3);
+                }
+            }
+            // Out of combat: enemies sent away, then stand (field idle),
+            // walk, run, and attack (the Keyblade comes out for the swing).
+            "field" => {
+                latch.away |= f == 1;
+                latch.walk = (100..160).contains(&f);
+                latch.stick = if (100..160).contains(&f) { Vec2::Y * 0.4 } else if (160..220).contains(&f) { Vec2::Y } else { Vec2::ZERO };
+                press(1, f == 240, &mut latch);
+                if auto.trace && f % 10 == 0 {
+                    let a = game.anim.as_ref();
+                    eprintln!("f{f} field {} weapons_out {}", a.map_or(false, |a| a.field), a.map_or(true, |a| a.weapons_out()));
                 }
             }
             // The shortcut menu: hold it open and cast Square (Blizzard);
@@ -1376,6 +1394,10 @@ fn simulate(
     let battle = dummies.iter().any(|d| d.respawn == 0);
     drive::frame(game, battle, &mut dbg.log);
     if let Some(anim) = game.anim.as_mut() {
+        // Out of combat while no enemy is up (KH2's field mode; the rule for
+        // when the game switches is ours): the field idle/walk/run, and the
+        // Keyblade away while Sora just moves.
+        anim.field = !battle;
         anim.update(&out, &game.character, p);
     }
 
@@ -1677,6 +1699,22 @@ fn simulate(
         dbg.log.drain(..n);
     }
 
+    // F6: send the enemies away (held hidden, short of respawning) or
+    // bring them back.
+    if std::mem::take(&mut latch.away) {
+        game.enemies_away = !game.enemies_away;
+        dbg.log.push(if game.enemies_away { "enemies sent away (out of combat)".into() } else { "enemies back".into() });
+        if !game.enemies_away {
+            for mut dm in dummies.iter_mut() {
+                dm.respawn = 1;
+            }
+        }
+    }
+    if game.enemies_away {
+        for mut dm in dummies.iter_mut() {
+            dm.respawn = 60;
+        }
+    }
     // Dummies.
     for mut dm in dummies.iter_mut() {
         if dm.knock_frames > 0 {
@@ -1871,7 +1909,7 @@ impl Game {
 
 fn sync_segments(
     game: Res<Game>,
-    mut pieces: Query<(&Piece, &mut Transform, &MeshMaterial3d<StandardMaterial>)>,
+    mut pieces: Query<(&Piece, &mut Transform, &MeshMaterial3d<StandardMaterial>, &mut Visibility)>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut glow: Local<Option<[f32; 3]>>,
 ) {
@@ -1886,7 +1924,12 @@ fn sync_segments(
     };
     let relight = *glow != Some(want);
     *glow = Some(want);
-    for (piece, mut t, mat) in &mut pieces {
+    // The Keyblade is put away out of combat while Sora just moves.
+    let weapons = if anim.weapons_out() { Visibility::Inherited } else { Visibility::Hidden };
+    for (piece, mut t, mat, mut vis) in &mut pieces {
+        if matches!(piece.part, Part::Weapon(_)) && *vis != weapons {
+            *vis = weapons;
+        }
         if relight && piece.part == Part::Body {
             if let Some(m) = mats.get_mut(&mat.0) {
                 m.emissive = LinearRgba::rgb(want[0], want[1], want[2]);
@@ -2113,7 +2156,7 @@ fn hud(
          pos ({:.0}, {:.0}, {:.0})  move/frame ({:.1}, {:.1}, {:.1})  {}\n\
          Sora LV{} HP {}/{} (Str {} Mag {} Def {})  {}: Soldier LV{}\n\
          High Jump {}  Quick Run {}  Aerial Dodge {}  Glide {}  Dodge Roll {}  Combo Plus x{}  Air Combo Plus x{}  Finishing Plus x{}\n\
-         [Esc] abilities  [Up/Down] command menu (J confirm, Space back)  [hold Ctrl] shortcuts  [1-6] cast  [F1-F4] debug shapes  [F5] refill Drive  [R] reset\n\
+         [Esc] abilities  [Up/Down] menu (J ok, Space back)  [Ctrl] shortcuts  [1-6] cast  [F1-F4] debug  [F5] refill Drive  [F6] no enemies  [R] reset\n\
          WASD move (Alt walk)  Space jump (in air: aerial dodge)  J/LMB attack  K/Shift guard / roll / quick run / glide (air)  Tab lock-on  Q/E/RMB camera\n",
         out.state,
         out.motion,

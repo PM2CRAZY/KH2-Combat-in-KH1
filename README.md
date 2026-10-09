@@ -87,6 +87,7 @@ docs/
 | Drive: Valor, Wisdom, Limit, Master, Final / Revert | 7 8 9 0 - / Backspace | command menu | command menu |
 | Cast directly (Fire, Blizzard, Thunder, Cure, Magnet, Reflect) | 1–6 | | |
 | Refill the Drive gauge (testing; the form gauge while in a form) | F5 | Back | Select / Share |
+| Send the enemies away / bring them back (out of combat: relaxed idle, walk and run, Keyblade put away) | F6 | | |
 | Ability menu (equip with J/Enter, U = unlimited AP) | Esc / P | Start | Start / Options |
 | Attack/guard shapes, hit shapes, skeleton, other collision / reset position | F1 F2 F3 F4 / R | | |
 
