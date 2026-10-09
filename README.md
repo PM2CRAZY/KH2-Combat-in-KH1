@@ -67,7 +67,7 @@ docs/
 | Camera | Q/E, arrows, right-drag | right stick |
 | Growth levels: High Jump, Quick Run, Aerial Dodge, Glide, Dodge Roll | 1 2 3 4 5 | |
 | Combo Plus / Air Combo Plus / Finishing Plus | 6 7 8 | |
-| Attack spheres / hurt spheres / reset position | F1 / F2 / R | |
+| Attack/guard shapes, hit shapes, skeleton, other collision / reset position | F1 F2 F3 F4 / R | |
 
 The arena has steps, a normal-jump ledge, a High Jump ledge and a tall tower to glide from.
 The dummies are Shadows: their HP, resistances and damage limits come from ENMP/LVPM, and

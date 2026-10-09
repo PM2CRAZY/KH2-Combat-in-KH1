@@ -87,8 +87,24 @@ override for the head.
   - The blade is rigid on its bone 2 and points along that bone's −X, where the attack
     spheres are.
   - Bones 3–11 are the keychain, which the weapon motions swing.
-- **Blending.** The playground cross-fades into a new motion over 8 frames. **Approximation:**
-  the game uses per-move blend times, for example PTYA `blend_time`.
+- **Blending. Checked (exe).** Every motion start passes a blend length in 60 Hz frames.
+  Lengths of 2 or less mean no blend.
+  - **The blend clock** starts at 2 and advances 1 per frame. The weight from the old pose
+    is clock ÷ length, and the blend ends when the clock reaches the length.
+  - **Lengths the executable uses:**
+    - attacks: PTYA `blend_time`, which is 0 for every Sora row, so swings start at once
+    - idle/walk/run changes, and motions an action requests (jump, the fall after a jump,
+      roll, ...): 8
+    - Glide: 16
+    - the general "start falling" helper: 16
+    - the motion queued to follow a finished action (usually idle): 0
+  - **Walk ↔ run** keeps the gait's phase: the new start frame is
+    `new length × (1 + old position + blend) ÷ old length`, wrapped.
+  - **After an action**, idle starts at once and then blends into walk/run. So the
+    playground blends from idle's first pose.
+  - **Not modelled:** the game holds the new motion at its start frame during the blend and
+    starts its triggers afterwards. Our controller's timing doesn't wait for the blend
+    (this only matters for 8- and 16-frame blends, never for attacks).
 
 ## What the playground draws
 
@@ -101,5 +117,13 @@ A simple mannequin of our own design on Sora's main bones:
 
 It glows white while invulnerable and cyan while guarding. The Keyblade prop has a grip, a
 guard, a blade and a swinging keychain. Fingers, hair and clothing bones are animated but
-not drawn. No mesh, texture or other asset is loaded. Attack spheres (F1) and hurt spheres
-(F2) sit on the real bones, and hits are tested against them.
+not drawn. No mesh, texture or other asset is loaded.
+
+Debug views:
+- **F1:** live attack shapes, including sweep copies (red), or guard shapes (cyan)
+- **F2:** hit shapes
+- **F3:** the skeleton as lines (Sora white, Keyblade gold)
+- **F4:** every other collision type, colour-coded by type
+
+Every shape uses its real kind and size: sphere, column, ellipsoid or cube. Hits use the
+game's overlap test (see `combat-model.md`, "Hit detection").

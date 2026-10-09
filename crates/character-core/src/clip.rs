@@ -26,7 +26,9 @@ pub enum WindowKind {
     AllowReactionCommand,
     WeaponTrail,
     /// Guard is active: incoming non-piercing hits from the front are blocked.
-    Guard,
+    /// The guard's shapes are the attack-group shapes of `group` (on the
+    /// Keyblade if `weapon`), as the game builds them.
+    Guard { attack: u16, group: u8, weapon: bool },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -52,7 +52,7 @@ pub fn data() -> SoraData {
     roll.events.push(Event { frame: 34, kind: EventKind::FallCheck });
     clips.insert(character_core::motion::DODGE_ROLL, roll);
     let mut guard = Clip::plain(character_core::motion::GUARD, 60);
-    guard.windows.push(Window { start: 0, end: Some(40), kind: WindowKind::Guard });
+    guard.windows.push(Window { start: 0, end: Some(40), kind: WindowKind::Guard { attack: 0, group: 0, weapon: false } });
     clips.insert(character_core::motion::GUARD, guard);
     clips.insert(900, attack_clip(900, 48, (15, 23), 1, 23, false, 90.0));
     clips.insert(901, attack_clip(901, 80, (25, 38), 2, 40, true, 120.0));

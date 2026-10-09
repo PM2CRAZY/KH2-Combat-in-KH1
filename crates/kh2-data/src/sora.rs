@@ -36,15 +36,28 @@ pub struct BladeSphere {
     pub radius: f32,
 }
 
-/// One attack (or hurt) sphere fixed to a bone.
+/// One collision shape fixed to a bone (an MDLX collision entry), in model
+/// units. See `combat_core::Shape` for how shapes overlap.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BoneSphere {
+pub struct BoneShape {
+    /// Collision group: attack windows switch groups on by number.
     pub group: u8,
-    /// Bone index, or `None` for the object's root (feet, facing).
+    /// Collision type: 2 hit (hurt), 6 attack, 13 guard, ... (OpenKH table).
+    pub kind: u8,
+    /// 0 ellipsoid, 1 column, 2 cube, 3 sphere.
+    pub shape: u8,
+    /// Free value per entry (on Sora's hurt spheres: 1 for legs and hips).
+    pub argument: i16,
+    /// Bone index, or `None` for the object's root (feet, facing). Other
+    /// special anchors (0x4001 and up) are also treated as the root.
     pub bone: Option<usize>,
-    /// Offset in the bone's space (model units).
+    /// Offset in the bone's space.
     pub offset: [f32; 3],
+    /// Raised this far (world up) after the offset is placed.
+    pub lift: f32,
     pub radius: f32,
+    /// Vertical half-size (columns, ellipsoids).
+    pub height: f32,
 }
 
 /// Sora's and the Keyblade's skeletons and motions, for posing a rig. Read
@@ -59,11 +72,9 @@ pub struct Rig {
     pub weapon_motions: HashMap<u16, Arc<Interpolated>>,
     /// Sora bone the Keyblade's root follows (`sklt` right-hand bone).
     pub weapon_bone: Option<usize>,
-    /// Attack spheres by collision group: the Keyblade's, then Sora's own.
-    pub weapon_attacks: Vec<BoneSphere>,
-    pub body_attacks: Vec<BoneSphere>,
-    /// Sora's hurt spheres (collision kind 2).
-    pub hurt: Vec<BoneSphere>,
+    /// Every collision shape on the Keyblade's bones and on Sora's.
+    pub weapon_shapes: Vec<BoneShape>,
+    pub body_shapes: Vec<BoneShape>,
 }
 
 /// Everything needed to run Sora.
@@ -206,7 +217,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapon: Option<&Anb>, combat: &C
                     let attack = p(0) as u16;
                     let is_guard = combat.battle.attack_for_level(attack, 0, 99).map_or(false, |a| matches!(a.kind, 2 | 3));
                     if is_guard {
-                        WindowKind::Guard
+                        WindowKind::Guard { attack, group: p(1) as u8, weapon: on_weapon }
                     } else {
                         let combo = (r.id == range_id::ATTACK_HITBOX_COMBO).then(|| p(2));
                         WindowKind::Hitbox { attack, group: p(1) as u8, combo, weapon: on_weapon }
@@ -258,16 +269,20 @@ fn moves(player: &Mset, weapon: &Mset, combat: &CombatData) -> HashMap<u16, Clip
     clips
 }
 
-/// Collision entries of one kind as bone-attached spheres.
-pub fn bone_spheres(collision: &[ObjectCollision], kind: u8) -> Vec<BoneSphere> {
+/// Collision entries as bone-attached shapes.
+pub fn bone_shapes(collision: &[ObjectCollision]) -> Vec<BoneShape> {
     collision
         .iter()
-        .filter(|c| c.kind == kind)
-        .map(|c| BoneSphere {
+        .map(|c| BoneShape {
             group: c.group,
-            bone: (c.bone >= 0 && c.bone < 0x4000).then_some(c.bone as usize),
+            kind: c.kind,
+            shape: c.shape,
+            argument: c.argument,
+            bone: (c.bone >= 0 && c.bone & 0x4000 == 0).then_some(c.bone as usize),
             offset: [c.position[0] as f32, c.position[1] as f32, c.position[2] as f32],
+            lift: c.position_height as f32,
             radius: c.radius as f32,
+            height: c.height as f32,
         })
         .collect()
 }
@@ -343,9 +358,8 @@ fn load_rig(read: &dyn Fn(&str) -> Result<Vec<u8>>, player: &Mset, weapon: &Mset
         motions: pose_motions(player),
         weapon_motions: pose_motions(weapon),
         weapon_bone,
-        weapon_attacks: bone_spheres(weapon_collision, 6),
-        body_attacks: bone_spheres(&body, 6),
-        hurt: bone_spheres(&body, 2),
+        weapon_shapes: bone_shapes(weapon_collision),
+        body_shapes: bone_shapes(&body),
         skeleton,
         weapon_skeleton,
     })

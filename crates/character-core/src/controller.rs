@@ -127,6 +127,8 @@ pub struct Output {
     pub hitboxes: Vec<ActiveHitbox>,
     pub invulnerable: bool,
     pub guarding: bool,
+    /// Live guard windows; their shapes come from the collision group.
+    pub guard_boxes: Vec<ActiveHitbox>,
     pub locked: Option<u32>,
     /// KH2 combo counter (1 on the first swing; only advances on swings
     /// that follow a connecting one).
@@ -308,6 +310,7 @@ struct FrameOut {
     hitboxes: Vec<ActiveHitbox>,
     invulnerable: bool,
     guarding: bool,
+    guard_boxes: Vec<ActiveHitbox>,
     no_gravity: bool,
     motion: u16,
     clip_frame: u32,
@@ -744,6 +747,7 @@ impl Character {
             hitboxes: fo.hitboxes,
             invulnerable: fo.invulnerable,
             guarding: fo.guarding,
+            guard_boxes: fo.guard_boxes,
             locked: self.lock,
             combo_count: self.count,
             events: fo.events,
@@ -825,7 +829,10 @@ impl Character {
                 }
                 WindowKind::Invulnerable => fo.invulnerable = true,
                 WindowKind::NoGravity => fo.no_gravity = true,
-                WindowKind::Guard => fo.guarding = true,
+                WindowKind::Guard { attack, group, weapon } => {
+                    fo.guarding = true;
+                    fo.guard_boxes.push(ActiveHitbox { swing: (act.swing << 8) | wi as u64, attack, group, weapon });
+                }
                 _ => {}
             }
         }

@@ -118,3 +118,32 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - Bones are now kept in object space.
   - The Keyblade's blade/keychain orientation is fixed.
   - New simplified mannequin.
+
+### 2026-10-09: Phase 2 (skeleton-accurate hitboxes)
+- **Hit detection, from the exe:**
+  - Attack windows collect the attack- and guard-type shapes of their collision group.
+    Defenders use their hit-type shapes.
+  - The overlap test: sphere, column, ellipsoid; cubes never hit.
+  - The 1.5 × radius sweep between frames.
+  - Implemented engine-agnostically as `combat_core::{Shape, AttackVolume, first_overlap}`,
+    with unit tests.
+- **Data:**
+  - `kh2_data::sora::BoneShape` keeps every MDLX collision entry: type, kind, bone or root,
+    offset, lift, radius, height.
+  - Guard windows keep their group (`WindowKind::Guard { attack, group, weapon }`).
+    `Output::guard_boxes` lists them.
+- **Blending, from the exe:**
+  - blend lengths of 8 (default and locomotion), 16 (glide and the fall helper), PTYA
+    `blend_time` for attacks (0) and 0 for queued follow-ups
+  - the clock starts at 2
+  - walk↔run phase sync
+- **Playground:**
+  - hits use the game's test, with the sweep
+  - F1 attack/guard, F2 hit, F3 skeleton lines, F4 other collision types
+  - `--show-hurt`, `--show-skeleton` and `--show-other` for screenshots
+- **Open:**
+  - clash table
+  - wall-hit ray
+  - the motion freeze during a blend
+  - group-enable bits from the collision header
+  - enemy collision (Phase 3)

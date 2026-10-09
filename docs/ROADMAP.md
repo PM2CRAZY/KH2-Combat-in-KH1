@@ -59,7 +59,21 @@ impractical. Each one gets marked Checked in the docs or gets fixed.
     - rounding order
     - difficulty multipliers
 
-## Phase 2: skeleton-accurate hitboxes
+## Phase 2: skeleton-accurate hitboxes (done 2026-10-09)
+
+Status: **Done** 11–14. Beyond the list, also read from the executable:
+- the game's shape overlap test (sphere, column, ellipsoid; cubes never hit)
+- the between-frames sweep, and every collision type and shape placed on its bone
+- guard shapes from guard windows' groups
+- per-move motion blend lengths, with walk/run phase sync
+
+**Open:**
+- attack-vs-attack clashes
+- the wall-hit ray
+- the motion freeze during a blend
+- dummies use a stand-in column (Phase 3)
+
+See `combat-model.md` ("Hit detection") and `animation.md`.
 
 11. Read the MDLX skeletons of Sora and the Keyblade: bones only, no meshes or textures.
 12. Fully evaluate motions: forward kinematics, IK helpers, constraints and expressions, giving

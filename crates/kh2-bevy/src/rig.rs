@@ -8,12 +8,62 @@ use std::sync::Arc;
 use bevy::prelude::*;
 use character_core::{motion, Character, Output, StateName};
 use kh2_anim::{evaluate, key_time, Options};
-use kh2_data::sora::{BoneSphere, Rig};
+use combat_core::{Shape as CShape, ShapeKind};
+use kh2_data::sora::{BoneShape, Rig};
 use kh2_formats::anim::Interpolated;
 
-/// Frames over which a new motion is blended in from the previous pose
-/// (approximation; the game uses per-move blend times).
-const BLEND_FRAMES: f32 = 8.0;
+/// Collision types (MDLX collision entries; OpenKH's names).
+pub mod kind {
+    pub const BG: u8 = 0;
+    pub const OBJ: u8 = 1;
+    pub const HIT: u8 = 2;
+    pub const TARGET: u8 = 3;
+    pub const BG_PLAYER: u8 = 4;
+    pub const ATTACK: u8 = 6;
+    pub const GUARD: u8 = 13;
+}
+
+/// Motion blend lengths the executable passes when it starts a motion
+/// (60 Hz frames). See docs/animation.md, "Blending".
+pub mod blend {
+    use character_core::{motion, Character};
+
+    /// Idle/walk/run changes, and the default when an action requests a
+    /// motion (jump, roll, guard, the fall after a jump, ...).
+    pub const DEFAULT: f32 = 8.0;
+    /// Gliding, and the general "start falling" helper.
+    pub const GLIDE: f32 = 16.0;
+    /// The motion queued to follow a finished action plays at once.
+    pub const QUEUED: f32 = 0.0;
+    /// Blends of 2 frames or less are skipped.
+    pub const MIN: f32 = 2.0;
+
+    pub fn is_glide(m: u16) -> bool {
+        (motion::GLIDE..=motion::GLIDE_END).contains(&m)
+    }
+
+    pub fn is_free(m: u16) -> bool {
+        matches!(m, motion::IDLE | motion::WALK | motion::RUN | motion::FALL) || is_glide(m)
+    }
+
+    /// Blend length for switching from motion `from` to `to`.
+    pub fn frames(character: &Character, from: u16, to: u16) -> f32 {
+        if let Some(row) = character.moveset.combo_rows.iter().find(|r| r.motion == to) {
+            // Attacks: PTYA blend_time (0 for all of Sora's rows).
+            return row.blend_time;
+        }
+        if is_glide(to) {
+            return GLIDE;
+        }
+        if is_free(to) && !is_free(from) {
+            // A jump hands over to the fall itself (default blend); other
+            // actions queue their follow-up motion, which starts at once.
+            let jumpish = matches!(from, motion::JUMP | motion::HIGH_JUMP | motion::AERIAL_DODGE);
+            return if jumpish { DEFAULT } else { QUEUED };
+        }
+        DEFAULT
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 struct Track {
@@ -38,6 +88,7 @@ pub struct RigAnim {
     pub object: Mat4,
     blend_from: Option<(Vec<(Vec3, Quat, Vec3)>, Vec<(Vec3, Quat, Vec3)>)>,
     blend_t: f32,
+    blend_len: f32,
 }
 
 fn decompose(v: &[Mat4]) -> Vec<(Vec3, Quat, Vec3)> {
@@ -60,7 +111,7 @@ impl RigAnim {
     pub fn new(rig: Arc<Rig>) -> RigAnim {
         let bones = kh2_anim::Pose::bind(&rig.skeleton).bones;
         let weapon = kh2_anim::Pose::bind(&rig.weapon_skeleton).bones;
-        RigAnim { rig, track: None, bones, weapon, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0 }
+        RigAnim { rig, track: None, bones, weapon, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT }
     }
 
     fn pick(&self, out: &Output) -> Track {
@@ -105,9 +156,42 @@ impl RigAnim {
             Some(p) => p.motion != track.motion || track.frame < p.frame,
             None => false,
         };
-        if restarted {
-            self.blend_from = Some((decompose(&self.bones), decompose(&self.weapon)));
-            self.blend_t = 0.0;
+        if let (true, Some(prev)) = (restarted, self.track) {
+            let frames = blend::frames(character, prev.motion, track.motion);
+            // Walk <-> run keeps the gait's phase (the game scales the old
+            // motion's progress, plus the blend, onto the new one's length).
+            let gait = |m: u16| m == motion::WALK || m == motion::RUN;
+            if gait(prev.motion) && gait(track.motion) && prev.motion != track.motion {
+                if let Some(pm) = rig.motions.get(&prev.motion) {
+                    let (pl, nl) = (kh2_anim::length_frames(pm), kh2_anim::length_frames(m));
+                    let pos = key_time(pm, prev.frame, true) - pm.frame_start * 60.0 / pm.fps.max(1e-3);
+                    if pl > 0.0 && nl > 0.0 {
+                        track.frame = (nl * (1.0 + pos + frames) / pl) % nl;
+                    }
+                }
+            }
+            // An action's queued follow-up is idle, which starts at once; the
+            // idle state then blends into walk/run. So blend from idle's
+            // first pose rather than the action's last.
+            let via_idle = !blend::is_free(prev.motion) && gait(track.motion);
+            let frames = if via_idle { blend::DEFAULT } else { frames };
+            if frames > blend::MIN {
+                let idle = Track { motion: motion::IDLE, frame: 0.0, looping: true, root: false };
+                self.blend_from = match (via_idle, rig.motions.get(&motion::IDLE)) {
+                    (true, Some(im)) => {
+                        let b = evaluate(&rig.skeleton, im, key_time(im, 0.0, true), Options::default()).bones;
+                        let w = self.weapon_pose(&rig, idle, &b);
+                        Some((decompose(&b), decompose(&w)))
+                    }
+                    _ => Some((decompose(&self.bones), decompose(&self.weapon))),
+                };
+                // The game's blend clock starts at 2 and the weight is
+                // clock / length, ending once it reaches the length.
+                self.blend_t = blend::MIN;
+                self.blend_len = frames;
+            } else {
+                self.blend_from = None;
+            }
         }
         self.track = Some(track);
 
@@ -132,7 +216,7 @@ impl RigAnim {
         let mut weapon = self.weapon_pose(&rig, track, &bones);
         if let Some((fb, fw)) = &self.blend_from {
             self.blend_t += 1.0;
-            let w = (self.blend_t / BLEND_FRAMES).min(1.0);
+            let w = (self.blend_t / self.blend_len).min(1.0);
             blend(fb, &mut bones, w);
             blend(fw, &mut weapon, w);
             if w >= 1.0 {
@@ -155,23 +239,52 @@ impl RigAnim {
         local.iter().map(|w| hand * *w).collect()
     }
 
-    /// World-space (KH2 units) sphere centres and radii for an attack group.
-    pub fn attack_spheres(&self, group: u8, weapon: bool) -> Vec<(Vec3, f32)> {
-        let list = if weapon { &self.rig.weapon_attacks } else { &self.rig.body_attacks };
-        list.iter().filter(|s| s.group == group).map(|s| (self.sphere_center(s, weapon), s.radius)).collect()
-    }
-
-    pub fn hurt_spheres(&self) -> Vec<(Vec3, f32)> {
-        self.rig.hurt.iter().map(|s| (self.sphere_center(s, false), s.radius)).collect()
-    }
-
-    fn sphere_center(&self, s: &BoneSphere, weapon: bool) -> Vec3 {
+    /// A collision shape placed in the world (KH2 units, y-up): the offset
+    /// through its bone (or the object root), then raised by its lift.
+    pub fn world_shape(&self, s: &BoneShape, weapon: bool) -> Option<CShape> {
+        let kind = ShapeKind::from_u8(s.shape)?;
         let off = Vec3::from(s.offset);
         let bones = if weapon { &self.weapon } else { &self.bones };
-        match s.bone.and_then(|b| bones.get(b)) {
-            Some(m) => self.to_world.transform_point3(m.transform_point3(off)),
+        let c = match s.bone {
+            Some(b) => self.to_world.transform_point3(bones.get(b)?.transform_point3(off)),
             None => self.object.transform_point3(off),
+        } + Vec3::Y * s.lift;
+        Some(CShape::new(kind, c.into(), s.radius, s.height))
+    }
+
+    /// Every shape of one collision type, with whether it is on the Keyblade.
+    pub fn shapes_of_kind(&self, kind: u8) -> Vec<(CShape, bool)> {
+        let body = self.rig.body_shapes.iter().map(|s| (s, false));
+        let weapon = self.rig.weapon_shapes.iter().map(|s| (s, true));
+        body.chain(weapon).filter(|(s, _)| s.kind == kind).filter_map(|(s, w)| Some((self.world_shape(s, w)?, w))).collect()
+    }
+
+    /// The shapes an attack (or guard) window switches on: attack- and
+    /// guard-type shapes of its group, on the Keyblade or on Sora, in data
+    /// order (the game's order, which the sweep relies on).
+    pub fn attack_shapes(&self, group: u8, weapon: bool) -> Vec<CShape> {
+        let list = if weapon { &self.rig.weapon_shapes } else { &self.rig.body_shapes };
+        list.iter()
+            .filter(|s| s.group == group && (s.kind == kind::ATTACK || s.kind == kind::GUARD))
+            .filter_map(|s| self.world_shape(s, weapon))
+            .collect()
+    }
+
+    /// Sora's hit (hurt) shapes.
+    pub fn hurt_shapes(&self) -> Vec<CShape> {
+        self.shapes_of_kind(kind::HIT).into_iter().filter(|(_, w)| !w).map(|(s, _)| s).collect()
+    }
+
+    /// Bone joints as line segments (parent → child), world space.
+    pub fn skeleton_lines(&self) -> Vec<(Vec3, Vec3, Part)> {
+        let mut out = Vec::new();
+        for (part, skel, bones) in [(Part::Body, &self.rig.skeleton, &self.bones), (Part::Weapon, &self.rig.weapon_skeleton, &self.weapon)] {
+            for (i, b) in skel.iter().enumerate() {
+                let (Some(m), Some(p)) = (bones.get(i), usize::try_from(b.parent).ok().and_then(|p| bones.get(p))) else { continue };
+                out.push((self.to_world.transform_point3(p.w_axis.truncate()), self.to_world.transform_point3(m.w_axis.truncate()), part));
+            }
         }
+        out
     }
 
     /// World position (KH2 units) of an anchor, if its bone exists.

@@ -313,8 +313,8 @@ fn sora_checks(data: kh2_data::sora::SoraData) -> Result<(), String> {
     use character_core::*;
     match (&data.rig, &data.rig_error) {
         (Some(r), _) => println!(
-            "rig: {} bones, {} motions; Keyblade {} bones, {} motions, attached to bone {:?}; {} attack spheres",
-            r.skeleton.len(), r.motions.len(), r.weapon_skeleton.len(), r.weapon_motions.len(), r.weapon_bone, r.weapon_attacks.len()
+            "rig: {} bones, {} motions; Keyblade {} bones, {} motions, attached to bone {:?}; collision shapes: {} on Sora, {} on the Keyblade",
+            r.skeleton.len(), r.motions.len(), r.weapon_skeleton.len(), r.weapon_motions.len(), r.weapon_bone, r.body_shapes.len(), r.weapon_shapes.len()
         ),
         (None, e) => println!("rig: not loaded ({e:?})"),
     }
@@ -327,7 +327,7 @@ fn sora_checks(data: kh2_data::sora::SoraData) -> Result<(), String> {
         if let Some(c) = base.moveset.clips.get(&m) {
             let hits: Vec<String> = c.windows.iter().filter_map(|w| match w.kind {
                 WindowKind::Hitbox { attack, group, .. } => Some(format!("atk{attack}/g{group}@{}..{}", w.start, w.end.map_or("end".into(), |e| e.to_string()))),
-                WindowKind::Guard => Some(format!("guard@{}..{:?}", w.start, w.end)),
+                WindowKind::Guard { attack, group, weapon } => Some(format!("guard atkp {attack} group {group}{}@{}..{:?}", if weapon { " (keyblade)" } else { "" }, w.start, w.end)),
                 _ => None,
             }).collect();
             let combo = c.first(|k| matches!(k, WindowKind::Combo));

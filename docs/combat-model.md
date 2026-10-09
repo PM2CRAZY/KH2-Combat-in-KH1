@@ -60,6 +60,63 @@ no clamp. In the real routine:
 So the example's numbers don't apply exactly. The unit test `magic_and_difficulty` uses
 the real order instead.
 
+## Hit detection (`combat_core::Shape`)
+
+**Checked (exe).** Read from the attack update and the overlap test in your copy of KH2 Final
+Mix's executable; only the rules are written here.
+
+**Which shapes.** Every model's collision list (MDLX, OpenKH's layout) holds shapes fixed to
+bones. Each entry has a group, a type, a shape kind, a bone, an offset, a lift
+(`position_height`), a radius and a height.
+- **An attack window** switches on its ATKP's collision group. The attack collects that
+  group's shapes of type 6 (attack) and 13 (guard), in list order. Sora's swings use the
+  Keyblade's list, and some moves use Sora's own.
+- **Guard windows** (ATKP kind guard) work the same way: Guard uses Keyblade group 2;
+  Aerial Dodge uses Sora's group 6.
+- **The defender's shapes** are its type 2 (hit) entries.
+- A collision group is only live while enabled. Sora's list header enables group 0 by
+  default, and attack windows enable the others.
+
+**Placing a shape.**
+- The offset is transformed by the bone's matrix. Bone `0x4000` means the object root:
+  feet, facing.
+- Other special anchors exist: `0x4003`/`0x4004` are the right/left weapon tip, and
+  `0x4001`/`0x4009` sit on the first OBJ / ITEM shape. Sora doesn't use them.
+- Then the centre is raised by the lift.
+- `radius` is the horizontal size. `height` is the vertical half-size: a column reaches
+  `height` above and below its centre.
+
+**The overlap test.** `d` is the gap between centres. All comparisons are strict.
+
+| Pair | Hit when |
+|---|---|
+| sphere–sphere | `|d| < r₁ + r₂` |
+| column–column | `|d.y| < h₁ + h₂` and horizontal `|d| < r₁ + r₂` |
+| ellipsoid–ellipsoid or sphere | `(dx/R)² + (dy/H)² + (dz/R)² < 1`, with `R = r₁ + r₂`, `H = h₁ + h₂` |
+| ellipsoid or sphere vs column | no hit if `|d.y| ≥ hₑ + h_c`; otherwise horizontal `|d| < r' + r_c`, where `r' = rₑ` beside the column and `rₑ·√(1 − t²)` past its end (`t = (|d.y| − h_c)/hₑ`) |
+| anything with a cube | never |
+
+**Sweep.**
+- Each attack remembers its shapes' centres from the previous frame, up to 32 shapes.
+- If a shape moved more than 1.5 × its radius, copies are added one radius apart. They step
+  from the new centre back toward the old one until the remaining gap is at most
+  1.5 × the radius.
+- The first frame of an attack has no previous centres.
+- At most 256 attack shapes are live at once.
+
+**Order.** For each defender, the attack shapes are tried in order, and for each one the
+defender's hit shapes in order. The first overlap registers, and the defender is done for
+that frame. Already-hit and team filters apply before this.
+
+**Also there, not modelled yet:**
+- Attack shapes from different sides that overlap can clash: a 7×7 table by attack kind
+  decides it.
+- On the second frame and after, a ray from the old to the new position of the first shape
+  is tested against the map, for wall hits.
+
+**Playground.** The training dummies have no skeleton, so their hit shape is a column of our
+own (radius 50, 110 tall) until Phase 3 reads enemies' collision lists.
+
 ## Not modelled yet
 
 - Reaction animations and knockback physics: the ids are passed to the host as raw numbers.

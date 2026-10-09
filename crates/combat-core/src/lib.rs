@@ -35,9 +35,11 @@ mod combatant;
 mod damage;
 mod element;
 mod hit;
+mod shape;
 
 pub use attack::*;
 pub use combatant::*;
 pub use damage::*;
 pub use element::*;
 pub use hit::*;
+pub use shape::*;

@@ -21,7 +21,7 @@ use bevy::math::Isometry3d;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use character_core::{Abilities, Button as Btn, Character, Env, Input as CInput, Output, StateName, TargetInfo};
-use combat_core::{AttackDef, Combatant, DamageRules, HitTracker, Stats, Team};
+use combat_core::{first_overlap, AttackDef, AttackVolume, Combatant, DamageRules, HitTracker, Shape as CShape, ShapeKind, Stats, Team};
 use kh2_data::sora::BladeSphere;
 use kh2_data::{Install, Source};
 
@@ -105,7 +105,12 @@ fn main() {
     .insert_resource(Time::<Fixed>::from_hz(60.0))
     .insert_resource(Latch::default())
     .insert_resource(CameraRig { yaw: 0.0, pitch: 0.35, distance: cam_distance, manual_timer: 0.0 })
-    .insert_resource(Debug { show_boxes: true, show_hurt: false, log: Vec::new(), last: None })
+    .insert_resource(Debug {
+        show_boxes: true,
+        show_hurt: args.iter().any(|a| a == "--show-hurt"),
+        show_skeleton: args.iter().any(|a| a == "--show-skeleton"),
+        show_other: args.iter().any(|a| a == "--show-other"),
+        log: Vec::new(), last: None })
     .insert_resource(Shot { after_frames: screenshot_after, frames: 0 })
     .insert_resource(Autoplay { on: autoplay || scene.is_some(), frame: 0, scene: scene.unwrap_or_default() })
     .add_systems(Startup, (world::spawn_arena, spawn_camera_and_light));
@@ -146,9 +151,11 @@ fn main() {
                 dummy_template,
                 dummy_level,
                 combo_plus: 0,
+                volumes: HashMap::new(),
+                live_attacks: Vec::new(),
             })
             .add_systems(Startup, (spawn_player, spawn_dummies))
-            .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, draw_debug, hud, abilities_keys, screenshot))
+            .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
             .add_systems(FixedUpdate, simulate);
         }
         Err(_) => {
@@ -195,12 +202,19 @@ struct Game {
     dummy_template: Option<Combatant>,
     dummy_level: u16,
     combo_plus: u8,
+    /// Live attack windows' shapes from the previous frame (for the sweep),
+    /// by window id.
+    volumes: HashMap<(u64, bool), AttackVolume>,
+    /// This frame's attack shapes including sweep copies (for drawing).
+    live_attacks: Vec<CShape>,
 }
 
 #[derive(Resource)]
 struct Debug {
     show_boxes: bool,
     show_hurt: bool,
+    show_skeleton: bool,
+    show_other: bool,
     log: Vec<String>,
     last: Option<String>,
 }
@@ -489,6 +503,12 @@ fn abilities_keys(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>, mut d
     if keys.just_pressed(KeyCode::F2) {
         dbg.show_hurt = !dbg.show_hurt;
     }
+    if keys.just_pressed(KeyCode::F3) {
+        dbg.show_skeleton = !dbg.show_skeleton;
+    }
+    if keys.just_pressed(KeyCode::F4) {
+        dbg.show_other = !dbg.show_other;
+    }
     if keys.just_pressed(KeyCode::KeyR) {
         game.pos = [0.0, 0.0, -400.0];
     }
@@ -509,25 +529,29 @@ fn blade_pose(pos: [f32; 3], facing: f32, sweep: Option<f32>) -> (Vec3, Vec3) {
     (hand + fwd * 25.0, dir)
 }
 
-/// Attack spheres for a live hitbox: on the real bones when the skeleton is
-/// loaded, otherwise the swept approximation.
-fn attack_spheres(game: &Game, facing: f32, group: u8, weapon: bool) -> Vec<(Vec3, f32)> {
+/// Shapes for a live attack or guard window: the group's collision shapes
+/// on the real bones when the skeleton is loaded, otherwise spheres along a
+/// swept stand-in blade (approximation).
+fn attack_shapes(game: &Game, facing: f32, group: u8, weapon: bool) -> Vec<CShape> {
     if let Some(anim) = &game.anim {
-        let s = anim.attack_spheres(group, weapon);
+        let s = anim.attack_shapes(group, weapon);
         if !s.is_empty() {
             return s;
         }
     }
     let (origin, dir) = blade_pose(game.pos, facing, Some(0.5));
-    hit_spheres(game, group, origin, dir)
-}
-
-fn hit_spheres(game: &Game, group: u8, origin: Vec3, dir: Vec3) -> Vec<(Vec3, f32)> {
-    match game.blade.get(&group) {
+    let spheres: Vec<(Vec3, f32)> = match game.blade.get(&group) {
         Some(s) if !s.is_empty() => s.iter().map(|b| (origin + dir * (40.0 + b.along), b.radius)).collect(),
         // Body/other attack groups (approximation): one sphere in front.
         _ => vec![(origin + dir * 60.0, 80.0)],
-    }
+    };
+    spheres.into_iter().map(|(c, r)| CShape::sphere(c.into(), r)).collect()
+}
+
+/// A training dummy's hit shape: a column standing on the ground
+/// (stand-in until enemies' own collision data is read in Phase 3).
+fn dummy_shape(pos: [f32; 3]) -> CShape {
+    CShape::column([pos[0], pos[1] + DUMMY_HEIGHT * 0.5, pos[2]], DUMMY_RADIUS, DUMMY_HEIGHT * 0.5)
 }
 
 fn simulate(
@@ -626,20 +650,26 @@ fn simulate(
         anim.update(&out, &game.character, p);
     }
 
-    // Hits.
+    // Hits: each live window's shapes, plus copies filling the gap since
+    // last frame, tested against each target's shapes (the game's test).
+    let live: std::collections::HashSet<(u64, bool)> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| (h.swing, h.weapon)).collect();
+    game.volumes.retain(|k, _| live.contains(k));
+    game.live_attacks.clear();
+    for h in &out.guard_boxes {
+        let shapes = attack_shapes(game, out.facing, h.group, h.weapon);
+        let swept = game.volumes.entry((h.swing, h.weapon)).or_default().update(&shapes);
+        game.live_attacks.extend(swept);
+    }
     for h in &out.hitboxes {
+        let shapes = attack_shapes(game, out.facing, h.group, h.weapon);
+        let swept = game.volumes.entry((h.swing, h.weapon)).or_default().update(&shapes);
+        game.live_attacks.extend(swept.iter().copied());
         let Some(attack) = game.attacks.get(&h.attack).cloned() else { continue };
-        let spheres = attack_spheres(game, out.facing, h.group, h.weapon);
         for mut dm in dummies.iter_mut() {
             if dm.respawn > 0 {
                 continue;
             }
-            let dp = Vec3::from(dm.pos);
-            let touching = spheres.iter().any(|(c, r)| {
-                let horiz = Vec2::new(c.x - dp.x, c.z - dp.z).length();
-                horiz <= r + DUMMY_RADIUS && c.y + r >= dp.y && c.y - r <= dp.y + DUMMY_HEIGHT
-            });
-            if !touching {
+            if first_overlap(&swept, &[dummy_shape(dm.pos)]).is_none() {
                 continue;
             }
             let sora = game.sora.clone();
@@ -816,22 +846,71 @@ fn draw_debug(game: Res<Game>, dbg: Res<Debug>, dummies: Query<&Dummy>, mut gizm
             gizmos.circle(iso, (DUMMY_RADIUS + 25.0) * SCALE, Color::srgb(1.0, 0.9, 0.2));
         }
     }
-    if !dbg.show_boxes {
-        return;
-    }
-    for h in &out.hitboxes {
-        for (c, r) in attack_spheres(&game, out.facing, h.group, h.weapon) {
-            gizmos.sphere(Isometry3d::from_translation(c * SCALE), r * SCALE, Color::srgb(1.0, 0.2, 0.2));
+    let guard = Color::srgb(0.2, 0.9, 1.0);
+    let attack = Color::srgb(1.0, 0.2, 0.2);
+    if dbg.show_boxes {
+        for s in &game.live_attacks {
+            draw_shape(&mut gizmos, s, if out.guarding { guard } else { attack });
         }
     }
-    if let (true, Some(anim)) = (dbg.show_hurt, &game.anim) {
-        for (c, r) in anim.hurt_spheres() {
-            gizmos.sphere(Isometry3d::from_translation(c * SCALE), r * SCALE, Color::srgba(0.3, 0.7, 1.0, 0.35));
+    if dbg.show_hurt {
+        if let Some(anim) = &game.anim {
+            for s in anim.hurt_shapes() {
+                draw_shape(&mut gizmos, &s, Color::srgba(0.3, 0.7, 1.0, 0.6));
+            }
+        }
+        for d in dummies.iter().filter(|d| d.respawn == 0) {
+            draw_shape(&mut gizmos, &dummy_shape(d.pos), Color::srgba(0.3, 0.7, 1.0, 0.6));
+        }
+    }
+    if let (true, Some(anim)) = (dbg.show_other, &game.anim) {
+        for k in [rig::kind::BG, rig::kind::OBJ, rig::kind::TARGET, rig::kind::BG_PLAYER, 5, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20] {
+            let hue = (k as f32 * 47.0) % 360.0;
+            for (s, _) in anim.shapes_of_kind(k) {
+                draw_shape(&mut gizmos, &s, Color::hsla(hue, 0.7, 0.6, 0.7));
+            }
         }
     }
     let p = Vec3::from(game.pos) * SCALE;
     let iso = Isometry3d::new(p + Vec3::Y * 0.02, Quat::from_rotation_x(FRAC_PI_2));
     gizmos.circle(iso, SORA_RADIUS * SCALE, if out.invulnerable { Color::WHITE } else { Color::srgb(0.2, 0.6, 1.0) });
+}
+
+/// Draws a collision shape as wire lines (KH2 units in, scene units out).
+fn draw_shape(gizmos: &mut Gizmos, s: &CShape, color: Color) {
+    let c = Vec3::from(s.center) * SCALE;
+    let (r, h) = (s.radius * SCALE, s.height * SCALE);
+    let flat = |y: f32| Isometry3d::new(c + Vec3::Y * y, Quat::from_rotation_x(FRAC_PI_2));
+    match s.kind {
+        ShapeKind::Sphere => {
+            gizmos.sphere(Isometry3d::from_translation(c), r, color);
+        }
+        ShapeKind::Ellipsoid => {
+            gizmos.ellipse(flat(0.0), Vec2::new(r, r), color);
+            gizmos.ellipse(Isometry3d::from_translation(c), Vec2::new(r, h), color);
+            gizmos.ellipse(Isometry3d::new(c, Quat::from_rotation_y(FRAC_PI_2)), Vec2::new(r, h), color);
+        }
+        ShapeKind::Column => {
+            gizmos.circle(flat(h), r, color);
+            gizmos.circle(flat(-h), r, color);
+            for k in 0..4 {
+                let a = k as f32 * FRAC_PI_2;
+                let o = Vec3::new(a.cos() * r, 0.0, a.sin() * r);
+                gizmos.line(c + o - Vec3::Y * h, c + o + Vec3::Y * h, color);
+            }
+        }
+        ShapeKind::Cube => {
+            gizmos.cuboid(Transform::from_translation(c).with_scale(Vec3::new(2.0 * r, 2.0 * h, 2.0 * r)), color);
+        }
+    }
+}
+
+fn draw_skeleton(game: Res<Game>, dbg: Res<Debug>, mut gizmos: Gizmos) {
+    let (true, Some(anim)) = (dbg.show_skeleton, &game.anim) else { return };
+    for (a, b, part) in anim.skeleton_lines() {
+        let color = if part == Part::Weapon { Color::srgb(1.0, 0.85, 0.2) } else { Color::srgb(0.9, 1.0, 0.9) };
+        gizmos.line(a * SCALE, b * SCALE, color);
+    }
 }
 
 fn hud(
@@ -860,7 +939,7 @@ fn hud(
          pos ({:.0}, {:.0}, {:.0})  move/frame ({:.1}, {:.1}, {:.1})  {}\n\
          Sora LV{} (Str {} Mag {} Def {})  dummies: Shadow LV{}\n\
          [1] High Jump {}  [2] Quick Run {}  [3] Aerial Dodge {}  [4] Glide {}  [5] Dodge Roll {}\n\
-         [6] Combo Plus x{}  [7] Air Combo Plus x{}  [8] Finishing Plus x{}  [F1] hitboxes  [F2] hurtboxes  [R] reset\n\
+         [6] Combo Plus x{}  [7] Air Combo Plus x{}  [8] Finishing Plus x{}  [F1] attack/guard shapes  [F2] hurt shapes  [F3] skeleton  [F4] other collision  [R] reset\n\
          WASD move (Alt walk)  Space jump (in air: aerial dodge, then hold: glide)  J/LMB attack  K/Shift guard / roll / quick run  Tab lock-on  Q/E/RMB camera\n",
         out.state,
         out.motion,
