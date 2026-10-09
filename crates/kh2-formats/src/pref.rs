@@ -81,12 +81,35 @@ pub const SSTM_FIELDS: &[&str] = &[
     "magic_jump", "lock_on_range", "lock_on_release_range",
 ];
 
+/// `magi`: one 124-byte record of spell parameters per magic "sub" (level
+/// x2 + finisher, + 10 per Drive form). Kept raw because the spell scripts
+/// read it directly by byte offset; field names are in OpenKH's
+/// preferences doc (Fire radius/height/time, Blizzard speed, ...).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MagiTable {
+    pub pointers: Vec<u32>,
+    data: Vec<u8>,
+}
+
+impl MagiTable {
+    pub const RECORD: usize = 124;
+
+    /// The record for `sub`, falling back to record 0 for an out-of-range
+    /// or empty index, as the game does.
+    pub fn get(&self, sub: i32) -> Option<&[u8]> {
+        let ok = |i: usize| self.pointers.get(i).copied().filter(|p| *p != 0);
+        let p = usize::try_from(sub).ok().and_then(ok).or_else(|| ok(0))? as usize;
+        self.data.get(p..p + Self::RECORD)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Pref {
     pub plyr: PrefTable,
     pub fmab: PrefTable,
     pub prty: PrefTable,
     pub sstm: PrefTable,
+    pub magi: MagiTable,
 }
 
 impl Pref {
@@ -110,6 +133,15 @@ impl Pref {
             fmab: t("fmab", FMAB_FIELDS.len())?,
             prty: t("prty", PRTY_FIELDS.len())?,
             sstm: t("sstm", 95)?,
+            magi: match bar.get("magi") {
+                Some(e) => {
+                    let mut r = Reader::new(e.data);
+                    let n = (r.u32()? as usize).min(1024);
+                    let pointers = (0..n).map(|_| r.u32()).collect::<Result<Vec<_>>>()?;
+                    MagiTable { pointers, data: e.data.to_vec() }
+                }
+                None => MagiTable::default(),
+            },
         })
     }
 }

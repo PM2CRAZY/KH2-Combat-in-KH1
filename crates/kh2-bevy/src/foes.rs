@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use character_core::npc::{Npc, NpcCommand, NpcOutput};
 use character_core::reaction::{self, Hit};
 use character_core::ActiveHitbox;
-use combat_core::{first_overlap, AttackDef, AttackVolume, Shape as CShape};
+use combat_core::{first_overlap, AttackVolume, Shape as CShape};
 use kh2_data::enemy::EnemyData;
 use kh2_formats::battle::Atkp;
 
@@ -18,28 +18,15 @@ use crate::rig::{Anchor, Paint, Part, Piece, RigAnim, Shape};
 use crate::world::Arena;
 use crate::{Dummy, SCALE};
 
-/// What a Shadow needs at run time: its data plus the ATKP rows its attacks
-/// use, at its level.
+/// What a Shadow needs at run time: its data (skeleton, motions, shapes,
+/// stats). Its attacks' rows are picked when they hit (see `magic::row`).
 pub struct FoeKit {
     pub data: EnemyData,
-    pub attacks: HashMap<u16, AttackDef>,
 }
 
 impl FoeKit {
-    pub fn new(data: EnemyData, combat: &kh2_data::CombatData, level: u16) -> FoeKit {
-        let mut attacks = HashMap::new();
-        for c in data.clips.values() {
-            for w in &c.windows {
-                let id = match w.kind {
-                    character_core::WindowKind::Hitbox { attack, .. } | character_core::WindowKind::Guard { attack, .. } => attack,
-                    _ => continue,
-                };
-                if let Some(a) = combat.attack_at_level(id, 0, level as u8) {
-                    attacks.insert(id, a);
-                }
-            }
-        }
-        FoeKit { data, attacks }
+    pub fn new(data: EnemyData) -> FoeKit {
+        FoeKit { data }
     }
 }
 
@@ -57,6 +44,8 @@ pub struct FoeState {
     /// This frame's live attack (and guard) windows with their shapes.
     pub live: Vec<(ActiveHitbox, Vec<CShape>)>,
     pub guards: Vec<(ActiveHitbox, Vec<CShape>)>,
+    /// The Magnet attack holding it (spell attack key).
+    pub caught_by: Option<u64>,
 }
 
 impl FoeState {
@@ -74,6 +63,7 @@ impl FoeState {
             spent: HashSet::new(),
             live: Vec::new(),
             guards: Vec::new(),
+            caught_by: None,
         }
     }
 

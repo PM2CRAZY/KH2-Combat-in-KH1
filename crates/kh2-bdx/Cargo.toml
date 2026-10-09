@@ -1,0 +1,10 @@
+[package]
+name = "kh2-bdx"
+description = "Runs KH2's BDX behaviour scripts (the bytecode inside .mag, .mdlx and other BAR files). Engine-agnostic: the host supplies the traps."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+thiserror.workspace = true

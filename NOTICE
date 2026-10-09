@@ -15,6 +15,11 @@ Ported or adapted from OpenKH (see crates/kh2-formats):
   - OpenKh.Kh2/MotionTrigger.cs, Motion.cs, ModelCollision.cs, ObjectCollision.cs
                                                        -> crates/kh2-formats/src/motion.rs
   - OpenKh.Kh2/SystemData/Pref/*.cs                    -> crates/kh2-formats/src/pref.rs
+  - OpenKh.Kh2/Pax.cs, Dpx.cs, Dpd.cs, Dpd.ParticleData.cs, DpdPData.cs
+                                                       -> crates/kh2-formats/src/pax.rs
+  - OpenKh.Command.Bdxio/Models/BdxTraps.cs (trap table),
+    BdxInstructionDescs.cs (mnemonics)                 -> crates/kh2-bdx/src/traps.rs,
+                                                          crates/kh2-bdx/src/disasm.rs
 Changes: rewritten in Rust; cipher rounds folded into one XOR mask; the
 cipher's substitution table is located in the user's own executable at
 runtime instead of being embedded.

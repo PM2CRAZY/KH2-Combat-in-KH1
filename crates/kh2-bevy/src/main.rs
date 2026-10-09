@@ -24,7 +24,7 @@ use bevy::math::Isometry3d;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use character_core::{Abilities, Button as Btn, Character, Env, Input as CInput, Output, StateName, TargetInfo};
-use combat_core::{first_overlap, AttackDef, AttackVolume, Combatant, DamageRules, HitTracker, Shape as CShape, ShapeKind, Stats, Team};
+use combat_core::{first_overlap, resolve_hit, AttackVolume, Combatant, DamageRules, HitRecord, Shape as CShape, ShapeKind, Stats, Team};
 use kh2_data::sora::BladeSphere;
 use kh2_data::{Install, Source};
 
@@ -149,13 +149,6 @@ fn main() {
             };
             let mut character = data.character.clone();
             character.abilities = Abilities::max_growth();
-            // Sub 0 of every attack id, at Sora's level (the game picks
-            // level variants this way).
-            let ids: std::collections::BTreeSet<u16> = data.combat.battle.atkp.iter().filter(|a| a.sub() == 0).map(|a| a.id).collect();
-            let attacks: HashMap<u16, AttackDef> = ids
-                .into_iter()
-                .filter_map(|id| data.combat.attack_at_level(id, 0, level as u8).map(|a| (id, a)))
-                .collect();
             let dummy_template = data.combat.enemy(DUMMY_ENEMY, Some(dummy_level));
             // Menus, abilities and magic from the install.
             let action_ids: Vec<u16> = data.character.moveset.combo_rows.iter().map(|r| r.ability).filter(|a| *a != 0).collect();
@@ -177,6 +170,15 @@ fn main() {
             if let Some(k) = &kit {
                 character.abilities = kh2_data::kit::abilities_from(&equipped, k);
             }
+            // The spells' own files (behaviour scripts and effects).
+            let spells = kit.as_ref().map(|k| {
+                let dir = arg("--data-dir");
+                magic::Spells::load(k, data.magi.clone(), |name| match (&used, &dir) {
+                    (Some(i), _) => i.read_any(source, name).ok(),
+                    (None, Some(d)) => std::fs::read(std::path::Path::new(d).join(name.rsplit('/').next().unwrap_or(name))).ok(),
+                    _ => None,
+                })
+            });
             app.insert_resource(Game {
                 anim,
                 character,
@@ -185,9 +187,12 @@ fn main() {
                 last: None,
                 sora: Combatant::new(1, Team::Player, stats),
                 level,
-                attacks,
+                battle: std::sync::Arc::new(data.combat.battle.clone()),
+                sora_record: HitRecord::new(),
+                live_swings: Default::default(),
+                spells,
+                cast_now: None,
                 blade: data.blade_groups.clone(),
-                tracker: HitTracker::new(),
                 rules: DamageRules::default(),
                 frame: 0,
                 grounded: true,
@@ -210,7 +215,7 @@ fn main() {
                     }
                     m
                 },
-                foe_kit: enemy.map(|e| foes::FoeKit::new(e, &data.combat, dummy_level)),
+                foe_kit: enemy.map(foes::FoeKit::new),
                 sora_hits: Vec::new(),
                 sora_guards: Vec::new(),
                 sora_hit_by: Default::default(),
@@ -225,9 +230,9 @@ fn main() {
                 kit,
             })
             .insert_resource(hud::MenuState::default())
-            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn))
+            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn, magic::spawn_pool))
             .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, foes::sync_pieces, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
-            .add_systems(Update, (hud::ability_menu, hud::draw))
+            .add_systems(Update, (hud::ability_menu, hud::draw, magic::draw))
             .add_systems(FixedUpdate, simulate);
         }
         Err(_) => {
@@ -264,9 +269,20 @@ struct Game {
     last: Option<Output>,
     sora: Combatant,
     level: usize,
-    attacks: HashMap<u16, AttackDef>,
+    /// Every ATKP row: an attack's row is picked when it hits, by how many
+    /// hits in a row the target has taken from the same attack group.
+    battle: std::sync::Arc<kh2_formats::battle::Battle>,
+    /// Sora's hit record (what has hit him, and the group timer).
+    sora_record: HitRecord,
+    /// Attack windows live last frame (Sora's and the Shadows'), to forget
+    /// them in the hit records when they end.
+    live_swings: std::collections::HashSet<u64>,
+    /// Spells in flight (absent without the install's menus).
+    spells: Option<magic::Spells>,
+    /// A cast started this frame: kit spell index and whether the
+    /// finisher motion was used.
+    cast_now: Option<(usize, bool)>,
     blade: HashMap<u8, Vec<BladeSphere>>,
-    tracker: HitTracker,
     rules: DamageRules,
     frame: u64,
     grounded: bool,
@@ -394,6 +410,8 @@ struct Dummy {
     flash: u32,
     /// A Shadow on its own skeleton (absent: a plain column dummy).
     foe: Option<foes::FoeState>,
+    /// What has hit it (exe rules: once per attack, rows by hits in a row).
+    record: HitRecord,
 }
 
 fn spawn_camera_and_light(mut commands: Commands) {
@@ -465,7 +483,7 @@ fn spawn_dummies(mut commands: Commands, game: Res<Game>, mut meshes: ResMut<Ass
     for (i, p) in spots.iter().enumerate() {
         let mut c = template.clone();
         c.id = 100 + i as u32;
-        let mut dm = Dummy { id: c.id, home: *p, pos: *p, combatant: c, knock: [0.0; 2], knock_frames: 0, respawn: 0, flash: 0, foe: None };
+        let mut dm = Dummy { id: c.id, home: *p, pos: *p, combatant: c, knock: [0.0; 2], knock_frames: 0, respawn: 0, flash: 0, foe: None, record: HitRecord::new() };
         let Some(kit) = &game.foe_kit else {
             commands.spawn((dm, Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), Transform::from_xyz(p[0] * SCALE, DUMMY_HEIGHT * 0.5 * SCALE, p[2] * SCALE)));
             continue;
@@ -768,6 +786,28 @@ fn simulate(
                     latch.shortcut = Some(3);
                 }
             }
+            // One spell, cast twice from a few steps away: fire, blizzard,
+            // thunder, cure, magnet, reflect (the Magic list's order).
+            name @ ("fire" | "blizzard" | "thunder" | "cure" | "magnet" | "reflect") => {
+                let i = ["fire", "blizzard", "thunder", "cure", "magnet", "reflect"].iter().position(|n| *n == name).unwrap_or(0);
+                latch.stick = if f < 12 { Vec2::Y } else { Vec2::ZERO };
+                // Hurt first, so Cure has something to heal.
+                if name == "cure" && f == 1 {
+                    game.sora.hp = game.sora.max_hp / 3;
+                }
+                // Reflect is short: cast it as a Shadow starts a swipe.
+                let hit_at = game
+                    .foe_kit
+                    .as_ref()
+                    .and_then(|k| k.data.clips.get(&foes::shadow::SWIPE))
+                    .and_then(|c| c.windows.iter().filter(|w| matches!(w.kind, character_core::WindowKind::Hitbox { .. })).map(|w| w.start).min())
+                    .unwrap_or(0);
+                let swiping = dummies.iter().any(|d| d.foe.as_ref().and_then(|s| s.out.as_ref()).is_some_and(|o| o.motion == foes::shadow::SWIPE && o.clip_frame == hit_at.saturating_sub(12)));
+                let again = if name == "reflect" { swiping } else { f == 20 || f == 160 };
+                if again {
+                    latch.shortcut = Some(i);
+                }
+            }
             // Stand still and guard every 40 frames: Shadows' swipes bounce off.
             "guard" => {
                 latch.stick = Vec2::ZERO;
@@ -874,7 +914,8 @@ fn simulate(
                 let m = |v: i16| (v >= 0).then_some(v as u16);
                 if let (Some(ground), Some(air)) = (m(sp.ground_motion), m(sp.air_motion)) {
                     let motions = character_core::CastMotions { ground, air, finisher: m(sp.finish_motion) };
-                    if game.character.cast(motions).is_some() {
+                    if let Some(used) = game.character.cast(motions) {
+                        game.cast_now = Some((i, Some(used) == motions.finisher && motions.finisher != Some(motions.ground)));
                         game.mp = if sp.mp_cost == 255 { 0.0 } else { (game.mp - sp.mp_cost as f32).max(0.0) };
                         if game.mp <= 0.0 {
                             game.mp_charge = Some(0.0);
@@ -917,14 +958,17 @@ fn simulate(
         ledges: &ledges,
     };
     let out = game.character.step(&input, &env);
-    // The cast motion's magic-cast event releases the spell.
+    // The cast motion's magic-cast event releases the spell (trigger 21);
+    // the script itself runs below with the other spells.
+    let new_cast = game.cast_now.take();
+    let mut released = false;
     if let Some(i) = game.casting {
-        let released = out.events.iter().any(|e| matches!(e, character_core::EventKind::MagicCast(m) if *m as u16 == out.motion));
-        if released {
+        let fired = out.events.iter().any(|e| matches!(e, character_core::EventKind::MagicCast(m) if *m as u16 == out.motion));
+        if fired {
             game.casting = None;
+            released = true;
             if let Some(sp) = game.kit.as_ref().map(|k| k.spells[i].clone()) {
                 dbg.log.push(format!("{} released", sp.name));
-                magic::release(game, &sp);
             }
         } else if out.state != StateName::Magic {
             game.casting = None;
@@ -935,6 +979,15 @@ fn simulate(
     let mut p = game.pos;
     p[0] += out.displacement[0];
     p[2] += out.displacement[2];
+    // A spell's recoil (Blizzard pushes Sora back).
+    if let Some(sp) = game.spells.as_mut() {
+        if let Some((d, v)) = sp.recoil {
+            p[0] += d.x * v;
+            p[2] += d.z * v;
+            let next = v * 0.9;
+            sp.recoil = (next >= 1.0).then_some((d, next));
+        }
+    }
     p = arena.push_out(p, SORA_RADIUS, 30.0);
     // Body collision with standing column dummies (Shadows are separated
     // by weight after they move).
@@ -1017,9 +1070,11 @@ fn simulate(
                 }
             }
         }
-        let Some(attack) = game.attacks.get(&h.attack).cloned() else { continue };
+        let Some(first) = magic::row(&game.battle, h.attack, 0, 0).cloned() else { continue };
+        // The window's group: the row's combo group, else its own.
+        let group = if first.combo_group != 0 { first.combo_group as i64 } else { h.swing as i64 };
         for mut dm in dummies.iter_mut() {
-            if dm.respawn > 0 {
+            if dm.respawn > 0 || dm.record.has_hit(h.swing) {
                 continue;
             }
             let target = match &dm.foe {
@@ -1030,17 +1085,21 @@ fn simulate(
             if first_overlap(&swept, &target).is_none() {
                 continue;
             }
-            let sora = game.sora.clone();
-            let r = game.tracker.try_hit(game.frame, h.swing, &game.rules, &attack, &sora, &mut dm.combatant);
+            let adm = dm.record.admit(group, false, false);
+            let Some(row) = magic::row(&game.battle, h.attack, 0, adm.count).cloned() else { continue };
+            dm.record.mark(h.swing, row.interval);
+            if !adm.effective {
+                continue;
+            }
+            let attack = kh2_data::attack_def(&row);
+            let r = resolve_hit(&game.rules, &attack, &game.sora, &mut dm.combatant);
             if r.blocked.is_none() {
                 game.connected.insert(h.swing);
                 game.character.register_hit();
                 let fwd = [out.facing.sin(), out.facing.cos()];
                 if dm.foe.is_some() {
                     // The game's generic reaction (flinch / push / launch).
-                    if let Some(atk) = game.atkp_raw.get(&h.attack).cloned() {
-                        foes::react(&mut dm, &atk, out.facing, r.killed);
-                    }
+                    foes::react(&mut dm, &row, out.facing, r.killed);
                 } else {
                     // Column dummy: ATKP strength spread over 10 frames
                     // (approximation).
@@ -1050,9 +1109,10 @@ fn simulate(
                 }
                 dm.flash = 6;
                 let line = format!(
-                    "hit Shadow#{} with atkp {} ({}%): {} dmg  HP {}/{}{}",
+                    "hit Shadow#{} with atkp {} hit {} ({}%): {} dmg  HP {}/{}{}",
                     dm.id - 99,
                     h.attack,
+                    adm.count + 1,
                     attack.power,
                     r.damage,
                     dm.combatant.hp,
@@ -1066,6 +1126,13 @@ fn simulate(
             }
         }
     }
+
+    // Spells: a cast that started this frame (trigger 20), the release
+    // (trigger 21), then every spell script runs once.
+    if game.spells.is_some() {
+        spell_frame(game, &out, new_cast, released, &arena, &mut dummies, &mut dbg);
+    }
+
     if auto.trace {
         for l in &dbg.log[log_before.min(dbg.log.len())..] {
             eprintln!("log f{} {l}", game.frame);
@@ -1088,6 +1155,7 @@ fn simulate(
         }
         let sora_hurt = game.anim.as_ref().map(|a| a.hurt_shapes()).unwrap_or_default();
         let sora_facing = out.facing;
+        let barriers = game.spells.as_ref().map(|sp| magic::barriers(&sp.magic, &game.battle)).unwrap_or_default();
         let mut live_pairs = std::collections::HashSet::new();
         for mut dm in dummies.iter_mut() {
             let foe_pos = dm.pos;
@@ -1108,6 +1176,21 @@ fn simulate(
                     continue;
                 }
                 let Some(fatk) = game.atkp_raw.get(&h.attack).cloned() else { continue };
+                // A Reflect barrier bounces the attack and counts it (the
+                // spell's script then fires back).
+                if let Some((key, _, b)) = barriers.iter().find(|(_, r, b)| foes::clashes(r, &fatk) && foes::overlap(b, &shapes)) {
+                    st.spent.insert(h.swing);
+                    game.sora_hit_by.insert((*id, h.swing));
+                    foes::foe_clash_reaction(st, &fatk, sora_facing);
+                    if let Some(a) = game.spells.as_mut().and_then(|sp| sp.magic.attack_mut(*key)) {
+                        a.reflect_count = a.reflect_count.saturating_add(1);
+                    }
+                    if let Some(c) = b.first() {
+                        game.sparks.push((Vec3::from(c.center), 20));
+                    }
+                    dbg.log.push(format!("Reflect blocked Shadow#{}'s atkp {}", *id - 99, h.attack));
+                    continue;
+                }
                 // Clash with Sora's guard or attack (exe table and angles).
                 let mut clashed = None;
                 for (sh, sshapes) in game.sora_guards.iter().chain(game.sora_hits.iter()) {
@@ -1140,15 +1223,26 @@ fn simulate(
                 if out.invulnerable || !foes::overlap(&shapes, &sora_hurt) {
                     continue;
                 }
-                let Some(adef) = kit.attacks.get(&h.attack) else { continue };
+                // Sora's hit record: once per attack; the player side also
+                // refuses other attack groups for 30 frames after a hit.
+                let key = ((*id as u64) << 40) | h.swing;
+                if game.sora_record.has_hit(key) {
+                    continue;
+                }
                 st.spent.insert(h.swing);
                 game.sora_hit_by.insert((*id, h.swing));
-                let attacker = combatant.clone();
-                let r = game.tracker.try_hit(game.frame, ((*id as u64) << 40) | h.swing, &game.rules, adef, &attacker, &mut game.sora);
+                let group = if fatk.combo_group != 0 { fatk.combo_group as i64 } else { key as i64 };
+                let adm = game.sora_record.admit(group, false, true);
+                let Some(row) = magic::row(&game.battle, h.attack, 0, adm.count).cloned() else { continue };
+                game.sora_record.mark(key, row.interval);
+                if !adm.effective {
+                    continue;
+                }
+                let r = resolve_hit(&game.rules, &kh2_data::attack_def(&row), combatant, &mut game.sora);
                 if r.blocked.is_none() {
                     game.character.take_hit(&character_core::reaction::Hit {
-                        reaction: fatk.enemy_reaction,
-                        knockback: (fatk.knockback_1, fatk.knockback_2),
+                        reaction: row.enemy_reaction,
+                        knockback: (row.knockback_1, row.knockback_2),
                         dir: [foe_facing.sin(), foe_facing.cos()],
                         part: 0,
                     });
@@ -1163,6 +1257,29 @@ fn simulate(
         game.sora_hit_by.retain(|k| live_pairs.contains(k));
     }
     game.foe_kit = kit;
+
+    // Hit records: a frame passes; attacks that ended are forgotten.
+    let mut swings_now: std::collections::HashSet<u64> = out.hitboxes.iter().chain(&out.guard_boxes).map(|h| h.swing).collect();
+    for dm in dummies.iter() {
+        if let Some(st) = &dm.foe {
+            swings_now.extend(st.live.iter().chain(&st.guards).map(|(h, _)| ((dm.id as u64) << 40) | h.swing));
+        }
+    }
+    let ended: Vec<u64> = game.live_swings.difference(&swings_now).copied().collect();
+    for mut dm in dummies.iter_mut() {
+        for k in &ended {
+            dm.record.forget(*k);
+        }
+        // The group timer waits while a hit-reaction motion (10-39) plays.
+        let frozen = dm.foe.as_ref().and_then(|s| s.out.as_ref()).is_some_and(|o| (10..40).contains(&o.motion));
+        dm.record.tick(1.0, frozen);
+    }
+    for k in &ended {
+        game.sora_record.forget(*k);
+    }
+    game.sora_record.tick(1.0, (10..40).contains(&out.motion));
+    game.live_swings = swings_now;
+
     if auto.trace {
         for l in &dbg.log[log_mid.min(dbg.log.len())..] {
             eprintln!("log f{} {l}", game.frame);
@@ -1208,6 +1325,153 @@ fn simulate(
     }
     dbg.last = Some(format!("{:?}", out.state));
     game.last = Some(out);
+}
+
+/// One frame of spells: snapshot the world for the scripts, start a new
+/// cast, release, run every script, then apply what their attacks did.
+fn spell_frame(game: &mut Game, out: &Output, new_cast: Option<(usize, bool)>, released: bool, arena: &Arena, dummies: &mut Query<&mut Dummy>, dbg: &mut Debug) {
+    let Some(mut sp) = game.spells.take() else { return };
+    let mut objs = vec![magic::Snap::from_anim(magic::SORA, game.pos, out.facing, out.motion, true, !game.grounded, !game.grounded, game.anim.as_ref(), 90.0)];
+    for dm in dummies.iter() {
+        let alive = dm.respawn == 0 && dm.foe.as_ref().map_or(true, |s| !s.npc.is_dead());
+        let (facing, motion, anim, air) = match &dm.foe {
+            Some(st) => (st.npc.facing(), st.out.as_ref().map_or(0, |o| o.motion), Some(&st.anim), !st.grounded),
+            None => (0.0, 0, None, false),
+        };
+        objs.push(magic::Snap::from_anim(dm.id, dm.pos, facing, motion, alive, air, air, anim, 60.0));
+    }
+    // Sora's target: the lock-on, else the nearest Shadow in front within
+    // 1500, else the nearest (approximation of the game's search).
+    let fwd = Vec2::new(out.facing.sin(), out.facing.cos());
+    let here = Vec2::new(game.pos[0], game.pos[2]);
+    let mut cands: Vec<(f32, bool, u32)> = objs
+        .iter()
+        .filter(|o| o.id != magic::SORA && o.alive)
+        .map(|o| {
+            let d = Vec2::new(o.pos.x, o.pos.z) - here;
+            (d.length(), d.dot(fwd) >= 0.0 && d.length() < 1500.0, o.id)
+        })
+        .collect();
+    cands.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.total_cmp(&b.0)));
+    let target = out.locked.filter(|id| objs.iter().any(|o| o.id == *id && o.alive)).or(cands.first().map(|c| c.2));
+    let abilities = game.character.abilities.equipped.clone();
+    let centers: HashMap<u32, Vec3> = objs.iter().map(|o| (o.id, o.center)).collect();
+    let magic::Spells { magic: m, rng, magi, file_of, .. } = &mut sp;
+    let mut world = magic::PlayWorld { objs, arena, abilities: &abilities, target, rng, hitbacks: Vec::new() };
+
+    if let (Some((i, finisher)), Some(kit)) = (new_cast, game.kit.as_ref()) {
+        if let (Some(Some(file)), Some(info)) = (file_of.get(i), kit.spells.get(i)) {
+            let sub = info.level as i32 * 2 - 2 + finisher as i32;
+            let row = magi.get(sub).map(|r| r.to_vec()).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
+            if let Err(e) = m.cast(*file, magic::SORA, info.element, sub, &row, &mut world) {
+                dbg.log.push(format!("{}: {e}", info.name));
+            }
+        }
+    }
+    if released {
+        m.release(magic::SORA, &mut world);
+    }
+    let events = m.update(&mut world);
+    let hitbacks = std::mem::take(&mut world.hitbacks);
+    drop(world);
+    for (o, d, dist) in hitbacks {
+        if o == magic::SORA {
+            sp.recoil = Some((d, dist * 0.1));
+        }
+    }
+    let strikes = magic::handle_events(events, &mut dbg.log);
+    let m = &mut sp.magic;
+
+    // Direct applications (Cure): heal Sora.
+    for (key, target) in strikes {
+        let Some(a) = m.attack_mut(key) else { continue };
+        let (atk, sub) = (a.atk, a.sub);
+        if target != magic::SORA {
+            continue;
+        }
+        let Some(row) = magic::row(&game.battle, atk, sub, 0).cloned() else { continue };
+        let caster = game.sora.clone();
+        let r = resolve_hit(&game.rules, &kh2_data::attack_def(&row), &caster, &mut game.sora);
+        dbg.log.push(format!("Cure: +{} HP (atkp {}, {}%)  HP {}/{}", r.healed, atk, row.power, game.sora.hp, game.sora.max_hp));
+    }
+
+    // Spell attacks against the Shadows.
+    magic::bg_hits(m, &game.battle, arena);
+    for mut dm in dummies.iter_mut() {
+        if dm.respawn > 0 || dm.foe.as_ref().is_some_and(|s| s.npc.is_dead()) {
+            continue;
+        }
+        let hurt = match &dm.foe {
+            Some(st) => st.hurt_shapes(),
+            None => vec![dummy_shape(dm.pos)],
+        };
+        let foe_pos = Vec3::from(dm.pos);
+        let hits = {
+            let Dummy { record, id, .. } = &mut *dm;
+            magic::hits_on(m, &game.battle, *id, foe_pos, &hurt, record)
+        };
+        for h in hits {
+            let attack = kh2_data::attack_def(&h.row);
+            let r = resolve_hit(&game.rules, &attack, &game.sora, &mut dm.combatant);
+            if r.blocked.is_some() {
+                continue;
+            }
+            let name = game.kit.as_ref().and_then(|k| k.spells.iter().find(|s| s.file == m.spells[h.spell].name)).map_or("Spell".to_string(), |s| s.name.clone());
+            if h.row.enemy_reaction == 5 && dm.foe.is_some() {
+                // Magnet: caught and pulled (exe reaction 5).
+                let (k1, k2) = (h.row.knockback_1 as f32, h.row.knockback_2 as f32);
+                let radius = k1 + magic::rand(&mut sp.rng) * (k2 - k1);
+                let swirl = h.row.unknown_16 as f32;
+                let st = dm.foe.as_mut().unwrap();
+                let fwd = st.npc.forward();
+                let front = fwd[0] * h.dir[0] + fwd[1] * h.dir[1] < 0.0;
+                st.npc.suction(front, radius, swirl);
+                st.caught_by = Some(h.key);
+                if r.killed {
+                    st.npc.die(foes::shadow::DEATH);
+                }
+            } else if dm.foe.is_some() {
+                foes::react(&mut dm, &h.row, h.dir[0].atan2(h.dir[1]), r.killed);
+            }
+            dm.flash = 6;
+            dbg.log.push(format!(
+                "{name} hit Shadow#{} with atkp {} hit {} ({}%): {} dmg  HP {}/{}{}",
+                h.foe - 99,
+                h.atk,
+                h.count + 1,
+                h.row.power,
+                r.damage,
+                dm.combatant.hp,
+                dm.combatant.max_hp,
+                if r.killed { "  KO" } else { "" }
+            ));
+            if r.killed {
+                dm.respawn = 120;
+            }
+        }
+    }
+    // Magnet: pull toward the attack's centre while it lives.
+    for mut dm in dummies.iter_mut() {
+        let id = dm.id;
+        let Some(st) = dm.foe.as_mut() else { continue };
+        let Some(key) = st.caught_by else { continue };
+        let at = m.attacks.iter().find(|a| a.key == key && !a.freed).and_then(|a| a.pos);
+        match (at, centers.get(&id)) {
+            (Some(c), Some(body)) => st.npc.suction_to = Some((c - *body).into()),
+            _ => {
+                st.npc.suction_to = None;
+                st.caught_by = None;
+            }
+        }
+    }
+    // Attacks the scripts freed are forgotten by everyone they hit.
+    let freed: Vec<u64> = m.freed().filter(|a| a.owns_id).map(|a| a.id | magic::SPELL_KEY).collect();
+    for mut dm in dummies.iter_mut() {
+        for k in &freed {
+            dm.record.forget(*k);
+        }
+    }
+    game.spells = Some(sp);
 }
 
 impl Game {

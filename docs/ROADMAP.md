@@ -95,12 +95,15 @@ See `combat-model.md` ("Hit detection") and `animation.md`.
 **Partly done:**
 - 17: Shadows attack on our own timer, not their scripts
 
+**Also done (Phase 4 work):**
+- weight (body push split by weight)
+- reaction 5 (Magnet's pull)
+- the per-target hit record, which picks ATKP rows by hit count
+
 **Open:**
-- enemy scripts (BDX)
-- weight
+- enemy scripts. The BDX machine now exists (`kh2-bdx`); enemies need their own traps.
 - revenge
 - Sora's damage-lock length
-- reaction 5
 
 See `combat-model.md` ("Hit reactions", "Clashes and guarding", "Enemies").
 
@@ -111,7 +114,23 @@ See `combat-model.md` ("Hit reactions", "Clashes and guarding", "Enemies").
     That lets guard, reflect and invulnerable frames be tested for real.
 18. Sora taking damage: his reactions, knock-down and recovery.
 
-## Phase 4: the rest of Sora's kit
+## Phase 4: the rest of Sora's kit (started 2026-10-09)
+
+**Done:**
+- 20 (partly): Sora's HP/MP gauges; MP costs from 03system
+- 21 (partly): the ledge hang, which waits for a fresh push or jump (our change)
+- 22: magic. Every spell runs from its own file's script (`docs/magic-model.md`):
+  - the cast motions and MP
+  - Fire, Blizzard, Thunder, Cure, Magnet and Reflect at all three levels
+- **Command menu and ability menu:** names, AP costs and the AP cap from the install, with
+  growth/combo abilities switching the controller. Aerial Recovery is added for convenience.
+
+**Open:**
+- the MP Charge rate
+- Drive Form spell variants
+- Items
+- the remaining 19/20 items (Keyblade stats, more abilities)
+- 23
 
 19. Combo and finisher abilities (Combo Plus, Air Combo Plus, Finishing Plus, Negative Combo,
     Berserk, Finishing Leap, Retaliating Slash and others), using ability ids from the

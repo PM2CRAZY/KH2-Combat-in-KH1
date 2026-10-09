@@ -11,13 +11,16 @@ extracted data and no decompiled code, and the playground loads no meshes or tex
 
 ```
 crates/
-  combat-core/     engine-agnostic hit rules: damage, resistances, clamps, guard, multi-hit gating
+  combat-core/     engine-agnostic hit rules: damage, resistances, clamps, guard, shapes, the
+                   per-target hit record (hit once, re-hit intervals, rows by hit count)
   character-core/  engine-agnostic 60 Hz controller: run/turn, jump, High Jump, Glide, Dodge Roll,
                    Quick Run, Aerial Dodge, Guard, landing recovery, lock-on, ground/air combos
   kh2-formats/     readers: Epic HED/PKG, BAR, 00battle.bin (incl. PTYA), 03system.bin pref,
                    MSET/ANB motions + root curves + triggers, model collision,
                    MDLX skeletons, full keyframed motions, objentry, sklt
   kh2-anim/        poses a skeleton from a motion like the game does: F-curves, constraints, IK
+  kh2-bdx/         runs KH2's BDX scripts (the bytecode inside spell and object files)
+  kh2-magic/       spells run from their own files' scripts: casting, attacks, effects
   kh2-data/        finds your install and builds the controller and attack data for Sora
   kh2-combat-cli/  `kh2-combat`: dump tables, simulate hits, run scripted movement checks
   kh2-bevy/        `kh2-playground`: Bevy app with an animated mannequin, training dummies, hitbox gizmos
@@ -25,6 +28,7 @@ docs/
   combat-model.md    damage rules: source and confidence for each
   movement-model.md  movement/moveset rules: source and confidence for each
   animation.md       how the skeleton is posed (from the executable's motion evaluator)
+  magic-model.md     how spells run: casting, the script machine, every trap the spells use
 ```
 
 ## Testing it on Windows
@@ -54,6 +58,9 @@ docs/
    - `--synthetic`: made-up numbers, no install needed (capsule rig)
    - `--capsule`: draw the old capsule instead of the mannequin
    - `--cam-distance N`: camera distance (default 650)
+   - `--enemies N`: how many Shadows (default 1)
+   - `--hp N`: Sora's max HP (default 60; the real value depends on story bonuses)
+   - `--magic-level 1|2|3`: Fire/Fira/Firaga and so on (default 3)
 
 ### Playground controls
 
@@ -65,8 +72,9 @@ docs/
 | Guard (standing) / Dodge Roll or Quick Run (moving; hold to keep dashing) | K / Shift | X |
 | Lock-on | Tab / middle click | RT |
 | Camera | Q/E, arrows, right-drag | right stick |
-| Growth levels: High Jump, Quick Run, Aerial Dodge, Glide, Dodge Roll | 1 2 3 4 5 | |
-| Combo Plus / Air Combo Plus / Finishing Plus | 6 7 8 | |
+| Command menu: move / confirm / back out of Magic | Up, Down / J / Space | D-pad / A / B |
+| Magic shortcuts (Fire, Blizzard, Thunder, Cure, Magnet, Reflect) | 1–6 | |
+| Ability menu (equip with J/Enter, U = unlimited AP) | Esc / P | Start |
 | Attack/guard shapes, hit shapes, skeleton, other collision / reset position | F1 F2 F3 F4 / R | |
 
 Jump at a wall that is slightly too high, holding toward it, to grab the ledge (push toward it to climb, pull away to drop).
@@ -77,6 +85,9 @@ dark stick figure), hurt shapes, attacks, HP and stats.
 - **When they're hit** they flinch, slide or get launched by the game's reaction rules.
 - **They come at you** with a simple timer of ours (KH2's enemy scripts aren't run). Their
   claws can hit Sora, and his Guard bounces them off.
+
+**Magic** runs from the spell files' own scripts (`docs/magic-model.md`). Each effect shows
+as a glowing orb at its real position, and each spell attack as its real hit volume.
 
 Without the Shadow's files the playground falls back to plain column dummies.
 
@@ -115,7 +126,12 @@ install the player owns.
   animation is attached to his right hand (bone 178, from the `sklt` table). Attack and hurt
   spheres sit on the real bones, so hits follow the actual swing.
 - **Damage per hit:** the game's own order and rounding, base-term clamps from ENMP/LVPM, and
-  the exact difficulty table (see `docs/combat-model.md`).
+  the exact difficulty table (see `docs/combat-model.md`). Which ATKP row applies depends on
+  how many hits in a row the target has taken from that attack group, as in the game.
+- **Menus:** the command menu, ability names, AP costs and the level's AP total, spell names,
+  MP costs and Sora's MP come from 03system, 00battle and the message files.
+- **Spells:** every spell's behaviour comes from its own script, with its sizes and timings
+  from 03system `magi`.
 
 How the executable was studied: Ghidra headless on your own copy, kept outside the repo. Only
 plain-language notes are in `docs/`.
@@ -124,11 +140,10 @@ plain-language notes are in `docs/`.
 
 - **Stick tilt → walk/run, landing recovery, and roll / Quick Run cancel points.**
 - **Air-control target speed and invulnerability timer units.**
-- **Animation blending** uses a fixed 8-frame cross-fade, not the game's per-move blend times.
-  Feet don't adapt to slopes and stairs, and there's no head look-at.
-- **Dummies don't attack yet.** Guard and invulnerability are shown (cyan / white) but never
-  tested against incoming hits.
-- **Not done yet:** magic, drive forms, limits, reaction commands, ledge hang, enemy AI.
+- **Animation:** feet don't adapt to slopes and stairs, and there's no head look-at.
+- **Enemy AI:** the Shadows use our own timer, not their scripts.
+- **MP Charge** refills over a fixed 10 seconds (the game's rate isn't read yet).
+- **Not done yet:** drive forms, items, limits, summons, reaction commands.
 
 ## Rules this repo follows
 

@@ -5,6 +5,8 @@ This project stands on other people's research. Licences are kept; see `NOTICE`.
 | Source | What we used | Licence |
 |---|---|---|
 | [OpenKH](https://github.com/OpenKH/OpenKh) ([docs](https://openkh.dev/kh2/)): Xeeynamo, the OpenKH team and contributors | HED/PKG archive layout and cipher (`OpenKh.Egs`), BAR container, every `00battle.bin` table layout (incl. PTYA), `03system.bin` pref tables, MSET/ANB/motion-trigger/model-collision layouts, the interpolated-motion and MDLX skeleton layouts, `00objentry.bin` layout, enemy/command dictionaries. Parts of `kh2-formats` are ports of their C# code. | Apache-2.0 |
+| OpenKH `OpenKh.Command.Bdxio` and the [KH2 AI docs](https://openkh.dev/kh2/file/ai/) (generated from [GovanifY's ghidra-kh2ai](https://code.govanify.com/govanify/ghidra-kh2ai)) | BDX file layout, instruction mnemonics, and the trap (syscall) name/argument table, ported to `crates/kh2-bdx/src/traps.rs`. The table matches the executable's. | Apache-2.0 |
+| OpenKH `OpenKh.Kh2/Pax.cs`, `Dpx.cs`, `Dpd*.cs`, preferences docs | PAX element, DPX and DPD particle-data layouts (`crates/kh2-formats/src/pax.rs`); `magi` field names | Apache-2.0 |
 | [Kenjiuno's msetDoc](https://gitlab.com/kenjiuno/msetDoc), via OpenKH's ANB/MSET/motion docs | Moveset, motion trigger and interpolated-motion layouts; the trigger id tables | see repo |
 | [KHPCPatchManager](https://github.com/PurpleHato/KHPCPatchManager): AntonioDePau, PurpleHato and contributors | Reference for how the Epic PKG/HED files are extracted | see repo |
 | [GovanifY/kh2](https://github.com/govanify/kh2) | Background on the original engine's structure (PS2 decomp). Not used for code. | MIT |

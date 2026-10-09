@@ -92,6 +92,9 @@ pub struct SoraData {
     pub rig_error: Option<String>,
     /// objentry weight (body pushing; 0 = immovable).
     pub weight: f32,
+    /// Spell parameters (`03system.bin` pref `magi`), read by the spell
+    /// scripts.
+    pub magi: kh2_formats::pref::MagiTable,
 }
 
 pub(crate) fn rec<'a>(t: &'a kh2_formats::pref::PrefTable, i: usize) -> &'a [f32] {
@@ -382,7 +385,7 @@ fn load_sora_with(source: Source, read: &dyn Fn(&str) -> Result<Vec<u8>>) -> Res
         .and_then(|b| kh2_formats::objentry::parse_objentry(&b).ok())
         .and_then(|o| o.into_iter().find(|o| o.model == PLAYER_OBJECT))
         .map_or(100.0, |o| o.weight);
-    Ok(SoraData { character, combat, blade_groups: blade_groups(&collision), motions, rig, rig_error, weight })
+    Ok(SoraData { character, combat, blade_groups: blade_groups(&collision), motions, rig, rig_error, weight, magi: pref.magi.clone() })
 }
 
 fn load_rig(read: &dyn Fn(&str) -> Result<Vec<u8>>, player: &Mset, weapon: &Mset, weapon_collision: &[ObjectCollision]) -> Result<Rig> {

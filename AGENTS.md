@@ -166,3 +166,40 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - `character_core::npc` runs it
   - the playground's Shadows attack on our timer, hit Sora and get guarded
 - **Open:** enemy scripts, weight, revenge, Sora's damage-lock length.
+
+### 2026-10-09: Phase 4 (HUD, menus, abilities, magic)
+- **Playground changes:**
+  - one Shadow by default (`--enemies N`)
+  - the ledge hang waits for a fresh push or jump before climbing (our change)
+  - Aerial Recovery (jump during a launch)
+- **Enemy weight (exe):** the body push is split by objentry weight.
+- **03system item/cmd tables and msg text:**
+  - the command menu (Attack, Magic, Items, Drive)
+  - the ability menu with real names and AP and the level's AP cap
+  - HP/MP gauges
+- **Correction (exe):** the ATKP row "level" byte is the defender's consecutive-hit count
+  from the same attack group, not the attacker's level. It is now implemented with the
+  game's per-object hit record (`combat_core::HitRecord`: hit-once bits, group/count, a
+  30-frame group timer for the player, 4 re-hit interval slots). Sora's and the Shadows'
+  swings use it too.
+- **New crate `kh2-bdx`:** the BDX script machine, written from the interpreter. The trap
+  names come from OpenKH's list, whose 828 argument counts match the executable.
+- **New crate `kh2-magic`:**
+  - spell casting (trigger 20 with caster, resources, sub and the `magi` record; trigger 21
+    at the cast motion's magic-cast event)
+  - the 59 traps the six spells use
+  - spell attacks (the game's magic attack shape and sweep, duplicates sharing ids)
+  - effects (PAX elements by id, bone codes, lifetimes from the DPD emitter headers)
+  - a y-down/y-up flip at the boundary
+- **Reaction 5 (exe):** Magnet's orbit pull.
+- **Verified:**
+  - every spell file at every level runs to the end headlessly (`kh2-magic` test with
+    extracted files)
+  - in the playground: Firaga hits 5 times (alternating 8/10-frame re-hits, a 175% final);
+    Blizzaga's shard; Thundaga's bolt; Curaga heals; Magnega lifts the Shadow into an orbit;
+    Reflega stops a swipe and counters with 574 ×5 and a 667 burst
+- **Open:**
+  - the MP Charge rate
+  - the target search without lock-on
+  - Drive Form variants
+  - enemy scripts (the VM is ready)

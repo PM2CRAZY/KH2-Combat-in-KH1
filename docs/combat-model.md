@@ -30,13 +30,59 @@ Cure (ATKP type 5) heals `ceil(target max HP × power × stat / 10000)`. C-Cure 
 
 ## Attack rows
 
-- The first u16 of an ATKP row is two bytes: the **minimum attacker level** and the **sub id**.
+- The first u16 of an ATKP row is two bytes: a **hit count** threshold and the **sub id**.
   **Checked (exe).**
-- **Level variants.** Rows that share an id and sub are scanned in order while their minimum
-  level is at most the attacker's level. A row with `switch` 0 always replaces the current
-  pick; `switch` 1 or 2 only replaces it when `(level - min level)` is even or odd.
-  `Battle::attack_for_level` implements this. **Checked (exe).**
+- **Row variants.** Rows that share an id and sub are scanned in order while their threshold
+  is at most the target's **hit count** (see "Hit records" below). A row with `switch` 0
+  always replaces the current pick; `switch` 1 or 2 only replaces it when
+  `(count - threshold)` is even or odd. `Battle::attack_for_level` implements the scan.
+  **Checked (exe).**
+  - *Correction (2026-10-09):* Phase 1 read the threshold as the attacker's level. The lookup
+    is called from the hit routine with the defender's consecutive-hit count. Examples:
+    - Sora's ATKP 12 is 150% on the first hit and 50% on repeats.
+    - Fire (ATKP 502 sub 0) hits for 50% every 18 frames; the third hit is 150% and knocks
+      the target away.
+    - Firaga (sub 4) alternates rows with 8- and 10-frame intervals; the fifth hit is 175%.
 - `power` is a percentage. **Checked.**
+
+## Hit records (`combat_core::HitRecord`)
+
+**Checked (exe).** Every object keeps a record of the attacks that hit it, and every live
+attack has a small id (1–255, reused once the attack ends).
+
+**Before a hit counts:**
+1. The attack's bit in the target's record must be clear. Cure kinds (ATKP kind 5 and 6)
+   skip this check.
+2. Team and other filters must pass.
+
+**When it hits:**
+- **Group.** The attack's group is its ATKP `combo_group` when nonzero. Otherwise it is the
+  value its creator passed, or a fresh number (scripts pass −1, so spells get a fresh one).
+- **Effective or not.** The hit is effective if any of these holds:
+  - it is a Cure kind
+  - it comes from the target's last group
+  - its group is 0xff
+  - the target's group timer is at or below 0
+  
+  An ineffective hit is still registered, flagged so it does nothing.
+- **Count.** If effective, the count goes up for the same group, or the group is remembered
+  and the count resets to 0.
+- **Group timer.** Objects with a particular flag set the timer to 30. In this project that
+  is the player.
+- **Row.** The ATKP row is picked with the count (above).
+- **Re-hit.** If the row has an `interval`, the attack's id goes into one of 4 re-hit slots
+  with that many frames.
+- **Mark.** The attack's bit is set.
+
+**Every frame:**
+- The group timer counts down. It holds while the object plays a reaction motion (10–39).
+- Each re-hit slot counts down by the frame time. When one runs out, it clears that attack's
+  bit, so the attack can hit again.
+
+**When an attack ends**, its bit is cleared in every object's record. Duplicated attacks
+share the original's id and don't clear it.
+
+The playground uses this for Sora's swings, the Shadows' swings and spells.
 
 ## Enemy stats (`kh2_data::enemy_combatant`)
 
@@ -202,12 +248,14 @@ Each enemy comes from its own files:
 - **Moveset:** `obj/M_EX010.mset` for the Shadow. Enemy movesets index motions by slot.
 - **Skeleton and collision shapes:** its MDLX.
 - **Stats:** ENMP / LVPM.
-- **Weight:** objentry; read, not used yet.
+- **Weight:** objentry. When two bodies overlap they are pushed apart, each moving in
+  inverse proportion to its weight (exe). Weight 0 means immovable.
 
 **Hurt shapes** are its type-2 shapes. For the Shadow these are three spheres: bone 2 r40,
 bone 28 r45 and bone 31 r40.
 
-**Attacks** are its motions' hitbox windows, with their ATKP rows at the enemy's level:
+**Attacks** are its motions' hitbox windows. The ATKP row is picked by Sora's hit count when
+the attack lands:
 - **201 swipe:** ATKP 5, group 1 (a claw)
 - **202:** ATKP 1313 / 1314
 - **203 dash:** a guard window (ATKP 405), then ATKP 7, which launches
@@ -218,12 +266,24 @@ its moves. The playground's Shadows walk up and swipe when close, sometimes dash
 300–550 away, and wait 1.5–3 s between attacks. Damage to Sora goes through
 `combat-core`, and his reaction uses the same routine as above.
 
+## Magnet's pull (reaction 5)
+
+**Checked (exe).** Reaction 5 catches the target:
+- **Setup:**
+  - motion 20, or 21 when hit from behind
+  - an orbit radius picked at random between the ATKP's knockback 1 and 2
+  - a swirl speed from the ATKP's next field (signed; −3 / −6 / −12 for Magnet / Magnera /
+    Magnega)
+- **Each frame:** it moves toward the orbit radius around the attack's centre by up to 20,
+  and sideways (a quarter turn about the vertical) by the swirl speed.
+- **Release:** when the attack ends, the target falls (ours: as from a launch with no speed).
+
+The pull itself doesn't use weight.
+
 ## Not modelled yet
 
-- Enemy AI (BDX scripts) and revenge limits per enemy. Enemy weight and per-enemy
-  resistance to being pushed.
-- Reaction 5 (a push away from the attack's position) and the alternate-part flinches (11 /
-  13).
+- Enemy AI (BDX scripts) and revenge limits per enemy.
+- The alternate-part flinches (11 / 13).
 - How long Sora is locked in a damage motion. The playground reads the "allow reaction
   command" window (frame 8): **Hypothesis**.
 - Multiplayer/co-op damage scaling (a global mode flag divides or multiplies damage).

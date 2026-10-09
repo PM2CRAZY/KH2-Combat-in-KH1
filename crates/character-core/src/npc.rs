@@ -35,6 +35,8 @@ pub enum NpcState {
     Blown,
     Down,
     Dead,
+    /// Pulled into a Magnet.
+    Suction,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -63,6 +65,8 @@ enum Mode {
     /// second frame).
     Blow { motion: u16, frame: u32, blow: Blow, step: [f32; 3] },
     Dead { motion: u16, frame: u32 },
+    /// Caught by a Magnet: orbit radius and swirl speed (exe, reaction 5).
+    Suction { motion: u16, frame: u32, radius: f32, swirl: f32 },
 }
 
 #[derive(Clone, Debug)]
@@ -80,6 +84,9 @@ pub struct Npc {
     airborne: bool,
     fall_vel: f32,
     tick: u64,
+    /// While caught by a Magnet: the vector from the body centre to the
+    /// magnet's centre this frame (the host updates it; `None` lets go).
+    pub suction_to: Option<[f32; 3]>,
 }
 
 fn yaw_of(d: [f32; 2]) -> f32 {
@@ -110,6 +117,7 @@ impl Npc {
             airborne: false,
             fall_vel: 0.0,
             tick: 0,
+            suction_to: None,
         }
     }
 
@@ -185,6 +193,21 @@ impl Npc {
             self.start(NpcState::Hurt, motion, None);
         }
         self.push = Some((dir, distance * 0.1));
+    }
+
+    /// Caught by a Magnet (ATKP reaction 5). The game picks the orbit
+    /// radius at random between the attack's two knockback values and
+    /// takes the swirl speed from its next value, plays motion 20 (21 when
+    /// hit from behind) and pulls every frame (see [`Npc::step`]).
+    pub fn suction(&mut self, from_front: bool, radius: f32, swirl: f32) {
+        if self.is_dead() {
+            return;
+        }
+        let motion = if from_front { 20 } else { 21 };
+        self.push = None;
+        self.hop = None;
+        self.airborne = true;
+        self.mode = Mode::Suction { motion, frame: 0, radius, swirl };
     }
 
     /// Dies with `motion` (if present; otherwise holds the current pose).
@@ -313,6 +336,41 @@ impl Npc {
                     return out;
                 }
             }
+            Mode::Suction { motion, frame, radius, swirl } => {
+                out.state = NpcState::Suction;
+                out.motion = motion;
+                out.clip_frame = frame;
+                out.looping = true;
+                match self.suction_to {
+                    Some(d) => {
+                        // Toward the orbit radius at up to 20 a frame, plus a
+                        // sideways swirl (exe).
+                        let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                        let n = if len > 1e-4 { [d[0] / len, d[1] / len, d[2] / len] } else { [0.0; 3] };
+                        let radial = ((len - radius) * 0.1).clamp(-20.0, 20.0);
+                        // Turned a quarter about the vertical, flattened.
+                        let t = [n[2], 0.0, -n[0]];
+                        let tl = (t[0] * t[0] + t[2] * t[2]).sqrt();
+                        let t = if tl > 1e-4 { [t[0] / tl, 0.0, t[2] / tl] } else { [0.0; 3] };
+                        out.displacement = [n[0] * radial + t[0] * swirl, n[1] * radial, n[2] * radial + t[2] * swirl];
+                        if frame == 0 {
+                            let f = if motion == 20 { [n[0], n[2]] } else { [-n[0], -n[2]] };
+                            if f[0] != 0.0 || f[1] != 0.0 {
+                                self.facing = yaw_of(f);
+                            }
+                        }
+                        self.mode = Mode::Suction { motion, frame: frame + 1, radius, swirl };
+                        self.fall_vel = 0.0;
+                        out.facing = self.facing;
+                        return out;
+                    }
+                    None => {
+                        // Let go: drop as from a launch with no speed.
+                        self.mode = Mode::Blow { motion: crate::reaction::motion::BLOW_FRONT, frame: 1, blow: Blow::new([0.0; 2], 0.0, &self.reaction), step: [0.0; 3] };
+                        out.state = NpcState::Blown;
+                    }
+                }
+            }
             Mode::Dead { motion, frame } => {
                 out.state = NpcState::Dead;
                 out.motion = motion;
@@ -413,5 +471,27 @@ mod tests {
         assert_eq!(states[0], (NpcState::Blown, 16));
         assert!(states.iter().any(|s| *s == (NpcState::Down, 17)), "landed into 17");
         assert!(z < -200.0, "flew back: {z}");
+    }
+
+    #[test]
+    fn magnet_pulls_into_an_orbit_then_drops() {
+        let mut n = npc();
+        n.suction(true, 100.0, -6.0);
+        // Centre 300 ahead and 200 up; follow the pull.
+        let c = [0.0f32, 200.0, 300.0];
+        let mut p = [0.0f32; 3];
+        for _ in 0..120 {
+            n.suction_to = Some([c[0] - p[0], c[1] - p[1], c[2] - p[2]]);
+            let o = n.step(&NpcCommand::default(), false);
+            assert_eq!(o.state, NpcState::Suction);
+            for i in 0..3 {
+                p[i] += o.displacement[i];
+            }
+        }
+        let d = ((c[0] - p[0]).powi(2) + (c[1] - p[1]).powi(2) + (c[2] - p[2]).powi(2)).sqrt();
+        assert!((d - 100.0).abs() < 20.0, "orbiting near the radius: {d}");
+        n.suction_to = None;
+        let o = n.step(&NpcCommand::default(), false);
+        assert_eq!(o.state, NpcState::Blown);
     }
 }

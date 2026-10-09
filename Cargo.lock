@@ -2359,6 +2359,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "kh2-bdx"
+version = "0.1.0"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "kh2-bevy"
 version = "0.1.0"
 dependencies = [
@@ -2368,6 +2375,7 @@ dependencies = [
  "kh2-anim",
  "kh2-data",
  "kh2-formats",
+ "kh2-magic",
 ]
 
 [[package]]
@@ -2398,6 +2406,16 @@ dependencies = [
  "md-5",
  "sha2",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "kh2-magic"
+version = "0.1.0"
+dependencies = [
+ "combat-core",
+ "glam",
+ "kh2-bdx",
+ "kh2-formats",
 ]
 
 [[package]]
