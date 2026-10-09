@@ -73,20 +73,24 @@ docs/
 
 ### Playground controls
 
-| Action | Keyboard / mouse | Xbox pad |
-|---|---|---|
-| Move (Alt = walk) | WASD | left stick |
-| Jump (hold for full height); in the air: Aerial Dodge, then hold to Glide | Space | B |
-| Attack | J / left click | A |
-| Guard (standing) / Dodge Roll or Quick Run (moving; hold to keep dashing) | K / Shift | X |
-| Lock-on / switch target | Tab / middle click; Z, C | RT; R2 + right stick |
-| Camera turn / zoom / reset | Q/E, right-drag / mouse up-down / F | right stick / R3 |
-| Reaction command | L | Y |
-| Command menu: move / confirm / back out | Up, Down or mouse wheel / J / Space | D-pad / A / B |
-| Drive: Valor, Wisdom, Limit, Master, Final / Revert | 7 8 9 0 - / Backspace | command menu |
-| Magic shortcuts (Fire, Blizzard, Thunder, Cure, Magnet, Reflect) | 1–6 | |
-| Ability menu (equip with J/Enter, U = unlimited AP) | Esc / P | Start |
-| Attack/guard shapes, hit shapes, skeleton, other collision / reset position | F1 F2 F3 F4 / R | |
+| Action | Keyboard / mouse | Xbox pad | PlayStation pad |
+|---|---|---|---|
+| Move (Alt = walk) | WASD | left stick | left stick |
+| Jump (hold for full height); in the air: Aerial Dodge | Space | B | Circle |
+| Attack | J / left click | A | Cross |
+| Guard (standing) / Dodge Roll or Quick Run (moving; hold to keep dashing); in the air: hold to Glide | K / Shift | X | Square |
+| Lock-on / switch target | Tab / middle click; Z, C | RT; R2 + right stick | R1; R2 + right stick |
+| Camera turn / zoom / reset | Q/E, right-drag / mouse up-down / F | right stick / R3 | right stick / R3 |
+| Reaction command | L | Y | Triangle |
+| Command menu: move / confirm / back out | Up, Down or mouse wheel / J / Space | D-pad / A / B | D-pad / Cross / Circle |
+| Shortcut menu: hold, then press a face button to cast its spell (in the Magic list: assigns the highlighted spell) | hold Ctrl + L / K / Space / J | hold LB + Y / X / B / A | hold L1 + Triangle / Square / Circle / Cross |
+| Drive: Valor, Wisdom, Limit, Master, Final / Revert | 7 8 9 0 - / Backspace | command menu | command menu |
+| Cast directly (Fire, Blizzard, Thunder, Cure, Magnet, Reflect) | 1–6 | | |
+| Refill the Drive gauge (testing; the form gauge while in a form) | F5 | Back | Select / Share |
+| Ability menu (equip with J/Enter, U = unlimited AP) | Esc / P | Start | Start / Options |
+| Attack/guard shapes, hit shapes, skeleton, other collision / reset position | F1 F2 F3 F4 / R | | |
+
+The shortcuts start as Fire, Blizzard, Thunder and Cure.
 
 Jump at a wall that is slightly too high, holding toward it, to grab the ledge (push toward it to climb, pull away to drop).
 
