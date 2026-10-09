@@ -57,7 +57,7 @@ fn growth() -> Vec<GrowthLevel> {
             quick_run_time: 10.0,
             quick_run_speed: 30.0,
             quick_run_brake: 0.9,
-            quick_run_stop_brake: 0.9,
+            quick_run_stop_brake: 0.5,
             quick_run_star_time: 5.0,
             glide_speed: 16.0,
             glide_fall_ratio: 0.015,
@@ -77,6 +77,7 @@ fn roll_clip() -> Clip {
     let mut c = Clip::plain(motion::DODGE_ROLL, len);
     c.root = (0..=len).map(|f| [0.0, 0.0, f as f32 * 10.0]).collect();
     c.events.push(Event { frame: 30, kind: EventKind::FallCheck });
+    c.events.push(Event { frame: 10, kind: EventKind::QuickRunCheck });
     c
 }
 
@@ -140,7 +141,7 @@ fn jump_has_takeoff_frames_and_reaches_height() {
     assert_eq!(w.pos[1], 0.0, "still on the ground during takeoff");
     let mut apex = 0.0f32;
     for _ in 0..120 {
-        w.step(IDLE);
+        w.step(Pad { jump: true, ..IDLE });
         apex = apex.max(w.pos[1]);
     }
     // High Jump MAX (level 4) = 400 in this fixture. Sampled every
@@ -174,7 +175,7 @@ fn landing_recovery_then_free() {
 fn dodge_roll_uses_root_motion_and_level_iframes() {
     let mut w = World::new(sora());
     w.ch.abilities.dodge_roll = 2; // 20 i-frames in this fixture
-    let outs = w.run(40, Pad { stick: [1.0, 0.0], action: true, ..IDLE });
+    let outs: Vec<_> = (0..40).map(|f| w.step(Pad { stick: [1.0, 0.0], action: f < 3, ..IDLE })).collect();
     assert_eq!(outs[0].state, StateName::DodgeRoll);
     let inv = outs.iter().take_while(|o| o.invulnerable).count();
     assert_eq!(inv, 20);
@@ -265,4 +266,46 @@ fn lock_on_picks_nearest_and_releases() {
     w.targets[1].pos = [0.0, 0.0, 5000.0];
     let o = w.step(IDLE);
     assert_eq!(o.locked, None);
+}
+
+fn apex_with_hold(frames: usize) -> f32 {
+    let mut w = World::new(sora());
+    let mut apex = 0.0f32;
+    for f in 0..160 {
+        w.step(Pad { jump: f < frames, ..IDLE });
+        apex = apex.max(w.pos[1]);
+    }
+    apex
+}
+
+#[test]
+fn jump_height_depends_on_hold() {
+    let tap = apex_with_hold(1);
+    let mid = apex_with_hold(20);
+    let full = apex_with_hold(200);
+    assert!(tap < mid && mid < full, "tap {tap} mid {mid} full {full}");
+    assert!((full - 400.0).abs() < 1.0);
+    assert!(tap < full * 0.5, "tap {tap}");
+}
+
+#[test]
+fn quick_run_ends_on_release_and_roll_chains_into_it() {
+    // Tap: the dash stops early.
+    let mut w = World::new(sora());
+    w.ch.abilities.dodge_roll = 0;
+    let outs: Vec<_> = (0..40).map(|f| w.step(Pad { stick: [1.0, 0.0], action: f < 2, ..IDLE })).collect();
+    let tap = w.pos[0];
+    assert_eq!(outs[0].state, StateName::QuickRun);
+    let mut w = World::new(sora());
+    w.ch.abilities.dodge_roll = 0;
+    w.run(40, Pad { stick: [1.0, 0.0], action: true, ..IDLE });
+    assert!(w.pos[0] > tap + 50.0, "held {} vs tap {tap}", w.pos[0]);
+}
+
+#[test]
+fn holding_through_the_roll_turns_it_into_quick_run() {
+    let mut w = World::new(sora());
+    let outs = w.run(20, Pad { stick: [1.0, 0.0], action: true, ..IDLE });
+    assert_eq!(outs[5].state, StateName::DodgeRoll);
+    assert_eq!(outs[12].state, StateName::QuickRun);
 }

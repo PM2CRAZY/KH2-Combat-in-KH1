@@ -78,15 +78,28 @@ override for the head.
   character by the root-motion curve. So the model is drawn at the character's position
   minus the clip's current root offset; the A300 hips track the root curve to within a few
   units. **Checked.**
+  - The offset is taken out of the pose before blending, so cross-fades between clips don't
+    jump.
 - **Air poses.** In-air motions (jump, fall, high jump) keep the feet 20–40 units above the
   physics position, with legs tucked. That is the real data.
 - **Keyblade.** Its own motion is evaluated with the same motion id and frame, then attached
   to Sora's bone 178.
+  - The blade is rigid on its bone 2 and points along that bone's −X, where the attack
+    spheres are.
+  - Bones 3–11 are the keychain, which the weapon motions swing.
 - **Blending.** The playground cross-fades into a new motion over 8 frames. **Approximation:**
   the game uses per-move blend times, for example PTYA `blend_time`.
 
 ## What the playground draws
 
-A mannequin of our own capsules between joints, coloured by state; the Keyblade is drawn the
-same way. No mesh, texture or other asset is loaded. Attack spheres (F1) and hurt spheres
+A simple mannequin of our own design on Sora's main bones:
+- rounded torso and hips
+- head
+- capsule limbs
+- mitten hands
+- big shoes
+
+It glows white while invulnerable and cyan while guarding. The Keyblade prop has a grip, a
+guard, a blade and a swinging keychain. Fingers, hair and clothing bones are animated but
+not drawn. No mesh, texture or other asset is loaded. Attack spheres (F1) and hurt spheres
 (F2) sit on the real bones, and hits are tested against them.

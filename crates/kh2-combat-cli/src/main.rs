@@ -404,6 +404,34 @@ fn sora_checks(data: kh2_data::sora::SoraData) -> Result<(), String> {
         if o.state == StateName::Attack && o.clip_frame == 0 { seq.push(format!("f{f}:m{}@y{:.0}", o.motion, w.pos[1])); }
     }
     println!("air combo: {}", seq.join(" -> "));
+    // Jump height by how long jump is held (normal jump, then High Jump MAX).
+    for (label, abil) in [("jump", Abilities::default()), ("high jump MAX", Abilities { high_jump: 4, ..Default::default() })] {
+        let mut row = Vec::new();
+        for hold in [1usize, 8, 14, 20, 30, 200] {
+            let mut w = new(abil.clone());
+            let mut apex = 0.0f32;
+            for f in 0..240 {
+                w.step(Pad { jump: f < hold, ..Default::default() });
+                apex = apex.max(w.pos[1]);
+            }
+            row.push(format!("hold {hold}: {apex:.0}"));
+        }
+        println!("{label} apex by hold: {}", row.join(", "));
+    }
+    // Quick Run distance by hold, and Dodge Roll held into Quick Run.
+    for (label, abil) in [("quick run MAX", Abilities { quick_run: 4, ..Default::default() }), ("roll+quick run MAX", Abilities { quick_run: 4, dodge_roll: 4, ..Default::default() })] {
+        let mut row = Vec::new();
+        for hold in [2usize, 12, 30, 200] {
+            let mut w = new(abil.clone());
+            let mut states = Vec::new();
+            for f in 0..120 {
+                let o = w.step(Pad { stick: [0.0, 1.0], action: f < hold, ..Default::default() });
+                if states.last() != Some(&o.state) { states.push(o.state); }
+            }
+            row.push(format!("hold {hold}: {:.0} {:?}", w.pos[2], states));
+        }
+        println!("{label}: {}", row.join(" | "));
+    }
     // Aerial Dodge (all growth MAX), pressed 20 frames after the jump.
     let mut w = new(Abilities::max_growth());
     let mut log = Vec::new();

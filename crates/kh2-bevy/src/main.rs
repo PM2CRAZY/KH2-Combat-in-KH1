@@ -25,7 +25,7 @@ use combat_core::{AttackDef, Combatant, DamageRules, HitTracker, Stats, Team};
 use kh2_data::sora::BladeSphere;
 use kh2_data::{Install, Source};
 
-use rig::{Part, RigAnim, Segment};
+use rig::{Paint, Part, Piece, RigAnim, Shape};
 use world::{Arena, ARENA_BOXES};
 
 /// KH2 units (about 1 cm) to Bevy meters.
@@ -269,17 +269,23 @@ fn spawn_camera_and_light(mut commands: Commands) {
 
 fn spawn_player(mut commands: Commands, game: Res<Game>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     if let Some(anim) = &game.anim {
-        // Mannequin: one unit capsule per bone segment, placed every frame.
-        let capsule = meshes.add(Capsule3d::new(0.5, 1.0));
-        let body = mats.add(StandardMaterial { base_color: Color::srgb(0.85, 0.2, 0.25), perceptual_roughness: 0.6, ..default() });
-        let blade = mats.add(StandardMaterial { base_color: Color::srgb(0.8, 0.8, 0.9), metallic: 0.6, ..default() });
+        // Mannequin: rounded pieces on the bones, placed every frame.
+        let sphere = meshes.add(Sphere::new(0.5).mesh().uv(24, 16));
+        let paints: HashMap<Paint, Handle<StandardMaterial>> = Paint::ALL.iter().map(|p| (*p, mats.add(p.material()))).collect();
         commands.spawn((Player, Transform::default(), Visibility::default()));
-        for (seg, mat) in rig::segments(&anim.rig.skeleton, Part::Body)
-            .into_iter()
-            .map(|s| (s, body.clone()))
-            .chain(rig::segments(&anim.rig.weapon_skeleton, Part::Weapon).into_iter().map(|s| (s, blade.clone())))
-        {
-            commands.spawn((seg, Mesh3d(capsule.clone()), MeshMaterial3d(mat), Transform::default()));
+        for piece in rig::pieces(&anim.rig) {
+            // Bones are rigid, so each capsule is sized once from the bind pose.
+            let mesh = match piece.shape {
+                Shape::Capsule(a, b, r) => {
+                    let len = match (anim.anchor(piece.part, a), anim.anchor(piece.part, b)) {
+                        (Some(a), Some(b)) => a.distance(b),
+                        _ => 0.0,
+                    };
+                    meshes.add(Capsule3d::new(r * SCALE, len * SCALE).mesh().rings(4).latitudes(12).longitudes(16))
+                }
+                Shape::Sphere(..) => sphere.clone(),
+            };
+            commands.spawn((piece, Mesh3d(mesh), MeshMaterial3d(paints[&piece.paint].clone()), Transform::default()));
         }
         return;
     }
@@ -569,7 +575,8 @@ fn simulate(
     // Camera-relative stick.
     let d = Vec2::new(rig.yaw.sin(), rig.yaw.cos());
     let right = Vec2::new(-d.y, d.x);
-    let s = d * latch.stick.y + right * -latch.stick.x;
+    // With the camera behind looking along d, screen-right is `right`.
+    let s = d * latch.stick.y + right * latch.stick.x;
     let btn = |i: usize, l: &Latch| Btn { pressed: l.pressed[i], held: l.held[i] };
     let input = CInput { stick: [s.x, s.y], jump: btn(0, &latch), attack: btn(1, &latch), action: btn(2, &latch), lock: btn(3, &latch) };
     latch.pressed = [false; 4];
@@ -699,43 +706,41 @@ impl Game {
 
 fn sync_segments(
     game: Res<Game>,
-    mut segs: Query<(&Segment, &mut Transform, &MeshMaterial3d<StandardMaterial>)>,
+    mut pieces: Query<(&Piece, &mut Transform, &MeshMaterial3d<StandardMaterial>)>,
     mut mats: ResMut<Assets<StandardMaterial>>,
-    mut tinted: Local<Option<AssetId<StandardMaterial>>>,
+    mut glow: Local<Option<[f32; 3]>>,
 ) {
     let (Some(anim), Some(out)) = (&game.anim, &game.last) else { return };
-    for (seg, mut t, mat) in &mut segs {
-        let (a, b) = match seg.part {
-            Part::Body => (anim.bone_world(seg.parent), anim.bone_world(seg.child)),
-            Part::Weapon => {
-                if anim.weapon.is_empty() {
-                    continue;
-                }
-                (anim.weapon_world(seg.parent), anim.weapon_world(seg.child))
-            }
-        };
-        let (a, b) = (a * SCALE, b * SCALE);
-        let d = b - a;
-        let len = d.length();
-        let r = seg.radius * 2.0 * SCALE;
-        *t = Transform {
-            translation: (a + b) * 0.5,
-            rotation: Quat::from_rotation_arc(Vec3::Y, d.normalize_or(Vec3::Y)),
-            // The unit capsule is 2 units tall (1 + two 0.5 caps).
-            scale: Vec3::new(r, (len / 2.0).max(r * 0.5), r),
-        };
-        if seg.part == Part::Body && tinted.map_or(true, |id| id == mat.0.id()) {
-            *tinted = Some(mat.0.id());
+    // State glow: white while invulnerable, cyan while guarding.
+    let want = if out.invulnerable {
+        [0.9, 0.9, 0.9]
+    } else if out.guarding {
+        [0.0, 0.6, 0.8]
+    } else {
+        [0.0; 3]
+    };
+    let relight = *glow != Some(want);
+    *glow = Some(want);
+    for (piece, mut t, mat) in &mut pieces {
+        if relight && piece.part == Part::Body {
             if let Some(m) = mats.get_mut(&mat.0) {
-                m.base_color = if out.invulnerable {
-                    Color::srgb(1.0, 1.0, 1.0)
-                } else if out.guarding {
-                    Color::srgb(0.3, 0.9, 1.0)
-                } else if out.state == StateName::Attack {
-                    Color::srgb(1.0, 0.45, 0.2)
-                } else {
-                    Color::srgb(0.85, 0.2, 0.25)
+                m.emissive = LinearRgba::rgb(want[0], want[1], want[2]);
+            }
+        }
+        match piece.shape {
+            Shape::Capsule(a, b, r) => {
+                let (Some(a), Some(b)) = (anim.anchor(piece.part, a), anim.anchor(piece.part, b)) else { continue };
+                let (a, b) = (a * SCALE, b * SCALE);
+                let _ = r;
+                *t = Transform {
+                    translation: (a + b) * 0.5,
+                    rotation: Quat::from_rotation_arc(Vec3::Y, (b - a).normalize_or(Vec3::Y)),
+                    scale: Vec3::ONE,
                 };
+            }
+            Shape::Sphere(c, r) => {
+                let Some(c) = anim.anchor(piece.part, c) else { continue };
+                *t = Transform::from_translation(c * SCALE).with_scale(Vec3::splat(r * 2.0 * SCALE));
             }
         }
     }

@@ -60,9 +60,9 @@ docs/
 | Action | Keyboard / mouse | Xbox pad |
 |---|---|---|
 | Move (Alt = walk) | WASD | left stick |
-| Jump; in the air: Aerial Dodge, then hold to Glide | Space | B |
+| Jump (hold for full height); in the air: Aerial Dodge, then hold to Glide | Space | B |
 | Attack | J / left click | A |
-| Guard (standing) / Dodge Roll or Quick Run (moving) | K / Shift | X |
+| Guard (standing) / Dodge Roll or Quick Run (moving; hold to keep dashing) | K / Shift | X |
 | Lock-on | Tab / middle click | RT |
 | Camera | Q/E, arrows, right-drag | right stick |
 | Growth levels: High Jump, Quick Run, Aerial Dodge, Glide, Dodge Roll | 1 2 3 4 5 | |
@@ -115,7 +115,6 @@ plain-language notes are in `docs/`.
 
 ## Still approximated or open (see `docs/movement-model.md`)
 
-- **Variable jump height.** Whether holding jump changes the height hasn't been traced yet.
 - **Stick tilt → walk/run, landing recovery, and roll / Quick Run cancel points.**
 - **Air-control target speed and invulnerability timer units.**
 - **Animation blending** uses a fixed 8-frame cross-fade, not the game's per-move blend times.

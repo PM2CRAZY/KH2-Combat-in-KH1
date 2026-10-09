@@ -102,3 +102,19 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - screenshots of idle, run, attack, jump, roll and glide look right
 - Open: per-move blend times, foot ground adaptation, head look-at, the Shadow's own
   skeleton.
+
+### 2026-10-08: playtest fixes
+- Stick left/right was mirrored (screen-right is −X when looking along +Z).
+- Read from the exe:
+  - **Variable jump height:** an early release swaps the rest of the rise for a 5.1-unit
+    hop, after 6 frames and before apex − 5.
+  - **Quick Run** lasts only while the button is held, and is ground-only.
+  - **Dodge Roll's** frame-10 event chains into Quick Run while the button is held.
+- Air combos: whiffs now advance the count, per the user's knowledge of the game (the exe's
+  rule for this isn't found yet; ground stays hit-only).
+- Rig:
+  - **End-of-action zoom fixed:** the last frame was posed as a free loop without the root
+    offset, and blending then smeared that jump.
+  - Bones are now kept in object space.
+  - The Keyblade's blade/keychain orientation is fixed.
+  - New simplified mannequin.

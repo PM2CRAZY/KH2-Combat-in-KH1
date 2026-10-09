@@ -142,17 +142,20 @@ pub struct Arc {
     pub height: f32,
     pub t: f32,
     pub uptime: f32,
+    /// Releasing jump early cuts this arc short (button jumps and Aerial
+    /// Dodge; not attack hops).
+    pub holdable: bool,
 }
 
 impl Arc {
     pub fn new(height: f32, gravity: f32) -> Arc {
         let h = height.max(0.0);
-        Arc { height: h, t: 0.0, uptime: uptime(h, gravity) }
+        Arc { height: h, t: 0.0, uptime: uptime(h, gravity), holdable: false }
     }
 
     /// Falling from rest (walked off a ledge, glide ended, ...).
     pub fn fall() -> Arc {
-        Arc { height: 0.0, t: 0.0, uptime: 0.0 }
+        Arc { height: 0.0, t: 0.0, uptime: 0.0, holdable: false }
     }
 
     pub fn y(&self, t: f32, gravity: f32) -> f32 {
@@ -177,6 +180,16 @@ impl Arc {
         dy.max(-fall_max * dt)
     }
 }
+
+/// When jump is released early, KH2 replaces the rest of the rise with a hop
+/// this high from the current height: g x 0.5 x 5 x 5 (checked in the exe).
+pub fn release_hop(gravity: f32) -> f32 {
+    gravity * 0.5 * 5.0 * 5.0
+}
+/// The cut only happens after this many frames of the rise...
+const HOLD_MIN_FRAMES: f32 = 6.0;
+/// ...and more than this many frames before the apex.
+const HOLD_APEX_MARGIN: f32 = 5.0;
 
 /// Frames for a jump of `height` to reach its apex.
 pub fn uptime(height: f32, gravity: f32) -> f32 {
@@ -243,6 +256,9 @@ pub struct Character {
     lock: Option<u32>,
     /// Set when a jump starts with Aerial Dodge owned; cleared on use.
     air_dodge_ready: bool,
+    /// Jump button still held since the jump started / released early.
+    jump_held: bool,
+    jump_released: bool,
     count: u8,
     finishers: u8,
     /// The current swing has connected.
@@ -320,6 +336,8 @@ impl Character {
             count: 0,
             finishers: 0,
             hit: false,
+            jump_held: false,
+            jump_released: false,
             buffered_attack: false,
         }
     }
@@ -434,6 +452,45 @@ impl Character {
         self.airborne = true;
     }
 
+    /// A jump whose height depends on how long the button is held.
+    fn start_held_arc(&mut self, height: f32) {
+        self.start_arc(height);
+        if let Some(a) = &mut self.arc {
+            a.holdable = true;
+        }
+    }
+
+    /// KH2's variable jump height: an early release (after 6 frames of rise,
+    /// more than 5 before the apex) swaps the rest of the rise for a small hop.
+    fn check_jump_release(&mut self) {
+        let Some(a) = self.arc else { return };
+        if !a.holdable {
+            return;
+        }
+        if self.jump_released && a.t > HOLD_MIN_FRAMES && a.t < a.uptime - HOLD_APEX_MARGIN {
+            self.jump_released = false;
+            self.start_arc(release_hop(self.params.gravity));
+        } else if a.t >= a.uptime - HOLD_APEX_MARGIN {
+            if let Some(a) = &mut self.arc {
+                a.holdable = false;
+            }
+        }
+    }
+
+    fn start_quick_run(&mut self, dir: [f32; 2]) -> bool {
+        let Some(g) = self.growth(self.abilities.quick_run).cloned() else { return false };
+        self.facing = yaw_of(dir);
+        self.vel_h = scale(norm(dir), g.quick_run_speed);
+        self.vel_y = 0.0;
+        self.arc = None;
+        self.start_action(ActionKind::QuickRun, motion::QUICK_RUN);
+        if let Mode::Action(act) = &mut self.mode {
+            act.timer = g.quick_run_time;
+            act.brake = g.quick_run_brake;
+        }
+        true
+    }
+
     /// Tries to start an attack. Returns false if no combo row fits.
     fn try_attack(&mut self, input: &Input, env: &Env) -> bool {
         let (current_motion, in_finisher) = match &self.mode {
@@ -441,7 +498,11 @@ impl Character {
             _ => (None, false),
         };
         let in_attack = current_motion.is_some();
-        let hit = self.hit || self.abilities.combo_master;
+        // Ground swings only advance the combo when the previous one
+        // connected (read from the exe). In the air, whiffed swings advance
+        // it too, so an air combo always ends in its finisher (matches the
+        // game; the exe path for this hasn't been traced yet).
+        let hit = self.hit || self.abilities.combo_master || (self.airborne && in_attack);
         let saved = (self.count, self.finishers);
         // The counter moves when the next swing starts.
         if in_finisher && hit && self.finishers < self.max_finishers() {
@@ -544,18 +605,9 @@ impl Character {
                 return true;
             }
         }
-        if a.quick_run > 0 && moving {
-            let g = self.growth(a.quick_run).cloned().unwrap_or_default();
-            self.facing = yaw_of(input.stick);
-            self.vel_h = scale(norm(input.stick), g.quick_run_speed);
-            self.vel_y = 0.0;
-            self.arc = None;
-            self.start_action(ActionKind::QuickRun, motion::QUICK_RUN);
-            if let Mode::Action(act) = &mut self.mode {
-                act.timer = g.quick_run_time;
-                act.brake = g.quick_run_brake;
-            }
-            return true;
+        // Quick Run is ground-only (the game checks airborne first).
+        if a.quick_run > 0 && moving && !self.airborne {
+            return self.start_quick_run(input.stick);
         }
         false
     }
@@ -571,7 +623,9 @@ impl Character {
             if moving {
                 self.facing = yaw_of(input.stick);
             }
-            self.start_arc(g.air_dodge_height);
+            self.start_held_arc(g.air_dodge_height);
+            self.jump_held = input.jump.held;
+            self.jump_released = !input.jump.held;
             self.vel_h = scale(dir, g.air_dodge_speed);
             self.vel_y = 0.0;
             self.start_action(ActionKind::AerialDodge, motion::AERIAL_DODGE);
@@ -580,6 +634,8 @@ impl Character {
         if !self.airborne {
             let high = self.abilities.high_jump > 0;
             let m = if high && self.clip(motion::HIGH_JUMP).is_some() { motion::HIGH_JUMP } else { motion::JUMP };
+            self.jump_held = input.jump.held;
+            self.jump_released = !input.jump.held;
             self.start_action(ActionKind::Jump { high }, m);
             return true;
         }
@@ -651,6 +707,14 @@ impl Character {
         self.airborne = !env.grounded || rising;
         if was_airborne && !self.airborne {
             self.land();
+        }
+
+        if self.jump_held && !input.jump.held {
+            self.jump_held = false;
+            self.jump_released = true;
+        }
+        if self.airborne && matches!(self.mode, Mode::Free | Mode::Action(Action { kind: ActionKind::AerialDodge, .. })) {
+            self.check_jump_release();
         }
 
         let mut fo = FrameOut::default();
@@ -781,7 +845,7 @@ impl Character {
                     } else {
                         self.params.jump_height
                     };
-                    self.start_arc(h);
+                    self.start_held_arc(h);
                     self.air_dodge_ready = self.abilities.aerial_dodge > 0;
                     finished = true;
                 }
@@ -808,6 +872,15 @@ impl Character {
                 if f >= free_at {
                     cancel_allowed = true;
                 }
+                // The roll's "quick run check" event: still holding the
+                // action button there turns the roll into a Quick Run along
+                // the roll direction (checked in the exe).
+                if clip.event_at(f, |k| *k == EventKind::QuickRunCheck) && input.action.held && self.abilities.quick_run > 0 {
+                    let dir = self.forward();
+                    if self.start_quick_run(dir) {
+                        return true;
+                    }
+                }
             }
             ActionKind::QuickRun => {
                 let g = self.growth(self.abilities.quick_run).cloned().unwrap_or_default();
@@ -817,7 +890,8 @@ impl Character {
                 fo.no_gravity = true;
                 if act.motion == motion::QUICK_RUN {
                     finished = false;
-                    act.timer -= 1.0;
+                    // Releasing the button ends the dash right away.
+                    act.timer = if input.action.held { act.timer - 1.0 } else { 0.0 };
                     if act.timer <= 0.0 {
                         act.brake = g.quick_run_stop_brake;
                         act.motion = motion::QUICK_RUN_END;

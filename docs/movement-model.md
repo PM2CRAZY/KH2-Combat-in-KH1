@@ -57,8 +57,18 @@ direction takes effect on the next even frame.
   **Checked.**
 - Walking off a ledge starts the same fall from rest.
 
-Whether holding jump changes the height is **open**. The jump action has a "can hold" check
-that hasn't been traced yet; the height is fixed for now.
+**Variable height. Checked (exe).**
+- **Which jumps:** button jumps and Aerial Dodge are "holdable".
+- **Early release:** if the jump button is released after more than 6 frames of rise and more
+  than 5 frames before the apex, the rest of the rise is replaced by a small hop from the
+  current height. The hop is `g × 0.5 × 5 × 5` ≈ 5.1 units high.
+- **Hold:** keeping the button down to within 5 frames of the apex gives the full height.
+- **On your install:**
+  - normal jump: about 115 tapped, 185 held
+  - High Jump MAX: about 214 tapped, 585 held
+
+Our one deviation: a release *during the 4 takeoff frames* also counts. In the exe, the hold
+flag only starts with the airborne jump.
 
 ## Air control
 
@@ -73,11 +83,19 @@ All **Checked (exe)** unless noted:
   with Aerial Dodge owned. Walking off
   a ledge doesn't allow it. Once per airtime. It starts a fresh jump arc of
   `air_dodge_height` with horizontal speed `air_dodge_speed` along the stick.
-- **Quick Run.** Starts at `air_slide_speed` along the stick, with no gravity, and is
-  invulnerable for `air_slide_star_time`. Each tick the speed is multiplied by `brake`. After
-  `air_slide_time` frames the brake switches to `stop_brake` and the end motion (204) plays.
-- **Dodge Roll.** Ground only. It faces the stick and moves by the animation's root motion
-  (438 units). It is invulnerable for `dodge_roll_star_time` (10/16/24/32 frames by level).
+- **Quick Run.** Ground only.
+  - **Start:** `air_slide_speed` along the stick, with no gravity, invulnerable for
+    `air_slide_star_time`.
+  - **Each tick:** the speed is multiplied by `brake`.
+  - **Hold:** the dash lasts while the action button is held, up to `air_slide_time`
+    frames.
+  - **End:** on release or timeout, the brake switches to `stop_brake` and the end motion
+    (204) plays.
+- **Dodge Roll.** Ground only.
+  - **Movement:** it faces the stick and moves by the animation's root motion (435 units).
+  - **Invulnerability:** `dodge_roll_star_time` (10/16/24/32 frames by level).
+  - **Hold:** the roll's frame-10 "quick run check" event turns it into a Quick Run along
+    the roll direction if the action button is still held and Sora has Quick Run.
 - **Glide:**
   - **Start:** airborne, jump pressed, and height above ground strictly greater than
     `glide_start_height`.
@@ -109,8 +127,11 @@ command" window (frame 8). **Hypothesis**; the landing action itself has not bee
    - From a non-attack state: count = 1, finishers = 1.
    - From an attack whose swing **connected**: count + 1.
    - From a finisher that connected, if finishers < max: also finishers + 1.
-   - **A whiffed swing does not advance the count.** Combo Master makes every swing count as
-     a hit.
+   - **On the ground, a whiffed swing does not advance the count** (read from the exe).
+     Combo Master makes every swing count as a hit.
+   - **In the air, whiffed swings advance it too**, so a whiffed air combo still ends in its
+     finisher (181 → 182 → 183). This matches the real game as played; the exe path for it
+     hasn't been found yet.
 2. **Row conditions:**
    - The motion must be nonzero.
    - The required ability, if any, must be equipped.
