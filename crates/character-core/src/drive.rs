@@ -237,6 +237,18 @@ impl Drive {
         }
     }
 
+    /// Fills the gauge (a testing aid, not a game rule): every Drive bar
+    /// out of a form, the form gauge in one.
+    pub fn refill(&mut self) {
+        match &mut self.gauge {
+            None => {
+                self.bars = self.max;
+                self.points = 100;
+            }
+            Some(g) => g.left = g.max,
+        }
+    }
+
     pub fn revert(&mut self) {
         self.gauge = None;
     }
@@ -300,6 +312,22 @@ mod tests {
         assert_eq!((d.bars, d.points), (3, 100), "full holds at 100");
         d.add_points(-30);
         assert_eq!((d.bars, d.points), (3, 70));
+    }
+
+    #[test]
+    fn refill_fills_the_drive_or_the_form_gauge() {
+        let mut d = Drive::new(5);
+        d.add_points(140);
+        d.refill();
+        assert!(d.full() && d.points == 100);
+        d.spend(3);
+        d.enter(form::VALOR, 1);
+        for _ in 0..500 {
+            d.tick(true);
+        }
+        d.refill();
+        let g = d.gauge.unwrap();
+        assert_eq!(g.left, g.max);
     }
 
     #[test]

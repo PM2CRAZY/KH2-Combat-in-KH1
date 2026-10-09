@@ -245,6 +245,43 @@ fn glide_needs_height_and_held_button() {
 }
 
 #[test]
+fn glide_on_the_action_button() {
+    let mut w = World::new(sora());
+    w.ch.glide_button = GlideButton::Action;
+    w.run(1, Pad { jump: true, ..IDLE });
+    w.run(10, IDLE);
+    // Jump in mid-air still Aerial Dodges...
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_eq!(o.state, StateName::AerialDodge);
+    w.run(20, IDLE);
+    // ...and with the dodge spent, it no longer glides.
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_ne!(o.state, StateName::Glide);
+    w.run(1, IDLE);
+    // The action button glides, held.
+    let o = w.step(Pad { action: true, ..IDLE });
+    assert_eq!(o.state, StateName::Glide);
+    let outs = w.run(10, Pad { action: true, stick: [0.0, 1.0], ..IDLE });
+    assert!(outs.iter().all(|o| o.state == StateName::Glide));
+    // Holding jump doesn't keep it going.
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_ne!(o.state, StateName::Glide);
+}
+
+#[test]
+fn action_button_mid_dodge_glides() {
+    let mut w = World::new(sora());
+    w.ch.glide_button = GlideButton::Action;
+    w.run(1, Pad { jump: true, ..IDLE });
+    w.run(12, IDLE);
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_eq!(o.state, StateName::AerialDodge);
+    w.run(3, IDLE);
+    let o = w.step(Pad { action: true, ..IDLE });
+    assert_eq!(o.state, StateName::Glide);
+}
+
+#[test]
 fn aerial_dodge_once_per_airtime() {
     let mut w = World::new(sora());
     w.run(1, Pad { jump: true, ..IDLE });

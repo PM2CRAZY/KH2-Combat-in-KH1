@@ -304,6 +304,8 @@ pub struct Character {
     pub reaction: crate::reaction::ReactionParams,
     pub abilities: Abilities,
     pub combo_rules: ComboRules,
+    /// Which button starts and holds Glide in mid-air.
+    pub glide_button: GlideButton,
     facing: f32,
     vel_h: [f32; 2],
     vel_y: f32,
@@ -330,6 +332,18 @@ pub struct Character {
     push: Option<([f32; 2], f32)>,
     /// Frames left without air commands after a ceiling bonk (exe).
     ceiling_lock: f32,
+}
+
+/// The mid-air button that glides (a host binding choice).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GlideButton {
+    /// Jump again in mid-air, once Aerial Dodge is used up or not owned
+    /// (the exe's rule).
+    #[default]
+    Jump,
+    /// The action button (guard/roll; Square on a PlayStation pad). Jump in
+    /// mid-air then only Aerial Dodges.
+    Action,
 }
 
 const TAU: f32 = std::f32::consts::TAU;
@@ -391,6 +405,7 @@ impl Character {
             reaction: crate::reaction::ReactionParams::default(),
             abilities: Abilities::default(),
             combo_rules: ComboRules::default(),
+            glide_button: GlideButton::default(),
             facing: 0.0,
             vel_h: [0.0; 2],
             vel_y: 0.0,
@@ -914,9 +929,12 @@ impl Character {
         true
     }
 
-    fn try_action_button(&mut self, input: &Input) -> bool {
+    fn try_action_button(&mut self, input: &Input, env: &Env) -> bool {
         let moving = len2(input.stick) > DEAD_ZONE;
         let a = self.abilities.clone();
+        if self.airborne && self.glide_button == GlideButton::Action {
+            return self.try_glide(env);
+        }
         if !self.airborne {
             if !moving {
                 if a.guard && self.clip(motion::GUARD).is_some() {
@@ -940,8 +958,29 @@ impl Character {
         false
     }
 
+    /// Glide, when it is owned and Sora is high enough.
+    fn try_glide(&mut self, env: &Env) -> bool {
+        if let Some(g) = self.growth(self.abilities.glide) {
+            if env.height_above_ground > g.glide_start_height {
+                self.arc = None;
+                self.vel_y = 0.0;
+                self.mode = Mode::Glide;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The button that holds Glide.
+    fn glide_held(&self, input: &Input) -> bool {
+        match self.glide_button {
+            GlideButton::Jump => input.jump.held,
+            GlideButton::Action => input.action.held,
+        }
+    }
+
     /// Jump button. On the ground: jump. In the air: Aerial Dodge if this
-    /// airtime still allows it, otherwise Glide.
+    /// airtime still allows it, otherwise Glide (when Glide is on jump).
     fn try_jump(&mut self, input: &Input, env: &Env) -> bool {
         if self.airborne && self.abilities.aerial_dodge > 0 && self.air_dodge_ready {
             let g = self.growth(self.abilities.aerial_dodge).cloned().unwrap_or_default();
@@ -967,15 +1006,7 @@ impl Character {
             self.start_action(ActionKind::Jump { high }, m);
             return true;
         }
-        if let Some(g) = self.growth(self.abilities.glide) {
-            if env.height_above_ground > g.glide_start_height {
-                self.arc = None;
-                self.vel_y = 0.0;
-                self.mode = Mode::Glide;
-                return true;
-            }
-        }
-        false
+        self.glide_button == GlideButton::Jump && self.try_glide(env)
     }
 
     /// KH2's ledge grab, checked every frame of a jump or fall once the
@@ -1170,7 +1201,7 @@ impl Character {
                 if self.ceiling_lock <= 0.0
                     && ((input.attack.pressed && self.try_attack(input, env))
                     || (input.jump.pressed && self.try_jump(input, env))
-                        || (input.action.pressed && self.try_action_button(input)))
+                        || (input.action.pressed && self.try_action_button(input, env)))
                 {
                     return true;
                 }
@@ -1185,7 +1216,7 @@ impl Character {
             }
             Mode::Glide => {
                 let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
-                if !input.jump.held || env.height_above_ground < g.glide_end_height || !self.airborne {
+                if !self.glide_held(input) || env.height_above_ground < g.glide_end_height || !self.airborne {
                     self.mode = Mode::Free;
                     self.arc = Some(Arc::fall());
                     fo.motion = motion::FALL;
@@ -1330,8 +1361,15 @@ impl Character {
                 }
             }
             ActionKind::AerialDodge => {
-                // Jump again mid-dodge: straight into Glide.
-                if input.jump.pressed {
+                // The glide button mid-dodge: straight into Glide.
+                if self.glide_button == GlideButton::Action && input.action.pressed {
+                    let me = std::mem::replace(&mut self.mode, Mode::Free);
+                    if self.try_glide(env) {
+                        return true;
+                    }
+                    self.mode = me;
+                }
+                if self.glide_button == GlideButton::Jump && input.jump.pressed {
                     let me = std::mem::replace(&mut self.mode, Mode::Free);
                     if self.try_jump(input, env) {
                         return true;
@@ -1449,7 +1487,7 @@ impl Character {
         if cancel_allowed || f >= clip.length {
             if (input.attack.pressed && self.try_attack(input, env))
                 || (input.jump.pressed && self.try_jump(input, env))
-                || (input.action.pressed && self.try_action_button(input))
+                || (input.action.pressed && self.try_action_button(input, env))
             {
                 return true;
             }
