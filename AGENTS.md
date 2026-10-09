@@ -13,6 +13,11 @@ Notes for anyone (human or AI agent) working on this repo.
 - When code is ported from another project, credit it in `NOTICE` and `CREDITS.md`
   and keep its licence.
 
+## Several sessions at once
+
+Up to one lead and three helper chats can work together. Follow `docs/WORKFLOW.md`: lanes
+by crate, claims on the board in `local/board/`, delivery to the PC's `main` under a lock.
+
 ## Reverse-engineering notes
 
 - Ghidra runs headless on a private copy of the user's executable, outside the repo. Commit
