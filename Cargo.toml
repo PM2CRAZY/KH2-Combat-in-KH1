@@ -8,6 +8,7 @@ members = [
     "crates/character-core",
     "crates/kh2-bevy",
     "crates/kh2-anim",
+    "crates/kh2-rig",
     "crates/kh2-bdx",
     "crates/kh2-magic",
     "crates/map-collision",
@@ -24,6 +25,7 @@ combat-core = { path = "crates/combat-core" }
 kh2-formats = { path = "crates/kh2-formats" }
 kh2-data = { path = "crates/kh2-data" }
 kh2-anim = { path = "crates/kh2-anim" }
+kh2-rig = { path = "crates/kh2-rig" }
 kh2-bdx = { path = "crates/kh2-bdx" }
 kh2-magic = { path = "crates/kh2-magic" }
 map-collision = { path = "crates/map-collision" }

@@ -16,6 +16,7 @@ combat-core.workspace = true
 kh2-data.workspace = true
 kh2-formats.workspace = true
 kh2-anim.workspace = true
+kh2-rig.workspace = true
 kh2-magic.workspace = true
 map-collision.workspace = true
 kh2-camera.workspace = true

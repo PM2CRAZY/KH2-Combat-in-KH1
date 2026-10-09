@@ -2377,6 +2377,7 @@ dependencies = [
  "kh2-data",
  "kh2-formats",
  "kh2-magic",
+ "kh2-rig",
  "map-collision",
 ]
 
@@ -2424,6 +2425,18 @@ dependencies = [
  "combat-core",
  "glam",
  "kh2-bdx",
+ "kh2-formats",
+]
+
+[[package]]
+name = "kh2-rig"
+version = "0.1.0"
+dependencies = [
+ "character-core",
+ "combat-core",
+ "glam",
+ "kh2-anim",
+ "kh2-data",
  "kh2-formats",
 ]
 
