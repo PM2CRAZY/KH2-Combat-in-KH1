@@ -161,6 +161,10 @@ fn main() {
             }
             let mut character = data.character.clone();
             character.abilities = Abilities::max_growth();
+            // Glide on the action button: Square on a PlayStation pad, K /
+            // Left Shift on the keyboard (user's choice; jump still Aerial
+            // Dodges).
+            character.glide_button = character_core::GlideButton::Action;
             let dummy_template = data.combat.enemy(DUMMY_ENEMY, Some(dummy_level));
             // Menus, abilities and magic from the install.
             let action_ids: Vec<u16> = data.character.moveset.combo_rows.iter().map(|r| r.ability).filter(|a| *a != 0).collect();
@@ -271,9 +275,9 @@ fn main() {
                 kit,
             })
             .insert_resource(hud::MenuState::default())
-            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn, hud::spawn_drive, hud::spawn_rc, magic::spawn_pool))
+            .add_systems(Startup, (spawn_player, spawn_dummies, hud::spawn, hud::spawn_drive, hud::spawn_shortcuts, hud::spawn_rc, magic::spawn_pool))
             .add_systems(Update, (latch_input, camera_control, sync_visuals, sync_segments, foes::sync_pieces, draw_debug, draw_skeleton, hud, abilities_keys, screenshot))
-            .add_systems(Update, (hud::ability_menu, hud::draw, hud::draw_drive.after(hud::draw), hud::draw_rc, rc::draw_mark, magic::draw, rebuild_player))
+            .add_systems(Update, (hud::ability_menu, hud::draw, hud::draw_drive.after(hud::draw), hud::draw_shortcuts.after(hud::draw), hud::draw_rc, rc::draw_mark, magic::draw, rebuild_player))
             .add_systems(FixedUpdate, (simulate, camera_step).chain());
         }
         Err(_) => {
@@ -429,6 +433,12 @@ struct Latch {
     menu_up: bool,
     menu_down: bool,
     shortcut: Option<usize>,
+    /// The shortcut menu modifier (L1 / Ctrl) is held, and the slot
+    /// (`hud::SLOTS` order) whose button was pressed with it.
+    short_held: bool,
+    short_slot: Option<usize>,
+    /// Testing aid: fill the Drive gauge (F5 / pad Select).
+    refill: bool,
 }
 
 /// `--autoplay`: scripted input for smoke tests and screenshots
@@ -679,7 +689,24 @@ fn latch_input(
         }
     }
     latch.cam_reset |= keys.just_pressed(KeyCode::KeyF);
-    latch.rc |= keys.just_pressed(KeyCode::KeyL) || pads.iter().any(|p| p.just_pressed(GamepadButton::North));
+    latch.refill |= keys.just_pressed(KeyCode::F5) || pads.iter().any(|p| p.just_pressed(GamepadButton::Select));
+    // The shortcut menu: hold L1 / Ctrl, then a face button casts its slot
+    // instead of jumping, attacking and so on (KH2).
+    let modifier = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || pads.iter().any(|p| p.pressed(GamepadButton::LeftTrigger));
+    if modifier {
+        let pad = |b: GamepadButton| pads.iter().any(|p| p.just_pressed(b));
+        let slots = [
+            keys.just_pressed(KeyCode::KeyL) || pad(GamepadButton::North),
+            keys.just_pressed(KeyCode::KeyK) || keys.just_pressed(KeyCode::ShiftLeft) || pad(GamepadButton::West),
+            keys.just_pressed(KeyCode::Space) || pad(GamepadButton::East),
+            keys.just_pressed(KeyCode::KeyJ) || mouse.just_pressed(MouseButton::Left) || pad(GamepadButton::South),
+        ];
+        if let Some(i) = slots.iter().position(|&p| p) {
+            latch.short_slot = Some(i);
+        }
+    } else {
+        latch.rc |= keys.just_pressed(KeyCode::KeyL) || pads.iter().any(|p| p.just_pressed(GamepadButton::North));
+    }
     // Drive shortcuts: 7 Valor, 8 Wisdom, 9 Limit, 0 Master, - Final,
     // Backspace Revert.
     for (k, f) in [(KeyCode::Digit7, 1u8), (KeyCode::Digit8, 2), (KeyCode::Digit9, 3), (KeyCode::Digit0, 4), (KeyCode::Minus, 5), (KeyCode::Backspace, 0)] {
@@ -730,8 +757,16 @@ fn latch_input(
     }
     latch.walk = keys.pressed(KeyCode::AltLeft);
     latch.stick = if latch.walk { stick * 0.4 } else { stick };
+    let released = latch.short_held && !modifier;
+    latch.short_held = modifier;
     for i in 0..4 {
-        if held[i] && !latch.held[i] {
+        // With the modifier the face buttons belong to the shortcuts (not
+        // lock-on), and letting go of it doesn't turn a button still held
+        // into a fresh press.
+        if modifier && i < 3 {
+            held[i] = false;
+        }
+        if held[i] && !latch.held[i] && !(released && i < 3) {
             latch.pressed[i] = true;
         }
         latch.held[i] = held[i];
@@ -880,6 +915,8 @@ fn simulate(
         latch.menu_up = false;
         latch.menu_down = false;
         latch.shortcut = None;
+        latch.short_slot = None;
+        menu.shortcuts_open = false;
         return;
     }
     game.frame += 1;
@@ -911,6 +948,30 @@ fn simulate(
                 press(1, f == 8 || f == 12, &mut latch);
                 if f == 150 {
                     latch.shortcut = Some(3);
+                }
+            }
+            // The shortcut menu: hold it open and cast Square (Blizzard);
+            // then in the Magic list put Thunder on Triangle and cast it
+            // from the shortcuts; then refill the Drive gauge.
+            "shortcuts" => {
+                latch.stick = Vec2::ZERO;
+                latch.short_held = (5..60).contains(&f) || (85..90).contains(&f) || (130..140).contains(&f);
+                if f == 20 {
+                    latch.short_slot = Some(1);
+                }
+                latch.menu_down |= f == 70 || f == 76 || f == 79;
+                press(1, f == 73, &mut latch);
+                if f == 86 || f == 132 {
+                    latch.short_slot = Some(0);
+                }
+                press(0, f == 95, &mut latch);
+                if f == 150 {
+                    game.drive.drive.bars = 0;
+                    game.drive.drive.points = 0;
+                }
+                latch.refill |= f == 155;
+                if auto.trace && f % 10 == 0 {
+                    eprintln!("f{f} focus {:?} cursor {} shortcuts {:?} drive {}+{}", menu.focus, menu.magic, menu.shortcuts.0, game.drive.drive.bars, game.drive.drive.points);
                 }
             }
             // One spell, cast twice from a few steps away: fire, blizzard,
@@ -1062,8 +1123,10 @@ fn simulate(
                 press(2, f % 60 == 5, &mut latch);
             }
             "glide" => {
+                // Jump, Aerial Dodge, then hold the action button (Square).
                 latch.stick = Vec2::X;
-                press(0, f == 5 || f == 30 || f > 50, &mut latch);
+                press(0, f == 5 || f == 30, &mut latch);
+                press(2, f > 50, &mut latch);
             }
             "air" => {
                 press(0, f == 5, &mut latch);
@@ -1084,6 +1147,23 @@ fn simulate(
     // Command menu: up/down move the cursor; attack confirms the selected
     // command (Attack just attacks), jump backs out of a submenu (KH2).
     let mut cast: Option<usize> = latch.shortcut.take();
+    menu.shortcuts_open = latch.short_held;
+    if let Some(slot) = latch.short_slot.take() {
+        let name = hud::SLOTS[slot].0;
+        if menu.focus == hud::Focus::Magic {
+            // In the Magic list: put the highlighted spell on that button.
+            menu.shortcuts.0[slot] = Some(menu.magic);
+            let spell = game.kit.as_ref().and_then(|k| hud::spell_list(k, game.magic_level).get(menu.magic).and_then(|&i| k.spells.get(i)).map(|s| s.name.clone()));
+            dbg.log.push(format!("shortcut {name}: {}", spell.unwrap_or_default()));
+        } else {
+            cast = menu.shortcuts.0[slot];
+        }
+    }
+    // Testing aid: fill the Drive gauge (or the form gauge in a form).
+    if std::mem::take(&mut latch.refill) {
+        game.drive.drive.refill();
+        dbg.log.push("Drive gauge refilled".into());
+    }
     // A Drive command (form id; 0 = Revert).
     let mut drive_cmd: Option<u8> = latch.drive.take();
     if let Some(kit) = &game.kit {
@@ -2033,8 +2113,8 @@ fn hud(
          pos ({:.0}, {:.0}, {:.0})  move/frame ({:.1}, {:.1}, {:.1})  {}\n\
          Sora LV{} HP {}/{} (Str {} Mag {} Def {})  {}: Soldier LV{}\n\
          High Jump {}  Quick Run {}  Aerial Dodge {}  Glide {}  Dodge Roll {}  Combo Plus x{}  Air Combo Plus x{}  Finishing Plus x{}\n\
-         [Esc] abilities  [Up/Down] command menu (J confirm, Space back)  [1-6] magic shortcuts  [F1-F4] debug shapes  [R] reset\n\
-         WASD move (Alt walk)  Space jump (in air: aerial dodge, then hold: glide)  J/LMB attack  K/Shift guard / roll / quick run  Tab lock-on  Q/E/RMB camera\n",
+         [Esc] abilities  [Up/Down] command menu (J confirm, Space back)  [hold Ctrl] shortcuts  [1-6] cast  [F1-F4] debug shapes  [F5] refill Drive  [R] reset\n\
+         WASD move (Alt walk)  Space jump (in air: aerial dodge)  J/LMB attack  K/Shift guard / roll / quick run / glide (air)  Tab lock-on  Q/E/RMB camera\n",
         out.state,
         out.motion,
         out.clip_frame,

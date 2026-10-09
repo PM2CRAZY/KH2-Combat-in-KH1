@@ -26,13 +26,33 @@ pub struct MenuState {
     pub drive: usize,
     pub ability: usize,
     pub scroll: usize,
+    pub shortcuts: Shortcuts,
+    /// The shortcut menu is showing (L1 / Ctrl held).
+    pub shortcuts_open: bool,
 }
+
+/// The magic shortcut slots, in [`SLOTS`] order: positions in the Magic
+/// list ([`spell_list`]), or empty.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shortcuts(pub [Option<usize>; 4]);
+
+impl Default for Shortcuts {
+    /// Fire, Blizzard, Thunder, Cure (our choice).
+    fn default() -> Self {
+        Shortcuts([Some(0), Some(1), Some(2), Some(3)])
+    }
+}
+
+/// Shortcut slots: the button's name and its keyboard key.
+pub const SLOTS: [(&str, &str); 4] = [("Triangle", "L"), ("Square", "K"), ("Circle", "Space"), ("Cross", "J")];
 
 /// Root entries.
 pub const ATTACK: usize = 0;
 pub const MAGIC: usize = 1;
 pub const DRIVE: usize = 3;
 
+#[derive(Component)]
+pub struct CmdMenu;
 #[derive(Component)]
 pub struct CmdRow(pub usize);
 #[derive(Component)]
@@ -84,15 +104,18 @@ pub fn spawn(mut commands: Commands, game: Res<Game>) {
     let font = |size: f32| TextFont { font_size: size, ..default() };
     // Command menu (bottom left).
     commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(28.0),
-            bottom: Val::Px(28.0),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::FlexEnd,
-            column_gap: Val::Px(8.0),
-            ..default()
-        })
+        .spawn((
+            CmdMenu,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(28.0),
+                bottom: Val::Px(28.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::FlexEnd,
+                column_gap: Val::Px(8.0),
+                ..default()
+            },
+        ))
         .with_children(|p| {
             p.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), ..default() }).with_children(|col| {
                 col.spawn((Text::new("COMMAND"), font(13.0), TextColor(Color::srgb(0.7, 0.8, 1.0))));
@@ -540,6 +563,87 @@ pub fn draw_rc(game: Res<Game>, mut boxes: Query<(&mut Node, &mut BackgroundColo
         let want = format!("[L]  {name}");
         if t.0 != want {
             *t = Text::new(want);
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct ShortcutPanel;
+#[derive(Component)]
+pub struct ShortcutRow(pub usize);
+
+/// The shortcut menu: while L1 / Ctrl is held it takes the command menu's
+/// place, one row per face button (KH2's layout; the look is ours).
+pub fn spawn_shortcuts(mut commands: Commands, game: Res<Game>) {
+    if game.kit.is_none() {
+        return;
+    }
+    let font = |size: f32| TextFont { font_size: size, ..default() };
+    commands
+        .spawn((
+            ShortcutPanel,
+            Node { position_type: PositionType::Absolute, left: Val::Px(28.0), bottom: Val::Px(28.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), display: Display::None, ..default() },
+        ))
+        .with_children(|col| {
+            col.spawn((Text::new("SHORTCUTS"), font(13.0), TextColor(Color::srgb(0.7, 0.8, 1.0))));
+            for (i, (button, key)) in SLOTS.iter().enumerate() {
+                col.spawn((
+                    ShortcutRow(i),
+                    Node { width: Val::Px(300.0), height: Val::Px(30.0), padding: UiRect::horizontal(Val::Px(12.0)), align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() },
+                    BackgroundColor(NAVY),
+                    BorderRadius::new(Val::Px(4.0), Val::Px(15.0), Val::Px(15.0), Val::Px(4.0)),
+                ))
+                .with_children(|r| {
+                    r.spawn((Text::new(format!("{button} [{key}]")), font(13.0), TextColor(Color::srgb(0.95, 0.8, 0.4)), Node { width: Val::Px(110.0), ..default() }));
+                    r.spawn((Text::new(""), font(17.0), TextColor(WHITE), Node { flex_grow: 1.0, ..default() }));
+                    r.spawn((Text::new(""), font(14.0), TextColor(Color::srgb(0.55, 0.75, 1.0))));
+                });
+            }
+            col.spawn((Text::new("In the Magic list: hold and press to assign"), font(12.0), TextColor(GREY)));
+        });
+}
+
+#[allow(clippy::type_complexity)]
+pub fn draw_shortcuts(
+    game: Res<Game>,
+    menu: Res<MenuState>,
+    mut panel: Query<&mut Node, (With<ShortcutPanel>, Without<CmdMenu>)>,
+    mut cmd: Query<&mut Node, (With<CmdMenu>, Without<ShortcutPanel>)>,
+    rows: Query<(&ShortcutRow, &Children)>,
+    mut texts: Query<(&mut Text, &mut TextColor)>,
+) {
+    let Some(kit) = &game.kit else { return };
+    let open = menu.shortcuts_open && menu.focus != Focus::Abilities;
+    if let Ok(mut n) = panel.get_single_mut() {
+        n.display = if open { Display::Flex } else { Display::None };
+        // Above the command menu and the Magic list while assigning.
+        n.bottom = Val::Px(if menu.focus == Focus::Magic { 236.0 } else { 28.0 });
+    }
+    // In the Magic list the list stays up, so a spell can be assigned.
+    if let Ok(mut n) = cmd.get_single_mut() {
+        n.display = if open && menu.focus != Focus::Magic { Display::None } else { Display::Flex };
+    }
+    if !open {
+        return;
+    }
+    let spells = spell_list(kit, game.magic_level);
+    let usable = crate::drive::magic_allowed(game.drive.form()) && !game.drive.busy();
+    for (row, children) in &rows {
+        let spell = menu.shortcuts.0[row.0].and_then(|p| spells.get(p)).and_then(|&i| kit.spells.get(i));
+        for (k, c) in children.iter().enumerate().skip(1) {
+            if let Ok((mut t, mut col)) = texts.get_mut(*c) {
+                *t = Text::new(match (spell, k) {
+                    (Some(s), 1) => s.name.clone(),
+                    (None, 1) => "-".into(),
+                    (Some(s), _) if s.mp_cost == 255 => "all MP".into(),
+                    (Some(s), _) => format!("{} MP", s.mp_cost),
+                    _ => String::new(),
+                });
+                if k == 1 {
+                    let ok = usable && spell.is_some_and(|s| game.can_afford(s.mp_cost));
+                    *col = TextColor(if ok { WHITE } else { GREY });
+                }
+            }
         }
     }
 }

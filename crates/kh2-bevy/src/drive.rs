@@ -180,6 +180,7 @@ fn swap_to(game: &mut Game, data: &Arc<SoraData>, abilities: Abilities) {
     let (facing, lock) = (old.facing(), old.lock());
     let mut c = data.character.clone();
     c.abilities = abilities;
+    c.glide_button = old.glide_button;
     c.set_facing(facing);
     c.set_lock(lock);
     game.character = c;
