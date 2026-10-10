@@ -177,6 +177,16 @@ impl Camera {
         c
     }
 
+    /// Turns the camera to `yaw` at once (no swing): the eye and its goals are placed there.
+    /// For a host handing over from another camera that was looking that way.
+    pub fn snap_yaw(&mut self, yaw: f32) {
+        self.yaw = wrap(yaw);
+        self.goal_yaw = self.yaw;
+        self.eye = self.place(self.at);
+        self.eye_goal = self.eye;
+        self.prev_eye_goal = self.eye;
+    }
+
     /// Horizontal direction the camera looks along (from eye to look
     /// point), as a yaw: forward is (sin, 0, cos).
     pub fn view_yaw(&self) -> f32 {
