@@ -103,6 +103,9 @@ pub struct RigAnim {
     /// weapons are put away while Sora just moves (the host decides when;
     /// see [`RigAnim::weapons_out`]).
     pub field: bool,
+    /// Blend (60 Hz frames) into the motion queued after a finished action. The game uses none
+    /// (`blend::QUEUED`); a host can soften the snap.
+    pub queued_blend: f32,
 }
 
 /// Movement motions that keep the weapons put away out of combat. Attacks,
@@ -146,7 +149,7 @@ impl RigAnim {
     pub fn new(rig: Arc<Rig>) -> RigAnim {
         let bones = kh2_anim::Pose::bind(&rig.skeleton).bones;
         let weapons = rig.weapons.iter().map(|w| kh2_anim::Pose::bind(&w.skeleton).bones).collect();
-        RigAnim { rig, track: None, bones, weapons, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT, field: false }
+        RigAnim { rig, track: None, bones, weapons, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT, field: false, queued_blend: blend::QUEUED }
     }
 
     /// The keyframes a track plays: the field variant when it asks for one.
@@ -177,12 +180,20 @@ impl RigAnim {
         let free_motion = matches!(out.motion, motion::IDLE | motion::WALK | motion::RUN | motion::FALL);
         match out.state {
             StateName::Idle | StateName::Walk | StateName::Run if free_motion => free(out.motion, true),
+            // The action's last frame, reported in a free state: a host that softens the snap
+            // into the next motion starts it now rather than holding the action's end a frame.
+            StateName::Idle | StateName::Walk | StateName::Run if self.queued_blend > blend::MIN => {
+                free(match out.state { StateName::Walk => motion::WALK, StateName::Run => motion::RUN, _ => motion::IDLE }, true)
+            }
             StateName::Glide => free(out.motion, true),
             StateName::Air => {
                 // Keep playing the jump while rising, then the fall loop.
                 let rising = out.displacement[1] > 0.05;
+                // Only while the clip lasts: past its end it would hold its last frame, frozen,
+                // for as long as the rise goes on (an aerial dodge's end).
+                let left = |p: &Track| Self::motion_for(&self.rig, p.motion, p.field).is_some_and(|m| p.frame + 1.0 < kh2_anim::length_frames(m));
                 match prev {
-                    Some(p) if rising && (p.motion == motion::JUMP || p.motion == motion::HIGH_JUMP || p.motion == motion::AERIAL_DODGE) => {
+                    Some(p) if rising && (p.motion == motion::JUMP || p.motion == motion::HIGH_JUMP || p.motion == motion::AERIAL_DODGE) && left(&p) => {
                         Track { frame: p.frame + 1.0, looping: false, root: false, ..p }
                     }
                     _ => free(motion::FALL, true),
@@ -207,7 +218,10 @@ impl RigAnim {
             None => false,
         };
         if let (true, Some(prev)) = (restarted, self.track) {
-            let frames = blend::frames(character, prev.motion, track.motion);
+            let mut frames = blend::frames(character, prev.motion, track.motion);
+            if frames <= blend::QUEUED && blend::is_free(track.motion) && !blend::is_free(prev.motion) {
+                frames = frames.max(self.queued_blend);
+            }
             // Walk <-> run keeps the gait's phase (the game scales the old
             // motion's progress, plus the blend, onto the new one's length).
             let gait = |m: u16| m == motion::WALK || m == motion::RUN;

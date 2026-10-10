@@ -317,6 +317,8 @@ pub struct Character {
     lock: Option<u32>,
     /// Set when a jump starts with Aerial Dodge owned; cleared on use.
     air_dodge_ready: bool,
+    /// Glide banking shown (0 level, 1 or -1 turning), held with some hysteresis.
+    glide_bank: i8,
     /// Jump button still held since the jump started / released early.
     jump_held: bool,
     jump_released: bool,
@@ -355,6 +357,11 @@ fn wrap(a: f32) -> f32 {
     }
     a - std::f32::consts::PI
 }
+
+/// Glide banking: start banking with this much turn still to make (radians, 12 degrees, or two
+/// frames of turning if that is more) and level out below 4 degrees.
+const GLIDE_BANK_IN: f32 = 0.21;
+const GLIDE_BANK_OUT: f32 = 0.07;
 
 fn turn_toward(from: f32, to: f32, rate: f32) -> f32 {
     let d = wrap(to - from);
@@ -416,6 +423,7 @@ impl Character {
             swing_counter: 0,
             lock: None,
             air_dodge_ready: false,
+            glide_bank: 0,
             count: 0,
             finishers: 0,
             hit: false,
@@ -1222,15 +1230,25 @@ impl Character {
                     fo.motion = motion::FALL;
                     return false;
                 }
-                let mut turn = 0;
+                // Bank into a turn only while there is a real turn left to make, and come out of it
+                // only once it is nearly made (ours: steering by a camera-relative stick leaves a
+                // hair of turn either way every frame, and banking on its sign flipped the banked
+                // motions back and forth).
+                let mut d = 0.0;
                 if moving {
                     let want = yaw_of(input.stick);
-                    let d = wrap(want - self.facing);
-                    if d.abs() > 1e-3 {
-                        turn = if d > 0.0 { 1 } else { -1 };
-                    }
+                    d = wrap(want - self.facing);
                     self.facing = turn_toward(self.facing, want, g.glide_turn_speed);
                 }
+                let (enter, leave) = (GLIDE_BANK_IN.max(g.glide_turn_speed * 2.0), GLIDE_BANK_OUT);
+                self.glide_bank = match self.glide_bank {
+                    0 if d > enter => 1,
+                    0 if d < -enter => -1,
+                    1 if d < leave => if d < -enter { -1 } else { 0 },
+                    -1 if d > -leave => if d > enter { 1 } else { 0 },
+                    b => b,
+                };
+                let turn = self.glide_bank;
                 fo.motion = match turn {
                     0 => motion::GLIDE,
                     1 => motion::GLIDE_TURN_A,
