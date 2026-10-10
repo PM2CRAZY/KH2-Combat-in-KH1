@@ -192,8 +192,11 @@ impl RigAnim {
                 // Only while the clip lasts: past its end it would hold its last frame, frozen,
                 // for as long as the rise goes on (an aerial dodge's end).
                 let left = |p: &Track| Self::motion_for(&self.rig, p.motion, p.field).is_some_and(|m| p.frame + 1.0 < kh2_anim::length_frames(m));
+                // The High Jump's flip comes about its apex: it plays to its end however the
+                // rise goes (a short hop included), so a High Jump always flips.
                 match prev {
-                    Some(p) if rising && (p.motion == motion::JUMP || p.motion == motion::HIGH_JUMP || p.motion == motion::AERIAL_DODGE) && left(&p) => {
+                    Some(p) if p.motion == motion::HIGH_JUMP && left(&p) => Track { frame: p.frame + 1.0, looping: false, root: false, ..p },
+                    Some(p) if rising && (p.motion == motion::JUMP || p.motion == motion::AERIAL_DODGE) && left(&p) => {
                         Track { frame: p.frame + 1.0, looping: false, root: false, ..p }
                     }
                     _ => free(motion::FALL, true),
