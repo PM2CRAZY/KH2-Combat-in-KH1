@@ -258,10 +258,19 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
      - `flag & 2` lowers `high` by the jump height
      - `flag & 8` / `flag & 16` shrink or grow the window by the target's height
    - `inner_min < dot(facing, dir) ≤ inner_max`
-4. **Pick the first valid row in table order.** `score` is not used.
-5. **Anti-repeat:** if that row's motion is already playing, use the row whose id equals its
-   `sub`. This is why Sora alternates swings.
-6. **Fallback:** if nothing is valid, use row 9 in the air or row 5 on the ground.
+4. **Walk the valid rows in table order** (`0x140401F30`) and take the first whose motion
+   is not the one playing (or whose `sub` is its own id). `score` is not used.
+5. **Anti-repeat:** a valid row whose motion is already playing is passed over; the first
+   such row's `sub` row is kept, and used only if no other valid row is found. This is why
+   Sora alternates swings, and why Finishing Plus and the modifiers mix (Explosion, then the
+   next valid finisher, then Explosion again). Corrected: before, the first valid row
+   was swapped for its `sub` and a row without one repeated.
+6. **Fallback** (`0x140402000`): if the walk finds nothing, row 9 (air) or row 5 (ground) is
+   marked valid too and the walk runs again.
+7. **Rows reached from a state** (kind 0), in the attack-press handler (`0x1403A6A60`):
+   attack while the guard's repel (motion 42) plays takes row 39, Counterguard, if it passes
+   its conditions. Retaliating Slash (row 40) is checked in a separate routine
+   (`0x1403A8D00`, row id in a register); ours: attack while launched.
 
 Combo length:
 - Ground and air are 3 each.

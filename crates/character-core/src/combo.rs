@@ -105,7 +105,7 @@ pub struct Situation<'a> {
 }
 
 /// Row-level checks that don't depend on a target.
-fn condition(r: &ComboRow, s: &Situation) -> bool {
+pub fn condition(r: &ComboRow, s: &Situation) -> bool {
     if r.motion == 0 || (r.ability != 0 && !s.equipped.contains(&r.ability)) {
         return false;
     }
@@ -148,41 +148,59 @@ pub struct Choice<'a> {
     pub target: Option<TargetGeom>,
 }
 
-/// Picks the next attack: the first row in table order that passes, then
-/// swapped for its `sub` row if its motion is already playing. With no
-/// valid row, falls back to row id 9 (air) or 5 (ground).
+/// Picks the next attack (exe): every row that passes is marked, then the rows are walked in
+/// table order and the first one whose motion is not the one playing is taken (or whose `sub`
+/// is itself). A row whose motion is already playing is passed over; the first such row's
+/// `sub` row is kept as the answer for when nothing else passes. With nothing at all, row 9
+/// (air) or 5 (ground) is marked too and the walk is done again.
+///
+/// (Before the fix, the first passing row was taken and swapped for its `sub` when its motion was
+/// playing; a row with no `sub`, such as Explosion, then repeated on every press. The exe walks
+/// on instead, which is where KH2's mix of finishers and modifiers comes from.)
 pub fn select<'a>(rows: &'a [ComboRow], s: &Situation) -> Option<Choice<'a>> {
     let by_id = |id: u8| rows.iter().find(|r| r.id == id);
-    let mut found: Option<Choice> = None;
-    for r in rows {
+    let passes = |r: &'a ComboRow| -> Option<Choice<'a>> {
         if !condition(r, s) {
-            continue;
+            return None;
         }
         let target = match r.kind {
             1 => match s.primary {
                 Some(t) if in_range(r, &t, s.jump_height) => Some(t),
-                _ => continue,
+                _ => return None,
             },
-            2 => match s.all.iter().find(|t| in_range(r, t, s.jump_height)) {
-                Some(t) => Some(*t),
-                None => continue,
-            },
+            2 => Some(*s.all.iter().find(|t| in_range(r, t, s.jump_height))?),
             3 => s.primary,
-            _ => continue,
+            _ => return None,
         };
-        found = Some(Choice { row: r, target });
-        break;
-    }
-    let Some(mut c) = found else {
-        let row = by_id(if s.air { 9 } else { 5 })?;
-        return Some(Choice { row, target: s.primary });
+        Some(Choice { row: r, target })
     };
-    if c.row.motion == s.current_motion && c.row.sub as i32 != c.row.id as i32 {
-        if let Some(alt) = u8::try_from(c.row.sub).ok().and_then(by_id) {
-            c.row = alt;
+    let walk = |valid: &[Choice<'a>]| -> Option<Choice<'a>> {
+        let mut alt: Option<Choice<'a>> = None;
+        for c in valid {
+            if c.row.sub as i32 == c.row.id as i32 || c.row.motion != s.current_motion {
+                return Some(*c);
+            }
+            if alt.is_none() {
+                if let Some(a) = u8::try_from(c.row.sub).ok().and_then(by_id) {
+                    alt = Some(Choice { row: a, target: c.target });
+                }
+            }
         }
+        alt
+    };
+    let mut valid: Vec<Choice<'a>> = rows.iter().filter_map(passes).collect();
+    if let Some(c) = walk(&valid) {
+        return Some(c);
     }
-    Some(c)
+    // Nothing: the default row joins the marked ones (in its table place) and the walk runs again.
+    let Some(fallback) = by_id(if s.air { 9 } else { 5 }) else {
+        // A table without the default rows (test fixtures): repeat the first passing row.
+        return valid.first().copied();
+    };
+    let at = rows.iter().position(|r| std::ptr::eq(r, fallback)).unwrap_or(rows.len());
+    let before = valid.iter().filter(|c| rows.iter().position(|r| std::ptr::eq(r, c.row)).unwrap_or(0) < at).count();
+    valid.insert(before, Choice { row: fallback, target: s.primary });
+    walk(&valid)
 }
 
 #[cfg(test)]

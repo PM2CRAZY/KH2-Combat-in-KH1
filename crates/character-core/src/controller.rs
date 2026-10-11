@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 
 use crate::clip::{Clip, EventKind, WindowKind};
-use crate::combo::{select, ComboRow, Situation, TargetGeom, FLAG_JUMP_ADJUST};
+use crate::combo::{condition, select, Choice, ComboRow, Situation, TargetGeom, FLAG_JUMP_ADJUST};
 use crate::params::{Abilities, AttackParams, ComboRules, GrowthLevel, MoveParams};
 
 /// Motion ids used by the controller (KH2 player moveset numbering).
@@ -285,6 +285,12 @@ enum Mode {
 const WALL_HOP: f32 = 50.0;
 /// Frames into a launch before Aerial Recovery can be used (ours).
 const RECOVERY_AFTER: u32 = 6;
+/// Combo rows only reached from a state (PTYA kind 0), and the abilities they need.
+/// Counterguard: attack during the guard's repel (motion 42), as the exe's attack-press
+/// handler does (`current motion == 0x2A` → row 0x27). Retaliating Slash: attack while
+/// launched (ours; the exe checks it in a separate routine whose row id comes in a register).
+const COUNTERGUARD_ROW: u8 = 39;
+const RETALIATING_SLASH_ROW: u8 = 40;
 /// Hit-back starting speed per unit of distance (exe: 0.1).
 const HIT_BACK_SPEED: f32 = 0.1;
 
@@ -315,6 +321,8 @@ pub struct Character {
     mode: Mode,
     swing_counter: u64,
     lock: Option<u32>,
+    /// A kind-0 combo row the next attack must be (Counterguard, Retaliating Slash).
+    forced_row: Option<u8>,
     /// Each attack starts facing the locked-on target (a host's choice; off = the game's turn
     /// windows only).
     face_lock: bool,
@@ -425,6 +433,7 @@ impl Character {
             mode: Mode::Free,
             swing_counter: 0,
             lock: None,
+            forced_row: None,
             face_lock: false,
             air_dodge_ready: false,
             glide_bank: 0,
@@ -903,7 +912,12 @@ impl Character {
             equipped: &self.abilities.equipped,
             jump_height: self.params.jump_height,
         };
-        let Some(choice) = select(&self.moveset.combo_rows, &sit) else {
+        let forced = self.forced_row.take().and_then(|id| self.moveset.combo_rows.iter().find(|r| r.id == id)).filter(|r| condition(r, &sit));
+        let picked = match forced {
+            Some(r) => Some(Choice { row: r, target: sit.primary }),
+            None => select(&self.moveset.combo_rows, &sit),
+        };
+        let Some(choice) = picked else {
             (self.count, self.finishers) = saved;
             return false;
         };
@@ -1459,6 +1473,14 @@ impl Character {
                 }
             }
             ActionKind::Hurt => {
+                // Counterguard: attack during the guard's repel (exe).
+                if act.motion == motion::GUARD && input.attack.pressed && !self.airborne {
+                    self.forced_row = Some(COUNTERGUARD_ROW);
+                    if self.try_attack(input, env) {
+                        return false;
+                    }
+                    self.forced_row = None;
+                }
                 // Buttons are taken once the reaction-command window opens
                 // (frame 8 for Sora's damage motions); our reading.
                 let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
@@ -1481,6 +1503,19 @@ impl Character {
                     let m = if self.clip(motion::AERIAL_DODGE).is_some() { motion::AERIAL_DODGE } else { act.motion };
                     self.start_action(ActionKind::Hurt, m);
                     return false;
+                }
+                // Retaliating Slash (ours, see RETALIATING_SLASH_ROW): attack while launched.
+                if input.attack.pressed && self.airborne && f >= RECOVERY_AFTER {
+                    self.forced_row = Some(RETALIATING_SLASH_ROW);
+                    let (vh, vy, arc) = (self.vel_h, self.vel_y, self.arc);
+                    self.vel_h = [0.0; 2];
+                    self.vel_y = 0.0;
+                    self.arc = Some(Arc::fall());
+                    if self.try_attack(input, env) {
+                        return false;
+                    }
+                    (self.vel_h, self.vel_y, self.arc) = (vh, vy, arc);
+                    self.forced_row = None;
                 }
                 fo.no_gravity = true;
                 // Hold the last frame until landing.
