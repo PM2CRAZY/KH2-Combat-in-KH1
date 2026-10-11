@@ -315,6 +315,9 @@ pub struct Character {
     mode: Mode,
     swing_counter: u64,
     lock: Option<u32>,
+    /// Each attack starts facing the locked-on target (a host's choice; off = the game's turn
+    /// windows only).
+    face_lock: bool,
     /// Set when a jump starts with Aerial Dodge owned; cleared on use.
     air_dodge_ready: bool,
     /// Glide banking shown (0 level, 1 or -1 turning), held with some hysteresis.
@@ -422,6 +425,7 @@ impl Character {
             mode: Mode::Free,
             swing_counter: 0,
             lock: None,
+            face_lock: false,
             air_dodge_ready: false,
             glide_bank: 0,
             count: 0,
@@ -684,6 +688,12 @@ impl Character {
         self.lock = id;
     }
 
+    /// Whether each attack starts facing the locked-on target, wherever it is (our addition for
+    /// hosts whose lock-on should aim every swing; the game only turns in its turn windows).
+    pub fn set_face_lock(&mut self, on: bool) {
+        self.face_lock = on;
+    }
+
     pub fn combo_count(&self) -> u8 {
         self.count
     }
@@ -890,8 +900,19 @@ impl Character {
             (self.count, self.finishers) = saved;
             return false;
         }
-        // No target: face the stick direction immediately.
-        if target.is_none() && len2(input.stick) > DEAD_ZONE {
+        // Locked on (when the host asks for it): the swing faces the target, near or far.
+        let to_lock = if self.face_lock {
+            self.lock
+                .and_then(|id| env.targets.iter().find(|t| t.id == id))
+                .map(|t| [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]])
+                .filter(|d| len2(*d) > 1e-3)
+        } else {
+            None
+        };
+        if let Some(d) = to_lock {
+            self.facing = yaw_of(d);
+        } else if target.is_none() && len2(input.stick) > DEAD_ZONE {
+            // No target: face the stick direction immediately.
             self.facing = yaw_of(input.stick);
         }
         let dir = match target.and_then(|t| env.targets.iter().find(|x| x.id == t.id)) {
