@@ -876,6 +876,19 @@ impl Character {
             self.finishers = 1;
         }
 
+        // Locked on (when the host asks for it): the swing faces the target, near or far,
+        // before the row is picked (rows that want the target dead ahead then see it there).
+        let to_lock = if self.face_lock {
+            self.lock
+                .and_then(|id| env.targets.iter().find(|t| t.id == id))
+                .map(|t| [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]])
+                .filter(|d| len2(*d) > 1e-3)
+        } else {
+            None
+        };
+        if let Some(d) = to_lock {
+            self.facing = yaw_of(d);
+        }
         let air = self.airborne;
         let all: Vec<TargetGeom> = env.targets.iter().map(|t| self.geom(env, t)).collect();
         let primary = self.primary_target(env).map(|t| self.geom(env, t));
@@ -900,18 +913,7 @@ impl Character {
             (self.count, self.finishers) = saved;
             return false;
         }
-        // Locked on (when the host asks for it): the swing faces the target, near or far.
-        let to_lock = if self.face_lock {
-            self.lock
-                .and_then(|id| env.targets.iter().find(|t| t.id == id))
-                .map(|t| [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]])
-                .filter(|d| len2(*d) > 1e-3)
-        } else {
-            None
-        };
-        if let Some(d) = to_lock {
-            self.facing = yaw_of(d);
-        } else if target.is_none() && len2(input.stick) > DEAD_ZONE {
+        if to_lock.is_none() && target.is_none() && len2(input.stick) > DEAD_ZONE {
             // No target: face the stick direction immediately.
             self.facing = yaw_of(input.stick);
         }
