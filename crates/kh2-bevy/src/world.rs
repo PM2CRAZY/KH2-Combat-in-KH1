@@ -83,8 +83,10 @@ impl Arena {
         map.add(&[v(-EDGE, 0.0, -EDGE), v(-EDGE, 0.0, EDGE), v(EDGE, 0.0, EDGE), v(EDGE, 0.0, -EDGE)], attr::FLOOR);
         let h = 2000.0;
         for (a, b) in [(v(-EDGE, 0.0, -EDGE), v(EDGE, 0.0, -EDGE)), (v(EDGE, 0.0, -EDGE), v(EDGE, 0.0, EDGE)), (v(EDGE, 0.0, EDGE), v(-EDGE, 0.0, EDGE)), (v(-EDGE, 0.0, EDGE), v(-EDGE, 0.0, -EDGE))] {
-            // Facing inward.
-            map.add(&[a, a + Vec3::Y * h, b + Vec3::Y * h, b], attr::WALL);
+            // Facing inward (counter-clockwise seen from inside the arena). These were wound the
+            // other way, facing out: they never held Sora in, and within his radius of one the
+            // solver pushed him out through it.
+            map.add(&[a, b, b + Vec3::Y * h, a + Vec3::Y * h], attr::WALL);
         }
         let first_drawn = map.polys.len();
         let mut ledges = Vec::new();
@@ -192,5 +194,31 @@ pub fn body_of(shape: Option<&kh2_data::sora::BoneShape>, player: bool) -> map_c
     match shape {
         Some(s) => map_collision::Body { radius: s.radius, half_height: s.height, center: s.lift, lower_sphere: s.kind != 0, pass, snap: 0.0 },
         None => map_collision::Body { pass, ..map_collision::Body::player(90.0, 90.0, 115.0) },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The edge walls face the middle of the arena and hold Sora in.
+    #[test]
+    fn edge_walls_face_inward_and_hold() {
+        let arena = Arena::build();
+        for p in &arena.map.polys[1..arena.first_drawn] {
+            let centre = p.corners().iter().copied().sum::<Vec3>() / p.corners().len() as f32;
+            assert!(p.normal.dot(-centre.with_y(0.0)) > 0.0, "edge wall at {centre} faces out ({})", p.normal);
+        }
+        let body = body_of(None, true);
+        for dir in [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z] {
+            let mut pos = dir * 2700.0 + dir.cross(Vec3::Y) * 300.0;
+            for _ in 0..60 {
+                let m = body.solve(&arena.map, pos, dir * 26.0, false);
+                pos = m.pos;
+            }
+            let reach = pos.dot(dir);
+            assert!(reach <= EDGE - 89.0 && reach > EDGE - 95.0, "running {dir}: held at {reach}");
+            assert!(pos.y.abs() < 1e-3, "still on the floor: {pos}");
+        }
     }
 }
