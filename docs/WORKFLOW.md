@@ -62,6 +62,10 @@ Small, frequent deliveries. Each one builds and passes `cargo test`.
    - Append a line to `log.md`: what changed and whether the others need to rebase.
    - Message the running sessions.
 5. Never force-push, rewrite `main`, or merge with conflicts on the PC.
+6. Only the session that took the lock releases it. In a one-line script, release inside the
+   branch that took it (`if mkdir local/board/main.lock; then ...; rmdir local/board/main.lock;
+   fi`): `mkdir ... && ...; rmdir ...` deletes another session's lock when `mkdir` fails
+   (claude-8a's, during its merge on 2026-10-11).
 
 ## Cost
 
