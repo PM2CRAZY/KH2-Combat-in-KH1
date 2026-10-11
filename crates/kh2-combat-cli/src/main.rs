@@ -27,6 +27,7 @@ Commands:
                             model collision shapes (hurtboxes / attack boxes)
   extract --file obj/X.mset --out local/X.mset
                             copy one file out of your archives (for local research; never commit it)
+  sound --id N --out x.wav  one KH2 sound effect (bank*1000+index) decoded to a WAV (local research)
   hit --attack ID[:SUB] --enemy ID [--level L] [--str S] [--mag M] [--difficulty beginner|standard|proud|critical]
                             simulate one hit and print every step
 
@@ -81,6 +82,35 @@ fn run(args: &Args) -> Result<(), String> {
             let bytes = install.read_any(source, file).map_err(|e| e.to_string())?;
             std::fs::write(out, &bytes).map_err(|e| e.to_string())?;
             println!("{} bytes -> {out}", bytes.len());
+            return Ok(());
+        }
+        "sound" => {
+            let id: u32 = args.num("--id")?.ok_or("missing --id")?;
+            let out = args.value("--out").ok_or("missing --out")?;
+            let (bank, index) = kh2_formats::scd::split_id(id);
+            let bytes = install.read_any(source, &kh2_formats::scd::bank_file(bank)).map_err(|e| e.to_string())?;
+            let scd = kh2_formats::scd::Scd::parse(&bytes).map_err(|e| e.to_string())?;
+            let pcm = scd.sound(index).map_err(|e| e.to_string())?;
+            let data: Vec<u8> = pcm.samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+            let mut w = Vec::new();
+            let block = pcm.channels as u32 * 2;
+            w.extend_from_slice(b"RIFF");
+            w.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
+            w.extend_from_slice(b"WAVEfmt ");
+            for v in [16u32] {
+                w.extend_from_slice(&v.to_le_bytes());
+            }
+            w.extend_from_slice(&1u16.to_le_bytes());
+            w.extend_from_slice(&pcm.channels.to_le_bytes());
+            w.extend_from_slice(&pcm.rate.to_le_bytes());
+            w.extend_from_slice(&(pcm.rate * block).to_le_bytes());
+            w.extend_from_slice(&(block as u16).to_le_bytes());
+            w.extend_from_slice(&16u16.to_le_bytes());
+            w.extend_from_slice(b"data");
+            w.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            w.extend_from_slice(&data);
+            std::fs::write(out, &w).map_err(|e| e.to_string())?;
+            println!("sound {id}: bank {bank} index {index}, {} Hz, {} ch, {:.2} s -> {out}", pcm.rate, pcm.channels, pcm.samples.len() as f32 / pcm.channels as f32 / pcm.rate as f32);
             return Ok(());
         }
         "pref" => return pref(&install, source),
