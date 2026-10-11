@@ -335,6 +335,8 @@ pub struct Character {
     jump_released: bool,
     count: u8,
     finishers: u8,
+    /// The get-up motion after landing from a launch, while it plays (Hyper Healing).
+    get_up: Option<u16>,
     /// The current swing has connected.
     hit: bool,
     buffered_attack: bool,
@@ -439,6 +441,7 @@ impl Character {
             glide_bank: 0,
             count: 0,
             finishers: 0,
+            get_up: None,
             hit: false,
             jump_held: false,
             jump_released: false,
@@ -707,6 +710,11 @@ impl Character {
         self.count
     }
 
+    /// The attack playing is a combo finisher.
+    pub fn in_finisher(&self) -> bool {
+        matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) if row.is_finisher())
+    }
+
     fn growth(&self, level: u8) -> Option<&GrowthLevel> {
         if level == 0 {
             None
@@ -813,6 +821,7 @@ impl Character {
     }
 
     fn start_action(&mut self, kind: ActionKind, motion: u16) {
+        self.get_up = None;
         self.swing_counter += 1;
         self.mode = Mode::Action(Action { kind, motion, frame: 0, swing: self.swing_counter, timer: 0.0, brake: 1.0, lunge: 0.0 });
     }
@@ -1152,6 +1161,7 @@ impl Character {
                     self.vel_h = [0.0; 2];
                     if self.clip(m).is_some() {
                         self.start_action(ActionKind::Hurt, m);
+                        self.get_up = Some(m);
                     } else {
                         self.mode = Mode::Free;
                     }
@@ -1491,12 +1501,17 @@ impl Character {
                     // Air flinch done: keep falling.
                     finished = true;
                 }
+                // Hyper Healing (ours): the get-up after a launch ends halfway.
+                if self.abilities.hyper_healing && self.get_up == Some(act.motion) && f >= clip.length / 2 {
+                    finished = true;
+                }
             }
             ActionKind::Blow { .. } => {
                 // Aerial Recovery (ours: the exe's input for it isn't traced):
                 // jump while launched rights Sora with a small hop and the
                 // aerial-dodge flip, and control comes back when it ends.
-                if self.abilities.aerial_recovery && input.jump.pressed && self.airborne && f >= RECOVERY_AFTER {
+                let recovery_after = if self.abilities.hyper_healing { 2 } else { RECOVERY_AFTER };
+                if self.abilities.aerial_recovery && input.jump.pressed && self.airborne && f >= recovery_after {
                     self.vel_h = [0.0; 2];
                     self.vel_y = 0.0;
                     self.arc = Some(Arc::new(WALL_HOP, self.params.gravity));
@@ -1505,7 +1520,7 @@ impl Character {
                     return false;
                 }
                 // Retaliating Slash (ours, see RETALIATING_SLASH_ROW): attack while launched.
-                if input.attack.pressed && self.airborne && f >= RECOVERY_AFTER {
+                if input.attack.pressed && self.airborne && f >= recovery_after {
                     self.forced_row = Some(RETALIATING_SLASH_ROW);
                     let (vh, vy, arc) = (self.vel_h, self.vel_y, self.arc);
                     self.vel_h = [0.0; 2];

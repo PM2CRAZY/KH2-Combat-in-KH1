@@ -139,6 +139,11 @@ pub struct Abilities {
     pub combo_master: bool,
     /// Press jump while launched to right yourself in mid-air.
     pub aerial_recovery: bool,
+    /// Hyper Healing (ours, for hosts that buy it): back on your feet in half the time after
+    /// a launch, and Aerial Recovery / Retaliating Slash from the launch's 2nd frame.
+    pub hyper_healing: bool,
+    /// Guard Plus (ours): the guard holds blows from every side, not only the front.
+    pub guard_all_round: bool,
     /// Item ids of equipped action abilities (for combo rows that need one).
     pub equipped: Vec<u16>,
 }
@@ -158,6 +163,8 @@ impl Default for Abilities {
             negative_combo: 0,
             combo_master: false,
             aerial_recovery: false,
+            hyper_healing: false,
+            guard_all_round: false,
             equipped: Vec::new(),
         }
     }
