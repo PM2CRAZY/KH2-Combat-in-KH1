@@ -4,8 +4,8 @@
 //! time f32, motion)`: samples the motion into per-bone rotation / translation arrays, then
 //! builds the bone matrices in `0x140390260`) or, for characters with ground IK, in
 //! `0x140392710` (`(world matrix, instance, flags)`). The instance (`*u64`):
-//! - `+0` points at the model header: `bone_count u32`, then a handle to the 0x30-byte bone
-//!   table (`kh1_data::mdls`).
+//! - `+0` points at a slot that points at the model header: `bone_count u16`, then a handle
+//!   to the 0x30-byte bone table (`kh1_data::mdls`).
 //! - `+0x1B0`, `+0x1B4`, `+0x1B8`, `+0x1BC`, `+0x1C0`: handles to per-bone 0x40-byte matrix
 //!   arrays; `+0x1C4`, `+0x1C8`: per-bone 0x10-byte translation and rotation.
 //! Handles are the game's 32-bit addresses: `table[(h & 0x7FFFFFFF) >> 25] | (h & 0x1FFFFFF)`,
@@ -58,10 +58,31 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
 }
 
+/// Every model size posed (the first 40 kinds), logged once each: what the hooks see.
+fn note_model(bones: u32, instance: usize, via_ik: bool) {
+    static SEEN: Mutex<Vec<(u32, bool)>> = Mutex::new(Vec::new());
+    let Ok(mut v) = SEEN.try_lock() else { return };
+    if v.len() < 40 && !v.contains(&(bones, via_ik)) {
+        v.push((bones, via_ik));
+        log(&format!("posed: a {bones}-bone model (instance {instance:#x}) by {}", if via_ik { "the ground-IK pass" } else { "the plain pass" }));
+    }
+}
+
 /// Sora's model (293 bones): his bind pose, built once from the game's own bone table.
 unsafe fn check(instance: usize, via_ik: bool) {
-    let header = rd::<u64>(instance) as usize;
-    if header == 0 || rd::<u32>(header) != SORA_BONES {
+    // `*instance` points at the model's slot, which points at the model header (bone count
+    // u16, then the bone-table handle): `0x140390260` reads `**(short **)*instance`.
+    let slot = rd::<u64>(instance) as usize;
+    if slot < 0x10000 {
+        return;
+    }
+    let header = rd::<u64>(slot) as usize;
+    if header < 0x10000 {
+        return;
+    }
+    let bones = rd::<u16>(header) as u32;
+    note_model(bones, instance, via_ik);
+    if bones != SORA_BONES {
         return;
     }
     let Ok(mut g) = SORA.try_lock() else { return };
@@ -109,7 +130,13 @@ unsafe fn check(instance: usize, via_ik: bool) {
     let mode = MODE.load(Ordering::Relaxed) as usize;
     if (1..=ARRAYS.len()).contains(&mode) {
         let a = ptr(rd::<u32>(instance + ARRAYS[mode - 1]));
-        if a != 0 {
+        // Only arrays of affine matrices (`+0x1B0` holds the sampled scale / rotation /
+        // translation channels, not matrices).
+        let affine = |p: usize| {
+            let f: [f32; 16] = rd(p);
+            f[3] == 0.0 && f[7] == 0.0 && f[11] == 0.0 && (f[15] - 1.0).abs() < 1e-4
+        };
+        if a != 0 && affine(a) && affine(a + 3 * 0x40) {
             // Keep the root where the game put it; everything else in the bind pose from there.
             let g0 = Mat4::from_cols_array(&rd::<[f32; 16]>(a));
             let to = g0 * s.bind[0].inverse();

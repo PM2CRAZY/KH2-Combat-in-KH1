@@ -296,3 +296,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Installed as an OpenKH mod (`crates/kh1-hook/openkh/mod.yml`: `dll/kh1-kh2.dll`, method
   copy) in the user's `mods/kh1/kh2-combat`, enabled in `mods-KH1.txt`, plus a copy in the
   built `mod/kh1/dll/` so it works before the next Mods Manager build.
+- Probe fix (the user: Insert did nothing; log: loaded by Panacea, hooks in, but Sora never
+  seen): the instance's `+0` points at a slot that points at the model header, whose bone
+  count is a u16 (`0x140390260`: `**(short **)*instance`); we read one level short. Every
+  model size posed is now logged once. `+0x1B0` holds the sampled channels (scale `+0`,
+  rotation `+0x10`, translation `+0x20` per 0x40-byte bone), not matrices; `+0x1B8` the built
+  matrices; the T-pose test only writes arrays whose bones look affine.
