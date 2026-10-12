@@ -287,3 +287,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   trampoline with the moved prologue); logs Sora's (293 bones) arrays; Insert cycles a
   T-pose override through the five arrays to learn which one the game draws.
 
+- Loading (the user: KH1 crashed launched directly; then the Epic launcher would not start
+  with our `dinput8.dll` in the shared folder): launched without Epic's arguments KH1 crashes
+  on its own (`-epiclocale` read as null in `0x1400D9BD0`). The proxy is out of the game
+  folder. The DLL is now loaded by Panacea (OpenKH's `DBGHELP.dll`, read in Ghidra): in KH1
+  only, it `LoadLibrary`s every `*.dll` in `<mod_path>\kh1\dll\` and calls `OnInit(wchar_t*
+  mod folder)` / `OnFrame()` if exported (`kh1-hook` exports `OnInit`, which logs the route).
+  Installed as an OpenKH mod (`crates/kh1-hook/openkh/mod.yml`: `dll/kh1-kh2.dll`, method
+  copy) in the user's `mods/kh1/kh2-combat`, enabled in `mods-KH1.txt`, plus a copy in the
+  built `mod/kh1/dll/` so it works before the next Mods Manager build.

@@ -32,6 +32,7 @@
 !/crates/*/tests/**/*.rs
 !/crates/*/examples/**/*.rs
 !/crates/*/build.rs
+!/crates/kh1-hook/openkh/mod.yml
 
 # 6. Never track these, even if a rule above would match.
 /target/

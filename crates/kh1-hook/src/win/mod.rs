@@ -1,4 +1,6 @@
-//! Windows (64-bit) side: the proxy export, the KH1 check, the log.
+//! Windows (64-bit) side: the KH1 check, the log, and two ways in: Panacea's DLL folder
+//! (`OnInit`, the installed route) or a `dinput8.dll` proxy (the launcher failed to start
+//! with that in the shared KH folder, so it is not used).
 
 mod hook;
 mod pose;
@@ -74,6 +76,20 @@ pub unsafe extern "system" fn DirectInput8Create(inst: *mut c_void, version: u32
     }
 }
 
+/// Panacea (OpenKH's mod loader, `DBGHELP.dll`) loads every DLL in `<mod_path>\kh1\dll\` in
+/// KH1 only, then calls `OnInit` with that game's mod folder (and `OnFrame` each frame, if
+/// exported). This is how the mod is installed: the launcher and the other games in the
+/// folder never load it. (Our work starts in `DllMain`; this only notes the route.)
+#[no_mangle]
+pub unsafe extern "C" fn OnInit(mod_path: *const u16) {
+    let mut s = String::new();
+    if !mod_path.is_null() {
+        let n = (0..1024).take_while(|&i| *mod_path.add(i) != 0).count();
+        s = String::from_utf16_lossy(std::slice::from_raw_parts(mod_path, n));
+    }
+    log(&format!("loaded by Panacea (mod folder {s})"));
+}
+
 /// A heartbeat (which other mods are loaded), and the test key: Insert cycles the pose
 /// override (`pose::MODE`).
 unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
@@ -104,6 +120,12 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         let kh1 = exe.rsplit('\\').next().is_some_and(|n| n.eq_ignore_ascii_case(KH1_EXE));
         IN_KH1.store(kh1, Ordering::Relaxed);
         if !kh1 {
+            // Other games and the launcher share the folder: only forward DirectInput, and note
+            // that we were here (one line, for diagnosing a launch problem).
+            let name = exe.rsplit('\\').next().unwrap_or("?").to_string();
+            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(format!("{}\\kh1-kh2-other.log", exe_dir())) {
+                let _ = writeln!(f, "loaded in {name} (build {}); only forwarding DirectInput", env!("KH1_KH2_BUILD"));
+            }
             return 1;
         }
         let path = format!("{}\\kh1-kh2.log", exe_dir());
