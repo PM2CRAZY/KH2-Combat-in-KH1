@@ -70,6 +70,21 @@ fn run(args: &Args) -> Result<(), String> {
         let data = kh2_data::sora::load_sora_dir(std::path::Path::new(dir)).map_err(|e| e.to_string())?;
         return sora_checks(data);
     }
+    if cmd == "kh1-extract" {
+        // KH1 (the port in progress): `kh1-extract --kh1 <install> --file <name> --out <path>
+        // [--live]`; the unmodded package (BackupImage) is read unless --live.
+        let dir = args.value("--kh1").ok_or("missing --kh1")?;
+        let install = kh1_data::Kh1Install::locate(dir).map_err(|e| e.to_string())?;
+        let source = if args.flag("--live") { kh1_data::Source::Live } else { kh1_data::Source::Original };
+        for file in args.value("--file").ok_or("missing --file")?.split(',') {
+            let bytes = install.read(source, file).map_err(|e| e.to_string())?;
+            let out = args.value("--out").ok_or("missing --out")?;
+            let path = if std::path::Path::new(out).is_dir() { format!("{out}/{file}") } else { out.to_string() };
+            std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+            println!("{file}: {} bytes -> {path}", bytes.len());
+        }
+        return Ok(());
+    }
     let game = args.value("--game").ok_or("missing --game")?;
     let install = Install::locate(game).map_err(|e| e.to_string())?;
     let source = if args.flag("--backup") { Source::Backup } else { Source::Live };

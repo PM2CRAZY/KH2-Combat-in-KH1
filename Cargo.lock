@@ -2351,6 +2351,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "kh1-data"
+version = "0.1.0"
+dependencies = [
+ "kh2-formats",
+]
+
+[[package]]
 name = "kh2-anim"
 version = "0.1.0"
 dependencies = [
@@ -2394,6 +2401,7 @@ version = "0.1.0"
 dependencies = [
  "character-core",
  "combat-core",
+ "kh1-data",
  "kh2-data",
  "kh2-formats",
 ]

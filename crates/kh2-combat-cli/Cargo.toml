@@ -14,4 +14,5 @@ path = "src/main.rs"
 character-core = { path = "../character-core" }
 combat-core.workspace = true
 kh2-data.workspace = true
+kh1-data.workspace = true
 kh2-formats.workspace = true

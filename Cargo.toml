@@ -13,6 +13,7 @@ members = [
     "crates/kh2-magic",
     "crates/map-collision",
     "crates/kh2-camera",
+    "crates/kh1-data",
 ]
 
 [workspace.package]
@@ -24,6 +25,7 @@ rust-version = "1.75"
 combat-core = { path = "crates/combat-core" }
 kh2-formats = { path = "crates/kh2-formats" }
 kh2-data = { path = "crates/kh2-data" }
+kh1-data = { path = "crates/kh1-data" }
 kh2-anim = { path = "crates/kh2-anim" }
 kh2-rig = { path = "crates/kh2-rig" }
 kh2-bdx = { path = "crates/kh2-bdx" }

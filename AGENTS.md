@@ -239,3 +239,22 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - other enemies' RCs
   - items, form keyblade stats
   - the MP Charge rate
+
+### 2026-10-12: KH1 port started (KH2 melee in Kingdom Hearts Final Mix PC)
+- The user's request: KH1 stays KH1 except the melee combat, which becomes the KH2 rewrite's;
+  KH2's abilities and combo modifiers go in KH1's Ability menu. The user's choices: KH1's own
+  melee abilities are swapped for their closest KH2 counterparts in the same menu slot and
+  level-up spot (the extra KH2 modifiers are added as new abilities); KH2 modifiers are learnt
+  through KH1's level-up tables (Warrior / Guardian / Mystic) and equipped with AP.
+- New crate `kh1-data`: KH1's packages (`kh1_first..fifth`, same format and cipher as KH2's,
+  key table from the KH1 executable; `BackupImage/` originals first so a randomizer's edits
+  don't leak in). CLI `kh1-extract --kh1 <install> --file a,b --out <dir>`. All 601 names in
+  `kh1_first` resolve from OpenKH's `kh1idx.txt` / `kh1pc.txt` lists (the user's install).
+- Sora is `xa_ex_0010.mdls` (8 sections; the first is `MOBJ`) and `xa_ex_0010.mset` (3
+  sections; the first is `MMTN`, a motion table); battle table `btltbl.bin` (ability level
+  tables at `+0x3BF8` and two more, per the Archipelago scripts).
+- The KH1 executable is x64 and imports `DINPUT8.dll` (a proxy DLL; the
+  folder is shared with KH2, BBS and Re:CoM, so the DLL must only act in KH1). The user runs
+  OpenKH's Panacea (`DBGHELP.dll`) and LuaBackend with an Archipelago randomizer: stay
+  compatible.
+
