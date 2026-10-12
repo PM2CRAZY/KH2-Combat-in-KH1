@@ -2362,6 +2362,11 @@ dependencies = [
 [[package]]
 name = "kh1-hook"
 version = "0.1.0"
+dependencies = [
+ "glam",
+ "kh1-data",
+ "kh2-anim",
+]
 
 [[package]]
 name = "kh2-anim"

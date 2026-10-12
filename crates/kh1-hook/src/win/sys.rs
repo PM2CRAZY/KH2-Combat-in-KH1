@@ -11,4 +11,13 @@ extern "system" {
     pub fn GetModuleHandleA(name: *const u8) -> *mut c_void;
     pub fn CreateThread(attrs: *mut c_void, stack: usize, start: unsafe extern "system" fn(*mut c_void) -> u32, param: *mut c_void, flags: u32, id: *mut u32) -> *mut c_void;
     pub fn Sleep(ms: u32);
+    pub fn VirtualAlloc(addr: *mut c_void, size: usize, kind: u32, prot: u32) -> *mut c_void;
+    pub fn VirtualProtect(addr: *mut c_void, size: usize, prot: u32, old: *mut u32) -> i32;
+    pub fn FlushInstructionCache(process: *mut c_void, addr: *const c_void, size: usize) -> i32;
+    pub fn GetCurrentProcess() -> *mut c_void;
+}
+
+#[link(name = "user32")]
+extern "system" {
+    pub fn GetAsyncKeyState(vk: i32) -> i16;
 }

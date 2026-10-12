@@ -1,5 +1,7 @@
 //! Windows (64-bit) side: the proxy export, the KH1 check, the log.
 
+mod hook;
+mod pose;
 mod sys;
 
 use std::ffi::c_void;
@@ -72,16 +74,25 @@ pub unsafe extern "system" fn DirectInput8Create(inst: *mut c_void, version: u32
     }
 }
 
-/// Stage 1: a heartbeat, so a test run shows the DLL lives in KH1 next to the other mods.
+/// A heartbeat (which other mods are loaded), and the test key: Insert cycles the pose
+/// override (`pose::MODE`).
 unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
     let base = GetModuleHandleA(std::ptr::null()) as usize;
     let mut n = 0u32;
+    let mut was = false;
     loop {
-        Sleep(5000);
+        Sleep(50);
         n += 1;
-        if n <= 3 || n % 12 == 0 {
+        let down = (GetAsyncKeyState(0x2D) as u16 & 0x8000) != 0;
+        if down && !was {
+            let m = (pose::MODE.load(Ordering::Relaxed) + 1) % 6;
+            pose::MODE.store(m, Ordering::Relaxed);
+            log(&format!("Insert: pose override {}", if m == 0 { "off".to_string() } else { format!("on, T-pose written into array {m}") }));
+        }
+        was = down;
+        if n == 100 || n % 2400 == 0 {
             let others: Vec<&str> = ["DBGHELP.dll", "LuaBackend.dll"].into_iter().filter(|m| !GetModuleHandleA(format!("{m}\0").as_ptr()).is_null()).collect();
-            log(&format!("alive {}s; KH1 at {base:#x}; other mods loaded: {others:?}", n * 5));
+            log(&format!("alive {}s; KH1 at {base:#x}; other mods loaded: {others:?}", n / 20));
         }
     }
 }
@@ -100,6 +111,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
             *LOG.lock().unwrap() = Some(f);
         }
         log(&format!("kh1-kh2 {} loaded (build {}) in {exe}", env!("CARGO_PKG_VERSION"), env!("KH1_KH2_BUILD")));
+        std::panic::set_hook(Box::new(|info| log(&format!("PANIC in kh1-kh2: {info}"))));
+        pose::install();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
     }
     1

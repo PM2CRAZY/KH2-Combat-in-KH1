@@ -274,4 +274,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - New crate `kh1-hook` (64-bit `dinput8.dll`, `-Zbuild-std` for `x86_64-pc-windows-gnu`):
   stage 1 only forwards DirectInput, and in KH1 alone logs a heartbeat to `kh1-kh2.log`
   (which other mods are loaded). Installed in the KH 1.5+2.5 folder.
+- KH1's skeleton pass (Ghidra, the user's Epic exe; ASLR, so base + RVA): `0x140391E20`
+  `(world, instance, time f32, motion)` samples the motion into per-bone arrays and builds
+  the bone matrices (`0x140390260`); `0x140392710` `(world, instance, flags)` is the variant
+  with ground IK (called by `0x14029E490` with the actor's instance at `actor+0x15C`). The
+  instance: `+0` the model header (bone count, bone-table handle); handles to 0x40-byte
+  per-bone matrix arrays at `+0x1B0..+0x1C0`, translation / rotation arrays at
+  `+0x1C4` / `+0x1C8`. Game handles are 32-bit: `[exe+0x2EE4730][(h & 0x7FFFFFFF) >> 25] |
+  (h & 0x1FFFFFF)` (`0x14038B230`). Matrices are D3D row-vector layout (translation at
+  +0x30), i.e. glam's column-major memory.
+- `kh1-hook` stage 2 (probe): inline hooks on both (x64: `jmp rel32` to a stub near the exe,
+  trampoline with the moved prologue); logs Sora's (293 bones) arrays; Insert cycles a
+  T-pose override through the five arrays to learn which one the game draws.
 

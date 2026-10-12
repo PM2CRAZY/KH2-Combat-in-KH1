@@ -44,6 +44,12 @@ pub fn parse_skeleton(mdls: &[u8]) -> Result<Vec<Bone>> {
     let header = mobj + u32_at(mdls, mobj + 8 * 4)? as usize;
     let bone_count = u32_at(mdls, header)? as usize;
     let table = header + u32_at(mdls, header + 4)? as usize;
+    parse_bones(mdls, table, bone_count)
+}
+
+/// `count` bones of the 0x30-byte table at `table` in `bytes` (a whole `.mdls`, or the table
+/// itself read from the game's memory with `table` 0).
+pub fn parse_bones(mdls: &[u8], table: usize, bone_count: usize) -> Result<Vec<Bone>> {
     if bone_count == 0 || bone_count > 1024 {
         return Err(Error::Format(format!("mdls: {bone_count} bones")));
     }
