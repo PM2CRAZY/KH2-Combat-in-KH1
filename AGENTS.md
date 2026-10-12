@@ -257,4 +257,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   folder is shared with KH2, BBS and Re:CoM, so the DLL must only act in KH1). The user runs
   OpenKH's Panacea (`DBGHELP.dll`) and LuaBackend with an Archipelago randomizer: stay
   compatible.
+- Scope widened (the user, same day): KH2's movement abilities too, and KH1 Sora uses KH2's
+  animations for everything except summons, Drive Forms (none in KH1) and magic. So KH2's
+  controller drives Sora outright (idle, run, jump, glide, dodge, guard, hurt, attacks), as
+  in KH2's combat mode, with KH1's collision underneath; KH1 keeps magic, summons, items,
+  cutscenes and menus. Proposed (to confirm in play): KH1's story abilities map onto KH2
+  growth (High Jump x1-3 -> High Jump LV1-3, Glide -> Glide LV1-2, Superglide -> Glide
+  LV3/MAX, Dodge Roll -> Dodge Roll LV1); Quick Run, Aerial Dodge and the higher growth
+  levels go into the level tables; Mermaid Kick and KH1's special attacks (Sonic Blade, Ars
+  Arcanum, Ragnarok, Strike Raid) keep KH1's animations, having no KH2 counterpart.
 
