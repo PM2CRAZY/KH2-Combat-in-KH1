@@ -9,6 +9,8 @@
 //! A mod manager (OpenKH's) keeps the originals of the packages it patched in `BackupImage/`;
 //! [`Source::Original`] reads those first, so a randomizer's edits don't leak into our tables.
 
+pub mod mdls;
+
 use kh2_formats::egs::{Archive, KeyTable};
 use kh2_formats::{Error, Result};
 use std::path::{Path, PathBuf};

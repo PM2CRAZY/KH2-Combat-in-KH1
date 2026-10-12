@@ -14,6 +14,7 @@ members = [
     "crates/map-collision",
     "crates/kh2-camera",
     "crates/kh1-data",
+    "crates/kh1-hook",
 ]
 
 [workspace.package]

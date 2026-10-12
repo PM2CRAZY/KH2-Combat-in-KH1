@@ -266,4 +266,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   LV3/MAX, Dodge Roll -> Dodge Roll LV1); Quick Run, Aerial Dodge and the higher growth
   levels go into the level tables; Mermaid Kick and KH1's special attacks (Sonic Blade, Ars
   Arcanum, Ragnarok, Strike Raid) keep KH1's animations, having no KH2 counterpart.
+- KH1 Sora's skeleton (`kh1_data::mdls`, read from the user's `xa_ex_0010.mdls`): 293 bones,
+  0x30 bytes each (KH2's MDLX bone packed tighter: scale, Euler rotation, translation, links
+  parent / sibling / child in 10-bit fields), bind pose a T-pose like KH2 Sora's (256 bones;
+  KH1 Sora's hips at 78.9 against KH2's 88.5). `examples/skeletons.rs` prints both bind poses
+  side by side for the retarget map.
+- New crate `kh1-hook` (64-bit `dinput8.dll`, `-Zbuild-std` for `x86_64-pc-windows-gnu`):
+  stage 1 only forwards DirectInput, and in KH1 alone logs a heartbeat to `kh1-kh2.log`
+  (which other mods are loaded). Installed in the KH 1.5+2.5 folder.
 

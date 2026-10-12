@@ -8,3 +8,7 @@ license = "Apache-2.0"
 
 [dependencies]
 kh2-formats.workspace = true
+
+[dev-dependencies]
+kh2-anim.workspace = true
+glam = "0.29"
