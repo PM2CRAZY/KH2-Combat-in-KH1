@@ -22,6 +22,13 @@ fn main() {
             let kh2 = kh2_anim::evaluate(&rig.skeleton, m, t, kh2_anim::Options::default()).bones;
             let (p, q) = (plain.pose(&kh2), rested.pose(&kh2));
             let rel = |v: &[glam::Mat4], i: usize, from: usize| (v[i].w_axis - v[from].w_axis).truncate();
+            let seg = |v: &[glam::Mat4], n: usize| {
+                let (a, b, p) = (v[71].w_axis.truncate(), v[78].w_axis.truncate(), v[n].w_axis.truncate());
+                let ab = b - a;
+                let t = ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0);
+                (p - (a + ab * t)).length()
+            };
+            println!("   hood joints off the spine (71-78): {:.1} {:.1} {:.1} {:.1}", seg(&q, 81), seg(&q, 82), seg(&q, 83), seg(&q, 84));
             let bad = q.iter().filter(|m| !(glam::Mat3::from_mat4(**m).determinant() > 0.2)).count();
             println!(
                 "{motion} f{f}: hood tip from neck {:.0?} -> {:.0?}; front panel tip from hip {:.0?} -> {:.0?}; toe {:.0?} -> {:.0?}; bad {bad}",

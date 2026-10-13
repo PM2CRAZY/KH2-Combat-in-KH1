@@ -598,3 +598,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     that thigh than in the bind (constant: 13.8 / 20.1 from the thigh axis in every motion
     checked). The chain mesh's back part is presumably skinned with the hips (we don't read
     KH1's skin weights yet); if it still clips, reading the mdls mesh weights is next.
+- `kh1-hook` stage 25 (the user: the hood is at 90° again; leave the chain; shoes spin round
+  in the glide):
+  - Hood: still carried by the chest in KH1's battle-idle relation, now folded down 0.7 rad
+    about the level axis square to it (`HOOD_FOLD` in `set_rest`): tip 7 below the neck
+    base, its joints 7-13 off the spine axis, constant in every motion.
+  - Feet: `Pole::Foot` replaces the up rule: the foot rolls with the shin's hinge axis (the
+    shin part's x, frames now computed in order, `frames`), turning to the model's up only
+    while the foot is flat and its ankle low (below 24, none above 40, KH2 units). The up
+    rule alone had turned the glide's pointed, sole-up feet over. `foot_check`: glide
+    (205-207) shoes within 9° of KH2's feet.
