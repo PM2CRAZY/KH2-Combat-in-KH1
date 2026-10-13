@@ -364,3 +364,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   world matrix holds a fixed relation to KH1's hand over 20 frames while the hand moves is
   taken as held and re-placed from the hand drawn (logged; lets go if the relation breaks).
   `examples/kh1_motions.rs` / `kh2_rows.rs` list both games' motions (scratch research).
+- Stage 6 (the user: the vanish still there; animations jumbled; air combos glide; sliding
+  in every animation). Log: 102 / 103 / 104 are the air combo (two swings and a finisher),
+  not the glide (the user has no glide yet); now KH2's 183 / 184 alternating and 181. The
+  vanish: speeds of 10^4 units/s still at every slot change, so KH1's blends between motions
+  mix our drawn pose back into `+0x1B4[0]`; placement now comes from the pass's own world
+  matrix (y and z columns negated, axes normalised, as `0x140391E20` does with `× -1` at
+  `0x140430938`) once it agrees with the bone-derived one for 30 frames (logged either way),
+  and meanwhile a jump of over 30 units in one frame is ignored unless it persists 3 frames.
+  Sliding: walk / run play at his measured speed over the loop's ground speed (planted heel
+  against bone 0: KH2 run 484 units/s, walk 111, field run 427, field walk 134; KH2's own run
+  speed 8 / frame = 480 / s agrees), scaled by the hip ratio. Swings still slide with KH1's
+  own lunge until KH2's controller moves him. Combo alternation no longer resets on the idle
+  KH1 plays between swings (1.2 s gap).

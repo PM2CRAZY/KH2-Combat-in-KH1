@@ -22,10 +22,11 @@
 //! (magic, reactions, cutscenes...) keeps KH1's own animation for now.
 //!
 //! Model space → world is taken from the game each frame: the root's world matrix times the
-//! inverse of its own matrix (`+0x1B4[0] * +0x1B8[0]⁻¹`). When a pass leaves `+0x1B4[0]` as we
-//! wrote it (some frames when KH1 changes motions), that would read our own pose back and
-//! throw him off (the user: a split-second vanish going from idle to walk), so the last model
-//! → world is kept then. Our model-space pose goes into `+0x1B4` after the game's pass.
+//! inverse of its own matrix (`+0x1B4[0] * +0x1B8[0]⁻¹`), but KH1's blends between motions mix
+//! the pose we drew back into that (the user: a split-second vanish at every change), so the
+//! pass's own world matrix is used once it has agreed with that for 30 frames (`from_param`),
+//! and meanwhile a one-frame jump of the bone-derived placement is ignored. Our model-space
+//! pose goes into `+0x1B4` after the game's pass.
 //!
 //! The Keyblade is its own small model, placed from his hand. A small model whose world matrix
 //! keeps a fixed relation to KH1's hand while the hand moves is taken as held, and from then
@@ -71,15 +72,17 @@ enum Play {
     /// A KH2 motion; `field` takes its out-of-combat variant (no Keyblade) when there is one;
     /// slots sharing a `group` continue the same clip instead of restarting it.
     Motion { motion: u16, field: bool, looping: bool, group: u8 },
-    /// A ground combo swing (KH2's 151 / 152 alternate, as its combo rows do with no target),
-    /// or the finisher (154), stretched to the KH1 swing's length so hits stay in time.
-    Swing { finisher: bool },
+    /// A combo swing, stretched to the KH1 swing's length so hits stay in time: on the ground
+    /// KH2's 151 / 152 alternate (its no-target rows) and 154 finishes; in the air 183 / 184
+    /// alternate and 181 finishes.
+    Swing { air: bool, finisher: bool },
 }
 
-/// KH1 Sora's slots, from the user's play log (2026-10-13): 0 / 2 / 5 field idle, walk, run;
-/// 1 / 3 / 6 the battle ones; 12 → 13 → 10 → 11 jump, rise, fall, land; 102 / 103 / 104 glide;
-/// 98 → 99 → 98 → 101 the ground combo (100 assumed a third swing). 4 / 7 are unseen and taken
-/// as battle walk / run.
+/// KH1 Sora's slots, from the user's play logs (2026-10-13): 0 / 2 / 5 field idle, walk, run;
+/// 1 / 3 / 6 the battle ones; 12 → 13 → 10 → 11 jump, rise, fall, land; 98 → 99 → 98 → 101 the
+/// ground combo (100 assumed a third swing); 102 / 103 / 104 the air combo (the user: air
+/// combos showed the glide they were first taken for). 4 / 7 are unseen and taken as battle
+/// walk / run.
 fn play_for(slot: usize) -> Option<Play> {
     use character_core::motion as m;
     let mo = |motion: u16, field: bool, looping: bool, group: u8| Play::Motion { motion, field, looping, group };
@@ -94,10 +97,10 @@ fn play_for(slot: usize) -> Option<Play> {
         8 | 9 => mo(m::JUMP, false, false, 1),
         10 => mo(m::FALL, false, true, 0),
         11 => mo(m::LAND, false, false, 0),
-        102 | 103 => mo(m::GLIDE, false, true, 2),
-        104 => mo(m::GLIDE_END, false, false, 0),
-        98..=100 => Play::Swing { finisher: false },
-        101 => Play::Swing { finisher: true },
+        98..=100 => Play::Swing { air: false, finisher: false },
+        101 => Play::Swing { air: false, finisher: true },
+        102 | 103 => Play::Swing { air: true, finisher: false },
+        104 => Play::Swing { air: true, finisher: true },
         _ => return None,
     })
 }
@@ -113,6 +116,32 @@ static SLOTS: OnceLock<(HashMap<Signature, usize>, Vec<u32>)> = OnceLock::new();
 struct Kh2 {
     rig: Arc<Rig>,
     roots: HashMap<u16, Vec<[f32; 3]>>,
+    /// Walk and run (battle, field): ground speed in KH2 units per second, from the planted
+    /// foot's travel against the hips.
+    ground: HashMap<(u16, bool), f32>,
+}
+
+/// How fast a looping gait covers ground: each frame, the lower foot's horizontal travel
+/// relative to bone 0 while it is within 4 units of its lowest (planted), averaged, × 60.
+fn ground_speed(rig: &Rig, clip: &kh2_formats::anim::Interpolated) -> f32 {
+    let feet = [16usize, 45]; // heels
+    let len = kh2_anim::length_frames(clip).max(2.0) as usize;
+    let poses: Vec<Vec<Mat4>> = (0..=len).map(|f| kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, f as f32, true), kh2_anim::Options::default()).bones).collect();
+    let at = |p: &Vec<Mat4>, b: usize| p.get(b).map_or(Vec3::ZERO, |m| m.w_axis.truncate());
+    let mut sum = 0.0;
+    let mut n = 0;
+    for &foot in &feet {
+        let low = poses.iter().map(|p| at(p, foot).y).fold(f32::MAX, f32::min);
+        for w in poses.windows(2) {
+            let (a, b) = (&w[0], &w[1]);
+            if at(a, foot).y < low + 4.0 && at(b, foot).y < low + 4.0 {
+                let d = (at(b, foot) - at(b, 0)) - (at(a, foot) - at(a, 0));
+                sum += Vec3::new(d.x, 0.0, d.z).length();
+                n += 1;
+            }
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 * 60.0 }
 }
 static KH2: OnceLock<Result<Kh2, String>> = OnceLock::new();
 
@@ -126,6 +155,32 @@ struct Sora {
     /// The last model → world, and the root matrix we wrote with it.
     to_world: Option<Mat4>,
     wrote_root: Option<[f32; 16]>,
+    /// The pass's own world matrix (its y and z flipped, axes unit length) agreed with the
+    /// pose-derived placement for this many frames; trusted from 30 on.
+    param_agree: u32,
+    param_ok: bool,
+    /// Pose-derived placements that jumped from the last (kept out unless they persist).
+    jumps: u32,
+}
+
+/// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
+/// world's second and third rows (`× -1`, `0x140430938`) and takes the rows' lengths out as
+/// scale (`0x140391E20`).
+unsafe fn from_param(world: usize) -> Option<Mat4> {
+    if world < 0x10000 {
+        return None;
+    }
+    let p = mat(world);
+    let (x, y, z) = (p.x_axis.truncate(), p.y_axis.truncate(), p.z_axis.truncate());
+    if !(x.length() > 1e-4 && y.length() > 1e-4 && z.length() > 1e-4) {
+        return None;
+    }
+    let m = Mat4::from_cols(x.normalize().extend(0.0), (-y.normalize()).extend(0.0), (-z.normalize()).extend(0.0), p.w_axis);
+    affine(&m).then_some(m)
+}
+
+fn close(a: &Mat4, b: &Mat4, units: f32) -> bool {
+    (a.w_axis - b.w_axis).length() < units && (a.x_axis - b.x_axis).length() < 0.05 && (a.y_axis - b.y_axis).length() < 0.05 && (a.z_axis - b.z_axis).length() < 0.05
 }
 
 /// Which KH2 motion follows KH1's, and how far into it.
@@ -219,8 +274,19 @@ pub fn load_kh2() {
             let sora = install.load_sora(source).map_err(|e| format!("KH2 Sora: {e}"))?;
             let rig = sora.rig.clone().ok_or_else(|| sora.rig_error.clone().unwrap_or_else(|| "no rig".into()))?;
             let roots = sora.character.moveset.clips.iter().map(|(m, c)| (*m, c.root.clone())).collect();
+            let mut ground = HashMap::new();
+            for m in [character_core::motion::WALK, character_core::motion::RUN] {
+                for field in [false, true] {
+                    let clip = if field { rig.field_motions.get(&m) } else { rig.motions.get(&m) };
+                    if let Some(c) = clip {
+                        let g = ground_speed(&rig, c);
+                        log(&format!("KH2 {} {}: ground speed {g:.0} units/s", if field { "field" } else { "battle" }, if m == character_core::motion::WALK { "walk" } else { "run" }));
+                        ground.insert((m, field), g);
+                    }
+                }
+            }
             log(&format!("KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32()));
-            Ok(Kh2 { rig, roots })
+            Ok(Kh2 { rig, roots, ground })
         })();
         if let Err(e) = &r {
             log(&format!("KH2 Sora did not load: {e}"));
@@ -333,17 +399,27 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
             let same_group = matches!(f.play, Some(Play::Motion { group: g, .. }) if g == group && group != 0);
             let restart = f.motion != motion || f.field != field || (new_slot && !same_group && !looping);
             let blend = if motion == m2::GLIDE { BLEND_GLIDE } else { BLEND_MOVE };
-            (motion, field, looping, restart, 60.0, blend)
+            // Walk and run step with his real speed, so the planted foot doesn't slide.
+            let rate = match kh2.ground.get(&(motion, field)) {
+                Some(&g) if g > 1.0 && (motion == m2::WALK || motion == m2::RUN) => (60.0 * f.speed / (g * r.hip_ratio())).clamp(25.0, 150.0),
+                _ => 60.0,
+            };
+            (motion, field, looping, restart, rate, blend)
         }
-        Play::Swing { finisher } => {
+        Play::Swing { air, finisher } => {
             if new_slot {
-                let fresh = f.last_swing.map_or(true, |t| now.duration_since(t).as_secs_f32() > COMBO_GAP) || !matches!(f.play, Some(Play::Swing { .. }));
+                let fresh = f.last_swing.map_or(true, |t| now.duration_since(t).as_secs_f32() > COMBO_GAP);
                 f.swings = if fresh { 0 } else { f.swings + 1 };
-                f.last_swing = Some(now);
-            } else {
-                f.last_swing = Some(now);
             }
-            let motion = if finisher { 154 } else if f.swings % 2 == 0 { 151 } else { 152 };
+            f.last_swing = Some(now);
+            let motion = match (air, finisher, f.swings % 2 == 0) {
+                (false, true, _) => 154,
+                (false, false, true) => 151,
+                (false, false, false) => 152,
+                (true, true, _) => 181,
+                (true, false, true) => 183,
+                (true, false, false) => 184,
+            };
             // Stretch KH2's swing over KH1's, so the blade comes round when KH1's hit lands.
             let kh1_len = slot.and_then(|n| SLOTS.get()?.1.get(n).copied()).unwrap_or(0) as f32;
             let kh2_len = kh2.rig.motions.get(&motion).map_or(0.0, |m| kh2_anim::length_frames(m));
@@ -351,6 +427,15 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
             (motion, false, false, new_slot, rate, 0.0)
         }
     };
+    if !restart && matches!(play, Play::Motion { .. }) {
+        // Loops change speed as he does: carry the clip position over at the new rate.
+        if let Some(t0) = f.since {
+            let done = now.duration_since(t0).as_secs_f32() * f.rate;
+            f.rate = f.rate + (rate - f.rate) * 0.15;
+            let back = std::time::Duration::from_secs_f32((done / f.rate.max(1.0)).clamp(0.0, 3600.0));
+            f.since = now.checked_sub(back).or(f.since);
+        }
+    }
     if restart {
         if !f.last.is_empty() && blend > 0.0 {
             f.from = decompose(&f.last);
@@ -420,7 +505,7 @@ unsafe fn bone_count(instance: usize) -> Option<u32> {
     Some(rd::<u16>(header) as u32)
 }
 
-unsafe fn check(instance: usize, via_ik: bool) {
+unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     let Some(bones) = bone_count(instance) else { return };
     note_model(bones, instance, via_ik);
     if bones != SORA_BONES {
@@ -443,7 +528,7 @@ unsafe fn check(instance: usize, via_ik: bool) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, param_agree: 0, param_ok: false, jumps: 0 });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -463,19 +548,45 @@ unsafe fn check(instance: usize, via_ik: bool) {
     }
     let raw0: [f32; 16] = rd(world);
     let ours = s.wrote_root == Some(raw0);
-    let to_world = if ours {
-        // The pass left our root in place: keep the placement we had.
-        match s.to_world {
-            Some(m) => m,
-            None => return,
+    let derived = (!ours)
+        .then(|| {
+            let g0 = Mat4::from_cols_array(&raw0);
+            let l0 = mat(local);
+            (affine(&g0) && affine(&l0) && l0.determinant().abs() > 1e-6).then(|| g0 * l0.inverse())
+        })
+        .flatten();
+    let param = from_param(param_world);
+    // Learn whether the pass's world matrix is the placement (it can't be thrown by blends).
+    if let (Some(d), Some(p), false) = (derived, param, s.param_ok) {
+        if close(&d, &p, 1.0) {
+            s.param_agree += 1;
+            if s.param_agree >= 30 {
+                s.param_ok = true;
+                log("placement: the skeleton pass's own world matrix matches; using it from now on");
+            }
+        } else {
+            if s.param_agree > 0 || s.calls == 30 {
+                log(&format!("placement: pass matrix {:?} vs from the bones {:?}", p.to_cols_array().map(|v| (v * 100.0).round() / 100.0), d.to_cols_array().map(|v| (v * 100.0).round() / 100.0)));
+            }
+            s.param_agree = 0;
         }
-    } else {
-        let g0 = Mat4::from_cols_array(&raw0);
-        let l0 = mat(local);
-        if !affine(&g0) || !affine(&l0) || l0.determinant().abs() < 1e-6 {
-            return;
+    }
+    let to_world = match (s.param_ok, param, derived, s.to_world) {
+        (true, Some(p), ..) => p,
+        // From the bones, unless it jumped (a KH1 blend mixing in the pose we drew): a real
+        // move is a few units a frame; keep the last unless the jump persists.
+        (_, _, Some(d), Some(last)) => {
+            if close(&d, &last, 30.0) || s.jumps >= 3 {
+                s.jumps = 0;
+                d
+            } else {
+                s.jumps += 1;
+                last
+            }
         }
-        g0 * l0.inverse()
+        (_, _, Some(d), None) => d,
+        (_, _, None, Some(last)) => last,
+        _ => return,
     };
     if !s.checked && s.calls >= 30 && !ours {
         s.checked = true;
@@ -596,7 +707,7 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
         None => f(world, instance, t, motion),
     }
     if instance != 0 {
-        check(instance, false);
+        check(instance, false, world);
     }
 }
 
@@ -611,7 +722,7 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
         None => f(world, instance, flags),
     }
     if instance != 0 {
-        check(instance, true);
+        check(instance, true, world);
     }
 }
 

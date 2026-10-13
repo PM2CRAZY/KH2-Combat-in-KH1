@@ -260,6 +260,11 @@ impl Retarget {
         Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio }
     }
 
+    /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
+    pub fn hip_ratio(&self) -> f32 {
+        self.hip_ratio
+    }
+
     /// How many KH1 bones a measured part turns.
     pub fn mapped(&self) -> usize {
         self.turns.iter().filter(|t| t.is_some()).count()
