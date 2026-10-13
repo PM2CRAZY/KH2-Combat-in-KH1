@@ -662,3 +662,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   the ground mode is what snapped rises back to the floor in stage 8). Less than 49% of the
   rise done: KH2's `hit_ceiling` (logged with the collision flags `+0x2D0`; bit 3 is what
   KH1's own jump `0x1402AD260` treats as a ceiling).
+- `kh1-hook` stage 31 (Phase 6, KH1-only moves): KH1's jump runs, in its per-state input
+  step (`0x1402ADA90`, the state table's third handler), checks that hand Sora to KH1's own
+  air moves: `0x1402C5710` vines / climbable surfaces (state 10, collision id `+0x2DE`),
+  `0x1402C68A0` ledges (state 13, from the collision's contact `+0x2F0` / `+0x300` and the
+  stick), `0x1402C7E00` bars (skipped while `0x14298D3A8`), `0x1402C17B0` hang points on
+  other actors (body part type 3), `0x1402BF410` swimming (state 17, water level `+0x2D4`).
+  While KH2 has him falling (Air / Jump, stick held) they are tried in the same order (ini
+  `grabs`); one that takes him sets `HANDOFF`: KH1 keeps him until its state is 0 / 1 and its
+  motion slot a movement one again, then KH2's controller starts over standing (`FRESH`).

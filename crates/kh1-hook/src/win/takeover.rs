@@ -49,6 +49,17 @@ const BATTLE_LINGER: f32 = 6.0;
 /// How far below the feet the floor may drop and still be stepped down onto (KH2's floor ray
 /// reaches 24 below).
 const STEP_DOWN: f32 = 24.0;
+/// KH1's air-move checks (see `grab`).
+const CAN_ACT_RVA: usize = 0x2956E0;
+const VINE_RVA: usize = 0x2C5710;
+const LEDGE_RVA: usize = 0x2C68A0;
+const BAR_RVA: usize = 0x2C7E00;
+const NO_BARS_RVA: usize = 0x298D3A8;
+const HANG_RVA: usize = 0x2C17B0;
+const SWIM_RVA: usize = 0x2BF410;
+/// KH1 has him for one of its own moves (`grab`); KH2 starts over afterwards (`FRESH`).
+static HANDOFF: AtomicBool = AtomicBool::new(false);
+static FRESH: AtomicBool = AtomicBool::new(false);
 /// KH1's falling movement state (an air state that runs none of KH1's jump bookkeeping).
 const AIR_STATE: i32 = 5;
 
@@ -160,6 +171,18 @@ unsafe fn takeover(actor: usize) -> bool {
         release(&format!("KH1's script moves him, actions {kinds:?}, flags {:08x}", rd::<u32>(actor)));
         return false;
     }
+    // KH1 took him for one of its own air moves (`grab`): until it has him standing again.
+    if HANDOFF.load(Ordering::Relaxed) {
+        let state = rd::<i32>(actor + 0x70);
+        if matches!(state, 0 | 1) && matches!(pose::sora_slot(), Some(0..=7)) {
+            HANDOFF.store(false, Ordering::Relaxed);
+            FRESH.store(true, Ordering::Relaxed);
+            log(&format!("KH1's move ended (state {state}): KH2 again"));
+        } else {
+            release(&format!("KH1's own move, KH1 state {state}"));
+            return false;
+        }
+    }
     // KH1 plays his death (`hurt`: HP gone, the stats' dying flag 4).
     let stats = pose::ptr(rd::<u32>(actor + 0x6C));
     if stats > 0x10000 && (rd::<u8>(stats) & 4 != 0 || rd::<i32>(stats + 0x3C) < 1) {
@@ -184,6 +207,14 @@ unsafe fn takeover(actor: usize) -> bool {
         anim.queued_blend = 14.0;
         Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new() }
     });
+    if FRESH.swap(false, Ordering::Relaxed) {
+        // Back from KH1's own move: KH2's controller starts over (standing), keeping its
+        // abilities.
+        let abilities = d.character.abilities.clone();
+        d.character = kh2.character.clone();
+        d.character.abilities = abilities;
+        d.grounded = true;
+    }
     d.growth.update(base, &mut d.character);
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
@@ -299,6 +330,15 @@ unsafe fn takeover(actor: usize) -> bool {
     let f = out.facing;
     wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
     wr(actor + 0x150, f);
+    // KH1's own air moves (its jump's input step `0x1402ADA90` tries them in this order):
+    // vines and climbable walls (state 10), ledges (13), bars (`0x1402C7E00`), objects to
+    // hang from, and water to swim in (17). Tried while KH2 has him falling, the stick held.
+    if settings.grabs && d.character.airborne() && out.displacement[1] <= 0.0 && tilt > 0.0 && matches!(out.state, StateName::Air | StateName::Jump) {
+        if let Some(what) = grab(base, actor, [dir.x, 0.0, dir.y, tilt]) {
+            HANDOFF.store(true, Ordering::Relaxed);
+            log(&format!("KH1 takes him: {what} (KH1 state {}, slot {:?})", rd::<i32>(actor + 0x70), pose::sora_slot()));
+        }
+    }
 
     let q = rd::<[f32; 3]>(actor + 0x10);
     // Battle or field stance by KH1's battle mode (bit 0 of `0x142867CD8`), as KH2 does by its
@@ -335,6 +375,31 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     ACTIVE_MS.store(now_ms().max(1), Ordering::Relaxed);
     true
+}
+
+/// KH1's air moves, tried as its jump's input step does; the one that took him, if any.
+unsafe fn grab(base: usize, actor: usize, stick: [f32; 4]) -> Option<&'static str> {
+    let flags = rd::<u32>(actor);
+    let fine: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    if flags & 0x2004 != 0 || fine(actor) == 0 {
+        return None;
+    }
+    // (Some write into the vector they are given: room to spare.)
+    let mut v = [0.0f32; 16];
+    v[..4].copy_from_slice(&stick);
+    let p = v.as_mut_ptr() as usize;
+    type Try = unsafe extern "system" fn(usize, usize) -> i32;
+    let tries: [(usize, &str); 5] = [(VINE_RVA, "vine / climb"), (LEDGE_RVA, "ledge"), (BAR_RVA, "bar"), (HANG_RVA, "object to hang from"), (SWIM_RVA, "water")];
+    for (rva, what) in tries {
+        if rva == BAR_RVA && rd::<u32>(base + NO_BARS_RVA) != 0 {
+            continue;
+        }
+        let f: Try = std::mem::transmute(base + rva);
+        if f(actor, p) != 0 {
+            return Some(what);
+        }
+    }
+    None
 }
 
 /// A platform's carry and the frame's push (KH1 world), see the physics step.

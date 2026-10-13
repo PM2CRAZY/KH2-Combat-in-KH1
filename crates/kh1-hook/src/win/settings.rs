@@ -18,7 +18,9 @@ hurt = kh2\r\n\
 ; carry: on = moving platforms carry Sora and KH1's pushes move him while KH2 has him\r\n\
 carry = on\r\n\
 ; ceilings: on = ceilings stop KH2's jumps (KH1's collision), off = they don't\r\n\
-ceilings = on\r\n";
+ceilings = on\r\n\
+; grabs: on = KH1's ledge grabs, vine / rope grabs and swimming take Sora from KH2's jumps\r\n\
+grabs = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -26,6 +28,7 @@ pub struct Settings {
     pub hurt: bool,
     pub carry: bool,
     pub ceilings: bool,
+    pub grabs: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -57,6 +60,7 @@ pub fn get() -> &'static Settings {
             hurt: on(&text, "hurt", "kh2", true),
             carry: on(&text, "carry", "on", true),
             ceilings: on(&text, "ceilings", "on", true),
+            grabs: on(&text, "grabs", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s
