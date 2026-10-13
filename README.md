@@ -126,6 +126,13 @@ controller returns a displacement, facing, active hitboxes and invulnerable/guar
 KH2's numbers, add `kh2-data` and call `Install::locate(path)?.load_sora(Source::Live)` on an
 install the player owns.
 
+## KH2 combat in Kingdom Hearts Final Mix (in progress)
+
+`crates/kh1-hook` puts KH2's movement, combos and hit reactions on Sora in KH1 Final Mix (PC,
+via OpenKH's Panacea), with KH2's animations retargeted onto KH1's Sora, while magic, summons,
+specials and KH1's own moves stay KH1's. Install, the `kh1-kh2.ini` switches, the ability
+mapping and the roadmap: `docs/kh1-port.md`.
+
 ## What's driven by data (your install)
 
 - **Movement:** walk 2, run 8 units per frame. Jump 185 with 4 takeoff frames. Turning is
