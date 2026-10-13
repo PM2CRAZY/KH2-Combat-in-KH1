@@ -352,33 +352,33 @@ const CLEAR_MAX: f32 = 14.0;
 /// battle stance spread the legs: the user's chain clipping through the pants).
 const ATTACHED: [(usize, usize); 1] = [(10, 43)];
 
-/// Each: root, joints, what they keep off (bone pairs), and the most distance kept.
-fn cloth_chains() -> Vec<(usize, Vec<usize>, Vec<(usize, usize)>, f32)> {
+/// Each: root, joints, what they keep off (bone pairs), the most distance kept, and a margin
+/// added to the bind's distance.
+fn cloth_chains() -> Vec<(usize, Vec<usize>, Vec<(usize, usize)>, f32, f32)> {
     let thighs = THIGHS.to_vec();
     let mut v = vec![
-        (10usize, vec![12usize, 13, 14, 15], thighs.clone(), CLEAR_MAX),
-        (72, vec![73, 74, 75], thighs.clone(), CLEAR_MAX),
-        // The hood off the back and the head: KH2's battle stance hunches him forward, which
-        // tips his back up under the hanging hood (the user: the hood clips through Sora in the
-        // battle idle).
-        (HOOD_ROOT, vec![80, 81, 82, 83, 84], vec![(71, 78), (78, 151)], 30.0),
+        // The belt chain, carried by the +x thigh, also stands CHAIN_OUT further off it than in
+        // the bind: its back part (skinned with the hips, which the thigh turns against in
+        // KH2's stances) lay in the back of the shorts (the user: the back of the chain clips
+        // into the shorts, in every stance).
+        (10usize, vec![14usize, 15], vec![THIGHS[0]], 22.0, CHAIN_OUT),
+        (72, vec![73, 74, 75], thighs.clone(), CLEAR_MAX, 0.0),
     ];
     for root in [248usize, 252, 256, 260, 264, 268, 272, 276] {
-        v.push((root, vec![root + 2, root + 3], thighs.clone(), CLEAR_MAX));
+        v.push((root, vec![root + 2, root + 3], thighs.clone(), CLEAR_MAX, 0.0));
     }
     v
 }
 
-/// The hood: its root under the neck base (`78`); it turns with the chest's yaw only, tipped
-/// down by `HOOD_DROP`, so KH2's hunched battle stance doesn't stand it up behind the head
-/// (the user: the hood stood at 90° in almost every motion, then: could still be lower).
-const HOOD_ROOT: usize = 79;
-const HOOD_LEAN: f32 = 0.0;
-const HOOD_DROP: f32 = 0.45;
-/// Bones that hang as in KH1's rest pose (`set_rest`): the hood's cloth joints and the
-/// Keyblade's grip and chain. Everything else keeps the bind's relation (the belt chain hung
-/// out in a loop from the battle idle's swing: the user's "floating chain").
-const REST_BONES: [std::ops::RangeInclusive<usize>; 2] = [80..=84, 280..=292];
+const CHAIN_OUT: f32 = 4.0;
+
+/// Bones that hang as in KH1's rest pose (`set_rest`): the hood (root and cloth joints) and
+/// the Keyblade's grip and chain. Everything else keeps the bind's relation (the belt chain
+/// hung out in a loop from the battle idle's swing: the user's "floating chain"). The hood
+/// lies on the back as in KH1's battle idle, carried by the neck base (78, the chest): a hood
+/// hanging by the chest's yaw alone, then pushed off the back, clipped wildly in KH2's
+/// hunched battle stance (the user); carried by the chest it can't meet the back.
+const REST_BONES: [std::ops::RangeInclusive<usize>; 2] = [79..=84, 280..=292];
 /// The thumbs (103-107 / 207-211). Now aimed along KH2's thumb from KH1's own bind (see
 /// `layout`), so this open-hand fallback (`set_rest_open`, `pose_grip`) only applies if that
 /// part can't be measured (KH1's own motions leave the thumbs at their bind, which is why KH1's
@@ -425,13 +425,10 @@ impl Retarget {
         let h2 = b2.first().map_or(1.0, |m| m.w_axis.y);
         let hip_ratio = if h2.abs() > 1.0 { pos.first().map_or(1.0, |p| p.y) / h2 } else { 1.0 };
         let rest_local = vec![None; kh1.len()];
-        let mut hang = vec![None; kh1.len()];
-        if HOOD_ROOT < kh1.len() {
-            hang[HOOD_ROOT] = Some((1, HOOD_LEAN, HOOD_DROP));
-        }
+        let hang = vec![None; kh1.len()];
         let rest_open = vec![None; kh1.len()];
         let mut cloth = Vec::new();
-        for (root, joints, keep_off, cap) in cloth_chains() {
+        for (root, joints, keep_off, cap, margin) in cloth_chains() {
             if joints.iter().chain([&root]).chain(keep_off.iter().flat_map(|(a, b)| [a, b])).any(|&j| j >= kh1.len()) {
                 continue;
             }
@@ -455,7 +452,7 @@ impl Retarget {
                     let ab = pb - pa;
                     let t = ((n - pa).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
                     let d = (n - (pa + ab * t)).length();
-                    nodes.push((j, (a, b), d.min(cap)));
+                    nodes.push((j, (a, b), (d + margin).min(cap)));
                 }
             }
             cloth.push(Cloth { root, bones, nodes });

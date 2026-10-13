@@ -589,3 +589,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     stance spread the legs).
   - The hood chain (79: 80-84) is kept off the back (71→78) and the head (78→151) by
     `keep_clear` (up to 30), so the hunched battle stance can't tip the back into it.
+- `kh1-hook` stage 24 (the user's stills: the back of the chain lies in the back of the
+  shorts in every stance; the hood clips wildly in the battle idle):
+  - Hood: no more hanging or pushing. Root and joints (79-84) take KH1's battle-idle relation
+    to the neck base (78, on the chest part), so the hood lies on the back as in KH1 and
+    moves with the chest (it can't meet the back). Tip 2-8 above the neck in KH2's stances.
+  - Chain: still carried by the +x thigh; its lower joints (14, 15) also kept 4 further off
+    that thigh than in the bind (constant: 13.8 / 20.1 from the thigh axis in every motion
+    checked). The chain mesh's back part is presumably skinned with the hips (we don't read
+    KH1's skin weights yet); if it still clips, reading the mdls mesh weights is next.
