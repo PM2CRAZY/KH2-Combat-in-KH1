@@ -112,20 +112,33 @@ unsafe fn row_info(actor: usize, row: i32) -> Option<Row> {
 /// finisher]: KH1's combo motions 200 / 202 on the ground, 204 / 205 in the air (the Attack
 /// command's own picks in the user's log; 203's first row carries a much stronger attack).
 unsafe fn sora_rows(sora: usize) -> Option<[Row; 4]> {
-    let mut found: HashMap<i16, Row> = HashMap::new();
+    let mut rows: Vec<Row> = Vec::new();
     let mut all = Vec::new();
     for i in 0..0x40 {
         let Some(r) = row_info(sora, i) else { break };
-        if (200..=205).contains(&r.motion) {
-            found.entry(r.motion).or_insert(r);
-        }
         if r.motion >= 0 {
             all.push(format!("{i}:{}/{:#x}/{:02x?}", r.motion, r.data, r.fx));
+            rows.push(r);
         }
     }
     log(&format!("Sora's KH1 attack rows (row:motion/data/fx): {}", all.join(" ")));
-    let pick = |m: &[i16]| m.iter().find_map(|m| found.get(m).copied());
-    Some([pick(&[200, 201, 202])?, pick(&[202, 201, 200])?, pick(&[204, 200])?, pick(&[205, 204, 202])?])
+    // The attack data the rows use (first words: strength source, element, reaction, ...).
+    let base = BASE.load(Ordering::Relaxed);
+    let mut seen = HashSet::new();
+    let datas: Vec<String> = rows
+        .iter()
+        .filter(|r| seen.insert(r.data))
+        .map(|r| format!("{:#x}: [{}]", r.data, (0..12).map(|k| format!("{:x}", rd::<u32>(base + ATTACK_DATA_RVA + r.data as usize + k * 4))).collect::<Vec<_>>().join(" ")))
+        .collect();
+    log(&format!("their attack data: {}", datas.join(" | ")));
+    let first = |m: i16| rows.iter().find(|r| r.motion == m).copied();
+    // A finisher: KH1's finishing motion, preferring a row whose attack data differs from the
+    // swing's (KH1's own finisher hits harder and knocks back; row 14, the first 202, shares
+    // the swing's data).
+    let finisher = |m: i16, swing: Row| rows.iter().find(|r| r.motion == m && r.data != swing.data).copied().or_else(|| first(m));
+    let ground = first(200).or_else(|| first(201))?;
+    let air = first(204).or(Some(ground))?;
+    Some([ground, finisher(202, ground).unwrap_or(ground), air, finisher(205, air).unwrap_or(air)])
 }
 
 /// One enemy's body part: KH1's entry for its contact code and the shape in KH2 space.

@@ -37,6 +37,8 @@ const MOVE_RVA: usize = 0x297710;
 const PARTY_RVA: usize = 0x2D37C80;
 const EVENT_RVA: usize = 0x298D3A0;
 const BATTLE_RVA: usize = 0x2867CD8;
+const LOCK_STATE_RVA: usize = 0x2DB3F10;
+const LOCK_TARGET_RVA: usize = 0x2DB3F18;
 const DRAW_WEAPON_RVA: usize = 0x2A0CA0;
 const PUT_AWAY_RVA: usize = 0x2A10F0;
 /// Actor flag: the weapon is out (drawn).
@@ -203,6 +205,16 @@ unsafe fn takeover(actor: usize) -> bool {
     let pos = [p[0], -p[1], p[2]];
     let above = rd::<f32>(actor + 0x3D4);
     let targets = d.strikes.look(actor);
+    // KH1's lock-on (R1): while it holds a target (`0x142DB3F10` its state, the target's handle
+    // at `0x142DB3F18`, which the command menu aims every command at), KH2 locks the same
+    // enemy, so its swings home in on and turn toward it.
+    let locked = if rd::<u32>(base + LOCK_STATE_RVA) != 0 { pose::ptr(rd::<u32>(base + LOCK_TARGET_RVA)) } else { 0 };
+    let lock = (locked > 0x10000).then(|| locked as u32).filter(|id| targets.iter().any(|t| t.id == *id));
+    if lock != d.character.lock() && d.logged < 400 {
+        d.logged += 1;
+        log(&format!("lock-on: {lock:?}"));
+    }
+    d.character.set_lock(lock);
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     let out = d.character.step(&input, &env);
 

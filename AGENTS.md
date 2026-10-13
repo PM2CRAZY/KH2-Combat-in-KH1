@@ -608,3 +608,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     while the foot is flat and its ankle low (below 24, none above 40, KH2 units). The up
     rule alone had turned the glide's pointed, sole-up feet over. `foot_check`: glide
     (205-207) shoes within 9° of KH2's feet.
+- `kh1-hook` stage 26 (phase 4, combat parity, finishing):
+  - Lock-on: KH1's lock state `0x142DB3F10` (non-zero while R1 holds a target) and target
+    handle `0x142DB3F18` (`0x1402912F0`, the command menu, aims every command at it). KH2's
+    controller locks the same enemy (`Character::set_lock`), so swings home in on it.
+  - Finishers land with a KH1 finishing row whose attack data differs from the swing's
+    (KH1's first 202 row shares the swing's data); every distinct attack data's first words
+    are logged for picking knockback by its fields next.
