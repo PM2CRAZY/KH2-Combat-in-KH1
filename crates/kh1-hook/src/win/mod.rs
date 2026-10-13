@@ -4,6 +4,7 @@
 
 mod combat;
 mod crash;
+mod feet;
 mod hook;
 mod pose;
 mod probe;

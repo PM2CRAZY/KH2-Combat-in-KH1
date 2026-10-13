@@ -56,6 +56,9 @@ pub const CROSS: u16 = 0x4000;
 pub static ON: AtomicBool = AtomicBool::new(true);
 /// KH1's area script is moving Sora (`pose` shows KH1's own animation then).
 pub static SCRIPTED: AtomicBool = AtomicBool::new(false);
+/// KH2 has the Keyblade out (the thumbs grip) / Sora is on the ground (the feet meet the floor).
+pub static GRIP: AtomicBool = AtomicBool::new(false);
+pub static GROUNDED: AtomicBool = AtomicBool::new(false);
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_PHYS: AtomicUsize = AtomicUsize::new(0);
 /// The pad as the player pressed it (before KH1's copy is masked): buttons, then sticks
@@ -253,6 +256,8 @@ unsafe fn takeover(actor: usize) -> bool {
     d.anim.field = !battle && !lingering;
     d.anim.update(&out, &d.character, [q[0], -q[1], q[2]]);
     keyblade(base, actor, d.anim.weapons_out(), &mut d.logged);
+    GRIP.store(d.anim.weapons_out(), Ordering::Relaxed);
+    GROUNDED.store(d.grounded && !d.character.airborne(), Ordering::Relaxed);
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));

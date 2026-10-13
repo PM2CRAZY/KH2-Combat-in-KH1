@@ -554,3 +554,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - The skeleton pass's world matrix, once confirmed, places every later Sora at once (it
     was re-learnt per zone, placing him by his bones meanwhile: the brief invisibility).
   - Open: feet on stairs (KH1's ground IK is replaced by our pose; needs our own foot IK).
+- `kh1-hook` stage 21 (the user: thumbs still odd, feet through stairs, the chain through
+  the shorts, fit the jacket's lower part to KH2's motions):
+  - Thumbs (103-107 / 207-211) take KH1's own pose: the battle idle's grip while KH2 has the
+    Keyblade out (`takeover::GRIP`), the field idle's (slot 0) open hand otherwise
+    (`Retarget::set_rest_open`, `pose_grip`). The KH2 thumb mapping is gone.
+  - Belt chain root (10) turns 80% with the +x thigh; the jacket's back hem (72) 35% with the
+    chest, the rest with the hips.
+  - `win/feet.rs`: foot IK while KH2 has Sora on the ground. KH1's floor ray `0x1401910E0`
+    (the ground-IK pass's query: start `+0`, 1.0 at `+0xC`, length `+0x14`, 1.0 at `+0x1C`; hit
+    `+0x20..+0x28`, hit id i16 `+0x30`, -1 none; KH1 world y-down) under each sole (bones
+    22 / 48); the body drops for a planted foot's lower floor (≤ 30), each leg bends (thigh
+    17 / 43, knee 18 / 44, ankle 19 / 45) to put a planted sole on its floor or lift a raised
+    one out of a step; eased (35% a frame).

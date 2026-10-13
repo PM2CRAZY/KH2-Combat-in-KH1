@@ -120,6 +120,8 @@ static SLOTS: OnceLock<(HashMap<Signature, usize>, Vec<u32>)> = OnceLock::new();
 /// cloth, face, the Keyblade's grip and chain), `Retarget::set_rest`.
 static REST: OnceLock<Option<kh1_data::mset::Motion>> = OnceLock::new();
 const REST_SLOT: usize = 1;
+/// KH1's field idle (slot 0): the thumbs' open-handed pose while no Keyblade is held.
+static REST_OPEN: OnceLock<Option<kh1_data::mset::Motion>> = OnceLock::new();
 
 /// KH2 Sora: skeleton and motions, and each action clip's root travel per frame (KH1 moves
 /// him itself, so a swing's lunge is taken out of the pose).
@@ -187,6 +189,8 @@ struct Sora {
     param_ok: bool,
     /// Pose-derived placements that jumped from the last (kept out unless they persist).
     jumps: u32,
+    /// KH1's bone parents (for the feet).
+    parents: Vec<i16>,
 }
 
 /// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
@@ -411,6 +415,7 @@ pub fn load_kh2() {
             }
             log(&format!("KH1 Sora's motion table: {} slots", motions.len()));
             let _ = REST.set(motions.get(REST_SLOT).cloned().flatten());
+            let _ = REST_OPEN.set(motions.first().cloned().flatten());
             Ok((map, lengths))
         })();
         match slots {
@@ -419,6 +424,7 @@ pub fn load_kh2() {
             }
             Err(e) => {
                 let _ = REST.set(None);
+                let _ = REST_OPEN.set(None);
                 log(&format!("KH1 Sora's motion table did not load: {e}"))
             }
         }
@@ -449,7 +455,7 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
             match (fresh, s.retarget.as_ref()) {
                 (Some(b), Some(r)) => {
                     s.follow.slot = slot;
-                    Some(r.pose(&b))
+                    Some(r.pose_grip(&b, super::takeover::GRIP.load(Ordering::Relaxed)))
                 }
                 _ => follow(s, slot, to_world),
             }
@@ -652,7 +658,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0 });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect() });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -664,6 +670,9 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 let mut r = Retarget::new(&b, &kh2.rig.skeleton);
                 if let Some(m) = rest {
                     r.set_rest(&m.apply(&b, 0.0));
+                }
+                if let Some(Some(m)) = REST_OPEN.get() {
+                    r.set_rest_open(&m.apply(&b, 0.0));
                 }
                 log(&format!("retarget ready: {} of {} KH1 bones follow KH2 (the rest hang as in KH1's battle idle: {})", r.mapped(), b.len(), rest.is_some()));
                 s.retarget = Some(r);
@@ -730,7 +739,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     let orig_blade = (!ours).then(|| (mat(world + 280 * 0x40), mat(world + 283 * 0x40)));
     let slot = slot_of(instance);
     SLOT_NOW.store(slot.unwrap_or(usize::MAX), Ordering::Relaxed);
-    let Some(pose) = wanted(s, slot, &to_world) else {
+    let Some(mut pose) = wanted(s, slot, &to_world) else {
         s.wrote_root = None;
         s.to_world = Some(to_world);
         if let Some(o) = orig_hands {
@@ -740,6 +749,8 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         }
         return;
     };
+    let kh2_feet = MODE.load(Ordering::Relaxed) == 0 && super::takeover::active() && super::takeover::GROUNDED.load(Ordering::Relaxed);
+    super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
     }

@@ -145,13 +145,10 @@ struct Side {
     knuckle: usize,
     index: usize,
     little: usize,
-    /// The thumb's base and tip (one segment in KH2).
-    thumb: usize,
-    thumb_tip: usize,
 }
 
 /// +x side; the −x side is +29 on the legs and +92 on the arms.
-const PLUS_X: Side = Side { hip: 11, knee: 12, ankle: 13, heel: 16, toe: 17, clavicle: 74, shoulder: 76, elbow: 79, wrist: 80, knuckle: 97, index: 93, little: 105, thumb: 89, thumb_tip: 92 };
+const PLUS_X: Side = Side { hip: 11, knee: 12, ankle: 13, heel: 16, toe: 17, clavicle: 74, shoulder: 76, elbow: 79, wrist: 80, knuckle: 97, index: 93, little: 105 };
 
 fn minus_x() -> Side {
     let s = PLUS_X;
@@ -168,8 +165,6 @@ fn minus_x() -> Side {
         knuckle: s.knuckle + 92,
         index: s.index + 92,
         little: s.little + 92,
-        thumb: s.thumb + 92,
-        thumb_tip: s.thumb_tip + 92,
     }
 }
 
@@ -207,6 +202,7 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
         clavicle: usize,
         finger_shift: usize,
     }
+    let mut thigh_plus = 0;
     for (s, k) in [(PLUS_X, K1 { hip: 42, clavicle: 194, finger_shift: 0 }), (minus_x(), K1 { hip: 16, clavicle: 89, finger_shift: 104 })] {
         let mut add = |p: Part| {
             parts.push(p);
@@ -242,11 +238,8 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
         for b in c + 9..=c + 12 {
             one(b, hand, &mut bones);
         }
-        // The thumb (KH1: its base and four joints under the hand, 207-211 / 103-107; KH2: one
-        // segment), else it stuck out as in the T-pose (the user: unnatural thumbs in the idle).
-        let thumb = add(Part::Aim { from: s.thumb, to: s.thumb_tip, pole: Pole::Line(s.little, s.index) });
-        for b in 207 - k.finger_shift..=211 - k.finger_shift {
-            one(b, thumb, &mut bones);
+        if k.hip == 42 {
+            thigh_plus = thigh;
         }
         // Fingers: KH2 base, a co-located joint, then two joints; KH1 base, a co-located
         // joint, then three.
@@ -262,8 +255,19 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
             }
         }
     }
+    // The belt chain hangs from the belt down the outside of the +x thigh (10-15): it turns
+    // mostly with that thigh, so a stride or a raised knee carries it along instead of through
+    // the shorts (the user: the chain went through his pants).
+    bones.push((CHAIN_ROOT, pelvis, thigh_plus, 0.8));
+    // The jacket's back hem (72-75) hangs from the waist: mostly the hips' turn, a little of
+    // the chest's, so it no longer swings out behind with KH2's chest when he leans in (the
+    // user: fit the jacket's lower part to KH2's motions).
+    bones.push((JACKET_HEM, pelvis, chest, 0.35));
     (parts, bones)
 }
+
+const CHAIN_ROOT: usize = 10;
+const JACKET_HEM: usize = 72;
 
 pub struct Retarget {
     parent: Vec<Option<usize>>,
@@ -281,6 +285,8 @@ pub struct Retarget {
     /// Bones no part turns: their matrix relative to the parent in a KH1 rest pose
     /// (`set_rest`), else they keep the bind's relation.
     rest_local: Vec<Option<Mat4>>,
+    /// The thumbs' relation in KH1's open-handed (field) pose, used while not gripping.
+    rest_open: Vec<Option<Mat4>>,
     /// Cloth that hangs (the hood): `(part, share)` turns with the part's yaw but only
     /// `share` of its lean.
     hang: Vec<Option<(usize, f32)>>,
@@ -296,6 +302,11 @@ const HOOD_DROP: f32 = 0.45;
 /// Keyblade's grip and chain. Everything else keeps the bind's relation (the belt chain hung
 /// out in a loop from the battle idle's swing: the user's "floating chain").
 const REST_BONES: [std::ops::RangeInclusive<usize>; 2] = [80..=84, 280..=292];
+/// The thumbs (KH1: base and four joints under each hand, 103-107 / 207-211; KH2's thumb is a
+/// single short segment whose bind points another way, so mapped it looked wrong). They take
+/// KH1's own pose: its battle idle's grip while the Keyblade is held, its field idle's open
+/// hand otherwise (`set_rest_open`, `pose_grip`).
+const THUMBS: [std::ops::RangeInclusive<usize>; 2] = [103..=107, 207..=211];
 
 /// A turn's part about the model's up (y) axis (swing-twist).
 fn yaw_of(q: Quat) -> Quat {
@@ -335,7 +346,8 @@ impl Retarget {
         if HOOD_ROOT < kh1.len() {
             hang[HOOD_ROOT] = Some((1, HOOD_LEAN));
         }
-        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, hang }
+        let rest_open = vec![None; kh1.len()];
+        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang }
     }
 
     /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
@@ -349,12 +361,26 @@ impl Retarget {
     pub fn set_rest(&mut self, rest: &[Bone]) {
         let m = kh2_anim::Pose::bind(rest).bones;
         for i in 0..self.rest_local.len().min(m.len()) {
-            if self.turns[i].is_some() || self.hang[i].is_some() || !REST_BONES.iter().any(|r| r.contains(&i)) {
+            if self.turns[i].is_some() || self.hang[i].is_some() || !REST_BONES.iter().chain(&THUMBS).any(|r| r.contains(&i)) {
                 continue;
             }
             if let Some(p) = self.parent[i] {
                 let l = m[p].inverse() * m[i];
                 self.rest_local[i] = l.is_finite().then_some(l);
+            }
+        }
+    }
+
+    /// The thumbs' open-handed pose (KH1's field idle), for `pose_grip(.., false)`.
+    pub fn set_rest_open(&mut self, rest: &[Bone]) {
+        let m = kh2_anim::Pose::bind(rest).bones;
+        for i in 0..self.rest_open.len().min(m.len()) {
+            if self.turns[i].is_some() || !THUMBS.iter().any(|r| r.contains(&i)) {
+                continue;
+            }
+            if let Some(p) = self.parent[i] {
+                let l = m[p].inverse() * m[i];
+                self.rest_open[i] = l.is_finite().then_some(l);
             }
         }
     }
@@ -375,8 +401,13 @@ impl Retarget {
         self.parts.iter().zip(&self.rest_inv).map(|(p, r)| Some(p.frame(&now)? * (*r)?)).collect()
     }
 
-    /// KH1 model-space bone matrices for a KH2 model-space pose.
+    /// KH1 model-space bone matrices for a KH2 model-space pose (hands gripping).
     pub fn pose(&self, kh2: &[Mat4]) -> Vec<Mat4> {
+        self.pose_grip(kh2, true)
+    }
+
+    /// As `pose`; `grip` false gives the thumbs KH1's open-handed pose.
+    pub fn pose_grip(&self, kh2: &[Mat4], grip: bool) -> Vec<Mat4> {
         let now = positions(kh2);
         let part: Vec<Option<Quat>> = self.parts.iter().zip(&self.rest_inv).map(|(p, r)| Some(p.frame(&now)? * (*r)?)).collect();
         let n = self.pos.len();
@@ -387,7 +418,8 @@ impl Retarget {
             let own = self.turns[i]
                 .and_then(|(a, b, t)| Some(part[a]?.slerp(part[b]?, t)))
                 .or_else(|| self.hang[i].and_then(|(a, share)| part[a].map(|q| yaw_of(q).slerp(q, share) * Quat::from_rotation_x(-HOOD_DROP))));
-            if let (None, Some(p), Some(l)) = (own, self.parent[i], self.rest_local[i]) {
+            let rest = if grip { self.rest_local[i] } else { self.rest_open[i].or(self.rest_local[i]) };
+            if let (None, Some(p), Some(l)) = (own, self.parent[i], rest) {
                 out[i] = out[p] * l;
                 let (_, r, t) = out[i].to_scale_rotation_translation();
                 turn[i] = (r * self.rot[i].inverse()).normalize();
