@@ -109,7 +109,8 @@ unsafe fn row_info(actor: usize, row: i32) -> Option<Row> {
 }
 
 /// Sora's own rows to land KH2's hits with: [ground swing, ground finisher, air swing, air
-/// finisher] (KH1's combo motions 200-202 on the ground, 203-205 in the air).
+/// finisher]: KH1's combo motions 200 / 202 on the ground, 204 / 205 in the air (the Attack
+/// command's own picks in the user's log; 203's first row carries a much stronger attack).
 unsafe fn sora_rows(sora: usize) -> Option<[Row; 4]> {
     let mut found: HashMap<i16, Row> = HashMap::new();
     let mut all = Vec::new();
@@ -124,7 +125,7 @@ unsafe fn sora_rows(sora: usize) -> Option<[Row; 4]> {
     }
     log(&format!("Sora's KH1 attack rows (row:motion/data/fx): {}", all.join(" ")));
     let pick = |m: &[i16]| m.iter().find_map(|m| found.get(m).copied());
-    Some([pick(&[200, 201, 202])?, pick(&[202, 201, 200])?, pick(&[203, 204, 200])?, pick(&[205, 204, 202])?])
+    Some([pick(&[200, 201, 202])?, pick(&[202, 201, 200])?, pick(&[204, 200])?, pick(&[205, 204, 202])?])
 }
 
 /// One enemy's body part: KH1's entry for its contact code and the shape in KH2 space.

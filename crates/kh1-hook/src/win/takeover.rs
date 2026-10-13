@@ -46,6 +46,8 @@ pub const SQUARE: u16 = 0x8000;
 pub const CROSS: u16 = 0x4000;
 
 pub static ON: AtomicBool = AtomicBool::new(true);
+/// KH1's area script is moving Sora (`pose` shows KH1's own animation then).
+pub static SCRIPTED: AtomicBool = AtomicBool::new(false);
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_PHYS: AtomicUsize = AtomicUsize::new(0);
 /// The pad as the player pressed it (before KH1's copy is masked): buttons, then sticks
@@ -117,10 +119,28 @@ unsafe fn takeover(actor: usize) -> bool {
         return false;
     }
     if rd::<u32>(base + EVENT_RVA) != 0 {
+        SCRIPTED.store(false, Ordering::Relaxed);
         release("an event runs");
         return false;
     }
+    // KH1's area scripts walk / turn him (zone entries and exits, doors): their pending
+    // actions hang off `+0x440` (`0x14028CD60`); KH1 moves and animates him meanwhile.
+    let script = pose::ptr(rd::<u32>(actor + 0x440));
+    SCRIPTED.store(script != 0, Ordering::Relaxed);
+    if script != 0 {
+        let mut kinds = Vec::new();
+        let mut a = script;
+        while a > 0x10000 && kinds.len() < 8 {
+            kinds.push(rd::<u8>(a + 0x10));
+            a = rd::<u64>(a + 0x58) as usize;
+        }
+        release(&format!("KH1's script moves him, actions {kinds:?}, flags {:08x}", rd::<u32>(actor)));
+        return false;
+    }
     let slot = pose::sora_slot();
+    // The Keyblade's model instance (combat state `+0x18`, the attack objects' weapon).
+    let cs = pose::ptr(rd::<u32>(actor + 0x14C));
+    pose::WEAPON.store(if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 }, Ordering::Relaxed);
     let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.character.airborne())).unwrap_or(false);
     if !matches!(slot, Some(0..=7)) && !airborne {
         release(&format!("KH1's own action, slot {}", slot.map_or("?".into(), |s| s.to_string())));
@@ -218,7 +238,7 @@ unsafe fn takeover(actor: usize) -> bool {
     if d.last_state != Some(out.state) {
         if d.logged < 400 {
             d.logged += 1;
-            log(&format!("KH2 has Sora: {:?} (motion {}), height above floor {above:.1}, KH1 slot {:?}", out.state, out.motion, slot));
+            log(&format!("KH2 has Sora: {:?} (motion {}), height above floor {above:.1}, KH1 slot {:?}, flags {:08x}; {}", out.state, out.motion, slot, rd::<u32>(actor), pose::weapon_report()));
         }
         d.last_state = Some(out.state);
     }

@@ -475,3 +475,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     each effective hit is landed by a fresh attack object from Sora's own row (ground / air ×
     swing / finisher = KH1 motions 200 / 202 / 203 / 205), hit-once bit cleared during the
     call, then freed. `probe::hit` scales the record's damage by the KH2 row's power.
+- `kh1-hook` stage 11: the user's stage 10 log: KH2's hits land (31-72 on the ground); the
+  Attack command's air rows are 204 / 205 (203's first row, 0x4C58, hit for 95-144). Area
+  scripts (`0x14028C550`, per-actor action list at `+0x440`, pool `0x142BA1E80`, 0x60 each,
+  kind byte `+0x10`, next `+0x58`) walk Sora through doors / zone entries: KH2 lets go and
+  `pose` shows KH1's own animation while the list is non-empty. Diagnostics for the
+  Keyblade (invisible during KH2's attacks): its instance is combat state `+0x18`; where it
+  is posed is logged with each KH2 state change.

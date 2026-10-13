@@ -251,6 +251,49 @@ struct Hands {
 }
 static HANDS_NOW: Mutex<Option<Hands>> = Mutex::new(None);
 
+/// The Keyblade's model instance (Sora's combat state `+0x18`; set by `takeover`), and when /
+/// where it was last posed (diagnosing the user's invisible Keyblade during KH2's attacks).
+pub static WEAPON: AtomicUsize = AtomicUsize::new(0);
+struct WeaponSeen {
+    at: Instant,
+    via_ik: bool,
+    param: Vec3,
+    bone0: Option<Vec3>,
+    words: [u32; 12],
+}
+static WEAPON_SEEN: Mutex<Option<WeaponSeen>> = Mutex::new(None);
+
+unsafe fn note_weapon(instance: usize, world: usize, via_ik: bool) {
+    let param = if world > 0x10000 { mat(world).w_axis.truncate() } else { Vec3::NAN };
+    let b = ptr(rd::<u32>(instance + WORLD));
+    let bone0 = (b > 0x10000).then(|| mat(b).w_axis.truncate());
+    let words = rd::<[u32; 12]>(instance);
+    if let Ok(mut w) = WEAPON_SEEN.try_lock() {
+        *w = Some(WeaponSeen { at: Instant::now(), via_ik, param, bone0, words });
+    }
+}
+
+/// Where the Keyblade was last posed, against the hands.
+pub fn weapon_report() -> String {
+    let inst = WEAPON.load(Ordering::Relaxed);
+    let hands = HANDS_NOW.lock().ok().and_then(|h| *h);
+    let hand = hands.map(|h| (h.drawn[0].w_axis.truncate(), h.orig[0].w_axis.truncate()));
+    let seen = WEAPON_SEEN.lock().ok();
+    match seen.as_ref().and_then(|s| s.as_ref()) {
+        Some(w) => format!(
+            "Keyblade {inst:#x} posed {} ms ago ({}), at {:.0?} (bone 0 {:.0?}), right hand drawn {:.0?} / KH1's {:.0?}, instance [{}]",
+            w.at.elapsed().as_millis(),
+            if w.via_ik { "IK pass" } else { "plain pass" },
+            w.param,
+            w.bone0,
+            hand.map(|h| h.0),
+            hand.map(|h| h.1),
+            w.words.iter().map(|v| format!("{v:08x}")).collect::<Vec<_>>().join(" ")
+        ),
+        None => format!("Keyblade {inst:#x} not posed yet"),
+    }
+}
+
 /// Small models seen near Sora: whether each is held, by which hand, with what relation.
 #[derive(Default)]
 struct Watch {
@@ -356,6 +399,11 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
     let mode = MODE.load(Ordering::Relaxed);
     match mode {
         0 => {
+            // KH1's area script walks him (zone entries and exits): KH1's own animation.
+            if super::takeover::SCRIPTED.load(Ordering::Relaxed) {
+                s.follow.slot = slot;
+                return None;
+            }
             let fresh = super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, t)| t.elapsed().as_secs_f32() < 0.15).map(|(b, _)| b.clone()));
             match (fresh, s.retarget.as_ref()) {
                 (Some(b), Some(r)) => {
@@ -746,6 +794,9 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
         }
         None => f(world, instance, t, motion),
     }
+    if instance != 0 && instance == WEAPON.load(Ordering::Relaxed) {
+        note_weapon(instance, world, false);
+    }
     if instance != 0 {
         check(instance, false, world);
     }
@@ -760,6 +811,9 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
             f(a.as_ptr() as usize, instance, flags);
         }
         None => f(world, instance, flags),
+    }
+    if instance != 0 && instance == WEAPON.load(Ordering::Relaxed) {
+        note_weapon(instance, world, true);
     }
     if instance != 0 {
         check(instance, true, world);
