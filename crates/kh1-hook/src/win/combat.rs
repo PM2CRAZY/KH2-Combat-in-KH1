@@ -77,7 +77,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     let base = BASE.load(Ordering::Relaxed);
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
     let command = rd::<u8>(base + COMMAND_RVA);
-    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::active() {
+    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
         PRESSED.store(true, Ordering::Relaxed);
         note(format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));
         return;
@@ -102,10 +102,12 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_COMMAND.load(Ordering::Acquire));
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
     let kind = rd::<u8>(base + COMMAND_RVA);
-    if actor != sora || matches!(kind, 0 | 1) || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::active() {
+    if actor != sora || matches!(kind, 0 | 1) || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::kh2_has() {
         return f(actor, dir);
     }
+    trail_off(actor);
     let air = takeover::kh2_airborne();
+    let before = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
     if air {
         let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
         let y = rd::<f32>(actor + 0x14);
@@ -118,9 +120,19 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         wr(actor + 0x3D0, 0u32);
         wr(actor, rd::<u32>(actor) & !0x1_0000);
     }
+    let set = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
     let full = rd::<u32>(base + COMMAND_RVA);
     f(actor, dir);
-    takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}", if air { " in the air" } else { "" }));
+    // Only if KH1 did something with him (a new state or motion request); else as before.
+    let after = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
+    if after != set {
+        takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}", if air { " in the air" } else { "" }));
+    } else {
+        if air {
+            wr(actor + 0x70, before.0);
+        }
+        note(format!("command {kind:#x} ({full:08x}): KH1 did nothing with Sora, KH2 keeps him"));
+    }
 }
 
 /// The Attack command since the last call (KH2's attack button press).
@@ -284,10 +296,9 @@ pub struct Strikes {
     guards: Vec<Guard>,
     /// Swings a guard repelled: they hit nothing more.
     repelled: HashSet<u64>,
-    /// KH1's swing rows by motion (200..206), for `swing_start`.
-    swing_rows: Option<HashMap<i16, Row>>,
-    /// The trail flag is ours (set for a KH2 swing), and frames since a trail was asked for.
-    trail_on: bool,
+    /// KH1's swing rows by motion (200..206), for `swing_start`, and the model they are for.
+    swing_rows: Option<(u16, HashMap<i16, Row>)>,
+    /// Frames since a trail was asked for.
     trail_asked: Option<u32>,
 }
 
@@ -395,13 +406,24 @@ const VOICE_RVA: usize = 0x28E060;
 /// Actor `+0x1CC` bit: the weapon trail is drawn (`0x1402BFD70`; KH1's attack motions' triggers
 /// set it over their swing).
 const TRAIL_FLAG: u32 = 0x80_0000;
+/// The trail flag is ours (set for a KH2 swing).
+static TRAIL_ON: AtomicBool = AtomicBool::new(false);
+
+/// Clears the trail flag if we set it (KH1 has Sora again, whatever the reason).
+pub unsafe fn trail_off(sora: usize) {
+    if TRAIL_ON.swap(false, Ordering::Relaxed) {
+        wr(sora + 0x1CC, rd::<u32>(sora + 0x1CC) & !TRAIL_FLAG);
+    }
+}
 
 impl Strikes {
     /// Phase 9: a KH2 swing starts with what KH1's matching combo row plays when its motion
     /// starts (`0x1402A17F0`): the Keyblade trail asked for, the swing's effect and Sora's
     /// voice. `count` is KH2's combo count (1 on the first swing).
     pub unsafe fn swing_start(&mut self, sora: usize, air: bool, count: u8, finisher: bool) {
-        if self.swing_rows.is_none() {
+        let obj = pose::ptr(rd::<u32>(sora + 0x130));
+        let model = if obj > 0x10000 { rd::<u16>(obj + 0x4C) } else { u16::MAX };
+        if self.swing_rows.as_ref().map(|r| r.0) != Some(model) {
             let mut m = HashMap::new();
             for i in 0..0x40 {
                 let Some(r) = row_info(sora, i) else { break };
@@ -414,7 +436,10 @@ impl Strikes {
                 v.sort();
                 v.join(", ")
             }));
-            self.swing_rows = Some(m);
+            if m.is_empty() {
+                return;
+            }
+            self.swing_rows = Some((model, m));
         }
         let n = count.max(1) as i16 - 1;
         let motion = match (air, finisher) {
@@ -423,7 +448,7 @@ impl Strikes {
             (true, false) => 204 + n.min(1),
             (true, true) => 206,
         };
-        let Some(r) = self.swing_rows.as_ref().and_then(|m| m.get(&motion)).copied() else { return };
+        let Some(r) = self.swing_rows.as_ref().and_then(|m| m.1.get(&motion)).copied() else { return };
         let base = BASE.load(Ordering::Relaxed);
         let cs = pose::ptr(rd::<u32>(sora + 0x14C));
         let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
@@ -449,10 +474,9 @@ impl Strikes {
         let flags = rd::<u32>(sora + 0x1CC);
         if swinging {
             wr(sora + 0x1CC, flags | TRAIL_FLAG);
-            self.trail_on = true;
-        } else if self.trail_on {
-            wr(sora + 0x1CC, flags & !TRAIL_FLAG);
-            self.trail_on = false;
+            TRAIL_ON.store(true, Ordering::Relaxed);
+        } else {
+            trail_off(sora);
         }
         // Whether the trail came (logged for the first few).
         if let Some(n) = self.trail_asked {

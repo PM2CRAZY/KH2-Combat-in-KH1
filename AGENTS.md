@@ -699,3 +699,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   KH1 row of the same place in KH1's combo (200 / 201 / 202, finisher 203; air 204 / 205,
   finisher 206), and the trail bit follows KH2's hit windows (ini `swing_fx`; whether the
   trail was made is logged for the first swings).
+- `kh1-hook` stage 35 (review fixes for 33–34): the trail flag is cleared whenever KH1 has
+  Sora (any physics frame KH2 doesn't take, and before a KH1 command); a command hands Sora to
+  KH1 only if KH1 changed his state or motion request (`+0x164`), else the in-air jump state
+  is undone and KH2 keeps him; `exec` and `command` act only while KH2 has him and he is not
+  handed to KH1 (`takeover::kh2_has`); a stale Attack press is dropped when KH2 starts over;
+  a repel's recoil (KH2 motions 41 / 43) is not a swing start; the swing rows are cached per
+  model and never empty.

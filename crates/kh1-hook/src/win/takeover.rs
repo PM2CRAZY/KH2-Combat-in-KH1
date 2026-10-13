@@ -133,6 +133,10 @@ unsafe extern "system" fn physics(actor: usize) {
     if ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor) {
         return;
     }
+    // KH1 has him this frame: a Keyblade trail KH2's swing asked for ends.
+    if actor > 0x10000 && actor == rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize {
+        combat::trail_off(actor);
+    }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
 }
@@ -226,6 +230,8 @@ unsafe fn takeover(actor: usize) -> bool {
         d.character = kh2.character.clone();
         d.character.abilities = abilities;
         d.grounded = true;
+        // An Attack press from before (during KH1's move) is not KH2's.
+        combat::take_press();
     }
     d.growth.update(base, &mut d.character);
     if d.last_state.is_none() {
@@ -382,7 +388,9 @@ unsafe fn takeover(actor: usize) -> bool {
     if settings.swing_fx {
         // A KH2 swing starting: a new attack motion, or the same one again from its start.
         let attacking = matches!(out.state, StateName::Attack);
-        let started = attacking && (d.swing != Some(out.motion) || out.clip_frame < d.swing_frame);
+        // (A repel's recoil is not a swing.)
+        let recoil = matches!(out.motion, character_core::reaction::motion::REPELLED | character_core::reaction::motion::REPELLED_AIR);
+        let started = attacking && !recoil && (d.swing != Some(out.motion) || out.clip_frame < d.swing_frame);
         if started {
             d.strikes.swing_start(actor, d.character.airborne(), out.combo_count, d.character.in_finisher());
         }
@@ -460,6 +468,11 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
         ));
     }
     c.to_array()
+}
+
+/// KH2 has Sora this moment (not handed to KH1).
+pub fn kh2_has() -> bool {
+    active() && !HANDOFF.load(Ordering::Relaxed)
 }
 
 /// KH2 has Sora in the air this moment.
