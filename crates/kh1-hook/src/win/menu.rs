@@ -150,6 +150,16 @@ unsafe fn add(list: usize, len: usize, byte: u8) -> bool {
     false
 }
 
+/// Notes a KH1 ability given up for one of ours in `kh1-kh2-removed.txt` next to the game (so
+/// it can be given back by hand).
+fn remember(line: &str) {
+    use std::io::Write;
+    let path = format!("{}\\kh1-kh2-removed.txt", super::exe_dir());
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
 /// Takes our abilities back out of a list (closing the gaps).
 unsafe fn strip(list: usize, len: usize) -> usize {
     let bytes: Vec<u8> = (0..len).map(|i| rd::<u8>(list + i)).collect();
@@ -217,7 +227,25 @@ impl Growth {
                         growth::List::Shared => (save + 0x599, 10, ab.id),
                         growth::List::Sora => (save + 0x44, 48, ab.id | 0x80),
                     };
-                    if add(list, len, byte) {
+                    let mut done = add(list, len, byte);
+                    // KH2's abilities first (the user): a KH1 ability that's off makes room.
+                    if !done && ab.list == growth::List::Sora {
+                        let bytes: Vec<u8> = (0..len).map(|i| rd::<u8>(list + i)).collect();
+                        if let Some(i) = growth::make_room(&bytes) {
+                            let gone = bytes[i];
+                            let mut kept = bytes.clone();
+                            kept.remove(i);
+                            kept.push(0);
+                            for (k, b) in kept.iter().enumerate() {
+                                std::ptr::write((list + k) as *mut u8, *b);
+                            }
+                            done = add(list, len, byte);
+                            let line = format!("Sora's list was full: {} (off) made room for {}", growth::name(gone), ab.name);
+                            log(&line);
+                            remember(&format!("level {}: removed {} (id {}) for {}", now.level, growth::name(gone), gone & 0x7F, ab.name));
+                        }
+                    }
+                    if done {
                         log(&format!("Sora learns {} (level {}, {} AP)", ab.name, ab.level, ab.ap));
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);

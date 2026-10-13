@@ -82,6 +82,13 @@ What only KH2 has is added to KH1's Ability menu as new abilities, learned at So
 Quick Run and Aerial Dodge reach LV2 / LV3 / MAX at levels 22 / 40 / 65 and 28 / 46 / 70;
 the dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at 19 / 37 / 60.
 
+Sora's ability list holds 48 (KH1's most). When it is full, KH2's abilities come first: a
+KH1 ability that is off gives up its place, a spare copy first (an ability he has more than
+once), then the least missed (Encounter Plus, EXP Zero, Cheer, Scan, Evolution, Jackpot, Lucky
+Strike, Treasure Magnet, ...). Equipped abilities, Guard, Dodge Roll, the specials and the
+combo modifiers are never removed. Each removal is written to `kh1-kh2-removed.txt` next to the
+game.
+
 They live in an extended copy of KH1's ability table (ids 66 to 77), so a save holding them
 needs this mod to show them. To go back to a plain KH1 save: set `abilities = test`, load the
 save (they are taken out of Sora's lists), save, then remove the mod.

@@ -167,6 +167,68 @@ pub fn has(list: &[u8], id: u8) -> bool {
     list.iter().take_while(|b| **b != 0).any(|b| b & 0x7F == id)
 }
 
+/// KH1's ability names by id (1..=65), as the Archipelago KH1 world lists them (for the log).
+pub const KH1_NAMES: [&str; 65] = [
+    "High Jump", "Mermaid Kick", "Glide", "Superglide", "Treasure Magnet", "Combo Plus", "Air Combo Plus", "Critical Plus", "Second Wind", "Scan",
+    "Sonic Blade", "Ars Arcanum", "Strike Raid", "Ragnarok", "Trinity Limit", "Cheer", "Vortex", "Aerial Sweep", "Counterattack", "Blitz",
+    "Guard", "Dodge Roll", "MP Haste", "MP Rage", "Second Chance", "Berserk", "Jackpot", "Lucky Strike", "Charge", "Rocket",
+    "Tornado", "MP Gift", "Raging Boar", "Asp's Bite", "Healing Herb", "Wind Armor", "Crescent", "Sandstorm", "Applause!", "Blazing Fury",
+    "Icy Terror", "Bolts of Sorrow", "Ghostly Scream", "Hummingbird", "Time-Out", "Storm's Eye", "Ferocious Lunge", "Furious Bellow", "Spiral Wave", "Thunder Potion",
+    "Cure Potion", "Aero Potion", "Slapshot", "Sliding Dash", "Hurricane Blast", "Ripple Drive", "Stun Impact", "Gravity Break", "Zantetsuken", "Tech Boost",
+    "Encounter Plus", "Leaf Bracer", "Evolution", "EXP Zero", "Combo Master",
+];
+
+/// An ability's name (KH1's or ours).
+pub fn name(id: u8) -> String {
+    let id = id & 0x7F;
+    if let Some(ab) = MENU.iter().find(|a| a.id == id) {
+        return ab.name.to_string();
+    }
+    KH1_NAMES.get((id as usize).wrapping_sub(1)).map_or(format!("ability {id}"), |n| n.to_string())
+}
+
+/// The user: KH2's abilities come first. When Sora's list (48, KH1's most) is full, KH1
+/// abilities that are learned but off make room, least missed first: a spare copy of one he
+/// has twice or more, then these, in order. Nothing equipped, nothing of ours, and not Guard,
+/// Dodge Roll, the specials or the combo modifiers.
+pub const MAKE_ROOM: [u8; 16] = [
+    61, // Encounter Plus
+    64, // EXP Zero
+    16, // Cheer
+    10, // Scan
+    63, // Evolution
+    27, // Jackpot
+    28, // Lucky Strike
+    5,  // Treasure Magnet
+    9,  // Second Wind
+    60, // Tech Boost
+    62, // Leaf Bracer
+    23, // MP Haste
+    24, // MP Rage
+    26, // Berserk
+    8,  // Critical Plus
+    25, // Second Chance
+];
+
+/// Which entry of a full list gives up its place (its index), if any.
+pub fn make_room(list: &[u8]) -> Option<usize> {
+    let end = list.iter().position(|b| *b == 0).unwrap_or(list.len());
+    let l = &list[..end];
+    let ours = |b: u8| MENU.iter().any(|a| a.id == b & 0x7F);
+    let off = |b: u8| b & 0x80 != 0 && !ours(b);
+    // A spare copy that's off: of the ability with the most copies.
+    let copies = |id: u8| l.iter().filter(|b| *b & 0x7F == id).count();
+    if let Some(i) = (0..end).filter(|i| off(l[*i]) && copies(l[*i] & 0x7F) > 1).max_by_key(|i| (copies(l[*i] & 0x7F), *i)) {
+        return Some(i);
+    }
+    for id in MAKE_ROOM {
+        if let Some(i) = (0..end).rev().find(|i| off(l[*i]) && l[*i] & 0x7F == id) {
+            return Some(i);
+        }
+    }
+    None
+}
+
 /// Sora's side of KH1's save block.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Kh1Sora {
@@ -415,6 +477,31 @@ mod tests {
         assert_eq!(ids.len(), MENU.len());
         assert!(ids.iter().all(|i| *i >= FIRST_ID && *i < 0x80));
         assert!(MENU.iter().all(|a| a.name.len() <= 24 && a.help.len() <= 60));
+    }
+
+    #[test]
+    fn room_comes_from_spare_copies_then_the_least_missed() {
+        // The user's level-51 list (full): four Tech Boosts off, two Treasure Magnets off, a
+        // Critical Plus on and one off.
+        let mut l = vec![10, 62, 25, 14 | 0x80, 24, 54, 60 | 0x80, 60 | 0x80, 8, 23, 13 | 0x80, 5 | 0x80, 53, 28 | 0x80, 60 | 0x80, 6, 26 | 0x80, 21 | 0x80, 5 | 0x80, 57, 11 | 0x80, 19, 6, 16 | 0x80, 60 | 0x80, 6, 59 | 0x80, 6, 18, 7, 20, 58, 65, 22, 12 | 0x80, 17, 56, 7, 8, 15 | 0x80, 55 | 0x80, 8 | 0x80, 27 | 0x80, 61 | 0x80, 68 | 0x80, 69 | 0x80, 70 | 0x80, 71 | 0x80];
+        assert_eq!(l.len(), 48);
+        let mut freed = Vec::new();
+        while let Some(i) = make_room(&l) {
+            freed.push(name(l[i]));
+            l.remove(i);
+            l.push(0);
+            if freed.len() == 8 {
+                break;
+            }
+        }
+        // Spares first (three Tech Boosts, a Treasure Magnet and a Critical Plus, those with
+        // the most copies first), then Encounter Plus, Cheer, Jackpot.
+        let mut spares = freed[..5].to_vec();
+        spares.sort();
+        assert_eq!(spares, ["Critical Plus", "Tech Boost", "Tech Boost", "Tech Boost", "Treasure Magnet"]);
+        assert_eq!(freed[5..], ["Encounter Plus", "Cheer", "Jackpot"]);
+        // Never Guard (off here), the specials, ours, or anything equipped.
+        assert!(l.contains(&(21 | 0x80)) && l.contains(&(11 | 0x80)) && l.contains(&(68 | 0x80)) && l.contains(&10));
     }
 
     #[test]

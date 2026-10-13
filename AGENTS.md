@@ -733,3 +733,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     Slapshot, Flash Step, Slide Dash, Vicinity Break and finish with Guard Break / 155 / 154,
     air combos alternate 181 / 182 (as KH2 does) and finish with Aerial Finish.
   - A full ability list (48, KH1's most) is reported once per ability, not every second.
+- `kh1-hook` stage 38 (the user: KH2 abilities have priority): when Sora's list (48) is full,
+  `growth::make_room` picks a KH1 ability that is off to give up its place: first a spare copy
+  of one he has two or more of (most copies first), then, in `MAKE_ROOM` order, Encounter
+  Plus, EXP Zero, Cheer, Scan, Evolution, Jackpot, Lucky Strike, Treasure Magnet, Second Wind,
+  Tech Boost, Leaf Bracer, MP Haste, MP Rage, Berserk, Critical Plus, Second Chance. Never an
+  equipped one, ours, Guard, Dodge Roll, the specials or the modifiers. Each removal is logged
+  and appended to `kh1-kh2-removed.txt` next to the game (unit-tested on the user's list).
