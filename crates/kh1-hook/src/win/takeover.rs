@@ -37,10 +37,13 @@ const MOVE_RVA: usize = 0x297710;
 const PARTY_RVA: usize = 0x2D37C80;
 const EVENT_RVA: usize = 0x298D3A0;
 const BATTLE_RVA: usize = 0x2867CD8;
-const SET_MOTION_RVA: usize = 0x29D630;
-/// Actor `+0x374` bit: the stance its idle / walk / run requests map to (set: battle).
-const STANCE_BATTLE: u32 = 0x40000;
-const RAW_SLOT: u32 = 0x2000_0000;
+const DRAW_WEAPON_RVA: usize = 0x2A0CA0;
+const PUT_AWAY_RVA: usize = 0x2A10F0;
+/// Actor flag: the weapon is out (drawn).
+const WEAPON_OUT: u32 = 0x4000;
+/// After an attack in the field, how long Sora keeps KH2's battle stance (Keyblade in hand)
+/// before KH2's field idle puts it away (the user: a combo ended in the empty-handed idle).
+const BATTLE_LINGER: f32 = 6.0;
 /// How far below the feet the floor may drop and still be stepped down onto (KH2's floor ray
 /// reaches 24 below).
 const STEP_DOWN: f32 = 24.0;
@@ -80,6 +83,8 @@ struct Driver {
     last_state: Option<StateName>,
     logged: u32,
     strikes: combat::Strikes,
+    /// Last attack (for `BATTLE_LINGER`).
+    fought: Option<Instant>,
 }
 
 static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
@@ -163,7 +168,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
         // a combo).
         anim.queued_blend = 14.0;
-        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default() }
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None }
     });
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
@@ -241,9 +246,13 @@ unsafe fn takeover(actor: usize) -> bool {
     // Battle or field stance by KH1's battle mode (bit 0 of `0x142867CD8`), as KH2 does by its
     // own: out of battle KH2's field motions carry no Keyblade, and attacks bring it out.
     let battle = rd::<u32>(base + BATTLE_RVA) & 1 != 0;
-    d.anim.field = !battle;
+    if matches!(out.state, StateName::Attack) || !out.hitboxes.is_empty() {
+        d.fought = Some(Instant::now());
+    }
+    let lingering = d.fought.is_some_and(|t| t.elapsed().as_secs_f32() < BATTLE_LINGER);
+    d.anim.field = !battle && !lingering;
     d.anim.update(&out, &d.character, [q[0], -q[1], q[2]]);
-    keyblade(base, actor, slot, d.anim.weapons_out(), &mut d.logged);
+    keyblade(base, actor, d.anim.weapons_out(), &mut d.logged);
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));
@@ -267,31 +276,32 @@ unsafe fn takeover(actor: usize) -> bool {
     true
 }
 
-/// KH1 draws Sora's Keyblade only in its battle motions (its field idle / walk / run hold
-/// none; the user's stage 15 video: always empty hands). KH1's own motion is hidden under
-/// KH2's pose, so it is only kept in the stance whose motions show the Keyblade when KH2's
-/// pose has it out (battle, or an attack in the field): KH1's battle idle (slot 1) is set
-/// directly, and the stance bit `+0x374` kept with it.
-unsafe fn keyblade(base: usize, actor: usize, slot: Option<usize>, out: bool, logged: &mut u32) {
-    let flags = rd::<u32>(actor + 0x374);
-    let battle_slot = matches!(slot, Some(1 | 3 | 4 | 6 | 7));
-    if (flags & STANCE_BATTLE != 0) == out && battle_slot == out {
+/// KH1 shows Sora's Keyblade while his actor's flag `0x4000` is set ("weapon out"):
+/// `0x14029DAB0`, applying a motion, sets it with `0x1402A0CA0(actor, 1)` (flag, and the
+/// combat state's bytes `+0xC..+0xF` = ff ff ff 80, the Keyblade's colour and alpha) for
+/// motions whose table entry is of type 1 (the attacks, the battle stance), and clears it
+/// with `0x1402A10F0` for type 0 (the field idle / walk / run); the flag also makes motion
+/// requests map to their battle variants (`0x14029E050`). KH1's own motions never change
+/// while KH2 has Sora (its attacks are KH2's), so the flag follows KH2's pose here: out while
+/// KH2 has the Keyblade out, put away when KH2 puts it away.
+unsafe fn keyblade(base: usize, actor: usize, out: bool, logged: &mut u32) {
+    let flags = rd::<u32>(actor);
+    let cs = pose::ptr(rd::<u32>(actor + 0x14C));
+    let has = flags & WEAPON_OUT != 0;
+    if has == out {
         return;
     }
-    wr(actor + 0x374, if out { flags | STANCE_BATTLE } else { flags & !STANCE_BATTLE });
-    let set: unsafe extern "system" fn(usize, u32, f32) = std::mem::transmute(base + SET_MOTION_RVA);
-    // Bit 0x20000000: the slot itself, not a request mapped through the motion table (for
-    // Sora `0x14029E050` ignores the stance bit: it only applies to actors without a combat
-    // state; the user's stage 16 log: slot 0 stayed). 1 is the battle idle, 0 the field one.
-    set(actor, RAW_SLOT | if out { 1 } else { 0 }, 0.0);
-    // Logged when the wanted stance changes, and every 2 s while KH1 keeps undoing it.
-    static LAST: AtomicU32 = AtomicU32::new(2);
-    static REDO: AtomicU32 = AtomicU32::new(0);
-    let changed = LAST.swap(out as u32, Ordering::Relaxed) != out as u32;
-    let redo = if changed { REDO.store(0, Ordering::Relaxed); 0 } else { REDO.fetch_add(1, Ordering::Relaxed) + 1 };
-    if *logged < 400 && (changed || redo % 120 == 1) {
+    if out {
+        let draw: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + DRAW_WEAPON_RVA);
+        draw(actor, 1);
+    } else {
+        let put_away: unsafe extern "system" fn(usize) = std::mem::transmute(base + PUT_AWAY_RVA);
+        put_away(actor);
+    }
+    if *logged < 400 {
         *logged += 1;
-        log(&format!("Keyblade {}: KH1 stance {}, from slot {:?} (stance flags {flags:08x}); redone {redo} times", if out { "out" } else { "away" }, if out { "battle" } else { "field" }, slot));
+        let colour = if cs > 0x10000 { rd::<[u8; 4]>(cs + 0xC) } else { [0; 4] };
+        log(&format!("Keyblade {}: actor flags {flags:08x} -> {:08x}, colour {colour:02x?}", if out { "out" } else { "put away" }, rd::<u32>(actor)));
     }
 }
 

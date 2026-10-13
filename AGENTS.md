@@ -522,3 +522,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Request bit `0x20000000` passes a slot through unmapped: the battle idle (slot 1) is now
   set directly while KH2 has the Keyblade out, the field idle (0) when it is put away.
   (The user: fetch `kh1-kh2.log` from the PC directly, never ask for it.)
+- `kh1-hook` stage 18: stage 17's raw battle-idle slot took, but KH1 put the field slots
+  back every frame and the Keyblade stayed hidden. The real switch (Ghidra): applying a
+  motion (`0x14029DAB0`) draws the weapon for table entries of type 1 (`0x1402A0CA0(actor,
+  1)`: actor flag `0x4000`, combat state `+0xC..+0xF` = ff ff ff 80) and puts it away for
+  type 0 (`0x1402A10F0`: clears the flag); the flag also maps requests to their battle
+  variants. The flag now follows KH2's pose (`weapons_out`). After an attack in the field,
+  KH2 keeps its battle stance for 6 s (the user: combos ended in the empty-handed idle).
