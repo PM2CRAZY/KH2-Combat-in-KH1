@@ -40,6 +40,7 @@ const BATTLE_RVA: usize = 0x2867CD8;
 const SET_MOTION_RVA: usize = 0x29D630;
 /// Actor `+0x374` bit: the stance its idle / walk / run requests map to (set: battle).
 const STANCE_BATTLE: u32 = 0x40000;
+const RAW_SLOT: u32 = 0x2000_0000;
 /// How far below the feet the floor may drop and still be stepped down onto (KH2's floor ray
 /// reaches 24 below).
 const STEP_DOWN: f32 = 24.0;
@@ -269,8 +270,8 @@ unsafe fn takeover(actor: usize) -> bool {
 /// KH1 draws Sora's Keyblade only in its battle motions (its field idle / walk / run hold
 /// none; the user's stage 15 video: always empty hands). KH1's own motion is hidden under
 /// KH2's pose, so it is only kept in the stance whose motions show the Keyblade when KH2's
-/// pose has it out (battle, or an attack in the field): the stance bit `+0x374` picks which
-/// slot a request maps to (`0x14029E050` in `0x14029D630`), and the idle request is replayed.
+/// pose has it out (battle, or an attack in the field): KH1's battle idle (slot 1) is set
+/// directly, and the stance bit `+0x374` kept with it.
 unsafe fn keyblade(base: usize, actor: usize, slot: Option<usize>, out: bool, logged: &mut u32) {
     let flags = rd::<u32>(actor + 0x374);
     let battle_slot = matches!(slot, Some(1 | 3 | 4 | 6 | 7));
@@ -279,7 +280,10 @@ unsafe fn keyblade(base: usize, actor: usize, slot: Option<usize>, out: bool, lo
     }
     wr(actor + 0x374, if out { flags | STANCE_BATTLE } else { flags & !STANCE_BATTLE });
     let set: unsafe extern "system" fn(usize, u32, f32) = std::mem::transmute(base + SET_MOTION_RVA);
-    set(actor, 0, 0.0);
+    // Bit 0x20000000: the slot itself, not a request mapped through the motion table (for
+    // Sora `0x14029E050` ignores the stance bit: it only applies to actors without a combat
+    // state; the user's stage 16 log: slot 0 stayed). 1 is the battle idle, 0 the field one.
+    set(actor, RAW_SLOT | if out { 1 } else { 0 }, 0.0);
     // Logged when the wanted stance changes, and every 2 s while KH1 keeps undoing it.
     static LAST: AtomicU32 = AtomicU32::new(2);
     static REDO: AtomicU32 = AtomicU32::new(0);

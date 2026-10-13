@@ -516,3 +516,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `0x40000`, which `0x14029E050` uses to map a request to the field or battle slot) with
   the idle request replayed (`0x14029D630(actor, 0, 0.0)`); back to field when it is put
   away. Finished actions blend into idle over 14 frames (`RigAnim::queued_blend`).
+- `kh1-hook` stage 17: stage 16's idle request never changed Sora's slot (stayed 0, redone
+  every frame): `0x14029E050` maps a request to a slot through the motion table, and the
+  stance bit only applies to actors with flag `0x4000` or no combat state, so not to Sora.
+  Request bit `0x20000000` passes a slot through unmapped: the battle idle (slot 1) is now
+  set directly while KH2 has the Keyblade out, the field idle (0) when it is put away.
+  (The user: fetch `kh1-kh2.log` from the PC directly, never ask for it.)
