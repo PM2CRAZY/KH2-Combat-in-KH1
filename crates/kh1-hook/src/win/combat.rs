@@ -122,19 +122,21 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     }
     // What KH1 doing something with him changes: his state, motion request, the script-held
     // flag 0x1000000 (spells and items set it, the user's log), his motion slot.
-    let look = || (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164), rd::<u32>(actor) & 0x100_0000, pose::sora_slot());
+    // ... and above all any motion KH1 sets on him (`probe`'s set-motion hooks count them: the
+    // air cast's `0x14029D7F0(actor, 0x83 + spell)` changed none of the others, the user's log).
+    let look = || (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164), rd::<u32>(actor) & 0x100_0000, pose::sora_slot(), super::probe::SORA_MOTIONS.load(Ordering::Relaxed));
     let set = look();
     let full = rd::<u32>(base + COMMAND_RVA);
     f(actor, dir);
     // Only if KH1 did something with him (a new state or motion request); else as before.
     let after = look();
     if after != set {
-        takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}", if air { " in the air" } else { "" }));
+        takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}, KH1 motion {:#x}", if air { " in the air" } else { "" }, super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed)));
     } else {
         if air {
             wr(actor + 0x70, before.0);
         }
-        note(format!("command {kind:#x} ({full:08x}): KH1 did nothing with Sora, KH2 keeps him"));
+        note(format!("command {kind:#x} ({full:08x}){}: KH1 did nothing with Sora, KH2 keeps him", if air { " in the air" } else { "" }));
     }
 }
 

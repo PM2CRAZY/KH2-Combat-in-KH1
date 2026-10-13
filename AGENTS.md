@@ -719,3 +719,17 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   to Sora's lists at their level (`growth::MENU`; shared ones on, the rest off); other modes
   take them back out. Final Mix's Combo Master (65) maps to KH2's. Commands now count as
   KH1's when the script-held flag or the motion slot changes too (spells set the flag).
+- `kh1-hook` stage 37 (the user: no animation for a jump cast; the Square shortcut didn't cast;
+  check moves don't repeat):
+  - A command counts as KH1's when KH1 sets any motion on Sora during it (`probe`'s
+    set-motion hooks count them: `SORA_MOTIONS`); the air cast (`0x14029D7F0(actor, 0x83 +
+    spell)`) changed none of state / request / flag / slot at that point, so KH2 kept him and
+    hid the cast's motion.
+  - KH1's shortcuts are L1 + a face button: with L1 held, Circle and Square reach KH1 and are
+    not KH2's jump / action (a button held past L1's release stays KH1's until let go).
+  - `kh1-data/examples/combo_mix.rs` runs KH2's controller with the user's menu (Combo Plus x4,
+    Air Combo Plus x2, Combo Master, the nine mapped modifiers) against near / far /
+    surrounding / raised foes: no move follows itself; ground combos mix 151 / 152 / 153 with
+    Slapshot, Flash Step, Slide Dash, Vicinity Break and finish with Guard Break / 155 / 154,
+    air combos alternate 181 / 182 (as KH2 does) and finish with Aerial Finish.
+  - A full ability list (48, KH1's most) is reported once per ability, not every second.

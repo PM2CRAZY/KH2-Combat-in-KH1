@@ -68,6 +68,8 @@ const AIR_STATE: i32 = 3;
 
 pub const CIRCLE: u16 = 0x2000;
 pub const SQUARE: u16 = 0x8000;
+/// KH1's shortcut button (L1 + a face button).
+pub const L1: u16 = 0x0400;
 #[allow(dead_code)]
 pub const CROSS: u16 = 0x4000;
 
@@ -246,8 +248,13 @@ unsafe fn takeover(actor: usize) -> bool {
     let tilt = ((lx * lx + ly * ly).sqrt().min(1.0) - 0.2).max(0.0) / 0.8;
     let dir = glam::Vec2::new(rd::<f32>(actor + 0x20), rd::<f32>(actor + 0x28)).normalize_or_zero();
     let stick = if tilt > 0.0 { (dir * tilt).to_array() } else { [0.0, 0.0] };
-    let jump = buttons & CIRCLE != 0;
-    let action = buttons & SQUARE != 0;
+    // With L1 held the face buttons are KH1's shortcuts, not KH2's jump / action; a button
+    // still held when L1 lets go stays KH1's until released (`held` sees it raw).
+    let shortcut = buttons & L1 != 0;
+    let jump_raw = buttons & CIRCLE != 0;
+    let action_raw = buttons & SQUARE != 0;
+    let jump = jump_raw && !shortcut;
+    let action = action_raw && !shortcut;
     // KH1's Attack command (Cross with Attack chosen in the menu) is KH2's attack button.
     let attack = combat::take_press();
     let input = Input {
@@ -257,7 +264,7 @@ unsafe fn takeover(actor: usize) -> bool {
         action: Button { pressed: action && !d.held.1, held: action },
         lock: Button::default(),
     };
-    d.held = (jump, action);
+    d.held = (jump_raw, action_raw);
 
     // Where he is, KH2's way up (KH1's world is y-down).
     let p = rd::<[f32; 3]>(actor + 0x10);

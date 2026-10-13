@@ -170,6 +170,8 @@ pub struct Growth {
     frames: u32,
     seen: Option<Kh1Sora>,
     applied: bool,
+    /// Abilities already reported as not fitting (once each).
+    no_room: Vec<u8>,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -178,7 +180,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new() }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -215,8 +217,12 @@ impl Growth {
                         growth::List::Shared => (save + 0x599, 10, ab.id),
                         growth::List::Sora => (save + 0x44, 48, ab.id | 0x80),
                     };
-                    let done = add(list, len, byte);
-                    log(&format!("Sora learns {} (level {}, {} AP){}", ab.name, ab.level, ab.ap, if done { "" } else { ": no room in the list" }));
+                    if add(list, len, byte) {
+                        log(&format!("Sora learns {} (level {}, {} AP)", ab.name, ab.level, ab.ap));
+                    } else if !self.no_room.contains(&ab.id) {
+                        self.no_room.push(ab.id);
+                        log(&format!("Sora can't learn {} (level {}): his ability list is full (48, KH1's most)", ab.name, ab.level));
+                    }
                 }
             } else {
                 let n = strip(save + 0x44, 48) + strip(save + 0x599, 10);

@@ -128,7 +128,9 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     // The pad as pressed goes to KH2; while KH2 has Sora, KH1 doesn't see its buttons.
     super::takeover::RAW_BUTTONS.store(b as u32, Ordering::Relaxed);
     super::takeover::RAW_STICKS.store(u32::from_le_bytes(st), Ordering::Relaxed);
-    if super::takeover::active() {
+    // L1 held: KH1's shortcuts (L1 + a face button cast the spells set there), so KH1 keeps
+    // Circle and Square then (the user: the Square shortcut didn't cast).
+    if super::takeover::active() && b & super::takeover::L1 == 0 {
         std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::CIRCLE | super::takeover::SQUARE));
     }
     // Sticks to 3 levels each, so drift doesn't flood the log.
@@ -318,11 +320,17 @@ unsafe fn callers(here: usize) -> String {
 }
 
 static SETM_LOGGED: AtomicU32 = AtomicU32::new(0);
+/// KH1 set a motion on Sora (any slot), counted (`combat::command` sees whether a command did).
+pub static SORA_MOTIONS: AtomicU32 = AtomicU32::new(0);
+/// The last slot KH1 set on Sora.
+pub static SORA_LAST_SLOT: AtomicU32 = AtomicU32::new(0);
 
 unsafe fn setm_note(which: usize, actor: usize, req: u32, here: usize) {
     if actor == 0 || actor != sora() {
         return;
     }
+    SORA_MOTIONS.fetch_add(1, Ordering::Relaxed);
+    SORA_LAST_SLOT.store(req, Ordering::Relaxed);
     let slot = req & 0xFFFF;
     // Not standing / walking / running (the slots KH2 has).
     if slot <= 7 || SETM_LOGGED.load(Ordering::Relaxed) >= 80 {

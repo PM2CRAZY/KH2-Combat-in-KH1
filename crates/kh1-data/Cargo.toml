@@ -13,3 +13,4 @@ glam = "0.29"
 
 [dev-dependencies]
 kh2-data.workspace = true
+character-core = { path = "../character-core" }
