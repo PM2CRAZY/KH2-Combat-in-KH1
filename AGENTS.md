@@ -302,3 +302,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   model size posed is now logged once. `+0x1B0` holds the sampled channels (scale `+0`,
   rotation `+0x10`, translation `+0x20` per 0x40-byte bone), not matrices; `+0x1B8` the built
   matrices; the T-pose test only writes arrays whose bones look affine.
+- Deploying `kh1-hook`: while KH1 runs, Panacea's copy in `mod/kh1/dll/` is locked and a
+  write to it does not land (the upload reported success; the second test ran the old
+  build). Rename the loaded file aside (`*.dll.loaded-old`, not loaded: Panacea takes
+  `*.dll` only), copy the new one in, and check its SHA-256 on the PC after every deploy.
+  The user's two crash dumps of 2026-10-13 (KH1 and the launcher, the launcher without our
+  DLL) are both the null `memcpy` of a start without Epic's arguments.
