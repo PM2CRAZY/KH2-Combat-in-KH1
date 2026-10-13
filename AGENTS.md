@@ -581,3 +581,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     about its root so no joint comes nearer a thigh (hip → knee) than in the bind (≤ 14).
     Hanging and pushed cloth move at most 0.35 rad a frame (no snaps when the hips' yaw
     flips in somersaults).
+- `kh1-hook` stage 23 (the user: in the battle idle the chain clips through the shorts and
+  the hood through Sora):
+  - The belt chain (10-15) is carried rigidly by the +x thigh (43) as in the bind
+    (`ATTACHED`, `attach`): its distance to the outer shorts panel (57→59) is the bind's in
+    every motion checked (a free-hanging chain fell inside the shorts when the battle
+    stance spread the legs).
+  - The hood chain (79: 80-84) is kept off the back (71→78) and the head (78→151) by
+    `keep_clear` (up to 30), so the hunched battle stance can't tip the back into it.

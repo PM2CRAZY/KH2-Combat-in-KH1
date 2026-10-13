@@ -281,6 +281,7 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
     // jacket mesh with KH2's motions).
     let _ = chest;
     bones.push((72, pelvis, pelvis, 0.0));
+    let _ = thigh_plus;
     for (base, thigh) in [(248, thigh_plus), (264, thigh_minus)] {
         for (k, share) in [0.25, 0.15, 0.05, 0.0].into_iter().enumerate() {
             bones.push((base + 4 * k, pelvis, thigh, share));
@@ -312,6 +313,8 @@ pub struct Retarget {
     hang: Vec<Option<(usize, f32, f32)>>,
     /// Cloth kept off the thighs (`keep_clear`).
     cloth: Vec<Cloth>,
+    /// The bind's matrices (for `attach`).
+    bind_m: Vec<Mat4>,
     /// Last turn of each hanging bone and last swing of each cloth chain: they move at most
     /// `CLOTH_STEP` a call, so a flip of the hips' yaw (somersaults) or of which side of a thigh
     /// the cloth is pushed to doesn't snap them round (a little lag, like cloth's own).
@@ -343,10 +346,25 @@ const THIGHS: [(usize, usize); 2] = [(43, 44), (17, 18)];
 const CLEAR_MAX: f32 = 14.0;
 /// Chain roots and joints: the belt chain (10: 12-15), the hem's back centre (72: 73-75) and
 /// its eight panels (root: root + 2, + 3).
-fn cloth_chains() -> Vec<(usize, Vec<usize>)> {
-    let mut v = vec![(10usize, vec![12usize, 13, 14, 15]), (72, vec![73, 74, 75])];
+/// The belt chain (10-15) runs from the belt down over the +x shorts panel to the back pocket:
+/// it is carried by that thigh (43) as in the bind, as the shorts' panels are, so it keeps
+/// lying on them however the leg goes (hanging free it fell inside the shorts whenever the
+/// battle stance spread the legs: the user's chain clipping through the pants).
+const ATTACHED: [(usize, usize); 1] = [(10, 43)];
+
+/// Each: root, joints, what they keep off (bone pairs), and the most distance kept.
+fn cloth_chains() -> Vec<(usize, Vec<usize>, Vec<(usize, usize)>, f32)> {
+    let thighs = THIGHS.to_vec();
+    let mut v = vec![
+        (10usize, vec![12usize, 13, 14, 15], thighs.clone(), CLEAR_MAX),
+        (72, vec![73, 74, 75], thighs.clone(), CLEAR_MAX),
+        // The hood off the back and the head: KH2's battle stance hunches him forward, which
+        // tips his back up under the hanging hood (the user: the hood clips through Sora in the
+        // battle idle).
+        (HOOD_ROOT, vec![80, 81, 82, 83, 84], vec![(71, 78), (78, 151)], 30.0),
+    ];
     for root in [248usize, 252, 256, 260, 264, 268, 272, 276] {
-        v.push((root, vec![root + 2, root + 3]));
+        v.push((root, vec![root + 2, root + 3], thighs.clone(), CLEAR_MAX));
     }
     v
 }
@@ -357,7 +375,6 @@ fn cloth_chains() -> Vec<(usize, Vec<usize>)> {
 const HOOD_ROOT: usize = 79;
 const HOOD_LEAN: f32 = 0.0;
 const HOOD_DROP: f32 = 0.45;
-const CHAIN_ROOT: usize = 10;
 /// Bones that hang as in KH1's rest pose (`set_rest`): the hood's cloth joints and the
 /// Keyblade's grip and chain. Everything else keeps the bind's relation (the belt chain hung
 /// out in a loop from the battle idle's swing: the user's "floating chain").
@@ -412,17 +429,10 @@ impl Retarget {
         if HOOD_ROOT < kh1.len() {
             hang[HOOD_ROOT] = Some((1, HOOD_LEAN, HOOD_DROP));
         }
-        // The belt chain (10-15, from the belt down the outside of the +x hip) hangs with the
-        // hips' turn but none of their lean, and none of the thigh's swing: it hung off the
-        // thigh last time and swung forward stiffly with every stride (the user: the chain is
-        // weirdly positioned; before that it went through the shorts).
-        if CHAIN_ROOT < kh1.len() {
-            hang[CHAIN_ROOT] = Some((0, 0.0, 0.0));
-        }
         let rest_open = vec![None; kh1.len()];
         let mut cloth = Vec::new();
-        for (root, joints) in cloth_chains() {
-            if joints.iter().chain([&root]).any(|&j| j >= kh1.len()) {
+        for (root, joints, keep_off, cap) in cloth_chains() {
+            if joints.iter().chain([&root]).chain(keep_off.iter().flat_map(|(a, b)| [a, b])).any(|&j| j >= kh1.len()) {
                 continue;
             }
             let bones: Vec<usize> = (0..kh1.len()).filter(|&i| {
@@ -440,18 +450,19 @@ impl Retarget {
             }).collect();
             let mut nodes = Vec::new();
             for &j in &joints {
-                for (a, b) in THIGHS {
+                for &(a, b) in &keep_off {
                     let (pa, pb, n) = (pos[a], pos[b], pos[j]);
                     let ab = pb - pa;
                     let t = ((n - pa).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
                     let d = (n - (pa + ab * t)).length();
-                    nodes.push((j, (a, b), d.min(CLEAR_MAX)));
+                    nodes.push((j, (a, b), d.min(cap)));
                 }
             }
             cloth.push(Cloth { root, bones, nodes });
         }
         let memory = std::sync::Mutex::new((vec![None; kh1.len()], vec![Quat::IDENTITY; cloth.len()]));
-        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory }
+        let bind_m = b1.clone();
+        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory, bind_m }
     }
 
     /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
@@ -547,8 +558,32 @@ impl Retarget {
             }
             out[i] = Mat4::from_scale_rotation_translation(self.scale[i], (turn[i] * self.rot[i]).normalize(), at[i]);
         }
+        self.attach(&mut out);
         self.keep_clear(&mut out);
         out
+    }
+
+    /// Bones carried rigidly by another as in the bind (`ATTACHED`).
+    fn attach(&self, out: &mut [Mat4]) {
+        for &(root, to) in ATTACHED.iter() {
+            if root >= out.len() || to >= out.len() {
+                continue;
+            }
+            let carry = out[to] * self.bind_m[to].inverse();
+            for j in 0..out.len() {
+                let mut p = Some(j);
+                for _ in 0..16 {
+                    match p {
+                        Some(q) if q == root => {
+                            out[j] = carry * self.bind_m[j];
+                            break;
+                        }
+                        Some(q) => p = self.parent[q],
+                        None => break,
+                    }
+                }
+            }
+        }
     }
 
     /// Cloth (the belt chain, the jacket's hem panels) never comes nearer a thigh than it was in
