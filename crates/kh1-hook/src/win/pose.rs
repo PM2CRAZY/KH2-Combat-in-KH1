@@ -215,6 +215,14 @@ const BLEND_GLIDE: f32 = 16.0 / 60.0;
 const COMBO_GAP: f32 = 1.2;
 
 static SORA: Mutex<Option<Sora>> = Mutex::new(None);
+/// Sora's animation instance, and where the pass last placed him (model origin, world).
+pub static SORA_INSTANCE: AtomicUsize = AtomicUsize::new(0);
+static SORA_AT: Mutex<Option<[f32; 3]>> = Mutex::new(None);
+
+/// Where the skeleton pass last placed Sora (his model origin in the world).
+pub fn sora_world() -> Option<[f32; 3]> {
+    *SORA_AT.lock().ok()?
+}
 static CLOCK: OnceLock<Instant> = OnceLock::new();
 
 /// KH1's hands this frame (as the game posed them) and as we drew them.
@@ -533,6 +541,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     }
     let s = g.as_mut().unwrap();
     s.calls += 1;
+    SORA_INSTANCE.store(instance, Ordering::Relaxed);
     if s.retarget.is_none() {
         if let Some(Ok(kh2)) = KH2.get() {
             if let Ok(b) = KH1_BONES.lock() {
@@ -593,6 +602,9 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         let chain = mat(world) * mat(local + 0x40) * mat(local + 0x80) * mat(local + 0xC0);
         let err = (chain.w_axis - mat(world + 0xC0).w_axis).length();
         log(&format!("check: bone 3 from the locals is {err:.3} units from the game's (should be ~0)"));
+    }
+    if let Ok(mut at) = SORA_AT.try_lock() {
+        *at = Some(to_world.w_axis.truncate().to_array());
     }
     let orig_hands = (!ours).then(|| HANDS.map(|(b, _)| mat(world + b * 0x40)));
     let slot = slot_of(instance);

@@ -377,3 +377,27 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   speed 8 / frame = 480 / s agrees), scaled by the hip ratio. Swings still slide with KH1's
   own lunge until KH2's controller moves him. Combo alternation no longer resets on the idle
   KH1 plays between swings (1.2 s gap).
+- Direction change (the user, 2026-10-13: "I want the EXACT KH2 combat, not just
+  animations"; sliding stayed because KH1 still moved him). KH2's controller
+  (`character-core`) will drive Sora: input, movement, physics,
+  jump / glide / dodge / guard, the combo system and hit timing; KH1 keeps its world,
+  collision, enemies, HP / MP, magic, items, summons, menus. The animation-follow mode
+  (`pose::follow`) stays as the fallback until then. Stage 6 log: placement from the pass's
+  matrix took; glide is slots 75 / 76 / 77; 117 unknown.
+- Ghidra findings for the takeover:
+  - Input: every controller type ends in `0x140112C70` `(device state, PADDATA out, config)`,
+    KH1's PS2-style pad record: `+0` buttons u16 in PS2 order (bit 0 Select ... 4-7 d-pad
+    Up / Right / Down / Left, 8-11 L2 R2 L1 R1, 12-15 Triangle Circle Cross Square; it clears
+    opposite d-pad pairs), `+2..+5` stick bytes (order to confirm), `+0x1F` status. XInput is
+    imported by ordinal (2 GetState at `0x140113B80`), DualShock / DualSense through HID
+    (`0x1401132A0`, `0x140111490`).
+  - Floor query `0x1401910E0` `(query)`: `{x, y, z, 1, 0, range, 0, 1}` in, nearest level
+    surface vertically within range at `+0x20` (point), `+0x30` face (short, -1 none)
+    (`0x140190B00` walks the cells' polygons); used by the ground-IK pass.
+  - Actor animation update `0x14029CF10` `(actor, dt)`: `+0x10` position (vec4, to confirm),
+    `+0xD0` world matrix, `+0x15C` animation instance handle, `+0x168` motion slot u16,
+    `+0x16C` motion time, `+0x1D4` motion table handle.
+- `kh1-hook` stage 7 (probe, `probe.rs`): finds Sora's actor through his instance, searches it
+  for his drawn position, puts hardware write watchpoints (debug registers on every other
+  thread, a vectored handler) on that field for 25 s and logs the writing code by address;
+  logs the pad record on change.

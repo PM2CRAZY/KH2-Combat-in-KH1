@@ -15,6 +15,14 @@ extern "system" {
     pub fn VirtualProtect(addr: *mut c_void, size: usize, prot: u32, old: *mut u32) -> i32;
     pub fn FlushInstructionCache(process: *mut c_void, addr: *const c_void, size: usize) -> i32;
     pub fn GetCurrentProcess() -> *mut c_void;
+    pub fn GetCurrentThreadId() -> u32;
+    pub fn OpenThread(access: u32, inherit: i32, id: u32) -> *mut c_void;
+    pub fn SuspendThread(thread: *mut c_void) -> u32;
+    pub fn ResumeThread(thread: *mut c_void) -> u32;
+    pub fn GetThreadContext(thread: *mut c_void, ctx: *mut c_void) -> i32;
+    pub fn SetThreadContext(thread: *mut c_void, ctx: *const c_void) -> i32;
+    pub fn CloseHandle(h: *mut c_void) -> i32;
+    pub fn AddVectoredExceptionHandler(first: u32, handler: unsafe extern "system" fn(*mut c_void) -> i32) -> *mut c_void;
 }
 
 #[link(name = "user32")]
