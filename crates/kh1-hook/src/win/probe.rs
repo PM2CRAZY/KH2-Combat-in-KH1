@@ -358,7 +358,10 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     let f: HitF = std::mem::transmute(ORIG_HIT.load(Ordering::Acquire));
     let owner = if attack > 0x10000 { pose::ptr(rd::<u32>(attack + 0x34)) } else { 0 };
     let r = f(attack, target);
-    if owner != 0 && owner == sora() && target > 0x10000 {
+    if owner != 0 && owner == sora() && r > 0x10000 {
+        super::combat::scale_record(r);
+    }
+    if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");
         if let Ok(mut t) = ATTACK_TEMPLATE.lock() {
             *t = Some(std::slice::from_raw_parts(attack as *const u8, 0xC0).to_vec());

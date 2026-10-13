@@ -118,6 +118,8 @@ pub struct Kh2 {
     pub rig: Arc<Rig>,
     /// KH2 Sora's controller data (moveset, movement and growth numbers, combo rows).
     pub character: character_core::Character,
+    /// KH2's attack rows (ATKP: power, reaction, re-hit interval, combo group).
+    pub battle: Arc<kh2_formats::battle::Battle>,
     roots: HashMap<u16, Vec<[f32; 3]>>,
     /// Walk and run (battle, field): ground speed in KH2 units per second, from the planted
     /// foot's travel against the hips.
@@ -309,7 +311,7 @@ pub fn load_kh2() {
                 }
             }
             log(&format!("KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32()));
-            Ok(Kh2 { rig, character: sora.character.clone(), roots, ground })
+            Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), roots, ground })
         })();
         if let Err(e) = &r {
             log(&format!("KH2 Sora did not load: {e}"));

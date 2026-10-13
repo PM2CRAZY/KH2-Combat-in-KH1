@@ -17,4 +17,5 @@ kh2-data.workspace = true
 kh2-rig.workspace = true
 kh2-formats.workspace = true
 character-core = { path = "../character-core" }
+combat-core.workspace = true
 glam = "0.29"

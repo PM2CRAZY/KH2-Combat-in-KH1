@@ -23,7 +23,7 @@
 //! come from the floor it reports. KH1 never sees Circle or Square meanwhile (`probe::pad`).
 //! The pose drawn is KH2's animation player's (`POSE`, read by `pose`).
 
-use super::{hook, log, pose};
+use super::{combat, hook, log, pose};
 use character_core::{Abilities, Button, Character, Env, Input, StateName};
 use glam::Mat4;
 use kh2_rig::RigAnim;
@@ -72,6 +72,7 @@ struct Driver {
     grounded: bool,
     last_state: Option<StateName>,
     logged: u32,
+    strikes: combat::Strikes,
 }
 
 static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
@@ -133,7 +134,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // hand them out later).
         character.abilities = Abilities { guard: true, aerial_recovery: true, combo_master: true, ..Abilities::max_growth() };
         log("KH2's controller ready for Sora");
-        Driver { character, anim: RigAnim::new(kh2.rig.clone()), held: (true, true), grounded: true, last_state: None, logged: 0 }
+        Driver { character, anim: RigAnim::new(kh2.rig.clone()), held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default() }
     });
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
@@ -149,10 +150,12 @@ unsafe fn takeover(actor: usize) -> bool {
     let stick = if tilt > 0.0 { (dir * tilt).to_array() } else { [0.0, 0.0] };
     let jump = buttons & CIRCLE != 0;
     let action = buttons & SQUARE != 0;
+    // KH1's Attack command (Cross with Attack chosen in the menu) is KH2's attack button.
+    let attack = combat::take_press();
     let input = Input {
         stick,
         jump: Button { pressed: jump && !d.held.0, held: jump },
-        attack: Button::default(),
+        attack: Button { pressed: attack, held: attack },
         action: Button { pressed: action && !d.held.1, held: action },
         lock: Button::default(),
     };
@@ -162,7 +165,8 @@ unsafe fn takeover(actor: usize) -> bool {
     let p = rd::<[f32; 3]>(actor + 0x10);
     let pos = [p[0], -p[1], p[2]];
     let above = rd::<f32>(actor + 0x3D4);
-    let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &[], ledges: &[] };
+    let targets = d.strikes.look(actor);
+    let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     let out = d.character.step(&input, &env);
 
     // KH2's displacement: the sideways part through KH1's mover (walls, slopes, steps up); the
@@ -207,6 +211,7 @@ unsafe fn takeover(actor: usize) -> bool {
     let q = rd::<[f32; 3]>(actor + 0x10);
     d.anim.field = matches!(slot, Some(0 | 2 | 5));
     d.anim.update(&out, &d.character, [q[0], -q[1], q[2]]);
+    d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));
     }

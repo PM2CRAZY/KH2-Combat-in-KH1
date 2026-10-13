@@ -2,6 +2,7 @@
 //! (`OnInit`, the installed route) or a `dinput8.dll` proxy (the launcher failed to start
 //! with that in the shared KH folder, so it is not used).
 
+mod combat;
 mod hook;
 mod pose;
 mod probe;
@@ -141,6 +142,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         pose::install();
         probe::install();
         takeover::install();
+        combat::install();
         pose::load_kh2();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
     }

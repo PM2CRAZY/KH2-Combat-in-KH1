@@ -2365,6 +2365,7 @@ name = "kh1-hook"
 version = "0.1.0"
 dependencies = [
  "character-core",
+ "combat-core",
  "glam",
  "kh1-data",
  "kh2-anim",

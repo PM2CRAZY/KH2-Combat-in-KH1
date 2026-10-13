@@ -458,3 +458,20 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   non-movement slots (stack return addresses), the attack-touched-actor hook dumps Sora's
   attack records / targets' stats and keeps the last as a template, the actors are listed
   every 4 s. Fixed before shipping: `0x14029D630`'s third argument is a float (XMM2).
+- `kh1-hook` stage 10 (combat parity, `win/combat.rs`), from the stage 9 log and Ghidra:
+  - The Attack command `0x1402A5380` (command type 1 in `0x142D54440`) runs a row of the
+    actor's attack table with `0x1402A4760` `(actor, row, dir)`; `0x1402A17F0` reads the row
+    (`0x142D5D4B0[object id] + row * 0x14`: motion request `+0`, attack data
+    `0x142D23740 + [+4]`, effect / sound bytes `+0xC..+0xE` → attack `+0xA8..+0xAA`, flag
+    `0x400000`) and makes the attack object with `0x1402B10E0` `(actor, hit bit from
+    0x1402B15D0, data)` (pool `0x142DB5110`, 0x40 × 0xC0; freed by `0x1402B13D0`).
+  - Per frame `0x1402B22D0` builds the body entries: hittable actors (`0x14028FEE0`), team
+    `(+0x374 >> 5) & 3`, parts at `[[+0x134] +0x18]` (0x14 bytes each, count byte `+6`,
+    disabled bits `+0x3A8`), shape by `0x1402B3CB0` (type, radius, half height, centre `+0x10`).
+    Contact `0x1402B1ED0` `(attack entry rcx, body entry rdx)` does the record, its push
+    direction, the hit effect and the Keyblade hit sound (`0x140293FD0`).
+  - While KH2 has Sora, a type-1 Attack command is swallowed and becomes KH2's attack press.
+    KH2's swept attack shapes and hit records test KH1's body parts;
+    each effective hit is landed by a fresh attack object from Sora's own row (ground / air ×
+    swing / finisher = KH1 motions 200 / 202 / 203 / 205), hit-once bit cleared during the
+    call, then freed. `probe::hit` scales the record's damage by the KH2 row's power.
