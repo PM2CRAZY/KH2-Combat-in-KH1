@@ -326,3 +326,27 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (backup originals if the Mods Manager made them); Insert cycles off / KH1 T-pose upright /
   KH2 idle / KH2 run, written into `+0x1B4` after the game's pass (the Keyblade still follows
   KH1's hand). Logs a check that `+0x1B8` chains to `+0x1B4`.
+- Waist fix (the user's screenshot of the in-game idle: the waist contorted). KH2's root,
+  pelvis, spine, first hip bone, ankles and arm bones carry another built-in orientation in
+  its motions than in its bind pose (the idle's pelvis 210° from rest, ankles ~115° off their
+  foot every frame), so copying their turns from rest spun KH1's belt, pouches and shorts.
+  `kh1_data::retarget` now measures every turn from KH2's joint positions: torso frames from
+  bones riding on each part, limb segments aimed joint to joint and rolled by the knee /
+  elbow direction (foot / knuckle line while nearly straight), fingers by segment.
+  `examples/roll_probe.rs` checks it (leg rolls within ~30° of the foot in the idle; the run's
+  kicked-back thigh 69° from the pelvis where the foot-rolled version gave 166°).
+- KH1 motions (`kh1_data::mset`, from the user's `xa_ex_0010.mset` and the skeleton pass
+  `0x140391E20` / channel evaluator `0x14038F9D0`): the `MMTN` table (118 slots for Sora),
+  per motion frames / fps / bones / channels / keys, keys `time<<8 | interpolation` (1/256
+  frames; hold, linear, Hermite with per-frame tangents). KH1 animates bodies through ~11 IK
+  helpers per motion (ground root, body centre, hips with their yaw, pelvis, chest, hands,
+  feet; records of scale / parent / rotation / translation) and per-bone flags pick the IK
+  chains and their target helpers, so plain channel playback leaves the legs straight. Slots
+  read from the helper paths: 0-1 standing, 2-4 walking (?), 5-7 running (looping), 8-10
+  jumping / in the air, 11 landing; to be confirmed in play. A motion's counts (frames,
+  channels, helper channels, helpers) name its slot (116 signatures for 118 slots; the shared
+  pairs 77/78 and 86/87 are not movement).
+- `kh1-hook` stage 4: the motion playing is at `instance + 8`; standing / walking / running /
+  in-air / landing slots get KH2's idle / walk / run / jump or fall / land (8-frame blends),
+  every other slot keeps KH1's animation. Insert cycles follow / off / T-pose / idle / run.
+  Slot changes are logged with speed and climb.
