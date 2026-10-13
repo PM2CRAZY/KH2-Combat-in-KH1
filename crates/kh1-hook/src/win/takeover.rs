@@ -60,8 +60,11 @@ const SWIM_RVA: usize = 0x2BF410;
 /// KH1 has him for one of its own moves (`grab`); KH2 starts over afterwards (`FRESH`).
 static HANDOFF: AtomicBool = AtomicBool::new(false);
 static FRESH: AtomicBool = AtomicBool::new(false);
-/// KH1's falling movement state (an air state that runs none of KH1's jump bookkeeping).
-const AIR_STATE: i32 = 5;
+static HANDOFF_FRAMES: AtomicU32 = AtomicU32::new(0);
+/// KH1's fall state (after a jump's rise, or off an edge): its collision is the air kind
+/// (`0x140297F20` sets flag 1, no snapping onto the floor), and the wall solver's only extra
+/// for it (`0x1402AD260`) clears its fall speed `+0x3C4` at a ceiling. No enter / exit handlers.
+const AIR_STATE: i32 = 3;
 
 pub const CIRCLE: u16 = 0x2000;
 pub const SQUARE: u16 = 0x8000;
@@ -138,6 +141,11 @@ fn release(why: &str) {
                 dr.logged += 1;
                 log(&format!("KH1 has Sora ({why})"));
             }
+            if dr.last_state.is_some() {
+                // When KH2 has him again, its controller starts over (standing): whatever KH1
+                // did meanwhile, KH2's jump or blow from before is over.
+                FRESH.store(true, Ordering::Relaxed);
+            }
             dr.last_state = None;
             dr.held = (true, true);
         }
@@ -174,7 +182,8 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH1 took him for one of its own air moves (`grab`): until it has him standing again.
     if HANDOFF.load(Ordering::Relaxed) {
         let state = rd::<i32>(actor + 0x70);
-        if matches!(state, 0 | 1) && matches!(pose::sora_slot(), Some(0..=7)) {
+        let frames = HANDOFF_FRAMES.fetch_add(1, Ordering::Relaxed);
+        if frames >= 10 && matches!(state, 0 | 1) && matches!(pose::sora_slot(), Some(0..=7)) {
             HANDOFF.store(false, Ordering::Relaxed);
             FRESH.store(true, Ordering::Relaxed);
             log(&format!("KH1's move ended (state {state}): KH2 again"));
@@ -190,7 +199,7 @@ unsafe fn takeover(actor: usize) -> bool {
         return false;
     }
     let slot = pose::sora_slot();
-    let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.character.airborne())).unwrap_or(false);
+    let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false);
     if !matches!(slot, Some(0..=7)) && !airborne {
         release(&format!("KH1's own action, slot {}, KH1 state {}", slot.map_or("?".into(), |s| s.to_string()), rd::<i32>(actor + 0x70)));
         return false;
@@ -267,21 +276,23 @@ unsafe fn takeover(actor: usize) -> bool {
     let up_before = -p[1];
     wr(actor + 0x490, rd::<[f32; 4]>(actor + 0x10));
     // What KH1's physics step adds to a move (`0x140298230`), as it would: a carrying
-    // platform's motion (`+0x200`, while `+0x160` bit 4) and the frame's push (`+0x120`,
+    // platform's motion (`+0x200`, while `+0x160 & 4`) and the frame's push (`+0x120`,
     // cleared once used), and the touched-objects mask (`+0x90`) cleared before the move.
     let settings = super::settings::get();
     let carry = if settings.carry { carried(actor, &mut d.logged) } else { [0.0; 3] };
-    wr(actor + 0x90, 0u64);
+    if settings.carry {
+        wr(actor + 0x90, 0u64);
+    }
     let mv: MoveFn = std::mem::transmute(base + MOVE_RVA);
-    // Rising: the rise goes through KH1's mover too, with KH1's falling state (5) for the move
-    // so that it collides as in the air (its collision query `0x140297F20` picks the air mode
-    // by the movement state; on the ground state it snaps him back onto the floor), which
-    // stops him at a ceiling (KH1's own jump: `0x1402AD260`).
+    // Rising: the rise goes through KH1's mover too, in KH1's fall state for the move so that
+    // it collides as in the air (its collision query `0x140297F20` takes that from the movement
+    // state; in the ground state it snaps him back onto the floor), which stops him at a
+    // ceiling (KH1's own jump: `0x1402AD260`).
     let rise3d = settings.ceilings && rising;
     if rise3d {
         let state = rd::<i32>(actor + 0x70);
         wr(actor + 0x70, AIR_STATE);
-        mv(actor, &[out.displacement[0] + carry[0], -out.displacement[1], out.displacement[2] + carry[2], 0.0], 0);
+        mv(actor, &[out.displacement[0] + carry[0], -out.displacement[1] + carry[1], out.displacement[2] + carry[2], 0.0], 0);
         wr(actor + 0x70, state);
     } else {
         mv(actor, &[out.displacement[0] + carry[0], 0.0, out.displacement[2] + carry[2], 0.0], 0);
@@ -297,9 +308,9 @@ unsafe fn takeover(actor: usize) -> bool {
         if rise3d {
             // KH2's ceiling rule: less than 49% of the rise happened.
             let got = -rd::<f32>(actor + 0x14);
+            y = got;
             if out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
                 d.character.hit_ceiling();
-                y = got.max(up_before);
                 static BONKS: AtomicU32 = AtomicU32::new(0);
                 if BONKS.fetch_add(1, Ordering::Relaxed) < 40 {
                     log(&format!("ceiling: rose {:.1} of {:.1} at height {:.1} (collision flags {:08x})", got - up_before, out.displacement[1], up_before - floor_up, rd::<u32>(actor + 0x2D0)));
@@ -334,7 +345,18 @@ unsafe fn takeover(actor: usize) -> bool {
     // vines and climbable walls (state 10), ledges (13), bars (`0x1402C7E00`), objects to
     // hang from, and water to swim in (17). Tried while KH2 has him falling, the stick held.
     if settings.grabs && d.character.airborne() && out.displacement[1] <= 0.0 && tilt > 0.0 && matches!(out.state, StateName::Air | StateName::Jump) {
-        if let Some(what) = grab(base, actor, [dir.x, 0.0, dir.y, tilt]) {
+        // KH1 tries them in its jump / fall states, whose collision (`0x140297F20`: flag 1)
+        // finds the contacts they read; ours ran in its ground state. So: KH1's fall state (3,
+        // which has these checks too) and a standing-still move there to refresh the contacts.
+        let state = rd::<i32>(actor + 0x70);
+        wr(actor + 0x70, AIR_STATE);
+        mv(actor, &[0.0; 4], 0);
+        let took = grab(base, actor, [dir.x, 0.0, dir.y, tilt]);
+        if took.is_none() {
+            wr(actor + 0x70, state);
+        }
+        if let Some(what) = took {
+            HANDOFF_FRAMES.store(0, Ordering::Relaxed);
             HANDOFF.store(true, Ordering::Relaxed);
             log(&format!("KH1 takes him: {what} (KH1 state {}, slot {:?})", rd::<i32>(actor + 0x70), pose::sora_slot()));
         }
@@ -428,7 +450,7 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
 
 /// While KH2 has Sora: his controller and its last frame (for `hurt`).
 pub fn with_kh2<R>(f: impl FnOnce(&mut Character, &Output) -> R) -> Option<R> {
-    if !ON.load(Ordering::Relaxed) || !active() {
+    if !ON.load(Ordering::Relaxed) || !active() || HANDOFF.load(Ordering::Relaxed) {
         return None;
     }
     let mut g = DRIVER.try_lock().ok()?;

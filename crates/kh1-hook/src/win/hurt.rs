@@ -26,6 +26,7 @@
 
 use super::{combat, hook, log, pose, takeover};
 use character_core::reaction::Hit;
+use character_core::StateName;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 const HURT_RVA: usize = 0x299A40;
@@ -64,8 +65,9 @@ enum Fate {
     Taken(u32),
 }
 
-unsafe extern "system" fn hurt(actor: usize) {
-    let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG.load(Ordering::Acquire));
+unsafe extern "system" fn hurt(actor: usize) -> usize {
+    // (KH1's pass returns nothing; whatever it leaves in rax is passed back all the same.)
+    let f: unsafe extern "system" fn(usize) -> usize = std::mem::transmute(ORIG.load(Ordering::Acquire));
     let base = BASE.load(Ordering::Relaxed);
     if actor < 0x10000 || actor != rd::<u64>(base + PARTY_RVA) as usize || !super::settings::get().hurt {
         return f(actor);
@@ -83,6 +85,7 @@ unsafe extern "system" fn hurt(actor: usize) {
     let kind_of: unsafe extern "system" fn(usize, usize) -> u32 = std::mem::transmute(base + KIND_RVA);
     let me = rd::<[f32; 3]>(actor + 0x10);
     let fates = takeover::with_kh2(|ch, out| {
+        let reacting = out.state;
         let fwd = glam::Vec2::new(out.facing.sin(), out.facing.cos());
         let mut fates = Vec::new();
         for &r in &ready {
@@ -106,17 +109,21 @@ unsafe extern "system" fn hurt(actor: usize) {
                 ch.clash(1, 1, toward.to_array());
                 Fate::Guarded
             } else if matches!(kind, 6 | 7) {
-                // An attack clash (KH1's recoil): KH2's own.
-                ch.clash(1, 1, toward.to_array());
+                // An attack clash (KH1's recoil): KH2's recoil (not its guard repel).
+                ch.clash(0, 0, toward.to_array());
                 Fate::Guarded
-            } else {
+            } else if matches!(kind, 3..=5) {
                 Fate::Taken(kind)
+            } else {
+                // Kinds KH2 has no reaction for (none, or KH1's special ones): KH1's, as is.
+                fates.push(None);
+                continue;
             };
             fates.push(Some((fate, toward)));
         }
-        fates
+        (fates, reacting)
     });
-    let Some(fates) = fates else { return f(actor) };
+    let Some((fates, reacting)) = fates else { return f(actor) };
     // KH2's reaction for the strongest taken hit (after KH1's damage, unless he went down).
     let mut react: Option<(u32, glam::Vec2)> = None;
     for (&r, fate) in ready.iter().zip(&fates) {
@@ -137,13 +144,19 @@ unsafe extern "system" fn hurt(actor: usize) {
             }
         }
     }
-    f(actor);
+    let r = f(actor);
     let stats = pose::ptr(rd::<u32>(actor + 0x6C));
     let down = stats > 0x10000 && (rd::<u8>(stats) & 4 != 0 || rd::<i32>(stats + 0x3C) < 1);
-    let Some((kind, toward)) = react else { return };
+    let Some((kind, toward)) = react else { return r };
     if down {
         note(format!("Sora is down (HP {})", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
-        return;
+        return r;
+    }
+    // Already reeling: the damage counts, but a flinch doesn't restart KH2's reaction (nor
+    // anything restart a blow), so a crowd can't lock him in place.
+    if matches!(reacting, StateName::Blown) || (matches!(reacting, StateName::Hurt) && kind < 5) {
+        note(format!("KH2 reaction skipped (already {reacting:?}), HP {}", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
+        return r;
     }
     let blow = kind == 5;
     // KH1's voice and rumble: 3 a flinch's, 4 / 5 a knock-back's.
@@ -161,6 +174,7 @@ unsafe extern "system" fn hurt(actor: usize) {
     wr(base + COMMAND_RVA + 8, 0u32);
     voice(actor, if big { 1 } else { 0 }, 0);
     note(format!("KH2 reaction: {} toward {:.2?}, HP {}", if blow { "blow" } else { "flinch" }, dir, if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
+    r
 }
 
 pub unsafe fn install() {

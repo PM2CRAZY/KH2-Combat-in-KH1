@@ -671,3 +671,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   While KH2 has him falling (Air / Jump, stick held) they are tried in the same order (ini
   `grabs`); one that takes him sets `HANDOFF`: KH1 keeps him until its state is 0 / 1 and its
   motion slot a movement one again, then KH2's controller starts over standing (`FRESH`).
+- `kh1-hook` stage 32 (review fixes for 28–31): KH1's fall state 3 (not 5) for KH2's rises
+  and the grab checks: its collision has flag 1 (no floor snap) and mode 4 like KH1's own jump,
+  its input step has the grab checks, its wall-solver extra only clears `+0x3C4`. Grabs refresh
+  KH1's contacts with a standing-still move in that state first and keep the state only if a
+  check took him. `HANDOFF` lasts at least 10 frames. Any release marks `FRESH` (KH2 restarts
+  standing when it has him again), and the in-air exception uses `airborne` only while KH2
+  has him. `hurt`: KH2 reacts only to kinds 3–5 (others stay KH1's), never restarts a blow nor
+  a flinch with a flinch, plays KH2's recoil (not its guard) for attack clashes 6 / 7, and
+  passes the pass's rax back. Rises take KH1's mover's height (`y = got`).
