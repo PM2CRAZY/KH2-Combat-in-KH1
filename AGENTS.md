@@ -350,3 +350,17 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   in-air / landing slots get KH2's idle / walk / run / jump or fall / land (8-frame blends),
   every other slot keeps KH1's animation. Insert cycles follow / off / T-pose / idle / run.
   Slot changes are logged with speed and climb.
+- Stage 5 (the user: a split-second vanish going idle → walk/run; requests: jump, glide and
+  attack animations, Keyblade and no-Keyblade versions in their situations). Play log
+  (2026-10-13): slots 0 / 2 / 5 field idle / walk / run, 1 / 3 / 6 the battle ones (the field
+  ones follow attacks back to the field); jump 12 → 13 → 10 → 11; glide 102 / 103 / 104;
+  ground combo 98 → 99 → 98 → 101. `pose::play_for` maps them: field slots take KH2's field
+  variants (no Keyblade; KH2 has them for idle / walk / run), jump / fall / land, glide / glide
+  end, and swings 151 / 152 alternating with finisher 154 (KH2's no-target ground rows),
+  each stretched to the KH1 swing's length and with KH2's lunge taken out (KH1 moves him).
+  The vanish: some passes leave `+0x1B4[0]` as we wrote it, and model → world read from it
+  compounded our own pose (the log's speeds of 10^4-10^5 units/s too); the last placement
+  is kept when the root reads back as ours. The Keyblade: a small model (≤ 40 bones) whose
+  world matrix holds a fixed relation to KH1's hand over 20 frames while the hand moves is
+  taken as held and re-placed from the hand drawn (logged; lets go if the relation breaks).
+  `examples/kh1_motions.rs` / `kh2_rows.rs` list both games' motions (scratch research).

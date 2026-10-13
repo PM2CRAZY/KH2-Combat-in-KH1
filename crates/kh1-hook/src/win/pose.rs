@@ -1,38 +1,42 @@
-//! Stage 3: KH2 Sora's motions drawn on KH1 Sora, following what KH1 has him do.
+//! KH2 Sora's motions drawn on KH1 Sora, following what KH1 has him do.
 //!
 //! KH1 poses a character in `0x140391E20` (`(world matrix, instance, time f32, motion)`:
 //! samples the motion, then builds the bone matrices in `0x140390260`) or, for characters with
 //! ground IK, `0x140392710` (`(world matrix, instance, flags)`). The instance (`*u64`):
 //! - `+0` points at a slot that points at the model header: `bone_count u16`, then a handle
 //!   to the 0x30-byte bone table (`kh1_data::mdls`).
+//! - `+8`: the motion playing (stored by the skeleton pass).
 //! - `+0x1B0`: per bone (0x40 bytes) the sampled channels: scale `+0`, accumulated scale
 //!   `+0x10`, Euler rotation `+0x20`, translation `+0x30`. Kept between frames (only animated
 //!   channels are rewritten), so never written by us.
 //! - `+0x1B4`: per bone, the world matrix the game draws (D3D row-vector layout, i.e. glam's
-//!   column-major memory; the world is y-down). The user's test (stage 2): writing a pose here
-//!   moves Sora's mesh.
+//!   column-major memory; the world is y-down).
 //! - `+0x1B8`: per bone, its matrix relative to its parent (bone 0: the root's own, which the
 //!   motion drives: hips height and a yaw, not the bind's rotation).
 //! Handles are the game's 32-bit addresses: `table[(h & 0x7FFFFFFF) >> 25] | (h & 0x1FFFFFF)`,
 //! the table at `exe + 0x2EE4730` (`0x14038B230`).
 //!
-//! The motion playing is at `instance + 8` (stored by the skeleton pass); its counts name the
-//! slot of KH1 Sora's motion table (`kh1_data::mset`), and standing, walking, running and
-//! jumping slots get KH2's motion for the same thing (`follow`); every other slot (attacks,
-//! magic, reactions, cutscenes) keeps KH1's own animation for now.
+//! The motion's counts name its slot in KH1 Sora's motion table (`kh1_data::mset`); `play_for`
+//! gives KH2's motion for the same thing (slots read from the user's play log: field and
+//! battle idle / walk / run, jump, fall, land, glide, the ground combo); every other slot
+//! (magic, reactions, cutscenes...) keeps KH1's own animation for now.
 //!
 //! Model space → world is taken from the game each frame: the root's world matrix times the
-//! inverse of its own matrix (`+0x1B4[0] * +0x1B8[0]⁻¹`). Our model-space pose (KH1's bind for
-//! the T-pose test, or a KH2 motion through `kh1_data::retarget`) then goes into `+0x1B4`.
-//! Written after the game's pass, so the Keyblade (attached inside the pass) still follows
-//! KH1's hand for now.
+//! inverse of its own matrix (`+0x1B4[0] * +0x1B8[0]⁻¹`). When a pass leaves `+0x1B4[0]` as we
+//! wrote it (some frames when KH1 changes motions), that would read our own pose back and
+//! throw him off (the user: a split-second vanish going from idle to walk), so the last model
+//! → world is kept then. Our model-space pose goes into `+0x1B4` after the game's pass.
+//!
+//! The Keyblade is its own small model, placed from his hand. A small model whose world matrix
+//! keeps a fixed relation to KH1's hand while the hand moves is taken as held, and from then
+//! on is placed by the same relation to the hand we draw (`held`).
 
 use super::{hook, log, sys};
-use glam::Mat4;
+use glam::{Mat4, Quat, Vec3};
 use kh1_data::retarget::Retarget;
 use kh2_data::sora::Rig;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
@@ -42,9 +46,10 @@ const POSE_IK_RVA: usize = 0x392710;
 const HANDLE_TABLE_RVA: usize = 0x2EE4730;
 const POSE_PROLOGUE: [u8; 7] = [0x4C, 0x8B, 0xDC, 0x53, 0x56, 0x41, 0x54];
 const POSE_IK_PROLOGUE: [u8; 9] = [0x4C, 0x8B, 0xDC, 0x55, 0x53, 0x41, 0x54, 0x41, 0x57];
-const CHANNELS: usize = 0x1B0;
 const WORLD: usize = 0x1B4;
 const LOCAL: usize = 0x1B8;
+/// KH1 Sora's hands (the −x side is his right, which holds the Keyblade).
+const HANDS: [(usize, &str); 2] = [(101, "right"), (206, "left")];
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_POSE: AtomicUsize = AtomicUsize::new(0);
@@ -52,7 +57,7 @@ static ORIG_POSE_IK: AtomicUsize = AtomicUsize::new(0);
 
 /// What Insert cycles through (starts on the first).
 pub const MODES: [&str; 5] = [
-    "KH2 animations follow Sora (standing, walking, running, jumping)",
+    "KH2 animations follow Sora (movement, jump, glide, ground combo)",
     "off (KH1's own animation)",
     "KH1 bind pose (T-pose), upright",
     "KH2 idle (battle stance)",
@@ -60,25 +65,39 @@ pub const MODES: [&str; 5] = [
 ];
 pub static MODE: AtomicU32 = AtomicU32::new(0);
 
-/// KH1 Sora's motion slots (`xa_ex_0010.mset` table order) by what they look like, from
-/// their IK targets (`kh1_data::mset`; hips height, foot lifts, looping): to be confirmed in
-/// play (every slot change is logged with his speed).
+/// How a KH1 slot is shown with KH2's motions.
 #[derive(Clone, Copy, PartialEq, Debug)]
-enum Kind {
-    Stand,
-    Walk,
-    Run,
-    Air,
-    Land,
+enum Play {
+    /// A KH2 motion; `field` takes its out-of-combat variant (no Keyblade) when there is one;
+    /// slots sharing a `group` continue the same clip instead of restarting it.
+    Motion { motion: u16, field: bool, looping: bool, group: u8 },
+    /// A ground combo swing (KH2's 151 / 152 alternate, as its combo rows do with no target),
+    /// or the finisher (154), stretched to the KH1 swing's length so hits stay in time.
+    Swing { finisher: bool },
 }
 
-fn kind_of(slot: usize) -> Option<Kind> {
+/// KH1 Sora's slots, from the user's play log (2026-10-13): 0 / 2 / 5 field idle, walk, run;
+/// 1 / 3 / 6 the battle ones; 12 → 13 → 10 → 11 jump, rise, fall, land; 102 / 103 / 104 glide;
+/// 98 → 99 → 98 → 101 the ground combo (100 assumed a third swing). 4 / 7 are unseen and taken
+/// as battle walk / run.
+fn play_for(slot: usize) -> Option<Play> {
+    use character_core::motion as m;
+    let mo = |motion: u16, field: bool, looping: bool, group: u8| Play::Motion { motion, field, looping, group };
     Some(match slot {
-        0 | 1 => Kind::Stand,
-        2..=4 => Kind::Walk,
-        5..=7 => Kind::Run,
-        8..=10 => Kind::Air,
-        11 => Kind::Land,
+        0 => mo(m::IDLE, true, true, 0),
+        1 => mo(m::IDLE, false, true, 0),
+        2 => mo(m::WALK, true, true, 0),
+        3 | 4 => mo(m::WALK, false, true, 0),
+        5 => mo(m::RUN, true, true, 0),
+        6 | 7 => mo(m::RUN, false, true, 0),
+        12 | 13 => mo(m::JUMP, false, false, 1),
+        8 | 9 => mo(m::JUMP, false, false, 1),
+        10 => mo(m::FALL, false, true, 0),
+        11 => mo(m::LAND, false, false, 0),
+        102 | 103 => mo(m::GLIDE, false, true, 2),
+        104 => mo(m::GLIDE_END, false, false, 0),
+        98..=100 => Play::Swing { finisher: false },
+        101 => Play::Swing { finisher: true },
         _ => return None,
     })
 }
@@ -86,11 +105,16 @@ fn kind_of(slot: usize) -> Option<Kind> {
 /// A KH1 motion's counts, which tell Sora's motions apart (two pairs of unrelated slots
 /// share theirs): frames, channels, helper channels, helpers.
 type Signature = (u32, u32, u32, u32);
-static SLOTS: OnceLock<HashMap<Signature, usize>> = OnceLock::new();
+/// Slot by signature, and each slot's length in frames.
+static SLOTS: OnceLock<(HashMap<Signature, usize>, Vec<u32>)> = OnceLock::new();
 
-/// KH2 Sora's skeleton and motions, from the KH2 install in the same folder (loaded on a
-/// thread at start).
-static KH2: OnceLock<Result<Arc<Rig>, String>> = OnceLock::new();
+/// KH2 Sora: skeleton and motions, and each action clip's root travel per frame (KH1 moves
+/// him itself, so a swing's lunge is taken out of the pose).
+struct Kh2 {
+    rig: Arc<Rig>,
+    roots: HashMap<u16, Vec<[f32; 3]>>,
+}
+static KH2: OnceLock<Result<Kh2, String>> = OnceLock::new();
 
 struct Sora {
     instance: usize,
@@ -99,31 +123,65 @@ struct Sora {
     calls: u64,
     checked: bool,
     follow: Follow,
+    /// The last model → world, and the root matrix we wrote with it.
+    to_world: Option<Mat4>,
+    wrote_root: Option<[f32; 16]>,
 }
 
 /// Which KH2 motion follows KH1's, and how far into it.
 #[derive(Default)]
 struct Follow {
     slot: Option<usize>,
-    kind: Option<Kind>,
+    play: Option<Play>,
     motion: u16,
+    field: bool,
     since: Option<Instant>,
+    /// Clip frames per real second (60, or stretched for swings).
+    rate: f32,
+    /// Ground combo swings in a row, and when the last one started.
+    swings: u32,
+    last_swing: Option<Instant>,
     /// Last KH2 pose (model space), and the pose blended from on a change.
     last: Vec<Mat4>,
-    from: Vec<(glam::Vec3, glam::Quat, glam::Vec3)>,
+    from: Vec<(Vec3, Quat, Vec3)>,
     blend_start: Option<Instant>,
+    blend_secs: f32,
     /// Movement measured from the model origin (world units per second), smoothed.
-    at: Option<(glam::Vec3, Instant)>,
+    at: Option<(Vec3, Instant)>,
     speed: f32,
     climb: f32,
     logged: u32,
 }
 
-/// Blend into a new KH2 motion over 8 frames, as KH2 does between movement motions.
-const BLEND_SECS: f32 = 8.0 / 60.0;
+/// KH2's blends: 8 frames between movement motions, 16 into a glide, none into a swing.
+const BLEND_MOVE: f32 = 8.0 / 60.0;
+const BLEND_GLIDE: f32 = 16.0 / 60.0;
+/// Swings more than this apart start a new combo.
+const COMBO_GAP: f32 = 1.2;
 
 static SORA: Mutex<Option<Sora>> = Mutex::new(None);
 static CLOCK: OnceLock<Instant> = OnceLock::new();
+
+/// KH1's hands this frame (as the game posed them) and as we drew them.
+#[derive(Clone, Copy)]
+struct Hands {
+    orig: [Mat4; 2],
+    drawn: [Mat4; 2],
+    at: Instant,
+}
+static HANDS_NOW: Mutex<Option<Hands>> = Mutex::new(None);
+
+/// Small models seen near Sora: whether each is held, by which hand, with what relation.
+#[derive(Default)]
+struct Watch {
+    rel: Option<(usize, Mat4)>,
+    steady: u32,
+    hand_moved: f32,
+    last_hand: Option<Vec3>,
+    held: Option<usize>,
+    logged: bool,
+}
+static WATCH: Mutex<Option<HashMap<usize, Watch>>> = Mutex::new(None);
 
 /// A game handle to a pointer.
 pub fn ptr(h: u32) -> usize {
@@ -149,36 +207,39 @@ fn affine(m: &Mat4) -> bool {
 }
 
 /// Loads KH2 Sora from `KINGDOM HEARTS II FINAL MIX.exe`'s install (the originals the Mods
-/// Manager backed up, if any, so a randomizer's edits don't leak in).
+/// Manager backed up, if any, so a randomizer's edits don't leak in), and KH1 Sora's motion
+/// table as the game loads it.
 pub fn load_kh2() {
     std::thread::spawn(|| {
         let t = Instant::now();
-        let r = (|| -> Result<Arc<Rig>, String> {
+        let r = (|| -> Result<Kh2, String> {
             let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
             let install = kh2_data::Install::locate(&exe).map_err(|e| format!("KH2 install: {e}"))?;
             let source = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
             let sora = install.load_sora(source).map_err(|e| format!("KH2 Sora: {e}"))?;
-            let rig = sora.rig.ok_or_else(|| sora.rig_error.unwrap_or_else(|| "no rig".into()))?;
-            log(&format!("KH2 Sora loaded ({source:?} files): {} bones, {} motions, in {:.1}s", rig.skeleton.len(), rig.motions.len(), t.elapsed().as_secs_f32()));
-            Ok(rig)
+            let rig = sora.rig.clone().ok_or_else(|| sora.rig_error.clone().unwrap_or_else(|| "no rig".into()))?;
+            let roots = sora.character.moveset.clips.iter().map(|(m, c)| (*m, c.root.clone())).collect();
+            log(&format!("KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32()));
+            Ok(Kh2 { rig, roots })
         })();
         if let Err(e) = &r {
             log(&format!("KH2 Sora did not load: {e}"));
         }
         let _ = KH2.set(r);
-        // KH1 Sora's own motion table, as the game loads it (to name the slot playing).
-        let slots = (|| -> Result<HashMap<Signature, usize>, String> {
+        let slots = (|| -> Result<(HashMap<Signature, usize>, Vec<u32>), String> {
             let install = kh1_data::Kh1Install::locate(super::exe_dir()).map_err(|e| e.to_string())?;
             let bytes = install.read(kh1_data::Source::Live, "xa_ex_0010.mset").map_err(|e| e.to_string())?;
             let motions = kh1_data::mset::parse(&bytes).map_err(|e| e.to_string())?;
             let mut map = HashMap::new();
+            let mut lengths = Vec::new();
             for (i, m) in motions.iter().enumerate() {
+                lengths.push(m.as_ref().map_or(0, |m| m.frames));
                 if let Some(m) = m {
                     map.entry((m.frames, m.channels.len() as u32, m.helper_channels, m.helpers)).or_insert(i);
                 }
             }
             log(&format!("KH1 Sora's motion table: {} slots", motions.len()));
-            Ok(map)
+            Ok((map, lengths))
         })();
         match slots {
             Ok(m) => {
@@ -206,19 +267,19 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
         0 => follow(s, slot, to_world),
         2 => Some(s.bind.clone()),
         3 | 4 => {
-            let rig = KH2.get()?.as_ref().ok()?;
+            let kh2 = KH2.get()?.as_ref().ok()?;
             let r = s.retarget.as_ref()?;
-            let m = rig.motions.get(&(if mode == 3 { character_core::motion::IDLE } else { character_core::motion::RUN }))?;
+            let m = kh2.rig.motions.get(&(if mode == 3 { character_core::motion::IDLE } else { character_core::motion::RUN }))?;
             let frames = CLOCK.get_or_init(Instant::now).elapsed().as_secs_f32() * 60.0;
             let t = kh2_anim::key_time(m, frames, true);
-            let kh2 = kh2_anim::evaluate(&rig.skeleton, m, t, kh2_anim::Options::default()).bones;
-            Some(r.pose(&kh2))
+            let pose = kh2_anim::evaluate(&kh2.rig.skeleton, m, t, kh2_anim::Options::default()).bones;
+            Some(r.pose(&pose))
         }
         _ => None,
     }
 }
 
-fn decompose(v: &[Mat4]) -> Vec<(glam::Vec3, glam::Quat, glam::Vec3)> {
+fn decompose(v: &[Mat4]) -> Vec<(Vec3, Quat, Vec3)> {
     v.iter().map(|m| m.to_scale_rotation_translation()).collect()
 }
 
@@ -232,99 +293,140 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
     let up = to_world.y_axis.truncate().normalize_or_zero();
     if let Some((p, t)) = f.at {
         let dt = now.duration_since(t).as_secs_f32();
-        if dt > 1e-3 && dt < 0.25 {
+        if dt > 4e-3 && dt < 0.25 {
             let d = pos - p;
             let climb = d.dot(up) / dt;
             let speed = (d - up * d.dot(up)).length() / dt;
             f.speed += (speed - f.speed) * 0.2;
             f.climb += (climb - f.climb) * 0.3;
+            f.at = Some((pos, now));
+        } else if dt >= 0.25 {
+            f.at = Some((pos, now));
         }
+    } else {
+        f.at = Some((pos, now));
     }
-    f.at = Some((pos, now));
-    let kind = slot.and_then(kind_of);
-    if slot != f.slot {
-        if f.logged < 600 {
+    let play = slot.and_then(play_for);
+    let new_slot = slot != f.slot;
+    if new_slot {
+        if f.logged < 800 {
             f.logged += 1;
-            log(&format!("KH1 slot {} ({}) at speed {:.0}/s, climb {:.0}/s", slot.map_or("?".into(), |n| n.to_string()), kind.map_or("KH1's own animation".into(), |k| format!("{k:?}")), f.speed, f.climb));
+            log(&format!(
+                "KH1 slot {} ({}) at speed {:.0}/s, climb {:.0}/s",
+                slot.map_or("?".into(), |n| n.to_string()),
+                play.map_or("KH1's own animation".into(), |p| format!("{p:?}")),
+                f.speed,
+                f.climb
+            ));
         }
         f.slot = slot;
     }
-    let Some(kind) = kind else {
-        f.kind = None;
+    let Some(play) = play else {
+        f.play = None;
         return None;
     };
-    let rig = KH2.get()?.as_ref().ok()?.clone();
+    let kh2 = KH2.get()?.as_ref().ok()?;
     let r = s.retarget.as_ref()?;
     let f = &mut s.follow;
-    let motion = match kind {
-        Kind::Stand => m2::IDLE,
-        Kind::Walk => m2::WALK,
-        Kind::Run => m2::RUN,
-        // Rising plays the jump, then the fall loop.
-        Kind::Air => {
-            if f.climb > 20.0 && f.motion != m2::FALL {
-                m2::JUMP
-            } else {
-                m2::FALL
-            }
+    let (motion, field, looping, restart, rate, blend) = match play {
+        Play::Motion { motion, field, looping, group } => {
+            let same_group = matches!(f.play, Some(Play::Motion { group: g, .. }) if g == group && group != 0);
+            let restart = f.motion != motion || f.field != field || (new_slot && !same_group && !looping);
+            let blend = if motion == m2::GLIDE { BLEND_GLIDE } else { BLEND_MOVE };
+            (motion, field, looping, restart, 60.0, blend)
         }
-        Kind::Land => m2::LAND,
+        Play::Swing { finisher } => {
+            if new_slot {
+                let fresh = f.last_swing.map_or(true, |t| now.duration_since(t).as_secs_f32() > COMBO_GAP) || !matches!(f.play, Some(Play::Swing { .. }));
+                f.swings = if fresh { 0 } else { f.swings + 1 };
+                f.last_swing = Some(now);
+            } else {
+                f.last_swing = Some(now);
+            }
+            let motion = if finisher { 154 } else if f.swings % 2 == 0 { 151 } else { 152 };
+            // Stretch KH2's swing over KH1's, so the blade comes round when KH1's hit lands.
+            let kh1_len = slot.and_then(|n| SLOTS.get()?.1.get(n).copied()).unwrap_or(0) as f32;
+            let kh2_len = kh2.rig.motions.get(&motion).map_or(0.0, |m| kh2_anim::length_frames(m));
+            let rate = if kh1_len > 1.0 && kh2_len > 1.0 { 60.0 * kh2_len / kh1_len } else { 60.0 };
+            (motion, false, false, new_slot, rate, 0.0)
+        }
     };
-    if f.kind != Some(kind) || f.motion != motion {
-        if !f.last.is_empty() {
+    if restart {
+        if !f.last.is_empty() && blend > 0.0 {
             f.from = decompose(&f.last);
             f.blend_start = Some(now);
+            f.blend_secs = blend;
+        } else {
+            f.blend_start = None;
         }
-        f.kind = Some(kind);
         f.motion = motion;
+        f.field = field;
         f.since = Some(now);
+        f.rate = rate;
     }
-    let clip = rig.motions.get(&motion).or_else(|| rig.motions.get(&m2::IDLE))?;
-    let looping = matches!(motion, m2::IDLE | m2::WALK | m2::RUN | m2::FALL);
-    let frames = f.since.map_or(0.0, |t| now.duration_since(t).as_secs_f32() * 60.0);
+    f.play = Some(play);
+    let clip = field
+        .then(|| kh2.rig.field_motions.get(&motion))
+        .flatten()
+        .or_else(|| kh2.rig.motions.get(&motion))
+        .or_else(|| kh2.rig.motions.get(&m2::IDLE))?;
+    let frames = f.since.map_or(0.0, |t| now.duration_since(t).as_secs_f32() * f.rate);
     let t = kh2_anim::key_time(clip, frames, looping);
-    let mut kh2 = kh2_anim::evaluate(&rig.skeleton, clip, t, kh2_anim::Options::default()).bones;
+    let mut pose = kh2_anim::evaluate(&kh2.rig.skeleton, clip, t, kh2_anim::Options::default()).bones;
+    // A swing's lunge: KH1 moves him, so take KH2's root travel out of the pose.
+    if matches!(play, Play::Swing { .. }) {
+        if let Some(root) = kh2.roots.get(&motion).and_then(|r| r.get((frames as usize).min(r.len().saturating_sub(1)))) {
+            let un = Mat4::from_translation(-Vec3::from(*root));
+            for m in pose.iter_mut() {
+                *m = un * *m;
+            }
+        }
+    }
     if let Some(b) = f.blend_start {
-        let w = now.duration_since(b).as_secs_f32() / BLEND_SECS;
-        if w >= 1.0 || f.from.len() != kh2.len() {
+        let w = now.duration_since(b).as_secs_f32() / f.blend_secs.max(1e-3);
+        if w >= 1.0 || f.from.len() != pose.len() {
             f.blend_start = None;
         } else {
-            for (m, (fs, fr, ft)) in kh2.iter_mut().zip(&f.from) {
+            for (m, (fs, fr, ft)) in pose.iter_mut().zip(&f.from) {
                 let (ss, sr, st) = m.to_scale_rotation_translation();
                 *m = Mat4::from_scale_rotation_translation(fs.lerp(ss, w), fr.slerp(sr, w), ft.lerp(st, w));
             }
         }
     }
-    f.last = kh2.clone();
-    Some(r.pose(&kh2))
+    f.last = pose.clone();
+    Some(r.pose(&pose))
 }
 
-/// The slot of the KH1 motion the instance plays (`instance + 8`, set by the skeleton pass).
+/// The slot of the KH1 motion the instance plays.
 unsafe fn slot_of(instance: usize) -> Option<usize> {
     let m = rd::<u64>(instance + 8) as usize;
     if m < 0x10000 {
         return None;
     }
     let sig = (rd::<u32>(m + 4), rd::<u32>(m + 0x18), rd::<u32>(m + 0x20), rd::<u32>(m + 0x2C));
-    SLOTS.get()?.get(&sig).copied()
+    SLOTS.get()?.0.get(&sig).copied()
 }
 
-unsafe fn check(instance: usize, via_ik: bool) {
-    // `*instance` points at the model's slot, which points at the model header (bone count
-    // u16, then the bone-table handle): `0x140390260` reads `**(short **)*instance`.
+/// The model's bone count (`**instance`), if it reads.
+unsafe fn bone_count(instance: usize) -> Option<u32> {
     let slot = rd::<u64>(instance) as usize;
     if slot < 0x10000 {
-        return;
+        return None;
     }
     let header = rd::<u64>(slot) as usize;
     if header < 0x10000 {
-        return;
+        return None;
     }
-    let bones = rd::<u16>(header) as u32;
+    Some(rd::<u16>(header) as u32)
+}
+
+unsafe fn check(instance: usize, via_ik: bool) {
+    let Some(bones) = bone_count(instance) else { return };
     note_model(bones, instance, via_ik);
     if bones != SORA_BONES {
         return;
     }
+    let header = rd::<u64>(rd::<u64>(instance) as usize) as usize;
     let Ok(mut g) = SORA.try_lock() else { return };
     if g.as_ref().map_or(true, |s| s.instance != instance) {
         let table = ptr(rd::<u32>(header + 4));
@@ -341,17 +443,16 @@ unsafe fn check(instance: usize, via_ik: bool) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default() });
-        // Kept for the retarget, built once KH2 Sora is loaded.
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
     s.calls += 1;
     if s.retarget.is_none() {
-        if let Some(Ok(rig)) = KH2.get() {
+        if let Some(Ok(kh2)) = KH2.get() {
             if let Ok(b) = KH1_BONES.lock() {
-                let r = Retarget::new(&b, &rig.skeleton);
-                log(&format!("retarget ready: {} of {} KH1 bones follow a KH2 bone", r.mapped(), b.len()));
+                let r = Retarget::new(&b, &kh2.rig.skeleton);
+                log(&format!("retarget ready: {} of {} KH1 bones follow KH2", r.mapped(), b.len()));
                 s.retarget = Some(r);
             }
         }
@@ -360,40 +461,140 @@ unsafe fn check(instance: usize, via_ik: bool) {
     if world == 0 || local == 0 {
         return;
     }
-    let g0 = mat(world);
-    let l0 = mat(local);
-    if !affine(&g0) || !affine(&l0) || l0.determinant().abs() < 1e-6 {
-        return;
-    }
-    let to_world = g0 * l0.inverse();
-    if !s.checked && s.calls >= 30 {
-        // Is `+0x1B8` really each bone's matrix relative to its parent? Then the game's world
-        // matrix of bone 3 is bone 0's times the locals of 1, 2 and 3.
+    let raw0: [f32; 16] = rd(world);
+    let ours = s.wrote_root == Some(raw0);
+    let to_world = if ours {
+        // The pass left our root in place: keep the placement we had.
+        match s.to_world {
+            Some(m) => m,
+            None => return,
+        }
+    } else {
+        let g0 = Mat4::from_cols_array(&raw0);
+        let l0 = mat(local);
+        if !affine(&g0) || !affine(&l0) || l0.determinant().abs() < 1e-6 {
+            return;
+        }
+        g0 * l0.inverse()
+    };
+    if !s.checked && s.calls >= 30 && !ours {
         s.checked = true;
-        let chain = g0 * mat(local + 0x40) * mat(local + 0x80) * mat(local + 0xC0);
-        let g3 = mat(world + 0xC0);
-        let err = (chain.w_axis - g3.w_axis).length();
-        log(&format!(
-            "check: bone 3 from the locals is {err:.3} units from the game's (should be ~0); model->world {:?}; channels at {:#x}",
-            to_world.to_cols_array().map(|v| (v * 100.0).round() / 100.0),
-            ptr(rd::<u32>(instance + CHANNELS))
-        ));
+        let chain = mat(world) * mat(local + 0x40) * mat(local + 0x80) * mat(local + 0xC0);
+        let err = (chain.w_axis - mat(world + 0xC0).w_axis).length();
+        log(&format!("check: bone 3 from the locals is {err:.3} units from the game's (should be ~0)"));
     }
+    let orig_hands = (!ours).then(|| HANDS.map(|(b, _)| mat(world + b * 0x40)));
     let slot = slot_of(instance);
-    let Some(pose) = wanted(s, slot, &to_world) else { return };
+    let Some(pose) = wanted(s, slot, &to_world) else {
+        s.wrote_root = None;
+        s.to_world = Some(to_world);
+        if let Some(o) = orig_hands {
+            if let Ok(mut h) = HANDS_NOW.lock() {
+                *h = Some(Hands { orig: o, drawn: o, at: Instant::now() });
+            }
+        }
+        return;
+    };
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
+    }
+    s.wrote_root = Some(rd(world));
+    s.to_world = Some(to_world);
+    let drawn = HANDS.map(|(b, _)| to_world * pose[b]);
+    if let Ok(mut h) = HANDS_NOW.lock() {
+        let orig = orig_hands.or(h.map(|h| h.orig)).unwrap_or(drawn);
+        *h = Some(Hands { orig, drawn, at: Instant::now() });
     }
 }
 
 static KH1_BONES: Mutex<Vec<kh2_formats::anim::Bone>> = Mutex::new(Vec::new());
+
+/// A small model posed while Sora's hands are known: is it held (its world matrix a fixed
+/// relation to KH1's hand while the hand moves)? Returns the world matrix to pose it with
+/// instead, once it is held and Sora is drawn with KH2's motions.
+unsafe fn held(instance: usize, world: usize) -> Option<Mat4> {
+    let bones = bone_count(instance)?;
+    if bones == SORA_BONES || bones > 40 || world < 0x10000 {
+        return None;
+    }
+    let hands = (*HANDS_NOW.lock().ok()?)?;
+    if hands.at.elapsed().as_secs_f32() > 0.1 {
+        return None;
+    }
+    let w = mat(world);
+    if !affine(&w) {
+        return None;
+    }
+    let mut g = WATCH.lock().ok()?;
+    let map = g.get_or_insert_with(HashMap::new);
+    if map.len() > 64 && !map.contains_key(&instance) {
+        return None;
+    }
+    let v = map.entry(instance).or_default();
+    if let Some(hand) = v.held {
+        let rel = v.rel?.1;
+        let o = hands.orig[hand];
+        // Still held? (A dropped weapon or a model reused for something else lets go.)
+        let now_rel = o.inverse() * w;
+        if (now_rel.w_axis - rel.w_axis).length() > 8.0 {
+            v.held = None;
+            v.steady = 0;
+            log(&format!("the {bones}-bone model at {instance:#x} let go of the {} hand", HANDS[hand].1));
+            return None;
+        }
+        return Some(hands.drawn[hand] * rel);
+    }
+    // Learning: the relation to each hand, steady over frames in which the hand moved.
+    let mut best: Option<(usize, Mat4, f32)> = None;
+    for (h, o) in hands.orig.iter().enumerate() {
+        let d = (w.w_axis - o.w_axis).truncate().length();
+        if d < 60.0 && best.map_or(true, |b| d < b.2) {
+            best = Some((h, o.inverse() * w, d));
+        }
+    }
+    let Some((hand, rel, dist)) = best else {
+        v.rel = None;
+        v.steady = 0;
+        return None;
+    };
+    let hand_pos = hands.orig[hand].w_axis.truncate();
+    if let Some(p) = v.last_hand {
+        v.hand_moved += (hand_pos - p).length();
+    }
+    v.last_hand = Some(hand_pos);
+    match v.rel {
+        Some((h, r)) if h == hand && (r.w_axis - rel.w_axis).length() < 0.5 && (r.x_axis - rel.x_axis).length() < 0.02 => v.steady += 1,
+        _ => {
+            v.rel = Some((hand, rel));
+            v.steady = 0;
+            v.hand_moved = 0.0;
+        }
+    }
+    if v.steady >= 20 && v.hand_moved > 10.0 {
+        // (Placed from a hand learnt while KH1's own pose showed; a model placed from the hand
+        // we draw never looks steady against KH1's while KH2's motions show, and needs nothing.)
+        v.held = Some(hand);
+        if !v.logged {
+            v.logged = true;
+            log(&format!("the {bones}-bone model at {instance:#x} is held in Sora's {} hand ({dist:.1} units from it); it now follows the hand drawn", HANDS[hand].1));
+        }
+    }
+    None
+}
 
 type Pose = unsafe extern "system" fn(usize, usize, f32, usize);
 type PoseIk = unsafe extern "system" fn(usize, usize, u32);
 
 unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: usize) {
     let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
-    f(world, instance, t, motion);
+    let moved = if instance != 0 && MODE.load(Ordering::Relaxed) == 0 { held(instance, world) } else { None };
+    match moved {
+        Some(m) => {
+            let a = m.to_cols_array();
+            f(a.as_ptr() as usize, instance, t, motion);
+        }
+        None => f(world, instance, t, motion),
+    }
     if instance != 0 {
         check(instance, false);
     }
@@ -401,7 +602,14 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
 
 unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
     let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
-    f(world, instance, flags);
+    let moved = if instance != 0 && MODE.load(Ordering::Relaxed) == 0 { held(instance, world) } else { None };
+    match moved {
+        Some(m) => {
+            let a = m.to_cols_array();
+            f(a.as_ptr() as usize, instance, flags);
+        }
+        None => f(world, instance, flags),
+    }
     if instance != 0 {
         check(instance, true);
     }
