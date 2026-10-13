@@ -110,6 +110,11 @@ fn play_for(slot: usize) -> Option<Play> {
 /// share theirs): frames, channels, helper channels, helpers.
 type Signature = (u32, u32, u32, u32);
 /// Slot by signature, and each slot's length in frames.
+/// The skeleton pass's world matrix has been seen to place Sora right: from then on it is used
+/// at once for every new Sora (each zone makes one). Re-learning it per zone placed him by
+/// his bones meanwhile, which KH1's walk-in blends had mixed with our pose: he was drawn
+/// turned or off to the side for a moment (the user: Sora occasionally turns invisible).
+static PARAM_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SLOTS: OnceLock<(HashMap<Signature, usize>, Vec<u32>)> = OnceLock::new();
 /// KH1's battle idle: its first frame is the rest pose of the bones no KH2 part turns (hood,
 /// cloth, face, the Keyblade's grip and chain), `Retarget::set_rest`.
@@ -647,7 +652,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, param_agree: 0, param_ok: false, jumps: 0 });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0 });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -685,6 +690,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             s.param_agree += 1;
             if s.param_agree >= 30 {
                 s.param_ok = true;
+                PARAM_OK.store(true, Ordering::Relaxed);
                 log("placement: the skeleton pass's own world matrix matches; using it from now on");
             }
         } else {

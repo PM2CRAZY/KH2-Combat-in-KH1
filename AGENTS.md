@@ -543,3 +543,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - The hood (root 79) turns with the chest's yaw and 30% of its lean; every bone no part
     turns now hangs as in the first frame of KH1's battle idle (slot 1, `set_rest`) instead
     of the T-pose (hood, belt chain, cloth joints, face, the Keyblade's grip and chain).
+- `kh1-hook` stage 20 (the user's video of stage 19: the belt chain floated out in a loop,
+  shins showed through the shorts in the battle idle, odd thumbs in the field idle, the hood
+  could be lower, Sora briefly invisible, feet clip stair steps):
+  - KH1 rest pose only for the hood's cloth joints (80-84) and the Keyblade (280-292); the
+    belt chain (10-15) and the rest keep the bind (the battle idle's chain swings out).
+  - Shorts panels follow the thigh again (the snap was the thigh roll, fixed in stage 19).
+  - Hood root: chest yaw only, tipped down 0.45 rad (tip 45° below the neck).
+  - Thumbs mapped (KH1 207-211 / 103-107 on KH2's thumb segment 89→92 / 181→184).
+  - The skeleton pass's world matrix, once confirmed, places every later Sora at once (it
+    was re-learnt per zone, placing him by his bones meanwhile: the brief invisibility).
+  - Open: feet on stairs (KH1's ground IK is replaced by our pose; needs our own foot IK).

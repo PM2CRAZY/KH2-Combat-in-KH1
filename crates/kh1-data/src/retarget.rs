@@ -145,10 +145,13 @@ struct Side {
     knuckle: usize,
     index: usize,
     little: usize,
+    /// The thumb's base and tip (one segment in KH2).
+    thumb: usize,
+    thumb_tip: usize,
 }
 
 /// +x side; the −x side is +29 on the legs and +92 on the arms.
-const PLUS_X: Side = Side { hip: 11, knee: 12, ankle: 13, heel: 16, toe: 17, clavicle: 74, shoulder: 76, elbow: 79, wrist: 80, knuckle: 97, index: 93, little: 105 };
+const PLUS_X: Side = Side { hip: 11, knee: 12, ankle: 13, heel: 16, toe: 17, clavicle: 74, shoulder: 76, elbow: 79, wrist: 80, knuckle: 97, index: 93, little: 105, thumb: 89, thumb_tip: 92 };
 
 fn minus_x() -> Side {
     let s = PLUS_X;
@@ -165,6 +168,8 @@ fn minus_x() -> Side {
         knuckle: s.knuckle + 92,
         index: s.index + 92,
         little: s.little + 92,
+        thumb: s.thumb + 92,
+        thumb_tip: s.thumb_tip + 92,
     }
 }
 
@@ -220,13 +225,6 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
             one(b, thigh, &mut bones);
         }
         one(h + 2, shin, &mut bones);
-        // The shorts: four panels hang off the hip joint (front, outer, back, inner; root then
-        // three cloth joints). Halfway between pelvis and thigh, so a raised knee lifts them
-        // without swinging them round with the thigh's roll (the user: a trouser leg snapped
-        // while falling, knees up).
-        for root in [h + 10, h + 14, h + 18, h + 22] {
-            bones.push((root, pelvis, thigh, 0.5));
-        }
         for b in h + 3..=h + 8 {
             one(b, foot, &mut bones);
         }
@@ -243,6 +241,12 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
         }
         for b in c + 9..=c + 12 {
             one(b, hand, &mut bones);
+        }
+        // The thumb (KH1: its base and four joints under the hand, 207-211 / 103-107; KH2: one
+        // segment), else it stuck out as in the T-pose (the user: unnatural thumbs in the idle).
+        let thumb = add(Part::Aim { from: s.thumb, to: s.thumb_tip, pole: Pole::Line(s.little, s.index) });
+        for b in 207 - k.finger_shift..=211 - k.finger_shift {
+            one(b, thumb, &mut bones);
         }
         // Fingers: KH2 base, a co-located joint, then two joints; KH1 base, a co-located
         // joint, then three.
@@ -282,11 +286,16 @@ pub struct Retarget {
     hang: Vec<Option<(usize, f32)>>,
 }
 
-/// The hood: its root under the neck base (`78`); it turns with the chest's yaw and a third of
-/// its lean, so KH2's hunched battle stance doesn't stand it up behind the head (the user: the
-/// hood stood at 90° in almost every motion; KH1's own motions keep it hanging).
+/// The hood: its root under the neck base (`78`); it turns with the chest's yaw only, tipped
+/// down by `HOOD_DROP`, so KH2's hunched battle stance doesn't stand it up behind the head
+/// (the user: the hood stood at 90° in almost every motion, then: could still be lower).
 const HOOD_ROOT: usize = 79;
-const HOOD_LEAN: f32 = 0.3;
+const HOOD_LEAN: f32 = 0.0;
+const HOOD_DROP: f32 = 0.45;
+/// Bones that hang as in KH1's rest pose (`set_rest`): the hood's cloth joints and the
+/// Keyblade's grip and chain. Everything else keeps the bind's relation (the belt chain hung
+/// out in a loop from the battle idle's swing: the user's "floating chain").
+const REST_BONES: [std::ops::RangeInclusive<usize>; 2] = [80..=84, 280..=292];
 
 /// A turn's part about the model's up (y) axis (swing-twist).
 fn yaw_of(q: Quat) -> Quat {
@@ -340,7 +349,7 @@ impl Retarget {
     pub fn set_rest(&mut self, rest: &[Bone]) {
         let m = kh2_anim::Pose::bind(rest).bones;
         for i in 0..self.rest_local.len().min(m.len()) {
-            if self.turns[i].is_some() || self.hang[i].is_some() {
+            if self.turns[i].is_some() || self.hang[i].is_some() || !REST_BONES.iter().any(|r| r.contains(&i)) {
                 continue;
             }
             if let Some(p) = self.parent[i] {
@@ -377,7 +386,7 @@ impl Retarget {
         for i in 0..n {
             let own = self.turns[i]
                 .and_then(|(a, b, t)| Some(part[a]?.slerp(part[b]?, t)))
-                .or_else(|| self.hang[i].and_then(|(a, share)| part[a].map(|q| yaw_of(q).slerp(q, share))));
+                .or_else(|| self.hang[i].and_then(|(a, share)| part[a].map(|q| yaw_of(q).slerp(q, share) * Quat::from_rotation_x(-HOOD_DROP))));
             if let (None, Some(p), Some(l)) = (own, self.parent[i], self.rest_local[i]) {
                 out[i] = out[p] * l;
                 let (_, r, t) = out[i].to_scale_rotation_translation();
