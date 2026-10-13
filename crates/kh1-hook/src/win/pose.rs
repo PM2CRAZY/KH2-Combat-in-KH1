@@ -111,6 +111,10 @@ fn play_for(slot: usize) -> Option<Play> {
 type Signature = (u32, u32, u32, u32);
 /// Slot by signature, and each slot's length in frames.
 static SLOTS: OnceLock<(HashMap<Signature, usize>, Vec<u32>)> = OnceLock::new();
+/// KH1's battle idle: its first frame is the rest pose of the bones no KH2 part turns (hood,
+/// cloth, face, the Keyblade's grip and chain), `Retarget::set_rest`.
+static REST: OnceLock<Option<kh1_data::mset::Motion>> = OnceLock::new();
+const REST_SLOT: usize = 1;
 
 /// KH2 Sora: skeleton and motions, and each action clip's root travel per frame (KH1 moves
 /// him itself, so a swing's lunge is taken out of the pose).
@@ -401,13 +405,17 @@ pub fn load_kh2() {
                 }
             }
             log(&format!("KH1 Sora's motion table: {} slots", motions.len()));
+            let _ = REST.set(motions.get(REST_SLOT).cloned().flatten());
             Ok((map, lengths))
         })();
         match slots {
             Ok(m) => {
                 let _ = SLOTS.set(m);
             }
-            Err(e) => log(&format!("KH1 Sora's motion table did not load: {e}")),
+            Err(e) => {
+                let _ = REST.set(None);
+                log(&format!("KH1 Sora's motion table did not load: {e}"))
+            }
         }
     });
 }
@@ -646,10 +654,13 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     s.calls += 1;
     SORA_INSTANCE.store(instance, Ordering::Relaxed);
     if s.retarget.is_none() {
-        if let Some(Ok(kh2)) = KH2.get() {
+        if let (Some(Ok(kh2)), Some(rest)) = (KH2.get(), REST.get()) {
             if let Ok(b) = KH1_BONES.lock() {
-                let r = Retarget::new(&b, &kh2.rig.skeleton);
-                log(&format!("retarget ready: {} of {} KH1 bones follow KH2", r.mapped(), b.len()));
+                let mut r = Retarget::new(&b, &kh2.rig.skeleton);
+                if let Some(m) = rest {
+                    r.set_rest(&m.apply(&b, 0.0));
+                }
+                log(&format!("retarget ready: {} of {} KH1 bones follow KH2 (the rest hang as in KH1's battle idle: {})", r.mapped(), b.len(), rest.is_some()));
                 s.retarget = Some(r);
             }
         }

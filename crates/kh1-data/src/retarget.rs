@@ -37,6 +37,16 @@ enum Pole {
     /// front, the elbow's back; negated when `flip`), falling back to the `Line` while the limb
     /// is nearly straight. For a hinge both segments share it, whatever the foot or hand does.
     Joint { a: usize, b: usize, c: usize, fallback: (usize, usize), flip: bool },
+    /// The model's up (+y) while the segment lies flat, turning to the `Line` as it stands
+    /// up: a foot's roll, so a shoe stays flat on the ground however the shin leans (the
+    /// user: shoes slightly contorted in the battle stance, where KH2's shins lean out).
+    Up(usize, usize),
+    /// A knee: as `Joint`, but nearly straight it falls back to the hips' forward (the line
+    /// between the two hip joints `.0` → `.1`, crossed with up). The foot's direction, the
+    /// first fallback, turns against the knee whenever a raised thigh points the toes down
+    /// (falls, landings, jumps, combos), and the thigh then rolled 180° within a frame as the
+    /// leg straightened (the user: a trouser leg snapped while falling).
+    Knee { a: usize, b: usize, c: usize, hips: (usize, usize) },
 }
 
 #[derive(Clone, Copy)]
@@ -47,10 +57,23 @@ enum Part {
     Aim { from: usize, to: usize, pole: Pole },
 }
 
-/// The joint's offset from the end-to-end line, as a share of that line's length: below the
-/// first the limb counts as straight (fallback pole), above the second as bent.
-const BEND_STRAIGHT: f32 = 0.04;
-const BEND_BENT: f32 = 0.12;
+/// The sine of a joint's bend: below the first the limb counts as straight (fallback pole),
+/// above the second as bent.
+const BEND_STRAIGHT: f32 = 0.08;
+const BEND_BENT: f32 = 0.25;
+
+/// A hinge `a`-`b`-`c` (hip, knee, ankle): how bent it is (0 straight .. 1 bent) and the
+/// direction its middle joint points (the knee's front, the elbow's back), square to `y`.
+/// Taken from the plane of the two segments (their cross product, the hinge axis): the joint's
+/// offset from the end-to-end line, used before, lies along the thigh when the thigh is raised
+/// and the shin folded back (a fall's tucked legs), and its square to the thigh then spun
+/// from frame to frame (the user: a trouser leg snapped while falling).
+fn bend(a: Vec3, b: Vec3, c: Vec3, y: Vec3) -> (f32, Vec3) {
+    let (u, v) = ((b - a).normalize_or_zero(), (c - b).normalize_or_zero());
+    let axis = u.cross(v);
+    let w = ((axis.length() - BEND_STRAIGHT) / (BEND_BENT - BEND_STRAIGHT)).clamp(0.0, 1.0);
+    (w, perp(y.cross(axis), y).normalize_or_zero())
+}
 
 fn perp(v: Vec3, axis: Vec3) -> Vec3 {
     v - axis * v.dot(axis)
@@ -72,13 +95,29 @@ impl Part {
                     Pole::Line(a, b) => line(a, b)?,
                     Pole::Joint { a, b, c, fallback, flip } => {
                         let fb = line(fallback.0, fallback.1)?;
-                        let (pa, pc) = (at(a)?, at(c)?);
-                        let span = pc - pa;
-                        let len = span.length().max(1e-4);
-                        let out = perp(at(b)? - pa, span / len);
-                        let w = ((out.length() / len - BEND_STRAIGHT) / (BEND_BENT - BEND_STRAIGHT)).clamp(0.0, 1.0);
-                        let dir = perp(out, y).normalize_or_zero() * if flip { -1.0 } else { 1.0 };
+                        let (w, dir) = bend(at(a)?, at(b)?, at(c)?, y);
+                        let dir = dir * if flip { -1.0 } else { 1.0 };
                         (fb * (1.0 - w) + dir * w).normalize_or_zero()
+                    }
+                    Pole::Knee { a, b, c, hips } => {
+                        // The hips' forward, swung along with the segment from hanging straight
+                        // down to where it points: square to the segment however far the thigh
+                        // is raised (a raised thigh lies along the plain forward, and its roll
+                        // then spun from frame to frame).
+                        let right = (at(hips.1)? - at(hips.0)?).normalize_or_zero();
+                        let up = perp(Vec3::Y, right).normalize_or_zero();
+                        let forward = right.cross(up);
+                        let fb = perp(Quat::from_rotation_arc(-up, y) * forward, y).normalize_or_zero();
+                        let (w, dir) = bend(at(a)?, at(b)?, at(c)?, y);
+                        (fb * (1.0 - w) + dir * w).normalize_or_zero()
+                    }
+                    Pole::Up(a, b) => {
+                        let fb = line(a, b)?;
+                        let up = perp(Vec3::Y, y).normalize_or_zero();
+                        // Flat (|y.up| small) → up; within ~30° of vertical → the line.
+                        let w = ((1.0 - y.y.abs()) / 0.5).clamp(0.0, 1.0);
+                        let z = fb * (1.0 - w) + up * w;
+                        if z.length_squared() < 1e-6 { fb } else { z.normalize() }
                     }
                 };
                 (y.cross(z), y, z)
@@ -168,10 +207,10 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
             parts.push(p);
             parts.len() - 1
         };
-        let knee = Pole::Joint { a: s.hip, b: s.knee, c: s.ankle, fallback: (s.heel, s.toe), flip: false };
+        let knee = Pole::Knee { a: s.hip, b: s.knee, c: s.ankle, hips: (minus_x().hip, PLUS_X.hip) };
         let thigh = add(Part::Aim { from: s.hip, to: s.knee, pole: knee });
         let shin = add(Part::Aim { from: s.knee, to: s.ankle, pole: knee });
-        let foot = add(Part::Aim { from: s.heel, to: s.toe, pole: Pole::Line(s.ankle, s.knee) });
+        let foot = add(Part::Aim { from: s.heel, to: s.toe, pole: Pole::Up(s.ankle, s.knee) });
         let clav = add(Part::Aim { from: s.clavicle, to: s.shoulder, pole: Pole::Line(67, 137) });
         let upper = add(Part::Aim { from: s.shoulder, to: s.elbow, pole: Pole::Joint { a: s.shoulder, b: s.elbow, c: s.wrist, fallback: (s.little, s.index), flip: true } });
         let fore = add(Part::Aim { from: s.elbow, to: s.wrist, pole: Pole::Line(s.little, s.index) });
@@ -181,6 +220,13 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
             one(b, thigh, &mut bones);
         }
         one(h + 2, shin, &mut bones);
+        // The shorts: four panels hang off the hip joint (front, outer, back, inner; root then
+        // three cloth joints). Halfway between pelvis and thigh, so a raised knee lifts them
+        // without swinging them round with the thigh's roll (the user: a trouser leg snapped
+        // while falling, knees up).
+        for root in [h + 10, h + 14, h + 18, h + 22] {
+            bones.push((root, pelvis, thigh, 0.5));
+        }
         for b in h + 3..=h + 8 {
             one(b, foot, &mut bones);
         }
@@ -228,6 +274,24 @@ pub struct Retarget {
     turns: Vec<Option<(usize, usize, f32)>>,
     /// KH1 hip height / KH2 hip height.
     hip_ratio: f32,
+    /// Bones no part turns: their matrix relative to the parent in a KH1 rest pose
+    /// (`set_rest`), else they keep the bind's relation.
+    rest_local: Vec<Option<Mat4>>,
+    /// Cloth that hangs (the hood): `(part, share)` turns with the part's yaw but only
+    /// `share` of its lean.
+    hang: Vec<Option<(usize, f32)>>,
+}
+
+/// The hood: its root under the neck base (`78`); it turns with the chest's yaw and a third of
+/// its lean, so KH2's hunched battle stance doesn't stand it up behind the head (the user: the
+/// hood stood at 90° in almost every motion; KH1's own motions keep it hanging).
+const HOOD_ROOT: usize = 79;
+const HOOD_LEAN: f32 = 0.3;
+
+/// A turn's part about the model's up (y) axis (swing-twist).
+fn yaw_of(q: Quat) -> Quat {
+    let t = Quat::from_xyzw(0.0, q.y, 0.0, q.w);
+    if t.length_squared() < 1e-8 { Quat::IDENTITY } else { t.normalize() }
 }
 
 fn positions(m: &[Mat4]) -> Vec<Vec3> {
@@ -257,7 +321,12 @@ impl Retarget {
         let parent = kh1.iter().enumerate().map(|(i, b)| (b.parent >= 0 && (b.parent as usize) < i).then_some(b.parent as usize)).collect();
         let h2 = b2.first().map_or(1.0, |m| m.w_axis.y);
         let hip_ratio = if h2.abs() > 1.0 { pos.first().map_or(1.0, |p| p.y) / h2 } else { 1.0 };
-        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio }
+        let rest_local = vec![None; kh1.len()];
+        let mut hang = vec![None; kh1.len()];
+        if HOOD_ROOT < kh1.len() {
+            hang[HOOD_ROOT] = Some((1, HOOD_LEAN));
+        }
+        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, hang }
     }
 
     /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
@@ -265,9 +334,36 @@ impl Retarget {
         self.hip_ratio
     }
 
+    /// Bones no part turns (hood, belt chain, the shorts' cloth joints, face, hair, the weapon
+    /// chain) hang as in this KH1 pose (local bones, e.g. a KH1 motion's frame applied to the
+    /// skeleton) instead of the bind's T-pose (the user: the hood stood out at 90°).
+    pub fn set_rest(&mut self, rest: &[Bone]) {
+        let m = kh2_anim::Pose::bind(rest).bones;
+        for i in 0..self.rest_local.len().min(m.len()) {
+            if self.turns[i].is_some() || self.hang[i].is_some() {
+                continue;
+            }
+            if let Some(p) = self.parent[i] {
+                let l = m[p].inverse() * m[i];
+                self.rest_local[i] = l.is_finite().then_some(l);
+            }
+        }
+    }
+
+    /// Whether a measured part turns this KH1 bone.
+    pub fn is_mapped(&self, bone: usize) -> bool {
+        self.turns.get(bone).is_some_and(|t| t.is_some())
+    }
+
     /// How many KH1 bones a measured part turns.
     pub fn mapped(&self) -> usize {
         self.turns.iter().filter(|t| t.is_some()).count()
+    }
+
+    /// Each part's turn for a KH2 pose (debugging).
+    pub fn part_turns(&self, kh2: &[Mat4]) -> Vec<Option<Quat>> {
+        let now = positions(kh2);
+        self.parts.iter().zip(&self.rest_inv).map(|(p, r)| Some(p.frame(&now)? * (*r)?)).collect()
     }
 
     /// KH1 model-space bone matrices for a KH2 model-space pose.
@@ -279,7 +375,16 @@ impl Retarget {
         let mut at = vec![Vec3::ZERO; n];
         let mut out = vec![Mat4::IDENTITY; n];
         for i in 0..n {
-            let own = self.turns[i].and_then(|(a, b, t)| Some(part[a]?.slerp(part[b]?, t)));
+            let own = self.turns[i]
+                .and_then(|(a, b, t)| Some(part[a]?.slerp(part[b]?, t)))
+                .or_else(|| self.hang[i].and_then(|(a, share)| part[a].map(|q| yaw_of(q).slerp(q, share))));
+            if let (None, Some(p), Some(l)) = (own, self.parent[i], self.rest_local[i]) {
+                out[i] = out[p] * l;
+                let (_, r, t) = out[i].to_scale_rotation_translation();
+                turn[i] = (r * self.rot[i].inverse()).normalize();
+                at[i] = t;
+                continue;
+            }
             match self.parent[i] {
                 None => {
                     turn[i] = own.unwrap_or(Quat::IDENTITY);

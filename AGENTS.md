@@ -529,3 +529,17 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   type 0 (`0x1402A10F0`: clears the flag); the flag also maps requests to their battle
   variants. The flag now follows KH2's pose (`weapons_out`). After an attack in the field,
   KH2 keeps its battle stance for 6 s (the user: combos ended in the empty-handed idle).
+- `kh1-hook` stage 19 (retarget polish, the user's video: the Keyblade shows now):
+  - Trouser leg snapping in falls: the thigh's roll flipped 180° within a half frame in
+    falls, landings, jumps and several combo swings (`kh1-data` example `snap_check`). The
+    knee's direction came from the knee's offset from the hip-ankle line, which lies along a
+    raised thigh; it is now the hinge plane's (`bend`: thigh × shin), with the hips' forward
+    swung along with the leg as the straight-leg fallback (`Pole::Knee`). Elbows use the same
+    `bend`. Worst half-frame thigh turn: 180° → under 50°.
+  - The shorts' four panel roots per leg (hip + 10 / 14 / 18 / 22) turn halfway between
+    pelvis and thigh.
+  - Shoes: the foot's roll is the model's up while the foot lies flat (`Pole::Up`), the shin
+    only as it stands up, so soles stay flat when KH2's shins lean out.
+  - The hood (root 79) turns with the chest's yaw and 30% of its lean; every bone no part
+    turns now hangs as in the first frame of KH1's battle idle (slot 1, `set_rest`) instead
+    of the T-pose (hood, belt chain, cloth joints, face, the Keyblade's grip and chain).
