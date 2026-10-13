@@ -8,6 +8,11 @@
 //! - Hardware write watchpoints (debug registers, on every thread of the game) on that
 //!   position name the code that writes it: KH1's movement, gravity and collision. Logged by
 //!   address for 25 seconds, then removed.
+//! - Combat probe (stage 9): KH1's set-motion functions (`0x14029D630`, `0x14029D7F0`,
+//!   `0x14029D8A0`, `(actor, slot | flags, ...)`) log the code asking for Sora's attack slots
+//!   (return addresses found on the stack); `0x1402BD180` `(attack, target)` (an attack touched
+//!   an actor) dumps Sora's attack records and the target's stats; the live actors (through
+//!   `0x14028F990`, the actor iterator) are listed every few seconds.
 //! - `0x140112C70` `(device state, PADDATA out, config)` is where every controller (XInput,
 //!   DualShock / DualSense over HID, ...) becomes KH1's PS2-style pad record: `+0` buttons u16
 //!   (PS2 order: Select, L3, R3, Start, Up, Right, Down, Left, L2, R2, L1, R1, Triangle,
@@ -27,6 +32,16 @@ const PAD_RVA: usize = 0x112C70;
 const PAD_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 
 static ORIG_ACTOR: AtomicUsize = AtomicUsize::new(0);
+static ORIG_SETM: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
+static ORIG_HIT: AtomicUsize = AtomicUsize::new(0);
+const SETM_RVA: [usize; 3] = [0x29D630, 0x29D7F0, 0x29D8A0];
+const SETM_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
+const HIT_RVA: usize = 0x2BD180;
+const HIT_PROLOGUE: [u8; 7] = [0x40, 0x55, 0x57, 0x48, 0x83, 0xEC, 0x48];
+const ACTORS_RVA: usize = 0x28F990;
+const PARTY_RVA: usize = 0x2D37C80;
+/// Sora's attack record as KH1 last made it (0xC0 bytes), for KH2's hits.
+pub static ATTACK_TEMPLATE: std::sync::Mutex<Option<Vec<u8>>> = std::sync::Mutex::new(None);
 static ORIG_PAD: AtomicUsize = AtomicUsize::new(0);
 pub static SORA_ACTOR: AtomicUsize = AtomicUsize::new(0);
 static ACTOR_CALLS: AtomicU32 = AtomicU32::new(0);
@@ -61,6 +76,9 @@ unsafe extern "system" fn actor(a: usize, dt: f32) {
     }
     if n == 120 * 8 {
         dump(a, "8 s later");
+    }
+    if n % 240 == 120 && n < 240 * 10 {
+        list_actors();
     }
 }
 
@@ -272,9 +290,133 @@ pub unsafe fn tick(seconds: f32) {
     }
 }
 
+fn sora() -> usize {
+    unsafe { rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize }
+}
+
+/// Code addresses in the executable found on the stack above `here` (return addresses, most
+/// recent first; a few may be stale).
+unsafe fn callers(here: usize) -> String {
+    let base = BASE.load(Ordering::Relaxed);
+    let mut v = Vec::new();
+    for i in 0..0x100 {
+        let x: u64 = rd(here + i * 8);
+        let x = x as usize;
+        if x > base + 0x1000 && x < base + 0x3B_0000 && !v.contains(&(x - base)) {
+            v.push(x - base);
+            if v.len() >= 10 {
+                break;
+            }
+        }
+    }
+    v.iter().map(|r| format!("exe+{r:x}")).collect::<Vec<_>>().join(" ")
+}
+
+static SETM_LOGGED: AtomicU32 = AtomicU32::new(0);
+
+unsafe fn setm_note(which: usize, actor: usize, req: u32, here: usize) {
+    if actor == 0 || actor != sora() {
+        return;
+    }
+    let slot = req & 0xFFFF;
+    // Not standing / walking / running (the slots KH2 has).
+    if slot <= 7 || SETM_LOGGED.load(Ordering::Relaxed) >= 80 {
+        return;
+    }
+    SETM_LOGGED.fetch_add(1, Ordering::Relaxed);
+    log(&format!("set motion #{which} slot {slot} (flags {:#x}) on Sora, from {}", req & 0xFFFF_0000, callers(here)));
+}
+
+type SetmF = unsafe extern "system" fn(usize, u32, u32) -> usize;
+
+/// `0x14029D630` takes the blend time as a float (third argument, in XMM2).
+type SetmBlendF = unsafe extern "system" fn(usize, u32, f32);
+
+unsafe extern "system" fn setm0(a: usize, req: u32, blend: f32) {
+    let here = &a as *const usize as usize;
+    setm_note(0, a, req, here);
+    let f: SetmBlendF = std::mem::transmute(ORIG_SETM[0].load(Ordering::Acquire));
+    f(a, req, blend)
+}
+unsafe extern "system" fn setm1(a: usize, req: u32, c: u32) -> usize {
+    let here = &a as *const usize as usize;
+    setm_note(1, a, req, here);
+    let f: SetmF = std::mem::transmute(ORIG_SETM[1].load(Ordering::Acquire));
+    f(a, req, c)
+}
+unsafe extern "system" fn setm2(a: usize, req: u32, c: u32) -> usize {
+    let here = &a as *const usize as usize;
+    setm_note(2, a, req, here);
+    let f: SetmF = std::mem::transmute(ORIG_SETM[2].load(Ordering::Acquire));
+    f(a, req, c)
+}
+
+static HIT_LOGGED: AtomicU32 = AtomicU32::new(0);
+type HitF = unsafe extern "system" fn(usize, usize) -> usize;
+
+unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
+    let f: HitF = std::mem::transmute(ORIG_HIT.load(Ordering::Acquire));
+    let owner = if attack > 0x10000 { pose::ptr(rd::<u32>(attack + 0x34)) } else { 0 };
+    let r = f(attack, target);
+    if owner != 0 && owner == sora() && target > 0x10000 {
+        let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");
+        if let Ok(mut t) = ATTACK_TEMPLATE.lock() {
+            *t = Some(std::slice::from_raw_parts(attack as *const u8, 0xC0).to_vec());
+        }
+        if HIT_LOGGED.fetch_add(1, Ordering::Relaxed) < 24 {
+            let stats = pose::ptr(rd::<u32>(target + 0x6C));
+            let data = pose::ptr(rd::<u32>(attack + 0x5C));
+            let rec = if r > 0x10000 { words(r, 16) } else { "none".into() };
+            log(&format!(
+                "Sora's attack {attack:#x} hit actor {target:#x} (kind {}, object {}) -> record [{rec}]; attack [{}]; attack data {data:#x} [{}]; target stats {stats:#x} [{}]",
+                rd::<u8>(target + 6),
+                object_id(target),
+                words(attack, 0x30),
+                if data > 0x10000 { words(data, 0x18) } else { "-".into() },
+                if stats > 0x10000 { words(stats, 0x34) } else { "-".into() }
+            ));
+        }
+    }
+    r
+}
+
+unsafe fn object_id(a: usize) -> u32 {
+    let o = pose::ptr(rd::<u32>(a + 0x130));
+    if o > 0x10000 { rd::<u16>(o + 0x4C) as u32 } else { 0xFFFF }
+}
+
+/// The live actors, through KH1's iterator.
+unsafe fn list_actors() {
+    let next: unsafe extern "system" fn(usize) -> usize = std::mem::transmute(BASE.load(Ordering::Relaxed) + ACTORS_RVA);
+    let mut a = next(0);
+    let mut lines = Vec::new();
+    let mut n = 0;
+    while a != 0 && n < 64 {
+        n += 1;
+        let p: [f32; 3] = rd(a + 0x10);
+        let col = pose::ptr(rd::<u32>(a + 0x134));
+        let radius = if col > 0x10000 && rd::<u8>(col + 5) != 0 {
+            let sh = pose::ptr(rd::<u32>(col + 0x14));
+            if sh > 0x10000 { rd::<f32>(sh + 0xC) } else { -1.0 }
+        } else {
+            -1.0
+        };
+        let stats = pose::ptr(rd::<u32>(a + 0x6C));
+        let hp = if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { -1 };
+        lines.push(format!("{a:#x} kind {} obj {} at ({:.0},{:.0},{:.0}) r {radius:.0} hp? {hp} flags {:08x}/{:08x}", rd::<u8>(a + 6), object_id(a), p[0], p[1], p[2], rd::<u32>(a), rd::<u32>(a + 0x374)));
+        a = next(a);
+    }
+    log(&format!("actors ({n}): {}", lines.join(" | ")));
+}
+
 pub unsafe fn install() {
     let base = GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
+    let fns = [setm0 as *const () as usize, setm1 as *const () as usize, setm2 as *const () as usize];
+    for k in 0..3 {
+        hook::install(base + SETM_RVA[k], &SETM_PROLOGUE, fns[k], &ORIG_SETM[k], "set motion");
+    }
+    hook::install(base + HIT_RVA, &HIT_PROLOGUE, hit as *const () as usize, &ORIG_HIT, "attack touched actor");
     hook::install(base + ACTOR_RVA, &ACTOR_PROLOGUE, actor as *const () as usize, &ORIG_ACTOR, "actor animation update");
     hook::install(base + PAD_RVA, &PAD_PROLOGUE, pad as *const () as usize, &ORIG_PAD, "pad record");
 }

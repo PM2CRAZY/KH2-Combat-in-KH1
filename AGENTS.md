@@ -433,3 +433,28 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   is KH2's, landing on the floor the mover reports (`+0x324`); on the ground the mover's
   height stands, stepping down onto a floor up to 24 below, else he falls. `+0x3D4` is
   rewritten for KH2's next step. The user's next requirement: attacks 1:1 with KH2.
+- Phase 3 (combat parity) started; the user: movement looks great. Ghidra:
+  - KH1's hit pipeline: `0x1402BD180` `(attack, target)` (an attack touched an actor: checks
+    the target can be hit `0x14028FEE0`, queues a hit record, MP for the attacker from the
+    attack data `+0x2C`, the attack's hit script) → `0x1402BD480` `(attack, hit-once bit,
+    target)` takes a 0x40-byte record from the pools at `0x142DE6810` / `0x142DE7810` and
+    links it on the target (`+0x3EC`, hit-once bits `+0x3E0`): attacker `+4`, damage `+8`,
+    flags `+0xC`, knock-back direction `+0x10`, attack data `+0x2C`; the target's think pops
+    it (`0x1402BCFB0`) and applies damage and reaction.
+  - KH1's damage `0x1402BD8D0` `(attack, target, flags)`: power = attack data `+0x14` +
+    attack `+0x2C`, critical (chance `+0x94`, bonus `+0x98`), against the target's defence
+    (stats `+0x6C` → `+0x50`) through the table `0x142DE67C0`, min / max from the attack data
+    (`+0x20` / `+0x24`) scaled by attack `+0xAC`, clamps from the target's stats (`+0xC0` /
+    `+0xC2`), element resistance (stats `+0x78 + element * 4`, element = attack `+0x30` bits
+    6-9). Attack objects: owner handle `+0x34`, attack data handle `+0x5C`, hit-once bit
+    `+0x54`.
+  - KH1's collision pass `0x1402B1A50` tests 0x40-byte entries (owner, attack object,
+    shape at `+0x20`, overlap `0x1402B3D50`); attack vs body → `0x1402B1ED0` →
+    `0x1402BD180`; attack vs attack → `0x1402B2A30` (clash, priority `+0x68`).
+  - Battle mode: bit 0 of `0x142867CD8` (picks field / battle idle-walk-run in
+    `0x1402C9FF0`). Actor iterator `0x14028F990` `(previous) -> next`. Actor kind byte `+6`
+    (3 enemy AI, 4 / 5 / 9 / 10 objects), body radius `[[+0x134] +0x14] +0xC`.
+- `kh1-hook` stage 9 (combat probe): set-motion hooks log the code putting Sora into
+  non-movement slots (stack return addresses), the attack-touched-actor hook dumps Sora's
+  attack records / targets' stats and keeps the last as a template, the actors are listed
+  every 4 s. Fixed before shipping: `0x14029D630`'s third argument is a float (XMM2).
