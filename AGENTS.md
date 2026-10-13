@@ -690,3 +690,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   in KH2's air he is first put into KH1's jump state falling from where he is, as KH1's
   ceiling bonk does (`0x1402AF7D0(actor, 2)`, `+0x3B0` / `+0x3B8` / `+0x3BC` 0, `+0x3B4` his
   y, `+0x3C0` velocity 0, `+0x3D0` 0, flag 0x10000 off). Ini `commands`.
+- `kh1-hook` stage 34 (Phase 9 feel): KH1's combo row (0x14 bytes) also carries what its
+  motion's start plays (`0x1402A17F0`): +2 the weapon trail (`0x1402C0160(actor, n)` asks for
+  it in the combat state, `+0x38` = n | 0x40000000; `0x1402BFD70` makes it while actor
+  `+0x1CC` bit 0x800000, which the attack motions' triggers set over the swing, and ends it
+  when the bit clears), +3 an effect on Sora (`0x1402ABB60(*(cs+0x18), n, actor, 0x30)`),
+  +0xF a voice (`0x14028E060(actor, n, 0)`). Each KH2 attack motion start plays those of the
+  KH1 row of the same place in KH1's combo (200 / 201 / 202, finisher 203; air 204 / 205,
+  finisher 206), and the trail bit follows KH2's hit windows (ini `swing_fx`; whether the
+  trail was made is logged for the first swings).

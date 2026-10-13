@@ -23,7 +23,9 @@ ceilings = on\r\n\
 grabs = on\r\n\
 ; commands: on = KH1's commands other than Attack (magic, items, specials, summons) take\r\n\
 ; Sora from KH2 until KH1 has him standing again (in the air: KH1's fall from there)\r\n\
-commands = on\r\n";
+commands = on\r\n\
+; swing_fx: on = KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice\r\n\
+swing_fx = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -33,6 +35,7 @@ pub struct Settings {
     pub ceilings: bool,
     pub grabs: bool,
     pub commands: bool,
+    pub swing_fx: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -66,6 +69,7 @@ pub fn get() -> &'static Settings {
             ceilings: on(&text, "ceilings", "on", true),
             grabs: on(&text, "grabs", "on", true),
             commands: on(&text, "commands", "on", true),
+            swing_fx: on(&text, "swing_fx", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

@@ -26,6 +26,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `ceilings` | `on` (default), `off` | Ceilings stop KH2's jumps. |
 | `grabs` | `on` (default), `off` | KH1's ledge, vine, bar and swim moves take him from KH2's falls. |
 | `commands` | `on` (default), `off` | KH1's own commands (magic, items, specials, summons) take him from KH2. |
+| `swing_fx` | `on` (default), `off` | KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice. |
 
 ## What is KH1's and what is KH2's
 
@@ -92,7 +93,7 @@ The log shows what KH1's menu gives every time it changes (`KH1's menu gives KH2
    Sora's level until they are added to KH1's menu.
 8. What stays KH1's: KH1's commands hand Sora to KH1, in the air through KH1's own fall (33).
    Built, to be tried in game.
-9. Release polish.
+9. Release polish: KH1's Keyblade trail, swing effects and voice on KH2's swings (34).
 
 ## Trying the new stages
 
@@ -104,6 +105,7 @@ The log shows what KH1's menu gives every time it changes (`KH1's menu gives KH2
 - Grabs: fall past a ledge holding toward it; jump at a vine (`KH1 takes him: ...`).
 - Commands: cast a spell standing and in mid-air, use an item, a special
   (`KH1 takes him: command ...`, then `KH1's move ended ...: KH2 again`).
+- Swings: the Keyblade trail and Sora's voice on KH2's combo (`Keyblade trail drawn ...`).
 - Abilities: set `abilities = kh1`, start the game, open and change the Ability menu.
 
 Any of these misbehaving can be switched off in the ini without a new build.

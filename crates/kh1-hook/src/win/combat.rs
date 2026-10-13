@@ -134,6 +134,11 @@ struct Row {
     data: i32,
     /// Bytes +0xC..+0xE (the attack object's +0xA8..+0xAA: effect and sound).
     fx: [u8; 3],
+    /// What the row's start plays (`0x1402A17F0`): +2 the weapon trail (`0x1402C0160`), +3 an
+    /// effect on Sora (`0x1402ABB60`), +0xF a voice (`0x14028E060`); -1 none.
+    trail: i8,
+    effect: i8,
+    voice: i8,
 }
 
 unsafe fn row_info(actor: usize, row: i32) -> Option<Row> {
@@ -147,7 +152,7 @@ unsafe fn row_info(actor: usize, row: i32) -> Option<Row> {
         return None;
     }
     let r = table + row as usize * 0x14;
-    Some(Row { motion: rd(r), data: rd(r + 4), fx: rd(r + 0xC) })
+    Some(Row { motion: rd(r), data: rd(r + 4), fx: rd(r + 0xC), trail: rd(r + 2), effect: rd(r + 3), voice: rd(r + 0xF) })
 }
 
 /// Sora's own rows to land KH2's hits with: [ground swing, ground finisher, air swing, air
@@ -279,6 +284,11 @@ pub struct Strikes {
     guards: Vec<Guard>,
     /// Swings a guard repelled: they hit nothing more.
     repelled: HashSet<u64>,
+    /// KH1's swing rows by motion (200..206), for `swing_start`.
+    swing_rows: Option<HashMap<i16, Row>>,
+    /// The trail flag is ours (set for a KH2 swing), and frames since a trail was asked for.
+    trail_on: bool,
+    trail_asked: Option<u32>,
 }
 
 /// An enemy's guard: a KH1 attack object of priority 100 (`0x1402B2A30`: such an object
@@ -379,7 +389,87 @@ pub unsafe fn clang(at: [f32; 3]) {
     f(source, 10, 20000, &p);
 }
 
+const TRAIL_RVA: usize = 0x2C0160;
+const EFFECT_RVA: usize = 0x2ABB60;
+const VOICE_RVA: usize = 0x28E060;
+/// Actor `+0x1CC` bit: the weapon trail is drawn (`0x1402BFD70`; KH1's attack motions' triggers
+/// set it over their swing).
+const TRAIL_FLAG: u32 = 0x80_0000;
+
 impl Strikes {
+    /// Phase 9: a KH2 swing starts with what KH1's matching combo row plays when its motion
+    /// starts (`0x1402A17F0`): the Keyblade trail asked for, the swing's effect and Sora's
+    /// voice. `count` is KH2's combo count (1 on the first swing).
+    pub unsafe fn swing_start(&mut self, sora: usize, air: bool, count: u8, finisher: bool) {
+        if self.swing_rows.is_none() {
+            let mut m = HashMap::new();
+            for i in 0..0x40 {
+                let Some(r) = row_info(sora, i) else { break };
+                if (200..=206).contains(&r.motion) {
+                    m.entry(r.motion).or_insert(r);
+                }
+            }
+            log(&format!("KH1 swing rows (motion: trail / effect / voice): {}", {
+                let mut v: Vec<_> = m.values().map(|r| format!("{}: {} / {} / {}", r.motion, r.trail, r.effect, r.voice)).collect();
+                v.sort();
+                v.join(", ")
+            }));
+            self.swing_rows = Some(m);
+        }
+        let n = count.max(1) as i16 - 1;
+        let motion = match (air, finisher) {
+            (false, false) => 200 + n.min(2),
+            (false, true) => 203,
+            (true, false) => 204 + n.min(1),
+            (true, true) => 206,
+        };
+        let Some(r) = self.swing_rows.as_ref().and_then(|m| m.get(&motion)).copied() else { return };
+        let base = BASE.load(Ordering::Relaxed);
+        let cs = pose::ptr(rd::<u32>(sora + 0x14C));
+        let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
+        if source > 0x10000 {
+            if r.trail >= 0 {
+                let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(base + TRAIL_RVA);
+                f(sora, r.trail as u32);
+                self.trail_asked = Some(0);
+            }
+            if r.effect >= 0 {
+                let f: unsafe extern "system" fn(usize, i32, usize, u32) -> usize = std::mem::transmute(base + EFFECT_RVA);
+                f(source, r.effect as i32, sora, 0x30);
+            }
+        }
+        if r.voice >= 0 {
+            let f: unsafe extern "system" fn(usize, i32, usize) = std::mem::transmute(base + VOICE_RVA);
+            f(sora, r.voice as i32, 0);
+        }
+    }
+
+    /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
+    pub unsafe fn trail(&mut self, sora: usize, swinging: bool) {
+        let flags = rd::<u32>(sora + 0x1CC);
+        if swinging {
+            wr(sora + 0x1CC, flags | TRAIL_FLAG);
+            self.trail_on = true;
+        } else if self.trail_on {
+            wr(sora + 0x1CC, flags & !TRAIL_FLAG);
+            self.trail_on = false;
+        }
+        // Whether the trail came (logged for the first few).
+        if let Some(n) = self.trail_asked {
+            let cs = pose::ptr(rd::<u32>(sora + 0x14C));
+            let made = cs > 0x10000 && rd::<u64>(cs + 0x28) != 0;
+            if made || n >= 30 {
+                static SEEN: AtomicU32 = AtomicU32::new(0);
+                if SEEN.fetch_add(1, Ordering::Relaxed) < 12 {
+                    log(&format!("Keyblade trail {} ({n} frames after asking, trail flag {})", if made { "drawn" } else { "not drawn" }, flags & TRAIL_FLAG != 0));
+                }
+                self.trail_asked = None;
+            } else {
+                self.trail_asked = Some(n + 1);
+            }
+        }
+    }
+
     /// The enemies this frame, as KH2's targets (before KH2's step).
     pub unsafe fn look(&mut self, sora: usize) -> Vec<TargetInfo> {
         self.bodies = bodies(sora);

@@ -109,6 +109,9 @@ struct Driver {
     /// KH2's last frame (dodge-roll invulnerability, guard), for `hurt`.
     last_out: Option<Output>,
     growth: menu::Growth,
+    /// The KH2 attack motion playing and its frame (`swing_fx`).
+    swing: Option<u16>,
+    swing_frame: u32,
 }
 
 static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
@@ -214,7 +217,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
         // a combo).
         anim.queued_blend = 14.0;
-        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new() }
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0 }
     });
     if FRESH.swap(false, Ordering::Relaxed) {
         // Back from KH1's own move: KH2's controller starts over (standing), keeping its
@@ -376,6 +379,17 @@ unsafe fn takeover(actor: usize) -> bool {
     GRIP.store(d.anim.weapons_out(), Ordering::Relaxed);
     GROUNDED.store(d.grounded && !d.character.airborne(), Ordering::Relaxed);
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
+    if settings.swing_fx {
+        // A KH2 swing starting: a new attack motion, or the same one again from its start.
+        let attacking = matches!(out.state, StateName::Attack);
+        let started = attacking && (d.swing != Some(out.motion) || out.clip_frame < d.swing_frame);
+        if started {
+            d.strikes.swing_start(actor, d.character.airborne(), out.combo_count, d.character.in_finisher());
+        }
+        d.swing = attacking.then_some(out.motion);
+        d.swing_frame = out.clip_frame;
+        d.strikes.trail(actor, attacking && !out.hitboxes.is_empty());
+    }
     d.last_out = Some(out.clone());
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));
