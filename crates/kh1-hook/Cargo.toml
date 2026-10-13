@@ -13,4 +13,7 @@ crate-type = ["cdylib"]
 [dependencies]
 kh1-data.workspace = true
 kh2-anim.workspace = true
+kh2-data.workspace = true
+kh2-formats.workspace = true
+character-core = { path = "../character-core" }
 glam = "0.29"

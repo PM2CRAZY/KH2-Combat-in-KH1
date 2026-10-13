@@ -90,8 +90,8 @@ pub unsafe extern "C" fn OnInit(mod_path: *const u16) {
     log(&format!("loaded by Panacea (mod folder {s})"));
 }
 
-/// A heartbeat (which other mods are loaded), and the test key: Insert cycles the pose
-/// override (`pose::MODE`).
+/// A heartbeat (which other mods are loaded), and the test key: Insert cycles what Sora is
+/// drawn with (`pose::MODES`).
 unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
     let base = GetModuleHandleA(std::ptr::null()) as usize;
     let mut n = 0u32;
@@ -101,9 +101,9 @@ unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
         n += 1;
         let down = (GetAsyncKeyState(0x2D) as u16 & 0x8000) != 0;
         if down && !was {
-            let m = (pose::MODE.load(Ordering::Relaxed) + 1) % 6;
+            let m = (pose::MODE.load(Ordering::Relaxed) + 1) % pose::MODES.len() as u32;
             pose::MODE.store(m, Ordering::Relaxed);
-            log(&format!("Insert: pose override {}", if m == 0 { "off".to_string() } else { format!("on, T-pose written into array {m}") }));
+            log(&format!("Insert: {}", pose::MODES[m as usize]));
         }
         was = down;
         if n == 100 || n % 2400 == 0 {
@@ -135,6 +135,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         log(&format!("kh1-kh2 {} loaded (build {}) in {exe}", env!("CARGO_PKG_VERSION"), env!("KH1_KH2_BUILD")));
         std::panic::set_hook(Box::new(|info| log(&format!("PANIC in kh1-kh2: {info}"))));
         pose::install();
+        pose::load_kh2();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
     }
     1

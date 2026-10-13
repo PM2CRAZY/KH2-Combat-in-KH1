@@ -308,3 +308,21 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `*.dll` only), copy the new one in, and check its SHA-256 on the PC after every deploy.
   The user's two crash dumps of 2026-10-13 (KH1 and the launcher, the launcher without our
   DLL) are both the null `memcpy` of a start without Epic's arguments.
+- Stage 2 result (the user's Insert test, log): Sora is the 293-bone model posed by the plain
+  pass (also by the ground-IK pass). Writing into `+0x1B4` gave a clean T-pose: that is the
+  world matrix array the game draws (y-down world). `+0x1B0` holds the sampled channels (scale
+  `+0`, accumulated scale `+0x10`, Euler `+0x20`, translation `+0x30` per 0x40-byte bone), kept
+  between frames (writing it made him huge); `+0x1B8` is each bone's matrix relative to its
+  parent (bone 3's matches its channels with KH2's Euler order). The T-pose lay sideways
+  because it was placed from the bind's root rotation; in motion KH1's root is the hips with a
+  yaw. Model → world is now `+0x1B4[0] * +0x1B8[0]⁻¹`, read each frame.
+- New `kh1_data::retarget` (ours, from the two bind poses): KH2 Sora's pose on KH1 Sora's
+  skeleton. Both bind in a T-pose facing +z with the same chain layout; 113 KH1 bones take
+  their KH2 counterpart's model-space turn from rest (legs, spine, neck, head, arms, fingers),
+  the rest turn with their parent; KH1's bone lengths, hips scaled by the hip-height ratio.
+  `examples/retarget_check.rs` (KH2=1 for KH2's own pose) checked idle and run against KH2's
+  own poses in side / front plots.
+- `kh1-hook` stage 3: KH2 Sora loads on a thread from the KH2 install in the same folder
+  (backup originals if the Mods Manager made them); Insert cycles off / KH1 T-pose upright /
+  KH2 idle / KH2 run, written into `+0x1B4` after the game's pass (the Keyblade still follows
+  KH1's hand). Logs a check that `+0x1B8` chains to `+0x1B4`.
