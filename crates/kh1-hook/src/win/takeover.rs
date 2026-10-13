@@ -24,7 +24,7 @@
 //! The pose drawn is KH2's animation player's (`POSE`, read by `pose`).
 
 use super::{combat, hook, log, pose};
-use character_core::{Abilities, Button, Character, Env, Input, StateName};
+use character_core::{Abilities, Button, Character, Env, Input, Output, StateName};
 use glam::Mat4;
 use kh2_rig::RigAnim;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -90,6 +90,8 @@ struct Driver {
     strikes: combat::Strikes,
     /// Last attack (for `BATTLE_LINGER`).
     fought: Option<Instant>,
+    /// KH2's last frame (dodge-roll invulnerability, guard), for `hurt`.
+    last_out: Option<Output>,
 }
 
 static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
@@ -155,6 +157,12 @@ unsafe fn takeover(actor: usize) -> bool {
         release(&format!("KH1's script moves him, actions {kinds:?}, flags {:08x}", rd::<u32>(actor)));
         return false;
     }
+    // KH1 plays his death (`hurt`: HP gone, the stats' dying flag 4).
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    if stats > 0x10000 && (rd::<u8>(stats) & 4 != 0 || rd::<i32>(stats + 0x3C) < 1) {
+        release("he is down");
+        return false;
+    }
     let slot = pose::sora_slot();
     let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.character.airborne())).unwrap_or(false);
     if !matches!(slot, Some(0..=7)) && !airborne {
@@ -173,7 +181,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
         // a combo).
         anim.queued_blend = 14.0;
-        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None }
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None }
     });
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
@@ -271,6 +279,7 @@ unsafe fn takeover(actor: usize) -> bool {
     GRIP.store(d.anim.weapons_out(), Ordering::Relaxed);
     GROUNDED.store(d.grounded && !d.character.airborne(), Ordering::Relaxed);
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
+    d.last_out = Some(out.clone());
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));
     }
@@ -291,6 +300,18 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     ACTIVE_MS.store(now_ms().max(1), Ordering::Relaxed);
     true
+}
+
+/// While KH2 has Sora: his controller and its last frame (for `hurt`).
+pub fn with_kh2<R>(f: impl FnOnce(&mut Character, &Output) -> R) -> Option<R> {
+    if !ON.load(Ordering::Relaxed) || !active() {
+        return None;
+    }
+    let mut g = DRIVER.try_lock().ok()?;
+    let d = g.as_mut()?;
+    d.last_state?;
+    let out = d.last_out.clone()?;
+    Some(f(&mut d.character, &out))
 }
 
 /// KH1 shows Sora's Keyblade while his actor's flag `0x4000` is set ("weapon out"):

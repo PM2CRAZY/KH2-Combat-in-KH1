@@ -6,6 +6,7 @@ mod combat;
 mod crash;
 mod feet;
 mod hook;
+mod hurt;
 mod pose;
 mod probe;
 mod takeover;
@@ -146,6 +147,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         probe::install();
         takeover::install();
         combat::install();
+        hurt::install();
         pose::load_kh2();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
     }

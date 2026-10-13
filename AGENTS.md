@@ -628,3 +628,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - Finishers: KH1's combo finishers are motions 203 / 206 with reaction-kind-5 data
     (0x4C58; the data's third word is the reaction kind, 3 a flinch, 5 knock-back).
   - Lock-on confirmed in the user's log (KH2 locks KH1's R1 target).
+- `kh1-hook` stage 28 (Phase 5, taking hits): `win/hurt.rs` hooks KH1's hit pass `0x140299A40`.
+  Before it runs for Sora under KH2, each ready hit record (queue at actor `+0x3EC`, next at
+  `+0x30`, delay bits 12..15 of `+0xC`) is decided with KH2's last frame: invulnerable
+  (dodge roll) → evaded, guard state / guard windows with the attacker in front (Guard Plus:
+  anywhere) → KH2 guard repel + KH1 clash spark; both mark the record no-effect (`+0` bit
+  0x20, as KH1's own guard does). Taken hits keep KH1's damage pass (Second Chance, MP,
+  HP bar, dying) with the reaction kind cleared, then KH2 plays the reaction (3 / 4 flinch,
+  5 blow) and the hurt voice `0x14028E060(actor, 0|1, 0)`, rumble `0x14028D740`, journal
+  count `0x14028A4D0(0xD)` and command clear KH1 would have. Damage types 9..12 (drains,
+  heals) are left to KH1. HP gone / stats flag 4: `takeover` releases Sora to KH1.

@@ -326,7 +326,7 @@ unsafe fn guards(sora: usize) -> Vec<Guard> {
 }
 
 /// KH1's clash spark and sound where a swing is repelled (`0x1402B2890`'s).
-unsafe fn clang(at: [f32; 3]) {
+pub unsafe fn clang(at: [f32; 3]) {
     let base = BASE.load(Ordering::Relaxed);
     let source = rd::<u64>(base + CLANG_SOURCE_RVA) as usize;
     if source < 0x10000 {
