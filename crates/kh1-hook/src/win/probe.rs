@@ -18,6 +18,9 @@ use super::{hook, log, pose};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
+/// The position watch ran (2026-10-13: `0x140386D00` from `0x140299350`, the collision mover);
+/// off now.
+const WATCH_ON: bool = false;
 const ACTOR_RVA: usize = 0x29CF10;
 const ACTOR_PROLOGUE: [u8; 8] = [0x40, 0x55, 0x57, 0x48, 0x8D, 0x6C, 0x24, 0xE8];
 const PAD_RVA: usize = 0x112C70;
@@ -104,6 +107,12 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     }
     let b: u16 = rd(out);
     let st: [u8; 4] = rd(out + 2);
+    // The pad as pressed goes to KH2; while KH2 has Sora, KH1 doesn't see its buttons.
+    super::takeover::RAW_BUTTONS.store(b as u32, Ordering::Relaxed);
+    super::takeover::RAW_STICKS.store(u32::from_le_bytes(st), Ordering::Relaxed);
+    if super::takeover::active() {
+        std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::CIRCLE | super::takeover::SQUARE));
+    }
     // Sticks to 3 levels each, so drift doesn't flood the log.
     let q = |v: u8| -> u64 { if v < 0x50 { 0 } else if v > 0xB0 { 2 } else { 1 } };
     let key = b as u64 | q(st[0]) << 16 | q(st[1]) << 18 | q(st[2]) << 20 | q(st[3]) << 22 | ((out as u64 & 0xFFFF) << 32);
@@ -242,7 +251,7 @@ pub unsafe fn tick(seconds: f32) {
     let a = SORA_ACTOR.load(Ordering::Relaxed);
     let off = POS_OFF.load(Ordering::Relaxed);
     let armed = ARMED_AT.load(Ordering::Relaxed);
-    if armed == 0 && a != 0 && off != 0 && seconds > 20.0 {
+    if WATCH_ON && armed == 0 && a != 0 && off != 0 && seconds > 20.0 {
         AddVectoredExceptionHandler(1, on_exception);
         let n = watch(a + off);
         ARMED_AT.store(seconds as u32, Ordering::Relaxed);

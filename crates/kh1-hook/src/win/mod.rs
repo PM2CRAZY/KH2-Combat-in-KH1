@@ -5,6 +5,7 @@
 mod hook;
 mod pose;
 mod probe;
+mod takeover;
 mod sys;
 
 use std::ffi::c_void;
@@ -104,6 +105,7 @@ unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
         if down && !was {
             let m = (pose::MODE.load(Ordering::Relaxed) + 1) % pose::MODES.len() as u32;
             pose::MODE.store(m, Ordering::Relaxed);
+            takeover::ON.store(m == 0, Ordering::Relaxed);
             log(&format!("Insert: {}", pose::MODES[m as usize]));
         }
         was = down;
@@ -138,6 +140,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         std::panic::set_hook(Box::new(|info| log(&format!("PANIC in kh1-kh2: {info}"))));
         pose::install();
         probe::install();
+        takeover::install();
         pose::load_kh2();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
     }

@@ -2370,6 +2370,7 @@ dependencies = [
  "kh2-anim",
  "kh2-data",
  "kh2-formats",
+ "kh2-rig",
 ]
 
 [[package]]

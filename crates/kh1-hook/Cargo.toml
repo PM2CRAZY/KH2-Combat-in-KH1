@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 kh1-data.workspace = true
 kh2-anim.workspace = true
 kh2-data.workspace = true
+kh2-rig.workspace = true
 kh2-formats.workspace = true
 character-core = { path = "../character-core" }
 glam = "0.29"

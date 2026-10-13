@@ -57,8 +57,9 @@ static ORIG_POSE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_POSE_IK: AtomicUsize = AtomicUsize::new(0);
 
 /// What Insert cycles through (starts on the first).
-pub const MODES: [&str; 5] = [
-    "KH2 animations follow Sora (movement, jump, glide, ground combo)",
+pub const MODES: [&str; 6] = [
+    "KH2 controls Sora (KH2 movement; KH1's own actions keep KH1)",
+    "KH1 controls Sora, KH2 animations on top",
     "off (KH1's own animation)",
     "KH1 bind pose (T-pose), upright",
     "KH2 idle (battle stance)",
@@ -113,8 +114,10 @@ static SLOTS: OnceLock<(HashMap<Signature, usize>, Vec<u32>)> = OnceLock::new();
 
 /// KH2 Sora: skeleton and motions, and each action clip's root travel per frame (KH1 moves
 /// him itself, so a swing's lunge is taken out of the pose).
-struct Kh2 {
-    rig: Arc<Rig>,
+pub struct Kh2 {
+    pub rig: Arc<Rig>,
+    /// KH2 Sora's controller data (moveset, movement and growth numbers, combo rows).
+    pub character: character_core::Character,
     roots: HashMap<u16, Vec<[f32; 3]>>,
     /// Walk and run (battle, field): ground speed in KH2 units per second, from the planted
     /// foot's travel against the hips.
@@ -144,6 +147,18 @@ fn ground_speed(rig: &Rig, clip: &kh2_formats::anim::Interpolated) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 * 60.0 }
 }
 static KH2: OnceLock<Result<Kh2, String>> = OnceLock::new();
+
+/// KH2 Sora, once loaded.
+pub fn kh2() -> Option<&'static Kh2> {
+    KH2.get()?.as_ref().ok()
+}
+
+/// The slot of KH1 Sora's motion playing now (as of his last skeleton pass).
+static SLOT_NOW: AtomicUsize = AtomicUsize::new(usize::MAX);
+pub fn sora_slot() -> Option<usize> {
+    let s = SLOT_NOW.load(Ordering::Relaxed);
+    (s != usize::MAX).then_some(s)
+}
 
 struct Sora {
     instance: usize,
@@ -294,7 +309,7 @@ pub fn load_kh2() {
                 }
             }
             log(&format!("KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32()));
-            Ok(Kh2 { rig, roots, ground })
+            Ok(Kh2 { rig, character: sora.character.clone(), roots, ground })
         })();
         if let Err(e) = &r {
             log(&format!("KH2 Sora did not load: {e}"));
@@ -338,12 +353,22 @@ fn note_model(bones: u32, instance: usize, via_ik: bool) {
 fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4>> {
     let mode = MODE.load(Ordering::Relaxed);
     match mode {
-        0 => follow(s, slot, to_world),
-        2 => Some(s.bind.clone()),
-        3 | 4 => {
+        0 => {
+            let fresh = super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, t)| t.elapsed().as_secs_f32() < 0.15).map(|(b, _)| b.clone()));
+            match (fresh, s.retarget.as_ref()) {
+                (Some(b), Some(r)) => {
+                    s.follow.slot = slot;
+                    Some(r.pose(&b))
+                }
+                _ => follow(s, slot, to_world),
+            }
+        }
+        1 => follow(s, slot, to_world),
+        3 => Some(s.bind.clone()),
+        4 | 5 => {
             let kh2 = KH2.get()?.as_ref().ok()?;
             let r = s.retarget.as_ref()?;
-            let m = kh2.rig.motions.get(&(if mode == 3 { character_core::motion::IDLE } else { character_core::motion::RUN }))?;
+            let m = kh2.rig.motions.get(&(if mode == 4 { character_core::motion::IDLE } else { character_core::motion::RUN }))?;
             let frames = CLOCK.get_or_init(Instant::now).elapsed().as_secs_f32() * 60.0;
             let t = kh2_anim::key_time(m, frames, true);
             let pose = kh2_anim::evaluate(&kh2.rig.skeleton, m, t, kh2_anim::Options::default()).bones;
@@ -608,6 +633,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     }
     let orig_hands = (!ours).then(|| HANDS.map(|(b, _)| mat(world + b * 0x40)));
     let slot = slot_of(instance);
+    SLOT_NOW.store(slot.unwrap_or(usize::MAX), Ordering::Relaxed);
     let Some(pose) = wanted(s, slot, &to_world) else {
         s.wrote_root = None;
         s.to_world = Some(to_world);
@@ -710,7 +736,7 @@ type PoseIk = unsafe extern "system" fn(usize, usize, u32);
 
 unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: usize) {
     let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
-    let moved = if instance != 0 && MODE.load(Ordering::Relaxed) == 0 { held(instance, world) } else { None };
+    let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
     match moved {
         Some(m) => {
             let a = m.to_cols_array();
@@ -725,7 +751,7 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
 
 unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
     let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
-    let moved = if instance != 0 && MODE.load(Ordering::Relaxed) == 0 { held(instance, world) } else { None };
+    let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
     match moved {
         Some(m) => {
             let a = m.to_cols_array();

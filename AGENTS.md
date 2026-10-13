@@ -401,3 +401,28 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   for his drawn position, puts hardware write watchpoints (debug registers on every other
   thread, a vectored handler) on that field for 25 s and logs the writing code by address;
   logs the pad record on change.
+- Stage 7 probe result (the user's run): Sora's actor at `0x142D37C80` (party array, Sora
+  first; actors are 0x4B0-byte records in a pool from `0x142D37CA0`); position `+0x10`
+  (copies at `+0x50`, `+0x100` in the world matrix at `+0xD0`, `+0x260`, `+0x2E0`, `+0x320`);
+  the only regular writer is `0x140386D00` (vector add) from the collision mover
+  `0x140299350`, ~57 times a second. Pad record: Cross 0x4000, Circle 0x2000, Square 0x8000,
+  d-pad as PS2; stick bytes rx, ry, lx, ly (left: 0 = left / up, 0xFF = right / down).
+- Ghidra, the actor's frame (`0x140295E50`): think (`0x1402957F0` picks it by object kind;
+  `0x1402A1170` for the player and party: the move vector, the state's handler from the
+  table `0x142DB4240` (0x40 bytes a state: flags, enter, exit, update, displacement,
+  transition, ...; registered by `0x1402AF9F0` from `0x1402AF8B0`), the turn toward `+0x150`),
+  physics `0x140298230` (state displacement, platform carry `+0x120`, `0x140297710` move with
+  collision, floor `+0x320` / height above it `+0x3D4`, transition), matrix, animation.
+  `0x14298D3A0` is set while an event runs. The state at `+0x70` stays 0 through KH1's
+  attacks, so KH1's own actions are told by the motion slot instead.
+- `kh1-hook` stage 8 (`takeover.rs`): KH2's controller drives Sora's movement. Hooked
+  physics step; for Sora, with no event and KH1 showing standing / walking / running (slots
+  0-7) or KH2 having him in the air: input (direction from KH1's camera-relative move vector
+  `+0x20`, tilt from the left stick, Circle jump, Square KH2's action button), KH2's step
+  with KH1's height above floor, KH2's displacement through KH1's mover `0x140297710`
+  (stepping down up to 24 onto lower floor on the ground, put back on the floor when below
+  it), facing written to `+0x30..+0x3C` and `+0x150`, KH2's animation player for the pose
+  (field variants on KH1's field slots). KH1 doesn't see Circle / Square while KH2 has him.
+  Every movement ability at MAX for testing. Insert: KH2 controls / KH2 animations on KH1 /
+  off / T-pose / idle / run. Cross still goes to KH1 (talk, chests, menus, KH1's attacks,
+  which hand control back to KH1 until they end); KH2's combo system is next.
