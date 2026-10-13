@@ -287,8 +287,60 @@ unsafe fn note_weapon(instance: usize, world: usize, via_ik: bool) {
     }
 }
 
+/// Small models (≤ 40 bones) posed near Sora: when, where, and where their placement matrix
+/// comes from (a bone of Sora's drawn matrices, if it points into them).
+struct Small {
+    bones: u32,
+    at: Instant,
+    pos: Vec3,
+    from_bone: Option<usize>,
+    dist_hand: f32,
+}
+static SMALL: Mutex<Option<HashMap<usize, Small>>> = Mutex::new(None);
+
+unsafe fn note_small(instance: usize, world: usize) {
+    let Some(bones) = bone_count(instance) else { return };
+    if bones > 40 || bones == SORA_BONES || world < 0x10000 {
+        return;
+    }
+    let w = mat(world);
+    let pos = w.w_axis.truncate();
+    let sora = SORA_INSTANCE.load(Ordering::Relaxed);
+    let arr = if sora > 0x10000 { ptr(rd::<u32>(sora + WORLD)) } else { 0 };
+    let from_bone = (arr > 0x10000 && world >= arr && world < arr + SORA_BONES as usize * 0x40).then(|| (world - arr) / 0x40);
+    let Some(hands) = HANDS_NOW.lock().ok().and_then(|h| *h) else { return };
+    let dist_hand = (pos - hands.drawn[0].w_axis.truncate()).length();
+    let near_sora = SORA_AT.try_lock().ok().and_then(|a| *a).map_or(false, |a| (pos - Vec3::from(a)).length() < 400.0);
+    if !near_sora && from_bone.is_none() {
+        return;
+    }
+    if let Ok(mut g) = SMALL.try_lock() {
+        let m = g.get_or_insert_with(HashMap::new);
+        if m.len() < 64 || m.contains_key(&instance) {
+            m.insert(instance, Small { bones, at: Instant::now(), pos, from_bone, dist_hand });
+        }
+    }
+}
+
 /// Where the Keyblade was last posed, against the hands.
 pub fn weapon_report() -> String {
+    let small = SMALL.lock().ok().map(|g| {
+        let mut v: Vec<String> = g
+            .as_ref()
+            .map(|m| {
+                m.iter()
+                    .filter(|(_, s)| s.at.elapsed().as_secs_f32() < 5.0)
+                    .map(|(i, s)| format!("{i:#x} {}b {}ms ago at {:.0?} {:.0} from drawn hand{}", s.bones, s.at.elapsed().as_millis(), s.pos, s.dist_hand, s.from_bone.map_or(String::new(), |b| format!(", placed by Sora's bone {b}"))))
+                    .collect()
+            })
+            .unwrap_or_default();
+        v.sort();
+        v.join(" | ")
+    });
+    format!("small models near Sora: [{}]; {}", small.unwrap_or_default(), weapon_report_old())
+}
+
+fn weapon_report_old() -> String {
     let inst = weapon_instance();
     let hands = HANDS_NOW.lock().ok().and_then(|h| *h);
     let hand = hands.map(|h| (h.drawn[0].w_axis.truncate(), h.orig[0].w_axis.truncate()));
@@ -827,6 +879,9 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
     if instance != 0 && instance == weapon_instance() {
         note_weapon(instance, world, false);
     }
+    if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
+        note_small(instance, world);
+    }
     if instance != 0 {
         check(instance, false, world);
     }
@@ -844,6 +899,9 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
     }
     if instance != 0 && instance == weapon_instance() {
         note_weapon(instance, world, true);
+    }
+    if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
+        note_small(instance, world);
     }
     if instance != 0 {
         check(instance, true, world);

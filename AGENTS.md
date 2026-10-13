@@ -493,3 +493,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   top of the game thread's stack when a door script set Sora's exit motion). The scan now
   stops at an unreadable page. The Keyblade object (combat state `+0x18`) is no model
   instance (`[0x82, 0, 0, 9, handle, ...]`); its model instance is the handle at `+0x10`.
+- `kh1-hook` stage 14: the user: doors work; the Keyblade is still invisible while
+  attacking. Ruled out offline (`kh1-data` example `hand_check`): no KH2 attack motion
+  degenerates or stretches the retargeted right hand or the 40 bones under it (101-127,
+  280-292). The combat state's `+0x18` object is no model either: it is a table (count `+0xC`,
+  0x20-byte entries from `+0x10`, looked up by `0x1401DDE80`), the hit-effect points. Probe:
+  every small model (≤ 40 bones) posed near Sora is logged with where its placement matrix
+  comes from (a bone of Sora's drawn matrices, if it points into them), at each KH2 state
+  change and every 15 frames of an attack.

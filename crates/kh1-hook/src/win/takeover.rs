@@ -238,6 +238,14 @@ unsafe fn takeover(actor: usize) -> bool {
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));
     }
+    // The Keyblade during attacks (the user: invisible while attacking): every 15 frames.
+    static ATTACK_FRAMES: AtomicU32 = AtomicU32::new(0);
+    if matches!(out.state, StateName::Attack) {
+        let n = ATTACK_FRAMES.fetch_add(1, Ordering::Relaxed);
+        if n % 15 == 7 && n < 15 * 40 {
+            log(&format!("attacking (motion {}, frame {}): {}", out.motion, out.clip_frame, pose::weapon_report()));
+        }
+    }
     if d.last_state != Some(out.state) {
         if d.logged < 400 {
             d.logged += 1;
