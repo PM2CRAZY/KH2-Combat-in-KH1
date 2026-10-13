@@ -23,8 +23,8 @@
 //! come from the floor it reports. KH1 never sees Circle or Square meanwhile (`probe::pad`).
 //! The pose drawn is KH2's animation player's (`POSE`, read by `pose`).
 
-use super::{combat, hook, log, pose};
-use character_core::{Abilities, Button, Character, Env, Input, Output, StateName};
+use super::{combat, hook, log, menu, pose};
+use character_core::{Button, Character, Env, Input, Output, StateName};
 use glam::Mat4;
 use kh2_rig::RigAnim;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -92,6 +92,7 @@ struct Driver {
     fought: Option<Instant>,
     /// KH2's last frame (dodge-roll invulnerability, guard), for `hurt`.
     last_out: Option<Output>,
+    growth: menu::Growth,
 }
 
 static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
@@ -166,23 +167,22 @@ unsafe fn takeover(actor: usize) -> bool {
     let slot = pose::sora_slot();
     let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.character.airborne())).unwrap_or(false);
     if !matches!(slot, Some(0..=7)) && !airborne {
-        release(&format!("KH1's own action, slot {}", slot.map_or("?".into(), |s| s.to_string())));
+        release(&format!("KH1's own action, slot {}, KH1 state {}", slot.map_or("?".into(), |s| s.to_string()), rd::<i32>(actor + 0x70)));
         return false;
     }
     let Some(kh2) = pose::kh2() else { return false };
     let Ok(mut g) = DRIVER.try_lock() else { return false };
     let d = g.get_or_insert_with(|| {
-        let mut character = kh2.character.clone();
-        // Testing: every movement ability at MAX, guard and aerial recovery (KH1's level-ups
-        // hand them out later).
-        character.abilities = Abilities { guard: true, aerial_recovery: true, combo_master: true, ..Abilities::max_growth() };
+        // Its abilities: `menu` (the ini's `abilities`: testing MAX, or KH1's menu and level).
+        let character = kh2.character.clone();
         log("KH2's controller ready for Sora");
         let mut anim = RigAnim::new(kh2.rig.clone());
         // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
         // a combo).
         anim.queued_blend = 14.0;
-        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None }
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new() }
     });
+    d.growth.update(base, &mut d.character);
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
         d.character.set_facing(rd::<f32>(actor + 0x3C));
@@ -233,8 +233,14 @@ unsafe fn takeover(actor: usize) -> bool {
     let rising = out.displacement[1] > 0.0;
     let up_before = -p[1];
     wr(actor + 0x490, rd::<[f32; 4]>(actor + 0x10));
+    // What KH1's physics step adds to a move (`0x140298230`), as it would: a carrying
+    // platform's motion (`+0x200`, while `+0x160` bit 4) and the frame's push (`+0x120`,
+    // cleared once used), and the touched-objects mask (`+0x90`) cleared before the move.
+    let carry = carried(actor, &mut d.logged);
+    wr(actor + 0x90, 0u64);
     let mv: MoveFn = std::mem::transmute(base + MOVE_RVA);
-    mv(actor, &[out.displacement[0], 0.0, out.displacement[2], 0.0], 0);
+    mv(actor, &[out.displacement[0] + carry[0], 0.0, out.displacement[2] + carry[2], 0.0], 0);
+    wr(actor + 0x120, [0.0f32; 4]);
     // The floor under where he is now (KH1 y-down: floor point `+0x320`).
     let floor_up = -rd::<f32>(actor + 0x324);
     let walked_up = -rd::<f32>(actor + 0x14);
@@ -294,12 +300,36 @@ unsafe fn takeover(actor: usize) -> bool {
     if d.last_state != Some(out.state) {
         if d.logged < 400 {
             d.logged += 1;
-            log(&format!("KH2 has Sora: {:?} (motion {}), height above floor {above:.1}, KH1 slot {:?}, flags {:08x}; {}", out.state, out.motion, slot, rd::<u32>(actor), pose::weapon_report()));
+            log(&format!("KH2 has Sora: {:?} (motion {}), height above floor {above:.1}, KH1 slot {:?}, KH1 state {}, flags {:08x}; {}", out.state, out.motion, slot, rd::<i32>(actor + 0x70), rd::<u32>(actor), pose::weapon_report()));
         }
         d.last_state = Some(out.state);
     }
     ACTIVE_MS.store(now_ms().max(1), Ordering::Relaxed);
     true
+}
+
+/// A platform's carry and the frame's push (KH1 world), see the physics step.
+unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
+    let mut c = glam::Vec3::from(rd::<[f32; 3]>(actor + 0x120));
+    let riding = rd::<u32>(actor + 0x160) & 4 != 0;
+    if riding {
+        c += glam::Vec3::from(rd::<[f32; 3]>(actor + 0x200));
+    }
+    if !c.is_finite() || c.length() > 400.0 {
+        return [0.0; 3];
+    }
+    static SEEN: AtomicU32 = AtomicU32::new(0);
+    if c.length_squared() > 1e-4 && *logged < 400 && SEEN.fetch_add(1, Ordering::Relaxed) < 40 {
+        *logged += 1;
+        log(&format!(
+            "carried {c:.2?} (push {:.2?}, platform {:?}, standing on {:#x}, object {})",
+            rd::<[f32; 3]>(actor + 0x120),
+            riding.then(|| rd::<[f32; 3]>(actor + 0x200)),
+            pose::ptr(rd::<u32>(actor + 0x398)),
+            rd::<i32>(actor + 0x2CC)
+        ));
+    }
+    c.to_array()
 }
 
 /// While KH2 has Sora: his controller and its last frame (for `hurt`).

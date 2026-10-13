@@ -7,6 +7,7 @@ mod crash;
 mod feet;
 mod hook;
 mod hurt;
+mod menu;
 mod pose;
 mod probe;
 mod takeover;

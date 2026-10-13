@@ -638,3 +638,18 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   5 blow) and the hurt voice `0x14028E060(actor, 0|1, 0)`, rumble `0x14028D740`, journal
   count `0x14028A4D0(0xD)` and command clear KH1 would have. Damage types 9..12 (drains,
   heals) are left to KH1. HP gone / stats flag 4: `takeover` releases Sora to KH1.
+- `kh1-hook` stage 29 (Phase 6 / 7 groundwork):
+  - Platform carry and push: KH1's physics step adds, before its move, the carrying
+    platform's motion (`+0x200` while `+0x160` bit 4) and the frame's push (`+0x120`, zeroed
+    after), and clears the touched-objects mask (`+0x90`). KH2's moves now do the same
+    (`takeover::carried`, logged the first 40 times it is non-zero). Before, `+0x120` was never
+    cleared while KH2 had Sora.
+  - KH1's movement state (`+0x70`) is in the hand-off logs (for Phase 6/8 hand-offs).
+  - Phase 7: `growth.rs` (unit tested) maps KH1's menu to KH2's abilities: save block
+    `0x142DE9D60` (`*0x1428695A0`), Sora's level byte `+4`, abilities `+0x44` (48 bytes,
+    bit 7 = not equipped, 0 ends the list as `0x140282A70` counts), shared abilities `+0x599`.
+    KH1's own abilities map directly (High Jump levels, Glide + Superglide, Guard, Dodge Roll,
+    Combo Plus, Air Combo Plus, the FM modifiers to KH2's nearest); KH2-only ones come with
+    Sora's level (`LEVELS`). `win/menu.rs` reads `kh1-kh2.ini` (`abilities = test | kh1 |
+    all`, default `test`, the old testing set) and logs what KH1's menu gives every time it
+    changes.

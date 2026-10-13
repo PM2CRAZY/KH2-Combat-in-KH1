@@ -9,6 +9,8 @@
 
 #![allow(clippy::missing_safety_doc)]
 
+pub mod growth;
+
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod win;
 
