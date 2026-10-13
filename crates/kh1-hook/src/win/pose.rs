@@ -290,7 +290,23 @@ pub fn weapon_report() -> String {
             hand.map(|h| h.1),
             w.words.iter().map(|v| format!("{v:08x}")).collect::<Vec<_>>().join(" ")
         ),
-        None => format!("Keyblade {inst:#x} not posed yet"),
+        None => {
+            // Not posed by the skeleton passes: where its own matrices put it.
+            let now = unsafe {
+                if inst > 0x10000 && super::crash::readable(inst) && super::crash::readable(inst + 0x1B8) {
+                    let b = ptr(rd::<u32>(inst + WORLD));
+                    let words = rd::<[u32; 8]>(inst).map(|v| format!("{v:08x}")).join(" ");
+                    let bone0 = (b > 0x10000 && super::crash::readable(b)).then(|| mat(b).w_axis.truncate());
+                    let slot = rd::<u64>(inst) as usize;
+                    let header = if slot > 0x10000 && super::crash::readable(slot) { rd::<u64>(slot) as usize } else { 0 };
+                    let bones = (header > 0x10000 && super::crash::readable(header)).then(|| rd::<u16>(header));
+                    format!("bone 0 at {bone0:.0?}, bones {bones:?}, instance [{words}]")
+                } else {
+                    "unreadable".into()
+                }
+            };
+            format!("Keyblade {inst:#x} not posed by the skeleton passes; {now}; right hand drawn {:.0?} / KH1's {:.0?}", hand.map(|h| h.0), hand.map(|h| h.1))
+        }
     }
 }
 

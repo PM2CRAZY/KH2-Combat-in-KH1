@@ -482,3 +482,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `pose` shows KH1's own animation while the list is non-empty. Diagnostics for the
   Keyblade (invisible during KH2's attacks): its instance is combat state `+0x18`; where it
   is posed is logged with each KH2 state change.
+- `kh1-hook` stage 12: the user: the game crashed going through a door (stage 11; no dump,
+  last line KH2 retaking Sora between the door's turn and its walk, actor flags `0x1000000`
+  set). Actor flag `0x1000000` (script commands 0x24 set / 0x23 clear) now also keeps KH2
+  off (set from a door's turn to the end of its walk, and at a zone entry). `win/crash.rs`
+  logs the first fatal exceptions (code, address, registers, return addresses). The
+  Keyblade instance is never posed by the two skeleton passes; its own matrices are logged.

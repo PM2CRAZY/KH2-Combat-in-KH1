@@ -22,6 +22,7 @@ extern "system" {
     pub fn GetThreadContext(thread: *mut c_void, ctx: *mut c_void) -> i32;
     pub fn SetThreadContext(thread: *mut c_void, ctx: *const c_void) -> i32;
     pub fn CloseHandle(h: *mut c_void) -> i32;
+    pub fn VirtualQuery(addr: *const c_void, info: *mut c_void, size: usize) -> usize;
     pub fn AddVectoredExceptionHandler(first: u32, handler: unsafe extern "system" fn(*mut c_void) -> i32) -> *mut c_void;
 }
 

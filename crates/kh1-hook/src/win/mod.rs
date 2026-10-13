@@ -3,6 +3,7 @@
 //! with that in the shared KH folder, so it is not used).
 
 mod combat;
+mod crash;
 mod hook;
 mod pose;
 mod probe;
@@ -139,6 +140,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         }
         log(&format!("kh1-kh2 {} loaded (build {}) in {exe}", env!("CARGO_PKG_VERSION"), env!("KH1_KH2_BUILD")));
         std::panic::set_hook(Box::new(|info| log(&format!("PANIC in kh1-kh2: {info}"))));
+        crash::install();
         pose::install();
         probe::install();
         takeover::install();

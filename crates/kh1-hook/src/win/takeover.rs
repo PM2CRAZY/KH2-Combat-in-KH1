@@ -125,9 +125,12 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     // KH1's area scripts walk / turn him (zone entries and exits, doors): their pending
     // actions hang off `+0x440` (`0x14028CD60`); KH1 moves and animates him meanwhile.
+    // Flag `0x1000000` (script commands 0x24 / 0x23, `0x14028C550`) is set from a door's turn
+    // until the walk through it ends, and at a zone entry until he has walked in.
     let script = pose::ptr(rd::<u32>(actor + 0x440));
-    SCRIPTED.store(script != 0, Ordering::Relaxed);
-    if script != 0 {
+    let held_by_script = rd::<u32>(actor) & 0x0100_0000 != 0;
+    SCRIPTED.store(script != 0 || held_by_script, Ordering::Relaxed);
+    if script != 0 || held_by_script {
         let mut kinds = Vec::new();
         let mut a = script;
         while a > 0x10000 && kinds.len() < 8 {
