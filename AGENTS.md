@@ -615,3 +615,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - Finishers land with a KH1 finishing row whose attack data differs from the swing's
     (KH1's first 202 row shares the swing's data); every distinct attack data's first words
     are logged for picking knockback by its fields next.
+- `kh1-hook` stage 27 (the user: enemies like the Large Body must repel hits from the front;
+  some enemies' parts take no damage and bounce the Keyblade off):
+  - KH1's guards are attack objects of priority 100 (`+0x68`; the clash `0x1402B2A30` repels
+    anything meeting one), directional when type bits `0xE0000` are 1 or 3 (`0x1402B24B0`:
+    Sora within the arc whose cosine is the data's `+0x64` around the owner's facing turned
+    by the data's `+0x60`). `combat::guards` scans the attack pool (`0x142DB5110`, 0x40 ×
+    0xC0; in use `0x800`, active `0xC`, motion-bound type 2 only while the owner plays it)
+    each frame; a KH2 swing meeting one is repelled (`Character::register_wall_hit`, KH2's
+    repel) and hits nothing more, with KH1's clash spark (`0x1402AC4C0(*0x142D67400, 10,
+    20000, pos)`). Guards seen are logged once per owner.
+  - Finishers: KH1's combo finishers are motions 203 / 206 with reaction-kind-5 data
+    (0x4C58; the data's third word is the reaction kind, 3 a flinch, 5 knock-back).
+  - Lock-on confirmed in the user's log (KH2 locks KH1's R1 target).

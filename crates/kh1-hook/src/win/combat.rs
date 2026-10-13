@@ -132,13 +132,15 @@ unsafe fn sora_rows(sora: usize) -> Option<[Row; 4]> {
         .collect();
     log(&format!("their attack data: {}", datas.join(" | ")));
     let first = |m: i16| rows.iter().find(|r| r.motion == m).copied();
-    // A finisher: KH1's finishing motion, preferring a row whose attack data differs from the
-    // swing's (KH1's own finisher hits harder and knocks back; row 14, the first 202, shares
-    // the swing's data).
-    let finisher = |m: i16, swing: Row| rows.iter().find(|r| r.motion == m && r.data != swing.data).copied().or_else(|| first(m));
+    // The attack data's third word is KH1's reaction kind (into the attack's `+0x30` low bits;
+    // 3 a flinch, 5 the finishers' knock-back, the user's stage 26 log). KH1's combo finishers
+    // are motions 203 (ground) and 206 (air), both with a kind-5 data (0x4C58, +4 strength);
+    // a finisher lands with the first kind-5 row of that motion.
+    let kind = |r: &Row| rd::<u32>(base + ATTACK_DATA_RVA + r.data as usize + 8);
+    let finisher = |m: i16| rows.iter().find(|r| r.motion == m && kind(r) == 5).copied().or_else(|| rows.iter().find(|r| (200..=206).contains(&r.motion) && kind(r) == 5).copied());
     let ground = first(200).or_else(|| first(201))?;
     let air = first(204).or(Some(ground))?;
-    Some([ground, finisher(202, ground).unwrap_or(ground), air, finisher(205, air).unwrap_or(air)])
+    Some([ground, finisher(203).unwrap_or(ground), air, finisher(206).unwrap_or(air)])
 }
 
 /// One enemy's body part: KH1's entry for its contact code and the shape in KH2 space.
@@ -232,12 +234,114 @@ pub struct Strikes {
     rows: Option<[Row; 4]>,
     rows_tried: bool,
     bodies: Vec<Body>,
+    guards: Vec<Guard>,
+    /// Swings a guard repelled: they hit nothing more.
+    repelled: HashSet<u64>,
+}
+
+/// An enemy's guard: a KH1 attack object of priority 100 (`0x1402B2A30`: such an object
+/// repels whatever attack meets it), e.g. the Large Body's belly, shields. Directional ones
+/// (type bits `0xE0000` of 1 or 3) only guard an arc in front of their owner (`0x1402B24B0`).
+struct Guard {
+    shape: Shape,
+    /// KH1 world centre.
+    at: [f32; 3],
+    owner: usize,
+}
+
+const ATTACK_POOL_RVA: usize = 0x2DB5110;
+const ATTACK_SLOTS: usize = 0x40;
+const GUARD_PRIORITY: i32 = 100;
+const CLANG_RVA: usize = 0x2AC4C0;
+const CLANG_SOURCE_RVA: usize = 0x2D67400;
+
+/// The live enemy guards near Sora.
+unsafe fn guards(sora: usize) -> Vec<Guard> {
+    let base = BASE.load(Ordering::Relaxed);
+    let hittable: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(base + HITTABLE_RVA);
+    let team = |a: usize| (rd::<u32>(a + 0x374) >> 5) & 3;
+    let ours = team(sora);
+    let at = rd::<[f32; 3]>(sora + 0x10);
+    let mut out = Vec::new();
+    for k in 0..ATTACK_SLOTS {
+        let g = base + ATTACK_POOL_RVA + k * 0xC0;
+        let flags = rd::<u32>(g);
+        // In use, active, not being freed or switched off.
+        if flags & 0x800 == 0 || flags & 0xC == 0 || flags & 0x0120_0000 != 0 {
+            continue;
+        }
+        if rd::<i32>(g + 0x68) != GUARD_PRIORITY {
+            continue;
+        }
+        let owner = pose::ptr(rd::<u32>(g + 0x34));
+        if owner < 0x10000 || owner == sora || team(owner) == ours || hittable(owner) & 0xFF == 0 {
+            continue;
+        }
+        // Tied to a motion (activity type 2): only while the owner plays it.
+        if (flags >> 2) & 3 == 2 {
+            let req = rd::<u32>(g + 0x58);
+            if req != 0xFFF && req != rd::<u32>(owner + 0x164) {
+                continue;
+            }
+        }
+        let c = rd::<[f32; 3]>(g + 0x10);
+        let r = rd::<f32>(g + 0xC);
+        if !(r > 0.0 && r < 1000.0) || !c.iter().all(|v| v.is_finite()) {
+            continue;
+        }
+        let (dx, dz) = (c[0] - at[0], c[2] - at[2]);
+        if dx * dx + dz * dz > NEAR * NEAR {
+            continue;
+        }
+        // Directional: Sora must be within the arc (cosine at the data's `+0x64`) around the
+        // owner's facing turned by the data's `+0x60`.
+        if (flags & 0xE0000).wrapping_sub(0x20000) & 0xFFF9_FFFF == 0 {
+            let data = pose::ptr(rd::<u32>(g + 0x5C));
+            if data > 0x10000 {
+                let f = rd::<[f32; 3]>(owner + 0x30);
+                let turn = rd::<f32>(data + 0x60);
+                let (s, co) = (turn.sin(), turn.cos());
+                let fx = f[0] * co + f[2] * s;
+                let fz = -f[0] * s + f[2] * co;
+                let (o, me) = (rd::<[f32; 3]>(owner + 0x50), rd::<[f32; 3]>(sora + 0x50));
+                let (dx, dz) = (me[0] - o[0], me[2] - o[2]);
+                let (lf, ld) = ((fx * fx + fz * fz).sqrt(), (dx * dx + dz * dz).sqrt());
+                if lf > 1e-4 && ld > 1e-4 && (fx * dx + fz * dz) / (lf * ld) < rd::<f32>(data + 0x64) {
+                    continue;
+                }
+            }
+        }
+        static SEEN: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
+        if let Ok(mut v) = SEEN.try_lock() {
+            if v.len() < 40 && !v.contains(&owner) {
+                v.push(owner);
+                let obj = pose::ptr(rd::<u32>(owner + 0x130));
+                let id = if obj > 0x10000 { rd::<u16>(obj + 0x4C) } else { 0xFFFF };
+                log(&format!("guard seen: actor {owner:#x} (object {id}), radius {r:.0}, flags {flags:08x}"));
+            }
+        }
+        out.push(Guard { shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner });
+    }
+    out
+}
+
+/// KH1's clash spark and sound where a swing is repelled (`0x1402B2890`'s).
+unsafe fn clang(at: [f32; 3]) {
+    let base = BASE.load(Ordering::Relaxed);
+    let source = rd::<u64>(base + CLANG_SOURCE_RVA) as usize;
+    if source < 0x10000 {
+        return;
+    }
+    let f: unsafe extern "system" fn(usize, u32, u32, *const [f32; 4]) -> usize = std::mem::transmute(base + CLANG_RVA);
+    let p = [at[0], at[1], at[2], 1.0];
+    f(source, 10, 20000, &p);
 }
 
 impl Strikes {
     /// The enemies this frame, as KH2's targets (before KH2's step).
     pub unsafe fn look(&mut self, sora: usize) -> Vec<TargetInfo> {
         self.bodies = bodies(sora);
+        self.guards = guards(sora);
         self.bodies.iter().map(|b| b.target).collect()
     }
 
@@ -261,6 +365,19 @@ impl Strikes {
             }
             let Some(first) = battle.attack_for_level(h.attack, 0, 0).cloned() else { continue };
             let group = if first.combo_group != 0 { first.combo_group as i64 } else { h.swing as i64 };
+            // An enemy's guard repels the swing before it reaches a body (KH2's repel, as off a
+            // wall; KH1's clash spark and sound).
+            if self.repelled.contains(&h.swing) {
+                continue;
+            }
+            let guard_shapes: Vec<Shape> = self.guards.iter().map(|g| g.shape).collect();
+            if let Some((_, gi)) = first_overlap(&swept, &guard_shapes) {
+                self.repelled.insert(h.swing);
+                let bounced = character.register_wall_hit();
+                clang(self.guards[gi].at);
+                note(format!("KH2 attack {} repelled by the guard of actor {:#x} (bounced: {bounced})", h.attack, self.guards[gi].owner));
+                continue;
+            }
             for b in &self.bodies {
                 let rec = self.records.entry(b.actor).or_default();
                 if rec.has_hit(h.swing) {
@@ -286,6 +403,7 @@ impl Strikes {
             }
         }
         let now: HashSet<u64> = out.hitboxes.iter().map(|h| h.swing).collect();
+        self.repelled.retain(|s| now.contains(s));
         for ended in self.live.difference(&now) {
             for r in self.records.values_mut() {
                 r.forget(*ended);
