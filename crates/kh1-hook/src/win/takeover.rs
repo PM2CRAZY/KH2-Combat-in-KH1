@@ -448,6 +448,19 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
     c.to_array()
 }
 
+/// KH2 has Sora in the air this moment.
+pub fn kh2_airborne() -> bool {
+    active() && !HANDOFF.load(Ordering::Relaxed) && DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false)
+}
+
+/// KH1 takes Sora for one of its own actions (a command): it keeps him until it has him
+/// standing in a movement motion again (see `HANDOFF`).
+pub fn hand_to_kh1(why: &str) {
+    HANDOFF_FRAMES.store(0, Ordering::Relaxed);
+    HANDOFF.store(true, Ordering::Relaxed);
+    log(&format!("KH1 takes him: {why}"));
+}
+
 /// While KH2 has Sora: his controller and its last frame (for `hurt`).
 pub fn with_kh2<R>(f: impl FnOnce(&mut Character, &Output) -> R) -> Option<R> {
     if !ON.load(Ordering::Relaxed) || !active() || HANDOFF.load(Ordering::Relaxed) {

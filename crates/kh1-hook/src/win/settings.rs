@@ -20,7 +20,10 @@ carry = on\r\n\
 ; ceilings: on = ceilings stop KH2's jumps (KH1's collision), off = they don't\r\n\
 ceilings = on\r\n\
 ; grabs: on = KH1's ledge grabs, vine / rope grabs and swimming take Sora from KH2's jumps\r\n\
-grabs = on\r\n";
+grabs = on\r\n\
+; commands: on = KH1's commands other than Attack (magic, items, specials, summons) take\r\n\
+; Sora from KH2 until KH1 has him standing again (in the air: KH1's fall from there)\r\n\
+commands = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -29,6 +32,7 @@ pub struct Settings {
     pub carry: bool,
     pub ceilings: bool,
     pub grabs: bool,
+    pub commands: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -61,6 +65,7 @@ pub fn get() -> &'static Settings {
             carry: on(&text, "carry", "on", true),
             ceilings: on(&text, "ceilings", "on", true),
             grabs: on(&text, "grabs", "on", true),
+            commands: on(&text, "commands", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

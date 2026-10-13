@@ -680,3 +680,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   has him. `hurt`: KH2 reacts only to kinds 3–5 (others stay KH1's), never restarts a blow nor
   a flinch with a flinch, plays KH2's recoil (not its guard) for attack clashes 6 / 7, and
   passes the pass's rax back. Rises take KH1's mover's height (`y = got`).
+- `kh1-hook` stage 33 (Phase 8, KH1's commands stay KH1's): hook on KH1's command step
+  `0x1402A5380 (actor, dir)` (called from the think step `0x1402A4090` while a command is
+  pending at `0x142D54440`). Attack (type 1) still becomes KH2's attack via `exec`; types
+  that only touch the party or the menu (`0x1402A1470`'s switch: 0x1D 0x1E 0x46 0x51 0x54
+  0x64 → `+0x98`'s actor; 0x4B.. 0x60 → menu) pass; any other (magic is 2, spell in bits
+  8..23) hands Sora to KH1 (`takeover::hand_to_kh1`, the `HANDOFF` rules). KH1 picks the
+  command's version by its movement state (0 ground → `0x1402A1C20`; 2 jump → the air cast);
+  in KH2's air he is first put into KH1's jump state falling from where he is, as KH1's
+  ceiling bonk does (`0x1402AF7D0(actor, 2)`, `+0x3B0` / `+0x3B8` / `+0x3BC` 0, `+0x3B4` his
+  y, `+0x3C0` velocity 0, `+0x3D0` 0, flag 0x10000 off). Ini `commands`.

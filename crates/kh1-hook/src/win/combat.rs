@@ -46,6 +46,11 @@ const NEAR: f32 = 1500.0;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_EXEC: AtomicUsize = AtomicUsize::new(0);
+static ORIG_COMMAND: AtomicUsize = AtomicUsize::new(0);
+/// KH1's command step `(actor, dir)`: runs the command at `0x142D54440` (type byte first).
+const COMMAND_STEP_RVA: usize = 0x2A5380;
+const COMMAND_STEP_PROLOGUE: [u8; 11] = [0x40, 0x55, 0x56, 0x57, 0x48, 0x81, 0xEC, 0x60, 0x01, 0x00, 0x00];
+const STATE_RVA: usize = 0x2AF7D0;
 /// The Attack command was given since KH2's last frame.
 static PRESSED: AtomicBool = AtomicBool::new(false);
 /// While KH2's hit is landed: its power in percent (0 otherwise).
@@ -79,6 +84,43 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     }
     let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
     f(actor, row, dir)
+}
+
+/// Command types that don't move Sora (`0x1402A1470`): the party's (`+0x98`'s), the menu's.
+const NOT_SORAS: [u8; 21] = [0x1D, 0x1E, 0x46, 0x51, 0x54, 0x64, 0x4B, 0x4D, 0x4E, 0x52, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5E, 0x5F, 0x60, 0x4F, 0x5C, 0x5D];
+
+/// Phase 8: KH1's own commands stay KH1's. KH1's command step (`0x1402A5380`, from its think
+/// step `0x1402A4090`) runs a chosen command: Attack (type 1) becomes KH2's attack (`exec`);
+/// any other that moves Sora (magic is type 2, spell in bits 8..23; items, specials,
+/// summons...) is KH1's from here (`takeover::hand_to_kh1`). KH1 picks the command's ground
+/// or air version by its movement state, which stays the ground's while KH2 has him: in KH2's
+/// air, Sora is first put in KH1's jump state as falling from where he is (the fields KH1's
+/// own ceiling bonk `0x1402AD260` sets: rise time `+0x3B8` 0, time `+0x3B0` 0, height `+0x3BC`
+/// 0, base `+0x3B4` his height), so the air version plays and KH1 lands him.
+unsafe extern "system" fn command(actor: usize, dir: usize) {
+    let base = BASE.load(Ordering::Relaxed);
+    let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_COMMAND.load(Ordering::Acquire));
+    let sora = rd::<u64>(base + PARTY_RVA) as usize;
+    let kind = rd::<u8>(base + COMMAND_RVA);
+    if actor != sora || matches!(kind, 0 | 1) || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::active() {
+        return f(actor, dir);
+    }
+    let air = takeover::kh2_airborne();
+    if air {
+        let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
+        let y = rd::<f32>(actor + 0x14);
+        set_state(actor, 2);
+        wr(actor + 0x3B0, 0.0f32);
+        wr(actor + 0x3B8, 0.0f32);
+        wr(actor + 0x3BC, 0.0f32);
+        wr(actor + 0x3B4, y);
+        wr(actor + 0x3C0, [0.0f32; 4]);
+        wr(actor + 0x3D0, 0u32);
+        wr(actor, rd::<u32>(actor) & !0x1_0000);
+    }
+    let full = rd::<u32>(base + COMMAND_RVA);
+    f(actor, dir);
+    takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}", if air { " in the air" } else { "" }));
 }
 
 /// The Attack command since the last call (KH2's attack button press).
@@ -478,4 +520,5 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row");
+    hook::install(base + COMMAND_STEP_RVA, &COMMAND_STEP_PROLOGUE, command as *const () as usize, &ORIG_COMMAND, "command step");
 }
