@@ -426,3 +426,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Every movement ability at MAX for testing. Insert: KH2 controls / KH2 animations on KH1 /
   off / T-pose / idle / run. Cross still goes to KH1 (talk, chests, menus, KH1's attacks,
   which hand control back to KH1 until they end); KH2's combo system is next.
+- Stage 8 result (the user + log): KH2 drives walk, run, dodge roll, quick run, aerial dodge
+  and glide (300-500 units up off ledges); the jump played but didn't rise: KH1's mover snaps
+  a grounded actor back onto the floor each frame, undoing the jump's first small rises.
+  Fix (8b): only the sideways move goes through the mover; in the air (or rising) his height
+  is KH2's, landing on the floor the mover reports (`+0x324`); on the ground the mover's
+  height stands, stepping down onto a floor up to 24 below, else he falls. `+0x3D4` is
+  rewritten for KH2's next step. The user's next requirement: attacks 1:1 with KH2.

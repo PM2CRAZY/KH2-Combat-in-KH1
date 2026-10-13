@@ -165,27 +165,40 @@ unsafe fn takeover(actor: usize) -> bool {
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &[], ledges: &[] };
     let out = d.character.step(&input, &env);
 
-    // KH2's displacement through KH1's mover; on the ground, follow the floor down a step.
+    // KH2's displacement: the sideways part through KH1's mover (walls, slopes, steps up); the
+    // height is KH2's while he is in the air (KH1's mover snaps a grounded actor back onto the
+    // floor every frame, which undid a jump's first small rises: the user, stage 8).
     let air = d.character.airborne();
-    let mut disp = [out.displacement[0], -out.displacement[1], out.displacement[2], 0.0];
-    if !air && above > 0.0 && above <= STEP_DOWN {
-        disp[1] += above;
-    }
+    let rising = out.displacement[1] > 0.0;
+    let up_before = -p[1];
     wr(actor + 0x490, rd::<[f32; 4]>(actor + 0x10));
     let mv: MoveFn = std::mem::transmute(base + MOVE_RVA);
-    mv(actor, &disp, 0);
-    // Landed (or below the floor): stand on it.
-    let after = rd::<f32>(actor + 0x3D4);
-    let rising = air && out.displacement[1] > 0.0;
-    if after <= 0.5 {
-        if after < 0.0 {
-            let y = rd::<f32>(actor + 0x14);
-            wr(actor + 0x14, y + after);
+    mv(actor, &[out.displacement[0], 0.0, out.displacement[2], 0.0], 0);
+    // The floor under where he is now (KH1 y-down: floor point `+0x320`).
+    let floor_up = -rd::<f32>(actor + 0x324);
+    let walked_up = -rd::<f32>(actor + 0x14);
+    if air || rising {
+        let y = up_before + out.displacement[1];
+        if y <= floor_up && !rising {
+            wr(actor + 0x14, -floor_up);
+            d.grounded = true;
+        } else {
+            wr(actor + 0x14, -y.max(floor_up));
+            d.grounded = false;
         }
-        d.grounded = !rising;
     } else {
-        d.grounded = false;
+        // On the ground: where the mover walked him, stepping down onto a floor up to 24 below
+        // (KH2's floor ray), else walking off the edge into a fall.
+        let drop = walked_up - floor_up;
+        if drop <= STEP_DOWN {
+            wr(actor + 0x14, -floor_up);
+            d.grounded = true;
+        } else {
+            d.grounded = false;
+        }
     }
+    // Height above the floor for KH2's next step.
+    wr(actor + 0x3D4, (-rd::<f32>(actor + 0x14)) - floor_up);
     // Facing.
     let f = out.facing;
     wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
