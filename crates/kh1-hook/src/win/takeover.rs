@@ -141,9 +141,6 @@ unsafe fn takeover(actor: usize) -> bool {
         return false;
     }
     let slot = pose::sora_slot();
-    // The Keyblade's model instance (combat state `+0x18`, the attack objects' weapon).
-    let cs = pose::ptr(rd::<u32>(actor + 0x14C));
-    pose::set_weapon(if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 });
     let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.character.airborne())).unwrap_or(false);
     if !matches!(slot, Some(0..=7)) && !airborne {
         release(&format!("KH1's own action, slot {}", slot.map_or("?".into(), |s| s.to_string())));

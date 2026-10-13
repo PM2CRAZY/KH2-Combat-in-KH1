@@ -501,3 +501,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   every small model (≤ 40 bones) posed near Sora is logged with where its placement matrix
   comes from (a bone of Sora's drawn matrices, if it points into them), at each KH2 state
   change and every 15 frames of an attack.
+- `kh1-hook` stage 15: the stage 14 log: no small model is posed near Sora's hand at any
+  time (none of the passes poses a Keyblade model). KH1 Sora's own skeleton carries the
+  weapon: bone 280 under the right hand (grip, 4 units from it), 281-282 at the same point,
+  283-292 a chain of short segments (flags 1) reaching 56 units (`kh1-data` example
+  `bones_under`). The probe now logs bones 280 / 283 as KH1 posed them and as we drew them
+  (position, determinant, distance from the hand). The weapon-object probe is gone.

@@ -251,42 +251,6 @@ struct Hands {
 }
 static HANDS_NOW: Mutex<Option<Hands>> = Mutex::new(None);
 
-/// The Keyblade's model instance (Sora's combat state `+0x18`; set by `takeover`), and when /
-/// where it was last posed (diagnosing the user's invisible Keyblade during KH2's attacks).
-pub static WEAPON: AtomicUsize = AtomicUsize::new(0);
-struct WeaponSeen {
-    at: Instant,
-    via_ik: bool,
-    param: Vec3,
-    bone0: Option<Vec3>,
-    words: [u32; 12],
-}
-static WEAPON_SEEN: Mutex<Option<WeaponSeen>> = Mutex::new(None);
-static WEAPON_INST: AtomicUsize = AtomicUsize::new(0);
-
-/// The Keyblade object's model instance: its handle at `+0x10` (the object itself is no
-/// instance: `[0x82, 0, 0, 9, handle, ...]` in the stage 12 log).
-fn weapon_instance() -> usize {
-    WEAPON_INST.load(Ordering::Relaxed)
-}
-
-/// `takeover`: the Keyblade object this frame.
-pub unsafe fn set_weapon(obj: usize) {
-    WEAPON.store(obj, Ordering::Relaxed);
-    let inst = if obj > 0x10000 && super::crash::readable(obj) { ptr(rd::<u32>(obj + 0x10)) } else { 0 };
-    WEAPON_INST.store(inst, Ordering::Relaxed);
-}
-
-unsafe fn note_weapon(instance: usize, world: usize, via_ik: bool) {
-    let param = if world > 0x10000 { mat(world).w_axis.truncate() } else { Vec3::NAN };
-    let b = ptr(rd::<u32>(instance + WORLD));
-    let bone0 = (b > 0x10000).then(|| mat(b).w_axis.truncate());
-    let words = rd::<[u32; 12]>(instance);
-    if let Ok(mut w) = WEAPON_SEEN.try_lock() {
-        *w = Some(WeaponSeen { at: Instant::now(), via_ik, param, bone0, words });
-    }
-}
-
 /// Small models (≤ 40 bones) posed near Sora: when, where, and where their placement matrix
 /// comes from (a bone of Sora's drawn matrices, if it points into them).
 struct Small {
@@ -322,6 +286,23 @@ unsafe fn note_small(instance: usize, world: usize) {
     }
 }
 
+/// Sora's weapon bones (280, the grip under the right hand; 283 the first of the chain), as
+/// KH1 posed them and as we drew them, and whether this frame's matrices were already ours.
+static BLADE: Mutex<Option<(Mat4, Mat4, Mat4, Mat4, bool)>> = Mutex::new(None);
+
+fn blade_report() -> String {
+    let Some(Some((o0, o3, d0, d3, ours))) = BLADE.lock().ok().map(|b| *b) else { return "weapon bones not seen".into() };
+    let h = HANDS_NOW.lock().ok().and_then(|h| *h);
+    let det = |m: &Mat4| glam::Mat3::from_mat4(*m).determinant();
+    let p = |m: &Mat4| m.w_axis.truncate();
+    format!(
+        "weapon bones: KH1's 280 at {:.0?} (det {:.2}, {:.0} from KH1's hand), 283 at {:.0?} (det {:.2}); drawn 280 at {:.0?} (det {:.2}, {:.0} from the drawn hand), 283 at {:.0?} (det {:.2}){}",
+        p(&o0), det(&o0), h.map_or(-1.0, |h| (p(&o0) - h.orig[0].w_axis.truncate()).length()), p(&o3), det(&o3),
+        p(&d0), det(&d0), h.map_or(-1.0, |h| (p(&d0) - h.drawn[0].w_axis.truncate()).length()), p(&d3), det(&d3),
+        if ours { " (KH1 did not repose him this frame)" } else { "" }
+    )
+}
+
 /// Where the Keyblade was last posed, against the hands.
 pub fn weapon_report() -> String {
     let small = SMALL.lock().ok().map(|g| {
@@ -337,44 +318,9 @@ pub fn weapon_report() -> String {
         v.sort();
         v.join(" | ")
     });
-    format!("small models near Sora: [{}]; {}", small.unwrap_or_default(), weapon_report_old())
+    format!("{}; small models near Sora: [{}]", blade_report(), small.unwrap_or_default())
 }
 
-fn weapon_report_old() -> String {
-    let inst = weapon_instance();
-    let hands = HANDS_NOW.lock().ok().and_then(|h| *h);
-    let hand = hands.map(|h| (h.drawn[0].w_axis.truncate(), h.orig[0].w_axis.truncate()));
-    let seen = WEAPON_SEEN.lock().ok();
-    match seen.as_ref().and_then(|s| s.as_ref()) {
-        Some(w) => format!(
-            "Keyblade {inst:#x} posed {} ms ago ({}), at {:.0?} (bone 0 {:.0?}), right hand drawn {:.0?} / KH1's {:.0?}, instance [{}]",
-            w.at.elapsed().as_millis(),
-            if w.via_ik { "IK pass" } else { "plain pass" },
-            w.param,
-            w.bone0,
-            hand.map(|h| h.0),
-            hand.map(|h| h.1),
-            w.words.iter().map(|v| format!("{v:08x}")).collect::<Vec<_>>().join(" ")
-        ),
-        None => {
-            // Not posed by the skeleton passes: where its own matrices put it.
-            let now = unsafe {
-                if inst > 0x10000 && super::crash::readable(inst) && super::crash::readable(inst + 0x1B8) {
-                    let b = ptr(rd::<u32>(inst + WORLD));
-                    let words = rd::<[u32; 8]>(inst).map(|v| format!("{v:08x}")).join(" ");
-                    let bone0 = (b > 0x10000 && super::crash::readable(b)).then(|| mat(b).w_axis.truncate());
-                    let slot = rd::<u64>(inst) as usize;
-                    let header = if slot > 0x10000 && super::crash::readable(slot) { rd::<u64>(slot) as usize } else { 0 };
-                    let bones = (header > 0x10000 && super::crash::readable(header)).then(|| rd::<u16>(header));
-                    format!("bone 0 at {bone0:.0?}, bones {bones:?}, instance [{words}]")
-                } else {
-                    "unreadable".into()
-                }
-            };
-            format!("Keyblade {inst:#x} not posed by the skeleton passes; {now}; right hand drawn {:.0?} / KH1's {:.0?}", hand.map(|h| h.0), hand.map(|h| h.1))
-        }
-    }
-}
 
 /// Small models seen near Sora: whether each is held, by which hand, with what relation.
 #[derive(Default)]
@@ -764,6 +710,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         *at = Some(to_world.w_axis.truncate().to_array());
     }
     let orig_hands = (!ours).then(|| HANDS.map(|(b, _)| mat(world + b * 0x40)));
+    let orig_blade = (!ours).then(|| (mat(world + 280 * 0x40), mat(world + 283 * 0x40)));
     let slot = slot_of(instance);
     SLOT_NOW.store(slot.unwrap_or(usize::MAX), Ordering::Relaxed);
     let Some(pose) = wanted(s, slot, &to_world) else {
@@ -782,6 +729,12 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     s.wrote_root = Some(rd(world));
     s.to_world = Some(to_world);
     let drawn = HANDS.map(|(b, _)| to_world * pose[b]);
+    if let Ok(mut k) = BLADE.try_lock() {
+        let prev = k.map(|k| (k.0, k.1));
+        if let Some(o) = orig_blade.or(prev) {
+            *k = Some((o.0, o.1, to_world * pose[280], to_world * pose[283], ours));
+        }
+    }
     if let Ok(mut h) = HANDS_NOW.lock() {
         let orig = orig_hands.or(h.map(|h| h.orig)).unwrap_or(drawn);
         *h = Some(Hands { orig, drawn, at: Instant::now() });
@@ -876,9 +829,6 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
         }
         None => f(world, instance, t, motion),
     }
-    if instance != 0 && instance == weapon_instance() {
-        note_weapon(instance, world, false);
-    }
     if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
         note_small(instance, world);
     }
@@ -896,9 +846,6 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
             f(a.as_ptr() as usize, instance, flags);
         }
         None => f(world, instance, flags),
-    }
-    if instance != 0 && instance == weapon_instance() {
-        note_weapon(instance, world, true);
     }
     if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
         note_small(instance, world);
