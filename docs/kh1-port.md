@@ -59,41 +59,35 @@ KH1's own abilities, while equipped:
 | Stun Impact | Guard Break |
 | Gravity Break | Aerial Finish |
 
-What only KH2 has comes with Sora's level, until KH1's menu can list it:
+Final Mix's own Combo Master is KH2's Combo Master while equipped.
 
-| Level | Ability |
-|---|---|
-| 4 | Aerial Recovery |
-| 7 / 22 / 40 / 65 | Quick Run LV1 / LV2 / LV3 / MAX |
-| 10 | Dodge Slash |
-| 13 / 28 / 46 / 70 | Aerial Dodge LV1 / LV2 / LV3 / MAX |
-| 16 | Horizontal Slash |
-| 19 / 37 / 60 | Dodge Roll LV2 / LV3 / MAX (with KH1's Dodge Roll equipped) |
-| 25 | Aerial Spiral |
-| 31 | Upper Slash |
-| 34 | Finishing Plus |
-| 43 | Retaliating Slash |
-| 48 | Aerial Dive |
-| 50 | Magnet Burst |
-| 55 | Combo Master |
+What only KH2 has is added to KH1's Ability menu as new abilities, learned at Sora's level
+(added when he reaches it, or when the game loads if he is already past it):
 
-The log shows what KH1's menu gives every time it changes (`KH1's menu gives KH2: ...`).
+| Level | Ability | Menu | AP |
+|---|---|---|---|
+| 4 | Aerial Recovery | Sora's | 2 |
+| 7 | Quick Run (on when learned) | shared | - |
+| 10 | Dodge Slash | Sora's | 2 |
+| 13 | Aerial Dodge (on when learned) | shared | - |
+| 16 | Horizontal Slash | Sora's | 2 |
+| 20 | Negative Combo | Sora's | 2 |
+| 25 | Aerial Spiral | Sora's | 2 |
+| 31 | Upper Slash | Sora's | 4 |
+| 34 | Finishing Plus | Sora's | 5 |
+| 43 | Retaliating Slash | Sora's | 3 |
+| 48 | Aerial Dive | Sora's | 2 |
+| 50 | Magnet Burst | Sora's | 3 |
 
-### Next for Phase 7: KH2-only abilities in KH1's menu
+Quick Run and Aerial Dodge reach LV2 / LV3 / MAX at levels 22 / 40 / 65 and 28 / 46 / 70;
+the dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at 19 / 37 / 60.
 
-What the KH1FM Randomizer (MIT) documents and does, as facts to build on:
+They live in an extended copy of KH1's ability table (ids 66 to 77), so a save holding them
+needs this mod to show them. To go back to a plain KH1 save: set `abilities = test`, load the
+save (they are taken out of Sora's lists), save, then remove the mod.
 
-- Sora's level-up abilities are bytes in `btltbl.bin` (from offset 0x3B27 for the Warrior
-  path, one per level and path), each `0x80 + ability id` (Sliding Dash `0xB6` = 54, Scan
-  `0x8A` = 10, Tech Boost `0xBC` = 60, Leaf Bracer `0xBE` = 62).
-- Item and ability help text lives in `remastered/btltbl.bin/UK_ItemHelp.bin` and similar
-  message files, in KH1's own character table; the randomizer rewrites entries there.
-
-So the KH2-only abilities can go into the menu by (1) choosing ability ids KH1's Sora never
-uses, (2) naming and describing them in KH1's message files, (3) giving them AP costs in the
-battle table, (4) placing them in the level-up table, and (5) having `growth.rs` read those ids
-instead of the level schedule. Like the randomizer, this has to patch the user's own files at
-install time (no game files in this repo).
+The log shows what KH1's menu gives every time it changes (`KH1's menu gives KH2: ...`) and
+each ability learned (`Sora learns ...`).
 
 ## Roadmap
 

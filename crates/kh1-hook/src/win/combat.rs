@@ -120,11 +120,14 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         wr(actor + 0x3D0, 0u32);
         wr(actor, rd::<u32>(actor) & !0x1_0000);
     }
-    let set = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
+    // What KH1 doing something with him changes: his state, motion request, the script-held
+    // flag 0x1000000 (spells and items set it, the user's log), his motion slot.
+    let look = || (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164), rd::<u32>(actor) & 0x100_0000, pose::sora_slot());
+    let set = look();
     let full = rd::<u32>(base + COMMAND_RVA);
     f(actor, dir);
     // Only if KH1 did something with him (a new state or motion request); else as before.
-    let after = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
+    let after = look();
     if after != set {
         takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}", if air { " in the air" } else { "" }));
     } else {

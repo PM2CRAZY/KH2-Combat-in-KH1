@@ -150,6 +150,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         takeover::install();
         combat::install();
         hurt::install();
+        menu::install();
         pose::load_kh2();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
     }

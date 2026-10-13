@@ -706,3 +706,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   handed to KH1 (`takeover::kh2_has`); a stale Attack press is dropped when KH2 starts over;
   a repel's recoil (KH2 motions 41 / 43) is not a swing start; the swing rows are cached per
   model and never empty.
+- `kh1-hook` stage 36 (Phase 7, KH2's abilities in KH1's menu): KH1's ability table is
+  `btltbl.bin`'s (loaded to `0x142D23740` by `0x14028D840`), entries of 12 bytes at
+  `*0x142D37748` (static `0x142D26B18`), 65 of them: +0 AP, +1 kind, +2 menu order (u16; the
+  menu sorts lists by it, `0x1402836C0`), +4 name handle, +8 help handle (from the remaster's
+  `AbilityName.bin` / `AbilityHelp.bin`, made handles with `0x14038B080`, which registers any
+  pointer's 32 MB window in the handle table `0x142EE4730`). `0x14028D760(id)` = table +
+  (id - 1) * 12 is every reader (menu name `0x1402E5D40`, help `0x1402E5D10`, AP used
+  `0x1402E62D0`, the message placeholder in `0x1401746D0`). `win/menu.rs` copies it into an
+  80-entry table with ids 66..77 (template entry, KH2 AP, our text in KH1's codes), points
+  `0x142D37748` at it (again after `0x14028D840`, hooked), and in `abilities = kh1` adds them
+  to Sora's lists at their level (`growth::MENU`; shared ones on, the rest off); other modes
+  take them back out. Final Mix's Combo Master (65) maps to KH2's. Commands now count as
+  KH1's when the script-held flag or the motion slot changes too (spells set the flag).
