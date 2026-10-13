@@ -36,6 +36,10 @@ const PHYS_PROLOGUE: [u8; 12] = [0x40, 0x55, 0x53, 0x41, 0x56, 0x48, 0x8B, 0xEC,
 const MOVE_RVA: usize = 0x297710;
 const PARTY_RVA: usize = 0x2D37C80;
 const EVENT_RVA: usize = 0x298D3A0;
+const BATTLE_RVA: usize = 0x2867CD8;
+const SET_MOTION_RVA: usize = 0x29D630;
+/// Actor `+0x374` bit: the stance its idle / walk / run requests map to (set: battle).
+const STANCE_BATTLE: u32 = 0x40000;
 /// How far below the feet the floor may drop and still be stepped down onto (KH2's floor ray
 /// reaches 24 below).
 const STEP_DOWN: f32 = 24.0;
@@ -154,7 +158,11 @@ unsafe fn takeover(actor: usize) -> bool {
         // hand them out later).
         character.abilities = Abilities { guard: true, aerial_recovery: true, combo_master: true, ..Abilities::max_growth() };
         log("KH2's controller ready for Sora");
-        Driver { character, anim: RigAnim::new(kh2.rig.clone()), held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default() }
+        let mut anim = RigAnim::new(kh2.rig.clone());
+        // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
+        // a combo).
+        anim.queued_blend = 14.0;
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default() }
     });
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
@@ -229,8 +237,12 @@ unsafe fn takeover(actor: usize) -> bool {
     wr(actor + 0x150, f);
 
     let q = rd::<[f32; 3]>(actor + 0x10);
-    d.anim.field = matches!(slot, Some(0 | 2 | 5));
+    // Battle or field stance by KH1's battle mode (bit 0 of `0x142867CD8`), as KH2 does by its
+    // own: out of battle KH2's field motions carry no Keyblade, and attacks bring it out.
+    let battle = rd::<u32>(base + BATTLE_RVA) & 1 != 0;
+    d.anim.field = !battle;
     d.anim.update(&out, &d.character, [q[0], -q[1], q[2]]);
+    keyblade(base, actor, slot, d.anim.weapons_out(), &mut d.logged);
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));
@@ -252,6 +264,31 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     ACTIVE_MS.store(now_ms().max(1), Ordering::Relaxed);
     true
+}
+
+/// KH1 draws Sora's Keyblade only in its battle motions (its field idle / walk / run hold
+/// none; the user's stage 15 video: always empty hands). KH1's own motion is hidden under
+/// KH2's pose, so it is only kept in the stance whose motions show the Keyblade when KH2's
+/// pose has it out (battle, or an attack in the field): the stance bit `+0x374` picks which
+/// slot a request maps to (`0x14029E050` in `0x14029D630`), and the idle request is replayed.
+unsafe fn keyblade(base: usize, actor: usize, slot: Option<usize>, out: bool, logged: &mut u32) {
+    let flags = rd::<u32>(actor + 0x374);
+    let battle_slot = matches!(slot, Some(1 | 3 | 4 | 6 | 7));
+    if (flags & STANCE_BATTLE != 0) == out && battle_slot == out {
+        return;
+    }
+    wr(actor + 0x374, if out { flags | STANCE_BATTLE } else { flags & !STANCE_BATTLE });
+    let set: unsafe extern "system" fn(usize, u32, f32) = std::mem::transmute(base + SET_MOTION_RVA);
+    set(actor, 0, 0.0);
+    // Logged when the wanted stance changes, and every 2 s while KH1 keeps undoing it.
+    static LAST: AtomicU32 = AtomicU32::new(2);
+    static REDO: AtomicU32 = AtomicU32::new(0);
+    let changed = LAST.swap(out as u32, Ordering::Relaxed) != out as u32;
+    let redo = if changed { REDO.store(0, Ordering::Relaxed); 0 } else { REDO.fetch_add(1, Ordering::Relaxed) + 1 };
+    if *logged < 400 && (changed || redo % 120 == 1) {
+        *logged += 1;
+        log(&format!("Keyblade {}: KH1 stance {}, from slot {:?} (stance flags {flags:08x}); redone {redo} times", if out { "out" } else { "away" }, if out { "battle" } else { "field" }, slot));
+    }
 }
 
 pub unsafe fn install() {

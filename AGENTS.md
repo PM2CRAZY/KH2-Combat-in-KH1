@@ -507,3 +507,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   283-292 a chain of short segments (flags 1) reaching 56 units (`kh1-data` example
   `bones_under`). The probe now logs bones 280 / 283 as KH1 posed them and as we drew them
   (position, determinant, distance from the hand). The weapon-object probe is gone.
+- `kh1-hook` stage 16: the user's video (Traverse Town, no enemies): Sora's hands are always
+  empty; the weapon bones are drawn in his hand (stage 15 log), so KH1 hides the Keyblade
+  itself: KH1 shows it only in its battle motions (field idle / walk / run 0 / 2 / 5 carry
+  none; KH1 brings it out for attacks). KH2's field / battle stance now follows KH1's battle
+  mode (not KH1's slot), and while KH2's pose has the Keyblade out (`weapons_out`: battle,
+  or an attack in the field) Sora's actor is kept in KH1's battle stance (`+0x374` bit
+  `0x40000`, which `0x14029E050` uses to map a request to the field or battle slot) with
+  the idle request replayed (`0x14029D630(actor, 0, 0.0)`); back to field when it is put
+  away. Finished actions blend into idle over 14 frames (`RigAnim::queued_blend`).
