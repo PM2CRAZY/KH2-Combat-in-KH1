@@ -653,3 +653,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     Sora's level (`LEVELS`). `win/menu.rs` reads `kh1-kh2.ini` (`abilities = test | kh1 |
     all`, default `test`, the old testing set) and logs what KH1's menu gives every time it
     changes.
+- `kh1-hook` stage 30: `win/settings.rs` reads `kh1-kh2.ini` once (written with defaults when
+  missing): `abilities` (test | kh1 | all), `hurt` (kh2 | kh1), `carry` (on | off),
+  `ceilings` (on | off), so each feature not yet tried in game can be switched off without a
+  build. Ceilings: while KH2's displacement rises, the move goes through KH1's mover in 3D
+  with Sora's movement state set to 5 (falling) for the call only: `0x140297F20` builds the
+  collision query's mode from the state (air mode 0x10 vs ground 4 for the player's team;
+  the ground mode is what snapped rises back to the floor in stage 8). Less than 49% of the
+  rise done: KH2's `hit_ceiling` (logged with the collision flags `+0x2D0`; bit 3 is what
+  KH1's own jump `0x1402AD260` treats as a ceiling).

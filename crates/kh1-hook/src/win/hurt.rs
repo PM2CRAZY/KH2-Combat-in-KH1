@@ -67,7 +67,7 @@ enum Fate {
 unsafe extern "system" fn hurt(actor: usize) {
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG.load(Ordering::Acquire));
     let base = BASE.load(Ordering::Relaxed);
-    if actor < 0x10000 || actor != rd::<u64>(base + PARTY_RVA) as usize {
+    if actor < 0x10000 || actor != rd::<u64>(base + PARTY_RVA) as usize || !super::settings::get().hurt {
         return f(actor);
     }
     // The ready records (those KH1's pass pops this frame).

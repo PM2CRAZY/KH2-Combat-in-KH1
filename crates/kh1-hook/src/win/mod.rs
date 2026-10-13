@@ -9,6 +9,7 @@ mod hook;
 mod hurt;
 mod menu;
 mod pose;
+mod settings;
 mod probe;
 mod takeover;
 mod sys;

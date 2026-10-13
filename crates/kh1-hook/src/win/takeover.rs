@@ -49,6 +49,8 @@ const BATTLE_LINGER: f32 = 6.0;
 /// How far below the feet the floor may drop and still be stepped down onto (KH2's floor ray
 /// reaches 24 below).
 const STEP_DOWN: f32 = 24.0;
+/// KH1's falling movement state (an air state that runs none of KH1's jump bookkeeping).
+const AIR_STATE: i32 = 5;
 
 pub const CIRCLE: u16 = 0x2000;
 pub const SQUARE: u16 = 0x8000;
@@ -236,16 +238,43 @@ unsafe fn takeover(actor: usize) -> bool {
     // What KH1's physics step adds to a move (`0x140298230`), as it would: a carrying
     // platform's motion (`+0x200`, while `+0x160` bit 4) and the frame's push (`+0x120`,
     // cleared once used), and the touched-objects mask (`+0x90`) cleared before the move.
-    let carry = carried(actor, &mut d.logged);
+    let settings = super::settings::get();
+    let carry = if settings.carry { carried(actor, &mut d.logged) } else { [0.0; 3] };
     wr(actor + 0x90, 0u64);
     let mv: MoveFn = std::mem::transmute(base + MOVE_RVA);
-    mv(actor, &[out.displacement[0] + carry[0], 0.0, out.displacement[2] + carry[2], 0.0], 0);
-    wr(actor + 0x120, [0.0f32; 4]);
+    // Rising: the rise goes through KH1's mover too, with KH1's falling state (5) for the move
+    // so that it collides as in the air (its collision query `0x140297F20` picks the air mode
+    // by the movement state; on the ground state it snaps him back onto the floor), which
+    // stops him at a ceiling (KH1's own jump: `0x1402AD260`).
+    let rise3d = settings.ceilings && rising;
+    if rise3d {
+        let state = rd::<i32>(actor + 0x70);
+        wr(actor + 0x70, AIR_STATE);
+        mv(actor, &[out.displacement[0] + carry[0], -out.displacement[1], out.displacement[2] + carry[2], 0.0], 0);
+        wr(actor + 0x70, state);
+    } else {
+        mv(actor, &[out.displacement[0] + carry[0], 0.0, out.displacement[2] + carry[2], 0.0], 0);
+    }
+    if settings.carry {
+        wr(actor + 0x120, [0.0f32; 4]);
+    }
     // The floor under where he is now (KH1 y-down: floor point `+0x320`).
     let floor_up = -rd::<f32>(actor + 0x324);
     let walked_up = -rd::<f32>(actor + 0x14);
     if air || rising {
-        let y = up_before + out.displacement[1];
+        let mut y = up_before + out.displacement[1];
+        if rise3d {
+            // KH2's ceiling rule: less than 49% of the rise happened.
+            let got = -rd::<f32>(actor + 0x14);
+            if out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
+                d.character.hit_ceiling();
+                y = got.max(up_before);
+                static BONKS: AtomicU32 = AtomicU32::new(0);
+                if BONKS.fetch_add(1, Ordering::Relaxed) < 40 {
+                    log(&format!("ceiling: rose {:.1} of {:.1} at height {:.1} (collision flags {:08x})", got - up_before, out.displacement[1], up_before - floor_up, rd::<u32>(actor + 0x2D0)));
+                }
+            }
+        }
         if y <= floor_up && !rising {
             wr(actor + 0x14, -floor_up);
             d.grounded = true;
