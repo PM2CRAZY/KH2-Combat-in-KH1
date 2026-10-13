@@ -300,7 +300,12 @@ unsafe fn callers(here: usize) -> String {
     let base = BASE.load(Ordering::Relaxed);
     let mut v = Vec::new();
     for i in 0..0x100 {
-        let x: u64 = rd(here + i * 8);
+        // The stack may end within the scan (the crash going through a door, stage 12).
+        let at = here + i * 8;
+        if (i == 0 || at & 0xFFF == 0) && !super::crash::readable(at) {
+            break;
+        }
+        let x: u64 = rd(at);
         let x = x as usize;
         if x > base + 0x1000 && x < base + 0x3B_0000 && !v.contains(&(x - base)) {
             v.push(x - base);

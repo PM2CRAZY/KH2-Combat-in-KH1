@@ -262,6 +262,20 @@ struct WeaponSeen {
     words: [u32; 12],
 }
 static WEAPON_SEEN: Mutex<Option<WeaponSeen>> = Mutex::new(None);
+static WEAPON_INST: AtomicUsize = AtomicUsize::new(0);
+
+/// The Keyblade object's model instance: its handle at `+0x10` (the object itself is no
+/// instance: `[0x82, 0, 0, 9, handle, ...]` in the stage 12 log).
+fn weapon_instance() -> usize {
+    WEAPON_INST.load(Ordering::Relaxed)
+}
+
+/// `takeover`: the Keyblade object this frame.
+pub unsafe fn set_weapon(obj: usize) {
+    WEAPON.store(obj, Ordering::Relaxed);
+    let inst = if obj > 0x10000 && super::crash::readable(obj) { ptr(rd::<u32>(obj + 0x10)) } else { 0 };
+    WEAPON_INST.store(inst, Ordering::Relaxed);
+}
 
 unsafe fn note_weapon(instance: usize, world: usize, via_ik: bool) {
     let param = if world > 0x10000 { mat(world).w_axis.truncate() } else { Vec3::NAN };
@@ -275,7 +289,7 @@ unsafe fn note_weapon(instance: usize, world: usize, via_ik: bool) {
 
 /// Where the Keyblade was last posed, against the hands.
 pub fn weapon_report() -> String {
-    let inst = WEAPON.load(Ordering::Relaxed);
+    let inst = weapon_instance();
     let hands = HANDS_NOW.lock().ok().and_then(|h| *h);
     let hand = hands.map(|h| (h.drawn[0].w_axis.truncate(), h.orig[0].w_axis.truncate()));
     let seen = WEAPON_SEEN.lock().ok();
@@ -810,7 +824,7 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
         }
         None => f(world, instance, t, motion),
     }
-    if instance != 0 && instance == WEAPON.load(Ordering::Relaxed) {
+    if instance != 0 && instance == weapon_instance() {
         note_weapon(instance, world, false);
     }
     if instance != 0 {
@@ -828,7 +842,7 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
         }
         None => f(world, instance, flags),
     }
-    if instance != 0 && instance == WEAPON.load(Ordering::Relaxed) {
+    if instance != 0 && instance == weapon_instance() {
         note_weapon(instance, world, true);
     }
     if instance != 0 {

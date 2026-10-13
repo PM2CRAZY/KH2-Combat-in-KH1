@@ -488,3 +488,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   off (set from a door's turn to the end of its walk, and at a zone entry). `win/crash.rs`
   logs the first fatal exceptions (code, address, registers, return addresses). The
   Keyblade instance is never posed by the two skeleton passes; its own matrices are logged.
+- `kh1-hook` stage 13: the crash note found the door crash: ours, in the stage 9 probe's
+  set-motion logging (`probe::callers` scanned 0x800 bytes above its frame and ran off the
+  top of the game thread's stack when a door script set Sora's exit motion). The scan now
+  stops at an unreadable page. The Keyblade object (combat state `+0x18`) is no model
+  instance (`[0x82, 0, 0, 9, handle, ...]`); its model instance is the handle at `+0x10`.
