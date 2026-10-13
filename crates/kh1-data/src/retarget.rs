@@ -169,7 +169,7 @@ fn minus_x() -> Side {
 }
 
 /// Every part, and the KH1 bones each turns: `(KH1 bone, part a, part b, blend toward b)`.
-fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
+fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) {
     let mut parts = vec![
         // Each from bones that ride on that part (its children), so another part's bend
         // can't tilt it.
@@ -203,6 +203,10 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
         finger_shift: usize,
     }
     let mut thigh_plus = 0;
+    let mut thigh_minus = 0;
+    // Parts whose rest frame is measured on KH1's bind (not KH2's): the KH1 bones then take
+    // KH2's direction outright, where the two binds hold that limb differently.
+    let mut kh1_rest: Vec<(usize, Part)> = vec![];
     for (s, k) in [(PLUS_X, K1 { hip: 42, clavicle: 194, finger_shift: 0 }), (minus_x(), K1 { hip: 16, clavicle: 89, finger_shift: 104 })] {
         let mut add = |p: Part| {
             parts.push(p);
@@ -240,6 +244,19 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
         }
         if k.hip == 42 {
             thigh_plus = thigh;
+        } else {
+            thigh_minus = thigh;
+        }
+        // The thumb: KH2's is one segment (base → tip, 89 → 92 / 181 → 184), lying along the
+        // fingers in its bind; KH1's (103-107 / 207-211) points straight forward in its bind.
+        // Turned by the difference from KH2's bind it kept KH1's forward thumb (the user:
+        // unnatural thumbs); aimed from KH1's bind it lies as KH2's thumb lies.
+        let (t2, t1) = (89 + (s.index - PLUS_X.index), 207 - k.finger_shift);
+        let (index1, little1) = (212 - k.finger_shift, 227 - k.finger_shift);
+        let thumb = add(Part::Aim { from: t2, to: t2 + 3, pole: Pole::Line(s.little, s.index) });
+        kh1_rest.push((thumb, Part::Aim { from: t1, to: t1 + 4, pole: Pole::Line(little1, index1) }));
+        for b in t1..=t1 + 4 {
+            one(b, thumb, &mut bones);
         }
         // Fingers: KH2 base, a co-located joint, then two joints; KH1 base, a co-located
         // joint, then three.
@@ -255,19 +272,22 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>) {
             }
         }
     }
-    // The belt chain hangs from the belt down the outside of the +x thigh (10-15): it turns
-    // mostly with that thigh, so a stride or a raised knee carries it along instead of through
-    // the shorts (the user: the chain went through his pants).
-    bones.push((CHAIN_ROOT, pelvis, thigh_plus, 0.8));
-    // The jacket's back hem (72-75) hangs from the waist: mostly the hips' turn, a little of
-    // the chest's, so it no longer swings out behind with KH2's chest when he leans in (the
-    // user: fit the jacket's lower part to KH2's motions).
-    bones.push((JACKET_HEM, pelvis, chest, 0.35));
-    (parts, bones)
+    // The jacket's hem: nine cloth chains from the spine base (71) down over the shorts: back
+    // centre 72, and per side front, side-front, side-back and back (248 / 252 / 256 / 260 on
+    // +x, 264 / 268 / 272 / 276 on -x). KH2 parents its own hem to the pelvis (its bones 4-9,
+    // 35-38), so ours turns with the hips, not the chest, and a thigh pushes the panels in front
+    // of it along as it rises (front most, back least). Before, the hem rode on the chest and
+    // stuck out, or cut into the thighs, whenever KH2 leaned or strode (the user: make the
+    // jacket mesh with KH2's motions).
+    let _ = chest;
+    bones.push((72, pelvis, pelvis, 0.0));
+    for (base, thigh) in [(248, thigh_plus), (264, thigh_minus)] {
+        for (k, share) in [0.25, 0.15, 0.05, 0.0].into_iter().enumerate() {
+            bones.push((base + 4 * k, pelvis, thigh, share));
+        }
+    }
+    (parts, bones, kh1_rest)
 }
-
-const CHAIN_ROOT: usize = 10;
-const JACKET_HEM: usize = 72;
 
 pub struct Retarget {
     parent: Vec<Option<usize>>,
@@ -289,7 +309,46 @@ pub struct Retarget {
     rest_open: Vec<Option<Mat4>>,
     /// Cloth that hangs (the hood): `(part, share)` turns with the part's yaw but only
     /// `share` of its lean.
-    hang: Vec<Option<(usize, f32)>>,
+    hang: Vec<Option<(usize, f32, f32)>>,
+    /// Cloth kept off the thighs (`keep_clear`).
+    cloth: Vec<Cloth>,
+    /// Last turn of each hanging bone and last swing of each cloth chain: they move at most
+    /// `CLOTH_STEP` a call, so a flip of the hips' yaw (somersaults) or of which side of a thigh
+    /// the cloth is pushed to doesn't snap them round (a little lag, like cloth's own).
+    memory: std::sync::Mutex<(Vec<Option<Quat>>, Vec<Quat>)>,
+}
+
+const CLOTH_STEP: f32 = 0.35;
+
+fn limit(prev: Option<Quat>, want: Quat) -> Quat {
+    match prev {
+        Some(p) => {
+            let a = p.angle_between(want);
+            if a > CLOTH_STEP { p.slerp(want, CLOTH_STEP / a).normalize() } else { want }
+        }
+        None => want,
+    }
+}
+
+/// A cloth chain: its root, every bone it moves, and per joint the thigh segment (hip, knee)
+/// and the distance from it the joint keeps (its bind distance, at most `CLEAR_MAX`).
+struct Cloth {
+    root: usize,
+    bones: Vec<usize>,
+    nodes: Vec<(usize, (usize, usize), f32)>,
+}
+
+/// KH1's thighs (hip joint, knee) and the cloth chains kept off them.
+const THIGHS: [(usize, usize); 2] = [(43, 44), (17, 18)];
+const CLEAR_MAX: f32 = 14.0;
+/// Chain roots and joints: the belt chain (10: 12-15), the hem's back centre (72: 73-75) and
+/// its eight panels (root: root + 2, + 3).
+fn cloth_chains() -> Vec<(usize, Vec<usize>)> {
+    let mut v = vec![(10usize, vec![12usize, 13, 14, 15]), (72, vec![73, 74, 75])];
+    for root in [248usize, 252, 256, 260, 264, 268, 272, 276] {
+        v.push((root, vec![root + 2, root + 3]));
+    }
+    v
 }
 
 /// The hood: its root under the neck base (`78`); it turns with the chest's yaw only, tipped
@@ -298,14 +357,15 @@ pub struct Retarget {
 const HOOD_ROOT: usize = 79;
 const HOOD_LEAN: f32 = 0.0;
 const HOOD_DROP: f32 = 0.45;
+const CHAIN_ROOT: usize = 10;
 /// Bones that hang as in KH1's rest pose (`set_rest`): the hood's cloth joints and the
 /// Keyblade's grip and chain. Everything else keeps the bind's relation (the belt chain hung
 /// out in a loop from the battle idle's swing: the user's "floating chain").
 const REST_BONES: [std::ops::RangeInclusive<usize>; 2] = [80..=84, 280..=292];
-/// The thumbs (KH1: base and four joints under each hand, 103-107 / 207-211; KH2's thumb is a
-/// single short segment whose bind points another way, so mapped it looked wrong). They take
-/// KH1's own pose: its battle idle's grip while the Keyblade is held, its field idle's open
-/// hand otherwise (`set_rest_open`, `pose_grip`).
+/// The thumbs (103-107 / 207-211). Now aimed along KH2's thumb from KH1's own bind (see
+/// `layout`), so this open-hand fallback (`set_rest_open`, `pose_grip`) only applies if that
+/// part can't be measured (KH1's own motions leave the thumbs at their bind, which is why KH1's
+/// rest poses never changed them: the user's "thumbs have still not changed").
 const THUMBS: [std::ops::RangeInclusive<usize>; 2] = [103..=107, 207..=211];
 
 /// A turn's part about the model's up (y) axis (swing-twist).
@@ -329,9 +389,15 @@ impl Retarget {
             rot.push(r.normalize());
             scale.push(s);
         }
-        let (parts, bones) = layout();
+        let (parts, bones, kh1_rest) = layout();
         let rest = positions(&b2);
-        let rest_inv = parts.iter().map(|p| p.frame(&rest).map(|q| q.inverse())).collect();
+        let mut rest_inv: Vec<Option<Quat>> = parts.iter().map(|p| p.frame(&rest).map(|q| q.inverse())).collect();
+        let rest1 = positions(&b1);
+        for (i, p) in kh1_rest {
+            if let Some(r) = rest_inv.get_mut(i) {
+                *r = p.frame(&rest1).map(|q| q.inverse());
+            }
+        }
         let mut turns = vec![None; kh1.len()];
         for (b, a, c, t) in bones {
             if b < kh1.len() {
@@ -344,10 +410,48 @@ impl Retarget {
         let rest_local = vec![None; kh1.len()];
         let mut hang = vec![None; kh1.len()];
         if HOOD_ROOT < kh1.len() {
-            hang[HOOD_ROOT] = Some((1, HOOD_LEAN));
+            hang[HOOD_ROOT] = Some((1, HOOD_LEAN, HOOD_DROP));
+        }
+        // The belt chain (10-15, from the belt down the outside of the +x hip) hangs with the
+        // hips' turn but none of their lean, and none of the thigh's swing: it hung off the
+        // thigh last time and swung forward stiffly with every stride (the user: the chain is
+        // weirdly positioned; before that it went through the shorts).
+        if CHAIN_ROOT < kh1.len() {
+            hang[CHAIN_ROOT] = Some((0, 0.0, 0.0));
         }
         let rest_open = vec![None; kh1.len()];
-        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang }
+        let mut cloth = Vec::new();
+        for (root, joints) in cloth_chains() {
+            if joints.iter().chain([&root]).any(|&j| j >= kh1.len()) {
+                continue;
+            }
+            let bones: Vec<usize> = (0..kh1.len()).filter(|&i| {
+                let mut p = i;
+                for _ in 0..16 {
+                    if p == root {
+                        return true;
+                    }
+                    match kh1[p].parent {
+                        q if q >= 0 => p = q as usize,
+                        _ => return false,
+                    }
+                }
+                false
+            }).collect();
+            let mut nodes = Vec::new();
+            for &j in &joints {
+                for (a, b) in THIGHS {
+                    let (pa, pb, n) = (pos[a], pos[b], pos[j]);
+                    let ab = pb - pa;
+                    let t = ((n - pa).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+                    let d = (n - (pa + ab * t)).length();
+                    nodes.push((j, (a, b), d.min(CLEAR_MAX)));
+                }
+            }
+            cloth.push(Cloth { root, bones, nodes });
+        }
+        let memory = std::sync::Mutex::new((vec![None; kh1.len()], vec![Quat::IDENTITY; cloth.len()]));
+        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory }
     }
 
     /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
@@ -361,7 +465,7 @@ impl Retarget {
     pub fn set_rest(&mut self, rest: &[Bone]) {
         let m = kh2_anim::Pose::bind(rest).bones;
         for i in 0..self.rest_local.len().min(m.len()) {
-            if self.turns[i].is_some() || self.hang[i].is_some() || !REST_BONES.iter().chain(&THUMBS).any(|r| r.contains(&i)) {
+            if self.turns[i].is_some() || self.hang[i].is_some() || !REST_BONES.iter().any(|r| r.contains(&i)) {
                 continue;
             }
             if let Some(p) = self.parent[i] {
@@ -415,9 +519,14 @@ impl Retarget {
         let mut at = vec![Vec3::ZERO; n];
         let mut out = vec![Mat4::IDENTITY; n];
         for i in 0..n {
-            let own = self.turns[i]
-                .and_then(|(a, b, t)| Some(part[a]?.slerp(part[b]?, t)))
-                .or_else(|| self.hang[i].and_then(|(a, share)| part[a].map(|q| yaw_of(q).slerp(q, share) * Quat::from_rotation_x(-HOOD_DROP))));
+            let own = self.turns[i].and_then(|(a, b, t)| Some(part[a]?.slerp(part[b]?, t))).or_else(|| {
+                let (a, share, drop) = self.hang[i]?;
+                let want = yaw_of(part[a]?).slerp(part[a]?, share) * Quat::from_rotation_x(-drop);
+                let mut mem = self.memory.lock().ok()?;
+                let q = limit(mem.0[i], want);
+                mem.0[i] = Some(q);
+                Some(q)
+            });
             let rest = if grip { self.rest_local[i] } else { self.rest_open[i].or(self.rest_local[i]) };
             if let (None, Some(p), Some(l)) = (own, self.parent[i], rest) {
                 out[i] = out[p] * l;
@@ -438,7 +547,61 @@ impl Retarget {
             }
             out[i] = Mat4::from_scale_rotation_translation(self.scale[i], (turn[i] * self.rot[i]).normalize(), at[i]);
         }
+        self.keep_clear(&mut out);
         out
+    }
+
+    /// Cloth (the belt chain, the jacket's hem panels) never comes nearer a thigh than it was in
+    /// the bind: where a joint would, its chain swings about its root just far enough out
+    /// (KH1 animates this cloth by hand in each of its own motions, so nothing of KH1's fits
+    /// KH2's strides; the user: the chain went through the shorts, the jacket should mesh).
+    fn keep_clear(&self, out: &mut [Mat4]) {
+        let at = |v: &[Mat4], i: usize| v[i].w_axis.truncate();
+        let Ok(mut mem) = self.memory.lock() else { return };
+        for (ci, c) in self.cloth.iter().enumerate() {
+            let mut swing = Quat::IDENTITY;
+            for _ in 0..2 {
+                let root = at(out, c.root);
+                let mut best: Option<(f32, Quat)> = None;
+                for &(node, (a, b), clear) in &c.nodes {
+                    let n = at(out, node);
+                    let (pa, pb) = (at(out, a), at(out, b));
+                    let ab = pb - pa;
+                    let t = ((n - pa).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+                    let near = pa + ab * t;
+                    let d = (n - near).length();
+                    if d >= clear {
+                        continue;
+                    }
+                    let away = (n - near).normalize_or_zero();
+                    let away = if away == Vec3::ZERO { (n - root).cross(ab).normalize_or_zero() } else { away };
+                    let target = n + away * (clear - d);
+                    let (from, to) = ((n - root).normalize_or_zero(), (target - root).normalize_or_zero());
+                    if from == Vec3::ZERO || to == Vec3::ZERO {
+                        continue;
+                    }
+                    let q = Quat::from_rotation_arc(from, to);
+                    let angle = q.angle_between(Quat::IDENTITY);
+                    if best.map_or(true, |(a, _)| angle > a) {
+                        best = Some((angle, q));
+                    }
+                }
+                let Some((_, q)) = best else { break };
+                swing = q * swing;
+                let m = Mat4::from_translation(root) * Mat4::from_quat(q) * Mat4::from_translation(-root);
+                for &j in &c.bones {
+                    out[j] = m * out[j];
+                }
+            }
+            // Eased: undo the swing just made and make the limited one instead.
+            let eased = limit(Some(mem.1[ci]), swing);
+            mem.1[ci] = eased;
+            let root = at(out, c.root);
+            let m = Mat4::from_translation(root) * Mat4::from_quat(eased * swing.inverse()) * Mat4::from_translation(-root);
+            for &j in &c.bones {
+                out[j] = m * out[j];
+            }
+        }
     }
 
     /// The bind pose (a T-pose), as the game would draw it.

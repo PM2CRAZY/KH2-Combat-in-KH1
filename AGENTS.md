@@ -567,3 +567,17 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     22 / 48); the body drops for a planted foot's lower floor (≤ 30), each leg bends (thigh
     17 / 43, knee 18 / 44, ankle 19 / 45) to put a planted sole on its floor or lift a raised
     one out of a step; eased (35% a frame).
+- `kh1-hook` stage 22 (the user: the chain still sits oddly, the thumbs never changed, the
+  jacket must mesh with KH2's motions). Measured offline before shipping (`kh1-data`
+  examples `thumb_check`, `clip_check`, `kh1_follow`, `snap_check`):
+  - Thumbs: KH1's own motions leave the thumbs at their bind (so no KH1 rest pose changed
+    them). They are now aimed along KH2's thumb (89→92 / 181→184) with the part's rest frame
+    measured on KH1's bind (`layout`'s `kh1_rest`): KH1's thumb lies exactly as KH2's
+    (0° apart in every motion checked).
+  - KH1 animates its cloth (belt chain, hem) by hand per motion (no blend of hips and thighs
+    fits it: 20-140° residuals), so: the belt chain (10) hangs with the hips' yaw only; the
+    jacket hem's nine chains (72; 248-276) turn with the hips (KH2 parents its own hem to the
+    pelvis), front panels a little with their thigh; and `keep_clear` swings any cloth chain
+    about its root so no joint comes nearer a thigh (hip → knee) than in the bind (≤ 14).
+    Hanging and pushed cloth move at most 0.35 rad a frame (no snaps when the hips' yaw
+    flips in somersaults).
