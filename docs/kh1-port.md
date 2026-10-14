@@ -39,7 +39,8 @@ Next to the game; written with the defaults when missing, read when the game sta
 
 ## Abilities from KH1's menu (`abilities = kh1`)
 
-KH1's own abilities, while equipped:
+KH1's own abilities, while equipped (those that are KH2 moves show their KH2 name and help in
+the menu, e.g. Hurricane Blast is listed as Explosion):
 
 | KH1 | KH2 |
 |---|---|
@@ -84,7 +85,7 @@ the dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at 19 / 37 / 
 
 Sora's ability list holds 48 (KH1's most). When it is full, KH2's abilities come first: a
 KH1 ability that is off gives up its place, a spare copy first (an ability he has more than
-once), then the least missed (Encounter Plus, EXP Zero, Cheer, Scan, Evolution, Jackpot, Lucky
+once), then the least missed (EXP Zero, Cheer, Scan, Evolution, Jackpot, Lucky
 Strike, Treasure Magnet, ...). Equipped abilities, Guard, Dodge Roll, the specials and the
 combo modifiers are never removed. Each removal is written to `kh1-kh2-removed.txt` next to the
 game.

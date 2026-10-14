@@ -740,3 +740,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Tech Boost, Leaf Bracer, MP Haste, MP Rage, Berserk, Critical Plus, Second Chance. Never an
   equipped one, ours, Guard, Dodge Roll, the specials or the modifiers. Each removal is logged
   and appended to `kh1-kh2-removed.txt` next to the game (unit-tested on the user's list).
+- `kh1-hook` stage 39 (the user: keep Encounter Plus; Magnet Burst doesn't pull; where is
+  Explosion?):
+  - Encounter Plus is off `MAKE_ROOM`; abilities `kh1-kh2-removed.txt` lists that may no
+    longer be given up are given back once a run (off), another making room if needed.
+  - Magnet (ATKP reaction category 5, Magnet Burst): an enemy it strikes is caught (orbit
+    radius between the attack's two knockback values, swirl its next value) and, while the
+    swing lasts, drawn to the pulling hitbox's centre with the exe's suction step (toward the
+    radius at up to 20 a frame plus the swirl, as `character_core::npc`) through KH1's per-frame
+    push `+0x120` (its physics step adds it to the move and clears it, enemies included).
+  - KH1 abilities that are KH2 moves here show their KH2 name and help in the menu
+    (`growth::RENAMED`: Vortex → Flash Step, Counterattack → Counterguard, Blitz → Finishing
+    Leap, Sliding Dash → Slide Dash, Hurricane Blast → Explosion, Ripple Drive → Vicinity
+    Break, Stun Impact → Guard Break, Gravity Break → Aerial Finish); ids unchanged.

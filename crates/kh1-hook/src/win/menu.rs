@@ -29,7 +29,7 @@ const KH1_ENTRIES: usize = 65;
 const ENTRIES: usize = 80;
 
 static TABLE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-/// Our abilities' text handles (name, help), by `MENU` order.
+/// Our abilities' text handles (name, help), by `MENU` order, then `RENAMED`'s.
 static TEXT: std::sync::OnceLock<Vec<(u32, u32)>> = std::sync::OnceLock::new();
 static ORIG_LOAD: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
@@ -90,9 +90,11 @@ pub unsafe fn ensure_table(base: usize) {
     let text = TEXT.get_or_init(|| {
         growth::MENU
             .iter()
-            .map(|ab| {
-                let name = Box::leak(encode(ab.name).into_boxed_slice()).as_ptr() as usize;
-                let help = Box::leak(encode(ab.help).into_boxed_slice()).as_ptr() as usize;
+            .map(|ab| (ab.name, ab.help))
+            .chain(growth::RENAMED.iter().map(|r| (r.1, r.2)))
+            .map(|(n, h)| {
+                let name = Box::leak(encode(n).into_boxed_slice()).as_ptr() as usize;
+                let help = Box::leak(encode(h).into_boxed_slice()).as_ptr() as usize;
                 (to_handle(name), to_handle(help))
             })
             .collect()
@@ -106,6 +108,13 @@ pub unsafe fn ensure_table(base: usize) {
         std::ptr::write_unaligned((e + 2) as *mut u16, rd::<u16>(t + 2).wrapping_add(1));
         std::ptr::write_unaligned((e + 4) as *mut u32, text[k].0);
         std::ptr::write_unaligned((e + 8) as *mut u32, text[k].1);
+    }
+    // KH1's abilities that are KH2 moves here go by their KH2 names.
+    for (k, r) in growth::RENAMED.iter().enumerate() {
+        let e = ours + (r.0 as usize - 1) * 12;
+        let (n, h) = text[growth::MENU.len() + k];
+        std::ptr::write_unaligned((e + 4) as *mut u32, n);
+        std::ptr::write_unaligned((e + 8) as *mut u32, h);
     }
     std::ptr::write_unaligned((base + TABLE_PTR_RVA) as *mut u64, ours as u64);
     static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -160,6 +169,22 @@ fn remember(line: &str) {
     }
 }
 
+/// KH1 abilities `kh1-kh2-removed.txt` says were given up that may no longer be (the user
+/// keeps Encounter Plus): their ids.
+fn given_back() -> Vec<u8> {
+    let path = format!("{}\\kh1-kh2-removed.txt", super::exe_dir());
+    let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+    let mut ids = Vec::new();
+    for line in text.lines() {
+        let Some(i) = line.find("(id ") else { continue };
+        let Some(id) = line[i + 4..].split(')').next().and_then(|n| n.trim().parse::<u8>().ok()) else { continue };
+        if !growth::MAKE_ROOM.contains(&id) && !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    ids
+}
+
 /// Takes our abilities back out of a list (closing the gaps).
 unsafe fn strip(list: usize, len: usize) -> usize {
     let bytes: Vec<u8> = (0..len).map(|i| rd::<u8>(list + i)).collect();
@@ -182,6 +207,8 @@ pub struct Growth {
     applied: bool,
     /// Abilities already reported as not fitting (once each).
     no_room: Vec<u8>,
+    /// Abilities given up before that no longer would be were given back (once a run).
+    gave_back: bool,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -190,7 +217,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new() }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -222,6 +249,36 @@ impl Growth {
         // Sora learns KH2's abilities at their levels (`kh1`), or has them taken back out.
         if let Some(save) = save_block(base) {
             if self.mode == Mode::Kh1 {
+                // Given back once (the user: keep Encounter Plus), off, making room if needed.
+                if !self.gave_back {
+                    self.gave_back = true;
+                    for id in given_back() {
+                        if growth::has(&now.abilities, id) {
+                            continue;
+                        }
+                        let list = save + 0x44;
+                        let mut done = add(list, 48, id | 0x80);
+                        if !done {
+                            let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
+                            if let Some(i) = growth::make_room(&bytes) {
+                                let gone = bytes[i];
+                                let mut kept = bytes.clone();
+                                kept.remove(i);
+                                kept.push(0);
+                                for (k, b) in kept.iter().enumerate() {
+                                    std::ptr::write((list + k) as *mut u8, *b);
+                                }
+                                remember(&format!("level {}: removed {} (id {}) to give back {}", now.level, growth::name(gone), gone & 0x7F, growth::name(id)));
+                                log(&format!("{} (off) made room to give back {}", growth::name(gone), growth::name(id)));
+                                done = add(list, 48, id | 0x80);
+                            }
+                        }
+                        log(&format!("{} given back to Sora{}", growth::name(id), if done { " (off)" } else { ": no room" }));
+                    }
+                    if let Some(again) = Self::kh1(base) {
+                        now = again;
+                    }
+                }
                 for ab in now.grants() {
                     let (list, len, byte) = match ab.list {
                         growth::List::Shared => (save + 0x599, 10, ab.id),

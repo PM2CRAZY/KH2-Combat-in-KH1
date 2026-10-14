@@ -184,6 +184,9 @@ pub fn name(id: u8) -> String {
     if let Some(ab) = MENU.iter().find(|a| a.id == id) {
         return ab.name.to_string();
     }
+    if let Some(r) = RENAMED.iter().find(|r| r.0 == id) {
+        return r.1.to_string();
+    }
     KH1_NAMES.get((id as usize).wrapping_sub(1)).map_or(format!("ability {id}"), |n| n.to_string())
 }
 
@@ -191,8 +194,7 @@ pub fn name(id: u8) -> String {
 /// abilities that are learned but off make room, least missed first: a spare copy of one he
 /// has twice or more, then these, in order. Nothing equipped, nothing of ours, and not Guard,
 /// Dodge Roll, the specials or the combo modifiers.
-pub const MAKE_ROOM: [u8; 16] = [
-    61, // Encounter Plus
+pub const MAKE_ROOM: [u8; 15] = [
     64, // EXP Zero
     16, // Cheer
     10, // Scan
@@ -208,6 +210,19 @@ pub const MAKE_ROOM: [u8; 16] = [
     26, // Berserk
     8,  // Critical Plus
     25, // Second Chance
+];
+
+/// KH1 abilities that are KH2 moves here, shown in the menu by their KH2 name and help (the
+/// user: where is Explosion? It was Hurricane Blast in the menu).
+pub const RENAMED: [(u8, &str, &str); 8] = [
+    (kh1::VORTEX, "Flash Step", "Ground combo: dash to a distant foe and strike."),
+    (kh1::COUNTERATTACK, "Counterguard", "Counter: strike right after guarding."),
+    (kh1::BLITZ, "Finishing Leap", "Finisher: leap and slam the ground."),
+    (kh1::SLIDING_DASH, "Slide Dash", "Ground combo: dash at a distant foe."),
+    (kh1::HURRICANE_BLAST, "Explosion", "Finisher: unleash a blast around you."),
+    (kh1::RIPPLE_DRIVE, "Vicinity Break", "Ground combo: hit foes all around."),
+    (kh1::STUN_IMPACT, "Guard Break", "Finisher: break through a foe's guard."),
+    (kh1::GRAVITY_BREAK, "Aerial Finish", "Air finisher: a powerful spinning strike."),
 ];
 
 /// Which entry of a full list gives up its place (its index), if any.
@@ -499,9 +514,10 @@ mod tests {
         let mut spares = freed[..5].to_vec();
         spares.sort();
         assert_eq!(spares, ["Critical Plus", "Tech Boost", "Tech Boost", "Tech Boost", "Treasure Magnet"]);
-        assert_eq!(freed[5..], ["Encounter Plus", "Cheer", "Jackpot"]);
-        // Never Guard (off here), the specials, ours, or anything equipped.
-        assert!(l.contains(&(21 | 0x80)) && l.contains(&(11 | 0x80)) && l.contains(&(68 | 0x80)) && l.contains(&10));
+        assert_eq!(freed[5..], ["Cheer", "Jackpot", "Lucky Strike"]);
+        // Never Guard (off here), Encounter Plus (the user), the specials, ours, or anything
+        // equipped.
+        assert!(l.contains(&(61 | 0x80)) && l.contains(&(21 | 0x80)) && l.contains(&(11 | 0x80)) && l.contains(&(68 | 0x80)) && l.contains(&10));
     }
 
     #[test]

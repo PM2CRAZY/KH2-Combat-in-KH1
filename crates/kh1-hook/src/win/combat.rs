@@ -305,6 +305,9 @@ pub struct Strikes {
     swing_rows: Option<(u16, HashMap<i16, Row>)>,
     /// Frames since a trail was asked for.
     trail_asked: Option<u32>,
+    /// Enemies a Magnet (ATKP reaction 5: Magnet Burst) caught: the swing, orbit radius and
+    /// swirl. Pulled every frame while the swing lasts.
+    pulled: HashMap<usize, (u64, f32, f32)>,
 }
 
 /// An enemy's guard: a KH1 attack object of priority 100 (`0x1402B2A30`: such an object
@@ -474,6 +477,50 @@ impl Strikes {
         }
     }
 
+    /// KH2's Magnet: each caught enemy is drawn toward the pulling hitbox's centre, to its
+    /// orbit radius at up to 20 a frame and swirled sideways (the exe's suction step, as
+    /// `character_core::npc`), through KH1's own per-frame push (`+0x120`, which its physics
+    /// step adds to the actor's move and clears). Let go when the swing ends.
+    unsafe fn pull(&mut self, out: &Output, anim: &RigAnim, battle: &Battle) {
+        if self.pulled.is_empty() {
+            return;
+        }
+        let mut centres: HashMap<u64, [f32; 3]> = HashMap::new();
+        for h in &out.hitboxes {
+            let Some(a) = battle.attack_for_level(h.attack, 0, 0) else { continue };
+            if character_core::reaction::category(a.enemy_reaction) != 5 {
+                continue;
+            }
+            if let Some(c) = anim.attack_shapes(h.group, h.weapon).first() {
+                centres.entry(h.swing).or_insert(c.center);
+            }
+        }
+        let alive: HashMap<usize, f32> = self.bodies.iter().map(|b| (b.actor, b.target.height)).collect();
+        self.pulled.retain(|a, (swing, _, _)| centres.contains_key(swing) && alive.contains_key(a));
+        for (&actor, &(swing, radius, swirl)) in &self.pulled {
+            let c = centres[&swing];
+            let p = rd::<[f32; 3]>(actor + 0x10);
+            // KH2's frame (y up), from the body's middle.
+            let body = [p[0], -p[1] + alive[&actor] * 0.5, p[2]];
+            let d = [c[0] - body[0], c[1] - body[1], c[2] - body[2]];
+            let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            if len < 1e-3 {
+                continue;
+            }
+            let n = [d[0] / len, d[1] / len, d[2] / len];
+            let radial = ((len - radius) * 0.1).clamp(-20.0, 20.0);
+            let tl = (n[2] * n[2] + n[0] * n[0]).sqrt();
+            let t = if tl > 1e-4 { [n[2] / tl, -n[0] / tl] } else { [0.0, 0.0] };
+            let m = [n[0] * radial + t[0] * swirl, n[1] * radial, n[2] * radial + t[1] * swirl];
+            let push = rd::<[f32; 3]>(actor + 0x120);
+            wr(actor + 0x120, [push[0] + m[0], push[1] - m[1], push[2] + m[2]]);
+        }
+        static SEEN: AtomicU32 = AtomicU32::new(0);
+        if SEEN.fetch_add(1, Ordering::Relaxed) % 60 == 0 {
+            note(format!("Magnet: {} enemies held around {} centre(s)", self.pulled.len(), centres.len()));
+        }
+    }
+
     /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
     pub unsafe fn trail(&mut self, sora: usize, swinging: bool) {
         let flags = rd::<u32>(sora + 0x1CC);
@@ -557,12 +604,20 @@ impl Strikes {
                 let Some(rows) = self.rows else { continue };
                 let kh1 = rows[(air as usize) * 2 + finisher as usize];
                 let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power);
+                // A Magnet's catch (the user: Magnet Burst didn't pull them together): KH2 picks
+                // the orbit radius between the two knockback values, the swirl from the next.
+                if character_core::reaction::category(row.enemy_reaction) == 5 {
+                    let (a, c) = (row.knockback_1 as f32, row.knockback_2 as f32);
+                    let t = ((b.actor >> 4) % 97) as f32 / 96.0;
+                    self.pulled.insert(b.actor, (h.swing, a + (c - a) * t, row.unknown_16 as f32));
+                }
                 note(format!(
                     "KH2 attack {} (power {}, reaction {}) hit actor {:#x} part {ti} at {:?}: landed with KH1 row motion {} -> {dealt:?}",
                     h.attack, row.power, row.enemy_reaction, b.actor, swept[ai].center, kh1.motion
                 ));
             }
         }
+        self.pull(out, anim, battle);
         let now: HashSet<u64> = out.hitboxes.iter().map(|h| h.swing).collect();
         self.repelled.retain(|s| now.contains(s));
         for ended in self.live.difference(&now) {
