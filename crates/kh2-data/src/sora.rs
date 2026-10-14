@@ -329,6 +329,8 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
                 0 => EventKind::Jump,
                 1 => EventKind::Effect(e.params.first().copied().unwrap_or(0)),
                 17 => EventKind::MagicCast(e.params.first().copied().unwrap_or(0)),
+                8 if e.params.len() >= 2 => EventKind::Sound(e.params[0] as u16 as u32 * 1000 + e.params[1] as u16 as u32),
+                13 | 14 => EventKind::Voice(e.params.first().copied().unwrap_or(-1)),
                 28 => EventKind::RevengeCheck,
                 34 => EventKind::QuickRunCheck,
                 35 => EventKind::FallCheck,

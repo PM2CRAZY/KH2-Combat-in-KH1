@@ -394,9 +394,7 @@ unsafe fn takeover(actor: usize) -> bool {
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
     // KH2's own sounds for the effect elements this frame starts.
     for e in &out.events {
-        if let character_core::EventKind::Effect(n) = e {
-            super::kh2sound::element(out.motion, *n);
-        }
+        super::kh2sound::event(out.motion, *e);
     }
     super::kh2sound::tick();
     if settings.swing_fx {
@@ -406,7 +404,8 @@ unsafe fn takeover(actor: usize) -> bool {
         let recoil = matches!(out.motion, character_core::reaction::motion::REPELLED | character_core::reaction::motion::REPELLED_AIR);
         let started = attacking && !recoil && (d.swing != Some(out.motion) || out.clip_frame < d.swing_frame);
         if started {
-            d.strikes.swing_start(actor, d.character.airborne(), out.combo_count, d.character.in_finisher());
+            // (KH2's own voice for the moves whose KH2 sounds play, not KH1's.)
+            d.strikes.swing_start(actor, d.character.airborne(), out.combo_count, d.character.in_finisher(), !super::kh2sound::covers(out.motion));
         }
         d.swing = attacking.then_some(out.motion);
         d.swing_frame = out.clip_frame;

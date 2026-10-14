@@ -761,3 +761,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (`magnet_explosion` default: 166, 197; `all`; `off`), `kh2_volume`. KH2's visual effects
   (PAX/DPX particle systems) are not drawn yet: that needs our own particle renderer inside
   KH1's Direct3D 11 frame.
+- `kh1-hook` stage 41 (the user: the KH2 sounds don't sound right; dig into the KH2 install):
+  `docs/kh2-sound.md` "Sound ids are id records": `Scd::sound_id` resolves a sound id through
+  the bank's id records (it was played as a stream number: wrong sounds), with
+  their volume; Ogg Vorbis voice streams decode (`lewton`). `EventKind::Sound` (frame trigger
+  8, weapon bank 500 = the Kingdom Key's) and `EventKind::Voice` (13 / 14, VTBL) join the
+  effect elements; `kh2sound` plays all three, and KH1's swing voice stays quiet on those
+  moves. Research tools: `kh1-data/examples/move_sounds.rs` (renders a move's KH2 timeline to
+  WAV), `atkp_sounds.rs`; the static Linux CLI runs on the user's PC VM
+  (`local/tools/kh2-combat-linux-3 extract --backup --game ...`).

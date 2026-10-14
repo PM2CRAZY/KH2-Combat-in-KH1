@@ -60,6 +60,11 @@ pub enum EventKind {
     /// Start the object's effect element `n`; an object with a script
     /// (Wisdom Form) runs its trigger 0x10 with it (frame trigger 1).
     Effect(i16),
+    /// Play sound effect `bank * 1000 + index` (frame trigger 8, e.g. the Keyblade's swing:
+    /// bank 500 stands for the equipped weapon's own bank).
+    Sound(u32),
+    /// Play the object's battle voice `n` (frame triggers 13 / 14: `00battle` VTBL id).
+    Voice(i16),
     Other(u8),
 }
 

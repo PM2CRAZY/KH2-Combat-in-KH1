@@ -105,7 +105,7 @@ fn run(args: &Args) -> Result<(), String> {
             let (bank, index) = kh2_formats::scd::split_id(id);
             let bytes = install.read_any(source, &kh2_formats::scd::bank_file(bank)).map_err(|e| e.to_string())?;
             let scd = kh2_formats::scd::Scd::parse(&bytes).map_err(|e| e.to_string())?;
-            let pcm = scd.sound(index).map_err(|e| e.to_string())?;
+            let pcm = scd.sound_id(index).map_err(|e| e.to_string())?;
             let data: Vec<u8> = pcm.samples.iter().flat_map(|s| s.to_le_bytes()).collect();
             let mut w = Vec::new();
             let block = pcm.channels as u32 * 2;

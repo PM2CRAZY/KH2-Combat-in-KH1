@@ -14,7 +14,19 @@
 //! ```
 //!
 //! A KH2 sound id is `bank * 1000 + index` (PAX element sounds, e.g. 999038 = bank 999,
-//! index 38). Only Microsoft ADPCM (codec 12) is decoded; it is what the effect banks hold.
+//! index 38). The index is the bank's sound id, not a stream number (b-kh1 stage 41, the user:
+//! the sounds were wrong): `0x30` u16 id count, `0x36` u16 the bank number, and from `0x50` a
+//! table of that many offsets to id records, contiguous, up to the first entry script: byte 0
+//! 1 (plays) or 0 (none), a f32 volume at 0x08, the u32 id at 0x0C, and the record's last
+//! four bytes two u16, the sound entry (whose stream is the stream of the same index; checked
+//! against each entry script's length in se999) and a track. E.g. se999 id 38 plays entry 35
+//! at 0.8, se500 id 42 entry 25, se000 id 169 entry 125. Microsoft ADPCM (codec 12, the effect banks) and Ogg Vorbis (codec 6, the voice
+//! banks `voice/us/battle/*_sora.win32.scd`) are decoded. A Vorbis stream's extra data is a
+//! 0x20-byte header (u8 version 2, u8 header size 0x20, u8 XOR key, ..., u32 seek table size at
+//! 0x10, u32 Vorbis header size at 0x14), the seek table, then the Ogg pages of the Vorbis
+//! headers XOR'd with the key; the stream's data is the rest of the Ogg pages as they are.
+//! (The voice banks' entry table runs on into the stream table: real entries are as many as
+//! streams.)
 
 use crate::{bad, Error, Result};
 
@@ -27,12 +39,16 @@ pub struct Pcm {
     pub rate: u32,
     pub channels: u16,
     pub samples: Vec<i16>,
+    /// The id's volume (1.0 when played by stream).
+    pub volume: f32,
 }
 
 pub struct Scd<'a> {
     data: &'a [u8],
     entries: Vec<usize>,
     streams: Vec<usize>,
+    /// Sound id → (entry, volume); `None` for ids that play nothing.
+    ids: Vec<Option<(usize, f32)>>,
 }
 
 fn u16_at(b: &[u8], o: usize) -> Result<u16> {
@@ -65,14 +81,44 @@ impl<'a> Scd<'a> {
         let (n_entries, n_streams) = (u16_at(data, 0x30)? as usize, u16_at(data, 0x32)? as usize);
         let (o_entries, o_streams) = (u32_at(data, 0x38)? as usize, u32_at(data, 0x3C)? as usize);
         let table = |o: usize, n: usize| -> Result<Vec<usize>> { (0..n).map(|i| Ok(u32_at(data, o + i * 4)? as usize)).collect() };
-        Ok(Scd { data, entries: table(o_entries, n_entries)?, streams: table(o_streams, n_streams)? })
+        let entries = table(o_entries, n_entries)?;
+        let streams = table(o_streams, n_streams)?;
+        // The id records (see the module notes).
+        let n_ids = n_entries;
+        let mut ids = Vec::new();
+        let recs = table(0x50, n_ids).unwrap_or_default();
+        let end_all = entries.first().copied().unwrap_or(0);
+        for (i, &r) in recs.iter().enumerate() {
+            let end = recs.get(i + 1).copied().unwrap_or(end_all);
+            if r < 0x50 || end <= r + 0x10 || end > data.len() || data[r] != 1 {
+                ids.push(None);
+                continue;
+            }
+            let vol = f32::from_bits(u32_at(data, r + 8)?);
+            let entry = u16_at(data, end - 4)? as usize;
+            ids.push((entry < streams.len()).then_some((entry, if vol.is_finite() && vol > 0.0 { vol } else { 1.0 })));
+        }
+        Ok(Scd { data, entries, streams, ids })
+    }
+
+    /// The bank's number (`0x36`).
+    pub fn bank(&self) -> u16 {
+        u16_at(self.data, 0x36).unwrap_or(0)
+    }
+
+    /// Plays sound `id` of this bank (the id's entry, at its volume), if it plays anything.
+    pub fn sound_id(&self, id: usize) -> Result<Pcm> {
+        let (entry, volume) = self.ids.get(id).copied().flatten().ok_or_else(|| Error::Format(format!("scd: sound id {id} plays nothing")))?;
+        let mut p = self.sound(entry)?;
+        p.volume = volume;
+        Ok(p)
     }
 
     /// Whether `at` holds a stream header this reader understands.
     fn is_stream(&self, at: usize) -> bool {
         let ok = |o| i32_at(self.data, at + o).unwrap_or(-1);
         let (size, ch, rate, codec) = (ok(0), ok(4), ok(8), ok(12));
-        size > 0 && (1..=8).contains(&ch) && (4000..=96000).contains(&rate) && codec == 12
+        size > 0 && (1..=8).contains(&ch) && (4000..=96000).contains(&rate) && (codec == 12 || codec == 6)
     }
 
     /// The stream that sound `index` plays.
@@ -84,19 +130,53 @@ impl<'a> Scd<'a> {
         self.streams.get(index).copied().filter(|&s| self.is_stream(s))
     }
 
-    /// Decodes sound `index` of this bank.
+    /// Decodes stream `index` of this bank (see `sound_id` for a KH2 sound id).
     pub fn sound(&self, index: usize) -> Result<Pcm> {
         let at = self.stream_of(index).ok_or_else(|| Error::Format(format!("scd: no stream for sound {index}")))?;
         let d = self.data;
         let size = i32_at(d, at)? as usize;
         let channels = i32_at(d, at + 4)? as u16;
         let rate = i32_at(d, at + 8)? as u32;
+        let codec = i32_at(d, at + 0x0C)?;
         let extra = i32_at(d, at + 0x18)? as usize;
         let fmt = d.get(at + 0x20..at + 0x20 + extra).ok_or_else(|| Error::Format("scd: short format".into()))?;
         let body = d.get(at + 0x20 + extra..at + 0x20 + extra + size).ok_or_else(|| Error::Format("scd: short data".into()))?;
-        let samples = decode_ms_adpcm(fmt, body, channels as usize)?;
-        Ok(Pcm { rate, channels, samples })
+        let samples = if codec == 6 { decode_vorbis(fmt, body)? } else { decode_ms_adpcm(fmt, body, channels as usize)? };
+        Ok(Pcm { rate, channels, samples, volume: 1.0 })
     }
+
+    /// How many sounds the bank holds (its streams).
+    pub fn len(&self) -> usize {
+        self.streams.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.streams.is_empty()
+    }
+}
+
+/// SCD Ogg Vorbis (codec 6): `extra` the stream's extra data (see the module notes), `data`
+/// the Ogg pages after the headers.
+pub fn decode_vorbis(extra: &[u8], data: &[u8]) -> Result<Vec<i16>> {
+    let hsize = *extra.get(1).ok_or_else(|| Error::Format("scd: short vorbis".into()))? as usize;
+    let key = extra[2];
+    let seek = u32_at(extra, 0x10)? as usize;
+    let vh = u32_at(extra, 0x14)? as usize;
+    let head = extra.get(hsize + seek..hsize + seek + vh).ok_or_else(|| Error::Format("scd: short vorbis header".into()))?;
+    let mut ogg: Vec<u8> = head.iter().map(|b| b ^ key).collect();
+    ogg.extend_from_slice(data);
+    let mut r = lewton::inside_ogg::OggStreamReader::new(std::io::Cursor::new(ogg)).map_err(|e| Error::Format(format!("scd: vorbis: {e}")))?;
+    let mut out = Vec::new();
+    loop {
+        match r.read_dec_packet_itl() {
+            Ok(Some(p)) => out.extend_from_slice(&p),
+            Ok(None) => break,
+            // A truncated last page ends it.
+            Err(_) if !out.is_empty() => break,
+            Err(e) => return Err(Error::Format(format!("scd: vorbis: {e}"))),
+        }
+    }
+    Ok(out)
 }
 
 /// Microsoft ADPCM: `fmt` is the WAVEFORMATEX (+ADPCM fields), `data` whole blocks.

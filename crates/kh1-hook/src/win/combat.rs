@@ -428,7 +428,7 @@ impl Strikes {
     /// Phase 9: a KH2 swing starts with what KH1's matching combo row plays when its motion
     /// starts (`0x1402A17F0`): the Keyblade trail asked for, the swing's effect and Sora's
     /// voice. `count` is KH2's combo count (1 on the first swing).
-    pub unsafe fn swing_start(&mut self, sora: usize, air: bool, count: u8, finisher: bool) {
+    pub unsafe fn swing_start(&mut self, sora: usize, air: bool, count: u8, finisher: bool, kh1_voice: bool) {
         let obj = pose::ptr(rd::<u32>(sora + 0x130));
         let model = if obj > 0x10000 { rd::<u16>(obj + 0x4C) } else { u16::MAX };
         if self.swing_rows.as_ref().map(|r| r.0) != Some(model) {
@@ -471,7 +471,7 @@ impl Strikes {
                 f(source, r.effect as i32, sora, 0x30);
             }
         }
-        if r.voice >= 0 {
+        if r.voice >= 0 && kh1_voice {
             let f: unsafe extern "system" fn(usize, i32, usize) = std::mem::transmute(base + VOICE_RVA);
             f(sora, r.voice as i32, 0);
         }
