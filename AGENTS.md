@@ -774,3 +774,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `kh2_voice` in `kh1-kh2.ini`, off by default: `kh2sound` loads no VTBL voices and
   `covers()` is false, so KH1's swing voice plays on Magnet Burst and Explosion with KH2's
   sounds and effect elements. `kh2_voice = on` brings KH2's battle voice back.
+- `kh1-hook` stage 43 (the user: give Sora more AP to make up for the KH2 abilities): KH1's
+  party stats `0x1402A2FA0` `(member, out)` fill `0x142E94BC0 + member * 0x100` from the save
+  (max AP `+0xE4` = member `+9` plus the accessories' `+4`, at most 100; `0x1402E6220` is AP
+  left = that minus the equipped abilities' AP, `0x1402E6120` reads it). `win/menu.rs` hooks
+  it: Sora's max AP gets `growth::bonus_ap(level)`, the AP of every `growth::MENU` ability
+  learned by then (27 by 50). Nothing is written to the save. `bonus_ap` in the ini.

@@ -30,6 +30,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `kh2_sounds` | `magnet_explosion` (default), `all`, `off` | Which moves play KH2's own sounds (its effect and Keyblade sounds, from the KH2 install). |
 | `kh2_volume` | `1.0` (default) | Their volume. |
 | `kh2_voice` | `off` (default), `on` | `on`: Sora's KH2 battle voice on those moves; `off`: KH1's voice. |
+| `bonus_ap` | `on` (default), `off` | With `abilities = kh1`: Sora's max AP grows by the AP of each KH2 ability he learns (below). |
 
 ## What is KH1's and what is KH2's
 
@@ -82,6 +83,10 @@ What only KH2 has is added to KH1's Ability menu as new abilities, learned at So
 | 43 | Retaliating Slash | Sora's | 3 |
 | 48 | Aerial Dive | Sora's | 2 |
 | 50 | Magnet Burst | Sora's | 3 |
+
+Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the KH2
+abilities take none of the AP KH1 gives him: +2 at level 4, +27 in all by level 50 (KH1's
+cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while the game runs.
 
 Quick Run and Aerial Dodge reach LV2 / LV3 / MAX at levels 22 / 40 / 65 and 28 / 46 / 70;
 the dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at 19 / 37 / 60.

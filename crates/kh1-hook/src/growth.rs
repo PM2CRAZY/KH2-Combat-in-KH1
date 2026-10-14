@@ -379,6 +379,12 @@ impl Kh1Sora {
     }
 }
 
+/// The AP Sora gets on top of KH1's by his level: each KH2 ability he has learned brings its
+/// own AP, so taking the KH2 abilities costs none of KH1's.
+pub fn bonus_ap(level: u8) -> u8 {
+    MENU.iter().filter(|ab| level >= ab.level).map(|ab| ab.ap).sum()
+}
+
 /// One line for the log.
 pub fn describe(a: &Abilities) -> String {
     let mut names: Vec<&str> = Vec::new();
@@ -415,6 +421,15 @@ pub fn describe(a: &Abilities) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bonus_ap_follows_the_learned_abilities() {
+        assert_eq!(bonus_ap(1), 0);
+        assert_eq!(bonus_ap(4), 2);
+        assert_eq!(bonus_ap(10), 4);
+        assert_eq!(bonus_ap(50), MENU.iter().map(|ab| ab.ap).sum::<u8>());
+        assert_eq!(bonus_ap(50), bonus_ap(100));
+    }
 
     fn sora(level: u8, abilities: &[u8], shared: &[u8]) -> Kh1Sora {
         let mut a = abilities.to_vec();

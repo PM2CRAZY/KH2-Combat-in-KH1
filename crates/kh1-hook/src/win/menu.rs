@@ -134,9 +134,37 @@ unsafe extern "system" fn table_load() {
     ensure_table(base);
 }
 
+/// KH1's party stats (`0x1402A2FA0` `(member, stats)`, into `0x142E94BC0 + member * 0x100`):
+/// max AP `+0xE4` = the save's AP byte (member `+9`) plus the accessories', at most 100.
+const STATS_RVA: usize = 0x2A2FA0;
+const STATS_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x57, 0x41, 0x56, 0x41, 0x57];
+static ORIG_STATS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Sora's max AP gets the AP of each KH2 ability he has learned (`growth::bonus_ap`); the save
+/// keeps KH1's own.
+unsafe extern "system" fn stats(member: i32, out: usize) {
+    let f: unsafe extern "system" fn(i32, usize) = std::mem::transmute(ORIG_STATS.load(std::sync::atomic::Ordering::Acquire));
+    f(member, out);
+    let set = super::settings::get();
+    if member != 0 || out < 0x10000 || !set.bonus_ap || set.abilities != growth::Mode::Kh1 {
+        return;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let Some(save) = save_block(base) else { return };
+    let bonus = growth::bonus_ap(rd::<u8>(save + 4));
+    let ap = rd::<i32>(out + 0xE4);
+    let now = (ap + bonus as i32).min(100);
+    std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
+    static LAST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+    if LAST.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
+        log(&format!("Sora's AP: {ap} (KH1's) + {bonus} (KH2 abilities learned) = {now}"));
+    }
+}
+
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     super::hook::install(base + TABLE_LOAD_RVA, &TABLE_LOAD_PROLOGUE, table_load as *const () as usize, &ORIG_LOAD, "ability table load");
+    super::hook::install(base + STATS_RVA, &STATS_PROLOGUE, stats as *const () as usize, &ORIG_STATS, "party stats");
 }
 
 /// Sora's save block, if it is there.

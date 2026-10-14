@@ -31,7 +31,9 @@ swing_fx = on\r\n\
 kh2_sounds = magnet_explosion\r\n\
 kh2_volume = 1.0\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
-kh2_voice = off\r\n";
+kh2_voice = off\r\n\
+; bonus_ap: on = (abilities = kh1) Sora's max AP grows by the AP of each KH2 ability he learns\r\n\
+bonus_ap = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -46,6 +48,7 @@ pub struct Settings {
     pub kh2_sounds: Option<Option<Vec<u16>>>,
     pub kh2_volume: f32,
     pub kh2_voice: bool,
+    pub bonus_ap: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -87,6 +90,7 @@ pub fn get() -> &'static Settings {
             },
             kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
             kh2_voice: on(&text, "kh2_voice", "on", false),
+            bonus_ap: on(&text, "bonus_ap", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s
