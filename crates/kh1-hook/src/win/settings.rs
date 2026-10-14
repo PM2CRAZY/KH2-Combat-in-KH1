@@ -25,7 +25,11 @@ grabs = on\r\n\
 ; Sora from KH2 until KH1 has him standing again (in the air: KH1's fall from there)\r\n\
 commands = on\r\n\
 ; swing_fx: on = KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice\r\n\
-swing_fx = on\r\n";
+swing_fx = on\r\n\
+; kh2_sounds: KH2's own sound effects for these moves, from your KH2 install:\r\n\
+; magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
+kh2_sounds = magnet_explosion\r\n\
+kh2_volume = 1.0\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -36,6 +40,9 @@ pub struct Settings {
     pub grabs: bool,
     pub commands: bool,
     pub swing_fx: bool,
+    /// Which motions play KH2's own sounds: `None` off, `Some(None)` all.
+    pub kh2_sounds: Option<Option<Vec<u16>>>,
+    pub kh2_volume: f32,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -70,6 +77,12 @@ pub fn get() -> &'static Settings {
             grabs: on(&text, "grabs", "on", true),
             commands: on(&text, "commands", "on", true),
             swing_fx: on(&text, "swing_fx", "on", true),
+            kh2_sounds: match setting(&text, "kh2_sounds").as_deref() {
+                Some("off") | Some("0") | Some("no") => None,
+                Some("all") => Some(None),
+                _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
+            },
+            kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

@@ -753,3 +753,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     (`growth::RENAMED`: Vortex → Flash Step, Counterattack → Counterguard, Blitz → Finishing
     Leap, Sliding Dash → Slide Dash, Hurricane Blast → Explosion, Ripple Drive → Vicinity
     Break, Stun Impact → Guard Break, Gravity Break → Aerial Finish); ids unchanged.
+- `kh1-hook` stage 40 (the user: Magnet Burst's and Explosion's exact KH2 sounds and effects?):
+  `win/kh2sound.rs`, the KH2 sound player (`docs/kh2-sound.md`): once KH2 Sora is loaded,
+  the sounds of the effect elements the chosen motions start (`EventKind::Effect`, PAX "p_ex"
+  in `obj/P_EX100.a.us`) are read from the user's KH2 install (`se/seNNN.win32.scd`, Microsoft
+  ADPCM) and played through `waveOut` when KH2's clip starts the element. Ini `kh2_sounds`
+  (`magnet_explosion` default: 166, 197; `all`; `off`), `kh2_volume`. KH2's visual effects
+  (PAX/DPX particle systems) are not drawn yet: that needs our own particle renderer inside
+  KH1's Direct3D 11 frame.

@@ -30,3 +30,40 @@ extern "system" {
 extern "system" {
     pub fn GetAsyncKeyState(vk: i32) -> i16;
 }
+
+/// `WAVEFORMATEX`.
+#[repr(C, packed(2))]
+pub struct WaveFormatEx {
+    pub format_tag: u16,
+    pub channels: u16,
+    pub samples_per_sec: u32,
+    pub avg_bytes_per_sec: u32,
+    pub block_align: u16,
+    pub bits_per_sample: u16,
+    pub cb_size: u16,
+}
+
+/// `WAVEHDR` (64-bit layout).
+#[repr(C)]
+pub struct WaveHdr {
+    pub data: *mut u8,
+    pub buffer_length: u32,
+    pub bytes_recorded: u32,
+    pub user: usize,
+    pub flags: u32,
+    pub loops: u32,
+    pub next: *mut WaveHdr,
+    pub reserved: usize,
+}
+
+pub const WAVE_MAPPER: u32 = 0xFFFF_FFFF;
+pub const WHDR_DONE: u32 = 1;
+
+#[link(name = "winmm")]
+extern "system" {
+    pub fn waveOutOpen(out: *mut usize, device: u32, format: *const WaveFormatEx, callback: usize, instance: usize, flags: u32) -> u32;
+    pub fn waveOutPrepareHeader(out: usize, hdr: *mut WaveHdr, size: u32) -> u32;
+    pub fn waveOutUnprepareHeader(out: usize, hdr: *mut WaveHdr, size: u32) -> u32;
+    pub fn waveOutWrite(out: usize, hdr: *mut WaveHdr, size: u32) -> u32;
+    pub fn waveOutClose(out: usize) -> u32;
+}

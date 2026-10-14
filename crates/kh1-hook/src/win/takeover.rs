@@ -392,6 +392,13 @@ unsafe fn takeover(actor: usize) -> bool {
     GRIP.store(d.anim.weapons_out(), Ordering::Relaxed);
     GROUNDED.store(d.grounded && !d.character.airborne(), Ordering::Relaxed);
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
+    // KH2's own sounds for the effect elements this frame starts.
+    for e in &out.events {
+        if let character_core::EventKind::Effect(n) = e {
+            super::kh2sound::element(out.motion, *n);
+        }
+    }
+    super::kh2sound::tick();
     if settings.swing_fx {
         // A KH2 swing starting: a new attack motion, or the same one again from its start.
         let attacking = matches!(out.state, StateName::Attack);
