@@ -129,7 +129,8 @@ fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
                 let id = if (500_000..501_000).contains(&id) { id - 500_000 + WEAPON_BANK * 1000 } else { id };
                 wants.push((id, Want::Sound(id)));
             }
-            EventKind::Voice(v) if v >= 0 && !voice_ids.contains(&v) => voice_ids.push(v),
+            // (The user: KH1's voice, not KH2's, unless `kh2_voice = on`.)
+            EventKind::Voice(v) if v >= 0 && !voice_ids.contains(&v) && super::settings::get().kh2_voice => voice_ids.push(v),
             _ => {}
         }
     }
@@ -201,7 +202,7 @@ fn vtbl(bar: &[u8]) -> Vec<(u8, u8, Vec<i8>)> {
 
 /// Whether KH2's own sounds stand in for KH1's (its swing voice) on `motion`.
 pub fn covers(motion: u16) -> bool {
-    allowed(motion) && LOADED.try_lock().map_or(false, |g| g.is_some())
+    super::settings::get().kh2_voice && allowed(motion) && LOADED.try_lock().map_or(false, |g| g.is_some())
 }
 
 /// Sora's `motion` reached a KH2 event: its sound, if it has one.

@@ -770,3 +770,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   moves. Research tools: `kh1-data/examples/move_sounds.rs` (renders a move's KH2 timeline to
   WAV), `atkp_sounds.rs`; the static Linux CLI runs on the user's PC VM
   (`local/tools/kh2-combat-linux-3 extract --backup --game ...`).
+- `kh1-hook` stage 42 (the user: every KH2 sound is right but the voice; keep KH1's voice):
+  `kh2_voice` in `kh1-kh2.ini`, off by default: `kh2sound` loads no VTBL voices and
+  `covers()` is false, so KH1's swing voice plays on Magnet Burst and Explosion with KH2's
+  sounds and effect elements. `kh2_voice = on` brings KH2's battle voice back.

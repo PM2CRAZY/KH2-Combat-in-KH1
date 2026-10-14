@@ -29,7 +29,9 @@ swing_fx = on\r\n\
 ; kh2_sounds: KH2's own sound effects for these moves, from your KH2 install:\r\n\
 ; magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
 kh2_sounds = magnet_explosion\r\n\
-kh2_volume = 1.0\r\n";
+kh2_volume = 1.0\r\n\
+; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
+kh2_voice = off\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -43,6 +45,7 @@ pub struct Settings {
     /// Which motions play KH2's own sounds: `None` off, `Some(None)` all.
     pub kh2_sounds: Option<Option<Vec<u16>>>,
     pub kh2_volume: f32,
+    pub kh2_voice: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -83,6 +86,7 @@ pub fn get() -> &'static Settings {
                 _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
             },
             kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
+            kh2_voice: on(&text, "kh2_voice", "on", false),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

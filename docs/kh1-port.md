@@ -27,6 +27,9 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `grabs` | `on` (default), `off` | KH1's ledge, vine, bar and swim moves take him from KH2's falls. |
 | `commands` | `on` (default), `off` | KH1's own commands (magic, items, specials, summons) take him from KH2. |
 | `swing_fx` | `on` (default), `off` | KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice. |
+| `kh2_sounds` | `magnet_explosion` (default), `all`, `off` | Which moves play KH2's own sounds (its effect and Keyblade sounds, from the KH2 install). |
+| `kh2_volume` | `1.0` (default) | Their volume. |
+| `kh2_voice` | `off` (default), `on` | `on`: Sora's KH2 battle voice on those moves; `off`: KH1's voice. |
 
 ## What is KH1's and what is KH2's
 
