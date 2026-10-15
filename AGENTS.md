@@ -844,3 +844,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     used (`Retarget::set_grip`): the Dream Sword is held another way than the Keyblade.
   - `Abilities::one_swing_on_miss` (character-core, ours, set in `abilities = kh1`): without
     Combo Master a swing that hasn't connected doesn't chain.
+- `kh1-hook` stage 51 (the user: at the start of some cutscenes Sora slides and snaps back;
+  the Dream Shield is held backwards): held still on the ground (KH1's control step skipped
+  or him unable to act) for 2 frames, KH1 has him (KH2's run slide or lunge no longer moves
+  him while the event sets up), KH2 starts over afterwards. Logged once per weapon: Sora's
+  weapon (save `+0x36`) and KH1's grip of it against the Keyblade's rest grip (for the
+  shield's fix).

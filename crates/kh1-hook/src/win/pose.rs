@@ -770,6 +770,17 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     if let (false, Some(0..=7), Some(&Some(p)), Some(r)) = (ours, slot, s.parents.get(kh1_data::retarget::GRIP_BONE).map(|p| (*p >= 0).then_some(*p as usize)).as_ref(), s.retarget.as_ref()) {
         let live = mat(world + p * 0x40).inverse() * mat(world + kh1_data::retarget::GRIP_BONE * 0x40);
         let used = r.set_grip(Some(live));
+        // Which weapon (Sora's save entry `+0x36`) and how KH1 holds it, once per weapon.
+        static WEAPON: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
+        let save = rd::<u64>(BASE.load(Ordering::Relaxed) + 0x28695A0) as usize;
+        if save > 0x10000 {
+            let w = rd::<u8>(save + 0x36) as u32;
+            if WEAPON.swap(w, Ordering::Relaxed) != w {
+                let (_, q, t) = live.to_scale_rotation_translation();
+                let (ax, ang) = q.to_axis_angle();
+                log(&format!("weapon {w:#x}: KH1's grip turned {:.2} rad from the Keyblade's rest (KH1's grip: axis {ax:.2?} angle {ang:.2}, offset {t:.1?})", r.grip_turn(&live).unwrap_or(-1.0)));
+            }
+        }
         static GRIP_LIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if GRIP_LIVE.swap(used, Ordering::Relaxed) != used {
             log(if used { "the weapon is held another way than the Keyblade (KH1's grip is used)" } else { "the weapon is held as the Keyblade (the rest pose's grip)" });

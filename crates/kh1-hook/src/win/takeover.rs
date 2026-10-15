@@ -64,6 +64,7 @@ static CONTROLLED: AtomicBool = AtomicBool::new(true);
 /// KH1 holds him still (logged on a change).
 static FROZEN: AtomicBool = AtomicBool::new(false);
 static CONTROL_HOOKED: AtomicBool = AtomicBool::new(false);
+static FROZEN_FRAMES: AtomicU32 = AtomicU32::new(0);
 const VINE_RVA: usize = 0x2C5710;
 const LEDGE_RVA: usize = 0x2C68A0;
 const BAR_RVA: usize = 0x2C7E00;
@@ -288,6 +289,21 @@ unsafe fn takeover(actor: usize) -> bool {
     let frozen = !CONTROLLED.swap(false, Ordering::Relaxed) && CONTROL_HOOKED.load(Ordering::Relaxed);
     if FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
         log(if frozen { "KH1 holds Sora still: no input for KH2" } else { "KH1 lets Sora act again" });
+    }
+    // Held still on the ground for more than a frame (a cutscene starting, the user: he slid
+    // on and snapped back): KH1 has him, so nothing of KH2's (a run's slide, a lunge) moves him.
+    let still = if frozen { FROZEN_FRAMES.fetch_add(1, Ordering::Relaxed) + 1 } else { FROZEN_FRAMES.store(0, Ordering::Relaxed); 0 };
+    if still >= 2 && !d.character.airborne() {
+        if d.last_state.is_some() {
+            if d.logged < 400 {
+                d.logged += 1;
+                log("KH1 has Sora (KH1 holds him still)");
+            }
+            FRESH.store(true, Ordering::Relaxed);
+        }
+        d.last_state = None;
+        d.held = (true, true);
+        return false;
     }
     let (stick, jump, action, attack) = if frozen { ([0.0, 0.0], false, false, false) } else { (stick, jump, action, attack) };
     let input = Input {

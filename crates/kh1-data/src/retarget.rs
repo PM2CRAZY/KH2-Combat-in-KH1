@@ -542,6 +542,14 @@ impl Retarget {
     /// `None` when KH1 didn't pose him. A grip turned more than `GRIP_TURN` from the rest pose's
     /// (KH1's battle idle with the Keyblade) is used instead of it: another weapon is held
     /// another way (the user: the Dream Sword was drawn backwards). Returns whether it is used.
+    /// The angle (radians) between a grip and the rest pose's (diagnostics).
+    pub fn grip_turn(&self, live: &Mat4) -> Option<f32> {
+        let r = self.rest_local.get(GRIP_BONE).copied().flatten()?;
+        let (_, lq, _) = live.to_scale_rotation_translation();
+        let (_, rq, _) = r.to_scale_rotation_translation();
+        Some(lq.angle_between(rq))
+    }
+
     pub fn set_grip(&self, live: Option<Mat4>) -> bool {
         let use_live = match (live, self.rest_local.get(GRIP_BONE).copied().flatten()) {
             (Some(l), Some(r)) if l.is_finite() => {
