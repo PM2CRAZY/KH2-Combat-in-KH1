@@ -811,3 +811,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `win/hurt.rs` hooked it as `(actor)` and called KH1's with a garbage rdx; harmless while
   KH2 had Sora (KH1's reaction kind cleared), it crashed when a hit landed while KH1 had him
   (a spell cast). The hook now takes and passes both.
+- `kh1-hook` stage 47 (the user's ability levels): High Jump (one) = High Jump MAX; Glide =
+  Glide LV3, Superglide = Glide MAX; Quick Run and Aerial Dodge LV3 when learned (their level
+  growth dropped; the dodge roll keeps its own). Sora keeps one High Jump / Glide / Superglide
+  (`growth::one_only`, an equipped copy kept): spares are taken out of the shared list in
+  `abilities = kh1` and noted in `kh1-kh2-removed.txt` (without "(id", so they are not given
+  back).

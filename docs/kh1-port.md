@@ -50,8 +50,9 @@ the menu, e.g. Hurricane Blast is listed as Explosion):
 
 | KH1 | KH2 |
 |---|---|
-| High Jump (levels 1 / 2 / 3) | High Jump LV1 / LV2 / MAX |
-| Glide, each Superglide | Glide LV1, a level more each (to MAX) |
+| High Jump | High Jump MAX |
+| Glide | Glide LV3 |
+| Superglide | Glide MAX |
 | Guard | Guard |
 | Dodge Roll | Dodge Roll LV1 (higher levels with Sora's level, below) |
 | Combo Plus, Air Combo Plus (each) | Combo Plus, Air Combo Plus (each) |
@@ -74,9 +75,9 @@ What only KH2 has is added to KH1's Ability menu as new abilities, learned at So
 | Level | Ability | Menu | AP |
 |---|---|---|---|
 | 4 | Aerial Recovery | Sora's | 2 |
-| 7 | Quick Run (on when learned) | shared | - |
+| 7 | Quick Run LV3 (on when learned) | shared | - |
 | 10 | Dodge Slash | Sora's | 2 |
-| 13 | Aerial Dodge (on when learned) | shared | - |
+| 13 | Aerial Dodge LV3 (on when learned) | shared | - |
 | 16 | Horizontal Slash | Sora's | 2 |
 | 20 | Negative Combo | Sora's | 2 |
 | 25 | Aerial Spiral | Sora's | 2 |
@@ -90,8 +91,10 @@ Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the K
 abilities take none of the AP KH1 gives him: +2 at level 4, +27 in all by level 50 (KH1's
 cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while the game runs.
 
-Quick Run and Aerial Dodge reach LV2 / LV3 / MAX at levels 22 / 40 / 65 and 28 / 46 / 70;
-the dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at 19 / 37 / 60.
+The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60.
+Sora keeps one High Jump, one Glide and one Superglide: spare copies (a randomizer can give
+more) are taken out of the shared list when the game loads or he gets one, and noted in
+`kh1-kh2-removed.txt`.
 
 Sora's ability list holds 48 (KH1's most). When it is full, KH2's abilities come first: a
 KH1 ability that is off gives up its place, a spare copy first (an ability he has more than

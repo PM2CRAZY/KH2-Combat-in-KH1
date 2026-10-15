@@ -10,8 +10,9 @@
 //! 22 Dodge Roll; Final Mix's 53 Slapshot, 54 Sliding Dash, 55 Hurricane Blast, 56 Ripple
 //! Drive, 57 Stun Impact, 58 Gravity Break.
 //!
-//! - What KH1 has, KH2 takes from it while equipped: High Jump's levels, Glide (and each
-//!   Superglide a Glide level more), Guard, Dodge Roll, each Combo Plus / Air Combo Plus, and
+//! - What KH1 has, KH2 takes from it while equipped (the user's levels): High Jump is High
+//!   Jump MAX, Glide is Glide LV3, Superglide Glide MAX (Sora keeps one of each: `one_only`),
+//!   Guard, Dodge Roll, each Combo Plus / Air Combo Plus, and
 //!   KH1's combo modifiers as KH2's nearest one (Vortex: Flash Step, Aerial Sweep, Counterattack:
 //!   Counterguard, Blitz: Finishing Leap, Slapshot, Sliding Dash: Slide Dash, Hurricane Blast:
 //!   Explosion, Ripple Drive: Vicinity Break, Stun Impact: Guard Break, Gravity Break: Aerial
@@ -20,8 +21,8 @@
 //! - What only KH2 has goes into KH1's menu as new abilities (`MENU`, ids 66 up, in an
 //!   extended copy of KH1's ability table, `win/menu.rs`), learned at Sora's level: Quick Run
 //!   and Aerial Dodge in the shared abilities (with High Jump and Glide), the rest in Sora's,
-//!   with KH2's AP costs. Quick Run, Aerial Dodge and the dodge roll level up with Sora
-//!   (`GROWTH`).
+//!   with KH2's AP costs. Quick Run and Aerial Dodge are LV3; the dodge roll levels up with
+//!   Sora (`GROWTH`).
 
 use character_core::Abilities;
 
@@ -150,17 +151,33 @@ pub enum Growth {
     DodgeRoll(u8),
 }
 
-pub const GROWTH: [(u8, Growth); 9] = [
-    (19, Growth::DodgeRoll(2)),
-    (22, Growth::QuickRun(2)),
-    (28, Growth::AerialDodge(2)),
-    (37, Growth::DodgeRoll(3)),
-    (40, Growth::QuickRun(3)),
-    (46, Growth::AerialDodge(3)),
-    (60, Growth::DodgeRoll(4)),
-    (65, Growth::QuickRun(4)),
-    (70, Growth::AerialDodge(4)),
-];
+/// (Quick Run and Aerial Dodge are LV3 as soon as they are learned, the user's choice.)
+pub const GROWTH: [(u8, Growth); 3] = [(19, Growth::DodgeRoll(2)), (37, Growth::DodgeRoll(3)), (60, Growth::DodgeRoll(4))];
+
+/// Shared abilities Sora keeps only one of (the user: one High Jump, one Glide, one
+/// Superglide).
+pub const ONE_ONLY: [u8; 3] = [kh1::HIGH_JUMP, kh1::GLIDE, kh1::SUPERGLIDE];
+
+/// The shared list with the spare copies of `ONE_ONLY` taken out (an equipped copy is the one
+/// kept), and the ids taken out. The list keeps its length (zeros at the end).
+pub fn one_only(list: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let end = list.iter().position(|b| *b == 0).unwrap_or(list.len());
+    let mut keep: Vec<Option<usize>> = vec![None; ONE_ONLY.len()];
+    for (k, id) in ONE_ONLY.iter().enumerate() {
+        let at = |on: bool| list[..end].iter().position(|b| b & 0x7F == *id && (b & 0x80 == 0) == on);
+        keep[k] = at(true).or_else(|| at(false));
+    }
+    let mut out = Vec::with_capacity(list.len());
+    let mut removed = Vec::new();
+    for (i, b) in list[..end].iter().enumerate() {
+        match ONE_ONLY.iter().position(|id| *id == b & 0x7F) {
+            Some(k) if keep[k] != Some(i) => removed.push(b & 0x7F),
+            _ => out.push(*b),
+        }
+    }
+    out.resize(list.len(), 0);
+    (out, removed)
+}
 
 /// Whether a list has `id` in it at all (equipped or not).
 pub fn has(list: &[u8], id: u8) -> bool {
@@ -303,14 +320,14 @@ impl Kh1Sora {
         let a = &self.abilities;
         let s = &self.shared;
         let mut out = Abilities { guard: false, ..Abilities::default() };
-        out.high_jump = match equipped(s, kh1::HIGH_JUMP) {
-            0 => 0,
-            1 => 1,
-            2 => 2,
-            _ => 4,
-        };
-        if equipped(s, kh1::GLIDE) > 0 {
-            out.glide = (1 + equipped(s, kh1::SUPERGLIDE)).min(4);
+        // (The user: one High Jump, MAX; one Glide, LV3, and one Superglide, MAX.)
+        if equipped(s, kh1::HIGH_JUMP) > 0 {
+            out.high_jump = 4;
+        }
+        if equipped(s, kh1::SUPERGLIDE) > 0 {
+            out.glide = 4;
+        } else if equipped(s, kh1::GLIDE) > 0 {
+            out.glide = 3;
         }
         out.guard = equipped(a, kh1::GUARD) > 0;
         if out.guard {
@@ -341,8 +358,9 @@ impl Kh1Sora {
                 continue;
             }
             match ab.effect {
-                Effect::QuickRun => quick_run = 1,
-                Effect::AerialDodge => aerial_dodge = 1,
+                // (The user: both at LV3.)
+                Effect::QuickRun => quick_run = 3,
+                Effect::AerialDodge => aerial_dodge = 3,
                 Effect::AerialRecovery => out.aerial_recovery = true,
                 Effect::FinishingPlus => out.finishing_plus = 1,
                 Effect::NegativeCombo => out.negative_combo = 1,
@@ -440,6 +458,20 @@ mod tests {
     }
 
     #[test]
+    fn one_of_each_only() {
+        let hj = kh1::HIGH_JUMP;
+        let list = [hj, kh1::GLIDE, hj, kh1::SUPERGLIDE, hj | 0x80, kh1::SUPERGLIDE | 0x80, kh1::SUPERGLIDE | 0x80, 66 | 0x80, 67 | 0x80, 0];
+        let (out, removed) = one_only(&list);
+        assert_eq!(out, vec![hj, kh1::GLIDE, kh1::SUPERGLIDE, 66 | 0x80, 67 | 0x80, 0, 0, 0, 0, 0]);
+        assert_eq!(removed, vec![hj, hj, kh1::SUPERGLIDE, kh1::SUPERGLIDE]);
+        // An equipped copy is kept over an earlier unequipped one.
+        let (out, _) = one_only(&[kh1::SUPERGLIDE | 0x80, kh1::SUPERGLIDE, 0]);
+        assert_eq!(out, vec![kh1::SUPERGLIDE, 0, 0]);
+        // Nothing to do.
+        assert!(one_only(&[hj, 66, 0]).1.is_empty());
+    }
+
+    #[test]
     fn fresh_save_has_nothing() {
         let a = sora(1, &[], &[]).kh2();
         assert_eq!((a.high_jump, a.glide, a.dodge_roll, a.quick_run, a.aerial_dodge), (0, 0, 0, 0, 0));
@@ -462,7 +494,9 @@ mod tests {
         )
         .kh2();
         assert!(a.guard);
-        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 2, 2));
+        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 4, 4));
+        let g = sora(1, &[], &[kh1::GLIDE]).kh2();
+        assert_eq!(g.glide, 3);
         assert!(a.equipped.contains(&kh2::FLASH_STEP) && !a.equipped.contains(&kh2::SLAPSHOT));
         assert!(a.equipped.contains(&kh2::GUARD));
     }
@@ -477,7 +511,7 @@ mod tests {
     #[test]
     fn menu_abilities_work_when_equipped() {
         let a = sora(99, &[kh1::DODGE_ROLL, 68, 74, 69, 77 | 0x80, kh1::COMBO_MASTER], &[kh1::HIGH_JUMP, kh1::HIGH_JUMP, kh1::HIGH_JUMP, 66, 67]).kh2();
-        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (4, 4, 4, 4));
+        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (3, 3, 4, 4));
         assert!(a.aerial_recovery && a.combo_master && a.finishing_plus == 1);
         assert!(a.equipped.contains(&kh2::DODGE_SLASH) && !a.equipped.contains(&kh2::MAGNET_BURST));
         // Learned but off: nothing.
@@ -485,8 +519,9 @@ mod tests {
         assert!(!off.aerial_recovery && off.quick_run == 0);
         // No KH1 Dodge Roll: no roll at any level.
         assert_eq!(sora(99, &[], &[]).kh2().dodge_roll, 0);
-        // Quick Run's level follows Sora's.
-        assert_eq!(sora(30, &[], &[66]).kh2().quick_run, 2);
+        // Quick Run is LV3 from the start.
+        assert_eq!(sora(7, &[], &[66]).kh2().quick_run, 3);
+        assert_eq!(sora(99, &[], &[67]).kh2().aerial_dodge, 3);
     }
 
     #[test]

@@ -307,6 +307,17 @@ impl Growth {
                         now = again;
                     }
                 }
+                // One High Jump, one Glide, one Superglide (the user): spares go.
+                let (kept, spare) = growth::one_only(&now.shared);
+                if !spare.is_empty() {
+                    for (k, b) in kept.iter().enumerate() {
+                        std::ptr::write((save + 0x599 + k) as *mut u8, *b);
+                    }
+                    let names: Vec<String> = spare.iter().map(|id| growth::name(*id)).collect();
+                    log(&format!("spare shared abilities taken out (one of each counts): {}", names.join(", ")));
+                    remember(&format!("level {}: spare shared abilities taken out (one of each counts): {}", now.level, names.join(", ")));
+                    now.shared = kept;
+                }
                 for ab in now.grants() {
                     let (list, len, byte) = match ab.list {
                         growth::List::Shared => (save + 0x599, 10, ab.id),
