@@ -180,7 +180,16 @@ fn kh1_moving() -> bool {
     }
 }
 
+/// KH1 has him: our last KH2 pose is no longer drawn (it froze him for a moment, the user:
+/// walking into a ladder, the walk stopped before the climb); `pose` blends into KH1's own.
+fn drop_pose() {
+    if let Ok(mut p) = POSE.try_lock() {
+        *p = None;
+    }
+}
+
 fn release(why: &str) {
+    drop_pose();
     if let Ok(mut d) = DRIVER.try_lock() {
         if let Some(dr) = d.as_mut() {
             if dr.logged < 400 && dr.last_state.is_some() {
@@ -316,6 +325,7 @@ unsafe fn takeover(actor: usize) -> bool {
         }
         d.last_state = None;
         d.held = (true, true);
+        drop_pose();
         return false;
     }
     let (stick, jump, action, attack) = if frozen { ([0.0, 0.0], false, false, false) } else { (stick, jump, action, attack) };

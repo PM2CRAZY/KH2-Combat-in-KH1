@@ -860,7 +860,8 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             let w = at.elapsed().as_secs_f32() / KH1_BLEND;
             if w < 1.0 && last.len() >= SORA_BONES as usize {
                 let inv = to_world.inverse();
-                let w = w * w * (3.0 - 2.0 * w);
+                // (Eased out: KH1's motion shows at once, our last pose fades.)
+                let w = 1.0 - (1.0 - w) * (1.0 - w);
                 for (i, from) in last.iter().enumerate().take(SORA_BONES as usize) {
                     let kh1 = inv * mat(world + i * 0x40);
                     let (fs, fr, ft) = from.to_scale_rotation_translation();

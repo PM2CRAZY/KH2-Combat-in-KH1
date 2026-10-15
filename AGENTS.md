@@ -896,3 +896,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   jump / fall / landing (slots 8-13) now show KH1's own animation while KH1 has him (KH2's
   jumps are KH2's as before). The T-pose detector of stage 56 is gone (its chest bone was
   three parents up from the hand, still in the arm: it fired in every idle).
+- `kh1-hook` stage 58 (the user: walking into a ladder, the walk froze before the climb):
+  `pose` kept drawing KH2's last pose for 0.15 s after KH1 took him (`takeover::POSE`'s
+  freshness), then blended from it: a frozen walk for a third of a second. Taking him to KH1
+  now drops that pose (`takeover::drop_pose`), and the 0.2 s blend into KH1's own animation is
+  eased out (KH1's motion shows at once, our last pose fades).
