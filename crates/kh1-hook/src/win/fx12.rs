@@ -6,10 +6,10 @@
 //! thread's tasks into the current command list (`0x1400FD3A0(R)`). Our draw runs right after
 //! the world-model pass (`0x1401EADD0`, task 160000, hooked): the world is drawn, KH1's own
 //! effects and the HUD come after. We record into KH1's list, on its bound frame buffer (its
-//! RTV and DSV by the frame buffer's ids), with our own root signature and pipeline states,
-//! then give KH1 its state back the way it does itself after opening a list: its root
-//! signature and descriptor heaps (`0x1401087B0(R, list)`) and every cached state marked dirty
-//! (`0x140102980(R)`), so its next draw sets viewport, targets, pipeline and constants again.
+//! targets inherited when the list is one of KH1's bundles), with our own root signature and
+//! pipeline states, then hand KH1 a fresh list the way it does itself when its vertex ring
+//! runs out mid-scene (`0x1400F7300(R, 0)`, `0x140109360(R, 1, 0)`), so its next draw sets
+//! targets, pipeline and constants again.
 //! We touch nothing when no effect is drawing.
 //!
 //! No descriptor heaps of ours: the root signature is 40 root constants (view, projection,
@@ -48,8 +48,8 @@ const VIEW_RVA: usize = 0x2E9DE60;
 const PROJ_PTR_RVA: usize = 0x2340EE0;
 const FIELD_PROJ_RVA: usize = 0x2341320;
 const LIST_RVA: usize = 0xFD3A0;
-const SET_ROOT_RVA: usize = 0x1087B0;
-const DIRTY_RVA: usize = 0x102980;
+const CLOSE_RVA: usize = 0xF7300;
+const REOPEN_RVA: usize = 0x109360;
 
 // ID3D12Device
 const DEV_CREATE_PSO: usize = 10;
@@ -59,6 +59,7 @@ const DEV_CREATE_COMMITTED: usize = 27;
 const RES_MAP: usize = 8;
 const RES_GPU_VA: usize = 11;
 // ID3D12GraphicsCommandList
+const CL_GET_TYPE: usize = 8;
 const CL_DRAW: usize = 12;
 const CL_TOPOLOGY: usize = 20;
 const CL_SET_PSO: usize = 25;
@@ -638,7 +639,16 @@ pub unsafe fn draw(base: usize, frame: &kh2_fx::Frame, view: glam::Mat4, proj: g
     let cl = cl as P;
     let rtv_h = rtv as usize;
     let dsv_h = dsv as usize;
-    com!(cl, CL_SET_RT, fn(u32, *const usize, i32, *const usize), 1, &rtv_h, 0, if has_dsv { &dsv_h as *const usize } else { std::ptr::null() });
+    // KH1 records its draws into bundles (`0x1400FE6E0` makes them, `0x1400F7290` closes one and
+    // runs it in the frame's direct list): a bundle inherits the direct list's targets and may
+    // not set them (it would fail to close: the crash of the first try). Only a direct list
+    // gets them from us.
+    let list_type = com!(cl, CL_GET_TYPE, fn() -> u32);
+    if list_type == 0 {
+        com!(cl, CL_SET_RT, fn(u32, *const usize, i32, *const usize), 1, &rtv_h, 0, if has_dsv { &dsv_h as *const usize } else { std::ptr::null() });
+    } else if list_type != 1 {
+        return;
+    }
     com!(cl, CL_SET_ROOT_SIG, fn(P), gpu.root as P);
     com!(cl, CL_TOPOLOGY, fn(u32), 4);
     com!(cl, CL_SET_VB, fn(u32, u32, *const u64), 0, 1, vb.as_ptr());
@@ -665,17 +675,21 @@ pub unsafe fn draw(base: usize, frame: &kh2_fx::Frame, view: glam::Mat4, proj: g
         com!(cl, CL_ROOT_CONSTANTS, fn(u32, u32, *const u32, u32), 0, 5, kb.as_ptr(), 35);
         com!(cl, CL_DRAW, fn(u32, u32, u32, u32), count as u32, 1, first as u32, 0);
     }
-    // KH1's root signature and heaps back, and all its cached state re-applied on its next draw.
-    let set_root: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + SET_ROOT_RVA);
-    let dirty: unsafe extern "system" fn(usize) = std::mem::transmute(base + DIRTY_RVA);
-    set_root(r, cl as usize);
-    dirty(r);
+    // KH1 gets a fresh list, exactly as when its vertex ring runs out mid-scene
+    // (`0x1400FBBA0`): ours is closed and queued (`0x1400F7300(R, 0)`), a new one opened with
+    // KH1's root signature and heaps and all its cached state marked dirty
+    // (`0x140109360(R, 1, 0)`), so its next draw sets everything again.
+    let close: unsafe extern "system" fn(usize, u32) -> u64 = std::mem::transmute(base + CLOSE_RVA);
+    let reopen: unsafe extern "system" fn(usize, u32, u32) = std::mem::transmute(base + REOPEN_RVA);
+    close(r, 0);
+    reopen(r, 1, 0);
     static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if LOGGED.fetch_add(1, Ordering::Relaxed) < 3 {
         log(&format!(
-            "fx: drew {} batches, {} vertices into frame buffer {fbi} ({}x{}, {samples}x MSAA, depth {has_dsv}); clip scale {s}, offset ({ox}, {oy}); viewport {:?}",
+            "fx: drew {} batches, {} vertices into a {} list, frame buffer {fbi} ({}x{}, {samples}x MSAA, depth {has_dsv}); clip scale {s}, offset ({ox}, {oy}); viewport {:?}",
             frame.batches.len(),
             n,
+            if list_type == 1 { "bundle" } else { "direct" },
             rd::<i32>(fb + 8),
             rd::<i32>(fb + 0xC),
             rd::<[f32; 4]>(r + 0x15C)

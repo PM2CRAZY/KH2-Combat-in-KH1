@@ -797,3 +797,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
     `0x1400FBA20`). `win/kh2fx.rs`: loads `P_EX100.a.us` + texcommon from the KH2 install,
     starts elements on `EventKind::Effect`, ends motion-bound ones on a motion change, steps
     per KH2 controller frame, bones from `pose::kh2_pose`. Ini `kh2_effects`, `fx_test`.
+- `kh1-hook` stage 45 (the user: the game crashed at Explosion's effect): KH1's current list is
+  usually a **bundle** (`0x1400FE6E0` creates its allocator and list with type 1;
+  `0x1400F7290` closes it and runs it with `ExecuteBundle` in the direct list at command
+  buffer `+8`). Our `OMSetRenderTargets` is not allowed in a bundle, so its `Close` failed
+  (`E_INVALIDARG`) and KH1's `ExecuteBundle` of the broken bundle crashed. `fx12` now checks
+  the list type (`GetType`) and sets targets only in a direct list (a bundle inherits them),
+  then hands KH1 a fresh list with its own mid-scene sequence (`0x1400F7300(R, 0)`,
+  `0x140109360(R, 1, 0)`, as in `0x1400FBBA0`) instead of `0x1401087B0` + `0x140102980`.
