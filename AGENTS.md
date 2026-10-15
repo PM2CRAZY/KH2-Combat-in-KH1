@@ -818,3 +818,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `abilities = kh1` and noted in `kh1-kh2-removed.txt` (without "(id", so they are not given
   back).
 - `kh1-hook` stage 48 (the user): High Jump is High Jump LV3 (not MAX).
+- `kh1-hook` stage 49 (hook audit, after stage 46's crash): for every hooked function, the
+  argument registers it reads before writing (rcx / rdx / r8 / r9, xmm0..3) and whether its
+  callers use rax / xmm0 after the call (a Ghidra `CallUse.java` over every call site), and the
+  same for every KH1 function we call. Found: `0x14029D7F0` and `0x14029D8A0` (set motion)
+  take a float third argument in XMM2 (stored at actor `+0x184`) and their result is used by
+  callers; `0x140392710` (skeleton pass with ground IK) takes a float third argument. The hooks
+  declared those as integers, so KH1 got whatever XMM2 held: now `f32`. Everything else matches
+  (`0x1402A4760` 3 ints, `0x1402A5380` 2, `0x140299A40` 2 (46), `0x1401EADD0` /
+  `0x14028D840` none, `0x1402A2FA0` 2, `0x140391E20` (int, int, float, int), `0x14029CF10`
+  (int, float), `0x140112C70` 3, `0x14029D630` (int, int, float), `0x1402BD180` 2 → used
+  result, `0x140298230` 1).

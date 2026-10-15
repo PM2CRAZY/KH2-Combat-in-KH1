@@ -134,13 +134,15 @@ Built, being checked in game:
 
 Next:
 
-9. KH2's effects for the rest of Sora's moves (`kh2_effects = all`): the programs these
-   moves need beyond Explosion's and Magnet Burst's, and the PC's HD effect textures.
-10. KH2's hit effects and sounds on enemies (sparks, finisher flashes).
-11. A hook audit: every hooked KH1 function's arguments and return checked against the
-    executable (stage 46's crash came from one).
-12. Release: the OpenKH mod package with a default ini (`abilities = kh1`), install notes,
+9. A hook audit: every hooked or called KH1 function's arguments and return checked against
+   the executable. Done in 49: the set-motion hooks (`0x14029D7F0`, `0x14029D8A0`) and the
+   ground-IK skeleton pass (`0x140392710`) take a float third argument (XMM2) that the hooks
+   passed as an integer; fixed.
+10. Release: the OpenKH mod package with a default ini (`abilities = kh1`), install notes,
     and the KH2 install found next to KH1 or set in the ini.
+
+Skipped (the user): KH2's effects for the rest of Sora's moves, KH2's hit effects and sounds
+on enemies.
 
 ## Trying the new stages
 

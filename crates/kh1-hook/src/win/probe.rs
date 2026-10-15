@@ -340,7 +340,10 @@ unsafe fn setm_note(which: usize, actor: usize, req: u32, here: usize) {
     log(&format!("set motion #{which} slot {slot} (flags {:#x}) on Sora, from {}", req & 0xFFFF_0000, callers(here)));
 }
 
-type SetmF = unsafe extern "system" fn(usize, u32, u32) -> usize;
+/// `0x14029D7F0` / `0x14029D8A0` take a float third too (XMM2, stored at the actor's `+0x184`),
+/// and return a pointer their callers use (the hook audit of stage 49: the hooks had it as an
+/// integer, so KH1 got whatever XMM2 held).
+type SetmF = unsafe extern "system" fn(usize, u32, f32) -> usize;
 
 /// `0x14029D630` takes the blend time as a float (third argument, in XMM2).
 type SetmBlendF = unsafe extern "system" fn(usize, u32, f32);
@@ -351,13 +354,13 @@ unsafe extern "system" fn setm0(a: usize, req: u32, blend: f32) {
     let f: SetmBlendF = std::mem::transmute(ORIG_SETM[0].load(Ordering::Acquire));
     f(a, req, blend)
 }
-unsafe extern "system" fn setm1(a: usize, req: u32, c: u32) -> usize {
+unsafe extern "system" fn setm1(a: usize, req: u32, c: f32) -> usize {
     let here = &a as *const usize as usize;
     setm_note(1, a, req, here);
     let f: SetmF = std::mem::transmute(ORIG_SETM[1].load(Ordering::Acquire));
     f(a, req, c)
 }
-unsafe extern "system" fn setm2(a: usize, req: u32, c: u32) -> usize {
+unsafe extern "system" fn setm2(a: usize, req: u32, c: f32) -> usize {
     let here = &a as *const usize as usize;
     setm_note(2, a, req, here);
     let f: SetmF = std::mem::transmute(ORIG_SETM[2].load(Ordering::Acquire));

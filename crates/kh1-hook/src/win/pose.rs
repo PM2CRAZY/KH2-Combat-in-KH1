@@ -871,7 +871,8 @@ unsafe fn held(instance: usize, world: usize) -> Option<Mat4> {
 }
 
 type Pose = unsafe extern "system" fn(usize, usize, f32, usize);
-type PoseIk = unsafe extern "system" fn(usize, usize, u32);
+/// The third argument is a float (XMM2; the hook audit of stage 49).
+type PoseIk = unsafe extern "system" fn(usize, usize, f32);
 
 unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: usize) {
     let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
@@ -891,7 +892,7 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
     }
 }
 
-unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: u32) {
+unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
     let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
     let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
     match moved {
