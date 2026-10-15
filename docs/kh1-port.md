@@ -112,20 +112,35 @@ each ability learned (`Sora learns ...`).
 
 ## Roadmap
 
-1. Loading. Done.
-2. Animations. Done.
-3. Movement. Done.
-4. Combat parity. Done.
-5. Taking hits: dodge-roll invulnerability, KH2's guard, KH2's reactions on KH1's damage.
-   Built (stage 28, review fixes 32), to be tried in game.
-6. Movement polish: platforms and pushes (29), ceilings (30), KH1's ledge / vine / bar /
-   swim moves (31, 32). Built, to be tried in game.
-7. Abilities from KH1's menu (29). Built (`abilities = kh1`); KH2-only abilities come with
-   Sora's level until they are added to KH1's menu.
-8. What stays KH1's: KH1's commands hand Sora to KH1, in the air through KH1's own fall (33).
-   Built, to be tried in game.
-9. Release polish: KH1's Keyblade trail, swing effects and voice on KH2's swings (34); KH2's
-   own sounds (40-42) and visual effects (44) for Magnet Burst and Explosion.
+Done (played by the user):
+
+1. Loading, animations, movement, combat parity.
+2. Taking hits the KH2 way (28, 32; the hit pass's second argument fixed in 46).
+3. Movement polish: platforms, pushes, ceilings, KH1's ledge / vine / bar / swim moves.
+4. KH1's commands (magic, items, specials, summons) take Sora from KH2 and give him back,
+   jump casts and the L1 shortcut included (33, 37).
+5. Abilities from KH1's menu with KH2's first (29, 36, 38), Encounter Plus kept, extra AP
+   for the KH2 abilities (43), one High Jump (LV3), Glide LV3 / Superglide MAX, Quick Run and
+   Aerial Dodge LV3 (47, 48).
+6. Swing feel: KH1's Keyblade trail, swing effects and voice (34); KH2's own sounds for
+   Magnet Burst and Explosion, with KH1's voice (40-42).
+
+Built, being checked in game:
+
+7. KH2's own visual effects for Magnet Burst and Explosion, drawn in KH1's Direct3D 12
+   frame (44-46): placement on Sora and the Keyblade, depth against walls and enemies,
+   brightness of the blend modes, high frame-rate (interpolated) mode.
+8. Magnet Burst's pull on enemies (39).
+
+Next:
+
+9. KH2's effects for the rest of Sora's moves (`kh2_effects = all`): the programs these
+   moves need beyond Explosion's and Magnet Burst's, and the PC's HD effect textures.
+10. KH2's hit effects and sounds on enemies (sparks, finisher flashes).
+11. A hook audit: every hooked KH1 function's arguments and return checked against the
+    executable (stage 46's crash came from one).
+12. Release: the OpenKH mod package with a default ini (`abilities = kh1`), install notes,
+    and the KH2 install found next to KH1 or set in the ini.
 
 ## Trying the new stages
 
