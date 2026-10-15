@@ -5,8 +5,10 @@
 mod combat;
 mod crash;
 mod feet;
+mod fx12;
 mod hook;
 mod hurt;
+mod kh2fx;
 mod kh2sound;
 mod menu;
 mod pose;
@@ -153,6 +155,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         hurt::install();
         menu::install();
         kh2sound::start();
+        kh2fx::start();
         pose::load_kh2();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
     }

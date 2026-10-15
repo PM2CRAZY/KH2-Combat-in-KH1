@@ -203,7 +203,7 @@ impl Archive {
         let decompressed = h.i32()?;
         let remastered = h.i32()?;
         let compressed = h.i32()?;
-        if decompressed < 0 || remastered < 0 || remastered > 0x10000 {
+        if decompressed < 0 || !(0..=0x10000).contains(&remastered) {
             return bad(format!("{name}: implausible pkg header"));
         }
         f.seek(SeekFrom::Current(remastered as i64 * 0x30))?;

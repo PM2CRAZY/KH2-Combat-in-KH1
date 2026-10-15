@@ -30,6 +30,8 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `kh2_sounds` | `magnet_explosion` (default), `all`, `off` | Which moves play KH2's own sounds (its effect and Keyblade sounds, from the KH2 install). |
 | `kh2_volume` | `1.0` (default) | Their volume. |
 | `kh2_voice` | `off` (default), `on` | `on`: Sora's KH2 battle voice on those moves; `off`: KH1's voice. |
+| `kh2_effects` | `magnet_explosion` (default), `all`, `off` | Which moves show KH2's own visual effects (its particle effects, from the KH2 install, drawn in KH1's frame). |
+| `fx_test` | `off` (default), `on` | Starts Magnet Burst's effect at Sora every 4 seconds, to check the effect renderer. |
 | `bonus_ap` | `on` (default), `off` | With `abilities = kh1`: Sora's max AP grows by the AP of each KH2 ability he learns (below). |
 
 ## What is KH1's and what is KH2's
@@ -119,7 +121,8 @@ each ability learned (`Sora learns ...`).
    Sora's level until they are added to KH1's menu.
 8. What stays KH1's: KH1's commands hand Sora to KH1, in the air through KH1's own fall (33).
    Built, to be tried in game.
-9. Release polish: KH1's Keyblade trail, swing effects and voice on KH2's swings (34).
+9. Release polish: KH1's Keyblade trail, swing effects and voice on KH2's swings (34); KH2's
+   own sounds (40-42) and visual effects (44) for Magnet Burst and Explosion.
 
 ## Trying the new stages
 

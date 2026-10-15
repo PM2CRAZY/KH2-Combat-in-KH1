@@ -441,6 +441,30 @@ fn note_model(bones: u32, instance: usize, via_ik: bool) {
     }
 }
 
+/// KH2 Sora's last pose (KH2 model space) and the model → world it was drawn with, for KH2's
+/// effects (`kh2fx`), and when.
+static KH2_POSE: Mutex<Option<(Vec<Mat4>, Mat4, Instant)>> = Mutex::new(None);
+
+fn note_kh2(pose: &[Mat4], to_world: &Mat4) {
+    if let Ok(mut g) = KH2_POSE.try_lock() {
+        match g.as_mut() {
+            Some(k) if k.0.len() == pose.len() => {
+                k.0.copy_from_slice(pose);
+                k.1 = *to_world;
+                k.2 = Instant::now();
+            }
+            _ => *g = Some((pose.to_vec(), *to_world, Instant::now())),
+        }
+    }
+}
+
+/// KH2 Sora's pose (model space) and model → world, if one was drawn in the last half second.
+pub fn kh2_pose<R>(f: impl FnOnce(&[Mat4], &Mat4) -> R) -> Option<R> {
+    let g = KH2_POSE.lock().ok()?;
+    let (pose, w, at) = g.as_ref()?;
+    (at.elapsed().as_secs_f32() < 0.5).then(|| f(pose, w))
+}
+
 /// The model-space pose to draw for the current mode, if any.
 fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4>> {
     let mode = MODE.load(Ordering::Relaxed);
@@ -455,6 +479,7 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
             match (fresh, s.retarget.as_ref()) {
                 (Some(b), Some(r)) => {
                     s.follow.slot = slot;
+                    note_kh2(&b, to_world);
                     Some(r.pose_grip(&b, super::takeover::GRIP.load(Ordering::Relaxed)))
                 }
                 _ => follow(s, slot, to_world),
@@ -609,6 +634,7 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
         }
     }
     f.last = pose.clone();
+    note_kh2(&pose, to_world);
     Some(r.pose(&pose))
 }
 

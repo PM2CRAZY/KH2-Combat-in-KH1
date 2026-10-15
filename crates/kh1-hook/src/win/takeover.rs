@@ -395,8 +395,10 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH2's own sounds for the effect elements this frame starts.
     for e in &out.events {
         super::kh2sound::event(out.motion, *e);
+        super::kh2fx::event(out.motion, *e);
     }
     super::kh2sound::tick();
+    super::kh2fx::tick(out.motion);
     if settings.swing_fx {
         // A KH2 swing starting: a new attack motion, or the same one again from its start.
         let attacking = matches!(out.state, StateName::Attack);

@@ -33,7 +33,12 @@ kh2_volume = 1.0\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
 kh2_voice = off\r\n\
 ; bonus_ap: on = (abilities = kh1) Sora's max AP grows by the AP of each KH2 ability he learns\r\n\
-bonus_ap = on\r\n";
+bonus_ap = on\r\n\
+; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
+; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
+kh2_effects = magnet_explosion\r\n\
+; fx_test: on = start Magnet Burst's effect at Sora every 4 seconds (checks the renderer)\r\n\
+fx_test = off\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -49,6 +54,9 @@ pub struct Settings {
     pub kh2_volume: f32,
     pub kh2_voice: bool,
     pub bonus_ap: bool,
+    /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
+    pub kh2_effects: Option<Option<Vec<u16>>>,
+    pub fx_test: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -91,6 +99,12 @@ pub fn get() -> &'static Settings {
             kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
             kh2_voice: on(&text, "kh2_voice", "on", false),
             bonus_ap: on(&text, "bonus_ap", "on", true),
+            kh2_effects: match setting(&text, "kh2_effects").as_deref() {
+                Some("off") | Some("0") | Some("no") => None,
+                Some("all") => Some(None),
+                _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
+            },
+            fx_test: on(&text, "fx_test", "on", false),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

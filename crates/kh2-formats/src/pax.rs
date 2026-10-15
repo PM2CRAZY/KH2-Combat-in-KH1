@@ -4,7 +4,7 @@
 //! `Dpd.ParticleData.cs` and `DpdPData.cs` (Apache-2.0). Only what the
 //! game logic needs is read: each element (which effect, where it is bound
 //! and how) and each effect's emitter timing (how long it lives, whether
-//! it loops). Particles, textures and models are not read.
+//! it loops). Programs, textures, shapes and models are read by [`crate::dpd`].
 //!
 //! ```text
 //! PAX:  "PAX_" | debug info offset | element count | DPX offset
@@ -52,7 +52,9 @@ pub struct PaxElement {
     pub scale: [f32; 3],
 }
 
-/// One emitter's timing, in 60 Hz frames.
+/// One emitter's timing, in effect ticks. The effect system advances one
+/// tick per two 60 Hz game frames (see `docs/kh2-effects.md`), so a value
+/// of 27 lasts 54 game frames.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Emitter {
     /// `None`: starts when the effect's loop is ended.

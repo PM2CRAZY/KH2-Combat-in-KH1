@@ -114,6 +114,8 @@ pub struct FCurve {
 impl FCurve {
     /// Rotation channels skip interpolation across a near-2π jump between
     /// keys at most two frames apart (the game's wrap-around guard).
+    // 3.14 is the game's own threshold, not an approximation of pi.
+    #[allow(clippy::approx_constant)]
     fn segment(&self, t: f32) -> f32 {
         let k = &self.keys;
         if t <= k[0].time {

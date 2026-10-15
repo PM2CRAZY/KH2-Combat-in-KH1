@@ -780,3 +780,20 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   left = that minus the equipped abilities' AP, `0x1402E6120` reads it). `win/menu.rs` hooks
   it: Sora's max AP gets `growth::bonus_ap(level)`, the AP of every `growth::MENU` ability
   learned by then (27 by 50). Nothing is written to the save. `bonus_ap` in the ini.
+- `kh1-hook` stage 44 (the user: KH2's real visual effects for Magnet Burst and Explosion):
+  - `docs/kh2-effects.md` + `kh2_formats::dpd`: KH2's effect machine (PAX elements, 30 Hz
+    effect ticks, emitters / programs / keys, MegaBirth sprites, ribbons, models, textures
+    with the palette swizzle, `effect/texcommon.dpd` for VRAM addresses below 0x3000).
+  - New crate `kh2-fx`: plays elements and outputs world-space triangles per batch (texture,
+    GS blend, depth test, depth offset); `examples/fx_render.rs` renders them to PNGs.
+  - `docs/kh1-render.md`: KH1 renders with **Direct3D 12** (D3D11 only decodes movies). Renderer
+    `0x1422BB580` (device `+0x2E0`, frame buffers, constant shadows), View `0x142E9DE60`, P at
+    the projection struct `+0x80`, KH1's clip formula, the world-model pass `0x1401EADD0`.
+  - `win/fx12.rs`: our D3D12 drawing recorded into KH1's current list after the world pass, on
+    its bound frame buffer (RTV / DSV by id, its MSAA count), own root signature (40 root
+    constants + a root SRV raw buffer of RGBA8 textures, bilinear wrap in the shader) and
+    PSOs per blend mode; KH1's root signature, heaps and dirty state restored with
+    `0x1401087B0` / `0x140102980` (KH1 re-binds topology and vertex buffer per draw itself,
+    `0x1400FBA20`). `win/kh2fx.rs`: loads `P_EX100.a.us` + texcommon from the KH2 install,
+    starts elements on `EventKind::Effect`, ends motion-bound ones on a motion change, steps
+    per KH2 controller frame, bones from `pose::kh2_pose`. Ini `kh2_effects`, `fx_test`.

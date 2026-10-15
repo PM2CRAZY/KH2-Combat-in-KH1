@@ -180,6 +180,7 @@ pub fn decode_vorbis(extra: &[u8], data: &[u8]) -> Result<Vec<i16>> {
 }
 
 /// Microsoft ADPCM: `fmt` is the WAVEFORMATEX (+ADPCM fields), `data` whole blocks.
+#[allow(clippy::needless_range_loop)]
 pub fn decode_ms_adpcm(fmt: &[u8], data: &[u8], channels: usize) -> Result<Vec<i16>> {
     let block = u16_at(fmt, 12)? as usize;
     let per_block = u16_at(fmt, 18)? as usize;

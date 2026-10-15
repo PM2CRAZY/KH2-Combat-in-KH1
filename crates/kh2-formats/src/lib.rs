@@ -8,6 +8,7 @@
 //! - [`battle`]: typed tables inside `00battle.bin`
 //! - [`motion`]: movesets (MSET/ANB), motion timing, motion triggers, model collision
 //! - [`pref`]: movement parameters from `03system.bin`
+//! - [`pax`], [`dpd`]: effect packages (elements, emitter programs, textures, sprites, models)
 //!
 //! Format knowledge comes from the OpenKH project (Apache-2.0). Parts of
 //! this crate are ports of OpenKH's C# readers; see `NOTICE` and
@@ -18,6 +19,7 @@
 
 pub mod anim;
 pub mod bar;
+pub mod dpd;
 pub mod battle;
 pub mod egs;
 pub mod motion;
