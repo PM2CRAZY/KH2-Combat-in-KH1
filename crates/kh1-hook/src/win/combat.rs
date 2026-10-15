@@ -308,6 +308,100 @@ pub struct Strikes {
     /// Enemies a Magnet (ATKP reaction 5: Magnet Burst) caught: the swing, orbit radius and
     /// swirl. Pulled every frame while the swing lasts.
     pulled: HashMap<usize, (u64, f32, f32)>,
+    /// (swing, shot) pairs already met (once a swing).
+    met_shots: HashSet<(u64, usize)>,
+    shots: Vec<Shot>,
+}
+
+/// An enemy's shot Sora's swings can knock back (Wakka's ball): a free-standing KH1 attack
+/// object of the attack pool (attribute `+0x30` bit `0x400`), `docs/kh1-reflect.md`.
+struct Shot {
+    obj: usize,
+    /// Its swept path (previous and current centre) and radius, KH2 y-up.
+    shapes: Vec<Shape>,
+    owner: usize,
+}
+
+/// The enemies' shots near Sora that a swing may meet.
+unsafe fn shots(sora: usize) -> Vec<Shot> {
+    let base = BASE.load(Ordering::Relaxed);
+    let team = |a: usize| (rd::<u32>(a + 0x374) >> 5) & 3;
+    let ours = team(sora);
+    let at = rd::<[f32; 3]>(sora + 0x10);
+    let mut out = Vec::new();
+    for k in 0..ATTACK_SLOTS {
+        let g = base + ATTACK_POOL_RVA + k * 0xC0;
+        let flags = rd::<u32>(g);
+        // In use and active; not switched off, freed, or already turned back.
+        if flags & 0x800 == 0 || flags & 0xC == 0 || flags & (0x400 | 0x0020_0000 | 0x0100_0000) != 0 {
+            continue;
+        }
+        if rd::<u32>(g + 0x30) & 0x400 == 0 || rd::<u32>(g + 4) & 0x30 != 0 {
+            continue;
+        }
+        let prio = rd::<i32>(g + 0x68);
+        if !(1..98).contains(&prio) {
+            continue;
+        }
+        let owner = pose::ptr(rd::<u32>(g + 0x34));
+        if owner == sora || (owner > 0x10000 && team(owner) == ours) {
+            continue;
+        }
+        let c = rd::<[f32; 3]>(g + 0x10);
+        let prev = rd::<[f32; 3]>(g + 0x70);
+        let r = rd::<f32>(g + 0xC);
+        if !(r > 0.0 && r < 500.0) || !c.iter().chain(prev.iter()).all(|v| v.is_finite()) {
+            continue;
+        }
+        let (dx, dz) = (c[0] - at[0], c[2] - at[2]);
+        if dx * dx + dz * dz > NEAR * NEAR {
+            continue;
+        }
+        let up = |p: [f32; 3]| [p[0], -p[1], p[2]];
+        let mid = [(c[0] + prev[0]) * 0.5, (c[1] + prev[1]) * 0.5, (c[2] + prev[2]) * 0.5];
+        let shapes = vec![Shape::sphere(up(c), r), Shape::sphere(up(mid), r), Shape::sphere(up(prev), r)];
+        out.push(Shot { obj: g, shapes, owner });
+    }
+    out
+}
+
+/// A swing meets a shot as KH1's own swing would (`0x1402B2890`, the attack-vs-attack clash,
+/// both ways): KH1 turns the shot back (team swapped, Sora its owner, flag `0x1000000`).
+/// Returns whether it was turned back.
+unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row) -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
+    let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
+    let free: unsafe extern "system" fn(usize) = std::mem::transmute(base + FREE_ATTACK_RVA);
+    let clash: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + CLASH_RVA);
+    let obj = new_attack(sora, free_bit(), base + ATTACK_DATA_RVA + row.data as usize);
+    if obj < 0x10000 {
+        return false;
+    }
+    let c = [at.center[0], -at.center[1], at.center[2], 1.0f32];
+    wr(obj + 0x10, c);
+    wr(obj + 0x40, c);
+    wr(obj + 0x70, c);
+    wr(obj + 0xC, at.radius);
+    let entry = |o: usize, owner: usize, centre: [f32; 4], r: f32| {
+        let mut e = [0u8; 0x40];
+        let p = e.as_mut_ptr() as usize;
+        wr(p, (rd::<u32>(o) >> 12) & 3);
+        wr(p + 8, owner as u64);
+        wr(p + 0x10, rd::<u32>(o + 0x54));
+        wr(p + 0x18, o as u64);
+        wr(p + 0x20, 1u32);
+        wr(p + 0x24, r);
+        wr(p + 0x28, r);
+        wr(p + 0x30, centre);
+        e
+    };
+    let sc = rd::<[f32; 3]>(shot.obj + 0x10);
+    let swing = entry(obj, sora, c, at.radius);
+    let them = entry(shot.obj, shot.owner, [sc[0], sc[1], sc[2], 1.0], rd::<f32>(shot.obj + 0xC));
+    clash(swing.as_ptr() as usize, them.as_ptr() as usize);
+    free(obj);
+    rd::<u32>(shot.obj) & 0x0100_0000 != 0
 }
 
 /// An enemy's guard: a KH1 attack object of priority 100 (`0x1402B2A30`: such an object
@@ -324,6 +418,8 @@ const ATTACK_POOL_RVA: usize = 0x2DB5110;
 const ATTACK_SLOTS: usize = 0x40;
 const GUARD_PRIORITY: i32 = 100;
 const CLANG_RVA: usize = 0x2AC4C0;
+/// KH1's attack-vs-attack meeting (`0x1402B2890 (entry, entry)`).
+const CLASH_RVA: usize = 0x2B2890;
 const CLANG_SOURCE_RVA: usize = 0x2D67400;
 
 /// The live enemy guards near Sora.
@@ -550,6 +646,7 @@ impl Strikes {
     pub unsafe fn look(&mut self, sora: usize) -> Vec<TargetInfo> {
         self.bodies = bodies(sora);
         self.guards = guards(sora);
+        self.shots = shots(sora);
         self.bodies.iter().map(|b| b.target).collect()
     }
 
@@ -564,6 +661,7 @@ impl Strikes {
         }
         let keys: HashSet<(u64, u8)> = out.hitboxes.iter().map(|h| (h.swing, h.weapon)).collect();
         self.volumes.retain(|k, _| keys.contains(k));
+        self.met_shots.retain(|(sw, _)| keys.iter().any(|k| k.0 == *sw));
         let air = character.airborne();
         for h in &out.hitboxes {
             let shapes = anim.attack_shapes(h.group, h.weapon);
@@ -585,6 +683,21 @@ impl Strikes {
                 clang(self.guards[gi].at);
                 note(format!("KH2 attack {} repelled by the guard of actor {:#x} (bounced: {bounced})", h.attack, self.guards[gi].owner));
                 continue;
+            }
+            // An enemy's shot met: knocked back as KH1's swing would (the user: Wakka's ball).
+            if let Some(rows) = self.rows {
+                for shot in &self.shots {
+                    if self.met_shots.contains(&(h.swing, shot.obj)) {
+                        continue;
+                    }
+                    let Some((ai, _)) = first_overlap(&swept, &shot.shapes) else { continue };
+                    self.met_shots.insert((h.swing, shot.obj));
+                    let back = meet_shot(sora, shot, &swept[ai], rows[(air as usize) * 2]);
+                    if back {
+                        character.register_hit();
+                    }
+                    note(format!("KH2 swing met shot {:#x} of {:#x}: turned back {back}", shot.obj, shot.owner));
+                }
             }
             for b in &self.bodies {
                 let rec = self.records.entry(b.actor).or_default();

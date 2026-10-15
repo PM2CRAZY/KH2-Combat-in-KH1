@@ -183,6 +183,9 @@ struct Sora {
     /// The last model → world, and the root matrix we wrote with it.
     to_world: Option<Mat4>,
     wrote_root: Option<[f32; 16]>,
+    /// The last pose we drew (model space) and when: KH1's own animation blends in from it
+    /// (the user: going into KH1's ladder climb and other moves of its own snapped).
+    last_drawn: Option<(Vec<Mat4>, Instant)>,
     /// The pass's own world matrix (its y and z flipped, axes unit length) agreed with the
     /// pose-derived placement for this many frames; trusted from 30 on.
     param_agree: u32,
@@ -238,6 +241,8 @@ struct Follow {
     logged: u32,
 }
 
+/// How long KH1's own animation takes to blend in from KH2's pose (seconds).
+const KH1_BLEND: f32 = 0.2;
 /// KH2's blends: 8 frames between movement motions, 16 into a glide, none into a swing.
 const BLEND_MOVE: f32 = 8.0 / 60.0;
 const BLEND_GLIDE: f32 = 16.0 / 60.0;
@@ -465,42 +470,55 @@ pub fn kh2_pose<R>(f: impl FnOnce(&[Mat4], &Mat4) -> R) -> Option<R> {
     (at.elapsed().as_secs_f32() < 0.5).then(|| f(pose, w))
 }
 
-/// Weapons KH2's grip holds the wrong way round (the ini's `flip_weapons`, by Sora's weapon id,
-/// save `+0x36`; the user: the Dream Shield's front faced Sora): turned half round about the
-/// forearm (the grip's parent and its parent), at the hand.
-fn turn_weapon(pose: &mut [Mat4], parents: &[i16]) {
+/// KH1's wrist (the weapon hand relative to its forearm) for the weapon held KH1's way, while
+/// KH1 posed him this frame (else the last one seen).
+static KH1_WRIST: Mutex<Option<Mat4>> = Mutex::new(None);
+
+/// Weapons KH2's sword grip holds the wrong way round (the ini's `flip_weapons`, by Sora's
+/// weapon id, save `+0x36`; the user: the Dream Shield's front faced Sora) are held with
+/// KH1's own wrist: the weapon hand (the grip's parent) takes KH1's turn relative to the
+/// forearm, carrying the fingers and the weapon with it; KH2's arm swings as before.
+unsafe fn kh1_wrist(pose: &mut [Mat4], parents: &[i16], orig_world: Option<usize>) {
     let flip = &super::settings::get().flip_weapons;
     if flip.is_empty() {
         return;
     }
-    let base = BASE.load(Ordering::Relaxed);
-    let save = unsafe { rd::<u64>(base + 0x28695A0) } as usize;
-    if save < 0x10000 || !flip.contains(&unsafe { rd::<u8>(save + 0x36) }) {
+    let save = rd::<u64>(BASE.load(Ordering::Relaxed) + 0x28695A0) as usize;
+    if save < 0x10000 || !flip.contains(&rd::<u8>(save + 0x36)) {
         return;
     }
     let grip = kh1_data::retarget::GRIP_BONE;
     let parent = |i: usize| parents.get(i).copied().filter(|p| *p >= 0).map(|p| p as usize);
     let Some(hand) = parent(grip) else { return };
     let Some(arm) = parent(hand) else { return };
-    if hand >= pose.len() || arm >= pose.len() || grip >= pose.len() {
+    let n = pose.len().min(SORA_BONES as usize);
+    if hand >= n || arm >= n {
         return;
     }
-    let h = pose[hand].w_axis.truncate();
-    let axis = (h - pose[arm].w_axis.truncate()).normalize_or_zero();
-    if axis == Vec3::ZERO {
+    if let Some(w) = orig_world {
+        let l = mat(w + arm * 0x40).inverse() * mat(w + hand * 0x40);
+        if l.is_finite() {
+            if let Ok(mut g) = KH1_WRIST.lock() {
+                *g = Some(l);
+            }
+        }
+    }
+    let Some(local) = KH1_WRIST.lock().ok().and_then(|g| *g) else { return };
+    let want = pose[arm] * local;
+    let delta = want * pose[hand].inverse();
+    if !delta.is_finite() {
         return;
     }
-    let turn = Mat4::from_translation(h) * Mat4::from_axis_angle(axis, std::f32::consts::PI) * Mat4::from_translation(-h);
-    // The grip and every bone under it.
-    for i in grip..pose.len().min(SORA_BONES as usize) {
+    // The hand and every bone under it.
+    for i in hand..n {
         let mut p = Some(i);
-        for _ in 0..16 {
+        for _ in 0..24 {
             match p {
-                Some(q) if q == grip => {
-                    pose[i] = turn * pose[i];
+                Some(q) if q == hand => {
+                    pose[i] = delta * pose[i];
                     break;
                 }
-                Some(q) if q < grip => break,
+                Some(q) if q < hand => break,
                 Some(q) => p = parent(q),
                 None => break,
             }
@@ -727,7 +745,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect() });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect() });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -827,6 +845,25 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     let Some(mut pose) = wanted(s, slot, &to_world) else {
         s.wrote_root = None;
         s.to_world = Some(to_world);
+        // KH1's own animation takes over: blended in from the pose we drew last.
+        if let (false, Some((last, at))) = (ours, s.last_drawn.as_ref()) {
+            let w = at.elapsed().as_secs_f32() / KH1_BLEND;
+            if w < 1.0 && last.len() >= SORA_BONES as usize {
+                let inv = to_world.inverse();
+                let w = w * w * (3.0 - 2.0 * w);
+                for (i, from) in last.iter().enumerate().take(SORA_BONES as usize) {
+                    let kh1 = inv * mat(world + i * 0x40);
+                    let (fs, fr, ft) = from.to_scale_rotation_translation();
+                    let (ks, kr, kt) = kh1.to_scale_rotation_translation();
+                    let m = Mat4::from_scale_rotation_translation(fs.lerp(ks, w), fr.slerp(kr, w), ft.lerp(kt, w));
+                    if m.is_finite() {
+                        std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * m).to_cols_array());
+                    }
+                }
+            } else {
+                s.last_drawn = None;
+            }
+        }
         if let Some(o) = orig_hands {
             if let Ok(mut h) = HANDS_NOW.lock() {
                 *h = Some(Hands { orig: o, drawn: o, at: Instant::now() });
@@ -836,11 +873,18 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     };
     let kh2_feet = MODE.load(Ordering::Relaxed) == 0 && super::takeover::active() && super::takeover::GROUNDED.load(Ordering::Relaxed);
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
-    turn_weapon(&mut pose, &s.parents);
+    kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
     }
     s.wrote_root = Some(rd(world));
+    match s.last_drawn.as_mut() {
+        Some((v, t)) if v.len() == pose.len() => {
+            v.copy_from_slice(&pose);
+            *t = Instant::now();
+        }
+        _ => s.last_drawn = Some((pose.clone(), Instant::now())),
+    }
     s.to_world = Some(to_world);
     let drawn = HANDS.map(|(b, _)| to_world * pose[b]);
     if let Ok(mut k) = BLADE.try_lock() {

@@ -24,7 +24,7 @@
 //! The pose drawn is KH2's animation player's (`POSE`, read by `pose`).
 
 use super::{combat, hook, log, menu, pose};
-use character_core::{Button, Character, Env, Input, Output, StateName};
+use character_core::{Button, Character, Env, Input, Output, StateName, TargetInfo};
 use glam::Mat4;
 use kh2_rig::RigAnim;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -39,6 +39,8 @@ const EVENT_RVA: usize = 0x298D3A0;
 const BATTLE_RVA: usize = 0x2867CD8;
 const LOCK_STATE_RVA: usize = 0x2DB3F10;
 const LOCK_TARGET_RVA: usize = 0x2DB3F18;
+/// A lock point's world position (`0x1402AE330 (actor, point, out) -> radius`, KH1 y-down).
+const LOCK_POINT_RVA: usize = 0x2AE330;
 const DRAW_WEAPON_RVA: usize = 0x2A0CA0;
 const PUT_AWAY_RVA: usize = 0x2A10F0;
 /// Actor flag: the weapon is out (drawn).
@@ -330,11 +332,27 @@ unsafe fn takeover(actor: usize) -> bool {
     let p = rd::<[f32; 3]>(actor + 0x10);
     let pos = [p[0], -p[1], p[2]];
     let above = rd::<f32>(actor + 0x3D4);
-    let targets = d.strikes.look(actor);
+    let mut targets = d.strikes.look(actor);
     // KH1's lock-on (R1): while it holds a target (`0x142DB3F10` its state, the target's handle
     // at `0x142DB3F18`, which the command menu aims every command at), KH2 locks the same
     // enemy, so its swings home in on and turn toward it.
     let locked = if rd::<u32>(base + LOCK_STATE_RVA) != 0 { pose::ptr(rd::<u32>(base + LOCK_TARGET_RVA)) } else { 0 };
+    // KH1 locks a point of the target (`0x142DB3F1C`, an index into its collision record's lock
+    // points; `docs/kh1-lockon.md`): KH2 homes in on that point (the user: locked on Darkside's
+    // hand, Sora went for his body), wherever the actor's root is.
+    if locked > 0x10000 {
+        let point: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
+        let mut v = [0.0f32; 4];
+        let r = point(locked, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0), &mut v);
+        if v[..3].iter().all(|x| x.is_finite()) && r.is_finite() && r >= 0.0 {
+            let r = r.min(500.0);
+            let t = TargetInfo { id: locked as u32, pos: [v[0], -v[1] - r, v[2]], radius: r.max(10.0), height: (2.0 * r).max(20.0) };
+            match targets.iter_mut().find(|x| x.id == t.id) {
+                Some(x) => *x = t,
+                None => targets.push(t),
+            }
+        }
+    }
     let lock = (locked > 0x10000).then(|| locked as u32).filter(|id| targets.iter().any(|t| t.id == *id));
     if lock != d.character.lock() && d.logged < 400 {
         d.logged += 1;

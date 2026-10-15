@@ -863,3 +863,22 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   7 (`kh1_moving`). Confirmed in the log: the Dream Shield is item 0x53 (`flip_weapons`'s
   default). The live-grip switch of stage 50 is gone (KH1's grip moves with its motions; it
   flapped between the two every few frames); its log line stays.
+- `kh1-hook` stage 54 (the user: lock-on on Darkside's hand still sent Sora at his body;
+  Wakka's ball can't be hit back; the Dream Shield still faced Sora; KH1's own moves (ladder)
+  snapped in; items from chests were Archipelago items):
+  - `docs/kh1-lockon.md`: KH1 locks a (handle, lock point) pair: point index at
+    `0x142DB3F1C`; `0x1402AE330 (actor, point, out vec4) -> radius` is the point's world
+    position (lock points: collision record `+7` count / `+0x1C` list, 0x14 each, mask actor
+    `+0x3AC`). KH2's target for the locked actor is now that point.
+  - `docs/kh1-reflect.md`: shots like Wakka's ball are free-standing attack objects of the
+    pool (`+0x30` bit 0x400); a swing turns them back through the attack-vs-attack meeting
+    `0x1402B2890 (entry, entry)` (`0x1402B2A30` both ways: team swapped, Sora the owner, flag
+    0x1000000). `combat::shots` / `meet_shot`: KH2's swept swing against them, once a swing,
+    with a KH1 row's attack object as the swing side.
+  - The Dream Shield (`flip_weapons`): held with KH1's own wrist (the grip's parent bone
+    relative to its parent, from KH1's pose each frame it poses him), carrying the fingers and
+    the weapon; KH2's arm swings as before. (The half-turn of stage 52 is gone.)
+  - KH1's own animation blends in from the last pose we drew over 0.2 s (`KH1_BLEND`).
+  - The user's KH1 `Image/en/kh1_first` was a randomizer-patched package (Feb 2025: 26 files,
+    Destiny Islands / Dive / Disney Castle `.ard`s, `UK_treasure.ev`, ...): restored from
+    `BackupImage/`, the patched pair kept as `*.ap-patched`.
