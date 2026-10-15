@@ -31,6 +31,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `kh2_volume` | `1.0` (default) | Their volume. |
 | `kh2_voice` | `off` (default), `on` | `on`: Sora's KH2 battle voice on those moves; `off`: KH1's voice. |
 | `kh2_effects` | `magnet_explosion` (default), `all`, `off` | Which moves show KH2's own visual effects (its particle effects, from the KH2 install, drawn in KH1's frame). |
+| `flip_weapons` | KH1 item ids, `0x53` (default), `none` | Weapons KH2's grip holds the wrong way round, turned half round in his hand (the Dream Shield). |
 | `fx_test` | `off` (default), `on` | Starts Magnet Burst's effect at Sora every 4 seconds, to check the effect renderer. |
 | `bonus_ap` | `on` (default), `off` | With `abilities = kh1`: Sora's max AP grows by the AP of each KH2 ability he learns (below). |
 

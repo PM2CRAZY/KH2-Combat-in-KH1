@@ -465,6 +465,49 @@ pub fn kh2_pose<R>(f: impl FnOnce(&[Mat4], &Mat4) -> R) -> Option<R> {
     (at.elapsed().as_secs_f32() < 0.5).then(|| f(pose, w))
 }
 
+/// Weapons KH2's grip holds the wrong way round (the ini's `flip_weapons`, by Sora's weapon id,
+/// save `+0x36`; the user: the Dream Shield's front faced Sora): turned half round about the
+/// forearm (the grip's parent and its parent), at the hand.
+fn turn_weapon(pose: &mut [Mat4], parents: &[i16]) {
+    let flip = &super::settings::get().flip_weapons;
+    if flip.is_empty() {
+        return;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let save = unsafe { rd::<u64>(base + 0x28695A0) } as usize;
+    if save < 0x10000 || !flip.contains(&unsafe { rd::<u8>(save + 0x36) }) {
+        return;
+    }
+    let grip = kh1_data::retarget::GRIP_BONE;
+    let parent = |i: usize| parents.get(i).copied().filter(|p| *p >= 0).map(|p| p as usize);
+    let Some(hand) = parent(grip) else { return };
+    let Some(arm) = parent(hand) else { return };
+    if hand >= pose.len() || arm >= pose.len() || grip >= pose.len() {
+        return;
+    }
+    let h = pose[hand].w_axis.truncate();
+    let axis = (h - pose[arm].w_axis.truncate()).normalize_or_zero();
+    if axis == Vec3::ZERO {
+        return;
+    }
+    let turn = Mat4::from_translation(h) * Mat4::from_axis_angle(axis, std::f32::consts::PI) * Mat4::from_translation(-h);
+    // The grip and every bone under it.
+    for i in grip..pose.len().min(SORA_BONES as usize) {
+        let mut p = Some(i);
+        for _ in 0..16 {
+            match p {
+                Some(q) if q == grip => {
+                    pose[i] = turn * pose[i];
+                    break;
+                }
+                Some(q) if q < grip => break,
+                Some(q) => p = parent(q),
+                None => break,
+            }
+        }
+    }
+}
+
 /// The model-space pose to draw for the current mode, if any.
 fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4>> {
     let mode = MODE.load(Ordering::Relaxed);
@@ -798,6 +841,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     };
     let kh2_feet = MODE.load(Ordering::Relaxed) == 0 && super::takeover::active() && super::takeover::GROUNDED.load(Ordering::Relaxed);
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
+    turn_weapon(&mut pose, &s.parents);
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
     }

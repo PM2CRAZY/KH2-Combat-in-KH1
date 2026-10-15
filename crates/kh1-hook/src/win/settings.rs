@@ -38,7 +38,10 @@ bonus_ap = on\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
 ; fx_test: on = start Magnet Burst's effect at Sora every 4 seconds (checks the renderer)\r\n\
-fx_test = off\r\n";
+fx_test = off\r\n\
+; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
+; round in his hand (0x53: the Dream Shield); none = off\r\n\
+flip_weapons = 0x53\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -57,6 +60,7 @@ pub struct Settings {
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
+    pub flip_weapons: Vec<u8>,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -105,6 +109,16 @@ pub fn get() -> &'static Settings {
                 _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
             },
             fx_test: on(&text, "fx_test", "on", false),
+            flip_weapons: match setting(&text, "flip_weapons") {
+                None => vec![0x53],
+                Some(v) => v
+                    .split([',', ' '])
+                    .filter_map(|t| {
+                        let t = t.trim();
+                        t.strip_prefix("0x").map_or_else(|| t.parse().ok(), |h| u8::from_str_radix(h, 16).ok())
+                    })
+                    .collect(),
+            },
         };
         log(&format!("settings ({path}): {s:?}"));
         s

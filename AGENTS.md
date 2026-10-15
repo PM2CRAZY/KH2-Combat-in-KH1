@@ -850,3 +850,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   him while the event sets up), KH2 starts over afterwards. Logged once per weapon: Sora's
   weapon (save `+0x36`) and KH1's grip of it against the Keyblade's rest grip (for the
   shield's fix).
+- `kh1-hook` stage 52 (the user: the Dream Shield's front faces Sora): ini `flip_weapons`
+  (KH1 item ids, default 0x53, taken to be the Dream Shield: KH1's weapon items run Kingdom
+  Key 0x51, Dream Sword, Shield, Rod; unconfirmed, the weapon line in the log gives the id):
+  the grip bone's subtree is turned half round about the forearm at the hand
+  (`pose::turn_weapon`).
