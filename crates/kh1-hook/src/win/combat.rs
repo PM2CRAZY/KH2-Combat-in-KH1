@@ -336,11 +336,11 @@ unsafe fn shots(sora: usize) -> Vec<Shot> {
         if flags & 0x800 == 0 || flags & 0xC == 0 || flags & (0x400 | 0x0020_0000 | 0x0100_0000) != 0 {
             continue;
         }
-        if rd::<u32>(g + 0x30) & 0x400 == 0 || rd::<u32>(g + 4) & 0x30 != 0 {
-            continue;
-        }
+        // (Every live enemy attack: KH1's collision pass meets each pair of attacks, and the
+        // meeting itself decides what happens: a shot turned back, a clash, nothing. Guards,
+        // priority 100, have their own path.)
         let prio = rd::<i32>(g + 0x68);
-        if !(1..98).contains(&prio) {
+        if prio == GUARD_PRIORITY || prio < 0 {
             continue;
         }
         let owner = pose::ptr(rd::<u32>(g + 0x34));
@@ -360,6 +360,19 @@ unsafe fn shots(sora: usize) -> Vec<Shot> {
         let up = |p: [f32; 3]| [p[0], -p[1], p[2]];
         let mid = [(c[0] + prev[0]) * 0.5, (c[1] + prev[1]) * 0.5, (c[2] + prev[2]) * 0.5];
         let shapes = vec![Shape::sphere(up(c), r), Shape::sphere(up(mid), r), Shape::sphere(up(prev), r)];
+        // What it is, once a slot and kind (to tell shots apart in the log).
+        static SEEN: std::sync::Mutex<Vec<(usize, u32, u32)>> = std::sync::Mutex::new(Vec::new());
+        if let Ok(mut seen) = SEEN.lock() {
+            let key = (g, flags & 0xFFFF_F000, rd::<u32>(g + 0x30));
+            if seen.len() < 200 && !seen.contains(&key) {
+                seen.push(key);
+                log(&format!(
+                    "enemy attack near Sora: slot {k} flags {flags:08x} +4 {:08x} +0x30 {:08x} owner {owner:#x} priority {prio} radius {r:.0} at {c:.0?} (was {prev:.0?})",
+                    rd::<u32>(g + 4),
+                    rd::<u32>(g + 0x30)
+                ));
+            }
+        }
         out.push(Shot { obj: g, shapes, owner });
     }
     out
@@ -696,7 +709,10 @@ impl Strikes {
                     if back {
                         character.register_hit();
                     }
-                    note(format!("KH2 swing met shot {:#x} of {:#x}: turned back {back}", shot.obj, shot.owner));
+                    static MET: AtomicU32 = AtomicU32::new(0);
+                    if MET.fetch_add(1, Ordering::Relaxed) < 200 {
+                        log(&format!("KH2 swing met enemy attack {:#x} of {:#x} (flags now {:08x}): turned back {back}", shot.obj, shot.owner, rd::<u32>(shot.obj)));
+                    }
                 }
             }
             for b in &self.bodies {

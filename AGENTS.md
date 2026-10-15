@@ -882,3 +882,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   - The user's KH1 `Image/en/kh1_first` was a randomizer-patched package (Feb 2025: 26 files,
     Destiny Islands / Dive / Disney Castle `.ard`s, `UK_treasure.ev`, ...): restored from
     `BackupImage/`, the patched pair kept as `*.ap-patched`.
+- `kh1-hook` stage 55 (Wakka's ball still not turned back; nothing in the log): the swing now
+  meets every live enemy attack of the pool but guards (KH1's pass meets every pair; the
+  meeting decides), and each one near Sora is logged once by slot and kind ("enemy attack
+  near Sora: ...") to tell what the ball is.
