@@ -805,3 +805,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   the list type (`GetType`) and sets targets only in a direct list (a bundle inherits them),
   then hands KH1 a fresh list with its own mid-scene sequence (`0x1400F7300(R, 0)`,
   `0x140109360(R, 1, 0)`, as in `0x1400FBBA0`) instead of `0x1401087B0` + `0x140102980`.
+- `kh1-hook` stage 46 (the user: casting Thunder crashed the game): the hit pass `0x140299A40`
+  takes **two** arguments, `(actor, out vector)` (rdx, kept in r13 and passed to the
+  reactions as r8; the knock-back reaction `0x14029AD30` writes the actor's position there).
+  `win/hurt.rs` hooked it as `(actor)` and called KH1's with a garbage rdx; harmless while
+  KH2 had Sora (KH1's reaction kind cleared), it crashed when a hit landed while KH1 had him
+  (a spell cast). The hook now takes and passes both.

@@ -5,7 +5,7 @@
 //!   linked from the actor's `+0x3EC` (handle), next at record `+0x30`; `+0` flags (`0x20`: no
 //!   effect, as for an attack a guard stopped, `0x1402B2A30`), `+4` the attacker's handle, `+8`
 //!   the damage, `+0xC` low 5 bits the reaction kind, bits 12..15 a delay in frames.
-//! - `0x140299A40` `(actor)` takes them each frame: pops ready records (`0x1402BCFB0`; a record
+//! - `0x140299A40` `(actor, out vector)` takes them each frame: pops ready records (`0x1402BCFB0`; a record
 //!   still delayed counts down and stops the pass), applies the damage (`0x1402BCD30`; Second
 //!   Chance, MP from damage, the HP bar and the dying flag 4 on the stats `+0x6C` live here
 //!   too), maps the kind (`0x1402BD0E0`: kind 1 becomes 3 / 4 / 5 by the damage's share of max
@@ -65,9 +65,13 @@ enum Fate {
     Taken(u32),
 }
 
-unsafe extern "system" fn hurt(actor: usize) -> usize {
-    // (KH1's pass returns nothing; whatever it leaves in rax is passed back all the same.)
-    let f: unsafe extern "system" fn(usize) -> usize = std::mem::transmute(ORIG.load(Ordering::Acquire));
+unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
+    // (KH1's pass returns nothing; whatever it leaves in rax is passed back all the same.) Its
+    // second argument (rdx) is where its reactions write a vector (the knock-back one,
+    // `0x14029AD30`, writes the actor's position there): it must reach KH1 intact (a hit while
+    // KH1 had Sora, casting, crashed on it).
+    let f0: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(ORIG.load(Ordering::Acquire));
+    let f = |a: usize| f0(a, out);
     let base = BASE.load(Ordering::Relaxed);
     if actor < 0x10000 || actor != rd::<u64>(base + PARTY_RVA) as usize || !super::settings::get().hurt {
         return f(actor);
