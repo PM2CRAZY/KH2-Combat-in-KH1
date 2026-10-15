@@ -470,6 +470,23 @@ pub fn kh2_pose<R>(f: impl FnOnce(&[Mat4], &Mat4) -> R) -> Option<R> {
     (at.elapsed().as_secs_f32() < 0.5).then(|| f(pose, w))
 }
 
+/// The blend argument of KH1's last ground-IK pass (diagnostics).
+static LAST_T: AtomicU32 = AtomicU32::new(0);
+
+/// Both hands where the bind (T-pose) has them relative to the chest (the hands' grandparent's
+/// parent), within 3 units: the arms were left unposed.
+fn t_arms(bind: &[Mat4], parents: &[i16], m: impl Fn(usize) -> Mat4) -> bool {
+    let up = |i: usize| parents.get(i).copied().filter(|p| *p >= 0).map(|p| p as usize);
+    HANDS.iter().all(|(h, _)| {
+        let Some(chest) = up(*h).and_then(up).and_then(up) else { return false };
+        if *h >= bind.len() || chest >= bind.len() {
+            return false;
+        }
+        let rel = |a: Mat4, b: Mat4| a.inverse().transform_point3(b.w_axis.truncate());
+        (rel(m(chest), m(*h)) - rel(bind[chest], bind[*h])).length() < 3.0
+    })
+}
+
 /// KH1's wrist (the weapon hand relative to its forearm) for the weapon held KH1's way, while
 /// KH1 posed him this frame (else the last one seen).
 static KH1_WRIST: Mutex<Option<Mat4>> = Mutex::new(None);
@@ -826,6 +843,22 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     let orig_blade = (!ours).then(|| (mat(world + 280 * 0x40), mat(world + 283 * 0x40)));
     let slot = slot_of(instance);
     SLOT_NOW.store(slot.unwrap_or(usize::MAX), Ordering::Relaxed);
+    // (Diagnostics, the user's T-pose: KH1's own pass leaving the arms as in the bind.)
+    if !ours {
+        let inv = to_world.inverse();
+        if t_arms(&s.bind, &s.parents, |i| inv * mat(world + i * 0x40)) {
+            static T_KH1: AtomicU32 = AtomicU32::new(0);
+            if T_KH1.fetch_add(1, Ordering::Relaxed) < 40 {
+                log(&format!(
+                    "T-pose arms from KH1's own {} pass: slot {slot:?}, KH2 has him {}, blend arg {:.3}, mode {}",
+                    if via_ik { "ground-IK" } else { "plain" },
+                    super::takeover::kh2_has(),
+                    f32::from_bits(LAST_T.load(Ordering::Relaxed)),
+                    MODE.load(Ordering::Relaxed)
+                ));
+            }
+        }
+    }
     // Which weapon and how KH1 holds it, logged once a weapon (KH1's grip itself is not used:
     // it moves with KH1's motions, stage 53).
     if let (false, Some(0..=7), Some(&Some(p)), Some(r)) = (ours, slot, s.parents.get(kh1_data::retarget::GRIP_BONE).map(|p| (*p >= 0).then_some(*p as usize)).as_ref(), s.retarget.as_ref()) {
@@ -871,6 +904,12 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         }
         return;
     };
+    if t_arms(&s.bind, &s.parents, |i| pose[i]) {
+        static T_OURS: AtomicU32 = AtomicU32::new(0);
+        if T_OURS.fetch_add(1, Ordering::Relaxed) < 40 {
+            log(&format!("T-pose arms in the pose we draw: slot {slot:?}, KH2 has him {}, mode {}", super::takeover::kh2_has(), MODE.load(Ordering::Relaxed)));
+        }
+    }
     let kh2_feet = MODE.load(Ordering::Relaxed) == 0 && super::takeover::active() && super::takeover::GROUNDED.load(Ordering::Relaxed);
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
@@ -997,6 +1036,7 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
 }
 
 unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
+    LAST_T.store(flags.to_bits(), Ordering::Relaxed);
     let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
     let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
     match moved {

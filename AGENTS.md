@@ -886,3 +886,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   meets every live enemy attack of the pool but guards (KH1's pass meets every pair; the
   meeting decides), and each one near Sora is logged once by slot and kind ("enemy attack
   near Sora: ...") to tell what the ball is.
+- `kh1-hook` stage 56 (diagnostics for the user's T-pose arms, seen on the ladder and at
+  Darkside): logs when KH1's own pass leaves both hands where the bind has them relative to
+  the chest (with the pass, slot, the ground-IK pass's float argument (a blend weight, used
+  by `0x140392710`'s lerps) and mode), and when the pose we draw does.
