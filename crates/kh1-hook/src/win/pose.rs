@@ -765,6 +765,16 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     let orig_blade = (!ours).then(|| (mat(world + 280 * 0x40), mat(world + 283 * 0x40)));
     let slot = slot_of(instance);
     SLOT_NOW.store(slot.unwrap_or(usize::MAX), Ordering::Relaxed);
+    // KH1's own grip of the weapon while it shows him standing, walking or running: another
+    // weapon held another way (the Dream Sword) is drawn KH1's way.
+    if let (false, Some(0..=7), Some(&Some(p)), Some(r)) = (ours, slot, s.parents.get(kh1_data::retarget::GRIP_BONE).map(|p| (*p >= 0).then_some(*p as usize)).as_ref(), s.retarget.as_ref()) {
+        let live = mat(world + p * 0x40).inverse() * mat(world + kh1_data::retarget::GRIP_BONE * 0x40);
+        let used = r.set_grip(Some(live));
+        static GRIP_LIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if GRIP_LIVE.swap(used, Ordering::Relaxed) != used {
+            log(if used { "the weapon is held another way than the Keyblade (KH1's grip is used)" } else { "the weapon is held as the Keyblade (the rest pose's grip)" });
+        }
+    }
     let Some(mut pose) = wanted(s, slot, &to_world) else {
         s.wrote_root = None;
         s.to_world = Some(to_world);

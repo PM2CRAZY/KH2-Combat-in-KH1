@@ -144,6 +144,9 @@ pub struct Abilities {
     pub hyper_healing: bool,
     /// Guard Plus (ours): the guard holds blows from every side, not only the front.
     pub guard_all_round: bool,
+    /// Ours (the KH1 port, the user): without Combo Master a swing that hasn't connected is
+    /// the only one; the next press starts a new first swing once it ends.
+    pub one_swing_on_miss: bool,
     /// Item ids of equipped action abilities (for combo rows that need one).
     pub equipped: Vec<u16>,
 }
@@ -165,6 +168,7 @@ impl Default for Abilities {
             aerial_recovery: false,
             hyper_healing: false,
             guard_all_round: false,
+            one_swing_on_miss: false,
             equipped: Vec::new(),
         }
     }

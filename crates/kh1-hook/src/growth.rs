@@ -319,7 +319,7 @@ impl Kh1Sora {
     pub fn kh2(&self) -> Abilities {
         let a = &self.abilities;
         let s = &self.shared;
-        let mut out = Abilities { guard: false, ..Abilities::default() };
+        let mut out = Abilities { guard: false, one_swing_on_miss: true, ..Abilities::default() };
         // (The user: one High Jump, LV3; one Glide, LV3, and one Superglide, MAX.)
         if equipped(s, kh1::HIGH_JUMP) > 0 {
             out.high_jump = 3;

@@ -51,6 +51,19 @@ const BATTLE_LINGER: f32 = 6.0;
 const STEP_DOWN: f32 = 24.0;
 /// KH1's air-move checks (see `grab`).
 const CAN_ACT_RVA: usize = 0x2956E0;
+/// KH1's tally of the save (`0x14028A4D0(id)`: `+0x848 + id * 2`).
+const COUNT_RVA: usize = 0x28A4D0;
+/// KH1's control step for the player (`0x1402A4090 (actor, move vector)`, from the think step
+/// `0x1402A1170`): it reads the pad and starts commands only while Sora can act
+/// (`0x1402956E0`); events, tutorial windows and scripted moments skip it or stop him acting.
+const CONTROL_RVA: usize = 0x2A4090;
+const CONTROL_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40];
+static ORIG_CONTROL: AtomicUsize = AtomicUsize::new(0);
+/// KH1's control step ran for Sora since the last physics step, with him able to act.
+static CONTROLLED: AtomicBool = AtomicBool::new(true);
+/// KH1 holds him still (logged on a change).
+static FROZEN: AtomicBool = AtomicBool::new(false);
+static CONTROL_HOOKED: AtomicBool = AtomicBool::new(false);
 const VINE_RVA: usize = 0x2C5710;
 const LEDGE_RVA: usize = 0x2C68A0;
 const BAR_RVA: usize = 0x2C7E00;
@@ -141,6 +154,18 @@ unsafe extern "system" fn physics(actor: usize) {
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
+}
+
+unsafe extern "system" fn control(actor: usize, dir: usize) {
+    let base = BASE.load(Ordering::Relaxed);
+    if actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize {
+        let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+        if can(actor) != 0 {
+            CONTROLLED.store(true, Ordering::Relaxed);
+        }
+    }
+    let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_CONTROL.load(Ordering::Acquire));
+    f(actor, dir);
 }
 
 fn release(why: &str) {
@@ -257,6 +282,14 @@ unsafe fn takeover(actor: usize) -> bool {
     let action = action_raw && !shortcut;
     // KH1's Attack command (Cross with Attack chosen in the menu) is KH2's attack button.
     let attack = combat::take_press();
+    // KH1 holding him still (its control step skipped or him unable to act: cutscene moments,
+    // tutorial windows; the user: he moved anyway): KH2 gets no input (he still falls, lands
+    // and finishes what he was doing).
+    let frozen = !CONTROLLED.swap(false, Ordering::Relaxed) && CONTROL_HOOKED.load(Ordering::Relaxed);
+    if FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
+        log(if frozen { "KH1 holds Sora still: no input for KH2" } else { "KH1 lets Sora act again" });
+    }
+    let (stick, jump, action, attack) = if frozen { ([0.0, 0.0], false, false, false) } else { (stick, jump, action, attack) };
     let input = Input {
         stick,
         jump: Button { pressed: jump && !d.held.0, held: jump },
@@ -399,6 +432,18 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     super::kh2sound::tick();
     super::kh2fx::tick(out.motion);
+    {
+        // A KH2 swing starting: a new attack motion, or the same one again from its start.
+        let attacking = matches!(out.state, StateName::Attack);
+        let recoil = matches!(out.motion, character_core::reaction::motion::REPELLED | character_core::reaction::motion::REPELLED_AIR);
+        if attacking && !recoil && (d.swing != Some(out.motion) || out.clip_frame < d.swing_frame) {
+            // KH1's attack step counts each attack in the save's tallies (`0x14028A4D0(0x13)`,
+            // `0x1402A4760`); event scripts read them (`0x14028A4B0`): the Dive to the Heart's
+            // "attack" tutorial waits for it (the user's softlock).
+            let count: unsafe extern "system" fn(i32) = std::mem::transmute(base + COUNT_RVA);
+            count(0x13);
+        }
+    }
     if settings.swing_fx {
         // A KH2 swing starting: a new attack motion, or the same one again from its start.
         let attacking = matches!(out.state, StateName::Attack);
@@ -409,10 +454,11 @@ unsafe fn takeover(actor: usize) -> bool {
             // (KH2's own voice for the moves whose KH2 sounds play, not KH1's.)
             d.strikes.swing_start(actor, d.character.airborne(), out.combo_count, d.character.in_finisher(), !super::kh2sound::covers(out.motion));
         }
-        d.swing = attacking.then_some(out.motion);
-        d.swing_frame = out.clip_frame;
         d.strikes.trail(actor, attacking && !out.hitboxes.is_empty());
     }
+    let attacking = matches!(out.state, StateName::Attack);
+    d.swing = attacking.then_some(out.motion);
+    d.swing_frame = out.clip_frame;
     d.last_out = Some(out.clone());
     if let Ok(mut pz) = POSE.try_lock() {
         *pz = Some((d.anim.bones.clone(), Instant::now()));
@@ -548,6 +594,9 @@ pub unsafe fn install() {
     let base = sys_base();
     BASE.store(base, Ordering::Relaxed);
     hook::install(base + PHYS_RVA, &PHYS_PROLOGUE, physics as *const () as usize, &ORIG_PHYS, "actor physics step");
+    if hook::install(base + CONTROL_RVA, &CONTROL_PROLOGUE, control as *const () as usize, &ORIG_CONTROL, "player control step").is_some() {
+        CONTROL_HOOKED.store(true, Ordering::Relaxed);
+    }
 }
 
 unsafe fn sys_base() -> usize {

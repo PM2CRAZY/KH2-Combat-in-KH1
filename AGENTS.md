@@ -829,3 +829,18 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `0x14028D840` none, `0x1402A2FA0` 2, `0x140391E20` (int, int, float, int), `0x14029CF10`
   (int, float), `0x140112C70` 3, `0x14029D630` (int, int, float), `0x1402BD180` 2 → used
   result, `0x140298230` 1).
+- `kh1-hook` stage 50 (the user: softlocked in the Dive to the Heart's attack tutorial; the
+  Dream Sword held backwards; Sora moving while KH1 holds him still; without Combo Master one
+  swing only):
+  - KH1's attack step (`0x1402A4760`) counts each attack in the save's tallies
+    (`0x14028A4D0(0x13)`: `+0x848 + id * 2`, capped 9999); event scripts read the tallies
+    (`0x14028A4B0`, an event opcode at `0x1401ADF??`). KH2's swings now count too.
+  - KH1's player control step `0x1402A4090 (actor, move vector)` (from the think step
+    `0x1402A1170`, skipped when actor `+0x444` bit 1 is set) reads the pad and starts
+    commands only when `0x1402956E0` says he can act (flag 4, `+0x88` bit 0x20, `+0x444`
+    bit 1). Hooked: KH2 gets no input on a frame it didn't run with him able to act.
+  - The weapon's grip bone 280: when KH1's own grip (relative to its parent, read from KH1's
+    pose while it shows slots 0-7) is turned more than 1 rad from the battle idle's, it is
+    used (`Retarget::set_grip`): the Dream Sword is held another way than the Keyblade.
+  - `Abilities::one_swing_on_miss` (character-core, ours, set in `abilities = kh1`): without
+    Combo Master a swing that hasn't connected doesn't chain.

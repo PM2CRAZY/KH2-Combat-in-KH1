@@ -329,7 +329,15 @@ pub struct Retarget {
     /// `CLOTH_STEP` a call, so a flip of the hips' yaw (somersaults) or of which side of a thigh
     /// the cloth is pushed to doesn't snap them round (a little lag, like cloth's own).
     memory: std::sync::Mutex<(Vec<Option<Quat>>, Vec<Quat>)>,
+    /// The weapon's grip as KH1 holds it now (`set_grip`), when it is turned well away from the
+    /// rest pose's (another weapon held another way: the Dream Sword).
+    grip_live: std::sync::Mutex<Option<Mat4>>,
 }
+
+/// The weapon's grip bone (the Keyblade's, also every other weapon's).
+pub const GRIP_BONE: usize = 280;
+/// How far (radians) KH1's live grip must turn from the rest pose's to be used instead.
+const GRIP_TURN: f32 = 1.0;
 
 const CLOTH_STEP: f32 = 0.35;
 
@@ -496,7 +504,7 @@ impl Retarget {
         }
         let memory = std::sync::Mutex::new((vec![None; kh1.len()], vec![Quat::IDENTITY; cloth.len()]));
         let bind_m = b1.clone();
-        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory, bind_m }
+        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory, bind_m, grip_live: std::sync::Mutex::new(None) }
     }
 
     /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
@@ -528,6 +536,27 @@ impl Retarget {
                 self.rest_local[i] = l.is_finite().then_some(l);
             }
         }
+    }
+
+    /// KH1's own grip this frame (`GRIP_BONE` relative to its parent, from KH1's pose), or
+    /// `None` when KH1 didn't pose him. A grip turned more than `GRIP_TURN` from the rest pose's
+    /// (KH1's battle idle with the Keyblade) is used instead of it: another weapon is held
+    /// another way (the user: the Dream Sword was drawn backwards). Returns whether it is used.
+    pub fn set_grip(&self, live: Option<Mat4>) -> bool {
+        let use_live = match (live, self.rest_local.get(GRIP_BONE).copied().flatten()) {
+            (Some(l), Some(r)) if l.is_finite() => {
+                let (_, lq, _) = l.to_scale_rotation_translation();
+                let (_, rq, _) = r.to_scale_rotation_translation();
+                (lq.angle_between(rq) > GRIP_TURN).then_some(l)
+            }
+            _ => None,
+        };
+        if live.is_some() {
+            if let Ok(mut g) = self.grip_live.lock() {
+                *g = use_live;
+            }
+        }
+        use_live.is_some()
     }
 
     /// The thumbs' open-handed pose (KH1's field idle), for `pose_grip(.., false)`.
@@ -583,6 +612,7 @@ impl Retarget {
                 Some(q)
             });
             let rest = if grip { self.rest_local[i] } else { self.rest_open[i].or(self.rest_local[i]) };
+            let rest = if i == GRIP_BONE { self.grip_live.lock().ok().and_then(|g| *g).or(rest) } else { rest };
             if let (None, Some(p), Some(l)) = (own, self.parent[i], rest) {
                 out[i] = out[p] * l;
                 let (_, r, t) = out[i].to_scale_rotation_translation();

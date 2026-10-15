@@ -877,6 +877,9 @@ impl Character {
             _ => (None, false),
         };
         let in_attack = current_motion.is_some();
+        if in_attack && self.abilities.one_swing_on_miss && !self.abilities.combo_master && !self.hit {
+            return false;
+        }
         // Ground swings only advance the combo when the previous one
         // connected (read from the exe). In the air, whiffed swings advance
         // it too, so an air combo always ends in its finisher (matches the
