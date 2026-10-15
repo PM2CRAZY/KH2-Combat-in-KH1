@@ -169,6 +169,15 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
     f(actor, dir);
 }
 
+/// KH1 shows Sora standing, walking or running: his motion's slot, or for a motion we don't
+/// know (another moveset's), the last one KH1 asked for.
+fn kh1_moving() -> bool {
+    match pose::sora_slot() {
+        Some(s) => s <= 7,
+        None => super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed) & 0xFFFF <= 7,
+    }
+}
+
 fn release(why: &str) {
     if let Ok(mut d) = DRIVER.try_lock() {
         if let Some(dr) = d.as_mut() {
@@ -218,7 +227,7 @@ unsafe fn takeover(actor: usize) -> bool {
     if HANDOFF.load(Ordering::Relaxed) {
         let state = rd::<i32>(actor + 0x70);
         let frames = HANDOFF_FRAMES.fetch_add(1, Ordering::Relaxed);
-        if frames >= 10 && matches!(state, 0 | 1) && matches!(pose::sora_slot(), Some(0..=7)) {
+        if frames >= 10 && matches!(state, 0 | 1) && kh1_moving() {
             HANDOFF.store(false, Ordering::Relaxed);
             FRESH.store(true, Ordering::Relaxed);
             log(&format!("KH1's move ended (state {state}): KH2 again"));
@@ -235,7 +244,9 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     let slot = pose::sora_slot();
     let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false);
-    if !matches!(slot, Some(0..=7)) && !airborne {
+    // (A motion we don't know, as the Dream Shield's own moveset's, is not taken for KH1's own
+    // action: the user saw KH1's idle and attacks with the shield.)
+    if matches!(slot, Some(s) if s > 7) && !airborne {
         release(&format!("KH1's own action, slot {}, KH1 state {}", slot.map_or("?".into(), |s| s.to_string()), rd::<i32>(actor + 0x70)));
         return false;
     }

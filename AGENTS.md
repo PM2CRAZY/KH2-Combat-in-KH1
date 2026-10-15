@@ -855,3 +855,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Key 0x51, Dream Sword, Shield, Rod; unconfirmed, the weapon line in the log gives the id):
   the grip bone's subtree is turned half round about the forearm at the hand
   (`pose::turn_weapon`).
+- `kh1-hook` stage 53 (the user's video: with the Dream Shield, KH1's idle and attacks
+  showed, a choppy cut out of a run, no attack while walking): the shield has its own
+  moveset, whose motions our slot table (P_EX100's signatures) doesn't know, and an unknown
+  slot was taken for KH1's own action (KH1 had him). Now only a known slot past 7 is; KH1's
+  move hand-back takes an unknown motion as standing when KH1's last request was a slot up to
+  7 (`kh1_moving`). Confirmed in the log: the Dream Shield is item 0x53 (`flip_weapons`'s
+  default). The live-grip switch of stage 50 is gone (KH1's grip moves with its motions; it
+  flapped between the two every few frames); its log line stays.
