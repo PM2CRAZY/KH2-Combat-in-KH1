@@ -890,3 +890,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Darkside): logs when KH1's own pass leaves both hands where the bind has them relative to
   the chest (with the pass, slot, the ground-IK pass's float argument (a blend weight, used
   by `0x140392710`'s lerps) and mode), and when the pose we draw does.
+- `kh1-hook` stage 57 (the user's ladder video: "T-pose" arms dropping off the ladder): not a
+  T-pose but KH2's battle fall (motion 4, arms flung up and out: hands at head height ±55
+  apart in `retarget_check`) drawn for KH1's own fall (slot 10) while KH1 had him. KH1's own
+  jump / fall / landing (slots 8-13) now show KH1's own animation while KH1 has him (KH2's
+  jumps are KH2's as before). The T-pose detector of stage 56 is gone (its chest bone was
+  three parents up from the hand, still in the arm: it fired in every idle).
