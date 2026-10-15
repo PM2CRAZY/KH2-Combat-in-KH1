@@ -50,7 +50,7 @@ the menu, e.g. Hurricane Blast is listed as Explosion):
 
 | KH1 | KH2 |
 |---|---|
-| High Jump | High Jump MAX |
+| High Jump | High Jump LV3 |
 | Glide | Glide LV3 |
 | Superglide | Glide MAX |
 | Guard | Guard |

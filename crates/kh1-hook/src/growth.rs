@@ -11,7 +11,7 @@
 //! Drive, 57 Stun Impact, 58 Gravity Break.
 //!
 //! - What KH1 has, KH2 takes from it while equipped (the user's levels): High Jump is High
-//!   Jump MAX, Glide is Glide LV3, Superglide Glide MAX (Sora keeps one of each: `one_only`),
+//!   Jump LV3, Glide is Glide LV3, Superglide Glide MAX (Sora keeps one of each: `one_only`),
 //!   Guard, Dodge Roll, each Combo Plus / Air Combo Plus, and
 //!   KH1's combo modifiers as KH2's nearest one (Vortex: Flash Step, Aerial Sweep, Counterattack:
 //!   Counterguard, Blitz: Finishing Leap, Slapshot, Sliding Dash: Slide Dash, Hurricane Blast:
@@ -320,9 +320,9 @@ impl Kh1Sora {
         let a = &self.abilities;
         let s = &self.shared;
         let mut out = Abilities { guard: false, ..Abilities::default() };
-        // (The user: one High Jump, MAX; one Glide, LV3, and one Superglide, MAX.)
+        // (The user: one High Jump, LV3; one Glide, LV3, and one Superglide, MAX.)
         if equipped(s, kh1::HIGH_JUMP) > 0 {
-            out.high_jump = 4;
+            out.high_jump = 3;
         }
         if equipped(s, kh1::SUPERGLIDE) > 0 {
             out.glide = 4;
@@ -494,7 +494,7 @@ mod tests {
         )
         .kh2();
         assert!(a.guard);
-        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 4, 4));
+        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 3, 4));
         let g = sora(1, &[], &[kh1::GLIDE]).kh2();
         assert_eq!(g.glide, 3);
         assert!(a.equipped.contains(&kh2::FLASH_STEP) && !a.equipped.contains(&kh2::SLAPSHOT));
@@ -511,7 +511,7 @@ mod tests {
     #[test]
     fn menu_abilities_work_when_equipped() {
         let a = sora(99, &[kh1::DODGE_ROLL, 68, 74, 69, 77 | 0x80, kh1::COMBO_MASTER], &[kh1::HIGH_JUMP, kh1::HIGH_JUMP, kh1::HIGH_JUMP, 66, 67]).kh2();
-        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (3, 3, 4, 4));
+        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (3, 3, 4, 3));
         assert!(a.aerial_recovery && a.combo_master && a.finishing_plus == 1);
         assert!(a.equipped.contains(&kh2::DODGE_SLASH) && !a.equipped.contains(&kh2::MAGNET_BURST));
         // Learned but off: nothing.

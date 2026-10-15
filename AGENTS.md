@@ -817,3 +817,4 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (`growth::one_only`, an equipped copy kept): spares are taken out of the shared list in
   `abilities = kh1` and noted in `kh1-kh2-removed.txt` (without "(id", so they are not given
   back).
+- `kh1-hook` stage 48 (the user): High Jump is High Jump LV3 (not MAX).
