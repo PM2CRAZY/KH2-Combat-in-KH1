@@ -931,3 +931,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 ### 2026-10-16: Stage 62 (wall clinks off by default)
 - The user changed his mind: swings pass through walls again. The wall ray stays behind ini
   `wall_clink = on` (default off).
+
+### 2026-10-16: Stage 63 (Quick Run LV2 later, both with AP, "New Ability" prompts)
+- Quick Run: LV2, learned at level 12 (was 7); Quick Run (2 AP) and Aerial Dodge (3 AP) are in
+  Sora's own list now, off until equipped, and their AP joins `bonus_ap`. Saves from earlier
+  builds have them moved out of the shared list (one that was on stays on).
+- Learning a KH2 ability shows a box in KH1's level-up prompt style ("New Ability", its name,
+  its AP), through KH1's prompt boxes `0x14283BD90` / text `0x142DC3068` the way the
+  Archipelago KH1 client shows items (gaithern's KH-1FM-AP-LUA, MIT, `show_prompt`); queued
+  until Sora's box is free (a level-up's own box goes first).

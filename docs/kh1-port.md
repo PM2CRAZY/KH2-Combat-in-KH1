@@ -73,14 +73,15 @@ the menu, e.g. Hurricane Blast is listed as Explosion):
 Final Mix's own Combo Master is KH2's Combo Master while equipped.
 
 What only KH2 has is added to KH1's Ability menu as new abilities, learned at Sora's level
-(added when he reaches it, or when the game loads if he is already past it):
+(added when he reaches it, or when the game loads if he is already past it, off until equipped;
+a "New Ability" box in KH1's level-up prompt style says so, with its AP):
 
 | Level | Ability | Menu | AP |
 |---|---|---|---|
 | 4 | Aerial Recovery | Sora's | 2 |
-| 7 | Quick Run LV3 (on when learned) | shared | - |
 | 10 | Dodge Slash | Sora's | 2 |
-| 13 | Aerial Dodge LV3 (on when learned) | shared | - |
+| 12 | Quick Run LV2 | Sora's | 2 |
+| 13 | Aerial Dodge LV3 | Sora's | 3 |
 | 16 | Horizontal Slash | Sora's | 2 |
 | 20 | Negative Combo | Sora's | 2 |
 | 25 | Aerial Spiral | Sora's | 2 |
@@ -91,7 +92,7 @@ What only KH2 has is added to KH1's Ability menu as new abilities, learned at So
 | 50 | Magnet Burst | Sora's | 3 |
 
 Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the KH2
-abilities take none of the AP KH1 gives him: +2 at level 4, +27 in all by level 50 (KH1's
+abilities take none of the AP KH1 gives him: +2 at level 4, +32 in all by level 50 (KH1's
 cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while the game runs.
 
 The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60.
@@ -123,8 +124,8 @@ Done (played by the user):
 4. KH1's commands (magic, items, specials, summons) take Sora from KH2 and give him back,
    jump casts and the L1 shortcut included (33, 37).
 5. Abilities from KH1's menu with KH2's first (29, 36, 38), Encounter Plus kept, extra AP
-   for the KH2 abilities (43), one High Jump (LV3), Glide LV3 / Superglide MAX, Quick Run and
-   Aerial Dodge LV3 (47, 48).
+   for the KH2 abilities (43), one High Jump (LV3), Glide LV3 / Superglide MAX, Quick Run LV2 and
+   Aerial Dodge LV3 (47, 48), both later with AP in Sora's list.
 6. Swing feel: KH1's Keyblade trail, swing effects and voice (34); KH2's own sounds for
    Magnet Burst and Explosion, with KH1's voice (40-42).
 

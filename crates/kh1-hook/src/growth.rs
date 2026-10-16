@@ -21,8 +21,9 @@
 //! - What only KH2 has goes into KH1's menu as new abilities (`MENU`, ids 66 up, in an
 //!   extended copy of KH1's ability table, `win/menu.rs`), learned at Sora's level: Quick Run
 //!   and Aerial Dodge in the shared abilities (with High Jump and Glide), the rest in Sora's,
-//!   with KH2's AP costs. Quick Run and Aerial Dodge are LV3; the dodge roll levels up with
-//!   Sora (`GROWTH`).
+//!   with KH2's AP costs (Quick Run and Aerial Dodge too, in Sora's list). Quick Run is LV2 and
+//!   Aerial Dodge LV3; the dodge roll levels up with Sora (`GROWTH`).
+//!   (Earlier builds put Quick Run and Aerial Dodge in the shared list: `win/menu.rs` moves them.)
 
 use character_core::Abilities;
 
@@ -128,8 +129,10 @@ const fn m(id: u8, name: &'static str, help: &'static str, ap: u8, level: u8, li
 pub const FIRST_ID: u8 = 66;
 
 pub const MENU: [MenuAbility; 12] = [
-    m(66, "Quick Run", "Dash swiftly along the ground.", 0, 7, List::Shared, kh1::GLIDE, Effect::QuickRun),
-    m(67, "Aerial Dodge", "Leap once more in midair.", 0, 13, List::Shared, kh1::GLIDE, Effect::AerialDodge),
+    // (The user: Quick Run LV2, a little later than KH2's level 7; both with AP in Sora's own
+    // list, not the shared one. AP as KH2's.)
+    m(66, "Quick Run", "Dash swiftly along the ground.", 2, 12, List::Sora, kh1::DODGE_ROLL, Effect::QuickRun),
+    m(67, "Aerial Dodge", "Leap once more in midair.", 3, 13, List::Sora, kh1::DODGE_ROLL, Effect::AerialDodge),
     m(68, "Aerial Recovery", "Right yourself in midair after being knocked back.", 2, 4, List::Sora, kh1::COMBO_PLUS, Effect::AerialRecovery),
     m(69, "Dodge Slash", "Ground combo: strike nearby foes all around.", 2, 10, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::DODGE_SLASH)),
     m(70, "Horizontal Slash", "Air combo: slash foes while spinning in midair.", 2, 16, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH)),
@@ -151,7 +154,7 @@ pub enum Growth {
     DodgeRoll(u8),
 }
 
-/// (Quick Run and Aerial Dodge are LV3 as soon as they are learned, the user's choice.)
+/// (Quick Run is LV2 and Aerial Dodge LV3 as soon as they are learned, the user's choice.)
 pub const GROWTH: [(u8, Growth); 3] = [(19, Growth::DodgeRoll(2)), (37, Growth::DodgeRoll(3)), (60, Growth::DodgeRoll(4))];
 
 /// Shared abilities Sora keeps only one of (the user: one High Jump, one Glide, one
@@ -358,8 +361,8 @@ impl Kh1Sora {
                 continue;
             }
             match ab.effect {
-                // (The user: both at LV3.)
-                Effect::QuickRun => quick_run = 3,
+                // (The user: Quick Run LV2, Aerial Dodge LV3.)
+                Effect::QuickRun => quick_run = 2,
                 Effect::AerialDodge => aerial_dodge = 3,
                 Effect::AerialRecovery => out.aerial_recovery = true,
                 Effect::FinishingPlus => out.finishing_plus = 1,
@@ -510,18 +513,18 @@ mod tests {
 
     #[test]
     fn menu_abilities_work_when_equipped() {
-        let a = sora(99, &[kh1::DODGE_ROLL, 68, 74, 69, 77 | 0x80, kh1::COMBO_MASTER], &[kh1::HIGH_JUMP, kh1::HIGH_JUMP, kh1::HIGH_JUMP, 66, 67]).kh2();
-        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (3, 3, 4, 3));
+        let a = sora(99, &[kh1::DODGE_ROLL, 68, 74, 69, 77 | 0x80, kh1::COMBO_MASTER, 66, 67], &[kh1::HIGH_JUMP, kh1::HIGH_JUMP, kh1::HIGH_JUMP]).kh2();
+        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (2, 3, 4, 3));
         assert!(a.aerial_recovery && a.combo_master && a.finishing_plus == 1);
         assert!(a.equipped.contains(&kh2::DODGE_SLASH) && !a.equipped.contains(&kh2::MAGNET_BURST));
         // Learned but off: nothing.
-        let off = sora(99, &[68 | 0x80], &[66 | 0x80]).kh2();
+        let off = sora(99, &[68 | 0x80, 66 | 0x80], &[]).kh2();
         assert!(!off.aerial_recovery && off.quick_run == 0);
         // No KH1 Dodge Roll: no roll at any level.
         assert_eq!(sora(99, &[], &[]).kh2().dodge_roll, 0);
-        // Quick Run is LV3 from the start.
-        assert_eq!(sora(7, &[], &[66]).kh2().quick_run, 3);
-        assert_eq!(sora(99, &[], &[67]).kh2().aerial_dodge, 3);
+        // Quick Run is LV2 from the start, Aerial Dodge LV3.
+        assert_eq!(sora(12, &[66], &[]).kh2().quick_run, 2);
+        assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 3);
     }
 
     #[test]
@@ -530,7 +533,7 @@ mod tests {
         let ids: Vec<u8> = g.iter().map(|a| a.id).collect();
         assert_eq!(ids, vec![66, 67, 68, 69]);
         // Already learned (even unequipped): not again.
-        let g = sora(13, &[68 | 0x80], &[66]).grants();
+        let g = sora(13, &[68 | 0x80, 66 | 0x80], &[]).grants();
         assert_eq!(g.iter().map(|a| a.id).collect::<Vec<_>>(), vec![67, 69]);
         assert!(sora(1, &[], &[]).grants().is_empty());
     }

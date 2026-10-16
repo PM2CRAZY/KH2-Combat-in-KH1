@@ -167,6 +167,47 @@ pub unsafe fn install() {
     super::hook::install(base + STATS_RVA, &STATS_PROLOGUE, stats as *const () as usize, &ORIG_STATS, "party stats");
 }
 
+/// KH1's level-up prompt boxes (`0x14283BD90`, Sora's first, `0x3A20` apart; the box count
+/// per party member at 16 bytes before) and their text (`0x142DC3068`: titles `0x20` apart,
+/// lines from `+0x70`), as the Archipelago KH1 client shows its items with them (gaithern's
+/// KH-1FM-AP-LUA, MIT, `show_prompt`). Shows one box in Sora's place; false while that box is
+/// in use (a level-up's own, say).
+const PROMPT_BOX_RVA: usize = 0x283BD90;
+const PROMPT_TEXT_RVA: usize = 0x2DC3068;
+const PROMPT_BOX_COLOUR_RVA: usize = 0x528710;
+const PROMPT_TEXT_COLOUR_RVA: usize = 0x528750;
+
+unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str) -> bool {
+    let bx = base + PROMPT_BOX_RVA;
+    let text = base + PROMPT_TEXT_RVA;
+    if !super::crash::readable(bx) || !super::crash::readable(bx + 0xB98) || !super::crash::readable(text + 0xB0) || rd::<i32>(bx) != 0 {
+        return false;
+    }
+    let put = |at: usize, s: &str| {
+        let mut b = encode(s);
+        b.truncate(0x1F);
+        b.push(0);
+        std::ptr::copy_nonoverlapping(b.as_ptr(), at as *mut u8, b.len());
+    };
+    put(text, title);
+    put(text + 0x70, line1);
+    put(text + 0x90, line2);
+    let w = |at: usize, v: u64| std::ptr::write_unaligned(at as *mut u64, v);
+    let wi = |at: usize, v: i32| std::ptr::write_unaligned(at as *mut i32, v);
+    wi(bx - 0x10, 1);
+    w(bx + 0x30, text as u64);
+    wi(bx + 0x18, 2);
+    w(bx + 0x20, (text + 0x70) as u64);
+    w(bx + 0x28, (text + 0x90) as u64);
+    wi(bx + 0x0C, 0);
+    std::ptr::write_unaligned((bx + 0xB80) as *mut f32, 1.0);
+    w(bx + 0xB88, (base + PROMPT_BOX_COLOUR_RVA) as u64);
+    w(bx + 0xB90, (base + PROMPT_TEXT_COLOUR_RVA) as u64);
+    wi(bx, 1);
+    log(&format!("prompt shown: {title} / {line1} / {line2}"));
+    true
+}
+
 /// Sora's save block, if it is there.
 unsafe fn save_block(base: usize) -> Option<usize> {
     let mut save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
@@ -237,6 +278,8 @@ pub struct Growth {
     no_room: Vec<u8>,
     /// Abilities given up before that no longer would be were given back (once a run).
     gave_back: bool,
+    /// "New ability" boxes waiting for KH1's prompt box to be free: (title, line, line).
+    prompts: std::collections::VecDeque<(String, String, String)>,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -245,7 +288,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default() }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -268,6 +311,13 @@ impl Growth {
                 Mode::Test => ch.abilities = growth::test(),
                 Mode::All => ch.abilities = growth::all(),
                 Mode::Kh1 => self.frames = 59,
+            }
+        }
+        if self.frames % 30 == 0 {
+            if let Some(p) = self.prompts.front().cloned() {
+                if prompt(base, &p.0, &p.1, &p.2) {
+                    self.prompts.pop_front();
+                }
             }
         }
         if self.frames % 60 != 0 {
@@ -318,6 +368,25 @@ impl Growth {
                     remember(&format!("level {}: spare shared abilities taken out (one of each counts): {}", now.level, names.join(", ")));
                     now.shared = kept;
                 }
+                // Quick Run and Aerial Dodge moved from the shared list into Sora's (the user: with
+                // AP); one that was on stays on.
+                for ab in growth::MENU.iter().filter(|a| a.list == growth::List::Sora) {
+                    let shared = save + 0x599;
+                    let bytes: Vec<u8> = (0..10).map(|i| rd::<u8>(shared + i)).collect();
+                    let Some(i) = bytes.iter().take_while(|b| **b != 0).position(|b| b & 0x7F == ab.id) else { continue };
+                    let on = bytes[i] & 0x80 == 0;
+                    let mut kept = bytes.clone();
+                    kept.remove(i);
+                    kept.push(0);
+                    for (k, b) in kept.iter().enumerate() {
+                        std::ptr::write((shared + k) as *mut u8, *b);
+                    }
+                    let moved = growth::has(&now.abilities, ab.id) || add(save + 0x44, 48, if on { ab.id } else { ab.id | 0x80 });
+                    log(&format!("{} moved from the shared abilities to Sora's ({}){}", ab.name, if on { "on" } else { "off" }, if moved { "" } else { ": his list is full, learned again when there's room" }));
+                    if let Some(again) = Self::kh1(base) {
+                        now = again;
+                    }
+                }
                 for ab in now.grants() {
                     let (list, len, byte) = match ab.list {
                         growth::List::Shared => (save + 0x599, 10, ab.id),
@@ -343,6 +412,9 @@ impl Growth {
                     }
                     if done {
                         log(&format!("Sora learns {} (level {}, {} AP)", ab.name, ab.level, ab.ap));
+                        // The user: the game should say so.
+                        let how = if ab.ap > 0 { format!("Equip it in Abilities: {} AP", ab.ap) } else { "Now in Abilities".to_string() };
+                        self.prompts.push_back(("New Ability".to_string(), ab.name.to_string(), how));
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
                         log(&format!("Sora can't learn {} (level {}): his ability list is full (48, KH1's most)", ab.name, ab.level));
