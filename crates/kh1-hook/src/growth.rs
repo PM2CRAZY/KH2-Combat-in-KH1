@@ -433,10 +433,22 @@ impl Kh1Sora {
     }
 }
 
+/// KH1 abilities (shown by their KH2 names) also learned at a level, earlier than KH1's own
+/// level-up gives them (the user: Aerial Sweep at about 28; KH1's Dream Shield gives it at 84).
+pub const LEVEL_GIFTS: [(u8, u8); 1] = [(28, kh1::AERIAL_SWEEP)];
+
 impl Kh1Sora {
-    /// The bosses beaten whose gift Sora doesn't have yet.
-    pub fn boss_gifts(&self) -> Vec<BossGift> {
-        BOSS_GIFTS.iter().filter(|g| beaten(&self.progress, g) && !has(&self.abilities, g.ability)).copied().collect()
+    /// The bosses beaten (and levels reached, `LEVEL_GIFTS`) whose gift Sora doesn't have yet:
+    /// (why, ability).
+    pub fn boss_gifts(&self) -> Vec<(String, u8)> {
+        let mut out: Vec<(String, u8)> = BOSS_GIFTS.iter().filter(|g| beaten(&self.progress, g)).map(|g| (format!("{} beaten", g.boss), g.ability)).collect();
+        out.extend(LEVEL_GIFTS.iter().filter(|(l, _)| self.level >= *l).map(|(l, id)| (format!("level {l}"), *id)));
+        let mut seen = Vec::new();
+        out.retain(|(_, id)| !has(&self.abilities, *id) && !seen.contains(id) && {
+            seen.push(*id);
+            true
+        });
+        out
     }
 }
 

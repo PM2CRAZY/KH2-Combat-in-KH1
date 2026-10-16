@@ -471,9 +471,9 @@ impl Growth {
                 if let Some(again) = Self::kh1(base) {
                     now = again;
                 }
-                for g in now.boss_gifts() {
+                for (why, ability) in now.boss_gifts() {
                     let list = save + 0x44;
-                    let byte = g.ability | 0x80;
+                    let byte = ability | 0x80;
                     let mut done = add(list, 48, byte);
                     if !done {
                         let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
@@ -486,16 +486,16 @@ impl Growth {
                                 std::ptr::write((list + k) as *mut u8, *b);
                             }
                             done = add(list, 48, byte);
-                            remember(&format!("level {}: removed {} (id {}) for {}", now.level, growth::name(gone), gone & 0x7F, growth::name(g.ability)));
+                            remember(&format!("level {}: removed {} (id {}) for {}", now.level, growth::name(gone), gone & 0x7F, growth::name(ability)));
                         }
                     }
-                    let name = growth::name(g.ability);
+                    let name = growth::name(ability);
                     if done {
-                        log(&format!("{} beaten: Sora learns {name}", g.boss));
+                        log(&format!("{why}: Sora learns {name}"));
                         self.prompts.push_back(("New Ability".to_string(), name, String::new()));
-                    } else if !self.no_room.contains(&g.ability) {
-                        self.no_room.push(g.ability);
-                        log(&format!("{} beaten, but Sora can't learn {name}: his ability list is full", g.boss));
+                    } else if !self.no_room.contains(&ability) {
+                        self.no_room.push(ability);
+                        log(&format!("{why}, but Sora can't learn {name}: his ability list is full"));
                     }
                 }
             } else {

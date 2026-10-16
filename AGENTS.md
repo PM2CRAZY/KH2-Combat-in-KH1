@@ -1062,3 +1062,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   it; off until equipped, with a "New Ability" box. Upper Slash, Aerial Dive and Magnet Burst
   are no longer learned by level (`MenuAbility::level` = `BOSS`); their AP joins `bonus_ap` once
   the boss is beaten.
+
+### 2026-10-16: Stage 83 (Aerial Sweep at level 28)
+- `growth::LEVEL_GIFTS`: KH1's Aerial Sweep also at level 28 (the user; KH1's Dream Shield gives
+  it at 84), unless Clayton already gave it. Guard Break stays at KH1's level 18 (the user).

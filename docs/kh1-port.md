@@ -106,6 +106,9 @@ Ability" box):
 | Captain Hook | Magnet Burst | 3 |
 | Cerberus | Aerial Dive | 2 |
 
+Aerial Sweep also comes at level 28 if Clayton hasn't given it yet (KH1's Dream Shield gives it
+only at 84). Guard Break stays at KH1's own level 18 (Dream Shield).
+
 Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the KH2
 abilities take none of the AP KH1 gives him: +2 at level 4, +32 in all by level 50 (KH1's
 cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while the game runs.
