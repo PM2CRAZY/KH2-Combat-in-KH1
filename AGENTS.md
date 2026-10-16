@@ -1350,3 +1350,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (Attack / Magic / Aerial Dodge, in the air), KH2's downward displacement is dropped (rises
   kept); the flight takes him again when the combo ends.
 
+### 2026-10-16: Stage 122 (ladders caught on the way up)
+- The user: jumping into a ladder didn't put him on it at once. KH1's jump step `0x1402ADA90`
+  tries its grabs every frame, rising too; it skips them only with flag 0x10000 for 15 frames
+  (`0x1404308B0`) after jumping off something, or while `+0x3B0 <= +0x3B8 + 6` when `+0x3B8`
+  is set. Our "rising under 2 a frame" limit (stage 81) is gone.
+

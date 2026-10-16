@@ -668,10 +668,12 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH1's own air moves (its jump's input step `0x1402ADA90` tries them in this order):
     // vines and climbable walls (state 10), ledges (13), bars (`0x1402C7E00`), objects to
     // hang from, and water to swim in (17). Tried while KH2 has him falling, the stick held.
-    // As KH1's jump step tries them (`0x1402ADA90`): not while rising fast (the top of the jump
-    // counts), the stick held or not (KH1 passes its input either way; the user: ladders and
-    // poles were hit or miss from a jump).
-    if settings.grabs && d.character.airborne() && out.displacement[1] < 2.0 && matches!(out.state, StateName::Air | StateName::Jump) {
+    // As KH1's jump step tries them (`0x1402ADA90`): every frame of the jump, rising too (KH1
+    // skips them only in the 15 frames after jumping off something, flag 0x10000, a jump KH1
+    // has itself; the user: jumping into a ladder didn't catch it until the top of the jump),
+    // the stick held or not (KH1 passes its input either way; the user: ladders and poles were
+    // hit or miss from a jump).
+    if settings.grabs && d.character.airborne() && matches!(out.state, StateName::Air | StateName::Jump) {
         // KH1 tries them in its jump / fall states, whose collision (`0x140297F20`: flag 1)
         // finds the contacts they read; ours ran in its ground state. So: KH1's fall state (3,
         // which has these checks too) and a standing-still move there to refresh the contacts.
