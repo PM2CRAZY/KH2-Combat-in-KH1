@@ -921,3 +921,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   from where a fall started, and each grounded frame a step down; he lands / stands on the top
   and `+0x398` is set (`0x140295C60`). The mover in our states never found them.
 
+
+### 2026-10-16: Stage 61 (aim only at KH1's target)
+- KH2's controller gets only KH1's current target (R1 lock, state 3, or the small cursor's soft
+  target, states 1/2/4) in its target list, so swings neither turn toward nor home in on any
+  other enemy or lock point; with none, a swing goes where the stick points. Ini `auto_aim = on`
+  brings back KH2's own nearest-in-reach pick. The user: the automatic aim was too heavy.

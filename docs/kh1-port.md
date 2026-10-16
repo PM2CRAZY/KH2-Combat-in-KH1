@@ -34,6 +34,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `flip_weapons` | KH1 item ids, `0x53` (default), `none` | Weapons KH2's grip holds the wrong way round, turned half round in his hand (the Dream Shield). |
 | `fx_test` | `off` (default), `on` | Starts Magnet Burst's effect at Sora every 4 seconds, to check the effect renderer. |
 | `bonus_ap` | `on` (default), `off` | With `abilities = kh1`: Sora's max AP grows by the AP of each KH2 ability he learns (below). |
+| `auto_aim` | `off` (default), `on` | Off: KH2's swings turn toward and home in on only KH1's own target, the R1 lock or the small cursor's soft target. On: KH2's own pick, the nearest enemy in reach. |
 
 ## What is KH1's and what is KH2's
 

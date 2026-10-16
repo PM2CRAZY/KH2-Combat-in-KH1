@@ -34,6 +34,9 @@ kh2_volume = 1.0\r\n\
 kh2_voice = off\r\n\
 ; bonus_ap: on = (abilities = kh1) Sora's max AP grows by the AP of each KH2 ability he learns\r\n\
 bonus_ap = on\r\n\
+; auto_aim: off = swings turn toward only KH1's target (the R1 lock or the small cursor);\r\n\
+; on = KH2's own pick, the nearest enemy in reach\r\n\
+auto_aim = off\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
@@ -57,6 +60,7 @@ pub struct Settings {
     pub kh2_volume: f32,
     pub kh2_voice: bool,
     pub bonus_ap: bool,
+    pub auto_aim: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
@@ -103,6 +107,7 @@ pub fn get() -> &'static Settings {
             kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
             kh2_voice: on(&text, "kh2_voice", "on", false),
             bonus_ap: on(&text, "bonus_ap", "on", true),
+            auto_aim: on(&text, "auto_aim", "on", false),
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {
                 Some("off") | Some("0") | Some("no") => None,
                 Some("all") => Some(None),

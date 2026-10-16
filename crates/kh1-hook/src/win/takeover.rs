@@ -380,6 +380,11 @@ unsafe fn takeover(actor: usize) -> bool {
         log(&format!("lock-on: {lock:?}"));
     }
     d.character.set_lock(lock);
+    // KH2 aims a swing at any enemy in reach; here only at KH1's own target, the R1 lock or the
+    // small cursor's soft target (the user: Sora swung toward points he wasn't targeting).
+    if !super::settings::get().auto_aim {
+        targets.retain(|t| Some(t.id) == lock);
+    }
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     let out = d.character.step(&input, &env);
 
