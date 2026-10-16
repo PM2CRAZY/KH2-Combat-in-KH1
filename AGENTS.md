@@ -1305,3 +1305,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   pass tests every part), and logs big targets (more than 8 parts: parts hittable, root
   distance) for the next look.
 
+### 2026-10-16: Stage 116 (big targets aren't pulled)
+- The user: Aerial Finish (and likely Magnet) on Oogie's Manor's blobs pulled the whole house
+  into the floor: our pulls push the whole actor (`+0x120`). A body is `fixed` (more than 8
+  parts, root beyond 1500, taller than 600 or radius over 300) and the Magnet pull and the
+  Aerial Finish hold skip it. Stage 115 and 116 shipped together.
+

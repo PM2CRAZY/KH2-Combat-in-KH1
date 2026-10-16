@@ -240,6 +240,10 @@ struct Body {
     target: TargetInfo,
     /// Its hit parts' top above its root.
     tall: f32,
+    /// Too big to move: many parts, or its root far beyond its near parts (the user: Aerial
+    /// Finish on Oogie's Manor's blobs pulled the whole house into the floor). Our pulls
+    /// (Magnet, the Aerial Finish hold) leave it be.
+    fixed: bool,
 }
 
 /// KH1's lock point `(actor, point, out) -> radius` (`docs/kh1-lockon.md`).
@@ -311,16 +315,18 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
         if parts.is_empty() || !parts.iter().any(|q| near([q.shape.center[0], 0.0, q.shape.center[2]])) {
             continue;
         }
-        if count > 8 {
+        let tall = (top - feet[1]).max(radius);
+        let root_far = (p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2) > NEAR * NEAR;
+        let fixed = count > 8 || root_far || tall > 600.0 || radius > 300.0;
+        if fixed {
             static SEEN: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
             if let Ok(mut v) = SEEN.lock() {
                 if !v.contains(&this) && v.len() < 20 {
                     v.push(this);
-                    log(&format!("big target {this:#x} (object {}): {} of {count} parts hittable, root {:.0} away", super::probe::object_id(this), parts.len(), ((p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2)).sqrt()));
+                    log(&format!("big target {this:#x} (object {}, not pulled): {} of {count} parts hittable, {tall:.0} tall, radius {radius:.0}, root {:.0} away", super::probe::object_id(this), parts.len(), ((p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2)).sqrt()));
                 }
             }
         }
-        let tall = (top - feet[1]).max(radius);
         let mut target = TargetInfo { id: this as u32, pos: feet, radius, height: tall };
         // KH2's combo table measures a target by its target shape (`0x1403C8EE0`: its point
         // and size), not its feet and full height; KH1's lock point is that shape (the user:
@@ -333,7 +339,7 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
             target.pos = [v[0], -v[1], v[2]];
             target.height = r.max(10.0);
         }
-        out.push(Body { actor: this, parts, target, tall });
+        out.push(Body { actor: this, parts, target, tall, fixed });
     }
     out
 }
@@ -738,7 +744,7 @@ impl Strikes {
                 centres.entry(h.swing).or_insert(c.center);
             }
         }
-        let alive: HashMap<usize, f32> = self.bodies.iter().map(|b| (b.actor, b.tall)).collect();
+        let alive: HashMap<usize, f32> = self.bodies.iter().filter(|b| !b.fixed).map(|b| (b.actor, b.tall)).collect();
         self.pulled.retain(|a, (swing, _, _)| centres.contains_key(swing) && alive.contains_key(a));
         for (&actor, &(swing, radius, swirl)) in &self.pulled {
             let c = centres[&swing];
@@ -772,7 +778,7 @@ impl Strikes {
         if self.held.is_empty() {
             return;
         }
-        let alive: HashSet<usize> = self.bodies.iter().map(|b| b.actor).collect();
+        let alive: HashSet<usize> = self.bodies.iter().filter(|b| !b.fixed).map(|b| b.actor).collect();
         self.held.retain(|a, left| {
             *left = left.saturating_sub(1);
             *left > 0 && alive.contains(a)
