@@ -843,7 +843,15 @@ impl Strikes {
                     continue;
                 }
                 character.register_hit();
-                let finisher = character_core::reaction::category(row.enemy_reaction) == 4;
+                // A blow that throws (KH1's finisher row, a launch): not one that holds the foe
+                // up beside Sora, as Aerial Finish's spinning hits do (reaction 9, up 5..12,
+                // sideways -1 / -10: toward him). KH1's finisher row sent the foe ~250 away on
+                // the first, and the rest missed (the user: pushed out of the finisher).
+                let blow = character_core::reaction::category(row.enemy_reaction) == 4;
+                let k1 = if row.knockback_1 == i16::MAX { 0 } else { row.knockback_1 };
+                let k2 = row.knockback_2;
+                let throws = (k1 == 0 && k2 == 0) || k2 >= 10 || k1 >= 30;
+                let finisher = blow && throws;
                 let Some(rows) = self.rows else { continue };
                 let kh1 = rows[(air as usize) * 2 + finisher as usize];
                 // KH2's launch, its own height and speed (the user: Upper Slash didn't send them

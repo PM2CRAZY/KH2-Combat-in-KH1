@@ -1204,3 +1204,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   is read once per frame at the start of `takeover` (`FROZEN_NOW`), before any early return.
   The hold / act lines now carry his state, slot, flags, motion and the object he stands on.
 
+### 2026-10-16: Stage 103 (Aerial Finish holds)
+- The user: enemies were pushed out of the air finisher. Aerial Finish's spinning hits
+  (ATKP 915 / 916 / 917: reaction 9, up 10 / 5 / 12, sideways -1 / -1 / -10) are blows that
+  hold the foe up beside Sora; landed with KH1's air finisher row they sent it ~250 away on the
+  first hit (the log: 915 at z -1836, 916 at -2089) and the rest missed. A blow takes KH1's
+  finisher row (and a KH2 launch) only when it throws: sideways >= 10 or up >= 30 (or the
+  default blow); the others land with the plain row. The last hit (927: 3 / 45) still throws.
+
