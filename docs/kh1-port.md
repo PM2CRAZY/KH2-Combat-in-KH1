@@ -59,8 +59,8 @@ the menu, e.g. Hurricane Blast is listed as Explosion):
 | KH1 | KH2 |
 |---|---|
 | High Jump | High Jump LV1 (higher levels with Sora's level, below) |
-| Glide | Glide LV3 |
-| Superglide | Glide MAX |
+| Glide | Glide LV1, LV2 at level 40, LV3 at 52; MAX once Chernabog is beaten |
+| Superglide | none: turned into Glide (its Chernabog reward reads "Glide MAX") |
 | Guard | Guard |
 | Dodge Roll | Dodge Roll LV1 (higher levels with Sora's level, below) |
 | Combo Plus, Air Combo Plus (each) | Combo Plus, Air Combo Plus (each) |
@@ -117,8 +117,10 @@ cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while t
 The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60; its
 menu name shows the level ("Dodge Roll LV2"), with an "Ability Up" box each time.
 High Jump reaches LV2 / LV3 / MAX at levels 30 / 44 / 58, and Aerial Dodge at 40 / 52 / 64,
-the same way (name with its level, "Ability Up" box).
-Sora keeps one High Jump, one Glide and one Superglide: spare copies (a randomizer can give
+the same way (name with its level, "Ability Up" box), and Glide at 40 / 52 to LV3, MAX for
+beating Chernabog (End of the World progress 0x33, KH1's Superglide reward, renamed "Glide
+MAX"; Superglide itself is turned into Glide or taken out).
+Sora keeps one High Jump and one Glide: spare copies (a randomizer can give
 more) are taken out of the shared list when the game loads or he gets one, and noted in
 `kh1-kh2-removed.txt`.
 

@@ -95,6 +95,11 @@ static DR_HANDLE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
 static HJ_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static HJ_HANDLE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
 static AD_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Glide's (KH1's, a handle like High Jump's), and Superglide's, named "Glide MAX": KH1's own
+/// reward for Chernabog says what it is here (the user: no Superglide, Glide MAX instead).
+static GL_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static GL_HANDLE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+static SG_HANDLE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
 
 fn write_name(slot: &std::sync::atomic::AtomicUsize, name: String) {
     let p = slot.load(std::sync::atomic::Ordering::Relaxed);
@@ -110,6 +115,11 @@ fn write_name(slot: &std::sync::atomic::AtomicUsize, name: String) {
 /// Writes High Jump's level into its menu name.
 pub fn set_high_jump_name(level: u8) {
     write_name(&HJ_NAME, growth::high_jump_name(level));
+}
+
+/// Writes Glide's level into its menu name.
+pub fn set_glide_name(level: u8) {
+    write_name(&GL_NAME, growth::glide_name(level));
 }
 
 /// Writes Aerial Dodge's level into its menu name.
@@ -208,6 +218,19 @@ pub unsafe fn ensure_table(base: usize) {
         to_handle(buf)
     });
     std::ptr::write_unaligned((ours + (growth::kh1::HIGH_JUMP as usize - 1) * 12 + 4) as *mut u32, hj);
+    // And Glide, and Superglide as "Glide MAX" (its name and help).
+    let gl = *GL_HANDLE.get_or_init(|| {
+        let buf = Box::leak(vec![0u8; QR_NAME_LEN].into_boxed_slice()).as_mut_ptr() as usize;
+        GL_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
+        set_glide_name(1);
+        to_handle(buf)
+    });
+    std::ptr::write_unaligned((ours + (growth::kh1::GLIDE as usize - 1) * 12 + 4) as *mut u32, gl);
+    let sg = *SG_HANDLE.get_or_init(|| {
+        let name = Box::leak(encode(&growth::glide_name(4)).into_boxed_slice()).as_ptr() as usize;
+        to_handle(name)
+    });
+    std::ptr::write_unaligned((ours + (growth::kh1::SUPERGLIDE as usize - 1) * 12 + 4) as *mut u32, sg);
     std::ptr::write_unaligned((base + TABLE_PTR_RVA) as *mut u64, ours as u64);
     static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if LOGGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 6 {
@@ -393,6 +416,7 @@ pub struct Growth {
     dr_level: Option<u8>,
     hj_level: Option<u8>,
     ad_level: Option<u8>,
+    gl_level: Option<u8>,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -401,7 +425,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None, hj_level: None, ad_level: None }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None, hj_level: None, ad_level: None, gl_level: None }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -477,7 +501,7 @@ impl Growth {
                         now = again;
                     }
                 }
-                // One High Jump, one Glide, one Superglide (the user): spares go.
+                // One High Jump, one Glide (the user): spares go.
                 let (kept, spare) = growth::one_only(&now.shared);
                 if !spare.is_empty() {
                     for (k, b) in kept.iter().enumerate() {
@@ -487,6 +511,31 @@ impl Growth {
                     log(&format!("spare shared abilities taken out (one of each counts): {}", names.join(", ")));
                     remember(&format!("level {}: spare shared abilities taken out (one of each counts): {}", now.level, names.join(", ")));
                     now.shared = kept;
+                }
+                // No Superglide (the user): Glide grows to MAX for Chernabog instead. KH1's Superglide
+                // becomes Glide (or goes, with Glide there), on or off as it was.
+                if growth::has(&now.shared, growth::kh1::SUPERGLIDE) {
+                    let shared = save + 0x599;
+                    let bytes: Vec<u8> = (0..10).map(|i| rd::<u8>(shared + i)).collect();
+                    let end = bytes.iter().position(|b| *b == 0).unwrap_or(10);
+                    let has_glide = growth::has(&bytes, growth::kh1::GLIDE);
+                    let mut kept = Vec::with_capacity(10);
+                    for b in &bytes[..end] {
+                        if b & 0x7F != growth::kh1::SUPERGLIDE {
+                            kept.push(*b);
+                        } else if !has_glide && !growth::has(&kept, growth::kh1::GLIDE) {
+                            kept.push((b & 0x80) | growth::kh1::GLIDE);
+                        }
+                    }
+                    kept.resize(10, 0);
+                    for (k, b) in kept.iter().enumerate() {
+                        std::ptr::write((shared + k) as *mut u8, *b);
+                    }
+                    log(&format!("Superglide {} (Glide grows to MAX for Chernabog instead)", if has_glide { "taken out" } else { "turned into Glide" }));
+                    remember(&format!("level {}: Superglide {}", now.level, if has_glide { "taken out" } else { "turned into Glide" }));
+                    if let Some(again) = Self::kh1(base) {
+                        now = again;
+                    }
                 }
                 // Quick Run and Aerial Dodge moved from the shared list into Sora's (the user: with
                 // AP); one that was on stays on.
@@ -645,6 +694,22 @@ impl Growth {
                     }
                 }
                 self.hj_level = Some(l);
+            }
+            let l = if growth::has(&now.shared, growth::kh1::GLIDE) || growth::has(&now.shared, growth::kh1::SUPERGLIDE) { growth::glide_level(now.level, &now.progress) } else { 0 };
+            if self.gl_level != Some(l) {
+                if l > 0 {
+                    set_glide_name(l);
+                }
+                if let Some(old) = self.gl_level {
+                    if old > 0 && l > old {
+                        log(&format!("Glide grows: {}", growth::glide_name(l)));
+                        // (MAX is Chernabog's: KH1's own Superglide box says "Glide MAX".)
+                        if l < 4 {
+                            self.prompts.push_back(("Ability Up".to_string(), growth::glide_name(l), String::new()));
+                        }
+                    }
+                }
+                self.gl_level = Some(l);
             }
             let l = if growth::has(&now.abilities, AERIAL_DODGE) { growth::aerial_dodge_level(now.level) } else { 0 };
             if self.ad_level != Some(l) {

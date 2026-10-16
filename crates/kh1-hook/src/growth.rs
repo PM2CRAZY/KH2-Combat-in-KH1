@@ -11,7 +11,9 @@
 //! Drive, 57 Stun Impact, 58 Gravity Break.
 //!
 //! - What KH1 has, KH2 takes from it while equipped (the user's levels): High Jump is High
-//!   Jump LV3, Glide is Glide LV3, Superglide Glide MAX (Sora keeps one of each: `one_only`),
+//!   Jump LV3, Glide grows with Sora (LV2 at 40, LV3 at 52) and is MAX once Chernabog falls,
+//!   in place of KH1's Superglide, which is taken out (`GLIDE_LEVELS`, `CHERNABOG`; Sora keeps
+//!   one of each: `one_only`),
 //!   Guard, Dodge Roll, each Combo Plus / Air Combo Plus, and
 //!   KH1's combo modifiers as KH2's nearest one (Vortex: Flash Step, Aerial Sweep, Counterattack:
 //!   Counterguard, Blitz: Finishing Leap, Slapshot, Sliding Dash: Slide Dash, Hurricane Blast:
@@ -224,6 +226,27 @@ pub const HIGH_JUMP_LEVELS: [u8; 3] = [30, 44, 58];
 /// (the user: its growth from 40).
 pub const AERIAL_DODGE_LEVELS: [u8; 3] = [40, 52, 64];
 
+/// Glide's levels past LV1 (LV1 from KH1's Glide, Neverland): LV2 at 40, LV3 at 52; MAX only for
+/// beating Chernabog (the user: no Superglide; Glide grows from 40 to LV3, Chernabog gives MAX).
+pub const GLIDE_LEVELS: [u8; 2] = [40, 52];
+
+/// Chernabog beaten: End of the World's progress (index 11) at 0x33, where KH1 gives Superglide
+/// (as the Archipelago KH1 client reads it, gaithern's KH-1FM-AP-LUA, MIT).
+pub const CHERNABOG: BossGift = BossGift { boss: "Chernabog", world: 11, progress: 0x33, ability: kh1::GLIDE };
+
+/// Glide's level at Sora's level, once he has it: MAX once Chernabog is beaten.
+pub fn glide_level(level: u8, progress: &[u8]) -> u8 {
+    if beaten(progress, &CHERNABOG) {
+        4
+    } else {
+        1 + GLIDE_LEVELS.iter().filter(|at| level >= **at).count() as u8
+    }
+}
+
+pub fn glide_name(l: u8) -> String {
+    level_name("Glide", l)
+}
+
 fn grown(level: u8, steps: &[u8; 3]) -> u8 {
     1 + steps.iter().filter(|at| level >= **at).count() as u8
 }
@@ -435,15 +458,13 @@ impl Kh1Sora {
         let a = &self.abilities;
         let s = &self.shared;
         let mut out = Abilities { guard: false, one_swing_on_miss: true, ..Abilities::default() };
-        // (The user: one High Jump, growing with Sora to MAX; one Glide, LV3, and one
-        // Superglide, MAX.)
+        // (The user: one High Jump, growing with Sora to MAX; one Glide, growing to LV3, MAX for
+        // Chernabog; no Superglide, which `win/menu.rs` turns into Glide.)
         if equipped(s, kh1::HIGH_JUMP) > 0 {
             out.high_jump = high_jump_level(self.level);
         }
-        if equipped(s, kh1::SUPERGLIDE) > 0 {
-            out.glide = 4;
-        } else if equipped(s, kh1::GLIDE) > 0 {
-            out.glide = 3;
+        if equipped(s, kh1::GLIDE) > 0 || equipped(s, kh1::SUPERGLIDE) > 0 {
+            out.glide = glide_level(self.level, &self.progress);
         }
         out.guard = equipped(a, kh1::GUARD) > 0;
         if out.guard {
@@ -654,9 +675,14 @@ mod tests {
         )
         .kh2();
         assert!(a.guard);
-        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 1, 4));
-        let g = sora(1, &[], &[kh1::GLIDE]).kh2();
-        assert_eq!(g.glide, 3);
+        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 1, 1));
+        // Glide grows with Sora (LV2 at 40, LV3 at 52), MAX once Chernabog falls.
+        assert_eq!(sora(39, &[], &[kh1::GLIDE]).kh2().glide, 1);
+        assert_eq!(sora(40, &[], &[kh1::GLIDE]).kh2().glide, 2);
+        assert_eq!(sora(99, &[], &[kh1::GLIDE]).kh2().glide, 3);
+        let mut c = sora(1, &[], &[kh1::GLIDE]);
+        c.progress[11] = 0x33;
+        assert_eq!(c.kh2().glide, 4);
         assert!(a.equipped.contains(&kh2::FLASH_STEP) && !a.equipped.contains(&kh2::SLAPSHOT));
         assert!(a.equipped.contains(&kh2::GUARD));
     }

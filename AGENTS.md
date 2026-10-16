@@ -1371,3 +1371,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - No landing: in a flight combo the fall stops 15 above the floor unless Square is held; the
   flight takes him again from 5 up.
 
+### 2026-10-16: Stage 124 (no Superglide; Glide grows)
+- The user: remove Superglide; Glide levels with Sora, LV2 at 40 up to LV3; Chernabog gives
+  Glide MAX instead of Superglide. `growth::GLIDE_LEVELS = [40, 52]`, `glide_level(level,
+  progress)` (4 once `CHERNABOG`, End of the World index 11 at 0x33, the AP client's
+  Superglide check); `win/menu.rs` turns Superglide in the shared list into Glide (or drops it
+  beside one), names Glide with its level and Superglide's table entry "Glide MAX" (KH1's own
+  Chernabog reward box), and an "Ability Up" box for LV2 / LV3.
+
