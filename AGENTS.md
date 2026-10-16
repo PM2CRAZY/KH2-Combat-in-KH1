@@ -1077,3 +1077,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - KH1's knock-back hits (kind 4) are KH2 blows now, as its launches (5) were; every 4 was a
   flinch, so Sora was hardly ever knocked into the air (the user: Aerial Recovery never came
   out). Aerial Recovery (jump) also works from an air flinch (hit while airborne).
+
+### 2026-10-16: Stage 86 (KH2's Square moves)
+- KH2's Square combo moves are kind-0 PTYA rows, never picked by `select`. The action button in
+  a combo or finisher window now tries, in order, Finishing Leap (row 37, ability 95: the
+  combo's end), Upper Slash (12, 18) on the ground and Horizontal Slash (38, 99) in the air,
+  as KH2's help texts describe them (the user: Horizontal Slash didn't work). Menu help texts
+  updated.

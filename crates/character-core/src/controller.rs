@@ -290,9 +290,9 @@ const RECOVERY_AFTER: u32 = 6;
 /// handler does (`current motion == 0x2A` → row 0x27). Retaliating Slash: attack while
 /// launched (ours; the exe checks it in a separate routine whose row id comes in a register).
 const COUNTERGUARD_ROW: u8 = 39;
-/// Upper Slash (ability 18): the action button during a ground combo.
-const UPPER_SLASH_ROW: u8 = 12;
-const UPPER_SLASH_ABILITY: u16 = 18;
+/// KH2's Square moves in a combo, in the order tried: (PTYA row, ability, in the air).
+/// Finishing Leap (row 37, ability 95), Upper Slash (12, 18), Horizontal Slash (38, 99).
+const SQUARE_MOVES: [(u8, u16, bool); 3] = [(37, 95, false), (12, 18, false), (38, 99, true)];
 const RETALIATING_SLASH_ROW: u8 = 40;
 /// Hit-back starting speed per unit of distance (exe: 0.1).
 const HIT_BACK_SPEED: f32 = 0.1;
@@ -1576,16 +1576,24 @@ impl Character {
                     }
                     self.buffered_attack = false;
                 }
-                // Upper Slash: the action button (Square) during a ground combo knocks the target
-                // into the air (KH2's help: "Knocks a target into the air during a combo"; its
-                // PTYA row 12 is kind 0, reached only this way; the user: it never came out).
-                if input.action.pressed && !self.airborne && (combo_open || finisher_open) && self.abilities.equipped.contains(&UPPER_SLASH_ABILITY) {
-                    self.mode = Mode::Action(act.clone());
-                    self.forced_row = Some(UPPER_SLASH_ROW);
-                    if self.try_attack(input, env) {
-                        return true;
+                // The action button (Square) in a combo: KH2's Square moves, whose PTYA rows are
+                // kind 0 (reached only this way; the user: Upper Slash and Horizontal Slash never
+                // came out). KH2's help: Finishing Leap "at the end of a combo with Square",
+                // Upper Slash "knocks a target into the air during a combo", Horizontal Slash
+                // "during a midair combo with Square". The first whose ability is equipped and
+                // whose row's conditions pass (a finisher's: the combo's end) is taken.
+                if input.action.pressed && (combo_open || finisher_open) {
+                    for (row, ability, air) in SQUARE_MOVES {
+                        if air != self.airborne || !self.abilities.equipped.contains(&ability) {
+                            continue;
+                        }
+                        self.mode = Mode::Action(act.clone());
+                        self.forced_row = Some(row);
+                        if self.try_attack(input, env) {
+                            return true;
+                        }
+                        self.forced_row = None;
                     }
-                    self.forced_row = None;
                 }
             }
         }

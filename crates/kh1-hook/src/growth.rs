@@ -165,7 +165,7 @@ pub const MENU: [MenuAbility; 12] = [
     m(67, "Aerial Dodge", "Leap once more in midair.", 3, 13, List::Sora, kh1::DODGE_ROLL, Effect::AerialDodge),
     m(68, "Aerial Recovery", "Right yourself in midair after being knocked back.", 2, 4, List::Sora, kh1::COMBO_PLUS, Effect::AerialRecovery),
     m(69, "Dodge Slash", "Ground combo: strike nearby foes all around.", 2, 10, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::DODGE_SLASH)),
-    m(70, "Horizontal Slash", "Air combo: slash foes while spinning in midair.", 2, 16, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH)),
+    m(70, "Horizontal Slash", "Air combo: a powerful side slash with Square.", 2, 16, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH)),
     m(71, "Negative Combo", "Shortens combos by one attack.", 2, 20, List::Sora, kh1::COMBO_PLUS, Effect::NegativeCombo),
     m(72, "Aerial Spiral", "Air combo: spin into foes in midair.", 2, 25, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_SPIRAL)),
     m(73, "Upper Slash", "Combo: knock a foe into the air with Square.", 4, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::UPPER_SLASH)),
@@ -267,7 +267,7 @@ pub const MAKE_ROOM: [u8; 15] = [
 pub const RENAMED: [(u8, &str, &str); 8] = [
     (kh1::VORTEX, "Flash Step", "Ground combo: dash to a distant foe and strike."),
     (kh1::COUNTERATTACK, "Counterguard", "Counter: strike right after guarding."),
-    (kh1::BLITZ, "Finishing Leap", "Finisher: leap and slam the ground."),
+    (kh1::BLITZ, "Finishing Leap", "Finisher: end a combo with Square to leap and slam."),
     (kh1::SLIDING_DASH, "Slide Dash", "Ground combo: dash at a distant foe."),
     (kh1::HURRICANE_BLAST, "Explosion", "Finisher: unleash a blast around you."),
     (kh1::RIPPLE_DRIVE, "Vicinity Break", "Ground combo: hit foes all around."),
