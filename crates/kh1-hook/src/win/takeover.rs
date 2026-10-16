@@ -48,6 +48,15 @@ const SET_STATE_RVA: usize = 0x2AF7D0;
 const FLIGHT_STATE: i32 = 8;
 /// KH1's flight starts above this height over the floor (`0x1404308D4`).
 const FLIGHT_ABOVE: f32 = 100.0;
+/// Attack pressed while KH1 flies him (`combat::exec`): KH2 takes him in the air for its
+/// aerial combo (the user: KH2's aerial attacks while flying).
+pub static FLY_ATTACK: AtomicBool = AtomicBool::new(false);
+/// That press, for KH2's first frame (after its fresh start drops older presses).
+static FLY_PRESS: AtomicBool = AtomicBool::new(false);
+/// Flying when KH2 took him: back into flight after the combo at any height (down to
+/// `FLEW_ABOVE`), until he lands.
+static FLEW: AtomicBool = AtomicBool::new(false);
+const FLEW_ABOVE: f32 = 20.0;
 const LOCK_STATE_RVA: usize = 0x2DB3F10;
 const LOCK_TARGET_RVA: usize = 0x2DB3F18;
 /// A lock point's world position (`0x1402AE330 (actor, point, out) -> radius`, KH1 y-down).
@@ -306,18 +315,32 @@ unsafe fn takeover(actor: usize) -> bool {
     // Flight (the user: Sora couldn't fly in Neverland): KH2 has his jumps, so KH1's fall state,
     // where flight starts, never ran. KH2's jump past its top, as high as KH1 wants, starts
     // KH1's own flight, which then has him (state 8) until he lands.
+    let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+    let fly_attack = FLY_ATTACK.swap(false, Ordering::Relaxed);
+    let flying = rd::<i32>(actor + 0x70) == FLIGHT_STATE;
+    if fly_attack && flying {
+        // Out of KH1's flight (its exit step runs) to the ground state KH2 keeps him in; KH2
+        // starts in the air with the press.
+        set_state(actor, 0);
+        FLEW.store(true, Ordering::Relaxed);
+        FLY_PRESS.store(true, Ordering::Relaxed);
+        log(&format!("flight: Attack, KH2 takes him for an aerial combo ({:.0} above the floor)", rd::<f32>(actor + 0x3D4)));
+    }
     if KH2_AIR.load(Ordering::Relaxed) && rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 && matches!(rd::<i32>(actor + 0x70), 0 | 1) {
-        let falling = DRIVER.try_lock().ok().and_then(|d| d.as_ref().and_then(|d| d.last_out.as_ref().map(|o| o.displacement[1] <= 0.0))).unwrap_or(false);
+        // Coming down out of a jump or a finished air move (not mid-combo: KH2's aerial
+        // attacks sink a little).
+        let falling = DRIVER.try_lock().ok().and_then(|d| d.as_ref().and_then(|d| d.last_out.as_ref().map(|o| o.displacement[1] <= 0.0 && matches!(d.character.state_name(), StateName::Air | StateName::Jump)))).unwrap_or(false);
         let room: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + FLIGHT_ROOM_RVA);
         let above = rd::<f32>(actor + 0x3D4);
-        if falling && (above > FLIGHT_ABOVE || room(actor) != 0) {
+        let flew = FLEW.load(Ordering::Relaxed) && above > FLEW_ABOVE;
+        if falling && (above > FLIGHT_ABOVE || flew || room(actor) != 0) {
             wr(actor + 0x3C4, 0.0f32);
+            FLEW.store(false, Ordering::Relaxed);
             if above > FLIGHT_ABOVE {
                 let start: unsafe extern "system" fn(usize) = std::mem::transmute(base + FLIGHT_START_RVA);
                 start(actor);
             } else {
-                let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
-                set(actor, FLIGHT_STATE);
+                set_state(actor, FLIGHT_STATE);
             }
             log(&format!("flight: KH1 flies him ({:.0} above the floor; state now {})", above, rd::<i32>(actor + 0x70)));
         }
@@ -333,7 +356,7 @@ unsafe fn takeover(actor: usize) -> bool {
     let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false);
     // (A motion we don't know, as the Dream Shield's own moveset's, is not taken for KH1's own
     // action: the user saw KH1's idle and attacks with the shield.)
-    if matches!(slot, Some(s) if s > 7) && !airborne {
+    if matches!(slot, Some(s) if s > 7) && !airborne && !FLY_PRESS.load(Ordering::Relaxed) {
         release(&format!("KH1's own action, slot {}, KH1 state {}", slot.map_or("?".into(), |s| s.to_string()), rd::<i32>(actor + 0x70)));
         return false;
     }
@@ -359,6 +382,10 @@ unsafe fn takeover(actor: usize) -> bool {
         // An Attack press from before (during KH1's move) is not KH2's.
         combat::take_press();
     }
+    if FLY_PRESS.load(Ordering::Relaxed) {
+        // Out of KH1's flight: in the air where it had him.
+        d.grounded = false;
+    }
     if ROLL_NOW.swap(false, Ordering::Relaxed) {
         d.held.1 = false;
     }
@@ -383,7 +410,7 @@ unsafe fn takeover(actor: usize) -> bool {
     let jump = jump_raw && !shortcut;
     let action = action_raw && !shortcut;
     // KH1's Attack command (Cross with Attack chosen in the menu) is KH2's attack button.
-    let attack = combat::take_press();
+    let attack = combat::take_press() | FLY_PRESS.swap(false, Ordering::Relaxed);
     // KH1 holding him still (its control step skipped or him unable to act: cutscene moments,
     // tutorial windows; the user: he moved anyway): KH2 gets no input (he still falls, lands
     // and finishes what he was doing).
@@ -679,6 +706,9 @@ unsafe fn takeover(actor: usize) -> bool {
     keyblade(base, actor, d.anim.weapons_out(), &mut d.logged);
     GRIP.store(d.anim.weapons_out(), Ordering::Relaxed);
     GROUNDED.store(d.grounded && !d.character.airborne(), Ordering::Relaxed);
+    if d.grounded && !d.character.airborne() {
+        FLEW.store(false, Ordering::Relaxed);
+    }
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
     // KH2's own sounds for the effect elements this frame starts.
     for e in &out.events {

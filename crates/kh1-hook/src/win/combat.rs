@@ -79,6 +79,12 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     let base = BASE.load(Ordering::Relaxed);
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
     let command = rd::<u8>(base + COMMAND_RVA);
+    // Flying (KH1 has him, state 8): KH2's aerial combo instead of KH1's flying attack.
+    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == 8 {
+        takeover::FLY_ATTACK.store(true, Ordering::Relaxed);
+        note(format!("Attack command while flying (KH1 row {row}): KH2's aerial combo"));
+        return;
+    }
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
         PRESSED.store(true, Ordering::Relaxed);
         note(format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));

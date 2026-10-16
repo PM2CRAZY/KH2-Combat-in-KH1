@@ -1336,3 +1336,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   mode-1 follow camera, which is ours, so state 8 left `kh1_camera_mode` (still KH1's own
   movement mode for `takeover`).
 
+### 2026-10-16: Stage 120 (KH2 aerial attacks while flying)
+- The user asked for KH2's aerial attacks in flight. `combat::exec`: the Attack command while
+  Sora's KH1 state is 8 sets `takeover::FLY_ATTACK` instead of KH1's flying attack. `takeover`
+  then puts him in state 0 (flight's exit step runs), KH2 starts fresh in the air
+  (`d.grounded = false`) with that press (`FLY_PRESS`, after the fresh start's dropped
+  presses; the "KH1's own action" slot check skipped that frame), and `FLEW` lets the flight
+  start again once the combo is over (KH2 state Air / Jump, coming down) at any height above
+  20, not only above KH1's 100; cleared on landing.
+
