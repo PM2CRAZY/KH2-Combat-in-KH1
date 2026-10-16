@@ -901,3 +901,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   freshness), then blended from it: a frozen walk for a third of a second. Taking him to KH1
   now drops that pose (`takeover::drop_pose`), and the 0.2 s blend into KH1's own animation is
   eased out (KH1's motion shows at once, our last pose fades).
+- `kh1-hook` stage 59 (the user: can't land on boxes; Sora hung over a box in KH2's fall,
+  arms out): the map floor point `+0x320` doesn't know objects, and KH2's falls set his height
+  against it alone. Falls now go through KH1's mover in its fall state too (as rises did), which
+  stops him on objects; a fall stopped short (less than half of it happened) lands him there
+  (`Driver::on_top`), and on the ground he stays on top while the ground mover keeps him at
+  that height (else the usual floor step-down / walk-off).

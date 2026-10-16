@@ -130,6 +130,8 @@ struct Driver {
     /// The KH2 attack motion playing and its frame (`swing_fx`).
     swing: Option<u16>,
     swing_frame: u32,
+    /// Standing on top of something above the map floor (a box): its height (KH2 y-up).
+    on_top: Option<f32>,
 }
 
 static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
@@ -271,7 +273,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
         // a combo).
         anim.queued_blend = 14.0;
-        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0 }
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0, on_top: None }
     });
     if FRESH.swap(false, Ordering::Relaxed) {
         // Back from KH1's own move: KH2's controller starts over (standing), keeping its
@@ -392,7 +394,10 @@ unsafe fn takeover(actor: usize) -> bool {
     // it collides as in the air (its collision query `0x140297F20` takes that from the movement
     // state; in the ground state it snaps him back onto the floor), which stops him at a
     // ceiling (KH1's own jump: `0x1402AD260`).
-    let rise3d = settings.ceilings && rising;
+    // Falling too (the user: he couldn't land on boxes): KH1's fall state's mover stops him on
+    // whatever is under him, objects included, as KH1's own fall does; the map floor alone
+    // (`+0x320`) doesn't know boxes.
+    let rise3d = settings.ceilings && (rising || air);
     if rise3d {
         let state = rd::<i32>(actor + 0x70);
         wr(actor + 0x70, AIR_STATE);
@@ -409,7 +414,14 @@ unsafe fn takeover(actor: usize) -> bool {
     let walked_up = -rd::<f32>(actor + 0x14);
     if air || rising {
         let mut y = up_before + out.displacement[1];
-        if rise3d {
+        let mut stopped = false;
+        if rise3d && !rising {
+            // Stopped short of a fall (less than half of it happened): standing on something.
+            let got = -rd::<f32>(actor + 0x14);
+            stopped = out.displacement[1] < -0.5 && (up_before - got) < -out.displacement[1] * 0.5;
+            y = got;
+        }
+        if rise3d && rising {
             // KH2's ceiling rule: less than 49% of the rise happened.
             let got = -rd::<f32>(actor + 0x14);
             y = got;
@@ -421,21 +433,39 @@ unsafe fn takeover(actor: usize) -> bool {
                 }
             }
         }
-        if y <= floor_up && !rising {
+        if stopped && !rising && y > floor_up {
+            wr(actor + 0x14, -y);
+            d.grounded = true;
+            d.on_top = Some(y);
+            static ON_TOP: AtomicU32 = AtomicU32::new(0);
+            if ON_TOP.fetch_add(1, Ordering::Relaxed) < 40 {
+                log(&format!("landed on something {:.1} above the floor (standing on {:#x})", y - floor_up, pose::ptr(rd::<u32>(actor + 0x398))));
+            }
+        } else if y <= floor_up && !rising {
             wr(actor + 0x14, -floor_up);
             d.grounded = true;
+            d.on_top = None;
         } else {
             wr(actor + 0x14, -y.max(floor_up));
             d.grounded = false;
+            d.on_top = None;
         }
     } else {
         // On the ground: where the mover walked him, stepping down onto a floor up to 24 below
-        // (KH2's floor ray), else walking off the edge into a fall.
+        // (KH2's floor ray), else walking off the edge into a fall. On top of something (a
+        // box): as long as the ground mover keeps him at its height (it stands him on objects;
+        // the map floor doesn't know them).
         let drop = walked_up - floor_up;
-        if drop <= STEP_DOWN {
+        let kept = d.on_top.is_some_and(|top| walked_up > floor_up + 1.0 && (walked_up - top).abs() <= STEP_DOWN);
+        if kept {
+            d.on_top = Some(walked_up);
+            d.grounded = true;
+        } else if drop <= STEP_DOWN {
+            d.on_top = None;
             wr(actor + 0x14, -floor_up);
             d.grounded = true;
         } else {
+            d.on_top = None;
             d.grounded = false;
         }
     }
