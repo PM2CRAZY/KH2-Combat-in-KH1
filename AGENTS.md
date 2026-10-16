@@ -1026,3 +1026,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   things, Wakka's ball among them, whose log entries showed `+0x30 = 0x541`). Enemies' melee
   attack shapes no longer clash with it (the user, again: far too many clinks); the swing hits
   their bodies as in KH2.
+
+### 2026-10-16: Stage 78 (KH2 camera parity)
+- KH2's field of view: 69.9° vertical (1.5 rad across 4:3), set through KH1's FOV setter as 76.1
+  "PS2 degrees" each frame KH2's camera runs (KH1's 53 is 48° vertical); KH1's default comes
+  back when KH1's camera runs.
+- Framed as in KH2: `camera_scale` 0.89 (KH1 / KH2 Sora's hips) and `camera_lower` 0.
+- Sticks: the pad's raw ones with a 15% dead zone (KH1's processed ones drop the inner 47%);
+  KH1's processed right stick when the raw one is idle (mouse).

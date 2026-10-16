@@ -34,6 +34,8 @@ const KH1_MOTION_RVAS: [usize; 9] = [0x2538850, 0x2538854, 0x2538AB4, 0x2538AA0,
 const STEP_RVA: usize = 0x23405DC;
 const RIGHT_STICK_RVA: usize = 0x298D4D0;
 const LEFT_STICK_RVA: usize = 0x298D4E0;
+/// Stick dead zone for KH2's camera (of full tilt).
+const STICK_DEAD: f32 = 0.15;
 /// Logical buttons: `+8` pressed this frame. R3 `0x200`, Select `0x8000`.
 const BUTTONS_RVA: usize = 0x298D4A0;
 const R3: u32 = 0x200;
@@ -104,7 +106,32 @@ pub unsafe fn install() {
 /// KH2's camera this frame: chosen, and no cutscene (the user: KH1's camera for cutscenes and
 /// scenes with text, so the camera doesn't end up inside things).
 fn ours() -> bool {
-    KH2.load(Ordering::Relaxed) && !super::takeover::kh1_scene()
+    let on = KH2.load(Ordering::Relaxed) && !super::takeover::kh1_scene();
+    if !on && FOV_SET.swap(false, Ordering::Relaxed) {
+        // KH1's own field of view back for KH1's camera.
+        unsafe { set_fov(rd::<f32>(BASE.load(Ordering::Relaxed) + DEFAULT_FOV_RVA)) };
+    }
+    on
+}
+
+/// KH2's field of view is ours (KH1's own goes back when KH1's camera runs).
+static FOV_SET: AtomicBool = AtomicBool::new(false);
+
+unsafe fn set_fov(deg: f32) {
+    if (20.0..120.0).contains(&deg) {
+        let set: unsafe extern "system" fn(f32) = std::mem::transmute(BASE.load(Ordering::Relaxed) + SET_FOV_RVA);
+        set(deg);
+    }
+}
+
+/// KH1's FOV setting (its PS2 "horizontal" degrees) that gives KH2's vertical field of view
+/// (69.9°: 1.5 rad across a 4:3 frame; the PC versions keep the vertical one). KH1's vertical
+/// is `2 atan(tan(fov / 2) · 384 / (2 · 0.84 · 256))` at 16:9 (`docs/kh1-render.md` 1.2), so
+/// 76.1 here; KH1's own 53 is 48° vertical, a much narrower view (the user: it still felt off).
+fn kh2_fov() -> f32 {
+    let v = kh2_camera::Params::FIELD.fov_v();
+    let k = 384.0 / (2.0 * 0.84 * 256.0);
+    (2.0 * ((v * 0.5).tan() / k).atan()).to_degrees()
 }
 
 unsafe extern "system" fn follow_mode() {
@@ -156,13 +183,10 @@ unsafe fn run(lock: bool) -> Option<()> {
     let flags = rd::<u32>(base + ENTRY_FLAGS_RVA);
     wr(base + ENTRY_FLAGS_RVA, flags & !7);
     let fresh_mode = flags & 2 != 0;
-    if fresh_mode && !lock {
-        let fov = rd::<f32>(base + DEFAULT_FOV_RVA);
-        if (20.0..120.0).contains(&fov) {
-            let set: unsafe extern "system" fn(f32) = std::mem::transmute(base + SET_FOV_RVA);
-            set(fov);
-        }
-    }
+    // KH2's field of view, every frame (KH1's area cameras and mode entries set their own).
+    let _ = fresh_mode;
+    set_fov(kh2_fov());
+    FOV_SET.store(true, Ordering::Relaxed);
     let dt = rd::<f32>(base + STEP_RVA);
     let dt = if dt.is_finite() { dt.clamp(0.0, 4.0) } else { 1.0 };
     let feet = rd::<[f32; 3]>(sora + 0x10);
@@ -177,8 +201,29 @@ unsafe fn run(lock: bool) -> Option<()> {
 
     // Input: KH1's processed sticks (-1..1, y down) and buttons. Sora unable to act: no stick.
     let free = rd::<u32>(sora + 0x444) & 1 == 0;
-    let r = if free { rd::<[f32; 2]>(base + RIGHT_STICK_RVA) } else { [0.0; 2] };
-    let l = rd::<[f32; 2]>(base + LEFT_STICK_RVA);
+    // The pad's own sticks with a small dead zone, as KH2 reads them: KH1's processed ones
+    // drop the inner 47% (60 of 127.5), so gentle tilts did nothing. KH1's processed right
+    // stick still counts when the raw one is idle (the mouse writes there).
+    let raw = super::takeover::RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
+    let axis = |b: u8| (b as f32 - 128.0) / 127.0;
+    let dead = |v: [f32; 2]| -> [f32; 2] {
+        let m = (v[0] * v[0] + v[1] * v[1]).sqrt();
+        if m < STICK_DEAD {
+            return [0.0; 2];
+        }
+        let k = ((m - STICK_DEAD) / (1.0 - STICK_DEAD)).min(1.0) / m;
+        [v[0] * k, v[1] * k]
+    };
+    let raw_r = dead([axis(raw[0]), axis(raw[1])]);
+    let r = if !free {
+        [0.0; 2]
+    } else if raw_r != [0.0; 2] {
+        raw_r
+    } else {
+        rd::<[f32; 2]>(base + RIGHT_STICK_RVA)
+    };
+    let raw_l = dead([axis(raw[2]), axis(raw[3])]);
+    let l = if raw_l != [0.0; 2] { raw_l } else { rd::<[f32; 2]>(base + LEFT_STICK_RVA) };
     let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
     let turn = rd::<f32>(base + TURN_SIGN_RVA);
     let turn = if turn < 0.0 { -1.0 } else { 1.0 };
