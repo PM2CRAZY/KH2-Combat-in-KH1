@@ -927,10 +927,15 @@ impl Character {
             equipped: &self.abilities.equipped,
             jump_height: self.params.jump_height,
         };
-        let forced = self.forced_row.take().and_then(|id| self.moveset.combo_rows.iter().find(|r| r.id == id)).filter(|r| condition(r, &sit));
-        let picked = match forced {
-            Some(r) => Some(Choice { row: r, target: sit.primary }),
-            None => select(&self.moveset.combo_rows, &sit),
+        // A forced row (a state's own move: Counterguard, Retaliating Slash, the Square moves)
+        // that can't be used is no attack at all; it never falls back to the ordinary combo (the
+        // user: Sora could attack while knocked into the air).
+        let wanted = self.forced_row.take();
+        let forced = wanted.and_then(|id| self.moveset.combo_rows.iter().find(|r| r.id == id)).filter(|r| condition(r, &sit));
+        let picked = match (wanted, forced) {
+            (_, Some(r)) => Some(Choice { row: r, target: sit.primary }),
+            (Some(_), None) => None,
+            (None, None) => select(&self.moveset.combo_rows, &sit),
         };
         let Some(choice) = picked else {
             (self.count, self.finishers) = saved;

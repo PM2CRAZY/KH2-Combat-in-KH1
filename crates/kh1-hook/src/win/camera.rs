@@ -107,6 +107,11 @@ pub unsafe fn install() {
 /// scenes with text, so the camera doesn't end up inside things).
 fn ours() -> bool {
     let on = KH2.load(Ordering::Relaxed) && !super::takeover::kh1_scene();
+    static WAS: AtomicBool = AtomicBool::new(true);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if WAS.swap(on, Ordering::Relaxed) != on && KH2.load(Ordering::Relaxed) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+        log(if on { "KH2 camera: back from KH1's" } else { "KH2 camera: KH1's for a scene" });
+    }
     if !on && FOV_SET.swap(false, Ordering::Relaxed) {
         // KH1's own field of view back for KH1's camera.
         unsafe { set_fov(rd::<f32>(BASE.load(Ordering::Relaxed) + DEFAULT_FOV_RVA)) };

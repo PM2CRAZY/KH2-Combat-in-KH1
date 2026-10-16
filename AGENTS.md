@@ -1093,3 +1093,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (motion 0x52 / 0x5C, state 2), sets KH2's apex height and rise time (`+0x3BC` / `+0x3B8`, from
   the ATKP knockback values flown as KH2's blow flies) and horizontal speed (`+0x3C0`). Upper
   Slash goes up (the user). Enemies without a launch motion (big ones, most bosses) don't.
+
+### 2026-10-16: Stage 88 (no attacks mid-launch; KH2 camera through summons)
+- A forced combo row (Counterguard, Retaliating Slash, the Square moves) that can't be used is no
+  attack: it fell back to the ordinary combo, so Sora attacked while knocked into the air (the
+  user) and Square mid-combo could start a plain swing.
+- KH1 holding Sora still counts as a scene for the camera only out of battle (the user: KH2's
+  camera should stay through a summon's attack, Simba's charge).
+- Launch logs: each KH2 launch asked for, and KH1 launch reactions that weren't ours.

@@ -926,6 +926,10 @@ pub unsafe fn scale_record(rec: usize) {
             v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < 3000);
             v.push((rec, l, now));
         }
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log(&format!("KH2 launch asked: record {rec:#x} made a launch (up {:.0} in {:.0} frames, sideways {:.1}/frame)", l.h, l.t, l.speed));
+        }
     }
     let d = rd::<i32>(rec + 8);
     let scaled = ((d as i64 * p as i64) / 100).max(1) as i32;
@@ -984,7 +988,13 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_LAUNCH.load(Ordering::Acquire));
     f(actor, rec);
     let ours = LAUNCHES.lock().ok().and_then(|mut v| v.iter().position(|(r, _, _)| *r == rec).map(|i| v.remove(i).1));
-    let Some(l) = ours else { return };
+    let Some(l) = ours else {
+        static M: AtomicU32 = AtomicU32::new(0);
+        if M.fetch_add(1, Ordering::Relaxed) < 20 {
+            log(&format!("KH1 launch reaction on {actor:#x} for record {rec:#x} (not a KH2 launch)"));
+        }
+        return;
+    };
     let motion = rd::<u16>(actor + 0x3EA);
     let state = rd::<i32>(actor + 0x70);
     static N: AtomicU32 = AtomicU32::new(0);
