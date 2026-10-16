@@ -507,6 +507,25 @@ impl Growth {
                         now = again;
                     }
                 }
+                // Aerial Dodge is Riku's (the user: on this save it came from a level): taken back
+                // out until Riku is beaten the first time (given again then, with its box).
+                if !growth::BOSS_GIFTS.iter().any(|g| g.ability == AERIAL_DODGE && growth::beaten(&now.progress, g)) {
+                    let list = save + 0x44;
+                    let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
+                    let end = bytes.iter().position(|b| *b == 0).unwrap_or(48);
+                    if let Some(i) = bytes[..end].iter().position(|b| b & 0x7F == AERIAL_DODGE) {
+                        let mut kept = bytes.clone();
+                        kept.remove(i);
+                        kept.push(0);
+                        for (k, b) in kept.iter().enumerate() {
+                            std::ptr::write((list + k) as *mut u8, *b);
+                        }
+                        log("Aerial Dodge taken back until Riku is beaten (Hollow Bastion)");
+                        if let Some(again) = Self::kh1(base) {
+                            now = again;
+                        }
+                    }
+                }
                 for ab in now.grants() {
                     let (list, len, byte) = match ab.list {
                         growth::List::Shared => (save + 0x599, 10, ab.id),

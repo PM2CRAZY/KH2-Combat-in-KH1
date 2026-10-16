@@ -1235,3 +1235,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   KH2 has him. `combat::command` now refuses any other command while KH2 has him in the air,
   with KH1's "can't" sound (`0x140177F60 (4)`). Magic stays allowed (jump casts).
 
+### 2026-10-16: Stage 107 (Aerial Dodge taken back until Riku)
+- The user's save still had Aerial Dodge (from its old level). It is taken out of Sora's list
+  while Riku (Hollow Bastion, first time) isn't beaten, and given again (with its box) once he
+  is.
+
