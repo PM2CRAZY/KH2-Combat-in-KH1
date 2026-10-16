@@ -1001,3 +1001,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 ### 2026-10-16: Stage 73 (all of the Jungle Slider is KH1's)
 - The slider also runs in KH1 movement state 31 (the user: its jump and attack didn't work, KH2
   had Sora there): every state from 30 up is KH1's (`kh1_mode`).
+
+### 2026-10-16: Stage 74 (catching a ladder on the way down)
+- The grab probe's air move presses 4 units along the stick instead of standing still: KH1's
+  climb check (`0x1402C5D30`) needs the wall face the move touched (`+0x2DE`), which a
+  standing-still move cleared, so a ladder jumped into was caught only at its foot (the user).
+  Without a grab the position is put back.

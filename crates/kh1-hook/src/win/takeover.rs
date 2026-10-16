@@ -548,11 +548,17 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH1 tries them in its jump / fall states, whose collision (`0x140297F20`: flag 1)
         // finds the contacts they read; ours ran in its ground state. So: KH1's fall state (3,
         // which has these checks too) and a standing-still move there to refresh the contacts.
+        // The move presses a little into where the stick points: KH1's climb check reads the wall
+        // face the move touched (`+0x2DE`), which a standing-still move cleared (the user: he
+        // slid down a ladder he jumped into, caught only at the bottom). Put back if nothing
+        // takes him.
         let state = rd::<i32>(actor + 0x70);
+        let at = rd::<[f32; 4]>(actor + 0x10);
         wr(actor + 0x70, AIR_STATE);
-        mv(actor, &[0.0; 4], 0);
+        mv(actor, &[dir.x * 4.0, 0.0, dir.y * 4.0, 0.0], 0);
         let took = grab(base, actor, [dir.x, 0.0, dir.y, tilt]);
         if took.is_none() {
+            wr(actor + 0x10, at);
             wr(actor + 0x70, state);
         }
         if let Some(what) = took {
