@@ -185,11 +185,18 @@ fn landing_keeps_running_with_the_stick_and_stops_dead_without() {
 fn dodge_roll_uses_root_motion_and_level_iframes() {
     let mut w = World::new(sora());
     w.ch.abilities.dodge_roll = 2; // 20 i-frames in this fixture
-    let outs: Vec<_> = (0..40).map(|f| w.step(Pad { stick: [1.0, 0.0], action: f < 3, ..IDLE })).collect();
+    let outs: Vec<_> = (0..40).map(|f| w.step(if f < 3 { Pad { stick: [1.0, 0.0], action: true, ..IDLE } } else { IDLE })).collect();
     assert_eq!(outs[0].state, StateName::DodgeRoll);
     let inv = outs.iter().take_while(|o| o.invulnerable).count();
     assert_eq!(inv, 20);
     assert!((w.pos[0] - 400.0).abs() < 1e-3, "rolled along +x by the clip's root motion: {:?}", w.pos);
+
+    // Holding the stick: the roll's recovery is walked out of from its fall-check event.
+    let mut w = World::new(sora());
+    w.ch.abilities.dodge_roll = 2;
+    let outs: Vec<_> = (0..40).map(|f| w.step(Pad { stick: [1.0, 0.0], action: f < 3, ..IDLE })).collect();
+    let rolled = outs.iter().take_while(|o| o.state == StateName::DodgeRoll).count();
+    assert!(rolled < 40, "still rolling with the stick held after the fall check: {rolled} frames");
 }
 
 fn mash(w: &mut World, connect: bool) -> (Vec<u16>, Vec<(usize, u16)>) {

@@ -1395,6 +1395,11 @@ impl Character {
                 let free_at = clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map_or(clip.length, |e| e.frame);
                 if f >= free_at {
                     cancel_allowed = true;
+                    // The stick walks out of the roll's recovery there too, as it does out of a
+                    // landing (the user: too much of a freeze after the roll).
+                    if len2(input.stick) > DEAD_ZONE {
+                        finished = true;
+                    }
                 }
                 // The roll's "quick run check" event: still holding the
                 // action button there turns the roll into a Quick Run along
