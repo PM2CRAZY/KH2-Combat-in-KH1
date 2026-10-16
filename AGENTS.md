@@ -1138,3 +1138,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   asked on Cerberus (which KH1 never launches) stayed queued under KH1's reused hit record and
   one landed on a Shadow later. A KH2 launch now waits only 250 ms (`LAUNCH_FRESH_MS`) for
   KH1's launch reaction.
+
+### 2026-10-16: Stage 96 (ground-to-air rows)
+- The user: Aerial Sweep and Aerial Dive (ground-to-air) were hard to trigger. KH2's combo
+  selector (`0x140401BB0`) measures facing from the direction to the primary target, not the
+  player's facing; kind-1 rows have a facing window of 0.99996..1, so with Sora's own facing
+  they (Aerial Sweep 33, Aerial Dive 48, the jump at an airborne foe 0, Slide Dash, Flash
+  Step, the long approach 153, Aerial Spiral) almost never passed. `Controller::try_attack`
+  now aims at the primary target for the selection. The height window's sign was checked too
+  (`0x140401AD0`: target − player, y-down; the doc had it reversed, the code was right).
+- Aerial Dive's help: from the ground, at a far airborne foe.

@@ -768,17 +768,18 @@ impl Character {
             .map(|(t, _)| t)
     }
 
-    fn geom(&self, env: &Env, t: &TargetInfo) -> TargetGeom {
+    /// A target as the combo table sees it; `aim` is the selector's facing (exe `0x140401BB0`:
+    /// the direction to the primary target when there is one, else Sora's facing).
+    fn geom(&self, env: &Env, t: &TargetInfo, aim: [f32; 2]) -> TargetGeom {
         let d = [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]];
         let n = norm(d);
-        let f = self.forward();
         TargetGeom {
             id: t.id,
             distance: len2(d),
             dy: t.pos[1] - env.pos[1],
             radius: t.radius,
             height: t.height,
-            facing_dot: if len2(d) > 1e-3 { n[0] * f[0] + n[1] * f[1] } else { 1.0 },
+            facing_dot: if len2(d) > 1e-3 { (n[0] * aim[0] + n[1] * aim[1]).min(1.0) } else { 1.0 },
         }
     }
 
@@ -919,8 +920,18 @@ impl Character {
             self.facing = yaw_of(d);
         }
         let air = self.airborne;
-        let all: Vec<TargetGeom> = env.targets.iter().map(|t| self.geom(env, t)).collect();
-        let primary = self.primary_target(env).map(|t| self.geom(env, t));
+        // The selector faces the primary target (exe `0x140401BB0`), so its own rows (kind 1,
+        // facing window 0.99996..1) always face it and the all-target rows (kind 2) are
+        // measured from it. (Before, Sora's own facing was used: kind-1 rows such as Aerial
+        // Sweep, Aerial Dive, Slide Dash and the jump to an airborne foe almost never passed.)
+        let primary_info = self.primary_target(env);
+        let aim = primary_info
+            .map(|t| [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]])
+            .filter(|d| len2(*d) > 1e-3)
+            .map(norm)
+            .unwrap_or_else(|| self.forward());
+        let all: Vec<TargetGeom> = env.targets.iter().map(|t| self.geom(env, t, aim)).collect();
+        let primary = primary_info.map(|t| TargetGeom { facing_dot: 1.0, ..self.geom(env, t, aim) });
         let sit = Situation {
             air,
             count: self.count,

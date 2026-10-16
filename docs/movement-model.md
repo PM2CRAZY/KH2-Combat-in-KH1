@@ -254,10 +254,13 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
    
    A range check requires all of:
    - `near ≤ distance − target radius < far`
-   - a height window in y-down: `high′ < (player.y − target.y) ≤ low′`
+   - a height window in y-down: `high′ < (target.y − player.y) ≤ low′` (`0x140401AD0`; the
+     target point is its target shape's, `0x1403C8EE0`)
      - `flag & 2` lowers `high` by the jump height
      - `flag & 8` / `flag & 16` shrink or grow the window by the target's height
-   - `inner_min < dot(facing, dir) ≤ inner_max`
+   - `inner_min < dot(facing, dir) ≤ inner_max`, where the facing is the direction to the
+     primary target when there is one, else the player's facing (`0x140401BB0`); the primary's
+     own rows (kind 1, window 0.99996..1) therefore always face it
 4. **Walk the valid rows in table order** (`0x140401F30`) and take the first whose motion
    is not the one playing (or whose `sub` is its own id). `score` is not used.
 5. **Anti-repeat:** a valid row whose motion is already playing is passed over; the first

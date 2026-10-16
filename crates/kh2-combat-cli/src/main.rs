@@ -196,7 +196,7 @@ fn run(args: &Args) -> Result<(), String> {
             println!(" id kind sub cofs     flag  mot next   jump  jmax  jmin  spmin spmax   near    far    low   high  inmin inmax blend dadj  abil score");
             for e in set {
                 println!(
-                    "{:>3} {:>4} {:>3} {:>4} {:>8x} {:>4} {:>4} {:>6.1} {:>5.1} {:>5.1} {:>6.1} {:>5.1} {:>6.0} {:>6.0} {:>6.0} {:>6.0} {:>5.0} {:>5.0} {:>5.1} {:>4.1} {:>5} {:>5}",
+                    "{:>3} {:>4} {:>3} {:>4} {:>8x} {:>4} {:>4} {:>6.1} {:>5.1} {:>5.1} {:>6.1} {:>5.1} {:>6.0} {:>6.0} {:>6.0} {:>6.0} {:>8.5} {:>8.5} {:>5.1} {:>4.1} {:>5} {:>5}",
                     e.id, e.kind, e.sub, e.combo_offset, e.flag, e.motion, e.next_motion, e.jump, e.jump_max, e.jump_min,
                     e.speed_min, e.speed_max, e.near, e.far, e.low, e.high, e.inner_min, e.inner_max, e.blend_time,
                     e.distance_adjust, e.ability, e.score
