@@ -968,3 +968,6 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   ini (`camera`), not the save.
 - Untested in game: the row's layout against the help box, the text codes in sysmsg, the
   camera's turn direction and scale.
+
+### 2026-10-16: Stage 67 (KH2 camera: right stick x the right way round)
+- The right stick's x is negated for `kh2_camera` (the user: x was inverted).

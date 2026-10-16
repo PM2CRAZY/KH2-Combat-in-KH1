@@ -177,7 +177,9 @@ unsafe fn run(lock: bool) -> Option<()> {
     let auto = config < 0x10000 || rd::<i32>(config + 8) == 0;
     let ctl = kh2_camera::Controls {
         move_stick: Vec2::new(l[0], l[1]).clamp_length_max(1.0),
-        look_stick: Vec2::new(r[0] * turn, -r[1]).clamp_length_max(1.0),
+        // (Negated: KH1 world turns the other way round from the camera crate's; the user: x was
+        // inverted.)
+        look_stick: Vec2::new(-r[0] * turn, -r[1]).clamp_length_max(1.0),
         reset: free && pressed & R3 != 0,
         auto,
     };
