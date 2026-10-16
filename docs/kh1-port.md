@@ -74,7 +74,7 @@ Final Mix's own Combo Master is KH2's Combo Master while equipped.
 
 What only KH2 has is added to KH1's Ability menu as new abilities, learned at Sora's level
 (added when he reaches it, or when the game loads if he is already past it, off until equipped;
-a "New Ability" box in KH1's level-up prompt style says so, with its AP):
+a "New Ability" box in KH1's level-up prompt style names it):
 
 | Level | Ability | Menu | AP |
 |---|---|---|---|

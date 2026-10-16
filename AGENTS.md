@@ -945,3 +945,6 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - From the roll's fall-check event (frame 34 for Sora) the stick ends the roll and Sora walks /
   runs at once, as out of a landing; before, only a button did, so he stood still until the
   motion ended (the user: too much of a freeze after the roll).
+
+### 2026-10-16: Stage 65 (New Ability box: the name only)
+- The "New Ability" box shows the ability's name alone (one line), the user's choice.

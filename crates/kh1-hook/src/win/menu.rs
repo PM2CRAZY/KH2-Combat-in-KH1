@@ -191,14 +191,18 @@ unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str) -> bool {
     };
     put(text, title);
     put(text + 0x70, line1);
-    put(text + 0x90, line2);
+    if !line2.is_empty() {
+        put(text + 0x90, line2);
+    }
     let w = |at: usize, v: u64| std::ptr::write_unaligned(at as *mut u64, v);
     let wi = |at: usize, v: i32| std::ptr::write_unaligned(at as *mut i32, v);
     wi(bx - 0x10, 1);
     w(bx + 0x30, text as u64);
-    wi(bx + 0x18, 2);
+    wi(bx + 0x18, if line2.is_empty() { 1 } else { 2 });
     w(bx + 0x20, (text + 0x70) as u64);
-    w(bx + 0x28, (text + 0x90) as u64);
+    if !line2.is_empty() {
+        w(bx + 0x28, (text + 0x90) as u64);
+    }
     wi(bx + 0x0C, 0);
     std::ptr::write_unaligned((bx + 0xB80) as *mut f32, 1.0);
     w(bx + 0xB88, (base + PROMPT_BOX_COLOUR_RVA) as u64);
@@ -413,8 +417,8 @@ impl Growth {
                     if done {
                         log(&format!("Sora learns {} (level {}, {} AP)", ab.name, ab.level, ab.ap));
                         // The user: the game should say so.
-                        let how = if ab.ap > 0 { format!("Equip it in Abilities: {} AP", ab.ap) } else { "Now in Abilities".to_string() };
-                        self.prompts.push_back(("New Ability".to_string(), ab.name.to_string(), how));
+                        // Its name only (the user: no description needed).
+                        self.prompts.push_back(("New Ability".to_string(), ab.name.to_string(), String::new()));
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
                         log(&format!("Sora can't learn {} (level {}): his ability list is full (48, KH1's most)", ab.name, ab.level));
