@@ -71,6 +71,10 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
+    if !super::settings::get().config_row {
+        log("Config menu: no Camera Style row (config_row = off)");
+        return;
+    }
     TEXT.get_or_init(|| STRINGS.iter().map(|s| Box::leak(super::menu::encode(s).into_boxed_slice()).as_ptr() as usize).collect());
     if rd::<u16>(base + ROWS_RVA) != 8 || rd::<u16>(base + VISIBLE_RVA) != 8 {
         log(&format!("Config menu: unexpected row counts {} / {}: no Camera Style row", rd::<u16>(base + ROWS_RVA), rd::<u16>(base + VISIBLE_RVA)));

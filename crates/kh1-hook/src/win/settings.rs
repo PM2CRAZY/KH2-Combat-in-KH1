@@ -44,6 +44,8 @@ wall_clink = off\r\n\
 camera = kh2\r\n\
 ; camera_scale: KH2's camera distances and heights times this (KH1 Sora is a little smaller)\r\n\
 camera_scale = 0.9\r\n\
+; config_row: on = the Config menu's Camera Style row; off = no row (the ini alone switches)\r\n\
+config_row = on\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
@@ -71,6 +73,7 @@ pub struct Settings {
     pub wall_clink: bool,
     pub kh2_camera: bool,
     pub camera_scale: f32,
+    pub config_row: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
@@ -120,6 +123,7 @@ pub fn get() -> &'static Settings {
             auto_aim: on(&text, "auto_aim", "on", false),
             wall_clink: on(&text, "wall_clink", "on", false),
             kh2_camera: on(&text, "camera", "kh2", true),
+            config_row: on(&text, "config_row", "on", true),
             camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.9),
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {
                 Some("off") | Some("0") | Some("no") => None,
