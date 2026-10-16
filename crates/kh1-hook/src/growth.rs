@@ -126,6 +126,35 @@ const fn m(id: u8, name: &'static str, help: &'static str, ap: u8, level: u8, li
     MenuAbility { id, name, help, ap, level, list, template, effect }
 }
 
+/// `MenuAbility::level` for an ability a boss gives (`BOSS_GIFTS`), not a level.
+pub const BOSS: u8 = 0;
+
+/// A boss's gift (the user's list; KH2 gives its moves for beating bosses too): the ability, once
+/// the world's story progress byte (`progress`, `Kh1Sora::progress`) reaches the value it has
+/// once the boss is beaten (as the Archipelago KH1 client reads them: gaithern's KH-1FM-AP-LUA,
+/// MIT, after the RetroAchievements code notes).
+#[derive(Clone, Copy, Debug)]
+pub struct BossGift {
+    pub boss: &'static str,
+    /// The world's index in the progress bytes (0 Traverse Town, 1 Deep Jungle, 2 Olympus
+    /// Coliseum, 3 Wonderland, 4 Agrabah, 5 Monstro, 6 Atlantica, 8 Halloween Town, 9 Neverland,
+    /// 10 Hollow Bastion, 11 End of the World).
+    pub world: usize,
+    pub progress: u8,
+    /// Ours (`MENU`) or KH1's (a modifier shown by its KH2 name, `RENAMED`).
+    pub ability: u8,
+}
+
+pub const BOSS_GIFTS: [BossGift; 7] = [
+    BossGift { boss: "Sabor", world: 1, progress: 0x42, ability: 73 },
+    BossGift { boss: "Clayton", world: 1, progress: 0x56, ability: kh1::AERIAL_SWEEP },
+    BossGift { boss: "Jafar", world: 4, progress: 0x49, ability: kh1::GRAVITY_BREAK },
+    BossGift { boss: "Pot Centipede", world: 4, progress: 0x35, ability: kh1::STUN_IMPACT },
+    BossGift { boss: "Dragon Maleficent", world: 10, progress: 0x6E, ability: kh1::HURRICANE_BLAST },
+    BossGift { boss: "Captain Hook", world: 9, progress: 0x56, ability: 77 },
+    BossGift { boss: "Cerberus", world: 2, progress: 0x25, ability: 76 },
+];
+
 /// The first id past KH1's own (65 entries in its table).
 pub const FIRST_ID: u8 = 66;
 
@@ -139,11 +168,11 @@ pub const MENU: [MenuAbility; 12] = [
     m(70, "Horizontal Slash", "Air combo: slash foes while spinning in midair.", 2, 16, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH)),
     m(71, "Negative Combo", "Shortens combos by one attack.", 2, 20, List::Sora, kh1::COMBO_PLUS, Effect::NegativeCombo),
     m(72, "Aerial Spiral", "Air combo: spin into foes in midair.", 2, 25, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_SPIRAL)),
-    m(73, "Upper Slash", "Counter: knock a foe into the air after guarding.", 4, 31, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::UPPER_SLASH)),
+    m(73, "Upper Slash", "Counter: knock a foe into the air after guarding.", 4, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::UPPER_SLASH)),
     m(74, "Finishing Plus", "Adds a finishing move to the combo.", 5, 34, List::Sora, kh1::COMBO_PLUS, Effect::FinishingPlus),
     m(75, "Retaliating Slash", "Counter: strike back while knocked away.", 3, 43, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::RETALIATING_SLASH)),
-    m(76, "Aerial Dive", "Air combo: dive down at a foe below.", 2, 48, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE)),
-    m(77, "Magnet Burst", "Finisher: pull in foes all around.", 3, 50, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST)),
+    m(76, "Aerial Dive", "Air combo: dive down at a foe below.", 2, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE)),
+    m(77, "Magnet Burst", "Finisher: pull in foes all around.", 3, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST)),
 ];
 
 /// Growth levels past the first, by Sora's level.
@@ -273,6 +302,8 @@ pub struct Kh1Sora {
     pub abilities: Vec<u8>,
     /// The shared abilities (`+0x599`).
     pub shared: Vec<u8>,
+    /// The worlds' story progress bytes (save `+0x1504`, 12).
+    pub progress: Vec<u8>,
 }
 
 /// Equipped copies of `id` in a KH1 ability list (as `0x140282A70`: up to the first 0).
@@ -394,7 +425,7 @@ impl Kh1Sora {
     /// The menu abilities Sora's level has earned that his lists don't hold yet.
     pub fn grants(&self) -> Vec<MenuAbility> {
         MENU.iter()
-            .filter(|ab| self.level >= ab.level)
+            .filter(|ab| ab.level != BOSS && self.level >= ab.level)
             .filter(|ab| ab.effect != Effect::AerialDodge || has(&self.shared, kh1::HIGH_JUMP))
             .filter(|ab| !has(if ab.list == List::Shared { &self.shared } else { &self.abilities }, ab.id))
             .copied()
@@ -402,11 +433,31 @@ impl Kh1Sora {
     }
 }
 
+impl Kh1Sora {
+    /// The bosses beaten whose gift Sora doesn't have yet.
+    pub fn boss_gifts(&self) -> Vec<BossGift> {
+        BOSS_GIFTS.iter().filter(|g| beaten(&self.progress, g) && !has(&self.abilities, g.ability)).copied().collect()
+    }
+}
+
+/// Whether a gift's boss is beaten.
+pub fn beaten(progress: &[u8], g: &BossGift) -> bool {
+    progress.get(g.world).is_some_and(|p| *p >= g.progress)
+}
+
 /// The AP Sora gets on top of KH1's by his level: each KH2 ability he has learned brings its
 /// own AP, so taking the KH2 abilities costs none of KH1's.
 /// (Aerial Dodge only once High Jump is had: it is learned after it, the user's choice.)
-pub fn bonus_ap(level: u8, high_jump: bool) -> u8 {
-    MENU.iter().filter(|ab| level >= ab.level && (ab.effect != Effect::AerialDodge || high_jump)).map(|ab| ab.ap).sum()
+/// Ours a boss gives count once it is beaten.
+pub fn bonus_ap(level: u8, high_jump: bool, progress: &[u8]) -> u8 {
+    let earned = |ab: &MenuAbility| {
+        if ab.level == BOSS {
+            BOSS_GIFTS.iter().any(|g| g.ability == ab.id && beaten(progress, g))
+        } else {
+            level >= ab.level && (ab.effect != Effect::AerialDodge || high_jump)
+        }
+    };
+    MENU.iter().filter(|ab| earned(ab)).map(|ab| ab.ap).sum()
 }
 
 /// One line for the log.
@@ -448,13 +499,16 @@ mod tests {
 
     #[test]
     fn bonus_ap_follows_the_learned_abilities() {
-        assert_eq!(bonus_ap(1, true), 0);
-        assert_eq!(bonus_ap(4, true), 2);
-        assert_eq!(bonus_ap(10, true), 4);
-        assert_eq!(bonus_ap(50, true), MENU.iter().map(|ab| ab.ap).sum::<u8>());
-        assert_eq!(bonus_ap(50, true), bonus_ap(100, true));
+        assert_eq!(bonus_ap(1, true, &[]), 0);
+        assert_eq!(bonus_ap(4, true, &[]), 2);
+        assert_eq!(bonus_ap(10, true, &[]), 4);
+        let all = [0xFFu8; 12];
+        assert_eq!(bonus_ap(50, true, &all), MENU.iter().map(|ab| ab.ap).sum::<u8>());
+        assert_eq!(bonus_ap(50, true, &all), bonus_ap(100, true, &all));
+        // Boss gifts' AP only once beaten.
+        assert_eq!(bonus_ap(100, true, &all), bonus_ap(100, true, &[]) + 4 + 2 + 3);
         // Aerial Dodge's 3 AP only with High Jump.
-        assert_eq!(bonus_ap(13, true), bonus_ap(13, false) + 3);
+        assert_eq!(bonus_ap(13, true, &[]), bonus_ap(13, false, &[]) + 3);
     }
 
     fn sora(level: u8, abilities: &[u8], shared: &[u8]) -> Kh1Sora {
@@ -462,7 +516,7 @@ mod tests {
         a.resize(48, 0);
         let mut s = shared.to_vec();
         s.resize(10, 0);
-        Kh1Sora { level, abilities: a, shared: s }
+        Kh1Sora { level, abilities: a, shared: s, progress: vec![0; 12] }
     }
 
     #[test]

@@ -89,11 +89,22 @@ a "New Ability" box in KH1's level-up prompt style names it):
 | 16 | Horizontal Slash | Sora's | 2 |
 | 20 | Negative Combo | Sora's | 2 |
 | 25 | Aerial Spiral | Sora's | 2 |
-| 31 | Upper Slash | Sora's | 4 |
 | 34 | Finishing Plus | Sora's | 5 |
 | 43 | Retaliating Slash | Sora's | 3 |
-| 48 | Aerial Dive | Sora's | 2 |
-| 50 | Magnet Burst | Sora's | 3 |
+
+Bosses give KH2 moves too, as KH2 does (the user's list), on top of what they already give;
+learned once the world's story progress passes the boss (off until equipped, with a "New
+Ability" box):
+
+| Boss | Ability | AP |
+|---|---|---|
+| Sabor | Upper Slash | 4 |
+| Clayton | Aerial Sweep (KH1's) | KH1's |
+| Jafar | Aerial Finish (KH1's Gravity Break) | KH1's |
+| Pot Centipede | Guard Break (KH1's Stun Impact) | KH1's |
+| Dragon Maleficent | Explosion (KH1's Hurricane Blast) | KH1's |
+| Captain Hook | Magnet Burst | 3 |
+| Cerberus | Aerial Dive | 2 |
 
 Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the KH2
 abilities take none of the AP KH1 gives him: +2 at level 4, +32 in all by level 50 (KH1's

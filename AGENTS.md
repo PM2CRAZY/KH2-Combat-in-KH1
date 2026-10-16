@@ -1052,3 +1052,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - Air grabs (ladders, vines, poles, ledges) are tried as KH1's jump step does: also near the top
   of the jump (rising under 2 a frame) and with the stick neutral (then no probe move: the
   frame's own air move left the contacts). The user: hit or miss from a jump.
+
+### 2026-10-16: Stage 82 (bosses give KH2 moves)
+- `growth::BOSS_GIFTS` (the user's list): Sabor Upper Slash, Clayton Aerial Sweep, Jafar Aerial
+  Finish (KH1's Gravity Break), Pot Centipede Guard Break (Stun Impact), Dragon Maleficent
+  Explosion (Hurricane Blast), Captain Hook Magnet Burst, Cerberus Aerial Dive. Learned once the
+  world's story progress byte (save `+0x1504`, `0x142DEB264`, 12 worlds) reaches the value it has
+  after the boss (thresholds as the Archipelago KH1 client reads them), unless Sora already has
+  it; off until equipped, with a "New Ability" box. Upper Slash, Aerial Dive and Magnet Burst
+  are no longer learned by level (`MenuAbility::level` = `BOSS`); their AP joins `bonus_ap` once
+  the boss is beaten.

@@ -26,6 +26,8 @@ const TABLE_LOAD_RVA: usize = 0x28D840;
 const TABLE_LOAD_PROLOGUE: [u8; 9] = [0x40, 0x53, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's own entries.
 const KH1_ENTRIES: usize = 65;
+/// The worlds' story progress bytes in the save block (`0x142DEB264`, 12 bytes).
+const PROGRESS_OFF: usize = 0x1504;
 /// Our Aerial Dodge's id (`growth::MENU`).
 const AERIAL_DODGE: u8 = 67;
 const ENTRIES: usize = 80;
@@ -154,7 +156,8 @@ unsafe extern "system" fn stats(member: i32, out: usize) {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let Some(save) = save_block(base) else { return };
     let shared = std::slice::from_raw_parts((save + 0x599) as *const u8, 10);
-    let bonus = growth::bonus_ap(rd::<u8>(save + 4), growth::has(shared, growth::kh1::HIGH_JUMP));
+    let progress = std::slice::from_raw_parts((save + PROGRESS_OFF) as *const u8, 12);
+    let bonus = growth::bonus_ap(rd::<u8>(save + 4), growth::has(shared, growth::kh1::HIGH_JUMP), progress);
     let ap = rd::<i32>(out + 0xE4);
     let now = (ap + bonus as i32).min(100);
     std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
@@ -315,7 +318,8 @@ impl Growth {
         let level = rd::<u8>(save + 4);
         let abilities = std::slice::from_raw_parts((save + 0x44) as *const u8, 48).to_vec();
         let shared = std::slice::from_raw_parts((save + 0x599) as *const u8, 10).to_vec();
-        Some(Kh1Sora { level, abilities, shared })
+        let progress = std::slice::from_raw_parts((save + PROGRESS_OFF) as *const u8, 12).to_vec();
+        Some(Kh1Sora { level, abilities, shared, progress })
     }
 
     /// Every second: KH1's menu and level, and Sora's abilities from them (`kh1`), or the
@@ -461,6 +465,37 @@ impl Growth {
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
                         log(&format!("Sora can't learn {} (level {}): his ability list is full (48, KH1's most)", ab.name, ab.level));
+                    }
+                }
+                // Bosses' gifts (the user's list), off until equipped, with their box.
+                if let Some(again) = Self::kh1(base) {
+                    now = again;
+                }
+                for g in now.boss_gifts() {
+                    let list = save + 0x44;
+                    let byte = g.ability | 0x80;
+                    let mut done = add(list, 48, byte);
+                    if !done {
+                        let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
+                        if let Some(i) = growth::make_room(&bytes) {
+                            let gone = bytes[i];
+                            let mut kept = bytes.clone();
+                            kept.remove(i);
+                            kept.push(0);
+                            for (k, b) in kept.iter().enumerate() {
+                                std::ptr::write((list + k) as *mut u8, *b);
+                            }
+                            done = add(list, 48, byte);
+                            remember(&format!("level {}: removed {} (id {}) for {}", now.level, growth::name(gone), gone & 0x7F, growth::name(g.ability)));
+                        }
+                    }
+                    let name = growth::name(g.ability);
+                    if done {
+                        log(&format!("{} beaten: Sora learns {name}", g.boss));
+                        self.prompts.push_back(("New Ability".to_string(), name, String::new()));
+                    } else if !self.no_room.contains(&g.ability) {
+                        self.no_room.push(g.ability);
+                        log(&format!("{} beaten, but Sora can't learn {name}: his ability list is full", g.boss));
                     }
                 }
             } else {
