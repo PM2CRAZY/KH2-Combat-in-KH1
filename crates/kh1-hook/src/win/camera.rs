@@ -230,14 +230,20 @@ unsafe fn run(lock: bool) -> Option<()> {
     let was_ours = now_ms().saturating_sub(LAST_MS.load(Ordering::Relaxed)) < 300;
     // (Or after a while of KH1's own: a cutscene had it.)
     let _ = fresh_mode;
-    if g.is_none() || !was_ours {
+    // (Or Sora is far from where it was looking: a new room, a warp.)
+    let far = g.as_ref().is_some_and(|c| (c.at - subject.feet).length() > 600.0 / s);
+    if g.is_none() || !was_ours || far {
         let f = kh2_camera::Params::FIELD;
         let mut c = kh2_camera::Camera::new(f, &subject);
         let (eye, at) = (rd::<[f32; 3]>(base + EYE_RVA), rd::<[f32; 3]>(base + TARGET_RVA));
         let d = Vec2::new(eye[0] - at[0], eye[2] - at[2]);
-        if d.length() > 1.0 && d.is_finite() {
-            // At the distance it was too (a pause menu closing didn't move it).
-            c.dist = (d.length() / s).clamp(f.dist_min, f.dist_max);
+        // At KH2's default distance (the user: entering a room it started on the ground looking
+        // up: KH1's pair was left over and close together, and KH2's closest distance puts the
+        // eye 150 below the look point). Facing the way KH1's camera looked when that camera
+        // was looking at Sora from a usual distance, else behind him.
+        let near = Vec2::new(at[0] - feet[0], at[2] - feet[2]).length() < 200.0;
+        let usual = d.length() / s >= f.dist_min && d.length() / s <= f.dist_max * 1.5;
+        if near && usual && d.is_finite() {
             c.snap_yaw(d.x.atan2(d.y));
         }
         *g = Some(c);

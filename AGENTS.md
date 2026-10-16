@@ -1013,3 +1013,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   KH1 doesn't see Square, and a Square press ends the handoff at once with KH2 taking it as a
   fresh press (KH2's roll). Before, KH1 started its own roll there (slot 117) and KH2 took over
   mid-way: he slid backwards (the user, jumping off a pole and rolling).
+
+### 2026-10-16: Stage 76 (KH2 camera on entering a room)
+- A new KH2 camera starts at KH2's default distance, behind Sora unless KH1's camera was
+  looking at him from a usual distance (then its yaw); and one is started when Sora is far from
+  the look point (a new room, a warp). Before, it took KH1's left-over pair's distance, and
+  KH2's closest distance puts the eye 150 below the look point: on the ground looking up (the
+  user, every room entry).
