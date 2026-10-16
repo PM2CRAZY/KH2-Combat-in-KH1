@@ -265,10 +265,8 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
             continue;
         }
         let p = rd::<[f32; 3]>(this + 0x10);
-        let (dx, dz) = (p[0] - at[0], p[2] - at[2]);
-        if dx * dx + dz * dz > NEAR * NEAR {
-            continue;
-        }
+        // (Near or not by its parts, below: a big one's root can be far from parts within
+        // reach, the user: Oogie's Manor's glowing blobs, parts of the manor itself.)
         let col = pose::ptr(rd::<u32>(this + 0x134));
         if col < 0x10000 {
             continue;
@@ -306,8 +304,21 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
             top = top.max(centre[1] + h);
             parts.push(Part { entry, shape });
         }
-        if parts.is_empty() {
+        let near = |c: [f32; 3]| {
+            let (dx, dz) = (c[0] - at[0], c[2] - at[2]);
+            dx * dx + dz * dz <= NEAR * NEAR
+        };
+        if parts.is_empty() || !parts.iter().any(|q| near([q.shape.center[0], 0.0, q.shape.center[2]])) {
             continue;
+        }
+        if count > 8 {
+            static SEEN: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
+            if let Ok(mut v) = SEEN.lock() {
+                if !v.contains(&this) && v.len() < 20 {
+                    v.push(this);
+                    log(&format!("big target {this:#x} (object {}): {} of {count} parts hittable, root {:.0} away", super::probe::object_id(this), parts.len(), ((p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2)).sqrt()));
+                }
+            }
         }
         let tall = (top - feet[1]).max(radius);
         let mut target = TargetInfo { id: this as u32, pos: feet, radius, height: tall };

@@ -1298,3 +1298,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - `chests.rs`: the battle check before the chest prompt (`0x1402B3904`: `test [0x142867CD8],
   1; jz`) becomes `jnc`, as the AP interaction script (KSX, Gicu) does. `chests_in_battle`.
 
+### 2026-10-16: Stage 115 (big targets by their parts)
+- The user: Sora couldn't hit the glowing blobs on Oogie's Manor. Likely parts of the manor
+  actor, whose root is far from Sora: `combat::bodies` dropped any actor whose root was more
+  than 1500 away. It now keeps an actor when any of its parts is within 1500 (KH1's own hit
+  pass tests every part), and logs big targets (more than 8 parts: parts hittable, root
+  distance) for the next look.
+
