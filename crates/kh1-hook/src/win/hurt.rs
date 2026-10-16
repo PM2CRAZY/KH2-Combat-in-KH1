@@ -162,7 +162,9 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         note(format!("KH2 reaction skipped (already {reacting:?}), HP {}", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
         return r;
     }
-    let blow = kind == 5;
+    // KH1's knock-backs (4) and launches (5) knock him away as KH2's blows do (so Aerial
+    // Recovery has something to recover from; the user: it never came out, every 4 was a flinch).
+    let blow = kind >= 4;
     // KH1's voice and rumble: 3 a flinch's, 4 / 5 a knock-back's.
     let big = kind >= 4;
     let dir = [-toward.x, -toward.y];

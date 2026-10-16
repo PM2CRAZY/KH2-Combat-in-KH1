@@ -1494,6 +1494,17 @@ impl Character {
                 }
             }
             ActionKind::Hurt => {
+                // Aerial Recovery from an air flinch too (knocked about in the air; the user: it
+                // never came out, KH1's hits rarely launch him): jump rights him.
+                let recovery_after = if self.abilities.hyper_healing { 2 } else { RECOVERY_AFTER };
+                if self.abilities.aerial_recovery && input.jump.pressed && self.airborne && f >= recovery_after && act.motion != motion::AERIAL_DODGE {
+                    self.vel_h = [0.0; 2];
+                    self.vel_y = 0.0;
+                    self.arc = Some(Arc::new(WALL_HOP, self.params.gravity));
+                    let m = if self.clip(motion::AERIAL_DODGE).is_some() { motion::AERIAL_DODGE } else { act.motion };
+                    self.start_action(ActionKind::Hurt, m);
+                    return false;
+                }
                 // Counterguard: attack during the guard's repel (exe).
                 if act.motion == motion::GUARD && input.attack.pressed && !self.airborne {
                     self.forced_row = Some(COUNTERGUARD_ROW);

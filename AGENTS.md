@@ -1072,3 +1072,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   by `select`). As KH2's help has it: the action button (Square) in a ground combo's combo or
   finisher window starts it (forced row), when equipped. Retaliating Slash also takes the
   action button now (KH2's), besides attack. Menu help texts for both rewritten to say so.
+
+### 2026-10-16: Stage 85 (Aerial Recovery has something to recover from)
+- KH1's knock-back hits (kind 4) are KH2 blows now, as its launches (5) were; every 4 was a
+  flinch, so Sora was hardly ever knocked into the air (the user: Aerial Recovery never came
+  out). Aerial Recovery (jump) also works from an air flinch (hit while airborne).
