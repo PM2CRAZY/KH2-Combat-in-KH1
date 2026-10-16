@@ -287,6 +287,12 @@ enum Mode {
 const WALL_HOP: f32 = 50.0;
 /// Frames into a launch before Aerial Recovery / Retaliating Slash can be used (exe: 16).
 const RECOVERY_AFTER: u32 = 16;
+/// Quick Run's fewest invulnerable frames (KH2 gives LV1 none).
+pub const QUICK_RUN_STAR_MIN: f32 = 6.0;
+
+/// Aerial Dodge's invulnerable frames before its level's (2 more per level).
+pub const AIR_DODGE_STAR: f32 = 8.0;
+
 /// Aerial Recovery's hop height and speed along the stick (`plyr.blow_recovery_h` / `_v`).
 const AIR_RECOVERY_HOP: f32 = 100.0;
 const AIR_RECOVERY_SPEED: f32 = 10.0;
@@ -1437,7 +1443,9 @@ impl Character {
             }
             ActionKind::QuickRun => {
                 let g = self.growth(self.abilities.quick_run).cloned().unwrap_or_default();
-                if (f as f32) < g.quick_run_star_time {
+                // KH2's (fmab: 0 / 8 / 12 / 16 frames by level); LV1 gets 6 too (the user: Quick
+                // Run should always have some).
+                if (f as f32) < g.quick_run_star_time.max(QUICK_RUN_STAR_MIN) {
                     fo.invulnerable = true;
                 }
                 fo.no_gravity = true;
@@ -1458,6 +1466,11 @@ impl Character {
                 }
             }
             ActionKind::AerialDodge => {
+                // Invulnerable at the start (the user: like Aerial Recovery; KH2's own dodge has
+                // none): 10 / 12 / 14 / 16 frames by level.
+                if (f as f32) < AIR_DODGE_STAR + 2.0 * self.abilities.aerial_dodge.min(4) as f32 {
+                    fo.invulnerable = true;
+                }
                 // The glide button mid-dodge: straight into Glide.
                 if self.glide_button == GlideButton::Action && input.action.pressed {
                     let me = std::mem::replace(&mut self.mode, Mode::Free);

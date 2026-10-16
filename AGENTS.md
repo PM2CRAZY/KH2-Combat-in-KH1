@@ -1212,3 +1212,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   finisher row (and a KH2 launch) only when it throws: sideways >= 10 or up >= 30 (or the
   default blow); the others land with the plain row. The last hit (927: 3 / 45) still throws.
 
+### 2026-10-16: Stage 104 (invulnerable frames)
+- The user: Aerial Recovery, Aerial Dodge and Quick Run should have invulnerable frames.
+  Aerial Recovery already had KH2's (to frame 16). Aerial Dodge (none in KH2) gets 10 / 12 /
+  14 / 16 by level (`AIR_DODGE_STAR` + 2 per level). Quick Run keeps KH2's fmab star times
+  (0 / 8 / 12 / 16 by level) with at least 6 (`QUICK_RUN_STAR_MIN`, for LV1).
+
