@@ -997,3 +997,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   crates and the camp's tent, flickering between landing and falling (the user's video).
   Otherwise the fall keeps KH2's own height. On the ground he stays on such a landing while
   KH1's collision keeps him on ground there.
+
+### 2026-10-16: Stage 73 (all of the Jungle Slider is KH1's)
+- The slider also runs in KH1 movement state 31 (the user: its jump and attack didn't work, KH2
+  had Sora there): every state from 30 up is KH1's (`kh1_mode`).

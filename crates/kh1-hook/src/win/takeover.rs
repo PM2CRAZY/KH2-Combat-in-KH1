@@ -267,7 +267,7 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH1's own movement modes KH2 has no part in: the Jungle Slider (state 30; the user: he
     // walked along the vines instead of sliding).
     let state = rd::<i32>(actor + 0x70);
-    let own_mode = KH1_MODES.contains(&state);
+    let own_mode = kh1_mode(state);
     KH1_MODE.store(own_mode, Ordering::Relaxed);
     if own_mode {
         release(&format!("KH1's own movement mode (KH1 state {state})"));
@@ -697,8 +697,11 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
     c.to_array()
 }
 
-/// KH1 movement states that are KH1's alone (30: the Jungle Slider).
-const KH1_MODES: [i32; 1] = [30];
+/// KH1 movement states that are KH1's alone: 30 and up (the Jungle Slider is 30 and 31: its
+/// slide, jumps and swings).
+fn kh1_mode(state: i32) -> bool {
+    state >= 30
+}
 /// Sora is in one of them (KH2's camera gives way too).
 static KH1_MODE: AtomicBool = AtomicBool::new(false);
 
@@ -711,7 +714,7 @@ pub fn kh1_scene() -> bool {
     }
     let event = unsafe { rd::<u32>(base + EVENT_RVA) } != 0;
     let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
-    let own_mode = sora > 0x10000 && KH1_MODES.contains(&unsafe { rd::<i32>(sora + 0x70) });
+    let own_mode = sora > 0x10000 && kh1_mode(unsafe { rd::<i32>(sora + 0x70) });
     event || own_mode || (active() && (SCRIPTED.load(Ordering::Relaxed) || FROZEN_FRAMES.load(Ordering::Relaxed) >= 2))
 }
 
