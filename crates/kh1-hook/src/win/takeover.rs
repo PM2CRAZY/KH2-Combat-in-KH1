@@ -737,7 +737,9 @@ pub fn kh1_scene() -> bool {
     }
     let event = unsafe { rd::<u32>(base + EVENT_RVA) } != 0;
     let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
-    let own_mode = sora > 0x10000 && kh1_mode(unsafe { rd::<i32>(sora + 0x70) });
+    // (The Jungle Slider's states only: a summon's own states (38 Simba's charge, 40 the call)
+    // keep KH2's camera, the user.)
+    let own_mode = sora > 0x10000 && matches!(unsafe { rd::<i32>(sora + 0x70) }, 30 | 31);
     // Held still counts out of battle only: in battle it is a summon's or a command's moment
     // (the user: KH2's camera should stay through Simba's charge).
     let battle = unsafe { rd::<u32>(base + BATTLE_RVA) } & 1 != 0;

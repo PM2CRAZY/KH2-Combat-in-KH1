@@ -1106,3 +1106,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - Letting go of the action button before Quick Run's time is up stops it with a stronger brake,
   the earlier the stronger (0.7 per tick for a tap, KH2's stop brake when held to the end): at
   LV2 a tap went ~740 units against ~950 held, as KH2's end slide is most of it (the user).
+
+### 2026-10-16: Stage 90 (KH2 camera through Simba's charge)
+- Only the Jungle Slider's movement states (30, 31) give the camera to KH1; a summon's (38
+  Simba's charge, 40 the call) keep KH2's (the user). KH1 still has Sora in all states 30+.
