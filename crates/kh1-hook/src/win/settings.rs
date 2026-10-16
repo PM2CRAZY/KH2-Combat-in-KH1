@@ -37,6 +37,8 @@ bonus_ap = on\r\n\
 ; auto_aim: off = swings turn toward only KH1's target (the R1 lock or the small cursor);\r\n\
 ; on = KH2's own pick, the nearest enemy in reach\r\n\
 auto_aim = off\r\n\
+; wall_clink: on = a swing that meets a wall clinks off it and bounces Sora back; off = it passes\r\n\
+wall_clink = off\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
@@ -61,6 +63,7 @@ pub struct Settings {
     pub kh2_voice: bool,
     pub bonus_ap: bool,
     pub auto_aim: bool,
+    pub wall_clink: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
@@ -108,6 +111,7 @@ pub fn get() -> &'static Settings {
             kh2_voice: on(&text, "kh2_voice", "on", false),
             bonus_ap: on(&text, "bonus_ap", "on", true),
             auto_aim: on(&text, "auto_aim", "on", false),
+            wall_clink: on(&text, "wall_clink", "on", false),
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {
                 Some("off") | Some("0") | Some("no") => None,
                 Some("all") => Some(None),

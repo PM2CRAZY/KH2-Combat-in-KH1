@@ -927,3 +927,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   target, states 1/2/4) in its target list, so swings neither turn toward nor home in on any
   other enemy or lock point; with none, a swing goes where the stick points. Ini `auto_aim = on`
   brings back KH2's own nearest-in-reach pick. The user: the automatic aim was too heavy.
+
+### 2026-10-16: Stage 62 (wall clinks off by default)
+- The user changed his mind: swings pass through walls again. The wall ray stays behind ini
+  `wall_clink = on` (default off).

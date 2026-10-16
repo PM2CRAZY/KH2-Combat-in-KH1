@@ -770,7 +770,9 @@ impl Strikes {
             // A wall in the blade's way since last frame: KH1's background ray, as its own swings
             // have it (`0x1402B1870`), and KH2's repel off it (the user: swings went through
             // walls). Walls only: a floor or ceiling the blade dips into doesn't repel.
-            if let Some(at) = before.iter().zip(shapes.iter()).find_map(|(p, s)| wall_between([p[0], -p[1], p[2]], [s.center[0], -s.center[1], s.center[2]])) {
+            // (Off by default: the user would rather swings pass through walls; ini `wall_clink`.)
+            if !super::settings::get().wall_clink {
+            } else if let Some(at) = before.iter().zip(shapes.iter()).find_map(|(p, s)| wall_between([p[0], -p[1], p[2]], [s.center[0], -s.center[1], s.center[2]])) {
                 self.repelled.insert(h.swing);
                 let bounced = character.register_wall_hit();
                 clang(at);
