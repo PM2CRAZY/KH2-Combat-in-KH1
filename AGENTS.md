@@ -1319,3 +1319,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   attack Sora owns: KH2 swings after `scale_record`, KH1 swings, magic) gets damage = the
   foe's HP (stats `+0x3C`), at least 9999.
 
+### 2026-10-16: Stage 118 (Neverland flight)
+- The user: Sora couldn't fly in Neverland. KH1's flight is movement state 8, not 25 (25 is
+  Mermaid Kick's dash, from swimming state 24 with KH1 ability 2). State table at
+  `0x142DB4240` (0x40 per state), filled by `0x1402AF9F0(state, flags, enter, exit, ...,
+  move +0x20, next +0x28, ..., +0x38)`; the setter is `0x1402AF7D0(actor, state)`. The fall
+  state (2) starts flight when the world flags `0x142867CD8` have bit 0x20 (Neverland) and
+  `+0x3D4` (height above the floor) is over 100 (`0x1402AFD30`: motion 0x75, state 8,
+  `+0x3C4 *= 0.3`), or by a per-room height table (`0x1402AFC10`, `0x140529970`: world 0xD
+  rooms 8 / 9, world 0x10 rooms 0x1A / 0x21 / 0x22). KH2 has the jumps, so KH1's fall state
+  never ran: `takeover` now does that check while KH2's jump comes down and calls KH1's flight
+  start; state 8 is KH1's own mode (and camera) until he lands.
+

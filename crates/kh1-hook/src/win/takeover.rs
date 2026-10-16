@@ -37,6 +37,17 @@ const MOVE_RVA: usize = 0x297710;
 const PARTY_RVA: usize = 0x2D37C80;
 const EVENT_RVA: usize = 0x298D3A0;
 const BATTLE_RVA: usize = 0x2867CD8;
+/// Flight (Neverland): the world flags' bit 0x20 lets Sora fly; KH1's fall state (2) starts
+/// it once he is more than 100 above the floor (`0x1402AFD30`: motion 0x75, state 8, his rise
+/// speed `+0x3C4` cut to 0.3) or, in a few rooms, above a set height (`0x1402AFC10`, the
+/// table at `0x140529970`; its next-state step `0x1402ADA30` then goes to 8).
+const FLIGHT_FLAG: u32 = 0x20;
+const FLIGHT_START_RVA: usize = 0x2AFD30;
+const FLIGHT_ROOM_RVA: usize = 0x2AFC10;
+const SET_STATE_RVA: usize = 0x2AF7D0;
+const FLIGHT_STATE: i32 = 8;
+/// KH1's flight starts above this height over the floor (`0x1404308D4`).
+const FLIGHT_ABOVE: f32 = 100.0;
 const LOCK_STATE_RVA: usize = 0x2DB3F10;
 const LOCK_TARGET_RVA: usize = 0x2DB3F18;
 /// A lock point's world position (`0x1402AE330 (actor, point, out) -> radius`, KH1 y-down).
@@ -292,6 +303,25 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     // KH1's own movement modes KH2 has no part in: the Jungle Slider (state 30; the user: he
     // walked along the vines instead of sliding).
+    // Flight (the user: Sora couldn't fly in Neverland): KH2 has his jumps, so KH1's fall state,
+    // where flight starts, never ran. KH2's jump past its top, as high as KH1 wants, starts
+    // KH1's own flight, which then has him (state 8) until he lands.
+    if KH2_AIR.load(Ordering::Relaxed) && rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 && matches!(rd::<i32>(actor + 0x70), 0 | 1) {
+        let falling = DRIVER.try_lock().ok().and_then(|d| d.as_ref().and_then(|d| d.last_out.as_ref().map(|o| o.displacement[1] <= 0.0))).unwrap_or(false);
+        let room: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + FLIGHT_ROOM_RVA);
+        let above = rd::<f32>(actor + 0x3D4);
+        if falling && (above > FLIGHT_ABOVE || room(actor) != 0) {
+            wr(actor + 0x3C4, 0.0f32);
+            if above > FLIGHT_ABOVE {
+                let start: unsafe extern "system" fn(usize) = std::mem::transmute(base + FLIGHT_START_RVA);
+                start(actor);
+            } else {
+                let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+                set(actor, FLIGHT_STATE);
+            }
+            log(&format!("flight: KH1 flies him ({:.0} above the floor; state now {})", above, rd::<i32>(actor + 0x70)));
+        }
+    }
     let state = rd::<i32>(actor + 0x70);
     let own_mode = kh1_mode(state);
     KH1_MODE.store(own_mode, Ordering::Relaxed);
@@ -774,15 +804,17 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
 /// KH1 movement states that are KH1's alone: 30 and up (the Jungle Slider is 30 and 31: its
 /// slide, jumps and swings), 29 (the magic carpet out of the Cave of Wonders: Agrabah room
 /// 0x14 puts Sora in it, `0x1402957F0`; the user: the carpet didn't move, a softlock), 24
-/// (swimming: Atlantica, and End of the World room 0x16's water, `0x140288920`) and 25 (flying,
-/// the other state where jump means up, `0x140291660`'s 0x203000100 mask). KH2 has none of these.
+/// (swimming: Atlantica, and End of the World room 0x16's water, `0x140288920`), 25 (Mermaid
+/// Kick's dash, from 24 with KH1 ability 2: `0x1402C9980`) and 8 (flying in Neverland: see
+/// `FLIGHT_FLAG`; with 24 and 25 the states where jump means up, `0x140291660`'s 0x203000100
+/// mask). KH2 has none of these.
 fn kh1_mode(state: i32) -> bool {
-    state >= 29 || matches!(state, 24 | 25)
+    state >= 29 || matches!(state, 24 | 25 | FLIGHT_STATE)
 }
 
 /// The same, for KH2's camera (KH1's own camera for the carpet, the slider, water and flight).
 pub fn kh1_camera_mode(state: i32) -> bool {
-    matches!(state, 24 | 25 | 29 | 30 | 31)
+    matches!(state, 24 | 25 | 29 | 30 | 31 | FLIGHT_STATE)
 }
 /// Sora is in one of them (KH2's camera gives way too).
 static KH1_MODE: AtomicBool = AtomicBool::new(false);
