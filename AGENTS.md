@@ -1039,3 +1039,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - The "New Ability" box waits until KH1's prompt box has been free for 4 s: a level-up's own
   box comes a moment after the level changes and replaced ours (Aerial Dodge's was logged as
   shown, the user never saw it).
+
+### 2026-10-16: Stage 80 (New Ability box beside the level-up's)
+- KH1's prompt column holds up to 5 boxes per party member (`0xBA0` apart, count 16 bytes before
+  the first). For 3 s after Sora learns an ability its box waits for KH1's own (the level-up's)
+  and is added as the next box in Sora's column, with its own text buffers; with none by then it
+  shows alone once the column is free (the user: show both at once).

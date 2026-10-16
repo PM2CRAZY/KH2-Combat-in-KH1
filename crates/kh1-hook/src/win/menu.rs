@@ -173,42 +173,51 @@ pub unsafe fn install() {
 /// KH-1FM-AP-LUA, MIT, `show_prompt`). Shows one box in Sora's place; false while that box is
 /// in use (a level-up's own, say).
 const PROMPT_BOX_RVA: usize = 0x283BD90;
+#[allow(dead_code)]
 const PROMPT_TEXT_RVA: usize = 0x2DC3068;
+/// Boxes per party member (`0x3A20` / `0xBA0`) and their size.
+const PROMPT_BOXES: usize = 5;
+const PROMPT_BOX_SIZE: usize = 0xBA0;
 const PROMPT_BOX_COLOUR_RVA: usize = 0x528710;
 const PROMPT_TEXT_COLOUR_RVA: usize = 0x528750;
 
-unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str) -> bool {
-    let bx = base + PROMPT_BOX_RVA;
-    let text = base + PROMPT_TEXT_RVA;
-    if !super::crash::readable(bx) || !super::crash::readable(bx + 0xB98) || !super::crash::readable(text + 0xB0) || rd::<i32>(bx) != 0 {
+unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str, append: bool) -> bool {
+    let first = base + PROMPT_BOX_RVA;
+    let count_at = first - 0x10;
+    if !super::crash::readable(count_at) || !super::crash::readable(first + PROMPT_BOX_SIZE * PROMPT_BOXES) {
         return false;
     }
-    let put = |at: usize, s: &str| {
+    let showing = rd::<i32>(first) != 0;
+    let n = rd::<i32>(count_at);
+    // Beside KH1's own (a level-up's) in Sora's column (the user: show both at once), or alone.
+    let index = match (showing, append) {
+        (true, true) if (1..PROMPT_BOXES as i32).contains(&n) => n as usize,
+        (false, false) => 0,
+        _ => return false,
+    };
+    let bx = first + index * PROMPT_BOX_SIZE;
+    // Our own text (KH1's prompt text area holds the level-up's).
+    let keep = |s: &str| -> usize {
         let mut b = encode(s);
         b.truncate(0x1F);
         b.push(0);
-        std::ptr::copy_nonoverlapping(b.as_ptr(), at as *mut u8, b.len());
+        Box::leak(b.into_boxed_slice()).as_ptr() as usize
     };
-    put(text, title);
-    put(text + 0x70, line1);
-    if !line2.is_empty() {
-        put(text + 0x90, line2);
-    }
     let w = |at: usize, v: u64| std::ptr::write_unaligned(at as *mut u64, v);
     let wi = |at: usize, v: i32| std::ptr::write_unaligned(at as *mut i32, v);
-    wi(bx - 0x10, 1);
-    w(bx + 0x30, text as u64);
+    w(bx + 0x30, keep(title) as u64);
     wi(bx + 0x18, if line2.is_empty() { 1 } else { 2 });
-    w(bx + 0x20, (text + 0x70) as u64);
+    w(bx + 0x20, keep(line1) as u64);
     if !line2.is_empty() {
-        w(bx + 0x28, (text + 0x90) as u64);
+        w(bx + 0x28, keep(line2) as u64);
     }
     wi(bx + 0x0C, 0);
     std::ptr::write_unaligned((bx + 0xB80) as *mut f32, 1.0);
     w(bx + 0xB88, (base + PROMPT_BOX_COLOUR_RVA) as u64);
     w(bx + 0xB90, (base + PROMPT_TEXT_COLOUR_RVA) as u64);
     wi(bx, 1);
-    log(&format!("prompt shown: {title} / {line1} / {line2}"));
+    wi(count_at, index as i32 + 1);
+    log(&format!("prompt shown: {title} / {line1} / {line2} (box {index}, KH1's count was {n})"));
     true
 }
 
@@ -319,20 +328,15 @@ impl Growth {
                 Mode::Kh1 => self.frames = 59,
             }
         }
-        // Shown once KH1's prompt box has been free for a while (4 s): a level-up's own box
-        // comes a moment after the level changes and replaced ours (the user never saw Aerial
-        // Dodge's, logged as shown).
+        // Beside the level-up's own box when it comes (the user: KH1 shows several at once): for
+        // up to 3 s after learning, added to KH1's when it is up; then alone if the box is free.
         if !self.prompts.is_empty() {
-            let bx = base + PROMPT_BOX_RVA;
-            let free = super::crash::readable(bx) && rd::<i32>(bx) == 0;
-            self.idle = if free { self.idle + 1 } else { 0 };
-            if self.idle >= 240 {
-                if let Some(p) = self.prompts.front().cloned() {
-                    if prompt(base, &p.0, &p.1, &p.2) {
-                        self.prompts.pop_front();
-                    }
+            self.idle += 1;
+            if let Some(p) = self.prompts.front().cloned() {
+                if prompt(base, &p.0, &p.1, &p.2, true) || (self.idle >= 180 && prompt(base, &p.0, &p.1, &p.2, false)) {
+                    self.prompts.pop_front();
+                    self.idle = 0;
                 }
-                self.idle = 0;
             }
         } else {
             self.idle = 0;
