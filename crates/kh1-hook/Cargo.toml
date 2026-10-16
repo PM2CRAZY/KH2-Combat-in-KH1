@@ -19,4 +19,5 @@ kh2-formats.workspace = true
 kh2-fx = { path = "../kh2-fx" }
 character-core = { path = "../character-core" }
 combat-core.workspace = true
+kh2-camera.workspace = true
 glam = "0.29"

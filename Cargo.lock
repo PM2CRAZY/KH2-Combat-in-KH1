@@ -2376,6 +2376,7 @@ dependencies = [
  "glam",
  "kh1-data",
  "kh2-anim",
+ "kh2-camera",
  "kh2-data",
  "kh2-formats",
  "kh2-fx",

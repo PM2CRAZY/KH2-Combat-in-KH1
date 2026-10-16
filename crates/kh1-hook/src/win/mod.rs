@@ -2,7 +2,9 @@
 //! (`OnInit`, the installed route) or a `dinput8.dll` proxy (the launcher failed to start
 //! with that in the shared KH folder, so it is not used).
 
+mod camera;
 mod combat;
+mod config;
 mod crash;
 mod feet;
 mod fx12;
@@ -154,6 +156,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         combat::install();
         hurt::install();
         menu::install();
+        camera::install();
+        config::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

@@ -948,3 +948,23 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 
 ### 2026-10-16: Stage 65 (New Ability box: the name only)
 - The "New Ability" box shows the ability's name alone (one line), the user's choice.
+
+### 2026-10-16: Stage 66 (KH2's field camera, Camera Style in KH1's Config menu)
+- Research: `docs/kh1-camera.md` (KH1's field camera module, its mode table and state) and
+  `docs/kh1-config-menu.md` (the Config menu's window, tables, text lookup, storage).
+- **`win/camera.rs`:** KH1's camera mode table (`0x140507AD0`) gets ours for mode 1 (follow)
+  and mode 3 (lock-on). Each frame `kh2_camera::Camera` (KH2's free follow / lock-on framing,
+  wall pull-in with KH1's camera ray `0x140191640`) writes KH1's internal eye / target, with
+  KH1's yaw / pitch / distance kept in step and its own timers zeroed; KH1 still blends to and
+  from its other cameras, runs its climbing / ledge cameras (`0x1401E3320`), events and area
+  cameras, and builds the View. Right stick: x turns (KH1's left/right option's sign), y zooms;
+  R3 resets; Select is KH1's first person; KH1's Auto / Manual option is KH2's Auto. KH1 world
+  ↔ camera: y flipped and divided by `camera_scale` (0.9).
+- **`win/config.rs`:** a ninth Config row "Camera Style: KH1 / KH2". The window definition's
+  row counts go to 9; its update is wrapped (our row's left / right / confirm switch the
+  camera and are hidden from KH1's update; the row is drawn with KH1's panel calls; rows 25
+  apart during the call so nine fit); the help line's id is swapped for ours on our row; the
+  sysmsg lookup `0x1402CE7C0` is replaced (our ids `0x7F000001..4`). The choice is saved in the
+  ini (`camera`), not the save.
+- Untested in game: the row's layout against the help box, the text codes in sysmsg, the
+  camera's turn direction and scale.
