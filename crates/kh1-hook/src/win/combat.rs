@@ -104,16 +104,15 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_COMMAND.load(Ordering::Acquire));
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
     let kind = rd::<u8>(base + COMMAND_RVA);
-    if actor != sora || matches!(kind, 0 | 1) || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::kh2_has() {
-        return f(actor, dir);
-    }
-    let air = takeover::kh2_airborne();
     // In the air KH1 allows only magic, kind 99 and kind 0x47 (`0x1402912F0`); KH1 judges the
-    // air by his flags, which stay the ground's while KH2 has him, so Sonic Blade and the like
-    // came out mid-jump (the user). Refused as KH1 refuses (magic of every kind stays: jump
-    // casts are wanted).
+    // air by his flags (`0x1402A0D30`), which stay the ground's while KH2 has him, and also
+    // while KH1 has him falling from one of our air casts (its fall state 2, which we set), so
+    // Sonic Blade and the like came out mid-jump (the user). Refused as KH1 refuses (magic of
+    // every kind stays: jump casts are wanted).
     let full = rd::<u32>(base + COMMAND_RVA);
-    if air && !matches!(kind, 2 | 99 | 0x47) {
+    let ours = actor == sora && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed);
+    let air = takeover::kh2_airborne();
+    if ours && !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && (air || rd::<i32>(actor + 0x70) == 2) {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 20 {
             log(&format!("command {kind:#x} ({full:08x}) refused in the air, as KH1 would"));
@@ -121,6 +120,13 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
         return;
+    }
+    if actor != sora || matches!(kind, 0 | 1) || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::kh2_has() {
+        return f(actor, dir);
+    }
+    static AIR_LOG: AtomicU32 = AtomicU32::new(0);
+    if AIR_LOG.fetch_add(1, Ordering::Relaxed) < 40 {
+        log(&format!("command {kind:#x}: KH2 has him {}", if air { "in the air" } else { "on the ground" }));
     }
     trail_off(actor);
     let before = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));

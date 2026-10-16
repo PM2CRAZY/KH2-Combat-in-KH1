@@ -1249,3 +1249,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   KH1's. `kh2_effects` keeps its own two (`kh2fx::DEFAULT_MOTIONS`). Any `kh2_sounds` word
   but `all` / `off` (the old `magnet_explosion` too) means the new default.
 
+### 2026-10-16: Stage 109 (no Sonic Blade in the air, again)
+- The user: Sonic Blade still came out mid-jump; the log had it as a ground command (command
+  0x4, not "in the air"). `kh2_airborne` read the driver with `try_lock`, and KH1's command
+  step can run while it is held (a failed lock read as "on the ground"): the takeover now keeps
+  `KH2_AIR` each frame. The refusal also runs while KH1 has him in its fall state 2 (after one
+  of our air casts, whose state we set without KH1's airborne flags), before the hand-off
+  test, and every command logs whether KH2 had him in the air.
+

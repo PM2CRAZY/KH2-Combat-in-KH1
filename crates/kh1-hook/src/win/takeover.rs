@@ -202,6 +202,7 @@ fn drop_pose() {
 }
 
 fn release(why: &str) {
+    KH2_AIR.store(false, Ordering::Relaxed);
     drop_pose();
     if let Ok(mut d) = DRIVER.try_lock() {
         if let Some(dr) = d.as_mut() {
@@ -460,6 +461,7 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     let out = d.character.step(&input, &env);
+    KH2_AIR.store(d.character.airborne(), Ordering::Relaxed);
 
     // KH2's displacement: the sideways part through KH1's mover (walls, slopes, steps up); the
     // height is KH2's while he is in the air (KH1's mover snaps a grounded actor back onto the
@@ -818,9 +820,12 @@ pub fn kh2_has() -> bool {
 }
 
 /// KH2 has Sora in the air this moment.
+/// (Kept each frame: KH1's command step can run while the driver is locked, and a failed
+/// `try_lock` read as "on the ground", the user: Sonic Blade mid-jump.)
 pub fn kh2_airborne() -> bool {
-    active() && !HANDOFF.load(Ordering::Relaxed) && DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false)
+    active() && !HANDOFF.load(Ordering::Relaxed) && KH2_AIR.load(Ordering::Relaxed)
 }
+static KH2_AIR: AtomicBool = AtomicBool::new(false);
 
 /// KH1 takes Sora for one of its own actions (a command): it keeps him until it has him
 /// standing in a movement motion again (see `HANDOFF`).
