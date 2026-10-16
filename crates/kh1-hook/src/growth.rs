@@ -168,9 +168,9 @@ pub const MENU: [MenuAbility; 12] = [
     m(70, "Horizontal Slash", "Air combo: slash foes while spinning in midair.", 2, 16, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH)),
     m(71, "Negative Combo", "Shortens combos by one attack.", 2, 20, List::Sora, kh1::COMBO_PLUS, Effect::NegativeCombo),
     m(72, "Aerial Spiral", "Air combo: spin into foes in midair.", 2, 25, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_SPIRAL)),
-    m(73, "Upper Slash", "Counter: knock a foe into the air after guarding.", 4, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::UPPER_SLASH)),
+    m(73, "Upper Slash", "Combo: knock a foe into the air with Square.", 4, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::UPPER_SLASH)),
     m(74, "Finishing Plus", "Adds a finishing move to the combo.", 5, 34, List::Sora, kh1::COMBO_PLUS, Effect::FinishingPlus),
-    m(75, "Retaliating Slash", "Counter: strike back while knocked away.", 3, 43, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::RETALIATING_SLASH)),
+    m(75, "Retaliating Slash", "When knocked away, recover and strike back with Square.", 3, 43, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::RETALIATING_SLASH)),
     m(76, "Aerial Dive", "Air combo: dive down at a foe below.", 2, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE)),
     m(77, "Magnet Burst", "Finisher: pull in foes all around.", 3, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST)),
 ];

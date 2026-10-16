@@ -290,6 +290,9 @@ const RECOVERY_AFTER: u32 = 6;
 /// handler does (`current motion == 0x2A` → row 0x27). Retaliating Slash: attack while
 /// launched (ours; the exe checks it in a separate routine whose row id comes in a register).
 const COUNTERGUARD_ROW: u8 = 39;
+/// Upper Slash (ability 18): the action button during a ground combo.
+const UPPER_SLASH_ROW: u8 = 12;
+const UPPER_SLASH_ABILITY: u16 = 18;
 const RETALIATING_SLASH_ROW: u8 = 40;
 /// Hit-back starting speed per unit of distance (exe: 0.1).
 const HIT_BACK_SPEED: f32 = 0.1;
@@ -1527,8 +1530,9 @@ impl Character {
                     self.start_action(ActionKind::Hurt, m);
                     return false;
                 }
-                // Retaliating Slash (ours, see RETALIATING_SLASH_ROW): attack while launched.
-                if input.attack.pressed && self.airborne && f >= recovery_after {
+                // Retaliating Slash (see RETALIATING_SLASH_ROW): the action button while launched,
+                // as KH2's help has it (Square); attack too (ours, as before).
+                if (input.action.pressed || input.attack.pressed) && self.airborne && f >= recovery_after {
                     self.forced_row = Some(RETALIATING_SLASH_ROW);
                     let (vh, vy, arc) = (self.vel_h, self.vel_y, self.arc);
                     self.vel_h = [0.0; 2];
@@ -1560,6 +1564,17 @@ impl Character {
                         return true;
                     }
                     self.buffered_attack = false;
+                }
+                // Upper Slash: the action button (Square) during a ground combo knocks the target
+                // into the air (KH2's help: "Knocks a target into the air during a combo"; its
+                // PTYA row 12 is kind 0, reached only this way; the user: it never came out).
+                if input.action.pressed && !self.airborne && (combo_open || finisher_open) && self.abilities.equipped.contains(&UPPER_SLASH_ABILITY) {
+                    self.mode = Mode::Action(act.clone());
+                    self.forced_row = Some(UPPER_SLASH_ROW);
+                    if self.try_attack(input, env) {
+                        return true;
+                    }
+                    self.forced_row = None;
                 }
             }
         }
