@@ -235,29 +235,11 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     let frozen = !CONTROLLED.swap(false, Ordering::Relaxed) && CONTROL_HOOKED.load(Ordering::Relaxed);
     FROZEN_NOW.store(frozen, Ordering::Relaxed);
-    // KH1's control of him coming and going every few frames is one of its rides (the user:
-    // the magic carpet out of the Cave of Wonders didn't move while KH2 had him between): KH1
-    // has him while it lasts, and 3 s after.
+    // KH1's control of him coming and going every few frames while KH2 has him is one of its
+    // rides (the user: the magic carpet out of the Cave of Wonders didn't move while KH2 had him
+    // between): KH1 has him for 5 s (counted only while KH2 has him: KH1's own frames flicker
+    // too, and counting them kept him KH1's in plain rooms, the user).
     let now = now_ms();
-    if LAST_FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
-        if let Ok(mut q) = FLICKER.lock() {
-            q.push_back(now);
-            while q.front().is_some_and(|t| now.saturating_sub(*t) > 3000) {
-                q.pop_front();
-            }
-            if q.len() >= 6 {
-                if RIDE_UNTIL.swap(now + 3000, Ordering::Relaxed) < now {
-                    log(&format!(
-                        "KH1's control comes and goes ({} times in 3 s): KH1 has him (KH1 state {}, flags {:08x}, on {:#x})",
-                        q.len(),
-                        rd::<i32>(actor + 0x70),
-                        rd::<u32>(actor),
-                        pose::ptr(rd::<u32>(actor + 0x398))
-                    ));
-                }
-            }
-        }
-    }
     if now < RIDE_UNTIL.load(Ordering::Relaxed) {
         release("a ride: KH1's control comes and goes");
         return false;
@@ -376,6 +358,19 @@ unsafe fn takeover(actor: usize) -> bool {
     // tutorial windows; the user: he moved anyway): KH2 gets no input (he still falls, lands
     // and finishes what he was doing).
     let frozen = FROZEN_NOW.load(Ordering::Relaxed);
+    if LAST_FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
+        if let Ok(mut q) = FLICKER.lock() {
+            q.push_back(now);
+            while q.front().is_some_and(|t| now.saturating_sub(*t) > 3000) {
+                q.pop_front();
+            }
+            if q.len() >= 10 {
+                q.clear();
+                RIDE_UNTIL.store(now + 5000, Ordering::Relaxed);
+                log(&format!("KH1's control comes and goes (10 times in 3 s): KH1 has him for 5 s (KH1 state {}, flags {:08x})", rd::<i32>(actor + 0x70), rd::<u32>(actor)));
+            }
+        }
+    }
     if FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);

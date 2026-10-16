@@ -1257,3 +1257,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   of our air casts, whose state we set without KH1's airborne flags), before the hand-off
   test, and every command logs whether KH2 had him in the air.
 
+### 2026-10-16: Stage 110 (the ride test only while KH2 has him)
+- The user: Sora stuck in KH1's animations. Stage 102's ride test counted KH1's control coming
+  and going on every frame, KH1's own included (a room entry's script holds, then KH1's own
+  frames, which flicker too), and each count kept the ride going: KH1 had him for good. It now
+  counts only on frames KH2 has him, needs 10 changes in 3 s, and gives KH1 him for 5 s
+  without extending.
+
