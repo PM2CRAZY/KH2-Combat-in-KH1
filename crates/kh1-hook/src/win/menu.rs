@@ -284,6 +284,8 @@ pub struct Growth {
     gave_back: bool,
     /// "New ability" boxes waiting for KH1's prompt box to be free: (title, line, line).
     prompts: std::collections::VecDeque<(String, String, String)>,
+    /// Frames KH1's prompt box has been free.
+    idle: u32,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -292,7 +294,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default() }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0 }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -317,12 +319,23 @@ impl Growth {
                 Mode::Kh1 => self.frames = 59,
             }
         }
-        if self.frames % 30 == 0 {
-            if let Some(p) = self.prompts.front().cloned() {
-                if prompt(base, &p.0, &p.1, &p.2) {
-                    self.prompts.pop_front();
+        // Shown once KH1's prompt box has been free for a while (4 s): a level-up's own box
+        // comes a moment after the level changes and replaced ours (the user never saw Aerial
+        // Dodge's, logged as shown).
+        if !self.prompts.is_empty() {
+            let bx = base + PROMPT_BOX_RVA;
+            let free = super::crash::readable(bx) && rd::<i32>(bx) == 0;
+            self.idle = if free { self.idle + 1 } else { 0 };
+            if self.idle >= 240 {
+                if let Some(p) = self.prompts.front().cloned() {
+                    if prompt(base, &p.0, &p.1, &p.2) {
+                        self.prompts.pop_front();
+                    }
                 }
+                self.idle = 0;
             }
+        } else {
+            self.idle = 0;
         }
         if self.frames % 60 != 0 {
             return;

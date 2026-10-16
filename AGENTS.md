@@ -1034,3 +1034,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - Framed as in KH2: `camera_scale` 0.89 (KH1 / KH2 Sora's hips) and `camera_lower` 0.
 - Sticks: the pad's raw ones with a 15% dead zone (KH1's processed ones drop the inner 47%);
   KH1's processed right stick when the raw one is idle (mouse).
+
+### 2026-10-16: Stage 79 (New Ability box after the level-up's own)
+- The "New Ability" box waits until KH1's prompt box has been free for 4 s: a level-up's own
+  box comes a moment after the level changes and replaced ours (Aerial Dodge's was logged as
+  shown, the user never saw it).
