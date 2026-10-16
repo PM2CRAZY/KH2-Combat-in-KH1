@@ -1171,3 +1171,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   now read code by code (`0x1402CFEA0`'s operand sizes) and the confirm icon (`0F 41`) becomes
   cancel's (`0F 42`).
 
+### 2026-10-16: Stage 99 (the gradient over four rows)
+- The user: the shortcut panel's gradient should go all the way down. The panel is drawn as its
+  header and four 22 px rows cut from KH1's three; row k shows texture row 2k/3, the two
+  nearest rows blended (the second drawn over with vertex alpha), so the shading spreads over
+  four rows and the shapes stay KH1's. The Customize label came out `0d 16 00 0f 42` (right).
+

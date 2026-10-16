@@ -315,7 +315,7 @@ unsafe extern "system" fn step() -> u64 {
 }
 
 /// The shortcut menu's panels (`0x140278880`, re-done here): the tall one (header and three
-/// rows) gets a fourth row, its last row's slice drawn again a row lower; the title as it is.
+/// rows) is drawn as a header and four rows, its gradient spread over them; the title as it is.
 unsafe extern "system" fn panel(inst: usize, def: usize, x: i32, y: i32, scale: f32, p6: i32, p7: i32) {
     let base = base();
     let q = base + QUAD_RVA;
@@ -361,18 +361,37 @@ unsafe extern "system" fn panel(inst: usize, def: usize, x: i32, y: i32, scale: 
         ));
     }
     if bottom - top >= 48 * 16 {
-        // The panel as KH1 has it (header and three rows), then its last row's slice again a
-        // row lower: a fourth row like the others.
-        go();
+        // Header, then four rows from KH1's three (22 px each, from the bottom up). Its
+        // gradient spreads over the four: row k shows the texture's row 2k/3, a blend of the
+        // two nearest rows (same shapes, so only the shading moves).
+        let mut keep = [0u8; 0xE0];
+        std::ptr::copy_nonoverlapping(q as *const u8, keep.as_mut_ptr(), keep.len());
         let (vt, vb) = (rd::<i32>(q + 0x24), rd::<i32>(q + 0x34));
         let ev = ((vb - vt) as i64 * e as i64 / (bottom - top) as i64) as i32;
-        wr(q + 0xA4, bottom);
-        wr(q + 0xC4, bottom);
-        wr(q + 0xB4, bottom + e);
-        wr(q + 0xD4, bottom + e);
-        wr(q + 0x24, vb - ev);
-        wr(q + 0x44, vb - ev);
-        go();
+        let (rows_y, rows_v) = (bottom - 3 * e, vb - 3 * ev);
+        let piece = |y0: i32, y1: i32, v0: i32, v1: i32, alpha: f32| {
+            std::ptr::copy_nonoverlapping(keep.as_ptr(), q as *mut u8, keep.len());
+            for (off, v) in [(0xA4, y0), (0xC4, y0), (0xB4, y1), (0xD4, y1), (0x24, v0), (0x44, v0), (0x34, v1), (0x54, v1)] {
+                wr(q + off, v);
+            }
+            if alpha < 1.0 {
+                for k in 0..4 {
+                    let c = q + 0x60 + k * 0x10 + 12;
+                    wr(c, (rd::<i32>(c) as f32 * alpha) as i32);
+                }
+            }
+            go();
+        };
+        piece(top, rows_y, vt, rows_v, 1.0);
+        for k in 0..4 {
+            let y = rows_y + k * e;
+            let c = k as f32 * 2.0 / 3.0;
+            let (a, f) = (c.floor() as i32, c.fract());
+            piece(y, y + e, rows_v + a * ev, rows_v + (a + 1) * ev, 1.0);
+            if f > 0.01 {
+                piece(y, y + e, rows_v + (a + 1) * ev, rows_v + (a + 2) * ev, f);
+            }
+        }
     } else {
         go();
     }
