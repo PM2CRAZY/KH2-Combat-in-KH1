@@ -1345,3 +1345,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   start again once the combo is over (KH2 state Air / Jump, coming down) at any height above
   20, not only above KH1's 100; cleared on landing.
 
+### 2026-10-16: Stage 121 (no sinking in a flight combo)
+- The user: Sora should stay in flight through the combo. While `FLEW` and KH2 is attacking
+  (Attack / Magic / Aerial Dodge, in the air), KH2's downward displacement is dropped (rises
+  kept); the flight takes him again when the combo ends.
+

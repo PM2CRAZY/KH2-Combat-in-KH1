@@ -512,7 +512,13 @@ unsafe fn takeover(actor: usize) -> bool {
         targets.retain(|t| Some(t.id) == lock);
     }
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
-    let out = d.character.step(&input, &env);
+    let mut out = d.character.step(&input, &env);
+    // Out of flight for a combo: he stays up through it (the user: Sora should remain in
+    // flight throughout the combo); KH2's aerial attacks sink between hits, so no sinking while
+    // attacking (rises, as an upward finisher's, stay). Flight takes him again once it's done.
+    if FLEW.load(Ordering::Relaxed) && d.character.airborne() && matches!(d.character.state_name(), StateName::Attack | StateName::Magic | StateName::AerialDodge) {
+        out.displacement[1] = out.displacement[1].max(0.0);
+    }
     KH2_AIR.store(d.character.airborne(), Ordering::Relaxed);
 
     // KH2's displacement: the sideways part through KH1's mover (walls, slopes, steps up); the
