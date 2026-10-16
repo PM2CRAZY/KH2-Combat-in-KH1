@@ -772,9 +772,17 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
 }
 
 /// KH1 movement states that are KH1's alone: 30 and up (the Jungle Slider is 30 and 31: its
-/// slide, jumps and swings).
+/// slide, jumps and swings), 29 (the magic carpet out of the Cave of Wonders: Agrabah room
+/// 0x14 puts Sora in it, `0x1402957F0`; the user: the carpet didn't move, a softlock), 24
+/// (swimming: Atlantica, and End of the World room 0x16's water, `0x140288920`) and 25 (flying,
+/// the other state where jump means up, `0x140291660`'s 0x203000100 mask). KH2 has none of these.
 fn kh1_mode(state: i32) -> bool {
-    state >= 30
+    state >= 29 || matches!(state, 24 | 25)
+}
+
+/// The same, for KH2's camera (KH1's own camera for the carpet, the slider, water and flight).
+pub fn kh1_camera_mode(state: i32) -> bool {
+    matches!(state, 24 | 25 | 29 | 30 | 31)
 }
 /// Sora is in one of them (KH2's camera gives way too).
 static KH1_MODE: AtomicBool = AtomicBool::new(false);
@@ -790,7 +798,7 @@ pub fn kh1_scene() -> bool {
     let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
     // (The Jungle Slider's states only: a summon's own states (38 Simba's charge, 40 the call)
     // keep KH2's camera, the user.)
-    let own_mode = sora > 0x10000 && matches!(unsafe { rd::<i32>(sora + 0x70) }, 30 | 31);
+    let own_mode = sora > 0x10000 && kh1_camera_mode(unsafe { rd::<i32>(sora + 0x70) });
     // Held still counts out of battle only: in battle it is a summon's or a command's moment
     // (the user: KH2's camera should stay through Simba's charge).
     let battle = unsafe { rd::<u32>(base + BATTLE_RVA) } & 1 != 0;

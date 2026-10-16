@@ -1264,3 +1264,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   counts only on frames KH2 has him, needs 10 changes in 3 s, and gives KH1 him for 5 s
   without extending.
 
+### 2026-10-16: Stage 111 (the magic carpet, for certain)
+- The user can't easily get back to the carpet and it softlocks if broken. `0x1402957F0` (the
+  player actor's setup) puts Sora in movement state 29 (0x1D) in Agrabah (world 8) room 0x14
+  while its event index is under 0xD: the carpet out of the Cave of Wonders. KH1's own modes
+  were 30 and up; now 29, 24 and 25 too (24 is Atlantica's water, set when `0x14298D3A0`, world
+  9 or End of the World room 0x15, `0x140288920`; 24 / 25 are the states where jump means up,
+  `0x140291660`'s mask 0x203000100). KH1's camera for 24 / 25 / 29 / 30 / 31. (Stage 110's
+  flicker test stays as a fallback.)
+
