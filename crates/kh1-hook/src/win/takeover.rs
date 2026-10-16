@@ -56,7 +56,22 @@ static FLY_PRESS: AtomicBool = AtomicBool::new(false);
 /// Flying when KH2 took him: back into flight after the combo at any height (down to
 /// `FLEW_ABOVE`), until he lands.
 static FLEW: AtomicBool = AtomicBool::new(false);
-const FLEW_ABOVE: f32 = 20.0;
+const FLEW_ABOVE: f32 = 5.0;
+/// In a flight combo he doesn't come down below this over the floor (the user: an attack that
+/// touched the ground ended the flight), unless Square (flight's descend) is held.
+const FLY_FLOOR: f32 = 15.0;
+/// A flight combo's way to its target's height (the user: home in on it, down too): the feet
+/// go toward the target point less this, at this share of the gap a frame, at most this fast.
+const FLY_AIM_BELOW: f32 = 60.0;
+const FLY_AIM_RATE: f32 = 0.15;
+const FLY_AIM_MAX: f32 = 14.0;
+const FLY_AIM_REACH: f32 = 600.0;
+/// The flight sparkle (Tinker Bell's dust): Sora's step `0x140295E50` keeps its effect
+/// (`+0xB0`, effect 0x14 on bone 0x8003, `0x1402ABA90`) while his state is 8 and ends it
+/// otherwise. Its `cmp [rdi+0x70],8; jnz; mov eax,[rdi]` at `0x14029602E` calls a stub that
+/// also says "flying" while this flag byte (in the stub) is set: during a flight combo.
+const SPARKLE_RVA: usize = 0x29602E;
+static SPARKLE_FLAG: AtomicUsize = AtomicUsize::new(0);
 const LOCK_STATE_RVA: usize = 0x2DB3F10;
 const LOCK_TARGET_RVA: usize = 0x2DB3F18;
 /// A lock point's world position (`0x1402AE330 (actor, point, out) -> radius`, KH1 y-down).
@@ -223,6 +238,7 @@ fn drop_pose() {
 
 fn release(why: &str) {
     KH2_AIR.store(false, Ordering::Relaxed);
+    unsafe { set_sparkle(false) };
     drop_pose();
     if let Ok(mut d) = DRIVER.try_lock() {
         if let Some(dr) = d.as_mut() {
@@ -516,9 +532,31 @@ unsafe fn takeover(actor: usize) -> bool {
     // Out of flight for a combo: he stays up through it (the user: Sora should remain in
     // flight throughout the combo); KH2's aerial attacks sink between hits, so no sinking while
     // attacking (rises, as an upward finisher's, stay). Flight takes him again once it's done.
-    if FLEW.load(Ordering::Relaxed) && d.character.airborne() && matches!(d.character.state_name(), StateName::Attack | StateName::Magic | StateName::AerialDodge) {
+    let flew = FLEW.load(Ordering::Relaxed) && d.character.airborne();
+    if flew && matches!(d.character.state_name(), StateName::Attack | StateName::Magic | StateName::AerialDodge) {
         out.displacement[1] = out.displacement[1].max(0.0);
+        // Toward the height of what the swing goes for (KH2's own approach is level).
+        if matches!(d.character.state_name(), StateName::Attack) {
+            let aim = targets
+                .iter()
+                .filter(|t| Some(t.id) == lock || lock.is_none())
+                .map(|t| (t, (t.pos[0] - pos[0]).hypot(t.pos[2] - pos[2])))
+                .filter(|(_, h)| *h < FLY_AIM_REACH)
+                .min_by(|a, b| a.1.total_cmp(&b.1));
+            if let Some((t, _)) = aim {
+                let gap = (t.pos[1] - FLY_AIM_BELOW) - pos[1];
+                if gap.abs() > 8.0 {
+                    out.displacement[1] = (gap * FLY_AIM_RATE).clamp(-FLY_AIM_MAX, FLY_AIM_MAX);
+                }
+            }
+        }
     }
+    // In flight's combo: not down onto the floor unless Square (descend) is held.
+    let descend = RAW_BUTTONS.load(Ordering::Relaxed) as u16 & SQUARE != 0;
+    if flew && !descend && out.displacement[1] < 0.0 {
+        out.displacement[1] = out.displacement[1].max(-(above - FLY_FLOOR).max(0.0));
+    }
+    set_sparkle(flew);
     KH2_AIR.store(d.character.airborne(), Ordering::Relaxed);
 
     // KH2's displacement: the sideways part through KH1's mover (walls, slopes, steps up); the
@@ -951,9 +989,37 @@ unsafe fn keyblade(base: usize, actor: usize, out: bool, logged: &mut u32) {
     }
 }
 
+/// Sets the sparkle stub's flag (see `SPARKLE_RVA`).
+unsafe fn set_sparkle(on: bool) {
+    let f = SPARKLE_FLAG.load(Ordering::Relaxed);
+    if f != 0 {
+        std::ptr::write_volatile(f as *mut u8, on as u8);
+    }
+}
+
+/// The flight sparkle's state test: a stub doing `cmp [rdi+0x70],8; je; cmp byte [flag],1`
+/// (ZF set: flying), then the `mov eax,[rdi]` it replaced.
+unsafe fn sparkle_stub(base: usize) {
+    let site = base + SPARKLE_RVA;
+    let Some(stub) = hook::alloc_near(site, 32) else {
+        log("flight sparkle: no memory near its test");
+        return;
+    };
+    let code: [u8; 17] = [0x83, 0x7F, 0x70, 0x08, 0x74, 0x07, 0x80, 0x3D, 0x03, 0x00, 0x00, 0x00, 0x01, 0x8B, 0x07, 0xC3, 0x00];
+    std::ptr::copy_nonoverlapping(code.as_ptr(), stub as *mut u8, code.len());
+    let mut new = [0u8; 8];
+    new[0] = 0xE8;
+    new[1..5].copy_from_slice(&((stub as i64 - (site as i64 + 5)) as i32).to_le_bytes());
+    new[5..8].copy_from_slice(&[0x75, 0x5C, 0x90]);
+    if hook::patch(site, &[0x83, 0x7F, 0x70, 0x08, 0x75, 0x5D, 0x8B, 0x07], &new, "flight sparkle test") {
+        SPARKLE_FLAG.store(stub + 16, Ordering::Relaxed);
+    }
+}
+
 pub unsafe fn install() {
     let base = sys_base();
     BASE.store(base, Ordering::Relaxed);
+    sparkle_stub(base);
     hook::install(base + PHYS_RVA, &PHYS_PROLOGUE, physics as *const () as usize, &ORIG_PHYS, "actor physics step");
     if hook::install(base + CONTROL_RVA, &CONTROL_PROLOGUE, control as *const () as usize, &ORIG_CONTROL, "player control step").is_some() {
         CONTROL_HOOKED.store(true, Ordering::Relaxed);

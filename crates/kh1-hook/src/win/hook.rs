@@ -17,7 +17,7 @@ fn abs_jmp(to: usize) -> [u8; 14] {
 }
 
 /// Executable memory within 2 GB below `near` (for `rel32` jumps from the game's code).
-unsafe fn alloc_near(near: usize, size: usize) -> Option<usize> {
+pub unsafe fn alloc_near(near: usize, size: usize) -> Option<usize> {
     let mut at = (near & !0xFFFF).saturating_sub(0x1000_0000);
     let low = near.saturating_sub(0x7000_0000);
     while at > low {

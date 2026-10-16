@@ -1356,3 +1356,18 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (`0x1404308B0`) after jumping off something, or while `+0x3B0 <= +0x3B8 + 6` when `+0x3B8`
   is set. Our "rising under 2 a frame" limit (stage 81) is gone.
 
+### 2026-10-16: Stage 123 (flight combos: sparkle, homing, no landing)
+- The user: keep the flight sparkle through flying attacks, home in on the enemy (down too),
+  and don't end the flight when a move touches the ground unless Square (descend) is held.
+- Sparkle: Sora's step `0x140295E50` keeps its effect at `+0xB0` (`0x1402ABA90(0x142D67400,
+  0x14, sora, 0x8003)`) while state 8 and ends it (`byte = 1` on its `+0x10`) otherwise.
+  `takeover::sparkle_stub` replaces `cmp [rdi+0x70],8; jnz; mov eax,[rdi]` at `0x14029602E`
+  with a call to a stub that also answers "flying" while its flag byte is set (a flight
+  combo: `FLEW` and airborne). (The 0x42D4 flight sound and the low-flight dust `0x1402BFEB0`
+  are flight's move step's own.)
+- Homing: KH2's approach is level; in a flight combo's attack the feet go toward the aimed
+  target's point less 60 (lock, else the nearest within 600) at 0.15 of the gap a frame, at
+  most 14.
+- No landing: in a flight combo the fall stops 15 above the floor unless Square is held; the
+  flight takes him again from 5 up.
+
