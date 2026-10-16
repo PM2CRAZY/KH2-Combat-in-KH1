@@ -38,6 +38,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `wall_clink` | `off` (default), `on` | On: a swing that meets a wall clinks off it (KH1's background ray) and bounces Sora back. Off: swings pass through walls. |
 | `camera` | `kh2` (default), `kh1` | KH2's field camera (follows behind, swings behind while running with Auto, right stick turns and zooms, R3 resets, KH2's lock-on framing) or KH1's own. The Config menu's new last row, Camera Style, switches it in game and writes it here. |
 | `camera_scale` | `1.0` (default) | KH2's camera distances and heights are multiplied by this (1.0: KH2's own distance). |
+| `camera_lower` | `70` (default) | KH2's camera, look point and eye together, this much lower (KH2 looks 170 above the feet, above KH1 Sora's head): Sora nearer the middle of the screen. 0 = as KH2. |
 | `config_row` | `on` (default), `off` | The Config menu's Camera Style row (off: none; `camera` alone decides). |
 
 ## What is KH1's and what is KH2's

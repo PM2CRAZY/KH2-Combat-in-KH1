@@ -164,7 +164,10 @@ unsafe fn run(lock: bool) -> Option<()> {
     if !feet.iter().all(|v| v.is_finite()) || !facing.is_finite() {
         return None;
     }
-    let subject = kh2_camera::Subject { feet: to_cam(feet, s), facing, run_speed: 8.0 };
+    // Lowered as a whole (the user: Sora near the middle of the screen; KH2's look point, 170
+    // above the feet, is above KH1 Sora's head).
+    let lower = super::settings::get().camera_lower;
+    let subject = kh2_camera::Subject { feet: to_cam(feet, s) - Vec3::Y * (lower / s), facing, run_speed: 8.0 };
 
     // Input: KH1's processed sticks (-1..1, y down) and buttons. Sora unable to act: no stick.
     let free = rd::<u32>(sora + 0x444) & 1 == 0;
