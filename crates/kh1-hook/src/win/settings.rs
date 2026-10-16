@@ -27,8 +27,9 @@ commands = on\r\n\
 ; swing_fx: on = KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice\r\n\
 swing_fx = on\r\n\
 ; kh2_sounds: KH2's own sound effects for these moves, from your KH2 install:\r\n\
-; magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
-kh2_sounds = magnet_explosion\r\n\
+; abilities (every KH2 ability move: Upper Slash, Explosion, Aerial Finish...), all (every\r\n\
+; move, the plain combo too), off\r\n\
+kh2_sounds = abilities\r\n\
 kh2_volume = 1.0\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
 kh2_voice = off\r\n\
@@ -139,7 +140,7 @@ pub fn get() -> &'static Settings {
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {
                 Some("off") | Some("0") | Some("no") => None,
                 Some("all") => Some(None),
-                _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
+                _ => Some(Some(super::kh2fx::DEFAULT_MOTIONS.to_vec())),
             },
             fx_test: on(&text, "fx_test", "on", false),
             flip_weapons: match setting(&text, "flip_weapons") {

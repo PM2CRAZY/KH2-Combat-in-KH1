@@ -1240,3 +1240,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   while Riku (Hollow Bastion, first time) isn't beaten, and given again (with its box) once he
   is.
 
+### 2026-10-16: Stage 108 (KH2's sounds for every ability move)
+- The user: the exact KH2 sounds for the KH2 moves, as Explosion's and Magnet Burst's (no
+  visuals). `kh2sound::DEFAULT_MOTIONS` is now every ability motion of Sora's PTYA (161..172,
+  191..197: Upper Slash, Slapshot, Dodge Slash, Slide Dash, Guard Break, Explosion, Finishing
+  Leap, Flash Step, Vicinity Break, Counterguard, Retaliating Slash, Aerial Sweep, Aerial
+  Spiral, Horizontal Slash, Aerial Finish, Aerial Dive, Magnet Burst); the plain combo keeps
+  KH1's. `kh2_effects` keeps its own two (`kh2fx::DEFAULT_MOTIONS`). Any `kh2_sounds` word
+  but `all` / `off` (the old `magnet_explosion` too) means the new default.
+

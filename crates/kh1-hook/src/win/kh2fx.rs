@@ -18,6 +18,9 @@
 //! Ini: `kh2_effects` (`magnet_explosion` default, `all`, `off`), `fx_test = on` starts Magnet
 //! Burst's sphere at Sora every 4 seconds (to check the renderer in game).
 
+
+/// Explosion and Magnet Burst (the visuals stay those two; the user: no others needed).
+pub const DEFAULT_MOTIONS: [u16; 2] = [166, 197];
 use super::{fx12, hook, log};
 use character_core::EventKind;
 use glam::{Mat4, Vec3};

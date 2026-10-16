@@ -11,15 +11,19 @@
 //! KH2 Sora is loaded, a thread reads them from the user's own KH2 install, decodes them
 //! (Microsoft ADPCM, Ogg Vorbis for voices) and keeps them; nothing is copied anywhere. They play through Windows' `waveOut`, a device handle per sound, closed
 //! when it is done. Ini: `kh2_sounds` (`magnet_explosion` the default, `all`, `off`) and
-//! `kh2_volume`.
+//! `kh2_volume`. The default is every KH2 ability move (`DEFAULT_MOTIONS`).
 
 use super::log;
 use super::sys::{waveOutClose, waveOutOpen, waveOutPrepareHeader, waveOutUnprepareHeader, waveOutWrite, WaveFormatEx, WaveHdr, WAVE_MAPPER, WHDR_DONE};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-/// Explosion and Magnet Burst.
-pub const DEFAULT_MOTIONS: [u16; 2] = [166, 197];
+/// KH2's ability moves (the user: their exact sounds, as Explosion's and Magnet Burst's): Upper
+/// Slash 161, Slapshot 162, Dodge Slash 163, Slide Dash 164, Guard Break 165, Explosion 166,
+/// Finishing Leap 167, Flash Step 169, Vicinity Break 170, Counterguard 171, Retaliating Slash
+/// 172, Aerial Sweep 191, Aerial Spiral 192, Horizontal Slash 193, Aerial Finish 194, Aerial
+/// Dive 196, Magnet Burst 197. (The plain combo's swings keep KH1's.)
+pub const DEFAULT_MOTIONS: [u16; 17] = [161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197];
 
 struct Sound {
     rate: u32,
