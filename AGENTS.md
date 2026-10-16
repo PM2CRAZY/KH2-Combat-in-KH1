@@ -971,3 +971,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 
 ### 2026-10-16: Stage 67 (KH2 camera: right stick x the right way round)
 - The right stick's x is negated for `kh2_camera` (the user: x was inverted).
+
+### 2026-10-16: Stage 68 (KH2 camera at KH2's own distance)
+- `camera_scale` defaults to 1.0 (KH2's distances and heights as they are), the user: a bit
+  further back, as in KH2.

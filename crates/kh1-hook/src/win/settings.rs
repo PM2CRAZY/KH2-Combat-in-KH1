@@ -42,8 +42,8 @@ wall_clink = off\r\n\
 ; camera: kh2 = KH2's field camera (follows behind, right stick turns and zooms, R3 resets);\r\n\
 ; kh1 = KH1's own. The Config menu's camera row switches it in game too.\r\n\
 camera = kh2\r\n\
-; camera_scale: KH2's camera distances and heights times this (KH1 Sora is a little smaller)\r\n\
-camera_scale = 0.9\r\n\
+; camera_scale: KH2's camera distances and heights times this (1.0: KH2's own)\r\n\
+camera_scale = 1.0\r\n\
 ; config_row: on = the Config menu's Camera Style row; off = no row (the ini alone switches)\r\n\
 config_row = on\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
@@ -124,7 +124,7 @@ pub fn get() -> &'static Settings {
             wall_clink: on(&text, "wall_clink", "on", false),
             kh2_camera: on(&text, "camera", "kh2", true),
             config_row: on(&text, "config_row", "on", true),
-            camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.9),
+            camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(1.0),
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {
                 Some("off") | Some("0") | Some("no") => None,
                 Some("all") => Some(None),
