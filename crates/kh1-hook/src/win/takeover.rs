@@ -442,8 +442,14 @@ unsafe fn takeover(actor: usize) -> bool {
         if rise3d && !rising {
             // Stopped short of a fall (less than half of it happened): standing on something.
             let got = -rd::<f32>(actor + 0x14);
-            stopped = out.displacement[1] < -0.5 && (up_before - got) < -out.displacement[1] * 0.5;
-            y = got;
+            // Only with KH1's collision saying he is on ground (`+0x2D0` bit 0 clear, as its
+            // physics step reads it): a wall beside him also stops the air move, and he hung on
+            // the side of crates and tents (the user's video).
+            let ground = rd::<u32>(actor + 0x2D0) & 1 == 0;
+            stopped = ground && out.displacement[1] < -0.5 && (up_before - got) < -out.displacement[1] * 0.5;
+            if stopped {
+                y = got;
+            }
         }
         if !rising {
             // A box's top crossed by the fall (the user, twice: he couldn't land on boxes; KH1's
@@ -499,7 +505,16 @@ unsafe fn takeover(actor: usize) -> bool {
         // An object's top under him (KH1's finder, from where he is down a step).
         let start = walked_up.max(up_before) + 1.0;
         let top = object_top(base, actor, start, STEP_DOWN + 1.0).filter(|(t, _)| *t > floor_up + 1.0 && start - *t <= STEP_DOWN + 1.0);
-        if let Some((t, obj)) = top {
+        // Stood on something the map floor doesn't know that isn't an object KH1's finder sees
+        // (the fall's landing above): kept there while KH1's collision has him on ground at
+        // that height.
+        let kept = top.is_none()
+            && d.on_top.is_some_and(|t| walked_up > floor_up + 1.0 && (walked_up - t).abs() <= STEP_DOWN)
+            && rd::<u32>(actor + 0x2D0) & 1 == 0;
+        if kept {
+            d.on_top = Some(walked_up);
+            d.grounded = true;
+        } else if let Some((t, obj)) = top {
             if d.on_top.is_none() {
                 static STOOD: AtomicU32 = AtomicU32::new(0);
                 if STOOD.fetch_add(1, Ordering::Relaxed) < 40 {

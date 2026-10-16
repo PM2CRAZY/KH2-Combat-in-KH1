@@ -990,3 +990,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - KH1 movement state 30 (the Jungle Slider) hands Sora to KH1 for as long as it lasts (the
   user: he walked along the vines instead of sliding); KH2's camera gives way there too.
   `KH1_MODES` in `takeover.rs` lists such states.
+
+### 2026-10-16: Stage 72 (no hanging on the sides of crates and tents)
+- A fall the air mover stopped short counts as a landing only when KH1's collision has him on
+  ground (`+0x2D0` bit 0 clear); a wall beside him stopped it too, and he hung on the sides of
+  crates and the camp's tent, flickering between landing and falling (the user's video).
+  Otherwise the fall keeps KH2's own height. On the ground he stays on such a landing while
+  KH1's collision keeps him on ground there.
