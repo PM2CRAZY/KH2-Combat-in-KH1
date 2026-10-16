@@ -1020,3 +1020,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   the look point (a new room, a warp). Before, it took KH1's left-over pair's distance, and
   KH2's closest distance puts the eye 150 below the look point: on the ground looking up (the
   user, every room entry).
+
+### 2026-10-16: Stage 77 (no clashing with enemies' melee attacks)
+- A KH2 swing meets only free-standing enemy shots (`+0x30` bit 0x400: thrown and fired
+  things, Wakka's ball among them, whose log entries showed `+0x30 = 0x541`). Enemies' melee
+  attack shapes no longer clash with it (the user, again: far too many clinks); the swing hits
+  their bodies as in KH2.

@@ -348,6 +348,13 @@ unsafe fn shots(sora: usize) -> Vec<Shot> {
         if flags & 0x400 != 0 || (flags & 0x80 != 0 && rd::<u32>(g + 4) != 0) {
             continue;
         }
+        // Free-standing shots only (`+0x30` bit 0x400: a thrown ball, a fired projectile, Wakka's
+        // ball among them): an enemy's melee swing that meets KH2's broad swings clashed and
+        // clinked far more often than KH2 would (the user, twice). KH2's swing hits the body
+        // instead.
+        if rd::<u32>(g + 0x30) & 0x400 == 0 {
+            continue;
+        }
         let owner = pose::ptr(rd::<u32>(g + 0x34));
         if owner == sora || (owner > 0x10000 && team(owner) == ours) {
             continue;
