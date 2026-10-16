@@ -132,6 +132,8 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     // Circle and Square then (the user: the Square shortcut didn't cast).
     if super::takeover::active() && b & super::takeover::L1 == 0 {
         std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::CIRCLE | super::takeover::SQUARE));
+    } else if !super::takeover::kh1_keeps_square() && b & super::takeover::L1 == 0 {
+        std::ptr::write_unaligned(out as *mut u16, b & !super::takeover::SQUARE);
     }
     // Sticks to 3 levels each, so drift doesn't flood the log.
     let q = |v: u8| -> u64 { if v < 0x50 { 0 } else if v > 0xB0 { 2 } else { 1 } };

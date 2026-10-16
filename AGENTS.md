@@ -1007,3 +1007,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   climb check (`0x1402C5D30`) needs the wall face the move touched (`+0x2DE`), which a
   standing-still move cleared, so a ladder jumped into was caught only at its foot (the user).
   Without a grab the position is put back.
+
+### 2026-10-16: Stage 75 (a roll right after KH1's own move is KH2's)
+- While KH1 has Sora back on the ground after one of its own air moves (`HANDOFF`, state 0/1),
+  KH1 doesn't see Square, and a Square press ends the handoff at once with KH2 taking it as a
+  fresh press (KH2's roll). Before, KH1 started its own roll there (slot 117) and KH2 took over
+  mid-way: he slid backwards (the user, jumping off a pole and rolling).

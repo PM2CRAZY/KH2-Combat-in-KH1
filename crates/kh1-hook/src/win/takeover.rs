@@ -77,6 +77,8 @@ const SWIM_RVA: usize = 0x2BF410;
 static HANDOFF: AtomicBool = AtomicBool::new(false);
 static FRESH: AtomicBool = AtomicBool::new(false);
 static HANDOFF_FRAMES: AtomicU32 = AtomicU32::new(0);
+/// Square was pressed as KH1's move ended: KH2 takes it as a press (not one already held).
+static ROLL_NOW: AtomicBool = AtomicBool::new(false);
 /// KH1's fall state (after a jump's rise, or off an edge): its collision is the air kind
 /// (`0x140297F20` sets flag 1, no snapping onto the floor), and the wall solver's only extra
 /// for it (`0x1402AD260`) clears its fall speed `+0x3C4` at a ceiling. No enter / exit handlers.
@@ -249,8 +251,13 @@ unsafe fn takeover(actor: usize) -> bool {
     if HANDOFF.load(Ordering::Relaxed) {
         let state = rd::<i32>(actor + 0x70);
         let frames = HANDOFF_FRAMES.fetch_add(1, Ordering::Relaxed);
-        if frames >= 10 && matches!(state, 0 | 1) && kh1_moving() {
+        // Square there (a dodge roll right after jumping off a pole) is KH2's: KH1 doesn't see
+        // it (`kh1_keeps_square`), and KH2 takes him at once to roll (the user: KH1 had started
+        // its own roll, and he slid backwards when KH2 took over mid-way).
+        let square = RAW_BUTTONS.load(Ordering::Relaxed) as u16 & SQUARE != 0;
+        if frames >= 10 && matches!(state, 0 | 1) && (kh1_moving() || square) {
             HANDOFF.store(false, Ordering::Relaxed);
+            ROLL_NOW.store(square, Ordering::Relaxed);
             FRESH.store(true, Ordering::Relaxed);
             log(&format!("KH1's move ended (state {state}): KH2 again"));
         } else {
@@ -302,6 +309,9 @@ unsafe fn takeover(actor: usize) -> bool {
         d.grounded = true;
         // An Attack press from before (during KH1's move) is not KH2's.
         combat::take_press();
+    }
+    if ROLL_NOW.swap(false, Ordering::Relaxed) {
+        d.held.1 = false;
     }
     d.growth.update(base, &mut d.character);
     if d.last_state.is_none() {
@@ -722,6 +732,17 @@ pub fn kh1_scene() -> bool {
     let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
     let own_mode = sora > 0x10000 && kh1_mode(unsafe { rd::<i32>(sora + 0x70) });
     event || own_mode || (active() && (SCRIPTED.load(Ordering::Relaxed) || FROZEN_FRAMES.load(Ordering::Relaxed) >= 2))
+}
+
+/// Whether KH1 may see Square: not while it has Sora back on the ground after one of its own
+/// air moves (KH2 is about to take him; a roll pressed then is KH2's).
+pub fn kh1_keeps_square() -> bool {
+    if !HANDOFF.load(Ordering::Relaxed) {
+        return true;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let sora = if base == 0 { 0 } else { (unsafe { rd::<u64>(base + PARTY_RVA) }) as usize };
+    !(sora > 0x10000 && matches!(unsafe { rd::<i32>(sora + 0x70) }, 0 | 1))
 }
 
 /// KH2 has Sora this moment (not handed to KH1).
