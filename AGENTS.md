@@ -1101,3 +1101,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - KH1 holding Sora still counts as a scene for the camera only out of battle (the user: KH2's
   camera should stay through a summon's attack, Simba's charge).
 - Launch logs: each KH2 launch asked for, and KH1 launch reactions that weren't ours.
+
+### 2026-10-16: Stage 89 (a tapped Quick Run goes less far)
+- Letting go of the action button before Quick Run's time is up stops it with a stronger brake,
+  the earlier the stronger (0.7 per tick for a tap, KH2's stop brake when held to the end): at
+  LV2 a tap went ~740 units against ~950 held, as KH2's end slide is most of it (the user).

@@ -290,6 +290,9 @@ const RECOVERY_AFTER: u32 = 6;
 /// handler does (`current motion == 0x2A` → row 0x27). Retaliating Slash: attack while
 /// launched (ours; the exe checks it in a separate routine whose row id comes in a register).
 const COUNTERGUARD_ROW: u8 = 39;
+/// Quick Run's stop brake for a tap (ours): the end slide shrinks toward this the earlier the
+/// button is let go.
+const TAP_STOP_BRAKE: f32 = 0.7;
 /// KH2's Square moves in a combo, in the order tried: (PTYA row, ability, in the air).
 /// Finishing Leap (row 37, ability 95), Upper Slash (12, 18), Horizontal Slash (38, 99).
 const SQUARE_MOVES: [(u8, u16, bool); 3] = [(37, 95, false), (12, 18, false), (38, 99, true)];
@@ -1428,9 +1431,14 @@ impl Character {
                 if act.motion == motion::QUICK_RUN {
                     finished = false;
                     // Releasing the button ends the dash right away.
-                    act.timer = if input.action.held { act.timer - 1.0 } else { 0.0 };
+                    let left = if input.action.held { act.timer - 1.0 } else { act.timer };
+                    act.timer = if input.action.held { left } else { 0.0 };
                     if act.timer <= 0.0 {
-                        act.brake = g.quick_run_stop_brake;
+                        // Let go early: a shorter stop the earlier (ours, the user: a tap should
+                        // go less far; KH2's own end slide is most of a short dash's length).
+                        // Held to the end: KH2's stop brake.
+                        let held = if g.quick_run_time > 0.0 { (1.0 - left.max(0.0) / g.quick_run_time).clamp(0.0, 1.0) } else { 1.0 };
+                        act.brake = TAP_STOP_BRAKE + (g.quick_run_stop_brake - TAP_STOP_BRAKE).max(0.0) * held;
                         act.motion = motion::QUICK_RUN_END;
                         act.frame = 0;
                         self.mode = Mode::Action(act);
