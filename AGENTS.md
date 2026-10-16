@@ -1132,3 +1132,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (`HIGH_JUMP_LEVELS`, `AERIAL_DODGE_LEVELS`), LV1 when Sora gets them. Each gets a name buffer
   ("High Jump LV2", entry 1's handle like Dodge Roll's; Aerial Dodge's in the TEXT init like
   Quick Run's) and an "Ability Up" box when it grows; learning Aerial Dodge shows its level.
+
+### 2026-10-16: Stage 95 (no leftover launches)
+- The user's log: Upper Slash's launch reaches Shadows (up 265 in 26 frames), but launches
+  asked on Cerberus (which KH1 never launches) stayed queued under KH1's reused hit record and
+  one landed on a Shadow later. A KH2 launch now waits only 250 ms (`LAUNCH_FRESH_MS`) for
+  KH1's launch reaction.
