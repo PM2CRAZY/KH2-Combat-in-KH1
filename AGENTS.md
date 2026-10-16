@@ -1120,3 +1120,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   flinches), from the launch's 16th frame, jump: motion 40, hop 100, 10/frame along the stick
   (straight up with it neutral), invulnerable to frame 16, control back at frame 24, no Aerial
   Dodge after. Retaliating Slash: Square only, same frame.
+
+### 2026-10-16: Stage 92 (Dodge Roll shows its level)
+- KH1's Dodge Roll (22) gets a name buffer like Quick Run's ("Dodge Roll LV1" .. "MAX", its
+  levels as before: 19 / 37 / 60), written into our ability table's entry, and an "Ability Up"
+  box each time it grows (the user).

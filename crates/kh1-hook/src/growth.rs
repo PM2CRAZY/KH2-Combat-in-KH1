@@ -195,6 +195,24 @@ pub fn quick_run_name(l: u8) -> String {
     }
 }
 
+/// Dodge Roll's level at Sora's level, once he has KH1's Dodge Roll (`GROWTH`: LV2 at 19, LV3 at
+/// 37, MAX at 60).
+pub fn dodge_roll_level(level: u8) -> u8 {
+    GROWTH.iter().filter_map(|(at, g)| match g {
+        Growth::DodgeRoll(l) if level >= *at => Some(*l),
+        _ => None,
+    }).max().unwrap_or(1)
+}
+
+/// Its name in the menu and the level-up box ("Dodge Roll LV2", "Dodge Roll MAX").
+pub fn dodge_roll_name(l: u8) -> String {
+    if l >= 4 {
+        "Dodge Roll MAX".to_string()
+    } else {
+        format!("Dodge Roll LV{}", l.max(1))
+    }
+}
+
 /// Growth levels past the first, by Sora's level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Growth {
@@ -617,6 +635,7 @@ mod tests {
         assert_eq!(sora(12, &[66], &[]).kh2().quick_run, 1);
         assert_eq!(sora(32, &[66], &[]).kh2().quick_run, 3);
         assert_eq!(quick_run_name(4), "Quick Run MAX");
+        assert_eq!((dodge_roll_level(18), dodge_roll_level(19), dodge_roll_level(60)), (1, 2, 4));
         assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 3);
     }
 

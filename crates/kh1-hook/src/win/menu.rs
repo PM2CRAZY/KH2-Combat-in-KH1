@@ -87,6 +87,22 @@ fn decode(p: usize) -> String {
 static QR_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 const QR_NAME_LEN: usize = 32;
 
+/// KH1's Dodge Roll's menu name: a buffer like Quick Run's, and its text handle.
+static DR_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static DR_HANDLE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+/// Writes Dodge Roll's level into its menu name.
+pub fn set_dodge_roll_name(level: u8) {
+    let p = DR_NAME.load(std::sync::atomic::Ordering::Relaxed);
+    if p == 0 {
+        return;
+    }
+    let mut b = encode(&growth::dodge_roll_name(level));
+    b.truncate(QR_NAME_LEN - 1);
+    b.push(0);
+    unsafe { std::ptr::copy_nonoverlapping(b.as_ptr(), p as *mut u8, b.len()) };
+}
+
 /// Writes Quick Run's level into its menu name ("Quick Run LV2", "Quick Run MAX").
 pub fn set_quick_run_name(level: u8) {
     let p = QR_NAME.load(std::sync::atomic::Ordering::Relaxed);
@@ -145,6 +161,14 @@ pub unsafe fn ensure_table(base: usize) {
         std::ptr::write_unaligned((e + 4) as *mut u32, n);
         std::ptr::write_unaligned((e + 8) as *mut u32, h);
     }
+    // Dodge Roll goes by its level too (the user).
+    let dr = *DR_HANDLE.get_or_init(|| {
+        let buf = Box::leak(vec![0u8; QR_NAME_LEN].into_boxed_slice()).as_mut_ptr() as usize;
+        DR_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
+        set_dodge_roll_name(1);
+        to_handle(buf)
+    });
+    std::ptr::write_unaligned((ours + (growth::kh1::DODGE_ROLL as usize - 1) * 12 + 4) as *mut u32, dr);
     std::ptr::write_unaligned((base + TABLE_PTR_RVA) as *mut u64, ours as u64);
     static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if LOGGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 6 {
@@ -326,8 +350,9 @@ pub struct Growth {
     prompts: std::collections::VecDeque<(String, String, String)>,
     /// Frames KH1's prompt box has been free.
     idle: u32,
-    /// Quick Run's level last seen (None: not looked yet).
+    /// Quick Run's and Dodge Roll's levels last seen (None: not looked yet).
     qr_level: Option<u8>,
+    dr_level: Option<u8>,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -336,7 +361,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -550,6 +575,19 @@ impl Growth {
                     }
                 }
                 self.qr_level = Some(l);
+            }
+            let l = if growth::has(&now.abilities, growth::kh1::DODGE_ROLL) { growth::dodge_roll_level(now.level) } else { 0 };
+            if self.dr_level != Some(l) {
+                if l > 0 {
+                    set_dodge_roll_name(l);
+                }
+                if let Some(old) = self.dr_level {
+                    if old > 0 && l > old {
+                        log(&format!("Dodge Roll grows: {}", growth::dodge_roll_name(l)));
+                        self.prompts.push_back(("Ability Up".to_string(), growth::dodge_roll_name(l), String::new()));
+                    }
+                }
+                self.dr_level = Some(l);
             }
         }
         if self.seen.as_ref() == Some(&now) {

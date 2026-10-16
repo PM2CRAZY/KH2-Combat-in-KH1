@@ -113,7 +113,8 @@ Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the K
 abilities take none of the AP KH1 gives him: +2 at level 4, +32 in all by level 50 (KH1's
 cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while the game runs.
 
-The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60.
+The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60; its
+menu name shows the level ("Dodge Roll LV2"), with an "Ability Up" box each time.
 Sora keeps one High Jump, one Glide and one Superglide: spare copies (a randomizer can give
 more) are taken out of the shared list when the game loads or he gets one, and noted in
 `kh1-kh2-removed.txt`.
