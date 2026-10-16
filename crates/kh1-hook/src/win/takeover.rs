@@ -386,7 +386,8 @@ unsafe fn takeover(actor: usize) -> bool {
         let r = point(locked, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0), &mut v);
         if v[..3].iter().all(|x| x.is_finite()) && r.is_finite() && r >= 0.0 {
             let r = r.min(500.0);
-            let t = TargetInfo { id: locked as u32, pos: [v[0], -v[1] - r, v[2]], radius: r.max(10.0), height: (2.0 * r).max(20.0) };
+            // Its point and size as KH2's target shape (as `combat::bodies` has every target).
+            let t = TargetInfo { id: locked as u32, pos: [v[0], -v[1], v[2]], radius: r.max(10.0), height: r.max(10.0) };
             match targets.iter_mut().find(|x| x.id == t.id) {
                 Some(x) => *x = t,
                 None => targets.push(t),

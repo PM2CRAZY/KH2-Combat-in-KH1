@@ -217,7 +217,12 @@ struct Body {
     actor: usize,
     parts: Vec<Part>,
     target: TargetInfo,
+    /// Its hit parts' top above its root.
+    tall: f32,
 }
+
+/// KH1's lock point `(actor, point, out) -> radius` (`docs/kh1-lockon.md`).
+const LOCK_POINT_RVA: usize = 0x2AE330;
 
 /// KH1's hittable actors on other teams than Sora's, near him.
 unsafe fn bodies(sora: usize) -> Vec<Body> {
@@ -283,8 +288,20 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
         if parts.is_empty() {
             continue;
         }
-        let target = TargetInfo { id: this as u32, pos: feet, radius, height: (top - feet[1]).max(radius) };
-        out.push(Body { actor: this, parts, target });
+        let tall = (top - feet[1]).max(radius);
+        let mut target = TargetInfo { id: this as u32, pos: feet, radius, height: tall };
+        // KH2's combo table measures a target by its target shape (`0x1403C8EE0`: its point
+        // and size), not its feet and full height; KH1's lock point is that shape (the user:
+        // Aerial Sweep / Aerial Dive, which want the target well above Sora, hardly came out
+        // when a flying foe counted from its feet with its whole height).
+        let point: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
+        let mut v = [0.0f32; 4];
+        let r = point(this, 0, &mut v);
+        if r > 0.0 && r < 1000.0 && v[..3].iter().all(|x| x.is_finite()) {
+            target.pos = [v[0], -v[1], v[2]];
+            target.height = r.max(10.0);
+        }
+        out.push(Body { actor: this, parts, target, tall });
     }
     out
 }
@@ -687,7 +704,7 @@ impl Strikes {
                 centres.entry(h.swing).or_insert(c.center);
             }
         }
-        let alive: HashMap<usize, f32> = self.bodies.iter().map(|b| (b.actor, b.target.height)).collect();
+        let alive: HashMap<usize, f32> = self.bodies.iter().map(|b| (b.actor, b.tall)).collect();
         self.pulled.retain(|a, (swing, _, _)| centres.contains_key(swing) && alive.contains_key(a));
         for (&actor, &(swing, radius, swirl)) in &self.pulled {
             let c = centres[&swing];

@@ -1185,3 +1185,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   with no point this frame no longer hands the frame to KH1's lock-on camera: ours follows.
   Restarts and hand-overs are logged with their reason.
 
+### 2026-10-16: Stage 101 (targets as KH2's target shapes)
+- The user: Aerial Dive still barely came out. KH2's combo table measures a target by its
+  target shape (`0x1403C8EE0`: the shape's point raised by its position height, and its own
+  size), and Aerial Sweep / Aerial Dive / the jump at an airborne foe (flag 0xA: the window's
+  low end shrinks by the target's height) want that point at least 110 + its size above Sora.
+  We gave targets their feet and whole height (a flyer needed its feet ~200 up). Every target
+  is now KH1's lock point 0 (its centre, the lock radius as its size), the locked one too (it
+  was the sphere's bottom and twice the radius); a target without lock points keeps its feet
+  and height. Magnet Burst's pull still aims at the body's middle (`Body::tall`).
+
