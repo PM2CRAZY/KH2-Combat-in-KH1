@@ -673,6 +673,17 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
     c.to_array()
 }
 
+/// A cutscene or scripted moment: an event runs (talks with text boxes too), an area script
+/// walks Sora, or KH1 holds him still (for KH2's camera to give way to KH1's).
+pub fn kh1_scene() -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return false;
+    }
+    let event = unsafe { rd::<u32>(base + EVENT_RVA) } != 0;
+    event || (active() && (SCRIPTED.load(Ordering::Relaxed) || FROZEN_FRAMES.load(Ordering::Relaxed) >= 2))
+}
+
 /// KH2 has Sora this moment (not handed to KH1).
 pub fn kh2_has() -> bool {
     active() && !HANDOFF.load(Ordering::Relaxed)

@@ -979,3 +979,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 ### 2026-10-16: Stage 69 (KH2 camera lowered)
 - `camera_lower` (default 70): KH2's camera, look point and eye together, that much lower, so
   KH1's smaller Sora sits near the middle of the screen (the user). Same angle as KH2's.
+
+### 2026-10-16: Stage 70 (KH1's camera in cutscenes)
+- KH2's camera gives way to KH1's own follow / lock-on camera while an event runs (talks with
+  text boxes included), an area script walks Sora, or KH1 holds him still
+  (`takeover::kh1_scene`); KH1's carries on from where KH2's was. After a gap KH2's starts
+  again from KH1's view (yaw and distance), not from where it left off.

@@ -101,15 +101,21 @@ pub unsafe fn install() {
     log(&format!("KH2 camera: KH1's follow and lock-on cameras swapped for KH2's ({})", if KH2.load(Ordering::Relaxed) { "on" } else { "KH1's chosen" }));
 }
 
+/// KH2's camera this frame: chosen, and no cutscene (the user: KH1's camera for cutscenes and
+/// scenes with text, so the camera doesn't end up inside things).
+fn ours() -> bool {
+    KH2.load(Ordering::Relaxed) && !super::takeover::kh1_scene()
+}
+
 unsafe extern "system" fn follow_mode() {
-    if !KH2.load(Ordering::Relaxed) || run(false).is_none() {
+    if !ours() || run(false).is_none() {
         let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_FOLLOW.load(Ordering::Acquire));
         f();
     }
 }
 
 unsafe extern "system" fn lock_mode() {
-    if !KH2.load(Ordering::Relaxed) || run(true).is_none() {
+    if !ours() || run(true).is_none() {
         let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_LOCK.load(Ordering::Acquire));
         f();
     }
@@ -220,14 +226,18 @@ unsafe fn run(lock: bool) -> Option<()> {
 
     let Ok(mut g) = CAM.lock() else { return None };
     // A new camera when KH1 comes back to its follow camera from something not ours (an event,
-    // an area camera, a menu), facing the way KH1's camera was looking from.
+    // an area camera, a menu, a cutscene), facing the way KH1's camera was looking from.
     let was_ours = now_ms().saturating_sub(LAST_MS.load(Ordering::Relaxed)) < 300;
-    if g.is_none() || (fresh_mode && !was_ours) {
+    // (Or after a while of KH1's own: a cutscene had it.)
+    let _ = fresh_mode;
+    if g.is_none() || !was_ours {
         let f = kh2_camera::Params::FIELD;
         let mut c = kh2_camera::Camera::new(f, &subject);
         let (eye, at) = (rd::<[f32; 3]>(base + EYE_RVA), rd::<[f32; 3]>(base + TARGET_RVA));
         let d = Vec2::new(eye[0] - at[0], eye[2] - at[2]);
         if d.length() > 1.0 && d.is_finite() {
+            // At the distance it was too (a pause menu closing didn't move it).
+            c.dist = (d.length() / s).clamp(f.dist_min, f.dist_max);
             c.snap_yaw(d.x.atan2(d.y));
         }
         *g = Some(c);
