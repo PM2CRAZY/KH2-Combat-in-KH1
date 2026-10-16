@@ -1228,3 +1228,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   knocks it along the record's direction each spin. A holding blow's record direction is now
   zeroed (in `scale_record` and again after the contact), so it flinches in place.
 
+### 2026-10-16: Stage 106 (no Sonic Blade in the air)
+- The user: Sora could use Sonic Blade mid-jump. KH1's command check (`0x1402912F0`) allows
+  only magic (kind 2), kind 99 and kind 0x47 in the air, judging the air by his flags
+  (`0x1402A0D30`: `+0` bit 4, `+0x88` bit 0x20, `+0x444` bit 1), which stay the ground's while
+  KH2 has him. `combat::command` now refuses any other command while KH2 has him in the air,
+  with KH1's "can't" sound (`0x140177F60 (4)`). Magic stays allowed (jump casts).
+

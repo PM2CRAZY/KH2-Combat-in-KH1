@@ -29,6 +29,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
 const EXEC_RVA: usize = 0x2A4760;
+/// KH1's menu sounds (`0x140177F60 (n)`; 4: can't).
+const SOUND_RVA: usize = 0x177F60;
 const EXEC_PROLOGUE: [u8; 11] = [0x4C, 0x8B, 0xDC, 0x57, 0x48, 0x81, 0xEC, 0x90, 0x00, 0x00, 0x00];
 const COMMAND_RVA: usize = 0x2D54440;
 const PARTY_RVA: usize = 0x2D37C80;
@@ -105,8 +107,22 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     if actor != sora || matches!(kind, 0 | 1) || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::kh2_has() {
         return f(actor, dir);
     }
-    trail_off(actor);
     let air = takeover::kh2_airborne();
+    // In the air KH1 allows only magic, kind 99 and kind 0x47 (`0x1402912F0`); KH1 judges the
+    // air by his flags, which stay the ground's while KH2 has him, so Sonic Blade and the like
+    // came out mid-jump (the user). Refused as KH1 refuses (magic of every kind stays: jump
+    // casts are wanted).
+    let full = rd::<u32>(base + COMMAND_RVA);
+    if air && !matches!(kind, 2 | 99 | 0x47) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 20 {
+            log(&format!("command {kind:#x} ({full:08x}) refused in the air, as KH1 would"));
+        }
+        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+        sound(4);
+        return;
+    }
+    trail_off(actor);
     let before = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
     if air {
         let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
@@ -126,7 +142,6 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // air cast's `0x14029D7F0(actor, 0x83 + spell)` changed none of the others, the user's log).
     let look = || (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164), rd::<u32>(actor) & 0x100_0000, pose::sora_slot(), super::probe::SORA_MOTIONS.load(Ordering::Relaxed));
     let set = look();
-    let full = rd::<u32>(base + COMMAND_RVA);
     f(actor, dir);
     // Only if KH1 did something with him (a new state or motion request); else as before.
     let after = look();
