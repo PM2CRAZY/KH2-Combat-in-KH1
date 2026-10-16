@@ -346,6 +346,8 @@ pub struct Strikes {
     /// Enemies a Magnet (ATKP reaction 5: Magnet Burst) caught: the swing, orbit radius and
     /// swirl. Pulled every frame while the swing lasts.
     pulled: HashMap<usize, (u64, f32, f32)>,
+    /// Enemies a holding blow (Aerial Finish's spin) hit: frames left to keep them beside Sora.
+    held: HashMap<usize, u32>,
     /// (swing, shot) pairs already met (once a swing).
     met_shots: HashSet<(u64, usize)>,
     shots: Vec<Shot>,
@@ -751,6 +753,39 @@ impl Strikes {
         }
     }
 
+    /// KH2's holding blows (reaction 9 with a small lift and a pull toward Sora: Aerial
+    /// Finish's spin) keep the foe up beside him until the throw (the user: they slipped out of
+    /// it). Each held foe is drawn toward a point beside Sora at his height through KH1's
+    /// per-frame push (`+0x120`), for `HOLD_FRAMES` after its last such hit.
+    unsafe fn hold(&mut self, sora: usize) {
+        if self.held.is_empty() {
+            return;
+        }
+        let alive: HashSet<usize> = self.bodies.iter().map(|b| b.actor).collect();
+        self.held.retain(|a, left| {
+            *left = left.saturating_sub(1);
+            *left > 0 && alive.contains(a)
+        });
+        let s = rd::<[f32; 3]>(sora + 0x10);
+        for &actor in self.held.keys() {
+            let p = rd::<[f32; 3]>(actor + 0x10);
+            let (dx, dz) = (p[0] - s[0], p[2] - s[2]);
+            let d = (dx * dx + dz * dz).sqrt();
+            // Beside him: no farther than HOLD_REACH, his feet's height a little up (y down).
+            let k = if d > HOLD_REACH { HOLD_REACH / d } else { 1.0 };
+            let goal = [s[0] + dx * k, s[1] - HOLD_UP, s[2] + dz * k];
+            let mut m = [(goal[0] - p[0]) * 0.35, (goal[1] - p[1]) * 0.35, (goal[2] - p[2]) * 0.35];
+            let len = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt();
+            if len > 30.0 {
+                for v in &mut m {
+                    *v *= 30.0 / len;
+                }
+            }
+            let push = rd::<[f32; 3]>(actor + 0x120);
+            wr(actor + 0x120, [push[0] + m[0], push[1] + m[1], push[2] + m[2]]);
+        }
+    }
+
     /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
     pub unsafe fn trail(&mut self, sora: usize, swinging: bool) {
         let flags = rd::<u32>(sora + 0x1CC);
@@ -897,6 +932,9 @@ impl Strikes {
                 }
                 // A Magnet's catch (the user: Magnet Burst didn't pull them together): KH2 picks
                 // the orbit radius between the two knockback values, the swirl from the next.
+                if blow && !throws && dealt.is_some() {
+                    self.held.insert(b.actor, HOLD_FRAMES);
+                }
                 if character_core::reaction::category(row.enemy_reaction) == 5 {
                     let (a, c) = (row.knockback_1 as f32, row.knockback_2 as f32);
                     let t = ((b.actor >> 4) % 97) as f32 / 96.0;
@@ -909,6 +947,7 @@ impl Strikes {
             }
         }
         self.pull(out, anim, battle);
+        self.hold(sora);
         let now: HashSet<u64> = out.hitboxes.iter().map(|h| h.swing).collect();
         self.repelled.retain(|s| now.contains(s));
         for ended in self.live.difference(&now) {
@@ -1031,6 +1070,10 @@ impl Launch {
     }
 }
 
+/// How long a holding blow keeps its foe beside Sora (frames), how far out and how high.
+const HOLD_FRAMES: u32 = 24;
+const HOLD_REACH: f32 = 90.0;
+const HOLD_UP: f32 = 30.0;
 /// The hit being landed holds the foe in place (its record's push direction is zeroed).
 static HOLD: AtomicBool = AtomicBool::new(false);
 static HELD_REC: AtomicUsize = AtomicUsize::new(0);

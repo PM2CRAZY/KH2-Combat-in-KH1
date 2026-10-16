@@ -1279,3 +1279,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Break (Ripple Drive) at 36, Flash Step (Vortex) at 42 and Finishing Leap (Blitz) at 48, with
   Aerial Sweep at 28 as before (off, with a New Ability box, if Sora doesn't have it yet).
 
+### 2026-10-16: Stage 113 (Aerial Finish holds its foe)
+- The user: foes still slipped out of Aerial Finish. The log: whole spins land sometimes, but
+  often the foe is gone after 915 / 916 (falling while Sora spins up). KH2's reaction-9 blows
+  lift and pull the foe toward Sora; KH1's flinch lets it fall. `Strikes::hold`: a foe a
+  holding blow hit is drawn, for 24 frames after each such hit, toward a point no more than 90
+  from Sora at his height + 30, through KH1's per-frame push (`+0x120`, at most 30 a frame).
+
