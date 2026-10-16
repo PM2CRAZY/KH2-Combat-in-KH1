@@ -985,3 +985,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   text boxes included), an area script walks Sora, or KH1 holds him still
   (`takeover::kh1_scene`); KH1's carries on from where KH2's was. After a gap KH2's starts
   again from KH1's view (yaw and distance), not from where it left off.
+
+### 2026-10-16: Stage 71 (the Jungle Slider is KH1's)
+- KH1 movement state 30 (the Jungle Slider) hands Sora to KH1 for as long as it lasts (the
+  user: he walked along the vines instead of sliding); KH2's camera gives way there too.
+  `KH1_MODES` in `takeover.rs` lists such states.
