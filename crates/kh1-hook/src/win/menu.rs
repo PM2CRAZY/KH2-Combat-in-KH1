@@ -556,8 +556,8 @@ impl Growth {
                         now = again;
                     }
                 }
-                // Aerial Dodge is Riku's (the user: on this save it came from a level): taken back
-                // out until Riku is beaten the first time (given again then, with its box).
+                // Aerial Dodge is Genie Jafar's (the user; Riku's before): taken back out until he
+                // is beaten (given again then, with its box).
                 if !growth::BOSS_GIFTS.iter().any(|g| g.ability == AERIAL_DODGE && growth::beaten(&now.progress, g)) {
                     let list = save + 0x44;
                     let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
@@ -569,7 +569,7 @@ impl Growth {
                         for (k, b) in kept.iter().enumerate() {
                             std::ptr::write((list + k) as *mut u8, *b);
                         }
-                        log("Aerial Dodge taken back until Riku is beaten (Hollow Bastion)");
+                        log("Aerial Dodge taken back until Genie Jafar is beaten (Agrabah)");
                         if let Some(again) = Self::kh1(base) {
                             now = again;
                         }

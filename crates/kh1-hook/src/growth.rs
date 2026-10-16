@@ -155,8 +155,9 @@ pub const BOSS_GIFTS: [BossGift; 8] = [
     BossGift { boss: "Dragon Maleficent", world: 10, progress: 0x6E, ability: kh1::HURRICANE_BLAST },
     BossGift { boss: "Captain Hook", world: 9, progress: 0x56, ability: 77 },
     BossGift { boss: "Cerberus", world: 2, progress: 0x25, ability: 76 },
-    // Riku in Hollow Bastion, the first time (0x28 during the fight, 0x32 its reward).
-    BossGift { boss: "Riku", world: 10, progress: 0x32, ability: 67 },
+    // Genie Jafar in Agrabah (the user; earlier Riku the first time): Agrabah's progress is 0x46
+    // during Jafar and 0x53 after Genie Jafar's cutscene (KH-1FM-AP-LUA's warp fixes).
+    BossGift { boss: "Genie Jafar", world: 4, progress: 0x53, ability: 67 },
 ];
 
 /// The first id past KH1's own (65 entries in its table).
@@ -166,7 +167,7 @@ pub const MENU: [MenuAbility; 12] = [
     // (The user: Quick Run from level 12, growing with Sora; both with AP in Sora's own
     // list, not the shared one. AP as KH2's.)
     m(66, "Quick Run", "Dash swiftly along the ground.", 2, 12, List::Sora, kh1::DODGE_ROLL, Effect::QuickRun),
-    // (The user: Aerial Dodge for beating Riku the first time, `BOSS_GIFTS`.)
+    // (The user: Aerial Dodge for beating Genie Jafar, `BOSS_GIFTS`.)
     m(67, "Aerial Dodge", "Leap once more in midair.", 3, BOSS, List::Sora, kh1::DODGE_ROLL, Effect::AerialDodge),
     m(68, "Aerial Recovery", "Right yourself in midair after being knocked back.", 2, 4, List::Sora, kh1::COMBO_PLUS, Effect::AerialRecovery),
     m(69, "Dodge Slash", "Ground combo: strike nearby foes all around.", 2, 10, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::DODGE_SLASH)),
@@ -222,9 +223,9 @@ pub fn dodge_roll_name(l: u8) -> String {
 /// LV1 when Sora gets it, LV2 at 30, LV3 at 44, MAX at 58 (the user: LV2 at 30).
 pub const HIGH_JUMP_LEVELS: [u8; 3] = [30, 44, 58];
 
-/// Aerial Dodge's levels past LV1 (LV1 when Riku first falls): LV2 at 40, LV3 at 52, MAX at 64
-/// (the user: its growth from 40).
-pub const AERIAL_DODGE_LEVELS: [u8; 3] = [40, 52, 64];
+/// Aerial Dodge's levels past LV1 (LV1 when Genie Jafar falls): LV2 at 30, LV3 at 42, MAX at 54
+/// (the user: its growth from 30).
+pub const AERIAL_DODGE_LEVELS: [u8; 3] = [30, 42, 54];
 
 /// Glide's levels past LV1 (LV1 from KH1's Glide, Neverland): LV2 at 40, LV3 at 52; MAX only for
 /// beating Chernabog (the user: no Superglide; Glide grows from 40 to LV3, Chernabog gives MAX).
@@ -712,7 +713,7 @@ mod tests {
         assert_eq!((dodge_roll_level(18), dodge_roll_level(19), dodge_roll_level(60)), (1, 2, 4));
         // High Jump and Aerial Dodge grow too (the user).
         assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 4);
-        assert_eq!((aerial_dodge_level(39), aerial_dodge_level(40), aerial_dodge_level(52), aerial_dodge_level(64)), (1, 2, 3, 4));
+        assert_eq!((aerial_dodge_level(29), aerial_dodge_level(30), aerial_dodge_level(42), aerial_dodge_level(54)), (1, 2, 3, 4));
         assert_eq!((high_jump_level(29), high_jump_level(30), high_jump_level(44), high_jump_level(58)), (1, 2, 3, 4));
         assert_eq!(sora(30, &[], &[kh1::HIGH_JUMP]).kh2().high_jump, 2);
         assert_eq!((high_jump_name(3), aerial_dodge_name(4)), ("High Jump LV3".to_string(), "Aerial Dodge MAX".to_string()));
@@ -722,16 +723,18 @@ mod tests {
     fn grants_follow_level_and_lists() {
         let g = sora(13, &[], &[kh1::HIGH_JUMP]).grants();
         let ids: Vec<u8> = g.iter().map(|a| a.id).collect();
-        // (Aerial Dodge is Riku's gift, not a level's.)
+        // (Aerial Dodge is Genie Jafar's gift, not a level's.)
         assert_eq!(ids, vec![66, 68, 69]);
         // Already learned (even unequipped): not again.
         let g = sora(13, &[68 | 0x80, 66 | 0x80], &[kh1::HIGH_JUMP]).grants();
         assert_eq!(g.iter().map(|a| a.id).collect::<Vec<_>>(), vec![69]);
-        // Riku beaten: Aerial Dodge.
-        let mut riku = sora(30, &[], &[]);
-        riku.progress = vec![0; 12];
-        riku.progress[10] = 0x32;
-        assert!(riku.boss_gifts().iter().any(|(_, id)| *id == 67));
+        // Genie Jafar beaten: Aerial Dodge.
+        let mut jafar = sora(30, &[], &[]);
+        jafar.progress = vec![0; 12];
+        jafar.progress[4] = 0x52;
+        assert!(!jafar.boss_gifts().iter().any(|(_, id)| *id == 67));
+        jafar.progress[4] = 0x53;
+        assert!(jafar.boss_gifts().iter().any(|(_, id)| *id == 67));
         assert!(sora(1, &[], &[]).grants().is_empty());
     }
 

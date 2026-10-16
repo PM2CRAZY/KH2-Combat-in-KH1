@@ -105,7 +105,7 @@ Ability" box):
 | Dragon Maleficent | Explosion (KH1's Hurricane Blast) | KH1's |
 | Captain Hook | Magnet Burst | 3 |
 | Cerberus | Aerial Dive | 2 |
-| Riku (Hollow Bastion, the first time) | Aerial Dodge LV1 (higher levels below) | 3 |
+| Genie Jafar (Agrabah) | Aerial Dodge LV1 (higher levels below) | 3 |
 
 Earlier than KH1's level-ups (Dream Shield: 45 / 39 / 69 / 78 / 60), if Sora doesn't have them yet: Counterguard at 22, Slide Dash at 30, Vicinity Break at 36, Flash Step at 42, Finishing Leap at 48. Aerial Sweep also comes at level 28 if Clayton hasn't given it yet (KH1's Dream Shield gives it
 only at 84). Guard Break stays at KH1's own level 18 (Dream Shield).
@@ -116,7 +116,7 @@ cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while t
 
 The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60; its
 menu name shows the level ("Dodge Roll LV2"), with an "Ability Up" box each time.
-High Jump reaches LV2 / LV3 / MAX at levels 30 / 44 / 58, and Aerial Dodge at 40 / 52 / 64,
+High Jump reaches LV2 / LV3 / MAX at levels 30 / 44 / 58, and Aerial Dodge at 30 / 42 / 54,
 the same way (name with its level, "Ability Up" box), and Glide at 40 / 52 to LV3, MAX for
 beating Chernabog (End of the World progress 0x33, KH1's Superglide reward, renamed "Glide
 MAX"; Superglide itself is turned into Glide or taken out).
