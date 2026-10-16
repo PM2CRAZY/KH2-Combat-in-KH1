@@ -17,6 +17,7 @@ mod pose;
 mod settings;
 mod gummi;
 mod chests;
+mod devtools;
 mod shortcuts;
 mod probe;
 mod takeover;
@@ -123,6 +124,7 @@ unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
             log(&format!("Insert: {}", pose::MODES[m as usize]));
         }
         was = down;
+        devtools::keys();
         probe::tick(n as f32 / 20.0);
         if n == 100 || n % 2400 == 0 {
             let others: Vec<&str> = ["DBGHELP.dll", "LuaBackend.dll"].into_iter().filter(|m| !GetModuleHandleA(format!("{m}\0").as_ptr()).is_null()).collect();
@@ -166,6 +168,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         shortcuts::install();
         gummi::install();
         chests::install();
+        devtools::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

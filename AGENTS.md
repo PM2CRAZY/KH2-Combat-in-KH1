@@ -1311,3 +1311,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   parts, root beyond 1500, taller than 600 or radius over 300) and the Magnet pull and the
   Aerial Finish hold skip it. Stage 115 and 116 shipped together.
 
+### 2026-10-16: Stage 117 (dev tool: insta-kill)
+- The user asked for a dev tool to toggle insta-killing enemies. New `win/devtools.rs`:
+  `insta_kill = on/off` in the ini (default off); F8 (monitor thread) or L1 + R1 + Select (pad
+  hook) toggles it and saves it with `settings::save`; menu sound 2 (on) / 3 (off), played on
+  the game's thread from the pad hook. With it on, `probe::hit` (every hit record from an
+  attack Sora owns: KH2 swings after `scale_record`, KH1 swings, magic) gets damage = the
+  foe's HP (stats `+0x3C`), at least 9999.
+
