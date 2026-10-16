@@ -1084,3 +1084,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   combo's end), Upper Slash (12, 18) on the ground and Horizontal Slash (38, 99) in the air,
   as KH2's help texts describe them (the user: Horizontal Slash didn't work). Menu help texts
   updated.
+
+### 2026-10-16: Stage 87 (KH2 launches launch)
+- Research: `docs/kh1-launch.md` (KH1's hit record, an enemy's launch reaction `0x1402B6390`,
+  its arc fields). KH1 has no per-hit launch speed or angle.
+- A KH2 hit whose ATKP reaction is a launch (category 4) forces KH1's launch (record kind 5, in
+  `scale_record`) and, once KH1's launch reaction has run (hooked) and the enemy did launch
+  (motion 0x52 / 0x5C, state 2), sets KH2's apex height and rise time (`+0x3BC` / `+0x3B8`, from
+  the ATKP knockback values flown as KH2's blow flies) and horizontal speed (`+0x3C0`). Upper
+  Slash goes up (the user). Enemies without a launch motion (big ones, most bosses) don't.

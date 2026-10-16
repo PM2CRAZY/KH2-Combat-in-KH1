@@ -829,7 +829,15 @@ impl Strikes {
                 let finisher = character_core::reaction::category(row.enemy_reaction) == 4;
                 let Some(rows) = self.rows else { continue };
                 let kh1 = rows[(air as usize) * 2 + finisher as usize];
+                // KH2's launch, its own height and speed (the user: Upper Slash didn't send them
+                // up): KH1 launches with its own, so its launch is redone (`launched`).
+                if let Ok(mut p) = PENDING.lock() {
+                    *p = finisher.then(|| Launch::kh2(row.knockback_1, row.knockback_2, &character.reaction));
+                }
                 let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power);
+                if let Ok(mut p) = PENDING.lock() {
+                    *p = None;
+                }
                 // A Magnet's catch (the user: Magnet Burst didn't pull them together): KH2 picks
                 // the orbit radius between the two knockback values, the swirl from the next.
                 if character_core::reaction::category(row.enemy_reaction) == 5 {
@@ -910,15 +918,98 @@ pub unsafe fn scale_record(rec: usize) {
     if p == 0 || rec < 0x10000 {
         return;
     }
+    // A KH2 launch: KH1's launch reaction (kind 5) with KH2's numbers once it runs.
+    if let Some(l) = PENDING.lock().ok().and_then(|g| *g) {
+        wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 5);
+        if let Ok(mut v) = LAUNCHES.lock() {
+            let now = takeover_ms();
+            v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < 3000);
+            v.push((rec, l, now));
+        }
+    }
     let d = rd::<i32>(rec + 8);
     let scaled = ((d as i64 * p as i64) / 100).max(1) as i32;
     wr(rec + 8, scaled);
     LAST_DAMAGE.store(scaled as u32, Ordering::Relaxed);
 }
 
+/// A KH2 launch for KH1's launch reaction: apex height above the start, frames to it, and the
+/// starting horizontal speed (KH1 units, 60 Hz frames). `docs/kh1-launch.md`.
+#[derive(Clone, Copy, Debug)]
+struct Launch {
+    h: f32,
+    t: f32,
+    speed: f32,
+}
+
+impl Launch {
+    /// From an ATKP launch's knockback values (up speed, horizontal speed; both 0: the
+    /// defaults), flown as KH2's blow flies (`character_core::reaction::Blow`), to its apex.
+    fn kh2(k1: i16, k2: i16, p: &character_core::reaction::ReactionParams) -> Launch {
+        let (up, speed) = if k1 == 0 && k2 == 0 { (p.blow_up, p.blow_speed) } else { (k1 as f32, k2 as f32) };
+        let mut b = character_core::reaction::Blow::new([0.0, speed.abs()], up, p);
+        let (mut y, mut h, mut t, mut frames) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        for _ in 0..200 {
+            let d = b.tick(2.0, p);
+            frames += 2.0;
+            y += d[1];
+            if y > h {
+                h = y;
+                t = frames;
+            }
+            if d[1] <= 0.0 {
+                break;
+            }
+        }
+        Launch { h: h.max(1.0), t: t.max(2.0), speed: speed.abs() }
+    }
+}
+
+static PENDING: std::sync::Mutex<Option<Launch>> = std::sync::Mutex::new(None);
+/// Records made with a KH2 launch: (record, launch, when).
+static LAUNCHES: std::sync::Mutex<Vec<(usize, Launch, u64)>> = std::sync::Mutex::new(Vec::new());
+static ORIG_LAUNCH: AtomicUsize = AtomicUsize::new(0);
+/// KH1's launch reaction `0x1402B6390 (actor, record)`.
+const LAUNCH_RVA: usize = 0x2B6390;
+const LAUNCH_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x60];
+
+fn takeover_ms() -> u64 {
+    static T0: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    T0.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
+}
+
+/// KH1's launch, then KH2's height, rise time and horizontal speed for our records, when the
+/// enemy did launch (its launch motion 0x52 / 0x5C, air state 2).
+unsafe extern "system" fn launched(actor: usize, rec: usize) {
+    let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_LAUNCH.load(Ordering::Acquire));
+    f(actor, rec);
+    let ours = LAUNCHES.lock().ok().and_then(|mut v| v.iter().position(|(r, _, _)| *r == rec).map(|i| v.remove(i).1));
+    let Some(l) = ours else { return };
+    let motion = rd::<u16>(actor + 0x3EA);
+    let state = rd::<i32>(actor + 0x70);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if !matches!(motion, 0x52 | 0x5C) || state != 2 {
+        if N.fetch_add(1, Ordering::Relaxed) < 30 {
+            log(&format!("KH2 launch on {actor:#x}: KH1 didn't launch it (motion {motion:#x}, state {state})"));
+        }
+        return;
+    }
+    let dir = rd::<[f32; 3]>(actor + 0x20);
+    let n = (dir[0] * dir[0] + dir[2] * dir[2]).sqrt();
+    let (dx, dz) = if n > 1e-3 { (dir[0] / n, dir[2] / n) } else { (0.0, 0.0) };
+    wr(actor + 0x3B0, 0.0f32);
+    wr(actor + 0x3B8, l.t);
+    wr(actor + 0x3BC, -l.h);
+    wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed]);
+    if N.fetch_add(1, Ordering::Relaxed) < 30 {
+        log(&format!("KH2 launch on {actor:#x}: up {:.0} in {:.0} frames, sideways {:.1}/frame", l.h, l.t, l.speed));
+    }
+}
+
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
+    hook::install(base + LAUNCH_RVA, &LAUNCH_PROLOGUE, launched as *const () as usize, &ORIG_LAUNCH, "enemy launch reaction");
     hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row");
     hook::install(base + COMMAND_STEP_RVA, &COMMAND_STEP_PROLOGUE, command as *const () as usize, &ORIG_COMMAND, "command step");
 }
