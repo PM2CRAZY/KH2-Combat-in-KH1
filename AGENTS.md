@@ -1331,3 +1331,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   never ran: `takeover` now does that check while KH2's jump comes down and calls KH1's flight
   start; state 8 is KH1's own mode (and camera) until he lands.
 
+### 2026-10-16: Stage 119 (KH2 camera in flight)
+- The user: flying snapped to KH1's camera with KH2's chosen. Flight (state 8) runs in KH1's
+  mode-1 follow camera, which is ours, so state 8 left `kh1_camera_mode` (still KH1's own
+  movement mode for `takeover`).
+

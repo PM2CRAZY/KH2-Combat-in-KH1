@@ -812,9 +812,11 @@ fn kh1_mode(state: i32) -> bool {
     state >= 29 || matches!(state, 24 | 25 | FLIGHT_STATE)
 }
 
-/// The same, for KH2's camera (KH1's own camera for the carpet, the slider, water and flight).
+/// The same, for KH2's camera (KH1's own camera for the carpet, the slider and water). Not
+/// flight: KH1 flies in its ordinary follow camera (mode 1, ours with KH2's camera chosen, KH1's
+/// yaw kept in step so its flight steering matches), the user: the camera snapped to KH1's.
 pub fn kh1_camera_mode(state: i32) -> bool {
-    matches!(state, 24 | 25 | 29 | 30 | 31 | FLIGHT_STATE)
+    matches!(state, 24 | 25 | 29 | 30 | 31)
 }
 /// Sora is in one of them (KH2's camera gives way too).
 static KH1_MODE: AtomicBool = AtomicBool::new(false);
