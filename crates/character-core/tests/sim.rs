@@ -435,11 +435,15 @@ fn aerial_recovery_rights_sora_mid_launch() {
     let mut w = World::new(ch);
     w.step(IDLE);
     w.ch.take_hit(&reaction::Hit { reaction: 7, knockback: (24, 40), dir: [0.0, -1.0], part: 0 });
-    w.run(10, IDLE);
+    // Not before the launch's 16th frame (exe).
+    w.run(5, IDLE);
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_ne!(o.state, StateName::Hurt);
+    w.run(11, IDLE);
     let z = w.pos[2];
     let o = w.step(Pad { jump: true, ..IDLE });
     assert_eq!(o.state, StateName::Hurt);
-    w.run(60, IDLE);
+    w.run(90, IDLE);
     assert!((w.pos[2] - z).abs() < 30.0, "stopped flying back: {} -> {}", z, w.pos[2]);
     assert!(w.outs_free());
 }

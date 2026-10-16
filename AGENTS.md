@@ -1110,3 +1110,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 ### 2026-10-16: Stage 90 (KH2 camera through Simba's charge)
 - Only the Jungle Slider's movement states (30, 31) give the camera to KH1; a summon's (38
   Simba's charge, 40 the call) keep KH2's (the user). KH1 still has Sora in all states 30+.
+
+### 2026-10-16: Stage 91 (Quick Run grows with Sora; Aerial Recovery as the exe)
+- The tap brake (stage 89) is gone (the user). Quick Run grows with Sora instead
+  (`growth::QUICK_RUN_LEVELS`): LV1 at 12, LV2 at 20, LV3 at 32, MAX at 45. Its menu name is a
+  buffer rewritten in place ("Quick Run LV2" ... "Quick Run MAX"), and each growth shows an
+  "Ability Up" box.
+- Aerial Recovery per `docs/aerial-recovery.md` (exe `0x1403D6030`): launches only (not air
+  flinches), from the launch's 16th frame, jump: motion 40, hop 100, 10/frame along the stick
+  (straight up with it neutral), invulnerable to frame 16, control back at frame 24, no Aerial
+  Dodge after. Retaliating Slash: Square only, same frame.

@@ -159,7 +159,7 @@ pub const BOSS_GIFTS: [BossGift; 7] = [
 pub const FIRST_ID: u8 = 66;
 
 pub const MENU: [MenuAbility; 12] = [
-    // (The user: Quick Run LV2, a little later than KH2's level 7; both with AP in Sora's own
+    // (The user: Quick Run from level 12, growing with Sora; both with AP in Sora's own
     // list, not the shared one. AP as KH2's.)
     m(66, "Quick Run", "Dash swiftly along the ground.", 2, 12, List::Sora, kh1::DODGE_ROLL, Effect::QuickRun),
     m(67, "Aerial Dodge", "Leap once more in midair.", 3, 13, List::Sora, kh1::DODGE_ROLL, Effect::AerialDodge),
@@ -174,6 +174,26 @@ pub const MENU: [MenuAbility; 12] = [
     m(76, "Aerial Dive", "Air combo: dive down at a foe below.", 2, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE)),
     m(77, "Magnet Burst", "Finisher: pull in foes all around.", 3, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST)),
 ];
+
+/// Our Quick Run's ability id (`MENU`).
+pub const QUICK_RUN_ID: u8 = 66;
+
+/// Quick Run's level by Sora's level (the user: it levels up with him, MAX 4): LV1 when learned.
+pub const QUICK_RUN_LEVELS: [(u8, u8); 4] = [(12, 1), (20, 2), (32, 3), (45, 4)];
+
+/// Quick Run's level at Sora's level (0 before it is learned).
+pub fn quick_run_level(level: u8) -> u8 {
+    QUICK_RUN_LEVELS.iter().filter(|(at, _)| level >= *at).map(|(_, l)| *l).max().unwrap_or(0)
+}
+
+/// Its name in the menu and the level-up box ("Quick Run LV2", "Quick Run MAX").
+pub fn quick_run_name(l: u8) -> String {
+    if l >= 4 {
+        "Quick Run MAX".to_string()
+    } else {
+        format!("Quick Run LV{}", l.max(1))
+    }
+}
 
 /// Growth levels past the first, by Sora's level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -393,8 +413,8 @@ impl Kh1Sora {
                 continue;
             }
             match ab.effect {
-                // (The user: Quick Run LV2, Aerial Dodge LV3.)
-                Effect::QuickRun => quick_run = 2,
+                // (The user: Quick Run grows with Sora, `QUICK_RUN_LEVELS`; Aerial Dodge LV3.)
+                Effect::QuickRun => quick_run = quick_run_level(self.level).max(1),
                 Effect::AerialDodge => aerial_dodge = 3,
                 Effect::AerialRecovery => out.aerial_recovery = true,
                 Effect::FinishingPlus => out.finishing_plus = 1,
@@ -585,7 +605,7 @@ mod tests {
     #[test]
     fn menu_abilities_work_when_equipped() {
         let a = sora(99, &[kh1::DODGE_ROLL, 68, 74, 69, 77 | 0x80, kh1::COMBO_MASTER, 66, 67], &[kh1::HIGH_JUMP, kh1::HIGH_JUMP, kh1::HIGH_JUMP]).kh2();
-        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (2, 3, 4, 3));
+        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (4, 3, 4, 3));
         assert!(a.aerial_recovery && a.combo_master && a.finishing_plus == 1);
         assert!(a.equipped.contains(&kh2::DODGE_SLASH) && !a.equipped.contains(&kh2::MAGNET_BURST));
         // Learned but off: nothing.
@@ -593,8 +613,10 @@ mod tests {
         assert!(!off.aerial_recovery && off.quick_run == 0);
         // No KH1 Dodge Roll: no roll at any level.
         assert_eq!(sora(99, &[], &[]).kh2().dodge_roll, 0);
-        // Quick Run is LV2 from the start, Aerial Dodge LV3.
-        assert_eq!(sora(12, &[66], &[]).kh2().quick_run, 2);
+        // Quick Run grows with Sora (LV1 at 12 .. MAX at 45), Aerial Dodge LV3.
+        assert_eq!(sora(12, &[66], &[]).kh2().quick_run, 1);
+        assert_eq!(sora(32, &[66], &[]).kh2().quick_run, 3);
+        assert_eq!(quick_run_name(4), "Quick Run MAX");
         assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 3);
     }
 

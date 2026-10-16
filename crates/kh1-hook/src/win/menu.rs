@@ -83,6 +83,22 @@ fn decode(p: usize) -> String {
     s
 }
 
+/// Quick Run's menu name buffer (KH1 text codes) and its size.
+static QR_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+const QR_NAME_LEN: usize = 32;
+
+/// Writes Quick Run's level into its menu name ("Quick Run LV2", "Quick Run MAX").
+pub fn set_quick_run_name(level: u8) {
+    let p = QR_NAME.load(std::sync::atomic::Ordering::Relaxed);
+    if p == 0 {
+        return;
+    }
+    let mut b = encode(&growth::quick_run_name(level));
+    b.truncate(QR_NAME_LEN - 1);
+    b.push(0);
+    unsafe { std::ptr::copy_nonoverlapping(b.as_ptr(), p as *mut u8, b.len()) };
+}
+
 /// Points KH1 at our longer ability table (if it isn't already).
 pub unsafe fn ensure_table(base: usize) {
     let cur = rd::<u64>(base + TABLE_PTR_RVA) as usize;
@@ -97,7 +113,16 @@ pub unsafe fn ensure_table(base: usize) {
             .map(|ab| (ab.name, ab.help))
             .chain(growth::RENAMED.iter().map(|r| (r.1, r.2)))
             .map(|(n, h)| {
-                let name = Box::leak(encode(n).into_boxed_slice()).as_ptr() as usize;
+                let name = if n == "Quick Run" {
+                    // Its name shows its level, rewritten in place as it grows (the user: the
+                    // menu should say which level, without duplicate copies).
+                    let buf = Box::leak(vec![0u8; QR_NAME_LEN].into_boxed_slice()).as_mut_ptr() as usize;
+                    QR_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
+                    set_quick_run_name(1);
+                    buf
+                } else {
+                    Box::leak(encode(n).into_boxed_slice()).as_ptr() as usize
+                };
                 let help = Box::leak(encode(h).into_boxed_slice()).as_ptr() as usize;
                 (to_handle(name), to_handle(help))
             })
@@ -301,6 +326,8 @@ pub struct Growth {
     prompts: std::collections::VecDeque<(String, String, String)>,
     /// Frames KH1's prompt box has been free.
     idle: u32,
+    /// Quick Run's level last seen (None: not looked yet).
+    qr_level: Option<u8>,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -309,7 +336,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0 }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -461,7 +488,8 @@ impl Growth {
                         log(&format!("Sora learns {} (level {}, {} AP)", ab.name, ab.level, ab.ap));
                         // The user: the game should say so.
                         // Its name only (the user: no description needed).
-                        self.prompts.push_back(("New Ability".to_string(), ab.name.to_string(), String::new()));
+                        let shown = if ab.effect == growth::Effect::QuickRun { growth::quick_run_name(growth::quick_run_level(now.level)) } else { ab.name.to_string() };
+                        self.prompts.push_back(("New Ability".to_string(), shown, String::new()));
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
                         log(&format!("Sora can't learn {} (level {}): his ability list is full (48, KH1's most)", ab.name, ab.level));
@@ -506,6 +534,22 @@ impl Growth {
             }
             if let Some(again) = Self::kh1(base) {
                 now = again;
+            }
+        }
+        // Quick Run's level: its menu name, and a box each time it grows (the user).
+        if self.mode == Mode::Kh1 {
+            let l = if growth::has(&now.abilities, growth::QUICK_RUN_ID) { growth::quick_run_level(now.level).max(1) } else { 0 };
+            if self.qr_level != Some(l) {
+                if l > 0 {
+                    set_quick_run_name(l);
+                }
+                if let Some(old) = self.qr_level {
+                    if old > 0 && l > old {
+                        log(&format!("Quick Run grows: {}", growth::quick_run_name(l)));
+                        self.prompts.push_back(("Ability Up".to_string(), growth::quick_run_name(l), String::new()));
+                    }
+                }
+                self.qr_level = Some(l);
             }
         }
         if self.seen.as_ref() == Some(&now) {

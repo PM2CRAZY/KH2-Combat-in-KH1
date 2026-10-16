@@ -40,6 +40,8 @@ pub mod motion {
     pub const REPELLED: u16 = 41;
     pub const REPELLED_AIR: u16 = 43;
     pub const CLIMB: u16 = 8;
+    /// Aerial Recovery's flip (exe).
+    pub const AIR_RECOVERY: u16 = 40;
 }
 
 /// Everything the controller needs to know about a character's moves.
@@ -283,16 +285,16 @@ enum Mode {
 /// Wall recoil: push-back distance on the ground, hop height in the air
 /// (exe constant 50).
 const WALL_HOP: f32 = 50.0;
-/// Frames into a launch before Aerial Recovery can be used (ours).
-const RECOVERY_AFTER: u32 = 6;
+/// Frames into a launch before Aerial Recovery / Retaliating Slash can be used (exe: 16).
+const RECOVERY_AFTER: u32 = 16;
+/// Aerial Recovery's hop height and speed along the stick (`plyr.blow_recovery_h` / `_v`).
+const AIR_RECOVERY_HOP: f32 = 100.0;
+const AIR_RECOVERY_SPEED: f32 = 10.0;
 /// Combo rows only reached from a state (PTYA kind 0), and the abilities they need.
 /// Counterguard: attack during the guard's repel (motion 42), as the exe's attack-press
 /// handler does (`current motion == 0x2A` → row 0x27). Retaliating Slash: attack while
 /// launched (ours; the exe checks it in a separate routine whose row id comes in a register).
 const COUNTERGUARD_ROW: u8 = 39;
-/// Quick Run's stop brake for a tap (ours): the end slide shrinks toward this the earlier the
-/// button is let go.
-const TAP_STOP_BRAKE: f32 = 0.7;
 /// KH2's Square moves in a combo, in the order tried: (PTYA row, ability, in the air).
 /// Finishing Leap (row 37, ability 95), Upper Slash (12, 18), Horizontal Slash (38, 99).
 const SQUARE_MOVES: [(u8, u16, bool); 3] = [(37, 95, false), (12, 18, false), (38, 99, true)];
@@ -1431,14 +1433,9 @@ impl Character {
                 if act.motion == motion::QUICK_RUN {
                     finished = false;
                     // Releasing the button ends the dash right away.
-                    let left = if input.action.held { act.timer - 1.0 } else { act.timer };
-                    act.timer = if input.action.held { left } else { 0.0 };
+                    act.timer = if input.action.held { act.timer - 1.0 } else { 0.0 };
                     if act.timer <= 0.0 {
-                        // Let go early: a shorter stop the earlier (ours, the user: a tap should
-                        // go less far; KH2's own end slide is most of a short dash's length).
-                        // Held to the end: KH2's stop brake.
-                        let held = if g.quick_run_time > 0.0 { (1.0 - left.max(0.0) / g.quick_run_time).clamp(0.0, 1.0) } else { 1.0 };
-                        act.brake = TAP_STOP_BRAKE + (g.quick_run_stop_brake - TAP_STOP_BRAKE).max(0.0) * held;
+                        act.brake = g.quick_run_stop_brake;
                         act.motion = motion::QUICK_RUN_END;
                         act.frame = 0;
                         self.mode = Mode::Action(act);
@@ -1507,16 +1504,15 @@ impl Character {
                 }
             }
             ActionKind::Hurt => {
-                // Aerial Recovery from an air flinch too (knocked about in the air; the user: it
-                // never came out, KH1's hits rarely launch him): jump rights him.
-                let recovery_after = if self.abilities.hyper_healing { 2 } else { RECOVERY_AFTER };
-                if self.abilities.aerial_recovery && input.jump.pressed && self.airborne && f >= recovery_after && act.motion != motion::AERIAL_DODGE {
-                    self.vel_h = [0.0; 2];
-                    self.vel_y = 0.0;
-                    self.arc = Some(Arc::new(WALL_HOP, self.params.gravity));
-                    let m = if self.clip(motion::AERIAL_DODGE).is_some() { motion::AERIAL_DODGE } else { act.motion };
-                    self.start_action(ActionKind::Hurt, m);
-                    return false;
+                // Aerial Recovery's own motion (exe, `docs/aerial-recovery.md`): invulnerable to
+                // frame 16, control back at frame 24, then the fall.
+                if act.motion == motion::AIR_RECOVERY {
+                    if f <= 16 {
+                        fo.invulnerable = true;
+                    }
+                    if f >= 24 {
+                        finished = true;
+                    }
                 }
                 // Counterguard: attack during the guard's repel (exe).
                 if act.motion == motion::GUARD && input.attack.pressed && !self.airborne {
@@ -1545,18 +1541,27 @@ impl Character {
                 // Aerial Recovery (ours: the exe's input for it isn't traced):
                 // jump while launched rights Sora with a small hop and the
                 // aerial-dodge flip, and control comes back when it ends.
-                let recovery_after = if self.abilities.hyper_healing { 2 } else { RECOVERY_AFTER };
+                // As the exe (`0x1403D6030`, `docs/aerial-recovery.md`): from the launch's 16th
+                // frame, jump: motion 40, a 100 hop, 10/frame along the stick (straight up with
+                // it neutral), the launch's own speed dropped; no Aerial Dodge after it.
+                let recovery_after = RECOVERY_AFTER;
                 if self.abilities.aerial_recovery && input.jump.pressed && self.airborne && f >= recovery_after {
-                    self.vel_h = [0.0; 2];
+                    if len2(input.stick) > DEAD_ZONE {
+                        self.facing = yaw_of(input.stick);
+                        self.vel_h = scale(norm(input.stick), AIR_RECOVERY_SPEED);
+                    } else {
+                        self.vel_h = [0.0; 2];
+                    }
                     self.vel_y = 0.0;
-                    self.arc = Some(Arc::new(WALL_HOP, self.params.gravity));
-                    let m = if self.clip(motion::AERIAL_DODGE).is_some() { motion::AERIAL_DODGE } else { act.motion };
+                    self.arc = Some(Arc::new(AIR_RECOVERY_HOP, self.params.gravity));
+                    self.air_dodge_ready = false;
+                    let m = if self.clip(motion::AIR_RECOVERY).is_some() { motion::AIR_RECOVERY } else { motion::AERIAL_DODGE };
                     self.start_action(ActionKind::Hurt, m);
                     return false;
                 }
-                // Retaliating Slash (see RETALIATING_SLASH_ROW): the action button while launched,
-                // as KH2's help has it (Square); attack too (ours, as before).
-                if (input.action.pressed || input.attack.pressed) && self.airborne && f >= recovery_after {
+                // Retaliating Slash (see RETALIATING_SLASH_ROW): Square while launched, from the
+                // same frame (exe).
+                if input.action.pressed && self.airborne && f >= recovery_after {
                     self.forced_row = Some(RETALIATING_SLASH_ROW);
                     let (vh, vy, arc) = (self.vel_h, self.vel_y, self.arc);
                     self.vel_h = [0.0; 2];
