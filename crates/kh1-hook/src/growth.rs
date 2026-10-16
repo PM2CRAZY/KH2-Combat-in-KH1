@@ -22,8 +22,8 @@
 //!   extended copy of KH1's ability table, `win/menu.rs`), learned at Sora's level: Quick Run
 //!   and Aerial Dodge in the shared abilities (with High Jump and Glide), the rest in Sora's,
 //!   with KH2's AP costs (Quick Run and Aerial Dodge too, in Sora's list; Aerial Dodge only once
-//!   Sora has High Jump). Quick Run is LV2 and
-//!   Aerial Dodge LV3; the dodge roll levels up with Sora (`GROWTH`).
+//!   Sora has High Jump). Quick Run, Aerial Dodge, High Jump and the dodge roll level up with
+//!   Sora to MAX (`QUICK_RUN_LEVELS`, `AERIAL_DODGE_LEVELS`, `HIGH_JUMP_LEVELS`, `GROWTH`).
 //!   (Earlier builds put Quick Run and Aerial Dodge in the shared list: `win/menu.rs` moves them.)
 
 use character_core::Abilities;
@@ -213,6 +213,45 @@ pub fn dodge_roll_name(l: u8) -> String {
     }
 }
 
+/// High Jump's levels past LV1, by Sora's level (the user: it levels up with him too, MAX 4):
+/// LV1 when Sora gets it, LV2 at 24, LV3 at 38, MAX at 52.
+pub const HIGH_JUMP_LEVELS: [u8; 3] = [24, 38, 52];
+
+/// Aerial Dodge's levels past LV1 (LV1 when learned, after High Jump): LV2 at 25, LV3 at 36,
+/// MAX at 50.
+pub const AERIAL_DODGE_LEVELS: [u8; 3] = [25, 36, 50];
+
+fn grown(level: u8, steps: &[u8; 3]) -> u8 {
+    1 + steps.iter().filter(|at| level >= **at).count() as u8
+}
+
+/// High Jump's level at Sora's level, once he has it.
+pub fn high_jump_level(level: u8) -> u8 {
+    grown(level, &HIGH_JUMP_LEVELS)
+}
+
+/// Aerial Dodge's level at Sora's level, once he has learned it.
+pub fn aerial_dodge_level(level: u8) -> u8 {
+    grown(level, &AERIAL_DODGE_LEVELS)
+}
+
+/// A growing ability's name with its level ("High Jump LV2", "High Jump MAX").
+pub fn level_name(name: &str, l: u8) -> String {
+    if l >= 4 {
+        format!("{name} MAX")
+    } else {
+        format!("{name} LV{}", l.max(1))
+    }
+}
+
+pub fn high_jump_name(l: u8) -> String {
+    level_name("High Jump", l)
+}
+
+pub fn aerial_dodge_name(l: u8) -> String {
+    level_name("Aerial Dodge", l)
+}
+
 /// Growth levels past the first, by Sora's level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Growth {
@@ -222,7 +261,7 @@ pub enum Growth {
     DodgeRoll(u8),
 }
 
-/// (Quick Run is LV2 and Aerial Dodge LV3 as soon as they are learned, the user's choice.)
+/// (Quick Run, Aerial Dodge and High Jump have their own tables above.)
 pub const GROWTH: [(u8, Growth); 3] = [(19, Growth::DodgeRoll(2)), (37, Growth::DodgeRoll(3)), (60, Growth::DodgeRoll(4))];
 
 /// Shared abilities Sora keeps only one of (the user: one High Jump, one Glide, one
@@ -393,9 +432,10 @@ impl Kh1Sora {
         let a = &self.abilities;
         let s = &self.shared;
         let mut out = Abilities { guard: false, one_swing_on_miss: true, ..Abilities::default() };
-        // (The user: one High Jump, LV3; one Glide, LV3, and one Superglide, MAX.)
+        // (The user: one High Jump, growing with Sora to MAX; one Glide, LV3, and one
+        // Superglide, MAX.)
         if equipped(s, kh1::HIGH_JUMP) > 0 {
-            out.high_jump = 3;
+            out.high_jump = high_jump_level(self.level);
         }
         if equipped(s, kh1::SUPERGLIDE) > 0 {
             out.glide = 4;
@@ -431,9 +471,9 @@ impl Kh1Sora {
                 continue;
             }
             match ab.effect {
-                // (The user: Quick Run grows with Sora, `QUICK_RUN_LEVELS`; Aerial Dodge LV3.)
+                // (The user: they grow with Sora, `QUICK_RUN_LEVELS`, `AERIAL_DODGE_LEVELS`.)
                 Effect::QuickRun => quick_run = quick_run_level(self.level).max(1),
-                Effect::AerialDodge => aerial_dodge = 3,
+                Effect::AerialDodge => aerial_dodge = aerial_dodge_level(self.level),
                 Effect::AerialRecovery => out.aerial_recovery = true,
                 Effect::FinishingPlus => out.finishing_plus = 1,
                 Effect::NegativeCombo => out.negative_combo = 1,
@@ -606,7 +646,7 @@ mod tests {
         )
         .kh2();
         assert!(a.guard);
-        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 3, 4));
+        assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 1, 4));
         let g = sora(1, &[], &[kh1::GLIDE]).kh2();
         assert_eq!(g.glide, 3);
         assert!(a.equipped.contains(&kh2::FLASH_STEP) && !a.equipped.contains(&kh2::SLAPSHOT));
@@ -623,7 +663,7 @@ mod tests {
     #[test]
     fn menu_abilities_work_when_equipped() {
         let a = sora(99, &[kh1::DODGE_ROLL, 68, 74, 69, 77 | 0x80, kh1::COMBO_MASTER, 66, 67], &[kh1::HIGH_JUMP, kh1::HIGH_JUMP, kh1::HIGH_JUMP]).kh2();
-        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (4, 3, 4, 3));
+        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (4, 4, 4, 4));
         assert!(a.aerial_recovery && a.combo_master && a.finishing_plus == 1);
         assert!(a.equipped.contains(&kh2::DODGE_SLASH) && !a.equipped.contains(&kh2::MAGNET_BURST));
         // Learned but off: nothing.
@@ -631,12 +671,17 @@ mod tests {
         assert!(!off.aerial_recovery && off.quick_run == 0);
         // No KH1 Dodge Roll: no roll at any level.
         assert_eq!(sora(99, &[], &[]).kh2().dodge_roll, 0);
-        // Quick Run grows with Sora (LV1 at 12 .. MAX at 45), Aerial Dodge LV3.
+        // Quick Run grows with Sora (LV1 at 12 .. MAX at 45).
         assert_eq!(sora(12, &[66], &[]).kh2().quick_run, 1);
         assert_eq!(sora(32, &[66], &[]).kh2().quick_run, 3);
         assert_eq!(quick_run_name(4), "Quick Run MAX");
         assert_eq!((dodge_roll_level(18), dodge_roll_level(19), dodge_roll_level(60)), (1, 2, 4));
-        assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 3);
+        // High Jump and Aerial Dodge grow too (the user).
+        assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 4);
+        assert_eq!((aerial_dodge_level(13), aerial_dodge_level(25), aerial_dodge_level(36), aerial_dodge_level(50)), (1, 2, 3, 4));
+        assert_eq!((high_jump_level(1), high_jump_level(24), high_jump_level(38), high_jump_level(52)), (1, 2, 3, 4));
+        assert_eq!(sora(30, &[], &[kh1::HIGH_JUMP]).kh2().high_jump, 2);
+        assert_eq!((high_jump_name(3), aerial_dodge_name(4)), ("High Jump LV3".to_string(), "Aerial Dodge MAX".to_string()));
     }
 
     #[test]

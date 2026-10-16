@@ -1125,3 +1125,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - KH1's Dodge Roll (22) gets a name buffer like Quick Run's ("Dodge Roll LV1" .. "MAX", its
   levels as before: 19 / 37 / 60), written into our ability table's entry, and an "Ability Up"
   box each time it grows (the user).
+
+### 2026-10-16: Stage 94 (High Jump and Aerial Dodge grow with Sora)
+- High Jump (KH1's 1, shared) and Aerial Dodge (our 67) level up like Quick Run and Dodge Roll
+  (the user): High Jump LV2 / LV3 / MAX at 24 / 38 / 52, Aerial Dodge at 25 / 36 / 50
+  (`HIGH_JUMP_LEVELS`, `AERIAL_DODGE_LEVELS`), LV1 when Sora gets them. Each gets a name buffer
+  ("High Jump LV2", entry 1's handle like Dodge Roll's; Aerial Dodge's in the TEXT init like
+  Quick Run's) and an "Ability Up" box when it grows; learning Aerial Dodge shows its level.

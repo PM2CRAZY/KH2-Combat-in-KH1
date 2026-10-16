@@ -91,6 +91,32 @@ const QR_NAME_LEN: usize = 32;
 static DR_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static DR_HANDLE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
 
+/// High Jump's (KH1's, a handle like Dodge Roll's) and our Aerial Dodge's (like Quick Run's).
+static HJ_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static HJ_HANDLE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+static AD_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn write_name(slot: &std::sync::atomic::AtomicUsize, name: String) {
+    let p = slot.load(std::sync::atomic::Ordering::Relaxed);
+    if p == 0 {
+        return;
+    }
+    let mut b = encode(&name);
+    b.truncate(QR_NAME_LEN - 1);
+    b.push(0);
+    unsafe { std::ptr::copy_nonoverlapping(b.as_ptr(), p as *mut u8, b.len()) };
+}
+
+/// Writes High Jump's level into its menu name.
+pub fn set_high_jump_name(level: u8) {
+    write_name(&HJ_NAME, growth::high_jump_name(level));
+}
+
+/// Writes Aerial Dodge's level into its menu name.
+pub fn set_aerial_dodge_name(level: u8) {
+    write_name(&AD_NAME, growth::aerial_dodge_name(level));
+}
+
 /// Writes Dodge Roll's level into its menu name.
 pub fn set_dodge_roll_name(level: u8) {
     let p = DR_NAME.load(std::sync::atomic::Ordering::Relaxed);
@@ -136,6 +162,11 @@ pub unsafe fn ensure_table(base: usize) {
                     QR_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
                     set_quick_run_name(1);
                     buf
+                } else if n == "Aerial Dodge" {
+                    let buf = Box::leak(vec![0u8; QR_NAME_LEN].into_boxed_slice()).as_mut_ptr() as usize;
+                    AD_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
+                    set_aerial_dodge_name(1);
+                    buf
                 } else {
                     Box::leak(encode(n).into_boxed_slice()).as_ptr() as usize
                 };
@@ -169,6 +200,14 @@ pub unsafe fn ensure_table(base: usize) {
         to_handle(buf)
     });
     std::ptr::write_unaligned((ours + (growth::kh1::DODGE_ROLL as usize - 1) * 12 + 4) as *mut u32, dr);
+    // And High Jump (the user).
+    let hj = *HJ_HANDLE.get_or_init(|| {
+        let buf = Box::leak(vec![0u8; QR_NAME_LEN].into_boxed_slice()).as_mut_ptr() as usize;
+        HJ_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
+        set_high_jump_name(1);
+        to_handle(buf)
+    });
+    std::ptr::write_unaligned((ours + (growth::kh1::HIGH_JUMP as usize - 1) * 12 + 4) as *mut u32, hj);
     std::ptr::write_unaligned((base + TABLE_PTR_RVA) as *mut u64, ours as u64);
     static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if LOGGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 6 {
@@ -353,6 +392,8 @@ pub struct Growth {
     /// Quick Run's and Dodge Roll's levels last seen (None: not looked yet).
     qr_level: Option<u8>,
     dr_level: Option<u8>,
+    hj_level: Option<u8>,
+    ad_level: Option<u8>,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -361,7 +402,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None, hj_level: None, ad_level: None }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -513,7 +554,11 @@ impl Growth {
                         log(&format!("Sora learns {} (level {}, {} AP)", ab.name, ab.level, ab.ap));
                         // The user: the game should say so.
                         // Its name only (the user: no description needed).
-                        let shown = if ab.effect == growth::Effect::QuickRun { growth::quick_run_name(growth::quick_run_level(now.level)) } else { ab.name.to_string() };
+                        let shown = match ab.effect {
+                            growth::Effect::QuickRun => growth::quick_run_name(growth::quick_run_level(now.level)),
+                            growth::Effect::AerialDodge => growth::aerial_dodge_name(growth::aerial_dodge_level(now.level)),
+                            _ => ab.name.to_string(),
+                        };
                         self.prompts.push_back(("New Ability".to_string(), shown, String::new()));
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
@@ -588,6 +633,32 @@ impl Growth {
                     }
                 }
                 self.dr_level = Some(l);
+            }
+            let l = if growth::has(&now.shared, growth::kh1::HIGH_JUMP) { growth::high_jump_level(now.level) } else { 0 };
+            if self.hj_level != Some(l) {
+                if l > 0 {
+                    set_high_jump_name(l);
+                }
+                if let Some(old) = self.hj_level {
+                    if old > 0 && l > old {
+                        log(&format!("High Jump grows: {}", growth::high_jump_name(l)));
+                        self.prompts.push_back(("Ability Up".to_string(), growth::high_jump_name(l), String::new()));
+                    }
+                }
+                self.hj_level = Some(l);
+            }
+            let l = if growth::has(&now.abilities, AERIAL_DODGE) { growth::aerial_dodge_level(now.level) } else { 0 };
+            if self.ad_level != Some(l) {
+                if l > 0 {
+                    set_aerial_dodge_name(l);
+                }
+                if let Some(old) = self.ad_level {
+                    if old > 0 && l > old {
+                        log(&format!("Aerial Dodge grows: {}", growth::aerial_dodge_name(l)));
+                        self.prompts.push_back(("Ability Up".to_string(), growth::aerial_dodge_name(l), String::new()));
+                    }
+                }
+                self.ad_level = Some(l);
             }
         }
         if self.seen.as_ref() == Some(&now) {

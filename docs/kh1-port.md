@@ -57,7 +57,7 @@ the menu, e.g. Hurricane Blast is listed as Explosion):
 
 | KH1 | KH2 |
 |---|---|
-| High Jump | High Jump LV3 |
+| High Jump | High Jump LV1 (higher levels with Sora's level, below) |
 | Glide | Glide LV3 |
 | Superglide | Glide MAX |
 | Guard | Guard |
@@ -85,7 +85,7 @@ a "New Ability" box in KH1's level-up prompt style names it):
 | 4 | Aerial Recovery | Sora's | 2 |
 | 10 | Dodge Slash | Sora's | 2 |
 | 12 | Quick Run LV1 (LV2 at 20, LV3 at 32, MAX at 45; its menu name shows the level, an "Ability Up" box each time) | Sora's | 2 |
-| 13, once he has High Jump | Aerial Dodge LV3 | Sora's | 3 |
+| 13, once he has High Jump | Aerial Dodge LV1 (higher levels below) | Sora's | 3 |
 | 16 | Horizontal Slash | Sora's | 2 |
 | 20 | Negative Combo | Sora's | 2 |
 | 25 | Aerial Spiral | Sora's | 2 |
@@ -115,6 +115,8 @@ cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while t
 
 The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60; its
 menu name shows the level ("Dodge Roll LV2"), with an "Ability Up" box each time.
+High Jump reaches LV2 / LV3 / MAX at levels 24 / 38 / 52, and Aerial Dodge at 25 / 36 / 50,
+the same way (name with its level, "Ability Up" box).
 Sora keeps one High Jump, one Glide and one Superglide: spare copies (a randomizer can give
 more) are taken out of the shared list when the game loads or he gets one, and noted in
 `kh1-kh2-removed.txt`.
