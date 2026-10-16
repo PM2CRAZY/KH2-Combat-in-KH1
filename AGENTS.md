@@ -1218,3 +1218,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   14 / 16 by level (`AIR_DODGE_STAR` + 2 per level). Quick Run keeps KH2's fmab star times
   (0 / 8 / 12 / 16 by level) with at least 6 (`QUICK_RUN_STAR_MIN`, for LV1).
 
+### 2026-10-16: Stage 105 (Riku's Aerial Dodge, later growth, holding hits stay put)
+- The user: Aerial Dodge for beating Riku the first time (Hollow Bastion progress 0x32, its
+  reward's threshold in gaithern's KH-1FM-AP-LUA, MIT; 0x28 during the fight), no longer a
+  level or High Jump's (the High Jump gate and its take-back are gone; the user's Archipelago
+  save has no High Jump). Its New Ability box shows its level. High Jump grows at 30 / 44 / 58,
+  Aerial Dodge at 40 / 52 / 64.
+- Still sliding out of Aerial Finish: KH1's flinch on an airborne foe (kind 3, `0x1402B69E0`)
+  knocks it along the record's direction each spin. A holding blow's record direction is now
+  zeroed (in `scale_record` and again after the contact), so it flinches in place.
+

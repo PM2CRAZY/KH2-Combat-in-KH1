@@ -859,7 +859,18 @@ impl Strikes {
                 if let Ok(mut p) = PENDING.lock() {
                     *p = finisher.then(|| Launch::kh2(row.knockback_1, row.knockback_2, &character.reaction));
                 }
+                // A holding blow (Aerial Finish's spin) flinches the foe where it is: KH1's
+                // flinch knocks an airborne foe along the record's direction, and spin after
+                // spin slid it out of reach (the user); the direction is zeroed (`scale_record`).
+                HOLD.store(blow && !throws, Ordering::Relaxed);
                 let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power);
+                HOLD.store(false, Ordering::Relaxed);
+                // (Again once the contact is done, in case its direction came after the record.)
+                let rec = HELD_REC.swap(0, Ordering::Relaxed);
+                if rec > 0x10000 {
+                    let w = rd::<f32>(rec + 0x1C);
+                    wr(rec + 0x10, [0.0f32, 0.0, 0.0, w]);
+                }
                 if let Ok(mut p) = PENDING.lock() {
                     *p = None;
                 }
@@ -956,6 +967,11 @@ pub unsafe fn scale_record(rec: usize) {
             log(&format!("KH2 launch asked: record {rec:#x} made a launch (up {:.0} in {:.0} frames, sideways {:.1}/frame)", l.h, l.t, l.speed));
         }
     }
+    if HOLD.load(Ordering::Relaxed) {
+        HELD_REC.store(rec, Ordering::Relaxed);
+        let w = rd::<f32>(rec + 0x1C);
+        wr(rec + 0x10, [0.0f32, 0.0, 0.0, w]);
+    }
     let d = rd::<i32>(rec + 8);
     let scaled = ((d as i64 * p as i64) / 100).max(1) as i32;
     wr(rec + 8, scaled);
@@ -994,6 +1010,9 @@ impl Launch {
     }
 }
 
+/// The hit being landed holds the foe in place (its record's push direction is zeroed).
+static HOLD: AtomicBool = AtomicBool::new(false);
+static HELD_REC: AtomicUsize = AtomicUsize::new(0);
 static PENDING: std::sync::Mutex<Option<Launch>> = std::sync::Mutex::new(None);
 /// Records made with a KH2 launch: (record, launch, when).
 static LAUNCHES: std::sync::Mutex<Vec<(usize, Launch, u64)>> = std::sync::Mutex::new(Vec::new());

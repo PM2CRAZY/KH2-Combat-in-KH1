@@ -145,7 +145,7 @@ pub struct BossGift {
     pub ability: u8,
 }
 
-pub const BOSS_GIFTS: [BossGift; 7] = [
+pub const BOSS_GIFTS: [BossGift; 8] = [
     BossGift { boss: "Sabor", world: 1, progress: 0x42, ability: 73 },
     BossGift { boss: "Clayton", world: 1, progress: 0x56, ability: kh1::AERIAL_SWEEP },
     BossGift { boss: "Jafar", world: 4, progress: 0x49, ability: kh1::GRAVITY_BREAK },
@@ -153,6 +153,8 @@ pub const BOSS_GIFTS: [BossGift; 7] = [
     BossGift { boss: "Dragon Maleficent", world: 10, progress: 0x6E, ability: kh1::HURRICANE_BLAST },
     BossGift { boss: "Captain Hook", world: 9, progress: 0x56, ability: 77 },
     BossGift { boss: "Cerberus", world: 2, progress: 0x25, ability: 76 },
+    // Riku in Hollow Bastion, the first time (0x28 during the fight, 0x32 its reward).
+    BossGift { boss: "Riku", world: 10, progress: 0x32, ability: 67 },
 ];
 
 /// The first id past KH1's own (65 entries in its table).
@@ -162,7 +164,8 @@ pub const MENU: [MenuAbility; 12] = [
     // (The user: Quick Run from level 12, growing with Sora; both with AP in Sora's own
     // list, not the shared one. AP as KH2's.)
     m(66, "Quick Run", "Dash swiftly along the ground.", 2, 12, List::Sora, kh1::DODGE_ROLL, Effect::QuickRun),
-    m(67, "Aerial Dodge", "Leap once more in midair.", 3, 13, List::Sora, kh1::DODGE_ROLL, Effect::AerialDodge),
+    // (The user: Aerial Dodge for beating Riku the first time, `BOSS_GIFTS`.)
+    m(67, "Aerial Dodge", "Leap once more in midair.", 3, BOSS, List::Sora, kh1::DODGE_ROLL, Effect::AerialDodge),
     m(68, "Aerial Recovery", "Right yourself in midair after being knocked back.", 2, 4, List::Sora, kh1::COMBO_PLUS, Effect::AerialRecovery),
     m(69, "Dodge Slash", "Ground combo: strike nearby foes all around.", 2, 10, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::DODGE_SLASH)),
     m(70, "Horizontal Slash", "Air combo: a powerful side slash with Square.", 2, 16, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH)),
@@ -214,12 +217,12 @@ pub fn dodge_roll_name(l: u8) -> String {
 }
 
 /// High Jump's levels past LV1, by Sora's level (the user: it levels up with him too, MAX 4):
-/// LV1 when Sora gets it, LV2 at 24, LV3 at 38, MAX at 52.
-pub const HIGH_JUMP_LEVELS: [u8; 3] = [24, 38, 52];
+/// LV1 when Sora gets it, LV2 at 30, LV3 at 44, MAX at 58 (the user: LV2 at 30).
+pub const HIGH_JUMP_LEVELS: [u8; 3] = [30, 44, 58];
 
-/// Aerial Dodge's levels past LV1 (LV1 when learned, after High Jump): LV2 at 25, LV3 at 36,
-/// MAX at 50.
-pub const AERIAL_DODGE_LEVELS: [u8; 3] = [25, 36, 50];
+/// Aerial Dodge's levels past LV1 (LV1 when Riku first falls): LV2 at 40, LV3 at 52, MAX at 64
+/// (the user: its growth from 40).
+pub const AERIAL_DODGE_LEVELS: [u8; 3] = [40, 52, 64];
 
 fn grown(level: u8, steps: &[u8; 3]) -> u8 {
     1 + steps.iter().filter(|at| level >= **at).count() as u8
@@ -504,7 +507,6 @@ impl Kh1Sora {
     pub fn grants(&self) -> Vec<MenuAbility> {
         MENU.iter()
             .filter(|ab| ab.level != BOSS && self.level >= ab.level)
-            .filter(|ab| ab.effect != Effect::AerialDodge || has(&self.shared, kh1::HIGH_JUMP))
             .filter(|ab| !has(if ab.list == List::Shared { &self.shared } else { &self.abilities }, ab.id))
             .copied()
             .collect()
@@ -537,14 +539,13 @@ pub fn beaten(progress: &[u8], g: &BossGift) -> bool {
 
 /// The AP Sora gets on top of KH1's by his level: each KH2 ability he has learned brings its
 /// own AP, so taking the KH2 abilities costs none of KH1's.
-/// (Aerial Dodge only once High Jump is had: it is learned after it, the user's choice.)
 /// Ours a boss gives count once it is beaten.
-pub fn bonus_ap(level: u8, high_jump: bool, progress: &[u8]) -> u8 {
+pub fn bonus_ap(level: u8, progress: &[u8]) -> u8 {
     let earned = |ab: &MenuAbility| {
         if ab.level == BOSS {
             BOSS_GIFTS.iter().any(|g| g.ability == ab.id && beaten(progress, g))
         } else {
-            level >= ab.level && (ab.effect != Effect::AerialDodge || high_jump)
+            level >= ab.level
         }
     };
     MENU.iter().filter(|ab| earned(ab)).map(|ab| ab.ap).sum()
@@ -589,16 +590,14 @@ mod tests {
 
     #[test]
     fn bonus_ap_follows_the_learned_abilities() {
-        assert_eq!(bonus_ap(1, true, &[]), 0);
-        assert_eq!(bonus_ap(4, true, &[]), 2);
-        assert_eq!(bonus_ap(10, true, &[]), 4);
+        assert_eq!(bonus_ap(1, &[]), 0);
+        assert_eq!(bonus_ap(4, &[]), 2);
+        assert_eq!(bonus_ap(10, &[]), 4);
         let all = [0xFFu8; 12];
-        assert_eq!(bonus_ap(50, true, &all), MENU.iter().map(|ab| ab.ap).sum::<u8>());
-        assert_eq!(bonus_ap(50, true, &all), bonus_ap(100, true, &all));
-        // Boss gifts' AP only once beaten.
-        assert_eq!(bonus_ap(100, true, &all), bonus_ap(100, true, &[]) + 4 + 2 + 3);
-        // Aerial Dodge's 3 AP only with High Jump.
-        assert_eq!(bonus_ap(13, true, &[]), bonus_ap(13, false, &[]) + 3);
+        assert_eq!(bonus_ap(50, &all), MENU.iter().map(|ab| ab.ap).sum::<u8>());
+        assert_eq!(bonus_ap(50, &all), bonus_ap(100, &all));
+        // Boss gifts' AP only once beaten (Upper Slash, Aerial Dive, Magnet Burst, Aerial Dodge).
+        assert_eq!(bonus_ap(100, &all), bonus_ap(100, &[]) + 4 + 2 + 3 + 3);
     }
 
     fn sora(level: u8, abilities: &[u8], shared: &[u8]) -> Kh1Sora {
@@ -678,8 +677,8 @@ mod tests {
         assert_eq!((dodge_roll_level(18), dodge_roll_level(19), dodge_roll_level(60)), (1, 2, 4));
         // High Jump and Aerial Dodge grow too (the user).
         assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 4);
-        assert_eq!((aerial_dodge_level(13), aerial_dodge_level(25), aerial_dodge_level(36), aerial_dodge_level(50)), (1, 2, 3, 4));
-        assert_eq!((high_jump_level(1), high_jump_level(24), high_jump_level(38), high_jump_level(52)), (1, 2, 3, 4));
+        assert_eq!((aerial_dodge_level(39), aerial_dodge_level(40), aerial_dodge_level(52), aerial_dodge_level(64)), (1, 2, 3, 4));
+        assert_eq!((high_jump_level(29), high_jump_level(30), high_jump_level(44), high_jump_level(58)), (1, 2, 3, 4));
         assert_eq!(sora(30, &[], &[kh1::HIGH_JUMP]).kh2().high_jump, 2);
         assert_eq!((high_jump_name(3), aerial_dodge_name(4)), ("High Jump LV3".to_string(), "Aerial Dodge MAX".to_string()));
     }
@@ -688,13 +687,16 @@ mod tests {
     fn grants_follow_level_and_lists() {
         let g = sora(13, &[], &[kh1::HIGH_JUMP]).grants();
         let ids: Vec<u8> = g.iter().map(|a| a.id).collect();
-        assert_eq!(ids, vec![66, 67, 68, 69]);
-        // Aerial Dodge waits for High Jump.
-        let ids: Vec<u8> = sora(13, &[], &[]).grants().iter().map(|a| a.id).collect();
+        // (Aerial Dodge is Riku's gift, not a level's.)
         assert_eq!(ids, vec![66, 68, 69]);
         // Already learned (even unequipped): not again.
         let g = sora(13, &[68 | 0x80, 66 | 0x80], &[kh1::HIGH_JUMP]).grants();
-        assert_eq!(g.iter().map(|a| a.id).collect::<Vec<_>>(), vec![67, 69]);
+        assert_eq!(g.iter().map(|a| a.id).collect::<Vec<_>>(), vec![69]);
+        // Riku beaten: Aerial Dodge.
+        let mut riku = sora(30, &[], &[]);
+        riku.progress = vec![0; 12];
+        riku.progress[10] = 0x32;
+        assert!(riku.boss_gifts().iter().any(|(_, id)| *id == 67));
         assert!(sora(1, &[], &[]).grants().is_empty());
     }
 
