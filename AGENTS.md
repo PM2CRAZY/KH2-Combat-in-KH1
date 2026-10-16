@@ -1273,3 +1273,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `0x140291660`'s mask 0x203000100). KH1's camera for 24 / 25 / 29 / 30 / 31. (Stage 110's
   flicker test stays as a fallback.)
 
+### 2026-10-16: Stage 112 (KH2-named KH1 abilities earlier)
+- The user: Vicinity Break at 69 (Dream Shield) is absurd, Slide Dash at about 30. `LEVEL_GIFTS`
+  now also gives Counterguard (Counterattack) at 22, Slide Dash (Sliding Dash) at 30, Vicinity
+  Break (Ripple Drive) at 36, Flash Step (Vortex) at 42 and Finishing Leap (Blitz) at 48, with
+  Aerial Sweep at 28 as before (off, with a New Ability box, if Sora doesn't have it yet).
+

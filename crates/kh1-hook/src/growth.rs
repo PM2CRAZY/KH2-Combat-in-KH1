@@ -515,7 +515,16 @@ impl Kh1Sora {
 
 /// KH1 abilities (shown by their KH2 names) also learned at a level, earlier than KH1's own
 /// level-up gives them (the user: Aerial Sweep at about 28; KH1's Dream Shield gives it at 84).
-pub const LEVEL_GIFTS: [(u8, u8); 1] = [(28, kh1::AERIAL_SWEEP)];
+/// (The user: Slide Dash at 30, Vicinity Break at 69 was absurd; the rest set to match. KH1's
+/// Dream Shield gives them at 45 / 39 / 69 / 78 / 60.)
+pub const LEVEL_GIFTS: [(u8, u8); 6] = [
+    (22, kh1::COUNTERATTACK),
+    (28, kh1::AERIAL_SWEEP),
+    (30, kh1::SLIDING_DASH),
+    (36, kh1::RIPPLE_DRIVE),
+    (42, kh1::VORTEX),
+    (48, kh1::BLITZ),
+];
 
 impl Kh1Sora {
     /// The bosses beaten (and levels reached, `LEVEL_GIFTS`) whose gift Sora doesn't have yet:
