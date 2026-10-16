@@ -1161,3 +1161,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   as empty.
 - The previous run's log is kept as `kh1-kh2.prev.log`.
 
+### 2026-10-16: Stage 98 (the shortcut menu looks like KH1's)
+- The user's screenshots: the battle panel cut in the middle looked wrong and the title
+  ("SHORTCUT", the second panel: 8 px tall) moved into the rows (its quad is in GS
+  coordinates, not the menu's, so the "lower rows" test always passed). The panel quad (header
+  and three rows, 86 px, UV 1:1) is now drawn whole and its last 22 px drawn again a row lower;
+  the title stays. In Customize the fourth label showed garbage: KH1's label 0xD0 is
+  `0D 16 00 ...` (an x offset whose operand has a 0 byte), so it was cut short; the label is
+  now read code by code (`0x1402CFEA0`'s operand sizes) and the confirm icon (`0F 41`) becomes
+  cancel's (`0F 42`).
+

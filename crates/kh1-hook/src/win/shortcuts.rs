@@ -188,18 +188,33 @@ unsafe fn install_customize(base: usize) {
 pub unsafe fn label4(kh1: impl Fn(u32) -> usize) -> usize {
     *LABEL.get_or_init(|| {
         let p = kh1(LABEL3);
-        let mut b: Vec<u8> = (0..64).map(|i| rd::<u8>(p + i)).take_while(|c| *c != 0).collect();
-        let icon = (0..b.len().saturating_sub(1)).find(|&i| b[i] == 0x0F && b[i + 1] == 0x41);
-        let how = if let Some(i) = icon {
-            b[i + 1] = 0x42;
-            "icon"
-        } else if let Some(i) = b.iter().rposition(|c| *c == 0x24) {
-            b[i] = 0x25;
-            "number"
-        } else {
-            "as is"
-        };
-        log(&format!("Customize: fourth shortcut label from {LABEL3:#x} ({how}): {b:02x?}"));
+        // KH1's text codes take operands (`0x1402CFEA0`), and an operand can be 0.
+        let mut b = Vec::new();
+        let mut i = 0;
+        while i < 64 {
+            let c = rd::<u8>(p + i);
+            if c == 0 || c == 0x10 {
+                break;
+            }
+            let n = match c {
+                0x0D | 0x0E | 0x11..=0x14 => 3,
+                0x0B => 4,
+                0x08 => 5,
+                0x07 | 0x0C | 0x0F | 0x15..=0x1F => 2,
+                _ => 1,
+            };
+            for k in 0..n {
+                b.push(rd::<u8>(p + i + k));
+            }
+            if c == 0x0F && b.last() == Some(&0x41) {
+                *b.last_mut().unwrap() = 0x42;
+            }
+            i += n;
+        }
+        if !b.windows(2).any(|w| w == [0x0F, 0x42]) {
+            b.extend_from_slice(&[0x0F, 0x42]);
+        }
+        log(&format!("Customize: fourth shortcut label from {LABEL3:#x}: {b:02x?}"));
         b.push(0);
         Box::leak(b.into_boxed_slice()).as_ptr() as usize
     })
@@ -299,9 +314,8 @@ unsafe extern "system" fn step() -> u64 {
     r
 }
 
-/// The shortcut menu's panels (`0x140278880`, re-done here): one row taller. A tall piece (the
-/// panel itself) is cut at its middle and the lower half drawn a row lower, a one-texel band
-/// stretched between; a short piece in the lower rows moves down a row; others as KH1 has them.
+/// The shortcut menu's panels (`0x140278880`, re-done here): the tall one (header and three
+/// rows) gets a fourth row, its last row's slice drawn again a row lower; the title as it is.
 unsafe extern "system" fn panel(inst: usize, def: usize, x: i32, y: i32, scale: f32, p6: i32, p7: i32) {
     let base = base();
     let q = base + QUAD_RVA;
@@ -347,43 +361,19 @@ unsafe extern "system" fn panel(inst: usize, def: usize, x: i32, y: i32, scale: 
         ));
     }
     if bottom - top >= 48 * 16 {
-        let mut keep = [0u8; 0xE0];
-        std::ptr::copy_nonoverlapping(q as *const u8, keep.as_mut_ptr(), keep.len());
-        let restore = || std::ptr::copy_nonoverlapping(keep.as_ptr(), q as *mut u8, keep.len());
-        let ym = (top + bottom) / 2;
+        // The panel as KH1 has it (header and three rows), then its last row's slice again a
+        // row lower: a fourth row like the others.
+        go();
         let (vt, vb) = (rd::<i32>(q + 0x24), rd::<i32>(q + 0x34));
-        let vm = (vt + vb) / 2;
-        // Upper half.
-        wr(q + 0xB4, ym);
-        wr(q + 0xD4, ym);
-        wr(q + 0x34, vm);
-        wr(q + 0x54, vm);
-        go();
-        // The band.
-        restore();
-        wr(q + 0xA4, ym);
-        wr(q + 0xC4, ym);
-        wr(q + 0xB4, ym + e);
-        wr(q + 0xD4, ym + e);
-        for off in [0x24, 0x34, 0x44, 0x54] {
-            wr(q + off, vm);
-        }
-        go();
-        // Lower half, a row down.
-        restore();
-        wr(q + 0xA4, ym + e);
-        wr(q + 0xC4, ym + e);
+        let ev = ((vb - vt) as i64 * e as i64 / (bottom - top) as i64) as i32;
+        wr(q + 0xA4, bottom);
+        wr(q + 0xC4, bottom);
         wr(q + 0xB4, bottom + e);
         wr(q + 0xD4, bottom + e);
-        wr(q + 0x24, vm);
-        wr(q + 0x44, vm);
+        wr(q + 0x24, vb - ev);
+        wr(q + 0x44, vb - ev);
         go();
     } else {
-        if top >= (y + 0x14 + 2 * ROW) * 16 {
-            for off in [0xA4, 0xB4, 0xC4, 0xD4] {
-                add(off, e);
-            }
-        }
         go();
     }
 }
