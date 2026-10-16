@@ -554,7 +554,10 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH1's own air moves (its jump's input step `0x1402ADA90` tries them in this order):
     // vines and climbable walls (state 10), ledges (13), bars (`0x1402C7E00`), objects to
     // hang from, and water to swim in (17). Tried while KH2 has him falling, the stick held.
-    if settings.grabs && d.character.airborne() && out.displacement[1] <= 0.0 && tilt > 0.0 && matches!(out.state, StateName::Air | StateName::Jump) {
+    // As KH1's jump step tries them (`0x1402ADA90`): not while rising fast (the top of the jump
+    // counts), the stick held or not (KH1 passes its input either way; the user: ladders and
+    // poles were hit or miss from a jump).
+    if settings.grabs && d.character.airborne() && out.displacement[1] < 2.0 && matches!(out.state, StateName::Air | StateName::Jump) {
         // KH1 tries them in its jump / fall states, whose collision (`0x140297F20`: flag 1)
         // finds the contacts they read; ours ran in its ground state. So: KH1's fall state (3,
         // which has these checks too) and a standing-still move there to refresh the contacts.
@@ -562,11 +565,15 @@ unsafe fn takeover(actor: usize) -> bool {
         // face the move touched (`+0x2DE`), which a standing-still move cleared (the user: he
         // slid down a ladder he jumped into, caught only at the bottom). Put back if nothing
         // takes him.
+        // With the stick neutral the frame's own air move (KH1's fall state) left the contacts.
         let state = rd::<i32>(actor + 0x70);
         let at = rd::<[f32; 4]>(actor + 0x10);
         wr(actor + 0x70, AIR_STATE);
-        mv(actor, &[dir.x * 4.0, 0.0, dir.y * 4.0, 0.0], 0);
-        let took = grab(base, actor, [dir.x, 0.0, dir.y, tilt]);
+        if tilt > 0.0 {
+            mv(actor, &[dir.x * 4.0, 0.0, dir.y * 4.0, 0.0], 0);
+        }
+        let (gx, gz) = if tilt > 0.0 { (dir.x, dir.y) } else { (0.0, 0.0) };
+        let took = grab(base, actor, [gx, 0.0, gz, tilt]);
         if took.is_none() {
             wr(actor + 0x10, at);
             wr(actor + 0x70, state);

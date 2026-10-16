@@ -21,7 +21,8 @@
 //! - What only KH2 has goes into KH1's menu as new abilities (`MENU`, ids 66 up, in an
 //!   extended copy of KH1's ability table, `win/menu.rs`), learned at Sora's level: Quick Run
 //!   and Aerial Dodge in the shared abilities (with High Jump and Glide), the rest in Sora's,
-//!   with KH2's AP costs (Quick Run and Aerial Dodge too, in Sora's list). Quick Run is LV2 and
+//!   with KH2's AP costs (Quick Run and Aerial Dodge too, in Sora's list; Aerial Dodge only once
+//!   Sora has High Jump). Quick Run is LV2 and
 //!   Aerial Dodge LV3; the dodge roll levels up with Sora (`GROWTH`).
 //!   (Earlier builds put Quick Run and Aerial Dodge in the shared list: `win/menu.rs` moves them.)
 
@@ -394,6 +395,7 @@ impl Kh1Sora {
     pub fn grants(&self) -> Vec<MenuAbility> {
         MENU.iter()
             .filter(|ab| self.level >= ab.level)
+            .filter(|ab| ab.effect != Effect::AerialDodge || has(&self.shared, kh1::HIGH_JUMP))
             .filter(|ab| !has(if ab.list == List::Shared { &self.shared } else { &self.abilities }, ab.id))
             .copied()
             .collect()
@@ -402,8 +404,9 @@ impl Kh1Sora {
 
 /// The AP Sora gets on top of KH1's by his level: each KH2 ability he has learned brings its
 /// own AP, so taking the KH2 abilities costs none of KH1's.
-pub fn bonus_ap(level: u8) -> u8 {
-    MENU.iter().filter(|ab| level >= ab.level).map(|ab| ab.ap).sum()
+/// (Aerial Dodge only once High Jump is had: it is learned after it, the user's choice.)
+pub fn bonus_ap(level: u8, high_jump: bool) -> u8 {
+    MENU.iter().filter(|ab| level >= ab.level && (ab.effect != Effect::AerialDodge || high_jump)).map(|ab| ab.ap).sum()
 }
 
 /// One line for the log.
@@ -445,11 +448,13 @@ mod tests {
 
     #[test]
     fn bonus_ap_follows_the_learned_abilities() {
-        assert_eq!(bonus_ap(1), 0);
-        assert_eq!(bonus_ap(4), 2);
-        assert_eq!(bonus_ap(10), 4);
-        assert_eq!(bonus_ap(50), MENU.iter().map(|ab| ab.ap).sum::<u8>());
-        assert_eq!(bonus_ap(50), bonus_ap(100));
+        assert_eq!(bonus_ap(1, true), 0);
+        assert_eq!(bonus_ap(4, true), 2);
+        assert_eq!(bonus_ap(10, true), 4);
+        assert_eq!(bonus_ap(50, true), MENU.iter().map(|ab| ab.ap).sum::<u8>());
+        assert_eq!(bonus_ap(50, true), bonus_ap(100, true));
+        // Aerial Dodge's 3 AP only with High Jump.
+        assert_eq!(bonus_ap(13, true), bonus_ap(13, false) + 3);
     }
 
     fn sora(level: u8, abilities: &[u8], shared: &[u8]) -> Kh1Sora {
@@ -529,11 +534,14 @@ mod tests {
 
     #[test]
     fn grants_follow_level_and_lists() {
-        let g = sora(13, &[], &[]).grants();
+        let g = sora(13, &[], &[kh1::HIGH_JUMP]).grants();
         let ids: Vec<u8> = g.iter().map(|a| a.id).collect();
         assert_eq!(ids, vec![66, 67, 68, 69]);
+        // Aerial Dodge waits for High Jump.
+        let ids: Vec<u8> = sora(13, &[], &[]).grants().iter().map(|a| a.id).collect();
+        assert_eq!(ids, vec![66, 68, 69]);
         // Already learned (even unequipped): not again.
-        let g = sora(13, &[68 | 0x80, 66 | 0x80], &[]).grants();
+        let g = sora(13, &[68 | 0x80, 66 | 0x80], &[kh1::HIGH_JUMP]).grants();
         assert_eq!(g.iter().map(|a| a.id).collect::<Vec<_>>(), vec![67, 69]);
         assert!(sora(1, &[], &[]).grants().is_empty());
     }

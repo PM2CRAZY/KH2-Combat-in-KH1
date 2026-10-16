@@ -85,7 +85,7 @@ a "New Ability" box in KH1's level-up prompt style names it):
 | 4 | Aerial Recovery | Sora's | 2 |
 | 10 | Dodge Slash | Sora's | 2 |
 | 12 | Quick Run LV2 | Sora's | 2 |
-| 13 | Aerial Dodge LV3 | Sora's | 3 |
+| 13, once he has High Jump | Aerial Dodge LV3 | Sora's | 3 |
 | 16 | Horizontal Slash | Sora's | 2 |
 | 20 | Negative Combo | Sora's | 2 |
 | 25 | Aerial Spiral | Sora's | 2 |

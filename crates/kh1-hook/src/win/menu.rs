@@ -26,6 +26,8 @@ const TABLE_LOAD_RVA: usize = 0x28D840;
 const TABLE_LOAD_PROLOGUE: [u8; 9] = [0x40, 0x53, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's own entries.
 const KH1_ENTRIES: usize = 65;
+/// Our Aerial Dodge's id (`growth::MENU`).
+const AERIAL_DODGE: u8 = 67;
 const ENTRIES: usize = 80;
 
 static TABLE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
@@ -151,7 +153,8 @@ unsafe extern "system" fn stats(member: i32, out: usize) {
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let Some(save) = save_block(base) else { return };
-    let bonus = growth::bonus_ap(rd::<u8>(save + 4));
+    let shared = std::slice::from_raw_parts((save + 0x599) as *const u8, 10);
+    let bonus = growth::bonus_ap(rd::<u8>(save + 4), growth::has(shared, growth::kh1::HIGH_JUMP));
     let ap = rd::<i32>(out + 0xE4);
     let now = (ap + bonus as i32).min(100);
     std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
@@ -406,6 +409,25 @@ impl Growth {
                     log(&format!("{} moved from the shared abilities to Sora's ({}){}", ab.name, if on { "on" } else { "off" }, if moved { "" } else { ": his list is full, learned again when there's room" }));
                     if let Some(again) = Self::kh1(base) {
                         now = again;
+                    }
+                }
+                // Aerial Dodge waits for High Jump (the user): taken back out until then (learned
+                // again, with its box, once he has it).
+                if !growth::has(&now.shared, growth::kh1::HIGH_JUMP) {
+                    let list = save + 0x44;
+                    let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
+                    let end = bytes.iter().position(|b| *b == 0).unwrap_or(48);
+                    if let Some(i) = bytes[..end].iter().position(|b| b & 0x7F == AERIAL_DODGE) {
+                        let mut kept = bytes.clone();
+                        kept.remove(i);
+                        kept.push(0);
+                        for (k, b) in kept.iter().enumerate() {
+                            std::ptr::write((list + k) as *mut u8, *b);
+                        }
+                        log("Aerial Dodge taken back until Sora has High Jump");
+                        if let Some(again) = Self::kh1(base) {
+                            now = again;
+                        }
                     }
                 }
                 for ab in now.grants() {

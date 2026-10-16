@@ -1045,3 +1045,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   the first). For 3 s after Sora learns an ability its box waits for KH1's own (the level-up's)
   and is added as the next box in Sora's column, with its own text buffers; with none by then it
   shows alone once the column is free (the user: show both at once).
+
+### 2026-10-16: Stage 81 (Aerial Dodge after High Jump; grabs as KH1's jump tries them)
+- Aerial Dodge is learned at level 13 only once Sora has High Jump (the user); without it, it is
+  taken back out of his list, and its AP isn't in `bonus_ap`.
+- Air grabs (ladders, vines, poles, ledges) are tried as KH1's jump step does: also near the top
+  of the jump (rising under 2 a frame) and with the stick neutral (then no probe move: the
+  frame's own air move left the contacts). The user: hit or miss from a jump.
