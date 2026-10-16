@@ -1177,3 +1177,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   nearest rows blended (the second drawn over with vertex alpha), so the shading spreads over
   four rows and the shapes stay KH1's. The Customize label came out `0d 16 00 0f 42` (right).
 
+### 2026-10-16: Stage 100 (lock-on camera steady)
+- The user's video (KH2 camera, locked on in the Cave of Wonders): the camera jumped about.
+  The "Sora is far from where it was looking" restart compared the look point with his feet;
+  locked on, the look point is 30% of the way to the target, so a far target restarted the
+  camera (from KH1's eye) again and again. It compares the eye now (1200). A lock-on target
+  with no point this frame no longer hands the frame to KH1's lock-on camera: ours follows.
+  Restarts and hand-overs are logged with their reason.
+

@@ -167,21 +167,31 @@ unsafe fn run(lock: bool) -> Option<()> {
     let base = BASE.load(Ordering::Relaxed);
     let sora = rd::<u64>(base + SORA_RVA) as usize;
     if sora < 0x10000 || rd::<u64>(base + SUBJECT_RVA) as usize != sora {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log(&format!("KH2 camera: KH1's own this frame (its subject isn't Sora, {})", if lock { "lock-on" } else { "follow" }));
+        }
         return None;
     }
     let s = super::settings::get().camera_scale;
+    // The lock-on target's point; when it can't be had this frame (the target between forms,
+    // gone for a moment), KH2's camera carries on as the follow camera rather than handing the
+    // frame to KH1's lock-on camera (the user: it jumped about in a boss fight).
     let lock_at = if lock {
         let actor = pose::ptr(rd::<u32>(base + LOCK_TARGET_RVA));
-        if actor < 0x10000 {
-            return None;
-        }
-        let point: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
         let mut v = [0.0f32; 4];
-        point(actor, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0), &mut v);
-        if !v[..3].iter().all(|x| x.is_finite()) {
-            return None;
+        if actor > 0x10000 {
+            let point: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
+            point(actor, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0), &mut v);
         }
-        Some(to_cam([v[0], v[1], v[2]], s))
+        let ok = actor > 0x10000 && v[..3].iter().all(|x| x.is_finite() && x.abs() < 1.0e6);
+        if !ok {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 10 {
+                log(&format!("KH2 camera: lock-on target {actor:#x} has no point this frame: following"));
+            }
+        }
+        ok.then(|| to_cam([v[0], v[1], v[2]], s))
     } else {
         None
     };
@@ -281,7 +291,9 @@ unsafe fn run(lock: bool) -> Option<()> {
     // (Or after a while of KH1's own: a cutscene had it.)
     let _ = fresh_mode;
     // (Or Sora is far from where it was looking: a new room, a warp.)
-    let far = g.as_ref().is_some_and(|c| (c.at - subject.feet).length() > 600.0 / s);
+    // (The eye, not the look point: locked on, that is 30% of the way to the target, and a far
+    // target put it 600 away, so the camera was made anew over and over, the user's boss fight.)
+    let far = g.as_ref().is_some_and(|c| (c.eye - subject.feet).length() > 1200.0 / s);
     if g.is_none() || !was_ours || far {
         let f = kh2_camera::Params::FIELD;
         let mut c = kh2_camera::Camera::new(f, &subject);
@@ -298,7 +310,8 @@ unsafe fn run(lock: bool) -> Option<()> {
         }
         *g = Some(c);
         if LOGGED.fetch_add(1, Ordering::Relaxed) < 20 {
-            log(&format!("KH2 camera: started ({}), yaw {:.2}", if lock { "lock-on" } else { "follow" }, g.as_ref().map_or(0.0, |c| c.yaw)));
+            let why = if !was_ours { "after KH1's" } else if far { "Sora far away" } else { "first" };
+            log(&format!("KH2 camera: started ({}, {why}), yaw {:.2}", if lock { "lock-on" } else { "follow" }, g.as_ref().map_or(0.0, |c| c.yaw)));
         }
     }
     let cam = g.as_mut()?;
