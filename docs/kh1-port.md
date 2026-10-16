@@ -40,6 +40,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `camera_scale` | `0.89` (default) | KH2's camera distances and heights are multiplied by this. 0.89 is KH1 Sora's size against KH2 Sora's (hips 78.9 / 88.5), so he is framed as in KH2. |
 | `camera_lower` | `0` (default) | KH2's camera, look point and eye together, this much lower. 0 = as KH2. |
 | `config_row` | `on` (default), `off` | The Config menu's Camera Style row (off: none; `camera` alone decides). |
+| `shortcuts` | `4` (default), `3` | KH2's four shortcuts: L1 + the cancel button (Circle) is the fourth, set in Customize. `3`: KH1's three. |
 
 ## What is KH1's and what is KH2's
 

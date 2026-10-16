@@ -1148,3 +1148,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   now aims at the primary target for the selection. The height window's sign was checked too
   (`0x140401AD0`: target − player, y-down; the doc had it reversed, the code was right).
 - Aerial Dive's help: from the ground, at a far airborne foe.
+
+### 2026-10-16: Stage 97 (four shortcuts)
+- The user: four shortcut slots like KH2, KH1's shortcut menu extended so it fits in.
+  `win/shortcuts.rs`, `docs/kh1-shortcuts.md`. The fourth is L1 + the cancel button (Circle;
+  Cross with the button swap), kept at save `+0x847` (spell + 1; old saves start empty), set
+  in Customize (a fourth row, its label KH1's third with the cancel icon), filled with a newly
+  learned spell when KH1's three are full. In battle the shortcut menu moves up a row, its
+  panel is stretched by a row (cut at the middle, a one-texel band between), and the fourth
+  row gets the cancel icon. `shortcuts = 3` in the ini turns it off.
+- The text lookup (`config.rs`) is in even with `config_row = off`; an id past KH1's table reads
+  as empty.
+- The previous run's log is kept as `kh1-kh2.prev.log`.
+

@@ -71,3 +71,50 @@ pub unsafe fn install(target: usize, expect: &[u8], ours: usize, original: &std:
     log(&format!("hooked {what} at {target:#x}"));
     Some(tramp)
 }
+
+/// Writes `new` over `at` (code or data) if the bytes there are `expect`.
+pub unsafe fn patch(at: usize, expect: &[u8], new: &[u8], what: &str) -> bool {
+    let have = std::slice::from_raw_parts(at as *const u8, expect.len());
+    if have != expect {
+        log(&format!("patch {what} at {at:#x}: unexpected bytes {have:02x?}, not patched"));
+        return false;
+    }
+    let mut old = 0u32;
+    if VirtualProtect(at as *mut c_void, new.len(), 0x40, &mut old) == 0 {
+        log(&format!("patch {what}: VirtualProtect failed"));
+        return false;
+    }
+    std::ptr::copy_nonoverlapping(new.as_ptr(), at as *mut u8, new.len());
+    let mut tmp = 0u32;
+    VirtualProtect(at as *mut c_void, new.len(), old, &mut tmp);
+    FlushInstructionCache(GetCurrentProcess(), at as *const c_void, new.len());
+    true
+}
+
+/// Points the `call rel32` at `site` (which must call `callee`) at `ours`, through a stub near
+/// the executable. `ours` takes the same arguments; it calls `callee` itself for the original.
+pub unsafe fn redirect_call(site: usize, callee: usize, ours: usize, what: &str) -> bool {
+    if *(site as *const u8) != 0xE8 {
+        log(&format!("redirect {what} at {site:#x}: not a call"));
+        return false;
+    }
+    let rel = std::ptr::read_unaligned((site + 1) as *const i32);
+    let to = (site as i64 + 5 + rel as i64) as usize;
+    if to != callee {
+        log(&format!("redirect {what} at {site:#x}: calls {to:#x}, not {callee:#x}"));
+        return false;
+    }
+    let Some(stub) = alloc_near(site, 16) else {
+        log(&format!("redirect {what}: no memory near {site:#x}"));
+        return false;
+    };
+    let go = abs_jmp(ours);
+    std::ptr::copy_nonoverlapping(go.as_ptr(), stub as *mut u8, go.len());
+    let mut call = [0u8; 5];
+    call[0] = 0xE8;
+    call[1..].copy_from_slice(&((stub as i64 - (site as i64 + 5)) as i32).to_le_bytes());
+    let mut want = [0u8; 5];
+    want[0] = 0xE8;
+    want[1..].copy_from_slice(&rel.to_le_bytes());
+    patch(site, &want, &call, what)
+}

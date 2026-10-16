@@ -49,6 +49,9 @@ camera_scale = 0.89\r\n\
 camera_lower = 0\r\n\
 ; config_row: on = the Config menu's Camera Style row; off = no row (the ini alone switches)\r\n\
 config_row = on\r\n\
+; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
+; Customize); 3 = KH1's three\r\n\
+shortcuts = 4\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
@@ -78,6 +81,8 @@ pub struct Settings {
     pub camera_scale: f32,
     pub camera_lower: f32,
     pub config_row: bool,
+    /// KH2's fourth shortcut (`shortcuts = 4`).
+    pub four_shortcuts: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
@@ -128,6 +133,7 @@ pub fn get() -> &'static Settings {
             wall_clink: on(&text, "wall_clink", "on", false),
             kh2_camera: on(&text, "camera", "kh2", true),
             config_row: on(&text, "config_row", "on", true),
+            four_shortcuts: on(&text, "shortcuts", "4", true),
             camera_lower: setting(&text, "camera_lower").and_then(|v| v.parse::<f32>().ok()).filter(|v| (-200.0..200.0).contains(v)).unwrap_or(0.0),
             camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.89),
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {

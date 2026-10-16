@@ -15,6 +15,7 @@ mod kh2sound;
 mod menu;
 mod pose;
 mod settings;
+mod shortcuts;
 mod probe;
 mod takeover;
 mod sys;
@@ -144,6 +145,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
             return 1;
         }
         let path = format!("{}\\kh1-kh2.log", exe_dir());
+        // The last run's log is kept beside it (a problem seen before a restart stays readable).
+        let _ = std::fs::rename(&path, format!("{}\\kh1-kh2.prev.log", exe_dir()));
         if let Ok(f) = OpenOptions::new().create(true).write(true).truncate(true).open(&path) {
             *LOG.lock().unwrap() = Some(f);
         }
@@ -158,6 +161,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         menu::install();
         camera::install();
         config::install();
+        shortcuts::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

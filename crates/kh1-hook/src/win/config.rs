@@ -71,16 +71,18 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
+    TEXT.get_or_init(|| STRINGS.iter().map(|s| Box::leak(super::menu::encode(s).into_boxed_slice()).as_ptr() as usize).collect());
+    // The text lookup carries our strings for the shortcuts too (`shortcuts.rs`).
+    if hook::install(base + TEXT_RVA, &TEXT_PROLOGUE, text as *const () as usize, &ORIG_TEXT, "menu text lookup").is_none() {
+        return;
+    }
+    TEXT_HOOKED.store(true, Ordering::Release);
     if !super::settings::get().config_row {
         log("Config menu: no Camera Style row (config_row = off)");
         return;
     }
-    TEXT.get_or_init(|| STRINGS.iter().map(|s| Box::leak(super::menu::encode(s).into_boxed_slice()).as_ptr() as usize).collect());
     if rd::<u16>(base + ROWS_RVA) != 8 || rd::<u16>(base + VISIBLE_RVA) != 8 {
         log(&format!("Config menu: unexpected row counts {} / {}: no Camera Style row", rd::<u16>(base + ROWS_RVA), rd::<u16>(base + VISIBLE_RVA)));
-        return;
-    }
-    if hook::install(base + TEXT_RVA, &TEXT_PROLOGUE, text as *const () as usize, &ORIG_TEXT, "menu text lookup").is_none() {
         return;
     }
     if hook::install(base + HELP_RVA, &HELP_PROLOGUE, help as *const () as usize, &ORIG_HELP, "Config help line").is_none() {
@@ -104,10 +106,28 @@ unsafe extern "system" fn text(id: u32) -> usize {
             return t[(id - ID_LABEL) as usize];
         }
     }
+    if id == super::shortcuts::ID_LABEL4 {
+        return super::shortcuts::label4(|i| kh1_text(i));
+    }
+    kh1_text(id)
+}
+
+/// Whether our text lookup is in (our ids can be used).
+pub static TEXT_HOOKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// KH1's own sysmsg text for `id`.
+pub unsafe fn kh1_text(id: u32) -> usize {
     let base = BASE.load(Ordering::Relaxed);
     let table = rd::<u64>(base + TEXT_TABLE_RVA) as usize;
     let at = rd::<u64>(base + TEXT_BASE_RVA) as usize;
-    at.wrapping_add(rd::<u16>(table + id.wrapping_sub(1) as usize * 2) as usize)
+    let entry = table.wrapping_add(id.wrapping_sub(1) as usize * 2);
+    // An id past the table (one of ours read from a table KH1 has only three of) reads as
+    // empty instead of wild memory.
+    if id == 0 || id >= 0x10000 || (id > 0x2000 && !super::crash::readable(entry)) {
+        static EMPTY: [u8; 1] = [0];
+        return EMPTY.as_ptr() as usize;
+    }
+    at.wrapping_add(rd::<u16>(entry) as usize)
 }
 
 unsafe extern "system" fn help(win: usize) {
