@@ -401,7 +401,7 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     r
 }
 
-unsafe fn object_id(a: usize) -> u32 {
+pub unsafe fn object_id(a: usize) -> u32 {
     let o = pose::ptr(rd::<u32>(a + 0x130));
     if o > 0x10000 { rd::<u16>(o + 0x4C) as u32 } else { 0xFFFF }
 }

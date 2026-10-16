@@ -220,9 +220,45 @@ fn release(why: &str) {
     }
 }
 
+/// KH1's control step this frame (read once per frame, before anything can return early).
+static FROZEN_NOW: AtomicBool = AtomicBool::new(false);
+/// When KH1's control of him last came or went, and until when it is taken for a ride.
+static FLICKER: std::sync::Mutex<std::collections::VecDeque<u64>> = std::sync::Mutex::new(std::collections::VecDeque::new());
+static RIDE_UNTIL: AtomicU64 = AtomicU64::new(0);
+static LAST_FROZEN: AtomicBool = AtomicBool::new(false);
+
 unsafe fn takeover(actor: usize) -> bool {
     let base = BASE.load(Ordering::Relaxed);
     if actor != rd::<u64>(base + PARTY_RVA) as usize {
+        return false;
+    }
+    let frozen = !CONTROLLED.swap(false, Ordering::Relaxed) && CONTROL_HOOKED.load(Ordering::Relaxed);
+    FROZEN_NOW.store(frozen, Ordering::Relaxed);
+    // KH1's control of him coming and going every few frames is one of its rides (the user:
+    // the magic carpet out of the Cave of Wonders didn't move while KH2 had him between): KH1
+    // has him while it lasts, and 3 s after.
+    let now = now_ms();
+    if LAST_FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
+        if let Ok(mut q) = FLICKER.lock() {
+            q.push_back(now);
+            while q.front().is_some_and(|t| now.saturating_sub(*t) > 3000) {
+                q.pop_front();
+            }
+            if q.len() >= 6 {
+                if RIDE_UNTIL.swap(now + 3000, Ordering::Relaxed) < now {
+                    log(&format!(
+                        "KH1's control comes and goes ({} times in 3 s): KH1 has him (KH1 state {}, flags {:08x}, on {:#x})",
+                        q.len(),
+                        rd::<i32>(actor + 0x70),
+                        rd::<u32>(actor),
+                        pose::ptr(rd::<u32>(actor + 0x398))
+                    ));
+                }
+            }
+        }
+    }
+    if now < RIDE_UNTIL.load(Ordering::Relaxed) {
+        release("a ride: KH1's control comes and goes");
         return false;
     }
     if rd::<u32>(base + EVENT_RVA) != 0 {
@@ -338,9 +374,26 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH1 holding him still (its control step skipped or him unable to act: cutscene moments,
     // tutorial windows; the user: he moved anyway): KH2 gets no input (he still falls, lands
     // and finishes what he was doing).
-    let frozen = !CONTROLLED.swap(false, Ordering::Relaxed) && CONTROL_HOOKED.load(Ordering::Relaxed);
+    let frozen = FROZEN_NOW.load(Ordering::Relaxed);
     if FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
-        log(if frozen { "KH1 holds Sora still: no input for KH2" } else { "KH1 lets Sora act again" });
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 400 {
+            // What he is doing (the user: the magic carpet after Genie Jafar didn't move).
+            let on = pose::ptr(rd::<u32>(actor + 0x398));
+            let detail = format!(
+                "KH1 state {}, slot {:?} (last {}), flags {:08x}, +0x444 {:08x}, motion {:#x}, on {:#x} (object {})",
+                rd::<i32>(actor + 0x70),
+                pose::sora_slot(),
+                super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed) & 0xFFFF,
+                rd::<u32>(actor),
+                rd::<u32>(actor + 0x444),
+                rd::<u16>(actor + 0x3EA),
+                on,
+                if on > 0x10000 { super::probe::object_id(on) as i64 } else { -1 }
+            );
+            log(&format!("{}; {detail}", if frozen { "KH1 holds Sora still: no input for KH2" } else { "KH1 lets Sora act again" }));
+        }
     }
     // Held still on the ground for more than a frame (a cutscene starting, the user: he slid
     // on and snapped back): KH1 has him, so nothing of KH2's (a run's slide, a lunge) moves him.

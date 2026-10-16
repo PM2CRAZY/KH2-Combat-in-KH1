@@ -1195,3 +1195,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   was the sphere's bottom and twice the radius); a target without lock points keeps its feet
   and height. Magnet Burst's pull still aims at the body's middle (`Body::tall`).
 
+### 2026-10-16: Stage 102 (the magic carpet)
+- The user's video: the magic carpet out of the Cave of Wonders (after Genie Jafar) didn't
+  move. The log: KH1's control step for Sora came and went every few frames ("KH1 holds Sora
+  still" / "lets Sora act again" over and over), and KH2 took him on the frames between, so
+  KH1's own physics (which the ride needs) didn't run. KH1's control coming and going 6 times
+  in 3 s is now taken for a ride: KH1 has him while it lasts and 3 s after. The control step
+  is read once per frame at the start of `takeover` (`FROZEN_NOW`), before any early return.
+  The hold / act lines now carry his state, slot, flags, motion and the object he stands on.
+
