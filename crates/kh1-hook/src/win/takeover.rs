@@ -81,6 +81,15 @@ static HANDOFF_FRAMES: AtomicU32 = AtomicU32::new(0);
 /// (`0x140297F20` sets flag 1, no snapping onto the floor), and the wall solver's only extra
 /// for it (`0x1402AD260`) clears its fall speed `+0x3C4` at a ceiling. No enter / exit handlers.
 const AIR_STATE: i32 = 3;
+/// KH1's generic air state (what its physics step puts an airborne actor in): its object-top
+/// finder (`0x1402B3950`) looks below only in it.
+const FALL_STATE: i32 = 2;
+/// KH1's object-top finder `0x1402B3950 (actor, move) -> object`: the standable object (box,
+/// barrel: collision shapes of type 2 / 3) whose top the move ends at or under, the move's
+/// height cut so it ends on the top. The map floor (`+0x320`) doesn't know objects.
+const OBJECT_TOP_RVA: usize = 0x2B3950;
+/// Sets the object the actor stands on (`+0x398`).
+const STAND_ON_RVA: usize = 0x295C60;
 
 pub const CIRCLE: u16 = 0x2000;
 pub const SQUARE: u16 = 0x8000;
@@ -415,11 +424,24 @@ unsafe fn takeover(actor: usize) -> bool {
     if air || rising {
         let mut y = up_before + out.displacement[1];
         let mut stopped = false;
+        let mut on: Option<usize> = None;
         if rise3d && !rising {
             // Stopped short of a fall (less than half of it happened): standing on something.
             let got = -rd::<f32>(actor + 0x14);
             stopped = out.displacement[1] < -0.5 && (up_before - got) < -out.displacement[1] * 0.5;
             y = got;
+        }
+        if !rising {
+            // A box's top crossed by the fall (the user, twice: he couldn't land on boxes; KH1's
+            // fall finds them with its object-top finder, not the mover in our states).
+            let fell = (up_before - y).max(0.0);
+            if let Some((top, obj)) = object_top(base, actor, up_before, fell + 0.5) {
+                if top > floor_up + 0.5 && top >= y - 0.5 {
+                    y = top;
+                    stopped = true;
+                    on = Some(obj);
+                }
+            }
         }
         if rise3d && rising {
             // KH2's ceiling rule: less than 49% of the rise happened.
@@ -437,9 +459,13 @@ unsafe fn takeover(actor: usize) -> bool {
             wr(actor + 0x14, -y);
             d.grounded = true;
             d.on_top = Some(y);
+            if let Some(obj) = on {
+                let stand: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + STAND_ON_RVA);
+                stand(actor, obj);
+            }
             static ON_TOP: AtomicU32 = AtomicU32::new(0);
             if ON_TOP.fetch_add(1, Ordering::Relaxed) < 40 {
-                log(&format!("landed on something {:.1} above the floor (standing on {:#x})", y - floor_up, pose::ptr(rd::<u32>(actor + 0x398))));
+                log(&format!("landed on something {:.1} above the floor (object {:?}, standing on {:#x})", y - floor_up, on, pose::ptr(rd::<u32>(actor + 0x398))));
             }
         } else if y <= floor_up && !rising {
             wr(actor + 0x14, -floor_up);
@@ -456,9 +482,20 @@ unsafe fn takeover(actor: usize) -> bool {
         // box): as long as the ground mover keeps him at its height (it stands him on objects;
         // the map floor doesn't know them).
         let drop = walked_up - floor_up;
-        let kept = d.on_top.is_some_and(|top| walked_up > floor_up + 1.0 && (walked_up - top).abs() <= STEP_DOWN);
-        if kept {
-            d.on_top = Some(walked_up);
+        // An object's top under him (KH1's finder, from where he is down a step).
+        let start = walked_up.max(up_before) + 1.0;
+        let top = object_top(base, actor, start, STEP_DOWN + 1.0).filter(|(t, _)| *t > floor_up + 1.0 && start - *t <= STEP_DOWN + 1.0);
+        if let Some((t, obj)) = top {
+            if d.on_top.is_none() {
+                static STOOD: AtomicU32 = AtomicU32::new(0);
+                if STOOD.fetch_add(1, Ordering::Relaxed) < 40 {
+                    log(&format!("standing on object {obj:#x}, {:.1} above the floor", t - floor_up));
+                }
+            }
+            d.on_top = Some(t);
+            wr(actor + 0x14, -t);
+            let stand: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + STAND_ON_RVA);
+            stand(actor, obj);
             d.grounded = true;
         } else if drop <= STEP_DOWN {
             d.on_top = None;
@@ -590,6 +627,21 @@ unsafe fn grab(base: usize, actor: usize, stick: [f32; 4]) -> Option<&'static st
         }
     }
     None
+}
+
+/// The top of a standable object under him (KH2 height, up), from `from` (up) down to
+/// `down` below it: KH1's own object-top finder, run in its fall state from that height.
+unsafe fn object_top(base: usize, actor: usize, from: f32, down: f32) -> Option<(f32, usize)> {
+    let find: unsafe extern "system" fn(usize, *mut [f32; 4]) -> usize = std::mem::transmute(base + OBJECT_TOP_RVA);
+    let (state, y) = (rd::<i32>(actor + 0x70), rd::<f32>(actor + 0x14));
+    wr(actor + 0x70, FALL_STATE);
+    wr(actor + 0x14, -from);
+    let mut mv = [0.0f32, down.max(0.5), 0.0, 0.0];
+    let obj = find(actor, &mut mv);
+    wr(actor + 0x14, y);
+    wr(actor + 0x70, state);
+    let top = from - mv[1];
+    (obj > 0x10000 && top.is_finite() && top <= from + 0.5).then_some((top, obj))
 }
 
 /// A platform's carry and the frame's push (KH1 world), see the physics step.

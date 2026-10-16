@@ -343,9 +343,33 @@ unsafe fn shots(sora: usize) -> Vec<Shot> {
         if prio == GUARD_PRIORITY || prio < 0 {
             continue;
         }
+        // KH1's pass (`0x1402B1A50`) leaves out attacks with word bit 0x400, and those with
+        // bit 0x80 that already met something (`+4`).
+        if flags & 0x400 != 0 || (flags & 0x80 != 0 && rd::<u32>(g + 4) != 0) {
+            continue;
+        }
         let owner = pose::ptr(rd::<u32>(g + 0x34));
         if owner == sora || (owner > 0x10000 && team(owner) == ours) {
             continue;
+        }
+        // Its carrier (`+0x90`) switched off (`+0x88` bit 1): only some types stay (`0x1402B2610`).
+        let t = flags & 0xE0000;
+        let carrier = pose::ptr(rd::<u32>(g + 0x90));
+        if carrier > 0x10000 && rd::<u8>(carrier + 0x88) & 1 != 0 && rd::<u32>(g + 0x30) & 0x400 == 0 && (((t.wrapping_sub(0x20000)) & 0xfff9_ffff) != 0 || t == 0x60000) {
+            continue;
+        }
+        // Tied to a motion (activity 2): live only while the owner plays it and within its hit
+        // window (`0x1402B2610`: owner `+0x1CC` bit `0x10000 << group`), as KH1's pass has it
+        // (the user: endless clinks against the enemies' resting attack shapes).
+        if (flags >> 2) & 3 == 2 {
+            if owner < 0x10000 {
+                continue;
+            }
+            let req = rd::<u32>(g + 0x58);
+            let window = 0x10000u32 << ((flags >> 4) & 3);
+            if req == 0xFFF || req != rd::<u32>(owner + 0x164) || rd::<u32>(owner + 0x160) & 0x100 != 0 || rd::<u32>(owner + 0x1CC) & window == 0 {
+                continue;
+            }
         }
         let c = rd::<[f32; 3]>(g + 0x10);
         let prev = rd::<[f32; 3]>(g + 0x70);
@@ -391,6 +415,14 @@ unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row) -> bool {
     if obj < 0x10000 {
         return false;
     }
+    // KH1's pairing table (`0x1405299B8`, by type `flags >> 17 & 7`): either way round.
+    let ty = |o: usize| (rd::<u32>(o) >> 17) & 7;
+    let table = |a: u32, b: u32| rd::<u8>(base + PAIRS_RVA + a as usize) & (1u8 << b) != 0;
+    let (ts, to) = (ty(obj), ty(shot.obj));
+    if !table(ts, to) && !table(to, ts) {
+        free(obj);
+        return false;
+    }
     let c = [at.center[0], -at.center[1], at.center[2], 1.0f32];
     wr(obj + 0x10, c);
     wr(obj + 0x40, c);
@@ -417,6 +449,39 @@ unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row) -> bool {
     rd::<u32>(shot.obj) & 0x0100_0000 != 0
 }
 
+/// Where the map's walls stop a blade moving `from` → `to` (KH1 world, y down): KH1's
+/// background ray (`0x140191520`, the one its attacks use), and the hit face's normal
+/// (`0x14018FC60`) to tell walls from floors and ceilings.
+unsafe fn wall_between(from: [f32; 3], to: [f32; 3]) -> Option<[f32; 3]> {
+    let d = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+    let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    if !(0.5..400.0).contains(&len) || !from.iter().chain(to.iter()).all(|v| v.is_finite()) {
+        return None;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let ray: unsafe extern "system" fn(*mut [u8; 0x40], u32) = std::mem::transmute(base + RAY_RVA);
+    let normal: unsafe extern "system" fn(i32, i32, *mut [f32; 4]) = std::mem::transmute(base + FACE_NORMAL_RVA);
+    let mut r = [0u8; 0x40];
+    let p = r.as_mut_ptr() as usize;
+    wr(p, [from[0], from[1], from[2], 1.0f32]);
+    wr(p + 0x10, [d[0], d[1], d[2], 0.0f32]);
+    ray(&mut r, 1);
+    let face = rd::<i16>(p + 0x30) as i32;
+    let owner = rd::<i32>(p + 0x34);
+    // The map's own faces only (`-1`): objects (crates, barrels) take the swing as a hit.
+    if face < 0 || owner != -1 {
+        return None;
+    }
+    let mut n = [0.0f32; 4];
+    normal(owner, face, &mut n);
+    let nl = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+    if !(nl > 1e-3 && nl.is_finite()) || (n[1] / nl).abs() > 0.6 {
+        return None;
+    }
+    let at = rd::<[f32; 3]>(p + 0x20);
+    at.iter().all(|v| v.is_finite()).then_some(at)
+}
+
 /// An enemy's guard: a KH1 attack object of priority 100 (`0x1402B2A30`: such an object
 /// repels whatever attack meets it), e.g. the Large Body's belly, shields. Directional ones
 /// (type bits `0xE0000` of 1 or 3) only guard an arc in front of their owner (`0x1402B24B0`).
@@ -433,6 +498,17 @@ const GUARD_PRIORITY: i32 = 100;
 const CLANG_RVA: usize = 0x2AC4C0;
 /// KH1's attack-vs-attack meeting (`0x1402B2890 (entry, entry)`).
 const CLASH_RVA: usize = 0x2B2890;
+/// KH1's attack pairing table (8 bytes, a bit per type that may meet).
+const PAIRS_RVA: usize = 0x5299B8;
+/// KH1's attack-vs-background ray (`0x1402B1870 (attack, from, to)`): spark, sound, and a
+/// clash record on the owner when it meets a wall.
+#[allow(dead_code)]
+const WALL_RVA: usize = 0x2B1870;
+/// KH1's background ray (`0x140191520 (ray, mode)`): ray from `+0`, direction `+0x10`; out:
+/// the point `+0x20`, the face `+0x30` (i16, -1 none), its object `+0x34` (-1 the map).
+const RAY_RVA: usize = 0x191520;
+/// A face's normal (`0x14018FC60 (object, face, out)`).
+const FACE_NORMAL_RVA: usize = 0x18FC60;
 const CLANG_SOURCE_RVA: usize = 0x2D67400;
 
 /// The live enemy guards near Sora.
@@ -678,7 +754,9 @@ impl Strikes {
         let air = character.airborne();
         for h in &out.hitboxes {
             let shapes = anim.attack_shapes(h.group, h.weapon);
-            let swept = self.volumes.entry((h.swing, h.weapon)).or_default().update(&shapes);
+            let vol = self.volumes.entry((h.swing, h.weapon)).or_default();
+            let before: Vec<[f32; 3]> = vol.previous().to_vec();
+            let swept = vol.update(&shapes);
             if swept.is_empty() {
                 continue;
             }
@@ -687,6 +765,16 @@ impl Strikes {
             // An enemy's guard repels the swing before it reaches a body (KH2's repel, as off a
             // wall; KH1's clash spark and sound).
             if self.repelled.contains(&h.swing) {
+                continue;
+            }
+            // A wall in the blade's way since last frame: KH1's background ray, as its own swings
+            // have it (`0x1402B1870`), and KH2's repel off it (the user: swings went through
+            // walls). Walls only: a floor or ceiling the blade dips into doesn't repel.
+            if let Some(at) = before.iter().zip(shapes.iter()).find_map(|(p, s)| wall_between([p[0], -p[1], p[2]], [s.center[0], -s.center[1], s.center[2]])) {
+                self.repelled.insert(h.swing);
+                let bounced = character.register_wall_hit();
+                clang(at);
+                note(format!("KH2 attack {} struck a wall at {at:.0?} (bounced: {bounced})", h.attack));
                 continue;
             }
             let guard_shapes: Vec<Shape> = self.guards.iter().map(|g| g.shape).collect();

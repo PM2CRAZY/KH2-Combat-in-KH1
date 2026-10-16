@@ -907,3 +907,17 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   stops him on objects; a fall stopped short (less than half of it happened) lands him there
   (`Driver::on_top`), and on the ground he stays on top while the ground mover keeps him at
   that height (else the usual floor step-down / walk-off).
+
+### 2026-10-16: Stage 60 (fewer clinks, wall clinks, box tops)
+- **Enemy attacks a swing meets** follow KH1's own pass (`0x1402B2610` / `0x1402B1A50`): motion-tied
+  attacks (activity 2) only inside their owner's hit window, `0xFFF` latching skipped, word bit
+  0x400 and spent 0x80 attacks left out, the pairing table `0x1405299B8` checked both ways. The
+  user: endless clinks against the enemies' resting attack shapes.
+- **Walls:** each live KH2 swing casts KH1's background ray (`0x140191520`) from last frame's
+  attack-shape centres to this frame's; a map face whose normal is mostly level (a wall) repels
+  the swing (`register_wall_hit`, KH1's clang). Floors, ceilings and objects don't.
+- **Box tops:** KH1's object-top finder `0x1402B3950 (actor, move) -> object` (types 2 / 3
+  collision shapes of standable objects) is run in KH1's air state 2 (it skips state 3's class)
+  from where a fall started, and each grounded frame a step down; he lands / stands on the top
+  and `+0x398` is set (`0x140295C60`). The mover in our states never found them.
+
