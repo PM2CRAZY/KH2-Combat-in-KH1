@@ -1286,3 +1286,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   holding blow hit is drawn, for 24 frames after each such hit, toward a point no more than 90
   from Sora at his height + 30, through KH1's per-frame push (`+0x120`, at most 30 a frame).
 
+### 2026-10-16: Stage 114 (Gummi routes row, chests in battle)
+- The user: a Config option to skip the Gummi routes or fly them; chests in battle.
+- `config.rs` now has two rows of ours (8 Camera Style, 9 Gummi Routes: Vanilla / Skip), ten
+  rows 22 apart while the list runs, help ids swapped in at the table's slots 8 / 9;
+  `settings::save(key, value)` keeps either in the ini (`gummi = vanilla / skip`).
+- `gummi.rs` ports KH-1FM-AP-LUA's Instant Gummi (denhonator, Gicu; MIT; credited in NOTICE /
+  CREDITS) to the pad read each frame: the chosen destination becomes the flight's current
+  one (Epic addresses: selection 0x507D7C, destination 0x508280, 0x507C90, 0x268A26C, warps
+  0x50F9D0).
+- `chests.rs`: the battle check before the chest prompt (`0x1402B3904`: `test [0x142867CD8],
+  1; jz`) becomes `jnc`, as the AP interaction script (KSX, Gicu) does. `chests_in_battle`.
+

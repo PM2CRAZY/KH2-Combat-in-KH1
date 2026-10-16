@@ -53,6 +53,11 @@ config_row = on\r\n\
 ; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
 ; Customize); 3 = KH1's three\r\n\
 shortcuts = 4\r\n\
+; gummi: vanilla = fly the Gummi Ship between worlds; skip = arrive at once (the Config menu's\r\n\
+; Gummi Routes row switches it in game too)\r\n\
+gummi = vanilla\r\n\
+; chests_in_battle: on = chests (and their Triangle prompt) open in battle too; off = KH1's way\r\n\
+chests_in_battle = on\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
@@ -84,6 +89,10 @@ pub struct Settings {
     pub config_row: bool,
     /// KH2's fourth shortcut (`shortcuts = 4`).
     pub four_shortcuts: bool,
+    /// Skip the Gummi Ship's flights (`gummi = skip`).
+    pub gummi_skip: bool,
+    /// Chests open in battle too.
+    pub chests_in_battle: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
@@ -135,6 +144,8 @@ pub fn get() -> &'static Settings {
             kh2_camera: on(&text, "camera", "kh2", true),
             config_row: on(&text, "config_row", "on", true),
             four_shortcuts: on(&text, "shortcuts", "4", true),
+            gummi_skip: on(&text, "gummi", "skip", false),
+            chests_in_battle: on(&text, "chests_in_battle", "on", true),
             camera_lower: setting(&text, "camera_lower").and_then(|v| v.parse::<f32>().ok()).filter(|v| (-200.0..200.0).contains(v)).unwrap_or(0.0),
             camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.89),
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {
@@ -159,27 +170,26 @@ pub fn get() -> &'static Settings {
     })
 }
 
-/// Keeps the Config menu's camera choice in the ini (`camera = kh1 / kh2`): that line changed,
-/// or added, the rest as it was.
-pub fn save_camera(kh2: bool) {
+/// Keeps a Config menu choice in the ini (`key = value`): that line changed, or added, the rest
+/// as it was.
+pub fn save(key: &str, value: &str) {
     let path = format!("{}\\{INI}", super::exe_dir());
     let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let value = if kh2 { "kh2" } else { "kh1" };
     let mut found = false;
     let mut out: Vec<String> = text
         .lines()
         .map(|l| {
             let t = l.trim_start();
-            if !t.starts_with(';') && t.split('=').next().is_some_and(|k| k.trim().eq_ignore_ascii_case("camera")) {
+            if !t.starts_with(';') && t.split('=').next().is_some_and(|k| k.trim().eq_ignore_ascii_case(key)) {
                 found = true;
-                format!("camera = {value}")
+                format!("{key} = {value}")
             } else {
                 l.to_string()
             }
         })
         .collect();
     if !found {
-        out.push(format!("camera = {value}"));
+        out.push(format!("{key} = {value}"));
     }
     let _ = std::fs::write(&path, out.join("\r\n") + "\r\n");
 }

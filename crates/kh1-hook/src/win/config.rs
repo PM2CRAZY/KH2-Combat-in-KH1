@@ -1,17 +1,19 @@
-//! A ninth Config menu row, "Camera Style: KH1 / KH2" (the user: switch between KH1's and KH2's
-//! camera in the game's Config menu). `docs/kh1-config-menu.md` has KH1's side.
+//! Two more Config menu rows: "Camera Style: KH1 / KH2" (the user: switch between KH1's and
+//! KH2's camera in the game's Config menu) and "Gummi Routes: Vanilla / Skip" (`gummi.rs`).
+//! `docs/kh1-config-menu.md` has KH1's side.
 //!
-//! - The Config list window's definition (`0x140547090`) gets 9 rows instead of 8.
+//! - The Config list window's definition (`0x140547090`) gets 10 rows instead of 8.
 //! - Its update (`0x1402F7DD0`) is wrapped: on our row, left / right / confirm switch the camera
 //!   (and are hidden from KH1's update, whose left / right on a ninth row would step the
-//!   difficulty); after it, our row is drawn with KH1's own panel calls. While it runs the rows
-//!   are 25 apart instead of 28, so nine fit above the help box.
+//!   difficulty); after it, our rows are drawn with KH1's own panel calls. While it runs the rows
+//!   are 22 apart instead of 28, so ten fit above the help box.
 //! - The help line (`0x1402F7D60`) reads its text id from a table by row; for our row it is
 //!   pointed at our id for the call.
 //! - The menu's text lookup (`0x1402CE7C0`, sysmsg ids) is replaced: ids from `OUR_IDS` are our
 //!   strings, the rest are looked up as KH1 does.
 //!
-//! The choice is kept in `kh1-kh2.ini` (`camera = kh1 / kh2`), not the save.
+//! The choices are kept in `kh1-kh2.ini` (`camera = kh1 / kh2`, `gummi = vanilla / skip`), not
+//! the save.
 
 use super::{camera, hook, log};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -48,18 +50,56 @@ const SOUND_RVA: usize = 0x177F60;
 const PANEL_RVA: usize = 0x2D5590;
 const DECOR_RVA: usize = 0x2F0740;
 
-const OUR_ROW: i32 = 8;
-const ID_LABEL: u32 = 0x7F00_0001;
-const ID_KH1: u32 = 0x7F00_0002;
-const ID_KH2: u32 = 0x7F00_0003;
-const ID_HELP: u32 = 0x7F00_0004;
-const STRINGS: [&str; 4] = ["Camera Style", "KH1", "KH2", "Choose KH1's camera or KH2's field camera."];
+/// Our rows: 8 the camera, 9 the Gummi routes. Each: label, left value, right value, help.
+const FIRST_ROW: i32 = 8;
+const ROWS: [[u32; 4]; 2] = [
+    [0x7F00_0001, 0x7F00_0002, 0x7F00_0003, 0x7F00_0004],
+    [0x7F00_0006, 0x7F00_0007, 0x7F00_0008, 0x7F00_0009],
+];
+const STRINGS: [(u32, &str); 8] = [
+    (0x7F00_0001, "Camera Style"),
+    (0x7F00_0002, "KH1"),
+    (0x7F00_0003, "KH2"),
+    (0x7F00_0004, "Choose KH1's camera or KH2's field camera."),
+    (0x7F00_0006, "Gummi Routes"),
+    (0x7F00_0007, "Vanilla"),
+    (0x7F00_0008, "Skip"),
+    (0x7F00_0009, "Fly the Gummi Ship between worlds, or arrive at once."),
+];
+
+/// A row's value: right (true) or left.
+fn value(row: i32) -> bool {
+    match row {
+        8 => camera::KH2.load(Ordering::Relaxed),
+        _ => super::gummi::SKIP.load(Ordering::Relaxed),
+    }
+}
+
+fn toggle(row: i32) {
+    let v = !value(row);
+    match row {
+        8 => {
+            camera::KH2.store(v, Ordering::Relaxed);
+            super::settings::save("camera", if v { "kh2" } else { "kh1" });
+            log(&format!("Config menu: camera style {}", if v { "KH2" } else { "KH1" }));
+        }
+        _ => {
+            super::gummi::SKIP.store(v, Ordering::Relaxed);
+            super::settings::save("gummi", if v { "skip" } else { "vanilla" });
+            log(&format!("Config menu: Gummi routes {}", if v { "skipped" } else { "flown" }));
+        }
+    }
+}
+
+fn ours(row: i32) -> bool {
+    (FIRST_ROW..FIRST_ROW + ROWS.len() as i32).contains(&row)
+}
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_UPDATE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_HELP: AtomicUsize = AtomicUsize::new(0);
 static ORIG_TEXT: AtomicUsize = AtomicUsize::new(0);
-static TEXT: std::sync::OnceLock<Vec<usize>> = std::sync::OnceLock::new();
+static TEXT: std::sync::OnceLock<Vec<(u32, usize)>> = std::sync::OnceLock::new();
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -71,18 +111,18 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
-    TEXT.get_or_init(|| STRINGS.iter().map(|s| Box::leak(super::menu::encode(s).into_boxed_slice()).as_ptr() as usize).collect());
+    TEXT.get_or_init(|| STRINGS.iter().map(|(id, s)| (*id, Box::leak(super::menu::encode(s).into_boxed_slice()).as_ptr() as usize)).collect());
     // The text lookup carries our strings for the shortcuts too (`shortcuts.rs`).
     if hook::install(base + TEXT_RVA, &TEXT_PROLOGUE, text as *const () as usize, &ORIG_TEXT, "menu text lookup").is_none() {
         return;
     }
     TEXT_HOOKED.store(true, Ordering::Release);
     if !super::settings::get().config_row {
-        log("Config menu: no Camera Style row (config_row = off)");
+        log("Config menu: no rows of ours (config_row = off)");
         return;
     }
     if rd::<u16>(base + ROWS_RVA) != 8 || rd::<u16>(base + VISIBLE_RVA) != 8 {
-        log(&format!("Config menu: unexpected row counts {} / {}: no Camera Style row", rd::<u16>(base + ROWS_RVA), rd::<u16>(base + VISIBLE_RVA)));
+        log(&format!("Config menu: unexpected row counts {} / {}: no rows of ours", rd::<u16>(base + ROWS_RVA), rd::<u16>(base + VISIBLE_RVA)));
         return;
     }
     if hook::install(base + HELP_RVA, &HELP_PROLOGUE, help as *const () as usize, &ORIG_HELP, "Config help line").is_none() {
@@ -93,18 +133,17 @@ pub unsafe fn install() {
     }
     let mut old = 0u32;
     super::sys::VirtualProtect((base + ROWS_RVA) as *mut _, 4, 0x04, &mut old);
-    wr(base + ROWS_RVA, 9u16);
-    wr(base + VISIBLE_RVA, 9u16);
-    log("Config menu: Camera Style row added");
+    let n = 8 + ROWS.len() as u16;
+    wr(base + ROWS_RVA, n);
+    wr(base + VISIBLE_RVA, n);
+    log("Config menu: Camera Style and Gummi Routes rows added");
 }
 
 /// KH1's sysmsg lookup (its own instructions, re-done here: its first one is RIP-relative, so
 /// the original can't be called), with our ids on top.
 unsafe extern "system" fn text(id: u32) -> usize {
-    if (ID_LABEL..ID_LABEL + STRINGS.len() as u32).contains(&id) {
-        if let Some(t) = TEXT.get() {
-            return t[(id - ID_LABEL) as usize];
-        }
+    if let Some(t) = TEXT.get().and_then(|t| t.iter().find(|(i, _)| *i == id)) {
+        return t.1;
     }
     if id == super::shortcuts::ID_LABEL4 {
         return super::shortcuts::label4(|i| kh1_text(i));
@@ -133,15 +172,18 @@ pub unsafe fn kh1_text(id: u32) -> usize {
 unsafe extern "system" fn help(win: usize) {
     let base = BASE.load(Ordering::Relaxed);
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_HELP.load(Ordering::Acquire));
-    if rd::<i32>(base + ROW_RVA) != OUR_ROW {
+    let row = rd::<i32>(base + ROW_RVA);
+    if !ours(row) {
         return f(win);
     }
-    // The ninth help id is read from just past the table (row 0's max value): ours for the call.
-    let keep = rd::<u32>(base + MAX0_RVA);
+    // Rows 8 and 9 read their help ids from just past the table (the next table's first two
+    // entries): ours for the call.
     debug_assert_eq!(base + HELP_IDS_RVA + 8 * 4, base + MAX0_RVA);
-    wr(base + MAX0_RVA, ID_HELP);
+    let at = base + HELP_IDS_RVA + row as usize * 4;
+    let keep = rd::<u32>(at);
+    wr(at, ROWS[(row - FIRST_ROW) as usize][3]);
     f(win);
-    wr(base + MAX0_RVA, keep);
+    wr(at, keep);
 }
 
 unsafe extern "system" fn update(win: usize) {
@@ -150,28 +192,28 @@ unsafe extern "system" fn update(win: usize) {
     let focus: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + FOCUS_RVA);
     let pad = rd::<u64>(base + PAD_PTR_RVA) as usize;
     let mut kept: Option<(u32, u32)> = None;
-    if pad > 0x10000 && rd::<i32>(base + ROW_RVA) == OUR_ROW && focus(win) != 0 {
+    let row = rd::<i32>(base + ROW_RVA);
+    if pad > 0x10000 && ours(row) && focus(win) != 0 {
         let confirm = rd::<u32>(base + CONFIRM_MASK_RVA);
         let (pressed, repeat) = (rd::<u32>(pad + 8), rd::<u32>(pad + 0x10));
         if pressed & (LEFT | RIGHT | confirm) != 0 {
-            let kh2 = !camera::KH2.load(Ordering::Relaxed);
-            camera::KH2.store(kh2, Ordering::Relaxed);
+            toggle(row);
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(1);
-            super::settings::save_camera(kh2);
-            log(&format!("Config menu: camera style {}", if kh2 { "KH2" } else { "KH1" }));
         }
-        // KH1's update must not see them on our row (its left / right would step the difficulty).
+        // KH1's update must not see them on our rows (its left / right would step the difficulty).
         kept = Some((pressed, repeat));
         wr(pad + 8, pressed & !(LEFT | RIGHT | confirm));
         wr(pad + 0x10, repeat & !(LEFT | RIGHT | confirm));
     }
-    // Nine rows 25 apart (instead of 28) during the call, so ours clears the help box.
+    // Ten rows 22 apart (instead of 28) during the call, so ours clear the help box.
     let (h, gap) = (rd::<i32>(base + ROW_H_RVA), rd::<i32>(base + ROW_GAP_RVA));
-    wr(base + ROW_H_RVA, 25i32.min(h));
+    wr(base + ROW_H_RVA, ROW_PITCH.min(h));
     wr(base + ROW_GAP_RVA, 0i32);
     f(win);
-    draw(base, win);
+    for k in 0..ROWS.len() as i32 {
+        draw(base, win, FIRST_ROW + k);
+    }
     wr(base + ROW_H_RVA, h);
     wr(base + ROW_GAP_RVA, gap);
     if let Some((p, r)) = kept {
@@ -180,13 +222,17 @@ unsafe extern "system" fn update(win: usize) {
     }
 }
 
-/// Our row, drawn as KH1 draws rows 0..5: the label, then the two choice panels.
-unsafe fn draw(base: usize, win: usize) {
+/// Our rows' pitch while the Config list runs.
+const ROW_PITCH: i32 = 22;
+
+/// One of our rows, drawn as KH1 draws rows 0..5: the label, then the two choice panels.
+unsafe fn draw(base: usize, win: usize, row: i32) {
     let panel: unsafe extern "system" fn(usize, i32, i32, i32, i32, i32, i32, i32, u32) = std::mem::transmute(base + PANEL_RVA);
     let decor: unsafe extern "system" fn(usize, i32, i32, i32) = std::mem::transmute(base + DECOR_RVA);
+    let ids = ROWS[(row - FIRST_ROW) as usize];
     let h = rd::<i32>(base + ROW_H_RVA);
-    let y = 0x47 + OUR_ROW * (h + rd::<i32>(base + ROW_GAP_RVA));
-    let selected = rd::<i32>(base + ROW_RVA) == OUR_ROW;
+    let y = 0x47 + row * (h + rd::<i32>(base + ROW_GAP_RVA));
+    let selected = rd::<i32>(base + ROW_RVA) == row;
     if selected {
         let y2 = h / 2 - 1 + y;
         decor(win, -0x40, y2, 0x4B);
@@ -194,10 +240,10 @@ unsafe fn draw(base: usize, win: usize) {
         decor(win, 0x141, y2, 6);
         decor(win, 0x1E9, y2, 0x17);
     }
-    panel(win, if selected { 0xB } else { 0 }, 2, 0, 0x0B, y, 0x8E, 0x1B, ID_LABEL);
-    let v = camera::KH2.load(Ordering::Relaxed) as usize;
+    panel(win, if selected { 0xB } else { 0 }, 2, 0, 0x0B, y, 0x8E, 0x1B, ids[0]);
+    let v = value(row) as usize;
     let styles = base + if selected { STYLES_SELECTED_RVA } else { STYLES_OTHER_RVA };
     let (left, right) = (rd::<u32>(styles + v * 8) as i32, rd::<u32>(styles + v * 8 + 4) as i32);
-    panel(win, left, 2, 2, 0x9F, y, 0xA2, 0xF0, ID_KH1);
-    panel(win, right, 2, 2, 0x147, y, 0xA2, 0x198, ID_KH2);
+    panel(win, left, 2, 2, 0x9F, y, 0xA2, 0xF0, ids[1]);
+    panel(win, right, 2, 2, 0x147, y, 0xA2, 0x198, ids[2]);
 }

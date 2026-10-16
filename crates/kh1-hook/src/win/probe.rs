@@ -125,6 +125,7 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     }
     let b: u16 = rd(out);
     let st: [u8; 4] = rd(out + 2);
+    super::gummi::tick(super::sys::GetModuleHandleA(std::ptr::null()) as usize);
     // The pad as pressed goes to KH2; while KH2 has Sora, KH1 doesn't see its buttons.
     super::takeover::RAW_BUTTONS.store(b as u32, Ordering::Relaxed);
     super::takeover::RAW_STICKS.store(u32::from_le_bytes(st), Ordering::Relaxed);
