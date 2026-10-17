@@ -96,11 +96,35 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     }
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
         PRESSED.store(true, Ordering::Relaxed);
+        if let Some(r) = row_info(actor, row) {
+            attack_shown(r.motion as u16 as u32);
+        }
         note(format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));
         return;
     }
     let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
     f(actor, row, dir)
+}
+
+/// The motion KH1's own swing would have started on Sora (the row's, `0x1402A17F0` ->
+/// `0x14029D7F0(actor, motion | 0x1000000)`, which his `+0x164` then holds) and when, in ms.
+/// Event scripts read `+0x164` (opcode 322): Dive to the Heart's "Press to attack" window waits
+/// for an attack motion there, which KH2's swing never sets (the user's softlock, Steam and
+/// Epic alike). `attack_seen` gives the script that motion for a moment after a KH2 attack.
+static ATTACK_SHOWN: std::sync::Mutex<Option<(u32, std::time::Instant)>> = std::sync::Mutex::new(None);
+
+fn attack_shown(motion: u32) {
+    if let Ok(mut a) = ATTACK_SHOWN.lock() {
+        *a = Some((motion, std::time::Instant::now()));
+    }
+}
+
+/// The motion an event script should see on Sora instead of his `+0x164` (KH2 attacked within
+/// the last 0.6 s: about one KH1 swing).
+pub fn attack_seen() -> Option<u32> {
+    let a = ATTACK_SHOWN.lock().ok()?;
+    let (m, t) = (*a)?;
+    (t.elapsed().as_secs_f32() < 0.6).then_some(m)
 }
 
 /// Command types that don't move Sora (`0x1402A1470`): the party's (`+0x98`'s), the menu's.

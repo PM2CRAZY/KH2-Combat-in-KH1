@@ -73,7 +73,25 @@ unsafe extern "system" fn event_op(ctx: usize, op: i32, c: usize, d: usize) -> u
         }
     }
     let f: unsafe extern "system" fn(usize, i32, usize, usize) -> u64 = std::mem::transmute(ORIG_EVENT_OP.load(Ordering::Acquire));
-    f(ctx, op, c, d)
+    let r = f(ctx, op, c, d);
+    // Opcode 322 just pushed the script actor's `+0x164` (stack: count `+0x194`, slots from
+    // `+0x198`). For Sora, right after a KH2 attack: the motion KH1's swing would show
+    // (`combat::attack_seen`), so scripts waiting for an attack (tutorials) see one.
+    if op == 322 && ctx > 0x10000 {
+        let actor = rd::<u64>(ctx + 8) as usize;
+        let sora = rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize;
+        let top = rd::<i32>(ctx + 0x194);
+        if actor > 0x10000 && actor == sora && (1..32).contains(&top) {
+            if let Some(m) = super::combat::attack_seen() {
+                std::ptr::write_unaligned((ctx + 0x198 + top as usize * 4) as *mut u32, m);
+                static N: AtomicU32 = AtomicU32::new(0);
+                if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log(&format!("event op 322: Sora's motion shown to the script as {m:#x} (KH2 attacked)"));
+                }
+            }
+        }
+    }
+    r
 }
 
 /// Once a second: the event opcodes run in that second, when they differ from the last second's

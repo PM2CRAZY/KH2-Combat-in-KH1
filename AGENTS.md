@@ -1562,3 +1562,20 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `0x1401ADFA0`). Diagnostics: event opcodes per second when they change (dispatcher
   `0x1401B13F0`, table `0x1404FB550`, 764 opcodes; `probe::event_trace`) and camera jerks
   (`camera::jerk_note`: the user found the camera jittery there).
+
+### 2026-10-17: Stage 144-145 (the attack tutorial; camera timing)
+- The trace (`probe::event_trace`): at Dive to the Heart's "Press to attack" window the script
+  polls opcode 322 (`0x1401AB6E0`: pushes the script actor's `+0x164`) every frame, with Sora as
+  the actor. `+0x164` is the motion request applied (`0x14029DAB0`: low 16 bits of the first
+  queued request): 0 idle, 1 walk, 2 run under KH2; KH1's swing starts the row's motion
+  (`0x1402A17F0` -> `0x14029D7F0(actor, motion | 0x1000000)`, 200 for the first ground row),
+  which the window waits for. Stage 50's tally (`0x14028A4D0(0x13)`) was not what it reads.
+- Fix: `combat::exec` notes the row's motion when KH2 takes an Attack press
+  (`attack_shown`); for 0.6 s after, opcode 322 run on Sora has its pushed value replaced
+  with it (`probe::event_op`; the slot at `+0x198 + count * 4`, count `+0x194`). Sora's own
+  `+0x164` is untouched (KH1's attack objects tied to a motion compare it).
+- Camera (`camera::jerk_note` summaries): the eye and look point move smoothly (≤ ~1 unit of
+  change per frame walking) at 60 updates/s, but frames arrive 2..42 ms apart even standing
+  still: uneven frame pacing, not the camera.
+- The user's "slight slide" in the scene after "move and run": the log shows KH1's own scene
+  motions there (slots 206 / 207, `follow` leaves KH1's animation): KH1's own walk.
