@@ -1490,3 +1490,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   -1..-0.17), which before stage 126 never had any foe but the lock. Its KH2 visual stays off
   (the user asked for only Explosion's and Magnet Burst's).
 
+### 2026-10-16: Stage 136 (Vicinity Break's KH2 visuals)
+- The user asked for them: `kh2fx::DEFAULT_MOTIONS` is Explosion (166), Vicinity Break (170)
+  and Magnet Burst (197); the ini's `magnet_explosion` value now means those three.
+

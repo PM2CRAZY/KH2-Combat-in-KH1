@@ -19,8 +19,9 @@
 //! Burst's sphere at Sora every 4 seconds (to check the renderer in game).
 
 
-/// Explosion and Magnet Burst (the visuals stay those two; the user: no others needed).
-pub const DEFAULT_MOTIONS: [u16; 2] = [166, 197];
+/// Explosion, Vicinity Break and Magnet Burst (the user: those three; Vicinity Break's was
+/// asked for when it went unnoticed without it).
+pub const DEFAULT_MOTIONS: [u16; 3] = [166, 170, 197];
 use super::{fx12, hook, log};
 use character_core::EventKind;
 use glam::{Mat4, Vec3};

@@ -67,7 +67,8 @@ chests_in_battle = on\r\n\
 ;   Select) toggles it in game and keeps the choice here\r\n\
 insta_kill = off\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
-; KH1's frame: magnet_explosion (Magnet Burst and Explosion), all (every move), off\r\n\
+; KH1's frame: magnet_explosion (Magnet Burst, Explosion and Vicinity Break), all (every\r\n\
+;   move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
 ; fx_test: on = start Magnet Burst's effect at Sora every 4 seconds (checks the renderer)\r\n\
 fx_test = off\r\n\
