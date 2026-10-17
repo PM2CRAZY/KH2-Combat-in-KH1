@@ -57,6 +57,21 @@ unsafe extern "system" fn event_op(ctx: usize, op: i32, c: usize, d: usize) -> u
     if (0..EVENT_OPS as i32).contains(&op) {
         EVENT_COUNTS[op as usize].fetch_add(1, Ordering::Relaxed);
     }
+    // Opcode 322 (`0x1401AB6E0`) pushes the script actor's motion request (`+0x164`): note
+    // each new value (a tutorial waits on it).
+    if op == 322 && ctx > 0x10000 {
+        static LAST: AtomicU64 = AtomicU64::new(u64::MAX);
+        static N: AtomicU32 = AtomicU32::new(0);
+        let actor = rd::<u64>(ctx + 8) as usize;
+        if actor > 0x10000 {
+            let v = rd::<u32>(actor + 0x164);
+            let key = (actor as u64) << 16 ^ v as u64;
+            if LAST.swap(key, Ordering::Relaxed) != key && N.fetch_add(1, Ordering::Relaxed) < 200 {
+                let sora = rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize;
+                log(&format!("event op 322: actor {actor:#x}{} motion request {v:#x} (state {}, takeover {})", if actor == sora { " (Sora)" } else { "" }, rd::<i32>(actor + 0x70), super::takeover::ON.load(Ordering::Relaxed)));
+            }
+        }
+    }
     let f: unsafe extern "system" fn(usize, i32, usize, usize) -> u64 = std::mem::transmute(ORIG_EVENT_OP.load(Ordering::Acquire));
     f(ctx, op, c, d)
 }

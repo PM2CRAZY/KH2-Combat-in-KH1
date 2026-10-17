@@ -154,26 +154,58 @@ unsafe extern "system" fn lock_mode() {
     }
 }
 
-/// Notes frames where the eye's motion jerks (its change in velocity over 12 units in a frame),
-/// with the frame step, the look point and Sora's feet (the user: jittery in Dive to the Heart).
+/// The camera's smoothness (the user: jittery in Dive to the Heart): every 5 s while it runs,
+/// its updates per second, the spread of the time between them, and the biggest change in the
+/// eye's, the look point's and Sora's motion between frames; and single jerks past 12 units.
 fn jerk_note(eye: Vec3, at: Vec3, feet: Vec3, dt: f32, yaw: f32) {
     use std::sync::Mutex;
-    static LAST: Mutex<Option<(Vec3, Vec3, u64)>> = Mutex::new(None);
-    static N: AtomicU32 = AtomicU32::new(0);
-    let Ok(mut l) = LAST.lock() else { return };
+    struct S {
+        last: Option<(Vec3, Vec3, Vec3, Vec3, Vec3, Vec3, u64)>,
+        since: u64,
+        n: u32,
+        gap: (u64, u64),
+        acc: (f32, f32, f32),
+        dts: (f32, f32),
+    }
+    static ST: Mutex<S> = Mutex::new(S { last: None, since: 0, n: 0, gap: (u64::MAX, 0), acc: (0.0, 0.0, 0.0), dts: (f32::MAX, 0.0) });
+    static LINES: AtomicU32 = AtomicU32::new(0);
+    let Ok(mut st) = ST.lock() else { return };
     let now = now_ms();
-    if let Some((e0, v0, t0)) = *l {
-        let v = eye - e0;
-        let a = v - v0;
-        if now - t0 < 100 && a.length() > 12.0 && N.fetch_add(1, Ordering::Relaxed) < 80 {
+    if let Some((e0, a0, f0, ve, va, vf, t0)) = st.last {
+        let gap = now - t0;
+        if gap > 200 {
+            st.last = Some((eye, at, feet, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO, now));
+            return;
+        }
+        let (ve2, va2, vf2) = (eye - e0, at - a0, feet - f0);
+        let (je, ja, jf) = ((ve2 - ve).length(), (va2 - va).length(), (vf2 - vf).length());
+        st.n += 1;
+        st.gap = (st.gap.0.min(gap), st.gap.1.max(gap));
+        st.acc = (st.acc.0.max(je), st.acc.1.max(ja), st.acc.2.max(jf));
+        st.dts = (st.dts.0.min(dt), st.dts.1.max(dt));
+        if (je > 12.0 || ja > 12.0) && LINES.fetch_add(1, Ordering::Relaxed) < 120 {
             log(&format!(
-                "KH2 camera jerk: eye moved {:.0} (last frame {:.0}), dt {dt:.2}, {}ms since last frame; eye {:.0?} at {:.0?} feet {:.0?} yaw {yaw:.2}",
-                v.length(), v0.length(), now - t0, eye.to_array(), at.to_array(), feet.to_array()
+                "KH2 camera jerk: eye {:.0} -> {:.0}, look {:.0} -> {:.0}, Sora {:.0} -> {:.0} per frame; dt {dt:.2}, {gap}ms; eye {:.0?} feet {:.0?} yaw {yaw:.2}",
+                ve.length(), ve2.length(), va.length(), va2.length(), vf.length(), vf2.length(), eye.to_array(), feet.to_array()
             ));
         }
-        *l = Some((eye, v, now));
+        st.last = Some((eye, at, feet, ve2, va2, vf2, now));
+        if now - st.since >= 5000 {
+            if st.n > 10 && LINES.fetch_add(1, Ordering::Relaxed) < 120 {
+                log(&format!(
+                    "KH2 camera, last {:.1}s: {:.0} updates/s, {}..{}ms apart, dt {:.2}..{:.2}; biggest change per frame: eye {:.1}, look {:.1}, Sora {:.1}",
+                    (now - st.since) as f32 / 1000.0, st.n as f32 * 1000.0 / (now - st.since) as f32, st.gap.0, st.gap.1, st.dts.0, st.dts.1, st.acc.0, st.acc.1, st.acc.2
+                ));
+            }
+            st.since = now;
+            st.n = 0;
+            st.gap = (u64::MAX, 0);
+            st.acc = (0.0, 0.0, 0.0);
+            st.dts = (f32::MAX, 0.0);
+        }
     } else {
-        *l = Some((eye, Vec3::ZERO, now));
+        st.since = now;
+        st.last = Some((eye, at, feet, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO, now));
     }
 }
 
