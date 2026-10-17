@@ -1528,3 +1528,24 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `0x140270DA0`: state at `+0`, timer `+0xC`, line count `+0x18`, lines `+0x20` / `+0x28`,
   title `+0x30`, fade `+0xB80`, colours `+0xB88` / `+0xB90`, 0xBA0 a box, counts per member
   at `0x14283BD80`, members `0x3A20` apart.
+
+### 2026-10-17: Stage 142 (Steam release)
+- The user now has the Steam release (`D:\Steam\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5
+  ReMIX-`); players reported the mod doing nothing there (it switched itself off). Same game,
+  linked the same day (Epic stamp 1721648200, Steam 1721645006), but each build links its store's
+  SDK, so code and globals shift by region (e.g. battle flags `0x2867CD8` -> `0x2867364`, save
+  `0x2DE9D60` -> `0x2DE9360`).
+- `win/addr.rs`: every game address is an `Rva` (the Epic RVA); `base + rva` gives the running
+  build's address (`impl Add<Rva> for usize`), from `steam_map.in` (Epic -> Steam, 174 pairs) on
+  Steam. `addr::detect` picks the build by the PE link stamp and checks three prologues; any
+  other build stays off as before. `tests/steam_map.rs`: every `Rva(0x..)` in `src/win` has a
+  Steam address.
+- How the table was made (locally, from the user's two executables; nothing of them is in the
+  repo): functions paired through `.pdata` and a diff of their instruction streams with
+  relative targets set aside (14,827 of 15,824 identical); globals from the RIP-relative
+  operands of paired functions. Each code address was checked over 64 bytes, instruction by
+  instruction, with each reference mapping consistently; menu tables with no direct reference
+  (`0x5470E0`, `0x547130`, `0x547140`) by their contents (-0xCF0, as `0x5470C0`). Patched bytes
+  (shortcut rows, Customize, sparkle test, combo table) are identical in Steam's build.
+- Steam's English files are in `Image\dt` (the KH1 / KH2 loaders already try en, dt, jp).
+- README / mod.yml: Epic or Steam; README.txt kept in `crates/kh1-hook/openkh/`.

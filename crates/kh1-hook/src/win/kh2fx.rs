@@ -19,6 +19,7 @@
 //! Burst's sphere at Sora every 4 seconds (to check the renderer in game).
 
 
+use super::addr::Rva;
 /// Explosion, Vicinity Break and Magnet Burst (the user: those three; Vicinity Break's was
 /// asked for when it went unnoticed without it).
 pub const DEFAULT_MOTIONS: [u16; 3] = [166, 170, 197];
@@ -29,7 +30,7 @@ use kh2_fx::{Camera, EffectHandle, Effects, Frame, Library};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-const WORLD_PASS_RVA: usize = 0x1EADD0;
+const WORLD_PASS_RVA: Rva = Rva(0x1EADD0);
 const WORLD_PASS_PROLOGUE: [u8; 15] = [0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x70, 0x10, 0x48, 0x89, 0x78, 0x18];
 /// KH2 element flag: ended when the owner's motion changes.
 const ENDS_WITH_MOTION: u32 = 0x20;

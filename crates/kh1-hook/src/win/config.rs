@@ -15,40 +15,41 @@
 //!
 //! The choice is kept in `kh1-kh2.ini` (`camera = kh1 / kh2`), not the save.
 
+use super::addr::Rva;
 use super::{camera, hook, log};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const TEXT_RVA: usize = 0x2CE7C0;
+const TEXT_RVA: Rva = Rva(0x2CE7C0);
 const TEXT_PROLOGUE: [u8; 7] = [0x48, 0x8B, 0x05, 0x89, 0xCE, 0xB4, 0x02];
-const TEXT_TABLE_RVA: usize = 0x2E1B650;
-const TEXT_BASE_RVA: usize = 0x2E1B648;
-const UPDATE_RVA: usize = 0x2F7DD0;
+const TEXT_TABLE_RVA: Rva = Rva(0x2E1B650);
+const TEXT_BASE_RVA: Rva = Rva(0x2E1B648);
+const UPDATE_RVA: Rva = Rva(0x2F7DD0);
 const UPDATE_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
-const HELP_RVA: usize = 0x2F7D60;
+const HELP_RVA: Rva = Rva(0x2F7D60);
 const HELP_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x40];
 /// The Config window definition's row count and visible rows (u16).
-const ROWS_RVA: usize = 0x5470B6;
-const VISIBLE_RVA: usize = 0x5470B8;
+const ROWS_RVA: Rva = Rva(0x5470B6);
+const VISIBLE_RVA: Rva = Rva(0x5470B8);
 /// Per-row help ids (8 u32); the ninth reads the next table's first entry (row 0's max value).
-const HELP_IDS_RVA: usize = 0x5470C0;
-const MAX0_RVA: usize = 0x5470E0;
+const HELP_IDS_RVA: Rva = Rva(0x5470C0);
+const MAX0_RVA: Rva = Rva(0x5470E0);
 /// Value panel styles by value: selected row, other rows (left, right).
-const STYLES_SELECTED_RVA: usize = 0x547130;
-const STYLES_OTHER_RVA: usize = 0x547140;
+const STYLES_SELECTED_RVA: Rva = Rva(0x547130);
+const STYLES_OTHER_RVA: Rva = Rva(0x547140);
 /// The row under the cursor (the help window reads it).
-const ROW_RVA: usize = 0x2E998F8;
+const ROW_RVA: Rva = Rva(0x2E998F8);
 /// Row height and gap (shared by every menu).
-const ROW_H_RVA: usize = 0x546050;
-const ROW_GAP_RVA: usize = 0x546058;
+const ROW_H_RVA: Rva = Rva(0x546050);
+const ROW_GAP_RVA: Rva = Rva(0x546058);
 /// Menu pad: `+8` pressed this frame, `+0x10` pressed with repeat.
-const PAD_PTR_RVA: usize = 0x2E96320;
-const CONFIRM_MASK_RVA: usize = 0x546390;
+const PAD_PTR_RVA: Rva = Rva(0x2E96320);
+const CONFIRM_MASK_RVA: Rva = Rva(0x546390);
 const LEFT: u32 = 0x8000_0080;
 const RIGHT: u32 = 0x2000_0020;
-const FOCUS_RVA: usize = 0x2E2E40;
-const SOUND_RVA: usize = 0x177F60;
-const PANEL_RVA: usize = 0x2D5590;
-const DECOR_RVA: usize = 0x2F0740;
+const FOCUS_RVA: Rva = Rva(0x2E2E40);
+const SOUND_RVA: Rva = Rva(0x177F60);
+const PANEL_RVA: Rva = Rva(0x2D5590);
+const DECOR_RVA: Rva = Rva(0x2F0740);
 
 /// Our rows: 8 the camera. Each: label, left value, right value, help.
 const FIRST_ROW: i32 = 8;

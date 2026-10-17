@@ -15,76 +15,77 @@
 //! - Customize's shortcut list (window `0x140548E40`, drawn by `0x140300510`; the overview
 //!   `0x1403010E0`) gets a fourth row, labelled with KH1's third label with its icon swapped.
 
+use super::addr::Rva;
 use super::{config, hook, log};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
-const SAVE_PTR_RVA: usize = 0x28695A0;
+const SAVE_PTR_RVA: Rva = Rva(0x28695A0);
 const SLOTS_OFF: usize = 0x844;
 const SLOT4_OFF: usize = 0x847;
 const FLAGS_OFF: usize = 0x874;
 
 /// The battle shortcut menu: `+4` / `+8` disabled bits, `+0x10` count, `+0x14` command ids.
-const MENU_RVA: usize = 0x529718;
+const MENU_RVA: Rva = Rva(0x529718);
 /// The battle magic menu's entries, count and disabled bits (filled by the same function).
-const MAGIC_ENTRIES_RVA: usize = 0x52964C;
-const MAGIC_COUNT_RVA: usize = 0x529648;
-const MAGIC_DISABLED_RVA: usize = 0x52963C;
+const MAGIC_ENTRIES_RVA: Rva = Rva(0x52964C);
+const MAGIC_COUNT_RVA: Rva = Rva(0x529648);
+const MAGIC_DISABLED_RVA: Rva = Rva(0x52963C);
 /// Set when any shortcut is set (KH1 switches to the shortcut menu on L1 only then).
-const HAS_SHORTCUTS_RVA: usize = 0x2D5445C;
+const HAS_SHORTCUTS_RVA: Rva = Rva(0x2D5445C);
 /// The command menu chain's root, and the command picked this frame.
-const ROOT_RVA: usize = 0x2D543F0;
-const PICKED_RVA: usize = 0x2D543E8;
+const ROOT_RVA: Rva = Rva(0x2D543F0);
+const PICKED_RVA: Rva = Rva(0x2D543E8);
 /// Logical buttons pressed this frame (6: cancel).
-const PRESSED_RVA: usize = 0x298D4A8;
+const PRESSED_RVA: Rva = Rva(0x298D4A8);
 const CANCEL: u32 = 6;
 /// No command (an empty shortcut).
 const EMPTY: u8 = 0x42;
 
-const COMMAND_RECORD_RVA: usize = 0x28D7D0;
-const MAGIC_LEVEL_RVA: usize = 0x28D0D0;
-const RUN_ENTRY_RVA: usize = 0x2912F0;
+const COMMAND_RECORD_RVA: Rva = Rva(0x28D7D0);
+const MAGIC_LEVEL_RVA: Rva = Rva(0x28D0D0);
+const RUN_ENTRY_RVA: Rva = Rva(0x2912F0);
 
-const GET_RVA: usize = 0x282F20;
+const GET_RVA: Rva = Rva(0x282F20);
 const GET_PROLOGUE: [u8; 7] = [0x48, 0x8B, 0x05, 0x79, 0x66, 0x5E, 0x02];
-const SET_RVA: usize = 0x283640;
+const SET_RVA: Rva = Rva(0x283640);
 const SET_PROLOGUE: [u8; 7] = [0x48, 0x8B, 0x05, 0x59, 0x5F, 0x5E, 0x02];
-const LEARN_RVA: usize = 0x2830F0;
+const LEARN_RVA: Rva = Rva(0x2830F0);
 const LEARN_PROLOGUE: [u8; 6] = [0x48, 0x63, 0xC1, 0x44, 0x8B, 0xD2];
-const FILL_RVA: usize = 0x292330;
+const FILL_RVA: Rva = Rva(0x292330);
 const FILL_PROLOGUE: [u8; 12] = [0x4C, 0x8B, 0xDC, 0x41, 0x57, 0x48, 0x81, 0xEC, 0xC0, 0x00, 0x00, 0x00];
-const STEP_RVA: usize = 0x291660;
+const STEP_RVA: Rva = Rva(0x291660);
 const STEP_PROLOGUE: [u8; 13] = [0x40, 0x53, 0x55, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20];
 
 // Drawing (`0x140279700`, case 5).
-const PANEL_FN_RVA: usize = 0x278880;
-const ICON_FN_RVA: usize = 0x277E50;
-const PANEL_CALLS: [usize; 2] = [0x279E66, 0x279E90];
-const ICON_X_CALL: usize = 0x279EE7;
+const PANEL_FN_RVA: Rva = Rva(0x278880);
+const ICON_FN_RVA: Rva = Rva(0x277E50);
+const PANEL_CALLS: [Rva; 2] = [Rva(0x279E66), Rva(0x279E90)];
+const ICON_X_CALL: Rva = Rva(0x279EE7);
 /// `mov r9d, 0x11a` before the panels and icons (the menu's y).
-const Y_MOVS: [usize; 5] = [0x279E2C, 0x279E81, 0x279E95, 0x279EB2, 0x279ECF];
+const Y_MOVS: [Rva; 5] = [Rva(0x279E2C), Rva(0x279E81), Rva(0x279E95), Rva(0x279EB2), Rva(0x279ECF)];
 /// `add r8d, 0x11a` (the rows' y).
-const Y_ADD: usize = 0x279F32;
+const Y_ADD: Rva = Rva(0x279F32);
 /// `lea ebp, [rdi - 0x11]` (3 rows, rdi = 0x14).
-const ROWS_LEA: usize = 0x279F09;
+const ROWS_LEA: Rva = Rva(0x279F09);
 /// `mov dword [0x1428531f0], 0x11a` (the menu's y, kept for later).
-const Y_STORE: usize = 0x279F73;
+const Y_STORE: Rva = Rva(0x279F73);
 const MENU_Y: i32 = 0x11A;
 const ROW: i32 = 0x16;
 /// The quad the panel calls build (`0x142867360`) and the draw list cursor.
-const QUAD_RVA: usize = 0x2867360;
-const LIST_RVA: usize = 0x2853218;
-const ALPHA_RVA: usize = 0x2867444;
-const DRAW_ON_RVA: usize = 0x528820;
-const BUILD_RVA: usize = 0x27B300;
-const SUBMIT_RVA: usize = 0x274340;
+const QUAD_RVA: Rva = Rva(0x2867360);
+const LIST_RVA: Rva = Rva(0x2853218);
+const ALPHA_RVA: Rva = Rva(0x2867444);
+const DRAW_ON_RVA: Rva = Rva(0x528820);
+const BUILD_RVA: Rva = Rva(0x27B300);
+const SUBMIT_RVA: Rva = Rva(0x274340);
 
 // Customize.
-const WINDOW_ROWS_RVA: usize = 0x548E66;
-const WINDOW_VISIBLE_RVA: usize = 0x548E68;
-const LIST_LOOP: usize = 0x30075D;
-const OVERVIEW_LOOP: usize = 0x3011DF;
-const LIST_LABELS_RVA: usize = 0x548D40;
-const OVERVIEW_LABELS_RVA: usize = 0x548F50;
+const WINDOW_ROWS_RVA: Rva = Rva(0x548E66);
+const WINDOW_VISIBLE_RVA: Rva = Rva(0x548E68);
+const LIST_LOOP: Rva = Rva(0x30075D);
+const OVERVIEW_LOOP: Rva = Rva(0x3011DF);
+const LIST_LABELS_RVA: Rva = Rva(0x548D40);
+const OVERVIEW_LABELS_RVA: Rva = Rva(0x548F50);
 /// KH1's label for the third shortcut (confirm).
 const LABEL3: u32 = 0xD0;
 pub const ID_LABEL4: u32 = 0x7F00_0005;
@@ -180,7 +181,7 @@ unsafe fn install_customize(base: usize) {
         && hook::patch(base + WINDOW_ROWS_RVA, &[3, 0, 3, 0], &[4, 0, 4, 0], "Customize shortcut rows")
         && hook::patch(base + LIST_LOOP, &[0x83, 0xFD, 0x03], &[0x83, 0xFD, 0x04], "Customize shortcut list")
         && hook::patch(base + OVERVIEW_LOOP, &[0x83, 0xFF, 0x03], &[0x83, 0xFF, 0x04], "Customize overview");
-    debug_assert_eq!(WINDOW_VISIBLE_RVA, WINDOW_ROWS_RVA + 2);
+    debug_assert_eq!(WINDOW_VISIBLE_RVA.0, WINDOW_ROWS_RVA.0 + 2);
     log(if ok { "Customize: four shortcut rows" } else { "Customize: shortcut rows only partly patched (see above)" });
 }
 

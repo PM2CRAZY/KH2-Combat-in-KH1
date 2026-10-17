@@ -13,52 +13,53 @@
 //! World: KH1's is y-down; `kh2_camera` is y-up, and here also divided by `camera_scale` (KH2's
 //! distances suit a slightly bigger Sora).
 
+use super::addr::Rva;
 use super::{log, pose};
 use glam::{Vec2, Vec3};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-const MODES_RVA: usize = 0x507AD0;
-const SORA_RVA: usize = 0x2D37C80;
-const SUBJECT_RVA: usize = 0x2538A10;
+const MODES_RVA: Rva = Rva(0x507AD0);
+const SORA_RVA: Rva = Rva(0x2D37C80);
+const SUBJECT_RVA: Rva = Rva(0x2538A10);
 /// Mode-entry flags: bit 1 = this mode's first frame (bits 0 / 2: from mode 0 / a snapshot).
-const ENTRY_FLAGS_RVA: usize = 0x25389E8;
-const EYE_RVA: usize = 0x2538A30;
-const TARGET_RVA: usize = 0x2538A40;
-const PITCH_RVA: usize = 0x2538A50;
-const YAW_RVA: usize = 0x2538A54;
-const DIST_RVA: usize = 0x2538A5C;
+const ENTRY_FLAGS_RVA: Rva = Rva(0x25389E8);
+const EYE_RVA: Rva = Rva(0x2538A30);
+const TARGET_RVA: Rva = Rva(0x2538A40);
+const PITCH_RVA: Rva = Rva(0x2538A50);
+const YAW_RVA: Rva = Rva(0x2538A54);
+const DIST_RVA: Rva = Rva(0x2538A5C);
 /// KH1's camera timers and stick velocities that would fight ours (zeroed each frame).
-const KH1_MOTION_RVAS: [usize; 9] = [0x2538850, 0x2538854, 0x2538AB4, 0x2538AA0, 0x2538844, 0x2538848, 0x253884C, 0x2538B50, 0x2538B54];
+const KH1_MOTION_RVAS: [Rva; 9] = [Rva(0x2538850), Rva(0x2538854), Rva(0x2538AB4), Rva(0x2538AA0), Rva(0x2538844), Rva(0x2538848), Rva(0x253884C), Rva(0x2538B50), Rva(0x2538B54)];
 /// Frame step (2 at 30 frames a second, 1 at 60): KH2's camera counts 60 Hz frames.
-const STEP_RVA: usize = 0x23405DC;
-const RIGHT_STICK_RVA: usize = 0x298D4D0;
-const LEFT_STICK_RVA: usize = 0x298D4E0;
+const STEP_RVA: Rva = Rva(0x23405DC);
+const RIGHT_STICK_RVA: Rva = Rva(0x298D4D0);
+const LEFT_STICK_RVA: Rva = Rva(0x298D4E0);
 /// Stick dead zone for KH2's camera (of full tilt).
 const STICK_DEAD: f32 = 0.15;
 /// Logical buttons: `+8` pressed this frame. R3 `0x200`, Select `0x8000`.
-const BUTTONS_RVA: usize = 0x298D4A0;
+const BUTTONS_RVA: Rva = Rva(0x298D4A0);
 const R3: u32 = 0x200;
 const SELECT: u32 = 0x8000;
 /// KH1's config block (`+8`: field camera 0 Auto / 1 Manual).
-const CONFIG_PTR_RVA: usize = 0x2E1FE70;
+const CONFIG_PTR_RVA: Rva = Rva(0x2E1FE70);
 /// The camera left/right option's sign (+1 normal).
-const TURN_SIGN_RVA: usize = 0x507AAC;
-const FLAGS_RVA: usize = 0x2867CD8;
-const FLAGS2_RVA: usize = 0x2867CDC;
+const TURN_SIGN_RVA: Rva = Rva(0x507AAC);
+const FLAGS_RVA: Rva = Rva(0x2867CD8);
+const FLAGS2_RVA: Rva = Rva(0x2867CDC);
 /// Mode 1's end: KH1's movement-state cameras (vines, ledges...).
-const STATE_CAMERAS_RVA: usize = 0x1E3320;
+const STATE_CAMERAS_RVA: Rva = Rva(0x1E3320);
 /// Mode switch `(mode, blend)`.
-const SET_MODE_RVA: usize = 0x1E3200;
+const SET_MODE_RVA: Rva = Rva(0x1E3200);
 /// KH1's camera ray (background and objects, collision locked): `0x140191640 (ray*)`.
-const RAY_RVA: usize = 0x191640;
-const FACE_NORMAL_RVA: usize = 0x18FC60;
-const LOCK_TARGET_RVA: usize = 0x2DB3F18;
-const LOCK_POINT_RVA: usize = 0x2AE330;
+const RAY_RVA: Rva = Rva(0x191640);
+const FACE_NORMAL_RVA: Rva = Rva(0x18FC60);
+const LOCK_TARGET_RVA: Rva = Rva(0x2DB3F18);
+const LOCK_POINT_RVA: Rva = Rva(0x2AE330);
 /// FOV setter (degrees) and KH1's default field FOV (mode 1's entry sets it; area cameras
 /// change it).
-const SET_FOV_RVA: usize = 0x28A960;
-const DEFAULT_FOV_RVA: usize = 0x3EAC84;
+const SET_FOV_RVA: Rva = Rva(0x28A960);
+const DEFAULT_FOV_RVA: Rva = Rva(0x3EAC84);
 
 /// KH2's camera is on (the ini's `camera`, the Config menu's row).
 pub static KH2: AtomicBool = AtomicBool::new(true);
@@ -90,7 +91,7 @@ pub unsafe fn install() {
     let lock = base + MODES_RVA + 0x30;
     let (f, l) = (rd::<u64>(follow) as usize, rd::<u64>(lock) as usize);
     // The entries should point at KH1's own mode 1 / mode 3 (`0x1401DF7C0` / `0x1401E04F0`).
-    if f != base + 0x1DF7C0 || l != base + 0x1E04F0 {
+    if f != base + Rva(0x1DF7C0) || l != base + Rva(0x1E04F0) {
         log(&format!("KH2 camera: KH1's camera modes aren't where expected ({f:#x}, {l:#x}): not installed"));
         return;
     }

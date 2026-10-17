@@ -30,9 +30,12 @@
 !/crates/*/README.md
 !/crates/*/src/**/*.rs
 !/crates/*/tests/**/*.rs
+# The Steam address table (numbers only: Epic RVA -> Steam RVA).
+!/crates/kh1-hook/src/win/steam_map.in
 !/crates/*/examples/**/*.rs
 !/crates/*/build.rs
 !/crates/kh1-hook/openkh/mod.yml
+!/crates/kh1-hook/openkh/README.txt
 
 # 6. Never track these, even if a rule above would match.
 /target/

@@ -20,6 +20,7 @@
 //! sounds are KH1's. The damage is scaled by the KH2 attack's power (`POWER`, applied to the
 //! hit record in `probe::hit`).
 
+use super::addr::Rva;
 use super::{hook, log, pose, takeover};
 use character_core::{Character, Output, TargetInfo};
 use combat_core::{first_overlap, AttackVolume, HitRecord, Shape};
@@ -28,21 +29,21 @@ use kh2_rig::RigAnim;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
-const EXEC_RVA: usize = 0x2A4760;
+const EXEC_RVA: Rva = Rva(0x2A4760);
 /// KH1's menu sounds (`0x140177F60 (n)`; 4: can't).
-const SOUND_RVA: usize = 0x177F60;
+const SOUND_RVA: Rva = Rva(0x177F60);
 const EXEC_PROLOGUE: [u8; 11] = [0x4C, 0x8B, 0xDC, 0x57, 0x48, 0x81, 0xEC, 0x90, 0x00, 0x00, 0x00];
-const COMMAND_RVA: usize = 0x2D54440;
-const PARTY_RVA: usize = 0x2D37C80;
-const ROWS_RVA: usize = 0x2D5D4B0;
-const ATTACK_DATA_RVA: usize = 0x2D23740;
-const NEXT_ACTOR_RVA: usize = 0x28F990;
-const HITTABLE_RVA: usize = 0x28FEE0;
-const PART_SHAPE_RVA: usize = 0x2B3CB0;
-const NEW_ATTACK_RVA: usize = 0x2B10E0;
-const FREE_BIT_RVA: usize = 0x2B15D0;
-const LAND_RVA: usize = 0x2B1ED0;
-const FREE_ATTACK_RVA: usize = 0x2B13D0;
+const COMMAND_RVA: Rva = Rva(0x2D54440);
+const PARTY_RVA: Rva = Rva(0x2D37C80);
+const ROWS_RVA: Rva = Rva(0x2D5D4B0);
+const ATTACK_DATA_RVA: Rva = Rva(0x2D23740);
+const NEXT_ACTOR_RVA: Rva = Rva(0x28F990);
+const HITTABLE_RVA: Rva = Rva(0x28FEE0);
+const PART_SHAPE_RVA: Rva = Rva(0x2B3CB0);
+const NEW_ATTACK_RVA: Rva = Rva(0x2B10E0);
+const FREE_BIT_RVA: Rva = Rva(0x2B15D0);
+const LAND_RVA: Rva = Rva(0x2B1ED0);
+const FREE_ATTACK_RVA: Rva = Rva(0x2B13D0);
 /// Enemies farther than this from Sora are not looked at.
 const NEAR: f32 = 1500.0;
 
@@ -50,9 +51,9 @@ static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_EXEC: AtomicUsize = AtomicUsize::new(0);
 static ORIG_COMMAND: AtomicUsize = AtomicUsize::new(0);
 /// KH1's command step `(actor, dir)`: runs the command at `0x142D54440` (type byte first).
-const COMMAND_STEP_RVA: usize = 0x2A5380;
+const COMMAND_STEP_RVA: Rva = Rva(0x2A5380);
 const COMMAND_STEP_PROLOGUE: [u8; 11] = [0x40, 0x55, 0x56, 0x57, 0x48, 0x81, 0xEC, 0x60, 0x01, 0x00, 0x00];
-const STATE_RVA: usize = 0x2AF7D0;
+const STATE_RVA: Rva = Rva(0x2AF7D0);
 /// The Attack command was given since KH2's last frame.
 static PRESSED: AtomicBool = AtomicBool::new(false);
 /// While KH2's hit is landed: its power in percent (0 otherwise).
@@ -261,7 +262,7 @@ struct Body {
 }
 
 /// KH1's lock point `(actor, point, out) -> radius` (`docs/kh1-lockon.md`).
-const LOCK_POINT_RVA: usize = 0x2AE330;
+const LOCK_POINT_RVA: Rva = Rva(0x2AE330);
 
 /// KH1's hittable actors on other teams than Sora's, near him.
 unsafe fn bodies(sora: usize) -> Vec<Body> {
@@ -597,24 +598,24 @@ fn clashes(guard: u32, swing: u32) -> bool {
     CLASH_TABLE[(guard & 7) as usize] & (1 << (swing & 7)) != 0
 }
 
-const ATTACK_POOL_RVA: usize = 0x2DB5110;
+const ATTACK_POOL_RVA: Rva = Rva(0x2DB5110);
 const ATTACK_SLOTS: usize = 0x40;
 const GUARD_PRIORITY: i32 = 100;
-const CLANG_RVA: usize = 0x2AC4C0;
+const CLANG_RVA: Rva = Rva(0x2AC4C0);
 /// KH1's attack-vs-attack meeting (`0x1402B2890 (entry, entry)`).
-const CLASH_RVA: usize = 0x2B2890;
+const CLASH_RVA: Rva = Rva(0x2B2890);
 /// KH1's attack pairing table (8 bytes, a bit per type that may meet).
-const PAIRS_RVA: usize = 0x5299B8;
+const PAIRS_RVA: Rva = Rva(0x5299B8);
 /// KH1's attack-vs-background ray (`0x1402B1870 (attack, from, to)`): spark, sound, and a
 /// clash record on the owner when it meets a wall.
 #[allow(dead_code)]
-const WALL_RVA: usize = 0x2B1870;
+const WALL_RVA: Rva = Rva(0x2B1870);
 /// KH1's background ray (`0x140191520 (ray, mode)`): ray from `+0`, direction `+0x10`; out:
 /// the point `+0x20`, the face `+0x30` (i16, -1 none), its object `+0x34` (-1 the map).
-const RAY_RVA: usize = 0x191520;
+const RAY_RVA: Rva = Rva(0x191520);
 /// A face's normal (`0x14018FC60 (object, face, out)`).
-const FACE_NORMAL_RVA: usize = 0x18FC60;
-const CLANG_SOURCE_RVA: usize = 0x2D67400;
+const FACE_NORMAL_RVA: Rva = Rva(0x18FC60);
+const CLANG_SOURCE_RVA: Rva = Rva(0x2D67400);
 
 /// The live enemy guards near Sora.
 unsafe fn guards(sora: usize) -> Vec<Guard> {
@@ -698,9 +699,9 @@ pub unsafe fn clang(at: [f32; 3]) {
     f(source, 10, 20000, &p);
 }
 
-const TRAIL_RVA: usize = 0x2C0160;
-const EFFECT_RVA: usize = 0x2ABB60;
-const VOICE_RVA: usize = 0x28E060;
+const TRAIL_RVA: Rva = Rva(0x2C0160);
+const EFFECT_RVA: Rva = Rva(0x2ABB60);
+const VOICE_RVA: Rva = Rva(0x28E060);
 /// Actor `+0x1CC` bit: the weapon trail is drawn (`0x1402BFD70`; KH1's attack motions' triggers
 /// set it over their swing).
 const TRAIL_FLAG: u32 = 0x80_0000;
@@ -1222,7 +1223,7 @@ static LAUNCHES: std::sync::Mutex<Vec<(usize, Launch, u64)>> = std::sync::Mutex:
 const LAUNCH_FRESH_MS: u64 = 250;
 static ORIG_LAUNCH: AtomicUsize = AtomicUsize::new(0);
 /// KH1's launch reaction `0x1402B6390 (actor, record)`.
-const LAUNCH_RVA: usize = 0x2B6390;
+const LAUNCH_RVA: Rva = Rva(0x2B6390);
 const LAUNCH_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x60];
 
 fn takeover_ms() -> u64 {

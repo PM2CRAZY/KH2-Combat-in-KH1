@@ -32,6 +32,7 @@
 //! keeps a fixed relation to KH1's hand while the hand moves is taken as held, and from then
 //! on is placed by the same relation to the hand we draw (`held`).
 
+use super::addr::Rva;
 use super::{hook, log, sys};
 use glam::{Mat4, Quat, Vec3};
 use kh1_data::retarget::Retarget;
@@ -42,9 +43,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 const SORA_BONES: u32 = 293;
-const POSE_RVA: usize = 0x391E20;
-const POSE_IK_RVA: usize = 0x392710;
-const HANDLE_TABLE_RVA: usize = 0x2EE4730;
+const POSE_RVA: Rva = Rva(0x391E20);
+const POSE_IK_RVA: Rva = Rva(0x392710);
+const HANDLE_TABLE_RVA: Rva = Rva(0x2EE4730);
 const POSE_PROLOGUE: [u8; 7] = [0x4C, 0x8B, 0xDC, 0x53, 0x56, 0x41, 0x54];
 const POSE_IK_PROLOGUE: [u8; 9] = [0x4C, 0x8B, 0xDC, 0x55, 0x53, 0x41, 0x54, 0x41, 0x57];
 const WORLD: usize = 0x1B4;
@@ -492,7 +493,7 @@ unsafe fn kh1_wrist(pose: &mut [Mat4], parents: &[i16], orig_world: Option<usize
     if flip.is_empty() {
         return;
     }
-    let save = rd::<u64>(BASE.load(Ordering::Relaxed) + 0x28695A0) as usize;
+    let save = rd::<u64>(BASE.load(Ordering::Relaxed) + Rva(0x28695A0)) as usize;
     if save < 0x10000 || !flip.contains(&rd::<u8>(save + 0x36)) {
         return;
     }
@@ -848,7 +849,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         let live = mat(world + p * 0x40).inverse() * mat(world + kh1_data::retarget::GRIP_BONE * 0x40);
         // Which weapon (Sora's save entry `+0x36`) and how KH1 holds it, once per weapon.
         static WEAPON: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
-        let save = rd::<u64>(BASE.load(Ordering::Relaxed) + 0x28695A0) as usize;
+        let save = rd::<u64>(BASE.load(Ordering::Relaxed) + Rva(0x28695A0)) as usize;
         if save > 0x10000 {
             let w = rd::<u8>(save + 0x36) as u32;
             if WEAPON.swap(w, Ordering::Relaxed) != w {

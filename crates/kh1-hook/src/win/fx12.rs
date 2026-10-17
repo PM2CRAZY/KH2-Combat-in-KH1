@@ -25,6 +25,7 @@
 //!
 //! Every failure logs once and turns the renderer off for the session.
 
+use super::addr::Rva;
 use super::crash::readable;
 use super::log;
 use super::sys::{GetModuleHandleA, GetProcAddress, LoadLibraryA};
@@ -43,13 +44,13 @@ macro_rules! com {
     }};
 }
 
-const RENDERER_RVA: usize = 0x22BB580;
-const VIEW_RVA: usize = 0x2E9DE60;
-const PROJ_PTR_RVA: usize = 0x2340EE0;
-const FIELD_PROJ_RVA: usize = 0x2341320;
-const LIST_RVA: usize = 0xFD3A0;
-const CLOSE_RVA: usize = 0xF7300;
-const REOPEN_RVA: usize = 0x109360;
+const RENDERER_RVA: Rva = Rva(0x22BB580);
+const VIEW_RVA: Rva = Rva(0x2E9DE60);
+const PROJ_PTR_RVA: Rva = Rva(0x2340EE0);
+const FIELD_PROJ_RVA: Rva = Rva(0x2341320);
+const LIST_RVA: Rva = Rva(0xFD3A0);
+const CLOSE_RVA: Rva = Rva(0xF7300);
+const REOPEN_RVA: Rva = Rva(0x109360);
 
 // ID3D12Device
 const DEV_CREATE_PSO: usize = 10;

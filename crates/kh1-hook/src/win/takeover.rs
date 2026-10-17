@@ -23,6 +23,7 @@
 //! come from the floor it reports. KH1 never sees Circle or Square meanwhile (`probe::pad`).
 //! The pose drawn is KH2's animation player's (`POSE`, read by `pose`).
 
+use super::addr::Rva;
 use super::{combat, hook, log, menu, pose};
 use character_core::{Button, Character, Env, Input, Output, StateName, TargetInfo};
 use glam::Mat4;
@@ -31,20 +32,20 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::sync::Mutex;
 use std::time::Instant;
 
-const PHYS_RVA: usize = 0x298230;
+const PHYS_RVA: Rva = Rva(0x298230);
 const PHYS_PROLOGUE: [u8; 12] = [0x40, 0x55, 0x53, 0x41, 0x56, 0x48, 0x8B, 0xEC, 0x48, 0x83, 0xEC, 0x50];
-const MOVE_RVA: usize = 0x297710;
-const PARTY_RVA: usize = 0x2D37C80;
-const EVENT_RVA: usize = 0x298D3A0;
-const BATTLE_RVA: usize = 0x2867CD8;
+const MOVE_RVA: Rva = Rva(0x297710);
+const PARTY_RVA: Rva = Rva(0x2D37C80);
+const EVENT_RVA: Rva = Rva(0x298D3A0);
+const BATTLE_RVA: Rva = Rva(0x2867CD8);
 /// Flight (Neverland): the world flags' bit 0x20 lets Sora fly; KH1's fall state (2) starts
 /// it once he is more than 100 above the floor (`0x1402AFD30`: motion 0x75, state 8, his rise
 /// speed `+0x3C4` cut to 0.3) or, in a few rooms, above a set height (`0x1402AFC10`, the
 /// table at `0x140529970`; its next-state step `0x1402ADA30` then goes to 8).
 const FLIGHT_FLAG: u32 = 0x20;
-const FLIGHT_START_RVA: usize = 0x2AFD30;
-const FLIGHT_ROOM_RVA: usize = 0x2AFC10;
-const SET_STATE_RVA: usize = 0x2AF7D0;
+const FLIGHT_START_RVA: Rva = Rva(0x2AFD30);
+const FLIGHT_ROOM_RVA: Rva = Rva(0x2AFC10);
+const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
 const FLIGHT_STATE: i32 = 8;
 /// KH1's flight starts above this height over the floor (`0x1404308D4`).
 const FLIGHT_ABOVE: f32 = 100.0;
@@ -76,14 +77,14 @@ const FLY_AIM_REACH: f32 = 600.0;
 /// (`+0xB0`, effect 0x14 on bone 0x8003, `0x1402ABA90`) while his state is 8 and ends it
 /// otherwise. Its `cmp [rdi+0x70],8; jnz; mov eax,[rdi]` at `0x14029602E` calls a stub that
 /// also says "flying" while this flag byte (in the stub) is set: during a flight combo.
-const SPARKLE_RVA: usize = 0x29602E;
+const SPARKLE_RVA: Rva = Rva(0x29602E);
 static SPARKLE_FLAG: AtomicUsize = AtomicUsize::new(0);
-const LOCK_STATE_RVA: usize = 0x2DB3F10;
-const LOCK_TARGET_RVA: usize = 0x2DB3F18;
+const LOCK_STATE_RVA: Rva = Rva(0x2DB3F10);
+const LOCK_TARGET_RVA: Rva = Rva(0x2DB3F18);
 /// A lock point's world position (`0x1402AE330 (actor, point, out) -> radius`, KH1 y-down).
-const LOCK_POINT_RVA: usize = 0x2AE330;
-const DRAW_WEAPON_RVA: usize = 0x2A0CA0;
-const PUT_AWAY_RVA: usize = 0x2A10F0;
+const LOCK_POINT_RVA: Rva = Rva(0x2AE330);
+const DRAW_WEAPON_RVA: Rva = Rva(0x2A0CA0);
+const PUT_AWAY_RVA: Rva = Rva(0x2A10F0);
 /// Actor flag: the weapon is out (drawn).
 const WEAPON_OUT: u32 = 0x4000;
 /// After an attack in the field, how long Sora keeps KH2's battle stance (Keyblade in hand)
@@ -93,13 +94,13 @@ const BATTLE_LINGER: f32 = 6.0;
 /// reaches 24 below).
 const STEP_DOWN: f32 = 24.0;
 /// KH1's air-move checks (see `grab`).
-const CAN_ACT_RVA: usize = 0x2956E0;
+const CAN_ACT_RVA: Rva = Rva(0x2956E0);
 /// KH1's tally of the save (`0x14028A4D0(id)`: `+0x848 + id * 2`).
-const COUNT_RVA: usize = 0x28A4D0;
+const COUNT_RVA: Rva = Rva(0x28A4D0);
 /// KH1's control step for the player (`0x1402A4090 (actor, move vector)`, from the think step
 /// `0x1402A1170`): it reads the pad and starts commands only while Sora can act
 /// (`0x1402956E0`); events, tutorial windows and scripted moments skip it or stop him acting.
-const CONTROL_RVA: usize = 0x2A4090;
+const CONTROL_RVA: Rva = Rva(0x2A4090);
 const CONTROL_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40];
 static ORIG_CONTROL: AtomicUsize = AtomicUsize::new(0);
 /// KH1's control step ran for Sora since the last physics step, with him able to act.
@@ -108,12 +109,12 @@ static CONTROLLED: AtomicBool = AtomicBool::new(true);
 static FROZEN: AtomicBool = AtomicBool::new(false);
 static CONTROL_HOOKED: AtomicBool = AtomicBool::new(false);
 static FROZEN_FRAMES: AtomicU32 = AtomicU32::new(0);
-const VINE_RVA: usize = 0x2C5710;
-const LEDGE_RVA: usize = 0x2C68A0;
-const BAR_RVA: usize = 0x2C7E00;
-const NO_BARS_RVA: usize = 0x298D3A8;
-const HANG_RVA: usize = 0x2C17B0;
-const SWIM_RVA: usize = 0x2BF410;
+const VINE_RVA: Rva = Rva(0x2C5710);
+const LEDGE_RVA: Rva = Rva(0x2C68A0);
+const BAR_RVA: Rva = Rva(0x2C7E00);
+const NO_BARS_RVA: Rva = Rva(0x298D3A8);
+const HANG_RVA: Rva = Rva(0x2C17B0);
+const SWIM_RVA: Rva = Rva(0x2BF410);
 /// KH1 has him for one of its own moves (`grab`); KH2 starts over afterwards (`FRESH`).
 static HANDOFF: AtomicBool = AtomicBool::new(false);
 static FRESH: AtomicBool = AtomicBool::new(false);
@@ -130,9 +131,9 @@ const FALL_STATE: i32 = 2;
 /// KH1's object-top finder `0x1402B3950 (actor, move) -> object`: the standable object (box,
 /// barrel: collision shapes of type 2 / 3) whose top the move ends at or under, the move's
 /// height cut so it ends on the top. The map floor (`+0x320`) doesn't know objects.
-const OBJECT_TOP_RVA: usize = 0x2B3950;
+const OBJECT_TOP_RVA: Rva = Rva(0x2B3950);
 /// Sets the object the actor stands on (`+0x398`).
-const STAND_ON_RVA: usize = 0x295C60;
+const STAND_ON_RVA: Rva = Rva(0x295C60);
 
 pub const CIRCLE: u16 = 0x2000;
 pub const SQUARE: u16 = 0x8000;
@@ -870,7 +871,7 @@ unsafe fn grab(base: usize, actor: usize, stick: [f32; 4]) -> Option<&'static st
     v[..4].copy_from_slice(&stick);
     let p = v.as_mut_ptr() as usize;
     type Try = unsafe extern "system" fn(usize, usize) -> i32;
-    let tries: [(usize, &str); 5] = [(VINE_RVA, "vine / climb"), (LEDGE_RVA, "ledge"), (BAR_RVA, "bar"), (HANG_RVA, "object to hang from"), (SWIM_RVA, "water")];
+    let tries: [(Rva, &str); 5] = [(VINE_RVA, "vine / climb"), (LEDGE_RVA, "ledge"), (BAR_RVA, "bar"), (HANG_RVA, "object to hang from"), (SWIM_RVA, "water")];
     for (rva, what) in tries {
         if rva == BAR_RVA && rd::<u32>(base + NO_BARS_RVA) != 0 {
             continue;

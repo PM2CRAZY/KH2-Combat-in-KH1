@@ -24,19 +24,20 @@
 //!   have played for it are played here.
 //! Sora's HP gone: KH1 had its dying pass (kind kept), and `takeover` lets KH1 have him.
 
+use super::addr::Rva;
 use super::{combat, hook, log, pose, takeover};
 use character_core::reaction::Hit;
 use character_core::StateName;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
-const HURT_RVA: usize = 0x299A40;
+const HURT_RVA: Rva = Rva(0x299A40);
 const HURT_PROLOGUE: [u8; 11] = [0x48, 0x8B, 0xC4, 0x55, 0x57, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57];
-const KIND_RVA: usize = 0x2BD0E0;
-const VOICE_RVA: usize = 0x28E060;
-const RUMBLE_RVA: usize = 0x28D740;
-const COUNT_RVA: usize = 0x28A4D0;
-const PARTY_RVA: usize = 0x2D37C80;
-const COMMAND_RVA: usize = 0x2D54440;
+const KIND_RVA: Rva = Rva(0x2BD0E0);
+const VOICE_RVA: Rva = Rva(0x28E060);
+const RUMBLE_RVA: Rva = Rva(0x28D740);
+const COUNT_RVA: Rva = Rva(0x28A4D0);
+const PARTY_RVA: Rva = Rva(0x2D37C80);
+const COMMAND_RVA: Rva = Rva(0x2D54440);
 /// Hit record flag: no effect.
 const NO_EFFECT: u8 = 0x20;
 

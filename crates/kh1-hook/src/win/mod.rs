@@ -2,6 +2,7 @@
 //! (`OnInit`, the installed route) or a `dinput8.dll` proxy (the launcher failed to start
 //! with that in the shared KH folder, so it is not used).
 
+mod addr;
 mod camera;
 mod combat;
 mod config;
@@ -129,20 +130,6 @@ unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
     }
 }
 
-/// The game build this mod's addresses are for (the Epic Games Store release): a few of the
-/// functions it hooks, by their first bytes. Any other build (Steam's, another update) is left
-/// alone rather than patched at the wrong places.
-unsafe fn supported_exe() -> bool {
-    let base = GetModuleHandleA(std::ptr::null()) as usize;
-    let signs: [(usize, &[u8]); 3] = [
-        // KH1's actor physics step, player control step and reward message line.
-        (0x298230, &[0x40, 0x55, 0x53, 0x41, 0x56, 0x48, 0x8B, 0xEC, 0x48, 0x83, 0xEC, 0x50]),
-        (0x2A4090, &[0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40]),
-        (0x1B6990, &[0x40, 0x57, 0x48, 0x83, 0xEC, 0x20]),
-    ];
-    signs.iter().all(|(rva, bytes)| crash::readable(base + rva + bytes.len()) && std::slice::from_raw_parts((base + rva) as *const u8, bytes.len()) == *bytes)
-}
-
 #[no_mangle]
 pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved: *mut c_void) -> i32 {
     if reason == 1 {
@@ -166,10 +153,13 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         }
         log(&format!("kh1-kh2 {} loaded (build {}) in {exe}", env!("CARGO_PKG_VERSION"), env!("KH1_KH2_BUILD")));
         std::panic::set_hook(Box::new(|info| log(&format!("PANIC in kh1-kh2: {info}"))));
-        if !supported_exe() {
-            log("unsupported game version: this mod is for the Epic Games Store release of KINGDOM HEARTS FINAL MIX (1.5+2.5); nothing was changed");
+        let base = GetModuleHandleA(std::ptr::null()) as usize;
+        let build = addr::detect(base);
+        if build == addr::Build::Unknown {
+            log(&format!("unsupported game version (link stamp {}): this mod is for the Epic Games Store and Steam releases of KINGDOM HEARTS FINAL MIX (1.5+2.5) as of July 2024; nothing was changed", addr::stamp(base)));
             return 1;
         }
+        log(&format!("game build: {}", build.name()));
         crash::install();
         pose::install();
         probe::install();

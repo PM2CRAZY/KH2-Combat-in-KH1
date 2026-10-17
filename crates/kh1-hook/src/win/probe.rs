@@ -18,6 +18,7 @@
 //!   (PS2 order: Select, L3, R3, Start, Up, Right, Down, Left, L2, R2, L1, R1, Triangle,
 //!   Circle, Cross, Square), `+2..+5` the four stick bytes. Logged on change.
 
+use super::addr::Rva;
 use super::sys::*;
 use super::{hook, log, pose};
 use std::ffi::c_void;
@@ -26,20 +27,20 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 /// The position watch ran (2026-10-13: `0x140386D00` from `0x140299350`, the collision mover);
 /// off now.
 const WATCH_ON: bool = false;
-const ACTOR_RVA: usize = 0x29CF10;
+const ACTOR_RVA: Rva = Rva(0x29CF10);
 const ACTOR_PROLOGUE: [u8; 8] = [0x40, 0x55, 0x57, 0x48, 0x8D, 0x6C, 0x24, 0xE8];
-const PAD_RVA: usize = 0x112C70;
+const PAD_RVA: Rva = Rva(0x112C70);
 const PAD_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 
 static ORIG_ACTOR: AtomicUsize = AtomicUsize::new(0);
 static ORIG_SETM: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
 static ORIG_HIT: AtomicUsize = AtomicUsize::new(0);
-const SETM_RVA: [usize; 3] = [0x29D630, 0x29D7F0, 0x29D8A0];
+const SETM_RVA: [Rva; 3] = [Rva(0x29D630), Rva(0x29D7F0), Rva(0x29D8A0)];
 const SETM_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
-const HIT_RVA: usize = 0x2BD180;
+const HIT_RVA: Rva = Rva(0x2BD180);
 const HIT_PROLOGUE: [u8; 7] = [0x40, 0x55, 0x57, 0x48, 0x83, 0xEC, 0x48];
-const ACTORS_RVA: usize = 0x28F990;
-const PARTY_RVA: usize = 0x2D37C80;
+const ACTORS_RVA: Rva = Rva(0x28F990);
+const PARTY_RVA: Rva = Rva(0x2D37C80);
 /// Sora's attack record as KH1 last made it (0xC0 bytes), for KH2's hits.
 pub static ATTACK_TEMPLATE: std::sync::Mutex<Option<Vec<u8>>> = std::sync::Mutex::new(None);
 static ORIG_PAD: AtomicUsize = AtomicUsize::new(0);

@@ -14,15 +14,16 @@
 //! his lists, Quick Run and Aerial Dodge on (shared abilities), the rest off until equipped.
 //! In the other modes they are taken back out of his lists, so a save stays KH1's own.
 
+use super::addr::Rva;
 use super::log;
 use crate::growth::{self, Kh1Sora, Mode};
 use character_core::Character;
 
-const SAVE_PTR_RVA: usize = 0x28695A0;
-const SAVE_RVA: usize = 0x2DE9D60;
-const TABLE_PTR_RVA: usize = 0x2D37748;
-const TO_HANDLE_RVA: usize = 0x38B080;
-const TABLE_LOAD_RVA: usize = 0x28D840;
+const SAVE_PTR_RVA: Rva = Rva(0x28695A0);
+const SAVE_RVA: Rva = Rva(0x2DE9D60);
+const TABLE_PTR_RVA: Rva = Rva(0x2D37748);
+const TO_HANDLE_RVA: Rva = Rva(0x38B080);
+const TABLE_LOAD_RVA: Rva = Rva(0x28D840);
 const TABLE_LOAD_PROLOGUE: [u8; 9] = [0x40, 0x53, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's own entries.
 const KH1_ENTRIES: usize = 65;
@@ -251,7 +252,7 @@ unsafe extern "system" fn table_load() {
 
 /// KH1's party stats (`0x1402A2FA0` `(member, stats)`, into `0x142E94BC0 + member * 0x100`):
 /// max AP `+0xE4` = the save's AP byte (member `+9`) plus the accessories', at most 100.
-const STATS_RVA: usize = 0x2A2FA0;
+const STATS_RVA: Rva = Rva(0x2A2FA0);
 const STATS_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x57, 0x41, 0x56, 0x41, 0x57];
 static ORIG_STATS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
@@ -282,9 +283,9 @@ unsafe extern "system" fn stats(member: i32, out: usize) {
 /// u16: low 4 bits the kind, 1 an ability, its id the high byte, the party member bits 4..7;
 /// it pops 2 and returns 2). Abilities are added by the command `0x1401AF120` from the same
 /// record (`0x140282CA0(id, member)`).
-const REWARD_LINE_RVA: usize = 0x1B6990;
+const REWARD_LINE_RVA: Rva = Rva(0x1B6990);
 const REWARD_LINE_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const REWARD_RECORD_RVA: usize = 0x28D810;
+const REWARD_RECORD_RVA: Rva = Rva(0x28D810);
 static ORIG_REWARD_LINE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// No "learned" line for a spare copy (one the mod gave already: `Kh1Sora::spare_gift`): the
@@ -324,14 +325,14 @@ pub unsafe fn install() {
 /// per party member at 16 bytes before) and their text (`0x142DC3068`: titles `0x20` apart,
 /// lines from `+0x70`); the layout as KH1's own box updater (`0x140270DA0`) reads it. Shows one
 /// box in Sora's place; false while that box is in use (a level-up's own, say).
-const PROMPT_BOX_RVA: usize = 0x283BD90;
+const PROMPT_BOX_RVA: Rva = Rva(0x283BD90);
 #[allow(dead_code)]
-const PROMPT_TEXT_RVA: usize = 0x2DC3068;
+const PROMPT_TEXT_RVA: Rva = Rva(0x2DC3068);
 /// Boxes per party member (`0x3A20` / `0xBA0`) and their size.
 const PROMPT_BOXES: usize = 5;
 const PROMPT_BOX_SIZE: usize = 0xBA0;
-const PROMPT_BOX_COLOUR_RVA: usize = 0x528710;
-const PROMPT_TEXT_COLOUR_RVA: usize = 0x528750;
+const PROMPT_BOX_COLOUR_RVA: Rva = Rva(0x528710);
+const PROMPT_TEXT_COLOUR_RVA: Rva = Rva(0x528750);
 
 unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str, append: bool) -> bool {
     let first = base + PROMPT_BOX_RVA;

@@ -9,10 +9,11 @@
 //!   planted sole on its floor, or to lift a raised foot out of a step it would cut into.
 //! Changes are eased over a few frames, and fade out when KH2 lets go or he leaves the ground.
 
+use super::addr::Rva;
 use glam::{Mat4, Quat, Vec3};
 use std::sync::Mutex;
 
-const FLOOR_RAY_RVA: usize = 0x1910E0;
+const FLOOR_RAY_RVA: Rva = Rva(0x1910E0);
 /// KH1 Sora, per side: thigh, knee, ankle, sole (the bone on the ground in the bind).
 const LEGS: [[usize; 4]; 2] = [[17, 18, 19, 22], [43, 44, 45, 48]];
 /// A sole this close to the model's ground (KH1 units) counts as planted.
