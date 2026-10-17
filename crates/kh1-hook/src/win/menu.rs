@@ -322,9 +322,8 @@ pub unsafe fn install() {
 
 /// KH1's level-up prompt boxes (`0x14283BD90`, Sora's first, `0x3A20` apart; the box count
 /// per party member at 16 bytes before) and their text (`0x142DC3068`: titles `0x20` apart,
-/// lines from `+0x70`), as the Archipelago KH1 client shows its items with them (gaithern's
-/// KH-1FM-AP-LUA, MIT, `show_prompt`). Shows one box in Sora's place; false while that box is
-/// in use (a level-up's own, say).
+/// lines from `+0x70`); the layout as KH1's own box updater (`0x140270DA0`) reads it. Shows one
+/// box in Sora's place; false while that box is in use (a level-up's own, say).
 const PROMPT_BOX_RVA: usize = 0x283BD90;
 #[allow(dead_code)]
 const PROMPT_TEXT_RVA: usize = 0x2DC3068;

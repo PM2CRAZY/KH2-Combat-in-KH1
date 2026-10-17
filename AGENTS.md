@@ -1519,3 +1519,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   left out of the default ini. The mod.yml describes the mod for players; the release zip is
   mod.yml + kh1-kh2.dll + README.txt (install steps) + licences, NOTICE, CREDITS.
 
+
+### 2026-10-17: Stage 141 (no chests in battle)
+- The user: remove the chests-in-battle patch. `win/chests.rs` and `chests_in_battle` are gone;
+  chests stay closed in battle, as in KH1. NOTICE no longer carries KH-1FM-AP-LUA's licence
+  (no code from it is left); CREDITS keeps a facts-only line for its story-progress values.
+  The prompt-box layout (`menu::prompt`) is checked against KH1's own box updater
+  `0x140270DA0`: state at `+0`, timer `+0xC`, line count `+0x18`, lines `+0x20` / `+0x28`,
+  title `+0x30`, fade `+0xB80`, colours `+0xB88` / `+0xB90`, 0xBA0 a box, counts per member
+  at `0x14283BD80`, members `0x3A20` apart.

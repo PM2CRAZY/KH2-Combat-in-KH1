@@ -15,7 +15,6 @@ mod kh2sound;
 mod menu;
 mod pose;
 mod settings;
-mod chests;
 mod shortcuts;
 mod probe;
 mod takeover;
@@ -181,7 +180,6 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         camera::install();
         config::install();
         shortcuts::install();
-        chests::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();
