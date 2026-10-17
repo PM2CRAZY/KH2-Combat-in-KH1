@@ -1480,3 +1480,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   from the part `land` hits: `TARGET`), and the ini's `damage_scale` (default 1.0, 0.1..10)
   multiplies Sora's KH2 hits.
 
+### 2026-10-16: Stage 135 (Magic-based KH2 hits grow with MP)
+- The user: Explosion and Magnet Burst should do more; they scale with magic. KH2's ATKP stat
+  source byte says so: Explosion 911 / 912, Magnet Burst 1900 / 1901 / 1903 are 1 (Magic).
+  KH1 has no Magic stat: such hits (`MAGIC` while landing) get x (1 + 0.1 x Sora's max MP, save
+  member `+8`) x the ini's `magic_scale` (default 1.0) on top of `damage_scale`.
+- The user hadn't seen Vicinity Break: it did come out twice in the log (motion 170, attack
+  1869, both hits landed). Its row (51) wants a foe behind Sora within 300 (facing window
+  -1..-0.17), which before stage 126 never had any foe but the lock. Its KH2 visual stays off
+  (the user asked for only Explosion's and Magnet Burst's).
+

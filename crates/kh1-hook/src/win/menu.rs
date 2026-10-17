@@ -375,7 +375,7 @@ unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str, append: boo
 }
 
 /// Sora's save block, if it is there.
-unsafe fn save_block(base: usize) -> Option<usize> {
+pub unsafe fn save_block(base: usize) -> Option<usize> {
     let mut save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
     if save < 0x10000 {
         save = base + SAVE_RVA;

@@ -1023,7 +1023,9 @@ impl Strikes {
                 // flinch knocks an airborne foe along the record's direction, and spin after
                 // spin slid it out of reach (the user); the direction is zeroed (`scale_record`).
                 HOLD.store(blow && !throws && !b.fixed, Ordering::Relaxed);
+                MAGIC.store(row.stat_source == 1, Ordering::Relaxed);
                 let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power);
+                MAGIC.store(false, Ordering::Relaxed);
                 HOLD.store(false, Ordering::Relaxed);
                 // (Again once the contact is done, in case its direction came after the record.)
                 let rec = HELD_REC.swap(0, Ordering::Relaxed);
@@ -1073,6 +1075,8 @@ pub static LAST_DAMAGE: AtomicU32 = AtomicU32::new(0);
 /// The foe a KH2 hit is being landed on, and each foe's damage fraction left over (in
 /// 1/10000ths of a point).
 static TARGET: AtomicUsize = AtomicUsize::new(0);
+/// The hit being landed is one of KH2's Magic-based ones.
+static MAGIC: AtomicBool = AtomicBool::new(false);
 static CARRY: std::sync::LazyLock<std::sync::Mutex<HashMap<usize, i64>>> = std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 
 /// Lands one hit with KH1's contact code, through a KH1 attack object made from Sora's row.
@@ -1145,7 +1149,17 @@ pub unsafe fn scale_record(rec: usize) {
     // the next hit on the same foe (the user: Explosion did too little: its 25% hits on a
     // 6-damage swing were floored from 1.5 to 1, a third of the burst lost).
     let d = rd::<i32>(rec + 8);
-    let scale = (super::settings::get().damage_scale * 100.0).round().max(1.0) as i64;
+    let set = super::settings::get();
+    let mut factor = set.damage_scale;
+    // KH2's Magic-based hits (ATKP stat source 1: Explosion's, Magnet Burst's; the user: they
+    // scale with magic): KH1 has no Magic stat, so Sora's max MP stands in, +10% a point, times
+    // the ini's `magic_scale`.
+    if MAGIC.load(Ordering::Relaxed) {
+        let base = BASE.load(Ordering::Relaxed);
+        let mp = super::menu::save_block(base).map_or(0, |s| rd::<u8>(s + 8)) as f32;
+        factor *= (1.0 + 0.1 * mp.min(30.0)) * set.magic_scale;
+    }
+    let scale = (factor * 100.0).round().max(1.0) as i64;
     let target = TARGET.load(Ordering::Relaxed);
     let mut carry = CARRY.lock().ok();
     let before = carry.as_ref().and_then(|c| c.get(&target).copied()).unwrap_or(0);

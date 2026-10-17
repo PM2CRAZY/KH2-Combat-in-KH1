@@ -33,6 +33,9 @@ kh2_sounds = abilities\r\n\
 kh2_volume = 1.0\r\n\
 ; damage_scale: times the damage of Sora's KH2 attacks (1.0 = KH1's hit x KH2's power)\r\n\
 damage_scale = 1.0\r\n\
+; magic_scale: times KH2's Magic-based attacks on top (Explosion, Magnet Burst; they also\r\n\
+;   grow with Sora's max MP, +10% a point)\r\n\
+magic_scale = 1.0\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
 kh2_voice = off\r\n\
 ; bonus_ap: on = (abilities = kh1) Sora's max AP grows by the AP of each KH2 ability he learns\r\n\
@@ -86,6 +89,8 @@ pub struct Settings {
     pub kh2_volume: f32,
     /// Times the damage of Sora's KH2 hits (KH1's damage x KH2's power x this).
     pub damage_scale: f32,
+    /// Times KH2's Magic-based hits on top (Explosion, Magnet Burst), which also grow with MP.
+    pub magic_scale: f32,
     pub kh2_voice: bool,
     pub bonus_ap: bool,
     pub auto_aim: bool,
@@ -147,6 +152,7 @@ pub fn get() -> &'static Settings {
             },
             kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
             damage_scale: setting(&text, "damage_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
+            magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
             kh2_voice: on(&text, "kh2_voice", "on", false),
             bonus_ap: on(&text, "bonus_ap", "on", true),
             auto_aim: on(&text, "auto_aim", "on", false),
