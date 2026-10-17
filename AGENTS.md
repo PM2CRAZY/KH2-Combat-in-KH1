@@ -1494,3 +1494,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - The user asked for them: `kh2fx::DEFAULT_MOTIONS` is Explosion (166), Vicinity Break (170)
   and Magnet Burst (197); the ini's `magnet_explosion` value now means those three.
 
+### 2026-10-16: Stage 137 (Flash Step for Sabor)
+- The user: Flash Step (KH1's Vortex) unlocks after Sabor. Out of `LEVEL_GIFTS` (it was 42),
+  into `BOSS_GIFTS` (Deep Jungle index 1 at 0x42, beside Upper Slash). Still one of
+  `early_kh1()`: KH1's own later Vortex is a spare.
+

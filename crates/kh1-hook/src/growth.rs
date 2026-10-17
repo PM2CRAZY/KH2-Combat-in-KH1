@@ -147,8 +147,10 @@ pub struct BossGift {
     pub ability: u8,
 }
 
-pub const BOSS_GIFTS: [BossGift; 8] = [
+pub const BOSS_GIFTS: [BossGift; 9] = [
     BossGift { boss: "Sabor", world: 1, progress: 0x42, ability: 73 },
+    // Flash Step (KH1's Vortex) for Sabor too (the user; it was a level 42 gift).
+    BossGift { boss: "Sabor", world: 1, progress: 0x42, ability: kh1::VORTEX },
     BossGift { boss: "Clayton", world: 1, progress: 0x56, ability: kh1::AERIAL_SWEEP },
     BossGift { boss: "Jafar", world: 4, progress: 0x49, ability: kh1::GRAVITY_BREAK },
     BossGift { boss: "Pot Centipede", world: 4, progress: 0x35, ability: kh1::STUN_IMPACT },
@@ -563,12 +565,11 @@ impl Kh1Sora {
 /// level-up gives them (the user: Aerial Sweep at about 28; KH1's Dream Shield gives it at 84).
 /// (The user: Slide Dash at 30, Vicinity Break at 69 was absurd; the rest set to match. KH1's
 /// Dream Shield gives them at 45 / 39 / 69 / 78 / 60.)
-pub const LEVEL_GIFTS: [(u8, u8); 6] = [
+pub const LEVEL_GIFTS: [(u8, u8); 5] = [
     (22, kh1::COUNTERATTACK),
     (28, kh1::AERIAL_SWEEP),
     (30, kh1::SLIDING_DASH),
     (36, kh1::RIPPLE_DRIVE),
-    (42, kh1::VORTEX),
     (48, kh1::BLITZ),
 ];
 

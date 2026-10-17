@@ -107,7 +107,7 @@ Ability" box):
 | Cerberus | Aerial Dive | 2 |
 | Genie Jafar (Agrabah) | Aerial Dodge LV1 (higher levels below) | 3 |
 
-Earlier than KH1's level-ups (Dream Shield: 45 / 39 / 69 / 78 / 60), if Sora doesn't have them yet: Counterguard at 22, Slide Dash at 30, Vicinity Break at 36, Flash Step at 42, Finishing Leap at 48. Aerial Sweep also comes at level 28 if Clayton hasn't given it yet (KH1's Dream Shield gives it
+Earlier than KH1's level-ups (Dream Shield: 45 / 39 / 69 / 78 / 60), if Sora doesn't have them yet: Counterguard at 22, Slide Dash at 30, Vicinity Break at 36, Finishing Leap at 48; Flash Step comes for beating Sabor. Aerial Sweep also comes at level 28 if Clayton hasn't given it yet (KH1's Dream Shield gives it
 only at 84). Guard Break stays at KH1's own level 18 (Dream Shield).
 
 Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the KH2
