@@ -344,6 +344,7 @@ struct Gpu {
     tex_buf: usize,
     tex_va: u64,
     tex: Vec<TexSlot>,
+    /// The vertex ring's write point (bytes).
     frame: u64,
 }
 
@@ -355,6 +356,24 @@ const SLOT_BYTES: usize = 6 << 20;
 
 static GPU: Mutex<Option<Gpu>> = Mutex::new(None);
 static OFF: AtomicBool = AtomicBool::new(false);
+/// Our draws: how many, and the last one's time (ms since start), for a crash note.
+static DRAWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static LAST_DRAW_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+const DEV_REMOVED_REASON: usize = 37;
+
+/// For a crash note: KH1's device's removed reason (0 = not removed; DXGI_ERROR_DEVICE_HUNG
+/// 0x887A0006, _REMOVED 0x887A0005, _RESET 0x887A0007, _DRIVER_INTERNAL_ERROR 0x887A0020,
+/// E_OUTOFMEMORY 0x8007000E), our draws so far and how long ago the last one was.
+pub unsafe fn crash_note(base: usize) -> String {
+    let r = base + RENDERER_RVA;
+    let device = if super::crash::readable(r + 0x2E0) { rd::<u64>(r + 0x2E0) as usize } else { 0 };
+    let reason = if device > 0x10000 && super::crash::readable(device) { format!("{:#010x}", com!(device as P, DEV_REMOVED_REASON, fn() -> i32) as u32) } else { "?".into() };
+    let now = START.get().map_or(0, |t| t.elapsed().as_millis() as u64);
+    let n = DRAWS.load(Ordering::Relaxed);
+    let last = LAST_DRAW_MS.load(Ordering::Relaxed);
+    format!("GPU device removed reason {reason}; KH2 effect draws {n}{}", if n > 0 { format!(", the last {} ms ago", now.saturating_sub(last)) } else { String::new() })
+}
 /// Textures waiting for the first draw (RGBA8 each).
 static TEXTURES: Mutex<Option<Vec<(u32, u32, Vec<u8>)>>> = Mutex::new(None);
 
@@ -610,18 +629,27 @@ pub unsafe fn draw(base: usize, frame: &kh2_fx::Frame, view: glam::Mat4, proj: g
             Err(e) => return fail(e),
         }
     }
+    DRAWS.fetch_add(1, Ordering::Relaxed);
+    LAST_DRAW_MS.store(START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64, Ordering::Relaxed);
     let get_list: unsafe extern "system" fn(usize, usize, usize, usize) -> usize = std::mem::transmute(base + LIST_RVA);
     let cl = get_list(r, 0, 0, 0);
     if cl < 0x10000 {
         return;
     }
-    // Vertices into this frame's ring slot.
-    let slot = (gpu.frame as usize) % RING_SLOTS;
-    gpu.frame += 1;
+    // Vertices at the ring's write point, which goes round the whole ring (24 MB): a draw's
+    // vertices stay put for many frames, however many draws a frame has (a slot per draw, as
+    // before, came round again within KH1's 3 frames in flight with several draws a frame).
     let max = SLOT_BYTES / 36;
     let n = frame.vertices.len().min(max);
-    std::ptr::copy_nonoverlapping(frame.vertices.as_ptr() as *const u8, (gpu.ring_map + slot * SLOT_BYTES) as *mut u8, n * 36);
-    let vb: [u64; 2] = [gpu.ring_va + (slot * SLOT_BYTES) as u64, ((n * 36) as u64) | (36u64 << 32)];
+    let bytes = (n * 36 + 255) & !255;
+    let total = RING_SLOTS * SLOT_BYTES;
+    let mut at = gpu.frame as usize;
+    if at + bytes > total {
+        at = 0;
+    }
+    gpu.frame = (at + bytes) as u64;
+    std::ptr::copy_nonoverlapping(frame.vertices.as_ptr() as *const u8, (gpu.ring_map + at) as *mut u8, n * 36);
+    let vb: [u64; 2] = [gpu.ring_va + at as u64, ((n * 36) as u64) | (36u64 << 32)];
     // KH1's clip scale and offsets (its cbConstantVS shadow: SafeScale, xyOffset.zw).
     let mut s = rd::<f32>(r + 0x5A10);
     if !(s.is_finite() && s > 0.01 && s < 100.0) {

@@ -1392,3 +1392,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Flight-combo vertical homing follows the lock (or the nearest with `auto_aim`). Its help
   text says "Air combo finisher".
 
+### 2026-10-16: Stage 127 (crash after Riku 1: GPU device lost; notes and a safer ring)
+- The user: the game crashed after beating Riku 1. The log: `CRASH 0xc0000005 at
+  exe+10ab69 (reading 0x0)` in `0x14010A990`, KH1's frame-fence wait reading a finished
+  list's GPU timestamps: `ID3D12Resource::Map` (vtable +0x40) on the list's readback buffer
+  gave null, which it does once the device is removed (hung / reset). Cause not in the log.
+- The crash note now adds KH1's device's `GetDeviceRemovedReason` (vtable 37), our KH2 effect
+  draw count and how long ago the last was (`fx12::crash_note`).
+- `fx12` vertex ring: a write point going round the whole 24 MB ring (256-byte aligned)
+  instead of one 6 MB slot per draw call, which came round again within KH1's frames in
+  flight when a frame had several effect draws.
+
