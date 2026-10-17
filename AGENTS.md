@@ -1504,3 +1504,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   own option): Square in the air glides; ini `glide = square` (default) or `jump`. Out of a
   flight (`FLEW`) it stays on jump: Square is flight's descend there.
 
+### 2026-10-17: Stage 139 (Gummi skip and insta-kill removed)
+- The user, to keep the mod modular: the Gummi route skip is gone (`win/gummi.rs`, the
+  `gummi` ini key, the Config menu's Gummi Routes row: back to one row of ours, Camera Style,
+  rows 25 apart) and so is the insta-kill dev tool (`win/devtools.rs`, `insta_kill`, F8 /
+  L1 + R1 + Select). NOTICE / CREDITS no longer list Instant Gummi.
+

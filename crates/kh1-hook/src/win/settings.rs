@@ -60,14 +60,8 @@ config_row = on\r\n\
 ; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
 ; Customize); 3 = KH1's three\r\n\
 shortcuts = 4\r\n\
-; gummi: vanilla = fly the Gummi Ship between worlds; skip = arrive at once (the Config menu's\r\n\
-; Gummi Routes row switches it in game too)\r\n\
-gummi = vanilla\r\n\
 ; chests_in_battle: on = chests (and their Triangle prompt) open in battle too; off = KH1's way\r\n\
 chests_in_battle = on\r\n\
-; insta_kill: dev tool, on = every hit of Sora's takes all the foe's HP; F8 (or L1 + R1 +\r\n\
-;   Select) toggles it in game and keeps the choice here\r\n\
-insta_kill = off\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst, Explosion and Vicinity Break), all (every\r\n\
 ;   move), off\r\n\
@@ -106,12 +100,8 @@ pub struct Settings {
     pub config_row: bool,
     /// KH2's fourth shortcut (`shortcuts = 4`).
     pub four_shortcuts: bool,
-    /// Skip the Gummi Ship's flights (`gummi = skip`).
-    pub gummi_skip: bool,
     /// Chests open in battle too.
     pub chests_in_battle: bool,
-    /// Dev tool: Sora's hits take all the foe's HP (`devtools`).
-    pub insta_kill: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
@@ -166,9 +156,7 @@ pub fn get() -> &'static Settings {
             kh2_camera: on(&text, "camera", "kh2", true),
             config_row: on(&text, "config_row", "on", true),
             four_shortcuts: on(&text, "shortcuts", "4", true),
-            gummi_skip: on(&text, "gummi", "skip", false),
             chests_in_battle: on(&text, "chests_in_battle", "on", true),
-            insta_kill: on(&text, "insta_kill", "on", false),
             camera_lower: setting(&text, "camera_lower").and_then(|v| v.parse::<f32>().ok()).filter(|v| (-200.0..200.0).contains(v)).unwrap_or(0.0),
             camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.89),
             kh2_effects: match setting(&text, "kh2_effects").as_deref() {

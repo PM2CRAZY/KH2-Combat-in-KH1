@@ -125,8 +125,6 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     }
     let b: u16 = rd(out);
     let st: [u8; 4] = rd(out + 2);
-    super::gummi::tick(super::sys::GetModuleHandleA(std::ptr::null()) as usize);
-    super::devtools::pad(super::sys::GetModuleHandleA(std::ptr::null()) as usize, b);
     // The pad as pressed goes to KH2; while KH2 has Sora, KH1 doesn't see its buttons.
     super::takeover::RAW_BUTTONS.store(b as u32, Ordering::Relaxed);
     super::takeover::RAW_STICKS.store(u32::from_le_bytes(st), Ordering::Relaxed);
@@ -380,7 +378,6 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     let r = f(attack, target);
     if owner != 0 && owner == sora() && r > 0x10000 {
         super::combat::scale_record(r);
-        super::devtools::hit(target, r);
     }
     if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");

@@ -28,9 +28,9 @@ Changes: rewritten in Rust; cipher rounds folded into one XOR mask; the
 cipher's substitution table is located in the user's own executable at
 runtime instead of being embedded.
 
-crates/kh1-hook/src/win/gummi.rs and chests.rs port logic from KH-1FM-AP-LUA
-(https://github.com/gaithern/KH-1FM-AP-LUA): the "Instant Gummi" script by
-denhonator with edits from Gicu, and the interaction script by KSX and Gicu.
+crates/kh1-hook/src/win/chests.rs ports logic from KH-1FM-AP-LUA
+(https://github.com/gaithern/KH-1FM-AP-LUA): the interaction script by KSX and
+Gicu. Story-progress values and the prompt-box method also come from it.
 Copyright (c) 2026 gaithern, MIT License:
 
   Permission is hereby granted, free of charge, to any person obtaining a copy of
