@@ -178,7 +178,7 @@ pub const MENU: [MenuAbility; 12] = [
     m(74, "Finishing Plus", "Adds a finishing move to the combo.", 5, 34, List::Sora, kh1::COMBO_PLUS, Effect::FinishingPlus),
     m(75, "Retaliating Slash", "When knocked away, recover and strike back with Square.", 3, 43, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::RETALIATING_SLASH)),
     m(76, "Aerial Dive", "From the ground: leap at a far airborne foe.", 2, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE)),
-    m(77, "Magnet Burst", "Finisher: pull in foes all around.", 3, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST)),
+    m(77, "Magnet Burst", "Air combo finisher: pull in foes all around.", 3, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST)),
 ];
 
 /// Our Quick Run's ability id (`MENU`).

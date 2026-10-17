@@ -1382,3 +1382,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Jafar, 0x53 after Genie Jafar's cutscene, KH-1FM-AP-LUA's warp fixes), not Riku's, and grows
   from 30: `AERIAL_DODGE_LEVELS = [30, 42, 54]`.
 
+### 2026-10-16: Stage 126 (every enemy counts for the combo table)
+- The user: Magnet Burst hardly came out. KH2's Magnet Burst is an air finisher: row 49 (kind
+  2: any target within 650 whose direction is more than ~22 degrees off the aim, facing window
+  -1..0.924) and row 50 (kind 1: the primary at 300..650). With `auto_aim` off the hook cut
+  `Env::targets` down to the lock, so kind-2 rows (Magnet Burst's, Explosion's 26, Vicinity
+  Break's 51, 34 / 59 / 43) only ever saw the primary, dead ahead. Now all targets go in and
+  `Character::set_auto_target(false)` keeps the aim on the lock only (no lock: no primary).
+  Flight-combo vertical homing follows the lock (or the nearest with `auto_aim`). Its help
+  text says "Air combo finisher".
+

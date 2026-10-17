@@ -340,6 +340,9 @@ pub struct Character {
     /// Each attack starts facing the locked-on target (a host's choice; off = the game's turn
     /// windows only).
     face_lock: bool,
+    /// No lock: aim at the nearest target (the game's auto-target). Off: aim only at the lock;
+    /// the rows that look at every enemy still see them all (`set_auto_target`).
+    auto_target: bool,
     /// Set when a jump starts with Aerial Dodge owned; cleared on use.
     air_dodge_ready: bool,
     /// Glide banking shown (0 level, 1 or -1 turning), held with some hysteresis.
@@ -451,6 +454,7 @@ impl Character {
             lock: None,
             forced_row: None,
             face_lock: false,
+            auto_target: true,
             air_dodge_ready: false,
             glide_bank: 0,
             count: 0,
@@ -720,6 +724,13 @@ impl Character {
         self.face_lock = on;
     }
 
+    /// Whether, with no lock, swings aim at the nearest target (the game's way, default) or at
+    /// none. Either way every target in `Env::targets` counts for the combo rows that look at
+    /// all enemies (Explosion's, Vicinity Break's, Magnet Burst's).
+    pub fn set_auto_target(&mut self, on: bool) {
+        self.auto_target = on;
+    }
+
     pub fn combo_count(&self) -> u8 {
         self.count
     }
@@ -762,6 +773,9 @@ impl Character {
     fn primary_target<'e>(&self, env: &'e Env) -> Option<&'e TargetInfo> {
         if let Some(id) = self.lock {
             return env.targets.iter().find(|t| t.id == id);
+        }
+        if !self.auto_target {
+            return None;
         }
         // Auto-target: nearest within the longest combo-row reach or the
         // auto lock-on range, whichever is larger (not yet checked).

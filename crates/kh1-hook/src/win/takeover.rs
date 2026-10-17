@@ -523,10 +523,12 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     d.character.set_lock(lock);
     // KH2 aims a swing at any enemy in reach; here only at KH1's own target, the R1 lock or the
-    // small cursor's soft target (the user: Sora swung toward points he wasn't targeting).
-    if !super::settings::get().auto_aim {
-        targets.retain(|t| Some(t.id) == lock);
-    }
+    // small cursor's soft target (the user: Sora swung toward points he wasn't targeting). The
+    // other enemies near him still count for the combo rows that look at every enemy (the user:
+    // Magnet Burst hardly came out: its row wants a foe off to the side; Explosion's and
+    // Vicinity Break's likewise), so they stay in the list.
+    let auto_aim = super::settings::get().auto_aim;
+    d.character.set_auto_target(auto_aim);
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     let mut out = d.character.step(&input, &env);
     // Out of flight for a combo: he stays up through it (the user: Sora should remain in
@@ -539,7 +541,7 @@ unsafe fn takeover(actor: usize) -> bool {
         if matches!(d.character.state_name(), StateName::Attack) {
             let aim = targets
                 .iter()
-                .filter(|t| Some(t.id) == lock || lock.is_none())
+                .filter(|t| Some(t.id) == lock || (lock.is_none() && auto_aim))
                 .map(|t| (t, (t.pos[0] - pos[0]).hypot(t.pos[2] - pos[2])))
                 .filter(|(_, h)| *h < FLY_AIM_REACH)
                 .min_by(|a, b| a.1.total_cmp(&b.1));
