@@ -269,6 +269,12 @@ struct Hands {
 }
 static HANDS_NOW: Mutex<Option<Hands>> = Mutex::new(None);
 
+/// Sora's own body (KH1 Sora's 293-bone model) was posed within `ms` milliseconds: not while
+/// he is in another body (the Heartless form in Hollow Bastion, the user: no jump animation).
+pub fn sora_body_seen(ms: u128) -> bool {
+    HANDS_NOW.try_lock().ok().and_then(|h| h.as_ref().map(|h| h.at.elapsed().as_millis() < ms)).unwrap_or(true)
+}
+
 /// Small models (≤ 40 bones) posed near Sora: when, where, and where their placement matrix
 /// comes from (a bone of Sora's drawn matrices, if it points into them).
 struct Small {

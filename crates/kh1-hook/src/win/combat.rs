@@ -1070,6 +1070,10 @@ impl Strikes {
 
 /// Damage of the last landed hit (set by `probe::hit` from the record).
 pub static LAST_DAMAGE: AtomicU32 = AtomicU32::new(0);
+/// The foe a KH2 hit is being landed on, and each foe's damage fraction left over (in
+/// 1/10000ths of a point).
+static TARGET: AtomicUsize = AtomicUsize::new(0);
+static CARRY: std::sync::LazyLock<std::sync::Mutex<HashMap<usize, i64>>> = std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 
 /// Lands one hit with KH1's contact code, through a KH1 attack object made from Sora's row.
 /// Returns the damage written to the hit record, if one was made.
@@ -1102,6 +1106,7 @@ unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16) -> Op
     wr(e + 0x28, at.radius);
     wr(e + 0x30, c);
     LAST_DAMAGE.store(u32::MAX, Ordering::Relaxed);
+    TARGET.store(std::ptr::read_unaligned(part.entry.as_ptr().add(8) as *const u64) as usize, Ordering::Relaxed);
     POWER.store(power.max(1) as u32, Ordering::Relaxed);
     contact(e, part.entry.as_ptr() as usize);
     POWER.store(0, Ordering::Relaxed);
@@ -1136,8 +1141,23 @@ pub unsafe fn scale_record(rec: usize) {
         let w = rd::<f32>(rec + 0x1C);
         wr(rec + 0x10, [0.0f32, 0.0, 0.0, w]);
     }
+    // KH1's damage times KH2's power (and the ini's `damage_scale`), the fraction carried to
+    // the next hit on the same foe (the user: Explosion did too little: its 25% hits on a
+    // 6-damage swing were floored from 1.5 to 1, a third of the burst lost).
     let d = rd::<i32>(rec + 8);
-    let scaled = ((d as i64 * p as i64) / 100).max(1) as i32;
+    let scale = (super::settings::get().damage_scale * 100.0).round().max(1.0) as i64;
+    let target = TARGET.load(Ordering::Relaxed);
+    let mut carry = CARRY.lock().ok();
+    let before = carry.as_ref().and_then(|c| c.get(&target).copied()).unwrap_or(0);
+    let total = d.max(0) as i64 * p as i64 * scale + before;
+    let scaled = (total / 10_000).max(1);
+    if let Some(c) = carry.as_mut() {
+        if c.len() > 64 {
+            c.clear();
+        }
+        c.insert(target, (total - scaled * 10_000).max(0));
+    }
+    let scaled = scaled.min(i32::MAX as i64) as i32;
     wr(rec + 8, scaled);
     LAST_DAMAGE.store(scaled as u32, Ordering::Relaxed);
 }

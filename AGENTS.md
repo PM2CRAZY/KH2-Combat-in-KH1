@@ -1469,3 +1469,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   frame, a guard repels only when that part's centre is inside the guard (the blade must pass
   through it); repel notes log the guard's motion tie, the owner's motion and the nearest part.
 
+### 2026-10-16: Stage 134 (Heartless form is KH1's; damage fractions carried; damage_scale)
+- The user: Heartless Sora (Hollow Bastion) had no jump animation, and should have no KH2 at
+  all: KH2 drove him while his body was another model, left in KH1's idle. `pose::sora_body_seen`
+  (Sora's own 293-bone model posed within 500 ms, from the hands' timestamp) gates `takeover`:
+  otherwise KH1 has him ("Sora is in another body").
+- The user: more damage, Explosion should do a lot more. Its burst is ~20 hits at power 25
+  plus a 150 blast; each hit is KH1's damage x power / 100, which was floored (6 x 25% = 1.5 ->
+  1, a third of the burst). The fraction is now carried per foe (`CARRY`, 1/10000ths, the foe
+  from the part `land` hits: `TARGET`), and the ini's `damage_scale` (default 1.0, 0.1..10)
+  multiplies Sora's KH2 hits.
+

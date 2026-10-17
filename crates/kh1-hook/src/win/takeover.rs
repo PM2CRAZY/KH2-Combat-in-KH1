@@ -291,6 +291,12 @@ unsafe fn takeover(actor: usize) -> bool {
         release("an event runs");
         return false;
     }
+    // Not in his own body (the Heartless form): KH1 has him, its own moves and animations
+    // (KH2's moves would leave that body standing in KH1's idle).
+    if !pose::sora_body_seen(500) {
+        release("Sora is in another body (not his own model)");
+        return false;
+    }
     // KH1's area scripts walk / turn him (zone entries and exits, doors): their pending
     // actions hang off `+0x440` (`0x14028CD60`); KH1 moves and animates him meanwhile.
     // Flag `0x1000000` (script commands 0x24 / 0x23, `0x14028C550`) is set from a door's turn
