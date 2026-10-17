@@ -53,6 +53,8 @@ const FLIGHT_ABOVE: f32 = 100.0;
 pub static FLY_ATTACK: AtomicBool = AtomicBool::new(false);
 /// That press, for KH2's first frame (after its fresh start drops older presses).
 static FLY_PRESS: AtomicBool = AtomicBool::new(false);
+/// The same for an Attack pressed during KH1's own move (`ATTACK_AFTER`), on the ground.
+static FLY_PRESS_GROUND: AtomicBool = AtomicBool::new(false);
 /// Flying when KH2 took him: back into flight after the combo at any height (down to
 /// `FLEW_ABOVE`), until he lands.
 static FLEW: AtomicBool = AtomicBool::new(false);
@@ -310,7 +312,9 @@ unsafe fn takeover(actor: usize) -> bool {
         // it (`kh1_keeps_square`), and KH2 takes him at once to roll (the user: KH1 had started
         // its own roll, and he slid backwards when KH2 took over mid-way).
         let square = RAW_BUTTONS.load(Ordering::Relaxed) as u16 & SQUARE != 0;
-        if frames >= 10 && matches!(state, 0 | 1) && (kh1_moving() || square) {
+        let attack = ATTACK_AFTER.load(Ordering::Relaxed);
+        if frames >= 10 && matches!(state, 0 | 1) && (kh1_moving() || square || attack) {
+            FLY_PRESS_GROUND.store(ATTACK_AFTER.swap(false, Ordering::Relaxed), Ordering::Relaxed);
             HANDOFF.store(false, Ordering::Relaxed);
             ROLL_NOW.store(square, Ordering::Relaxed);
             FRESH.store(true, Ordering::Relaxed);
@@ -395,7 +399,8 @@ unsafe fn takeover(actor: usize) -> bool {
         d.character = kh2.character.clone();
         d.character.abilities = abilities;
         d.grounded = true;
-        // An Attack press from before (during KH1's move) is not KH2's.
+        // An Attack press from before (during KH1's move) is not KH2's (one asked of KH1 then
+        // is: `FLY_PRESS_GROUND`).
         combat::take_press();
     }
     if FLY_PRESS.load(Ordering::Relaxed) {
@@ -426,7 +431,7 @@ unsafe fn takeover(actor: usize) -> bool {
     let jump = jump_raw && !shortcut;
     let action = action_raw && !shortcut;
     // KH1's Attack command (Cross with Attack chosen in the menu) is KH2's attack button.
-    let attack = combat::take_press() | FLY_PRESS.swap(false, Ordering::Relaxed);
+    let attack = combat::take_press() | FLY_PRESS.swap(false, Ordering::Relaxed) | FLY_PRESS_GROUND.swap(false, Ordering::Relaxed);
     // KH1 holding him still (its control step skipped or him unable to act: cutscene moments,
     // tutorial windows; the user: he moved anyway): KH2 gets no input (he still falls, lands
     // and finishes what he was doing).
@@ -735,6 +740,7 @@ unsafe fn takeover(actor: usize) -> bool {
             wr(actor + 0x70, state);
         }
         if let Some(what) = took {
+            ATTACK_AFTER.store(false, Ordering::Relaxed);
             HANDOFF_FRAMES.store(0, Ordering::Relaxed);
             HANDOFF.store(true, Ordering::Relaxed);
             log(&format!("KH1 takes him: {what} (KH1 state {}, slot {:?})", rd::<i32>(actor + 0x70), pose::sora_slot()));
@@ -930,6 +936,15 @@ pub fn kh1_keeps_square() -> bool {
 }
 
 /// KH2 has Sora this moment (not handed to KH1).
+/// KH1 has him for one of its own moves (`hand_to_kh1`), until he can be KH2's again.
+pub fn kh1_move() -> bool {
+    active() && HANDOFF.load(Ordering::Relaxed)
+}
+
+/// Attack pressed while KH1 had him for its own move (`combat::exec`): ends that move as soon
+/// as he stands free (KH1 allowed the cancel) and is KH2's first press.
+pub static ATTACK_AFTER: AtomicBool = AtomicBool::new(false);
+
 pub fn kh2_has() -> bool {
     active() && !HANDOFF.load(Ordering::Relaxed)
 }
@@ -945,6 +960,7 @@ static KH2_AIR: AtomicBool = AtomicBool::new(false);
 /// KH1 takes Sora for one of its own actions (a command): it keeps him until it has him
 /// standing in a movement motion again (see `HANDOFF`).
 pub fn hand_to_kh1(why: &str) {
+    ATTACK_AFTER.store(false, Ordering::Relaxed);
     HANDOFF_FRAMES.store(0, Ordering::Relaxed);
     HANDOFF.store(true, Ordering::Relaxed);
     log(&format!("KH1 takes him: {why}"));

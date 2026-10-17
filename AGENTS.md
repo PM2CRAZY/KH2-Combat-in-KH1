@@ -1403,3 +1403,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   instead of one 6 MB slot per draw call, which came round again within KH1's frames in
   flight when a frame had several effect draws.
 
+### 2026-10-16: Stage 128 (no KH1 combo during KH1's own moves)
+- The user saw KH1's Ripple Drive graphic twice as Riku 1 fell (right before the crash). The
+  log's last hits were KH1's own attack objects (`probe::hit` with no KH2 power): Attack
+  pressed while KH1 still had Sora after a spell (`hand_to_kh1`, "command 0x2") ran KH1's own
+  combo (its finisher: Ripple Drive, equipped). `combat::exec` now takes that press for KH2
+  (`takeover::ATTACK_AFTER`): the move ends as soon as he stands free (state 0 / 1, 10
+  frames in, as KH1 allowed the cancel) and KH2's first frame gets the press
+  (`FLY_PRESS_GROUND`, past the fresh start's dropped presses). Cleared on each new hand-off.
+

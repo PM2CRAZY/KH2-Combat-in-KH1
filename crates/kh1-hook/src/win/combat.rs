@@ -85,6 +85,14 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         note(format!("Attack command while flying (KH1 row {row}): KH2's aerial combo"));
         return;
     }
+    // KH1 still has him for one of its own moves (a spell's cast, an item): the press is KH2's
+    // once that ends, not KH1's own combo (the user: KH1's Ripple Drive came out after a spell,
+    // twice, finishing Riku).
+    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_move() {
+        takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
+        note(format!("Attack command during KH1's own move (KH1 row {row}): KH2's once it ends"));
+        return;
+    }
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
         PRESSED.store(true, Ordering::Relaxed);
         note(format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));
