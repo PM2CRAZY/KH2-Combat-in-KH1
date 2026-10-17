@@ -918,14 +918,18 @@ impl Strikes {
             // Only guards KH1's clash table lets meet Sora's swing (its row data's `+0x38` type;
             // the user: aerial combos on Dragon Maleficent clinked: her big guard is type 6,
             // which meets nothing).
-            let swing_type = self.rows.map(|rows| {
-                let base = BASE.load(Ordering::Relaxed);
-                rd::<u32>(base + ATTACK_DATA_RVA + rows[(air as usize) * 2].data as usize + 0x38) & 7
-            });
+            let swing_data = self.rows.map(|rows| BASE.load(Ordering::Relaxed) + ATTACK_DATA_RVA + rows[(air as usize) * 2].data as usize);
+            let swing_type = swing_data.map(|d| rd::<u32>(d + 0x38) & 7);
+            // KH1's swing is one thin sphere on the blade (its data's `+0x5C` radius); KH2's hit
+            // shapes are wide. A guard is met only by the sweep thinned to KH1's radius (the
+            // user's Dragon Maleficent video: half the air combos' first swings were repelled by
+            // her 180-wide guard while reaching for her head).
+            let blade = swing_data.map_or(25.0, |d| (rd::<i32>(d + 0x5C) as f32).clamp(8.0, 60.0));
+            let thin: Vec<Shape> = swept.iter().map(|s| Shape { radius: s.radius.min(blade), height: s.height.min(blade), ..*s }).collect();
             let guards: Vec<&Guard> = self.guards.iter().filter(|g| swing_type.map_or(true, |t| clashes(g.kind, t))).collect();
             static TYPES: AtomicU32 = AtomicU32::new(0);
             if !self.guards.is_empty() && TYPES.fetch_add(1, Ordering::Relaxed) < 6 {
-                log(&format!("guards near: clash types {:?} against Sora's swing type {swing_type:?}: {} can repel", self.guards.iter().map(|g| g.kind).collect::<Vec<_>>(), guards.len()));
+                log(&format!("guards near: clash types {:?} against Sora's swing type {swing_type:?} (blade radius {blade}): {} can repel", self.guards.iter().map(|g| g.kind).collect::<Vec<_>>(), guards.len()));
             }
             let guard_shapes: Vec<Shape> = guards.iter().map(|g| g.shape).collect();
             // Only a guard met before any body part along this frame's sweep (KH1 tests a swing's
@@ -937,7 +941,7 @@ impl Strikes {
                 .iter()
                 .filter_map(|b| first_overlap(&swept, &b.parts.iter().map(|p| p.shape).collect::<Vec<_>>()).map(|(ai, _)| ai))
                 .min();
-            if let Some((gai, gi)) = first_overlap(&swept, &guard_shapes).filter(|(gai, _)| body_at.map_or(true, |b| *gai < b)) {
+            if let Some((gai, gi)) = first_overlap(&thin, &guard_shapes).filter(|(gai, _)| body_at.map_or(true, |b| *gai < b)) {
                 let _ = gai;
                 self.repelled.insert(h.swing);
                 let bounced = character.register_wall_hit();

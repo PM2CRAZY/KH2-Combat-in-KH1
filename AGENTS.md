@@ -1449,3 +1449,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   00`). Guards now repel only when the table lets their type meet Sora's swing type (his KH1
   row data's `+0x38 & 7`); logged ("guards near").
 
+### 2026-10-16: Stage 132 (guards meet a thin blade)
+- The user's Dragon Maleficent video: half the air combos' first swings were repelled by her
+  guard (radius 180, flags `00116a09`, clash type 0, motion-bound), the other swings hit her
+  head / neck. KH1's swing is one sphere of its data's `+0x5C` radius on the blade; KH2's hit
+  shapes are wide and clipped the guard's edge on the way to the head. Guards are now tested
+  against the sweep with each shape's radius cut to that KH1 radius (8..60).
+
