@@ -20,7 +20,10 @@ use super::{camera, hook, log};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const TEXT_RVA: Rva = Rva(0x2CE7C0);
-const TEXT_PROLOGUE: [u8; 7] = [0x48, 0x8B, 0x05, 0x89, 0xCE, 0xB4, 0x02];
+/// Its first instruction (`mov rax, [rip -> TEXT_TABLE_RVA]`; Epic: 48 8B 05 89 CE B4 02).
+fn text_prologue() -> [u8; 7] {
+    super::addr::mov_rax_rip(TEXT_RVA, TEXT_TABLE_RVA)
+}
 const TEXT_TABLE_RVA: Rva = Rva(0x2E1B650);
 const TEXT_BASE_RVA: Rva = Rva(0x2E1B648);
 const UPDATE_RVA: Rva = Rva(0x2F7DD0);
@@ -95,7 +98,7 @@ pub unsafe fn install() {
     BASE.store(base, Ordering::Relaxed);
     TEXT.get_or_init(|| STRINGS.iter().map(|(id, s)| (*id, Box::leak(super::menu::encode(s).into_boxed_slice()).as_ptr() as usize)).collect());
     // The text lookup carries our strings for the shortcuts too (`shortcuts.rs`).
-    if hook::install(base + TEXT_RVA, &TEXT_PROLOGUE, text as *const () as usize, &ORIG_TEXT, "menu text lookup").is_none() {
+    if hook::install(base + TEXT_RVA, &text_prologue(), text as *const () as usize, &ORIG_TEXT, "menu text lookup").is_none() {
         return;
     }
     TEXT_HOOKED.store(true, Ordering::Release);

@@ -1549,3 +1549,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (shortcut rows, Customize, sparkle test, combo table) are identical in Steam's build.
 - Steam's English files are in `Image\dt` (the KH1 / KH2 loaders already try en, dt, jp).
 - README / mod.yml: Epic or Steam; README.txt kept in `crates/kh1-hook/openkh/`.
+
+### 2026-10-17: Stage 143 (Steam: first test)
+- The user's first Steam run (new game): the build was recognised and KH2's control ran, but
+  two hooks were refused: menu text lookup (`0x2CE7C0`) and shortcut get (`0x282F20`, and so
+  set `0x283640`) begin `mov rax, [rip + disp]`, whose offset differs per build. Their
+  expected bytes are now made for the running build (`addr::mov_rax_rip`: text table
+  `0x2E1B650`, save pointer `0x28695A0`); the trampolines are never called (both replaced
+  outright). Every other hook's prologue checked against both executables: identical.
+- Dive to the Heart's "Press to attack" window stayed up although KH2's swings add to the
+  attack tally (`0x14028A4D0(0x13)`, identical in Steam's build; read by event opcode 474,
+  `0x1401ADFA0`). Diagnostics: event opcodes per second when they change (dispatcher
+  `0x1401B13F0`, table `0x1404FB550`, 764 opcodes; `probe::event_trace`) and camera jerks
+  (`camera::jerk_note`: the user found the camera jittery there).

@@ -44,6 +44,52 @@ const PARTY_RVA: Rva = Rva(0x2D37C80);
 /// Sora's attack record as KH1 last made it (0xC0 bytes), for KH2's hits.
 pub static ATTACK_TEMPLATE: std::sync::Mutex<Option<Vec<u8>>> = std::sync::Mutex::new(None);
 static ORIG_PAD: AtomicUsize = AtomicUsize::new(0);
+
+/// KH1's event script dispatcher (`0x1401B13F0 (context, opcode)`: the handler table at
+/// `0x1404FB550`, 764 opcodes). Traced to see what a waiting script (a tutorial window) polls.
+const EVENT_OP_RVA: Rva = Rva(0x1B13F0);
+const EVENT_OP_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x30];
+static ORIG_EVENT_OP: AtomicUsize = AtomicUsize::new(0);
+const EVENT_OPS: usize = 768;
+static EVENT_COUNTS: [AtomicU32; EVENT_OPS] = [const { AtomicU32::new(0) }; EVENT_OPS];
+
+unsafe extern "system" fn event_op(ctx: usize, op: i32, c: usize, d: usize) -> u64 {
+    if (0..EVENT_OPS as i32).contains(&op) {
+        EVENT_COUNTS[op as usize].fetch_add(1, Ordering::Relaxed);
+    }
+    let f: unsafe extern "system" fn(usize, i32, usize, usize) -> u64 = std::mem::transmute(ORIG_EVENT_OP.load(Ordering::Acquire));
+    f(ctx, op, c, d)
+}
+
+/// Once a second: the event opcodes run in that second, when they differ from the last second's
+/// (a script waiting on a condition runs the same few every frame).
+fn event_trace(t: f32) {
+    use std::sync::Mutex;
+    static LAST: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+    static LINES: AtomicU32 = AtomicU32::new(0);
+    static LAST_T: AtomicU32 = AtomicU32::new(0);
+    let sec = t as u32;
+    if LAST_T.swap(sec, Ordering::Relaxed) == sec {
+        return;
+    }
+    let mut ops = Vec::new();
+    let mut text = String::new();
+    for (i, c) in EVENT_COUNTS.iter().enumerate() {
+        let n = c.swap(0, Ordering::Relaxed);
+        if n > 0 {
+            ops.push(i);
+            text.push_str(&format!(" {i}x{n}"));
+        }
+    }
+    let Ok(mut last) = LAST.lock() else { return };
+    if ops != *last && !ops.is_empty() && LINES.fetch_add(1, Ordering::Relaxed) < 600 {
+        let base = BASE.load(Ordering::Relaxed);
+        let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
+        let free = sora > 0x10000 && unsafe { rd::<u32>(sora + 0x444) } & 1 == 0;
+        log(&format!("event ops at {t:.0}s (Sora can act: {free}):{text}"));
+    }
+    *last = ops;
+}
 pub static SORA_ACTOR: AtomicUsize = AtomicUsize::new(0);
 static ACTOR_CALLS: AtomicU32 = AtomicU32::new(0);
 /// Offset in the actor of the first position-like triple found.
@@ -266,6 +312,7 @@ fn report(label: &str) {
 
 /// The monitor thread's part: arm the watchpoints once the position is known, report, disarm.
 pub unsafe fn tick(seconds: f32) {
+    event_trace(seconds);
     static ARMED_AT: AtomicU32 = AtomicU32::new(0);
     static DONE: AtomicU32 = AtomicU32::new(0);
     if DONE.load(Ordering::Relaxed) != 0 {
@@ -441,4 +488,5 @@ pub unsafe fn install() {
     hook::install(base + HIT_RVA, &HIT_PROLOGUE, hit as *const () as usize, &ORIG_HIT, "attack touched actor");
     hook::install(base + ACTOR_RVA, &ACTOR_PROLOGUE, actor as *const () as usize, &ORIG_ACTOR, "actor animation update");
     hook::install(base + PAD_RVA, &PAD_PROLOGUE, pad as *const () as usize, &ORIG_PAD, "pad record");
+    hook::install(base + EVENT_OP_RVA, &EVENT_OP_PROLOGUE, event_op as *const () as usize, &ORIG_EVENT_OP, "event script opcodes (trace)");
 }

@@ -46,9 +46,15 @@ const MAGIC_LEVEL_RVA: Rva = Rva(0x28D0D0);
 const RUN_ENTRY_RVA: Rva = Rva(0x2912F0);
 
 const GET_RVA: Rva = Rva(0x282F20);
-const GET_PROLOGUE: [u8; 7] = [0x48, 0x8B, 0x05, 0x79, 0x66, 0x5E, 0x02];
+/// `mov rax, [rip -> SAVE_PTR_RVA]` (Epic: 48 8B 05 79 66 5E 02).
+fn get_prologue() -> [u8; 7] {
+    super::addr::mov_rax_rip(GET_RVA, SAVE_PTR_RVA)
+}
 const SET_RVA: Rva = Rva(0x283640);
-const SET_PROLOGUE: [u8; 7] = [0x48, 0x8B, 0x05, 0x59, 0x5F, 0x5E, 0x02];
+/// `mov rax, [rip -> SAVE_PTR_RVA]` (Epic: 48 8B 05 59 5F 5E 02).
+fn set_prologue() -> [u8; 7] {
+    super::addr::mov_rax_rip(SET_RVA, SAVE_PTR_RVA)
+}
 const LEARN_RVA: Rva = Rva(0x2830F0);
 const LEARN_PROLOGUE: [u8; 6] = [0x48, 0x63, 0xC1, 0x44, 0x8B, 0xD2];
 const FILL_RVA: Rva = Rva(0x292330);
@@ -122,8 +128,8 @@ pub unsafe fn install() {
         return;
     }
     // The slots first: everything else reads the fourth through them.
-    if hook::install(base + GET_RVA, &GET_PROLOGUE, get as *const () as usize, &ORIG_GET, "shortcut get").is_none()
-        || hook::install(base + SET_RVA, &SET_PROLOGUE, set as *const () as usize, &ORIG_SET, "shortcut set").is_none()
+    if hook::install(base + GET_RVA, &get_prologue(), get as *const () as usize, &ORIG_GET, "shortcut get").is_none()
+        || hook::install(base + SET_RVA, &set_prologue(), set as *const () as usize, &ORIG_SET, "shortcut set").is_none()
     {
         log("shortcuts: KH1's three (the slot functions weren't as expected)");
         return;

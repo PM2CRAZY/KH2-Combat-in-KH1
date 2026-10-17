@@ -154,6 +154,29 @@ unsafe extern "system" fn lock_mode() {
     }
 }
 
+/// Notes frames where the eye's motion jerks (its change in velocity over 12 units in a frame),
+/// with the frame step, the look point and Sora's feet (the user: jittery in Dive to the Heart).
+fn jerk_note(eye: Vec3, at: Vec3, feet: Vec3, dt: f32, yaw: f32) {
+    use std::sync::Mutex;
+    static LAST: Mutex<Option<(Vec3, Vec3, u64)>> = Mutex::new(None);
+    static N: AtomicU32 = AtomicU32::new(0);
+    let Ok(mut l) = LAST.lock() else { return };
+    let now = now_ms();
+    if let Some((e0, v0, t0)) = *l {
+        let v = eye - e0;
+        let a = v - v0;
+        if now - t0 < 100 && a.length() > 12.0 && N.fetch_add(1, Ordering::Relaxed) < 80 {
+            log(&format!(
+                "KH2 camera jerk: eye moved {:.0} (last frame {:.0}), dt {dt:.2}, {}ms since last frame; eye {:.0?} at {:.0?} feet {:.0?} yaw {yaw:.2}",
+                v.length(), v0.length(), now - t0, eye.to_array(), at.to_array(), feet.to_array()
+            ));
+        }
+        *l = Some((eye, v, now));
+    } else {
+        *l = Some((eye, Vec3::ZERO, now));
+    }
+}
+
 /// KH1 world (y down) ↔ the camera's (y up, divided by the scale).
 fn to_cam(p: [f32; 3], s: f32) -> Vec3 {
     Vec3::new(p[0], -p[1], p[2]) / s
@@ -323,6 +346,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         return None;
     }
     LAST_MS.store(now_ms(), Ordering::Relaxed);
+    jerk_note(eye * s, at * s, subject.feet * s, dt, cam.yaw);
     let (e, t) = (to_kh1(eye, s), to_kh1(at, s));
     wr(base + EYE_RVA, [e[0], e[1], e[2], 1.0f32]);
     wr(base + TARGET_RVA, [t[0], t[1], t[2], 1.0f32]);

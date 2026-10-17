@@ -115,3 +115,11 @@ fn steam(epic: usize) -> usize {
 
 /// Epic RVA -> Steam RVA, sorted by the Epic RVA.
 pub(crate) static STEAM: &[(u32, u32)] = &include!("steam_map.in");
+
+/// `mov rax, [rip + disp]` at `at` reading `target`, as the running build has it (the first
+/// instruction of a few functions we replace outright; its offset differs between builds).
+pub fn mov_rax_rip(at: Rva, target: Rva) -> [u8; 7] {
+    let disp = (target.get() as i64 - (at.get() as i64 + 7)) as i32;
+    let d = disp.to_le_bytes();
+    [0x48, 0x8B, 0x05, d[0], d[1], d[2], d[3]]
+}
