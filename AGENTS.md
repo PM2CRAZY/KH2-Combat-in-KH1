@@ -1499,3 +1499,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   into `BOSS_GIFTS` (Deep Jungle index 1 at 0x42, beside Upper Slash). Still one of
   `early_kh1()`: KH1's own later Vortex is a spare.
 
+### 2026-10-16: Stage 138 (Glide on Square)
+- The user: Glide on Square, as KH1's Superglide. The controller's `GlideButton::Action` (KH2's
+  own option): Square in the air glides; ini `glide = square` (default) or `jump`. Out of a
+  flight (`FLEW`) it stays on jump: Square is flight's descend there.
+

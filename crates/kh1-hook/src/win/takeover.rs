@@ -445,6 +445,9 @@ unsafe fn takeover(actor: usize) -> bool {
         d.held.1 = false;
     }
     d.growth.update(base, &mut d.character);
+    // Glide on Square, as KH1's Superglide was (the user), or on the jump button (ini `glide`).
+    // (Not out of a flight: there Square is flight's descend.)
+    d.character.glide_button = if super::settings::get().glide_on_square && !FLEW.load(Ordering::Relaxed) { character_core::GlideButton::Action } else { character_core::GlideButton::Jump };
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
         d.character.set_facing(rd::<f32>(actor + 0x3C));
