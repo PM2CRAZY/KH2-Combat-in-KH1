@@ -331,7 +331,9 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
         }
         let tall = (top - feet[1]).max(radius);
         let root_far = (p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2) > NEAR * NEAR;
-        let fixed = count > 8 || root_far || tall > 600.0 || radius > 300.0;
+        // Or not an enemy at all (KH1 actor kind 3 are the fighters; attackable objects are
+        // others): the user, nothing immovable is pulled or thrown.
+        let fixed = count > 8 || root_far || tall > 600.0 || radius > 300.0 || rd::<u8>(this + 6) != 3;
         if fixed {
             static SEEN: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
             if let Ok(mut v) = SEEN.lock() {
@@ -891,7 +893,17 @@ impl Strikes {
                 continue;
             }
             let guard_shapes: Vec<Shape> = self.guards.iter().map(|g| g.shape).collect();
-            if let Some((_, gi)) = first_overlap(&swept, &guard_shapes) {
+            // Only a guard met before any body part along this frame's sweep (KH1 tests a swing's
+            // sweep entries in order, and KH1's blade is thin; KH2's wide hit shapes touched a
+            // guard beside the part they hit: the user, Darkballs and Dragon Maleficent clinked
+            // way too much).
+            let body_at = self
+                .bodies
+                .iter()
+                .filter_map(|b| first_overlap(&swept, &b.parts.iter().map(|p| p.shape).collect::<Vec<_>>()).map(|(ai, _)| ai))
+                .min();
+            if let Some((gai, gi)) = first_overlap(&swept, &guard_shapes).filter(|(gai, _)| body_at.map_or(true, |b| *gai < b)) {
+                let _ = gai;
                 self.repelled.insert(h.swing);
                 let bounced = character.register_wall_hit();
                 clang(self.guards[gi].at);
@@ -943,13 +955,15 @@ impl Strikes {
                 let kh1 = rows[(air as usize) * 2 + finisher as usize];
                 // KH2's launch, its own height and speed (the user: Upper Slash didn't send them
                 // up): KH1 launches with its own, so its launch is redone (`launched`).
+                // (Not for the big and the immovable: KH1's own reaction stays, the user: Magnet
+                // Burst and Aerial Finish moved Dragon Maleficent.)
                 if let Ok(mut p) = PENDING.lock() {
-                    *p = finisher.then(|| Launch::kh2(row.knockback_1, row.knockback_2, &character.reaction));
+                    *p = (finisher && !b.fixed).then(|| Launch::kh2(row.knockback_1, row.knockback_2, &character.reaction));
                 }
                 // A holding blow (Aerial Finish's spin) flinches the foe where it is: KH1's
                 // flinch knocks an airborne foe along the record's direction, and spin after
                 // spin slid it out of reach (the user); the direction is zeroed (`scale_record`).
-                HOLD.store(blow && !throws, Ordering::Relaxed);
+                HOLD.store(blow && !throws && !b.fixed, Ordering::Relaxed);
                 let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power);
                 HOLD.store(false, Ordering::Relaxed);
                 // (Again once the contact is done, in case its direction came after the record.)
@@ -963,10 +977,10 @@ impl Strikes {
                 }
                 // A Magnet's catch (the user: Magnet Burst didn't pull them together): KH2 picks
                 // the orbit radius between the two knockback values, the swirl from the next.
-                if blow && !throws && dealt.is_some() {
+                if blow && !throws && dealt.is_some() && !b.fixed {
                     self.held.insert(b.actor, HOLD_FRAMES);
                 }
-                if character_core::reaction::category(row.enemy_reaction) == 5 {
+                if character_core::reaction::category(row.enemy_reaction) == 5 && !b.fixed {
                     let (a, c) = (row.knockback_1 as f32, row.knockback_2 as f32);
                     let t = ((b.actor >> 4) % 97) as f32 / 96.0;
                     self.pulled.insert(b.actor, (h.swing, a + (c - a) * t, row.unknown_16 as f32));

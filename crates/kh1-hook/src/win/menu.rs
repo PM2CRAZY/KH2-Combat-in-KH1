@@ -277,9 +277,46 @@ unsafe extern "system" fn stats(member: i32, out: usize) {
     }
 }
 
+/// KH1's event command that adds a reward's line to a message window (`0x1401B6990(event)`:
+/// the reward id at the event stack's top `+0x198 + sp * 4`, its record `0x14028D810(id)`, a
+/// u16: low 4 bits the kind, 1 an ability, its id the high byte, the party member bits 4..7;
+/// it pops 2 and returns 2). Abilities are added by the command `0x1401AF120` from the same
+/// record (`0x140282CA0(id, member)`).
+const REWARD_LINE_RVA: usize = 0x1B6990;
+const REWARD_LINE_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x20];
+const REWARD_RECORD_RVA: usize = 0x28D810;
+static ORIG_REWARD_LINE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// No "learned" line for a spare copy (one the mod gave already: `Kh1Sora::spare_gift`): the
+/// command is popped as KH1 does when it shows nothing (the user: remove the learned box for
+/// duplicates).
+unsafe extern "system" fn reward_line(ev: usize) -> u64 {
+    let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_REWARD_LINE.load(std::sync::atomic::Ordering::Acquire));
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    if super::settings::get().abilities == growth::Mode::Kh1 && ev > 0x10000 {
+        let sp = rd::<i32>(ev + 0x194);
+        if (0..64).contains(&sp) {
+            let id = rd::<u32>(ev + 0x198 + sp as usize * 4);
+            let rec: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + REWARD_RECORD_RVA);
+            let r = rec(id);
+            if r > 0x10000 {
+                let v = rd::<u16>(r);
+                let (kind, member, ability) = (v & 0xF, (v >> 4) & 0xF, (v >> 8) as u8);
+                if kind == 1 && member == 0 && Growth::kh1(base).is_some_and(|s| s.spare_gift(ability)) {
+                    std::ptr::write_unaligned((ev + 0x194) as *mut i32, sp - 2);
+                    log(&format!("no \"learned\" line for {}: a spare copy (the mod gave it already)", growth::name(ability)));
+                    return 2;
+                }
+            }
+        }
+    }
+    f(ev)
+}
+
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     super::hook::install(base + TABLE_LOAD_RVA, &TABLE_LOAD_PROLOGUE, table_load as *const () as usize, &ORIG_LOAD, "ability table load");
+    super::hook::install(base + REWARD_LINE_RVA, &REWARD_LINE_PROLOGUE, reward_line as *const () as usize, &ORIG_REWARD_LINE, "reward message line");
     super::hook::install(base + STATS_RVA, &STATS_PROLOGUE, stats as *const () as usize, &ORIG_STATS, "party stats");
 }
 

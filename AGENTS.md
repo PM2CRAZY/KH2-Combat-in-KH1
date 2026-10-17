@@ -1422,3 +1422,20 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   `LEVEL_GIFTS` and `BOSS_GIFTS`) keeps one copy each in Sora's list (`keep_one`, the
   equipped one); KH1's own later copy is taken out (logged, and in `kh1-kh2-removed.txt`).
 
+### 2026-10-16: Stage 130 (no "learned" line for spares; fewer clinks; nothing big or fixed moved)
+- The user: remove the learned box for duplicates. KH1's event command `0x1401B6990(event)`
+  adds a reward's line to a message window (reward id at `+0x198 + sp * 4`, `sp` at `+0x194`;
+  record `0x14028D810(id)`: u16, kind = low 4 bits (1 ability), member bits 4..7, ability the
+  high byte; it pops 2, returns 2); abilities are added by `0x1401AF120` through
+  `0x140282CA0(id, member)` (appends `id | 0x80`). Hooked (`menu::reward_line`): Sora's ability
+  that `Kh1Sora::spare_gift` (the mod's level / boss gift is due and he has it) is popped with
+  no line. Untested: a window whose only line it was may show empty.
+- The user: Darkballs and Dragon Maleficent clinked way too much. Their guards (priority 100,
+  objects 330 / 332, flags with bit 20 "spent", which only skips KH1's wall test in
+  `0x1402B1670`) repelled swings whose wide KH2 shapes touched a guard beside the part they hit.
+  A guard repels now only when it is met earlier along the frame's sweep than any body part.
+- The user: Magnet Burst and Aerial Finish shouldn't affect Dragon Maleficent, big enemies, or
+  anything immovable. `fixed` also covers actors that aren't KH1 kind 3 (attackable objects);
+  a fixed body gets no KH2 launch (`PENDING`, which forced KH1's launch reaction), no Aerial
+  Finish hold and no Magnet catch: KH1's own reaction stays.
+

@@ -471,6 +471,13 @@ pub fn all() -> Abilities {
 }
 
 impl Kh1Sora {
+    /// KH1's own copy of `id` would be a spare: the mod gives it before KH1 does (its level
+    /// reached or its boss beaten) and Sora has it (the user: no "learned" box for those).
+    pub fn spare_gift(&self, id: u8) -> bool {
+        let early = LEVEL_GIFTS.iter().any(|(l, i)| *i == id && self.level >= *l) || BOSS_GIFTS.iter().any(|g| g.ability == id && beaten(&self.progress, g));
+        early && has(&self.abilities, id)
+    }
+
     /// KH2's abilities from KH1's menu and Sora's level.
     pub fn kh2(&self) -> Abilities {
         let a = &self.abilities;
