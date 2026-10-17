@@ -537,6 +537,24 @@ impl Growth {
                         now = again;
                     }
                 }
+                // One copy of each KH1 ability the mod gives early (the user: a second Slide
+                // Dash from Maleficent): KH1's own later copy goes.
+                {
+                    let list = save + 0x44;
+                    let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
+                    let (kept, spare) = growth::keep_one(&bytes, &growth::early_kh1());
+                    if !spare.is_empty() {
+                        for (k, b) in kept.iter().enumerate() {
+                            std::ptr::write((list + k) as *mut u8, *b);
+                        }
+                        let names: Vec<String> = spare.iter().map(|id| growth::name(*id)).collect();
+                        log(&format!("spare copies taken out (the mod gave them already): {}", names.join(", ")));
+                        remember(&format!("level {}: spare copies taken out (the mod gave them already): {}", now.level, names.join(", ")));
+                        if let Some(again) = Self::kh1(base) {
+                            now = again;
+                        }
+                    }
+                }
                 // Quick Run and Aerial Dodge moved from the shared list into Sora's (the user: with
                 // AP); one that was on stays on.
                 for ab in growth::MENU.iter().filter(|a| a.list == growth::List::Sora) {

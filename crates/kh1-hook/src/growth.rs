@@ -298,16 +298,33 @@ pub const ONE_ONLY: [u8; 3] = [kh1::HIGH_JUMP, kh1::GLIDE, kh1::SUPERGLIDE];
 /// The shared list with the spare copies of `ONE_ONLY` taken out (an equipped copy is the one
 /// kept), and the ids taken out. The list keeps its length (zeros at the end).
 pub fn one_only(list: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    keep_one(list, &ONE_ONLY)
+}
+
+/// KH1 abilities of Sora's that the mod gives before KH1 does (`LEVEL_GIFTS`, the KH1 ones in
+/// `BOSS_GIFTS`): KH1's own copy later is a spare (the user: a second Slide Dash from
+/// Maleficent), and one copy is all a KH2 modifier needs.
+pub fn early_kh1() -> Vec<u8> {
+    let mut ids: Vec<u8> = LEVEL_GIFTS.iter().map(|(_, id)| *id).collect();
+    ids.extend(BOSS_GIFTS.iter().map(|g| g.ability).filter(|id| *id < FIRST_ID));
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+/// `list` with the spare copies of `ids` taken out (an equipped copy is the one kept), and the
+/// ids taken out. The list keeps its length (zeros at the end).
+pub fn keep_one(list: &[u8], ids: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let end = list.iter().position(|b| *b == 0).unwrap_or(list.len());
-    let mut keep: Vec<Option<usize>> = vec![None; ONE_ONLY.len()];
-    for (k, id) in ONE_ONLY.iter().enumerate() {
+    let mut keep: Vec<Option<usize>> = vec![None; ids.len()];
+    for (k, id) in ids.iter().enumerate() {
         let at = |on: bool| list[..end].iter().position(|b| b & 0x7F == *id && (b & 0x80 == 0) == on);
         keep[k] = at(true).or_else(|| at(false));
     }
     let mut out = Vec::with_capacity(list.len());
     let mut removed = Vec::new();
     for (i, b) in list[..end].iter().enumerate() {
-        match ONE_ONLY.iter().position(|id| *id == b & 0x7F) {
+        match ids.iter().position(|id| *id == b & 0x7F) {
             Some(k) if keep[k] != Some(i) => removed.push(b & 0x7F),
             _ => out.push(*b),
         }
@@ -686,6 +703,17 @@ mod tests {
         assert_eq!(c.kh2().glide, 4);
         assert!(a.equipped.contains(&kh2::FLASH_STEP) && !a.equipped.contains(&kh2::SLAPSHOT));
         assert!(a.equipped.contains(&kh2::GUARD));
+    }
+
+    #[test]
+    fn early_gifts_keep_one_copy() {
+        let ids = early_kh1();
+        assert!(ids.contains(&kh1::SLIDING_DASH) && ids.contains(&kh1::GRAVITY_BREAK) && !ids.contains(&67));
+        // The equipped copy stays; KH1's later (unequipped) copy goes.
+        let list = [kh1::GUARD, kh1::SLIDING_DASH, kh1::COMBO_PLUS, kh1::SLIDING_DASH | 0x80, kh1::COMBO_PLUS, 0];
+        let (out, removed) = keep_one(&list, &ids);
+        assert_eq!(out, vec![kh1::GUARD, kh1::SLIDING_DASH, kh1::COMBO_PLUS, kh1::COMBO_PLUS, 0, 0]);
+        assert_eq!(removed, vec![kh1::SLIDING_DASH]);
     }
 
     #[test]

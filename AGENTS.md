@@ -1412,3 +1412,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   frames in, as KH1 allowed the cancel) and KH2's first frame gets the press
   (`FLY_PRESS_GROUND`, past the fresh start's dropped presses). Cleared on each new hand-off.
 
+### 2026-10-16: Stage 129 (KH1 moves end on the stick; no spare early gifts)
+- The user: after a Hollow Bastion crystal (command 0x5), moving within a second kept KH1's
+  animations: the hand-off ended only once KH1's slot was a plain idle / walk / run (0..7), and
+  KH1 walked him in other slots (75 / 77). Now it also ends when KH1's own "can act" test
+  (`0x1402956E0`: no action flag 4, no reaction `+0x88 & 0x20`, `+0x444 & 1` clear) passes
+  with the left stick (pad bytes 2 / 3) past 0.3, state 0 / 1, 10 frames in.
+- The user: a second Slide Dash from Maleficent. `growth::early_kh1()` (the KH1 ids of
+  `LEVEL_GIFTS` and `BOSS_GIFTS`) keeps one copy each in Sora's list (`keep_one`, the
+  equipped one); KH1's own later copy is taken out (logged, and in `kh1-kh2-removed.txt`).
+

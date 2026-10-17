@@ -313,7 +313,16 @@ unsafe fn takeover(actor: usize) -> bool {
         // its own roll, and he slid backwards when KH2 took over mid-way).
         let square = RAW_BUTTONS.load(Ordering::Relaxed) as u16 & SQUARE != 0;
         let attack = ATTACK_AFTER.load(Ordering::Relaxed);
-        if frames >= 10 && matches!(state, 0 | 1) && (kh1_moving() || square || attack) {
+        // Done with its move and free (KH1's own test `0x1402956E0`: no action running (flag
+        // 4), not reeling, not held) with the stick held: KH2's, whatever animation KH1 walks
+        // him in (the user: after a Hollow Bastion crystal, moving within a second walked him
+        // in KH1's animations, slots it has besides its plain walk and run).
+        let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+        let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
+        let off = |b: u8| (b as f32 - 128.0).abs() / 127.0;
+        let stick = off(st[2]).hypot(off(st[3])) > 0.3;
+        let free = can_act(actor) != 0 && stick;
+        if frames >= 10 && matches!(state, 0 | 1) && (kh1_moving() || free || square || attack) {
             FLY_PRESS_GROUND.store(ATTACK_AFTER.swap(false, Ordering::Relaxed), Ordering::Relaxed);
             HANDOFF.store(false, Ordering::Relaxed);
             ROLL_NOW.store(square, Ordering::Relaxed);
