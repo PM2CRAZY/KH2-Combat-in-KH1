@@ -9,9 +9,10 @@ use std::sync::OnceLock;
 const INI: &str = "kh1-kh2.ini";
 const DEFAULT_INI: &str = "; kh1-kh2 settings (read when the game starts)\r\n\
 ;\r\n\
-; abilities: test = every KH2 movement ability at MAX (testing), kh1 = KH2's abilities from\r\n\
-; KH1's Ability menu and Sora's level, all = everything and every combo modifier\r\n\
-abilities = test\r\n\
+; abilities: kh1 = KH2's abilities from KH1's Ability menu, Sora's level and bosses (normal\r\n\
+; play); remove = take the KH2 abilities back out of your save (load it, save once, then\r\n\
+; uninstall); test = every KH2 movement ability at MAX; all = everything, every modifier\r\n\
+abilities = kh1\r\n\
 ; hurt: kh2 = Sora takes hits KH2's way (dodge-roll invulnerability, KH2 guard, KH2\r\n\
 ; reactions); kh1 = KH1's own hit reactions\r\n\
 hurt = kh2\r\n\
@@ -66,8 +67,6 @@ chests_in_battle = on\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst, Explosion and Vicinity Break), all (every\r\n\
 ;   move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
-; fx_test: on = start Magnet Burst's effect at Sora every 4 seconds (checks the renderer)\r\n\
-fx_test = off\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
 ; round in his hand (0x53: the Dream Shield); none = off\r\n\
 flip_weapons = 0x53\r\n";
@@ -133,7 +132,7 @@ pub fn get() -> &'static Settings {
             }
         };
         let s = Settings {
-            abilities: setting(&text, "abilities").and_then(|v| Mode::parse(&v)).unwrap_or(Mode::Test),
+            abilities: setting(&text, "abilities").and_then(|v| Mode::parse(&v)).unwrap_or(Mode::Kh1),
             hurt: on(&text, "hurt", "kh2", true),
             carry: on(&text, "carry", "on", true),
             ceilings: on(&text, "ceilings", "on", true),

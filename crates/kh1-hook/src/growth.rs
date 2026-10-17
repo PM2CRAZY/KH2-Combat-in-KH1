@@ -449,7 +449,8 @@ pub enum Mode {
 impl Mode {
     pub fn parse(s: &str) -> Option<Mode> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "test" | "max" => Some(Mode::Test),
+            // ("remove": before uninstalling, the KH2 abilities come out of the save, as in test.)
+            "test" | "max" | "remove" | "uninstall" => Some(Mode::Test),
             "kh1" | "menu" | "level" => Some(Mode::Kh1),
             "all" => Some(Mode::All),
             _ => None,

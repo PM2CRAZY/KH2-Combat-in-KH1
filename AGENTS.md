@@ -1510,3 +1510,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   rows 25 apart) and so is the insta-kill dev tool (`win/devtools.rs`, `insta_kill`, F8 /
   L1 + R1 + Select). NOTICE / CREDITS no longer list Instant Gummi.
 
+### 2026-10-17: Stage 140 (release package)
+- The user is releasing the mod. Fresh installs default to `abilities = kh1` (was `test`);
+  `abilities = remove` (= test mode) takes the KH2 abilities back out of a save before
+  uninstalling. The DLL checks the game build first (`supported_exe`: the first bytes of
+  KH1's physics step `0x298230`, control step `0x2A4090` and reward line `0x1B6990`, the
+  Epic Games Store release) and stays off otherwise (Steam's addresses differ). `fx_test`
+  left out of the default ini. The mod.yml describes the mod for players; the release zip is
+  mod.yml + kh1-kh2.dll + README.txt (install steps) + licences, NOTICE, CREDITS.
+
