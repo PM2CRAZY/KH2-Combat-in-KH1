@@ -1456,3 +1456,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   shapes are wide and clipped the guard's edge on the way to the head. Guards are now tested
   against the sweep with each shape's radius cut to that KH1 radius (8..60).
 
+### 2026-10-16: Stage 133 (no KH1 glide after an air spell; fewer guard repels)
+- The user's video: after a spell in the air the hand-off ended with KH1 still in its air
+  state (1, then 2); its fall state's step (`0x1402ADBD0` -> `0x1402B0530` -> `0x1402B0BA0`,
+  with Glide's flag `0x142D5F610 & 0x80` and the jump button held for KH2's glide) put him in
+  KH1's glide (state 0x15, motion 0x71). A hand-off now ends by setting KH1's state to 0
+  (`0x1402AF7D0`, its exit steps run) and starts KH2 in the air when he is (`AIR_START`); KH1's
+  glide state under KH2 is turned back to 0 at once (logged).
+- Clinks: Sora's swing data (bone 0x30) has no radius / priority of its own (the Keyblade's
+  are added by `0x1402B10E0`), so "blade radius 8" was only the clamp. KH1 itself clashes a
+  type-0 priority-100 guard with any swing entering it. Now, with a part touched in the same
+  frame, a guard repels only when that part's centre is inside the guard (the blade must pass
+  through it); repel notes log the guard's motion tie, the owner's motion and the nearest part.
+

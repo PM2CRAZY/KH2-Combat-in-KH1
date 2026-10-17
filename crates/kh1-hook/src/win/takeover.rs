@@ -55,6 +55,10 @@ pub static FLY_ATTACK: AtomicBool = AtomicBool::new(false);
 static FLY_PRESS: AtomicBool = AtomicBool::new(false);
 /// The same for an Attack pressed during KH1's own move (`ATTACK_AFTER`), on the ground.
 static FLY_PRESS_GROUND: AtomicBool = AtomicBool::new(false);
+/// KH1's own move ended with him in the air: KH2 starts falling.
+static AIR_START: AtomicBool = AtomicBool::new(false);
+/// KH1's glide (state 0x15, `0x1402B0BA0`): never while KH2 has him.
+const KH1_GLIDE_STATE: i32 = 0x15;
 /// Flying when KH2 took him: back into flight after the combo at any height (down to
 /// `FLEW_ABOVE`), until he lands.
 static FLEW: AtomicBool = AtomicBool::new(false);
@@ -325,6 +329,17 @@ unsafe fn takeover(actor: usize) -> bool {
         if frames >= 10 && matches!(state, 0 | 1) && (kh1_moving() || free || square || attack) {
             FLY_PRESS_GROUND.store(ATTACK_AFTER.swap(false, Ordering::Relaxed), Ordering::Relaxed);
             HANDOFF.store(false, Ordering::Relaxed);
+            // KH1's state back to the ground one KH2 keeps him in, its exit steps run (the
+            // user: after a spell in the air KH1 still had him in its air state 1 / 2 and its
+            // air step glided when the jump button was held, KH1's glide under KH2), and KH2
+            // starts in the air when he is.
+            if state != 0 {
+                let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+                set(actor, 0);
+            }
+            if rd::<f32>(actor + 0x3D4) > STEP_DOWN {
+                AIR_START.store(true, Ordering::Relaxed);
+            }
             ROLL_NOW.store(square, Ordering::Relaxed);
             FRESH.store(true, Ordering::Relaxed);
             log(&format!("KH1's move ended (state {state}): KH2 again"));
@@ -374,6 +389,10 @@ unsafe fn takeover(actor: usize) -> bool {
             log(&format!("flight: KH1 flies him ({:.0} above the floor; state now {})", above, rd::<i32>(actor + 0x70)));
         }
     }
+    if !HANDOFF.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == KH1_GLIDE_STATE && KH2_AIR.load(Ordering::Relaxed) {
+        set_state(actor, 0);
+        log("KH1 started its glide under KH2: back to KH2's");
+    }
     let state = rd::<i32>(actor + 0x70);
     let own_mode = kh1_mode(state);
     KH1_MODE.store(own_mode, Ordering::Relaxed);
@@ -412,8 +431,8 @@ unsafe fn takeover(actor: usize) -> bool {
         // is: `FLY_PRESS_GROUND`).
         combat::take_press();
     }
-    if FLY_PRESS.load(Ordering::Relaxed) {
-        // Out of KH1's flight: in the air where it had him.
+    if FLY_PRESS.load(Ordering::Relaxed) || AIR_START.swap(false, Ordering::Relaxed) {
+        // Out of KH1's flight or one of its moves in the air: in the air where it had him.
         d.grounded = false;
     }
     if ROLL_NOW.swap(false, Ordering::Relaxed) {

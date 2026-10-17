@@ -584,6 +584,8 @@ struct Guard {
     owner: usize,
     /// Its clash type (flags bits 17..19).
     kind: u32,
+    /// Tied to this motion of its owner (activity type 2), if so.
+    motion: Option<u32>,
 }
 
 /// KH1's clash table (`0x1405299B8`, symmetric): which clash types meet which (bit n: meets
@@ -679,7 +681,7 @@ unsafe fn guards(sora: usize) -> Vec<Guard> {
                 log(&format!("guard seen: actor {owner:#x} (object {id}), radius {r:.0}, flags {flags:08x}"));
             }
         }
-        out.push(Guard { shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner, kind: (flags >> 17) & 7 });
+        out.push(Guard { shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner, kind: (flags >> 17) & 7, motion: ((flags >> 2) & 3 == 2).then(|| rd::<u32>(g + 0x58)) });
     }
     out
 }
@@ -936,17 +938,35 @@ impl Strikes {
             // sweep entries in order, and KH1's blade is thin; KH2's wide hit shapes touched a
             // guard beside the part they hit: the user, Darkballs and Dragon Maleficent clinked
             // way too much).
+            // The part this frame's sweep touches first, if any (its index along the sweep and its
+            // shape).
             let body_at = self
                 .bodies
                 .iter()
-                .filter_map(|b| first_overlap(&swept, &b.parts.iter().map(|p| p.shape).collect::<Vec<_>>()).map(|(ai, _)| ai))
-                .min();
-            if let Some((gai, gi)) = first_overlap(&thin, &guard_shapes).filter(|(gai, _)| body_at.map_or(true, |b| *gai < b)) {
+                .filter_map(|b| first_overlap(&swept, &b.parts.iter().map(|p| p.shape).collect::<Vec<_>>()).map(|(ai, ti)| (ai, b.parts[ti].shape)))
+                .min_by_key(|(ai, _)| *ai);
+            // With a part touched, a guard repels only when that part lies within the guard: the
+            // blade has to go through the guard to reach it (KH1's blade, thin, could reach a
+            // part outside it without).
+            let inside = |g: &Shape, p: &Shape| {
+                let d = ((p.center[0] - g.center[0]).powi(2) + (p.center[1] - g.center[1]).powi(2) + (p.center[2] - g.center[2]).powi(2)).sqrt();
+                d < g.radius
+            };
+            if let Some((gai, gi)) = first_overlap(&thin, &guard_shapes).filter(|(gai, gi)| body_at.map_or(true, |(b, part)| *gai < b && inside(&guard_shapes[*gi], &part))) {
                 let _ = gai;
                 self.repelled.insert(h.swing);
                 let bounced = character.register_wall_hit();
                 clang(guards[gi].at);
-                note(format!("KH2 attack {} repelled by the guard of actor {:#x}, clash type {} (bounced: {bounced})", h.attack, guards[gi].owner, guards[gi].kind));
+                let g = guards[gi];
+                let near_part = self
+                    .bodies
+                    .iter()
+                    .find(|b| b.actor == g.owner)
+                    .and_then(|b| b.parts.iter().map(|p| ((p.shape.center[0] - g.at[0]).hypot(p.shape.center[2] - g.at[2]).hypot(p.shape.center[1] + g.at[1]), p.shape.radius)).min_by(|a, b| a.0.total_cmp(&b.0)));
+                note(format!(
+                    "KH2 attack {} repelled by the guard of actor {:#x}, clash type {} radius {:.0}, motion-bound {:?} (owner motion {}), nearest hittable part {:?} (centre distance, radius) (bounced: {bounced})",
+                    h.attack, g.owner, g.kind, g.shape.radius, g.motion, rd::<u32>(g.owner + 0x164), near_part
+                ));
                 continue;
             }
             // An enemy's shot met: knocked back as KH1's swing would (the user: Wakka's ball).
