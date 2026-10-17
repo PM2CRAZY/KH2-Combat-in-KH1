@@ -1572,7 +1572,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   which the window waits for. Stage 50's tally (`0x14028A4D0(0x13)`) was not what it reads.
 - Fix: `combat::exec` notes the row's motion when KH2 takes an Attack press
   (`attack_shown`); for 0.6 s after, opcode 322 run on Sora has its pushed value replaced
-  with it (`probe::event_op`; the slot at `+0x198 + count * 4`, count `+0x194`). Sora's own
+  with it (`probe::event_op`; the slot at `+0x198 + count * 4`, count `+0x194`, 0 for the first slot: the s145 build skipped 0 and never fired). Sora's own
   `+0x164` is untouched (KH1's attack objects tied to a motion compare it).
 - Camera (`camera::jerk_note` summaries): the eye and look point move smoothly (≤ ~1 unit of
   change per frame walking) at 60 updates/s, but frames arrive 2..42 ms apart even standing
