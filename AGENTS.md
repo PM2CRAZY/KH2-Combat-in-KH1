@@ -1439,3 +1439,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   a fixed body gets no KH2 launch (`PENDING`, which forced KH1's launch reaction), no Aerial
   Finish hold and no Magnet catch: KH1's own reaction stays.
 
+### 2026-10-16: Stage 131 (KH1's clash table for guards; big stays big)
+- The user: Dragon Maleficent was still pulled into a wall (Aerial Finish, Magnet Burst): her
+  size was judged each frame from her pose (615 tall standing, under 600 head down). A target
+  found big (more than 8 parts, taller than 600, radius over 300) stays big (by actor and
+  object id).
+- The user: high aerial combos on her clinked. Her big guard (radius 150, flags `000d6a09`) is
+  clash type 6, which meets nothing in KH1's clash table (`0x1405299B8`: `1F 09 09 3F 29 18 00
+  00`). Guards now repel only when the table lets their type meet Sora's swing type (his KH1
+  row data's `+0x38 & 7`); logged ("guards near").
+

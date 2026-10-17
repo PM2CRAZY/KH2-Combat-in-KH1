@@ -333,7 +333,19 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
         let root_far = (p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2) > NEAR * NEAR;
         // Or not an enemy at all (KH1 actor kind 3 are the fighters; attackable objects are
         // others): the user, nothing immovable is pulled or thrown.
-        let fixed = count > 8 || root_far || tall > 600.0 || radius > 300.0 || rd::<u8>(this + 6) != 3;
+        // Once big, always (the user: Dragon Maleficent was pulled into a wall: she is 615 tall
+        // standing and under 600 with her head down); kept by actor and its object id.
+        static BIG: std::sync::Mutex<Vec<(usize, u32)>> = std::sync::Mutex::new(Vec::new());
+        let key = (this, super::probe::object_id(this));
+        let big_now = count > 8 || tall > 600.0 || radius > 300.0;
+        let big = BIG.lock().map_or(big_now, |mut v| {
+            if big_now && !v.contains(&key) {
+                v.retain(|(a, _)| *a != this);
+                v.push(key);
+            }
+            v.contains(&key)
+        });
+        let fixed = big || root_far || rd::<u8>(this + 6) != 3;
         if fixed {
             static SEEN: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
             if let Ok(mut v) = SEEN.lock() {
@@ -570,6 +582,17 @@ struct Guard {
     /// KH1 world centre.
     at: [f32; 3],
     owner: usize,
+    /// Its clash type (flags bits 17..19).
+    kind: u32,
+}
+
+/// KH1's clash table (`0x1405299B8`, symmetric): which clash types meet which (bit n: meets
+/// type n). Types 6 and 7 meet nothing.
+const CLASH_TABLE: [u8; 8] = [0x1F, 0x09, 0x09, 0x3F, 0x29, 0x18, 0x00, 0x00];
+
+/// Whether a guard of clash type `guard` meets Sora's swing of type `swing`.
+fn clashes(guard: u32, swing: u32) -> bool {
+    CLASH_TABLE[(guard & 7) as usize] & (1 << (swing & 7)) != 0
 }
 
 const ATTACK_POOL_RVA: usize = 0x2DB5110;
@@ -656,7 +679,7 @@ unsafe fn guards(sora: usize) -> Vec<Guard> {
                 log(&format!("guard seen: actor {owner:#x} (object {id}), radius {r:.0}, flags {flags:08x}"));
             }
         }
-        out.push(Guard { shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner });
+        out.push(Guard { shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner, kind: (flags >> 17) & 7 });
     }
     out
 }
@@ -892,7 +915,19 @@ impl Strikes {
                 note(format!("KH2 attack {} struck a wall at {at:.0?} (bounced: {bounced})", h.attack));
                 continue;
             }
-            let guard_shapes: Vec<Shape> = self.guards.iter().map(|g| g.shape).collect();
+            // Only guards KH1's clash table lets meet Sora's swing (its row data's `+0x38` type;
+            // the user: aerial combos on Dragon Maleficent clinked: her big guard is type 6,
+            // which meets nothing).
+            let swing_type = self.rows.map(|rows| {
+                let base = BASE.load(Ordering::Relaxed);
+                rd::<u32>(base + ATTACK_DATA_RVA + rows[(air as usize) * 2].data as usize + 0x38) & 7
+            });
+            let guards: Vec<&Guard> = self.guards.iter().filter(|g| swing_type.map_or(true, |t| clashes(g.kind, t))).collect();
+            static TYPES: AtomicU32 = AtomicU32::new(0);
+            if !self.guards.is_empty() && TYPES.fetch_add(1, Ordering::Relaxed) < 6 {
+                log(&format!("guards near: clash types {:?} against Sora's swing type {swing_type:?}: {} can repel", self.guards.iter().map(|g| g.kind).collect::<Vec<_>>(), guards.len()));
+            }
+            let guard_shapes: Vec<Shape> = guards.iter().map(|g| g.shape).collect();
             // Only a guard met before any body part along this frame's sweep (KH1 tests a swing's
             // sweep entries in order, and KH1's blade is thin; KH2's wide hit shapes touched a
             // guard beside the part they hit: the user, Darkballs and Dragon Maleficent clinked
@@ -906,8 +941,8 @@ impl Strikes {
                 let _ = gai;
                 self.repelled.insert(h.swing);
                 let bounced = character.register_wall_hit();
-                clang(self.guards[gi].at);
-                note(format!("KH2 attack {} repelled by the guard of actor {:#x} (bounced: {bounced})", h.attack, self.guards[gi].owner));
+                clang(guards[gi].at);
+                note(format!("KH2 attack {} repelled by the guard of actor {:#x}, clash type {} (bounced: {bounced})", h.attack, guards[gi].owner, guards[gi].kind));
                 continue;
             }
             // An enemy's shot met: knocked back as KH1's swing would (the user: Wakka's ball).
