@@ -68,6 +68,14 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
+/// Waiting commands' log, on its own count (the shared one runs out in a long session).
+fn cmd_log(s: String) {
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 200 {
+        log(&s);
+    }
+}
+
 fn note(s: String) {
     if LOGGED.fetch_add(1, Ordering::Relaxed) < 300 {
         log(&s);
@@ -147,22 +155,35 @@ static PENDING_COMMAND: std::sync::Mutex<Option<([u8; 16], std::time::Instant)>>
 pub unsafe fn resume_command() {
     let Ok(mut p) = PENDING_COMMAND.lock() else { return };
     let Some((rec, t)) = *p else { return };
-    if t.elapsed().as_secs_f32() > 1.5 || !takeover::kh2_has() {
+    let kind = rec[0];
+    // (5 s: a whole combo with its finisher; the user: a spell chosen mid-combo never came.)
+    if t.elapsed().as_secs_f32() > 5.0 {
         *p = None;
+        cmd_log(format!("command {kind:#x} dropped: KH2's move still couldn't take it after 5 s"));
+        return;
+    }
+    if !takeover::kh2_has() {
+        *p = None;
+        cmd_log(format!("command {kind:#x} dropped: KH2 no longer has Sora"));
         return;
     }
     let base = BASE.load(Ordering::Relaxed);
     if rd::<u8>(base + COMMAND_RVA) != 0 {
         // A new choice replaces it.
         *p = None;
+        cmd_log(format!("command {kind:#x} dropped: another command was chosen"));
         return;
     }
-    let kind = rec[0];
-    let ready = takeover::with_kh2(|c, _| if kind == 2 { c.can_cast() } else { c.can_take_command() }).unwrap_or(false);
-    if ready {
+    let ready = takeover::with_kh2(|c, _| if kind == 2 { c.can_cast() } else { c.can_take_command() });
+    if ready == Some(true) {
         *p = None;
-        wr(base + COMMAND_RVA, rec);
-        note(format!("command {kind:#x}: KH2's move allows it now"));
+        // The menu step's own flags this frame (`0x140291660`) kept; the choice put back.
+        let flags = rd::<u32>(base + COMMAND_RVA) & 0xFF00_0000 & !0x0100_0000;
+        let mut r = rec;
+        let v = u32::from_le_bytes([r[0], r[1], r[2], r[3]]) | flags;
+        r[..4].copy_from_slice(&v.to_le_bytes());
+        wr(base + COMMAND_RVA, r);
+        cmd_log(format!("command {kind:#x}: KH2's move allows it now ({:.2} s after it was chosen)", t.elapsed().as_secs_f32()));
     }
 }
 
@@ -211,7 +232,7 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         if let Ok(mut p) = PENDING_COMMAND.lock() {
             *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now()));
         }
-        note(format!("command {kind:#x} ({full:08x}) waits: KH2's move can't be cancelled yet"));
+        cmd_log(format!("command {kind:#x} ({full:08x}) waits: KH2's move can't be cancelled yet"));
         return;
     }
     static AIR_LOG: AtomicU32 = AtomicU32::new(0);

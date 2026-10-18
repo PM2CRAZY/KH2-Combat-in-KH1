@@ -750,7 +750,10 @@ pub fn menu_sora_within(ms: u64) -> bool {
 /// Whether a Sora model instance stands at his actor (the field's Sora), as far as can be told
 /// (unknown: yes). The pass's world matrix, else bone 0's, against the actor's `+0x10`.
 unsafe fn at_sora(instance: usize, param_world: usize) -> bool {
-    let actor = super::probe::SORA_ACTOR.load(Ordering::Relaxed);
+    // Sora's actor from KH1's party slot, current every frame (the probe's copy could still be the
+    // last room's actor as a room loads, and Sora's new model was refused, left in KH1's
+    // animations; the user: "sometimes entering a room").
+    let actor = super::takeover::sora_actor();
     if actor < 0x10000 || !super::crash::readable(actor + 0x20) {
         return true;
     }

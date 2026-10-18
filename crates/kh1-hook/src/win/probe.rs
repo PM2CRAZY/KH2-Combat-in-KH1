@@ -261,7 +261,8 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     // Circle and Square then (the user: the Square shortcut didn't cast).
     // (Only when L1 opens KH1's shortcut menu: with no shortcut set it opens nothing, and KH1
     // jumped with the button, cancelling KH2's moves, the user.)
-    let shortcuts = super::shortcuts::menu_on_l1(b_all);
+    // (And not while a command submenu is open: Circle backs out of it, KH1's.)
+    let shortcuts = super::shortcuts::menu_on_l1(b_all) || super::shortcuts::submenu_open();
     if super::takeover::active() && !shortcuts {
         std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::jump_button() | super::takeover::SQUARE));
     } else if !super::takeover::kh1_keeps_square() && !shortcuts {

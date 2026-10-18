@@ -1633,3 +1633,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   him in the field idle).
 - KH2's camera started while locked on faces the target at once (it came back unlocked after a
   pause, the battle pause, a limit, the save menu or examining).
+
+### 2026-10-18: Stage 149 (command submenus, the spell queue, room entry)
+- The command menu's current level: `0x142D54450` points at `&0x142D543F0` at the top level
+  (there KH1's menu step `0x140291660` turns cancel, pressed bit `4`, into the jump flag
+  `0x1000000` on the command record) and deeper in a submenu (magic, items, summons), where
+  cancel backs out. `shortcuts::submenu_open()`: the pad mask, KH2's jump and the control-step
+  strip leave Circle to KH1 then (the user couldn't leave those lists during a KH2 move).
+- The command queue waits up to 5 s (a combo with its finisher; the user: a spell chosen
+  mid-combo never came), keeps the menu step's own flags when it puts the choice back, and
+  logs every wait / resume / drop on its own count (`cmd_log`).
+- `pose::at_sora` compares a new model with Sora's actor from KH1's party slot
+  (`takeover::sora_actor`); the probe's copy could be the last room's as a room loads, and
+  his new model was refused (KH1's animations on entering a room, "sometimes").

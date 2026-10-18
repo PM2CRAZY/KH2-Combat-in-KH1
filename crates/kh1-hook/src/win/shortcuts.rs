@@ -420,3 +420,15 @@ pub fn menu_on_l1(buttons: u16) -> bool {
     let base = base();
     base != 0 && unsafe { rd::<u32>(base + HAS_SHORTCUTS_RVA) != 0 }
 }
+
+/// Where the command menu's current level is kept (`0x140291660`: `&ROOT_RVA` at the top level,
+/// a deeper slot in a submenu: magic, items, summons...).
+const LEVEL_PTR_RVA: Rva = Rva(0x2D54450);
+
+/// A submenu of the command menu is open: Circle (KH1's cancel, `4`) backs out of it there, where
+/// at the top level it is the jump (the menu step turns it into the jump flag `0x1000000`). The
+/// user: with a KH2 move running, the magic / item / summon lists couldn't be left.
+pub fn submenu_open() -> bool {
+    let base = base();
+    base != 0 && unsafe { rd::<u64>(base + LEVEL_PTR_RVA) as usize != base + ROOT_RVA }
+}

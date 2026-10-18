@@ -254,7 +254,8 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
         && actor == rd::<u64>(base + PARTY_RVA) as usize
         && !HANDOFF.load(Ordering::Relaxed)
         && kh1_borrows(actor)
-        && !super::shortcuts::menu_on_l1(RAW_BUTTONS.load(Ordering::Relaxed) as u16);
+        && !super::shortcuts::menu_on_l1(RAW_BUTTONS.load(Ordering::Relaxed) as u16)
+        && !super::shortcuts::submenu_open();
     const KH2_BITS: u32 = 0x6 | 0x10_0000;
     let state = base + BUTTONS_RVA;
     let saved = rd::<[u32; 6]>(state);
@@ -513,7 +514,8 @@ unsafe fn takeover(actor: usize) -> bool {
     let stick = if tilt > 0.0 { (dir * tilt).to_array() } else { [0.0, 0.0] };
     // With L1 held the face buttons are KH1's shortcuts, not KH2's jump / action; a button
     // still held when L1 lets go stays KH1's until released (`held` sees it raw).
-    let shortcut = super::shortcuts::menu_on_l1(buttons);
+    // (A command submenu open: Circle backs out of it, not KH2's jump.)
+    let shortcut = super::shortcuts::menu_on_l1(buttons) || super::shortcuts::submenu_open();
     let jump_raw = buttons & jump_button() != 0;
     let action_raw = buttons & SQUARE != 0;
     let jump = jump_raw && !shortcut;
@@ -1107,6 +1109,15 @@ pub fn move_tilt() -> f32 {
 /// Attack pressed while KH1 had him for its own move (`combat::exec`): ends that move as soon
 /// as he stands free (KH1 allowed the cancel) and is KH2's first press.
 pub static ATTACK_AFTER: AtomicBool = AtomicBool::new(false);
+
+/// Sora's actor (KH1's party slot), 0 if none.
+pub fn sora_actor() -> usize {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return 0;
+    }
+    unsafe { rd::<u64>(base + PARTY_RVA) as usize }
+}
 
 pub fn kh2_has() -> bool {
     ON.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 && !HANDOFF.load(Ordering::Relaxed)
