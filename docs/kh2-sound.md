@@ -44,3 +44,15 @@ The user: Explosion and Magnet Burst didn't sound right in KH1. Two things were 
   frame 0, 6 at frame 50) in `voice/us/battle/<world>_sora.win32.scd`, whose streams are Ogg
   Vorbis (codec 6; the Vorbis headers XOR'd with the key at extra byte 2).
 - KH1's own swing voice is not played for moves whose KH2 sounds play.
+
+## se000's records (s178)
+
+The user: Reflect's sounds were wrong. se000's id records are 68 bytes, not 20 as in se999 and
+se500, and their last four bytes are two u16 that differ: the first is only a running count
+of the ids that play, the second the entry. Read by the first (stage 41 to s177), Reflect's
+138 / 139 / 176 played nothing and the others played unrelated sounds (57 of se000's 124 ids
+unplayable). Read by the second, each spell's sounds sit in one block (Reflect 138..178 →
+entries 180..187, Fire 114..119 → 91..98, Blizzard → 2..8, Cure → 35..37) and 12 ids are
+unplayable (empty entries 195..213: Thunder's 126..128 among them). In se999 and se500 the two
+are equal, so the sounds already checked there are unchanged. Magnet Burst's 169 now plays
+entry 156 (2.7 s), not 125.

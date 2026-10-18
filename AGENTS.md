@@ -1966,3 +1966,34 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   The barrier and its counter don't watch the caster's motion (kh2-magic test with the cast
   motion ending at frame 8: same barrier and counters), so landing early keeps Reflect up.
   Test `falling_air_cast_lands_into_the_landing`.
+
+### 2026-10-18: Stage 178 (glide hover, Aerial Dodge, Reflect's sounds, Fire's cancel, magic in the combo)
+- "KH2 sora has a animation for gliding in place": KH2's ACTION_GLIDEHOVER (exe `0x1403A8F44`:
+  a glide started with the stick neutral is action 0x11, else 0x12; `0x140422B20` plays motion
+  208 and goes to the glide on the stick; `0x140422930` slows it ×0.9 a tick). Ours: the same,
+  and a glide let go hovers once slowed under 2 per frame. `motion::GLIDE_END` (208, unused)
+  is `GLIDE_HOVER`. Test `glide_in_place_hovers`.
+- "aerial dodge doesnt push you forwards unless you're tilted forwards in KH2": neutral, the
+  dodge has no horizontal speed (was `air_dodge_speed` along the facing). Test
+  `neutral_aerial_dodge_goes_straight_up`.
+- "These are the wrong Reflect sound effects": se000's id records are 68 bytes and the u16
+  read as the entry (end - 4) is only a running count there; the entry is the last u16 (end -
+  2), equal to it in se999 / se500 (20-byte records, the sounds checked before). Read that way
+  every spell's ids land in one block (Reflect's on entries 180..187) and 12 of 124 ids are
+  unplayable (57 before; Reflect's 138 / 139 / 176 played nothing). Fire, Magnet Burst's 169
+  and the other se000 sounds change too. `docs/kh2-sound.md`.
+- "can you make it so fire cant be cancelled out until fire actually shoots the projectile":
+  `spell_out` no longer falls back on 55% of KH1's cast motion for spells with a shot (only
+  Cure / Stop); the others wait for their shot (or KH1's whole cast motion). The shot test
+  compares with the fewest attack objects seen since the cast (a swing's hitbox out at the
+  handoff ended during it, so Fire's shot came back to the start count). Logs "command's spell
+  Some(n) out after t s (its shot / KH1's cast motion's time)".
+- "casting a spell mid combo ... should essentially add onto the main combo / it should insert
+  itself" (video: Reflega mid-air combo, then a whole new combo): a spell is mid-combo while a
+  swing plays or one just ended (in the air until landing, on the ground for 60 frames), not
+  only during a swing (`combo_live`); it takes a step (counted as `try_attack` counts: hit,
+  Combo Master or in the air) and the combo goes on after it. KH1's spells too
+  (`Character::magic_step` at the command handoff, `SPELL_COMBO` restores the combo after).
+  Test `spell_mid_combo_is_a_step_of_it`.
+- Pending: "multi-hit attacks (like explosion) should only have the last hit towards revenge
+  value" (KH1's revenge field being traced).

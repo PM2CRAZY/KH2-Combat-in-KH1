@@ -587,3 +587,74 @@ fn falling_air_cast_lands_into_the_landing() {
     assert!(outs[..landed].iter().all(|o| o.motion == 73), "left the cast before landing");
     assert!(w.pos[1] <= 0.0);
 }
+
+/// Gliding in place is KH2's hover (motion 208): a glide started with the stick neutral hovers
+/// in place, the stick takes it into the glide, and a glide let go hovers again once stopped.
+#[test]
+fn glide_in_place_hovers() {
+    let mut w = World::new(sora());
+    w.ch.abilities.aerial_dodge = 0;
+    w.run(1, Pad { jump: true, ..IDLE });
+    w.run(12, IDLE);
+    let outs = w.run(10, Pad { jump: true, ..IDLE });
+    assert!(outs.iter().all(|o| o.state == StateName::Glide && o.motion == motion::GLIDE_HOVER), "{:?}", outs.iter().map(|o| o.motion).collect::<Vec<_>>());
+    assert!(outs.iter().all(|o| o.displacement[0].abs() + o.displacement[2].abs() < 1e-3), "hovering moved");
+    let outs = w.run(20, Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
+    assert!(outs.iter().all(|o| o.motion != motion::GLIDE_HOVER));
+    assert!(outs.last().unwrap().displacement[2].abs() > 5.0);
+    let outs = w.run(80, Pad { jump: true, ..IDLE });
+    assert_eq!(outs.last().unwrap().motion, motion::GLIDE_HOVER);
+    assert!(outs[0].motion != motion::GLIDE_HOVER, "hovered before slowing down");
+}
+
+/// Aerial Dodge only moves along the stick: neutral, it goes straight up (the user: KH2's
+/// doesn't push Sora forward unless tilted).
+#[test]
+fn neutral_aerial_dodge_goes_straight_up() {
+    let mut w = World::new(sora());
+    w.run(1, Pad { jump: true, ..IDLE });
+    w.run(10, IDLE);
+    let x0 = (w.pos[0], w.pos[2]);
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_eq!(o.state, StateName::AerialDodge);
+    w.run(20, IDLE);
+    assert!((w.pos[0] - x0.0).abs() + (w.pos[2] - x0.1).abs() < 1e-3, "moved {:?}", (w.pos[0] - x0.0, w.pos[2] - x0.1));
+    let mut w = World::new(sora());
+    w.run(1, Pad { jump: true, ..IDLE });
+    w.run(10, IDLE);
+    let z0 = w.pos[2];
+    w.step(Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
+    w.run(10, Pad { stick: [0.0, 1.0], ..IDLE });
+    assert!(w.pos[2] - z0 > 20.0);
+}
+
+/// A spell cast mid-combo inserts itself as a step of it (the user: as a modifier does), also
+/// just after a swing has ended (picking it from the menu takes a moment): swing, spell, then
+/// the next swing is the combo's finisher.
+#[test]
+fn spell_mid_combo_is_a_step_of_it() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(71, Clip::plain(71, 30));
+    let mut w = World::new(ch);
+    w.step(Pad { attack: true, ..IDLE });
+    for _ in 0..45 {
+        let o = w.step(IDLE);
+        if !o.hitboxes.is_empty() {
+            w.ch.register_hit();
+        }
+    }
+    w.run(10, IDLE);
+    assert_eq!(w.ch.cast(CastMotions { ground: 71, finisher: None, air: 73 }), Some(71));
+    w.run(40, IDLE);
+    let o = w.step(Pad { attack: true, ..IDLE });
+    assert_eq!(o.motion, 110, "the swing after the spell should be the finisher");
+    // Long after a swing, a spell starts no combo step.
+    let mut ch = sora();
+    ch.moveset.clips.insert(71, Clip::plain(71, 30));
+    let mut w = World::new(ch);
+    w.step(Pad { attack: true, ..IDLE });
+    w.run(200, IDLE);
+    w.ch.cast(CastMotions { ground: 71, finisher: None, air: 73 });
+    w.run(40, IDLE);
+    assert_eq!(w.step(Pad { attack: true, ..IDLE }).motion, 100);
+}

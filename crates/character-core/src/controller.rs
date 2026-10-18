@@ -38,7 +38,8 @@ pub mod motion {
     pub const GLIDE: u16 = 205;
     pub const GLIDE_TURN_A: u16 = 206;
     pub const GLIDE_TURN_B: u16 = 207;
-    pub const GLIDE_END: u16 = 208;
+    /// Gliding in place (ACTION_GLIDEHOVER's motion, exe `0x140422B20`).
+    pub const GLIDE_HOVER: u16 = 208;
     pub const DODGE_ROLL: u16 = 209;
     pub const HANG: u16 = 7;
     /// Repelled by a wall (or a guard) on the ground / in the air.
@@ -322,6 +323,9 @@ const HIT_BACK_SPEED: f32 = 0.1;
 /// runs off; it was 0, KH1 had none). Buttons still work from the motion's reaction window.
 const LAND_HOLD: u32 = 14;
 
+/// Frames after a ground swing ends in which a spell still comes mid-combo (`combo_live`).
+const COMBO_GRACE: u32 = 60;
+
 /// Physics tick length in frames: KH2 recomputes velocities at 30 Hz.
 const DT: f32 = 2.0;
 const DEAD_ZONE: f32 = 0.1;
@@ -364,6 +368,9 @@ pub struct Character {
     air_dodge_ready: bool,
     /// Glide banking shown (0 level, 1 or -1 turning), held with some hysteresis.
     glide_bank: i8,
+    /// Gliding in place (KH2's ACTION_GLIDEHOVER, motion 208): `None` until the glide's first
+    /// frame decides it (the stick neutral then: hover).
+    glide_hover: Option<bool>,
     /// Jump button still held since the jump started / released early.
     jump_held: bool,
     jump_released: bool,
@@ -375,6 +382,9 @@ pub struct Character {
     hit: bool,
     /// The next swing goes on with the combo (`set_combo_state`: after a spell).
     combo_carry: bool,
+    /// Frames since an attack last played (0 while one does): a spell cast this soon after a
+    /// swing on the ground still comes mid-combo (`combo_live`).
+    since_swing: u32,
     buffered_attack: bool,
     /// Hang point to move onto this frame (a ledge was just grabbed).
     snap: Option<[f32; 3]>,
@@ -411,6 +421,10 @@ fn wrap(a: f32) -> f32 {
 /// frames of turning if that is more) and level out below 4 degrees.
 const GLIDE_BANK_IN: f32 = 0.21;
 const GLIDE_BANK_OUT: f32 = 0.07;
+/// Horizontal speed (per frame) under which a glide with the stick let go turns into the hover.
+const GLIDE_HOVER_SPEED: f32 = 2.0;
+/// The hover's horizontal speed each physics tick (exe `0x140422930`, `0x1405866E0`).
+const GLIDE_HOVER_DRAG: f32 = 0.9;
 
 fn turn_toward(from: f32, to: f32, rate: f32) -> f32 {
     let d = wrap(to - from);
@@ -478,11 +492,13 @@ impl Character {
             auto_target: true,
             air_dodge_ready: false,
             glide_bank: 0,
+            glide_hover: None,
             count: 0,
             finishers: 0,
             get_up: None,
             hit: false,
             combo_carry: false,
+            since_swing: u32::MAX,
             jump_held: false,
             jump_released: false,
             buffered_attack: false,
@@ -564,7 +580,7 @@ impl Character {
         if !self.can_cast() {
             return None;
         }
-        let in_combo = matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. }, .. }));
+        let in_combo = self.combo_live();
         let at_finisher = in_combo && self.count.saturating_add(1) >= self.max_count(self.airborne);
         let motion = if self.airborne {
             m.air
@@ -574,7 +590,7 @@ impl Character {
             m.ground
         };
         self.clip(motion)?;
-        if in_combo && self.hit {
+        if in_combo && self.swing_counts() {
             self.count = self.count.saturating_add(1);
         }
         // The swing after the spell goes on with the combo (the spell took a step of it).
@@ -689,6 +705,35 @@ impl Character {
     /// after the cast's end frames).
     pub fn combo_state(&self) -> (u8, u8, bool) {
         (self.count, self.finishers, self.hit)
+    }
+
+    /// A combo is going (the user: a spell cast mid-combo inserts itself in it, as a modifier
+    /// does): a swing playing, or one just ended (in the air until landing, on the ground for
+    /// `COMBO_GRACE` frames: picking the spell from KH1's menu takes a moment), and its last
+    /// swing not yet reached.
+    fn combo_live(&self) -> bool {
+        let swinging = matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. }, .. }));
+        let recent = self.count > 0 && (self.airborne || self.since_swing <= COMBO_GRACE);
+        (swinging || recent) && self.count < self.max_count(self.airborne)
+    }
+
+    /// Whether the step taken now counts on the combo's counter (as `try_attack`: a connected
+    /// swing, Combo Master, or in the air).
+    fn swing_counts(&self) -> bool {
+        self.hit || self.abilities.combo_master || self.airborne
+    }
+
+    /// A spell of the host's own (KH1's) is cast now: mid-combo it takes a step of the combo,
+    /// as KH2's casts do (`cast`). Returns whether the combo goes on after it (the spell wasn't
+    /// its last step).
+    pub fn magic_step(&mut self) -> bool {
+        if !self.combo_live() {
+            return false;
+        }
+        if self.swing_counts() {
+            self.count = self.count.saturating_add(1);
+        }
+        self.count < self.max_count(self.airborne)
     }
 
     pub fn set_combo_state(&mut self, (count, finishers, hit): (u8, u8, bool)) {
@@ -1145,6 +1190,7 @@ impl Character {
                 self.arc = None;
                 self.vel_y = 0.0;
                 self.mode = Mode::Glide;
+                self.glide_hover = None;
                 return true;
             }
         }
@@ -1166,14 +1212,16 @@ impl Character {
             let g = self.growth(self.abilities.aerial_dodge).cloned().unwrap_or_default();
             self.air_dodge_ready = false;
             let moving = len2(input.stick) > DEAD_ZONE;
-            let dir = if moving { norm(input.stick) } else { self.forward() };
+            let dir = norm(input.stick);
             if moving {
                 self.facing = yaw_of(input.stick);
             }
             self.start_held_arc(g.air_dodge_height);
             self.jump_held = input.jump.held;
             self.jump_released = !input.jump.held;
-            self.vel_h = scale(dir, g.air_dodge_speed);
+            // Only along the stick: with it neutral the dodge goes straight up (the user: KH2's
+            // Aerial Dodge doesn't push Sora forward unless the stick is tilted).
+            self.vel_h = if moving { scale(dir, g.air_dodge_speed) } else { [0.0; 2] };
             self.vel_y = 0.0;
             self.start_action(ActionKind::AerialDodge, motion::AERIAL_DODGE);
             return true;
@@ -1317,6 +1365,7 @@ impl Character {
 
     /// Advances one 60 Hz frame.
     pub fn step(&mut self, input: &Input, env: &Env) -> Output {
+        self.since_swing = if matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. }, .. })) { 0 } else { self.since_swing.saturating_add(1) };
         self.update_lock(input, env);
         let was_airborne = self.airborne;
         let rising = self.arc.map_or(false, |a| a.rising())
@@ -1433,8 +1482,19 @@ impl Character {
                     -1 if d > -leave => if d > enter { 1 } else { 0 },
                     b => b,
                 };
+                // Gliding in place (exe `0x1403A8F44`: a glide started with the stick neutral is
+                // ACTION_GLIDEHOVER, motion 208, and the stick takes it into the glide, `0x140422B20`).
+                // Ours: a glide whose stick is let go hovers too once it has slowed to a stop
+                // (our glide slows with the stick; the exe's glide has no way back).
+                let hover = *self.glide_hover.get_or_insert(!moving);
+                let hover = if hover { !moving } else { !moving && len2(self.vel_h) < GLIDE_HOVER_SPEED };
+                self.glide_hover = Some(hover);
+                if hover {
+                    self.glide_bank = 0;
+                }
                 let turn = self.glide_bank;
                 fo.motion = match turn {
+                    _ if hover => motion::GLIDE_HOVER,
                     0 => motion::GLIDE,
                     1 => motion::GLIDE_TURN_A,
                     _ => motion::GLIDE_TURN_B,
@@ -1823,7 +1883,7 @@ impl Character {
                 // "in KH2 you're able to glide in place").
                 let tilt = if moving { m } else { 0.0 };
                 let speed = (1.0 - a) * g.glide_speed * tilt + a * len2(self.vel_h);
-                self.vel_h = scale(self.forward(), speed);
+                self.vel_h = if self.glide_hover == Some(true) { scale(self.vel_h, GLIDE_HOVER_DRAG) } else { scale(self.forward(), speed) };
                 let fall = ((env.height_above_ground - g.glide_fall_height).max(0.0) * g.glide_fall_ratio).min(g.glide_fall_max);
                 self.vel_y = -fall;
                 gravity = false;

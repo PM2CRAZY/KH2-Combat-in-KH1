@@ -46,7 +46,7 @@ pub mod blend {
     pub const MIN: f32 = 2.0;
 
     pub fn is_glide(m: u16) -> bool {
-        (motion::GLIDE..=motion::GLIDE_END).contains(&m)
+        (motion::GLIDE..=motion::GLIDE_HOVER).contains(&m)
     }
 
     pub fn is_free(m: u16) -> bool {

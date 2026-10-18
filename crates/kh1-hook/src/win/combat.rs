@@ -269,10 +269,17 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // Only if KH1 did something with him (a new state or motion request); else as before.
     let after = look();
     if after != set {
+        // A spell mid-combo takes a step of it, and the combo goes on after it (the user: magic
+        // cast mid-combo inserts itself in the combo, as a modifier does).
+        if kind == 2 {
+            let on = takeover::with_kh2(|c, _| c.magic_step());
+            takeover::SPELL_COMBO.store(on == Some(true), Ordering::Relaxed);
+            log(&format!("spell cast {}", match on { Some(true) => "mid-combo: the combo goes on after it", Some(false) => "outside a combo (or as its last step)", None => "(KH2's controller busy: not counted on the combo)" }));
+        }
         takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
         // (A spell in the air: its index in the command's second byte (Fire 0 .. Aero 6).)
         takeover::set_air_cast((air && kind == 2).then_some(((full >> 8) & 0xFF) as u8));
-        takeover::command_started(sora_shots(actor));
+        takeover::command_started(sora_shots(actor), (kind == 2).then_some(((full >> 8) & 0xFF) as u8));
         takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}, KH1 motion {:#x}", if air { " in the air" } else { "" }, super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed)));
     } else {
         if air {

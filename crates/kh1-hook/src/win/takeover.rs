@@ -337,26 +337,49 @@ static LAND_NOW: AtomicBool = AtomicBool::new(false);
 
 /// A command KH1 runs (a spell): when it started and how many attack objects of Sora's were
 /// live then (a new one is the spell's shot going out).
-static COMMAND: Mutex<Option<(Instant, usize)>> = Mutex::new(None);
+static COMMAND: Mutex<Option<Command>> = Mutex::new(None);
 /// KH1's command was cut by an Attack in its end frames: KH2's combo goes on.
 static COMBO_ON: AtomicBool = AtomicBool::new(false);
+/// A KH1 spell was cast mid-combo (`Character::magic_step`): the combo goes on after it.
+pub static SPELL_COMBO: AtomicBool = AtomicBool::new(false);
 
-pub fn command_started(shots: usize) {
+pub fn command_started(shots: usize, spell: Option<u8>) {
     if let Ok(mut c) = COMMAND.lock() {
-        *c = Some((Instant::now(), shots));
+        *c = Some(Command { t: Instant::now(), low: shots, spell, logged: false });
     }
 }
 
+/// The command handed to KH1: when, the fewest attack objects of Sora's seen since (a swing's
+/// hitbox still out at the handoff ends during the cast, so the spell's shot can come back to
+/// the count it started at), and its spell (Fire 0 .. Aero 6) for a magic command.
+#[derive(Clone, Copy)]
+struct Command {
+    t: Instant,
+    low: usize,
+    spell: Option<u8>,
+    logged: bool,
+}
+
 /// The command's spell is out (KH2's cast motions take Attack from about 8 frames after their
-/// release, their "end frames"): a new attack object of Sora's, or, for spells with none (Cure),
-/// 55% of KH1's cast motion.
+/// release, their "end frames"): a new attack object of Sora's. Only spells that make none
+/// (Cure, Stop) fall back on 55% of KH1's cast motion; the others wait for their shot (the
+/// user: Fire could be cancelled before it shot), or at most KH1's whole cast motion.
 unsafe fn spell_out(actor: usize) -> bool {
-    let Some((t, shots)) = COMMAND.try_lock().ok().and_then(|c| *c) else { return true };
-    if super::combat::sora_shots(actor) > shots {
-        return true;
-    }
+    let Ok(mut g) = COMMAND.try_lock() else { return false };
+    let Some(c) = g.as_mut() else { return true };
+    let now = super::combat::sora_shots(actor);
     let len = pose::sora_slot().filter(|s| *s > 13).and_then(pose::slot_frames).map_or(36.0, |n| n as f32);
-    t.elapsed().as_secs_f32() >= (len * 0.55 / 60.0).clamp(0.3, 1.2)
+    let secs = c.t.elapsed().as_secs_f32();
+    let shot = now > c.low;
+    c.low = c.low.min(now);
+    let no_shot = matches!(c.spell, Some(3) | Some(5)) || c.spell.is_none();
+    let wait = if no_shot { (len * 0.55 / 60.0).clamp(0.3, 1.2) } else { (len / 60.0).clamp(0.5, 2.5) };
+    let out = shot || secs >= wait;
+    if out && !c.logged {
+        c.logged = true;
+        log(&format!("command's spell {:?} out after {secs:.2} s ({})", c.spell, if shot { "its shot" } else { "KH1's cast motion's time" }));
+    }
+    out
 }
 
 /// KH1 shows Sora standing, walking or running: his motion's slot, or for a motion we don't
@@ -769,7 +792,7 @@ unsafe fn takeover(actor: usize) -> bool {
         let combo = d.character.combo_state();
         d.character = kh2.character.clone();
         d.character.abilities = abilities;
-        if COMBO_ON.swap(false, Ordering::Relaxed) {
+        if COMBO_ON.swap(false, Ordering::Relaxed) | SPELL_COMBO.swap(false, Ordering::Relaxed) {
             d.character.set_combo_state(combo);
         }
         d.grounded = true;

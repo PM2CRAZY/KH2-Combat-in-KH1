@@ -85,7 +85,9 @@ All **Checked (exe)** unless noted:
 - **Aerial Dodge.** Pressing **jump** again in mid-air. Only possible if the jump *started*
   with Aerial Dodge owned. Walking off
   a ledge doesn't allow it. Once per airtime. It starts a fresh jump arc of
-  `air_dodge_height` with horizontal speed `air_dodge_speed` along the stick.
+  `air_dodge_height` with horizontal speed `air_dodge_speed` along the stick; with the stick
+  neutral it goes straight up (s178, the user: KH2's doesn't push forward unless tilted; before,
+  it went along the facing).
 - **Quick Run.** Ground only.
   - **Start:** `air_slide_speed` along the stick, with no gravity, invulnerable for
     `air_slide_star_time`.
@@ -104,8 +106,13 @@ All **Checked (exe)** unless noted:
     `glide_start_height`.
   - **Turning:** uses `glide_turn_speed`.
   - **Speed** each tick: `(1 − a)·glide_speed·tilt + a·|v|`, along the facing; `tilt` is the
-    stick's (0 when neutral), so letting go glides in place (the user: KH2 does; the exe's
-    glide step is not traced, **Hypothesis** for the exact scaling).
+    stick's (0 when neutral), so letting go glides in place (the user: KH2 does). The exe's
+    glide step (`0x140422C00`) has no tilt: `(1 − a)·glide_speed + a·|v|`.
+  - **Gliding in place (Checked (exe), s178):** a glide started with the stick neutral is
+    ACTION_GLIDEHOVER (`0x1403A8F44`: action 0x11, else 0x12 the glide), which plays motion
+    208 (`0x140422B20`), slows its horizontal speed ×0.9 a tick (`0x140422930`, `0x1405866E0`)
+    and falls as the glide does; the stick takes it into the glide. Ours also: a glide let go
+    hovers once it has slowed under 2 per frame (the exe's glide has no way back).
   - **Descent per frame:** `min(max(height − glide_fall_height, 0) × glide_fall_ratio,
     glide_fall_max)`. Descent slows as the ground nears, so the glide settles at
     `glide_fall_height` above the ground.

@@ -18,9 +18,13 @@
 //! the sounds were wrong): `0x30` u16 id count, `0x36` u16 the bank number, and from `0x50` a
 //! table of that many offsets to id records, contiguous, up to the first entry script: byte 0
 //! 1 (plays) or 0 (none), a f32 volume at 0x08, the u32 id at 0x0C, and the record's last
-//! four bytes two u16, the sound entry (whose stream is the stream of the same index; checked
-//! against each entry script's length in se999) and a track. E.g. se999 id 38 plays entry 35
-//! at 0.8, se500 id 42 entry 25, se000 id 169 entry 125. Microsoft ADPCM (codec 12, the effect banks) and Ogg Vorbis (codec 6, the voice
+//! four bytes two u16, of which the last is the sound entry (a stream header itself, or a
+//! script whose stream is the stream of the same index; checked against each entry script's
+//! length in se999). In se999 / se500 (20-byte records) the two are equal; in se000 (68-byte
+//! records) the first is only a running count, and only the last lands each spell's sounds in
+//! one block (s178: Reflect's 138..178 on entries 180..187; 12 of 124 ids unplayable this way,
+//! 57 the other). E.g. se999 id 38 plays entry 35 at 0.8, se500 id 42 entry 25, se000 id 169
+//! entry 156. Microsoft ADPCM (codec 12, the effect banks) and Ogg Vorbis (codec 6, the voice
 //! banks `voice/us/battle/*_sora.win32.scd`) are decoded. A Vorbis stream's extra data is a
 //! 0x20-byte header (u8 version 2, u8 header size 0x20, u8 XOR key, ..., u32 seek table size at
 //! 0x10, u32 Vorbis header size at 0x14), the seek table, then the Ogg pages of the Vorbis
@@ -95,8 +99,13 @@ impl<'a> Scd<'a> {
                 continue;
             }
             let vol = f32::from_bits(u32_at(data, r + 8)?);
-            let entry = u16_at(data, end - 4)? as usize;
-            ids.push((entry < streams.len()).then_some((entry, if vol.is_finite() && vol > 0.0 { vol } else { 1.0 })));
+            // The record's last u16 is the entry it plays. (Before s178 the u16 before it was
+            // read: in se999 / se500's 20-byte records the two are equal, but in se000's 68-byte
+            // ones that one is only a running count, and Reflect's 138 / 139 / 176 played
+            // nothing and the others the wrong sounds, the user. Read this way se000's ids land
+            // in one block per spell: Reflect's 138..178 on entries 180..187.)
+            let entry = u16_at(data, end - 2)? as usize;
+            ids.push((entry < entries.len()).then_some((entry, if vol.is_finite() && vol > 0.0 { vol } else { 1.0 })));
         }
         Ok(Scd { data, entries, streams, ids })
     }
