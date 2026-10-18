@@ -1870,3 +1870,21 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   timed Sora's drawn model by the clock; during the pause only the menu's copy is drawn, far
   from his actor. A gap of more than 250 ms in Sora's physics frames marks a resume
   (`takeover::resumed_within`), and for 800 ms after one his body counts as seen.
+
+### 2026-10-18: Stage 170 (Reflect in the Magic menu)
+- The user: "lets add reflect into the magic menu, i want the sound and VFX". KH1's command
+  records (`0x14028D7D0 (id)`, 16 bytes, 256; 0x7D.. empty) get 0x7D: magic, spell byte 7,
+  word index 0x1FF (named "Reflect" by pointing the name drawer's `0x14028D820` call at
+  `0x1402787FB` to ours). After KH1's battle-menu fill (`0x140292330`) it goes into the magic
+  list (`0x140529638`) before Summon once Sora has Aero (`reflect::learned`), greyed as KH1's
+  spells are with Fire's cost (`0x1402A2A80`; spell data `0x142D23598 → +0x30`). The list's
+  layout (`0x142859E60`: `+0x10` / `+0x28`) gets 8 row panels for 9 entries (KH1 builds 7).
+- `combat::command` hands command 2 / spell 7 to `reflect::chosen` (KH1 never runs it). KH2
+  casts it when its move allows (MAGC: 71 / 72 / 73), pays MP (`0x1402A39D0`), and runs
+  `magic/REFLECT_1.mag`'s script with `kh2-magic` (trigger 20, release at frame 0). While ATKP
+  573 lives, `hurt` stops Sora's hits (no-effect) and counts them. The counter (574 every 10
+  frames at level 1, then the 667 burst) lands through `Strikes::spell_strike`.
+- The spell's PAX is drawn beside Sora's package (`kh2fx`, textures appended), its elements'
+  sounds play (`kh2sound`), cast voices only with `kh2_voice`. ini `reflect = on`. Not in the
+  shortcuts (KH1's shortcut slots hold spells 0..6). `docs/kh1-reflect-spell.md`. Built by a
+  helper session from s166 and merged over s167..s169.
