@@ -278,6 +278,9 @@ static HANDS_NOW: Mutex<Option<Hands>> = Mutex::new(None);
 /// Sora's own body (KH1 Sora's 293-bone model) was posed within `ms` milliseconds: not while
 /// he is in another body (the Heartless form in Hollow Bastion, the user: no jump animation).
 pub fn sora_body_seen(ms: u128) -> bool {
+    if super::takeover::resumed_within(800) {
+        return true;
+    }
     HANDS_NOW.try_lock().ok().and_then(|h| h.as_ref().map(|h| h.at.elapsed().as_millis() < ms)).unwrap_or(true)
 }
 

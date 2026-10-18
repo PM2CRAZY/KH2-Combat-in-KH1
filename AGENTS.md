@@ -1862,3 +1862,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   and hands Sora to KH2 at once (KH1's action flag cleared; logged "spell's end frames
   cancelled by ..."). Before it is out, Square and the stick no longer end the handoff either
   (they could cut the cast 10 frames in). Only an Attack carries the combo on.
+
+### 2026-10-18: Stage 169 (pausing mid KH2 move, again)
+- The user: pausing during KH2 animations still put him in KH1's. The s168 log: paused while
+  falling (KH2's Air), resumed, "KH1 has Sora (Sora is in another body)", KH2 restarted
+  standing in mid-air, KH1's fall slot took him (state 21, its air moves). `sora_body_seen`
+  timed Sora's drawn model by the clock; during the pause only the menu's copy is drawn, far
+  from his actor. A gap of more than 250 ms in Sora's physics frames marks a resume
+  (`takeover::resumed_within`), and for 800 ms after one his body counts as seen.

@@ -176,6 +176,18 @@ fn now_ms() -> u64 {
     CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 
+/// Sora's last physics frame, and when the game last came back from a pause (a gap of more than
+/// 250 ms between them).
+static LAST_PHYS_MS: AtomicU64 = AtomicU64::new(0);
+static RESUMED_MS: AtomicU64 = AtomicU64::new(0);
+
+/// The game came back from a pause in the last `ms` milliseconds: Sora's model wasn't drawn
+/// meanwhile (the pause menu draws a copy elsewhere), which is no sign of another body (the
+/// user: paused mid KH2 move, resumed in KH1's; the log: "Sora is in another body" on resume).
+pub fn resumed_within(ms: u64) -> bool {
+    now_ms().saturating_sub(RESUMED_MS.load(Ordering::Relaxed)) < ms
+}
+
 /// KH2 had Sora on his last physics frame (game frames: a pause keeps it).
 pub fn kh2_frame() -> bool {
     FRAME_KIND.load(Ordering::Relaxed) == 1
@@ -226,6 +238,11 @@ unsafe extern "system" fn physics(actor: usize) {
     let sora = actor > 0x10000 && actor == rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize;
     if sora {
         HANDOFF_FRAME.store(false, Ordering::Relaxed);
+        // A gap in Sora's physics frames: the game was paused (or a menu held it).
+        let now = now_ms();
+        if now.saturating_sub(LAST_PHYS_MS.swap(now, Ordering::Relaxed)) > 250 {
+            RESUMED_MS.store(now, Ordering::Relaxed);
+        }
     }
     let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
     if sora {
