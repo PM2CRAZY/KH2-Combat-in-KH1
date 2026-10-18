@@ -461,6 +461,21 @@ unsafe fn takeover(actor: usize) -> bool {
         release(&format!("KH1's script moves him, actions {kinds:?}, flags {:08x}", rd::<u32>(actor)));
         return false;
     }
+    // KH1 jumped him on its own while KH2 had him (the user: holding jump and pressing L1; the
+    // log: L1 + Circle, KH1's jump motion set from its own state step, its state 2 and jump slot
+    // 12 as KH2 landed, then its air moves): KH2 keeps him, KH1 back in its ground state (its
+    // jump slot is then a leftover, below).
+    if !HANDOFF.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 {
+        let state = rd::<i32>(actor + 0x70);
+        if matches!(state, 1 | 2) && matches!(pose::sora_slot(), Some(8 | 9 | 12 | 13)) {
+            let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+            set(actor, 0);
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("KH1 jumped him under KH2 (state {state}, slot {:?}): taken back", pose::sora_slot()));
+            }
+        }
+    }
     // KH1 took him for one of its own air moves (`grab`): until it has him standing again.
     if HANDOFF.load(Ordering::Relaxed) {
         let state = rd::<i32>(actor + 0x70);
@@ -516,7 +531,9 @@ unsafe fn takeover(actor: usize) -> bool {
             let len = pose::slot_frames(slot).unwrap_or(u32::MAX / 2).max(20);
             !(8..=13).contains(&slot) && slot != usize::MAX && c.1 >= len
         };
-        let done = can_act(actor) != 0 || cast_done && state == 2;
+        // (A cast in the air plays through to the ground now, the user: "fire isn't playing the
+        // full animation"; KH2 takes him on landing, `cast_landed` below.)
+        let done = can_act(actor) != 0 || cast_done && state == 2 && air_cast().is_none();
         let command = FROM_COMMAND.load(Ordering::Relaxed);
         let fall_state = if command { matches!(state, 1 | 2) && done } else { state == 2 || state == 1 && done };
         let falling = fall_state && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);

@@ -1827,3 +1827,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   L1 down (KH1's shortcuts) the control hook left KH1 all its button bits, the held jump too,
   and KH1 jumped him as KH2 landed. In the shortcut menu (or a submenu) only KH1's "pressed"
   bits stay now (a shortcut, backing out); the held and repeat jump / Square bits are KH2's.
+
+### 2026-10-18: Stage 165 (air casts play through; KH1's own jump under KH2)
+- The user (a video): Fire in the air "isn't playing the full animation and looks weird": the
+  log showed stage 157's "cast played through" handing a jump cast to KH2's fall mid-air. Air
+  casts (`air_cast`) now stay KH1's to the ground, then KH2's landing (stage 163).
+- Holding jump and pressing L1 still launched him (the s164 log: "L1, Circle" while KH2 had
+  him in the air, then KH1's jump motion (slot 9, set from its own state step, not the control
+  step we strip around), and KH1 state 2 / slot 12 as KH2 landed). Wherever it comes from: when
+  KH1 has put him in its jump (state 1 / 2, slot 8 / 9 / 12 / 13) on a frame KH2 had him and
+  no handoff ran, KH1's state goes back to 0 and KH2 keeps him (logged).
