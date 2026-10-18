@@ -2155,3 +2155,20 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   its 35° cap kept it out. Now a free pendulum (no pull, full gravity, damping 0.12, 170° cap):
   it rests hanging from the pommel. A chain starting over first settles (`SETTLE` 120 steps, no
   breeze), so it isn't seen dropping into place. Test `a_free_chain_hangs_down`.
+
+### 2026-10-18: Stage 189 (Drive: the second command page)
+- The user: "add a drive form. For now, lets add wisdom form ... press left on the dpad to have
+  essentially a second command menu (like how it is in KH2,) and have a drive menu at the bottom
+  of the second command menu". Asked: Wisdom costs MP; KH1 Sora recoloured blue; page 2 is
+  Attack, Magic, Items, Drive. Three helper sessions researched the menu, Wisdom's data and the
+  recolour; this stage is the menu (`docs/kh1-drive.md`, `win/drive.rs`, ini `drive = on`).
+- KH1's top menu (menu 0) is rebuilt each frame; its fourth row isn't one of its entries but
+  the magic list's last (Summon, command 6, opening menu 3). Page 2 turns that row into Drive:
+  D-pad left (logical `0x80`, cleared before KH1's step, which would move the cursor to Attack)
+  at the top level flips the page (not with the L1 menu, a submenu or a summon out); after the
+  fill the magic list ends in Summon (appended when KH1 had none), its bit is Drive's, the top's
+  Magic entry is forced in when Sora has no spell (blocked), menu 3 holds our form commands
+  (records 0x7E.., magic type, argument 0x10 + form, word 0x1FE..), and word 6 reads "Drive"
+  on page 2. A form chosen reaches `combat::command` as magic with that argument
+  (`drive::chosen`; this stage only logs it and plays KH1's "can't" sound). The step, fill and
+  name hooks are shared with `shortcuts` / `reflect` (whichever installed them calls `drive`).

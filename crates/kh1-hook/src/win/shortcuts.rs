@@ -77,8 +77,8 @@ const LEARN_RVA: Rva = Rva(0x2830F0);
 const LEARN_PROLOGUE: [u8; 6] = [0x48, 0x63, 0xC1, 0x44, 0x8B, 0xD2];
 pub(super) const FILL_RVA: Rva = Rva(0x292330);
 pub(super) const FILL_PROLOGUE: [u8; 12] = [0x4C, 0x8B, 0xDC, 0x41, 0x57, 0x48, 0x81, 0xEC, 0xC0, 0x00, 0x00, 0x00];
-const STEP_RVA: Rva = Rva(0x291660);
-const STEP_PROLOGUE: [u8; 13] = [0x40, 0x53, 0x55, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20];
+pub(super) const STEP_RVA: Rva = Rva(0x291660);
+pub(super) const STEP_PROLOGUE: [u8; 13] = [0x40, 0x53, 0x55, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20];
 
 // Drawing (`0x140279700`, case 5).
 const PANEL_FN_RVA: Rva = Rva(0x278880);
@@ -160,6 +160,11 @@ pub fn fill_hooked() -> bool {
     FILL_HOOKED.load(Ordering::Acquire)
 }
 static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
+
+/// The command step is hooked here (`shortcuts = 4`): `drive` runs its page flip in it.
+pub fn step_hooked() -> bool {
+    ORIG_STEP.load(Ordering::Acquire) != 0
+}
 static LABEL: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -504,8 +509,10 @@ unsafe extern "system" fn learn(member: i32, spell: u32) {
 unsafe extern "system" fn fill(a: usize, b: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_FILL.load(Ordering::Acquire));
     f(a, b);
-    // Reflect's entry in the magic list first (the fourth shortcut reads that list).
+    // Reflect's entry in the magic list first (the fourth shortcut reads that list), then the
+    // second page's Drive row (`drive`).
     super::reflect::magic_menu(a, b);
+    super::drive::fill(a, b);
     let base = base();
     let s = save();
     // (KH1 fills its shortcuts only with magic on here and a spell learned.)
@@ -572,6 +579,8 @@ unsafe extern "system" fn fill(a: usize, b: usize) {
 unsafe extern "system" fn step() -> u64 {
     let f: unsafe extern "system" fn() -> u64 = std::mem::transmute(ORIG_STEP.load(Ordering::Acquire));
     let base = base();
+    // The second page (D-pad left, `drive`).
+    super::drive::pre_step();
     // On the shortcut menu (L1 held since last frame), cancel is the fourth shortcut, not KH1's
     // jump (its jump check comes first and ends the step), so KH1 doesn't see it.
     let pressed = base + PRESSED_RVA;

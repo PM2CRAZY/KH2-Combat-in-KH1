@@ -215,6 +215,12 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // every kind stays: jump casts are wanted).
     let full = rd::<u32>(base + COMMAND_RVA);
     // Our Reflect (magic, spell byte 7, which KH1 has no spell for): KH2's, never KH1's.
+    // A Drive form (page 2's Drive list, `drive`).
+    let arg = ((full >> 8) & 0xFF) as u8;
+    if actor == sora && kind == 2 && super::drive::on() && (super::drive::FORM_ARG..super::drive::FORM_ARG + super::drive::FORMS.len() as u8).contains(&arg) {
+        super::drive::chosen(actor, (arg - super::drive::FORM_ARG) as usize);
+        return;
+    }
     if actor == sora && kind == 2 && ((full >> 8) & 0xFF) as u8 == super::reflect::SPELL {
         super::reflect::chosen(actor);
         return;

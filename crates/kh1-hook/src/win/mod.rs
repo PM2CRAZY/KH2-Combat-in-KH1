@@ -7,6 +7,7 @@ mod camera;
 mod combat;
 mod config;
 mod crash;
+mod drive;
 mod feet;
 mod fx12;
 mod hook;
@@ -178,6 +179,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         config::install();
         shortcuts::install();
         reflect::install();
+        drive::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

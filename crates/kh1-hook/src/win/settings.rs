@@ -76,7 +76,10 @@ reflect = on\r\n\
 ; them to the ground under KH2's moves); off = as before\r\n\
 keyblade_turn = on\r\n\
 ; physics: on = Sora's hair, hood and keychain swing and sway during KH2's moves; off = rigid\r\n\
-physics = on\r\n";
+physics = on\r\n\
+; drive: on = D-pad left at the battle menu's top flips to a second page (Attack, Magic, Items,\r\n\
+; Drive), Drive listing KH2's forms; off = KH1's menu only\r\n\
+drive = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -116,6 +119,8 @@ pub struct Settings {
     pub keyblade_turn: bool,
     /// Hair, hood and keychain swing under KH2's moves (`physics = on`, `kh1_data::jiggle`).
     pub physics: bool,
+    /// The second command page with Drive (`drive = on`).
+    pub drive: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -187,6 +192,7 @@ pub fn get() -> &'static Settings {
             reflect: on(&text, "reflect", "on", true),
             keyblade_turn: on(&text, "keyblade_turn", "on", true),
             physics: on(&text, "physics", "on", true),
+            drive: on(&text, "drive", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

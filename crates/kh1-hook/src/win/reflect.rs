@@ -60,8 +60,8 @@ pub const HELP_ID: u32 = 0x7F00_0006;
 const HELP: &str = "Surround yourself with a barrier that blocks attacks,\nthen strikes back at every foe nearby.";
 
 const RECORD_RVA: Rva = Rva(0x28D7D0);
-const WORD_RVA: Rva = Rva(0x28D820);
-const NAME_CALL_RVA: Rva = Rva(0x2787FB);
+pub(super) const WORD_RVA: Rva = Rva(0x28D820);
+pub(super) const NAME_CALL_RVA: Rva = Rva(0x2787FB);
 const MAGIC_MENU_RVA: Rva = Rva(0x529638);
 const MAGIC_LAYOUT_RVA: Rva = Rva(0x2859E60);
 /// KH1's spells: 0x38 bytes each, `+0` the level loaded (0: none; `0x14028D0D0 (spell)`),
@@ -264,6 +264,9 @@ unsafe fn mp(sora: usize) -> (i32, i32) {
 
 /// Our name for the command's word index; KH1's word otherwise (`0x14028D820`).
 unsafe extern "system" fn word(index: i32) -> usize {
+    if let Some(p) = super::drive::word(index) {
+        return p;
+    }
     if index == WORD as i32 {
         if let Some(n) = NAME.get() {
             let save = rd::<u64>(base() + SAVE_PTR_RVA) as usize;
@@ -432,6 +435,23 @@ unsafe extern "system" fn fill(a: usize, b: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_FILL.load(Ordering::Acquire));
     f(a, b);
     magic_menu(a, b);
+    super::drive::fill(a, b);
+}
+
+/// The battle-menu fill is hooked here (Reflect on, `shortcuts` not hooking it).
+pub fn fill_hooked() -> bool {
+    ORIG_FILL.load(Ordering::Acquire) != 0
+}
+
+/// The command name call goes to `word` (Reflect on).
+pub fn word_hooked() -> bool {
+    WORD_HOOKED.load(Ordering::Acquire)
+}
+static WORD_HOOKED: AtomicBool = AtomicBool::new(false);
+
+/// `eight_rows` for `drive` (Summon appended to a full list).
+pub unsafe fn eight_rows_pub(base: usize) -> bool {
+    eight_rows(base)
 }
 
 pub unsafe fn install() {
@@ -445,6 +465,7 @@ pub unsafe fn install() {
         log("Reflect: the command name call wasn't as expected: no Reflect in the menu");
         return;
     }
+    WORD_HOOKED.store(true, Ordering::Release);
     if !super::shortcuts::fill_hooked() && hook::install(base + super::shortcuts::FILL_RVA, &super::shortcuts::FILL_PROLOGUE, fill as *const () as usize, &ORIG_FILL, "battle menus fill (Reflect)").is_none() {
         return;
     }
