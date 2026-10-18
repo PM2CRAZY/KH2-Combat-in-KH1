@@ -146,7 +146,13 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
             return 1;
         }
         let path = format!("{}\\kh1-kh2.log", exe_dir());
-        // The last run's log is kept beside it (a problem seen before a restart stays readable).
+        // The last runs' logs are kept beside it (a problem seen before a restart stays
+        // readable): .prev.log the last, .prev2 .. .prev5 before it (the user's sessions were
+        // lost to two quick restarts with one kept).
+        for n in (2..=5).rev() {
+            let from = if n == 2 { format!("{}\\kh1-kh2.prev.log", exe_dir()) } else { format!("{}\\kh1-kh2.prev{}.log", exe_dir(), n - 1) };
+            let _ = std::fs::rename(&from, format!("{}\\kh1-kh2.prev{n}.log", exe_dir()));
+        }
         let _ = std::fs::rename(&path, format!("{}\\kh1-kh2.prev.log", exe_dir()));
         if let Ok(f) = OpenOptions::new().create(true).write(true).truncate(true).open(&path) {
             *LOG.lock().unwrap() = Some(f);

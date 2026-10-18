@@ -1646,3 +1646,8 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - `pose::at_sora` compares a new model with Sora's actor from KH1's party slot
   (`takeover::sora_actor`); the probe's copy could be the last room's as a room loads, and
   his new model was refused (KH1's animations on entering a room, "sometimes").
+- Logs: the last five runs are kept (`kh1-kh2.prev.log`, `.prev2` .. `.prev5`); the user's
+  sessions were lost to two quick restarts with one kept. Reported, not yet understood: after
+  sliding off a Traverse Town roof (KH1's own slide; the command menu greys), KH2's jumps stay
+  low until a dodge roll (KH1's mover reads none of its jump fields `+0x3B0..+0x3D0`; the
+  `ceiling:` log lines will say if it is our ceiling rule).
