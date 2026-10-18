@@ -292,6 +292,11 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
     }
 }
 
+/// Frames of the current rise, and whether a slope's contact (collision bit 3) has been there
+/// since its first frames (a roof he takes off from, not a ceiling met on the way up).
+static RISE_FRAMES: AtomicU32 = AtomicU32::new(0);
+static SLOPE_RUN: AtomicBool = AtomicBool::new(false);
+
 /// One of KH1's moves has him standing again and free (its ground state, KH1's own can-act
 /// test): the jump button is KH2's from here (the user: after a spell, a jump on the first free
 /// frame was KH1's high jump, "resulting in many bugs").
@@ -932,6 +937,12 @@ unsafe fn takeover(actor: usize) -> bool {
                 }
             }
         }
+        if rising {
+            RISE_FRAMES.fetch_add(1, Ordering::Relaxed);
+        } else {
+            RISE_FRAMES.store(0, Ordering::Relaxed);
+            SLOPE_RUN.store(false, Ordering::Relaxed);
+        }
         if rise3d && rising {
             // KH2's ceiling rule: less than 49% of the rise happened.
             let got = -rd::<f32>(actor + 0x14);
@@ -941,7 +952,14 @@ unsafe fn takeover(actor: usize) -> bool {
             // than up, and every jump was read as a head bump and cut short until a roll (the
             // user's rooftops; the logs: "rose 0.0 of 7.5 at height 620.1, flags 9", jump after
             // jump, where real ceilings show flags 1 and a partial rise). KH2's own rise there.
-            let slope = rd::<u32>(actor + 0x2D0) & 8 != 0;
+            // Only a contact there from the start of the rise and unbroken since: a ceiling met
+            // later in a jump can carry bit 3 too (the user: in Olympus's lobby he jumped through
+            // the roof; the log: "rise on a slope's contact (flags 9)" there).
+            let slope_now = rd::<u32>(actor + 0x2D0) & 8 != 0;
+            let n = RISE_FRAMES.load(Ordering::Relaxed);
+            let run = slope_now && (n <= 3 || SLOPE_RUN.load(Ordering::Relaxed));
+            SLOPE_RUN.store(run, Ordering::Relaxed);
+            let slope = run;
             if slope && out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
                 y = up_before + out.displacement[1];
                 static SLOPES: AtomicU32 = AtomicU32::new(0);

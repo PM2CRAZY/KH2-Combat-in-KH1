@@ -1837,3 +1837,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   step we strip around), and KH1 state 2 / slot 12 as KH2 landed). Wherever it comes from: when
   KH1 has put him in its jump (state 1 / 2, slot 8 / 9 / 12 / 13) on a frame KH2 had him and
   no handoff ran, KH1's state goes back to 0 and KH2 keeps him (logged).
+
+### 2026-10-18: Stage 166 (no jumping through Olympus's roof)
+- The user: in the Coliseum's lobby a jump went through the roof. The log: "rise on a slope's
+  contact (flags 9)": that ceiling carries KH1's collision bit 3 too, and stage 152's roof rule
+  let KH2's rise through. Bit 3 now counts as a roof only when it was there from the first 3
+  frames of the rise and unbroken since (`RISE_FRAMES`, `SLOPE_RUN`): taking off from a roof,
+  not meeting a ceiling on the way up.
