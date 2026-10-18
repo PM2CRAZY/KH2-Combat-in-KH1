@@ -1918,3 +1918,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (cap 5 s), `kh2_magic::Magic::hold` freezes the cast (script and effect ages; its attacks
   stay, so `hurt` keeps blocking); the counter fires after; the barrier effect is restarted if
   it ends. Tests `reflect_counters_what_it_blocked`, `reflect_barrier_held`.
+
+### 2026-10-18: Stage 173 (glide in place)
+- The user: "In KH2 you're able to glide in place". The glide's speed now follows the stick's
+  tilt (`(1 − a)·glide_speed·tilt + a·|v|`): with the stick let go he slows to a hover where he
+  is, still descending to and settling at `glide_fall_height`. The exact KH2 scaling is not
+  traced in the exe (hypothesis in `docs/movement-model.md`).

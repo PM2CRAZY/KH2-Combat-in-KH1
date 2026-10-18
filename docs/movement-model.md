@@ -103,7 +103,9 @@ All **Checked (exe)** unless noted:
   - **Start:** airborne, jump pressed, and height above ground strictly greater than
     `glide_start_height`.
   - **Turning:** uses `glide_turn_speed`.
-  - **Speed** each tick: `(1 − a)·glide_speed + a·|v|`, along the facing.
+  - **Speed** each tick: `(1 − a)·glide_speed·tilt + a·|v|`, along the facing; `tilt` is the
+    stick's (0 when neutral), so letting go glides in place (the user: KH2 does; the exe's
+    glide step is not traced, **Hypothesis** for the exact scaling).
   - **Descent per frame:** `min(max(height − glide_fall_height, 0) × glide_fall_ratio,
     glide_fall_max)`. Descent slows as the ground nears, so the glide settles at
     `glide_fall_height` above the ground.

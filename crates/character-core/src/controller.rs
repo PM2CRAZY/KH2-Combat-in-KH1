@@ -1778,7 +1778,10 @@ impl Character {
             Mode::Glide => {
                 let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
                 let a = g.glide_acceleration;
-                let speed = (1.0 - a) * g.glide_speed + a * len2(self.vel_h);
+                // Its speed follows the stick: let go and he glides in place, hovering (the user:
+                // "in KH2 you're able to glide in place").
+                let tilt = if moving { m } else { 0.0 };
+                let speed = (1.0 - a) * g.glide_speed * tilt + a * len2(self.vel_h);
                 self.vel_h = scale(self.forward(), speed);
                 let fall = ((env.height_above_ground - g.glide_fall_height).max(0.0) * g.glide_fall_ratio).min(g.glide_fall_max);
                 self.vel_y = -fall;
