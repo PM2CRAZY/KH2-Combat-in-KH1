@@ -625,6 +625,11 @@ unsafe fn takeover(actor: usize) -> bool {
         }
         if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || cancel || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
             JUMP_NOW.store(jump, Ordering::Relaxed);
+            // An Attack waiting through a spell (pressed during it): the combo goes on after it,
+            // as after KH2's own casts (the user: magic is part of the combo's queue).
+            if command && attack {
+                COMBO_ON.store(true, Ordering::Relaxed);
+            }
             if cast_landed {
                 // KH1's cast action ends here (it would at the end of its own landing): its
                 // "action running" flag off, so its can-act test lets KH2's input through.

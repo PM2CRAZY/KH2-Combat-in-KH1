@@ -1939,3 +1939,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (`Runtime::carry`, added to its reflect count once it stands). Only the last cast of a chain
   fires the counter and burst, for every hit blocked along the way.
 - Stage 174 (Reflect falls in the air) went out in the same build.
+
+### 2026-10-18: Stage 176 (magic in the combo's queue)
+- The user: "reflect and the other magic should be part of the combo cue, so it can get cast
+  and the next attack waits for the magic to get done", and "reflect should have a finisher
+  like in KH2". KH2's casts (Reflect): an Attack pressed during the cast is buffered
+  (`buffered_attack`) and taken when the cast's reaction window opens or at its end; a cast
+  started mid-combo leaves `combo_carry`, so that swing goes on with the combo. KH1's casts:
+  an Attack waiting through one (`ATTACK_AFTER`) now carries the combo on at the handoff's end
+  too (`COMBO_ON`), not only when it cut the end frames.
+- Reflect's finisher was already there (KH2's rule, `Character::cast`: cast in a combo-magic
+  window when the next swing would be the combo's last, MAGC finisher motion 72, sub + 1);
+  the user's logs only show casts from free movement (shortcuts), where it can't happen.

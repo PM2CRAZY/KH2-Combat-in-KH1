@@ -577,6 +577,9 @@ impl Character {
         if in_combo && self.hit {
             self.count = self.count.saturating_add(1);
         }
+        // The swing after the spell goes on with the combo (the spell took a step of it).
+        self.combo_carry = in_combo && !at_finisher;
+        self.buffered_attack = false;
         self.vel_h = [0.0; 2];
         if self.airborne {
             self.vel_y = 0.0;
@@ -1613,6 +1616,19 @@ impl Character {
                 let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
                 if f >= open {
                     cancel_allowed = true;
+                }
+                // An Attack pressed during the cast waits for it (the user: magic is part of the
+                // combo's queue, the next attack waits for the spell), then goes on with the
+                // combo (`combo_carry`, set when the cast came mid-combo).
+                if input.attack.pressed {
+                    self.buffered_attack = true;
+                }
+                if self.buffered_attack && (f >= open || f + 1 >= clip.length) {
+                    self.mode = Mode::Action(act.clone());
+                    if self.try_attack(input, env) {
+                        return true;
+                    }
+                    self.buffered_attack = false;
                 }
             }
             ActionKind::Hurt => {
