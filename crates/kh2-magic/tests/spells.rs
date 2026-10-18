@@ -173,16 +173,26 @@ fn wisdom_fires_a_homing_shot() {
 #[test]
 fn reflect_counters_what_it_blocked() {
     let d = dir();
-    let (Ok(system), Ok(bytes)) = (std::fs::read(d.join("03system.bin")), std::fs::read(d.join("REFLECT_1.mag"))) else {
+    let Ok(system) = std::fs::read(d.join("03system.bin")) else {
         eprintln!("skipped: no extracted files in {}", d.display());
         return;
     };
     let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    // Reflect, Reflera, Reflega: each level's own file, at its sub (level × 2 − 2).
+    for level in 1..=3 {
+        let file = format!("REFLECT_{level}.mag");
+        let Ok(bytes) = std::fs::read(d.join(&file)) else { continue };
+        let sub = level * 2 - 2;
+        reflect_level(&file, &bytes, sub, pref.magi.get(sub).unwrap());
+    }
+}
+
+fn reflect_level(file: &str, bytes: &[u8], sub: i32, magi: &[u8]) {
     for blocks in [0u8, 1, 3] {
         let mut magic = Magic::new();
-        let spell = magic.add_spell(SpellFile::parse("REFLECT_1.mag", &bytes).unwrap());
+        let spell = magic.add_spell(SpellFile::parse(file, bytes).unwrap());
         let mut w = Fake { frame: 0, release_at: 0, motion_end: 60, seed: 1 };
-        magic.cast(spell, SORA, 5, 0, pref.magi.get(0).unwrap(), &mut w).unwrap();
+        magic.cast(spell, SORA, 5, sub, magi, &mut w).unwrap();
         assert!(magic.release(SORA, &mut w));
         // (frame, atk, radius, y) of each attack's first frame placed, and every counter frame.
         let mut seen: Vec<(u32, u16, f32, f32)> = Vec::new();
@@ -217,8 +227,59 @@ fn reflect_counters_what_it_blocked() {
             }
         }
         let counters: Vec<_> = seen.iter().filter(|s| s.1 != 573).collect();
-        eprintln!("{blocks} blocked: barrier {barrier_frames} frames from {:?}, counters {counters:?}, effects (id, bone, sound) {effects:?}", seen.first());
+        eprintln!("{file} sub {sub}, {blocks} blocked: barrier {barrier_frames} frames from {:?}, counters {counters:?}, effects (id, bone, sound) {effects:?}", seen.first());
         assert!(barrier_frames > 10);
         assert_eq!(blocks == 0, counters.is_empty(), "{counters:?}");
     }
+}
+
+/// Reflect held (`Magic::hold`, the host stretching the barrier while hits keep coming): the
+/// barrier and its effect stay for the whole hold, the script picks up where it stopped, and
+/// the counter still fires after.
+#[test]
+fn reflect_barrier_held() {
+    let d = dir();
+    let (Ok(system), Ok(bytes)) = (std::fs::read(d.join("03system.bin")), std::fs::read(d.join("REFLECT_1.mag"))) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    let mut magic = Magic::new();
+    let spell = magic.add_spell(SpellFile::parse("REFLECT_1.mag", &bytes).unwrap());
+    let mut w = Fake { frame: 0, release_at: 0, motion_end: 60, seed: 1 };
+    magic.cast(spell, SORA, 5, 0, pref.magi.get(0).unwrap(), &mut w).unwrap();
+    assert!(magic.release(SORA, &mut w));
+    let (hold_from, hold_to) = (24u32, 124u32);
+    let (mut barrier, mut effect0, mut counter_from) = (Vec::new(), Vec::new(), None);
+    for f in 1..300 {
+        w.frame = f;
+        magic.hold(SORA, (hold_from..hold_to).contains(&f));
+        for e in magic.update(&mut w) {
+            if let Event::Error(s) = e {
+                panic!("{s}");
+            }
+        }
+        if f == 5 {
+            if let Some(a) = magic.attacks.iter_mut().find(|a| a.atk == 573 && !a.freed) {
+                a.reflect_count = 2;
+            }
+        }
+        if magic.attacks.iter().any(|a| a.atk == 573 && !a.freed) {
+            barrier.push(f);
+        }
+        if magic.effects.iter().any(|e| e.element.id == 0 && e.alive()) {
+            effect0.push(f);
+        }
+        if counter_from.is_none() && magic.attacks.iter().any(|a| a.atk == 574 && !a.freed && a.pos.is_some()) {
+            counter_from = Some(f);
+        }
+        if magic.casts.is_empty() {
+            break;
+        }
+    }
+    let span = |v: &Vec<u32>| (v.first().copied(), v.last().copied());
+    eprintln!("held {hold_from}..{hold_to}: barrier {:?}, effect 0 {:?}, counter from {counter_from:?}", span(&barrier), span(&effect0));
+    assert!(barrier.last().is_some_and(|l| *l >= hold_to), "barrier through the hold: {:?}", span(&barrier));
+    assert!(effect0.last().is_some_and(|l| *l >= hold_to - 1), "barrier effect through the hold: {:?}", span(&effect0));
+    assert!(counter_from.is_some_and(|c| c > hold_to), "counter after the hold: {counter_from:?}");
 }

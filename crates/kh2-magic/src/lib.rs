@@ -212,6 +212,8 @@ pub struct Cast {
     fresh: bool,
     /// An object script run (not a spell cast).
     pub object: bool,
+    /// Held by the host (`Magic::hold`): its script doesn't run and its effects don't age.
+    pub held: bool,
 }
 
 impl Cast {
@@ -296,7 +298,7 @@ impl Magic {
         vm.mem.write(magi_at, magi)?;
         let main = vm.spawn(None);
         vm.trigger(main, 20, &[Cell::addr(player), Cell::addr(t.pax_rec), Cell::int(sub), Cell::addr(magi_at)])?;
-        self.casts.push(Cast { vm, t, main, released: false, finished: false, fresh: true, object: false });
+        self.casts.push(Cast { vm, t, main, released: false, finished: false, fresh: true, object: false, held: false });
         // It first runs with the next `update` (the game's magic manager
         // runs every script once per frame, after the player).
         Ok(self.casts.len() - 1)
@@ -330,7 +332,7 @@ impl Magic {
         let effect = host::start_object_effect(self, &mut vm, &mut t, n as u16, owner, world);
         let main = vm.spawn(None);
         vm.trigger(main, 0x10, &[Cell::addr(obj), Cell::int(n as i32), Cell::addr(effect)])?;
-        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true });
+        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true, held: false });
         // The trigger runs at once (same frame), like the game's call.
         let i = self.casts.len() - 1;
         self.run_cast(i, world);
@@ -379,9 +381,11 @@ impl Magic {
         let ft = self.frametime;
         // Attacks freed last frame are gone now.
         self.attacks.retain(|a| !a.freed);
+        // A held cast's effects stand still in time (they still follow their owner).
+        let held: Vec<u64> = self.casts.iter().filter(|c| c.held).flat_map(|c| c.t.effects.values().copied()).collect();
         for e in &mut self.effects {
             if e.alive() {
-                e.tick(ft, world);
+                e.tick(if held.contains(&e.id) { 0.0 } else { ft }, world);
             } else {
                 e.linger -= ft;
             }
@@ -389,7 +393,7 @@ impl Magic {
         // Dead effects stay a little so scripts holding them read "dead".
         self.effects.retain(|e| e.alive() || e.linger > 0.0);
         for i in 0..self.casts.len() {
-            if !self.casts[i].finished {
+            if !self.casts[i].finished && !self.casts[i].held {
                 self.run_cast(i, world);
             }
         }
@@ -418,6 +422,19 @@ impl Magic {
     /// Attacks freed this frame (the host should forget their hits).
     pub fn freed(&self) -> impl Iterator<Item = &MagicAttack> {
         self.attacks.iter().filter(|a| a.freed)
+    }
+
+    /// Holds `caster`'s spell casts in place (`on`), or lets them go on: a held cast's script
+    /// doesn't run (its waits don't count down) and its effects don't age, while its attacks
+    /// stay as they are. For a host that stretches a phase of a spell (Reflect's barrier while
+    /// attacks keep hitting it). Returns whether any cast was there.
+    pub fn hold(&mut self, caster: ObjId, on: bool) -> bool {
+        let mut any = false;
+        for c in self.casts.iter_mut().filter(|c| c.t.caster == caster && !c.object) {
+            c.held = on;
+            any = true;
+        }
+        any
     }
 
     /// Whether `caster` has a cast in flight.
@@ -451,5 +468,6 @@ fn placeholder() -> Cast {
         finished: true,
         fresh: false,
         object: false,
+        held: false,
     }
 }

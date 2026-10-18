@@ -145,6 +145,9 @@ unsafe extern "system" fn text(id: u32) -> usize {
     if id == super::shortcuts::ID_LABEL4 {
         return super::shortcuts::label4(|i| kh1_text(i));
     }
+    if let Some(p) = super::reflect::text(id) {
+        return p;
+    }
     kh1_text(id)
 }
 

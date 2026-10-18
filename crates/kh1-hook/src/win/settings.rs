@@ -68,8 +68,9 @@ kh2_effects = magnet_explosion\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
 ; round in his hand (0x53: the Dream Shield); none = off\r\n\
 flip_weapons = 0x53\r\n\
-; reflect: on = KH2's Reflect in the Magic menu once Sora has Aero (KH2's cast, barrier,\r\n\
-; counter, effects and sounds, from your KH2 install; Fire's MP); off = KH1's spells only\r\n\
+; reflect: on = KH2's Reflect in the Magic menu and the shortcuts once Sora has Aero (KH2's\r\n\
+; cast, barrier, counter, effects and sounds, from your KH2 install; Reflera / Reflega with\r\n\
+; Aerora / Aeroga; 1 MP); off = KH1's spells only\r\n\
 reflect = on\r\n";
 
 #[derive(Debug)]

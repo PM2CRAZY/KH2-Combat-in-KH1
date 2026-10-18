@@ -234,7 +234,12 @@ Frame-buffer object `fb` (RTV made in `0x1400FCD60`, DSV made in `0x1400FCB00`):
    - 135000 `0x14028AA80`: copy the previous camera slot into the "current" globals.
    - 140000 `0x1401DEDE0`: GPU camera copies (`0x1401EB5C0`), then `0x1401EA9F0` (pre-pass over
      the model-object table: culling with `0x142340700`, animation).
-   - 159998/159999: misc, including the event camera `0x1402D3040`.
+   - 159998/159999: misc. `0x1402D3040` (159999) is the pause menu's task (registered by its
+     opener `0x1402D3450`): it updates and draws the menu's windows (`0x1402E19B0`) before the
+     world pass, and keeps the camera repointed (`0x142340ED8` / `0x142340EE0`, put back when
+     the menu closes) for the party models the world pass then draws over them. So anything
+     drawn after the world pass lands on top of the pause menu (`kh2fx` draws nothing while
+     KH1's pause state `0x14232E9B4` is up) [high: read from the code].
    - **160000 `0x1401DEE40` -> `0x1401EADD0`: draws every model object.** The table is at
      `0x142678C80`: 256 entries of 0xE0 bytes, flag word `+0x92`, model `+0x98`, data `+0xA0`.
      Objects are sorted far to near by view z; objects flagged "always first" use key 1e6 (sky),

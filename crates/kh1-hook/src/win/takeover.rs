@@ -188,6 +188,13 @@ pub fn resumed_within(ms: u64) -> bool {
     now_ms().saturating_sub(RESUMED_MS.load(Ordering::Relaxed)) < ms
 }
 
+/// The game stands still now: no physics frame of Sora's for over 120 ms (a pause, or a menu
+/// that stops the field; `kh2fx` draws no effects then). Unknown (no frame yet): no.
+pub fn paused() -> bool {
+    let last = LAST_PHYS_MS.load(Ordering::Relaxed);
+    last != 0 && now_ms().saturating_sub(last) > 120
+}
+
 /// KH2 had Sora on his last physics frame (game frames: a pause keeps it).
 pub fn kh2_frame() -> bool {
     FRAME_KIND.load(Ordering::Relaxed) == 1

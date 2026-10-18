@@ -38,8 +38,9 @@ struct Loaded {
     elements: HashMap<i16, Sound>,
     sounds: HashMap<u32, Sound>,
     voices: HashMap<i16, Vec<Sound>>,
-    /// A spell file's effect elements' sounds (`reflect`: REFLECT_1.mag's PAX).
-    spell_elements: HashMap<u16, Sound>,
+    /// A spell file's effect elements' sounds (`reflect`: REFLECT_<n>.mag's PAX), by (level,
+    /// element).
+    spell_elements: HashMap<(u8, u16), Sound>,
 }
 
 static LOADED: Mutex<Option<Loaded>> = Mutex::new(None);
@@ -98,7 +99,7 @@ pub fn start() {
             .collect();
         // Reflect (the user: its sounds): its cast voices (MAGC, played by KH2's cast code, not a
         // motion trigger; only with `kh2_voice`) and its effect elements' sounds.
-        let mut spell: Vec<(u16, i32)> = Vec::new();
+        let mut spell: Vec<(u8, u16, i32)> = Vec::new();
         if super::settings::get().reflect {
             events.extend(super::reflect::cast_voices(kh2).into_iter().map(character_core::EventKind::Voice));
             spell = super::reflect::element_sounds();
@@ -122,7 +123,7 @@ pub fn start() {
     });
 }
 
-fn load(events: &[character_core::EventKind], spell: &[(u16, i32)]) -> Result<Loaded, String> {
+fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Result<Loaded, String> {
     use character_core::EventKind;
     let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
     let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
@@ -136,7 +137,7 @@ fn load(events: &[character_core::EventKind], spell: &[(u16, i32)]) -> Result<Lo
     enum Want {
         Element(i16),
         Sound(u32),
-        Spell(u16),
+        Spell(u8, u16),
     }
     let mut wants: Vec<(u32, Want)> = Vec::new();
     let mut voice_ids: Vec<i16> = Vec::new();
@@ -155,9 +156,9 @@ fn load(events: &[character_core::EventKind], spell: &[(u16, i32)]) -> Result<Lo
             _ => {}
         }
     }
-    for &(el, sound) in spell {
-        if sound >= 0 && !wants.iter().any(|(_, w)| matches!(w, Want::Spell(e) if *e == el)) {
-            wants.push((sound as u32, Want::Spell(el)));
+    for &(level, el, sound) in spell {
+        if sound >= 0 && !wants.iter().any(|(_, w)| matches!(w, Want::Spell(l, e) if *l == level && *e == el)) {
+            wants.push((sound as u32, Want::Spell(level, el)));
         }
     }
     let mut out = Loaded::default();
@@ -185,7 +186,7 @@ fn load(events: &[character_core::EventKind], spell: &[(u16, i32)]) -> Result<Lo
                 let of = match want {
                     Want::Element(el) => format!(" (effect element {el})"),
                     Want::Sound(_) => String::new(),
-                    Want::Spell(el) => format!(" (Reflect's element {el})"),
+                    Want::Spell(level, el) => format!(" (Reflect level {level}'s element {el})"),
                 };
                 log(&format!("KH2 sound {id}{of}: {} Hz, {} ch, {:.2} s, volume {:.2}", p.rate, p.channels, p.samples.len() as f32 / p.channels.max(1) as f32 / p.rate.max(1) as f32, p.volume));
                 let snd = decode(p);
@@ -196,8 +197,8 @@ fn load(events: &[character_core::EventKind], spell: &[(u16, i32)]) -> Result<Lo
                     Want::Sound(s) => {
                         out.sounds.insert(s, snd);
                     }
-                    Want::Spell(el) => {
-                        out.spell_elements.insert(el, snd);
+                    Want::Spell(level, el) => {
+                        out.spell_elements.insert((level, el), snd);
                     }
                 }
             }
@@ -270,14 +271,14 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     }
 }
 
-/// The spell's effect element `el` started (`reflect`): its sound, as Sora's elements' (the
-/// game's effects and volume sliders).
-pub unsafe fn spell_element(el: u16) {
+/// A Reflect level's effect element `el` started (`reflect`): its sound, as Sora's elements'
+/// (the game's effects and volume sliders).
+pub unsafe fn spell_element(level: u8, el: u16) {
     if super::settings::get().kh2_sounds.is_none() {
         return;
     }
     let Ok(g) = LOADED.try_lock() else { return };
-    if let Some(s) = g.as_ref().and_then(|l| l.spell_elements.get(&el)) {
+    if let Some(s) = g.as_ref().and_then(|l| l.spell_elements.get(&(level, el))) {
         play(s, Channel::Effects);
     }
 }
