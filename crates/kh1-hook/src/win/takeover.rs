@@ -575,16 +575,28 @@ unsafe fn takeover(actor: usize) -> bool {
         // An Attack during a spell: KH2's once the spell is out (its end frames; the user: KH2's
         // magic can be cut by an attack to go on with the combo), not before (it would cut the
         // spell). In the air too.
+        // The rest of KH1's cast can be cancelled the same way (the user: "animation cancel the
+        // KH1 spells"): a jump, Square (roll, guard, glide) or moving the stick, once the spell
+        // is out; none of them before (Square or the stick 10 frames in cut the cast itself).
         let command = FROM_COMMAND.load(Ordering::Relaxed);
-        let attack_cut = attack && command && !done && spell_out(actor);
+        let out = command && !done && spell_out(actor);
+        let jump_pressed = buttons() & jump_button() != 0;
+        let attack_cut = attack && out;
+        let cancel = out && (attack || jump_pressed || square || stick);
         let attack = attack && (!command || done || attack_cut);
-        if attack_cut {
+        let square = square && (!command || done || cancel);
+        let jump = jump || cancel && jump_pressed;
+        let free = free || cancel && stick;
+        if cancel {
             // KH1's cast action ends here: its "action running" flag off (as at its own end).
             wr(actor, rd::<u32>(actor) & !4);
-            COMBO_ON.store(true, Ordering::Relaxed);
-            log("Attack in the spell's end frames: KH2's combo goes on");
+            COMBO_ON.store(attack_cut, Ordering::Relaxed);
+            log(&format!(
+                "spell's end frames cancelled by {}",
+                if attack_cut { "an Attack: KH2's combo goes on" } else if jump_pressed { "a jump" } else if square { "Square" } else { "moving" }
+            ));
         }
-        if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || attack_cut || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
+        if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || cancel || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
             JUMP_NOW.store(jump, Ordering::Relaxed);
             if cast_landed {
                 // KH1's cast action ends here (it would at the end of its own landing): its

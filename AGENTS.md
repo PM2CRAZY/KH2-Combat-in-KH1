@@ -1855,3 +1855,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   not before (before, an Attack 10 frames in could cut the cast itself). KH1's action flag is
   cleared there, and KH2's combo state from before the spell carries over
   (`Character::combo_state` / `set_combo_state`: the next swing counts on from it).
+
+### 2026-10-18: Stage 168 (animation-cancel KH1's spells)
+- The user: "animation cancel the KH1 spells". Once the spell is out (`spell_out`), not only
+  an Attack (stage 167) but a jump, Square (roll, guard, glide) or the stick ends KH1's cast
+  and hands Sora to KH2 at once (KH1's action flag cleared; logged "spell's end frames
+  cancelled by ..."). Before it is out, Square and the stick no longer end the handoff either
+  (they could cut the cast 10 frames in). Only an Attack carries the combo on.
