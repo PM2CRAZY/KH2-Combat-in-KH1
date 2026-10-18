@@ -2138,3 +2138,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   s185's, and each bone's swing capped from its posed direction (`Chain::max_turn`: hair 10°,
   hood 12°, keychain 35°; the simulated tip is pulled back to the cap so the swing doesn't build
   past it). Test `swing_capped`.
+
+### 2026-10-18: Stage 187 (physics steps by game frame)
+- "the animations arent smooth, they kind of stutter" (s186 video). The jiggle stepped by the
+  clock in fixed 1/60 s steps; frames come 13..22 ms apart (the camera's log), so some draws ran
+  no step (the chains left at Sora's last place, then snapping after him) and others two. Now it
+  steps once per Sora physics frame (`takeover::GAME_FRAME`, counted where `FRAME_KIND` is set);
+  a draw of the same frame again re-applies without stepping; over 30 frames missed, it starts
+  over. (The recordings' whole-frame repeats, 16..35% of frames, are in older videos too: the
+  recording or frame pacing, not ours.)

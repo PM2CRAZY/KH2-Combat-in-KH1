@@ -204,7 +204,7 @@ struct Sora {
     parents: Vec<i16>,
     /// The hair, hood and keychain's swing under KH2's poses (`kh1_data::jiggle`), and when it
     /// last moved.
-    jiggle: Option<(kh1_data::jiggle::Jiggle, Instant)>,
+    jiggle: Option<(kh1_data::jiggle::Jiggle, u64)>,
 }
 
 /// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
@@ -994,15 +994,18 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
     keyblade_teeth_up(&mut pose, &s.parents);
     if super::settings::get().physics {
-        let now = Instant::now();
-        let (j, last) = s.jiggle.get_or_insert_with(|| (kh1_data::jiggle::Jiggle::new(kh1_data::jiggle::sora_chains()), now));
-        let dt = now.duration_since(*last).as_secs_f32();
-        // (Back after KH1's own animation, or a pause: the swing starts over.)
-        if dt > 0.5 {
+        // One step per game frame (Sora's physics frames), not by the clock: frames come 13..22
+        // ms apart, and a draw with no step left the chains at his last place (the user: the
+        // animations stuttered). A gap of more than half a second (KH1's own animation, a
+        // pause) starts the swing over.
+        let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+        let (j, last) = s.jiggle.get_or_insert_with(|| (kh1_data::jiggle::Jiggle::new(kh1_data::jiggle::sora_chains()), frame));
+        let steps = frame.saturating_sub(*last);
+        if steps > 30 {
             j.reset();
         }
-        *last = now;
-        j.apply(&mut pose, &s.parents, &to_world, dt);
+        *last = frame;
+        j.apply(&mut pose, &s.parents, &to_world, steps.min(3) as usize);
     }
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());

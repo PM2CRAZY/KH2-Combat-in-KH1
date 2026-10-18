@@ -61,15 +61,14 @@ struct State {
 pub struct Jiggle {
     chains: Vec<Chain>,
     state: Vec<State>,
-    /// Time not yet simulated, and the breeze's clock.
-    pending: f32,
+    /// The breeze's clock.
     clock: f32,
 }
 
 impl Jiggle {
     pub fn new(chains: Vec<Chain>) -> Jiggle {
         let n = chains.len();
-        Jiggle { chains, state: vec![State::default(); n], pending: 0.0, clock: 0.0 }
+        Jiggle { chains, state: vec![State::default(); n], clock: 0.0 }
     }
 
     /// Starts every chain over at its posed place (no swing carried in).
@@ -79,13 +78,10 @@ impl Jiggle {
         }
     }
 
-    /// Moves the chains on by `dt` seconds and turns their bones in `pose` (model space, bones
-    /// in parent-before-child order, `parents` their parents) toward where they swing to.
-    /// `to_world`: the model's place in the world, whose y is up.
-    pub fn apply(&mut self, pose: &mut [Mat4], parents: &[i16], to_world: &Mat4, dt: f32) {
-        self.pending = (self.pending + dt.clamp(0.0, 0.25)).min(4.0 * STEP);
-        let steps = (self.pending / STEP).floor() as usize;
-        self.pending -= steps as f32 * STEP;
+    /// Moves the chains on by `steps` game frames (0: the same frame drawn again) and turns their
+    /// bones in `pose` (model space, bones in parent-before-child order, `parents` their
+    /// parents) toward where they swing to. `to_world`: the model's place in the world, y up.
+    pub fn apply(&mut self, pose: &mut [Mat4], parents: &[i16], to_world: &Mat4, steps: usize) {
         let from_world = to_world.inverse();
         if !from_world.is_finite() {
             return;
@@ -202,7 +198,7 @@ mod tests {
         let mut p = pose.clone();
         for _ in 0..120 {
             p = pose.clone();
-            j.apply(&mut p, &parents, &Mat4::IDENTITY, STEP);
+            j.apply(&mut p, &parents, &Mat4::IDENTITY, 1);
         }
         for (a, b) in p.iter().zip(&pose) {
             assert!((a.w_axis - b.w_axis).length() < 1e-3, "{a:?} vs {b:?}");
@@ -220,7 +216,7 @@ mod tests {
             x += 300.0 * STEP;
             let w = Mat4::from_translation(Vec3::new(0.0, 0.0, x));
             let mut p = pose.clone();
-            j.apply(&mut p, &parents, &w, STEP);
+            j.apply(&mut p, &parents, &w, 1);
             tip = p[3].w_axis.truncate();
         }
         assert!(tip.z < -1.0, "tip didn't trail: {tip:?}");
@@ -230,7 +226,7 @@ mod tests {
         let w = Mat4::from_translation(Vec3::new(0.0, 0.0, x));
         for _ in 0..300 {
             let mut p = pose.clone();
-            j.apply(&mut p, &parents, &w, STEP);
+            j.apply(&mut p, &parents, &w, 1);
             tip = p[3].w_axis.truncate();
         }
         assert!((tip - Vec3::new(30.0, 100.0, 0.0)).length() < 0.5, "didn't settle: {tip:?}");
@@ -241,9 +237,9 @@ mod tests {
         let (pose, parents) = rig();
         let mut j = Jiggle::new(vec![chain()]);
         let mut p = pose.clone();
-        j.apply(&mut p, &parents, &Mat4::IDENTITY, STEP);
+        j.apply(&mut p, &parents, &Mat4::IDENTITY, 1);
         let mut p = pose.clone();
-        j.apply(&mut p, &parents, &Mat4::from_translation(Vec3::new(5000.0, 0.0, 0.0)), STEP);
+        j.apply(&mut p, &parents, &Mat4::from_translation(Vec3::new(5000.0, 0.0, 0.0)), 1);
         assert!((p[3].w_axis - pose[3].w_axis).length() < 1e-3);
     }
 }
@@ -264,7 +260,7 @@ mod cap_tests {
             z += 2000.0 * STEP;
             let w = Mat4::from_translation(Vec3::new(0.0, 0.0, z));
             let mut p = pose.clone();
-            j.apply(&mut p, &parents, &w, STEP);
+            j.apply(&mut p, &parents, &w, 1);
             let d = (p[1].w_axis - p[0].w_axis).truncate();
             worst = worst.max(d.angle_between(Vec3::X));
         }

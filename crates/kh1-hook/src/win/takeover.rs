@@ -253,6 +253,7 @@ unsafe extern "system" fn physics(actor: usize) {
     }
     let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
     if sora {
+        GAME_FRAME.fetch_add(1, Ordering::Relaxed);
         FRAME_KIND.store(if took { 1 } else if HANDOFF_FRAME.load(Ordering::Relaxed) { 2 } else { 0 }, Ordering::Relaxed);
         room_watch(actor, took);
     }
@@ -1569,6 +1570,10 @@ pub fn move_tilt() -> f32 {
 /// Attack pressed while KH1 had him for its own move (`combat::exec`): ends that move as soon
 /// as he stands free (KH1 allowed the cancel) and is KH2's first press.
 pub static ATTACK_AFTER: AtomicBool = AtomicBool::new(false);
+
+/// Sora's physics frames so far (one per game frame): what frame-locked work (`pose`'s hair and
+/// cloth swing) steps by, not the clock (the user: it stuttered; frames arrive 13..22 ms apart).
+pub static GAME_FRAME: AtomicU64 = AtomicU64::new(0);
 
 /// Sora's actor (KH1's party slot), 0 if none.
 pub fn sora_actor() -> usize {
