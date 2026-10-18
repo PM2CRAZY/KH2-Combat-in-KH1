@@ -39,7 +39,10 @@ pub fn sora_chains() -> Vec<Chain> {
         v.push(Chain { bones: vec![root + 1, root + 2], stiffness: 0.55, damping: 0.25, gravity: 0.0, wind: 40.0, max_turn: 10f32.to_radians() });
     }
     v.push(Chain { bones: (80..=84).collect(), stiffness: 0.45, damping: 0.25, gravity: 0.1, wind: 30.0, max_turn: 12f32.to_radians() });
-    v.push(Chain { bones: (284..=292).collect(), stiffness: 0.18, damping: 0.15, gravity: 0.6, wind: 20.0, max_turn: 35f32.to_radians() });
+    // The keychain hangs free from the pommel, a pendulum (s188, the user: its movement is good
+    // but it "looks like the chain is kind of floating": KH1's rest pose holds it straight out
+    // of the pommel along the blade, and the pull back there with the 35° cap kept it so).
+    v.push(Chain { bones: (284..=292).collect(), stiffness: 0.0, damping: 0.12, gravity: 1.0, wind: 20.0, max_turn: 170f32.to_radians() });
     v
 }
 
@@ -48,6 +51,8 @@ pub fn sora_chains() -> Vec<Chain> {
 const GRAVITY: f32 = 980.0;
 /// Simulation step (the game's frame).
 const STEP: f32 = 1.0 / 60.0;
+/// Steps a chain takes at once when it starts over, to settle.
+const SETTLE: usize = 120;
 /// A jump this far between frames is a warp (a room change, a cut): the chains start over.
 const WARP: f32 = 300.0;
 
@@ -95,15 +100,20 @@ impl Jiggle {
             let target: Vec<Vec3> = c.bones.iter().map(|&b| at(pose, b)).collect();
             let len: Vec<f32> = target.windows(2).map(|w| (w[1] - w[0]).length()).collect();
             let st = &mut self.state[ci];
-            if st.p.len() != target.len() || (st.p[0] - target[0]).length() > WARP || st.p.iter().any(|p| !p.is_finite()) {
+            let fresh = st.p.len() != target.len() || (st.p[0] - target[0]).length() > WARP || st.p.iter().any(|p| !p.is_finite());
+            if fresh {
                 st.p = target.clone();
                 st.prev = target.clone();
             }
-            for k in 0..steps {
+            // Starting over, a chain first settles where it rests (a free one hanging), so it
+            // isn't seen dropping from the pose's place (`SETTLE` steps, no breeze).
+            let settle = if fresh { SETTLE } else { 0 };
+            for k in 0..steps + settle {
+                let k = k.saturating_sub(settle);
                 let t = self.clock + k as f32 * STEP;
                 // A breeze from one side, swelling and dropping, with a quicker flutter on top.
                 let gust = 0.6 + 0.4 * (t * 0.9).sin() + 0.15 * (t * 7.3).sin() * (t * 2.1).cos();
-                let wind = Vec3::new((t * 0.13).cos(), 0.0, (t * 0.13).sin()) * (c.wind * gust);
+                let wind = if settle > 0 && k == 0 { Vec3::ZERO } else { Vec3::new((t * 0.13).cos(), 0.0, (t * 0.13).sin()) * (c.wind * gust) };
                 let acc = Vec3::new(0.0, -GRAVITY * c.gravity, 0.0) + wind;
                 st.p[0] = target[0];
                 st.prev[0] = target[0];
@@ -266,5 +276,26 @@ mod cap_tests {
         }
         assert!(worst <= 0.2 + 1e-3, "turned {worst}");
         assert!(worst > 0.1, "never swung");
+    }
+}
+
+#[cfg(test)]
+mod hang_tests {
+    use super::*;
+
+    #[test]
+    fn a_free_chain_hangs_down() {
+        // Out along +x from a still root; no stiffness: it ends up hanging below the root.
+        let pose: Vec<Mat4> = (0..4).map(|i| Mat4::from_translation(Vec3::new(i as f32 * 5.0, 100.0, 0.0))).collect();
+        let parents = vec![-1, 0, 1, 2];
+        let c = Chain { bones: vec![0, 1, 2, 3], stiffness: 0.0, damping: 0.12, gravity: 1.0, wind: 0.0, max_turn: 170f32.to_radians() };
+        let mut j = Jiggle::new(vec![c]);
+        let mut tip = Vec3::ZERO;
+        for _ in 0..600 {
+            let mut p = pose.clone();
+            j.apply(&mut p, &parents, &Mat4::IDENTITY, 1);
+            tip = p[3].w_axis.truncate();
+        }
+        assert!(tip.y < 100.0 - 13.0 && tip.x.abs() < 3.0, "not hanging: {tip:?}");
     }
 }

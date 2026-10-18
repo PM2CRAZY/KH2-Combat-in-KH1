@@ -2147,3 +2147,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   a draw of the same frame again re-applies without stepping; over 30 frames missed, it starts
   over. (The recordings' whole-frame repeats, 16..35% of frames, are in older videos too: the
   recording or frame pacing, not ours.)
+
+### 2026-10-18: Stage 188 (the keychain hangs)
+- "the actual movement of the keychain is good, but ... the starting position of it doesnt look
+  natural, it looks like the chain is kind of floating": KH1's rest pose holds the keychain
+  straight out of the pommel along the blade, and s186's pull back there (stiffness 0.18) with
+  its 35° cap kept it out. Now a free pendulum (no pull, full gravity, damping 0.12, 170° cap):
+  it rests hanging from the pommel. A chain starting over first settles (`SETTLE` 120 steps, no
+  breeze), so it isn't seen dropping into place. Test `a_free_chain_hangs_down`.
