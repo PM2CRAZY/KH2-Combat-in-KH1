@@ -54,6 +54,15 @@ struct State {
     frame: Frame,
     test_at: Option<std::time::Instant>,
     started: u32,
+    /// A spell file's own effect package (`reflect`: `magic/REFLECT_1.mag`), played beside
+    /// Sora's; its textures follow his in the renderer's texture list (from `tex_base`).
+    spell: Option<SpellFx>,
+}
+
+struct SpellFx {
+    fx: Effects,
+    tex_base: u32,
+    frame: Frame,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -89,10 +98,18 @@ pub unsafe fn start() {
             std::thread::sleep(std::time::Duration::from_millis(500));
         };
         match load() {
-            Ok(lib) => {
+            Ok((lib, common)) => {
                 let bind = kh2_anim::Pose::bind(&kh2.rig.skeleton);
                 let tip_local = bind.bones.get(HAND).map(|h| h.inverse().transform_point3(TIP_BIND)).unwrap_or(Vec3::ZERO);
-                let textures: Vec<(u32, u32, Vec<u8>)> = lib.textures().iter().map(|t| (t.width, t.height, t.rgba.clone())).collect();
+                let mut textures: Vec<(u32, u32, Vec<u8>)> = lib.textures().iter().map(|t| (t.width, t.height, t.rgba.clone())).collect();
+                // Reflect's own package (the user: its VFX), its textures after Sora's.
+                let spell = spell_library(&common).map(|l| {
+                    let tex_base = textures.len() as u32;
+                    textures.extend(l.textures().iter().map(|t| (t.width, t.height, t.rgba.clone())));
+                    let mut fx = Effects::new(Arc::new(l));
+                    fx.seed(0x5EF1);
+                    SpellFx { fx, tex_base, frame: Frame::new() }
+                });
                 log(&format!(
                     "KH2 effects: {} elements, {} textures loaded in {:.1} s{}",
                     lib.elements().len(),
@@ -111,7 +128,7 @@ pub unsafe fn start() {
                 let mut fx = Effects::new(lib);
                 fx.seed(0x2D1F);
                 if let Ok(mut g) = STATE.lock() {
-                    *g = Some(State { fx, running: Vec::new(), motion: u16::MAX, tip_local, frame: Frame::new(), test_at: None, started: 0 });
+                    *g = Some(State { fx, running: Vec::new(), motion: u16::MAX, tip_local, frame: Frame::new(), test_at: None, started: 0, spell });
                 }
             }
             Err(e) => log(&format!("KH2 effects: not loaded ({e})")),
@@ -119,13 +136,84 @@ pub unsafe fn start() {
     });
 }
 
-fn load() -> Result<Library, String> {
+fn load() -> Result<(Library, Vec<u8>), String> {
     let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
     let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
     let src = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
     let pack = install.read_any(src, "obj/P_EX100.a.us").map_err(|e| e.to_string())?;
     let common = install.read_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon.dpd: {e}"))?;
-    Library::load_named(&pack, Some("p_ex"), Some(&common)).map_err(|e| format!("{e:?}"))
+    let lib = Library::load_named(&pack, Some("p_ex"), Some(&common)).map_err(|e| format!("{e:?}"))?;
+    Ok((lib, common))
+}
+
+/// Reflect's effect package (the PAX in its spell file), if the spell is on and its file read.
+fn spell_library(common: &[u8]) -> Option<Library> {
+    if !super::settings::get().reflect {
+        return None;
+    }
+    let Some(bytes) = super::reflect::spell_file() else {
+        log("KH2 effects: Reflect's spell file not read: no Reflect effects");
+        return None;
+    };
+    match Library::load(&bytes, Some(common)) {
+        Ok(l) => {
+            let skipped: Vec<_> = [0u16, 1, 4, 12, 13, 14].iter().map(|&id| (id, l.unsupported_programs(id))).filter(|(_, v)| !v.is_empty()).collect();
+            log(&format!(
+                "KH2 effects: Reflect's package, {} elements, {} textures{}",
+                l.elements().len(),
+                l.textures().len(),
+                if skipped.is_empty() { String::new() } else { format!("; skipped programs {skipped:?}") }
+            ));
+            Some(l)
+        }
+        Err(e) => {
+            log(&format!("KH2 effects: Reflect's package not loaded ({e:?})"));
+            None
+        }
+    }
+}
+
+/// Starts element `el` of the spell's package on Sora (its bone code as for his own effects),
+/// for `reflect` (the spell script's `pax_start_bind`). Returns its handle.
+pub fn spell_start(el: u16) -> Option<u32> {
+    if super::settings::get().kh2_effects.is_none() {
+        return None;
+    }
+    let Ok(mut g) = STATE.lock() else { return None };
+    let s = g.as_mut()?;
+    let tip = s.tip_local;
+    let sp = s.spell.as_mut()?;
+    let h = sp.fx.start(el, &mut |c| bone(c, tip))?;
+    Some(h.0)
+}
+
+/// The spell's package is loaded (for the log).
+pub fn spell_ready() -> bool {
+    STATE.lock().ok().is_some_and(|g| g.as_ref().is_some_and(|s| s.spell.is_some()))
+}
+
+/// What the spell script did to an effect it started: ended its loop (`end`), killed it, or set
+/// its fade (`alpha`).
+pub fn spell_end(h: u32) {
+    with_spell(|fx| fx.end(EffectHandle(h)));
+}
+
+pub fn spell_kill(h: u32) {
+    with_spell(|fx| fx.kill(EffectHandle(h)));
+}
+
+pub fn spell_alpha(h: u32, alpha: f32) {
+    with_spell(|fx| fx.set_alpha(EffectHandle(h), alpha));
+}
+
+pub fn spell_running(h: u32) -> bool {
+    with_spell(|fx| fx.is_running(EffectHandle(h))).unwrap_or(false)
+}
+
+fn with_spell<R>(f: impl FnOnce(&mut Effects) -> R) -> Option<R> {
+    let mut g = STATE.lock().ok()?;
+    let sp = g.as_mut()?.spell.as_mut()?;
+    Some(f(&mut sp.fx))
 }
 
 /// The world matrix of an element's bone code (KH2 world, y down).
@@ -191,6 +279,9 @@ fn step(s: &mut State, motion: Option<u16>) {
     }
     let tip = s.tip_local;
     s.fx.tick(1.0, &mut |c| bone(c, tip));
+    if let Some(sp) = s.spell.as_mut() {
+        sp.fx.tick(1.0, &mut |c| bone(c, tip));
+    }
     let fx = &s.fx;
     s.running.retain(|(h, _, _)| fx.is_running(*h));
 }
@@ -216,7 +307,7 @@ fn draw() {
         }
         // (KH1's frames step the effects too: `takeover::physics`.)
     }
-    if s.fx.running_count() == 0 {
+    if s.fx.running_count() == 0 && s.spell.as_ref().is_none_or(|sp| sp.fx.running_count() == 0) {
         return;
     }
     // The pause menu draws its own Sora in another world pass, with its own camera: the effects
@@ -228,5 +319,19 @@ fn draw() {
     let Some((view, proj)) = (unsafe { fx12::camera(base) }) else { return };
     let cam = Camera::from_view(view);
     s.fx.build(&cam, &mut s.frame);
+    // The spell's triangles after Sora's, its texture ids moved past his.
+    if let Some(sp) = s.spell.as_mut() {
+        if sp.fx.running_count() > 0 {
+            sp.fx.build(&cam, &mut sp.frame);
+            let first = s.frame.vertices.len() as u32;
+            s.frame.vertices.extend_from_slice(&sp.frame.vertices);
+            for b in &sp.frame.batches {
+                let mut b = *b;
+                b.first += first;
+                b.texture = b.texture.map(|t| t + sp.tex_base);
+                s.frame.batches.push(b);
+            }
+        }
+    }
     unsafe { fx12::draw(base, &s.frame, view, proj) };
 }

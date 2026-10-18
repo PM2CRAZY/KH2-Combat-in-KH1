@@ -2380,6 +2380,7 @@ dependencies = [
  "kh2-data",
  "kh2-formats",
  "kh2-fx",
+ "kh2-magic",
  "kh2-rig",
 ]
 

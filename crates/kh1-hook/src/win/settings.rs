@@ -67,7 +67,10 @@ shortcuts = 4\r\n\
 kh2_effects = magnet_explosion\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
 ; round in his hand (0x53: the Dream Shield); none = off\r\n\
-flip_weapons = 0x53\r\n";
+flip_weapons = 0x53\r\n\
+; reflect: on = KH2's Reflect in the Magic menu once Sora has Aero (KH2's cast, barrier,\r\n\
+; counter, effects and sounds, from your KH2 install; Fire's MP); off = KH1's spells only\r\n\
+reflect = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -101,6 +104,8 @@ pub struct Settings {
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
     pub flip_weapons: Vec<u8>,
+    /// KH2's Reflect in KH1's magic menu (`reflect = on`).
+    pub reflect: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -169,6 +174,7 @@ pub fn get() -> &'static Settings {
                     })
                     .collect(),
             },
+            reflect: on(&text, "reflect", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

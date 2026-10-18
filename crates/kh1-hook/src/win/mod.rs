@@ -18,6 +18,7 @@ mod pose;
 mod settings;
 mod shortcuts;
 mod probe;
+mod reflect;
 mod takeover;
 mod sys;
 
@@ -176,6 +177,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         camera::install();
         config::install();
         shortcuts::install();
+        reflect::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

@@ -62,6 +62,8 @@ fn note(s: String) {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Fate {
     Evaded,
+    /// Stopped by a Reflect barrier (`reflect`), counted for its counter.
+    Reflected,
     Guarded,
     Taken(u32),
 }
@@ -110,6 +112,10 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
             let kind = kind_of(actor, r);
             let fate = if out.invulnerable {
                 Fate::Evaded
+            } else if super::reflect::barrier_up() {
+                // KH2's Reflect: the barrier round him stops any attack (from every side) and
+                // counts it.
+                Fate::Reflected
             } else if (out.guarding || !out.guard_boxes.is_empty()) && (toward.dot(fwd) > 0.0 || ch.abilities.guard_all_round) {
                 ch.clash(1, 1, toward.to_array());
                 Fate::Guarded
@@ -136,6 +142,10 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         note(format!("Sora hit by {:#x}: damage {}, record kind {}, {fate:?}", pose::ptr(rd::<u32>(r + 4)), rd::<i32>(r + 8), rd::<u32>(r + 0xC) & 0x1F));
         match fate {
             Fate::Evaded => wr(r, rd::<u8>(r) | NO_EFFECT),
+            Fate::Reflected => {
+                wr(r, rd::<u8>(r) | NO_EFFECT);
+                super::reflect::blocked(pose::ptr(rd::<u32>(r + 4)));
+            }
             Fate::Guarded => {
                 wr(r, rd::<u8>(r) | NO_EFFECT);
                 let at = [me[0] + toward.x * 40.0, me[1] - 60.0, me[2] + toward.y * 40.0];
