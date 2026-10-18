@@ -124,6 +124,7 @@ Unit question still open: the invulnerability timers are treated as 60 Hz frames
 - **Stick held:** walk/run takes over after a short hold: 14 frames standing in the landing
   (the user's KH2 video at 60 fps: touchdown, about 16 frames of the landing crouch, then the
   run). This replaces "at once", which the exe reading had suggested but play doesn't show.
+  A jump ends the hold at any frame (the user).
 - **Stick neutral:** the landing motion plays and velocity is the stick's, so Sora stops dead.
   Air momentum isn't carried (this was the "slide on landing").
 - Buttons are accepted again from the motion's "allow reaction command" window (frame 8);

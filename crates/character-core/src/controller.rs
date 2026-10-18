@@ -1462,7 +1462,9 @@ impl Character {
                     finished = true;
                 }
                 let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(0);
-                if f >= open {
+                // Jump at any moment of it (the user: the hold is right, but jumping out of it
+                // should work).
+                if f >= open || input.jump.pressed {
                     cancel_allowed = true;
                 }
             }

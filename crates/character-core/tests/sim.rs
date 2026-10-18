@@ -521,3 +521,19 @@ fn carried_into_the_air_falls_on_at_its_speed() {
     }
     assert!(falls < 300 && w.pos[1] == 0.0, "lands");
 }
+
+#[test]
+fn jump_out_of_the_landing_hold() {
+    let mut w = World::new(sora());
+    w.ch.abilities.high_jump = 0;
+    w.run(1, Pad { jump: true, ..IDLE });
+    let mut f = 0;
+    while w.step(IDLE).state != StateName::Land {
+        f += 1;
+        assert!(f < 300, "never landed");
+    }
+    // Two frames into the landing (before its reaction window): jump.
+    w.step(Pad { stick: [0.0, 1.0], ..IDLE });
+    let o = w.step(Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
+    assert_eq!(o.state, StateName::Jump, "jumped out of the landing");
+}

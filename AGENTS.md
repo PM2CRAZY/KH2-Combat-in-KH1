@@ -1776,3 +1776,7 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bits (KH1's own moves use them: jumping off a bar). Now once KH1's move has him standing and
   free (state 0 and KH1's can-act test, `kh1_move_done`) they are KH2's: stripped from KH1, and
   a jump press then ends the handoff with KH2 jumping at once (`JUMP_NOW` clears the held flag).
+
+### 2026-10-18: Stage 160 (jump out of the landing hold)
+- The user: the landing hold is right, but a jump should end it. A jump press now opens the
+  landing's cancel at any frame (other buttons still wait for its reaction window, frame 8).
