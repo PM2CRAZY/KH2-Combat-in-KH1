@@ -343,7 +343,10 @@ unsafe fn run(lock: bool) -> Option<()> {
     let Ok(mut g) = CAM.lock() else { return None };
     // A new camera when KH1 comes back to its follow camera from something not ours (an event,
     // an area camera, a menu, a cutscene), facing the way KH1's camera was looking from.
-    let was_ours = now_ms().saturating_sub(LAST_MS.load(Ordering::Relaxed)) < 300;
+    let gap = now_ms().saturating_sub(LAST_MS.load(Ordering::Relaxed));
+    // (A pause in between doesn't count: the pause menu's Sora was posed meanwhile; the user:
+    // spamming pause while locked on started the camera over unlocked each time, shaking it.)
+    let was_ours = gap < 300 || (super::pose::menu_sora_within(gap + 200) && gap < 60_000);
     // (Or after a while of KH1's own: a cutscene had it.)
     let _ = fresh_mode;
     // (Or Sora is far from where it was looking: a new room, a warp.)

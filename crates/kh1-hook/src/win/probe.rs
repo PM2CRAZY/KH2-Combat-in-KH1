@@ -210,9 +210,12 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     super::takeover::RAW_STICKS.store(u32::from_le_bytes(st), Ordering::Relaxed);
     // L1 held: KH1's shortcuts (L1 + a face button cast the spells set there), so KH1 keeps
     // Circle and Square then (the user: the Square shortcut didn't cast).
-    if super::takeover::active() && b & super::takeover::L1 == 0 {
-        std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::CIRCLE | super::takeover::SQUARE));
-    } else if !super::takeover::kh1_keeps_square() && b & super::takeover::L1 == 0 {
+    // (Only when L1 opens KH1's shortcut menu: with no shortcut set it opens nothing, and KH1
+    // jumped with the button, cancelling KH2's moves, the user.)
+    let shortcuts = super::shortcuts::menu_on_l1(b);
+    if super::takeover::active() && !shortcuts {
+        std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::jump_button() | super::takeover::SQUARE));
+    } else if !super::takeover::kh1_keeps_square() && !shortcuts {
         std::ptr::write_unaligned(out as *mut u16, b & !super::takeover::SQUARE);
     }
     // Sticks to 3 levels each, so drift doesn't flood the log.

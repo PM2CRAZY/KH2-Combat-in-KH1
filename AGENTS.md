@@ -1579,3 +1579,33 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   still: uneven frame pacing, not the camera.
 - The user's "slight slide" in the scene after "move and run": the log shows KH1's own scene
   motions there (slots 206 / 207, `follow` leaves KH1's animation): KH1's own walk.
+
+### 2026-10-17: Stage 147 (the user's bug list)
+- Attack on the first free frame after a KH1 move was KH1's attack, and KH1's combo ran on
+  from there (out of order, glitched): `kh1_move` needed `active()` (KH2 drew a frame in the last
+  150 ms), which lapses during any KH1 move longer than that. Now `HANDOFF_SEEN_MS` (the
+  hand-off branch seen in `takeover`) keeps it; and `combat::exec` never runs KH1's attack row
+  for Sora while `takeover::kh1_borrows` (his own body, no event / area script / ride / KH1
+  movement mode / flight): it hands to KH1 with `ATTACK_AFTER`, KH2's first press when KH1 lets go.
+- Confirm button on Circle (Options): KH1's pad step `0x140288F30` maps Cross to confirm
+  (`0x210001`) and Circle to jump / cancel (`6`), swapped when `0x1402F4690` (a settings field;
+  `+0x1A` Epic, `+0x1E` Steam) says so. We hid Circle from KH1 and read Circle as KH2's jump,
+  so with the swap KH1 saw its jump and took Sora. `takeover::jump_button()` follows the option
+  (pad mask and KH2's jump).
+- L1 + jump cancelled KH2 moves when no shortcut was set: KH1 opens its shortcut menu on L1
+  only then (`HAS_SHORTCUTS_RVA`), else the face buttons are its plain ones. The pad mask and
+  KH2's `shortcut` now use `shortcuts::menu_on_l1`.
+- Commands (magic, items, specials) cancelled any KH2 move: `combat::command` now runs one only
+  when `can_cast` (spells: free, landing, an attack's ComboMagic window) or `can_take_command`
+  (others); otherwise it waits (`PENDING_COMMAND`, KH1's 16-byte record) and
+  `resume_command` (before KH1's control step) puts it back once allowed, within 1.5 s.
+- Pause menu: KH1 poses a second copy of Sora's model there; any 293-bone instance was taken
+  for Sora (one frame of KH2's pose, and KH2's walk at the menu Sora's zero speed: slow). A new
+  instance is Sora only within 150 of his actor (`pose::at_sora`); the other is left to KH1 and
+  noted (`menu_sora_within`). KH2 effects aren't drawn while it is (the menu's world pass drew a
+  copy), and KH2's camera carries on across a pause (spamming pause restarted it unlocked).
+- Keyblade trail: KH1 drops a trail asked for 30+ frames before the blow (the modifiers' long
+  wind-ups: "not drawn" for motions 169 / 192 in the logs); asked again as the hit window opens.
+- Aerial Finish (motion 194, combo row 29, ability 100) joins KH2's effects moves.
+- KH2 effects step on KH1's frames too (`kh2fx::NO_MOTION`: the cut-short move's end); a spell
+  mid-move froze them.

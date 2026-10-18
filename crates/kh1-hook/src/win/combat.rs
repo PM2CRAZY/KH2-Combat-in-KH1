@@ -102,6 +102,16 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         note(format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));
         return;
     }
+    // KH1 is playing one of its own motions on him (a reaction, the end of a spell), or KH2 lost
+    // him for a frame: the press is KH2's once KH1 lets go, never KH1's own attack row (the user:
+    // Attack on the first free frame after a KH1 move gave KH1's attacks, and its combo carried
+    // on from there out of order).
+    if actor == sora && command == 1 && takeover::kh1_borrows(actor) {
+        takeover::hand_to_kh1(&format!("Attack pressed during KH1's own motion (KH1 row {row})"));
+        takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
+        note(format!("Attack command during KH1's own motion (KH1 row {row}): KH2's once it ends"));
+        return;
+    }
     let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
     f(actor, row, dir)
 }
@@ -125,6 +135,35 @@ pub fn attack_seen() -> Option<u32> {
     let a = ATTACK_SHOWN.lock().ok()?;
     let (m, t) = (*a)?;
     (t.elapsed().as_secs_f32() < 0.6).then_some(m)
+}
+
+/// A command chosen while KH2's move couldn't take it (`command`): KH1's command record
+/// (`COMMAND_RVA`, 16 bytes) and when; given back to KH1 once Sora can act (`resume_command`),
+/// dropped after 1.5 s.
+static PENDING_COMMAND: std::sync::Mutex<Option<([u8; 16], std::time::Instant)>> = std::sync::Mutex::new(None);
+
+/// Before KH1's control step: a waiting command goes back into KH1's command record once KH2's
+/// move allows it (KH1's control step then runs it as if just chosen).
+pub unsafe fn resume_command() {
+    let Ok(mut p) = PENDING_COMMAND.lock() else { return };
+    let Some((rec, t)) = *p else { return };
+    if t.elapsed().as_secs_f32() > 1.5 || !takeover::kh2_has() {
+        *p = None;
+        return;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    if rd::<u8>(base + COMMAND_RVA) != 0 {
+        // A new choice replaces it.
+        *p = None;
+        return;
+    }
+    let kind = rec[0];
+    let ready = takeover::with_kh2(|c, _| if kind == 2 { c.can_cast() } else { c.can_take_command() }).unwrap_or(false);
+    if ready {
+        *p = None;
+        wr(base + COMMAND_RVA, rec);
+        note(format!("command {kind:#x}: KH2's move allows it now"));
+    }
 }
 
 /// Command types that don't move Sora (`0x1402A1470`): the party's (`+0x98`'s), the menu's.
@@ -162,6 +201,18 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     }
     if actor != sora || matches!(kind, 0 | 1) || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::kh2_has() {
         return f(actor, dir);
+    }
+    // KH2 runs a command only when Sora can act: a spell when free, landing or in an attack's
+    // "combo magic" window (`can_cast`), anything else when free or in a combo window
+    // (`can_take_command`). Chosen mid-move, it waits and runs as soon as he can (the user: magic
+    // cancelled any KH2 move).
+    let ready = takeover::with_kh2(|c, _| if kind == 2 { c.can_cast() } else { c.can_take_command() }).unwrap_or(true);
+    if !ready {
+        if let Ok(mut p) = PENDING_COMMAND.lock() {
+            *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now()));
+        }
+        note(format!("command {kind:#x} ({full:08x}) waits: KH2's move can't be cancelled yet"));
+        return;
     }
     static AIR_LOG: AtomicU32 = AtomicU32::new(0);
     if AIR_LOG.fetch_add(1, Ordering::Relaxed) < 40 {
@@ -413,6 +464,10 @@ pub struct Strikes {
     swing_rows: Option<(u16, HashMap<i16, Row>)>,
     /// Frames since a trail was asked for.
     trail_asked: Option<u32>,
+    /// The trail this swing asked for (KH1's row's), and whether its hit window was open last
+    /// frame: asked again as the window opens if KH1 dropped it meanwhile (a long wind-up).
+    trail_id: Option<u32>,
+    was_swinging: bool,
     /// Enemies a Magnet (ATKP reaction 5: Magnet Burst) caught: the swing, orbit radius and
     /// swirl. Pulled every frame while the swing lasts.
     pulled: HashMap<usize, (u64, f32, f32)>,
@@ -780,6 +835,7 @@ impl Strikes {
                 let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(base + TRAIL_RVA);
                 f(sora, r.trail as u32);
                 self.trail_asked = Some(0);
+                self.trail_id = Some(r.trail as u32);
             }
             if r.effect >= 0 {
                 let f: unsafe extern "system" fn(usize, i32, usize, u32) -> usize = std::mem::transmute(base + EFFECT_RVA);
@@ -872,6 +928,24 @@ impl Strikes {
     /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
     pub unsafe fn trail(&mut self, sora: usize, swinging: bool) {
         let flags = rd::<u32>(sora + 0x1CC);
+        // The hit window opening: KH1's trail object (`+0x14C`'s `+0x28`) must be there; KH1
+        // drops a trail asked for too long before (the user: most ground combo modifiers, whose
+        // blows come 30+ frames into the motion, had no trail).
+        if swinging && !self.was_swinging {
+            let cs = pose::ptr(rd::<u32>(sora + 0x14C));
+            if let Some(id) = self.trail_id {
+                if cs > 0x10000 && rd::<u64>(cs + 0x28) == 0 && rd::<u64>(cs + 0x18) != 0 {
+                    let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(BASE.load(Ordering::Relaxed) + TRAIL_RVA);
+                    f(sora, id);
+                    self.trail_asked = Some(0);
+                    static N: AtomicU32 = AtomicU32::new(0);
+                    if N.fetch_add(1, Ordering::Relaxed) < 12 {
+                        log("Keyblade trail asked again as the hit window opened (KH1 had dropped it)");
+                    }
+                }
+            }
+        }
+        self.was_swinging = swinging;
         if swinging {
             wr(sora + 0x1CC, flags | TRAIL_FLAG);
             TRAIL_ON.store(true, Ordering::Relaxed);

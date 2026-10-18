@@ -739,6 +739,35 @@ unsafe fn bone_count(instance: usize) -> Option<u32> {
     Some(rd::<u16>(header) as u32)
 }
 
+/// When a copy of Sora's model away from his actor (the pause menu's) was last posed.
+static MENU_SORA: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// The pause menu's Sora was posed within the last `ms` (the menu is up).
+pub fn menu_sora_within(ms: u64) -> bool {
+    MENU_SORA.lock().ok().and_then(|m| *m).is_some_and(|t| t.elapsed().as_millis() as u64 <= ms)
+}
+
+/// Whether a Sora model instance stands at his actor (the field's Sora), as far as can be told
+/// (unknown: yes). The pass's world matrix, else bone 0's, against the actor's `+0x10`.
+unsafe fn at_sora(instance: usize, param_world: usize) -> bool {
+    let actor = super::probe::SORA_ACTOR.load(Ordering::Relaxed);
+    if actor < 0x10000 || !super::crash::readable(actor + 0x20) {
+        return true;
+    }
+    let at = from_param(param_world).map(|m| m.w_axis.truncate()).or_else(|| {
+        let world = ptr(rd::<u32>(instance + WORLD));
+        (world != 0).then(|| Mat4::from_cols_array(&rd::<[f32; 16]>(world)).w_axis.truncate())
+    });
+    let Some(p) = at.filter(|p| p.is_finite()) else { return true };
+    let a = rd::<[f32; 3]>(actor + 0x10);
+    let d = Vec3::new(p.x - a[0], p.y - a[1], p.z - a[2]).length();
+    static N: AtomicU32 = AtomicU32::new(0);
+    if d > 150.0 && N.fetch_add(1, Ordering::Relaxed) < 10 {
+        log(&format!("Sora's model {instance:#x} drawn {d:.0} away from his actor: another copy (the pause menu's), left to KH1"));
+    }
+    d <= 150.0
+}
+
 unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     let Some(bones) = bone_count(instance) else { return };
     note_model(bones, instance, via_ik);
@@ -747,6 +776,12 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     }
     let header = rd::<u64>(rd::<u64>(instance) as usize) as usize;
     let Ok(mut g) = SORA.try_lock() else { return };
+    if g.as_ref().map_or(true, |s| s.instance != instance) && !at_sora(instance, param_world) {
+        // Another copy of Sora's model away from his actor: the pause menu's (the user: it
+        // walked slowly in KH2's walk and showed a frame of KH2's pose). KH1's own animation.
+        MENU_SORA.lock().map(|mut m| *m = Some(Instant::now())).ok();
+        return;
+    }
     if g.as_ref().map_or(true, |s| s.instance != instance) {
         let table = ptr(rd::<u32>(header + 4));
         if table == 0 {

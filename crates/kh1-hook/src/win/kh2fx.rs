@@ -20,9 +20,10 @@
 
 
 use super::addr::Rva;
-/// Explosion, Vicinity Break and Magnet Burst (the user: those three; Vicinity Break's was
-/// asked for when it went unnoticed without it).
-pub const DEFAULT_MOTIONS: [u16; 3] = [166, 170, 197];
+/// Explosion, Vicinity Break, Magnet Burst and Aerial Finish (the user: those three first;
+/// Vicinity Break's was asked for when it went unnoticed without it, Aerial Finish's (motion
+/// 194, Sora's combo row 29, ability 100) when it was missing).
+pub const DEFAULT_MOTIONS: [u16; 4] = [166, 170, 197, 194];
 use super::{fx12, hook, log};
 use character_core::EventKind;
 use glam::{Mat4, Vec3};
@@ -162,6 +163,9 @@ pub fn event(motion: u16, kind: EventKind) {
 }
 
 /// One game frame of KH2's controller: KH2's motion now.
+/// `tick`'s motion while KH1 has Sora: no KH2 motion (effects bound to one end).
+pub const NO_MOTION: u16 = u16::MAX - 1;
+
 pub fn tick(motion: u16) {
     let Ok(mut g) = STATE.lock() else { return };
     let Some(s) = g.as_mut() else { return };
@@ -204,12 +208,14 @@ fn draw() {
                 log("KH2 effect: test (element 51)");
             }
         }
-        // Without KH2's controller ticking (KH1 has Sora), step here.
-        if !super::takeover::kh2_has() {
-            step(s, None);
-        }
+        // (KH1's frames step the effects too: `takeover::physics`.)
     }
     if s.fx.running_count() == 0 {
+        return;
+    }
+    // The pause menu draws its own Sora in another world pass, with its own camera: the effects
+    // once, in the field's (the user: a copy of the effect in the pause menu).
+    if super::pose::menu_sora_within(150) {
         return;
     }
     let base = BASE.load(Ordering::Relaxed);

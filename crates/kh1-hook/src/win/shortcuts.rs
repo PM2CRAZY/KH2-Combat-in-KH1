@@ -410,3 +410,13 @@ unsafe extern "system" fn icon(inst: usize, glyph: u32, x: i32, y: i32, scale: f
     f(inst, glyph, x, y, scale);
     f(inst, 0x42, x, y + ROW, scale);
 }
+
+/// L1 is held and opens KH1's shortcut menu (KH1 switches to it only when a shortcut is set,
+/// `HAS_SHORTCUTS_RVA`): the face buttons are KH1's shortcuts then, not KH2's jump / action.
+pub fn menu_on_l1(buttons: u16) -> bool {
+    if buttons & super::takeover::L1 == 0 {
+        return false;
+    }
+    let base = base();
+    base != 0 && unsafe { rd::<u32>(base + HAS_SHORTCUTS_RVA) != 0 }
+}

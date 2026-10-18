@@ -62,7 +62,7 @@ config_row = on\r\n\
 ; Customize); 3 = KH1's three\r\n\
 shortcuts = 4\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
-; KH1's frame: magnet_explosion (Magnet Burst, Explosion and Vicinity Break), all (every\r\n\
+; KH1's frame: magnet_explosion (Magnet Burst, Explosion, Vicinity Break, Aerial Finish), all (every\r\n\
 ;   move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\

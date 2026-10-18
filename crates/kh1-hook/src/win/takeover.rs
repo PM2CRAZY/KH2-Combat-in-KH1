@@ -117,6 +117,10 @@ const HANG_RVA: Rva = Rva(0x2C17B0);
 const SWIM_RVA: Rva = Rva(0x2BF410);
 /// KH1 has him for one of its own moves (`grab`); KH2 starts over afterwards (`FRESH`).
 static HANDOFF: AtomicBool = AtomicBool::new(false);
+/// When `takeover` last saw KH1 still in its move (`kh1_move` holds while it does: KH2 draws
+/// nothing meanwhile, so `active` lapses after 150 ms; the user: an Attack on the first free frame
+/// after a spell was KH1's own attack).
+static HANDOFF_SEEN_MS: AtomicU64 = AtomicU64::new(0);
 static FRESH: AtomicBool = AtomicBool::new(false);
 static HANDOFF_FRAMES: AtomicU32 = AtomicU32::new(0);
 /// Square was pressed as KH1's move ended: KH2 takes it as a press (not one already held).
@@ -206,9 +210,12 @@ unsafe extern "system" fn physics(actor: usize) {
     if ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor) {
         return;
     }
-    // KH1 has him this frame: a Keyblade trail KH2's swing asked for ends.
+    // KH1 has him this frame: a Keyblade trail KH2's swing asked for ends, and KH2's effects
+    // play on (those of the move KH1 cut short end; the user: a spell cast during a move with a
+    // KH2 effect froze the effect where it was).
     if actor > 0x10000 && actor == rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize {
         combat::trail_off(actor);
+        super::kh2fx::tick(super::kh2fx::NO_MOTION);
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
@@ -217,6 +224,7 @@ unsafe extern "system" fn physics(actor: usize) {
 unsafe extern "system" fn control(actor: usize, dir: usize) {
     let base = BASE.load(Ordering::Relaxed);
     if actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize {
+        combat::resume_command();
         let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
         if can(actor) != 0 {
             CONTROLLED.store(true, Ordering::Relaxed);
@@ -351,6 +359,7 @@ unsafe fn takeover(actor: usize) -> bool {
             FRESH.store(true, Ordering::Relaxed);
             log(&format!("KH1's move ended (state {state}): KH2 again"));
         } else {
+            HANDOFF_SEEN_MS.store(now_ms().max(1), Ordering::Relaxed);
             release(&format!("KH1's own move, KH1 state {state}"));
             return false;
         }
@@ -463,8 +472,8 @@ unsafe fn takeover(actor: usize) -> bool {
     let stick = if tilt > 0.0 { (dir * tilt).to_array() } else { [0.0, 0.0] };
     // With L1 held the face buttons are KH1's shortcuts, not KH2's jump / action; a button
     // still held when L1 lets go stays KH1's until released (`held` sees it raw).
-    let shortcut = buttons & L1 != 0;
-    let jump_raw = buttons & CIRCLE != 0;
+    let shortcut = super::shortcuts::menu_on_l1(buttons);
+    let jump_raw = buttons & jump_button() != 0;
     let action_raw = buttons & SQUARE != 0;
     let jump = jump_raw && !shortcut;
     let action = action_raw && !shortcut;
@@ -976,8 +985,43 @@ pub fn kh1_keeps_square() -> bool {
 /// KH2 has Sora this moment (not handed to KH1).
 /// KH1 has him for one of its own moves (`hand_to_kh1`), until he can be KH2's again.
 pub fn kh1_move() -> bool {
-    active() && HANDOFF.load(Ordering::Relaxed)
+    let seen = ACTIVE_MS.load(Ordering::Relaxed).max(HANDOFF_SEEN_MS.load(Ordering::Relaxed));
+    ON.load(Ordering::Relaxed) && HANDOFF.load(Ordering::Relaxed) && seen != 0 && now_ms().saturating_sub(seen) < 150
 }
+
+/// KH2 would have Sora but KH1 is playing one of its own motions on him (a reaction, or an
+/// action KH1 started itself): his own body, no event or area script, no ride, not one of KH1's
+/// own movement modes. An Attack then is KH2's once KH1 lets go, never KH1's own attack.
+pub unsafe fn kh1_borrows(actor: usize) -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    ON.load(Ordering::Relaxed)
+        && base != 0
+        && actor == rd::<u64>(base + PARTY_RVA) as usize
+        && rd::<u32>(base + EVENT_RVA) == 0
+        && now_ms() >= RIDE_UNTIL.load(Ordering::Relaxed)
+        && pose::sora_body_seen(500)
+        && !SCRIPTED.load(Ordering::Relaxed)
+        && !kh1_mode(rd::<i32>(actor + 0x70))
+        && rd::<i32>(actor + 0x70) != FLIGHT_STATE
+}
+
+/// The button KH1 jumps with: Circle, or Cross when the options swap the confirm button to
+/// Circle (KH1's pad step `0x140288F30` maps Cross to confirm (`0x210001`) and Circle to
+/// jump / cancel (`6`), the other way round when `0x1402F4690` says so; the user: with the swap,
+/// KH1 saw the jump button and took Sora from KH2).
+pub fn jump_button() -> u16 {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return CIRCLE;
+    }
+    let swapped: unsafe extern "system" fn() -> u8 = unsafe { std::mem::transmute(base + CONFIRM_SWAP_RVA) };
+    if unsafe { swapped() } & 1 != 0 {
+        CROSS
+    } else {
+        CIRCLE
+    }
+}
+const CONFIRM_SWAP_RVA: Rva = Rva(0x2F4690);
 
 /// Attack pressed while KH1 had him for its own move (`combat::exec`): ends that move as soon
 /// as he stands free (KH1 allowed the cancel) and is KH2's first press.
