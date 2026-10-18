@@ -1249,7 +1249,8 @@ impl Strikes {
                 let silent = row.revenge_damage == 0 && revenge_to_come(character, out, battle);
                 HOLD.store(blow && !throws && !b.fixed, Ordering::Relaxed);
                 MAGIC.store(row.stat_source == 1, Ordering::Relaxed);
-                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, silent);
+                // (The move this hit belongs to: its action, `swing`'s high bits.)
+                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, silent.then_some(h.swing >> 8));
                 MAGIC.store(false, Ordering::Relaxed);
                 HOLD.store(false, Ordering::Relaxed);
                 // (Again once the contact is done, in case its direction came after the record.)
@@ -1350,7 +1351,7 @@ impl Strikes {
                 let knock = character_core::reaction::category(r.enemy_reaction) == 4 || k1 >= 100;
                 let kh1 = rows[knock as usize];
                 MAGIC.store(r.stat_source == 1, Ordering::Relaxed);
-                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, false);
+                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, None);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
                 out.push((a.atk, b.actor, dealt));
@@ -1393,6 +1394,13 @@ fn revenge_to_come(character: &Character, out: &Output, battle: &Battle) -> bool
 static SILENT: AtomicBool = AtomicBool::new(false);
 /// The hit record `scale_record` saw last.
 static LAST_REC: AtomicUsize = AtomicUsize::new(0);
+/// KH1's engine reaction for a hit record (`0x1402B62C0 (actor, record)`: the flinch by the
+/// record's direction, air or ground; its scripts' reaction call `0x1402B9B60` runs it), and the
+/// hit-effect step that call runs first for records with `+0xC` bit `0x800` (`0x1402B65F0`).
+const REACT_RVA: Rva = Rva(0x2B62C0);
+const REACT_FX_RVA: Rva = Rva(0x2B65F0);
+/// Multi-hit moves whose first hit a foe's script has heard (move key, foe, when).
+static TOLD: std::sync::Mutex<Vec<(u64, usize, std::time::Instant)>> = std::sync::Mutex::new(Vec::new());
 /// KH1's handle → pointer (`0x14038B0B0`; 0 for 0).
 const FROM_HANDLE_RVA: Rva = Rva(0x38B0B0);
 /// A foe's script flag (`+0x374` bit `0x10000`, with its script machine at `+0x144`): KH1 tells
@@ -1405,16 +1413,38 @@ const SCRIPTED: u32 = 0x1_0000;
 /// Lands one hit with KH1's contact code, through a KH1 attack object made from Sora's row.
 /// Returns the damage written to the hit record, if one was made.
 ///
-/// `silent` (a multi-hit move's hit before its last), on a foe run by a script: its script
-/// hears nothing of it. The script flag is off for the contact (no event 2), the record made is
-/// taken back off the foe's queue (`+0x3EC`, linked by handles at `+0x30`; no event 0) with the
-/// foe's hit flags and serial (`+0x3E0`, `+0x3E8`) as they were, and freed; its damage is
-/// carried to the next hit that lands on the foe (the move's last, normally).
-unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, silent: bool) -> Option<u32> {
+/// `silent` (a multi-hit move's hit before its last, with the move's key), on a foe run by a
+/// script: its script hears nothing of it (it counts hits toward its retaliation). The script
+/// flag is off for the contact (no event 2), the record made is taken back off the foe's queue
+/// (`+0x3EC`, linked by handles at `+0x30`; no event 0) with the foe's hit flags and serial
+/// (`+0x3E0`, `+0x3E8`) as they were, and freed; its damage is carried to the next hit that
+/// lands on the foe (the move's last, normally).
+/// Its flinch (the user: the foe no longer reacted to the earlier hits): a foe already in one
+/// of its damage motions (as KH1's own reaction code tests, `+0x164 - +0x3EA` under 10) flinches
+/// again through KH1's engine reaction (`0x1402B62C0`, which its scripts' reaction call runs);
+/// one that isn't hears the move's first hit as usual, so its script decides whether it
+/// flinches (a boss with super armour doesn't), and the rest stay silent.
+unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, silent: Option<u64>) -> Option<u32> {
     let target = std::ptr::read_unaligned(part.entry.as_ptr().add(8) as *const u64) as usize;
-    let silent = silent && target > 0x10000 && rd::<u32>(target + 0x374) & SCRIPTED != 0 && rd::<u32>(target + 0x144) != 0;
-    if !silent {
+    let scripted = target > 0x10000 && rd::<u32>(target + 0x374) & SCRIPTED != 0 && rd::<u32>(target + 0x144) != 0;
+    let Some(key) = silent.filter(|_| scripted) else {
         return land_hit(sora, part, at, row, power);
+    };
+    let reacting = (rd::<i32>(target + 0x164) as u32).wrapping_sub(rd::<u16>(target + 0x3EA) as u32) < 10;
+    if !reacting {
+        // The move's first hit on this foe goes to its script (whether it flinches is its call).
+        let first = TOLD.lock().map_or(true, |mut t| {
+            t.retain(|&(_, _, at)| at.elapsed().as_secs_f32() < 5.0);
+            if t.iter().any(|&(k, f, _)| k == key && f == target) {
+                false
+            } else {
+                t.push((key, target, std::time::Instant::now()));
+                true
+            }
+        });
+        if first {
+            return land_hit(sora, part, at, row, power);
+        }
     }
     let base = BASE.load(Ordering::Relaxed);
     let saved = (rd::<u32>(target + 0x374), rd::<u32>(target + 0x3E0), rd::<u16>(target + 0x3E8));
@@ -1446,6 +1476,16 @@ unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, silen
                 n += 1;
             }
         }
+        if unlinked && reacting {
+            // Flinched again by KH1's engine reaction, as the foe's script had it react before.
+            let base = BASE.load(Ordering::Relaxed);
+            if rd::<u32>(rec + 0xC) & 0x800 != 0 {
+                let fx: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + REACT_FX_RVA);
+                fx(target, rec);
+            }
+            let react: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + REACT_RVA);
+            react(target, rec);
+        }
         if unlinked {
             wr(rec, 0u32);
             wr(target + 0x3E0, saved.1);
@@ -1453,7 +1493,7 @@ unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, silen
         }
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 60 {
-            log(&format!("silent hit on scripted foe {target:#x}: record {rec:#x} {} (damage carried to its next hit)", if unlinked { "taken back" } else { "NOT found on its queue (left to KH1)" }));
+            log(&format!("silent hit on scripted foe {target:#x}: record {rec:#x} {}{} (damage carried to its next hit)", if unlinked { "taken back" } else { "NOT found on its queue (left to KH1)" }, if reacting { ", flinched again" } else { "" }));
         }
     }
     dealt

@@ -2100,3 +2100,17 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (`kh1_casting` now needs Sora still unable to act, and a spell waiting once the cast is done
   ends the hand-off). Known limit: KH2's air cast motion (73) has no finisher window, so after
   an air finishing Reflect the next finisher can't follow in the air.
+
+### 2026-10-18: Stage 184 (multi-hit moves flinch again)
+- "Multi-hit moves should continue triggering the enemy's taking-damage animation on each
+  appropriate hit, while revenge value is only added on the finishing hit": s179's silent hits
+  never reached the foe's script, which is what plays its reactions (its reaction calls run
+  KH1's engine reactions, `0x1402B9B60` → `0x1402B62C0 (actor, record)`; the default path
+  `0x1402BCD30` only changes HP). Now a silent hit on a foe already in one of its damage motions
+  (`+0x164 - +0x3EA` under 10, KH1's own test in `0x1402B62C0`) runs that engine reaction itself
+  (and `0x1402B65F0` first for records with `+0xC` bit `0x800`, as the call does) before the
+  record is freed; a foe not reacting hears the move's first hit as usual (its script decides
+  whether it flinches: super armour stays), the rest stay silent (`TOLD`, per move and foe).
+  So a multi-hit move counts at most twice toward a script's hit count (its first hit when the
+  foe wasn't already reeling, and its last), never once per tick; forcing a flinch the script
+  didn't choose risks breaking bosses (the Cloud kind of bug). Damage still carried to the last.
