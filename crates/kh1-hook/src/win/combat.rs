@@ -115,6 +115,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // Attack on the first free frame after a KH1 move gave KH1's attacks, and its combo carried
     // on from there out of order).
     if actor == sora && command == 1 && takeover::kh1_borrows(actor) {
+        takeover::set_air_cast(None);
         takeover::hand_to_kh1(&format!("Attack pressed during KH1's own motion (KH1 row {row})"));
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
         note(format!("Attack command during KH1's own motion (KH1 row {row}): KH2's once it ends"));
@@ -264,6 +265,8 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     let after = look();
     if after != set {
         takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
+        // (A spell in the air: its index in the command's second byte (Fire 0 .. Aero 6).)
+        takeover::set_air_cast((air && kind == 2).then_some(((full >> 8) & 0xFF) as u8));
         takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}, KH1 motion {:#x}", if air { " in the air" } else { "" }, super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed)));
     } else {
         if air {

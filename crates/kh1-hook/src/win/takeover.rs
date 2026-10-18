@@ -522,6 +522,7 @@ unsafe fn takeover(actor: usize) -> bool {
             }
             FLY_PRESS_GROUND.store(ATTACK_AFTER.swap(false, Ordering::Relaxed), Ordering::Relaxed);
             HANDOFF.store(false, Ordering::Relaxed);
+            set_air_cast(None);
             // KH1's state back to the ground one KH2 keeps him in, its exit steps run (the
             // user: after a spell in the air KH1 still had him in its air state 1 / 2 and its
             // air step glided when the jump button was held, KH1's glide under KH2), and KH2
@@ -1008,6 +1009,7 @@ unsafe fn takeover(actor: usize) -> bool {
             ATTACK_AFTER.store(false, Ordering::Relaxed);
             HANDOFF_FRAMES.store(0, Ordering::Relaxed);
             HANDOFF.store(true, Ordering::Relaxed);
+            set_air_cast(None);
             log(&format!("KH1 takes him: {what} (KH1 state {}, slot {:?})", rd::<i32>(actor + 0x70), pose::sora_slot()));
         }
     }
@@ -1215,7 +1217,10 @@ pub fn kh1_scene() -> bool {
     // Held still counts out of battle only: in battle it is a summon's or a command's moment
     // (the user: KH2's camera should stay through Simba's charge).
     let battle = unsafe { rd::<u32>(base + BATTLE_RVA) } & 1 != 0;
-    let held = FROZEN_FRAMES.load(Ordering::Relaxed) >= 2 && !battle;
+    // (Nor the hold that ends one of KH1's own moves, a spell's landing: the user, KH2's
+    // camera zoomed in to KH1's after a jump cast of Fire out of battle.)
+    let after_move = HANDOFF.load(Ordering::Relaxed) || now_ms().saturating_sub(HANDOFF_SEEN_MS.load(Ordering::Relaxed)) < 1500;
+    let held = FROZEN_FRAMES.load(Ordering::Relaxed) >= 2 && !battle && !after_move;
     event || own_mode || (active() && (SCRIPTED.load(Ordering::Relaxed) || held))
 }
 
@@ -1341,6 +1346,24 @@ static KH2_AIR: AtomicBool = AtomicBool::new(false);
 /// The hand-off now running is a command's (`combat::command`): KH2 comes back in its battle
 /// stance.
 pub static FROM_COMMAND: AtomicBool = AtomicBool::new(false);
+
+/// A spell KH1 is casting in the air (its index, when it started), for `pose` to draw KH2's
+/// air cast, fall and landing meanwhile.
+static AIR_CAST: Mutex<Option<(u8, Instant)>> = Mutex::new(None);
+
+pub fn set_air_cast(spell: Option<u8>) {
+    if let Ok(mut c) = AIR_CAST.lock() {
+        *c = spell.map(|s| (s, Instant::now()));
+    }
+}
+
+/// The spell KH1 casts in the air now (while it has him for it) and seconds since it started.
+pub fn air_cast() -> Option<(u8, f32)> {
+    if !HANDOFF.load(Ordering::Relaxed) {
+        return None;
+    }
+    AIR_CAST.try_lock().ok()?.map(|(s, t)| (s, t.elapsed().as_secs_f32()))
+}
 
 pub fn hand_to_kh1(why: &str) {
     ATTACK_AFTER.store(false, Ordering::Relaxed);

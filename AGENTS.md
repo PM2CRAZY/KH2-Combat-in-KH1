@@ -1791,3 +1791,20 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   vertex morph between two models: Aerial Finish's rings widening). Offline renders
   (`fx_render`, new `--flip-z` / `--follow-root` options) skip nothing for guard_break,
   finishing_leap and aerial_finish; explosion and magnet render byte-identical.
+
+### 2026-10-18: Stage 162 (jump casts drawn as KH2's, camera, Guard Break's spiral)
+- Jump casts still showed KH1's animation all the way down (the user; the s161 log: a spell in
+  the air stays in KH1's air state 2 with its cast slot 80 until he lands, so stage 157's "cast
+  played through" never came before the ground). Now drawn, not taken: while KH1 has him for a
+  spell cast in the air (`takeover::air_cast`, the spell from the command's second byte: Fire 0
+  .. Aero 6), `pose` plays KH2's air cast for that spell (MAGC air motions 58 / 61 / 64 / 67 /
+  70 / 73; Gravity Magnet's, Stop Fire's, Aero Reflect's), then KH2's fall, and KH2's landing
+  once KH1 has him on the ground. KH1 still moves him and runs the spell.
+- Out of battle, KH1's hold at the end of such a landing counted as a "scene" and gave the
+  camera to KH1's (the user: a jump cast of Fire zoomed the camera in). Holds while or within
+  1.5 s of one of KH1's moves no longer count.
+- Guard Break's effect sat around the middle of the Keyblade (the user). Its spiral (element
+  32) is 235 along -z of KH2's object root; our root frame mirrored the model's y only, which
+  keeps the model's forward (+z) and so put the spiral behind him. The root frame is now the
+  model's turned half round about x (y and z negated); centred elements (Explosion, Magnet
+  Burst) are unchanged.

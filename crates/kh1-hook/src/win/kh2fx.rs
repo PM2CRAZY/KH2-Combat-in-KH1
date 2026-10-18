@@ -11,7 +11,7 @@
 //!
 //! Bones: KH2 Sora's pose (KH2 model space) and the model → world it was drawn with
 //! (`pose::kh2_pose`). The effect world is KH2's (y down), as KH1's is; a bone's world matrix
-//! is model → world × the bone, the object root's is model → world with y flipped (element
+//! is model → world × the bone, the object root's is model → world turned half round about x (element
 //! offsets at the root are in KH2's y-down object space), the weapon points are the Keyblade's
 //! tip (its collision point 0 in the bind pose, carried by hand bone 178).
 //!
@@ -133,7 +133,11 @@ fn bone(code: u16, tip_local: Vec3) -> Option<Mat4> {
     super::pose::kh2_pose(|pose, w| {
         let w = *w;
         match code {
-            0x4000 => Some(w * Mat4::from_scale(Vec3::new(1.0, -1.0, 1.0))),
+            // KH2's object space is the model's turned half round about x (y down, and forward
+            // along -z: Guard Break's spiral sits 235 along -z, at the end of the thrust), not
+            // mirrored in y alone, which put it behind him (the user: the effect sat at the middle
+            // of the Keyblade).
+            0x4000 => Some(w * Mat4::from_scale(Vec3::new(1.0, -1.0, -1.0))),
             0x4001 => pose.first().map(|b| Mat4::from_translation(w.transform_point3(b.w_axis.truncate()))),
             0x4003..=0x4008 => pose.get(HAND).map(|h| w * *h * Mat4::from_translation(tip_local)),
             c => pose.get(c as usize).map(|b| w * *b),
