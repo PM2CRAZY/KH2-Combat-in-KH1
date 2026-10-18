@@ -1194,9 +1194,15 @@ impl Strikes {
                 // A holding blow (Aerial Finish's spin) flinches the foe where it is: KH1's
                 // flinch knocks an airborne foe along the record's direction, and spin after
                 // spin slid it out of reach (the user); the direction is zeroed (`scale_record`).
+                // One of a multi-hit move's hits before its last (KH2's revenge value 0 on this
+                // row, more than 0 on a hit still to come in this motion: Explosion's 911 then
+                // 912, Magnet Burst's 1901 then 1903, Aerial Finish's 915..917 then 927): on a
+                // foe run by its own script it is landed silently (`land`), so the script only
+                // hears the last hit (the user: only the last hit counts toward revenge value).
+                let silent = row.revenge_damage == 0 && revenge_to_come(character, out, battle);
                 HOLD.store(blow && !throws && !b.fixed, Ordering::Relaxed);
                 MAGIC.store(row.stat_source == 1, Ordering::Relaxed);
-                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power);
+                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, silent);
                 MAGIC.store(false, Ordering::Relaxed);
                 HOLD.store(false, Ordering::Relaxed);
                 // (Again once the contact is done, in case its direction came after the record.)
@@ -1297,7 +1303,7 @@ impl Strikes {
                 let knock = character_core::reaction::category(r.enemy_reaction) == 4 || k1 >= 100;
                 let kh1 = rows[knock as usize];
                 MAGIC.store(r.stat_source == 1, Ordering::Relaxed);
-                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power);
+                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, false);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
                 out.push((a.atk, b.actor, dealt));
@@ -1325,7 +1331,88 @@ static CARRY: std::sync::LazyLock<std::sync::Mutex<HashMap<usize, i64>>> = std::
 
 /// Lands one hit with KH1's contact code, through a KH1 attack object made from Sora's row.
 /// Returns the damage written to the hit record, if one was made.
-unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16) -> Option<u32> {
+/// Whether a hit of KH2's revenge value comes later in the motion playing (a hitbox window
+/// starting after this frame whose ATKP row has one).
+fn revenge_to_come(character: &Character, out: &Output, battle: &Battle) -> bool {
+    character.moveset.clips.get(&out.motion).is_some_and(|c| {
+        c.windows.iter().any(|w| {
+            w.start > out.clip_frame
+                && matches!(w.kind, character_core::WindowKind::Hitbox { attack, .. } if battle.attack_for_level(attack, 0, 0).is_some_and(|r| r.revenge_damage > 0))
+        })
+    })
+}
+
+/// A hit being landed silently (`land`): `scale_record` keeps its damage for the next hit.
+static SILENT: AtomicBool = AtomicBool::new(false);
+/// The hit record `scale_record` saw last.
+static LAST_REC: AtomicUsize = AtomicUsize::new(0);
+/// KH1's handle → pointer (`0x14038B0B0`; 0 for 0).
+const FROM_HANDLE_RVA: Rva = Rva(0x38B0B0);
+/// A foe's script flag (`+0x374` bit `0x10000`, with its script machine at `+0x144`): KH1 tells
+/// its script of each hit, at once (event 2, `0x1402BCF20` from the contact) and when the foe
+/// takes its queued records (event 0, `0x1402B59F0`), and the script decides what a hit does.
+/// KH1 has no revenge value of its own (traced: no counter in the engine); a boss's script
+/// counts hits itself.
+const SCRIPTED: u32 = 0x1_0000;
+
+/// Lands one hit with KH1's contact code, through a KH1 attack object made from Sora's row.
+/// Returns the damage written to the hit record, if one was made.
+///
+/// `silent` (a multi-hit move's hit before its last), on a foe run by a script: its script
+/// hears nothing of it. The script flag is off for the contact (no event 2), the record made is
+/// taken back off the foe's queue (`+0x3EC`, linked by handles at `+0x30`; no event 0) with the
+/// foe's hit flags and serial (`+0x3E0`, `+0x3E8`) as they were, and freed; its damage is
+/// carried to the next hit that lands on the foe (the move's last, normally).
+unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, silent: bool) -> Option<u32> {
+    let target = std::ptr::read_unaligned(part.entry.as_ptr().add(8) as *const u64) as usize;
+    let silent = silent && target > 0x10000 && rd::<u32>(target + 0x374) & SCRIPTED != 0 && rd::<u32>(target + 0x144) != 0;
+    if !silent {
+        return land_hit(sora, part, at, row, power);
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let saved = (rd::<u32>(target + 0x374), rd::<u32>(target + 0x3E0), rd::<u16>(target + 0x3E8));
+    wr(target + 0x374, saved.0 & !SCRIPTED);
+    LAST_REC.store(0, Ordering::Relaxed);
+    SILENT.store(true, Ordering::Relaxed);
+    let dealt = land_hit(sora, part, at, row, power);
+    SILENT.store(false, Ordering::Relaxed);
+    wr(target + 0x374, rd::<u32>(target + 0x374) | (saved.0 & SCRIPTED));
+    let rec = LAST_REC.swap(0, Ordering::Relaxed);
+    if rec > 0x10000 {
+        let from: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + FROM_HANDLE_RVA);
+        let next = rd::<u32>(rec + 0x30);
+        let mut unlinked = false;
+        if from(rd::<u32>(target + 0x3EC)) == rec {
+            wr(target + 0x3EC, next);
+            unlinked = true;
+        } else {
+            let mut p = from(rd::<u32>(target + 0x3EC));
+            let mut n = 0;
+            while p > 0x10000 && n < 64 {
+                let q = from(rd::<u32>(p + 0x30));
+                if q == rec {
+                    wr(p + 0x30, next);
+                    unlinked = true;
+                    break;
+                }
+                p = q;
+                n += 1;
+            }
+        }
+        if unlinked {
+            wr(rec, 0u32);
+            wr(target + 0x3E0, saved.1);
+            wr(target + 0x3E8, saved.2);
+        }
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log(&format!("silent hit on scripted foe {target:#x}: record {rec:#x} {} (damage carried to its next hit)", if unlinked { "taken back" } else { "NOT found on its queue (left to KH1)" }));
+        }
+    }
+    dealt
+}
+
+unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16) -> Option<u32> {
     let base = BASE.load(Ordering::Relaxed);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
@@ -1408,6 +1495,16 @@ pub unsafe fn scale_record(rec: usize) {
     let mut carry = CARRY.lock().ok();
     let before = carry.as_ref().and_then(|c| c.get(&target).copied()).unwrap_or(0);
     let total = d.max(0) as i64 * p as i64 * scale + before;
+    if SILENT.load(Ordering::Relaxed) {
+        // Held over whole for the foe's next hit (`land`'s silent hits).
+        LAST_REC.store(rec, Ordering::Relaxed);
+        if let Some(c) = carry.as_mut() {
+            c.insert(target, total);
+        }
+        wr(rec + 8, 0i32);
+        LAST_DAMAGE.store(0, Ordering::Relaxed);
+        return;
+    }
     let scaled = (total / 10_000).max(1);
     if let Some(c) = carry.as_mut() {
         if c.len() > 64 {

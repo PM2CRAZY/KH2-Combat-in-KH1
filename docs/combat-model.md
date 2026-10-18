@@ -297,3 +297,15 @@ The pull itself doesn't use weight.
   command" window (frame 8): **Hypothesis**.
 - Multiplayer/co-op damage scaling (a global mode flag divides or multiplies damage).
 - Drive forms, limits and summons beyond reading their tables.
+
+## Revenge value in KH1 (s179)
+
+KH1 keeps no revenge value in its engine. A landed hit makes a record queued on the foe (`+0x3EC`,
+records linked by handles at `+0x30`; the foe's hit flags `+0x3E0` and a hit serial `+0x3E8`,
+copied to the record's `+0x24`). A foe with a script (`+0x374` bit `0x10000`, its machine at
+`+0x144`) is told of the hit at once (event 2, `0x1402BCF20`, from the contact `0x1402B1ED0`) and
+again when it takes its queue in its own update (event 0, `0x1402B59F0` from the hit pass
+`0x1402B6C60`); the script applies the damage (`0x1402BCD30`) and counts hits however it does.
+KH2's ATKP revenge value marks a multi-hit move's ticks (0) and its last hit (> 0); the hook lands
+the ticks on scripted foes without the script hearing of them and carries their damage to the
+next hit (`combat::land`).

@@ -1995,5 +1995,24 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   Combo Master or in the air) and the combo goes on after it. KH1's spells too
   (`Character::magic_step` at the command handoff, `SPELL_COMBO` restores the combo after).
   Test `spell_mid_combo_is_a_step_of_it`.
-- Pending: "multi-hit attacks (like explosion) should only have the last hit towards revenge
-  value" (KH1's revenge field being traced).
+
+### 2026-10-18: Stage 179 (revenge value, Reflect's invulnerability, Attack cuts air casts)
+- "multi-hit attacks (like explosion) should only have the last hit towards revenge value". KH1
+  has no revenge value in its engine (traced by a helper session: no counter; a hit makes a
+  record queued on the foe, `+0x3EC` linked by handles at `+0x30`, with the foe's hit flags
+  `+0x3E0` and serial `+0x3E8`; a foe with a script (`+0x374` bit `0x10000`, machine `+0x144`)
+  hears of it at once, event 2 from `0x1402BCF20` in the contact, and again when it takes its
+  queue, event 0 from `0x1402B59F0`; its script applies the damage and counts hits as it
+  likes). KH2's own data marks the hits: revenge value 0 on Explosion's ticks (911) and 24 on
+  its blast (912), Magnet Burst 1901 / 1903, Aerial Finish 915..917 / 927. So a hit whose row
+  has none while one with some is still to come in the motion (`revenge_to_come`) is landed
+  silently on a scripted foe: script flag off for the contact, the record taken back off the
+  queue and freed, flags and serial restored, its whole damage carried (`CARRY`) to the foe's
+  next hit, normally the move's last. Unscripted foes as before. Logs "silent hit on scripted
+  foe". The ticks' flinch is the script's too, so scripted foes no longer flinch to them.
+- "while the reflect animation is up sora should be invincible all the way through": enemy hits
+  in any of Reflect's cast motions (MAGC ground / air / finisher of each level) are evaded
+  (`hurt`), before the barrier stands and after it falls; the barrier's own still count.
+- "magic transition into the base attack during a combo" (asked: "Attack cuts the spell
+  short"): an Attack once a KH1 spell is out now cuts air casts too (stage 171 left air casts
+  uncancellable; jump, Square and the stick still don't cut them), into KH2's next combo swing.

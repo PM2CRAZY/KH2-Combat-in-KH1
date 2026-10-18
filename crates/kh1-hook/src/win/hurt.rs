@@ -116,6 +116,10 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                 // KH2's Reflect: the barrier round him stops any attack (from every side) and
                 // counts it.
                 Fate::Reflected
+            } else if reacting == StateName::Magic && super::reflect::cast_motion(out.motion) {
+                // The rest of Reflect's cast (before the barrier stands and after it falls): no
+                // harm all the way through (the user), not counted for the counter.
+                Fate::Evaded
             } else if (out.guarding || !out.guard_boxes.is_empty()) && (toward.dot(fwd) > 0.0 || ch.abilities.guard_all_round) {
                 ch.clash(1, 1, toward.to_array());
                 Fate::Guarded

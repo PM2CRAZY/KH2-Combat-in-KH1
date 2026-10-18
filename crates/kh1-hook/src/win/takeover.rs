@@ -627,12 +627,15 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH1 spells"): a jump, Square (roll, guard, glide) or moving the stick, once the spell
         // is out; none of them before (Square or the stick 10 frames in cut the cast itself).
         let command = FROM_COMMAND.load(Ordering::Relaxed);
-        // (Not a spell cast in the air: that one plays through to the ground, KH2's landing after
-        // it (the user: "you can animation cancel out of KH1 jump spells, so no good there").)
-        let out = command && !done && air_cast().is_none() && spell_out(actor);
+        // (A spell cast in the air plays through to the ground, KH2's landing after it (the user:
+        // "you can animation cancel out of KH1 jump spells, so no good there"), except for an
+        // Attack once it is out: the user, "attack cuts the spell short" into the combo's next
+        // swing, in the air too, and only Attack.)
+        let out_any = command && !done && spell_out(actor);
+        let out = out_any && air_cast().is_none();
         let jump_pressed = buttons() & jump_button() != 0;
-        let attack_cut = attack && out;
-        let cancel = out && (attack || jump_pressed || square || stick);
+        let attack_cut = attack && out_any;
+        let cancel = attack_cut || out && (jump_pressed || square || stick);
         let attack = attack && (!command || done || attack_cut);
         let square = square && (!command || done || cancel);
         let jump = jump || cancel && jump_pressed;

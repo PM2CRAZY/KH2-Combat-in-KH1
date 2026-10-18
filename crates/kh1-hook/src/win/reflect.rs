@@ -584,6 +584,15 @@ static BARRIER: AtomicBool = AtomicBool::new(false);
 static BLOCKS: AtomicU32 = AtomicU32::new(0);
 
 /// `hurt`: a barrier stands around Sora now.
+/// Sora is in one of Reflect's cast motions (any level's ground, air or finisher; `hurt`: he
+/// can't be hurt all through it, the user, not only while the barrier stands).
+pub fn cast_motion(motion: u16) -> bool {
+    (1..=3).any(|l| {
+        let m = motions(l);
+        motion == m.ground || motion == m.air || Some(motion) == m.finisher
+    })
+}
+
 pub fn barrier_up() -> bool {
     BARRIER.load(Ordering::Relaxed)
 }

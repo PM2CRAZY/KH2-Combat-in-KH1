@@ -61,7 +61,7 @@ pointer (`0x14038B0B0` decodes). Confidence: **[high]** read plainly from the co
      the hit (event 2) with the contact point.
 
 Record layout (0x40): `+0` flags, `+4` attacker, `+8` damage, `+0xC` kind / element /
-deferral / delay, `+0x10` direction vec4, `+0x20` body part, `+0x24` unused (0), `+0x28`
+deferral / delay, `+0x10` direction vec4, `+0x20` body part, `+0x24` the foe's hit serial (`+0x3E8`, s179), `+0x28`
 hit bit, `+0x2C` attack data, `+0x30` next record, `+0x34` / `+0x38` effect,
 `+0x3C` unused (0). [high for the writes; "unused" means only that `0x1402BD480` leaves them
 zero]
