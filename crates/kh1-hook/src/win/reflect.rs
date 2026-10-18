@@ -565,6 +565,8 @@ struct Runtime {
 const HOLD_AT: u32 = 22;
 const HOLD_FRAMES: u32 = 20;
 const HOLD_MAX_S: f32 = 5.0;
+/// The longest a Reflect's counter waits for the combo (`hold`).
+const COMBO_WAIT_MAX_S: f32 = 6.0;
 
 #[derive(Default)]
 struct Hold {
@@ -576,6 +578,8 @@ struct Hold {
     since: Option<Instant>,
     frames: u32,
     spent: bool,
+    /// Held for the combo (`hold`): its counter waits for the combo's last Reflect.
+    combo: bool,
 }
 
 static RT: Mutex<Option<Runtime>> = Mutex::new(None);
@@ -863,7 +867,8 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             None => note(format!("Reflect: {blocks} hit(s) stopped with no barrier left to count them")),
         }
     }
-    let held = hold(rt, blocks);
+    let held = hold(rt, blocks, out.combo_live);
+    let combo_wait = rt.hold.combo;
     for e in rt.magic.update(&mut world).into_iter().chain(rt.magic.take_events()) {
         match e {
             Event::Missing(n) => note(format!("Reflect's script used {n} (not modelled)")),
@@ -898,6 +903,11 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                 } else if e.ended_at.is_some() && !ended {
                     super::kh2fx::spell_end(h);
                     rt.fx.insert(e.id, (Some(h), true));
+                } else if combo_wait && e.alive() {
+                    // Waiting for the combo: the barrier is gone from sight (its counter is
+                    // all that is left to come).
+                    super::kh2fx::spell_kill(h);
+                    rt.fx.insert(e.id, (None, false));
                 } else if held && e.alive() && !ended && !super::kh2fx::spell_running(h) {
                     // Held: the barrier's drawn effect played out on its own; again, for as long
                     // as the hold lasts (no sound: it is the same barrier).
@@ -944,7 +954,8 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         rt.barrier = barrier;
         note(format!("Reflect barrier {} ({:.2} s after the cast)", if barrier { "up" } else { "down" }, rt.started.map_or(0.0, |t| t.elapsed().as_secs_f32())));
     }
-    BARRIER.store(barrier, Ordering::Relaxed);
+    // (Waiting for the combo, the barrier stops nothing: Sora is attacking.)
+    BARRIER.store(barrier && !combo_wait, Ordering::Relaxed);
     if rt.magic.casts.is_empty() && rt.casting.is_none() && rt.fresh.is_none() && rt.started.is_some() {
         note(format!("Reflect done: {} hit(s) blocked, {} counter hit(s)", rt.blocks, rt.counter_hits));
         rt.started = None;
@@ -953,12 +964,26 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
 
 /// Before the spell's frame: whether its cast is held this frame (the barrier stretched while
 /// hits keep coming, `HOLD_AT`), with `blocks` hits stopped since the last frame.
-fn hold(rt: &mut Runtime, blocks: u32) -> bool {
+///
+/// Also held, with something blocked, while Sora's combo goes on (`combo`: steps left): the
+/// user, "if sora does a combo with reflect, any attack done to every reflect should burst out of
+/// the final reflect in the chain". The barrier is hidden and stops nothing then, and its counter
+/// waits: a Reflect cast later in the combo takes its blocked hits over (`after_step`'s chain)
+/// and waits or bursts in its turn; the combo over (its last step, a while with no swing, a
+/// landing, a hit taken), the last one bursts for them all. At most `COMBO_WAIT_MAX_S`.
+fn hold(rt: &mut Runtime, blocks: u32, combo: bool) -> bool {
     let h = &mut rt.hold;
     h.since_hit = if blocks > 0 { Some(0) } else { h.since_hit.map(|n| n.saturating_add(1)) };
     let was = h.since.is_some();
-    let over = h.since.is_some_and(|t| t.elapsed().as_secs_f32() >= HOLD_MAX_S);
-    let want = rt.barrier && !h.spent && !over && h.age >= HOLD_AT && h.since_hit.is_some_and(|n| n <= HOLD_FRAMES);
+    let cap = if h.combo { COMBO_WAIT_MAX_S } else { HOLD_MAX_S };
+    let over = h.since.is_some_and(|t| t.elapsed().as_secs_f32() >= cap);
+    let hits = rt.barrier && !h.spent && !over && h.age >= HOLD_AT && h.since_hit.is_some_and(|n| n <= HOLD_FRAMES);
+    let for_combo = rt.barrier && !h.spent && !over && h.age >= HOLD_AT && !hits && combo && rt.blocks > 0;
+    if for_combo != h.combo {
+        h.combo = for_combo;
+        note(format!("Reflect {}: {} blocked", if for_combo { "waits for the combo (the chain's last Reflect bursts)" } else { "no longer waiting for the combo" }, rt.blocks));
+    }
+    let want = hits || for_combo;
     if want {
         if !was {
             h.since = Some(Instant::now());

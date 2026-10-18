@@ -168,3 +168,13 @@ The user: "can we have reflect keep shielding until attacks have stopped". KH2's
   of 9 entries drawing right (the 8th row panel), the barrier effect's place around Sora.
 - KH2's own enemy recoil off the barrier and turned-back projectiles.
 - Shortcuts, levels 2 / 3, the 1 MP cost and the held barrier: not tested in the game yet.
+
+## Reflect in a combo (s180)
+
+The user: "if sora does a combo with reflect, any attack done to every reflect should burst out
+of the final reflect in the chain". A Reflect that blocked something, reaching the point where
+its barrier would drop (`HOLD_AT`) while Sora's combo still has steps left
+(`Output::combo_live`), is held (`Magic::hold`) with its barrier hidden and stopping nothing; its
+counter waits. A Reflect cast later in the combo takes its blocked hits over (the spam chain of
+s175) and waits in its turn; once the combo is over (its last step, 60 frames on the ground with
+no swing, a landing, a hit taken; at most 6 s) the waiting one goes on and bursts for them all.

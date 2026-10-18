@@ -176,6 +176,8 @@ pub struct Output {
     /// KH2 combo counter (1 on the first swing; only advances on swings
     /// that follow a connecting one).
     pub combo_count: u8,
+    /// A combo is going and has steps left (a spell now would be one of them: `combo_live`).
+    pub combo_live: bool,
     pub events: Vec<EventKind>,
 }
 
@@ -561,8 +563,14 @@ impl Character {
             Mode::Action(a) => {
                 let f = a.frame.saturating_sub(1);
                 let open = |k: &WindowKind| matches!(k, WindowKind::ComboMagic);
+                // A swing takes a spell when it would take its next swing (its combo or
+                // finisher window): Sora's swings have no magic window of their own, so a spell
+                // chosen mid-swing waited for the whole swing to end (the user: "too much a
+                // pause before magic gets cast in a combo").
+                let swing_open = |k: &WindowKind| matches!(k, WindowKind::ComboMagic | WindowKind::Combo | WindowKind::Finisher);
                 match a.kind {
-                    ActionKind::Attack { .. } | ActionKind::Magic => self.clip(a.motion).map_or(false, |c| c.has(f, open)),
+                    ActionKind::Attack { .. } => self.clip(a.motion).map_or(false, |c| c.has(f, swing_open)),
+                    ActionKind::Magic => self.clip(a.motion).map_or(false, |c| c.has(f, open)),
                     ActionKind::Land => true,
                     _ => false,
                 }
@@ -1430,6 +1438,7 @@ impl Character {
             weapon_trail: fo.weapon_trail,
             locked: self.lock,
             combo_count: self.count,
+            combo_live: self.combo_live(),
             events: fo.events,
         }
     }

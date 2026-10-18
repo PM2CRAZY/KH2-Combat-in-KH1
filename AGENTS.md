@@ -2016,3 +2016,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - "magic transition into the base attack during a combo" (asked: "Attack cuts the spell
   short"): an Attack once a KH1 spell is out now cuts air casts too (stage 171 left air casts
   uncancellable; jump, Square and the stick still don't cut them), into KH2's next combo swing.
+
+### 2026-10-18: Stage 180 (magic out of a swing at once; Reflect chains in a combo)
+- "too much a pause before magic gets cast in a combo" and "make it possible for attacks to
+  cancel into magic": Sora's swings have no magic window (only the casts have `ComboMagic`), so
+  `can_cast` was false through a whole swing and a spell chosen mid-swing waited for its end
+  (0.15..0.7 s in the user's log). A swing now takes a spell in its combo or finisher window,
+  when it would take its next swing (right after its hit). Test
+  `spell_cast_from_the_swing_combo_window`.
+- "if sora does a combo with reflect, any attack done to every reflect should burst out of the
+  final reflect in the chain": a Reflect that blocked something waits with its counter (held,
+  barrier hidden and stopping nothing) while the combo has steps left (`Output::combo_live`);
+  a later Reflect in the combo takes its hits over (s175's chain), the combo's end lets the
+  last one burst for all. `docs/kh1-reflect-spell.md`.

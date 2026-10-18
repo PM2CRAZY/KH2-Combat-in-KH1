@@ -658,3 +658,23 @@ fn spell_mid_combo_is_a_step_of_it() {
     w.run(40, IDLE);
     assert_eq!(w.step(Pad { attack: true, ..IDLE }).motion, 100);
 }
+
+/// A spell chosen mid-swing is cast as soon as the swing would take its next swing (its combo
+/// window), not only once it has ended (the user: "too much a pause before magic gets cast").
+#[test]
+fn spell_cast_from_the_swing_combo_window() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(71, Clip::plain(71, 30));
+    let mut w = World::new(ch);
+    w.step(Pad { attack: true, ..IDLE });
+    let mut opened = None;
+    for f in 1..40 {
+        w.step(IDLE);
+        if w.ch.can_cast() {
+            opened = Some(f);
+            break;
+        }
+    }
+    // The test swing (motion 100, 40 frames) opens its combo window at frame 20.
+    assert!(opened.is_some_and(|f| f <= 22), "could cast only at {opened:?}");
+}
