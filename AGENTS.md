@@ -2114,3 +2114,19 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   So a multi-hit move counts at most twice toward a script's hit count (its first hit when the
   foe wasn't already reeling, and its last), never once per tick; forcing a flinch the script
   didn't choose risks breaking bosses (the Cloud kind of bug). Damage still carried to the last.
+
+### 2026-10-18: Stage 185 (Keyblades teeth up; hair, hood and keychain physics)
+- "sora holds his keyblade backwards, with the teeth of the keyblade facing the ground", "every
+  keyblade is held backwards": the grip bone (280) hangs from the hand as in KH1's rest pose,
+  whose roll of the blade isn't KH2's. The blade and keychain lie on the grip's x (keychain
+  bones at -21..-56 on it in the bind), so every Keyblade (not 0x52..=0x55, the dream weapons
+  and the wooden sword, nor `flip_weapons`) is turned half round about that axis with its
+  subtree (`pose::keyblade_teeth_up`; ini `keyblade_turn = on`).
+- "sora's keychain, hair, hood etc dont have wind physics during any KH2 moves": KH1 has none
+  either (each of its motions animates them by hand), so under KH2's motions they stayed rigid.
+  `kh1_data::jiggle`: per chain, particles in world space pulled back toward the pose, with
+  gravity and a breeze, kept at the bones' lengths, each bone turned at its simulated child
+  (subtree with it): the 14 hair spikes under the head (151; root, joint, tip each), the hood
+  80..84, the keychain 284..292. Reset after half a second without KH2's pose or on a warp.
+  ini `physics = on`. Tests in `jiggle.rs` (still pose stays, a carried chain trails then
+  settles, a warp restarts it). Tuning is a first guess: not yet seen in game.

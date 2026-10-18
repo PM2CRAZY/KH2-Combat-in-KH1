@@ -71,7 +71,12 @@ flip_weapons = 0x53\r\n\
 ; reflect: on = KH2's Reflect in the Magic menu and the shortcuts once Sora has Aero (KH2's\r\n\
 ; cast, barrier, counter, effects and sounds, from your KH2 install; Reflera / Reflega with\r\n\
 ; Aerora / Aeroga; 1 MP); off = KH1's spells only\r\n\
-reflect = on\r\n";
+reflect = on\r\n\
+; keyblade_turn: on = every Keyblade held with its teeth up, as KH2 holds it (KH1's grip held\r\n\
+; them to the ground under KH2's moves); off = as before\r\n\
+keyblade_turn = on\r\n\
+; physics: on = Sora's hair, hood and keychain swing and sway during KH2's moves; off = rigid\r\n\
+physics = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -107,6 +112,10 @@ pub struct Settings {
     pub flip_weapons: Vec<u8>,
     /// KH2's Reflect in KH1's magic menu (`reflect = on`).
     pub reflect: bool,
+    /// Keyblades turned teeth up in his hand (`keyblade_turn = on`, `pose::keyblade_teeth_up`).
+    pub keyblade_turn: bool,
+    /// Hair, hood and keychain swing under KH2's moves (`physics = on`, `kh1_data::jiggle`).
+    pub physics: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -176,6 +185,8 @@ pub fn get() -> &'static Settings {
                     .collect(),
             },
             reflect: on(&text, "reflect", "on", true),
+            keyblade_turn: on(&text, "keyblade_turn", "on", true),
+            physics: on(&text, "physics", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

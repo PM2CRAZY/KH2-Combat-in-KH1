@@ -1,0 +1,233 @@
+//! Secondary motion for KH1 Sora's loose parts while KH2's moves pose him: the hair spikes,
+//! the hood and the Keyblade's keychain lag, swing and settle, with a light breeze.
+//!
+//! KH1 has no physics for these: their movement is animated by hand in each of its own motions,
+//! so under KH2's motions they stayed rigid (the user: "sora's keychain, hair, hood etc dont have
+//! wind physics during any KH2 moves"). Ours, not either game's: each chain is a string of
+//! particles in world space (so running, turning and swinging carry them), pulled back toward
+//! where the pose puts them, with gravity and a breeze, kept at the bones' lengths; each bone is
+//! then turned to point at its simulated child.
+
+use glam::{Mat4, Quat, Vec3};
+
+/// One chain: its bones from the one fixed to its parent to the tip, and how it moves.
+#[derive(Clone, Debug)]
+pub struct Chain {
+    pub bones: Vec<usize>,
+    /// Pull back toward the posed position each step (0..1).
+    pub stiffness: f32,
+    /// Velocity lost each step (0..1).
+    pub damping: f32,
+    /// Gravity's share (1 = full).
+    pub gravity: f32,
+    /// The breeze's strength (acceleration, units / s²).
+    pub wind: f32,
+}
+
+/// KH1 Sora's chains (bones from `xa_ex_0010.mdls`'s bind: under the head (151) fourteen hair
+/// spikes of a root, a joint and a tip, three bones each, the joint at the root's place; the
+/// hood 79..84 from the neck base, 79 and 80 at one place; the keychain 283..292 from the
+/// Keyblade's pommel, swung from 284 on: 283 may carry the pommel itself).
+pub fn sora_chains() -> Vec<Chain> {
+    let mut v = Vec::new();
+    for root in (152..=191).step_by(3) {
+        v.push(Chain { bones: vec![root + 1, root + 2], stiffness: 0.22, damping: 0.14, gravity: 0.25, wind: 350.0 });
+    }
+    v.push(Chain { bones: (80..=84).collect(), stiffness: 0.16, damping: 0.12, gravity: 0.5, wind: 250.0 });
+    v.push(Chain { bones: (284..=292).collect(), stiffness: 0.06, damping: 0.08, gravity: 1.0, wind: 120.0 });
+    v
+}
+
+/// Gravity (units: KH1's, about a centimetre; per second²), down in world space (y-up here, as
+/// the pose's model space turned by `to_world`, whose up is the world's).
+const GRAVITY: f32 = 980.0;
+/// Simulation step (the game's frame).
+const STEP: f32 = 1.0 / 60.0;
+/// A jump this far between frames is a warp (a room change, a cut): the chains start over.
+const WARP: f32 = 300.0;
+
+#[derive(Clone, Debug, Default)]
+struct State {
+    p: Vec<Vec3>,
+    prev: Vec<Vec3>,
+}
+
+/// The chains and their particles.
+pub struct Jiggle {
+    chains: Vec<Chain>,
+    state: Vec<State>,
+    /// Time not yet simulated, and the breeze's clock.
+    pending: f32,
+    clock: f32,
+}
+
+impl Jiggle {
+    pub fn new(chains: Vec<Chain>) -> Jiggle {
+        let n = chains.len();
+        Jiggle { chains, state: vec![State::default(); n], pending: 0.0, clock: 0.0 }
+    }
+
+    /// Starts every chain over at its posed place (no swing carried in).
+    pub fn reset(&mut self) {
+        for s in &mut self.state {
+            s.p.clear();
+        }
+    }
+
+    /// Moves the chains on by `dt` seconds and turns their bones in `pose` (model space, bones
+    /// in parent-before-child order, `parents` their parents) toward where they swing to.
+    /// `to_world`: the model's place in the world, whose y is up.
+    pub fn apply(&mut self, pose: &mut [Mat4], parents: &[i16], to_world: &Mat4, dt: f32) {
+        self.pending = (self.pending + dt.clamp(0.0, 0.25)).min(4.0 * STEP);
+        let steps = (self.pending / STEP).floor() as usize;
+        self.pending -= steps as f32 * STEP;
+        let from_world = to_world.inverse();
+        if !from_world.is_finite() {
+            return;
+        }
+        let at = |pose: &[Mat4], b: usize| to_world.transform_point3(pose[b].w_axis.truncate());
+        for ci in 0..self.chains.len() {
+            let c = self.chains[ci].clone();
+            if c.bones.iter().any(|&b| b >= pose.len()) || c.bones.len() < 2 {
+                continue;
+            }
+            let target: Vec<Vec3> = c.bones.iter().map(|&b| at(pose, b)).collect();
+            let len: Vec<f32> = target.windows(2).map(|w| (w[1] - w[0]).length()).collect();
+            let st = &mut self.state[ci];
+            if st.p.len() != target.len() || (st.p[0] - target[0]).length() > WARP || st.p.iter().any(|p| !p.is_finite()) {
+                st.p = target.clone();
+                st.prev = target.clone();
+            }
+            for k in 0..steps {
+                let t = self.clock + k as f32 * STEP;
+                // A breeze from one side, swelling and dropping, with a quicker flutter on top.
+                let gust = 0.6 + 0.4 * (t * 0.9).sin() + 0.15 * (t * 7.3).sin() * (t * 2.1).cos();
+                let wind = Vec3::new((t * 0.13).cos(), 0.0, (t * 0.13).sin()) * (c.wind * gust);
+                let acc = Vec3::new(0.0, -GRAVITY * c.gravity, 0.0) + wind;
+                st.p[0] = target[0];
+                st.prev[0] = target[0];
+                for i in 1..st.p.len() {
+                    let p = st.p[i];
+                    let v = (p - st.prev[i]) * (1.0 - c.damping);
+                    let mut n = p + v + acc * STEP * STEP;
+                    n += (target[i] - n) * c.stiffness;
+                    st.prev[i] = p;
+                    st.p[i] = n;
+                }
+                // Each link back to its bone's length.
+                for i in 1..st.p.len() {
+                    let d = st.p[i] - st.p[i - 1];
+                    let l = d.length();
+                    if l > 1e-4 && len[i - 1] > 1e-4 {
+                        st.p[i] = st.p[i - 1] + d * (len[i - 1] / l);
+                    } else {
+                        st.p[i] = target[i];
+                    }
+                }
+            }
+            // Each bone turned toward its simulated child, its subtree with it.
+            for i in 0..c.bones.len() - 1 {
+                let (b, child) = (c.bones[i], c.bones[i + 1]);
+                let here = pose[b].w_axis.truncate();
+                let cur = pose[child].w_axis.truncate() - here;
+                let want = from_world.transform_point3(st.p[i + 1]) - here;
+                if cur.length() < 1e-3 || want.length() < 1e-3 {
+                    continue;
+                }
+                let q = Quat::from_rotation_arc(cur.normalize(), want.normalize());
+                if !q.is_finite() {
+                    continue;
+                }
+                let turn = Mat4::from_translation(here) * Mat4::from_quat(q) * Mat4::from_translation(-here);
+                for j in 0..pose.len() {
+                    if j == b || under(parents, j, b) {
+                        pose[j] = turn * pose[j];
+                    }
+                }
+            }
+        }
+        self.clock += steps as f32 * STEP;
+    }
+}
+
+/// Whether bone `j` is below bone `root`.
+fn under(parents: &[i16], j: usize, root: usize) -> bool {
+    let mut p = parents.get(j).copied().unwrap_or(-1);
+    for _ in 0..64 {
+        if p < 0 {
+            return false;
+        }
+        if p as usize == root {
+            return true;
+        }
+        p = parents.get(p as usize).copied().unwrap_or(-1);
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A straight chain of 4 bones hanging out along +x from bone 0 at the origin.
+    fn rig() -> (Vec<Mat4>, Vec<i16>) {
+        let pose = (0..4).map(|i| Mat4::from_translation(Vec3::new(i as f32 * 10.0, 100.0, 0.0))).collect();
+        (pose, vec![-1, 0, 1, 2])
+    }
+
+    fn chain() -> Chain {
+        Chain { bones: vec![0, 1, 2, 3], stiffness: 0.2, damping: 0.1, gravity: 0.0, wind: 0.0 }
+    }
+
+    #[test]
+    fn still_pose_stays_put() {
+        let (pose, parents) = rig();
+        let mut j = Jiggle::new(vec![chain()]);
+        let mut p = pose.clone();
+        for _ in 0..120 {
+            p = pose.clone();
+            j.apply(&mut p, &parents, &Mat4::IDENTITY, STEP);
+        }
+        for (a, b) in p.iter().zip(&pose) {
+            assert!((a.w_axis - b.w_axis).length() < 1e-3, "{a:?} vs {b:?}");
+        }
+    }
+
+    #[test]
+    fn moving_chain_trails_then_settles() {
+        let (pose, parents) = rig();
+        let mut j = Jiggle::new(vec![chain()]);
+        let mut x = 0.0;
+        let mut tip = Vec3::ZERO;
+        // Carried along +z at 300 units/s: the tip trails behind (-z of where the pose puts it).
+        for _ in 0..20 {
+            x += 300.0 * STEP;
+            let w = Mat4::from_translation(Vec3::new(0.0, 0.0, x));
+            let mut p = pose.clone();
+            j.apply(&mut p, &parents, &w, STEP);
+            tip = p[3].w_axis.truncate();
+        }
+        assert!(tip.z < -1.0, "tip didn't trail: {tip:?}");
+        // Lengths kept.
+        assert!((tip.length() - Vec3::new(30.0, 100.0, 0.0).length()).abs() < 5.0 || tip.distance(Vec3::new(0.0, 100.0, 0.0)) < 30.5);
+        // Stopped, it settles back.
+        let w = Mat4::from_translation(Vec3::new(0.0, 0.0, x));
+        for _ in 0..300 {
+            let mut p = pose.clone();
+            j.apply(&mut p, &parents, &w, STEP);
+            tip = p[3].w_axis.truncate();
+        }
+        assert!((tip - Vec3::new(30.0, 100.0, 0.0)).length() < 0.5, "didn't settle: {tip:?}");
+    }
+
+    #[test]
+    fn a_warp_restarts_the_chain() {
+        let (pose, parents) = rig();
+        let mut j = Jiggle::new(vec![chain()]);
+        let mut p = pose.clone();
+        j.apply(&mut p, &parents, &Mat4::IDENTITY, STEP);
+        let mut p = pose.clone();
+        j.apply(&mut p, &parents, &Mat4::from_translation(Vec3::new(5000.0, 0.0, 0.0)), STEP);
+        assert!((p[3].w_axis - pose[3].w_axis).length() < 1e-3);
+    }
+}

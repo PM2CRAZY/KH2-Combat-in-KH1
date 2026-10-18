@@ -202,6 +202,9 @@ struct Sora {
     jumps: u32,
     /// KH1's bone parents (for the feet).
     parents: Vec<i16>,
+    /// The hair, hood and keychain's swing under KH2's poses (`kh1_data::jiggle`), and when it
+    /// last moved.
+    jiggle: Option<(kh1_data::jiggle::Jiggle, Instant)>,
 }
 
 /// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
@@ -546,6 +549,46 @@ unsafe fn kh1_wrist(pose: &mut [Mat4], parents: &[i16], orig_world: Option<usize
     }
 }
 
+/// Every Keyblade turned half round about its own length in his hand (the user: "every keyblade
+/// is held backwards", the teeth to the ground): the grip (`GRIP_BONE`) hangs from the hand as
+/// in KH1's rest pose, whose roll of the blade is not KH2's. The blade and its keychain lie along
+/// the grip's x (the keychain's bones at -21..-56 on it in the bind), so the turn is about that
+/// axis, the subtree with it. Not the dream weapons and the wooden sword (`0x52..=0x55`), nor
+/// those `flip_weapons` holds by KH1's wrist (the Dream Shield).
+unsafe fn keyblade_teeth_up(pose: &mut [Mat4], parents: &[i16]) {
+    let save = rd::<u64>(BASE.load(Ordering::Relaxed) + Rva(0x28695A0)) as usize;
+    if save < 0x10000 {
+        return;
+    }
+    let w = rd::<u8>(save + 0x36);
+    let set = super::settings::get();
+    if !set.keyblade_turn || (0x52..=0x55).contains(&w) || set.flip_weapons.contains(&w) {
+        return;
+    }
+    let grip = kh1_data::retarget::GRIP_BONE;
+    if grip >= pose.len() {
+        return;
+    }
+    let turn = pose[grip] * Mat4::from_rotation_x(std::f32::consts::PI) * pose[grip].inverse();
+    if !turn.is_finite() {
+        return;
+    }
+    for i in grip..pose.len().min(SORA_BONES as usize) {
+        let mut p = Some(i);
+        for _ in 0..24 {
+            match p {
+                Some(q) if q == grip => {
+                    pose[i] = turn * pose[i];
+                    break;
+                }
+                Some(q) if q < grip => break,
+                Some(q) => p = parents.get(q).copied().filter(|x| *x >= 0).map(|x| x as usize),
+                None => break,
+            }
+        }
+    }
+}
+
 /// The model-space pose to draw for the current mode, if any.
 fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4>> {
     let mode = MODE.load(Ordering::Relaxed);
@@ -819,7 +862,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect() });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -949,6 +992,18 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     let kh2_feet = MODE.load(Ordering::Relaxed) == 0 && super::takeover::active() && super::takeover::GROUNDED.load(Ordering::Relaxed);
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
+    keyblade_teeth_up(&mut pose, &s.parents);
+    if super::settings::get().physics {
+        let now = Instant::now();
+        let (j, last) = s.jiggle.get_or_insert_with(|| (kh1_data::jiggle::Jiggle::new(kh1_data::jiggle::sora_chains()), now));
+        let dt = now.duration_since(*last).as_secs_f32();
+        // (Back after KH1's own animation, or a pause: the swing starts over.)
+        if dt > 0.5 {
+            j.reset();
+        }
+        *last = now;
+        j.apply(&mut pose, &s.parents, &to_world, dt);
+    }
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
     }
