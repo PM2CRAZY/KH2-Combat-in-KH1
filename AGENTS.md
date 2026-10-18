@@ -1651,3 +1651,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   sliding off a Traverse Town roof (KH1's own slide; the command menu greys), KH2's jumps stay
   low until a dodge roll (KH1's mover reads none of its jump fields `+0x3B0..+0x3D0`; the
   `ceiling:` log lines will say if it is our ceiling rule).
+
+### 2026-10-18: Stage 151 (game volume, full ability lists)
+- KH2's sounds follow the game's volume sliders: KH1's global settings (`0x14012AC50` returns
+  them; Steam's build 4 bytes later) hold master `+0x10` (the device's, `0x14011BE4A`) and
+  channels 1..3 `+0x12/+0x14/+0x16` (0..10; `0x1400DDD00` sets each channel to slider / 10), in
+  the options menu's order: music, sound effects, voice. KH2's effects play at master × effects,
+  its voices at master × voice, read when each starts (`kh2sound::game_volume`).
+- A full ability list (the user's level 100 save had no Aerial Dodge): `growth::make_room` goes
+  on past the least-missed list to any KH1 ability that's off (never `KEEP`: Guard, Dodge Roll,
+  Combo Plus / Air Combo Plus, the specials, the abilities that are KH2 moves), then to the
+  least missed even when on. Each still noted in `kh1-kh2-removed.txt`.
+- Traverse Town's district doors ("curtain rooms"): KH1's animations after them, the room
+  entry's refused model (stage 149's fix).

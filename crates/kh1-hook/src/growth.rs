@@ -414,8 +414,25 @@ pub fn make_room(list: &[u8]) -> Option<usize> {
             return Some(i);
         }
     }
+    // A full list of a finished game (the user's level 100 save: no Aerial Dodge, the list full
+    // of KH1's, most of them on): any other KH1 ability that's off, but never Guard, Dodge Roll,
+    // Combo Plus / Air Combo Plus, the specials or the combo modifiers (KH2 uses them)...
+    if let Some(i) = (0..end).rev().find(|i| off(l[*i]) && !KEEP.contains(&(l[*i] & 0x7F))) {
+        return Some(i);
+    }
+    // ... then the least missed even when on.
+    for id in MAKE_ROOM {
+        if let Some(i) = (0..end).rev().find(|i| !ours(l[*i]) && l[*i] & 0x7F == id) {
+            return Some(i);
+        }
+    }
     None
 }
+
+/// KH1 abilities never given up for room: Guard, Dodge Roll, Combo Plus, Air Combo Plus, the
+/// specials (Sonic Blade, Ars Arcanum, Strike Raid, Ragnarok, Trinity Limit) and every KH1
+/// ability that is a KH2 move here (`RENAMED`, Slapshot, Aerial Sweep).
+const KEEP: [u8; 19] = [21, 22, 6, 7, 11, 12, 13, 14, 15, 17, 18, 19, 20, 53, 54, 55, 56, 57, 58];
 
 /// Sora's side of KH1's save block.
 #[derive(Clone, Debug, PartialEq)]

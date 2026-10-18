@@ -220,34 +220,72 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     match kind {
         EventKind::Effect(el) => {
             if let Some(s) = l.elements.get(&el) {
-                play(s);
+                play(s, Channel::Effects);
             }
         }
         EventKind::Sound(id) => {
             let id = if (500_000..501_000).contains(&id) { id - 500_000 + WEAPON_BANK * 1000 } else { id };
             if let Some(s) = l.sounds.get(&id) {
-                play(s);
+                play(s, Channel::Effects);
             }
         }
         EventKind::Voice(v) => {
             if let Some(c) = l.voices.get(&v) {
                 static PICK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
                 let n = PICK.fetch_add(7, std::sync::atomic::Ordering::Relaxed) as usize;
-                play(&c[n % c.len()]);
+                play(&c[n % c.len()], Channel::Voice);
             }
         }
         _ => {}
     }
 }
 
-unsafe fn play(s: &Sound) {
+/// KH1's global settings (`0x14012AC50` returns them): its volume sliders, 0..10 each:
+/// master `+0x10` (the device's, `0x14011BE4A`), then channels 1..3 `+0x12`, `+0x14`, `+0x16`
+/// (`0x1400DDD00` sets each channel to its slider / 10), in the options menu's order: music,
+/// sound effects, voice. Steam's build keeps them 4 bytes later (`+0x14..+0x1A`).
+const SETTINGS_RVA: super::addr::Rva = super::addr::Rva(0x12AC50);
+
+#[derive(Clone, Copy)]
+enum Channel {
+    Effects,
+    Voice,
+}
+
+/// The game's volume for KH2's sounds of a kind now: master × its channel (the user: KH2's
+/// sounds ignored the game's volume sliders).
+fn game_volume(c: Channel) -> f32 {
+    let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
+    if base == 0 {
+        return 1.0;
+    }
+    let get: unsafe extern "system" fn() -> usize = unsafe { std::mem::transmute(base + SETTINGS_RVA) };
+    let s = unsafe { get() };
+    if s < 0x10000 {
+        return 1.0;
+    }
+    let shift = if super::addr::Build::current() == super::addr::Build::Steam { 4 } else { 0 };
+    let rd = |off: usize| unsafe { std::ptr::read_unaligned((s + off + shift) as *const i16) } as f32;
+    let master = rd(0x10);
+    let ch = rd(match c {
+        Channel::Effects => 0x14,
+        Channel::Voice => 0x16,
+    });
+    ((master / 10.0).clamp(0.0, 1.0)) * ((ch / 10.0).clamp(0.0, 1.0))
+}
+
+unsafe fn play(s: &Sound, channel: Channel) {
+    let gain = game_volume(channel);
+    if gain <= 0.001 {
+        return;
+    }
     let block = s.channels * 2;
     let fmt = WaveFormatEx { format_tag: 1, channels: s.channels, samples_per_sec: s.rate, avg_bytes_per_sec: s.rate * block as u32, block_align: block, bits_per_sample: 16, cb_size: 0 };
     let mut handle = 0usize;
     if waveOutOpen(&mut handle, WAVE_MAPPER, &fmt, 0, 0, 0) != 0 {
         return;
     }
-    let data = s.data.clone();
+    let data = if gain < 0.999 { Arc::new(s.data.iter().map(|&x| (x as f32 * gain) as i16).collect::<Vec<i16>>()) } else { s.data.clone() };
     let mut hdr = Box::new(WaveHdr { data: data.as_ptr() as *mut u8, buffer_length: (data.len() * 2) as u32, bytes_recorded: 0, user: 0, flags: 0, loops: 0, next: std::ptr::null_mut(), reserved: 0 });
     let size = std::mem::size_of::<WaveHdr>() as u32;
     if waveOutPrepareHeader(handle, &mut *hdr, size) != 0 || waveOutWrite(handle, &mut *hdr, size) != 0 {
