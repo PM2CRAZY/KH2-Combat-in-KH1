@@ -242,6 +242,7 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // Only if KH1 did something with him (a new state or motion request); else as before.
     let after = look();
     if after != set {
+        takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
         takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}, KH1 motion {:#x}", if air { " in the air" } else { "" }, super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed)));
     } else {
         if air {

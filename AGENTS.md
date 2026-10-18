@@ -1609,3 +1609,27 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - Aerial Finish (motion 194, combo row 29, ability 100) joins KH2's effects moves.
 - KH2 effects step on KH1's frames too (`kh2fx::NO_MOTION`: the cut-short move's end); a spell
   mid-move froze them.
+
+### 2026-10-18: Stage 148 (a Steam tester's log; the user's videos)
+- A tester's log (Steam, s146 release): every pad record logged empty ("0000", sticks 80) the
+  whole session, two record addresses alternating, while KH1 walked, jumped (`set motion slot
+  9`, "KH1's own action, slot 12, KH1 state 1"), glided and ran its own air combo; only Attack
+  and magic (KH1's command menu) reached KH2. Keyboard play: KH1 merges its keys in after the
+  pad records (`0x140288F30`), which is all KH2 read. Their ini also had `commands = off` (KH1
+  runs its commands itself, any time), `kh2_voice = on` (KH2's lines: the "wrong quotes"),
+  `kh2_camera = off` (KH1's own camera, its own lock-on behaviour).
+- `takeover::buttons()`: the pads' records or KH1's merged state (`0x14298D4A0 + 4` held: `6`
+  as the jump button, `0x100000` as Square); `move_tilt()`: the pad's stick or KH1's processed
+  one (`0x14298D4E0`). `probe::merge_pads`: every record seen in the last 100 ms merged.
+- "KH2 has him" is now by game frame (`FRAME_KIND`, set each physics frame of Sora: KH2 / KH1's
+  hand-off move / KH1), not 150 ms of time: a pause no longer drops KH2 (the battle pause's
+  aerial combo went to KH1's table).
+- KH1's control step (`takeover::control`) runs without its jump / cancel (`6`) and Square
+  action (`0x100000`) bits while Sora is KH2's or KH1 has him outside one of its moves
+  (`kh1_borrows`, no hand-off, no L1 shortcut menu): KH1's merged state, so the keyboard, every
+  pad and the confirm swap alike; put back after (menus keep them). KH1 jumped on the first
+  frame after a pause or an examine.
+- Back from a command's hand-off (`FROM_COMMAND`): KH2's battle stance (a standing spell left
+  him in the field idle).
+- KH2's camera started while locked on faces the target at once (it came back unlocked after a
+  pause, the battle pause, a limit, the save menu or examining).

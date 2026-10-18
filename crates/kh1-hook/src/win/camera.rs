@@ -367,6 +367,15 @@ unsafe fn run(lock: bool) -> Option<()> {
         if near && usual && d.is_finite() {
             c.snap_yaw(d.x.atan2(d.y));
         }
+        // Locked on: behind Sora facing the target at once, where the lock-on camera settles
+        // (the user: after a pause, the battle pause, a limit, the save menu or examining
+        // something, it came back unlocked and swung round to the target).
+        if let Some(t) = lock_at {
+            let to = Vec2::new(t.x - subject.feet.x, t.z - subject.feet.z);
+            if to.length() > 1.0 && to.is_finite() {
+                c.snap_yaw((-to.x).atan2(-to.y));
+            }
+        }
         *g = Some(c);
         if LOGGED.fetch_add(1, Ordering::Relaxed) < 20 {
             let why = if !was_ours { "after KH1's" } else if far { "Sora far away" } else { "first" };

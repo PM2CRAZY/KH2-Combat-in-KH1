@@ -197,6 +197,51 @@ unsafe fn find_position(a: usize) {
 static PAD_LOGGED: AtomicU32 = AtomicU32::new(0);
 static PAD_LAST: AtomicU64 = AtomicU64::new(0);
 
+/// The pads' records this moment, merged: buttons or'ed, each stick from the record that has it
+/// furthest from the centre.
+fn merge_pads(out: usize, b: u16, st: [u8; 4]) -> (u16, [u8; 4]) {
+    use std::sync::Mutex;
+    static PADS: Mutex<Vec<(usize, u16, [u8; 4], std::time::Instant)>> = Mutex::new(Vec::new());
+    static SEEN: AtomicU32 = AtomicU32::new(0);
+    let Ok(mut pads) = PADS.lock() else { return (b, st) };
+    let now = std::time::Instant::now();
+    match pads.iter_mut().find(|p| p.0 == out) {
+        Some(p) => {
+            p.1 = b;
+            p.2 = st;
+            p.3 = now;
+        }
+        None => {
+            pads.push((out, b, st, now));
+            let n = SEEN.fetch_add(1, Ordering::Relaxed) + 1;
+            if n > 1 && n <= 8 {
+                log(&format!("pad records: {n} seen ({out:#x} new): merged for KH2, as KH1 merges them"));
+            }
+        }
+    }
+    pads.retain(|p| now.duration_since(p.3).as_millis() < 100);
+    let mut buttons = 0u16;
+    let mut sticks = [0x80u8; 4];
+    let off = |v: u8| (v as i32 - 128).abs();
+    let (mut right, mut left) = (-1, -1);
+    for p in pads.iter() {
+        buttons |= p.1;
+        let r = off(p.2[0]).max(off(p.2[1]));
+        if r > right {
+            right = r;
+            sticks[0] = p.2[0];
+            sticks[1] = p.2[1];
+        }
+        let l = off(p.2[2]).max(off(p.2[3]));
+        if l > left {
+            left = l;
+            sticks[2] = p.2[2];
+            sticks[3] = p.2[3];
+        }
+    }
+    (buttons, sticks)
+}
+
 unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     let f: PadFn = std::mem::transmute(ORIG_PAD.load(Ordering::Acquire));
     f(src, out, cfg);
@@ -205,14 +250,18 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     }
     let b: u16 = rd(out);
     let st: [u8; 4] = rd(out + 2);
-    // The pad as pressed goes to KH2; while KH2 has Sora, KH1 doesn't see its buttons.
-    super::takeover::RAW_BUTTONS.store(b as u32, Ordering::Relaxed);
-    super::takeover::RAW_STICKS.store(u32::from_le_bytes(st), Ordering::Relaxed);
+    // The pad as pressed goes to KH2; while KH2 has Sora, KH1 doesn't see its buttons. KH1 reads
+    // a record per pad (Steam Input's virtual pad beside the real one, a keyboard...) and
+    // merges them: so does KH2, every record seen in the last 100 ms (the user's tester: two
+    // records, KH2 kept the idle one's and got no input at all while KH1 moved him).
+    let (b_all, st_all) = merge_pads(out, b, st);
+    super::takeover::RAW_BUTTONS.store(b_all as u32, Ordering::Relaxed);
+    super::takeover::RAW_STICKS.store(u32::from_le_bytes(st_all), Ordering::Relaxed);
     // L1 held: KH1's shortcuts (L1 + a face button cast the spells set there), so KH1 keeps
     // Circle and Square then (the user: the Square shortcut didn't cast).
     // (Only when L1 opens KH1's shortcut menu: with no shortcut set it opens nothing, and KH1
     // jumped with the button, cancelling KH2's moves, the user.)
-    let shortcuts = super::shortcuts::menu_on_l1(b);
+    let shortcuts = super::shortcuts::menu_on_l1(b_all);
     if super::takeover::active() && !shortcuts {
         std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::jump_button() | super::takeover::SQUARE));
     } else if !super::takeover::kh1_keeps_square() && !shortcuts {
