@@ -1042,7 +1042,12 @@ unsafe fn takeover(actor: usize) -> bool {
             // (KH2's own voice for the moves whose KH2 sounds play, not KH1's.)
             d.strikes.swing_start(actor, d.character.airborne(), out.combo_count, d.character.in_finisher(), !super::kh2sound::covers(out.motion));
         }
-        d.strikes.trail(actor, attacking && !out.hitboxes.is_empty());
+        // (And the guard's swish: its motion's trail window, KH2's Keyblade trail there.)
+        let guard_swish = matches!(out.state, StateName::Guard) && out.weapon_trail;
+        if guard_swish && !d.strikes.has_trail() {
+            d.strikes.trail_for_guard(actor);
+        }
+        d.strikes.trail(actor, attacking && !out.hitboxes.is_empty() || guard_swish);
     }
     let attacking = matches!(out.state, StateName::Attack);
     d.swing = attacking.then_some(out.motion);

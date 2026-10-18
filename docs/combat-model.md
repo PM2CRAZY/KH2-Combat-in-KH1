@@ -236,7 +236,16 @@ its owner's front within that angle (reflect angle turns the cone).
 - **Enemy:** unless its "refact self" is 2, it plays its ATKP "reflected motion" and is
   pushed back by "reflect hit-back" (−1 = 50).
 
-**Sora's Guard** is ATKP 162: kind guard, refact self 2, reflect range 180°.
+**Pressing Guard** (the action button standing) starts combo row 11 (exe `0x1403A9020`, tried
+from the action-button handler `0x1403A75A0` when not moving), whose motion is 173 (A322): its
+Keyblade carries a guard window (ATKP 161: kind guard, refact self 1, so a blocked attack
+starts the repel; reflect range 120°) on frames 6..37, the trail on 8..37 and a swish sound
+at frame 1. Motion 42 (A321) is what plays when an attack meets the guard (the repel below),
+and Counterguard is row 39 taken while 42 plays (the same handler checks the motion is 0x2A).
+Checked (exe, PTYA set 1 row 11). Until stage 158 we played 42 for the press (the user: "the
+animation he uses when somebody actually hits his guard").
+
+**The repel's guard window** (motion 42) is ATKP 162: kind guard, refact self 2, reflect range 180°.
 - **Against a Shadow's swipe** (ATKP 5: kind normal, reflected motion 140): the swipe stops,
   the Shadow is repelled into motion 140, and Sora stays in his guard.
 - **Against its dash** (ATKP 7: refact self 2, refact other 1): the dash carries on, Sora is

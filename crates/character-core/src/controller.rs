@@ -25,7 +25,12 @@ pub mod motion {
     pub const JUMP: u16 = 3;
     pub const FALL: u16 = 4;
     pub const LAND: u16 = 5;
+    /// The guard's repel: an attack met his guard (pushed back, Counterguard's window).
     pub const GUARD: u16 = 42;
+    /// Guard pressed (combo row 11's motion, A322: guard window frames 6..37, the blade's trail;
+    /// exe: the action button standing tries row 11). Motion 42 is the block, not the press (the
+    /// user: our guard was the animation he plays when his guard is hit).
+    pub const GUARD_PRESS: u16 = 173;
     pub const HIGH_JUMP: u16 = 201;
     pub const AERIAL_DODGE: u16 = 202;
     pub const QUICK_RUN: u16 = 203;
@@ -164,6 +169,8 @@ pub struct Output {
     pub guarding: bool,
     /// Live guard windows; their shapes come from the collision group.
     pub guard_boxes: Vec<ActiveHitbox>,
+    /// The motion's Keyblade-trail window is open (the guard's swish, the swings').
+    pub weapon_trail: bool,
     pub locked: Option<u32>,
     /// KH2 combo counter (1 on the first swing; only advances on swings
     /// that follow a connecting one).
@@ -301,6 +308,8 @@ const AIR_RECOVERY_SPEED: f32 = 10.0;
 /// handler does (`current motion == 0x2A` → row 0x27). Retaliating Slash: attack while
 /// launched (ours; the exe checks it in a separate routine whose row id comes in a register).
 const COUNTERGUARD_ROW: u8 = 39;
+/// The guard's combo row (exe: tried by the action button while standing).
+const GUARD_ROW: u8 = 11;
 /// KH2's Square moves in a combo, in the order tried: (PTYA row, ability, in the air).
 /// Finishing Leap (row 37, ability 95), Upper Slash (12, 18), Horizontal Slash (38, 99).
 const SQUARE_MOVES: [(u8, u16, bool); 3] = [(37, 95, false), (12, 18, false), (38, 99, true)];
@@ -431,6 +440,7 @@ struct FrameOut {
     invulnerable: bool,
     guarding: bool,
     guard_boxes: Vec<ActiveHitbox>,
+    weapon_trail: bool,
     no_gravity: bool,
     motion: u16,
     clip_frame: u32,
@@ -1058,10 +1068,15 @@ impl Character {
         }
         if !self.airborne {
             if !moving {
-                if a.guard && self.clip(motion::GUARD).is_some() {
-                    self.vel_h = [0.0; 2];
-                    self.start_action(ActionKind::Guard, motion::GUARD);
-                    return true;
+                // Row 11's motion (the moveset's own), else the press's, else the repel's.
+                let press = self.moveset.combo_rows.iter().find(|r| r.id == GUARD_ROW).map(|r| r.motion).filter(|m| self.clip(*m).is_some());
+                let m = press.or_else(|| self.clip(motion::GUARD_PRESS).map(|_| motion::GUARD_PRESS)).or_else(|| self.clip(motion::GUARD).map(|_| motion::GUARD));
+                if a.guard {
+                    if let Some(m) = m {
+                        self.vel_h = [0.0; 2];
+                        self.start_action(ActionKind::Guard, m);
+                        return true;
+                    }
                 }
                 return false;
             }
@@ -1308,6 +1323,7 @@ impl Character {
             invulnerable: fo.invulnerable,
             guarding: fo.guarding,
             guard_boxes: fo.guard_boxes,
+            weapon_trail: fo.weapon_trail,
             locked: self.lock,
             combo_count: self.count,
             events: fo.events,
@@ -1403,6 +1419,7 @@ impl Character {
                 }
                 WindowKind::Invulnerable => fo.invulnerable = true,
                 WindowKind::NoGravity => fo.no_gravity = true,
+                WindowKind::WeaponTrail => fo.weapon_trail = true,
                 WindowKind::Guard { attack, group, weapon } => {
                     fo.guarding = true;
                     fo.guard_boxes.push(ActiveHitbox { swing: (act.swing << 8) | wi as u64, attack, group, weapon });

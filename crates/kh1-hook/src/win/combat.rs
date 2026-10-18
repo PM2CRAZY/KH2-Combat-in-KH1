@@ -948,6 +948,29 @@ impl Strikes {
     }
 
     /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
+    /// A trail has been asked of KH1 for the current move.
+    pub fn has_trail(&self) -> bool {
+        self.trail_id.is_some()
+    }
+
+    /// The guard's swish: KH1's Keyblade trail of a ground swing (the guard has no swing row).
+    pub unsafe fn trail_for_guard(&mut self, sora: usize) {
+        if self.swing_rows.is_none() {
+            // The rows are read on the first swing; a guard first reads them the same way.
+            self.swing_start(sora, false, 1, false, false);
+            return;
+        }
+        let Some(r) = self.swing_rows.as_ref().and_then(|m| m.1.get(&200)).copied() else { return };
+        let cs = pose::ptr(rd::<u32>(sora + 0x14C));
+        let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
+        if source > 0x10000 && r.trail >= 0 {
+            let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(BASE.load(Ordering::Relaxed) + TRAIL_RVA);
+            f(sora, r.trail as u32);
+            self.trail_asked = Some(0);
+            self.trail_id = Some(r.trail as u32);
+        }
+    }
+
     pub unsafe fn trail(&mut self, sora: usize, swinging: bool) {
         let flags = rd::<u32>(sora + 0x1CC);
         // The hit window opening: KH1's trail object (`+0x14C`'s `+0x28`) must be there; KH1

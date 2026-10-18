@@ -1756,3 +1756,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   added) show kh2-fx skipping programs 115 pppDrawMatrixWood, 120 pppRyjDrawMatrixWorld, 174
   pppVertexAp (and 49 pppVtMime for Aerial Finish): KH2's blade ribbons and Finishing Leap's
   white burst. Being implemented separately.
+
+### 2026-10-18: Stage 158 (the guard's own motion)
+- The user: our guard was "the animation he uses when somebody actually hits his guard" (with
+  a KH2 video of the real guard). KH2's action button, standing, tries combo row 11 (exe
+  `0x1403A9020` from the handler `0x1403A75A0`); in Sora's PTYA set row 11 is motion 173 (A322):
+  the Keyblade's guard window ATKP 161 (refact self 1: a block starts the repel) frames 6..37,
+  its trail 8..37, a swish sound at 1. Motion 42 (A321), which we played, is the repel (and
+  Counterguard's window, row 39 while 42 plays: the same handler checks motion 0x2A). The press
+  now starts row 11's motion (`motion::GUARD_PRESS` 173 as a fallback); a block still plays 42.
+- `Output::weapon_trail` (the motion's trail window): KH1's Keyblade trail shows during the
+  guard's swish; 173 joins the KH2 sound moves (its swish).

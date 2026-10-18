@@ -22,9 +22,9 @@ use std::sync::{Arc, Mutex};
 /// Slash 161, Slapshot 162, Dodge Slash 163, Slide Dash 164, Guard Break 165, Explosion 166,
 /// Finishing Leap 167, Flash Step 169, Vicinity Break 170, Counterguard 171, Retaliating Slash
 /// 172, Aerial Sweep 191, Aerial Spiral 192, Horizontal Slash 193, Aerial Finish 194, Aerial
-/// Dive 196, Magnet Burst 197; and Aerial Recovery 40 (the user: it had no sound). (The plain
-/// combo's swings keep KH1's.)
-pub const DEFAULT_MOTIONS: [u16; 18] = [161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40];
+/// Dive 196, Magnet Burst 197; Aerial Recovery 40 (the user: it had no sound) and the guard 173
+/// (its swish). (The plain combo's swings keep KH1's.)
+pub const DEFAULT_MOTIONS: [u16; 19] = [161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173];
 
 struct Sound {
     rate: u32,
