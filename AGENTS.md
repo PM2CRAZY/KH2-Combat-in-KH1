@@ -1930,3 +1930,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (motion 73) hovers in its no-gravity window (range id 3, frames 16..74). `Character::
   air_magic_falls` (the hook sets it) skips that window for magic actions: the cast falls from
   rest as it plays; landing keeps the cast going on the ground.
+
+### 2026-10-18: Stage 175 (Reflect spammed: one counter at the end)
+- The user: "reflect needs to not do the burst damage until the player stops spamming it".
+  A Reflect cast while the last one is still in flight (barrier, hold or counter) now ends that
+  one at once (`kh2_magic::Magic::cancel`: scripts stop, effects killed, attacks freed) without
+  its counter, and the hits its barrier counted carry over to the new barrier
+  (`Runtime::carry`, added to its reflect count once it stands). Only the last cast of a chain
+  fires the counter and burst, for every hit blocked along the way.
+- Stage 174 (Reflect falls in the air) went out in the same build.

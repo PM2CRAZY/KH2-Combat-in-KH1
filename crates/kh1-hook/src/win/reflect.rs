@@ -550,6 +550,8 @@ struct Runtime {
     blocks: u32,
     counter_hits: u32,
     started: Option<Instant>,
+    /// Hits blocked by a cast a new one took over, for the new barrier to count.
+    carry: u32,
 }
 
 /// The barrier held while attacks keep hitting it (the user: "can we have reflect keep shielding
@@ -663,7 +665,7 @@ fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
         if levels.is_empty() {
             return None;
         }
-        *g = Some(Runtime { magic, spells, levels, fresh: None, casting: None, fx: HashMap::new(), barrier: false, hold: Hold::default(), blocks: 0, counter_hits: 0, started: None });
+        *g = Some(Runtime { magic, spells, levels, fresh: None, casting: None, fx: HashMap::new(), barrier: false, hold: Hold::default(), blocks: 0, counter_hits: 0, started: None, carry: 0 });
     }
     g.as_mut()
 }
@@ -795,11 +797,26 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         let sub = level as i32 * 2 - 2 + finisher as i32;
         let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
         let spell = rt.spells[(level - 1) as usize].unwrap_or(0);
+        // Cast again while the last one is still in flight (its barrier, or its counter not yet
+        // done): that one ends here without its counter, and the hits it blocked carry over to
+        // this one, whose counter then fires for them all (the user: "reflect needs to not do
+        // the burst damage until the player stops spamming it").
+        let mut carry = 0;
+        if rt.magic.busy(SORA) {
+            carry = rt.magic.attacks.iter().filter(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3)).map(|a| a.reflect_count as u32).max().unwrap_or(0).max(rt.carry);
+            rt.magic.cancel(SORA);
+            for h in rt.fx.values().filter_map(|v| v.0) {
+                super::kh2fx::spell_kill(h);
+            }
+            rt.fx.clear();
+            note(format!("Reflect cast again in flight: the last one ends without its counter, {carry} blocked hit(s) carried over"));
+        }
         match rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) {
             Ok(_) => {
                 rt.casting = Some(motion);
                 rt.hold = Hold::default();
-                rt.blocks = 0;
+                rt.blocks = carry;
+                rt.carry = carry;
                 rt.counter_hits = 0;
             }
             Err(e) => note(format!("Reflect: the script didn't start ({e})")),
@@ -818,6 +835,14 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     }
     // The hits the barrier stopped since last frame: its reflect count (the script's counter).
     let blocks = BLOCKS.swap(0, Ordering::Relaxed);
+    // Hits carried over from a cast this one took over: its barrier counts them once it stands.
+    if rt.carry > 0 {
+        if let Some(a) = rt.magic.attacks.iter_mut().find(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3)) {
+            a.reflect_count = a.reflect_count.saturating_add(rt.carry.min(255) as u8);
+            note(format!("Reflect: {} carried hit(s) counted on the new barrier (count {})", rt.carry, a.reflect_count));
+            rt.carry = 0;
+        }
+    }
     if blocks > 0 {
         let barrier = rt.magic.attacks.iter_mut().find(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3));
         match barrier {

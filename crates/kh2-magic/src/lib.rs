@@ -437,6 +437,23 @@ impl Magic {
         any
     }
 
+    /// Ends `caster`'s spell casts at once (a host's choice: a new cast of the same spell taking
+    /// over, Reflect spammed): their scripts stop, their effects are killed and their attacks go
+    /// with the next `update`. Returns how many casts there were.
+    pub fn cancel(&mut self, caster: ObjId) -> usize {
+        let mut n = 0;
+        let mut effects = Vec::new();
+        for c in self.casts.iter_mut().filter(|c| c.t.caster == caster && !c.object && !c.finished) {
+            c.finished = true;
+            effects.extend(c.t.effects.values().copied());
+            n += 1;
+        }
+        for e in self.effects.iter_mut().filter(|e| effects.contains(&e.id)) {
+            e.killed = true;
+        }
+        n
+    }
+
     /// Whether `caster` has a cast in flight.
     pub fn busy(&self, caster: ObjId) -> bool {
         self.casts.iter().any(|c| c.t.caster == caster && !c.object)
