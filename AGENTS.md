@@ -1888,3 +1888,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   sounds play (`kh2sound`), cast voices only with `kh2_voice`. ini `reflect = on`. Not in the
   shortcuts (KH1's shortcut slots hold spells 0..6). `docs/kh1-reflect-spell.md`. Built by a
   helper session from s166 and merged over s167..s169.
+
+### 2026-10-18: Stage 171 (no cancelling jump casts)
+- The user: "you can animation cancel out of KH1 jump spells, so no good there". Stage 168's
+  end-frame cancels (Attack, jump, Square, the stick) now apply to ground casts only; a cast
+  in the air (`air_cast`) plays KH1's animation through to the ground and KH2's landing hold
+  (stage 163).
