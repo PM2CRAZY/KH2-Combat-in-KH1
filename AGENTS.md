@@ -1820,3 +1820,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   left KH1 its jump whenever the raw pad had L1 (KH1's shortcuts); KH1's own button state can
   differ from the raw pad for a frame, and then saw a plain jump. The strip now follows L1 in
   KH1's own state (`0x40000`, its pad table `0x140528F90` maps the raw `0x400` to it).
+
+### 2026-10-18: Stage 164 (jump held, then L1)
+- The user: holding jump and pressing L1 "does crazy stuff". The log: KH2's landing with KH1
+  in its state 2 and jump slot 12 (flags 0x48003), then KH1's own air moves (state 21). With
+  L1 down (KH1's shortcuts) the control hook left KH1 all its button bits, the held jump too,
+  and KH1 jumped him as KH2 landed. In the shortcut menu (or a submenu) only KH1's "pressed"
+  bits stay now (a shortcut, backing out); the held and repeat jump / Square bits are KH2's.

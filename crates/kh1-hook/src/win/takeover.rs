@@ -265,24 +265,28 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
     let strip = actor > 0x10000
         && actor == rd::<u64>(base + PARTY_RVA) as usize
         && (!HANDOFF.load(Ordering::Relaxed) || kh1_move_done(base, actor))
-        && kh1_borrows(actor)
-        // (L1 as KH1's own button state has it this frame, `0x40000` from the raw `0x400` in its
-        // pad table `0x140528F90`: the raw pad's could differ from it for a frame, and spamming
-        // L1 and jump then let KH1 see a plain jump, its high jump under KH2, the user.)
-        && !super::shortcuts::menu_on_l1(if rd::<u32>(base + BUTTONS_RVA + 4) & KH1_L1 != 0 { L1 } else { 0 })
-        && !super::shortcuts::submenu_open();
+        && kh1_borrows(actor);
+    // With L1 down (KH1's shortcuts) or a submenu open, the presses are KH1's (a shortcut, backing
+    // out): only the held and repeat bits go then. A jump held while L1 came down was KH1's held
+    // jump: KH1 jumped as KH2 landed him and went on to its own air moves (the user: "holding the
+    // jump button and hitting L1 does crazy stuff"; the log: KH2's landing with KH1's state 2
+    // and jump slot 12, then state 21). (L1 as KH1's own button state has it this frame,
+    // `0x40000` from the raw `0x400` in its pad table `0x140528F90`; the raw pad's could differ
+    // from it for a frame.)
+    let menu = super::shortcuts::menu_on_l1(if rd::<u32>(base + BUTTONS_RVA + 4) & KH1_L1 != 0 { L1 } else { 0 }) || super::shortcuts::submenu_open();
+    let offs: &[usize] = if menu { &[4, 0x10, 0x14] } else { &[4, 8, 0x10, 0x14] };
     const KH2_BITS: u32 = 0x6 | 0x10_0000;
     let state = base + BUTTONS_RVA;
     let saved = rd::<[u32; 6]>(state);
     if strip {
-        for off in [4usize, 8, 0x10, 0x14] {
+        for &off in offs {
             wr(state + off, rd::<u32>(state + off) & !KH2_BITS);
         }
     }
     f(actor, dir);
     if strip {
         // KH1's own changes to the state meanwhile kept; only our bits come back.
-        for off in [4usize, 8, 0x10, 0x14] {
+        for &off in offs {
             wr(state + off, rd::<u32>(state + off) | (saved[off / 4] & KH2_BITS));
         }
     }
