@@ -556,16 +556,12 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
             // drawn until KH2's next frame; the user: paused mid KH2 move, resumed in KH1's).
             let kh2_frame = super::takeover::kh2_frame();
             let fresh = super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, t)| kh2_frame || t.elapsed().as_secs_f32() < 0.15).map(|(b, _)| b.clone()));
-            let cast = if fresh.is_none() { air_cast_play(slot) } else { None };
             match (fresh, s.retarget.as_ref()) {
                 (Some(b), Some(r)) => {
                     s.follow.slot = slot;
                     note_kh2(&b, to_world);
                     Some(r.pose_grip(&b, super::takeover::GRIP.load(Ordering::Relaxed)))
                 }
-                // A spell cast in the air (KH1 has him): KH2's air cast for that spell, then
-                // KH2's fall and landing (the user: KH1's animation all through a jump cast).
-                _ if cast.is_some() => follow_play(s, slot, to_world, cast),
                 // KH1's own jump, fall and landing while KH1 has him (dropping off a ladder or a
                 // vine, out of water): KH1's own animation (the user: KH2's fall, its arms
                 // flung out, looked like a T-pose there).
@@ -596,32 +592,6 @@ fn decompose(v: &[Mat4]) -> Vec<(Vec3, Quat, Vec3)> {
 }
 
 /// KH2's motion for what KH1's slot shows Sora doing; `None` leaves KH1's own animation.
-/// KH2's air cast motion for each of KH1's spells (03system MAGC: Fire 58, Blizzard 61, Thunder
-/// 64, Cure 67, Magnet 70, Reflect 73; KH1's Gravity takes Magnet's, Stop Fire's, Aero
-/// Reflect's).
-const AIR_CASTS: [u16; 7] = [58, 61, 64, 67, 70, 58, 73];
-
-/// What to draw while KH1 casts a spell in the air: KH2's air cast while it plays, then KH2's
-/// fall, and KH2's landing on KH1's (slot 11).
-fn air_cast_play(slot: Option<usize>) -> Option<Play> {
-    use character_core::motion as m2;
-    let (spell, secs) = super::takeover::air_cast()?;
-    let kh2 = KH2.get()?.as_ref().ok()?;
-    let cast = AIR_CASTS[(spell as usize).min(AIR_CASTS.len() - 1)];
-    let len = kh2.rig.motions.get(&cast).map_or(0.0, |m| kh2_anim::length_frames(m)) / 60.0;
-    // On the ground again (KH1's landing slot, or its ground state): KH2's landing.
-    let a = super::takeover::sora_actor();
-    let grounded = a > 0x10000 && unsafe { std::ptr::read_unaligned((a + 0x70) as *const i32) } == 0;
-    let motion = if matches!(slot, Some(11)) || grounded {
-        m2::LAND
-    } else if secs < len {
-        cast
-    } else {
-        m2::FALL
-    };
-    Some(Play::Motion { motion, field: false, looping: motion == m2::FALL, group: 0 })
-}
-
 fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4>> {
     follow_play(s, slot, to_world, None)
 }

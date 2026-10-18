@@ -1808,3 +1808,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   keeps the model's forward (+z) and so put the spiral behind him. The root frame is now the
   model's turned half round about x (y and z negated); centred elements (Explosion, Magnet
   Burst) are unchanged.
+
+### 2026-10-18: Stage 163 (KH1's jump casts, landing hold after them, L1 spam)
+- The user: KH1's magic animations after all (stage 162's KH2 air casts taken out), but the
+  landing after a jump cast should have KH2's landing hold, and a jump out of it KH2's jump.
+  When KH1 lands him out of an air cast (`air_cast`, KH1 state 0 on the floor), KH2 takes him
+  at once in its landing (`Character::land_now`: the 14-frame hold, a jump at any frame); KH1's
+  cast action flag (`+0` bit 4) is cleared so its can-act test lets KH2's input through.
+- Spamming L1 and jump launched Sora in KH1's animations (the log: KH2's jump, then KH1 state 2
+  in its jump slot 12 under KH2, "KH1's own action, slot 12/13", state 21). The control hook
+  left KH1 its jump whenever the raw pad had L1 (KH1's shortcuts); KH1's own button state can
+  differ from the raw pad for a frame, and then saw a plain jump. The strip now follows L1 in
+  KH1's own state (`0x40000`, its pad table `0x140528F90` maps the raw `0x400` to it).

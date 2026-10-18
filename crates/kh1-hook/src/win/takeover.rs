@@ -152,6 +152,8 @@ pub const CIRCLE: u16 = 0x2000;
 pub const SQUARE: u16 = 0x8000;
 /// KH1's shortcut button (L1 + a face button).
 pub const L1: u16 = 0x0400;
+/// L1 in KH1's own button state (`0x14298D4A0`), its pad table's bit for the raw `0x400`.
+const KH1_L1: u32 = 0x4_0000;
 #[allow(dead_code)]
 pub const CROSS: u16 = 0x4000;
 
@@ -264,7 +266,10 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
         && actor == rd::<u64>(base + PARTY_RVA) as usize
         && (!HANDOFF.load(Ordering::Relaxed) || kh1_move_done(base, actor))
         && kh1_borrows(actor)
-        && !super::shortcuts::menu_on_l1(RAW_BUTTONS.load(Ordering::Relaxed) as u16)
+        // (L1 as KH1's own button state has it this frame, `0x40000` from the raw `0x400` in its
+        // pad table `0x140528F90`: the raw pad's could differ from it for a frame, and spamming
+        // L1 and jump then let KH1 see a plain jump, its high jump under KH2, the user.)
+        && !super::shortcuts::menu_on_l1(if rd::<u32>(base + BUTTONS_RVA + 4) & KH1_L1 != 0 { L1 } else { 0 })
         && !super::shortcuts::submenu_open();
     const KH2_BITS: u32 = 0x6 | 0x10_0000;
     let state = base + BUTTONS_RVA;
@@ -293,6 +298,8 @@ unsafe fn kh1_move_done(base: usize, actor: usize) -> bool {
 
 /// KH1's move ended on a jump press: KH2 jumps at once (the press isn't taken as held over).
 static JUMP_NOW: AtomicBool = AtomicBool::new(false);
+/// KH1 landed him out of an air cast: KH2 starts in its landing.
+static LAND_NOW: AtomicBool = AtomicBool::new(false);
 
 /// KH1 shows Sora standing, walking or running: his motion's slot, or for a motion we don't
 /// know (another moveset's), the last one KH1 asked for.
@@ -510,8 +517,19 @@ unsafe fn takeover(actor: usize) -> bool {
         let fall_state = if command { matches!(state, 1 | 2) && done } else { state == 2 || state == 1 && done };
         let falling = fall_state && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
         let jump = buttons() & jump_button() != 0 && kh1_move_done(base, actor);
-        if frames >= 10 && (falling || jump || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
+        // A spell cast in the air (KH1's animation all through, the user's choice): when KH1
+        // lands him, KH2's landing from there, its short hold and a jump out of it (the user:
+        // "the same pause buffer, and if he jumps out of it, KH2 Sora's jump"), instead of
+        // KH1's landing, its hold and then a snap.
+        let cast_landed = air_cast().is_some() && state == 0 && above <= STEP_DOWN;
+        if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
             JUMP_NOW.store(jump, Ordering::Relaxed);
+            if cast_landed {
+                // KH1's cast action ends here (it would at the end of its own landing): its
+                // "action running" flag off, so its can-act test lets KH2's input through.
+                wr(actor, rd::<u32>(actor) & !4);
+                LAND_NOW.store(true, Ordering::Relaxed);
+            }
             if falling {
                 // (A frame missed would read as a jump in speed: kept to what a fall can be.)
                 *HANDOFF_FALL.lock().unwrap() = vel.map(|(h, up)| {
@@ -537,7 +555,9 @@ unsafe fn takeover(actor: usize) -> bool {
             ROLL_NOW.store(square, Ordering::Relaxed);
             FRESH.store(true, Ordering::Relaxed);
             HANDOFF_POS.lock().unwrap().take();
-            if falling {
+            if cast_landed {
+                log("KH1's air cast landed: KH2's landing");
+            } else if falling {
                 log(&format!("KH1's move ended in its fall ({above:.0} above the floor): KH2's fall"));
             } else {
                 log(&format!("KH1's move ended (state {state}): KH2 again"));
@@ -660,6 +680,11 @@ unsafe fn takeover(actor: usize) -> bool {
         d.held.1 = false;
     }
     if JUMP_NOW.swap(false, Ordering::Relaxed) {
+        d.held.0 = false;
+    }
+    if LAND_NOW.swap(false, Ordering::Relaxed) {
+        d.grounded = true;
+        d.character.land_now();
         d.held.0 = false;
     }
     d.growth.update(base, &mut d.character);

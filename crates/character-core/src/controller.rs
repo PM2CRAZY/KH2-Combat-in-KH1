@@ -664,6 +664,16 @@ impl Character {
         self.vel_y = vel_y.min(0.0);
     }
 
+    /// Just touched down out of a move of the host's own (a spell cast in the air): standing,
+    /// in the landing (its short hold, a jump out of it at any frame).
+    pub fn land_now(&mut self) {
+        self.airborne = true;
+        self.mode = Mode::Free;
+        self.land();
+        self.airborne = false;
+        self.vel_h = [0.0; 2];
+    }
+
     /// In the air this frame (the host picks the map's air rules with it).
     pub fn airborne(&self) -> bool {
         self.airborne
