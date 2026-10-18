@@ -1664,3 +1664,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   least missed even when on. Each still noted in `kh1-kh2-removed.txt`.
 - Traverse Town's district doors ("curtain rooms"): KH1's animations after them, the room
   entry's refused model (stage 149's fix).
+
+### 2026-10-18: Stage 152 (rooftop jumps; a tester's s148 log)
+- Low jumps after a roof (the user's video; the tester's log: "ceiling: rose 0.0 of 7.5 at height
+  620.1 (collision flags 00000009)" ten jumps running; the user's own logs the same at 457.2):
+  KH1's collision bit 3 (`+0x2D0` = 9) is a slope's surface under him, not a ceiling (real
+  bumps: flags 1, a partial rise). KH1's air mover pushes him along the roof rather than up;
+  our ceiling rule took each jump for a head bump (cut it, locked air moves). With bit 3 the
+  rise is KH2's own and no ceiling is called.
+- The tester's log also showed: Sora's model refused mid-battle against the probe's stale actor
+  ("drawn 872 away"), then "another body" and KH1's moves (stage 149's party-slot actor fixes
+  it); spells waiting and dropped after 1.5 s (stage 149's 5 s); Aerial Dodge MAX not learned on
+  a full list (stage 151). Pad records now counted once each.

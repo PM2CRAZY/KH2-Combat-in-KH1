@@ -726,7 +726,19 @@ unsafe fn takeover(actor: usize) -> bool {
             // KH2's ceiling rule: less than 49% of the rise happened.
             let got = -rd::<f32>(actor + 0x14);
             y = got;
-            if out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
+            // KH1's collision bit 3 (`+0x2D0` 9 = in the air + on a slope's surface): a steep roof
+            // he is on or sliding off, not a ceiling. KH1's air mover pushes him along it rather
+            // than up, and every jump was read as a head bump and cut short until a roll (the
+            // user's rooftops; the logs: "rose 0.0 of 7.5 at height 620.1, flags 9", jump after
+            // jump, where real ceilings show flags 1 and a partial rise). KH2's own rise there.
+            let slope = rd::<u32>(actor + 0x2D0) & 8 != 0;
+            if slope && out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
+                y = up_before + out.displacement[1];
+                static SLOPES: AtomicU32 = AtomicU32::new(0);
+                if SLOPES.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log(&format!("rise on a slope's contact (flags {:08x}): KH2's own rise {:.1}, not a ceiling", rd::<u32>(actor + 0x2D0), out.displacement[1]));
+                }
+            } else if out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
                 d.character.hit_ceiling();
                 static BONKS: AtomicU32 = AtomicU32::new(0);
                 if BONKS.fetch_add(1, Ordering::Relaxed) < 40 {

@@ -213,9 +213,17 @@ fn merge_pads(out: usize, b: u16, st: [u8; 4]) -> (u16, [u8; 4]) {
         }
         None => {
             pads.push((out, b, st, now));
-            let n = SEEN.fetch_add(1, Ordering::Relaxed) + 1;
-            if n > 1 && n <= 8 {
-                log(&format!("pad records: {n} seen ({out:#x} new): merged for KH2, as KH1 merges them"));
+            // (Counted once per record: one going quiet a moment and coming back isn't new.)
+            static EVER: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+            if let Ok(mut ever) = EVER.lock() {
+                if !ever.contains(&out) {
+                    ever.push(out);
+                    let n = ever.len();
+                    let _ = SEEN.fetch_add(1, Ordering::Relaxed);
+                    if n > 1 && n <= 8 {
+                        log(&format!("pad records: {n} seen ({out:#x} new): merged for KH2, as KH1 merges them"));
+                    }
+                }
             }
         }
     }
