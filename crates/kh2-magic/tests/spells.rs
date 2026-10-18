@@ -283,3 +283,56 @@ fn reflect_barrier_held() {
     assert!(effect0.last().is_some_and(|l| *l >= hold_to - 1), "barrier effect through the hold: {:?}", span(&effect0));
     assert!(counter_from.is_some_and(|c| c > hold_to), "counter after the hold: {counter_from:?}");
 }
+
+/// Reflect cast into Reflect (the host's chain: the last cast is cancelled, its blocked hits
+/// carried to the new barrier): the old barrier is gone at once, so the carried hits land on the
+/// new one, which then counters for them (the user: the chain's burst never came; the carry
+/// went to the old barrier, still standing until the next update).
+#[test]
+fn reflect_chain_counters_from_the_last_cast() {
+    let d = dir();
+    let (Ok(system), Ok(bytes)) = (std::fs::read(d.join("03system.bin")), std::fs::read(d.join("REFLECT_1.mag"))) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    let magi = pref.magi.get(0).unwrap();
+    let mut magic = Magic::new();
+    let spell = magic.add_spell(SpellFile::parse("REFLECT_1.mag", &bytes).unwrap());
+    let mut w = Fake { frame: 0, release_at: 0, motion_end: 60, seed: 1 };
+    magic.cast(spell, SORA, 5, 0, magi, &mut w).unwrap();
+    assert!(magic.release(SORA, &mut w));
+    for f in 1..8 {
+        w.frame = f;
+        magic.update(&mut w);
+        if f == 5 {
+            magic.attacks.iter_mut().find(|a| a.atk == 573 && !a.freed).unwrap().reflect_count = 2;
+        }
+    }
+    // Cast again, as `reflect::after_step` does.
+    let carry = magic.attacks.iter().filter(|a| a.atk == 573 && !a.freed).map(|a| a.reflect_count).max().unwrap_or(0);
+    assert_eq!(carry, 2);
+    magic.cancel(SORA);
+    assert!(magic.attacks.iter().all(|a| a.atk != 573 || a.freed), "the old barrier still stands after the cancel");
+    w.frame = 0;
+    magic.cast(spell, SORA, 5, 0, magi, &mut w).unwrap();
+    assert!(magic.release(SORA, &mut w));
+    let mut carried = false;
+    let mut counters = 0;
+    for f in 1..200 {
+        w.frame = f;
+        if !carried {
+            if let Some(a) = magic.attacks.iter_mut().find(|a| a.atk == 573 && !a.freed) {
+                a.reflect_count += carry;
+                carried = true;
+            }
+        }
+        magic.update(&mut w);
+        counters += magic.attacks.iter().filter(|a| a.atk != 573 && !a.freed && a.pos.is_some()).count();
+        if magic.casts.is_empty() {
+            break;
+        }
+    }
+    assert!(carried, "the new barrier never stood");
+    assert!(counters > 0, "the last Reflect of the chain didn't counter");
+}

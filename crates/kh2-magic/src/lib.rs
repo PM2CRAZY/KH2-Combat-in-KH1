@@ -443,13 +443,21 @@ impl Magic {
     pub fn cancel(&mut self, caster: ObjId) -> usize {
         let mut n = 0;
         let mut effects = Vec::new();
+        let mut attacks = Vec::new();
         for c in self.casts.iter_mut().filter(|c| c.t.caster == caster && !c.object && !c.finished) {
             c.finished = true;
             effects.extend(c.t.effects.values().copied());
+            attacks.extend(c.t.attacks.values().copied());
             n += 1;
         }
         for e in self.effects.iter_mut().filter(|e| effects.contains(&e.id)) {
             e.killed = true;
+        }
+        // Its attacks go now, not at the next `update`: a cast started straight after must not
+        // find them (the host's Reflect chain counted the carried hits on the old barrier, and
+        // the new one burst for none).
+        for a in self.attacks.iter_mut().filter(|a| attacks.contains(&a.key)) {
+            a.freed = true;
         }
         n
     }

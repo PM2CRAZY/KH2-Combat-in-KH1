@@ -2036,3 +2036,19 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   swings with the stick held KH2 is in its run for a few frames (still showing the swing, the
   log's "Run (motion 166)"), and KH1's run cycle stepped then. Now only after `STEPS_AFTER` (10)
   frames running KH2's own walk / run motion (1 / 2).
+
+### 2026-10-18: Stage 182 (Reflect chains burst for real; the burst's sound)
+- "if reflects are cast into one another, basically delay the burst until the last reflect, all
+  attacks and triggers should burst at the last reflect". The user's s180 log: "cast again in
+  flight ... 2 blocked hit(s) carried over", "2 carried hit(s) counted on the new barrier
+  (count 4)", then "2 hit(s) blocked, 0 counter hit(s)": `Magic::cancel` left the cancelled
+  cast's attacks standing until the next `update`, so the carry went onto the old barrier
+  (still found first) and the new one countered for nothing. The chain (s175) never burst.
+  `cancel` now frees the cast's attacks at once (kh2-magic test
+  `reflect_chain_counters_from_the_last_cast`, which fails without it). The carry is also
+  every hit of the chain so far (`rt.blocks`), not only a standing barrier's count, so a Reflect
+  cast into a counter already under way carries its hits too.
+- "the burst sound isnt in the game either": the script starts no element for the burst
+  (ATKP 667 / 668 / 669); KH2's own hit effect for it (`trap_attack_set_pax`) isn't modelled,
+  and element 11's sound (174) plays nothing in the PC files. Element 7's sound (173, shared by
+  all three levels, 1.9 s) now plays as the burst attack appears. Inferred, not traced.

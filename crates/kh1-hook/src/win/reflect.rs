@@ -552,7 +552,13 @@ struct Runtime {
     started: Option<Instant>,
     /// Hits blocked by a cast a new one took over, for the new barrier to count.
     carry: u32,
+    /// Burst attacks whose sound has played.
+    burst_heard: std::collections::HashSet<u64>,
 }
+
+/// The counter's burst attacks (tiers 1..3) and the element whose sound is the burst's.
+const BURSTS: [u16; 3] = [667, 668, 669];
+const BURST_ELEMENT: u16 = 7;
 
 /// The barrier held while attacks keep hitting it (the user: "can we have reflect keep shielding
 /// until attacks have stopped"). The scripts' barrier (ATKP 573) stands 27 frames at every level
@@ -678,7 +684,7 @@ fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
         if levels.is_empty() {
             return None;
         }
-        *g = Some(Runtime { magic, spells, levels, fresh: None, casting: None, fx: HashMap::new(), barrier: false, hold: Hold::default(), blocks: 0, counter_hits: 0, started: None, carry: 0 });
+        *g = Some(Runtime { magic, spells, levels, fresh: None, casting: None, fx: HashMap::new(), barrier: false, hold: Hold::default(), blocks: 0, counter_hits: 0, started: None, carry: 0, burst_heard: Default::default() });
     }
     g.as_mut()
 }
@@ -816,7 +822,11 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         // the burst damage until the player stops spamming it").
         let mut carry = 0;
         if rt.magic.busy(SORA) {
-            carry = rt.magic.attacks.iter().filter(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3)).map(|a| a.reflect_count as u32).max().unwrap_or(0).max(rt.carry);
+            // Every hit blocked along the chain so far (`rt.blocks` counts this cast's and what it
+            // carried; the barrier's count, if one still stands): also when the counter had
+            // already begun (the user: "delay the burst until the last reflect, all attacks and
+            // triggers should burst at the last reflect").
+            carry = rt.magic.attacks.iter().filter(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3)).map(|a| a.reflect_count as u32).max().unwrap_or(0).max(rt.carry).max(rt.blocks);
             rt.magic.cancel(SORA);
             for h in rt.fx.values().filter_map(|v| v.0) {
                 super::kh2fx::spell_kill(h);
@@ -936,6 +946,17 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             continue;
         }
         attacks.push(combat::SpellAttack { key: a.id | SPELL_KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes });
+    }
+    // The burst (the counter's last attack, ATKP 667 / 668 / 669 by tier): its shatter sound,
+    // element 7's (173 at every level; the script starts no element for the burst, and element
+    // 11's 174 plays nothing in the PC files; the user: no burst sound). Ours: KH2's own hit
+    // effect for it (`trap_attack_set_pax`) is not modelled.
+    for a in rt.magic.attacks.iter().filter(|a| !a.freed && a.owner == SORA && BURSTS.contains(&a.atk)) {
+        if rt.burst_heard.insert(a.key) {
+            let level = rt.levels.get(a.spell).copied().unwrap_or(1);
+            super::kh2sound::spell_element(level, BURST_ELEMENT);
+            note(format!("Reflect burst (ATKP {}): element {BURST_ELEMENT}'s sound", a.atk));
+        }
     }
     if !attacks.is_empty() {
         let hits = strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned());

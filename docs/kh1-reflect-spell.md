@@ -178,3 +178,8 @@ its barrier would drop (`HOLD_AT`) while Sora's combo still has steps left
 counter waits. A Reflect cast later in the combo takes its blocked hits over (the spam chain of
 s175) and waits in its turn; once the combo is over (its last step, 60 frames on the ground with
 no swing, a landing, a hit taken; at most 6 s) the waiting one goes on and bursts for them all.
+
+s182: the chain's carry now really reaches the last Reflect (`Magic::cancel` frees the cancelled
+cast's attacks at once; before, the carry was counted on the old barrier and the chain never
+burst), and the burst (ATKP 667 / 668 / 669) plays element 7's sound (173), inferred as the
+shatter: the script starts no element for it and element 11's 174 plays nothing on PC.
