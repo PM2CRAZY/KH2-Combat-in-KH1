@@ -1767,3 +1767,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   now starts row 11's motion (`motion::GUARD_PRESS` 173 as a fallback); a block still plays 42.
 - `Output::weapon_trail` (the motion's trail window): KH1's Keyblade trail shows during the
   guard's swish; 173 joins the KH2 sound moves (its swish).
+
+### 2026-10-18: Stage 159 (no KH1 high jump after its moves)
+- The user (a video): whenever KH1 plays one of its animations, a jump on the first frame Sora
+  can act is KH1's high jump. The log: an air spell, KH1 lands him (state 0, can act false),
+  then state 1 with can act true at the floor (KH1 jumped), state 2, and "KH1's move ended in
+  its fall (290 above the floor)". During `HANDOFF` the control hook left KH1 its jump / Square
+  bits (KH1's own moves use them: jumping off a bar). Now once KH1's move has him standing and
+  free (state 0 and KH1's can-act test, `kh1_move_done`) they are KH2's: stripped from KH1, and
+  a jump press then ends the handoff with KH2 jumping at once (`JUMP_NOW` clears the held flag).

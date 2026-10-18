@@ -262,7 +262,7 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
     // first frame after a pause or an examine, with two pads (Steam Input), or with the swap.
     let strip = actor > 0x10000
         && actor == rd::<u64>(base + PARTY_RVA) as usize
-        && !HANDOFF.load(Ordering::Relaxed)
+        && (!HANDOFF.load(Ordering::Relaxed) || kh1_move_done(base, actor))
         && kh1_borrows(actor)
         && !super::shortcuts::menu_on_l1(RAW_BUTTONS.load(Ordering::Relaxed) as u16)
         && !super::shortcuts::submenu_open();
@@ -282,6 +282,17 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
         }
     }
 }
+
+/// One of KH1's moves has him standing again and free (its ground state, KH1's own can-act
+/// test): the jump button is KH2's from here (the user: after a spell, a jump on the first free
+/// frame was KH1's high jump, "resulting in many bugs").
+unsafe fn kh1_move_done(base: usize, actor: usize) -> bool {
+    let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    rd::<i32>(actor + 0x70) == 0 && can_act(actor) != 0
+}
+
+/// KH1's move ended on a jump press: KH2 jumps at once (the press isn't taken as held over).
+static JUMP_NOW: AtomicBool = AtomicBool::new(false);
 
 /// KH1 shows Sora standing, walking or running: his motion's slot, or for a motion we don't
 /// know (another moveset's), the last one KH1 asked for.
@@ -498,7 +509,9 @@ unsafe fn takeover(actor: usize) -> bool {
         let command = FROM_COMMAND.load(Ordering::Relaxed);
         let fall_state = if command { matches!(state, 1 | 2) && done } else { state == 2 || state == 1 && done };
         let falling = fall_state && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
-        if frames >= 10 && (falling || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
+        let jump = buttons() & jump_button() != 0 && kh1_move_done(base, actor);
+        if frames >= 10 && (falling || jump || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
+            JUMP_NOW.store(jump, Ordering::Relaxed);
             if falling {
                 // (A frame missed would read as a jump in speed: kept to what a fall can be.)
                 *HANDOFF_FALL.lock().unwrap() = vel.map(|(h, up)| {
@@ -644,6 +657,9 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     if ROLL_NOW.swap(false, Ordering::Relaxed) {
         d.held.1 = false;
+    }
+    if JUMP_NOW.swap(false, Ordering::Relaxed) {
+        d.held.0 = false;
     }
     d.growth.update(base, &mut d.character);
     // Glide on Square, as KH1's Superglide was (the user), or on the jump button (ini `glide`).
