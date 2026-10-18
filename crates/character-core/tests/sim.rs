@@ -537,3 +537,53 @@ fn jump_out_of_the_landing_hold() {
     let o = w.step(Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
     assert_eq!(o.state, StateName::Jump, "jumped out of the landing");
 }
+
+/// Horizontal Slash (row 38, ability 99) stands for one swing of an air combo: mashing Square
+/// in the air takes it only while the combo has swings left before its finisher, so it can't
+/// be spammed forever (it hops, so before Sora could stay up for good, the user).
+#[test]
+fn horizontal_slash_is_part_of_the_air_combo() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(193, attack_clip(193, 30, (5, 10), 5, 15));
+    let mut slash = row(38, 193, false, true);
+    slash.kind = 0;
+    slash.ability = 99;
+    slash.jump = 14.0;
+    ch.moveset.combo_rows.push(slash);
+    ch.abilities.equipped.push(99);
+    let mut w = World::new(ch);
+    w.run(3, Pad { jump: true, ..IDLE });
+    w.run(12, IDLE);
+    // One air swing, then nothing but Square.
+    let mut motions = Vec::new();
+    for f in 0..400 {
+        let o = w.step(Pad { attack: f < 2, action: f >= 2 && f % 2 == 0, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            motions.push(o.motion);
+        }
+    }
+    let slashes = motions.iter().filter(|&&m| m == 193).count();
+    assert!(slashes >= 1, "Horizontal Slash never came out: {motions:?}");
+    let max = w.ch.combo_rules.air_base as usize;
+    assert!(slashes <= max - 1, "{slashes} Horizontal Slashes in a combo of {max}: {motions:?}");
+}
+
+/// An air cast that falls as it plays (`air_magic_falls`, as Final Form's air Reflect) ends on
+/// touching the ground in KH2's landing, not standing in the rest of the cast (the user).
+#[test]
+fn falling_air_cast_lands_into_the_landing() {
+    let mut ch = sora();
+    let mut cast = Clip::plain(73, 200);
+    cast.windows.push(Window { start: 0, end: Some(190), kind: WindowKind::NoGravity });
+    ch.moveset.clips.insert(73, cast);
+    ch.air_magic_falls = true;
+    let mut w = World::new(ch);
+    w.run(3, Pad { jump: true, ..IDLE });
+    w.run(12, IDLE);
+    assert!(w.pos[1] > 50.0);
+    assert_eq!(w.ch.cast(CastMotions { ground: 71, finisher: Some(72), air: 73 }), Some(73));
+    let outs = w.run(150, IDLE);
+    let landed = outs.iter().position(|o| o.state == StateName::Land).expect("never landed");
+    assert!(outs[..landed].iter().all(|o| o.motion == 73), "left the cast before landing");
+    assert!(w.pos[1] <= 0.0);
+}

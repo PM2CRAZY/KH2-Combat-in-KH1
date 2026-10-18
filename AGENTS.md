@@ -1951,3 +1951,18 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 - Reflect's finisher was already there (KH2's rule, `Character::cast`: cast in a combo-magic
   window when the next swing would be the combo's last, MAGC finisher motion 72, sub + 1);
   the user's logs only show casts from free movement (shortcuts), where it can't happen.
+
+### 2026-10-18: Stage 177 (Horizontal Slash in the combo; air casts land into KH2's landing)
+- The user: "Horizontal slash can be spammed forever, this is bad". A forced Square move row
+  (Upper Slash 12, Horizontal Slash 38) only checked the row's own conditions, and a normal
+  row has no count check, so Square kept taking Horizontal Slash (a jump row: each one hops,
+  so Sora stayed up). Now a non-finisher Square move needs `count < max` after the count
+  update: it is one swing of the combo, and at the end Attack's finisher is next.
+  Test `horizontal_slash_is_part_of_the_air_combo` (24 slashes before, 1 in a combo of 3).
+- The user: Final Form's air Reflect falls and lands during its animation; mimic it for base
+  Sora and end in KH2's landing. The fall was s174 (`air_magic_falls` skips motion 73's
+  no-gravity range); now a falling air cast touching the ground goes into the Land action
+  (with its 14-frame hold, jump-cancelable) instead of standing out the rest of the cast.
+  The barrier and its counter don't watch the caster's motion (kh2-magic test with the cast
+  motion ending at frame 8: same barrier and counters), so landing early keeps Reflect up.
+  Test `falling_air_cast_lands_into_the_landing`.

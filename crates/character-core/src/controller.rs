@@ -1032,7 +1032,16 @@ impl Character {
         // that can't be used is no attack at all; it never falls back to the ordinary combo (the
         // user: Sora could attack while knocked into the air).
         let wanted = self.forced_row.take();
-        let forced = wanted.and_then(|id| self.moveset.combo_rows.iter().find(|r| r.id == id)).filter(|r| condition(r, &sit));
+        // A Square move that isn't a finisher (Upper Slash, Horizontal Slash) stands for one
+        // swing of the combo, so it is only there while the combo has a swing left before its
+        // finisher; at the end the press does nothing and the Attack button's finisher is next.
+        // (It was always there: Horizontal Slash hops, so Sora could spam it forever in the air,
+        // the user.)
+        let square = SQUARE_MOVES.iter().any(|m| Some(m.0) == wanted);
+        let forced = wanted
+            .and_then(|id| self.moveset.combo_rows.iter().find(|r| r.id == id))
+            .filter(|r| condition(r, &sit))
+            .filter(|r| !square || r.is_finisher() || sit.count < sit.max_count);
         let picked = match (wanted, forced) {
             (_, Some(r)) => Some(Choice { row: r, target: sit.primary }),
             (Some(_), None) => None,
@@ -1285,6 +1294,16 @@ impl Character {
                     }
                 }
                 ActionKind::Hurt => {
+                    self.vel_h = [0.0; 2];
+                    self.mode = Mode::Free;
+                    if land {
+                        self.start_action(ActionKind::Land, motion::LAND);
+                    }
+                }
+                // An air cast falling as it plays (`air_magic_falls`) ends on the ground in KH2's
+                // landing, as Final Form's air Reflect lands (the user). The spell itself is out
+                // by then (released by the cast motion's own event).
+                ActionKind::Magic if self.air_magic_falls => {
                     self.vel_h = [0.0; 2];
                     self.mode = Mode::Free;
                     if land {

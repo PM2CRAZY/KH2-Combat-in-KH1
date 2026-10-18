@@ -279,6 +279,11 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
    attack while the guard's repel (motion 42) plays takes row 39, Counterguard, if it passes
    its conditions. Retaliating Slash (row 40) is checked in a separate routine
    (`0x1403A8D00`, row id in a register); ours: attack while launched.
+   The Square moves (Finishing Leap 37, Upper Slash 12, Horizontal Slash 38) are taken by
+   Square in a combo window. **Ours (s177):** a Square move that isn't a finisher stands for
+   one swing of the combo, so it is only there while `count < max` after the count update;
+   at the combo's end Square does nothing and Attack's finisher is next. Without this,
+   Horizontal Slash (a jump row that hops 14..114) could be pressed forever in the air.
 
 Combo length:
 - Ground and air are 3 each.
