@@ -38,6 +38,8 @@ struct Loaded {
     elements: HashMap<i16, Sound>,
     sounds: HashMap<u32, Sound>,
     voices: HashMap<i16, Vec<Sound>>,
+    /// A spell file's effect elements' sounds (`reflect`: REFLECT_1.mag's PAX).
+    spell_elements: HashMap<u16, Sound>,
 }
 
 static LOADED: Mutex<Option<Loaded>> = Mutex::new(None);
@@ -86,7 +88,7 @@ pub fn start() {
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         };
-        let events: Vec<character_core::EventKind> = kh2
+        let mut events: Vec<character_core::EventKind> = kh2
             .character
             .moveset
             .clips
@@ -94,9 +96,23 @@ pub fn start() {
             .filter(|(m, _)| allowed(**m))
             .flat_map(|(_, c)| c.events.iter().map(|e| e.kind))
             .collect();
-        match load(&events) {
+        // Reflect (the user: its sounds): its cast voices (MAGC, played by KH2's cast code, not a
+        // motion trigger; only with `kh2_voice`) and its effect elements' sounds.
+        let mut spell: Vec<(u16, i32)> = Vec::new();
+        if super::settings::get().reflect {
+            events.extend(super::reflect::cast_voices(kh2).into_iter().map(character_core::EventKind::Voice));
+            spell = super::reflect::element_sounds();
+        }
+        match load(&events, &spell) {
             Ok(map) => {
-                log(&format!("KH2 sounds: {} effect, {} other, {} voices loaded in {:.1} s", map.elements.len(), map.sounds.len(), map.voices.len(), t.elapsed().as_secs_f32()));
+                log(&format!(
+                    "KH2 sounds: {} effect, {} other, {} voices, {} of Reflect's loaded in {:.1} s",
+                    map.elements.len(),
+                    map.sounds.len(),
+                    map.voices.len(),
+                    map.spell_elements.len(),
+                    t.elapsed().as_secs_f32()
+                ));
                 if let Ok(mut g) = LOADED.lock() {
                     *g = Some(map);
                 }
@@ -106,7 +122,7 @@ pub fn start() {
     });
 }
 
-fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
+fn load(events: &[character_core::EventKind], spell: &[(u16, i32)]) -> Result<Loaded, String> {
     use character_core::EventKind;
     let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
     let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
@@ -120,6 +136,7 @@ fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
     enum Want {
         Element(i16),
         Sound(u32),
+        Spell(u16),
     }
     let mut wants: Vec<(u32, Want)> = Vec::new();
     let mut voice_ids: Vec<i16> = Vec::new();
@@ -136,6 +153,11 @@ fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
             // (The user: KH1's voice, not KH2's, unless `kh2_voice = on`.)
             EventKind::Voice(v) if v >= 0 && !voice_ids.contains(&v) && super::settings::get().kh2_voice => voice_ids.push(v),
             _ => {}
+        }
+    }
+    for &(el, sound) in spell {
+        if sound >= 0 && !wants.iter().any(|(_, w)| matches!(w, Want::Spell(e) if *e == el)) {
+            wants.push((sound as u32, Want::Spell(el)));
         }
     }
     let mut out = Loaded::default();
@@ -163,6 +185,7 @@ fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
                 let of = match want {
                     Want::Element(el) => format!(" (effect element {el})"),
                     Want::Sound(_) => String::new(),
+                    Want::Spell(el) => format!(" (Reflect's element {el})"),
                 };
                 log(&format!("KH2 sound {id}{of}: {} Hz, {} ch, {:.2} s, volume {:.2}", p.rate, p.channels, p.samples.len() as f32 / p.channels.max(1) as f32 / p.rate.max(1) as f32, p.volume));
                 let snd = decode(p);
@@ -172,6 +195,9 @@ fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
                     }
                     Want::Sound(s) => {
                         out.sounds.insert(s, snd);
+                    }
+                    Want::Spell(el) => {
+                        out.spell_elements.insert(el, snd);
                     }
                 }
             }
@@ -241,6 +267,31 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
             }
         }
         _ => {}
+    }
+}
+
+/// The spell's effect element `el` started (`reflect`): its sound, as Sora's elements' (the
+/// game's effects and volume sliders).
+pub unsafe fn spell_element(el: u16) {
+    if super::settings::get().kh2_sounds.is_none() {
+        return;
+    }
+    let Ok(g) = LOADED.try_lock() else { return };
+    if let Some(s) = g.as_ref().and_then(|l| l.spell_elements.get(&el)) {
+        play(s, Channel::Effects);
+    }
+}
+
+/// Sora's battle voice `v` (a spell's cast voice, `reflect`), when KH2's voices are on.
+pub unsafe fn voice(v: i16) {
+    if !super::settings::get().kh2_voice {
+        return;
+    }
+    let Ok(g) = LOADED.try_lock() else { return };
+    if let Some(c) = g.as_ref().and_then(|l| l.voices.get(&v)) {
+        static PICK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(3);
+        let n = PICK.fetch_add(7, std::sync::atomic::Ordering::Relaxed) as usize;
+        play(&c[n % c.len()], Channel::Voice);
     }
 }
 

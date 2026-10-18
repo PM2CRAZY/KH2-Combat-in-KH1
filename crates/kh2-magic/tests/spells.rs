@@ -167,3 +167,58 @@ fn wisdom_fires_a_homing_shot() {
     let (a, b) = (path[1].3, path[path.len() - 1].3);
     assert!(b.z > a.z + 300.0, "{a} -> {b}");
 }
+
+/// Reflect: the barrier (ATKP 573, kind reflect) stops attacks; each one
+/// counted (`attack_get_reflect_count`) makes the counter fire after it.
+#[test]
+fn reflect_counters_what_it_blocked() {
+    let d = dir();
+    let (Ok(system), Ok(bytes)) = (std::fs::read(d.join("03system.bin")), std::fs::read(d.join("REFLECT_1.mag"))) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    for blocks in [0u8, 1, 3] {
+        let mut magic = Magic::new();
+        let spell = magic.add_spell(SpellFile::parse("REFLECT_1.mag", &bytes).unwrap());
+        let mut w = Fake { frame: 0, release_at: 0, motion_end: 60, seed: 1 };
+        magic.cast(spell, SORA, 5, 0, pref.magi.get(0).unwrap(), &mut w).unwrap();
+        assert!(magic.release(SORA, &mut w));
+        // (frame, atk, radius, y) of each attack's first frame placed, and every counter frame.
+        let mut seen: Vec<(u32, u16, f32, f32)> = Vec::new();
+        let mut effects = std::collections::BTreeSet::new();
+        let mut barrier_frames = 0;
+        for f in 1..200 {
+            w.frame = f;
+            for e in magic.update(&mut w) {
+                if let Event::Error(s) = e {
+                    panic!("{s}");
+                }
+            }
+            for e in magic.effects.iter().filter(|e| e.alive()) {
+                effects.insert((e.element.id, e.element.bone, e.element.sound));
+            }
+            if f == 5 {
+                if let Some(a) = magic.attacks.iter_mut().find(|a| a.atk == 573 && !a.freed) {
+                    a.reflect_count = blocks;
+                }
+            }
+            for a in magic.attacks.iter().filter(|a| !a.freed && a.pos.is_some() && a.radius > 0.0) {
+                if a.atk == 573 {
+                    barrier_frames += 1;
+                    if barrier_frames > 1 {
+                        continue;
+                    }
+                }
+                seen.push((f, a.atk, a.radius, a.pos.unwrap().y));
+            }
+            if magic.casts.is_empty() {
+                break;
+            }
+        }
+        let counters: Vec<_> = seen.iter().filter(|s| s.1 != 573).collect();
+        eprintln!("{blocks} blocked: barrier {barrier_frames} frames from {:?}, counters {counters:?}, effects (id, bone, sound) {effects:?}", seen.first());
+        assert!(barrier_frames > 10);
+        assert_eq!(blocks == 0, counters.is_empty(), "{counters:?}");
+    }
+}

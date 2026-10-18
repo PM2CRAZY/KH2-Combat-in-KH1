@@ -257,6 +257,7 @@ unsafe extern "system" fn physics(actor: usize) {
     // KH2 effect froze the effect where it was).
     if actor > 0x10000 && actor == rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize {
         combat::trail_off(actor);
+        super::reflect::kh1_frame();
         super::kh2fx::tick(super::kh2fx::NO_MOTION);
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
@@ -909,6 +910,8 @@ unsafe fn takeover(actor: usize) -> bool {
     let auto_aim = super::settings::get().auto_aim;
     d.character.set_auto_target(auto_aim);
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
+    // A Reflect chosen from the Magic menu: KH2's cast as soon as its move allows (`reflect`).
+    super::reflect::before_step(actor, &mut d.character);
     let mut out = d.character.step(&input, &env);
     // Out of flight for a combo: he stays up through it (the user: Sora should remain in
     // flight throughout the combo); KH2's aerial attacks sink between hits, so no sinking while
@@ -1164,6 +1167,8 @@ unsafe fn takeover(actor: usize) -> bool {
         FLEW.store(false, Ordering::Relaxed);
     }
     d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
+    // Reflect's script: its cast, barrier, counter and effects.
+    super::reflect::after_step(actor, &out, d.character.airborne(), &mut d.strikes, &kh2.battle, lock);
     // KH2's own sounds for the effect elements this frame starts.
     for e in &out.events {
         super::kh2sound::event(out.motion, *e);

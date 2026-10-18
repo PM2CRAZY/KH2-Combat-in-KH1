@@ -178,7 +178,10 @@ coloured by element.
 | Thundaga | **Bolt:** a thread waits, then strikes at the target with a thin column (ATKP 249) and a burst (ATKP 250, 375%). The finisher and Drive Forms add more bolts. |
 | Curaga | **Heal:** heals every party member within `magi`[14] of the target body centre (Sora when he has no target). ATKP 708 on the centre object, 709 on others; 600% of Magic. |
 | Magnega | **Pull:** a sphere above and in front catches enemies into an orbit (reaction 5, `combat-model.md`). The spell lasts about 230 frames. |
-| Reflega | **Barrier:** ATKP 573 (kind reflect) for its 27-frame effect. Each enemy attack it stops counts. **Counter:** afterwards it fires ATKP 574 every 6 frames, then a 667 burst (550%). |
+| Reflega | **Barrier:** ATKP 573 (kind reflect) for its 27-frame effect. Each enemy attack it stops counts. **Counter:** afterwards it fires ATKP 574 every 6 frames, then a 667 burst (550%). Level 1 (REFLECT_1): the counter re-hits every 10 frames, from frame 30 to 57, the burst 58..63. |
+
+Reflect in KH1 (the mod's Magic-menu Reflect, level 1, run from this same script): see
+`kh1-reflect-spell.md`.
 
 ## Still open
 

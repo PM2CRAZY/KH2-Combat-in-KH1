@@ -210,6 +210,11 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // Sonic Blade and the like came out mid-jump (the user). Refused as KH1 refuses (magic of
     // every kind stays: jump casts are wanted).
     let full = rd::<u32>(base + COMMAND_RVA);
+    // Our Reflect (magic, spell byte 7, which KH1 has no spell for): KH2's, never KH1's.
+    if actor == sora && kind == 2 && ((full >> 8) & 0xFF) as u8 == super::reflect::SPELL {
+        super::reflect::chosen(actor);
+        return;
+    }
     let ours = actor == sora && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed);
     let air = takeover::kh2_airborne();
     if ours && !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && (air || rd::<i32>(actor + 0x70) == 2) {
@@ -1227,6 +1232,78 @@ impl Strikes {
         self.live = now;
         let alive: HashSet<usize> = self.bodies.iter().map(|b| b.actor).collect();
         self.records.retain(|a, _| alive.contains(a));
+    }
+}
+
+/// A spell's attack this frame (`reflect`): its hit-record key and group, ATKP id and sub, and
+/// its shapes (KH2 y-up, swept as the game sweeps spell attacks).
+pub struct SpellAttack {
+    pub key: u64,
+    pub group: i64,
+    pub atk: u16,
+    pub sub: u8,
+    pub shapes: Vec<Shape>,
+}
+
+impl Strikes {
+    /// This frame's enemies (from `look`): id (as KH2's targets have it), feet and aim point (KH2
+    /// y-up), for the spell scripts.
+    pub unsafe fn targets(&self) -> Vec<(u32, [f32; 3], [f32; 3])> {
+        self.bodies
+            .iter()
+            .map(|b| {
+                let p = rd::<[f32; 3]>(b.actor + 0x10);
+                (b.target.id, [p[0], -p[1], p[2]], b.target.pos)
+            })
+            .collect()
+    }
+
+    /// A spell's attacks against the enemies, through the same hit records as Sora's swings
+    /// (once per attack until its row's re-hit interval runs out, rows by hits in a row from its
+    /// group), each hit landed with KH1's contact code like a swing's: Sora's ground swing row,
+    /// or his finisher's for a row that knocks away (KH2 reaction category 4, or a hit-back of
+    /// 100 or more; ours). `row` gives an ATKP row by (id, sub, hit count). Returns (ATKP id,
+    /// actor, damage) for each landed hit.
+    pub unsafe fn spell_strike(&mut self, sora: usize, attacks: &[SpellAttack], row: &dyn Fn(u16, u8, u8) -> Option<kh2_formats::battle::Atkp>) -> Vec<(u16, usize, Option<u32>)> {
+        if !self.rows_tried {
+            self.rows_tried = true;
+            self.rows = sora_rows(sora);
+        }
+        let Some(rows) = self.rows else { return Vec::new() };
+        let mut out = Vec::new();
+        for a in attacks {
+            let Some(first) = row(a.atk, a.sub, 0) else { continue };
+            for b in &self.bodies {
+                let rec = self.records.entry(b.actor).or_default();
+                if rec.has_hit(a.key) {
+                    continue;
+                }
+                let targets: Vec<Shape> = b.parts.iter().map(|p| p.shape).collect();
+                let Some((ai, ti)) = first_overlap(&a.shapes, &targets) else { continue };
+                let adm = rec.admit(a.group, false, false);
+                let r = row(a.atk, a.sub, adm.count.min(255) as u8).unwrap_or(first.clone());
+                rec.mark(a.key, r.interval);
+                if !adm.effective {
+                    continue;
+                }
+                let k1 = if r.knockback_1 == i16::MAX { 0 } else { r.knockback_1 };
+                let knock = character_core::reaction::category(r.enemy_reaction) == 4 || k1 >= 100;
+                let kh1 = rows[knock as usize];
+                MAGIC.store(r.stat_source == 1, Ordering::Relaxed);
+                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power);
+                MAGIC.store(false, Ordering::Relaxed);
+                note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
+                out.push((a.atk, b.actor, dealt));
+            }
+        }
+        out
+    }
+
+    /// A spell attack ended: whoever it hit may be hit by a new one.
+    pub fn spell_forget(&mut self, key: u64) {
+        for r in self.records.values_mut() {
+            r.forget(key);
+        }
     }
 }
 

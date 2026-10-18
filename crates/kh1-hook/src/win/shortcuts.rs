@@ -57,8 +57,8 @@ fn set_prologue() -> [u8; 7] {
 }
 const LEARN_RVA: Rva = Rva(0x2830F0);
 const LEARN_PROLOGUE: [u8; 6] = [0x48, 0x63, 0xC1, 0x44, 0x8B, 0xD2];
-const FILL_RVA: Rva = Rva(0x292330);
-const FILL_PROLOGUE: [u8; 12] = [0x4C, 0x8B, 0xDC, 0x41, 0x57, 0x48, 0x81, 0xEC, 0xC0, 0x00, 0x00, 0x00];
+pub(super) const FILL_RVA: Rva = Rva(0x292330);
+pub(super) const FILL_PROLOGUE: [u8; 12] = [0x4C, 0x8B, 0xDC, 0x41, 0x57, 0x48, 0x81, 0xEC, 0xC0, 0x00, 0x00, 0x00];
 const STEP_RVA: Rva = Rva(0x291660);
 const STEP_PROLOGUE: [u8; 13] = [0x40, 0x53, 0x55, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20];
 
@@ -102,6 +102,12 @@ static ORIG_GET: AtomicUsize = AtomicUsize::new(0);
 static ORIG_SET: AtomicUsize = AtomicUsize::new(0);
 static ORIG_LEARN: AtomicUsize = AtomicUsize::new(0);
 static ORIG_FILL: AtomicUsize = AtomicUsize::new(0);
+/// Our fill hook is in (`reflect` adds its entry from it; else it hooks the fill itself).
+static FILL_HOOKED: AtomicBool = AtomicBool::new(false);
+
+pub fn fill_hooked() -> bool {
+    FILL_HOOKED.load(Ordering::Acquire)
+}
 static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
 static LABEL: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 
@@ -135,9 +141,11 @@ pub unsafe fn install() {
         return;
     }
     hook::install(base + LEARN_RVA, &LEARN_PROLOGUE, learn as *const () as usize, &ORIG_LEARN, "magic learned");
-    if hook::install(base + FILL_RVA, &FILL_PROLOGUE, fill as *const () as usize, &ORIG_FILL, "battle menus fill").is_none()
-        || hook::install(base + STEP_RVA, &STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step").is_none()
-    {
+    if hook::install(base + FILL_RVA, &FILL_PROLOGUE, fill as *const () as usize, &ORIG_FILL, "battle menus fill").is_none() {
+        return;
+    }
+    FILL_HOOKED.store(true, Ordering::Release);
+    if hook::install(base + STEP_RVA, &STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step").is_none() {
         return;
     }
     ON.store(true, Ordering::Release);
@@ -264,6 +272,11 @@ unsafe extern "system" fn learn(member: i32, spell: u32) {
 unsafe extern "system" fn fill(a: usize, b: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_FILL.load(Ordering::Acquire));
     f(a, b);
+    // Reflect's entry in the magic list first (the fourth shortcut reads that list).
+    super::reflect::magic_menu(a, b);
+    if !ON.load(Ordering::Acquire) {
+        return;
+    }
     let base = base();
     let s = save();
     if s < 0x10000 || rd::<u8>(s + FLAGS_OFF) & 9 != 0 || rd::<i32>(base + MAGIC_COUNT_RVA) <= 0 {
