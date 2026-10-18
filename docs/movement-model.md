@@ -87,7 +87,12 @@ All **Checked (exe)** unless noted:
   a ledge doesn't allow it. Once per airtime. It starts a fresh jump arc of
   `air_dodge_height` with horizontal speed `air_dodge_speed` along the stick; with the stick
   neutral it goes straight up (s178, the user: KH2's doesn't push forward unless tilted; before,
-  it went along the facing).
+  it went along the facing). A dodge roll or Quick Run that goes off a ledge gives the fall its
+  Aerial Dodge too (s183, the user's spec; walking off still doesn't).
+- **Air control (ours, s183):** with the stick held, the air speed steers toward the stick's
+  run speed (`air_keep`) but fades no faster than with the stick let go (`air_drag`), unless
+  pushed against (the user: an Aerial Dodge's speed, up to 36 a frame, was gone in a few frames
+  as soon as a direction was pressed).
 - **Quick Run.** Ground only.
   - **Start:** `air_slide_speed` along the stick, with no gravity, invulnerable for
     `air_slide_star_time`.
@@ -291,6 +296,22 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
    one swing of the combo, so it is only there while `count < max` after the count update;
    at the combo's end Square does nothing and Attack's finisher is next. Without this,
    Horizontal Slash (a jump row that hops 14..114) could be pressed forever in the air.
+
+**Magic in the combo string (ours, s183, the user's spec):** a spell takes one slot as a
+swing does (`Character::spell_slot`), KH2's casts (`cast`) and KH1's spells (`magic_step` at the
+hand-off) alike:
+- with no combo going it is a new combo's first step (count 1);
+- in a going combo (a swing or spell playing, or one ended within 60 frames on the ground /
+  before landing) it is the next step, counted as a swing is; on the combo's last step it is
+  its finisher (KH2's finisher cast motion, 72 for Reflect);
+- during a finisher (a swing's finisher window, or a finisher cast's) only as the next finisher
+  while Finishing Plus leaves one; after the combo's last finisher nothing new, swing or spell,
+  starts until that animation has ended (`can_cast`, `try_attack`, `cancel_allowed`);
+- a swing after a spell counts on from it (`hit` set), and after a spell that took a finisher
+  slot with another to come it is that finisher (`carry_finisher`).
+A finisher cast (`cast_finisher`) can't be cancelled (no jump, roll, swing or spell) except into
+the next finisher in its finisher window; when it ends the combo is over. The aerial Reflect's
+fall and landing (s174 / s177) are kept: landing ends it.
 
 Combo length:
 - Ground and air are 3 each.

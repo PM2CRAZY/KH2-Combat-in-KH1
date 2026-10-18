@@ -2052,3 +2052,51 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   (ATKP 667 / 668 / 669); KH2's own hit effect for it (`trap_attack_set_pax`) isn't modelled,
   and element 11's sound (174) plays nothing in the PC files. Element 7's sound (173, shared by
   all three levels, 1.9 s) now plays as the burst attack appears. Inferred, not traced.
+
+### 2026-10-18: Stage 183 (the user's magic-combo spec; aerial landing, submenu guard, roll-off dodge, dodge momentum)
+- The user's written spec (magic in the combo string, KH2 Reflect finisher rules, KH1 magic
+  integration, three combat bugs) and a bug report (Aerial Dodge momentum). In the controller
+  one rule for a spell's combo slot (`spell_slot` / `take_spell_slot`, `SpellSlot`), used by
+  KH2's casts (`cast`) and KH1's spells (`magic_step`): a new combo's first step, the next
+  step of a going one (its finisher on the last), or during a finisher only the next finisher
+  while Finishing Plus leaves one. `can_cast` follows it (a finisher's window only for the next
+  finisher; nothing after the last finisher until it ends). A finisher cast (`cast_finisher`)
+  takes no cancel except the next finisher in its finisher window, and ends the combo; a
+  finisher swing's finisher window cancels only while another finisher may follow.
+  `try_attack` takes a finisher cast (or a spell that left `carry_finisher`) as the finisher
+  playing. `ComboState` carries `finisher_next` over KH1's casts. Tests: `reflect_cannot_
+  follow_the_last_finisher`, `finishing_reflect_as_the_first_finisher_then_a_finisher`,
+  `finishing_reflect_twice_then_the_combo_ends_after_it`, `finishing_reflect_as_the_second_
+  finisher`, `reflect_mid_combo_is_one_step`, `kh1_spells_take_one_slot_each`.
+- KH1 spells in the hook: the slot is logged ("spell cast: combo slot n") and decides what may
+  cut the cast once the spell is out (`SPELL_SLOT`): an Attack or another spell (the combo's
+  next step) unless it was the combo's last slot; a jump or Square only out of a step on the
+  ground; never the stick (spec rule D). KH1 runs no command during its cast, so an Attack or
+  a spell chosen then is taken off its command record (`combat::take_chosen_command`; the user:
+  no attack out of magic); a spell waits in the queue (`MAGIC_AFTER`, `resume_command` keeps
+  it through the cast). After the cast the combo goes on from the spell's slot (not after the
+  last). A Reflect barrier waits for the combo only with something else in it (count ≥ 2).
+- Spec 3.1, aerial attacks to idle: the user's logs, "Attack 181 at 85 above the floor -> Run",
+  "Attack 192 -> Idle": landing mid air-attack went to Free; now KH2's Land. Test
+  `air_attack_lands_into_the_landing` (fails without).
+- Spec 3.2, guard from a submenu: with a command submenu open the pad mask and the control-step
+  strip left Square to KH1, whose own guard works in the air. Now only the L1 shortcut menu
+  leaves KH1 Square; a submenu keeps only its back-out (jump / cancel), Square is KH2's (its
+  guard ground-only).
+- Spec 3.3, no Aerial Dodge after rolling off a ledge: `air_dodge_ready` came only from a jump;
+  a roll or Quick Run taking off (`since_roll`) gives it too. Test
+  `aerial_dodge_after_rolling_off_a_ledge` (fails without).
+- "Aerial Dodge momentum is reset ... when the player presses a directional input": air control
+  steered toward the run speed (8) at `air_keep` 0.9 a tick, draining a dodge's 18..36 a frame
+  in a few frames, while letting go only applied `air_drag`. Now the stick steers without
+  fading the speed faster than `air_drag`, unless pushed against. Test
+  `dodge_momentum_kept_with_the_stick` (fails without).
+- Review (a separate session, against the spec) found three more, fixed: a finishing spell
+  could follow a finisher that missed (`spell_slot` and `can_cast` now need the finisher to
+  count, as `try_attack` does; test `no_finishing_reflect_after_a_missed_finisher`); an air
+  spell's combo (its finisher carry) survived the landing of Reflect's air fall (`land()` resets
+  the combo there, as for aerial swings; test `air_spell_combo_ends_on_landing`); a spell chosen
+  after KH1's cast had ended waited in the queue until the stick or a button moved
+  (`kh1_casting` now needs Sora still unable to act, and a spell waiting once the cast is done
+  ends the hand-off). Known limit: KH2's air cast motion (73) has no finisher window, so after
+  an air finishing Reflect the next finisher can't follow in the air.

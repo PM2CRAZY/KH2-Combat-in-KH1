@@ -678,3 +678,309 @@ fn spell_cast_from_the_swing_combo_window() {
     // The test swing (motion 100, 40 frames) opens its combo window at frame 20.
     assert!(opened.is_some_and(|f| f <= 22), "could cast only at {opened:?}");
 }
+
+// ---- Magic in the combo string (spec: magic combo logic) ----
+
+/// The test moveset with cast motions (71 ground, 72 the finisher cast, 73 air), a finisher
+/// swing with a finisher window, Combo Master (every swing counts) and `fp` Finishing Plus.
+fn magic_sora(fp: u8) -> Character {
+    let mut ch = sora();
+    let mut fin = attack_clip(110, 50, (12, 20), 3, 999);
+    fin.windows.retain(|w| !matches!(w.kind, WindowKind::Combo));
+    fin.windows.push(Window { start: 30, end: Some(45), kind: WindowKind::Finisher });
+    ch.moveset.clips.insert(110, fin);
+    let mut c71 = Clip::plain(71, 40);
+    c71.windows.push(Window { start: 20, end: None, kind: WindowKind::AllowReactionCommand });
+    c71.windows.push(Window { start: 25, end: Some(35), kind: WindowKind::ComboMagic });
+    ch.moveset.clips.insert(71, c71);
+    let mut c72 = Clip::plain(72, 50);
+    c72.windows.push(Window { start: 20, end: None, kind: WindowKind::AllowReactionCommand });
+    c72.windows.push(Window { start: 30, end: Some(45), kind: WindowKind::Finisher });
+    ch.moveset.clips.insert(72, c72);
+    ch.moveset.clips.insert(73, Clip::plain(73, 40));
+    ch.abilities.combo_master = true;
+    ch.abilities.finishing_plus = fp;
+    ch
+}
+
+const CAST: CastMotions = CastMotions { ground: 71, finisher: Some(72), air: 73 };
+
+/// Steps until `pred` holds (at most `n` frames), pressing Attack every other frame if `mash`.
+fn until(w: &mut World, n: usize, mash: bool, pred: impl Fn(&Output, &Character) -> bool) -> Option<Output> {
+    for f in 0..n {
+        let o = w.step(Pad { attack: mash && f % 2 == 0, ..IDLE });
+        if pred(&o, &w.ch) {
+            return Some(o);
+        }
+    }
+    None
+}
+
+/// Swing, then the next swing in its combo window, until `swings` swings have started; returns
+/// in the last one's combo / finisher window (`at` frames in).
+fn swings(w: &mut World, swings: usize, at: u32) -> Output {
+    let mut started = 0;
+    let mut last = None;
+    for f in 0..400 {
+        let o = w.step(Pad { attack: started < swings && f % 2 == 0, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            started += 1;
+        }
+        if started == swings && o.state == StateName::Attack && o.clip_frame >= at {
+            return o;
+        }
+        last = Some(o);
+    }
+    panic!("never got {swings} swings: last {:?}", last.map(|o| (o.state, o.motion)));
+}
+
+#[test]
+fn reflect_cannot_follow_the_last_finisher() {
+    // No Finishing Plus: swing, swing, finisher; in the finisher's window no spell.
+    let mut w = World::new(magic_sora(0));
+    let o = swings(&mut w, 3, 32);
+    assert_eq!(o.motion, 110);
+    assert!(!w.ch.can_cast(), "a spell after the combo's last finisher");
+    assert_eq!(w.ch.cast(CAST), None);
+    // Its animation over, a new combo may start, with a spell too (its first step).
+    until(&mut w, 60, false, |o, _| o.state != StateName::Attack).unwrap();
+    assert_eq!(w.ch.cast(CAST), Some(71));
+}
+
+#[test]
+fn finishing_reflect_as_the_first_finisher_then_a_finisher() {
+    // Case A: swing, swing, finishing Reflect, finisher.
+    let mut w = World::new(magic_sora(1));
+    swings(&mut w, 2, 21);
+    assert_eq!(w.ch.cast(CAST), Some(72), "the combo's last step is the finishing cast");
+    // Attack pressed early: nothing until its finisher window (frame 30).
+    for _ in 0..14 {
+        let o = w.step(Pad { attack: true, ..IDLE });
+        assert_eq!(o.motion, 72);
+        w.step(IDLE);
+    }
+    let o = until(&mut w, 30, true, |o, _| o.state == StateName::Attack).expect("no second finisher");
+    assert_eq!(o.motion, 110, "the swing after a finishing Reflect is the next finisher");
+    // That was the last finisher: no spell, no swing until it has ended.
+    let o = until(&mut w, 40, true, |o, _| o.clip_frame >= 32).unwrap();
+    assert_eq!(o.motion, 110);
+    assert!(!w.ch.can_cast());
+    let o = until(&mut w, 30, true, |o, _| o.clip_frame == 0 || o.state != StateName::Attack).unwrap();
+    assert!(!(o.state == StateName::Attack && o.motion == 110 && o.clip_frame == 0), "a third finisher");
+}
+
+#[test]
+fn finishing_reflect_twice_then_the_combo_ends_after_it() {
+    // Case B / C: swing, swing, finishing Reflect, finishing Reflect; locked to its end.
+    let mut w = World::new(magic_sora(1));
+    swings(&mut w, 2, 21);
+    assert_eq!(w.ch.cast(CAST), Some(72));
+    until(&mut w, 40, false, |o, _| o.clip_frame >= 31).unwrap();
+    assert_eq!(w.ch.cast(CAST), Some(72), "the second finisher, a finishing Reflect");
+    // Nothing interrupts it: Attack, a spell, jump, Square.
+    for f in 1..49 {
+        let o = w.step(Pad { attack: f % 2 == 0, jump: f % 7 == 0, action: f % 5 == 0, ..IDLE });
+        assert_eq!((o.state, o.motion), (StateName::Magic, 72), "frame {f}");
+        assert!(!w.ch.can_cast(), "frame {f}");
+    }
+    // Ended: a new combo from its first swing.
+    let o = until(&mut w, 20, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 100);
+}
+
+#[test]
+fn finishing_reflect_as_the_second_finisher() {
+    // Case D: swing, swing, finisher, finishing Reflect.
+    let mut w = World::new(magic_sora(1));
+    let o = swings(&mut w, 3, 31);
+    assert_eq!(o.motion, 110);
+    assert_eq!(w.ch.cast(CAST), Some(72), "Finishing Plus: a finishing Reflect after the first finisher");
+    for f in 1..49 {
+        let o = w.step(Pad { attack: f % 2 == 0, ..IDLE });
+        assert_eq!(o.motion, 72, "frame {f}");
+    }
+    assert_eq!(w.ch.cast(CAST), None, "still in it");
+}
+
+#[test]
+fn reflect_mid_combo_is_one_step() {
+    // Swing, Reflect, finisher (the combo of 3): magic takes one slot, none skipped.
+    let mut w = World::new(magic_sora(0));
+    swings(&mut w, 1, 21);
+    assert_eq!(w.ch.cast(CAST), Some(71));
+    let o = until(&mut w, 60, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 110);
+    // Reflect first: Reflect, swing, finisher.
+    let mut w = World::new(magic_sora(0));
+    assert_eq!(w.ch.cast(CAST), Some(71));
+    let o = until(&mut w, 60, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 100);
+    let o = until(&mut w, 60, true, |o, _| o.state == StateName::Attack && o.clip_frame == 0 && o.motion != 100).unwrap();
+    assert_eq!(o.motion, 110);
+    // Reflect into Reflect (its combo-magic window), then the finisher.
+    let mut w = World::new(magic_sora(0));
+    assert_eq!(w.ch.cast(CAST), Some(71));
+    until(&mut w, 40, false, |o, _| o.clip_frame >= 26).unwrap();
+    assert_eq!(w.ch.cast(CAST), Some(71), "second spell, second step");
+    let o = until(&mut w, 60, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 110);
+}
+
+/// KH1's spells (`magic_step` at the hand-off, `combo_state` / `set_combo_state` around it).
+fn kh1_spell(w: &mut World) -> Option<SpellSlot> {
+    let slot = w.ch.magic_step();
+    let c = w.ch.combo_state();
+    // The host's own cast plays; KH2's controller starts over after it, the combo carried.
+    let mut fresh = magic_sora(w.ch.abilities.finishing_plus);
+    if slot.is_some_and(|s| s != SpellSlot::Finisher { more: false }) {
+        fresh.set_combo_state(c);
+    }
+    w.ch = fresh;
+    slot
+}
+
+#[test]
+fn kh1_spells_take_one_slot_each() {
+    // Magic, swing, finisher.
+    let mut w = World::new(magic_sora(0));
+    assert_eq!(kh1_spell(&mut w), Some(SpellSlot::Step));
+    let o = until(&mut w, 10, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 100);
+    let o = until(&mut w, 60, true, |o, _| o.state == StateName::Attack && o.clip_frame == 0 && o.motion != 100).unwrap();
+    assert_eq!(o.motion, 110, "magic, swing, then the finisher: none skipped");
+    // Swing, magic, finisher.
+    let mut w = World::new(magic_sora(0));
+    swings(&mut w, 1, 21);
+    assert_eq!(kh1_spell(&mut w), Some(SpellSlot::Step));
+    let o = until(&mut w, 10, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 110);
+    // Magic, magic, finisher.
+    let mut w = World::new(magic_sora(0));
+    assert_eq!(kh1_spell(&mut w), Some(SpellSlot::Step));
+    assert_eq!(kh1_spell(&mut w), Some(SpellSlot::Step));
+    let o = until(&mut w, 10, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 110);
+    // Swing, magic, magic on the last slot: the combo ends with it.
+    let mut w = World::new(magic_sora(0));
+    swings(&mut w, 1, 21);
+    assert_eq!(kh1_spell(&mut w), Some(SpellSlot::Step));
+    assert_eq!(kh1_spell(&mut w), Some(SpellSlot::Finisher { more: false }));
+    let o = until(&mut w, 10, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 100, "a new combo after the last step's spell");
+    // With Finishing Plus the spell on the last slot is the first finisher: a finisher next.
+    let mut w = World::new(magic_sora(1));
+    swings(&mut w, 2, 21);
+    assert_eq!(kh1_spell(&mut w), Some(SpellSlot::Finisher { more: true }));
+    let o = until(&mut w, 10, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 110);
+    // ... and nothing after that one's window.
+    until(&mut w, 40, false, |o, _| o.clip_frame >= 32).unwrap();
+    assert!(!w.ch.can_cast());
+}
+
+#[test]
+fn air_attack_lands_into_the_landing() {
+    let mut w = World::new(magic_sora(0));
+    w.run(3, Pad { jump: true, ..IDLE });
+    w.run(10, IDLE);
+    let o = until(&mut w, 20, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 120);
+    // The ground comes up mid-swing (the log: "Attack 181 at 85 above the floor -> Run").
+    w.step(IDLE);
+    w.pos[1] = 0.5;
+    let outs: Vec<_> = (0..200).map(|_| w.step(IDLE)).collect();
+    let i = outs.iter().position(|o| o.state != StateName::Attack && o.state != StateName::Air).unwrap();
+    assert_eq!(outs[i].state, StateName::Land, "after an air attack: {:?}", outs[i].state);
+}
+
+#[test]
+fn aerial_dodge_after_rolling_off_a_ledge() {
+    let mut w = World::new(magic_sora(0));
+    w.step(Pad { action: true, stick: [0.0, 1.0], ..IDLE });
+    w.run(5, Pad { stick: [0.0, 1.0], ..IDLE });
+    // The floor drops away under the roll; the roll plays out into the fall.
+    w.pos[1] = 5000.0;
+    let o = until(&mut w, 80, false, |o, _| o.state == StateName::Air).expect("no fall after the roll");
+    assert!(w.ch.airborne(), "{:?}", o.state);
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_eq!(o.state, StateName::AerialDodge);
+}
+
+#[test]
+fn dodge_momentum_kept_with_the_stick() {
+    // KH2's Aerial Dodge MAX speed; the fall after it, the stick held forward then sideways.
+    let mut ch = magic_sora(0);
+    for g in &mut ch.growth {
+        g.air_dodge_speed = 36.0;
+    }
+    let speed_after = |stick_late: [f32; 2]| {
+        let mut w = World::new(ch.clone());
+        w.run(2, Pad { jump: true, ..IDLE });
+        w.run(10, IDLE);
+        w.step(Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
+        w.run(4, IDLE);
+        let mut d = [0.0; 3];
+        for _ in 0..10 {
+            d = w.step(Pad { stick: stick_late, ..IDLE }).displacement;
+        }
+        (d[0] * d[0] + d[2] * d[2]).sqrt()
+    };
+    let let_go = speed_after([0.0, 0.0]);
+    let forward = speed_after([0.0, 1.0]);
+    let sideways = speed_after([1.0, 0.0]);
+    let back = speed_after([0.0, -1.0]);
+    assert!(forward >= let_go * 0.99, "forward {forward} vs let go {let_go}");
+    assert!(sideways >= let_go * 0.99, "sideways {sideways} vs let go {let_go}");
+    assert!(back < let_go * 0.8, "pushing back brakes: {back} vs {let_go}");
+}
+
+#[test]
+fn no_finishing_reflect_after_a_missed_finisher() {
+    // No Combo Master: the finisher whiffs, so neither a swing nor a spell follows it.
+    let mut ch = magic_sora(1);
+    ch.abilities.combo_master = false;
+    let mut w = World::new(ch);
+    // Two connecting swings, then the finisher, which misses.
+    let mut started = 0;
+    for f in 0..400 {
+        let o = w.step(Pad { attack: started < 3 && f % 2 == 0, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            started += 1;
+        }
+        if !o.hitboxes.is_empty() && o.motion != 110 {
+            w.ch.register_hit();
+        }
+        if started == 3 && o.motion == 110 && o.clip_frame >= 32 {
+            break;
+        }
+    }
+    assert_eq!(w.ch.state_name(), StateName::Attack);
+    assert!(!w.ch.can_cast(), "a spell after a missed finisher");
+    assert_eq!(w.ch.cast(CAST), None);
+}
+
+#[test]
+fn air_spell_combo_ends_on_landing() {
+    // Air combo, an air spell on its last step (Finishing Plus leaving another), falling to the
+    // ground (Reflect's air fall): on the ground the next swing starts a new combo.
+    let mut ch = magic_sora(1);
+    ch.air_magic_falls = true;
+    let mut w = World::new(ch);
+    w.run(3, Pad { jump: true, ..IDLE });
+    w.run(10, IDLE);
+    let mut started = 0;
+    for f in 0..200 {
+        let o = w.step(Pad { attack: started < 2 && f % 2 == 0, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            started += 1;
+        }
+        if started == 2 && o.state == StateName::Attack && o.clip_frame >= 16 {
+            break;
+        }
+    }
+    assert_eq!(w.ch.cast(CAST), Some(73));
+    until(&mut w, 200, false, |o, _| o.state == StateName::Land).expect("never landed");
+    w.run(30, IDLE);
+    let o = until(&mut w, 20, true, |o, _| o.state == StateName::Attack).unwrap();
+    assert_eq!(o.motion, 100, "the air combo's finisher carried onto the ground");
+}

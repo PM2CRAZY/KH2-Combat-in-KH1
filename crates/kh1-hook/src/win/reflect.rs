@@ -877,7 +877,9 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             None => note(format!("Reflect: {blocks} hit(s) stopped with no barrier left to count them")),
         }
     }
-    let held = hold(rt, blocks, out.combo_live);
+    // (Waiting for the combo only with something else in it: a Reflect is now a combo's first
+    // step on its own, and alone it bursts as before.)
+    let held = hold(rt, blocks, out.combo_live && out.combo_count >= 2);
     let combo_wait = rt.hold.combo;
     for e in rt.magic.update(&mut world).into_iter().chain(rt.magic.take_events()) {
         match e {

@@ -135,6 +135,25 @@ pub enum StateName {
     Scripted,
 }
 
+/// The combo slot a spell took (`Character::spell_slot`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpellSlot {
+    /// A step of the combo (its first, or one before its last).
+    Step,
+    /// A finisher slot; `more`: Finishing Plus leaves another finisher after it.
+    Finisher { more: bool },
+}
+
+/// The combo carried over a move of the host's own (`Character::combo_state`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ComboState {
+    pub count: u8,
+    pub finishers: u8,
+    pub hit: bool,
+    /// The next step is the combo's next finisher.
+    pub finisher_next: bool,
+}
+
 /// A spell's cast motions (MAGC): ground, air, and the combo-finisher one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CastMotions {
@@ -387,6 +406,14 @@ pub struct Character {
     /// Frames since an attack last played (0 while one does): a spell cast this soon after a
     /// swing on the ground still comes mid-combo (`combo_live`).
     since_swing: u32,
+    /// The Magic action playing was cast as a finisher of the combo (`spell_slot`).
+    cast_finisher: bool,
+    /// The combo's next step is a finisher (a spell took a finisher slot and Finishing Plus
+    /// leaves another): `try_attack` takes it as the next finisher.
+    carry_finisher: bool,
+    /// Frames since a dodge roll or Quick Run last played (an aerial dodge in the fall off a
+    /// ledge it rolled from).
+    since_roll: u32,
     buffered_attack: bool,
     /// Hang point to move onto this frame (a ledge was just grabbed).
     snap: Option<[f32; 3]>,
@@ -501,6 +528,9 @@ impl Character {
             hit: false,
             combo_carry: false,
             since_swing: u32::MAX,
+            cast_finisher: false,
+            carry_finisher: false,
+            since_roll: u32::MAX,
             jump_held: false,
             jump_released: false,
             buffered_attack: false,
@@ -552,25 +582,31 @@ impl Character {
         true
     }
 
-    /// Whether a spell could be cast right now: free on the ground or in the
-    /// air, or inside an attack's or spell's "combo magic" window.
+    /// Whether a spell could be cast right now (spec: magic follows the combo's own rules):
+    /// - free (a new combo, or the step after one of a going combo), or landing;
+    /// - in a swing's combo window, when it would take its next swing (Sora's swings have no
+    ///   magic window of their own; s180, the user: "too much a pause before magic");
+    /// - in a finisher (a swing's or a spell's) only as the next finisher, with Finishing Plus
+    ///   leaving one (its finisher window): after the combo's last finisher nothing new starts
+    ///   until its animation has ended (the user: Reflect followed a finisher as an action of
+    ///   its own);
+    /// - in a spell's own "combo magic" window (a spell into a spell).
     pub fn can_cast(&self) -> bool {
         if self.ceiling_lock > 0.0 {
             return false;
         }
         match &self.mode {
-            Mode::Free => true,
+            Mode::Free => !(self.combo_carry && self.carry_finisher && self.finishers >= self.max_finishers()),
             Mode::Action(a) => {
                 let f = a.frame.saturating_sub(1);
-                let open = |k: &WindowKind| matches!(k, WindowKind::ComboMagic);
-                // A swing takes a spell when it would take its next swing (its combo or
-                // finisher window): Sora's swings have no magic window of their own, so a spell
-                // chosen mid-swing waited for the whole swing to end (the user: "too much a
-                // pause before magic gets cast in a combo").
-                let swing_open = |k: &WindowKind| matches!(k, WindowKind::ComboMagic | WindowKind::Combo | WindowKind::Finisher);
-                match a.kind {
-                    ActionKind::Attack { .. } => self.clip(a.motion).map_or(false, |c| c.has(f, swing_open)),
-                    ActionKind::Magic => self.clip(a.motion).map_or(false, |c| c.has(f, open)),
+                let has = |p: &dyn Fn(&WindowKind) -> bool| self.clip(a.motion).map_or(false, |c| c.has(f, |k| p(k)));
+                // (As a swing's next finisher: only after one that counts, `try_attack`.)
+                let next_finisher = self.finishers < self.max_finishers() && self.swing_counts() && has(&|k| matches!(k, WindowKind::Finisher));
+                match &a.kind {
+                    ActionKind::Attack { row } if row.is_finisher() => next_finisher,
+                    ActionKind::Attack { .. } => has(&|k| matches!(k, WindowKind::ComboMagic | WindowKind::Combo)),
+                    ActionKind::Magic if self.cast_finisher => next_finisher,
+                    ActionKind::Magic => has(&|k| matches!(k, WindowKind::ComboMagic)),
                     ActionKind::Land => true,
                     _ => false,
                 }
@@ -579,31 +615,77 @@ impl Character {
         }
     }
 
-    /// Starts a cast: the air motion when airborne, the finisher motion when
-    /// it lands on the combo's last hit, else the ground one. Returns the
-    /// motion started, or `None` if casting isn't possible now. The spell
-    /// itself is released by the motion's magic-cast event
-    /// (`EventKind::MagicCast` with the motion's own id).
+    /// The combo slot a spell cast now takes (spec: each spell is one step of the combo string,
+    /// under the same rules as a swing): `None` when it can't take one (after the combo's last
+    /// finisher). Doesn't change anything; `take_spell_slot` does.
+    fn spell_slot(&self) -> Option<(SpellSlot, u8, u8)> {
+        let max = self.max_count(self.airborne);
+        let more = |finishers: u8| finishers < self.max_finishers();
+        if self.finisher_now() {
+            // The next finisher of the combo (Finishing Plus), as a finisher swing's attack
+            // would be (`try_attack`'s finisher branch).
+            // (Only after a finisher that counts, as `try_attack` takes the next finisher swing.)
+            if self.finishers >= self.max_finishers() || !self.swing_counts() {
+                return None;
+            }
+            let (c, fin) = (self.count.saturating_add(1), self.finishers + 1);
+            return Some((SpellSlot::Finisher { more: more(fin) }, c, fin));
+        }
+        if self.combo_live() {
+            // The combo's next step; it counts as a swing would (a connected one, Combo Master,
+            // in the air), and on its last step it is the combo's (first) finisher.
+            let c = if self.swing_counts() { self.count.saturating_add(1) } else { self.count.max(1) };
+            let slot = if c >= max { SpellSlot::Finisher { more: more(self.finishers) } } else { SpellSlot::Step };
+            return Some((slot, c, self.finishers.max(1)));
+        }
+        // No combo going: the spell is a new combo's first step.
+        let slot = if 1 >= max { SpellSlot::Finisher { more: more(1) } } else { SpellSlot::Step };
+        Some((slot, 1, 1))
+    }
+
+    /// Takes the slot `spell_slot` gave: the counters move, and the combo goes on after the
+    /// spell unless it was the combo's last finisher (the next step then a finisher too while
+    /// Finishing Plus leaves one).
+    fn take_spell_slot(&mut self, (slot, count, finishers): (SpellSlot, u8, u8)) {
+        self.count = count;
+        self.finishers = finishers;
+        // The step after a spell counts on from it (as after a connected swing).
+        self.hit = true;
+        self.combo_carry = !matches!(slot, SpellSlot::Finisher { more: false });
+        self.carry_finisher = matches!(slot, SpellSlot::Finisher { more: true });
+        self.cast_finisher = matches!(slot, SpellSlot::Finisher { .. });
+        self.since_swing = 0;
+        self.buffered_attack = false;
+    }
+
+    /// Whether the move playing now is a finisher of the combo (a finisher swing or a spell cast
+    /// as one), or one just ended whose combo goes on to the next finisher (`carry_finisher`).
+    fn finisher_now(&self) -> bool {
+        match &self.mode {
+            Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) => row.is_finisher(),
+            Mode::Action(Action { kind: ActionKind::Magic, .. }) => self.cast_finisher,
+            _ => self.combo_carry && self.carry_finisher,
+        }
+    }
+
+    /// Starts a cast: the air motion when airborne, the finisher motion when it takes a
+    /// finisher slot of the combo (`spell_slot`), else the ground one. Returns the motion
+    /// started, or `None` if casting isn't possible now. The spell itself is released by the
+    /// motion's magic-cast event (`EventKind::MagicCast` with the motion's own id).
     pub fn cast(&mut self, m: CastMotions) -> Option<u16> {
         if !self.can_cast() {
             return None;
         }
-        let in_combo = self.combo_live();
-        let at_finisher = in_combo && self.count.saturating_add(1) >= self.max_count(self.airborne);
+        let slot = self.spell_slot()?;
         let motion = if self.airborne {
             m.air
-        } else if at_finisher {
+        } else if matches!(slot.0, SpellSlot::Finisher { .. }) {
             m.finisher.unwrap_or(m.ground)
         } else {
             m.ground
         };
         self.clip(motion)?;
-        if in_combo && self.swing_counts() {
-            self.count = self.count.saturating_add(1);
-        }
-        // The swing after the spell goes on with the combo (the spell took a step of it).
-        self.combo_carry = in_combo && !at_finisher;
-        self.buffered_attack = false;
+        self.take_spell_slot(slot);
         self.vel_h = [0.0; 2];
         if self.airborne {
             self.vel_y = 0.0;
@@ -708,11 +790,10 @@ impl Character {
         self.vel_h = [0.0; 2];
     }
 
-    /// Where the combo stands (its count, finishers, whether the last swing connected), to carry
-    /// it over a move of the host's own (a spell cast mid-combo: KH2 goes on with the combo
-    /// after the cast's end frames).
-    pub fn combo_state(&self) -> (u8, u8, bool) {
-        (self.count, self.finishers, self.hit)
+    /// Where the combo stands, to carry it over a move of the host's own (a spell of KH1's: the
+    /// combo goes on after it).
+    pub fn combo_state(&self) -> ComboState {
+        ComboState { count: self.count, finishers: self.finishers, hit: self.hit, finisher_next: self.carry_finisher }
     }
 
     /// A combo is going (the user: a spell cast mid-combo inserts itself in it, as a modifier
@@ -720,7 +801,7 @@ impl Character {
     /// `COMBO_GRACE` frames: picking the spell from KH1's menu takes a moment), and its last
     /// swing not yet reached.
     fn combo_live(&self) -> bool {
-        let swinging = matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. }, .. }));
+        let swinging = matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. } | ActionKind::Magic, .. }));
         let recent = self.count > 0 && (self.airborne || self.since_swing <= COMBO_GRACE);
         (swinging || recent) && self.count < self.max_count(self.airborne)
     }
@@ -731,24 +812,23 @@ impl Character {
         self.hit || self.abilities.combo_master || self.airborne
     }
 
-    /// A spell of the host's own (KH1's) is cast now: mid-combo it takes a step of the combo,
-    /// as KH2's casts do (`cast`). Returns whether the combo goes on after it (the spell wasn't
-    /// its last step).
-    pub fn magic_step(&mut self) -> bool {
-        if !self.combo_live() {
-            return false;
-        }
-        if self.swing_counts() {
-            self.count = self.count.saturating_add(1);
-        }
-        self.count < self.max_count(self.airborne)
+    /// A spell of the host's own (KH1's) is cast now: it takes its combo slot as KH2's casts do
+    /// (`cast`, `spell_slot`). Returns the slot it took, `None` if it couldn't take one.
+    pub fn magic_step(&mut self) -> Option<SpellSlot> {
+        let slot = self.spell_slot()?;
+        self.take_spell_slot(slot);
+        Some(slot.0)
     }
 
-    pub fn set_combo_state(&mut self, (count, finishers, hit): (u8, u8, bool)) {
-        self.count = count;
-        self.finishers = finishers;
-        self.hit = hit;
-        self.combo_carry = count > 0;
+    /// Back from a move of the host's own (`combo_state` before it): the combo goes on, its next
+    /// step counting on from there (a finisher if `finisher_next`).
+    pub fn set_combo_state(&mut self, c: ComboState) {
+        self.count = c.count;
+        self.finishers = c.finishers;
+        self.hit = c.hit;
+        self.combo_carry = c.count > 0;
+        self.carry_finisher = c.finisher_next;
+        self.since_swing = 0;
     }
 
     /// In the air this frame (the host picks the map's air rules with it).
@@ -1020,11 +1100,18 @@ impl Character {
     fn try_attack(&mut self, input: &Input, env: &Env) -> bool {
         let (current_motion, in_finisher) = match &self.mode {
             Mode::Action(Action { kind: ActionKind::Attack { row }, motion, .. }) => (Some(*motion), row.is_finisher()),
+            // A spell cast as a finisher is the finisher playing (`spell_slot`).
+            Mode::Action(Action { kind: ActionKind::Magic, motion, .. }) if self.cast_finisher => (Some(*motion), true),
             _ => (None, false),
         };
         let in_attack = current_motion.is_some();
         let carry = std::mem::take(&mut self.combo_carry);
+        let carry_finisher = std::mem::take(&mut self.carry_finisher);
+        // After a spell that took a finisher slot with Finishing Plus leaving another: the next
+        // finisher.
+        let in_finisher = in_finisher || (carry && carry_finisher);
         if in_attack && self.abilities.one_swing_on_miss && !self.abilities.combo_master && !self.hit {
+            (self.combo_carry, self.carry_finisher) = (carry, carry_finisher);
             return false;
         }
         // Ground swings only advance the combo when the previous one
@@ -1034,9 +1121,18 @@ impl Character {
         let hit = self.hit || self.abilities.combo_master || (self.airborne && in_attack);
         let saved = (self.count, self.finishers);
         // The counter moves when the next swing starts.
-        if in_finisher && hit && self.finishers < self.max_finishers() {
-            self.count = self.count.saturating_add(1);
-            self.finishers += 1;
+        if in_finisher {
+            if hit && self.finishers < self.max_finishers() {
+                self.count = self.count.saturating_add(1);
+                self.finishers += 1;
+            } else if in_attack {
+                // The combo's last finisher: nothing new until its animation has ended (spec).
+                (self.combo_carry, self.carry_finisher) = (carry, carry_finisher);
+                return false;
+            } else {
+                self.count = 1;
+                self.finishers = 1;
+            }
         } else if (in_attack || carry) && hit {
             self.count = self.count.saturating_add(1);
         } else if !in_attack && !carry {
@@ -1297,6 +1393,7 @@ impl Character {
         self.count = 0;
         self.finishers = 0;
         self.combo_carry = false;
+        self.carry_finisher = false;
         self.buffered_attack = false;
     }
 
@@ -1337,6 +1434,10 @@ impl Character {
                 ActionKind::Attack { row } if row.is_jump() || row.is_air() => {
                     self.mode = Mode::Free;
                     self.reset_combo();
+                    // KH2's landing, not straight to idle (spec 3.1: aerial attacks went to idle).
+                    if land {
+                        self.start_action(ActionKind::Land, motion::LAND);
+                    }
                 }
                 ActionKind::Blow { .. } => {
                     // Landing from a launch: the motion after it (down and up).
@@ -1362,6 +1463,8 @@ impl Character {
                 ActionKind::Magic if self.air_magic_falls => {
                     self.vel_h = [0.0; 2];
                     self.mode = Mode::Free;
+                    // The air combo ends on the ground, as an aerial swing's does.
+                    self.reset_combo();
                     if land {
                         self.start_action(ActionKind::Land, motion::LAND);
                     }
@@ -1373,7 +1476,13 @@ impl Character {
 
     /// Advances one 60 Hz frame.
     pub fn step(&mut self, input: &Input, env: &Env) -> Output {
-        self.since_swing = if matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. }, .. })) { 0 } else { self.since_swing.saturating_add(1) };
+        self.since_swing = if matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. } | ActionKind::Magic, .. })) { 0 } else { self.since_swing.saturating_add(1) };
+        self.since_roll = if matches!(&self.mode, Mode::Action(Action { kind: ActionKind::DodgeRoll | ActionKind::QuickRun, .. })) { 0 } else { self.since_roll.saturating_add(1) };
+        // A combo carried past a step (a spell's) lapses on the ground after `COMBO_GRACE` with
+        // nothing new (spec: the combo string is one).
+        if matches!(self.mode, Mode::Free) && self.combo_carry && !self.airborne && self.since_swing > COMBO_GRACE {
+            self.reset_combo();
+        }
         self.update_lock(input, env);
         let was_airborne = self.airborne;
         let rising = self.arc.map_or(false, |a| a.rising())
@@ -1381,6 +1490,12 @@ impl Character {
         self.airborne = !env.grounded || rising;
         if was_airborne && !self.airborne {
             self.land();
+        }
+        // Rolled off a ledge (a dodge roll or Quick Run going from the ground into the air): the
+        // fall has its Aerial Dodge, as a jump's does (spec 3.3; walking off a ledge still has
+        // none, KH2's rule).
+        if !was_airborne && self.airborne && self.since_roll <= 2 && self.abilities.aerial_dodge > 0 {
+            self.air_dodge_ready = true;
         }
         if self.airborne {
             self.ceiling_lock = (self.ceiling_lock - 1.0).max(0.0);
@@ -1522,7 +1637,10 @@ impl Character {
         let clip = self.clip(act.motion).cloned().unwrap_or_else(|| Clip::plain(act.motion, 1));
         let f = act.frame;
         let mut finished = f >= clip.length;
-        let mut cancel_allowed = clip.has(f, |k| matches!(k, WindowKind::Combo | WindowKind::Finisher)) && self.ceiling_lock <= 0.0;
+        // A finisher's window lets the next finisher in only while Finishing Plus leaves one: the
+        // combo's last finisher plays to its end before anything new (spec).
+        let finisher_more = self.finishers < self.max_finishers();
+        let mut cancel_allowed = clip.has(f, |k| matches!(k, WindowKind::Combo) || matches!(k, WindowKind::Finisher) && finisher_more) && self.ceiling_lock <= 0.0;
         let target = self.primary_target(env).map(|t| t.pos);
 
         for (wi, w) in clip.windows.iter().enumerate() {
@@ -1699,6 +1817,28 @@ impl Character {
                 return false;
             }
             ActionKind::Climb => fo.no_gravity = true,
+            ActionKind::Magic if self.cast_finisher => {
+                // A spell cast as a finisher (spec: finishing Reflect is a finisher of the combo):
+                // nothing interrupts it, no new combo, no spell, no jump or roll, until it ends;
+                // only the combo's next finisher (Finishing Plus leaving one), an Attack in its
+                // finisher window (or a spell, `can_cast`).
+                cancel_allowed = false;
+                if input.attack.pressed {
+                    self.buffered_attack = true;
+                }
+                let next = finisher_more && clip.has(f, |k| matches!(k, WindowKind::Finisher));
+                if self.buffered_attack && next {
+                    self.mode = Mode::Action(act.clone());
+                    if self.try_attack(input, env) {
+                        return true;
+                    }
+                    self.buffered_attack = false;
+                }
+                if finished {
+                    // Its animation over, the combo is (a new one may start).
+                    self.reset_combo();
+                }
+            }
             ActionKind::Magic => {
                 // Other actions once the reaction-command window opens.
                 let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
@@ -1873,7 +2013,16 @@ impl Character {
         let steer = |v: [f32; 2], target: [f32; 2]| [v[0] * p.air_keep + target[0] * (1.0 - p.air_keep), v[1] * p.air_keep + target[1] * (1.0 - p.air_keep)];
         let air_control = |c: &Self, stick: bool| -> [f32; 2] {
             if stick && moving {
-                steer(c.vel_h, scale(stick_dir, ground_speed))
+                // The stick steers what he has rather than replacing it (the user: an Aerial
+                // Dodge's speed, up to 36 a frame, was gone in a few frames as soon as a direction
+                // was pressed, since steering pulls toward the run speed; let go, it lasted): his
+                // speed fades no faster than with the stick let go, unless pushed against.
+                let s = steer(c.vel_h, scale(stick_dir, ground_speed));
+                let speed = len2(c.vel_h);
+                let along = if speed > 1e-3 { (c.vel_h[0] * stick_dir[0] + c.vel_h[1] * stick_dir[1]) / speed } else { 1.0 };
+                let keep = speed * p.air_drag * if along >= 0.0 { 1.0 } else { 1.0 + along };
+                let n = len2(s);
+                if n > 1e-3 && n < keep { scale(s, keep / n) } else { s }
             } else {
                 scale(c.vel_h, p.air_drag)
             }

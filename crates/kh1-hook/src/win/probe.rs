@@ -270,9 +270,14 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     // (Only when L1 opens KH1's shortcut menu: with no shortcut set it opens nothing, and KH1
     // jumped with the button, cancelling KH2's moves, the user.)
     // (And not while a command submenu is open: Circle backs out of it, KH1's.)
-    let shortcuts = super::shortcuts::menu_on_l1(b_all) || super::shortcuts::submenu_open();
+    // (A submenu keeps only its back-out button: Square there was KH1's own guard, in the air
+    // too, spec 3.2.)
+    let l1_menu = super::shortcuts::menu_on_l1(b_all);
+    let shortcuts = l1_menu || super::shortcuts::submenu_open();
     if super::takeover::active() && !shortcuts {
         std::ptr::write_unaligned(out as *mut u16, b & !(super::takeover::jump_button() | super::takeover::SQUARE));
+    } else if super::takeover::active() && !l1_menu {
+        std::ptr::write_unaligned(out as *mut u16, b & !super::takeover::SQUARE);
     } else if !super::takeover::kh1_keeps_square() && !shortcuts {
         std::ptr::write_unaligned(out as *mut u16, b & !super::takeover::SQUARE);
     }

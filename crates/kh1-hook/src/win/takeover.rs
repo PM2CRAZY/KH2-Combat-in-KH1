@@ -298,21 +298,34 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
     // and jump slot 12, then state 21). (L1 as KH1's own button state has it this frame,
     // `0x40000` from the raw `0x400` in its pad table `0x140528F90`; the raw pad's could differ
     // from it for a frame.)
-    let menu = super::shortcuts::menu_on_l1(if rd::<u32>(base + BUTTONS_RVA + 4) & KH1_L1 != 0 { L1 } else { 0 }) || super::shortcuts::submenu_open();
-    let offs: &[usize] = if menu { &[4, 0x10, 0x14] } else { &[4, 8, 0x10, 0x14] };
+    // (A submenu open keeps only its back-out, the jump / cancel press: Square there was KH1's
+    // own guard, in the air too (spec 3.2); KH2's guard follows its own rules.)
+    let l1_menu = super::shortcuts::menu_on_l1(if rd::<u32>(base + BUTTONS_RVA + 4) & KH1_L1 != 0 { L1 } else { 0 });
+    let submenu = super::shortcuts::submenu_open();
     const KH2_BITS: u32 = 0x6 | 0x10_0000;
+    let bits = |off: usize| -> u32 {
+        if off != 8 {
+            KH2_BITS
+        } else if l1_menu {
+            0
+        } else if submenu {
+            0x10_0000
+        } else {
+            KH2_BITS
+        }
+    };
     let state = base + BUTTONS_RVA;
     let saved = rd::<[u32; 6]>(state);
     if strip {
-        for &off in offs {
-            wr(state + off, rd::<u32>(state + off) & !KH2_BITS);
+        for off in [4usize, 8, 0x10, 0x14] {
+            wr(state + off, rd::<u32>(state + off) & !bits(off));
         }
     }
     f(actor, dir);
     if strip {
         // KH1's own changes to the state meanwhile kept; only our bits come back.
-        for &off in offs {
-            wr(state + off, rd::<u32>(state + off) | (saved[off / 4] & KH2_BITS));
+        for off in [4usize, 8, 0x10, 0x14] {
+            wr(state + off, rd::<u32>(state + off) | (saved[off / 4] & bits(off)));
         }
     }
 }
@@ -340,8 +353,27 @@ static LAND_NOW: AtomicBool = AtomicBool::new(false);
 static COMMAND: Mutex<Option<Command>> = Mutex::new(None);
 /// KH1's command was cut by an Attack in its end frames: KH2's combo goes on.
 static COMBO_ON: AtomicBool = AtomicBool::new(false);
-/// A KH1 spell was cast mid-combo (`Character::magic_step`): the combo goes on after it.
-pub static SPELL_COMBO: AtomicBool = AtomicBool::new(false);
+/// The combo slot the KH1 spell being cast took (`Character::magic_step`): 0 none (not a
+/// spell), 1 a step, 2 a finisher with Finishing Plus leaving another, 3 the combo's last.
+pub static SPELL_SLOT: AtomicU8 = AtomicU8::new(0);
+/// A spell was chosen during KH1's cast (`combat::command` / `take_chosen_command`): waiting in
+/// the command queue, it cuts the cast once the spell is out (a spell into a spell).
+pub static MAGIC_AFTER: AtomicBool = AtomicBool::new(false);
+
+/// KH1 is casting a spell (a command's hand-off, Sora not yet free to act: once he is, the
+/// hand-off may wait for input, and a spell chosen then is KH1's to run at once).
+pub fn kh1_casting() -> bool {
+    if !(HANDOFF.load(Ordering::Relaxed) && FROM_COMMAND.load(Ordering::Relaxed)) {
+        return false;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let actor = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
+    if actor < 0x10000 {
+        return false;
+    }
+    let can_act: unsafe extern "system" fn(usize) -> i32 = unsafe { std::mem::transmute(base + CAN_ACT_RVA) };
+    unsafe { can_act(actor) == 0 }
+}
 
 pub fn command_started(shots: usize, spell: Option<u8>) {
     if let Ok(mut c) = COMMAND.lock() {
@@ -627,35 +659,60 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH1 spells"): a jump, Square (roll, guard, glide) or moving the stick, once the spell
         // is out; none of them before (Square or the stick 10 frames in cut the cast itself).
         let command = FROM_COMMAND.load(Ordering::Relaxed);
-        // (A spell cast in the air plays through to the ground, KH2's landing after it (the user:
-        // "you can animation cancel out of KH1 jump spells, so no good there"), except for an
-        // Attack once it is out: the user, "attack cuts the spell short" into the combo's next
-        // swing, in the air too, and only Attack.)
+        // What may cut a KH1 spell short, once it is out (spec: KH1 magic is a step of the combo
+        // string): an Attack (the combo's next swing) or another spell (its next step), in the air
+        // too; a jump or Square only on the ground and only out of a step (s168). Never the stick
+        // (spec rule D: a direction pressed cancelled the cast), and nothing out of the combo's
+        // last step (rule E: it plays to its end; a new combo after it).
+        // An Attack or a spell chosen meanwhile: KH1 runs no command during its cast, so they
+        // are read off its command record here (the user: no attack out of magic).
+        if command && !done {
+            match combat::take_chosen_command() {
+                Some(1) => {
+                    ATTACK_AFTER.store(true, Ordering::Relaxed);
+                }
+                Some(2) => {
+                    MAGIC_AFTER.store(true, Ordering::Relaxed);
+                }
+                _ => {}
+            }
+        }
+        let attack = attack || ATTACK_AFTER.load(Ordering::Relaxed);
+        let slot = SPELL_SLOT.load(Ordering::Relaxed);
+        let last = slot == 3;
         let out_any = command && !done && spell_out(actor);
         let out = out_any && air_cast().is_none();
         let jump_pressed = buttons() & jump_button() != 0;
-        let attack_cut = attack && out_any;
-        let cancel = attack_cut || out && (jump_pressed || square || stick);
+        let magic_after = MAGIC_AFTER.load(Ordering::Relaxed);
+        let attack_cut = attack && out_any && !last;
+        let magic_cut = magic_after && out_any && !last;
+        let other_cut = out && slot <= 1 && (jump_pressed || square);
+        let cancel = attack_cut || magic_cut || other_cut;
         let attack = attack && (!command || done || attack_cut);
-        let square = square && (!command || done || cancel);
-        let jump = jump || cancel && jump_pressed;
-        let free = free || cancel && stick;
+        let square = square && (!command || done || other_cut);
+        let jump = jump || other_cut && jump_pressed;
         if cancel {
             // KH1's cast action ends here: its "action running" flag off (as at its own end).
             wr(actor, rd::<u32>(actor) & !4);
-            COMBO_ON.store(attack_cut, Ordering::Relaxed);
+            if slot == 0 {
+                COMBO_ON.store(attack_cut, Ordering::Relaxed);
+            }
             log(&format!(
-                "spell's end frames cancelled by {}",
-                if attack_cut { "an Attack: KH2's combo goes on" } else if jump_pressed { "a jump" } else if square { "Square" } else { "moving" }
+                "spell's end frames cut by {} (combo slot {slot})",
+                if attack_cut { "an Attack: the combo's next swing" } else if magic_cut { "a spell: the combo's next step" } else if jump_pressed { "a jump" } else { "Square" }
             ));
         }
-        if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || cancel || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
+        // (A spell chosen during the cast, which is now over: it runs at once from the queue.)
+        let magic_waits = magic_after && done;
+        if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || cancel || magic_waits || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
             JUMP_NOW.store(jump, Ordering::Relaxed);
             // An Attack waiting through a spell (pressed during it): the combo goes on after it,
             // as after KH2's own casts (the user: magic is part of the combo's queue).
-            if command && attack {
+            if command && attack && SPELL_SLOT.load(Ordering::Relaxed) == 0 {
                 COMBO_ON.store(true, Ordering::Relaxed);
             }
+            // A spell chosen during the cast runs from the queue once KH2 has him (`resume_command`).
+            MAGIC_AFTER.store(false, Ordering::Relaxed);
             if cast_landed {
                 // KH1's cast action ends here (it would at the end of its own landing): its
                 // "action running" flag off, so its can-act test lets KH2's input through.
@@ -795,7 +852,9 @@ unsafe fn takeover(actor: usize) -> bool {
         let combo = d.character.combo_state();
         d.character = kh2.character.clone();
         d.character.abilities = abilities;
-        if COMBO_ON.swap(false, Ordering::Relaxed) | SPELL_COMBO.swap(false, Ordering::Relaxed) {
+        // After a KH1 spell: the combo goes on from the slot it took (not after the combo's last).
+        let spell = SPELL_SLOT.swap(0, Ordering::Relaxed);
+        if COMBO_ON.swap(false, Ordering::Relaxed) && spell == 0 || matches!(spell, 1 | 2) {
             d.character.set_combo_state(combo);
         }
         d.grounded = true;
@@ -842,11 +901,13 @@ unsafe fn takeover(actor: usize) -> bool {
     // With L1 held the face buttons are KH1's shortcuts, not KH2's jump / action; a button
     // still held when L1 lets go stays KH1's until released (`held` sees it raw).
     // (A command submenu open: Circle backs out of it, not KH2's jump.)
-    let shortcut = super::shortcuts::menu_on_l1(buttons) || super::shortcuts::submenu_open();
+    let l1_menu = super::shortcuts::menu_on_l1(buttons);
+    let shortcut = l1_menu || super::shortcuts::submenu_open();
     let jump_raw = buttons & jump_button() != 0;
     let action_raw = buttons & SQUARE != 0;
     let jump = jump_raw && !shortcut;
-    let action = action_raw && !shortcut;
+    // (Square stays KH2's with a submenu open: only the L1 shortcut menu uses it; spec 3.2.)
+    let action = action_raw && !l1_menu;
     // KH1's Attack command (Cross with Attack chosen in the menu) is KH2's attack button.
     let attack = combat::take_press() | FLY_PRESS.swap(false, Ordering::Relaxed) | FLY_PRESS_GROUND.swap(false, Ordering::Relaxed);
     // KH1 holding him still (its control step skipped or him unable to act: cutscene moments,

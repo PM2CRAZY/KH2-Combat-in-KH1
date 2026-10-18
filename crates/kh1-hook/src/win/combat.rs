@@ -163,6 +163,10 @@ pub unsafe fn resume_command() {
         cmd_log(format!("command {kind:#x} dropped: KH2's move still couldn't take it after 5 s"));
         return;
     }
+    // (Chosen during KH1's cast: it waits for that to be cut or to end.)
+    if takeover::kh1_casting() {
+        return;
+    }
     if !takeover::kh2_has() {
         *p = None;
         cmd_log(format!("command {kind:#x} dropped: KH2 no longer has Sora"));
@@ -213,6 +217,16 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // Our Reflect (magic, spell byte 7, which KH1 has no spell for): KH2's, never KH1's.
     if actor == sora && kind == 2 && ((full >> 8) & 0xFF) as u8 == super::reflect::SPELL {
         super::reflect::chosen(actor);
+        return;
+    }
+    // A spell chosen while KH1 casts one: it waits for the cast to be cut (once out) or to end,
+    // then runs as the combo's next step (`takeover`'s MAGIC_AFTER; spec: magic into magic).
+    if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_casting() {
+        if let Ok(mut p) = PENDING_COMMAND.lock() {
+            *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now()));
+        }
+        takeover::MAGIC_AFTER.store(true, Ordering::Relaxed);
+        cmd_log(format!("command {kind:#x} ({full:08x}) waits: KH1's spell is still being cast"));
         return;
     }
     let ours = actor == sora && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed);
@@ -271,11 +285,20 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     if after != set {
         // A spell mid-combo takes a step of it, and the combo goes on after it (the user: magic
         // cast mid-combo inserts itself in the combo, as a modifier does).
-        if kind == 2 {
-            let on = takeover::with_kh2(|c, _| c.magic_step());
-            takeover::SPELL_COMBO.store(on == Some(true), Ordering::Relaxed);
-            log(&format!("spell cast {}", match on { Some(true) => "mid-combo: the combo goes on after it", Some(false) => "outside a combo (or as its last step)", None => "(KH2's controller busy: not counted on the combo)" }));
-        }
+        // A spell takes its slot of the combo string as KH2's casts do (spec: one slot each).
+        let slot = if kind == 2 {
+            let s = takeover::with_kh2(|c, _| (c.magic_step(), c.combo_state()));
+            let code = match s.map(|x| x.0) {
+                Some(Some(character_core::SpellSlot::Step)) => 1,
+                Some(Some(character_core::SpellSlot::Finisher { more: true })) => 2,
+                _ => 3,
+            };
+            log(&format!("spell cast: combo slot {code} ({:?}; 1 a step, 2 a finisher with another to come, 3 the combo's last)", s));
+            code
+        } else {
+            0
+        };
+        takeover::SPELL_SLOT.store(slot, Ordering::Relaxed);
         takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
         // (A spell in the air: its index in the command's second byte (Fire 0 .. Aero 6).)
         takeover::set_air_cast((air && kind == 2).then_some(((full >> 8) & 0xFF) as u8));
@@ -286,6 +309,30 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
             wr(actor + 0x70, before.0);
         }
         note(format!("command {kind:#x} ({full:08x}){}: KH1 did nothing with Sora, KH2 keeps him", if air { " in the air" } else { "" }));
+    }
+}
+
+/// During KH1's cast: an Attack (1) or a spell (2) just chosen in the command menu, taken off
+/// KH1's command record (KH1 runs none while it casts); a spell goes to the queue
+/// (`resume_command`) to run once KH2 has Sora.
+pub unsafe fn take_chosen_command() -> Option<u8> {
+    let base = BASE.load(Ordering::Relaxed);
+    let kind = rd::<u8>(base + COMMAND_RVA);
+    match kind {
+        1 => {
+            wr(base + COMMAND_RVA, 0u8);
+            cmd_log("Attack chosen during KH1's cast: KH2's once the spell is out".to_string());
+            Some(1)
+        }
+        2 => {
+            if let Ok(mut p) = PENDING_COMMAND.lock() {
+                *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now()));
+            }
+            wr(base + COMMAND_RVA, 0u8);
+            cmd_log("spell chosen during KH1's cast: waits to cut it once the spell is out".to_string());
+            Some(2)
+        }
+        _ => None,
     }
 }
 
