@@ -32,6 +32,8 @@ pub(crate) mod k {
     pub const ANGLE: u32 = 41;
     pub const SCALE: u32 = 42;
     pub const COLOR: u32 = 43;
+    /// Vertex morph between two models (drawn by a later DrawMdl*).
+    pub const VT_MIME: u32 = 49;
     pub const RAND_FLOAT: u32 = 51;
     pub const RAND_IV: u32 = 66;
     pub const MATRIX_XYZ: u32 = 87;
@@ -41,12 +43,18 @@ pub(crate) mod k {
     pub const PAR_MATRIX: u32 = 105;
     pub const DRAW_MATRIX: u32 = 112;
     pub const DRAW_MATRIX_FRONT: u32 = 113;
+    /// Billboard turning only about the root's own y axis.
+    pub const DRAW_MATRIX_WOOD: u32 = 115;
+    /// `D` through the root matrix saved when the instance was spawned.
+    pub const RYJ_DRAW_MATRIX_WORLD: u32 = 120;
     pub const KE_Z_CRCT: u32 = 124;
     pub const KE_Z_CRCT_SHP: u32 = 125;
     pub const DRAW_MDL3: u32 = 137;
     pub const DRAW_MDL_TS3: u32 = 139;
     pub const DRAW_SHAPE: u32 = 141;
     pub const DRAW_SHAPE_X: u32 = 142;
+    /// VertexApLc with the vertex carried through the spawner's matrix.
+    pub const VERTEX_AP: u32 = 174;
     pub const VERTEX_AP_LC: u32 = 177;
     pub const MEGA_BIRTH: u32 = 201;
     /// Same routine as MatrixXYZ.
@@ -60,12 +68,15 @@ pub(crate) mod k {
 
 /// Program types this crate runs.
 pub fn supported(kind: u32) -> bool {
-    matches!(kind, 28..=31 | 36..=43 | 51 | 66 | 84 | 87 | 90 | 91 | 94 | 105 | 112 | 113 | 124 | 125 | 137 | 139 | 141 | 142 | 177 | 201 | 216 | 217 | 219 | 236 | 241)
+    matches!(
+        kind,
+        28..=31 | 36..=43 | 49 | 51 | 66 | 84 | 87 | 90 | 91 | 94 | 105 | 112 | 113 | 115 | 120 | 124 | 125 | 137 | 139 | 141 | 142 | 174 | 177 | 201 | 216 | 217 | 219 | 236 | 241
+    )
 }
 
 /// Programs with a draw slot: they run in the draw pass.
 pub(crate) fn has_draw(kind: u32) -> bool {
-    matches!(kind, k::DRAW_MDL3 | k::DRAW_MDL_TS3 | k::DRAW_SHAPE | k::DRAW_SHAPE_X | k::MEGA_BIRTH | k::DRAW_MDL_LOOP_Z | k::SHIPOLY)
+    matches!(kind, k::VT_MIME | k::DRAW_MDL3 | k::DRAW_MDL_TS3 | k::DRAW_SHAPE | k::DRAW_SHAPE_X | k::MEGA_BIRTH | k::DRAW_MDL_LOOP_Z | k::SHIPOLY)
 }
 
 /// Programs skipped while an instance is fast-forwarded after a loop.
@@ -143,7 +154,7 @@ impl Work {
 }
 
 /// How the draw matrix `D` was last built.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub(crate) enum DKind {
     #[default]
     None,
@@ -152,6 +163,13 @@ pub(crate) enum DKind {
     /// Billboard: `M`'s axes (times the root scale lengths) used directly
     /// in view space at the view position of `M`'s origin.
     Front,
+    /// Upright billboard (pppDrawMatrixWood): `M`'s axes times the root
+    /// scale lengths, and `M`'s translation, put through the frame that
+    /// keeps the root's y axis and turns x to face the screen.
+    Wood,
+    /// `D = P·V·R·M` with `R` the root matrix saved at spawn
+    /// (pppRyjDrawMatrixWorld): the instance stays where it was born.
+    World(Mat4),
 }
 
 /// Per-program state that the game keeps behind pointers in the work area.
@@ -179,6 +197,9 @@ pub(crate) struct Instance {
     pub reset_pending: bool,
     pub m: Mat4,
     pub d: DKind,
+    /// The program (index) whose VtMime vertices replace the model's in
+    /// this instance's model draws (the game's vertex override at +0x90).
+    pub mime: Option<usize>,
     pub work: Work,
     /// Current key per program.
     pub cursor: Vec<usize>,
@@ -186,6 +207,28 @@ pub(crate) struct Instance {
 }
 
 impl Instance {
+    /// Program constructs that do more than zero their work: RyjDrawMatrixWorld
+    /// saves the current root matrix at its `w1`.
+    fn constructed(mut self, def: &EmitterDef, root: Mat4) -> Instance {
+        for prog in &def.programs {
+            if prog.kind == k::RYJ_DRAW_MATRIX_WORLD {
+                let o = w(prog, 1);
+                for (i, v) in root.to_cols_array().into_iter().enumerate() {
+                    self.work.set_f32(o + i as i32 * 4, v);
+                }
+            }
+        }
+        self
+    }
+
+    fn saved_matrix(&self, o: i32) -> Mat4 {
+        let mut a = [0.0; 16];
+        for (i, v) in a.iter_mut().enumerate() {
+            *v = self.work.f32(o + i as i32 * 4);
+        }
+        Mat4::from_cols_array(&a)
+    }
+
     pub fn key<'a>(&self, prog: &'a Program, pi: usize) -> Option<&'a Key> {
         prog.keys.get(self.cursor[pi]).or(prog.keys.last())
     }
@@ -298,10 +341,12 @@ impl Player {
             reset_pending: false,
             m: Mat4::IDENTITY,
             d: DKind::None,
+            mime: None,
             work: Work::new(size),
             cursor: vec![0; n],
             state: vec![ProgState::None; n],
         }
+        .constructed(def, self.fx.root)
     }
 
     /// Spawn emitters whose start frame has come (each fires once).
@@ -533,7 +578,10 @@ fn reset(inst: &mut Instance, def: &EmitterDef) {
             k::COL_ACCELE | k::COL_MOVE | k::COLOR => inst.work.zero(w0, 8),
             k::DRAW_SHAPE | k::DRAW_SHAPE_X => inst.work.zero(w0, 6),
             k::DRAW_MDL_TS3 | k::DRAW_MDL_LOOP_Z => inst.work.zero(w(prog, 2), 28),
+            // VertexAp has no reset slot: its countdown carries over a loop.
             k::VERTEX_AP_LC | k::VERTEX_AP_LC_LOOP => inst.work.zero(w0, 4),
+            // Reset clears t, its rate and acceleration (the buffer stays).
+            k::VT_MIME => inst.work.zero(w0, 12),
             k::SHIPOLY => {
                 if let ProgState::Shipoly(s) = &mut inst.state[pi] {
                     s.reset();
@@ -684,7 +732,9 @@ fn calc(
         }
         k::DRAW_MATRIX | k::DRAW_MATRIX_LOOP => inst.d = DKind::Full,
         k::DRAW_MATRIX_FRONT => inst.d = DKind::Front,
-        k::VERTEX_AP_LC | k::VERTEX_AP_LC_LOOP => {
+        k::DRAW_MATRIX_WOOD => inst.d = DKind::Wood,
+        k::RYJ_DRAW_MATRIX_WORLD => inst.d = DKind::World(inst.saved_matrix(w1)),
+        k::VERTEX_AP | k::VERTEX_AP_LC | k::VERTEX_AP_LC_LOOP => {
             if inst.computed || fast_forward || key.i16(4) < 0 {
                 return;
             }
@@ -694,13 +744,17 @@ fn calc(
                 if let Some(vs) = d.vertex_set(key.i16(4) as i32) {
                     let verts = d.model(vs.model).map(|m| m.vertices.as_slice()).unwrap_or(&[]);
                     let n = key.u8(6);
+                    // VertexAp hands the child the vertex through the
+                    // spawner's own matrix; VertexApLc the raw vertex.
+                    let carry = (prog.kind == k::VERTEX_AP).then_some(inst.m);
                     let mut pick = |idx: usize| {
                         let v = vs.indices.get(idx).and_then(|&i| verts.get(i as usize)).copied().unwrap_or([0; 3]);
+                        let v = Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32);
                         spawns.push(Spawn {
                             emitter: key.i32(12) as usize,
                             parent: (_e, inst.uid),
                             offset: key.i32(16),
-                            value: Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32),
+                            value: carry.map_or(v, |m| m.transform_point3(v)),
                         });
                     };
                     if key.i32(12) != -1 && !vs.indices.is_empty() {
@@ -758,6 +812,15 @@ fn draw_calc(lib: &Library, dpd: usize, rng: &mut Rng, fx: &EffectView, inst: &m
             }
         }
         k::DRAW_MDL_LOOP_Z => loop_z(inst, prog, key, false),
+        k::VT_MIME => {
+            if !inst.computed {
+                vt_mime_step(&mut inst.work, w(prog, 0), key, key.frame() == inst.frame);
+            }
+            // The draw half points the instance's model draws at the morph.
+            if key.i32(4) != 0xffff || key.i32(8) != 0xffff {
+                inst.mime = Some(pi);
+            }
+        }
         k::MEGA_BIRTH => {
             let alpha_bytes = inst.work.rgba(w(prog, 1));
             let m = inst.m;
@@ -797,6 +860,36 @@ fn draw_calc_ff(lib: &Library, dpd: usize, inst: &mut Instance, pi: usize, prog:
         k::DRAW_MDL_LOOP_Z => loop_z(inst, prog, key, true),
         _ => {}
     }
+}
+
+/// pppVtMime calc: `w0` holds `t`, its rate and its acceleration. Every
+/// tick `rate += accel; t += rate`; on a key tick `t += @12`, `rate +=
+/// @16` (unless @16 is below -1e38, the "keep" marker) and `accel += @20`.
+pub(crate) fn vt_mime_step(wk: &mut Work, o: i32, key: &Key, on_key: bool) {
+    let (t, rate, accel) = (wk.f32(o), wk.f32(o + 4), wk.f32(o + 8));
+    let rate = rate + accel;
+    let t = t + rate;
+    if on_key {
+        wk.set_f32(o, t + key.f32(12));
+        let dv = key.f32(16);
+        wk.set_f32(o + 4, if dv as f64 >= -1e38 { rate + dv } else { rate });
+        wk.set_f32(o + 8, accel + key.f32(20));
+    } else {
+        wk.set_f32(o, t);
+        wk.set_f32(o + 4, rate);
+    }
+}
+
+/// pppVtMime draw: model A's vertices moved toward model B's by `t`,
+/// `trunc(a + (b - a)·t)` per component as i16 (A's vertex count).
+pub(crate) fn vt_mime_vertices(a: &[[i16; 3]], b: &[[i16; 3]], t: f32) -> Vec<[i16; 3]> {
+    a.iter()
+        .enumerate()
+        .map(|(i, va)| {
+            let vb = b.get(i).copied().unwrap_or([0; 3]);
+            std::array::from_fn(|c| ((vb[c] as i32 - va[c] as i32) as f32 * t + va[c] as f32) as i32 as i16)
+        })
+        .collect()
 }
 
 /// pppDrawMdlLoopZ scroll: positions wrap at 32768, velocities pick up
@@ -894,5 +987,44 @@ mod tests {
         }
         assert!(!supported(1) && !supported(200));
         assert!(has_draw(201) && !has_draw(113));
+        for kind in [49, 115, 120, 174] {
+            assert!(supported(kind), "{kind}");
+        }
+        assert!(has_draw(k::VT_MIME) && !has_draw(k::DRAW_MATRIX_WOOD) && !has_draw(k::RYJ_DRAW_MATRIX_WORLD) && !has_draw(k::VERTEX_AP));
+    }
+
+    fn key(frame: i32, words: &[f32]) -> Key {
+        let mut data = frame.to_le_bytes().to_vec();
+        for v in words {
+            data.extend_from_slice(&v.to_le_bytes());
+        }
+        Key { data }
+    }
+
+    #[test]
+    fn vt_mime_integrates_t() {
+        let mut wk = Work::new(16);
+        // Models (ignored here), then t, rate and acceleration deltas.
+        let k0 = key(0, &[0.0, 0.0, 0.25, 0.5, -0.125]);
+        vt_mime_step(&mut wk, 0, &k0, true);
+        assert_eq!((wk.f32(0), wk.f32(4), wk.f32(8)), (0.25, 0.5, -0.125));
+        // Next tick: rate += accel, then t += rate.
+        vt_mime_step(&mut wk, 0, &k0, false);
+        assert_eq!((wk.f32(0), wk.f32(4), wk.f32(8)), (0.625, 0.375, -0.125));
+        // A rate delta of -FLT_MAX leaves the rate alone.
+        let k1 = key(0, &[0.0, 0.0, 0.0, f32::MIN, 0.125]);
+        vt_mime_step(&mut wk, 0, &k1, true);
+        assert_eq!((wk.f32(0), wk.f32(4), wk.f32(8)), (0.875, 0.25, 0.0));
+    }
+
+    #[test]
+    fn vt_mime_morphs_and_truncates() {
+        let a = [[0i16, 10, -10], [100, 0, 0]];
+        let b = [[10i16, 20, -20]];
+        let m = vt_mime_vertices(&a, &b, 0.55);
+        // trunc(a + (b - a)·t), toward zero; a vertex B lacks goes to 0.
+        assert_eq!(m[0], [5, 15, -15]);
+        assert_eq!(m[1], [45, 0, 0]);
+        assert_eq!(vt_mime_vertices(&a, &b, 0.0), a.to_vec());
     }
 }

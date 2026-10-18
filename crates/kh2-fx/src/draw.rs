@@ -13,7 +13,7 @@ use kh2_formats::dpd::{Key, Model, Program, ShapeFrame};
 use crate::camera::Camera;
 use crate::library::Library;
 use crate::output::{Blend, DrawState, Frame, Vertex};
-use crate::player::{k, DKind, Instance, Player, ProgState};
+use crate::player::{k, vt_mime_vertices, DKind, Instance, Player, ProgState};
 
 /// Colour bytes (0x80 = 1.0) times a vertex colour, in 0x80 units,
 /// clamped like the PC's vertex path.
@@ -34,6 +34,19 @@ struct Ctx<'a> {
     root: Mat4,
     vr: Mat4,
     rs: Vec3,
+    /// The upright camera-facing frame of DrawMatrixWood, in view space.
+    wood: Mat4,
+}
+
+/// The game's upright billboard frame (`docs/kh2-effects.md` §7.3): y is
+/// the root's y axis in view space, normalised; x is perpendicular to it
+/// in the screen plane, `(y.y, -y.x, 0)` normalised; z = x × y; origin is
+/// the root's view-space origin.
+pub(crate) fn wood_frame(vr: &Mat4) -> Mat4 {
+    let y = vr.y_axis.truncate().try_normalize().unwrap_or(Vec3::Y);
+    let x = Vec3::new(y.y, -y.x, 0.0).try_normalize().unwrap_or(Vec3::X);
+    let z = x.cross(y).try_normalize().unwrap_or(Vec3::Z);
+    Mat4::from_cols(x.extend(0.0), y.extend(0.0), z.extend(0.0), vr.w_axis)
 }
 
 impl Ctx<'_> {
@@ -43,6 +56,11 @@ impl Ctx<'_> {
             DKind::None => None,
             DKind::Full => Some(self.vr * inst.m),
             DKind::Front => Some(self.front(inst.m)),
+            DKind::Wood => {
+                let m = inst.m;
+                Some(self.wood * Mat4::from_cols(m.x_axis * self.rs.x, m.y_axis * self.rs.y, m.z_axis * self.rs.z, m.w_axis))
+            }
+            DKind::World(root) => Some(self.view * root * inst.m),
         }
     }
 
@@ -140,7 +158,7 @@ struct MdlDraw {
     z: Option<Mat4>,
 }
 
-fn model(cx: &Ctx, out: &mut Frame, mdl: &Model, d: &Mat4, colour: [u8; 4], o: MdlDraw) {
+fn model(cx: &Ctx, out: &mut Frame, mdl: &Model, verts: &[[i16; 3]], d: &Mat4, colour: [u8; 4], o: MdlDraw) {
     let immediate = o.bits & 2 != 0;
     let per_tri = !immediate && o.bits & 1 != 0;
     let blend = match o.blend {
@@ -160,7 +178,7 @@ fn model(cx: &Ctx, out: &mut Frame, mdl: &Model, d: &Mat4, colour: [u8; 4], o: M
         let dv = (((o.scroll.1 * 65536.0) as i32) >> (g.tex0.th() as i32 + 4)) as f32 / 4096.0;
         for p in &g.prims {
             let vert = |i: usize| {
-                let v = mdl.vertices.get(p.vertices[i] as usize).copied().unwrap_or([0; 3]);
+                let v = verts.get(p.vertices[i] as usize).or_else(|| mdl.vertices.get(p.vertices[i] as usize)).copied().unwrap_or([0; 3]);
                 let uv = p.st.get(i).map(|s| [s[0] as f32 / 4096.0 + du, s[1] as f32 / 4096.0 + dv]).unwrap_or([0.0; 2]);
                 Vertex {
                     pos: cx.world(d.transform_point3(Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32))),
@@ -181,7 +199,8 @@ fn model(cx: &Ctx, out: &mut Frame, mdl: &Model, d: &Mat4, colour: [u8; 4], o: M
 /// Emit every draw of one player.
 pub(crate) fn build(lib: &Library, p: &Player, cam: &Camera, out: &mut Frame) {
     let view = cam.view();
-    let cx = Ctx { lib, dpd: p.dpd, view, inv: cam.view_inverse(), root: p.fx.root, vr: view * p.fx.root, rs: p.fx.rs };
+    let vr = view * p.fx.root;
+    let cx = Ctx { lib, dpd: p.dpd, view, inv: cam.view_inverse(), root: p.fx.root, vr, rs: p.fx.rs, wood: wood_frame(&vr) };
     let data = p.data(lib);
     let dpd = &lib.dpds[p.dpd];
     for (e, def) in data.emitters.iter().enumerate() {
@@ -220,7 +239,8 @@ pub(crate) fn build(lib: &Library, p: &Player, cam: &Camera, out: &mut Frame) {
                             ),
                         };
                         let z = zat.and_then(|at| cx.z(&def.programs, inst, at));
-                        model(&cx, out, mdl, &d, colour, MdlDraw { z, ..o });
+                        let morphed = inst.mime.and_then(|mi| mime(dpd, &def.programs, inst, mi));
+                        model(&cx, out, mdl, morphed.as_deref().unwrap_or(&mdl.vertices), &d, colour, MdlDraw { z, ..o });
                     }
                     k::MEGA_BIRTH => megabirth(&cx, out, inst, pi, prog, key),
                     k::SHIPOLY => shipoly(&cx, out, inst, pi, prog, key),
@@ -229,6 +249,15 @@ pub(crate) fn build(lib: &Library, p: &Player, cam: &Camera, out: &mut Frame) {
             }
         }
     }
+}
+
+/// The vertices a VtMime program (index `pi`) last pointed the instance at.
+fn mime(dpd: &kh2_formats::dpd::Dpd, progs: &[Program], inst: &Instance, pi: usize) -> Option<Vec<[i16; 3]>> {
+    let prog = progs.get(pi)?;
+    let key = inst.key(prog, pi)?;
+    let a = dpd.model(key.i32(4))?;
+    let b = dpd.model(key.i32(8))?;
+    Some(vt_mime_vertices(&a.vertices, &b.vertices, inst.work.f32(w(prog, 0))))
 }
 
 fn megabirth(cx: &Ctx, out: &mut Frame, inst: &Instance, pi: usize, prog: &Program, key: &Key) {
@@ -401,5 +430,23 @@ mod tests {
         assert_eq!(c[1], 0.0);
         assert_eq!(c[2], 0.5);
         assert_eq!(c[3], 0.5);
+    }
+
+    #[test]
+    fn wood_frame_keeps_root_up_and_faces_screen() {
+        // Root y tilted in the screen plane and toward the camera, scaled 2.
+        let y = Vec3::new(0.6, 0.0, 0.8) * 2.0;
+        let vr = Mat4::from_cols(Vec3::new(0.0, 0.0, 2.0).extend(0.0), y.extend(0.0), Vec3::new(1.6, 0.0, -1.2).extend(0.0), Vec3::new(5.0, 6.0, 7.0).extend(1.0));
+        let f = wood_frame(&vr);
+        let (fx, fy, fz) = (f.x_axis.truncate(), f.y_axis.truncate(), f.z_axis.truncate());
+        assert!((fy - y.normalize()).length() < 1e-6);
+        // x stays in the screen plane, perpendicular to y; z = x × y.
+        assert_eq!(fx.z, 0.0);
+        assert!(fx.dot(fy).abs() < 1e-6 && (fx.length() - 1.0).abs() < 1e-6);
+        assert!((fz - fx.cross(fy)).length() < 1e-6);
+        assert_eq!(f.w_axis, vr.w_axis);
+        // An upright root (y down the screen) gives the plain screen frame.
+        let up = wood_frame(&Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0)));
+        assert!((up.x_axis.truncate() - Vec3::X).length() < 1e-6 && (up.z_axis.truncate() - Vec3::Z).length() < 1e-6);
     }
 }

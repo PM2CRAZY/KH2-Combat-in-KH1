@@ -1780,3 +1780,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
 ### 2026-10-18: Stage 160 (jump out of the landing hold)
 - The user: the landing hold is right, but a jump should end it. A jump press now opens the
   landing's cancel at any frame (other buttons still wait for its reaction window, frame 8).
+
+### 2026-10-18: Stage 161 (Guard Break's and Finishing Leap's full effects)
+- kh2-fx gains the four programs those moves used and we skipped (read from KH2's exe;
+  `docs/kh2-effects.md` §6, §7.3, §7.4, §12.1): 115 pppDrawMatrixWood (an upright billboard,
+  turning to the camera about the effect's own y: Guard Break's spiral around the thrust),
+  120 pppRyjDrawMatrixWorld (an instance keeps the root it was spawned at: Guard Break's light
+  fans stay put while he lunges), 174 pppVertexAp (VertexApLc with the vertex taken through the
+  spawner's matrix: Finishing Leap's five flame spikes on a ring around him), 49 pppVtMime (a
+  vertex morph between two models: Aerial Finish's rings widening). Offline renders
+  (`fx_render`, new `--flip-z` / `--follow-root` options) skip nothing for guard_break,
+  finishing_leap and aerial_finish; explosion and magnet render byte-identical.

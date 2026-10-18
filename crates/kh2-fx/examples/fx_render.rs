@@ -4,7 +4,15 @@
 //! ```text
 //! cargo run --release -p kh2-fx --example fx_render -- <dir> <out dir> [explosion|magnet|all]
 //!     [--frames N] [--dist D] [--size PX] [--seed S] [--side] [--bg LIFT]
+//!     [--flip-z] [--follow-root]
 //! ```
+//!
+//! `--flip-z` maps Sora's y-up model space to the y-down effect world by a
+//! half turn about x (y and z negated) instead of the default mirror (y
+//! negated). `--follow-root` puts the object root (0x4000) under bone 0's
+//! ground position, so effects bound to it follow the motion's lunge. Both
+//! are viewing aids for effects offset from the object root (Guard Break's
+//! element 32 sits 235 units along -z); neither is settled.
 //!
 //! `<dir>` holds the user's own extracted files: `P_EX100.a.us` (Sora's
 //! BAR with the "p_ex" PAX) or `fx/p_ex.pax`, `fx/texcommon.dpd`, and
@@ -242,8 +250,15 @@ struct Sora {
 }
 
 /// KH2 model space is y-up; the effect world is y-down.
-fn to_world() -> Mat4 {
-    Mat4::from_scale(Vec3::new(1.0, -1.0, 1.0))
+fn to_world(flip_z: bool) -> Mat4 {
+    Mat4::from_scale(Vec3::new(1.0, -1.0, if flip_z { -1.0 } else { 1.0 }))
+}
+
+/// How the example maps Sora into the effect world.
+#[derive(Clone, Copy)]
+struct Mapping {
+    flip_z: bool,
+    follow_root: bool,
 }
 
 impl Sora {
@@ -270,12 +285,17 @@ struct Anchors {
     pose: Option<kh2_anim::Pose>,
     tip_local: Vec3,
     t: f32,
+    map: Mapping,
 }
 
 impl Anchors {
     fn bone(&self, code: u16) -> Option<Mat4> {
-        let w = to_world();
+        let w = to_world(self.map.flip_z);
         match (code, &self.pose) {
+            (0x4000, Some(p)) if self.map.follow_root => {
+                let r = w.transform_point3(p.bone_position(0));
+                Some(Mat4::from_translation(Vec3::new(r.x, 0.0, r.z)))
+            }
             (0x4000, _) => Some(Mat4::IDENTITY),
             (0x4001, Some(p)) => Some(Mat4::from_translation(w.transform_point3(p.bone_position(0)))),
             (0x4003..=0x4008, Some(p)) => {
@@ -311,7 +331,7 @@ const SCENES: &[Scene] = &[
 ];
 
 #[allow(clippy::too_many_arguments)]
-fn run(lib: &Arc<Library>, sora: Option<&Sora>, scene: &Scene, out: &Path, frames: u32, dist: f32, size: usize, seed: u32, side: bool, bg: f32) {
+fn run(lib: &Arc<Library>, sora: Option<&Sora>, scene: &Scene, out: &Path, frames: u32, dist: f32, size: usize, seed: u32, side: bool, bg: f32, map: Mapping) {
     let mut fx = Effects::new(lib.clone());
     fx.seed(seed);
     // A game-like camera: about head height plus a bit, looking slightly down.
@@ -322,7 +342,7 @@ fn run(lib: &Arc<Library>, sora: Option<&Sora>, scene: &Scene, out: &Path, frame
     let mut frame = Frame::new();
     let mut peak = 0usize;
     for f in 0..frames {
-        let anchors = Anchors { pose: sora.and_then(|s| s.pose(scene.motion, f as f32)), tip_local: sora.map(|s| s.tip_local).unwrap_or(Vec3::ZERO), t: f as f32 };
+        let anchors = Anchors { pose: sora.and_then(|s| s.pose(scene.motion, f as f32)), tip_local: sora.map(|s| s.tip_local).unwrap_or(Vec3::ZERO), t: f as f32, map };
         let mut bones = |c: u16| anchors.bone(c);
         for &(at, id) in scene.triggers {
             if at == f && fx.start(id, &mut bones).is_none() {
@@ -339,7 +359,7 @@ fn run(lib: &Arc<Library>, sora: Option<&Sora>, scene: &Scene, out: &Path, frame
             line(&mut img, &view, Vec3::new(-250.0, 0.0, s), Vec3::new(250.0, 0.0, s), [0.16, 0.17, 0.2]);
         }
         if let (Some(s), Some(p)) = (sora, &anchors.pose) {
-            let w = to_world();
+            let w = to_world(map.flip_z);
             for (i, b) in s.skel.iter().enumerate() {
                 if b.parent >= 0 && (b.parent as usize) < p.bones.len() && i < p.bones.len() {
                     line(&mut img, &view, w.transform_point3(p.bone_position(b.parent as usize)), w.transform_point3(p.bone_position(i)), [0.35, 0.35, 0.4]);
@@ -409,7 +429,7 @@ fn texture_sheet(lib: &Library, out: &Path) {
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 2 {
-        eprintln!("usage: fx_render <dir> <out dir> [explosion|magnet|all] [--frames N] [--dist D] [--size PX] [--seed S] [--side] [--bg LIFT]");
+        eprintln!("usage: fx_render <dir> <out dir> [explosion|magnet|all] [--frames N] [--dist D] [--size PX] [--seed S] [--side] [--bg LIFT] [--flip-z] [--follow-root]");
         std::process::exit(1);
     }
     let dir = PathBuf::from(&args[0]);
@@ -418,6 +438,7 @@ fn main() {
     let which = args.get(2).filter(|a| !a.starts_with("--")).cloned().unwrap_or_else(|| "all".into());
     let opt = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).and_then(|v| v.parse::<f32>().ok());
     let side = args.iter().any(|a| a == "--side");
+    let map = Mapping { flip_z: args.iter().any(|a| a == "--flip-z"), follow_root: args.iter().any(|a| a == "--follow-root") };
     let dist = opt("--dist").unwrap_or(300.0);
     let size = opt("--size").unwrap_or(480.0) as usize;
     let seed = opt("--seed").unwrap_or(1.0) as u32;
@@ -444,7 +465,7 @@ fn main() {
     for s in SCENES {
         if which == "all" || which == s.name {
             let frames = opt("--frames").map(|f| f as u32).unwrap_or(s.frames);
-            run(&lib, sora.as_ref(), s, &out, frames, dist, size, seed, side, bg);
+            run(&lib, sora.as_ref(), s, &out, frames, dist, size, seed, side, bg, map);
         }
     }
 }

@@ -184,13 +184,19 @@ fn pax(id: u16, flags: u32, wait: f32, fadeout: u8, dpd: Vec<u8>) -> Vec<u8> {
 }
 
 fn sprite_effect(total: u32, end: u32) -> Vec<u8> {
+    sprite_effect_with(total, end, (113, vec![48]))
+}
+
+/// The sprite effect with another draw-matrix program in place of
+/// DrawMatrixFront (work bytes 96..160 are free for it).
+fn sprite_effect_with(total: u32, end: u32, (matrix, work): (u32, Vec<i32>)) -> Vec<u8> {
     let progs: Vec<Prog> = vec![
         (40, 16, vec![(0, f3(10.0, 0.0, 0.0))], vec![0]),
         (42, 16, vec![(0, f3(2.0, 2.0, 2.0))], vec![16]),
         // Colour 0x4000 = 0x80 in each channel; tick 1 adds -0x2000 alpha.
         (43, 12, vec![(0, [0x00, 0x40, 0x00, 0x40, 0x00, 0x40, 0x00, 0x40].to_vec()), (1, [0, 0, 0, 0, 0, 0, 0x00, 0xe0].to_vec())], vec![28]),
         (94, 4, vec![(0, vec![])], vec![0, 16]),
-        (113, 4, vec![(0, vec![])], vec![48]),
+        (matrix, 4, vec![(0, vec![])], work),
         (142, 20, vec![(0, [0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0].to_vec())], vec![64, 28, 48, 0]),
     ];
     dpd(particle_data(total, end, &progs))
@@ -309,4 +315,47 @@ fn bound_effect_follows_bone_and_fades_on_end() {
         fx.tick(1.0, &mut bones);
     }
     assert!(!fx.is_running(h));
+}
+
+#[test]
+fn world_matrix_stays_where_it_was_spawned() {
+    // RyjDrawMatrixWorld saves the root at spawn in its w1 (64 bytes).
+    let lib = Library::load(&pax(7, 0x01, 0.0, 0, sprite_effect_with(3, 4, (120, vec![96, 96]))), None).unwrap();
+    assert!(lib.unsupported_programs(7).is_empty());
+    let mut fx = Effects::new(Arc::new(lib));
+    let cam = Camera::look_at(Vec3::new(10.0, 0.0, -100.0), Vec3::new(10.0, 0.0, 0.0), Vec3::NEG_Y);
+    let mut x = 0.0f32;
+    {
+        let mut bones = |_: u16| Some(Mat4::from_translation(Vec3::new(x, 0.0, 0.0)));
+        fx.start(7, &mut bones).unwrap();
+    }
+    let mut f = Frame::new();
+    for i in 0..4 {
+        x = 100.0 * i as f32;
+        let mut bones = |_: u16| Some(Mat4::from_translation(Vec3::new(x, 0.0, 0.0)));
+        fx.tick(1.0, &mut bones);
+        fx.build(&cam, &mut f);
+    }
+    // The bound root moved to 300, the sprite stayed at 0 + 10.
+    let cx: f32 = f.vertices.iter().map(|v| v.pos[0]).sum::<f32>() / f.vertices.len() as f32;
+    assert!((cx - 10.0).abs() < 1e-3, "{cx}");
+}
+
+#[test]
+fn wood_billboard_stays_upright() {
+    let lib = Library::load(&pax(7, 0, 0.0, 0, sprite_effect_with(3, 4, (115, vec![96]))), None).unwrap();
+    let mut fx = Effects::new(Arc::new(lib));
+    // Looking down at the sprite from above and in front.
+    let cam = Camera::look_at(Vec3::new(10.0, -100.0, -100.0), Vec3::new(10.0, 0.0, 0.0), Vec3::NEG_Y);
+    let mut bones = |_: u16| Some(Mat4::IDENTITY);
+    fx.start(7, &mut bones);
+    let fr = frames(&mut fx, &cam, 1);
+    let vs = &fr[0].vertices;
+    assert_eq!(vs.len(), 6);
+    // Turned toward the camera about the root's y only: still in the z = 0
+    // plane, 2 x 16 units each way around (10, 0, 0).
+    for v in vs {
+        assert!(v.pos[2].abs() < 1e-3, "{:?}", v.pos);
+        assert!((v.pos[0] - 10.0).abs() > 31.9 && (v.pos[1]).abs() > 31.9, "{:?}", v.pos);
+    }
 }

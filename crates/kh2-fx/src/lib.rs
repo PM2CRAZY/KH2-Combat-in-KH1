@@ -46,12 +46,13 @@
 //!
 //! ## What runs
 //!
-//! Every program type used by Explosion and Magnet Burst (see
-//! [`supported`]): the integrators (Point, Angle, Scale, Color and
-//! their Move / Accele forms), RandFloat, RandIV, the matrix builders
-//! (XYZ, YXZ, ZXY, Scl, ParMatrix, DrawMatrix, DrawMatrixFront,
-//! DrawMatrixLoop, KeZCrct, KeZCrctShp), DrawShape(X), DrawMdl3,
-//! DrawMdlTs3, DrawMdlLoopZ, VertexApLc, RyjMegaBirth and EiDrawShipoly,
+//! Every program type used by Explosion, Magnet Burst, Guard Break,
+//! Finishing Leap and Aerial Finish (see [`supported`]): the integrators
+//! (Point, Angle, Scale, Color and their Move / Accele forms), RandFloat,
+//! RandIV, the matrix builders (XYZ, YXZ, ZXY, Scl, ParMatrix, DrawMatrix,
+//! DrawMatrixFront, DrawMatrixWood, RyjDrawMatrixWorld, DrawMatrixLoop,
+//! KeZCrct, KeZCrctShp), DrawShape(X), DrawMdl3, DrawMdlTs3, DrawMdlLoopZ,
+//! VtMime, VertexAp, VertexApLc, RyjMegaBirth and EiDrawShipoly,
 //! plus MatrixLoop and VertexApLcLoop (the same routines as MatrixXYZ and
 //! VertexApLc in the game's table).
 //! Other types are skipped and counted ([`Effects::skipped_programs`],

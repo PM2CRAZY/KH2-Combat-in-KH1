@@ -265,8 +265,8 @@ same emitter wrote this tick.
   fast-forwarding).
 - **Ended effect.** Once ended, no instance loops; endless instances (total `0x70000000`) of a
   looping effect are destroyed when only endless ones remain.
-- **Children.** Emitters with start `0x7FFFFFFF` are spawned by programs (VertexApLc, the other
-  `*Ap*`/`BornRnd*` types) through `0x1404b1ce0`. The child keeps a link to its parent, used by
+- **Children.** Emitters with start `0x7FFFFFFF` are spawned by programs (VertexApLc, VertexAp,
+  the other `*Ap*`/`BornRnd*` types) through `0x1404b1ce0`. The child keeps a link to its parent, used by
   ParMatrix.
 
 ### 5.7 Randomness (checked, `0x1404de100`)
@@ -285,7 +285,7 @@ C runtime `rand`. Any uniform `[0, 1]` source reproduces it in distribution.
 | +0x10 | 4×4 local matrix `M` (rows x, y, z; translation row at +0x40) |
 | +0x50 | 4×4 draw matrix `D` |
 | +0x80 | view-space position (billboards) |
-| +0x90, +0x94 | optional vertex / normal overrides for models |
+| +0x90, +0x94 | optional vertex / normal overrides for models (VtMime sets +0x90, §7.4) |
 | +0x9C | "spawned this tick" flag |
 | +0xA0 | work area (offsets from the program records) |
 | work size | one key cursor (pointer) per program |
@@ -310,11 +310,16 @@ C runtime `rand`. Any uniform `[0, 1]` source reproduces it in distribution.
     scale])` × particle-data header transform (offset, angle, scale). Its per-axis scale
     lengths `rs = (|row x|, |row y|, |row z|)` are kept for billboards.
   - `V` = camera view, `P` = projection, `VR = V·Root` (column form), `PVR = P·V·Root`,
-    `Bill` = a camera-facing frame derived from `VR`.
+    `Bill` = an upright camera-facing frame derived from `VR` (checked, `0x1402c27b0`): its
+    y axis is `VR`'s y axis (the root's y in view space) normalised; its x axis is
+    `(y.y, −y.x, 0)` normalised, i.e. perpendicular to y in the screen plane; z = x × y
+    (normalised); origin = `VR`'s translation. The game also keeps `P·Bill`. Only
+    DrawMatrixWood (§7.3) uses it among the programs described here.
 
 ## 7. Program reference
 
-Only the types Explosion and Magnet Burst use. `w[i]` = the program's i-th work offset;
+The types Explosion and Magnet Burst use, plus those of Guard Break, Finishing Leap and
+Aerial Finish (§12.1). `w[i]` = the program's i-th work offset;
 "state" lives at `+0xA0 + w[i]` of the instance. Keys start with the frame word; offsets
 below are from the key start. All checked unless marked.
 
@@ -352,6 +357,8 @@ the fade value (§2).
 | 84 | pppSMatrix | `w0` | Stores a pointer that nothing reads on PC; no effect. |
 | 112, 217 | pppDrawMatrix, DrawMatrixLoop | – | `D = PVR · M` (fully 3D oriented). |
 | 113 | pppDrawMatrixFront | – | **Billboard**: rotation rows of `M` scaled by `rs`, used as is in view space; translation = `VR · M.translation`; `D = P · that`. The shape faces the camera, keeping only `M`'s own rotation (normally none). |
+| 115 | pppDrawMatrixWood | – | **Upright billboard** (calc `0x1404c8020`; its "before a tick" hook `0x1404c80d0` is empty). Rotation rows of `M` scaled by `rs`, translation = `M.translation` (not scaled), then `D = P · Bill · that` (§6). The model turns to face the camera about the root's y axis only (a "tree" billboard). The view position at +0x80 is `PVR · M.translation`. |
+| 120 | pppRyjDrawMatrixWorld | `w1` 4×4 saved root | Construct (`0x1404c8440`) copies the current `Root` into the 64 bytes at `w1`. Calc (`0x1404c83d0`): `D = P · V · saved · M`. The instance stays where the root was when it was **spawned**, however the effect moves later (bound elements). Calc runs every call. |
 | 124 | pppKeZCrct | `w0` 4×4 out | Key @4 3×f32 offset, @16 3×f32 scale, @28 u8 mode. Rows of `M` scaled by key scale. Mode 0: offset added to the local translation, then `VR·`. Mode 1: `VR·` first, then offset added **in view space**. Mode 2: offset × `rs` after `Root`. Mode 3: camera-facing frame. Out = `P · result`. |
 | 125 | pppKeZCrctShp | `w0` 4×4 out | Billboard version: rows of `M` × `rs`, translation × key scale then as above. |
 
@@ -407,6 +414,35 @@ getting the chosen vertex position (model units, the vertex set's model) as 3 fl
 offset @16 (the child's Point value), then countdown = interval − 1; else countdown −= 1.
 Children use ParMatrix, so the vertex is carried into the parent's frame. Keys with count 0
 switch spawning off.
+
+**174 pppVertexAp** (`calc 0x1404d5520`, construct `0x1404d5700`, spawn `0x1404d5410`).
+Same key, work, countdown, order and fast-forward rule as VertexApLc, with one difference:
+the chosen vertex is **transformed by the spawning instance's `M`** (as a point) before it
+is written to the child's offset @16, so the child gets an effect-space position and needs no
+ParMatrix. Construct zeroes `w0`; there is **no reset slot**, so the countdown and cursor
+carry over an instance loop (VertexApLc has one). Finishing Leap (element 34) spawns its
+five upward flame spikes this way, one per vertex of a pentagon vertex set flattened by the
+spawner's scale `(0.18, 0, 0.18)` into a ring around Sora; Guard Break (element 31) spawns its
+fan of light every 3 ticks at the origin (spawner scale 0.0001).
+
+**49 pppVtMime** – vertex morph between two models (calc `0x1404c3330`, draw
+`0x1404c31a0`, construct `0x1404c33f0`, reset `0x1404c3430`, destruct `0x1404c3450`). It
+has a draw slot, so it runs in the draw pass. Key (24 bytes): @4 i32 model A, @8 i32 model B
+(both 0xFFFF = off), @12 f32 `t` delta, @16 f32 rate delta (below −1e38, e.g. −FLT_MAX, means
+"leave the rate"), @20 f32 acceleration delta. Work `w0`: f32 `t`, f32 rate, f32
+acceleration, u32 handle of a vertex buffer.
+- Calc (once per tick, not while fast-forwarding): `rate += accel; t += rate`; on a key
+  tick `t += @12`, `rate += @16`, `accel += @20`.
+- Draw: on first use allocate a buffer of model A's vertex count; fill it with
+  `trunc(A[i] + (B[i] − A[i]) · t)` per component, stored as i16; set the instance's
+  vertex override (+0x90) to it.
+- Every later DrawMdl draw of that instance (DrawMdl3, Ts3, LoopZ) passes the override, and
+  the model packet (`0x1404b8250`) uses it **in place of the drawn model's own vertex list**
+  (the vertex count stays the drawn model's).
+- Construct and reset zero `t`, rate and acceleration (construct also clears the handle);
+  destruct frees the buffer.
+Aerial Finish uses it to open its swirl: model 24 morphs into model 23 (the one drawn, both
+246 vertices) as `t` runs from 0 to about 1 over the first ticks.
 
 **241 pppEiDrawShipoly** – ribbon trail (`calc 0x1404bb5f0`, `draw 0x1404bac50`). Records
 two points per tick (`±width/2` along the instance's local y, key @12 width) from the
@@ -673,6 +709,17 @@ From `P_EX100.a.us` (`p_ex`). All five Explosion and both Magnet elements live i
 
 Run `pax_fx` on the file for the full program lists.
 
+### 12.1 Guard Break, Finishing Leap, Aerial Finish
+
+Same DPD. Only the parts that use the programs added for them are listed.
+
+| Motion | Element | Bone, offset | Uses |
+|---|---|---|---|
+| Guard Break (165) | 31 | 0x4000, y −77, bound | VertexAp (every 3 ticks) spawns fans of light rays (model 37, a flat ±800 fan, texture-scrolled) drawn with RyjDrawMatrixWorld, so each stays where it was spawned while Sora lunges. |
+| Guard Break | 32 | 0x4000, y −90, z −235, rotated −90° about x | Two DrawMatrixWood models (1, 2: long along the root's y, which the rotation lays along the thrust axis) spiral around the thrust line and turn to face the camera about it; a stretched flare (shape 19) along the same axis. |
+| Finishing Leap (167) | 34 | 0x4000, z −9 | Eight VertexAp spawners. Five each place one flame spike (model 7, DrawMatrix, ZXY angles tilting it up and out, spinning about its long axis, about 340 units long at full size) at one corner of a pentagon flattened into a ring of radius about 160 at y −80. The other three put streaks (shape 2), white flares (shape 19) and, from tick 10, gold MegaBirth sparks at all five corners. Plus one DrawMatrixWood model (emitter 18). |
+| Aerial Finish (194) | 35–38 | 0x4000, rotated swirls | VtMime morphs model 24 → 23 in the DrawMdlTs3 swirl rings. |
+
 ## 13. Function index
 
 | Address | What |
@@ -699,6 +746,9 @@ Run `pax_fx` on the file for the full program lists.
 | 0x1404C34D0, 0x1404C4340 | RandFloat, RandIV. |
 | 0x1404C5E50, 0x1404C61D0, 0x1404C62B0, 0x1404C6A20, 0x1404C7AB0 | MatrixXYZ, YXZ, ZXY, Scl, ParMatrix. |
 | 0x1404C7E40, 0x1404C7E80, 0x1404C8BF0, 0x1404C8DC0 | DrawMatrix, DrawMatrixFront, KeZCrct, KeZCrctShp. |
+| 0x1404C8020, 0x1404C83D0, 0x1404C8440 | DrawMatrixWood; RyjDrawMatrixWorld calc, construct. |
+| 0x1404D5520, 0x1404D5410, 0x1404D5700 | VertexAp calc, spawn, construct. |
+| 0x1404C3330, 0x1404C31A0, 0x1404C33F0, 0x1404C3430, 0x1404C3450 | VtMime calc, draw (morph), construct, reset, destruct. |
 | 0x1404CB1B0, 0x1404CB3B0, 0x1404CB520 | DrawShape, DrawShapeX draw, shape animation. |
 | 0x1404CA050, 0x1404CA500, 0x1404CA790, 0x1404CAF30, 0x1404CAD40 | DrawMdl3, DrawMdlTs3 (draw, scroll), DrawMdlLoopZ (draw, scroll). |
 | 0x1404BDDA0, 0x1404BD5D0, 0x1404BC630, 0x1404BD2A0, 0x1404BD7A0, 0x1404BE100 | MegaBirth. |
@@ -714,6 +764,8 @@ Run `pax_fx` on the file for the full program lists.
 | Topic | Status |
 |---|---|
 | Element layer, timing (30 Hz, start wait, fade), program machine, key semantics, integrators, random, matrices, MegaBirth birth/update/draw, VertexApLc, DrawShape(X), DrawMdl* | **Checked** in code; MegaBirth and shape layouts cross-checked against the data. |
+| DrawMatrixWood (and the `Bill` frame), RyjDrawMatrixWorld, VertexAp, VtMime (calc, morph, use of the override by the model packet) | **Checked (exe)**; rendered offline for Guard Break, Finishing Leap and Aerial Finish. The look was compared only with descriptions of the game, not side by side. |
+| Model → effect world mapping of Sora's pose | **Hypothesis**: the `fx_render` example maps the y-up skeleton by a mirror (y negated) and pins 0x4000 at the origin. Guard Break's element 32 (z −235, axis along −z) then lands behind Sora's lunge; with a half turn about x (`--flip-z`) and the root following the motion (`--follow-root`) it lands on the thrust. The game's own mapping was not traced. |
 | Texture decode (linear, CSM1 palette, alpha ×2), normalised UVs, page atlas rule, file-space TBP/CBP matching | **Checked** (decode and UVs visually; atlas and matching from the relocation code and the data). |
 | Exact PC pixel/vertex shader maths (vertex colour scale, how matrix 1 is used) | **Inferred**: PS2 modulate semantics; position from `D`, depth from the Z matrix. |
 | Camera up vector | Data-driven; `(0,−1,0)` assumed (y down on screen). |
