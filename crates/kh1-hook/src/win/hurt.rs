@@ -169,6 +169,8 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     let Some((kind, toward)) = react else { return r };
     if down {
         note(format!("Sora is down (HP {})", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
+        // (Out of a Drive Form at once, as KH2's KO: `form`.)
+        super::form::knocked_out();
         return r;
     }
     // Already reeling: the damage counts, but a flinch doesn't restart KH2's reaction (nor

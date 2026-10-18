@@ -107,9 +107,11 @@ pub unsafe fn start() {
                 let mut textures: Vec<(u32, u32, Vec<u8>)> = lib.textures().iter().map(|t| (t.width, t.height, t.rgba.clone())).collect();
                 // Reflect's own packages (the user: its VFX), one per level, their textures after
                 // Sora's.
-                let spell: Vec<Option<SpellFx>> = (1..=3u8)
+                // (And Wisdom Form's, as package 4: its shots, `form`.)
+                let spell: Vec<Option<SpellFx>> = (1..=WISDOM)
                     .map(|level| {
-                        spell_library(level, &common).map(|l| {
+                        let lib = if level == WISDOM { wisdom_library(kh2, &common) } else { spell_library(level, &common) };
+                        lib.map(|l| {
                             let tex_base = textures.len() as u32;
                             textures.extend(l.textures().iter().map(|t| (t.width, t.height, t.rgba.clone())));
                             let mut fx = Effects::new(Arc::new(l));
@@ -152,6 +154,29 @@ fn load() -> Result<(Library, Vec<u8>), String> {
     let common = install.read_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon.dpd: {e}"))?;
     let lib = Library::load_named(&pack, Some("p_ex"), Some(&common)).map_err(|e| format!("{e:?}"))?;
     Ok((lib, common))
+}
+
+/// Wisdom Form's effect package (`P_EX100_MAGF.a.us`, PAX "p_ex"), played as spell package 4.
+pub const WISDOM: u8 = 4;
+
+fn wisdom_library(kh2: &super::pose::Kh2, common: &[u8]) -> Option<Library> {
+    let archive = kh2.wisdom.as_ref()?.archive.as_ref()?;
+    match Library::load_named(archive, Some("p_ex"), Some(common)) {
+        Ok(l) => {
+            log(&format!("KH2 effects: Wisdom Form's package, {} elements, {} textures", l.elements().len(), l.textures().len()));
+            Some(l)
+        }
+        Err(e) => {
+            log(&format!("KH2 effects: Wisdom Form's package not loaded ({e:?})"));
+            None
+        }
+    }
+}
+
+/// Puts a spell effect's root where the script has it (an unbound one it moves: Wisdom's shots),
+/// a KH2-world (y down) matrix.
+pub fn spell_place(h: u32, at: Mat4) {
+    with_spell(h, |fx, e| fx.set_anchor(e, at));
 }
 
 /// A Reflect level's effect package (the PAX in its spell file), if the spell is on and its file
@@ -273,7 +298,7 @@ fn bone(code: u16, tip_local: Vec3) -> Option<Mat4> {
 /// A KH2 controller event (from `takeover`, each frame KH2 has Sora).
 pub fn event(motion: u16, kind: EventKind) {
     let EventKind::Effect(el) = kind else { return };
-    if el < 0 || !allowed(motion) {
+    if el < 0 || !(allowed(motion) || super::form::own_motion(motion)) {
         return;
     }
     let Ok(mut g) = STATE.lock() else { return };

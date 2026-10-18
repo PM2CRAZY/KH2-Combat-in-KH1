@@ -1331,7 +1331,7 @@ impl Strikes {
     /// or his finisher's for a row that knocks away (KH2 reaction category 4, or a hit-back of
     /// 100 or more; ours). `row` gives an ATKP row by (id, sub, hit count). Returns (ATKP id,
     /// actor, damage) for each landed hit.
-    pub unsafe fn spell_strike(&mut self, sora: usize, attacks: &[SpellAttack], row: &dyn Fn(u16, u8, u8) -> Option<kh2_formats::battle::Atkp>) -> Vec<(u16, usize, Option<u32>)> {
+    pub unsafe fn spell_strike(&mut self, sora: usize, attacks: &[SpellAttack], row: &dyn Fn(u16, u8, u8) -> Option<kh2_formats::battle::Atkp>) -> Vec<(u64, u16, usize, Option<u32>)> {
         if !self.rows_tried {
             self.rows_tried = true;
             self.rows = sora_rows(sora);
@@ -1360,7 +1360,7 @@ impl Strikes {
                 let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, None);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
-                out.push((a.atk, b.actor, dealt));
+                out.push((a.key, a.atk, b.actor, dealt));
             }
         }
         out

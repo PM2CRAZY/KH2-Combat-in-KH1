@@ -224,6 +224,8 @@ struct Driver {
     swing_frame: u32,
     /// Standing on top of something above the map floor (a box): its height (KH2 y-up).
     on_top: Option<f32>,
+    /// A Drive Form (`form`): the change, the form, its gauge.
+    drive: super::form::Drive,
 }
 
 static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
@@ -433,6 +435,7 @@ fn drop_pose() {
 }
 
 fn release(why: &str) {
+    super::gates::released();
     let mut changed = false;
     if let Ok(mut w) = LAST_WHY.try_lock() {
         if w.as_str() != why {
@@ -838,7 +841,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
         // a combo).
         anim.queued_blend = 14.0;
-        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0, on_top: None }
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0, on_top: None, drive: Default::default() }
     });
     if FRESH.swap(false, Ordering::Relaxed) {
         // Back from a command of KH1's (a spell, an item): that was fighting, so KH2's battle
@@ -851,7 +854,8 @@ unsafe fn takeover(actor: usize) -> bool {
         // abilities.
         let abilities = d.character.abilities.clone();
         let combo = d.character.combo_state();
-        d.character = kh2.character.clone();
+        // (In a Drive Form, the form's.)
+        d.character = super::form::character(&d.drive, kh2).clone();
         d.character.abilities = abilities;
         // After a KH1 spell: the combo goes on from the slot it took (not after the combo's last).
         let spell = SPELL_SLOT.swap(0, Ordering::Relaxed);
@@ -884,6 +888,7 @@ unsafe fn takeover(actor: usize) -> bool {
         d.held.0 = false;
     }
     d.growth.update(base, &mut d.character);
+    super::form::abilities(&mut d.drive, &mut d.character);
     // Glide on Square, as KH1's Superglide was (the user), or on the jump button (ini `glide`).
     // (Not out of a flight: there Square is flight's descend.)
     // Air casts (Reflect) fall as they play, as KH1's spells do (the user).
@@ -1016,6 +1021,8 @@ unsafe fn takeover(actor: usize) -> bool {
     let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     // A Reflect chosen from the Magic menu: KH2's cast as soon as its move allows (`reflect`).
     super::reflect::before_step(actor, &mut d.character);
+    // A Drive chosen from page 2 (`form`): the change, the form's end.
+    super::form::before_step(&mut d.drive, &mut d.character, &mut d.anim, kh2, actor);
     let mut out = d.character.step(&input, &env);
     // Out of flight for a combo: he stays up through it (the user: Sora should remain in
     // flight throughout the combo); KH2's aerial attacks sink between hits, so no sinking while
@@ -1071,6 +1078,12 @@ unsafe fn takeover(actor: usize) -> bool {
     // whatever is under him, objects included, as KH1's own fall does; the map floor alone
     // (`+0x320`) doesn't know boxes.
     let rise3d = settings.ceilings && (rising || air);
+    // An attack's lunge doesn't walk him into a room exit (`gates`): its face event dropped,
+    // this frame's move undone.
+    let attack_move = matches!(out.state, StateName::Attack);
+    let before_move = rd::<[f32; 4]>(actor + 0x10);
+    super::gates::pre_move(actor, attack_move);
+    super::gates::attacking(actor, attack_move);
     if rise3d {
         let state = rd::<i32>(actor + 0x70);
         wr(actor + 0x70, AIR_STATE);
@@ -1078,6 +1091,13 @@ unsafe fn takeover(actor: usize) -> bool {
         wr(actor + 0x70, state);
     } else {
         mv(actor, &[out.displacement[0] + carry[0], 0.0, out.displacement[2] + carry[2], 0.0], 0);
+    }
+    if let Some(e) = super::gates::post_move() {
+        wr(actor + 0x10, before_move);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log(&format!("an attack's lunge touched map event {e}: kept out of it (the move undone)"));
+        }
     }
     if settings.carry {
         wr(actor + 0x120, [0.0f32; 4]);
@@ -1270,14 +1290,24 @@ unsafe fn takeover(actor: usize) -> bool {
     if d.grounded && !d.character.airborne() {
         FLEW.store(false, Ordering::Relaxed);
     }
-    d.strikes.strike(actor, &out, &d.anim, &mut d.character, &kh2.battle);
+    let battle_rows = super::form::battle(&d.drive, kh2).clone();
+    d.strikes.strike(actor, &out, &d.anim, &mut d.character, &battle_rows);
     // Reflect's script: its cast, barrier, counter and effects.
-    super::reflect::after_step(actor, &out, d.character.airborne(), &mut d.strikes, &kh2.battle, lock);
-    // KH2's own sounds for the effect elements this frame starts.
+    super::reflect::after_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock);
+    // KH2's own sounds for the effect elements this frame starts. In Wisdom Form a frame
+    // trigger 1 is a shot from its model's script instead (`form`).
     for e in &out.events {
+        if super::form::takes(&d.drive, e) {
+            if let character_core::EventKind::Effect(n) = e {
+                super::form::effect(*n);
+            }
+            continue;
+        }
         super::kh2sound::event(out.motion, *e);
         super::kh2fx::event(out.motion, *e);
     }
+    super::form::shots_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock);
+    super::form::after_step(&mut d.drive, actor, rd::<u32>(base + BATTLE_RVA) & 1 != 0);
     super::kh2sound::tick();
     super::kh2fx::tick(out.motion);
     {

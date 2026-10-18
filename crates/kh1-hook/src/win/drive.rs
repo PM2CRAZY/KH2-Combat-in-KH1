@@ -44,7 +44,7 @@ static BASE: AtomicUsize = AtomicUsize::new(0);
 /// The second page is up.
 static PAGE2: AtomicBool = AtomicBool::new(false);
 static ON: AtomicBool = AtomicBool::new(false);
-static NAMES: OnceLock<(usize, Vec<usize>)> = OnceLock::new();
+static NAMES: OnceLock<(usize, Vec<usize>, usize)> = OnceLock::new();
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -111,13 +111,13 @@ unsafe fn ensure_records(base: usize) -> bool {
     true
 }
 
-/// Whether form `k` can be chosen now (stage 1: the menu only).
-unsafe fn usable(_k: usize) -> bool {
-    super::takeover::kh2_has()
+/// Whether form `k` can be chosen now (`form`: its MP, or Revert in the form).
+unsafe fn usable(actor: usize, _k: usize) -> bool {
+    super::form::usable(actor)
 }
 
 /// After KH1's battle-menu fill (and Reflect's entry): page 2's Drive row and list.
-pub unsafe fn fill(_actor: usize, _flags: usize) {
+pub unsafe fn fill(actor: usize, _flags: usize) {
     let base = base();
     if !on() || base == 0 {
         return;
@@ -145,7 +145,7 @@ pub unsafe fn fill(_actor: usize, _flags: usize) {
         wr(magic + 0x10, n + 1);
         n + 1
     };
-    let any = (0..FORMS.len()).any(|k| usable(k));
+    let any = (0..FORMS.len()).any(|k| usable(actor, k));
     let bit = 1u32 << (n - 1);
     for off in [4usize, 8] {
         let v = rd::<u32>(magic + off);
@@ -165,7 +165,7 @@ pub unsafe fn fill(_actor: usize, _flags: usize) {
     let mut grey = 0u32;
     for (k, &(id, _, _)) in FORMS.iter().enumerate() {
         wr(list + 0x14 + k, id);
-        if !usable(k) {
+        if !usable(actor, k) {
             grey |= 1 << k;
         }
     }
@@ -183,19 +183,26 @@ pub fn word(index: i32) -> Option<usize> {
     if !on() {
         return None;
     }
-    let (drive, forms) = NAMES.get()?;
+    let (drive, forms, revert) = NAMES.get()?;
     if index == SUMMON as i32 && PAGE2.load(Ordering::Relaxed) {
         return Some(*drive);
     }
-    FORMS.iter().position(|f| f.1 as i32 == index).map(|k| forms[k])
+    // In the form its entry is KH2's Revert.
+    FORMS.iter().position(|f| f.1 as i32 == index).map(|k| if super::form::in_form() { *revert } else { forms[k] })
 }
 
-/// A form chosen (`combat::command`: magic with argument `FORM_ARG + k`).
-pub unsafe fn chosen(_actor: usize, k: usize) {
+/// A form chosen (`combat::command`: magic with argument `FORM_ARG + k`): `form` changes him
+/// (or reverts, in the form).
+pub unsafe fn chosen(actor: usize, k: usize) {
     let name = FORMS.get(k).map_or("?", |f| f.2);
-    log(&format!("Drive: {name} chosen (the form itself comes in the next stage)"));
-    let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base() + SOUND_RVA);
-    sound(4);
+    match super::form::choose(actor) {
+        Ok(what) => log(&format!("Drive: {what} chosen")),
+        Err(why) => {
+            log(&format!("Drive: {name} refused ({why})"));
+            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base() + SOUND_RVA);
+            sound(4);
+        }
+    }
 }
 
 /// The command step when `shortcuts` hasn't hooked it.
@@ -235,6 +242,7 @@ pub unsafe fn install() {
     let _ = NAMES.set((
         Box::leak(super::menu::encode("Drive").into_boxed_slice()).as_ptr() as usize,
         FORMS.iter().map(|f| Box::leak(super::menu::encode(f.2).into_boxed_slice()).as_ptr() as usize).collect(),
+        Box::leak(super::menu::encode("Revert").into_boxed_slice()).as_ptr() as usize,
     ));
     if !super::shortcuts::step_hooked()
         && hook::install(base + super::shortcuts::STEP_RVA, &super::shortcuts::STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step (Drive)").is_none()

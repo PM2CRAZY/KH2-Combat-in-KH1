@@ -2178,3 +2178,27 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   but KH1's world has y pointing down (the pose's model space is y-up; `to_world` flips it), so
   the free keychain of s188 rose. Down is now the model's down taken through `to_world`. Test
   `hangs_down_in_a_y_down_world`.
+
+### 2026-10-18: Stage 191 (Wisdom Form; lunges kept out of exits and crates)
+- Wisdom Form itself (`win/form.rs`, `docs/kh1-drive.md`): page 2's Drive entry, 3 MP (KH1's
+  own payment), KH2's change (Sora's Drive motion 52, invulnerable; the swap to `P_EX100_MAGF`
+  loaded beside KH2 Sora, `pose::Form`, facing / lock kept; arrival 53), Quick Run LV1 and
+  Sora's support abilities, 40 s of battle time (the gauge stands still out of battle), the
+  entry reading "Revert" in the form, revert motion 4 on the ground, at once on a KO (`hurt`).
+  Its shots: the motions' frame trigger 1 runs the model's `wisd` script (`Magic::
+  object_effect`) with its effect archive as `kh2fx` package 4; the shot's unbound effect is
+  placed where the script moves it (new kh2-fx `Effects::set_anchor`); ATKP 859 lands through
+  the spell hit records (now returning the attack key, so the hit is passed back to the
+  script); unlocked, the nearest enemy in front is the target. Reflect's sub + 10 in the form.
+  Reflect's script world is shared (`reflect::world_now`).
+- The blue (`win/tint.rs`, `docs/kh1-tint.md`): a hook on KH1's mesh draw `0x1401DB7F0` sets the
+  mesh shader's Ambient / fog for Sora's clothes meshes (3..7: jacket, jumpsuit, trim), read
+  from his model's mesh table, and puts KH1's back after; faded in over 15 frames.
+- "a combo pushing you forward shouldnt bring you into a new room if you're by the entrance of
+  a room, also, if a combo pushes you forward into a box, it shouldnt go into soras push
+  animation" (`win/gates.rs`, `docs/kh1-exits-push.md`): exits are collision faces with an
+  event number that KH1's mover queues on every touch; during takeover's move of an attack
+  frame a new face event is dropped and the move undone. Crates count 12 frames of Sora's
+  touch themselves; during KH2's attacks (and 20 frames after) their "touched by" field is
+  cleared before the count.
+- None of it watched in game yet.

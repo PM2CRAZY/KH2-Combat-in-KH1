@@ -51,6 +51,8 @@ struct Running {
     pos: Vec3,
     rot: Mat3,
     scale: Vec3,
+    /// Placed by the host (`set_anchor`): this matrix stands for the bone.
+    anchor: Option<Mat4>,
 }
 
 /// Plays PAX elements.
@@ -138,6 +140,7 @@ impl Effects {
             pos,
             rot,
             scale,
+            anchor: None,
         });
         Some(EffectHandle(handle))
     }
@@ -180,6 +183,15 @@ impl Effects {
         self.running.len()
     }
 
+    /// Place an effect: `bone` (KH2 world, y down) stands for its bone from now on, followed
+    /// every tick whatever its bind flags (a script moving an unbound effect, a shot).
+    pub fn set_anchor(&mut self, h: EffectHandle, bone: Mat4) {
+        if let Some(r) = self.running.iter_mut().find(|r| r.handle == h.0) {
+            r.anchor = Some(bone);
+            (r.pos, r.rot, r.scale) = element_transform(&r.element, bone);
+        }
+    }
+
     /// Multiply an effect's alpha (e.g. hide weapon effects, flag 0x800).
     pub fn set_alpha(&mut self, h: EffectHandle, alpha: f32) {
         if let Some(r) = self.running.iter_mut().find(|r| r.handle == h.0) {
@@ -217,7 +229,9 @@ impl Effects {
             }
             let f = r.element.flags;
             let follow = f & flags::BIND != 0 && (f & flags::BIND_UNTIL_START == 0 || !r.started);
-            if follow {
+            if let Some(a) = r.anchor {
+                (r.pos, r.rot, r.scale) = element_transform(&r.element, a);
+            } else if follow {
                 if let Some(b) = bones(r.element.bone) {
                     (r.pos, r.rot, r.scale) = element_transform(&r.element, b);
                 }

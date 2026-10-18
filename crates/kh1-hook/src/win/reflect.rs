@@ -85,8 +85,8 @@ const ROWS: usize = 8;
 const WAIT_S: f32 = 5.0;
 
 /// Sora in the spell scripts' world; enemies are `FOE0 + i`.
-const SORA: ObjId = 1;
-const FOE0: ObjId = 100;
+pub(super) const SORA: ObjId = 1;
+pub(super) const FOE0: ObjId = 100;
 /// Spell attacks' keys in the hit records (apart from KH2's swing ids).
 const SPELL_KEY: u64 = 1 << 60;
 
@@ -249,6 +249,12 @@ unsafe fn affordable(base: usize, sora: usize) -> bool {
     }
     let check: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + MP_CHECK_RVA);
     check(sora, COST) & 0xFF != 0
+}
+
+/// KH1's own payment of MP (`cost` in hundredths of a bar from 100 up; `form`'s Drive).
+pub(super) unsafe fn pay_mp(sora: usize, cost: i32) {
+    let pay: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base() + MP_PAY_RVA);
+    pay(sora, cost);
 }
 
 /// Sora's MP now (stats `+0x44` of `+0x48`), for the log.
@@ -711,21 +717,39 @@ fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
 }
 
 /// The world as the spell script sees it this frame (y up).
-struct Obj {
-    id: ObjId,
-    pos: Vec3,
-    facing: f32,
-    motion: u16,
-    air: bool,
-    target: Vec3,
-    centre: Vec3,
+pub(super) struct Obj {
+    pub(super) id: ObjId,
+    pub(super) pos: Vec3,
+    pub(super) facing: f32,
+    pub(super) motion: u16,
+    pub(super) air: bool,
+    pub(super) target: Vec3,
+    pub(super) centre: Vec3,
 }
 
-struct KhWorld {
-    objs: Vec<Obj>,
-    target: Option<ObjId>,
-    floor: f32,
-    rng: u32,
+/// (Also Wisdom Form's shots', `form`.)
+pub(super) struct KhWorld {
+    pub(super) objs: Vec<Obj>,
+    pub(super) target: Option<ObjId>,
+    pub(super) floor: f32,
+    pub(super) rng: u32,
+}
+
+/// The world as the scripts see it this frame: Sora (`SORA`) and the enemies near him
+/// (`FOE0 + i`, from `strikes`' look), the lock's one as Sora's target.
+pub(super) unsafe fn world_now(actor: usize, out: &Output, airborne: bool, strikes: &combat::Strikes, lock: Option<u32>, seed: u32) -> KhWorld {
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    let pos = Vec3::new(p[0], -p[1], p[2]);
+    // Sora's body centre: KH2's hips (bone 0) as drawn, else 90 up.
+    let centre = pose::kh2_pose(|b, w| b.first().map(|h| (flip() * *w).transform_point3(h.w_axis.truncate()))).flatten().unwrap_or(pos + Vec3::Y * 90.0);
+    let mut objs = vec![Obj { id: SORA, pos, facing: out.facing, motion: out.motion, air: airborne, target: centre, centre }];
+    let targets = strikes.targets();
+    for (i, (_, feet, aim)) in targets.iter().enumerate() {
+        objs.push(Obj { id: FOE0 + i as u32, pos: Vec3::from(*feet), facing: 0.0, motion: 0, air: false, target: Vec3::from(*aim), centre: Vec3::from(*aim) });
+    }
+    let target = lock.and_then(|l| targets.iter().position(|t| t.0 == l)).map(|i| FOE0 + i as u32);
+    let floor = -rd::<f32>(actor + 0x324);
+    KhWorld { objs, target, floor, rng: seed }
 }
 
 impl KhWorld {
@@ -735,7 +759,7 @@ impl KhWorld {
 }
 
 /// y up <-> KH1's y down.
-fn flip() -> Mat4 {
+pub(super) fn flip() -> Mat4 {
     Mat4::from_scale(Vec3::new(1.0, -1.0, 1.0))
 }
 
@@ -817,24 +841,13 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         BLOCKS.store(0, Ordering::Relaxed);
         return;
     }
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    let pos = Vec3::new(p[0], -p[1], p[2]);
-    // Sora's body centre: KH2's hips (bone 0) as drawn, else 90 up.
-    let centre = pose::kh2_pose(|b, w| b.first().map(|h| (flip() * *w).transform_point3(h.w_axis.truncate()))).flatten().unwrap_or(pos + Vec3::Y * 90.0);
-    let mut objs = vec![Obj { id: SORA, pos, facing: out.facing, motion: out.motion, air: airborne, target: centre, centre }];
-    let targets = strikes.targets();
-    for (i, (id, feet, aim)) in targets.iter().enumerate() {
-        let _ = id;
-        objs.push(Obj { id: FOE0 + i as u32, pos: Vec3::from(*feet), facing: 0.0, motion: 0, air: false, target: Vec3::from(*aim), centre: Vec3::from(*aim) });
-    }
-    let target = lock.and_then(|l| targets.iter().position(|t| t.0 == l)).map(|i| FOE0 + i as u32);
-    let floor = -rd::<f32>(actor + 0x324);
-    let mut world = KhWorld { objs, target, floor, rng: 0x1234_5678 ^ (rt.counter_hits.wrapping_mul(2_654_435_761)) };
+    let mut world = world_now(actor, out, airborne, strikes, lock, 0x1234_5678 ^ (rt.counter_hits.wrapping_mul(2_654_435_761)));
     // A cast that started this frame (trigger 20), then the release (trigger 21) at the cast
     // motion's magic-cast event (Reflect's: frame 0).
     if let Some((motion, finisher, level)) = rt.fresh.take() {
         // KH2's sub for a spell level: level × 2 − 2, + 1 for the combo finisher's cast.
-        let sub = level as i32 * 2 - 2 + finisher as i32;
+        // (In Wisdom Form, + 10: `form`.)
+        let sub = level as i32 * 2 - 2 + finisher as i32 + super::form::magic_sub();
         let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
         let spell = rt.spells[(level - 1) as usize].unwrap_or(0);
         // Cast again while the last one is still in flight (its barrier, or its counter not yet
@@ -983,7 +996,7 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     }
     if !attacks.is_empty() {
         let hits = strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned());
-        for (atk, foe, dealt) in hits {
+        for (_, atk, foe, dealt) in hits {
             rt.counter_hits += 1;
             note(format!("Reflect counter: ATKP {atk} hit {foe:#x} -> damage {dealt:?}"));
         }

@@ -137,3 +137,26 @@ Page 2 differs from page 1 only in row 3, so reuse KH1's Summon path end to end:
 4. **Choice**: menu 3 entry -> 0x1402912F0 -> 0x142D54440 = `02 | arg<<8`, chain back to root ->
    0x1402A5380 -> `combat::command`: route `kind == 2 && arg == form arg` to a `drive::chosen`
    before the KH1-cast queue (as Reflect).
+
+## Wisdom Form (stage 191, `form.rs`)
+
+- Choosing the form's entry (`drive::chosen`) asks `form` for it: refused (the "can't" sound)
+  without 3 MP, while KH1 has Sora, or with its files missing. In the form the same entry reads
+  "Revert".
+- The change follows KH2's (kh2-bevy `drive.rs`): base Sora's Drive motion 52 (invulnerable),
+  then the swap to `P_EX100_MAGF` (moveset 3, same 256-bone skeleton as Sora's, so the pose's
+  retarget is unchanged): facing, lock and glide button kept; abilities = Sora's support ones,
+  no action or growth ones, Quick Run at the form's level (1), every combo row of the form's
+  table. Arrival motion 53. On the ground only (waits for it).
+- The gauge: `(level + 3) × 600` frames, counted only in battle (KH1's battle bit). Then, on
+  Revert, or knocked out: back to Sora (revert motion 4; none on a KO), his own abilities back.
+- Shots: Wisdom's attack motions carry frame trigger 1 on their shot frames (151: 25, 26, 27 at
+  10/20/30; finisher 154: 28..40; air 181: 41..43). Each runs the model's object script (BAR
+  entry 3 of `P_EX100_MAGF.mdlx`, "wisd") with the PAX of `P_EX100_MAGF.a.us` (entry 18): a
+  muzzle element bound to Sora, and the shot element (20), unbound, which the script moves with
+  its attack (ATKP 859, radius 50). The hook places that effect where the script has it each
+  frame (`kh2fx::spell_place`, kh2-fx `Effects::set_anchor`) and lands the attack through the
+  spell hit records; a hit marks the attack hit so the script ends it. Unlocked: the nearest
+  enemy within 1500 in front is the target.
+- Spells in the form: magic sub + 10 (Reflect's rows exist at sub 10 and 14).
+- The look: `tint.rs` (`docs/kh1-tint.md`).

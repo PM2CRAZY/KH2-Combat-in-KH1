@@ -134,10 +134,34 @@ pub struct Kh2 {
     pub battle: Arc<kh2_formats::battle::Battle>,
     /// The spells' `magi` records (03system `pref`), by sub (`reflect`).
     pub magi: kh2_formats::pref::MagiTable,
+    /// Wisdom Form (`form`): its model's moveset and motions, its script and effect archive.
+    pub wisdom: Option<Form>,
     roots: HashMap<u16, Vec<[f32; 3]>>,
     /// Walk and run (battle, field): ground speed in KH2 units per second, from the planted
     /// foot's travel against the hips.
     ground: HashMap<(u16, bool), f32>,
+}
+
+/// A Drive Form's data (KH2's `P_EX100_<form>` files): the same skeleton as Sora's.
+pub struct Form {
+    pub rig: Arc<Rig>,
+    pub character: character_core::Character,
+    pub battle: Arc<kh2_formats::battle::Battle>,
+    /// The model's object script (BAR entry type 3: Wisdom's `wisd`, its shots).
+    pub script: Option<Vec<u8>>,
+    /// The form's effect archive (`.a.us`: the PAX "p_ex" its script's effects come from).
+    pub archive: Option<Arc<Vec<u8>>>,
+}
+
+fn load_form(install: &kh2_data::Install, source: kh2_data::Source, spec: kh2_data::sora::PlayerSpec, skeleton: usize) -> Result<Form, String> {
+    let data = install.load_player(source, spec).map_err(|e| e.to_string())?;
+    let rig = data.rig.clone().ok_or_else(|| data.rig_error.clone().unwrap_or_else(|| "no rig".into()))?;
+    if rig.skeleton.len() != skeleton {
+        return Err(format!("{} bones, Sora has {skeleton}", rig.skeleton.len()));
+    }
+    let script = install.read_any(source, &format!("obj/{}.mdlx", spec.model)).ok().and_then(|b| kh2_magic::SpellFile::bar_entry(&b, 3));
+    let archive = install.read_any(source, &format!("obj/{}.a.us", spec.model)).ok().map(Arc::new);
+    Ok(Form { rig, character: data.character.clone(), battle: Arc::new(data.combat.battle.clone()), script, archive })
 }
 
 /// How fast a looping gait covers ground: each frame, the lower foot's horizontal travel
@@ -420,7 +444,29 @@ pub fn load_kh2() {
                 }
             }
             log(&format!("KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32()));
-            Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), magi: sora.magi.clone(), roots, ground })
+            let wisdom = if super::settings::get().drive {
+                let t = Instant::now();
+                match load_form(&install, source, kh2_data::sora::FORMS[1], rig.skeleton.len()) {
+                    Ok(f) => {
+                        log(&format!(
+                            "KH2 Wisdom Form loaded: {} motions, {} combo rows, script {}, effects {}, in {:.1}s",
+                            f.rig.motions.len(),
+                            f.character.moveset.combo_rows.len(),
+                            f.script.as_ref().map_or("missing".into(), |s| format!("{} bytes", s.len())),
+                            if f.archive.is_some() { "read" } else { "missing" },
+                            t.elapsed().as_secs_f32()
+                        ));
+                        Some(f)
+                    }
+                    Err(e) => {
+                        log(&format!("KH2 Wisdom Form did not load: {e}"));
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+            Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), magi: sora.magi.clone(), wisdom, roots, ground })
         })();
         if let Err(e) = &r {
             log(&format!("KH2 Sora did not load: {e}"));

@@ -9,6 +9,8 @@ mod config;
 mod crash;
 mod drive;
 mod feet;
+mod form;
+mod gates;
 mod fx12;
 mod hook;
 mod hurt;
@@ -21,6 +23,7 @@ mod shortcuts;
 mod probe;
 mod reflect;
 mod takeover;
+mod tint;
 mod sys;
 
 use std::ffi::c_void;
@@ -180,6 +183,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         shortcuts::install();
         reflect::install();
         drive::install();
+        tint::install();
+        gates::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

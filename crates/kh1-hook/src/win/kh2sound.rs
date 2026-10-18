@@ -94,7 +94,7 @@ pub fn start() {
             .moveset
             .clips
             .iter()
-            .filter(|(m, _)| allowed(**m))
+            .filter(|(m, _)| allowed(**m) || super::form::own_motion(**m))
             .flat_map(|(_, c)| c.events.iter().map(|e| e.kind))
             .collect();
         // Reflect (the user: its sounds): its cast voices (MAGC, played by KH2's cast code, not a
@@ -104,6 +104,8 @@ pub fn start() {
             events.extend(super::reflect::cast_voices(kh2).into_iter().map(character_core::EventKind::Voice));
             spell = super::reflect::element_sounds();
         }
+        // Wisdom Form's (its shots', `form`).
+        spell.extend(super::form::element_sounds(kh2));
         match load(&events, &spell) {
             Ok(map) => {
                 log(&format!(
@@ -243,7 +245,7 @@ pub fn covers(motion: u16) -> bool {
 /// Sora's `motion` reached a KH2 event: its sound, if it has one.
 pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     use character_core::EventKind;
-    if !allowed(motion) {
+    if !(allowed(motion) || super::form::own_motion(motion)) {
         return;
     }
     let Ok(g) = LOADED.try_lock() else { return };
