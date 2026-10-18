@@ -2172,3 +2172,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   on page 2. A form chosen reaches `combat::command` as magic with that argument
   (`drive::chosen`; this stage only logs it and plays KH1's "can't" sound). The step, fill and
   name hooks are shared with `shortcuts` / `reflect` (whichever installed them calls `drive`).
+
+### 2026-10-18: Stage 190 (the keychain hangs down)
+- "the keychain is now floating upwards??" (a screenshot): gravity pulled toward the world's -y,
+  but KH1's world has y pointing down (the pose's model space is y-up; `to_world` flips it), so
+  the free keychain of s188 rose. Down is now the model's down taken through `to_world`. Test
+  `hangs_down_in_a_y_down_world`.

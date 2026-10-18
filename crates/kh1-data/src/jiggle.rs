@@ -46,8 +46,7 @@ pub fn sora_chains() -> Vec<Chain> {
     v
 }
 
-/// Gravity (units: KH1's, about a centimetre; per second²), down in world space (y-up here, as
-/// the pose's model space turned by `to_world`, whose up is the world's).
+/// Gravity (units: KH1's, about a centimetre; per second²), along the model's down in the world.
 const GRAVITY: f32 = 980.0;
 /// Simulation step (the game's frame).
 const STEP: f32 = 1.0 / 60.0;
@@ -92,6 +91,9 @@ impl Jiggle {
             return;
         }
         let at = |pose: &[Mat4], b: usize| to_world.transform_point3(pose[b].w_axis.truncate());
+        // Down is the model's down in the world (KH1's world has y pointing down: the user, s188,
+        // "the keychain is now floating upwards").
+        let down = -to_world.transform_vector3(Vec3::Y).normalize_or(Vec3::Y);
         for ci in 0..self.chains.len() {
             let c = self.chains[ci].clone();
             if c.bones.iter().any(|&b| b >= pose.len()) || c.bones.len() < 2 {
@@ -114,7 +116,7 @@ impl Jiggle {
                 // A breeze from one side, swelling and dropping, with a quicker flutter on top.
                 let gust = 0.6 + 0.4 * (t * 0.9).sin() + 0.15 * (t * 7.3).sin() * (t * 2.1).cos();
                 let wind = if settle > 0 && k == 0 { Vec3::ZERO } else { Vec3::new((t * 0.13).cos(), 0.0, (t * 0.13).sin()) * (c.wind * gust) };
-                let acc = Vec3::new(0.0, -GRAVITY * c.gravity, 0.0) + wind;
+                let acc = down * (GRAVITY * c.gravity) + wind;
                 st.p[0] = target[0];
                 st.prev[0] = target[0];
                 for i in 1..st.p.len() {
@@ -297,5 +299,27 @@ mod hang_tests {
             tip = p[3].w_axis.truncate();
         }
         assert!(tip.y < 100.0 - 13.0 && tip.x.abs() < 3.0, "not hanging: {tip:?}");
+    }
+}
+
+#[cfg(test)]
+mod down_tests {
+    use super::*;
+
+    #[test]
+    fn hangs_down_in_a_y_down_world() {
+        // KH1's world: y down (to_world flips y). The chain must hang toward the model's down.
+        let pose: Vec<Mat4> = (0..4).map(|i| Mat4::from_translation(Vec3::new(i as f32 * 5.0, 100.0, 0.0))).collect();
+        let parents = vec![-1, 0, 1, 2];
+        let c = Chain { bones: vec![0, 1, 2, 3], stiffness: 0.0, damping: 0.12, gravity: 1.0, wind: 0.0, max_turn: 170f32.to_radians() };
+        let mut j = Jiggle::new(vec![c]);
+        let flip = Mat4::from_scale(Vec3::new(1.0, -1.0, 1.0));
+        let mut tip = Vec3::ZERO;
+        for _ in 0..600 {
+            let mut p = pose.clone();
+            j.apply(&mut p, &parents, &flip, 1);
+            tip = p[3].w_axis.truncate();
+        }
+        assert!(tip.y < 100.0 - 13.0, "not hanging in model space: {tip:?}");
     }
 }
