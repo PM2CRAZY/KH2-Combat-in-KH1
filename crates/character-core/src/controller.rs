@@ -370,6 +370,8 @@ pub struct Character {
     get_up: Option<u16>,
     /// The current swing has connected.
     hit: bool,
+    /// The next swing goes on with the combo (`set_combo_state`: after a spell).
+    combo_carry: bool,
     buffered_attack: bool,
     /// Hang point to move onto this frame (a ledge was just grabbed).
     snap: Option<[f32; 3]>,
@@ -476,6 +478,7 @@ impl Character {
             finishers: 0,
             get_up: None,
             hit: false,
+            combo_carry: false,
             jump_held: false,
             jump_released: false,
             buffered_attack: false,
@@ -672,6 +675,20 @@ impl Character {
         self.land();
         self.airborne = false;
         self.vel_h = [0.0; 2];
+    }
+
+    /// Where the combo stands (its count, finishers, whether the last swing connected), to carry
+    /// it over a move of the host's own (a spell cast mid-combo: KH2 goes on with the combo
+    /// after the cast's end frames).
+    pub fn combo_state(&self) -> (u8, u8, bool) {
+        (self.count, self.finishers, self.hit)
+    }
+
+    pub fn set_combo_state(&mut self, (count, finishers, hit): (u8, u8, bool)) {
+        self.count = count;
+        self.finishers = finishers;
+        self.hit = hit;
+        self.combo_carry = count > 0;
     }
 
     /// In the air this frame (the host picks the map's air rules with it).
@@ -946,6 +963,7 @@ impl Character {
             _ => (None, false),
         };
         let in_attack = current_motion.is_some();
+        let carry = std::mem::take(&mut self.combo_carry);
         if in_attack && self.abilities.one_swing_on_miss && !self.abilities.combo_master && !self.hit {
             return false;
         }
@@ -959,9 +977,9 @@ impl Character {
         if in_finisher && hit && self.finishers < self.max_finishers() {
             self.count = self.count.saturating_add(1);
             self.finishers += 1;
-        } else if in_attack && hit {
+        } else if (in_attack || carry) && hit {
             self.count = self.count.saturating_add(1);
-        } else if !in_attack {
+        } else if !in_attack && !carry {
             self.count = 1;
             self.finishers = 1;
         }
@@ -1206,6 +1224,7 @@ impl Character {
     fn reset_combo(&mut self) {
         self.count = 0;
         self.finishers = 0;
+        self.combo_carry = false;
         self.buffered_attack = false;
     }
 

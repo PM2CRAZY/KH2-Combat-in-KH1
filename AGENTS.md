@@ -1844,3 +1844,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   let KH2's rise through. Bit 3 now counts as a roof only when it was there from the first 3
   frames of the rise and unbroken since (`RISE_FRAMES`, `SLOPE_RUN`): taking off from a roof,
   not meeting a ceiling on the way up.
+
+### 2026-10-18: Stage 167 (attack out of a spell's end frames, combo carried on)
+- The user: KH2's magic has end frames an Attack cuts into, going on with the combo. KH2's
+  ground casts open their range-14 window about 8 frames after the magic-cast event (Fire 56:
+  cast 22, window from 30 of 80; Blizzard 59: 16 / 24 of 72; Thunder 62: 18 / 26 of 68).
+  For KH1's casts (`HANDOFF` from a command): an Attack pressed meanwhile (`ATTACK_AFTER`)
+  now ends the handoff only once the spell is out (`spell_out`: a new attack object owned by
+  Sora in KH1's pool, `combat::sora_shots`, or 55% of KH1's cast motion for spells with none),
+  not before (before, an Attack 10 frames in could cut the cast itself). KH1's action flag is
+  cleared there, and KH2's combo state from before the spell carries over
+  (`Character::combo_state` / `set_combo_state`: the next swing counts on from it).

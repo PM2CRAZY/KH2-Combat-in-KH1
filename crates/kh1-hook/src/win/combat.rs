@@ -267,6 +267,7 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
         // (A spell in the air: its index in the command's second byte (Fire 0 .. Aero 6).)
         takeover::set_air_cast((air && kind == 2).then_some(((full >> 8) & 0xFF) as u8));
+        takeover::command_started(sora_shots(actor));
         takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}, KH1 motion {:#x}", if air { " in the air" } else { "" }, super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed)));
     } else {
         if air {
@@ -700,6 +701,18 @@ const CLASH_TABLE: [u8; 8] = [0x1F, 0x09, 0x09, 0x3F, 0x29, 0x18, 0x00, 0x00];
 /// Whether a guard of clash type `guard` meets Sora's swing of type `swing`.
 fn clashes(guard: u32, swing: u32) -> bool {
     CLASH_TABLE[(guard & 7) as usize] & (1 << (swing & 7)) != 0
+}
+
+/// Sora's own live attack objects in KH1's pool (a spell's shot among them): owner `+0x34`.
+pub unsafe fn sora_shots(sora: usize) -> usize {
+    let base = BASE.load(Ordering::Relaxed);
+    (0..ATTACK_SLOTS)
+        .filter(|k| {
+            let g = base + ATTACK_POOL_RVA + k * 0xC0;
+            let flags = rd::<u32>(g);
+            flags & 0x800 != 0 && flags & 0xC != 0 && flags & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(g + 0x34)) == sora
+        })
+        .count()
 }
 
 const ATTACK_POOL_RVA: Rva = Rva(0x2DB5110);

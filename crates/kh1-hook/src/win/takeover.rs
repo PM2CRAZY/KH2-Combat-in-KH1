@@ -310,6 +310,30 @@ static JUMP_NOW: AtomicBool = AtomicBool::new(false);
 /// KH1 landed him out of an air cast: KH2 starts in its landing.
 static LAND_NOW: AtomicBool = AtomicBool::new(false);
 
+/// A command KH1 runs (a spell): when it started and how many attack objects of Sora's were
+/// live then (a new one is the spell's shot going out).
+static COMMAND: Mutex<Option<(Instant, usize)>> = Mutex::new(None);
+/// KH1's command was cut by an Attack in its end frames: KH2's combo goes on.
+static COMBO_ON: AtomicBool = AtomicBool::new(false);
+
+pub fn command_started(shots: usize) {
+    if let Ok(mut c) = COMMAND.lock() {
+        *c = Some((Instant::now(), shots));
+    }
+}
+
+/// The command's spell is out (KH2's cast motions take Attack from about 8 frames after their
+/// release, their "end frames"): a new attack object of Sora's, or, for spells with none (Cure),
+/// 55% of KH1's cast motion.
+unsafe fn spell_out(actor: usize) -> bool {
+    let Some((t, shots)) = COMMAND.try_lock().ok().and_then(|c| *c) else { return true };
+    if super::combat::sora_shots(actor) > shots {
+        return true;
+    }
+    let len = pose::sora_slot().filter(|s| *s > 13).and_then(pose::slot_frames).map_or(36.0, |n| n as f32);
+    t.elapsed().as_secs_f32() >= (len * 0.55 / 60.0).clamp(0.3, 1.2)
+}
+
 /// KH1 shows Sora standing, walking or running: his motion's slot, or for a motion we don't
 /// know (another moveset's), the last one KH1 asked for.
 fn kh1_moving() -> bool {
@@ -548,7 +572,19 @@ unsafe fn takeover(actor: usize) -> bool {
         // "the same pause buffer, and if he jumps out of it, KH2 Sora's jump"), instead of
         // KH1's landing, its hold and then a snap.
         let cast_landed = air_cast().is_some() && state == 0 && above <= STEP_DOWN;
-        if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
+        // An Attack during a spell: KH2's once the spell is out (its end frames; the user: KH2's
+        // magic can be cut by an attack to go on with the combo), not before (it would cut the
+        // spell). In the air too.
+        let command = FROM_COMMAND.load(Ordering::Relaxed);
+        let attack_cut = attack && command && !done && spell_out(actor);
+        let attack = attack && (!command || done || attack_cut);
+        if attack_cut {
+            // KH1's cast action ends here: its "action running" flag off (as at its own end).
+            wr(actor, rd::<u32>(actor) & !4);
+            COMBO_ON.store(true, Ordering::Relaxed);
+            log("Attack in the spell's end frames: KH2's combo goes on");
+        }
+        if frames >= 3 && cast_landed || frames >= 10 && (falling || jump || attack_cut || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
             JUMP_NOW.store(jump, Ordering::Relaxed);
             if cast_landed {
                 // KH1's cast action ends here (it would at the end of its own landing): its
@@ -686,8 +722,12 @@ unsafe fn takeover(actor: usize) -> bool {
         // Back from KH1's own move: KH2's controller starts over (standing), keeping its
         // abilities.
         let abilities = d.character.abilities.clone();
+        let combo = d.character.combo_state();
         d.character = kh2.character.clone();
         d.character.abilities = abilities;
+        if COMBO_ON.swap(false, Ordering::Relaxed) {
+            d.character.set_combo_state(combo);
+        }
         d.grounded = true;
         // An Attack press from before (during KH1's move) is not KH2's (one asked of KH1 then
         // is: `FLY_PRESS_GROUND`).
