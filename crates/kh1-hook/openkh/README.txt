@@ -55,6 +55,9 @@ Square ............ Dodge Roll / Quick Run while moving, Guard while standing,
                     Glide in the air (set "glide = jump" to glide by holding jump)
 L1 + cancel ....... the fourth shortcut (set it in the Customize menu)
 Right stick ....... KH2's camera (turn and zoom); R3 resets it
+D-pad left ........ at the battle menu: the second page (Attack, Magic, Items,
+                    Drive). Drive > Wisdom Form costs 3 MP and lasts 40 s of
+                    battle; in the form the same entry is Revert.
 Magic, items, summons and specials stay KH1's own.
 The Config menu has a "Camera Style" row to switch between KH1's and KH2's
 camera.
@@ -83,6 +86,7 @@ Each line in the file explains itself. The ones you are most likely to want:
   kh2_effects = off           turns KH2's visual effects off
   kh2_sounds = off            turns KH2's sound effects off
   shortcuts = 3               back to KH1's three shortcuts
+  drive = off                 no second menu page and no Wisdom Form
 
 
 UNINSTALL
