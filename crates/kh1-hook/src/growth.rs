@@ -660,6 +660,16 @@ pub fn describe(a: &Abilities) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// A tester's finished level 100 save (its log): 48 abilities, every one that's off is kept
+    /// (Combo Plus, the specials, the modifiers, ours), so room comes from the least missed even
+    /// though on: EXP Zero.
+    #[test]
+    fn full_finished_save_makes_room() {
+        let raw: [u8; 48] = [64, 22, 6 | 0x80, 7 | 0x80, 53, 54, 17 | 0x80, 10, 61, 26, 15 | 0x80, 21, 19, 8, 8, 18, 20 | 0x80, 55, 57 | 0x80, 59, 5, 5, 27, 28, 65, 56, 23, 24, 24, 11 | 0x80, 13, 12, 14 | 0x80, 25, 62, 8, 58, 66 | 0x80, 68 | 0x80, 69 | 0x80, 70 | 0x80, 71 | 0x80, 72 | 0x80, 74 | 0x80, 75 | 0x80, 73 | 0x80, 77 | 0x80, 76 | 0x80];
+        let i = make_room(&raw).expect("room");
+        assert_eq!(raw[i] & 0x7F, 64);
+    }
+
     use super::*;
 
     #[test]
