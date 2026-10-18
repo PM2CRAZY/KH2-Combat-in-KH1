@@ -2029,3 +2029,10 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   barrier hidden and stopping nothing) while the combo has steps left (`Output::combo_live`);
   a later Reflect in the combo takes its hits over (s175's chain), the combo's end lets the
   last one burst for all. `docs/kh1-reflect-spell.md`.
+
+### 2026-10-18: Stage 181 (no footsteps between swings)
+- "i can still hear the footstep sound fx while walking forward in the middle of a combo":
+  stage 155 let KH1's footstep through on any frame KH2's state was Walk / Run; between two
+  swings with the stick held KH2 is in its run for a few frames (still showing the swing, the
+  log's "Run (motion 166)"), and KH1's run cycle stepped then. Now only after `STEPS_AFTER` (10)
+  frames running KH2's own walk / run motion (1 / 2).

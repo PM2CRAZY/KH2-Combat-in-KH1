@@ -1262,7 +1262,14 @@ unsafe fn takeover(actor: usize) -> bool {
             log(&format!("attacking (motion {}, frame {}): {}", out.motion, out.clip_frame, pose::weapon_report()));
         }
     }
-    KH2_STEPS.store(matches!(out.state, StateName::Walk | StateName::Run), Ordering::Relaxed);
+    // KH1's footsteps only once KH2 has been walking or running a moment, in its own walk / run
+    // motion (the user: steps heard walking forward mid-combo; between two swings KH2 can be in
+    // its run for a few frames, still showing the swing, and KH1's run cycle stepped then).
+    static STEPPING: AtomicU32 = AtomicU32::new(0);
+    let walking = matches!(out.state, StateName::Walk | StateName::Run) && matches!(out.motion, character_core::motion::WALK | character_core::motion::RUN);
+    let n = if walking { STEPPING.load(Ordering::Relaxed).saturating_add(1) } else { 0 };
+    STEPPING.store(n, Ordering::Relaxed);
+    KH2_STEPS.store(n >= STEPS_AFTER, Ordering::Relaxed);
     if d.last_state != Some(out.state) {
         if d.logged < 400 {
             d.logged += 1;
@@ -1282,8 +1289,10 @@ unsafe fn takeover(actor: usize) -> bool {
 const FOOTSTEP_RVA: Rva = Rva(0x293C70);
 const FOOTSTEP_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x56, 0x48, 0x83, 0xEC, 0x20];
 static ORIG_FOOTSTEP: AtomicUsize = AtomicUsize::new(0);
-/// KH2 has Sora walking or running this frame.
+/// KH2 has Sora walking or running this frame (for `STEPS_AFTER` frames or more).
 static KH2_STEPS: AtomicBool = AtomicBool::new(false);
+/// Frames of KH2's walk / run before KH1's footsteps sound.
+const STEPS_AFTER: u32 = 10;
 
 unsafe extern "system" fn footstep(actor: usize, kind: i32) -> usize {
     let base = BASE.load(Ordering::Relaxed);
