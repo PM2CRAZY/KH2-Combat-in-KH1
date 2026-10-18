@@ -35,6 +35,11 @@ pub struct MoveParams {
     /// Frames of no air commands after the head hits a ceiling (KH2
     /// `sstm` ceiling_disable_command_time: 16).
     pub ceiling_lock: f32,
+    /// Ground inertia (`prty` acceleration / brake; Wisdom Form 0.85 / 0.97, Sora 0 = none):
+    /// steering, the velocity becomes `target × (1 − acceleration) + velocity × acceleration`;
+    /// with the stick let go, it is multiplied by `brake` (he slides to a stop).
+    pub acceleration: f32,
+    pub brake: f32,
 }
 
 /// Ledge-grab numbers (KH2 `prty` hang_height/hang_margin, `sstm`
@@ -72,6 +77,8 @@ impl Default for MoveParams {
             hang: HangParams::default(),
             hit_back_to_jump: 0.048,
             ceiling_lock: 16.0,
+            acceleration: 0.0,
+            brake: 0.0,
         }
     }
 }

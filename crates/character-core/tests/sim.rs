@@ -984,3 +984,52 @@ fn air_spell_combo_ends_on_landing() {
     let o = until(&mut w, 20, true, |o, _| o.state == StateName::Attack).unwrap();
     assert_eq!(o.motion, 100, "the air combo's finisher carried onto the ground");
 }
+
+/// Wisdom Form's ground inertia (prty acceleration 0.85, brake 0.97): he slides to a stop, in
+/// his idle, after letting go of the stick (the user: "KH2 sora slides when he stops in wisdom
+/// form").
+#[test]
+fn ground_inertia_slides_to_a_stop() {
+    let mut ch = sora();
+    ch.params.acceleration = 0.85;
+    ch.params.brake = 0.97;
+    let mut w = World::new(ch);
+    w.run(60, Pad { stick: [0.0, 1.0], ..IDLE });
+    let z0 = w.pos[2];
+    let outs = w.run(30, IDLE);
+    assert!(w.pos[2] - z0 > 40.0, "slid {}", w.pos[2] - z0);
+    assert!(outs.iter().all(|o| o.state == StateName::Idle), "idle while sliding");
+    w.run(400, IDLE);
+    let z1 = w.pos[2];
+    w.run(10, IDLE);
+    assert_eq!(w.pos[2], z1, "stopped");
+    // Without the numbers (Sora): stops dead.
+    let mut w = World::new(sora());
+    w.run(60, Pad { stick: [0.0, 1.0], ..IDLE });
+    let z0 = w.pos[2];
+    w.run(5, IDLE);
+    assert!(w.pos[2] - z0 < 8.5);
+}
+
+/// An attack motion's allow-movement range lets him move with the stick (Wisdom's shots; the
+/// user: "sora is able to move/slide mid combo in KH2"); outside one he stands.
+#[test]
+fn attack_moves_in_its_allow_movement_range() {
+    let mut ch = sora();
+    let mut clip = attack_clip(100, 40, (10, 16), 1, 20);
+    clip.windows.push(Window { start: 0, end: Some(30), kind: WindowKind::AllowMovement });
+    ch.moveset.clips.insert(100, clip);
+    let mut w = World::new(ch);
+    w.step(Pad { attack: true, ..IDLE });
+    let x0 = w.pos[0];
+    let outs = w.run(12, Pad { stick: [1.0, 0.0], ..IDLE });
+    assert!(outs.iter().all(|o| o.state == StateName::Attack));
+    assert!(w.pos[0] - x0 > 50.0, "moved {}", w.pos[0] - x0);
+    // Sora's own swing (no range): he stays put.
+    let mut w = World::new(sora());
+    w.step(Pad { attack: true, ..IDLE });
+    let x0 = w.pos[0];
+    let outs = w.run(12, Pad { stick: [1.0, 0.0], ..IDLE });
+    assert!(outs.iter().all(|o| o.state == StateName::Attack));
+    assert!((w.pos[0] - x0).abs() < 1e-3);
+}

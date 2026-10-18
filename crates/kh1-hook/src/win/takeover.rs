@@ -1023,6 +1023,8 @@ unsafe fn takeover(actor: usize) -> bool {
     super::reflect::before_step(actor, &mut d.character);
     // A Drive chosen from page 2 (`form`): the change, the form's end.
     super::form::before_step(&mut d.drive, &mut d.character, &mut d.anim, kh2, actor);
+    // A KH2 spell chosen in Wisdom Form: its cast (`formmagic`).
+    super::formmagic::before_step(actor, &mut d.character);
     let mut out = d.character.step(&input, &env);
     // Out of flight for a combo: he stays up through it (the user: Sora should remain in
     // flight throughout the combo); KH2's aerial attacks sink between hits, so no sinking while

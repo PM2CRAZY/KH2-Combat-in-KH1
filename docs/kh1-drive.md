@@ -158,5 +158,17 @@ Page 2 differs from page 1 only in row 3, so reuse KH1's Summon path end to end:
   frame (`kh2fx::spell_place`, kh2-fx `Effects::set_anchor`) and lands the attack through the
   spell hit records; a hit marks the attack hit so the script ends it. Unlocked: the nearest
   enemy within 1500 in front is the target.
-- Spells in the form: magic sub + 10 (Reflect's rows exist at sub 10 and 14).
-- The look: `tint.rs` (`docs/kh1-tint.md`).
+- Spells in the form: magic sub + 10 (Reflect's rows exist at sub 10 and 14). From stage 192
+  Fire, Blizzard, Thunder and Cure chosen in the form are KH2's (`formmagic.rs`): MAGC's cast
+  motions (56..67, the form's own animations), KH1's level and cost, KH2's `.mag` script at
+  sub level × 2 − 2 (+ 1 finisher) + 10 (test `wisdom_spells_run_at_their_sub`: Fire ATKP 502,
+  Blizzard 248, Thunder 249 / 250, Cure a direct application to Sora), their effect packages
+  (`kh2fx` 5..16) and sounds. Cure's heal is ours: ATKP power / 3000 of KH1's max HP (Cure
+  sub 10..14: 708 power 800..1200 plus 709 400..600).
+- Stage 192 also: Quick Run MAX (the user); the gauge drains ½ a frame out of battle (exe; the
+  notes); the arrival's looping elements (100: a loop from tick 45, 11 / 12) ended when the
+  arrival ends, and every form effect put out on a revert (they stayed on Sora); Wisdom's
+  ground inertia (prty acceleration 0.85 / brake 0.97: he slides to a stop in his idle) and
+  its motions' allow-movement range (41: the shots 0..46, the casts) in `character-core`.
+- The look: `tint.rs` (`docs/kh1-tint.md`). Stage 192: Sora's PC model has the alternate mesh
+  table (header `+0x10` = 0x96969696, the table behind `+0x14`); pieces picked by texture.

@@ -4,28 +4,21 @@
 //! - Sora's Drive motion (52, invulnerable) with base Sora's moveset; when it ends, the swap:
 //!   the form's moveset, motions and combo rows (`P_EX100_MAGF`, moveset 3), his facing and
 //!   lock kept, and its arrival (53). Its abilities: Sora's support abilities, not his action
-//!   or growth ones, and the form's own growth ability, Quick Run, at the form's level;
-//! - the form lasts `(level + 3) × 600` frames of battle (KH2's gauge, which stands still
-//!   out of battle); then, or on the Revert command (the same Drive entry), back to Sora with
+//!   or growth ones, and the form's own growth ability, Quick Run, at MAX (the user);
+//! - the form lasts `(level + 3) × 600` frames of battle (KH2's gauge, exe: it drains 1 a
+//!   frame in battle, ½ out of it); then, or on the Revert command (the same Drive entry), back to Sora with
 //!   the revert motion (4), on the ground. Knocked out: back at once;
-//! - its shots: a motion's frame trigger 1 (`EventKind::Effect(n)`) runs the form model's
-//!   script (`wisd`, BAR entry 3) as KH2 does (`Magic::object_effect`), with the form's effect
-//!   archive (`kh2fx` package 4); its attack (ATKP 859) hits KH1's enemies through the same
-//!   hit records as Sora's spells (`Strikes::spell_strike`). With nothing locked on, a shot
-//!   goes for the nearest enemy in front, as KH2's auto-target does;
-//! - spells in the form: KH2's magic sub + 10 (Reflect, ours).
+//! - its shots and its spells: `formmagic`.
 //! The cost is MP (`COST`, KH1's own payment), not a Drive gauge, which KH1 has none of.
 
-use super::reflect::{flip, world_now, KhWorld, SORA};
-use super::{combat, log, pose};
-use character_core::{Abilities, Character, EventKind, Output};
-use glam::{Mat4, Quat, Vec3};
-use kh2_formats::battle::{Atkp, Battle};
-use kh2_magic::{Event, Magic, SpellFile};
+use super::{log, pose};
+use character_core::{Abilities, Character, EventKind};
+use kh2_formats::battle::Battle;
 use kh2_rig::RigAnim;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+pub use super::formmagic::{effect, element_sounds, package_spell, shots_step, spell_file, LAST_PACKAGE, SPELL_NAMES};
 
 pub const DRIVE_MOTION: u16 = 52;
 pub const ARRIVE_MOTION: u16 = 53;
@@ -38,12 +31,7 @@ const COST: i32 = COST_MP * 100;
 /// The form's level (KH1 has no form experience): Lv 1, 40 s of battle.
 const LEVEL: u32 = 1;
 /// KH2's magic sub offset in Wisdom Form.
-const MAGIC_SUB: i32 = 10;
-/// Wisdom's shots' hit-record keys (apart from Reflect's and the swings').
-const SHOT_KEY: u64 = 1 << 59;
-/// The farthest an unlocked shot looks for an enemy, and how far off his facing.
-const AUTO_RANGE: f32 = 1500.0;
-const AUTO_CONE: f32 = 0.5;
+pub const MAGIC_SUB: i32 = 10;
 
 /// A request: 1 Wisdom, 2 revert (the menu), 3 knocked out (`hurt`).
 static REQUEST: AtomicU8 = AtomicU8::new(0);
@@ -142,6 +130,7 @@ pub struct Drive {
 }
 
 struct InForm {
+    /// In half frames (the gauge drains 1 a frame in battle, ½ out of it).
     left: u32,
     sora: Abilities,
     own: Abilities,
@@ -177,7 +166,8 @@ fn form_abilities(sora: &Abilities, form: &Character) -> Abilities {
         combo_master: sora.combo_master,
         one_swing_on_miss: sora.one_swing_on_miss,
         high_jump: 0,
-        quick_run: LEVEL as u8,
+        // (The user: Wisdom with Quick Run MAX.)
+        quick_run: 4,
         aerial_dodge: 0,
         glide: 0,
         dodge_roll: 0,
@@ -258,10 +248,10 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     let own = form_abilities(&sora, &f.character);
     swap(ch, anim, &f.character, &f.rig, own.clone());
     ch.play(ARRIVE_MOTION, true);
-    let left = (LEVEL + 3) * 600;
+    let left = (LEVEL + 3) * 600 * 2;
     d.form = Some(InForm { left, sora, own, logged_s: u32::MAX });
     IN_FORM.store(true, Ordering::Relaxed);
-    log(&format!("Wisdom Form (Lv{LEVEL}): {:.0} s of battle, Quick Run LV{LEVEL}", left as f32 / 60.0));
+    log(&format!("Wisdom Form (Lv{LEVEL}): {:.0} s of battle (twice that out of it), Quick Run MAX", left as f32 / 120.0));
 }
 
 unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &pose::Kh2, motion: bool, why: &str) {
@@ -274,7 +264,7 @@ unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     if motion {
         ch.play(REVERT_MOTION, true);
     }
-    end_shots();
+    super::formmagic::end_all();
     log(&format!("Revert ({why})"));
 }
 
@@ -301,10 +291,8 @@ pub fn abilities(d: &mut Drive, ch: &mut Character) {
 pub unsafe fn after_step(d: &mut Drive, actor: usize, battle: bool) {
     super::tint::refresh(actor, d.form.is_some());
     let Some(f) = d.form.as_mut() else { return };
-    if battle {
-        f.left = f.left.saturating_sub(1);
-    }
-    let s = f.left.div_ceil(60);
+    f.left = f.left.saturating_sub(if battle { 2 } else { 1 });
+    let s = f.left.div_ceil(120);
     if s % 10 == 0 && s != f.logged_s {
         f.logged_s = s;
         log(&format!("Wisdom Form: {s} s left"));
@@ -313,201 +301,6 @@ pub unsafe fn after_step(d: &mut Drive, actor: usize, battle: bool) {
         d.revert = true;
         log("Wisdom Form: the gauge is empty");
     }
-}
-
-// ---------------------------------------------------------------- the shots
-
-struct Shots {
-    magic: Magic,
-    file: usize,
-    /// Script effect id → our drawn effect, and whether its end was passed on.
-    fx: HashMap<u64, (Option<u32>, bool)>,
-    queued: Vec<i16>,
-    fired: u32,
-    hits: u32,
-}
-
-static SHOTS: Mutex<Option<Shots>> = Mutex::new(None);
-static NO_SHOTS: AtomicBool = AtomicBool::new(false);
-
-fn shots(g: &mut Option<Shots>) -> Option<&mut Shots> {
-    if g.is_none() && !NO_SHOTS.load(Ordering::Relaxed) {
-        let f = pose::kh2()?.wisdom.as_ref()?;
-        let made = (|| {
-            let script = f.script.as_ref().ok_or("no script in its model")?;
-            let pax = f.archive.as_ref().and_then(|a| SpellFile::bar_entry(a, 18)).ok_or("no effects in its archive")?;
-            SpellFile::from_parts("P_EX100_MAGF", script, &pax)
-        })();
-        match made {
-            Ok(file) => {
-                let mut magic = Magic::new();
-                let file = magic.add_spell(file);
-                *g = Some(Shots { magic, file, fx: HashMap::new(), queued: Vec::new(), fired: 0, hits: 0 });
-                log("Wisdom Form's script ready (its shots)");
-            }
-            Err(e) => {
-                NO_SHOTS.store(true, Ordering::Relaxed);
-                log(&format!("Wisdom Form fires no shots: {e}"));
-            }
-        }
-    }
-    g.as_mut()
-}
-
-/// Wisdom's effect elements' sounds (`kh2sound`, as spell package `kh2fx::WISDOM`).
-pub fn element_sounds(kh2: &pose::Kh2) -> Vec<(u8, u16, i32)> {
-    let Some(pax) = kh2.wisdom.as_ref().and_then(|f| f.archive.as_ref()).and_then(|a| SpellFile::bar_entry(a, 18)).and_then(|p| kh2_formats::pax::Pax::parse(&p).ok()) else {
-        return Vec::new();
-    };
-    pax.elements.iter().map(|e| (super::kh2fx::WISDOM, e.id, e.sound)).collect()
-}
-
-/// A frame trigger 1 of the form's motion this frame (`takeover`): a shot.
-pub fn effect(n: i16) {
-    if let Ok(mut g) = SHOTS.lock() {
-        if let Some(s) = shots(&mut g) {
-            s.queued.push(n);
-        }
-    }
-}
-
-fn end_shots() {
-    if let Ok(mut g) = SHOTS.lock() {
-        if let Some(s) = g.as_mut() {
-            s.queued.clear();
-        }
-    }
-}
-
-fn row(battle: &Battle, atk: u16, sub: u8, count: u8) -> Option<&Atkp> {
-    battle.attack_for_level(atk, sub, count)
-}
-
-/// An unlocked shot's target: the nearest enemy within `AUTO_RANGE` in front of him.
-fn auto_target(w: &KhWorld, facing: f32) -> Option<u32> {
-    let me = w.objs.first()?;
-    let ahead = Vec3::new(facing.sin(), 0.0, facing.cos());
-    w.objs
-        .iter()
-        .skip(1)
-        .filter_map(|o| {
-            let d = o.target - me.pos;
-            let flat = Vec3::new(d.x, 0.0, d.z);
-            let dist = flat.length();
-            (dist < AUTO_RANGE && flat.normalize_or_zero().dot(ahead) > AUTO_CONE).then_some((o.id, dist))
-        })
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|x| x.0)
-}
-
-/// After KH2's step and the swings: the shots' frame (script, effects, hits).
-pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
-    let Ok(mut g) = SHOTS.try_lock() else { return };
-    let Some(s) = g.as_mut() else { return };
-    if s.queued.is_empty() && s.magic.casts.is_empty() && s.magic.effects.is_empty() && s.fx.is_empty() {
-        return;
-    }
-    let mut world = world_now(actor, out, airborne, strikes, lock, 0x51A7_0000 ^ s.fired.wrapping_mul(2_654_435_761));
-    if world.target.is_none() {
-        world.target = auto_target(&world, out.facing);
-    }
-    for n in std::mem::take(&mut s.queued) {
-        match s.magic.object_effect(s.file, SORA, n, &mut world) {
-            Ok(_) => {
-                s.fired += 1;
-                if s.fired <= 30 {
-                    log(&format!("Wisdom shot (trigger {n}, motion {}), target {:?}", out.motion, world.target));
-                }
-            }
-            Err(e) => log(&format!("Wisdom's script didn't take trigger {n}: {e}")),
-        }
-    }
-    for e in s.magic.update(&mut world).into_iter().chain(s.magic.take_events()) {
-        match e {
-            Event::Missing(n) => {
-                static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-                if N.fetch_add(1, Ordering::Relaxed) < 10 {
-                    log(&format!("Wisdom's script used {n} (not modelled)"));
-                }
-            }
-            Event::Error(e) => log(&format!("Wisdom's script error: {e}")),
-            Event::Strike { .. } => {}
-        }
-    }
-    // Effects: bound ones (the muzzle flash) follow Sora's bones; the shot's own the script moves.
-    let mut seen = Vec::new();
-    for e in &s.magic.effects {
-        seen.push(e.id);
-        let placed = e.owner.is_none().then(|| place(e.pos, e.dir));
-        match s.fx.get(&e.id) {
-            None => {
-                let h = if e.alive() { super::kh2fx::spell_start(super::kh2fx::WISDOM, e.element.id) } else { None };
-                if let (Some(h), Some(at)) = (h, placed) {
-                    super::kh2fx::spell_place(h, at);
-                }
-                if e.alive() {
-                    super::kh2sound::spell_element(super::kh2fx::WISDOM, e.element.id);
-                }
-                s.fx.insert(e.id, (h, false));
-            }
-            Some((Some(h), ended)) => {
-                let (h, ended) = (*h, *ended);
-                if let Some(at) = placed {
-                    super::kh2fx::spell_place(h, at);
-                }
-                if e.killed {
-                    super::kh2fx::spell_kill(h);
-                } else if e.fade.is_some() {
-                    super::kh2fx::spell_alpha(h, e.alpha());
-                    if !e.alive() {
-                        super::kh2fx::spell_kill(h);
-                    }
-                } else if e.ended_at.is_some() && !ended {
-                    super::kh2fx::spell_end(h);
-                    s.fx.insert(e.id, (Some(h), true));
-                } else if !e.alive() && !ended {
-                    super::kh2fx::spell_end(h);
-                    s.fx.insert(e.id, (Some(h), true));
-                }
-            }
-            Some((None, _)) => {}
-        }
-    }
-    s.fx.retain(|id, (h, _)| seen.contains(id) || h.is_some_and(super::kh2fx::spell_running));
-    // The shots' attacks against KH1's enemies; one that hits is told so (the script ends it).
-    let attacks: Vec<combat::SpellAttack> = s
-        .magic
-        .attacks
-        .iter()
-        .filter(|a| !a.freed && a.owner == SORA)
-        .filter_map(|a| {
-            let first = row(battle, a.atk, a.sub, 0)?;
-            let shapes = a.shapes();
-            (!shapes.is_empty()).then(|| combat::SpellAttack { key: a.id | SHOT_KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
-        })
-        .collect();
-    if !attacks.is_empty() {
-        let hits = strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned());
-        for (key, atk, foe, dealt) in hits {
-            s.hits += 1;
-            if let Some(a) = s.magic.attacks.iter_mut().find(|a| a.id | SHOT_KEY == key) {
-                a.hit = true;
-            }
-            if s.hits <= 40 {
-                log(&format!("Wisdom shot: ATKP {atk} hit {foe:#x} -> damage {dealt:?}"));
-            }
-        }
-    }
-    for a in s.magic.freed().filter(|a| a.owns_id) {
-        strikes.spell_forget(a.id | SHOT_KEY);
-    }
-}
-
-/// An unbound effect's root where the script has it (y up, our axes) → KH2's world (y down),
-/// turned along its direction.
-fn place(pos: Vec3, dir: Vec3) -> Mat4 {
-    let r = Quat::from_rotation_arc(Vec3::Z, dir.try_normalize().unwrap_or(Vec3::Z));
-    flip() * Mat4::from_rotation_translation(r, pos) * flip()
 }
 
 /// Sora's Drive and revert motions: their effects and sounds play whatever the ini's lists

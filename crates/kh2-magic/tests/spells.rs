@@ -336,3 +336,50 @@ fn reflect_chain_counters_from_the_last_cast() {
     assert!(carried, "the new barrier never stood");
     assert!(counters > 0, "the last Reflect of the chain didn't counter");
 }
+
+/// Wisdom Form's spells: Fire, Blizzard, Thunder and Cure at Wisdom's magic sub (level × 2 − 2
+/// + 10), as the KH1 port casts them in the form: each starts, puts out its attacks (Cure: a
+/// direct application to Sora) and ends.
+#[test]
+fn wisdom_spells_run_at_their_sub() {
+    let d = dir();
+    let Ok(system) = std::fs::read(d.join("03system.bin")) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    for (spell, name) in ["FIRE", "BLIZZARD", "THUNDER", "CURE"].iter().enumerate() {
+        for level in 1..=3 {
+            let file = format!("{name}_{level}.mag");
+            let Ok(bytes) = std::fs::read(d.join(&file)) else { continue };
+            let sub = level * 2 - 2 + 10;
+            let mut magic = Magic::new();
+            let s = magic.add_spell(SpellFile::parse(&file, &bytes).unwrap());
+            let mut w = Fake { frame: 0, release_at: 0, motion_end: 40, seed: 1 };
+            magic.cast(s, SORA, spell as u8, sub, pref.magi.get(sub).unwrap(), &mut w).unwrap();
+            assert!(magic.release(SORA, &mut w));
+            let (mut attacks, mut strikes, mut effects) = (std::collections::BTreeSet::new(), 0, 0);
+            let mut done = false;
+            for f in 1..600 {
+                w.frame = f;
+                for e in magic.update(&mut w) {
+                    match e {
+                        Event::Error(s) => panic!("{file}: {s}"),
+                        Event::Strike { target, .. } if target == SORA => strikes += 1,
+                        _ => {}
+                    }
+                }
+                effects = effects.max(magic.effects.len());
+                attacks.extend(magic.attacks.iter().filter(|a| a.pos.is_some()).map(|a| (a.atk, a.sub)));
+                if magic.casts.is_empty() {
+                    done = true;
+                    break;
+                }
+            }
+            eprintln!("{file} sub {sub}: attacks {attacks:?}, strikes on Sora {strikes}, effects {effects}");
+            assert!(done, "{file} ended");
+            assert!(!attacks.is_empty() || strikes > 0, "{file} did something");
+            assert!(attacks.iter().all(|a| a.1 as i32 == sub || a.1 == 0), "{file}: at its sub");
+        }
+    }
+}

@@ -251,6 +251,51 @@ unsafe fn affordable(base: usize, sora: usize) -> bool {
     check(sora, COST) & 0xFF != 0
 }
 
+/// A KH1 spell's level now (0 Fire, 1 Blizzard, 2 Thunder, 3 Cure, ... 6 Aero): the one KH1
+/// has loaded for it (spell table `+0`), else the save's, else 1 (`formmagic`'s Wisdom spells).
+pub(super) unsafe fn kh1_spell_level(spell: u8) -> u8 {
+    let loaded = rd::<i32>(base() + SPELLS_RVA + spell as usize * 0x38);
+    if (1..=3).contains(&loaded) {
+        return loaded as u8;
+    }
+    let save = rd::<u64>(base() + SAVE_PTR_RVA) as usize;
+    let saved = if save > 0x10000 { rd::<u8>(save + 0x492 + spell as usize) } else { 0 };
+    if (1..=3).contains(&saved) {
+        saved
+    } else {
+        1
+    }
+}
+
+/// A KH1 spell's MP cost in the payment's units (hundredths of a bar from 100 up): its spell
+/// data's cost field (as Fire's, `fire_cost`), 1 bar if it doesn't read.
+pub(super) unsafe fn kh1_spell_cost(spell: u8) -> i32 {
+    let data = rd::<u64>(base() + SPELLS_RVA + spell as usize * 0x38 + 0x18) as usize;
+    let v = if data > 0x10000 && super::crash::readable(data + 0x34) { rd::<i32>(data + 0x30) } else { 0 };
+    match v {
+        100.. => v,
+        1..=99 => v * 100,
+        _ => COST,
+    }
+}
+
+/// Whether Sora can pay `cost` now, magic allowed, as KH1 judges its own spells.
+pub(super) unsafe fn can_pay(sora: usize, cost: i32) -> bool {
+    let base = base();
+    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
+    if sora < 0x10000 || save < 0x10000 || rd::<u8>(base + MAGIC_SEAL_RVA) & 4 != 0 || rd::<u8>(save + 0x874) & 1 != 0 {
+        return false;
+    }
+    let check: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + MP_CHECK_RVA);
+    check(sora, cost) & 0xFF != 0
+}
+
+/// Plays one of KH1's menu sounds (4: can't).
+pub(super) unsafe fn menu_sound(n: i32) {
+    let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base() + SOUND_RVA);
+    sound(n);
+}
+
 /// KH1's own payment of MP (`cost` in hundredths of a bar from 100 up; `form`'s Drive).
 pub(super) unsafe fn pay_mp(sora: usize, cost: i32) {
     let pay: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base() + MP_PAY_RVA);

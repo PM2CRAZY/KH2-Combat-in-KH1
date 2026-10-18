@@ -370,6 +370,9 @@ pub struct Character {
     pub air_magic_falls: bool,
     facing: f32,
     vel_h: [f32; 2],
+    /// The ground speed the stick asks for (with inertia, `vel_h` eases toward it): what walk,
+    /// run or idle shows.
+    steer_speed: f32,
     vel_y: f32,
     airborne: bool,
     arc: Option<Arc>,
@@ -509,6 +512,7 @@ impl Character {
             air_magic_falls: false,
             facing: 0.0,
             vel_h: [0.0; 2],
+            steer_speed: 0.0,
             vel_y: 0.0,
             airborne: false,
             arc: None,
@@ -1399,7 +1403,7 @@ impl Character {
 
     fn free_motion(&self) -> u16 {
         let p = &self.params;
-        let speed = len2(self.vel_h);
+        let speed = self.shown_speed();
         if self.airborne {
             motion::FALL
         } else if speed >= (p.walk_speed + p.run_speed) * 0.5 {
@@ -1673,6 +1677,10 @@ impl Character {
         }
         for e in clip.events.iter().filter(|e| e.frame == f) {
             fo.events.push(e.kind);
+        }
+        // Moving in an allow-movement range with nothing to aim at: he turns with the stick.
+        if target.is_none() && len2(input.stick) > DEAD_ZONE && !self.airborne && matches!(act.kind, ActionKind::Attack { .. } | ActionKind::Magic) && clip.has(f, |k| matches!(k, WindowKind::AllowMovement)) {
+            self.facing = turn_toward(self.facing, yaw_of(input.stick), self.params.turn_speed);
         }
 
         match &act.kind {
@@ -2010,6 +2018,19 @@ impl Character {
         let moving = m > DEAD_ZONE;
         let stick_dir = norm(input.stick);
         let ground_speed = if !moving { 0.0 } else if m >= p.run_threshold { p.run_speed } else { p.walk_speed };
+        self.steer_speed = ground_speed;
+        // Ground inertia (KH2's idle-action move, exe): eased toward the stick, braked to a stop.
+        let ground = |v: [f32; 2]| -> [f32; 2] {
+            let target = scale(stick_dir, ground_speed);
+            if p.acceleration <= 0.0 {
+                target
+            } else if moving {
+                [target[0] * (1.0 - p.acceleration) + v[0] * p.acceleration, target[1] * (1.0 - p.acceleration) + v[1] * p.acceleration]
+            } else {
+                let b = scale(v, p.brake);
+                if len2(b) < 0.05 { [0.0; 2] } else { b }
+            }
+        };
         let steer = |v: [f32; 2], target: [f32; 2]| [v[0] * p.air_keep + target[0] * (1.0 - p.air_keep), v[1] * p.air_keep + target[1] * (1.0 - p.air_keep)];
         let air_control = |c: &Self, stick: bool| -> [f32; 2] {
             if stick && moving {
@@ -2032,7 +2053,7 @@ impl Character {
         let mode = self.mode.clone();
         match &mode {
             Mode::Free => {
-                self.vel_h = if self.airborne { air_control(self, true) } else { scale(stick_dir, ground_speed) };
+                self.vel_h = if self.airborne { air_control(self, true) } else { ground(self.vel_h) };
             }
             Mode::Glide => {
                 let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
@@ -2052,7 +2073,7 @@ impl Character {
                 }
                 // Idle-action movement: velocity is the stick, no momentum
                 // carried from the air.
-                ActionKind::Land => self.vel_h = if act.frame < LAND_HOLD { [0.0; 2] } else { scale(stick_dir, ground_speed) },
+                ActionKind::Land => self.vel_h = if act.frame < LAND_HOLD { [0.0; 2] } else { ground(self.vel_h) },
                 ActionKind::Hang { .. } | ActionKind::Climb => {
                     self.vel_h = [0.0; 2];
                     self.vel_y = 0.0;
@@ -2063,7 +2084,18 @@ impl Character {
                         self.vel_h = [0.0; 2];
                     }
                 }
-                ActionKind::Magic => self.vel_h = if self.airborne { scale(self.vel_h, p.air_drag) } else { [0.0; 2] },
+                ActionKind::Magic => {
+                    self.vel_h = if self.airborne {
+                        scale(self.vel_h, p.air_drag)
+                    } else if self.clip_has(act.motion, act.frame, |k| matches!(k, WindowKind::AllowMovement)) {
+                        // (Wisdom Form's casts move: their motions' allow-movement range.)
+                        ground(self.vel_h)
+                    } else if p.acceleration > 0.0 {
+                        scale(self.vel_h, p.brake)
+                    } else {
+                        [0.0; 2]
+                    }
+                }
                 ActionKind::Blow { blow } => {
                     let mut b = *blow;
                     let d = b.tick(DT, &self.reaction);
@@ -2092,7 +2124,19 @@ impl Character {
                             let first = clip.and_then(|c| c.first(|k| matches!(k, WindowKind::Hitbox { .. }))).unwrap_or(0);
                             act.frame <= first
                         };
-                        self.vel_h = if act.lunge > 0.0 && before_hit { scale(self.forward(), act.lunge) } else { [0.0; 2] };
+                        // Moving while attacking in the motion's allow-movement range (Wisdom Form's
+                        // shots; the user: "sora is able to move/slide mid combo in KH2"); with
+                        // inertia, sliding on after it.
+                        self.vel_h = if act.lunge > 0.0 && before_hit {
+                            scale(self.forward(), act.lunge)
+                        } else if self.clip_has(act.motion, act.frame, |k| matches!(k, WindowKind::AllowMovement)) {
+                            ground(self.vel_h)
+                        } else if p.acceleration > 0.0 {
+                            let b = scale(self.vel_h, p.brake);
+                            if len2(b) < 0.05 { [0.0; 2] } else { b }
+                        } else {
+                            [0.0; 2]
+                        };
                     }
                 }
             },
@@ -2108,14 +2152,28 @@ impl Character {
         }
     }
 
+    /// The speed walk / run / idle go by: with ground inertia, what the stick asks (he slides
+    /// to a stop in his idle, as Wisdom Form does), else his speed.
+    fn shown_speed(&self) -> f32 {
+        if self.params.acceleration > 0.0 && !self.airborne {
+            self.steer_speed
+        } else {
+            len2(self.vel_h)
+        }
+    }
+
+    fn clip_has(&self, motion: u16, frame: u32, f: impl Fn(&WindowKind) -> bool) -> bool {
+        self.moveset.clips.get(&motion).is_some_and(|c| c.has(frame, |k| f(k)))
+    }
+
     pub fn state_name(&self) -> StateName {
         match &self.mode {
             Mode::Free => {
                 if self.airborne {
                     StateName::Air
-                } else if len2(self.vel_h) >= (self.params.walk_speed + self.params.run_speed) * 0.5 {
+                } else if self.shown_speed() >= (self.params.walk_speed + self.params.run_speed) * 0.5 {
                     StateName::Run
-                } else if len2(self.vel_h) > 0.0 {
+                } else if self.shown_speed() > 0.0 {
                     StateName::Walk
                 } else {
                     StateName::Idle

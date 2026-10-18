@@ -2202,3 +2202,21 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   touch themselves; during KH2's attacks (and 20 frames after) their "touched by" field is
   cleared before the count.
 - None of it watched in game yet.
+
+### 2026-10-18: Stage 192 (Wisdom: its spells, slide, moving shots; tint and effect fixes)
+- The user: "give wisdom form max quick run, KH2 sora slides when he stops in wisdom form. Also,
+  lets use the wisdom form version of these spells [asked: Fire, Blizzard, Thunder, Cure]. Also,
+  using the base wisdom form combo shouldnt stop sora in his tracks"; "sora's outfit isnt blue,
+  and the effects are still covering sora"; "the effects last after reverting as well".
+- Quick Run MAX in the form. `character-core`: `MoveParams` acceleration / brake (from prty)
+  and the allow-movement range (41), tests `ground_inertia_slides_to_a_stop`,
+  `attack_moves_in_its_allow_movement_range` (`docs/movement-model.md`).
+- `formmagic.rs` (the shots moved there from `form.rs`): KH2's Fire / Blizzard / Thunder / Cure
+  in the form (KH1's menu or shortcut → `combat::command` → `spell_chosen`; cast when KH2's
+  move allows, `before_step`), their packages in `kh2fx` (handles now carry 5 bits of package);
+  Cure heals KH1's HP. Test `wisdom_spells_run_at_their_sub`.
+- The light on Sora was the arrival's elements (100 loops until ended): ended when the arrival
+  does; everything of the form's put out on a revert.
+- The tint found no table: the PC's Sora model uses the alternate mesh table (`0x1401DB4F0`);
+  read now, pieces by texture index; the log lists the table.
+- The gauge drains ½ a frame out of battle (KH2's), 1 in battle.

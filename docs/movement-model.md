@@ -347,3 +347,14 @@ What this produces on your install (`kh2-combat sora`):
 
 - **Auto-target selection** (nearest within reach).
 - **Dodge Roll / Quick Run cancel points.**
+
+
+## Ground inertia and moving attacks (stage 192)
+
+- `prty` acceleration / brake (Sora 0 / 0; Wisdom Form 0.85 / 0.97): KH2's idle-action move
+  (exe, `0x140421630` → `0x1403B6DB0`) eases the ground velocity toward the stick
+  (`target × (1 − a) + v × a`) and, with the stick let go, multiplies it by the brake. With
+  inertia, walk / run / idle go by what the stick asks, so he slides to a stop in his idle.
+- Motion range 41 (allow movement) lets an attack or a cast move with the stick (same inertia),
+  turning with it when nothing is targeted; past the range, with inertia, the speed brakes off.
+  Wisdom's shots (0..46 of 151) and casts carry it; Sora's swings don't.

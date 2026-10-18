@@ -108,9 +108,18 @@ pub unsafe fn start() {
                 // Reflect's own packages (the user: its VFX), one per level, their textures after
                 // Sora's.
                 // (And Wisdom Form's, as package 4: its shots, `form`.)
-                let spell: Vec<Option<SpellFx>> = (1..=WISDOM)
+                // (And Wisdom Form's spells, Fire / Blizzard / Thunder / Cure by level, as packages
+                // `form::spell_package`.)
+                let last = if super::settings::get().drive { super::form::LAST_PACKAGE } else { WISDOM };
+                let spell: Vec<Option<SpellFx>> = (1..=last)
                     .map(|level| {
-                        let lib = if level == WISDOM { wisdom_library(kh2, &common) } else { spell_library(level, &common) };
+                        let lib = if level == WISDOM {
+                            wisdom_library(kh2, &common)
+                        } else if level > WISDOM {
+                            form_spell_library(level, &common)
+                        } else {
+                            spell_library(level, &common)
+                        };
                         lib.map(|l| {
                             let tex_base = textures.len() as u32;
                             textures.extend(l.textures().iter().map(|t| (t.width, t.height, t.rgba.clone())));
@@ -173,6 +182,19 @@ fn wisdom_library(kh2: &super::pose::Kh2, common: &[u8]) -> Option<Library> {
     }
 }
 
+/// A Wisdom Form spell's package (its `.mag` file's PAX), `form::spell_package` numbering.
+fn form_spell_library(package: u8, common: &[u8]) -> Option<Library> {
+    let (spell, level) = super::form::package_spell(package)?;
+    let bytes = super::form::spell_file(spell, level)?;
+    match Library::load(&bytes, Some(common)) {
+        Ok(l) => Some(l),
+        Err(e) => {
+            log(&format!("KH2 effects: Wisdom {} level {level}'s package not loaded ({e:?})", super::form::SPELL_NAMES[spell as usize]));
+            None
+        }
+    }
+}
+
 /// Puts a spell effect's root where the script has it (an unbound one it moves: Wisdom's shots),
 /// a KH2-world (y down) matrix.
 pub fn spell_place(h: u32, at: Mat4) {
@@ -209,8 +231,9 @@ fn spell_library(level: u8, common: &[u8]) -> Option<Library> {
 
 /// A spell effect's handle for `reflect`: the level's package (bits 30..31: level − 1) and its
 /// handle there.
+/// A spell package's effect: the package (`level` − 1) in the top 5 bits.
 fn spell_handle(level: u8, h: EffectHandle) -> u32 {
-    ((level.saturating_sub(1) as u32 & 3) << 30) | (h.0 & 0x3FFF_FFFF)
+    ((level.saturating_sub(1) as u32 & 31) << 27) | (h.0 & 0x07FF_FFFF)
 }
 
 /// Starts element `el` of a Reflect level's package on Sora (its bone code as for his own
@@ -252,8 +275,8 @@ pub fn spell_running(h: u32) -> bool {
 
 fn with_spell<R>(h: u32, f: impl FnOnce(&mut Effects, EffectHandle) -> R) -> Option<R> {
     let mut g = STATE.lock().ok()?;
-    let sp = g.as_mut()?.spell.get_mut((h >> 30) as usize)?.as_mut()?;
-    Some(f(&mut sp.fx, EffectHandle(h & 0x3FFF_FFFF)))
+    let sp = g.as_mut()?.spell.get_mut((h >> 27) as usize)?.as_mut()?;
+    Some(f(&mut sp.fx, EffectHandle(h & 0x07FF_FFFF)))
 }
 
 /// KH1's pause machine (`0x14017D030`): 0 while the game runs; 1..6 from the pause button (or a

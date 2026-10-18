@@ -166,6 +166,8 @@ pub fn move_params_for(p: &Pref, moveset: usize) -> MoveParams {
         },
         hit_back_to_jump: f(sstm, SSTM_FIELDS, "hit_back_to_jump"),
         ceiling_lock: f(sstm, SSTM_FIELDS, "ceiling_disable_command_time"),
+        acceleration: f(prty, PRTY_FIELDS, "acceleration"),
+        brake: f(prty, PRTY_FIELDS, "brake"),
         // Gravity and air control are constants in the executable, not
         // table values; MoveParams::default() carries them.
         ..MoveParams::default()

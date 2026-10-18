@@ -10,6 +10,7 @@ mod crash;
 mod drive;
 mod feet;
 mod form;
+mod formmagic;
 mod gates;
 mod fx12;
 mod hook;

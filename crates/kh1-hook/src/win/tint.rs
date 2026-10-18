@@ -40,17 +40,20 @@ const JACKET: Look = Look { mul: [0.55, 0.7, 1.25], f: 0.85, fog: [0.05, 0.10, 0
 const SUIT: Look = Look { mul: [0.2, 0.2, 0.2], f: 0.55, fog: [0.10, 0.25, 1.0] };
 const TRIM: Look = Look { mul: [0.75, 0.85, 1.15], f: 1.0, fog: [0.0, 0.0, 0.0] };
 
-fn look(mesh: usize) -> Option<&'static Look> {
-    match mesh {
-        3 | 4 => Some(&JACKET),
-        5 => Some(&SUIT),
-        6 | 7 => Some(&TRIM),
+/// A piece by its texture (`xa_ex_0010`: 3 the jacket, 4 the jumpsuit, 5 the trim).
+fn look(texture: u32) -> Option<&'static Look> {
+    match texture {
+        3 => Some(&JACKET),
+        4 => Some(&SUIT),
+        5 => Some(&TRIM),
         _ => None,
     }
 }
 
-const MESHES: usize = 9;
+const MESHES: usize = 32;
 static PACKETS: [AtomicUsize; MESHES] = [const { AtomicUsize::new(0) }; MESHES];
+/// Each mesh's texture index (which piece it is, `look`).
+static LOOKS: [AtomicU32; MESHES] = [const { AtomicU32::new(u32::MAX) }; MESHES];
 static HEADER: AtomicUsize = AtomicUsize::new(0);
 /// How much of the look (0..1, f32 bits), stepped toward the form's.
 static AMOUNT: AtomicU32 = AtomicU32::new(0);
@@ -84,18 +87,31 @@ pub unsafe fn refresh(actor: usize, on: bool) {
         return;
     }
     let header = rd::<u64>(slot) as usize;
-    if header < 0x10000 || !super::crash::readable(header + 0x10 * (MESHES + 1)) {
+    if header < 0x10000 || !super::crash::readable(header + 0x20) {
         return;
     }
     // (Read every frame: a room's reload can put the model back where it was with new lists.)
     let changed = header != HEADER.load(Ordering::Relaxed);
-    let count = rd::<u32>(header + 0xC) as usize;
-    if rd::<u16>(header) != 293 || count != MESHES || rd::<u32>(header + 0x10) == 0x9696_9696 {
-        static N: AtomicU32 = AtomicU32::new(0);
-        if changed && N.fetch_add(1, Ordering::Relaxed) < 5 {
-            log(&format!("Wisdom tint: Sora's model isn't the one known ({} bones, {count} meshes): not tinted", rd::<u16>(header)));
+    HEADER.store(header, Ordering::Relaxed);
+    // The mesh table (`0x1401DB4F0` / `0x1401DB570`): the header's own entries from `+0x10`, or,
+    // when `+0x10` reads 0x96969696 (the PC's models), a table behind the handle at `+0x14`:
+    // its count at `+4`, entries after a skip given by `+8`.
+    let (first, count) = if rd::<u32>(header + 0x10) == 0x9696_9696 {
+        let p = pose::ptr(rd::<u32>(header + 0x14));
+        let t = if p > 0x10000 && super::crash::readable(p + 8) { rd::<u64>(p) as usize } else { 0 };
+        if t < 0x10000 || !super::crash::readable(t + 0x10) {
+            return;
         }
-        HEADER.store(header, Ordering::Relaxed);
+        let w = rd::<u32>(t + 8);
+        let skip = if w & 0x1_0000 != 0 { (w & 0xFFFF) as usize } else { 0 };
+        (t + 0x10 * (1 + skip * 2), rd::<u32>(t + 4) as usize)
+    } else {
+        (header + 0x10, rd::<u32>(header + 0xC) as usize)
+    };
+    if count == 0 || count > MESHES || !super::crash::readable(first + 0x10 * count) {
+        if changed {
+            log(&format!("Wisdom tint: Sora's model {header:#x} has {count} meshes: not tinted"));
+        }
         for p in &PACKETS {
             p.store(0, Ordering::Relaxed);
         }
@@ -103,13 +119,20 @@ pub unsafe fn refresh(actor: usize, on: bool) {
     }
     let mut got = Vec::new();
     for (i, p) in PACKETS.iter().enumerate() {
-        let packets = pose::ptr(rd::<u32>(header + 0x10 * (i + 1) + 0xC));
+        if i >= count {
+            p.store(0, Ordering::Relaxed);
+            continue;
+        }
+        let e = first + 0x10 * i;
+        let packets = pose::ptr(rd::<u32>(e + 0xC));
+        // Which piece: by the mesh's texture (entry `+4`; jacket 3, jumpsuit 4, trim 5).
+        let tex = rd::<u32>(e + 4);
         p.store(packets, Ordering::Relaxed);
-        got.push(packets);
+        LOOKS[i].store(tex, Ordering::Relaxed);
+        got.push(format!("{i}: {:08x} tex {tex} {:08x} -> {packets:#x}", rd::<u32>(e), rd::<u32>(e + 8)));
     }
-    HEADER.store(header, Ordering::Relaxed);
     if changed {
-        log(&format!("Wisdom tint: Sora's model {header:#x}, mesh packets {got:#x?}"));
+        log(&format!("Wisdom tint: Sora's model {header:#x}, {count} meshes: {}", got.join("; ")));
     }
 }
 
@@ -119,7 +142,7 @@ unsafe extern "system" fn draw(a: usize, b: usize, c: usize, d: usize) -> u64 {
     if k <= 0.0 || a == 0 {
         return orig(a, b, c, d);
     }
-    let Some(l) = PACKETS.iter().position(|p| p.load(Ordering::Relaxed) == a).and_then(look) else {
+    let Some(l) = PACKETS.iter().position(|p| p.load(Ordering::Relaxed) == a).and_then(|i| look(LOOKS[i].load(Ordering::Relaxed))) else {
         return orig(a, b, c, d);
     };
     let base = BASE.load(Ordering::Relaxed);

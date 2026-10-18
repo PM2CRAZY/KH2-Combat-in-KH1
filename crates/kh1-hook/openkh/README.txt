@@ -57,7 +57,8 @@ L1 + cancel ....... the fourth shortcut (set it in the Customize menu)
 Right stick ....... KH2's camera (turn and zoom); R3 resets it
 D-pad left ........ at the battle menu: the second page (Attack, Magic, Items,
                     Drive). Drive > Wisdom Form costs 3 MP and lasts 40 s of
-                    battle; in the form the same entry is Revert.
+                    battle; in the form the same entry is Revert, and Fire,
+                    Blizzard, Thunder and Cure cast KH2's Wisdom versions.
 Magic, items, summons and specials stay KH1's own.
 The Config menu has a "Camera Style" row to switch between KH1's and KH2's
 camera.
