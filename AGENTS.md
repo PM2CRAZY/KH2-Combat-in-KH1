@@ -1894,3 +1894,27 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   end-frame cancels (Attack, jump, Square, the stick) now apply to ground casts only; a cast
   in the air (`air_cast`) plays KH1's animation through to the ground and KH2's landing hold
   (stage 163).
+
+### 2026-10-18: Stage 172 (Reflect in the shortcuts, Reflera / Reflega, 1 MP, held barrier, effects under the pause menu)
+- The user: "the reflect vfx pass through the pause menu, make reflect able to be put in the
+  shortcuts, also include the two upgrades. Reflect should cost 1 MP", then "can we have
+  reflect keep shielding until attacks have stopped". Built by a helper session from s170.
+- Pause menu: KH1's pause menu task (`0x1402D3040`, priority 159999, opened by `0x1402D3450`)
+  draws its windows before the world pass and repoints the camera for the party models, so our
+  effects drew over it. `kh2fx` draws nothing while KH1's pause state `0x14232E9B4` is non-zero
+  (1..6) or Sora has had no physics frame for 120 ms (`takeover::paused`).
+- Shortcuts: only KH1's battle fill reads the slot bytes and indexes its spell table by them,
+  so Reflect is never stored there: its slots keep KH1's none (`0xFF`) plus a bit in `+0x847`
+  (bits 4..6; the fourth's nibble is 8). After the fill those entries are command 0x7D (the
+  menu's path, `reflect::chosen`); KH1's learn sees them as taken.
+- Customize: the spell list (`0x142E9A9F0`, 8 ints) moves to a buffer of ours (its four `lea`
+  repointed) so Reflect fits before "none"; 9 rows 25 apart. Its help line (`0x14030028E`) and
+  name calls (`0x14028D100`) are ours. Works with `shortcuts = 3` too.
+- Levels: `reflect::level` = Aero's level (KH1's spell table `+0`, else save `+0x492 + 6`);
+  each level its own `REFLECT_n.mag`, MAGC row and sub; Reflect / Reflera / Reflega.
+- MP: KH1's MP is whole points; a cost ≥ 100 is hundredths (check `cost/100 <= MP`, pay
+  `cost/100`), so Reflect costs 100 (1 MP) at every level.
+- Held barrier: from the barrier's 22nd frame, while the last blocked hit is ≤ 20 frames old
+  (cap 5 s), `kh2_magic::Magic::hold` freezes the cast (script and effect ages; its attacks
+  stay, so `hurt` keeps blocking); the counter fires after; the barrier effect is restarted if
+  it ends. Tests `reflect_counters_what_it_blocked`, `reflect_barrier_held`.
