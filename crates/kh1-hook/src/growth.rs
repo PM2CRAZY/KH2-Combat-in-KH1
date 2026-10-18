@@ -35,6 +35,8 @@ pub mod kh1 {
     pub const HIGH_JUMP: u8 = 1;
     pub const GLIDE: u8 = 3;
     pub const SUPERGLIDE: u8 = 4;
+    /// Zantetsuken: taken out of Sora's list (the user: room for KH2's abilities).
+    pub const ZANTETSUKEN: u8 = 59;
     pub const COMBO_PLUS: u8 = 6;
     pub const AIR_COMBO_PLUS: u8 = 7;
     pub const VORTEX: u8 = 17;
@@ -367,8 +369,7 @@ pub fn name(id: u8) -> String {
 /// abilities that are learned but off make room, least missed first: a spare copy of one he
 /// has twice or more, then these, in order. Nothing equipped, nothing of ours, and not Guard,
 /// Dodge Roll, the specials or the combo modifiers.
-pub const MAKE_ROOM: [u8; 15] = [
-    64, // EXP Zero
+pub const MAKE_ROOM: [u8; 14] = [
     16, // Cheer
     10, // Scan
     63, // Evolution
@@ -432,7 +433,7 @@ pub fn make_room(list: &[u8]) -> Option<usize> {
 /// KH1 abilities never given up for room: Guard, Dodge Roll, Combo Plus, Air Combo Plus, the
 /// specials (Sonic Blade, Ars Arcanum, Strike Raid, Ragnarok, Trinity Limit) and every KH1
 /// ability that is a KH2 move here (`RENAMED`, Slapshot, Aerial Sweep).
-const KEEP: [u8; 19] = [21, 22, 6, 7, 11, 12, 13, 14, 15, 17, 18, 19, 20, 53, 54, 55, 56, 57, 58];
+const KEEP: [u8; 20] = [21, 22, 6, 7, 11, 12, 13, 14, 15, 17, 18, 19, 20, 53, 54, 55, 56, 57, 58, 64];
 
 /// Sora's side of KH1's save block.
 #[derive(Clone, Debug, PartialEq)]
@@ -662,12 +663,12 @@ pub fn describe(a: &Abilities) -> String {
 mod tests {
     /// A tester's finished level 100 save (its log): 48 abilities, every one that's off is kept
     /// (Combo Plus, the specials, the modifiers, ours), so room comes from the least missed even
-    /// though on: EXP Zero.
+    /// though on (EXP Zero kept, the user): Cheer.
     #[test]
     fn full_finished_save_makes_room() {
         let raw: [u8; 48] = [64, 22, 6 | 0x80, 7 | 0x80, 53, 54, 17 | 0x80, 10, 61, 26, 15 | 0x80, 21, 19, 8, 8, 18, 20 | 0x80, 55, 57 | 0x80, 59, 5, 5, 27, 28, 65, 56, 23, 24, 24, 11 | 0x80, 13, 12, 14 | 0x80, 25, 62, 8, 58, 66 | 0x80, 68 | 0x80, 69 | 0x80, 70 | 0x80, 71 | 0x80, 72 | 0x80, 74 | 0x80, 75 | 0x80, 73 | 0x80, 77 | 0x80, 76 | 0x80];
         let i = make_room(&raw).expect("room");
-        assert_eq!(raw[i] & 0x7F, 64);
+        assert_eq!(raw[i] & 0x7F, 10);
     }
 
     use super::*;

@@ -1676,3 +1676,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   ("drawn 872 away"), then "another body" and KH1's moves (stage 149's party-slot actor fixes
   it); spells waiting and dropped after 1.5 s (stage 149's 5 s); Aerial Dodge MAX not learned on
   a full list (stage 151). Pad records now counted once each.
+
+### 2026-10-18: Stage 153 (no Zantetsuken, keep EXP Zero)
+- The user: "remove zanteksukan, keep exp zero, increase the ability slot limit, have aerial
+  dodge be its own ability still". Zantetsuken (KH1 id 59) is taken out of Sora's list like
+  Superglide (the mod has no use for it; its level-up line is not shown), which frees a slot on
+  a full list for Aerial Dodge (its own ability, id 67). EXP Zero (64) is in `KEEP` and no
+  longer in `make_room`'s least-missed list; one taken out by stage 151 is given back (off).
+- The list itself can't grow: KH1 keeps 48 bytes per party member at `+0x44`, and the next
+  member's record starts `0x74` after this one (the save's layout, not ours).

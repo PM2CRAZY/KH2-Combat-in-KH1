@@ -303,7 +303,8 @@ unsafe extern "system" fn reward_line(ev: usize) -> u64 {
             if r > 0x10000 {
                 let v = rd::<u16>(r);
                 let (kind, member, ability) = (v & 0xF, (v >> 4) & 0xF, (v >> 8) as u8);
-                if kind == 1 && member == 0 && Growth::kh1(base).is_some_and(|s| s.spare_gift(ability)) {
+                // (Zantetsuken too: it's taken out again at once, the user.)
+                if kind == 1 && member == 0 && (ability == growth::kh1::ZANTETSUKEN || Growth::kh1(base).is_some_and(|s| s.spare_gift(ability))) {
                     std::ptr::write_unaligned((ev + 0x194) as *mut i32, sp - 2);
                     log(&format!("no \"learned\" line for {}: a spare copy (the mod gave it already)", growth::name(ability)));
                     return 2;
@@ -413,7 +414,7 @@ fn given_back() -> Vec<u8> {
     for line in text.lines() {
         let Some(i) = line.find("(id ") else { continue };
         let Some(id) = line[i + 4..].split(')').next().and_then(|n| n.trim().parse::<u8>().ok()) else { continue };
-        if !growth::MAKE_ROOM.contains(&id) && !ids.contains(&id) {
+        if !growth::MAKE_ROOM.contains(&id) && id != growth::kh1::ZANTETSUKEN && !ids.contains(&id) {
             ids.push(id);
         }
     }
@@ -572,6 +573,26 @@ impl Growth {
                     remember(&format!("level {}: Superglide {}", now.level, if has_glide { "taken out" } else { "turned into Glide" }));
                     if let Some(again) = Self::kh1(base) {
                         now = again;
+                    }
+                }
+                // No Zantetsuken (the user): it goes from Sora's list wherever KH1 gives it, a slot
+                // for KH2's abilities (a finished save's list was full).
+                {
+                    let list = save + 0x44;
+                    let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
+                    if growth::has(&bytes, growth::kh1::ZANTETSUKEN) {
+                        let end = bytes.iter().position(|b| *b == 0).unwrap_or(48);
+                        let mut kept: Vec<u8> = bytes[..end].iter().copied().filter(|b| b & 0x7F != growth::kh1::ZANTETSUKEN).collect();
+                        let n = end - kept.len();
+                        kept.resize(48, 0);
+                        for (k, b) in kept.iter().enumerate() {
+                            std::ptr::write((list + k) as *mut u8, *b);
+                        }
+                        log(&format!("Zantetsuken taken out of Sora's list ({n} cop{})", if n == 1 { "y" } else { "ies" }));
+                        remember(&format!("level {}: Zantetsuken taken out (the mod has none)", now.level));
+                        if let Some(again) = Self::kh1(base) {
+                            now = again;
+                        }
                     }
                 }
                 // One copy of each KH1 ability the mod gives early (the user: a second Slide
