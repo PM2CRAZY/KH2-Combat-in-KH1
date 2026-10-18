@@ -2130,3 +2130,11 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   80..84, the keychain 284..292. Reset after half a second without KH2's pose or on a warp.
   ini `physics = on`. Tests in `jiggle.rs` (still pose stays, a carried chain trails then
   settles, a warp restarts it). Tuning is a first guess: not yet seen in game.
+
+### 2026-10-18: Stage 186 (physics toned down)
+- The user's video of s185: "it works, but ... needs to be toned down a lot, there's a lot of
+  clipping" (hair spikes splayed into each other and the head, the hood flipped up). Stiffer
+  springs and more damping, no gravity on the hair and little on the hood, a breeze a tenth of
+  s185's, and each bone's swing capped from its posed direction (`Chain::max_turn`: hair 10°,
+  hood 12°, keychain 35°; the simulated tip is pulled back to the cap so the swing doesn't build
+  past it). Test `swing_capped`.

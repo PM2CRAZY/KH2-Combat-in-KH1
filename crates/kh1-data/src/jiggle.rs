@@ -22,6 +22,9 @@ pub struct Chain {
     pub gravity: f32,
     /// The breeze's strength (acceleration, units / s²).
     pub wind: f32,
+    /// The most a bone may turn away from its posed direction (radians): no swing so wide it
+    /// clips into him (the user's video, s185: hair and hood through his head).
+    pub max_turn: f32,
 }
 
 /// KH1 Sora's chains (bones from `xa_ex_0010.mdls`'s bind: under the head (151) fourteen hair
@@ -30,11 +33,13 @@ pub struct Chain {
 /// Keyblade's pommel, swung from 284 on: 283 may carry the pommel itself).
 pub fn sora_chains() -> Vec<Chain> {
     let mut v = Vec::new();
+    // (Toned down from s185, the user: "needs to be toned down a lot, there's a lot of
+    // clipping": stiffer, little gravity on the hair and hood, a light breeze, swings capped.)
     for root in (152..=191).step_by(3) {
-        v.push(Chain { bones: vec![root + 1, root + 2], stiffness: 0.22, damping: 0.14, gravity: 0.25, wind: 350.0 });
+        v.push(Chain { bones: vec![root + 1, root + 2], stiffness: 0.55, damping: 0.25, gravity: 0.0, wind: 40.0, max_turn: 10f32.to_radians() });
     }
-    v.push(Chain { bones: (80..=84).collect(), stiffness: 0.16, damping: 0.12, gravity: 0.5, wind: 250.0 });
-    v.push(Chain { bones: (284..=292).collect(), stiffness: 0.06, damping: 0.08, gravity: 1.0, wind: 120.0 });
+    v.push(Chain { bones: (80..=84).collect(), stiffness: 0.45, damping: 0.25, gravity: 0.1, wind: 30.0, max_turn: 12f32.to_radians() });
+    v.push(Chain { bones: (284..=292).collect(), stiffness: 0.18, damping: 0.15, gravity: 0.6, wind: 20.0, max_turn: 35f32.to_radians() });
     v
 }
 
@@ -138,6 +143,17 @@ impl Jiggle {
                 if !q.is_finite() {
                     continue;
                 }
+                // At most `max_turn` from the posed direction (the simulated tip pulled back
+                // to match, so the swing doesn't build up past it).
+                let (axis, angle) = q.to_axis_angle();
+                let q = if angle > c.max_turn && axis.is_finite() {
+                    let q = Quat::from_axis_angle(axis, c.max_turn);
+                    let tip = here + q * cur.normalize() * want.length();
+                    st.p[i + 1] = to_world.transform_point3(tip);
+                    q
+                } else {
+                    q
+                };
                 let turn = Mat4::from_translation(here) * Mat4::from_quat(q) * Mat4::from_translation(-here);
                 for j in 0..pose.len() {
                     if j == b || under(parents, j, b) {
@@ -176,7 +192,7 @@ mod tests {
     }
 
     fn chain() -> Chain {
-        Chain { bones: vec![0, 1, 2, 3], stiffness: 0.2, damping: 0.1, gravity: 0.0, wind: 0.0 }
+        Chain { bones: vec![0, 1, 2, 3], stiffness: 0.2, damping: 0.1, gravity: 0.0, wind: 0.0, max_turn: 1.5 }
     }
 
     #[test]
@@ -229,5 +245,30 @@ mod tests {
         let mut p = pose.clone();
         j.apply(&mut p, &parents, &Mat4::from_translation(Vec3::new(5000.0, 0.0, 0.0)), STEP);
         assert!((p[3].w_axis - pose[3].w_axis).length() < 1e-3);
+    }
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::*;
+
+    #[test]
+    fn swing_capped() {
+        let pose: Vec<Mat4> = (0..2).map(|i| Mat4::from_translation(Vec3::new(i as f32 * 10.0, 100.0, 0.0))).collect();
+        let parents = vec![-1, 0];
+        let c = Chain { bones: vec![0, 1], stiffness: 0.05, damping: 0.0, gravity: 0.0, wind: 0.0, max_turn: 0.2 };
+        let mut j = Jiggle::new(vec![c]);
+        let mut worst = 0.0f32;
+        let mut z = 0.0;
+        for _ in 0..60 {
+            z += 2000.0 * STEP;
+            let w = Mat4::from_translation(Vec3::new(0.0, 0.0, z));
+            let mut p = pose.clone();
+            j.apply(&mut p, &parents, &w, STEP);
+            let d = (p[1].w_axis - p[0].w_axis).truncate();
+            worst = worst.max(d.angle_between(Vec3::X));
+        }
+        assert!(worst <= 0.2 + 1e-3, "turned {worst}");
+        assert!(worst > 0.1, "never swung");
     }
 }
