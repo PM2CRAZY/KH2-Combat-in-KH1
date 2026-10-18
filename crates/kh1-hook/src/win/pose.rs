@@ -169,6 +169,11 @@ pub fn kh2() -> Option<&'static Kh2> {
 
 /// The slot of KH1 Sora's motion playing now (as of his last skeleton pass).
 static SLOT_NOW: AtomicUsize = AtomicUsize::new(usize::MAX);
+/// A KH1 motion slot's length in frames (KH1 Sora's motion table).
+pub fn slot_frames(slot: usize) -> Option<u32> {
+    SLOTS.get()?.1.get(slot).copied().filter(|n| *n > 0)
+}
+
 pub fn sora_slot() -> Option<usize> {
     let s = SLOT_NOW.load(Ordering::Relaxed);
     (s != usize::MAX).then_some(s)
@@ -546,7 +551,11 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
                 s.follow.slot = slot;
                 return None;
             }
-            let fresh = super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, t)| t.elapsed().as_secs_f32() < 0.15).map(|(b, _)| b.clone()));
+            // KH2's last pose: recent, or the last frame of his was KH2's (a pause stops the
+            // game's frames, not the clock: after one, the old pose went stale and KH1's slot was
+            // drawn until KH2's next frame; the user: paused mid KH2 move, resumed in KH1's).
+            let kh2_frame = super::takeover::kh2_frame();
+            let fresh = super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, t)| kh2_frame || t.elapsed().as_secs_f32() < 0.15).map(|(b, _)| b.clone()));
             match (fresh, s.retarget.as_ref()) {
                 (Some(b), Some(r)) => {
                     s.follow.slot = slot;

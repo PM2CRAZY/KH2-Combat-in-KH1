@@ -1735,3 +1735,24 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   command's fall is KH2's only once KH1 lets him act again (`0x1402956E0`), state 1 or 2; a
   grab's (bar, pole, ledge) as before. `release` logs a new reason even while KH1 already has
   him (that case left no line saying why).
+
+### 2026-10-18: Stage 157 (falls handed over for real, air casts, pauses)
+- Stage 154's handed-over falls never reached KH2 (the user's s156 log, a loop: "KH1's move
+  ended in its fall: KH2's fall", then at once "KH1 has Sora (KH1's own action, slot 10)"):
+  KH1's fall slot (10) is still up on the frame after, and `takeover` took a slot past 7 on a
+  KH2 that wasn't airborne yet (no KH2 frame since) for KH1's own action. A fall just handed
+  over (`AIR_START` / `HANDOFF_FALL`) counts as airborne, and KH1's jump / fall / land slots
+  8..13 with KH1's ground state are leftovers, not KH1 actions (also: no more KH1 landing and
+  idle before KH2 after a KH1 move).
+- Air spells: KH1 keeps its cast pose and won't let him act until he lands (can-act false all
+  the way down). A command in KH1's air state 2 whose current motion (not 8..13) has played its
+  length (KH1 Sora's motion table, `pose::slot_frames`, at least 20 frames) counts as done:
+  KH2's fall from there.
+- Pause mid KH2 move (the user: resumed in a KH1 animation): `pose` drew KH2's last pose only
+  while under 0.15 s old, so after a pause it was stale and KH1's slot was drawn; it is also
+  used while Sora's last physics frame was KH2's (`takeover::kh2_frame`, game frames).
+- Guard Break / Finishing Leap effects "look different" (the user's KH2 videos): offline
+  renders (`fx_render` scenes guard_break, finishing_leap, aerial_finish, aerial_recovery
+  added) show kh2-fx skipping programs 115 pppDrawMatrixWood, 120 pppRyjDrawMatrixWorld, 174
+  pppVertexAp (and 49 pppVtMime for Aerial Finish): KH2's blade ribbons and Finishing Leap's
+  white burst. Being implemented separately.

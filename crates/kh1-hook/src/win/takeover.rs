@@ -174,6 +174,11 @@ fn now_ms() -> u64 {
     CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 
+/// KH2 had Sora on his last physics frame (game frames: a pause keeps it).
+pub fn kh2_frame() -> bool {
+    FRAME_KIND.load(Ordering::Relaxed) == 1
+}
+
 /// KH2 has Sora this moment (its last frame was under 150 ms ago).
 pub fn active() -> bool {
     let a = ACTIVE_MS.load(Ordering::Relaxed);
@@ -475,7 +480,21 @@ unsafe fn takeover(actor: usize) -> bool {
         // the spell was cut off and KH1's fall played on (the user, s155). So a command's fall is
         // KH2's only once the spell is done (he can act again), in state 1 or 2; a grab's (a bar,
         // a pole, a ledge) as soon as KH1 drops him in state 2.
-        let done = can_act(actor) != 0;
+        // A spell cast in the air: KH1 holds its cast pose (and won't let him act) until he
+        // lands (the user: still KH1's animation, then its idle on landing). Its cast motion
+        // played through (KH1's frames, at least 20) counts as done: the spell is out by then.
+        static CAST: Mutex<(usize, u32)> = Mutex::new((usize::MAX, 0));
+        let cast_done = {
+            let slot = pose::sora_slot().unwrap_or(usize::MAX);
+            let mut c = CAST.lock().unwrap();
+            if frames == 0 || c.0 != slot {
+                *c = (slot, 0);
+            }
+            c.1 += 1;
+            let len = pose::slot_frames(slot).unwrap_or(u32::MAX / 2).max(20);
+            !(8..=13).contains(&slot) && slot != usize::MAX && c.1 >= len
+        };
+        let done = can_act(actor) != 0 || cast_done && state == 2;
         let command = FROM_COMMAND.load(Ordering::Relaxed);
         let fall_state = if command { matches!(state, 1 | 2) && done } else { state == 2 || state == 1 && done };
         let falling = fall_state && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
@@ -569,10 +588,19 @@ unsafe fn takeover(actor: usize) -> bool {
         return false;
     }
     let slot = pose::sora_slot();
-    let airborne = DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false);
+    // (Also a fall just handed over from one of KH1's moves, before KH2's first frame of it: KH1's
+    // fall slot is still up then, and was taken for KH1's own action, so KH1 kept him falling
+    // in its animation every time (the user: KH1's fall after a spell; the log: "KH2's fall",
+    // then at once "KH1's own action, slot 10").)
+    let handed_fall = AIR_START.load(Ordering::Relaxed) || HANDOFF_FALL.try_lock().map_or(false, |f| f.is_some());
+    let airborne = handed_fall || DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false);
     // (A motion we don't know, as the Dream Shield's own moveset's, is not taken for KH1's own
     // action: the user saw KH1's idle and attacks with the shield.)
-    if matches!(slot, Some(s) if s > 7) && !airborne && !FLY_PRESS.load(Ordering::Relaxed) {
+    // KH1's own jump / fall / landing slots (8..13) with KH1's ground state: what's left of a
+    // fall KH2 has taken over (KH1 changes slot a few frames later), not an action of KH1's
+    // (the user: on landing after a spell, KH1's idle, then a snap to KH2).
+    let leftover_fall = matches!(slot, Some(8..=13)) && rd::<i32>(actor + 0x70) == 0;
+    if matches!(slot, Some(s) if s > 7) && !leftover_fall && !airborne && !FLY_PRESS.load(Ordering::Relaxed) {
         release(&format!("KH1's own action, slot {}, KH1 state {}", slot.map_or("?".into(), |s| s.to_string()), rd::<i32>(actor + 0x70)));
         return false;
     }

@@ -304,6 +304,10 @@ struct Scene {
 const SCENES: &[Scene] = &[
     Scene { name: "explosion", motion: 166, triggers: &[(0, 44), (0, 45), (0, 46), (0, 47), (34, 48)], frames: 100 },
     Scene { name: "magnet", motion: 197, triggers: &[(10, 51), (60, 52)], frames: 130 },
+    Scene { name: "guard_break", motion: 165, triggers: &[(24, 31), (28, 30), (30, 32)], frames: 80 },
+    Scene { name: "finishing_leap", motion: 167, triggers: &[(2, 33), (28, 34)], frames: 80 },
+    Scene { name: "aerial_recovery", motion: 40, triggers: &[(0, 0)], frames: 40 },
+    Scene { name: "aerial_finish", motion: 194, triggers: &[(0, 35), (0, 36), (0, 37), (0, 38)], frames: 80 },
 ];
 
 #[allow(clippy::too_many_arguments)]
