@@ -1924,3 +1924,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   tilt (`(1 − a)·glide_speed·tilt + a·|v|`): with the stick let go he slows to a hover where he
   is, still descending to and settling at `glide_fall_height`. The exact KH2 scaling is not
   traced in the exe (hypothesis in `docs/movement-model.md`).
+
+### 2026-10-18: Stage 174 (Reflect falls in the air)
+- The user: "make sora fall while casting reflect mid air, just like kh1 magic". KH2's air cast
+  (motion 73) hovers in its no-gravity window (range id 3, frames 16..74). `Character::
+  air_magic_falls` (the hook sets it) skips that window for magic actions: the cast falls from
+  rest as it plays; landing keeps the cast going on the ground.

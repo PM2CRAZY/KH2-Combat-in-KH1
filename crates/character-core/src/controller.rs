@@ -340,6 +340,9 @@ pub struct Character {
     pub combo_rules: ComboRules,
     /// Which button starts and holds Glide in mid-air.
     pub glide_button: GlideButton,
+    /// Air casts fall while they play (KH1's way) instead of hovering in their motion's
+    /// no-gravity window (KH2's).
+    pub air_magic_falls: bool,
     facing: f32,
     vel_h: [f32; 2],
     vel_y: f32,
@@ -460,6 +463,7 @@ impl Character {
             abilities: Abilities::default(),
             combo_rules: ComboRules::default(),
             glide_button: GlideButton::default(),
+            air_magic_falls: false,
             facing: 0.0,
             vel_h: [0.0; 2],
             vel_y: 0.0,
@@ -1447,7 +1451,9 @@ impl Character {
                     }
                 }
                 WindowKind::Invulnerable => fo.invulnerable = true,
-                WindowKind::NoGravity => fo.no_gravity = true,
+                // (A host may have air casts fall as they play: KH1's do, the user wanted Reflect
+                // in the air to as well.)
+                WindowKind::NoGravity if !(self.air_magic_falls && matches!(act.kind, ActionKind::Magic)) => fo.no_gravity = true,
                 WindowKind::WeaponTrail => fo.weapon_trail = true,
                 WindowKind::Guard { attack, group, weapon } => {
                     fo.guarding = true;
