@@ -1725,3 +1725,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   air state 1 there, not 2; once the spell is done (he can act) and he drops, KH2's fall as
   for stage 154's bars. KH1-move states are logged as they change.
 
+
+### 2026-10-18: Stage 156 (spells in the air)
+- s155 broke air spells (the user: "it cancels the spell and goes into the KH1 falling"). The
+  log: a spell in the air (command 0x2 "in the air", KH1 motion 0x40000006) runs in KH1's air
+  state 2 from its first frame, slot 80 the cast, sinking; stage 154's rule took state 2 +
+  dropping as "the move ended in its fall" 10 frames in, set KH1's state to 0 mid-cast, and
+  KH1's spell action then kept him (its fall slots 9..11) with KH2 never taking over. Now a
+  command's fall is KH2's only once KH1 lets him act again (`0x1402956E0`), state 1 or 2; a
+  grab's (bar, pole, ledge) as before. `release` logs a new reason even while KH1 already has
+  him (that case left no line saying why).

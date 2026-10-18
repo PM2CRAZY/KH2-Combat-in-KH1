@@ -296,10 +296,12 @@ fn drop_pose() {
 }
 
 fn release(why: &str) {
+    let mut changed = false;
     if let Ok(mut w) = LAST_WHY.try_lock() {
         if w.as_str() != why {
             w.clear();
             w.push_str(why);
+            changed = true;
         }
     }
     KH2_AIR.store(false, Ordering::Relaxed);
@@ -307,7 +309,9 @@ fn release(why: &str) {
     drop_pose();
     if let Ok(mut d) = DRIVER.try_lock() {
         if let Some(dr) = d.as_mut() {
-            if dr.logged < 400 && dr.last_state.is_some() {
+            // Also a new reason while KH1 already has him (the user, s155: after a spell's
+            // handoff KH1's fall played on and the log never said why KH2 didn't take him).
+            if dr.logged < 400 && (dr.last_state.is_some() || changed) {
                 dr.logged += 1;
                 log(&format!("KH1 has Sora ({why})"));
             }
@@ -466,9 +470,15 @@ unsafe fn takeover(actor: usize) -> bool {
         // after a spell in the air), dropping: KH2's fall from there, at KH1's speed (the user:
         // jumping off a pole he fell in KH1's falling animation, until he landed).
         let above = rd::<f32>(actor + 0x3D4);
-        // After a spell in the air KH1 drops him in its air state 1 instead (the user: falling
-        // after KH1's magic, KH1's fall animation): that one once the spell is done (he can act).
-        let falling = (state == 2 || state == 1 && can_act(actor) != 0) && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
+        // A spell in the air is cast in KH1's air state 2 itself, sinking as it goes (the log:
+        // command 0x2 in the air, state 2 from its first frame, slot 80 the cast); taken then,
+        // the spell was cut off and KH1's fall played on (the user, s155). So a command's fall is
+        // KH2's only once the spell is done (he can act again), in state 1 or 2; a grab's (a bar,
+        // a pole, a ledge) as soon as KH1 drops him in state 2.
+        let done = can_act(actor) != 0;
+        let command = FROM_COMMAND.load(Ordering::Relaxed);
+        let fall_state = if command { matches!(state, 1 | 2) && done } else { state == 2 || state == 1 && done };
+        let falling = fall_state && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
         if frames >= 10 && (falling || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
             if falling {
                 // (A frame missed would read as a jump in speed: kept to what a fall can be.)
