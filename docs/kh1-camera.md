@@ -72,8 +72,8 @@ halves some per-frame gains).
 Other code that writes the public pair directly: `0x1401E29D0` (restore from a snapshot,
 see 6.4), `0x1401E1E60` (snap behind Sora, a script command), `0x1401E2170` (enter the
 conversation camera), `0x14028A5B0` (init), and the event-script camera commands `0x1401BD8C0`
-(orbit, also writes roll) and `0x1401C0520` / `0x1401C08D0` (they read it). The cutscene
-renderer (`0x1402D3040`, priority 159999) uses its own view through `0x142340ED8` /
+(orbit, also writes roll) and `0x1401C0520` / `0x1401C08D0` (they read it). The pause
+menu's task (`0x1402D3040`, priority 159999; kh1-render 3.1) uses its own view through `0x142340ED8` /
 `0x142340EE0` (kh1-render 1.1).
 
 ---

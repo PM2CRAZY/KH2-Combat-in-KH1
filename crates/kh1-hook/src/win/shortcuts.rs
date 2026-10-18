@@ -14,6 +14,19 @@
 //!   cancel button's icon (text icon 0x42; 0x41 is confirm, both follow the button swap).
 //! - Customize's shortcut list (window `0x140548E40`, drawn by `0x140300510`; the overview
 //!   `0x1403010E0`) gets a fourth row, labelled with KH1's third label with its icon swapped.
+//!
+//! **Reflect** (`reflect`, spell 7, which KH1 has no data for) can be put in any shortcut (with
+//! `shortcuts = 3` too). KH1's own slot bytes never hold it, so nothing of KH1's reads spell 7 from
+//! them (KH1's fill would index its spell table by it): a slot holding Reflect is KH1's "none"
+//! (`0xFF`) with its bit set in `+0x847` (bits 4..6 for slots 0..2; the fourth's spell + 1 is
+//! 8). After KH1's fill such an entry is our command 0x7D, usable as the Magic menu's Reflect, so
+//! L1 + its button gives KH1's command step the same command as the menu and `combat::command`
+//! hands it to `reflect::chosen`. KH1's learn (`0x1402830F0`, a new spell into the first empty
+//! slot) sees those slots as taken. Customize: the spell list (`0x142E9A9F0`, 8 ints, KH1's 7
+//! spells and "none") gets Reflect before "none", so it is moved to a buffer of ours (the four
+//! instructions that address it repointed), its rows pitched closer when there are 9, its help
+//! line ours (`reflect::HELP_ID`), and the spell names (`0x14028D100 (spell)`, 0 past 6) answer
+//! 7 with Reflect's level name.
 
 use super::addr::Rva;
 use super::{config, hook, log};
@@ -21,8 +34,13 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
 const SAVE_PTR_RVA: Rva = Rva(0x28695A0);
 const SLOTS_OFF: usize = 0x844;
+/// Low nibble: the fourth shortcut's spell + 1 (0 none, 8 Reflect); bits 4..6: KH1's slots 0..2
+/// hold Reflect (only while their byte is KH1's none, `0xFF`).
 const SLOT4_OFF: usize = 0x847;
 const FLAGS_OFF: usize = 0x874;
+/// Reflect's spell number (KH1's are 0..6).
+const REFLECT: i32 = super::reflect::SPELL as i32;
+const NONE: u8 = 0xFF;
 
 /// The battle shortcut menu: `+4` / `+8` disabled bits, `+0x10` count, `+0x14` command ids.
 const MENU_RVA: Rva = Rva(0x529718);
@@ -96,8 +114,41 @@ const OVERVIEW_LABELS_RVA: Rva = Rva(0x548F50);
 const LABEL3: u32 = 0xD0;
 pub const ID_LABEL4: u32 = 0x7F00_0005;
 
+// Customize's spell list (Reflect in it).
+/// The list (8 ints: the spells learned, then 7 for "none", always last) and its count; the
+/// cursor in it.
+const PICK_LIST_RVA: Rva = Rva(0x2E9A9F0);
+const PICK_COUNT_RVA: Rva = Rva(0x2E9A9E4);
+/// Its fills (`0x1402D8AA0` calls the first as the pause menu opens; the second has the same
+/// body) and their first bytes (`mov [rsp+8], rbx; push rdi; sub rsp, 0x20`).
+const PICK_FILLS: [Rva; 2] = [Rva(0x301D60), Rva(0x301E50)];
+const PICK_FILL_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
+/// Every instruction that addresses the list: `lea reg, [rip -> PICK_LIST_RVA]` (help line,
+/// list window, the two fills).
+const PICK_LEAS: [(Rva, [u8; 3]); 4] = [(Rva(0x30029A), [0x48, 0x8D, 0x0D]), (Rva(0x300322), [0x48, 0x8D, 0x35]), (Rva(0x301D86), [0x48, 0x8D, 0x3D]), (Rva(0x301E5C), [0x48, 0x8D, 0x3D])];
+/// The list window's update (it draws the rows) and its first bytes.
+const PICK_UPDATE_RVA: Rva = Rva(0x300300);
+const PICK_UPDATE_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
+/// The help line's `call 0x14028D0D0` (the level; its help id is list entry × 3 + 0xD4 + it).
+const HELP_LEVEL_CALL: Rva = Rva(0x30028E);
+/// A spell's name (`0x14028D100 (spell)`: KH1's word for its command, 0 past spell 6) and the
+/// calls to it (list rows, the chosen one, the shortcut list, the overview).
+const SPELL_NAME_RVA: Rva = Rva(0x28D100);
+const SPELL_NAME_CALLS: [Rva; 4] = [Rva(0x3003DD), Rva(0x30042B), Rva(0x3006F0), Rva(0x301177)];
+/// Menu rows' height and gap (every menu's), and the pitch our 9-row list uses.
+const ROW_H_RVA: Rva = Rva(0x546050);
+const ROW_GAP_RVA: Rva = Rva(0x546058);
+const PICK_PITCH: i32 = 25;
+/// Our copy of the list (16 ints), near the executable.
+static PICK_BUF: AtomicUsize = AtomicUsize::new(0);
+static ORIG_PICK_FILLS: [AtomicUsize; 2] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+static ORIG_PICK_UPDATE: AtomicUsize = AtomicUsize::new(0);
+
 static BASE: AtomicUsize = AtomicUsize::new(0);
+/// The fourth shortcut is on (`shortcuts = 4`).
 static ON: AtomicBool = AtomicBool::new(false);
+/// Reflect can be put in shortcuts (`reflect = on`).
+static REFL: AtomicBool = AtomicBool::new(false);
 static ORIG_GET: AtomicUsize = AtomicUsize::new(0);
 static ORIG_SET: AtomicUsize = AtomicUsize::new(0);
 static ORIG_LEARN: AtomicUsize = AtomicUsize::new(0);
@@ -129,11 +180,12 @@ unsafe fn save() -> usize {
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
-    if !super::settings::get().four_shortcuts {
+    let (four, reflect) = (super::settings::get().four_shortcuts, super::settings::get().reflect);
+    if !four && !reflect {
         log("shortcuts: KH1's three (shortcuts = 3)");
         return;
     }
-    // The slots first: everything else reads the fourth through them.
+    // The slots first: everything else reads the fourth and Reflect through them.
     if hook::install(base + GET_RVA, &get_prologue(), get as *const () as usize, &ORIG_GET, "shortcut get").is_none()
         || hook::install(base + SET_RVA, &set_prologue(), set as *const () as usize, &ORIG_SET, "shortcut set").is_none()
     {
@@ -145,6 +197,14 @@ pub unsafe fn install() {
         return;
     }
     FILL_HOOKED.store(true, Ordering::Release);
+    if reflect {
+        REFL.store(true, Ordering::Release);
+        install_reflect(base);
+    }
+    if !four {
+        log("shortcuts: KH1's three (shortcuts = 3), Reflect can go in them");
+        return;
+    }
     if hook::install(base + STEP_RVA, &STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step").is_none() {
         return;
     }
@@ -199,6 +259,131 @@ unsafe fn install_customize(base: usize) {
     log(if ok { "Customize: four shortcut rows" } else { "Customize: shortcut rows only partly patched (see above)" });
 }
 
+/// `lea reg, [rip -> target]` at `at` (7 bytes; `op` its first three) as the running build has it.
+fn lea_rip(op: [u8; 3], at: usize, target: usize) -> Option<[u8; 7]> {
+    let d = i32::try_from(target as i64 - (at as i64 + 7)).ok()?.to_le_bytes();
+    Some([op[0], op[1], op[2], d[0], d[1], d[2], d[3]])
+}
+
+/// Reflect in Customize: its own spell list (room for Reflect), names, help line and row pitch.
+unsafe fn install_reflect(base: usize) {
+    if !config::TEXT_HOOKED.load(Ordering::Acquire) {
+        log("Customize: no Reflect in the spell list (no text lookup for its help)");
+        return;
+    }
+    // Every instruction that addresses KH1's list, checked before any is changed.
+    let list = base + PICK_LIST_RVA;
+    let ok = PICK_LEAS.iter().all(|(at, op)| {
+        let at = base + *at;
+        lea_rip(*op, at, list).is_some_and(|want| std::slice::from_raw_parts(at as *const u8, 7) == want)
+    }) && PICK_FILLS.iter().all(|f| std::slice::from_raw_parts((base + *f) as *const u8, PICK_FILL_PROLOGUE.len()) == PICK_FILL_PROLOGUE)
+        && std::slice::from_raw_parts((base + PICK_UPDATE_RVA) as *const u8, PICK_UPDATE_PROLOGUE.len()) == PICK_UPDATE_PROLOGUE;
+    if !ok {
+        log("Customize: KH1's spell list code wasn't as expected: no Reflect in it (battle shortcuts that hold it still work)");
+        return;
+    }
+    let Some(buf) = hook::alloc_near(base + PICK_LEAS[0].0, 0x1000) else {
+        log("Customize: no memory near the game for the spell list: no Reflect in it");
+        return;
+    };
+    // KH1's list and count as they are (empty before the pause menu first opens).
+    std::ptr::copy_nonoverlapping(list as *const u8, buf as *mut u8, 8 * 4);
+    PICK_BUF.store(buf, Ordering::Release);
+    // The fills (they write the list through the repointed `lea`), the window and the help line.
+    let fills: [usize; 2] = [pick_fill0 as *const () as usize, pick_fill1 as *const () as usize];
+    for (k, f) in PICK_FILLS.iter().enumerate() {
+        if hook::install(base + *f, &PICK_FILL_PROLOGUE, fills[k], &ORIG_PICK_FILLS[k], "Customize spell list fill").is_none() {
+            return;
+        }
+    }
+    let mut all = true;
+    for (at, op) in PICK_LEAS {
+        let at = base + at;
+        let (Some(old), Some(new)) = (lea_rip(op, at, list), lea_rip(op, at, buf)) else {
+            all = false;
+            continue;
+        };
+        all &= hook::patch(at, &old, &new, "Customize spell list address");
+    }
+    all &= hook::install(base + PICK_UPDATE_RVA, &PICK_UPDATE_PROLOGUE, pick_update as *const () as usize, &ORIG_PICK_UPDATE, "Customize spell list window").is_some();
+    all &= hook::redirect_call(base + HELP_LEVEL_CALL, base + MAGIC_LEVEL_RVA, help_level as *const () as usize, "Customize spell help");
+    for at in SPELL_NAME_CALLS {
+        all &= hook::redirect_call(base + at, base + SPELL_NAME_RVA, spell_name as *const () as usize, "Customize spell name");
+    }
+    log(&format!("Customize: Reflect can go in the shortcuts{} (spell list moved to {buf:#x})", if all { "" } else { ", some patches failed (see above)" }));
+}
+
+/// KH1's Customize spell list (now ours) and its count.
+unsafe fn pick_list() -> (usize, usize) {
+    let buf = PICK_BUF.load(Ordering::Acquire);
+    (buf, rd::<i32>(base() + PICK_COUNT_RVA).clamp(0, 15) as usize)
+}
+
+/// After KH1's fill (spells learned, then 7 for "none"): Reflect before "none" when Sora has it.
+unsafe fn pick_fill_after() {
+    let (buf, n) = pick_list();
+    if buf == 0 || n == 0 || n >= 15 || !super::reflect::offered() {
+        return;
+    }
+    let last = rd::<i32>(buf + (n - 1) * 4);
+    wr(buf + (n - 1) * 4, REFLECT);
+    wr(buf + n * 4, last);
+    wr(base() + PICK_COUNT_RVA, n as i32 + 1);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 5 {
+        log(&format!("Customize: spell list {:?} (Reflect = 7 before none)", (0..=n).map(|k| rd::<i32>(buf + k * 4)).collect::<Vec<_>>()));
+    }
+}
+
+unsafe extern "system" fn pick_fill0() {
+    let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_PICK_FILLS[0].load(Ordering::Acquire));
+    f();
+    pick_fill_after();
+}
+
+unsafe extern "system" fn pick_fill1() {
+    let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_PICK_FILLS[1].load(Ordering::Acquire));
+    f();
+    pick_fill_after();
+}
+
+/// The spell list window's update: with 9 rows (7 spells, Reflect, none) its rows are pitched
+/// closer during the call, so the last clears the help box under it (as `config`'s nine rows).
+unsafe extern "system" fn pick_update(win: usize) {
+    let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_PICK_UPDATE.load(Ordering::Acquire));
+    let base = base();
+    if pick_list().1 <= 8 {
+        return f(win);
+    }
+    let (h, gap) = (rd::<i32>(base + ROW_H_RVA), rd::<i32>(base + ROW_GAP_RVA));
+    wr(base + ROW_H_RVA, PICK_PITCH.min(h));
+    wr(base + ROW_GAP_RVA, 0i32);
+    f(win);
+    wr(base + ROW_H_RVA, h);
+    wr(base + ROW_GAP_RVA, gap);
+}
+
+/// The help line's level call (KH1 passes the cursor; the help id is entry × 3 + 0xD4 + this):
+/// on Reflect's row, what makes the id `reflect::HELP_ID`.
+unsafe extern "system" fn help_level(cursor: i32) -> i32 {
+    let (buf, n) = pick_list();
+    if buf != 0 && cursor >= 0 && (cursor as usize) + 1 < n && rd::<i32>(buf + cursor as usize * 4) == REFLECT {
+        return (super::reflect::HELP_ID as i32).wrapping_sub(REFLECT * 3 + 0xD4);
+    }
+    let f: unsafe extern "system" fn(i32) -> i32 = std::mem::transmute(base() + MAGIC_LEVEL_RVA);
+    f(cursor)
+}
+
+/// A spell's name for Customize: Reflect's level name for 7 (0, KH1's "none", when it isn't
+/// offered); KH1's for the rest.
+unsafe extern "system" fn spell_name(spell: u32) -> usize {
+    if spell == REFLECT as u32 {
+        return super::reflect::name_now().unwrap_or(0);
+    }
+    let f: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base() + SPELL_NAME_RVA);
+    f(spell)
+}
+
 /// The fourth label: KH1's third with the confirm icon swapped for cancel's (or its 3 for a 4).
 pub unsafe fn label4(kh1: impl Fn(u32) -> usize) -> usize {
     *LABEL.get_or_init(|| {
@@ -235,31 +420,78 @@ pub unsafe fn label4(kh1: impl Fn(u32) -> usize) -> usize {
     })
 }
 
-/// A shortcut's spell (0..6) or -1.
+/// A shortcut's spell (0..6, 7 Reflect) or -1.
 unsafe extern "system" fn get(slot: i32) -> i32 {
     let s = save();
+    let ours = rd::<u8>(s + SLOT4_OFF);
     if slot == 3 {
-        let v = rd::<u8>(s + SLOT4_OFF);
-        return if v == 0 || v > 7 { -1 } else { v as i32 - 1 };
+        let v = ours & 0xF;
+        return if !ON.load(Ordering::Relaxed) || v == 0 || v > 8 || (v == 8 && !REFL.load(Ordering::Relaxed)) { -1 } else { v as i32 - 1 };
     }
-    rd::<i8>(s + SLOTS_OFF + slot as usize) as i32
+    if !(0..3).contains(&slot) {
+        return -1;
+    }
+    let b = rd::<u8>(s + SLOTS_OFF + slot as usize);
+    if b == NONE && ours >> (4 + slot) & 1 != 0 && REFL.load(Ordering::Relaxed) {
+        return REFLECT;
+    }
+    b as i8 as i32
 }
 
+/// Sets a shortcut (Customize): a spell 0..6, 7 Reflect, else none.
 unsafe extern "system" fn set(slot: i32, spell: u8) {
     let s = save();
+    let ours = rd::<u8>(s + SLOT4_OFF);
+    let name = |spell: u8| match spell {
+        0..=6 => format!("spell {spell}"),
+        7 => "Reflect".to_string(),
+        _ => "none".to_string(),
+    };
     if slot == 3 {
-        wr(s + SLOT4_OFF, if spell >= 7 { 0u8 } else { spell + 1 });
-        log(&format!("fourth shortcut: {}", if spell >= 7 { "none".to_string() } else { format!("spell {spell}") }));
+        wr(s + SLOT4_OFF, ours & 0xF0 | if spell <= REFLECT as u8 { spell + 1 } else { 0 });
+        log(&format!("fourth shortcut: {}", name(spell)));
         return;
     }
-    wr(s + SLOTS_OFF + slot as usize, spell);
+    if !(0..3).contains(&slot) {
+        return;
+    }
+    let bit = 1u8 << (4 + slot);
+    if spell == REFLECT as u8 {
+        // KH1's byte stays its none: nothing of KH1's ever reads spell 7 from it.
+        wr(s + SLOTS_OFF + slot as usize, NONE);
+        wr(s + SLOT4_OFF, ours | bit);
+    } else {
+        wr(s + SLOTS_OFF + slot as usize, spell);
+        wr(s + SLOT4_OFF, ours & !bit);
+    }
+    if spell == REFLECT as u8 || ours & bit != 0 {
+        log(&format!("shortcut {}: {}", slot + 1, name(spell)));
+    }
 }
 
-/// A spell learned: KH1 puts it in the first empty of its three; with those full, the fourth.
+/// A spell learned: KH1 puts it in the first empty of its three (a slot holding Reflect is not
+/// empty); with those full, the fourth.
 unsafe extern "system" fn learn(member: i32, spell: u32) {
     let f: unsafe extern "system" fn(i32, u32) = std::mem::transmute(ORIG_LEARN.load(Ordering::Acquire));
+    // Reflect's slots read as taken for KH1's learn (a placeholder, put back after).
+    const TAKEN: u8 = 0xFE;
+    let s = save();
+    let mut held = [false; 3];
+    if s > 0x10000 {
+        for (k, h) in held.iter_mut().enumerate() {
+            if get(k as i32) == REFLECT {
+                wr(s + SLOTS_OFF + k, TAKEN);
+                *h = true;
+            }
+        }
+    }
     f(member, spell);
-    if member != 0 || spell >= 7 {
+    for (k, h) in held.iter().enumerate() {
+        if *h && rd::<u8>(s + SLOTS_OFF + k) == TAKEN {
+            wr(s + SLOTS_OFF + k, NONE);
+        }
+    }
+    if !ON.load(Ordering::Relaxed) || member != 0 || spell >= 7 {
         return;
     }
     if (0..4).any(|k| get(k) == spell as i32) || get(3) != -1 {
@@ -274,17 +506,44 @@ unsafe extern "system" fn fill(a: usize, b: usize) {
     f(a, b);
     // Reflect's entry in the magic list first (the fourth shortcut reads that list).
     super::reflect::magic_menu(a, b);
-    if !ON.load(Ordering::Acquire) {
-        return;
-    }
     let base = base();
     let s = save();
+    // (KH1 fills its shortcuts only with magic on here and a spell learned.)
     if s < 0x10000 || rd::<u8>(s + FLAGS_OFF) & 9 != 0 || rd::<i32>(base + MAGIC_COUNT_RVA) <= 0 {
         return;
     }
     let menu = base + MENU_RVA;
+    // Reflect in KH1's three: KH1 saw its none there (entry 0x42, disabled); ours instead.
+    let reflect = if REFL.load(Ordering::Relaxed) { super::reflect::shortcut_state(a, b) } else { None };
+    let mut reflect_slots = 0u32;
+    for k in 0..3usize {
+        if get(k as i32) != REFLECT {
+            continue;
+        }
+        let Some(usable) = reflect else { continue };
+        reflect_slots |= 1 << k;
+        wr(menu + 0x14 + k, super::reflect::COMMAND);
+        for at in [menu + 4, menu + 8] {
+            let v = rd::<u32>(at);
+            wr(at, if usable { v & !(1 << k) } else { v | 1 << k });
+        }
+        wr(base + HAS_SHORTCUTS_RVA, 1u32);
+    }
+    if reflect_slots != 0 {
+        static LOGGED: AtomicU32 = AtomicU32::new(u32::MAX);
+        let key = reflect_slots | (reflect == Some(true)) as u32 * 8;
+        if LOGGED.swap(key, Ordering::Relaxed) != key {
+            log(&format!("Reflect in shortcut(s) {:?} in battle: command {:#x}, usable {}", (0..3).filter(|k| reflect_slots >> k & 1 != 0).map(|k| k + 1).collect::<Vec<_>>(), super::reflect::COMMAND, reflect == Some(true)));
+        }
+    }
+    if !ON.load(Ordering::Acquire) {
+        return;
+    }
     let spell = get(3);
-    let (entry, usable) = if (0..7).contains(&spell) {
+    let (entry, usable) = if spell == REFLECT && reflect.is_some() {
+        wr(base + HAS_SHORTCUTS_RVA, 1u32);
+        (super::reflect::COMMAND, reflect == Some(true))
+    } else if (0..7).contains(&spell) {
         let level: unsafe extern "system" fn(u32) -> i8 = std::mem::transmute(base + MAGIC_LEVEL_RVA);
         let cmd = (level(spell as u32) as i32 + (spell + 2) * 3) as u8;
         // Usable as the magic menu has it (KH1's own three use the same test).

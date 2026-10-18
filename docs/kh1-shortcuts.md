@@ -48,3 +48,51 @@ The shortcut list is window `0x140548E40` (rows / visible rows at `+0x26` / `+0x
 `0x140300510` (three rows, labels sysmsg `0xCE / 0xCF / 0xD0` from `0x140548D40`); a row picks a
 spell in `0x140300300`, which calls the set. The overview `0x1403010E0` shows the same three
 (labels `0x140548F50`).
+
+## Who reads the slots (Checked, exe)
+
+Only these touch `save + 0x844 .. 0x846`: the get `0x140282F20` (called by Customize's shortcut
+list `0x140300510` and overview `0x1403010E0` only), the set `0x140283640` (from the spell list
+`0x140300300`), the learn `0x1402830F0`, new game `0x140283150`, `0x140282FB0` (writes 0, 1, 2),
+and the battle fill `0x140292330`, which reads the bytes directly: for a slot it calls
+`0x14028D0D0 (spell)` (the spell table, 7 entries of 0x38 bytes from `0x142D23580`) and indexes a
+local array of 8 by the spell. So a slot byte of 7 would make KH1 read past its spell table and
+an uninitialised local, and build a stray command id. `+0x847` is not read or written by KH1.
+
+## Customize's spell list (Checked, exe)
+
+- The list is ints at `0x142E9A9F0`, count `0x142E9A9E4`, cursor `0x142E9AA18`, the slot being set
+  `0x142E9AA14`; right after the list, `0x142E9AA10` is the overview's party member. The fills
+  `0x140301D60` (called by `0x1402D8AA0` as the pause menu opens) and `0x140301E50` (same body)
+  put the learned spells (`0x1402830C0 (0, spell)`) and then 7 for "none": at most 8, all the
+  room there is. "None" is told by place (the last row), not by value, everywhere.
+- The list window (definition `0x140548E10`, update `0x140300300`) takes its row count from the
+  count; its rows are drawn `[0x140546050] + [0x140546058]` apart (every menu's row height and
+  gap). Confirm calls the set with the entry (or -1 for the last) and keeps its name
+  (`0x14028D100`). Its help line `0x140300260` shows sysmsg `entry × 3 + 0xD4 + 0x14028D0D0
+  (cursor)` (KH1 passes the cursor, not the spell, to the level), `0xEA` for "none".
+- Names: `0x14028D100 (spell)` returns 0 for a spell past 6 (the callers then show sysmsg
+  `0xD4`, "none"), else KH1's word for the command `level + (spell + 2) × 3`. Called at
+  `0x1403003DD`, `0x14030042B` (the list), `0x1403006F0` (the shortcut list), `0x140301177` (the
+  overview).
+
+## Reflect in the shortcuts (Ours, `shortcuts.rs`)
+
+- Saved: a slot 0..2 holding Reflect keeps KH1's none (`0xFF`) with bit `4 + slot` of `+0x847`
+  set; the fourth's nibble is 8. KH1 (and the mod without Reflect) sees none there; a bit whose
+  byte isn't `0xFF` means nothing. The get / set hooks are in with `shortcuts = 3` too.
+- KH1's learn sees Reflect's slots as taken (a placeholder `0xFE` for the call), so a new spell
+  doesn't land on them.
+- Battle: after KH1's fill, a Reflect slot's entry becomes command 0x7D (greyed as the Magic
+  menu's Reflect: magic allowed, not sealed, 1 MP, KH2 has Sora) and `0x142D5445C` is set.
+  L1 + its button runs it through `0x1402912F0` like any entry: KH1's command record gets type 2,
+  spell 7, and `combat::command` hands it to `reflect::chosen` (KH1's spell code never sees it).
+  The fourth shortcut (L1 + cancel) the same.
+- Customize: the four `lea` instructions that address the list (`0x14030029A`, `0x140300322`,
+  `0x140301D86`, `0x140301E5C`, all checked first) point at a 16-int buffer of ours near the
+  game; after each fill Reflect (7) goes before "none" once Sora has it. With 9 rows the list's
+  update runs with rows 25 apart (gap 0), as Config's nine. The help line's level call
+  (`0x14030028E`) returns, on Reflect's row, what makes the id ours (`0x7F000006`, answered by
+  the menu text lookup). The four name calls answer 7 with Reflect's level name.
+- Not checked in the game: the 9-row list's look (only the rows are pitched; the window has no
+  height of its own in its definition).

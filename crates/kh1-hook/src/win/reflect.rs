@@ -7,9 +7,15 @@
 //!   menus are filled (`0x140292330`), and put into the magic list (`0x140529638`: `+4` / `+8`
 //!   disabled bits, `+0x10` count, `+0x14` command ids) after KH1's spells, before Summon, once
 //!   Sora has Aero (`learned`). Greyed as KH1 greys a spell (magic sealed, MP short by KH1's own
-//!   check `0x1402A2A80` with Fire's cost, Fire's spell data `+0x30`). Its name: KH1 draws a
-//!   command's name from its record's word index (`+4`) through `0x14028D820`, called once in its
-//!   name drawer `0x1402787B0`; that call is pointed at `word`, which answers our index.
+//!   check `0x1402A2A80` with a cost of 1 MP, `COST`). Its name: KH1 draws a command's name from
+//!   its record's word index (`+4`) through `0x14028D820`, called once in its name drawer
+//!   `0x1402787B0`; that call is pointed at `word`, which answers our index with the level's
+//!   name (Reflect / Reflera / Reflega).
+//! - **Levels.** Reflect's level is KH1's Aero level (`level`): Aero / Aerora / Aeroga give
+//!   Reflect / Reflera / Reflega, each from its own KH2 files (`magic/REFLECT_<n>.mag`: script
+//!   and effect package; MAGC row of that level; ATKP and `magi` at sub `level × 2 − 2`).
+//! - **Shortcuts.** `shortcuts` puts it in KH1's shortcuts (Customize and battle); a shortcut
+//!   gives KH1's command step the same command as the menu, so it comes here the same way.
 //! - **Rows.** KH1's magic list draws its rows with one of 7 row panels each (layout
 //!   `0x142859E60`: `+0x10` count, `+0x28` the panels, 0xC0 bytes each, built from one template
 //!   by `0x140278A00`); 7 spells + Reflect + Summon need 8. The layout is pointed at our copy of
@@ -17,10 +23,9 @@
 //! - **Cast.** Choosing it gives KH1's command step `0x1402A5380` command type 2, spell 7, which
 //!   KH1 has no spell for: `combat::command` hands it here (`chosen`) and KH1 never runs it. KH2
 //!   (`takeover`) casts it as soon as Sora can cast (`before_step`): KH2's cast motion from the
-//!   MAGC row (Reflect level 1: ground 71, combo finisher 72, air 73), KH1's MP paid
-//!   (`0x1402A39D0`, Fire's cost), and the spell's own script (`magic/REFLECT_1.mag`, run by
-//!   `kh2-magic` as the playground does) from trigger 20, released at the motion's magic-cast
-//!   event (frame 0).
+//!   MAGC row (every level: ground 71, combo finisher 72, air 73), KH1's 1 MP paid
+//!   (`0x1402A39D0`), and the level's own script (`magic/REFLECT_<n>.mag`, run by `kh2-magic` as
+//!   the playground does) from trigger 20, released at the motion's magic-cast event (frame 0).
 //! - **Barrier.** While the script's reflect-kind attack (ATKP 573) lives, enemy hits on Sora are
 //!   stopped (`hurt`) and counted (`attack_get_reflect_count`); the script then fires its counter
 //!   (ATKP 574, then the 667 burst), landed on KH1's enemies as KH2's swings are
@@ -47,16 +52,20 @@ pub const SPELL: u8 = 7;
 const WORD: u16 = 0x1FF;
 /// Reflect's MAGC element.
 const ELEMENT: u8 = 5;
-/// Its level (KH1 has one Reflect; KH2's level 1).
-const LEVEL: u8 = 1;
+/// KH2's levels: Reflect, Reflera, Reflega.
+const LEVELS: u8 = 3;
+const NAMES: [&str; 3] = ["Reflect", "Reflera", "Reflega"];
+/// The Customize spell list's help line for it (a text id of ours, `config`'s text lookup).
+pub const HELP_ID: u32 = 0x7F00_0006;
+const HELP: &str = "Surround yourself with a barrier that blocks attacks,\nthen strikes back at every foe nearby.";
 
 const RECORD_RVA: Rva = Rva(0x28D7D0);
 const WORD_RVA: Rva = Rva(0x28D820);
 const NAME_CALL_RVA: Rva = Rva(0x2787FB);
 const MAGIC_MENU_RVA: Rva = Rva(0x529638);
 const MAGIC_LAYOUT_RVA: Rva = Rva(0x2859E60);
-/// KH1's spells: 0x38 bytes each, `+0` level (0: not learned), `+0x18` the spell's data (`+0x30`
-/// its MP cost).
+/// KH1's spells: 0x38 bytes each, `+0` the level loaded (0: none; `0x14028D0D0 (spell)`),
+/// `+0x18` the spell's data (`+0x30` its MP cost).
 const SPELLS_RVA: Rva = Rva(0x2D23580);
 const MP_CHECK_RVA: Rva = Rva(0x2A2A80);
 const MP_PAY_RVA: Rva = Rva(0x2A39D0);
@@ -64,8 +73,12 @@ const SAVE_PTR_RVA: Rva = Rva(0x28695A0);
 /// Bit 4: no magic now (`0x14028CE40`'s first test).
 const MAGIC_SEAL_RVA: Rva = Rva(0x2D54438);
 const SOUND_RVA: Rva = Rva(0x177F60);
-/// KH1's MP cost unit: 100 a point (`0x1402A2A80`); Fire's own if its data can't be read.
-const FIRE_COST_FALLBACK: i32 = 100;
+/// Reflect's cost at every level: what KH1 calls 1 MP. KH1's MP is whole points (Sora's stats
+/// `+0x44`, of the maximum `+0x48`: what the HUD's MP bar shows); a spell cost of 100 or more is in
+/// hundredths of a point: `0x1402A2A80` checks `cost / 100 <= MP`, `0x1402A39D0` takes
+/// `cost / 100` points (`0x1402A2870 (actor, -n)`). (Costs under 100 are charge-gauge units,
+/// `+0xBE`, 30 a point.)
+const COST: i32 = 100;
 const ROW_BYTES: usize = 0xC0;
 const ROWS: usize = 8;
 /// How long a chosen Reflect waits for KH2's move to allow a cast (as KH1's queued commands).
@@ -79,7 +92,9 @@ const SPELL_KEY: u64 = 1 << 60;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_FILL: AtomicUsize = AtomicUsize::new(0);
-static NAME: OnceLock<usize> = OnceLock::new();
+/// Each level's name (KH1 text codes) and the help line.
+static NAME: OnceLock<[usize; 3]> = OnceLock::new();
+static HELP_TEXT: OnceLock<usize> = OnceLock::new();
 static ROWS_BUF: OnceLock<usize> = OnceLock::new();
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -107,28 +122,69 @@ pub unsafe fn learned(save: usize) -> bool {
     save > 0x10000 && rd::<u8>(save + 0x74) & (1 << 6) != 0
 }
 
+/// Reflect's level, 1..3: KH1's Aero level (the user: Aero / Aerora / Aeroga give Reflect /
+/// Reflera / Reflega; one place to change it). The level KH1 has loaded for Aero (its spell
+/// table `0x142D23580 + 6 * 0x38`, `+0`: what KH1's own menus name and cast, Aero / Aerora /
+/// Aeroga), else the save's (`save + 0x492 + spell`, which `0x14028D3D0` keeps with it), else 1.
+pub unsafe fn level(save: usize) -> u8 {
+    let loaded = rd::<i32>(base() + SPELLS_RVA + 6 * 0x38);
+    if (1..=LEVELS as i32).contains(&loaded) {
+        return loaded as u8;
+    }
+    let saved = if save > 0x10000 { rd::<u8>(save + 0x492 + 6) } else { 0 };
+    if (1..=LEVELS).contains(&saved) {
+        saved
+    } else {
+        1
+    }
+}
+
+/// The level cast now: Aero's, or the highest level below it whose files loaded.
+unsafe fn cast_level(save: usize) -> Option<u8> {
+    (1..=level(save)).rev().find(|&l| parsed(l).is_some())
+}
+
+/// The name for the level KH1 shows now (KH1 text), for our command and the Customize lists.
+pub unsafe fn name_now() -> Option<usize> {
+    let save = rd::<u64>(base() + SAVE_PTR_RVA) as usize;
+    let n = NAME.get()?;
+    (super::settings::get().reflect && learned(save)).then(|| n[(level(save) - 1) as usize])
+}
+
+/// Our text ids (`config`'s menu text lookup): the Customize help line.
+pub fn text(id: u32) -> Option<usize> {
+    (id == HELP_ID).then(|| HELP_TEXT.get().copied()).flatten()
+}
+
+/// It can be offered in KH1's spell lists now (Customize's): on, named, learned, its files in.
+pub unsafe fn offered() -> bool {
+    let save = rd::<u64>(base() + SAVE_PTR_RVA) as usize;
+    base() != 0 && super::settings::get().reflect && NAME.get().is_some() && learned(save) && !PARSED.get().is_some_and(|p| p.iter().all(|s| s.is_none()))
+}
+
 // ---------------------------------------------------------------- the spell's data
 
-/// Reflect level 1's MAGC row (`00battle`): its file, cast motions and voices.
-fn magc() -> Option<&'static kh2_formats::battle::Magc> {
-    pose::kh2()?.battle.magc.iter().find(|m| m.id == ELEMENT && m.level == LEVEL && m.world == 0)
+/// A level's MAGC row (`00battle`): its file, cast motions and voices.
+fn magc(level: u8) -> Option<&'static kh2_formats::battle::Magc> {
+    pose::kh2()?.battle.magc.iter().find(|m| m.id == ELEMENT && m.level == level && m.world == 0)
 }
 
 /// The cast motions (MAGC; 71 / 72 / 73 if the row is missing).
-fn motions() -> CastMotions {
+fn motions(level: u8) -> CastMotions {
     let m = |v: i16, d: u16| if v >= 0 { v as u16 } else { d };
-    match magc() {
+    match magc(level) {
         Some(r) => CastMotions { ground: m(r.ground_motion, 71), air: m(r.air_motion, 73), finisher: (r.finish_motion >= 0).then_some(r.finish_motion as u16) },
         None => CastMotions { ground: 71, air: 73, finisher: Some(72) },
     }
 }
 
-/// The spell file's bytes from the user's KH2 install (read once, the first caller waits; after
+/// A level's spell file from the user's KH2 install (read once, the first caller waits; after
 /// KH2 Sora has loaded).
-pub fn spell_file() -> Option<Arc<Vec<u8>>> {
-    static FILE: OnceLock<Option<Arc<Vec<u8>>>> = OnceLock::new();
-    FILE.get_or_init(|| {
-        let name = magc().map_or("magic/REFLECT_1.mag".to_string(), |m| m.filename.clone());
+pub fn spell_file(level: u8) -> Option<Arc<Vec<u8>>> {
+    static FILES: [OnceLock<Option<Arc<Vec<u8>>>>; 3] = [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+    let slot = FILES.get((level as usize).wrapping_sub(1))?;
+    slot.get_or_init(|| {
+        let name = magc(level).map_or(format!("magic/REFLECT_{level}.mag"), |m| m.filename.clone());
         let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
         let r = (|| -> Result<Vec<u8>, String> {
             let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
@@ -141,7 +197,7 @@ pub fn spell_file() -> Option<Arc<Vec<u8>>> {
                 Some(Arc::new(b))
             }
             Err(e) => {
-                log(&format!("Reflect: {name} not read ({e}): no Reflect"));
+                log(&format!("Reflect: {name} not read ({e}): no Reflect at level {level}"));
                 None
             }
         }
@@ -149,43 +205,50 @@ pub fn spell_file() -> Option<Arc<Vec<u8>>> {
     .clone()
 }
 
-/// The script and effect package, parsed (set by the loader thread; `None` inside if unusable).
-static PARSED: OnceLock<Option<SpellFile>> = OnceLock::new();
+/// Each level's script and effect package, parsed (set by the loader thread; `None` for a level
+/// whose file is missing or unusable).
+static PARSED: OnceLock<Vec<Option<SpellFile>>> = OnceLock::new();
 
-/// The spell's effect elements and their sounds (`kh2sound`).
-pub fn element_sounds() -> Vec<(u16, i32)> {
-    let Some(b) = spell_file() else { return Vec::new() };
-    let Some(pax) = SpellFile::bar_entry(&b, 18).and_then(|p| kh2_formats::pax::Pax::parse(&p).ok()) else { return Vec::new() };
-    pax.elements.iter().map(|e| (e.id, e.sound)).collect()
+fn parsed(level: u8) -> Option<&'static SpellFile> {
+    PARSED.get()?.get((level as usize).wrapping_sub(1))?.as_ref()
 }
 
-/// Its cast voices (MAGC: the cast and the finisher cast; `kh2sound`, with `kh2_voice`).
+/// Every level's effect elements and their sounds (`kh2sound`): (level, element, sound).
+pub fn element_sounds() -> Vec<(u8, u16, i32)> {
+    let mut out = Vec::new();
+    for level in 1..=LEVELS {
+        let Some(b) = spell_file(level) else { continue };
+        let Some(pax) = SpellFile::bar_entry(&b, 18).and_then(|p| kh2_formats::pax::Pax::parse(&p).ok()) else { continue };
+        out.extend(pax.elements.iter().map(|e| (level, e.id, e.sound)));
+    }
+    out
+}
+
+/// Its cast voices (MAGC: the cast and the finisher cast, every level; `kh2sound`, with
+/// `kh2_voice`).
 pub fn cast_voices(kh2: &pose::Kh2) -> Vec<i16> {
-    kh2.battle.magc.iter().filter(|m| m.id == ELEMENT && m.level == LEVEL && m.world == 0).flat_map(|m| [m.voice, m.voice_finisher]).filter(|v| *v != 255).map(|v| v as i16).collect()
+    let mut v: Vec<i16> = kh2.battle.magc.iter().filter(|m| m.id == ELEMENT && m.world == 0).flat_map(|m| [m.voice, m.voice_finisher]).filter(|v| *v != 255).map(|v| v as i16).collect();
+    v.sort_unstable();
+    v.dedup();
+    v
 }
 
 // ---------------------------------------------------------------- KH1's MP
 
-/// Fire's MP cost (the user: Reflect costs what Fire does).
-unsafe fn cost(base: usize) -> i32 {
+/// Fire's own cost field (KH1's loaded spell data `+0x18 → +0x30`), for the log only.
+unsafe fn fire_cost(base: usize) -> Option<i32> {
     let data = rd::<u64>(base + SPELLS_RVA + 0x18) as usize;
-    if data > 0x10000 && super::crash::readable(data + 0x34) {
-        let c = rd::<i32>(data + 0x30);
-        if (1..=10_000).contains(&c) {
-            return c;
-        }
-    }
-    FIRE_COST_FALLBACK
+    (data > 0x10000 && super::crash::readable(data + 0x34)).then(|| rd::<i32>(data + 0x30))
 }
 
-/// Magic is allowed now and Sora has the MP, as KH1 judges its own spells (`0x14028CE40`).
+/// Magic is allowed now and Sora has 1 MP, as KH1 judges its own spells (`0x14028CE40`).
 unsafe fn affordable(base: usize, sora: usize) -> bool {
     let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
     if sora < 0x10000 || save < 0x10000 || rd::<u8>(base + MAGIC_SEAL_RVA) & 4 != 0 || rd::<u8>(save + 0x874) & 1 != 0 {
         return false;
     }
     let check: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + MP_CHECK_RVA);
-    check(sora, cost(base)) & 0xFF != 0
+    check(sora, COST) & 0xFF != 0
 }
 
 /// Sora's MP now (stats `+0x44` of `+0x48`), for the log.
@@ -202,8 +265,9 @@ unsafe fn mp(sora: usize) -> (i32, i32) {
 /// Our name for the command's word index; KH1's word otherwise (`0x14028D820`).
 unsafe extern "system" fn word(index: i32) -> usize {
     if index == WORD as i32 {
-        if let Some(p) = NAME.get() {
-            return *p;
+        if let Some(n) = NAME.get() {
+            let save = rd::<u64>(base() + SAVE_PTR_RVA) as usize;
+            return n[(level(save) - 1) as usize];
         }
     }
     let f: unsafe extern "system" fn(i32) -> usize = std::mem::transmute(base() + WORD_RVA);
@@ -270,20 +334,66 @@ unsafe fn eight_rows(base: usize) -> bool {
     true
 }
 
+/// Reflect can be in KH1's battle menus now (on, named, learned, a level's files in, our command
+/// record in place). Logs its level when it changes.
+unsafe fn in_menus(base: usize) -> bool {
+    if base == 0 || !super::settings::get().reflect || NAME.get().is_none() {
+        return false;
+    }
+    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
+    if !learned(save) || PARSED.get().is_some_and(|p| p.iter().all(|s| s.is_none())) || !ensure_record(base) {
+        return false;
+    }
+    static LEVEL_LOGGED: AtomicU32 = AtomicU32::new(0);
+    let l = level(save);
+    if LEVEL_LOGGED.swap(l as u32, Ordering::Relaxed) != l as u32 {
+        log(&format!(
+            "Reflect: level {l}, {} (KH1's Aero level: loaded {}, saved {}){}",
+            NAMES[(l - 1) as usize],
+            rd::<i32>(base + SPELLS_RVA + 6 * 0x38),
+            rd::<u8>(save + 0x492 + 6),
+            match (PARSED.get().is_some(), cast_level(save)) {
+                (false, _) => String::new(),
+                (true, Some(c)) if c != l => format!("; its files didn't load, level {c} is cast"),
+                (true, Some(_)) => String::new(),
+                (true, None) => "; no level's files loaded".to_string(),
+            }
+        ));
+    }
+    true
+}
+
+/// Usable now, as KH1's own spells are (its fill's flag 0x20: magic usable in this menu at all;
+/// magic not sealed; 1 MP), and only while KH2 has Sora (KH1 can't cast it).
+unsafe fn usable(base: usize, actor: usize, flags: usize) -> bool {
+    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
+    let allowed = flags > 0x10000 && rd::<u8>(flags) & 0x20 != 0;
+    allowed && affordable(base, actor) && takeover::kh2_has() && cast_level(save).is_some()
+}
+
+/// Why it's greyed (for the log).
+unsafe fn greyed_why(actor: usize, flags: usize) -> String {
+    let allowed = flags > 0x10000 && rd::<u8>(flags) & 0x20 != 0;
+    format!("magic allowed {allowed}, MP {:?} of cost 1 ({COST}), KH2 has Sora {}, files loaded {}", mp(actor), takeover::kh2_has(), PARSED.get().is_some())
+}
+
+/// For a shortcut holding Reflect, after KH1's fill (`shortcuts`): `None` when it can't be offered
+/// (the slot shows empty), else whether it's usable now.
+pub unsafe fn shortcut_state(actor: usize, flags: usize) -> Option<bool> {
+    let base = base();
+    in_menus(base).then(|| usable(base, actor, flags))
+}
+
 /// After KH1 fills the battle menus (`0x140292330 (actor, flags)`): Reflect into the magic list.
 pub unsafe fn magic_menu(actor: usize, flags: usize) {
     let base = base();
-    if base == 0 || !super::settings::get().reflect || NAME.get().is_none() {
+    if base == 0 {
         return;
     }
     let menu = base + MAGIC_MENU_RVA;
     let n = rd::<i32>(menu + 0x10);
-    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
     // (KH1 shows no list here: no spells, or magic off in this mode.)
-    if !(1..=15).contains(&n) || !learned(save) || PARSED.get().is_some_and(|s| s.is_none()) {
-        return;
-    }
-    if !ensure_record(base) {
+    if !(1..=15).contains(&n) || !in_menus(base) {
         return;
     }
     let entries = menu + 0x14;
@@ -298,10 +408,7 @@ pub unsafe fn magic_menu(actor: usize, flags: usize) {
     if n as usize >= 8 && !eight_rows(base) {
         return;
     }
-    // Usable as KH1's spells are (its fill's flag 0x20: magic usable in this menu at all), and
-    // only while KH2 has Sora (KH1 can't cast it).
-    let allowed = flags > 0x10000 && rd::<u8>(flags) & 0x20 != 0;
-    let usable = allowed && affordable(base, actor) && takeover::kh2_has() && PARSED.get().is_some();
+    let usable = usable(base, actor, flags);
     for k in (at..n as usize).rev() {
         wr(entries + k + 1, rd::<u8>(entries + k));
     }
@@ -316,11 +423,11 @@ pub unsafe fn magic_menu(actor: usize, flags: usize) {
     static LOGGED: AtomicU32 = AtomicU32::new(u32::MAX);
     let key = (n as u32) << 8 | (at as u32) << 1 | usable as u32;
     if LOGGED.swap(key, Ordering::Relaxed) != key {
-        log(&format!("Reflect in the Magic menu: entry {} of {} ({}){}", at + 1, n + 1, if usable { "usable" } else { "greyed" }, if usable { String::new() } else { format!(" (magic allowed {allowed}, MP {:?} of cost {}, KH2 has Sora {})", mp(actor), cost(base), takeover::kh2_has()) }));
+        log(&format!("Reflect in the Magic menu: entry {} of {} ({}){}", at + 1, n + 1, if usable { "usable" } else { "greyed" }, if usable { String::new() } else { format!(" ({})", greyed_why(actor, flags)) }));
     }
 }
 
-/// KH1's battle-menu fill when `shortcuts` hasn't hooked it (`shortcuts = 3`).
+/// KH1's battle-menu fill when `shortcuts` hasn't hooked it.
 unsafe extern "system" fn fill(a: usize, b: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_FILL.load(Ordering::Acquire));
     f(a, b);
@@ -341,31 +448,47 @@ pub unsafe fn install() {
     if !super::shortcuts::fill_hooked() && hook::install(base + super::shortcuts::FILL_RVA, &super::shortcuts::FILL_PROLOGUE, fill as *const () as usize, &ORIG_FILL, "battle menus fill (Reflect)").is_none() {
         return;
     }
-    let _ = NAME.set(Box::leak(super::menu::encode("Reflect").into_boxed_slice()).as_ptr() as usize);
-    log(&format!("Reflect: menu entry ready (command {COMMAND:#x}, learned with Aero, Fire's MP)"));
-    // The spell file, once KH2 Sora is there (its MAGC row names it).
+    let _ = HELP_TEXT.set(Box::leak(super::menu::encode(HELP).into_boxed_slice()).as_ptr() as usize);
+    let _ = NAME.set(NAMES.map(|n| Box::leak(super::menu::encode(n).into_boxed_slice()).as_ptr() as usize));
+    log(&format!("Reflect: menu entry ready (command {COMMAND:#x}, learned with Aero, its level Aero's, 1 MP = KH1 cost {COST})"));
+    // The spell files, once KH2 Sora is there (their MAGC rows name them).
     std::thread::spawn(|| {
         let t = Instant::now();
         while pose::kh2().is_none() {
             if t.elapsed().as_secs() > 300 {
                 log("Reflect: KH2 Sora never loaded");
-                let _ = PARSED.set(None);
+                let _ = PARSED.set(Vec::new());
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
-        let parsed = spell_file().and_then(|b| match SpellFile::parse("REFLECT_1.mag", &b) {
-            Ok(f) => Some(f),
-            Err(e) => {
-                log(&format!("Reflect: spell file not usable ({e})"));
-                None
+        let mut all = Vec::new();
+        for level in 1..=LEVELS {
+            let name = format!("REFLECT_{level}.mag");
+            let parsed = spell_file(level).and_then(|b| match SpellFile::parse(&name, &b) {
+                Ok(f) => Some(f),
+                Err(e) => {
+                    log(&format!("Reflect: {name} not usable ({e})"));
+                    None
+                }
+            });
+            if let Some(f) = &parsed {
+                let m = motions(level);
+                let sub = level as i32 * 2 - 2;
+                let barrier = pose::kh2().and_then(|k| k.battle.attack_for_level(573, sub as u8, 0)).map(|a| a.kind);
+                let counter = pose::kh2().and_then(|k| k.battle.attack_for_level(574, sub as u8, 0)).map(|a| (a.power, a.interval));
+                log(&format!(
+                    "Reflect level {level} ({}): script and {} effect elements ready; cast motions {} / finisher {:?} / air {}; sub {sub}: barrier ATKP 573 kind {barrier:?}, counter 574 (power, re-hit frames) {counter:?}",
+                    NAMES[(level - 1) as usize],
+                    f.pax.elements.len(),
+                    m.ground,
+                    m.finisher,
+                    m.air
+                ));
             }
-        });
-        if let Some(f) = &parsed {
-            let m = motions();
-            log(&format!("Reflect: script and {} effect elements ready; cast motions {} / finisher {:?} / air {}", f.pax.elements.len(), m.ground, m.finisher, m.air));
+            all.push(parsed);
         }
-        let _ = PARSED.set(parsed);
+        let _ = PARSED.set(all);
     });
 }
 
@@ -380,42 +503,77 @@ unsafe fn refuse(base: usize, why: &str) {
     note(format!("Reflect refused: {why}"));
 }
 
-/// KH1's command step got our command (`combat::command`): KH1 never runs it.
+/// KH1's command step got our command (`combat::command`: from the Magic menu or a shortcut, the
+/// same command): KH1 never runs it.
 pub unsafe fn chosen(actor: usize) {
     let base = base();
     if !super::settings::get().reflect {
         return refuse(base, "reflect = off");
     }
-    if !PARSED.get().is_some_and(|s| s.is_some()) {
-        return refuse(base, "its spell file isn't loaded");
+    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
+    if cast_level(save).is_none() {
+        return refuse(base, "its spell files aren't loaded");
     }
     if !takeover::kh2_has() {
         return refuse(base, "KH1 has Sora (KH2 casts Reflect)");
     }
     if !affordable(base, actor) {
-        return refuse(base, &format!("MP {:?}, cost {}", mp(actor), cost(base)));
+        return refuse(base, &format!("MP {:?}, cost 1 ({COST})", mp(actor)));
     }
     if let Ok(mut w) = WAITING.lock() {
         *w = Some(Instant::now());
     }
-    note(format!("Reflect chosen (MP {:?}, cost {}, KH2 can cast now: {:?})", mp(actor), cost(base), takeover::with_kh2(|c, _| c.can_cast())));
+    note(format!(
+        "Reflect chosen (level {}, MP {:?}, cost 1; Fire's own cost field {:?}; KH2 can cast now: {:?})",
+        level(save),
+        mp(actor),
+        fire_cost(base),
+        takeover::with_kh2(|c, _| c.can_cast())
+    ));
 }
 
 // ---------------------------------------------------------------- casting it
 
 struct Runtime {
     magic: Magic,
-    spell: usize,
-    /// The cast just started (motion, finisher): the script starts with this frame's world.
-    fresh: Option<(u16, bool)>,
+    /// Each level's spell in `magic` (by level − 1), and each spell's level (by spell index).
+    spells: [Option<usize>; 3],
+    levels: Vec<u8>,
+    /// The cast just started (motion, finisher, level): the script starts with this frame's world.
+    fresh: Option<(u16, bool, u8)>,
     /// The cast motion waiting for its magic-cast event.
     casting: Option<u16>,
     /// Script effect id → our drawn effect, and whether its end was passed on.
     fx: HashMap<u64, (Option<u32>, bool)>,
     barrier: bool,
+    hold: Hold,
     blocks: u32,
     counter_hits: u32,
     started: Option<Instant>,
+}
+
+/// The barrier held while attacks keep hitting it (the user: "can we have reflect keep shielding
+/// until attacks have stopped"). The scripts' barrier (ATKP 573) stands 27 frames at every level
+/// (`kh2-magic` test `reflect_counters_what_it_blocked`); from its `HOLD_AT`th frame, while the
+/// last blocked hit is at most `HOLD_FRAMES` frames old, the cast is held (`Magic::hold`: its
+/// script stops where it is, its effects don't age, the barrier attack stays, so `hurt` keeps
+/// stopping hits), at most `HOLD_MAX_S`. Let go, the script goes on: the barrier drops a few
+/// frames later and the counter fires, its strength from the hits counted as before (test
+/// `reflect_barrier_held`). Ours, not KH2's.
+const HOLD_AT: u32 = 22;
+const HOLD_FRAMES: u32 = 20;
+const HOLD_MAX_S: f32 = 5.0;
+
+#[derive(Default)]
+struct Hold {
+    /// Frames the barrier has stood, not counting held ones (the script's own time).
+    age: u32,
+    /// Frames since the last blocked hit.
+    since_hit: Option<u32>,
+    /// Held since; the hold used up (the cap reached) for this cast.
+    since: Option<Instant>,
+    frames: u32,
+    spent: bool,
 }
 
 static RT: Mutex<Option<Runtime>> = Mutex::new(None);
@@ -457,41 +615,55 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     if !affordable(base, actor) {
         return refuse(base, &format!("MP {:?} (spent meanwhile)", mp(actor)));
     }
-    let m = motions();
+    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
+    let Some(level) = cast_level(save) else {
+        return refuse(base, "its spell files aren't loaded");
+    };
+    let m = motions(level);
     let Some(motion) = ch.cast(m) else {
         note(format!("Reflect: KH2 couldn't start its cast motion ({m:?})"));
         return;
     };
+    // KH1's own payment of a spell's cost: 1 MP at every level.
     let pay: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + MP_PAY_RVA);
     let before = mp(actor);
-    pay(actor, cost(base));
+    pay(actor, COST);
     let finisher = Some(motion) == m.finisher && m.finisher != Some(m.ground);
     if let Ok(mut g) = RT.lock() {
         if let Some(rt) = runtime(&mut g) {
-            rt.fresh = Some((motion, finisher));
+            rt.fresh = Some((motion, finisher, level));
             rt.started = Some(Instant::now());
         }
     }
-    if let Some(r) = magc() {
+    if let Some(r) = magc(level) {
         let v = if finisher { r.voice_finisher } else { r.voice };
         if v != 255 {
             super::kh2sound::voice(v as i16);
         }
     }
     note(format!(
-        "Reflect cast: motion {motion}{}, MP {before:?} -> {:?} (its effects loaded: {})",
+        "{} cast (level {level}): motion {motion}{}, MP {before:?} -> {:?} (its effects loaded: {})",
+        NAMES[(level - 1) as usize],
         if finisher { " (combo finisher)" } else if motion == m.air { " (air)" } else { "" },
         mp(actor),
-        super::kh2fx::spell_ready()
+        super::kh2fx::spell_ready(level)
     ));
 }
 
 fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
     if g.is_none() {
-        let file = PARSED.get()?.as_ref()?.clone();
         let mut magic = Magic::new();
-        let spell = magic.add_spell(file);
-        *g = Some(Runtime { magic, spell, fresh: None, casting: None, fx: HashMap::new(), barrier: false, blocks: 0, counter_hits: 0, started: None });
+        let (mut spells, mut levels) = ([None; 3], Vec::new());
+        for (i, f) in PARSED.get()?.iter().enumerate() {
+            if let Some(f) = f {
+                spells[i] = Some(magic.add_spell(f.clone()));
+                levels.push(i as u8 + 1);
+            }
+        }
+        if levels.is_empty() {
+            return None;
+        }
+        *g = Some(Runtime { magic, spells, levels, fresh: None, casting: None, fx: HashMap::new(), barrier: false, hold: Hold::default(), blocks: 0, counter_hits: 0, started: None });
     }
     g.as_mut()
 }
@@ -618,12 +790,15 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     let mut world = KhWorld { objs, target, floor, rng: 0x1234_5678 ^ (rt.counter_hits.wrapping_mul(2_654_435_761)) };
     // A cast that started this frame (trigger 20), then the release (trigger 21) at the cast
     // motion's magic-cast event (Reflect's: frame 0).
-    if let Some((motion, finisher)) = rt.fresh.take() {
-        let sub = LEVEL as i32 * 2 - 2 + finisher as i32;
+    if let Some((motion, finisher, level)) = rt.fresh.take() {
+        // KH2's sub for a spell level: level × 2 − 2, + 1 for the combo finisher's cast.
+        let sub = level as i32 * 2 - 2 + finisher as i32;
         let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
-        match rt.magic.cast(rt.spell, SORA, ELEMENT, sub, &magi, &mut world) {
+        let spell = rt.spells[(level - 1) as usize].unwrap_or(0);
+        match rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) {
             Ok(_) => {
                 rt.casting = Some(motion);
+                rt.hold = Hold::default();
                 rt.blocks = 0;
                 rt.counter_hits = 0;
             }
@@ -654,6 +829,7 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             None => note(format!("Reflect: {blocks} hit(s) stopped with no barrier left to count them")),
         }
     }
+    let held = hold(rt, blocks);
     for e in rt.magic.update(&mut world).into_iter().chain(rt.magic.take_events()) {
         match e {
             Event::Missing(n) => note(format!("Reflect's script used {n} (not modelled)")),
@@ -668,11 +844,12 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         seen.push(e.id);
         match rt.fx.get(&e.id) {
             None => {
-                let h = if e.alive() { super::kh2fx::spell_start(e.element.id) } else { None };
+                let level = rt.levels.get(e.spell).copied().unwrap_or(1);
+                let h = if e.alive() { super::kh2fx::spell_start(level, e.element.id) } else { None };
                 if e.alive() {
-                    super::kh2sound::spell_element(e.element.id);
+                    super::kh2sound::spell_element(level, e.element.id);
                 }
-                note(format!("Reflect effect: element {} (sound {}){}", e.element.id, e.element.sound, if h.is_some() { "" } else { ", not drawn" }));
+                note(format!("Reflect effect: level {level} element {} (sound {}){}", e.element.id, e.element.sound, if h.is_some() { "" } else { ", not drawn" }));
                 rt.fx.insert(e.id, (h, false));
             }
             Some((Some(h), ended)) => {
@@ -687,6 +864,14 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                 } else if e.ended_at.is_some() && !ended {
                     super::kh2fx::spell_end(h);
                     rt.fx.insert(e.id, (Some(h), true));
+                } else if held && e.alive() && !ended && !super::kh2fx::spell_running(h) {
+                    // Held: the barrier's drawn effect played out on its own; again, for as long
+                    // as the hold lasts (no sound: it is the same barrier).
+                    let level = rt.levels.get(e.spell).copied().unwrap_or(1);
+                    if let Some(n) = super::kh2fx::spell_start(level, e.element.id) {
+                        rt.fx.insert(e.id, (Some(n), false));
+                        note(format!("Reflect: barrier effect (element {}) started again for the hold", e.element.id));
+                    }
                 }
             }
             Some((None, _)) => {}
@@ -718,6 +903,9 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     for a in rt.magic.freed().filter(|a| a.owns_id) {
         strikes.spell_forget(a.id | SPELL_KEY);
     }
+    if barrier && !held {
+        rt.hold.age += 1;
+    }
     if barrier != rt.barrier {
         rt.barrier = barrier;
         note(format!("Reflect barrier {} ({:.2} s after the cast)", if barrier { "up" } else { "down" }, rt.started.map_or(0.0, |t| t.elapsed().as_secs_f32())));
@@ -727,6 +915,38 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         note(format!("Reflect done: {} hit(s) blocked, {} counter hit(s)", rt.blocks, rt.counter_hits));
         rt.started = None;
     }
+}
+
+/// Before the spell's frame: whether its cast is held this frame (the barrier stretched while
+/// hits keep coming, `HOLD_AT`), with `blocks` hits stopped since the last frame.
+fn hold(rt: &mut Runtime, blocks: u32) -> bool {
+    let h = &mut rt.hold;
+    h.since_hit = if blocks > 0 { Some(0) } else { h.since_hit.map(|n| n.saturating_add(1)) };
+    let was = h.since.is_some();
+    let over = h.since.is_some_and(|t| t.elapsed().as_secs_f32() >= HOLD_MAX_S);
+    let want = rt.barrier && !h.spent && !over && h.age >= HOLD_AT && h.since_hit.is_some_and(|n| n <= HOLD_FRAMES);
+    if want {
+        if !was {
+            h.since = Some(Instant::now());
+            h.frames = 0;
+            note(format!("Reflect barrier held: last hit {} frames ago ({} blocked so far)", h.since_hit.unwrap_or(0), rt.blocks));
+        } else if blocks > 0 {
+            note(format!("Reflect barrier held: last hit 0 frames ago ({} blocked so far, held {} frames)", rt.blocks, h.frames));
+        }
+        h.frames += 1;
+    } else if was {
+        h.spent = true;
+        let held = h.since.take().map_or(0.0, |t| t.elapsed().as_secs_f32());
+        note(format!(
+            "Reflect barrier let go: last hit {} frames ago, held {} frames ({held:.2} s{}), {} blocked: the counter follows",
+            h.since_hit.unwrap_or(0),
+            h.frames,
+            if over { ", the cap" } else { "" },
+            rt.blocks
+        ));
+    }
+    rt.magic.hold(SORA, want);
+    want
 }
 
 /// KH1 has Sora this frame: a Reflect in flight ends with its effects (KH2 runs it).
