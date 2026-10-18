@@ -1707,3 +1707,21 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   state 15 -> 16 -> 2 with motion request 6, KH1's fall, -> 7 its landing) is KH2's from there:
   `Character::carry_into_air` starts KH2's fall at the speed KH1 had him moving (his position's
   change per frame, capped), so the swing's momentum and the fall's speed carry on.
+
+### 2026-10-18: Stage 155 (footsteps, three moves' effects, landing hold, falls after spells)
+- Footsteps mid-animation (the user): KH1 keeps Sora in its walk / run slots (5..7 in battle)
+  whenever the stick is held, so its own footstep sound (`0x140293C70 (actor, kind)`, the
+  floor's sound from `footstep.bin` by world `0x142340E5C` and material; Steam `0x140295E00`)
+  played under KH2's attacks and rolls. Hooked: Sora's steps sound only while KH2 walks or runs
+  him (or KH1 has him).
+- Guard Break (165: effect elements 31, 30, 32 at frames 24, 28, 30), Finishing Leap (167: 33
+  at 2, 34 at 28) and Aerial Recovery (40: element 0 at 0) join `kh2fx::DEFAULT_MOTIONS`;
+  Aerial Recovery joins the sounds too. The sound log now names each element's sound, or says
+  an element has none (Finishing Leap's sound, if not its elements', is still to find).
+- Landing (the user's KH2 video: touchdown, ~16 frames of the landing crouch at 60 fps, then
+  the run): `LAND_HOLD` 14 frames standing still before the stick moves him; buttons still from
+  the reaction window. `docs/movement-model.md` corrected.
+- Falling after KH1's magic in the air (the user: KH1's fall animation): KH1 drops him in its
+  air state 1 there, not 2; once the spell is done (he can act) and he drops, KH2's fall as
+  for stage 154's bars. KH1-move states are logged as they change.
+

@@ -162,8 +162,11 @@ fn landing_keeps_running_with_the_stick_and_stops_dead_without() {
     w.ch.abilities.high_jump = 0;
     w.run(1, Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
     let outs: Vec<_> = (0..200).map(|_| w.step(Pad { stick: [0.0, 1.0], ..IDLE })).collect();
-    let land = outs.iter().filter(|o| o.state == StateName::Land).count();
-    assert!(land <= 1, "landing frames with stick held: {land}");
+    let land: Vec<&Output> = outs.iter().filter(|o| o.state == StateName::Land).collect();
+    // KH2 holds him in the landing for a moment (the user's KH2 video), then he runs.
+    assert_eq!(land.len(), 14, "landing frames with stick held");
+    assert!(land.iter().all(|o| o.displacement[0] == 0.0 && o.displacement[2] == 0.0), "still while landing");
+    assert!(matches!(outs.last().unwrap().state, StateName::Run | StateName::Walk));
 
     // Neutral stick: the land motion plays and Sora does not slide.
     let mut w = World::new(sora());

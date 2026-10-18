@@ -446,6 +446,14 @@ unsafe fn takeover(actor: usize) -> bool {
         let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
         let stick = move_tilt() > 0.15;
         let free = can_act(actor) != 0 && stick;
+        // Its states as it goes, for the log (what a fall out of it looked like).
+        static LAST_STATE: AtomicU32 = AtomicU32::new(u32::MAX);
+        if frames == 0 {
+            LAST_STATE.store(u32::MAX, Ordering::Relaxed);
+        }
+        if LAST_STATE.swap(state as u32, Ordering::Relaxed) != state as u32 {
+            log(&format!("KH1's move: state {state} at {:.0} above the floor (can act {})", rd::<f32>(actor + 0x3D4), can_act(actor) != 0));
+        }
         // His speed while KH1 moves him (per frame, KH2's way up), for a fall handed over.
         let p = rd::<[f32; 3]>(actor + 0x10);
         let vel = {
@@ -458,7 +466,9 @@ unsafe fn takeover(actor: usize) -> bool {
         // after a spell in the air), dropping: KH2's fall from there, at KH1's speed (the user:
         // jumping off a pole he fell in KH1's falling animation, until he landed).
         let above = rd::<f32>(actor + 0x3D4);
-        let falling = state == 2 && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
+        // After a spell in the air KH1 drops him in its air state 1 instead (the user: falling
+        // after KH1's magic, KH1's fall animation): that one once the spell is done (he can act).
+        let falling = (state == 2 || state == 1 && can_act(actor) != 0) && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
         if frames >= 10 && (falling || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
             if falling {
                 // (A frame missed would read as a jump in speed: kept to what a fall can be.)
@@ -1011,6 +1021,7 @@ unsafe fn takeover(actor: usize) -> bool {
             log(&format!("attacking (motion {}, frame {}): {}", out.motion, out.clip_frame, pose::weapon_report()));
         }
     }
+    KH2_STEPS.store(matches!(out.state, StateName::Walk | StateName::Run), Ordering::Relaxed);
     if d.last_state != Some(out.state) {
         if d.logged < 400 {
             d.logged += 1;
@@ -1020,6 +1031,30 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     ACTIVE_MS.store(now_ms().max(1), Ordering::Relaxed);
     true
+}
+
+/// KH1's footstep sound (`0x140293C70 (actor, kind)`: the floor's sound from `footstep.bin`
+/// by world and material), played from his motion's frames. Under KH2, KH1 keeps him in its
+/// walk / run slots whenever the stick is held, so its steps sounded during KH2's attacks and
+/// rolls (the user: footsteps mid-animation): Sora's are KH1's only while KH2 walks or runs
+/// him (or KH1 has him).
+const FOOTSTEP_RVA: Rva = Rva(0x293C70);
+const FOOTSTEP_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x56, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_FOOTSTEP: AtomicUsize = AtomicUsize::new(0);
+/// KH2 has Sora walking or running this frame.
+static KH2_STEPS: AtomicBool = AtomicBool::new(false);
+
+unsafe extern "system" fn footstep(actor: usize, kind: i32) -> usize {
+    let base = BASE.load(Ordering::Relaxed);
+    if actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize && FRAME_KIND.load(Ordering::Relaxed) == 1 && !KH2_STEPS.load(Ordering::Relaxed) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log("KH1's footstep held back (KH2 isn't walking him)");
+        }
+        return 0;
+    }
+    let f: unsafe extern "system" fn(usize, i32) -> usize = std::mem::transmute(ORIG_FOOTSTEP.load(Ordering::Acquire));
+    f(actor, kind)
 }
 
 /// KH1's air moves, tried as its jump's input step does; the one that took him, if any.
@@ -1328,6 +1363,7 @@ pub unsafe fn install() {
     BASE.store(base, Ordering::Relaxed);
     sparkle_stub(base);
     hook::install(base + PHYS_RVA, &PHYS_PROLOGUE, physics as *const () as usize, &ORIG_PHYS, "actor physics step");
+    let _ = hook::install(base + FOOTSTEP_RVA, &FOOTSTEP_PROLOGUE, footstep as *const () as usize, &ORIG_FOOTSTEP, "footstep sound");
     if hook::install(base + CONTROL_RVA, &CONTROL_PROLOGUE, control as *const () as usize, &ORIG_CONTROL, "player control step").is_some() {
         CONTROL_HOOKED.store(true, Ordering::Relaxed);
     }

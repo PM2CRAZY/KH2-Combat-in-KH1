@@ -22,8 +22,9 @@ use std::sync::{Arc, Mutex};
 /// Slash 161, Slapshot 162, Dodge Slash 163, Slide Dash 164, Guard Break 165, Explosion 166,
 /// Finishing Leap 167, Flash Step 169, Vicinity Break 170, Counterguard 171, Retaliating Slash
 /// 172, Aerial Sweep 191, Aerial Spiral 192, Horizontal Slash 193, Aerial Finish 194, Aerial
-/// Dive 196, Magnet Burst 197. (The plain combo's swings keep KH1's.)
-pub const DEFAULT_MOTIONS: [u16; 17] = [161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197];
+/// Dive 196, Magnet Burst 197; and Aerial Recovery 40 (the user: it had no sound). (The plain
+/// combo's swings keep KH1's.)
+pub const DEFAULT_MOTIONS: [u16; 18] = [161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40];
 
 struct Sound {
     rate: u32,
@@ -124,11 +125,10 @@ fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
     let mut voice_ids: Vec<i16> = Vec::new();
     for e in events {
         match *e {
-            EventKind::Effect(el) => {
-                if let Some(p) = pax.element(el as u16).filter(|p| p.sound >= 0) {
-                    wants.push((p.sound as u32, Want::Element(el)));
-                }
-            }
+            EventKind::Effect(el) => match pax.element(el as u16) {
+                Some(p) if p.sound >= 0 => wants.push((p.sound as u32, Want::Element(el))),
+                _ => log(&format!("KH2 sounds: effect element {el} has no sound")),
+            },
             EventKind::Sound(id) => {
                 let id = if (500_000..501_000).contains(&id) { id - 500_000 + WEAPON_BANK * 1000 } else { id };
                 wants.push((id, Want::Sound(id)));
@@ -160,7 +160,11 @@ fn load(events: &[character_core::EventKind]) -> Result<Loaded, String> {
         let scd = kh2_formats::scd::Scd::parse(&banks[&bank]).map_err(|e| e.to_string())?;
         match scd.sound_id(index) {
             Ok(p) => {
-                log(&format!("KH2 sound {id}: {} Hz, {} ch, {:.2} s, volume {:.2}", p.rate, p.channels, p.samples.len() as f32 / p.channels.max(1) as f32 / p.rate.max(1) as f32, p.volume));
+                let of = match want {
+                    Want::Element(el) => format!(" (effect element {el})"),
+                    Want::Sound(_) => String::new(),
+                };
+                log(&format!("KH2 sound {id}{of}: {} Hz, {} ch, {:.2} s, volume {:.2}", p.rate, p.channels, p.samples.len() as f32 / p.channels.max(1) as f32 / p.rate.max(1) as f32, p.volume));
                 let snd = decode(p);
                 match want {
                     Want::Element(el) => {

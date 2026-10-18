@@ -308,6 +308,11 @@ const RETALIATING_SLASH_ROW: u8 = 40;
 /// Hit-back starting speed per unit of distance (exe: 0.1).
 const HIT_BACK_SPEED: f32 = 0.1;
 
+/// Frames a landing holds Sora where he touched down before the stick moves him again (the
+/// user's KH2 video: touchdown, then the landing crouch for about 16 frames at 60 fps before he
+/// runs off; it was 0, KH1 had none). Buttons still work from the motion's reaction window.
+const LAND_HOLD: u32 = 14;
+
 /// Physics tick length in frames: KH2 recomputes velocities at 30 Hz.
 const DT: f32 = 2.0;
 const DEAD_ZONE: f32 = 0.1;
@@ -1436,7 +1441,7 @@ impl Character {
                 // the land motion only plays while the stick is neutral, and
                 // moving switches straight to walk/run. Buttons are accepted
                 // once the reaction-command window opens (frame 8 for Sora).
-                if len2(input.stick) > DEAD_ZONE {
+                if len2(input.stick) > DEAD_ZONE && f >= LAND_HOLD {
                     finished = true;
                 }
                 let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(0);
@@ -1737,7 +1742,7 @@ impl Character {
                 }
                 // Idle-action movement: velocity is the stick, no momentum
                 // carried from the air.
-                ActionKind::Land => self.vel_h = scale(stick_dir, ground_speed),
+                ActionKind::Land => self.vel_h = if act.frame < LAND_HOLD { [0.0; 2] } else { scale(stick_dir, ground_speed) },
                 ActionKind::Hang { .. } | ActionKind::Climb => {
                     self.vel_h = [0.0; 2];
                     self.vel_y = 0.0;
