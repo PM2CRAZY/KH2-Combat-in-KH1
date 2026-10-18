@@ -57,6 +57,8 @@ const DECOR_RVA: Rva = Rva(0x2F0740);
 /// Our rows: 8 the camera. Each: label, left value, right value, help.
 const FIRST_ROW: i32 = 8;
 const ROWS: [[u32; 4]; 1] = [[0x7F00_0001, 0x7F00_0002, 0x7F00_0003, 0x7F00_0004]];
+/// The camera row's help line (with the version under it).
+const HELP_ID: u32 = 0x7F00_0004;
 const STRINGS: [(u32, &str); 4] = [
     (0x7F00_0001, "Camera Style"),
     (0x7F00_0002, "KH1"),
@@ -96,7 +98,17 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
-    TEXT.get_or_init(|| STRINGS.iter().map(|(id, s)| (*id, Box::leak(super::menu::encode(s).into_boxed_slice()).as_ptr() as usize)).collect());
+    TEXT.get_or_init(|| {
+        STRINGS
+            .iter()
+            .map(|(id, s)| {
+                // The camera row's help carries the mod's version on its second line (the user:
+                // a version shown in the Config menu, to tell which build a PC runs).
+                let s = if *id == HELP_ID { format!("{s}\nKH2 Combat version {}", crate::VERSION) } else { s.to_string() };
+                (*id, Box::leak(super::menu::encode(&s).into_boxed_slice()).as_ptr() as usize)
+            })
+            .collect()
+    });
     // The text lookup carries our strings for the shortcuts too (`shortcuts.rs`).
     if hook::install(base + TEXT_RVA, &text_prologue(), text as *const () as usize, &ORIG_TEXT, "menu text lookup").is_none() {
         return;

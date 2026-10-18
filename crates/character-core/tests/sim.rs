@@ -500,3 +500,21 @@ fn sora_is_launched_lands_and_gets_up() {
     assert!(up > 10);
     assert!(w.pos[2] < -200.0, "{:?}", w.pos);
 }
+
+#[test]
+fn carried_into_the_air_falls_on_at_its_speed() {
+    // Handed over mid-fall (off a bar): moving 6 sideways and 3 down per frame.
+    let mut w = World::new(sora());
+    w.pos = [0.0, 300.0, 0.0];
+    w.ch.carry_into_air([6.0, 0.0], -3.0);
+    let o = w.step(IDLE);
+    assert_eq!(o.state, StateName::Air);
+    assert!(o.displacement[0] > 4.0, "keeps going sideways: {:?}", o.displacement);
+    assert!(o.displacement[1] < -2.5, "falls on, not from rest: {:?}", o.displacement);
+    let mut falls = 0;
+    while w.pos[1] > 0.0 && falls < 300 {
+        w.step(IDLE);
+        falls += 1;
+    }
+    assert!(falls < 300 && w.pos[1] == 0.0, "lands");
+}

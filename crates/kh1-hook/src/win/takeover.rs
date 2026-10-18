@@ -128,6 +128,10 @@ static FRAME_KIND: AtomicU8 = AtomicU8::new(0);
 static HANDOFF_FRAME: AtomicBool = AtomicBool::new(false);
 static FRESH: AtomicBool = AtomicBool::new(false);
 static HANDOFF_FRAMES: AtomicU32 = AtomicU32::new(0);
+/// Where KH1's move had him last frame (his speed while it moves him).
+static HANDOFF_POS: Mutex<Option<[f32; 3]>> = Mutex::new(None);
+/// KH1's move ended in its fall: his speed then (per frame: sideways, up), for KH2's fall.
+static HANDOFF_FALL: Mutex<Option<([f32; 2], f32)>> = Mutex::new(None);
 /// Square was pressed as KH1's move ended: KH2 takes it as a press (not one already held).
 static ROLL_NOW: AtomicBool = AtomicBool::new(false);
 /// KH1's fall state (after a jump's rise, or off an edge): its collision is the air kind
@@ -219,6 +223,7 @@ unsafe extern "system" fn physics(actor: usize) {
     let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
     if sora {
         FRAME_KIND.store(if took { 1 } else if HANDOFF_FRAME.load(Ordering::Relaxed) { 2 } else { 0 }, Ordering::Relaxed);
+        room_watch(actor, took);
     }
     if took {
         return;
@@ -291,6 +296,12 @@ fn drop_pose() {
 }
 
 fn release(why: &str) {
+    if let Ok(mut w) = LAST_WHY.try_lock() {
+        if w.as_str() != why {
+            w.clear();
+            w.push_str(why);
+        }
+    }
     KH2_AIR.store(false, Ordering::Relaxed);
     unsafe { set_sparkle(false) };
     drop_pose();
@@ -308,6 +319,63 @@ fn release(why: &str) {
             dr.last_state = None;
             dr.held = (true, true);
         }
+    }
+}
+
+/// Why KH1 last had Sora (`release`), for the room lines.
+static LAST_WHY: Mutex<String> = Mutex::new(String::new());
+
+/// KH1's current world and room (u32 each; `0x1402AFC10` compares its flight table with them;
+/// KH-1FM-AP-LUA reads them too).
+const WORLD_RVA: Rva = Rva(0x2340E5C);
+const ROOM_RVA: Rva = Rva(0x2340EC4);
+
+/// The room Sora is in, when he came in, and whether its first seconds were logged.
+struct RoomSeen {
+    world: u32,
+    room: u32,
+    at_ms: u64,
+    frames: u32,
+    kh2_frames: u32,
+    reported: bool,
+}
+static ROOM: Mutex<Option<RoomSeen>> = Mutex::new(None);
+
+/// Each room entered goes in the log (the user: the log should say what happens on entering
+/// a room; a friend's rooms "broke the mod"), and 3 s later who had Sora meanwhile: KH2 for how
+/// much of it, and if KH1 has him, why.
+unsafe fn room_watch(actor: usize, kh2: bool) {
+    let base = BASE.load(Ordering::Relaxed);
+    let (world, room) = (rd::<u32>(base + WORLD_RVA), rd::<u32>(base + ROOM_RVA));
+    let Ok(mut seen) = ROOM.try_lock() else { return };
+    let now = now_ms();
+    if seen.as_ref().is_none_or(|s| s.world != world || s.room != room) {
+        log(&format!(
+            "room: world {world:#x} room {room:#x} entered; {} (KH1 state {}, flags {:08x}, script {})",
+            if kh2 { "KH2 has Sora".to_string() } else { format!("KH1 has Sora ({})", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
+            rd::<i32>(actor + 0x70),
+            rd::<u32>(actor),
+            pose::ptr(rd::<u32>(actor + 0x440)) != 0,
+        ));
+        *seen = Some(RoomSeen { world, room, at_ms: now, frames: 0, kh2_frames: 0, reported: false });
+    }
+    let Some(s) = seen.as_mut() else { return };
+    s.frames += 1;
+    if kh2 {
+        s.kh2_frames += 1;
+    }
+    if !s.reported && now.saturating_sub(s.at_ms) >= 3000 {
+        s.reported = true;
+        log(&format!(
+            "room {:#x}-{:#x}, first 3 s: KH2 had Sora {} of {} frames; now {} (KH1 state {}, body seen {})",
+            s.world,
+            s.room,
+            s.kh2_frames,
+            s.frames,
+            if kh2 { "KH2 has him".to_string() } else { format!("KH1 has him: {}", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
+            rd::<i32>(actor + 0x70),
+            pose::sora_body_seen(500),
+        ));
     }
 }
 
@@ -378,7 +446,28 @@ unsafe fn takeover(actor: usize) -> bool {
         let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
         let stick = move_tilt() > 0.15;
         let free = can_act(actor) != 0 && stick;
-        if frames >= 10 && matches!(state, 0 | 1) && (kh1_moving() || free || square || attack) {
+        // His speed while KH1 moves him (per frame, KH2's way up), for a fall handed over.
+        let p = rd::<[f32; 3]>(actor + 0x10);
+        let vel = {
+            let mut last = HANDOFF_POS.lock().unwrap();
+            let v = last.map(|l| ([p[0] - l[0], p[2] - l[2]], l[1] - p[1]));
+            *last = Some(p);
+            v
+        };
+        // Out of its move into its plain fall (state 2: off a bar or a pole, down from a ledge,
+        // after a spell in the air), dropping: KH2's fall from there, at KH1's speed (the user:
+        // jumping off a pole he fell in KH1's falling animation, until he landed).
+        let above = rd::<f32>(actor + 0x3D4);
+        let falling = state == 2 && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
+        if frames >= 10 && (falling || matches!(state, 0 | 1) && (kh1_moving() || free || square || attack)) {
+            if falling {
+                // (A frame missed would read as a jump in speed: kept to what a fall can be.)
+                *HANDOFF_FALL.lock().unwrap() = vel.map(|(h, up)| {
+                    let n = (h[0] * h[0] + h[1] * h[1]).sqrt();
+                    let k = if n > 20.0 { 20.0 / n } else { 1.0 };
+                    ([h[0] * k, h[1] * k], up.max(-30.0))
+                });
+            }
             FLY_PRESS_GROUND.store(ATTACK_AFTER.swap(false, Ordering::Relaxed), Ordering::Relaxed);
             HANDOFF.store(false, Ordering::Relaxed);
             // KH1's state back to the ground one KH2 keeps him in, its exit steps run (the
@@ -394,7 +483,12 @@ unsafe fn takeover(actor: usize) -> bool {
             }
             ROLL_NOW.store(square, Ordering::Relaxed);
             FRESH.store(true, Ordering::Relaxed);
-            log(&format!("KH1's move ended (state {state}): KH2 again"));
+            HANDOFF_POS.lock().unwrap().take();
+            if falling {
+                log(&format!("KH1's move ended in its fall ({above:.0} above the floor): KH2's fall"));
+            } else {
+                log(&format!("KH1's move ended (state {state}): KH2 again"));
+            }
         } else {
             HANDOFF_SEEN_MS.store(now_ms().max(1), Ordering::Relaxed);
             HANDOFF_FRAME.store(true, Ordering::Relaxed);
@@ -494,6 +588,11 @@ unsafe fn takeover(actor: usize) -> bool {
     if FLY_PRESS.load(Ordering::Relaxed) || AIR_START.swap(false, Ordering::Relaxed) {
         // Out of KH1's flight or one of its moves in the air: in the air where it had him.
         d.grounded = false;
+    }
+    if let Some((h, up)) = HANDOFF_FALL.lock().unwrap().take() {
+        // Out of KH1's fall: falling on as KH1 had him (KH2's fall animation).
+        d.grounded = false;
+        d.character.carry_into_air(h, up);
     }
     if ROLL_NOW.swap(false, Ordering::Relaxed) {
         d.held.1 = false;

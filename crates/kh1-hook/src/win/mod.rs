@@ -157,7 +157,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         if let Ok(f) = OpenOptions::new().create(true).write(true).truncate(true).open(&path) {
             *LOG.lock().unwrap() = Some(f);
         }
-        log(&format!("kh1-kh2 {} loaded (build {}) in {exe}", env!("CARGO_PKG_VERSION"), env!("KH1_KH2_BUILD")));
+        log(&format!("kh1-kh2 {} ({}) loaded (build {}) in {exe}", crate::VERSION, env!("CARGO_PKG_VERSION"), env!("KH1_KH2_BUILD")));
         std::panic::set_hook(Box::new(|info| log(&format!("PANIC in kh1-kh2: {info}"))));
         let base = GetModuleHandleA(std::ptr::null()) as usize;
         let build = addr::detect(base);

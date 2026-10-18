@@ -1685,3 +1685,25 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   longer in `make_room`'s least-missed list; one taken out by stage 151 is given back (off).
 - The list itself can't grow: KH1 keeps 48 bytes per party member at `+0x44`, and the next
   member's record starts `0x74` after this one (the save's layout, not ours).
+
+### 2026-10-18: Stage 154 (the version in the Config menu)
+- The user's friend: rooms breaking and no Aerial Dodge on a save that gets it here (this PC's
+  s153 log: "Genie Jafar beaten: Sora learns Aerial Dodge MAX", AerialDodge motions after),
+  matching the s148 build his earlier log came from. The user asked whether our addresses are
+  absolute: they are RVAs (KH1 is loaded wherever ASLR puts it, `0x7ff6...` here), so they are
+  the same on every PC with the same game build; an unknown build turns the mod off.
+- `VERSION` (`lib.rs`, "s154") is shown on the second line of the Config menu's Camera Style
+  help ("KH2 Combat version s154") and in the log's first line. `tests/version.rs` keeps it
+  equal to the latest stage here: bump it with each stage. The README says how to check it,
+  and that an update needs a Build again.
+- Rooms in the log (the user: "the log should tell you whats happening when you enter a new
+  room"): KH1's world and room (u32 at `0x142340E5C` / `0x142340EC4`; Steam `+0x233FE84` /
+  `+0x233FE8C`, read from each build's `0x1402AFC10`, the flight-room check; KH-1FM-AP-LUA uses
+  the same) are watched each frame: "room: world W room R entered" with who has Sora (KH1's
+  reason when it does, his state, flags, a script), and 3 s on, how many of those frames KH2
+  had him.
+- Off a pole / bar (the user: KH1's falling animation after jumping off a pole): a KH1 move
+  (`HANDOFF`) that ends in KH1's plain fall (state 2, above the floor, dropping; the log: bar
+  state 15 -> 16 -> 2 with motion request 6, KH1's fall, -> 7 its landing) is KH2's from there:
+  `Character::carry_into_air` starts KH2's fall at the speed KH1 had him moving (his position's
+  change per frame, capped), so the swing's momentum and the fall's speed carry on.

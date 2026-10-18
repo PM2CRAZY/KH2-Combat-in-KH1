@@ -634,6 +634,21 @@ impl Character {
         self.push = Some((norm(dir), distance * HIT_BACK_SPEED));
     }
 
+    /// Already falling when the host hands him over (out of a move of the host's own: a swing
+    /// off a bar): in the air with that speed, per frame (`vel_y` up; negative falls), so the
+    /// fall goes on as it was instead of starting from rest.
+    pub fn carry_into_air(&mut self, vel_h: [f32; 2], vel_y: f32) {
+        self.mode = Mode::Free;
+        self.airborne = true;
+        self.vel_h = vel_h;
+        let mut arc = Arc::fall();
+        if self.params.gravity > 0.0 {
+            arc.t = (-vel_y).max(0.0) / self.params.gravity;
+        }
+        self.arc = Some(arc);
+        self.vel_y = vel_y.min(0.0);
+    }
+
     /// In the air this frame (the host picks the map's air rules with it).
     pub fn airborne(&self) -> bool {
         self.airborne
