@@ -413,7 +413,7 @@ fn line(t: &mut String, r: &Row) {
     let _ = write!(t, "{:#06x},{:#010x},{},{},{},{},", r.buttons, r.kh1_buttons, r.sticks[0], r.sticks[1], r.sticks[2], r.sticks[3]);
     {
         let d = &r.draw;
-        let age = d.at.map_or(String::new(), |a| a.elapsed().as_millis().to_string());
+        let age = d.at.map_or(String::new(), |_| d.age_ms.to_string());
         let slot = d.slot.map_or(String::new(), |n| n.to_string());
         if d.route == "follow" {
             let _ = write!(t, "{},{},\"{}\",{},{:.1},{:.2},{},{},", d.route, slot, d.play, d.motion, d.frames, d.blend, b(d.restart), age);

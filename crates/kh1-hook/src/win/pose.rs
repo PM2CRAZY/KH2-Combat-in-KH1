@@ -900,6 +900,8 @@ pub struct Drawn {
     /// The clip was (re)started this draw.
     pub restart: bool,
     pub at: Option<Instant>,
+    /// Ms since that draw, when `drawn` read it.
+    pub age_ms: u64,
 }
 
 /// 0: KH1's own, 1: KH2's controller's pose, 2: a KH2 clip for KH1's slot (set by `wanted`'s routes).
@@ -909,7 +911,9 @@ static DRAW_LAST: Mutex<Option<Drawn>> = Mutex::new(None);
 
 /// What was drawn last (for the trace); `at` is when.
 pub fn drawn() -> Drawn {
-    DRAW_LAST.try_lock().ok().and_then(|d| d.clone()).unwrap_or_default()
+    let mut d = DRAW_LAST.try_lock().ok().and_then(|d| d.clone()).unwrap_or_default();
+    d.age_ms = d.at.map_or(0, |a| a.elapsed().as_millis() as u64);
+    d
 }
 
 /// The model-space pose to draw for the current mode, if any, and a note of what was chosen.
@@ -966,6 +970,12 @@ fn wanted_inner(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Ve
                     DRAW_ROUTE.store(1, Ordering::Relaxed);
                     note_kh2(&b, to_world);
                     let pose = r.pose_grip(&b, super::takeover::GRIP.load(Ordering::Relaxed));
+                    // (What KH2's clips blend from once KH1 has him again: this pose, not the last one
+                    // a clip of ours drew, which was before KH2's move: the t317 trace, an Aerial
+                    // Dodge's end blended in from the old jump pose.)
+                    s.follow.last = b.iter().chain(w.iter()).copied().collect();
+                    s.follow.last_at = Some(Instant::now());
+                    s.follow.blend_start = None;
                     s.kh2_now = Some((b, w));
                     Some(pose)
                 }
@@ -1188,7 +1198,7 @@ fn follow_play(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, forced: Optio
         f.rate = 60.0;
     }
     if restart && !matches!(play, Play::Slot { .. }) {
-        if !f.last.is_empty() && blend > 0.0 {
+        if !f.last.is_empty() && blend > 0.0 && f.last_at.is_some_and(|t| now.duration_since(t).as_secs_f32() < 0.25) {
             f.from = decompose(&f.last);
             f.blend_start = Some(now);
             f.blend_secs = blend;
@@ -1260,7 +1270,7 @@ fn follow_play(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, forced: Optio
     s.kh2_now = Some((pose, weapon));
     DRAW_ROUTE.store(2, Ordering::Relaxed);
     if let Ok(mut d) = DRAW_DETAIL.try_lock() {
-        *d = Some(Drawn { route: "follow", slot, play: format!("{play:?}"), motion, frames, blend: blend_now, restart, at: None });
+        *d = Some(Drawn { route: "follow", slot, play: format!("{play:?}"), motion, frames, blend: blend_now, restart, at: None, age_ms: 0 });
     }
     Some(kh1)
 }

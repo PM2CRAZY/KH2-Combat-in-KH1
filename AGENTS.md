@@ -1,3 +1,14 @@
+### 2026-10-21: Stage 318 (testing branch: the fall after an Aerial Dodge blends from the dodge's pose)
+- The user: after an Aerial Dodge "goes back into the jump animation for a frame and soras feet
+  seem to glitch out before snapping to his falling pose". The t317 draw columns: the dodge is
+  drawn by KH2's controller (`draw_route` kh2_controller), then KH1's fall (slot 10, KH2 motion 4)
+  starts with a blend from `Follow::last`, which only our clips set: the High Jump pose from before
+  the dodge, 1.5-3 s old (blend 0.00 on the first frame, so the old jump pose showed). Now the
+  controller's pose is stored in `Follow::last` each time it is drawn, and a clip blends only from
+  a pose under 0.25 s old (as the slot path already did).
+- `draw_age_ms` was the age at the time the trace was written; it is now the age when the frame
+  was recorded.
+
 ### 2026-10-21: Stage 317 (testing branch: the trace records what is drawn on Sora)
 - The user: asked for more in the trace to see Sora's model problems (the one-frame jump / glide
   pose at the start of an Aerial Dodge). `pose::wanted` now notes what it chose (`pose::drawn`):
