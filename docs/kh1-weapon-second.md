@@ -578,6 +578,29 @@ model and HD setup, the second queue call. What differs is the hold:
   each bone from the grip), noted from KH1's pose on frames KH1 posed him. `Retarget::set_grip`
   (s50, KH1's live grip when it is turned more than 1 rad from the battle idle's) is no longer
   called.
+- **The Dream Shield stretched across the field** (the user: "having the dream shield
+  equipped leads to some pretty bad stretching issues"; video in the Dive, a thin grey bar
+  several body lengths long out of his hand in KH2's swings) [high for the cause, from the log]:
+  - The shield is the one `flip_weapons` item (`0x53` by default), held by KH1's wrist
+    (`pose::kh1_wrist`): the hand takes KH1's forearm-to-hand matrix from KH1's own pose. On
+    the frames KH1 blends between its motions its hand and grip can lie thousands of units off
+    (every log has such frames: KH1's 280 at about twice Sora's position, 283 with det 0.5,
+    0, -0.8). With a Keyblade nothing reads KH1's hand, so they never showed. With the shield,
+    that "wrist" moved the drawn hand there and kept it until KH1's next frame: in the s328 log,
+    45 of 176 status lines draw 280 (and the hand, 4 from it) 400..120000 units from Sora. In
+    the Keyblade sessions before it, none did. The forearm's and the shield's mesh stretch
+    out to that hand.
+  - Fix: only KH1's turn of the wrist is used, never its translation (the hand stays 11 units
+    from the forearm, KH1's bone length in every motion of `xa_ex_0010.mset`), and only from a
+    frame whose hand is rigid and a bone's length (±25%) from its forearm. Otherwise the last
+    good wrist is kept (logged, the first 10 times).
+  - The hold: `dream_hold`'s nearness test now counts only the grip and the skinned bones
+    282..291. The shield's hold was refused in every Dive room before room 0x4, "a bone 526
+    / 17605 from the grip" (the grip's distance from the world origin), so most likely 281 or
+    292, which are never drawn. Those two now always take the bind's place. Until a hold is
+    noted, a dream weapon's bones after the grip stay rigid as in Sora's bind (the Keyblade's
+    chain swing used to bend the mesh). The log names the weapon, its model number, the hold
+    noted (grip offset, turn, scale, reach) or the bone refused.
 - **The left hand** (`leftblade::dream_left`, used by `note_pose` when the left item is a dream
   weapon):
   - with KH1's hold noted this session (Sora held the Dream Sword in the Dive): the turn from

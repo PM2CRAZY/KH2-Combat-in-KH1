@@ -865,7 +865,9 @@ static KH1_WRIST: Mutex<Option<Mat4>> = Mutex::new(None);
 /// Weapons KH2's sword grip holds the wrong way round (the ini's `flip_weapons`, by Sora's
 /// weapon id, save `+0x36`; the user: the Dream Shield's front faced Sora) are held with
 /// KH1's own wrist: the weapon hand (the grip's parent) takes KH1's turn relative to the
-/// forearm, carrying the fingers and the weapon with it; KH2's arm swings as before.
+/// forearm, carrying the fingers and the weapon with it; KH2's arm swings as before. Only KH1's
+/// turn of the wrist is taken (the hand stays our bone's length from the forearm), and only from
+/// frames where KH1's hand is a rigid bone's length from its forearm.
 unsafe fn kh1_wrist(pose: &mut [Mat4], parents: &[i16], orig_world: Option<usize>) {
     let flip = &super::settings::get().flip_weapons;
     if flip.is_empty() {
@@ -883,15 +885,42 @@ unsafe fn kh1_wrist(pose: &mut [Mat4], parents: &[i16], orig_world: Option<usize
     if hand >= n || arm >= n {
         return;
     }
+    // Our own forearm-to-hand (KH1's bone length, as the retarget keeps it).
+    let ours = pose[arm].inverse() * pose[hand];
+    let bone = ours.w_axis.truncate();
     if let Some(w) = orig_world {
         let l = mat(w + arm * 0x40).inverse() * mat(w + hand * 0x40);
-        if l.is_finite() {
+        // (Only a wrist that is one: on the frames KH1 blends between its motions its hand
+        // matrix can lie thousands of units off (the s328 log with the Dream Shield: KH1's hand
+        // and grip at twice his position, its 283 squashed, det 0..-0.8), and that "wrist" put
+        // the hand drawn there, the arm's and the shield's mesh stretched to it across the
+        // field, the user: "having the dream shield equipped leads to some pretty bad
+        // stretching issues". A frame whose hand isn't a bone's length from the forearm, or
+        // isn't rigid, keeps the last good wrist.)
+        let (sc, _, t) = l.to_scale_rotation_translation();
+        let rigid = l.is_finite() && (sc - Vec3::ONE).abs().max_element() < 0.1 && glam::Mat3::from_mat4(l).determinant() > 0.0;
+        let len_ok = (t.length() - bone.length()).abs() <= (bone.length() * 0.25).max(2.0);
+        if rigid && len_ok {
             if let Ok(mut g) = KH1_WRIST.lock() {
                 *g = Some(l);
+            }
+            static LOGGED: AtomicU32 = AtomicU32::new(u32::MAX);
+            let w = held_weapon().unwrap_or(0) as u32;
+            if LOGGED.swap(w, Ordering::Relaxed) != w {
+                let (_, q, _) = (ours.inverse() * l).to_scale_rotation_translation();
+                log(&format!("weapon {w:#x} (model {}): held by KH1's wrist (`flip_weapons`), turned {:.2} rad from KH2's hand, KH1's forearm-to-hand {:.1} (ours {:.1})", w.wrapping_sub(0x50), q.angle_between(Quat::IDENTITY), t.length(), bone.length()));
+            }
+        } else {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 10 {
+                log(&format!("KH1's wrist this frame not used (its hand {:.0} from the forearm, ours {:.1}; scale {sc:.2?}): the last good one kept", t.length(), bone.length()));
             }
         }
     }
     let Some(local) = KH1_WRIST.lock().ok().and_then(|g| *g) else { return };
+    // KH1's turn of the wrist, our bone's length and offset (never KH1's translation).
+    let (_, q, _) = local.to_scale_rotation_translation();
+    let local = Mat4::from_rotation_translation(q, bone);
     let want = pose[arm] * local;
     let delta = want * pose[hand].inverse();
     if !delta.is_finite() {
@@ -926,6 +955,9 @@ static DREAM_HOLD: Mutex<Option<(u8, Vec<Mat4>)>> = Mutex::new(None);
 const WEAPON_BONES: usize = 13;
 /// How far from the hand / grip a dream weapon's bones can be in a hold that is noted.
 const DREAM_NEAR: f32 = 250.0;
+/// The weapon bones (after the grip) the weapon's mesh is skinned to: 282..291, the ones Sora's
+/// bind flags for KH1's model queue (`docs/kh1-weapon-second.md` §1.4); 281 and 292 aren't.
+const SKINNED: std::ops::RangeInclusive<usize> = 2..=11;
 
 /// A dream weapon held rigidly as KH1 holds it (the tester: the Dream Sword "stretches" the
 /// split second a movement begins, the rest of him not, and the Dream Shield is held another
@@ -933,13 +965,15 @@ const DREAM_NEAR: f32 = 250.0;
 /// swing), so the mesh between them stretched. `kh1_world`: KH1's world matrices when it posed
 /// him this frame (its hold is noted from them); then every weapon bone is put where KH1's hold
 /// puts it from the hand drawn.
-unsafe fn dream_hold(pose: &mut [Mat4], parents: &[i16], kh1_world: Option<usize>) {
+unsafe fn dream_hold(pose: &mut [Mat4], parents: &[i16], bind: &[Mat4], kh1_world: Option<usize>) {
     let Some(w) = held_weapon().filter(|w| dream_weapon(*w)) else { return };
     let grip = kh1_data::retarget::GRIP_BONE;
     let Some(hand) = parents.get(grip).copied().filter(|p| *p >= 0).map(|p| p as usize) else { return };
-    if pose.len() < grip + WEAPON_BONES || hand >= pose.len() {
+    if pose.len() < grip + WEAPON_BONES || hand >= pose.len() || bind.len() < grip + WEAPON_BONES {
         return;
     }
+    // Each weapon bone relative to the grip as in Sora's bind (rigid, unswung).
+    let bind_rel = |i: usize| bind[grip].inverse() * bind[grip + i];
     if let Some(world) = kh1_world {
         let g = mat(world + grip * 0x40);
         let mut rel = vec![mat(world + hand * 0x40).inverse() * g];
@@ -950,25 +984,63 @@ unsafe fn dream_hold(pose: &mut [Mat4], parents: &[i16], kh1_world: Option<usize
         // put the shield there with the mesh stretched to it, the user: "tap move, the split
         // second any animations begin, he stretches ... you can see his un-stretched shield
         // appears at the end of the stretched mesh".)
-        let near = rel[0].w_axis.truncate().length() < DREAM_NEAR && rel[1..].iter().all(|m| m.w_axis.truncate().length() < DREAM_NEAR);
-        if !near {
-            static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 10 {
-                let far = rel.iter().map(|m| m.w_axis.truncate().length()).fold(0.0f32, f32::max);
-                log(&format!("weapon {w:#x}: KH1's hold this frame not noted (a bone {far:.0} from the grip)"));
+        // Only the bones the weapon's mesh is skinned to count (`SKINNED`, 282..291). The s328 log:
+        // the Dream Shield's hold was refused through the Dive's first three rooms for "a bone 526
+        // / 17605 from the grip", about the grip's own distance from the world's origin, so most
+        // likely an unskinned bone (281 or 292) KH1 leaves at the origin; no hold was noted until
+        // room 4 and the shield was drawn on the Keyblade's swung chain meanwhile. Those two take
+        // the bind's place (nothing is drawn with them); the log now names the bone refused.
+        let bad = |i: usize, m: &Mat4| -> bool {
+            let far = m.w_axis.truncate().length() >= DREAM_NEAR;
+            !m.is_finite() || ((i == 0 || SKINNED.contains(&i)) && far)
+        };
+        match rel.iter().enumerate().find(|(i, m)| bad(*i, m)) {
+            Some((i, m)) => {
+                static N: AtomicU32 = AtomicU32::new(0);
+                if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log(&format!(
+                        "weapon {w:#x}: KH1's hold this frame not noted (bone {} {:.0} from the {}, det {:.2})",
+                        grip + i,
+                        m.w_axis.truncate().length(),
+                        if i == 0 { "hand" } else { "grip" },
+                        glam::Mat3::from_mat4(*m).determinant()
+                    ));
+                }
             }
-        }
-        if near && rel.iter().all(|m| m.is_finite()) {
-            if let Ok(mut h) = DREAM_HOLD.lock() {
-                let new = h.as_ref().map_or(true, |(id, _)| *id != w);
-                *h = Some((w, rel));
-                if new {
-                    log(&format!("weapon {w:#x}: held rigidly as KH1 holds it (its hold noted from KH1's pose)"));
+            None => {
+                for i in 1..WEAPON_BONES {
+                    if !SKINNED.contains(&i) {
+                        rel[i] = bind_rel(i);
+                    }
+                }
+                if let Ok(mut h) = DREAM_HOLD.lock() {
+                    let new = h.as_ref().map_or(true, |(id, _)| *id != w);
+                    if new {
+                        let reach = rel[1..].iter().map(|m| m.w_axis.truncate().length()).fold(0.0f32, f32::max);
+                        let (sc, q, t) = rel[0].to_scale_rotation_translation();
+                        log(&format!("weapon {w:#x} (model {}): held rigidly as KH1 holds it (its hold noted from KH1's pose: grip {t:.1?} from the hand, turned {:.2} rad, scale {sc:.2?}; its bones reach {reach:.0} from the grip)", w - 0x50, q.angle_between(Quat::IDENTITY)));
+                    }
+                    *h = Some((w, rel));
                 }
             }
         }
     }
-    let Some(rel) = DREAM_HOLD.lock().ok().and_then(|h| h.as_ref().filter(|(id, _)| *id == w).map(|(_, r)| r.clone())) else { return };
+    let Some(rel) = DREAM_HOLD.lock().ok().and_then(|h| h.as_ref().filter(|(id, _)| *id == w).map(|(_, r)| r.clone())) else {
+        // No hold of KH1's for this weapon yet: the grip as posed, every bone after it rigid as
+        // in the bind (the Keyblade's chain swing would bend the mesh).
+        static LOGGED: AtomicU32 = AtomicU32::new(u32::MAX);
+        if LOGGED.swap(w as u32, Ordering::Relaxed) != w as u32 {
+            log(&format!("weapon {w:#x} (model {}): no hold of KH1's noted yet: held rigid as in the bind until one is", w - 0x50));
+        }
+        let g = pose[grip];
+        for i in 1..WEAPON_BONES {
+            let m = g * bind_rel(i);
+            if m.is_finite() {
+                pose[grip + i] = m;
+            }
+        }
+        return;
+    };
     let g = pose[hand] * rel[0];
     pose[grip] = g;
     for i in 1..WEAPON_BONES {
@@ -1789,7 +1861,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         j.apply_except(&mut pose, &s.parents, &to_world, steps.min(3) as usize, |b| driven.covers(b));
     }
     // A dream weapon whole, as KH1 holds it.
-    dream_hold(&mut pose, &s.parents, (!ours).then_some(world));
+    dream_hold(&mut pose, &s.parents, &s.bind, (!ours).then_some(world));
     // Final Form's Keyblade floating where KH2's weapon motion has it.
     if let (Some((body, weapon)), true) = (s.kh2_now.as_ref(), super::form::in_final()) {
         super::leftblade::final_float(&mut pose, &s.bind, body, weapon, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()), &to_world);

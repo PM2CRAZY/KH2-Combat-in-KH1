@@ -3584,6 +3584,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 329 (the Dream Shield no longer stretched)
+- The user (video, Dive to the Heart): "having the dream shield equipped leads to some pretty bad
+  stretching issues". The shield (the only `flip_weapons` item) takes KH1's forearm-to-hand matrix
+  (`pose::kh1_wrist`), and on KH1's blend frames that matrix is garbage (its 280 thousands of units
+  off), so the drawn hand flew across the field with the forearm and shield stretched to it. Now
+  only KH1's wrist rotation is used, at our own 11-unit hand, and a frame with a bad hand keeps the
+  last good wrist; the dream weapons' grip check (`dream_hold`) only needs the skinned bones
+  282..291. docs/kh1-weapon-second.md §10.
+
 ### 2026-10-22: Stage 328 (Drive orbs drawn with KH2's own art)
 - The user: "keep the drive orbs running through KH1s engine, but if possible, let's try to get the
   texture from KH2". `prizeart.rs`: KH2's `obj/PRIZE.mdlx` (its prize effect package; types 7 / 8
