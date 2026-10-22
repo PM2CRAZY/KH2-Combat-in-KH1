@@ -267,10 +267,31 @@ H6 are under H3.
 
 | Way | Verdict |
 |---|---|
-| **Grow the slot table.** A copy of the 118 handles plus ours, null-ended, its handle written to the actor's `+0x1D4` (and to `MMTN + 0x30`, so a re-bound actor gets it too). | **Yes.** Nothing bounds the slot by a count (`0x1401D40E0` counts but is never called). Each new zone makes a new Sora actor: it is re-applied when `+0x1D4` / `+0x1D8` aren't ours, only while the table is still Sora's own (118 entries, the request table as in the file). |
+| **Grow the slot table.** A copy of the set's own slot handles plus ours, handed to KH1 when it binds the set onto Sora (t353, below). | **Yes.** Nothing bounds the slot by a count (`0x1401D40E0` counts but is never called). |
 | **Grow or redirect the request table.** A copy of section 1 at `+0x1D8`. | **Yes**, and it is what makes this work (below). |
 | A slot-lookup hook (`0x14029E050`). | Not needed: the tables do it with no code patch. |
 | Motion data made in memory | **Yes**: a KH1-format motion on our heap, its offsets turned into handles with `0x14038B080` (§1.1). |
+
+**Where KH1 binds a motion set, and how ours get in (decomp, t353).** The t349-t352 runs showed
+the first way (a per-frame swap of Sora's actor's tables once they matched the file) never
+applied: in a world Sora isn't on his own set.
+- **His own set**, at his actor's creation: `0x1402894C0` → `0x140287E40 (actor, bundle, motion
+  file)` (Epic `0x140285CC0`) sets `+0x1D0` the file, `+0x1D4` the slot list (the file's MMTN
+  `+0x30`, `0x1401D6230`), `+0x1D8` the request table (section 1), `+0x1DC` section 2.
+- **A world's set**, on entering it: `0x14029E850 (actor, file)` saves his set into
+  `+0x1E0..+0x1EC` (if nothing is saved yet) and binds the world's into `+0x1D0..+0x1DC` with
+  `0x1402886F0 (set, file)` (Epic `0x140286570`, from the neighbours, unchecked). Traverse Town's
+  has about 88 slots: file slots 0-16, then 54-117 shifted down (the combo at 61-67), and 0xFFF for
+  the requests it lacks. A request that resolves to 0xFFF brings his own back from `+0x1E0`.
+- **In memory the slot list has no end marker**: the set's first motion follows it. Its count is
+  the words before the lowest motion it points at.
+- **Ours**: both binds are hooked. After KH1 binds a set onto an actor whose model has 293 bones
+  (Sora), its slot and request handles are replaced with copies, made once per set: its own slots,
+  ours right after; its request table, with each request our move stands in for pointed at ours
+  (by style, every frame) where the set's own entry holds the KH1 motion ours stands in for (by
+  signature). KH1's own save and restore copy the handles, so ours travel with them. Each frame
+  also checks `+0x1D0` and `+0x1E0` (a bind before our motions were built). Our moves are known by
+  their motion's address, since their slot numbers differ from set to set.
 
 **Two ways a KH2 motion gets played:**
 1. **Redirect** (a KH2 look on a KH1 move). A request KH1's state already makes (`0xC9`, the 2nd
@@ -313,18 +334,47 @@ There are two tiers.
 - The draw follows KH1's motion engine frame for frame, so the timing can't drift. KH1's attack
   objects ride on the bones we drew, so its hitboxes follow KH2's Keyblade.
 
-**Tier B, later: a full bake.**
-- At load, each KH2 frame (60 Hz) is retargeted (`Retarget::pose`). KH1's locals are worked out
-  (`parent⁻¹ × bone`, then Euler X→Y→Z, as `kh2_anim` poses KH1's bind) and written as linear
-  keys per channel, reduced where a line fits within a tolerance.
-- The root, bone 0, carries KH2's root travel × the hip ratio. So "KH1's physics" (KH1 moving
-  him by the motion's root) applies to the KH2 motion.
-- The joint words and IK helpers come from the template. The helper channels are worked out
-  from the baked feet and hands, or the IK is turned off per bone. That needs the joint-word
-  bits read (`0x140390260`): **open**.
-- Then `pose.rs` draws nothing for these slots, beyond the hair, hood and keychain and the
-  Keyblade's turn. KH1's own pass shows KH2's motion, KH1's blends mix it like any of its own,
-  and Player Model KH2 takes it through `kh1_data::inverse` as it does any KH1 pose.
+**Tier B: a full bake (built at t349, `kh1_data::bake`, `kh1_bake = on`; untested in game).**
+
+First build: the legs are plain FK like every other bone (no foot lift on slopes in these moves yet; tier A had none there either). The hybrid legs below are the next step once the raw bake looks right.
+
+The user's rules: a raw bake first, behind an ini switch (`kh1_bake = on / off`; off is tier A).
+None of our corrections go in (Keyblade teeth-up, `flip_weapons`, our feet, `held`). We test in
+game, then decide.
+
+- **Pose.** At load, each KH2 frame (60 Hz) goes through `Retarget::pose` plus `secondary`. The
+  hair, hood and chain are KH2's own hand animation, so they go in the bake like the body.
+  KH1's locals are worked out (`parent⁻¹ × bone`, then Euler X→Y→Z, the order `0x1401DB430`
+  builds) and written as **linear keys** (interpolation 1) per channel, reduced where a line
+  fits within a tolerance. Channels that stay at the bind get no keys (step 2 of §1.6 resets
+  them to it). Channels that never move become constant channels.
+- **Joint words: plain FK.** For every bone KH1 doesn't skip, the word is 0: mode 0, `lo` 0, no
+  helpers, bits 23–25 clear. Bones KH1 skips (bit 26) stay skipped. This turns off the
+  helper-driven root, legs, arms, spine and neck for our slots only (joint words are per
+  motion), so KH1 plays our keys exactly. The two-bone IK solves go away for these motions.
+  The head look-at still works.
+- **Helpers.** The template's helper table is kept (11 entries, the same parents), with one
+  helper channel set: **H10's translation = KH2's root travel × the hip ratio**. That is where
+  KH1 takes a motion's travel from (§1.6, step 5). Bone 0 carries the in-place root only. The
+  other helpers get no channels: no bone points at them any more.
+- **The legs stay on KH1's IK (the hybrid).** KH1's foot ground lift acts only in mode 2 (§1.6),
+  and it **is used on Sora**. In the user's t348 trace (Traverse Town, KH1's own animation,
+  standing still on uneven ground, a bent leg seen in game):
+  - `instance+0x14` was `0x00200001` on every row: ground lift on, and a foot target lifted;
+  - the ankles were 17.4 and 29.8 above the floor under his centre (17.7 is the ankle's height
+    on flat ground);
+  - every pass was the plain one (`0x140391C70`), so the lift happens in the mode 2 path, not
+    the blend path.
+
+  So the legs keep their template words (16/42 aim, 17/43 mode 2, 19/45 position from H9/H8, 20/46
+  H9/H8's turn), with **H8 and H9 keyed to the baked ankles** (position and the foot's turn). Bone
+  16/42's aim and the IK's twist (the thigh's sampled rotation x) get worked out so the knees bend
+  where KH2's do. Everything else is plain FK.
+- **What `pose.rs` does for these slots: nothing.** KH1's own pass shows the motion. The
+  Keyblade mesh rides 280–292.
+- **Open, to check in game:** who reads `instance+0x100` (the travel); how the `+0x1CC` blend
+  list treats an FK slot next to KH1's IK motions; the model header's ground-lift list for
+  Sora.
 
 Both tiers build in memory at load, from the user's install: KH2's `P_EX100.mset` and KH1's
 `xa_ex_0010.mset`. Nothing is shipped.
@@ -409,8 +459,8 @@ Not built yet: phase 4.
   KB): one block at most.
 - **A world's own motion set** (`+0x1E0`) replaces `+0x1D4` / `+0x1D8` while it is used. Our
   tables go back on only when the actor shows Sora's own table again.
-- **Tier B** needs the joint words and IK helpers understood. Until then, tier A's draw is still
-  ours, so KH1's own blends of our slot (when KH1, not us, blends out of it) blend the template's
-  pose.
+- **Tier A's blends:** tier A's draw is ours, so KH1's own blends of our slot (when KH1, not
+  us, blends out of it) blend the template's pose. Tier B fixes that. Its joint words are read
+  (§1.6). What remains open there is the `+0x1CC` blend list and the travel's reader.
 - **Unverified in game:** everything in §1 is static reading of the code plus the user's files,
   except the request → slot proof from the s261 log (§1.3).

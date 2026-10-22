@@ -665,7 +665,19 @@ pub fn load_kh2() {
             log(&format!("KH1 Sora's motion table: {} slots", motions.len()));
             // KH2's moves as new slots of that table (`kh2slots`, ini `kh1_slots`).
             if let Some(Ok(k)) = KH2.get() {
-                super::kh2slots::prepare(&bytes, k);
+                // Baked into KH1 motions (`kh1_bake`): KH1's skeleton and the retarget for it.
+                let bake = if super::settings::get().kh1_bake {
+                    match baker(&install, k, &motions) {
+                        Ok(b) => Some(b),
+                        Err(e) => {
+                            log(&format!("KH2 slots: not baked ({e}); drawn over KH1's as before"));
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                super::kh2slots::prepare(&bytes, k, bake.as_ref());
             }
             let _ = REST.set(motions.get(REST_SLOT).cloned().flatten());
             let _ = REST_OPEN.set(motions.first().cloned().flatten());
@@ -946,6 +958,7 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
     let mut d = match (pose.is_some(), DRAW_ROUTE.load(Ordering::Relaxed)) {
         (true, 1) => Drawn { route: "kh2_controller", ..Default::default() },
         (true, 2) => DRAW_DETAIL.try_lock().ok().and_then(|d| d.clone()).map(|d| Drawn { route: "follow", ..d }).unwrap_or(Drawn { route: "follow", ..Default::default() }),
+        (false, 3) => DRAW_DETAIL.try_lock().ok().and_then(|d| d.clone()).map(|d| Drawn { route: "baked", ..d }).unwrap_or(Drawn { route: "baked", ..Default::default() }),
         _ => Drawn { route: "kh1_own", ..Default::default() },
     };
     d.slot = slot;
@@ -1034,6 +1047,104 @@ fn kh2_weapon(rig: &Rig, motion: u16, frames: f32, looping: bool, body: &[Mat4])
     local.iter().map(|l| hand * *l).collect()
 }
 
+/// What baking KH2's motions into KH1 motions takes at load (`kh2slots`, ini `kh1_bake`,
+/// `kh1_data::bake`): KH1 Sora's skeleton from its own file, the retarget with KH1's battle and
+/// field idles as its rest, and KH2's own hair, hood and keychain (`secondary`), built as
+/// `check` builds them for the field's Sora.
+pub struct Baker {
+    pub skeleton: Vec<kh2_formats::anim::Bone>,
+    retarget: Retarget,
+    secondary: kh1_data::secondary::Secondary,
+}
+
+impl Baker {
+    pub fn new(kh2: &Kh2, skeleton: Vec<kh2_formats::anim::Bone>, rest: Option<&kh1_data::mset::Motion>, rest_open: Option<&kh1_data::mset::Motion>) -> Baker {
+        let mut retarget = Retarget::new(&skeleton, &kh2.rig.skeleton);
+        if let Some(m) = rest {
+            retarget.set_rest(&m.apply(&skeleton, 0.0));
+        }
+        if let Some(m) = rest_open {
+            retarget.set_rest_open(&m.apply(&skeleton, 0.0));
+        }
+        let secondary = kh1_data::secondary::Secondary::new(&skeleton, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
+        Baker { skeleton, retarget, secondary }
+    }
+
+    /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
+    /// draws it (`follow_play`, `Play::Slot`): KH2's body and Keyblade, the root travel taken out
+    /// (KH1 moves him), retargeted, KH2's hair, hood and keychain on (`hair_physics` and
+    /// `kh2_hair` on). Nothing of ours after that (feet, KH1's wrist, the Keyblade's turn, the
+    /// swing): the raw bake (the user: test it in game first, then decide).
+    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32) -> Option<Vec<Vec<Mat4>>> {
+        let rig = &kh2.rig;
+        let clip = rig.motions.get(&motion)?;
+        let set = super::settings::get();
+        let roots = kh2.roots.get(&motion);
+        let mut out = Vec::with_capacity(frames as usize + 1);
+        for f in 0..=frames {
+            let at = f as f32;
+            let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
+            let mut weapon = kh2_weapon(rig, motion, at, false, &body);
+            if let Some(root) = roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))) {
+                let un = Mat4::from_translation(-Vec3::from(*root));
+                for m in body.iter_mut().chain(weapon.iter_mut()) {
+                    *m = un * *m;
+                }
+            }
+            let mut kh1 = self.retarget.pose(&body);
+            if set.physics && set.kh2_hair {
+                self.secondary.apply(&mut kh1, &body, (!weapon.is_empty()).then_some(weapon.as_slice()), kh1_data::secondary::Parts::ALL);
+            }
+            out.push(kh1);
+        }
+        Some(out)
+    }
+}
+
+/// The baker for `kh2slots::prepare` (the loader thread): KH1 Sora's skeleton from
+/// `xa_ex_0010.mdls`, his battle idle (slot 1) and field idle (slot 0) as the retarget's rest.
+fn baker(install: &kh1_data::Kh1Install, kh2: &Kh2, motions: &[Option<kh1_data::mset::Motion>]) -> Result<Baker, String> {
+    let mdls = install.read(kh1_data::Source::Live, "xa_ex_0010.mdls").map_err(|e| format!("xa_ex_0010.mdls: {e}"))?;
+    let skeleton = kh1_data::mdls::parse_skeleton(&mdls).map_err(|e| format!("xa_ex_0010.mdls: {e}"))?;
+    if skeleton.len() != SORA_BONES as usize {
+        return Err(format!("xa_ex_0010.mdls has {} bones", skeleton.len()));
+    }
+    Ok(Baker::new(kh2, skeleton, motions.get(REST_SLOT).and_then(|m| m.as_ref()), motions.first().and_then(|m| m.as_ref())))
+}
+
+/// One of our slots baked into a KH1 motion (`kh2slots`, ini `kh1_bake`): KH1 plays it and shows
+/// it with no pose of ours. KH2's pose for the same frame is still noted for KH2's effects on
+/// his bones (`kh2fx`, `reflect`), as a tier A slot notes it; the next clip of ours doesn't blend
+/// from a pose drawn before this one.
+fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16) -> Option<Vec<Mat4>> {
+    s.follow.slot = slot;
+    s.follow.play = None;
+    s.follow.last_at = None;
+    s.follow.blend_start = None;
+    let actor = super::takeover::sora_actor();
+    let frames = match slot {
+        Some(n) if actor > 0x10000 => unsafe { super::kh2slots::kh1_time(actor, n) },
+        _ => None,
+    };
+    if let (Some(kh2), Some(at)) = (KH2.get().and_then(|k| k.as_ref().ok()), frames) {
+        if let Some(clip) = kh2.rig.motions.get(&motion) {
+            let mut pose = kh2_anim::evaluate(&kh2.rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
+            if let Some(root) = kh2.roots.get(&motion).and_then(|r| r.get((at as usize).min(r.len().saturating_sub(1)))) {
+                let un = Mat4::from_translation(-Vec3::from(*root));
+                for m in pose.iter_mut() {
+                    *m = un * *m;
+                }
+            }
+            note_kh2(&pose, to_world);
+        }
+    }
+    DRAW_ROUTE.store(3, Ordering::Relaxed);
+    if let Ok(mut d) = DRAW_DETAIL.try_lock() {
+        *d = Some(Drawn { route: "baked", slot, play: format!("Baked {{ motion: {motion} }}"), motion, frames: frames.unwrap_or(-1.0), blend: -1.0, restart: false, at: None, age_ms: 0 });
+    }
+    None
+}
+
 fn decompose(v: &[Mat4]) -> Vec<(Vec3, Quat, Vec3)> {
     v.iter().map(|m| m.to_scale_rotation_translation()).collect()
 }
@@ -1043,6 +1154,10 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
     // One of our slots (`kh2slots`): its KH2 motion, whatever the styles now (KH1 plays it to its
     // end; its template underneath is never shown).
     if let Some(motion) = slot.and_then(super::kh2slots::kh2_motion) {
+        // (Baked, `kh1_bake`: KH1's own pass shows it.)
+        if slot.is_some_and(super::kh2slots::is_baked) {
+            return follow_baked(s, slot, to_world, motion);
+        }
         return follow_play(s, slot, to_world, Some(Play::Slot { motion }));
     }
     // Misc Animations at KH2 (`styles`, base Sora): KH1 uses the item (its effect, its timing, the
@@ -1293,6 +1408,16 @@ fn follow_play(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, forced: Optio
         *d = Some(Drawn { route: "follow", slot, play: format!("{play:?}"), motion, frames, blend: blend_now, restart, at: None, age_ms: 0 });
     }
     Some(kh1)
+}
+
+/// The slot in KH1 Sora's file (`xa_ex_0010.mset`) of the loaded motion at `m`, by its
+/// signature (length, channel, helper channel and helper counts), as `slot_of` finds it.
+pub unsafe fn file_slot_of_motion(m: usize) -> Option<usize> {
+    if m < 0x10000 || !super::crash::readable(m) || !super::crash::readable(m + 0x30) {
+        return None;
+    }
+    let sig = (rd::<u32>(m + 4), rd::<u32>(m + 0x18), rd::<u32>(m + 0x20), rd::<u32>(m + 0x2C));
+    SLOTS.get()?.0.get(&sig).copied()
 }
 
 /// The slot of the KH1 motion the instance plays.
@@ -1711,6 +1836,59 @@ unsafe fn held(instance: usize, world: usize) -> Option<Mat4> {
     None
 }
 
+/// What KH1's own skeleton pass did to Sora's feet, read straight after the pass and before
+/// anything of ours (the trace's `ik_ground_on`, `ik_lifted`, `foot_r_up`, `foot_l_up`,
+/// `pose_path` columns; the user's test: does KH1 bend his legs onto a slope?). From the
+/// decomp (`docs/kh1-anim-slots.md` §1.6): `instance + 0x14` bits 0-1 turn KH1's ground lift
+/// on, and bit `0x200000` is set when a foot target was lifted onto the floor that pass.
+#[derive(Clone, Copy, Default)]
+pub struct FeetSeen {
+    /// `instance + 0x14` after the last pass.
+    pub flags: u32,
+    /// The ankles' height (KH1's units, up = minus its y): right (19, the −x leg), left (45).
+    pub ankle_up: [f32; 2],
+    /// Passes since the last row: the plain one (`0x140391E20`), the blend / IK one
+    /// (`0x140392710`).
+    pub passes: [u32; 2],
+    /// Read at least once since the last row.
+    pub seen: bool,
+}
+
+static FEET: Mutex<FeetSeen> = Mutex::new(FeetSeen { flags: 0, ankle_up: [0.0; 2], passes: [0; 2], seen: false });
+/// Sora's ankles: the bones his two-bone leg IK aims at its foot helpers (H9, H8).
+const ANKLES: [usize; 2] = [19, 45];
+
+/// After KH1's pass, for Sora's own instance only (not the pause menu's copy), while the trace
+/// is on.
+unsafe fn note_feet(instance: usize, via_ik: bool) {
+    if instance == 0 || instance != SORA_INSTANCE.load(Ordering::Relaxed) || !super::trace::enabled() || !super::trace::wants(super::trace::cat::FEET) {
+        return;
+    }
+    let world = ptr(rd::<u32>(instance + WORLD));
+    if world == 0 || !super::crash::readable(world) || !super::crash::readable(world + SORA_BONES as usize * 0x40 - 1) {
+        return;
+    }
+    let flags = rd::<u32>(instance + 0x14);
+    let up = ANKLES.map(|b| -rd::<f32>(world + b * 0x40 + 0x34));
+    if let Ok(mut g) = FEET.try_lock() {
+        g.flags = flags;
+        g.ankle_up = up;
+        g.passes[via_ik as usize] += 1;
+        g.seen = true;
+    }
+}
+
+/// The feet as KH1's last pass left them, with the pass counts since the last call (cleared).
+pub fn take_feet() -> FeetSeen {
+    FEET.lock()
+        .map(|mut g| {
+            let old = *g;
+            *g = FeetSeen { passes: [0; 2], seen: false, ..old };
+            old
+        })
+        .unwrap_or_default()
+}
+
 type Pose = unsafe extern "system" fn(usize, usize, f32, usize);
 /// The third argument is a float (XMM2; the hook audit of stage 49).
 type PoseIk = unsafe extern "system" fn(usize, usize, f32);
@@ -1725,6 +1903,7 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
         }
         None => f(world, instance, t, motion),
     }
+    note_feet(instance, false);
     if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
         note_small(instance, world);
     }
@@ -1744,6 +1923,7 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
         }
         None => f(world, instance, flags),
     }
+    note_feet(instance, true);
     if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
         note_small(instance, world);
     }

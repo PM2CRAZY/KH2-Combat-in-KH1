@@ -8,6 +8,8 @@ mod combat;
 mod combomods;
 mod config;
 mod crash;
+mod debugfont;
+mod debugmenu;
 mod drive;
 mod equipmenu;
 mod feet;
@@ -65,13 +67,19 @@ pub const KH1_EXE: &str = "KINGDOM HEARTS FINAL MIX.exe";
 /// (`[f123]`, Sora's physics frames: `takeover::GAME_FRAME`, the trace's `frame`), and keeps it
 /// for that frame's trace row (`trace`).
 pub fn log(line: &str) {
+    log_as(trace::cat::LOG, line);
+}
+
+/// A log line that is a trace category's own (`trace::cat::SOUNDS` for the sound log): the
+/// trace keeps it only while that category is recorded.
+pub fn log_as(category: u32, line: &str) {
     if let Ok(mut g) = LOG.lock() {
         if let Some(f) = g.as_mut() {
             let _ = writeln!(f, "[f{}] {line}", takeover::GAME_FRAME.load(Ordering::Relaxed));
             let _ = f.flush();
         }
     }
-    trace::note(line);
+    trace::note_as(category, line);
 }
 
 /// The host executable's full path.
@@ -194,6 +202,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         log(&format!("game build: {}", build.name()));
         crash::install();
         pose::install();
+        kh2slots::install();
         probe::install();
         takeover::install();
         combat::install();
@@ -211,6 +220,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         model::install();
         gates::install();
         soundlog::install();
+        debugmenu::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

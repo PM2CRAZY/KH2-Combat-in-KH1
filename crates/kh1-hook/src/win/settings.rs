@@ -79,6 +79,10 @@ shared = on\r\n\
 ;   / Aerial Base Combo KH2); a list of KH2 motions (e.g. 152) = only those; off = KH2's motions drawn over\r\n\
 ;   KH1's (as before)\r\n\
 kh1_slots = on\r\n\
+; kh1_bake: on = those slots are KH2's motions baked into KH1 motions at load (KH1's own pass\r\n\
+;   shows them, nothing drawn over it; KH1's FK, so no foot lift on slopes in them yet); off = the\r\n\
+;   slot is a retimed KH1 motion with KH2's drawn over it\r\n\
+kh1_bake = on\r\n\
 ; camera_lower: KH2's camera (look point and eye together) this much lower (0 = as KH2)\r\n\
 camera_lower = 0\r\n\
 ; camera_calls: kh2 = (camera = kh2) KH2's camera runs as KH1's own camera mode: KH1's moves,\r\n\
@@ -150,8 +154,28 @@ trace = on\r\n\
 ; trace_seconds: how many seconds before the dump the trace clip holds (1 to 120, default 10)\r\n\
 trace_seconds = 10\r\n\
 ; sound_log: on = every KH1 menu sound, voice group and voice clip played is a line in the log\r\n\
-; (the id and where it was called from, docs/kh1-sounds.md); off = nothing is hooked\r\n\
-sound_log = on\r\n";
+; (the id and where it was called from, docs/kh1-sounds.md); off = none (the debug menu switches it)\r\n\
+sound_log = on\r\n\
+; trace_*: what each trace row holds (on / off each; the debug menu's Trace Recorder page switches\r\n\
+; them): movement (position, floor, collision, velocity), kh1_state, kh2_state, form, draw\r\n\
+; (animation draw), feet (feet / IK), kh1_camera, kh2_camera, input, config, log (log lines),\r\n\
+; hit_fx (hit effect lines), sounds (sound log lines)\r\n\
+trace_movement = on\r\n\
+trace_kh1_state = on\r\n\
+trace_kh2_state = on\r\n\
+trace_form = on\r\n\
+trace_draw = on\r\n\
+trace_feet = on\r\n\
+trace_kh1_camera = on\r\n\
+trace_kh2_camera = on\r\n\
+trace_input = on\r\n\
+trace_config = on\r\n\
+trace_log = on\r\n\
+trace_hit_fx = on\r\n\
+trace_sounds = on\r\n\
+; debug_menu: on = L1 + R1 + Triangle opens the debug menu (the Config menu's Debug Menu row\r\n\
+; switches it in game too); off = the buttons do nothing\r\n\
+debug_menu = off\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -230,11 +254,18 @@ pub struct Settings {
     /// KH2's moves as new slots in KH1 Sora's motion table (`kh2slots.rs`): `None` off (the
     /// default), `Some(None)` every move that has one (`on`), else only these KH2 motions.
     pub kh1_slots: Option<Option<Vec<u16>>>,
+    /// Those slots baked into KH1 motions at load (`kh1_bake = on`, the default; `kh1_data::bake`):
+    /// KH1 shows them with no pose of ours; off: a retimed KH1 motion drawn over (tier A).
+    pub kh1_bake: bool,
     pub trace: super::trace::Mode,
     /// How many seconds of Sora's frames a trace dump holds (`trace_seconds`, 1..=120, 10 by default).
     pub trace_seconds: u32,
     /// KH1's sounds written to the log (`sound_log = on`, `soundlog.rs`).
     pub sound_log: bool,
+    /// What each trace row holds (`trace_*` = on / off, `trace::ITEMS`; all on by default).
+    pub trace_cats: u32,
+    /// L1 + R1 + Triangle opens the debug menu (`debug_menu = on`, `debugmenu.rs`).
+    pub debug_menu: bool,
 }
 
 static SETTINGS: AtomicPtr<Settings> = AtomicPtr::new(std::ptr::null_mut());
@@ -401,9 +432,12 @@ fn load(first: bool) -> Option<Settings> {
             None | Some("on") | Some("all") | Some("yes") => Some(None),
             Some(v) => Some(Some(v.split([',', ' ']).filter_map(|t| t.trim().parse().ok()).collect())),
         },
+        kh1_bake: on(&text, "kh1_bake", "on", true),
         trace: super::trace::Mode::parse(setting(&text, "trace").as_deref()),
         trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
         sound_log: on(&text, "sound_log", "on", true),
+        trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
+        debug_menu: on(&text, "debug_menu", "on", false),
     };
     log(&format!("settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" }));
     Some(s)

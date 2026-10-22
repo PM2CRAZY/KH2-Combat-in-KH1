@@ -493,6 +493,10 @@ static SEEN: Mutex<Option<Seen>> = Mutex::new(None);
 
 /// Notes the call that just ended.
 unsafe fn record(base: usize, via: &'static str, who: &'static str, why: &'static str, entry: u32) {
+    // (t354) Only for the trace, while it records a camera category.
+    if !super::trace::wants(super::trace::cat::KH1_CAMERA | super::trace::cat::KH2_CAMERA) {
+        return;
+    }
     let sora = rd::<u64>(base + SORA_RVA) as usize;
     let feet = if sora > 0x10000 { rd::<[f32; 3]>(sora + 0x10) } else { [0.0; 3] };
     let up = |v: [f32; 4]| [v[0], -v[1], v[2]];

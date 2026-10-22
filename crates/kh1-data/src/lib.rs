@@ -9,6 +9,7 @@
 //! A mod manager (OpenKH's) keeps the originals of the packages it patched in `BackupImage/`;
 //! [`Source::Original`] reads those first, so a randomizer's edits don't leak into our tables.
 
+pub mod bake;
 pub mod inverse;
 pub mod jiggle;
 pub mod mdls;

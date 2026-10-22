@@ -38,7 +38,6 @@ pub const KH1_SLOTS: usize = 118;
 const KH1_REQUESTS: usize = 0x141;
 const REQUESTS: usize = 0x220;
 const SLOT_TABLE: usize = 0x1D4;
-const REQUEST_TABLE: usize = 0x1D8;
 const SLOT_NOW: usize = 0x168;
 const TIME_NOW: usize = 0x16C;
 const BLEND_LEN: usize = 0x170;
@@ -81,6 +80,8 @@ pub struct Move {
     /// Its slot in KH1's table.
     pub slot: usize,
     pub frames: u32,
+    /// Baked into a KH1 motion (`kh1_bake`, `kh1_data::bake`): KH1 shows it, nothing of ours drawn.
+    pub baked: bool,
     /// The KH2 clip's sounds, voices and effects, by frame.
     events: Vec<(u32, EventKind)>,
 }
@@ -95,8 +96,9 @@ struct Built {
 
 static BUILT: OnceLock<Option<Built>> = OnceLock::new();
 
-/// Builds our motions (the loader thread, `pose::load_kh2`): `mset` is KH1 Sora's file.
-pub fn prepare(mset: &[u8], kh2: &pose::Kh2) {
+/// Builds our motions (the loader thread, `pose::load_kh2`): `mset` is KH1 Sora's file; with
+/// `bake` (`kh1_bake`), each KH2 motion baked into its KH1 motion, else the template retimed.
+pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
     let Some(which) = super::settings::get().kh1_slots.clone() else {
         let _ = BUILT.set(None);
         return;
@@ -122,8 +124,15 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2) {
             let old = u32::from_le_bytes(template[4..8].try_into().unwrap());
             let frames = clip.length.max(1);
             let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32);
-            let block = ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?;
             let slot = KH1_SLOTS + moves.len();
+            let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, s.motion, frames, &tracks)) {
+                Some(Ok(block)) => (block, true),
+                Some(Err(e)) => {
+                    log(&format!("KH2 slots: KH2 motion {} not baked ({e}); drawn over its template", s.motion));
+                    (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false)
+                }
+                None => (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false),
+            };
             log(&format!(
                 "KH2 slots: KH2 motion {} as KH1 slot {slot} (for KH1's slot {} / request {:#x}, {old} -> {frames} frames): {}",
                 s.motion,
@@ -132,7 +141,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2) {
                 tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
             ));
             let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Voice(_) | EventKind::Effect(_))).map(|e| (e.frame, e.kind)).collect();
-            moves.push(Move { motion: s.motion, stands_for: s.stands_for, request: s.request, kind: s.kind, slot, frames, events });
+            moves.push(Move { motion: s.motion, stands_for: s.stands_for, request: s.request, kind: s.kind, slot, frames, baked, events });
             blocks.push(block);
         }
         Ok(Built { moves, blocks, requests })
@@ -146,6 +155,25 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2) {
             let _ = BUILT.set(None);
         }
     }
+}
+
+/// KH2's `motion` baked into a KH1 motion on `template` (`kh1_data::bake`), with its report logged.
+fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], motion: u16, frames: u32, tracks: &[EventTrack]) -> Result<Vec<u8>, String> {
+    let t = std::time::Instant::now();
+    let poses = b.poses(kh2, motion, frames).ok_or("KH2 has no animation for it")?;
+    let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses).map_err(|e| e.to_string())?;
+    log(&format!(
+        "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; KH1's FK from it within {:.3} units of the pose (worst bone {})",
+        block.len(),
+        t.elapsed().as_secs_f32() * 1000.0,
+        r.keyed_channels,
+        r.keys,
+        r.constant_channels,
+        r.static_bones,
+        r.max_error,
+        r.worst_bone
+    ));
+    Ok(block)
 }
 
 /// KH1's events for a KH2 clip on a retimed template (`r`: new length / the template's): the
@@ -170,16 +198,28 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32) -> V
     out
 }
 
-/// Our motions placed in memory (the game thread), and Sora's table copies.
+/// One of Sora's motion sets with ours added (`docs/kh1-anim-slots.md` §2): KH1 binds a set onto
+/// his actor (his own at creation, `0x140287E40`; a world's on entering it, `0x1402886F0` from
+/// `0x14029E850`, his own saved at `+0x1E0`), and we hand it these copies instead, built once per
+/// set: its own slots, then ours right after them; its request table, with the requests our moves
+/// stand in for pointed at ours by their styles.
+struct Set {
+    /// KH1's own handles for its tables (to know the set again).
+    kh1_slots: u32,
+    kh1_requests: u32,
+    /// Ours.
+    slots_handle: u32,
+    requests_handle: u32,
+    requests: &'static mut [u32],
+    /// (request, KH1's entry, our slot index in this set, the move's style).
+    redirects: Vec<(usize, u32, u32, Kind)>,
+}
+
+/// Our motions placed in memory (the game thread) and the sets made with them.
 struct Placed {
     /// Each motion's address (ours, leaked) and its handle.
     motions: Vec<(usize, u32)>,
-    slot_table: &'static mut [u32],
-    slot_handle: u32,
-    request_table: &'static mut [u32],
-    request_handle: u32,
-    /// The actor they were put on last.
-    actor: usize,
+    sets: Vec<Set>,
 }
 
 static PLACED: Mutex<Option<Placed>> = Mutex::new(None);
@@ -202,6 +242,11 @@ fn moved(slot: usize) -> Option<&'static Move> {
 pub fn covers(kind: Kind) -> bool {
     let Some(b) = built() else { return false };
     SPECS.iter().any(|s| s.kind == kind) && SPECS.iter().filter(|s| s.kind == kind).all(|s| b.moves.iter().any(|m| m.request == s.request))
+}
+
+/// `slot` is one of ours, baked into a KH1 motion (KH1 shows it; `pose` draws nothing over it).
+pub fn is_baked(slot: usize) -> bool {
+    moved(slot).is_some_and(|m| m.baked)
 }
 
 /// Our slot's KH2 motion, if `slot` is one of ours.
@@ -243,9 +288,20 @@ pub unsafe fn kh1_blend(actor: usize) -> Option<f32> {
     (len > 1.0 && clock.is_finite() && clock < len).then(|| (clock / len).clamp(0.0, 1.0))
 }
 
-/// KH1's time in our slot playing on `actor` (frames), if it is `slot`.
+/// The move of ours `actor` plays now: the motion its slot (`+0x168`) holds in the set bound
+/// (`+0x1D4`), by its address (our slot numbers differ from set to set).
+unsafe fn current(actor: usize) -> Option<&'static Move> {
+    let t = pose::ptr(rd::<u32>(actor + SLOT_TABLE));
+    let i = rd::<u32>(actor + SLOT_NOW) as usize;
+    if t < 0x10000 || i > 0xFFF || !super::crash::readable(t + i * 4 + 3) {
+        return None;
+    }
+    slot_of_motion(pose::ptr(rd::<u32>(t + i * 4))).and_then(moved)
+}
+
+/// KH1's time in our slot playing on `actor` (frames), if it is `slot` (our move's id).
 pub unsafe fn kh1_time(actor: usize, slot: usize) -> Option<f32> {
-    (rd::<u32>(actor + SLOT_NOW) as usize == slot).then(|| rd::<f32>(actor + TIME_NOW)).filter(|t| t.is_finite() && *t >= 0.0)
+    current(actor).filter(|m| m.slot == slot).map(|_| rd::<f32>(actor + TIME_NOW)).filter(|t| t.is_finite() && *t >= 0.0)
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -285,69 +341,209 @@ unsafe fn place(b: &Built) -> Placed {
     if let Ok(mut v) = MOTION_AT.lock() {
         *v = at;
     }
-    let slot_table: &'static mut [u32] = Box::leak(vec![0u32; KH1_SLOTS + motions.len() + 1].into_boxed_slice());
-    let request_table: &'static mut [u32] = Box::leak(vec![0xFFFu32; REQUESTS].into_boxed_slice());
-    let slot_handle = handle(slot_table.as_ptr() as usize);
-    let request_handle = handle(request_table.as_ptr() as usize);
-    log(&format!("KH2 slots: {} motions placed (handles {:08x?}), tables {slot_handle:08x} / {request_handle:08x}", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>()));
-    Placed { motions, slot_table, slot_handle, request_table, request_handle, actor: 0 }
+    log(&format!("KH2 slots: {} motions placed (handles {:08x?})", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>()));
+    Placed { motions, sets: Vec::new() }
 }
 
-/// KH1's own tables on `actor` (its 118 slots, its request table as in the file).
-unsafe fn kh1_own(b: &Built, actor: usize) -> Option<(usize, usize)> {
-    let (s, r) = (pose::ptr(rd::<u32>(actor + SLOT_TABLE)), pose::ptr(rd::<u32>(actor + REQUEST_TABLE)));
-    let n = b.requests.len().min(REQUESTS);
-    if s < 0x10000 || r < 0x10000 || !super::crash::readable(s) || !super::crash::readable(s + (KH1_SLOTS + 1) * 4 - 1) || !super::crash::readable(r) || !super::crash::readable(r + n * 4 - 1) {
-        return None;
+/// Sora's bone count (his model and motions).
+const SORA_BONES: u32 = 293;
+
+/// KH1's model on `actor` is Sora's (293 bones: the actor's instance `+0x15C`, its model slot,
+/// the model header's count; every step checked, as the set bind hook sees other structures too).
+unsafe fn is_sora(actor: usize) -> bool {
+    let ok = |p: usize, n: usize| p >= 0x10000 && super::crash::readable(p) && super::crash::readable(p + n - 1);
+    if !ok(actor, 0x1F0) {
+        return false;
     }
-    let slots_ok = (0..KH1_SLOTS).all(|i| rd::<u32>(s + i * 4) != 0) && rd::<u32>(s + KH1_SLOTS * 4) == 0;
-    let requests_ok = (0..n).all(|i| rd::<u32>(r + i * 4) == b.requests[i]);
-    (slots_ok && requests_ok).then_some((s, r))
+    let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+    if !ok(inst, 0x10) {
+        return false;
+    }
+    let slot = rd::<u64>(inst) as usize;
+    if !ok(slot, 8) {
+        return false;
+    }
+    let header = rd::<u64>(slot) as usize;
+    ok(header, 2) && rd::<u16>(header) as u32 == SORA_BONES
 }
 
-/// Each frame Sora is posed (`pose`, the game thread): our tables on his actor, the requests
-/// pointed at our slots by their moves' styles, and our slot's KH2 sounds and effects.
+/// The set bound at `at` (four handles: file, slot list, request table, a third section): its
+/// file, slot list and request table addresses, its slot count and its request table's length,
+/// checked.
+unsafe fn read_set(at: usize) -> Result<(usize, usize, usize, usize, usize), String> {
+    let (fh, sh, rh) = (rd::<u32>(at), rd::<u32>(at + 4), rd::<u32>(at + 8));
+    let (f, s, r) = (pose::ptr(fh), pose::ptr(sh), pose::ptr(rh));
+    if f < 0x10000 || s < 0x10000 || r < 0x10000 || !super::crash::readable(f + 0x14) || !super::crash::readable(s + 3) || !super::crash::readable(r + 3) {
+        return Err(format!("handles {fh:08x} / {sh:08x} / {rh:08x} don't read"));
+    }
+    // Its slot count: the words before its first motion (KH1 keeps no end marker in memory; the
+    // motions follow the list, t352).
+    let mut first = usize::MAX;
+    let mut i = 0usize;
+    while i < 4096 && s + i * 4 < first {
+        if !super::crash::readable(s + i * 4 + 3) {
+            break;
+        }
+        let h = rd::<u32>(s + i * 4);
+        if h & 0x8000_0000 != 0 {
+            let m = pose::ptr(h);
+            if m > s && m < first && super::crash::readable(m + 0x40) && rd::<u32>(m + 0x10) == SORA_BONES {
+                first = m;
+            }
+        }
+        i += 1;
+    }
+    if first == usize::MAX {
+        return Err(format!("no motion in slot list {sh:08x}"));
+    }
+    let count = (first - s) / 4;
+    // Its request table: the file's section 1 (sections at +4, +8, +0xC, +0x10).
+    let (r0, r1) = (rd::<u32>(f + 8) as usize, rd::<u32>(f + 0xC) as usize);
+    if r1 <= r0 || f + r0 != r || (r1 - r0) / 4 > REQUESTS * 8 || !super::crash::readable(r + (r1 - r0) - 1) {
+        return Err(format!("request table {rh:08x} isn't the file's section 1 ({r0:#x}..{r1:#x})"));
+    }
+    Ok((f, s, r, count, (r1 - r0) / 4))
+}
+
+/// Ours for the set bound at `at` (made the first time), its handles written there. Whether ours
+/// are there now.
+unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
+    let (sh, rh) = (rd::<u32>(at + 4), rd::<u32>(at + 8));
+    if p.sets.iter().any(|t| t.slots_handle == sh && t.requests_handle == rh) {
+        return true;
+    }
+    if let Some(t) = p.sets.iter().find(|t| t.kh1_slots == sh && t.kh1_requests == rh) {
+        wr(at + 4, t.slots_handle);
+        wr(at + 8, t.requests_handle);
+        return true;
+    }
+    if p.sets.len() >= 32 {
+        return false;
+    }
+    let (f, s, r, count, len) = match read_set(at) {
+        Ok(v) => v,
+        Err(e) => {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("KH2 slots: set at {at:#x} ({why}) not extended: {e}"));
+            }
+            return false;
+        }
+    };
+    let slots: &'static mut [u32] = Box::leak(vec![0u32; count + p.motions.len() + 1].into_boxed_slice());
+    for i in 0..count {
+        slots[i] = rd::<u32>(s + i * 4);
+    }
+    for (i, m) in p.motions.iter().enumerate() {
+        slots[count + i] = m.1;
+    }
+    let requests: &'static mut [u32] = Box::leak(vec![0xFFFu32; len].into_boxed_slice());
+    for i in 0..len {
+        requests[i] = rd::<u32>(r + i * 4);
+    }
+    // The requests ours stand in for, where this set's own entry holds the KH1 motion they stand
+    // in for (by its signature, `pose::file_slot_of_motion`).
+    let mut redirects = Vec::new();
+    let mut missing = Vec::new();
+    for (i, m) in b.moves.iter().enumerate() {
+        let e = requests.get(m.request).copied().unwrap_or(0xFFF);
+        let own = (e & 0xFFF) as usize;
+        let holds = own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for);
+        if holds {
+            redirects.push((m.request, e, (count + i) as u32, m.kind));
+        } else {
+            missing.push(format!("{:#x}", m.request));
+        }
+    }
+    let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects };
+    log(&format!(
+        "KH2 slots: Sora's set {f:#x} ({why}): {count} slots of its own, ours at {}..{}, {} requests; ours stand in for {}{}",
+        count,
+        count + p.motions.len() - 1,
+        len,
+        t.redirects.iter().map(|r| format!("{:#x} (its slot {})", r.0, r.1 & 0xFFF)).collect::<Vec<_>>().join(", "),
+        if missing.is_empty() { String::new() } else { format!("; not in this set: {}", missing.join(", ")) }
+    ));
+    wr(at + 4, t.slots_handle);
+    wr(at + 8, t.requests_handle);
+    p.sets.push(t);
+    true
+}
+
+/// Ours for a set KH1 just bound onto Sora's actor (`at` = `actor + 0x1D0`), from the bind hooks.
+unsafe fn bound(actor: usize, why: &str) {
+    if !is_sora(actor) {
+        return;
+    }
+    let Some(b) = built() else { return };
+    let Ok(mut g) = PLACED.try_lock() else { return };
+    let p = g.get_or_insert_with(|| place(b));
+    extend(b, p, actor + SET, why);
+}
+
+/// Where an actor's bound set is (file, slot list, request table, a third section), and where
+/// KH1 keeps his own while a world's is bound.
+const SET: usize = 0x1D0;
+const SAVED_SET: usize = 0x1E0;
+
+/// KH1 binding Sora's own set at his actor's creation (`0x140287E40 (actor, bundle, motion
+/// file)`; Epic `0x140285CC0`): `mov [rsp+8], rbx; mov [rsp+10h], rbp`.
+const BIND_OWN_RVA: Rva = Rva(0x285CC0);
+const BIND_OWN_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
+/// KH1 binding a motion set into an actor's four handles (`0x1402886F0 (set, file)`; a world's
+/// onto Sora from `0x14029E850`; Epic `0x140286570`, worked out from the neighbours, unchecked):
+/// `mov [rsp+8], rbx; push rdi; sub rsp, 20h`.
+const BIND_SET_RVA: Rva = Rva(0x286570);
+const BIND_SET_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_BIND_OWN: AtomicUsize = AtomicUsize::new(0);
+static ORIG_BIND_SET: AtomicUsize = AtomicUsize::new(0);
+
+unsafe extern "system" fn bind_own(actor: usize, bundle: usize, file: usize) {
+    let f: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(ORIG_BIND_OWN.load(Ordering::Acquire));
+    f(actor, bundle, file);
+    if file != 0 {
+        bound(actor, "his own, bound");
+    }
+}
+
+unsafe extern "system" fn bind_set(set: usize, file: usize) {
+    let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_BIND_SET.load(Ordering::Acquire));
+    f(set, file);
+    if file != 0 && set > SET {
+        bound(set - SET, "a world's, bound");
+    }
+}
+
+/// The bind hooks (they do nothing until our motions are built, `kh1_slots` on).
+pub unsafe fn install() {
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    super::hook::install(base + BIND_OWN_RVA, &BIND_OWN_PROLOGUE, bind_own as *const () as usize, &ORIG_BIND_OWN, "actor motion set bind (KH2 slots)");
+    super::hook::install(base + BIND_SET_RVA, &BIND_SET_PROLOGUE, bind_set as *const () as usize, &ORIG_BIND_SET, "motion set bind (KH2 slots)");
+}
+
+/// Each frame Sora is posed (`pose`, the game thread): ours on the set bound and the one KH1
+/// keeps (in case a bind came before our motions were built), the requests pointed at ours by
+/// their moves' styles in every set, and our slot's KH2 sounds and effects.
 pub unsafe fn frame(actor: usize) {
     let Some(b) = built() else { return };
-    if actor < 0x10000 || !super::crash::readable(actor + 0x1E0) {
+    if !is_sora(actor) {
         return;
     }
     let Ok(mut g) = PLACED.try_lock() else { return };
     let p = g.get_or_insert_with(|| place(b));
-    let ours = rd::<u32>(actor + SLOT_TABLE) == p.slot_handle && rd::<u32>(actor + REQUEST_TABLE) == p.request_handle;
-    if !ours {
-        let Some((s, r)) = kh1_own(b, actor) else {
-            static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 5 {
-                log(&format!("KH2 slots: Sora's actor {actor:#x} shows another motion set; left to KH1"));
-            }
-            PLAYING.store(usize::MAX, Ordering::Relaxed);
-            PLAYING_MOTION.store(u32::MAX, Ordering::Relaxed);
-            return;
-        };
-        for i in 0..KH1_SLOTS {
-            p.slot_table[i] = rd::<u32>(s + i * 4);
-        }
-        for (i, m) in p.motions.iter().enumerate() {
-            p.slot_table[KH1_SLOTS + i] = m.1;
-        }
-        *p.slot_table.last_mut().unwrap() = 0;
-        for i in 0..b.requests.len().min(REQUESTS) {
-            p.request_table[i] = rd::<u32>(r + i * 4);
-        }
-        wr(actor + SLOT_TABLE, p.slot_handle);
-        wr(actor + REQUEST_TABLE, p.request_handle);
-        if p.actor != actor {
-            log(&format!("KH2 slots: on Sora's actor {actor:#x} ({} slots, {} of ours)", KH1_SLOTS + p.motions.len(), p.motions.len()));
-        }
-        p.actor = actor;
+    extend(b, p, actor + SET, "found on his actor");
+    if rd::<u32>(actor + SAVED_SET) != 0 {
+        extend(b, p, actor + SAVED_SET, "kept by KH1 on his actor");
     }
     // The requests by style (base Sora under shared states; a change applies from KH1's next
     // request, never to the motion playing).
-    for m in &b.moves {
-        let kh1 = b.requests[m.request];
-        let on = super::shared::on() && super::styles::kh2(m.kind);
-        p.request_table[m.request] = if on { (kh1 & !0xFFF) | m.slot as u32 } else { kh1 };
+    let on = super::shared::on();
+    for t in p.sets.iter_mut() {
+        for &(req, kh1, ours, kind) in &t.redirects {
+            if let Some(e) = t.requests.get_mut(req) {
+                *e = if on && super::styles::kh2(kind) { (kh1 & !0xFFF) | ours } else { kh1 };
+            }
+        }
     }
     drop(g);
     tick(actor);
@@ -356,8 +552,7 @@ pub unsafe fn frame(actor: usize) {
 /// Our slot's KH2 sounds, voices and effects between KH1's last time and its time now.
 unsafe fn tick(actor: usize) {
     static LAST: Mutex<Option<(usize, f32)>> = Mutex::new(None);
-    let slot = rd::<u32>(actor + SLOT_NOW) as usize;
-    let Some(m) = moved(slot) else {
+    let Some(m) = current(actor) else {
         PLAYING.store(usize::MAX, Ordering::Relaxed);
         PLAYING_MOTION.store(u32::MAX, Ordering::Relaxed);
         if let Ok(mut l) = LAST.try_lock() {
@@ -365,6 +560,7 @@ unsafe fn tick(actor: usize) {
         }
         return;
     };
+    let slot = m.slot;
     PLAYING.store(slot, Ordering::Relaxed);
     PLAYING_MOTION.store(m.motion as u32, Ordering::Relaxed);
     let now: f32 = rd(actor + TIME_NOW);
@@ -376,7 +572,14 @@ unsafe fn tick(actor: usize) {
     if from == -1.0 {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log(&format!("KH2 slots: KH1 plays slot {slot} (KH2 motion {}, for KH1's {} / request {:#x}; Sora's request {:#x})", m.motion, m.stands_for, m.request, rd::<u32>(actor + 0x164)));
+            log(&format!(
+                "KH2 slots: KH1 plays ours, KH2 motion {} (for KH1's {} / request {:#x}; its slot {} in the set; Sora's request {:#x})",
+                m.motion,
+                m.stands_for,
+                m.request,
+                rd::<u32>(actor + SLOT_NOW),
+                rd::<u32>(actor + 0x164)
+            ));
         }
     }
     *l = Some((slot, now));

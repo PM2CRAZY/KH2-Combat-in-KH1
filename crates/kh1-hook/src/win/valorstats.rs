@@ -153,6 +153,8 @@ pub unsafe fn step(sora: usize) {
         wr(stats + MAX_MP, m);
     }
     clamp_mp(stats, m);
+    // (t354) The debug menu's locked stats stay as locked.
+    super::debugmenu::lock_stats(0, stats);
     DIRTY.store(want.is_some(), Ordering::Relaxed);
     // Logged as it changes.
     let key = want.map(|(k, _, _)| k).unwrap_or(0);

@@ -20,6 +20,9 @@
 //!
 //! The choices are kept in `kh1-kh2.ini` (`camera`, `physics`, `ground_combo`, `air_combo`,
 //! `magic`, `air_magic`... = kh1 / kh2), not the save.
+//!
+//! (t354) A Debug Menu row (Off / On, the ini's `debug_menu`) turns on the debug menu
+//! (`debugmenu.rs`: L1 + R1 + Triangle).
 
 use super::addr::Rva;
 use super::styles::Kind;
@@ -71,7 +74,7 @@ const DECOR_RVA: Rva = Rva(0x2F0740);
 /// Our rows (8 a page: KH1's rows 8..15, scrolled for the rest): the camera, the physics, the
 /// move styles (`ROW_WHAT` says which is which). Each: label, left value, right value, help.
 const FIRST_ROW: i32 = 8;
-const ROWS: [[u32; 4]; 12] = [
+const ROWS: [[u32; 4]; 13] = [
     [0x7F00_0001, 0x7F00_0002, 0x7F00_0003, 0x7F00_0004],
     [0x7F00_0119, 0x7F00_0002, 0x7F00_0003, 0x7F00_011A],
     [0x7F00_0101, 0x7F00_0002, 0x7F00_0003, 0x7F00_0102],
@@ -86,10 +89,11 @@ const ROWS: [[u32; 4]; 12] = [
     // [0x7F00_0117, 0x7F00_0002, 0x7F00_0003, 0x7F00_0118],
     [0x7F00_010F, 0x7F00_0002, 0x7F00_0003, 0x7F00_0110],
     [0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112],
+    [0x7F00_011B, 0x7F00_011D, 0x7F00_011E, 0x7F00_011C],
 ];
 /// The camera row's help line (with the version under it).
 const HELP_ID: u32 = 0x7F00_0004;
-const STRINGS: [(u32, &str); 30] = [
+const STRINGS: [(u32, &str); 34] = [
     (0x7F00_0001, "Camera Style"),
     (0x7F00_0002, "KH1"),
     (0x7F00_0003, "KH2"),
@@ -120,6 +124,10 @@ const STRINGS: [(u32, &str); 30] = [
     (0x7F00_0112, "Fly the Gummi Ship between worlds, or skip the flights."),
     (0x7F00_0113, "Vanilla"),
     (0x7F00_0114, "Skip"),
+    (0x7F00_011B, "Debug Menu"),
+    (0x7F00_011C, "Turn on the debug menu: L1 + R1 + Triangle opens and closes it."),
+    (0x7F00_011D, "Off"),
+    (0x7F00_011E, "On"),
 ];
 
 /// What one of our rows switches.
@@ -131,10 +139,12 @@ enum Row {
     Style(Kind),
     /// Gummi Routes (Vanilla | Skip).
     Gummi,
+    /// The debug menu (Off | On, `debugmenu`).
+    Debug,
 }
 
 /// Each row's switch (`ROWS` in order).
-const ROW_WHAT: [Row; 12] = [
+const ROW_WHAT: [Row; 13] = [
     Row::Camera,
     Row::Physics,
     Row::Style(Kind::GroundCombo),
@@ -148,6 +158,7 @@ const ROW_WHAT: [Row; 12] = [
     // Row::Style(Kind::PlayerModel),
     Row::Style(Kind::BattleQuotes),
     Row::Gummi,
+    Row::Debug,
 ];
 
 fn what(row: i32) -> Row {
@@ -162,6 +173,7 @@ fn value(row: i32) -> bool {
         Row::Physics => physics::rule() == physics::Rule::Kh2,
         Row::Style(k) => styles::kh2(k),
         Row::Gummi => super::gummi::SKIP.load(Ordering::Relaxed),
+        Row::Debug => super::debugmenu::enabled(),
     }
 }
 
@@ -178,6 +190,7 @@ fn toggle(row: i32) {
         Row::Physics => physics::set_rule(if v { physics::Rule::Kh2 } else { physics::Rule::Kh1 }),
         Row::Style(k) => styles::set(k, v),
         Row::Gummi => super::gummi::set(v),
+        Row::Debug => super::debugmenu::set_enabled(v),
     }
 }
 

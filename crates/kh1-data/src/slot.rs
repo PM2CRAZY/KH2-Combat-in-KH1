@@ -32,11 +32,11 @@ pub const COMBO: u16 = 5;
 pub const SOUND: u16 = 6;
 pub const TRAIL: u16 = 7;
 
-fn u32_at(b: &[u8], at: usize) -> Result<u32> {
+pub(crate) fn u32_at(b: &[u8], at: usize) -> Result<u32> {
     b.get(at..at + 4).map(|s| u32::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| Error::Format(format!("motion: read past the end at {at:#x}")))
 }
 
-fn put(b: &mut [u8], at: usize, v: u32) {
+pub(crate) fn put(b: &mut [u8], at: usize, v: u32) {
     b[at..at + 4].copy_from_slice(&v.to_le_bytes());
 }
 
@@ -200,6 +200,12 @@ pub fn retimed(block: &[u8], frames: u32, events: &[EventTrack]) -> Result<Vec<u
             put(&mut b, q, v.to_bits());
         }
     }
+    append_events(&mut b, events);
+    Ok(b)
+}
+
+/// `events` written after the motion `b` (16-byte aligned), its `+0x3C` pointed at them.
+pub(crate) fn append_events(b: &mut Vec<u8>, events: &[EventTrack]) {
     b.resize((b.len() + 15) & !15, 0);
     let groups = b.len();
     let mut keys_at = groups + events.len() * 12 + 4;
@@ -223,8 +229,7 @@ pub fn retimed(block: &[u8], frames: u32, events: &[EventTrack]) -> Result<Vec<u
     b.extend_from_slice(&table);
     b.extend_from_slice(&key_bytes);
     b.resize((b.len() + 15) & !15, 0);
-    put(&mut b, EVENTS, groups as u32);
-    Ok(b)
+    put(b, EVENTS, groups as u32);
 }
 
 /// `tracks` with every key time scaled by `r` (a template's events on a retimed motion).

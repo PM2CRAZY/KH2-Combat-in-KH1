@@ -456,7 +456,8 @@ unsafe fn trace_frame(actor: usize, start: [f32; 4]) {
     let base = BASE.load(Ordering::Relaxed);
     let p = rd::<[f32; 4]>(actor + 0x10);
     // (KH2's side only on KH2's own frames: on KH1's its last move stays in the controller.)
-    let kh2_frame = FRAME_KIND.load(Ordering::Relaxed) == 1;
+    // (t354: and only while the trace records KH2's state.)
+    let kh2_frame = FRAME_KIND.load(Ordering::Relaxed) == 1 && super::trace::wants(super::trace::cat::KH2_STATE);
     let kh2 = DRIVER.try_lock().ok().filter(|_| kh2_frame).and_then(|g| {
         let kh2 = g.as_ref().map(|d| {
             let o = d.last_out.as_ref();
@@ -510,13 +511,16 @@ unsafe fn trace_frame(actor: usize, start: [f32; 4]) {
         arc: rd::<[f32; 4]>(actor + 0x3B0),
         push: rd::<[f32; 3]>(actor + 0x120),
         kh2,
-        form: super::form::current().map(|k| format!("{k:?}")),
+        form: if super::trace::wants(super::trace::cat::FORM) { super::form::current().map(|k| format!("{k:?}")) } else { None },
         buttons: RAW_BUTTONS.load(Ordering::Relaxed) as u16,
         kh1_buttons: rd::<u32>(base + BUTTONS_RVA + 4),
         sticks,
         draw: Default::default(),
         cam: Default::default(),
+        feet: Default::default(),
         events: String::new(),
+        // (Filled by `trace::frame`.)
+        cats: 0,
     });
 }
 

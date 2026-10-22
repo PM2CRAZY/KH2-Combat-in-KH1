@@ -236,6 +236,12 @@ static ORIG_STATS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsi
 /// Sora's max AP gets the AP of each KH2 ability he has learned (`growth::bonus_ap`); the save
 /// keeps KH1's own.
 unsafe extern "system" fn stats(member: i32, out: usize) {
+    stats_inner(member, out);
+    // The debug menu's locked stats over everything (`debugmenu::lock_stats`).
+    super::debugmenu::lock_stats(member, out);
+}
+
+unsafe fn stats_inner(member: i32, out: usize) {
     let f: unsafe extern "system" fn(i32, usize) = std::mem::transmute(ORIG_STATS.load(std::sync::atomic::Ordering::Acquire));
     f(member, out);
     // Valor's second Keyblade's Strength and MP on Sora's (`valorstats`).
@@ -416,7 +422,8 @@ fn given_back() -> Vec<u8> {
 unsafe fn strip(list: usize, len: usize) -> usize {
     let bytes: Vec<u8> = (0..len).map(|i| rd::<u8>(list + i)).collect();
     let end = bytes.iter().position(|b| *b == 0).unwrap_or(len);
-    let ours = |b: u8| growth::MENU.iter().any(|ab| ab.id == b & 0x7F);
+    // (Not one the debug menu gave this session.)
+    let ours = |b: u8| growth::MENU.iter().any(|ab| ab.id == b & 0x7F) && super::debugmenu::ability_forced(b) != Some(true);
     let kept: Vec<u8> = bytes[..end].iter().copied().filter(|b| !ours(*b)).collect();
     let removed = end - kept.len();
     if removed > 0 {
@@ -554,7 +561,8 @@ impl Growth {
                 {
                     let list = save + 0x44;
                     let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
-                    if growth::has(&bytes, growth::kh1::ZANTETSUKEN) {
+                    // (Unless the debug menu gave it, `debugmenu::ability_forced`.)
+                    if growth::has(&bytes, growth::kh1::ZANTETSUKEN) && super::debugmenu::ability_forced(growth::kh1::ZANTETSUKEN) != Some(true) {
                         let end = bytes.iter().position(|b| *b == 0).unwrap_or(48);
                         let mut kept: Vec<u8> = bytes[..end].iter().copied().filter(|b| b & 0x7F != growth::kh1::ZANTETSUKEN).collect();
                         let n = end - kept.len();
@@ -621,7 +629,7 @@ impl Growth {
                 }
                 // Aerial Dodge is Genie Jafar's (the user; Riku's before): taken back out until he
                 // is beaten (given again then, with its box).
-                if !growth::BOSS_GIFTS.iter().any(|g| g.ability == AERIAL_DODGE && growth::beaten(&now.progress, g)) {
+                if !growth::BOSS_GIFTS.iter().any(|g| g.ability == AERIAL_DODGE && growth::beaten(&now.progress, g)) && super::debugmenu::ability_forced(AERIAL_DODGE) != Some(true) {
                     let list = save + 0x44;
                     let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
                     let end = bytes.iter().position(|b| *b == 0).unwrap_or(48);
@@ -641,6 +649,10 @@ impl Growth {
                 // KH2's abilities by level, boss (the user's list) or KH1 namesake, off until
                 // equipped, each with its box.
                 for (why, ab) in now.grants() {
+                    // (Not one the debug menu took out this session.)
+                    if super::debugmenu::ability_forced(ab.id) == Some(false) {
+                        continue;
+                    }
                     let (list, len, byte) = match ab.list {
                         growth::List::Shared => (save + 0x599, 10, ab.id),
                         growth::List::Sora => (save + 0x44, 48, ab.id | 0x80),

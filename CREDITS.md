@@ -18,6 +18,7 @@ This project stands on other people's research. Licences are kept; see `NOTICE`.
 | gaithern's [KH-1FM-AP-LUA](https://github.com/gaithern/KH-1FM-AP-LUA) | Story-progress values for beaten bosses (`growth.rs`); where the current world and room ids sit (checked against both executables, `takeover.rs`). Facts only; no code. | MIT |
 | [KH1FM Randomizer](https://github.com/gaithern/KH1FM-RANDOMIZER) (KH1FM Randomizer contributors) | Where Sora's level-up abilities sit in `btltbl.bin` and their `0x80 + id` encoding, more ability ids (Tech Boost, Leaf Bracer), and where KH1's help text lives (`docs/kh1-port.md`). Facts only; no code. | MIT |
 | [Bevy](https://bevyengine.org) | Engine for the playground (`kh2-bevy`) | MIT OR Apache-2.0 |
+| [DejaVu fonts](https://dejavu-fonts.github.io) (DejaVu Sans Mono Bold) | The debug menu's text: the glyphs drawn into a small atlas (`crates/kh1-hook/src/win/debugfont.rs`) | Bitstream Vera licence (free to use, embed and redistribute) |
 | [glam](https://github.com/bitshifter/glam-rs) | Matrix and quaternion maths in `kh2-anim` and `kh2-fx` | MIT OR Apache-2.0 |
 | [Ghidra](https://github.com/NationalSecurityAgency/ghidra) (NSA) | Used locally to study the user's own executable. Nothing it produced is in this repo; findings are written up in plain language in `docs/`. | Apache-2.0 |
 | [trevaintdead/ai-game-modding-guides](https://github.com/trevaintdead/ai-game-modding-guides) | Project structure and rules (whitelist `.gitignore`, no assets, credits) | see repo |

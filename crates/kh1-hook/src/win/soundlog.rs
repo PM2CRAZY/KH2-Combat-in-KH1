@@ -22,6 +22,10 @@
 //! RVA in the running build, which is the Steam one on Steam: `docs/kh1-sounds.md`), or the mod
 //! (`kh1voice`, `trace`, `config` and `combat` play sounds too). `docs/kh1-sounds.md` is the
 //! table the log fills in.
+//!
+//! (t354) The hooks go in whatever `sound_log` says, and each writes its line only while the sound
+//! log is on (`trace::sound_log`: the ini's, or the debug menu's since), so it switches in game.
+//! Its lines are the trace's Sounds category (`log_as`).
 
 use super::addr::{Build, Rva};
 use super::hook;
@@ -116,30 +120,41 @@ fn who(actor: usize) -> String {
 fn emit(line: String) {
     let n = LINES.fetch_add(1, Ordering::Relaxed);
     if n < MAX_LINES {
-        log(&line);
+        super::log_as(super::trace::cat::SOUNDS, &line);
     } else if n == MAX_LINES {
         log(&format!("KH1 sound log: {MAX_LINES} lines this session; no more until the game restarts"));
     }
 }
 
+/// The sound log is on now.
+fn live() -> bool {
+    super::trace::sound_log()
+}
+
 unsafe extern "system" fn menu_sound(id: i32) -> usize {
-    let from = caller();
-    emit(format!("KH1 sound: menu sound {id} ({from})"));
+    if live() {
+        let from = caller();
+        emit(format!("KH1 sound: menu sound {id} ({from})"));
+    }
     let f: unsafe extern "system" fn(i32) -> usize = std::mem::transmute(ORIG_SOUND.load(Ordering::Acquire));
     f(id)
 }
 
 unsafe extern "system" fn voice_group(actor: usize, group: i32, other: usize) -> usize {
-    let from = caller();
-    let with = if other == 0 { String::new() } else { format!(", other {}", who(other)) };
-    emit(format!("KH1 sound: voice group {group} on {}{with} ({from})", who(actor)));
+    if live() {
+        let from = caller();
+        let with = if other == 0 { String::new() } else { format!(", other {}", who(other)) };
+        emit(format!("KH1 sound: voice group {group} on {}{with} ({from})", who(actor)));
+    }
     let f: unsafe extern "system" fn(usize, i32, usize) -> usize = std::mem::transmute(ORIG_GROUP.load(Ordering::Acquire));
     f(actor, group, other)
 }
 
 unsafe extern "system" fn voice_clip(actor: usize, clip: i32, priority: i32) -> usize {
-    let from = caller();
-    emit(format!("KH1 sound: voice clip {clip} ({clip:#x}) priority {priority} on {} ({from})", who(actor)));
+    if live() {
+        let from = caller();
+        emit(format!("KH1 sound: voice clip {clip} ({clip:#x}) priority {priority} on {} ({from})", who(actor)));
+    }
     let f: unsafe extern "system" fn(usize, i32, i32) -> usize = std::mem::transmute(ORIG_CLIP.load(Ordering::Acquire));
     f(actor, clip, priority)
 }
@@ -222,16 +237,18 @@ fn se_new(kind: u64, bank: i32, no: i32, id: i32) -> bool {
 }
 
 unsafe extern "system" fn voice_call(bank: i32, no: i32) -> usize {
-    let from = caller();
-    let file = SORA_BANKS.iter().find(|b| b.0 == bank).map_or(String::new(), |b| format!(" = {}.win32.scd clip {no}", b.1));
-    emit(format!("KH1 sound: voice call bank {bank} no {no}{file} ({from})"));
+    if live() {
+        let from = caller();
+        let file = SORA_BANKS.iter().find(|b| b.0 == bank).map_or(String::new(), |b| format!(" = {}.win32.scd clip {no}", b.1));
+        emit(format!("KH1 sound: voice call bank {bank} no {no}{file} ({from})"));
+    }
     let f: unsafe extern "system" fn(i32, i32) -> usize = std::mem::transmute(ORIG_VOICE_CALL.load(Ordering::Acquire));
     f(bank, no)
 }
 
 unsafe extern "system" fn se_create(bank: i32, no: i32, id: i32) -> usize {
-    let from = caller();
-    if se_new(1, bank, no, id) {
+    if live() && se_new(1, bank, no, id) {
+        let from = caller();
         show_list();
         emit(format!("KH1 sound: effect create bank {bank} no {no} id {id}, {} ({from})", bank_node(bank, no)));
     }
@@ -240,8 +257,8 @@ unsafe extern "system" fn se_create(bank: i32, no: i32, id: i32) -> usize {
 }
 
 unsafe extern "system" fn se_play(bank: i32, no: i32, id: i32) -> usize {
-    let from = caller();
-    if se_new(2, bank, no, id) {
+    if live() && se_new(2, bank, no, id) {
+        let from = caller();
         emit(format!("KH1 sound: effect play bank {bank} no {no} id {id}, {} ({from})", bank_node(bank, no)));
     }
     let f: unsafe extern "system" fn(i32, i32, i32) -> usize = std::mem::transmute(ORIG_SE_PLAY.load(Ordering::Acquire));
@@ -249,9 +266,7 @@ unsafe extern "system" fn se_play(bank: i32, no: i32, id: i32) -> usize {
 }
 
 pub unsafe fn install() {
-    if !super::settings::get().sound_log {
-        return;
-    }
+    super::trace::refresh();
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     let rd32 = |at: usize| std::ptr::read_unaligned(at as *const u32);

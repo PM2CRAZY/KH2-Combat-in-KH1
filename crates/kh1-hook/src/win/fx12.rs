@@ -24,6 +24,12 @@
 //! active projection struct `+0x80`, `s, ox, oy` from KH1's constant shadow.
 //!
 //! Every failure logs once and turns the renderer off for the session.
+//!
+//! (t354) Also the debug menu's screen-space overlay (`draw_overlay`, from the frame-end hook in
+//! `debugmenu`): untextured boxes and text from a font texture kept with the model textures,
+//! drawn on top of everything KH1 drew that frame (the HUD included), no depth test. Effect
+//! textures handed over after the renderer came up (the overlay can bring it up first) are
+//! uploaded then (`late_textures`).
 
 use super::addr::Rva;
 use super::crash::readable;
@@ -656,7 +662,53 @@ unsafe fn ready<'a>(base: usize, g: &'a mut Option<Gpu>) -> Option<&'a mut Gpu> 
             }
         }
     }
+    if let Some(gpu) = g.as_mut() {
+        late_textures(gpu);
+    }
     g.as_mut()
+}
+
+/// The effect textures, when they were handed over after the renderer came up with none.
+unsafe fn late_textures(gpu: &mut Gpu) {
+    if !gpu.tex.is_empty() {
+        return;
+    }
+    let Some(textures) = TEXTURES.try_lock().ok().and_then(|mut g| g.take()) else { return };
+    if textures.is_empty() {
+        return;
+    }
+    let total: usize = textures.iter().map(|t| (t.0 * t.1) as usize).sum::<usize>().max(1);
+    let (buf, map, va) = match buffer(gpu.device, total * 4) {
+        Ok(b) => b,
+        Err(e) => return fail(format!("effect textures: {e}")),
+    };
+    let mut at = 0usize;
+    for (w, h, px) in &textures {
+        let n = (*w * *h) as usize;
+        if px.len() >= n * 4 {
+            std::ptr::copy_nonoverlapping(px.as_ptr(), (map + at * 4) as *mut u8, n * 4);
+        }
+        gpu.tex.push(TexSlot { offset: at as u32, w: *w, h: *h });
+        at += n;
+    }
+    // (The first, empty buffer stays: a frame in flight may still name it.)
+    gpu.tex_buf = buf;
+    gpu.tex_va = va;
+    log(&format!("fx: effect textures uploaded after the renderer came up ({} textures, {} KB)", gpu.tex.len(), total * 4 / 1024));
+}
+
+/// The model texture arena, made the first time it's needed; false if it couldn't be.
+unsafe fn mesh_arena(gpu: &mut Gpu) -> bool {
+    if gpu.mesh.is_none() {
+        match buffer(gpu.device, MESH_TEXELS * 4) {
+            Ok((buf, map, va)) => gpu.mesh = Some(MeshArena { buf, map, va, used: 0, slots: Vec::new() }),
+            Err(e) => {
+                fail(format!("model textures: {e}"));
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// Copies `vertices` to the ring's write point, which goes round the whole ring (24 MB): a
@@ -699,6 +751,11 @@ unsafe fn constants(r: usize, view: glam::Mat4, proj: glam::Mat4) -> ([u32; 40],
 /// KH1's current list with our targets (a direct list) or theirs (a bundle), our root signature,
 /// triangle lists, the vertices and constants 0..35 bound; and its type (0 direct, 1 bundle).
 unsafe fn begin(base: usize, r: usize, gpu: &Gpu, t: &Target, vb: &[u64; 2], k: &[u32; 40], srv: u64) -> Option<(P, u32)> {
+    // (t356) No list cached and no command buffer: KH1 isn't recording (its getter would read the
+    // null buffer: the debug menu's crash when drawn from the frame end).
+    if rd::<u64>(r + 0x5990) == 0 && rd::<u64>(r + 0x5988) == 0 {
+        return None;
+    }
     let get_list: unsafe extern "system" fn(usize, usize, usize, usize) -> usize = std::mem::transmute(base + LIST_RVA);
     let cl = get_list(r, 0, 0, 0);
     if cl < 0x10000 {
@@ -857,14 +914,8 @@ pub unsafe fn draw_mesh(base: usize, vertices: &[kh2_fx::Vertex], batches: &[Mes
     let Ok(mut g) = GPU.lock() else { return None };
     let gpu = ready(base, &mut g)?;
     let t = target(r)?;
-    if gpu.mesh.is_none() {
-        match buffer(gpu.device, MESH_TEXELS * 4) {
-            Ok((buf, map, va)) => gpu.mesh = Some(MeshArena { buf, map, va, used: 0, slots: Vec::new() }),
-            Err(e) => {
-                fail(format!("model textures: {e}"));
-                return None;
-            }
-        }
+    if !mesh_arena(gpu) {
+        return None;
     }
     let (opaque, blended) = match (gpu.pso((Mode::Alpha, true, t.has_dsv, t.samples, t.quality, true)), gpu.pso((Mode::Alpha, true, t.has_dsv, t.samples, t.quality, false))) {
         (Ok(a), Ok(b)) => (a, b),
@@ -918,4 +969,100 @@ pub unsafe fn draw_mesh(base: usize, vertices: &[kh2_fx::Vertex], batches: &[Mes
     }
     let _ = arena_buf;
     Some(t.fbi)
+}
+
+/// One rectangle of the debug overlay, in pixels of the bound frame buffer (`overlay_size`) from
+/// its top left: a plain box (`textured` false) or a piece of the font texture (`uv`: left, top,
+/// right, bottom, 0..1), in `color` (RGBA 0..1, alpha blended).
+#[derive(Clone, Copy, Debug)]
+pub struct OverlayQuad {
+    pub rect: [f32; 4],
+    pub uv: [f32; 4],
+    pub color: [f32; 4],
+    pub textured: bool,
+}
+
+/// The size (pixels) of the frame buffer the overlay draws into now, `None` before KH1 renders.
+pub unsafe fn overlay_size(base: usize) -> Option<(f32, f32)> {
+    if OFF.load(Ordering::Relaxed) {
+        return None;
+    }
+    let t = target(base + RENDERER_RVA)?;
+    let (w, h) = (rd::<i32>(t.fb + 8), rd::<i32>(t.fb + 0xC));
+    (w > 0 && h > 0).then_some((w as f32, h as f32))
+}
+
+/// Draws the debug overlay into KH1's current command list: the boxes first, then the text, no
+/// depth test, on top of everything drawn so far (from the frame-end hook, game thread). `size`
+/// is the pixel space the rectangles are in (`overlay_size`). False if nothing was drawn.
+pub unsafe fn draw_overlay(base: usize, quads: &[OverlayQuad], font: &MeshTexture, size: (f32, f32)) -> bool {
+    if OFF.load(Ordering::Relaxed) || quads.is_empty() || size.0 < 1.0 || size.1 < 1.0 {
+        return false;
+    }
+    let r = base + RENDERER_RVA;
+    let Ok(mut g) = GPU.lock() else { return false };
+    let Some(gpu) = ready(base, &mut g) else { return false };
+    let Some(t) = target(r) else { return false };
+    if !mesh_arena(gpu) {
+        return false;
+    }
+    let pso = match gpu.pso((Mode::Alpha, false, t.has_dsv, t.samples, t.quality, false)) {
+        Ok(p) => p,
+        Err(e) => {
+            fail(e);
+            return false;
+        }
+    };
+    let arena = gpu.mesh.as_mut().unwrap();
+    let font_slot = arena.slot(font);
+    let arena_va = arena.va;
+    // Boxes, then text: two runs.
+    let mut vertices: Vec<kh2_fx::Vertex> = Vec::with_capacity(quads.len() * 6);
+    let mut runs: Vec<(u32, u32, bool)> = Vec::with_capacity(2);
+    for textured in [false, true] {
+        if textured && font_slot.is_none() {
+            break;
+        }
+        let first = vertices.len() as u32;
+        for q in quads.iter().filter(|q| q.textured == textured) {
+            let [x, y, w, h] = q.rect;
+            let [u0, v0, u1, v1] = q.uv;
+            let v = |px: f32, py: f32, u: f32, vv: f32| kh2_fx::Vertex { pos: [px, py, 0.0], uv: [u, vv], color: q.color };
+            vertices.extend_from_slice(&[v(x, y, u0, v0), v(x + w, y, u1, v0), v(x, y + h, u0, v1), v(x + w, y, u1, v0), v(x + w, y + h, u1, v1), v(x, y + h, u0, v1)]);
+        }
+        let count = vertices.len() as u32 - first;
+        if count > 0 {
+            runs.push((first, count, textured));
+        }
+    }
+    if runs.is_empty() {
+        return false;
+    }
+    note_draw();
+    let (vb, n) = upload(gpu, &vertices);
+    // View = identity, projection = pixels to clip (the shader flips y): x' = 2x/W - 1, y' = 2y/H - 1.
+    let proj = glam::Mat4::from_cols(glam::Vec4::new(2.0 / size.0, 0.0, 0.0, 0.0), glam::Vec4::new(0.0, 2.0 / size.1, 0.0, 0.0), glam::Vec4::ZERO, glam::Vec4::new(-1.0, -1.0, 0.0, 1.0));
+    let mut k = [0u32; 40];
+    for (i, f) in glam::Mat4::IDENTITY.to_cols_array().iter().chain(proj.to_cols_array().iter()).enumerate() {
+        k[i] = f.to_bits();
+    }
+    k[32] = 1f32.to_bits();
+    let Some((cl, _)) = begin(base, r, gpu, &t, &vb, &k, arena_va) else { return false };
+    com!(cl, CL_SET_PSO, fn(P), pso as P);
+    for (first, count, textured) in runs {
+        if first as usize >= n {
+            continue;
+        }
+        let count = count.min(n as u32 - first) / 3 * 3;
+        let tx = if textured { font_slot.unwrap_or(TexSlot { offset: 0, w: 1, h: 1 }) } else { TexSlot { offset: 0, w: 1, h: 1 } };
+        let kb = [0f32.to_bits(), tx.offset, tx.w, tx.h, textured as u32];
+        com!(cl, CL_ROOT_CONSTANTS, fn(u32, u32, *const u32, u32), 0, 5, kb.as_ptr(), 35);
+        com!(cl, CL_DRAW, fn(u32, u32, u32, u32), count, 1, first, 0);
+    }
+    hand_back(base, r);
+    static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::Relaxed) {
+        log(&format!("debug menu: overlay drawn ({} quads, {}x{} frame buffer {}, {}x MSAA)", quads.len(), size.0, size.1, t.fbi, t.samples));
+    }
+    true
 }

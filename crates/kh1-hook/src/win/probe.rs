@@ -295,6 +295,21 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
         let now: u16 = rd(out);
         std::ptr::write_unaligned(out as *mut u16, now & !super::trace::RAW_SELECT);
     }
+    // The debug menu (`debugmenu`): L1 + R1 + Triangle opens it; while it is open (and after, until
+    // every button is let go) KH1 and KH2 see no buttons and centred sticks.
+    match super::debugmenu::pad(b_all) {
+        super::debugmenu::Hide::All => {
+            std::ptr::write_unaligned(out as *mut u16, 0);
+            std::ptr::write_unaligned((out + 2) as *mut [u8; 4], [0x80; 4]);
+            super::takeover::RAW_BUTTONS.store(0, Ordering::Relaxed);
+            super::takeover::RAW_STICKS.store(0x8080_8080, Ordering::Relaxed);
+        }
+        super::debugmenu::Hide::Triangle => {
+            let now: u16 = rd(out);
+            std::ptr::write_unaligned(out as *mut u16, now & !super::trace::RAW_TRIANGLE);
+        }
+        super::debugmenu::Hide::Nothing => {}
+    }
     // Sticks to 3 levels each, so drift doesn't flood the log.
     let q = |v: u8| -> u64 { if v < 0x50 { 0 } else if v > 0xB0 { 2 } else { 1 } };
     let key = b as u64 | q(st[0]) << 16 | q(st[1]) << 18 | q(st[2]) << 20 | q(st[3]) << 22 | ((out as u64 & 0xFFFF) << 32);
@@ -615,7 +630,7 @@ unsafe fn hit_effect_note(attack: usize, target: usize, owner: usize, rec: usize
         rd::<i8>(attack + 0xA8),
         if rd::<u32>(attack) & 0x40_0000 != 0 { "set" } else { "clear" }
     );
-    super::trace::note(&line);
+    super::trace::note_as(super::trace::cat::HIT_FX, &line);
     let new_pair = SEEN.lock().is_ok_and(|mut v| {
         let fresh = v.len() < 120 && !v.contains(&(src, group, sig));
         if fresh {

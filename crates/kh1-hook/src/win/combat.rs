@@ -1291,7 +1291,9 @@ impl Strikes {
             (true, true) => 206,
         };
         let Some(r) = self.swing_rows.as_ref().and_then(|m| m.1.get(&motion)).copied() else { return };
-        super::trace::note(&format!("swing start fx: KH1 motion {motion} (air {air} count {count} finisher {finisher}): trail {} effect {} voice {}", r.trail, r.effect, r.voice));
+        if super::trace::wants(super::trace::cat::HIT_FX) {
+            super::trace::note_as(super::trace::cat::HIT_FX, &format!("swing start fx: KH1 motion {motion} (air {air} count {count} finisher {finisher}): trail {} effect {} voice {}", r.trail, r.effect, r.voice));
+        }
         let base = BASE.load(Ordering::Relaxed);
         let cs = pose::ptr(rd::<u32>(sora + 0x14C));
         let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
@@ -2113,7 +2115,9 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     let fx_before = rd::<[u8; 3]>(obj + 0xA8);
     let flags_before = rd::<u32>(obj);
     let data_at = base + ATTACK_DATA_RVA + row.data as usize;
-    let data_words = (0..8).map(|k| format!("{:08x}", rd::<u32>(data_at + k * 4))).collect::<Vec<_>>().join(" ");
+    // (t354) Only gathered while the trace records hit effects.
+    let hit_fx = super::trace::wants(super::trace::cat::HIT_FX);
+    let data_words = if hit_fx { (0..8).map(|k| format!("{:08x}", rd::<u32>(data_at + k * 4))).collect::<Vec<_>>().join(" ") } else { String::new() };
     // KH2's hit records decide what may hit again, not KH1's hit-once bit.
     let saved = rd::<u32>(obj + 0x54);
     wr(obj + 0x54, 0u32);
@@ -2158,11 +2162,13 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
         forced.push_str(&format!(" | hit_effect_test: effect {id} on {who} {on:#x} (source {source:#x}) -> {h:#x}"));
         log(&format!("hit_effect_test: effect {id} on {who} {on:#x} (source {source:#x}) -> {h:#x}"));
     }
-    super::trace::note(&format!(
-        "hitfx: {info} | KH1 row motion {} data {:#x} fx {:02x?} (trail {} effect {} voice {}) spell-data {spell} | obj flags before {:08x} (0x400000 {}) after contact {:08x} | obj+A8 before {:02x?} after contact {:02x?} | KH1 attack data [{data_words}] | target {:#x} dmg {}{forced}{spell_fx}",
-        row.motion, row.data, row.fx, row.trail, row.effect, row.voice, flags_before, if flags_before & 0x400000 != 0 { "set" } else { "clear" }, flags_after, fx_before, fx_after,
-        TARGET.load(Ordering::Relaxed), if d == u32::MAX { "none".to_string() } else { d.to_string() }
-    ));
+    if hit_fx {
+        super::trace::note_as(super::trace::cat::HIT_FX, &format!(
+            "hitfx: {info} | KH1 row motion {} data {:#x} fx {:02x?} (trail {} effect {} voice {}) spell-data {spell} | obj flags before {:08x} (0x400000 {}) after contact {:08x} | obj+A8 before {:02x?} after contact {:02x?} | KH1 attack data [{data_words}] | target {:#x} dmg {}{forced}{spell_fx}",
+            row.motion, row.data, row.fx, row.trail, row.effect, row.voice, flags_before, if flags_before & 0x400000 != 0 { "set" } else { "clear" }, flags_after, fx_before, fx_after,
+            TARGET.load(Ordering::Relaxed), if d == u32::MAX { "none".to_string() } else { d.to_string() }
+        ));
+    }
     (d != u32::MAX).then_some(d)
 }
 

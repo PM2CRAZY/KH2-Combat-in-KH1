@@ -1,3 +1,174 @@
+### 2026-10-22: Stage 359 (testing branch: the debug menu's Weapons and Abilities pages)
+- The user: under the Stats page, a weapon and an ability page "so I can add or remove each weapon and ability".
+- **Weapons**: every Sora weapon (item kind 2 in KH1's item table) with its inventory count (`save + 0x499 + id`,
+  `docs/kh1-equipment.md` section 2; equipping changes no count): left / right add or take one (0..99, never below
+  the copies equipped across the members), Cross gives one or takes every free copy. The equipped one is marked.
+- **Abilities**: Sora's KH1 abilities (1, 2, 5..28, 53..65: not the party's 29..52, not Glide / Superglide) and ours
+  (`growth::MENU`, not KH2's Glide: the Glide style swaps those), each with its copies in his lists and how many are
+  on (`save + 0x44`, 48 bytes, bit 7 = off; High Jump and Mermaid Kick in the shared `+0x599`, 10): right adds a copy
+  (off, as KH1 learns), left takes one (an off copy first), Cross adds one or takes them all; a full list refuses.
+- What the page adds or takes out is left alone for the session by the mod's upkeep (`menu::Growth::update`): KH2's
+  abilities given by level / boss / namesake aren't given back once taken out, an added Aerial Dodge isn't held back
+  until Genie Jafar, an added Zantetsuken stays, and at `abilities = test / all` added ones of ours aren't stripped
+  (`debugmenu::ability_forced`).
+- Long pages scroll (16 rows around the cursor, the title shows the place).
+
+### 2026-10-22: Stage 358 (testing branch: the debug menu's stats reach the save too; Level)
+- The user: the Status page's Level is `exe+2DE9364` (Steam), which the decomp shows is Sora's save record's `+4`
+  (the save block `0x142DE9360` Steam, `0x16C00` bytes, written to and read from the save file), read by the
+  Status page itself (Steam `0x140312410`, `0x14031272D movzx eax, [r13+4]`, r13 = save + member x 0x74; the
+  page's EXP is the record's `+0x40`, its HP / MP / Strength / Defense / AP the Status copy's). Then: "touch saves
+  as well, and any equivalent values let our debug menu adjust with the same settings".
+- `debugmenu`'s Stats page has Level (1..100, save only) first, and every stat is written to Sora's save record as
+  well as the world block and the Status copy, by edits and by locks (every frame). The record holds HP (`+5`) and
+  MP (`+7`) as they are, and base max HP (`+6`), max MP (`+8`), AP (`+9`), Strength (`+0xA`), Defense (`+0xB`)
+  before equipment (KH1's stats function adds the weapon's and accessories' and caps Strength, Defense, AP at 100):
+  for those the record gets the value less the equipment's bonus, read from KH1's own stats function (unhooked,
+  `menu::kh1_stats`) less the record's byte, so KH1's next rebuild gives the value back. Bytes, 0..255.
+
+### 2026-10-22: Stage 357 (testing branch: the debug menu follows KH1's confirm button)
+- The user (Circle to confirm): the debug menu's confirm and back buttons follow the game's setting. KH1 keeps them
+  as pad masks, confirm at `0x140546390` (Steam `0x1405456A0`, the Config row's `CONFIRM_MASK_RVA`) and cancel at
+  `+4`, both set by `0x1402F6700` (Steam) from the setting: Circle `0x2000` / Cross `0x4000`. `debugmenu::buttons`
+  reads them each frame (Cross / Circle if they hold anything else); the hints show X or O to match.
+
+### 2026-10-22: Stage 356 (testing branch: the debug menu's crash as it opened)
+- The user's t355 log: the game crashed the frame the menu opened, in KH1's command-list getter (Steam
+  `0x1400FD238`, reading `0x84`: the renderer's command buffer `+0x5988` null). The menu was drawn from KH1's frame
+  end (`0x140109B40` Steam), and by then the field loop has already called the end of the frame's drawing (Steam
+  `0x1400FBBE0`, which closes the frame's list with `0x1400F7160`): nothing is recording.
+- The menu is drawn from a hook on that function's start instead (Steam `0x1400FBBE0`, Epic `0x1400FBD80` from the
+  table's neighbours, prologue `40 56 57 41 56 48 83 EC 40`; the field loop `0x140170D50` calls it after the HUD's
+  tasks), once a frame (KH1's frame end calls it again). The frame end keeps the menu's input and the stat locks.
+- `fx12::begin` gives up when the renderer has neither a cached list (`+0x5990`) nor a command buffer (`+0x5988`),
+  so no draw of ours can reach the getter with nothing open.
+
+### 2026-10-22: Stage 355 (testing branch: t354's build error)
+- The user's build of t354: `takeover::trace_frame`'s `trace::Row` lacked the new `cats` field (E0063). It is set to 0
+  there, as `trace::frame` fills it.
+
+### 2026-10-22: Stage 354 (testing branch: the debug menu: Trace Recorder with categories, Stats with locks)
+- The user: a debug menu opened with a button combination, drawn over the game like the command menu (the game
+  runs on), a grey box with some opacity, white text, the selected row yellow; turned on in the Config menu; pages
+  that replace the main one, Back out of them, Exit on the main one; Sora not moved by the buttons while it's open.
+  `debugmenu.rs`.
+- **Opening**: the Config menu's new Debug Menu row (Off / On, ini `debug_menu`, off by default). L1 + R1 + Triangle
+  opens it and closes it; closed that way it opens again on the page it was left on; Exit (or Circle on the main
+  page) closes it and the next open starts on the main page. While L1 + R1 are held with the menu on, KH1 doesn't
+  see Triangle.
+- **Input**: `probe::pad` hands the merged pad to `debugmenu::pad`; while the menu is open (and after it closes,
+  until every button is let go) KH1's records get no buttons and centred sticks, and KH2's `RAW_BUTTONS` /
+  `RAW_STICKS` read nothing. The menu reads the pad as pressed: D-pad up / down, left / right (repeat when held),
+  Cross picks, Circle goes back. (Controllers only: the keyboard path isn't covered.)
+- **Drawing**: a hook on KH1's frame end (`0x140109CE0 (renderer)`, Steam `0x140109B40`, prologue
+  `48 8B C4 57 48 81 EC 90 00 00 00`, from the Steam decomp and exe: `0x1400DAFF0` -> `0x140109B20` -> it, before the
+  resolve, full-screen copy and present) draws it over everything that frame (HUD included) with
+  `fx12::draw_overlay`: screen-space quads (view identity, a pixels-to-clip projection), no depth test, alpha
+  blended; text from a font atlas (DejaVu Sans Mono Bold, 14 x 28 cells, `debugfont.rs`, run-length coded) kept with
+  the model textures. `fx12` also uploads effect textures handed over after the renderer came up (the overlay can
+  bring it up first: `late_textures`).
+- **Trace Recorder page**: Trace (Off / On / Always), Seconds (1..120, steps freely), Sound Log (On / Off), and
+  Categories: six groups (KH1 Actor, KH2 Controller, Pose, Camera, Input & Config, Events) whose rows turn all of
+  the group on or off with left / right and open with Cross to set each of the 13 items (`trace::ITEMS`,
+  `GROUPS`). Every change is written to the ini (`trace`, `trace_seconds`, `sound_log`, new `trace_*` keys, all on
+  by default) and is live at once (`trace::set_*`; `trace::refresh` takes the ini's again when it reloads).
+- **Trace categories**: a category that is off isn't gathered (the camera's `record`, the trace's draw / feet
+  reads, the feet hook, KH2's side and Form in `takeover::trace_frame`, the hit-effect lines' formatting) and its
+  columns leave the CSV (the header is built from the categories; each row keeps the categories it was made
+  with, so a dump across a change writes empty cells where a row lacks a column). Log lines, hit-effect lines
+  and the sound log's lines are separate categories of the events column (`log_as`, `trace::note_as`).
+- **Sound log**: its hooks go in whatever the ini says, and write only while it's on (`trace::sound_log`), so it
+  switches in game.
+- **Stats page**: Sora's HP, Max HP, MP, Max MP, Strength, Defense, AP (left / right change, Cross locks). From the
+  Steam decomp of KH1's stats function (`0x1402A5130`, Epic `0x1402A2FA0`): the stats block's `+0x3C` HP (at most
+  max HP), `+0x40` max HP, `+0x44` MP, `+0x48` max MP, `+0x4C` Strength, `+0x50` Defense, `+0xE4` AP, `+0xC8` the
+  save record it came from; KH1 fills the Status menu's copies at `0x142E94BC0 + member * 0x100` (Steam
+  `0x142E941E0`, `0x9E0` below as its neighbours in the table) and Sora's world block (actor `+0x6C`) from the save
+  and copies his HP / MP back into the save after. Changes go to the world block and the Status menu copy, never
+  the save; locked stats are written to both every frame, after KH1's stats function fills a block for Sora
+  (`menu::stats` -> `debugmenu::lock_stats`) and after Valor's stat step (`valorstats::step`). HP and MP stay within
+  their maximums; a locked HP above 0 clears the block's dying flag (bit 4 of `+0`, as KH1's HP change does). The
+  locks are not kept in the ini.
+
+### 2026-10-22: Stage 353 (testing branch: KH2's slots added where KH1 binds Sora's motion sets)
+- The user's t352 log: the set on Sora's actor in Traverse Town is the world's (about 88 slots, the combo at
+  61-67), not his own 118, and its request table has 0xFFF for what it lacks. From the decomp (the user: look
+  first): his own set is bound at the actor's creation by `0x140287E40` (Epic `0x140285CC0`), a world's on
+  entering it by `0x14029E850` -> `0x1402886F0` (Epic `0x140286570`, from the neighbours, unchecked: the prologue
+  test keeps it unhooked if wrong), his own saved at `+0x1E0`. `docs/kh1-anim-slots.md` §2.
+- Both binds hooked (`kh2slots::install`): after KH1 binds a set onto Sora's actor (its model 293 bones), the
+  slot and request handles become ours for that set, made once per set: its own slots (counted as the words before
+  its first motion: no end marker in memory), ours right after; its request table with the requests our moves stand
+  in for pointed at ours by style, only where the set's own entry holds the KH1 motion ours stands in for (by
+  signature). Each set logged ("Sora's set ...: N slots of its own, ours at ...").
+- `frame` no longer swaps or checks against the file: it extends `+0x1D0` and `+0x1E0` if a bind came before our
+  motions were built, sets the redirects by style in every set, and ticks. Our moves are found by their motion's
+  address (`current`), so `kh1_time`, `tick` and the trace work whatever slot number the set gives them.
+- Removed: `kh1_own`, `describe_slots`, the per-frame table copy and the 118-slot assumption.
+
+### 2026-10-22: Stage 352 (testing branch: KH1's slot table taken as its 118 entries; how KH1 lays it out, logged)
+- The user's t351 log: KH1's slot table on Sora's actor has empty entries 80-88, 91, 104-107, 116, and no end marker
+  after entry 117 (entry 118 = 02000000, not a handle; the "135 entries" counted data past the table). The decomp
+  (`0x140287E40`, `0x1401D6230`): the actor's `+0x1D4` is the bound file's MMTN `+0x30`, its list at MMTN `+0x40`.
+- `kh1_own` no longer asks for an end marker: the table is taken as the file's 118 entries (ours keeps its own end).
+  Once per table it logs (`describe_slots`) which entries are empty, which hold another file slot's motion (by
+  `pose::file_slot_of_motion`, the signature `slot_of` uses), which hold something not in Sora's file, and the
+  words after entry 117. The request table test stays.
+
+### 2026-10-22: Stage 351 (testing branch: KH2's slots go on Sora with KH1's empty slot entries)
+- The user's t350 log: Sora's actor refused because KH1's slot table (in memory) has entry 80 of 118 empty, though
+  the file has a motion there (`kh1_own`'s first test). The request table wasn't reached.
+- `kh1_own` no longer requires every one of KH1's 118 entries: empty ones are copied as they are (logged once, which
+  ones); only an all-empty table is refused. The slot table length and request table tests stay, with their reasons.
+- Ours keeps KH1's own entries up to date each frame from KH1's table on the same actor (`Placed::kh1_slots`), so an
+  entry KH1 fills after ours was made isn't left empty in ours.
+
+### 2026-10-22: Stage 350 (testing branch: why KH2's slots aren't put on Sora, logged)
+- The user's t349 run: all seven KH2 motions baked (KH1's FK within 0.22-0.30 units of the poses), but no slot of
+  ours ever played: `kh2slots::frame` found Sora's actor "showing another motion set" every frame (logged 5 times,
+  never "on Sora's actor"), so KH1 played its own 98-104 with KH2's swings drawn over them (trace `draw_route`
+  follow, `Swing`). Tier A never ran in game either.
+- `kh1_own` now says which test fails: the tables unreadable (handles and addresses), an empty slot table entry,
+  the slot table's length if not 118 (with entry 118), or the request table's entries that differ from the file
+  (count, first 12 with file and memory values). Each new reason is logged ("not taken (...)"), 40 at most.
+
+### 2026-10-22: Stage 349 (testing branch: KH2's slot motions baked into KH1 motions, tier B)
+- The user: bake KH2's animations into KH1 Sora's motions (`docs/kh1-anim-slots.md` §1.6, §3.1), a raw bake first
+  (none of our corrections: Keyblade teeth-up, `flip_weapons`, our feet, `held`), behind an ini switch, then test
+  in game. The Keyblade is part of KH1 Sora's skeleton (bones 280-292, its mesh skinned onto them), so KH2's body
+  and Keyblade motions bake into the one KH1 motion; Valor's second Keyblade later.
+- `kh1_data::bake::baked(template, frames, events, skeleton, poses)`: KH1 model-space poses per frame -> a KH1
+  motion on the retimed template. Joint words plain FK (word 0; bit 25 where nothing moves; KH1's skipped leaves
+  keep theirs), each bone's local as Euler X->Y->Z (continuous across frames) and translation, bind values left
+  out, constants for held values, linear keys reduced within 0.001 rad / 0.02 units; the template's helpers and
+  helper channels kept (H10's travel moves him as in tier A); KH1's FK from the channels checked against the
+  poses (logged as "within N units").
+- `pose::Baker` (loader thread): KH1's skeleton from `xa_ex_0010.mdls`, the retarget with the battle / field idles
+  as rest, `secondary`; `poses` draws each frame as a tier A slot does (KH2's body and Keyblade, root travel out,
+  retargeted, KH2's hair, hood and keychain).
+- `kh2slots::prepare(mset, kh2, bake)`: with `kh1_bake = on` (new ini key, default on) each slot's motion is the
+  baked one (`Move::baked`), else the retimed template as before; a failed bake falls back to the template.
+- `pose::follow`: a baked slot draws nothing (KH1's own pass shows it); KH2's pose at KH1's time is still noted
+  for KH2's effects on his bones (`kh2fx`, `reflect`). Trace `draw_route` "baked" with its motion and frame.
+- Legs are FK in this first bake: no KH1 foot lift on slopes during these moves (tier A had none there either).
+- Nothing tested in game; nothing compiled here (no crates in this environment).
+
+### 2026-10-22: Stage 348 (testing branch: t347's trace row builds again)
+- t347 didn't build: `takeover`'s `trace::Row` initializer lacked the new `feet` field (filled by `trace::frame`
+  from `pose::take_feet`, as `draw` and `cam` are). Given its default there.
+
+### 2026-10-22: Stage 347 (testing branch: the trace shows what KH1's own skeleton pass does to his feet)
+- The user, before the tier B bake (`docs/kh1-anim-slots.md` §3.1): test in game whether KH1 bends Sora's legs
+  onto a slope, since a plain-FK baked slot turns KH1's two-bone leg IK, and with it its ground lift, off.
+  From the decomp (§1.6): `instance + 0x14` bits 0-1 turn the ground lift on; bit `0x200000` is set when a
+  foot target was lifted onto the floor.
+- `pose::note_feet`, straight after KH1's pass (`0x140391E20` or `0x140392710`) and before anything of ours,
+  for Sora's own instance while the trace runs: that word and the ankles' heights (bones 19 and 45).
+- Trace columns after `kh2cam_lock_dist`: `ik_ground_on` (bits 0-1), `ik_lifted`, `ik_flags`, `foot_r_up`
+  and `foot_l_up` (each ankle above `floor_up`, the floor under his centre), `pose_path` (which pass ran since
+  the last row, with counts; empty columns when KH1 didn't pose him).
+- The test: Insert to "off (KH1's own animation)", stand side-on on a slope or stairs, Select + Triangle.
+
 ### 2026-10-22: Stage 346 (testing branch: KH2's pose and effects once per game frame, the game's own frame delta)
 - The user: KH2's side should run on the game's own delta (30 fps base, 60 fps and uncapped on PC), and the
   hook is heavy on low-spec hardware (at 30 fps every KH2 step ran twice, at a hitch up to four times).
