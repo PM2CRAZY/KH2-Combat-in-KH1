@@ -434,9 +434,9 @@ unsafe extern "system" fn physics(actor: usize) {
         // (At KH2's 60 Hz: `steps`.)
         // (Our KH2 slot playing in KH1's motion table, `kh2slots`: its effects go on with it.)
         let motion = super::kh2slots::fx_motion().unwrap_or(super::kh2fx::NO_MOTION);
-        for _ in 0..steps() {
-            super::kh2fx::tick(motion);
-        }
+        // (One tick of this frame's delta, as the game takes one update of delta 2 at 30 fps:
+        // the effect clock adds the delta up itself, `kh2_fx::Effects::tick`.)
+        super::kh2fx::tick(motion, steps() as f32);
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
@@ -2671,7 +2671,12 @@ unsafe fn takeover(actor: usize) -> bool {
     let (mut invulnerable, mut guarding) = (false, false);
     let mut back = None;
     let mut last: Option<Output> = None;
+    // Steps run this frame, and where Sora's pose was last asked for (the pose and the effects
+    // are worked out once per game frame, after the steps).
+    let mut ran = 0u32;
+    let mut anim_pos = [0.0f32; 3];
     for step in 0..steps_now {
+        ran += 1;
         let input = if step == 0 {
             input
         } else {
@@ -3002,7 +3007,15 @@ unsafe fn takeover(actor: usize) -> bool {
         // (In a Drive Form always the battle stance, Keyblades out, as KH2's forms: the user, "dont
         // let soras keyblades disappear in valor form".)
         d.anim.field = !battle && !lingering && !super::form::in_form();
-        d.anim.update(&out, &d.character, [q[0], -q[1], q[2]]);
+        // (The game takes one update of delta 2 at its 30 fps and poses Sora once; our extra 60 Hz
+        // steps keep the track and the blend clock but leave the pose to the frame's last step,
+        // unless a hit or guard window is open, which reads the Keyblade's place.)
+        anim_pos = [q[0], -q[1], q[2]];
+        if step + 1 < steps_now && out.hitboxes.is_empty() && out.guard_boxes.is_empty() {
+            d.anim.update_deferred(&out, &d.character, anim_pos);
+        } else {
+            d.anim.update(&out, &d.character, anim_pos);
+        }
         kh2_footsteps(actor, &out, &d.anim);
         keyblade(base, actor, d.anim.weapons_out(), &mut d.logged);
         GRIP.store(d.anim.weapons_out(), Ordering::Relaxed);
@@ -3039,7 +3052,6 @@ unsafe fn takeover(actor: usize) -> bool {
         super::form::shots_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock);
         super::form::after_step(&mut d.drive, actor, rd::<u32>(base + BATTLE_RVA) & 1 != 0);
         super::kh2sound::tick();
-        super::kh2fx::tick(out.motion);
         {
             // A KH2 swing starting: a new attack motion, or the same one again from its start.
             let attacking = matches!(out.state, StateName::Attack);
@@ -3107,6 +3119,10 @@ unsafe fn takeover(actor: usize) -> bool {
         }
     }
     let Some(mut out) = last else { return false };
+    // The pose of a last step that was left (the loop ended early), and KH2's effects by the
+    // steps run.
+    d.anim.settle(&d.character, out.facing, anim_pos);
+    super::kh2fx::tick(out.motion, ran as f32);
     out.invulnerable |= invulnerable;
     out.guarding |= guarding;
     d.last_out = Some(out.clone());

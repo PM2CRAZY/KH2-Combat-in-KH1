@@ -165,6 +165,104 @@ to read them:
 windows). The glide is 75..78. At Glide = KH2, KH2's glide was never drawn on KH1's glide, and
 four of KH1's attack motions were drawn with KH2's glide instead.
 
+### 1.6 How a motion becomes bones (decomp, for the tier B bake)
+
+Read from the user's Ghidra export of the Steam exe (`DECOMPS/KH1 STEAM C DECOMP.c`) and
+checked against `xa_ex_0010.mset`. Steam addresses first. The Epic one is in brackets: the
+whole region sits 0x1B0 lower on Steam, and `steam_map.in` confirms this for the two functions
+it lists.
+
+**The pose pass, `0x140391C70` [`0x140391E20`] `(world, instance, time, motion)`:**
+
+1. **World matrix.** The world matrix's row scales are split off (`0x142EF2F60..68`) and its
+   translation is moved aside (`0x142EF2F50..58`). Rows 1 and 2 are negated (y-down), and the
+   result goes into **helper matrix 0** (`0x142EF1F50`, 0x40 apart).
+2. **New motion.** When the motion is not the one playing (`instance+8`), `0x14038F550`
+   [`0x14038F700`] runs:
+   - every bone's sampled channels (`+0x1B0`) are reset to the **bind** (the mdls bone table:
+     scale `+0`, rotation `+0x10`, translation `+0x20`);
+   - the motion's **constant channels** (`+0x34`/`+0x38`) are written over that;
+   - every bone with joint-word **bit 25** has its local matrix built **once** here.
+   A channel that has no keys therefore stays at the bind.
+3. **Keyed channels.** Each keyed channel is sampled at `time × 256` (`0x14038F820`
+   [`0x14038F9D0`]; key time `>> 8` is in 1/256 frames, as `kh1_data::mset` documents) into the
+   bone's sampled slot:
+   - kinds 1–3: scale x, y, z at `+0x00`;
+   - kinds 4–6: rotation at `+0x20`, wrapped to ±π;
+   - kinds 7–9: translation at `+0x30`.
+
+   The channel's kind byte also says what happens outside the keys: bits 4–5 before the first
+   key, bits 6–7 after the last; 2 repeats, 0 or 1 holds.
+4. **Helper channels.** The helper channels are sampled into the helper table (`+0x30`, 40
+   bytes each: scale `+0`, parent `+0xC`, rotation `+0x10`, translation `+0x1C`). Helper `k`
+   becomes matrix `k`: its parent's matrix times its own (scale, Euler X→Y→Z, translation),
+   for `k ≥ 1`. Entry 0 is unused, because matrix 0 is the world.
+5. **Root travel.** The **last helper's** translation (H10 on Sora), times the world scale, goes
+   to `instance+0x100..0x108`. `instance+0xF0..0xF8` gets the world position plus that. The body
+   is not parented to H10. **This is where KH1's root travel lives, not bone 0.** Who reads
+   `+0x100` / `+0xF0` is still **open**.
+6. **Bones.** `0x1403900B0` [`0x140390260`] builds the bones (below).
+7. **Events.** Event flags go to `instance+0x14` (types `0x10000..0x10003`, 0, `0x50000`,
+   `0x70000`).
+8. **Translation back.** The world translation is added back to every bone's matrix (`+0x1B4`).
+
+**The bone pass, `0x1403900B0` [`0x140390260`]:** it walks bones in order. The parent comes from
+the mdls bone table (`+0x2C & 0x3FF`; `0x3FF` = helper matrix 0). The motion's **joint word**
+(`+0x14`, one `u32` per bone) decides how each bone is placed:
+
+| Bits | Meaning |
+|---|---|
+| 26 (`0x4000000`) | **Skip.** The bone's world matrix isn't written. |
+| 25 (`0x2000000`) | **Static.** The local matrix built at motion start (step 2) is kept. Keys on the bone are ignored. |
+| 24 (`0x1000000`) | Parented to helper matrix 0 (the world), not to its parent bone. |
+| 23 (`0x800000`) | Keep the position already in `+0x1B4`. |
+| 21–22 (`0x600000`), mode | 0 FK. 1 a one-bone aim. 2 a two-bone IK with bend flag 0 (legs). 3 the same IK with bend flag 1 (arms). |
+| 0–1 (FK mode), `lo` | 0 Euler X→Y→Z from the sampled rotation and translation (`0x1401DB430`: identity, then X, Y, Z, then the translation). 1 aim at helper `A`, rolled by the sampled rotation x. 2 copy helper `A`'s rotation. |
+| 2–10, 27 (as bit 9), `A` | Helper index for `lo` (1-based: `A` = matrix `A−1`). |
+| 11–19, 28 (as bit 9), `P` | Position from helper `P` (1-based). |
+
+- **Mode 1 (aim):** bone `i` aims at helper `P` of bone `i+1`'s word, at bone `i+1`'s bind
+  length. Bone `i+1` gets its bind offset.
+- **Modes 2 and 3 (two-bone IK):** the solver is `0x14038FC20` [`0x14038FDD0`]. It poses bones
+  `i` and `i+1`. The target is helper `P` of bone `i+2`'s word, the twist is bone `i`'s sampled
+  rotation x, and the pole is helper `A` when `lo = 3`.
+- **Ground lift:** with `instance+0x14 & 3`, a mode 2 bone listed in the model header's
+  `+0x90..+0x9C` (bone + 1) casts down (`0x140193230`). If the ground is above the target, the
+  target is lifted onto it, and `instance+0x14 |= 0x200000`. **This is KH1's foot IK.**
+- **Head look-at:** with `instance+0x14 & 0xC`, `0x140391860` [`0x140391A10`] turns the head
+  bone toward `instance+0xE0`, weighted by `+0xEC`. The head bone is the model header's `+0x20`,
+  else `+0x10`. The bone pass clears bit 25 on that bone every frame, so the turn always lands.
+  **This works in FK too.**
+
+**Sora's rig, as the joint words show it.** The words agree across 107 of 118 motions; the
+others differ only in helper numbers and the static bit. KH1 Sora is mostly **driven by 11
+helpers**, not by bone keys:
+
+| Bones | Word | What it does |
+|---|---|---|
+| 0 | `lo2 A4, P4` | Root: H3's rotation and position. H3 is the pelvis control under H2, the centre at 92.7 high. |
+| 1 | `lo2 A6` | H5's rotation |
+| 2 → 3 | mode 1; 3 has `P6` | Spine aims at H5 |
+| 16, 17–18, 19, 20 | aim H9; mode 2; `P10` keep pos, world parent; copy H9 | One leg: thigh aims at the foot helper H9, two-bone IK to H9, the foot takes H9's turn |
+| 42, 43–44, 45, 46 | the same with H8 | Other leg |
+| 68, 69 → 70 | copy H6; mode 1 to H6 | Chest and neck to the head helper H6 |
+| 92, 93–94, 95 | aim H4; mode 3; `P5` | Right arm (−x): two-bone IK to the hand helper H4 |
+| 197, 198–199, 200 | aim H7; mode 3; `P8` | Left arm: IK to H7 |
+| 280–292 | FK, static or keyed | **The Keyblade.** Grip 280, blade and chain 281–292. KH1's Keyblade mesh is skinned straight onto these (§1.4 of `kh1-weapon-second.md`), so it moves with whatever these bones do. |
+| 9, 15, 25, 29, ... | skip | Tips and end bones. Never written. |
+| the rest | FK, static or keyed | Fingers, hair, hood, face and cloth |
+
+Helper parents: H1 is under the world. H2 (centre) and H10 (travel) are under H1. H3 (pelvis
+control), H8 and H9 (feet, about 75 below the centre) are under H2. H4 and H7 (hands), H5 and
+H6 are under H3.
+
+**The blend path, `0x140392560` [`0x140392710`]** (`pose.rs`'s `pose_ik`):
+- It blends two stored pose snapshots (`instance+0x1C4` / `+0x1C8`) by `param_3`.
+- It then re-solves the aims and two-bone IKs in a list at `instance+0x1CC` (types 1 / 2 / 3,
+  with targets kept in the list), with the same ground lift.
+- Which motion's IK that list holds while KH1 blends into or out of one of our slots is
+  **open**. The check: log it in game while `+0x168` is our slot.
+
 ## 2. Adding slots
 
 | Way | Verdict |

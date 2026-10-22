@@ -99,8 +99,19 @@ KH1's ability menu (`growth.rs`; `abilities = kh1`) holds both games' abilities:
   (`shared::physics`) scale by the frame step. Steering's keep and drag (per KH2 tick, two 60 Hz
   frames) are raised to half its power.
 - **KH2's controller:** whole 60 Hz steps a game frame (`takeover::steps`: 1 at 60 fps, 2 at 30, at
-  most 4, a fraction carried over). Each step runs the controller, the animation (`RigAnim`),
-  hits, guard windows, effects and sounds. Presses go to the first step.
+  most 4, a fraction carried over). Each step runs the controller, KH1's mover, hits, guard
+  windows and sounds. Presses go to the first step. The Keyblade's and Sora's **pose** is worked
+  out once a game frame (`RigAnim::update_deferred` / `settle`: the earlier steps keep the track
+  and the blend clock, and draw nothing unless a hit or guard window is open), and KH2's
+  **effects** take the frame's delta in one tick (`kh2fx::tick(motion, delta)`; the effect clock
+  adds it up as the game's does).
+- **The game's own frame step** (Steam exe, from the Ghidra decomp): the delta
+  `0x140717480` is a whole number of 60 Hz units, never fractional. The logic callback
+  (`FUN_140154700`, ~59.94 Hz) is paced by a timer thread; the main thread waits until `interval`
+  of them have come (interval 2 when the fps setting is exactly 30.0, else 1) and takes
+  `delta = callbacks since the last update` (clamped to 6.0). So the game takes **one** update of
+  delta 2.0 at its 30 fps base, where we run two 60 Hz steps; higher or uncapped frame rates only
+  add presents between logic callbacks. See the project note `kh2-frame-delta.md`.
 - **Counted in 60 Hz frames** (`takeover::TICKS`): the hair and cloth swing, `hurt`'s re-hit grace,
   the cut windows of KH1's moves, a form's cast clock.
 

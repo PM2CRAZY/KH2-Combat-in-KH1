@@ -109,6 +109,8 @@ pub struct RigAnim {
     /// Motions shown as another, looping (`(motion, shown)`): a form whose clip for a motion is
     /// only Sora's own (Valor's landing is his, without the Keyblade) shows its stance instead.
     pub stand_in: Vec<(u16, u16)>,
+    /// The track moved on by `update_deferred` and the pose not yet worked out (`settle`).
+    stale: bool,
 }
 
 /// Movement motions that keep the weapons put away out of combat. Attacks,
@@ -152,7 +154,7 @@ impl RigAnim {
     pub fn new(rig: Arc<Rig>) -> RigAnim {
         let bones = kh2_anim::Pose::bind(&rig.skeleton).bones;
         let weapons = rig.weapons.iter().map(|w| kh2_anim::Pose::bind(&w.skeleton).bones).collect();
-        RigAnim { rig, track: None, bones, weapons, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT, field: false, queued_blend: blend::QUEUED, stand_in: Vec::new() }
+        RigAnim { rig, track: None, bones, weapons, to_world: Mat4::IDENTITY, object: Mat4::IDENTITY, blend_from: None, blend_t: 1.0, blend_len: blend::DEFAULT, field: false, queued_blend: blend::QUEUED, stand_in: Vec::new(), stale: false }
     }
 
     /// The keyframes a track plays: the field variant when it asks for one.
@@ -234,9 +236,37 @@ impl RigAnim {
 
     /// Advances one 60 Hz frame from the controller's output.
     pub fn update(&mut self, out: &Output, character: &Character, pos: [f32; 3]) {
+        if self.advance(out, character) {
+            self.render(character, out.facing, pos);
+        }
+    }
+
+    /// As `update`, but the pose (the clip's evaluation, the blend and the weapons') is left for
+    /// `settle`: the track and the blend clock move on as they would, so a host that steps
+    /// several 60 Hz frames in one game frame (the game itself takes one update of delta 2 at
+    /// its 30 fps) works the pose out once, for the last of them. `pose` stays the last one
+    /// worked out until then.
+    pub fn update_deferred(&mut self, out: &Output, character: &Character, pos: [f32; 3]) {
+        if self.advance(out, character) {
+            self.stale = true;
+            self.object = Mat4::from_rotation_translation(Quat::from_rotation_y(out.facing), Vec3::from(pos));
+            self.to_world = self.object;
+        }
+    }
+
+    /// Works out the pose a run of `update_deferred` calls left (a no-op when it is current).
+    pub fn settle(&mut self, character: &Character, facing: f32, pos: [f32; 3]) {
+        if self.stale {
+            self.render(character, facing, pos);
+        }
+    }
+
+    /// The track for this frame's output, and the blend's start and clock. False when the rig has
+    /// no motion for it (nothing changes).
+    fn advance(&mut self, out: &Output, character: &Character) -> bool {
         let mut track = self.pick(out);
         let rig = self.rig.clone();
-        let Some(m) = Self::motion_for(&rig, track.motion, track.field).or_else(|| self.track.and_then(|t| Self::motion_for(&rig, t.motion, t.field))) else { return };
+        let Some(m) = Self::motion_for(&rig, track.motion, track.field).or_else(|| self.track.and_then(|t| Self::motion_for(&rig, t.motion, t.field))) else { return false };
         if !rig.motions.contains_key(&track.motion) {
             track = self.track.unwrap_or(track);
         }
@@ -288,6 +318,19 @@ impl RigAnim {
             }
         }
         self.track = Some(track);
+        // (The blend's clock: one 60 Hz frame, applied by `render`.)
+        if self.blend_from.is_some() {
+            self.blend_t += 1.0;
+        }
+        true
+    }
+
+    /// The pose of the current track (with its blend and the weapons'), in object space.
+    fn render(&mut self, character: &Character, facing: f32, pos: [f32; 3]) {
+        self.stale = false;
+        let rig = self.rig.clone();
+        let Some(track) = self.track else { return };
+        let Some(m) = Self::motion_for(&rig, track.motion, track.field) else { return };
 
         // Root motion already moved the character; take the clip's current
         // root offset out of the pose so everything is in object space (this
@@ -309,7 +352,6 @@ impl RigAnim {
         let mut bones: Vec<Mat4> = pose.bones.iter().map(|b| unroot * *b).collect();
         let mut weapons = self.weapon_poses(&rig, track, &bones);
         if let Some((fb, fw)) = &self.blend_from {
-            self.blend_t += 1.0;
             let w = (self.blend_t / self.blend_len).min(1.0);
             blend(fb, &mut bones, w);
             for (to, from) in weapons.iter_mut().zip(fw) {
@@ -321,7 +363,7 @@ impl RigAnim {
         }
         self.bones = bones;
         self.weapons = weapons;
-        self.object = Mat4::from_rotation_translation(Quat::from_rotation_y(out.facing), Vec3::from(pos));
+        self.object = Mat4::from_rotation_translation(Quat::from_rotation_y(facing), Vec3::from(pos));
         self.to_world = self.object;
     }
 

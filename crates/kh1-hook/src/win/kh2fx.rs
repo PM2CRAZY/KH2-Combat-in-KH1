@@ -538,17 +538,18 @@ pub fn event(motion: u16, kind: EventKind) {
     }
 }
 
-/// One game frame of KH2's controller: KH2's motion now.
 /// `tick`'s motion while KH1 has Sora: no KH2 motion (effects bound to one end).
 pub const NO_MOTION: u16 = u16::MAX - 1;
 
-pub fn tick(motion: u16) {
+/// One game frame of KH2's effects: KH2's motion now, and the frame's delta in 60 Hz frames (1.0
+/// at 60 fps, 2.0 at 30, like the game's own frame delta; the effect clock adds it up).
+pub fn tick(motion: u16, delta: f32) {
     let Ok(mut g) = STATE.lock() else { return };
     let Some(s) = g.as_mut() else { return };
-    step(s, Some(motion));
+    step(s, Some(motion), delta);
 }
 
-fn step(s: &mut State, motion: Option<u16>) {
+fn step(s: &mut State, motion: Option<u16>, delta: f32) {
     if let Some(m) = motion {
         if m != s.motion {
             for (h, from, ends) in &s.running {
@@ -576,15 +577,15 @@ fn step(s: &mut State, motion: Option<u16>) {
             sp.fx.set_camera(&cam);
         }
     }
-    s.fx.tick(1.0, &mut |c| bone(c, tip));
+    s.fx.tick(delta, &mut |c| bone(c, tip));
     for sp in s.spell.iter_mut().flatten() {
-        sp.fx.tick(1.0, &mut |c| bone(c, tip));
+        sp.fx.tick(delta, &mut |c| bone(c, tip));
     }
     if let Some(wp) = s.weapon.as_mut() {
         if let Some((view, _)) = unsafe { fx12::camera(BASE.load(Ordering::Relaxed)) } {
             wp.fx.set_camera(&Camera::from_view(view));
         }
-        wp.fx.tick(1.0, &mut |_| blade(tip));
+        wp.fx.tick(delta, &mut |_| blade(tip));
     }
     let fx = &s.fx;
     s.running.retain(|(h, _, _)| fx.is_running(*h));

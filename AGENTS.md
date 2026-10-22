@@ -1,3 +1,21 @@
+### 2026-10-22: Stage 346 (testing branch: KH2's pose and effects once per game frame, the game's own frame delta)
+- The user: KH2's side should run on the game's own delta (30 fps base, 60 fps and uncapped on PC), and the
+  hook is heavy on low-spec hardware (at 30 fps every KH2 step ran twice, at a hitch up to four times).
+  From the Ghidra decomp of the Steam exe (`FUN_140154740`, `FUN_140154700`, the pacing thread at ~line
+  255080; project note `kh2-frame-delta.md`): the delta (`0x140717480`) is always a whole number of 60 Hz
+  units, one update of delta 2.0 at the 30 fps base, no fractional delta at higher or uncapped rates (those
+  only add presents between logic callbacks, ~59.94 Hz at most).
+- Kept: the controller, KH1's mover, hits, guard windows and sounds still step in whole 60 Hz frames
+  (`takeover::steps`), so no window is skipped and KH2's moves take the same time at either frame rate.
+- **Pose once per game frame** (`kh2-rig` `RigAnim::update_deferred` / `settle`, `takeover`): a step before
+  the frame's last keeps the animation's track and blend clock moving but doesn't evaluate the clip, blend or
+  weapons; the last one (or `settle` after an early end of the steps) does. A step with a hit or guard window
+  open still evaluates (hits read the Keyblade's place). `update` is `advance` + `render`, the same as before.
+- **Effects take the frame's delta** (`kh2fx::tick(motion, delta)`, `takeover::physics`): one tick of `steps()`
+  60 Hz frames instead of that many ticks of 1.0 (`kh2_fx::Effects::tick` adds the delta up as the game's
+  effect clock does); KH2's frames tick after the steps, with the steps run.
+- Nothing tested in game; the load at 30 fps should drop (one pose and one effect pass a frame instead of two).
+
 ### 2026-10-22: Stage 345 (testing branch: KH2's spells hit with the KH1 spell's own hit effect)
 - The user: KH2's moves' hits only ever show the plain Keyblade effect. From the user's Ghidra export of the
   Steam exe (project notes `kh1-hit-effects.md`): KH1's hit spark comes from the attack object's effect list
