@@ -79,6 +79,19 @@ pub unsafe fn swing_grunt(actor: usize) {
     play(actor, SWING_GROUP);
 }
 
+/// Sora's combo finisher shouts (KH1's group 5), and the air finishers' (group 6).
+pub const FINISHER_GROUP: i32 = 5;
+pub const AIR_FINISHER_GROUP: i32 = 6;
+
+/// One of his finisher shouts, at random (KH1's own pick of group 5, or 6 in the air): a KH2
+/// finisher of his own that KH1 has no line for (Reflect cast as the combo's finisher, `reflect`).
+pub unsafe fn finisher(actor: usize, air: bool) {
+    static N: AtomicU32 = AtomicU32::new(0);
+    let group = if air { AIR_FINISHER_GROUP } else { FINISHER_GROUP };
+    note(&N, || format!("a finisher shout (group {group})"));
+    play(actor, group);
+}
+
 /// "Give me strength!" (the user: when he changes into a Drive Form).
 pub unsafe fn give_me_strength(actor: usize) {
     static N: AtomicU32 = AtomicU32::new(0);

@@ -303,6 +303,9 @@ struct Action {
     brake: f32,
     /// Ground attack lunge speed (until the first hitbox opens).
     lunge: f32,
+    /// The action button has been let go since the action began (a Dodge Roll's quick-run
+    /// check wants it held all along: a second press is no hold).
+    let_go: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -454,6 +457,13 @@ pub struct Character {
     hit: bool,
     /// The next swing goes on with the combo (`set_combo_state`: after a spell).
     combo_carry: bool,
+    /// An air swing ended with him still in the air (`Some(it was a finisher)`): the air combo
+    /// is still going until he lands, as KH2's air rows queue the fall (`next_motion` 4) in the
+    /// attack rather than ending it. A press in the fall counts on from it, and after the air
+    /// combo's last finisher nothing new starts until the landing (the KH1 port's player: Aerial
+    /// Spiral, a jump row, lifted him toward an airborne foe on every press and the count
+    /// restarted from each fall, so the air combo never ended).
+    air_combo: Option<bool>,
     /// Frames since an attack last played (0 while one does): a spell cast this soon after a
     /// swing on the ground still comes mid-combo (`combo_live`).
     since_swing: u32,
@@ -592,6 +602,7 @@ impl Character {
             get_up: None,
             hit: false,
             combo_carry: false,
+            air_combo: None,
             since_swing: u32::MAX,
             cast_finisher: false,
             carry_finisher: false,
@@ -1306,7 +1317,7 @@ impl Character {
         self.cast_hold = None;
         self.scripted_next = None;
         self.swing_counter += 1;
-        self.mode = Mode::Action(Action { kind, motion, frame: 0, swing: self.swing_counter, timer: 0.0, brake: 1.0, lunge: 0.0 });
+        self.mode = Mode::Action(Action { kind, motion, frame: 0, swing: self.swing_counter, timer: 0.0, brake: 1.0, lunge: 0.0, let_go: false });
     }
 
     fn start_arc(&mut self, height: f32) {
@@ -1362,20 +1373,26 @@ impl Character {
             _ => (None, false),
         };
         let in_attack = current_motion.is_some();
-        let carry = std::mem::take(&mut self.combo_carry);
+        // An air swing that ended in the fall (`air_combo`): the air combo goes on from it, and
+        // after its finisher nothing starts before the landing.
+        let air_combo = if self.airborne && !in_attack { self.air_combo } else { None };
+        if air_combo == Some(true) && !self.combo_carry {
+            return false;
+        }
+        let carry = std::mem::take(&mut self.combo_carry) || air_combo.is_some();
         let carry_finisher = std::mem::take(&mut self.carry_finisher);
         // After a spell that took a finisher slot with Finishing Plus leaving another: the next
         // finisher.
         let in_finisher = in_finisher || (carry && carry_finisher);
         if in_attack && self.abilities.one_swing_on_miss && !self.abilities.combo_master && !self.hit {
-            (self.combo_carry, self.carry_finisher) = (carry, carry_finisher);
+            (self.combo_carry, self.carry_finisher) = (carry && air_combo.is_none(), carry_finisher);
             return false;
         }
         // Ground swings only advance the combo when the previous one
         // connected (read from the exe). In the air, whiffed swings advance
         // it too, so an air combo always ends in its finisher (matches the
         // game; the exe path for this hasn't been traced yet).
-        let hit = self.hit || self.abilities.combo_master || (self.airborne && in_attack);
+        let hit = self.hit || self.abilities.combo_master || (self.airborne && (in_attack || air_combo.is_some()));
         let saved = (self.count, self.finishers);
         // The counter moves when the next swing starts.
         if in_finisher {
@@ -1552,6 +1569,7 @@ impl Character {
             }
         }
         self.hit = false;
+        self.air_combo = None;
         let motion = row.motion;
         self.start_action(ActionKind::Attack { row }, motion);
         if let Mode::Action(a) = &mut self.mode {
@@ -1739,6 +1757,7 @@ impl Character {
         self.finishers = 0;
         self.combo_carry = false;
         self.carry_finisher = false;
+        self.air_combo = None;
     }
 
     fn free_motion(&self) -> u16 {
@@ -1759,6 +1778,8 @@ impl Character {
         self.arc = None;
         self.vel_y = 0.0;
         self.air_dodge_ready = false;
+        // (The air combo ends on the ground, `air_combo`.)
+        self.air_combo = None;
         let land = self.clip(motion::LAND).is_some();
         match &self.mode {
             Mode::Free | Mode::Glide => {
@@ -2100,8 +2121,13 @@ impl Character {
                 }
                 // The roll's "quick run check" event: still holding the
                 // action button there turns the roll into a Quick Run along
-                // the roll direction (checked in the exe).
-                if clip.event_at(f, |k| *k == EventKind::QuickRunCheck) && input.action.held && self.abilities.quick_run > 0 {
+                // the roll direction (checked in the exe). Held since the roll's press: a second
+                // press made in the roll is no hold (the player: "when the dodge button is pressed
+                // twice very quickly, Sora enters quick run mode; this doesn't happen in KH2").
+                if !input.action.held {
+                    act.let_go = true;
+                }
+                if clip.event_at(f, |k| *k == EventKind::QuickRunCheck) && input.action.held && !act.let_go && self.abilities.quick_run > 0 {
                     let dir = self.forward();
                     if self.start_quick_run(dir) {
                         return true;
@@ -2384,6 +2410,10 @@ impl Character {
         self.mode = Mode::Free;
         if self.airborne && self.arc.is_none() {
             self.arc = Some(Arc::fall());
+        }
+        // A swing over in the air: its combo goes on through the fall (`air_combo`).
+        if let ActionKind::Attack { row } = &act.kind {
+            self.air_combo = self.airborne.then_some(row.is_finisher());
         }
         // KH2's Quick Run is an air slide: it ends in the landing (the user: "Sora does not enter
         // his landing animation after doing a quick run"), its short hold, a jump at any frame.

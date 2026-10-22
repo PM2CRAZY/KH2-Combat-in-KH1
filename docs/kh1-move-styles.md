@@ -162,6 +162,15 @@ stale KH2 pose over its start):
   20-30; a voice trigger at 0 and sound 305 at 10). Picked from the moveset by its shape (no name
   in the file); KH1's use runs ~52 frames (`ITEM_CUT` 51), so they line up without stretching.
 
+At KH1, standing, walking and running are KH1's own idle, walk and run (`takeover::MISC_KH1`),
+while KH2 still moves him. Which one is KH2's state's (`takeover::MISC_GAIT`,
+`pose::kh1_ground_pose`, sampled from KH1's motion table), not KH1's own slot: KH1 picks its slot
+by its own dead zone and walk / run line (no move at all with the stick at 0.5 in the logs, where
+KH2 walks from 0.28 and runs from 0.6), so he slid in KH1's idle at a small tilt and ran in KH1's
+walk a little further (a player's report). Field or battle stance as KH1's own slot has it (its
+Keyblade shown with it); changes blend over 8 frames, walk and run keep their stride's phase.
+KH1's step sounds still come from KH1's own slot.
+
 Not mapped (no clean KH2 counterpart, or not identified yet): summon calls (KH2's summons share
 the Drive change, motion 52, but KH1's summon command isn't told apart here yet), examining /
 picking up, KH1's other field actions. Guard, the dodge roll and hit reactions already have their

@@ -216,23 +216,116 @@ fn weapon_library(common: &[u8]) -> Option<Library> {
 pub const WEAPON_VANISH: u16 = 0;
 
 /// The Keyblade's bones as the weapon package's elements name them: any code is the blade, half
-/// way from the hand to the tip, turned as the hand.
+/// way to its tip, where the Keyblade is drawn (`drawn_blade`), else half way from KH2's hand to
+/// the bind pose's tip.
 fn blade(tip_local: Vec3) -> Option<Mat4> {
-    super::pose::kh2_pose(|pose, w| pose.get(HAND).map(|h| *w * *h * Mat4::from_translation(tip_local * 0.5))).flatten()
+    blade_within(tip_local, VANISH_WAIT_SECS)
 }
 
+/// `blade`, the Keyblade as drawn up to `secs` ago.
+fn blade_within(tip_local: Vec3, secs: f32) -> Option<Mat4> {
+    drawn_blade(secs)
+        .map(|b| b * Mat4::from_translation(TIP_IN_BLADE * 0.5))
+        .or_else(|| super::pose::kh2_pose(|pose, w| pose.get(HAND).map(|h| *w * *h * Mat4::from_translation(tip_local * 0.5))).flatten())
+}
+
+/// The base Keyblade's blade bone as drawn on Sora's hand from our pose (`note_drawn_blade`: KH1's
+/// world, y down, as the effects' bones), and when.
+static DRAWN_BLADE: Mutex<Option<(Mat4, std::time::Instant)>> = Mutex::new(None);
+
+/// The Keyblade put away (`weapon_vanish`), its flash waiting for the frame's pose (when).
+static VANISH_PENDING: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+/// The flash's wait for a pose of ours: past it, the last one drawn (if recent) or none.
+const VANISH_WAIT_SECS: f32 = 0.1;
+
+/// Where the Keyblade is drawn now, its blade bone (`leftblade::KH2_BLADE`) in KH1's world, if
+/// drawn in the last `secs`: Final's and Master's floating one, Limit Form's (in his hand or
+/// thrown), else base Sora's on his hand as our pose draws it (`note_drawn_blade`).
+fn drawn_blade(secs: f32) -> Option<Mat4> {
+    if super::form::floating_blade() {
+        if let Some(b) = super::leftblade::final_blade(false) {
+            return Some(b);
+        }
+    }
+    if super::form::in_limit() {
+        if let Some(b) = super::limits::drawn_blade() {
+            return Some(b);
+        }
+    }
+    let g = DRAWN_BLADE.try_lock().ok()?;
+    g.filter(|(_, t)| t.elapsed().as_secs_f32() < secs).map(|(m, _)| m)
+}
+
+/// `pose`, as it draws Sora from our pose (KH2's, or ours following KH1's moves; never KH1's own
+/// animation, whose weapon bones are garbage on its blend frames, s329): the Keyblade's blade
+/// bone there (KH1's world). A flash waiting (`weapon_vanish`) starts there now.
+pub fn note_drawn_blade(blade: Mat4) {
+    if !blade.is_finite() {
+        return;
+    }
+    if let Ok(mut g) = DRAWN_BLADE.try_lock() {
+        *g = Some((blade, std::time::Instant::now()));
+    }
+    let pending = VANISH_PENDING.try_lock().ok().and_then(|mut p| p.take());
+    if let Some(t) = pending {
+        if !start_vanish(VANISH_WAIT_SECS, "as drawn this frame") {
+            // (The effects busy this moment: on the next pose.)
+            if let Ok(mut p) = VANISH_PENDING.try_lock() {
+                *p = Some(t);
+            }
+        }
+    }
+}
+
+/// The Keyblade's vanish flash, started where the Keyblade is drawn (drawn up to `secs` ago,
+/// `blade_within`). Returns false if the effects couldn't be had this moment (to try again).
+fn start_vanish(secs: f32, why: &str) -> bool {
+    let Ok(mut g) = STATE.try_lock() else { return false };
+    let Some(s) = g.as_mut() else { return true };
+    let tip = s.tip_local;
+    let Some(wp) = s.weapon.as_mut() else { return true };
+    let Some(at) = blade_within(tip, secs) else {
+        log("KH2 effect: the Keyblade's vanish skipped (no pose of the Keyblade to put it on)");
+        return true;
+    };
+    if wp.fx.start(WEAPON_VANISH, &mut |_| Some(at)).is_some() {
+        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log(&format!("KH2 effect: the Keyblade's vanish at {:.0?} ({why})", at.w_axis.truncate()));
+        }
+    }
+    true
+}
+
+/// The Keyblade is put away (`takeover::keyblade`): its flash, on the Keyblade where this frame's
+/// pose draws it (`note_drawn_blade`), not KH2's last pose drawn, which after one of KH1's moves
+/// was where the last swing had been, or with no pose for half a second the world's origin (the
+/// player: "the keyblade fade-out sometimes happens in the wrong place").
 pub fn weapon_vanish() {
     if super::settings::get().kh2_effects.is_none() {
         return;
     }
-    let Ok(mut g) = STATE.lock() else { return };
-    let Some(s) = g.as_mut() else { return };
-    let tip = s.tip_local;
-    let Some(wp) = s.weapon.as_mut() else { return };
-    if wp.fx.start(WEAPON_VANISH, &mut |_| blade(tip)).is_some() {
-        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log("KH2 effect: the Keyblade's vanish");
+    if let Ok(mut p) = VANISH_PENDING.lock() {
+        *p = Some(std::time::Instant::now());
+    }
+}
+
+/// A flash still waiting past `VANISH_WAIT_SECS` (no pose of ours drawn since: KH1's own
+/// animation shows him): on the Keyblade as last drawn if that is recent, else none.
+fn vanish_overdue() {
+    let due = VANISH_PENDING.try_lock().ok().and_then(|mut p| match *p {
+        Some(t) if t.elapsed().as_secs_f32() > VANISH_WAIT_SECS => p.take(),
+        _ => None,
+    });
+    if due.is_some() {
+        if drawn_blade(0.25).is_some() {
+            start_vanish(0.25, "as last drawn");
+        } else {
+            static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 10 {
+                log("KH2 effect: the Keyblade's vanish skipped (the Keyblade not drawn from our pose lately)");
+            }
         }
     }
 }
@@ -660,6 +753,8 @@ pub fn event(motion: u16, kind: EventKind) {
 pub const NO_MOTION: u16 = u16::MAX - 1;
 
 pub fn tick(motion: u16) {
+    // (A Keyblade's flash still waiting for a pose of ours, `weapon_vanish`.)
+    vanish_overdue();
     let Ok(mut g) = STATE.lock() else { return };
     let Some(s) = g.as_mut() else { return };
     step(s, Some(motion));

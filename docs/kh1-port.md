@@ -61,6 +61,12 @@ Next to the game; written with the defaults when missing, read when the game sta
     under 100 over it, KH1 sets him down with its own fall and landing (`SETTLE`). KH2 takes
     him on the ground, as after KH1's other moves. An Attack, Square or a jump meanwhile still
     hands him to KH2's fall.
+  - KH1's hang off an edge walked over (state 13, from its ground state's input step, which
+    runs under KH2 too) is a hand-off as the air grabs are, from the frame KH1 sets it. KH1's
+    motion slot changes a frame after its state, and that frame was KH2's: its walk moved him
+    off the spot KH1 hung him from, and the hang's climb (state 14, which needs the edge's
+    contact) never came (the player: "even when pressing forward, he doesn't jump onto the
+    platforms"). The hang's climb, drop and jump are KH1's.
   - After a grab, each change of who draws him blends over 10 frames from the pose drawn just
     before: KH1's own animation into KH2's motion over KH1's slot, and that into KH2's own
     frames (`HANDBACK_BLEND`, `takeover::grab_blend`). Before this, KH2's arms-out fall popped

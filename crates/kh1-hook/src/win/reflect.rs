@@ -784,7 +784,13 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     // quotes but I need kh1 battle quotes"); on the combo's finisher the line "Protect!" (the
     // user), which only KH2 has (KH1 has no Reflect): KH2's MAGC finisher voice for Reflect, 25
     // (Fire / Blizzard / Thunder name theirs 11 / 12 / 13).
-    if finisher {
+    // (That line only with KH2's battle quotes, `kh2_voice`: with KH1's, the third Reflect of a
+    // combo, its finisher, switched Sora to his KH2 voice for it, the player: "When using Reflect
+    // three times, Sora's voice changes to his voice from KH2". KH1's own finisher shout then,
+    // as his finishing swings call it, `kh1voice::finisher`.)
+    if finisher && !super::kh2sound::kh2_voice() {
+        super::kh1voice::finisher(actor, ch.airborne());
+    } else if finisher {
         let v = magc(level).map(|r| r.voice_finisher).filter(|v| *v != 255).map_or(super::kh2sound::REFLECT_FINISHER_VOICE, |v| v as i16);
         super::kh2sound::reflect_voice(v);
     } else {

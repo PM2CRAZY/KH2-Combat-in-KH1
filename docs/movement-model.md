@@ -137,6 +137,10 @@ All **Checked (exe)** unless noted:
   - **Invulnerability:** `dodge_roll_star_time` (10/16/24/32 frames by level).
   - **Hold:** the roll's frame-10 "quick run check" event turns it into a Quick Run along
     the roll direction if the action button is still held and Sora has Quick Run.
+    Ours: held since the roll's own press. A second press made during the roll is no hold, so
+    a quick double tap stays a roll (the player: it went into Quick Run, which KH2 doesn't do);
+    a press once the roll lets him go (its fall-check frame) is a new roll. Test
+    `a_double_tap_of_the_roll_is_no_quick_run`.
 - **Glide:**
   - **Start:** airborne, jump pressed, and height above ground strictly greater than
     `glide_start_height`.
@@ -288,6 +292,13 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
    - **In the air, whiffed swings advance it too**, so a whiffed air combo still ends in its
      finisher (181 → 182 → 183). This matches the real game as played; the exe path for it
      hasn't been found yet.
+   - **Ours: an air swing that ends in the air keeps its combo through the fall.** The
+     air rows queue the fall (`next_motion` 4) rather than idle, so the attack is read as going
+     on until the landing: a press in the fall counts on from it, and after the air combo's
+     last finisher nothing new starts before the landing (`Character::air_combo`). Before, a
+     press after the swing had ended was "from a non-attack state" and restarted the count, and
+     a jump row (Aerial Spiral, 14..114 toward the target) lifted Sora again on every press: an
+     endless air combo while a foe flew near. Inferred from the table, not traced in the exe.
 2. **Row conditions:**
    - The motion must be nonzero.
    - The required ability, if any, must be equipped.

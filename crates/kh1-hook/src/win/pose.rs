@@ -166,6 +166,66 @@ fn kh1_air_pose() -> Option<Vec<Mat4>> {
     Some(kh2_anim::Pose::bind(&local).bones)
 }
 
+/// Misc Animations at KH1 (`takeover::MISC_KH1`): KH1's own idle, walk or run, but the one KH2's
+/// state asks for (`takeover::MISC_GAIT`), not the one KH1's own slot shows. KH1 picks its slot
+/// from the stick with its own dead zone and walk / run line, not KH2's: he slid along in KH1's
+/// idle at a small tilt and ran in KH1's walk a little further (the player's report). Field or
+/// battle stance as KH1's slot has it (its Keyblade shown or not goes with KH1's own motion).
+/// Changes blend over `GROUND_BLEND` from the pose drawn last; walk and run keep their stride's
+/// phase. `None`: KH1's motion table isn't in (KH1's own animation, as before).
+fn kh1_ground_pose(slot: Option<usize>, last: Option<&[Mat4]>) -> Option<Vec<Mat4>> {
+    struct Ground {
+        slot: usize,
+        frame: f32,
+        at: Instant,
+        from: Option<(Vec<(Vec3, Quat, Vec3)>, Instant)>,
+    }
+    static GROUND: Mutex<Option<Ground>> = Mutex::new(None);
+    let battle = !matches!(slot, Some(0 | 2 | 5));
+    let gait = (super::takeover::MISC_GAIT.load(Ordering::Relaxed) as usize).min(2);
+    let want = [[0, 2, 5], [1, 3, 6]][battle as usize][gait];
+    let motions = KH1_MOTIONS.get()?;
+    let m = motions.get(want)?.as_ref()?;
+    let len = m.frames.max(1) as f32;
+    let now = Instant::now();
+    let mut g = GROUND.lock().ok()?;
+    let prev = g.take().filter(|c| now.duration_since(c.at).as_secs_f32() < 0.25);
+    let stride = |s: usize| matches!(s, 2 | 3 | 5 | 6);
+    let (frame, from) = match prev {
+        Some(c) if c.slot == want => ((c.frame + now.duration_since(c.at).as_secs_f32() * m.fps.max(1.0)) % len, c.from),
+        Some(c) => {
+            let phase = motions.get(c.slot).and_then(|p| p.as_ref()).map_or(0.0, |p| c.frame / p.frames.max(1) as f32);
+            let frame = if stride(c.slot) && stride(want) { (phase.fract() * len) % len } else { 0.0 };
+            (frame, last.map(|l| (decompose(l), now)))
+        }
+        None => (0.0, last.map(|l| (decompose(l), now))),
+    };
+    let bones = KH1_BONES.lock().ok()?;
+    if bones.is_empty() {
+        return None;
+    }
+    let mut pose = kh2_anim::Pose::bind(&m.apply(&bones, frame)).bones;
+    drop(bones);
+    let from = from.filter(|(f, t0)| f.len() >= pose.len() && now.duration_since(*t0).as_secs_f32() < GROUND_BLEND);
+    if let Some((f, t0)) = from.as_ref() {
+        // (Eased: the new motion shows at once, the old pose fades.)
+        let w = now.duration_since(*t0).as_secs_f32() / GROUND_BLEND;
+        let w = 1.0 - (1.0 - w) * (1.0 - w);
+        for (p, (fs, fr, ft)) in pose.iter_mut().zip(f) {
+            let (ps, pr, pt) = p.to_scale_rotation_translation();
+            let b = Mat4::from_scale_rotation_translation(fs.lerp(ps, w), fr.slerp(pr, w), ft.lerp(pt, w));
+            if b.is_finite() {
+                *p = b;
+            }
+        }
+    }
+    *g = Some(Ground { slot: want, frame, at: now, from });
+    Some(pose)
+}
+
+/// `kh1_ground_pose`'s blend between KH1's idle, walk and run (seconds).
+const GROUND_BLEND: f32 = 8.0 / 60.0;
+
 /// KH2 Sora: skeleton and motions, and each action clip's root travel per frame (KH1 moves
 /// him itself, so a swing's lunge is taken out of the pose).
 pub struct Kh2 {
@@ -360,6 +420,7 @@ mod src {
     pub const FOLLOW: u8 = 2;
     pub const KH2: u8 = 3;
     pub const KH1_AIR: u8 = 4;
+    pub const KH1_GROUND: u8 = 5;
 }
 
 /// Out of one of KH1's grabs (`takeover::grab_blend`: a ledge's pull-up, a ladder, a pole), the
@@ -376,6 +437,7 @@ fn src_name(s: u8) -> &'static str {
         src::FOLLOW => "KH2's motion over KH1's slot",
         src::KH2 => "KH2",
         src::KH1_AIR => "KH1's jump over KH2's",
+        src::KH1_GROUND => "KH1's idle / walk / run by KH2's state",
         _ => "nothing",
     }
 }
@@ -1140,9 +1202,17 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
                 }
             }
             // Misc Animations at KH1: KH1's own idle / walk / run while KH2 stands, walks or runs
-            // him (`takeover::MISC_KH1`), blended in from our last pose.
+            // him (`takeover::MISC_KH1`), the one KH2's state asks for (`kh1_ground_pose`),
+            // blended in from our last pose.
             if super::takeover::MISC_KH1.load(Ordering::Relaxed) && super::takeover::kh2_frame() && matches!(slot, Some(0..=7)) {
                 s.follow.slot = slot;
+                let recent = s.last_drawn.as_ref().is_some_and(|(_, t)| t.elapsed().as_secs_f32() < 0.2);
+                let last = (recent && s.shown.len() >= SORA_BONES as usize).then_some(&s.shown[..]);
+                if let Some(p) = kh1_ground_pose(slot, last) {
+                    s.src_now = src::KH1_GROUND;
+                    NATIVE_KH1.store(true, Ordering::Relaxed);
+                    return Some(p);
+                }
                 return None;
             }
             // KH2's last pose: recent, or the last frame of his was KH2's (a pause stops the
@@ -1870,6 +1940,11 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     // the effects on it.
     if s.kh2_now.is_some() {
         super::limits::pose_hook(&mut pose, &s.bind, &to_world, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()));
+        // Where the Keyblade is drawn on his hand from our pose (not KH1's own weapon bones, garbage
+        // on its blend frames): the Keyblade's vanish flash goes there (`kh2fx::weapon_vanish`).
+        if let Some(b) = super::leftblade::held_blade(&pose, &s.bind, r_ratio(s.retarget.as_ref())) {
+            super::kh2fx::note_drawn_blade(to_world * b);
+        }
     }
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());

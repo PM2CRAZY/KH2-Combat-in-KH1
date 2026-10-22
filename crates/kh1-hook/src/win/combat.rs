@@ -205,6 +205,40 @@ pub fn attack_seen() -> Option<u32> {
 /// a queue of its own let magic come out however long after, apart from the combo string).
 static PENDING_COMMAND: std::sync::Mutex<Option<([u8; 16], std::time::Instant, u32)>> = std::sync::Mutex::new(None);
 
+/// The command waiting (`PENDING_COMMAND`) is a KH1 spell chosen during base Sora's KH1 cast,
+/// held as KH1's own command record holds it (`kh1_spell_queues`): it waits for the cast to be
+/// cut or to end, not the 0.2 s of a command taken in a cut already open.
+static KH1_SPELL_QUEUED: AtomicBool = AtomicBool::new(false);
+
+/// The longest a spell chosen during base Sora's KH1 cast waits for it (KH1's longest cast).
+const KH1_SPELL_QUEUE_SECS: f32 = 3.0;
+
+/// A spell `arg` chosen now, during one of base Sora's KH1 casts, is kept for when the cast can
+/// be cut or ends, as vanilla KH1 keeps it (its menu takes a plain spell while he can't act and
+/// its command step runs it once he can): pressing Fire again during Fire casts it again (the
+/// player: "the fire ability from KH1 only shoots one fireball when pressing the shortcut multiple
+/// times; before, it shot multiple fireballs"). s249's no-queue rule (a spell taken during
+/// KH1's cast only while its cut is open, the user: no buffers) had dropped every press before
+/// that: grounded Fire's cut opens at its frame 49 (`takeover::FIRE_CUT`) and the combo's last
+/// spell has none, so mashing gave one fireball. Only KH1's own spells (Fire .. Aero) on base
+/// Sora's KH1 casts: a Drive Form's spells and KH2's (the Magic style at KH2, Reflect) keep KH2's
+/// no-buffer rule.
+fn kh1_spell_queues(arg: u8) -> bool {
+    arg <= 6
+        && !super::form::in_form()
+        && !super::formmagic::BASE_KH1_CAST.load(Ordering::Relaxed)
+        && takeover::kh1_spell_now().is_some()
+}
+
+/// Keeps KH1's command record (a spell) for after the cast (`kh1_spell_queues`, or a cut open
+/// now): it runs from `resume_command` once KH2 takes him back.
+unsafe fn queue_spell(base: usize, kh1_queue: bool) {
+    if let Ok(mut p) = PENDING_COMMAND.lock() {
+        *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
+    }
+    KH1_SPELL_QUEUED.store(kh1_queue, Ordering::Relaxed);
+}
+
 /// A spell is waiting in the queue for KH2's move to take it (`takeover`).
 pub fn spell_waiting() -> bool {
     PENDING_COMMAND.try_lock().map_or(false, |p| p.is_some_and(|(r, _, _)| r[0] == 2))
@@ -219,8 +253,10 @@ pub unsafe fn resume_command() {
     // (Chosen during KH1's cast: it waits for that to be cut or to end, as the combo's next
     // step.)
     if takeover::kh1_casting() {
-        // (A frame or two at most now: it is only stored while the cut is open, s249.)
-        if t.elapsed().as_secs_f32() > 0.2 {
+        // (A frame or two at most now: it is only stored while the cut is open, s249; a KH1
+        // spell chosen during base Sora's KH1 cast waits for the cast, `kh1_spell_queues`.)
+        let wait = if KH1_SPELL_QUEUED.load(Ordering::Relaxed) { KH1_SPELL_QUEUE_SECS } else { 0.2 };
+        if t.elapsed().as_secs_f32() > wait {
             *p = None;
             cmd_log(format!("command {kind:#x} dropped: KH1's cast wasn't cut"));
         }
@@ -447,18 +483,19 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // A spell chosen while KH1 casts one: it waits for the cast to be cut (once out) or to end,
     // then runs as the combo's next step (`takeover`'s MAGIC_AFTER; spec: magic into magic).
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_casting() {
-        // (No queue, s249: taken only while KH1's spell can be cut now; else refused.)
-        if !takeover::SPELL_CUT_OPEN.load(Ordering::Relaxed) {
+        // (No queue, s249: taken only while KH1's spell can be cut now; else refused. But base
+        // Sora's KH1 spells queue as in KH1, `kh1_spell_queues`.)
+        let open = takeover::SPELL_CUT_OPEN.load(Ordering::Relaxed);
+        let kh1_queue = !open && kh1_spell_queues(arg);
+        if !open && !kh1_queue {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
             cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH1's spell can't be cut yet (no queue)"));
             return;
         }
-        if let Ok(mut p) = PENDING_COMMAND.lock() {
-            *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
-        }
+        queue_spell(base, kh1_queue);
         takeover::MAGIC_AFTER.store(true, Ordering::Relaxed);
-        cmd_log(format!("command {kind:#x} ({full:08x}) waits: KH1's spell is still being cast"));
+        cmd_log(format!("command {kind:#x} ({full:08x}) waits: KH1's spell is still being cast{}", if kh1_queue { " (KH1's own spell queue)" } else { "" }));
         return;
     }
     // Valor Form: none of KH1's specials (Sonic Blade, Strike Raid, ...: the user, "dont let
@@ -623,11 +660,17 @@ pub unsafe fn take_chosen_command() -> Option<u8> {
             None
         }
         2 if takeover::SPELL_CUT_OPEN.load(Ordering::Relaxed) => {
-            if let Ok(mut p) = PENDING_COMMAND.lock() {
-                *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
-            }
+            queue_spell(base, false);
             wr(base + COMMAND_RVA, 0u8);
             cmd_log("spell chosen during KH1's cast while it can be cut: cuts it now".to_string());
+            Some(2)
+        }
+        // Base Sora's KH1 spell chosen during his KH1 cast: kept for when the cast can be cut or
+        // ends, as KH1 keeps it (`kh1_spell_queues`; Fire again and again).
+        2 if kh1_spell_queues(((rd::<u32>(base + COMMAND_RVA) >> 8) & 0xFF) as u8) => {
+            queue_spell(base, true);
+            wr(base + COMMAND_RVA, 0u8);
+            cmd_log("KH1 spell chosen during base Sora's KH1 cast: waits for the cast to be cut or to end (KH1's own spell queue)".to_string());
             Some(2)
         }
         // (No queue, s249: before KH1's spell can be cut, dropped.)

@@ -220,7 +220,10 @@ const IN_WATER: u32 = 0x40_0000;
 /// walls (9, 10), the hang off an edge walked over (13), 12 (its narrow-beam move, skipped while
 /// `NO_BARS_RVA`), and swimming. KH1 runs that step every frame while KH2 has him, in the air too
 /// (KH2 keeps KH1's state at 0): those taken mid-air are undone (`ground_moves_in_air`).
-const GROUND_STEP_MOVES: [i32; 5] = [9, 10, 12, 13, SWIM_STATE];
+const GROUND_STEP_MOVES: [i32; 5] = [9, 10, 12, EDGE_HANG_STATE, SWIM_STATE];
+/// KH1's hang off an edge (from the air, `LEDGE_RVA`, or walked over, `0x1402C6760`); its climb
+/// back up is state 14.
+const EDGE_HANG_STATE: i32 = 13;
 /// Where KH2's last frame left him (KH1's game frame, position), for `ground_moves_in_air`.
 static LAST_END: Mutex<(u64, [f32; 4])> = Mutex::new((u64::MAX, [0.0; 4]));
 /// The hand-off running is KH1's swim (`water`): logged as he leaves the water.
@@ -808,6 +811,8 @@ pub static SPELL_CUT_OPEN: AtomicBool = AtomicBool::new(false);
 pub static KH1_AIR_SLOT: AtomicU32 = AtomicU32::new(0);
 /// KH1's own idle / walk / run drawn under KH2 (Misc Animations at KH1, `pose`).
 pub static MISC_KH1: AtomicBool = AtomicBool::new(false);
+/// Which of them KH2's state asks for: 0 idle, 1 walk, 2 run (`pose::kh1_ground_pose`).
+pub static MISC_GAIT: AtomicU8 = AtomicU8::new(0);
 /// KH2's glide level while the Glide style is KH1's (its ability set to 0 meanwhile).
 static KH2_GLIDE_KEPT: AtomicU32 = AtomicU32::new(0);
 /// KH1's glide was tried on this hold of Square (`style_air_start`, KH1's jump).
@@ -1490,6 +1495,20 @@ unsafe fn takeover(actor: usize) -> bool {
     if !HANDOFF.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 && rd::<i32>(actor + 0x70) == SWIM_STATE {
         take_for_kh1_move("water (walked in: KH1's swim)", -rd::<f32>(actor + 0x14) - rd::<f32>(actor + 0x3D4));
         SWIM_MOVE.store(true, Ordering::Relaxed);
+        drop_pose();
+    }
+    // The same for its hang off an edge walked over (`0x1402C6760`, state 13), on the ground (in
+    // the air `ground_moves_in_air` undid it above). KH1 sets the state and snaps him to the edge
+    // in its think, but his motion slot changes a frame later (the logs: "KH1 takes him: bar (KH1
+    // state 15, slot Some(6))"), so that frame was KH2's: its walk moved him off the spot KH1 hung
+    // him from, and KH1 then held a hang with no edge at his hands. Its climb (state 14, from the
+    // hang's input step `0x1402C6C60`) wants the edge's contact (`+0x2D0` bit 0x10) and never came
+    // (the player: "Sora sometimes hangs from the edges, but even when pressing forward, he
+    // doesn't jump onto the platforms"). Now KH1 has him from that frame, a hand-off as its air
+    // grabs are: its own hang, climb and drop (and its jump off the edge), KH2 again once he
+    // stands or falls.
+    if !HANDOFF.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 && rd::<i32>(actor + 0x70) == EDGE_HANG_STATE {
+        take_for_kh1_move("an edge walked over (KH1's hang)", -rd::<f32>(actor + 0x14) - rd::<f32>(actor + 0x3D4));
         drop_pose();
     }
     // Limit Form: one of KH1's own limits runs (`limits::kh1_limit_holds`; any of the five from its
@@ -2758,13 +2777,25 @@ unsafe fn takeover(actor: usize) -> bool {
     d.anim.update(&out, &d.character, [q[0], -q[1], q[2]]);
     super::prof::add(super::prof::ANIM, tp);
     // Misc Animations at KH1 (base Sora): standing, walking and running are drawn with KH1's own
-    // animations (KH1's control step picks them from the stick all along under KH2), its own
-    // steps sounding; KH2 still moves him (the user: "idle walk/run plus items").
+    // animations, KH1's own steps sounding; KH2 still moves him (the user: "idle walk/run plus
+    // items"). Which of them is KH2's state's (`MISC_GAIT`, `pose::kh1_ground_pose`), not KH1's own
+    // pick from the stick: KH1's dead zone and walk / run line aren't KH2's (the logs: KH1 had no
+    // move at all with the stick at 0.5, where KH2 already walked him from 0.28 and ran him from
+    // 0.6), so he slid in KH1's idle at a small tilt and ran in KH1's walk a little further (the
+    // player: "Sora moves but there's no animation ... super fast with the walking animation").
     let misc_kh1 = super::styles::kh1_now(super::styles::Kind::MiscAnims)
         && matches!(out.state, StateName::Idle | StateName::Walk | StateName::Run)
         && d.grounded
         && !d.character.airborne()
         && matches!(pose::sora_slot(), Some(0..=7));
+    MISC_GAIT.store(
+        match out.state {
+            StateName::Walk => 1,
+            StateName::Run => 2,
+            _ => 0,
+        },
+        Ordering::Relaxed,
+    );
     MISC_KH1.store(misc_kh1, Ordering::Relaxed);
     // Jump at KH1 (base Sora): KH1's own jump / fall / landing drawn over KH2's (`pose`), KH2
     // still jumping him.

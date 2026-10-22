@@ -590,6 +590,40 @@ fn horizontal_slash_is_part_of_the_air_combo() {
     assert!(slashes <= max - 1, "{slashes} Horizontal Slashes in a combo of {max}: {motions:?}");
 }
 
+/// An air combo goes on through the fall between swings and ends with its finisher until the
+/// landing (the KH1 port's player: Aerial Spiral, a jump row, lifted Sora on every press, and a
+/// press after each swing had ended started the count again, so the air combo never ended while
+/// a foe flew near).
+#[test]
+fn air_combo_ends_before_the_landing_however_slow_the_presses() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(192, attack_clip(192, 30, (5, 10), 6, 15));
+    let mut spiral = row(36, 192, false, true);
+    spiral.jump = 120.0;
+    // (Before the base air swing, as Aerial Spiral's row is in KH2's table.)
+    ch.moveset.combo_rows.insert(3, spiral);
+    let mut w = World::new(ch);
+    w.run(3, Pad { jump: true, ..IDLE });
+    w.run(12, IDLE);
+    // A press every 34 frames: each one after the last swing (30 frames) is over, in the fall.
+    let mut motions = Vec::new();
+    let mut landed = None;
+    for f in 0..1200 {
+        let o = w.step(Pad { attack: f % 34 == 0, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            motions.push(o.motion);
+        }
+        if w.pos[1] <= 0.0 {
+            landed = Some(f);
+            break;
+        }
+    }
+    assert!(landed.is_some(), "never landed: {} air swings {motions:?}", motions.len());
+    let max = w.ch.combo_rules.air_base as usize + w.ch.abilities.air_combo_plus as usize;
+    assert!(motions.len() <= max, "{} air swings in an air combo of {max}: {motions:?}", motions.len());
+    assert_eq!(motions.last(), Some(&120), "the air combo ends in its finisher: {motions:?}");
+}
+
 /// An air cast (`air_magic_falls`, as Final Form's air Reflect) falls as it plays (s206 reverts
 /// s204's hold, the user: "we do want it to fall like kh1"), and ends on touching the ground in
 /// KH2's landing, not standing in the rest of the cast (the user).
@@ -1763,6 +1797,18 @@ fn quick_run_out_of_the_roll_with_guard_equipped() {
     w.run(20, Pad { stick: [1.0, 0.0], ..IDLE });
     let outs: Vec<_> = (0..20).map(|f| w.step(Pad { stick: [1.0, 0.0], action: f < 3, ..IDLE })).collect();
     assert!(outs.iter().all(|o| o.state != StateName::QuickRun));
+}
+
+/// Two quick presses: the second, made during the roll and held over its quick-run check, is no
+/// hold of the first. The roll stays a roll (the player: a double tap went into Quick Run, which
+/// KH2 doesn't do), and a press once the roll lets go of him is a new roll.
+#[test]
+fn a_double_tap_of_the_roll_is_no_quick_run() {
+    let mut w = World::new(square_sora(true, true, true));
+    w.run(20, Pad { stick: [1.0, 0.0], ..IDLE });
+    let outs: Vec<_> = (0..30).map(|f| w.step(Pad { stick: [1.0, 0.0], action: f < 3 || f >= 5, ..IDLE })).collect();
+    assert_eq!(outs[0].state, StateName::DodgeRoll);
+    assert!(outs.iter().all(|o| o.state != StateName::QuickRun), "{:?}", outs.iter().map(|o| o.state).collect::<Vec<_>>());
 }
 
 /// Standing with no Guard and no roll (Wisdom Form's case), Quick Run dashes along his facing.
