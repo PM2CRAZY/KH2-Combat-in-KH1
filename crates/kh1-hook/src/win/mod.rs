@@ -41,6 +41,7 @@ mod stylecombo;
 mod stylejump;
 mod styleroll;
 mod prize;
+mod prizeart;
 mod probe;
 mod prof;
 mod reflect;

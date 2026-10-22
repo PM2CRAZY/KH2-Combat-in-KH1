@@ -114,6 +114,66 @@ impl Dpd {
     }
 }
 
+/// The raw animation of shape `number` of a DPD (`buf`), as the effect
+/// runtime walks it: the bytes from the shape's `+16` (step count at `+6`,
+/// steps at `+16`, 8 bytes each: frame offset, wait, flags) through the end
+/// of its last frame's sprite attributes. Offsets inside are relative to its
+/// start, so a copy works anywhere. `None` if no shape has that number.
+pub fn shape_animation(buf: &[u8], number: i32) -> Result<Option<Vec<u8>>> {
+    let mut r = Reader::new(buf);
+    if r.u32()? != MAGIC {
+        return bad("not a DPD");
+    }
+    let _particles = offsets(&mut r, "particle data")?;
+    let _textures = offsets(&mut r, "texture")?;
+    for o in offsets(&mut r, "shape")? {
+        if Reader::at(buf, o).i16()? as i32 != number {
+            continue;
+        }
+        let anm = buf.get(o + 16..).ok_or_else(|| oob("shape"))?;
+        let mut end = 0;
+        for f in animation_frames(anm)? {
+            let mut h = Reader::at(anm, f);
+            let flag = h.i16()?;
+            let n = h.i16()? as usize;
+            let attr = h.i32()?;
+            if attr < 0 {
+                return bad("DPD: negative sprite attribute offset");
+            }
+            let sprites = 32 + n * if flag & 8 != 0 { 24 } else { 16 };
+            end = end.max(f + sprites).max(f + attr as usize + n * 8);
+        }
+        let steps = Reader::at(anm, 6).i16()? as usize;
+        end = end.max(16 + steps * 8);
+        return Ok(Some(anm.get(..end).ok_or_else(|| oob("shape animation"))?.to_vec()));
+    }
+    Ok(None)
+}
+
+/// The frame offsets (from the animation's start) of a shape animation's
+/// steps, each once, in step order.
+pub fn animation_frames(anm: &[u8]) -> Result<Vec<usize>> {
+    let steps = Reader::at(anm, 6).i16()?;
+    if !(0..=1024).contains(&steps) {
+        return bad("DPD: implausible shape step count");
+    }
+    let mut out: Vec<usize> = Vec::new();
+    for i in 0..steps as usize {
+        let at = Reader::at(anm, 16 + i * 8).i16()?;
+        if at < 0 {
+            return bad("DPD: negative frame offset");
+        }
+        let n = Reader::at(anm, at as usize + 2).i16()?;
+        if !(0..=1024).contains(&n) {
+            return bad("DPD: implausible sprite count");
+        }
+        if !out.contains(&(at as usize)) {
+            out.push(at as usize);
+        }
+    }
+    Ok(out)
+}
+
 /// Where effect `number` of a PAX file lives: its DPD bytes and the index
 /// of its particle data inside that DPD.
 pub fn effect_source(pax: &[u8], number: u32) -> Result<Option<(&[u8], usize)>> {
@@ -1169,6 +1229,21 @@ mod tests {
         assert_eq!(prog.keys[0].vec3(4), [0.5, 0.25, 2.0]);
         assert_eq!(prog.keys[1].tick(), 5);
         assert_eq!(prog.keys[1].f32(4), -0.5);
+    }
+
+    #[test]
+    fn copies_shape_animation() {
+        let buf = dpd();
+        let anm = shape_animation(&buf, 5).unwrap().unwrap();
+        // Steps (16 + 8), the frame at 0x20: its free quad to +0x38, its attributes to +0x40.
+        assert_eq!(anm.len(), 0x20 + 0x40);
+        assert_eq!(anim_frames_tex0(&anm), vec![Dpd::parse(&buf).unwrap().shape(5).unwrap().sequence[0].frame.tex0.0]);
+        assert_eq!(animation_frames(&anm).unwrap(), vec![0x20]);
+        assert!(shape_animation(&buf, 6).unwrap().is_none());
+    }
+
+    fn anim_frames_tex0(anm: &[u8]) -> Vec<u64> {
+        animation_frames(anm).unwrap().iter().map(|&f| u64::from_le_bytes(anm[f + 16..f + 24].try_into().unwrap())).collect()
     }
 
     #[test]

@@ -3584,6 +3584,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 328 (Drive orbs drawn with KH2's own art)
+- The user: "keep the drive orbs running through KH1s engine, but if possible, let's try to get the
+  texture from KH2". `prizeart.rs`: KH2's `obj/PRIZE.mdlx` (its prize effect package; types 7 / 8
+  are its Drive orbs, shape 3, 24 steps; the remastered `-0.dds`) read at start; KH1's texture
+  lookup (0x14010D860) gives our entry for one address past PS2 VRAM; the prize effect's entries
+  7 / 8 point at our copy of KH2's animation. Fallback: s318's tinted MP orbs. New kh2-formats
+  `prize.rs`, `dds.rs`. docs/kh1-prizes.md.
+
 ### 2026-10-22: Stage 327 (Drive Recovery items in the right shop)
 - The user: "I don't see the drive recovery items." Their log: "item shop opened: world 3 room 9,
   KH1's list [1, 2, 3, ...]". The Item Shop's script is `tw10`, but KH1's room number is the file's

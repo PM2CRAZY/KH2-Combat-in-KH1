@@ -23,8 +23,10 @@
 //! - **Two types**, 7 a small Drive orb and 8 a big one. KH1's row table is copied to a table of
 //!   ours with rows 7 and 8 (MP's small and big rows, so the same height, pull and sound), and the
 //!   six places that read it (`TABLE_SITES`) point at the copy.
-//! - **Their look**: the effect program's entries 7 and 8 become MP's small and big orbs'
-//!   sprites and sizes in KH2's drive-orb yellow-orange (`ppp_draw`, each time it runs).
+//! - **Their look**: the effect program's entries 7 and 8 become KH2's own Drive orb, its sprite
+//!   animation and texture read from the user's KH2 install (`prizeart`), drawn by KH1's program;
+//!   until that is ready, or if it can't be, MP's small and big orbs' sprites and sizes in KH2's
+//!   drive-orb yellow-orange (`ppp_draw`, each time it runs).
 //! - **Their drop**: after an enemy's own drop (`ai_drop`), KH2's normal enemies' Drive orb rows
 //!   (`drivegauge::DROPS`) roll, and KH1 makes the orbs (`0x1402A9110`, the same mode as its own).
 //! - **Their pickup**: KH1's pickup (`pickup`) runs as ever; one of ours picked up adds its points
@@ -70,6 +72,10 @@ const PPP_DRAW_RVA: Rva = Rva(0x33E8D0);
 const PPP_DRAW_PROLOGUE: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x20, 0x55, 0x56, 0x57];
 /// Prizes off (KH1's drop functions return at once while it is set).
 const PRIZES_OFF_RVA: Rva = Rva(0x2D619AC);
+/// The prizes' draw records (0x20 bytes each: `+0x18` type, `+0x19` bits, bit 0 live, `+0x1C` the
+/// animation timer, `+0x1E` its step).
+const RECORDS_RVA: Rva = Rva(0x2432B40);
+const RECORDS: usize = 256;
 
 /// KH2's drive orbs' yellow-orange (KH2's orb is a warm gold; red full, green about two thirds,
 /// a little blue), as fractions of MP's orb's brightest channel.
@@ -212,22 +218,36 @@ fn entry(data: usize, t: usize) -> usize {
     data + 4 + t * 12
 }
 
-/// `pppRyjMegaBirthPrize`'s draw: its entries 7 and 8 are MP's orbs recoloured (written each
-/// time they differ, so a reloaded `prize.dpx` gets them too).
+/// `pppRyjMegaBirthPrize`'s draw: its entries 7 and 8 are KH2's Drive orb (`prizeart`), or until
+/// that is ready (or if it can't be) MP's orbs recoloured (written each time they differ, so a
+/// reloaded `prize.dpx` gets them too).
 unsafe extern "system" fn ppp_draw(prog: usize, data: usize) -> u64 {
     if on() && data > 0x10000 && super::crash::readable(data) && super::crash::readable(entry(data, 9) + 11) {
-        for (ours, mp) in [(SMALL as usize, 5usize), (BIG as usize, 6)] {
-            let src: [u8; 12] = rd(entry(data, mp));
-            let mut want = src;
-            let m = src[4].max(src[5]).max(src[6]) as f32;
-            for c in 0..3 {
-                want[4 + c] = (m * DRIVE_TINT[c]).round().clamp(0.0, 255.0) as u8;
-            }
-            if rd::<[u8; 12]>(entry(data, ours)) != want {
+        let kh2 = super::prizeart::entries(base(), data);
+        for (k, (ours, mp)) in [(SMALL as usize, 5usize), (BIG as usize, 6)].into_iter().enumerate() {
+            let want = match kh2 {
+                Some(e) => e[k],
+                None => {
+                    let src: [u8; 12] = rd(entry(data, mp));
+                    let mut want = src;
+                    let m = src[4].max(src[5]).max(src[6]) as f32;
+                    for c in 0..3 {
+                        want[4 + c] = (m * DRIVE_TINT[c]).round().clamp(0.0, 255.0) as u8;
+                    }
+                    want
+                }
+            };
+            let have: [u8; 12] = rd(entry(data, ours));
+            if have != want {
                 static LOGGED: AtomicU32 = AtomicU32::new(0);
                 if LOGGED.fetch_add(1, Ordering::Relaxed) < 4 {
                     let all: Vec<String> = (0..10).map(|t| format!("{t}: {:02x?}", rd::<[u8; 12]>(entry(data, t)))).collect();
                     log(&format!("Drive orbs: the prize effect's entries at {data:#x} before: {}", all.join(" | ")));
+                }
+                // Another shape: our prizes' animation steps start over (a step past the new
+                // shape's last would name no frame), as KH1 starts a new prize's.
+                if have[..4] != want[..4] {
+                    restart(ours as u8);
                 }
                 wr(entry(data, ours), want);
             }
@@ -235,6 +255,17 @@ unsafe extern "system" fn ppp_draw(prog: usize, data: usize) -> u64 {
     }
     let f: PppFn = std::mem::transmute(ORIG_PPP.load(Ordering::Acquire));
     f(prog, data)
+}
+
+/// Every live prize of type `ty`: its animation step and timer back to 0.
+unsafe fn restart(ty: u8) {
+    let records = base() + RECORDS_RVA;
+    for i in 0..RECORDS {
+        let r = records + i * 0x20;
+        if rd::<u8>(r + 0x18) == ty && rd::<u8>(r + 0x19) & 1 != 0 {
+            wr::<u32>(r + 0x1C, 0);
+        }
+    }
 }
 
 pub unsafe fn install() {
@@ -261,4 +292,5 @@ pub unsafe fn install() {
     SEED.store(0x9E37_79B9_7F4A_7C15 ^ now | 1, Ordering::Relaxed);
     ON.store(true, Ordering::Release);
     log("Drive orbs: KH1 prize types 7 (small) and 8 (big), dropped by enemies as KH2's are, picked up into the Drive gauge");
+    super::prizeart::install(base);
 }
