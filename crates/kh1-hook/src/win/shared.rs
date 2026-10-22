@@ -12,11 +12,16 @@
 //!   grabs, landing, its combo's rows, hit objects and damage). At KH1 nothing of ours touches it.
 //!   At KH2, KH1's slot is drawn with KH2's motion for the same thing (`kh2_look`,
 //!   `pose::follow`), "KH1 should treat KH2's animations as its own". Whose numbers move him is
-//!   the physics setting's, not the style's (`physics`: with it at KH2, KH2's run speed, jump arc,
-//!   swing travel, glide speed, fall and turn on every move; at KH1, KH1's own). The user (after s261): "currently don't share animations but should: sora base
+//!   the physics setting's, not the style's (`physics`: with it at KH2, KH2's run speed, jump arc
+//!   and swing travel on every move; at KH1, KH1's own). The user (after s261): "currently don't share animations but should: sora base
 //!   attack 2, kh2 base attack 2 / kh1 base finisher, kh2 base finishers / glide".
-//! - **A KH2-only move** (Aerial Dodge, KH2's Square moves, KH2's Quick Run out of KH1's roll,
-//!   the aerial combo at KH2, KH2's spells and Drives for now) is KH2's controller's: it borrows
+//! - **The glide** is not shared any more (t321, the user: "after incorporating kh2 glide as a
+//!   shared ability it stopped it from being 1:1 with kh2's glide"; "not have glide be affected by
+//!   the physics setting"): at Glide KH1 it is KH1's own glide state with KH1's own numbers, at
+//!   Glide KH2 a KH2 borrow (`GLIDE`), KH2's controller's own glide (its speed, fall, turn,
+//!   banking, hover and release) on KH2's glide numbers. The physics setting doesn't touch it.
+//! - **A KH2-only move** (Aerial Dodge, KH2's glide at Glide KH2, KH2's Square moves, KH2's Quick
+//!   Run out of KH1's roll, the aerial combo at KH2, KH2's spells and Drives for now) is KH2's controller's: it borrows
 //!   Sora out of KH1's states for it (`borrow`), and gives him back to KH1's ground or air state
 //!   the moment the move is over (`give_back`). So with Jump at KH1, Aerial Dodge is still his
 //!   double jump. With physics KH1 KH2's controller runs these on KH1's numbers
@@ -122,6 +127,10 @@ pub const AIR_JUMP: u8 = 2;
 /// Square held through KH1's own roll (Dodge Roll at KH1): KH2's Quick Run out of it, when Sora
 /// has Quick Run (it has no style of its own: KH2's move, by its ability).
 pub const QUICK_RUN: u8 = 3;
+/// The glide button in the air with the Glide style at KH2: KH2's own glide (t321). Its button is
+/// KH2's glide button: Square with KH1's Superglide equipped (or `glide = square`), else the jump
+/// button once the Aerial Dodge isn't there for it.
+pub const GLIDE: u8 = 4;
 static BORROW: AtomicU8 = AtomicU8::new(NONE);
 /// Square held since it started KH1's roll (`QUICK_RUN`), and how long KH1's roll motion has
 /// played in that hold (frames at 60 Hz, f32 bits; 0 not yet seen).
@@ -132,6 +141,8 @@ static ROLL_FRAMES: AtomicU32 = AtomicU32::new(0);
 static WANT_KH2: AtomicBool = AtomicBool::new(false);
 /// Aerial Dodge used in this air time (KH2 allows one; back on the ground, again).
 static AIR_DODGED: AtomicBool = AtomicBool::new(false);
+/// The jump button has been let go since the Aerial Dodge's press (a glide needs a fresh press).
+static DODGE_JUMP_UP: AtomicBool = AtomicBool::new(true);
 /// Buttons on KH1's last control step, for fresh presses.
 static LAST: AtomicU32 = AtomicU32::new(0);
 
@@ -162,6 +173,11 @@ pub struct Seen {
     pub square: bool,
     /// KH2's Aerial Dodge is equipped.
     pub air_dodge: bool,
+    /// KH1's Superglide is equipped: its glide is on Square (Glide alone: the jump button).
+    pub superglide: bool,
+    /// KH2's glide would start now (the Glide style is KH2's, KH2's Glide is equipped and he is
+    /// above its start height).
+    pub kh2_glide: bool,
     /// KH1's motion is in its combo window (a swing of KH1's own combo can chain now).
     pub combo_window: bool,
     /// KH1 has him knocked away in the air, far enough in for KH2's Aerial Recovery
@@ -188,6 +204,12 @@ pub struct Seen {
 pub const KH1_JUMP_BITS: u32 = 0x6;
 pub const KH1_ACTION_BIT: u32 = 0x10_0000;
 
+/// What the hide rules last saw (the trace log): the dodge was used this fall, the dodge's jump
+/// press has been let go since.
+pub fn dodge_flags() -> (bool, bool) {
+    (AIR_DODGED.load(Ordering::Relaxed), DODGE_JUMP_UP.load(Ordering::Relaxed))
+}
+
 /// One control step of KH1's with base Sora in its states: the borrow it starts (kept for the
 /// physics step), and KH1's bits it doesn't get this step.
 pub fn control(s: &Seen) -> u32 {
@@ -198,7 +220,10 @@ pub fn control(s: &Seen) -> u32 {
     if s.state == 0 {
         AIR_DODGED.store(false, Ordering::Relaxed);
     }
-    let on_square = super::settings::get().glide_on_square;
+    let on_square = super::settings::get().glide_on_square || s.superglide;
+    if !s.jump {
+        DODGE_JUMP_UP.store(true, Ordering::Relaxed);
+    }
     let roll_kh2 = styles::kh2(Kind::DodgeRoll);
     // KH2's ability moves out of KH1's own moves whatever the styles (`combomods`): a Square move
     // in KH1's combo window, Aerial Recovery / Retaliating Slash while KH1 has him knocked away.
@@ -254,7 +279,12 @@ pub fn control(s: &Seen) -> u32 {
             }
         } else if air && jump_fresh && s.air_dodge && !AIR_DODGED.load(Ordering::Relaxed) {
             AIR_DODGED.store(true, Ordering::Relaxed);
+            DODGE_JUMP_UP.store(false, Ordering::Relaxed);
             borrow = AIR_JUMP;
+        } else if air && s.kh2_glide && if on_square { square_fresh } else { jump_fresh } {
+            // KH2's glide (Glide at KH2, t321): KH2's controller glides him, as in KH2 (the jump
+            // press past the Aerial Dodge, or Square with Superglide).
+            borrow = GLIDE;
         }
     }
     if borrow != NONE {
@@ -276,6 +306,17 @@ pub fn control(s: &Seen) -> u32 {
     // normal kh1 glide by pressing the jump button"). Rising, the held jump is KH1's own, for its
     // height.
     if air && !s.rising && on_square {
+        hide |= KH1_JUMP_BITS | KH1_ACTION_BIT;
+    }
+    // With the Aerial Dodge equipped, KH1's glide (its held jump) comes only after the dodge, and on
+    // a fresh press: until the dodge is used, and while the jump pressed for it is still held, KH1
+    // sees no jump (t318 traces: KH1 asked for its glide on the dodge's first frame). Without the
+    // dodge equipped, KH1's glide is as it was.
+    if air && !s.rising && s.air_dodge && (!AIR_DODGED.load(Ordering::Relaxed) || !DODGE_JUMP_UP.load(Ordering::Relaxed)) {
+        hide |= KH1_JUMP_BITS | KH1_ACTION_BIT;
+    }
+    // Glide at KH2 (t321): KH1's own glide never, past the rise: the glide is KH2's (`GLIDE`).
+    if air && !s.rising && styles::kh2(Kind::Glide) {
         hide |= KH1_JUMP_BITS | KH1_ACTION_BIT;
     }
     hide
@@ -350,10 +391,8 @@ pub fn give_back(state: StateName, grounded: bool, falling: bool, combo: (bool, 
 ///   moved by the root travel of KH2's swing for that slot (`pose::swing_motion`), stretched over
 ///   KH1's swing, along his facing, in place of KH1's own travel. KH1's hit objects, timing and
 ///   damage stay.
-/// - The glide (state 0x15): KH2's glide turn rate (its pre-step `0x1402B06F0`, the facing set
-///   after KH1's own turn is undone), speed and fall (its step `0x1402B0890`), KH2's growth numbers
-///   at Sora's Glide level (level 1 at least: KH1 only glides him with Glide). KH1's glide start,
-///   end, slots and collision stay.
+/// - Not the glide (t321): KH1's glide state (0x15) is KH1's own with its own numbers at either
+///   physics setting, and at Glide KH2 the glide is KH2's controller's (a borrow, `GLIDE`).
 /// - KH1's other ground actions (its roll, an item's use, a ground cast, its specials) keep their
 ///   own travel: no KH2 numbers for them.
 ///
@@ -433,15 +472,6 @@ pub mod physics {
     static ORIG_GROUND: AtomicUsize = AtomicUsize::new(0);
     static ORIG_AIR: AtomicUsize = AtomicUsize::new(0);
     static ORIG_TAKEOFF: AtomicUsize = AtomicUsize::new(0);
-    static ORIG_GLIDE_PRE: AtomicUsize = AtomicUsize::new(0);
-    static ORIG_GLIDE: AtomicUsize = AtomicUsize::new(0);
-    /// KH1's glide state (`0x1402B0BA0` starts it; registered by `0x1402B0560`: pre-step
-    /// `0x1402B06F0 (actor, input)`, step `0x1402B0890 (actor, &displacement)`).
-    pub const GLIDE_STATE: usize = 0x15;
-    /// The actor's facing setter (`0x140295C80 (actor, angle)`, `takeover`'s too).
-    const SET_FACING_RVA: Rva = Rva(0x295C80);
-    /// The stick's tilt on KH1's last glide pre-step (f32 bits), for its step.
-    static GLIDE_TILT: AtomicU32 = AtomicU32::new(0);
     /// KH1's ground swing now (its slot, and KH1 frames into it: KH1's swings alternate slots,
     /// 98 / 99, so a new slot is a new swing), for KH2's swing travel.
     static SWING: Mutex<Option<(usize, f32)>> = Mutex::new(None);
@@ -457,21 +487,6 @@ pub mod physics {
         pub fall_max: f32,
         pub air_keep: f32,
         pub air_drag: f32,
-        /// KH2's glide at Sora's Glide level (none without it).
-        pub glide: Option<Glide>,
-    }
-
-    /// KH2's glide numbers (its growth table, per 60 Hz frame): top speed, how much of the last
-    /// frame's speed is kept, the fall (`(height - fall_height) × fall_ratio`, at most
-    /// `fall_max`), the turn rate (radians).
-    #[derive(Clone, Copy, Debug)]
-    pub struct Glide {
-        pub speed: f32,
-        pub acceleration: f32,
-        pub fall_ratio: f32,
-        pub fall_height: f32,
-        pub fall_max: f32,
-        pub turn: f32,
     }
     static NUMBERS: Mutex<Option<Numbers>> = Mutex::new(None);
 
@@ -796,12 +811,12 @@ pub mod physics {
     /// when it sets its states up, which would drop them).
     pub unsafe fn install(base: usize) {
         let table = base + TABLE_RVA;
-        let slots: [(usize, &AtomicUsize, usize); 5] = [
+        // (KH1's glide state, 0x15, is no longer wrapped, t321: KH2's numbers on it at physics KH2
+        // are gone; the glide follows its style only.)
+        let slots: [(usize, &AtomicUsize, usize); 3] = [
             (table + STEP, &ORIG_GROUND, ground_step as *const () as usize),
             (table + 2 * ENTRY + STEP, &ORIG_AIR, air_step as *const () as usize),
             (table + ENTRY + PRE_STEP, &ORIG_TAKEOFF, takeoff as *const () as usize),
-            (table + GLIDE_STATE * ENTRY + PRE_STEP, &ORIG_GLIDE_PRE, glide_pre as *const () as usize),
-            (table + GLIDE_STATE * ENTRY + STEP, &ORIG_GLIDE, glide_step as *const () as usize),
         ];
         for (slot, orig, ours) in slots {
             let now: usize = rd(slot);
@@ -904,80 +919,6 @@ pub mod physics {
         let right = [fw[1], -fw[0]];
         d[0] = local[0] * right[0] + local[1] * fw[0];
         d[2] = local[0] * right[1] + local[1] * fw[1];
-    }
-
-    /// The glide's pre-step (KH1 picks its glide slot and turns him toward the stick): KH2's turn
-    /// rate in place of KH1's (physics KH2).
-    unsafe extern "system" fn glide_pre(actor: usize, input: usize) -> usize {
-        let f: PreFn = std::mem::transmute(ORIG_GLIDE_PRE.load(Ordering::Acquire));
-        let sora = is_sora(actor);
-        let before: f32 = if sora { rd(actor + 0x3C) } else { 0.0 };
-        let r = f(actor, input);
-        if !sora || rd::<i32>(actor + 0x70) != GLIDE_STATE as i32 || input < 0x10000 {
-            return r;
-        }
-        // (The input: the stick's direction x, y, z, then its tilt.)
-        let i: [f32; 4] = rd(input);
-        GLIDE_TILT.store(if i[3].is_finite() { i[3].clamp(0.0, 1.0) } else { 0.0 }.to_bits(), Ordering::Relaxed);
-        if !kh2() || !before.is_finite() || !(i[3] > 0.0) || !i[0].is_finite() || !i[2].is_finite() {
-            return r;
-        }
-        let Some(g) = numbers().and_then(|n| n.glide) else { return r };
-        let want = i[0].atan2(i[2]);
-        let step = (g.turn * dt()).max(0.0);
-        let d = wrap(want - before);
-        let facing = wrap(before + d.clamp(-step, step));
-        let set: unsafe extern "system" fn(usize, f32) = std::mem::transmute(base() + SET_FACING_RVA);
-        set(actor, facing);
-        wr(actor + 0x150, facing);
-        r
-    }
-
-    /// The glide's step (KH1: along his facing, speeding up to its top speed, a steady fall): KH2's
-    /// speed (`(1 - a) × top × tilt + a × last`) and fall (by the height over the floor) in place
-    /// of KH1's (physics KH2). KH1 keeps its glide's start and end, its slots and collision.
-    unsafe extern "system" fn glide_step(actor: usize, disp: *mut [f32; 4]) -> usize {
-        let f: StepFn = std::mem::transmute(ORIG_GLIDE.load(Ordering::Acquire));
-        let sora = is_sora(actor);
-        let v0: [f32; 4] = if sora { rd(actor + 0x3C0) } else { [0.0; 4] };
-        let r = f(actor, disp);
-        if !sora || rd::<i32>(actor + 0x70) != GLIDE_STATE as i32 || disp.is_null() || !kh2() {
-            return r;
-        }
-        let Some(g) = numbers().and_then(|n| n.glide) else { return r };
-        let dt = dt();
-        let tilt = f32::from_bits(GLIDE_TILT.load(Ordering::Relaxed));
-        let last = v0[0].hypot(v0[2]);
-        let last = if last.is_finite() { last } else { 0.0 };
-        let speed = ((1.0 - g.acceleration) * g.speed * tilt + g.acceleration * last).max(0.0);
-        let fw: [f32; 3] = rd(actor + 0x30);
-        let n = fw[0].hypot(fw[2]);
-        let dir = if n.is_finite() && n > 1e-3 {
-            [fw[0] / n, fw[2] / n]
-        } else {
-            let yaw: f32 = rd(actor + 0x3C);
-            [yaw.sin(), yaw.cos()]
-        };
-        let above: f32 = rd(actor + 0x3D4);
-        let above = if above.is_finite() { above } else { 0.0 };
-        let fall = ((above - g.fall_height).max(0.0) * g.fall_ratio).min(g.fall_max).max(0.0);
-        let d = &mut *disp;
-        d[0] = dir[0] * speed * dt;
-        d[2] = dir[1] * speed * dt;
-        // (KH1's world is y-down.)
-        d[1] = fall * dt;
-        wr(actor + 0x3C0, [dir[0] * speed, d[1], dir[1] * speed, speed]);
-        r
-    }
-
-    fn wrap(a: f32) -> f32 {
-        let t = std::f32::consts::TAU;
-        let a = a.rem_euclid(t);
-        if a > std::f32::consts::PI {
-            a - t
-        } else {
-            a
-        }
     }
 
     type PreFn = unsafe extern "system" fn(usize, usize) -> usize;

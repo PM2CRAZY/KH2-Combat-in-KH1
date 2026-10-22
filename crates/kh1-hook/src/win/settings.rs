@@ -252,7 +252,10 @@ pub fn get() -> &'static Settings {
             },
             kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
             damage_scale: setting(&text, "damage_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
-            glide_on_square: on(&text, "glide", "square", true),
+            // (Glide on Square held off, t319: a glide is the jump button after the Aerial Dodge. The
+            // `glide = square` setting and the Square glide code stay, behind this flag, for later.)
+            // glide_on_square: on(&text, "glide", "square", true),
+            glide_on_square: false,
             air_cast_fall: setting(&text, "air_cast_fall").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v)).unwrap_or(AIR_CAST_FALL),
             magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
             kh2_voice: on(&text, "kh2_voice", "on", false),

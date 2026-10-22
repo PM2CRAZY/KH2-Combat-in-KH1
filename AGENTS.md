@@ -1,3 +1,58 @@
+### 2026-10-22: Stage 321 (testing branch: KH2's glide is KH2's controller's again; the glide off the physics setting)
+- The user: "after incorporating kh2 glide as a shared ability it stopped it from being 1:1 with
+  kh2's glide" (t320 traces, physics KH1, Glide KH2: KH1's glide state 0x15 on KH1's numbers with
+  KH2's motion 205 drawn on it: KH1's +0.4 a frame speed ramp to 16, its 1.0..2.45 saw-tooth fall,
+  no turn for a small tilt, and at release KH1's cut to 1.1 sideways with a hop up). Stage 284 had
+  made the glide a shared move whose numbers followed the physics setting (`shared::physics`'s
+  glide wrappers ran only at physics KH2). The user: option 2, "and not have glide be affected by
+  the physics setting in the config menu".
+- Glide at KH2 is a KH2 borrow again (`shared::GLIDE`): out of KH1's air, past the rise, the glide
+  button (Square with Superglide or `glide = square`; else a fresh jump press once the Aerial
+  Dodge isn't there for it: used this fall, or not equipped) with KH2's Glide equipped and above
+  its start height (`takeover::kh2_glide_open`) borrows him; KH2's controller gets the press on
+  its first frame (`JUMP_NOW` / `ROLL_NOW`, no Aerial Dodge in the borrow) and glides him with
+  its own glide: speed, fall, turn, banking (206 / 207), hover (208) and its release into its
+  fall, then KH1's fall when that is over (`give_back`). KH1 sees none of its glide inputs in the
+  air past the rise at Glide KH2. KH2's controller keeps its Glide ability at Glide KH2 in shared
+  states too (it was set to 0 there), so the glide button mid-Aerial Dodge glides straight away.
+- Glide at KH1: KH1's own glide state and numbers at either physics setting. The glide wrappers
+  on KH1's state 0x15 (`glide_pre` / `glide_step`) and `Numbers::glide` are gone; KH1's Square
+  glide (`shared_frame`) only at Glide KH1.
+- The glide's numbers never follow the physics setting now (KH2's controller's glide reads only
+  KH2's growth table; physics KH1 only changes its fall after the glide is let go).
+
+### 2026-10-22: Stage 320 (testing branch: Superglide on Square, glide mid-dodge, glide-hide logging)
+- The user: "you can't superglide out of air dodge"; in vanilla KH1 Glide is the jump button and
+  Superglide is Square. t319 had forced `glide_on_square` off, which took Superglide's Square away.
+  Now the glide button follows the ability (`takeover::glide_on_square_now`: Superglide equipped, or
+  the `glide_on_square` flag): `shared::control`'s hide (`Seen::superglide`), the Square glide in
+  `shared_frame`, KH1's glide held while it glides (`gliding`), and the controller's `glide_button`.
+- KH2's glide button (`character-core` `try_action_button`, `try_jump`, the AerialDodge action): a
+  FRESH press of the glide button glides, also in the middle of the Aerial Dodge ("straight into
+  Glide"); a held button never does. `shared_frame`'s Square glide is a fresh press now (a Square
+  held through the dodge doesn't glide when KH1 has him back). `style_air_start` (KH1 glide with
+  KH2 owning him) takes a fresh Square (Superglide) or a fresh jump press (Glide, when the dodge
+  isn't there for it: `Character::air_dodge_available`), and in the dodge (`StateName::AerialDodge`)
+  at once instead of only while falling.
+- `kh2_air_dodge` keeps its last answer when the controller is busy (a failed `try_lock` read as
+  "no dodge", so neither the borrow's hide nor the dodge hide held for that step).
+- Logging for the dodge's first-frame glide request (still open): when KH1's step in
+  `shared_control` asks 0x71..0x74, the log has the button words KH1 saw and the real ones, the
+  hide, `AIR_DODGED` / `DODGE_JUMP_UP`, and the state flags.
+
+### 2026-10-21: Stage 319 (testing branch: glide only after the Aerial Dodge, on the jump button)
+- The user: KH1's glide request on the Aerial Dodge's first frame (t318 traces: KH1's air step asked
+  its glide motion, 0x71 / 0x73, the frame KH2 borrowed him for the dodge) isn't wanted: "glide can
+  be requested after aerial dodge only (if its equipped)", and "hold off on normal glide on
+  square". `shared::control`: with the Aerial Dodge equipped, KH1 sees no jump in the air (past the
+  rise) until the dodge is used, nor while the dodge's press is still held (`DODGE_JUMP_UP`): the
+  glide, KH1's own held jump, needs a fresh press after the dodge. Without the dodge equipped
+  nothing is hidden. Landing resets it (`AIR_DODGED`).
+- Glide on Square is off: `settings::glide_on_square` is always false (the `glide = square` line
+  is commented out, one line to bring back); the Square glide code (`takeover::shared_frame`,
+  `glide_button`, `shared::control`'s hide) is untouched behind that flag. KH2's controller's own
+  glide button is the jump again.
+
 ### 2026-10-21: Stage 318 (testing branch: the fall after an Aerial Dodge blends from the dodge's pose)
 - The user: after an Aerial Dodge "goes back into the jump animation for a frame and soras feet
   seem to glitch out before snapping to his falling pose". The t317 draw columns: the dodge is

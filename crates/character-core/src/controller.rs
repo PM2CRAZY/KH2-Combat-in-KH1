@@ -886,6 +886,12 @@ impl Character {
         self.vel_y = vel_y.min(0.0);
     }
 
+    /// The Aerial Dodge is still there for this fall (a jump press in the air would be the dodge,
+    /// not a glide).
+    pub fn air_dodge_available(&self) -> bool {
+        self.air_dodge_ready
+    }
+
     /// The Aerial Dodge is there for this fall (taken over from the host's own jump).
     pub fn allow_air_dodge(&mut self) {
         self.air_dodge_ready = self.abilities.aerial_dodge > 0;
