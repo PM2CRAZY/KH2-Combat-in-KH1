@@ -382,6 +382,8 @@ static TITLE_TEXT: OnceLock<usize> = OnceLock::new();
 /// The costs' digits, and how far in from a row's right end they sit.
 static COST_TEXT: OnceLock<Vec<usize>> = OnceLock::new();
 const COST_DX: i32 = 5;
+/// The costs drawn on the rows (off: the user, "remove the numbers in the drive menu").
+const SHOW_COSTS: bool = false;
 static ORIG_LIST_DRAW: AtomicUsize = AtomicUsize::new(0);
 /// The header tab's stand-in while the Drive list draws: its record with no size.
 static BLANK_HEADER: OnceLock<usize> = OnceLock::new();
@@ -507,7 +509,7 @@ unsafe extern "system" fn list_draw(kind: i32, menu: usize, a3: i32, a4: i32, la
     // Each row's cost in Drive bars at its right end, as KH2's Drive list shows it (not in a form,
     // where the rows read Revert), in the row's own brightness (greyed with a row the gauge is
     // short of).
-    if alpha != 0.0 && !super::form::in_form() {
+    if SHOW_COSTS && alpha != 0.0 && !super::form::in_form() {
         // (The row's right end: its second panel's, the list's right column, if it has one.)
         let mut r = [0i32; 4];
         rect_of(if rows2 > 0x10000 { rows2 } else { rows }, &mut r);

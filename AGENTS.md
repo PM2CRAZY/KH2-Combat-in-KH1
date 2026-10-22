@@ -3584,6 +3584,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 324 (no costs in the Drive list; the HP and MP bars' bottom edge restored)
+- The user: "remove the numbers in the drive menu ... the outline of the MP and HP bars look like
+  they've been cut off". `drive::SHOW_COSTS = false` (the s318 cost digits off, code kept). The black
+  line under the bars' ends (s322, standing in for the hidden label's plate) now spans both ends,
+  from 0.57 of the ring's quarter left of it to the label's right end, 2 units thick.
+
 ### 2026-10-22: Stage 323 (the Drive gauge hidden until the first form; full by default)
 - The user: "don't show the drive gauge until the first drive form is unlocked. By default, the
   drive gauge should be full." `drivegauge::shown(max)` (max above the 3 base bars: a form is open)

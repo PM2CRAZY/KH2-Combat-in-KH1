@@ -438,14 +438,17 @@ unsafe fn draw() {
         None
     };
     if let Some((_, b, _, _)) = kh2 {
-        // The MP bar's end loses its bottom edge with the label hidden (the label's black plate
-        // drew it): a black line under the bar's end, from the ring's left edge to the label's
-        // right end.
+        // The MP and HP bars' ends lose their bottom edge with the label hidden (the label's
+        // black plate drew it): a black line under both ends, from the MP bar's end (0.57 of the
+        // ring's quarter left of it, measured on the user's s323 screenshot) to the label's right
+        // end, 2 units thick as KH1's outlines are (the user: "the outline of the MP and HP bars
+        // look like they've been cut off").
         if settings.hide_hp_label {
             if let Some(l) = layout.as_ref().filter(|l| !l.labels.is_empty()) {
                 let p = l.portrait;
+                let left = p[0] - ((p[2] - p[0]) as f32 * 0.57).round() as i32;
                 let right = l.labels.iter().map(|(_, r)| r[2]).max().unwrap_or(p[0] + 10).max(p[0] + 4);
-                block(base, rows, texture, p[0] - 1, p[1], right + 1, p[1] + 1, 0, BLACK, BLACK, alpha);
+                block(base, rows, texture, left, p[1], right + 1, p[1] + 2, 0, BLACK, BLACK, alpha);
             }
         }
         if settings.drive_gauge_debug {
