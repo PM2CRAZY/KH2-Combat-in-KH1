@@ -48,7 +48,8 @@ Each form is its own object in `00objentry.bin`, with:
 - **Damage taken** (the HP-change handler): out of a form, `damage / max HP × A` points, where
   `A` is 0 without Damage Drive and 50 per copy of it. So vanilla KH2 Sora gains nothing from
   hits he takes. In a form, damage never touches the form gauge.
-- **Not modelled:** items (Drive Recovery +3 bars, High Drive Recovery +9).
+- **Items** (`docs/kh1-items.md`): Drive Recovery adds 300 points, High Drive Recovery 900, through
+  the same add (KH2's item use, items 274 / 275); usable while the bars are below the maximum.
 
 ## Driving (Checked, exe)
 
@@ -1109,7 +1110,6 @@ snapshots at its events (the same 0x16C00-byte layout as the save block).
 - Form keyblade stats (forms deal Sora's base damage).
 - The limits' light (`trap_limit_light`); summons, party members.
 - The form change's full-screen effect.
-- Drive Recovery items.
 
 ## Growth abilities count what Sora has learned (s301)
 
@@ -1155,8 +1155,9 @@ at its right end (`drive::list_draw`, not in a form, where the rows read Revert)
 
 **Maximum** (`drivegauge::MAX_TABLE`, the user's, s325: "Let's have the drive gauge start at 3.
 Have the drive gauge level up at these points: 1. defeating Sabor (boss) 2. defeating Riku I 3.
-Beating the game 4. defeating Sephiroth 5. Defeating Kurt Zisa 6. Defeating Unknown"): 3 bars, +1
-for each of those six fights won, in any order; 9 (KH2's cap) with all six. Until s324 it was +1
+Beating the game 4. defeating Sephiroth 5. Defeating Kurt Zisa 6. Defeating Unknown"; and, the
+third changed: "instead of beating the game, make it after defeating Chernabog"): 3 bars, +1 for
+each of those six fights won, in any order; 9 (KH2's cap) with all six. Until s324 it was +1
 per form and +2 for Final. It is worked out from the story flags (`story::Flags`, the table
 below) every half second and never stored, so loading a save gives that save's maximum. Logged
 when it changes: "Drive gauge: maximum 5 bars (3 base, Sabor +1, Riku 1 +1)".
@@ -1165,7 +1166,7 @@ when it changes: "Drive gauge: maximum 5 bars (3 base, Sabor +1, Riku 1 +1)".
 |---|---|---|---|
 | Sabor (the boss fight, his second) | Deep Jungle's story byte (`+0x1505`) ≥ 0x42 | Room `tz03`'s script sets 0x3F as it starts the fight (enemy group 0x67), waits for the battle's end (calls 0x23C, 0x240) and sets 0x42; KH1's snapshots `tz03_y021` (0x37) and `tz03_y021a` (0x39) before, `tz00_00` (0x44) after. The first Sabor fight (as Sora lands, room `tz01`) ends at 0x0D. `growth::BOSS_GIFTS`'s Sabor value is the same 0x42. | High for the byte, medium-high that it is the fight meant (the second, full boss fight) |
 | Riku 1 | Hollow Bastion's story byte (`+0x150E`) ≥ 0x32 | Room `pc05`'s script waits for the battle's end (0x199), plays the scenes and sets 0x32, then swaps three character-journal entries for their next ones (0x211 removes 3, 9, 0x0B; 0x206 adds 4, 0x0A, 0x0C); snapshots `pc05_o011` (0x28, old entries) and `pc15_o021` (0x32, new ones); nothing writes a value between 0x28 and 0x32. | Medium-high |
-| Beating the game | byte `+0xD41` (the room scripts' byte variable 0x141) ≠ 0 | Set to 1 by End of the World's last rooms (`ew32`, `ew33`) once the last fight's enemies are gone, just before the ending's movies (`ew33`, call 0xF4 with `ew_001`..`ew_004`; KH1 gives its clear trophies on those movies, `0x1401C7700`); `ew33` reads it back to run the ending. No other room script writes it (all 235 searched) and the exe doesn't touch it. 0 in every snapshot and every save of the user's (none is past the final fight). | Medium: not seen in a cleared save; if KH1's clear save were made from a backup taken before the final fight it would read 0 |
+| Chernabog (End of the World, atop the Final Rest) | End of the World's story byte (`+0x150F`) ≥ 0x33 | Room `ew27` is his (its actor 7 is named CHERNABOG). Its entry script sets 0x32 as Sora walks in. Once the fight is over its script gives prize 0x10 (its prize row 0xB1 0x04: type 1, ability 4 of list 0xB, which is Superglide by KH1's own `(4, 0xB)` test, `takeover.rs`; KH1's reward for him) and sets 0x33. Only `ew27` writes 0x33, and nothing writes a value between 0x32 and 0x33: End of the World's stores are 0x01 (`ew02`), 0x32 and 0x33 (`ew27`), 0x5A (`ew36`), 0x64..0x6E (`ew31`), 0x93 / 0x9B (`ew34`). Snapshots `ew01_a011` (0x00) and `ew00_00` (0x01) are without Superglide; `ew01_a011a` (0x33) and every later one (`ew31_a011` 0x5A, `ew34_a011` 0x6E, `ew00_02` 0x66) have it. The user's 100% Steam save is at 0x33. The Steam install's `ew27` is the same file. Glide MAX (`growth::CHERNABOG`) reads the same flag, the same value it had before. Randomizer saves can hold 0x33 (and 0x08, which no room script writes) with the rest of the story far behind, so there it may count early. | High |
 | Sephiroth | Heartless journal entry 0xA5 (`+0x16F7` bit 2) | The Platinum Match's script (room `he07`) adds it after its 0x199 wait, once the battle is over (Ice Titan's 0xA6 comes as his match starts); its prize 0x95 is One-Winged Angel. In no snapshot (the last, `he07_t011`, is as the Platinum Match starts). | High |
 | Kurt Zisa | Agrabah's story byte (`+0x1508`) ≥ 0x96 | Room `al01`'s script waits for the battle's end (0x199), adds his journal entry 0xA8 and sets 0x96 (`al19` steps it on to 0xA0); Agrabah's story ends at 0x82 before him. Snapshots `al01_a041` (0x82, no 0xA8) and `pp10_o041` (0xA0, 0xA8). | High |
 | The Unknown | journal entry 0xA9 (`+0x16F8` bit 6) and item 0x3C owned (`+0x499 + 0x3C`) | Room `pc13`'s script adds 0xA9 (and sets its byte variable 0x518) as his fight starts, before its 0x199 wait; his prize 0x97 is item 0x3C (the prize table, `btltbl` + 0xC6A8), an accessory. Snapshots `pc13_o031` (neither) and `he07_t011` (both). Both together, as Ice Titan: the entry alone is a fight started, the accessory alone may come from elsewhere. The inventory counts what is equipped too (KH1's free count `0x1402E6330` takes the equipped from it); selling it would take the bar away. | High for the fight, medium for the prize test |
@@ -1175,7 +1176,8 @@ How the new reads were made (Checked, exe): the script call table is `0x1404FB55
 (`0x1401AF0D0`) wait for the battle's end too; 0x247 gives a prize (`btltbl` + 0xC6A8, u16 rows:
 type in the low nibble, the item in the high byte); the store class maps byte variables below
 0x800 to `save + 0xC00 + var`. The rooms' scripts and KH1's snapshots are read from the user's
-install, nothing kept.
+install, nothing kept. (s325's third row was the game's end, `+0xD41` set by `ew32` / `ew33`;
+the user moved it to Chernabog.)
 
 **Filling, out of a form** (KH2's rules from the exe, above):
 - *Sora's hits*: every hit record KH1 makes for one of Sora's attacks on a foe (`probe::hit`,

@@ -52,3 +52,6 @@
 *.gzf
 *.gpr
 *.rep
+
+# Claude Code worktrees (helpers' scratch checkouts).
+/.claude/

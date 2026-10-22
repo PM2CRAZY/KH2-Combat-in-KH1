@@ -235,9 +235,11 @@ pub const AERIAL_DODGE_LEVELS: [u8; 3] = [30, 42, 54];
 /// beating Chernabog (the user: no Superglide; Glide grows from 40 to LV3, Chernabog gives MAX).
 pub const GLIDE_LEVELS: [u8; 2] = [40, 52];
 
-/// Chernabog beaten: End of the World's progress (index 11) at 0x33, where KH1 gives Superglide
-/// (as the Archipelago KH1 client reads it, gaithern's KH-1FM-AP-LUA, MIT).
-pub const CHERNABOG: BossGift = BossGift { boss: "Chernabog", world: 11, progress: 0x33, ability: kh1::GLIDE };
+/// Chernabog beaten: End of the World's progress at 0x33, where KH1 gives Superglide. The story
+/// flag the Drive gauge uses too (`crate::story::CHERNABOG_EW`, its evidence there: read from
+/// his room's script and KH1's snapshots, the same value as before).
+pub const CHERNABOG: BossGift =
+    BossGift { boss: "Chernabog", world: crate::story::END_OF_THE_WORLD, progress: crate::story::CHERNABOG_EW, ability: kh1::GLIDE };
 
 /// Glide's level at Sora's level, once he has it: MAX once Chernabog is beaten.
 pub fn glide_level(level: u8, progress: &[u8]) -> u8 {
@@ -803,8 +805,15 @@ mod tests {
         assert_eq!(sora(40, &[], &[kh1::GLIDE]).kh2().glide, 2);
         assert_eq!(sora(99, &[], &[kh1::GLIDE]).kh2().glide, 3);
         let mut c = sora(1, &[], &[kh1::GLIDE]);
+        c.progress[11] = 0x32;
+        assert_eq!(c.kh2().glide, 1, "his fight under way");
         c.progress[11] = 0x33;
         assert_eq!(c.kh2().glide, 4);
+        // The Drive gauge's Chernabog row reads the same byte and value.
+        let mut save = vec![0; crate::story::SPAN];
+        save[crate::story::PROGRESS..][..c.progress.len()].copy_from_slice(&c.progress);
+        assert!(crate::story::Flags::read(&save).unwrap().chernabog);
+        assert_eq!((CHERNABOG.world, CHERNABOG.progress), (crate::story::END_OF_THE_WORLD, crate::story::CHERNABOG_EW));
         assert!(a.equipped.contains(&kh2::FLASH_STEP) && !a.equipped.contains(&kh2::SLAPSHOT));
         assert!(a.equipped.contains(&kh2::GUARD));
         // Vicinity Break is KH1's Ripple Drive (56), Magnet Burst ours (77): their KH2 ids, the

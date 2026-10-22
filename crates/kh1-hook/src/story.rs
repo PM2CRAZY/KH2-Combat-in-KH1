@@ -8,7 +8,7 @@
 //! - Reflect found after Pot Centipede, the Hercules Cup (its final is Hercules) and Ice Titan
 //!   (the Gold Match): the first gives Reflect, the second Reflera, the third Reflega;
 //! - the Drive gauge's maximum (`crate::drivegauge::MAX_TABLE`): +1 each for Sabor, Riku 1,
-//!   beating the game (Ansem's last fight), Sephiroth, Kurt Zisa and the Unknown.
+//!   Chernabog (End of the World, atop the Final Rest), Sephiroth, Kurt Zisa and the Unknown.
 //!
 //! How each flag was found (`docs/drive-model.md`, "When the forms open", has the details): KH1's
 //! event scripts store a world's story byte with an opcode whose target `0xB04 + world` the
@@ -31,6 +31,7 @@ pub const DEEP_JUNGLE: usize = 1;
 pub const AGRABAH: usize = 4;
 pub const NEVERLAND: usize = 9;
 pub const HOLLOW_BASTION: usize = 10;
+pub const END_OF_THE_WORLD: usize = 11;
 
 /// Guard Armor beaten: Traverse Town's byte goes 0x28 → 0x2B in the Third District's script
 /// once the fight is over (its enemies cleared, its prize given), the same value the bosses'
@@ -62,6 +63,15 @@ pub const RIKU_1_HB: u8 = 0x32;
 /// story ends at 0x82 before him. Snapshots `al01_a041` (0x82, no 0xA8) and `pp10_o041` (0xA0,
 /// with 0xA8).
 pub const KURT_ZISA_AG: u8 = 0x96;
+/// Chernabog beaten: his room `ew27` (its actor 7 is named CHERNABOG) sets End of the World's
+/// byte to 0x32 as Sora walks in; once the fight is over its script gives prize 0x10 (`btltbl`'s
+/// prize row 0xB1 0x04: type 1, ability 4 of list 0xB, Superglide, as KH1's own `(4, 0xB)` test
+/// reads it, `win::takeover`) and sets 0x33. No other room script writes 0x33, and nothing
+/// writes a value between 0x32 and 0x33 (End of the World goes 0x01, 0x32, 0x33, 0x5A, ...).
+/// Snapshots `ew01_a011` (0x00) and `ew00_00` (0x01) without Superglide, `ew01_a011a` (0x33) and
+/// every later one with it. The user's 100% save (Steam) stands at 0x33. Glide MAX
+/// (`growth::CHERNABOG`) reads the same flag.
+pub const CHERNABOG_EW: u8 = 0x33;
 
 /// The Heartless journal (`save + 0x16E3`, one bit per entry, the high bit first).
 pub const JOURNAL: usize = 0x16E3;
@@ -92,14 +102,6 @@ pub const DIAMOND_DUST: u8 = 0x65;
 /// 0x3C, an accessory (item kind 1). Snapshots `pc13_o031` (0) and `he07_t011` (1).
 pub const UNKNOWN_PRIZE: u8 = 0x3C;
 
-/// Ansem beaten, the game's end (`save + 0xD41`, the room scripts' byte variable 0x141): set to
-/// 1 by End of the World's last rooms (`ew32`, `ew33`) once the last fight's enemies are gone,
-/// just before the ending's movies (`ew33`, call 0xF4 with `ew_001`..`ew_004`, the movies after
-/// which KH1 gives its clear trophies, `0x1401C7700`); `ew33` reads it back to play the ending.
-/// Nothing else writes it (every room script searched), nor the exe. 0 in every snapshot and in
-/// every save the user has (none is past the final fight).
-pub const GAME_BEATEN: usize = 0xD41;
-
 /// The Dive to the Heart's choice (`save + 0x48C`): 0 the Sword, 1 the Shield, 2 the Rod (Wand).
 pub const DIVE_CHOICE: usize = 0x48C;
 
@@ -120,7 +122,7 @@ pub struct Flags {
     // The Drive gauge's (`crate::drivegauge::MAX_TABLE`).
     pub sabor: bool,
     pub riku_1: bool,
-    pub game_beaten: bool,
+    pub chernabog: bool,
     pub sephiroth: bool,
     pub kurt_zisa: bool,
     pub unknown: bool,
@@ -150,7 +152,7 @@ impl Flags {
             ice_titan: journal(save, ICE_TITAN_ENTRY) && save[INVENTORY + DIAMOND_DUST as usize] >= 1,
             sabor: progress(DEEP_JUNGLE) >= SABOR_DJ,
             riku_1: progress(HOLLOW_BASTION) >= RIKU_1_HB,
-            game_beaten: save[GAME_BEATEN] != 0,
+            chernabog: progress(END_OF_THE_WORLD) >= CHERNABOG_EW,
             sephiroth: journal(save, SEPHIROTH_ENTRY),
             kurt_zisa: progress(AGRABAH) >= KURT_ZISA_AG,
             // (As Ice Titan: the entry comes as the fight starts, the prize only from winning.)
@@ -177,7 +179,7 @@ impl Flags {
             self.ice_titan,
             self.sabor,
             self.riku_1,
-            self.game_beaten,
+            self.chernabog,
             self.sephiroth,
             self.kurt_zisa,
             self.unknown,
@@ -192,7 +194,7 @@ impl Flags {
         let s = |b: bool| if b { "beaten" } else { "not yet" };
         let w = |b: bool| if b { "won" } else { "not yet" };
         format!(
-            "Guard Armor {}, Opposite Armor {}, Pegasus Cup {}, Anti-Sora {}, Riku 2 {}; Pot Centipede {}, Hercules Cup {}, Ice Titan {}; Sabor {}, Riku 1 {}, the game {}, Sephiroth {}, Kurt Zisa {}, the Unknown {}",
+            "Guard Armor {}, Opposite Armor {}, Pegasus Cup {}, Anti-Sora {}, Riku 2 {}; Pot Centipede {}, Hercules Cup {}, Ice Titan {}; Sabor {}, Riku 1 {}, Chernabog {}, Sephiroth {}, Kurt Zisa {}, the Unknown {}",
             s(self.guard_armor),
             s(self.opposite_armor),
             w(self.pegasus_cup),
@@ -203,7 +205,7 @@ impl Flags {
             s(self.ice_titan),
             s(self.sabor),
             s(self.riku_1),
-            s(self.game_beaten),
+            s(self.chernabog),
             s(self.sephiroth),
             s(self.kurt_zisa),
             s(self.unknown)
@@ -402,7 +404,7 @@ mod tests {
             Flags { ice_titan: true, ..Default::default() },
             Flags { sabor: true, ..Default::default() },
             Flags { riku_1: true, ..Default::default() },
-            Flags { game_beaten: true, ..Default::default() },
+            Flags { chernabog: true, ..Default::default() },
             Flags { sephiroth: true, ..Default::default() },
             Flags { kurt_zisa: true, ..Default::default() },
             Flags { unknown: true, ..Default::default() },
@@ -417,7 +419,7 @@ mod tests {
     fn drive_gauge_fights() {
         let mut s = save();
         let none = Flags::read(&s).unwrap();
-        assert!(!none.sabor && !none.riku_1 && !none.game_beaten && !none.sephiroth && !none.kurt_zisa && !none.unknown);
+        assert!(!none.sabor && !none.riku_1 && !none.chernabog && !none.sephiroth && !none.kurt_zisa && !none.unknown);
         // Sabor: 0x3F holds through his fight, 0x42 only after it.
         s[PROGRESS + DEEP_JUNGLE] = 0x3F;
         assert!(!Flags::read(&s).unwrap().sabor);
@@ -454,10 +456,15 @@ mod tests {
         let mut t = save();
         t[INVENTORY + UNKNOWN_PRIZE as usize] = 1;
         assert!(!Flags::read(&t).unwrap().unknown);
-        // The game: Ansem's flag.
-        assert!(!Flags::read(&s).unwrap().game_beaten);
-        s[GAME_BEATEN] = 1;
-        assert!(Flags::read(&s).unwrap().game_beaten);
+        // Chernabog: 0x32 holds through his fight (set as Sora walks in), 0x33 only after it;
+        // the later story keeps it.
+        s[PROGRESS + END_OF_THE_WORLD] = 0x32;
+        assert!(!Flags::read(&s).unwrap().chernabog);
+        s[PROGRESS + END_OF_THE_WORLD] = CHERNABOG_EW;
+        assert_eq!(s[0x150F], 0x33);
+        assert!(Flags::read(&s).unwrap().chernabog);
+        s[PROGRESS + END_OF_THE_WORLD] = 0x6E;
+        assert!(Flags::read(&s).unwrap().chernabog);
         // None of them opens a form, nor Reflect beyond Agrabah's byte (past Kurt Zisa, it is past
         // Pot Centipede too).
         let f = Flags::read(&s).unwrap();
@@ -467,6 +474,6 @@ mod tests {
             assert!(open(choice, &f).is_empty());
             assert!(!unlocked(Form::Master, choice, &f) && !unlocked(Form::Final, choice, &f));
         }
-        assert!(GAME_BEATEN < SPAN && INVENTORY + (UNKNOWN_PRIZE as usize) < SPAN);
+        assert!(PROGRESS + END_OF_THE_WORLD < SPAN && INVENTORY + (UNKNOWN_PRIZE as usize) < SPAN);
     }
 }

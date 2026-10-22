@@ -208,6 +208,45 @@ pub fn ran_out() -> bool {
     RAN_OUT.load(Ordering::Relaxed)
 }
 
+/// Whether the gauge is shown now (a Drive Form open, `drivegauge::shown`), read from the save.
+pub fn form_open() -> bool {
+    unsafe {
+        let Some(save) = super::menu::save_block(base()) else { return false };
+        read_max(save);
+    }
+    SHOWN.load(Ordering::Relaxed)
+}
+
+/// The bars as text, in a form too (the Drive Recovery log): "2 bars + 40 of 5".
+pub fn describe_bars() -> String {
+    with(|d| {
+        format!(
+            "{} bars + {} of {}{}",
+            d.bars,
+            if d.bars >= d.max { 0 } else { d.points },
+            d.max,
+            if d.gauge.is_some() { " (waiting under the form's gauge)" } else { "" }
+        )
+    })
+    .unwrap_or_else(|| "no save".into())
+}
+
+/// A Drive Recovery can be used (`driveitems::usable`, KH2's test: the gauge shown and not full;
+/// in a form, the bars under the form's gauge).
+pub fn recovery_usable() -> bool {
+    form_open() && with(|d| crate::driveitems::usable(true, d.bars, d.max)).unwrap_or(false)
+}
+
+/// A Drive Recovery used: `points` added through the gauge's add (KH2's: the bars, in a form the
+/// bars under the form's gauge). Returns the gauge before and after, for the log.
+pub fn recover(points: i32) -> (String, String) {
+    let before = describe_bars();
+    form_open();
+    with(|d| d.add_points(points));
+    LOGGED.store(u32::MAX, Ordering::Relaxed);
+    (before, describe_bars())
+}
+
 /// Fills the gauge (a testing aid): every bar, or the form gauge in a form.
 #[allow(dead_code)]
 pub fn refill() {

@@ -5,7 +5,7 @@
 //! - **Costs** (the user's, KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 4, Master
 //!   4, Final 5; Anti 9, which empties the gauge.
 //! - **Maximum** (the user's, s325): 3 bars, then +1 for each of six fights won (`MAX_TABLE`:
-//!   Sabor, Riku 1, the game's end, Sephiroth, Kurt Zisa, the Unknown), KH2's 9 with all six.
+//!   Sabor, Riku 1, Chernabog, Sephiroth, Kurt Zisa, the Unknown), KH2's 9 with all six.
 //!   Derived from the story flags (`crate::story::Flags`) each time, never stored.
 //! - **Shown** once the first Drive Form is open (`shown`).
 //! - **The save**: bars and points live in two bytes of KH1's save block (`BARS_OFF`,
@@ -22,11 +22,12 @@ pub type Raise = (&'static str, fn(&Flags) -> bool, u8);
 
 /// The fights that raise the maximum (the user: "Have the drive gauge level up at these points:
 /// 1. defeating Sabor (boss) 2. defeating Riku I 3. Beating the game 4. defeating Sephiroth 5.
-/// Defeating Kurt Zisa 6. Defeating Unknown"). Change the rows here.
+/// Defeating Kurt Zisa 6. Defeating Unknown"; then, for the third, "instead of beating the game,
+/// make it after defeating Chernabog"). Change the rows here.
 pub const MAX_TABLE: [Raise; 6] = [
     ("Sabor", |f| f.sabor, 1),
     ("Riku 1", |f| f.riku_1, 1),
-    ("the game", |f| f.game_beaten, 1),
+    ("Chernabog", |f| f.chernabog, 1),
     ("Sephiroth", |f| f.sephiroth, 1),
     ("Kurt Zisa", |f| f.kurt_zisa, 1),
     ("the Unknown", |f| f.unknown, 1),
@@ -176,7 +177,7 @@ mod tests {
     use super::*;
 
     fn all() -> Flags {
-        Flags { sabor: true, riku_1: true, game_beaten: true, sephiroth: true, kurt_zisa: true, unknown: true, ..Default::default() }
+        Flags { sabor: true, riku_1: true, chernabog: true, sephiroth: true, kurt_zisa: true, unknown: true, ..Default::default() }
     }
 
     #[test]
@@ -184,7 +185,7 @@ mod tests {
         assert_eq!(max_bars(&Flags::default()), 3, "the start");
         assert_eq!(max_bars(&Flags { sabor: true, ..Default::default() }), 4);
         assert_eq!(max_bars(&Flags { sabor: true, riku_1: true, ..Default::default() }), 5);
-        assert_eq!(max_bars(&Flags { sabor: true, riku_1: true, game_beaten: true, ..Default::default() }), 6);
+        assert_eq!(max_bars(&Flags { sabor: true, riku_1: true, chernabog: true, ..Default::default() }), 6);
         assert_eq!(max_bars(&Flags { unknown: true, ..Default::default() }), 4, "any order");
         assert_eq!(max_bars(&all()), 9);
         // Each row counts once, for its own flag only.
@@ -193,7 +194,7 @@ mod tests {
             let one = [
                 Flags { sabor: true, ..Default::default() },
                 Flags { riku_1: true, ..Default::default() },
-                Flags { game_beaten: true, ..Default::default() },
+                Flags { chernabog: true, ..Default::default() },
                 Flags { sephiroth: true, ..Default::default() },
                 Flags { kurt_zisa: true, ..Default::default() },
                 Flags { unknown: true, ..Default::default() },

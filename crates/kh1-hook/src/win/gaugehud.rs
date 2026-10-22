@@ -18,6 +18,33 @@
 //! event bit `0x142867CD8` & 8), with its alpha (`+0xA9C` of his gauge record), and the HUD hide
 //! (`hud`, Page Down) empties it with the rest of that task's draws.
 //!
+//! **Only while the player has Sora in the field** (the user: "make sure the drive gauge is only
+//! showing when the character is actively controlling sora. Dont show it on the world map, in the
+//! menu, in the gummi ship routes, during cutscenes, etc"). KH1 runs this task outside the field
+//! too: the Gummi side scene sets the HUD up as well (`0x14020BAB0` calls the HUD setup
+//! `0x140264C50`, as the field's `0x14016E5B0` does), with no gauge slot bound, which the s323
+//! gauge drew at full alpha. `visibility` gives the reason it isn't drawn, if any:
+//! - KH1's game mode (`0x1423405C0`, stepped by `0x14016E850`): 5 is the field (set by the
+//!   field's setup `0x14016E5B0`); 6 / 7 the Gummi side scene (`0x14020BAB0`: the world map, the
+//!   flights), 8 / 9 its other setup (`0x14020B310`), 0..3 and 13..15 the title and the way back
+//!   to it, the rest the loads between (10, 11, 12, 17, 18 set the field up again);
+//! - KH1's pause machine (`0x14232E9B4`, `kh2fx::pause_menu_up`: the pause menu and the menus
+//!   opened the same way);
+//! - no physics frame of Sora's for 8 HUD frames (`takeover::GAME_FRAME`: any other menu or load
+//!   that stops the field);
+//! - his HUD slot not bound (`0x1428123E0`);
+//! - KH1's event bit (above: cut at once, as KH1's own gauge is);
+//! - an event running (`0x14298D3A0`: cutscenes, and talks with their text boxes) or KH1's
+//!   script having him (`takeover::script_has_sora`: a scene, a door, a room's exit or entry walk;
+//!   not his own actions, hits, knock-downs or KH1's limits);
+//! - his HP 0 (the game over);
+//! - KH1's own gauge faded out (its alpha, as before).
+//!
+//! It fades in and out in `FADE_S` (multiplied with KH1's alpha), cut at once where KH1's gauge
+//! is (the event bit) or there is no field. KH1's MP HP label is hidden, and the black edge drawn
+//! under the bars' ends, only while the gauge is drawn (past half its fade). Each change of reason
+//! is logged once ("Drive gauge HUD: hidden (...)" / "shown").
+//!
 //! **KH2's own art** (`kh2hud`, `drive_gauge_art = kh2`): KH2's gauge from its field HUD file,
 //! its animations as KH2 plays them; KH1's pieces above only when that can't be had.
 //!
@@ -73,6 +100,17 @@ const TEXT_RVA: Rva = Rva(0x2CFB20);
 const TEXT_RUN_RVA: Rva = Rva(0x3028F0);
 const FONT_H_RVA: Rva = Rva(0x54603C);
 const TEXT_WIDTH_RVA: Rva = Rva(0x2CEC60);
+/// KH1's game mode (i32; 5 the field). See the module's notes.
+const GAME_MODE_RVA: Rva = Rva(0x23405C0);
+const FIELD_MODE: i32 = 5;
+/// Nonzero while an event runs (cutscenes, talks): `takeover`'s and `camera`'s.
+const EVENT_RVA: Rva = Rva(0x298D3A0);
+/// KH1's party slot 0 (Sora's actor).
+const PARTY_RVA: Rva = Rva(0x2D37C80);
+/// HUD frames with no physics frame of Sora's before the field counts as stopped.
+const STALL_FRAMES: u32 = 8;
+/// The gauge's fade in or out, in seconds.
+const FADE_S: f32 = 0.2;
 
 /// KH1's colours run 0..0x80 for the texture's own (0x80 = as it is, up to 0xFF = twice).
 const BLACK: [i32; 4] = [0, 0, 0, 0x80];
@@ -143,12 +181,15 @@ type TaskFn = unsafe extern "system" fn(usize) -> usize;
 unsafe extern "system" fn task(node: usize) -> usize {
     let f: TaskFn = std::mem::transmute(ORIG_TASK.load(Ordering::Acquire));
     let base = base();
+    // Whether (and how faded) the gauge is drawn this frame.
+    let fade = std::panic::catch_unwind(|| step_fade(base)).unwrap_or(0.0);
     let l = std::panic::catch_unwind(|| measure(base)).ok().flatten();
     // Both halves of the label ("MP" and "HP": the user, 'the "HP" text is still there, remove
     // it').
-    // (Only while the gauge shows: before the first Drive Form, KH1's label stays.)
-    let shown = super::gauge::snapshot().is_some_and(|s| s.shown);
-    let labels: Vec<(usize, [i32; 4])> = if shown && super::settings::get().hide_hp_label { l.as_ref().map(|l| l.labels.clone()).unwrap_or_default() } else { Vec::new() };
+    // (Only while the gauge shows: before the first Drive Form, and wherever the gauge isn't
+    // drawn, KH1's label stays.)
+    let label_hidden = fade >= 0.5 && super::settings::get().hide_hp_label;
+    let labels: Vec<(usize, [i32; 4])> = if label_hidden { l.as_ref().map(|l| l.labels.clone()).unwrap_or_default() } else { Vec::new() };
     let hidden: Vec<(usize, [i32; 2])> = labels
         .iter()
         .filter_map(|&(rec, _)| {
@@ -166,8 +207,114 @@ unsafe extern "system" fn task(node: usize) -> usize {
     for (rec, keep) in hidden {
         wr(rec + 8, keep);
     }
-    let _ = std::panic::catch_unwind(|| draw());
+    if fade > 0.0 {
+        let _ = std::panic::catch_unwind(|| draw(fade, label_hidden));
+    }
     r
+}
+
+/// The gauge's fade (0 hidden .. 1 shown) and the reason last logged.
+static FADE: std::sync::Mutex<(f32, Option<std::time::Instant>)> = std::sync::Mutex::new((0.0, None));
+static REASON: std::sync::Mutex<Option<Option<String>>> = std::sync::Mutex::new(None);
+static REASONS_LOGGED: AtomicU32 = AtomicU32::new(0);
+/// Sora's physics frame last seen, and the HUD frames since it changed.
+static LAST_GAME_FRAME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static STALLED: AtomicU32 = AtomicU32::new(0);
+
+/// This frame's fade: towards 1 while Sora is the player's in the field, towards 0 (or 0 at once,
+/// `visibility`'s `cut`) otherwise; a change of reason logged.
+unsafe fn step_fade(base: usize) -> f32 {
+    let (reason, cut) = match visibility(base) {
+        Some((r, cut)) => (Some(r), cut),
+        None => (None, false),
+    };
+    {
+        let mut last = REASON.lock().unwrap_or_else(|e| e.into_inner());
+        if last.as_ref() != Some(&reason) {
+            // (Logged once per change, 400 at most.)
+            if REASONS_LOGGED.fetch_add(1, Ordering::Relaxed) < 400 {
+                log(&match &reason {
+                    Some(r) => format!("Drive gauge HUD: hidden ({r})"),
+                    None => "Drive gauge HUD: shown".into(),
+                });
+            }
+            *last = Some(reason.clone());
+        }
+    }
+    let mut g = FADE.lock().unwrap_or_else(|e| e.into_inner());
+    let now = std::time::Instant::now();
+    // (The time since the last HUD frame, at most 50 ms: a pause stops this task.)
+    let dt = g.1.map_or(0.0, |t| now.duration_since(t).as_secs_f32()).min(0.05);
+    g.1 = Some(now);
+    g.0 = match reason {
+        None => (g.0 + dt / FADE_S).min(1.0),
+        Some(_) if cut => 0.0,
+        Some(_) => (g.0 - dt / FADE_S).max(0.0),
+    };
+    g.0
+}
+
+/// Why the gauge isn't drawn this frame, and whether it goes at once (`true`) or fades out;
+/// `None`: Sora is the player's in the field.
+unsafe fn visibility(base: usize) -> Option<(String, bool)> {
+    // Sora's physics frames (the field running): counted here per HUD frame.
+    let gf = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let stalled = if LAST_GAME_FRAME.swap(gf, Ordering::Relaxed) != gf {
+        STALLED.store(0, Ordering::Relaxed);
+        0
+    } else {
+        STALLED.fetch_add(1, Ordering::Relaxed).saturating_add(1)
+    };
+    let mode = rd::<i32>(base + GAME_MODE_RVA);
+    if mode != FIELD_MODE {
+        let what = match mode {
+            6..=9 => "world map / Gummi Ship",
+            0..=3 | 13..=15 => "title screen",
+            _ => "loading",
+        };
+        return Some((format!("{what}: KH1 game mode {mode}, not the field"), true));
+    }
+    if super::kh2fx::pause_menu_up(base) {
+        return Some(("menu: KH1's pause machine is up".into(), true));
+    }
+    let sora = rd::<u64>(base + PARTY_RVA) as usize;
+    if sora < 0x10000 || !super::crash::readable(sora + 0x448) {
+        return Some(("no Sora in the field".into(), true));
+    }
+    if gf == 0 || stalled >= STALL_FRAMES {
+        // (Faded, not cut: a moment of KH1's own that skips his frames isn't a load.)
+        return Some(("the field is stopped: no physics frame of Sora's (a menu or a load)".into(), gf == 0));
+    }
+    if rd::<u32>(base + SORA_BOUND_RVA) == 0 {
+        return Some(("Sora's HP/MP gauge isn't up".into(), true));
+    }
+    if rd::<u32>(base + FLAGS_RVA) & 8 != 0 {
+        return Some(("cutscene: KH1's event bit".into(), true));
+    }
+    if rd::<u32>(base + EVENT_RVA) != 0 {
+        return Some(("event or dialogue".into(), false));
+    }
+    // (`takeover` keeps it on Sora's frames while it runs; without it, the same reads here.)
+    let script = if super::takeover::ON.load(Ordering::Relaxed) {
+        super::takeover::script_has_sora()
+    } else {
+        super::pose::ptr(rd::<u32>(sora + 0x440)) != 0 || rd::<u32>(sora + 0x444) & 1 != 0
+    };
+    if script {
+        return Some(("scene: KH1's script has Sora".into(), false));
+    }
+    let stats = super::pose::ptr(rd::<u32>(sora + 0x6C));
+    if stats > 0x10000 && super::crash::readable(stats + 0x44) && rd::<i32>(stats + 0x3C) <= 0 {
+        return Some(("game over: Sora's HP 0".into(), false));
+    }
+    if !super::gauge::snapshot().is_some_and(|s| s.shown) {
+        return Some(("no Drive Form opened yet".into(), true));
+    }
+    let alpha = rd::<f32>(base + SORA_GAUGE_RVA + 0xA9C);
+    if !(0.01..=1.5).contains(&alpha) {
+        return Some(("KH1's own gauge faded out".into(), true));
+    }
+    None
 }
 
 /// Sora's gauge as KH1 draws it this frame (`measure`).
@@ -340,20 +487,19 @@ unsafe fn text(base: usize, word: usize, x: i32, y: i32, colour: [u8; 4], outlin
     run(start);
 }
 
-unsafe fn draw() {
+/// The gauge, faded by `fade` (`step_fade`; `visibility` has already asked for Sora's gauge, the
+/// field and the player's control), and the bars' bottom edge if KH1's label was left out.
+unsafe fn draw(fade: f32, label_hidden: bool) {
     let base = base();
     let settings = super::settings::get();
-    // Only with Sora's gauge: not in events (KH1 draws none then), and with its alpha.
-    if rd::<u32>(base + FLAGS_RVA) & 8 != 0 {
-        return;
-    }
+    // With Sora's gauge's alpha.
     let g = base + SORA_GAUGE_RVA;
-    let alpha = if rd::<u32>(base + SORA_BOUND_RVA) != 0 { rd::<f32>(g + 0xA9C) } else { 1.0 };
+    let alpha = rd::<f32>(g + 0xA9C);
     if !(0.01..=1.5).contains(&alpha) {
         SKIPPED.fetch_add(1, Ordering::Relaxed);
         return;
     }
-    let alpha = alpha.min(1.0);
+    let alpha = alpha.min(1.0) * fade.clamp(0.0, 1.0);
     let Some(s) = super::gauge::snapshot() else { return };
     // (Not before the first Drive Form opens: the user.)
     if !s.shown {
@@ -441,7 +587,9 @@ unsafe fn draw() {
         // ring's quarter left of it, measured on the user's s323 screenshot) to the label's right
         // end, 2 units thick as KH1's outlines are (the user: "the outline of the MP and HP bars
         // look like they've been cut off").
-        if settings.hide_hp_label {
+        // (Only when the label was left out this frame: wherever the gauge isn't drawn, KH1's
+        // label and its edge are back.)
+        if label_hidden {
             if let Some(l) = layout.as_ref().filter(|l| !l.labels.is_empty()) {
                 let p = l.portrait;
                 let left = p[0] - ((p[2] - p[0]) as f32 * 0.57).round() as i32;

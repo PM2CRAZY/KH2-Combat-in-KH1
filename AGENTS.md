@@ -3584,6 +3584,20 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 326 (Chernabog for a Drive bar; the gauge only while the player has Sora; Drive Recovery items)
+- The user: "instead of beating the game, make it after defeating Chernabog". `story::CHERNABOG_EW`
+  (End of the World >= 0x33, set in ew27 after Superglide's prize; found independently, it matches
+  growth.rs's Glide MAX value, which now shares it). `MAX_TABLE`'s third row is Chernabog.
+- The user: "make sure the drive gauge is only showing when the character is actively controlling
+  sora". `gaugehud::visibility()`: KH1's game mode 0x1423405C0 (5 = the field), the pause machine,
+  Sora's actor, his frames advancing, his HUD slot, the event bit and events, `script_has_sora`,
+  HP 0; a 0.2 s fade. The MP HP label and the edge line follow the gauge.
+- The user: "have drive recovery items exist and be sold at the item shop in traverse town". KH1 ids
+  0x91 / 0x92 (unused placeholders after Cottage) as KH2's Drive Recovery (+300) and High Drive
+  Recovery (+900), menu-only as KH2's; bought for 80 / 120 (KH2's sell price x 4), sold for 16 / 24
+  (KH1's fifth); added to the Traverse Town Item Shop (tw10) once a form is open. `driveitems.rs`,
+  `win/items.rs`, docs/kh1-items.md.
+
 ### 2026-10-22: Stage 325 (the Drive maximum from six fights; the form gauge from the form's level)
 - The user: "Let's have the drive gauge start at 3. Have the drive gauge level up at these points:
   ... Sabor ... Riku I ... Beating the game ... Sephiroth ... Kurt Zisa ... Unknown. Also, when in

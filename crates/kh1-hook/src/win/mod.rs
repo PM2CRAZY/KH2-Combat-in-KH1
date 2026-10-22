@@ -20,6 +20,7 @@ mod fx12;
 mod hook;
 mod hud;
 mod hurt;
+mod items;
 mod kh2fx;
 mod kh1voice;
 mod kh2sound;
@@ -249,6 +250,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         music::install();
         hud::install();
         prize::install();
+        items::install();
         gaugehud::install();
         kh2sound::start();
         kh2fx::start();

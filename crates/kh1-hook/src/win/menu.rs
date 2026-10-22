@@ -248,6 +248,8 @@ unsafe extern "system" fn table_load() {
     f();
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     ensure_table(base);
+    // The Drive Recovery items' records and names (`items`).
+    super::items::ensure(base);
 }
 
 /// KH1's party stats (`0x1402A2FA0` `(member, stats)`, into `0x142E94BC0 + member * 0x100`):
