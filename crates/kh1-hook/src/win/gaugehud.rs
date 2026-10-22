@@ -109,8 +109,8 @@ const OVERLAP: i32 = 2;
 /// The HUD's height in its units (the bottom edge of the screen).
 const HUD_H: i32 = 384;
 /// KH1 HUD units per KH2 HUD unit: both fill the screen's height, KH1's 384 high, KH2's 448 (its
-/// PS2 frame), times 1.2 (the user: "its also kinda small"); `drive_gauge_scale` multiplies it.
-const KH2_UNIT: f32 = 384.0 / 448.0 * 1.2;
+/// PS2 frame), times 1.34 (the user's mockup of the right size, measured against s321's); `drive_gauge_scale` multiplies it.
+const KH2_UNIT: f32 = 384.0 / 448.0 * 1.34;
 /// The middle of KH2's DRIVE bar below its gauge centre, in KH2 units (its bar spans 2 to 25).
 const KH2_BAR_MIDDLE: f32 = 13.5;
 
@@ -144,18 +144,24 @@ unsafe extern "system" fn task(node: usize) -> usize {
     let f: TaskFn = std::mem::transmute(ORIG_TASK.load(Ordering::Acquire));
     let base = base();
     let l = std::panic::catch_unwind(|| measure(base)).ok().flatten();
-    let hidden = l.as_ref().and_then(|l| l.label).filter(|_| super::settings::get().hide_hp_label).and_then(|(rec, _)| {
-        // (A record with an animated rectangle keeps its own: not hidden.)
-        if rd::<u32>(rec + 0x60) & 0x14 == 0x14 {
-            return None;
-        }
-        let keep = rd::<[i32; 2]>(rec + 8);
-        wr(rec + 8, [0i32, 0]);
-        Some((rec, keep))
-    });
+    // Both halves of the label ("MP" and "HP": the user, 'the "HP" text is still there, remove
+    // it').
+    let labels: Vec<(usize, [i32; 4])> = if super::settings::get().hide_hp_label { l.as_ref().map(|l| l.labels.clone()).unwrap_or_default() } else { Vec::new() };
+    let hidden: Vec<(usize, [i32; 2])> = labels
+        .iter()
+        .filter_map(|&(rec, _)| {
+            // (A record with an animated rectangle keeps its own: not hidden.)
+            if rd::<u32>(rec + 0x60) & 0x14 == 0x14 {
+                return None;
+            }
+            let keep = rd::<[i32; 2]>(rec + 8);
+            wr(rec + 8, [0i32, 0]);
+            Some((rec, keep))
+        })
+        .collect();
     *LAYOUT.lock().unwrap_or_else(|e| e.into_inner()) = l;
     let r = f(node);
-    if let Some((rec, keep)) = hidden {
+    for (rec, keep) in hidden {
         wr(rec + 8, keep);
     }
     let _ = std::panic::catch_unwind(|| draw());
@@ -171,8 +177,11 @@ struct Layout {
     all: [i32; 4],
     /// The largest (the portrait's), its middle the gauge's.
     portrait: [i32; 4],
-    /// KH1's "MP HP" label: a wide, low sprite left of the portrait's middle, level with it.
+    /// KH1's "MP HP" label: a wide, low sprite left of the portrait's middle, level with it (the
+    /// largest; the gauge is placed from it).
     label: Option<(usize, [i32; 4])>,
+    /// Every sprite of that label ("MP" and "HP" are two).
+    labels: Vec<(usize, [i32; 4])>,
 }
 
 static LAYOUT: std::sync::Mutex<Option<Layout>> = std::sync::Mutex::new(None);
@@ -185,15 +194,16 @@ unsafe fn measure(base: usize) -> Option<Layout> {
     let area = |r: &[i32; 4]| (r[2] - r[0]) * (r[3] - r[1]);
     let portrait = sprites.iter().map(|(_, r)| *r).max_by_key(area)?;
     let (pcx, pw) = ((portrait[0] + portrait[2]) / 2, portrait[2] - portrait[0]);
-    let label = sprites
+    let labels: Vec<(usize, [i32; 4])> = sprites
         .iter()
         .filter(|(_, r)| {
             let (w, h) = (r[2] - r[0], r[3] - r[1]);
-            *r != portrait && w * 10 >= h * 16 && h <= 24 && w <= 120 && (r[0] + r[2]) / 2 < pcx - pw / 4 && r[1] >= portrait[1] - 10 && r[3] <= portrait[3] + 10
+            *r != portrait && w * 10 >= h * 14 && h <= 24 && w <= 120 && (r[0] + r[2]) / 2 < pcx - pw / 4 && r[1] >= portrait[1] - 10 && r[3] <= portrait[3] + 10
         })
-        .max_by_key(|(_, r)| area(r))
-        .copied();
-    let l = Layout { sprites, all, portrait, label };
+        .copied()
+        .collect();
+    let label = labels.iter().max_by_key(|(_, r)| area(r)).copied();
+    let l = Layout { sprites, all, portrait, label, labels };
     let key = l.label.map_or(0, |(rec, _)| rec);
     if LABEL_LOGGED.swap(key, Ordering::Relaxed) != key {
         let hide = if super::settings::get().hide_hp_label { "hidden" } else { "left (hide_hp_label = off)" };
@@ -202,7 +212,7 @@ unsafe fn measure(base: usize) -> Option<Layout> {
             l.sprites.iter().map(|(_, r)| *r).collect::<Vec<_>>(),
             l.portrait,
             match l.label {
-                Some((rec, r)) => format!("{r:?} (record {rec:#x}), {hide}"),
+                Some((rec, r)) => format!("{r:?} (record {rec:#x}), all its pieces {:?}, {hide}", l.labels.iter().map(|(_, r)| *r).collect::<Vec<_>>()),
                 None => "not found".into(),
             }
         ));
@@ -405,12 +415,14 @@ unsafe fn draw() {
                 // The user's screenshots (s320 against their mockup): the bar's middle 0.3 of the
                 // portrait's radius below the MP HP label's middle, its right end at the
                 // portrait's lower left.
-                let below = 0.3 * (p[2] - p[0]) as f32 / 2.0;
+                // (1.3 more and 6 right: the user's mockup of the right place, "This should be the
+                // right size and positioning of the gauge", measured against s321's screenshot.)
+                let below = 0.3 * (p[2] - p[0]) as f32 / 2.0 + 1.3;
                 let cy = match l.label {
                     Some((_, r)) => (r[1] + r[3]) as f32 / 2.0 - KH2_BAR_MIDDLE * k + below,
                     None => (p[1] + p[3]) as f32 / 2.0 + below,
                 };
-                ((p[0] + p[2]) as f32 / 2.0, cy)
+                ((p[0] + p[2]) as f32 / 2.0 + 6.0, cy)
             }
             None => ((443 + wide) as f32, 316.0),
         };
@@ -420,6 +432,16 @@ unsafe fn draw() {
         None
     };
     if let Some((_, b, _, _)) = kh2 {
+        // The MP bar's end loses its bottom edge with the label hidden (the label's black plate
+        // drew it): a black line under the bar's end, from the ring's left edge to the label's
+        // right end.
+        if settings.hide_hp_label {
+            if let Some(l) = layout.as_ref().filter(|l| !l.labels.is_empty()) {
+                let p = l.portrait;
+                let right = l.labels.iter().map(|(_, r)| r[2]).max().unwrap_or(p[0] + 10).max(p[0] + 4);
+                block(base, rows, texture, p[0] - 1, p[1], right + 1, p[1] + 1, 0, BLACK, BLACK, alpha);
+            }
+        }
         if settings.drive_gauge_debug {
             let b = b.map(|v| v.round() as i32);
             block(base, rows, texture, b[0] - 2, b[1] - 2, b[2] + 2, b[3] + 2, 0, MAGENTA, MAGENTA, 1.0);

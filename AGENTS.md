@@ -3584,6 +3584,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 322 (the Drive gauge at the user's size and place; both label halves hidden)
+- The user (screenshot of s321): "it could be a bit bigger just slightly. Also, the bottom black line
+  of the MP bar (right above the drive gauge) is cut off. also, the "HP" text is still there, remove
+  it", then a mockup: "This should be the right size and positioning of the gauge". Measured against
+  s321's screenshot: `KH2_UNIT` × 1.34, the gauge 6 HUD units right and 1.3 lower. KH1's label is
+  two sprites ("MP" [441, 316, 471, 331] and "HP" [463, 316, 486, 331]): both hidden now; their
+  black plate drew the MP bar end's bottom edge, so a 1-unit black line is drawn there.
+
 ### 2026-10-22: Stage 321 (the Drive gauge: no slide-in, bigger, lower)
 - The user (screenshot of s320): "I dont need the animation of the drive gauge rising up. Also the
   drive gauge is off from where it should be. its also kinda small". `kh2hud` starts the bar at its
