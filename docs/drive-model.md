@@ -1219,18 +1219,41 @@ small, 10 two big, 5 more (here six small and two big); about 0.8 small and 0.4 
 KH1's code scatters, pulls, times out, picks up and plays them as its own orbs; the pickup adds 1
 or 3 points, or 12 or 36 frames in a form (Anti loses them).
 
-**The HUD** (`gaugehud`): KH2's segmented Drive gauge under Sora's HP and MP: one segment per bar
-of the maximum, the full ones lit yellow-orange, the current one filled to its points, and the
-number of full bars to the right ("MAX" when full). In a form it shows the form gauge: its bars
-(4, or Anti's 6), draining, in a paler gold, and KH2's number (the full bars left, the one
-draining not counted). It is drawn by KH1's own HUD code in KH1's command-menu task
-(`0x140279700`): its sprite draw (`0x140278880`) with a copy of a Drive list row's panel record,
-recoloured and sized per segment, and its text draw (as the Drive list's title), after the same
-set-up KH1's list draw makes. It fades with the command menu (`0x14285320C`: events, KH1's own
-fades) and Page Down's HUD hide empties it as the rest of that task's draws. Its place is the ini's
-`drive_gauge = 548, 352` (the right end and top in KH1's HUD units: 512 × 384 for the 4:3 middle,
-the wide screen's sides running past 0 and 512); the default is a guess from the command menu's
-place (its left edge at -47 and bottom at 346), so it may want moving.
+**The HUD** (`gaugehud`): KH2's Drive gauge as KH2 shows it, under Sora's HP circle (the user's
+mockup): the orange DRIVE bar (its label at the left, the current bar's points filling it), the
+white MAX plate over it when the gauge is full, and the yellow slanted cap at the right end with the
+number of full bars. In a form it shows the form gauge: the bar in gold, draining, and KH2's number
+(the full bars left, the one draining not counted).
+
+It is drawn with KH1's own HUD primitives right after KH1's HP/MP gauge task (`0x14026B990`,
+hooked): each piece a quad of KH1's sprite path (a copy of a Drive list row's panel record, the
+middle of its picture, its corners moved for the slanted plates, `0x14027B300` then `0x140274340`),
+the words with KH1's text draw. It follows Sora's gauge: not drawn in events (KH1's bit
+`0x142867CD8` & 8, which stops that task's drawing), faded with his gauge's alpha (`+0xA9C` of his
+record `0x142812400`), and emptied by Page Down's HUD hide with the rest of that task's draws.
+
+Its place is measured each frame from where KH1 draws Sora's gauge: his record's place
+(`0x14026B820`, the wide screen's shift `0x14232E6D0` included) plus the rectangle of each sprite
+of the two lists KH1's gauge draws there (`+0x50`, count `+0x70`; `+0x10`, count `+0x48`); the
+gauge's right end sits 4 units past that box's right edge and its bar's top 2 units above its
+bottom, its width the box's (100 to 170 units). Without a measurement it falls back on KH1's pivot
+for the gauge (`0x140527FB0`: 443, 316) plus the shift. `drive_gauge = dx, dy` moves it from there
+(s318's `548, 352`, a place rather than a move, is read as no move); `drive_gauge_debug = on`
+draws a magenta block over it. A line every 3 seconds (and when it moves) logs its box, the box
+measured, its alpha, the quads drawn and the vertices KH1's immediate draw got and drew.
+
+Why s318's gauge wasn't seen (Inferred from the exe, not yet confirmed by a log): it drew in the
+command-menu task `0x140279700`, which KH1 runs *before* the HP/MP gauge task (both priority
+170001; the HUD setup `0x140264C50` registers the command menu first and `0x140288780` puts a task
+after every one of equal priority), so KH1's HP/MP gauge was drawn over its place; and at 0 bars
+it was nine 12 × 7 frames at 16% brightness and 60% alpha (KH1's sprite colours multiply the
+texture, 0x80 = as it is) with nothing lit. Its right end, 548, also ignored the wide screen's
+shift.
+
+KH2's own HUD art is not used: KH1's sprite path samples only textures KH1 registered itself (its
+texture map keyed by the PS2 texture address, `0x14010DD90`, filled from KH1's own files through
+`0x14010BF30`), so KH2's images would first need a texture made in KH1's renderer, and the KH2
+file holding the field HUD isn't known here (the archive index holds name hashes, not names).
 
 **The log**: "Drive gauge: maximum ..." when the maximum changes; "Drive: Valor Form for 3 bars
 (Drive gauge 4 bars + 20 of 4 -> 1 bars + 20 of 4)" on a Drive; "Valor Form (Lv1): its form gauge
@@ -1249,7 +1272,7 @@ out)"; "Drive orbs: an enemy's drop (...): 4 small, 0 big" and "Drive orb (small
 - Drive orb drops are rolled per drop from KH2's normal-enemy rows, not per enemy kind; KH1's
   bosses drop as any enemy.
 - The form level is 1 for every form (KH1 has no form EXP); Master's orb EXP isn't modelled.
-- The HUD's place and the orbs' colour are tuned blind (no screenshot of either yet).
+- The HUD's look is KH2's drawn with KH1's pieces, not KH2's art; the orbs' colour is tuned blind.
 
 **To check in game:** a new save (gauge 0 of 3), the maximum growing as forms open (log); hits
 filling it (KH2 combo, KH1 combo, KH1 spells, limits), taking damage filling it; the Drive list

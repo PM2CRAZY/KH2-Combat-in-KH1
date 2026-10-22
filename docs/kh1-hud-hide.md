@@ -26,7 +26,7 @@ registers it if not (`0x140282500 (priority, fn)` -> `0x140288780`). Sixteen tas
 | 165001 | `0x140265F80`, `0x140266330`, `0x14026DD10`, `0x14026EE10`, `0x14026F880`, `0x1402701C0`, `0x1402723D0`, `0x140273740`, `0x140273990` | gauges and other HUD pieces (not told apart one by one) |
 | 165001 | `0x140272290` | the lock-on cursor (`0x1402729B0`) |
 | 165001 | `0x140272660` | the target's gauge (reads the lock state `0x142DB3F10`) |
-| 170001 | `0x14026B990` | a gauge task, the one that reads the event bit above |
+| 170001 | `0x14026B990` | the HP/MP gauges (Sora's record `0x142812400`, slot n at `+ n × 0xDF0`); reads the event bit above; runs after the command menu (registered later at the same priority) |
 | 170001 | `0x14026E4B0`, `0x140270DA0` | HUD text and numbers |
 | 170001 | `0x140271860` | the info messages (a queue at `0x14284E360`, pushed by `0x1402712A0`) |
 | 170001 | `0x140279700` | the command menu, its lists (`0x140277F40`), the shortcuts |

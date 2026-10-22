@@ -122,9 +122,11 @@ gummi = vanilla\r\n\
 ; hud_toggle_key: the key that hides the whole HUD and shows it again (pagedown, pageup, home,\r\n\
 ; end, delete, f1..f12, a letter, or a key code such as 0x22); off = no key\r\n\
 hud_toggle_key = pagedown\r\n\
-; drive_gauge: where KH2's Drive gauge is drawn on the HUD: its right end and top, in KH1's HUD\r\n\
-; units (512 x 384 for the 4:3 middle; the wide screen's sides run past 0 and 512)\r\n\
-drive_gauge = 548, 352\r\n";
+; drive_gauge: moves KH2's Drive gauge from its place under Sora's HP circle: right, down, in\r\n\
+; KH1's HUD units (384 = the screen's height; negative = left, up)\r\n\
+drive_gauge = 0, 0\r\n\
+; drive_gauge_debug: on = a bright magenta block over the Drive gauge, to find it on screen\r\n\
+drive_gauge_debug = off\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -187,13 +189,15 @@ pub struct Settings {
     pub gummi_skip: bool,
     /// The key that hides and shows the HUD (`hud_toggle_key`, `hud.rs`); `None`: no key.
     pub hud_toggle_key: Option<u8>,
-    /// Where the Drive gauge is drawn (`drive_gauge = x, y`: its right end and top in KH1's HUD
-    /// units, `gaugehud`).
+    /// How far the Drive gauge is moved from its place under Sora's HP circle (`drive_gauge = dx,
+    /// dy` in KH1's HUD units, `gaugehud`).
     pub drive_gauge: (i32, i32),
+    /// A bright block over the Drive gauge, to find it (`drive_gauge_debug = on`).
+    pub drive_gauge_debug: bool,
 }
 
-/// The Drive gauge's default place: under Sora's HP and MP, at the bottom right.
-pub const DRIVE_GAUGE: (i32, i32) = (548, 352);
+/// s318's `drive_gauge` default (its right end and top then, not a move): read as no move.
+const OLD_DRIVE_GAUGE: (i32, i32) = (548, 352);
 
 /// What a swing does when it meets a wall (`walls`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -295,13 +299,22 @@ pub fn get() -> &'static Settings {
                     Some(crate::keys::PAGE_DOWN)
                 }
             },
-            drive_gauge: setting(&text, "drive_gauge")
-                .and_then(|v| {
-                    let mut it = v.split([',', ' ']).filter(|t| !t.is_empty()).map(|t| t.parse::<i32>().ok());
-                    Some((it.next()??, it.next()??))
-                })
-                .filter(|(x, y)| (-200..800).contains(x) && (-100..500).contains(y))
-                .unwrap_or(DRIVE_GAUGE),
+            drive_gauge: match setting(&text, "drive_gauge").and_then(|v| {
+                let mut it = v.split([',', ' ']).filter(|t| !t.is_empty()).map(|t| t.parse::<i32>().ok());
+                Some((it.next()??, it.next()??))
+            }) {
+                Some(OLD_DRIVE_GAUGE) => {
+                    log("drive_gauge = 548, 352 is s318's place, not a move: no move (it is a move from under Sora's HP circle now)");
+                    (0, 0)
+                }
+                Some((x, y)) if (-300..=300).contains(&x) && (-300..=300).contains(&y) => (x, y),
+                Some((x, y)) => {
+                    log(&format!("drive_gauge = {x}, {y}: a move of at most 300 each way; no move"));
+                    (0, 0)
+                }
+                None => (0, 0),
+            },
+            drive_gauge_debug: on(&text, "drive_gauge_debug", "on", false),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

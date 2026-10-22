@@ -43,7 +43,7 @@ const DRAW_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x10];
 const TASKS: [Rva; 16] = [
     Rva(0x265F80),
     Rva(0x266330),
-    Rva(0x26B990), // a gauge task, the one that reads the event flag
+    Rva(0x26B990), // the HP/MP gauges (reads the event flag; `gaugehud` draws after it)
     Rva(0x26DD10),
     Rva(0x26E4B0),
     Rva(0x26EE10),
@@ -157,9 +157,35 @@ unsafe extern "system" fn hud_task(node: usize, i: usize) -> usize {
 /// KH1's immediate draw: inside a HUD task with the HUD hidden, drawn with no vertices.
 unsafe extern "system" fn draw(renderer: usize, count: usize, a: usize, b: usize) -> usize {
     let orig: unsafe extern "system" fn(usize, usize, usize, usize) -> usize = std::mem::transmute(ORIG_DRAW.load(Ordering::Acquire));
+    let me = GetCurrentThreadId();
     let t = HUD_THREAD.load(Ordering::Relaxed);
-    let count = if t != 0 && t == GetCurrentThreadId() { 0 } else { count };
+    let asked = count;
+    let count = if t != 0 && t == me { 0 } else { count };
+    if COUNT_THREAD.load(Ordering::Relaxed) == me {
+        ASKED.fetch_add(asked as u32, Ordering::Relaxed);
+        DRAWN.fetch_add(count as u32, Ordering::Relaxed);
+    }
     orig(renderer, count, a, b)
+}
+
+/// Counting the vertices a piece of ours hands KH1's immediate draw (`gaugehud`'s proof in the
+/// log): the thread counted, and what it asked for and what was drawn (0 with the HUD hidden).
+static COUNT_THREAD: AtomicU32 = AtomicU32::new(0);
+static ASKED: AtomicU32 = AtomicU32::new(0);
+static DRAWN: AtomicU32 = AtomicU32::new(0);
+
+/// Starts counting this thread's immediate draws; `false` without the draw hook (no count).
+pub fn count_start() -> bool {
+    ASKED.store(0, Ordering::Relaxed);
+    DRAWN.store(0, Ordering::Relaxed);
+    COUNT_THREAD.store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
+    READY.load(Ordering::Acquire)
+}
+
+/// Stops counting: the vertices asked for and drawn since `count_start`.
+pub fn count_end() -> (u32, u32) {
+    COUNT_THREAD.store(0, Ordering::Relaxed);
+    (ASKED.load(Ordering::Relaxed), DRAWN.load(Ordering::Relaxed))
 }
 
 /// The toggle key (the monitor thread, every 50 ms): a press while the game has the keyboard

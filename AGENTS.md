@@ -3584,6 +3584,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 319 (the Drive gauge visible: drawn after Sora's gauge, placed from it)
+- The user: "I dont see the drive gauge at all", then a mockup: KH2's Drive gauge under KH1's HP
+  circle. The s318 draw ran in the command-menu task, which KH1 runs before the HP/MP gauge task
+  (same priority, registration order), so it was drawn over; it was also near black at 0 bars and
+  ignored the widescreen shift. `gaugehud` now hooks the HP/MP gauge task (0x14026B990), places the
+  gauge from Sora's gauge record (0x14026B820) and sprite boxes, and draws KH2's look (DRIVE bar,
+  MAX plate, yellow cap and number) with KH1's sprite calls. ini `drive_gauge = dx, dy` (a nudge),
+  `drive_gauge_debug`. KH2's own HUD art not loaded yet.
+
 ### 2026-10-22: Stage 318 (KH2's Drive gauge, form gauge and Drive orbs)
 - The user: "lets incorporate the drive gauge" (forms cost Drive bars at KH2's costs; filled by hits,
   damage taken and Drive orbs; max 3 + one per form, Final +2; KH2's form gauge in a form), and "For
