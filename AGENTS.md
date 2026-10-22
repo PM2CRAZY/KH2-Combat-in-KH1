@@ -1,3 +1,48 @@
+### 2026-10-22: Stage 336 (testing branch: the ini is read again whenever it is saved)
+- The user: "can you make it so that the ini can be changed while the game is running?"
+  `settings::get` checks the ini's modified time at most every half second and parses it again
+  when it changed (logged: "settings reloaded"); the new settings replace the old (the old are
+  leaked, as callers may still hold them). Settings only used at start (hooks put in, the
+  abilities given, the trace mode's setup) still need a restart.
+
+### 2026-10-22: Stage 335 (testing branch: `hit_fx_test`, which of KH1's hit effect bytes picks the hit effect)
+- The user's t334 traces: a KH2 spell's attack object lacks bit `0x400000` (`000b5800`), swings
+  have it (`00415809`, the contact adds `0x100000`). The swings' `+0xA8` bytes come only from the
+  borrowed KH1 row: `[00, 05, 06]` on the swings, `[03, 05, 06]` on the air finisher (row 206). The
+  user: the finisher's hit sound changed, its effect didn't. So is byte 0 the effect at all?
+- Test (ini, off by default): `hit_fx_test = 0,1,2,...` writes the next value, in turn, into byte
+  `hit_fx_byte` (0..2) of each landed KH2 hit's `+0xA8` bytes (the rest from the row), with bit
+  `0x400000` set, spells too; logged and in the `hitfx:` trace note.
+
+### 2026-10-22: Stage 334 (testing branch: the attack object's flag word in the hit-effect trace)
+- The user's t333 trace (KH2 Blizzard, ATKP 248 sub 4, on an enemy): the spell hit was landed with
+  KH1's Blizzard level 3 data (`0x6158`); the object's `+0xA8` held that data's own bytes
+  `[03, 05, 06]` before and after the contact, yet the plain Keyblade hit effect played. Spells
+  don't get bit `0x400000` on the object's flag word (swings do, as the Attack command's row does);
+  is that bit what makes the contact use `+0xA8`? `hitfx:` now also shows the flag word before and
+  after the contact (and whether `0x400000` is set), to compare a spell hit with a swing hit.
+
+### 2026-10-22: Stage 333 (testing branch: trace notes for the hit effects of KH2's moves)
+- The user: KH2's custom moves' hits only ever spawn the plain Keyblade swing effect. Every KH2 hit
+  is landed (`land_hit`) through one of Sora's four KH1 rows (ground / air, swing / finisher), and
+  that row's effect / sound bytes go to the attack object's `+0xA8`; the KH2 ATKP's own effect
+  fields are not passed on. Trace notes (events column) to confirm before changing it:
+  - `hitfx:` on every landed hit: the KH2 side (swing key or spell, ATKP id / sub, kind, element,
+    reaction, effect_on_hit, damage_effect, random_effect, hit_sound, flags), the KH1 row picked
+    (index, motion, data offset, fx bytes, trail / effect / voice), the attack object's
+    `+0xA8..+0xAA` before and after KH1's contact, KH1's attack data words, target and damage.
+  - `swing start fx:` the KH1 combo motion whose trail / effect / voice a KH2 swing starts with.
+
+### 2026-10-22: Stage 332 (testing branch: a KH1 air swing out of any KH2 air state gets KH1's hop, not KH2's rise)
+- The user (trace f8556, Explosion, then a jump and a swing on the jump's first frames): the swing
+  sent him up. The swing came out of `combat::command`'s air command (KH2 had him in its Jump /
+  Air), which passed `keep_rise = true` to `kh1_air_attack_started`, so KH2's jump rise (269 left)
+  went on under the swing: 20.5/frame up, 184 up at the swing's 10th frame, 258 at its 17th. Stage
+  313 had done this only for the swing out of KH2's jump arc on KH1's air states.
+- The user's call, "grounded attacks only": no KH2 air state keeps its rise now (Jump, Air rising,
+  Aerial Dodge, an air swing or cast): `keep_rise` is false at both callers; the faster sideways
+  speed is still kept. Falling swings are as before (KH2's rise was 0 there).
+
 ### 2026-10-22: Stage 331 (testing branch: KH2's glide 1:1 with the Steam exe: the stored launch speed, no stick-scaled glide, no glide back to the hover)
 - The user: "neutral flight doesn't store aerial dodges momentum, in kh2 ... if you aerial dodge go
   into neutral flight, neutral flight will store the speed from aerial dodge, so when you glide you

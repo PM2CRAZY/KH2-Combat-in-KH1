@@ -720,8 +720,9 @@ pub mod physics {
         }
         // Out of KH2's jump arc on KH1's air state the swing's own hop replaces the jump's rise, as
         // KH2's own air swing does (the t312 trace: a swing at the jump's start kept ~235 of rise and
-        // sent him to 214 up); the faster sideways speed is still kept. Out of a KH2 move (an Aerial
-        // Dodge) the rise is kept.
+        // sent him to 214 up); the faster sideways speed is still kept. Out of any KH2 air state
+        // (t332: the jump's take-off and rise, the Aerial Dodge, an air swing or cast) it is the same:
+        // `keep_rise` is true for no caller now, kept for a grounded KH2 attack later.
         let kept = {
             let k = kh1phys::keep_momentum(before, &now);
             if keep_rise { k } else { Motion { h: k.h, arc: now.arc } }

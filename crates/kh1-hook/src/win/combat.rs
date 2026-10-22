@@ -508,9 +508,11 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     let after = look();
     if after != set {
         // KH1's air attack out of KH2's move: its start replaced the speed and arc carried in with
-        // its own lunge and hop; the faster and the higher are kept (`shared::physics`).
+        // its own lunge and hop; the faster sideways speed is kept, not KH2's rise (t332, the user:
+        // a jump attack right after the take-off, f8556, climbed to 258 up; "grounded attacks
+        // only" keep one, and here he is in the air).
         if let Some(m) = carried.filter(|_| kind == 1) {
-            super::shared::physics::kh1_air_attack_started(actor, &m, true);
+            super::shared::physics::kh1_air_attack_started(actor, &m, false);
             // (Its lunge, which KH1's start leaves at 0 out of KH2's move: once it plays.)
             super::shared::physics::kh1_air_attack_from_kh2();
         }
@@ -1285,6 +1287,7 @@ impl Strikes {
             (true, true) => 206,
         };
         let Some(r) = self.swing_rows.as_ref().and_then(|m| m.1.get(&motion)).copied() else { return };
+        super::trace::note(&format!("swing start fx: KH1 motion {motion} (air {air} count {count} finisher {finisher}): trail {} effect {} voice {}", r.trail, r.effect, r.voice));
         let base = BASE.load(Ordering::Relaxed);
         let cs = pose::ptr(rd::<u32>(sora + 0x14C));
         let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
@@ -1794,7 +1797,12 @@ impl Strikes {
                 HOLD.store(blow && !throws && !b.fixed, Ordering::Relaxed);
                 MAGIC.store(row.stat_source == 1, Ordering::Relaxed);
                 // (The move this hit belongs to: its action, `swing`'s high bits.)
-                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false);
+                let info = format!(
+                    "KH2 swing {:?} ATKP {} sub {} (kind {} element {} reaction {} effect_on_hit {} damage_effect {} random_effect {} hit_sound {} flags {:#x}) -> KH1 row idx {} ({}{})",
+                    h.swing, row.id, row.sub_id >> 8, row.kind, row.element, row.enemy_reaction, row.effect_on_hit, row.damage_effect, row.random_effect, row.hit_sound, row.flags,
+                    (air as usize) * 2 + finisher as usize, if air { "air " } else { "ground " }, if finisher { "finisher" } else { "swing" }
+                );
+                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, info);
                 MAGIC.store(false, Ordering::Relaxed);
                 HOLD.store(false, Ordering::Relaxed);
                 // (Again once the contact is done, in case its direction came after the record.)
@@ -1903,7 +1911,12 @@ impl Strikes {
                     None => (rows[knock as usize], false),
                 };
                 MAGIC.store(!spell_data && r.stat_source == 1, Ordering::Relaxed);
-                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data);
+                let info = format!(
+                    "KH2 spell ATKP {} sub {} (kind {} element {} reaction {} effect_on_hit {} damage_effect {} random_effect {} hit_sound {} flags {:#x}) -> KH1 row idx {} ({})",
+                    a.atk, a.sub, r.kind, r.element, r.enemy_reaction, r.effect_on_hit, r.damage_effect, r.random_effect, r.hit_sound, r.flags,
+                    knock as usize, if knock { "ground finisher" } else { "ground swing" }
+                );
+                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data, info);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
                 out.push((a.key, a.atk, b.actor, dealt));
@@ -2010,8 +2023,10 @@ static CARRY: std::sync::LazyLock<std::sync::Mutex<HashMap<usize, i64>>> = std::
 
 /// Lands one hit with KH1's contact code, through a KH1 attack object made from Sora's row.
 /// Returns the damage written to the hit record, if one was made.
-unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool) -> Option<u32> {
-    land_hit(sora, part, at, row, power, spell)
+/// `info` describes the KH2 side of the hit for the trace's events column (t333: why every KH2
+/// hit shows the plain Keyblade hit effect).
+unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool, info: String) -> Option<u32> {
+    land_hit(sora, part, at, row, power, spell, info)
 }
 
 /// KH1's own attack data for a spell (Fire 0, Blizzard 1, Thunder 2, Cure 3, Gravity 4, Stop 5,
@@ -2033,7 +2048,7 @@ pub fn kh1_spell_data(spell: u8, level: u8) -> Option<i32> {
     Some(off)
 }
 
-unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool) -> Option<u32> {
+unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool, info: String) -> Option<u32> {
     let base = BASE.load(Ordering::Relaxed);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
@@ -2050,6 +2065,27 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
         wr(obj, rd::<u32>(obj) | 0x400000);
         wr(obj + 0xA8, row.fx);
     }
+    // (t335, test) `hit_fx_test`: the next value from the ini into one of the effect / sound
+    // bytes, with the bit that makes the contact use them (swings have it; spells didn't).
+    let set = super::settings::get();
+    let mut forced = String::new();
+    if !set.hit_fx_test.is_empty() {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let v = set.hit_fx_test[NEXT.fetch_add(1, Ordering::Relaxed) % set.hit_fx_test.len()];
+        wr(obj, rd::<u32>(obj) | 0x400000);
+        let mut fx = row.fx;
+        fx[set.hit_fx_byte] = v;
+        wr(obj + 0xA8, fx);
+        forced = format!(" | hit_fx_test: byte {} = {v} ({v:#04x})", set.hit_fx_byte);
+        log(&format!("hit_fx_test: byte {} = {v} ({v:#04x}) on {}", set.hit_fx_byte, if spell { "a spell hit" } else { "a swing hit" }));
+    }
+    // (t333, trace) The effect / sound bytes and KH1's attack data the contact code will read.
+    // (t334) And the object's flag word: is bit 0x400000 (set for swings, not spells) what makes
+    // the contact use `+0xA8`?
+    let fx_before = rd::<[u8; 3]>(obj + 0xA8);
+    let flags_before = rd::<u32>(obj);
+    let data_at = base + ATTACK_DATA_RVA + row.data as usize;
+    let data_words = (0..8).map(|k| format!("{:08x}", rd::<u32>(data_at + k * 4))).collect::<Vec<_>>().join(" ");
     // KH2's hit records decide what may hit again, not KH1's hit-once bit.
     let saved = rd::<u32>(obj + 0x54);
     wr(obj + 0x54, 0u32);
@@ -2069,9 +2105,16 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     POWER.store(power.max(1) as u32, Ordering::Relaxed);
     contact(e, part.entry.as_ptr() as usize);
     POWER.store(0, Ordering::Relaxed);
+    let fx_after = rd::<[u8; 3]>(obj + 0xA8);
+    let flags_after = rd::<u32>(obj);
     wr(obj + 0x54, saved);
     free(obj);
     let d = LAST_DAMAGE.load(Ordering::Relaxed);
+    super::trace::note(&format!(
+        "hitfx: {info} | KH1 row motion {} data {:#x} fx {:02x?} (trail {} effect {} voice {}) spell-data {spell} | obj flags before {:08x} (0x400000 {}) after contact {:08x} | obj+A8 before {:02x?} after contact {:02x?} | KH1 attack data [{data_words}] | target {:#x} dmg {}{forced}",
+        row.motion, row.data, row.fx, row.trail, row.effect, row.voice, flags_before, if flags_before & 0x400000 != 0 { "set" } else { "clear" }, flags_after, fx_before, fx_after,
+        TARGET.load(Ordering::Relaxed), if d == u32::MAX { "none".to_string() } else { d.to_string() }
+    ));
     (d != u32::MAX).then_some(d)
 }
 

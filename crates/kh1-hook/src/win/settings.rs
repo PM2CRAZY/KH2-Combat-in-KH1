@@ -1,13 +1,14 @@
-//! `kh1-kh2.ini` next to the game, read once when the game starts (written with the defaults
+//! `kh1-kh2.ini` next to the game, read when the game starts and again when saved (written with the defaults
 //! the first time; keys it lacks keep their defaults). Each newer, untested-in-game feature has
 //! a switch here, so it can be turned off without a new build.
 
 use super::log;
 use crate::growth::Mode;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 const INI: &str = "kh1-kh2.ini";
-const DEFAULT_INI: &str = "; kh1-kh2 settings (read when the game starts)\r\n\
+const DEFAULT_INI: &str = "; kh1-kh2 settings (read when the game starts, and again whenever this file is saved)\r\n\
 ;\r\n\
 ; abilities: kh1 = KH2's abilities from KH1's Ability menu, Sora's level and bosses (normal\r\n\
 ; play); remove = take the KH2 abilities back out of your save (load it, save once, then\r\n\
@@ -27,6 +28,10 @@ grabs = on\r\n\
 commands = on\r\n\
 ; swing_fx: on = KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice\r\n\
 swing_fx = on\r\n\
+; hit_fx_test: (test) KH2 hits write these values, in turn, into one byte of KH1's hit\r\n\
+;   effect bytes (hit_fx_byte: 0, 1 or 2), spells too; empty = off. E.g. 0,1,2,3,5,10\r\n\
+hit_fx_test =\r\n\
+hit_fx_byte = 0\r\n\
 ; kh2_sounds: KH2's own sound effects for these moves, from your KH2 install:\r\n\
 ; abilities (every KH2 ability move: Upper Slash, Explosion, Aerial Finish...), all (every\r\n\
 ; move, the plain combo too), off\r\n\
@@ -181,6 +186,11 @@ pub struct Settings {
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
+    /// (Test, t335) Values written in turn into byte `hit_fx_byte` (0..=2) of a landed KH2 hit's
+    /// KH1 effect / sound bytes (the attack object's `+0xA8`), with bit `0x400000` set (spells
+    /// too); empty: off.
+    pub hit_fx_test: Vec<u8>,
+    pub hit_fx_byte: usize,
     pub flip_weapons: Vec<u8>,
     /// KH2's Reflect in KH1's magic menu (`reflect = on`).
     pub reflect: bool,
@@ -218,7 +228,9 @@ pub struct Settings {
     pub sound_log: bool,
 }
 
-static SETTINGS: OnceLock<Settings> = OnceLock::new();
+static SETTINGS: AtomicPtr<Settings> = AtomicPtr::new(std::ptr::null_mut());
+static RELOAD: Mutex<()> = Mutex::new(());
+static MTIME: Mutex<Option<std::time::SystemTime>> = Mutex::new(None);
 
 /// The ini's `key = value`, if set.
 fn setting(text: &str, key: &str) -> Option<String> {
@@ -232,85 +244,141 @@ fn on(text: &str, key: &str, on_word: &str, default: bool) -> bool {
     }
 }
 
+/// The settings as the ini has them now. The ini is read when the game starts and again
+/// whenever it is saved (t336: checked at most every half second), so a change takes effect in
+/// game; settings only used at start (hooks put in, the abilities given) still need a restart.
 pub fn get() -> &'static Settings {
-    SETTINGS.get_or_init(|| {
-        let path = format!("{}\\{INI}", super::exe_dir());
-        let text = match std::fs::read_to_string(&path) {
-            Ok(t) => t,
-            Err(_) => {
-                let _ = std::fs::write(&path, DEFAULT_INI);
-                DEFAULT_INI.to_string()
+    let p = SETTINGS.load(Ordering::Acquire);
+    if p.is_null() {
+        let _g = RELOAD.lock().unwrap_or_else(|e| e.into_inner());
+        let p = SETTINGS.load(Ordering::Acquire);
+        if !p.is_null() {
+            return unsafe { &*p };
+        }
+        let s = Box::into_raw(Box::new(load(true).expect("first load")));
+        SETTINGS.store(s, Ordering::Release);
+        return unsafe { &*s };
+    }
+    if due() {
+        if let Ok(_g) = RELOAD.try_lock() {
+            if let Some(s) = load(false) {
+                // (The old one is left as it is: callers may still hold it.)
+                let s = Box::into_raw(Box::new(s));
+                SETTINGS.store(s, Ordering::Release);
+                return unsafe { &*s };
             }
-        };
-        let s = Settings {
-            abilities: setting(&text, "abilities").and_then(|v| Mode::parse(&v)).unwrap_or(Mode::Kh1),
-            hurt: on(&text, "hurt", "kh2", true),
-            carry: on(&text, "carry", "on", true),
-            ceilings: on(&text, "ceilings", "on", true),
-            grabs: on(&text, "grabs", "on", true),
-            commands: on(&text, "commands", "on", true),
-            swing_fx: on(&text, "swing_fx", "on", true),
-            kh2_sounds: match setting(&text, "kh2_sounds").as_deref() {
-                Some("off") | Some("0") | Some("no") => None,
-                Some("all") => Some(None),
-                _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
-            },
-            kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
-            damage_scale: setting(&text, "damage_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
-            // (Glide on Square held off, t319: a glide is the jump button after the Aerial Dodge. The
-            // `glide = square` setting and the Square glide code stay, behind this flag, for later.)
-            // glide_on_square: on(&text, "glide", "square", true),
-            glide_on_square: false,
-            air_cast_fall: setting(&text, "air_cast_fall").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v)).unwrap_or(AIR_CAST_FALL),
-            magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
-            kh2_voice: on(&text, "kh2_voice", "on", false),
-            bonus_ap: on(&text, "bonus_ap", "on", true),
-            auto_aim: on(&text, "auto_aim", "on", false),
-            wall_clink: on(&text, "wall_clink", "on", true),
-            kh2_camera: on(&text, "camera", "kh2", true),
-            config_row: on(&text, "config_row", "on", true),
-            four_shortcuts: on(&text, "shortcuts", "4", true),
-            camera_lower: setting(&text, "camera_lower").and_then(|v| v.parse::<f32>().ok()).filter(|v| (-200.0..200.0).contains(v)).unwrap_or(0.0),
-            camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.89),
-            camera_calls_kh2: on(&text, "camera_calls", "kh2", true),
-            kh2_effects: match setting(&text, "kh2_effects").as_deref() {
-                Some("off") | Some("0") | Some("no") => None,
-                Some("all") => Some(None),
-                _ => Some(Some(super::kh2fx::DEFAULT_MOTIONS.to_vec())),
-            },
-            fx_test: on(&text, "fx_test", "on", false),
-            flip_weapons: match setting(&text, "flip_weapons") {
-                None => vec![0x53],
-                Some(v) => v
-                    .split([',', ' '])
+        }
+    }
+    unsafe { &*SETTINGS.load(Ordering::Acquire) }
+}
+
+/// Half a second since the ini was last looked at.
+fn due() -> bool {
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    static LAST: AtomicU64 = AtomicU64::new(0);
+    let now = START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64 + 1;
+    let last = LAST.load(Ordering::Relaxed);
+    now.saturating_sub(last) >= 500 && LAST.compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+}
+
+/// The ini parsed; `None` when it wasn't saved since the last read (not on the first).
+fn load(first: bool) -> Option<Settings> {
+    let path = format!("{}\\{INI}", super::exe_dir());
+    // (t336) Read again only when the ini was saved since.
+    let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+    {
+        let mut m = MTIME.lock().unwrap_or_else(|e| e.into_inner());
+        if !first && *m == mtime {
+            return None;
+        }
+        *m = mtime;
+    }
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => {
+            let _ = std::fs::write(&path, DEFAULT_INI);
+            DEFAULT_INI.to_string()
+        }
+    };
+    let s = Settings {
+        abilities: setting(&text, "abilities").and_then(|v| Mode::parse(&v)).unwrap_or(Mode::Kh1),
+        hurt: on(&text, "hurt", "kh2", true),
+        carry: on(&text, "carry", "on", true),
+        ceilings: on(&text, "ceilings", "on", true),
+        grabs: on(&text, "grabs", "on", true),
+        commands: on(&text, "commands", "on", true),
+        swing_fx: on(&text, "swing_fx", "on", true),
+        kh2_sounds: match setting(&text, "kh2_sounds").as_deref() {
+            Some("off") | Some("0") | Some("no") => None,
+            Some("all") => Some(None),
+            _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
+        },
+        kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
+        damage_scale: setting(&text, "damage_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
+        // (Glide on Square held off, t319: a glide is the jump button after the Aerial Dodge. The
+        // `glide = square` setting and the Square glide code stay, behind this flag, for later.)
+        // glide_on_square: on(&text, "glide", "square", true),
+        glide_on_square: false,
+        air_cast_fall: setting(&text, "air_cast_fall").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v)).unwrap_or(AIR_CAST_FALL),
+        magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
+        kh2_voice: on(&text, "kh2_voice", "on", false),
+        bonus_ap: on(&text, "bonus_ap", "on", true),
+        auto_aim: on(&text, "auto_aim", "on", false),
+        wall_clink: on(&text, "wall_clink", "on", true),
+        kh2_camera: on(&text, "camera", "kh2", true),
+        config_row: on(&text, "config_row", "on", true),
+        four_shortcuts: on(&text, "shortcuts", "4", true),
+        camera_lower: setting(&text, "camera_lower").and_then(|v| v.parse::<f32>().ok()).filter(|v| (-200.0..200.0).contains(v)).unwrap_or(0.0),
+        camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.89),
+        camera_calls_kh2: on(&text, "camera_calls", "kh2", true),
+        kh2_effects: match setting(&text, "kh2_effects").as_deref() {
+            Some("off") | Some("0") | Some("no") => None,
+            Some("all") => Some(None),
+            _ => Some(Some(super::kh2fx::DEFAULT_MOTIONS.to_vec())),
+        },
+        fx_test: on(&text, "fx_test", "on", false),
+        hit_fx_test: setting(&text, "hit_fx_test")
+            .map(|v| {
+                v.split([',', ' '])
                     .filter_map(|t| {
                         let t = t.trim();
                         t.strip_prefix("0x").map_or_else(|| t.parse().ok(), |h| u8::from_str_radix(h, 16).ok())
                     })
-                    .collect(),
-            },
-            reflect: on(&text, "reflect", "on", true),
-            keyblade_turn: on(&text, "keyblade_turn", "on", true),
-            physics: hair_physics(&text),
-            physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
-            kh2_hair: on(&text, "kh2_hair", "on", true),
-            drive: on(&text, "drive", "on", true),
-            valor_left_blade: on(&text, "valor_left_blade", "on", true),
-            styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false))],
-            gummi_skip: on(&text, "gummi", "skip", false),
-            shared: on(&text, "shared", "on", true),
-            kh1_slots: match setting(&text, "kh1_slots").as_deref() {
-                Some("off") | Some("0") | Some("no") => None,
-                None | Some("on") | Some("all") | Some("yes") => Some(None),
-                Some(v) => Some(Some(v.split([',', ' ']).filter_map(|t| t.trim().parse().ok()).collect())),
-            },
-            trace: super::trace::Mode::parse(setting(&text, "trace").as_deref()),
-            trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
-            sound_log: on(&text, "sound_log", "on", true),
-        };
-        log(&format!("settings ({path}): {s:?}"));
-        s
-    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        hit_fx_byte: setting(&text, "hit_fx_byte").and_then(|v| v.parse::<usize>().ok()).filter(|v| *v <= 2).unwrap_or(0),
+        flip_weapons: match setting(&text, "flip_weapons") {
+            None => vec![0x53],
+            Some(v) => v
+                .split([',', ' '])
+                .filter_map(|t| {
+                    let t = t.trim();
+                    t.strip_prefix("0x").map_or_else(|| t.parse().ok(), |h| u8::from_str_radix(h, 16).ok())
+                })
+                .collect(),
+        },
+        reflect: on(&text, "reflect", "on", true),
+        keyblade_turn: on(&text, "keyblade_turn", "on", true),
+        physics: hair_physics(&text),
+        physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
+        kh2_hair: on(&text, "kh2_hair", "on", true),
+        drive: on(&text, "drive", "on", true),
+        valor_left_blade: on(&text, "valor_left_blade", "on", true),
+        styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false))],
+        gummi_skip: on(&text, "gummi", "skip", false),
+        shared: on(&text, "shared", "on", true),
+        kh1_slots: match setting(&text, "kh1_slots").as_deref() {
+            Some("off") | Some("0") | Some("no") => None,
+            None | Some("on") | Some("all") | Some("yes") => Some(None),
+            Some(v) => Some(Some(v.split([',', ' ']).filter_map(|t| t.trim().parse().ok()).collect())),
+        },
+        trace: super::trace::Mode::parse(setting(&text, "trace").as_deref()),
+        trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
+        sound_log: on(&text, "sound_log", "on", true),
+    };
+    log(&format!("settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" }));
+    Some(s)
 }
 
 /// The hair's switch: `hair_physics`, or an older ini's `physics = on / off` (before `physics`
