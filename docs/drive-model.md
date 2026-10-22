@@ -42,7 +42,13 @@ Each form is its own object in `00objentry.bin`, with:
   - truncated, so a value-1 hit on a normal enemy adds nothing
 - **Ours:** spell hits add drive too (the game's handler runs for Sora's attacks; that it
   covers spells is inferred).
-- **Not modelled:** orbs (the rule is in `Drive::orb`), Damage Drive, items.
+- **Drive orbs** (the prize table at `0x1405C7590`): a small orb (KH2's prize type 7) adds 1
+  point, a big one (8) 3, through the same add as a hit's (no ×0.75). In a form an orb adds
+  `value × 12` frames to the form gauge; in Anti Form it takes them away.
+- **Damage taken** (the HP-change handler): out of a form, `damage / max HP × A` points, where
+  `A` is 0 without Damage Drive and 50 per copy of it. So vanilla KH2 Sora gains nothing from
+  hits he takes. In a form, damage never touches the form gauge.
+- **Not modelled:** items (Drive Recovery +3 bars, High Drive Recovery +9).
 
 ## Driving (Checked, exe)
 
@@ -241,7 +247,8 @@ The user: "I want you to add anti form. I want 1:1 combat parity. I dont want it
 to enter, and I dont want sora to be able to revert out of it." Then: "Drive forms in this mod
 run out when you're out of MP, so sora will revert when he is out of MP". Since s285 it takes
 half his MP to enter, rounded down (the user: "Antiform should take half of your MP"), and still
-starts at any MP.
+starts at any MP. Since s318 it costs Drive bars instead: it empties the gauge (KH2's 9) and
+wants 3 bars to start ("The Drive gauge in KH1" below).
 
 - **How he gets it (ours).** Only by the secret button code (`form::pad`, read in `probe::pad`).
   It is never in the Drive list. The code is taken when KH2 could change him (free, jumping,
@@ -329,13 +336,13 @@ starts at any MP.
   the executable, not in the data. `hurt` raises each attack's damage in KH1's hit record
   (`+8`) by 1.5, rounded up, before KH1 applies it. Drains and heals are left alone.
 - **Entering and its end (ours, the user's rules).**
-  - It costs no MP and needs none (`form::cost_mp` 0, `mp_enough`).
+  - It empties the Drive gauge (KH2's cost 9) and wants 3 full bars to start (s318; it took half
+    his MP from s285, nothing before).
   - Otherwise it changes as the other forms do: Sora's Drive motion, HP to full, "Give me
     strength!", and the arrival.
-  - It runs on Sora's MP as every form here does: the same yellow-MP drain (`form::after_step`,
-    one unit every `DRAIN_FRAMES` frames of battle, half as fast out of it) and the same
-    `valorstats::DRIVE_MP` bars added while it lasts.
-  - Out of MP, it reverts. A KO reverts at once.
+  - It runs on its form gauge, KH2's 6 bars (3600 frames), drained as every form's is; Drive
+    orbs take from it instead of adding (KH2's rule).
+  - When the gauge runs out, it reverts. A KO reverts at once.
   - Revert can't end it: the Drive row is greyed, and `form::choose` and `drive::revert_row`
     refuse it.
   - KH2's own end (its 6-bar form gauge, hits draining it) isn't modelled. KH1 has no Drive
@@ -363,8 +370,8 @@ starts at any MP.
 
 ## Limit Form in the KH1 port (Data; the rules ours where marked)
 
-The user: "lets begin working on limit form". Its cost and unlock are the user's: 1 MP to enter,
-as Valor and Wisdom (`form::LIMIT_COST_MP`). It opens by the Dive's choice ("When the
+The user: "lets begin working on limit form". Its unlock is the user's; its cost is KH2's 4 Drive
+bars since s318 (1 MP before, as Valor and Wisdom). It opens by the Dive's choice ("When the
 forms open" below: first for the Shield, second for the Sword, third for the Rod). It is the Drive
 list's third entry, after Wisdom.
 
@@ -553,8 +560,8 @@ lists (`.hed` names). Nothing of it is in the repository.
 - `form::Kind::Limit`, `pose::Kh2::limit` (`P_EX100_KH1F` through `load_form`), `drive::FORMS`
   third entry: record 0x81, word 0x1FB. The Drive records' arguments follow the list's order, so
   Final's is now 0x13.
-- The change, the revert, the MP drain and its two extra bars (`valorstats::DRIVE_MP`), the
-  revert out of MP, on a KO and in a new world, and full HP on entering are all as for every form.
+- The change, the revert, the form gauge and the revert when it runs out (s318; before, the MP
+  drain), on a KO and in a new world, and full HP on entering are all as for every form.
 - **Moveset.** KH2's controller runs its moves and combo rows, its movement numbers, its guard,
   Aerial Recovery (motion 40), the Zantetsu Counter and its finishers, as above.
 - **Growth.** Dodge Roll at base Sora's level + 1, MAX at most (`form::growth_up`), the others
@@ -591,8 +598,8 @@ lists (`.hed` names). Nothing of it is in the repository.
     KH2's cost (`reflect::COST`, `kh1_spell_cost`), and KH2's cost / 100 rounded up gives the same
     bar for 60..80, so both rules agree; it is logged when a limit is paid. Short of a bar the
     limit can't be used (KH2's own rule for a cost above his MP isn't traced, above). The form's
-    own drain goes on; a limit that spends the last bar runs to its end before the out-of-MP
-    revert (that waits for `can_change_form`, never true in a scripted motion).
+    gauge drains on (s318: its form gauge, not MP); a form gauge running out mid-limit reverts
+    only after the limit (that waits for `can_change_form`, never true in a scripted motion).
   - **Running.** Chosen, a limit waits in the list until KH2's move takes a command
     (`can_take_command`, as a spell waits for `can_cast`). Then its bar is paid and `limi` is
     started at trigger 22 with the command (`kh2_magic::Magic::limit`). Each frame after KH2's
@@ -744,8 +751,8 @@ lists (`.hed` names). Nothing of it is in the repository.
     follow-ups are KH1's own Triangle presses, passed straight to KH1. `pose::follow` draws KH1's
     own animation all through: Limit Form's model is KH1 Sora's, so none of the form's KH2
     motions are drawn over a walk, run or jump slot of it.
-  - **The form** stays on. Its MP drain goes on (`form::drain`, the same yellow drain as
-    `after_step`). Out of MP meanwhile, the revert is set but waits: it needs KH2 to have him
+  - **The form** stays on. Its gauge drains on (s318: the form gauge, `gauge::frame`, every frame
+    of Sora's). Run out meanwhile, the revert is set (`form::drain`) but waits: it needs KH2 to have him
     and `can_change_form`, so it comes on the first frame after the limit. Before this, every
     KH1 move in a form paused the drain, because the drain ran only in KH2's steps. That is still
     so for items and Wisdom / Final's KH1 spells.
@@ -762,8 +769,8 @@ lists (`.hed` names). Nothing of it is in the repository.
       him (`SCRIPTED` is still stored as KH1 set it, so the camera and `pose` are unchanged);
     - `form::limit_under_way` (a KH1 limit in Limit Form, or KH2's own Limit commands if
       `KH2_LIMITS` is turned back on) puts off every revert but a knock-out or a new world: a
-      scene's (`scene_revert`), out of MP (`before_step`, as KH2's gauge running out mid-limit
-      ends the form only after it), and the Revert command (kept for the limit's end). The log
+      scene's (`scene_revert`), the form gauge running out (`before_step`, as KH2's gauge running out
+      mid-limit ends the form only after it), and the Revert command (kept for the limit's end). The log
       says "Drive: the revert (...) waits: a limit is under way in Limit Form" once, and "Drive:
       the revert put off during a limit (...) taken now" when it comes; a scene that ended with
       the limit leaves the form on ("... no longer asks: the form stays").
@@ -800,7 +807,7 @@ lists (`.hed` names). Nothing of it is in the repository.
     takes him back cleanly after, on the ground and in the air; that bit 16 covers the whole
     limit (if KH1 drops it early, the hand-off's cuts could take him mid-limit); that the takeover
     runs on KH1's limit frames (the drain runs from there);
-  - the MP drain and the out-of-MP revert through a KH1 limit; that no limit (Strike Raid's
+  - the form gauge and its revert through a KH1 limit; that no limit (Strike Raid's
     throws and follow-ups in particular) reverts the form part way, and a revert put off comes
     on the first frame after it;
   - Ripple Drive's body group 20 shapes on KH1's contact code;
@@ -812,9 +819,9 @@ lists (`.hed` names). Nothing of it is in the repository.
 The user: "lets take the rules and procedures we've done for wisdom form and valor form, and lets
 make master form. I want sora's jumpsuit to be yellow, and the inside of sora's jacket's hood be
 yellow as well instead of blue. I want soras belt to be black. Lets make sure when sora uses his
-KH2 Master Form attacks, his secondary keyblade's trail actually follows the keyblade." Its cost
-and unlock are the user's: 2 MP to enter (`form::MASTER_COST_MP`), open once Anti-Sora is beaten
-("When the forms open" below).
+KH2 Master Form attacks, his secondary keyblade's trail actually follows the keyblade." Its unlock
+is the user's, open once Anti-Sora is beaten ("When the forms open" below); its cost is KH2's 4
+Drive bars since s318 (2 MP before).
 
 Read from fresh copies of the Steam install's `00battle.bin`, `03system.bin`, `00objentry.bin`,
 `obj/P_EX100_TRIF.mdlx` / `.mset` and `obj/W_EX010_TRIF_R` / `_L.mset` (research helpers
@@ -888,8 +895,8 @@ Nothing of it is in the repository.
   order (Valor, Wisdom, Limit, Master, Final): record 0x87 and word 0x1F5, the next free ones after
   Limit Form's limits (0x82..0x86, 0x1FA..0x1F6). The records' arguments follow the list, so
   Final's is 0x14 now. It is listed only once unlocked.
-- The change, the revert, the MP drain and its two extra bars (`valorstats::DRIVE_MP`), the revert
-  out of MP, on a KO and in a new world, full HP on entering, no KH1 limits (`combat`, through
+- The change, the revert, the form gauge and the revert when it runs out (s318), on a KO and in a
+  new world, full HP on entering, no KH1 limits (`combat`, through
   `form::two_blades`), and talking and examining are all as for every form.
 - **Growth.** Aerial Dodge at base Sora's level + 1, MAX at most (`form::growth_up`), following
   KH1's menu changes mid-form (`form::abilities`).
@@ -1121,11 +1128,137 @@ the story while the same save plays, a box reads "New Drive Form: <name>" (`menu
 the same queue as Reflect's "New Magic" / "Magic Up" and the bosses' gifts). Loading a save with
 forms already open shows none (its story bytes or level jump).
 
-## MP while in a form (s310)
+## MP while in a form (s310, replaced in s318)
 
-The 2 extra MP bars a form added (s269) are switched off (`valorstats::DRIVE_MP_ON`), and the drain
-is three times slower: one unit of yellow MP every 9 frames of battle (`form::DRAIN_FRAMES`), half
-as fast out of battle. A top bar of value n breaks into n × 30 units.
+From s269 to s317 the forms ran on Sora's MP: 2 extra MP bars while a form lasted (switched off in
+s310), and a drain of one unit of yellow MP every 9 frames of battle, back to Sora out of MP. Since
+s318 a form runs on KH2's form gauge ("The Drive gauge in KH1", below) and MP is for magic only,
+in a form as out of one. The extra-bars code (`valorstats::DRIVE_MP`) is gone.
+
+## The Drive gauge in KH1 (s318; the rules KH2's, the numbers' sources given)
+
+The user: "Now that we've got the drive forms down, lets incorporate the drive gauge." Their
+choices: KH2's costs in Drive bars instead of MP; filled by Sora's hits, damage he takes and Drive
+orbs, never by save points; a maximum of 3 bars growing with each form unlocked; and in a form
+KH2's form gauge, draining, the form ending when it runs out. The model is `character_core::drive`
+(the "Drive gauge" and "In a form" sections above); the tables are `kh1-hook/src/drivegauge.rs`;
+the game side `win/gauge.rs`, `win/prize.rs`, `win/gaugehud.rs`.
+
+**Costs** (`drivegauge::cost`; KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 4,
+Master 4, Final 5. Anti Form (the secret code's) costs 9, which empties any gauge; it wants 3 full
+bars to start (ours: KH2's Anti only comes out of a Drive the gauge could pay for, the cheapest 3).
+The cost is paid as the Drive motion starts, by KH2's rule: a part-filled bar survives unless the
+gauge was full or short. A form the gauge can't pay for is greyed in the Drive list
+(`form::usable` -> `gauge::can_pay`) and refused with the gauge in the log; each row shows its cost
+at its right end (`drive::list_draw`, not in a form, where the rows read Revert).
+
+**Maximum** (`drivegauge::MAX_TABLE`, the user's): 3 bars, +1 each for Valor, Wisdom, Limit and
+Master, +2 for Final; 9 (KH2's cap) with all five open. It is worked out from the story flags
+(`story::unlocked` with the Dive's choice) every half second and never stored, so loading a save
+gives that save's maximum. Logged when it changes: "Drive gauge: maximum 4 bars (3 base, Valor
++1)".
+
+**Filling, out of a form** (KH2's rules from the exe, above):
+- *Sora's hits*: every hit record KH1 makes for one of Sora's attacks on a foe (`probe::hit`,
+  KH1's `0x1402BD180`; a foe by KH1's own test `0x14028FE30`: not marked not-a-foe, another
+  team), so KH2's hits (landed through KH1's contact code) and KH1's own (its combo, its limits,
+  its spells) alike. The value is the KH2 ATKP row's drive byte (0x29) for a KH2 hit
+  (`combat::land` passes it: Sora's ground combo 3 and 4, spells 4 to 9); KH1's own attacks have
+  no ATKP row, so they take KH2's value for the like (00battle `atkp`): a physical hit 3 (Sora's
+  combo swings 127, 128, 130, 134), a spell 5 (Thunder's level-1 rows 249 / 250), told apart by
+  the attack's data (KH1's spells' attack data, `combat::is_kh1_spell_data`). KH2 multiplies by
+  0.75 on a normal enemy and truncates: a 3 adds 2 points, a 4 adds 3.
+- *Damage taken*: KH2's Damage Drive rule with one copy, `damage / max HP × 50` points, truncated
+  (`drivegauge::damage_points`): losing a tenth of his HP adds 5. KH2 itself gives nothing
+  without the ability; the user wanted damage to count, so every Sora has it once. Read as his HP
+  dropping from one frame to the next (`gauge::frame`; not across a change of max HP or actor).
+- *Drive orbs*: a small orb 1 point, a big one 3 (KH2's prize table), below.
+- Save points do not refill it (nothing of KH1's touches it).
+
+**In a form** (`gauge::enter`, `gauge::frame`): the form gauge is `(level + 3) × 600` frames; KH1
+has no form levels, so Lv 1: 4 bars, 2400 frames, 40 s of battle. Anti: 6 bars. It drains 1 a
+frame in battle (KH1's battle flag) and 0.5 outside, every one of Sora's frames (KH2's or KH1's,
+a KH1 limit in Limit Form included); each of the form's hits on a foe takes `15 × drive × 0.2`
+frames (KH2's normal-enemy rate; 9 frames for a 3); each Drive orb gives `value × 12` frames
+(Anti: takes them). Damage taken doesn't touch it. When it runs out the form ends as by Revert,
+as soon as he can change (`form::drain` -> `before_step`), and never mid-limit (s314's
+`limit_under_way` rule). Under the form gauge the Drive gauge keeps the bars the cost left; there
+is no refill or cooldown on the way out.
+
+**The gauge in the save** (Checked: exe scan + the user's saves). The bars and the points (0..100,
+100 the full marker) are two bytes of KH1's save block: `save + 0x37` (bars) and `save + 0xAB`
+(points). Each is the byte after a party record's weapon, record `+0x37`, Sora's record (0) and
+Donald's (1, `+0x74`):
+- A record is 0x74 bytes; its weapon is the byte `+0x36` and the next field a u16 at `+0x38`, so
+  `+0x37` sits between a byte and an aligned u16: padding. (KH1's stats code also indexes the
+  records from `R + 4`, the pointer it keeps in `stats + 0xC8`; there the weapon is `+0x32`, the
+  pad `+0x33`, and its u16 at `+0x38` is `R + 0x3C`, the MP charge.)
+- Every access found after a `× 0x74` record index (`imul $0x74`, the next 60 instructions) to
+  `+0x33..+0x3B` is the weapon as a byte (`0x140284894`, `0x1402848F7`, `0x1402E69DE`, ...) or a
+  u16 at `+0x38` / `+0x3A`; none touches `+0x37` (nor `+0x33`, its place from the `R + 4` base
+  the stats code uses).
+- All nine of the user's autosaves hold 0 at both bytes, in all ten records.
+- The spare bytes before it are all taken (`+0x488` Valor's Keyblade, `+0x489` Final's, `+0x48A`
+  the testing branch's, `+0x48B` Master's; `+0x48C / +0x48D` KH1's), as are `+0x48E..` (the party
+  list) and `+0x492..` (spell levels).
+- Medium-high: a static scan can't see an access through a pointer computed elsewhere. A whole
+  record copy (KH1's party code) carries the byte with it.
+
+Every change is written to the save block at once and every use reads it back
+(`gauge::with`), so a save (at a save point, outside battle) keeps the gauge, and a loaded save
+brings its own; a stray byte (more than 9 bars or 100 points) reads as an empty gauge, and bars
+above the maximum are capped. **The form gauge isn't saved** (the simplest safe rule): KH1 saves
+outside battle, and a save made in a form keeps the bars left after the cost, so loading it gives
+Sora out of the form with those bars, as KH2's gauge after a Drive.
+
+**Drive orbs** (`docs/kh1-prizes.md`): two new prize types in KH1's own prize system, 7 a small
+orb and 8 a big one, recoloured copies of KH1's MP orbs (their rows, sprites, sizes, pull and
+sound; KH2's yellow-orange colour). An enemy's own drop (its AI's drop op) rolls KH2's normal
+enemies' drive-orb rows (00battle `przt`, the 87 rows with an item drop): 62 drop none, 10 four
+small, 10 two big, 5 more (here six small and two big); about 0.8 small and 0.4 big a defeat.
+KH1's code scatters, pulls, times out, picks up and plays them as its own orbs; the pickup adds 1
+or 3 points, or 12 or 36 frames in a form (Anti loses them).
+
+**The HUD** (`gaugehud`): KH2's segmented Drive gauge under Sora's HP and MP: one segment per bar
+of the maximum, the full ones lit yellow-orange, the current one filled to its points, and the
+number of full bars to the right ("MAX" when full). In a form it shows the form gauge: its bars
+(4, or Anti's 6), draining, in a paler gold, and KH2's number (the full bars left, the one
+draining not counted). It is drawn by KH1's own HUD code in KH1's command-menu task
+(`0x140279700`): its sprite draw (`0x140278880`) with a copy of a Drive list row's panel record,
+recoloured and sized per segment, and its text draw (as the Drive list's title), after the same
+set-up KH1's list draw makes. It fades with the command menu (`0x14285320C`: events, KH1's own
+fades) and Page Down's HUD hide empties it as the rest of that task's draws. Its place is the ini's
+`drive_gauge = 548, 352` (the right end and top in KH1's HUD units: 512 × 384 for the 4:3 middle,
+the wide screen's sides running past 0 and 512); the default is a guess from the command menu's
+place (its left edge at -47 and bottom at 346), so it may want moving.
+
+**The log**: "Drive gauge: maximum ..." when the maximum changes; "Drive: Valor Form for 3 bars
+(Drive gauge 4 bars + 20 of 4 -> 1 bars + 20 of 4)" on a Drive; "Valor Form (Lv1): its form gauge
+2400 frames (4 bars ...)" on arrival; a summary once a second while the gauge changes ("Drive
+gauge: 2 bars + 35 of 5; the last second: +6 from 3 hits, +5 from damage, +2 from 2 Drive orbs",
+or in a form "Valor Form's gauge: 1834 of 2400 frames (3.1 bars); the last second: 60 frames of
+the form, -36 from 4 hits"); "Valor Form: the form gauge ran out" and "Revert (the form gauge ran
+out)"; "Drive orbs: an enemy's drop (...): 4 small, 0 big" and "Drive orb (small) picked up by 0:
++1; Drive gauge ...".
+
+**Approximate (ours):**
+- KH1 has no boss mark this reads, so every foe takes KH2's normal-enemy rates (×0.75 drive, ×0.2
+  form-gauge drain per hit); KH2's bosses give the full value.
+- KH1's own attacks' drive values (3 physical, 5 spell) are KH2's for the like, not per move.
+- Damage Drive is on for everyone (one copy); MP Charge's ×2 doesn't exist in KH1.
+- Drive orb drops are rolled per drop from KH2's normal-enemy rows, not per enemy kind; KH1's
+  bosses drop as any enemy.
+- The form level is 1 for every form (KH1 has no form EXP); Master's orb EXP isn't modelled.
+- The HUD's place and the orbs' colour are tuned blind (no screenshot of either yet).
+
+**To check in game:** a new save (gauge 0 of 3), the maximum growing as forms open (log); hits
+filling it (KH2 combo, KH1 combo, KH1 spells, limits), taking damage filling it; the Drive list
+greying rows by cost and showing the costs; a Drive paying its cost (log), the form gauge on the
+HUD draining in and out of battle, hits draining it, orbs refilling it (Anti: draining), the
+revert when it runs out (in the air, mid-combo, mid-KH1-limit in Limit Form); enemies dropping
+yellow-orange orbs that behave as MP orbs, picked up by Sora and by a partner; saving and loading
+(the bars come back, a save made in a form loads out of it); Page Down hiding the gauge; the gauge
+fading in a cutscene.
 
 ## Partners (the rule the user's, the reads Checked: exe)
 
@@ -1185,7 +1318,7 @@ takes leave the field while it lasts: Valor takes Goofy, Wisdom Donald, Master a
 Limit no one, Anti Form both (KH2's Anti; only those in the field party). A guest in their place
 never vanishes (they are found by member id, 1 Donald, 2 Goofy). They go when the change starts
 (Sora's Drive motion) and come back beside Sora when the form ends, however it ends: the Revert
-command, out of MP, knocked out, a new world, a long KH1 scene (`form::scene_revert`), game over.
+command, the form gauge running out, knocked out, a new world, a long KH1 scene (`form::scene_revert`), game over.
 The log: "Drive: Goofy leaves for Valor Form" / "Drive: Goofy is back". The rule table is
 `partners::taken` (unit test there); the code `kh1-hook/src/win/vanish.rs`.
 
@@ -1298,7 +1431,7 @@ a partner left far behind wasn't looked for).
 
 To check in game: each form with the full party (who goes, who stays, the HUD entries, the log
 lines); Anti with one partner knocked out or away; Wisdom in Deep Jungle with Tarzan for Goofy
-(Donald goes, Tarzan stays); revert by command, out of MP, knocked out
+(Donald goes, Tarzan stays); revert by command, the form gauge running out, knocked out
 (game over and Continue), a room change and a world change in the form, a cutscene in the form,
 a save point (talking to it) in the form, then saving and loading; enemies ignoring where the
 partner stood; Limit Form's Trinity Limit as before (Limit takes no one); Page Down's HUD hiding

@@ -537,6 +537,19 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     let r = f(attack, target);
     if owner != 0 && owner == sora() && r > 0x10000 {
         super::combat::scale_record(r);
+        // KH2's Drive gauge (`gauge::hit`): a KH2 hit's ATKP drive value, else KH1's own attack's
+        // (a spell's, by its attack data, or a physical one's).
+        let d = match super::combat::DRIVE.load(Ordering::Relaxed) {
+            super::combat::NO_DRIVE => {
+                if super::combat::is_kh1_spell_data(pose::ptr(rd::<u32>(attack + 0x5C))) {
+                    crate::drivegauge::KH1_SPELL
+                } else {
+                    crate::drivegauge::KH1_PHYSICAL
+                }
+            }
+            d => d as u8,
+        };
+        super::gauge::hit(owner, target, d);
     }
     if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");

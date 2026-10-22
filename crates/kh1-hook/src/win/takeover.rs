@@ -453,6 +453,8 @@ unsafe extern "system" fn physics(actor: usize) {
         room_watch(actor, took);
         // The partners a Drive Form takes, away while it lasts (`vanish`).
         super::vanish::frame();
+        // KH2's Drive gauge: the form gauge's drain, damage taken (`gauge`).
+        super::gauge::frame(actor);
     }
     if took {
         return;
@@ -1494,7 +1496,7 @@ unsafe fn takeover(actor: usize) -> bool {
     // Limit menu or shortcuts, started as a KH1 command's hand-off, `combat::command`). KH1
     // has him all through it whatever is pressed: its limit module moves and animates him, and its
     // Keyblade, effects and hits are KH1's (none of the hand-off's cuts below, which would take him
-    // mid-limit). The form stays on and its MP drain goes on (`form::drain`; out of MP, the revert
+    // mid-limit). The form stays on and its gauge drains on (`gauge::frame`; out, `form::drain`
     // waits for KH2 to have him again). When KH1's limit flag clears, the hand-off below ends it as
     // a KH1 command's end: on the ground KH2's again on KH1's idle, the stick, an Attack or a jump;
     // in the air KH2's fall.
@@ -1507,10 +1509,9 @@ unsafe fn takeover(actor: usize) -> bool {
                 log("an Attack during KH1's limit (Limit Form): dropped, the limit plays to its end");
             }
         }
-        let battle = rd::<u32>(base + BATTLE_RVA) & 1 != 0;
         if let Ok(mut g) = DRIVER.try_lock() {
             if let Some(d) = g.as_mut() {
-                super::form::drain(&mut d.drive, actor, battle);
+                super::form::drain(&mut d.drive);
             }
         }
         // (The hand-off's frames count on, so its end is taken on the limit's first free frame;
@@ -2842,7 +2843,7 @@ unsafe fn takeover(actor: usize) -> bool {
         d.character.register_hit();
     }
     super::limits::after_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock);
-    super::form::after_step(&mut d.drive, actor, rd::<u32>(base + BATTLE_RVA) & 1 != 0);
+    super::form::after_step(&mut d.drive, actor);
     super::prof::add(super::prof::FORM, tp);
     super::kh2sound::tick();
     let tp = Instant::now();

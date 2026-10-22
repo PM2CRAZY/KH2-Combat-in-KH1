@@ -43,6 +43,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `config_row` | `on` (default), `off` | The Config menu's Camera Style row (off: none; `camera` alone decides). |
 | `shortcuts` | `4` (default), `3` | KH2's four shortcuts: L1 + the cancel button (Circle) is the fourth, set in Customize. `3`: KH1's three. |
 | `hud_toggle_key` | `pagedown` (default), `pageup`, `home`, `end`, `delete`, `f1`..`f12`, a letter or digit, a key code (`0x22`), `off` | A press (while the game window has the keyboard) hides the whole field HUD, the next shows it again: KH1's gauges, command menu and shortcuts, lock-on cursors, the target's gauge, info messages, and the mod's Drive page and list with them. The pause menu, events, subtitles and message windows stay. The game plays on as normal; the HUD starts shown each launch. The log says "HUD hidden" / "HUD shown". See `docs/kh1-hud-hide.md`. |
+| `drive_gauge` | `x, y` (default `548, 352`) | Where KH2's Drive gauge is drawn on the HUD: its right end and top, in KH1's HUD units (512 × 384 for the 4:3 middle; the wide screen's sides run past 0 and 512). The default sits under Sora's HP and MP. See `docs/drive-model.md`, "The Drive gauge in KH1". |
 
 ## What is KH1's and what is KH2's
 

@@ -1938,7 +1938,7 @@ impl Strikes {
                 HOLD.store(blow && !throws && !b.fixed, Ordering::Relaxed);
                 MAGIC.store(row.stat_source == 1, Ordering::Relaxed);
                 // (The move this hit belongs to: its action, `swing`'s high bits.)
-                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false);
+                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, row.drive_drain);
                 MAGIC.store(false, Ordering::Relaxed);
                 HOLD.store(false, Ordering::Relaxed);
                 // (Again once the contact is done, in case its direction came after the record.)
@@ -2047,7 +2047,7 @@ impl Strikes {
                     None => (rows[knock as usize], false),
                 };
                 MAGIC.store(!spell_data && r.stat_source == 1, Ordering::Relaxed);
-                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data);
+                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data, r.drive_drain);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
                 out.push((a.key, a.atk, b.actor, dealt));
@@ -2153,16 +2153,33 @@ static MAGIC: AtomicBool = AtomicBool::new(false);
 static CARRY: std::sync::LazyLock<std::sync::Mutex<HashMap<usize, i64>>> = std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 
 /// Lands one hit with KH1's contact code, through a KH1 attack object made from Sora's row.
-/// Returns the damage written to the hit record, if one was made.
-unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool) -> Option<u32> {
-    land_hit(sora, part, at, row, power, spell)
+/// Returns the damage written to the hit record, if one was made. `drive` is the KH2 ATKP row's
+/// drive value (byte 0x29), which the hit adds to the Drive gauge (`gauge::hit`, through
+/// `probe::hit` and `DRIVE`).
+unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool, drive: u8) -> Option<u32> {
+    DRIVE.store(drive as u32, Ordering::Relaxed);
+    let r = land_hit(sora, part, at, row, power, spell);
+    DRIVE.store(NO_DRIVE, Ordering::Relaxed);
+    r
 }
+
+/// While KH2's hit is landed: its ATKP drive value (`NO_DRIVE` otherwise: a hit of KH1's own,
+/// `probe::hit` gives it KH1's).
+pub static DRIVE: AtomicU32 = AtomicU32::new(NO_DRIVE);
+pub const NO_DRIVE: u32 = u32::MAX;
 
 /// KH1's own attack data for a spell (Fire 0, Blizzard 1, Thunder 2, Cure 3, Gravity 4, Stop 5,
 /// Aero 6) at a level (1..3): the offset in the attack data table (`docs/kh1-attack-elements.md`:
 /// the per-level entries from 0x5F28, 0x70 apart, in spell order). Its element (Fire 2, Blizzard
 /// 3, Thunder 4) is what makes the hit fire, ice or thunder against the target's resistances
 /// (the user: Wisdom's Fire, Blizzard and Thunder did physical damage). Logged once.
+/// Whether attack data at `data` is one of KH1's spells' (the seven spells' three levels from
+/// 0x5F28, `kh1_spell_data`): a KH1 spell's hit, for its drive value (`probe::hit`).
+pub fn is_kh1_spell_data(data: usize) -> bool {
+    let start = BASE.load(Ordering::Relaxed) + ATTACK_DATA_RVA + 0x5F28;
+    (start..start + 21 * 0x70).contains(&data)
+}
+
 pub fn kh1_spell_data(spell: u8, level: u8) -> Option<i32> {
     if spell > 6 || !(1..=3).contains(&level) {
         return None;

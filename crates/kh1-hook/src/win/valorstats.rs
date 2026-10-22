@@ -43,33 +43,12 @@ const STATS_SIZE: usize = 0x200;
 /// Sora's weapon (his save record's `+0x36`).
 const WEAPON: usize = 0x36;
 
-/// Bars of max MP every Drive Form adds while it lasts, filled as it starts (the user: "when
-/// entering a drive form, add 2 bars of MP for the duration of the drive form, just so sora has
-/// a little more time to be in drive").
-/// (Switched off: the user, "comment off about the 2 additional MP in drive forms. Instead, lets
-/// make drive forms drain MP MUCH slower" (`form::DRAIN_FRAMES`). Set `DRIVE_MP_ON` to bring the
-/// bars back.)
-const DRIVE_MP_BARS: i32 = 2;
-const DRIVE_MP_ON: bool = false;
-pub const DRIVE_MP: i32 = if DRIVE_MP_ON { DRIVE_MP_BARS } else { 0 };
-/// A form just started: its bars are filled on the first step that has them in his max MP.
-static FILL_PENDING: AtomicBool = AtomicBool::new(false);
-
-/// A Drive was paid for (`form`): the form's extra bars are filled once it has started.
-pub fn drive_started() {
-    FILL_PENDING.store(true, Ordering::Relaxed);
-}
-
-/// What Sora's stats get now on top of KH1's own: the second Keyblade's (Valor, Final: its item,
-/// Strength, max MP) and every form's `DRIVE_MP` bars.
+/// What Sora's stats get now on top of KH1's own: the second Keyblade's (Valor, Master, Final: its
+/// item, Strength, max MP).
+/// (The 2 extra MP bars a form once added, s269, are gone with the Drive gauge: a form runs on its
+/// form gauge now, `gauge`, not on MP.)
 unsafe fn deltas() -> Option<(u8, i32, i32)> {
-    let keyblade = bonus();
-    let form = super::form::in_form();
-    if keyblade.is_none() && !form {
-        return None;
-    }
-    let (k, s, m) = keyblade.unwrap_or((0, 0, 0));
-    Some((k, s, m + if form { DRIVE_MP } else { 0 }))
+    bonus()
 }
 
 /// Sora's live stats hold a form's bonus (they're put back once out of the form).
@@ -228,13 +207,6 @@ pub unsafe fn step(sora: usize) {
         wr(stats + MAX_MP, m);
     }
     clamp_mp(stats, m);
-    // The form's extra bars filled as it starts (once it has them in his max).
-    if super::form::in_form() && FILL_PENDING.swap(false, Ordering::Relaxed) && DRIVE_MP > 0 {
-        let mp = rd::<i32>(stats + MP);
-        let filled = (mp + DRIVE_MP).min(m);
-        wr(stats + MP, filled);
-        log(&format!("Drive: {DRIVE_MP} bars of MP added for the form: MP {mp} -> {filled} of {m}"));
-    }
     DIRTY.store(want.is_some(), Ordering::Relaxed);
     // Logged as it changes.
     let key = want.map(|(k, _, _)| k).unwrap_or(0);
@@ -246,7 +218,7 @@ pub unsafe fn step(sora: usize) {
                     Some((k, ds, dm)) => {
                         let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
                         let name = super::equip::item_name(base, k).unwrap_or_else(|| format!("{k:#x}"));
-                        format!("form stats: {name} {ds:+} Str, {dm:+} MP (the form's {DRIVE_MP} bars included): Strength {own_s} -> {s}, max MP {own_m} -> {m} (was {was_s} / {was_m})")
+                        format!("form stats: {name} {ds:+} Str, {dm:+} MP: Strength {own_s} -> {s}, max MP {own_m} -> {m} (was {was_s} / {was_m})")
                     }
                     None => format!("Valor Keyblade stats: none (out of Valor): Strength {was_s} -> {s}, max MP {was_m} -> {m}"),
                 };

@@ -3584,6 +3584,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 318 (KH2's Drive gauge, form gauge and Drive orbs)
+- The user: "lets incorporate the drive gauge" (forms cost Drive bars at KH2's costs; filled by hits,
+  damage taken and Drive orbs; max 3 + one per form, Final +2; KH2's form gauge in a form), and "For
+  the drive orbs, I want them to run through KH1's engine, not an overlay". New `drivegauge.rs`
+  (MAX_TABLE), `win/gauge.rs`, `win/gaugehud.rs` (KH1's HUD draw calls; ini `drive_gauge = x, y`),
+  `win/prize.rs` (prize types 7/8 in a copied row table, effect entries tinted, KH1's spawner and
+  pickup). MP drain and MP costs removed. Save: bars +0x37, points +0xAB. docs/drive-model.md,
+  docs/kh1-prizes.md.
+
 ### 2026-10-21: Stage 317 (jump only backs out of an open submenu)
 - The user: "when the drives, summons, items, or magic submenus are open, pressing the jump button
   closes the menus and jumps at the same time ... back out of the menu first before allowing jumps".

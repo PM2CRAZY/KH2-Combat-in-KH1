@@ -190,7 +190,8 @@ unsafe fn ensure_records(base: usize) -> bool {
     true
 }
 
-/// Whether form `k` can be chosen now (`form`: its MP, or Revert in the form).
+/// Whether form `k` can be chosen now (`form::usable`: its Drive bars, `gauge::can_pay`, its
+/// partners and the rest; or Revert in the form). A form the gauge is short of is greyed.
 unsafe fn usable(actor: usize, k: usize) -> bool {
     super::form::Kind::ALL.get(k).is_some_and(|&kind| super::form::usable(actor, kind))
 }
@@ -378,6 +379,9 @@ const TEXT_WIDTH_RVA: Rva = Rva(0x2CEC60);
 /// The row count the title was last logged for.
 static TITLE_LOGGED_ROWS: AtomicI32 = AtomicI32::new(-1);
 static TITLE_TEXT: OnceLock<usize> = OnceLock::new();
+/// The costs' digits, and how far in from a row's right end they sit.
+static COST_TEXT: OnceLock<Vec<usize>> = OnceLock::new();
+const COST_DX: i32 = 5;
 static ORIG_LIST_DRAW: AtomicUsize = AtomicUsize::new(0);
 /// The header tab's stand-in while the Drive list draws: its record with no size.
 static BLANK_HEADER: OnceLock<usize> = OnceLock::new();
@@ -498,6 +502,35 @@ unsafe extern "system" fn list_draw(kind: i32, menu: usize, a3: i32, a4: i32, la
             let end = draw(start, 1, colour, tx, ty, text);
             wr(base + PACKET_RVA, end as u64);
             run(start);
+        }
+    }
+    // Each row's cost in Drive bars at its right end, as KH2's Drive list shows it (not in a form,
+    // where the rows read Revert), in the row's own brightness (greyed with a row the gauge is
+    // short of).
+    if alpha != 0.0 && !super::form::in_form() {
+        // (The row's right end: its second panel's, the list's right column, if it has one.)
+        let mut r = [0i32; 4];
+        rect_of(if rows2 > 0x10000 { rows2 } else { rows }, &mut r);
+        let draw: unsafe extern "system" fn(usize, i32, u32, i32, i32, usize) -> usize = std::mem::transmute(base + TEXT_RVA);
+        let run: unsafe extern "system" fn(usize) = std::mem::transmute(base + TEXT_RUN_RVA);
+        let measure: unsafe extern "system" fn(usize, i32) -> i32 = std::mem::transmute(base + TEXT_WIDTH_RVA);
+        let a = (alpha * rd::<f32>(base + TEXT_ALPHA_RVA)).clamp(0.0, 255.0) as u8;
+        let costs = COST_TEXT.get_or_init(|| (0..10).map(|d| Box::leak(super::menu::encode(&d.to_string()).into_boxed_slice()).as_ptr() as usize).collect());
+        for row in 0..count as usize {
+            let id = rd::<u8>(menu + 0x14 + row);
+            let Some(k) = FORMS.iter().position(|f| f.0 == id) else { continue };
+            let Some(&kind) = super::form::Kind::ALL.get(k) else { continue };
+            let word = costs[(super::gauge::cost(kind) as usize).min(9)];
+            let w = if (8..=32).contains(&height) { measure(word, height) } else { 0 };
+            let b = rd::<u8>(menu + 0x24 + row);
+            let cx = lx + r[0] + r[2] - w - COST_DX;
+            let cy = y + 0x14 + r[1] + row as i32 * 0x16 + r[3] / 2 - 7;
+            let start = rd::<u64>(base + PACKET_RVA) as usize;
+            if start > 0x10000 {
+                let end = draw(start, 1, u32::from_le_bytes([b, b, b, a]), cx, cy, word);
+                wr(base + PACKET_RVA, end as u64);
+                run(start);
+            }
         }
     }
     // Each time the row count changes (the list's y moves 0x16 a row): where everything went.

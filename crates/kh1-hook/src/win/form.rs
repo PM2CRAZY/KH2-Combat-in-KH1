@@ -1,13 +1,14 @@
-//! Wisdom Form (the user: "lets add wisdom form", from the second command page's Drive, costing
-//! MP, Sora recoloured blue). Chosen from `drive`'s list, it plays out as KH2's Drive does
+//! Wisdom Form (the user: "lets add wisdom form", from the second command page's Drive, Sora
+//! recoloured blue). Chosen from `drive`'s list, it plays out as KH2's Drive does
 //! (`kh2-bevy`'s `drive.rs`, from the exe):
 //! - Sora's Drive motion (52, invulnerable) with base Sora's moveset; when it ends, the swap:
 //!   the form's moveset, motions and combo rows (`P_EX100_MAGF`, moveset 3), his facing and
 //!   lock kept, and its arrival (53). Its abilities: Sora's support abilities, not his action
 //!   or growth ones, and the form's own growth ability, Quick Run, one level above Sora's (the user);
-//! - the form runs on Sora's MP (the user): its yellow part drained bit by bit, a blue bar
-//!   broken into it when it runs out (KH1's own payment; `after_step`); out of MP, or on the
-//!   Revert command (the Drive row itself in the form), back to Sora, at once, in the air too:
+//! - the form runs on KH2's form gauge (`gauge`; the user, s318: "lets incorporate the drive
+//!   gauge"; it ran on Sora's MP before): `(level + 3) × 600` frames, drained as KH2 drains it;
+//!   when it runs out (`drain`), or on the Revert command (the Drive row itself in the form), back
+//!   to Sora, at once, in the air too:
 //!   what was playing is cut and he is free again with his movement kept (walking, running or
 //!   idle by the stick; in the air, falling). Knocked out: back at once;
 //! - Drive and Revert are taken only on a frame Sora can change (`Character::can_change_form`:
@@ -16,7 +17,8 @@
 //! - the change takes 45 frames (the user): Sora's Drive motion for `DRIVE_FRAMES`, then the
 //!   swap and the form's short arrival; in the air he is held where he is through it.
 //! - its shots and its spells: `formmagic`.
-//! The cost is MP (`cost_mp`, KH1's own payment), not a Drive gauge, which KH1 has none of.
+//! The cost is KH2's, in bars of KH2's Drive gauge (`gauge::cost`: Valor and Wisdom 3, Limit and
+//! Master 4, Final 5, Anti 9; it was MP until s317). MP is for magic only, in a form too.
 //!
 //! Valor Form (stage 211, the user: "i want to try to add valor form"): the same change and
 //! revert, `P_EX100_BTLF` (moveset 2, its two Keyblades' swings), its growth ability High Jump
@@ -35,7 +37,7 @@
 //!
 //! Anti Form (the user: "that cheat code we were using ... I want you to add anti form. I want
 //! 1:1 combat parity. I dont want it to cost any MP to enter, and I dont want sora to be able to
-//! revert out of it"; since s285 it takes half his MP: "Antiform should take half of your MP"): reached only by the secret code (`pad`), never from the Drive list
+//! revert out of it"; s285 to s317 it took half his MP, "Antiform should take half of your MP"; since s318 it empties the Drive gauge): reached only by the secret code (`pad`), never from the Drive list
 //! (`Kind::EVERY`, not `Kind::ALL`). `P_EX100_HTLF` (moveset 6): its own moveset, motions, combo
 //! rows, movement numbers, effects and sounds, no Keyblade (KH2's Anti holds none). As KH2's:
 //! - no magic, items, summons or KH1 specials (`combat`), no guard (no motion 42 in its set), no
@@ -45,10 +47,9 @@
 //! - Square (the user: "lets add anti-form's square move"): Anti Glide (row 11, motion 173) on the
 //!   ground, standing or moving; Side Spin (row 12, motion 161) in a ground combo
 //!   (`ANTI_SIDE_SPIN_ROW`). Neither guards.
-//! It takes half his MP to enter (`cost_mp`), and it runs on Sora's MP as every form here does (the user: "Drive
-//! forms in this mod run out when you're out of MP, so sora will revert when he is out of MP"):
-//! the same drain (`after_step`), the same extra bars if on (`valorstats::DRIVE_MP`, off since s310), and out of MP
-//! (or knocked out) back to Sora.
+//! It empties the Drive gauge (KH2's cost of 9; s285 to s317 it took half his MP) and wants 3 bars
+//! to start (`drivegauge::ANTI_NEEDS`); it runs on its 6-bar form gauge, orbs draining it as in
+//! KH2, and when that runs out (or knocked out) it is back to Sora.
 //!
 //! Limit Form (the user: "lets begin working on limit form"; `docs/drive-model.md`, "Limit Form in
 //! the KH1 port"): in the Drive list after Wisdom, the same change and revert, `P_EX100_KH1F`
@@ -61,8 +62,8 @@
 //! menu in Magic's place. That menu is off for now (`limits::KH2_LIMITS`; the user: "lets comment
 //! the KH2 limits, and for the moment put in the equivalent KH1 limits"): Magic is the Limit menu
 //! of KH1's own five limits instead (equipped or not; its shortcuts KH2 FM's Limit Form layout),
-//! run as KH1 does them, KH1 having him for each, the form on and draining (`drain`) all through.
-//! It costs `LIMIT_COST_MP` and opens by the user's table (`unlocked`, `crate::story`).
+//! run as KH1 does them, KH1 having him for each, the form on and its gauge draining all through.
+//! It costs 4 bars and opens by the user's table (`unlocked`, `crate::story`).
 //!
 //! Master Form (the user: "lets take the rules and procedures we've done for wisdom form and valor
 //! form, and lets make master form"; `docs/drive-model.md`, "Master Form in the KH1 port"): in the
@@ -73,7 +74,7 @@
 //! none, as Final's). Its growth ability is Aerial Dodge, one level above Sora's; no guard (its
 //! motion 42 is the repel's clip, with no guard window). It casts as Wisdom and Final do, on its
 //! own cast motions, at KH2's Master sub (+ 20, `Kind::magic_sub`, `formmagic`). It costs
-//! `MASTER_COST_MP` and opens once Anti-Sora is beaten (`unlocked`, `crate::story`).
+//! 4 bars and opens once Anti-Sora is beaten (`unlocked`, `crate::story`).
 //!
 //! Partners (the user: "Let's make drive forms require their specific party members to cast. For
 //! example, wisdom form needs donald alive to activate in KH2"; `docs/drive-model.md`, "Partners"):
@@ -108,44 +109,12 @@ const DRIVE_FRAMES: u32 = 39;
 pub const REVERT_ELEMENTS: [i16; 13] = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
 /// The motion id the revert's effects and sound are started under (no motion of Sora's has it).
 pub const REVERT_FX: u16 = u16::MAX - 2;
-/// MP to change (KH1's payment takes hundredths of a bar from 100 up), with `have` MP now:
-/// Valor and Wisdom 1 (the user: "have valor and wisdom forms cost 1 MP"), Final 3, Anti half of
-/// what he has, rounded down (the user: "Antiform should take half of your MP").
-fn cost_mp(kind: Kind, have: i32) -> i32 {
-    match kind {
-        Kind::Valor | Kind::Wisdom => 1,
-        Kind::Limit => LIMIT_COST_MP,
-        Kind::Master => MASTER_COST_MP,
-        Kind::Final => 3,
-        Kind::Anti => have.max(0) / 2,
-    }
-}
-
-/// Limit Form's MP cost (the user: 1 MP to enter, as Valor and Wisdom).
-pub const LIMIT_COST_MP: i32 = 1;
-/// Master Form's MP cost (the user: 2 MP to enter).
-pub const MASTER_COST_MP: i32 = 2;
-
 /// Anti Form's Side Spin: its PTYA row 12 (motion 161), Square in a ground combo (Data).
 const ANTI_SIDE_SPIN_ROW: u8 = 12;
 
-/// Whether `have` MP lets form `kind` start: its cost and some left to run on. Anti starts with
-/// any MP left (it takes half; with `valorstats::DRIVE_MP` off it needs one bar to run on).
-fn mp_enough(have: i32, kind: Kind) -> bool {
-    if kind == Kind::Anti {
-        return have > 0 || super::valorstats::DRIVE_MP > 0;
-    }
-    have > cost_mp(kind, have)
-}
-/// The form's level (KH1 has no form experience): Lv 1, 40 s of battle.
+/// The form's level (KH1 has no form experience): Lv 1, a form gauge of 4 bars, 40 s of battle.
 const LEVEL: u32 = 1;
-/// Frames of battle per unit of yellow MP the form uses up (half as fast out of battle). A blue
-/// bar breaks into its number × 30 units (KH1's own conversion), so the top bar lasts that many
-/// units.
-/// (3: the user, "lets also have drive forms drain a little slower"; it was 2. 9 since s310: "lets
-/// make drive forms drain MP MUCH slower", with the 2 extra bars switched off,
-/// `valorstats::DRIVE_MP`.)
-const DRAIN_FRAMES: u32 = 9;
+
 /// Upper Slash's ability (KH2's id): Sora's Square launch, given to Valor (`pose::port_moves`).
 const UPPER_SLASH: u16 = 95;
 
@@ -374,14 +343,6 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
 }
 
-unsafe fn mp(sora: usize) -> i32 {
-    let stats = pose::ptr(rd::<u32>(sora + 0x6C));
-    if stats < 0x10000 {
-        return 0;
-    }
-    rd::<i32>(stats + 0x44)
-}
-
 /// KH1's HP change `(actor, amount)` (`0x1402A2790`: clamped to the maximum, its HUD mirror kept).
 const HP_ADD_RVA: super::addr::Rva = super::addr::Rva(0x2A2790);
 
@@ -419,7 +380,8 @@ pub fn accept_now() -> bool {
 }
 
 /// Whether form `kind`'s entry can be chosen now (`drive`'s menu): reverting in a form (not in
-/// Anti Form, which has no Revert), else MP for it and KH2 having Sora, its data loaded, and what
+/// Anti Form, which has no Revert), else the Drive gauge's bars for it (`gauge::can_pay`; the
+/// list greys a form the gauge is short of) and KH2 having Sora, its data loaded, and what
 /// the form itself needs (Valor's second Keyblade, `valor`; its partners, `own_needs`).
 pub unsafe fn usable(sora: usize, kind: Kind) -> bool {
     if busy() {
@@ -429,7 +391,7 @@ pub unsafe fn usable(sora: usize, kind: Kind) -> bool {
         // (The user: "I dont want sora to be able to revert out of it".)
         return !in_anti();
     }
-    unlocked(kind) && pose::kh2().is_some_and(|k| kind.data(k).is_some()) && (super::takeover::kh2_has() || super::takeover::kh1_cut_window()) && sora > 0x10000 && mp_enough(mp(sora), kind) && own_needs(kind).is_ok()
+    unlocked(kind) && pose::kh2().is_some_and(|k| kind.data(k).is_some()) && (super::takeover::kh2_has() || super::takeover::kh1_cut_window()) && sora > 0x10000 && super::gauge::can_pay(kind) && own_needs(kind).is_ok()
 }
 
 /// The Drive list's form as `story`'s (Anti has none: the secret code's, always open).
@@ -471,7 +433,7 @@ pub unsafe fn unlocked(kind: Kind) -> bool {
     crate::story::unlocked(form, choice, &flags)
 }
 
-/// What a form needs besides MP: Valor its second Keyblade (`valor::keyblade`), and each Drive
+/// What a form needs besides its Drive bars: Valor its second Keyblade (`valor::keyblade`), and each Drive
 /// list form its partners (`partners`).
 unsafe fn own_needs(kind: Kind) -> Result<(), String> {
     match kind {
@@ -548,7 +510,7 @@ unsafe fn note_party(base: usize, party: &[Option<crate::partners::Member>; 2]) 
 
 /// Chosen from the Drive list (`drive::chosen`), or Anti Form by the secret code. Returns why
 /// not, if refused.
-pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
+pub unsafe fn choose(_sora: usize, kind: Kind) -> Result<&'static str, String> {
     if busy() {
         return Err("a change is under way".into());
     }
@@ -571,9 +533,12 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
     if !super::takeover::kh2_has() && !cut {
         return Err("KH1 has Sora".into());
     }
-    let have = mp(sora);
-    if !mp_enough(have, kind) {
-        return Err(format!("MP {have}: it costs {} and needs some left to run on", cost_mp(kind, have)));
+    if !super::gauge::can_pay(kind) {
+        return Err(if kind == Kind::Anti {
+            format!("the Drive gauge ({}) is short: Anti Form empties it and wants {} bars", super::gauge::describe(), crate::drivegauge::ANTI_NEEDS)
+        } else {
+            format!("the Drive gauge ({}) is short: it costs {} bars", super::gauge::describe(), super::gauge::cost(kind))
+        });
     }
     WANT.store(kind.code(), Ordering::Relaxed);
     REQUEST.store(1, Ordering::Relaxed);
@@ -589,20 +554,20 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
 pub struct Drive {
     /// Changing: Sora's Drive motion playing, its frames.
     change: Option<u32>,
-    /// In the form: battle frames left, Sora's own abilities (back on revert), the form's.
+    /// In the form: Sora's own abilities (back on revert), the form's (its gauge is `gauge`'s).
     form: Option<InForm>,
-    /// Out of MP: a revert as soon as he can change.
+    /// The form gauge ran out: a revert as soon as he can change.
     revert: bool,
     /// The form the change under way goes to.
     changing_to: Option<Kind>,
-    /// A revert (out of MP, the Revert command, a scene) put off because a limit was under way
+    /// A revert (the form gauge out, the Revert command, a scene) put off because a limit was under way
     /// (`limit_under_way`): logged once when put off, and again when taken.
     waited: Option<&'static str>,
 }
 
 /// A limit is under way in Limit Form: one of KH1's (KH1 has him, `limits::kh1_limit_holds`), or
 /// KH2's own (`limits::running`, with `limits::KH2_LIMITS` on). KH2 never reverts a form in the
-/// middle of a limit: out of gauge, the form ends when the limit has (the user: "Limit from has a
+/// middle of a limit: its gauge out, the form ends when the limit has (the user: "Limit from has a
 /// bug where sora will be reverted to base sora in the middle of a KH1 Limit"). Only a knock-out
 /// or a new world reverts meanwhile.
 pub fn limit_under_way() -> bool {
@@ -619,11 +584,8 @@ fn defer(d: &mut Drive, why: &'static str) {
 
 struct InForm {
     kind: Kind,
-    /// Half frames toward the next MP drained (2 a frame in battle, 1 out of it).
-    left: u32,
     sora: Abilities,
     own: Abilities,
-    logged_s: u32,
     /// KH1's world when the form started (`WORLD_RVA`): in another one, back to Sora.
     world: u32,
 }
@@ -770,8 +732,8 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
         1 if d.form.is_none() && d.change.is_none() => {
             let Some(kind) = Kind::from_code(WANT.load(Ordering::Relaxed)) else { return };
             // (Taken on the frame it was pressed in, `accept_now`; in the air too, held there.)
-            if !mp_enough(mp(actor), kind) {
-                log(&format!("Drive: MP {} short of {} by now", mp(actor), cost_mp(kind, mp(actor))));
+            if !super::gauge::can_pay(kind) {
+                log(&format!("Drive: the Drive gauge ({}) is short of {} by now", super::gauge::describe(), kind.name()));
                 return;
             }
             let air = ch.airborne();
@@ -779,12 +741,8 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
                 log("Drive: Sora has no Drive motion (52)");
                 return;
             }
-            let before = mp(actor);
-            let cost = cost_mp(kind, before);
-            if cost > 0 {
-                super::reflect::pay_mp(actor, cost * 100);
-            }
-            super::valorstats::drive_started();
+            // KH2's cost in bars (`gauge::pay`: a part-filled bar survives unless the gauge was full).
+            let (before, after) = super::gauge::pay(kind);
             heal_full(actor);
             // KH1's "Give me strength!" (the user: "add the battle quote from kh1 where he says
             // "give me strength" when your transforming into a drive").
@@ -792,7 +750,12 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
             d.change = Some(0);
             d.changing_to = Some(kind);
             CHANGING.store(true, Ordering::Relaxed);
-            log(&format!("Drive: {} (MP {before} -> {}), Sora's Drive motion{}", kind.name(), mp(actor), if air { ", held in the air" } else { "" }));
+            log(&format!(
+                "Drive: {} for {} bars (Drive gauge {before} -> {after}), Sora's Drive motion{}",
+                kind.name(),
+                super::gauge::cost(kind),
+                if air { ", held in the air" } else { "" }
+            ));
         }
         // (Never in Anti Form, which has no Revert: `choose` refuses it already.)
         2 if d.form.as_ref().is_some_and(|f| f.kind != Kind::Anti) => {
@@ -825,11 +788,11 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
         // (Not mid-limit: KH2's own limits run under KH2's step, `limits`; KH1's have him away
         // from it, so this comes on the first frame after one anyway.)
         if limit_under_way() {
-            defer(d, "out of MP");
+            defer(d, "the form gauge ran out");
             return;
         }
         d.revert = false;
-        revert(d, ch, anim, kh2, "out of MP");
+        revert(d, ch, anim, kh2, "the form gauge ran out");
     }
 }
 
@@ -861,7 +824,9 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
         ch.play_held(ARRIVE_MOTION, true);
     }
     let lv = (growth_of(&sora), own.clone());
-    d.form = Some(InForm { kind, left: 0, sora, own, logged_s: 0, world: world_now() });
+    d.form = Some(InForm { kind, sora, own, world: world_now() });
+    // KH2's form gauge, `(level + 3) × 600` frames (Anti 6 bars), from now (`gauge`).
+    let frames = super::gauge::enter(kind, LEVEL as u8);
     CURRENT.store(kind.code(), Ordering::Relaxed);
     IN_FORM.store(true, Ordering::Relaxed);
     if kind.two_blades() {
@@ -875,13 +840,18 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
         Kind::Final => ("Glide", lv.0.glide, lv.1.glide),
         Kind::Anti => {
             log(&format!(
-                "Anti Form: entered for half his MP; yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), back to Sora out of MP; no growth ability, no guard ({}), no Revert, 1.5x damage taken",
+                "Anti Form: entered; its form gauge {frames:.0} frames ({:.0} bars, 1 a frame in battle, half out of it; Drive orbs drain it), back to Sora when it runs out; no growth ability, no guard ({}), no Revert, 1.5x damage taken",
+                frames / 600.0,
                 if lv.1.guard { "it has a guard motion!" } else { "no motion 42" }
             ));
             return;
         }
     };
-    log(&format!("{} (Lv{LEVEL}): yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), {growth} level {form_lv} (Sora's learned {sora_lv}, equipped or not; one above, 4 = MAX)", kind.name()));
+    log(&format!(
+        "{} (Lv{LEVEL}): its form gauge {frames:.0} frames ({:.0} bars, 1 a frame in battle, half out of it; hits drain it, Drive orbs refill it), {growth} level {form_lv} (Sora's learned {sora_lv}, equipped or not; one above, 4 = MAX)",
+        kind.name(),
+        frames / 600.0
+    ));
 }
 
 /// Back to Sora: what played is cut, he is free with his movement (the user: on the ground
@@ -895,6 +865,8 @@ unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     if let Some(waited) = d.waited.take() {
         log(&format!("Drive: the revert put off during a limit ({waited}) taken now"));
     }
+    // The form gauge is gone; the Drive gauge is as the cost left it (KH2: no refill on the way out).
+    super::gauge::revert();
     let Some(f) = d.form.take() else {
         // (Out of the change: its partners back.)
         super::vanish::frame();
@@ -966,19 +938,10 @@ pub fn abilities(d: &mut Drive, ch: &mut Character) {
     }
 }
 
-/// After KH2's step: the look (`tint`), the MP the form uses up, its end.
+/// After KH2's step: the look (`tint`), the form's Keyblades, its end (`drain`).
 ///
-/// (Anti Form too, though it cost nothing to enter: the user, "Drive forms in this mod run out
-/// when you're out of MP, so sora will revert when he is out of MP".)
-///
-/// The form's gauge is Sora's MP (the user: "drive forms consume mp over time"), drained the
-/// way KH1 takes a cost under one bar (the user: "drain yellow mp incrementally, when the value
-/// that stores yellow mp reaches zero then we take away one bar of blue mp"): KH1's payment
-/// (`0x1402A39D0`) with a cost below 100 takes it from the yellow part (stats `+0xBE`) and, when
-/// that runs out, breaks the top blue bar into yellow. One unit every `DRAIN_FRAMES` in battle,
-/// half as often out of it (KH2's gauge drains so); with none left, back to Sora (on the
-/// ground, `before_step`).
-pub unsafe fn after_step(d: &mut Drive, actor: usize, battle: bool) {
+/// (The form gauge itself drains every frame of Sora's, `gauge::frame`.)
+pub unsafe fn after_step(d: &mut Drive, actor: usize) {
     super::tint::refresh(
         actor,
         d.form.as_ref().and_then(|f| match f.kind {
@@ -1016,44 +979,24 @@ pub unsafe fn after_step(d: &mut Drive, actor: usize, battle: bool) {
             }
         }
     }
-    drain(d, actor, battle);
+    drain(d);
 }
 
-/// One frame of the form's MP drain (`after_step`), and its end out of MP: `revert` set, taken by
-/// `before_step` once KH2 has him and he can change. Also while KH1 has him for one of its limits
-/// in Limit Form (`takeover`, `limits::kh1_limit_holds`: the form stays on all through the limit
-/// and drains as ever; out of MP meanwhile, the revert waits for the limit's end and KH2).
-pub unsafe fn drain(d: &mut Drive, actor: usize, battle: bool) {
-    let Some(f) = d.form.as_mut() else { return };
-    f.left += if battle { 2 } else { 1 };
-    if f.left >= DRAIN_FRAMES * 2 {
-        f.left = 0;
-        if super::reflect::has_mp(actor, 1) {
-            let before = (mp(actor), yellow(actor));
-            super::reflect::pay_mp(actor, 1);
-            if mp(actor) != before.0 && f.logged_s < 40 {
-                f.logged_s += 1;
-                log(&format!("{}: a blue bar broken into yellow: MP {} -> {} (yellow {} -> {})", f.kind.name(), before.0, mp(actor), before.1, yellow(actor)));
-            }
-        }
-    }
-    if !super::reflect::has_mp(actor, 1) && !d.revert {
+/// The form's end when its gauge has run out (`gauge::ran_out`; KH2's gauge empty, FUN_140404600):
+/// `revert` set, taken by `before_step` once KH2 has him and he can change. Also while KH1 has him
+/// for one of its limits in Limit Form (`takeover`, `limits::kh1_limit_holds`: the form stays on
+/// all through the limit, its gauge draining as ever; out meanwhile, the revert waits for the
+/// limit's end and KH2, `limit_under_way`).
+pub unsafe fn drain(d: &mut Drive) {
+    let Some(f) = d.form.as_ref() else { return };
+    if super::gauge::ran_out() && !d.revert {
         d.revert = true;
         let mid = limit_under_way();
-        log(&format!("{}: out of MP{}", f.kind.name(), if mid { " during a limit (the revert waits for its end, KH2 having him)" } else { "" }));
+        log(&format!("{}: back to Sora{}", f.kind.name(), if mid { " once the limit is over (KH2 having him)" } else { "" }));
         if mid {
-            defer(d, "out of MP");
+            defer(d, "the form gauge ran out");
         }
     }
-}
-
-/// The yellow part of Sora's MP (stats `+0xBE`).
-unsafe fn yellow(sora: usize) -> u16 {
-    let stats = pose::ptr(rd::<u32>(sora + 0x6C));
-    if stats < 0x10000 {
-        return 0;
-    }
-    rd::<u16>(stats + 0xBE)
 }
 
 /// Sora's Drive motion: its effects and sounds play whatever the ini's lists (`kh2fx`,

@@ -121,7 +121,10 @@ battle_quotes = kh1\r\n\
 gummi = vanilla\r\n\
 ; hud_toggle_key: the key that hides the whole HUD and shows it again (pagedown, pageup, home,\r\n\
 ; end, delete, f1..f12, a letter, or a key code such as 0x22); off = no key\r\n\
-hud_toggle_key = pagedown\r\n";
+hud_toggle_key = pagedown\r\n\
+; drive_gauge: where KH2's Drive gauge is drawn on the HUD: its right end and top, in KH1's HUD\r\n\
+; units (512 x 384 for the 4:3 middle; the wide screen's sides run past 0 and 512)\r\n\
+drive_gauge = 548, 352\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -184,7 +187,13 @@ pub struct Settings {
     pub gummi_skip: bool,
     /// The key that hides and shows the HUD (`hud_toggle_key`, `hud.rs`); `None`: no key.
     pub hud_toggle_key: Option<u8>,
+    /// Where the Drive gauge is drawn (`drive_gauge = x, y`: its right end and top in KH1's HUD
+    /// units, `gaugehud`).
+    pub drive_gauge: (i32, i32),
 }
+
+/// The Drive gauge's default place: under Sora's HP and MP, at the bottom right.
+pub const DRIVE_GAUGE: (i32, i32) = (548, 352);
 
 /// What a swing does when it meets a wall (`walls`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -286,6 +295,13 @@ pub fn get() -> &'static Settings {
                     Some(crate::keys::PAGE_DOWN)
                 }
             },
+            drive_gauge: setting(&text, "drive_gauge")
+                .and_then(|v| {
+                    let mut it = v.split([',', ' ']).filter(|t| !t.is_empty()).map(|t| t.parse::<i32>().ok());
+                    Some((it.next()??, it.next()??))
+                })
+                .filter(|(x, y)| (-200..800).contains(x) && (-100..500).contains(y))
+                .unwrap_or(DRIVE_GAUGE),
         };
         log(&format!("settings ({path}): {s:?}"));
         s
