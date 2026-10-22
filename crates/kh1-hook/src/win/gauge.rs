@@ -2,15 +2,17 @@
 //! KH2's own (`character_core::drive::Drive`, from the executable; `docs/drive-model.md`, "The
 //! Drive gauge in KH1"); the tables are `crate::drivegauge`.
 //!
-//! - **What it is.** Bars of 100 points up to a maximum that grows with the forms unlocked
-//!   (`drivegauge::max_bars`, from the story flags). The bars and points live in KH1's save block
+//! - **What it is.** Bars of 100 points up to a maximum of 3, +1 for each of six fights won
+//!   (`drivegauge::max_bars`, from the story flags), shown once the first Drive Form is open
+//!   (`drivegauge::shown`). The bars and points live in KH1's save block
 //!   (`drivegauge::BARS_OFF` / `POINTS_OFF`): every change is written there at once, and every use
 //!   reads them back, so a save keeps the gauge and a load brings its own.
 //! - **Filling.** Sora's hits (`hit`, from KH1's hit record `probe::hit`: KH2's ATKP drive value
 //!   for a KH2 hit, `drivegauge::KH1_PHYSICAL` / `KH1_SPELL` for KH1's), damage he takes (`frame`,
 //!   KH2's Damage Drive rule) and Drive orbs (`orb`, `prize`).
 //! - **In a form** the gauge is the form's countdown (`enter`, `frame`, `ran_out`): `(level + 3) ×
-//!   600` frames, 1 a frame in battle and 0.5 outside, less per hit, more per orb (Anti: less).
+//!   600` frames, the level the form's growth ability's (`form::form_level`), 1 a frame in battle
+//!   and 0.5 outside, less per hit, more per orb (Anti: its own 6 bars, orbs drain it).
 //!   The bars left after the cost wait under it; there is no refill on the way out.
 //! - **The log**: one summary line a second while it changes, never one per hit.
 
@@ -24,8 +26,11 @@ use std::sync::Mutex;
 const BATTLE_RVA: super::addr::Rva = super::addr::Rva(0x2867CD8);
 
 static STATE: Mutex<Option<Drive>> = Mutex::new(None);
-/// The maximum now (0: not read yet).
+/// The maximum now (0: not read yet), and whether the gauge shows (a Drive Form is open).
 static MAX: AtomicU8 = AtomicU8::new(0);
+static SHOWN: AtomicBool = AtomicBool::new(false);
+/// The level of the form entered last (`enter`; the backstop in `frame` starts its gauge again).
+static LEVEL: AtomicU8 = AtomicU8::new(1);
 /// The form gauge ran out this frame or earlier (taken by `form::drain`).
 static RAN_OUT: AtomicBool = AtomicBool::new(false);
 /// Sora's actor and HP last frame (damage taken), and his max HP then.
@@ -88,15 +93,20 @@ pub fn cost(kind: super::form::Kind) -> u8 {
     dg::cost(story_form(kind))
 }
 
-/// The maximum from the save's story flags (`drivegauge::MAX_TABLE`), logged when it changes.
+/// The maximum from the save's story flags (`drivegauge::MAX_TABLE`) and whether the gauge shows
+/// (a Drive Form open, `drivegauge::shown`), each logged when it changes.
 unsafe fn read_max(save: usize) -> u8 {
     let Some(flags) = super::menu::story_flags_at(save) else { return MAX.load(Ordering::Relaxed).max(dg::BASE_BARS) };
     let choice = rd::<u8>(save + crate::story::DIVE_CHOICE);
-    let max = dg::max_bars(|f| crate::story::unlocked(f, choice, &flags));
+    let max = dg::max_bars(&flags);
+    let shown = dg::shown(|f| crate::story::unlocked(f, choice, &flags));
+    let was_shown = SHOWN.swap(shown, Ordering::Relaxed);
     if MAX.swap(max, Ordering::Relaxed) != max {
-        let open: Vec<String> =
-            dg::MAX_TABLE.iter().filter(|(f, _)| crate::story::unlocked(*f, choice, &flags)).map(|(f, n)| format!("{f:?} +{n}")).collect();
-        log(&format!("Drive gauge: maximum {max} bars ({} base{}{})", dg::BASE_BARS, if open.is_empty() { "" } else { ", " }, open.join(", ")));
+        let won = dg::raised_by(&flags);
+        log(&format!("Drive gauge: maximum {max} bars ({} base{}{})", dg::BASE_BARS, if won.is_empty() { "" } else { ", " }, won.join(", ")));
+    }
+    if was_shown != shown {
+        log(if shown { "Drive gauge: shown (a Drive Form is open)" } else { "Drive gauge: hidden until the first Drive Form opens" });
     }
     max
 }
@@ -126,7 +136,7 @@ fn with<R>(f: impl FnOnce(&mut Drive) -> R) -> Option<R> {
         let r = f(d);
         // (Nothing written before the first form opens: the gauge is full when it first shows,
         // at the maximum it has then.)
-        if dg::shown(max) && (d.bars | dg::SET, d.points) != (have_b, have_p) {
+        if SHOWN.load(Ordering::Relaxed) && (d.bars | dg::SET, d.points) != (have_b, have_p) {
             wr(save + dg::BARS_OFF, d.bars | dg::SET);
             wr(save + dg::POINTS_OFF, d.points);
         }
@@ -141,10 +151,12 @@ pub struct Snapshot {
     pub points: u8,
     pub max: u8,
     pub form: Option<FormGauge>,
+    /// Whether it is drawn at all (a Drive Form is open, `drivegauge::shown`).
+    pub shown: bool,
 }
 
 pub fn snapshot() -> Option<Snapshot> {
-    with(|d| Snapshot { bars: d.bars, points: d.points, max: d.max, form: d.gauge })
+    with(|d| Snapshot { bars: d.bars, points: d.points, max: d.max, form: d.gauge, shown: SHOWN.load(Ordering::Relaxed) })
 }
 
 /// Whether the gauge pays for form `kind` now (KH2: a Drive is greyed when the gauge is short; ours,
@@ -171,8 +183,10 @@ pub fn pay(kind: super::form::Kind) -> (String, String) {
     (before, describe())
 }
 
-/// The form has arrived: its gauge, `(level + 3) × 600` frames (Anti 6 bars). Returns its length.
+/// The form has arrived: its gauge, `(level + 3) × 600` frames with `level` the form's
+/// (`form::form_level`, 1..=4; Anti its own 6 bars). Returns its length.
 pub fn enter(kind: super::form::Kind, level: u8) -> f32 {
+    LEVEL.store(level, Ordering::Relaxed);
     RAN_OUT.store(false, Ordering::Relaxed);
     LOGGED.store(u32::MAX, Ordering::Relaxed);
     with(|d| {
@@ -268,8 +282,9 @@ pub unsafe fn frame(actor: usize) {
         revert();
     } else if !has_gauge && super::form::in_form() {
         if let Some(kind) = super::form::current() {
-            log(&format!("Drive gauge: {} with no form gauge: started", kind.name()));
-            enter(kind, 1);
+            let level = LEVEL.load(Ordering::Relaxed);
+            log(&format!("Drive gauge: {} with no form gauge: started (level {level})", kind.name()));
+            enter(kind, level);
         }
     }
     // The form gauge drains (KH2: every frame of the form, half as fast out of battle).

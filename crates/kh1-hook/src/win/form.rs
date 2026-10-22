@@ -6,7 +6,8 @@
 //!   lock kept, and its arrival (53). Its abilities: Sora's support abilities, not his action
 //!   or growth ones, and the form's own growth ability, Quick Run, one level above Sora's (the user);
 //! - the form runs on KH2's form gauge (`gauge`; the user, s318: "lets incorporate the drive
-//!   gauge"; it ran on Sora's MP before): `(level + 3) × 600` frames, drained as KH2 drains it;
+//!   gauge"; it ran on Sora's MP before): `(level + 3) × 600` frames, drained as KH2 drains it,
+//!   the level the form's own growth ability's (`form_level`, s325: 1 to 4, so 4 to 7 bars);
 //!   when it runs out (`drain`), or on the Revert command (the Drive row itself in the form), back
 //!   to Sora, at once, in the air too:
 //!   what was playing is cut and he is free again with his movement kept (walking, running or
@@ -112,8 +113,6 @@ pub const REVERT_FX: u16 = u16::MAX - 2;
 /// Anti Form's Side Spin: its PTYA row 12 (motion 161), Square in a ground combo (Data).
 const ANTI_SIDE_SPIN_ROW: u8 = 12;
 
-/// The form's level (KH1 has no form experience): Lv 1, a form gauge of 4 bars, 40 s of battle.
-const LEVEL: u32 = 1;
 
 /// Upper Slash's ability (KH2's id): Sora's Square launch, given to Valor (`pose::port_moves`).
 const UPPER_SLASH: u16 = 95;
@@ -622,6 +621,24 @@ fn growth_up(level: u8) -> u8 {
 }
 const GROWTH_MAX: u8 = 4;
 
+/// The form's level (s325, the user: "when in a form, have the drive capacity be raised to
+/// whatever level the form is. For example, if sora has High Jump level 2, this means Valor Form
+/// has high jump level 3 Which makes Valor Form level 3"): its own growth ability's level in
+/// `own` (`form_abilities`: base Sora's learned level + 1, 4 = MAX), so 1..=4
+/// (`drivegauge::form_level`). Its form gauge is `(level + 3) × 600` frames. Anti has no growth
+/// ability: 1, which KH2's Anti gauge ignores (its own 6 bars).
+pub fn form_level(kind: Kind, own: &Abilities) -> u8 {
+    let growth = match kind {
+        Kind::Valor => own.high_jump,
+        Kind::Wisdom => own.quick_run,
+        Kind::Limit => own.dodge_roll,
+        Kind::Master => own.aerial_dodge,
+        Kind::Final => own.glide,
+        Kind::Anti => 1,
+    };
+    crate::drivegauge::form_level(growth)
+}
+
 /// Base Sora's growth levels for a form's own (`growth_up`): what he has learned, equipped or not
 /// (the user: "wisdom form should have lv2 EVEN IF SORA DOESNT ACTIVELY HAVE QUICK RUN EQUIPPED";
 /// `menu::LEARNED`), at least what he has on.
@@ -824,9 +841,10 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
         ch.play_held(ARRIVE_MOTION, true);
     }
     let lv = (growth_of(&sora), own.clone());
+    let level = form_level(kind, &own);
     d.form = Some(InForm { kind, sora, own, world: world_now() });
     // KH2's form gauge, `(level + 3) × 600` frames (Anti 6 bars), from now (`gauge`).
-    let frames = super::gauge::enter(kind, LEVEL as u8);
+    let frames = super::gauge::enter(kind, level);
     CURRENT.store(kind.code(), Ordering::Relaxed);
     IN_FORM.store(true, Ordering::Relaxed);
     if kind.two_blades() {
@@ -847,8 +865,13 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
             return;
         }
     };
+    let learned = match sora_lv {
+        0 => format!("no {growth} learned"),
+        l if l >= GROWTH_MAX => format!("{growth} MAX learned"),
+        l => format!("{growth} LV{l} learned"),
+    };
     log(&format!(
-        "{} (Lv{LEVEL}): its form gauge {frames:.0} frames ({:.0} bars, 1 a frame in battle, half out of it; hits drain it, Drive orbs refill it), {growth} level {form_lv} (Sora's learned {sora_lv}, equipped or not; one above, 4 = MAX)",
+        "{} level {level} ({learned}): form gauge {frames:.0} frames ({:.0} bars, 1 a frame in battle, half out of it; hits drain it, Drive orbs refill it); its {growth} level {form_lv} (one above Sora's, equipped or not; 4 = MAX)",
         kind.name(),
         frames / 600.0
     ));

@@ -3584,6 +3584,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 325 (the Drive maximum from six fights; the form gauge from the form's level)
+- The user: "Let's have the drive gauge start at 3. Have the drive gauge level up at these points:
+  ... Sabor ... Riku I ... Beating the game ... Sephiroth ... Kurt Zisa ... Unknown. Also, when in
+  a form, have the drive capacity be raised to whatever level the form is" (the form's growth
+  ability's level). `drivegauge::MAX_TABLE` is six story flags (story.rs: Deep Jungle >= 0x42,
+  Hollow Bastion >= 0x32, +0xD41 != 0, journal 0xA5, Agrabah >= 0x96, journal 0xA9 and item 0x3C);
+  `shown` checks the forms directly; a form's gauge is (level + 3) x 600 frames, level = its growth
+  level (1..4), Anti 6 bars. docs/drive-model.md.
+
 ### 2026-10-22: Stage 324 (no costs in the Drive list; the HP and MP bars' bottom edge restored)
 - The user: "remove the numbers in the drive menu ... the outline of the MP and HP bars look like
   they've been cut off". `drive::SHOW_COSTS = false` (the s318 cost digits off, code kept). The black

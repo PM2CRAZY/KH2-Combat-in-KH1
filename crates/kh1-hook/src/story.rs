@@ -6,7 +6,9 @@
 //! - Master Form after Anti-Sora (the dark Sora of Neverland's ship hold), Final Form after
 //!   Ansem-Riku (Riku 2, Hollow Bastion);
 //! - Reflect found after Pot Centipede, the Hercules Cup (its final is Hercules) and Ice Titan
-//!   (the Gold Match): the first gives Reflect, the second Reflera, the third Reflega.
+//!   (the Gold Match): the first gives Reflect, the second Reflera, the third Reflega;
+//! - the Drive gauge's maximum (`crate::drivegauge::MAX_TABLE`): +1 each for Sabor, Riku 1,
+//!   beating the game (Ansem's last fight), Sephiroth, Kurt Zisa and the Unknown.
 //!
 //! How each flag was found (`docs/drive-model.md`, "When the forms open", has the details): KH1's
 //! event scripts store a world's story byte with an opcode whose target `0xB04 + world` the
@@ -16,10 +18,16 @@
 //! cup scripts step from 0 to 3. Each value was read from the user's own install (the scripts of
 //! the room each fight is in) and checked against the user's saves and KH1's own per-event save
 //! snapshots (`event_data/*`), which hold the save as it is before and after each fight.
+//!
+//! The Drive gauge's six (s325) were found the same way, with three more script calls read in the
+//! exe (the opcode table `0x1404FB550`): 0x199 (`0x1401C8D10`) waits until no enemy is left and
+//! ends the battle, 0x23C / 0x240 wait for the battle's end too; and the room scripts' byte
+//! variables below 0x800 are `save + 0xC00 + var` (`0x14019DF40`, the same store class).
 
 /// The worlds' story bytes (12), in KH1's world order.
 pub const PROGRESS: usize = 0x1504;
 pub const TRAVERSE_TOWN: usize = 0;
+pub const DEEP_JUNGLE: usize = 1;
 pub const AGRABAH: usize = 4;
 pub const NEVERLAND: usize = 9;
 pub const HOLLOW_BASTION: usize = 10;
@@ -37,6 +45,23 @@ pub const ANTI_SORA_NL: u8 = 0x32;
 /// Ansem-Riku (Riku 2) beaten: after Dragon Maleficent (0x6E) the Grand Hall's script runs the
 /// fight and its scenes and ends by setting Hollow Bastion's byte to 0x82.
 pub const RIKU_2_HB: u8 = 0x82;
+/// Sabor beaten (the boss fight, his second: the first, as Sora lands in the Tree House, ends at
+/// 0x0D in room `tz01`): Deep Jungle's room `tz03` sets 0x3F as it starts the fight (enemy group
+/// 0x67), waits for the battle's end (calls 0x23C, 0x240) and sets 0x42. Snapshots `tz03_y021`
+/// (0x37) and `tz03_y021a` (0x39) before, `tz00_00` (0x44) after. `growth::BOSS_GIFTS`'s Sabor
+/// value is the same 0x42.
+pub const SABOR_DJ: u8 = 0x42;
+/// Riku 1 beaten (Hollow Bastion's first Riku fight, as Sora takes the Keyblade back): room
+/// `pc05`'s script waits for the battle's end (0x199), plays its scenes and sets 0x32, then swaps
+/// three character-journal entries for their next ones (call 0x211 removes 3, 9 and 0x0B, 0x206
+/// adds 4, 0x0A and 0x0C). Snapshots `pc05_o011` (0x28, the old entries) and `pc15_o021` (0x32,
+/// the new ones). Nothing writes a value between 0x28 and 0x32.
+pub const RIKU_1_HB: u8 = 0x32;
+/// Kurt Zisa beaten: room `al01`'s script waits for the battle's end (0x199), adds his journal
+/// entry 0xA8 and sets Agrabah's byte to 0x96 (`al19` steps it on to 0xA0 later). Agrabah's
+/// story ends at 0x82 before him. Snapshots `al01_a041` (0x82, no 0xA8) and `pp10_o041` (0xA0,
+/// with 0xA8).
+pub const KURT_ZISA_AG: u8 = 0x96;
 
 /// The Heartless journal (`save + 0x16E3`, one bit per entry, the high bit first).
 pub const JOURNAL: usize = 0x16E3;
@@ -45,6 +70,13 @@ pub const JOURNAL: usize = 0x16E3;
 pub const OPPOSITE_ARMOR_ENTRY: u8 = 0x9F;
 /// Ice Titan's journal entry: added as the Gold Match starts.
 pub const ICE_TITAN_ENTRY: u8 = 0xA6;
+/// Sephiroth's journal entry: the Platinum Match's script (room `he07`) adds it once the battle
+/// is over (after its 0x199 wait; Ice Titan's comes as his match starts). In none of KH1's
+/// snapshots (the last, `he07_t011`, is as the Platinum Match starts).
+pub const SEPHIROTH_ENTRY: u8 = 0xA5;
+/// The Unknown's journal entry: room `pc13`'s script adds it as his fight starts (with its byte
+/// variable 0x518), before its 0x199 wait. Snapshots `pc13_o031` (without) and `he07_t011` (with).
+pub const UNKNOWN_ENTRY: u8 = 0xA9;
 
 /// The Coliseum's cups' states (`save + 0xF36 + cup`: Phil, Pegasus, Hercules, Hades): 0 not
 /// won, 1 won, 2 and 3 its other two rounds won after that.
@@ -52,9 +84,21 @@ pub const CUPS: usize = 0xF36;
 pub const PEGASUS_CUP: usize = 1;
 pub const HERCULES_CUP: usize = 2;
 
-/// The inventory (`save + 0x499 + id`) and Diamond Dust, the Gold Match's prize.
+/// The inventory (`save + 0x499 + id`: what is owned, equipped or not, as KH1's free count
+/// `0x1402E6330` takes the equipped ones from it) and Diamond Dust, the Gold Match's prize.
 pub const INVENTORY: usize = 0x499;
 pub const DIAMOND_DUST: u8 = 0x65;
+/// The Unknown's prize: `pc13`'s prize 0x97, which the prize table (`btltbl` + 0xC6A8) makes item
+/// 0x3C, an accessory (item kind 1). Snapshots `pc13_o031` (0) and `he07_t011` (1).
+pub const UNKNOWN_PRIZE: u8 = 0x3C;
+
+/// Ansem beaten, the game's end (`save + 0xD41`, the room scripts' byte variable 0x141): set to
+/// 1 by End of the World's last rooms (`ew32`, `ew33`) once the last fight's enemies are gone,
+/// just before the ending's movies (`ew33`, call 0xF4 with `ew_001`..`ew_004`, the movies after
+/// which KH1 gives its clear trophies, `0x1401C7700`); `ew33` reads it back to play the ending.
+/// Nothing else writes it (every room script searched), nor the exe. 0 in every snapshot and in
+/// every save the user has (none is past the final fight).
+pub const GAME_BEATEN: usize = 0xD41;
 
 /// The Dive to the Heart's choice (`save + 0x48C`): 0 the Sword, 1 the Shield, 2 the Rod (Wand).
 pub const DIVE_CHOICE: usize = 0x48C;
@@ -73,6 +117,13 @@ pub struct Flags {
     pub pot_centipede: bool,
     pub hercules_cup: bool,
     pub ice_titan: bool,
+    // The Drive gauge's (`crate::drivegauge::MAX_TABLE`).
+    pub sabor: bool,
+    pub riku_1: bool,
+    pub game_beaten: bool,
+    pub sephiroth: bool,
+    pub kurt_zisa: bool,
+    pub unknown: bool,
 }
 
 fn journal(save: &[u8], entry: u8) -> bool {
@@ -97,6 +148,13 @@ impl Flags {
             // (The journal entry comes as the match starts and Diamond Dust only from winning it:
             // both, so neither a lost match nor a Diamond Dust from elsewhere counts.)
             ice_titan: journal(save, ICE_TITAN_ENTRY) && save[INVENTORY + DIAMOND_DUST as usize] >= 1,
+            sabor: progress(DEEP_JUNGLE) >= SABOR_DJ,
+            riku_1: progress(HOLLOW_BASTION) >= RIKU_1_HB,
+            game_beaten: save[GAME_BEATEN] != 0,
+            sephiroth: journal(save, SEPHIROTH_ENTRY),
+            kurt_zisa: progress(AGRABAH) >= KURT_ZISA_AG,
+            // (As Ice Titan: the entry comes as the fight starts, the prize only from winning.)
+            unknown: journal(save, UNKNOWN_ENTRY) && save[INVENTORY + UNKNOWN_PRIZE as usize] >= 1,
         })
     }
 
@@ -107,11 +165,26 @@ impl Flags {
     }
 
     /// The flags as bits (for "logged when it changes").
-    pub fn bits(&self) -> u8 {
-        [self.guard_armor, self.opposite_armor, self.pegasus_cup, self.anti_sora, self.riku_2, self.pot_centipede, self.hercules_cup, self.ice_titan]
-            .iter()
-            .enumerate()
-            .fold(0, |b, (i, on)| b | (*on as u8) << i)
+    pub fn bits(&self) -> u16 {
+        [
+            self.guard_armor,
+            self.opposite_armor,
+            self.pegasus_cup,
+            self.anti_sora,
+            self.riku_2,
+            self.pot_centipede,
+            self.hercules_cup,
+            self.ice_titan,
+            self.sabor,
+            self.riku_1,
+            self.game_beaten,
+            self.sephiroth,
+            self.kurt_zisa,
+            self.unknown,
+        ]
+        .iter()
+        .enumerate()
+        .fold(0, |b, (i, on)| b | (*on as u16) << i)
     }
 
     /// One line for the log.
@@ -119,7 +192,7 @@ impl Flags {
         let s = |b: bool| if b { "beaten" } else { "not yet" };
         let w = |b: bool| if b { "won" } else { "not yet" };
         format!(
-            "Guard Armor {}, Opposite Armor {}, Pegasus Cup {}, Anti-Sora {}, Riku 2 {}; Pot Centipede {}, Hercules Cup {}, Ice Titan {}",
+            "Guard Armor {}, Opposite Armor {}, Pegasus Cup {}, Anti-Sora {}, Riku 2 {}; Pot Centipede {}, Hercules Cup {}, Ice Titan {}; Sabor {}, Riku 1 {}, the game {}, Sephiroth {}, Kurt Zisa {}, the Unknown {}",
             s(self.guard_armor),
             s(self.opposite_armor),
             w(self.pegasus_cup),
@@ -127,7 +200,13 @@ impl Flags {
             s(self.riku_2),
             s(self.pot_centipede),
             w(self.hercules_cup),
-            s(self.ice_titan)
+            s(self.ice_titan),
+            s(self.sabor),
+            s(self.riku_1),
+            s(self.game_beaten),
+            s(self.sephiroth),
+            s(self.kurt_zisa),
+            s(self.unknown)
         )
     }
 }
@@ -321,10 +400,73 @@ mod tests {
             Flags { pot_centipede: true, ..Default::default() },
             Flags { hercules_cup: true, ..Default::default() },
             Flags { ice_titan: true, ..Default::default() },
+            Flags { sabor: true, ..Default::default() },
+            Flags { riku_1: true, ..Default::default() },
+            Flags { game_beaten: true, ..Default::default() },
+            Flags { sephiroth: true, ..Default::default() },
+            Flags { kurt_zisa: true, ..Default::default() },
+            Flags { unknown: true, ..Default::default() },
         ];
         for f in all {
             assert!(!seen.contains(&f.bits()));
             seen.push(f.bits());
         }
+    }
+
+    #[test]
+    fn drive_gauge_fights() {
+        let mut s = save();
+        let none = Flags::read(&s).unwrap();
+        assert!(!none.sabor && !none.riku_1 && !none.game_beaten && !none.sephiroth && !none.kurt_zisa && !none.unknown);
+        // Sabor: 0x3F holds through his fight, 0x42 only after it.
+        s[PROGRESS + DEEP_JUNGLE] = 0x3F;
+        assert!(!Flags::read(&s).unwrap().sabor);
+        s[PROGRESS + DEEP_JUNGLE] = SABOR_DJ;
+        assert!(Flags::read(&s).unwrap().sabor);
+        s[PROGRESS + DEEP_JUNGLE] = 0x6E;
+        assert!(Flags::read(&s).unwrap().sabor, "Deep Jungle's end");
+        // Riku 1: 0x28 before (pc05_o011), 0x32 after; Riku 2's 0x82 has it too.
+        s[PROGRESS + HOLLOW_BASTION] = 0x28;
+        assert!(!Flags::read(&s).unwrap().riku_1);
+        s[PROGRESS + HOLLOW_BASTION] = RIKU_1_HB;
+        let f = Flags::read(&s).unwrap();
+        assert!(f.riku_1 && !f.riku_2);
+        s[PROGRESS + HOLLOW_BASTION] = RIKU_2_HB;
+        assert!(Flags::read(&s).unwrap().riku_1);
+        s[PROGRESS + HOLLOW_BASTION] = RIKU_1_HB;
+        // Kurt Zisa: Agrabah's story ends at 0x82; 0x96 after him, 0xA0 later.
+        s[PROGRESS + AGRABAH] = 0x82;
+        assert!(!Flags::read(&s).unwrap().kurt_zisa);
+        s[PROGRESS + AGRABAH] = KURT_ZISA_AG;
+        assert!(Flags::read(&s).unwrap().kurt_zisa);
+        s[PROGRESS + AGRABAH] = 0xA0;
+        assert!(Flags::read(&s).unwrap().kurt_zisa);
+        // Sephiroth: his entry (byte 0x16F7, bit 2).
+        with_journal(&mut s, SEPHIROTH_ENTRY);
+        assert_eq!(s[0x16F7], 0x04);
+        assert!(Flags::read(&s).unwrap().sephiroth);
+        // The Unknown: the entry alone (his fight started) isn't a win, nor the accessory alone.
+        with_journal(&mut s, UNKNOWN_ENTRY);
+        assert_eq!(s[0x16F8], 0x40);
+        assert!(!Flags::read(&s).unwrap().unknown);
+        s[INVENTORY + UNKNOWN_PRIZE as usize] = 1;
+        assert!(Flags::read(&s).unwrap().unknown);
+        let mut t = save();
+        t[INVENTORY + UNKNOWN_PRIZE as usize] = 1;
+        assert!(!Flags::read(&t).unwrap().unknown);
+        // The game: Ansem's flag.
+        assert!(!Flags::read(&s).unwrap().game_beaten);
+        s[GAME_BEATEN] = 1;
+        assert!(Flags::read(&s).unwrap().game_beaten);
+        // None of them opens a form, nor Reflect beyond Agrabah's byte (past Kurt Zisa, it is past
+        // Pot Centipede too).
+        let f = Flags::read(&s).unwrap();
+        assert_eq!(f.reflect_level(), 1);
+        assert!(f.pot_centipede && !f.hercules_cup && !f.ice_titan);
+        for choice in 0..3 {
+            assert!(open(choice, &f).is_empty());
+            assert!(!unlocked(Form::Master, choice, &f) && !unlocked(Form::Final, choice, &f));
+        }
+        assert!(GAME_BEATEN < SPAN && INVENTORY + (UNKNOWN_PRIZE as usize) < SPAN);
     }
 }

@@ -147,7 +147,7 @@ unsafe extern "system" fn task(node: usize) -> usize {
     // Both halves of the label ("MP" and "HP": the user, 'the "HP" text is still there, remove
     // it').
     // (Only while the gauge shows: before the first Drive Form, KH1's label stays.)
-    let shown = super::gauge::snapshot().is_some_and(|s| crate::drivegauge::shown(s.max));
+    let shown = super::gauge::snapshot().is_some_and(|s| s.shown);
     let labels: Vec<(usize, [i32; 4])> = if shown && super::settings::get().hide_hp_label { l.as_ref().map(|l| l.labels.clone()).unwrap_or_default() } else { Vec::new() };
     let hidden: Vec<(usize, [i32; 2])> = labels
         .iter()
@@ -356,7 +356,7 @@ unsafe fn draw() {
     let alpha = alpha.min(1.0);
     let Some(s) = super::gauge::snapshot() else { return };
     // (Not before the first Drive Form opens: the user.)
-    if !crate::drivegauge::shown(s.max) {
+    if !s.shown {
         return;
     }
     let layout = base + LAYOUT_RVA;
@@ -371,11 +371,9 @@ unsafe fn draw() {
     // What it shows: the current bar's share (1 when full), the number, MAX.
     let (frac, number, max, form) = match s.form {
         Some(f) => {
-            let left = f.left.max(0.0);
-            let full = (left / 600.0).floor();
-            let frac = if left >= f.max { 1.0 } else { (left - full * 600.0) / 600.0 };
-            let bars = (f.max / 600.0).round().max(1.0) as i32;
-            let number = if left >= f.max { (bars - 1).max(0) } else { full as i32 };
+            // (Its length is the form's level's, `drivegauge::form_frames`: 4 bars at level 1,
+            // 7 at MAX.)
+            let (frac, number) = crate::drivegauge::form_view(f.left, f.max);
             (frac, number, false, true)
         }
         None => {

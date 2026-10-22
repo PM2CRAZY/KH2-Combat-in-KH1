@@ -1139,7 +1139,8 @@ in a form as out of one. The extra-bars code (`valorstats::DRIVE_MP`) is gone.
 
 The user: "Now that we've got the drive forms down, lets incorporate the drive gauge." Their
 choices: KH2's costs in Drive bars instead of MP; filled by Sora's hits, damage he takes and Drive
-orbs, never by save points; a maximum of 3 bars growing with each form unlocked; and in a form
+orbs, never by save points; a maximum of 3 bars growing with six fights won (s325; with each form
+unlocked until then); and in a form
 KH2's form gauge, draining, the form ending when it runs out. The model is `character_core::drive`
 (the "Drive gauge" and "In a form" sections above); the tables are `kh1-hook/src/drivegauge.rs`;
 the game side `win/gauge.rs`, `win/prize.rs`, `win/gaugehud.rs`.
@@ -1152,11 +1153,29 @@ gauge was full or short. A form the gauge can't pay for is greyed in the Drive l
 (`form::usable` -> `gauge::can_pay`) and refused with the gauge in the log; each row shows its cost
 at its right end (`drive::list_draw`, not in a form, where the rows read Revert).
 
-**Maximum** (`drivegauge::MAX_TABLE`, the user's): 3 bars, +1 each for Valor, Wisdom, Limit and
-Master, +2 for Final; 9 (KH2's cap) with all five open. It is worked out from the story flags
-(`story::unlocked` with the Dive's choice) every half second and never stored, so loading a save
-gives that save's maximum. Logged when it changes: "Drive gauge: maximum 4 bars (3 base, Valor
-+1)".
+**Maximum** (`drivegauge::MAX_TABLE`, the user's, s325: "Let's have the drive gauge start at 3.
+Have the drive gauge level up at these points: 1. defeating Sabor (boss) 2. defeating Riku I 3.
+Beating the game 4. defeating Sephiroth 5. Defeating Kurt Zisa 6. Defeating Unknown"): 3 bars, +1
+for each of those six fights won, in any order; 9 (KH2's cap) with all six. Until s324 it was +1
+per form and +2 for Final. It is worked out from the story flags (`story::Flags`, the table
+below) every half second and never stored, so loading a save gives that save's maximum. Logged
+when it changes: "Drive gauge: maximum 5 bars (3 base, Sabor +1, Riku 1 +1)".
+
+| Fight | Flag (relative to the save block) | How it was found | Confidence |
+|---|---|---|---|
+| Sabor (the boss fight, his second) | Deep Jungle's story byte (`+0x1505`) ≥ 0x42 | Room `tz03`'s script sets 0x3F as it starts the fight (enemy group 0x67), waits for the battle's end (calls 0x23C, 0x240) and sets 0x42; KH1's snapshots `tz03_y021` (0x37) and `tz03_y021a` (0x39) before, `tz00_00` (0x44) after. The first Sabor fight (as Sora lands, room `tz01`) ends at 0x0D. `growth::BOSS_GIFTS`'s Sabor value is the same 0x42. | High for the byte, medium-high that it is the fight meant (the second, full boss fight) |
+| Riku 1 | Hollow Bastion's story byte (`+0x150E`) ≥ 0x32 | Room `pc05`'s script waits for the battle's end (0x199), plays the scenes and sets 0x32, then swaps three character-journal entries for their next ones (0x211 removes 3, 9, 0x0B; 0x206 adds 4, 0x0A, 0x0C); snapshots `pc05_o011` (0x28, old entries) and `pc15_o021` (0x32, new ones); nothing writes a value between 0x28 and 0x32. | Medium-high |
+| Beating the game | byte `+0xD41` (the room scripts' byte variable 0x141) ≠ 0 | Set to 1 by End of the World's last rooms (`ew32`, `ew33`) once the last fight's enemies are gone, just before the ending's movies (`ew33`, call 0xF4 with `ew_001`..`ew_004`; KH1 gives its clear trophies on those movies, `0x1401C7700`); `ew33` reads it back to run the ending. No other room script writes it (all 235 searched) and the exe doesn't touch it. 0 in every snapshot and every save of the user's (none is past the final fight). | Medium: not seen in a cleared save; if KH1's clear save were made from a backup taken before the final fight it would read 0 |
+| Sephiroth | Heartless journal entry 0xA5 (`+0x16F7` bit 2) | The Platinum Match's script (room `he07`) adds it after its 0x199 wait, once the battle is over (Ice Titan's 0xA6 comes as his match starts); its prize 0x95 is One-Winged Angel. In no snapshot (the last, `he07_t011`, is as the Platinum Match starts). | High |
+| Kurt Zisa | Agrabah's story byte (`+0x1508`) ≥ 0x96 | Room `al01`'s script waits for the battle's end (0x199), adds his journal entry 0xA8 and sets 0x96 (`al19` steps it on to 0xA0); Agrabah's story ends at 0x82 before him. Snapshots `al01_a041` (0x82, no 0xA8) and `pp10_o041` (0xA0, 0xA8). | High |
+| The Unknown | journal entry 0xA9 (`+0x16F8` bit 6) and item 0x3C owned (`+0x499 + 0x3C`) | Room `pc13`'s script adds 0xA9 (and sets its byte variable 0x518) as his fight starts, before its 0x199 wait; his prize 0x97 is item 0x3C (the prize table, `btltbl` + 0xC6A8), an accessory. Snapshots `pc13_o031` (neither) and `he07_t011` (both). Both together, as Ice Titan: the entry alone is a fight started, the accessory alone may come from elsewhere. The inventory counts what is equipped too (KH1's free count `0x1402E6330` takes the equipped from it); selling it would take the bar away. | High for the fight, medium for the prize test |
+
+How the new reads were made (Checked, exe): the script call table is `0x1404FB550`; 0x199
+(`0x1401C8D10`) waits until no enemy is left and ends the battle; 0x23C (`0x1401AF060`) and 0x240
+(`0x1401AF0D0`) wait for the battle's end too; 0x247 gives a prize (`btltbl` + 0xC6A8, u16 rows:
+type in the low nibble, the item in the high byte); the store class maps byte variables below
+0x800 to `save + 0xC00 + var`. The rooms' scripts and KH1's snapshots are read from the user's
+install, nothing kept.
 
 **Filling, out of a form** (KH2's rules from the exe, above):
 - *Sora's hits*: every hit record KH1 makes for one of Sora's attacks on a foe (`probe::hit`,
@@ -1175,8 +1194,15 @@ gives that save's maximum. Logged when it changes: "Drive gauge: maximum 4 bars 
 - *Drive orbs*: a small orb 1 point, a big one 3 (KH2's prize table), below.
 - Save points do not refill it (nothing of KH1's touches it).
 
-**In a form** (`gauge::enter`, `gauge::frame`): the form gauge is `(level + 3) × 600` frames; KH1
-has no form levels, so Lv 1: 4 bars, 2400 frames, 40 s of battle. Anti: 6 bars. It drains 1 a
+**In a form** (`gauge::enter`, `gauge::frame`): the form gauge is `(level + 3) × 600` frames.
+The form's level (s325, the user: "if sora has High Jump level 2, this means Valor Form has high
+jump level 3 Which makes Valor Form level 3") is its own growth ability's level in the form
+(`form::form_level`, `drivegauge::form_level`): base Sora's learned level + 1, MAX 4, the value
+`form::form_abilities` gives it (Valor High Jump, Wisdom Quick Run, Limit Dodge Roll, Master
+Aerial Dodge, Final Glide). So level 1 (nothing learned) is 4 bars, 2400 frames; 2 is 5 bars,
+3000; 3 is 6 bars, 3600; 4 (MAX) is 7 bars, 4200. It is set as the form arrives and kept for the
+form (a growth level learned in it counts from the next Drive). Until s324 every form was level
+1. Anti: its own 6 bars (KH2's Anti level). It drains 1 a
 frame in battle (KH1's battle flag) and 0.5 outside, every one of Sora's frames (KH2's or KH1's,
 a KH1 limit in Limit Form included); each of the form's hits on a foe takes `15 × drive × 0.2`
 frames (KH2's normal-enemy rate; 9 frames for a 3); each Drive orb gives `value × 12` frames
@@ -1212,8 +1238,9 @@ outside battle, and a save made in a form keeps the bars left after the cost, so
 Sora out of the form with those bars, as KH2's gauge after a Drive.
 
 **Shown from the first form, full by default** (s323, the user). The gauge isn't drawn, and KH1's
-MP HP label isn't hidden, until a Drive Form is open (`drivegauge::shown`: the maximum above the 3
-base bars). The bars byte carries `SET` (0x80) once the mod has written it; a byte without it (a
+MP HP label isn't hidden, until a Drive Form is open (`drivegauge::shown`: any of Valor, Wisdom,
+Limit, Master and Final open by `story::unlocked`; s323 read it from the maximum, which no longer
+follows the forms). The bars byte carries `SET` (0x80) once the mod has written it; a byte without it (a
 new game, or a save from before s323) reads as a full gauge, and nothing is written before the
 first form opens, so the gauge is full at the maximum it first shows with.
 
@@ -1290,8 +1317,9 @@ is) with nothing lit. s319's KH1 pieces were seen (the user's screenshot), in th
 panel texture's middle (green and blue), not KH2's.
 
 **The log**: "Drive gauge: maximum ..." when the maximum changes; "Drive: Valor Form for 3 bars
-(Drive gauge 4 bars + 20 of 4 -> 1 bars + 20 of 4)" on a Drive; "Valor Form (Lv1): its form gauge
-2400 frames (4 bars ...)" on arrival; a summary once a second while the gauge changes ("Drive
+(Drive gauge 4 bars + 20 of 4 -> 1 bars + 20 of 4)" on a Drive; "Valor Form level 3 (High Jump
+LV2 learned): form gauge 3600 frames (6 bars ...)" on arrival; "Drive gauge: shown (a Drive Form is
+open)" when the first form opens; a summary once a second while the gauge changes ("Drive
 gauge: 2 bars + 35 of 5; the last second: +6 from 3 hits, +5 from damage, +2 from 2 Drive orbs",
 or in a form "Valor Form's gauge: 1834 of 2400 frames (3.1 bars); the last second: 60 frames of
 the form, -36 from 4 hits"); "Valor Form: the form gauge ran out" and "Revert (the form gauge ran
@@ -1305,11 +1333,15 @@ out)"; "Drive orbs: an enemy's drop (...): 4 small, 0 big" and "Drive orb (small
 - Damage Drive is on for everyone (one copy); MP Charge's ×2 doesn't exist in KH1.
 - Drive orb drops are rolled per drop from KH2's normal-enemy rows, not per enemy kind; KH1's
   bosses drop as any enemy.
-- The form level is 1 for every form (KH1 has no form EXP); Master's orb EXP isn't modelled.
+- The form level is its growth ability's level (1..4, the user's rule), not KH2's form EXP (KH1
+  has none; KH2's forms reach 7); Master's orb EXP isn't modelled.
 - The HUD's place and scale against KH1's portrait, and KH2's fill mask (a cut here), are
   approximate; the orbs' colour is tuned blind.
 
-**To check in game:** a new save (gauge 0 of 3), the maximum growing as forms open (log); hits
+**To check in game:** a new save (no gauge until the first form; then full at 3), the maximum
+growing after Sabor, Riku 1, the final fight, Sephiroth, Kurt Zisa and the Unknown (log), not
+as forms open; each form's gauge as long as its level (Valor with High Jump LV2 learned: 6
+bars, the HUD's number 5 when full); hits
 filling it (KH2 combo, KH1 combo, KH1 spells, limits), taking damage filling it; the Drive list
 greying rows by cost and showing the costs; a Drive paying its cost (log), the form gauge on the
 HUD draining in and out of battle, hits draining it, orbs refilling it (Anti: draining), the
