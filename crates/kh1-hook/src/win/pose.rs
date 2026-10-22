@@ -515,6 +515,26 @@ struct Watch {
 }
 static WATCH: Mutex<Option<HashMap<usize, Watch>>> = Mutex::new(None);
 
+/// A pointer to a game handle, as KH1 makes them (Steam `0x14038AD90`): `0x80000000 | (handle table index <<
+/// 25) | (low 25 bits)`, the index of the table entry holding its high bits; 0 if none does (t345).
+pub fn handle(p: usize) -> u32 {
+    if p == 0 {
+        return 0;
+    }
+    let table = BASE.load(Ordering::Relaxed) + HANDLE_TABLE_RVA;
+    let hi = p & !0x1FF_FFFF;
+    for i in 0..64usize {
+        let e = unsafe { *((table + i * 8) as *const u64) } as usize;
+        if e == hi {
+            return 0x8000_0000 | ((i as u32) << 25) | (p & 0x1FF_FFFF) as u32;
+        }
+        if e == usize::MAX {
+            break;
+        }
+    }
+    0
+}
+
 /// A game handle to a pointer.
 pub fn ptr(h: u32) -> usize {
     if h == 0 {

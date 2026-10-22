@@ -1,3 +1,92 @@
+### 2026-10-22: Stage 345 (testing branch: KH2's spells hit with the KH1 spell's own hit effect)
+- The user: KH2's moves' hits only ever show the plain Keyblade effect. From the user's Ghidra export of the
+  Steam exe (project notes `kh1-hit-effects.md`): KH1's hit spark comes from the attack object's effect list
+  (`+8`), picked by the hit kind and the attack data's `+0x28` group; a swing's list is the equipped Keyblade's
+  (`new_attack` on Sora), a KH1 spell shot's the spell's own. The spells' lists live in KH1's **magic slots**
+  (`0x2D23580`, 0x38 each, one per KH1 spell: `+0` level, `+8` the loaded `.mag` file; the list at
+  `file + [file + 8]`); the t341 run showed them staying loaded with no KH1 cast.
+- `land_hit` for a spell (KH1 spell data): the KH1 spell's list from its slot goes in the attack object's `+8`
+  (`pose::handle`, a pointer to a game handle) before KH1's contact: Fire's, Blizzard's and Stop's hit sparks
+  (Thunder and Gravity have none, as in KH1). Slot not loaded: the Keyblade's, as before. Logged ("KH2 spell
+  hit ...", 40 lines) and in the `hitfx:` trace note.
+- `probe`: the t340-t344 investigation scans (actor / object table / data searches) are taken out again; the
+  per-hit "hit effect:" log and effect-list dumps stay.
+
+### 2026-10-22: Stage 344 (testing branch: the object-table scan takes any file that holds the list)
+- The user's t343 run: the spells' list handles turn up only in passing places (two "last one" words at RVA
+  `0x2D223E4` / `0x2DB4718`, the running effects' pool from `0x2D678B0` at 0x3C each, the attack objects from
+  `0x2DB4718` at 0xC0 each), nothing that keeps them; KH1's actor loader (`0x140288460`) has other file
+  layouts than the one the t342 scan checked (`+8` .. `+0xC` for some kinds, `0x140287E40`).
+- `scan_object_tables` now reports any entry whose file (handle `+8` or slot buffer) holds the list within
+  1 MB, with the list's offset in the file and the file's first 8 words (its section table).
+
+### 2026-10-22: Stage 343 (testing branch: what holds the KH1 spells' effect lists)
+- The user's t342 run (all of KH1's magic): Fire, Blizzard, Thunder, Gravity and Stop hit with their own
+  lists (Gravity's has no kind-1 entry, Stop's normal hit is id 2), and no entry of the four object tables
+  has a file whose effect section is one of them: they're loaded some other way.
+- `probe::scan_refs` (Steam ranges): each such list's handle and address are searched for through the exe's
+  data (RVA `0x4D5000 .. 0x2F131E8`) and every place logged as an RVA, to find what keeps them (and the code
+  that loads them, from the exe).
+
+### 2026-10-22: Stage 342 (testing branch: which KH1 object entry holds each spell's effect list)
+- The user's t341 run: the KH1 spells' effect lists stay loaded and unchanged after Magic went to KH2 and a
+  room change (same world), with no KH1 cast. They sit in a load arena (packed by load order), so they're
+  found the way KH1 finds them: object entry -> model file -> effect section.
+- `probe::scan_object_tables` (Steam only: the user's Epic exe in `D:\claude\EPIC EXES` is an older Epic
+  release, contact at `0x2AF890` not `0x2B1ED0`, so the mod's Epic addresses for these tables aren't known):
+  when a hit uses a list that isn't the Keyblade's, every entry of KH1's four object tables (types 1, 7, 8,
+  12; Steam `0x14296B630`, `0x14298C6F0`, `0x14298C690`, `0x14298C750`) is checked: its file (handle `+8`,
+  or its fixed slot buffer at Steam `0x140D2ADA0`) and that file's effect section; the entry whose section
+  is the list is logged ("object tables:") with its id, type and slot.
+
+### 2026-10-22: Stage 341 (testing branch: the KH1 spells' effect lists remembered by address)
+- The user's t340 run: KH1's Fire, Blizzard and Thunder hit with lists at `0x...6c2b80`, `0x...6de500`,
+  `0x...702d00`, the very addresses of the run before (a game restart apart), and no live actor in KH1's actor
+  list has them as `+0x68` (the spell shots aren't in it). They're remembered by address now (logged with
+  their RVA), so a KH2 spell's hit shows whether each list is still there, unchanged.
+
+### 2026-10-22: Stage 340 (testing branch: where KH1's spells keep their effect lists)
+- The user's t339 run: all six Keyblades share one weapon effect source, reloaded on equip (each list differs:
+  Diamond Dust's sparks are ids 5..7, the others 0..2). From the Steam exe (project notes
+  `kh1-hit-effects.md`): an actor's own effect source is `+0x68`, the effect section of its object's model
+  file (section table `+0x10 .. +0x14`), set when it's made; KH1's spell shots put the spell actor's `+0x68` in
+  their attack objects' `+8`. A KH2 spell could do the same with the KH1 spell object's file, if it's loaded.
+- Log (`probe`): a hit with a list that isn't the Keyblade's finds the live actor whose `+0x68` it is, and logs
+  its object entry (id, type, slot, file) and the file's effect section ("spell source:"); every KH2 spell hit
+  logs those remembered spells' entries, files and lists as they are now ("spell sources (...)"), to see if
+  they stay loaded without a KH1 cast (a room change).
+
+### 2026-10-22: Stage 339 (testing branch: the hit-effect log per Keyblade)
+- The user's t338 run (six Keyblades, KH1 Fire / Blizzard / Thunder, KH2 Fire / Blizzard / Thunder): KH1's
+  spells hit with their own effect lists (Fire spark id 3, Blizzard 2, Thunder none of kind 1); KH2's spells
+  with the Keyblade's (the bug); all six Keyblades showed one source address, so only Kingdom Key's list
+  was logged. The log is now keyed by the list's contents too (a hash) and names the equipped weapon (save
+  entry `+0x36`), to see each Keyblade's list.
+
+### 2026-10-22: Stage 338 (testing branch: which KH1 hit effect each hit gets, logged)
+- From the Steam exe (project notes `kh1-hit-effects.md`): KH1's contact `0x1402B1ED0` starts the hit
+  effect with `0x1402B2190 (attack, kind, at)`: the source is the attack's weapon's effect list
+  (`attack+8`, made from `actor+0x14C` -> `+0x18`: Sora's equipped Keyblade, so each Keyblade has its own
+  sparks; a KH1 spell's own actor for its attacks), the entry the first whose kind mask holds the hit
+  kind (1; 4 against a guard, looked up as 2; 0x40 when the record's `+0xC` has 0x20) and whose group
+  mask holds `1 << (attack data +0x28)`; started at the hit point with `0x1402AC4C0`. Byte `+0xA8` is
+  only the hit sound (bit `0x400000`). The user: Keyblades' hit effects do look different.
+- `probe::hit` (any attack on anyone but Sora) works out that lookup: every hit's source, attack data
+  group, kind and the spark id KH1 picks go to the trace ("hit effect:"); each new (source, group) and
+  each new source's whole effect list (each entry's kind / group masks) to the log, to see which ids are
+  hit sparks, Keyblade by Keyblade and for KH1's own spells.
+
+### 2026-10-22: Stage 337 (testing branch: `hit_effect_test`, KH1's effects started on a KH2 hit)
+- The user's t336 `hit_fx_test` runs (KH2 air combo, 12 values each): byte 0 of `+0xA8` is the hit
+  sound (KH1 sound 11024 + the value), bytes 1 and 2 changed nothing heard or seen; no value of any
+  byte changed the hit's look. KH1's contact plays one plain spark; a different look has to be
+  started by us at the hit (the user's plan: per custom move, a KH1 effect or their own).
+- Test (ini, off by default, read live): `hit_effect_test = ids` (ranges allowed, `0-20,30`) starts
+  the next id, in turn, on each landed KH2 hit through `0x1402ABB60 (source, id, actor, 0x30)` from
+  Sora's effect source (`+0x14C` -> `+0x18`), as `swing_start` does with a row's effect; on the foe
+  hit (`hit_effect_on = target`) or on Sora (`= sora`). The id, actor, source and the call's return
+  are logged and in the `hitfx:` trace note.
+
 ### 2026-10-22: Stage 336 (testing branch: the ini is read again whenever it is saved)
 - The user: "can you make it so that the ini can be changed while the game is running?"
   `settings::get` checks the ini's modified time at most every half second and parses it again

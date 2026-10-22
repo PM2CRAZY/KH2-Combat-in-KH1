@@ -537,6 +537,10 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     let f: HitF = std::mem::transmute(ORIG_HIT.load(Ordering::Acquire));
     let owner = if attack > 0x10000 { pose::ptr(rd::<u32>(attack + 0x34)) } else { 0 };
     let r = f(attack, target);
+    // (t338) Which hit effect KH1's contact will start for this hit (any attack on anyone but Sora).
+    if attack > 0x10000 && target > 0x10000 && target != sora() {
+        hit_effect_note(attack, target, owner, r);
+    }
     if owner != 0 && owner == sora() && r > 0x10000 {
         super::combat::scale_record(r);
     }
@@ -560,6 +564,104 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
         }
     }
     r
+}
+
+/// The id KH1's hit-effect lookup (`0x1401DFFE0`, Steam) picks: the first entry of the source's
+/// effect list (count `+0xC`, entries from `+0x10`, 0x20 each) whose kind mask (`+0x10`) holds
+/// `kind` and whose group mask (`+0x14`) holds `group`; -1: none.
+unsafe fn spark_id(src: usize, kind: u32, group: u32) -> i32 {
+    let n = rd::<i32>(src + 0xC);
+    for i in 0..n.clamp(0, 256) as usize {
+        let e = src + 0x10 + i * 0x20;
+        let (a, b) = (rd::<u32>(e + 0x10), rd::<u32>(e + 0x14));
+        if (a & kind == kind || kind == 0) && (b & group == group || group == 0) {
+            return i as i32;
+        }
+    }
+    -1
+}
+
+/// (t338) KH1's hit effect for an attack's contact (`docs`: the project's kh1-hit-effects notes):
+/// contact `0x1402B1ED0` -> `0x1402B2190 (attack, kind, at)`: the source is the attack's weapon's
+/// effect list (`attack+8`; Sora's swings: the equipped Keyblade's), the entry by the hit kind (4
+/// against a guarding / invincible target, looked up as 2; 0x40 when the record's `+0xC` has 0x20;
+/// else 1) and the attack data's `+0x28` group. Each hit goes to the trace; each new (source,
+/// group) and each new source's whole effect list to the log.
+unsafe fn hit_effect_note(attack: usize, target: usize, owner: usize, rec: usize) {
+    let oid = |a: usize| if a > 0x10000 { object_id(a) } else { 0xFFFF };
+    // (t339) Keyed by the list's contents too: KH1 keeps one weapon effect source and reloads it
+    // when a Keyblade is equipped (all six of the user's Keyblades showed one address).
+    static SEEN: std::sync::Mutex<Vec<(usize, i32, u64)>> = std::sync::Mutex::new(Vec::new());
+    static SOURCES: std::sync::Mutex<Vec<(usize, u64)>> = std::sync::Mutex::new(Vec::new());
+    let src = pose::ptr(rd::<u32>(attack + 8));
+    let sig = list_sig(src);
+    // The equipped weapon (Sora's save entry `+0x36`, as `pose` logs it).
+    let save = rd::<u64>(BASE.load(Ordering::Relaxed) + Rva(0x28695A0)) as usize;
+    let weapon = if save > 0x10000 { rd::<u8>(save + 0x36) as i32 } else { -1 };
+    let data = pose::ptr(rd::<u32>(attack + 0x5C));
+    let group = if data > 0x10000 { rd::<i32>(data + 0x28) } else { -1 };
+    let (kind, look) = if rd::<u32>(target) & 0x0100_0080 != 0 {
+        (4u32, 2u32)
+    } else if rec > 0x10000 && rd::<u32>(rec + 0xC) & 0x20 != 0 {
+        (0x40, 0x40)
+    } else {
+        (1, 1)
+    };
+    let id = if src > 0x10000 && (0..32).contains(&group) { spark_id(src, look, 1 << group) } else { -1 };
+    let line = format!(
+        "hit effect: attack {attack:#x} of {owner:#x} (object {}) hit {target:#x} (object {}), weapon {weapon:#x}: source {src:#x} (list {sig:016x}), attack data {data:#x} group (+0x28) {group}, kind {kind:#x} -> KH1 spark id {id}; sound byte {} (0x400000 {})",
+        oid(owner),
+        oid(target),
+        rd::<i8>(attack + 0xA8),
+        if rd::<u32>(attack) & 0x40_0000 != 0 { "set" } else { "clear" }
+    );
+    super::trace::note(&line);
+    let new_pair = SEEN.lock().is_ok_and(|mut v| {
+        let fresh = v.len() < 120 && !v.contains(&(src, group, sig));
+        if fresh {
+            v.push((src, group, sig));
+        }
+        fresh
+    });
+    if new_pair {
+        log(&line);
+    }
+    let new_src = src > 0x10000
+        && SOURCES.lock().is_ok_and(|mut v| {
+            let fresh = v.len() < 48 && !v.contains(&(src, sig));
+            if fresh {
+                v.push((src, sig));
+            }
+            fresh
+        });
+    if new_src {
+        let n = rd::<i32>(src + 0xC);
+        if !(0..=256).contains(&n) {
+            log(&format!("effect list of source {src:#x} (owner {owner:#x}, object {}): count {n} out of range", oid(owner)));
+            return;
+        }
+        let entries: Vec<String> = (0..n as usize)
+            .map(|i| {
+                let e = src + 0x10 + i * 0x20;
+                let w = |o: usize| format!("{:08x}", rd::<u32>(e + o));
+                format!("{i}: kind {:#x} group {:#x} other {:#x} [{} {} {} {}]", rd::<u32>(e + 0x10), rd::<u32>(e + 0x14), rd::<u64>(e + 0x18), w(0), w(4), w(8), w(0xC))
+            })
+            .collect();
+        log(&format!("effect list of source {src:#x} (list {sig:016x}, owner {owner:#x}, object {}, weapon {weapon:#x}), {n} entries: {}", oid(owner), entries.join("; ")));
+    }
+}
+
+/// An effect list's contents (count and entries), FNV-1a; 0 for none.
+unsafe fn list_sig(src: usize) -> u64 {
+    if src <= 0x10000 {
+        return 0;
+    }
+    let n = rd::<i32>(src + 0xC).clamp(0, 256) as usize;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ n as u64;
+    for i in 0..n * 0x20 {
+        h = (h ^ rd::<u8>(src + 0x10 + i) as u64).wrapping_mul(0x100_0000_01b3);
+    }
+    h
 }
 
 pub unsafe fn object_id(a: usize) -> u32 {

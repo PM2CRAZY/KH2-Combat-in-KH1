@@ -32,6 +32,11 @@ swing_fx = on\r\n\
 ;   effect bytes (hit_fx_byte: 0, 1 or 2), spells too; empty = off. E.g. 0,1,2,3,5,10\r\n\
 hit_fx_test =\r\n\
 hit_fx_byte = 0\r\n\
+; hit_effect_test: (test) each landed KH2 hit starts the next of these KH1 effect ids (Sora's\r\n\
+;   effects, 0x1402ABB60) on the foe hit (hit_effect_on = target) or on Sora (= sora);\r\n\
+;   ranges allowed, e.g. 0-20,30; empty = off\r\n\
+hit_effect_test =\r\n\
+hit_effect_on = target\r\n\
 ; kh2_sounds: KH2's own sound effects for these moves, from your KH2 install:\r\n\
 ; abilities (every KH2 ability move: Upper Slash, Explosion, Aerial Finish...), all (every\r\n\
 ; move, the plain combo too), off\r\n\
@@ -191,6 +196,10 @@ pub struct Settings {
     /// too); empty: off.
     pub hit_fx_test: Vec<u8>,
     pub hit_fx_byte: usize,
+    /// (Test, t337) KH1 effect ids started in turn on each landed KH2 hit (`0x1402ABB60`, from
+    /// Sora's effect source); empty: off. `hit_effect_on = sora` puts them on Sora, else the foe.
+    pub hit_effect_test: Vec<i32>,
+    pub hit_effect_on_sora: bool,
     pub flip_weapons: Vec<u8>,
     /// KH2's Reflect in KH1's magic menu (`reflect = on`).
     pub reflect: bool,
@@ -347,6 +356,25 @@ fn load(first: bool) -> Option<Settings> {
                     .collect()
             })
             .unwrap_or_default(),
+        hit_effect_test: setting(&text, "hit_effect_test")
+            .map(|v| {
+                v.split([',', ' '])
+                    .filter(|t| !t.trim().is_empty())
+                    .flat_map(|t| {
+                        let t = t.trim();
+                        let n = |x: &str| x.trim().strip_prefix("0x").map_or_else(|| x.trim().parse::<i32>().ok(), |h| i32::from_str_radix(h, 16).ok());
+                        match t.split_once('-') {
+                            Some((a, b)) => match (n(a), n(b)) {
+                                (Some(a), Some(b)) if a <= b && b - a < 1000 => (a..=b).collect::<Vec<_>>(),
+                                _ => Vec::new(),
+                            },
+                            None => n(t).into_iter().collect(),
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        hit_effect_on_sora: on(&text, "hit_effect_on", "sora", false),
         hit_fx_byte: setting(&text, "hit_fx_byte").and_then(|v| v.parse::<usize>().ok()).filter(|v| *v <= 2).unwrap_or(0),
         flip_weapons: match setting(&text, "flip_weapons") {
             None => vec![0x53],

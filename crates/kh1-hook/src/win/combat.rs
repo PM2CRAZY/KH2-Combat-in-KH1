@@ -37,6 +37,10 @@ const COMMAND_RVA: Rva = Rva(0x2D54440);
 const PARTY_RVA: Rva = Rva(0x2D37C80);
 const ROWS_RVA: Rva = Rva(0x2D5D4B0);
 const ATTACK_DATA_RVA: Rva = Rva(0x2D23740);
+/// KH1's magic slots (Steam `0x142D22B80`), 0x38 each, one per KH1 spell (0 Fire, 1 Blizzard, 2 Thunder,
+/// 3 Cure, 4 Gravity, 5 Stop, 6 Aero): `+0` the loaded level (0: none), `+8` the loaded `.mag` file, whose
+/// effect list is at `file + [file + 8]` (the project notes `kh1-hit-effects.md`, from the Ghidra export).
+const MAGIC_SLOTS_RVA: Rva = Rva(0x2D23580);
 const NEXT_ACTOR_RVA: Rva = Rva(0x28F990);
 const HITTABLE_RVA: Rva = Rva(0x28FEE0);
 const PART_SHAPE_RVA: Rva = Rva(0x2B3CB0);
@@ -2069,6 +2073,30 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     // bytes, with the bit that makes the contact use them (swings have it; spells didn't).
     let set = super::settings::get();
     let mut forced = String::new();
+    // (t345) A spell's hit takes the KH1 spell's own effect list, from its magic slot, as KH1's spell shots
+    // do (`obj+8` = the shot's own list; KH1's contact then picks its hit spark: Fire's, Blizzard's, Stop's;
+    // Thunder and Gravity have none). Before, it was the Keyblade's (`new_attack` on Sora): the Keyblade spark.
+    // Not loaded: the Keyblade's, as before.
+    let mut spell_fx = String::new();
+    if spell && row.data >= 0x5F28 {
+        let k = ((row.data - 0x5F28) / 0x70 / 3) as usize;
+        if k < 7 {
+            let slot = base + MAGIC_SLOTS_RVA + k * 0x38;
+            let level = rd::<i32>(slot);
+            let file = rd::<u64>(slot + 8) as usize;
+            let off = if file > 0x10000 { rd::<i32>(file + 8) } else { 0 };
+            let list = if level != 0 && off > 0 { file + off as usize } else { 0 };
+            let h = pose::handle(list);
+            if h != 0 {
+                wr(obj + 8, h);
+            }
+            spell_fx = format!(" | KH1 spell {k}'s list: slot level {level}, file {file:#x}, list {list:#x} (handle {h:#010x}){}", if h != 0 { "" } else { ": not used (Keyblade's)" });
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 40 {
+                log(&format!("KH2 spell hit (KH1 data {:#x}){spell_fx}", row.data));
+            }
+        }
+    }
     if !set.hit_fx_test.is_empty() {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let v = set.hit_fx_test[NEXT.fetch_add(1, Ordering::Relaxed) % set.hit_fx_test.len()];
@@ -2110,8 +2138,28 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     wr(obj + 0x54, saved);
     free(obj);
     let d = LAST_DAMAGE.load(Ordering::Relaxed);
+    // (t337, test) `hit_effect_test`: the next KH1 effect id started on the foe hit (or on Sora),
+    // as a swing's start plays its row's effect (`swing_start`, `0x1402ABB60` from Sora's effect
+    // source).
+    let target = TARGET.load(Ordering::Relaxed);
+    if !set.hit_effect_test.is_empty() && d != u32::MAX {
+        static NEXT_FX: AtomicUsize = AtomicUsize::new(0);
+        let id = set.hit_effect_test[NEXT_FX.fetch_add(1, Ordering::Relaxed) % set.hit_effect_test.len()];
+        let cs = pose::ptr(rd::<u32>(sora + 0x14C));
+        let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
+        let on = if set.hit_effect_on_sora { sora } else { target };
+        let h = if source > 0x10000 && on > 0x10000 {
+            let f: unsafe extern "system" fn(usize, i32, usize, u32) -> usize = std::mem::transmute(base + EFFECT_RVA);
+            f(source, id, on, 0x30)
+        } else {
+            0
+        };
+        let who = if set.hit_effect_on_sora { "Sora" } else { "the foe" };
+        forced.push_str(&format!(" | hit_effect_test: effect {id} on {who} {on:#x} (source {source:#x}) -> {h:#x}"));
+        log(&format!("hit_effect_test: effect {id} on {who} {on:#x} (source {source:#x}) -> {h:#x}"));
+    }
     super::trace::note(&format!(
-        "hitfx: {info} | KH1 row motion {} data {:#x} fx {:02x?} (trail {} effect {} voice {}) spell-data {spell} | obj flags before {:08x} (0x400000 {}) after contact {:08x} | obj+A8 before {:02x?} after contact {:02x?} | KH1 attack data [{data_words}] | target {:#x} dmg {}{forced}",
+        "hitfx: {info} | KH1 row motion {} data {:#x} fx {:02x?} (trail {} effect {} voice {}) spell-data {spell} | obj flags before {:08x} (0x400000 {}) after contact {:08x} | obj+A8 before {:02x?} after contact {:02x?} | KH1 attack data [{data_words}] | target {:#x} dmg {}{forced}{spell_fx}",
         row.motion, row.data, row.fx, row.trail, row.effect, row.voice, flags_before, if flags_before & 0x400000 != 0 { "set" } else { "clear" }, flags_after, fx_before, fx_after,
         TARGET.load(Ordering::Relaxed), if d == u32::MAX { "none".to_string() } else { d.to_string() }
     ));
