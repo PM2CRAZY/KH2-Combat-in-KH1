@@ -109,8 +109,8 @@ const OVERLAP: i32 = 2;
 /// The HUD's height in its units (the bottom edge of the screen).
 const HUD_H: i32 = 384;
 /// KH1 HUD units per KH2 HUD unit: both fill the screen's height, KH1's 384 high, KH2's 448 (its
-/// PS2 frame); `drive_gauge_scale` multiplies it.
-const KH2_UNIT: f32 = 384.0 / 448.0;
+/// PS2 frame), times 1.2 (the user: "its also kinda small"); `drive_gauge_scale` multiplies it.
+const KH2_UNIT: f32 = 384.0 / 448.0 * 1.2;
 /// The middle of KH2's DRIVE bar below its gauge centre, in KH2 units (its bar spans 2 to 25).
 const KH2_BAR_MIDDLE: f32 = 13.5;
 
@@ -402,9 +402,13 @@ unsafe fn draw() {
         let (cx, cy) = match &layout {
             Some(l) => {
                 let p = l.portrait;
+                // The user's screenshots (s320 against their mockup): the bar's middle 0.3 of the
+                // portrait's radius below the MP HP label's middle, its right end at the
+                // portrait's lower left.
+                let below = 0.3 * (p[2] - p[0]) as f32 / 2.0;
                 let cy = match l.label {
-                    Some((_, r)) => (r[1] + r[3]) as f32 / 2.0 - KH2_BAR_MIDDLE * k,
-                    None => (p[1] + p[3]) as f32 / 2.0,
+                    Some((_, r)) => (r[1] + r[3]) as f32 / 2.0 - KH2_BAR_MIDDLE * k + below,
+                    None => (p[1] + p[3]) as f32 / 2.0 + below,
                 };
                 ((p[0] + p[2]) as f32 / 2.0, cy)
             }

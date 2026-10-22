@@ -3584,6 +3584,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 321 (the Drive gauge: no slide-in, bigger, lower)
+- The user (screenshot of s320): "I dont need the animation of the drive gauge rising up. Also the
+  drive gauge is off from where it should be. its also kinda small". `kh2hud` starts the bar at its
+  steady group (23, or 51 in a form), skipping KH2's slide-in (21 / 50). `gaugehud`: KH2 units are
+  1.2× larger (`KH2_UNIT`; `drive_gauge_scale` still multiplies), and the bar's middle sits 0.3 of
+  the portrait's radius below the MP HP label's middle (measured against the user's mockup).
+
 ### 2026-10-22: Stage 320 (KH2's own Drive gauge art, left of Sora's portrait; the MP HP label hidden)
 - The user: "the drive gauge should be here instead ... remove [the HP/MP labels] from the hud if
   possible ... use ghidra if you have to on KH2 to get the exact graphics, the animation while the

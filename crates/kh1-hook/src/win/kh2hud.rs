@@ -10,8 +10,8 @@
 //! kept on disk or in the mod.
 //!
 //! **What plays when** (KH2's own choices, read in its HUD code; the numbers are the sequence's
-//! animation groups): the bar appears with group 21 (the DRIVE bar sliding up into place), then
-//! stays as group 23; the fill is group 25, shown to the current bar's points (KH2 sweeps a mask
+//! animation groups): the bar is group 23 (KH2 slides it in first with group 21; not here: the
+//! user didn't want it); the fill is group 25, shown to the current bar's points (KH2 sweeps a mask
 //! over it; here it is cut at the share); the number of full bars is group 28 + n (each digit
 //! pops in: turned, scaled and faded from nothing, then sparkles); a bar gained plays group 22 over
 //! the bar (the fill flashing white and streaks); a full gauge shows group 20 (MAX, flashing in
@@ -159,7 +159,8 @@ fn step(seq: &Sequence, v: &View) -> State {
     let n = v.number.clamp(0, 9);
     let s = g.get_or_insert_with(|| State {
         form: v.form,
-        bar: Play::new(if v.form { FORM_APPEAR } else { BAR_APPEAR }),
+        // (No slide-in: the user, "I dont need the animation of the drive gauge rising up".)
+        bar: Play::new(if v.form { FORM_BAR } else { BAR }),
         fill: Play::new(if v.form { FORM_FILL } else { FILL }),
         number: Play::new(if v.form { FORM_NUMBER } else { NUMBER } + n as usize),
         value: n,
@@ -167,9 +168,10 @@ fn step(seq: &Sequence, v: &View) -> State {
         effects: Vec::new(),
     });
     if s.form != v.form {
-        // Into or out of a form: the other bar slides in, KH2's sparkle ring on the gauge.
+        // Into or out of a form: the other bar at once (no slide-in), KH2's sparkle ring on the
+        // gauge.
         s.form = v.form;
-        s.bar = Play::new(if v.form { FORM_APPEAR } else { BAR_APPEAR });
+        s.bar = Play::new(if v.form { FORM_BAR } else { BAR });
         s.fill = Play::new(if v.form { FORM_FILL } else { FILL });
         s.number = Play::new(if v.form { FORM_NUMBER } else { NUMBER } + n as usize);
         s.value = n;
