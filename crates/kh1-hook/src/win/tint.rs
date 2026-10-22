@@ -696,6 +696,24 @@ struct Desc {
     flags: u32,
 }
 
+/// A GPU texture made by KH1's own creator from `w × h` BGRA pixels (`kh2hud`'s KH2 HUD image),
+/// on the game thread. `None` if KH1 made none.
+pub(super) unsafe fn make_texture(w: u32, h: u32, bgra: &[u8], label: &'static [u8]) -> Option<u64> {
+    if bgra.len() < (w * h * 4) as usize || label.last() != Some(&0) {
+        return None;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let desc = Desc { dimension: 3, alignment: 0, width: w as u64, height: h, depth: 1, mips: 1, format: 0x57, samples: 1, quality: 0, layout: 0, flags: 0 };
+    let state: unsafe extern "system" fn() -> usize = std::mem::transmute(base + STATE_RVA);
+    let create: unsafe extern "system" fn(usize, *const Desc, *const u8, *const u8, u32) -> u64 = std::mem::transmute(base + CREATE_RVA);
+    let r = state();
+    if r < 0x10000 {
+        return None;
+    }
+    let t = create(r, &desc, bgra.as_ptr(), label.as_ptr(), 0);
+    (t >= 0x10000).then_some(t)
+}
+
 /// Our recoloured GPU texture for `src` in `look` (made on first use).
 unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64> {
     if let Some(&t) = s.ours.as_ref().and_then(|o| o.get(&(src, look))) {

@@ -122,9 +122,17 @@ gummi = vanilla\r\n\
 ; hud_toggle_key: the key that hides the whole HUD and shows it again (pagedown, pageup, home,\r\n\
 ; end, delete, f1..f12, a letter, or a key code such as 0x22); off = no key\r\n\
 hud_toggle_key = pagedown\r\n\
-; drive_gauge: moves KH2's Drive gauge from its place under Sora's HP circle: right, down, in\r\n\
+; drive_gauge_art: kh2 = KH2's own Drive gauge HUD, read from your KH2 install (its field HUD,\r\n\
+; field2d/us/zz0field.2dd); kh1 = drawn with KH1's pieces instead\r\n\
+drive_gauge_art = kh2\r\n\
+; drive_gauge: moves the Drive gauge from its place left of Sora's portrait: right, down, in\r\n\
 ; KH1's HUD units (384 = the screen's height; negative = left, up)\r\n\
 drive_gauge = 0, 0\r\n\
+; drive_gauge_scale: the Drive gauge's size, times KH2's own (1.0) against KH1's HUD\r\n\
+drive_gauge_scale = 1.0\r\n\
+; hide_hp_label: on = KH1's small MP HP label beside Sora's portrait is hidden (the Drive gauge\r\n\
+; sits there)\r\n\
+hide_hp_label = on\r\n\
 ; drive_gauge_debug: on = a bright magenta block over the Drive gauge, to find it on screen\r\n\
 drive_gauge_debug = off\r\n";
 
@@ -194,6 +202,12 @@ pub struct Settings {
     pub drive_gauge: (i32, i32),
     /// A bright block over the Drive gauge, to find it (`drive_gauge_debug = on`).
     pub drive_gauge_debug: bool,
+    /// KH2's own Drive gauge art (`drive_gauge_art = kh2`, `kh2hud`), else KH1's pieces.
+    pub drive_gauge_kh2: bool,
+    /// The Drive gauge's size, times KH2's own against KH1's HUD (`drive_gauge_scale`).
+    pub drive_gauge_scale: f32,
+    /// KH1's MP HP label beside Sora's portrait hidden (`hide_hp_label = on`).
+    pub hide_hp_label: bool,
 }
 
 /// s318's `drive_gauge` default (its right end and top then, not a move): read as no move.
@@ -315,6 +329,9 @@ pub fn get() -> &'static Settings {
                 None => (0, 0),
             },
             drive_gauge_debug: on(&text, "drive_gauge_debug", "on", false),
+            drive_gauge_kh2: on(&text, "drive_gauge_art", "kh2", true),
+            drive_gauge_scale: setting(&text, "drive_gauge_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..=3.0).contains(v)).unwrap_or(1.0),
+            hide_hp_label: on(&text, "hide_hp_label", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s

@@ -10,6 +10,7 @@
 //! - [`pref`]: movement parameters from `03system.bin`
 //! - [`mdlx`]: model meshes, skeletons and textures
 //! - [`pax`], [`dpd`]: effect packages (elements, emitter programs, textures, sprites, models)
+//! - [`seqd`]: 2D sequences (the HUD's animated pieces); [`png`]: the HD images beside them
 //!
 //! Format knowledge comes from the OpenKH project (Apache-2.0). Parts of
 //! this crate are ports of OpenKH's C# readers; see `NOTICE` and
@@ -29,7 +30,9 @@ pub mod msg;
 pub mod pax;
 pub mod scd;
 pub mod objentry;
+pub mod png;
 pub mod pref;
+pub mod seqd;
 pub mod system;
 mod reader;
 

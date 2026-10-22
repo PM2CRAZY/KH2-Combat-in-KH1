@@ -140,6 +140,23 @@ impl Install {
         Err(Error::NotFound(name.to_string()))
     }
 
+    /// Every remastered (HD) asset of `name` (e.g. a 2D file's PNG images, in its images' order),
+    /// from whichever `kh2_*` archive holds it.
+    pub fn read_remastered_any(&self, source: Source, name: &str) -> Result<Vec<(String, Vec<u8>)>> {
+        let keys = self.key_table()?;
+        for part in ARCHIVES {
+            let hed = self.resolve(source, &format!("{part}.hed"));
+            if !hed.is_file() {
+                continue;
+            }
+            let archive = Archive::open(&hed)?;
+            if archive.find(name).is_some() {
+                return archive.read_remastered_all(&keys, name);
+            }
+        }
+        Err(Error::NotFound(name.to_string()))
+    }
+
     /// Movement parameters from `03system.bin`.
     pub fn load_pref(&self, source: Source) -> Result<kh2_formats::pref::Pref> {
         kh2_formats::pref::Pref::from_03system(&self.read_any(source, "03system.bin")?)

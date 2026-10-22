@@ -3584,6 +3584,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 320 (KH2's own Drive gauge art, left of Sora's portrait; the MP HP label hidden)
+- The user: "the drive gauge should be here instead ... remove [the HP/MP labels] from the hud if
+  possible ... use ghidra if you have to on KH2 to get the exact graphics, the animation while the
+  gauge is charging, when its being drained, and all the animations that the hud element has".
+  `win/kh2hud.rs` reads `field2d/<lang>/zz0field.2dd` (the `gaug` sequence and its HD image) from
+  the user's KH2 at run time; groups 21/23 in, 25 fill, 28+n number, 22 bar gained, 20 MAX,
+  49/50/51/54+n form gauge, 130 form change, driven as KH2's HUD code does (0x14017F060,
+  0x140180D70). New kh2-formats `seqd.rs`, `png.rs`. ini `drive_gauge_art = kh2|kh1`,
+  `drive_gauge_scale`, `hide_hp_label`. docs/drive-model.md.
+
 ### 2026-10-22: Stage 319 (the Drive gauge visible: drawn after Sora's gauge, placed from it)
 - The user: "I dont see the drive gauge at all", then a mockup: KH2's Drive gauge under KH1's HP
   circle. The s318 draw ran in the command-menu task, which KH1 runs before the HP/MP gauge task

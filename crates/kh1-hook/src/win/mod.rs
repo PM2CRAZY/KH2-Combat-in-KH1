@@ -14,6 +14,7 @@ mod form;
 mod formmagic;
 mod gauge;
 mod gaugehud;
+mod kh2hud;
 mod gates;
 mod fx12;
 mod hook;
