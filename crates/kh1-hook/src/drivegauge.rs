@@ -2,8 +2,8 @@
 //! they are easy to change and to test. The gauge itself is `character_core::drive::Drive`
 //! (KH2's rules from the executable, `docs/drive-model.md`, "Drive gauge (Checked, exe)").
 //!
-//! - **Costs** (the user's, KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 4, Master
-//!   4, Final 5; Anti 9, which empties the gauge.
+//! - **Costs** (the user's, KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 3 (KH2's
+//!   4; the user's, s331), Master 4, Final 5; Anti 9, which empties the gauge.
 //! - **Maximum** (the user's, s325): 3 bars, then +1 for each of six fights won (`MAX_TABLE`:
 //!   Sabor, Riku 1, Chernabog, Sephiroth, Kurt Zisa, the Unknown), KH2's 9 with all six.
 //!   Derived from the story flags (`crate::story::Flags`) each time, never stored.
@@ -86,8 +86,9 @@ pub fn form_view(left: f32, max: f32) -> (f32, i32) {
 /// A Drive's cost in bars (KH2's `cmd` byte 0x1c; `None` is Anti Form, the secret code's).
 pub fn cost(form: Option<Form>) -> u8 {
     match form {
-        Some(Form::Valor) | Some(Form::Wisdom) => 3,
-        Some(Form::Limit) | Some(Form::Master) => 4,
+        // (Limit 3, not KH2's 4: the user, "Make limit form only cost 3 bars to enter".)
+        Some(Form::Valor) | Some(Form::Wisdom) | Some(Form::Limit) => 3,
+        Some(Form::Master) => 4,
         Some(Form::Final) => 5,
         None => ANTI_COST,
     }
@@ -263,7 +264,7 @@ mod tests {
     fn costs_are_kh2s() {
         assert_eq!(cost(Some(Form::Valor)), 3);
         assert_eq!(cost(Some(Form::Wisdom)), 3);
-        assert_eq!(cost(Some(Form::Limit)), 4);
+        assert_eq!(cost(Some(Form::Limit)), 3);
         assert_eq!(cost(Some(Form::Master)), 4);
         assert_eq!(cost(Some(Form::Final)), 5);
         assert_eq!(cost(None), 9);

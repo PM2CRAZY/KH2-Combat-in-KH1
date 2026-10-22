@@ -1145,7 +1145,7 @@ KH2's form gauge, draining, the form ending when it runs out. The model is `char
 (the "Drive gauge" and "In a form" sections above); the tables are `kh1-hook/src/drivegauge.rs`;
 the game side `win/gauge.rs`, `win/prize.rs`, `win/gaugehud.rs`.
 
-**Costs** (`drivegauge::cost`; KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 4,
+**Costs** (`drivegauge::cost`; KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 3 (KH2's 4; the user's, s331),
 Master 4, Final 5. Anti Form (the secret code's) costs 9, which empties any gauge; it wants 3 full
 bars to start (ours: KH2's Anti only comes out of a Drive the gauge could pay for, the cheapest 3).
 The cost is paid as the Drive motion starts, by KH2's rule: a part-filled bar survives unless the

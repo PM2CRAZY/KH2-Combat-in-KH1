@@ -3584,6 +3584,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 331 (Limit Form costs 3 bars)
+- The user: "Make limit form only cost 3 bars to enter". `drivegauge::cost`: Limit 3 (KH2's 4).
+
 ### 2026-10-22: Stage 330 (a player's seven bugs)
 - Walk with no animation / walk at run speed (Misc Animations KH1 only): KH1's idle/walk/run is
   chosen by KH2's state, not KH1's own stick thresholds (KH1 still at 0.41..0.50, KH2 walks from
