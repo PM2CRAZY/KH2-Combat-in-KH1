@@ -96,7 +96,7 @@ it set: the item table `*0x142D23738` = `+0x1A58`, 255 records of `0x14` bytes, 
   Set, Elixir... and Donald's staves and Goofy's shields); 4..6 accessories; 7 Potion, Hi-Potion,
   Ether, Tent, Camping Set.
 - Who opens which (all `.ard` scripts searched): **room `tw10`** (Traverse Town, world 3 room
-  10, the Item Shop) opens lists 0..3 by its story byte; `tw11` (the Accessory Shop) 4..6;
+  9 in memory: KH1 numbers rooms from 0, the files from 1; the Item Shop) opens lists 0..3 by its story byte; `tw11` (the Accessory Shop) 4..6;
   `al19` (Agrabah) 7; `tw01` op 0x274. Worlds are numbered by KH1's prefix table
   (`0x1404DD980`: dh, di, dc, tw, ...).
 - Buying (`0x1402FF220`): price `+0x08` × count against the munny; a kind-0 item asks which
@@ -121,7 +121,7 @@ it set: the item table `*0x142D23738` = `+0x1A58`, 255 records of `0x14` bytes, 
   call at `0x1402EAECB`). Otherwise KH1's own path: its use switch does nothing for these ids, so
   the error sound and its "can't use" window. The log has each use with the gauge before and
   after.
-- **Shop** (`0x1402FEC60`, hooked): when the item shop opens in world 3 room 10 and a Drive Form
+- **Shop** (`0x1402FEC60`, hooked): when the item shop opens in world 3 room 9 (script `tw10`: KH1's room numbers are the script file's less one) and a Drive Form
   is open, the list it gets is KH1's with ours after it (a list of ours, at most 52). Every shop
   opening is logged with its world, room and list. Other shops are untouched.
 

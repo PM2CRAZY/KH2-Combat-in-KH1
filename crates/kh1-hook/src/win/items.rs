@@ -15,7 +15,7 @@
 //!   refreshed, the recovery sound, the result window with our line. On anyone else, KH1's own
 //!   path (its use switch does nothing for these ids: the "can't use" buzz and window).
 //! - **Sold** (`shop_open`, KH1's shop `0x1402FEC60`): in the Traverse Town Item Shop (world 3,
-//!   room 10), once a Drive Form is open, the list KH1 opens gets ours after its own. Buying,
+//!   room 9, script `tw10`), once a Drive Form is open, the list KH1 opens gets ours after its own. Buying,
 //!   selling (KH1's sell price, a fifth) and the counts are KH1's.
 
 use super::addr::Rva;

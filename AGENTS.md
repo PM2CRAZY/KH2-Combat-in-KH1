@@ -3584,6 +3584,12 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 327 (Drive Recovery items in the right shop)
+- The user: "I don't see the drive recovery items." Their log: "item shop opened: world 3 room 9,
+  KH1's list [1, 2, 3, ...]". The Item Shop's script is `tw10`, but KH1's room number is the file's
+  less one (room 9); s326 checked room 10, which is the Accessory Shop (`tw11`).
+  `driveitems::SHOP_ROOM = 9`.
+
 ### 2026-10-22: Stage 326 (Chernabog for a Drive bar; the gauge only while the player has Sora; Drive Recovery items)
 - The user: "instead of beating the game, make it after defeating Chernabog". `story::CHERNABOG_EW`
   (End of the World >= 0x33, set in ew27 after Superglide's prize; found independently, it matches

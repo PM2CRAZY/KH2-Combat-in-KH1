@@ -119,10 +119,11 @@ pub fn usable(shown: bool, bars: u8, max: u8) -> bool {
     shown && bars < max
 }
 
-/// KH1's Traverse Town Item Shop (world 3 "tw", room 10: its script opens KH1's item shop with
-/// list 0..3 by the story).
+/// KH1's Traverse Town Item Shop: its script is `tw10` (it opens KH1's item shop with list 0..3
+/// by the story), but KH1's room number is the file's less one, room 9 (the user's s326 log: "item
+/// shop opened: world 3 room 9, KH1's list [1, 2, 3, ...]"; room 10 is `tw11`, the Accessory Shop).
 pub const SHOP_WORLD: u32 = 3;
-pub const SHOP_ROOM: u32 = 10;
+pub const SHOP_ROOM: u32 = 9;
 /// A shop list holds 52 ids (`0xD4` bytes with its count).
 pub const SHOP_LIST_MAX: usize = 52;
 
