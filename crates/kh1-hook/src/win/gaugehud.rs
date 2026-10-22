@@ -146,7 +146,9 @@ unsafe extern "system" fn task(node: usize) -> usize {
     let l = std::panic::catch_unwind(|| measure(base)).ok().flatten();
     // Both halves of the label ("MP" and "HP": the user, 'the "HP" text is still there, remove
     // it').
-    let labels: Vec<(usize, [i32; 4])> = if super::settings::get().hide_hp_label { l.as_ref().map(|l| l.labels.clone()).unwrap_or_default() } else { Vec::new() };
+    // (Only while the gauge shows: before the first Drive Form, KH1's label stays.)
+    let shown = super::gauge::snapshot().is_some_and(|s| crate::drivegauge::shown(s.max));
+    let labels: Vec<(usize, [i32; 4])> = if shown && super::settings::get().hide_hp_label { l.as_ref().map(|l| l.labels.clone()).unwrap_or_default() } else { Vec::new() };
     let hidden: Vec<(usize, [i32; 2])> = labels
         .iter()
         .filter_map(|&(rec, _)| {
@@ -353,6 +355,10 @@ unsafe fn draw() {
     }
     let alpha = alpha.min(1.0);
     let Some(s) = super::gauge::snapshot() else { return };
+    // (Not before the first Drive Form opens: the user.)
+    if !crate::drivegauge::shown(s.max) {
+        return;
+    }
     let layout = base + LAYOUT_RVA;
     let texture = rd::<u64>(layout) as usize;
     let rows = rd::<u64>(layout + 0x28) as usize;

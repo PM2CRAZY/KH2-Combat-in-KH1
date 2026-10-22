@@ -1211,6 +1211,12 @@ above the maximum are capped. **The form gauge isn't saved** (the simplest safe 
 outside battle, and a save made in a form keeps the bars left after the cost, so loading it gives
 Sora out of the form with those bars, as KH2's gauge after a Drive.
 
+**Shown from the first form, full by default** (s323, the user). The gauge isn't drawn, and KH1's
+MP HP label isn't hidden, until a Drive Form is open (`drivegauge::shown`: the maximum above the 3
+base bars). The bars byte carries `SET` (0x80) once the mod has written it; a byte without it (a
+new game, or a save from before s323) reads as a full gauge, and nothing is written before the
+first form opens, so the gauge is full at the maximum it first shows with.
+
 **Drive orbs** (`docs/kh1-prizes.md`): two new prize types in KH1's own prize system, 7 a small
 orb and 8 a big one, recoloured copies of KH1's MP orbs (their rows, sprites, sizes, pull and
 sound; KH2's yellow-orange colour). An enemy's own drop (its AI's drop op) rolls KH2's normal

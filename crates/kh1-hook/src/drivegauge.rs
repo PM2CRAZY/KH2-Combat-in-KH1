@@ -21,6 +21,12 @@ pub const MAX_TABLE: [(Form, u8); 5] = [(Form::Valor, 1), (Form::Wisdom, 1), (Fo
 /// KH2's cap (each bonus-level Drive Gauge upgrade stops at 9).
 pub const MAX_BARS: u8 = 9;
 
+/// Whether the gauge is shown: once the first Drive Form is open (the user: "don't show the drive
+/// gauge until the first drive form is unlocked"), which every `MAX_TABLE` row adds to.
+pub fn shown(max: u8) -> bool {
+    max > BASE_BARS
+}
+
 /// The gauge's maximum with the forms `open` says are unlocked.
 pub fn max_bars(open: impl Fn(Form) -> bool) -> u8 {
     let n = MAX_TABLE.iter().filter(|(f, _)| open(*f)).map(|(_, n)| *n as u32).sum::<u32>();
@@ -51,10 +57,19 @@ pub const ANTI_NEEDS: u8 = 3;
 /// (record 1, `0x74` on) the points.
 pub const BARS_OFF: usize = 0x37;
 pub const POINTS_OFF: usize = 0x74 + 0x37;
+/// The bars byte's mark that the gauge has been written (the user: "By default, the drive gauge
+/// should be full"): a byte without it (a new game, or a save from before s323) reads as a full
+/// gauge.
+pub const SET: u8 = 0x80;
 
-/// The gauge as read from the save: garbage (an old save's stray byte) reads as empty, and the
-/// bars are capped at `max` (a save with more forms than the story now has).
+/// The gauge as read from the save: never written (no `SET`) reads as full, garbage (an old
+/// save's stray byte) as empty, and the bars are capped at `max` (a save with more forms than
+/// the story now has).
 pub fn from_save(bars: u8, points: u8, max: u8) -> (u8, u8) {
+    if bars & SET == 0 {
+        return (max, if max == 0 { 0 } else { 100 });
+    }
+    let bars = bars & !SET;
     if bars > MAX_BARS || points > 100 {
         return (0, 0);
     }
@@ -138,13 +153,15 @@ mod tests {
 
     #[test]
     fn save_bytes_are_checked() {
-        assert_eq!(from_save(0, 0, 3), (0, 0));
-        assert_eq!(from_save(2, 40, 5), (2, 40));
-        assert_eq!(from_save(5, 100, 5), (5, 100));
-        assert_eq!(from_save(7, 20, 5), (5, 100), "capped at the maximum");
-        assert_eq!(from_save(10, 0, 9), (0, 0), "garbage");
-        assert_eq!(from_save(1, 0xFF, 9), (0, 0), "garbage");
-        assert_eq!(from_save(1, 100, 9), (1, 99), "100 marks a full gauge only");
+        assert_eq!(from_save(0, 0, 4), (4, 100), "never written: full");
+        assert_eq!(from_save(2, 40, 5), (5, 100), "an unmarked (pre-s323) save: full");
+        assert_eq!(from_save(SET, 0, 3), (0, 0));
+        assert_eq!(from_save(SET | 2, 40, 5), (2, 40));
+        assert_eq!(from_save(SET | 5, 100, 5), (5, 100));
+        assert_eq!(from_save(SET | 7, 20, 5), (5, 100), "capped at the maximum");
+        assert_eq!(from_save(SET | 10, 0, 9), (0, 0), "garbage");
+        assert_eq!(from_save(SET | 1, 0xFF, 9), (0, 0), "garbage");
+        assert_eq!(from_save(SET | 1, 100, 9), (1, 99), "100 marks a full gauge only");
         // The two bytes are distinct and inside the first two records.
         assert!(BARS_OFF < 0x74 && POINTS_OFF < 2 * 0x74 && POINTS_OFF != BARS_OFF);
     }

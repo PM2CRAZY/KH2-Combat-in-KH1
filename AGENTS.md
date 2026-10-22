@@ -3584,6 +3584,13 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 323 (the Drive gauge hidden until the first form; full by default)
+- The user: "don't show the drive gauge until the first drive form is unlocked. By default, the
+  drive gauge should be full." `drivegauge::shown(max)` (max above the 3 base bars: a form is open)
+  gates the HUD draw and the MP HP label's hiding. The save's bars byte now carries `SET` (0x80)
+  once written; a byte without it (a new game, a pre-s323 save) reads as a full gauge, and nothing
+  is written before the first form opens, so the gauge is full when it first shows.
+
 ### 2026-10-22: Stage 322 (the Drive gauge at the user's size and place; both label halves hidden)
 - The user (screenshot of s321): "it could be a bit bigger just slightly. Also, the bottom black line
   of the MP bar (right above the drive gauge) is cut off. also, the "HP" text is still there, remove

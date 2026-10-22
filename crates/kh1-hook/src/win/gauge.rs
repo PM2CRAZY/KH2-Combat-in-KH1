@@ -115,7 +115,7 @@ fn with<R>(f: impl FnOnce(&mut Drive) -> R) -> Option<R> {
         d.max = max;
         let (have_b, have_p) = (rd::<u8>(save + dg::BARS_OFF), rd::<u8>(save + dg::POINTS_OFF));
         let (b, p) = dg::from_save(have_b, have_p, max);
-        if (b, p) != (have_b, have_p) && (have_b > dg::MAX_BARS || have_p > 100) {
+        if have_b & dg::SET != 0 && ((have_b & !dg::SET) > dg::MAX_BARS || have_p > 100) {
             static ONCE: AtomicBool = AtomicBool::new(false);
             if !ONCE.swap(true, Ordering::Relaxed) {
                 log(&format!("Drive gauge: the save's bytes ({have_b}, {have_p}) aren't a gauge: empty"));
@@ -124,8 +124,10 @@ fn with<R>(f: impl FnOnce(&mut Drive) -> R) -> Option<R> {
         d.bars = b;
         d.points = p;
         let r = f(d);
-        if (d.bars, d.points) != (have_b, have_p) {
-            wr(save + dg::BARS_OFF, d.bars);
+        // (Nothing written before the first form opens: the gauge is full when it first shows,
+        // at the maximum it has then.)
+        if dg::shown(max) && (d.bars | dg::SET, d.points) != (have_b, have_p) {
+            wr(save + dg::BARS_OFF, d.bars | dg::SET);
             wr(save + dg::POINTS_OFF, d.points);
         }
         Some(r)
