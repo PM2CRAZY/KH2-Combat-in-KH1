@@ -14,6 +14,11 @@
 //!   under the floor, KH1 and KH2 trading him back and forth, a NaN. Those are written
 //!   `AUTO_DELAY` frames later, so what followed is in the file too.
 //!
+//! Each row also has the camera (`camera::seen`, the `cam_*` and `kh2cam_*` columns): which camera
+//! placed it (KH2's or KH1's, and why not KH2's), the eye and look point, their motion, the eye's
+//! distance and height from Sora, KH1's yaw / pitch / distance / field of view / blend, and KH2's
+//! camera's own yaw, goal yaw, distance and the sticks it read.
+//!
 //! Each row also has the Config menu's KH1 / KH2 rows as they were on that frame (`config_now`:
 //! Camera Style, Physics, the move styles) and whose physics numbers were moving him then
 //! (`physics_now`: KH2's in a Drive Form whatever the Physics row says).
@@ -140,6 +145,8 @@ pub struct Row {
     pub sticks: [u8; 4],
     /// What `pose` drew this frame (`pose::drawn`), filled by `frame`.
     pub draw: super::pose::Drawn,
+    /// The camera as its last follow / lock-on call left it, filled by `frame`.
+    pub cam: super::camera::Seen,
     pub events: String,
 }
 
@@ -152,7 +159,11 @@ kh1_state,kh1_motion,actor_flags,combo_window,\
 kh1_vel_x,kh1_vel_y,kh1_vel_z,kh1_vel_w,kh1_arc_0,kh1_arc_1,kh1_arc_2,kh1_arc_3,push_x,push_y,push_z,\
 kh2_state,kh2_motion,kh2_frame,kh2_air,kh2_grounded,kh2_on_top,kh2_facing,kh2_combo,kh2_lock,kh2_invulnerable,kh2_guarding,form,\
 buttons,kh1_buttons,stick_rx,stick_ry,stick_lx,stick_ly,\
-draw_route,draw_slot,draw_play,draw_kh2_motion,draw_clip_frame,draw_blend,draw_restart,draw_age_ms,events";
+draw_route,draw_slot,draw_play,draw_kh2_motion,draw_clip_frame,draw_blend,draw_restart,draw_age_ms,\
+cam_who,cam_via,cam_why,cam_lag,cam_mode_now,cam_blend_now,cam_entry,\
+cam_eye_x,cam_eye_up,cam_eye_z,cam_at_x,cam_at_up,cam_at_z,cam_eye_step,cam_at_step,\
+cam_horiz,cam_eye_height,cam_look_height,cam_yaw,cam_pitch,cam_dist,cam_fov,cam_blend_left,cam_blend_time,\
+kh2cam_yaw,kh2cam_goal_yaw,kh2cam_dist,kh2cam_look_x,kh2cam_look_y,kh2cam_move_x,kh2cam_move_y,kh2cam_reset,kh2cam_auto,kh2cam_lock_dist,events";
 
 /// Columns in `Row::config` (as in `HEADER`): Camera Style, Physics, the physics in use now, then
 /// the move styles in `styles::Kind::EVERY`'s order.
@@ -238,6 +249,7 @@ pub fn frame(mut row: Row) {
     ENABLED.store(true, Ordering::Relaxed);
     row.config = config_now();
     row.draw = super::pose::drawn();
+    row.cam = super::camera::seen();
     if let Ok(mut e) = EVENTS.lock() {
         row.events = std::mem::take(&mut *e);
     }
@@ -255,7 +267,8 @@ pub fn frame(mut row: Row) {
         ring.pop_front();
     }
     if combo && !COMBO_PREV.swap(true, Ordering::Relaxed) {
-        dump(&ring, "select_triangle");
+        // (The pause menu's click when the file is written, its "can't" when it isn't.)
+        click(dump(&ring, "select_triangle"));
     } else if !combo {
         COMBO_PREV.store(false, Ordering::Relaxed);
     }
@@ -322,13 +335,26 @@ fn anomaly(ring: &VecDeque<Row>, row: &Row) -> Option<(usize, String)> {
     None
 }
 
-fn dump(ring: &VecDeque<Row>, why: &str) {
+/// KH1's menu sounds (`0x140177F60 (n)`: 1 the cursor's move, 2 the confirm, 4 the "can't").
+const SOUND_RVA: super::addr::Rva = super::addr::Rva(0x177F60);
+
+/// The pause menu's confirm sound (a trace recorded) or its "can't" (none could be).
+fn click(written: bool) {
+    unsafe {
+        let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+        sound(if written { 2 } else { 4 });
+    }
+}
+
+/// Writes the ring to a CSV; whether it was written.
+fn dump(ring: &VecDeque<Row>, why: &str) -> bool {
     let n = DUMPS.fetch_add(1, Ordering::Relaxed);
     if n >= MAX_DUMPS {
         if n == MAX_DUMPS {
             log(&format!("trace: {MAX_DUMPS} dumps this session; no more until the game restarts"));
         }
-        return;
+        return false;
     }
     let dir = format!("{}\\kh1-kh2-traces", super::exe_dir());
     let _ = std::fs::create_dir_all(&dir);
@@ -342,8 +368,14 @@ fn dump(ring: &VecDeque<Row>, why: &str) {
         line(&mut text, r);
     }
     match std::fs::write(&path, text) {
-        Ok(()) => log(&format!("trace: {} frames ({:.1}s) written to {path} ({why})", ring.len(), ring.back().zip(ring.front()).map_or(0.0, |(b, f)| b.ms.saturating_sub(f.ms) as f32 / 1000.0))),
-        Err(e) => log(&format!("trace: couldn't write {path}: {e}")),
+        Ok(()) => {
+            log(&format!("trace: {} frames ({:.1}s) written to {path} ({why})", ring.len(), ring.back().zip(ring.front()).map_or(0.0, |(b, f)| b.ms.saturating_sub(f.ms) as f32 / 1000.0)));
+            true
+        }
+        Err(e) => {
+            log(&format!("trace: couldn't write {path}: {e}"));
+            false
+        }
     }
 }
 
@@ -421,10 +453,45 @@ fn line(t: &mut String, r: &Row) {
             let _ = write!(t, "{},{},,,,,,{},", d.route, slot, age);
         }
     }
+    camera(t, r);
     if !r.events.is_empty() {
         t.push('"');
         t.push_str(&r.events.replace('"', "\"\"").replace(['\r', '\n'], " "));
         t.push('"');
     }
     t.push_str("\r\n");
+}
+
+/// The camera's columns (the `cam_*` ones are KH1's camera as the last follow / lock-on call left
+/// it, KH1's units with `up` = minus its y; `kh2cam_*` is KH2's camera's own numbers when it
+/// placed it, with the distance in KH2's units, KH1's divided by `camera_scale`).
+/// `cam_lag` is how many game frames before this row's the camera last ran (Sora's physics
+/// runs before the camera in a frame, so 1 is normal; more: KH1 has the camera in a mode that is
+/// neither follow nor lock-on, `cam_mode_now`, such as an event, an area camera or first person).
+/// `cam_horiz` / `cam_eye_height` / `cam_look_height`: the eye's distance along the ground from
+/// Sora's feet, and the eye's and look point's height above them, at the camera's own frame.
+fn camera(t: &mut String, r: &Row) {
+    let c = &r.cam;
+    if c.who.is_empty() {
+        t.push_str(&",".repeat(34));
+        return;
+    }
+    let lag = r.frame as i64 - c.frame as i64;
+    let _ = write!(t, "{},{},{},{},{},{:.1},{:#x},", c.who, c.via, c.why, lag, c.mode_now, c.blend_now, c.entry);
+    let _ = write!(t, "{:.1},{:.1},{:.1},{:.1},{:.1},{:.1},{:.2},{:.2},", c.eye[0], c.eye[1], c.eye[2], c.at[0], c.at[1], c.at[2], c.eye_step, c.at_step);
+    let horiz = ((c.eye[0] - c.feet[0]).powi(2) + (c.eye[2] - c.feet[2]).powi(2)).sqrt();
+    let _ = write!(t, "{:.1},{:.1},{:.1},", horiz, c.eye[1] - c.feet[1], c.at[1] - c.feet[1]);
+    let _ = write!(t, "{:.3},{:.3},{:.1},{:.1},{:.1},{:.1},", c.yaw, c.pitch, c.dist, c.fov, c.blend_left, c.blend_time);
+    match &c.own {
+        Some(o) => {
+            let _ = write!(t, "{:.3},{:.3},{:.1},{:.2},{:.2},{:.2},{:.2},{},{},", o.yaw, o.goal_yaw, o.dist, o.look[0], o.look[1], o.mv[0], o.mv[1], o.reset as u8, o.auto as u8);
+            match o.lock_dist {
+                Some(d) => {
+                    let _ = write!(t, "{d:.1},");
+                }
+                None => t.push(','),
+            }
+        }
+        None => t.push_str(",,,,,,,,,,"),
+    }
 }

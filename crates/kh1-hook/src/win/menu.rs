@@ -115,6 +115,29 @@ pub fn set_aerial_dodge_name(level: u8) {
     write_name(&AD_NAME, growth::aerial_dodge_name(level));
 }
 
+/// KH2's own Glide's (t323, `growth::ours::GLIDE`): "Glide LV2", "Glide MAX".
+static GL_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn set_glide_name(level: u8) {
+    write_name(&GL_NAME, growth::glide_name(level));
+}
+
+/// The shared list for the Glide style now (t323, `growth::glide_swap`): KH2's own Glide in place
+/// of KH1's Glide and Superglide at KH2, KH1's back at KH1 (`kh2`). Written back if it changed.
+unsafe fn glide_style_list(save: usize, now: &Kh1Sora, kh2: bool) -> bool {
+    let (list, lines) = growth::glide_swap(&now.shared, kh2, &now.progress);
+    if list == now.shared {
+        return false;
+    }
+    for (k, b) in list.iter().enumerate().take(10) {
+        std::ptr::write((save + 0x599 + k) as *mut u8, *b);
+    }
+    for line in &lines {
+        log(&format!("abilities: {line}"));
+    }
+    true
+}
+
 /// Writes Quick Run's level into its menu name ("Quick Run LV2", "Quick Run MAX").
 pub fn set_quick_run_name(level: u8) {
     let p = QR_NAME.load(std::sync::atomic::Ordering::Relaxed);
@@ -151,6 +174,11 @@ pub unsafe fn ensure_table(base: usize) {
                     let buf = Box::leak(vec![0u8; QR_NAME_LEN].into_boxed_slice()).as_mut_ptr() as usize;
                     AD_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
                     set_aerial_dodge_name(1);
+                    buf
+                } else if n == "Glide" {
+                    let buf = Box::leak(vec![0u8; QR_NAME_LEN].into_boxed_slice()).as_mut_ptr() as usize;
+                    GL_NAME.store(buf, std::sync::atomic::Ordering::Relaxed);
+                    set_glide_name(1);
                     buf
                 } else {
                     Box::leak(encode(n).into_boxed_slice()).as_ptr() as usize
@@ -502,6 +530,13 @@ impl Growth {
                         now = again;
                     }
                 }
+                // The Glide style's glide (t323): KH2's own Glide alone at KH2, KH1's Glide and
+                // Superglide (vanilla) at KH1.
+                if glide_style_list(save, &now, super::styles::kh2(super::styles::Kind::Glide)) {
+                    if let Some(again) = Self::kh1(base) {
+                        now = again;
+                    }
+                }
                 // One High Jump, one Glide (the user): spares go.
                 let (kept, spare) = growth::one_only(&now.shared);
                 if !spare.is_empty() {
@@ -644,6 +679,8 @@ impl Growth {
                     }
                 }
             } else {
+                // (KH1's Glide and Superglide back first: KH2's Glide stood for them, t323.)
+                glide_style_list(save, &now, false);
                 let n = strip(save + 0x44, 48) + strip(save + 0x599, 10);
                 if n > 0 {
                     log(&format!("took {n} KH2 abilities back out of Sora's lists (abilities = {:?})", self.mode));
@@ -690,9 +727,13 @@ impl Growth {
                 }
                 self.hj_level = Some(l);
             }
-            // (MAX is KH1's own Superglide, Chernabog's reward with KH1's own box.)
-            let l = if growth::has(&now.shared, growth::kh1::GLIDE) { growth::glide_level(now.level) } else { 0 };
+            // KH2's own Glide (t323, Glide style KH2): its menu name and a box as it grows, MAX
+            // at Chernabog. At KH1 KH1's Glide and Superglide are vanilla: no boxes of ours.
+            let l = if growth::has(&now.shared, growth::ours::GLIDE) { growth::kh2_glide_level(now.level, &now.progress) } else { 0 };
             if self.gl_level != Some(l) {
+                if l > 0 {
+                    set_glide_name(l);
+                }
                 if let Some(old) = self.gl_level {
                     if old > 0 && l > old {
                         log(&format!("Glide grows: {}", growth::glide_name(l)));

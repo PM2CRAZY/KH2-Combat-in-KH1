@@ -28,6 +28,7 @@ mod pose;
 mod settings;
 mod shared;
 mod shortcuts;
+mod soundlog;
 mod gummi;
 mod styles;
 mod stylecombo;
@@ -209,6 +210,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         leftblade::install();
         model::install();
         gates::install();
+        soundlog::install();
         kh2sound::start();
         kh2fx::start();
         pose::load_kh2();

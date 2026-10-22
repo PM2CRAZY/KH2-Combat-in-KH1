@@ -16,6 +16,7 @@ extern "system" {
     pub fn FlushInstructionCache(process: *mut c_void, addr: *const c_void, size: usize) -> i32;
     pub fn GetCurrentProcess() -> *mut c_void;
     pub fn GetCurrentThreadId() -> u32;
+    pub fn RtlCaptureStackBackTrace(skip: u32, count: u32, frames: *mut *mut c_void, hash: *mut u32) -> u16;
     pub fn OpenThread(access: u32, inherit: i32, id: u32) -> *mut c_void;
     pub fn SuspendThread(thread: *mut c_void) -> u32;
     pub fn ResumeThread(thread: *mut c_void) -> u32;

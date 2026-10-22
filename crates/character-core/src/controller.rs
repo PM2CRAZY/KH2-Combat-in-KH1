@@ -436,6 +436,11 @@ pub struct Character {
     /// Gliding in place (KH2's ACTION_GLIDEHOVER, motion 208): `None` until the glide's first
     /// frame decides it (the stick neutral then: hover).
     glide_hover: Option<bool>,
+    /// The launch's sideways speed, kept (KH2's `+0xE0`, its flag `+0xEC`; Steam exe): set by the
+    /// jump's and the Aerial Dodge's launch (`0x1403CBB00`), put back as his speed whenever the
+    /// glide or its hover is entered (the air actions' shared enter, `0x1403CBD30`), cleared when
+    /// the glide ends into the fall (`0x1403CBC30`). None: no flag.
+    launch_vel: Option<[f32; 2]>,
     /// Jump button still held since the jump started / released early.
     jump_held: bool,
     jump_released: bool,
@@ -493,9 +498,8 @@ fn wrap(a: f32) -> f32 {
 /// frames of turning if that is more) and level out below 4 degrees.
 const GLIDE_BANK_IN: f32 = 0.21;
 const GLIDE_BANK_OUT: f32 = 0.07;
-/// Horizontal speed (per frame) under which a glide with the stick let go turns into the hover.
-const GLIDE_HOVER_SPEED: f32 = 2.0;
-/// The hover's horizontal speed each physics tick (exe `0x140422930`, `0x1405866E0`).
+/// The hover's speed each step (ACTION_GLIDEHOVER's step `0x140423650` multiplies his velocity
+/// by 0.9, `0x1405AAA40`; Steam exe). The stored launch speed (`launch_vel`) isn't touched.
 const GLIDE_HOVER_DRAG: f32 = 0.9;
 
 fn turn_toward(from: f32, to: f32, rate: f32) -> f32 {
@@ -571,6 +575,7 @@ impl Character {
             air_dodge_ready: false,
             glide_bank: 0,
             glide_hover: None,
+            launch_vel: None,
             count: 0,
             finishers: 0,
             get_up: None,
@@ -884,6 +889,16 @@ impl Character {
         }
         self.arc = Some(arc);
         self.vel_y = vel_y.min(0.0);
+    }
+
+    /// The stored launch speed (KH2's `+0xE0` with its flag, `launch_vel`), for a host that hands
+    /// him over mid-air and takes him back.
+    pub fn launch_vel(&self) -> Option<[f32; 2]> {
+        self.launch_vel
+    }
+
+    pub fn set_launch_vel(&mut self, v: Option<[f32; 2]>) {
+        self.launch_vel = v;
     }
 
     /// The Aerial Dodge is still there for this fall (a jump press in the air would be the dodge,
@@ -1655,7 +1670,8 @@ impl Character {
         false
     }
 
-    /// Glide, when it is owned and Sora is high enough.
+    /// Glide, when it is owned and Sora is high enough. Entering it puts the stored launch speed
+    /// back as his speed (the air actions' enter, `0x1403CBD30`: `+0x20 = +0xE0` with its flag).
     fn try_glide(&mut self, env: &Env) -> bool {
         if let Some(g) = self.growth(self.abilities.glide) {
             if env.height_above_ground > g.glide_start_height {
@@ -1663,6 +1679,9 @@ impl Character {
                 self.vel_y = 0.0;
                 self.mode = Mode::Glide;
                 self.glide_hover = None;
+                if let Some(v) = self.launch_vel {
+                    self.vel_h = v;
+                }
                 return true;
             }
         }
@@ -1694,6 +1713,8 @@ impl Character {
             // Only along the stick: with it neutral the dodge goes straight up (the user: KH2's
             // Aerial Dodge doesn't push Sora forward unless the stick is tilted).
             self.vel_h = if moving { scale(dir, g.air_dodge_speed) } else { [0.0; 2] };
+            // (Its launch is stored: `0x1403CB9F0` -> `0x1403CBB00`.)
+            self.launch_vel = Some(self.vel_h);
             self.vel_y = 0.0;
             self.start_action(ActionKind::AerialDodge, motion::AERIAL_DODGE);
             return true;
@@ -1782,6 +1803,9 @@ impl Character {
         self.arc = None;
         self.vel_y = 0.0;
         self.air_dodge_ready = false;
+        // (On the ground the stored launch speed is done with: the next air time starts its own,
+        // a jump's, or none, a fall off a ledge, `0x1403CBC30`.)
+        self.launch_vel = None;
         let land = self.clip(motion::LAND).is_some();
         match &self.mode {
             Mode::Free | Mode::Glide => {
@@ -1950,8 +1974,11 @@ impl Character {
             Mode::Glide => {
                 let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
                 if !self.glide_held(input) || env.height_above_ground < g.glide_end_height || !self.airborne {
+                    // Into the fall (`0x1403CBC30`): his speed now goes on, the stored launch
+                    // speed's flag is cleared.
                     self.mode = Mode::Free;
                     self.arc = Some(Arc::fall());
+                    self.launch_vel = None;
                     fo.motion = motion::FALL;
                     return false;
                 }
@@ -1973,12 +2000,17 @@ impl Character {
                     -1 if d > -leave => if d > enter { 1 } else { 0 },
                     b => b,
                 };
-                // Gliding in place (exe `0x1403A8F44`: a glide started with the stick neutral is
-                // ACTION_GLIDEHOVER, motion 208, and the stick takes it into the glide, `0x140422B20`).
-                // Ours: a glide whose stick is let go hovers too once it has slowed to a stop
-                // (our glide slows with the stick; the exe's glide has no way back).
-                let hover = *self.glide_hover.get_or_insert(!moving);
-                let hover = if hover { !moving } else { !moving && len2(self.vel_h) < GLIDE_HOVER_SPEED };
+                // Gliding in place (Steam exe `0x1403A8369`: a glide started with the stick neutral
+                // is ACTION_GLIDEHOVER, action 0x11, motion 208, else ACTION_GLIDE, 0x12). The stick
+                // takes the hover into the glide (`0x140423840`), whose enter puts the stored launch
+                // speed back (`0x1403CBD30`); the glide never goes back to the hover.
+                let was = self.glide_hover;
+                let hover = was.unwrap_or(!moving) && !moving;
+                if was == Some(true) && !hover {
+                    if let Some(v) = self.launch_vel {
+                        self.vel_h = v;
+                    }
+                }
                 self.glide_hover = Some(hover);
                 if hover {
                     self.glide_bank = 0;
@@ -2079,6 +2111,8 @@ impl Character {
                     };
                     self.start_held_arc(h);
                     self.air_dodge_ready = self.abilities.aerial_dodge > 0;
+                    // (The jump's launch is stored too, `0x1403CBB00`: his speed at take-off.)
+                    self.launch_vel = Some(self.vel_h);
                     finished = true;
                 }
             }
@@ -2448,10 +2482,9 @@ impl Character {
             Mode::Glide => {
                 let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
                 let a = g.glide_acceleration;
-                // Its speed follows the stick: let go and he glides in place, hovering (the user:
-                // "in KH2 you're able to glide in place").
-                let tilt = if moving { m } else { 0.0 };
-                let speed = (1.0 - a) * g.glide_speed * tilt + a * len2(self.vel_h);
+                // ACTION_GLIDE's step (`0x140423920`): `(1 - a) * glide_speed + a * |v|` along his
+                // facing, whatever the stick's tilt; the hover's (`0x140423650`): his speed x 0.9.
+                let speed = (1.0 - a) * g.glide_speed + a * len2(self.vel_h);
                 self.vel_h = if self.glide_hover == Some(true) { scale(self.vel_h, GLIDE_HOVER_DRAG) } else { scale(self.forward(), speed) };
                 let fall = ((env.height_above_ground - g.glide_fall_height).max(0.0) * g.glide_fall_ratio).min(g.glide_fall_max);
                 self.vel_y = -fall;

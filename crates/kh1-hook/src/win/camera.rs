@@ -80,6 +80,8 @@ const SET_FOV_RVA: Rva = Rva(0x28A960);
 const DEFAULT_FOV_RVA: Rva = Rva(0x3EAC84);
 /// The FOV as the setter keeps it (KH1's PS2 degrees).
 const FOV_RVA: Rva = Rva(0x299C500);
+/// KH1's camera mode (`docs/kh1-camera.md` 3).
+const MODE_RVA: Rva = Rva(0x299C508);
 /// KH1's mode-switch blend: time left, duration (the field camera task counts it down after the
 /// mode's update and eases the public pair from the blend-from pair by `1 - cos(left/T · π/2)`).
 const BLEND_LEFT_RVA: Rva = Rva(0x2538A20);
@@ -210,11 +212,15 @@ unsafe extern "system" fn state_mode<const I: usize>() {
         }
         let set: unsafe extern "system" fn(i32, f32) = std::mem::transmute(base + SET_MODE_RVA);
         set(1, 0.0);
+        VIA_STATE.store(STATE_MODES[I].0, Ordering::Relaxed);
         follow_mode();
         return;
     }
     let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_STATE[I].load(Ordering::Acquire));
     f();
+    let via = ["state4", "state5", "state6", "state8"][I];
+    let why = if !calls_kh2() { "older_camera_calls" } else if !subject_sora { "subject_not_sora" } else { "kh1_camera" };
+    record(base, via, "kh1", why, rd::<u32>(base + ENTRY_FLAGS_RVA));
 }
 
 /// KH1 handed its camera back to Sora after holding or releasing it: its mode switch
@@ -359,18 +365,181 @@ fn kh2_fov() -> f32 {
 
 unsafe extern "system" fn follow_mode() {
     note_entry(false);
-    if !ours() || run(false).is_none() {
-        let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_FOLLOW.load(Ordering::Acquire));
-        f();
-    }
+    camera_call(false);
 }
 
 unsafe extern "system" fn lock_mode() {
     note_entry(true);
-    if !ours() || run(true).is_none() {
-        let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_LOCK.load(Ordering::Acquire));
+    camera_call(true);
+}
+
+/// One call of KH1's follow (or lock-on) camera mode: ours when it is ours and runs, else KH1's
+/// own; either way noted for the trace (`seen`).
+unsafe fn camera_call(lock: bool) {
+    let base = BASE.load(Ordering::Relaxed);
+    // (Before `run` clears the first-frame bits.)
+    let entry = rd::<u32>(base + ENTRY_FLAGS_RVA);
+    set_why("");
+    if let Ok(mut o) = OWN.lock() {
+        *o = None;
+    }
+    let on = ours();
+    let ran = on && run(lock).is_some();
+    let why = if on { take_why() } else { kh1_why(base) };
+    if !ran {
+        let orig = if lock { &ORIG_LOCK } else { &ORIG_FOLLOW };
+        let f: unsafe extern "system" fn() = std::mem::transmute(orig.load(Ordering::Acquire));
         f();
     }
+    let state = VIA_STATE.swap(0, Ordering::Relaxed);
+    let via = match (lock, state) {
+        (true, _) => "lock",
+        (false, 4) => "follow<-state4",
+        (false, 5) => "follow<-state5",
+        (false, 6) => "follow<-state6",
+        (false, 8) => "follow<-state8",
+        _ => "follow",
+    };
+    record(base, via, if ran { "kh2" } else { "kh1" }, why, entry);
+}
+
+/// Why it isn't KH2's camera this call.
+fn kh1_why(base: usize) -> &'static str {
+    if !KH2.load(Ordering::Relaxed) {
+        "kh1_chosen"
+    } else if event_running(base) {
+        "event"
+    } else if kh1_only_state(base) {
+        "kh1_only_state"
+    } else {
+        "scene"
+    }
+}
+
+/// A KH1 movement-state camera (mode 4 / 5 / 6 / 8) that KH2's follow camera took this call.
+static VIA_STATE: AtomicUsize = AtomicUsize::new(0);
+/// A note from `run` on this call (why it handed back to KH1, or that it went to first person).
+static WHY: Mutex<&'static str> = Mutex::new("");
+
+fn set_why(w: &'static str) {
+    if let Ok(mut g) = WHY.lock() {
+        *g = w;
+    }
+}
+fn take_why() -> &'static str {
+    WHY.lock().map(|mut g| std::mem::take(&mut *g)).unwrap_or("")
+}
+/// `run` handing the frame to KH1's camera, and why.
+fn decline(why: &'static str) -> Option<()> {
+    set_why(why);
+    None
+}
+
+/// KH2's camera's own numbers on its last run (for the trace).
+#[derive(Clone, Copy, Default)]
+pub struct Own {
+    /// The camera's yaw, the yaw it is turning to, and its distance (KH2 units: KH1's / scale).
+    pub yaw: f32,
+    pub goal_yaw: f32,
+    pub dist: f32,
+    /// The right stick (look) and left stick (move) as it read them, after the dead zone.
+    pub look: [f32; 2],
+    pub mv: [f32; 2],
+    pub reset: bool,
+    pub auto: bool,
+    /// Lock-on: the distance from Sora's feet to the target's point (KH1 units).
+    pub lock_dist: Option<f32>,
+}
+static OWN: Mutex<Option<Own>> = Mutex::new(None);
+
+/// The camera as the last follow / lock-on / movement-state call left it (for the trace, the
+/// Select + Triangle recording). Sora's physics frame, which writes the trace row, runs before the
+/// camera in a game frame, so this is the camera's frame before: `frame` says which.
+#[derive(Clone, Copy, Default)]
+pub struct Seen {
+    /// The game frame (`takeover::GAME_FRAME`) and time of the call.
+    pub frame: u64,
+    pub ms: u64,
+    /// "kh2" (ours placed it) or "kh1" (KH1's own mode ran); empty: no call yet.
+    pub who: &'static str,
+    /// Which KH1 mode entry was called: follow, lock, follow<-stateN (a movement-state camera ours
+    /// took), stateN (one KH1 ran as its own).
+    pub via: &'static str,
+    /// Why KH1's, or a note ("first_person", "subject_not_sora", ...).
+    pub why: &'static str,
+    /// Mode-entry flags on the call (bit 1 first frame, bit 0 from mode 0, bit 2 from a snapshot).
+    pub entry: u32,
+    /// KH1's eye and look point after the call (KH2's way up: `up` is minus KH1's y), Sora's feet
+    /// then, and how far each moved since the call before.
+    pub eye: [f32; 3],
+    pub at: [f32; 3],
+    pub feet: [f32; 3],
+    pub eye_step: f32,
+    pub at_step: f32,
+    /// KH1's own yaw / pitch / distance fields, its field of view, the mode-switch blend.
+    pub yaw: f32,
+    pub pitch: f32,
+    pub dist: f32,
+    pub fov: f32,
+    pub blend_left: f32,
+    pub blend_time: f32,
+    /// KH2's camera's numbers when it ran.
+    pub own: Option<Own>,
+    /// KH1's camera mode and blend left when the trace row was made (any mode, not only ours).
+    pub mode_now: i32,
+    pub blend_now: f32,
+}
+static SEEN: Mutex<Option<Seen>> = Mutex::new(None);
+
+/// Notes the call that just ended.
+unsafe fn record(base: usize, via: &'static str, who: &'static str, why: &'static str, entry: u32) {
+    let sora = rd::<u64>(base + SORA_RVA) as usize;
+    let feet = if sora > 0x10000 { rd::<[f32; 3]>(sora + 0x10) } else { [0.0; 3] };
+    let up = |v: [f32; 4]| [v[0], -v[1], v[2]];
+    let (eye, at) = (up(rd::<[f32; 4]>(base + EYE_RVA)), up(rd::<[f32; 4]>(base + TARGET_RVA)));
+    let (ms, frame) = (now_ms(), super::takeover::GAME_FRAME.load(Ordering::Relaxed));
+    let own = OWN.lock().ok().and_then(|o| *o);
+    let Ok(mut g) = SEEN.lock() else { return };
+    let step = |a: [f32; 3], b: [f32; 3]| ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt();
+    let (eye_step, at_step) = match g.as_ref() {
+        Some(p) if ms.saturating_sub(p.ms) < 250 => (step(eye, p.eye), step(at, p.at)),
+        _ => (0.0, 0.0),
+    };
+    *g = Some(Seen {
+        frame,
+        ms,
+        who,
+        via,
+        why,
+        entry,
+        eye,
+        at,
+        feet: [feet[0], -feet[1], feet[2]],
+        eye_step,
+        at_step,
+        yaw: rd::<f32>(base + YAW_RVA),
+        pitch: rd::<f32>(base + PITCH_RVA),
+        dist: rd::<f32>(base + DIST_RVA),
+        fov: rd::<f32>(base + FOV_RVA),
+        blend_left: rd::<f32>(base + BLEND_LEFT_RVA),
+        blend_time: rd::<f32>(base + BLEND_TIME_RVA),
+        own,
+        mode_now: 0,
+        blend_now: 0.0,
+    });
+}
+
+/// The camera as the trace row sees it (`Seen::who` empty before the camera has run once).
+pub fn seen() -> Seen {
+    let base = BASE.load(Ordering::Relaxed);
+    let mut s = SEEN.lock().ok().and_then(|g| *g).unwrap_or_default();
+    if base != 0 {
+        unsafe {
+            s.mode_now = rd::<i32>(base + MODE_RVA);
+            s.blend_now = rd::<f32>(base + BLEND_LEFT_RVA);
+        }
+    }
+    s
 }
 
 /// The camera's smoothness (the user: jittery in Dive to the Heart): every 5 s while it runs,
@@ -446,7 +615,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         if N.fetch_add(1, Ordering::Relaxed) < 10 {
             log(&format!("KH2 camera: KH1's own this frame (its subject isn't Sora, {})", if lock { "lock-on" } else { "follow" }));
         }
-        return None;
+        return decline("subject_not_sora");
     }
     let s = super::settings::get().camera_scale;
     // The lock-on target's point; when it can't be had this frame (the target between forms,
@@ -478,7 +647,7 @@ unsafe fn run(lock: bool) -> Option<()> {
     let feet = rd::<[f32; 3]>(sora + 0x10);
     let facing = rd::<f32>(sora + 0x3C);
     if !feet.iter().all(|v| v.is_finite()) || !facing.is_finite() {
-        return None;
+        return decline("bad_feet");
     }
     // Lowered as a whole (the user: Sora near the middle of the screen; KH2's look point, 170
     // above the feet, is above KH1 Sora's head).
@@ -555,7 +724,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         Some((to_cam(hit, s), n))
     };
 
-    let Ok(mut g) = CAM.lock() else { return None };
+    let Ok(mut g) = CAM.lock() else { return decline("cam_locked") };
     // A new camera when KH1 comes back to its follow camera from something not ours (an event,
     // an area camera, a menu, a cutscene) or resets its camera: at KH2's default position,
     // unless taking over from another of KH1's cameras this frame.
@@ -652,14 +821,26 @@ unsafe fn run(lock: bool) -> Option<()> {
             log(&format!("KH2 camera: started ({}, {why}), yaw {:.2}", if lock { "lock-on" } else { "follow" }, g.as_ref().map_or(0.0, |c| c.yaw)));
         }
     }
-    let cam = g.as_mut()?;
+    let Some(cam) = g.as_mut() else { return decline("no_camera") };
     cam.update(&subject, &ctl, lock_at, dt, &wall);
     let (eye, at) = (cam.eye, cam.at);
     if !eye.is_finite() || !at.is_finite() || (eye - at).length() < 1.0 {
         *g = None;
-        return None;
+        return decline("degenerate_camera");
     }
     LAST_MS.store(now_ms(), Ordering::Relaxed);
+    if let Ok(mut o) = OWN.lock() {
+        *o = Some(Own {
+            yaw: cam.yaw,
+            goal_yaw: cam.goal_yaw,
+            dist: cam.dist,
+            look: [r[0], r[1]],
+            mv: [l[0], l[1]],
+            reset: ctl.reset,
+            auto: ctl.auto,
+            lock_dist: lock_at.map(|t| (t - subject.feet).length() * s),
+        });
+    }
     jerk_note(eye * s, at * s, subject.feet * s, dt, cam.yaw);
     let (e, t) = (to_kh1(eye, s), to_kh1(at, s));
     wr(base + EYE_RVA, [e[0], e[1], e[2], 1.0f32]);
@@ -683,6 +864,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         if free && pressed & SELECT != 0 && matches!(state, 0 | 8 | 0x18) && rd::<u32>(base + FLAGS_RVA) & 0x2000 == 0 && rd::<u32>(base + FLAGS2_RVA) & 0x10 == 0 {
             let set: unsafe extern "system" fn(i32, f32) = std::mem::transmute(base + SET_MODE_RVA);
             set(2, 30.0);
+            set_why("first_person");
             return Some(());
         }
         // KH1's climbing / ledge cameras: with `camera_calls = kh2` KH2's follow camera goes on

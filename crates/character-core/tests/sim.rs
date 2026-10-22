@@ -742,9 +742,42 @@ fn glide_in_place_hovers() {
     let outs = w.run(20, Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
     assert!(outs.iter().all(|o| o.motion != motion::GLIDE_HOVER));
     assert!(outs.last().unwrap().displacement[2].abs() > 5.0);
+    // KH2's glide never goes back to the hover (Steam exe: only a neutral start hovers), and its
+    // speed doesn't follow the stick: let go, he flies on at glide speed.
     let outs = w.run(80, Pad { jump: true, ..IDLE });
-    assert_eq!(outs.last().unwrap().motion, motion::GLIDE_HOVER);
-    assert!(outs[0].motion != motion::GLIDE_HOVER, "hovered before slowing down");
+    assert!(outs.iter().all(|o| o.motion != motion::GLIDE_HOVER));
+    assert!(outs.last().unwrap().displacement[2].abs() > 5.0, "slowed with the stick let go");
+}
+
+/// KH2's stored launch speed (Steam exe `+0xE0`): an Aerial Dodge into a neutral glide hovers,
+/// and tilting the stick puts the dodge's speed back; letting go of the glide keeps the speed.
+#[test]
+fn hover_keeps_the_dodge_speed() {
+    let first = |dodge: bool| {
+        let mut w = World::new(sora());
+        w.ch.glide_button = GlideButton::Action;
+        w.run(1, Pad { jump: true, ..IDLE });
+        w.run(10, IDLE);
+        if dodge {
+            let o = w.step(Pad { jump: true, stick: [0.0, 1.0], ..IDLE });
+            assert_eq!(o.state, StateName::AerialDodge);
+            w.run(3, Pad { stick: [0.0, 1.0], ..IDLE });
+        }
+        // Square with the stick neutral: the hover, slowing to a stop.
+        let outs = w.run(60, Pad { action: true, ..IDLE });
+        assert!(outs.iter().all(|o| o.motion == motion::GLIDE_HOVER), "{:?}", outs.iter().map(|o| o.motion).collect::<Vec<_>>());
+        assert!(outs.last().unwrap().displacement[2].abs() < 0.5, "still drifting: {}", outs.last().unwrap().displacement[2]);
+        // Tilted: the glide, from the stored speed.
+        let o = w.run(2, Pad { action: true, stick: [0.0, 1.0], ..IDLE });
+        let glide = o.last().unwrap().displacement[2].abs();
+        // Let go of the glide: the fall keeps its speed.
+        let o = w.step(Pad { stick: [0.0, 1.0], ..IDLE });
+        assert_ne!(o.state, StateName::Glide);
+        (glide, w.ch.state_name())
+    };
+    let (plain, _) = first(false);
+    let (dodged, _) = first(true);
+    assert!(dodged > plain + 1.0, "dodge's speed not kept: {dodged} vs {plain}");
 }
 
 /// Aerial Dodge only moves along the stick: neutral, it goes straight up (the user: KH2's

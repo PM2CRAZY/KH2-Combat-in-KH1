@@ -1,3 +1,136 @@
+### 2026-10-22: Stage 331 (testing branch: KH2's glide 1:1 with the Steam exe: the stored launch speed, no stick-scaled glide, no glide back to the hover)
+- The user: "neutral flight doesn't store aerial dodges momentum, in kh2 ... if you aerial dodge go
+  into neutral flight, neutral flight will store the speed from aerial dodge, so when you glide you
+  go to max speed, or if you glide then let go you get a bunch of speed while your falling"; "it
+  should be 1:1 so change everything that is currently different". (The rust rewrite's exe notes
+  are the Epic build's; these are the Steam exe's, `KINGDOM HEARTS II FINAL MIX.exe`, found from the
+  RTTI of `ACTION_GLIDE` / `ACTION_GLIDEHOVER`, vtables `0x1405CDBF0` / `0x1405CDB98`.)
+- What the exe does: Sora's movement data keeps his velocity (`+0x20`) and a stored launch velocity
+  (`+0xE0`, flag `+0xEC`). The jump's and the Aerial Dodge's launch (`0x1403CBB00`, the dodge from
+  `0x1403CB9F0`: stick direction x the dodge's speed, 0 neutral) writes it and sets the flag; the
+  air actions' shared enter (`0x1403CBD30`, jump, glide, hover) copies it back into his velocity
+  while the flag is set; the hover's step (`0x140423650`) multiplies his velocity by 0.9
+  (`0x1405AAA40`) and leaves `+0xE0` alone; the stick takes the hover into the glide
+  (`0x140423840`), whose enter puts the launch speed back; the glide's step (`0x140423920`) is
+  `(1 - a) * glide_speed + a * |v|` along his facing, no stick tilt in it; the glide's end into the
+  fall (`0x1403CBC30`) clears the flag and keeps his velocity. The start picks the hover only with
+  the stick neutral (`0x1403A8369`: action 0x11, else the glide, 0x12); the glide never goes back
+  to the hover.
+- `character-core`: `Character::launch_vel` (set at the jump's take-off and the Aerial Dodge, put back
+  on `try_glide` and on the hover's turn into the glide, cleared at the glide's end and on landing);
+  the glide's speed no longer follows the stick (stage 173 out), and a glide let go no longer drops
+  into the hover once slow (stage 178's ours, `GLIDE_HOVER_SPEED`, out). Tests:
+  `glide_in_place_hovers` (the glide flies on with the stick let go), new `hover_keeps_the_dodge_speed`.
+- `takeover`: KH2's stored launch speed is kept when KH2 gives him back in the air (`LAUNCH`: from
+  the glide's borrow, or a borrow that launched him), and the glide's borrow later in the same air
+  time starts from it (an Aerial Dodge, KH1's fall, then Square: the dodge's speed comes back);
+  without one (KH1's own jump) his speed at the borrow stands in for it. Cleared on the ground.
+
+### 2026-10-22: Stage 330 (testing branch: the trace's camera columns compile)
+- Stage 329 left `cam` out of the trace row `takeover::trace_frame` builds (E0063); it is
+  `Default::default()` there, filled by `trace::frame` like `draw`.
+
+### 2026-10-22: Stage 329 (testing branch: Sora's camera in the trace)
+- The user: "add soras camera movements to the trace ... when I describe whats happening you can
+  better understand and compare with the kh2 decomps camera and what we currently have"; the
+  trace is the Select + Triangle recording.
+- `camera.rs` notes each call of KH1's follow / lock-on / movement-state camera mode (`Seen`, read
+  by `trace::frame` through `camera::seen`): who placed it (ours or KH1's, and why not ours:
+  `kh1_chosen`, `event`, `kh1_only_state`, `scene`, or what `run` declined: `subject_not_sora`,
+  `bad_feet`, `degenerate_camera`...), which entry (`follow`, `lock`, `follow<-stateN` for a
+  movement-state camera ours took, `stateN` for one KH1 ran), the mode-entry flags, KH1's eye and
+  look point (up = minus y), how far each moved since the call before, the eye's ground distance
+  and the eye's and look point's height from Sora's feet, KH1's yaw / pitch / distance / field of
+  view / blend, and KH2's camera's yaw, goal yaw, distance, the right and left sticks it read,
+  reset, auto and the lock-on target's distance.
+- 34 new columns `cam_*` / `kh2cam_*` before `events`. `cam_lag` is the game frames between the
+  row and the camera's last run (1 is normal: Sora's physics runs before the camera); more means
+  KH1 has the camera in another mode (`cam_mode_now`: event, area, conversation, first person).
+- Not in: KH1's public eye / look point (`0x14299C4E0` / `4F0`, what is drawn, after a blend)
+  aren't in the Steam address table yet.
+
+### 2026-10-22: Stage 328 (testing branch: sound log names the SFX and voice bank files)
+- The user: "we can do both ... if I say I want sora to say this line e.g 0x23 you can just cross examine what I said with the log"; "you can do both" (a sound-effect hook and a clip-to-file map).
+- `soundlog.rs` (Steam build only for these): hooks the voice call (`0x1400DC210`, bank + clip no) and the effect create/play (`SslSeCreate`/`SslSePlay`). Voice lines log `voice call bank 93 no 37 = tw_sora.win32.scd clip 37`; effects log bank, no, id and the first bank-list nodes (dumped once, to decode the layout). `docs/kh1-sora-voice-banks.csv` maps Sora's bank/clip to SCD entries.
+
+### 2026-10-22: Stage 327 (testing branch: KH2's glide on Square as the KH2 rewrite has it; KH2's air moves keep their input)
+- The user: "it should behave exactly like the kh2 decomp ... in kh2 your allowed to glide out of
+  air doge"; "glide should activate from pressing square, not jump". The KH2 rewrite binds the
+  glide to the action button (`kh2-bevy` main.rs: "Glide on the action button ... jump still
+  Aerial Dodges"; tests `glide_on_the_action_button`, `action_button_mid_dodge_glides`): in the
+  air the jump is only the Aerial Dodge; Square glides whenever he is above the glide's start
+  height, before or after the dodge or mid-dodge, held to keep it going.
+- At Glide KH2 KH2's controller's glide button is Square (`GlideButton::Action`) whatever KH1's
+  Superglide or the ini's `glide`. The borrow out of KH1's air (`shared::GLIDE`) is a fresh Square
+  (up or down) with KH2's Glide equipped and high enough; its press is KH2's action press on the
+  first frame (`ROLL_NOW`), and the Aerial Dodge is there in the borrow if it wasn't used this air
+  time (`AIR_MOVES`); used there, it is noted at the hand-back (`shared::mark_air_dodged`) so
+  KH1's air doesn't borrow him for a second one.
+- The Aerial Dodge hide rule (stage 319: KH1 sees no jump until the dodge is used, then a fresh
+  press) is KH1's glide's only: at Glide KH1.
+- Stage 323's input fix back in: a KH2 move in the air out of KH1's states (`shared::kh2_move`,
+  airborne, KH1 state 0, its "action running" bit up) isn't taken as KH1 holding him still, so the
+  glide's held Square and the Aerial Dodge's stick and Square reach KH2's controller.
+- Not done (the user: "everything but 4. for now"): hiding KH1's Square in the air at Glide KH2
+  (KH1 has no Glide or Superglide there anyway, `glide_swap`).
+
+### 2026-10-22: Stage 326 (testing branch: KH1's sounds in the log)
+- The user: "we can do both ... if I say I want sora to say this line e.g 0x23 you can just cross
+  examine what I said with the log". New `soundlog.rs` (ini `sound_log`, on by default; `off`
+  hooks nothing) hooks KH1's menu sound (`0x140177F60 (id)`), voice group (`0x14028E060`) and
+  voice clip (`0x14028E7A0`) and logs each call: `KH1 sound: menu sound 2 (from game +0x...)`,
+  `voice group 4 on Sora (...)`, `voice clip 35 (0x23) priority 3 on Sora (...)`. A caller outside
+  the game's code is the mod's own call (`kh1voice`, `trace`, `config`, `combat`). The prologues
+  are the Steam exe's (read from it): `40 53 48 83 EC 30`, `48 89 5C 24 20`, `48 89 5C 24 08`;
+  an Epic build with other bytes logs "not hooked" and goes on. `docs/kh1-sounds.md` is the table
+  to fill in from the log; the log is capped at 6000 sound lines a session.
+
+### 2026-10-22: Stage 325 (testing branch: the trace's sound is the menu's confirm)
+- The user: stage 322's sound (`0x140177F60 (1)`) is the cursor's move sound; the one wanted is
+  the confirm on a menu button. `trace::click` now plays sound 2 (the menu's "open" / on sound,
+  `docs/kh1-config-menu.md`) when the trace is written, still 4 (the "can't") when it isn't. If 2 is
+  not the confirm, 0 and 3 are the others to try.
+
+### 2026-10-22: Stage 324 (testing branch: stage 323's two fixes taken back out, for now)
+- The user: only the Glide ability swap was asked for; the two fixes are to be tested after it.
+  Taken back out (as they were at t322): KH2's moves in the air out of KH1's states are again cut
+  off from input while KH1's control step stops (`takeover`'s `borrow_air` gone), and at Glide KH2
+  KH1's jump and Square are hidden in the air past the rise only (`shared::control`). Still open:
+  every borrowed KH2 glide ends on its second frame (the t321 log), and Square on the way up can
+  start KH1's own Superglide (less likely now: at Glide KH2 the shared list has no Superglide).
+
+### 2026-10-22: Stage 323 (testing branch: KH2's own Glide ability by the Glide style; KH2's air borrows keep their input)
+- The user: "if glide is set to kh2 both glide and super glide need to be removed from the shared
+  abilities list and only the original kh2 growth glide should appear again as its own custom
+  ability, if its kh1 then kh2s custom glide ability gets removed and it returns to vanilla".
+  KH2's own Glide is ours, id 88 (`growth::ours::GLIDE`, `MENU`): shared list, no AP, made from
+  KH1's Glide entry, its menu name with its level ("Glide LV2", "Glide MAX", `menu::set_glide_name`),
+  `Effect::Kh2Glide`: LV1..LV3 by Sora's level (40, 52), MAX once Chernabog is beaten
+  (`growth::kh2_glide_level`). It is never learned on its own: `growth::glide_swap` (each second,
+  `menu::glide_style_list`) at Glide KH2 takes KH1's Glide and Superglide out of the shared list
+  and puts KH2's Glide in the first one's place (on if either was on; a Glide or Superglide KH1
+  gives later is taken out the same way); at Glide KH1 it takes KH2's Glide out and puts KH1's
+  Glide back (on as it was) and Superglide too once Chernabog is beaten (on with Glide). Other
+  ability modes put KH1's back before taking ours out. "Ability Up" boxes for the glide only for
+  KH2's Glide now. With KH1's Superglide gone at Glide KH2, KH2's glide button is the jump.
+  Tests `glide_swaps_with_the_style`, `kh2_glide_grows_to_max_at_chernabog`.
+- The user: "currently unable to glide or sometimes can?" (t321 log: all 21 glide borrows ended on
+  their second frame; trace f3281: KH1's own Superglide). (1) A borrow in the air sets KH1's
+  state to 0, which queues KH1's landing and raises its "action running" bit, so KH1's control
+  step stops through the whole KH2 move and `takeover` read it as KH1 holding him still: no
+  input, so the glide button read as let go (and the Aerial Dodge had no input at all). Now a
+  KH2 move in the air out of KH1's states (`shared::kh2_move`, airborne, KH1 state 0, bit 4 up)
+  isn't taken as held still. (2) Square on the way up started KH1's own Superglide (the Glide KH2
+  hide was past the rise only): KH1's Square bit is hidden all through the air at Glide KH2, its
+  jump past the rise.
+
+### 2026-10-22: Stage 322 (testing branch: a sound when a trace is recorded)
+- The user: "can you make it so that when I record a trace a sound in game plays the sound when you
+  click on something in the pause menu". Select + Triangle's dump (`trace::frame`) now plays KH1's
+  menu click (`0x140177F60 (1)`, the sound the Config menu's toggles make) once the CSV is written,
+  or the "can't" (4) if it couldn't be (the session's dump limit, a write error). `trace::dump`
+  returns whether it wrote the file. The anomaly dumps, written on their own, stay silent.
+
 ### 2026-10-22: Stage 321 (testing branch: KH2's glide is KH2's controller's again; the glide off the physics setting)
 - The user: "after incorporating kh2 glide as a shared ability it stopped it from being 1:1 with
   kh2's glide" (t320 traces, physics KH1, Glide KH2: KH1's glide state 0x15 on KH1's numbers with

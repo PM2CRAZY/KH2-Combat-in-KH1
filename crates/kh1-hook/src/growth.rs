@@ -98,6 +98,9 @@ pub mod ours {
     pub const VICINITY_BREAK: u8 = 85;
     pub const GUARD_BREAK: u8 = 86;
     pub const AERIAL_FINISH: u8 = 87;
+    /// KH2's own Glide (t323): in the shared list in place of KH1's Glide and Superglide while
+    /// the Glide style is KH2's (`glide_swap`).
+    pub const GLIDE: u8 = 88;
 }
 
 /// KH1's modifiers and the KH2 one each stood for before the split (Hurricane Blast was
@@ -140,6 +143,9 @@ pub enum Effect {
     Glide,
     /// `glide` MAX.
     GlideMax,
+    /// KH2's own Glide (`ours::GLIDE`): LV1 to LV3 by Sora's level, MAX once Chernabog is
+    /// beaten (KH1's Superglide point).
+    Kh2Glide,
     /// `guard`, and KH2's Guard in `equipped`.
     Guard,
     /// `dodge_roll`: its growth level by Sora's level (`dodge_roll_level`).
@@ -329,7 +335,7 @@ pub const MAX_ID: u8 = 0x7F;
 
 use Side::{Borrow, Kh1Combo};
 
-pub const MENU: [MenuAbility; 22] = [
+pub const MENU: [MenuAbility; 23] = [
     // (The user: Quick Run from level 12, growing with Sora; both with AP in Sora's own
     // list, not the shared one. AP as KH2's.)
     m(66, "Quick Run", "Dash swiftly along the ground.", 2, 12, kh1::DODGE_ROLL, Effect::QuickRun, 0, Hook),
@@ -360,6 +366,12 @@ pub const MENU: [MenuAbility; 22] = [
     m(85, "Vicinity Break", "Ground combo: hit foes all around.", 2, 36, kh1::RIPPLE_DRIVE, Effect::Modifier(kh2::VICINITY_BREAK), kh1::RIPPLE_DRIVE, Kh1Combo),
     m(86, "Guard Break", "Finisher: break through a foe's guard.", 3, BOSS, kh1::STUN_IMPACT, Effect::Modifier(kh2::GUARD_BREAK), kh1::STUN_IMPACT, Kh1Combo),
     m(87, "Aerial Finish", "Air finisher: a powerful spinning strike.", 3, BOSS, kh1::GRAVITY_BREAK, Effect::Modifier(kh2::AERIAL_FINISH), kh1::GRAVITY_BREAK, Kh1Combo),
+    // KH2's own Glide (t323, the user: "if glide is set to kh2 both glide and super glide need to
+    // be removed from the shared abilities list and only the original kh2 growth glide should
+    // appear again as its own custom ability"): a shared ability (no AP), not learned on its own
+    // (`earned` gives none): `glide_swap` puts it in place of KH1's Glide and Superglide at the
+    // Glide style KH2, and back at KH1. Its KH1 side: KH2's glide is a borrow out of KH1's air.
+    MenuAbility { id: 88, name: "Glide", help: "Glide through the air. Grows with Sora.", ap: 0, level: BOSS, list: List::Shared, template: kh1::GLIDE, effect: Effect::Kh2Glide, with: 0, on_kh1: Borrow },
 ];
 
 /// Our Quick Run's ability id (`MENU`).
@@ -451,6 +463,63 @@ pub fn glide_level(level: u8) -> u8 {
     1 + GLIDE_LEVELS.iter().filter(|at| level >= **at).count() as u8
 }
 
+/// KH2's own Glide's level (`ours::GLIDE`): by Sora's level, MAX once Chernabog is beaten.
+pub fn kh2_glide_level(level: u8, progress: &[u8]) -> u8 {
+    if beaten(progress, &CHERNABOG) {
+        4
+    } else {
+        glide_level(level)
+    }
+}
+
+/// The shared list for the Glide style (t323): at KH2 (`kh2`), KH1's Glide and Superglide taken
+/// out and KH2's own Glide (`ours::GLIDE`) in the place of the first of them, on if either was;
+/// at KH1, KH2's Glide taken out and KH1's Glide back in its place (on as it was), with
+/// Superglide too once Chernabog is beaten (on with Glide). The list keeps its length; what
+/// changed, for the log.
+pub fn glide_swap(shared: &[u8], kh2: bool, progress: &[u8]) -> (Vec<u8>, Vec<String>) {
+    let end = shared.iter().position(|b| *b == 0).unwrap_or(shared.len());
+    let mut l: Vec<u8> = shared[..end].to_vec();
+    let mut lines = Vec::new();
+    let at = |l: &[u8], ids: &[u8]| l.iter().position(|b| ids.contains(&(b & 0x7F)));
+    let on = |l: &[u8], ids: &[u8]| l.iter().any(|b| ids.contains(b));
+    if kh2 {
+        let kh1_ids = [kh1::GLIDE, kh1::SUPERGLIDE];
+        if let Some(i) = at(&l, &kh1_ids) {
+            let was_on = on(&l, &kh1_ids);
+            let had = has(&l, ours::GLIDE);
+            let names: Vec<&str> = [(kh1::GLIDE, "Glide"), (kh1::SUPERGLIDE, "Superglide")].iter().filter(|(id, _)| has(&l, *id)).map(|(_, n)| *n).collect();
+            l.retain(|b| !kh1_ids.contains(&(b & 0x7F)));
+            if !had {
+                l.insert(i.min(l.len()), if was_on { ours::GLIDE } else { ours::GLIDE | 0x80 });
+            }
+            lines.push(format!(
+                "Glide style KH2: KH1's {} taken out of the shared abilities{}",
+                names.join(" and "),
+                if had { String::new() } else { format!(", KH2's Glide in its place ({})", if was_on { "on" } else { "off" }) }
+            ));
+        }
+    } else if let Some(i) = at(&l, &[ours::GLIDE]) {
+        let was_on = l[i] & 0x80 == 0;
+        l.remove(i);
+        let bit = if was_on { 0 } else { 0x80 };
+        let mut back = Vec::new();
+        if !has(&l, kh1::GLIDE) {
+            l.insert(i.min(l.len()), kh1::GLIDE | bit);
+            back.push("Glide");
+        }
+        if beaten(progress, &CHERNABOG) && !has(&l, kh1::SUPERGLIDE) && l.len() < shared.len() {
+            let j = l.iter().position(|b| b & 0x7F == kh1::GLIDE).map_or(l.len(), |j| j + 1);
+            l.insert(j, kh1::SUPERGLIDE | bit);
+            back.push("Superglide");
+        }
+        lines.push(format!("Glide style KH1: KH2's Glide taken out of the shared abilities, KH1's {} back ({})", if back.is_empty() { "own".to_string() } else { back.join(" and ") }, if was_on { "on" } else { "off" }));
+    }
+    l.truncate(shared.len());
+    l.resize(shared.len(), 0);
+    (l, lines)
+}
+
 pub fn glide_name(l: u8) -> String {
     level_name("Glide", l)
 }
@@ -500,7 +569,7 @@ pub const GROWTH: [(u8, Growth); 3] = [(19, Growth::DodgeRoll(2)), (37, Growth::
 
 /// Shared abilities Sora keeps only one of (the user: one High Jump, one Glide, one
 /// Superglide).
-pub const ONE_ONLY: [u8; 3] = [kh1::HIGH_JUMP, kh1::GLIDE, kh1::SUPERGLIDE];
+pub const ONE_ONLY: [u8; 4] = [kh1::HIGH_JUMP, kh1::GLIDE, kh1::SUPERGLIDE, ours::GLIDE];
 
 /// The shared list with the spare copies of `ONE_ONLY` taken out (an equipped copy is the one
 /// kept), and the ids taken out. The list keeps its length (zeros at the end).
@@ -684,6 +753,7 @@ impl Kh1Sora {
             Effect::HighJump => out.high_jump = out.high_jump.max(high_jump_level(self.level)),
             Effect::Glide => out.glide = out.glide.max(glide_level(self.level)),
             Effect::GlideMax => out.glide = 4,
+            Effect::Kh2Glide => out.glide = out.glide.max(kh2_glide_level(self.level, &self.progress)),
             Effect::Guard => {
                 out.guard = true;
                 push(out, kh2::GUARD);
@@ -915,6 +985,54 @@ mod tests {
         assert_eq!(bonus_ap(&done), bonus_ap(&sora(100, &[], &[])) + 4 + 2 + 3 + 3 + 2 + 3 + 3 + 3);
         // KH1's namesake brings it too.
         assert_eq!(bonus_ap(&sora(1, &[kh1::SLAPSHOT | 0x80, kh1::HURRICANE_BLAST], &[])), 2 + 3);
+    }
+
+    #[test]
+    fn glide_swaps_with_the_style() {
+        let chern = |p: &mut Vec<u8>| p[11] = 0x33;
+        let mut pr = vec![0u8; 12];
+        // KH2: Glide (on) and Superglide (off) out, KH2's Glide in Glide's place, on.
+        let sh = [kh1::HIGH_JUMP, kh1::GLIDE, 2, kh1::SUPERGLIDE | 0x80, 0, 0, 0, 0, 0, 0];
+        let (k2, lines) = glide_swap(&sh, true, &pr);
+        assert_eq!(k2, vec![kh1::HIGH_JUMP, ours::GLIDE, 2, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(lines.len(), 1);
+        // Again: nothing to do.
+        assert_eq!(glide_swap(&k2, true, &pr), (k2.clone(), Vec::new()));
+        // KH1's own Superglide given later (Chernabog) while at KH2: taken out, KH2's Glide kept.
+        let mut later = k2.clone();
+        later[3] = kh1::SUPERGLIDE;
+        assert_eq!(glide_swap(&later, true, &pr).0, k2);
+        // Back to KH1 before Chernabog: Glide only.
+        let (k1, _) = glide_swap(&k2, false, &pr);
+        assert_eq!(k1, vec![kh1::HIGH_JUMP, kh1::GLIDE, 2, 0, 0, 0, 0, 0, 0, 0]);
+        // After Chernabog: Superglide too, on as Glide was.
+        chern(&mut pr);
+        let (k1, _) = glide_swap(&k2, false, &pr);
+        assert_eq!(k1, vec![kh1::HIGH_JUMP, kh1::GLIDE, kh1::SUPERGLIDE, 2, 0, 0, 0, 0, 0, 0]);
+        let (k1, _) = glide_swap(&[ours::GLIDE | 0x80, 0, 0], false, &pr);
+        assert_eq!(k1, vec![kh1::GLIDE | 0x80, kh1::SUPERGLIDE | 0x80, 0]);
+        // Neither Glide: nothing either way.
+        assert_eq!(glide_swap(&[kh1::HIGH_JUMP, 0], true, &pr).0, vec![kh1::HIGH_JUMP, 0]);
+        assert_eq!(glide_swap(&[kh1::HIGH_JUMP, 0], false, &pr).0, vec![kh1::HIGH_JUMP, 0]);
+        // A full list keeps its length.
+        let full = [kh1::GLIDE, kh1::SUPERGLIDE, 1, 1, 1, 1, 1, 1, 1, 1];
+        assert_eq!(glide_swap(&full, true, &pr).0.len(), 10);
+        let back = glide_swap(&glide_swap(&full, true, &pr).0, false, &pr).0;
+        assert_eq!(back.len(), 10);
+        assert!(has(&back, kh1::GLIDE));
+    }
+
+    #[test]
+    fn kh2_glide_grows_to_max_at_chernabog() {
+        let mut s = sora(39, &[], &[ours::GLIDE]);
+        assert_eq!(s.kh2().glide, 1);
+        s.level = 52;
+        assert_eq!(s.kh2().glide, 3);
+        s.progress[11] = 0x33;
+        assert_eq!(s.kh2().glide, 4);
+        // Off: nothing; and never learned on its own.
+        assert_eq!(sora(60, &[], &[ours::GLIDE | 0x80]).kh2().glide, 0);
+        assert!(!sora(99, &[], &[kh1::GLIDE]).grants().iter().any(|(_, a)| a.id == ours::GLIDE));
     }
 
     #[test]

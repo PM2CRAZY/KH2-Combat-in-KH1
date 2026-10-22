@@ -138,7 +138,10 @@ gummi = vanilla\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
 trace = on\r\n\
 ; trace_seconds: how many seconds before the dump the trace clip holds (1 to 120, default 10)\r\n\
-trace_seconds = 10\r\n";
+trace_seconds = 10\r\n\
+; sound_log: on = every KH1 menu sound, voice group and voice clip played is a line in the log\r\n\
+; (the id and where it was called from, docs/kh1-sounds.md); off = nothing is hooked\r\n\
+sound_log = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -211,6 +214,8 @@ pub struct Settings {
     pub trace: super::trace::Mode,
     /// How many seconds of Sora's frames a trace dump holds (`trace_seconds`, 1..=120, 10 by default).
     pub trace_seconds: u32,
+    /// KH1's sounds written to the log (`sound_log = on`, `soundlog.rs`).
+    pub sound_log: bool,
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
@@ -301,6 +306,7 @@ pub fn get() -> &'static Settings {
             },
             trace: super::trace::Mode::parse(setting(&text, "trace").as_deref()),
             trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
+            sound_log: on(&text, "sound_log", "on", true),
         };
         log(&format!("settings ({path}): {s:?}"));
         s
