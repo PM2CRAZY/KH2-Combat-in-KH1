@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 391 (testing branch: KH2's row selection on KH1's air combo)
+- The tester: the same picker on the air combo. KH2's pick plays on KH1's air requests 0xCC / 0xCD / 0xCE (slots for 181, 182;
+  183, 184, `kh2slots::swing_rows` with `air`); KH1's air rows 18 / 17 / 16 / 15 (`0x1402A6C70`) give way as on the
+  ground (`Kh1Combo`), each row's request read from KH1's row table. KH1's air lunge and hop kept (asked).
+
 ### 2026-10-23: Stage 390 (testing branch: KH1's own ground rows give way to KH2's pick)
 - The tester Mr Bugs (`docs/tester-requests.md`, "KH2's combo row selection", option (a)): at Base Combo KH2, where KH1's
   ground picker (`0x1402A6EE0`, Steam) took a row of its own (dash 0 / 1, row 2, 9 / 10, ability finishers 3..7, or the

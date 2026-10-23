@@ -576,7 +576,25 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   hops (rows 0 / 1) and ability rows aren't KH1 rows and are left to their own handling (the
   ability rows borrow, `combomods`). Seen in the tester's t374 trace f27098: KH1's dash
   (request 0xD0, about 280 units) where KH2 took row 5.
-- Not changed: the air combo keeps its fixed 181 / 182 / 183.
+- **The air combo** (the tester: "the same KH2 row picker on the air combo"; Aerial Combo KH2):
+  KH1's air picker (`0x1402A6C70`, Steam, Checked) marks rows 15..18: 18 its plain swing (no
+  target, or one not more than 100 below), 17 for a target more than 100 below, 16 its finisher
+  (the count at the stats' `+0xD5`), 15 a finisher with KH1 ability bit 25; it takes the first
+  marked row whose request isn't playing, else 18 down to 15 by the same test. The row runner
+  gives rows 15..18 a sideways speed along the direction (`+0x3C0`: 8 on the combo's first
+  swing, 12 for 15 / 16, else 4), its hop (the row's `+8`, `0x1402AF960`) and queues the fall
+  (request 6) to follow. Now, as on the ground: KH2's pick at the press (its air rows, `would_take`
+  in the air) plays on KH1's air requests (0xCC / 0xCD the swings, 0xCE the finisher), each of
+  which has a slot for every plain air row's motion (181, 182; 183, 184; `swing_rows` with
+  `air`); KH1's row is swapped for its plain air row of KH2's kind when it isn't (swings 18 /
+  17, finisher 16 / 15, each taken only if its request, read from KH1's row table, is that
+  kind and isn't playing). KH2's air rows with an ability stay borrows. With no target: 181 /
+  182 alternating (row 9's `sub` 10), finisher 183 (row 8), 184 after it with Finishing Plus;
+  a target within 260 ahead or to the side: finisher 184 (row 7); a target below him in reach:
+  182 (row 10).
+- Not changed in the air: KH1's air swing's own lunge and hop (above; at physics KH2 on KH2's
+  gravity, `shared::physics::air_step`), not KH2's per-row hop (rows 7..10 hop 14..21 with their
+  speed windows). **Open** (a question to the tester): KH2's per-row hop on these too.
 - Found, not added (Steam KH2, `0x140402D20`): on the ground, before the walk, KH2 tests a line
   ahead of Sora (his facing scaled by a stats length `+0x2C` plus `+0x6F0`, laid on the ground,
   `0x1403B7BD0` / `0x1403BA750`) and marks row 1 if it is blocked (not in the air, not with `+0x18C`

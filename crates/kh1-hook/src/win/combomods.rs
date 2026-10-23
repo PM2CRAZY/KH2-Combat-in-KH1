@@ -214,48 +214,75 @@ pub unsafe fn attack(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         want(Move::Row { id: r.id, state: from });
         return None;
     }
-    let mut row = row;
-    if !air {
-        row = kh2_row(actor, row, pick.as_ref().map(|(r, ..)| r), request_of);
-        select_swing(request_of(row), pick.as_ref().map(|(r, ..)| r));
-    }
+    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    let row = kh2_row(actor, combo, row, pick.as_ref().map(|(r, ..)| r), request_of);
+    select_swing(combo, request_of(row), pick.as_ref().map(|(r, ..)| r));
     if let Ok(mut l) = LAST.lock() {
         *l = request_of(row).map(|m| (count, m, count >= kh1_len, air));
     }
     Some(row)
 }
 
-/// KH1's plain ground swing rows, in the order its ground picker falls back to them (Steam
-/// `0x1402A6EE0`, Checked: row 13, or 11 when 13's request is playing), and its plain finisher
-/// row (8). Their requests: 0xC8 / 0xC9 the swings (row 14, 0xCA, is the third swing the
-/// picker marks for a target ahead), 0xCB the finisher (the tester's t374 traces: rows 13 / 11
-/// / 14 run motions 200 / 201 / 202).
-const KH1_SWING_ROWS: [i32; 2] = [13, 11];
-const KH1_FINISHER_ROW: i32 = 8;
+/// KH1's combo, ground or air, for KH2's row selection: its style, its swing requests and its
+/// finisher request, and its plain rows in the order its picker falls back to them.
+struct Kh1Combo {
+    style: super::styles::Kind,
+    swings: std::ops::RangeInclusive<u32>,
+    finisher: u32,
+    swing_rows: &'static [i32],
+    finisher_rows: &'static [i32],
+}
 
-/// KH2's row selection over KH1's own ground rows (Base Combo KH2; the tester: "do option
-/// (a)", KH2 1:1): where KH1's ground picker took a row of its own that isn't the kind KH2's
-/// pick is (its dash at a target 160+ away, rows 0 / 1; its hop, row 2; its rows 9 / 10 for a
-/// target above; its ability finishers 3..7; or a swing where KH2 finishes and the other way
-/// round), and KH2's pick is a plain ground swing or finisher (no hop, no ability: those are
-/// borrows or KH2's hop, not KH1 rows), KH1's own plain row of that kind runs instead: a swing
-/// row whose request isn't the one playing (KH1's own anti-repeat, so the request restarts) or
-/// the finisher row, its request then pointed at our slot of KH2's motion (`select_swing`).
-/// KH1's row runner (`0x1402A68F0`) and its hits, damage and windows stay KH1's; KH1's dash
-/// goes. Unchanged when KH2's motion has no slot on that request.
-unsafe fn kh2_row(actor: usize, row: i32, pick: Option<&ComboRow>, request_of: &dyn Fn(i32) -> Option<u32>) -> i32 {
-    if !super::styles::kh2(super::styles::Kind::GroundCombo) {
+impl Kh1Combo {
+    /// KH2's `row` is a plain swing or finisher of this combo: no ability (those are borrows);
+    /// on the ground no hop (KH2's hops aren't KH1 rows), in the air an air row.
+    fn plain(&self, row: &ComboRow) -> bool {
+        let here = if self.style == super::styles::Kind::AirCombo { row.is_air() } else { !row.is_air() && !row.is_jump() };
+        here && row.ability == 0
+    }
+
+    /// KH1's `request` is the kind of KH2's `row` (a swing for a swing, the finisher for a finisher).
+    fn fits(&self, request: u32, row: &ComboRow) -> bool {
+        if row.is_finisher() { request == self.finisher } else { self.swings.contains(&request) }
+    }
+}
+
+/// The ground combo: requests 0xC8..0xCA its swings (the third, 0xCA, is row 14, marked for a
+/// target ahead), 0xCB its finisher; its plain swing rows 13, or 11 when 13's request is playing
+/// (Steam `0x1402A6EE0`, Checked; the tester's t374 traces: rows 13 / 11 / 14 run motions 200 /
+/// 201 / 202), its plain finisher row 8.
+const GROUND_COMBO: Kh1Combo = Kh1Combo { style: super::styles::Kind::GroundCombo, swings: 0xC8..=0xCA, finisher: 0xCB, swing_rows: &[13, 11], finisher_rows: &[8] };
+/// The air combo (KH1's air picker `0x1402A6C70`, Steam, Checked): rows 15..18; 18 its plain
+/// swing (no target, or one not more than 100 below), 17 for a target more than 100 below, 16
+/// its finisher (the count at the stats' `+0xD5`), 15 a finisher by a KH1 ability bit (25);
+/// with none free, 18 down to 15, the first whose request isn't playing. Requests 0xCC / 0xCD
+/// the swings, 0xCE the finisher (`kh2slots`); which row has which is read from the row table
+/// (`request_of`), not assumed.
+const AIR_COMBO: Kh1Combo = Kh1Combo { style: super::styles::Kind::AirCombo, swings: 0xCC..=0xCD, finisher: 0xCE, swing_rows: &[18, 17], finisher_rows: &[16, 15] };
+
+/// KH2's row selection over KH1's own rows (Base / Aerial Combo KH2; the tester: "do option
+/// (a)", KH2 1:1, and "the same KH2 row picker on the air combo"): where KH1's picker took a row
+/// of its own that isn't the kind KH2's pick is (on the ground its dash at a target 160+ away,
+/// rows 0 / 1; its hop, row 2; its rows 9 / 10; its ability finishers 3..7; in the air its row
+/// for a target below or its ability finisher; or a swing where KH2 finishes and the other way
+/// round), and KH2's pick is a plain swing or finisher of that combo (`Kh1Combo::plain`), KH1's
+/// own plain row of that kind runs instead: a swing row whose request isn't the one playing
+/// (KH1's own anti-repeat, so the request restarts) or the finisher row, its request then
+/// pointed at our slot of KH2's motion (`select_swing`). KH1's row runner (`0x1402A68F0`) and its
+/// hits, damage and windows stay KH1's; KH1's dash goes. Unchanged when KH2's motion has no slot
+/// on that request.
+unsafe fn kh2_row(actor: usize, combo: &Kh1Combo, row: i32, pick: Option<&ComboRow>, request_of: &dyn Fn(i32) -> Option<u32>) -> i32 {
+    if !super::styles::kh2(combo.style) {
         return row;
     }
-    let Some(p) = pick.filter(|r| !r.is_air() && !r.is_jump() && r.ability == 0) else { return row };
-    let swing = |q: u32| (0xC8..=0xCA).contains(&q);
-    let fits = |q: u32| if p.is_finisher() { q as usize == super::kh2slots::GROUND_FINISHER } else { swing(q) };
+    let Some(p) = pick.filter(|r| combo.plain(r)) else { return row };
+    let fits = |q: u32| combo.fits(q, p);
     let own = request_of(row);
     if own.is_some_and(fits) {
         return row;
     }
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
-    let rows: &[i32] = if p.is_finisher() { &[KH1_FINISHER_ROW] } else { &KH1_SWING_ROWS };
+    let rows = if p.is_finisher() { combo.finisher_rows } else { combo.swing_rows };
     let Some((r, q)) = rows.iter().filter_map(|&r| Some((r, request_of(r)?))).find(|&(_, q)| fits(q) && q != playing && super::kh2slots::has(q as usize, p.motion)) else {
         note(format!("KH2's row selection: KH1's row {row} (request {}) kept: no plain row of KH1's free for KH2's row {} motion {}", own.map_or("none".to_string(), |q| format!("{q:#x}")), p.id, p.motion));
         return row;
@@ -264,22 +291,23 @@ unsafe fn kh2_row(actor: usize, row: i32, pick: Option<&ComboRow>, request_of: &
     r
 }
 
-/// KH2's row selection on KH1's own ground swing (`attack`, no ability move borrowed): with the
-/// Base Combo at KH2, the swing KH2's combo takes at this press (`pick`: its rows by the target's
-/// distance, height and direction, the count, the finisher rule and the anti-repeat, Steam exe
-/// `0x140402D20`) plays on the row KH1 runs: KH1's request for it (`request`: 0xC8..0xCA its
-/// swings, 0xCB its finisher; the row's motion) is pointed at our slot of that KH2 motion
-/// (`kh2slots::pick`). KH1's row, its hits, damage and timing windows from the slot's events, are
-/// KH1's as before. A pick that doesn't fit KH1's row (a row that hops, a finisher on KH1's swing
-/// or a swing on its finisher, a motion with no slot) leaves the request's own motion. KH1's own
-/// other rows are replaced by its plain ones first (`kh2_row`).
-fn select_swing(request: Option<u32>, pick: Option<&ComboRow>) {
-    let Some(req) = request.map(|r| r as usize).filter(|r| (0xC8..=0xCB).contains(r)) else { return };
-    if !super::styles::kh2(super::styles::Kind::GroundCombo) {
+/// KH2's row selection on KH1's own swing (`attack`, no ability move borrowed): with the Base
+/// Combo (ground) or Aerial Combo (air) at KH2, the swing KH2's combo takes at this press
+/// (`pick`: its rows by the target's distance, height and direction, the count, the finisher rule
+/// and the anti-repeat, Steam exe `0x140402D20`) plays on the row KH1 runs: KH1's request for it
+/// (`request`: the row's motion; `Kh1Combo`'s swings and finisher) is pointed at our slot of that
+/// KH2 motion (`kh2slots::pick`). KH1's row, its hits, damage and timing windows from the slot's
+/// events, are KH1's as before. A pick that doesn't fit KH1's row (a ground row that hops, a
+/// finisher on KH1's swing or a swing on its finisher, a motion with no slot) leaves the
+/// request's own motion. KH1's own other rows are replaced by its plain ones first (`kh2_row`).
+fn select_swing(combo: &Kh1Combo, request: Option<u32>, pick: Option<&ComboRow>) {
+    let Some(q) = request.filter(|q| combo.swings.contains(q) || *q == combo.finisher) else { return };
+    let req = q as usize;
+    if !super::styles::kh2(combo.style) {
         unsafe { super::kh2slots::pick(req, None) };
         return;
     }
-    let fits = pick.filter(|r| !r.is_air() && !r.is_jump() && r.ability == 0 && r.is_finisher() == (req == 0xCB));
+    let fits = pick.filter(|r| combo.plain(r) && combo.fits(q, r));
     let plays = unsafe { super::kh2slots::pick(req, fits.map(|r| r.motion)) };
     note(format!(
         "KH2's row selection: KH1's request {req:#x} plays {}",

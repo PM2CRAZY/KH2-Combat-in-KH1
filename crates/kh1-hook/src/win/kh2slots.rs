@@ -64,8 +64,12 @@ struct Spec {
 /// draws them: 181 for KH1's first air swing (102), 182 for its second (103), 183 for its finisher
 /// (104), KH2's own order in the air (181 / 182 alternate, 183 finishes). With these built, the Attack in the air at Aerial Base Combo KH2 stays in KH1's air
 /// state (`covers`, `shared::kh1_combo`) instead of borrowing him for KH2's own air combo.
+/// These are each request's own; with the Aerial Combo at KH2, KH2's row selection picks among
+/// KH2's other air swings for them too (`pick`, `swing_rows`).
 /// KH1's ground finisher request (slot 101); 0xC8..0xCA are its swings.
 pub const GROUND_FINISHER: usize = 0xCB;
+/// KH1's air finisher request (slot 104); 0xCC / 0xCD are its swings.
+pub const AIR_FINISHER: usize = 0xCE;
 
 const SPECS: [Spec; 7] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
@@ -171,16 +175,17 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 log(&format!("KH2 slots: KH2 motion {} left out: not all three of KH1's slots {}..{} built", c.motion, c.slot, c.slot + 2));
             }
         }
-        // KH2's row selection on KH1's ground swings (`pick`): every other ground swing KH2's
-        // combo rows can take, built for each KH1 request of its kind (a swing for 0xC8..0xCA, a
-        // finisher for 0xCB) on that request's own template.
-        let rows = swing_rows(&kh2.character.moveset.combo_rows);
-        for s in SPECS.iter().filter(|s| s.kind == Kind::GroundCombo) {
+        // KH2's row selection on KH1's ground and air swings (`pick`): every other swing KH2's
+        // combo rows can take there, built for each KH1 request of its kind (on the ground a
+        // swing for 0xC8..0xCA, a finisher for 0xCB; in the air a swing for 0xCC / 0xCD, a
+        // finisher for 0xCE) on that request's own template.
+        for s in SPECS.iter().filter(|s| matches!(s.kind, Kind::GroundCombo | Kind::AirCombo)) {
             if !moves.iter().any(|m| m.request == s.request && m.default) {
                 continue;
             }
-            for &(motion, finisher) in &rows {
-                if finisher != (s.request == GROUND_FINISHER) || motion == s.motion || !wanted(motion) {
+            let air = s.kind == Kind::AirCombo;
+            for (motion, finisher) in swing_rows(&kh2.character.moveset.combo_rows, air) {
+                if finisher != matches!(s.request, GROUND_FINISHER | AIR_FINISHER) || motion == s.motion || !wanted(motion) {
                     continue;
                 }
                 if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, s.stands_for, s.request, s.kind), false, (false, 0), KH1_SLOTS + moves.len())? {
@@ -190,8 +195,8 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
             }
         }
         log(&format!(
-            "KH2 slots: KH2's row selection on KH1's ground combo: {}",
-            [0xC8usize, 0xC9, 0xCA, 0xCB].iter().map(|r| format!("{r:#x} -> {:?}", moves.iter().filter(|m| m.request == *r).map(|m| m.motion).collect::<Vec<_>>())).collect::<Vec<_>>().join(", ")
+            "KH2 slots: KH2's row selection on KH1's ground and air combo: {}",
+            [0xC8usize, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE].iter().map(|r| format!("{r:#x} -> {:?}", moves.iter().filter(|m| m.request == *r).map(|m| m.motion).collect::<Vec<_>>())).collect::<Vec<_>>().join(", ")
         ));
         Ok(Built { moves, blocks, requests })
     })();
@@ -249,17 +254,19 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, events }, block)))
 }
 
-/// The ground swings KH2's combo rows can take with no ability (an ability's row is a borrow,
-/// `combomods`) and no hop (a row with `jump` leaves the ground): (motion, finisher), each once.
-/// The rows the selector marks (kind 1, 2, 3) and the rows their `sub` swaps to (any kind; the
-/// exe's anti-repeat keeps the `sub` row, Steam `0x140402C50`).
-fn swing_rows(rows: &[character_core::ComboRow]) -> Vec<(u16, bool)> {
+/// The swings KH2's combo rows can take with no ability (an ability's row is a borrow,
+/// `combomods`): on the ground (`air` false) the ground rows with no hop (a row with `jump` leaves
+/// the ground), in the air the air rows (each hops a little, as KH1's air swings do):
+/// (motion, finisher), each once. The rows the selector marks (kind 1, 2, 3) and the rows their
+/// `sub` swaps to (any kind; the exe's anti-repeat keeps the `sub` row, Steam `0x140402C50`).
+fn swing_rows(rows: &[character_core::ComboRow], air: bool) -> Vec<(u16, bool)> {
     let picked = |r: &character_core::ComboRow| r.kind != 0;
     let subs: Vec<i8> = rows.iter().filter(|r| picked(r)).map(|r| r.sub).collect();
     let mut out: Vec<(u16, bool)> = Vec::new();
     for r in rows {
         let reachable = picked(r) || subs.contains(&(r.id as i8));
-        if reachable && r.motion != 0 && !r.is_air() && !r.is_jump() && r.ability == 0 && !out.iter().any(|o| o.0 == r.motion) {
+        let here = if air { r.is_air() } else { !r.is_air() && !r.is_jump() };
+        if reachable && r.motion != 0 && here && r.ability == 0 && !out.iter().any(|o| o.0 == r.motion) {
             out.push((r.motion, r.is_finisher()));
         }
     }
@@ -675,9 +682,9 @@ pub unsafe fn frame(actor: usize) {
     tick(actor);
 }
 
-/// The swing KH2's row selection picked for each of KH1's ground requests 0xC8..0xCB (our
-/// move's `slot`; `usize::MAX`: the request's own).
-static PICKED: [AtomicUsize; 4] = [const { AtomicUsize::new(usize::MAX) }; 4];
+/// The swing KH2's row selection picked for each of KH1's combo requests 0xC8..0xCE (ground
+/// 0xC8..0xCB, air 0xCC..0xCE; our move's `slot`; `usize::MAX`: the request's own).
+static PICKED: [AtomicUsize; 7] = [const { AtomicUsize::new(usize::MAX) }; 7];
 
 fn picked(request: usize) -> Option<usize> {
     let i = request.checked_sub(0xC8).filter(|i| *i < PICKED.len())?;
@@ -704,8 +711,8 @@ unsafe fn redirect(p: &mut Placed) {
     }
 }
 
-/// KH2's row selection on KH1's own ground swing (`combomods::attack`, Base Combo KH2): KH1's
-/// `request` (0xC8..0xCB, the row about to run) plays our slot of KH2's `motion` from now (its
+/// KH2's row selection on KH1's own ground or air swing (`combomods::attack`, Base / Aerial
+/// Combo KH2): KH1's `request` (0xC8..0xCE, the row about to run) plays our slot of KH2's `motion` from now (its
 /// request table entry pointed there at once, before KH1's row makes the request). `None`, or a
 /// motion with no slot built for that request: the request's own. Whether `motion` plays.
 pub unsafe fn pick(request: usize, motion: Option<u16>) -> bool {
