@@ -38,7 +38,8 @@ controller none of them runs. Checked (decomp), Steam KH2:
   (x · 24, y · 20, each clamped to ±1, y flipped) is written over the right stick's bytes. That
   frame the dead zone is 1, not 60, for **both** sticks, and both sticks' tilts are multiplied
   by `1 + s · 0.02`, where `s` is a short in the PC settings (`0x140715364 + 0x24`).
-  **Assumption:** `s` is the mouse sensitivity option.
+  `s` is the mouse sensitivity setting (Checked (decomp): KH1's camera reads the same field as
+  its mouse sensitivity, see "Ours: KH2's mouse camera").
 - **The follow camera's speeds** (`0x140166100`, each frame before the mode's update): the turn
   speed is the exe constant `0x140718bf0` and the zoom factor 1. Only when the mouse moved this
   frame they become `max(|dx · 10|, 1) · 3°` and `max(|dy · 10|, 1)`. The follow camera turns
@@ -67,12 +68,63 @@ at full tilt, is the OG rewrite's reading of the Epic exe ("Checked (exe)" in
   branch is in it. t380 (dead zone), t381 (movement), t382 (whole tilt), t383 (reset, cut) and
   t384 (the form's run speed) are all controller-path numbers.
 - Only when the pads' sticks rest do we read KH1's processed sticks (the keyboard's movement
-  keys; the mouse). KH1's stick step (`0x14028b4f0`) has KH2's mouse branch too: the mouse over
-  the right stick, dead zone 1 for both sticks while it moves (KH1 has no sensitivity factor on
-  the tilt). So with the mouse, ours turns at the controller's speed by the mouse's tilt.
-- Not modelled (the mouse camera): the turn and zoom speed by the mouse's motion, the
-  sensitivity factor on the tilt, the 0.4 lag in keyboard / mouse mode, and the mouse winning
-  over a tilted pad stick (ours takes the pad's when it is tilted).
+  keys).
+
+### Ours: KH2's mouse camera (the tester: "(b)")
+
+KH1 PC has the same mouse code as KH2 PC (the same port), so KH2's mouse camera runs on KH1's
+own mouse. Checked (decomp), Steam KH1:
+
+- `0x140138b30` is KH2's `0x1404e51f0` line for line: the mouse is on (`0x1422DB3EC`), its
+  record (`0x1421AAF18 + 0x23c`, `+0x29` 0xFF) has moved: `+8` and minus `+0xc`, each held to
+  ±1, and the sensitivity, the u16 at `0x1404D8614 + 0x24` (`0x14012af20`). KH2 reads the same
+  offset of its own settings block (`0x14014cde0 + 0x24`), and KH1's camera uses it as the mouse
+  sensitivity (below), which settles the earlier **Assumption** about KH2's `s`.
+- `0x14028b4f0` (KH1's stick step) is KH2's `0x14039c180` but for the sensitivity factor: in a
+  mouse frame the right stick's bytes are the mouse (x · 24, y · 20, held to ±1, y flipped) and
+  the dead zone is 1 for both sticks.
+- `0x1422DB3E8` (`0x140139590`) is KH1's keyboard / mouse mode, switched by the last device used
+  (`0x14013a2c0`: 1 after the keyboard or mouse, 0 after a pad button), as KH2's `0x142b44a88`.
+
+What ours does now (`camera.rs` `mouse` / `sticks`, the `kh2-camera` crate's `Controls::mouse`
+/ `Controls::kbm`; Steam only, frameadv's pattern; other builds keep the controller path):
+
+- In a frame the mouse moved (KH1's `0x140138b30` returns 1, its prologue checked first), both
+  sticks are KH1's processed ones (the mouse over the right stick, the dead zone 1: KH2's), times
+  KH2's `1 + s · 0.02`, and they win over a tilted pad stick, as in KH2.
+- The follow camera turns at `max(|10 x|, 1) · 3°` a frame times the tilt, and zooms at
+  `8 · max(|10 y|, 1)` times the tilt (`0x140166100`); the lock-on camera keeps 3° and 8.
+- In keyboard / mouse mode the look point and eye spring at `0.4 + (run − 8) · 0.0018`
+  (halved at 60 fps), every mode, the first person too (`0x140165700`).
+- The tilt is no longer held to 1 in the crate (KH2's `+0x2c` carries the factor).
+- Trace: `kh2cam_mouse_x`, `kh2cam_mouse_y` (blank when it didn't move), `kh2cam_kbm`.
+- Not done: the mouse turning Sora in the first person (his turn comes from the pad records'
+  right stick through `probe::pad`, which runs before KH1 writes the mouse in), and KH2's
+  mouse-frame dead zone and factor on the left stick for his movement (`takeover::move_tilt`).
+- 30 fps: KH2 springs once a frame at the full rate when its step is 2 or more; ours springs
+  twice at the half rate (unchanged). With the 0.4 lag that is 75% of the gap a frame where KH2
+  closes it all (2.5 · 0.4). At 60 fps they are the same.
+
+### KH1's own mouse camera against KH2's (the tester: "they feel pretty close")
+
+KH1's follow camera's stick step (Steam KH1 `0x1401e7320`, Checked (decomp)), `k` = 0.5 at 60
+fps, 1 at 30:
+
+| | KH1 (its follow camera) | KH2 (follow camera) |
+|---|---|---|
+| Pad turn | a velocity: + 0.15° · x · k a frame, at most 2.5°, decays 0.24° · k a frame | 3° · tilt a frame, no ramp |
+| Keyboard / mouse mode turn | + 0.3° · x · k a frame, at most `2.5° + 0.0875° · s`, decays 4° · k; stops at once when x is 0 or reverses | 3° · tilt a frame |
+| Mouse moving | the velocity times `max(|10 x|, 1)` after its cap, every frame | the speed `max(|10 x|, 1) · 3°` |
+| Sensitivity `s` | raises the cap | the tilt times `1 + 0.02 s` |
+| Mouse up / down | pitch, same velocity rule but no motion factor, -15°..50° | zoom, `8 · max(|10 y|, 1)` · tilt |
+| Mouse as the right stick | x · 24, y · 20, dead zone 1 | the same |
+| Follow lag | KH1's own spring | 0.07 (pad) / 0.4 (keyboard / mouse) |
+
+So a fast mouse turns KH1's camera at about `2.5° · max(|10 x|, 1)` a frame (at `s` 0) and
+KH2's at `3° · max(|10 x|, 1)` · tilt: the same motion factor on nearly the same base, which is
+why they feel close. They differ in KH1's ramp (a slow mouse eases in: at 60 fps it takes up
+to about 17 frames to reach the cap), its instant stop, the sensitivity (KH1's raises the cap,
+KH2's scales the tilt), and the vertical axis (KH1 pitches, KH2 zooms).
 
 ## KH2: bit 32 of the held word (the "unknown button")
 
@@ -170,5 +222,4 @@ Which button it is: **R2** (the tester, from KH2 itself: "its R2"). The decomp c
     which are our hand-over rules, not KH2's player.
   - Also seen (not ours to model): a debug free-move branch of `0x1403a8fa0` (bit 3 of the
     player's kind) doubles its speed in keyboard / mouse mode.
-- Not modelled: KH2's mouse camera (above); KH1's mouse still goes through KH1's processed
-  right stick.
+- KH2's mouse camera: "Ours: KH2's mouse camera" above (Steam).

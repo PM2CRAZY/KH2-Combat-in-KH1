@@ -56,7 +56,9 @@ There is no pitch control: zooming in lowers the camera along this curve.
   - Not known (exe data): the lock-on camera's own turn speed (`0x14071a470`); ours uses 3°.
   - These are the controller's numbers. KH2 PC's mouse branches (the turn and zoom sped up by
     the mouse's motion, a tighter lag in keyboard / mouse mode) are in `kh2-pad.md`; with a
-    controller none of them runs (Checked (decomp), `0x140166100`, `0x140165700`).
+    controller none of them runs (Checked (decomp), `0x140166100`, `0x140165700`). The crate
+    has them as `Controls::mouse` (the follow camera's speeds, `Camera::speeds`) and
+    `Controls::kbm` (the lag); `kh1-hook` feeds them from KH1's own mouse (Steam).
   - **Ours:** right turns the view right. The mirrored world makes the game's own sign
     meaningless here.
 - **Reset** (R3, or F on the keyboard): goal yaw = behind Sora, distance = default. It is a

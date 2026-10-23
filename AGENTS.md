@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 414 (testing branch: KH2's mouse camera)
+- The tester ("(b)"): KH1 PC's mouse code is KH2 PC's (Steam KH1 `0x140138b30` = KH2 `0x1404e51f0`). Mouse frames: both
+  sticks KH1's processed ones times `1 + 0.02 s`; the follow camera turns `max(|10x|,1)·3°` and zooms `8·max(|10y|,1)`
+  (`0x140166100`); keyboard/mouse mode (`0x1422DB3E8`) lag 0.4 + (run-8)·0.0018 (`0x140165700`). Steam only; prologue
+  checked. Trace `kh2cam_mouse_x/y`, `kh2cam_kbm`. KH1's own mouse camera (`0x1401e7320`) compared in `docs/kh2-pad.md`.
+
 ### 2026-10-23: Stage 413 (testing branch: R2 holds KH2's camera swing)
 - The tester ("its R2"): bit 32 of KH2's held word is R2. `kh2_camera::Controls::hold`: the swing behind runs only when
   `auto != hold` (Steam KH2 `0x140178ae0` / `0x140165110`). `camera::r2_held`: Steam KH1's raw pad word `0x14298C9B4`

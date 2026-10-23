@@ -63,6 +63,17 @@ const SELECT: u32 = 0x8000;
 const RAW_HELD_STEAM: usize = 0x298C9B4;
 /// R2 in the PS2 order.
 const RAW_R2: u32 = 0x200;
+/// Steam only: KH1 PC's mouse, the same code as KH2 PC's (`0x1404e51f0` there):
+/// `0x140138b30 (x*, y*, f32*, f32*, sensitivity u16*) -> moved`: the mouse record's motion this
+/// frame, each axis held to ±1 (y flipped), and the sensitivity setting (`0x1404D8614 + 0x24`).
+/// Its prologue is checked before the first call (`MOUSE_PROLOGUE`, from the Steam exe).
+const MOUSE_STEAM: usize = 0x138B30;
+const MOUSE_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10];
+/// Steam only: KH1's keyboard / mouse mode (`0x140139590` returns it; 1 after a key or the mouse,
+/// 0 after a pad button, `0x14013a2c0`), as KH2's `0x142b44a88`.
+const KBM_STEAM: usize = 0x22DB3E8;
+/// 0 not checked yet, 1 KH1's mouse function is where expected, 2 it isn't.
+static MOUSE_OK: AtomicU32 = AtomicU32::new(0);
 /// KH1's config block (`+8`: field camera 0 Auto / 1 Manual).
 const CONFIG_PTR_RVA: Rva = Rva(0x2E1FE70);
 /// The camera left/right option's sign (+1 normal).
@@ -483,6 +494,9 @@ pub struct Own {
     pub auto: bool,
     /// KH2's camera hold button (R2) held.
     pub hold: bool,
+    /// KH2 PC's mouse this frame (its motion, when it moved) and keyboard / mouse mode.
+    pub mouse: Option<[f32; 2]>,
+    pub kbm: bool,
     /// Lock-on: the distance from Sora's feet to the target's point (KH1 units).
     pub lock_dist: Option<f32>,
 }
@@ -702,7 +716,8 @@ unsafe fn run(lock: bool) -> Option<()> {
 
     // Input: the sticks (`sticks`) and buttons. Sora unable to act: no right stick.
     let free = rd::<u32>(sora + 0x444) & 1 == 0;
-    let (r, l) = sticks(base, free);
+    let m = mouse(base);
+    let (r, l) = sticks(base, free, &m);
     let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
     let turn = turn_sign(base);
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
@@ -712,11 +727,14 @@ unsafe fn run(lock: bool) -> Option<()> {
         // The crate's y is forward; KH1's (like KH2's pad) is positive pulled back. Passed
         // unflipped, "pulled straight back" read as forward and the swing-behind ran while Sora
         // ran toward the camera, turning him in a circle (tester trace f571370).
-        move_stick: Vec2::new(l[0], -l[1]).clamp_length_max(1.0),
+        // (Not held to 1: in a mouse frame KH2's pad scales both tilts by the sensitivity.)
+        move_stick: Vec2::new(l[0], -l[1]),
         look_stick: look(r, turn),
         reset: free && pressed & R3 != 0,
         auto,
         hold,
+        mouse: m.motion.map(Vec2::from),
+        kbm: m.kbm,
     };
     let wall = |a: Vec3, b: Vec3| -> Option<(Vec3, Vec3)> {
         let (fa, fb) = (to_kh1(a, s), to_kh1(b, s));
@@ -864,6 +882,8 @@ unsafe fn run(lock: bool) -> Option<()> {
             reset: ctl.reset,
             auto: ctl.auto,
             hold: ctl.hold,
+            mouse: m.motion,
+            kbm: m.kbm,
             lock_dist: lock_at.map(|t| (t - subject.feet).length() * s),
         });
     }
@@ -905,13 +925,54 @@ unsafe fn run(lock: bool) -> Option<()> {
 /// Logged once, the first time KH2's follow camera runs with `camera_calls = kh2`.
 static MODE_LOGGED: AtomicBool = AtomicBool::new(true);
 
+/// KH2 PC's mouse for this frame (Steam: KH1's own, the same code; other builds: none).
+#[derive(Clone, Copy, Default)]
+struct Mouse {
+    /// Its motion (x, y within ±1) when it moved this frame.
+    motion: Option<[f32; 2]>,
+    /// The tilt factor KH2's pad gives both sticks in a mouse frame: `1 + s · 0.02` (Steam KH2
+    /// `0x14039c180`, `s` the sensitivity; KH1's own stick step has no such factor).
+    tilt: f32,
+    /// Keyboard / mouse mode.
+    kbm: bool,
+}
+
+unsafe fn mouse(base: usize) -> Mouse {
+    let none = Mouse { tilt: 1.0, ..Default::default() };
+    if base == 0 || super::addr::Build::current() != super::addr::Build::Steam {
+        return none;
+    }
+    let kbm = rd::<u32>(base + KBM_STEAM) != 0;
+    if MOUSE_OK.load(Ordering::Relaxed) == 0 {
+        let ok = rd::<[u8; 10]>(base + MOUSE_STEAM) == MOUSE_PROLOGUE;
+        MOUSE_OK.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
+        log(&format!("KH2 camera: KH1's mouse (0x140138b30) {}", if ok { "found: KH2's mouse camera" } else { "isn't where expected: the mouse as a tilted stick only" }));
+    }
+    if MOUSE_OK.load(Ordering::Relaxed) != 1 {
+        return Mouse { kbm, ..none };
+    }
+    let get: unsafe extern "system" fn(*mut f32, *mut f32, *mut f32, *mut f32, *mut u16) -> i32 = std::mem::transmute(base + MOUSE_STEAM);
+    let (mut x, mut y, mut a, mut b, mut s) = (0.0f32, 0.0f32, 1.0f32, 1.0f32, 0u16);
+    if get(&mut x, &mut y, &mut a, &mut b, &mut s) == 0 || !x.is_finite() || !y.is_finite() {
+        return Mouse { kbm, ..none };
+    }
+    Mouse { motion: Some([x, y]), tilt: 1.0 + s as f32 * 0.02, kbm }
+}
+
 /// The right and left sticks for KH2's camera (KH1's way: -1..1, y positive pulled back). The
 /// pad's own sticks as KH2's pad builds them (`character_core::pad`, Steam KH2 `0x14039c180`: 60
 /// of 127.5 off each axis, a unit direction and a tilt), 1:1 (the tester). KH1's processed sticks
 /// are built the same way (Steam KH1 `0x14028b4f0`) and stand in when the pads' own rest: the
-/// keyboard's keys, and the mouse, which writes the right stick. `free` false (Sora unable to
+/// keyboard's keys. In a frame the mouse moved, KH2's pad writes the mouse over the right stick
+/// and takes a dead zone of 1 for both: KH1's stick step does the same, so KH1's processed sticks
+/// are KH2's then, times KH2's sensitivity factor (`Mouse::tilt`). `free` false (Sora unable to
 /// act): no right stick.
-unsafe fn sticks(base: usize, free: bool) -> ([f32; 2], [f32; 2]) {
+unsafe fn sticks(base: usize, free: bool, m: &Mouse) -> ([f32; 2], [f32; 2]) {
+    if m.motion.is_some() {
+        let k = |v: [f32; 2]| [v[0] * m.tilt, v[1] * m.tilt];
+        let r = if free { k(rd::<[f32; 2]>(base + RIGHT_STICK_RVA)) } else { [0.0; 2] };
+        return (r, k(rd::<[f32; 2]>(base + LEFT_STICK_RVA)));
+    }
     let raw = super::takeover::RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
     let raw_r = character_core::pad::stick_vec(raw[0], raw[1]);
     let r = if !free {
@@ -946,8 +1007,8 @@ unsafe fn turn_sign(base: usize) -> f32 {
 /// The right stick as the camera crate's look stick (x right, y up).
 fn look(r: [f32; 2], turn: f32) -> Vec2 {
     // (Negated: KH1 world turns the other way round from the camera crate's; the user: x was
-    // inverted.)
-    Vec2::new(-r[0] * turn, -r[1]).clamp_length_max(1.0)
+    // inverted.) (Not held to 1: KH2's mouse sensitivity factor can take the tilt past it.)
+    Vec2::new(-r[0] * turn, -r[1])
 }
 
 /// Writes KH2's camera's eye and look point (crate units) to KH1's internal pair, with KH1's own
@@ -1064,9 +1125,10 @@ unsafe fn run_first_person(base: usize, sora: usize) -> Option<()> {
     let run_speed = p.as_ref().map(|p| p.run_speed).filter(|v| v.is_finite() && *v > 0.0).unwrap_or(8.0);
     let eye_height = p.as_ref().map(|p| p.subjective_offset).filter(|v| v.is_finite() && *v > 0.0).unwrap_or(150.0);
     let subject = kh2_camera::Subject { feet: to_cam(feet, s), facing, run_speed };
-    let (r, _) = sticks(base, true);
+    let m = mouse(base);
+    let (r, _) = sticks(base, true, &m);
     let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
-    let ctl = kh2_camera::Controls { look_stick: look(r, turn_sign(base)), reset: pressed & R3 != 0, ..Default::default() };
+    let ctl = kh2_camera::Controls { look_stick: look(r, turn_sign(base)), reset: pressed & R3 != 0, mouse: m.motion.map(Vec2::from), kbm: m.kbm, ..Default::default() };
     let mut g = CAM.lock().ok()?;
     let cam = g.as_mut()?;
     cam.update_first_person(&subject, eye_height, &ctl, dt);
