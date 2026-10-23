@@ -242,10 +242,16 @@ Both rates are the swing-behind formula exactly (`camera-model.md`).
   when pulled back, and the crate's y is forward. So the crate's "not pulled straight back"
   test read "straight back" as "straight forward", and it swung the camera.
 - **KH2.** It skips the swing when the pad's y is 0.9 or more pulled back. This is the follow
-  update `0x140165110` (Steam), Checked in the exe. The test uses the stick's own numbers,
-  not its unit direction.
-- **Fix.** `camera.rs` negates y. The crate now uses the stick's own numbers in the test and
-  the rate, as KH2 does, instead of a unit direction.
+  update `0x140165110` (Steam), Checked (decomp). The pad's x / y there are the stick's
+  **unit direction** (`0x14039c180` normalizes them, `0x140142080`) and its tilt is kept
+  apart, so the swing is skipped whenever the stick points within 25.8° of straight back, at
+  any tilt.
+- **Fix.** `camera.rs` negates y (t373). The crate tests and scales by the stick's unit
+  direction, times its tilt, as KH2 does.
+- **Corrected after t373.** t373 used the dead-zoned components themselves and said a part
+  tilt straight back still swings. A second read of `0x14039c180` (the tester asked for one)
+  shows the vector is normalized in place, so in KH2 a part tilt straight back does not
+  swing; diagonally back (more than 25.8° off) still does, slowly.
 - **Checked.** The trace's per-frame turn matches the formula, and the condition and its
   inputs were read in the Steam decomp. A new trace has not been taken yet.
 - **Still different from KH2.** KH2's stick has a per-axis dead zone of 60 of 127.5 (set in

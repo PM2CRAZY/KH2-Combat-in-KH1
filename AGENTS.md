@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 379 (testing branch: KH2's camera swing-behind test on the stick's direction)
+- t373 correction (the tester asked to confirm in the KH2 decomp). From the decomp (Steam): `0x14039c180` keeps the left stick
+  as a direction plus a tilt (`0x140142080` normalizes it), so `0x140165110` skips the swing within 25.8 deg of straight
+  back at any tilt. `kh2-camera` tests and scales by that direction times the tilt (tests). Notes: `docs/camera-model.md`,
+  `docs/kh1-kh2-camera.md` 9a.
+
 ### 2026-10-23: Stage 378 (testing branch: Frame Advance draws the held frames)
 - The tester's t377 test: the game state held, but the picture was black on held frames (only the frames that ran
   showed). t372 held every task not flagged for a pause, and most of KH1's draws aren't flagged (from the decomp's

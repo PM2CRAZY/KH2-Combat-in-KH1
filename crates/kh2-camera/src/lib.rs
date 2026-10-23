@@ -94,7 +94,8 @@ pub struct Subject {
 /// Camera controls for one frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Controls {
-    /// Left stick, x right / y forward, magnitude 0..1.
+    /// Left stick, x right / y forward, magnitude 0..1: its direction is the pad's unit
+    /// direction, its length the pad's tilt (KH2's pad stick, dead zone applied by the host).
     pub move_stick: Vec2,
     /// Right stick, x right / y up, magnitude 0..1. Right turns the view
     /// right, up zooms in.
@@ -268,11 +269,14 @@ impl Camera {
                     }
                 } else {
                     let turned = self.manual(c, dt);
+                    // KH2's pad keeps the left stick as a unit direction and a tilt (Steam
+                    // 0x14039c180 normalizes the dead-zoned axes in place, 0x140142080, and
+                    // keeps the length, at most 1, beside them). The follow update
+                    // (0x140165110) tests and scales by the unit direction: no swing while it
+                    // points within acos 0.9 (25.8°) of straight back, at any tilt. Its pad y
+                    // is positive pulled back; here y is forward, so -y < 0.9.
                     let lmag = c.move_stick.length().min(1.0);
-                    // KH2 (Steam 0x140165110) tests the stick's own components, not its unit
-                    // direction. Its pad y is positive when pulled back and the test is
-                    // y < 0.9; here y is forward, so -y < 0.9.
-                    let d = c.move_stick;
+                    let d = c.move_stick.normalize_or_zero();
                     if c.auto && moved && lmag > 0.0 && !turned && -d.y < 0.9 {
                         let step = 2.0 * (d.x.abs() + 1.0) * (d.y.abs() + 1.0) * lmag * (RECENTER + (s.run_speed - 8.0) * RECENTER_RUN) * dt;
                         self.yaw = approach_angle(self.yaw, behind, step.max(0.0));
@@ -429,23 +433,30 @@ mod tests {
     }
 
     /// The tester's trace f571370: the stick pulled straight back must not swing the camera
-    /// (KH2 Steam 0x140165110: no swing while the pad's y is 0.9 or more pulled back).
+    /// (KH2 Steam 0x140165110: no swing while the pad's unit direction has y 0.9 or more pulled
+    /// back). The direction, not the tilt, decides: a part tilt straight back doesn't swing either.
     #[test]
     fn running_straight_back_does_not_swing() {
         assert!(turn_running_back(Vec2::new(0.0, -1.0)) < 1e-4);
+        assert!(turn_running_back(Vec2::new(0.0, -0.5)) < 1e-4);
         assert!(turn_running_back(Vec2::new(0.3, -0.95)) < 1e-4);
+        // 20° off straight back: cos 20° = 0.94, still "straight back".
+        let a = 20f32.to_radians();
+        assert!(turn_running_back(Vec2::new(a.sin(), -a.cos()) * 0.6) < 1e-4);
     }
 
-    /// KH2 tests the stick's components: diagonally back, or straight back with a partial tilt,
-    /// is under 0.9 and still swings.
+    /// More than 25.8° off straight back (diagonally back) still swings, at the rate of the
+    /// unit direction's components times the tilt.
     #[test]
-    fn diagonal_or_gentle_back_still_swings() {
+    fn diagonal_back_still_swings() {
         let r = 0.5_f32.sqrt();
         // 2 (|x| + 1)(|y| + 1) · tilt · 0.25° per frame, over 9 frames (the first has no "moved").
         let diag = 2.0 * (r + 1.0) * (r + 1.0) * 0.25 * 9.0;
         assert!((turn_running_back(Vec2::new(r, -r)) - diag).abs() < 0.05);
-        let gentle = 2.0 * 1.5 * 0.5 * 0.25 * 9.0;
-        assert!((turn_running_back(Vec2::new(0.0, -0.5)) - gentle).abs() < 0.05);
+        assert!((turn_running_back(Vec2::new(r, -r) * 0.5) - diag * 0.5).abs() < 0.05);
+        let a = 30f32.to_radians();
+        let thirty = 2.0 * (a.sin() + 1.0) * (a.cos() + 1.0) * 0.25 * 9.0;
+        assert!((turn_running_back(Vec2::new(a.sin(), -a.cos())) - thirty).abs() < 0.05);
     }
 
     #[test]

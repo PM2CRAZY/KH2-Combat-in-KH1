@@ -55,23 +55,29 @@ There is no pitch control: zooming in lowers the camera along this curve.
 
   Then the yaw turns toward "behind Sora" by
   `2 (|x| + 1)(|y| + 1) · tilt · (0.0043633 + (run_speed − 8) · 0.00017453)` radians per
-  frame. That is about 1° per frame for Sora and faster for faster forms. Meanwhile the
+  frame (`x`, `y` = the stick's unit direction). That is about 1° per frame for Sora and faster for faster forms. Meanwhile the
   distance drifts back to 420 at 0.5 per frame.
-- **"Pulled straight back", exactly** (Checked, Steam exe: the follow update `0x140165110`,
-  the same test in `0x1401642f0`; the pad's sticks are built in `0x14039c180`).
-  - `x`, `y` and `tilt` are the pad's own left-stick numbers, not a unit direction. Each
-    axis is the stick's byte minus 127.5, with a 60 dead zone taken off it and scaled to 0..1.
-    `tilt` is the length of the two, at most 1.
+- **"Pulled straight back", exactly** (Checked (decomp), Steam: the follow update
+  `0x140165110`, the same test in `0x1401642f0`; the pad's sticks are built in `0x14039c180`).
+  - `x`, `y` are the pad's left-stick **unit direction** and `tilt` its length, at most 1.
+    Each axis is the stick's byte minus 127.5, with a 60 dead zone taken off it and divided by
+    67.5; `0x14039c180` then normalizes the pair in place (`0x140142080` returns the length
+    and leaves the vector unit) and keeps the length, clamped to 1, beside it. (t373 read the
+    pair as the dead-zoned components; corrected after a second read.)
   - The pad's `y` is positive when the stick is pulled down (toward the camera). The swing
-    is skipped when `y` is 0.9 or more. So it is skipped only when Sora runs nearly straight
-    toward the camera at almost full tilt.
-  - Diagonally back, or straight back with a lighter tilt, `y` is under 0.9 and the camera
-    still swings. Sora's facing follows the stick through the camera, so in KH2 too this
-    slowly circles him.
+    is skipped when `y` is 0.9 or more: the stick points within 25.8° of straight back, at
+    any tilt. A part tilt straight back doesn't swing either.
+  - More than 25.8° off straight back (diagonally back) the camera still swings, at the rate
+    above with the unit direction's components. Sora's facing follows the stick through the
+    camera, so in KH2 too this slowly curves his run.
   - "Sora moved" is his position changing in x or z since the previous frame
     (`0x1403b8940`).
-  - The crate's stick has y forward, so its test is `−y < 0.9`. A host has to pass y
-    forward. KH1's stick, like KH2's pad, has y positive pulled back, so `kh1-hook` negates it.
+  - The swing also needs the right stick's tilt to be exactly 0 and the camera's swing flag
+    (`+0x42`), which is cleared by a pad bit (bit 32 of the held word, inverted by an option
+    bit, `0x140178ae0` / `0x1402e5310`) whose button isn't known (the remap table is data).
+  - The crate's stick has y forward, so its test is `−y < 0.9` on the stick's unit
+    direction. A host has to pass y forward. KH1's stick, like KH2's pad, has y positive
+    pulled back, so `kh1-hook` negates it.
 - **Smoothing.** The rendered look point and eye follow their goals with the game's spring:
   - the look point closes about 16% of its gap per frame
   - the eye about 9%
