@@ -760,6 +760,8 @@ struct Body {
     actor: usize,
     parts: Vec<Part>,
     target: TargetInfo,
+    /// KH1's lock point (KH2 y-up; its feet without one): what the spell scripts aim at.
+    aim: [f32; 3],
     /// Its hit parts' top above its root.
     tall: f32,
     /// Too big to move: many parts, or its root far beyond its near parts (the user: Aerial
@@ -770,6 +772,9 @@ struct Body {
 
 /// KH1's lock point `(actor, point, out) -> radius` (`docs/kh1-lockon.md`).
 const LOCK_POINT_RVA: Rva = Rva(0x2AE330);
+/// A foe this close over its floor (KH1's `+0x3D4`, with its collision's in-the-air bit `+0x2D0` 1
+/// clear) stands on the ground: the combo table sees its body from its feet up.
+const GROUNDED_ABOVE: f32 = 40.0;
 
 /// KH1's hittable actors on other teams than Sora's, near him.
 unsafe fn bodies(sora: usize) -> Vec<Body> {
@@ -805,6 +810,8 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
         let off = rd::<u32>(this + 0x3A8);
         let feet = [p[0], -p[1], p[2]];
         let (mut radius, mut top) = (0.0f32, feet[1]);
+        // Its hit parts' height span (KH2 y up), for the combo table (`TargetInfo::body`).
+        let (mut span_lo, mut span_hi) = (f32::MAX, f32::MIN);
         let mut parts = Vec::new();
         for i in 0..count.min(32) {
             if off & (1 << i) != 0 {
@@ -828,6 +835,8 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
             let shape = if kind == 1 { Shape::sphere(centre, r) } else { Shape::column(centre, r, h.max(r * 0.25)) };
             radius = radius.max(r);
             top = top.max(centre[1] + h);
+            span_lo = span_lo.min(shape.center[1] - shape.height);
+            span_hi = span_hi.max(shape.center[1] + shape.height);
             parts.push(Part { entry, shape });
         }
         let near = |c: [f32; 3]| {
@@ -863,19 +872,42 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
                 }
             }
         }
-        let mut target = TargetInfo { id: this as u32, pos: feet, radius, height: tall };
         // KH2's combo table measures a target by its target shape (`0x1403C8EE0`: its point
-        // and size), not its feet and full height; KH1's lock point is that shape (the user:
-        // Aerial Sweep / Aerial Dive, which want the target well above Sora, hardly came out
-        // when a flying foe counted from its feet with its whole height).
+        // and size), not its feet and full height (the user: Aerial Sweep / Aerial Dive, which
+        // want the target well above Sora, hardly came out when a flying foe counted from its
+        // feet with its whole height). Nor by KH1's lock point and that point's own size (the
+        // player: "In the Olympus Coliseum, Sora cannot use ground combos against Hercules; on
+        // the second hit, he initiates an aerial combo": his lock point high on his body with a
+        // small size read as a foe in the air, and the rows that jump Sora to one passed). Its
+        // body's height span instead, from its feet when it stands on the ground
+        // (`TargetInfo::body`); across, KH1's lock point (where Sora's swings go).
         let point: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
         let mut v = [0.0f32; 4];
         let r = point(this, 0, &mut v);
-        if r > 0.0 && r < 1000.0 && v[..3].iter().all(|x| x.is_finite()) {
-            target.pos = [v[0], -v[1], v[2]];
-            target.height = r.max(10.0);
+        let lock_ok = r > 0.0 && r < 1000.0 && v[..3].iter().all(|x| x.is_finite());
+        let (x, z) = if lock_ok { (v[0], v[2]) } else { (feet[0], feet[2]) };
+        let above = rd::<f32>(this + 0x3D4);
+        let grounded = above.is_finite() && (-GROUNDED_ABOVE..=GROUNDED_ABOVE).contains(&above) && rd::<u32>(this + 0x2D0) & 1 == 0;
+        let lo = if grounded { span_lo.min(feet[1]) } else { span_lo };
+        let target = TargetInfo::body(this as u32, x, z, lo, span_hi, radius);
+        static MEASURED: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new());
+        let obj = super::probe::object_id(this);
+        if let Ok(mut m) = MEASURED.lock() {
+            if !m.contains(&obj) && m.len() < 60 {
+                m.push(obj);
+                log(&format!(
+                    "combo measure, object {obj}: body {:.0}..{:.0} over Sora's feet ({}; {above:.0} over its floor), point {:.0} size {:.0}; KH1's lock point {}",
+                    lo - -at[1],
+                    span_hi - -at[1],
+                    if grounded { "standing: from its feet" } else { "in the air" },
+                    target.pos[1] - -at[1],
+                    target.height,
+                    if lock_ok { format!("{:.0} up, size {r:.0}", -v[1] - -at[1]) } else { "none".into() }
+                ));
+            }
         }
-        out.push(Body { actor: this, parts, target, tall, fixed });
+        let aim = if lock_ok { [v[0], -v[1], v[2]] } else { feet };
+        out.push(Body { actor: this, parts, target, aim, tall, fixed });
     }
     out
 }
@@ -2048,7 +2080,7 @@ impl Strikes {
             .iter()
             .map(|b| {
                 let p = rd::<[f32; 3]>(b.actor + 0x10);
-                (b.target.id, [p[0], -p[1], p[2]], b.target.pos)
+                (b.target.id, [p[0], -p[1], p[2]], b.aim)
             })
             .collect()
     }

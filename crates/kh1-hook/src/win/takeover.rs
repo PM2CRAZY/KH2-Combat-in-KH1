@@ -151,6 +151,15 @@ const KH1_GLIDE_STATE: i32 = 0x15;
 /// `FLEW_ABOVE`), until he lands.
 static FLEW: AtomicBool = AtomicBool::new(false);
 const FLEW_ABOVE: f32 = 5.0;
+/// KH2 refused a glide press in the air in a flight world (`Character::glide_blocked`): KH1's
+/// flight starts on the next frame where KH1 would fly him, as its own air jump press does
+/// (`0x1402ADBD0`: in a flight world `0x1402AFD30`, its flight start, never its glide). (The player:
+/// "When Sora uses Glide in Peter Pan's story mode, if he's in flight mode, he constantly gets
+/// stuck in the air and doesn't move": out of flight for a combo, the jump button held for
+/// flight's rise was KH2's glide, held on and on, hovering over the floor flight's combo keeps him
+/// off, and flight takes him again only out of a jump or a fall.)
+/// (The game frame of that press: only the next frame takes it.)
+static GLIDE_TO_FLIGHT: AtomicU64 = AtomicU64::new(u64::MAX);
 /// In a flight combo he doesn't come down below this over the floor (the user: an attack that
 /// touched the ground ended the flight), unless Square (flight's descend) is held.
 const FLY_FLOOR: f32 = 15.0;
@@ -454,6 +463,10 @@ unsafe extern "system" fn physics(actor: usize) {
         GAME_FRAME.fetch_add(1, Ordering::Relaxed);
         FRAME_KIND.store(if took { 1 } else if HANDOFF_FRAME.load(Ordering::Relaxed) { 2 } else { 0 }, Ordering::Relaxed);
         room_watch(actor, took);
+        // (Into the Coliseum's arena or out of it in a form: back to Sora, `cup`.)
+        if let Some(why) = super::cup::room() {
+            form_revert(actor, &why);
+        }
         // The partners a Drive Form takes, away while it lasts (`vanish`).
         super::vanish::frame();
         // KH2's Drive gauge: the form gauge's drain, damage taken (`gauge`).
@@ -1384,11 +1397,11 @@ unsafe fn scene_frame(actor: usize, event: bool, held: bool) {
     if !long || !(super::form::in_form() || super::form::busy()) {
         return;
     }
-    // (A limit under way in the form: `form::scene_revert` waits for its end, the run counting
-    // on, so a scene still on after the limit ends the form on its first frame after it.)
-    let Some(kh2) = pose::kh2() else { return };
-    let Ok(mut g) = DRIVER.try_lock() else { return };
-    let Some(d) = g.as_mut() else { return };
+    // (The Coliseum's rounds: a round's victory scene and the next round's setup keep the form,
+    // `cup`.)
+    if super::cup::carries(if event { "an event" } else if battle { "a battle's end" } else { "a long scene" }) {
+        return;
+    }
     let why = format!(
         "KH1 has had Sora {:.1} s for {}",
         n as f32 / 60.0,
@@ -1400,7 +1413,17 @@ unsafe fn scene_frame(actor: usize, event: bool, held: bool) {
             "a scene (its script holds him)"
         }
     );
-    super::form::scene_revert(&mut d.drive, &mut d.character, &mut d.anim, kh2, actor, &why);
+    form_revert(actor, &why);
+}
+
+/// Back to Sora now for `why` (`form::scene_revert`, KH1 may have him). A limit under way in the
+/// form puts it off (`form::limit_under_way`), the scene's run counting on, so a scene still on
+/// after the limit ends the form on its first frame after it.
+unsafe fn form_revert(actor: usize, why: &str) {
+    let Some(kh2) = pose::kh2() else { return };
+    let Ok(mut g) = DRIVER.try_lock() else { return };
+    let Some(d) = g.as_mut() else { return };
+    super::form::scene_revert(&mut d.drive, &mut d.character, &mut d.anim, kh2, actor, why);
 }
 
 unsafe fn takeover(actor: usize) -> bool {
@@ -1996,14 +2019,28 @@ unsafe fn takeover(actor: usize) -> bool {
         FLY_PRESS.store(true, Ordering::Relaxed);
         log(&format!("flight: Attack, KH2 takes him for an aerial combo ({:.0} above the floor)", rd::<f32>(actor + 0x3D4)));
     }
+    // A glide press KH2 refused in a flight world (`glide_blocked`, below): KH1's flight, as KH1's
+    // own air jump press (`0x1402ADBD0`) starts it there instead of its glide.
+    let glide_asked = GLIDE_TO_FLIGHT.swap(u64::MAX, Ordering::Relaxed).wrapping_add(1) == GAME_FRAME.load(Ordering::Relaxed);
     if KH2_AIR.load(Ordering::Relaxed) && rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 && matches!(rd::<i32>(actor + 0x70), 0 | 1) {
         // Coming down out of a jump or a finished air move (not mid-combo: KH2's aerial
         // attacks sink a little).
-        let falling = DRIVER.try_lock().ok().and_then(|d| d.as_ref().and_then(|d| d.last_out.as_ref().map(|o| o.displacement[1] <= 0.0 && matches!(d.character.state_name(), StateName::Air | StateName::Jump)))).unwrap_or(false);
+        // (A glide too, should one play there: KH1 has no glide in a flight world.)
+        let falling = DRIVER.try_lock().ok().and_then(|d| d.as_ref().and_then(|d| d.last_out.as_ref().map(|o| o.displacement[1] <= 0.0 && matches!(d.character.state_name(), StateName::Air | StateName::Jump | StateName::Glide)))).unwrap_or(false);
         let room: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + FLIGHT_ROOM_RVA);
         let above = rd::<f32>(actor + 0x3D4);
         let flew = FLEW.load(Ordering::Relaxed) && above > FLEW_ABOVE;
-        if falling && (above > FLIGHT_ABOVE || flew || room(actor) != 0) {
+        let here = above > FLIGHT_ABOVE || flew || room(actor) != 0;
+        if glide_asked {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 40 {
+                log(&format!(
+                    "flight: glide press in the air ({above:.0} above the floor): {}",
+                    if here { "KH1's flight instead of KH2's glide" } else { "under KH1's flight height, nothing (KH1 has no glide here)" }
+                ));
+            }
+        }
+        if (falling || glide_asked) && here {
             wr(actor + 0x3C4, 0.0f32);
             FLEW.store(false, Ordering::Relaxed);
             if above > FLIGHT_ABOVE {
@@ -2105,6 +2142,12 @@ unsafe fn takeover(actor: usize) -> bool {
         // Out of KH1's flight or one of its moves in the air: in the air where it had him.
         d.grounded = false;
     }
+    if FLY_PRESS.load(Ordering::Relaxed) {
+        // (Out of flight, the jump button held for its rise and Square for its descend are no
+        // fresh presses of KH2's: as last seen before the flight, a held jump was KH2's first
+        // frame's jump press, its Aerial Dodge or glide.)
+        d.held = (true, true);
+    }
     if let Some(v) = HANDOFF_SLIDE.lock().unwrap().take() {
         // Out of a form's KH1 cast: his slide goes on (KH2's idle / walk / run by the stick).
         if d.grounded && !d.character.airborne() {
@@ -2173,6 +2216,15 @@ unsafe fn takeover(actor: usize) -> bool {
         d.character.air_magic_fall_max = None;
     }
     d.character.glide_button = if super::settings::get().glide_on_square && !FLEW.load(Ordering::Relaxed) { character_core::GlideButton::Action } else { character_core::GlideButton::Jump };
+    // In a flight world, no KH2 glide (KH1 has none there: its air jump press is flight's start,
+    // `0x1402ADBD0`): the press is KH1's flight where KH1 would fly him (`GLIDE_TO_FLIGHT`), and a
+    // glide playing as the world becomes one ends in KH2's fall, which flight takes.
+    let flight_world = rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0;
+    static FLIGHT_WORLD: AtomicBool = AtomicBool::new(false);
+    if FLIGHT_WORLD.swap(flight_world, Ordering::Relaxed) != flight_world {
+        log(&format!("flight world {}: KH2's glide {}", if flight_world { "on" } else { "off" }, if flight_world { "off (its press is KH1's flight)" } else { "back" }));
+    }
+    d.character.glide_blocked = flight_world;
     if d.last_state.is_none() {
         // (Re)starting: face where KH1 had him facing.
         d.character.set_facing(rd::<f32>(actor + 0x3C));
@@ -2380,8 +2432,14 @@ unsafe fn takeover(actor: usize) -> bool {
         let r = point(locked, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0), &mut v);
         if v[..3].iter().all(|x| x.is_finite()) && r.is_finite() && r >= 0.0 {
             let r = r.min(500.0);
-            // Its point and size as KH2's target shape (as `combat::bodies` has every target).
-            let t = TargetInfo { id: locked as u32, pos: [v[0], -v[1], v[2]], radius: r.max(10.0), height: r.max(10.0) };
+            // Across, its point and size; up and down, its body's height span as `combat::bodies`
+            // measures every target (`TargetInfo::body`), not the point's: a point high on a tall
+            // foe standing on the ground (Hercules) read as a foe in the air, and the second swing
+            // jumped Sora to it into an air combo (the player).
+            let t = match targets.iter().find(|x| x.id == locked as u32) {
+                Some(b) => TargetInfo { pos: [v[0], b.pos[1], v[2]], radius: r.max(10.0), ..*b },
+                None => TargetInfo { id: locked as u32, pos: [v[0], -v[1], v[2]], radius: r.max(10.0), height: r.max(10.0) },
+            };
             match targets.iter_mut().find(|x| x.id == t.id) {
                 Some(x) => *x = t,
                 None => targets.push(t),
@@ -2417,6 +2475,9 @@ unsafe fn takeover(actor: usize) -> bool {
     let tp = Instant::now();
     let mut out = d.character.step(&input, &env);
     super::prof::add(super::prof::STEP, tp);
+    if d.character.take_glide_refused() && flight_world {
+        GLIDE_TO_FLIGHT.store(GAME_FRAME.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
     // Vicinity Break's and Magnet Burst's rows, when equipped: why a press didn't take one, or
     // that it did (once per combo each, `Character::take_combo_note`; the player: Vicinity
     // Break never came).

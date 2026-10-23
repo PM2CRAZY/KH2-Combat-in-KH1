@@ -70,6 +70,34 @@ Each form is its own object in `00objentry.bin`, with:
    - HP and MP go to full, and MP Charge is cancelled.
 6. **Form gauge** = `(form level + 3) × 600` frames. Anti uses 6 bars.
 
+**The change's effects in the KH1 port (s331; Data + Log).** The player: "The transform effects in
+DriveForms aren't working; Sora only transforms."
+- What the logs show (s315 to s328, every Drive): motion 52's frame-0 triggers start Sora's package
+  elements 1..13 ("KH2 effect: element 1 of motion 52 started" ... 13), the form's arrival (53)
+  starts its package's 1..12 and 100..102, and "KH2 effects: 12 ended with Sora's object (a form
+  change)" at the swap. Nothing broke them in a recent build: `form.rs`'s Drive start (s318), the
+  partners' vanish (s312) and the reverts (s314, s315) leave the effects alone.
+- The data (P_EX100's `p_ex`, Data): element 1 (effect 1, flags 0x3, on the object root 112 up) is
+  the orb: a sphere round Sora from tick 9 that bursts into shards and sparkles, 120 frames in all;
+  it is not one that ends with its owner, so it plays out across the swap. Elements 2..13 (flags
+  0x241: end with the owner, fade-out 0) are the glows on his limbs, looping; KH2 ends them when the
+  form's object replaces his, as the port does at its swap (frame 39 of the user's 45-frame change).
+  The revert's 15..27 are the same pair: a shrinking sphere and burst (15, sound 115), then glows
+  on his limbs (16..27, flags 0x241), looping.
+- What was missing, now done (`kh2fx`):
+  - KH2's grey screen tint (step 4 above; `kh2-bevy`'s `drive.rs`): RGB 0x30 over the screen at
+    0.5, in over 12 frames from the Drive motion's start, out over 15 after the swap (or at once
+    from a change cut short), drawn first in the effects' pass (the orb and the arrival draw over
+    it). Without it the orb's additive light washed out over KH1's bright fields.
+  - The revert's limb glows looped on base Sora until the next form change (their owner never
+    goes): ended 60 frames after the revert starts them (ours; KH2's call for them isn't traced).
+  - One log line per change ("KH2 effects: the Drive's orb and glows (elements 1..13) started on
+    Sora", "... the revert's light (elements 15..27) ..."), as the first 20 starts' lines had long
+    run out by the time a player drives.
+- To check in game: Drive into each form (the screen dims, the orb closes round Sora and bursts,
+  the form appears with its arrival light and aura, the screen comes back); revert (the revert's
+  sphere and burst, the limb light gone after a second).
+
 ## In a form (Checked, exe)
 
 - **Draining.** The form gauge drains 1 per frame in battle, 0.5 outside (×0.8 per Form
@@ -1528,5 +1556,60 @@ lines); Anti with one partner knocked out or away; Wisdom in Deep Jungle with Ta
 a save point (talking to it) in the form, then saving and loading; enemies ignoring where the
 partner stood; Limit Form's Trinity Limit as before (Limit takes no one); Page Down's HUD hiding
 in and out of a form; a cup round won in Valor, Wisdom and Master (the victory scene plays, the
-partners are back at its start, the form reverts 2.5 s in); a door and a room entry in a form
-(the partners show for the walk, then go).
+partners are back at its start, the form carries into the next round: "Drive Forms in the
+Coliseum" below); a door and a room entry in a form (the partners show for the walk, then go).
+
+**Partners left invisible (s331).** The player: "In the Olympus Coliseum, if Sora uses Drive Forms
+mid-match, in the next round Sora reverts to normal and allies become invisible."
+- The cause (Ours, from the code; no log of it): a partner's return wrote back the flag bits saved
+  when he was taken, whole. A partner taken again after a scene (30 quiet frames) while KH1 had his
+  model off for a moment (`0x1`: a round's or a room's setup moving the party) had that saved, and
+  came back with his model off for good, acting but unseen. The revert then had nothing left to do.
+- Now he is taken only with his model on (`0x8001` both set), and his return always turns acting,
+  model and shadow on (`0x8000 | 0x1 | 0x2`), the foe and touch bits as they were. KH1's own
+  scripts turn them off again after that if a scene wants him hidden.
+- A safety net (`vanish::stray`): a Donald or Goofy we hold no record of (his actor replaced or
+  reset), when he should be here (no form takes him, or KH1's script has Sora), still showing
+  exactly our bits (acting, model and shadow off, `0x240` on), with no game over's flag stack and
+  not KH1's own leaving (`+0x374` bit 28): the bits are cleared and his HUD entry faded in as
+  Sora's is. The log: "Drive: Goofy found with our away bits out of a form ...: shown again".
+
+## Drive Forms in the Coliseum (the rule the user's; the rooms Checked: Log)
+
+The user (s331): "in the coliseum, you should be able to maintain your drive form throughout
+rounds. if you enter the cup in a drive form you should be reverted before the first battle, but
+if you defeat a round in a drive form it should carry over into the next round". `win/cup.rs`.
+- **Where (Checked: the s314 / s315 logs).** KH1's world `0xB` is Olympus Coliseum: room 0 its
+  gates (Sora lands there), room 1 the lobby (Phil's cups), room 5 the Pegasus Cup's arena. Every
+  match set has an arena room of its own (Pegasus "is run in the arena that loads Leon's and
+  Yuffie's battle models", above); the arena is taken as any room from 2 on (medium: only room 5 was
+  seen).
+- **The cup's start.** Into an arena room from outside the arena in a form (or changing): back to
+  Sora there and then, before the first battle. Log: "Coliseum: into the arena (room 0x1 -> 0x5)
+  in a form: back to Sora before the first battle".
+- **A round won.** `takeover::scene_frame`'s reverts (an event 1 s, a battle's end 2.5 s, a long
+  scene 20 s) don't apply in the arena (`cup::carries`): the victory scene and the next round's
+  setup keep the form. One line per scene: "Coliseum: a round's scene (a battle's end) in Valor
+  Form: the form carries over into the next round (no revert)". The form gauge doesn't drain while
+  KH1's script has Sora there (`cup::gauge_held`). The partners the form took are back for the
+  scene as for any scene (it waits on their poses) and go again 30 frames after it, on the next
+  round's actors if KH1 made new ones (the partners' rules above).
+- **The cup's end.** A cup's state byte (`story::CUPS`, `save + 0xF36 + cup`, stepped by the cup's
+  script when it is won) changing while in the arena: the scene rules apply again, so the trophy
+  scene ends the form as a battle's end does. Log: "Coliseum: a cup's state changed ...". (When
+  in the trophy scene the byte steps isn't traced; leaving the arena reverts anyway.)
+- **Leaving the arena** (the cup over, lost or quit): out of an arena room in a form, back to Sora.
+  Log: "Coliseum: out of the arena ...".
+- Moving between two arena rooms keeps the form (logged), in case KH1 changes rooms between
+  rounds.
+- Knocked out still reverts at once, as anywhere.
+
+**Open.** A story scene in the arena (Hercules', Cerberus') no longer ends a form by the scene
+rules either; leaving the arena does. The arena's rooms besides 5 and how KH1 runs a round's change
+(the same room kept or re-entered, the party's actors kept or made again) weren't traced.
+
+To check in game: enter a cup in a form (reverted on entering the arena, partners back); Drive in
+round 1, win it (the victory scene plays with the partners, the form and its gauge carry over, the
+partners vanish again once the next round starts, never invisible afterwards); revert in a later
+round (partners back and visible); win the cup in a form (the trophy scene ends it); lose a round
+in a form (knocked out: reverted) and quit a cup in a form (reverted on leaving the arena).

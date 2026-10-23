@@ -3584,6 +3584,21 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 332 (a player's five bugs; Drive Forms across Coliseum rounds)
+- Glide in Neverland flight hung Sora: KH2's glide is off in flight worlds (`glide_blocked`), a glide
+  press starts KH1's flight where KH1 would, held buttons out of flight aren't fresh presses.
+  Hercules' second hit jumped to the air combo: combo rows measure a target by its body
+  (`TargetInfo::body`, feet up when standing), not its lock point.
+- Drive transform effects: they did play; KH2's grey screen tint during the change was missing (now
+  drawn) and the revert's limb glows looped (end after 60 frames). Counterguard's effects: motion
+  171 (and 169 Flash Step, 172 Retaliating Slash) added to the default `kh2_effects`.
+- The user: "in the coliseum, you should be able to maintain your drive form throughout rounds. if
+  you enter the cup in a drive form you should be reverted before the first battle, but if you
+  defeat a round in a drive form it should carry over into the next round". `win/cup.rs`: arena
+  entry reverts, round-end scenes don't, a cup state change or leaving the arena does. Partners are
+  hidden only while their model shows, always come back with model and shadow on, and any left
+  hidden out of a form are cleared (the invisible allies). docs/drive-model.md.
+
 ### 2026-10-22: Stage 331 (Limit Form costs 3 bars)
 - The user: "Make limit form only cost 3 bars to enter". `drivegauge::cost`: Limit 3 (KH2's 4).
 

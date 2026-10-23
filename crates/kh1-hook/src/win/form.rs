@@ -767,6 +767,8 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
             d.change = Some(0);
             d.changing_to = Some(kind);
             CHANGING.store(true, Ordering::Relaxed);
+            // KH2's grey screen tint through the change (`kh2fx::drive_tint`).
+            super::kh2fx::drive_tint(true);
             log(&format!(
                 "Drive: {} for {} bars (Drive gauge {before} -> {after}), Sora's Drive motion{}",
                 kind.name(),
@@ -815,6 +817,8 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
 
 unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &pose::Kh2) {
     CHANGING.store(false, Ordering::Relaxed);
+    // (The tint fades out after the swap.)
+    super::kh2fx::drive_tint(false);
     let kind = d.changing_to.take().unwrap_or(Kind::Wisdom);
     let Some(f) = kind.data(kh2) else { return };
     let sora = ch.abilities.clone();
@@ -882,6 +886,7 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
 /// movement"; in the air, falling).
 unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &pose::Kh2, why: &str) {
     CHANGING.store(false, Ordering::Relaxed);
+    super::kh2fx::drive_tint(false);
     d.change = None;
     d.revert = false;
     d.changing_to = None;

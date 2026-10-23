@@ -326,8 +326,9 @@ pub unsafe fn frame(actor: usize) {
             enter(kind, level);
         }
     }
-    // The form gauge drains (KH2: every frame of the form, half as fast out of battle).
-    let empty = with(|d| d.gauge.is_some() && d.tick(battle)).unwrap_or(false);
+    // The form gauge drains (KH2: every frame of the form, half as fast out of battle). Not while
+    // KH1's script has Sora between the Coliseum's rounds (the form carries into the next, `cup`).
+    let empty = !super::cup::gauge_held() && with(|d| d.gauge.is_some() && d.tick(battle)).unwrap_or(false);
     if super::form::in_form() {
         FRAMES.fetch_add(1, Ordering::Relaxed);
     }

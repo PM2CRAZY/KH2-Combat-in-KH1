@@ -1041,6 +1041,18 @@ logs the skipped programs once per element, `KH2 effect: form package 20 element
 Whether these draw nothing rather than garbage was checked offline: their draw programs need
 an instance spawned or a matrix built by the skipped programs, so they emit no triangles.
 
+### Which of Sora's moves start elements (Data, `P_EX100.mset`)
+
+Frame triggers 1 (start element) in Sora's ability motions: Guard Break 165 (31, 30, 32), Explosion
+166 (44..47, 48), Finishing Leap 167 (33, 34), Flash Step 169 (53 at frame 8; 54..56 at 18), Vicinity
+Break 170 (49, 50), Counterguard 171 (40 and 41 at frame 18), Retaliating Slash 172 (39 at 0),
+Aerial Finish 194 (35..38), Magnet Burst 197 (51, 52), Aerial Recovery 40 (0). The guard's motions
+(41, 42 its repel, 173) start none: its block flash isn't one of Sora's elements. Counterguard's 40
+(effect 27, the object root, flags 0x43, fade 8) is the burst round him, 41 (effect 28, bone 67,
+flags 0xA65, sound 999040) the counter slash's flash; `fx_render counterguard` draws both. Until
+s331 the ini default (`kh2_effects = magnet_explosion`, `kh2fx::DEFAULT_MOTIONS`) left out 169, 171
+and 172 (the player: "Counterguard doesn't have it VFX"); they are in it now.
+
 ## 13. Function index
 
 | Address | What |

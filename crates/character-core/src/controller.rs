@@ -85,11 +85,28 @@ pub struct Input {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TargetInfo {
     pub id: u32,
-    /// Feet position.
+    /// Feet position, or the point the combo table measures it from (`TargetInfo::body`).
     pub pos: [f32; 3],
     /// Collision radius and height (used by the combo table's range checks).
     pub radius: f32,
     pub height: f32,
+}
+
+impl TargetInfo {
+    /// A target as KH2's combo table measures it: a point and a size around it (its target
+    /// shape, exe `0x1403C8EE0`), here the middle of its body's height span and half that span.
+    /// `bottom` / `top` are its body's lowest and highest points (y up): a body standing on the
+    /// ground spans from its feet. The rows that jump Sora to a foe in the air (rows 0, 33, 48:
+    /// flags 2 | 8, height window -110..-250 less the target's size) then want the bottom of that
+    /// span 110 or more above his feet, and a tall foe standing on his floor (Hercules, Large
+    /// Body, Cerberus) is in reach of the ground rows, as in KH2. (Measured from a point high on
+    /// the body with only that point's small size, a tall grounded foe read as one in the air:
+    /// the KH1 port's player, "on the second hit, he initiates an aerial combo" on Hercules.)
+    pub fn body(id: u32, x: f32, z: f32, bottom: f32, top: f32, radius: f32) -> TargetInfo {
+        let (lo, hi) = if bottom <= top { (bottom, top) } else { (top, bottom) };
+        let half = ((hi - lo) * 0.5).max(10.0);
+        TargetInfo { id, pos: [x, (lo + hi) * 0.5, z], radius, height: half }
+    }
 }
 
 /// A grabbable edge: the top edge of a wall, from `a` to `b`, with `out`
@@ -390,6 +407,12 @@ pub struct Character {
     pub combo_rules: ComboRules,
     /// Which button starts and holds Glide in mid-air.
     pub glide_button: GlideButton,
+    /// No Glide (a host's choice, the KH1 port's flight worlds: KH1 has no glide there, its air
+    /// jump press is its flight's start, `0x1402ADBD0`). A glide press is noted instead
+    /// (`take_glide_refused`) and a glide playing ends in the fall.
+    pub glide_blocked: bool,
+    /// A glide press refused by `glide_blocked` this step.
+    glide_refused: bool,
     /// An air cast that reaches the ground while it plays ends there in the landing (as Final
     /// Form's air Reflect lands). It still holds in its motion's no-gravity window first
     /// (KH2's), and falls after it.
@@ -574,6 +597,8 @@ impl Character {
             abilities: Abilities::default(),
             combo_rules: ComboRules::default(),
             glide_button: GlideButton::default(),
+            glide_blocked: false,
+            glide_refused: false,
             air_magic_falls: false,
             air_magic_gravity: 1.0,
             air_magic_fall_max: None,
@@ -621,6 +646,12 @@ impl Character {
     /// The next line for the host's log on Vicinity Break's and Magnet Burst's rows: when one is
     /// equipped and could be used where Sora is, why the press didn't take it (once per combo),
     /// or that it did.
+    /// The last step had a glide press in the air that `glide_blocked` refused (the KH1 port:
+    /// KH1's flight starts on it instead).
+    pub fn take_glide_refused(&mut self) -> bool {
+        std::mem::take(&mut self.glide_refused)
+    }
+
     pub fn take_combo_note(&mut self) -> Option<String> {
         if self.combo_notes.is_empty() {
             None
@@ -1652,6 +1683,12 @@ impl Character {
 
     /// Glide, when it is owned and Sora is high enough.
     fn try_glide(&mut self, env: &Env) -> bool {
+        if self.glide_blocked {
+            if self.airborne {
+                self.glide_refused = true;
+            }
+            return false;
+        }
         if let Some(g) = self.growth(self.abilities.glide) {
             if env.height_above_ground > g.glide_start_height {
                 self.arc = None;
@@ -1841,6 +1878,7 @@ impl Character {
 
     /// Advances one 60 Hz frame.
     pub fn step(&mut self, input: &Input, env: &Env) -> Output {
+        self.glide_refused = false;
         self.since_swing = if matches!(&self.mode, Mode::Action(Action { kind: ActionKind::Attack { .. } | ActionKind::Magic, .. })) { 0 } else { self.since_swing.saturating_add(1) };
         self.since_roll = if matches!(&self.mode, Mode::Action(Action { kind: ActionKind::DodgeRoll | ActionKind::QuickRun, .. })) { 0 } else { self.since_roll.saturating_add(1) };
         // A combo carried past a step (a spell's) lapses on the ground after `COMBO_GRACE` with
@@ -1947,7 +1985,7 @@ impl Character {
             }
             Mode::Glide => {
                 let g = self.growth(self.abilities.glide).cloned().unwrap_or_default();
-                if !self.glide_held(input) || env.height_above_ground < g.glide_end_height || !self.airborne {
+                if !self.glide_held(input) || env.height_above_ground < g.glide_end_height || !self.airborne || self.glide_blocked {
                     self.mode = Mode::Free;
                     self.arc = Some(Arc::fall());
                     fo.motion = motion::FALL;

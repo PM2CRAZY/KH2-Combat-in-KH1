@@ -246,6 +246,83 @@ fn ground_combo_buffers_and_ends_with_finisher() {
     assert_eq!(second.0, 20 + 10);
 }
 
+/// A row that jumps Sora to a foe in the air, shaped like KH2's rows 0 / 33 / 48: a ground row
+/// (flags 2 | 8), height window -110..-250 (y-down) less the target's size, the primary target
+/// dead ahead, first in the table as there.
+fn jump_to_foe_row() -> ComboRow {
+    ComboRow {
+        id: 30, kind: 1, sub: -1, combo_offset: 0, flag: FLAG_JUMP_ADJUST | FLAG_LOW_SUB, motion: 120, next_motion: 4,
+        jump: 17.0, jump_min: 17.0, jump_max: 67.0, speed_min: 0.0, speed_max: 0.0, near: 0.0, far: 260.0,
+        low: -110.0, high: -250.0, inner_min: 0.99996, inner_max: 1.0, blend_time: 0.0, distance_adjust: 0.0,
+        ability: 0, score: 1,
+    }
+}
+
+/// Mashes Attack with every swing connecting: the swings started, and whether he left the ground.
+fn mash_at(target: TargetInfo) -> (Vec<u16>, bool) {
+    let mut ch = sora();
+    ch.moveset.combo_rows.insert(0, jump_to_foe_row());
+    let mut w = World::new(ch);
+    w.targets = vec![target];
+    let (mut motions, mut rose) = (Vec::new(), false);
+    for f in 0..200 {
+        let o = w.step(Pad { attack: f % 2 == 0, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            motions.push(o.motion);
+        }
+        if !o.hitboxes.is_empty() {
+            w.ch.register_hit();
+        }
+        rose |= w.pos[1] > 0.0 || w.ch.airborne();
+    }
+    (motions, rose)
+}
+
+#[test]
+fn a_tall_grounded_target_gets_the_ground_combo() {
+    // Hercules-like: standing on Sora's floor, 220 tall, a step ahead. Measured by its body (the
+    // middle of its height span, half the span its size) it is no foe in the air: the ground
+    // combo all through, its second swing included.
+    let (motions, rose) = mash_at(TargetInfo::body(7, 0.0, 100.0, 0.0, 220.0, 40.0));
+    assert_eq!(motions[..3], [100, 100, 110], "{motions:?}");
+    assert!(!rose, "the ground combo jumped him: {motions:?}");
+
+    // A foe flying above him (its body 150..200 up): the jump to it, then the air combo.
+    let (motions, rose) = mash_at(TargetInfo::body(7, 0.0, 100.0, 150.0, 200.0, 40.0));
+    assert_eq!(motions.first(), Some(&120), "{motions:?}");
+    assert!(rose);
+
+    // The same tall foe measured from a point high on its body with only that point's size (KH1's
+    // lock point, as before): read as a foe in the air, Sora jumped to it.
+    let (motions, rose) = mash_at(TargetInfo { id: 7, pos: [0.0, 170.0, 100.0], radius: 40.0, height: 30.0 });
+    assert_eq!(motions.first(), Some(&120), "{motions:?}");
+    assert!(rose);
+}
+
+#[test]
+fn a_blocked_glide_is_noted_not_started() {
+    let mut w = World::new(sora());
+    w.ch.abilities.aerial_dodge = 0;
+    w.ch.glide_blocked = true;
+    w.run(1, Pad { jump: true, ..IDLE });
+    w.run(12, IDLE);
+    assert!(w.pos[1] > 60.0);
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_ne!(o.state, StateName::Glide);
+    assert!(w.ch.take_glide_refused(), "the press is noted for the host");
+    assert!(!w.ch.take_glide_refused(), "once");
+    // A glide already playing ends in the fall once blocked.
+    w.ch.glide_blocked = false;
+    let mut w = World::new(sora());
+    w.ch.abilities.aerial_dodge = 0;
+    w.run(1, Pad { jump: true, ..IDLE });
+    w.run(12, IDLE);
+    assert_eq!(w.step(Pad { jump: true, ..IDLE }).state, StateName::Glide);
+    w.ch.glide_blocked = true;
+    let o = w.step(Pad { jump: true, ..IDLE });
+    assert_eq!(o.state, StateName::Air);
+}
+
 #[test]
 fn glide_needs_height_and_held_button() {
     let mut w = World::new(sora());

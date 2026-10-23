@@ -7,6 +7,7 @@ mod camera;
 mod combat;
 mod config;
 mod crash;
+mod cup;
 mod drive;
 mod equipmenu;
 mod feet;
