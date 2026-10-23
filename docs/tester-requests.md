@@ -171,10 +171,23 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
-## Title (the assistant fills this in if you leave it)
+## Frame advance in the debug menu
 
   
 
 > [!note] Tester Mr. Bugs
 
 > Can you add a frame advance feature into the debug menu? when you enable it you can frame advance by 1 frame by pressing R2 or pressing the period key on the keyboard, if you hold down the frame advance button then the game plays at normal speed.
+
+> [!tip] Assistant
+> Sounds useful, and since it's a debug menu tool the match-KH2 rules don't apply to it. My plan is a Frame Advance row in the debug menu. Turning it on freezes the game (the menu, HUD and picture still draw), each tap of R2 or the period key plays one game update, and holding it plays at normal speed until you let go. Music and sounds would freeze with the game. A few things I need from you first:
+>
+> 1. **How long a hold before it runs at normal speed?** (a) about a third of a second, like the menu's held-direction repeat, so a quick tap is always exactly one frame; (b) right away, so holding for 3 frames plays 3 frames; (c) something else.
+> 2. **What counts as one frame?** KH1 updates once per drawn frame, and at the 30 fps setting each update is two 60 Hz steps. (a) one game update, whatever your fps (at 30 fps a tap moves 2/60 s); (b) always one 60 Hz step, which at 30 fps means drawing every step. (a) is simpler and changes nothing else. If you play at 60 fps they're the same.
+> 3. **R2 is already used.** The mod's KH2 lock-on uses R2 + right stick to switch targets, and KH1 reads R2 too. While frame advance is on, should R2 (a) be only frame advance (hidden from the game, so no target switching), or (b) still reach the game as well? Or (c) use a different button on the controller.
+> 4. **Buttons pressed while frozen.** Held buttons go into the next frame you step, so you can hold Square and step through a swing. If you tap a button between steps and let go before stepping, should the next frame (a) still see that press, or (b) only see what's held when you step?
+>
+> The period key only counts while the game window is focused. Your thread's folder is `testers/frame-advance-in-the-debug-menu` if you have traces or logs to add.
+
+> [!note] Tester Mr. Bugs
+> 
