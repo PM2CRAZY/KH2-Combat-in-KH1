@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 401 (testing branch: KH2's per-row hop on KH1's air swings)
+- The tester: "(a)", 1:1. KH2 starts each row's hop when it is used, in the air too (`0x1403D78D0`, the count kept).
+  Aerial Combo KH2, KH2's plain air row playing on KH1's 0xCC / 0xCD / 0xCE: `combomods::air_hop` / `Run::AirHop`;
+  `combat::exec` runs KH1's air row, then `shared::physics::kh2_hop` puts KH2's height and speed on KH1's air fields in
+  place of the row's own lunge (8 / 12 / 4) and hop. No slot: KH1's own. A press in KH1's take-off frames (state 1)
+  keeps KH1's row's hop. Notes §7.
+
 ### 2026-10-23: Stage 400 (testing branch: KH2's attack hop rule from the KH2 exe)
 - t392's hop numbers were the OG rewrite's; Steam KH2 `0x1403D78D0` (Checked, decomp): the primary target, from his own
   kind-3 target shape's centre (Sora's: 70 up, radius 55, `P_EX100.mdlx`) to the target's (`0x1403D7520`); height

@@ -183,6 +183,9 @@ pub enum Run {
     /// KH2's hop (`kh2_hop`): KH1's air state entered, this KH1 air row run, then KH2's arc and
     /// speed on it (`shared::physics::kh2_hop`).
     Hop(i32, character_core::Launch),
+    /// KH2's air swing's own hop (`air_hop`): this KH1 air row run in KH1's air state, then KH2's
+    /// row's arc and speed replace the row's own lunge and hop (`shared::physics::kh2_hop`).
+    AirHop(i32, character_core::Launch),
 }
 
 /// An Attack KH1's own combo took (`combat::exec`, base Sora in KH1's own states, the combo style
@@ -197,21 +200,17 @@ pub unsafe fn attack(actor: usize, row: i32, dir: usize, request_of: &dyn Fn(i32
     }
     let run = attack_row(actor, row, request_of);
     takeover::set_drop_ahead(false);
-    match run {
-        None => Run::Kh2,
-        Some(Ok(r)) => Run::Row(r),
-        Some(Err((r, l))) => Run::Hop(r, l),
-    }
+    run
 }
 
-unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<Result<i32, (i32, character_core::Launch)>> {
+unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
     // (KH1's ground state or its jump / fall: not its flight, 8, nor its other states.)
     let state = rd::<i32>(actor + 0x70);
     if !matches!(state, 0..=2) || super::form::in_form() {
-        return Some(Ok(row));
+        return Run::Row(row);
     }
     let air = matches!(state, 1 | 2);
-    let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Some(Ok(row)) };
+    let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Run::Row(row) };
     let last = LAST.try_lock().ok().and_then(|l| *l);
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
@@ -220,7 +219,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         if let Some((row, ..)) = takeover::kh2_would_take(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()) {
             note(format!("Attack in KH1's finisher (count {n}): KH2's next finisher, row {} motion {} (Finishing Plus)", row.id, row.motion));
             want(Move::Row { id: row.id, state: from });
-            return None;
+            return Run::Kh2;
         }
     }
     // KH2's combo at KH1's count (this press counted: `count` is this swing's).
@@ -239,23 +238,51 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     ));
     if let Some((r, ..)) = pick.as_ref().filter(|_| why.is_some()) {
         want(Move::Row { id: r.id, state: from });
-        return None;
+        return Run::Kh2;
     }
     if !air {
         if let Some((r, l)) = pick.as_ref().zip(launch).and_then(|((p, ..), l)| kh2_hop(actor, row, p, l, request_of)) {
             if let Ok(mut g) = LAST.lock() {
                 *g = request_of(r).map(|m| (1, m, false, true));
             }
-            return Some(Err((r, l)));
+            return Run::Hop(r, l);
         }
     }
     let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
     let row = kh2_row(actor, combo, row, pick.as_ref().map(|(r, ..)| r), request_of);
-    select_swing(combo, request_of(row), pick.as_ref().map(|(r, ..)| r));
+    let plays = select_swing(combo, request_of(row), pick.as_ref().map(|(r, ..)| r));
     if let Ok(mut l) = LAST.lock() {
         *l = request_of(row).map(|m| (count, m, count >= kh1_len, air));
     }
-    Some(Ok(row))
+    if air {
+        if let Some(l) = pick.as_ref().zip(launch).filter(|_| plays).and_then(|((p, ..), l)| air_hop(row, p, l)) {
+            return Run::AirHop(row, l);
+        }
+    }
+    Run::Row(row)
+}
+
+/// KH2's air swing's own hop on KH1's air swing (Aerial Combo KH2; the tester: "(a)", KH2's own
+/// per-row hop on each air swing, 1:1): KH2's pick is a plain air row (rows 7..10: 181 / 182,
+/// finishers 183 / 184; no ability) and KH1's air row plays its motion (`select_swing`), so the
+/// hop KH2 starts with it (Steam KH2 `0x1403D78D0`: every row with `jump` above 0 starts one, in
+/// the air too, the count kept; `launch`, its height and speed for the primary target, or the
+/// row's `jump` and `speed_max` along his facing with none) replaces the one KH1's row starts
+/// (`0x1402A68F0`: `+0x3C0` 8 / 12 / 4 along the direction and the row's own `+8` hop), on
+/// KH1's air fields (`shared::physics::kh2_hop`, after the row ran). The launch, if so; `None`
+/// leaves KH1's row's own (not a plain air row of KH2's, or no hop).
+fn air_hop(row: i32, pick: &ComboRow, launch: character_core::Launch) -> Option<character_core::Launch> {
+    if !AIR_COMBO.plain(pick) || !pick.is_jump() || !launch.height.is_finite() || !launch.velocity.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    note(format!(
+        "KH2's row selection: KH2's air row {} motion {} on KH1's air row {row}: KH2's hop, {:.0} high, {:.1}/frame sideways, for KH1's row's own",
+        pick.id,
+        pick.motion,
+        launch.height,
+        launch.velocity[0].hypot(launch.velocity[1])
+    ));
+    Some(launch)
 }
 
 /// KH1's sweep of Sora's collision along a direction (Steam `0x1402C6E70 (actor, direction)`,
@@ -435,12 +462,13 @@ unsafe fn kh2_row(actor: usize, combo: &Kh1Combo, row: i32, pick: Option<&ComboR
 /// events, are KH1's as before. A pick that doesn't fit KH1's row (a ground row that hops, a
 /// finisher on KH1's swing or a swing on its finisher, a motion with no slot) leaves the
 /// request's own motion. KH1's own other rows are replaced by its plain ones first (`kh2_row`).
-fn select_swing(combo: &Kh1Combo, request: Option<u32>, pick: Option<&ComboRow>) {
-    let Some(q) = request.filter(|q| combo.swings.contains(q) || *q == combo.finisher) else { return };
+/// Whether KH2's motion plays.
+fn select_swing(combo: &Kh1Combo, request: Option<u32>, pick: Option<&ComboRow>) -> bool {
+    let Some(q) = request.filter(|q| combo.swings.contains(q) || *q == combo.finisher) else { return false };
     let req = q as usize;
     if !super::styles::kh2(combo.style) {
         unsafe { super::kh2slots::pick(req, None) };
-        return;
+        return false;
     }
     let fits = pick.filter(|r| combo.plain(r) && combo.fits(q, r));
     let plays = unsafe { super::kh2slots::pick(req, fits.map(|r| r.motion)) };
@@ -452,6 +480,7 @@ fn select_swing(combo: &Kh1Combo, request: Option<u32>, pick: Option<&ComboRow>)
             (None, _) => "its own motion (KH2 takes nothing)".to_string(),
         }
     ));
+    plays
 }
 
 /// KH1's control step with base Sora in KH1's own states (`shared::control`): a press that is one

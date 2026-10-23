@@ -104,7 +104,8 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         let (run, hop) = match super::combomods::attack(actor, row, dir, &|r| row_info(actor, r).map(|i| i.motion as u16 as u32)) {
             super::combomods::Run::Kh2 => return,
             super::combomods::Run::Row(r) => (r, None),
-            super::combomods::Run::Hop(r, l) => (r, Some(l)),
+            super::combomods::Run::Hop(r, l) => (r, Some((l, true))),
+            super::combomods::Run::AirHop(r, l) => (r, Some((l, false))),
         };
         // KH2's row selection ran KH1's plain row in place of its dash (rows 0 / 1): the ground
         // picker left the dash's distance in the direction's y (`0x1402A6EE0`, Steam, Checked;
@@ -113,14 +114,16 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
             wr(dir + 4, 0.0f32);
         }
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
-        let Some(l) = hop else { return f(actor, run, dir) };
+        let Some((l, from_ground)) = hop else { return f(actor, run, dir) };
         // KH2's hop: KH1's air state has him (as the hand-backs put him there, `combat::command`,
-        // `takeover`), KH1's air swing row starts in it, then KH2's arc and speed replace the
-        // row's own lunge and hop.
-        let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
-        set_state(actor, 2);
-        wr(actor + 0x3D0, 0u32);
-        wr(actor, rd::<u32>(actor) & !0x1_0000);
+        // `takeover`; already, for an air swing's own hop), KH1's air swing row starts in it, then
+        // KH2's arc and speed replace the row's own lunge and hop.
+        if from_ground {
+            let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
+            set_state(actor, 2);
+            wr(actor + 0x3D0, 0u32);
+            wr(actor, rd::<u32>(actor) & !0x1_0000);
+        }
         f(actor, run, dir);
         super::shared::physics::kh2_hop(actor, l.height, l.velocity);
         return;

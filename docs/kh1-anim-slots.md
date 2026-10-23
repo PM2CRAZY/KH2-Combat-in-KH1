@@ -641,9 +641,21 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   Not done: the ground rows' lunge path (`jump` 0) is the same function's other half (a class
   flag or `+0x18C` bit 6, the speed `(gap + distance_adjust) x` the lunge factor); Sora's ground
   rows have no speed window, so it is left as it was.
-- Not changed in the air: KH1's air swing's own lunge and hop (above; at physics KH2 on KH2's
-  gravity, `shared::physics::air_step`), not KH2's per-row hop (rows 7..10 hop 14..21 with their
-  speed windows). **Open** (a question to the tester): KH2's per-row hop on these too.
+- **KH2's per-row hop on the air swings** (the tester: "(a)", 1:1; Aerial Combo KH2,
+  `combomods::air_hop`): every row with `jump` above 0 starts KH2's hop when it is used, in the
+  air too (`0x1403D78D0`, the count kept there), so each of KH2's air swings rises and moves by
+  its own row (KH2's hop rule above): rows 9 / 10 (181 / 182) 21 / 17 high (no target), speed
+  -8..8; finishers 7 / 8 (184 / 183) 21 high, 12..18. When KH2's pick is a plain air row and
+  KH1's air row plays its motion (`select_swing`, our slot on 0xCC / 0xCD / 0xCE), `combat::exec`
+  runs KH1's row, then puts KH2's hop (`Launch`, from the same trial as the pick) on KH1's air
+  fields (`shared::physics::kh2_hop`, as for the hop rows from the ground, without the state
+  change: he is in state 2 already), in place of KH1's row's own (`+0x3C0` 8 / 12 / 4 and its
+  `+8` hop). With no slot for KH2's motion KH1's swing keeps its own. Physics KH2: KH2's arc for
+  that height on KH2's gravity; physics KH1: KH1's rise of that height (`kh1phys::Arc::hop`).
+  Not done: a press in KH1's state 1 (its take-off frames; `kh2_hop` needs state 2) keeps KH1's
+  row's own; a KH1 air swing started out of KH2's controller (`combat::command`) has KH1's
+  momentum rules after it (`kh1_air_attack_started`, `seed_kh1_lunge`), left as they are (the
+  tester: the KH2-controller path is going away). Unverified in game.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

@@ -640,7 +640,8 @@ pub mod physics {
     }
 
     /// KH2's hop of a combo row (`combomods`: a ground row with `jump`, KH1's air swing row run
-    /// for it out of KH1's air state just entered, `combat::exec`): KH1's arc fields and air speed
+    /// for it out of KH1's air state just entered, or an air row's own hop on KH1's air swing,
+    /// `combat::exec`): KH1's arc fields and air speed
     /// set to KH2's, after the row's start set its own lunge and hop (`0x1402A68F0`, Steam: the
     /// air rows 15..18 give `+0x3C0` 8 / 12 / 4 along the direction, and the row's own hop).
     /// `height`: KH2's rise (`Launch`), `vel`: its sideways velocity (x / z, a 60 Hz frame).
