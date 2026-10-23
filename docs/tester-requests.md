@@ -34,6 +34,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [3. Mr Bugs: 1. it seems right but check the ghidra kh2 steam c decomp to](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m3)
   - [4. Assistant: t379 to t384 (one change each; the build at the top of the b](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m4)
   - [5. Mr Bugs: kh2 "Found, not changed (KH2's lock-on turn speed is a const](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m5)
+  - [6. Assistant: t408 and t409, plus notes](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m6)
 - [KH2 effects in KH1's own effect system](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md)
   - [1. Mr Bugs: from chat-history-log.md (kh2 moves hitbox effect bugs)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m1)
   - [2. Assistant: t376](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m2)

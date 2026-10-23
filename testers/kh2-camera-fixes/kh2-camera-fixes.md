@@ -9,6 +9,7 @@
 - [3. Mr Bugs: 1. it seems right but check the ghidra kh2 steam c decomp to](#^m3)
 - [4. Assistant: t379 to t384 (one change each; the build at the top of the b](#^m4)
 - [5. Mr Bugs: kh2 "Found, not changed (KH2's lock-on turn speed is a const](#^m5)
+- [6. Assistant: t408 and t409, plus notes](#^m6)
 
 ---
 
@@ -85,3 +86,25 @@
 ^m5
 
 
+> [!tip] Assistant
+> t408 and t409, plus notes
+>
+> **The mouse:** you're right, they're separate in KH2 too. KH2 PC has mouse-only parts: the mouse takes over the right stick (and the stick dead zone drops for that frame), the follow camera's turn and zoom speed up the faster you move it, and in keyboard/mouse mode the camera follows much more tightly. The lock-on camera has no mouse speed-up, and the swing-behind has no mouse branch. Ours runs KH2's controller numbers only. I checked t380 to t384, and none of the mouse parts leaked into them. With the mouse, ours just treats it like a tilted stick. The notes are in `docs/kh2-pad.md`.
+>
+> 1. **t408, KH2's first person** is in, through KH1's own first-person mode. Sora fades out over 30 frames, you look from his head (KH2's eye height for each form) 350 units ahead, the right stick's up/down looks up and down, R3 levels the view, and Select again fades him back in. He can't walk in it and turns 3° a frame.
+> 2. **t409, walk / run:** KH2 walks Sora at any tilt past the stick's dead zone and runs him from 80% tilt. Ours ran from 50%, and had an extra 10% dead zone KH2 doesn't have; both are fixed now. (Base Sora in KH1's own states already ran from 80%, as KH1 does.)
+> 3. **The unknown button:** with Field Camera on Auto, holding it stops the swing-behind (on Manual it's the only time the camera swings), and while swimming it makes the right stick zoom. Which button it is sits in KH2's remap tables, which I can't read here. My best guess is L2, but that's a guess, so I haven't added it.
+>
+> **Check:** the Steam KH2 decomp for all of it, and the game files for the eye heights. Not checked in game. Assumptions: the first person's look up/down speed and limits are KH1's (80° up, 60° down, 3° a frame), because KH2's are in data I can't read, and that the right stick's left/right turns him.
+>
+> Questions:
+> 1. First person, look up/down: (a) keep KH1's speed and limits, or (b) tell me how KH2's felt different.
+> 2. First person, turning Sora: in KH2, which stick did it? (a) the right stick left/right (what I did), or (b) the left stick.
+> 3. If you can, try this in KH2: Field Camera on Auto, run in a circle while holding L2. If the camera stops swinging behind Sora, it's L2 and I'll add it. If not, which button does it? Or (b) leave it out.
+> 4. The mouse camera: (a) leave it as is, or (b) add KH2's mouse speed-up and its tighter keyboard/mouse follow.
+
+^m6
+
+
+> [!note] Tester Mr Bugs
+> 
