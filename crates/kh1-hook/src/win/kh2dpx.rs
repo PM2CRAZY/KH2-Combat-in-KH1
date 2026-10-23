@@ -16,7 +16,8 @@
 //! - Start wait: KH1's instance has one, `+0xD0` (game frames; counted down by KH1's effect
 //!   pass, which neither steps nor draws the instance until it runs out, `0x1401ECB50` /
 //!   `0x1401ECF30`; KH1 seeds it from the particle header's `+0x108` at start, `0x14031D2C0`).
-//!   It is set to the KH2 element's wait (+ 0.1 when bound, as KH2 adds) after the start.
+//!   It is set to the KH2 element's wait (+ 0.1 when bound, as KH2 adds) after the start, less
+//!   the 2 game frames KH1 adds to an element with a bone binding (the tester: exact to KH2).
 //! - The element's offset and rotation: folded into a copy of its particle data's header local
 //!   transform (`+0x80` / `+0x90`), which KH1 puts under the root its bone binding gives
 //!   (`0x14031CEA0`), as its own effect number (`ELEMENT_NUMBER`); its scale into the instance's
@@ -86,6 +87,25 @@ const INST_WAIT: usize = 0xD0;
 const EL_FLAGS: usize = 0x14;
 const EL_INSTANCE: usize = 0x2C;
 const EL_SERIAL: usize = 0x30;
+/// Element flag: it has a bone binding (set by KH1's binding, `0x1402AE880`).
+const EL_BOUND: u32 = 0x20;
+/// KH1's frame unit (Steam `0x14233FBCC`, 1.0, set by `0x14018C2A0`; the frame step
+/// `0x14233FBDC` is a multiple of it): a bound element starts at wait <= -2 x it.
+const FRAME_UNIT_STEAM: usize = 0x233FBCC;
+
+/// KH1's frame unit (read on Steam; 1.0, the value KH1 sets it to, elsewhere).
+fn frame_unit() -> f32 {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return 1.0;
+    }
+    let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
+    let v = unsafe { rd::<f32>(base + FRAME_UNIT_STEAM) };
+    if v.is_finite() && v > 0.0 {
+        v
+    } else {
+        1.0
+    }
+}
 
 /// What a native element does beside its start (from the KH2 PAX element).
 #[derive(Clone, Copy, Debug)]
@@ -419,8 +439,13 @@ unsafe fn instance(element: usize, serial: u32) -> Option<usize> {
 unsafe fn apply(element: usize, l: &Layer, motion: u16) -> bool {
     let serial = rd::<u32>(element + EL_SERIAL);
     let Some(inst) = instance(element, serial) else { return false };
-    // KH2 adds a tenth of a frame to a bound element's wait.
-    wr::<f32>(inst + INST_WAIT, l.wait + if l.flags & BIND != 0 { 0.1 } else { 0.0 });
+    // KH2 adds a tenth of a frame to a bound element's wait. KH1 starts an element with a
+    // bone binding only once its wait is down to -2 x its frame unit (`0x1401ECB50` / `0x1401ECF30`,
+    // 2 game frames later than KH2, which starts it once its wait is down to 0): the tester's rule
+    // (exact to KH2), so those 2 frames come off the wait. Each frame both games test the wait
+    // before counting it down by the frame step, so the start frame is KH2's at any frame rate.
+    let kh1_extra = if rd::<u32>(element + EL_FLAGS) & EL_BOUND != 0 { 2.0 * frame_unit() } else { 0.0 };
+    wr::<f32>(inst + INST_WAIT, l.wait + if l.flags & BIND != 0 { 0.1 } else { 0.0 } - kh1_extra);
     if l.scale != [1.0; 3] {
         wr::<[f32; 3]>(inst + INST_SCALE, l.scale);
     }

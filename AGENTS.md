@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 394 (testing branch: KH2 effects: bound elements start on KH2's frame)
+- The tester Mr Bugs (`docs/tester-requests.md`, "KH2 effects in KH1's own effect system": "exact to kh2"): `kh2dpx::apply`
+  takes KH1's 2-frame extra wait for bound elements (wait <= -2 x `0x14233FBCC`, `0x1401ECB50` / `0x1401ECF30`) off the
+  wait it writes; both games test the wait before counting it down, so the start frame is KH2's. KH1's binding task
+  (`0x1402AEDA0`, 139999) runs before the effect update (140000). Notes: `docs/kh2-effects.md` §16.2.
+
 ### 2026-10-23: Stage 393 (testing branch: KH2's drop-ahead row and the finisher tests' status bits)
 - From the KH2 decomp (Steam): the "blocked line" is the mover's no-floor flag: row 1 on no floor ahead (`0x140402D20` /
   `0x1403BA750`, bit 0, `0x140172640`): `drop_ahead`, tested with KH1's sweep `0x1402C6E70` (Steam only) at attack_j_front +
