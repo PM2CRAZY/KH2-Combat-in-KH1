@@ -243,4 +243,5 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > Once you've picked, write `Go ahead` and I'll start.
 
 > [!note] Tester Mr. Bugs
-> 
+> do option b
+> Go ahead
