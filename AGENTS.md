@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 426 (testing branch: Frame Advance draws the level and the models while held)
+- The tester's Held Tasks test (t399): 130000 (`0x2A23E0`) draws the models, 120000 (`0xD2830`) the level, and with 120000
+  running characters can move; 100000 (`0x1E5D90`) seems to be the camera. `frameadv`: 120000 and 130000 run while held by
+  default (`RUN_BY_DEFAULT`); 120000's own task lists (`0x14233E420` / `0x14233E7D0`: the animated map parts) are held
+  instead, each a row on the Held Tasks page (`SUB_LISTS`). Assumption: those are what moved. Notes:
+  `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 425 (testing branch: KH2 effects: the spell scripts' effects through KH1)
 - Reflect, Wisdom and KH2 magic packages, Steam only: the old player's spell functions (start, place, end, kill, alpha,
   running) try KH1 first (`NATIVE_SPELL`); place through KH1's apply `0x1402ADB40` (Checked (exe)). What remains on `kh2fx`:

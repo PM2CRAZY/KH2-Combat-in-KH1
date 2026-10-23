@@ -21,6 +21,8 @@
 - [15. Assistant: t399](#^m15)
 - [16. Mr Bugs: I'll send a log but a good lead is the games own pause mecha](#^m16)
 - [17. Assistant: Good lead, thanks. I followed it into the Steam exe this tim](#^m17)
+- [18. Mr Bugs: 130000 0x2a23e0 - model render](#^m18)
+- [19. Assistant: t426](#^m19)
 
 ---
 
@@ -269,5 +271,29 @@
 > 
 > sent ini
 
+^m18
 
 
+> [!tip] Assistant
+> t426
+>
+> That's exactly what I needed, thanks. So the picture needs 130000 (the models) and 120000 (the level), but 120000 also lets characters move.
+>
+> I looked inside 120000 in the decomp. Besides drawing the map (and the cutscene letterbox bars), it runs two small task lists of its own, one task per animated part of the map. My guess is those are what move.
+>
+> **So in t426:**
+> - 120000 and 130000 now run while the game is held, by default, so the level and the models should draw.
+> - 120000's two sub-lists are held instead. They show on the Held Tasks page as "120000 map parts A" and "120000 map parts B", each Held / Runs like the others.
+> - 100000 (the camera) stays held, so the camera shouldn't move while held.
+>
+> **Please check:** with Frame Advance on, is the picture up now, and does anything still move while held (characters, enemies, platforms, water, anything on the map)? If something still moves, try switching the two "map parts" rows, and send the log either way.
+>
+> **Check:** your Held Tasks test plus the decomp for what's inside 120000. Not checked in game. Assumption: that the map-part lists are what moved.
+>
+> Your ini came through too, thanks; the settings look fine for this.
+
+^m19
+
+
+> [!note] Tester Mr Bugs
+> 

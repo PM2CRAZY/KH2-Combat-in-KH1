@@ -429,7 +429,7 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             let mut v: Vec<(String, Action)> = super::frameadv::tasks()
                 .iter()
                 .enumerate()
-                .map(|(i, t)| (format!("{:>6} {:#08x}  < {} >", t.priority, t.rva, if t.runs { "Runs" } else { "Held" }), Action::HeldTask(i)))
+                .map(|(i, t)| (if t.label.is_empty() { format!("{:>6} {:#08x}  < {} >", t.priority, t.rva, if t.runs { "Runs" } else { "Held" }) } else { format!("{:>6} {:<9}< {} >", t.priority, t.label, if t.runs { "Runs" } else { "Held" }) }, Action::HeldTask(i)))
                 .collect();
             if v.is_empty() {
                 v.push(("(turn Frame Advance on first)".into(), Action::Back));

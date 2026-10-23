@@ -13,6 +13,7 @@
 - [7. Assistant: t402 to t404 (one each)](#^m7)
 - [8. Mr Bugs: 1. (a) if it ever happens in game I'll just let you know and](#^m8)
 - [9. Assistant: t417 to t425 (one piece each; the build at the top of the br](#^m9)
+- [10. Mr Bugs: can we have the files generated at run time so we don't take](#^m10)
 
 ---
 
@@ -257,6 +258,9 @@
 >    do the check
 >    
 >    go ahead 
+
+^m10
+
  
 
 

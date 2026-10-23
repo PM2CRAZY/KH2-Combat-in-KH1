@@ -1,4 +1,4 @@
-# KH1 frame advance (t371, t372, t377, t378, t399)
+# KH1 frame advance (t371, t372, t377, t378, t399, t426)
 
 How the debug menu's Frame Advance row holds KH1 still and steps it one frame at a time
 (`crates/kh1-hook/src/win/frameadv.rs`). Addresses are the Steam build's (Ghidra decomp of the Steam
@@ -78,6 +78,15 @@ holds the same tasks as t372 did, which went black for Frame Advance: the paused
 renderer keeping the last finished frame (`0x140109930` / `0x1401030C0`: the frame texture `+0x78E0` is
 refreshed only when the frame counters `+0x775C` / `+0x7760` / `+0x7764` say a new frame was drawn;
 **Assumption**, not finished).
+
+**t426: what the tester's Held Tasks test found (Checked (in game)).** With the page: 130000 `0x2A23E0` is needed
+for the models to draw (it runs the list `0x142D5C9F0`), 120000 `0xD2830` for the level, and with 120000 let run
+"characters can move"; 100000 `0x1E5D90` seems to control the camera. 120000 (`0x1400D2830`) also runs two lists
+of its own, `0x14233E420` and `0x14233E7D0` (made by `0x1401829B0` / `0x1401836E0`, one task per animated map part,
+counts `0x142336BB0` / `0x142336BB4`; steps `0x1401824C0` / `0x140183460`), besides drawing the map
+(`0x140182230` / `0x140182250`) and the cutscene bars (`0x140178580`). **Checked (decomp).** From t426, 120000
+and 130000 run while held by default, and the two sub-lists are held (each a row on the page). **Assumption**:
+that the sub-lists are what moved; the page lets a session check it.
 
 ## Actors
 
