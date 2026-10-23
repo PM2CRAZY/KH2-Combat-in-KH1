@@ -10,6 +10,7 @@
 - [4. Assistant: t390 to t393 (one part each; the build at the top of the bra](#^m4)
 - [5. Mr Bugs: sorry I should've been more clear; don't worry about moves t](#^m5)
 - [6. Assistant: t400 and t401](#^m6)
+- [7. Mr Bugs: sent the traces](#^m7)
 
 ---
 
@@ -113,3 +114,6 @@
 > do the check
 > 
 > go ahead 
+
+^m7
+

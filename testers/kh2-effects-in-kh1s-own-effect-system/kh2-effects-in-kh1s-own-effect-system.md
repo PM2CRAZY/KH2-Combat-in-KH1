@@ -11,6 +11,7 @@
 - [5. Assistant: t394 to t398 (one part each; the build at the top of the bra](#^m5)
 - [6. Mr Bugs: 1. (a) just make sure that kh1s effects still behave the sam](#^m6)
 - [7. Assistant: t402 to t404 (one each)](#^m7)
+- [8. Mr Bugs: 1. (a) if it ever happens in game I'll just let you know and](#^m8)
 
 ---
 
@@ -217,5 +218,6 @@
 > 
 > go ahead
 
+^m8
 
 
