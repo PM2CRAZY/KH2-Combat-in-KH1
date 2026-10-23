@@ -9,7 +9,8 @@
 //!   run by the main list's task at 80000 (`0x140298940`), which is not flagged 1.
 //!   (t372) t371 wrote the mask, but the pause machine (`0x14017F150`, run each frame before the
 //!   list) sets it every frame itself, so only the effects held (the tester: Sora went on moving).
-//!   Now, while the game is held, each task of the main list not flagged 1 has its function
+//!   Now, while the game is held, each task of the main list not flagged 1 and before KH1's first
+//!   draw pass (priority 140000; t378: t372 held the draws too, and the picture went black) has its function
 //!   (`+0x10`) swapped for ours, which does nothing (`skip`), and gets it back for a frame that
 //!   runs: the same tasks KH1's pause holds, held whatever the machine writes. From KH1's frame
 //!   end (`debugmenu::frame_end`, after the frame's list), so the next frame is held or runs. The
@@ -58,6 +59,12 @@ use std::time::{Duration, Instant};
 const TASK_LIST_STEAM: usize = 0x2867380;
 /// The tasks KH1's pause runs have this flag.
 const PAUSE_FLAG: u16 = 1;
+/// (t378) The first of KH1's draw passes (priority 140000, the GPU camera copies and the models'
+/// pre-pass, then the map, models, effects, HUD and menus): tasks from here on run while the game is
+/// held, so the picture is drawn. Only the update tasks before it are held.
+const FIRST_DRAW: i32 = 140000;
+/// The held tasks are written to the log once (priority, function's RVA).
+static LOGGED_TASKS: AtomicBool = AtomicBool::new(false);
 /// KH1's effect instances paused or not (Steam `0x1401ED6D0 (on)`).
 const EFFECT_PAUSE_STEAM: usize = 0x1ED6D0;
 /// KH1's pause machine (0 while the game runs).
@@ -118,7 +125,7 @@ unsafe fn hold_tasks(base: usize) {
     let mut n = 0;
     while t > 0x10000 && n < 1024 && super::crash::readable(t + 0x18) {
         let f: usize = rd(t + 0x10);
-        if rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && f != ours && f > 0x10000 {
+        if rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && rd::<i32>(t + 4) < FIRST_DRAW && f != ours && f > 0x10000 {
             // (A task freed and made again meanwhile: its new function is the one to give back.)
             match held.iter_mut().find(|e| e.0 == t) {
                 Some(e) => e.1 = f,
@@ -128,6 +135,10 @@ unsafe fn hold_tasks(base: usize) {
         }
         t = rd(t + 8);
         n += 1;
+    }
+    if !held.is_empty() && !LOGGED_TASKS.swap(true, Ordering::Relaxed) {
+        let list: Vec<String> = held.iter().map(|&(t, f)| format!("{} {:#x}", rd::<i32>(t + 4), f.wrapping_sub(base))).collect();
+        log(&format!("frame advance: holding {} tasks (priority, function RVA): {}", held.len(), list.join(", ")));
     }
 }
 

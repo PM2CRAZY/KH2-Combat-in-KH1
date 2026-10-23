@@ -1,3 +1,12 @@
+### 2026-10-23: Stage 378 (testing branch: Frame Advance draws the held frames)
+- The tester's t377 test: the game state held, but the picture was black on held frames (only the frames that ran
+  showed). t372 held every task not flagged for a pause, and most of KH1's draws aren't flagged (from the decomp's
+  registrations: flagged are 140000 and the model pass 160000, not the map, effects or HUD); KH1's pause shows the
+  last frame instead.
+- `frameadv::hold_tasks`: only tasks before KH1's first draw pass (priority under 140000: actors 80000, camera 110000,
+  scripts and the other updates) are held; every task from 140000 on runs. The held tasks are logged once. Notes:
+  `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 377 (testing branch: Frame Advance's period key hidden from KH1)
 - The tester's rule (period key works the same way as R2): KH1 no longer sees the period key while Frame Advance is
   on. `frameadv::install` hooks KH1's keyboard mapping (Steam `0x1400D7E80 (input object)`, prologue

@@ -1,4 +1,4 @@
-# KH1 frame advance (t371, t372)
+# KH1 frame advance (t371, t372, t377, t378)
 
 How the debug menu's Frame Advance row holds KH1 still and steps it one frame at a time
 (`crates/kh1-hook/src/win/frameadv.rs`). Addresses are the Steam build's (Ghidra decomp of the Steam
@@ -45,6 +45,19 @@ game is held, Frame Advance swaps the function of every task in use whose flags 
 its own that does nothing, and gives each its function back for a frame that runs. Those are the
 tasks KH1's pause holds (mask 1), held whatever the pause machine writes. New tasks are held as they
 appear (the list is walked every held frame).
+
+**t378: the draws run.** The tester's t377 test: the game state held, but the picture was black on held
+frames (a picture only on the frames that ran). Only about 20 of KH1's tasks set the pause flag (read
+from the decomp's registrations, `0x140284670` then a write to `+2`): among them 140000 (`0x1401E0F40`)
+and the model pass 160000 (`0x1401E0FA0`), but not the map, effect or HUD draws (150000, 164000s,
+165001 / 170001, 180000+). KH1's pause doesn't need them: its screen is built from the last frame (the
+frame texture, `kh1-render.md`). **Checked (decomp)** for the flags; **Assumption** for why the pause
+needs no draws. So from t378 only the tasks before KH1's first draw pass (priority under 140000: the
+actors at 80000, the camera at 110000, the camera copy at 135000, scripts and the rest of the updates)
+are held; every task from 140000 on runs. The tasks held are written to the log once ("frame advance:
+holding N tasks"), to check the split against a session. **Assumption**: no task from 140000 on moves
+the world (the HUD and menus run, so the command menu still answers the pad, and KH1's own effect fade
+`0x1403970D0` at 159999 runs).
 
 ## Actors
 

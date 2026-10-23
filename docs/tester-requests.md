@@ -13,12 +13,41 @@ Each thread has a title and is separated from the next one by a line. Finished t
 ## Contents
 
 - [Frame advance in the debug menu](#frame-advance-in-the-debug-menu)
-- [Chat history](#chat-history)
+  - [1. Mr. Bugs: Can you add a frame advance feature into the debug menu? whe](#frame-advance-in-the-debug-menu-1)
+  - [2. Assistant: Sounds useful, and since it's a debug menu tool the match-KH](#frame-advance-in-the-debug-menu-2)
+  - [3. Mr. Bugs: 1. holding for for a second causes it to run at full speed](#frame-advance-in-the-debug-menu-3)
+  - [4. Assistant: Got it, thanks. I checked the Steam KH1 decomp for the fps p](#frame-advance-in-the-debug-menu-4)
+  - [5. Mr. Bugs: yes so if you held square and advanced 5 frames that would b](#frame-advance-in-the-debug-menu-5)
+  - [6. Assistant: Got it, that's how I'll do the buttons: held over 5 steps is](#frame-advance-in-the-debug-menu-6)
+  - [7. Mr. Bugs: do option b](#frame-advance-in-the-debug-menu-7)
+  - [8. Assistant: t371](#frame-advance-in-the-debug-menu-8)
+  - [9. Mr. Bugs: I did what you asked and currently frame advance is not work](#frame-advance-in-the-debug-menu-9)
+  - [10. Assistant: t372](#frame-advance-in-the-debug-menu-10)
+  - [11. Assistant: t377](#frame-advance-in-the-debug-menu-11)
+  - [12. Mr Bugs: the in game states seem to be frozen, we have a new bug thou](#frame-advance-in-the-debug-menu-12)
+  - [13. Assistant: t378](#frame-advance-in-the-debug-menu-13)
 - [KH2 effects in KH1's own effect system](#kh2-effects-in-kh1s-own-effect-system)
+  - [1. Mr Bugs: from chat-history-log.md (kh2 moves hitbox effect bugs)](#kh2-effects-in-kh1s-own-effect-system-1)
+  - [2. Assistant: t376](#kh2-effects-in-kh1s-own-effect-system-2)
+  - [3. Assistant: Correction to the build note above: there's a build now. kh1](#kh2-effects-in-kh1s-own-effect-system-3)
+  - [4. Mr Bugs: 4. it should be exact to kh2 so for kh2 moves take the 2 fra](#kh2-effects-in-kh1s-own-effect-system-4)
 - [KH2's combo row selection](#kh2s-combo-row-selection)
+  - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](#kh2s-combo-row-selection-1)
+  - [2. Assistant: t374](#kh2s-combo-row-selection-2)
+  - [3. Mr Bugs: 1. do option (a)](#kh2s-combo-row-selection-3)
 - [Missing sleeves animation](#missing-sleeves-animation)
+  - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](#missing-sleeves-animation-1)
+  - [2. Assistant: t375](#missing-sleeves-animation-2)
+  - [3. Mr Bugs: 4. do (b) and (c), if there isn't a matching equivalent to s](#missing-sleeves-animation-3)
 - [KH2 Camera fixes](#kh2-camera-fixes)
+  - [1. Mr Bugs: I noticed when you run backwards the camera starts turning s](#kh2-camera-fixes-1)
+  - [2. Assistant: t373](#kh2-camera-fixes-2)
+  - [3. Mr Bugs: 1. it seems right but check the ghidra kh2 steam c decomp to](#kh2-camera-fixes-3)
 - [Table of contents](#table-of-contents)
+  - [1. Mr Bugs: from now on can you add a table of contents to the document ](#table-of-contents-1)
+  - [2. Assistant: Done. There's a Contents list at the top of the file, under ](#table-of-contents-2)
+  - [3. Mr Bugs: can I get sub tables so I can click on the exact message for](#table-of-contents-3)
+  - [4. Assistant: Done. Under each thread in the Contents there's now a link t](#table-of-contents-4)
 
 ---
 
@@ -57,7 +86,7 @@ Before replying to anything here, go read `design-philosophy-instructions.md` in
 
   
 
-**Contents.** Keep the table of contents under the title current: when you first reply to a new thread, add a link to it (`- [Title](#title-as-a-link)`, GitHub's link for the heading: lowercase, spaces as hyphens, punctuation dropped), and when a thread is closed, remove its line.
+**Contents.** Keep the table of contents under the title current: a link to each open thread (`- [Title](#title-as-a-link)`, GitHub's link for the heading: lowercase, spaces as hyphens, punctuation dropped), and under it a link to each message in the thread (`  - [n. Who: first words](#title-as-a-link-n)`). Each message has an anchor line just above its box (`<a id="title-as-a-link-n"></a>`, n counting the thread's messages from 1; empty reply boxes don't count). Update it with every reply, add new threads, and remove a closed thread's lines.
 
 **Titles.** Each thread starts with a title that says what the tester's first message asked for. If the tester left the title blank or a placeholder, write one when you first reply.
 
@@ -76,6 +105,8 @@ Before replying to anything here, go read `design-philosophy-instructions.md` in
 **Thread folders.** Testers put their trace CSVs and log files for a thread in the `testers` folder at the top of the repo (next to `docs`), in a subfolder named after the thread title in lowercase with hyphens. When you first reply to a new thread, create that subfolder with a short `README.md` in it (git doesn't track empty folders), and tell the tester its name in your reply. When you work on a thread, look in its folder for the tester's files.
 
   
+
+**Several threads (hard rule).** When more than one thread has a tester's message waiting, deploy a sub-agent on each of those threads whenever possible, working at the same time (each on its own copy of the code), and merge their work one version at a time. If a thread can't be finished, finish the others and say what's left.
 
 **Several requests.** One request per version when you can. If two requests touch the same system, say so in both threads and ask the testers how they want to handle it. If a request conflicts with another one, work it out with the testers involved.
 
@@ -187,10 +218,12 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
+<a id="frame-advance-in-the-debug-menu-1"></a>
 > [!note] Tester Mr. Bugs
 
 > Can you add a frame advance feature into the debug menu? when you enable it you can frame advance by 1 frame by pressing R2 or pressing the period key on the keyboard, if you hold down the frame advance button then the game plays at normal speed.
 
+<a id="frame-advance-in-the-debug-menu-2"></a>
 > [!tip] Assistant
 > Sounds useful, and since it's a debug menu tool the match-KH2 rules don't apply to it. My plan is a Frame Advance row in the debug menu. Turning it on freezes the game (the menu, HUD and picture still draw), each tap of R2 or the period key plays one game update, and holding it plays at normal speed until you let go. Music and sounds would freeze with the game. A few things I need from you first:
 >
@@ -201,6 +234,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > The period key only counts while the game window is focused. Your thread's folder is `testers/frame-advance-in-the-debug-menu` if you have traces or logs to add.
 
+<a id="frame-advance-in-the-debug-menu-3"></a>
 > [!note] Tester Mr. Bugs
 > 1. holding for for a second causes it to run at full speed
 > 
@@ -210,6 +244,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >    
 >    also trace recordings need to advance frame by frame as well, so if I have trace set to 3 seconds that timer only advances frame by frame. please let me know how you would implement it.
 
+<a id="frame-advance-in-the-debug-menu-4"></a>
 > [!tip] Assistant
 > Got it, thanks. I checked the Steam KH1 decomp for the fps part. Here's how I'd build it:
 >
@@ -231,6 +266,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > If that all sounds right, answer the held-button question and write `Go ahead`.
 
+<a id="frame-advance-in-the-debug-menu-5"></a>
 > [!note] Tester Mr. Bugs
 > yes so if you held square and advanced 5 frames that would be one press e.g
 > square press advance for 5 frames > let go of button > advance next frame > button is counted as released
@@ -243,6 +279,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 
 > let the user also disable it as well even if they're in frame advance
 
+<a id="frame-advance-in-the-debug-menu-6"></a>
 > [!tip] Assistant
 > Got it, that's how I'll do the buttons: held over 5 steps is one press, and the first step after you let go sees it released.
 >
@@ -254,10 +291,12 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > Once you've picked, write `Go ahead` and I'll start.
 
+<a id="frame-advance-in-the-debug-menu-7"></a>
 > [!note] Tester Mr. Bugs
 > do option b
 > Go ahead
 
+<a id="frame-advance-in-the-debug-menu-8"></a>
 > [!tip] Assistant
 > t371
 >
@@ -278,6 +317,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > **Please test:** step through a KH2 combo at 30 fps and at 60 fps, and grab a Select + Triangle trace while stepping (the trace now saves while the game is held, too). Also check that the camera and right stick do nothing while the game is held.
 
+<a id="frame-advance-in-the-debug-menu-9"></a>
 > [!note] Tester Mr. Bugs
 > I did what you asked and currently frame advance is not working for all states, right now when you frame advance only effects that are in the world advance frame by frame I've uploaded my traces and log to the testers folder for you, it has me doing attacks at 30 and 60 and with game frame off and on, on both kh1 and kh2 moves.
 > 
@@ -290,6 +330,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 
 > go ahead
 
+<a id="frame-advance-in-the-debug-menu-10"></a>
 > [!tip] Assistant
 > t372
 >
@@ -305,6 +346,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > I moved your files into the thread folders with the hyphen names (`testers/frame-advance-in-the-debug-menu` and so on) so each thread has one folder. I'm working through the other threads now.
 
+<a id="frame-advance-in-the-debug-menu-11"></a>
 > [!tip] Assistant
 > t377
 >
@@ -312,6 +354,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > The build at the top of the testing branch (`kh1-kh2.dll`) updates by itself a few minutes after each version, so pulling gets you t377.
 
+<a id="frame-advance-in-the-debug-menu-12"></a>
 > [!note] Tester Mr Bugs
 > the in game states seem to be frozen, we have a new bug though the game turns black when a frame advance is on, you only see a frame every frame advance or when you hold the frame advance key down
 > 
@@ -319,35 +362,20 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 
 > go ahead
 
-
----
-
-  
-
-## Chat history
-
-  
+<a id="frame-advance-in-the-debug-menu-13"></a>
+> [!tip] Assistant
+> t378
+>
+> Good, the state holding is working. The black screen came from the same change: t372 held every task KH1's pause doesn't run, and most of KH1's drawing (the map, effects, HUD) is in that group. I checked every task KH1 registers in the decomp, and only about 20 carry the pause flag; the model pass is one of them, the map and effects aren't. KH1's own pause gets away with it because its screen is built from the last frame.
+>
+> So now only the update tasks that run before KH1's first draw pass are held: the actors, the camera, scripts and the other game logic. Every draw from there on runs each frame, so the picture should stay up while held. The log lists the tasks it held the first time ("frame advance: holding N tasks"), which tells us whether the split is right if anything still looks off.
+>
+> **Check:** decomp (the task registrations and their flags). Not checked in game. Assumption: nothing in the draw group moves the world. Two things there do still run while held: the HUD and menus (so the command menu still answers the pad), and KH1's own effect fade-out.
+>
+> The hard rule is in the assistant section now ("Several threads"): when more than one thread has a message waiting, each gets its own sub-agent working at the same time, and their work is merged one version at a time. I'm doing that for this round: the effects, combo rows, sleeves and camera threads each have one working now.
 
 > [!note] Tester Mr Bugs
 > 
->I've logged all my past sessions of looking through the source code with claude, please look through the tester history to be up to date with everything I was working on 
->
->at chat-history-log.md
->
->go ahead
-
-> [!tip] Assistant
-> I read all of `docs/chat-history-log.md`. What I'm taking from it:
->
-> - The rules in it are already in `design-philosophy-instructions.md` (native always, KH2's numbers through KH1's own systems, open scope, performance, no decompiled code in the repo), and I follow that file.
-> - From M004: animations are baked raw from KH2 into KH1's motion slots, and hair, hood and chain movement is baked into them, not physics. I passed that on for the sleeves thread.
-> - Effects: Explosion's step 1 is done (t368 to t370). The element layer, KH2's `pppRyjMegaBirth`, `pppEiDrawShipoly` and retiring the parallel player are still open. That's the effects thread below.
-> - Hit effects: KH2 spell hits now play the KH1 spell's own spark through KH1's contact code, but deciding that a hit lands is still KH2's code running beside KH1's. That part isn't native yet.
->
-> If there's a later chat you want me to have too, add it to the same file and tell me.
-
-> [!note] Tester Mr Bugs
-> close
 
 
 ---
@@ -358,6 +386,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
+<a id="kh2-effects-in-kh1s-own-effect-system-1"></a>
 > [!note] Tester Mr Bugs
 
 > from chat-history-log.md (kh2 moves hitbox effect bugs)
@@ -462,6 +491,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >   
 >   
 
+<a id="kh2-effects-in-kh1s-own-effect-system-2"></a>
 > [!tip] Assistant
 > t376
 >
@@ -482,9 +512,11 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 2. For the big flare and burst: (a) wait until their sparks and ribbon are ported (steps 3 and 4), or (b) play them through KH1 now without those, just to check where they sit?
 > 3. Can you check the wrist flashes' turn looks right? Compare a run with `kh2_fx_native = on` against one with it off (the old player). If they differ, I'll convert the turn through the two skeletons' bind poses.
 
+<a id="kh2-effects-in-kh1s-own-effect-system-3"></a>
 > [!tip] Assistant
 > Correction to the build note above: there's a build now. `kh1-kh2.dll` at the top of the testing branch is t376, with everything up to now in it (frame advance t372, camera t373, combo rows t374, sleeves t375, effects t376). From now on, GitHub builds it on Windows and commits it every time the code on the testing branch changes, so pulling the testing branch always gets you the latest build. Install it through OpenKH as usual (`mod.yml`). The log's first line shows which version loaded.
 
+<a id="kh2-effects-in-kh1s-own-effect-system-4"></a>
 > [!note] Tester Mr Bugs
 > 4. it should be exact to kh2 so for kh2 moves take the 2 frame delay off
 > 5. do option (a) and start porting
@@ -500,12 +532,14 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
+<a id="kh2s-combo-row-selection-1"></a>
 > [!note] Tester Mr Bugs
 > In the KH2S model rendering there was a suggestion to implement "**KH2's row selection**, so the right swing plays for the target's distance. Today the swing order is fixed, which is the biggest feel difference."
 > 
 > I want you to start working on it to get it native in kh1 using the steam gihidra c decomp of kh1, if you need to compare with kh2's decomp (rust rewrite) do so, if not fallback to the gihidra c decomp of kh2's steam exe 
 > 
 
+<a id="kh2s-combo-row-selection-2"></a>
 > [!tip] Assistant
 > t374
 >
@@ -523,6 +557,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > A Select + Triangle trace of a few combos at different distances would help, along with the log lines that start with "KH2's row selection".
 
+<a id="kh2s-combo-row-selection-3"></a>
 > [!note] Tester Mr Bugs
 > 1. do option (a)
 >  2. yes
@@ -540,9 +575,11 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
+<a id="missing-sleeves-animation-1"></a>
 > [!note] Mr Bugs
 > I'm in the process of getting ready to transfer all the kh2 animations into kh1s internals and I noticed on kh2's animations they're missing animations for the sleeves can you double check and add them to our animations? I've logged sora running in kh1 and sora running in kh2, if there's any other missing parts to an animation let me know after you've implemented the changes (logs and traces are in Missing sleeves animation)
 
+<a id="missing-sleeves-animation-2"></a>
 > [!tip] Assistant
 > t375
 >
@@ -562,6 +599,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 2. Should I copy KH2's squash and stretch too? Yes or no.
 > 3. The belt chain and necklace: leave them still, or give them a little swing? A swing would be physics, which goes against the "baked, not physics" rule, so I'd only do it if you want it.
 
+<a id="missing-sleeves-animation-3"></a>
 > [!note] Mr Bugs
 > 4. do (b) and (c), if there isn't a matching equivalent to something on kh1's soras body we shouldn't add it, after your done give me a list of similarities that are shared between models so I can make sure nothing is being copied that shouldn't.
 > 5. yes do it
@@ -584,11 +622,13 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
+<a id="kh2-camera-fixes-1"></a>
 > [!note] Tester Mr Bugs
 > I noticed when you run backwards the camera starts turning sora in a circle and rotates this is not indented, can you please look through the kh2 decomp to verify and fix this change then if you need the kh2 ghidra c decomp steam version to find any other missing features do it. I've logged a trace for you to see whats going on in game
 > 
 > go ahead
 
+<a id="kh2-camera-fixes-2"></a>
 > [!tip] Assistant
 > t373
 >
@@ -604,6 +644,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > Other things I found in KH2's camera, not changed yet: the right stick may turn the camera at full speed even when tilted diagonally (I need a closer read before I'd change it), there's a reset branch whose purpose I don't know yet, and I haven't read KH2's zoom code. Tell me if you want any of those looked at.
 
+<a id="kh2-camera-fixes-3"></a>
 > [!note] Tester Mr Bugs
 > 1. it seems right but check the ghidra kh2 steam c decomp to make sure
 > 2. it should be 1:1 
@@ -620,15 +661,25 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
+<a id="table-of-contents-1"></a>
 > [!note] Tester Mr Bugs
 > from now on can you add a table of contents to the document  so I can quickly access each thread
 > 
 > go ahead
 
+<a id="table-of-contents-2"></a>
 > [!tip] Assistant
 > Done. There's a Contents list at the top of the file, under the title, with a link to every open thread. I added a rule to the assistant section so it stays current: each new thread gets a line when it's first answered, and its line comes off when it's closed.
 
+<a id="table-of-contents-3"></a>
 > [!note] Tester Mr Bugs
 > can I get sub tables so I can click on the exact message for each thread
 > 
 > go ahead
+
+<a id="table-of-contents-4"></a>
+> [!tip] Assistant
+> Done. Under each thread in the Contents there's now a link to every message in it, numbered, with who wrote it and its first words. Each message has a small anchor above it for the link to jump to. I'll keep them current with every reply. I also closed the Chat history thread and moved it to the archive.
+
+> [!note] Tester Mr Bugs
+> 
