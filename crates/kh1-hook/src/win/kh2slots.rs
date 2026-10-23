@@ -77,6 +77,28 @@ const SPECS: [Spec; 7] = [
     Spec { motion: 183, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
 ];
 
+/// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
+/// and running cycles? its more easy for me to compare"). KH1's walk and run requests (1, 2) are
+/// kind 3 in its request table: KH1 plays the entry's slot + 0, 1 or 2 (field, battle, the third
+/// variant; `0x14029E050`, `docs/kh1-anim-slots.md` §1.4), so each is built as three slots in a
+/// row, on KH1's three as templates (walk 2 / 3 / 4, run 5 / 6 / 7), with KH2's field cycle on the
+/// field one and its battle cycle on the other two, as `pose::play_for` draws them; the request is
+/// pointed at the first. All three or none.
+struct Cycle {
+    motion: u16,
+    request: usize,
+    /// KH1's first slot of the three.
+    slot: usize,
+}
+
+const CYCLES: [Cycle; 2] = [
+    Cycle { motion: character_core::motion::WALK, request: 0x1, slot: 2 },
+    Cycle { motion: character_core::motion::RUN, request: 0x2, slot: 5 },
+];
+
+/// A request table entry's kind (bits 12..14): 3 picks the slot + 0, 1 or 2 by field / battle.
+const KIND_VARIANTS: u32 = 3;
+
 pub struct Move {
     pub motion: u16,
     pub stands_for: usize,
@@ -91,6 +113,11 @@ pub struct Move {
     pub travel: bool,
     /// The request's own (`SPECS`); else one of the swings KH2's row selection picks (`pick`).
     pub default: bool,
+    /// KH2's field (out-of-combat) variant of the motion (a `CYCLES` field slot).
+    pub field: bool,
+    /// Which of a kind 3 request's three slots this is (`CYCLES`; 0 otherwise): only the first is
+    /// pointed at, KH1 adds the rest.
+    pub variant: u8,
     /// The KH2 clip's sounds, voices and effects, by frame.
     events: Vec<(u32, EventKind)>,
 }
@@ -121,9 +148,27 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
         let mut blocks = Vec::new();
         let wanted = |motion: u16| which.as_ref().map_or(true, |w| w.contains(&motion));
         for s in SPECS.iter().filter(|s| wanted(s.motion)) {
-            if let Some((m, block)) = make(mset, kh2, bake, &requests, (s.motion, s.stands_for, s.request, s.kind), true, KH1_SLOTS + moves.len())? {
+            if let Some((m, block)) = make(mset, kh2, bake, &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len())? {
                 moves.push(m);
                 blocks.push(block);
+            }
+        }
+        // KH2's walk and run, three slots in a row each (`CYCLES`).
+        for c in CYCLES.iter().filter(|c| wanted(c.motion)) {
+            let mut three = Vec::new();
+            for v in 0..3u8 {
+                match make(mset, kh2, bake, &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize)? {
+                    Some(m) => three.push(m),
+                    None => break,
+                }
+            }
+            if three.len() == 3 {
+                for (m, block) in three {
+                    moves.push(m);
+                    blocks.push(block);
+                }
+            } else {
+                log(&format!("KH2 slots: KH2 motion {} left out: not all three of KH1's slots {}..{} built", c.motion, c.slot, c.slot + 2));
             }
         }
         // KH2's row selection on KH1's ground swings (`pick`): every other ground swing KH2's
@@ -138,7 +183,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 if finisher != (s.request == GROUND_FINISHER) || motion == s.motion || !wanted(motion) {
                     continue;
                 }
-                if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, s.stands_for, s.request, s.kind), false, KH1_SLOTS + moves.len())? {
+                if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, s.stands_for, s.request, s.kind), false, (false, 0), KH1_SLOTS + moves.len())? {
                     moves.push(m);
                     blocks.push(block);
                 }
@@ -163,24 +208,30 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
 
 /// One of our motions: KH2's `motion` on KH1's slot `stands_for` (its template) for KH1's
 /// `request`, as our slot `slot`; `default`: the request's own (`SPECS`), else one KH2's row
-/// selection can pick (`pick`). `None` if it can't be built (logged).
-fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, slot: usize) -> Result<Option<(Move, Vec<u8>)>, String> {
+/// selection can pick (`pick`); `field`: KH2's field variant of the motion; `variant`: which of a
+/// kind 3 request's three slots (`CYCLES`). `None` if it can't be built (logged).
+#[allow(clippy::too_many_arguments)]
+fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize) -> Result<Option<(Move, Vec<u8>)>, String> {
     let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
         log(&format!("KH2 slots: KH2 motion {motion} has no clip, left out"));
         return Ok(None);
     };
-    if requests.get(request).map(|e| (e & 0xFFF) as usize) != Some(stands_for) {
+    let entry = requests.get(request).copied();
+    let base = stands_for.checked_sub(variant as usize);
+    if entry.map(|e| (e & 0xFFF) as usize) != base || (variant > 0 && entry.map(|e| (e >> 12) & 7) != Some(KIND_VARIANTS)) {
         // (Left out, not a failure of the rest: one wrong request shouldn't drop the others.)
         log(&format!("KH2 slots: request {request:#x} is not KH1's slot {stands_for}; KH2 motion {motion} left out"));
         return Ok(None);
     }
     let template = ks::motion_bytes(mset, stands_for).map_err(|e| e.to_string())?;
     let old = u32::from_le_bytes(template[4..8].try_into().unwrap());
-    let frames = clip.length.max(1);
+    // (A field variant's own length: KH2's field walk and run are their own motions.)
+    let field_len = field.then(|| kh2.rig.field_motions.get(&motion)).flatten().map(|m| kh2_anim::length_frames(m).round() as u32);
+    let frames = field_len.unwrap_or(clip.length).max(1);
     let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32);
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     let travel = kind == Kind::GroundCombo && travels(requests[request]);
-    let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, stands_for, motion, frames, &tracks, travel)) {
+    let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, stands_for, (motion, field), frames, &tracks, travel)) {
         Some(Ok(block)) => (block, true),
         Some(Err(e)) => {
             log(&format!("KH2 slots: KH2 motion {motion} not baked ({e}); drawn over its template"));
@@ -189,12 +240,13 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
         None => (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false),
     };
     log(&format!(
-        "KH2 slots: KH2 motion {motion} as KH1 slot {slot} (for KH1's slot {stands_for} / request {request:#x}{}, {old} -> {frames} frames): {}",
+        "KH2 slots: KH2 motion {motion}{} as KH1 slot {slot} (for KH1's slot {stands_for} / request {request:#x}{}, {old} -> {frames} frames): {}",
+        if field { " (field)" } else { "" },
         if default { "" } else { ", by KH2's row selection" },
         tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
     ));
     let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Voice(_) | EventKind::Effect(_))).map(|e| (e.frame, e.kind)).collect();
-    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, events }, block)))
+    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, events }, block)))
 }
 
 /// The ground swings KH2's combo rows can take with no ability (an ability's row is a borrow,
@@ -219,9 +271,9 @@ fn swing_rows(rows: &[character_core::ComboRow]) -> Vec<(u16, bool)> {
 /// logged. `travel`: the move's request has KH1's travel flag (`travels`): KH2's root travel goes
 /// in its H10.
 #[allow(clippy::too_many_arguments)]
-fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], stands_for: usize, motion: u16, frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
+fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], stands_for: usize, (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
     let t = std::time::Instant::now();
-    let (poses, moved, scales) = b.poses(kh2, motion, frames, travel, Some(stands_for)).ok_or("KH2 has no animation for it")?;
+    let (poses, moved, scales) = b.poses(kh2, motion, field, frames, travel, Some(stands_for)).ok_or("KH2 has no animation for it")?;
     let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved, &scales).map_err(|e| e.to_string())?;
     log(&format!(
         "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; travel {} ({} H10 keys); KH1's FK from it within {:.3} units of the pose (worst bone {})",
@@ -325,6 +377,11 @@ pub fn travels(entry: u32) -> bool {
 /// swing travel stays out).
 pub unsafe fn moves_itself(actor: usize) -> bool {
     current(actor).is_some_and(|m| m.travel)
+}
+
+/// Our slot plays KH2's field variant of its motion (`CYCLES`).
+pub fn is_field(slot: usize) -> bool {
+    moved(slot).is_some_and(|m| m.field)
 }
 
 /// Our slot's KH2 motion, if `slot` is one of ours.
@@ -529,7 +586,7 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         let holds = own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for);
         if holds {
             redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default));
-        } else {
+        } else if m.variant == 0 {
             missing.push(format!("{:#x}", m.request));
         }
     }

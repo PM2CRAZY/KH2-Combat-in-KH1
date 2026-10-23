@@ -533,3 +533,42 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   and refuse finishers while `+0x5C0` block `+0x1DC` bit 11 and `0x1403C1D10` hold. What those
   states are: not looked at.
 - Unverified in game: all of it.
+
+## 8. KH2's walk and run as slots (t389)
+
+The tester (`docs/tester-requests.md`, "Missing sleeves animation", point 6): "can you also bake
+the animations for kh2s walking and running cycles? its more easy for me to compare." Before,
+KH2's walk and run were only drawn over KH1's own (the follow route, `pose::play_for`, at a rate
+matched to his speed).
+
+**KH1's side** (Checked (files): `xa_ex_0010.mset`'s request table; Checked (decomp): §1.3's
+resolver `0x14029E050`):
+- Walk is request `0x1`, entry `0x3002`; run is `0x2`, entry `0x3005`: kind 3, so KH1 plays the
+  entry's slot + 0, 1 or 2 (field, battle, the third variant by `0x142867CD8` bit `0x1000`):
+  walk slots 2 / 3 / 4 (60, 60, 48 frames), run 5 / 6 / 7 (36 each).
+- The actor's motion rate (`+0x284`) is 1: `0x14029EF50` sets it, and otherwise only event
+  script commands do (`0x1401AB830`, `0x1402BA370`, through `0x14029E8B0`). So KH1 plays its own
+  walk and run, and ours, at their own speed, whatever his speed.
+
+**Ours** (`kh2slots::CYCLES`): each request gets three slots in a row on KH1's three as templates
+(retimed to KH2's length, baked with `kh1_bake`, `Baker::poses`): KH2's field cycle on the field
+one (2, 5), its battle cycle on the other two (3, 4 / 6, 7), as the follow route draws them; the
+request is pointed at the first (`redirect`), and KH1's kind 3 adds 0, 1 or 2 itself. All three
+or none (a slot missing would make KH1's +1 / +2 land on another of ours). Its style is Misc
+Animations (`shared::slot_kind`, slots 0..7), the same switch as before. KH2 motion 1 (walk: 72
+frames, 30 fps, keys 20..56) and 2 (run: 32 frames, keys 0..16): a KH2 cycle per KH1 cycle.
+- KH1 keeps its own: the request id (`+0x164`), its states, its movement, its footstep and sound
+  events (the template's, stretched to KH2's length: Assumption that both cycles start on the
+  same foot), its loop. KH1's own parts (belt chain, shorts, hem) take KH1's walk or run, stretched
+  the same way (`docs/kh1-secondary-motion.md`, "KH1's own parts").
+- `Play::Slot` (not baked: `kh1_bake = off`) and `follow_baked` take the field variant for the
+  field slots (`kh2slots::is_field`).
+
+Differences from before, for the tester to look at:
+- The cycle now plays at KH2's own speed (KH1's rate 1), not stretched to his speed over the
+  ground as the follow route did, so at speeds other than KH2's run the planted foot may slide.
+- KH1 blends into and out of the cycle itself (its blend clock), as with the swings.
+
+Not checked: in game; that KH1's walk and run states loop our slots over their whole length
+(Assumption: no custom loop range, `+0x288..+0x28C`, is set for them); which of KH1's states
+picks the third variant (4 / 7).

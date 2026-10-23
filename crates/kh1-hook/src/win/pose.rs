@@ -80,9 +80,9 @@ enum Play {
     /// is KH2's second, the user: "sora base attack 2, kh2 base attack 2"), or `None` to
     /// alternate them swing by swing.
     Swing { air: bool, finisher: bool, second: Option<bool> },
-    /// One of our slots in KH1's motion table (`kh2slots`): its KH2 motion, at KH1's own time
-    /// and blend (KH1 plays the slot; its length is the KH2 motion's).
-    Slot { motion: u16 },
+    /// One of our slots in KH1's motion table (`kh2slots`): its KH2 motion (`field`: its field
+    /// variant), at KH1's own time and blend (KH1 plays the slot; its length is the KH2 motion's).
+    Slot { motion: u16, field: bool },
 }
 
 /// KH2's swing for KH1's ground swing slot (`play_for`): 98 (KH1's first and third swing) KH2's
@@ -1101,9 +1101,13 @@ impl Baker {
     /// Also each frame's bone scales (KH2's squash and stretch on the parts `secondary` posed,
     /// `Secondary::scales`, and KH1's own on its parts), for the bake's scale channels; empty
     /// when none differs from 1.
-    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32, travel: bool, template: Option<usize>) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>, Vec<Vec<Vec3>>)> {
+    ///
+    /// `field`: KH2's field (out-of-combat) variant of the motion, where it has one (its walk and
+    /// run, `kh2slots::CYCLES`).
+    #[allow(clippy::type_complexity)]
+    pub fn poses(&self, kh2: &Kh2, motion: u16, field: bool, frames: u32, travel: bool, template: Option<usize>) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>, Vec<Vec<Vec3>>)> {
         let rig = &kh2.rig;
-        let clip = rig.motions.get(&motion)?;
+        let clip = field.then(|| rig.field_motions.get(&motion)).flatten().or_else(|| rig.motions.get(&motion))?;
         let set = super::settings::get();
         let roots = kh2.roots.get(&motion);
         let parents: Vec<i16> = self.skeleton.iter().map(|b| b.parent).collect();
@@ -1202,7 +1206,8 @@ fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16)
         _ => None,
     };
     if let (Some(kh2), Some(at)) = (KH2.get().and_then(|k| k.as_ref().ok()), frames) {
-        if let Some(clip) = kh2.rig.motions.get(&motion) {
+        let field = slot.is_some_and(super::kh2slots::is_field).then(|| kh2.rig.field_motions.get(&motion)).flatten();
+        if let Some(clip) = field.or_else(|| kh2.rig.motions.get(&motion)) {
             let mut pose = kh2_anim::evaluate(&kh2.rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
             if let Some(root) = kh2.roots.get(&motion).and_then(|r| r.get((at as usize).min(r.len().saturating_sub(1)))) {
                 let un = Mat4::from_translation(-Vec3::from(*root));
@@ -1233,7 +1238,7 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
         if slot.is_some_and(super::kh2slots::is_baked) {
             return follow_baked(s, slot, to_world, motion);
         }
-        return follow_play(s, slot, to_world, Some(Play::Slot { motion }));
+        return follow_play(s, slot, to_world, Some(Play::Slot { motion, field: slot.is_some_and(super::kh2slots::is_field) }));
     }
     // Misc Animations at KH2 (`styles`, base Sora): KH1 uses the item (its effect, its timing, the
     // item's logic) and KH2's item-use motion is drawn over it (P_EX100 motion 9, A110: the
@@ -1382,7 +1387,7 @@ fn follow_play(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, forced: Optio
             (motion, false, false, new_slot, rate, 0.0)
         }
         // (No rate: drawn at KH1's own time below; blended by KH1's blend clock.)
-        Play::Slot { motion } => (motion, false, false, new_slot || f.motion != motion, 60.0, 0.0),
+        Play::Slot { motion, field } => (motion, field, false, new_slot || f.motion != motion || f.field != field, 60.0, 0.0),
     };
     if !restart && matches!(play, Play::Motion { .. }) {
         // Loops change speed as he does: carry the clip position over at the new rate.

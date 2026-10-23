@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 389 (testing branch: KH2's walk and run baked)
+- The tester: bake KH2's walk and run to compare. `kh2slots::CYCLES`: requests 0x1 / 0x2 are kind 3, three slots each on
+  KH1's 2-4 / 5-7 (KH2's field cycle on the field slot, its battle cycle on the other two), redirected at the first;
+  `Play::Slot` carries the field flag. Under Misc Animations. KH1's motion rate `+0x284` is set to 1 by `0x14029EF50`;
+  otherwise only by event-script commands (decomp). Notes: `docs/kh1-anim-slots.md` §8.
+
 ### 2026-10-23: Stage 388 (testing branch: no hair switches)
 - The tester: KH2 has no physics, its secondary parts are keyed, so the switches go. `hair_physics`, `kh2_hair` and
   `jiggle.rs` removed; KH2's animation of the hair, hood, sleeves, necklace and chain always runs on KH2's poses (the OG
