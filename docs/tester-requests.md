@@ -313,7 +313,11 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > The build at the top of the testing branch (`kh1-kh2.dll`) updates by itself a few minutes after each version, so pulling gets you t377.
 
 > [!note] Tester Mr Bugs
+> the in game states seem to be frozen, we have a new bug though the game turns black when a frame advance is on, you only see a frame every frame advance or when you hold the frame advance key down
 > 
+> Can you also add a hard rule to the tester thread that any time there's multiple threads to have sub agents deployed on each thread when possible? 
+> 
+> go ahead
 
 
 ---
@@ -343,7 +347,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > If there's a later chat you want me to have too, add it to the same file and tell me.
 
 > [!note] Tester Mr Bugs
-> 
+> close
 
 
 ---
@@ -482,7 +486,11 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > Correction to the build note above: there's a build now. `kh1-kh2.dll` at the top of the testing branch is t376, with everything up to now in it (frame advance t372, camera t373, combo rows t374, sleeves t375, effects t376). From now on, GitHub builds it on Windows and commits it every time the code on the testing branch changes, so pulling the testing branch always gets you the latest build. Install it through OpenKH as usual (`mod.yml`). The log's first line shows which version loaded.
 
 > [!note] Tester Mr Bugs
-> 
+> 4. it should be exact to kh2 so for kh2 moves take the 2 frame delay off
+> 5. do option (a) and start porting
+> 6. can't check it yet as our frame advance still isn't complete, just do 1. and 2. for now
+>    
+>    go ahead
 
 ---
 
@@ -516,7 +524,12 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > A Select + Triangle trace of a few combos at different distances would help, along with the log lines that start with "KH2's row selection".
 
 > [!note] Tester Mr Bugs
-> 
+> 1. do option (a)
+>  2. yes
+>  3. yes
+>  4. yes add that
+>
+>go ahead
 
 
 ---
@@ -550,7 +563,17 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 3. The belt chain and necklace: leave them still, or give them a little swing? A swing would be physics, which goes against the "baked, not physics" rule, so I'd only do it if you want it.
 
 > [!note] Mr Bugs
+> 4. do (b) and (c), if there isn't a matching equivalent to something on kh1's soras body we shouldn't add it, after your done give me a list of similarities that are shared between models so I can make sure nothing is being copied that shouldn't.
+> 5. yes do it
+> 6. if you can bake a custom animation for the small parts kh2 sora doesn't have that kh1 has following the motion of each animation to give them similar looking results to kh1's animations that would be great, use kh1's animations as a reference. 
+>    
+>    "H2 has 2 flaps per sleeve and KH1 has 4, so the front and back follow KH2's front and back flaps, and the top and bottom are a mix of the two. The sleeves follow the same switches as the hair (`hair_physics`, `kh2_hair`)."
+>    
+>    this was a misunderstanding from the user's part, kh2 does not have "physics" but is instead baked so remove those switches out of the code, they're unneeded. If your unsure check the rust decomp, if it isn't there check the kh2 steam gihidra c decomp.
+>    
+>    can you also bake the animations for kh2s walking and running cycles? its more easy for me to compare.
 > 
+> go ahead
 
 
 ---
@@ -582,7 +605,12 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > Other things I found in KH2's camera, not changed yet: the right stick may turn the camera at full speed even when tilted diagonally (I need a closer read before I'd change it), there's a reset branch whose purpose I don't know yet, and I haven't read KH2's zoom code. Tell me if you want any of those looked at.
 
 > [!note] Tester Mr Bugs
+> 1. it seems right but check the ghidra kh2 steam c decomp to make sure
+> 2. it should be 1:1 
 > 
+> yes, look at everything related to the camera that your unsure about, use ghidra kh2 steam c decomp for it.
+> 
+> go ahead
 
 ---
 
@@ -601,4 +629,6 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > Done. There's a Contents list at the top of the file, under the title, with a link to every open thread. I added a rule to the assistant section so it stays current: each new thread gets a line when it's first answered, and its line comes off when it's closed.
 
 > [!note] Tester Mr Bugs
+> can I get sub tables so I can click on the exact message for each thread
 > 
+> go ahead
