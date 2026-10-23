@@ -21,11 +21,21 @@
 //!   handle (grip → pommel) to KH1's, so the chain leaves the pommel as KH2's does. The last
 //!   link (the charm) is a leaf in KH2: its direction is its bind direction turned as the bone
 //!   turned.
+//! - **Sleeves: the sleeve as KH2's hangs, each flap as KH2's flaps.** KH2 keys each sleeve by
+//!   hand: a root (111 / 203) turning about the shoulder against the upper arm, and two flaps
+//!   on it (113 front, 115 back; 205 / 207). KH1's sleeve is four chains (front, under, back,
+//!   top) of a joint at the shoulder and one part way down. The joints at the shoulder take
+//!   the KH2 root's turn in model space, carried by the swing from KH2's upper arm to KH1's
+//!   (KH1's upper arm points along KH2's, so this is nearly none); the joints down the sleeve
+//!   take the flap's turn relative to the root, on KH1's root as just posed. The under and top
+//!   chains blend the two flaps (by where they sit round the arm in the binds).
 //! Each KH1 bone is turned about its own joint with its subtree, so KH1's link lengths stay.
 //!
 //! The matches are ours, worked out from the two bind poses and from which bones the two
 //! games' motions actually turn (KH1: the spikes' middle bones, hood 80-83, chain 283-291;
-//! KH2: the spikes' second bones, hood 72-73, weapon 3-11). See `docs/kh1-secondary-motion.md`.
+//! KH2: the spikes' second bones, hood 72-73, weapon 3-11; sleeves: KH1 129/130, 133/134,
+//! 137/138, 141/142 and 233/234 ... 245/246, KH2 110, 113, 115 and 202, 205, 207). See
+//! `docs/kh1-secondary-motion.md`.
 
 use glam::{Mat4, Quat, Vec3};
 use kh2_formats::anim::Bone;
@@ -50,6 +60,44 @@ pub const KH1_GRIP: usize = 280;
 pub const KH1_POMMEL: usize = 283;
 pub const KH2_GRIP: usize = 0;
 pub const KH2_POMMEL: usize = 3;
+
+/// One side's sleeve: KH1's upper arm and elbow and its four chain roots (front, under, back,
+/// top; each root, a joint at the same place that the motions turn, one part way down, a tip);
+/// KH2's upper arm and elbow, the sleeve's root (turned about the shoulder through its parent)
+/// and its two flaps (pivot, then the leaf the motions turn: front, back).
+struct SleeveSide {
+    kh1_arm: usize,
+    kh1_elbow: usize,
+    kh1_roots: [usize; 4],
+    kh2_arm: usize,
+    kh2_elbow: usize,
+    kh2_root: usize,
+    kh2_flaps: [(usize, usize); 2],
+}
+
+/// +x (KH1 198, KH2 78) and -x (KH1 93, KH2 170): KH2's -x side is +92.
+const SLEEVES: [SleeveSide; 2] = [
+    SleeveSide { kh1_arm: 198, kh1_elbow: 199, kh1_roots: [232, 236, 240, 244], kh2_arm: 78, kh2_elbow: 79, kh2_root: 111, kh2_flaps: [(112, 113), (114, 115)] },
+    SleeveSide { kh1_arm: 93, kh1_elbow: 94, kh1_roots: [128, 132, 136, 140], kh2_arm: 170, kh2_elbow: 171, kh2_root: 203, kh2_flaps: [(204, 205), (206, 207)] },
+];
+
+/// One KH1 sleeve chain and what it follows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Sleeve {
+    /// The joint at the shoulder (turned with everything under it), the one part way down,
+    /// and the tip.
+    pub joint: usize,
+    pub mid: usize,
+    pub tip: usize,
+    /// KH1's and KH2's upper arm and elbow.
+    pub kh1_arm: (usize, usize),
+    pub kh2_arm: (usize, usize),
+    /// KH2's sleeve root.
+    pub kh2_root: usize,
+    /// KH2's two flap leaves and the second's share of the flap turn.
+    pub flaps: (usize, usize),
+    pub share: f32,
+}
 
 /// The most a spike may turn from its bind relative to the head (KH1's own motions turn them
 /// up to 173°).
@@ -80,15 +128,19 @@ pub struct Parts {
     pub hair: bool,
     pub hood: bool,
     pub chain: bool,
+    pub sleeves: bool,
 }
 
 impl Parts {
-    pub const ALL: Parts = Parts { hair: true, hood: true, chain: true };
+    pub const ALL: Parts = Parts { hair: true, hood: true, chain: true, sleeves: true };
 
     /// Whether this KH1 bone belongs to one of the parts set (hair 152-193, hood 79-84, chain
-    /// 283-292).
+    /// 283-292, sleeves 128-143 and 232-247).
     pub fn covers(&self, bone: usize) -> bool {
-        (self.hair && (152..=193).contains(&bone)) || (self.hood && (79..=84).contains(&bone)) || (self.chain && (283..=292).contains(&bone))
+        (self.hair && (152..=193).contains(&bone))
+            || (self.hood && (79..=84).contains(&bone))
+            || (self.chain && (283..=292).contains(&bone))
+            || (self.sleeves && ((128..=143).contains(&bone) || (232..=247).contains(&bone)))
     }
 }
 
@@ -112,6 +164,7 @@ pub struct Secondary {
     hair_mix: Vec<(usize, f32)>,
     hood: Vec<Link>,
     chain: Vec<Link>,
+    sleeves: Vec<Sleeve>,
     /// The head's centre (KH1 bind, the spike roots' middle) and, per spike, how near it the
     /// tip may come.
     head_centre: Vec3,
@@ -223,7 +276,30 @@ impl Secondary {
         } else {
             Vec::new()
         };
-        Secondary { parent, below, kh1_bind, kh2_bind, weapon_bind, hair, hair_mix, hood, chain, head_centre, hair_in }
+        let sleeves = sleeve_links(kh1, kh2, &kh1_bind, &kh2_bind);
+        Secondary { parent, below, kh1_bind, kh2_bind, weapon_bind, hair, hair_mix, hood, chain, sleeves, head_centre, hair_in }
+    }
+
+    pub fn sleeves(&self) -> &[Sleeve] {
+        &self.sleeves
+    }
+
+    /// A sleeve chain's two turns (model space, from KH1's bind): the joint at the shoulder (as
+    /// KH2's sleeve root, carried by the swing from KH2's upper arm onto KH1's as posed in
+    /// `pose`), then the joint down the sleeve with that root applied (`None` where KH2's bones
+    /// can't be read).
+    fn sleeve_turns(&self, sl: &Sleeve, pose: &[Mat4], body: &[Mat4]) -> Option<(Quat, Quat)> {
+        let dir = |p: &[Mat4], (a, b): (usize, usize)| Some((at(p.get(b)?) - at(p.get(a)?)).normalize_or_zero());
+        let (d2, d1) = (dir(body, sl.kh2_arm)?, dir(pose, sl.kh1_arm)?);
+        let onto = if d1 == Vec3::ZERO || d2 == Vec3::ZERO { Quat::IDENTITY } else { Quat::from_rotation_arc(d2, d1) };
+        let root = (onto * rot(body.get(sl.kh2_root)?) * rot(self.kh2_bind.get(sl.kh2_root)?).inverse()).normalize();
+        let a = Self::relative(body, &self.kh2_bind, sl.kh2_root, sl.flaps.0)?;
+        let b = Self::relative(body, &self.kh2_bind, sl.kh2_root, sl.flaps.1)?;
+        let flap = a.slerp(b, sl.share).normalize();
+        let joint = (root * rot(&self.kh1_bind[sl.joint])).normalize();
+        // The mid joint: the root's turn, then the flap's (both in the bind's axes).
+        let mid = (root * flap * rot(&self.kh1_bind[sl.mid])).normalize();
+        (joint.is_finite() && mid.is_finite()).then_some((joint, mid))
     }
 
     pub fn hair(&self) -> &[Link] {
@@ -329,6 +405,16 @@ impl Secondary {
                 None => rep.parts.hood = false,
             }
         }
+        if want.sleeves && !self.sleeves.is_empty() {
+            let mut any = false;
+            for sl in &self.sleeves {
+                let Some((joint, mid)) = self.sleeve_turns(sl, pose, body) else { continue };
+                self.turn(pose, sl.joint, (joint * rot(&pose[sl.joint]).inverse()).normalize());
+                self.turn(pose, sl.mid, (mid * rot(&pose[sl.mid]).inverse()).normalize());
+                any = true;
+            }
+            rep.parts.sleeves = any;
+        }
         if let (true, false, Some(w)) = (want.chain, self.chain.is_empty(), weapon) {
             if w.len() >= self.weapon_bind.len() && w.iter().all(|m| m.is_finite()) {
                 rep.parts.chain = true;
@@ -415,6 +501,13 @@ impl Secondary {
                 v.push((*l, (chest * d * bind_dir(l)).normalize()));
             }
         }
+        for sl in &self.sleeves {
+            if let Some((joint, mid)) = self.sleeve_turns(sl, pose, body) {
+                let d = |q: Quat, a: usize, b: usize| (q * rot(&self.kh1_bind[a]).inverse() * (at(&self.kh1_bind[b]) - at(&self.kh1_bind[a]))).normalize();
+                v.push((Link { kh1: sl.joint, tip: sl.mid, kh2: sl.kh2_root }, d(joint, sl.joint, sl.mid)));
+                v.push((Link { kh1: sl.mid, tip: sl.tip, kh2: sl.flaps.0 }, d(mid, sl.mid, sl.tip)));
+            }
+        }
         if let Some(w) = weapon {
             let h2 = (at(&w[KH2_POMMEL]) - at(&w[KH2_GRIP])).normalize_or_zero();
             let h1 = (at(&pose[KH1_POMMEL]) - at(&pose[KH1_GRIP])).normalize_or_zero();
@@ -432,6 +525,47 @@ impl Secondary {
     pub fn parent(&self, b: usize) -> Option<usize> {
         self.parent.get(b).copied().flatten()
     }
+}
+
+/// The sleeve chains found on both skeletons: each side's KH1 chains (root → joint at the same
+/// place → mid → tip, the root under the upper arm) and KH2's sleeve (root under the upper arm's
+/// chain, each flap pivot under the root and its leaf under that). A side either lacks is left
+/// out. Each chain's flap share: where its root and the two flap pivots sit round the arm in
+/// the binds (directions square to the arm), blended by inverse squared distance, as the hair.
+fn sleeve_links(kh1: &[Bone], kh2: &[Bone], b1: &[Mat4], b2: &[Mat4]) -> Vec<Sleeve> {
+    let p1 = |i: usize| kh1.get(i).map(|b| b.parent as i64);
+    let p2 = |i: usize| kh2.get(i).map(|b| b.parent as i64);
+    let mut v = Vec::new();
+    for s in &SLEEVES {
+        let kh2_ok = s.kh2_flaps.iter().all(|&(pivot, leaf)| p2(pivot) == Some(s.kh2_root as i64) && p2(leaf) == Some(pivot as i64)) && p2(s.kh2_elbow).is_some() && p2(s.kh2_arm).is_some();
+        let kh1_ok = s.kh1_roots.iter().all(|&r| p1(r) == Some(s.kh1_arm as i64) && p1(r + 1) == Some(r as i64) && p1(r + 2) == Some(r as i64 + 1) && p1(r + 3) == Some(r as i64 + 2)) && p1(s.kh1_elbow).is_some();
+        if !kh1_ok || !kh2_ok {
+            continue;
+        }
+        // Round the arm: the offset from the shoulder, square to the arm, made unit.
+        let round = |b: &[Mat4], arm: usize, elbow: usize, i: usize| {
+            let axis = (at(&b[elbow]) - at(&b[arm])).normalize_or_zero();
+            let o = at(&b[i]) - at(&b[arm]);
+            (o - axis * o.dot(axis)).normalize_or_zero()
+        };
+        let f: Vec<Vec3> = s.kh2_flaps.iter().map(|&(pivot, _)| round(b2, s.kh2_arm, s.kh2_elbow, pivot)).collect();
+        for &r in &s.kh1_roots {
+            let o = round(b1, s.kh1_arm, s.kh1_elbow, r);
+            let (d0, d1) = (o.distance(f[0]), o.distance(f[1]));
+            let (w0, w1) = (1.0 / (d0 * d0 + 1e-3), 1.0 / (d1 * d1 + 1e-3));
+            v.push(Sleeve {
+                joint: r + 1,
+                mid: r + 2,
+                tip: r + 3,
+                kh1_arm: (s.kh1_arm, s.kh1_elbow),
+                kh2_arm: (s.kh2_arm, s.kh2_elbow),
+                kh2_root: s.kh2_root,
+                flaps: (s.kh2_flaps[0].1, s.kh2_flaps[1].1),
+                share: w1 / (w0 + w1),
+            });
+        }
+    }
+    v
 }
 
 /// A turn limited to `max` radians.
@@ -623,10 +757,83 @@ mod tests {
         assert!(p2 == b1);
     }
 
+    /// `rigs` with the +x sleeve on both: KH1's upper arm 198 → elbow 199 and its four chains
+    /// (front, under, back, top) along the arm; KH2's upper arm 78 → elbow 79, the sleeve root
+    /// 111 at the shoulder (under 109 and 110) and its front and back flaps.
+    fn sleeve_rigs() -> (Vec<Bone>, Vec<Bone>) {
+        let (mut k1, mut k2, _) = rigs();
+        k1[198] = bone(0, [12.0, 112.0, -3.0]);
+        k1[199] = bone(198, [19.0, 0.0, 0.0]);
+        for (r, off) in [(232usize, [0.0, 0.0, 3.0]), (236, [0.0, -5.0, 0.0]), (240, [0.0, 0.0, -3.0]), (244, [0.0, 3.0, 0.0])] {
+            k1[r] = bone(198, off);
+            k1[r + 1] = bone(r as i16, [0.0; 3]);
+            k1[r + 2] = bone(r as i16 + 1, [9.0, 0.0, 0.0]);
+            k1[r + 3] = bone(r as i16 + 2, [6.0, 0.0, 0.0]);
+        }
+        k2[78] = bone(0, [10.0, 121.0, -5.0]);
+        k2[79] = bone(78, [22.0, 0.0, 0.0]);
+        k2[109] = bone(78, [22.0, 0.0, 0.0]);
+        k2[110] = bone(109, [-22.0, 0.0, 0.0]);
+        k2[111] = bone(110, [0.0; 3]);
+        k2[112] = bone(111, [2.5, -0.8, 3.2]);
+        k2[113] = bone(112, [0.0; 3]);
+        k2[114] = bone(111, [2.5, -0.8, -3.0]);
+        k2[115] = bone(114, [0.0; 3]);
+        (k1, k2)
+    }
+
+    #[test]
+    fn sleeves_match_their_flaps_round_the_arm() {
+        let (k1, k2) = sleeve_rigs();
+        let s = Secondary::new(&k1, &k2, None);
+        let v: Vec<(usize, f32)> = s.sleeves().iter().map(|l| (l.joint, l.share)).collect();
+        assert_eq!(v.iter().map(|x| x.0).collect::<Vec<_>>(), vec![233, 237, 241, 245]);
+        // Front mostly the front flap, back mostly the back one, under and top between.
+        assert!(v[0].1 < 0.1 && v[2].1 > 0.9, "{v:?}");
+        assert!((v[1].1 - 0.5).abs() < 0.1 && (v[3].1 - 0.5).abs() < 0.1, "{v:?}");
+        // The default rigs have no sleeve: none found.
+        let (a, b, _) = rigs();
+        assert!(Secondary::new(&a, &b, None).sleeves().is_empty());
+    }
+
+    #[test]
+    fn a_sleeve_hangs_and_flaps_as_kh2_s() {
+        let (k1, k2) = sleeve_rigs();
+        let s = Secondary::new(&k1, &k2, None);
+        let (b1, b2) = (kh2_anim::Pose::bind(&k1).bones, kh2_anim::Pose::bind(&k2).bones);
+        // KH2's sleeve root dropped 30° about z at the shoulder, its front flap 20° more about y.
+        let about = |p: Vec3, q: Quat| Mat4::from_translation(p) * Mat4::from_quat(q) * Mat4::from_translation(-p);
+        let (drop, flap) = (Quat::from_rotation_z(-30f32.to_radians()), Quat::from_rotation_y(20f32.to_radians()));
+        let mut body = b2.clone();
+        for i in [111, 112, 113, 114, 115] {
+            body[i] = about(at(&b2[111]), drop) * body[i];
+        }
+        body[113] = about(at(&body[113]), drop * flap * drop.inverse()) * body[113];
+        let mut pose = b1.clone();
+        let rep = s.apply(&mut pose, &body, None, Parts { sleeves: true, ..Parts::default() });
+        assert!(rep.parts.sleeves && !rep.parts.hair && !rep.parts.chain);
+        // Every chain's shoulder joint drops with KH2's root.
+        for r in [233, 237, 241, 245] {
+            assert!(dir(&pose, r, r + 1).angle_between(drop * Vec3::X) < 1e-3, "{r}: {:?}", dir(&pose, r, r + 1));
+            for b in r..=r + 1 {
+                assert!((at(&pose[b + 1]).distance(at(&pose[b])) - at(&b1[b + 1]).distance(at(&b1[b]))).abs() < 1e-3);
+            }
+        }
+        // The front chain's mid joint takes the front flap; the back chain's stays with the root.
+        assert!(dir(&pose, 234, 235).angle_between(drop * flap * Vec3::X) < 1e-2, "{:?}", dir(&pose, 234, 235));
+        assert!(dir(&pose, 242, 243).angle_between(drop * Vec3::X) < 1e-2);
+        // The arm and the rest stay.
+        assert!(pose[198] == b1[198] && pose[199] == b1[199]);
+        for (l, want) in s.expected(&b1, &body, None) {
+            assert!(dir(&pose, l.kh1, l.tip).angle_between(want) < 1e-3, "{l:?}");
+        }
+    }
+
     #[test]
     fn parts_cover_their_bones() {
         let p = Parts { hair: true, ..Parts::default() };
         assert!(p.covers(153) && !p.covers(80) && !p.covers(285));
         assert!(Parts::ALL.covers(80) && Parts::ALL.covers(292) && !Parts::ALL.covers(151) && !Parts::ALL.covers(282));
+        assert!(Parts::ALL.covers(129) && Parts::ALL.covers(247) && !Parts::ALL.covers(93) && !Parts::ALL.covers(198));
     }
 }

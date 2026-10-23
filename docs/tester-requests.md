@@ -497,6 +497,28 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > [!note] Mr Bugs
 > I'm in the process of getting ready to transfer all the kh2 animations into kh1s internals and I noticed on kh2's animations they're missing animations for the sleeves can you double check and add them to our animations? I've logged sora running in kh1 and sora running in kh2, if there's any other missing parts to an animation let me know after you've implemented the changes (logs and traces are in Missing sleeves animation)
 
+> [!tip] Assistant
+> t375
+>
+> Good catch, you were right. Under KH2's moves the sleeves had no animation at all: they stayed fixed to the upper arm like a solid tube. Both games animate the sleeves in their moves (KH2 does it with keyframes, not cloth physics); we just never copied KH2's over. Now each sleeve hangs and flaps the way KH2's sleeve does in the same move, both live and in the baked animations. KH2 has 2 flaps per sleeve and KH1 has 4, so the front and back follow KH2's front and back flaps, and the top and bottom are a mix of the two. The sleeves follow the same switches as the hair (`hair_physics`, `kh2_hair`).
+>
+> **Check:** the game files. I ran it over all 89 of KH2's motions on both arms: nothing breaks, every sleeve follows KH2's direction within 0.03°, and the sleeves never move further from the arm than KH1's own motions take them. Not checked: in game, and whether KH2's exe moves the sleeves any other way at runtime (the motion files have no constraints on them). How KH1's 4 flaps share KH2's 2 is my judgement from where they sit. Notes are in `docs/kh1-secondary-motion.md`. Your traces had no bone data in them, so the cause came from the model and motion files.
+>
+> **Other parts that still don't move under KH2's moves:**
+> - the shorts panels (KH2 animates its own trouser panels, so we could copy those)
+> - the jacket hem (KH2 has matching cloth at the hips)
+> - the belt chain, the necklace and the pieces on the front of the belt (KH2 has nothing matching these)
+> - KH2 also squashes and stretches some cloth, the sleeve flaps included. We only copy turns for now.
+> - The other way round: with the KH2 player model on KH1's own moves, KH2's sleeves, hair, hood and cloth stay still.
+>
+> Questions:
+> 1. What should I do next: (a) the shorts panels from KH2's trousers, (b) the jacket hem from KH2's hip cloth, (c) both, or (d) leave them for now?
+> 2. Should I copy KH2's squash and stretch too? Yes or no.
+> 3. The belt chain and necklace: leave them still, or give them a little swing? A swing would be physics, which goes against the "baked, not physics" rule, so I'd only do it if you want it.
+
+> [!note] Mr Bugs
+> 
+
 
 ---
 

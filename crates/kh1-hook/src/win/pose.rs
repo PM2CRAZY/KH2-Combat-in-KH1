@@ -1055,8 +1055,8 @@ fn kh2_weapon(rig: &Rig, motion: u16, frames: f32, looping: bool, body: &[Mat4])
 
 /// What baking KH2's motions into KH1 motions takes at load (`kh2slots`, ini `kh1_bake`,
 /// `kh1_data::bake`): KH1 Sora's skeleton from its own file, the retarget with KH1's battle and
-/// field idles as its rest, and KH2's own hair, hood and keychain (`secondary`), built as
-/// `check` builds them for the field's Sora.
+/// field idles as its rest, and KH2's own hair, hood, sleeves and keychain (`secondary`), built
+/// as `check` builds them for the field's Sora.
 pub struct Baker {
     pub skeleton: Vec<kh2_formats::anim::Bone>,
     retarget: Retarget,
@@ -1078,7 +1078,7 @@ impl Baker {
 
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
     /// draws it (`follow_play`, `Play::Slot`): KH2's body and Keyblade, the root travel taken out
-    /// (KH1 moves him), retargeted, KH2's hair, hood and keychain on (`hair_physics` and
+    /// (KH1 moves him), retargeted, KH2's hair, hood, sleeves and keychain on (`hair_physics` and
     /// `kh2_hair` on), the Keyblade's teeth-up turn (`keyblade_turn`). Nothing else of ours (feet,
     /// KH1's wrist, the swing).
     ///
@@ -1575,10 +1575,11 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 s.retarget = Some(r);
                 let sec = kh1_data::secondary::Secondary::new(&b, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
                 log(&format!(
-                    "KH2's own hair, hood and keychain: {} spikes ({}), {} hood joints, {} chain links",
+                    "KH2's own hair, hood, sleeves and keychain: {} spikes ({}), {} hood joints, {} sleeve chains, {} chain links",
                     sec.hair().len(),
                     sec.hair().iter().map(|l| format!("{}<-{}", l.kh1, l.kh2)).collect::<Vec<_>>().join(" "),
                     sec.hood().len(),
+                    sec.sleeves().len(),
                     sec.chain().len()
                 ));
                 s.secondary = Some(sec);
@@ -1722,17 +1723,18 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     keyblade_teeth_up(&mut pose, &s.parents);
     let set = super::settings::get();
     if set.physics {
-        // KH2's own animation of the hair, hood and keychain (the user: "add the animations for
-        // sora's hair and chain on each KH2 animation instead"), on every pose KH2 gave; the
-        // keychain only on a Keyblade (not the dream weapons or the wooden sword).
+        // KH2's own animation of the hair, hood, sleeves and keychain (the user: "add the
+        // animations for sora's hair and chain on each KH2 animation instead"; the sleeves: Mr
+        // Bugs, "missing animations for the sleeves"), on every pose KH2 gave; the keychain only
+        // on a Keyblade (not the dream weapons or the wooden sword).
         let mut driven = kh1_data::secondary::Parts::default();
         if let (true, Some((body, weapon)), Some(sec)) = (set.kh2_hair, s.kh2_now.as_ref(), s.secondary.as_ref()) {
-            let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)) };
+            let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)), sleeves: true };
             let rep = sec.apply(&mut pose, body, (!weapon.is_empty()).then_some(weapon.as_slice()), want);
             driven = rep.parts;
             static LOGGED: AtomicU32 = AtomicU32::new(0);
             if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
-                log(&format!("hair, hood and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
+                log(&format!("hair, hood, sleeves and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
             }
         }
         // The swing (`kh1_data::jiggle`) for any chain KH2 didn't pose. One step per 60 Hz frame

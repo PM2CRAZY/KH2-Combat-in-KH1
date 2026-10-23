@@ -1,3 +1,17 @@
+### 2026-10-23: Stage 375 (testing branch: KH2's sleeve animation on KH1 Sora)
+- The tester Mr Bugs (`docs/tester-requests.md`, "Missing sleeves animation"): under KH2's moves Sora's sleeves didn't
+  move. His t371 runs (KH2's run, then KH1's) log no bones; the cause is in the files: KH1's sleeve chains (128-143,
+  232-247, four per arm from the upper arm 93 / 198) were in no retarget part and not in `secondary`, so they kept
+  their bind relation to the arm. Both games key their sleeves by hand (KH1: 59-93 motions; KH2: root 110 / 202 and
+  flaps 113, 115, 205, 207, no constraints in any motion).
+- `secondary.rs`: `Parts::sleeves` (in `ALL`, `covers` 128-143 / 232-247). Each chain's shoulder joint takes KH2's
+  sleeve root's (111 / 203) model-space turn, carried by the swing from KH2's upper arm onto KH1's; the joint down the
+  sleeve takes the flap's turn relative to that root. Four KH1 chains blend KH2's two flaps by place round the arm
+  (front / back 98%, under / top about half). Live (`pose`) and in the bake (`Baker`), with the hair's switches.
+- Checked on the files, all 89 KH2 motions: no NaN, lengths kept, links within 0.03 deg of KH2's, sleeves within 29 deg
+  of the arm (KH1's own motions: 41 deg). Not carried: KH2's flap scale keys. Notes and the other parts still rigid
+  (shorts panels, hem, belt chain, necklace): `docs/kh1-secondary-motion.md`.
+
 ### 2026-10-23: Stage 374 (testing branch: KH2's row selection on KH1's ground combo)
 - The tester Mr. Bugs (`docs/tester-requests.md`, "KH2's combo row selection"): KH2's row selection, so the right swing
   plays for the target's distance; the swing order was fixed (0xC8 / 0xCA 151, 0xC9 152, 0xCB 154).

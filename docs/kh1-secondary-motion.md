@@ -1,4 +1,4 @@
-# KH1 port: hair, hood and keychain under KH2's moves
+# KH1 port: hair, hood, sleeves and keychain under KH2's moves
 
 When KH2's moves pose KH1 Sora, his hair spikes, hood and Keyblade chain now move the way KH2
 animates its own hair, hood and chain in that same move. KH1's own animations are not touched:
@@ -126,3 +126,76 @@ Across all 83 motions (1994 frames), no NaN appeared. Only one sample turned a s
 120° from its bind.
 
 Not checked in game yet.
+
+## Sleeves
+
+Tester request (Mr Bugs, "Missing sleeves animation"): under KH2's moves Sora's sleeves didn't
+move. His two runs (t371, KH1 model, Misc Animations KH2 with KH2's run, motion 2, then KH1 with
+KH1's run, slot 2) show the same run; neither trace logs bones, so the cause was found in the
+files.
+
+**Why they were still.** KH1's sleeve bones are outside every retarget part and not in
+`secondary`, so they kept their bind relation to the upper arm: a rigid tube. Both games animate
+the sleeves by hand. Checked (files):
+
+| | KH1 (`xa_ex_0010`) | KH2 (`P_EX100`) |
+|---|---|---|
+| Bones | Four chains per arm from the upper arm (93 / 198): front 128 / 232, under 132 / 236, back 136 / 240, top 140 / 244. Each: root, a joint at the same place, one 8.7 down the arm, a tip about 15 down. | Per arm, from the upper arm (78 / 170): 109 (at the elbow) → 110 (back at the shoulder) → the sleeve root 111 / 203 → two flaps: front 112 → 113 (204 → 205), back 114 → 115 (206 → 207), 2.5 out from the shoulder. |
+| What the motions turn | The joint at the shoulder and the one down the arm, in 59-93 of KH1's motions, up to 89°. Its run: 4-10°. | 110 / 202 (the whole sleeve about the shoulder) in 53-56 motions, and the flap leaves 113, 115, 205, 207 in 76-83. KH2's run: 110 11°, 113 33°, 115 17° (-x side 3-13°). 109, 111, 112, 114 are never keyed. |
+| Constraints or expressions on them | - | None in any of the 89 motions: KH2 keys its sleeves, no cloth or physics drives them. |
+
+Not checked in the KH2 exe: that nothing at run time (outside the motion data) moves the
+sleeves. Assumption, as for the hair and hood; the keys alone already move them.
+
+**How KH1's sleeve is posed now** (`secondary.rs`, `Parts::sleeves`, every frame KH2 poses him
+and in the bake, after the retarget, with the hair and hood):
+
+- The joint at the shoulder (129, 133, ... / 233, 237, ...) takes KH2's sleeve root's (111 / 203)
+  turn from its bind, in model space, carried by the swing from KH2's upper arm direction
+  (78 → 79) onto KH1's (198 → 199). KH1's upper arm already points along KH2's, so this swing is
+  about none. It is model space and not relative to the upper arm because KH2's sleeve root
+  turns about the arm's own axis against its twist (up to 178°, motions 8 and 181; Checked
+  (files): the turn's axis lies along the arm) and KH1's upper arm, posed from
+  positions, twists differently from KH2's 78 (7-11° on average, at worst about 170°): measured
+  against KH1's arm, the sleeve would be twisted round with that difference.
+- The joint down the sleeve (130, 134, ... / 234, 238, ...) takes the flap's turn relative to
+  KH2's root, on KH1's root as just posed.
+- Flaps: KH2 has two, KH1 four chains. Each chain blends KH2's two flaps by where its root and
+  the flap pivots sit round the arm in the binds (inverse squared distance, as the hair): front
+  98% the front flap, back 98% the back flap, under and top about half each. A judgement from
+  positions; neither game says which is which.
+- Lengths stay KH1's. No guard was needed: over all 89 KH2 motions (3272 frames, both arms) the
+  sleeve's tube stays within 29° of KH1's upper arm; KH1's own motions take it to 41° and the
+  bind holds it at 11°.
+
+Not carried: KH2's scale keys on the flaps (113 in 3 motions down to 0.70, 115 in 1, 205 in 8,
+207's 0.9 in its initial pose). The retarget and the bake carry turns only. Checked (files).
+
+**Switches.** As the hair and hood: `hair_physics = off` or `kh2_hair = off`, and the sleeves
+keep their old rigid relation to the arm (there is no swing for them).
+
+**Checks** (`kh1-data` unit tests `sleeves_match_their_flaps_round_the_arm`,
+`a_sleeve_hangs_and_flaps_as_kh2_s`; on the files, a scratch run of every KH2 motion): no NaN,
+no length change (worst 0.0001), each link within 0.03° of the direction KH2's bones give, KH2's
+run swinging the sleeves 2-8° against the arm. Baking KH2's run adds 48 keyed channels (16 bones,
+three turns each) with the bake's worst joint error unchanged (0.23, bone 155). Not checked in
+game.
+
+## Other parts KH1 animates that still don't move under KH2's moves
+
+Found with the sleeves (bones KH1's own motions turn in 5 or more motions that no retarget part,
+`secondary` part or KH2 match drives). Checked (files); what each is from bone positions only
+(Assumption).
+
+| KH1 bones | What (Assumption) | KH1 motions | Now | KH2's counterpart (keyed) |
+|---|---|---|---|---|
+| 27-28, 31-32, 35-36, 39-40 (-x); 53-54, 57-58, 61-62, 65-66 (+x) | the shorts' four panels per leg, from the thigh | 51-81, up to 97° | rigid on the thigh | the trouser panels under each thigh (27, 29, 32, 34; 56, 58, 61, 63), 38-82 motions, run up to 112° |
+| 249-250 ... 277-278, 73-74 | the jacket's hem panels from the spine base | 76-105, up to 163° | rigid, pushed off the thighs (`keep_clear`) | cloth from the pelvis (5, 7, 9; 36, 38), 35-78 motions |
+| 11-14 | the belt chain | 106-111, up to 157° | carried by the +x thigh | none found |
+| 5, 8 | belt-front pieces | 22-66 | rigid | none found |
+| 86-87 | the necklace | 97, up to 115° | rigid | none found by position (KH2's chest pieces 116-135 / 208-227 and 164-165 have no KH1 bones) |
+
+Also not carried: KH2's scale keys (its trouser and pelvis cloth 7, 9, 32, 36, 38, 61 in 18-72
+motions, 0.29-3.7; KH1's own motions key scale on its shorts panels too), and, the other way
+round, KH1's own animation of all these parts when KH2's model is drawn (`inverse` keeps KH2's
+cloth, hair and hood at its bind relation).

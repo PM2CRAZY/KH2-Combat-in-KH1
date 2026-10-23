@@ -353,7 +353,8 @@ None of our corrections go in (Keyblade teeth-up, `flip_weapons`, our feet, `hel
 game, then decide.
 
 - **Pose.** At load, each KH2 frame (60 Hz) goes through `Retarget::pose` plus `secondary`. The
-  hair, hood and chain are KH2's own hand animation, so they go in the bake like the body.
+  hair, hood, sleeves and chain are KH2's own hand animation, so they go in the bake like the
+  body.
   KH1's locals are worked out (`parent⁻¹ × bone`, then Euler X→Y→Z, the order `0x1401DB430`
   builds) and written as **linear keys** (interpolation 1) per channel, reduced where a line
   fits within a tolerance. Channels that stay at the bind get no keys (step 2 of §1.6 resets

@@ -30,6 +30,8 @@ fn kh1_parts_follow_kh2_motions() {
     // Fourteen KH1 spikes, the hood's four joints, the nine chain links; the two chains bind
     // at the same places.
     assert_eq!((s.hair().len(), s.hood().len(), s.chain().len()), (14, 4, 9));
+    // Four sleeve chains a side (front, under, back, top), on KH2's two flaps.
+    assert_eq!(s.sleeves().len(), 8);
     let (b1, wb) = (kh2_anim::Pose::bind(&kh1).bones, kh2_anim::Pose::bind(&wr.skeleton).bones);
     for l in s.chain() {
         assert!(at(&b1[l.kh1]).distance(at(&wb[l.kh2])) < 1.0, "{l:?}");
