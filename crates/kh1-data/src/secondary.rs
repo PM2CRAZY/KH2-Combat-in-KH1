@@ -35,6 +35,12 @@
 //!   the chest.
 //! Each KH1 bone is turned about its own joint with its subtree, so KH1's link lengths stay.
 //!
+//! **Squash and stretch** (`scales`): KH2's scale on a matched bone (its own, against its parent)
+//! goes on the KH1 bone matched to it, laid onto the KH1 bone's axes. Both games scale a bone the
+//! same way (KH1 `0x1403900B0` / `0x140394CF0`, KH2 `kh2_anim`): a bone's scale is its parent's
+//! times its own, and it stretches that bone's axes only, never where its children sit. So a KH1
+//! bone takes the scale of the KH2 bone it turns with, and its subtree carries it as KH2's does.
+//!
 //! The matches are ours, worked out from the two bind poses and from which bones the two
 //! games' motions actually turn (KH1: the spikes' middle bones, hood 80-83, chain 283-291;
 //! KH2: the spikes' second bones, hood 72-73, weapon 3-11; sleeves: KH1 129/130, 133/134,
@@ -173,6 +179,9 @@ pub struct Secondary {
     kh1_bind: Vec<Mat4>,
     kh2_bind: Vec<Mat4>,
     weapon_bind: Vec<Mat4>,
+    /// KH2's and its Keyblade's parents (for each bone's own scale).
+    kh2_parent: Vec<Option<usize>>,
+    weapon_parent: Vec<Option<usize>>,
     hair: Vec<Link>,
     /// Per spike: the second nearest KH2 spike and its share of the turn.
     hair_mix: Vec<(usize, f32)>,
@@ -243,7 +252,9 @@ impl Secondary {
         let kh1_bind = kh2_anim::Pose::bind(kh1).bones;
         let kh2_bind = kh2_anim::Pose::bind(kh2).bones;
         let weapon_bind = weapon.map(|w| kh2_anim::Pose::bind(w).bones).unwrap_or_default();
-        let parent: Vec<Option<usize>> = kh1.iter().enumerate().map(|(i, b)| (b.parent >= 0 && (b.parent as usize) < i).then_some(b.parent as usize)).collect();
+        let parents = |sk: &[Bone]| -> Vec<Option<usize>> { sk.iter().enumerate().map(|(i, b)| (b.parent >= 0 && (b.parent as usize) < i).then_some(b.parent as usize)).collect() };
+        let parent = parents(kh1);
+        let (kh2_parent, weapon_parent) = (parents(kh2), weapon.map(parents).unwrap_or_default());
         let kids = children(kh1);
         let mut below = vec![Vec::new(); kh1.len()];
         for i in (0..kh1.len()).rev() {
@@ -308,7 +319,7 @@ impl Secondary {
             let clear = [n1 + 1, n1 + 2].map(|j| at(&kh1_bind[j]).distance(nearest_on_segment(at(&kh1_bind[j]), at(&kh1_bind[71]), at(&kh1_bind[KH1_NECK_BASE]))) * NECKLACE_CLEAR);
             (Link { kh1: n1, tip: n1 + 1, kh2: n2 }, clear)
         });
-        Secondary { parent, below, kh1_bind, kh2_bind, weapon_bind, hair, hair_mix, hood, chain, sleeves, necklace, head_centre, hair_in }
+        Secondary { parent, below, kh1_bind, kh2_bind, weapon_bind, kh2_parent, weapon_parent, hair, hair_mix, hood, chain, sleeves, necklace, head_centre, hair_in }
     }
 
     pub fn sleeves(&self) -> &[Sleeve] {
@@ -530,6 +541,73 @@ impl Secondary {
         moved
     }
 
+    /// Each matched KH1 bone's own scale (against its parent, KH1's bone layout: `apply_scale`)
+    /// as KH2's pose gives its match: written into `out` (one per KH1 bone) for the parts `want`
+    /// asks for; other bones are left as they are. The hair, hood and chain take it on the first
+    /// KH1 bone each KH2 bone turns (its subtree carries it); a sleeve's shoulder joint its root's,
+    /// the joint down the sleeve its flaps' (blended as their turns); the necklace's link 165's.
+    pub fn scales(&self, body: &[Mat4], weapon: Option<&[Mat4]>, want: Parts, out: &mut [Vec3]) {
+        let mut put = |kh1: usize, s: Option<Vec3>| {
+            if let (Some(s), Some(o)) = (s, out.get_mut(kh1)) {
+                if s.is_finite() && s.min_element() > 0.0 {
+                    *o = s;
+                }
+            }
+        };
+        let body_s = |k: usize, kh1: usize| self.own_scale(body, &self.kh2_parent, &self.kh2_bind, k, kh1);
+        if want.hair {
+            for (k, l) in self.hair.iter().enumerate() {
+                let (other, share) = self.hair_mix[k];
+                put(l.kh1, Some(body_s(l.kh2, l.kh1).unwrap_or(Vec3::ONE).lerp(body_s(other, l.kh1).unwrap_or(Vec3::ONE), share)));
+            }
+        }
+        if want.hood {
+            let mut last = None;
+            for l in &self.hood {
+                if last != Some(l.kh2) {
+                    put(l.kh1, body_s(l.kh2, l.kh1));
+                    last = Some(l.kh2);
+                }
+            }
+        }
+        if want.sleeves {
+            for sl in &self.sleeves {
+                put(sl.joint, body_s(sl.kh2_root, sl.joint));
+                let (a, b) = (body_s(sl.flaps.0, sl.mid), body_s(sl.flaps.1, sl.mid));
+                put(sl.mid, a.zip(b).map(|(a, b)| a.lerp(b, sl.share)));
+            }
+        }
+        if let (true, Some((l, _))) = (want.necklace, self.necklace) {
+            put(l.kh1, body_s(l.kh2, l.kh1));
+        }
+        if let (true, Some(w)) = (want.chain, weapon) {
+            for l in &self.chain {
+                put(l.kh1, self.own_scale(w, &self.weapon_parent, &self.weapon_bind, l.kh2, l.kh1));
+            }
+        }
+    }
+
+    /// A KH2 bone's own scale in `pose` (its scale over its parent's), laid onto KH1 bone
+    /// `kh1`'s axes: each KH1 axis takes KH2's three scales weighted by how much of it lies
+    /// along each KH2 axis (squared, in the two binds, which face the same way). The same scale
+    /// when the axes match.
+    fn own_scale(&self, pose: &[Mat4], parents: &[Option<usize>], bind: &[Mat4], k: usize, kh1: usize) -> Option<Vec3> {
+        let acc = |i: usize| pose.get(i).map(|m| m.to_scale_rotation_translation().0);
+        let s = match parents.get(k).copied().flatten() {
+            Some(p) => acc(k)? / acc(p)?.max(Vec3::splat(1e-6)),
+            None => acc(k)?,
+        };
+        if (s - Vec3::ONE).abs().max_element() < 1e-5 {
+            return Some(Vec3::ONE);
+        }
+        let (r2, r1) = (rot(bind.get(k)?), rot(self.kh1_bind.get(kh1)?));
+        let along = |e: Vec3| {
+            let v = r2.inverse() * (r1 * e);
+            v.x * v.x * s.x + v.y * v.y * s.y + v.z * v.z * s.z
+        };
+        Some(Vec3::new(along(Vec3::X), along(Vec3::Y), along(Vec3::Z)))
+    }
+
     /// The necklace off the chest: where its pendant (`link + 1`) or tip comes nearer the spine
     /// (71 → 78) than `clear`, the link swings about its joint away from it, step by step, until
     /// clear (KH2's necklace hangs from the middle of its chest, KH1's from the front of its neck,
@@ -647,6 +725,32 @@ fn sleeve_links(kh1: &[Bone], kh2: &[Bone], b1: &[Mat4], b2: &[Mat4]) -> Vec<Sle
         }
     }
     v
+}
+
+/// Puts each bone's own scale (`local`, against its parent) on a model-space pose as both games
+/// draw it: a bone's scale is its parent's times its own, stretching its axes only (its place and
+/// its children's stay). `pose` is unscaled (as `Retarget` and `apply` give it); a bone whose
+/// scale works out at 1 is left exactly as it was.
+pub fn apply_scale(pose: &mut [Mat4], parents: &[i16], local: &[Vec3]) {
+    if local.iter().all(|s| *s == Vec3::ONE) {
+        return;
+    }
+    // (On the stack: this runs every frame Sora is posed.)
+    let mut acc = [Vec3::ONE; 512];
+    for i in 0..pose.len().min(acc.len()) {
+        let own = local.get(i).copied().unwrap_or(Vec3::ONE);
+        let s = match parents.get(i) {
+            Some(&p) if p >= 0 && (p as usize) < i => acc[p as usize] * own,
+            _ => own,
+        };
+        acc[i] = s;
+        if s != Vec3::ONE && s.is_finite() {
+            let m = &mut pose[i];
+            m.x_axis *= s.x;
+            m.y_axis *= s.y;
+            m.z_axis *= s.z;
+        }
+    }
 }
 
 /// A turn limited to `max` radians.
@@ -959,6 +1063,60 @@ mod tests {
         // Without KH2's necklace bone (the default rigs) there is none.
         let (a, b, _) = rigs();
         assert!(Secondary::new(&a, &b, None).necklace().is_none());
+    }
+
+    #[test]
+    fn a_flap_s_squash_goes_on_its_sleeve() {
+        let (k1, k2) = sleeve_rigs();
+        let s = Secondary::new(&k1, &k2, None);
+        let b2 = kh2_anim::Pose::bind(&k2).bones;
+        // KH2's front flap squashed to 0.7 along its x (KH2 multiplies scale down the bones:
+        // the flap's own is its scale over its pivot's).
+        let mut body = b2.clone();
+        body[113].x_axis *= 0.7;
+        let mut out = vec![Vec3::ONE; k1.len()];
+        s.scales(&body, None, Parts { sleeves: true, ..Parts::default() }, &mut out);
+        // The front chain's joint down the sleeve takes it (its axes match the flap's here), the
+        // back chain's not; the under and top chains about half; the shoulder joints none.
+        assert!((out[234] - Vec3::new(0.7, 1.0, 1.0)).length() < 0.02, "{:?}", out[234]);
+        assert!((out[242] - Vec3::ONE).length() < 0.02, "{:?}", out[242]);
+        assert!((out[238].x - 0.85).abs() < 0.05, "{:?}", out[238]);
+        assert!(out[233] == Vec3::ONE && out[1] == Vec3::ONE);
+        // Not asked for: nothing.
+        let mut none = vec![Vec3::ONE; k1.len()];
+        s.scales(&body, None, Parts { hair: true, ..Parts::default() }, &mut none);
+        assert!(none.iter().all(|v| *v == Vec3::ONE));
+        // Laid onto other axes: a KH1 bone turned a quarter about z takes KH2's x scale on its y.
+        let mut k1t = k1.clone();
+        k1t[234].rotation = [0.0, 0.0, std::f32::consts::FRAC_PI_2];
+        let st = Secondary::new(&k1t, &k2, None);
+        let mut out = vec![Vec3::ONE; k1.len()];
+        st.scales(&body, None, Parts { sleeves: true, ..Parts::default() }, &mut out);
+        assert!((out[234] - Vec3::new(1.0, 0.7, 1.0)).length() < 0.02, "{:?}", out[234]);
+    }
+
+    #[test]
+    fn scale_multiplies_down_the_bones_and_keeps_places() {
+        let (k1, _, _) = rigs();
+        let parents: Vec<i16> = k1.iter().map(|b| b.parent).collect();
+        let b1 = kh2_anim::Pose::bind(&k1).bones;
+        let mut pose = b1.clone();
+        let mut local = vec![Vec3::ONE; k1.len()];
+        local[283] = Vec3::new(1.0, 2.0, 1.0);
+        local[285] = Vec3::new(1.0, 1.0, 0.5);
+        apply_scale(&mut pose, &parents, &local);
+        for i in 0..pose.len() {
+            assert!(at(&pose[i]).distance(at(&b1[i])) < 1e-5, "bone {i} moved");
+        }
+        let sc = |i: usize| pose[i].to_scale_rotation_translation().0;
+        assert!((sc(283) - Vec3::new(1.0, 2.0, 1.0)).length() < 1e-5);
+        assert!((sc(284) - Vec3::new(1.0, 2.0, 1.0)).length() < 1e-5);
+        assert!((sc(285) - Vec3::new(1.0, 2.0, 0.5)).length() < 1e-5);
+        assert!(pose[282] == b1[282] && pose[100] == b1[100]);
+        // All at 1: nothing touched.
+        let mut p2 = b1.clone();
+        apply_scale(&mut p2, &parents, &vec![Vec3::ONE; k1.len()]);
+        assert!(p2 == b1);
     }
 
     #[test]

@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 386 (testing branch: KH2's squash and stretch)
+- The tester: carry KH2's scale keys. `Secondary::scales`, `secondary::apply_scale` (live, last step before the write),
+  bake scale channels kinds 1-3. Scale is multiplied down the bones and stretches only each bone (KH1 `0x1403900B0` /
+  `0x1401DB310` / `0x140394CF0`, decomp; KH2's side from the OG rewrite's evaluator). Today it carries only the sleeve
+  flaps' scale (no other matched KH2 bone keys scale).
+
 ### 2026-10-23: Stage 385 (testing branch: KH1's necklace follows KH2's; the KH2 -> KH1 part list)
 - The tester Mr Bugs (`docs/tester-requests.md`, "Missing sleeves animation"): the hem and shorts from KH2, only parts KH1
   has, and a list of every part shared between the models. From the files: KH2's model puts each vertex on one bone;

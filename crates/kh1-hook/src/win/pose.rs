@@ -307,6 +307,9 @@ struct Sora {
     inverse: Option<kh1_data::inverse::Inverse>,
     /// The KH2 pose (Sora's bones, the Keyblade's) the pose being drawn came from, if KH2's.
     kh2_now: Option<(Vec<Mat4>, Vec<Mat4>)>,
+    /// Each bone's own scale for the pose being drawn (KH2's squash and stretch on the parts
+    /// `secondary` matched, `Secondary::scales`), kept from frame to frame (no allocation).
+    scales: Vec<Vec3>,
 }
 
 /// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
@@ -1087,7 +1090,10 @@ impl Baker {
     /// whole pose and returned per frame, for the bake's H10. KH1 moves him by H10
     /// and pulls his placement back by it; his body carries it, as KH1's own motions do (H2), so
     /// the model stays on him (`kh1_data::bake`). Else none (empty): the travel stays out.
-    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32, travel: bool) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>)> {
+    ///
+    /// Also each frame's bone scales (KH2's squash and stretch on the parts `secondary` posed,
+    /// `Secondary::scales`), for the bake's scale channels; empty when none differs from 1.
+    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32, travel: bool) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>, Vec<Vec<Vec3>>)> {
         let rig = &kh2.rig;
         let clip = rig.motions.get(&motion)?;
         let set = super::settings::get();
@@ -1095,6 +1101,7 @@ impl Baker {
         let parents: Vec<i16> = self.skeleton.iter().map(|b| b.parent).collect();
         let mut out = Vec::with_capacity(frames as usize + 1);
         let mut moved = Vec::new();
+        let mut scales: Vec<Vec<Vec3>> = Vec::with_capacity(frames as usize + 1);
         let root_at = |f: u32| roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))).map(|p| Vec3::from(*p));
         let start = root_at(0).unwrap_or(Vec3::ZERO);
         for f in 0..=frames {
@@ -1115,9 +1122,13 @@ impl Baker {
             if set.keyblade_turn {
                 turn_grip(&mut kh1, &parents);
             }
+            let mut sc = vec![Vec3::ONE; kh1.len()];
             if set.physics && set.kh2_hair {
-                self.secondary.apply(&mut kh1, &body, (!weapon.is_empty()).then_some(weapon.as_slice()), kh1_data::secondary::Parts::ALL);
+                let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
+                let rep = self.secondary.apply(&mut kh1, &body, weapon, kh1_data::secondary::Parts::ALL);
+                self.secondary.scales(&body, weapon, rep.parts, &mut sc);
             }
+            scales.push(sc);
             if travel {
                 // (Along the ground only: the root's height stays out, as before.)
                 let d = root_at(f).map_or(Vec3::ZERO, |p| p - start);
@@ -1132,7 +1143,10 @@ impl Baker {
             }
             out.push(kh1);
         }
-        Some((out, moved))
+        if scales.iter().flatten().all(|s| *s == Vec3::ONE) {
+            scales.clear();
+        }
+        Some((out, moved, scales))
     }
 }
 
@@ -1555,7 +1569,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None, secondary: None, inverse: None, kh2_now: None });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None, secondary: None, inverse: None, kh2_now: None, scales: Vec::new() });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -1723,6 +1737,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
     keyblade_teeth_up(&mut pose, &s.parents);
     let set = super::settings::get();
+    let mut scaled = false;
     if set.physics {
         // KH2's own animation of the hair, hood, sleeves, necklace and keychain (the user: "add
         // the animations for sora's hair and chain on each KH2 animation instead"; the sleeves
@@ -1731,8 +1746,14 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         let mut driven = kh1_data::secondary::Parts::default();
         if let (true, Some((body, weapon)), Some(sec)) = (set.kh2_hair, s.kh2_now.as_ref(), s.secondary.as_ref()) {
             let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)), sleeves: true, necklace: true };
-            let rep = sec.apply(&mut pose, body, (!weapon.is_empty()).then_some(weapon.as_slice()), want);
+            let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
+            let rep = sec.apply(&mut pose, body, weapon, want);
             driven = rep.parts;
+            // KH2's squash and stretch on the parts it just posed (the tester: "yes do it").
+            s.scales.clear();
+            s.scales.resize(pose.len(), Vec3::ONE);
+            sec.scales(body, weapon, rep.parts, &mut s.scales);
+            scaled = true;
             static LOGGED: AtomicU32 = AtomicU32::new(0);
             if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
                 log(&format!("hair, hood, sleeves, necklace and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
@@ -1757,6 +1778,11 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     // Final Form's Keyblade floating where KH2's weapon motion has it.
     if let (Some((body, weapon)), true) = (s.kh2_now.as_ref(), super::form::in_final()) {
         super::leftblade::final_float(&mut pose, &s.bind, body, weapon, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()));
+    }
+    // Each bone's scale, as KH1's own bone pass would put it (multiplied down the bones, on the
+    // axes only), last: everything above works on the unscaled pose.
+    if scaled {
+        kh1_data::secondary::apply_scale(&mut pose, &s.parents, &s.scales);
     }
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());

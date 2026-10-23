@@ -18,6 +18,10 @@
 //!   within `ROT_TOL` / `POS_TOL`. Angles are kept continuous from frame to frame (the Euler
 //!   triple nearer the last frame's, then each angle unwrapped), so a line between keys never
 //!   turns the long way round.
+//! - **Scale** (`scales` given, t386). Each bone's own scale (against its parent: KH1 multiplies
+//!   it down the bones and stretches only each bone's axes, `0x1403900B0` / `0x140394CF0`) as
+//!   scale channels (kinds 1-3), at the bind (1) nothing, else a constant or keys as above
+//!   (`SCALE_TOL`). The poses themselves are unscaled.
 //! - **Helpers.** The template's helper table and helper channels, retimed. No bone points at a
 //!   helper any more.
 //! - **Travel** (`travel` given, t365). The last helper's translation (H10 on Sora) is where
@@ -41,6 +45,8 @@ pub const STATIC: u32 = 0x200_0000;
 /// The most a dropped key's angle (radians) or translation (units) may be off the line.
 pub const ROT_TOL: f32 = 0.001;
 pub const POS_TOL: f32 = 0.02;
+/// ... or scale.
+pub const SCALE_TOL: f32 = 0.002;
 /// Closer than this to the bind (or across the motion) is the same value.
 const SAME_ROT: f32 = 1e-4;
 const SAME_POS: f32 = 1e-3;
@@ -129,10 +135,10 @@ fn sample(keys: &[(u32, f32)], frame: f32) -> f32 {
 }
 
 /// The KH1 motion that shows `poses` (one per frame, `0..=frames`, KH1 model space, one matrix
-/// per bone of `skeleton`), built on `template` (a KH1 motion in file layout) lasting `frames`,
-/// with `events`. `travel` (empty, or one per pose): the motion's travel for H10, already in
-/// `poses`.
-pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bone], poses: &[Vec<Mat4>], travel: &[Vec3]) -> Result<(Vec<u8>, Report)> {
+/// per bone of `skeleton`, unscaled), built on `template` (a KH1 motion in file layout) lasting
+/// `frames`, with `events`. `travel` (empty, or one per pose): the motion's travel for H10,
+/// already in `poses`. `scales` (empty, or one per pose, one per bone): each bone's own scale.
+pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bone], poses: &[Vec<Mat4>], travel: &[Vec3], scales: &[Vec<Vec3>]) -> Result<(Vec<u8>, Report)> {
     let bad = |m: String| Error::Format(format!("bake: {m}"));
     let n = skeleton.len();
     if frames == 0 || frames as usize + 1 > MAX_KEYS {
@@ -146,6 +152,9 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
     }
     if !travel.is_empty() && (travel.len() != poses.len() || travel.iter().any(|t| !t.is_finite())) {
         return Err(bad(format!("{} travel values for {} poses", travel.len(), poses.len())));
+    }
+    if !scales.is_empty() && (scales.len() != poses.len() || scales.iter().any(|s| s.len() != n || s.iter().any(|v| !v.is_finite() || v.min_element() <= 0.0))) {
+        return Err(bad(format!("{} scale sets for {} poses", scales.len(), poses.len())));
     }
     let r = slot::retimed(template, frames, events)?;
     if u32_at(&r, 0x10)? as usize != n {
@@ -182,13 +191,19 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
         }
         let b = &skeleton[i];
         let mut moves = false;
-        for c in 0..6 {
+        // (Scale x..z, then rotation, then translation: kinds 1..9.)
+        for c in 0..9 {
             let (values, bind, same, tol): (Vec<f32>, f32, f32, f32) = if c < 3 {
-                (rot[i].iter().map(|v| v[c]).collect(), b.rotation[c], SAME_ROT, ROT_TOL)
+                if scales.is_empty() {
+                    continue;
+                }
+                (scales.iter().map(|s| s[i][c]).collect(), b.scale[c], SAME_ROT, SCALE_TOL)
+            } else if c < 6 {
+                (rot[i].iter().map(|v| v[c - 3]).collect(), b.rotation[c - 3], SAME_ROT, ROT_TOL)
             } else {
-                (pos[i].iter().map(|v| v[c - 3]).collect(), b.translation[c - 3], SAME_POS, POS_TOL)
+                (pos[i].iter().map(|v| v[c - 6]).collect(), b.translation[c - 6], SAME_POS, POS_TOL)
             };
-            let kind = 4 + c as u8;
+            let kind = 1 + c as u8;
             let (lo, hi) = values.iter().fold((f32::MAX, f32::MIN), |(l, h), v| (l.min(*v), h.max(*v)));
             if values.iter().all(|v| (v - bind).abs() <= same) {
                 continue;
@@ -315,6 +330,7 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
             let mut t3 = Vec3::from(b.translation);
             for &(_, kind, v) in constants.iter().filter(|c| c.0 as usize == i) {
                 match kind {
+                    1..=3 => {}
                     4..=6 => r3[kind as usize - 4] = v,
                     _ => t3[kind as usize - 7] = v,
                 }
@@ -322,6 +338,7 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
             for k in keyed.iter().filter(|k| k.bone as usize == i) {
                 let v = sample(&k.keys, f as f32);
                 match k.kind {
+                    1..=3 => {}
                     4..=6 => r3[k.kind as usize - 4] = v,
                     _ => t3[k.kind as usize - 7] = v,
                 }
@@ -367,6 +384,51 @@ mod tests {
         }
     }
 
+    /// A three-bone template (3 bones, word 0, no channels, one helper with none, no events).
+    fn template() -> Vec<u8> {
+        let mut t = vec![0u8; 0x100];
+        put(&mut t, 4, 5);
+        put(&mut t, 8, 60f32.to_bits());
+        put(&mut t, 0xC, 1);
+        put(&mut t, 0x10, 3);
+        put(&mut t, 0x14, 0x50);
+        put(&mut t, 0x1C, 0x60);
+        put(&mut t, 0x24, 0x60);
+        put(&mut t, 0x28, 0x60);
+        put(&mut t, 0x2C, 1);
+        put(&mut t, 0x30, 0x60);
+        put(&mut t, 0x38, 0x90);
+        put(&mut t, 0x3C, 0x90);
+        put(&mut t, 0x90, slot::END);
+        t
+    }
+
+    /// A bone's own scale becomes scale channels: kept off a bone at 1, a constant where it
+    /// holds, keys where it moves; the poses (unscaled) come back as before.
+    #[test]
+    fn bakes_scale() {
+        let bone = |parent: i16, t: [f32; 3]| Bone { index: 0, sibling: -1, parent, child: -1, flags: 0, scale: [1.0; 3], length: 1.0, rotation: [0.0; 3], translation: t };
+        let skeleton = vec![bone(-1, [0.0, 90.0, 0.0]), bone(0, [0.0, 0.0, 20.0]), bone(1, [0.0, 0.0, 20.0])];
+        let frames = 10u32;
+        let poses: Vec<Vec<Mat4>> = (0..=frames).map(|_| kh2_anim::Pose::bind(&skeleton).bones).collect();
+        // Bone 1 stretched along x from 1 to 2 over the motion, bone 2 held at 0.5 in y.
+        let scales: Vec<Vec<Vec3>> = (0..=frames).map(|f| vec![Vec3::ONE, Vec3::new(1.0 + f as f32 / frames as f32, 1.0, 1.0), Vec3::new(1.0, 0.5, 1.0)]).collect();
+        let (b, rep) = baked(&template(), frames, &[], &skeleton, &poses, &[], &scales).unwrap();
+        assert!(rep.max_error < 0.05, "{rep:?}");
+        // Channels: bone 1 kind 1 (two keys, a line); constants: bone 2 kind 2 at 0.5.
+        let (count, at) = (u32_at(&b, 0x18).unwrap() as usize, u32_at(&b, 0x1C).unwrap() as usize);
+        let ch: Vec<(u16, u8, u8)> = (0..count).map(|c| (u16::from_le_bytes([b[at + c * 6], b[at + c * 6 + 1]]), b[at + c * 6 + 2], b[at + c * 6 + 3])).collect();
+        assert_eq!(ch, vec![(1, 1, 2)]);
+        let (cn, cat) = (u32_at(&b, 0x34).unwrap() as usize, u32_at(&b, 0x38).unwrap() as usize);
+        let consts: Vec<(u16, u16, f32)> = (0..cn).map(|c| (u16::from_le_bytes([b[cat + c * 8], b[cat + c * 8 + 1]]), u16::from_le_bytes([b[cat + c * 8 + 2], b[cat + c * 8 + 3]]), f32::from_bits(u32_at(&b, cat + c * 8 + 4).unwrap()))).collect();
+        assert_eq!(consts, vec![(2, 2, 0.5)]);
+        // Bone 1 is keyed now (not built once).
+        let words = u32_at(&b, 0x14).unwrap() as usize;
+        assert_eq!(u32_at(&b, words + 4).unwrap(), 0);
+        // Bad scales are refused.
+        assert!(baked(&template(), frames, &[], &skeleton, &poses, &[], &scales[..3]).is_err());
+    }
+
     /// A three-bone chain posed over 10 frames, baked onto a small template, comes back within
     /// the tolerances from the channels written.
     #[test]
@@ -398,7 +460,7 @@ mod tests {
         put(&mut t, 0x38, 0x90);
         put(&mut t, 0x3C, 0x90);
         put(&mut t, 0x90, slot::END);
-        let (b, rep) = baked(&t, frames, &[], &skeleton, &poses, &[]).unwrap();
+        let (b, rep) = baked(&t, frames, &[], &skeleton, &poses, &[], &[]).unwrap();
         assert!(rep.max_error < 0.05, "{rep:?}");
         assert_eq!(u32_at(&b, 4).unwrap(), frames);
         // The tip never moves against its parent: built once (static, bit 25).
@@ -411,7 +473,7 @@ mod tests {
         // With travel: the last helper (here H0) gets a z channel, two keys for a line.
         let travel: Vec<Vec3> = (0..=frames).map(|f| Vec3::new(0.0, 0.0, f as f32 * 3.0)).collect();
         let moved: Vec<Vec<Mat4>> = poses.iter().zip(&travel).map(|(p, t)| p.iter().map(|m| Mat4::from_translation(*t) * *m).collect()).collect();
-        let (b, rep) = baked(&t, frames, &[], &skeleton, &moved, &travel).unwrap();
+        let (b, rep) = baked(&t, frames, &[], &skeleton, &moved, &travel, &[]).unwrap();
         assert!(rep.max_error < 0.05, "{rep:?}");
         assert_eq!(rep.travel_keys, 2);
         assert_eq!(u32_at(&b, 0x20).unwrap(), 1);

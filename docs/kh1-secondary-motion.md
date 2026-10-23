@@ -168,8 +168,8 @@ and in the bake, after the retarget, with the hair and hood):
   sleeve's tube stays within 29° of KH1's upper arm; KH1's own motions take it to 41° and the
   bind holds it at 11°.
 
-Not carried: KH2's scale keys on the flaps (113 in 3 motions down to 0.70, 115 in 1, 205 in 8,
-207's 0.9 in its initial pose). The retarget and the bake carry turns only. Checked (files).
+KH2's scale keys on the flaps (113 in 3 motions down to 0.70, 115 in 1, 205 in 8, 207's 0.9 in
+its initial pose) are carried since t386 ("Squash and stretch" below). Checked (files).
 
 **Switches.** As the hair and hood: `hair_physics = off` or `kh2_hair = off`, and the sleeves
 keep their old rigid relation to the arm (there is no swing for them).
@@ -249,6 +249,42 @@ Not copied (KH1's own bones, no visible KH2 match): the jacket hem (249-278, 73-
 shorts' panels (27-40, 53-66), the belt chain (11-14), the belt-front pieces (5, 8), the
 necklace's pendant (87).
 
+## Squash and stretch (t386)
+
+KH2's scale on the bones matched above now goes on their KH1 bones, live and in the bake (the
+tester: "yes do it").
+
+**How both games scale a bone** (the same): a bone's scale is its parent's times its own, and
+it stretches that bone's axes only; where the bone and its children sit is unscaled.
+- KH1, Checked (decomp): the bone pass `0x1403900B0` multiplies each bone's sampled scale by its
+  parent's (`0x1401DB310`, every bone not skipped, static ones too), builds the place unscaled,
+  then `0x140394CF0` multiplies the matrix's three axis rows by that scale. A motion's scale
+  channels are kinds 1-3 (`docs/kh1-anim-slots.md` §1.6 step 3).
+- KH2: the same in the OG Rust rewrite's evaluator (`kh2-anim`, `Pose::bind` / `evaluate`), which
+  this repo's `kh2_anim` copies. Not read in the KH2 decomp.
+
+**What goes where** (`Secondary::scales`, `secondary::apply_scale`): each matched KH1 bone takes
+its KH2 bone's own scale (its scale over its parent's), on the first KH1 bone that KH2 bone turns
+(its KH1 subtree carries it, as KH2's carries KH2's): a spike's joint (its two KH2 spikes
+blended by their share), the hood's 80 (72) and 82 (73), each chain link (the Keyblade's 3-11),
+a sleeve's shoulder joint (its root) and the joint down it (the two flaps blended), the
+necklace's 86 (165). KH2's three scales are laid onto the KH1 bone's axes: each KH1 axis takes
+them weighted by how much of it lies along each KH2 axis (squared, in the binds); the same scale
+where the axes match (the sleeves' do).
+
+- Live (`pose.rs`): after everything else, just before the bones are written, so the guards and
+  the hand's adjustments work on the unscaled pose.
+- Bake (`bake.rs`, `Baker::poses`): scale channels (kinds 1-3) for bones whose scale moves, a
+  constant where it holds, nothing at 1; the poses given are unscaled. A bone whose only channel
+  is a constant scale may still be built once (bit 25): KH1 applies the scale to static bones too.
+
+**What this carries today** (Checked (files), all 83 KH2 motions, 5991 frames): only the sleeves'
+joints down the sleeve: 130, 134, 138, 142 (KH2's 207 held at 0.9 in 17 motions' initial pose,
+KH1's 0.81-1.01) and 234, 238, 242, 246 (113 / 115, 0.59-1.14), in 43 motions. No other matched
+KH2 bone has scale keys (the hair, hood, necklace: none; the Keyblade's chain: not checked, no
+weapon file here). KH2's other scale keys are all on bones with no vertices that nothing of KH1
+follows. Positions are unchanged by it (checked: no bone moved). Not checked in game.
+
 ## Other parts KH1 animates that still don't move under KH2's moves
 
 Found with the sleeves (bones KH1's own motions turn in 5 or more motions that no retarget part,
@@ -263,6 +299,6 @@ Found with the sleeves (bones KH1's own motions turn in 5 or more motions that n
 | 5, 8 | belt-front pieces | 22-66 | rigid | none (KH2's pelvis pieces 4-9 have no vertices and no KH1 match) |
 | 87 | the necklace's pendant | 96, up to 125° | on the necklace link (86, KH2's 165) | none |
 
-Also not carried: KH2's scale keys (all on bones with no vertices, above), and, the other way
+Also not carried: the other way
 round, KH1's own animation of all these parts when KH2's model is drawn (`inverse` keeps KH2's
 cloth, hair and hood at its bind relation).

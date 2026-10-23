@@ -218,8 +218,8 @@ fn swing_rows(rows: &[character_core::ComboRow]) -> Vec<(u16, bool)> {
 /// `travel`: the move's request has KH1's travel flag (`travels`): KH2's root travel goes in its H10.
 fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], motion: u16, frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
     let t = std::time::Instant::now();
-    let (poses, moved) = b.poses(kh2, motion, frames, travel).ok_or("KH2 has no animation for it")?;
-    let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved).map_err(|e| e.to_string())?;
+    let (poses, moved, scales) = b.poses(kh2, motion, frames, travel).ok_or("KH2 has no animation for it")?;
+    let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved, &scales).map_err(|e| e.to_string())?;
     log(&format!(
         "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; travel {} ({} H10 keys); KH1's FK from it within {:.3} units of the pose (worst bone {})",
         block.len(),
