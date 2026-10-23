@@ -69,6 +69,16 @@ lists the 22 tasks held (priority, RVA): 10499 `0x189F80`, 20001 `0x1E1900`, 470
 for the frame to draw (**Assumption**; which one isn't clear from the decomp). The debug menu's Held Tasks
 page lists them, each Held or Runs, so a session can find it; each switch is logged.
 
+**The pause machine's states (Checked (exe), the jump table at `0x14017F568` the decomp skipped).** State 0
+(`0x14017F548`, the game running) writes the mask `0x142867370` = 0 every frame. State 1 (`0x14017F2C5`)
+writes it = 1, registers task 190020 (`0x14017FD60`, flags 1: it registers 190019 `0x14017F110`, flags 1, the
+P A U S E text, and calls `0x14018B370`, `0x140183CD0 (0x80)`) and goes to state 2. State 3 (`0x14017F318`) calls
+`0x1400D2F80` (thunk of `0x1400DE010`, KH1's sound pause: 1 on pause) and `0x140171660 (0)`. So KH1's pause
+holds the same tasks as t372 did, which went black for Frame Advance: the paused picture comes from the
+renderer keeping the last finished frame (`0x140109930` / `0x1401030C0`: the frame texture `+0x78E0` is
+refreshed only when the frame counters `+0x775C` / `+0x7760` / `+0x7764` say a new frame was drawn;
+**Assumption**, not finished).
+
 ## Actors
 
 Each actor is a task of a second list, `0x142D5AB00` (0x28-byte tasks, made by `0x140297980` with
