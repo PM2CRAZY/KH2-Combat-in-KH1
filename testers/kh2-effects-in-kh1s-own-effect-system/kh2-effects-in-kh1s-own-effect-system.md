@@ -14,6 +14,7 @@
 - [8. Mr Bugs: 1. (a) if it ever happens in game I'll just let you know and](#^m8)
 - [9. Assistant: t417 to t425 (one piece each; the build at the top of the br](#^m9)
 - [10. Mr Bugs: can we have the files generated at run time so we don't take](#^m10)
+- [11. Assistant: t427 to t430 (one each)](#^m11)
 
 ---
 
@@ -261,6 +262,25 @@
 
 ^m10
 
+
  
 
+> [!tip] Assistant
+> t427 to t430 (one each)
+>
+> 1. **t427, memory:** the KH2 effect files are now made at run time and only kept while they can play. Sora's and the Keyblade's are made at load (Sora's only for the moves you have KH2 effects on, plus Drive and Revert). A form's is made when you pick Drive and freed after Revert. Spells and Reflect are made at the levels you have. The common textures are made once and shared by every package, and we no longer keep our own copies of the HD images after KH1 has them. Sora's package went from about 10 MB to about 1.7 MB. There's no hitch on first use: until a file is ready, the old player plays that effect on the same frame, so nothing misses a frame.
+> 2. **t428, Keyblade tips:** Valor's and Final's tip effects now turn with the Keyblade, through KH1's own blade binding. The second Keyblade's tip uses the same KH1 binding, on the copy of Sora that the left Keyblade's trail already follows.
+> 3. **t429, Drive sphere:** KH2's screen distortion is ported through KH1's own distortion drawing, so the sphere plays through KH1 now.
+> 4. **t430, body centre:** KH1 has its own body centre (the centre of Sora's body collision), so spell effects on KH2's body centre use that now. The log prints both heights the first time one plays.
+>
+> **Check:** the KH1 exe and decomp (texture lookup, file removal, the blade and body-centre anchors) and the KH2 decomp (the distortion program); Sora's effect file offline for the sizes. Not checked in game. Assumptions: two numbers the KH2 decomp leaves out in the distortion (the normal scale and the push strength), that KH1 stops the second Keyblade's effects when it goes, and that freeing a package's texture leaves nothing stale behind. There was no log newer than t417 to check; the first one will list what went native per package (the forms', spells' and Keyblade's files only get checked in game).
+>
+> Questions:
+> 1. The old player still loads its own copy of every package at start, as the safety net for first plays. (a) keep it, (b) drop its copy of each package once ours is ready, and make forms and spells at load so nothing needs the safety net, or (c) drop it and keep everything made when needed (a form's very first effects could be missed if its file isn't ready in time)?
+> 2. Body centre: (a) KH1's own body centre (like the bones, KH1's own body), or (b) KH2's exact height (85 above his feet)?
 
+^m11
+
+
+> [!note] Tester Mr Bugs
+> 
