@@ -139,4 +139,8 @@
 
 
 > [!note] Tester Mr Bugs
-> 
+> 1. check the decomp for both (steam gihidra c decomp)
+> 2. check the steam gihidra c decomp
+> 3. (a)
+>    
+>   go ahead
