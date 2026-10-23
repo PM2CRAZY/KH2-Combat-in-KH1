@@ -1,3 +1,11 @@
+### 2026-10-23: Stage 416 (testing branch: KH2's line ahead, its floor rule and direction)
+- The t409 traces: row 1 at a 120 drop, 50..70 from the edge, is KH2's. The test was KH1's (`0x1402C6E70`: any step more than
+  half KH1's height down) along KH1's press direction. Now KH2's (`0x140172640` / `0x140172840`, decomp): only the end of the
+  85 line (`attack_j_front` -5 + `+0x6F0` 90; `+0x150` = plyr, Checked), none or more than lift - height - 1 = 24 below his
+  feet (lowered by a downhill line), laid on the floor's plane (KH1's `0x1401907F0`), along `Character::selector_aim`
+  (`0x1404028D0`). KH1's set-up / mover (`0x14029A0B0` / `0x140195180`, bytes checked) move it. Assumption: flat on
+  objects. Notes `docs/kh1-anim-slots.md` §7.
+
 ### 2026-10-23: Stage 415 (testing branch: KH2's hop out of the ground combo keeps its speed)
 - Mr Bugs (t409 traces f3990..f5413: "next to a ledge will start a short jump attack"): every row-1 hop rose and fell in
   place, `+0x3C0` 0 from its first frame. KH1's control step (`0x1402A3300`, decomp) sets `+0x3C0` = `+0x20` x `+0x2C` (the

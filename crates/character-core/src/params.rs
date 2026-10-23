@@ -134,8 +134,11 @@ pub struct AttackParams {
     /// speed window lunge; Sora's ground rows don't.
     pub distance_to_speed: f32,
     /// The plyr record's `attack_j_front` (`+0x2C`; Sora's -5): with his collision radius, how
-    /// far ahead KH2 tests the floor at an attack press (`Character::set_drop_ahead`). **Assumption**
-    /// that the exe's `+0x150` record there is plyr (its `+0x5C` / `+0x68` reads fit it).
+    /// far ahead KH2 tests the floor at an attack press (`Character::set_drop_ahead`). The exe's
+    /// `+0x150` record there is plyr (Steam KH2, Checked (decomp): its other reads are plyr's by
+    /// field order, `+0x50` / `+0x54` / `+0x58` the blow recovery h / v / time `0x1403D6BB0` /
+    /// `0x1403D6D50`, `+0x5C` / `+0x60` / `+0x64` / `+0x68` the auto lock-on range, min h, max h
+    /// and time `0x1403BE2B0` / `0x1403BE4B0` / `0x1403DCCD0`).
     pub jump_front: f32,
     /// His own target shape (the model's first collision shape of kind 3; Sora's: 70 up, radius
     /// 55): its centre's height above his feet and its radius. An attack row's hop is measured

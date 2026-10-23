@@ -1178,6 +1178,17 @@ impl Character {
         self.drop_ahead = on;
     }
 
+    /// The selector's direction at an attack press now (exe `0x1404028D0`, Checked (decomp)):
+    /// flat, to the primary target, or his facing with none (`0x1403B56E0`). Rows are measured
+    /// from it, and KH2's line ahead for row 1 runs along it (`set_drop_ahead`). x / z.
+    pub fn selector_aim(&self, env: &Env) -> [f32; 2] {
+        self.primary_target(env)
+            .map(|t| [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]])
+            .filter(|d| len2(*d) > 1e-3)
+            .map(norm)
+            .unwrap_or_else(|| self.forward())
+    }
+
     /// MP is charging (KH2's MP Charge; a host that has one): with Berserk Charge equipped
     /// (`BERSERK_CHARGE` among `abilities.equipped`) no finisher row is taken and the combo goes
     /// on (exe `0x1403D7780` / `0x1403D7850`).
@@ -1560,11 +1571,7 @@ impl Character {
         // measured from it. (Before, Sora's own facing was used: kind-1 rows such as Aerial
         // Sweep, Aerial Dive, Slide Dash and the jump to an airborne foe almost never passed.)
         let primary_info = self.primary_target(env);
-        let aim = primary_info
-            .map(|t| [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]])
-            .filter(|d| len2(*d) > 1e-3)
-            .map(norm)
-            .unwrap_or_else(|| self.forward());
+        let aim = self.selector_aim(env);
         // Locked on, the locked target is the only one the rows are measured against (the user:
         // locked onto one ahead with another beside him, Sora took the base finisher and lunged
         // at the one beside him instead of the locked one's Aerial Finish).

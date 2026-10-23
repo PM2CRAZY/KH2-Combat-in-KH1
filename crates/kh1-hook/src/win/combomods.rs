@@ -193,13 +193,12 @@ pub enum Run {
 /// ability moves instead, else the KH1 row to run: `row`, or KH1's plain swing or finisher row in
 /// its place where KH2's row selection takes that (`kh2_row`), or KH2's hop on KH1's air state
 /// (`kh2_hop`). `request_of`: a KH1 row's motion request (its `+0`).
-pub unsafe fn attack(actor: usize, row: i32, dir: usize, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
-    // (On the ground: KH2's line ahead, for its row 1.)
-    if rd::<i32>(actor + 0x70) == 0 && super::styles::kh2(super::styles::Kind::GroundCombo) {
-        takeover::set_drop_ahead(drop_ahead(actor, dir));
-    }
+pub unsafe fn attack(actor: usize, row: i32, _dir: usize, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
+    // (On the ground: KH2's line ahead, for its row 1, tested in KH2's trial along the
+    // selector's direction, `drop_ahead`.)
+    takeover::test_drop_ahead(rd::<i32>(actor + 0x70) == 0 && super::styles::kh2(super::styles::Kind::GroundCombo));
     let run = attack_row(actor, row, request_of);
-    takeover::set_drop_ahead(false);
+    takeover::test_drop_ahead(false);
     run
 }
 
@@ -285,63 +284,119 @@ fn air_hop(row: i32, pick: &ComboRow, launch: character_core::Launch) -> Option<
     Some(launch)
 }
 
-/// KH1's sweep of Sora's collision along a direction (Steam `0x1402C6E70 (actor, direction)`,
-/// Checked: his collision `+0x2A0` moved in steps (`0x140195180`) for his `+0x2C0` plus the
-/// direction's `w`; 1 when a step finds no floor in reach, the mover's bit 0 of `+0x2D0`), the
-/// test KH1's ground picker marks its row 2 with. Steam only (no Epic address); its bytes are
-/// checked before each call.
-const SWEEP_STEAM: usize = 0x2C6E70;
-const SWEEP_BYTES: [u8; 11] = [0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x68, 0x10];
-/// KH1's collision block on the actor the sweep moves (`+0x2A0`, through its result `+0x2E0`),
-/// put back after ours.
+/// KH1's collision block on Sora (`+0x2A0`: `+0` position, `+0x10` the move, `+0x20` radius,
+/// `+0x24` height, `+0x28` flags, `+0x2C` the object he stands on (all ones: the map), `+0x30`
+/// result bits, `+0x3C` the floor polygon (0xFFFF none), `+0x40` the result position, `+0x68`
+/// the floor's height; Steam `0x140195180`, Checked (decomp)), the part the mover writes, put
+/// back after our test.
 const COLLISION: usize = 0x2A0;
-const COLLISION_LEN: usize = 0x60;
+const COLLISION_LEN: usize = 0x78;
+/// KH1's set-up of that block from his model's shape (`0x14029A0B0 (actor, block)`: position,
+/// radius, height, flags; returns the step, 0.7 of the smaller of radius and height), the mover
+/// (`0x140195180 (block)`), and a map polygon's normal (`0x1401907F0 (polygon, out)`): the
+/// calls KH1's own sweep `0x1402C6E70` makes, in its order. Steam only (no Epic address); their
+/// bytes are checked before each test.
+const SETUP_STEAM: usize = 0x29A0B0;
+const SETUP_BYTES: [u8; 10] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
+const MOVER_STEAM: usize = 0x195180;
+const MOVER_BYTES: [u8; 10] = [0x40, 0x55, 0x53, 0x57, 0x41, 0x54, 0x48, 0x8D, 0xAC, 0x24];
+const NORMAL_STEAM: usize = 0x1907F0;
+const NORMAL_BYTES: [u8; 11] = [0xF3, 0x0F, 0x10, 0x15, 0xC4, 0x27, 0x25, 0x00, 0x48, 0x63, 0xC1];
 
 /// KH2's line ahead at an attack press on the ground (the tester: "add that"; Steam KH2
-/// `0x140402D20`, Checked): the direction to the primary target (or his facing with none),
-/// `attack_j_front` plus his collision radius long (KH2's model's first kind 0 / 4 collision
-/// shape, `0x1403C9BC0 (…, 0x11)`), laid on the ground and swept with his collision
-/// (`0x1403B7BD0` / `0x1403BA750`); bit 0 of the sweep's result is set by KH2's mover when no
-/// floor is found (`0x140172640`), and then row 1 is marked (a hop of 21 off the edge, KH2's air
-/// swing 181). Here: KH1's own sweep (`SWEEP_STEAM`) of that length along KH1's direction for the
-/// press (`dir`: to KH1's target, laid flat, or his facing; **assumption** that it is KH2's
-/// primary target's), KH1's collision block put back after. False off Steam or with no KH2 data.
-unsafe fn drop_ahead(actor: usize, dir: usize) -> bool {
-    if Build::current() != Build::Steam || dir < 0x10000 {
+/// `0x140402D20`, Checked (decomp)): `aim` (KH2's selector's direction, to the primary target or
+/// his facing, `Character::selector_aim`, x / z) `attack_j_front` (plyr `+0x2C`, Sora's -5) plus
+/// his collision radius (`+0x6F0`, the model's first kind 0 / 4 shape, Sora's 90) long, laid on
+/// the floor's plane under him (`0x1403B7BD0`: across the ground normal twice, its length kept)
+/// and swept with his collision from his feet (`0x1403BA750` -> `0x14016FEC0`). Row 1 is marked
+/// when the mover's bit 0 comes back (`0x140172640`, its branch for this sweep, the collision
+/// flag `+0x740` bit 0 cleared first): no floor in its search at the end point (from 115 above
+/// to 345 below, `0x140172840`: three times the shape's lift `+0x73C`), or the floor there more
+/// than lift less height less 1 (115 - 90 - 1 = 24, `+0x73C` - `+0x6F4`, `+0x754` being 0 with
+/// no object at `+0x9D8`) below his feet, his feet lowered by the line's own drop when it runs
+/// downhill (`+0x14` above 0). So a step down of 24 or less is floor, deeper is a drop, wherever
+/// along the line the edge is; only the end point counts.
+/// Here: the same line on KH1's collision. KH1's mover moves his collision block (KH1's shape)
+/// along its flat part in KH1's own steps (`0x1402C6E70`'s), the floor plane from the polygon
+/// KH1's mover finds under him (a map polygon; on an object, flat: **assumption**), and the floor it finds
+/// under the end (`+0x3C` / `+0x68`: the nearest below, or up to his height above) is judged by
+/// KH2's rule. KH1's own test (row 2) differs: any step with the floor more than half KH1's
+/// height below. KH1's block put back after. False off Steam or with no KH2 data.
+pub unsafe fn drop_ahead(actor: usize, aim: [f32; 2]) -> bool {
+    if Build::current() != Build::Steam {
         return false;
     }
     let base = takeover::game_base();
-    if rd::<[u8; 11]>(base + SWEEP_STEAM) != SWEEP_BYTES {
-        note("KH2's line ahead: KH1's sweep (0x1402C6E70) isn't the expected code here; not tested".to_string());
+    if rd::<[u8; 10]>(base + SETUP_STEAM) != SETUP_BYTES || rd::<[u8; 10]>(base + MOVER_STEAM) != MOVER_BYTES || rd::<[u8; 11]>(base + NORMAL_STEAM) != NORMAL_BYTES {
+        note("KH2's line ahead: KH1's collision calls (0x14029A0B0 / 0x140195180 / 0x1401907F0) aren't the expected code here; not tested".to_string());
         return false;
     }
     let Some(kh2) = pose::kh2() else { return false };
-    let radius = kh2_data::sora::bg_shape(&kh2.rig.body_shapes).map_or(0.0, |s| s.radius);
-    let length = kh2.character.attack.jump_front + radius;
-    let d: [f32; 4] = rd(dir);
-    let flat = d[0].hypot(d[2]);
-    let (x, z) = if flat > 1e-3 && d[0].is_finite() && d[2].is_finite() {
-        (d[0] / flat, d[2] / flat)
-    } else {
-        let yaw: f32 = rd(actor + 0x3C);
-        if !yaw.is_finite() {
-            return false;
-        }
-        (yaw.sin(), yaw.cos())
-    };
-    let own: f32 = rd(actor + COLLISION + 0x20);
-    if !own.is_finite() || length <= 0.0 {
+    let Some(shape) = kh2_data::sora::bg_shape(&kh2.rig.body_shapes) else { return false };
+    let length = kh2.character.attack.jump_front + shape.radius;
+    // (KH2's mover: the floor more than this below his feet is none.)
+    let reach = shape.lift - shape.height - 1.0;
+    let flat = aim[0].hypot(aim[1]);
+    if !(flat > 1e-3) || !(length > 0.0) || !reach.is_finite() {
         return false;
     }
+    let v = glam::Vec3::new(aim[0] / flat, 0.0, aim[1] / flat);
     let saved: [u8; COLLISION_LEN] = rd(actor + COLLISION);
-    let line = [x, 0.0f32, z, length - own];
-    let sweep: unsafe extern "system" fn(usize, *const [f32; 4]) -> u64 = std::mem::transmute(base + SWEEP_STEAM);
-    let hit = sweep(actor, &line) as u32 != 0;
-    wr(actor + COLLISION, saved);
-    if hit {
-        note(format!("KH2's line ahead: no floor within {length:.0} ({:.0} his radius), KH2's row 1 marked", radius));
+    let setup: unsafe extern "system" fn(usize, usize) -> f32 = std::mem::transmute(base + SETUP_STEAM);
+    let mover: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(base + MOVER_STEAM);
+    // The floor's plane under him (KH1 y-down; the projection doesn't care which way it points):
+    // KH1's mover where he stands (KH1's own sweep in its picker has just left the block at its
+    // end), its floor polygon's normal.
+    let step = setup(actor, actor + COLLISION);
+    wr(actor + COLLISION + 0x10, [0.0f32, 0.0, 0.0, 1.0]);
+    wr(actor + COLLISION + 0x28, rd::<u32>(actor + COLLISION + 0x28) & !1);
+    mover(actor + COLLISION);
+    let on_object = rd::<u32>(actor + COLLISION + 0x2C) != u32::MAX;
+    let polygon = rd::<u16>(actor + COLLISION + 0x3C);
+    let mut normal = glam::Vec3::NEG_Y;
+    if !on_object && polygon != 0xFFFF {
+        let normal_of: unsafe extern "system" fn(i32, *mut [f32; 4]) = std::mem::transmute(base + NORMAL_STEAM);
+        let mut n = [0.0f32; 4];
+        normal_of(polygon as i16 as i32, &mut n);
+        let n = glam::Vec3::new(n[0], n[1], n[2]).normalize_or_zero();
+        if n.y.abs() > 0.2 {
+            normal = n;
+        }
     }
-    hit
+    // (KH2's `0x1403B7BD0`: across the normal, back across it, normalized, at the length.)
+    let line = normal.cross(v).normalize_or_zero().cross(normal).normalize_or_zero() * length;
+    let across = glam::Vec2::new(line.x, line.z);
+    // (From his position again, as KH1's sweep starts.)
+    setup(actor, actor + COLLISION);
+    let start_y: f32 = rd(actor + COLLISION + 4);
+    let mut left = across.length();
+    if !(step > 0.5) || !start_y.is_finite() || !(left > 0.0) {
+        wr(actor + COLLISION, saved);
+        return false;
+    }
+    let dir = across / left;
+    let mut steps = 0;
+    while left > 0.0 && steps < 64 {
+        let s = step.min(left);
+        wr(actor + COLLISION + 0x10, [dir.x * s, 0.0f32, dir.y * s, 1.0f32]);
+        wr(actor + COLLISION + 0x28, rd::<u32>(actor + COLLISION + 0x28) & !1);
+        mover(actor + COLLISION);
+        wr(actor + COLLISION, rd::<[f32; 4]>(actor + COLLISION + 0x40));
+        left -= step;
+        steps += 1;
+    }
+    let found = rd::<u16>(actor + COLLISION + 0x3C) != 0xFFFF;
+    let below = rd::<f32>(actor + COLLISION + 0x68) - (start_y + line.y.max(0.0));
+    wr(actor + COLLISION, saved);
+    let drop = !found || !(below <= reach);
+    if drop {
+        note(if found {
+            format!("KH2's line ahead: the floor {below:.0} below at {length:.0} ahead (more than {reach:.0}: none), KH2's row 1 marked")
+        } else {
+            format!("KH2's line ahead: no floor under the point {length:.0} ahead, KH2's row 1 marked")
+        });
+    }
+    drop
 }
 
 /// KH2's hop out of KH1's ground combo (Base Combo KH2; the tester: "design and implement

@@ -691,21 +691,59 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,
   lays it on the ground (`0x1403B7BD0`: across the ground normal `+0x768` twice, its length
   kept) and sweeps his collision along it from his position (`0x1403BA750` -> `0x14016FEC0`);
-  the result's bit 0 marks row 1 (unchecked, in its table place). Bit 0 is the mover's "no
-  floor": no floor polygon, or the floor below reach (`0x140172640`). So t374's "blocked"
-  guess was wrong: it is a drop ahead, and row 1 is KH2's hop off it (181, a hop of 21). Not
-  done when he is in the air, with `+0x18C` bit 6, with an object at `+0x9D8`, or with his
-  object entry's `+0xC` bit 1 (what those are: not known; none seen on Sora). `+0x6F0` is his
-  radius from the model's first collision shape of kind 0 or 4 (`0x1403B3200` ->
-  `0x1403C9BC0 (…, 0x11)`, `+0x10`; `kh2_data::sora::bg_shape`). **Assumption**: `+0x150` is the
-  plyr record (its `+0x5C` / `+0x68` reads fit auto-lock range / time), so `+0x2C` is
-  `attack_j_front` (Sora's -5; `AttackParams::jump_front`).
-  Ours: `character_core::select` marks row 1 with `Situation::drop_ahead`
-  (`Character::set_drop_ahead`, ground only); the hook tests the line with KH1's own sweep
-  (`combomods::drop_ahead`: `0x1402C6E70`, Steam only, bytes checked; its total length is
-  `+0x2C0` plus the direction's `w`, set so it is KH2's; KH1's collision block put back after)
-  along KH1's direction for the press (to its target, laid flat, or his facing: **assumption**
-  that it matches KH2's primary target's), and the hop plays as KH2's hops do (above).
+  the result's bit 0 marks row 1 (unchecked, in its table place: index 3 of Sora's 37, before
+  every ground row but the hops at a target above, so it wins over the swings and finishers;
+  Checked (files)). So t374's "blocked" guess was wrong: it is a drop ahead, and row 1 is KH2's
+  hop off it (181, a hop of 21). Not done when he is in the air, with `+0x18C` bit 6, with an
+  object at `+0x9D8`, or with his object entry's `+0xC` bit 1 (what those are: not known; none
+  seen on Sora). `+0x6F0` is his radius from the model's first collision shape of kind 0 or 4
+  (`0x1403B6310` -> `0x1403C9BC0 (…, 0x11)`: `+0x10` the radius to `+0x6F0`, `+0x12` the
+  height to `+0x6F4`, `+0xE` the lift to `+0x73C`; `kh2_data::sora::bg_shape`; Sora's, entry 0
+  of `P_EX100.mdlx`'s list, Checked (files): kind 4, lift 115, radius 90, height 90). `+0x150`
+  is the plyr record (Checked (decomp), after t393's assumption: its other reads are plyr's by
+  field order, `+0x50` / `+0x54` / `+0x58` blow recovery h / v / time in `0x1403D6BB0` /
+  `0x1403D6D50`, `+0x5C` auto lock-on range in `0x1403BE2B0`, `+0x60` / `+0x64` its min / max h
+  in `0x1403BE4B0`, `+0x68` its time in `0x1403DCCD0`), so `+0x2C` is `attack_j_front` (Sora's
+  -5; `AttackParams::jump_front`): the line is 85 long.
+  - **What counts as no floor** (Steam KH2, Checked (decomp)): `0x1403BA750` copies his feet
+    (`+0x670`) and the line into the mover block `+0x6D0`, clears its flag `+0x740` bit 0 and
+    moves it (`0x14016FEC0`: the move, then the floor search at the end point, `0x140172840`).
+    The search is a vertical segment through the end point from the lift (`+0x73C`, 115) plus the
+    line's drop (at most 100) above it to three lifts (345) below it; none found: bit 0. Found,
+    with `+0x740` bit 0 clear (`0x140172640`'s first branch): bit 0 when the floor is more than
+    lift less height less 1 plus `+0x754` below his feet (`+0x6D4`), his feet lowered by the
+    line's drop when it runs downhill (`+0x6E4` above 0); `+0x754` is 0 without an object at
+    `+0x9D8` (`0x1403B9CE0`), which the selector requires. For Sora: more than 24 below (the
+    same 24 as KH2's step down, `takeover::STEP_DOWN`). Only the end point is judged, not the way
+    there; no floor attribute is read on this branch.
+  - **KH1's own** (row 2, `0x1402C6E70`, Steam, Checked (decomp)): KH1's collision (its model's
+    shape, `+0x134`) moved flat for its radius plus 20 in steps of 0.7 of the
+    smaller of its radius and height (`0x14029A0B0`), stopping at the first step whose floor is
+    more than half KH1's height below, or of KH1's not-a-floor kind (attribute `0xB0`), or
+    missing (`0x140195180`: bit 0 of `+0x2D0`).
+  - Ours (`combomods::drop_ahead`, Steam only, the three calls' bytes checked): the trial asks it
+    (`takeover::kh2_would_take_launch` with `test_drop_ahead`, the ground combo's press only)
+    along KH2's selector's direction there (`Character::selector_aim`: to the primary target,
+    else his facing, as `0x1404028D0`; t393 used KH1's direction for the press, the stick's
+    with no target). The line, 85 long, is laid on the plane of the floor polygon KH1's mover
+    finds under him (one still move; its normal by KH1's `0x1401907F0`; a map polygon only, on an
+    object flat: **assumption**), KH1's set-up (`0x14029A0B0`) and mover (`0x140195180`) take
+    his own collision along its flat part in KH1's steps, all the way, and the floor the last
+    step finds (`+0x2DC` 0xFFFF none, `+0x308` its height: the nearest below, or up to his
+    height above) is judged by KH2's rule: none, or more than 24 below his feet (lowered by the
+    line's drop downhill). KH1's block (`+0x2A0..+0x318`) put back after. Differences left:
+    KH1's collision shape and steps move him (walls stop it a little sooner or later than KH2's
+    90-radius sphere), and with floors stacked KH1's mover takes the nearest below where KH2's
+    search takes the first from 115 above. The hop plays as KH2's hops do (above).
+  - **Checked (trace)**, the tester's t409 traces f3990, f4996, f5299, f5413 and their log (no
+    target, stick idle, physics KH1): every row 1 was on a block 120 high (`floor_up` 120), facing
+    its edge (yaw about 3.09 / -2.90 / 3.03; the edge between z 799 and 807 at x -1387, where the
+    floor under him went from 0 to 120 on his way up), about 50 to 70 from it along his facing
+    (z 867, 854, 875; if the edge runs straight along x): the line's end 85 ahead was about 15 to
+    35 past the edge, over the floor 120 below, more than 24: KH2's row 1 there, as logged (`no floor within 85 (90 his radius)`). Presses farther from the edge
+    on the same block took KH2's 151 / 153 (rows 5 / 6). KH1's own row 2 was marked at each of
+    them too (the log: "KH1's row 2 replaced"), so the two tests agreed here; they part for drops
+    between 24 and half KH1's height, at gaps the line crosses, and on slopes.
 - **The finisher tests' status bits** (the tester: "add that"; Steam KH2, Checked (decomp)):
   - `+0x194` bit 5: the count step (`0x1403D6CA0`) takes it with the press's hit as the
     finisher chain (count and finisher count up, while under the most finishers `+0x5C0` block
