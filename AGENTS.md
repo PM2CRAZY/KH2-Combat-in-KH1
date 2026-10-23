@@ -3584,6 +3584,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-23: Stage 338 (forced reverts: partners fully back, Drive gauge full)
+- The user: "The sora is force reverted in any circumstances (reverted outside of the player's
+  control) make sure the party members are fully visible, and fully refill sora's drive gauge".
+  `form::revert` takes `forced`: true for a KO, a new world and every `scene_revert` (scenes,
+  battle ends, the Coliseum's arena entry and exit); false for the Revert command and the gauge
+  running out. Forced: `gauge::refill_bars` (every bar) and `vanish::force_back` (the partners the
+  form took, on their current actors: acting, model, shadow on, away bits off, beside Sora, HUD
+  entry faded in; KH1's member-leaving mark left alone). Also: installs now come from
+  PM2CRAZY/KH2-Combat-In-KH1-Mod (one commit, the latest build). docs/drive-model.md.
+
 ### 2026-10-23: Stage 337 (Drive Converter at level 35)
 - The user: "make drive converter come at level 35". `growth::SUPPORT_LEVELS` 50 -> 35.
 

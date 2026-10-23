@@ -250,6 +250,21 @@ pub fn recover(points: i32) -> (String, String) {
     (before, describe_bars())
 }
 
+/// Fills every bar (out of a form) after a forced revert (`form::revert`, the user: "fully
+/// refill sora's drive gauge"), once the gauge is shown.
+pub fn refill_bars(why: &str) {
+    if !form_open() {
+        return;
+    }
+    let before = describe_bars();
+    with(|d| {
+        d.gauge = None;
+        d.refill();
+    });
+    LOGGED.store(u32::MAX, Ordering::Relaxed);
+    log(&format!("Drive gauge: refilled after a forced revert ({why}): {before} -> {}", describe_bars()));
+}
+
 /// Fills the gauge (a testing aid): every bar, or the form gauge in a form.
 #[allow(dead_code)]
 pub fn refill() {

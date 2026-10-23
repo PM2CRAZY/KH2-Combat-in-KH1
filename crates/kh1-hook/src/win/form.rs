@@ -718,7 +718,7 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
     // Knocked out in the form: Sora again at once (KH2: a KO reverts).
     let knocked = REQUEST.load(Ordering::Relaxed) == 3 && REQUEST.swap(0, Ordering::Relaxed) == 3;
     if (d.form.is_some() || d.change.is_some()) && (knocked || hp(actor) <= 0) {
-        revert(d, ch, anim, kh2, "knocked out");
+        revert(d, ch, anim, kh2, "knocked out", true);
         return;
     }
     // Landed in another world in the form: Sora again at once, wherever he lands (the user: "when
@@ -728,7 +728,7 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
         let now = world_now();
         if now != w {
             log(&format!("Drive: a new world ({w} -> {now}): back to Sora"));
-            revert(d, ch, anim, kh2, "a new world");
+            revert(d, ch, anim, kh2, "a new world", true);
             return;
         }
     }
@@ -784,7 +784,7 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
                 defer(d, "the Revert command");
                 return;
             }
-            revert(d, ch, anim, kh2, "the Revert command");
+            revert(d, ch, anim, kh2, "the Revert command", false);
             return;
         }
         _ => {}
@@ -811,7 +811,7 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
             return;
         }
         d.revert = false;
-        revert(d, ch, anim, kh2, "the form gauge ran out");
+        revert(d, ch, anim, kh2, "the form gauge ran out", false);
     }
 }
 
@@ -883,8 +883,13 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
 
 /// Back to Sora: what played is cut, he is free with his movement (the user: on the ground
 /// "return you to whatever animation is being called from the control stick and not halt his
-/// movement"; in the air, falling).
-unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &pose::Kh2, why: &str) {
+/// movement"; in the air, falling). `forced`: out of the player's hands (a scene, a KO, a new
+/// world, the Coliseum's cup; not the Revert command or the gauge running out): the partners the
+/// form took fully back and the Drive gauge full (the user: "The sora is force reverted in any
+/// circumstances (reverted outside of the player's control) make sure the party members are fully
+/// visible, and fully refill sora's drive gauge").
+unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &pose::Kh2, why: &str, forced: bool) {
+    let taken = d.form.as_ref().map(|f| f.kind).or(d.changing_to).map(takes_partners).unwrap_or(&[]);
     CHANGING.store(false, Ordering::Relaxed);
     super::kh2fx::drive_tint(false);
     d.change = None;
@@ -893,11 +898,18 @@ unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     if let Some(waited) = d.waited.take() {
         log(&format!("Drive: the revert put off during a limit ({waited}) taken now"));
     }
-    // The form gauge is gone; the Drive gauge is as the cost left it (KH2: no refill on the way out).
+    // The form gauge is gone; the Drive gauge is as the cost left it (KH2: no refill on the way
+    // out), or full after a forced revert.
     super::gauge::revert();
+    if forced {
+        super::gauge::refill_bars(why);
+    }
     let Some(f) = d.form.take() else {
         // (Out of the change: its partners back.)
         super::vanish::revert();
+        if forced {
+            super::vanish::force_back(taken);
+        }
         return;
     };
     IN_FORM.store(false, Ordering::Relaxed);
@@ -916,6 +928,9 @@ unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     log(&format!("Revert ({why}){}", if ch.airborne() { ", falling" } else { "" }));
     // Its partners back beside him now (`vanish`; the party logged before and after).
     super::vanish::revert();
+    if forced {
+        super::vanish::force_back(taken);
+    }
 }
 
 /// KH1 has had Sora for a scene long enough in the form (`takeover::scene_frame`: a cutscene, a
@@ -932,7 +947,7 @@ pub unsafe fn scene_revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim
         defer(d, "a scene");
         return;
     }
-    revert(d, ch, anim, kh2, why);
+    revert(d, ch, anim, kh2, why, true);
     super::tint::refresh(actor, None);
     super::valorstats::step(actor);
 }

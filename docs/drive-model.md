@@ -1784,3 +1784,14 @@ round 1, win it (the victory scene plays with the partners, the form and its gau
 partners vanish again once the next round starts, never invisible afterwards); revert in a later
 round (partners back and visible); win the cup in a form (the trophy scene ends it); lose a round
 in a form (knocked out: reverted) and quit a cup in a form (reverted on leaving the arena).
+
+
+## Forced reverts (s338)
+
+A revert out of the player's hands (a KO, a new world, every scene revert: cutscenes, battle
+ends, the Coliseum's arena entry and exit) refills every bar of the Drive gauge
+(`gauge::refill_bars`) and brings the partners the form took fully back on their current actors
+(`vanish::force_back`: acting, model and shadow on, the away bits off, beside Sora, the HUD entry
+faded in; KH1's member-leaving mark is left alone). The Revert command and the form gauge running
+out are the player's own and keep KH2's rule (no refill). The log: "Drive gauge: refilled after a
+forced revert (...)" and "Drive: Donald fully back (a forced revert): ...".

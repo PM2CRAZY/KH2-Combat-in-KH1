@@ -236,6 +236,35 @@ pub fn revert() {
     log(&format!("Drive: the party at the revert, after: {}", unsafe { party_line(base) }));
 }
 
+/// A forced revert (`form::revert`, out of the player's hands: a scene, a KO, a new world, the
+/// Coliseum's cup): `taken`, the partners the form took, fully back on their current actors
+/// whatever our record says (the user: "The sora is force reverted in any circumstances ...
+/// make sure the party members are fully visible"): acting, model and shadow on, the away bits
+/// off, beside Sora, and his HUD entry faded in. KH1's own member-leaving mark is left alone.
+pub fn force_back(taken: &[Partner]) {
+    let base = base();
+    let Ok(mut st) = STATE.lock() else { return };
+    for &p in taken {
+        let i = BOTH.iter().position(|&b| b == p).unwrap_or(0);
+        let Some(actor) = (unsafe { actor_of(base, p) }) else { continue };
+        unsafe {
+            if rd::<u32>(actor + 0x374) & LEFT_FOR_GOOD != 0 {
+                continue;
+            }
+            let rec = st.members[i].away.take().filter(|a| a.actor == actor);
+            back(base, actor, rec.as_ref(), false);
+            wr(actor, rd::<u32>(actor) & !AWAY_BITS);
+            if let Some(slot) = hud_slot(base, actor) {
+                if !hud_showing(base, slot) {
+                    hud_mode(base, slot, 1);
+                }
+            }
+        }
+        st.members[i] = Member::NEW;
+        log(&format!("Drive: {} fully back (a forced revert): {}", p.name(), unsafe { party_line(base) }));
+    }
+}
+
 /// Each of Sora's frames (and at a form's end): partners away while the form takes them, back
 /// when it doesn't.
 pub fn frame() {
