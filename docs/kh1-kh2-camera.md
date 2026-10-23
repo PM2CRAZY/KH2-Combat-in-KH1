@@ -254,10 +254,10 @@ Both rates are the swing-behind formula exactly (`camera-model.md`).
   swing; diagonally back (more than 25.8° off) still does, slowly.
 - **Checked.** The trace's per-frame turn matches the formula, and the condition and its
   inputs were read in the Steam decomp. A new trace has not been taken yet.
-- **Still different from KH2.** KH2's stick has a per-axis dead zone of 60 of 127.5 (set in
-  `0x14039b7f0`, applied in `0x14039c180`). Ours uses a round 15% dead zone, at the user's
-  earlier request, so gentle tilts would move. At full tilt the two give the same numbers.
-  At partial tilts the swing rate, and where the 0.9 line falls, differ a little.
+- **Dead zone, now 1:1.** KH2's stick has a per-axis dead zone of 60 of 127.5 (set in
+  `0x14039b7f0`, applied in `0x14039c180`). Ours used a round 15% dead zone, at the user's
+  earlier request, so gentle tilts would move. At the tester's "it should be 1:1", the camera
+  reads the sticks KH2's way (`character_core::pad`, `docs/kh2-pad.md`).
 
 ## 10. Sources
 

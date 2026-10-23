@@ -20,6 +20,7 @@ mod combo;
 mod controller;
 pub mod drive;
 pub mod npc;
+pub mod pad;
 mod params;
 pub mod reaction;
 

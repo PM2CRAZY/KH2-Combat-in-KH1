@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 380 (testing branch: KH2's camera reads the sticks KH2's way)
+- The tester: KH2's stick dead zone 1:1. `character_core::pad` (`stick`, `stick_vec`) follows Steam KH2 `0x14039c180`
+  (60 of 127.5 off each axis, over 67.5, a direction and a tilt clamped to 1); `camera.rs` reads the pad's sticks
+  that way and `STICK_DEAD` (15%, camera only) is gone. KH1's own processed sticks are built the same way
+  (`0x14028b4f0`, dead zone 60 from `0x14028afc0`) and stay the stand-in for the keyboard and mouse. Notes:
+  `docs/kh2-pad.md`.
+
 ### 2026-10-23: Stage 379 (testing branch: KH2's camera swing-behind test on the stick's direction)
 - t373 correction (the tester asked to confirm in the KH2 decomp). From the decomp (Steam): `0x14039c180` keeps the left stick
   as a direction plus a tilt (`0x140142080` normalizes it), so `0x140165110` skips the swing within 25.8 deg of straight

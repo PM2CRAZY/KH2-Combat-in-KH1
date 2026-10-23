@@ -51,8 +51,6 @@ const KH1_MOTION_RVAS: [Rva; 9] = [Rva(0x2538850), Rva(0x2538854), Rva(0x2538AB4
 const STEP_RVA: Rva = Rva(0x23405DC);
 const RIGHT_STICK_RVA: Rva = Rva(0x298D4D0);
 const LEFT_STICK_RVA: Rva = Rva(0x298D4E0);
-/// Stick dead zone for KH2's camera (of full tilt).
-const STICK_DEAD: f32 = 0.15;
 /// Logical buttons: `+8` pressed this frame. R3 `0x200`, Select `0x8000`.
 const BUTTONS_RVA: Rva = Rva(0x298D4A0);
 const R3: u32 = 0x200;
@@ -660,20 +658,12 @@ unsafe fn run(lock: bool) -> Option<()> {
 
     // Input: KH1's processed sticks (-1..1, y down) and buttons. Sora unable to act: no stick.
     let free = rd::<u32>(sora + 0x444) & 1 == 0;
-    // The pad's own sticks with a small dead zone, as KH2 reads them: KH1's processed ones
-    // drop the inner 47% (60 of 127.5), so gentle tilts did nothing. KH1's processed right
-    // stick still counts when the raw one is idle (the mouse writes there).
+    // The pad's own sticks as KH2's pad builds them (`character_core::pad`, Steam KH2
+    // `0x14039c180`: 60 of 127.5 off each axis, a unit direction and a tilt), 1:1 (the tester).
+    // KH1's processed sticks are built the same way (Steam KH1 `0x14028b4f0`) and stand in when
+    // the pads' own rest: the keyboard's keys, and the mouse, which writes the right stick.
     let raw = super::takeover::RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
-    let axis = |b: u8| (b as f32 - 128.0) / 127.0;
-    let dead = |v: [f32; 2]| -> [f32; 2] {
-        let m = (v[0] * v[0] + v[1] * v[1]).sqrt();
-        if m < STICK_DEAD {
-            return [0.0; 2];
-        }
-        let k = ((m - STICK_DEAD) / (1.0 - STICK_DEAD)).min(1.0) / m;
-        [v[0] * k, v[1] * k]
-    };
-    let raw_r = dead([axis(raw[0]), axis(raw[1])]);
+    let raw_r = character_core::pad::stick_vec(raw[0], raw[1]);
     let r = if !free {
         [0.0; 2]
     } else if raw_r != [0.0; 2] {
@@ -681,7 +671,7 @@ unsafe fn run(lock: bool) -> Option<()> {
     } else {
         rd::<[f32; 2]>(base + RIGHT_STICK_RVA)
     };
-    let raw_l = dead([axis(raw[2]), axis(raw[3])]);
+    let raw_l = character_core::pad::stick_vec(raw[2], raw[3]);
     let l = if raw_l != [0.0; 2] { raw_l } else { rd::<[f32; 2]>(base + LEFT_STICK_RVA) };
     let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
     let turn = rd::<f32>(base + TURN_SIGN_RVA);
