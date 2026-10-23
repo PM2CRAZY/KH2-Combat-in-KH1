@@ -380,6 +380,11 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
 > [!note] Tester Mr Bugs
 > 
+> its still black when frame advance is on until you advance a frame, is there anything I can do to help log the error for you in game?
+> 
+> also can you make every thread a new document inside their respected names in the tester folder? that way when an agent updates the github for a different thread I can respond to it instantly without having to wait for the whole document to be finished. 
+> 
+> go ahead
 
 
 ---
@@ -549,7 +554,11 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 3. Next: (a) Magnet Burst (it uses the same two programs, so it can follow the same path), (b) retire the old effect player for Explosion now that it all runs through KH1, or (c) both?
 
 > [!note] Tester Mr Bugs
-> 
+> 1. (a) just make sure that kh1s effects still behave the same way
+> 2. (a)
+> 3. (b)
+>    
+>    go ahead
 
 ---
 
@@ -614,7 +623,13 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 3. The hop swing with Aerial Combo set to KH1: (a) keep KH1's swing, as now, or (b) play KH2's hop anyway?
 
 > [!note] Tester Mr Bugs
+> sorry I should've been more clear; don't worry about moves that are still in kh2 entirely, that system is going to be deprecated for when we get everything implemented and 1:1 in kh1 
 > 
+> 1. (a)
+> 2. don't worry about mp mechanics yet until we're ready to start working on it
+> 3. (a) 
+>    
+>    go ahead
 
 
 ---
@@ -683,8 +698,15 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 3. The baked walk and run play at KH2's own pace, so the feet can slide when you move at other speeds. (a) keep it exactly 1:1, or (b) speed the animation up and down with your movement, like the old version did?
 
 > [!note] Mr Bugs
+> I sent a trace and a new log 
 > 
-
+> for some reason, standing  and returning to neutral cause parts of soras model to stretch like crazy
+> 
+> for the custom animation parts for kh1s model lets set that aside and work on it later, remove them from animation for now.
+> 
+> 1. (b) only do what kh2 does so its 1:1
+> 2. (a)
+> 3. (a)
 
 ---
 
@@ -746,7 +768,12 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 3. **An unknown button** can stop KH2's auto-swing and allow zoom in places it's normally blocked; which button it is sits in KH2's remap tables. Want me to track it down?
 
 > [!note] Tester Mr Bugs
-> 
+> kh2 "Found, not changed (KH2's lock-on turn speed is a constant I can't read here; ours is 3°, and KH2 scales turning by the mouse's motion, which ours doesn't):" Make sure your not mixing up the mouse camera and the controller camera, those are seperate cameras (at least from a user's experince, unsure how it is in code)
+> 1. (a)
+> 2. yes
+> 3. unsure what an "unknown button" is but yes go ahead and do it
+>    
+>    go ahead
 
 ---
 
@@ -777,4 +804,8 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > Done. Under each thread in the Contents there's now a link to every message in it, numbered, with who wrote it and its first words. Each message has a small anchor above it for the link to jump to. I'll keep them current with every reply. I also closed the Chat history thread and moved it to the archive.
 
 > [!note] Tester Mr Bugs
+> response to notes
+> [!note] Tester Mr Bugs
+> I can't seem to click on them in obsidian, can you fix it for me?
+> go ahead
 > 
