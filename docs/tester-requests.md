@@ -39,6 +39,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](#missing-sleeves-animation-1)
   - [2. Assistant: t375](#missing-sleeves-animation-2)
   - [3. Mr Bugs: 4. do (b) and (c), if there isn't a matching equivalent to s](#missing-sleeves-animation-3)
+  - [4. Assistant: t385 to t389 (one part each; the build at the top of the bra](#missing-sleeves-animation-4)
 - [KH2 Camera fixes](#kh2-camera-fixes)
   - [1. Mr Bugs: I noticed when you run backwards the camera starts turning s](#kh2-camera-fixes-1)
   - [2. Assistant: t373](#kh2-camera-fixes-2)
@@ -613,6 +614,28 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >    can you also bake the animations for kh2s walking and running cycles? its more easy for me to compare.
 > 
 > go ahead
+
+<a id="missing-sleeves-animation-4"></a>
+> [!tip] Assistant
+> t385 to t389 (one part each; the build at the top of the branch has them all)
+>
+> First, something I found that changes the picture. In KH2's own model, every vertex is attached to exactly one bone, and a lot of the cloth bones KH2 animates have no mesh on them at all: the hood bones, the sleeve flaps, three hair spikes, the ring of cloth round the chest that lines up with KH1's jacket hem, all the trouser bones and the pelvis pieces. So in KH2 they don't visibly move anything. Copying them onto KH1 would add motion KH2's Sora doesn't show (the hem would sit flared out), so by your rule I didn't copy them for the hem and shorts.
+>
+> - **t385, shared parts.** New: KH1's necklace now swings with KH2's necklace (that one really does move on KH2's model). Everything copied from KH2 to KH1 now: hair spikes (KH1 153–192 from KH2 145–163), hood (KH1 80–83 from KH2 72/73), keychain (KH1 283–291 from the Keyblade's 3–11), sleeves (KH1 129/133/137/141 and 233/237/241/245 from KH2 110/202; KH1 130/134/138/142 and 234/238/242/246 from the flaps 113/115/205/207), the necklace (KH1 86 from KH2 165), plus the body. Of those, the hood, the flaps and spikes 143/159/161 have no mesh in KH2. The full table with every bone, and whether each KH2 bone shows on KH2's model, is in `docs/kh1-secondary-motion.md`.
+> - **t386, squash and stretch** is carried now, live and baked. Right now it only shows on the sleeve flaps, because every other KH2 scale key is on a bone with no mesh.
+> - **t387, KH1-only parts** (belt chain, belt-front pieces, shorts, jacket hem, the necklace's pendant) now play KH1's own animation of the same move, stretched to KH2's timing. So KH2's run gets KH1's run's chain swing and hem flap, and a KH2 swing gets KH1's swing's. They ride on KH2's body and are still kept off the thighs. I went with KH1's own animation rather than inventing one, as the closest to what you described.
+> - **t388, the hair and physics switches are gone** (`hair_physics`, `kh2_hair`), and so is our physics swing. KH2 really does just key these parts: the KH2 source has no cloth or hair physics, and nothing in KH2's motions drives them another way. One side effect: the keychain on a Dream weapon or the wooden sword now keeps KH1's rest pose instead of swinging.
+> - **t389, KH2's walk and run are baked** into KH1's walk and run slots (KH2's field cycle on the field version, its battle cycle on the battle ones), under the Misc Animations style like before.
+>
+> **Check:** the game files (all of KH2's motions) and the KH1 decomp (how it scales bones and plays the walk and run). Not checked in game. Assumptions: that the Steam game draws this same KH2 model, and that KH2's and KH1's runs start on the same foot.
+>
+> Questions:
+> 1. The hood, sleeve flaps and three hair spikes we already copy have no mesh in KH2. (a) keep copying them, or (b) follow only what KH2 visibly moves (the hood stays with the head, the sleeves without the flap motion, those spikes stay with the head)?
+> 2. Hem and shorts: (a) keep KH1's own animation, or (b) copy KH2's hidden cloth bones anyway (flared hem, twisted panels)?
+> 3. The baked walk and run play at KH2's own pace, so the feet can slide when you move at other speeds. (a) keep it exactly 1:1, or (b) speed the animation up and down with your movement, like the old version did?
+
+> [!note] Mr Bugs
+> 
 
 
 ---
