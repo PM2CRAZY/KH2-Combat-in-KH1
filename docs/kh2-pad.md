@@ -74,6 +74,50 @@ at full tilt, is the OG rewrite's reading of the Epic exe ("Checked (exe)" in
   sensitivity factor on the tilt, the 0.4 lag in keyboard / mouse mode, and the mouse winning
   over a tilted pad stick (ours takes the pad's when it is tilted).
 
+## KH2: bit 32 of the held word (the "unknown button")
+
+What it does (Checked (decomp), Steam KH2):
+
+- **The swing behind.** `0x140178ae0` returns bit 32 of the held word, inverted unless the
+  Field Camera option is Auto (`0x1402e5310`: bit 4 of the config word `+0x41a4` clear; the
+  options menu's first row, `0x1403651a0` / `0x140365580`, whose rows match KH2's Config:
+  Field Camera, the camera's up / down and left / right, a three-way row (Summon Effects),
+  the map, vibration (`0x1402e53f0`, used by the pad task's rumble), ...). The follow camera
+  (`0x140165110`) and one other mode (`0x140165570`) clear their swing flag when it is true.
+  So with Auto, holding the button stops the swing behind; with Manual, the camera swings
+  behind only while it is held.
+- **Zoom while swimming.** The follow camera zooms unless the player's kind has bit 3
+  (`0x1403babf0`); then only with bit 32 held (`0x140165110`, `0x140165570`, the lock-on and
+  other modes). The same kind bit sends his move (`0x1403a8fa0`) through a branch where two
+  other held bits (29 / 30) move him up and down at his `+0x13c`, and bit 32 held cancels that.
+  The first person doesn't pitch for that kind either (`0x140165e30`). **Inferred:** that kind
+  is a swimming player (KH2's Atlantica: `prty` moveset 8 has an up_down_speed of 8 and
+  swimming inertia, the others 0), whose right stick's up / down swims; holding the button
+  makes it zoom instead.
+
+Which button it is (not found):
+
+- The held word is the pad record's raw word put through the remap table `0x1405c3420`
+  (exe data, `{raw mask, logical bits}` pairs, ended by 0; `0x14039c720`) and a PC table built
+  at run time (`0x140bf3330`). Neither is in the decomp.
+- The raw word (`0x14039bbe0`): bits 0-15 the PS2 buttons in PS2 order. Checked (decomp): the
+  XInput read `0x140134d10` maps A to Cross 0x4000, B to Circle 0x2000, X to Square 0x8000, Y
+  to Triangle 0x1000, LB / RB to L1 0x400 / R1 0x800, LT / RT to L2 0x100 / R2 0x200, Back to
+  Select 1, Start 8, the stick clicks to L3 2 / R3 4, the d-pad to 0x10-0x80, and two more
+  buttons to 0x10000 / 0x20000; the table's first entry is 0xF09 (Select + Start + L1 + R1 +
+  L2 + R2, the soft reset). Bits 16-23 the stick directions (`0x14039c180`), 24 / 25 two PC
+  button masks set at run time (`0x140782740` / `0x140782744`), and 26 / 27 "L2 held" / "L2 not
+  held", swapped by bit 5 of the same config word (`0x1402e53d0`).
+- KH1's logical word is another layout (its table `0x140528F90`: R3 to 0x200, Select to
+  0x8000, `kh1-camera.md` 5.2), so KH1's doesn't tell KH2's.
+- Other logical bits the camera reads, for the record: pressed 17 (the reset; **Assumption:**
+  R3), pressed 22 (first person; **Assumption:** Select), held 18 / 19 (the first person's
+  pitch, with the right stick's y), held 20 / 21 (the first person's turn, `0x1403a9250`).
+- **Candidate:** L2, through raw bit 26 or 27: the only raw bits past the buttons and sticks
+  that a camera-side option flips. **Assumption**, not modelled. A check in KH2 itself settles
+  it: with Field Camera on Auto, run in a circle holding L2; if the camera stops swinging behind
+  him, it is L2.
+
 ## KH1 (Steam)
 
 - `0x14028b4f0`, from KH1's pad step `0x14028b0b0`, builds its sticks the same way: byte minus
