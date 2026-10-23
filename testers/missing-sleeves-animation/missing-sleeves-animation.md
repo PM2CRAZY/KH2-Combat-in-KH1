@@ -9,6 +9,7 @@
 - [3. Mr Bugs: 4. do (b) and (c), if there isn't a matching equivalent to s](#^m3)
 - [4. Assistant: t385 to t389 (one part each; the build at the top of the bra](#^m4)
 - [5. Mr Bugs: I sent a trace and a new log](#^m5)
+- [6. Assistant: t405 to t407 (one each)](#^m6)
 
 ---
 
@@ -94,3 +95,21 @@
 ^m5
 
 
+> [!tip] Assistant
+> t405 to t407 (one each)
+>
+> 1. **t405, the stretching.** Found it, from your trace: it was the shorts, the jacket hem and the belt pieces. Every time Sora goes back to idle (and while standing), KH1 blends between motions, and that blend skips the small joint bones those parts hang from. So we were measuring them against our own last frame instead of KH1's, and they got pulled to where KH1's idle has them, off KH2's hips, stretching the skin between. They're now measured against KH1's real placement. Your other suspects checked out clean (the squash values stay between 0.59 and 1.71).
+> 2. **t406, KH1's own animation:** taken off the belt chain, the belt-front pieces and the necklace pendant. They hang like before t387. I kept it on the jacket hem and shorts because of your "2. (a)". If you meant those too, say so and I'll take them off as well.
+> 3. **t407, 1:1 with KH2:** the hood now just turns with the head, the sleeves move as a whole with no flapping or squashing, and the three hair spikes that have no mesh in KH2 stay with the head. That's how KH2's model actually shows them. The walk and run stay exactly as they are.
+>
+> **Check:** the KH1 decomp (which bones KH1's blend pass writes) and the game files (all of KH2's motions, no broken poses). Not checked in game.
+>
+> Questions:
+> 1. Hem and shorts: (a) keep KH1's own animation on them, or (b) remove it too, so they're rigid like the belt?
+> 2. With the flaps now rigid, nothing on KH1's model gets KH2's squash and stretch any more (the flaps were the only matched parts with it). Is that fine? (a) yes, or (b) look for something else that should carry it?
+
+^m6
+
+
+> [!note] Mr Bugs
+> 
