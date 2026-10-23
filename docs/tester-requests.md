@@ -471,6 +471,9 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 2. For the big flare and burst: (a) wait until their sparks and ribbon are ported (steps 3 and 4), or (b) play them through KH1 now without those, just to check where they sit?
 > 3. Can you check the wrist flashes' turn looks right? Compare a run with `kh2_fx_native = on` against one with it off (the old player). If they differ, I'll convert the turn through the two skeletons' bind poses.
 
+> [!tip] Assistant
+> Correction to the build note above: there's a build now. `kh1-kh2.dll` at the top of the testing branch is t376, with everything up to now in it (frame advance t372, camera t373, combo rows t374, sleeves t375, effects t376). From now on, GitHub builds it on Windows and commits it every time the code on the testing branch changes, so pulling the testing branch always gets you the latest build. Install it through OpenKH as usual (`mod.yml`). The log's first line shows which version loaded.
+
 > [!note] Tester Mr Bugs
 > 
 
