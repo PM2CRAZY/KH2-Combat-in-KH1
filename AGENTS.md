@@ -1,3 +1,15 @@
+### 2026-10-23: Stage 373 (testing branch: KH2's camera no longer circles Sora when he runs toward it)
+- The tester Mr. Bugs (`docs/tester-requests.md`, "KH2 Camera fixes"): running backwards turned the camera and Sora in
+  a circle. His trace f571370: left stick straight down, KH2's camera yaw and Sora's yaw both turned 0.0175 a frame
+  (frames 571250-571262, 571287-571370): the swing-behind formula, 1 degree a frame.
+- Cause: `camera.rs` passed KH1's stick (y positive pulled back) to `kh2-camera`, whose y is forward, so its "not pulled
+  straight back" test read straight back as forward. `camera.rs` now negates y.
+- `kh2-camera`: the swing test and rate use the stick's own components, not its unit direction. Checked in the exe
+  (Steam KH2 follow update `0x140165110`, pad sticks `0x14039c180`): no swing while the pad's y is 0.9 or more pulled
+  back; diagonally back or a lighter tilt still swings, as in KH2. Tests for both.
+- Not changed: KH2's per-axis stick dead zone (60 of 127.5, `0x14039b7f0`) against ours (round 15%). Notes:
+  `docs/camera-model.md`, `docs/kh1-kh2-camera.md` 9a.
+
 ### 2026-10-23: Stage 372 (testing branch: Frame Advance holds the actors)
 - The tester's t371 test (`testers/frame-advance-in-the-debug-menu`, 8 traces at 30 / 60 fps, KH1 and KH2 moves):
   only effects held and stepped; Sora's physics frames went on every frame while the mod's clock stood still. The

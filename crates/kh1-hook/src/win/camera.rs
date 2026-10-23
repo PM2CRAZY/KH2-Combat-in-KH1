@@ -689,7 +689,10 @@ unsafe fn run(lock: bool) -> Option<()> {
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
     let auto = config < 0x10000 || rd::<i32>(config + 8) == 0;
     let ctl = kh2_camera::Controls {
-        move_stick: Vec2::new(l[0], l[1]).clamp_length_max(1.0),
+        // The crate's y is forward; KH1's (like KH2's pad) is positive pulled back. Passed
+        // unflipped, "pulled straight back" read as forward and the swing-behind ran while Sora
+        // ran toward the camera, turning him in a circle (tester trace f571370).
+        move_stick: Vec2::new(l[0], -l[1]).clamp_length_max(1.0),
         // (Negated: KH1 world turns the other way round from the camera crate's; the user: x was
         // inverted.)
         look_stick: Vec2::new(-r[0] * turn, -r[1]).clamp_length_max(1.0),

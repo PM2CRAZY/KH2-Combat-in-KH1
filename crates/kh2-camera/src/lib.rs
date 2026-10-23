@@ -269,10 +269,12 @@ impl Camera {
                 } else {
                     let turned = self.manual(c, dt);
                     let lmag = c.move_stick.length().min(1.0);
-                    // Stick y in the game is positive when pulled back.
-                    let dir = c.move_stick.normalize_or_zero();
-                    if c.auto && moved && lmag > 0.0 && !turned && -dir.y < 0.9 {
-                        let step = 2.0 * (dir.x.abs() + 1.0) * (dir.y.abs() + 1.0) * lmag * (RECENTER + (s.run_speed - 8.0) * RECENTER_RUN) * dt;
+                    // KH2 (Steam 0x140165110) tests the stick's own components, not its unit
+                    // direction. Its pad y is positive when pulled back and the test is
+                    // y < 0.9; here y is forward, so -y < 0.9.
+                    let d = c.move_stick;
+                    if c.auto && moved && lmag > 0.0 && !turned && -d.y < 0.9 {
+                        let step = 2.0 * (d.x.abs() + 1.0) * (d.y.abs() + 1.0) * lmag * (RECENTER + (s.run_speed - 8.0) * RECENTER_RUN) * dt;
                         self.yaw = approach_angle(self.yaw, behind, step.max(0.0));
                         self.goal_yaw = self.yaw;
                         let gap = p.dist_default - self.dist;
@@ -406,6 +408,44 @@ mod tests {
         let turned = wrap(c.yaw - y0).abs().to_degrees();
         // The first frame has no previous position, so no "moved".
         assert!((turned - 9.0).abs() < 0.05, "{turned}");
+    }
+
+    /// Runs Sora toward the camera for 10 frames with `stick` held (y forward) and returns how
+    /// far the camera turned, in degrees. His facing follows the stick through the camera, as
+    /// the host's movement does.
+    fn turn_running_back(stick: Vec2) -> f32 {
+        let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+        let ctl = Controls { move_stick: stick, auto: true, ..Default::default() };
+        let y0 = c.yaw;
+        let mut feet = Vec3::ZERO;
+        for _ in 0..10 {
+            // Camera-relative: forward is away from the eye, so the stick's angle is added to
+            // the view yaw.
+            let facing = wrap(c.view_yaw() + stick.x.atan2(stick.y));
+            feet += Vec3::new(facing.sin(), 0.0, facing.cos()) * 8.0;
+            c.update(&sora(feet, facing), &ctl, None, 1.0, &none);
+        }
+        wrap(c.yaw - y0).abs().to_degrees()
+    }
+
+    /// The tester's trace f571370: the stick pulled straight back must not swing the camera
+    /// (KH2 Steam 0x140165110: no swing while the pad's y is 0.9 or more pulled back).
+    #[test]
+    fn running_straight_back_does_not_swing() {
+        assert!(turn_running_back(Vec2::new(0.0, -1.0)) < 1e-4);
+        assert!(turn_running_back(Vec2::new(0.3, -0.95)) < 1e-4);
+    }
+
+    /// KH2 tests the stick's components: diagonally back, or straight back with a partial tilt,
+    /// is under 0.9 and still swings.
+    #[test]
+    fn diagonal_or_gentle_back_still_swings() {
+        let r = 0.5_f32.sqrt();
+        // 2 (|x| + 1)(|y| + 1) · tilt · 0.25° per frame, over 9 frames (the first has no "moved").
+        let diag = 2.0 * (r + 1.0) * (r + 1.0) * 0.25 * 9.0;
+        assert!((turn_running_back(Vec2::new(r, -r)) - diag).abs() < 0.05);
+        let gentle = 2.0 * 1.5 * 0.5 * 0.25 * 9.0;
+        assert!((turn_running_back(Vec2::new(0.0, -0.5)) - gentle).abs() < 0.05);
     }
 
     #[test]

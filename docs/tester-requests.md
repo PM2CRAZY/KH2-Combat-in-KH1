@@ -491,6 +491,24 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 
 > go ahead
 
+> [!tip] Assistant
+> t373
+>
+> Your trace showed it exactly. With the stick held straight down, our camera read it as pushing forward. So it kept swinging round behind Sora at 1° a frame, and since Sora runs relative to the camera, he turned with it and ran in a circle. The cause was the stick's up/down being passed to the KH2 camera the wrong way round.
+>
+> **What KH2 does.** I checked KH2's camera code in the Steam KH2 decomp (the follow update at `0x140165110`). KH2 doesn't swing the camera while you're running almost straight at it, at nearly full tilt. If you run diagonally backwards, or pull back only part way, KH2 does still swing slowly, so you'll get a gentle curve there. That's KH2's own behaviour, and ours now does the same.
+>
+> **Check:** the turn per frame in your trace matches KH2's swing formula exactly, and the condition was read in the KH2 decomp. Not checked in game yet. Notes are in `docs/kh1-kh2-camera.md` (9a) and `docs/camera-model.md`.
+>
+> Two questions:
+> 1. Please try running straight back and diagonally back. Does the diagonal curve feel like what you remember from KH2?
+> 2. **Stick dead zone.** KH2 ignores about the first half of the stick's tilt (60 of 127.5 on each axis). Ours ignores 15%, because gentle tilts used to do nothing. At full tilt they're the same, but at part tilt the swing differs. (a) switch to KH2's exact dead zone for 1:1, or (b) keep ours?
+>
+> Other things I found in KH2's camera, not changed yet: the right stick may turn the camera at full speed even when tilted diagonally (I need a closer read before I'd change it), there's a reset branch whose purpose I don't know yet, and I haven't read KH2's zoom code. Tell me if you want any of those looked at.
+
+> [!note] Tester Mr Bugs
+> 
+
 ---
 
   

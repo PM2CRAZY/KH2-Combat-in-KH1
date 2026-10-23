@@ -55,8 +55,23 @@ There is no pitch control: zooming in lowers the camera along this curve.
 
   Then the yaw turns toward "behind Sora" by
   `2 (|x| + 1)(|y| + 1) · tilt · (0.0043633 + (run_speed − 8) · 0.00017453)` radians per
-  frame (`x`, `y` = the stick's unit direction). That is about 1° per frame for Sora and
-  faster for faster forms. Meanwhile the distance drifts back to 420 at 0.5 per frame.
+  frame. That is about 1° per frame for Sora and faster for faster forms. Meanwhile the
+  distance drifts back to 420 at 0.5 per frame.
+- **"Pulled straight back", exactly** (Checked, Steam exe: the follow update `0x140165110`,
+  the same test in `0x1401642f0`; the pad's sticks are built in `0x14039c180`).
+  - `x`, `y` and `tilt` are the pad's own left-stick numbers, not a unit direction. Each
+    axis is the stick's byte minus 127.5, with a 60 dead zone taken off it and scaled to 0..1.
+    `tilt` is the length of the two, at most 1.
+  - The pad's `y` is positive when the stick is pulled down (toward the camera). The swing
+    is skipped when `y` is 0.9 or more. So it is skipped only when Sora runs nearly straight
+    toward the camera at almost full tilt.
+  - Diagonally back, or straight back with a lighter tilt, `y` is under 0.9 and the camera
+    still swings. Sora's facing follows the stick through the camera, so in KH2 too this
+    slowly circles him.
+  - "Sora moved" is his position changing in x or z since the previous frame
+    (`0x1403b8940`).
+  - The crate's stick has y forward, so its test is `−y < 0.9`. A host has to pass y
+    forward. KH1's stick, like KH2's pad, has y positive pulled back, so `kh1-hook` negates it.
 - **Smoothing.** The rendered look point and eye follow their goals with the game's spring:
   - the look point closes about 16% of its gap per frame
   - the eye about 9%

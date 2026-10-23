@@ -229,6 +229,30 @@ An ini written before this change has no `camera_calls` line, so it gets `kh2`.
 - Talks with text boxes still go to KH1's camera through the event flag. If some gameplay
   moment sets that flag, it will still hand the camera to KH1.
 
+## 9a. Running toward the camera turned Sora in a circle (fixed)
+
+Tester Mr Bugs' trace `trace_1792743273_f571370` (Steam). He held the left stick straight down
+(pad y 255, x 128) with the right stick idle, on frames 571250–571262 and 571287–571370.
+On every one of those frames KH2's camera yaw turned 0.0175 rad (1°). KH1 turned Sora's facing
+by the same amount, because his run direction is taken through the camera. So he ran a circle,
+one full turn in about 6 seconds. With x at 0.27 (frames 571276–571285) it was 0.022 per frame.
+Both rates are the swing-behind formula exactly (`camera-model.md`).
+
+- **Cause.** `camera.rs` passed KH1's stick to the camera crate unchanged. KH1's y is positive
+  when pulled back, and the crate's y is forward. So the crate's "not pulled straight back"
+  test read "straight back" as "straight forward", and it swung the camera.
+- **KH2.** It skips the swing when the pad's y is 0.9 or more pulled back. This is the follow
+  update `0x140165110` (Steam), Checked in the exe. The test uses the stick's own numbers,
+  not its unit direction.
+- **Fix.** `camera.rs` negates y. The crate now uses the stick's own numbers in the test and
+  the rate, as KH2 does, instead of a unit direction.
+- **Checked.** The trace's per-frame turn matches the formula, and the condition and its
+  inputs were read in the Steam decomp. A new trace has not been taken yet.
+- **Still different from KH2.** KH2's stick has a per-axis dead zone of 60 of 127.5 (set in
+  `0x14039b7f0`, applied in `0x14039c180`). Ours uses a round 15% dead zone, at the user's
+  earlier request, so gentle tilts would move. At full tilt the two give the same numbers.
+  At partial tilts the swing rate, and where the 0.9 line falls, differ a little.
+
 ## 10. Sources
 
 - KH1's camera module, mode table, blend, FOV setter and callers: our own static reading of the
