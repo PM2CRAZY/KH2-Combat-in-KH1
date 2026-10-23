@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 409 (testing branch: KH2's walk / run split)
+- The tester ("yes"). Steam KH2 `0x1403a8fa0` / `0x1403aa700`: walk below tilt 0.8, run from it, no dead zone past the
+  pad's. `run_threshold` 0.8 (was 0.5), `DEAD_ZONE` 0 (was 0.1); the ledge hang keeps 0.1 (`HANG_PUSH`). Notes:
+  `docs/kh2-pad.md`.
+
 ### 2026-10-23: Stage 408 (testing branch: KH2's first person in KH1's first-person mode)
 - The tester ("KH2 Camera fixes", option (a)): Select's first person is KH2's. KH1's mode 2 entries swapped
   (`first_person_mode` / `first_person_exit`, Steam `0x1401E2390` / `0x1401E2610`; Epic from the table's neighbours) only

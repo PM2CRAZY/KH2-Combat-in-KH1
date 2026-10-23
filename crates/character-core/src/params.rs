@@ -31,7 +31,9 @@ pub struct MoveParams {
     /// old length and `run_speed` (so speed above the run is kept, never gained). For a host
     /// that gives the controller KH1's physics.
     pub air_accel: f32,
-    /// Stick magnitude at or above which the character runs.
+    /// Stick tilt at or above which the character runs (below it, past 0, he walks). KH2: 0.8,
+    /// in the code (Steam KH2 `0x1403a8fa0` / `0x1403aa700`: the walk speed `+0x128` under 0.8,
+    /// the run speed `+0x12C` from it).
     pub run_threshold: f32,
     /// Ledge grab. `margin == 0` turns it off (as in the game).
     pub hang: HangParams,
@@ -83,7 +85,7 @@ impl Default for MoveParams {
             air_keep: 0.9,
             air_drag: 0.95,
             air_accel: 0.0,
-            run_threshold: 0.5,
+            run_threshold: 0.8,
             hang: HangParams::default(),
             hit_back_to_jump: 0.048,
             ceiling_lock: 16.0,

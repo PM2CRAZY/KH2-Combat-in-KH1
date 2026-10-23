@@ -378,7 +378,14 @@ const FINISHER_END: u32 = 6;
 
 /// Physics tick length in frames: KH2 recomputes velocities at 30 Hz.
 const DT: f32 = 2.0;
-const DEAD_ZONE: f32 = 0.1;
+/// The stick counts as held past this tilt. KH2's player has no dead zone of its own on top of
+/// the pad's (60 of 127.5 a side, `pad`): every read of his stick's tilt tests it against 0
+/// (Steam KH2 `0x1403a8fa0`, `0x1403aa700`, `0x1404034b0`, `0x140403d70`; his controller copies
+/// the pad's left stick as it is, `0x1403b2340`). Hosts pass the pad's tilt. (It was 0.1, ours.)
+const DEAD_ZONE: f32 = 0.0;
+/// Hanging: a push toward the wall past this climbs, away past it lets go, and the stick must
+/// come back under it first (ours, by request; `HangParams`).
+const HANG_PUSH: f32 = 0.1;
 
 /// One controllable character.
 #[derive(Clone, Debug)]
@@ -2296,15 +2303,15 @@ impl Character {
                 // stick grabs and climbs in one go. Here the push has to be a
                 // fresh one (let go of the stick first), or press jump, so you
                 // can hang and then choose (our change, by request).
-                let armed = *armed || toward <= DEAD_ZONE;
+                let armed = *armed || toward <= HANG_PUSH;
                 let (at, out) = (*at, *out);
                 act.kind = ActionKind::Hang { at, out, armed };
-                if ((armed && toward > DEAD_ZONE) || input.jump.pressed) && self.clip(motion::CLIMB).is_some() {
+                if ((armed && toward > HANG_PUSH) || input.jump.pressed) && self.clip(motion::CLIMB).is_some() {
                     // Push toward the wall: climb up (exe).
                     self.start_action(ActionKind::Climb, motion::CLIMB);
                     return true;
                 }
-                if toward < -DEAD_ZONE {
+                if toward < -HANG_PUSH {
                     // Pull away: let go (ours; the game's release input
                     // isn't traced yet).
                     self.mode = Mode::Free;

@@ -91,8 +91,23 @@ at full tilt, is the OG rewrite's reading of the Epic exe ("Checked (exe)" in
   15% dead zone, at an earlier request so gentle tilts would move; the tester asked for 1:1.
 - KH2's movement (`takeover::move_tilt`, the tilt KH2's controller walks and runs by, and
   `stick_dir`'s fallback direction) reads the left stick the same way. Before this it used a
-  round 20% dead zone on the length (labelled KH2's; it wasn't). Still open: which tilt KH2's
-  player takes as a run (`character-core`'s `run_threshold`, 50%, a hypothesis), and the
-  controller's own `DEAD_ZONE` (a tilt of 0.1) on top of the pad's.
+  round 20% dead zone on the length (labelled KH2's; it wasn't).
+- **Walk / run, 1:1** (Checked (decomp), Steam KH2). The player's controller copies the pad's
+  left stick (direction and tilt) as it is (`0x1403b2340`, into its `+0xb50`). His move
+  direction and speed (`0x1403a8fa0`, `0x1403aa700`): no stick when the tilt is 0 (he keeps his
+  facing, speed 0). Otherwise the stick through the camera (`0x1403a7fb0`), at his walk speed
+  (`+0x128`, `prty` walk_speed) when the tilt is under 0.8, and his run speed (`+0x12C`) from
+  0.8. The two other reads of the tilt (`0x1404034b0`, `0x140403d70`) test it against 0 too.
+  So there is no dead zone past the pad's, and no speed between walk and run.
+  - Ours: `character-core`'s `run_threshold` is 0.8 (it was 0.5, a hypothesis), and its
+    `DEAD_ZONE` is 0 (it was 0.1, ours): every tilt past the pad's dead zone walks. The ledge
+    hang keeps its own 0.1 for its climb / let-go pushes (`HANG_PUSH`, ours by an earlier
+    request).
+  - KH1 also runs from 0.8 (`kh1phys::RUN_TILT`), so base Sora in KH1's states already split
+    there.
+  - Not changed: `takeover`'s 0.15 tilt tests (`moving`, KH2 taking him after a KH1 move),
+    which are our hand-over rules, not KH2's player.
+  - Also seen (not ours to model): a debug free-move branch of `0x1403a8fa0` (bit 3 of the
+    player's kind) doubles its speed in keyboard / mouse mode.
 - Not modelled: KH2's mouse camera (above); KH1's mouse still goes through KH1's processed
   right stick.
