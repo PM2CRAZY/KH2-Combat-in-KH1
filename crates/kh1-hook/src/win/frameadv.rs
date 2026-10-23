@@ -111,6 +111,64 @@ struct State {
 /// The tasks held now: (task, its own function).
 static HELD_TASKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
 
+/// (t399) One of the tasks Frame Advance would hold, for the debug menu's Held Tasks page.
+#[derive(Clone, Copy)]
+pub struct TaskRow {
+    pub priority: i32,
+    /// Its function's RVA in the exe.
+    pub rva: usize,
+    /// The tester let it run while the game is held.
+    pub runs: bool,
+}
+
+/// The tasks seen the last time the game was held (priority order, as KH1's list keeps them).
+static TASKS: Mutex<Vec<TaskRow>> = Mutex::new(Vec::new());
+/// (t399) The functions (RVAs) the tester lets run while held (the Held Tasks page; this session).
+static RUNS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+
+/// The Held Tasks page's rows.
+pub fn tasks() -> Vec<TaskRow> {
+    TASKS.lock().map(|t| t.clone()).unwrap_or_default()
+}
+
+/// The Held Tasks page: row `i` held <-> runs while the game is held (to find a task the
+/// picture needs: the tester's t378 test, still black). A task let run gets its function back at
+/// once; one held again is held from the next held frame.
+pub fn toggle_task(i: usize) {
+    let Some(row) = TASKS.lock().ok().and_then(|t| t.get(i).copied()) else { return };
+    let runs = !row.runs;
+    if let Ok(mut r) = RUNS.lock() {
+        r.retain(|&x| x != row.rva);
+        if runs {
+            r.push(row.rva);
+        }
+    }
+    if let Ok(mut t) = TASKS.lock() {
+        if let Some(x) = t.get_mut(i) {
+            x.runs = runs;
+        }
+    }
+    if runs {
+        let base = BASE.load(Ordering::Relaxed);
+        if let Ok(mut held) = HELD_TASKS.lock() {
+            let ours = skip as *const () as usize;
+            held.retain(|&(t, f)| {
+                if f.wrapping_sub(base) != row.rva {
+                    return true;
+                }
+                unsafe {
+                    if super::crash::readable(t + 0x18) && rd::<u16>(t) != 0 && rd::<usize>(t + 0x10) == ours {
+                        wr::<usize>(t + 0x10, f);
+                    }
+                }
+                false
+            });
+        }
+    }
+    let list = RUNS.lock().map(|r| r.iter().map(|x| format!("{x:#x}")).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+    log(&format!("frame advance: task {} {:#x} {} while held (running while held: [{list}])", row.priority, row.rva, if runs { "runs" } else { "held" }));
+}
+
 /// A held task's function: does nothing, keeps the task.
 unsafe extern "system" fn skip(_task: usize) -> u32 {
     0
@@ -123,9 +181,20 @@ unsafe fn hold_tasks(base: usize) {
     let ours = skip as *const () as usize;
     let mut t: usize = rd(base + TASK_LIST_STEAM + 0x10);
     let mut n = 0;
+    let runs = RUNS.lock().map(|r| r.clone()).unwrap_or_default();
+    let mut seen: Vec<TaskRow> = Vec::new();
     while t > 0x10000 && n < 1024 && super::crash::readable(t + 0x18) {
         let f: usize = rd(t + 0x10);
-        if rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && rd::<i32>(t + 4) < FIRST_DRAW && f != ours && f > 0x10000 {
+        let candidate = rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && rd::<i32>(t + 4) < FIRST_DRAW && f > 0x10000;
+        if candidate {
+            // (Ours already: the task's own function is in `held`.)
+            let own = if f == ours { held.iter().find(|e| e.0 == t).map_or(0, |e| e.1) } else { f };
+            let rva = own.wrapping_sub(base);
+            if own != 0 && !seen.iter().any(|s| s.rva == rva) {
+                seen.push(TaskRow { priority: rd::<i32>(t + 4), rva, runs: runs.contains(&rva) });
+            }
+        }
+        if candidate && f != ours && !runs.contains(&f.wrapping_sub(base)) {
             // (A task freed and made again meanwhile: its new function is the one to give back.)
             match held.iter_mut().find(|e| e.0 == t) {
                 Some(e) => e.1 = f,
@@ -135,6 +204,9 @@ unsafe fn hold_tasks(base: usize) {
         }
         t = rd(t + 8);
         n += 1;
+    }
+    if let Ok(mut tl) = TASKS.lock() {
+        *tl = seen;
     }
     if !held.is_empty() && !LOGGED_TASKS.swap(true, Ordering::Relaxed) {
         let list: Vec<String> = held.iter().map(|&(t, f)| format!("{} {:#x}", rd::<i32>(t + 4), f.wrapping_sub(base))).collect();

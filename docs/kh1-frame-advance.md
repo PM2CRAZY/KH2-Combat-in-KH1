@@ -1,4 +1,4 @@
-# KH1 frame advance (t371, t372, t377, t378)
+# KH1 frame advance (t371, t372, t377, t378, t399)
 
 How the debug menu's Frame Advance row holds KH1 still and steps it one frame at a time
 (`crates/kh1-hook/src/win/frameadv.rs`). Addresses are the Steam build's (Ghidra decomp of the Steam
@@ -58,6 +58,16 @@ are held; every task from 140000 on runs. The tasks held are written to the log 
 holding N tasks"), to check the split against a session. **Assumption**: no task from 140000 on moves
 the world (the HUD and menus run, so the command menu still answers the pad, and KH1's own effect fade
 `0x1403970D0` at 159999 runs).
+
+**t399: finding the task the picture needs.** The tester's t378 test: still black while held. His t393 log
+lists the 22 tasks held (priority, RVA): 10499 `0x189F80`, 20001 `0x1E1900`, 47000 `0x28E550`, 49999
+`0x1C2BA0`, 50002 `0x1A5480` / `0x1A2320`, 53000 `0x28D620`, 55000 `0x2937F0`, 60000 `0x29E790`, 79998
+`0x28E6E0`, 80000 `0x298940` (the actors), 80001 `0x2B4460`, 85000 `0x2B11B0`, 95000 `0x2ABFF0`, 100000
+`0x1E5D90`, 110000 `0x28CD50` (the camera), 120000 `0xD2830`, 129999 `0x2BE500`, 130000 `0x2A23E0`, 135000
+`0x28CC10` (copies the camera slot of the other parity, `0x142867360`, into the current one), 137000
+`0x28F6B0` (runs the list `0x142D22D08`), 139999 `0x2AEDA0` (effect bone binding). One of them is needed
+for the frame to draw (**Assumption**; which one isn't clear from the decomp). The debug menu's Held Tasks
+page lists them, each Held or Runs, so a session can find it; each switch is logged.
 
 ## Actors
 

@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 399 (testing branch: Frame Advance's Held Tasks page)
+- The tester's t378 test: the picture is still black while held; he asked how to help log it. His t393 log lists the 22
+  tasks held (all under priority 140000). `frameadv::tasks` / `toggle_task`: the debug menu's new Held Tasks page (main
+  page) lists them (priority, function RVA, Held / Runs); one switched to Runs runs while the game is held (this session),
+  each switch logged with the list running. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 398 (testing branch: KH2 effects: Explosion's burst (element 48) through KH1)
 - KH2 0x4000 to KH1's object root 0x8000; flag 0x02 (bound until started) to KH1's bind-once bit 0x10000. Needs both
   programs plugged in. Assumption: KH1's 0x8000 frame is KH2's object frame. All of Explosion now plays through KH1's own

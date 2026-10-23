@@ -142,6 +142,8 @@ enum Page {
     Stats,
     Weapons,
     Abilities,
+    /// (t399) The tasks Frame Advance holds, each one switchable (`frameadv::tasks`).
+    HeldTasks,
 }
 
 impl Page {
@@ -152,6 +154,7 @@ impl Page {
             Page::Categories => Some(Page::Trace),
             Page::Group(_) => Some(Page::Categories),
             Page::Weapons | Page::Abilities => Some(Page::Stats),
+            Page::HeldTasks => Some(Page::Main),
         }
     }
 
@@ -165,6 +168,7 @@ impl Page {
             Page::Weapons => 4,
             Page::Abilities => 5,
             Page::Group(i) => 6 + i.min(trace::GROUPS.len() - 1),
+            Page::HeldTasks => 6 + trace::GROUPS.len(),
         }
     }
 
@@ -177,6 +181,7 @@ impl Page {
             Page::Stats => "DEBUG MENU > STATS".into(),
             Page::Weapons => "STATS > WEAPONS".into(),
             Page::Abilities => "STATS > ABILITIES".into(),
+            Page::HeldTasks => "FRAME ADVANCE > HELD TASKS".into(),
         }
     }
 
@@ -190,6 +195,7 @@ impl Page {
             Page::Stats => format!("Left/Right: change   {ok}: lock   {no}: back"),
             Page::Weapons => format!("Left/Right: count   {ok}: equip   {no}: back"),
             Page::Abilities => format!("Left/Right: copies   {ok}: add/remove   {no}: back"),
+            Page::HeldTasks => format!("Left/Right/{ok}: held / runs   {no}: back"),
         }
     }
 }
@@ -205,6 +211,7 @@ enum Action {
     SoundLog,
     GameFrames,
     FrameAdvance,
+    HeldTask(usize),
     GroupRow(usize),
     Item(usize),
     Stat(usize),
@@ -214,7 +221,7 @@ enum Action {
 
 struct Menu {
     page: Page,
-    cursor: [usize; 6 + trace::GROUPS.len()],
+    cursor: [usize; 7 + trace::GROUPS.len()],
     /// The pad last frame, the directions held and since when, the last repeat.
     last: u16,
     held: u16,
@@ -222,7 +229,7 @@ struct Menu {
     repeat_at: Option<Instant>,
 }
 
-static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 6 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
+static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 7 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
 
 /// One of Sora's stats: its name, its place in a stats block (`None`: only in the save), its byte
 /// in his save record, whether that byte is KH1's base number (equipment added on top), its
@@ -415,8 +422,21 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Stats  >".into(), Action::Enter(Page::Stats)),
             // (t371) `frameadv`: Steam only.
             (format!("{:<16}< {} >", "Frame Advance", if super::frameadv::supported() { on_off(super::frameadv::on()) } else { "Steam only" }), Action::FrameAdvance),
+            ("Held Tasks  >".into(), Action::Enter(Page::HeldTasks)),
             ("Exit".into(), Action::Exit),
         ],
+        Page::HeldTasks => {
+            let mut v: Vec<(String, Action)> = super::frameadv::tasks()
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (format!("{:>6} {:#08x}  < {} >", t.priority, t.rva, if t.runs { "Runs" } else { "Held" }), Action::HeldTask(i)))
+                .collect();
+            if v.is_empty() {
+                v.push(("(turn Frame Advance on first)".into(), Action::Back));
+            }
+            v.push(("Back".into(), Action::Back));
+            v
+        }
         Page::Trace => vec![
             (format!("{:<16}< {} >", "Trace", match trace::mode() { trace::Mode::Off => "Off", trace::Mode::On => "On", trace::Mode::Always => "Always" }), Action::TraceMode),
             (format!("{:<16}< {} >", "Seconds", trace::seconds()), Action::Seconds),
@@ -589,6 +609,10 @@ unsafe fn step(base: usize) {
                 super::frameadv::set_on(!super::frameadv::on());
                 sound(1);
             }
+        }
+        Action::HeldTask(i) => {
+            super::frameadv::toggle_task(i);
+            sound(1);
         }
         Action::GroupRow(i) if cross => {
             m.page = Page::Group(i);
