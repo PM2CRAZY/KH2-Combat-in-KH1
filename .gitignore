@@ -40,7 +40,10 @@
 !/crates/kh1-hook/openkh/mod.yml
 !/crates/kh1-hook/openkh/README.txt
 
-# 6. Never track these, even if a rule above would match.
+# 6. Testers' folders (traces, logs and notes for their requests, testers/README.md).
+!/testers/**
+
+# 7. Never track these, even if a rule above would match.
 /target/
 /local/
 *.bin
