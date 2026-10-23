@@ -124,6 +124,13 @@ fn form_anchor(code: u16) -> Option<Anchor> {
     anchor(code)
 }
 
+/// The spell packages' anchors, as `kh2fx`'s (Sora's bones and object root, the Keyblade's
+/// points) but for KH2's body centre 0x4001 (the root bone's place, unturned), for which KH1 has
+/// no anchor found yet: kh2fx keeps those.
+fn spell_anchor(code: u16) -> Option<Anchor> {
+    anchor(code)
+}
+
 /// The Keyblade's package names its own (weapon skeleton) bones; KH2's call of its vanish flash
 /// isn't traced, and `kh2fx` puts every code half way along the blade, turned as the hand. KH1's:
 /// the point half way along its blade (binding mode 3, t = 0.5), turned as the blade bone.
@@ -349,12 +356,16 @@ pub enum Pkg {
     Weapon,
     Valor,
     Final,
+    /// One of `kh2fx`'s spell packages (its numbering): Reflect's levels 1..3, Wisdom's archive 4
+    /// (`obj/P_EX100_MAGF.a.us`), then Fire, Blizzard, Thunder and Cure by level (Wisdom's and
+    /// base Sora's KH2 magic, `formmagic`).
+    Spell(u8),
 }
 
 struct Dpx {
     pkg: Pkg,
     /// Its name in the log and (with `kh2fx_` / `_dpx`) in KH1's loaded-file list.
-    label: &'static str,
+    label: String,
     /// Its elements switched on for KH1 (`None`: every one built).
     on: Option<&'static [i16]>,
     /// Owns the bytes; never freed or moved (KH1's effects point into it).
@@ -380,9 +391,9 @@ static STARTED: AtomicU32 = AtomicU32::new(0);
 /// What a package is built from.
 struct Source {
     pkg: Pkg,
-    label: &'static str,
+    label: String,
     /// Its file in KH2's install (BAR, or a PAX), and the name of its PAX entry if it has several.
-    path: &'static str,
+    path: String,
     pax_name: Option<&'static str>,
     on: Option<&'static [i16]>,
     /// The elements that play together (one DPD each, before the rest's one per effect).
@@ -416,14 +427,39 @@ pub fn start() {
         let mut sets = motion_sets(&kh2.character);
         sets.push(super::form::REVERT_ELEMENTS.to_vec());
         let mut sources = vec![
-            Source { pkg: Pkg::Sora, label: "p_ex100", path: "obj/P_EX100.a.us", pax_name: Some("p_ex"), on: Some(ON), sets, anchor, ignore: 0 },
-            Source { pkg: Pkg::Weapon, label: "w_ex010", path: "obj/W_EX010.a.us", pax_name: None, on: Some(WEAPON_ON), sets: Vec::new(), anchor: weapon_anchor, ignore: ENDS_WITH_MOTION },
+            Source { pkg: Pkg::Sora, label: "p_ex100".into(), path: "obj/P_EX100.a.us".into(), pax_name: Some("p_ex"), on: Some(ON), sets, anchor, ignore: 0 },
+            Source { pkg: Pkg::Weapon, label: "w_ex010".into(), path: "obj/W_EX010.a.us".into(), pax_name: None, on: Some(WEAPON_ON), sets: Vec::new(), anchor: weapon_anchor, ignore: ENDS_WITH_MOTION },
         ];
         if super::settings::get().drive {
             for (pkg, label, path, form) in [(Pkg::Valor, "p_ex100_btlf", "obj/P_EX100_BTLF.a.us", kh2.valor.as_ref()), (Pkg::Final, "p_ex100_ultf", "obj/P_EX100_ULTF.a.us", kh2.final_form.as_ref())] {
                 if let Some(f) = form {
-                    sources.push(Source { pkg, label, path, pax_name: Some("p_ex"), on: None, sets: motion_sets(&f.character), anchor: form_anchor, ignore: 0 });
+                    sources.push(Source { pkg, label: label.into(), path: path.into(), pax_name: Some("p_ex"), on: None, sets: motion_sets(&f.character), anchor: form_anchor, ignore: 0 });
                 }
+            }
+        }
+        // The spell packages `kh2fx` plays for the spell scripts (`reflect`, `formmagic`): their
+        // effects don't end with Sora's motion (the scripts end them).
+        let spell = |level: u8, path: String, pax_name: Option<&'static str>| Source {
+            pkg: Pkg::Spell(level),
+            label: path.rsplit('/').next().unwrap_or(&path).replace('.', "_").to_lowercase(),
+            path,
+            pax_name,
+            on: None,
+            sets: Vec::new(),
+            anchor: spell_anchor,
+            ignore: ENDS_WITH_MOTION,
+        };
+        if super::settings::get().reflect {
+            for level in 1..=3 {
+                sources.push(spell(level, super::reflect::spell_path(level), None));
+            }
+        }
+        if kh2.wisdom.is_some() {
+            sources.push(spell(super::kh2fx::WISDOM, "obj/P_EX100_MAGF.a.us".into(), Some("p_ex")));
+        }
+        for package in super::kh2fx::WISDOM + 1..=super::form::LAST_PACKAGE {
+            if let Some((sp, level)) = super::form::package_spell(package) {
+                sources.push(spell(package, super::formmagic::spell_path(sp, level), None));
             }
         }
         let common = (|| -> Result<(kh2_data::Install, kh2_data::Source, Vec<u8>), String> {
@@ -442,6 +478,9 @@ pub fn start() {
         };
         for s in sources {
             let t = std::time::Instant::now();
+            if super::addr::Build::current() != super::addr::Build::Steam && matches!(s.pkg, Pkg::Spell(_)) {
+                continue;
+            }
             match build(&install, src, &common, &s) {
                 Ok(d) => {
                     log(&format!("KH2 effects (native): {}'s DPX built, {} bytes, {} effects in {:.2} s", s.label, d.len, d.layers.len(), t.elapsed().as_secs_f32()));
@@ -522,7 +561,7 @@ fn unbindable(flags: u32) -> Option<&'static str> {
 /// own copy of its effect, grouped (`Source::sets`, then one group per effect), with KH2's HD
 /// textures for its own and the common textures it draws.
 fn build(install: &kh2_data::Install, src: kh2_data::Source, common: &[u8], s: &Source) -> Result<Dpx, String> {
-    let pack = install.read_any(src, s.path).map_err(|e| e.to_string())?;
+    let pack = install.read_any(src, &s.path).map_err(|e| e.to_string())?;
     let (pax_data, pax_at): (&[u8], usize) = if pack.starts_with(b"PAX_") {
         (&pack, 0)
     } else {
@@ -602,7 +641,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, common: &[u8], s: &
     layers.retain(|l| r.effects.contains(&l.number));
     // KH2's HD textures for the two files, each keyed by the offset in its file of the texture
     // record's pixels it replaces.
-    let own_hd = install.read_remastered_any(src, s.path).map_err(|e| format!("{} HD textures: {e}", s.path))?;
+    let own_hd = install.read_remastered_any(src, &s.path).map_err(|e| format!("{} HD textures: {e}", s.path))?;
     let common_hd = install.read_remastered_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon HD textures: {e}"))?;
     let mut hd = Vec::new();
     let mut report = Vec::new();
@@ -645,7 +684,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, common: &[u8], s: &
     let off = at - p;
     buf[off..off + dpx.len()].copy_from_slice(dpx);
     let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
-    Ok(Dpx { pkg: s.pkg, label: s.label, on: s.on, _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, types, refused: Vec::new(), programs: r.programs.clone(), relocated: false })
+    Ok(Dpx { pkg: s.pkg, label: s.label.clone(), on: s.on, _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, types, refused: Vec::new(), programs: r.programs.clone(), relocated: false })
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -784,12 +823,26 @@ pub fn event(motion: u16, el: i16) -> bool {
 
 /// Element `el` of package `pkg` started by KH1 (see `event`): true if it is KH1's.
 fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
-    let Ok(mut g) = PACKS.lock() else { return false };
-    let Some(d) = g.iter_mut().find(|d| d.pkg == pkg) else { return false };
+    !matches!(start_el(pkg, motion, el), Started::NotMine)
+}
+
+/// What `start_el` did.
+enum Started {
+    /// KH1 plays it: its element and layer.
+    Kh1(usize, Layer),
+    /// KH1's, but KH1 had no free element or effect slot, or no Sora: it doesn't play.
+    NotStarted,
+    /// Not KH1's (`kh2fx` plays it).
+    NotMine,
+}
+
+fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
+    let Ok(mut g) = PACKS.lock() else { return Started::NotMine };
+    let Some(d) = g.iter_mut().find(|d| d.pkg == pkg) else { return Started::NotMine };
     if !d.on.is_none_or(|on| on.contains(&el)) {
-        return false;
+        return Started::NotMine;
     }
-    let Some(&layer) = d.layers.iter().find(|l| l.el == el) else { return false };
+    let Some(&layer) = d.layers.iter().find(|l| l.el == el) else { return Started::NotMine };
     let (number, bone) = (layer.number, layer.anchor);
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
     // KH1's blade and position bindings, and the binding list (unbound elements), are used on
@@ -797,7 +850,7 @@ fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
     let position_only = layer.flags & POSITION_ONLY != 0;
     let unbound = layer.flags & (BIND | BIND_UNTIL_STARTED) == 0;
     if (matches!(bone, Anchor::Blade(_)) || position_only || unbound) && !steam {
-        return false;
+        return Started::NotMine;
     }
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     if !d.relocated {
@@ -820,13 +873,13 @@ fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
             d.refused.push(el);
             log(&format!("KH2 effects (native): {} element {el} runs programs {lacks:?}, not in KH1 as KH2's yet; kh2fx plays it", d.label));
         }
-        return false;
+        return Started::NotMine;
     }
     // (Steam: KH1's alone from here on, the old player retired for it.)
     let owned = steam;
     let sora = super::takeover::sora_actor();
     if sora < 0x10000 {
-        return owned;
+        return if owned { Started::NotStarted } else { Started::NotMine };
     }
     let once = if layer.flags & BIND_UNTIL_STARTED != 0 { BIND_ONCE } else { 0 };
     let on_bone = |code: u32| {
@@ -863,7 +916,13 @@ fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
             if element == 0 { "not started (no free element or effect slot)".to_string() } else { format!("element {element:#x}{}", if set { "" } else { " (its instance not found: no wait, scale or ending)" }) }
         ));
     }
-    element != 0 || owned
+    if element != 0 {
+        Started::Kh1(element, layer)
+    } else if owned {
+        Started::NotStarted
+    } else {
+        Started::NotMine
+    }
 }
 
 /// A frame trigger 1 of Valor's or Final's motion (`kh2fx::form_event`): its element from that
@@ -904,7 +963,7 @@ unsafe fn disarm(base: usize, element: usize) {
     let node = rd::<usize>(base + BIND_LIST_STEAM + 0x18);
     let ok = node != 0 && rd::<usize>(node + 0x10) == base + BIND_TASK_STEAM && rd::<usize>(node + 0x20) == element;
     let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
-    if record == 0 || !matches!(rd::<u8>(record + 4), 2 | 3) {
+    if record == 0 || !matches!(rd::<u8>(record + 4), 1 | 2 | 3) {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 5 {
             log(&format!("KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it stays bound"));
@@ -1120,4 +1179,135 @@ pub fn owner_gone() {
             false
         }
     });
+}
+
+/// A spell effect KH1 plays for the spell scripts (`kh2fx`'s spell API): our handle, KH1's
+/// element and its serial, its layer, its binding's node and record (`0` once let go: placed by
+/// the script).
+struct Spell {
+    handle: u32,
+    element: usize,
+    serial: u32,
+    layer: Layer,
+    node: usize,
+    record: usize,
+}
+
+static SPELLS: Mutex<Vec<Spell>> = Mutex::new(Vec::new());
+static NEXT_SPELL: AtomicU32 = AtomicU32::new(1);
+/// Our handles' bit in `kh2fx`'s (its own count from 1 below it).
+pub const NATIVE_SPELL: u32 = 0x0400_0000;
+/// KH1's apply of a binding's matrix to an element (Steam `0x1402ADB40 (element, matrix)`: its
+/// turn from the matrix's rows (`0x1402A8EF0`, in 65536ths of a turn) and its place from the last).
+const APPLY_STEAM: usize = 0x2ADB40;
+
+/// What `spell_start` did.
+pub enum SpellStart {
+    /// KH1 plays it: our handle (`NATIVE_SPELL` set).
+    Kh1(u32),
+    /// KH1's, not started (no free element or slot).
+    NotStarted,
+    /// `kh2fx` plays it.
+    NotMine,
+}
+
+/// Element `el` of spell package `level` (`kh2fx::spell_start`, the script's `pax_start_bind`):
+/// on Sora by its bone code, through KH1 when its package is built and it passes `start_el`'s
+/// gate (Steam only). Its endings are the script's (`spell_end` / `spell_kill` / `spell_alpha`),
+/// and Sora's object going.
+pub fn spell_start(level: u8, el: u16) -> SpellStart {
+    let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
+    match start_el(Pkg::Spell(level), super::kh2fx::NO_MOTION, el as i16) {
+        Started::NotMine => SpellStart::NotMine,
+        Started::NotStarted => SpellStart::NotStarted,
+        Started::Kh1(element, layer) => unsafe {
+            let node = rd::<usize>(base + BIND_LIST_STEAM + 0x18);
+            let ok = node != 0 && rd::<usize>(node + 0x10) == base + BIND_TASK_STEAM && rd::<usize>(node + 0x20) == element;
+            let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
+            let handle = NATIVE_SPELL | (NEXT_SPELL.fetch_add(1, Ordering::Relaxed) & (NATIVE_SPELL - 1));
+            if let Ok(mut g) = SPELLS.lock() {
+                g.retain(|x| instance(x.element, x.serial).is_some());
+                g.push(Spell { handle, element, serial: rd::<u32>(element + EL_SERIAL), layer, node: if record != 0 { node } else { 0 }, record });
+            }
+            SpellStart::Kh1(handle)
+        },
+    }
+}
+
+fn with_spell<R>(h: u32, f: impl FnOnce(&mut Spell, usize) -> R) -> Option<R> {
+    let mut g = SPELLS.lock().ok()?;
+    let i = g.iter().position(|x| x.handle == h)?;
+    let sp = &mut g[i];
+    let inst = unsafe { instance(sp.element, sp.serial) }?;
+    Some(f(sp, inst))
+}
+
+/// The script puts its effect at `at` (KH2's world, which is KH1's; `kh2fx::spell_place`): KH2's
+/// `at` stands for the effect's bone from now on. KH1's: its binding let go (disarmed, as an
+/// unbound element's), then the element's place and turn from `at` with KH1's own apply
+/// (`0x1402ADB40`); by position only, `at · offset` unturned.
+pub fn spell_place(h: u32, at: glam::Mat4) {
+    let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
+    with_spell(h, |sp, _| unsafe {
+        if sp.record != 0 {
+            let node = sp.node;
+            if rd::<u16>(node) != 0 && rd::<usize>(node + 0x10) == base + BIND_TASK_STEAM && rd::<usize>(node + 0x20) == sp.element && super::pose::ptr(rd::<u32>(node + 0x30)) == sp.record {
+                wr::<u8>(sp.record + 4, 0);
+                wr::<u32>(sp.record + 8, rd::<u32>(sp.record + 8) | BIND_ONCE);
+            }
+            sp.record = 0;
+            if let Ok(mut f) = FRESH.lock() {
+                f.retain(|x| x.element != sp.element);
+            }
+        }
+        if sp.layer.flags & POSITION_ONLY != 0 {
+            let p = at.transform_point3(glam::Vec3::from(sp.layer.bone_offset));
+            let place = super::pose::ptr(rd::<u32>(sp.element));
+            let turn = super::pose::ptr(rd::<u32>(sp.element + 4));
+            if place != 0 {
+                wr::<[f32; 3]>(place, p.to_array());
+            }
+            if turn != 0 {
+                wr::<[u32; 3]>(turn, [0; 3]);
+            }
+        } else {
+            let m = at.to_cols_array();
+            let apply: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + APPLY_STEAM);
+            apply(sp.element, m.as_ptr() as usize);
+        }
+    });
+}
+
+/// The script ends its effect (`kh2fx::spell_end`): KH2's end (`end`: 0x80 its loops, else 0x40
+/// its fade-out, else it plays on).
+pub fn spell_end(h: u32) {
+    let Some((element, serial, layer)) = with_spell(h, |sp, _| (sp.element, sp.serial, sp.layer)) else { return };
+    let Ok(mut g) = RUNNING.lock() else { return };
+    let i = match g.iter().position(|r| r.element == element && r.serial == serial) {
+        Some(i) => i,
+        None => {
+            g.push(Run { element, serial, motion: super::kh2fx::NO_MOTION, layer, fade: None });
+            g.len() - 1
+        }
+    };
+    let gone = unsafe { instance(element, serial) }.is_none_or(|inst| unsafe { end(&mut g[i], inst) });
+    if gone || (g[i].fade.is_none() && layer.flags & ENDS_WITH_OWNER == 0) {
+        g.remove(i);
+    }
+}
+
+/// The script kills its effect (`kh2fx::spell_kill`): KH1's stop.
+pub fn spell_kill(h: u32) {
+    with_spell(h, |sp, inst| unsafe { stop(sp.element, inst) });
+}
+
+/// The script sets its effect's alpha (`kh2fx::spell_alpha`): KH1's instance alpha, which its
+/// draws multiply every vertex colour by.
+pub fn spell_alpha(h: u32, alpha: f32) {
+    with_spell(h, |_, inst| unsafe { wr::<f32>(inst + INST_ALPHA, alpha) });
+}
+
+/// The effect still plays (`kh2fx::spell_running`).
+pub fn spell_running(h: u32) -> bool {
+    with_spell(h, |_, _| ()).is_some()
 }

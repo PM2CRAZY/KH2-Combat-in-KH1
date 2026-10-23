@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 425 (testing branch: KH2 effects: the spell scripts' effects through KH1)
+- Reflect, Wisdom and KH2 magic packages, Steam only: the old player's spell functions (start, place, end, kill, alpha,
+  running) try KH1 first (`NATIVE_SPELL`); place through KH1's apply `0x1402ADB40` (Checked (exe)). What remains on `kh2fx`:
+  notes §18.10-18.11.
+
 ### 2026-10-23: Stage 424 (testing branch: KH2 effects: KH2's pppAngleLoop and pppKeShpTail3X)
 - `al_calc` (KH2 wraps angles above 0x10000) and `tail3x_draw` (KH1's draw, then the trail step taken back when held, paused
   or on a computed frame), Checked (decomp). Seven more programs added to `KH1_SAME` (SRandFV, SRandUpFV, KeMatSN,

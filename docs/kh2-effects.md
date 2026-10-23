@@ -1615,3 +1615,44 @@ Both are plugged like the others (`KH2_OWN_PROGRAMS`, each KH1 entry checked slo
 and are gates. Which spells use them (§12.2): AngleLoop the Loop integrators of Blizzard's shard and
 Wisdom's Blizzard; KeShpTail3X Fire's flame tails and Blizzard 1's sparkle. Not checked offline:
 the spell files aren't staged here.
+
+### 18.10 The spell scripts' effects (Reflect, Wisdom, KH2 magic) through KH1
+
+- `kh2dpx` builds each spell package `kh2fx` plays for the spell scripts (Steam only): Reflect's
+  levels (`reflect::spell_path`: the MAGC row's file, else `magic/REFLECT_<n>.mag`), Wisdom's archive
+  (`obj/P_EX100_MAGF.a.us`, PAX "p_ex"), and Fire, Blizzard, Thunder and Cure by level
+  (`formmagic::spell_path`), one group per effect, their "ends with the motion" flag not applied
+  (the scripts end them; `kh2fx` never ended them on Sora's motion either).
+- `kh2fx`'s spell API tries KH1 first (`kh2dpx::spell_start`): an element that passes the gate
+  (anchor, flags, programs) is started on Sora as his own are and gets a handle of ours
+  (`NATIVE_SPELL` set, inside `kh2fx`'s package bits); the others stay `kh2fx`'s. On our handles:
+  - place (`spell_place`, a script moving an unbound effect: Wisdom's shots, Reflect's contact
+    flash): KH2's `at` stands for the bone from then on (`kh2-fx`'s `set_anchor`). KH1's binding
+    is let go (disarmed, §18.7) on the first one, then KH1's own apply (`0x1402ADB40 (element,
+    matrix)`: the turn from the matrix's rows through `0x1402A8EF0`, in 65536ths of a turn, the
+    place from its last row; **Checked (exe)**) puts the element there; by position only, the
+    place `at · offset`, unturned.
+  - end: KH2's end (§2: 0x80 the loops, else 0x40 the fade-out, else it plays on), as `kh2dpx::end`;
+    kill: KH1's stop (`0x1401EC470`); alpha: the instance's alpha (`+0x3C`); running: the instance
+    still the element's.
+- Not checked offline: none of these files is staged here, so their elements' bones, flags and
+  programs are only known at load. What KH1 doesn't have stays with `kh2fx` (logged per element):
+  KH2's body centre 0x4001 (no KH1 anchor found yet), KH2-only programs, and the programs §12.2
+  lists that aren't compared yet (KeShpTail3X and AngleLoop now are, §18.9).
+
+### 18.11 What still goes through the old player (`kh2fx`)
+
+On Steam, with the packages built (the first seconds after KH2 Sora loads: until then `kh2fx`
+plays everything, as before):
+
+- Sora's package: element 1 (the Drive motion's sphere: KH2's pppSnoMdlDttNorm, §18.6). Every
+  other element is KH1's (§18.3..18.6).
+- Valor's and Final's packages: their weapon-point elements (0x4003..0x4008, §18.8), and any
+  element the load log lists as left out (a bone with no KH1 anchor, a flag KH1's binding doesn't
+  do, a program not compared or KH2-only).
+- The spell packages: elements on KH2's body centre (0x4001), and the same load-log cases.
+- The Keyblade's flash: only if its element fails the gate (logged).
+- Anything whose package didn't build (logged: the file not read, its HD textures not read, every
+  group over KH1's texture slots), and every package on other builds (Epic: Sora's elements without
+  KH1's blade or position binding still play through KH1, as before).
+- `fx_test` (it starts `kh2fx`'s own element 51).
