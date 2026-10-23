@@ -228,6 +228,24 @@ fn mash(w: &mut World, connect: bool) -> (Vec<u16>, Vec<(usize, u16)>) {
 }
 
 #[test]
+fn host_swing_playing_is_passed_over() {
+    // Two ground swings (rows 0, 4) and the finisher: with the host's own swing of row 0's motion
+    // playing, the selector walks on to the next valid row, as for its own swing (exe).
+    let mut ch = sora();
+    let mut second = row(4, 101, false, false);
+    second.sub = 4;
+    ch.moveset.combo_rows.push(second);
+    let env = Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: &[], ledges: &[] };
+    let from = Some(ComboState { count: 1, finishers: 1, hit: true, finisher_next: false });
+    let first = ch.would_take_after(from, None, false, false, [0.0; 2], &env).unwrap();
+    assert_eq!(first.motion, 100);
+    let next = ch.would_take_after(from, Some(100), false, false, [0.0; 2], &env).unwrap();
+    assert_eq!(next.motion, 101);
+    // Not playing anything of the host's: the same as `would_take`.
+    assert_eq!(ch.would_take(from, false, false, [0.0; 2], &env).unwrap().motion, 100);
+}
+
+#[test]
 fn whiffed_swings_do_not_advance_the_combo() {
     let mut w = World::new(sora());
     let (motions, _) = mash(&mut w, false);

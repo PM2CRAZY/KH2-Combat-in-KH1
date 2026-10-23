@@ -270,7 +270,8 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
    - 0: never picked directly.
    
    A range check requires all of:
-   - `near ≤ distance − target radius < far`
+   - `near ≤ max(0, distance − target radius) < far` (the gap never below 0: Steam
+     `0x1404029F0`, Checked; before, a target closer than its radius failed every range row)
    - a height window in y-down: `high′ < (target.y − player.y) ≤ low′` (`0x140401AD0`; the
      target point is its target shape's, `0x1403C8EE0`)
      - `flag & 2` lowers `high` by the jump height
@@ -287,6 +288,10 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
    was swapped for its `sub` and a row without one repeated.
 6. **Fallback** (`0x140402000`): if the walk finds nothing, row 9 (air) or row 5 (ground) is
    marked valid too and the walk runs again.
+   Steam addresses (KH2 Steam exe, Checked): the selector `0x140402D20`, row conditions
+   `0x140402750` (finisher test `0x1403D7780`, normal-row test `0x1403D7850`), range
+   `0x1404029F0` -> `0x1404027F0`, the walk `0x140402C50`. The KH1 port's use of it on KH1's
+   own ground combo: `kh1-anim-slots.md` §7.
 7. **Rows reached from a state** (kind 0), in the attack-press handler (`0x1403A6A60`):
    attack while the guard's repel (motion 42) plays takes row 39, Counterguard, if it passes
    its conditions. Retaliating Slash (row 40) is checked in a separate routine

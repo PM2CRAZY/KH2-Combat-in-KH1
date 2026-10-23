@@ -475,3 +475,60 @@ Not built yet: phase 4.
   (§1.6). What remains open there is the `+0x1CC` blend list and the travel's reader.
 - **Unverified in game:** everything in §1 is static reading of the code plus the user's files,
   except the request → slot proof from the s261 log (§1.3).
+
+## 7. KH2's row selection on KH1's ground combo
+
+The tester (`docs/tester-requests.md`): "KH2's row selection, so the right swing plays for the
+target's distance". Until now each of KH1's ground requests played one fixed KH2 motion (0xC8 /
+0xCA 151, 0xC9 152, 0xCB 154).
+
+**How KH2 picks** (Steam KH2 exe, Checked; the rule is `character_core::combo::select`, from the
+OG rewrite, Epic addresses there):
+- The attack press runs the selector `0x140402D20`. It marks the rows that pass, then walks them.
+- A row's conditions (`0x140402750`): a motion; its ability equipped (if any); air rows only in
+  the air and ground rows only on the ground; a finisher row needs count (`+0xD74`) + its
+  combo offset >= the combo length (`+0x5C0` block `+0x200` ground / `+0x201` air,
+  `0x1403D7780`); a normal row is refused only once the count is at the length and more than
+  one finisher has run (`+0xD75`, `0x1403D7850`).
+- Range (`0x1404029F0` -> `0x1404027F0`), by the row's kind byte: 1 the primary target, 2 every
+  targetable object (`+0x6C8` bit 17), 3 no range. Gap = distance less the target's radius,
+  never below 0 (`near <= gap < far`); the height window (flags 2 / 8 / 16); the facing window
+  (`inner_min < dot <= inner_max`, dot capped at 1).
+- The walk (`0x140402C50`): the first marked row whose `sub` is its own id or whose motion isn't
+  the one playing (`+0x180`); a marked row whose motion is playing is passed over, the first one's
+  `sub` row kept for when nothing else passes. Nothing at all: row 9 (air) / 5 (ground) is marked
+  and the walk runs again.
+- On your install (the tester's logs): no target, 151 <-> 153; KH2's finisher at close range is
+  row 3, motion 155 (A304). Motions 151..155 are A300..A304.
+
+**How KH1 picks** (Steam KH1 exe, Checked): the Attack step (`0x1402A7510`) counts the press
+(`+0x14C` info `+0x41`: 1 outside a combo window, +1 inside one when the swing connected) and asks
+the ground picker (`0x1402A6EE0`; air `0x1402A6C70`). It marks KH1's own rows too: finishers
+when the count reaches the stats' `+0xD4` (row 8, or rows 3 / 4 / 5 / 7 by KH1 ability bits and a
+roll), a dash at a target 160 or more away (rows 0 / 1), rows for a target above (2, 9, 10, 14),
+then takes the first marked row whose request isn't the one playing (`+0x164`); with none, rows
+13 / 11 by the motion playing (its plain swings, requests 0xC8 / 0xC9). The row's request runs
+through the request table, which is where our slots go in.
+
+**Ours (Base Combo KH2, `kh1_slots` on):** at the press KH1's combo takes (`combat::exec`,
+`combomods::attack`), KH2's selector is asked at KH1's count, with KH2's motion KH1 plays now as
+the one playing (`Character::would_take_after`, so the anti-repeat works; before, the trial copy
+never had a swing playing and always gave row 5). When KH1's row is one of its plain ground swings
+(requests 0xC8..0xCA) or its plain finisher (0xCB) and KH2's pick fits it (a ground row, no hop,
+no ability, a swing for a swing and a finisher for the finisher), that request is pointed at our
+slot of the picked motion (`kh2slots::pick`) before KH1's row makes it. KH1 plays it: its state,
+row, hits and damage, the KH2 motion's hit / combo / trail windows as the slot's events. Slots
+for every such motion of KH2's rows (`kh2slots::swing_rows`) are built for each request, on the
+request's own template. No new hook; nothing per frame beyond the redirect already there.
+- Not changed: KH1's other rows (its dash at a target, its ability finishers, its jumps at a
+  target above) still play as before; KH2's ability rows are borrows as before (`combomods`);
+  the air combo keeps its fixed 181 / 182 / 183.
+- Found, not added (Steam KH2, `0x140402D20`): on the ground, before the walk, KH2 tests a line
+  ahead of Sora (his facing scaled by a stats length `+0x2C` plus `+0x6F0`, laid on the ground,
+  `0x1403B7BD0` / `0x1403BA750`) and marks row 1 if it is blocked (not in the air, not with `+0x18C`
+  bit 6, no object at `+0x9D8`). The OG rewrite doesn't have it. **Assumption:** a wall or obstacle
+  just ahead.
+- Found, not added: `0x1403D7780` / `0x1403D7850` also force a finisher when `+0x194` bit 5 is set
+  and refuse finishers while `+0x5C0` block `+0x1DC` bit 11 and `0x1403C1D10` hold. What those
+  states are: not looked at.
+- Unverified in game: all of it.

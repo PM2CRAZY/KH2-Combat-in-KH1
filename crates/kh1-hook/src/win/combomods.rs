@@ -190,7 +190,7 @@ pub unsafe fn attack(actor: usize, motion: Option<u32>) -> bool {
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     if let Some((n, _, true, _)) = last.filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
         let from = ComboState { count: n, finishers: 1, hit: true, finisher_next: true };
-        if let Some((row, ..)) = takeover::kh2_would_take(actor, Some(from), air, false).filter(|(r, ..)| r.is_finisher()) {
+        if let Some((row, ..)) = takeover::kh2_would_take(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()) {
             note(format!("Attack in KH1's finisher (count {n}): KH2's next finisher, row {} motion {} (Finishing Plus)", row.id, row.motion));
             want(Move::Row { id: row.id, state: from });
             return true;
@@ -198,7 +198,9 @@ pub unsafe fn attack(actor: usize, motion: Option<u32>) -> bool {
     }
     // KH2's combo at KH1's count (this press counted: `count` is this swing's).
     let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
-    let pick = takeover::kh2_would_take(actor, Some(from), air, false);
+    // (KH2's motion KH1 plays now for its swing: KH2's anti-repeat passes over it, as over its
+    // own swing playing.)
+    let pick = takeover::kh2_would_take(actor, Some(from), super::kh2slots::playing_motion(actor), air, false);
     let why = pick.as_ref().and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len));
     note(format!(
         "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",
@@ -206,14 +208,45 @@ pub unsafe fn attack(actor: usize, motion: Option<u32>) -> bool {
         pick.as_ref().map_or("nothing".to_string(), |(r, len, _)| format!("row {} motion {} (ability {}, finisher {}, KH2's length {len})", r.id, r.motion, r.ability, r.is_finisher())),
         why.map_or(String::new(), |w| format!(": {w}, KH2 borrows him for it"))
     ));
-    if let Some((row, ..)) = pick.filter(|_| why.is_some()) {
+    if let Some((row, ..)) = pick.as_ref().filter(|_| why.is_some()) {
         want(Move::Row { id: row.id, state: from });
         return true;
+    }
+    if !air {
+        select_swing(motion, pick.as_ref().map(|(r, ..)| r));
     }
     if let Ok(mut l) = LAST.lock() {
         *l = motion.map(|m| (count, m, count >= kh1_len, air));
     }
     false
+}
+
+/// KH2's row selection on KH1's own ground swing (`attack`, no ability move borrowed): with the
+/// Base Combo at KH2, the swing KH2's combo takes at this press (`pick`: its rows by the target's
+/// distance, height and direction, the count, the finisher rule and the anti-repeat, Steam exe
+/// `0x140402D20`) plays on the row KH1 runs: KH1's request for it (`request`: 0xC8..0xCA its
+/// swings, 0xCB its finisher; the row's motion) is pointed at our slot of that KH2 motion
+/// (`kh2slots::pick`). KH1's row, its hits, damage and timing windows from the slot's events, are
+/// KH1's as before. A pick that doesn't fit KH1's row (a row that hops, a finisher on KH1's swing
+/// or a swing on its finisher, a motion with no slot) leaves the request's own motion; KH1's other
+/// rows (its dash at a target, its ability finishers, its jump at an airborne target) aren't
+/// touched.
+fn select_swing(request: Option<u32>, pick: Option<&ComboRow>) {
+    let Some(req) = request.map(|r| r as usize).filter(|r| (0xC8..=0xCB).contains(r)) else { return };
+    if !super::styles::kh2(super::styles::Kind::GroundCombo) {
+        unsafe { super::kh2slots::pick(req, None) };
+        return;
+    }
+    let fits = pick.filter(|r| !r.is_air() && !r.is_jump() && r.ability == 0 && r.is_finisher() == (req == 0xCB));
+    let plays = unsafe { super::kh2slots::pick(req, fits.map(|r| r.motion)) };
+    note(format!(
+        "KH2's row selection: KH1's request {req:#x} plays {}",
+        match (pick, plays) {
+            (Some(r), true) => format!("KH2's row {} motion {}", r.id, r.motion),
+            (Some(r), false) => format!("its own motion (KH2's row {} motion {}: no slot for it, or it doesn't fit KH1's row: hop {}, ability {}, finisher {})", r.id, r.motion, r.is_jump(), r.ability, r.is_finisher()),
+            (None, _) => "its own motion (KH2 takes nothing)".to_string(),
+        }
+    ));
 }
 
 /// KH1's control step with base Sora in KH1's own states (`shared::control`): a press that is one
@@ -256,7 +289,7 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
             return None;
         }
         let from = ComboState { count, finishers: 1, hit: true, finisher_next: false };
-        let (row, ..) = unsafe { takeover::kh2_would_take(actor, Some(from), air, true) }?;
+        let (row, ..) = unsafe { takeover::kh2_would_take(actor, Some(from), None, air, true) }?;
         note(format!("Square in KH1's combo window (swing {count}): KH2's Square move, row {} motion {}", row.id, row.motion));
         want(Move::Row { id: row.id, state: from });
         return Some(super::shared::KH1_ACTION_BIT);
@@ -299,7 +332,7 @@ pub unsafe fn next_from_kh2(actor: usize, air: bool) -> Next {
     let Some((state, going, master, in_finisher)) = takeover::kh2_combo() else { return Next::Fresh };
     // In KH2's finisher: its next finisher with Finishing Plus (KH2's), else a new combo of KH1's.
     if in_finisher {
-        let pick = takeover::kh2_would_take(actor, None, air, false).filter(|(r, ..)| r.is_finisher());
+        let pick = takeover::kh2_would_take(actor, None, None, air, false).filter(|(r, ..)| r.is_finisher());
         if let Some((r, ..)) = pick {
             note(format!("Attack in KH2's finisher with the combo style KH1's: KH2's next finisher, row {} motion {} (Finishing Plus)", r.id, r.motion));
             return Next::Kh2;
@@ -310,7 +343,7 @@ pub unsafe fn next_from_kh2(actor: usize, air: bool) -> Next {
         return Next::Fresh;
     }
     let kh1_len = kh1_combo(actor, air).map_or(u8::MAX, |c| c.1);
-    let pick = takeover::kh2_would_take(actor, None, air, false);
+    let pick = takeover::kh2_would_take(actor, None, None, air, false);
     let next = state.count.saturating_add(1);
     let why = pick.as_ref().and_then(|(r, len, neg)| ability_move(r, *len, *neg, next, kh1_len));
     let out = if why.is_some() { Next::Kh2 } else { Next::Kh1 { count: state.count, hit: state.hit || master } };

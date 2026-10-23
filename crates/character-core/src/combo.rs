@@ -119,9 +119,11 @@ pub fn condition(r: &ComboRow, s: &Situation) -> bool {
     }
 }
 
-/// Range checks against one target.
+/// Range checks against one target. The gap is the distance less the target's radius, never
+/// below 0 (Steam exe `0x1404029F0`, Checked): a target closer than its own radius is at gap 0,
+/// so rows with `near` 0 still take it.
 pub fn in_range(r: &ComboRow, t: &TargetGeom, jump_height: f32) -> bool {
-    let d = t.distance - t.radius;
+    let d = (t.distance - t.radius).max(0.0);
     if !(r.near <= d && d < r.far) {
         return false;
     }
@@ -243,6 +245,14 @@ mod tests {
         // out of range: condition-only row
         assert_eq!(select(&rows, &sit(1, 0, Some(geom(900.0)))).unwrap().row.motion, 150);
         assert_eq!(select(&rows, &sit(1, 0, None)).unwrap().row.motion, 150);
+    }
+
+    #[test]
+    fn gap_never_below_zero() {
+        // Inside the target's radius: gap 0, so a row starting at 0 takes it.
+        let r = row(1, 1, 1, 0, 1, 0.0, 200.0);
+        let t = TargetGeom { radius: 80.0, ..geom(30.0) };
+        assert!(in_range(&r, &t, 0.0));
     }
 
     #[test]

@@ -56,12 +56,17 @@ struct Spec {
 /// first and third swing (98, request 0xC8) KH2's first (151); its second (99, 0xC9) KH2's second
 /// (152; the user: "sora base attack 2, kh2 base attack 2"); slot 100 (0xCA, taken as another
 /// swing) KH2's first; its finisher (101, 0xCB) KH2's finisher (154; "kh1 base finisher, kh2 base
-/// finishers").
+/// finishers"). These are each request's own; with the Base Combo at KH2, KH2's row selection
+/// picks among the other ground swings KH2's rows can take, built for each request too (`pick`,
+/// `swing_rows`).
 ///
 /// KH1's air combo (slots 102..104, requests 0xCC..0xCE), KH2's aerial swings for it as `pose`
 /// draws them: 181 for KH1's first air swing (102), 182 for its second (103), 183 for its finisher
 /// (104), KH2's own order in the air (181 / 182 alternate, 183 finishes). With these built, the Attack in the air at Aerial Base Combo KH2 stays in KH1's air
 /// state (`covers`, `shared::kh1_combo`) instead of borrowing him for KH2's own air combo.
+/// KH1's ground finisher request (slot 101); 0xC8..0xCA are its swings.
+const GROUND_FINISHER: usize = 0xCB;
+
 const SPECS: [Spec; 7] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
@@ -84,6 +89,8 @@ pub struct Move {
     pub baked: bool,
     /// Baked with KH2's root travel in its H10 (`bake_one`): KH1 moves him by it, nothing of ours.
     pub travel: bool,
+    /// The request's own (`SPECS`); else one of the swings KH2's row selection picks (`pick`).
+    pub default: bool,
     /// The KH2 clip's sounds, voices and effects, by frame.
     events: Vec<(u32, EventKind)>,
 }
@@ -112,42 +119,35 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
         }
         let mut moves = Vec::new();
         let mut blocks = Vec::new();
-        for s in SPECS.iter().filter(|s| which.as_ref().map_or(true, |w| w.contains(&s.motion))) {
-            let Some(clip) = kh2.character.moveset.clips.get(&s.motion) else {
-                log(&format!("KH2 slots: KH2 motion {} has no clip, left out", s.motion));
-                continue;
-            };
-            if requests.get(s.request).map(|e| (e & 0xFFF) as usize) != Some(s.stands_for) {
-                // (Left out, not a failure of the rest: one wrong request shouldn't drop the others.)
-                log(&format!("KH2 slots: request {:#x} is not KH1's slot {}; KH2 motion {} left out", s.request, s.stands_for, s.motion));
+        let wanted = |motion: u16| which.as_ref().map_or(true, |w| w.contains(&motion));
+        for s in SPECS.iter().filter(|s| wanted(s.motion)) {
+            if let Some((m, block)) = make(mset, kh2, bake, &requests, (s.motion, s.stands_for, s.request, s.kind), true, KH1_SLOTS + moves.len())? {
+                moves.push(m);
+                blocks.push(block);
+            }
+        }
+        // KH2's row selection on KH1's ground swings (`pick`): every other ground swing KH2's
+        // combo rows can take, built for each KH1 request of its kind (a swing for 0xC8..0xCA, a
+        // finisher for 0xCB) on that request's own template.
+        let rows = swing_rows(&kh2.character.moveset.combo_rows);
+        for s in SPECS.iter().filter(|s| s.kind == Kind::GroundCombo) {
+            if !moves.iter().any(|m| m.request == s.request && m.default) {
                 continue;
             }
-            let template = ks::motion_bytes(mset, s.stands_for).map_err(|e| e.to_string())?;
-            let old = u32::from_le_bytes(template[4..8].try_into().unwrap());
-            let frames = clip.length.max(1);
-            let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32);
-            let slot = KH1_SLOTS + moves.len();
-            // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
-            let travel = s.kind == Kind::GroundCombo && travels(requests[s.request]);
-            let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, s.motion, frames, &tracks, travel)) {
-                Some(Ok(block)) => (block, true),
-                Some(Err(e)) => {
-                    log(&format!("KH2 slots: KH2 motion {} not baked ({e}); drawn over its template", s.motion));
-                    (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false)
+            for &(motion, finisher) in &rows {
+                if finisher != (s.request == GROUND_FINISHER) || motion == s.motion || !wanted(motion) {
+                    continue;
                 }
-                None => (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false),
-            };
-            log(&format!(
-                "KH2 slots: KH2 motion {} as KH1 slot {slot} (for KH1's slot {} / request {:#x}, {old} -> {frames} frames): {}",
-                s.motion,
-                s.stands_for,
-                s.request,
-                tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
-            ));
-            let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Voice(_) | EventKind::Effect(_))).map(|e| (e.frame, e.kind)).collect();
-            moves.push(Move { motion: s.motion, stands_for: s.stands_for, request: s.request, kind: s.kind, slot, frames, baked, travel: travel && baked, events });
-            blocks.push(block);
+                if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, s.stands_for, s.request, s.kind), false, KH1_SLOTS + moves.len())? {
+                    moves.push(m);
+                    blocks.push(block);
+                }
+            }
         }
+        log(&format!(
+            "KH2 slots: KH2's row selection on KH1's ground combo: {}",
+            [0xC8usize, 0xC9, 0xCA, 0xCB].iter().map(|r| format!("{r:#x} -> {:?}", moves.iter().filter(|m| m.request == *r).map(|m| m.motion).collect::<Vec<_>>())).collect::<Vec<_>>().join(", ")
+        ));
         Ok(Built { moves, blocks, requests })
     })();
     match r {
@@ -159,6 +159,59 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
             let _ = BUILT.set(None);
         }
     }
+}
+
+/// One of our motions: KH2's `motion` on KH1's slot `stands_for` (its template) for KH1's
+/// `request`, as our slot `slot`; `default`: the request's own (`SPECS`), else one KH2's row
+/// selection can pick (`pick`). `None` if it can't be built (logged).
+fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, slot: usize) -> Result<Option<(Move, Vec<u8>)>, String> {
+    let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
+        log(&format!("KH2 slots: KH2 motion {motion} has no clip, left out"));
+        return Ok(None);
+    };
+    if requests.get(request).map(|e| (e & 0xFFF) as usize) != Some(stands_for) {
+        // (Left out, not a failure of the rest: one wrong request shouldn't drop the others.)
+        log(&format!("KH2 slots: request {request:#x} is not KH1's slot {stands_for}; KH2 motion {motion} left out"));
+        return Ok(None);
+    }
+    let template = ks::motion_bytes(mset, stands_for).map_err(|e| e.to_string())?;
+    let old = u32::from_le_bytes(template[4..8].try_into().unwrap());
+    let frames = clip.length.max(1);
+    let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32);
+    // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
+    let travel = kind == Kind::GroundCombo && travels(requests[request]);
+    let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, motion, frames, &tracks, travel)) {
+        Some(Ok(block)) => (block, true),
+        Some(Err(e)) => {
+            log(&format!("KH2 slots: KH2 motion {motion} not baked ({e}); drawn over its template"));
+            (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false)
+        }
+        None => (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false),
+    };
+    log(&format!(
+        "KH2 slots: KH2 motion {motion} as KH1 slot {slot} (for KH1's slot {stands_for} / request {request:#x}{}, {old} -> {frames} frames): {}",
+        if default { "" } else { ", by KH2's row selection" },
+        tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
+    ));
+    let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Voice(_) | EventKind::Effect(_))).map(|e| (e.frame, e.kind)).collect();
+    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, events }, block)))
+}
+
+/// The ground swings KH2's combo rows can take with no ability (an ability's row is a borrow,
+/// `combomods`) and no hop (a row with `jump` leaves the ground): (motion, finisher), each once.
+/// The rows the selector marks (kind 1, 2, 3) and the rows their `sub` swaps to (any kind; the
+/// exe's anti-repeat keeps the `sub` row, Steam `0x140402C50`).
+fn swing_rows(rows: &[character_core::ComboRow]) -> Vec<(u16, bool)> {
+    let picked = |r: &character_core::ComboRow| r.kind != 0;
+    let subs: Vec<i8> = rows.iter().filter(|r| picked(r)).map(|r| r.sub).collect();
+    let mut out: Vec<(u16, bool)> = Vec::new();
+    for r in rows {
+        let reachable = picked(r) || subs.contains(&(r.id as i8));
+        if reachable && r.motion != 0 && !r.is_air() && !r.is_jump() && r.ability == 0 && !out.iter().any(|o| o.0 == r.motion) {
+            out.push((r.motion, r.is_finisher()));
+        }
+    }
+    out
 }
 
 /// KH2's `motion` baked into a KH1 motion on `template` (`kh1_data::bake`), with its report logged.
@@ -218,8 +271,9 @@ struct Set {
     slots_handle: u32,
     requests_handle: u32,
     requests: &'static mut [u32],
-    /// (request, KH1's entry, our slot index in this set, the move's style).
-    redirects: Vec<(usize, u32, u32, Kind)>,
+    /// (request, KH1's entry, our slot index in this set, the move's style, the move (its
+    /// `slot`), whether it is the request's own).
+    redirects: Vec<(usize, u32, u32, Kind, usize, bool)>,
 }
 
 /// Our motions placed in memory (the game thread) and the sets made with them.
@@ -471,7 +525,7 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         let own = (e & 0xFFF) as usize;
         let holds = own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for);
         if holds {
-            redirects.push((m.request, e, (count + i) as u32, m.kind));
+            redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default));
         } else {
             missing.push(format!("{:#x}", m.request));
         }
@@ -482,7 +536,7 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         count,
         count + p.motions.len() - 1,
         len,
-        t.redirects.iter().map(|r| format!("{:#x} (its slot {})", r.0, r.1 & 0xFFF)).collect::<Vec<_>>().join(", "),
+        t.redirects.iter().filter(|r| r.5).map(|r| format!("{:#x} (its slot {})", r.0, r.1 & 0xFFF)).collect::<Vec<_>>().join(", "),
         if missing.is_empty() { String::new() } else { format!("; not in this set: {}", missing.join(", ")) }
     ));
     wr(at + 4, t.slots_handle);
@@ -556,18 +610,59 @@ pub unsafe fn frame(actor: usize) {
     if rd::<u32>(actor + SAVED_SET) != 0 {
         extend(b, p, actor + SAVED_SET, "kept by KH1 on his actor");
     }
-    // The requests by style (base Sora under shared states; a change applies from KH1's next
-    // request, never to the motion playing).
+    redirect(p);
+    drop(g);
+    tick(actor);
+}
+
+/// The swing KH2's row selection picked for each of KH1's ground requests 0xC8..0xCB (our
+/// move's `slot`; `usize::MAX`: the request's own).
+static PICKED: [AtomicUsize; 4] = [const { AtomicUsize::new(usize::MAX) }; 4];
+
+fn picked(request: usize) -> Option<usize> {
+    let i = request.checked_sub(0xC8).filter(|i| *i < PICKED.len())?;
+    let m = PICKED[i].load(Ordering::Relaxed);
+    (m != usize::MAX).then_some(m)
+}
+
+/// The requests by style (base Sora under shared states; a change applies from KH1's next
+/// request, never to the motion playing), each to its own move or the one KH2's row selection
+/// picked for it.
+unsafe fn redirect(p: &mut Placed) {
     let on = super::shared::on();
     for t in p.sets.iter_mut() {
-        for &(req, kh1, ours, kind) in &t.redirects {
+        for i in 0..t.redirects.len() {
+            let (req, kh1, ours, kind, id, default) = t.redirects[i];
+            let want = picked(req).filter(|m| t.redirects.iter().any(|r| r.0 == req && r.4 == *m));
+            if want.map_or(!default, |m| m != id) {
+                continue;
+            }
             if let Some(e) = t.requests.get_mut(req) {
                 *e = if on && super::styles::kh2(kind) { (kh1 & !0xFFF) | ours } else { kh1 };
             }
         }
     }
-    drop(g);
-    tick(actor);
+}
+
+/// KH2's row selection on KH1's own ground swing (`combomods::attack`, Base Combo KH2): KH1's
+/// `request` (0xC8..0xCB, the row about to run) plays our slot of KH2's `motion` from now (its
+/// request table entry pointed there at once, before KH1's row makes the request). `None`, or a
+/// motion with no slot built for that request: the request's own. Whether `motion` plays.
+pub unsafe fn pick(request: usize, motion: Option<u16>) -> bool {
+    let Some(i) = request.checked_sub(0xC8).filter(|i| *i < PICKED.len()) else { return false };
+    let m = motion.and_then(|mo| built()?.moves.iter().find(|m| m.request == request && m.motion == mo)).map(|m| m.slot);
+    PICKED[i].store(m.unwrap_or(usize::MAX), Ordering::Relaxed);
+    if let Ok(mut g) = PLACED.try_lock() {
+        if let Some(p) = g.as_mut() {
+            redirect(p);
+        }
+    }
+    m.is_some()
+}
+
+/// The KH2 motion of our slot `actor` plays now (KH2's anti-repeat passes over it, `pick`).
+pub unsafe fn playing_motion(actor: usize) -> Option<u16> {
+    current(actor).map(|m| m.motion)
 }
 
 /// Our slot's KH2 sounds, voices and effects between KH1's last time and its time now.

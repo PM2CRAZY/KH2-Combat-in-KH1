@@ -417,6 +417,10 @@ pub struct Character {
     lock: Option<u32>,
     /// A kind-0 combo row the next attack must be (Counterguard, Retaliating Slash).
     forced_row: Option<u8>,
+    /// The motion a host plays for this character's attack while this controller is free
+    /// (`would_take_after`), for the selector's anti-repeat only (the exe compares each row's
+    /// motion with the one playing).
+    host_motion: Option<u16>,
     /// Each attack starts facing the locked-on target (a host's choice; off = the game's turn
     /// windows only).
     face_lock: bool,
@@ -569,6 +573,7 @@ impl Character {
             swing_counter: 0,
             lock: None,
             forced_row: None,
+            host_motion: None,
             face_lock: false,
             combo_direction_lock: false,
             auto_target: true,
@@ -1178,10 +1183,19 @@ impl Character {
     /// is now. `square`: the action button, KH2's Square moves (Finishing Leap, Upper Slash,
     /// Horizontal Slash, a form's Square finisher), instead of Attack. Nothing of `self` changes.
     pub fn would_take(&mut self, from: Option<ComboState>, air: bool, square: bool, stick: [f32; 2], env: &Env) -> Option<ComboRow> {
+        self.would_take_after(from, None, air, square, stick, env)
+    }
+
+    /// `would_take`, with the motion the host's own attack plays now (`playing`): the selector's
+    /// anti-repeat passes over rows of that motion as it does over the controller's own swing
+    /// playing (exe: the walk compares each valid row's motion with the one playing, Steam
+    /// `0x140402C50`), so the host's combo alternates as KH2's does.
+    pub fn would_take_after(&mut self, from: Option<ComboState>, playing: Option<u16>, air: bool, square: bool, stick: [f32; 2], env: &Env) -> Option<ComboRow> {
         // (The moveset isn't cloned: the trial borrows it and gives it back.)
         let moveset = std::mem::take(&mut self.moveset);
         let mut t = self.clone();
         t.moveset = moveset;
+        t.host_motion = playing;
         if let Some(c) = from {
             t.mode = Mode::Free;
             t.airborne = air;
@@ -1511,7 +1525,7 @@ impl Character {
             count: self.count,
             finishers: self.finishers,
             max_count: self.max_count(air),
-            current_motion: current_motion.unwrap_or(u16::MAX),
+            current_motion: current_motion.or(self.host_motion).unwrap_or(u16::MAX),
             primary,
             all: &all,
             equipped: &self.abilities.equipped,

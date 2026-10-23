@@ -1483,8 +1483,9 @@ unsafe fn kh1_lock(base: usize, targets: &mut Vec<TargetInfo>) -> Option<u32> {
 /// Sora's targets and KH1's lock as KH2's step sees them: `from`, where KH1's own combo stands
 /// (KH1 has him: KH2's controller is set where he is, facing as KH1 has him), or `None` for KH2's
 /// own combo as it is (KH2 has him). With KH2's combo length there (Combo Plus, Negative Combo)
-/// and its Negative Combo.
-pub unsafe fn kh2_would_take(actor: usize, from: Option<character_core::ComboState>, air: bool, square: bool) -> Option<(character_core::ComboRow, u8, u8)> {
+/// and its Negative Combo. `playing`: KH2's motion KH1 plays now for its own swing (`kh2slots`),
+/// passed over by KH2's anti-repeat as KH2's own swing playing would be.
+pub unsafe fn kh2_would_take(actor: usize, from: Option<character_core::ComboState>, playing: Option<u16>, air: bool, square: bool) -> Option<(character_core::ComboRow, u8, u8)> {
     let base = BASE.load(Ordering::Relaxed);
     let kh2 = pose::kh2()?;
     let mut g = DRIVER.try_lock().ok()?;
@@ -1506,7 +1507,7 @@ pub unsafe fn kh2_would_take(actor: usize, from: Option<character_core::ComboSta
     let p = rd::<[f32; 3]>(actor + 0x10);
     let above = rd::<f32>(actor + 0x3D4);
     let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
-    let row = d.character.would_take(from, air, square, stick, &env)?;
+    let row = d.character.would_take_after(from, playing, air, square, stick, &env)?;
     Some((row, d.character.combo_length(air), d.character.abilities.negative_combo))
 }
 

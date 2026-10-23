@@ -1,3 +1,18 @@
+### 2026-10-23: Stage 374 (testing branch: KH2's row selection on KH1's ground combo)
+- The tester Mr. Bugs (`docs/tester-requests.md`, "KH2's combo row selection"): KH2's row selection, so the right swing
+  plays for the target's distance; the swing order was fixed (0xC8 / 0xCA 151, 0xC9 152, 0xCB 154).
+- From the decomps (Steam): KH2's selector `0x140402D20` (row checks `0x140402750`, finisher / normal tests
+  `0x1403D7780` / `0x1403D7850`, range `0x1404029F0` -> `0x1404027F0`, walk with anti-repeat `0x140402C50`, row 9 / 5
+  fallback) is `character_core::combo::select`, except the range gap, which the exe never lets go below 0
+  (`combo::in_range` now clamps it). KH1's Attack step `0x1402A7510` and ground picker `0x1402A6EE0` mark and walk its own
+  rows the same way; its plain swings are rows 13 / 11 (0xC8 / 0xC9) and its finisher row 8 (0xCB).
+- `Character::would_take_after`: the host's playing motion goes into the anti-repeat (`kh2_would_take` takes it;
+  stage 312's "always row 5" log). `combomods::select_swing`: at Base Combo KH2, a pick that fits KH1's plain swing or
+  finisher (ground, no hop, no ability) points that request at our slot of the picked motion (`kh2slots::pick`, before
+  KH1's row requests it); `kh2slots::swing_rows` builds a slot for each such motion per request. KH1's row, hits and
+  damage stay KH1's. `shared::swing_travel` takes the playing slot's motion. Notes: `docs/kh1-anim-slots.md` §7.
+- Not changed: KH1's dash / jump-at-target / ability-finisher rows, KH2's hopping rows, the air combo.
+
 ### 2026-10-23: Stage 373 (testing branch: KH2's camera no longer circles Sora when he runs toward it)
 - The tester Mr. Bugs (`docs/tester-requests.md`, "KH2 Camera fixes"): running backwards turned the camera and Sora in
   a circle. His trace f571370: left stick straight down, KH2's camera yaw and Sora's yaw both turned 0.0175 a frame

@@ -250,7 +250,7 @@ On KH1's own states (`shared::physics`'s wrappers, whatever the styles):
 | jump, High Jump | KH2's arc: its height (KH2's jump, or High Jump's growth height at Sora's level), gravity 20/49, early-release hop, fall cap 16 |
 | falls (off a ledge, out of a ladder, after a KH1 move) | KH2's arc from KH1's fields (`Arc::to_kh2`) |
 | air drift | KH2's `air_keep` toward the stick at KH2's walk / run speed, `air_drag` without it, per KH2 tick (two 60 Hz frames; earlier builds applied them per 60 Hz frame, twice KH2's) |
-| ground combo swings (98..101), either Base Combo style, `kh2_slots` too | the root travel of KH2's swing for that slot (`pose::swing_motion`: 98 / 100 → 151, 99 → 152, 101 → 154), stretched over KH1's swing |
+| ground combo swings (98..101), either Base Combo style, `kh2_slots` too | the root travel of KH2's swing for that slot (our `kh2slots` slot playing for it, KH2's row selection's pick, `kh1-anim-slots.md` §7; else `pose::swing_motion`: 98 / 100 → 151, 99 → 152, 101 → 154), stretched over KH1's swing |
 | glide, Superglide | KH2's glide speed, fall and turn at Sora's Glide level (level 1 at least: KH1 glides him only with its Glide) |
 | KH2's borrowed moves | KH2's controller as it is; its air casts KH2's own (the cast motions' no-gravity frames), not KH1's fall (before: only with Aerial Magic at KH2) |
 

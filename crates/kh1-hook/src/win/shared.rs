@@ -925,7 +925,9 @@ pub mod physics {
     /// objects and timing), KH2's physics on it.
     unsafe fn swing_travel(actor: usize, slot: usize) -> bool {
         let Some(kh2) = super::super::pose::kh2() else { return false };
-        let Some(motion) = super::super::pose::swing_motion(slot) else { return false };
+        // (Our slot playing for it, KH2's row selection's pick among them: its motion's travel.)
+        let ours = super::super::kh2slots::playing().filter(|s| super::super::kh2slots::stands_for(*s) == Some(slot)).and_then(super::super::kh2slots::kh2_motion);
+        let Some(motion) = ours.or_else(|| super::super::pose::swing_motion(slot)) else { return false };
         let Some(clip) = kh2.character.moveset.clips.get(&motion) else { return false };
         let kh1_len = super::super::pose::slot_frames(slot).unwrap_or(0) as f32;
         if clip.root.len() < 2 || kh1_len < 1.0 {
