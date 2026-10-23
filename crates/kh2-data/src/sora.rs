@@ -239,6 +239,9 @@ pub fn attack_params_for(p: &Pref, moveset: usize) -> AttackParams {
         lock_on_release_range: f(sstm, SSTM_FIELDS, "lock_on_release_range"),
         distance_to_speed: sstm.get(SSTM_ATTACK_DISTANCE_TO_SPEED).copied().unwrap_or(0.0),
         jump_front: g("attack_j_front"),
+        // (From the model: `target_shape`, set once the rig is loaded.)
+        target_lift: 0.0,
+        target_radius: 0.0,
     }
 }
 
@@ -368,6 +371,13 @@ fn moves(player: &Mset, weapons: &[Mset], combat: &CombatData) -> HashMap<u16, C
 /// sphere radius 90, height 90, centre ("lift") 115 above the feet.
 pub fn bg_shape(shapes: &[BoneShape]) -> Option<&BoneShape> {
     shapes.iter().find(|s| s.kind == 0 || s.kind == 4)
+}
+
+/// The model's target shape: its first collision shape of kind 3 (KH2's `0x1403B5650 (…, 3, -1)`,
+/// Steam; Sora's: on his root, 70 up, radius 55, Checked (files)), the point other objects measure
+/// him by and an attack row's hop is measured from (`0x1403D7520`).
+pub fn target_shape(shapes: &[BoneShape]) -> Option<&BoneShape> {
+    shapes.iter().find(|s| s.kind == 3)
 }
 
 pub fn bone_shapes(collision: &[ObjectCollision]) -> Vec<BoneShape> {
@@ -513,6 +523,12 @@ fn load_player_with(source: Source, spec: PlayerSpec, read: &dyn Fn(&str) -> Res
     // shape; the game reads it the same way.
     if let Some(r) = rig.as_ref().and_then(|r| r.body_shapes.iter().find(|s| s.kind == 4)) {
         character.params.hang.body_radius = r.radius;
+    }
+    // His target shape (kind 3), which an attack row's hop is measured from (its lift: Sora's
+    // offset is 0, so the offset's sign in the world is not needed here).
+    if let Some(s) = rig.as_ref().and_then(|r| target_shape(&r.body_shapes)) {
+        character.attack.target_lift = s.lift;
+        character.attack.target_radius = s.radius;
     }
     let weight = read("00objentry.bin")
         .ok()

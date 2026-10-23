@@ -1,3 +1,11 @@
+### 2026-10-23: Stage 400 (testing branch: KH2's attack hop rule from the KH2 exe)
+- t392's hop numbers were the OG rewrite's; Steam KH2 `0x1403D78D0` (Checked, decomp): the primary target, from his own
+  kind-3 target shape's centre (Sora's: 70 up, radius 55, `P_EX100.mdlx`) to the target's (`0x1403D7520`); height
+  bounded by PTYA `+0x14` / `+0x10` (+ jump height with flag 2); speed (gap less both radii + `distance_adjust`, not
+  held at 0) over `sqrt(|2h / 0.40816328|)` (`0x1403B73F0`), bounded by `+0x18` / `+0x1C`, the exe's test order.
+  `AttackParams::target_lift` / `target_radius` (`kh2_data::sora::target_shape`). Assumption: which player class is
+  Sora's (several share the method pair). Notes `docs/kh1-anim-slots.md` §7.
+
 ### 2026-10-23: Stage 399 (testing branch: Frame Advance's Held Tasks page)
 - The tester's t378 test: the picture is still black while held; he asked how to help log it. His t393 log lists the 22
   tasks held (all under priority 140000). `frameadv::tasks` / `toggle_task`: the debug menu's new Held Tasks page (main

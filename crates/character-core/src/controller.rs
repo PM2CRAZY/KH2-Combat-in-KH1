@@ -1637,15 +1637,28 @@ impl Character {
                 self.count = 1;
                 self.finishers = 1;
             }
-            let (height, speed) = match target {
+            // KH2's hop (Steam KH2 `0x1403D78D0`, Checked (decomp)): measured to the primary
+            // target (the character's own target, `+0xDC8`, whatever target a kind-2 row passed
+            // on), from his own target shape's centre to the target's (`0x1403D7520`): the
+            // height between the two, between `jump_min` and `jump_max` (plus his jump height
+            // with flag 2); the sideways speed the gap (distance less both radii, plus the row's
+            // `distance_adjust`, not held at 0) over KH2's rise time for that height (its own
+            // gravity constant, `0x1403B73F0`, whatever the character's), between `speed_min`
+            // and `speed_max`. The bounds are tested in the exe's order (a value under the low
+            // bound, or not a number, takes the low one). No target: the row's `jump` and
+            // `speed_max` along his facing.
+            let (height, speed, dir) = match primary {
                 Some(t) => {
                     let extra = if row.flag & FLAG_JUMP_ADJUST != 0 { self.params.jump_height } else { 0.0 };
-                    let h = t.dy.clamp(row.jump_min, (row.jump_max + extra).max(row.jump_min));
-                    let up = uptime(h, self.params.gravity).max(1.0);
-                    let s = ((t.distance - t.radius).max(0.0) / up).clamp(row.speed_min, row.speed_max.max(row.speed_min));
-                    (h, s)
+                    let bound = |v: f32, lo: f32, hi: f32| if !(lo <= v) { lo } else if v <= hi { v } else { hi };
+                    let h = bound(t.dy - self.attack.target_lift, row.jump_min, row.jump_max + extra);
+                    let gap = t.distance - (t.radius + self.attack.target_radius) + row.distance_adjust;
+                    let up = (2.0 * h / crate::KH2_GRAVITY).abs().sqrt();
+                    let s = bound(gap / up, row.speed_min, row.speed_max);
+                    let to = env.targets.iter().find(|x| x.id == t.id).map(|x| [x.pos[0] - env.pos[0], x.pos[2] - env.pos[2]]).filter(|d| len2(*d) > 1e-6);
+                    (h, s, to.map_or(dir, norm))
                 }
-                None => (row.jump, row.speed_max),
+                None => (row.jump, row.speed_max, dir),
             };
             self.start_arc(height);
             // A moving air attack (an allow-movement range: Wisdom Form's air shot) keeps the

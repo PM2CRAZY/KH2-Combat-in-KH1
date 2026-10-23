@@ -268,6 +268,38 @@ fn host_trial_gives_the_rows_hop() {
 }
 
 #[test]
+fn a_rows_hop_at_a_target_is_kh2s() {
+    // KH2's rule (Steam KH2 `0x1403D78D0`): from his own target shape's centre (70 up, radius 55)
+    // to the target's, the height bounded by the row's jump window, the gap less both radii plus
+    // `distance_adjust` over KH2's rise time for that height (its own gravity constant).
+    let mut ch = sora();
+    ch.attack.target_lift = 70.0;
+    ch.attack.target_radius = 55.0;
+    let mut hop = row(4, 101, false, false);
+    (hop.jump, hop.jump_min, hop.jump_max, hop.speed_min, hop.speed_max, hop.distance_adjust) = (17.0, 17.0, 67.0, -8.0, 18.0, 85.0);
+    ch.moveset.combo_rows.insert(0, hop);
+    ch.params.gravity = 0.3;
+    let targets = [TargetInfo { id: 7, pos: [0.0, 100.0, 200.0], radius: 30.0, height: 100.0 }];
+    ch.set_lock(Some(7));
+    let env = Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: &targets, ledges: &[] };
+    let (_, l) = ch.would_take_launch(None, None, false, false, [0.0; 2], &env).unwrap();
+    let l = l.unwrap();
+    assert_eq!(l.height, 30.0);
+    let up = (60.0f32 / character_core::KH2_GRAVITY).sqrt();
+    let s = 200.0 / up;
+    assert!((l.velocity[1] - s).abs() < 1e-3 && l.velocity[0].abs() < 1e-4, "{:?} vs {s}", l.velocity);
+    // A target below his target shape's centre: the jump window's low end; close in, the gap
+    // less both radii plus `distance_adjust` (not held at 0 first).
+    let targets = [TargetInfo { id: 7, pos: [0.0, 20.0, 10.0], radius: 30.0, height: 100.0 }];
+    let env = Env { targets: &targets, ..env };
+    let (_, l) = ch.would_take_launch(None, None, false, false, [0.0; 2], &env).unwrap();
+    let l = l.unwrap();
+    assert_eq!(l.height, 17.0);
+    let up = (34.0f32 / character_core::KH2_GRAVITY).sqrt();
+    assert!((l.velocity[1] - (10.0 - 85.0 + 85.0) / up).abs() < 1e-3, "{:?}", l.velocity);
+}
+
+#[test]
 fn whiffed_swings_do_not_advance_the_combo() {
     let mut w = World::new(sora());
     let (motions, _) = mash(&mut w, false);

@@ -131,11 +131,17 @@ pub struct AttackParams {
     /// far ahead KH2 tests the floor at an attack press (`Character::set_drop_ahead`). **Assumption**
     /// that the exe's `+0x150` record there is plyr (its `+0x5C` / `+0x68` reads fit it).
     pub jump_front: f32,
+    /// His own target shape (the model's first collision shape of kind 3; Sora's: 70 up, radius
+    /// 55): its centre's height above his feet and its radius. An attack row's hop is measured
+    /// from it (Steam KH2 `0x1403D78D0` -> `0x1403D7520`: the height from this centre to the
+    /// target's, the gap less both radii). 0 without a model.
+    pub target_lift: f32,
+    pub target_radius: f32,
 }
 
 impl Default for AttackParams {
     fn default() -> Self {
-        AttackParams { auto_lock_on_range: 300.0, lock_on_range: 1200.0, lock_on_release_range: 1500.0, distance_to_speed: 0.1, jump_front: 0.0 }
+        AttackParams { auto_lock_on_range: 300.0, lock_on_range: 1200.0, lock_on_release_range: 1500.0, distance_to_speed: 0.1, jump_front: 0.0, target_lift: 0.0, target_radius: 0.0 }
     }
 }
 

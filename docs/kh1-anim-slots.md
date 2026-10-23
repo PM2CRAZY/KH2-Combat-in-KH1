@@ -601,15 +601,46 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   count to 1 (KH2's: a hop from the ground restarts it), runs KH1's air swing row (18, or 17
   when 18's request plays) with its request pointed at our slot of KH2's motion, then puts
   KH2's hop on KH1's fields (`shared::physics::kh2_hop`): the height and sideways velocity KH2's
-  controller works out for that target (`Character::would_take_launch`, `Launch`: height
-  `clamp(target height, jump_min, jump_max (+ jump height with flag 2))`, speed `clamp(gap /
-  uptime, speed_min, speed_max)` toward the target; no target: the row's `jump` and
-  `speed_max`; the OG rewrite's rule), as KH2's arc on KH2's gravity (physics KH2, carried on by
+  controller works out for that target (`Character::would_take_launch`, `Launch`; KH2's rule,
+  below), as KH2's arc on KH2's gravity (physics KH2, carried on by
   `air_step` as KH2's jump is) or KH1's rise of that height (physics KH1). KH1's air combo goes
   on from there. Needs the Aerial Combo at KH2 too (else KH1's row is kept, logged). Not checked:
   in game (that KH1's air row runs as expected right after the state change; the hand-backs do
-  the same before KH1's own air attack), and KH2's hop rule in the KH2 exe (from the OG rewrite).
-  Ability hops (Aerial Sweep 33, Aerial Dive 48) stay borrows.
+  the same before KH1's own air attack). Ability hops (Aerial Sweep 33, Aerial Dive 48) stay
+  borrows.
+- **KH2's hop rule** (Steam KH2, Checked (decomp); t392 had the OG rewrite's, which differed):
+  after the pick, `0x1403A76B0` / `0x1403A8690` (the Attack press, both) run `0x1403D78D0 (him,
+  row, his target)`, `+0xDC8`'s target: the primary target, also for a kind-2 row passed on
+  another target. With the row's `jump` (`+0xC`) above 0: the count and finisher count go to 1 /
+  1 unless he is in the air (`0x1403BA9A0`); then, with a target (`0x1403BDE30`):
+  - `0x1403D7520`: the vector from his own target shape's centre to the target's (each its
+    model's first kind-3 shape, `0x1403B5650 (…, 3, -1)` / `0x1403BE0F0`, placed by
+    `0x1403C9C00`: the shape's offset on its bone, or on his root with bone 0x4000, raised by
+    the shape's lift `+0xE`) and the sum of the two radii (`+0x10`). Sora's kind-3 shape
+    (`P_EX100.mdlx`, Checked (files)): on his root, 70 up, radius 55 (`kh2_data::sora::
+    target_shape`, `AttackParams::target_lift` / `target_radius`). Ours: the target's centre is
+    KH1's lock point (as for the range checks), its radius its parts' largest.
+  - Height: that vector's rise, bounded by `+0x14` below and `+0x10` above (plus his jump height,
+    `0x1403B5A40`, with flag 2), in that order (`+0x14` when under it, `+0x10` when over). So the
+    PTYA's `+0x10` is the upper bound and `+0x14` the lower (`PtyaEntry::jump_max` /
+    `jump_min`, Checked).
+  - Speed: the flat distance less both radii plus the row's `distance_adjust` (`+0x3C`; Sora's
+    hop rows 85, not used by the OG rule; not held at 0) over `0x1403B73F0 (h)` =
+    `sqrt(|2h / 0.40816328|)`, KH2's own gravity constant, not the character's (so at physics
+    KH1 too); bounded by `+0x18` below and `+0x1C` above in the same order.
+  - No target: `jump` and `+0x1C` along his facing (`0x1403B56E0`).
+  - The class's method `+0x18` with (direction, height, speed): for the player classes
+    `0x140423140` / `0x140423170` -> `0x1403CBB00`: the arc's rise time for that height on the
+    same constant, the velocity the flat direction times the speed, then state 0x14.
+    (Assumption: Sora's class is one of those; several classes share this pair.)
+  Sora's hop rows (PTYA, Checked (files)): row 0 / 10 (182) 17..67, speed -8..8; rows 1 / 9 (181)
+  21..71, -8..8; rows 7 / 8 (184 / 183) 21..71, 12..18; all `distance_adjust` 85. Before (OG):
+  height measured from his feet, the gap less the target's radius only, at 0 at least, no
+  `distance_adjust`, over the rise on the character's gravity; with a 120-high target 200 away
+  (radius 30) row 0 went 67 high at 8 / frame, KH2's is 50 high at 8 (both capped there).
+  Not done: the ground rows' lunge path (`jump` 0) is the same function's other half (a class
+  flag or `+0x18C` bit 6, the speed `(gap + distance_adjust) x` the lunge factor); Sora's ground
+  rows have no speed window, so it is left as it was.
 - Not changed in the air: KH1's air swing's own lunge and hop (above; at physics KH2 on KH2's
   gravity, `shared::physics::air_step`), not KH2's per-row hop (rows 7..10 hop 14..21 with their
   speed windows). **Open** (a question to the tester): KH2's per-row hop on these too.
