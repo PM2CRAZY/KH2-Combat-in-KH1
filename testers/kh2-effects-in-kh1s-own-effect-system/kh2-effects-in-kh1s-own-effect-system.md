@@ -249,4 +249,14 @@
 
 
 > [!note] Tester Mr Bugs
-> 
+> can we have the files generated at run time so we don't take up extra memory?
+> 1. (a)
+> 2. (a)
+> 3. (a)
+>    
+>    do the check
+>    
+>    go ahead 
+ 
+
+
