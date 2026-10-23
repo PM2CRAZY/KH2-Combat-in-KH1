@@ -9,7 +9,9 @@
 //! - KH2: common (`effect/texcommon.dpd`) below TBP `0x3000` / CBP `0x3E00`, an effect's own
 //!   from there up.
 //!
-//! [`build`] makes a KH1 DPX out of one DPD of a KH2 PAX: the DPD's own texture addresses moved
+//! [`build_groups`] makes a KH1 DPX out of any KH2 effects of a PAX, one DPD per group (a group's
+//! effects all from one DPD of the PAX; KH1 gives each DPD its own run of texture slots when it
+//! draws). [`build`] / [`build_with`] are the one-group case. For each DPD: its own texture addresses moved
 //! to KH1's own window, the KH2 common textures it draws with copied in as its own (after its
 //! own, each at a fresh address, and set in the use-texture mask of every particle data that
 //! draws with them), and program types KH1 doesn't have (236..242) set to 1 (`pppDummyFunc`)
@@ -31,10 +33,12 @@ pub const KH1_LAST_PROGRAM: u32 = 235;
 /// `pppDummyFunc`.
 const DUMMY_PROGRAM: u32 = 1;
 /// Program types whose KH2 version is KH2's own (not KH1's): 43 `pppColor` (KH2 writes the colour
-/// bytes every call and clamps them), 201 `pppRyjMegaBirth` (KH2 rewrote it) and 241
+/// bytes every call and clamps them), 49 `pppVtMime` (KH2's calc keeps the rate on a marker
+/// key), 157 `pppKeShpTail3X` (KH2's draw steps its trail time only on a real frame), 201
+/// `pppRyjMegaBirth` (KH2 rewrote it), 214 `pppAngleLoop` (KH2 wraps the angles) and 241
 /// `pppEiDrawShipoly` (KH2 only). [`Kh1Dpx::programs`] lists where they are, so the host can point
 /// them at its own entries once KH1 has relocated the DPX (KH1's own DPXs keep KH1's).
-pub const KH2_OWN_PROGRAMS: [u32; 3] = [43, 201, 241];
+pub const KH2_OWN_PROGRAMS: [u32; 6] = [43, 49, 157, 201, 214, 241];
 
 fn u16_at(b: &[u8], at: usize) -> Result<u16> {
     b.get(at..at + 2).map(|s| u16::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| crate::Error::Format(format!("kh1dpx: read past the end at {at:#x}")))
@@ -219,8 +223,10 @@ fn texture_blocks(tex: &[u8]) -> Result<i32> {
 /// Where a texture of a [`Kh1Dpx`] came from.
 #[derive(Clone, Copy, Debug)]
 pub struct TexOrigin {
-    /// From the effect's own DPD (else from the common textures).
+    /// From the effect's own package (else from the common textures).
     pub own: bool,
+    /// Where the DPD it came from starts: in the PAX (own) or in the common file.
+    pub src_dpd_at: usize,
     /// Its record's offset in the DPD it came from, and its TBP there.
     pub src_offset: usize,
     pub src_tbp: i32,
@@ -228,24 +234,30 @@ pub struct TexOrigin {
     pub dpx_offset: usize,
 }
 
-/// A KH1 DPX made from one DPD of a KH2 PAX.
+/// A KH1 DPX made from KH2 effects of one PAX: one DPD per [`build_groups`] group.
 pub struct Kh1Dpx {
-    /// The DPX: header, an entry per effect asked for, a one-DPD list, then the DPD.
+    /// The DPX: header, an entry per effect, the DPD list, then the DPDs.
     pub bytes: Vec<u8>,
     /// MD5 of `bytes` (KH1 keys a loaded file's HD textures by its file's MD5).
     pub md5: [u8; 16],
-    /// Each texture's origin, in the DPD's texture order.
+    /// Each texture's origin, every DPD's in turn.
     pub textures: Vec<TexOrigin>,
-    /// Where the source DPD starts in the PAX, and the common DPD in the common file.
+    /// Where the first group's source DPD starts in the PAX, and the common DPD in the common
+    /// file.
     pub own_dpd_at: usize,
     pub common_dpd_at: usize,
-    /// The effect numbers it holds (as the KH2 PAX numbers them).
+    /// The effect numbers it holds, in entry order.
     pub effects: Vec<u32>,
+    /// Each entry's program types (its particle data's type list and every emitter's records,
+    /// as KH2 numbers them, each once), in entry order.
+    pub types: Vec<Vec<u32>>,
     /// Each program-type word (an emitter's program record, or a particle data's type list) whose
     /// KH2 type is one of [`KH2_OWN_PROGRAMS`]: its offset in `bytes` and the KH2 type. In `bytes`
-    /// 43 and 201 stay as they are and 241 is `pppDummyFunc`; KH1's relocation turns each word into a handle of
+    /// 43, 49, 157, 201 and 214 stay as they are and 241 is `pppDummyFunc`; KH1's relocation turns each word into a handle of
     /// its program table entry.
     pub programs: Vec<(usize, u32)>,
+    /// The groups left out (their index and why: e.g. more texture slots than KH1 has).
+    pub skipped: Vec<(usize, String)>,
     /// What was moved and copied, for the log.
     pub report: String,
 }
@@ -321,52 +333,131 @@ pub fn build(pax: &[u8], common: &[u8], effects: &[u32]) -> Result<Kh1Dpx> {
 /// [`build`], plus `variants` (each a copy of one of `effects`' particle datas under its own
 /// number, its header's local transform replaced) after them.
 pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Variant]) -> Result<Kh1Dpx> {
-    let dpx_at = u32_at(pax, 12)? as usize;
-    let dpx = pax.get(dpx_at..).ok_or_else(|| crate::Error::Format("kh1dpx: DPX out of range".into()))?;
-    if i32_at(dpx, 0)? != DPX_VERSION {
-        return bad("kh1dpx: unexpected DPX version");
+    let p = Pax::read(pax)?;
+    let mut items = Vec::new();
+    for &e in effects {
+        if p.entry(e).is_some() {
+            items.push(Item { number: e, effect: e, local: None });
+        }
     }
-    let n = i32_at(dpx, 12)?;
-    if !(0..=4096).contains(&n) {
-        return bad("kh1dpx: implausible DPX");
-    }
-    let entries: Vec<&[u8]> = (0..n as usize).map(|i| dpx.get(16 + i * 32..16 + i * 32 + 32)).collect::<Option<_>>().ok_or_else(|| crate::Error::Format("kh1dpx: DPX entries out of range".into()))?;
-    let mine: Vec<&[u8]> = entries.iter().copied().filter(|e| u32_at(e, 8).is_ok_and(|x| effects.contains(&x))).collect();
-    if mine.is_empty() {
+    if items.is_empty() {
         return bad(format!("kh1dpx: none of effects {effects:?}"));
     }
-    let dpd_off = u32_at(mine[0], 0)? as usize;
-    if mine.iter().any(|e| u32_at(e, 0).ok() != Some(dpd_off as u32)) {
+    for v in variants {
+        if !effects.contains(&v.effect) {
+            return bad(format!("kh1dpx: variant {} of effect {}, which isn't built", v.number, v.effect));
+        }
+        items.push(Item { number: v.number, effect: v.effect, local: Some((v.offset, v.angle)) });
+    }
+    let r = assemble(&p, pax, common, &[items])?;
+    match r.skipped.first() {
+        Some((_, why)) => Err(crate::Error::Format(why.clone())),
+        None => Ok(r),
+    }
+}
+
+/// KH1's DPX for KH2 effects of `pax` (a PAX, `PAX_` first), in groups: each group's variants
+/// (each a copy of a KH2 effect's particle data under its own number, its header's local
+/// transform replaced) become one DPD of the DPX, holding only those particle datas and the
+/// textures they draw with (the source DPD's own and the KH2 common ones from `common`, KH2's
+/// `effect/texcommon.dpd`), packed from KH1's own window (TBP `0x3800`, CBP `0x3D40`). A
+/// group's effects must all be in one DPD of the PAX; different groups may come from different
+/// DPDs. KH1 gives each DPD its own run of texture slots when drawn (`0x1401EDB00`, keyed by the
+/// DPD), so a group is what may draw at once with one run. A group that can't be built (more
+/// texture slots than KH1 has, a texture missing) is left out and listed in
+/// [`Kh1Dpx::skipped`]; the effect numbers must be unique and below `0x800`.
+pub fn build_groups(pax: &[u8], common: &[u8], groups: &[Vec<Variant>]) -> Result<Kh1Dpx> {
+    let p = Pax::read(pax)?;
+    let groups: Vec<Vec<Item>> = groups.iter().map(|g| g.iter().map(|v| Item { number: v.number, effect: v.effect, local: Some((v.offset, v.angle)) }).collect()).collect();
+    assemble(&p, pax, common, &groups)
+}
+
+/// One entry of a built DPD: its number, the KH2 effect it copies, and its new local transform
+/// (none: the effect's own).
+#[derive(Clone, Copy)]
+struct Item {
+    number: u32,
+    effect: u32,
+    local: Option<([f32; 3], [i32; 3])>,
+}
+
+/// The PAX's DPX: its entries and the DPDs' places.
+struct Pax<'a> {
+    dpx_at: usize,
+    dpx: &'a [u8],
+    entries: Vec<&'a [u8]>,
+    dpds: Vec<usize>,
+}
+
+impl<'a> Pax<'a> {
+    fn read(pax: &'a [u8]) -> Result<Pax<'a>> {
+        let dpx_at = u32_at(pax, 12)? as usize;
+        let dpx = pax.get(dpx_at..).ok_or_else(|| crate::Error::Format("kh1dpx: DPX out of range".into()))?;
+        if i32_at(dpx, 0)? != DPX_VERSION {
+            return bad("kh1dpx: unexpected DPX version");
+        }
+        let n = i32_at(dpx, 12)?;
+        if !(0..=4096).contains(&n) {
+            return bad("kh1dpx: implausible DPX");
+        }
+        let entries: Vec<&[u8]> = (0..n as usize).map(|i| dpx.get(16 + i * 32..16 + i * 32 + 32)).collect::<Option<_>>().ok_or_else(|| crate::Error::Format("kh1dpx: DPX entries out of range".into()))?;
+        let list_at = 16 + n as usize * 32;
+        let nd = i32_at(dpx, list_at)?;
+        let dpds = (0..nd.clamp(0, 64) as usize).filter_map(|i| u32_at(dpx, list_at + 4 + i * 4).ok().map(|x| x as usize)).collect();
+        Ok(Pax { dpx_at, dpx, entries, dpds })
+    }
+
+    /// The entry of effect number `e` (the first).
+    fn entry(&self, e: u32) -> Option<&'a [u8]> {
+        self.entries.iter().copied().find(|x| u32_at(x, 8).ok() == Some(e))
+    }
+
+    /// The DPD at `off` in the DPX: it runs to the next DPD of the list (or the DPX's end).
+    fn dpd(&self, off: usize) -> Result<&'a [u8]> {
+        let end = self.dpds.iter().copied().filter(|&x| x > off).chain(std::iter::once(self.dpx.len())).min().unwrap();
+        self.dpx.get(off..end).ok_or_else(|| crate::Error::Format("kh1dpx: DPD out of range".into()))
+    }
+}
+
+/// One built DPD.
+struct Built {
+    dpd: Vec<u8>,
+    /// Each item's particle data index in it.
+    pds: Vec<usize>,
+    /// Each texture's origin (`dpx_offset` relative to the DPD until placed).
+    origins: Vec<TexOrigin>,
+    /// KH2-own program words: (particle data, offset in it, type).
+    own: Vec<(usize, usize, u32)>,
+    types: Vec<Vec<u32>>,
+    report: String,
+}
+
+/// One DPD of `items` (all of one source DPD).
+fn build_dpd(p: &Pax, com: &Split, common_dpd_at: usize, items: &[Item]) -> Result<Built> {
+    let entries: Vec<&[u8]> = items.iter().map(|i| p.entry(i.effect).ok_or_else(|| crate::Error::Format(format!("kh1dpx: no effect {}", i.effect)))).collect::<Result<_>>()?;
+    let dpd_off = u32_at(entries[0], 0)? as usize;
+    if entries.iter().any(|e| u32_at(e, 0).ok() != Some(dpd_off as u32)) {
         return bad("kh1dpx: the effects are in more than one DPD");
     }
-    // The DPD runs to the next DPD of the list (or the end of the PAX).
-    let list_at = 16 + n as usize * 32;
-    let nd = i32_at(dpx, list_at)?;
-    let mut ends: Vec<usize> = (0..nd.clamp(0, 64) as usize).filter_map(|i| u32_at(dpx, list_at + 4 + i * 4).ok().map(|x| x as usize)).filter(|&x| x > dpd_off).collect();
-    ends.push(dpx.len());
-    let dpd_end = ends.into_iter().min().unwrap();
-    let src = split(dpx.get(dpd_off..dpd_end).ok_or_else(|| crate::Error::Format("kh1dpx: DPD out of range".into()))?)?;
-    let common_dpd_at = if u32_at(common, 0).ok() == Some(DPD_MAGIC) { 0 } else { 16 };
-    let com = split(common.get(common_dpd_at..).ok_or_else(|| crate::Error::Format("kh1dpx: common DPD out of range".into()))?)?;
+    let src = split(p.dpd(dpd_off)?)?;
+    let src_dpd_at = p.dpx_at + dpd_off;
     let mut report = Vec::new();
-    // The particle datas kept, in the order the effects name them.
-    let mut kept: Vec<usize> = Vec::new();
-    for e in &mine {
+    // Each item's source particle data.
+    let mut srcs: Vec<usize> = Vec::new();
+    for e in &entries {
         let i = u32_at(e, 4)? as usize;
         if i >= src.lists[0].len() {
             return bad("kh1dpx: particle data index out of range");
         }
-        if !kept.contains(&i) {
-            kept.push(i);
-        }
+        srcs.push(i);
     }
-    // The TEX0 words of every shape and model, and which (TBP, CBP) each kept particle data draws with.
+    // The TEX0 words of every shape and model, and which (TBP, CBP) each item's particle data draws with.
     let tex0: Vec<Vec<usize>> = src.lists[2].iter().map(|x| shape_tex0(x)).chain(src.lists[3].iter().map(|x| model_tex0(x))).collect::<Result<_>>()?;
     let item = |k: usize| if k < src.lists[2].len() { &src.lists[2][k] } else { &src.lists[3][k - src.lists[2].len()] };
     let ns = src.lists[2].len();
     let mut drawn: Vec<Vec<(i32, i32)>> = Vec::new();
-    for &p in &kept {
-        let pd = &src.lists[0][p];
+    for &s in &srcs {
+        let pd = &src.lists[0][s];
         let mut v = Vec::new();
         for (k, words) in tex0.iter().enumerate() {
             let used = if k < ns { bit(0xC0, pd, k) } else { bit(0xD0, pd, k - ns) };
@@ -445,7 +536,7 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
         // The record's own TEX0 (`+0x10`) names the same places (KH1's records keep them equal).
         let t0 = u64_at(&copy, 0x10)?;
         put_u64(&mut copy, 0x10, with(t0, nt, nc));
-        origins.push(TexOrigin { own: *own, src_offset: *src_offset, src_tbp: a, dpx_offset: 0 });
+        origins.push(TexOrigin { own: *own, src_dpd_at: if *own { src_dpd_at } else { common_dpd_at }, src_offset: *src_offset, src_tbp: a, dpx_offset: 0 });
         report.push(format!("{} {a:#x}/{b:#x} -> {nt:#x}/{nc:#x}", if *own { "own" } else { "common" }));
         textures.push(copy);
     }
@@ -469,93 +560,142 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
     }
     out.lists[4] = src.lists[4].clone();
     out.lists[1] = textures;
-    // Kept particle datas: their texture mask rebuilt for the new list, programs KH1 lacks set to
-    // `pppDummyFunc`. KH2's own programs noted (particle data, offset in it, type).
+    // The particle datas: their texture mask rebuilt for the new list, programs KH1 lacks set to
+    // `pppDummyFunc`, KH2's own programs noted (particle data, offset in it, type). An item with
+    // its own local transform gets its own copy; items of the same effect without one share it.
     let mut own: Vec<(usize, usize, u32)> = Vec::new();
-    for (pi, &p) in kept.iter().enumerate() {
-        let mut pd = src.lists[0][p].clone();
+    let mut pds: Vec<usize> = Vec::new();
+    let mut types: Vec<Vec<u32>> = Vec::new();
+    let mut plain: Vec<(usize, usize)> = Vec::new();
+    for (ii, it) in items.iter().enumerate() {
+        let s = srcs[ii];
+        if it.local.is_none() {
+            if let Some(&(_, at)) = plain.iter().find(|x| x.0 == s) {
+                pds.push(at);
+                types.push(types[pds.iter().position(|&x| x == at).unwrap()].clone());
+                continue;
+            }
+        }
+        let mut pd = src.lists[0][s].clone();
         for b in &mut pd[0xB0..0xC0] {
             *b = 0;
         }
         for (ti, t) in out.lists[1].iter().enumerate() {
             let (a, b) = key(t);
             let old = (tmap.iter().find(|m| m.1 == a).map(|m| m.0), cmap.iter().find(|m| m.1 == b).map(|m| m.0));
-            if drawn[pi].iter().any(|&(x, y)| Some(x) == old.0 || Some(y) == old.1) && ti < 128 {
+            if drawn[ii].iter().any(|&(x, y)| Some(x) == old.0 || Some(y) == old.1) && ti < 128 {
                 pd[0xB0 + ti / 8] |= 1 << (ti % 8);
             }
         }
+        if let Some((offset, angle)) = it.local {
+            for k in 0..3 {
+                put_u32(&mut pd, 0x80 + k * 4, offset[k].to_bits());
+                put_u32(&mut pd, 0x90 + k * 4, angle[k] as u32);
+            }
+            report.push(format!("effect {} as {} (offset {offset:?}, angles {angle:?})", it.effect, it.number));
+        }
+        let at = out.lists[0].len();
         let mut swapped = Vec::new();
-        for (at, ty) in program_types(&pd)? {
-            if KH2_OWN_PROGRAMS.contains(&ty) {
-                own.push((pi, at, ty));
+        let mut ty = Vec::new();
+        for (o, t) in program_types(&pd)? {
+            if !ty.contains(&t) {
+                ty.push(t);
             }
-            if ty > KH1_LAST_PROGRAM {
-                put_u32(&mut pd, at, DUMMY_PROGRAM);
-                swapped.push(ty);
+            if KH2_OWN_PROGRAMS.contains(&t) {
+                own.push((at, o, t));
+            }
+            if t > KH1_LAST_PROGRAM {
+                put_u32(&mut pd, o, DUMMY_PROGRAM);
+                swapped.push(t);
             }
         }
-        if !swapped.is_empty() {
-            report.push(format!("particle data {p}: programs {swapped:?} not in KH1 yet (dummy)"));
+        if !swapped.is_empty() && it.local.is_none() {
+            report.push(format!("particle data {s}: programs {swapped:?} not in KH1 (dummy until plugged in)"));
         }
+        if it.local.is_none() {
+            plain.push((s, at));
+        }
+        pds.push(at);
+        types.push(ty);
         out.lists[0].push(pd);
     }
-    // Variants: a copy of their effect's particle data (as kept above), its local transform
-    // replaced.
-    let mut extra: Vec<(Vec<u8>, usize)> = Vec::new();
-    for v in variants {
-        let Some(e) = mine.iter().find(|e| u32_at(e, 8).ok() == Some(v.effect)) else {
-            return bad(format!("kh1dpx: variant {} of effect {}, which isn't built", v.number, v.effect));
-        };
-        if v.number >= 0x800 || mine.iter().any(|e| u32_at(e, 8).ok() == Some(v.number)) {
-            return bad(format!("kh1dpx: variant number {} taken or too large", v.number));
-        }
-        let src_pd = kept.iter().position(|&k| k as u32 == u32_at(e, 4).unwrap_or(u32::MAX)).unwrap();
-        let mut pd = out.lists[0][src_pd].clone();
-        for k in 0..3 {
-            put_u32(&mut pd, 0x80 + k * 4, v.offset[k].to_bits());
-            put_u32(&mut pd, 0x90 + k * 4, v.angle[k] as u32);
-        }
-        let copies: Vec<(usize, usize, u32)> = own.iter().filter(|o| o.0 == src_pd).map(|o| (out.lists[0].len(), o.1, o.2)).collect();
-        own.extend(copies);
-        extra.push((e.to_vec(), out.lists[0].len()));
-        out.lists[0].push(pd);
-        report.push(format!("effect {} as {} (offset {:?}, angles {:?})", v.effect, v.number, v.offset, v.angle));
-    }
+    let kept: Vec<usize> = srcs.clone();
     report.insert(0, format!("particle datas {kept:?}, {} textures, vram {KH1_TBP:#x}..{tcur:#x} / {KH1_CBP:#x}..{ccur:#x} ({tslots} TBP, {cslots} CBP slots)", out.lists[1].len()));
     let (dpd, dpd_offs) = join(&out);
-    let count = mine.len() + extra.len();
-    let head = 16 + count * 32 + 8;
-    let at = (head + 15) & !15;
-    let mut bytes = vec![0u8; at + dpd.len()];
+    for (o, &x) in origins.iter_mut().zip(&dpd_offs[1]) {
+        o.dpx_offset = x as usize;
+    }
+    let own = own.into_iter().map(|(pd, off, ty)| (pd, dpd_offs[0][pd] as usize + off, ty)).collect();
+    Ok(Built { dpd, pds, origins, own, types, report: report.join("; ") })
+}
+
+/// The DPX of `groups` (each one DPD).
+fn assemble(p: &Pax, pax: &[u8], common: &[u8], groups: &[Vec<Item>]) -> Result<Kh1Dpx> {
+    let _ = pax;
+    let common_dpd_at = if u32_at(common, 0).ok() == Some(DPD_MAGIC) { 0 } else { 16 };
+    let com = split(common.get(common_dpd_at..).ok_or_else(|| crate::Error::Format("kh1dpx: common DPD out of range".into()))?)?;
+    let mut seen: Vec<u32> = Vec::new();
+    for it in groups.iter().flatten() {
+        if it.number >= 0x800 || seen.contains(&it.number) {
+            return bad(format!("kh1dpx: effect number {} taken or too large", it.number));
+        }
+        seen.push(it.number);
+    }
+    let mut built: Vec<(usize, Built)> = Vec::new();
+    let mut skipped = Vec::new();
+    for (gi, g) in groups.iter().enumerate() {
+        if g.is_empty() {
+            continue;
+        }
+        match build_dpd(p, &com, common_dpd_at, g) {
+            Ok(b) => built.push((gi, b)),
+            Err(e) => skipped.push((gi, e.to_string())),
+        }
+    }
+    if built.is_empty() {
+        return bad(format!("kh1dpx: nothing built ({})", skipped.iter().map(|s| s.1.clone()).collect::<Vec<_>>().join("; ")));
+    }
+    let count: usize = built.iter().map(|(gi, _)| groups[*gi].len()).sum();
+    let head = 16 + count * 32 + 4 + 4 * built.len();
+    let mut at = (head + 15) & !15;
+    let mut places = Vec::new();
+    for (_, b) in &built {
+        places.push(at);
+        at = (at + b.dpd.len() + 15) & !15;
+    }
+    let mut bytes = vec![0u8; at];
     put_u32(&mut bytes, 0, DPX_VERSION as u32);
     put_u32(&mut bytes, 12, count as u32);
-    let mut nums = Vec::new();
-    for (i, e) in mine.iter().enumerate() {
-        let o = 16 + i * 32;
-        bytes[o..o + 32].copy_from_slice(e);
-        put_u32(&mut bytes, o, at as u32);
-        let old = u32_at(e, 4)? as usize;
-        put_u32(&mut bytes, o + 4, kept.iter().position(|&k| k == old).unwrap() as u32);
-        nums.push(u32_at(e, 8)?);
+    let (mut nums, mut types, mut textures, mut programs, mut report) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut e = 0;
+    for ((gi, b), &place) in built.iter().zip(&places) {
+        for (k, it) in groups[*gi].iter().enumerate() {
+            let o = 16 + e * 32;
+            bytes[o..o + 32].copy_from_slice(p.entry(it.effect).unwrap());
+            put_u32(&mut bytes, o, place as u32);
+            put_u32(&mut bytes, o + 4, b.pds[k] as u32);
+            put_u32(&mut bytes, o + 8, it.number);
+            nums.push(it.number);
+            types.push(b.types[k].clone());
+            e += 1;
+        }
+        bytes[place..place + b.dpd.len()].copy_from_slice(&b.dpd);
+        textures.extend(b.origins.iter().map(|o| TexOrigin { dpx_offset: place + o.dpx_offset, ..*o }));
+        programs.extend(b.own.iter().map(|&(_, off, ty)| (place + off, ty)));
+        report.push(format!("[DPD {}: {}]", places.iter().position(|&x| x == place).unwrap(), b.report));
     }
-    for (i, ((e, pd), v)) in extra.iter().zip(variants).enumerate() {
-        let o = 16 + (mine.len() + i) * 32;
-        bytes[o..o + 32].copy_from_slice(e);
-        put_u32(&mut bytes, o, at as u32);
-        put_u32(&mut bytes, o + 4, *pd as u32);
-        put_u32(&mut bytes, o + 8, v.number);
-        nums.push(v.number);
+    let list = 16 + count * 32;
+    put_u32(&mut bytes, list, built.len() as u32);
+    for (i, &place) in places.iter().enumerate() {
+        put_u32(&mut bytes, list + 4 + i * 4, place as u32);
     }
-    put_u32(&mut bytes, 16 + count * 32, 1);
-    put_u32(&mut bytes, 16 + count * 32 + 4, at as u32);
-    bytes[at..].copy_from_slice(&dpd);
-    for (o, &x) in origins.iter_mut().zip(&dpd_offs[1]) {
-        o.dpx_offset = at + x as usize;
+    for (gi, why) in &skipped {
+        report.push(format!("[group {gi} left out: {why}]"));
     }
-    let programs: Vec<(usize, u32)> = own.iter().map(|&(pd, off, ty)| (at + dpd_offs[0][pd] as usize + off, ty)).collect();
+    let own_dpd_at = p.dpx_at + u32_at(p.entry(groups[built[0].0][0].effect).unwrap(), 0)? as usize;
     use md5::{Digest, Md5};
     let md5: [u8; 16] = Md5::digest(&bytes).into();
-    Ok(Kh1Dpx { bytes, md5, textures: origins, own_dpd_at: dpx_at + dpd_off, common_dpd_at, effects: nums, programs, report: report.join("; ") })
+    Ok(Kh1Dpx { bytes, md5, textures, own_dpd_at, common_dpd_at, effects: nums, types, programs, skipped, report: report.join(" ") })
 }
 
 #[cfg(test)]
@@ -665,5 +805,107 @@ mod tests {
             assert_eq!((ty, word), (ty, if ty == 241 { DUMMY_PROGRAM } else { ty }));
         }
         assert_eq!(r.programs.iter().filter(|p| p.1 == 201).count(), 4);
+    }
+
+    /// A particle data without textures running `programs` in one emitter (each also in the type
+    /// list), its header offset `x` along x.
+    fn pd_with(programs: &[u32], x: f32) -> Vec<u8> {
+        let n = programs.len();
+        let mut pd = vec![0u8; 0x110 + 0x18 + 4 * n + 8 + 0x28 + 16 * n];
+        put_u32(&mut pd, 0x80, x.to_bits());
+        put_u32(&mut pd, 0x110 + 8, 0x10);
+        put_u32(&mut pd, 0x110 + 0x10, n as u32);
+        let el = 0x14 + 4 * n;
+        put_u32(&mut pd, 0x110 + 0xC, el as u32);
+        put_u32(&mut pd, 0x110 + el, 1);
+        let em = el + 8;
+        put_u32(&mut pd, 0x110 + el + 4, em as u32);
+        put_u16(&mut pd, 0x110 + em + 0x26, n as u16);
+        for (k, &t) in programs.iter().enumerate() {
+            put_u32(&mut pd, 0x110 + 0x14 + 4 * k, t);
+            put_u32(&mut pd, 0x110 + em + 0x28 + 16 * k, t);
+        }
+        pd
+    }
+
+    /// A PAX of two DPDs: effects 10 and 11 (particle datas 0, 1 of the first), 20 (the second's
+    /// 0).
+    fn two_dpds() -> (Vec<u8>, Vec<u8>) {
+        let dpd_of = |pds: &[Vec<u8>]| {
+            let head = 4 + (4 + 4 * pds.len()) + 4 * 4 + 16;
+            let mut d = vec![0u8; head];
+            put_u32(&mut d, 0, DPD_MAGIC);
+            put_u32(&mut d, 4, pds.len() as u32);
+            let mut at = head;
+            for (i, pd) in pds.iter().enumerate() {
+                put_u32(&mut d, 8 + i * 4, at as u32);
+                at += pd.len();
+            }
+            for pd in pds {
+                d.extend_from_slice(pd);
+            }
+            d
+        };
+        let a = dpd_of(&[pd_with(&[201, 30], 1.0), pd_with(&[43], 2.0)]);
+        let b = dpd_of(&[pd_with(&[241, 38], 3.0)]);
+        let head = 16 + 3 * 32 + 4 + 8;
+        let mut dpx = vec![0u8; head];
+        put_u32(&mut dpx, 0, DPX_VERSION as u32);
+        put_u32(&mut dpx, 12, 3);
+        let (oa, ob) = (head as u32, (head + a.len()) as u32);
+        for (i, (o, pd, num)) in [(oa, 0u32, 10u32), (oa, 1, 11), (ob, 0, 20)].into_iter().enumerate() {
+            put_u32(&mut dpx, 16 + i * 32, o);
+            put_u32(&mut dpx, 16 + i * 32 + 4, pd);
+            put_u32(&mut dpx, 16 + i * 32 + 8, num);
+            put_u32(&mut dpx, 16 + i * 32 + 12, 0xABC0 + i as u32);
+        }
+        put_u32(&mut dpx, 16 + 3 * 32, 2);
+        put_u32(&mut dpx, 16 + 3 * 32 + 4, oa);
+        put_u32(&mut dpx, 16 + 3 * 32 + 8, ob);
+        dpx.extend_from_slice(&a);
+        dpx.extend_from_slice(&b);
+        let mut pax = b"PAX_".to_vec();
+        pax.extend_from_slice(&[0; 8]);
+        pax.extend_from_slice(&16u32.to_le_bytes());
+        pax.extend_from_slice(&dpx);
+        (pax, dpd_of(&[]))
+    }
+
+    #[test]
+    fn groups_make_one_dpd_each() {
+        let (pax, common) = two_dpds();
+        let v = |number, effect| Variant { number, effect, offset: [number as f32, 0.0, 0.0], angle: [0; 3] };
+        let r = build_groups(&pax, &common, &[vec![v(0x70A, 10), v(0x70B, 11), v(0x70C, 10)], vec![v(0x714, 20)]]).unwrap();
+        assert!(r.skipped.is_empty(), "{:?}", r.skipped);
+        assert_eq!(r.effects, vec![0x70A, 0x70B, 0x70C, 0x714]);
+        let b = &r.bytes;
+        assert_eq!(i32_at(b, 12).unwrap(), 4);
+        // Two DPDs listed; the first three entries in the first, each its own particle data.
+        let list = 16 + 4 * 32;
+        assert_eq!(u32_at(b, list).unwrap(), 2);
+        let (d0, d1) = (u32_at(b, list + 4).unwrap(), u32_at(b, list + 8).unwrap());
+        for (k, (d, pd)) in [(d0, 0), (d0, 1), (d0, 2), (d1, 0)].into_iter().enumerate() {
+            assert_eq!((u32_at(b, 16 + k * 32).unwrap(), u32_at(b, 16 + k * 32 + 4).unwrap()), (d, pd));
+            // The source entry's other words are kept.
+            assert_eq!(u32_at(b, 16 + k * 32 + 12).unwrap(), 0xABC0 + [0, 1, 0, 2][k]);
+        }
+        let dpd = &b[d0 as usize..];
+        assert_eq!(u32_at(dpd, 4).unwrap(), 3);
+        let at = |i: usize| u32_at(dpd, 8 + 4 * i).unwrap() as usize;
+        assert_eq!(f32::from_bits(u32_at(dpd, at(2) + 0x80).unwrap()), 0x70C as f32);
+        assert_eq!(dpd[at(0) + 0x110..at(0) + 0x130], dpd[at(2) + 0x110..at(2) + 0x130]);
+        assert_eq!(r.types, vec![vec![201, 30], vec![43], vec![201, 30], vec![241, 38]]);
+        // KH2's own programs in both DPDs (type list and record each), 241 as the dummy.
+        assert_eq!(r.programs.iter().filter(|p| p.1 == 201).count(), 4);
+        assert_eq!(r.programs.iter().filter(|p| p.1 == 43).count(), 2);
+        assert_eq!(r.programs.iter().filter(|p| p.1 == 241).count(), 2);
+        for &(at, ty) in &r.programs {
+            assert_eq!(u32_at(b, at).unwrap(), if ty == 241 { DUMMY_PROGRAM } else { ty });
+            assert_eq!(at >= d1 as usize, ty == 241);
+        }
+        // A group across two DPDs is left out, the rest still built; numbers must be unique.
+        let r = build_groups(&pax, &common, &[vec![v(0x70A, 10), v(0x714, 20)], vec![v(0x70B, 11)]]).unwrap();
+        assert_eq!((r.skipped.len(), r.skipped[0].0, r.effects.clone()), (1, 0, vec![0x70B]));
+        assert!(build_groups(&pax, &common, &[vec![v(0x70A, 10)], vec![v(0x70A, 20)]]).is_err());
     }
 }

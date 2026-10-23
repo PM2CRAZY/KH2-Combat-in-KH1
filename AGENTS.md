@@ -1,3 +1,41 @@
+### 2026-10-23: Stage 425 (testing branch: KH2 effects: the spell scripts' effects through KH1)
+- Reflect, Wisdom and KH2 magic packages, Steam only: the old player's spell functions (start, place, end, kill, alpha,
+  running) try KH1 first (`NATIVE_SPELL`); place through KH1's apply `0x1402ADB40` (Checked (exe)). What remains on `kh2fx`:
+  notes §18.10-18.11.
+
+### 2026-10-23: Stage 424 (testing branch: KH2 effects: KH2's pppAngleLoop and pppKeShpTail3X)
+- `al_calc` (KH2 wraps angles above 0x10000) and `tail3x_draw` (KH1's draw, then the trail step taken back when held, paused
+  or on a computed frame), Checked (decomp). Seven more programs added to `KH1_SAME` (SRandFV, SRandUpFV, KeMatSN,
+  KeShpTail2X, PointLoop, ScaleLoop, DrawMdlLoop). Notes §18.9.
+
+### 2026-10-23: Stage 423 (testing branch: KH2 effects: Valor's and Final's packages through KH1)
+- Body and object-root anchors through KH1; weapon points stay on `kh2fx` (open question). Notes §18.8.
+
+### 2026-10-23: Stage 422 (testing branch: KH2 effects: one DPX per package; the Keyblade's vanish flash and unbound elements)
+- Unbound elements: KH1's start, then the binding disarmed (mode 0 + bind-once, Checked (exe)). Vanish flash at blade
+  t = 0.5 (assumption, as the old player). `plug` flags only ever turn on. Notes §18.7.
+
+### 2026-10-23: Stage 421 (testing branch: KH2 effects: the Drive motion's and Revert's flashes through KH1)
+- Drive 2..13 and Revert 15..27 through KH1. Element 1 (KH2-only pppSnoMdlDttNorm, 238) stays on `kh2fx`. Notes §18.6.
+
+### 2026-10-23: Stage 420 (testing branch: KH2 effects: position-only elements on KH1's binding mode 1; the rest of Sora's moves through KH1)
+- KH2's flag 0x04 elements on KH1's binding mode 1 (start `0x1402ADC20`, Checked (exe)); after Sora's pass `posed` sets the
+  record's offset to bone place + turn x offset - KH1's point. Guard Break, Finishing Leap, Aerial Recovery, 169 / 171 / 172.
+  Notes §18.5.
+
+### 2026-10-23: Stage 419 (testing branch: KH2 effects: KH2's pppVtMime calc; Vicinity Break and Aerial Finish through KH1)
+- `kh2ppp::vt_calc`: KH2 skips a rate key below -1e38, and Sora's keys use it (KH1's would wreck the morph). KH1's draw,
+  construct, reset and destruct kept. Assumption: KH2's calc from the §7.4 reading (not in the Steam decomp). Notes §18.4.
+
+### 2026-10-23: Stage 418 (testing branch: KH2 effects: Sora's whole package built for KH1; Magnet Burst through KH1)
+- Groups per motion (moveset frame triggers), Revert's set, then one per effect. Bind-pose bone table (§18.3). Gate:
+  `KH1_SAME` programs (decomp comparison §18.2) or KH2's own plugged in; anything else goes to `kh2fx`, logged once.
+
+### 2026-10-23: Stage 417 (testing branch: KH2 effects: the KH1 DPX builder for any effects)
+- The tester ("KH2 effects in KH1's own effect system": "port every effect"). `kh1dpx::build_groups`: one DPD per group,
+  from any DPDs of a PAX; each entry's program types and each texture's source DPD reported; a group over KH1's 10 / 6
+  texture slots is left out and logged. Explosion's DPX unchanged (byte-identical offline). Notes `docs/kh2-effects.md` §18.1.
+
 ### 2026-10-23: Stage 416 (testing branch: KH2's line ahead, its floor rule and direction)
 - The t409 traces: row 1 at a 120 drop, 50..70 from the edge, is KH2's. The test was KH1's (`0x1402C6E70`: any step more than
   half KH1's height down) along KH1's press direction. Now KH2's (`0x140172640` / `0x140172840`, decomp): only the end of the

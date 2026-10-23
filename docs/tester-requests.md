@@ -49,6 +49,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [6. Mr Bugs: 1. (a) just make sure that kh1s effects still behave the sam](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m6)
   - [7. Assistant: t402 to t404 (one each)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m7)
   - [8. Mr Bugs: 1. (a) if it ever happens in game I'll just let you know and](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m8)
+  - [9. Assistant: t417 to t425 (one piece each; the build at the top of the br](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m9)
 - [KH2's combo row selection](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md)
   - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m1)
   - [2. Assistant: t374](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m2)

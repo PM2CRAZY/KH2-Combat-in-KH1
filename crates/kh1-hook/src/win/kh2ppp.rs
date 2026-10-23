@@ -34,6 +34,23 @@
 //! scale. Only the words of our DPX point at it, so KH1's own effects keep KH1's pppColor.
 //! Construct and reset are KH1's (`0x14032BAE0`: the colour words zeroed, as `kh2-fx` does).
 //!
+//! 49 `pppVtMime`, KH2's calc (`docs/kh2-effects.md` §18.4): KH1's (`0x14032C2E0`) adds a key's
+//! rate delta always; KH2's leaves the rate when the delta is below −1e38 (the keep marker, as
+//! Sora's Vicinity Break and Aerial Finish keys end with). Its draw, construct, reset and
+//! destruct are KH1's own (`0x14032C150`, `0x14032C380`, `0x14032C3C0`, `0x14032C3E0`, the same
+//! code as KH2's). Only our DPX's words point at it.
+//!
+//! 214 `pppAngleLoop`, KH2's calc (Steam KH2 `0x1404C0BA0`): KH1's (`0x14032B620`) adds the key's
+//! angles; KH2's then brings each above one turn (0x10000) back down by whole turns. Construct and
+//! reset are KH1's (`0x14032B6B0` / `0x14032B6E0`, the same as KH2's `0x1404C0CD0` / `0x1404C0D00`).
+//!
+//! 157 `pppKeShpTail3X`, KH2's draw (Steam KH2 `0x1404CEEF0`): the same as KH1's (`0x140338160`)
+//! but that its trail animation time (work 0 `+0x1F0`) goes on by the key's `+8` only when effects
+//! aren't held, the effect isn't paused and the frame isn't a computed one (KH1's every draw). So
+//! ours runs KH1's draw and takes that step back off when KH2's wouldn't have made it (the draw
+//! reads the time before it steps it). Calc, construct and reset are KH1's (`0x140337D20`,
+//! `0x1403380B0`, `0x140338120`).
+//!
 //! Steam only (the addresses are Steam's); elsewhere KH1's own programs stay.
 
 use super::log;
@@ -53,6 +70,21 @@ const MB_DESTRUCT_STEAM: usize = 0x3215A0;
 /// KH1's pppColor: calc (checked before plugging) and construct / reset.
 const KH1_COLOR_CALC_STEAM: usize = 0x32B940;
 const COLOR_CONSTRUCT_STEAM: usize = 0x32BAE0;
+/// KH1's pppVtMime: calc (checked before plugging), draw, construct, reset, destruct.
+const KH1_VT_MIME_CALC_STEAM: usize = 0x32C2E0;
+const VT_MIME_DRAW_STEAM: usize = 0x32C150;
+const VT_MIME_CONSTRUCT_STEAM: usize = 0x32C380;
+const VT_MIME_RESET_STEAM: usize = 0x32C3C0;
+const VT_MIME_DESTRUCT_STEAM: usize = 0x32C3E0;
+/// KH1's pppAngleLoop (calc checked before plugging; construct, reset) and pppKeShpTail3X (calc,
+/// draw checked before plugging, construct, reset).
+const KH1_ANGLE_LOOP_CALC_STEAM: usize = 0x32B620;
+const ANGLE_LOOP_CONSTRUCT_STEAM: usize = 0x32B6B0;
+const ANGLE_LOOP_RESET_STEAM: usize = 0x32B6E0;
+const TAIL_3X_CALC_STEAM: usize = 0x337D20;
+const KH1_TAIL_3X_DRAW_STEAM: usize = 0x338160;
+const TAIL_3X_CONSTRUCT_STEAM: usize = 0x3380B0;
+const TAIL_3X_RESET_STEAM: usize = 0x338120;
 /// KH1's program table and the entry of its MegaBirth's calc (checked before plugging).
 const TABLE_STEAM: usize = 0x54FF00;
 const KH1_MB_CALC_STEAM: usize = 0x3212F0;
@@ -86,12 +118,18 @@ const SINE: usize = 0x54BED0;
 pub const MEGA_BIRTH: u32 = 201;
 pub const SHIPOLY: u32 = 241;
 pub const COLOR: u32 = 43;
+pub const VT_MIME: u32 = 49;
+pub const ANGLE_LOOP: u32 = 214;
+pub const TAIL_3X: u32 = 157;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 /// KH2's MegaBirth / ribbon are plugged into the DPX (their words point at our entries).
 static PLUGGED_MB: AtomicBool = AtomicBool::new(false);
 static PLUGGED_SHIPOLY: AtomicBool = AtomicBool::new(false);
 static PLUGGED_COLOR: AtomicBool = AtomicBool::new(false);
+static PLUGGED_VT_MIME: AtomicBool = AtomicBool::new(false);
+static PLUGGED_ANGLE_LOOP: AtomicBool = AtomicBool::new(false);
+static PLUGGED_TAIL_3X: AtomicBool = AtomicBool::new(false);
 
 /// Whether KH2's own program `ty` is in (an effect that runs it may then play through KH1).
 pub fn plugged(ty: u32) -> bool {
@@ -99,6 +137,9 @@ pub fn plugged(ty: u32) -> bool {
         MEGA_BIRTH => PLUGGED_MB.load(Ordering::Relaxed),
         SHIPOLY => PLUGGED_SHIPOLY.load(Ordering::Relaxed),
         COLOR => PLUGGED_COLOR.load(Ordering::Relaxed),
+        VT_MIME => PLUGGED_VT_MIME.load(Ordering::Relaxed),
+        ANGLE_LOOP => PLUGGED_ANGLE_LOOP.load(Ordering::Relaxed),
+        TAIL_3X => PLUGGED_TAIL_3X.load(Ordering::Relaxed),
         _ => false,
     }
 }
@@ -111,10 +152,13 @@ struct Entry {
 
 /// Our program entries (KH1's 0x50-byte format). Written once on the game thread before any
 /// record points at them; never moved.
-static mut TABLE: [Entry; 3] = [const { Entry { name: std::ptr::null(), slots: [0; 9] } }; 3];
+static mut TABLE: [Entry; 6] = [const { Entry { name: std::ptr::null(), slots: [0; 9] } }; 6];
 static NAME_MB: &[u8] = b"pppRyjMegaBirth (KH2)\0";
 static NAME_SHIPOLY: &[u8] = b"pppEiDrawShipoly (KH2)\0";
 static NAME_COLOR: &[u8] = b"pppColor (KH2)\0";
+static NAME_VT_MIME: &[u8] = b"pppVtMime (KH2)\0";
+static NAME_ANGLE_LOOP: &[u8] = b"pppAngleLoop (KH2)\0";
+static NAME_TAIL_3X: &[u8] = b"pppKeShpTail3X (KH2)\0";
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -188,7 +232,8 @@ unsafe fn add4(out: usize, a: usize, b: usize) {
     }
 }
 
-/// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon, 2 the colour.
+/// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon, 2 the colour,
+/// 3 the vertex morph, 4 the angle loop, 5 the shape trail.
 unsafe fn table(i: usize) -> usize {
     let t = std::ptr::addr_of_mut!(TABLE) as *mut Entry;
     if (*t).name.is_null() {
@@ -211,6 +256,15 @@ unsafe fn table(i: usize) -> usize {
         let c = t.add(2);
         (*c).slots = [col_calc as *const () as usize, 0, 0, 0, 0, 0, b + COLOR_CONSTRUCT_STEAM, b + COLOR_CONSTRUCT_STEAM, 0];
         (*c).name = NAME_COLOR.as_ptr();
+        let v = t.add(3);
+        (*v).slots = [vt_calc as *const () as usize, 0, b + VT_MIME_DRAW_STEAM, 0, 0, 0, b + VT_MIME_CONSTRUCT_STEAM, b + VT_MIME_RESET_STEAM, b + VT_MIME_DESTRUCT_STEAM];
+        (*v).name = NAME_VT_MIME.as_ptr();
+        let a = t.add(4);
+        (*a).slots = [al_calc as *const () as usize, 0, 0, 0, 0, 0, b + ANGLE_LOOP_CONSTRUCT_STEAM, b + ANGLE_LOOP_RESET_STEAM, 0];
+        (*a).name = NAME_ANGLE_LOOP.as_ptr();
+        let k = t.add(5);
+        (*k).slots = [b + TAIL_3X_CALC_STEAM, 0, tail3x_draw as *const () as usize, 0, 0, 0, b + TAIL_3X_CONSTRUCT_STEAM, b + TAIL_3X_RESET_STEAM, 0];
+        (*k).name = NAME_TAIL_3X.as_ptr();
     }
     t.add(i) as usize
 }
@@ -238,12 +292,27 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         if !col_ok {
             log("KH2 effects (native): KH1's pppColor entry isn't as expected; KH2's pppColor not plugged in (KH1's runs)");
         }
-        let (ours_mb, ours_sp, ours_col) = (to_handle(table(0)), to_handle(table(1)), to_handle(table(2)));
-        if ours_mb == 0 || ours_sp == 0 || ours_col == 0 {
+        // KH1's pppVtMime entry: only our DPX's words of it are pointed at KH2's calc.
+        let kh1_vt = b + TABLE_STEAM + VT_MIME as usize * 0x50;
+        let vt_ok = rd::<usize>(kh1_vt + 8) == b + KH1_VT_MIME_CALC_STEAM && rd::<usize>(kh1_vt + 0x18) == b + VT_MIME_DRAW_STEAM;
+        if !vt_ok {
+            log("KH2 effects (native): KH1's pppVtMime entry isn't as expected; KH2's pppVtMime not plugged in");
+        }
+        // KH1's pppAngleLoop and pppKeShpTail3X entries, each checked as all its slots are.
+        let kh1_al = b + TABLE_STEAM + ANGLE_LOOP as usize * 0x50;
+        let al_ok = rd::<[usize; 9]>(kh1_al + 8) == [b + KH1_ANGLE_LOOP_CALC_STEAM, 0, 0, 0, 0, 0, b + ANGLE_LOOP_CONSTRUCT_STEAM, b + ANGLE_LOOP_RESET_STEAM, 0];
+        let kh1_t3 = b + TABLE_STEAM + TAIL_3X as usize * 0x50;
+        let t3_ok = rd::<[usize; 9]>(kh1_t3 + 8) == [b + TAIL_3X_CALC_STEAM, 0, b + KH1_TAIL_3X_DRAW_STEAM, 0, 0, 0, b + TAIL_3X_CONSTRUCT_STEAM, b + TAIL_3X_RESET_STEAM, 0];
+        if !al_ok || !t3_ok {
+            log(&format!("KH2 effects (native): KH1's pppAngleLoop ({al_ok}) / pppKeShpTail3X ({t3_ok}) entry as expected; KH2's not plugged in where not"));
+        }
+        let (ours_mb, ours_sp, ours_col, ours_vt) = (to_handle(table(0)), to_handle(table(1)), to_handle(table(2)), to_handle(table(3)));
+        let (ours_al, ours_t3) = (to_handle(table(4)), to_handle(table(5)));
+        if ours_mb == 0 || ours_sp == 0 || ours_col == 0 || ours_vt == 0 || ours_al == 0 || ours_t3 == 0 {
             log("KH2 effects (native): no handle for our program table; KH2's programs not plugged in");
             return;
         }
-        let (mut mb, mut sp, mut col, mut other) = (0, 0, 0, 0);
+        let (mut mb, mut sp, mut col, mut vt, mut al, mut t3, mut other) = (0, 0, 0, 0, 0, 0, 0);
         for &(at, ty) in programs {
             let w = dpx + at;
             let to = ptr(rd::<u32>(w));
@@ -256,16 +325,101 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
             } else if ty == COLOR && col_ok && to == kh1_col {
                 wr::<u32>(w, ours_col);
                 col += 1;
+            } else if ty == VT_MIME && vt_ok && to == kh1_vt {
+                wr::<u32>(w, ours_vt);
+                vt += 1;
+            } else if ty == ANGLE_LOOP && al_ok && to == kh1_al {
+                wr::<u32>(w, ours_al);
+                al += 1;
+            } else if ty == TAIL_3X && t3_ok && to == kh1_t3 {
+                wr::<u32>(w, ours_t3);
+                t3 += 1;
             } else {
                 other += 1;
             }
         }
-        PLUGGED_MB.store(mb > 0, Ordering::Relaxed);
-        PLUGGED_SHIPOLY.store(sp > 0, Ordering::Relaxed);
-        PLUGGED_COLOR.store(col > 0, Ordering::Relaxed);
+        // (Once in for one DPX, in for all: each DPX's words are plugged when it is relocated.)
+        PLUGGED_MB.fetch_or(mb > 0, Ordering::Relaxed);
+        PLUGGED_SHIPOLY.fetch_or(sp > 0, Ordering::Relaxed);
+        PLUGGED_COLOR.fetch_or(col > 0, Ordering::Relaxed);
+        PLUGGED_VT_MIME.fetch_or(vt > 0, Ordering::Relaxed);
+        PLUGGED_ANGLE_LOOP.fetch_or(al > 0, Ordering::Relaxed);
+        PLUGGED_TAIL_3X.fetch_or(t3 > 0, Ordering::Relaxed);
         log(&format!(
-            "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col} ({other} left as they were)"
+            "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col}, its pppVtMime into {vt}, its pppAngleLoop into {al}, its pppKeShpTail3X into {t3} ({other} left as they were)"
         ));
+    }
+}
+
+/// KH2's rate delta below this leaves the rate (the keep marker, `docs/kh2-effects.md` §7.4).
+const VT_KEEP: f32 = -1.0e38;
+
+/// KH2's pppVtMime calc on KH1's instance (`docs/kh2-effects.md` §7.4, §18.4). Work offset 0: the
+/// morph `t`, its rate, its acceleration. Not while held, paused or on a computed frame (bit 0 of
+/// the instance's frame word `+0xC`), as KH1's: rate += acceleration, t += rate; on the key's
+/// frame t += `@12`, rate += `@16` unless `@16` is below −1e38, acceleration += `@20`. KH1's
+/// (`0x14032C2E0`) is the same but adds `@16` always.
+unsafe extern "system" fn vt_calc(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    let eff = rd::<usize>(b + EFFECT);
+    if rd::<u32>(b + HELD) != 0 || rd::<u8>(eff + 0xD5) != 0 || rd::<u32>(obj + 0xC) & 1 != 0 {
+        return;
+    }
+    let w = work(obj, prog, 0);
+    let accel = rd::<f32>(w + 8);
+    let rate = rd::<f32>(w + 4) + accel;
+    wr::<f32>(w + 4, rate);
+    let t = rd::<f32>(w) + rate;
+    wr::<f32>(w, t);
+    if rd::<u32>(key) == rd::<u32>(obj + 0xC) {
+        wr::<f32>(w, t + rd::<f32>(key + 0xC));
+        let dv = rd::<f32>(key + 0x10);
+        if !(dv < VT_KEEP) {
+            wr::<f32>(w + 4, rate + dv);
+        }
+        wr::<f32>(w + 8, accel + rd::<f32>(key + 0x14));
+    }
+}
+
+/// KH2's pppAngleLoop calc (`0x1404C0BA0`) on KH1's instance. Work offset 0: three i32 angles and
+/// the handle of the first key it saw (`+0xC`). Not while held, paused or on a computed frame: on
+/// its first run the angles are cleared and the key's handle kept (KH1's `0x14038AD90`, as KH1's
+/// does); on the key's frame its angles (`+4..+0xC`) are added, then each above 0x10000 is brought
+/// down by 0x10000 until it isn't (KH1's adds only).
+unsafe extern "system" fn al_calc(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    let eff = rd::<usize>(b + EFFECT);
+    if rd::<u32>(b + HELD) != 0 || rd::<u8>(eff + 0xD5) != 0 || rd::<u32>(obj + 0xC) & 1 != 0 {
+        return;
+    }
+    let w = work(obj, prog, 0);
+    if rd::<i32>(w + 0xC) == 0 {
+        wr::<[i32; 3]>(w, [0; 3]);
+        wr::<u32>(w + 0xC, to_handle(key));
+    }
+    if rd::<u32>(key) == rd::<u32>(obj + 0xC) {
+        for c in 0..3 {
+            let mut a = rd::<i32>(w + c * 4).wrapping_add(rd::<i32>(key + 4 + c * 4));
+            while a > 0x10000 {
+                a -= 0x10000;
+            }
+            wr::<i32>(w + c * 4, a);
+        }
+    }
+}
+
+/// KH2's pppKeShpTail3X draw (`0x1404CEEF0`) on KH1's: KH1's own draw (`0x140338160`), its trail
+/// time step (work 0 `+0x1F0` += the key's `+8`, made whenever the key's model `+4` isn't 0xFFFF)
+/// taken back when KH2's test (not held, not paused, not a computed frame) would have skipped it.
+unsafe extern "system" fn tail3x_draw(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    let f: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(b + KH1_TAIL_3X_DRAW_STEAM);
+    f(obj, key, prog);
+    let eff = rd::<usize>(b + EFFECT);
+    let steps = rd::<u32>(b + HELD) == 0 && rd::<u8>(eff + 0xD5) == 0 && rd::<u32>(obj + 0xC) & 1 == 0;
+    if rd::<i32>(key + 4) != 0xFFFF && !steps {
+        let t = work(obj, prog, 0) + 0x1F0;
+        wr::<i32>(t, rd::<i32>(t).wrapping_sub(rd::<i32>(key + 8)));
     }
 }
 

@@ -12,6 +12,7 @@
 - [6. Mr Bugs: 1. (a) just make sure that kh1s effects still behave the sam](#^m6)
 - [7. Assistant: t402 to t404 (one each)](#^m7)
 - [8. Mr Bugs: 1. (a) if it ever happens in game I'll just let you know and](#^m8)
+- [9. Assistant: t417 to t425 (one piece each; the build at the top of the br](#^m9)
 
 ---
 
@@ -221,3 +222,31 @@
 ^m8
 
 
+> [!tip] Assistant
+> t417 to t425 (one piece each; the build at the top of the branch has them all)
+>
+> I've ported every KH2 effect I could onto KH1's own effect system:
+> 1. **t417:** a builder that turns any KH2 effects into KH1 effect files (Explosion's comes out byte for byte the same as before).
+> 2. **t418:** all of Sora's own effect package, with Magnet Burst switched on.
+> 3. **t419:** KH2's version of the morph program, so Vicinity Break and Aerial Finish play right in KH1 (KH1's own version would ruin their last keyframe).
+> 4. **t420:** effects that follow a bone by position only, which covers the rest of Sora's moves: Guard Break, Finishing Leap, Aerial Recovery and the ones under `kh2_effects = all`.
+> 5. **t421:** the Drive and Revert flashes.
+> 6. **t422:** one effect file per package, the Keyblade vanish flash, and effects that don't follow anything.
+> 7. **t423:** Valor's and Final's own effects (their body and root ones).
+> 8. **t424:** two more KH2 programs the spells need (an angle loop and the flame trails).
+> 9. **t425:** Reflect's, Wisdom's and the KH2 magic effects.
+>
+> Anything KH1 can't do yet stays on the old player, and the log says which effect and why. That's mainly: the Drive sphere's distortion, the effects on Valor's and Final's Keyblade tips, spell effects on KH2's "body centre" point, and anything the log lists when it loads.
+>
+> **Check:** the decomps for every program (compared slot by slot between the two games) and KH1's binding calls in the exe; Sora's own files for his package. Not checked in game. I only have Sora's effect file here, so the forms', spells' and Keyblade's files couldn't be checked offline; the first log will tell us what got through. If a package needs more texture slots than KH1 has (10 / 6), it's left on the old player and logged. Memory: each package carries its own copy of its textures, so the packages together take some extra memory (built once, in the background).
+>
+> Questions:
+> 1. Valor's and Final's Keyblade-tip effects: (a) use KH1's blade binding, so they turn with the Keyblade the way KH2's own rule does, (b) keep the old player's way (at the tip, facing where Sora faces), or (c) leave them on the old player for now? And for the second Keyblade's tip: (a) I add a "second Keyblade" anchor, or (b) leave those on the old player?
+> 2. The Drive sphere uses KH2's screen-distortion program, which the old player doesn't draw either: (a) port the distortion through KH1's renderer, (b) play it through KH1 without the distortion (looks the same as now), or (c) leave it?
+> 3. Spell effects on KH2's "body centre" point: (a) I find KH1's matching point and port them, or (b) leave them on the old player?
+
+^m9
+
+
+> [!note] Tester Mr Bugs
+> 

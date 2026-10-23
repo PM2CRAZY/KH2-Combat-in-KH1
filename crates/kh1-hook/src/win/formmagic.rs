@@ -85,6 +85,11 @@ fn magc(spell: u8, level: u8) -> Option<&'static kh2_formats::battle::Magc> {
     pose::kh2()?.battle.magc.iter().find(|m| m.id == spell && m.level == level && m.world == 0)
 }
 
+/// A spell's file in KH2's install (its MAGC row's, else `magic/<SPELL>_<n>.mag`).
+pub fn spell_path(spell: u8, level: u8) -> String {
+    magc(spell, level).map_or(format!("magic/{}_{level}.mag", FILE_NAMES[spell as usize]), |m| m.filename.clone())
+}
+
 /// A spell's file from the user's KH2 install (read once).
 pub fn spell_file(spell: u8, level: u8) -> Option<Arc<Vec<u8>>> {
     static FILES: [OnceLock<Option<Arc<Vec<u8>>>>; 12] = [const { OnceLock::new() }; 12];
@@ -93,7 +98,7 @@ pub fn spell_file(spell: u8, level: u8) -> Option<Arc<Vec<u8>>> {
     }
     FILES[(spell * 3 + level - 1) as usize]
         .get_or_init(|| {
-            let name = magc(spell, level).map_or(format!("magic/{}_{level}.mag", FILE_NAMES[spell as usize]), |m| m.filename.clone());
+            let name = spell_path(spell, level);
             let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
             let r = (|| -> Result<Vec<u8>, String> {
                 let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;

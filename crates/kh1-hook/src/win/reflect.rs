@@ -180,11 +180,16 @@ fn motions(level: u8) -> CastMotions {
 
 /// A level's spell file from the user's KH2 install (read once, the first caller waits; after
 /// KH2 Sora has loaded).
+/// A level's spell file in KH2's install (its MAGC row's, else `magic/REFLECT_<n>.mag`).
+pub fn spell_path(level: u8) -> String {
+    magc(level).map_or(format!("magic/REFLECT_{level}.mag"), |m| m.filename.clone())
+}
+
 pub fn spell_file(level: u8) -> Option<Arc<Vec<u8>>> {
     static FILES: [OnceLock<Option<Arc<Vec<u8>>>>; 3] = [OnceLock::new(), OnceLock::new(), OnceLock::new()];
     let slot = FILES.get((level as usize).wrapping_sub(1))?;
     slot.get_or_init(|| {
-        let name = magc(level).map_or(format!("magic/REFLECT_{level}.mag"), |m| m.filename.clone());
+        let name = spell_path(level);
         let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
         let r = (|| -> Result<Vec<u8>, String> {
             let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;

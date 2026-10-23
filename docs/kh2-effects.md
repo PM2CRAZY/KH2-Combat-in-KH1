@@ -1420,3 +1420,239 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   `W_EX010` package), `fx_test`, and the endings and fades it steps for those (`tick`,
   `owner_gone`). `kh2fx::tick` / `owner_gone` also step `kh2dpx`'s endings and fades; `paused`
   is used by `model`.
+
+## 18. Every KH2 effect through KH1 (Steam KH1)
+
+The port of every effect the mod plays onto KH1's own effect system, the way Explosion went
+(§16, §17). Tags as in §16.
+
+### 18.1 The builder for any effects (`kh2_formats::kh1dpx::build_groups`)
+
+- A KH1 DPX holds any number of DPDs (its DPD list after the entries): KH1's DPX relocation
+  (`0x1401E0080`) turns every entry's DPD offset into a handle and relocates each DPD of the list
+  (`0x1401ECA40`, its particle datas through `0x14031C2F0`). **Checked (exe)**.
+- KH1 gives an instance its texture slots when it draws (`0x1401ECF30` → `0x1401EDB00`): 10 TBP
+  and 6 CBP slots, a run for each DPD (keyed by the instance's DPD `+0x98`), shared by the
+  instances of that DPD. **Checked (exe)**. So the builder makes one DPD per group of effects,
+  each with only its particle datas and the textures they draw (the source DPD's own and KH2's
+  common ones), packed from KH1's own window (TBP `0x3800`, CBP `0x3D40`), as for Explosion. A
+  group's effects come from one DPD of the PAX; different groups may come from different DPDs.
+  A group needing more slots than KH1 has (or missing a texture) is left out and reported
+  (`Kh1Dpx::skipped`); the rest are built.
+- Each entry is a copy of a KH2 effect's particle data under its own number (`Variant`: the
+  element's offset and turn folded into the header's local transform, §16.2), its program types
+  listed (`Kh1Dpx::types`), KH2's own program words listed (`Kh1Dpx::programs`), and each
+  texture's source DPD noted (`TexOrigin::src_dpd_at`) for its HD image.
+- Explosion's DPX from it is byte for byte the one t368..t404 built (checked offline with a
+  stand-in for `texcommon.dpd`, which isn't staged here).
+
+### 18.2 Which programs KH1 runs as KH2 does
+
+Every slot of KH1's program table entry (`0x14054FF00`, read from the exe) against KH2's
+(`0x140779A00`, each slot from the KH2 decomp's data references, else the KH2 function whose
+decompile matches), as normalised decompiles (addresses, variable names and line wrapping taken
+out; the effect's paused byte KH1 `+0xD5` = KH2 `+0xC1`). Where a function isn't in either
+decomp, KH1's code was read in the exe. The programs of Sora's package (`P_EX100.a.us`, all its
+elements; **Checked (files)**):
+
+| Programs | Result |
+|---|---|
+| 87 MatrixXYZ, 90 MatrixYXZ, 91 MatrixZXY, 94 MatrixScl, 96 RyjMatrixNoRot, 105 ParMatrix, 106 KeParMatR, 113 DrawMatrixFront, 115 DrawMatrixWood (calc), 116 KeDMat, 117 KeDMatFr, 120 RyjDrawMatrixWorld (calc), 124 KeZCrct, 125 KeZCrctShp, 51 RandFloat, 63 RandFV, 66 RandIV, 174 VertexAp (calc), 177 VertexApLc (calc), 184 KeBornRnd6 (calc), 219 DrawMdlLoopZ (calc, draw, construct) | Same code. **Checked (decomp)**. |
+| 137 DrawMdl3, 138 DrawMdlSemi3, 139 DrawMdlTs3, 142 DrawShapeX, 160 KeShpDtt (draws), 49 VtMime (draw, construct, destruct) | Same code (the KH2 function found by its decompile). **Checked (decomp)**. |
+| 28 Accele, 36 Move | Not in either decomp. KH1's are byte for byte its SclAccele / SclMove (exe), which t368 found the same as KH2's. **Checked (exe)**, KH2's **Assumption** (as its siblings). |
+| 217 DrawMatrixLoop | Not in either decomp. KH1's is byte for byte its DrawMatrix (112), the same globals (exe). KH2's **Assumption** (as §7.4 reads it). |
+| 29-31, 37-42, 84, 112, 139 / 142 calcs and constructs | Not in either decomp; t368's comparison (Explosion's programs) found them the same. |
+| 49 VtMime calc | **Differs**: KH1's (`0x14032C2E0`, exe) adds the key's rate delta (`@16`) always; KH2's leaves the rate when it is below −1e38 (§7.4, the keep marker; KH2's calc isn't in the Steam decomp). Sora's VtMime keys use the marker (−FLT_MAX on their last key, **Checked (files)**: Vicinity Break, Aerial Finish), so KH1's would throw the morph away there. Ported (§18.4). |
+| 43 Color, 201 RyjMegaBirth, 241 EiDrawShipoly | KH2's own, ported (§17). |
+| 238 SnoMdlDttNorm | KH2 only (a frame-buffer distortion along a model's normals, §7.10). Only element 1 (the Drive motion's sphere) runs it. Not ported: that element stays with `kh2fx` (which runs its state but draws nothing for it either). |
+
+`kh2dpx::KH1_SAME` lists the ones KH1 runs as KH2; an element whose effect runs anything else
+(not KH1_SAME, not KH2's own plugged in) stays with `kh2fx`, logged once.
+
+### 18.3 Sora's package through KH1 (`kh2dpx`)
+
+- Every element of `P_EX100.a.us` is built at load, each as its own copy (`0x700 | element`, its
+  offset and turn folded in, §16.2). The groups (one DPD each): the elements each of KH2 Sora's
+  motions starts (its frame triggers 1, from the moveset the mod loads; an element in the first
+  motion that starts it), Revert's thirteen (`form::REVERT_ELEMENTS`), then each remaining
+  effect's elements; each split by source DPD.
+- KH2 bones on KH1's (option A), each KH2 bone on the KH1 bone of the same body part at the
+  same joint (retarget's parts), their bind frames the same to 0.05 (**Checked (files)**: KH2
+  `P_EX100.mdlx`, KH1 `xa_ex_0010.mdls`), so no turn conversion: pelvis 2 → 2; +x leg thigh 11
+  → 43, shin 12 → 44, foot 15 → 47, toe 18 → 50; −x leg 40 → 17, 41 → 18, 44 → 21, 47 → 24;
+  spine 67 → 70; upper arms 78 → 198, 170 → 93; hands 85 → 203, 177 → 98; 0x4000 → KH1 0x8000,
+  0x4003 / 0x4005 / 0x4007 → KH1's blade points. The effect sits at KH1's joint (KH1's limbs are
+  shorter: the hips 78.9 high against KH2's 88.5).
+- Flags KH1's binding does: 0x01 (mode 2 / 3), 0x02 (KH1's bind-once bit 0x10000), the endings
+  (§16.2). Not yet: unbound elements (KH2 places them once at the start; Sora's 14, 42, 43, none
+  of which a motion starts), 0x100 (scale by the bone), 0x10000 (two points); those stay with
+  `kh2fx`. 0x04 (position only): §18.5.
+- Switched on (`kh2dpx::ON`): Explosion, Magnet Burst (51: object root, y −127, fade-out 4;
+  52: bound until started). Magnet Burst's programs are all in KH1_SAME or KH2's own.
+- Cost: built once in the background (more DPDs than Explosion's one: each motion's copies of
+  the source DPD's shapes and models, and each its own copy of the common textures and their HD
+  images). Per frame nothing more than Explosion's.
+
+### 18.4 pppVtMime (49), KH2's calc
+
+- KH1's calc (`0x14032C2E0`, **Checked (exe)**: not while held `0x142E9D7E0`, paused (effect
+  `+0xD5`) or on a computed frame (instance `+0xC` bit 0); rate += acceleration, t += rate; on the
+  key's frame t += `@12`, rate += `@16`, acceleration += `@20`) adds the rate delta always. KH2's
+  leaves the rate when `@16` is below −1e38 (§7.4; KH2's calc is not in the Steam decomp, so this
+  is the earlier read of KH2's code, `kh2-fx`'s `vt_mime_step`: **Assumption** on the exact
+  comparison). Sora's VtMime keys end with −FLT_MAX there (**Checked (files)**: Vicinity Break's
+  elements 49, 50 at ticks 11 / 14, Aerial Finish's 35..38 at tick 13), so under KH1's the morph's
+  `t` runs off to −∞ for the rest of the effect.
+- `kh2ppp::vt_calc` is KH2's calc on KH1's instance, as our fourth entry; draw, construct, reset
+  and destruct are KH1's (`0x14032C150`, `0x14032C380`, `0x14032C3C0`, `0x14032C3E0`: draw,
+  construct and destruct the same code as KH2's, §18.2). `kh1dpx` lists type-49 words
+  (`KH2_OWN_PROGRAMS`) and `kh2ppp::plug` points the ones KH1 relocated to its entry 49 (checked:
+  calc and draw as above) at ours. KH1's own effects keep KH1's. Neither game's fast-forward list
+  holds a VtMime calc (KH1 `0x14054FEE0`: MegaBirth, `0x140322E50`; KH2 `0x140779990`: MegaBirth,
+  `0x1404BE1F0`, the ribbon; **Checked (exe)** / **Checked (decomp)**).
+- A gate (`kh2dpx::GATES`): an element running VtMime plays through KH1 only with it plugged in.
+- Switched on: Vicinity Break (motion 170: 49 object root y −8 and 50 y −97, both bound until
+  started) and Aerial Finish (194: 35..38, object root, rotated swirls, fade-out 2 / 0).
+
+### 18.5 KH2's position-only elements (flag 0x04) on KH1's binding mode 1
+
+- KH2 (§2, **Checked**): the effect sits at `B · offset` (the element's offset in the bone's
+  frame) turned by the element's rotation alone; with 0x01 every frame, with 0x02 until started.
+- KH1 (**Checked (exe)**): the start bound by position, `0x1402ADC20 (dpx, number, actor, code,
+  t)` (Steam; t the fifth argument, kept at the record's `+0xC`, mode `+4` = 1, code `+8`, world
+  offset `+0x10` = (0, 0, 0, 1), its first place at `+0x20` copied to the element's place). The
+  binding task (`0x1402AE910`) in mode 1 applies `+0x20`, then reads the point `0x14029EB20 (actor,
+  code, t)` and adds `+0x10` into `+0x20` (`0x140386A10`, four floats); with the bind-once bit it
+  reads, adds and applies once, then ends. It never writes the element's turn. The point for a
+  raw bone is code `0x1000 | n` (`0x14029FAB0`: bit 0x1000 takes the low 12 bits; `0x2000 | n` would
+  be looked up as a named bone there), at t = 1 the bone's place (`0x1401D6320`: its parent's
+  matrix times its own offset); for the blade, code 0x30 maps t into the blade (as mode 3).
+- KH1's world offset is fixed, KH2's offset turns with the bone. So for our mode-1 bindings
+  (`kh2dpx::posed`, after Sora's skeleton pass, Steam): the record's offset is set to (the bone's
+  place + the bone's turn × the element's offset − the point KH1 reads), from KH1's own reads
+  (`0x14029EA00` with `0x2000 | n`, `0x14029EB20` with the record's code), so KH1's next read lands
+  on KH2's `B · offset` exactly; for the blade, the point plus the blade's turn × the offset. Its
+  place for the next apply is this pass's on the start pass (KH2's first run reads first) and the
+  pass before's after it (what KH2 applies). One per live position-only element per frame: two
+  KH1 bone reads.
+- The element's own rotation goes into its copy's header turn (`H' = R · H`; the offset is not
+  folded in), the instance unturned, as KH2's root `T(B · offset) · R · S · H`.
+- Switched on with it: Guard Break (165: 30 bound until started, 31, 32), Finishing Leap (167:
+  33 the Keyblade tip by position, 34 bound until started), Aerial Recovery (40: 0), and the
+  moves only `kh2_effects = all` plays: 169 (53..55 by position on the toes, KH2 18 / 47, bound
+  until started; 56), 171 (40, 41 by position on the spine), 172 (39). Their programs are all
+  KH1_SAME or KH2's own (**Checked (files)**).
+- KH1 instances start unturned: the pool's claim (`0x1401EC690`) clears the instance, and the
+  start (`0x1401E0100`) only hands out handles of its place, turn and scale. **Checked (exe)**.
+  Not done: 0x04 on KH2's object root (none in Sora's package).
+
+### 18.6 The Drive motion's and Revert's flashes through KH1
+
+- The Drive motion (52, `form::DRIVE_MOTION`) starts elements 1..13 at its frame 0; Revert
+  (`form::revert`) starts 15..27 at once, right after Sora's object is handed back (so their
+  "ends with the owner" flag, 0x200, sees the new owner). All in the package's second DPD, which
+  has no textures of its own: everything they draw is KH2's common textures (**Checked (files)**).
+- Bones: 2..13 and 16..27 on the limbs and spine (§18.3: 67, 2, 170 / 78, 177 / 85, 40 / 11,
+  41 / 12, 44 / 15), flags 0x241 (bound, fade-out on the owner going); 15 on the spine by position
+  (0x245, §18.5). Their programs are all KH1_SAME, KH2's pppColor and MegaBirth.
+- Element 1 (the Drive motion's sphere at the object root, bound until started) runs KH2's
+  pppSnoMdlDttNorm (238, a frame-buffer distortion along the model's normals, §7.10), which KH1
+  doesn't have: it stays with `kh2fx` (which also draws nothing for 238, only its other parts).
+
+### 18.7 More packages; the Keyblade's vanish flash; unbound elements
+
+- `kh2dpx` builds one DPX per package (`Source`: its file, its PAX, the sets that play
+  together, its anchors, flags it doesn't apply), each entered in KH1's loaded files under its own
+  name (`kh2fx_<package>_dpx`) with its own HD textures (the package file's remastered assets and
+  texcommon's), relocated and plugged on first use. `kh2ppp::plug` now only ever turns a "plugged
+  in" flag on, so a second DPX without, say, MegaBirth words doesn't turn it off.
+- The Keyblade's package (`obj/W_EX010.a.us`, its first PAX): its vanish flash (element 0,
+  `kh2fx::weapon_vanish`, started as KH2 puts the Keyblade away, before KH1's put-away). Its
+  bones are the weapon skeleton's; KH2's own call of the flash isn't traced, and `kh2fx` put every
+  code half way along the blade turned as the hand. Through KH1: the point half way along KH1's
+  blade, turned as KH1's blade bone (binding mode 3, t = 0.5). **Assumption** (as `kh2fx`'s). Its
+  "ends with the motion" flag isn't applied (as `kh2fx` never ended it: the motion is the
+  Keyblade's own object's, which we don't have). Not checked offline: `W_EX010.a.us` isn't staged
+  here, so its element's flags and programs are read at load (logged); anything not in KH1 keeps
+  it with `kh2fx`.
+- Unbound elements (neither 0x01 nor 0x02: KH2 places them once at the start, from the bone as
+  it is then, `0x1402C6B30` only reads, §17.7): KH1's start on the bone places it the same way
+  (at once, from the bone as the start reads it: the pose before Sora's skeleton pass, as KH2's
+  start before its pose); its binding (the list's last node) is then disarmed: mode 0 with the
+  bind-once bit, which KH1's binding task (`0x1402AE910`) answers on its first run by freeing the
+  record and ending, without moving the element. **Checked (exe)**. Steam only (the binding list's
+  address). KH2 bone 0 (the root, at the hips) is KH1's bone 0 (the same bind frame).
+
+### 18.8 Valor's and Final's packages
+
+- With Drive on, `kh2dpx` also builds Valor Form's (`obj/P_EX100_BTLF.a.us`) and Final Form's
+  (`obj/P_EX100_ULTF.a.us`) packages (PAX "p_ex", else the first), grouped by their own movesets'
+  motions (the frame triggers 1 the mod's form motions fire, `form::effect` →
+  `kh2fx::form_event`). Every element built is switched on; the gate (anchor, flags, programs)
+  decides at play. The element's sound is still `kh2sound::spell_element`'s.
+- Anchors: the forms have Sora's skeleton (`pose::Form`), so his bones' table (§18.3). Their
+  weapon points stay with `kh2fx` for now: 0x4003 / 0x4005 / 0x4007 (the first Keyblade) because
+  `kh2fx` turns them with Sora's facing at the blade's point (the tester's request for Valor's
+  grounded finisher), where KH1's blade binding turns them with the blade as KH2's weapon bone
+  does (a question for the tester); 0x4004 / 0x4006 / 0x4008 (the second Keyblade, Valor's left
+  hand, Final's second floating one) because KH1 has no second Keyblade to bind to.
+- Not checked offline: neither file is staged here, so which bones, flags and programs their
+  elements use is only known at load (logged: each element switched on, each left out and why).
+
+### 18.9 The spells' programs
+
+The programs §12.2 lists for the spell packages (Reflect, Fire, Blizzard, Thunder, Cure, Wisdom's),
+compared as in §18.2:
+
+| Programs | Result |
+|---|---|
+| 75 SRandFV, 76 SRandUpFV, 85 KeMatSN (calc), 155 KeShpTail2X (calc; draw found by its decompile), 213 PointLoop, 215 ScaleLoop, 218 DrawMdlLoop (calc, construct; draw found by its decompile) | Same code. **Checked (decomp)**. In `KH1_SAME`. |
+| 210 MoveLoop, 211 AngMoveLoop | Not in either decomp. KH1's (`0x14032AF90`, construct `0x14032B080`) is §7.6's KH2 reading (keys always, the value not while fast-forwarding `0x142E9D804`, construct clearing the velocity). **Checked (exe)** against §7.6. In `KH1_SAME`. |
+| 214 AngleLoop | **Differs** (calc; construct and reset the same): KH2's (`0x1404C0BA0`) brings each angle above 0x10000 down by whole turns after a key; KH1's (`0x14032B620`) doesn't. **Checked (decomp)**, KH1's also **Checked (exe)**. Ported: `kh2ppp::al_calc`. |
+| 157 KeShpTail3X | **Differs** (draw; calc and construct the same): KH2's (`0x1404CEEF0`) steps its trail time (work 0 `+0x1F0` += key `+8`, at the draw's end, after drawing with the old time) only when not held, not paused and not on a computed frame; KH1's (`0x140338160`) on every draw with a model (key `+4` not 0xFFFF; every path of it reaches the step). **Checked (decomp)**. Ported: `kh2ppp::tail3x_draw` runs KH1's draw and takes the step back where KH2 makes none. |
+
+Both are plugged like the others (`KH2_OWN_PROGRAMS`, each KH1 entry checked slot by slot first)
+and are gates. Which spells use them (§12.2): AngleLoop the Loop integrators of Blizzard's shard and
+Wisdom's Blizzard; KeShpTail3X Fire's flame tails and Blizzard 1's sparkle. Not checked offline:
+the spell files aren't staged here.
+
+### 18.10 The spell scripts' effects (Reflect, Wisdom, KH2 magic) through KH1
+
+- `kh2dpx` builds each spell package `kh2fx` plays for the spell scripts (Steam only): Reflect's
+  levels (`reflect::spell_path`: the MAGC row's file, else `magic/REFLECT_<n>.mag`), Wisdom's archive
+  (`obj/P_EX100_MAGF.a.us`, PAX "p_ex"), and Fire, Blizzard, Thunder and Cure by level
+  (`formmagic::spell_path`), one group per effect, their "ends with the motion" flag not applied
+  (the scripts end them; `kh2fx` never ended them on Sora's motion either).
+- `kh2fx`'s spell API tries KH1 first (`kh2dpx::spell_start`): an element that passes the gate
+  (anchor, flags, programs) is started on Sora as his own are and gets a handle of ours
+  (`NATIVE_SPELL` set, inside `kh2fx`'s package bits); the others stay `kh2fx`'s. On our handles:
+  - place (`spell_place`, a script moving an unbound effect: Wisdom's shots, Reflect's contact
+    flash): KH2's `at` stands for the bone from then on (`kh2-fx`'s `set_anchor`). KH1's binding
+    is let go (disarmed, §18.7) on the first one, then KH1's own apply (`0x1402ADB40 (element,
+    matrix)`: the turn from the matrix's rows through `0x1402A8EF0`, in 65536ths of a turn, the
+    place from its last row; **Checked (exe)**) puts the element there; by position only, the
+    place `at · offset`, unturned.
+  - end: KH2's end (§2: 0x80 the loops, else 0x40 the fade-out, else it plays on), as `kh2dpx::end`;
+    kill: KH1's stop (`0x1401EC470`); alpha: the instance's alpha (`+0x3C`); running: the instance
+    still the element's.
+- Not checked offline: none of these files is staged here, so their elements' bones, flags and
+  programs are only known at load. What KH1 doesn't have stays with `kh2fx` (logged per element):
+  KH2's body centre 0x4001 (no KH1 anchor found yet), KH2-only programs, and the programs §12.2
+  lists that aren't compared yet (KeShpTail3X and AngleLoop now are, §18.9).
+
+### 18.11 What still goes through the old player (`kh2fx`)
+
+On Steam, with the packages built (the first seconds after KH2 Sora loads: until then `kh2fx`
+plays everything, as before):
+
+- Sora's package: element 1 (the Drive motion's sphere: KH2's pppSnoMdlDttNorm, §18.6). Every
+  other element is KH1's (§18.3..18.6).
+- Valor's and Final's packages: their weapon-point elements (0x4003..0x4008, §18.8), and any
+  element the load log lists as left out (a bone with no KH1 anchor, a flag KH1's binding doesn't
+  do, a program not compared or KH2-only).
+- The spell packages: elements on KH2's body centre (0x4001), and the same load-log cases.
+- The Keyblade's flash: only if its element fails the gate (logged).
+- Anything whose package didn't build (logged: the file not read, its HD textures not read, every
+  group over KH1's texture slots), and every package on other builds (Epic: Sora's elements without
+  KH1's blade or position binding still play through KH1, as before).
+- `fx_test` (it starts `kh2fx`'s own element 51).

@@ -224,6 +224,10 @@ pub fn weapon_vanish() {
         return;
     }
     let Ok(mut g) = STATE.lock() else { return };
+    // (The effects port) KH1's own effect system plays it once its DPX is built (`kh2dpx`).
+    if super::kh2dpx::weapon_vanish(g.as_ref().map_or(NO_MOTION, |s| s.motion)) {
+        return;
+    }
     let Some(s) = g.as_mut() else { return };
     let tip = s.tip_local;
     let Some(wp) = s.weapon.as_mut() else { return };
@@ -282,6 +286,11 @@ fn form_library(form: Option<&super::pose::Form>, name: &str, common: &[u8]) -> 
 /// package, on Sora; one that ends with its motion is ended when the motion changes (`step`).
 pub fn form_event(motion: u16, el: i16) {
     if el < 0 || super::settings::get().kh2_effects.is_none() {
+        return;
+    }
+    // (The effects port) KH1's own effect system plays it once the form's DPX is built (`kh2dpx`).
+    if super::kh2dpx::form_event(super::form::in_final(), motion, el) {
+        unsafe { super::kh2sound::spell_element(if super::form::in_final() { FINAL } else { VALOR }, el as u16) };
         return;
     }
     let Ok(mut g) = STATE.lock() else { return };
@@ -356,6 +365,9 @@ pub fn owner_gone() {
 /// Puts a spell effect's root where the script has it (an unbound one it moves: Wisdom's shots),
 /// a KH2-world (y down) matrix.
 pub fn spell_place(h: u32, at: Mat4) {
+    if h & super::kh2dpx::NATIVE_SPELL != 0 {
+        return super::kh2dpx::spell_place(h & 0x07FF_FFFF, at);
+    }
     with_spell(h, |fx, e| fx.set_anchor(e, at));
 }
 
@@ -400,6 +412,12 @@ pub fn spell_start(level: u8, el: u16) -> Option<u32> {
     if super::settings::get().kh2_effects.is_none() {
         return None;
     }
+    // (The effects port) KH1's own effect system plays it once the package's DPX is built.
+    match super::kh2dpx::spell_start(level, el) {
+        super::kh2dpx::SpellStart::Kh1(h) => return Some(spell_handle(level, EffectHandle(h))),
+        super::kh2dpx::SpellStart::NotStarted => return None,
+        super::kh2dpx::SpellStart::NotMine => {}
+    }
     let Ok(mut g) = STATE.lock() else { return None };
     let s = g.as_mut()?;
     let tip = s.tip_local;
@@ -416,18 +434,30 @@ pub fn spell_ready(level: u8) -> bool {
 /// What the spell script did to an effect it started: ended its loop (`end`), killed it, or set
 /// its fade (`alpha`).
 pub fn spell_end(h: u32) {
+    if h & super::kh2dpx::NATIVE_SPELL != 0 {
+        return super::kh2dpx::spell_end(h & 0x07FF_FFFF);
+    }
     with_spell(h, |fx, e| fx.end(e));
 }
 
 pub fn spell_kill(h: u32) {
+    if h & super::kh2dpx::NATIVE_SPELL != 0 {
+        return super::kh2dpx::spell_kill(h & 0x07FF_FFFF);
+    }
     with_spell(h, |fx, e| fx.kill(e));
 }
 
 pub fn spell_alpha(h: u32, alpha: f32) {
+    if h & super::kh2dpx::NATIVE_SPELL != 0 {
+        return super::kh2dpx::spell_alpha(h & 0x07FF_FFFF, alpha);
+    }
     with_spell(h, |fx, e| fx.set_alpha(e, alpha));
 }
 
 pub fn spell_running(h: u32) -> bool {
+    if h & super::kh2dpx::NATIVE_SPELL != 0 {
+        return super::kh2dpx::spell_running(h & 0x07FF_FFFF);
+    }
     with_spell(h, |fx, e| fx.is_running(e)).unwrap_or(false)
 }
 
