@@ -29,6 +29,8 @@
 //!   drive-orb yellow-orange (`ppp_draw`, each time it runs).
 //! - **Their drop**: after an enemy's own drop (`ai_drop`), KH2's normal enemies' Drive orb rows
 //!   (`drivegauge::DROPS`) roll, and KH1 makes the orbs (`0x1402A9110`, the same mode as its own).
+//!   The same hook rolls the Drive Recovery items' drop (`items::enemy_drop`), with or without
+//!   the orbs.
 //! - **Their pickup**: KH1's pickup (`pickup`) runs as ever; one of ours picked up adds its points
 //!   to the Drive gauge (`gauge::orb`: small 1, big 3; in a form its form gauge, × 12 frames).
 
@@ -186,12 +188,17 @@ unsafe extern "system" fn ai_drop(counts: usize, pos: usize, mode: u32) {
     let f: AiDropFn = std::mem::transmute(ORIG_AI_DROP.load(Ordering::Acquire));
     f(counts, pos, mode);
     let base = base();
-    if !on() || counts < 0x10000 || pos < 0x10000 || rd::<u32>(base + PRIZES_OFF_RVA) != 0 {
+    if counts < 0x10000 || pos < 0x10000 || rd::<u32>(base + PRIZES_OFF_RVA) != 0 {
         return;
     }
     // (Only a drop with something in it: KH1's seven counts.)
     let kh1: [i32; 7] = rd(counts);
     if kh1.iter().all(|&n| n <= 0) {
+        return;
+    }
+    // A Drive Recovery item, maybe (`items`: KH1's field item drop).
+    super::items::enemy_drop(base, kh1, pos, mode);
+    if !on() {
         return;
     }
     let (small, big) = crate::drivegauge::drop_for(roll());
@@ -268,24 +275,36 @@ unsafe fn restart(ty: u8) {
     }
 }
 
+/// The Drive orbs' parts: the row table, the draw and the pickup. False (none dropped) if any
+/// isn't as expected.
+unsafe fn install_orbs(base: usize) -> bool {
+    if !relocate_table(base) {
+        return false;
+    }
+    if hook::install(base + PPP_DRAW_RVA, &PPP_DRAW_PROLOGUE, ppp_draw as *const () as usize, &ORIG_PPP, "prize effect draw (Drive orbs)").is_none() {
+        log("Drive orbs: the prize effect's draw wasn't as expected: none dropped (they would not show)");
+        return false;
+    }
+    if hook::install(base + PICKUP_RVA, &PICKUP_PROLOGUE, pickup as *const () as usize, &ORIG_PICKUP, "prize pickup (Drive orbs)").is_none() {
+        log("Drive orbs: KH1's pickup wasn't as expected: none dropped");
+        return false;
+    }
+    true
+}
+
 pub unsafe fn install() {
     let base = base();
     if !super::settings::get().drive {
         return;
     }
-    if !relocate_table(base) {
+    let orbs = install_orbs(base);
+    // The enemy drop's hook also drops the Drive Recovery items (`items::enemy_drop`), so it goes
+    // in even without the orbs.
+    if hook::install(base + AI_DROP_RVA, &AI_DROP_PROLOGUE, ai_drop as *const () as usize, &ORIG_AI_DROP, "enemy prize drop (Drive orbs, Drive Recovery items)").is_none() {
+        log("Drive orbs: KH1's enemy drop wasn't as expected: no Drive orbs or Drive Recovery items dropped");
         return;
     }
-    if hook::install(base + PPP_DRAW_RVA, &PPP_DRAW_PROLOGUE, ppp_draw as *const () as usize, &ORIG_PPP, "prize effect draw (Drive orbs)").is_none() {
-        log("Drive orbs: the prize effect's draw wasn't as expected: none dropped (they would not show)");
-        return;
-    }
-    if hook::install(base + PICKUP_RVA, &PICKUP_PROLOGUE, pickup as *const () as usize, &ORIG_PICKUP, "prize pickup (Drive orbs)").is_none() {
-        log("Drive orbs: KH1's pickup wasn't as expected: none dropped");
-        return;
-    }
-    if hook::install(base + AI_DROP_RVA, &AI_DROP_PROLOGUE, ai_drop as *const () as usize, &ORIG_AI_DROP, "enemy prize drop (Drive orbs)").is_none() {
-        log("Drive orbs: KH1's enemy drop wasn't as expected: none dropped");
+    if !orbs {
         return;
     }
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);

@@ -78,6 +78,9 @@ him and ends it (its states 2..3; inferred from the step).
   form gauge in a form, Anti's lost). Any party member's pickup counts (the gauge is Sora's, as in
   KH2, where the orbs are the party's).
 
+The same hook on `0x1402A9AB0` drops the Drive Recovery items (KH1's field items, after its own
+item pairs): `docs/kh1-items.md`, section 7. It goes in even if the orbs' parts don't.
+
 Everything else is KH1's: the scatter and bounce, the pull toward a member, the lifetime and
 blink-out, the pickup sound, the draw.
 

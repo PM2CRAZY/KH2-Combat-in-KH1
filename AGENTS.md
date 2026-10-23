@@ -3584,6 +3584,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 333 (Drive Recovery items from drops, chests and shops)
+- The user: "lets make drive recovery and high drive recoveries more available throughout the game
+  (mob drops, chests, etc)". Enemy drops: after KH1's own drop (`0x1402A9AB0`), one roll by
+  `driveitems::TIERS` (any 3% / 0.5%, MP-orb drops 5% / 0.75%, 20+ prizes 15% / 4%; Lucky Strike
+  applies) made with KH1's dropped item `0x1402BDD50`, once a form is open. Chests: 17 plain
+  consumable chests in KH1's chest table (`0x140529A60`) patched in memory (12 Drive Recovery,
+  5 High). Shops: any item shop list with a Potion (Traverse Town, Agrabah). docs/kh1-items.md.
+
 ### 2026-10-22: Stage 332 (a player's five bugs; Drive Forms across Coliseum rounds)
 - Glide in Neverland flight hung Sora: KH2's glide is off in flight worlds (`glide_blocked`), a glide
   press starts KH1's flight where KH1 would, held buttons out of flight aren't fresh presses.
