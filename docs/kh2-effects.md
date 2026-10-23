@@ -1313,11 +1313,7 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
 - Both run KH2's MegaBirth: they play through KH1 only when it is plugged in (`kh2ppp::plugged`,
   Steam); otherwise, and on other builds, `kh2fx` plays them as before.
 - Not done: flag 0x800 (alpha follows the weapon's visibility; not in `kh2fx` either).
-- Found, not changed: KH1's pppColor (43, `0x14032B940`) writes the colour bytes only on a tick's
-  first frame (the whole program sits under the not-repeat test), KH2's (`0x1404C0F60`) on both
-  frames (only its key deltas wait), and clamps each channel at 32767 before scaling. So under
-  KH1's an element's fade (the instance alpha) shows every other game frame at 60 fps, under
-  KH2's every frame. Every Explosion effect uses pppColor.
+- KH1's pppColor (43) and KH2's differ: §17.6 (KH2's now runs for our DPX's words).
 - Found, not changed: KH1's bone binding task (`0x1402AE910`, modes 2 and 3) applies the matrix it
   read on its previous run, then reads the next one.
 
@@ -1333,3 +1329,27 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   KH2 programs plugged in (MegaBirth, the ribbon). **Assumptions**: KH1's 0x8000 frame is KH2's
   0x4000 object frame; KH2's 0x02 element is placed for the last time on the frame before its
   first tick, as KH1's is here.
+
+### 17.6 pppColor (43), KH2's, for KH2's effects only
+
+- KH1's (`0x14032B940`, entry 43: calc `+0x08`, construct and reset `0x14032BAE0`, no draw) and
+  KH2's (`0x1404C0F60`) **Checked (decomp)**, KH1's also **Checked (exe)**. Work offset 0: four
+  u16 channels, then the four colour bytes the draws read (`+8`). Both add the key's deltas
+  (`+4..+0xA`) only when not held (`0x142E9D7E0`), not paused (effect `+0xD5`, KH2 `+0xC1`), bit
+  0 of the instance's frame word `+0xC` clear (the not-repeat test) and that word equal to the
+  key's frame. KH1 then writes the bytes inside
+  that same test (except the key-frame part); KH2 writes them on every call, each channel × the
+  effect's colour (`+0x30`), **clamped at 32767**, × the scale. Monochrome (`0x142538200`, KH2
+  `0x140B60240`): RGB = 0.3 r + 0.59 g + 0.11 b of the bytes. So under KH1's an element's fade
+  (the instance alpha) shows only on calls that pass the not-repeat test, under KH2's on every call.
+- Scale: KH1's 1/128 (`0x1403B30B8`, **Checked (exe)**). The KH2 decomp drops the operand of its
+  scale call (`0x14013FCC0`): **Assumption** 1/128 (KH1's, and `kh2-fx`'s, `0x80` = 1.0).
+  KH2's construct isn't in the decomp's references: **Assumption** it is KH1's (the channels
+  zeroed, as `kh2-fx` does), so ours uses KH1's `0x14032BAE0`.
+- `kh2ppp::col_calc` is KH2's calc on KH1's instance, as our third entry. `kh1dpx` lists the
+  type-43 words of our DPX (`KH2_OWN_PROGRAMS` 43, 201, 241) and `kh2ppp::plug` points each one
+  KH1 relocated to its entry 43 (checked: its calc is `0x14032B940`) at ours. KH1's own DPXs
+  are relocated by KH1 to its own entry and never touched, and nothing in KH1 looks at which
+  entry a record has (no other reference to `0x14032B940` or the entry in the decomp), so KH1's
+  own effects keep KH1's pppColor exactly. Not a gate: if it isn't plugged (table not as
+  expected, or not Steam) the element still plays through KH1, with KH1's pppColor (logged).

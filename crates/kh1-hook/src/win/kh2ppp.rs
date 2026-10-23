@@ -28,6 +28,12 @@
 //! 241 `pppEiDrawShipoly` (KH2 only): the ribbon, recorded, splined and drawn as KH2 does,
 //! through KH1's renderer (below; `docs/kh2-effects.md` §17.3).
 //!
+//! 43 `pppColor`, KH2's version (Steam KH2 `0x1404C0F60`): KH1's (`0x14032B940`) writes the
+//! colour bytes only under its not-held / not-paused / not-repeat test, KH2's writes them on every
+//! call (only the key deltas wait for that test) and clamps each channel at 32767 before the
+//! scale. Only the words of our DPX point at it, so KH1's own effects keep KH1's pppColor.
+//! Construct and reset are KH1's (`0x14032BAE0`: the colour words zeroed, as `kh2-fx` does).
+//!
 //! Steam only (the addresses are Steam's); elsewhere KH1's own programs stay.
 
 use super::log;
@@ -44,6 +50,9 @@ const EULER_STEAM: usize = 0xE6730;
 const SHAPE_DRAW_STEAM: usize = 0x31E210;
 const MB_CONSTRUCT_STEAM: usize = 0x321520;
 const MB_DESTRUCT_STEAM: usize = 0x3215A0;
+/// KH1's pppColor: calc (checked before plugging) and construct / reset.
+const KH1_COLOR_CALC_STEAM: usize = 0x32B940;
+const COLOR_CONSTRUCT_STEAM: usize = 0x32BAE0;
 /// KH1's program table and the entry of its MegaBirth's calc (checked before plugging).
 const TABLE_STEAM: usize = 0x54FF00;
 const KH1_MB_CALC_STEAM: usize = 0x3212F0;
@@ -76,17 +85,20 @@ const SINE: usize = 0x54BED0;
 /// KH2's program types ours stand in for.
 pub const MEGA_BIRTH: u32 = 201;
 pub const SHIPOLY: u32 = 241;
+pub const COLOR: u32 = 43;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 /// KH2's MegaBirth / ribbon are plugged into the DPX (their words point at our entries).
 static PLUGGED_MB: AtomicBool = AtomicBool::new(false);
 static PLUGGED_SHIPOLY: AtomicBool = AtomicBool::new(false);
+static PLUGGED_COLOR: AtomicBool = AtomicBool::new(false);
 
 /// Whether KH2's own program `ty` is in (an effect that runs it may then play through KH1).
 pub fn plugged(ty: u32) -> bool {
     match ty {
         MEGA_BIRTH => PLUGGED_MB.load(Ordering::Relaxed),
         SHIPOLY => PLUGGED_SHIPOLY.load(Ordering::Relaxed),
+        COLOR => PLUGGED_COLOR.load(Ordering::Relaxed),
         _ => false,
     }
 }
@@ -99,9 +111,10 @@ struct Entry {
 
 /// Our program entries (KH1's 0x50-byte format). Written once on the game thread before any
 /// record points at them; never moved.
-static mut TABLE: [Entry; 2] = [Entry { name: std::ptr::null(), slots: [0; 9] }, Entry { name: std::ptr::null(), slots: [0; 9] }];
+static mut TABLE: [Entry; 3] = [const { Entry { name: std::ptr::null(), slots: [0; 9] } }; 3];
 static NAME_MB: &[u8] = b"pppRyjMegaBirth (KH2)\0";
 static NAME_SHIPOLY: &[u8] = b"pppEiDrawShipoly (KH2)\0";
+static NAME_COLOR: &[u8] = b"pppColor (KH2)\0";
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -175,7 +188,7 @@ unsafe fn add4(out: usize, a: usize, b: usize) {
     }
 }
 
-/// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon.
+/// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon, 2 the colour.
 unsafe fn table(i: usize) -> usize {
     let t = std::ptr::addr_of_mut!(TABLE) as *mut Entry;
     if (*t).name.is_null() {
@@ -195,6 +208,9 @@ unsafe fn table(i: usize) -> usize {
             sp_destruct as *const () as usize,
         ];
         (*r).name = NAME_SHIPOLY.as_ptr();
+        let c = t.add(2);
+        (*c).slots = [col_calc as *const () as usize, 0, 0, 0, 0, 0, b + COLOR_CONSTRUCT_STEAM, b + COLOR_CONSTRUCT_STEAM, 0];
+        (*c).name = NAME_COLOR.as_ptr();
     }
     t.add(i) as usize
 }
@@ -216,12 +232,18 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         }
         // The words of KH2-only programs were relocated to KH1's dummy entry (1).
         let kh1_dummy = b + TABLE_STEAM + 0x50;
-        let (ours_mb, ours_sp) = (to_handle(table(0)), to_handle(table(1)));
-        if ours_mb == 0 || ours_sp == 0 {
+        // KH1's pppColor entry: only our DPX's words of it are pointed at KH2's.
+        let kh1_col = b + TABLE_STEAM + COLOR as usize * 0x50;
+        let col_ok = rd::<usize>(kh1_col + 8) == b + KH1_COLOR_CALC_STEAM;
+        if !col_ok {
+            log("KH2 effects (native): KH1's pppColor entry isn't as expected; KH2's pppColor not plugged in (KH1's runs)");
+        }
+        let (ours_mb, ours_sp, ours_col) = (to_handle(table(0)), to_handle(table(1)), to_handle(table(2)));
+        if ours_mb == 0 || ours_sp == 0 || ours_col == 0 {
             log("KH2 effects (native): no handle for our program table; KH2's programs not plugged in");
             return;
         }
-        let (mut mb, mut sp, mut other) = (0, 0, 0);
+        let (mut mb, mut sp, mut col, mut other) = (0, 0, 0, 0);
         for &(at, ty) in programs {
             let w = dpx + at;
             let to = ptr(rd::<u32>(w));
@@ -231,13 +253,65 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
             } else if ty == SHIPOLY && to == kh1_dummy {
                 wr::<u32>(w, ours_sp);
                 sp += 1;
+            } else if ty == COLOR && col_ok && to == kh1_col {
+                wr::<u32>(w, ours_col);
+                col += 1;
             } else {
                 other += 1;
             }
         }
         PLUGGED_MB.store(mb > 0, Ordering::Relaxed);
         PLUGGED_SHIPOLY.store(sp > 0, Ordering::Relaxed);
-        log(&format!("KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp} ({other} left as they were)"));
+        PLUGGED_COLOR.store(col > 0, Ordering::Relaxed);
+        log(&format!(
+            "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col} ({other} left as they were)"
+        ));
+    }
+}
+
+/// The colour bytes' scale (0x80 = 1.0): KH1's `0x1403B30B8` (1/128, Checked (exe)); the KH2
+/// decomp drops the operand of its scale call (`0x14013FCC0`), taken as KH1's (and `kh2-fx`'s).
+const COLOR_SCALE: f32 = 1.0 / 128.0;
+
+/// `cvttss2si` (what `(int)` of a float is in both games: out of range or NaN gives `i32::MIN`).
+fn cvtt(x: f32) -> i32 {
+    if x.is_nan() || x >= 2147483648.0 || x < -2147483648.0 {
+        i32::MIN
+    } else {
+        x as i32
+    }
+}
+
+/// KH2's pppColor calc (`0x1404C0F60`) on KH1's instance and globals. Work offset 0: four u16
+/// channels (`+0`), the colour bytes the draws read (`+8`). The key's deltas (`+4`) are added on
+/// its frame (not held, not paused, bit 0 of the frame word `+0xC` clear, as KH1's), but the
+/// bytes are written on every call: each channel times the effect's colour (KH1's instance
+/// `+0x30`, KH2's same), clamped at 32767, times 1/128; in monochrome mode RGB become the grey.
+/// KH1's writes the bytes only under the key test's first three conditions (`docs/kh2-effects.md`
+/// §17.6).
+unsafe extern "system" fn col_calc(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    let w = work(obj, prog, 0);
+    let eff = rd::<usize>(b + EFFECT);
+    if rd::<u32>(b + HELD) == 0 && rd::<u8>(eff + 0xD5) == 0 && rd::<u32>(obj + 0xC) & 1 == 0 && rd::<u32>(key) == rd::<u32>(obj + 0xC) {
+        for c in 0..4 {
+            wr::<u16>(w + c * 2, rd::<u16>(w + c * 2).wrapping_add(rd::<u16>(key + 4 + c * 2)));
+        }
+    }
+    let mut v = [0i32; 4];
+    for (c, out) in v.iter_mut().enumerate() {
+        let mut x = rd::<u16>(w + c * 2) as f32 * rd::<f32>(eff + 0x30 + c * 4);
+        if 32767.0 < x {
+            x = 32767.0;
+        }
+        *out = cvtt(x * COLOR_SCALE);
+        wr::<u8>(w + 8 + c, *out as u8);
+    }
+    if rd::<u32>(b + MONO) != 0 {
+        let g = cvtt((v[0] & 0xFF) as f32 * 0.3 + (v[1] & 0xFF) as f32 * 0.59 + (v[2] & 0xFF) as f32 * 0.11) as u8;
+        for c in 0..3 {
+            wr::<u8>(w + 8 + c, g);
+        }
     }
 }
 

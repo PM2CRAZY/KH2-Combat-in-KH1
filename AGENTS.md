@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 402 (testing branch: KH2 effects: KH2's pppColor for KH2's effects only)
+- The tester (option (a), KH1's effects unchanged): KH2's pppColor (Steam KH2 `0x1404C0F60`, bytes written every call,
+  clamped at 32767) as our third entry (`kh2ppp::col_calc`); `kh1dpx` lists our DPX's type-43 words and `kh2ppp::plug`
+  points only those at it (KH1's entry 43 checked, `0x14032B940`). Assumption: KH2's scale 1/128 (KH1's `0x1403B30B8`);
+  KH1's construct `0x14032BAE0`. Notes `docs/kh2-effects.md` §17.6.
+
 ### 2026-10-23: Stage 401 (testing branch: KH2's per-row hop on KH1's air swings)
 - The tester: "(a)", 1:1. KH2 starts each row's hop when it is used, in the air too (`0x1403D78D0`, the count kept).
   Aerial Combo KH2, KH2's plain air row playing on KH1's 0xCC / 0xCD / 0xCE: `combomods::air_hop` / `Run::AirHop`;

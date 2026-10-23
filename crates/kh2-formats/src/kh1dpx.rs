@@ -30,10 +30,11 @@ const KH1_CBP_SLOTS: i32 = 6;
 pub const KH1_LAST_PROGRAM: u32 = 235;
 /// `pppDummyFunc`.
 const DUMMY_PROGRAM: u32 = 1;
-/// Program types whose KH2 version is KH2's own (not KH1's): 201 `pppRyjMegaBirth` (KH2 rewrote it)
-/// and 241 `pppEiDrawShipoly` (KH2 only). [`Kh1Dpx::programs`] lists where they are, so the host
-/// can point them at its own entries once KH1 has relocated the DPX.
-pub const KH2_OWN_PROGRAMS: [u32; 2] = [201, 241];
+/// Program types whose KH2 version is KH2's own (not KH1's): 43 `pppColor` (KH2 writes the colour
+/// bytes every call and clamps them), 201 `pppRyjMegaBirth` (KH2 rewrote it) and 241
+/// `pppEiDrawShipoly` (KH2 only). [`Kh1Dpx::programs`] lists where they are, so the host can point
+/// them at its own entries once KH1 has relocated the DPX (KH1's own DPXs keep KH1's).
+pub const KH2_OWN_PROGRAMS: [u32; 3] = [43, 201, 241];
 
 fn u16_at(b: &[u8], at: usize) -> Result<u16> {
     b.get(at..at + 2).map(|s| u16::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| crate::Error::Format(format!("kh1dpx: read past the end at {at:#x}")))
@@ -242,7 +243,7 @@ pub struct Kh1Dpx {
     pub effects: Vec<u32>,
     /// Each program-type word (an emitter's program record, or a particle data's type list) whose
     /// KH2 type is one of [`KH2_OWN_PROGRAMS`]: its offset in `bytes` and the KH2 type. In `bytes`
-    /// 201 stays 201 and 241 is `pppDummyFunc`; KH1's relocation turns each word into a handle of
+    /// 43 and 201 stay as they are and 241 is `pppDummyFunc`; KH1's relocation turns each word into a handle of
     /// its program table entry.
     pub programs: Vec<(usize, u32)>,
     /// What was moved and copied, for the log.
@@ -653,11 +654,12 @@ mod tests {
     }
     #[test]
     fn kh2_own_programs_are_listed() {
-        let (pax, common) = tiny_with(&[201, 241, 142]);
+        let (pax, common) = tiny_with(&[201, 241, 142, 43]);
         let v = Variant { number: 0x72E, effect: 33, offset: [0.0; 3], angle: [0; 3] };
         let r = build_with(&pax, &common, &[33], &[v]).unwrap();
         // The type list and the emitter's records, in the particle data and in its variant's copy.
-        assert_eq!(r.programs.len(), 8);
+        assert_eq!(r.programs.len(), 12);
+        assert_eq!(r.programs.iter().filter(|p| p.1 == 43).count(), 4);
         for &(at, ty) in &r.programs {
             let word = u32_at(&r.bytes, at).unwrap();
             assert_eq!((ty, word), (ty, if ty == 241 { DUMMY_PROGRAM } else { ty }));
