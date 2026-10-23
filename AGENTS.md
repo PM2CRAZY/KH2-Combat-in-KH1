@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 412 (testing branch: KH2's hood is on its torso)
+- The tester: "the hoodie doesn't seem to be animated anymore". From the files: KH2's model has no hood standing off the
+  back; the mesh behind the neck on 140 is the hair's, the hood is the top of the back on the torso 67 (68 above carries
+  none, no motion turns it off 67). `KH2_SHOWN_ON` hood 72 / 73 -> 67 (`KH2_TORSO`): KH1's hood keeps its bind relation
+  to the neck base (t407 had it turning with KH2's head). Assumption: that patch is the hood. Notes
+  `docs/kh1-secondary-motion.md` "KH2's hood".
+
 ### 2026-10-23: Stage 411 (testing branch: KH1's own parts: a skipped bone holds our matrix moved)
 - Mr Bugs (t409 picture, trace f20377): "his coat, his pants ... return to the map origin". Both of KH1's passes end by
   adding the world translation to every bone (after the world scale, if off 1), placed or not (`0x140392560`,
