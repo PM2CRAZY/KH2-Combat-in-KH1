@@ -11,6 +11,7 @@
 - [5. Mr Bugs: kh2 "Found, not changed (KH2's lock-on turn speed is a const](#^m5)
 - [6. Assistant: t408 and t409, plus notes](#^m6)
 - [7. Mr Bugs: 1. not sure what this question means but, kh1s cam feels fas](#^m7)
+- [8. Assistant: t413 and t414](#^m8)
 
 ---
 
@@ -118,3 +119,24 @@
 ^m7
 
 
+> [!tip] Assistant
+> t413 and t414
+>
+> Thanks for the traces and the answers.
+>
+> - **First person:** your two traces show exactly what you described. KH1's is on the left stick, follows Sora rigidly and turns by how far you push (3° × tilt, no smoothing). Ours (KH2's, t408) is on the right stick, turns a steady 3° a frame and eases the view with KH2's smoothing. Everything about it I can read in KH2's code already matches, so no change there. The one thing I can't read is how fast KH2 looks up and down and how far it can go (it's in KH2's exe data), so ours uses KH1's: 3° a frame, 80° up, 60° down.
+> - **t413, R2:** with Field Camera on Auto, holding R2 stops the camera swinging behind Sora; on Manual it only swings while you hold R2. The keyboard's R2 key should count too. With Frame Advance on, R2 still only steps frames. (Zooming with R2 while swimming isn't in: swimming is KH1's own state, so KH1's camera runs there.)
+> - **t414, mouse (Steam):** the camera turns and zooms faster the faster you move the mouse, the sensitivity setting counts, and with keyboard and mouse the camera follows Sora much more tightly, like KH2 PC. You were right that it's close to KH1's mouse camera: KH1 PC and KH2 PC share the same mouse code, and both speed up with mouse speed by the same factor from about the same base (KH1 about 2.5° a frame, KH2 3°). The differences: KH1's ramps up to speed and stops dead when the mouse stops, and its mouse up/down tilts the camera where KH2's zooms. The comparison table is in `docs/kh2-pad.md`.
+>
+> **Check:** the Steam KH2 decomp for both, the Steam KH1 decomp and exe for the mouse code and button table, and your traces for first person. Not checked in game. Assumption: that the keyboard's R2 key reaches the same pad bit.
+>
+> Questions:
+> 1. First-person look up/down: (a) it feels like KH2's, or (b) KH2's is slower. If so, roughly how much (half?), and does KH2 let you look less far up or down?
+> 2. In KH2 in first person with the mouse, does moving it left/right turn Sora? (a) yes, add it, or (b) no / leave it.
+> 3. At 30 fps, ours follows a little less tightly than KH2's with keyboard and mouse. (a) fix it to KH2's 30 fps behaviour, or (b) leave it?
+
+^m8
+
+
+> [!note] Tester Mr Bugs
+> 
