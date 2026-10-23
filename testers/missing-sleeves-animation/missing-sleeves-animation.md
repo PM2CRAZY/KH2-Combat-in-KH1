@@ -1,0 +1,96 @@
+# Missing sleeves animation
+
+[Back to the tester requests](../../docs/tester-requests.md)
+
+## Messages
+
+- [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](#^m1)
+- [2. Assistant: t375](#^m2)
+- [3. Mr Bugs: 4. do (b) and (c), if there isn't a matching equivalent to s](#^m3)
+- [4. Assistant: t385 to t389 (one part each; the build at the top of the bra](#^m4)
+- [5. Mr Bugs: I sent a trace and a new log](#^m5)
+
+---
+
+
+  
+
+> [!note] Mr Bugs
+> I'm in the process of getting ready to transfer all the kh2 animations into kh1s internals and I noticed on kh2's animations they're missing animations for the sleeves can you double check and add them to our animations? I've logged sora running in kh1 and sora running in kh2, if there's any other missing parts to an animation let me know after you've implemented the changes (logs and traces are in Missing sleeves animation)
+
+^m1
+
+
+> [!tip] Assistant
+> t375
+>
+> Good catch, you were right. Under KH2's moves the sleeves had no animation at all: they stayed fixed to the upper arm like a solid tube. Both games animate the sleeves in their moves (KH2 does it with keyframes, not cloth physics); we just never copied KH2's over. Now each sleeve hangs and flaps the way KH2's sleeve does in the same move, both live and in the baked animations. KH2 has 2 flaps per sleeve and KH1 has 4, so the front and back follow KH2's front and back flaps, and the top and bottom are a mix of the two. The sleeves follow the same switches as the hair (`hair_physics`, `kh2_hair`).
+>
+> **Check:** the game files. I ran it over all 89 of KH2's motions on both arms: nothing breaks, every sleeve follows KH2's direction within 0.03°, and the sleeves never move further from the arm than KH1's own motions take them. Not checked: in game, and whether KH2's exe moves the sleeves any other way at runtime (the motion files have no constraints on them). How KH1's 4 flaps share KH2's 2 is my judgement from where they sit. Notes are in `docs/kh1-secondary-motion.md`. Your traces had no bone data in them, so the cause came from the model and motion files.
+>
+> **Other parts that still don't move under KH2's moves:**
+> - the shorts panels (KH2 animates its own trouser panels, so we could copy those)
+> - the jacket hem (KH2 has matching cloth at the hips)
+> - the belt chain, the necklace and the pieces on the front of the belt (KH2 has nothing matching these)
+> - KH2 also squashes and stretches some cloth, the sleeve flaps included. We only copy turns for now.
+> - The other way round: with the KH2 player model on KH1's own moves, KH2's sleeves, hair, hood and cloth stay still.
+>
+> Questions:
+> 1. What should I do next: (a) the shorts panels from KH2's trousers, (b) the jacket hem from KH2's hip cloth, (c) both, or (d) leave them for now?
+> 2. Should I copy KH2's squash and stretch too? Yes or no.
+> 3. The belt chain and necklace: leave them still, or give them a little swing? A swing would be physics, which goes against the "baked, not physics" rule, so I'd only do it if you want it.
+
+^m2
+
+
+> [!note] Mr Bugs
+> 4. do (b) and (c), if there isn't a matching equivalent to something on kh1's soras body we shouldn't add it, after your done give me a list of similarities that are shared between models so I can make sure nothing is being copied that shouldn't.
+> 5. yes do it
+> 6. if you can bake a custom animation for the small parts kh2 sora doesn't have that kh1 has following the motion of each animation to give them similar looking results to kh1's animations that would be great, use kh1's animations as a reference. 
+>    
+>    "H2 has 2 flaps per sleeve and KH1 has 4, so the front and back follow KH2's front and back flaps, and the top and bottom are a mix of the two. The sleeves follow the same switches as the hair (`hair_physics`, `kh2_hair`)."
+>    
+>    this was a misunderstanding from the user's part, kh2 does not have "physics" but is instead baked so remove those switches out of the code, they're unneeded. If your unsure check the rust decomp, if it isn't there check the kh2 steam gihidra c decomp.
+>    
+>    can you also bake the animations for kh2s walking and running cycles? its more easy for me to compare.
+> 
+> go ahead
+
+^m3
+
+
+> [!tip] Assistant
+> t385 to t389 (one part each; the build at the top of the branch has them all)
+>
+> First, something I found that changes the picture. In KH2's own model, every vertex is attached to exactly one bone, and a lot of the cloth bones KH2 animates have no mesh on them at all: the hood bones, the sleeve flaps, three hair spikes, the ring of cloth round the chest that lines up with KH1's jacket hem, all the trouser bones and the pelvis pieces. So in KH2 they don't visibly move anything. Copying them onto KH1 would add motion KH2's Sora doesn't show (the hem would sit flared out), so by your rule I didn't copy them for the hem and shorts.
+>
+> - **t385, shared parts.** New: KH1's necklace now swings with KH2's necklace (that one really does move on KH2's model). Everything copied from KH2 to KH1 now: hair spikes (KH1 153–192 from KH2 145–163), hood (KH1 80–83 from KH2 72/73), keychain (KH1 283–291 from the Keyblade's 3–11), sleeves (KH1 129/133/137/141 and 233/237/241/245 from KH2 110/202; KH1 130/134/138/142 and 234/238/242/246 from the flaps 113/115/205/207), the necklace (KH1 86 from KH2 165), plus the body. Of those, the hood, the flaps and spikes 143/159/161 have no mesh in KH2. The full table with every bone, and whether each KH2 bone shows on KH2's model, is in `docs/kh1-secondary-motion.md`.
+> - **t386, squash and stretch** is carried now, live and baked. Right now it only shows on the sleeve flaps, because every other KH2 scale key is on a bone with no mesh.
+> - **t387, KH1-only parts** (belt chain, belt-front pieces, shorts, jacket hem, the necklace's pendant) now play KH1's own animation of the same move, stretched to KH2's timing. So KH2's run gets KH1's run's chain swing and hem flap, and a KH2 swing gets KH1's swing's. They ride on KH2's body and are still kept off the thighs. I went with KH1's own animation rather than inventing one, as the closest to what you described.
+> - **t388, the hair and physics switches are gone** (`hair_physics`, `kh2_hair`), and so is our physics swing. KH2 really does just key these parts: the KH2 source has no cloth or hair physics, and nothing in KH2's motions drives them another way. One side effect: the keychain on a Dream weapon or the wooden sword now keeps KH1's rest pose instead of swinging.
+> - **t389, KH2's walk and run are baked** into KH1's walk and run slots (KH2's field cycle on the field version, its battle cycle on the battle ones), under the Misc Animations style like before.
+>
+> **Check:** the game files (all of KH2's motions) and the KH1 decomp (how it scales bones and plays the walk and run). Not checked in game. Assumptions: that the Steam game draws this same KH2 model, and that KH2's and KH1's runs start on the same foot.
+>
+> Questions:
+> 1. The hood, sleeve flaps and three hair spikes we already copy have no mesh in KH2. (a) keep copying them, or (b) follow only what KH2 visibly moves (the hood stays with the head, the sleeves without the flap motion, those spikes stay with the head)?
+> 2. Hem and shorts: (a) keep KH1's own animation, or (b) copy KH2's hidden cloth bones anyway (flared hem, twisted panels)?
+> 3. The baked walk and run play at KH2's own pace, so the feet can slide when you move at other speeds. (a) keep it exactly 1:1, or (b) speed the animation up and down with your movement, like the old version did?
+
+^m4
+
+
+> [!note] Mr Bugs
+> I sent a trace and a new log 
+> 
+> for some reason, standing  and returning to neutral cause parts of soras model to stretch like crazy
+> 
+> for the custom animation parts for kh1s model lets set that aside and work on it later, remove them from animation for now.
+> 
+> 1. (b) only do what kh2 does so its 1:1
+> 2. (a)
+> 3. (a)
+
+^m5
+
+
