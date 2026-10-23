@@ -166,3 +166,15 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 (Add new threads below this line.)
+
+---
+
+  
+
+## Title (the assistant fills this in if you leave it)
+
+  
+
+> [!note] Tester Mr. Bugs
+
+> Can you add a frame advance feature into the debug menu? when you enable it you can frame advance by 1 frame by pressing R2 or pressing the period key on the keyboard, if you hold down the frame advance button then the game plays at normal speed.
