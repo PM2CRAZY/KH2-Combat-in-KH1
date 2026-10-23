@@ -108,6 +108,10 @@ enum Anchor {
     /// One of KH1's own anchor codes, as it is (0x8000: the object root, `0x14029EA00` /
     /// `0x14029EB20`), through its binding mode 2.
     Code(u32),
+    /// A point along the second Keyblade (Valor's left one, Final's second floating one): KH1's
+    /// blade binding (code 0x30, mode 3, as `Blade`) on the left Keyblade's owner, our copy of
+    /// Sora moved onto it that its trail follows (`leftblade::left_owner`). Steam.
+    LeftBlade(f32),
 }
 
 /// The elements of Sora's package switched on for KH1 (the tester: every effect, one move per
@@ -123,16 +127,18 @@ const ON: &[i16] = &[
 ];
 /// The Keyblade's package's elements switched on: its vanish flash (`weapon_vanish`).
 const WEAPON_ON: &[i16] = &[super::kh2fx::WEAPON_VANISH as i16];
-/// The forms' packages (Sora's skeleton: his bones' anchors). Their weapon points stay with
-/// `kh2fx` (open with the tester): 0x4003 / 0x4005 / 0x4007 the first Keyblade's (KH1's blade
-/// binding would turn them with the blade, KH2's weapon bone; `kh2fx` turns them with Sora's
-/// facing, as the tester asked for Valor's grounded finisher), 0x4004 / 0x4006 / 0x4008 the
-/// second's (KH1 has no second Keyblade to bind to).
+/// The forms' packages (Sora's skeleton: his bones' anchors). Their weapon points (the tester,
+/// 1 (a)): the first Keyblade's 0x4003 / 0x4005 / 0x4007 on KH1's blade binding (turned with the
+/// blade, as KH2's weapon bone turns them), the second's 0x4004 / 0x4006 / 0x4008 on KH1's blade
+/// binding of the left Keyblade (`Anchor::LeftBlade`): tip t = 1, root 0, halfway 0.5, KH2's
+/// (`0x1403B50F0`: 0x4004 / 0x4006 / 0x4008 are the second weapon's 0x4003 / 0x4005 / 0x4007).
 fn form_anchor(code: u16) -> Option<Anchor> {
-    if (0x4003..=0x4008).contains(&code) {
-        return None;
+    match code {
+        0x4004 => Some(Anchor::LeftBlade(1.0)),
+        0x4006 => Some(Anchor::LeftBlade(0.0)),
+        0x4008 => Some(Anchor::LeftBlade(0.5)),
+        _ => anchor(code),
     }
-    anchor(code)
 }
 
 /// The spell packages' anchors, as `kh2fx`'s (Sora's bones and object root, the Keyblade's
@@ -1380,7 +1386,7 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     // Steam only (their addresses are Steam's): elsewhere kh2fx plays them.
     let position_only = layer.flags & POSITION_ONLY != 0;
     let unbound = layer.flags & (BIND | BIND_UNTIL_STARTED) == 0;
-    if (matches!(bone, Anchor::Blade(_)) || position_only || unbound) && !steam {
+    if (matches!(bone, Anchor::Blade(_) | Anchor::LeftBlade(_)) || position_only || unbound) && !steam {
         return Started::NotMine;
     }
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
@@ -1404,33 +1410,55 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     if sora < 0x10000 {
         return if owned { Started::NotStarted } else { Started::NotMine };
     }
+    // The second Keyblade's points are bound to its owner (our copy of Sora on the left Keyblade,
+    // filled now); without it (not drawn) kh2fx plays them.
+    let actor = match bone {
+        Anchor::LeftBlade(_) => match super::leftblade::left_owner() {
+            Some(a) => a,
+            None => {
+                if !d.refused.contains(&el) {
+                    d.refused.push(el);
+                    log(&format!("KH2 effects (native): {} element {el} is on the second Keyblade, which isn't drawn; kh2fx plays it", d.label));
+                }
+                return Started::NotMine;
+            }
+        },
+        _ => sora,
+    };
     let once = if layer.flags & BIND_UNTIL_STARTED != 0 { BIND_ONCE } else { 0 };
     let on_bone = |code: u32| {
         let f: unsafe extern "system" fn(usize, u32, usize, u32) -> usize = unsafe { std::mem::transmute(base + START_ON_BONE_RVA) };
-        unsafe { f(d.at, number, sora, code | once) }
+        unsafe { f(d.at, number, actor, code | once) }
     };
     let by_position = |code: u32, t: f32| {
         let f: unsafe extern "system" fn(usize, u32, usize, u32, f32) -> usize = unsafe { std::mem::transmute(base + START_BY_POSITION_STEAM) };
-        unsafe { f(d.at, number, sora, code | once, t) }
+        unsafe { f(d.at, number, actor, code | once, t) }
+    };
+    let on_blade = |t: f32| {
+        let f: unsafe extern "system" fn(usize, u32, usize, u32, f32) -> usize = unsafe { std::mem::transmute(base + START_ON_BLADE_STEAM) };
+        unsafe { f(d.at, number, actor, BLADE_BONE | once, t) }
     };
     let element = match bone {
         Anchor::Bone(b) if position_only => by_position(RAW_POINT | b, 1.0),
-        Anchor::Blade(t) if position_only => by_position(BLADE_BONE, t),
+        Anchor::Blade(t) | Anchor::LeftBlade(t) if position_only => by_position(BLADE_BONE, t),
         Anchor::Bone(b) => on_bone(RAW_BONE | b),
         Anchor::Code(c) => on_bone(c),
-        Anchor::Blade(t) => {
-            let f: unsafe extern "system" fn(usize, u32, usize, u32, f32) -> usize = unsafe { std::mem::transmute(base + START_ON_BLADE_STEAM) };
-            unsafe { f(d.at, number, sora, BLADE_BONE | once, t) }
-        }
+        Anchor::Blade(t) | Anchor::LeftBlade(t) => on_blade(t),
     };
     drop(g);
+    if element != 0 && matches!(bone, Anchor::LeftBlade(_)) {
+        if let Ok(mut l) = LEFT_BOUND.lock() {
+            l.push((element, unsafe { rd::<u32>(element + EL_SERIAL) }));
+            LEFT_ANY.store(true, Ordering::Relaxed);
+        }
+    }
     // Not bound (KH2 places it once, at its start, from the bone as it is then): KH1's start has
     // just placed it the same way; its binding is disarmed so its first run lets go.
     if element != 0 && unbound {
         unsafe { disarm(base, element) };
     } else if element != 0 && steam && (once == 0 || position_only) {
         let pos = position_only.then_some(PosOnly { anchor: bone, offset: layer.bone_offset, prev: [0.0; 4] });
-        unsafe { note_binding(base, element, sora, pos) };
+        unsafe { note_binding(base, element, actor, pos) };
     }
     let set = element != 0 && unsafe { apply(element, &layer, motion) };
     if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
@@ -1548,6 +1576,30 @@ unsafe fn by_position_now(base: usize, actor: usize, record: usize, p: &PosOnly)
     [place[0], place[1], place[2], pt[3] + off[3]]
 }
 
+/// Our elements on the second Keyblade (KH1's element, its serial): its owner is filled from each
+/// of Sora's skeleton passes while one plays (`left_refresh`).
+static LEFT_BOUND: Mutex<Vec<(usize, u32)>> = Mutex::new(Vec::new());
+static LEFT_ANY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// After Sora's skeleton pass: the second Keyblade's owner filled from this pose (KH1's binding
+/// task then reads the left Keyblade where it is this frame, as it reads Sora's own bones); out of
+/// the form (the left Keyblade gone) its effects are stopped with KH1's stop (**Assumption**: KH2's
+/// second-weapon effects don't outlive the weapon).
+fn left_refresh() {
+    let Ok(mut g) = LEFT_BOUND.try_lock() else { return };
+    g.retain(|&(e, s)| unsafe { instance(e, s) }.is_some());
+    if !g.is_empty() && super::leftblade::left_owner().is_none() {
+        for &(e, s) in g.iter() {
+            if let Some(inst) = unsafe { instance(e, s) } {
+                unsafe { stop(e, inst) };
+            }
+        }
+        log(&format!("KH2 effects (native): {} effects on the second Keyblade stopped (it is gone)", g.len()));
+        g.clear();
+    }
+    LEFT_ANY.store(!g.is_empty(), Ordering::Relaxed);
+}
+
 /// Sora's skeleton pass (`pose`, the game thread), `after` it or before. KH2's binding reads its
 /// bone first on its first run (Steam KH2 `0x1402C58F0`: `0x1402C5F70` then `0x1402C49D0` while
 /// the element's timer `+0x58` is 0, after the object's pose; then apply, then read) and keeps
@@ -1556,6 +1608,9 @@ unsafe fn by_position_now(base: usize, actor: usize, record: usize, p: &PosOnly)
 /// later passes, before the pass (the pose KH2's binding read on its run before), while it still
 /// waits, then it is let go (from then on KH1's apply-then-read is KH2's).
 pub fn posed(after: bool) {
+    if after && LEFT_ANY.load(Ordering::Relaxed) {
+        left_refresh();
+    }
     if !FRESH_ANY.load(Ordering::Relaxed) {
         if after {
             PASSES.fetch_add(1, Ordering::Relaxed);

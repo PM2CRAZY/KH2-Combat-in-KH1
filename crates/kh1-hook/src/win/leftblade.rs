@@ -400,6 +400,18 @@ pub fn hide() {
     SHOWN.store(false, Ordering::Relaxed);
 }
 
+/// The left Keyblade's owner for KH1's own bindings (`kh2dpx`: KH2's second-weapon points 0x4004 /
+/// 0x4006 / 0x4008 on KH1's blade binding): our copy of Sora (the one its trail follows), filled
+/// now (`fill_owner`: his matrices as last posed, each moved onto the left Keyblade, and the left
+/// Keyblade's weapon row, so KH1's blade code 0x30 reads the left blade's range). None while the
+/// left Keyblade isn't drawn (out of Valor and Final, or its model not in yet).
+pub fn left_owner() -> Option<usize> {
+    if !INSTALLED.load(Ordering::Relaxed) || !(super::form::two_blades() && SHOWN.load(Ordering::Relaxed) && MESH.load(Ordering::Relaxed) != 0) {
+        return None;
+    }
+    unsafe { fill_owner() }.then(|| FAKE.load(Ordering::Relaxed)).filter(|&f| f != 0)
+}
+
 /// KH1's loader is done with our file (game thread, KH1's loader task).
 unsafe extern "system" fn loaded(size: i32, id: u32, buf: usize) {
     static N: AtomicU32 = AtomicU32::new(0);

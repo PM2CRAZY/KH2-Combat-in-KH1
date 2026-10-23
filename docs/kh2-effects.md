@@ -1591,12 +1591,12 @@ elements; **Checked (files)**):
   motions (the frame triggers 1 the mod's form motions fire, `form::effect` →
   `kh2fx::form_event`). Every element built is switched on; the gate (anchor, flags, programs)
   decides at play. The element's sound is still `kh2sound::spell_element`'s.
-- Anchors: the forms have Sora's skeleton (`pose::Form`), so his bones' table (§18.3). Their
-  weapon points stay with `kh2fx` for now: 0x4003 / 0x4005 / 0x4007 (the first Keyblade) because
-  `kh2fx` turns them with Sora's facing at the blade's point (the tester's request for Valor's
-  grounded finisher), where KH1's blade binding turns them with the blade as KH2's weapon bone
-  does (a question for the tester); 0x4004 / 0x4006 / 0x4008 (the second Keyblade, Valor's left
-  hand, Final's second floating one) because KH1 has no second Keyblade to bind to.
+- Anchors: the forms have Sora's skeleton (`pose::Form`), so his bones' table (Â§18.3). Their
+  weapon points (the tester, 1 (a)): 0x4003 / 0x4005 / 0x4007 (the first Keyblade) on KH1's blade
+  binding of Sora (mode 3, code 0x30, t = 1 / 0 / 0.5), turned with the blade as KH2's weapon bone
+  turns them (`0x1403B50F0` â `0x1403B5450`, the weapon's shape bone; Checked (decomp)); 0x4004 /
+  0x4006 / 0x4008 (the second weapon's same points, `(code â 1) & 1` = 1 there) on the second
+  Keyblade (Â§18.13).
 - Not checked offline: neither file is staged here, so which bones, flags and programs their
   elements use is only known at load (logged: each element switched on, each left out and why).
 
@@ -1648,8 +1648,8 @@ plays everything, as before):
 
 - Sora's package: element 1 (the Drive motion's sphere: KH2's pppSnoMdlDttNorm, §18.6). Every
   other element is KH1's (§18.3..18.6).
-- Valor's and Final's packages: their weapon-point elements (0x4003..0x4008, §18.8), and any
-  element the load log lists as left out (a bone with no KH1 anchor, a flag KH1's binding doesn't
+- Valor's and Final's packages: their second-Keyblade elements while the left Keyblade isn't
+  drawn (its model not in yet, §18.13), and any element the load log lists as left out (a bone with no KH1 anchor, a flag KH1's binding doesn't
   do, a program not compared or KH2-only).
 - The spell packages: elements on KH2's body centre (0x4001), and the same load-log cases.
 - The Keyblade's flash: only if its element fails the gate (logged).
@@ -1721,4 +1721,24 @@ can play.
   No hitch: the build is off the game thread, the entering is a copy of the package's own images
   (tens of KB) and KH1's relocation. KH1 makes each texture on its first draw as for its own
   effects.
+
+### 18.13 The second Keyblade's points (Valor's left Keyblade, Final's second)
+
+- KH1 has one weapon per actor; the second Keyblade is ours (`leftblade`: its model drawn in the
+  left hand, its trail KH1's own on a copy of Sora). That copy (the "left owner": Sora's actor and
+  model instance copied, every one of his world matrices moved by the turn from his right grip to
+  the left one, its weapon object Sora's with the left Keyblade's `btltbl` row) is what KH1's own
+  trail of the left Keyblade follows, so it is KH1's way to have a second weapon to bind to: KH1's
+  blade binding (`0x1402ADD60 (dpx, number, actor, 0x30, t)`, mode 3) on it reads the left blade's
+  bone and its range along it (`0x14029EB20`: code 0x30 through the actor's weapon object `+0x14C`
+  â row `+0x20`, `+0x28`..`+0x24`; bones through its instance `+0x15C`, matrices `+0x1B4`; alive by
+  `+0x374`, copied from Sora: Checked (exe)).
+- So 0x4004 / 0x4006 / 0x4008 are `Anchor::LeftBlade(1 / 0 / 0.5)`: KH1's binding on the left
+  owner, filled at the start (the pose before Sora's pass, as KH1's start reads Sora's) and after
+  each of Sora's skeleton passes while one of them plays (this frame's pose, before KH1's binding
+  task at 139999 reads it, as for the right Keyblade); the first-frame re-read (Â§17.7) and
+  position-only offsets (Â§18.5) work on it as on Sora. Steam only. Without the left owner (not
+  drawn yet) `kh2fx` plays them; when it goes (out of the form) KH1 stops them (**Assumption**:
+  KH2's second-weapon effects end with the weapon). Not checked offline: the forms' files aren't
+  staged, so which of their elements use 0x4004..0x4008 is only in the load log.
 

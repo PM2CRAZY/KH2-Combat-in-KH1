@@ -1,3 +1,7 @@
+### 2026-10-23: Stage 428 (testing branch: KH2 effects: the forms' Keyblade points on KH1's blade binding)
+- The tester (option (a)): 0x4003 / 5 / 7 KH1 blade binding on Sora; 0x4004 / 6 / 8 (KH2's second weapon) on
+  `leftblade::left_owner` (refreshed after Sora's pass while bound; stopped when it goes, assumption). Notes §18.8, §18.13.
+
 ### 2026-10-23: Stage 427 (testing branch: KH2 effects: packages built when needed, lean, freed when not)
 - The tester ("can we have the files generated at run time so we don't take up extra memory?"). `kh2dpx::manage`: wanted
   packages (Sora's for the `kh2_effects` moves + Drive and Revert, the Keyblade's, a form's from the Drive command to revert,
