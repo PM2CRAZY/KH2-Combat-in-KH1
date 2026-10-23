@@ -506,10 +506,54 @@ OG rewrite, Epic addresses there):
 (`+0x14C` info `+0x41`: 1 outside a combo window, +1 inside one when the swing connected) and asks
 the ground picker (`0x1402A6EE0`; air `0x1402A6C70`). It marks KH1's own rows too: finishers
 when the count reaches the stats' `+0xD4` (row 8, or rows 3 / 4 / 5 / 7 by KH1 ability bits and a
-roll), a dash at a target 160 or more away (rows 0 / 1), rows for a target above (2, 9, 10, 14),
-then takes the first marked row whose request isn't the one playing (`+0x164`); with none, rows
-13 / 11 by the motion playing (its plain swings, requests 0xC8 / 0xC9). The row's request runs
-through the request table, which is where our slots go in.
+roll), a dash at a target 160 or more away (rows 0 / 1), rows for a target in a height band
+(9, 10; 14 is its third plain swing, request 0xCA, marked for a target ahead), row 2 when its
+sweep ahead finds no floor (below), then takes the first marked row whose request isn't
+the one playing (`+0x164`); with none, rows 13 / 11 by the motion playing (its plain swings,
+requests 0xC8 / 0xC9). The row's request runs through the request table, which is where our
+slots go in. (Corrected after t374: row 2 is not a row for a target above.)
+- KH1's row runner (`0x1402A68F0`, Steam, Checked; the hook `combat::exec`): rows 0 / 1 lunge by
+  the dash distance the picker left in the direction's y (`0x1402AF960`; the plain path leaves 0
+  there) and queue request 6 (the fall) to follow (`0x14029FA30`, the motion queue: bit 30 and
+  the request); row 2 sets the direction's `+0xC` to 8 (the move speed the state's step takes,
+  `0x1402B18F0` copies the direction into `+0x20` / `+0x2C`) and queues the fall; the plain
+  swings and finishers (default case) queue request 0 (idle) and lunge by the row's own `+8`.
+- KH1's row 2 (`0x1402C6E70`, Steam, Checked): Sora's collision moved along the direction for his
+  `+0x2C0` plus 20, in steps (`0x140195180`); row 2 is marked when a step's result has bit 0 of
+  the collision's `+0x30`, which that mover sets when no floor is found within reach under him
+  (Checked in the decomp). So row 2 is KH1's attack at a drop ahead: it walks him off it, then
+  his fall. KH2 has the same test for its row 1 (below).
+
+**Sora's PTYA table** (moveset 1 of `00battle.bin`, the staged file, Checked (files); 37 rows, in
+table order; "any" = kind 2, every target, measured from the primary target's direction; "primary"
+= kind 1, whose facing window is 0.99996..1, i.e. dead ahead, which the selector makes true
+because it faces the primary target, `0x1404028D0`; "none" = kind 3, no range; gaps are distance
+less the target's radius):
+- Ground hops at a target well above (target about 110 to 250 up, its height widening it): Aerial
+  Sweep (33, primary, 0..260), Aerial Dive (48, primary, 0..650), and the plain one, row 0 (motion
+  182, primary, 0..260, hop 17..67 high, speed -8..8).
+- Ground finishers: Explosion (26, any, 0..300, facing -1..0.92), **row 2 (154, any, 0..180,
+  facing -0.71..0.92)**, Guard Break (27, none), Explosion (42, none), **row 3 (155, none, sub
+  2)**.
+- Ground swings: Vicinity Break (51, any, 0..300, behind: facing -1..-0.17), Flash Step (46,
+  primary, 180..400), Dodge Slash (44, primary, 180..240), Slide Dash (28, primary, 180..650),
+  **row 6 (153, primary, 180..300)**, Dodge Slash (34, any, 0..180, facing 0.17..0.92), **row 4
+  (152, any, 0..180, facing -0.71..0.92)**, Slapshot (35, primary, 0..120), Flash Step (47,
+  primary, 120..400), Dodge Slash (45, primary, 120..180), Flash Step (59, any, 180..400, facing
+  0.97..1), Slide Dash (43, any, 180..650, facing 0.97..1), **row 5 (151, none, sub 6: the
+  default)**. Every ground row's height window is the same (-20..-110 before the target's height:
+  a target on about his level).
+- Air finishers: Magnet Burst (49, any, 0..650), **row 7 (184, any, 0..260, facing
+  -0.71..0.92)**, Aerial Finish (29, none), Magnet Burst (50, primary, 300..650), **row 8 (183,
+  none, sub 7)**. Air swings: Aerial Spiral (36, primary 0..650 any height, and again any
+  300..650), **row 10 (182, primary, 0..260, a target below him)**, **row 9 (181, none, sub 10:
+  the default)**. The air rows hop too (jumps 14..21).
+- By id only (kind 0): **row 1 (181, a hop of 21: the drop ahead, below)**, Guard (11), Upper Slash
+  (12), Finishing Leap (37), Horizontal Slash (38), Counterguard (39), Retaliating Slash (40).
+- So the plain ground combo is: a target within 180 ahead or to the side: 152 / 151 alternating,
+  finisher 154; 180..300 dead ahead: 153 (row 6) / 151; otherwise 151 / 153, finisher 155. The
+  slots t374 builds (`kh2slots::swing_rows`: 151, 152, 153; 154, 155) are all the plain ground
+  rows; the plain ones not built are the hops (rows 0, 1) and the air rows.
 
 **Ours (Base Combo KH2, `kh1_slots` on):** at the press KH1's combo takes (`combat::exec`,
 `combomods::attack`), KH2's selector is asked at KH1's count, with KH2's motion KH1 plays now as
@@ -521,9 +565,18 @@ slot of the picked motion (`kh2slots::pick`) before KH1's row makes it. KH1 play
 row, hits and damage, the KH2 motion's hit / combo / trail windows as the slot's events. Slots
 for every such motion of KH2's rows (`kh2slots::swing_rows`) are built for each request, on the
 request's own template. No new hook; nothing per frame beyond the redirect already there.
-- Not changed: KH1's other rows (its dash at a target, its ability finishers, its jumps at a
-  target above) still play as before; KH2's ability rows are borrows as before (`combomods`);
-  the air combo keeps its fixed 181 / 182 / 183.
+- **KH1's own rows give way** (the tester: "do option (a)", KH2 1:1; `combomods::kh2_row`): when
+  KH1's ground picker took a row that isn't the kind of KH2's pick (its dash, rows 0 / 1; its
+  hop, 2; its rows 9 / 10; its ability finishers 3..7; a swing where KH2 finishes or the other
+  way round) and KH2's pick is a plain ground swing or finisher with a slot, `combat::exec` runs
+  KH1's plain row of that kind instead: swing row 13, or 11 when 13's request is playing (KH1's
+  own fallback order, so the request restarts), or finisher row 8; after a dash row the
+  direction's y (the dash distance) is put back to 0. That row's request then plays KH2's motion
+  as above. KH1's dash, hop and ability finishers no longer come out at Base Combo KH2; KH2's
+  hops (rows 0 / 1) and ability rows aren't KH1 rows and are left to their own handling (the
+  ability rows borrow, `combomods`). Seen in the tester's t374 trace f27098: KH1's dash
+  (request 0xD0, about 280 units) where KH2 took row 5.
+- Not changed: the air combo keeps its fixed 181 / 182 / 183.
 - Found, not added (Steam KH2, `0x140402D20`): on the ground, before the walk, KH2 tests a line
   ahead of Sora (his facing scaled by a stats length `+0x2C` plus `+0x6F0`, laid on the ground,
   `0x1403B7BD0` / `0x1403BA750`) and marks row 1 if it is blocked (not in the air, not with `+0x18C`

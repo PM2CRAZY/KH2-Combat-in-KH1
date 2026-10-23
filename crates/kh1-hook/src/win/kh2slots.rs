@@ -65,7 +65,7 @@ struct Spec {
 /// (104), KH2's own order in the air (181 / 182 alternate, 183 finishes). With these built, the Attack in the air at Aerial Base Combo KH2 stays in KH1's air
 /// state (`covers`, `shared::kh1_combo`) instead of borrowing him for KH2's own air combo.
 /// KH1's ground finisher request (slot 101); 0xC8..0xCA are its swings.
-const GROUND_FINISHER: usize = 0xCB;
+pub const GROUND_FINISHER: usize = 0xCB;
 
 const SPECS: [Spec; 7] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
@@ -718,6 +718,11 @@ pub unsafe fn pick(request: usize, motion: Option<u16>) -> bool {
         }
     }
     m.is_some()
+}
+
+/// A slot of ours plays KH2's `motion` for KH1's `request` (`pick` can point it there).
+pub fn has(request: usize, motion: u16) -> bool {
+    built().is_some_and(|b| b.moves.iter().any(|m| m.request == request && m.motion == motion))
 }
 
 /// The KH2 motion of our slot `actor` plays now (KH2's anti-repeat passes over it, `pick`).

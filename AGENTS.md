@@ -1,3 +1,11 @@
+### 2026-10-23: Stage 390 (testing branch: KH1's own ground rows give way to KH2's pick)
+- The tester Mr Bugs (`docs/tester-requests.md`, "KH2's combo row selection", option (a)): at Base Combo KH2, where KH1's
+  ground picker (`0x1402A6EE0`, Steam) took a row of its own (dash 0 / 1, row 2, 9 / 10, ability finishers 3..7, or the
+  wrong kind) and KH2's pick is a plain ground swing or finisher, `combat::exec` runs KH1's plain row 13 / 11 or 8 instead
+  (`combomods::kh2_row`); after a dash row the direction's y is put back to 0. His t374 trace f27098: KH1's dash (0xD0)
+  where KH2 took row 5. Sora's full PTYA table (staged `00battle.bin`), KH1's row runner (`0x1402A68F0`) and row 2 (a
+  drop ahead, `0x1402C6E70`; t374's notes called it a jump at a target above) in `docs/kh1-anim-slots.md` §7.
+
 ### 2026-10-23: Stage 389 (testing branch: KH2's walk and run baked)
 - The tester: bake KH2's walk and run to compare. `kh2slots::CYCLES`: requests 0x1 / 0x2 are kind 3, three slots each on
   KH1's 2-4 / 5-7 (KH2's field cycle on the field slot, its battle cycle on the other two), redirected at the first;

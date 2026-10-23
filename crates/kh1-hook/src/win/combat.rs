@@ -101,11 +101,15 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // Where KH2 would use one of its ability moves at this press instead, KH2 borrows him for it
     // (`combomods`), at either style.
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::shared::active() && super::shared::kh1_combo(matches!(rd::<i32>(actor + 0x70), 1 | 2)) {
-        if super::combomods::attack(actor, row_info(actor, row).map(|r| r.motion as u16 as u32)) {
-            return;
+        let Some(run) = super::combomods::attack(actor, row, &|r| row_info(actor, r).map(|i| i.motion as u16 as u32)) else { return };
+        // KH2's row selection ran KH1's plain row in place of its dash (rows 0 / 1): the ground
+        // picker left the dash's distance in the direction's y (`0x1402A6EE0`, Steam, Checked;
+        // the plain path has 0 there, the row runner reads it only for rows 0 / 1).
+        if run != row && matches!(row, 0 | 1) && dir >= 0x10000 {
+            wr(dir + 4, 0.0f32);
         }
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
-        return f(actor, row, dir);
+        return f(actor, run, dir);
     }
     // KH1's own combo (`stylecombo`, the Ground / Aerial Combo style set to KH1): its row runs.
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::stylecombo::kh1_row(actor) {
