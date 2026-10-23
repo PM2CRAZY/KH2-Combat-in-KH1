@@ -305,6 +305,13 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 > I moved your files into the thread folders with the hyphen names (`testers/frame-advance-in-the-debug-menu` and so on) so each thread has one folder. I'm working through the other threads now.
 
+> [!tip] Assistant
+> t377
+>
+> The period key is now hidden from KH1 too, so it works exactly like R2: while Frame Advance is on, only Frame Advance sees it. I could read the Steam exe this time, so this is a small hook at the start of KH1's keyboard-to-pad mapping (`0x1400D7E80`; its first bytes are checked before it installs). It clears the period key in KH1's keyboard buffers before KH1 reads them. Check: the Steam exe and decomp; not checked in game yet.
+>
+> The build at the top of the testing branch (`kh1-kh2.dll`) updates by itself a few minutes after each version, so pulling gets you t377.
+
 > [!note] Tester Mr Bugs
 > 
 

@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 377 (testing branch: Frame Advance's period key hidden from KH1)
+- The tester's rule (period key works the same way as R2): KH1 no longer sees the period key while Frame Advance is
+  on. `frameadv::install` hooks KH1's keyboard mapping (Steam `0x1400D7E80 (input object)`, prologue
+  `40 56 41 56 48 83 EC 48` read in the Steam exe), which clears DirectInput's period byte (0x34) in KH1's two key
+  buffers (input `+0x12A0` / `+0x13A0`, filled by `0x1400DA9F0`) before KH1 maps keys to its pad. Steam only, like
+  the rest of Frame Advance. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 376 (testing branch: KH2 effects through KH1's own effect system, step 2: the element layer)
 - The tester Mr Bugs (`docs/tester-requests.md`, "KH2 effects in KH1's own effect system"): KH2's element features in
   KH1's own effect system, not a layer beside it. Notes: `docs/kh2-effects.md` §16.

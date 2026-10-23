@@ -86,5 +86,7 @@ against what the game last saw.
 `0x1401122E0` makes KH1's DirectInput devices: the keyboard (`+8`, read through `0x140112080`) and
 the mouse (`+0x10`, `0x140112100`). `0x1400DA9F0` reads the keyboard's 256 key bytes into the input
 object at `+0x12A0 + index x 0x100` (index `+0x14A0`, two buffers) and then calls `0x1400D7E80` with
-it. **Checked (decomp).** Not done in t371: taking the period key out of that buffer before KH1 maps
-it (a hook on `0x1400D7E80`, whose first bytes need reading from the exe).
+it. **Checked (decomp).** `0x1400D7E80` reads the key bytes of the buffer `+0x14A0` names. t377 hooks its
+start (first bytes `40 56 41 56 48 83 EC 48`, `push rsi; push r14; sub rsp, 0x48`, **Checked (exe)**: the
+Steam exe, SHA-256 `d7907462...4bac`) and, while Frame Advance is on, clears the period key's byte
+(DirectInput 0x34) in both buffers, so KH1 never sees it.

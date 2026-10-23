@@ -32,8 +32,11 @@
 //! - **R2 and period** step the game and nothing else sees them while Frame Advance is on: R2 is
 //!   taken off every pad record (`probe::pad`, as the debug menu hides its buttons), so KH1 and
 //!   the KH2 side (the lock-on switch) don't see it. The period key counts only while the game's
-//!   window is in front. (Not done: hiding the period key from KH1's own keyboard reading, which
-//!   needs a hook in KH1's key mapping, `docs/kh1-frame-advance.md`.)
+//!   window is in front. (t377) KH1 doesn't see the period key either: KH1 reads the keyboard
+//!   into two 256-byte buffers (`0x1400DA9F0`: input object `+0x12A0`, the one this frame at
+//!   `+0x14A0`) and maps the keys to its pad in `0x1400D7E80 (input object)`; a hook on that
+//!   mapping's start clears the period key's byte (DirectInput `DIK_PERIOD`, 0x34) in both
+//!   buffers while Frame Advance is on.
 //! - **The mod's clock** (`clock_ms`) stops while the game is held, so the gaps and windows the
 //!   mod times in real time (a pause seen, KH2 active, the trace's frame gaps) read a stepped
 //!   frame as one played at full speed; `age` does the same for the draw's "posed lately" checks
@@ -61,6 +64,13 @@ const EFFECT_PAUSE_STEAM: usize = 0x1ED6D0;
 const PAUSE_STATE_RVA: Rva = Rva(0x232E9B4);
 /// KH1's pad record (held `+4`, the repeat timers `+0x1C` / `+0x20`).
 const BUTTONS_RVA: Rva = Rva(0x298D4A0);
+/// KH1's keyboard mapping (Steam `0x1400D7E80 (input object)`): `push rsi; push r14; sub rsp, 0x48`,
+/// read in the Steam exe.
+const KEY_MAP_STEAM: usize = 0xD7E80;
+const KEY_MAP_PROLOGUE: [u8; 8] = [0x40, 0x56, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x48];
+static ORIG_KEY_MAP: AtomicUsize = AtomicUsize::new(0);
+/// The period key in DirectInput's key state.
+const DIK_PERIOD: usize = 0x34;
 /// R2 in the pad's PS2 order.
 const R2: u16 = 1 << 9;
 /// The period key (`VK_OEM_PERIOD`).
@@ -189,6 +199,26 @@ pub fn set_on(on: bool) {
         }
         log(&format!("debug menu: frame advance {}", if on { "on (R2 / period: one frame, held 1 s: full speed)" } else { "off" }));
     }
+}
+
+/// Hooks KH1's keyboard mapping (Steam only; the hook checks its bytes first).
+pub unsafe fn install() {
+    if !supported() {
+        return;
+    }
+    let base = GetModuleHandleA(std::ptr::null()) as usize;
+    super::hook::install(base + KEY_MAP_STEAM, &KEY_MAP_PROLOGUE, key_map as *const () as usize, &ORIG_KEY_MAP, "keyboard mapping (frame advance's period key)");
+}
+
+/// KH1's keys to its pad: with Frame Advance on, the period key reads as up in both of KH1's
+/// keyboard buffers (`+0x12A0`, `+0x13A0`), so only Frame Advance sees it.
+unsafe extern "system" fn key_map(input: usize) {
+    if ON.load(Ordering::Relaxed) && input > 0x10000 {
+        wr::<u8>(input + 0x12A0 + DIK_PERIOD, 0);
+        wr::<u8>(input + 0x13A0 + DIK_PERIOD, 0);
+    }
+    let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_KEY_MAP.load(Ordering::Acquire));
+    f(input);
 }
 
 /// Each pad read (`probe::pad`, KH1's records merged): R2 noted; true: the game must not see R2.
