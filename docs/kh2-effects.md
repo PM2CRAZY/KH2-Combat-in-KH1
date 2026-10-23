@@ -1240,6 +1240,57 @@ KH1's: `0x1403212F0`, `0x140320C30`, `0x14031FD00`, `0x140320900`, `0x140320DF0`
 - Not used yet: no native element runs effects 31, 32 or 34 until their elements are switched
   on (elements 44, 45, 48; they still play through `kh2fx`).
 
+### 17.3 pppEiDrawShipoly (241), KH2 only
+
+KH2: calc `0x1404B9C00`, draw `0x1404B9260`, strip `0x1404B8380`, spline `0x1404B8F90` (set-up) /
+`0x1404BAA90` (value), construct `0x1404BA790`, reset `0x1404BA8C0`, destruct `0x1404BAA40`; the
+scroll-draw variant `0x1404B7530` (key `+8`) is not ported (logged once, not drawn; no Explosion or
+Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
+
+- State (work offset 3, 0xE0 bytes): head `+0x00`, ring length `+0x04` (u8, the key's `+11`
+  clamped 4..128), count `+0x06`, ring handle `+0x08` (from the effect allocator, 32 or 16 bytes a
+  slot), expand / velocity / acceleration `+0x0C..+0x14`, the variant's scroll `+0x18..+0x20`,
+  scroll u / v `+0x24` / `+0x28` (random start by key `+0x9F`), the instance matrix copy
+  `+0x30`, drift, its velocity and acceleration `+0x70` / `+0x80` / `+0x90`, the attract point,
+  its velocity and acceleration `+0xA0` / `+0xB0` / `+0xC0`, strength and its rates
+  `+0xD0..+0xD8`, the first key's handle `+0xDC` (the reset takes each accumulator's first key
+  value back off). Construct also sets the effect's "not culled" byte (KH2 `+0xC3`, KH1 `+0xD7`,
+  which KH1's update reads the same way).
+- Calc (once a tick; skipped while fast-forwarding, as KH2's list `0x140779990` skips it):
+  records two points ±width/2 along the instance's y (key `+9` = 0) or its place (else, with the
+  expand value as `w` when key `+0x1C`), in effect space (`+0x11` 0) or through the root (1);
+  then, in the one-point mode, expand (each point but the newest and the two oldest away from the
+  history's centre at its recorded speed), drift (`+0x1D`), attract (`+0x1E`: a step of
+  `(1 − clamp(distance / key +0x8C)) × strength` toward the point, in the instance's frame unless
+  2), each with key deltas at its key frame.
+- Draw: the history, newest first, through the space's view matrix (KH1's `0x142E9D580` view ∘
+  root, or the view), a natural cubic spline (KH2's own elimination, diagonal 4; ours checked to
+  4e-6 against `kh2-fx`'s form and through every point), `sub + 1` samples; in the one-point
+  modes a perpendicular across the screen, half the width long; optional taper. Then the strip
+  through KH1's renderer, the same library KH2's PC port uses (matched by code in both decomps):
+  GIF/PRIM `0x140386330` (KH2 `0x140472DA0`), TEST `0x140386630` (`0x1404730A0`), ZBUF
+  `0x140386960` (`0x1404733D0`, base `0x1425381D4` / `0x140B60258`), TEX0 `0x140386660`
+  (`0x1404730D0`, the model's first group TEX0, which KH1's draw pass has moved to the effect's
+  texture slot, `0x1401EBC60`), ALPHA `0x140386060` (`0x140472AD0`), CLAMP `0x140386210`
+  (`0x140472C80`), shader `0x140108700` (`0x140127030`, 0x2B, or 0x2C in monochrome
+  `0x142538200` / `0x140B60240`, the batched-shape shader), constant 4 `0x1401075D0`
+  (`0x140125F00`), camera `0x14031EAA0` (`0x1404AEB30`; KH1's effect `+0xDC` = KH2's `+0xC8`),
+  the inverse view `0x1400E5570` (`0x14013F3A0`), vertices `0x1400F3040` (`0x140111970`, 0x3C
+  bytes: place twice, colour, uv × 4096, the first two flagged 0x1000) and their draw
+  `0x1400FB9C0` (`0x14011A2F0`, primitive 6, 4 after the first segment). Per segment
+  `2 × (key +0x13 + 1)` vertices across, u along (`+0x9C..+0xA1`, `+0x90` by length, scrolled
+  `+0x94` / `+0x98`), v across, alpha along (`+0x17`, `+0x18`) and across (`+0x16`).
+- **Assumptions** (operands the KH2 decomp drops; no KH2 exe here): the half width is key `+12`
+  × the instance scale x (work offset 1) × the root's x length, and the vertex colour scale 1/225
+  (both as `kh2-fx` read them, §15.4); a column's place is `A·(1 − t) + B·t` with `t` its
+  fraction across (the decomp's operand order; `kh2-fx` runs it from B); the taper's middle is
+  half the sum. Where the decomp reads differently from §15.4 the decomp is followed: the taper
+  narrows the old end (t from 1 at the newest down), the attract step is the normalised
+  direction (not the distance) times the factor, key `+0x9E` = 1 starts u at 0.5, v runs
+  0.01..0.99.
+- Not ported: spaces 2 (an object KH2 sets, `0x140B60270`) and 3 (not drawn), the scroll-draw
+  variant.
+
 ### 17.4 Explosion's elements 44 and 45 through KH1
 
 - Element 44 (effect 31, KH2 bone 0x4003, flags 0xA61, no offset or turn): KH1's start on a

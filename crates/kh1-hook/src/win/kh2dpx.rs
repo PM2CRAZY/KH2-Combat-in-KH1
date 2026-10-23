@@ -464,7 +464,7 @@ pub fn event(motion: u16, el: i16) -> bool {
     }
     // An effect with a program of KH2's own plays through KH1 only with that program plugged in
     // (KH1's own version, or its dummy, isn't KH2's).
-    if layer.kh2_programs && !super::kh2ppp::plugged() {
+    if layer.kh2_programs && !super::kh2ppp::plugged(super::kh2ppp::MEGA_BIRTH) {
         return false;
     }
     let element = match bone {

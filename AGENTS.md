@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 397 (testing branch: KH2 effects: KH2's pppEiDrawShipoly through KH1's renderer)
+- Step 4. The ribbon ported (Steam KH2 `0x1404B9C00` / `0x1404B9260` / `0x1404B8380`: construct, reset, destruct, calc,
+  the spline, the draw), drawn with KH1's GS setters, shader 0x2B, camera `0x14031EAA0`, vertices `0x1400F3040` and draw
+  `0x1400FB9C0`; the spline matches `kh2-fx`'s to 4e-6. Not ported: the scroll-draw variant, spaces 2 and 3. Notes §17.3.
+
 ### 2026-10-23: Stage 396 (testing branch: KH2 effects: Explosion's elements 44 and 45 through KH1)
 - Anchors from KH2 bone codes: 0x4003 / 5 / 7 to KH1's blade point (code 0x30, t 1 / 0 / 0.5, binding mode 3 `0x1402ADD60`,
   t the 5th argument, a float on the stack, Checked (exe)); KH2 67 to KH1 70 (same bind frame). They play only once

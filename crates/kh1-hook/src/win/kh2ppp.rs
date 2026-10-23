@@ -25,6 +25,9 @@
 //! `0x14031BA30`) is KH2's same library (same sizes and code as KH2's `0x14013F850`,
 //! `0x14013F900`, `0x140142080`, `0x140140560`, `0x1404DC710`), so ours calls KH1's.
 //!
+//! 241 `pppEiDrawShipoly` (KH2 only): the ribbon, recorded, splined and drawn as KH2 does,
+//! through KH1's renderer (below; `docs/kh2-effects.md` §17.3).
+//!
 //! Steam only (the addresses are Steam's); elsewhere KH1's own programs stay.
 
 use super::log;
@@ -72,14 +75,20 @@ const SINE: usize = 0x54BED0;
 
 /// KH2's program types ours stand in for.
 pub const MEGA_BIRTH: u32 = 201;
+pub const SHIPOLY: u32 = 241;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
-/// KH2's MegaBirth is plugged into the DPX (its words point at our entry).
-static PLUGGED: AtomicBool = AtomicBool::new(false);
+/// KH2's MegaBirth / ribbon are plugged into the DPX (their words point at our entries).
+static PLUGGED_MB: AtomicBool = AtomicBool::new(false);
+static PLUGGED_SHIPOLY: AtomicBool = AtomicBool::new(false);
 
-/// Whether KH2's own programs are in (an effect that runs one may then play through KH1).
-pub fn plugged() -> bool {
-    PLUGGED.load(Ordering::Relaxed)
+/// Whether KH2's own program `ty` is in (an effect that runs it may then play through KH1).
+pub fn plugged(ty: u32) -> bool {
+    match ty {
+        MEGA_BIRTH => PLUGGED_MB.load(Ordering::Relaxed),
+        SHIPOLY => PLUGGED_SHIPOLY.load(Ordering::Relaxed),
+        _ => false,
+    }
 }
 
 #[repr(C)]
@@ -90,8 +99,9 @@ struct Entry {
 
 /// Our program entries (KH1's 0x50-byte format). Written once on the game thread before any
 /// record points at them; never moved.
-static mut TABLE: [Entry; 1] = [Entry { name: std::ptr::null(), slots: [0; 9] }];
+static mut TABLE: [Entry; 2] = [Entry { name: std::ptr::null(), slots: [0; 9] }, Entry { name: std::ptr::null(), slots: [0; 9] }];
 static NAME_MB: &[u8] = b"pppRyjMegaBirth (KH2)\0";
+static NAME_SHIPOLY: &[u8] = b"pppEiDrawShipoly (KH2)\0";
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -165,15 +175,28 @@ unsafe fn add4(out: usize, a: usize, b: usize) {
     }
 }
 
-/// Points our entries at their functions (once).
-unsafe fn table() -> usize {
+/// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon.
+unsafe fn table(i: usize) -> usize {
     let t = std::ptr::addr_of_mut!(TABLE) as *mut Entry;
     if (*t).name.is_null() {
         let b = base();
         (*t).slots = [mb_calc as *const () as usize, 0, mb_draw as *const () as usize, 0, 0, 0, b + MB_CONSTRUCT_STEAM, 0, b + MB_DESTRUCT_STEAM];
         (*t).name = NAME_MB.as_ptr();
+        let r = t.add(1);
+        (*r).slots = [
+            sp_calc as *const () as usize,
+            0,
+            sp_draw as *const () as usize,
+            0,
+            0,
+            0,
+            sp_construct as *const () as usize,
+            sp_reset as *const () as usize,
+            sp_destruct as *const () as usize,
+        ];
+        (*r).name = NAME_SHIPOLY.as_ptr();
     }
-    t as usize
+    t.add(i) as usize
 }
 
 /// After KH1 relocated the DPX at `dpx`: each KH2-own program word (`programs`: offset in the
@@ -191,23 +214,30 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
             log("KH2 effects (native): KH1's program table isn't as expected; KH2's MegaBirth not plugged in");
             return;
         }
-        let ours = to_handle(table());
-        if ours == 0 {
-            log("KH2 effects (native): no handle for our program table; KH2's MegaBirth not plugged in");
+        // The words of KH2-only programs were relocated to KH1's dummy entry (1).
+        let kh1_dummy = b + TABLE_STEAM + 0x50;
+        let (ours_mb, ours_sp) = (to_handle(table(0)), to_handle(table(1)));
+        if ours_mb == 0 || ours_sp == 0 {
+            log("KH2 effects (native): no handle for our program table; KH2's programs not plugged in");
             return;
         }
-        let (mut done, mut other) = (0, 0);
+        let (mut mb, mut sp, mut other) = (0, 0, 0);
         for &(at, ty) in programs {
             let w = dpx + at;
-            if ty == MEGA_BIRTH && ptr(rd::<u32>(w)) == kh1_mb {
-                wr::<u32>(w, ours);
-                done += 1;
+            let to = ptr(rd::<u32>(w));
+            if ty == MEGA_BIRTH && to == kh1_mb {
+                wr::<u32>(w, ours_mb);
+                mb += 1;
+            } else if ty == SHIPOLY && to == kh1_dummy {
+                wr::<u32>(w, ours_sp);
+                sp += 1;
             } else {
                 other += 1;
             }
         }
-        PLUGGED.store(done > 0, Ordering::Relaxed);
-        log(&format!("KH2 effects (native): KH2's MegaBirth plugged into {done} program words ({other} other KH2-only words left to KH1's dummy)"));
+        PLUGGED_MB.store(mb > 0, Ordering::Relaxed);
+        PLUGGED_SHIPOLY.store(sp > 0, Ordering::Relaxed);
+        log(&format!("KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp} ({other} left as they were)"));
     }
 }
 
@@ -832,5 +862,713 @@ unsafe fn matrix(rec: usize, key: usize, st: usize, m_now: usize, vbm: usize, ma
             mul(out, b + PROJ, out);
         }
         _ => {}
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 241 `pppEiDrawShipoly` (KH2 only): a ribbon through the instance's recent places
+// (`docs/kh2-effects.md` §17.3). Steam KH2: calc `0x1404B9C00`, draw `0x1404B9260`, the strip
+// `0x1404B8380`, spline `0x1404B8F90` / `0x1404BAA90`, construct `0x1404BA790`, reset
+// `0x1404BA8C0`, destruct `0x1404BAA40`. Drawn with KH1's own renderer calls, the same library
+// KH2's PC port draws its ribbon with (each matched function by function in the two decomps).
+
+// KH1's renderer (Steam RVAs), KH2's in brackets.
+/// GIF tag with PRIM (`0x140472DA0`).
+const GS_PRIM_STEAM: usize = 0x386330;
+/// TEST (`0x1404730A0`), ZBUF (`0x1404733D0`), TEX0 (`0x1404730D0`), ALPHA (`0x140472AD0`),
+/// CLAMP (`0x140472C80`): each (register value, context 0).
+const GS_TEST_STEAM: usize = 0x386630;
+const GS_ZBUF_STEAM: usize = 0x386960;
+const GS_TEX0_STEAM: usize = 0x386660;
+const GS_ALPHA_STEAM: usize = 0x386060;
+const GS_CLAMP_STEAM: usize = 0x386210;
+/// Shader (`0x140127030`), shader constant (`0x140125F00`).
+const SHADER_STEAM: usize = 0x108700;
+const SHADER_CONST_STEAM: usize = 0x1075D0;
+/// The camera matrices to the renderer, inverse of projection ∘ view out (`0x1404AEB30`).
+const CAMERA_STEAM: usize = 0x31EAA0;
+/// A rigid matrix's inverse (`0x14013F3A0`).
+const INVERSE_STEAM: usize = 0xE5570;
+/// Vertices from the renderer (`0x140111970`: count, stride) and their draw (`0x14011A2F0`:
+/// count, primitive, flags).
+const VERTICES_STEAM: usize = 0xF3040;
+const DRAW_VERTICES_STEAM: usize = 0xFB9C0;
+/// The effect allocator's free (`0x1404AF410`).
+const FREE_STEAM: usize = 0x31F2F0;
+/// Monochrome mode (`0x140B60240`) and the depth buffer's base (`0x140B60258`).
+const MONO: usize = 0x2538200;
+const ZBP: usize = 0x25381D4;
+/// View ∘ root (`0x142B0ED60`).
+const VIEW_ROOT: usize = 0x2E9D580;
+/// The ribbon's vertex colour scale (the KH2 decomp drops the operand; as `kh2-fx` read it).
+const RIBBON_COLOUR_SCALE: f32 = 1.0 / 225.0;
+/// The scroll-draw variant (key `+8` set, `0x1404B7530`) isn't ported: logged once.
+static LOGGED_VARIANT: AtomicBool = AtomicBool::new(false);
+
+type V4 = [f32; 4];
+
+fn sub4(a: V4, b: V4) -> V4 {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]]
+}
+fn add4v(a: V4, b: V4) -> V4 {
+    [b[0] + a[0], b[1] + a[1], b[2] + a[2], b[3] + a[3]]
+}
+fn scale4(a: V4, s: f32) -> V4 {
+    [s * a[0], s * a[1], s * a[2], s * a[3]]
+}
+fn len3(a: V4) -> f32 {
+    (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt()
+}
+/// Normalise `xyz`, `w` 0 (KH2's `0x140140490`); returns the length.
+fn norm3(a: &mut V4) -> f32 {
+    a[3] = 0.0;
+    let l = len3(*a);
+    if l != 0.0 {
+        let r = 1.0 / l;
+        a[0] *= r;
+        a[1] *= r;
+        a[2] *= r;
+    }
+    l
+}
+/// `b·(1−t) + a·t` (KH2's `0x140141AE0`).
+fn lerp4(a: V4, b: V4, t: f32) -> V4 {
+    let u = 1.0 - t;
+    [b[0] * u + a[0] * t, b[1] * u + a[1] * t, u * b[2] + a[2] * t, b[3] * u + a[3] * t]
+}
+unsafe fn v4(p: usize) -> V4 {
+    rd::<V4>(p)
+}
+unsafe fn xform_v(m: usize, v: V4) -> V4 {
+    let mut o = [0f32; 4];
+    xform(o.as_mut_ptr() as usize, m, v.as_ptr() as usize);
+    o
+}
+
+/// The ribbon's state (work offset 3; construct `0x1404BA790`).
+mod st {
+    pub const HEAD: usize = 0x00;
+    pub const RING: usize = 0x04;
+    pub const COUNT: usize = 0x06;
+    pub const BUF: usize = 0x08;
+    pub const EXPAND: usize = 0x0C;
+    pub const EXPAND_VEL: usize = 0x10;
+    pub const EXPAND_ACC: usize = 0x14;
+    pub const SCROLL_U: usize = 0x24;
+    pub const SCROLL_V: usize = 0x28;
+    pub const M: usize = 0x30;
+    pub const DRIFT: usize = 0x70;
+    pub const DRIFT_VEL: usize = 0x80;
+    pub const DRIFT_ACC: usize = 0x90;
+    pub const ATTRACT: usize = 0xA0;
+    pub const ATTRACT_VEL: usize = 0xB0;
+    pub const ATTRACT_ACC: usize = 0xC0;
+    pub const STRENGTH: usize = 0xD0;
+    pub const STRENGTH_VEL: usize = 0xD4;
+    pub const STRENGTH_ACC: usize = 0xD8;
+    pub const KEY: usize = 0xDC;
+}
+
+unsafe extern "system" fn sp_construct(obj: usize, prog: usize) {
+    let s = work(obj, prog, 3);
+    wr::<u32>(s + st::HEAD, 0);
+    wr::<u16>(s + st::RING, 0x100);
+    wr::<u32>(s + st::BUF, to_handle(0));
+    for at in [st::DRIFT, st::DRIFT_VEL, st::DRIFT_ACC, st::ATTRACT, st::ATTRACT_VEL, st::ATTRACT_ACC] {
+        wr::<[u8; 16]>(s + at, [0; 16]);
+    }
+    wr::<u16>(s + st::COUNT, 0);
+    wr::<u64>(s + st::EXPAND_VEL, 0);
+    wr::<u32>(s + st::EXPAND, 0);
+    wr::<u64>(s + 0x1C, 0);
+    wr::<u32>(s + 0x18, 0);
+    wr::<u64>(s + st::STRENGTH_VEL, 0);
+    wr::<u32>(s + st::STRENGTH, 0);
+    wr::<u64>(s + st::SCROLL_U, 0);
+    wr::<u32>(s + st::KEY, to_handle(0));
+    // The effect isn't skipped off screen (KH2's effect `+0xC3`, KH1's `+0xD7`: a ribbon
+    // reaches past the effect's bounds).
+    let eff = rd::<usize>(base() + EFFECT);
+    if eff != 0 {
+        wr::<u8>(eff + 0xD7, 1);
+    }
+}
+
+/// At an instance loop: the accumulators back to their first key's start.
+unsafe extern "system" fn sp_reset(obj: usize, prog: usize) {
+    let s = work(obj, prog, 3);
+    let k = ptr(rd::<u32>(s + st::KEY));
+    if k == 0 {
+        return;
+    }
+    for i in 0..3 {
+        wr::<f32>(s + st::ATTRACT + i * 4, rd::<f32>(s + st::ATTRACT + i * 4) - rd::<f32>(k + 0x5C + i * 4));
+    }
+    wr::<[u8; 16]>(s + st::ATTRACT_VEL, [0; 16]);
+    wr::<[u8; 16]>(s + st::ATTRACT_ACC, [0; 16]);
+    wr::<u64>(s + st::STRENGTH_VEL, 0);
+    wr::<f32>(s + st::STRENGTH, rd::<f32>(s + st::STRENGTH) - rd::<f32>(k + 0x80));
+    for i in 0..3 {
+        wr::<f32>(s + st::DRIFT + i * 4, rd::<f32>(s + st::DRIFT + i * 4) - rd::<f32>(k + 0x38 + i * 4));
+    }
+    wr::<[u8; 16]>(s + st::DRIFT_VEL, [0; 16]);
+    wr::<[u8; 16]>(s + st::DRIFT_ACC, [0; 16]);
+    wr::<u64>(s + st::EXPAND_VEL, 0);
+    wr::<f32>(s + st::EXPAND, rd::<f32>(s + st::EXPAND) - rd::<f32>(k + 0x2C));
+    wr::<u64>(s + 0x1C, 0);
+    wr::<f32>(s + 0x18, rd::<f32>(s + 0x18) - rd::<f32>(k + 0x20));
+}
+
+unsafe extern "system" fn sp_destruct(obj: usize, prog: usize) {
+    let s = work(obj, prog, 3);
+    let h = rd::<u32>(s + st::BUF);
+    if h != 0 {
+        let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base() + FREE_STEAM);
+        f(rd::<usize>(base() + CTX), ptr(h));
+        wr::<u32>(s + st::BUF, to_handle(0));
+    }
+}
+
+/// The ring slot `back` places behind the head (`head − back`, wrapped).
+unsafe fn ring_at(s: usize, back: i32) -> usize {
+    let mut i = rd::<i32>(s + st::HEAD) - back;
+    if i < 0 {
+        i += rd::<u8>(s + st::RING) as i32;
+    }
+    ptr(rd::<u32>(s + st::BUF)) + i as isize as usize * 16
+}
+
+/// A recorded point into the key's space (`+0x11`: 0 effect space, 1 world through the root;
+/// 3 through KH1's `0x142E9D500` too; 2, an object KH2 sets, isn't ported).
+unsafe fn record_space(key: usize, p: usize) {
+    let b = base();
+    match rd::<u8>(key + 0x11) {
+        1 => xform(p, b + ROOT, p),
+        3 => {
+            xform(p, b + ROOT, p);
+            xform(p, b + 0x2E9D500, p);
+        }
+        _ => {}
+    }
+}
+
+/// The ribbon's calc (`0x1404B9C00`; once a tick, not while fast-forwarding): record, then
+/// expand / drift / attract the history.
+unsafe extern "system" fn sp_calc(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    let eff = rd::<usize>(b + EFFECT);
+    if rd::<u32>(b + FAST_FORWARD) != 0 || rd::<u32>(b + HELD) != 0 || rd::<u8>(eff + 0xD5) != 0 || rd::<u32>(obj + 0xC) & 1 != 0 {
+        return;
+    }
+    let s = work(obj, prog, 3);
+    let frozen = rd::<u8>(key + 10) != 0;
+    let two = rd::<u8>(key + 9) == 0;
+    if !frozen {
+        copy(s + st::M, rd::<usize>(b + OBJ) + 0x10, 64);
+    }
+    if rd::<u32>(s + st::KEY) == 0 {
+        wr::<u32>(s + st::KEY, to_handle(key));
+    }
+    if rd::<u32>(s + st::BUF) == 0 {
+        let ring = rd::<u8>(key + 11).clamp(4, 0x80);
+        wr::<u8>(s + st::RING, ring);
+        let size = if two { (ring as u32) << 5 } else { (ring as u32) << 4 };
+        let f: unsafe extern "system" fn(usize, u32) -> usize = std::mem::transmute(b + ALLOC_STEAM);
+        wr::<u32>(s + st::BUF, to_handle(f(rd::<usize>(b + CTX), size)));
+        match rd::<u8>(key + 0x9F) {
+            1 => wr::<f32>(s + st::SCROLL_U, rand01()),
+            2 => wr::<f32>(s + st::SCROLL_V, rand01()),
+            3 => {
+                wr::<f32>(s + st::SCROLL_U, rand01());
+                wr::<f32>(s + st::SCROLL_V, rand01());
+            }
+            _ => {}
+        }
+    }
+    if ptr(rd::<u32>(s + st::BUF)) == 0 {
+        return;
+    }
+    let ring = rd::<u8>(s + st::RING) as u16;
+    if !frozen {
+        let head = rd::<i32>(s + st::HEAD) as isize as usize;
+        let buf = ptr(rd::<u32>(s + st::BUF));
+        if two {
+            let (a, c) = (buf + head * 32, buf + head * 32 + 16);
+            let w = rd::<f32>(key + 12);
+            let up = [0.0, w * 0.5, 0.0, 1.0f32];
+            xform(a, s + st::M, up.as_ptr() as usize);
+            let down = [0.0, w * -0.5, 0.0, 1.0f32];
+            xform(c, s + st::M, down.as_ptr() as usize);
+            record_space(key, a);
+            record_space(key, c);
+        } else {
+            let p = buf + head * 16;
+            copy(p, s + st::M + 0x30, 16);
+            record_space(key, p);
+            if rd::<u8>(key + 0x1C) != 0 {
+                wr::<f32>(p + 12, rd::<f32>(s + st::EXPAND));
+            }
+        }
+        wr::<u16>(s + st::COUNT, (rd::<u16>(s + st::COUNT).wrapping_add(1)).min(ring));
+    }
+    let count = rd::<u16>(s + st::COUNT) as i32;
+    let on_key = rd::<i32>(key) == rd::<i32>(obj + 0xC);
+    // Expand: each point away from the history's centre at the speed it was recorded with.
+    if rd::<u8>(key + 0x1C) != 0 && !two {
+        let mut c = [0f32; 4];
+        for i in 0..count {
+            c = add4v(c, v4(ring_at(s, i)));
+        }
+        let r = 1.0 / count as u16 as f32;
+        c = [c[0] * r, c[1] * r, c[2] * r, c[3]];
+        for i in 1..count - 2 {
+            let p = ring_at(s, i);
+            let speed = rd::<f32>(p + 12);
+            let mut d = sub4(v4(p), c);
+            norm3(&mut d);
+            let d = [d[0] * speed, d[1] * speed, d[2] * speed, d[3]];
+            wr::<V4>(p, add4v(v4(p), d));
+            wr::<f32>(p + 12, speed);
+        }
+        let acc = rd::<f32>(s + st::EXPAND_ACC);
+        let vel = acc + rd::<f32>(s + st::EXPAND_VEL);
+        wr::<f32>(s + st::EXPAND_VEL, vel);
+        let e = vel + rd::<f32>(s + st::EXPAND);
+        wr::<f32>(s + st::EXPAND, e);
+        if on_key {
+            wr::<f32>(s + st::EXPAND, e + rd::<f32>(key + 0x2C));
+            wr::<f32>(s + st::EXPAND_VEL, vel + rd::<f32>(key + 0x30));
+            wr::<f32>(s + st::EXPAND_ACC, acc + rd::<f32>(key + 0x34));
+        }
+    }
+    // Drift: the history (not the newest point) moved by the drift.
+    if rd::<u8>(key + 0x1D) != 0 && !two {
+        for i in 1..count {
+            let p = ring_at(s, i);
+            wr::<V4>(p, add4v(v4(p), v4(s + st::DRIFT)));
+        }
+        wr::<V4>(s + st::DRIFT_VEL, add4v(v4(s + st::DRIFT_VEL), v4(s + st::DRIFT_ACC)));
+        wr::<V4>(s + st::DRIFT, add4v(v4(s + st::DRIFT), v4(s + st::DRIFT_VEL)));
+        if on_key {
+            for k in 0..3 {
+                wr::<f32>(s + st::DRIFT + k * 4, rd::<f32>(key + 0x38 + k * 4) + rd::<f32>(s + st::DRIFT + k * 4));
+                wr::<f32>(s + st::DRIFT_VEL + k * 4, rd::<f32>(key + 0x44 + k * 4) + rd::<f32>(s + st::DRIFT_VEL + k * 4));
+                wr::<f32>(s + st::DRIFT_ACC + k * 4, rd::<f32>(key + 0x50 + k * 4) + rd::<f32>(s + st::DRIFT_ACC + k * 4));
+            }
+        }
+    }
+    // Attract: the history pulled toward a point (2: as it is; else in the instance's frame),
+    // a fixed step a tick, less with the distance over the key's range.
+    let attract = rd::<u8>(key + 0x1E);
+    if attract != 0 && !two {
+        for i in 1..count {
+            let p = ring_at(s, i);
+            let target = if attract == 2 { v4(s + st::ATTRACT) } else { xform_v(s + st::M, v4(s + st::ATTRACT)) };
+            let mut d = sub4(target, v4(p));
+            let l = norm3(&mut d) / rd::<f32>(key + 0x8C);
+            let f = if 0.0 <= l { if l <= 1.0 { l } else { 1.0 } } else { 0.0 };
+            let k = (1.0 - f) * rd::<f32>(s + st::STRENGTH);
+            let d = [d[0] * k, d[1] * k, d[2] * k, 0.0];
+            wr::<V4>(p, add4v(v4(p), d));
+        }
+        wr::<V4>(s + st::ATTRACT_VEL, add4v(v4(s + st::ATTRACT_VEL), v4(s + st::ATTRACT_ACC)));
+        wr::<V4>(s + st::ATTRACT, add4v(v4(s + st::ATTRACT), v4(s + st::ATTRACT_VEL)));
+        let sv = rd::<f32>(s + st::STRENGTH_VEL) + rd::<f32>(s + st::STRENGTH_ACC);
+        wr::<f32>(s + st::STRENGTH_VEL, sv);
+        wr::<f32>(s + st::STRENGTH, sv + rd::<f32>(s + st::STRENGTH));
+        if on_key {
+            for k in 0..3 {
+                wr::<f32>(s + st::ATTRACT + k * 4, rd::<f32>(key + 0x5C + k * 4) + rd::<f32>(s + st::ATTRACT + k * 4));
+                wr::<f32>(s + st::ATTRACT_VEL + k * 4, rd::<f32>(key + 0x68 + k * 4) + rd::<f32>(s + st::ATTRACT_VEL + k * 4));
+                wr::<f32>(s + st::ATTRACT_ACC + k * 4, rd::<f32>(key + 0x74 + k * 4) + rd::<f32>(s + st::ATTRACT_ACC + k * 4));
+            }
+            for (k, at) in [st::STRENGTH, st::STRENGTH_VEL, st::STRENGTH_ACC].into_iter().enumerate() {
+                wr::<f32>(s + at, rd::<f32>(key + 0x80 + k * 4) + rd::<f32>(s + at));
+            }
+        }
+    }
+    if !frozen {
+        let mut h = rd::<u32>(s + st::HEAD).wrapping_add(1);
+        if rd::<u8>(s + st::RING) as u32 <= h {
+            h = 0;
+        }
+        wr::<u32>(s + st::HEAD, h);
+    }
+}
+
+/// A natural cubic spline through `p[..n]` (`0x1404B8F90`): `c` = the second derivatives / 6,
+/// solved with KH2's elimination (diagonal 4, ends 0).
+fn spline(p: &[V4], n: usize, c: &mut [V4]) {
+    let unit = [0.0, 0.0, 0.0, 1.0];
+    c[n - 1] = unit;
+    c[0] = unit;
+    let mut d = [[0f32; 4]; 130];
+    for k in 0..n - 1 {
+        d[k] = sub4(p[k + 1], p[k]);
+    }
+    let pivot0 = [4.0, 4.0, 4.0, 5.0];
+    let mut m = [[0f32; 4]; 130];
+    m[0] = pivot0;
+    c[1] = sub4(sub4(d[1], d[0]), c[0]);
+    if n > 3 {
+        for k in 0..n - 3 {
+            let inv = [1.0 / m[k][0], 1.0 / m[k][1], 1.0 / m[k][2], 1.0];
+            let t = [inv[0] * c[k + 1][0], inv[1] * c[k + 1][1], inv[2] * c[k + 1][2], inv[3] * c[k + 1][3]];
+            c[k + 2] = sub4(sub4(d[k + 2], d[k + 1]), t);
+            m[k + 1] = sub4(pivot0, inv);
+        }
+    }
+    c[n - 2] = sub4(c[n - 2], c[n - 1]);
+    for i in (1..=n - 2).rev() {
+        let v = sub4(c[i], c[i + 1]);
+        c[i] = [v[0] / m[i - 1][0], v[1] / m[i - 1][1], v[2] / m[i - 1][2], v[3]];
+    }
+}
+
+/// The spline at `t` (`0x1404BAA90`): `p[i] + f·(Δp − 2c[i] − c[i+1]) + 3c[i]·f² + (c[i+1] −
+/// c[i])·f³`, `i = ⌊t⌋` (both arrays padded with 0 past the last point, as KH2 reads past it at
+/// the end with f = 0).
+fn spline_at(p: &[V4], c: &[V4], t: f32) -> V4 {
+    let i = t as i32 as usize;
+    let f = t - i as f32;
+    let q = add4v(scale4(c[i], 2.0), c[i + 1]);
+    let e = sub4(sub4(p[i + 1], p[i]), q);
+    let three = scale4(c[i], 3.0);
+    let a = add4v(scale4(sub4(c[i + 1], c[i]), f), three);
+    let a = add4v(scale4(a, f), e);
+    add4v(scale4(a, f), p[i])
+}
+
+/// The ribbon's draw (`0x1404B9260`): its two edges through the history, then the strip.
+unsafe extern "system" fn sp_draw(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    let scale = work(obj, prog, 1);
+    let colour = work(obj, prog, 2);
+    let s = work(obj, prog, 3);
+    if rd::<u8>(key + 8) != 0 {
+        if !LOGGED_VARIANT.swap(true, Ordering::Relaxed) {
+            log("KH2 effects (native): a ribbon with KH2's scroll-draw variant (key +8) isn't drawn (not ported)");
+        }
+        return;
+    }
+    let space = rd::<u8>(key + 0x11);
+    let to_view = match space {
+        0 => b + VIEW_ROOT,
+        1 => b + VIEW,
+        _ => return,
+    };
+    let buf = ptr(rd::<u32>(s + st::BUF));
+    let n = rd::<u16>(s + st::COUNT) as usize;
+    let sub = rd::<u8>(key + 0x12) as usize;
+    if buf == 0 || n <= 2 || n > 128 {
+        return;
+    }
+    let ring = rd::<u8>(s + st::RING) as i32;
+    let newest = rd::<i32>(s + st::HEAD) - 1;
+    let idx = |i: i32| {
+        let j = newest - i;
+        if j < 0 {
+            j + ring
+        } else {
+            j
+        }
+    };
+    let mut pts = [[0f32; 4]; 130];
+    let mut cs = [[0f32; 4]; 130];
+    // The two edges, newest first (`sub + 1` samples each).
+    let mut ea = [[0f32; 4]; 257];
+    let mut eb = [[0f32; 4]; 257];
+    if sub == 0 {
+        // No segment to draw (the strip still steps its scroll).
+    } else if rd::<u8>(key + 9) == 0 {
+        for side in 0..2 {
+            for i in 0..n {
+                let mut v = v4(buf + (idx(i as i32) as usize * 2 + side) * 16);
+                v[3] = 1.0;
+                pts[i] = xform_v(to_view, v);
+            }
+            spline(&pts, n, &mut cs);
+            let e = if side == 0 { &mut ea } else { &mut eb };
+            for (j, out) in e.iter_mut().enumerate().take(sub + 1) {
+                let mut v = spline_at(&pts, &cs, j as f32 / (sub as f32 / (n - 1) as i32 as f32));
+                v[3] = 1.0;
+                *out = v;
+            }
+        }
+    } else {
+        for i in 0..n {
+            let mut v = v4(buf + idx(i as i32) as usize * 16);
+            v[3] = 1.0;
+            pts[i] = v;
+        }
+        spline(&pts, n, &mut cs);
+        let mut mid = [[0f32; 4]; 257];
+        for (j, out) in mid.iter_mut().enumerate().take(sub + 1) {
+            let mut v = spline_at(&pts, &cs, (j as f32 / sub as f32) * (n - 1) as i32 as f32);
+            v[3] = 1.0;
+            *out = xform_v(to_view, v);
+        }
+        if 0.0 < rd::<f32>(key + 0x90) {
+            for j in 0..sub {
+                mid[j][3] = len3(sub4(mid[j], mid[j + 1]));
+            }
+            mid[sub][3] = 0.0;
+        }
+        // Half the width across the screen: key width x the instance's scale x x the root's
+        // (the KH2 decomp drops this operand; as `kh2-fx` read it).
+        let half = rd::<f32>(key + 12) * rd::<f32>(scale) * rd::<f32>(b + RS);
+        let mut prev = [0f32; 4];
+        let mut dir = [0f32; 4];
+        for j in 0..=sub {
+            let (a, c) = if j != sub { (mid[j], mid[j + 1]) } else { (mid[j - 1], mid[j]) };
+            let perp = if rd::<u8>(key + 9) == 1 {
+                let mut d = sub4(a, c);
+                norm3(&mut d);
+                let d = scale3v(d, half);
+                [-d[1], d[0], d[2], d[3]]
+            } else {
+                // The direction summed with the last one (the last sample keeps the last's y).
+                if j == sub {
+                    dir[0] = 0.0;
+                } else {
+                    dir = sub4(a, c);
+                }
+                dir[2] = 0.0;
+                dir[3] = 0.0;
+                norm3(&mut dir);
+                dir = scale3v(dir, half);
+                let sum = add4v(prev, dir);
+                prev = dir;
+                [-sum[1], sum[0], sum[2], sum[3]]
+            };
+            let (p, q) = (add4v(mid[j], perp), sub4(mid[j], perp));
+            ea[j] = [p[0], p[1], mid[j][2], mid[j][3]];
+            eb[j] = [q[0], q[1], mid[j][2], mid[j][3]];
+        }
+    }
+    // Taper: the ribbon narrows toward its middle line along its length.
+    if rd::<u8>(key + 0x10) != 0 {
+        let mut t = 1.0f32;
+        for j in 0..=sub {
+            // (Only x, y, z are written back.)
+            let m = scale3v(add4v(ea[j], eb[j]), 0.5);
+            let (a, c) = (lerp4(ea[j], m, t), lerp4(eb[j], m, t));
+            ea[j] = [a[0], a[1], a[2], ea[j][3]];
+            eb[j] = [c[0], c[1], c[2], eb[j][3]];
+            let next = t - 1.0 / sub as i32 as f32;
+            t = if 0.0 <= next { next } else { 0.0 };
+        }
+    }
+    let model = if rd::<i32>(key + 4) == 0xFFFF { 0 } else { rd::<usize>(rd::<usize>(b + CTX) + 0x20) + rd::<i32>(key + 4) as isize as usize * 0x38 };
+    strip(model, key, s, colour, &ea, &eb, n);
+}
+
+/// `xyz · s`, `w` kept.
+fn scale3v(a: V4, s: f32) -> V4 {
+    [s * a[0], s * a[1], s * a[2], a[3]]
+}
+
+/// The strip between the two edges (`0x1404B8380`), through KH1's renderer: a triangle strip
+/// per segment, `2 x (key 0x13 + 1)` vertices across.
+#[allow(clippy::too_many_arguments)]
+unsafe fn strip(model: usize, key: usize, s: usize, colour: usize, ea: &[V4], eb: &[V4], n: usize) {
+    let b = base();
+    let sub = rd::<u8>(key + 0x12);
+    if n < 3 {
+        return;
+    }
+    // Texture region along (u) and across (v), and the direction u runs.
+    let mut u1: f32 = match rd::<u8>(key + 0x9C) {
+        1 => 0.5,
+        2 => 0.25,
+        _ => 1.0,
+    };
+    let mut vmax: f32 = match rd::<u8>(key + 0x9D) {
+        1 => 0.5,
+        2 => 0.25,
+        _ => 1.0,
+    };
+    let mut u0: f32 = 0.5;
+    match rd::<u8>(key + 0x9E) {
+        1 => u1 += 0.25,
+        2 => u1 += 0.5,
+        3 => {
+            u0 = 0.75;
+            u1 += 0.75;
+        }
+        _ => u0 = 0.0,
+    }
+    u0 += 0.01;
+    u1 -= 0.01;
+    vmax -= 0.01;
+    let fill = if rd::<u8>(key + 0xA1) != 0 { n as f32 / rd::<u8>(s + st::RING) as f32 } else { 1.0 };
+    let span = if rd::<u8>(key + 0xA1) != 0 { fill * (u1 - u0) } else { u1 - u0 };
+    let (mut u, du) = match rd::<u8>(key + 0xA0) {
+        0 | 2 => (u0, span / sub as f32),
+        1 | 3 => (u1, -(span / sub as f32)),
+        _ => (0.0, 0.0),
+    };
+    // Alpha along the ribbon (key 0x17): up over the first part, down after.
+    let mut f = 1.0f32;
+    let (mut up, mut down) = (0.0f32, 0.0f32);
+    if rd::<u8>(key + 0x17) != 0 {
+        let rise = (sub as f32 * rd::<f32>(key + 0x18)) as i32 as f32;
+        let fall = sub as f32 - rise;
+        if 0.0 < rise {
+            f = 0.0;
+            up = 1.0 / rise;
+        } else {
+            f = 1.0;
+        }
+        if 0.0 < fall {
+            down = 1.0 / fall;
+        }
+    }
+    // GS state, as KH2 sets it (KH1's same calls).
+    let gs = |at: usize, v: u64| {
+        let f: unsafe extern "system" fn(usize, i32) = std::mem::transmute(b + at);
+        f(&v as *const u64 as usize, 0);
+    };
+    let tag: u64 = 0x6000_0000_0000_8001;
+    let prim: unsafe extern "system" fn(usize) = std::mem::transmute(b + GS_PRIM_STEAM);
+    prim(&tag as *const u64 as usize);
+    gs(GS_TEST_STEAM, if rd::<u8>(key + 0x14) != 0 { 0x3000D } else { 0x7000D });
+    gs(GS_ZBUF_STEAM, (rd::<u32>(b + ZBP) & 0x1FF) as u64 | 0x1_0100_0000);
+    let omd = if model != 0 { rd::<usize>(model + 0x28) } else { 0 };
+    let tex0 = if omd != 0 {
+        let g = (omd as isize + rd::<i32>(omd + 4) as isize) as usize;
+        rd::<u32>(g + 8) as u64 | (rd::<u32>(g + 0xC) as u64) << 32
+    } else {
+        0
+    };
+    gs(GS_TEX0_STEAM, tex0);
+    let alpha = match rd::<u8>(key + 0x15) {
+        0 => Some(0x80_0000_0044u64),
+        1 => Some(0x80_0000_0048),
+        2 => Some(0x80_0000_0042),
+        3 => Some(0x80_0000_0041),
+        4 => Some(0x80_0000_0046),
+        _ => None,
+    };
+    if let Some(a) = alpha {
+        gs(GS_ALPHA_STEAM, a);
+    }
+    gs(GS_CLAMP_STEAM, 0);
+    let shader: unsafe extern "system" fn(i32) = std::mem::transmute(b + SHADER_STEAM);
+    shader(0x2B + (rd::<u32>(b + MONO) != 0) as i32);
+    let k4 = [0.0f32, 1.0, 0.0, 1.0];
+    let constant: unsafe extern "system" fn(i32, usize, i32) = std::mem::transmute(b + SHADER_CONST_STEAM);
+    constant(4, k4.as_ptr() as usize, 0);
+    let mut cam = [0f32; 16];
+    let camera: unsafe extern "system" fn(usize) -> usize = std::mem::transmute(b + CAMERA_STEAM);
+    camera(cam.as_mut_ptr() as usize);
+    let cols = rd::<u8>(key + 0x13) as u32 + 1;
+    let rgb = [rd::<u8>(colour + 8), rd::<u8>(colour + 9), rd::<u8>(colour + 0xA)];
+    let eff = rd::<usize>(b + EFFECT);
+    // Vertices go to the renderer in world space (the inverse view of the view-space edges),
+    // or through the projection when the effect draws in screen space (KH2's `+0xC8`, KH1's
+    // `+0xDC`).
+    let screen = eff != 0 && rd::<i32>(eff + 0xDC) != 0;
+    let mut inv = [0f32; 16];
+    let inverse: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(b + INVERSE_STEAM);
+    inverse(b + VIEW, inv.as_mut_ptr() as usize);
+    let m = if screen { b + PROJ } else { inv.as_ptr() as usize };
+    let mut falling = false;
+    let (mut across, mut delta) = (0.0f32, 0.0f32);
+    let verts: unsafe extern "system" fn(u32, u32, u32) -> usize = std::mem::transmute(b + VERTICES_STEAM);
+    let draw: unsafe extern "system" fn(u32, u32, u32) = std::mem::transmute(b + DRAW_VERTICES_STEAM);
+    let to_prim = 0x302E_4000_0000_8000u64 | (cols as u64 * 2);
+    for seg in 0..sub as usize {
+        let a_inst = rd::<u8>(colour + 0xB) as f32;
+        let mut near = a_inst;
+        let mut far = a_inst;
+        if rd::<u8>(key + 0x17) != 0 {
+            near = a_inst * f;
+            let next = if !falling {
+                if 1.0 <= f {
+                    falling = true;
+                    f - down
+                } else {
+                    f + up
+                }
+            } else {
+                f - down
+            };
+            f = if 0.0 <= next { if next <= 1.0 { next } else { 1.0 } } else { 0.0 };
+            far = a_inst * f;
+        }
+        let (mut un, next_u);
+        if 0.0 < rd::<f32>(key + 0x90) {
+            un = u + (ea[seg][3] / rd::<f32>(key + 0x90)) * (u1 - u0);
+            next_u = if u1 < un { (un - u1) + u0 } else { un };
+        } else {
+            un = u + du;
+            next_u = if un <= u1 { un } else { u1 };
+        }
+        un += rd::<f32>(s + st::SCROLL_U);
+        let uc = u + rd::<f32>(s + st::SCROLL_U);
+        if rd::<u8>(key + 0x16) != 0 {
+            across = 0.0;
+            delta = 2.0 / (cols as i32 - 1) as f32;
+        }
+        prim(&to_prim as *const u64 as usize);
+        let count = cols * 2;
+        let vb = verts(count, 0x3C, 0);
+        if vb == 0 {
+            return;
+        }
+        let last = (cols as i32 - 1) as f32;
+        for c in 0..cols as usize {
+            let t = c as i32 as f32 / last;
+            let v = (vmax - 0.01) * t + 0.01 + rd::<f32>(s + st::SCROLL_V);
+            let (mut c0, mut c1) = (near, far);
+            if rd::<u8>(key + 0x16) != 0 {
+                c0 = near * across;
+                c1 = far * across;
+                let nx = across + delta;
+                if nx < 1.0 {
+                    across = if 0.0 <= nx { nx } else { 0.0 };
+                } else {
+                    delta *= -1.0;
+                    across = 1.0;
+                }
+            }
+            let mut p0 = lerp4(eb[seg], ea[seg], t);
+            p0[3] = 1.0;
+            let mut p1 = lerp4(eb[seg + 1], ea[seg + 1], t);
+            p1[3] = 1.0;
+            let (w0, w1) = (xform_v(m, p0), xform_v(m, p1));
+            let (st0, st1) = if 1 < rd::<u8>(key + 0xA0) { ([v, uc], [v, un]) } else { ([uc, v], [un, v]) };
+            for (k, (pos, uv, al)) in [(w0, st0, c0), (w1, st1, c1)].into_iter().enumerate() {
+                let i = c * 2 + k;
+                let at = vb + i * 0x3C;
+                wr::<V4>(at, pos);
+                wr::<V4>(at + 0x10, pos);
+                let a = (al as u32) as u8;
+                wr::<V4>(
+                    at + 0x20,
+                    [rgb[0] as f32 * RIBBON_COLOUR_SCALE, rgb[1] as f32 * RIBBON_COLOUR_SCALE, rgb[2] as f32 * RIBBON_COLOUR_SCALE, a as f32 * RIBBON_COLOUR_SCALE],
+                );
+                wr::<f32>(at + 0x30, uv[0] * 4096.0);
+                wr::<f32>(at + 0x34, uv[1] * 4096.0);
+                wr::<u16>(at + 0x38, if i < 2 { 0x1000 } else { 0 });
+            }
+        }
+        draw(count, 6, if seg > 0 { 4 } else { 0 });
+        u = next_u;
+    }
+    // The texture scroll, wrapped to 0..1 (not on a tick's repeat frame).
+    if rd::<u32>(b + HELD) == 0 && rd::<u8>(eff + 0xD5) == 0 && rd::<u8>(eff + 0xD8) == 0 {
+        let wrap = |mut v: f32| {
+            while 1.0 < v {
+                v -= 1.0;
+            }
+            while v < 0.0 {
+                v += 1.0;
+            }
+            v
+        };
+        wr::<f32>(s + st::SCROLL_V, wrap(rd::<f32>(key + 0x98) + rd::<f32>(s + st::SCROLL_V)));
+        wr::<f32>(s + st::SCROLL_U, wrap(rd::<f32>(key + 0x94) + rd::<f32>(s + st::SCROLL_U)));
     }
 }
