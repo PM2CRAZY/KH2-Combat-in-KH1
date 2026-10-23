@@ -1420,3 +1420,28 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   `W_EX010` package), `fx_test`, and the endings and fades it steps for those (`tick`,
   `owner_gone`). `kh2fx::tick` / `owner_gone` also step `kh2dpx`'s endings and fades; `paused`
   is used by `model`.
+
+## 18. Every KH2 effect through KH1 (Steam KH1)
+
+The port of every effect the mod plays onto KH1's own effect system, the way Explosion went
+(§16, §17). Tags as in §16.
+
+### 18.1 The builder for any effects (`kh2_formats::kh1dpx::build_groups`)
+
+- A KH1 DPX holds any number of DPDs (its DPD list after the entries): KH1's DPX relocation
+  (`0x1401E0080`) turns every entry's DPD offset into a handle and relocates each DPD of the list
+  (`0x1401ECA40`, its particle datas through `0x14031C2F0`). **Checked (exe)**.
+- KH1 gives an instance its texture slots when it draws (`0x1401ECF30` → `0x1401EDB00`): 10 TBP
+  and 6 CBP slots, a run for each DPD (keyed by the instance's DPD `+0x98`), shared by the
+  instances of that DPD. **Checked (exe)**. So the builder makes one DPD per group of effects,
+  each with only its particle datas and the textures they draw (the source DPD's own and KH2's
+  common ones), packed from KH1's own window (TBP `0x3800`, CBP `0x3D40`), as for Explosion. A
+  group's effects come from one DPD of the PAX; different groups may come from different DPDs.
+  A group needing more slots than KH1 has (or missing a texture) is left out and reported
+  (`Kh1Dpx::skipped`); the rest are built.
+- Each entry is a copy of a KH2 effect's particle data under its own number (`Variant`: the
+  element's offset and turn folded into the header's local transform, §16.2), its program types
+  listed (`Kh1Dpx::types`), KH2's own program words listed (`Kh1Dpx::programs`), and each
+  texture's source DPD noted (`TexOrigin::src_dpd_at`) for its HD image.
+- Explosion's DPX from it is byte for byte the one t368..t404 built (checked offline with a
+  stand-in for `texcommon.dpd`, which isn't staged here).

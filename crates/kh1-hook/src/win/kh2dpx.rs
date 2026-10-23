@@ -341,14 +341,20 @@ fn build() -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String, Vec<Layer>),
     // record's pixels it replaces.
     let own_hd = install.read_remastered_any(src, "obj/P_EX100.a.us").map_err(|e| format!("P_EX100 HD textures: {e}"))?;
     let common_hd = install.read_remastered_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon HD textures: {e}"))?;
-    let own_recs = kh2_formats::kh1dpx::texture_records(&pax.data[r.own_dpd_at..]).map_err(|e| e.to_string())?;
-    let common_recs = kh2_formats::kh1dpx::texture_records(&common[r.common_dpd_at..]).map_err(|e| e.to_string())?;
     let mut hd = Vec::new();
     let mut report = Vec::new();
+    // Each source DPD's texture records (own: in the PAX; common: in texcommon), by where it starts.
+    let mut recs_of: Vec<((bool, usize), Vec<(usize, i32)>)> = Vec::new();
     for t in &r.textures {
         // A texture's HD image is the one for its TBP (KH1 and KH2 make one texture per TBP):
         // the asset whose offset is any of the source DPD's records with that TBP.
-        let (assets, recs, base) = if t.own { (&own_hd, &own_recs, pax_at + r.own_dpd_at) } else { (&common_hd, &common_recs, r.common_dpd_at) };
+        let src_file: &[u8] = if t.own { pax.data } else { &common };
+        if !recs_of.iter().any(|x| x.0 == (t.own, t.src_dpd_at)) {
+            let recs = kh2_formats::kh1dpx::texture_records(&src_file[t.src_dpd_at..]).map_err(|e| e.to_string())?;
+            recs_of.push(((t.own, t.src_dpd_at), recs));
+        }
+        let recs = &recs_of.iter().find(|x| x.0 == (t.own, t.src_dpd_at)).unwrap().1;
+        let (assets, base) = if t.own { (&own_hd, pax_at + t.src_dpd_at) } else { (&common_hd, t.src_dpd_at) };
         let exact = base + t.src_offset + 0x20;
         let found = assets.iter().find(|a| a.offset as usize & 0xFF_FFFF == exact).or_else(|| {
             assets.iter().find(|a| recs.iter().any(|&(o, tbp)| tbp == t.src_tbp && base + o + 0x20 == a.offset as usize & 0xFF_FFFF))

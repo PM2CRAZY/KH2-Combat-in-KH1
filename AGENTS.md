@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 417 (testing branch: KH2 effects: the KH1 DPX builder for any effects)
+- The tester ("KH2 effects in KH1's own effect system": "port every effect"). `kh1dpx::build_groups`: one DPD per group,
+  from any DPDs of a PAX; each entry's program types and each texture's source DPD reported; a group over KH1's 10 / 6
+  texture slots is left out and logged. Explosion's DPX unchanged (byte-identical offline). Notes `docs/kh2-effects.md` §18.1.
+
 ### 2026-10-23: Stage 416 (testing branch: KH2's line ahead, its floor rule and direction)
 - The t409 traces: row 1 at a 120 drop, 50..70 from the edge, is KH2's. The test was KH1's (`0x1402C6E70`: any step more than
   half KH1's height down) along KH1's press direction. Now KH2's (`0x140172640` / `0x140172840`, decomp): only the end of the
