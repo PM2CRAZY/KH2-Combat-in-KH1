@@ -11,6 +11,7 @@
 - [5. Mr Bugs: sorry I should've been more clear; don't worry about moves t](#^m5)
 - [6. Assistant: t400 and t401](#^m6)
 - [7. Mr Bugs: sent the traces](#^m7)
+- [8. Assistant: t410 (notes only, no change in how it plays)](#^m8)
 
 ---
 
@@ -117,3 +118,25 @@
 
 ^m7
 
+
+> [!tip] Assistant
+> t410 (notes only, no change in how it plays)
+>
+> Checked all 7 (they're t409, from their timestamps; physics KH1, Base and Aerial Combo on KH2). Everything in them matches KH2's rule:
+> - No enemy above: 181 → 182 → 183. An enemy above: 182 → 181 → 183. An enemy far above, out of 182's reach: 181 → 182 → 183. The other finisher (184) never comes with one enemy, which is KH2's rule too: it needs a second enemy off to the side of the main one.
+> - Each swing's hop is KH2's height for that row (21 / 17 / 21 with nothing above, 44 to 71 toward an enemy overhead, within each row's limits) and KH2's sideways speed, aimed the way he turns. The rise is on KH1's gravity because physics is on KH1.
+> - KH1's own air rows give way where they should.
+>
+> Nothing to fix in the code. I only corrected a few notes and comments that had "above" and "below" swapped. You might have noticed him floating a couple of units high on some swings in the first area: that's KH1's collision sliding him over the enemy he's pushing into, not the combo (KH1's own jump does it there too).
+>
+> One trace (f41229) had a ground press at an enemy above give KH2's Aerial Sweep, because it's equipped and comes first; that's the KH2-only path you said to ignore.
+>
+> What these don't cover yet: ground combos, a ledge (the drop-ahead hop), and a log. A ground combo trace and a ledge one, with the log lines that start with "KH2's row selection", would let me check those too.
+>
+> 1. Aerial Sweep always wins over the plain hop at an enemy above while it's equipped. (a) you unequip it for a trace so I can check the plain hop from the ground, or (b) skip it?
+
+^m8
+
+
+> [!note] Tester Mr Bugs
+> 

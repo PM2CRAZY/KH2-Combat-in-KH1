@@ -55,6 +55,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [5. Mr Bugs: sorry I should've been more clear; don't worry about moves t](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m5)
   - [6. Assistant: t400 and t401](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m6)
   - [7. Mr Bugs: sent the traces](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m7)
+  - [8. Assistant: t410 (notes only, no change in how it plays)](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m8)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
