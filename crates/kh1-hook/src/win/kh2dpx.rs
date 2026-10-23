@@ -100,14 +100,17 @@ enum Anchor {
 }
 
 /// The elements of Sora's package switched on for KH1 (the tester: every effect, one move per
-/// version): Explosion (motion 166: 44..48), Magnet Burst (197: 51, 52).
-const ON: &[i16] = &[44, 45, 46, 47, 48, 51, 52];
+/// version): Explosion (motion 166: 44..48), Magnet Burst (197: 51, 52), Vicinity Break (170: 49,
+/// 50) and Aerial Finish (194: 35..38), the last two with KH2's pppVtMime.
+const ON: &[i16] = &[44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38];
 const MB: u32 = super::kh2ppp::MEGA_BIRTH;
 const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
 const COLOR: u32 = super::kh2ppp::COLOR;
-/// KH2's own programs an effect needs plugged in before it plays through KH1 (KH1's version of
-/// 201 isn't KH2's; 241 isn't in KH1). KH2's pppColor (43) is not a gate: without it KH1's runs.
-const GATES: [u32; 2] = [MB, SHIPOLY];
+const VT_MIME: u32 = super::kh2ppp::VT_MIME;
+/// KH2's own programs an effect needs plugged in before it plays through KH1 (KH1's versions of
+/// 49 and 201 aren't KH2's; 241 isn't in KH1). KH2's pppColor (43) is not a gate: without it
+/// KH1's runs.
+const GATES: [u32; 3] = [MB, SHIPOLY, VT_MIME];
 
 /// Program types KH1 runs the same as KH2 (`docs/kh2-effects.md` §18.2): every slot of KH1's
 /// table entry (`0x14054FF00`) against KH2's (`0x140779A00`), normalised decompiles, where both

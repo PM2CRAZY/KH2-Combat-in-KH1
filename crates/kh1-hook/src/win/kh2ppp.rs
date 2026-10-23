@@ -34,6 +34,12 @@
 //! scale. Only the words of our DPX point at it, so KH1's own effects keep KH1's pppColor.
 //! Construct and reset are KH1's (`0x14032BAE0`: the colour words zeroed, as `kh2-fx` does).
 //!
+//! 49 `pppVtMime`, KH2's calc (`docs/kh2-effects.md` §18.4): KH1's (`0x14032C2E0`) adds a key's
+//! rate delta always; KH2's leaves the rate when the delta is below −1e38 (the keep marker, as
+//! Sora's Vicinity Break and Aerial Finish keys end with). Its draw, construct, reset and
+//! destruct are KH1's own (`0x14032C150`, `0x14032C380`, `0x14032C3C0`, `0x14032C3E0`, the same
+//! code as KH2's). Only our DPX's words point at it.
+//!
 //! Steam only (the addresses are Steam's); elsewhere KH1's own programs stay.
 
 use super::log;
@@ -53,6 +59,12 @@ const MB_DESTRUCT_STEAM: usize = 0x3215A0;
 /// KH1's pppColor: calc (checked before plugging) and construct / reset.
 const KH1_COLOR_CALC_STEAM: usize = 0x32B940;
 const COLOR_CONSTRUCT_STEAM: usize = 0x32BAE0;
+/// KH1's pppVtMime: calc (checked before plugging), draw, construct, reset, destruct.
+const KH1_VT_MIME_CALC_STEAM: usize = 0x32C2E0;
+const VT_MIME_DRAW_STEAM: usize = 0x32C150;
+const VT_MIME_CONSTRUCT_STEAM: usize = 0x32C380;
+const VT_MIME_RESET_STEAM: usize = 0x32C3C0;
+const VT_MIME_DESTRUCT_STEAM: usize = 0x32C3E0;
 /// KH1's program table and the entry of its MegaBirth's calc (checked before plugging).
 const TABLE_STEAM: usize = 0x54FF00;
 const KH1_MB_CALC_STEAM: usize = 0x3212F0;
@@ -86,12 +98,14 @@ const SINE: usize = 0x54BED0;
 pub const MEGA_BIRTH: u32 = 201;
 pub const SHIPOLY: u32 = 241;
 pub const COLOR: u32 = 43;
+pub const VT_MIME: u32 = 49;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 /// KH2's MegaBirth / ribbon are plugged into the DPX (their words point at our entries).
 static PLUGGED_MB: AtomicBool = AtomicBool::new(false);
 static PLUGGED_SHIPOLY: AtomicBool = AtomicBool::new(false);
 static PLUGGED_COLOR: AtomicBool = AtomicBool::new(false);
+static PLUGGED_VT_MIME: AtomicBool = AtomicBool::new(false);
 
 /// Whether KH2's own program `ty` is in (an effect that runs it may then play through KH1).
 pub fn plugged(ty: u32) -> bool {
@@ -99,6 +113,7 @@ pub fn plugged(ty: u32) -> bool {
         MEGA_BIRTH => PLUGGED_MB.load(Ordering::Relaxed),
         SHIPOLY => PLUGGED_SHIPOLY.load(Ordering::Relaxed),
         COLOR => PLUGGED_COLOR.load(Ordering::Relaxed),
+        VT_MIME => PLUGGED_VT_MIME.load(Ordering::Relaxed),
         _ => false,
     }
 }
@@ -111,10 +126,11 @@ struct Entry {
 
 /// Our program entries (KH1's 0x50-byte format). Written once on the game thread before any
 /// record points at them; never moved.
-static mut TABLE: [Entry; 3] = [const { Entry { name: std::ptr::null(), slots: [0; 9] } }; 3];
+static mut TABLE: [Entry; 4] = [const { Entry { name: std::ptr::null(), slots: [0; 9] } }; 4];
 static NAME_MB: &[u8] = b"pppRyjMegaBirth (KH2)\0";
 static NAME_SHIPOLY: &[u8] = b"pppEiDrawShipoly (KH2)\0";
 static NAME_COLOR: &[u8] = b"pppColor (KH2)\0";
+static NAME_VT_MIME: &[u8] = b"pppVtMime (KH2)\0";
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -188,7 +204,8 @@ unsafe fn add4(out: usize, a: usize, b: usize) {
     }
 }
 
-/// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon, 2 the colour.
+/// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon, 2 the colour,
+/// 3 the vertex morph.
 unsafe fn table(i: usize) -> usize {
     let t = std::ptr::addr_of_mut!(TABLE) as *mut Entry;
     if (*t).name.is_null() {
@@ -211,6 +228,9 @@ unsafe fn table(i: usize) -> usize {
         let c = t.add(2);
         (*c).slots = [col_calc as *const () as usize, 0, 0, 0, 0, 0, b + COLOR_CONSTRUCT_STEAM, b + COLOR_CONSTRUCT_STEAM, 0];
         (*c).name = NAME_COLOR.as_ptr();
+        let v = t.add(3);
+        (*v).slots = [vt_calc as *const () as usize, 0, b + VT_MIME_DRAW_STEAM, 0, 0, 0, b + VT_MIME_CONSTRUCT_STEAM, b + VT_MIME_RESET_STEAM, b + VT_MIME_DESTRUCT_STEAM];
+        (*v).name = NAME_VT_MIME.as_ptr();
     }
     t.add(i) as usize
 }
@@ -238,12 +258,18 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         if !col_ok {
             log("KH2 effects (native): KH1's pppColor entry isn't as expected; KH2's pppColor not plugged in (KH1's runs)");
         }
-        let (ours_mb, ours_sp, ours_col) = (to_handle(table(0)), to_handle(table(1)), to_handle(table(2)));
-        if ours_mb == 0 || ours_sp == 0 || ours_col == 0 {
+        // KH1's pppVtMime entry: only our DPX's words of it are pointed at KH2's calc.
+        let kh1_vt = b + TABLE_STEAM + VT_MIME as usize * 0x50;
+        let vt_ok = rd::<usize>(kh1_vt + 8) == b + KH1_VT_MIME_CALC_STEAM && rd::<usize>(kh1_vt + 0x18) == b + VT_MIME_DRAW_STEAM;
+        if !vt_ok {
+            log("KH2 effects (native): KH1's pppVtMime entry isn't as expected; KH2's pppVtMime not plugged in");
+        }
+        let (ours_mb, ours_sp, ours_col, ours_vt) = (to_handle(table(0)), to_handle(table(1)), to_handle(table(2)), to_handle(table(3)));
+        if ours_mb == 0 || ours_sp == 0 || ours_col == 0 || ours_vt == 0 {
             log("KH2 effects (native): no handle for our program table; KH2's programs not plugged in");
             return;
         }
-        let (mut mb, mut sp, mut col, mut other) = (0, 0, 0, 0);
+        let (mut mb, mut sp, mut col, mut vt, mut other) = (0, 0, 0, 0, 0);
         for &(at, ty) in programs {
             let w = dpx + at;
             let to = ptr(rd::<u32>(w));
@@ -256,6 +282,9 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
             } else if ty == COLOR && col_ok && to == kh1_col {
                 wr::<u32>(w, ours_col);
                 col += 1;
+            } else if ty == VT_MIME && vt_ok && to == kh1_vt {
+                wr::<u32>(w, ours_vt);
+                vt += 1;
             } else {
                 other += 1;
             }
@@ -263,9 +292,40 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         PLUGGED_MB.store(mb > 0, Ordering::Relaxed);
         PLUGGED_SHIPOLY.store(sp > 0, Ordering::Relaxed);
         PLUGGED_COLOR.store(col > 0, Ordering::Relaxed);
+        PLUGGED_VT_MIME.store(vt > 0, Ordering::Relaxed);
         log(&format!(
-            "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col} ({other} left as they were)"
+            "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col}, its pppVtMime into {vt} ({other} left as they were)"
         ));
+    }
+}
+
+/// KH2's rate delta below this leaves the rate (the keep marker, `docs/kh2-effects.md` §7.4).
+const VT_KEEP: f32 = -1.0e38;
+
+/// KH2's pppVtMime calc on KH1's instance (`docs/kh2-effects.md` §7.4, §18.4). Work offset 0: the
+/// morph `t`, its rate, its acceleration. Not while held, paused or on a computed frame (bit 0 of
+/// the instance's frame word `+0xC`), as KH1's: rate += acceleration, t += rate; on the key's
+/// frame t += `@12`, rate += `@16` unless `@16` is below −1e38, acceleration += `@20`. KH1's
+/// (`0x14032C2E0`) is the same but adds `@16` always.
+unsafe extern "system" fn vt_calc(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    let eff = rd::<usize>(b + EFFECT);
+    if rd::<u32>(b + HELD) != 0 || rd::<u8>(eff + 0xD5) != 0 || rd::<u32>(obj + 0xC) & 1 != 0 {
+        return;
+    }
+    let w = work(obj, prog, 0);
+    let accel = rd::<f32>(w + 8);
+    let rate = rd::<f32>(w + 4) + accel;
+    wr::<f32>(w + 4, rate);
+    let t = rd::<f32>(w) + rate;
+    wr::<f32>(w, t);
+    if rd::<u32>(key) == rd::<u32>(obj + 0xC) {
+        wr::<f32>(w, t + rd::<f32>(key + 0xC));
+        let dv = rd::<f32>(key + 0x10);
+        if !(dv < VT_KEEP) {
+            wr::<f32>(w + 4, rate + dv);
+        }
+        wr::<f32>(w + 8, accel + rd::<f32>(key + 0x14));
     }
 }
 

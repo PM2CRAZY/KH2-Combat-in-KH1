@@ -1462,7 +1462,7 @@ elements; **Checked (files)**):
 | 28 Accele, 36 Move | Not in either decomp. KH1's are byte for byte its SclAccele / SclMove (exe), which t368 found the same as KH2's. **Checked (exe)**, KH2's **Assumption** (as its siblings). |
 | 217 DrawMatrixLoop | Not in either decomp. KH1's is byte for byte its DrawMatrix (112), the same globals (exe). KH2's **Assumption** (as §7.4 reads it). |
 | 29-31, 37-42, 84, 112, 139 / 142 calcs and constructs | Not in either decomp; t368's comparison (Explosion's programs) found them the same. |
-| 49 VtMime calc | **Differs**: KH1's (`0x14032C2E0`, exe) adds the key's rate delta (`@16`) always; KH2's leaves the rate when it is below −1e38 (§7.4, the keep marker; KH2's calc isn't in the Steam decomp). Sora's VtMime keys use the marker (−FLT_MAX on their last key, **Checked (files)**: Vicinity Break, Aerial Finish), so KH1's would throw the morph away there. Not in KH1_SAME: to port. |
+| 49 VtMime calc | **Differs**: KH1's (`0x14032C2E0`, exe) adds the key's rate delta (`@16`) always; KH2's leaves the rate when it is below −1e38 (§7.4, the keep marker; KH2's calc isn't in the Steam decomp). Sora's VtMime keys use the marker (−FLT_MAX on their last key, **Checked (files)**: Vicinity Break, Aerial Finish), so KH1's would throw the morph away there. Ported (§18.4). |
 | 43 Color, 201 RyjMegaBirth, 241 EiDrawShipoly | KH2's own, ported (§17). |
 | 238 SnoMdlDttNorm | KH2 only (a frame-buffer distortion along a model's normals, §7.10). Only element 1 (the Drive motion's sphere) runs it. Not ported: that element stays with `kh2fx` (which runs its state but draws nothing for it either). |
 
@@ -1492,3 +1492,24 @@ elements; **Checked (files)**):
 - Cost: built once in the background (more DPDs than Explosion's one: each motion's copies of
   the source DPD's shapes and models, and each its own copy of the common textures and their HD
   images). Per frame nothing more than Explosion's.
+
+### 18.4 pppVtMime (49), KH2's calc
+
+- KH1's calc (`0x14032C2E0`, **Checked (exe)**: not while held `0x142E9D7E0`, paused (effect
+  `+0xD5`) or on a computed frame (instance `+0xC` bit 0); rate += acceleration, t += rate; on the
+  key's frame t += `@12`, rate += `@16`, acceleration += `@20`) adds the rate delta always. KH2's
+  leaves the rate when `@16` is below −1e38 (§7.4; KH2's calc is not in the Steam decomp, so this
+  is the earlier read of KH2's code, `kh2-fx`'s `vt_mime_step`: **Assumption** on the exact
+  comparison). Sora's VtMime keys end with −FLT_MAX there (**Checked (files)**: Vicinity Break's
+  elements 49, 50 at ticks 11 / 14, Aerial Finish's 35..38 at tick 13), so under KH1's the morph's
+  `t` runs off to −∞ for the rest of the effect.
+- `kh2ppp::vt_calc` is KH2's calc on KH1's instance, as our fourth entry; draw, construct, reset
+  and destruct are KH1's (`0x14032C150`, `0x14032C380`, `0x14032C3C0`, `0x14032C3E0`: draw,
+  construct and destruct the same code as KH2's, §18.2). `kh1dpx` lists type-49 words
+  (`KH2_OWN_PROGRAMS`) and `kh2ppp::plug` points the ones KH1 relocated to its entry 49 (checked:
+  calc and draw as above) at ours. KH1's own effects keep KH1's. Neither game's fast-forward list
+  holds a VtMime calc (KH1 `0x14054FEE0`: MegaBirth, `0x140322E50`; KH2 `0x140779990`: MegaBirth,
+  `0x1404BE1F0`, the ribbon; **Checked (exe)** / **Checked (decomp)**).
+- A gate (`kh2dpx::GATES`): an element running VtMime plays through KH1 only with it plugged in.
+- Switched on: Vicinity Break (motion 170: 49 object root y −8 and 50 y −97, both bound until
+  started) and Aerial Finish (194: 35..38, object root, rotated swirls, fade-out 2 / 0).
