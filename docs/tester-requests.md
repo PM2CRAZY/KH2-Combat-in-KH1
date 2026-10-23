@@ -64,6 +64,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [5. Mr Bugs: I sent a trace and a new log](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m5)
   - [6. Assistant: t405 to t407 (one each)](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m6)
   - [7. Mr Bugs: the model is still bugged, it seems to be his clothes, (his ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m7)
+  - [8. Assistant: t411 and t412](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m8)
 - [Table of contents](../testers/table-of-contents/table-of-contents.md)
   - [1. Mr Bugs: from now on can you add a table of contents to the document ](../testers/table-of-contents/table-of-contents.md#^m1)
   - [2. Assistant: Done. There's a Contents list at the top of the file, under ](../testers/table-of-contents/table-of-contents.md#^m2)
