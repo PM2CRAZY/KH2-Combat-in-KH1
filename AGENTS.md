@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 398 (testing branch: KH2 effects: Explosion's burst (element 48) through KH1)
+- KH2 0x4000 to KH1's object root 0x8000; flag 0x02 (bound until started) to KH1's bind-once bit 0x10000. Needs both
+  programs plugged in. Assumption: KH1's 0x8000 frame is KH2's object frame. All of Explosion now plays through KH1's own
+  effect system on Steam. Notes §17.5.
+
 ### 2026-10-23: Stage 397 (testing branch: KH2 effects: KH2's pppEiDrawShipoly through KH1's renderer)
 - Step 4. The ribbon ported (Steam KH2 `0x1404B9C00` / `0x1404B9260` / `0x1404B8380`: construct, reset, destruct, calc,
   the spline, the draw), drawn with KH1's GS setters, shader 0x2B, camera `0x14031EAA0`, vertices `0x1400F3040` and draw

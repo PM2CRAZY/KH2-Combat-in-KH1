@@ -14,7 +14,8 @@
 //! (Steps 3-4) Explosion's big flare (element 44, effect 31, KH2's weapon point 0x4003: KH1's point
 //! along the Keyblade, binding mode 3) and dust burst (element 45, effect 32, KH2 bone 67: KH1 bone
 //! 70) too, once KH2's MegaBirth is plugged into KH1's program machine (`kh2ppp`; Steam only).
-//! Element 48 (the burst, KH2's 0x4000 object root) waits for KH2's ribbon program (241).
+//! And the burst (element 48, effect 34, KH2's object root 0x4000: KH1's 0x8000, bound until it
+//! starts as KH2's flag 0x02 asks), which also runs KH2's ribbon (241).
 //!
 //! (Step 2) The element layer, in KH1's own instance fields (Steam decomp; notes in
 //! `docs/kh2-effects.md` §16):
@@ -76,11 +77,22 @@ enum Anchor {
     /// A point along the Keyblade, `t` of the way from the blade's start to its end (KH1's bone
     /// code 0x30 through its binding mode 3, `0x1402ADD60`, Steam).
     Blade(f32),
+    /// One of KH1's own anchor codes, as it is (0x8000: the object root, `0x14029EA00` /
+    /// `0x14029EB20`), through its binding mode 2.
+    Code(u32),
 }
 
-/// The elements KH1 plays: (KH2 element, effect number, whether its effect runs a program of
-/// KH2's own, `kh2ppp`). Their KH1 anchors come from their KH2 bone codes (`anchor`).
-const NATIVE: [(i16, u32, bool); 4] = [(44, 31, true), (45, 32, true), (46, 33, false), (47, 33, false)];
+/// The elements KH1 plays: (KH2 element, effect number, the programs of KH2's own its effect
+/// runs, `kh2ppp`). Their KH1 anchors come from their KH2 bone codes (`anchor`).
+const NATIVE: [(i16, u32, &[u32]); 5] = [
+    (44, 31, &[MB]),
+    (45, 32, &[MB]),
+    (46, 33, &[]),
+    (47, 33, &[]),
+    (48, 34, &[MB, SHIPOLY]),
+];
+const MB: u32 = super::kh2ppp::MEGA_BIRTH;
+const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
 
 /// KH1's anchor for a KH2 bone code (the bones by the two bind poses: KH2 170 / 78 / 67 have the
 /// same bind frames as KH1 93 / 198 / 70, `docs/kh2-effects.md` §17.4); KH2's weapon points
@@ -91,6 +103,7 @@ fn anchor(code: u16) -> Option<Anchor> {
         170 => Anchor::Bone(93),
         78 => Anchor::Bone(198),
         67 => Anchor::Bone(70),
+        0x4000 => Anchor::Code(KH1_OBJECT_ROOT),
         0x4003 => Anchor::Blade(1.0),
         0x4005 => Anchor::Blade(0.0),
         0x4007 => Anchor::Blade(0.5),
@@ -102,6 +115,14 @@ fn anchor(code: u16) -> Option<Anchor> {
 /// `0x14029EB20`: code 0x30 maps `t` into the weapon's blade range, `btltbl` `+0x28`..`+0x24`).
 const START_ON_BLADE_STEAM: usize = 0x2ADD60;
 const BLADE_BONE: u32 = 0x30;
+/// KH1's object-root code: the actor's place with a frame from its matrix rows (each negated,
+/// `+0xF0`, `+0xE0`, `+0xD0`), KH2's 0x4000.
+const KH1_OBJECT_ROOT: u32 = 0x8000;
+/// KH1's bone-code bit for "place once, when the wait is over, then let go" (the binding task
+/// `0x1402AE910`: with it, its first run once the element no longer waits places it and ends):
+/// KH2's flag 0x02, bound only until started.
+const BIND_ONCE: u32 = 0x1_0000;
+const BIND_UNTIL_STARTED: u32 = 0x02;
 /// The effect number in our DPX of a KH2 element's own copy of its effect (its offset and
 /// rotation folded in): `0x700 | element` (KH1's element start keeps the low 11 bits).
 const ELEMENT_NUMBER: u32 = 0x700;
@@ -150,8 +171,8 @@ struct Layer {
     el: i16,
     number: u32,
     anchor: Anchor,
-    /// Its effect runs a program of KH2's own: KH1 plays it only once that is plugged in.
-    kh2_programs: bool,
+    /// The programs of KH2's own its effect runs: KH1 plays it only once those are plugged in.
+    kh2_programs: &'static [u32],
     flags: u32,
     wait: f32,
     fadeout: f32,
@@ -230,7 +251,7 @@ pub fn start() {
 /// folded into the header's local transform (`H' = S⁻¹ · T(t) · R · S · H`, S the element's
 /// scale, which KH1 takes as the instance's: KH2's root is `T(B·t) · R(B·R) · S`, KH1's the
 /// bound bone's `B`, times the header).
-fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, effect: u32, kh2_programs: bool) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
+fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, effect: u32, kh2_programs: &'static [u32]) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
     use glam::{Mat3, Vec3};
     use kh2_fx::math;
     let e = parsed.element(el as u16).ok_or(format!("no element {el}"))?;
@@ -464,17 +485,20 @@ pub fn event(motion: u16, el: i16) -> bool {
     }
     // An effect with a program of KH2's own plays through KH1 only with that program plugged in
     // (KH1's own version, or its dummy, isn't KH2's).
-    if layer.kh2_programs && !super::kh2ppp::plugged(super::kh2ppp::MEGA_BIRTH) {
+    if !layer.kh2_programs.iter().all(|&t| super::kh2ppp::plugged(t)) {
         return false;
     }
+    let once = if layer.flags & BIND_UNTIL_STARTED != 0 { BIND_ONCE } else { 0 };
+    let on_bone = |code: u32| {
+        let f: unsafe extern "system" fn(usize, u32, usize, u32) -> usize = unsafe { std::mem::transmute(base + START_ON_BONE_RVA) };
+        unsafe { f(d.at, number, sora, code | once) }
+    };
     let element = match bone {
-        Anchor::Bone(b) => {
-            let f: unsafe extern "system" fn(usize, u32, usize, u32) -> usize = unsafe { std::mem::transmute(base + START_ON_BONE_RVA) };
-            unsafe { f(d.at, number, sora, RAW_BONE | b) }
-        }
+        Anchor::Bone(b) => on_bone(RAW_BONE | b),
+        Anchor::Code(c) => on_bone(c),
         Anchor::Blade(t) => {
             let f: unsafe extern "system" fn(usize, u32, usize, u32, f32) -> usize = unsafe { std::mem::transmute(base + START_ON_BLADE_STEAM) };
-            unsafe { f(d.at, number, sora, BLADE_BONE, t) }
+            unsafe { f(d.at, number, sora, BLADE_BONE | once, t) }
         }
     };
     drop(g);
