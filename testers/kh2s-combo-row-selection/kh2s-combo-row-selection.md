@@ -9,6 +9,7 @@
 - [3. Mr Bugs: 1. do option (a)](#^m3)
 - [4. Assistant: t390 to t393 (one part each; the build at the top of the bra](#^m4)
 - [5. Mr Bugs: sorry I should've been more clear; don't worry about moves t](#^m5)
+- [6. Assistant: t400 and t401](#^m6)
 
 ---
 
@@ -89,3 +90,22 @@
 ^m5
 
 
+> [!tip] Assistant
+> t400 and t401
+>
+> Understood on the KH2-only moves: I'm not spending time on the parts that hand Sora to KH2's controller.
+>
+> - **t400:** I checked t392's hop numbers against KH2's exe and they were off (they came from the old KH2 source's rule). KH2 measures the hop from Sora's own target point (about 70 up) to the enemy's, takes both bodies' sizes off the gap, adds each row's reach bonus (85 on all of Sora's hop rows), and times it on KH2's own fixed gravity. It's 1:1 with the exe now. For example, an enemy 120 up and 200 away used to get a 67-high hop; KH2's is 50.
+> - **t401, (a):** every KH2 air swing now does its own little hop, rise and drift on KH1's air state, like KH2. With no target that's 21 high for 181 / 183 and 17 for 182, with the finishers moving faster. KH1's air lunge is gone there.
+> - **3 (a):** that was already how it works. With Aerial Combo on KH1 the hop swing stays KH1's, so nothing changed.
+> - **2:** left for later, as you said.
+>
+> **Check:** KH2 decomp (the hop at `0x1403D78D0`) and the game files for Sora's rows and his target shape. Not checked in game. Assumption: which of KH2's player classes is Sora's (several share the same code). One small thing: an attack pressed in the first frames of a jump, before KH1 counts you as airborne, still uses KH1's own air swing movement.
+>
+> A Select + Triangle trace of some air combos, with and without an enemy above you, would help.
+
+^m6
+
+
+> [!note] Tester Mr Bugs
+> 
