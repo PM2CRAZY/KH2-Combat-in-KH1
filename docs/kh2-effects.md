@@ -1399,3 +1399,24 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   KH1's own effects and bindings are never touched. Per frame: an atomic check while nothing is
   noted. **Assumption**: one skeleton pass of Sora a frame (with two, a waiting element's
   re-read before the second takes this frame's pose).
+
+### 17.8 The old player retired for Explosion
+
+- On Steam, once our DPX is built and KH2's MegaBirth and ribbon are plugged in, `kh2dpx::event`
+  owns elements 44..48: KH1 plays them, and if KH1 can't start one (no free element or effect
+  slot, no Sora actor) it doesn't play, as with KH1's own effects; `kh2fx` is never asked. The
+  ini switch `kh2_fx_native` is gone.
+- `kh2fx` still plays Explosion only where KH1 can't: the DPX not built yet (its background
+  build, the first seconds) or not at all (KH2 install or files not read: logged), KH2's
+  programs not plugged in (KH1's program table not as expected: logged), or another build
+  (Epic: the Keyblade-point binding and our programs are Steam-only, so elements 44, 45 and 48
+  go to `kh2fx`; 46 and 47 play through KH1 and fall back to `kh2fx` if KH1 has no slot).
+- Everything else in `kh2fx` is unchanged and still runs through it (its world-pass hook
+  `0x1401EADD0` and D3D12 draw `fx12`): Sora's other move effects (`kh2_effects`: Vicinity Break
+  170, Magnet Burst 197, Aerial Finish 194, Guard Break 165, Finishing Leap 167, Aerial Recovery
+  40, or every move with `all`), the form revert flashes (`form`, elements 15..27), Valor's and
+  Final's own packages (`form_event`), Reflect's packages (`reflect`), Wisdom's shots and spells
+  and base Sora's KH2 magic (`formmagic`), the Keyblade's vanish flash (`weapon_vanish`, the
+  `W_EX010` package), `fx_test`, and the endings and fades it steps for those (`tick`,
+  `owner_gone`). `kh2fx::tick` / `owner_gone` also step `kh2dpx`'s endings and fades; `paused`
+  is used by `model`.

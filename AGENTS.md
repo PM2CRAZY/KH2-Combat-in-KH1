@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 404 (testing branch: KH2 effects: the old effect player retired for Explosion)
+- The tester (option (b)): on Steam with the DPX built and KH2's programs plugged in, Explosion is KH1's alone (no `kh2fx`
+  fallback); `kh2fx` keeps it only before the DPX is built, if plugging fails, or off Steam. Ini `kh2_fx_native` removed.
+  What still uses `kh2fx`: notes §17.8.
+
 ### 2026-10-23: Stage 403 (testing branch: KH2 effects: bound elements take their bone on KH2's frame)
 - The tester (option (a)). From the decomps: both bindings apply the matrix read on their last run (KH2 `0x1402C58F0`, KH1
   `0x1402AE910`), but KH2's first run reads first, and it reads while waiting; KH1's start reads before Sora's skeleton

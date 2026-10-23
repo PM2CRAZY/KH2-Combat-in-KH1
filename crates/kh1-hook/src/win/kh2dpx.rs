@@ -61,8 +61,9 @@
 //! Sora's skeleton pass (`pose`): after it on the start frame, before it on the frames the effect
 //! still waits. KH1's binding then runs as it does; its own effects are not touched.
 //!
-//! Ini: `kh2_fx_native` (on by default): off = these elements are played by `kh2fx` as before.
-//! Elements fall back to `kh2fx` too while the DPX isn't built (or couldn't be).
+//! The old effect player (`kh2fx`) is retired for these elements on Steam (the tester): it plays
+//! them only while the DPX isn't built (or couldn't be), if KH2's programs couldn't be plugged
+//! in, or on another build (`event`).
 
 use super::addr::Rva;
 use super::log;
@@ -487,16 +488,15 @@ unsafe fn register(base: usize, d: &Dpx) -> Result<usize, String> {
     Ok(rec)
 }
 
-/// A KH2 element of Sora's package (`kh2fx::event`, game thread): true if KH1 played it.
+/// A KH2 element of Sora's package (`kh2fx::event`, game thread): true if it is KH1's (`kh2fx`
+/// doesn't play it). On Steam, once the DPX is built and KH2's programs its effect runs are
+/// plugged in, Explosion's elements are KH1's alone: KH1 plays them, or (no free element or
+/// effect slot, no Sora) they don't play, as KH1's own effects. `kh2fx` plays them only where
+/// KH1 can't: the DPX not built (yet, or it failed), KH2's programs not plugged in (KH1's
+/// program table not as expected), or another build (Epic: no blade binding, no KH2 programs;
+/// there the wrist flashes still play through KH1 and fall back to `kh2fx` if KH1 has no slot).
 pub fn event(motion: u16, el: i16) -> bool {
-    if !super::settings::get().kh2_fx_native {
-        return false;
-    }
     if !NATIVE.iter().any(|n| n.0 == el) {
-        return false;
-    }
-    let sora = super::takeover::sora_actor();
-    if sora < 0x10000 {
         return false;
     }
     let Ok(mut g) = DPX.lock() else { return false };
@@ -526,6 +526,12 @@ pub fn event(motion: u16, el: i16) -> bool {
     if !layer.kh2_programs.iter().all(|&t| super::kh2ppp::plugged(t)) {
         return false;
     }
+    // (Steam: KH1's alone from here on, the old player retired for it.)
+    let owned = steam;
+    let sora = super::takeover::sora_actor();
+    if sora < 0x10000 {
+        return owned;
+    }
     let once = if layer.flags & BIND_UNTIL_STARTED != 0 { BIND_ONCE } else { 0 };
     let on_bone = |code: u32| {
         let f: unsafe extern "system" fn(usize, u32, usize, u32) -> usize = unsafe { std::mem::transmute(base + START_ON_BONE_RVA) };
@@ -550,7 +556,7 @@ pub fn event(motion: u16, el: i16) -> bool {
             if element == 0 { "not started (no free element or effect slot)".to_string() } else { format!("element {element:#x}{}", if set { "" } else { " (its instance not found: no wait, scale or ending)" }) }
         ));
     }
-    element != 0
+    element != 0 || owned
 }
 
 /// The binding KH1's start just made for `element` (the binding list's last node), noted for

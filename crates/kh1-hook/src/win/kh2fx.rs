@@ -17,6 +17,10 @@
 //!
 //! Ini: `kh2_effects` (`magnet_explosion` default, `all`, `off`), `fx_test = on` starts Magnet
 //! Burst's sphere at Sora every 4 seconds (to check the renderer in game).
+//!
+//! Explosion (elements 44..48) is KH1's own on Steam (`kh2dpx`, retired here): `event` hands it
+//! over and this player gets it only while KH1's DPX isn't built, if KH2's programs couldn't be
+//! plugged into KH1's program machine, or on another build (`kh2dpx::event`).
 
 
 use super::addr::Rva;

@@ -99,9 +99,6 @@ shortcuts = 4\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst, Explosion, Vicinity Break, Aerial Finish, Guard\r\n\
 ;   Break, Finishing Leap, Aerial Recovery), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
-; kh2_fx_native: on = the KH2 effects ported so far play through KH1's own effect system\r\n\
-;   (Explosion's wrist flashes); off = all drawn by the KH2 effect player as before\r\n\
-kh2_fx_native = on\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
 ; round in his hand (0x53: the Dream Shield); none = off\r\n\
 flip_weapons = 0x53\r\n\
@@ -217,8 +214,6 @@ pub struct Settings {
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
     pub fx_test: bool,
-    /// (t368) The ported KH2 effects play through KH1's effect system (`kh2dpx`).
-    pub kh2_fx_native: bool,
     /// (Test, t335) Values written in turn into byte `hit_fx_byte` (0..=2) of a landed KH2 hit's
     /// KH1 effect / sound bytes (the attack object's `+0xA8`), with bit `0x400000` set (spells
     /// too); empty: off.
@@ -378,7 +373,6 @@ fn load(first: bool) -> Option<Settings> {
             _ => Some(Some(super::kh2fx::DEFAULT_MOTIONS.to_vec())),
         },
         fx_test: on(&text, "fx_test", "on", false),
-        kh2_fx_native: on(&text, "kh2_fx_native", "on", true),
         hit_fx_test: setting(&text, "hit_fx_test")
             .map(|v| {
                 v.split([',', ' '])
