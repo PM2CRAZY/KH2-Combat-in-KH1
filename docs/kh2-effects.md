@@ -1513,3 +1513,35 @@ elements; **Checked (files)**):
 - A gate (`kh2dpx::GATES`): an element running VtMime plays through KH1 only with it plugged in.
 - Switched on: Vicinity Break (motion 170: 49 object root y −8 and 50 y −97, both bound until
   started) and Aerial Finish (194: 35..38, object root, rotated swirls, fade-out 2 / 0).
+
+### 18.5 KH2's position-only elements (flag 0x04) on KH1's binding mode 1
+
+- KH2 (§2, **Checked**): the effect sits at `B · offset` (the element's offset in the bone's
+  frame) turned by the element's rotation alone; with 0x01 every frame, with 0x02 until started.
+- KH1 (**Checked (exe)**): the start bound by position, `0x1402ADC20 (dpx, number, actor, code,
+  t)` (Steam; t the fifth argument, kept at the record's `+0xC`, mode `+4` = 1, code `+8`, world
+  offset `+0x10` = (0, 0, 0, 1), its first place at `+0x20` copied to the element's place). The
+  binding task (`0x1402AE910`) in mode 1 applies `+0x20`, then reads the point `0x14029EB20 (actor,
+  code, t)` and adds `+0x10` into `+0x20` (`0x140386A10`, four floats); with the bind-once bit it
+  reads, adds and applies once, then ends. It never writes the element's turn. The point for a
+  raw bone is code `0x1000 | n` (`0x14029FAB0`: bit 0x1000 takes the low 12 bits; `0x2000 | n` would
+  be looked up as a named bone there), at t = 1 the bone's place (`0x1401D6320`: its parent's
+  matrix times its own offset); for the blade, code 0x30 maps t into the blade (as mode 3).
+- KH1's world offset is fixed, KH2's offset turns with the bone. So for our mode-1 bindings
+  (`kh2dpx::posed`, after Sora's skeleton pass, Steam): the record's offset is set to (the bone's
+  place + the bone's turn × the element's offset − the point KH1 reads), from KH1's own reads
+  (`0x14029EA00` with `0x2000 | n`, `0x14029EB20` with the record's code), so KH1's next read lands
+  on KH2's `B · offset` exactly; for the blade, the point plus the blade's turn × the offset. Its
+  place for the next apply is this pass's on the start pass (KH2's first run reads first) and the
+  pass before's after it (what KH2 applies). One per live position-only element per frame: two
+  KH1 bone reads.
+- The element's own rotation goes into its copy's header turn (`H' = R · H`; the offset is not
+  folded in), the instance unturned, as KH2's root `T(B · offset) · R · S · H`.
+- Switched on with it: Guard Break (165: 30 bound until started, 31, 32), Finishing Leap (167:
+  33 the Keyblade tip by position, 34 bound until started), Aerial Recovery (40: 0), and the
+  moves only `kh2_effects = all` plays: 169 (53..55 by position on the toes, KH2 18 / 47, bound
+  until started; 56), 171 (40, 41 by position on the spine), 172 (39). Their programs are all
+  KH1_SAME or KH2's own (**Checked (files)**).
+- KH1 instances start unturned: the pool's claim (`0x1401EC690`) clears the instance, and the
+  start (`0x1401E0100`) only hands out handles of its place, turn and scale. **Checked (exe)**.
+  Not done: 0x04 on KH2's object root (none in Sora's package).

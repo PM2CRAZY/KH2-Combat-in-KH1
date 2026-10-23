@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 420 (testing branch: KH2 effects: position-only elements on KH1's binding mode 1; the rest of Sora's moves through KH1)
+- KH2's flag 0x04 elements on KH1's binding mode 1 (start `0x1402ADC20`, Checked (exe)); after Sora's pass `posed` sets the
+  record's offset to bone place + turn x offset - KH1's point. Guard Break, Finishing Leap, Aerial Recovery, 169 / 171 / 172.
+  Notes §18.5.
+
 ### 2026-10-23: Stage 419 (testing branch: KH2 effects: KH2's pppVtMime calc; Vicinity Break and Aerial Finish through KH1)
 - `kh2ppp::vt_calc`: KH2 skips a rate key below -1e38, and Sora's keys use it (KH1's would wreck the morph). KH1's draw,
   construct, reset and destruct kept. Assumption: KH2's calc from the §7.4 reading (not in the Steam decomp). Notes §18.4.

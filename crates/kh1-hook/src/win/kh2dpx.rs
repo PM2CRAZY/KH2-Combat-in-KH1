@@ -101,8 +101,11 @@ enum Anchor {
 
 /// The elements of Sora's package switched on for KH1 (the tester: every effect, one move per
 /// version): Explosion (motion 166: 44..48), Magnet Burst (197: 51, 52), Vicinity Break (170: 49,
-/// 50) and Aerial Finish (194: 35..38), the last two with KH2's pppVtMime.
-const ON: &[i16] = &[44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38];
+/// 50) and Aerial Finish (194: 35..38), the last two with KH2's pppVtMime; then the rest of his
+/// moves', with KH1's position binding for KH2's flag 0x04: Guard Break (165: 30..32), Finishing
+/// Leap (167: 33, 34), Aerial Recovery (40: 0), and under `kh2_effects = all` motions 169 (53..56),
+/// 171 (40, 41) and 172 (39).
+const ON: &[i16] = &[44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38, 30, 31, 32, 33, 34, 0, 53, 54, 55, 56, 40, 41, 39];
 const MB: u32 = super::kh2ppp::MEGA_BIRTH;
 const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
 const COLOR: u32 = super::kh2ppp::COLOR;
@@ -172,6 +175,13 @@ fn anchor(code: u16) -> Option<Anchor> {
 /// binding mode 3: the bone's turn and the point, every frame) and its blade bone code (KH1's
 /// `0x14029EB20`: code 0x30 maps `t` into the weapon's blade range, `btltbl` `+0x28`..`+0x24`).
 const START_ON_BLADE_STEAM: usize = 0x2ADD60;
+/// KH1's start bound by position (Steam `0x1402ADC20 (dpx, number, actor, code, t)`, binding
+/// mode 1: every frame the point `0x14029EB20 (actor, code, t)` plus the binding's world offset
+/// `+0x10` as the effect's place; its turn is left as the start made it). A raw bone is
+/// `0x1000 | n` for the point (`0x14029FAB0`: bit 0x1000 takes the low 12 bits as the bone; the
+/// point at t = 1 is the bone's place, `0x1401D6320`), `0x2000 | n` for its matrix (`0x14029EA00`).
+const START_BY_POSITION_STEAM: usize = 0x2ADC20;
+const RAW_POINT: u32 = 0x1000;
 const BLADE_BONE: u32 = 0x30;
 /// KH1's object-root code: the actor's place with a frame from its matrix rows (each negated,
 /// `+0xF0`, `+0xE0`, `+0xD0`), KH2's 0x4000.
@@ -246,6 +256,9 @@ struct Layer {
     number: u32,
     anchor: Anchor,
     flags: u32,
+    /// With KH2's flag 0x04 (bound by position only): the element's offset in the bone's frame
+    /// (KH2's effect sits at `B · offset`, turned by the element's rotation alone).
+    bone_offset: [f32; 3],
     wait: f32,
     fadeout: f32,
     scale: [f32; 3],
@@ -272,6 +285,16 @@ struct Fresh {
     record: usize,
     actor: usize,
     pass: u32,
+    /// A position-only binding (KH1's mode 1): its anchor, the element's offset in the bone's
+    /// frame, and the place it gave on the pass before.
+    pos: Option<PosOnly>,
+}
+
+#[derive(Clone, Copy)]
+struct PosOnly {
+    anchor: Anchor,
+    offset: [f32; 3],
+    prev: [f32; 4],
 }
 
 static FRESH: Mutex<Vec<Fresh>> = Mutex::new(Vec::new());
@@ -373,7 +396,14 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16) -> Result<(Layer, 
     let safe = Vec3::new(if s.x != 0.0 { s.x } else { 1.0 }, if s.y != 0.0 { s.y } else { 1.0 }, if s.z != 0.0 { s.z } else { 1.0 });
     let r_e = math::euler_xyz(Vec3::from(e.rotation));
     let r_h = math::euler_xyz_i(h_ang);
-    let offset = Vec3::from(e.translation) / safe + r_e * Vec3::from(h_off);
+    let position_only = e.flags & POSITION_ONLY != 0;
+    if position_only && matches!(bone, Anchor::Code(_)) {
+        return Err(format!("element {el}: bound by position only to KH2's {:#x}, which KH1's position binding has no point for yet", e.bone));
+    }
+    // Position only: the root is `T(B · t) · R · S · H` (KH2), KH1's `T(point + offset) · S · H'`
+    // with the instance unturned, so `H' = S⁻¹ · R · S · H` and the offset goes through the
+    // binding (`posed`).
+    let offset = if position_only { r_e * Vec3::from(h_off) } else { Vec3::from(e.translation) / safe + r_e * Vec3::from(h_off) };
     let rot: Mat3 = r_e * r_h;
     let angle = math::xyz_i_of(rot);
     let number = ELEMENT_NUMBER | el as u32;
@@ -382,7 +412,7 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16) -> Result<(Layer, 
         e.bone, e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
         if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" }
     );
-    let l = Layer { el, number, anchor: bone, flags: e.flags, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
+    let l = Layer { el, number, anchor: bone, flags: e.flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
     Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle }, note))
 }
 
@@ -390,9 +420,6 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16) -> Result<(Layer, 
 fn unbindable(flags: u32) -> Option<&'static str> {
     if flags & (BIND | BIND_UNTIL_STARTED) == 0 {
         return Some("not bound (placed once at its start)");
-    }
-    if flags & POSITION_ONLY != 0 {
-        return Some("bound by position only");
     }
     if flags & BONE_SCALE != 0 {
         return Some("scaled by its bone");
@@ -662,8 +689,10 @@ pub fn event(motion: u16, el: i16) -> bool {
     let Some(&layer) = d.layers.iter().find(|l| l.el == el) else { return false };
     let (number, bone) = (layer.number, layer.anchor);
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
-    // KH1's blade binding is used on Steam only (its address is Steam's): elsewhere kh2fx plays it.
-    if matches!(bone, Anchor::Blade(_)) && !steam {
+    // KH1's blade and position bindings are used on Steam only (their addresses are Steam's):
+    // elsewhere kh2fx plays them.
+    let position_only = layer.flags & POSITION_ONLY != 0;
+    if (matches!(bone, Anchor::Blade(_)) || position_only) && !steam {
         return false;
     }
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
@@ -700,7 +729,13 @@ pub fn event(motion: u16, el: i16) -> bool {
         let f: unsafe extern "system" fn(usize, u32, usize, u32) -> usize = unsafe { std::mem::transmute(base + START_ON_BONE_RVA) };
         unsafe { f(d.at, number, sora, code | once) }
     };
+    let by_position = |code: u32, t: f32| {
+        let f: unsafe extern "system" fn(usize, u32, usize, u32, f32) -> usize = unsafe { std::mem::transmute(base + START_BY_POSITION_STEAM) };
+        unsafe { f(d.at, number, sora, code | once, t) }
+    };
     let element = match bone {
+        Anchor::Bone(b) if position_only => by_position(RAW_POINT | b, 1.0),
+        Anchor::Blade(t) if position_only => by_position(BLADE_BONE, t),
         Anchor::Bone(b) => on_bone(RAW_BONE | b),
         Anchor::Code(c) => on_bone(c),
         Anchor::Blade(t) => {
@@ -709,8 +744,9 @@ pub fn event(motion: u16, el: i16) -> bool {
         }
     };
     drop(g);
-    if element != 0 && steam && once == 0 {
-        unsafe { note_binding(base, element, sora) };
+    if element != 0 && steam && (once == 0 || position_only) {
+        let pos = position_only.then_some(PosOnly { anchor: bone, offset: layer.bone_offset, prev: [0.0; 4] });
+        unsafe { note_binding(base, element, sora, pos) };
     }
     let set = element != 0 && unsafe { apply(element, &layer, motion) };
     if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
@@ -724,11 +760,11 @@ pub fn event(motion: u16, el: i16) -> bool {
 
 /// The binding KH1's start just made for `element` (the binding list's last node), noted for
 /// `posed`. Steam only.
-unsafe fn note_binding(base: usize, element: usize, actor: usize) {
+unsafe fn note_binding(base: usize, element: usize, actor: usize, pos: Option<PosOnly>) {
     let node = rd::<usize>(base + BIND_LIST_STEAM + 0x18);
     let ok = node != 0 && rd::<usize>(node + 0x10) == base + BIND_TASK_STEAM && rd::<usize>(node + 0x20) == element;
     let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
-    if record == 0 || !matches!(rd::<u8>(record + 4), 2 | 3) {
+    if record == 0 || !matches!(rd::<u8>(record + 4), 1 | 2 | 3) || pos.is_some() != (rd::<u8>(record + 4) == 1) {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 5 {
             log(&format!("KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it keeps KH1's first placement"));
@@ -736,7 +772,7 @@ unsafe fn note_binding(base: usize, element: usize, actor: usize) {
         return;
     }
     if let Ok(mut f) = FRESH.lock() {
-        f.push(Fresh { element, serial: rd::<u32>(element + EL_SERIAL), node, record, actor, pass: PASSES.load(Ordering::Relaxed) });
+        f.push(Fresh { element, serial: rd::<u32>(element + EL_SERIAL), node, record, actor, pass: PASSES.load(Ordering::Relaxed), pos });
         FRESH_ANY.store(true, Ordering::Relaxed);
     }
 }
@@ -763,6 +799,35 @@ unsafe fn read_now(base: usize, f: &Fresh) {
     }
 }
 
+/// A position-only binding's offset for this pose (written to its record `+0x10`) and the place
+/// it gives (KH2's `B · offset`): for a bone, its matrix (`0x14029EA00`, `0x2000 | n`) less the
+/// point KH1's binding reads (`0x14029EB20` with the record's code and t), so the two agree
+/// exactly; for the blade, the point along it with the blade bone's turn (KH1's mode 3 frame).
+/// Rows of KH1's matrix are the bone's axes (row-vector form), translation in the last.
+unsafe fn by_position_now(base: usize, actor: usize, record: usize, p: &PosOnly) -> [f32; 4] {
+    let bone: unsafe extern "system" fn(usize, u32, usize) = std::mem::transmute(base + READ_BONE_STEAM);
+    let point: unsafe extern "system" fn(usize, u32, f32, usize) = std::mem::transmute(base + READ_POINT_STEAM);
+    let mut m = [0f32; 16];
+    let mut pt = [0f32; 4];
+    let (code, t) = (rd::<u32>(record + 8) & !BIND_ONCE, rd::<f32>(record + 0xC));
+    let rcode = match p.anchor {
+        Anchor::Bone(b) => RAW_BONE | b,
+        _ => code,
+    };
+    bone(actor, rcode, m.as_mut_ptr() as usize);
+    point(actor, code, t, pt.as_mut_ptr() as usize);
+    let o = p.offset;
+    let mut place = [0f32; 3];
+    for k in 0..3 {
+        let anchor = if matches!(p.anchor, Anchor::Bone(_)) { m[12 + k] } else { pt[k] };
+        place[k] = anchor + o[0] * m[k] + o[1] * m[4 + k] + o[2] * m[8 + k];
+    }
+    // (w as KH1's own: its start sets the offset to (0, 0, 0, 1), and the binding adds all four.)
+    let off = [place[0] - pt[0], place[1] - pt[1], place[2] - pt[2], rd::<f32>(record + 0x1C)];
+    wr::<[f32; 4]>(record + 0x10, off);
+    [place[0], place[1], place[2], pt[3] + off[3]]
+}
+
 /// Sora's skeleton pass (`pose`, the game thread), `after` it or before. KH2's binding reads its
 /// bone first on its first run (Steam KH2 `0x1402C58F0`: `0x1402C5F70` then `0x1402C49D0` while
 /// the element's timer `+0x58` is 0, after the object's pose; then apply, then read) and keeps
@@ -780,9 +845,21 @@ pub fn posed(after: bool) {
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     let pass = PASSES.load(Ordering::Relaxed);
     if let Ok(mut g) = FRESH.try_lock() {
-        g.retain(|f| unsafe {
+        g.retain_mut(|f| unsafe {
             if !fresh_live(base, f) {
                 return false;
+            }
+            if let Some(p) = f.pos.as_mut() {
+                // Position only: after each pass, the offset KH1's binding adds to its point is
+                // set to this pose's (bone place + bone turn x offset − the point); the place it
+                // applies next is this pass's on the start pass (KH2's first run reads first),
+                // else the pass before's (what KH2 applies), the binding then reading on.
+                if after {
+                    let cur = by_position_now(base, f.actor, f.record, p);
+                    wr::<[f32; 4]>(f.record + 0x20, if f.pass == pass { cur } else { p.prev });
+                    p.prev = cur;
+                }
+                return true;
             }
             if after {
                 if f.pass == pass {
