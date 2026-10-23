@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 384 (testing branch: the form's run speed in KH2's camera rates)
+- `camera.rs` passed a fixed run speed of 8; KH2 reads the player's `+0x12C`, so faster forms swing and follow
+  faster. It passes the current form's KH2 run speed (or Sora's). Assumption: `+0x12C` is that run speed (the crate's
+  notes). Notes: `docs/kh1-kh2-camera.md`.
+
 ### 2026-10-23: Stage 383 (testing branch: KH2's camera reset puts the eye on its goal; a cut while moving)
 - `0x140165110`: a reset also puts the eye on its goal (only the turn eases); with the left stick held the cut
   (`0x140164520` with its cut flag, then `0x140164d70`) places the look point and eye with no spring. Which fields are

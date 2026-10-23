@@ -259,6 +259,15 @@ Both rates are the swing-behind formula exactly (`camera-model.md`).
   earlier request, so gentle tilts would move. At the tester's "it should be 1:1", the camera
   reads the sticks KH2's way (`character_core::pad`, `docs/kh2-pad.md`).
 
+## 9b. The form's run speed in the camera's rates
+
+KH2's swing-behind rate and the look point / eye spring rates grow with the player's run speed
+(the player's `+0x12C`, read in the follow update `0x140165110`, Steam; Checked (decomp)). The
+`kh2-camera` crate takes it as `Subject::run_speed`; `camera.rs` passed a fixed 8 (Sora's).
+It now passes the KH2 run speed of the form Sora is in (`form::current`, the form's KH2
+controller numbers), else Sora's. **Assumption** (from the crate's notes): `+0x12C` is the
+form's run speed.
+
 ## 10. Sources
 
 - KH1's camera module, mode table, blend, FOV setter and callers: our own static reading of the

@@ -654,7 +654,13 @@ unsafe fn run(lock: bool) -> Option<()> {
     // Lowered as a whole (the user: Sora near the middle of the screen; KH2's look point, 170
     // above the feet, is above KH1 Sora's head).
     let lower = super::settings::get().camera_lower;
-    let subject = kh2_camera::Subject { feet: to_cam(feet, s) - Vec3::Y * (lower / s), facing, run_speed: 8.0 };
+    // KH2's swing-behind and spring rates grow with the player's run speed (`+0x12C`, the form's:
+    // Steam KH2 `0x140165110`): the form's KH2 run speed while in one, else Sora's (8).
+    let run_speed = pose::kh2()
+        .map(|kh2| super::form::current().and_then(|k| k.data(kh2)).map_or(&kh2.character, |f| &f.character).params.run_speed)
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(8.0);
+    let subject = kh2_camera::Subject { feet: to_cam(feet, s) - Vec3::Y * (lower / s), facing, run_speed };
 
     // Input: KH1's processed sticks (-1..1, y down) and buttons. Sora unable to act: no stick.
     let free = rd::<u32>(sora + 0x444) & 1 == 0;
