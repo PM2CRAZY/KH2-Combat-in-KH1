@@ -1,0 +1,6 @@
+# Line endings: LF in the repository whatever the platform (a Windows checkout with
+# core.autocrlf would otherwise commit every file as changed).
+* text=auto eol=lf
+*.dll binary
+*.png binary
+*.bin binary

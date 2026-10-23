@@ -18,9 +18,15 @@
 //!   within `ROT_TOL` / `POS_TOL`. Angles are kept continuous from frame to frame (the Euler
 //!   triple nearer the last frame's, then each angle unwrapped), so a line between keys never
 //!   turns the long way round.
-//! - **Helpers.** The template's helper table and helper channels, retimed: H10's translation
-//!   is where KH1 takes the motion's travel from, so he moves as with the template (as in tier
-//!   A). No bone points at a helper any more.
+//! - **Helpers.** The template's helper table and helper channels, retimed. No bone points at a
+//!   helper any more.
+//! - **Travel** (`travel` given, t365). The last helper's translation (H10 on Sora) is where
+//!   KH1 takes a motion's travel from (`docs/kh1-anim-slots.md` §1.6 step 5): with the request's
+//!   travel flag (file bit 15, `0x1402A01E0`) KH1 moves the actor by it each frame (`0x14029A3C0`
+//!   adds `+0x200`) and pulls the model's placement back by the travel so far (`0x14029F0A0`,
+//!   `+0x210`; put back at the motion's end, `0x14029FC40`), and its own motions carry the same
+//!   travel in the body (H2). So the template's H10 translation channels
+//!   are replaced by `travel` (model space, per frame), and the poses given carry it too.
 //! - **Events.** Those given (as `slot::retimed`).
 
 use crate::slot::{self, put, u32_at, EventTrack};
@@ -49,6 +55,8 @@ pub struct Report {
     pub keys: usize,
     /// Bones built once at the motion's start (bit 25).
     pub static_bones: usize,
+    /// Keys written for the travel helper (H10).
+    pub travel_keys: usize,
     /// The worst distance (units) between a joint as KH1 will place it from the channels and
     /// the pose given, over every frame, and its bone.
     pub max_error: f32,
@@ -98,6 +106,14 @@ fn reduce(v: &[f32], tol: f32) -> Vec<(u32, f32)> {
     out
 }
 
+/// One linear key (interpolation 1) in KH1's layout: `(frame*256)<<8 | 1`, the value, no tangents.
+fn key(frame: u32, v: f32) -> [u8; 16] {
+    let mut k = [0u8; 16];
+    k[..4].copy_from_slice(&(((frame as i32 * 256) << 8) | 1).to_le_bytes());
+    k[4..8].copy_from_slice(&v.to_le_bytes());
+    k
+}
+
 /// A keyed channel's value at `frame` (linear between keys, held past the ends).
 fn sample(keys: &[(u32, f32)], frame: f32) -> f32 {
     let (first, last) = (keys[0], keys[keys.len() - 1]);
@@ -114,8 +130,9 @@ fn sample(keys: &[(u32, f32)], frame: f32) -> f32 {
 
 /// The KH1 motion that shows `poses` (one per frame, `0..=frames`, KH1 model space, one matrix
 /// per bone of `skeleton`), built on `template` (a KH1 motion in file layout) lasting `frames`,
-/// with `events`.
-pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bone], poses: &[Vec<Mat4>]) -> Result<(Vec<u8>, Report)> {
+/// with `events`. `travel` (empty, or one per pose): the motion's travel for H10, already in
+/// `poses`.
+pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bone], poses: &[Vec<Mat4>], travel: &[Vec3]) -> Result<(Vec<u8>, Report)> {
     let bad = |m: String| Error::Format(format!("bake: {m}"));
     let n = skeleton.len();
     if frames == 0 || frames as usize + 1 > MAX_KEYS {
@@ -126,6 +143,9 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
     }
     if poses.iter().flatten().any(|m| !m.is_finite()) {
         return Err(bad("a pose is not finite".into()));
+    }
+    if !travel.is_empty() && (travel.len() != poses.len() || travel.iter().any(|t| !t.is_finite())) {
+        return Err(bad(format!("{} travel values for {} poses", travel.len(), poses.len())));
     }
     let r = slot::retimed(template, frames, events)?;
     if u32_at(&r, 0x10)? as usize != n {
@@ -187,23 +207,48 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
     report.constant_channels = constants.len();
     report.keys = keyed.iter().map(|k| k.keys.len()).sum();
 
-    // The template's helper channels and their keys (retimed).
+    // The template's helper channels and their keys (retimed), but for the travel helper's
+    // translation when `travel` is given: ours.
+    let (h_count, h_at) = (u32_at(&r, 0x2C)? as usize, u32_at(&r, 0x30)? as usize);
+    if !travel.is_empty() && h_count == 0 {
+        return Err(bad("travel given, but the template has no helpers".into()));
+    }
+    let last = h_count.saturating_sub(1) as u16;
     let (hc_count, hc_at, keys_at) = (u32_at(&r, 0x20)? as usize, u32_at(&r, 0x24)? as usize, u32_at(&r, 0x28)? as usize);
     let mut helper_channels: Vec<[u8; 6]> = Vec::new();
     let mut helper_keys: Vec<Vec<u8>> = Vec::new();
     for c in 0..hc_count {
         let e = hc_at + c * 6;
         let s: [u8; 6] = r.get(e..e + 6).ok_or_else(|| bad("helper channel past the end".into()))?.try_into().unwrap();
+        if !travel.is_empty() && u16::from_le_bytes([s[0], s[1]]) == last && (7..=9).contains(&(s[2] & 15)) {
+            continue;
+        }
         let (count, first) = (s[3] as usize, u16::from_le_bytes([s[4], s[5]]) as usize);
         let k = keys_at + first * 16;
         helper_keys.push(r.get(k..k + count * 16).ok_or_else(|| bad("helper key past the end".into()))?.to_vec());
         helper_channels.push(s);
     }
+    if !travel.is_empty() {
+        for c in 0..3 {
+            let values: Vec<f32> = travel.iter().map(|t| t[c]).collect();
+            if values.iter().all(|v| v.abs() <= SAME_POS) {
+                continue;
+            }
+            let keys = reduce(&values, POS_TOL);
+            let mut s = [0u8; 6];
+            s[..2].copy_from_slice(&last.to_le_bytes());
+            // (Kind 7..9, translation x..z; held outside the keys, bits 4..7 clear.)
+            s[2] = 7 + c as u8;
+            s[3] = keys.len() as u8;
+            helper_channels.push(s);
+            helper_keys.push(keys.iter().flat_map(|&(f, v)| key(f, v)).collect());
+            report.travel_keys += keys.len();
+        }
+    }
     let total_keys = report.keys + helper_keys.iter().map(|k| k.len() / 16).sum::<usize>();
     if total_keys > u16::MAX as usize {
         return Err(bad(format!("{total_keys} keys")));
     }
-    let (h_count, h_at) = (u32_at(&r, 0x2C)? as usize, u32_at(&r, 0x30)? as usize);
     let helpers = r.get(h_at..h_at + h_count * 40).ok_or_else(|| bad("helpers past the end".into()))?.to_vec();
     let tracks = slot::events(&r)?;
 
@@ -244,10 +289,7 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
     put(&mut out, 0x28, at);
     for k in &keyed {
         for &(f, v) in &k.keys {
-            out.extend_from_slice(&(((f as i32 * 256) << 8) | 1).to_le_bytes());
-            out.extend_from_slice(&v.to_le_bytes());
-            out.extend_from_slice(&0f32.to_le_bytes());
-            out.extend_from_slice(&0f32.to_le_bytes());
+            out.extend_from_slice(&key(f, v));
         }
     }
     for k in &helper_keys {
@@ -356,7 +398,7 @@ mod tests {
         put(&mut t, 0x38, 0x90);
         put(&mut t, 0x3C, 0x90);
         put(&mut t, 0x90, slot::END);
-        let (b, rep) = baked(&t, frames, &[], &skeleton, &poses).unwrap();
+        let (b, rep) = baked(&t, frames, &[], &skeleton, &poses, &[]).unwrap();
         assert!(rep.max_error < 0.05, "{rep:?}");
         assert_eq!(u32_at(&b, 4).unwrap(), frames);
         // The tip never moves against its parent: built once (static, bit 25).
@@ -364,5 +406,19 @@ mod tests {
         assert_eq!(u32_at(&b, words + 8).unwrap(), STATIC);
         assert_eq!(u32_at(&b, words).unwrap(), 0);
         assert!(slot::events(&b).unwrap().is_empty());
+        assert_eq!(u32_at(&b, 0x20).unwrap(), 0);
+
+        // With travel: the last helper (here H0) gets a z channel, two keys for a line.
+        let travel: Vec<Vec3> = (0..=frames).map(|f| Vec3::new(0.0, 0.0, f as f32 * 3.0)).collect();
+        let moved: Vec<Vec<Mat4>> = poses.iter().zip(&travel).map(|(p, t)| p.iter().map(|m| Mat4::from_translation(*t) * *m).collect()).collect();
+        let (b, rep) = baked(&t, frames, &[], &skeleton, &moved, &travel).unwrap();
+        assert!(rep.max_error < 0.05, "{rep:?}");
+        assert_eq!(rep.travel_keys, 2);
+        assert_eq!(u32_at(&b, 0x20).unwrap(), 1);
+        let hc = u32_at(&b, 0x24).unwrap() as usize;
+        assert_eq!(&b[hc..hc + 4], &[0, 0, 9, 2]);
+        let k = u32_at(&b, 0x28).unwrap() as usize + u16::from_le_bytes([b[hc + 4], b[hc + 5]]) as usize * 16;
+        assert_eq!(u32_at(&b, k + 16).unwrap(), ((frames as i32 * 256) << 8 | 1) as u32);
+        assert_eq!(f32::from_bits(u32_at(&b, k + 20).unwrap()), frames as f32 * 3.0);
     }
 }

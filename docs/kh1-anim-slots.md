@@ -200,7 +200,17 @@ it lists.
 5. **Root travel.** The **last helper's** translation (H10 on Sora), times the world scale, goes
    to `instance+0x100..0x108`. `instance+0xF0..0xF8` gets the world position plus that. The body
    is not parented to H10. **This is where KH1's root travel lives, not bone 0.** Who reads
-   `+0x100` / `+0xF0` is still **open**.
+   `+0x100` / `+0xF0`: the actor, when the request has KH1's travel flag (t365, from the decomp):
+   - a request entry's bit 15 becomes `0x4000000` (`0x1402A01E0`) and then the actor's `+0x160`
+     bit 4 (`0x14029FC40`). Sora's ground combo (0xC8..0xCB) has it; his air combo doesn't;
+   - the actor copies `+0xF0` to `+0x50` (`0x1403948D0`), keeping this frame's step in `+0x200`
+     and the travel so far in `+0x210` (end of `0x14029F0A0`);
+   - the move function (`0x14029A3C0`, which calls the ground step `0x1402B1850`) adds `+0x200`
+     to his displacement, so the motion moves him, with collision;
+   - the draw pulls his placement back by `+0x210`. At the motion's end, `0x14029FC40` puts it
+     back and clears it;
+   - KH1's own motions carry the same travel in H2, which the body hangs from (98..101: H10 z
+     100 / 120 / 100 / 190), so the pull-back cancels and the model stays on him.
 6. **Bones.** `0x1403900B0` [`0x140390260`] builds the bones (below).
 7. **Events.** Event flags go to `instance+0x14` (types `0x10000..0x10003`, 0, `0x50000`,
    `0x70000`).
@@ -354,9 +364,10 @@ game, then decide.
   motion), so KH1 plays our keys exactly. The two-bone IK solves go away for these motions.
   The head look-at still works.
 - **Helpers.** The template's helper table is kept (11 entries, the same parents), with one
-  helper channel set: **H10's translation = KH2's root travel × the hip ratio**. That is where
-  KH1 takes a motion's travel from (§1.6, step 5). Bone 0 carries the in-place root only. The
-  other helpers get no channels: no bone points at them any more.
+  helper channel set: **H10's translation = KH2's root travel** at KH2's full distances (t367;
+  t365 scaled it by the hip ratio), along the ground, for requests with the travel flag. That is where KH1 takes a motion's travel from
+  (§1.6, step 5). The body carries the same travel, as KH1's own motions do through H2, so the
+  pull-back cancels. The other helpers get no channels: no bone points at them any more.
 - **The legs stay on KH1's IK (the hybrid).** KH1's foot ground lift acts only in mode 2 (§1.6),
   and it **is used on Sora**. In the user's t348 trace (Traverse Town, KH1's own animation,
   standing still on uneven ground, a bent leg seen in game):
@@ -372,7 +383,7 @@ game, then decide.
   where KH2's do. Everything else is plain FK.
 - **What `pose.rs` does for these slots: nothing.** KH1's own pass shows the motion. The
   Keyblade mesh rides 280–292.
-- **Open, to check in game:** who reads `instance+0x100` (the travel); how the `+0x1CC` blend
+- **Open, to check in game:** how the `+0x1CC` blend
   list treats an FK slot next to KH1's IK motions; the model header's ground-lift list for
   Sora.
 

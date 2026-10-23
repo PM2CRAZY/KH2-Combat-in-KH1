@@ -888,6 +888,12 @@ unsafe fn keyblade_teeth_up(pose: &mut [Mat4], parents: &[i16]) {
     if !set.keyblade_turn || (0x52..=0x55).contains(&w) || set.flip_weapons.contains(&w) {
         return;
     }
+    turn_grip(pose, parents);
+}
+
+/// The half turn of the grip and everything under it about the grip's x (the blade's length):
+/// `keyblade_teeth_up`'s turn, also baked into KH2's slot motions (`Baker::poses`).
+fn turn_grip(pose: &mut [Mat4], parents: &[i16]) {
     let grip = kh1_data::retarget::GRIP_BONE;
     if grip >= pose.len() {
         return;
@@ -1073,14 +1079,24 @@ impl Baker {
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
     /// draws it (`follow_play`, `Play::Slot`): KH2's body and Keyblade, the root travel taken out
     /// (KH1 moves him), retargeted, KH2's hair, hood and keychain on (`hair_physics` and
-    /// `kh2_hair` on). Nothing of ours after that (feet, KH1's wrist, the Keyblade's turn, the
-    /// swing): the raw bake (the user: test it in game first, then decide).
-    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32) -> Option<Vec<Vec<Mat4>>> {
+    /// `kh2_hair` on), the Keyblade's teeth-up turn (`keyblade_turn`). Nothing else of ours (feet,
+    /// KH1's wrist, the swing).
+    ///
+    /// `travel` (t365, a move whose request has KH1's travel flag): KH2's root travel along the
+    /// ground (from its first frame, at KH2's full distances: the user, t367) put back on the
+    /// whole pose and returned per frame, for the bake's H10. KH1 moves him by H10
+    /// and pulls his placement back by it; his body carries it, as KH1's own motions do (H2), so
+    /// the model stays on him (`kh1_data::bake`). Else none (empty): the travel stays out.
+    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32, travel: bool) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>)> {
         let rig = &kh2.rig;
         let clip = rig.motions.get(&motion)?;
         let set = super::settings::get();
         let roots = kh2.roots.get(&motion);
+        let parents: Vec<i16> = self.skeleton.iter().map(|b| b.parent).collect();
         let mut out = Vec::with_capacity(frames as usize + 1);
+        let mut moved = Vec::new();
+        let root_at = |f: u32| roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))).map(|p| Vec3::from(*p));
+        let start = root_at(0).unwrap_or(Vec3::ZERO);
         for f in 0..=frames {
             let at = f as f32;
             let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
@@ -1092,12 +1108,31 @@ impl Baker {
                 }
             }
             let mut kh1 = self.retarget.pose(&body);
+            // The Keyblade's teeth up (`keyblade_turn`; the user's t353 test: held the wrong way
+            // round, as KH1's grip rolls the blade otherwise). Every weapon gets it in the bake:
+            // the dream weapons and the wooden sword too (the user: they show the same). Before
+            // the keychain, as `check` does: the chain hangs from the turned pommel.
+            if set.keyblade_turn {
+                turn_grip(&mut kh1, &parents);
+            }
             if set.physics && set.kh2_hair {
                 self.secondary.apply(&mut kh1, &body, (!weapon.is_empty()).then_some(weapon.as_slice()), kh1_data::secondary::Parts::ALL);
             }
+            if travel {
+                // (Along the ground only: the root's height stays out, as before.)
+                let d = root_at(f).map_or(Vec3::ZERO, |p| p - start);
+                // (KH2's units as they are: H10 moves him 1:1 in the world, Sora's placement
+                // having scale 1 (t364's KH1 trace: swing 98's H10 1.3 and 6.32 a frame, moved
+                // 1.30 and 6.32).)
+                let t = Vec3::new(d.x, 0.0, d.z);
+                for m in kh1.iter_mut() {
+                    m.w_axis += t.extend(0.0);
+                }
+                moved.push(t);
+            }
             out.push(kh1);
         }
-        Some(out)
+        Some((out, moved))
     }
 }
 

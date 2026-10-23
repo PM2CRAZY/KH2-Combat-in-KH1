@@ -1,0 +1,24 @@
+[package]
+name = "kh1-hook"
+description = "Runs the KH2 combat rewrite inside Kingdom Hearts Final Mix (PC, KH 1.5+2.5): a 64-bit dinput8.dll proxy that only acts in KINGDOM HEARTS FINAL MIX.exe."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "dinput8"
+crate-type = ["cdylib"]
+
+[dependencies]
+kh1-data.workspace = true
+kh2-anim.workspace = true
+kh2-data.workspace = true
+kh2-rig.workspace = true
+kh2-formats.workspace = true
+kh2-fx = { path = "../kh2-fx" }
+kh2-magic.workspace = true
+character-core = { path = "../character-core" }
+combat-core.workspace = true
+kh2-camera.workspace = true
+glam = "0.29"

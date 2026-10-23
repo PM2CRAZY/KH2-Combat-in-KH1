@@ -1,0 +1,15 @@
+[package]
+name = "kh2-rig"
+description = "Plays KH2 motions on a KH2 skeleton from a character controller's output (motion choice, blends, weapons, root motion) and places the rig's collision shapes. No engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+glam = "0.29"
+character-core = { path = "../character-core" }
+combat-core.workspace = true
+kh2-anim.workspace = true
+kh2-data.workspace = true
+kh2-formats.workspace = true

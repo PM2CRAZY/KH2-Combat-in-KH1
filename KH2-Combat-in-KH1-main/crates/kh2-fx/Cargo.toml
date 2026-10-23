@@ -1,0 +1,16 @@
+[package]
+name = "kh2-fx"
+description = "Plays Kingdom Hearts II effect particle data (PAX/DPD 'ppp' programs) and outputs world-space triangles to draw. Reads the user's own files; ships no game data."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# Relies on OpenKH format knowledge (Apache-2.0) through kh2-formats. See NOTICE and CREDITS.md.
+license = "Apache-2.0"
+
+[dependencies]
+kh2-formats.workspace = true
+glam = "0.29"
+
+[dev-dependencies]
+flate2.workspace = true
+kh2-anim.workspace = true

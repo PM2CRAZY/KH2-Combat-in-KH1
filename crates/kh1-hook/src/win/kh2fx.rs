@@ -522,6 +522,10 @@ pub fn event(motion: u16, kind: EventKind) {
     if el < 0 || !(allowed(motion) || super::form::own_motion(motion)) {
         return;
     }
+    // (t368) Elements KH1's own effect system plays (`kh2dpx`).
+    if super::kh2dpx::event(motion, el) {
+        return;
+    }
     let Ok(mut g) = STATE.lock() else { return };
     let Some(s) = g.as_mut() else { return };
     let tip = s.tip_local;

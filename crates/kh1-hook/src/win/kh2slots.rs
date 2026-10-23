@@ -82,6 +82,8 @@ pub struct Move {
     pub frames: u32,
     /// Baked into a KH1 motion (`kh1_bake`, `kh1_data::bake`): KH1 shows it, nothing of ours drawn.
     pub baked: bool,
+    /// Baked with KH2's root travel in its H10 (`bake_one`): KH1 moves him by it, nothing of ours.
+    pub travel: bool,
     /// The KH2 clip's sounds, voices and effects, by frame.
     events: Vec<(u32, EventKind)>,
 }
@@ -125,7 +127,9 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
             let frames = clip.length.max(1);
             let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32);
             let slot = KH1_SLOTS + moves.len();
-            let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, s.motion, frames, &tracks)) {
+            // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
+            let travel = s.kind == Kind::GroundCombo && travels(requests[s.request]);
+            let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, s.motion, frames, &tracks, travel)) {
                 Some(Ok(block)) => (block, true),
                 Some(Err(e)) => {
                     log(&format!("KH2 slots: KH2 motion {} not baked ({e}); drawn over its template", s.motion));
@@ -141,7 +145,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
             ));
             let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Voice(_) | EventKind::Effect(_))).map(|e| (e.frame, e.kind)).collect();
-            moves.push(Move { motion: s.motion, stands_for: s.stands_for, request: s.request, kind: s.kind, slot, frames, baked, events });
+            moves.push(Move { motion: s.motion, stands_for: s.stands_for, request: s.request, kind: s.kind, slot, frames, baked, travel: travel && baked, events });
             blocks.push(block);
         }
         Ok(Built { moves, blocks, requests })
@@ -158,18 +162,21 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
 }
 
 /// KH2's `motion` baked into a KH1 motion on `template` (`kh1_data::bake`), with its report logged.
-fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], motion: u16, frames: u32, tracks: &[EventTrack]) -> Result<Vec<u8>, String> {
+/// `travel`: the move's request has KH1's travel flag (`travels`): KH2's root travel goes in its H10.
+fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], motion: u16, frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
     let t = std::time::Instant::now();
-    let poses = b.poses(kh2, motion, frames).ok_or("KH2 has no animation for it")?;
-    let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses).map_err(|e| e.to_string())?;
+    let (poses, moved) = b.poses(kh2, motion, frames, travel).ok_or("KH2 has no animation for it")?;
+    let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved).map_err(|e| e.to_string())?;
     log(&format!(
-        "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; KH1's FK from it within {:.3} units of the pose (worst bone {})",
+        "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; travel {} ({} H10 keys); KH1's FK from it within {:.3} units of the pose (worst bone {})",
         block.len(),
         t.elapsed().as_secs_f32() * 1000.0,
         r.keyed_channels,
         r.keys,
         r.constant_channels,
         r.static_bones,
+        moved.last().map_or("none (KH1 doesn't move it)".to_string(), |v| format!("{:.1?} model units", v.to_array())),
+        r.travel_keys,
         r.max_error,
         r.worst_bone
     ));
@@ -247,6 +254,20 @@ pub fn covers(kind: Kind) -> bool {
 /// `slot` is one of ours, baked into a KH1 motion (KH1 shows it; `pose` draws nothing over it).
 pub fn is_baked(slot: usize) -> bool {
     moved(slot).is_some_and(|m| m.baked)
+}
+
+/// A request table entry (file layout) with KH1's travel flag: bit 15, which `0x1402A01E0`
+/// turns into the request's `0x4000000` and `0x14029FC40` into the actor's `+0x160` bit 4: KH1
+/// moves the actor by the motion's H10 (`0x14029A3C0`, `+0x200`) and pulls the model back by it
+/// (`0x14029F0A0`, `+0x210`). Sora's ground combo (0xC8..0xCB) has it; his air combo doesn't.
+pub fn travels(entry: u32) -> bool {
+    entry & 0x8000 != 0
+}
+
+/// Sora (`actor`) plays one of ours baked with KH2's travel: KH1 moves him by it (`shared`'s
+/// swing travel stays out).
+pub unsafe fn moves_itself(actor: usize) -> bool {
+    current(actor).is_some_and(|m| m.travel)
 }
 
 /// Our slot's KH2 motion, if `slot` is one of ours.

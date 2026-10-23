@@ -1,3 +1,137 @@
+### 2026-10-22: Stage 370 (testing branch: KH2's HD textures matched by the right header word)
+- The user's t369 run: Explosion still has the squares. The log: the DPX was entered in KH1's loaded files, but with 0
+  HD textures, every texture "none". The asset headers' `+0x20` words (P_EX100: `0x850A0`, `0x87120`, ...; texcommon:
+  `0x424D0`, `0x62550`, ...) each step by the asset before's size (8320, 131200 bytes): the asset's own place in the
+  stream, not the replaced data's offset (stage 369's assumption, wrong).
+- `HdAsset` keeps both words: `pkg_offset` (`+0x20`) and `offset` (`+0x24`), and textures are matched by `+0x24`.
+  Checked in the exe: KH1's own loader reads the same header's `+0x24` word as an HD entry's key (`0x1400D53F0`, low
+  24 bits kept, `0x1400E1680`). The log line now lists each asset as "name for <offset> (size, at <pkg_offset>)".
+
+### 2026-10-22: Stage 369 (testing branch: KH2 effects through KH1's own effect system: their HD textures)
+- The user's t368 test: Explosion's wrist flashes showed as squares at Sora's body, the rest fine. The log: the DPX was
+  built and relocated and both elements started, so placement and programs ran and only the textures failed.
+- From the decomp (Steam): KH1's PC port never draws a DPD's PS2 texture data. Its DPD texture pass (`0x14031EC10`,
+  one texture per TBP) asks the HD texture lookup (`0x14010C050`) for each record's pixels (`+0x20`): the loaded file
+  holding the pointer (`0x1400E2B20`: KH1's loaded-file list, each entry's data `+0x658`, size `+0x640`), then that
+  file's HD entry (`+0x670` list) whose `+0x54` is the pixels' offset in the file (the offset keying is on: set at
+  start in `axaAppMain`). Our buffer was in no file, so there was no texture. KH2's PC port does the same with its
+  own HD images (DDS, DXT5, as KH1's), stored with each file.
+- The user chose option A (native): the DPX is entered in KH1's loaded-file list the way KH1 enters a file it loads
+  (`0x1400E1680` / `0x1400E2F60`: a 0x688-byte resource entry, its data, size, name, MD5 (KH1 keeps a file's textures
+  while a file with that MD5 is loaded), and 0x78-byte HD entries), each texture record given the KH2 HD image KH2
+  draws for it. KH1's own loader makes the textures. Vtables are copied from KH1's own entries, memory comes from the
+  game's CRT (`malloc`, `_aligned_malloc`), the list from the lookup's own first instruction (no new address).
+- `kh2_formats::egs::Archive::read_remastered_all` / `kh2_data::Install::read_remastered_any`: a file's HD assets with
+  each header's `+0x20` word. **Assumption** (OpenKH's `RemasteredEntry.Offset`): the offset in the original file of
+  the data the asset replaces; the log lists each asset and which texture it matched, or "none".
+- `kh1dpx::build`: also rewrites each texture record's own TEX0 (`+0x10`, which KH1's records keep equal to `+0`/`+2`),
+  and returns each texture's origin (own or common, its record's offset there, its TBP, its offset in the DPX), the
+  source DPDs' places and the DPX's MD5; `texture_records(dpd)`. A texture takes the HD image of its source TBP (the
+  asset at any record with that TBP: one image per TBP in both games).
+- **Assumption**: KH1 adds to its loaded-file list on the game thread (ours is added there, on the first native start).
+
+### 2026-10-22: Stage 368 (testing branch: KH2 effects through KH1's own effect system, step 1)
+- The user: port KH2's effects into KH1's systems so any move can use them; ladder step 1 (native), bones by option A
+  (as the base attacks), Explosion first. Plan and checks: project notes `kh2-effects-in-kh1.md`.
+- Checked (Steam decomps and the files): KH1 and KH2 share the effect engine (DPX `0x82`, DPD `0x96`, programs 1..235
+  the same by name and number; KH2 adds 236..242) and the 30 Hz effect clock. What differs is texture memory: KH1's
+  own-texture window starts at TBP `0x3800` / CBP `0x3D40` (10 / 6 slots), KH2's at `0x3000` / `0x3E00` with its common
+  textures below.
+- `kh2_formats::kh1dpx::build(pax, texcommon, effects)`: a KH1 DPX of some effects of one KH2 DPD. Keeps their particle
+  datas only; the textures they draw with (the DPD's own and KH2 common ones) packed from KH1's window (textures sharing
+  a TBP get the largest one's space); shapes' and models' TEX0 moved; texture masks rebuilt; programs above 235 set to
+  KH1's dummy program until plugged in. Explosion (effects 31..34): 4 particle datas, 12 textures, 6 TBP / 2 CBP slots.
+- `kh2dpx` (new): builds Explosion's DPX in the background from the KH2 install; on its first use KH1 relocates it
+  (`0x1401E0080`), and elements 46 / 47 (effect 33, KH2 bones 170 / 78) start with KH1's start-on-bone (`0x1402ADCF0`)
+  on Sora's KH1 bones 93 / 198 (`0x2000 | bone`). KH1 steps, binds, textures, draws and ends them; nothing of ours runs
+  per frame. Kept inside one 32 MB handle region. `kh2fx::event` hands those two elements over first; while the DPX
+  isn't built, or KH1 has no free element, `kh2fx` plays them as before.
+- Ini `kh2_fx_native` (on): off = `kh2fx` plays everything as before.
+- Not yet (step 2): the elements' delay, fade-out, end-with-motion and their half turn about z (KH1's bone binding
+  doesn't take an element's rotation). Explosion's elements 44, 45 and 48 still play through `kh2fx` (they need KH2's
+  `pppRyjMegaBirth` and `pppEiDrawShipoly`, steps 3 and 4).
+
+### 2026-10-22: Stage 367 (testing branch: the baked swing travel at KH2's full distances)
+- The user: the baked travel at KH2's full distances, to match KH2's travel (t365 scaled it by the retarget's hip
+  ratio, a choice made without asking). Keeping the swing-travel feed off for baked swings is fine (the user).
+- `Baker::poses`: the travel is KH2's root travel along the ground as it is, no ratio. Sora's placement has scale 1
+  (t364's KH1 trace: swing 98's H10 steps 1.3 and 6.32 a frame, moved 1.30 and 6.32), so H10 moves him 1:1. The body
+  carries the same, so the model stays on him; his feet may slide a little on KH1's shorter legs.
+
+### 2026-10-22: Stage 366 (testing branch: t365 builds)
+- t365's build: E0592, `Retarget::hip_ratio` defined twice; `Retarget` already had it. The added copy is removed.
+
+### 2026-10-22: Stage 365 (testing branch: KH2's swing travel baked into the motion, KH1 moves him by it)
+- The user's t364 traces: the finisher no longer turns, but in KH2's baked swings the model trails the screen's centre
+  and jumps back to it at the swing's end, while KH1's own swings look right. Swing totals: KH2's 230 / 182 / 221 / 330
+  units, KH1's 92 / 89 / 95 / 186.
+- From the decomp (Steam), correcting stage 363: KH1 does take travel from the motion. A request entry's bit 15
+  (Sora's ground combo, 0xC8..0xCB; not his air combo) becomes `0x4000000` (`0x1402A01E0`) and the actor's `+0x160`
+  bit 4 (`0x14029FC40`). The pose pass (`0x140391C70`) writes H10's translation to the instance's `+0x100` and the
+  world position plus it to `+0xF0`; the actor copies `+0xF0` to `+0x50` (`0x1403948D0`) and keeps this frame's step
+  in `+0x200` and the travel so far in `+0x210` (end of `0x14029F0A0`). The move function (`0x14029A3C0`, which calls
+  the ground step `0x1402B1850`) adds `+0x200` to the displacement; the draw pulls the placement back by `+0x210`, put
+  back and cleared at the motion's end (`0x14029FC40`). KH1's own swings carry the same travel in H2, which the body
+  hangs from (98..101: H10 z 100 / 120 / 100 / 190), so the model stays on him.
+- Ours kept the template's H10 (KH1's travel) with the travel taken out of the body, and `ground_step` fed KH2's
+  travel too: he moved by both, and the model was pulled back by KH1's travel with nothing to cancel it.
+- `kh1_data::bake::baked` takes `travel` (per frame, model space): the template's H10 translation channels are
+  replaced by it (linear keys, reduced). `Baker::poses(.., travel)` puts KH2's root travel along the ground (from
+  frame 0, times the retarget's hip ratio, `Retarget::hip_ratio`) back on the whole pose and returns it.
+  `kh2slots::prepare` bakes it for the ground combo when the request has bit 15 (`travels`); `Move.travel`,
+  `moves_itself(actor)`.
+- `shared::physics::ground_step`: for a move that moves itself, KH2's swing travel isn't fed (KH1's step and its own
+  root travel move him). The t363 / t364 feed stays for unbaked swings. Air combo unchanged.
+- Travel scales with the hip ratio (no foot slide on KH1 Sora's shorter legs), so lunges are shorter than KH2's by
+  that ratio and Sora's world scale.
+
+### 2026-10-22: Stage 364 (testing branch: the finisher no longer turns toward KH2's travel)
+- The user's t363 traces: KH2's finisher (154) turned Sora mid-swing (0.196 rad a frame, twice) and ran him off the
+  screen's centre, then snapped back; swings 151 / 152 unchanged; the stick plays no part (the user).
+- From the decomp: KH1's player control (`0x1402A3300`) runs the state's input filter (`0x1402A7B30` -> state 0's
+  `0x1402A5F10`): with the stick let go it takes the move vector `+0x20` as the input; the ground pre-step
+  (`0x1402CC1A0`) then sets the desired facing `+0x150` from it (`0x140297FB0`, atan2) and KH1 turns his facing
+  toward that at the stats' rate (`+0xD0`, π/16 in an attack). t363 left KH2's travel direction in `+0x20`, sideways
+  in the finisher, so he turned toward it.
+- `ground_step`: KH1's move vector and speed (`+0x20..+0x2C`) are saved before KH2's travel is written and put back
+  after KH1's step, so KH1's step still moves him by KH2's travel and nothing else sees it.
+- Not explained yet: the ~26 units a frame while he turned and the 28-unit snap back (a new trace will show whether
+  they went with the turn).
+
+### 2026-10-22: Stage 363 (testing branch: KH2's swing travel through KH1's own move fields)
+- The user: KH2's ground combo travel (physics KH2) into KH1's systems, the goal being every KH2 system inside KH1's
+  while keeping KH2's feel. From the decomp: KH1's ground state step (`0x1402B1850`, Steam) moves him by his move
+  vector (`+0x20`, laid on the ground normal `+0xC0`) times his speed (`+0x2C`) times the frame; the motion's travel
+  helper (H10, the instance's `+0x100`) isn't read by it or by the combo, so baking travel into the motion wouldn't
+  move him.
+- `shared::physics::ground_step`: in KH1's ground swing (slots 98..101, action flag 4) at physics KH2, KH2's travel
+  for that swing (the same clip root, stretch and facing as before) is written as KH1's move vector (flat) and speed
+  (units a 60 Hz frame) before KH1's step runs, and KH1's step moves him (on slopes along the ground, as KH1 does).
+  It used to overwrite the step's result afterwards.
+
+### 2026-10-22: Stage 362 (testing branch: the baked swings hold the Keyblade teeth up)
+- The user's t353 test: the baked combo slots play (log "KH1 plays ours", trace `draw_route` baked) and everything
+  translates except the Keyblade, held the wrong way round (teeth down), as expected from the raw bake.
+- `Baker::poses` turns the grip and everything under it half round about the blade (`turn_grip`, split out of
+  `keyblade_teeth_up`) before the keychain, as the drawn path does, while `keyblade_turn` is on. Every weapon gets it
+  in the bake, the dream weapons and the wooden sword too (the user: they show the same issue; option A).
+
+### 2026-10-22: Stage 361 (testing branch: the debug menu's equip crash)
+- The user: the game crashes equipping another weapon from the debug menu. The log: `CRASH 0xc0000005 at exe+286737`,
+  inside KH1's weapon change (Steam `0x140286720`) at its first use of the id (the item record lookup
+  `0x14028F970`, which takes all of `ecx`); `rcx` was `0x2c296451`: the id `0x51` in the low byte, the rest left over
+  by the byte argument the t360 call declared. The id is passed as a whole `u32` now.
+
+### 2026-10-22: Stage 360 (testing branch: the debug menu equips Sora's weapon)
+- The user: stuck on the Dream Sword after the debug menu gave it ("game won't let me unequip dream weapons"; the log
+  shows weapon `0x52` from the Equipment page on): KH1's Equipment page refuses Sora's weapon row while he holds
+  `0x52..0x55` (`0x1402E6C60` / Steam `0x1402E90A0`, a four-id list read from the exe). Then: "if its possible to let
+  sora equip weapons via the debug menu lets do that".
+- **Weapons page**: Cross now equips the weapon on the row (one is given first when Sora owns none) through KH1's own
+  weapon change `0x1402845A0` (Steam `0x140286720`; `steam_map.in` gets the pair), which writes his weapon byte and
+  loads and makes the weapon object, then the Status copy's refresh `0x1402E5A80`. Left / right still change the count.
+  The equipped one is marked. The live stats block follows at KH1's next rebuild (the pause menu's exit, an area).
+
 ### 2026-10-22: Stage 359 (testing branch: the debug menu's Weapons and Abilities pages)
 - The user: under the Stats page, a weapon and an ability page "so I can add or remove each weapon and ability".
 - **Weapons**: every Sora weapon (item kind 2 in KH1's item table) with its inventory count (`save + 0x499 + id`,

@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/combat-core",
+    "crates/kh2-formats",
+    "crates/kh2-data",
+    "crates/kh2-combat-cli",
+    "crates/character-core",
+    "crates/kh2-bevy",
+    "crates/kh2-anim",
+    "crates/kh2-rig",
+    "crates/kh2-bdx",
+    "crates/kh2-magic",
+    "crates/map-collision",
+    "crates/kh2-camera",
+    "crates/kh1-data",
+    "crates/kh1-hook",
+    "crates/kh2-fx",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+
+[workspace.dependencies]
+combat-core = { path = "crates/combat-core" }
+kh2-formats = { path = "crates/kh2-formats" }
+kh2-data = { path = "crates/kh2-data" }
+kh1-data = { path = "crates/kh1-data" }
+kh2-anim = { path = "crates/kh2-anim" }
+kh2-rig = { path = "crates/kh2-rig" }
+kh2-bdx = { path = "crates/kh2-bdx" }
+kh2-magic = { path = "crates/kh2-magic" }
+map-collision = { path = "crates/map-collision" }
+kh2-camera = { path = "crates/kh2-camera" }
+kh2-fx = { path = "crates/kh2-fx" }
+md-5 = "0.10"
+sha2 = "0.10"
+flate2 = "1"
+thiserror = "1"
+lewton = "0.10"
+
+[profile.release]
+debug = false

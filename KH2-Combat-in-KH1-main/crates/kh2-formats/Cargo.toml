@@ -1,0 +1,15 @@
+[package]
+name = "kh2-formats"
+description = "Readers for Kingdom Hearts II PC (Epic) archives (HED/PKG), BAR containers and 00battle.bin tables. Reads the user's own install; ships no game data."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# Contains ports of OpenKH code (Apache-2.0). See NOTICE and CREDITS.md.
+license = "Apache-2.0"
+
+[dependencies]
+md-5.workspace = true
+sha2.workspace = true
+flate2.workspace = true
+thiserror.workspace = true
+lewton.workspace = true

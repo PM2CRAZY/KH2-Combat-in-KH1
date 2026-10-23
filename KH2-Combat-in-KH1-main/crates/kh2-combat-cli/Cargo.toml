@@ -1,0 +1,18 @@
+[package]
+name = "kh2-combat-cli"
+description = "Debug CLI: inspect KH2 combat tables from your install and simulate hits."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "kh2-combat"
+path = "src/main.rs"
+
+[dependencies]
+character-core = { path = "../character-core" }
+combat-core.workspace = true
+kh2-data.workspace = true
+kh1-data.workspace = true
+kh2-formats.workspace = true

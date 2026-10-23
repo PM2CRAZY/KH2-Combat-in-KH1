@@ -849,18 +849,48 @@ pub mod physics {
     }
 
     /// State 0's step: KH2's walk or run speed (physics KH2); KH2's swing travel in
-    /// KH1's ground combo (physics KH2, either swing animation).
+    /// KH1's ground combo (physics KH2, either swing animation), fed to KH1's own step.
     unsafe extern "system" fn ground_step(actor: usize, disp: *mut [f32; 4]) -> usize {
         let f: StepFn = std::mem::transmute(ORIG_GROUND.load(Ordering::Acquire));
-        let r = f(actor, disp);
-        if !is_sora(actor) || rd::<i32>(actor + 0x70) != 0 || disp.is_null() {
+        // KH1's ground swing: KH2's travel for it written into KH1's own move vector and speed
+        // before KH1's step, which moves him by them (`0x1402B1850`: the move vector `+0x20` laid
+        // on the ground's normal `+0xC0`, times the speed `+0x2C`, times the frame), so slopes and
+        // KH1's own reading of those fields see KH2's lunge (t363; it used to replace the step's
+        // result afterwards).
+        let swing = (is_sora(actor) && rd::<i32>(actor + 0x70) == 0 && !disp.is_null() && rd::<u32>(actor) & 4 != 0)
+            .then(super::super::pose::sora_slot)
+            .flatten()
+            .filter(|s| (98..=101).contains(s));
+        if let Some(slot) = swing {
+            if !kh2() {
+                return f(actor, disp);
+            }
+            // (Ours baked with KH2's root travel in its H10 (t365, `kh2slots::moves_itself`):
+            // KH1's own root travel moves him (`0x14029A3C0` adds `+0x200` after this step) and
+            // keeps the model on him; feeding KH2's travel here too moved him twice, and KH1
+            // pulled the model back by the template's travel: the t364 trace, the model trailing
+            // the screen's centre, then jumping to it at the swing's end.)
+            if super::super::kh2slots::moves_itself(actor) {
+                if let Ok(mut g) = SWING.try_lock() {
+                    *g = None;
+                }
+                return f(actor, disp);
+            }
+            // (KH1's own move vector and speed put back after its step: the next frame, with the
+            // stick let go, KH1's input filter for the state (`0x1402A5F10`) takes the move vector
+            // as the input, and the ground pre-step (`0x1402CC1A0`, `0x140297FB0`) turns his
+            // desired facing (`+0x150`) toward it; KH1's turn (`0x1402A3300`, π/16 a frame) then
+            // turned him toward KH2's travel, sideways in its finisher: the t363 trace.)
+            let kept: [f32; 4] = rd(actor + 0x20);
+            let fed = swing_travel(actor, slot);
+            let r = f(actor, disp);
+            if fed {
+                wr(actor + 0x20, kept);
+            }
             return r;
         }
-        let slot = super::super::pose::sora_slot();
-        if matches!(slot, Some(98..=101)) && rd::<u32>(actor) & 4 != 0 {
-            if kh2() {
-                swing_travel(actor, &mut *disp, slot.unwrap_or(0));
-            }
+        let r = f(actor, disp);
+        if !is_sora(actor) || rd::<i32>(actor + 0x70) != 0 || disp.is_null() {
             return r;
         }
         if let Ok(mut s) = SWING.try_lock() {
@@ -889,18 +919,19 @@ pub mod physics {
 
     /// KH1's ground swing (its slot `slot`) moved as KH2's swing for it moves him: KH2's clip's
     /// root travel (`Clip::root`, +Z forward, +X right), stretched over KH1's swing as its motion
-    /// is (`pose::follow`), along his facing. KH1's own travel this frame (its swing's step
-    /// forward, its dash at a target) is replaced: one owner state (KH1's swing, its hit objects
-    /// and timing), KH2's physics on it.
-    unsafe fn swing_travel(actor: usize, d: &mut [f32; 4], slot: usize) {
-        let Some(kh2) = super::super::pose::kh2() else { return };
-        let Some(motion) = super::super::pose::swing_motion(slot) else { return };
-        let Some(clip) = kh2.character.moveset.clips.get(&motion) else { return };
+    /// is (`pose::follow`), along his facing, as KH1's move vector (`+0x20`, flat) and speed
+    /// (`+0x2C`, units a 60 Hz frame) for KH1's own step. KH1's own travel this frame (its swing's
+    /// step forward, its dash at a target) gives way: one owner state (KH1's swing, its hit
+    /// objects and timing), KH2's physics on it.
+    unsafe fn swing_travel(actor: usize, slot: usize) -> bool {
+        let Some(kh2) = super::super::pose::kh2() else { return false };
+        let Some(motion) = super::super::pose::swing_motion(slot) else { return false };
+        let Some(clip) = kh2.character.moveset.clips.get(&motion) else { return false };
         let kh1_len = super::super::pose::slot_frames(slot).unwrap_or(0) as f32;
         if clip.root.len() < 2 || kh1_len < 1.0 {
-            return;
+            return false;
         }
-        let Ok(mut g) = SWING.try_lock() else { return };
+        let Ok(mut g) = SWING.try_lock() else { return false };
         let s = match *g {
             Some((s, t)) if s == slot => (s, t),
             _ => (slot, 0.0),
@@ -919,14 +950,21 @@ pub mod physics {
         let local = [b[0] - a[0], b[2] - a[2]];
         let yaw: f32 = rd(actor + 0x3C);
         if !yaw.is_finite() || !local.iter().all(|x| x.is_finite()) {
-            return;
+            return false;
         }
         // (KH2's world turned by his facing as the controller does, `fo.root`; KH1's x / z are
         // KH2's.)
         let fw = [yaw.sin(), yaw.cos()];
         let right = [fw[1], -fw[0]];
-        d[0] = local[0] * right[0] + local[1] * fw[0];
-        d[2] = local[0] * right[1] + local[1] * fw[1];
+        let (x, z) = (local[0] * right[0] + local[1] * fw[0], local[0] * right[1] + local[1] * fw[1]);
+        let len = (x * x + z * z).sqrt();
+        if len > 1e-5 && dt > 1e-4 {
+            wr(actor + 0x20, [x / len, 0.0f32, z / len]);
+            wr(actor + 0x2C, len / dt);
+        } else {
+            wr(actor + 0x2C, 0.0f32);
+        }
+        true
     }
 
     type PreFn = unsafe extern "system" fn(usize, usize) -> usize;

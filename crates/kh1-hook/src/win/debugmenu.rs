@@ -49,6 +49,9 @@
 //! - **Weapons** (t359, under Stats): every Sora weapon (item kind 2, KH1's item table) with how
 //!   many he owns, KH1's inventory count `save + 0x499 + id` (`equip`): left / right add or take
 //!   one (0..99, never below the copies equipped), Cross gives one or takes every free one.
+//!   (t360) Cross equips it instead (KH1's own weapon change, `0x1402845A0`, which loads the model;
+//!   one is given first when he owns none): the way off a Dream weapon or the wooden sword, whose
+//!   hold KH1's Equipment page refuses to change.
 //! - **Abilities** (t359, under Stats): Sora's own abilities (KH1's 1, 2, 5..28, 53..65; ours from
 //!   `growth::MENU`, but not the glides, which the Glide style decides) with how many copies are in
 //!   his lists (`save + 0x44`, 48 bytes, bit 7 set = off; the shared `+0x599`, 10, for High Jump and
@@ -76,6 +79,12 @@ const DRAW_END_PROLOGUE: [u8; 9] = [0x40, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83, 0x
 const PARTY_STATS_RVA: Rva = Rva(0x2E94BC0);
 /// KH1's menu buttons as the player set them: confirm (u32 mask in the pad's order), cancel at `+4`.
 const CONFIRM_MASK_RVA: Rva = Rva(0x546390);
+/// KH1's weapon change (`0x1402845A0 (item, done)`, Steam `0x140286720`): writes the member's weapon
+/// byte, frees the weapon object and loads and makes the new one (what the Equipment page's preview
+/// uses); `done` is called once the object is made, and must not be null.
+const EQUIP_WEAPON_RVA: Rva = Rva(0x2845A0);
+/// The pause menu's refresh of the party's stats copy (`0x1402E5A80`, as after an equipment change).
+const STATS_REFRESH_RVA: Rva = Rva(0x2E5A80);
 /// KH1's menu sounds (`0x140177F60 (n)`, as the Config rows use it: 0 the cursor, 1 a change).
 const SOUND_RVA: Rva = Rva(0x177F60);
 
@@ -175,7 +184,7 @@ impl Page {
             Page::Categories => format!("Left/Right: all on/off   {ok}: open   {no}: back"),
             Page::Group(_) => format!("Left/Right/{ok}: on/off   {no}: back"),
             Page::Stats => format!("Left/Right: change   {ok}: lock   {no}: back"),
-            Page::Weapons => format!("Left/Right: count   {ok}: give/take   {no}: back"),
+            Page::Weapons => format!("Left/Right: count   {ok}: equip   {no}: back"),
             Page::Abilities => format!("Left/Right: copies   {ok}: add/remove   {no}: back"),
         }
     }
@@ -575,6 +584,11 @@ unsafe fn step(base: usize) {
                 sound(1);
             }
         }
+        Action::Weapon(id) if cross => {
+            if equip_weapon(base, id) {
+                sound(1);
+            }
+        }
         Action::Weapon(id) => {
             if change_weapon(base, id, delta) {
                 sound(1);
@@ -765,8 +779,34 @@ unsafe fn sora_weapons(base: usize) -> Vec<u8> {
     (1..=255u8).filter(|&id| super::equip::kind(base, id) == Some(SORA_WEAPON)).collect()
 }
 
-/// Left / right (`delta`) or Cross (0) on a weapon: its count changed (0..99, never below the
-/// copies equipped). Whether it changed.
+/// The `done` KH1's weapon change wants: nothing to do.
+unsafe extern "system" fn equip_done() {}
+
+/// Cross on a weapon: Sora holds it (one is given first when he owns none), whatever he held
+/// before (KH1's own weapon row stays refused while he holds a Dream weapon or the wooden sword,
+/// so this is also the way out of those). Whether his weapon changed.
+unsafe fn equip_weapon(base: usize, id: u8) -> bool {
+    let Some(save) = super::menu::save_block(base) else { return false };
+    let was = super::equip::sora_weapon(base);
+    if was == Some(id) {
+        return false;
+    }
+    if super::equip::owned(base, id) == 0 {
+        wr(save + STOCK_OFF + id as usize, 1u8);
+    }
+    // (The id as a whole register: KH1 indexes its item table with all of `ecx`, and a byte argument
+    // leaves the rest of it undefined: t360 crashed reading the table at exe+286737.)
+    let equip: unsafe extern "system" fn(u32, unsafe extern "system" fn()) = std::mem::transmute(base + EQUIP_WEAPON_RVA);
+    equip(id as u32, equip_done);
+    let refresh: unsafe extern "system" fn() = std::mem::transmute(base + STATS_REFRESH_RVA);
+    refresh();
+    let name = |i: Option<u8>| i.map_or("none".to_string(), |i| super::equip::item_name(base, i).unwrap_or_else(|| format!("item {i:#x}")));
+    log(&format!("debug menu: Sora's weapon {} ({:#04x}) -> {} ({id:#04x})", name(was), was.unwrap_or(0), name(Some(id))));
+    true
+}
+
+/// Left / right (`delta`) on a weapon: its count changed (0..99, never below the copies
+/// equipped). Whether it changed.
 unsafe fn change_weapon(base: usize, id: u8, delta: i32) -> bool {
     let Some(save) = super::menu::save_block(base) else { return false };
     let now = super::equip::owned(base, id) as i32;

@@ -1,0 +1,13 @@
+[package]
+name = "kh2-magic"
+description = "KH2's spells, run from the spell files' own scripts: casting, attacks, effects. Engine-agnostic; the host answers questions about the world."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+kh2-bdx.workspace = true
+kh2-formats.workspace = true
+combat-core.workspace = true
+glam = "0.29"

@@ -1,0 +1,15 @@
+[package]
+name = "kh2-data"
+description = "Loads KH2 combat tables from the user's own install and converts them into combat-core types."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+
+[dependencies]
+character-core = { path = "../character-core" }
+combat-core.workspace = true
+kh2-formats.workspace = true
+
+[dev-dependencies]
+kh2-anim.workspace = true

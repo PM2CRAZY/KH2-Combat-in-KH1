@@ -1,0 +1,32 @@
+kh2-combat
+Copyright 2026 kh2-combat contributors
+
+This product includes software developed at
+The OpenKH GitHub Repository (https://git.openkh.dev/).
+
+    OpenKH - Open Kingdom Hearts Research and Development
+    Copyright 2019-2022 OpenKH Team and Contributors
+    Licensed under the Apache License, Version 2.0
+
+Ported or adapted from OpenKH (see crates/kh2-formats):
+  - OpenKh.Egs/Hed.cs, EgsHdAsset.cs, EgsEncryption.cs -> crates/kh2-formats/src/egs.rs
+  - OpenKh.Kh2/Bar.cs                                  -> crates/kh2-formats/src/bar.rs
+  - OpenKh.Kh2/Battle/*.cs, BaseTable.cs               -> crates/kh2-formats/src/battle.rs
+  - OpenKh.Kh2/MotionTrigger.cs, Motion.cs, ModelCollision.cs, ObjectCollision.cs
+                                                       -> crates/kh2-formats/src/motion.rs
+  - OpenKh.Kh2/SystemData/Pref/*.cs                    -> crates/kh2-formats/src/pref.rs
+  - OpenKh.Kh2/Pax.cs, Dpx.cs, Dpd.cs, Dpd.ParticleData.cs, DpdPData.cs
+                                                       -> crates/kh2-formats/src/pax.rs
+  - OpenKh.Kh2/Dpd*.cs, DpdPData.cs (program names), DpdModel.cs, DpdVsf.cs
+                                                       -> crates/kh2-formats/src/dpd.rs
+  - OpenKh.Kh2/Dpx.cs (effect record layout)           -> crates/kh2-fx/src/library.rs
+    (crates/kh2-fx plays effects read with the readers above)
+  - OpenKh.Command.Bdxio/Models/BdxTraps.cs (trap table),
+    BdxInstructionDescs.cs (mnemonics)                 -> crates/kh2-bdx/src/traps.rs,
+                                                          crates/kh2-bdx/src/disasm.rs
+Changes: rewritten in Rust; cipher rounds folded into one XOR mask; the
+cipher's substitution table is located in the user's own executable at
+runtime instead of being embedded.
+
+Kingdom Hearts is a trademark of Disney and Square Enix. This project is not
+affiliated with or endorsed by them, and contains no game assets or code.

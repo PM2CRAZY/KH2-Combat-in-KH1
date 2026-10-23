@@ -1,0 +1,3663 @@
+//! Stage 8: KH2's controller drives Sora (movement first: walk, run, jump, high jump, glide,
+//! aerial dodge, dodge roll, quick run, guard), with KH1's own collision underneath.
+//!
+//! From Ghidra (the user's Epic exe) and the stage 7 probe:
+//! - `0x140298230` `(actor)` is an actor's physics step: a displacement from its movement state
+//!   (handlers registered by `0x1402AF9F0`, 59 states, the state at `actor + 0x70`), platform
+//!   carry, then `0x140297710` `(actor, displacement vec4, 0)` moves it with the level's
+//!   collision (`0x140299350` sub-steps the move through the wall solver `0x140298A70`) and
+//!   records the floor under it (`+0x320` point, `+0x3D4` height above it), then the state's
+//!   transition handler runs. The probe's watchpoints: Sora's position (`+0x10`) is written
+//!   about 57 times a second by that move, nothing else.
+//! - `0x142D37C80`: the party's actors, Sora first. `0x14298D3A0` is set while an event runs
+//!   (the think step `0x1402957F0` forces its event state then).
+//! - Facing: `+0x30` forward (sin, 0, cos), `+0x3C` yaw, `+0x150` the yaw it turns toward;
+//!   `+0x20` / `+0x2C` the move direction and its speed, written by KH1's input before the
+//!   physics step (the probe's dumps).
+//!
+//! When it is Sora's step, no event runs and KH1 shows him standing, walking or running (KH1's
+//! slots 0-7: anything else is KH1's own action, which keeps control until it ends), KH2's
+//! controller takes the frame: the stick's direction from KH1's move direction and its tilt
+//! from the pad, jump on Circle, KH2's action button (guard / dodge roll / quick run / aerial
+//! dodge / glide) on Square; KH2's displacement goes through KH1's mover; landing and steps
+//! come from the floor it reports. KH1 never sees Circle or Square meanwhile (`probe::pad`).
+//! The pose drawn is KH2's animation player's (`POSE`, read by `pose`).
+
+use super::addr::Rva;
+use super::{combat, hook, log, menu, pose};
+use character_core::{Button, Character, Env, Input, Output, StateName, TargetInfo};
+use glam::Mat4;
+use kh2_rig::RigAnim;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::Mutex;
+use std::time::Instant;
+
+const PHYS_RVA: Rva = Rva(0x298230);
+const PHYS_PROLOGUE: [u8; 12] = [0x40, 0x55, 0x53, 0x41, 0x56, 0x48, 0x8B, 0xEC, 0x48, 0x83, 0xEC, 0x50];
+const MOVE_RVA: Rva = Rva(0x297710);
+/// KH1's motion request on an actor (`0x14029D7F0 (actor, request, blend)`).
+const SET_MOTION_RVA: Rva = Rva(0x29D7F0);
+const PARTY_RVA: Rva = Rva(0x2D37C80);
+const EVENT_RVA: Rva = Rva(0x298D3A0);
+const BATTLE_RVA: Rva = Rva(0x2867CD8);
+/// KH1's move vector this frame (the stick through its camera, `w` the tilt): written by its
+/// think (`0x1402A4090` from `0x14028A650`).
+const MOVE_VEC_RVA: Rva = Rva(0x2D5F630);
+
+/// KH1's camera angles its think turns the stick by (`0x14028A650`, its usual camera modes):
+/// the stick rotated by minus the first (wrapped), x mirrored, then rotated by the second.
+const CAM_A_RVA: Rva = Rva(0x299C504);
+const CAM_B_RVA: Rva = Rva(0x299CB94);
+/// KH1's camera mode (2 and 0xB turn the stick otherwise).
+const CAM_MODE_RVA: Rva = Rva(0x299C508);
+
+/// Which of the 8 sign conventions (stick x, stick y, rotation) matches KH1's own move vector,
+/// learned on frames that have one: a running score per convention (lower is better).
+static STICK_FIT: Mutex<[f32; 8]> = Mutex::new([0.0; 8]);
+
+fn stick_through_camera(c: usize, lx: f32, ly: f32, a: f32, b: f32) -> glam::Vec2 {
+    let u = if c & 1 != 0 { -1.0 } else { 1.0 };
+    let t = if c & 2 != 0 { -1.0 } else { 1.0 };
+    let s = if c & 4 != 0 { -1.0 } else { 1.0 };
+    let rot = |v: glam::Vec2, ang: f32| {
+        let (sn, cs) = (ang * s).sin_cos();
+        glam::Vec2::new(v.x * cs + v.y * sn, -v.x * sn + v.y * cs)
+    };
+    let v = rot(glam::Vec2::new(u * lx, t * ly), -a);
+    let v = glam::Vec2::new(-v.x, v.y);
+    rot(v, b).normalize_or_zero()
+}
+
+/// The stick's direction in the world: KH1's move vector (`MOVE_VEC_RVA`), not his `+0x20`,
+/// which KH1's own walk only turns toward the stick slowly. Under KH1's own dead zone (a slow
+/// walk, which KH1 still shows as idle) its vector is empty: then the raw stick turned through
+/// KH1's camera the same way (`stick_through_camera`, its signs checked against KH1's vector
+/// whenever there is one; the user: walking, he kept the direction he started in). `+0x20`
+/// only if neither.
+unsafe fn stick_dir(actor: usize, tilt: f32) -> glam::Vec2 {
+    let base = BASE.load(Ordering::Relaxed);
+    let mv = rd::<[f32; 4]>(base + MOVE_VEC_RVA);
+    let old = glam::Vec2::new(rd::<f32>(actor + 0x20), rd::<f32>(actor + 0x28)).normalize_or_zero();
+    // (KH1's think refreshes it only while he can act, `0x1402A4090`: during one of its casts it
+    // keeps the direction from before, the user: in Wisdom's casts of KH1 spells he slid the way
+    // he had been going.)
+    let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    let have_mv = mv[0].is_finite() && mv[2].is_finite() && mv[0].hypot(mv[2]) > 1e-3 && can_act(actor) != 0;
+    let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
+    let (lx, ly) = ((st[2] as f32 - 128.0) / 127.0, (st[3] as f32 - 128.0) / 127.0);
+    let (ca, cb, mode) = (rd::<f32>(base + CAM_A_RVA), rd::<f32>(base + CAM_B_RVA), rd::<u32>(base + CAM_MODE_RVA));
+    let usual = !matches!(mode, 2 | 0xB) && ca.is_finite() && cb.is_finite();
+    let raw_on = lx.hypot(ly) > 0.2;
+    let mvdir = glam::Vec2::new(mv[0], mv[2]).normalize_or_zero();
+    let mut best = 0;
+    if let Ok(mut fit) = STICK_FIT.lock() {
+        if have_mv && usual && lx.hypot(ly) > 0.5 {
+            for c in 0..8 {
+                let e = 1.0 - stick_through_camera(c, lx, ly, ca, cb).dot(mvdir);
+                fit[c] = fit[c] * 0.95 + e;
+            }
+        }
+        best = (0..8).min_by(|&i, &j| fit[i].total_cmp(&fit[j])).unwrap_or(0);
+    }
+    let dir = if have_mv {
+        mvdir
+    } else if usual && raw_on {
+        stick_through_camera(best, lx, ly, ca, cb)
+    } else {
+        old
+    };
+    if tilt > 0.0 && !have_mv {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 12 {
+            log(&format!("stick direction {dir:?} from the raw stick ({lx:.2}, {ly:.2}) through KH1's camera (convention {best}, mode {mode}); his +0x20 {old:?}, tilt {tilt:.2}"));
+        }
+    }
+    dir
+}
+/// Flight (Neverland): the world flags' bit 0x20 lets Sora fly; KH1's fall state (2) starts
+/// it once he is more than 100 above the floor (`0x1402AFD30`: motion 0x75, state 8, his rise
+/// speed `+0x3C4` cut to 0.3) or, in a few rooms, above a set height (`0x1402AFC10`, the
+/// table at `0x140529970`; its next-state step `0x1402ADA30` then goes to 8).
+const FLIGHT_FLAG: u32 = 0x20;
+const FLIGHT_START_RVA: Rva = Rva(0x2AFD30);
+const FLIGHT_ROOM_RVA: Rva = Rva(0x2AFC10);
+const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
+const FLIGHT_STATE: i32 = 8;
+/// KH1's flight starts above this height over the floor (`0x1404308D4`).
+const FLIGHT_ABOVE: f32 = 100.0;
+/// Attack pressed while KH1 flies him (`combat::exec`): KH2 takes him in the air for its
+/// aerial combo (the user: KH2's aerial attacks while flying).
+pub static FLY_ATTACK: AtomicBool = AtomicBool::new(false);
+/// That press, for KH2's first frame (after its fresh start drops older presses).
+static FLY_PRESS: AtomicBool = AtomicBool::new(false);
+/// The same for an Attack pressed during KH1's own move (`ATTACK_AFTER`), on the ground.
+static FLY_PRESS_GROUND: AtomicBool = AtomicBool::new(false);
+/// Frames an Attack carried out of a KH1 move may wait for KH1 to let him act (it holds him a
+/// frame or two after a cut: the press was dropped there and he stood in idle, the user: "when I
+/// try to go for an attack after I use a kh1 exclusive magic it just resets me to idle").
+static CARRY_FRAMES: AtomicU32 = AtomicU32::new(0);
+const CARRY_MAX: u32 = 10;
+/// KH1's own move ended with him in the air: KH2 starts falling.
+static AIR_START: AtomicBool = AtomicBool::new(false);
+/// KH1's fall: its gravity (units per 60 Hz frame², `0x1403EAB54`) and fastest fall per frame
+/// (20 × its step, `0x1404308B8`).
+const KH1_FALL_ACCEL: f32 = 0.484_693_88;
+const KH1_FALL_MAX: f32 = 20.0;
+/// KH2 steps after a cut of a KH1 move still to log KH1's motion fields for.
+static AFTER_CUT_LOG: AtomicU32 = AtomicU32::new(0);
+/// KH1's glide (state 0x15, `0x1402B0BA0`): never while KH2 has him.
+const KH1_GLIDE_STATE: i32 = 0x15;
+/// Flying when KH2 took him: back into flight after the combo at any height (down to
+/// `FLEW_ABOVE`), until he lands.
+static FLEW: AtomicBool = AtomicBool::new(false);
+const FLEW_ABOVE: f32 = 5.0;
+/// In a flight combo he doesn't come down below this over the floor (the user: an attack that
+/// touched the ground ended the flight), unless Square (flight's descend) is held.
+const FLY_FLOOR: f32 = 15.0;
+/// A flight combo's way to its target's height (the user: home in on it, down too): the feet
+/// go toward the target point less this, at this share of the gap a frame, at most this fast.
+const FLY_AIM_BELOW: f32 = 60.0;
+const FLY_AIM_RATE: f32 = 0.15;
+const FLY_AIM_MAX: f32 = 14.0;
+const FLY_AIM_REACH: f32 = 600.0;
+/// The flight sparkle (Tinker Bell's dust): Sora's step `0x140295E50` keeps its effect
+/// (`+0xB0`, effect 0x14 on bone 0x8003, `0x1402ABA90`) while his state is 8 and ends it
+/// otherwise. Its `cmp [rdi+0x70],8; jnz; mov eax,[rdi]` at `0x14029602E` calls a stub that
+/// also says "flying" while this flag byte (in the stub) is set: during a flight combo.
+const SPARKLE_RVA: Rva = Rva(0x29602E);
+static SPARKLE_FLAG: AtomicUsize = AtomicUsize::new(0);
+const LOCK_STATE_RVA: Rva = Rva(0x2DB3F10);
+const LOCK_TARGET_RVA: Rva = Rva(0x2DB3F18);
+/// A lock point's world position (`0x1402AE330 (actor, point, out) -> radius`, KH1 y-down).
+const LOCK_POINT_RVA: Rva = Rva(0x2AE330);
+const DRAW_WEAPON_RVA: Rva = Rva(0x2A0CA0);
+const PUT_AWAY_RVA: Rva = Rva(0x2A10F0);
+/// Actor flag: the weapon is out (drawn).
+const WEAPON_OUT: u32 = 0x4000;
+/// After an attack in the field, how long Sora keeps KH2's battle stance (Keyblade in hand)
+/// before KH2's field idle puts it away (the user: a combo ended in the empty-handed idle).
+const BATTLE_LINGER: f32 = 6.0;
+/// How far below the feet the floor may drop and still be stepped down onto (KH2's floor ray
+/// reaches 24 below).
+const STEP_DOWN: f32 = 24.0;
+/// KH1's air-move checks (see `grab`).
+const CAN_ACT_RVA: Rva = Rva(0x2956E0);
+/// KH1's tally of the save (`0x14028A4D0(id)`: `+0x848 + id * 2`).
+const COUNT_RVA: Rva = Rva(0x28A4D0);
+/// KH1's control step for the player (`0x1402A4090 (actor, move vector)`, from the think step
+/// `0x1402A1170`): it reads the pad and starts commands only while Sora can act
+/// (`0x1402956E0`); events, tutorial windows and scripted moments skip it or stop him acting.
+const CONTROL_RVA: Rva = Rva(0x2A4090);
+const CONTROL_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40];
+static ORIG_CONTROL: AtomicUsize = AtomicUsize::new(0);
+/// KH1's control step ran for Sora since the last physics step, with him able to act.
+static CONTROLLED: AtomicBool = AtomicBool::new(true);
+/// KH1 holds him still (logged on a change).
+static FROZEN: AtomicBool = AtomicBool::new(false);
+static CONTROL_HOOKED: AtomicBool = AtomicBool::new(false);
+static FROZEN_FRAMES: AtomicU32 = AtomicU32::new(0);
+const VINE_RVA: Rva = Rva(0x2C5710);
+const LEDGE_RVA: Rva = Rva(0x2C68A0);
+const BAR_RVA: Rva = Rva(0x2C7E00);
+const NO_BARS_RVA: Rva = Rva(0x298D3A8);
+const HANG_RVA: Rva = Rva(0x2C17B0);
+const SWIM_RVA: Rva = Rva(0x2BF410);
+/// Water (`docs/kh1-water-pits.md`). KH1's swim state, and its two ways in: from the air (its fall
+/// state's input step: `SWIM_RVA`, refused in `NO_SWIM_WORLD` room `NO_SWIM_ROOM`, Hook's ship,
+/// where its fall turns to flight instead) and walking in (its ground state's input step
+/// `0x1402CA350`: `0x1402BF300`, only while he can act, no room refused). Both take the deep test
+/// `DEEP_WATER_RVA` (the feet more than a set depth under the water level `+0x2D4`: a table by
+/// body size at `0x14052AD40`, 50 to 100).
+const SWIM_STATE: i32 = 17;
+const WADE_IN_RVA: Rva = Rva(0x2BF300);
+const NO_SWIM_WORLD: u32 = 0xD;
+const NO_SWIM_ROOM: u32 = 8;
+/// KH1's splash as an airborne body's feet go under the water (its physics step, `0x140298488`:
+/// once per entry, flag `0x400000` on the actor while under; the effect only for air states).
+const SPLASH_RVA: Rva = Rva(0x2C0020);
+const IN_WATER: u32 = 0x40_0000;
+/// The states KH1's ground state's input step (`0x1402CA350`) can put him in: ladders and climbable
+/// walls (9, 10), the hang off an edge walked over (13), 12 (its narrow-beam move, skipped while
+/// `NO_BARS_RVA`), and swimming. KH1 runs that step every frame while KH2 has him, in the air too
+/// (KH2 keeps KH1's state at 0): those taken mid-air are undone (`ground_moves_in_air`).
+const GROUND_STEP_MOVES: [i32; 5] = [9, 10, 12, EDGE_HANG_STATE, SWIM_STATE];
+/// KH1's hang off an edge (from the air, `LEDGE_RVA`, or walked over, `0x1402C6760`); its climb
+/// back up is state 14.
+const EDGE_HANG_STATE: i32 = 13;
+/// Where KH2's last frame left him (KH1's game frame, position), for `ground_moves_in_air`.
+static LAST_END: Mutex<(u64, [f32; 4])> = Mutex::new((u64::MAX, [0.0; 4]));
+/// The hand-off running is KH1's swim (`water`): logged as he leaves the water.
+static SWIM_MOVE: AtomicBool = AtomicBool::new(false);
+/// KH1 has him for one of its own moves (`grab`); KH2 starts over afterwards (`FRESH`).
+static HANDOFF: AtomicBool = AtomicBool::new(false);
+/// When `takeover` last saw KH1 still in its move (`kh1_move` holds while it does: KH2 draws
+/// nothing meanwhile, so `active` lapses after 150 ms; the user: an Attack on the first free frame
+/// after a spell was KH1's own attack).
+static HANDOFF_SEEN_MS: AtomicU64 = AtomicU64::new(0);
+/// Who had Sora on his last physics frame: 0 KH1 (or nobody), 1 KH2, 2 KH1 for one of its own
+/// moves (`HANDOFF`). Game frames, not time: a pause keeps it (the user: after the battle pause, an
+/// aerial combo went to KH1's moves, KH2 having been counted gone after 150 ms of pause).
+static FRAME_KIND: AtomicU8 = AtomicU8::new(0);
+static HANDOFF_FRAME: AtomicBool = AtomicBool::new(false);
+static FRESH: AtomicBool = AtomicBool::new(false);
+/// KH2 cut one of KH1's moves short: until KH1's motion slot is a plain one again (0..7), its
+/// leftover isn't taken for an action of KH1's own.
+static CUT_LEFT: AtomicBool = AtomicBool::new(false);
+
+/// KH2 has Sora while what's left of a KH1 move it cut plays on in KH1 (`CUT_LEFT`): KH1's menu
+/// greys its commands meanwhile.
+pub fn cut_left() -> bool {
+    CUT_LEFT.load(Ordering::Relaxed) && kh2_has()
+}
+/// KH2's first frames after KH1's own move: KH1's push speed isn't carried.
+static NO_CARRY: AtomicU32 = AtomicU32::new(0);
+static HANDOFF_FRAMES: AtomicU32 = AtomicU32::new(0);
+/// Frames of KH2's fall left in which KH1's grabs aren't tried: after KH1 lets go of him in the
+/// air (off a ledge, a ladder, a pole), as KH1 skips them for 15 frames after jumping off
+/// something (its flag 0x10000; the user: "when sora lets go of a ledge he instantly regrabs
+/// the ledge").
+static NO_GRAB: AtomicU32 = AtomicU32::new(0);
+/// KH2's fall taken over from KH1's free jump or fall: its Aerial Dodge is there.
+static AIR_MOVES: AtomicBool = AtomicBool::new(false);
+const NO_GRAB_FRAMES: u32 = 20;
+/// The hand-off running (or the last one) is one of KH1's grabs (`grab`: a ledge, a bar, a
+/// ladder, a vine), not a command; and when KH2 took him back after it (`grab_blend`).
+static GRAB_MOVE: AtomicBool = AtomicBool::new(false);
+static GRAB_BACK_MS: AtomicU64 = AtomicU64::new(0);
+/// The floor under him (KH2 height, up) as KH1's grab took him.
+static GRAB_FLOOR: Mutex<Option<f32>> = Mutex::new(None);
+/// KH1's pull-up onto a ledge is settling him on its top (latched for the hand-off): KH1 sets him
+/// down itself, its own fall and landing after its climb, and KH2 takes him on the ground.
+static SETTLE: AtomicBool = AtomicBool::new(false);
+/// A grab's fall state with the floor this much higher than where the grab took him, and him at
+/// most `SETTLE_ABOVE` over it, is the pull-up's settle on the top (the user's s307 log: the
+/// "bar" grab, state 15 hanging some 170 over the floor, 16 pulling up, then 2 only 46 over the
+/// ledge's top; KH2's fall from there drew his arms flung out until he landed on it).
+const CLIMBED_ONTO: f32 = 50.0;
+const SETTLE_ABOVE: f32 = 100.0;
+/// How long after a grab's hand-back `pose` may still start its blend (KH2's first frames).
+const GRAB_BLEND_MS: u64 = 500;
+/// Where KH1's move had him last frame (his speed while it moves him).
+static HANDOFF_POS: Mutex<Option<[f32; 3]>> = Mutex::new(None);
+/// KH1's move ended in its fall: his speed then (per frame: sideways, up), for KH2's fall.
+static HANDOFF_FALL: Mutex<Option<([f32; 2], f32)>> = Mutex::new(None);
+/// Out of a Drive Form's KH1 cast on the ground: the speed it slid at (KH2 x / z per frame), for
+/// KH2's first frame (`Character::carry_on_ground`).
+static HANDOFF_SLIDE: Mutex<Option<[f32; 2]>> = Mutex::new(None);
+/// Square was pressed as KH1's move ended: KH2 takes it as a press (not one already held).
+static ROLL_NOW: AtomicBool = AtomicBool::new(false);
+/// KH1's fall state (after a jump's rise, or off an edge): its collision is the air kind
+/// (`0x140297F20` sets flag 1, no snapping onto the floor), and the wall solver's only extra
+/// for it (`0x1402AD260`) clears its fall speed `+0x3C4` at a ceiling. No enter / exit handlers.
+const AIR_STATE: i32 = 3;
+/// KH1's generic air state (what its physics step puts an airborne actor in): its object-top
+/// finder (`0x1402B3950`) looks below only in it.
+const FALL_STATE: i32 = 2;
+/// KH1's leap off a ladder or a pole (after its climb state 15; the user's s205 log).
+const LEAP_OFF_STATE: i32 = 16;
+/// KH1's object-top finder `0x1402B3950 (actor, move) -> object`: the standable object (box,
+/// barrel: collision shapes of type 2 / 3) whose top the move ends at or under, the move's
+/// height cut so it ends on the top. The map floor (`+0x320`) doesn't know objects.
+const OBJECT_TOP_RVA: Rva = Rva(0x2B3950);
+/// Sets the object the actor stands on (`+0x398`).
+const STAND_ON_RVA: Rva = Rva(0x295C60);
+
+pub const CIRCLE: u16 = 0x2000;
+pub const SQUARE: u16 = 0x8000;
+/// KH1's shortcut button (L1 + a face button).
+pub const L1: u16 = 0x0400;
+/// L1 in KH1's own button state (`0x14298D4A0`), its pad table's bit for the raw `0x400`.
+const KH1_L1: u32 = 0x4_0000;
+#[allow(dead_code)]
+pub const CROSS: u16 = 0x4000;
+
+pub static ON: AtomicBool = AtomicBool::new(true);
+/// KH1's area script is moving Sora (`pose` shows KH1's own animation then).
+pub static SCRIPTED: AtomicBool = AtomicBool::new(false);
+/// KH1's script has Sora on his last frame (`script_has_sora`).
+static KH1_SCENE: AtomicBool = AtomicBool::new(false);
+/// KH1 held Sora still this frame for its script (`+0x444` bit 1), with the Driver taken:
+/// `physics` counts the frame for `scene_frame` once it is free.
+static SCENE_HELD: AtomicBool = AtomicBool::new(false);
+
+/// KH1's script has Sora (on his last frame): an event runs, its script has actions for him
+/// (`+0x440`), its hold bit holds him (`0x1000000`, not left over: `stale_hold`), or it holds him
+/// (`+0x444` bit 1, set and cleared only by its actor script commands, `0x14028C800` /
+/// `0x14028C7F4`; what its event waits and its camera read as "can't act"). Not one of KH1's
+/// limits in Limit Form (its limit module sets the hold bit). A script then may command the party
+/// (`vanish`: the partners a form took are back at once; the cup rounds' victory scene waits for
+/// each one's pose, event op 103).
+pub fn script_has_sora() -> bool {
+    KH1_SCENE.load(Ordering::Relaxed)
+}
+/// KH2 has the Keyblade out (the thumbs grip) / Sora is on the ground (the feet meet the floor).
+pub static GRIP: AtomicBool = AtomicBool::new(false);
+pub static GROUNDED: AtomicBool = AtomicBool::new(false);
+static BASE: AtomicUsize = AtomicUsize::new(0);
+static ORIG_PHYS: AtomicUsize = AtomicUsize::new(0);
+/// The pad as the player pressed it (before KH1's copy is masked): buttons, then sticks
+/// (rx, ry, lx, ly) packed in a u32.
+pub static RAW_BUTTONS: AtomicU32 = AtomicU32::new(0);
+pub static RAW_STICKS: AtomicU32 = AtomicU32::new(0x8080_8080);
+static ACTIVE_MS: AtomicU64 = AtomicU64::new(0);
+static CLOCK: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+fn now_ms() -> u64 {
+    CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
+
+/// Sora's last physics frame, and when the game last came back from a pause (a gap of more than
+/// 250 ms between them).
+static LAST_PHYS_MS: AtomicU64 = AtomicU64::new(0);
+static RESUMED_MS: AtomicU64 = AtomicU64::new(0);
+
+/// The game came back from a pause in the last `ms` milliseconds: Sora's model wasn't drawn
+/// meanwhile (the pause menu draws a copy elsewhere), which is no sign of another body (the
+/// user: paused mid KH2 move, resumed in KH1's; the log: "Sora is in another body" on resume).
+pub fn resumed_within(ms: u64) -> bool {
+    now_ms().saturating_sub(RESUMED_MS.load(Ordering::Relaxed)) < ms
+}
+
+/// The game stands still now: no physics frame of Sora's for over 120 ms (a pause, or a menu
+/// that stops the field; `kh2fx` draws no effects then). Unknown (no frame yet): no.
+pub fn paused() -> bool {
+    let last = LAST_PHYS_MS.load(Ordering::Relaxed);
+    last != 0 && now_ms().saturating_sub(last) > 120
+}
+
+/// KH2 had Sora on his last physics frame (game frames: a pause keeps it).
+pub fn kh2_frame() -> bool {
+    FRAME_KIND.load(Ordering::Relaxed) == 1
+}
+
+/// KH2 has Sora this moment (its last frame was under 150 ms ago).
+pub fn active() -> bool {
+    let a = ACTIVE_MS.load(Ordering::Relaxed);
+    a != 0 && now_ms().saturating_sub(a) < 150
+}
+
+struct Driver {
+    character: Character,
+    anim: RigAnim,
+    held: (bool, bool),
+    grounded: bool,
+    last_state: Option<StateName>,
+    logged: u32,
+    strikes: combat::Strikes,
+    /// Last attack (for `BATTLE_LINGER`).
+    fought: Option<Instant>,
+    /// KH2's last frame (dodge-roll invulnerability, guard), for `hurt`.
+    last_out: Option<Output>,
+    growth: menu::Growth,
+    /// The KH2 attack motion playing and its frame (`swing_fx`).
+    swing: Option<u16>,
+    swing_frame: u32,
+    /// Standing on top of something above the map floor (a box): its height (KH2 y-up).
+    on_top: Option<f32>,
+    /// A Drive Form (`form`): the change, the form, its gauge.
+    drive: super::form::Drive,
+    /// The attack windows of the weapon motions shown while jumping, falling and gliding (Final
+    /// Form's Keyblades).
+    motion_hits: kh2_rig::MotionHits,
+}
+
+static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
+/// KH2's pose this frame (KH2 model space): Sora's bones and the Keyblade's (its keychain drives
+/// KH1's, `kh1_data::secondary`), for `pose` to draw.
+pub static POSE: Mutex<Option<(Vec<Mat4>, Vec<Mat4>, Instant)>> = Mutex::new(None);
+
+unsafe fn rd<T: Copy>(p: usize) -> T {
+    std::ptr::read_unaligned(p as *const T)
+}
+
+unsafe fn wr<T: Copy>(p: usize, v: T) {
+    std::ptr::write_unaligned(p as *mut T, v)
+}
+
+type PhysFn = unsafe extern "system" fn(usize);
+type MoveFn = unsafe extern "system" fn(usize, *const [f32; 4], u32);
+
+/// Work of ours that took over 4 ms on the game's thread (a frame is 16.7): logged, 60 at most
+/// (the user: "every single attack lag").
+fn note_slow(t0: Instant, what: impl FnOnce() -> String) {
+    let ms = t0.elapsed().as_secs_f32() * 1000.0;
+    if ms > 4.0 {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log(&format!("slow: {} took {ms:.1} ms", what()));
+        }
+    }
+}
+
+unsafe extern "system" fn physics(actor: usize) {
+    let sora = actor > 0x10000 && actor == rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize;
+    if sora {
+        HANDOFF_FRAME.store(false, Ordering::Relaxed);
+        // A gap in Sora's physics frames: the game was paused (or a menu held it).
+        let now = now_ms();
+        if now.saturating_sub(LAST_PHYS_MS.swap(now, Ordering::Relaxed)) > 250 {
+            RESUMED_MS.store(now, Ordering::Relaxed);
+        }
+    }
+    let t0 = Instant::now();
+    let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
+    // (KH1's script held him still with the Driver taken: the frame counts for a scene now, on
+    // this frame's number.)
+    if sora && SCENE_HELD.swap(false, Ordering::Relaxed) {
+        scene_frame(actor, false, true);
+    }
+    if sora {
+        super::prof::add(super::prof::FRAME, t0);
+        note_slow(t0, || format!("Sora's frame of ours (KH2 has him: {took}, KH2 motion {})", KH2_MOTION.load(Ordering::Relaxed)));
+    }
+    if sora {
+        GAME_FRAME.fetch_add(1, Ordering::Relaxed);
+        FRAME_KIND.store(if took { 1 } else if HANDOFF_FRAME.load(Ordering::Relaxed) { 2 } else { 0 }, Ordering::Relaxed);
+        room_watch(actor, took);
+        // The partners a Drive Form takes, away while it lasts (`vanish`).
+        super::vanish::frame();
+        // KH2's Drive gauge: the form gauge's drain, damage taken (`gauge`).
+        super::gauge::frame(actor);
+    }
+    if took {
+        return;
+    }
+    // KH1 has him this frame: a Keyblade trail KH2's swing asked for ends, and KH2's effects
+    // play on (those of the move KH1 cut short end; the user: a spell cast during a move with a
+    // KH2 effect froze the effect where it was).
+    if actor > 0x10000 && actor == rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize {
+        combat::trail_off(actor);
+        super::reflect::kh1_frame();
+        super::kh2fx::tick(super::kh2fx::NO_MOTION);
+    }
+    let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
+    f(actor);
+}
+
+/// KH1's ground state's jump press (`0x1402CA3F0`, state 0's `+0x38`: its ground test, then the
+/// jump start `0x1402AD860`, jump or high jump motion, state 1).
+const JUMP_PRESS_RVA: Rva = Rva(0x2CA3F0);
+/// KH1's Glide and Superglide starts (`0x1402B0BA0` under both: its glide motion 0x71, air speed,
+/// state 0x15; nothing below its height over the floor).
+const GLIDE_RVA: Rva = Rva(0x2B0530);
+const SUPERGLIDE_RVA: Rva = Rva(0x2B05C0);
+/// KH1's ability test (`(ability, 0xB)`): 3 Glide, 4 Superglide (`0x1402A4600`'s use).
+const HAS_ABILITY_RVA: Rva = Rva(0x282A70);
+
+/// KH1's jump or glide instead of KH2's, on a fresh jump press (`stylejump`): what KH1 started,
+/// or `None` (KH2's as before). KH1 has him from this frame.
+unsafe fn style_air_start(base: usize, actor: usize, d: &Driver, glide_press: bool) -> Option<&'static str> {
+    if rd::<i32>(actor + 0x70) != 0 || FLEW.load(Ordering::Relaxed) || rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 {
+        return None;
+    }
+    let st = d.character.state_name();
+    let (dv, up) = d.last_out.as_ref().map_or(([0.0; 2], 0.0), |o| ([o.displacement[0], o.displacement[2]], o.displacement[1]));
+    let v = dv;
+    let v = if v.iter().all(|x| x.is_finite()) { v } else { [0.0; 2] };
+    let n = v[0].hypot(v[1]);
+    let k = if n > 30.0 { 30.0 / n } else { 1.0 };
+    let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+    if !glide_press && super::stylejump::kh1_jump() && d.grounded && !d.character.airborne() && matches!(st, StateName::Idle | StateName::Walk | StateName::Run | StateName::Land) {
+        let press: unsafe extern "system" fn(usize) -> usize = std::mem::transmute(base + JUMP_PRESS_RVA);
+        let y = rd::<f32>(actor + 0x14);
+        press(actor);
+        if rd::<i32>(actor + 0x70) != 1 {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 10 {
+                log(&format!("KH1's jump didn't start (KH1 state {}): KH2's", rd::<i32>(actor + 0x70)));
+            }
+            return None;
+        }
+        // KH2's ground speed carried into KH1's air speed (`+0x3C0`: x, y, z, its length); on
+        // KH2's first frame back (out of KH1's own landing) KH1's own is left.
+        if d.last_state.is_some() {
+            wr(actor + 0x3C0, [v[0] * k, 0.0f32, v[1] * k, n * k]);
+        }
+        wr(actor + 0x3B4, y);
+        return Some("KH1's jump (the Jump style is KH1's)");
+    }
+    let falling = up <= 0.0;
+    // (KH1's glide on Square held while falling, not on the jump button, the user: "rewrite normal
+    // glide so that it activates on a square press and not when you press the jump button": the
+    // jump press in the air is KH2's Aerial Dodge.)
+    if glide_press && super::stylejump::kh1_glide() && d.character.airborne() && falling && matches!(st, StateName::Air | StateName::Jump) {
+        // KH1's air state as an air command sets it (`combat::command`), then its glide.
+        // (Once a hold of Square: a glide that doesn't start isn't tried every frame.)
+        let y = rd::<f32>(actor + 0x14);
+        if !kh1_glide_open(base) || GLIDE_TRIED.swap(true, Ordering::Relaxed) {
+            return None;
+        }
+        set(actor, 2);
+        wr(actor + 0x3B0, 0.0f32);
+        wr(actor + 0x3B8, 0.0f32);
+        wr(actor + 0x3BC, 0.0f32);
+        wr(actor + 0x3B4, y);
+        wr(actor + 0x3C0, [v[0] * k, 0.0f32, v[1] * k, n * k]);
+        wr(actor + 0x3D0, 0u32);
+        wr(actor, rd::<u32>(actor) & !0x1_0000);
+        return match kh1_glide_start(base, actor) {
+            Some(w) => Some(w),
+            None => {
+                set(actor, 0);
+                None
+            }
+        };
+    }
+    None
+}
+
+/// Sora has KH1's Glide or Superglide.
+unsafe fn kh1_glide_open(base: usize) -> bool {
+    let has: unsafe extern "system" fn(i32, i32) -> i32 = std::mem::transmute(base + HAS_ABILITY_RVA);
+    has(4, 0xB) != 0 || has(3, 0xB) != 0
+}
+
+/// KH1's Superglide (when he has it) or Glide, from KH1's air state: what started, if it did.
+unsafe fn kh1_glide_start(base: usize, actor: usize) -> Option<&'static str> {
+    let has: unsafe extern "system" fn(i32, i32) -> i32 = std::mem::transmute(base + HAS_ABILITY_RVA);
+    let (superglide, glide) = (has(4, 0xB) != 0, has(3, 0xB) != 0);
+    if !superglide && !glide {
+        return None;
+    }
+    let start: unsafe extern "system" fn(usize) = std::mem::transmute(base + if superglide { SUPERGLIDE_RVA } else { GLIDE_RVA });
+    start(actor);
+    if rd::<i32>(actor + 0x70) != KH1_GLIDE_STATE {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log(&format!("KH1's glide didn't start ({:.0} above the floor, KH1 state {}): KH2 keeps him", rd::<f32>(actor + 0x3D4), rd::<i32>(actor + 0x70)));
+        }
+        return None;
+    }
+    Some(if superglide { "KH1's Superglide (the Glide style is KH1's)" } else { "KH1's glide (the Glide style is KH1's)" })
+}
+
+/// KH1's roll (`styleroll`): its start, the stick's angle, the facing setter, its deep-water
+/// test, and its ability bits (`0x20` Dodge Roll).
+const ROLL_START_RVA: Rva = Rva(0x2C7CB0);
+const DIR_ANGLE_RVA: Rva = Rva(0x295E20);
+const SET_FACING_RVA: Rva = Rva(0x295C80);
+const DEEP_WATER_RVA: Rva = Rva(0x2BF530);
+/// (`0x142D5F610`, its handler's `mov eax, [rip+...]` at `0x1402A5A65`; s240 read `0x142F5F610`,
+/// which never had the bit: the user, "unable to input a kh1 dodge roll".)
+const ROLL_ABILITY_RVA: Rva = Rva(0x2D5F610);
+const ROLL_ABILITY: u32 = 0x20;
+
+/// KH1's dodge roll instead of KH2's, on a fresh Square with the stick (`styleroll`): whether it
+/// started. KH1 has him from this frame.
+unsafe fn style_roll_start(base: usize, actor: usize, d: &Driver, dir: glam::Vec2, tilt: f32) -> bool {
+    if !super::styleroll::kh1_roll() || tilt <= 0.15 || !d.grounded || d.character.airborne() || rd::<i32>(actor + 0x70) != 0 {
+        return false;
+    }
+    if !matches!(d.character.state_name(), StateName::Idle | StateName::Walk | StateName::Run | StateName::Land) {
+        return false;
+    }
+    let deep: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + DEEP_WATER_RVA);
+    if rd::<u32>(base + ROLL_ABILITY_RVA) & ROLL_ABILITY == 0 || deep(actor) != 0 {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log(&format!("KH1's roll not open (ability bits {:#x}): KH2's Square", rd::<u32>(base + ROLL_ABILITY_RVA)));
+        }
+        return false;
+    }
+    let v = [dir.x, 0.0f32, dir.y, tilt];
+    let angle: unsafe extern "system" fn(usize, *const f32) -> f32 = std::mem::transmute(base + DIR_ANGLE_RVA);
+    let face: unsafe extern "system" fn(usize, f32) = std::mem::transmute(base + SET_FACING_RVA);
+    let start: unsafe extern "system" fn(usize) = std::mem::transmute(base + ROLL_START_RVA);
+    let a = angle(actor, v.as_ptr());
+    // (The angle is its second argument: the second float register, as KH1's handler passes it.)
+    face(actor, a);
+    start(actor);
+    true
+}
+
+/// KH1's player step (`0x1402A75B0`, Sora's per-frame step, from the actor kinds' switch at
+/// `0x14029593C`). On a frame his state changed (flag `0x400`, set by its state change
+/// `0x1402AF7D0`) it picks the motion for the new state: down from the air (state 2 to 0, the old
+/// state at `+0x378`) KH1's landing (`(+0x3D0) + 7 | 0x1000000`, then `0x14029D8A0 (0x40000000)`),
+/// into the air its fall (6). That is where KH1's air spell is hard-wired to KH1's landing.
+#[allow(dead_code)]
+const PLAYER_STEP_RVA: Rva = Rva(0x2A75B0);
+/// `push rbx; sub rsp, 0x50` (the next instruction is rip-relative, not moved).
+#[allow(dead_code)]
+const PLAYER_STEP_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x50];
+#[allow(dead_code)]
+static ORIG_PLAYER_STEP: AtomicUsize = AtomicUsize::new(0);
+/// KH1 set Sora down out of an air spell, and its landing motion wasn't asked for: KH2 takes him
+/// into KH2's landing (`takeover`'s hand-off, its next frame).
+static AIR_SPELL_LANDED: AtomicBool = AtomicBool::new(false);
+
+#[allow(dead_code)]
+unsafe extern "system" fn player_step(actor: usize) {
+    let base = BASE.load(Ordering::Relaxed);
+    let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_PLAYER_STEP.load(Ordering::Acquire));
+    // KH1's air spell (KH1 has him for it) landing this frame: KH1's own landing isn't asked for
+    // (its old state hidden from the step for the call), KH2's is, from his spell's air state (the
+    // user: "code soras kh1s aerial magic animation states so that they are able to call kh2's
+    // animation states and call kh2's landing animation").
+    let landing = actor > 0x10000
+        && actor == rd::<u64>(base + PARTY_RVA) as usize
+        && ON.load(Ordering::Relaxed)
+        && HANDOFF.load(Ordering::Relaxed)
+        && air_cast().is_some()
+        && rd::<u32>(actor) & 0x400 != 0
+        && rd::<i32>(actor + 0x70) == 0
+        && rd::<i32>(actor + 0x378) == 2;
+    if !landing {
+        return f(actor);
+    }
+    wr(actor + 0x378, 0i32);
+    f(actor);
+    wr(actor + 0x378, 2i32);
+    AIR_SPELL_LANDED.store(true, Ordering::Relaxed);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!(
+            "KH1's air spell landed: KH1's landing motion not asked for, KH2's landing next (KH1 motion {:#x}, {:.0} above the floor)",
+            rd::<u32>(actor + 0x164),
+            rd::<f32>(actor + 0x3D4)
+        ));
+    }
+}
+
+unsafe extern "system" fn control(actor: usize, dir: usize) {
+    let base = BASE.load(Ordering::Relaxed);
+    if actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize {
+        combat::resume_command();
+        let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+        if can(actor) != 0 {
+            CONTROLLED.store(true, Ordering::Relaxed);
+        }
+    }
+    let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_CONTROL.load(Ordering::Acquire));
+    // KH1's own jump / cancel (bits 6) and Square action (`0x100000`) are KH2's while Sora is
+    // KH2's, or KH1 has him for a moment outside one of its own moves (a reaction, examining
+    // something): taken out of KH1's button state (`0x14298D4A0`: +4 held, +8 pressed, +0x10 /
+    // +0x14 repeats; all pads merged, the confirm swap applied) for its control step only, put
+    // back after (menus keep them). The user: KH1 jumped (and glided, and its air combo) on the
+    // first frame after a pause or an examine, with two pads (Steam Input), or with the swap.
+    let strip = actor > 0x10000
+        && actor == rd::<u64>(base + PARTY_RVA) as usize
+        // (Also all through one of KH1's commands, a spell or an item: on the frame it lets him
+        // act again KH1 clears its action flag inside its own step and then read a jump or Square
+        // as its own jump, high jump or dodge roll, the user. Those presses are KH2's when it
+        // takes him back.)
+        && (!HANDOFF.load(Ordering::Relaxed) || kh1_move_done(base, actor) || kh1_air_free(base, actor) || FROM_COMMAND.load(Ordering::Relaxed) || super::stylejump::active())
+        && kh1_borrows(actor);
+    // With L1 down (KH1's shortcuts) or a submenu open, the presses are KH1's (a shortcut, backing
+    // out): only the held and repeat bits go then. A jump held while L1 came down was KH1's held
+    // jump: KH1 jumped as KH2 landed him and went on to its own air moves (the user: "holding the
+    // jump button and hitting L1 does crazy stuff"; the log: KH2's landing with KH1's state 2
+    // and jump slot 12, then state 21). (L1 as KH1's own button state has it this frame,
+    // `0x40000` from the raw `0x400` in its pad table `0x140528F90`; the raw pad's could differ
+    // from it for a frame.)
+    // (A submenu open keeps only its back-out, the jump / cancel press: Square there was KH1's
+    // own guard, in the air too (spec 3.2); KH2's guard follows its own rules.)
+    let l1_menu = super::shortcuts::menu_on_l1(if rd::<u32>(base + BUTTONS_RVA + 4) & KH1_L1 != 0 { L1 } else { 0 });
+    let submenu = super::shortcuts::submenu_open();
+    // (KH1's jump with KH1's glide, `stylejump`: the jump button is KH1's there, its glide.)
+    let kh2_bits: u32 = if super::stylejump::kh1_keeps_jump() { 0x10_0000 } else { 0x6 | 0x10_0000 };
+    // KH1's own jump (`stylejump::JUMP`) rising (its state 1, going up): its jump held is KH1's,
+    // for its height (the user: "I also dont as high of a jump as i should be getting because it
+    // cuts off the input to the jump button"); from its top on it isn't, so holding it doesn't
+    // glide (KH1's glide is on Square here: "as soon as i jump i go into a glide").
+    let kh1_rise = super::stylejump::mode() == super::stylejump::JUMP && actor > 0x10000 && rd::<i32>(actor + 0x70) == 1 && {
+        let p = rd::<[f32; 3]>(actor + 0x10)[1];
+        let rising = RISE_Y.swap(p.to_bits(), Ordering::Relaxed);
+        p <= f32::from_bits(rising)
+    };
+    let bits = |off: usize| -> u32 {
+        if off == 4 && kh1_rise {
+            kh2_bits & !0x6
+        } else if off != 8 {
+            kh2_bits
+        } else if l1_menu {
+            0
+        } else if submenu {
+            0x10_0000 & kh2_bits
+        } else {
+            kh2_bits
+        }
+    };
+    let state = base + BUTTONS_RVA;
+    let saved = rd::<[u32; 6]>(state);
+    // KH1's Square from the keyboard. KH1 has Square as its logical `0x10` and `0x800000` too
+    // (its pad table `0x140528F90`), and its menu step (`0x140291660`) turns a press of `0x10`
+    // into its Square action (`KH1_SQUARE_ACTION`), which this step takes as KH1's block or
+    // dodge roll (`0x1402A59A0`, by KH1's rule: block unless it has the roll and the stick is
+    // tilted). A pad's Square is taken out of its record (`probe::pad`); the keyboard's keys are
+    // merged into that record after it (`0x1400D7DE0`), so on keyboard KH1 blocked or rolled over
+    // KH2's Quick Run (the player: "Guard has priority over Quick Run ... on keyboard and
+    // mouse"). While the Square is KH2's (as `probe::pad` has it), those go for this step too.
+    let square_kh2 = actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize && square_is_kh2(l1_menu, submenu);
+    if square_kh2 {
+        let c = rd::<u32>(base + KH1_COMMAND_RVA);
+        if c & KH1_SQUARE_ACTION != 0 {
+            wr(base + KH1_COMMAND_RVA, c & !KH1_SQUARE_ACTION);
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 10 {
+                log("KH1's Square action (the keyboard's Square) taken out: the Square is KH2's");
+            }
+        }
+        for off in [4usize, 8, 0x10, 0x14] {
+            wr(state + off, rd::<u32>(state + off) & !KH1_SQUARE_BITS);
+        }
+    }
+    // KH1's glide at the Glide style KH1 (`stylejump::GLIDE`): its jump button held is Square held
+    // (it glides on Square, the user), for its held state only.
+    let inject: u32 = if strip && super::stylejump::mode() == super::stylejump::GLIDE && buttons() & SQUARE != 0 { 0x6 } else { 0 };
+    if strip {
+        for off in [4usize, 8, 0x10, 0x14] {
+            wr(state + off, rd::<u32>(state + off) & !bits(off));
+        }
+        wr(state + 4, rd::<u32>(state + 4) | inject);
+    }
+    f(actor, dir);
+    if strip {
+        // KH1's own changes to the state meanwhile kept; only our bits come back.
+        wr(state + 4, rd::<u32>(state + 4) & !inject);
+        for off in [4usize, 8, 0x10, 0x14] {
+            wr(state + off, rd::<u32>(state + off) | (saved[off / 4] & bits(off)));
+        }
+    }
+    if square_kh2 {
+        for off in [4usize, 8, 0x10, 0x14] {
+            wr(state + off, rd::<u32>(state + off) | (saved[off / 4] & KH1_SQUARE_BITS));
+        }
+    }
+}
+
+/// KH1's command word (`0x142D54440`): its menu step's action flags in the top byte.
+const KH1_COMMAND_RVA: Rva = Rva(0x2D54440);
+/// KH1's Square action there (set from a press of its logical `0x10`, `0x140291660`).
+const KH1_SQUARE_ACTION: u32 = 0x0400_0000;
+/// Square's other logical bits in KH1's button state (beside `0x100000`).
+const KH1_SQUARE_BITS: u32 = 0x10 | 0x80_0000;
+
+/// The Square is KH2's, not KH1's: the same rule `probe::pad` takes a pad's Square out of KH1's
+/// record by (KH2 has Sora and L1's shortcut menu isn't up; or KH1's air spell, or KH1 back on
+/// the ground after one of its air moves, with no shortcut menu or submenu up).
+fn square_is_kh2(l1_menu: bool, submenu: bool) -> bool {
+    (active() && !l1_menu) || ((air_cast().is_some() || !kh1_keeps_square()) && !l1_menu && !submenu)
+}
+
+/// Frames of the current rise, and whether a slope's contact (collision bit 3) has been there
+/// since its first frames (a roof he takes off from, not a ceiling met on the way up).
+static RISE_FRAMES: AtomicU32 = AtomicU32::new(0);
+static SLOPE_RUN: AtomicBool = AtomicBool::new(false);
+
+/// One of KH1's moves has him standing again and free (its ground state, KH1's own can-act
+/// test): the jump button is KH2's from here (the user: after a spell, a jump on the first free
+/// frame was KH1's high jump, "resulting in many bugs").
+/// KH1 has him free in its jump or fall (state 1 / 2, its can-act test passes), not in a spell's
+/// air cast.
+unsafe fn kh1_air_free(base: usize, actor: usize) -> bool {
+    let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    matches!(rd::<i32>(actor + 0x70), 1 | 2) && can_act(actor) != 0 && air_cast().is_none()
+}
+
+unsafe fn kh1_move_done(base: usize, actor: usize) -> bool {
+    let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    rd::<i32>(actor + 0x70) == 0 && can_act(actor) != 0
+}
+
+/// KH1's move ended on a jump press: KH2 jumps at once (the press isn't taken as held over).
+static JUMP_NOW: AtomicBool = AtomicBool::new(false);
+/// Sora's height (KH1's y, down positive) on the last control step, to tell KH1's jump rising.
+static RISE_Y: AtomicU32 = AtomicU32::new(0);
+/// KH1's spell could be cut by another now (`combat`: a spell chosen then is taken, else refused).
+pub static SPELL_CUT_OPEN: AtomicBool = AtomicBool::new(false);
+/// Jump at KH1: KH1's motion slot drawn over KH2's jump (12 jump, 13 rise, 10 fall, 11 land),
+/// 0 none (`pose::kh1_air_pose`).
+pub static KH1_AIR_SLOT: AtomicU32 = AtomicU32::new(0);
+/// KH1's own idle / walk / run drawn under KH2 (Misc Animations at KH1, `pose`).
+pub static MISC_KH1: AtomicBool = AtomicBool::new(false);
+/// Which of them KH2's state asks for: 0 idle, 1 walk, 2 run (`pose::kh1_ground_pose`).
+pub static MISC_GAIT: AtomicU8 = AtomicU8::new(0);
+/// KH2's glide level while the Glide style is KH1's (its ability set to 0 meanwhile).
+static KH2_GLIDE_KEPT: AtomicU32 = AtomicU32::new(0);
+/// KH1's glide was tried on this hold of Square (`style_air_start`, KH1's jump).
+static GLIDE_TRIED: AtomicBool = AtomicBool::new(false);
+/// A fresh jump press while KH1 has him on the ground in one of its moves (`takeover`).
+static GROUND_JUMP: AtomicBool = AtomicBool::new(false);
+static JUMP_PREV: AtomicBool = AtomicBool::new(false);
+/// KH2 jumps on its first frame with input (frames left to wait for one).
+static PENDING_JUMP: AtomicU32 = AtomicU32::new(0);
+const PENDING_JUMP_FRAMES: u32 = 30;
+/// The jump button for KH2 out of KH1's move: 1 held over (no jump), 2 not held, 0 nothing to set.
+static JUMP_HELD_OVER: AtomicU8 = AtomicU8::new(0);
+/// KH2's frames after KH1's move still logged in the air.
+static JUMP_WATCH: AtomicU32 = AtomicU32::new(0);
+/// KH1 landed him out of an air cast: KH2 starts in its landing.
+static LAND_NOW: AtomicBool = AtomicBool::new(false);
+/// ... sliding on at this speed (a form's KH1 air cast, `form_cast_frame`'s).
+static LAND_SLIDE: Mutex<Option<[f32; 2]>> = Mutex::new(None);
+
+/// A command KH1 runs (a spell): when it started and how many attack objects of Sora's were
+/// live then (a new one is the spell's shot going out).
+static COMMAND: Mutex<Option<Command>> = Mutex::new(None);
+/// KH1's command was cut by an Attack in its end frames: KH2's combo goes on.
+static COMBO_ON: AtomicBool = AtomicBool::new(false);
+/// The combo slot the KH1 spell being cast took (`Character::magic_step`): 0 none (not a
+/// spell), 1 a step, 2 a finisher with Finishing Plus leaving another, 3 the combo's last.
+pub static SPELL_SLOT: AtomicU8 = AtomicU8::new(0);
+/// A spell was chosen during KH1's cast (`combat::command` / `take_chosen_command`): waiting in
+/// the command queue, it cuts the cast once the spell is out (a spell into a spell).
+pub static MAGIC_AFTER: AtomicBool = AtomicBool::new(false);
+/// KH1's spell was cut by, or had waiting through it, an Attack or a spell: the combo goes on.
+static SPELL_CUT: AtomicBool = AtomicBool::new(false);
+/// KH2's motion on its last frame (`u32::MAX` while KH1 has Sora): a command chosen during a KH2
+/// move waits only while that move plays (KH2's input buffer), not on a timer of its own (the
+/// user: magic came out however much later it was; it is part of the combo string).
+pub static KH2_MOTION: AtomicU32 = AtomicU32::new(u32::MAX);
+
+/// Whether KH2 is still in the move a command was chosen in (`motion`, from `KH2_MOTION`).
+pub fn same_move(motion: u32) -> bool {
+    motion != u32::MAX && KH2_MOTION.load(Ordering::Relaxed) == motion
+}
+
+/// KH1 is casting a spell (a command's hand-off, Sora not yet free to act: once he is, the
+/// hand-off may wait for input, and a spell chosen then is KH1's to run at once).
+pub fn kh1_casting() -> bool {
+    if !(HANDOFF.load(Ordering::Relaxed) && FROM_COMMAND.load(Ordering::Relaxed)) {
+        return false;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let actor = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
+    if actor < 0x10000 {
+        return false;
+    }
+    let can_act: unsafe extern "system" fn(usize) -> i32 = unsafe { std::mem::transmute(base + CAN_ACT_RVA) };
+    unsafe { can_act(actor) == 0 }
+}
+
+/// KH2 may take Sora out of one of KH1's moves from this frame (`kh1_cut_frame`).
+static KH1_WINDOW: AtomicBool = AtomicBool::new(false);
+/// A Drive chosen in that window (`form::choose`): KH2 takes him to change.
+pub static DRIVE_CUT: AtomicBool = AtomicBool::new(false);
+/// The command KH1 runs was picked from the Items list (`combat::run_entry`).
+pub static ITEM_COMMAND: AtomicBool = AtomicBool::new(false);
+
+/// KH1 has Sora for an item's use now (an item command handed to KH1, `combat::command`).
+pub fn item_use_now() -> bool {
+    HANDOFF.load(Ordering::Relaxed) && FROM_COMMAND.load(Ordering::Relaxed) && ITEM_COMMAND.load(Ordering::Relaxed)
+}
+/// Grounded KH1 Fire: KH2 may take him from this frame (the user, frame by frame).
+const FIRE_CUT: u32 = 49;
+/// An item's use: KH2's from this frame (the user: on its frame 52 KH1's roll, guard or jump
+/// came out).
+const ITEM_CUT: u32 = 51;
+
+/// The frame of KH1's current move from which KH2 may take him, and whether it is an item's
+/// (taken then whatever is pressed). For now grounded Fire (the user: "for now lets just add
+/// this to kh1s fire until we get the logic setup correctly") and items.
+unsafe fn kh1_cut_frame(state: i32) -> Option<(u32, bool)> {
+    if state != 0 || air_cast().is_some() || super::form::in_form() {
+        return None;
+    }
+    let c = COMMAND.try_lock().ok()?.as_ref().copied()?;
+    match c.spell {
+        Some(0) => Some((FIRE_CUT, false)),
+        None if ITEM_COMMAND.load(Ordering::Relaxed) => Some((ITEM_CUT, true)),
+        _ => None,
+    }
+}
+
+/// KH2 may take Sora now out of KH1's move (its cut frame reached): a Drive chosen now is taken.
+pub fn kh1_cut_window() -> bool {
+    HANDOFF.load(Ordering::Relaxed) && KH1_WINDOW.load(Ordering::Relaxed)
+}
+
+pub fn command_started(shots: usize, spell: Option<u8>) {
+    KH1_WINDOW.store(false, Ordering::Relaxed);
+    DRIVE_CUT.store(false, Ordering::Relaxed);
+    if let Ok(mut c) = COMMAND.lock() {
+        *c = Some(Command { t: Instant::now(), low: shots, spell, logged: false });
+    }
+    // In a Drive Form, a KH1 spell it has no KH2 version of runs on the form's cast motion's
+    // clock (the user: Gravity / Stop / Aero in Wisdom held KH1's whole animation; "the same logic
+    // as thunder, available input window, when the animation is supposed to end"), and slides
+    // as the form's casts do ("the same velocity in his casts as he does for the KH2 adjacent
+    // spells").
+    // (Base Sora too, with the Magic style at KH2 (`styles`): KH1's Gravity, Stop and Aero on his
+    // own KH2 cast motions, the user's choice "KH1 spell, KH2 animation".)
+    // (Final Form as Wisdom, on Final's own cast motions: `form::casting_form`; the user, "bring
+    // it to final form, with final form's animations".)
+    let air_now = AIR_CAST.try_lock().ok().is_some_and(|a| a.is_some());
+    let base_look = spell.is_some_and(|sp| sp >= 4) && super::formmagic::base_kh2(air_now);
+    super::formmagic::BASE_KH1_CAST.store(base_look, Ordering::Relaxed);
+    let casting = super::form::casting_form();
+    let fc = spell.filter(|_| casting.is_some() || base_look).and_then(|sp| {
+        let air = air_now;
+        let level = unsafe { super::reflect::kh1_spell_level(sp) };
+        let motion = super::formmagic::kh1_spell_motion(sp, level, air);
+        let kh2 = pose::kh2()?;
+        // (Base Sora's only out of a form, `base_kh2`.)
+        let form = match casting {
+            Some(kind) => &kind.data(kh2)?.character,
+            None => &kh2.character,
+        };
+        let clip = form.moveset.clips.get(&motion)?;
+        let react = clip.first(|k| matches!(k, character_core::WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
+        let allow = clip.windows.iter().find(|w| matches!(w.kind, character_core::WindowKind::AllowMovement)).map(|w| (w.start, w.end.unwrap_or(clip.length)));
+        let p = &form.params;
+        log(&format!("{}: KH1 spell {sp} on the cast motion {motion}'s clock: {} frames, input from {react}, moving {allow:?}", if base_look { "KH2 magic style" } else { "Drive Form" }, clip.length));
+        // (His speed going in, KH2's last frame: no halt at the cast's start, the user.)
+        let v = with_kh2(|_, o| [o.displacement[0], o.displacement[2]]).unwrap_or([0.0; 2]);
+        let v = if v[0].is_finite() && v[1].is_finite() && v[0].hypot(v[1]) < 40.0 { v } else { [0.0; 2] };
+        // A cast motion that travels (its root curve: Master Form's D372 under Thunder's ids,
+        // Gravity's here, ~1050 units): KH1's mover takes him along it, as KH2's own casts
+        // move him (`Character::step`'s root motion; the user: "Master form does the correct
+        // animation, but it doesn't actually move sora at all. same goes for aerial magic").
+        // Its speed going in is kept only where the motion lets him move (an allow-movement or
+        // keep-momentum range: Final's, Wisdom's), as `Character::cast` keeps it; else the root
+        // travel is his movement. (No other form's KH1-spell motions travel: Wisdom's, Final's
+        // and base Sora's C/E/A 36x / 37x for Thunder and Cure have no root curve.)
+        let travel = travels(clip);
+        let keeps = clip.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::AllowMovement | character_core::WindowKind::KeepMomentum));
+        let v = if travel && !keeps { [0.0; 2] } else { v };
+        let no_gravity = clip.windows.iter().find(|w| matches!(w.kind, character_core::WindowKind::NoGravity)).map(|w| (w.start, w.end.unwrap_or(clip.length)));
+        if travel {
+            let end = clip.root.last().copied().unwrap_or([0.0; 3]);
+            log(&format!("  its motion travels {:.0} (root at its end {end:.0?}), no gravity {no_gravity:?}; his speed going in {}", end[0].hypot(end[2]), if keeps { "kept" } else { "dropped" }));
+        }
+        Some(FormCast { len: clip.length, react, allow, accel: p.acceleration, brake: p.brake, walk: p.walk_speed, run: p.run_speed, threshold: p.run_threshold, v, air, air_keep: p.air_keep, kind: casting, motion, travel, no_gravity, hold_y: None })
+    });
+    if let Ok(mut f) = FORM_CAST.lock() {
+        *f = fc;
+    }
+}
+
+/// A KH1 spell cast in a Drive Form (`command_started`): the form's cast motion's length, its
+/// input window, its allow-movement range and the form's ground inertia, and the slide so far
+/// (per frame, KH2 x / z).
+#[derive(Clone, Copy, Debug)]
+struct FormCast {
+    len: u32,
+    react: u32,
+    allow: Option<(u32, u32)>,
+    accel: f32,
+    brake: f32,
+    walk: f32,
+    run: f32,
+    threshold: f32,
+    v: [f32; 2],
+    air: bool,
+    /// The form's air steering (`air_keep`: the share of his air speed kept each step).
+    air_keep: f32,
+    /// Whose cast motion (`None`: base Sora's) and its id, for its root curve (`cast_clip`).
+    kind: Option<super::form::Kind>,
+    motion: u16,
+    /// The motion travels (its root curve, `ROOT_TRAVEL_MIN`): KH1's mover takes him along it.
+    travel: bool,
+    /// Its no-gravity range (frames): a travelling cast holds his height there in the air, as
+    /// KH2 holds him in the form's own air casts; KH1's fall after it.
+    no_gravity: Option<(u32, u32)>,
+    /// The height (KH1's y) a travelling air cast holds him at, from its first air frame.
+    hold_y: Option<f32>,
+}
+
+static FORM_CAST: Mutex<Option<FormCast>> = Mutex::new(None);
+
+/// A cast motion's root curve this far off its start (units, on the ground plane) counts as
+/// travel (`FormCast::travel`).
+const ROOT_TRAVEL_MIN: f32 = 1.0;
+
+/// The clip travels (`ROOT_TRAVEL_MIN`): a form's KH1 cast on it moves him along its root curve
+/// (`form_cast_frame`), and the pose drawn has that travel taken out (`pose::follow_play`).
+pub fn travels(clip: &character_core::Clip) -> bool {
+    clip.root.iter().any(|r| r[0].hypot(r[2]) > ROOT_TRAVEL_MIN)
+}
+
+/// The clip of a form's KH1 cast (`FormCast`): the form's moveset's, or base Sora's.
+fn cast_clip(kind: Option<super::form::Kind>, motion: u16) -> Option<&'static character_core::Clip> {
+    let kh2 = pose::kh2()?;
+    let ch = match kind {
+        Some(k) => &k.data(kh2)?.character,
+        None => &kh2.character,
+    };
+    ch.moveset.clips.get(&motion)
+}
+
+/// A clip's root travel at frame `f` (its root curve's step to the next frame, the motion's own
+/// x right / z forward), turned to KH1's facing (yaw `+0x3C`), KH1 x / z; and its rise (y up).
+unsafe fn root_step(actor: usize, clip: &character_core::Clip, f: u32) -> ([f32; 2], f32) {
+    let d = clip.root_delta(f);
+    let yaw = rd::<f32>(actor + 0x3C);
+    // (As `Character::step`: forward (sin, cos), right (cos, -sin).)
+    let fw = [yaw.sin(), yaw.cos()];
+    let right = [fw[1], -fw[0]];
+    ([d[0] * right[0] + d[2] * fw[0], d[0] * right[1] + d[2] * fw[1]], d[1])
+}
+
+/// One frame of a form's KH1 cast (`frames` into it): on the ground he moves as the form's cast
+/// motion lets him (the stick in its allow-movement range with the form's inertia, braking after),
+/// through KH1's mover, and along the motion's own root travel where it has one (Master's,
+/// `FormCast::travel`), on the ground and in the air. Returns the cast's (length, input window).
+unsafe fn form_cast_frame(actor: usize, frames: u32) -> Option<(u32, u32)> {
+    let mut g = FORM_CAST.try_lock().ok()?;
+    let fc = g.as_mut()?;
+    // The motion's own travel this frame (Master's casts), on top of the slide.
+    let (root, rise) = fc.travel.then(|| cast_clip(fc.kind, fc.motion)).flatten().map_or(([0.0; 2], 0.0), |c| root_step(actor, c, frames));
+    if !fc.air && rd::<i32>(actor + 0x70) == 0 {
+        let tilt = move_tilt();
+        let dir = stick_dir(actor, tilt);
+        let moving = fc.allow.is_some_and(|(a, b)| (a..b).contains(&frames));
+        let speed = if tilt <= 0.0 { 0.0 } else if tilt >= fc.threshold { fc.run } else { fc.walk };
+        // (KH2's physics steps every other frame.)
+        if frames % 2 == 0 {
+            fc.v = if moving && fc.accel > 0.0 {
+                let t = dir * speed;
+                [t.x * (1.0 - fc.accel) + fc.v[0] * fc.accel, t.y * (1.0 - fc.accel) + fc.v[1] * fc.accel]
+            } else if moving {
+                (dir * speed).to_array()
+            } else {
+                let b = [fc.v[0] * fc.brake, fc.v[1] * fc.brake];
+                if b[0].hypot(b[1]) < 0.05 { [0.0; 2] } else { b }
+            };
+        }
+        let step = [fc.v[0] + root[0], fc.v[1] + root[1]];
+        if step[0] != 0.0 || step[1] != 0.0 {
+            let base = BASE.load(Ordering::Relaxed);
+            let mv: MoveFn = std::mem::transmute(base + MOVE_RVA);
+            mv(actor, &[step[0], 0.0, step[1], 0.0], 0);
+        }
+    }
+    // In the air (KH1's jump or fall state): he keeps the speed he had going in, as KH2's air
+    // casts do (the user: "when casting aerial gravity/stop/aero, the animations are correct, but
+    // sora doesnt maintain his velocity"); KH1's own air cast slowed him to a stop. The stick
+    // steers him in the motion's allow-movement range, by the form's air steering (toward the
+    // stick at its run speed); his height stays KH1's. KH1's own air speed (`+0x3C0`) is zeroed
+    // so it adds nothing.
+    if fc.air && matches!(rd::<i32>(actor + 0x70), 1 | 2) {
+        let tilt = move_tilt();
+        let moving = fc.allow.is_some_and(|(a, b)| (a..b).contains(&frames));
+        if moving && tilt > 0.0 && frames % 2 == 0 {
+            let dir = stick_dir(actor, tilt);
+            let t = dir * fc.run;
+            let k = fc.air_keep.clamp(0.0, 1.0);
+            fc.v = [fc.v[0] * k + t.x * (1.0 - k), fc.v[1] * k + t.y * (1.0 - k)];
+        }
+        // A travelling cast (Master's) as KH2 has the form's own air casts: along its root
+        // travel, his height held through the motion's no-gravity range (KH1's y down; its fall
+        // speed `+0x3C4` cleared there), then KH1's fall from rest (its fall speed left to grow).
+        let y = rd::<f32>(actor + 0x14);
+        let held = fc.travel && fc.no_gravity.is_some_and(|(a, b)| (a..b).contains(&frames));
+        let dy = if fc.travel {
+            let target = fc.hold_y.unwrap_or(y) - rise;
+            fc.hold_y = Some(if held { target } else { y - rise });
+            if held { target - y } else { -rise }
+        } else {
+            0.0
+        };
+        if fc.travel && !held {
+            wr(actor + 0x3C0, 0.0f32);
+            wr(actor + 0x3C8, [0.0f32; 2]);
+        } else {
+            wr(actor + 0x3C0, [0.0f32; 4]);
+        }
+        let step = [fc.v[0] + root[0], fc.v[1] + root[1]];
+        if step[0] != 0.0 || step[1] != 0.0 || dy != 0.0 {
+            let base = BASE.load(Ordering::Relaxed);
+            let mv: MoveFn = std::mem::transmute(base + MOVE_RVA);
+            mv(actor, &[step[0], dy, step[1], 0.0], 0);
+        }
+        static N: AtomicU32 = AtomicU32::new(0);
+        if frames == 0 && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            log(&format!("KH1 air cast in a form's motion: his speed {:.1}/frame kept", fc.v[0].hypot(fc.v[1])));
+        }
+    }
+    Some((fc.len, fc.react))
+}
+
+/// The command handed to KH1: when, the fewest attack objects of Sora's seen since (a swing's
+/// hitbox still out at the handoff ends during the cast, so the spell's shot can come back to
+/// the count it started at), and its spell (Fire 0 .. Aero 6) for a magic command.
+#[derive(Clone, Copy)]
+struct Command {
+    t: Instant,
+    low: usize,
+    spell: Option<u8>,
+    logged: bool,
+}
+
+/// The command's spell is out (KH2's cast motions take Attack from about 8 frames after their
+/// release, their "end frames"): a new attack object of Sora's. Only spells that make none
+/// (Cure, Stop) fall back on 55% of KH1's cast motion; the others wait for their shot (the
+/// user: Fire could be cancelled before it shot), or at most KH1's whole cast motion.
+unsafe fn spell_out(actor: usize) -> bool {
+    let Ok(mut g) = COMMAND.try_lock() else { return false };
+    let Some(c) = g.as_mut() else { return true };
+    let now = super::combat::sora_shots(actor);
+    let len = pose::sora_slot().filter(|s| *s > 13).and_then(pose::slot_frames).map_or(36.0, |n| n as f32);
+    let secs = c.t.elapsed().as_secs_f32();
+    let shot = now > c.low;
+    c.low = c.low.min(now);
+    let no_shot = matches!(c.spell, Some(3) | Some(5)) || c.spell.is_none();
+    let wait = if no_shot { (len * 0.55 / 60.0).clamp(0.3, 1.2) } else { (len / 60.0).clamp(0.5, 2.5) };
+    let out = shot || secs >= wait;
+    if out && !c.logged {
+        c.logged = true;
+        log(&format!("command's spell {:?} out after {secs:.2} s ({})", c.spell, if shot { "its shot" } else { "KH1's cast motion's time" }));
+    }
+    out
+}
+
+/// KH1 shows Sora standing, walking or running: his motion's slot, or for a motion we don't
+/// know (another moveset's), the last one KH1 asked for.
+fn kh1_moving() -> bool {
+    match pose::sora_slot() {
+        Some(s) => s <= 7,
+        None => super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed) & 0xFFFF <= 7,
+    }
+}
+
+/// KH1 has him: our last KH2 pose is no longer drawn (it froze him for a moment, the user:
+/// walking into a ladder, the walk stopped before the climb); `pose` blends into KH1's own.
+fn drop_pose() {
+    if let Ok(mut p) = POSE.try_lock() {
+        *p = None;
+    }
+}
+
+fn release(why: &str) {
+    super::gates::released();
+    KH2_MOTION.store(u32::MAX, Ordering::Relaxed);
+    let mut changed = false;
+    if let Ok(mut w) = LAST_WHY.try_lock() {
+        if w.as_str() != why {
+            w.clear();
+            w.push_str(why);
+            changed = true;
+        }
+    }
+    KH2_AIR.store(false, Ordering::Relaxed);
+    unsafe { set_sparkle(false) };
+    drop_pose();
+    if let Ok(mut d) = DRIVER.try_lock() {
+        if let Some(dr) = d.as_mut() {
+            // Also a new reason while KH1 already has him (the user, s155: after a spell's
+            // handoff KH1's fall played on and the log never said why KH2 didn't take him).
+            // (A new reason always (at most 4 a second): past the 400 lines the log never said why
+            // KH1 kept him, the user: KH1's animations from a boss's end on.)
+            if dr.last_state.is_some() || changed {
+                static LAST_MS: AtomicU64 = AtomicU64::new(0);
+                let now = now_ms();
+                if changed && now.saturating_sub(LAST_MS.swap(now, Ordering::Relaxed)) >= 250 || dr.logged < 400 {
+                    dr.logged = dr.logged.saturating_add(1);
+                    log(&format!("KH1 has Sora ({why})"));
+                }
+            }
+            if dr.last_state.is_some() {
+                // When KH2 has him again, its controller starts over (standing): whatever KH1
+                // did meanwhile, KH2's jump or blow from before is over.
+                FRESH.store(true, Ordering::Relaxed);
+            }
+            dr.last_state = None;
+            dr.held = (true, true);
+        }
+    }
+}
+
+/// Why KH1 last had Sora (`release`), for the room lines.
+static LAST_WHY: Mutex<String> = Mutex::new(String::new());
+
+/// KH1's current world and room (u32 each; `0x1402AFC10` compares its flight table with them;
+/// KH-1FM-AP-LUA reads them too).
+const WORLD_RVA: Rva = Rva(0x2340E5C);
+const ROOM_RVA: Rva = Rva(0x2340EC4);
+
+/// The room Sora is in, when he came in, and whether its first seconds were logged.
+struct RoomSeen {
+    world: u32,
+    room: u32,
+    at_ms: u64,
+    frames: u32,
+    kh2_frames: u32,
+    reported: bool,
+}
+static ROOM: Mutex<Option<RoomSeen>> = Mutex::new(None);
+
+/// Each room entered goes in the log (the user: the log should say what happens on entering
+/// a room; a friend's rooms "broke the mod"), and 3 s later who had Sora meanwhile: KH2 for how
+/// much of it, and if KH1 has him, why.
+unsafe fn room_watch(actor: usize, kh2: bool) {
+    // KH1 keeping him a long while (not in one of its moves for us): every 10 s, why, and his
+    // state (the user: KH1's animations from a boss's end on, no reason in the log).
+    {
+        static SINCE: AtomicU64 = AtomicU64::new(0);
+        static LAST: AtomicU64 = AtomicU64::new(0);
+        let now = now_ms();
+        if kh2 || HANDOFF.load(Ordering::Relaxed) {
+            SINCE.store(0, Ordering::Relaxed);
+        } else if SINCE.load(Ordering::Relaxed) == 0 {
+            SINCE.store(now, Ordering::Relaxed);
+        } else if now.saturating_sub(SINCE.load(Ordering::Relaxed)) > 5000 && now.saturating_sub(LAST.load(Ordering::Relaxed)) > 10000 {
+            LAST.store(now, Ordering::Relaxed);
+            let base = BASE.load(Ordering::Relaxed);
+            let why = LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default();
+            log(&format!(
+                "KH1 has had Sora {:.0} s: {why}; KH1 state {}, slot {:?}, flags {:08x}, event {:#x}, script {:#x}, body seen {}, ON {}",
+                now.saturating_sub(SINCE.load(Ordering::Relaxed)) as f32 / 1000.0,
+                rd::<i32>(actor + 0x70),
+                pose::sora_slot(),
+                rd::<u32>(actor),
+                rd::<u32>(base + EVENT_RVA),
+                rd::<u32>(actor + 0x440),
+                pose::sora_body_seen(500),
+                ON.load(Ordering::Relaxed)
+            ));
+        }
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let (world, room) = (rd::<u32>(base + WORLD_RVA), rd::<u32>(base + ROOM_RVA));
+    let Ok(mut seen) = ROOM.try_lock() else { return };
+    let now = now_ms();
+    if seen.as_ref().is_none_or(|s| s.world != world || s.room != room) {
+        log(&format!(
+            "room: world {world:#x} room {room:#x} entered; {} (KH1 state {}, flags {:08x}, script {})",
+            if kh2 { "KH2 has Sora".to_string() } else { format!("KH1 has Sora ({})", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
+            rd::<i32>(actor + 0x70),
+            rd::<u32>(actor),
+            pose::ptr(rd::<u32>(actor + 0x440)) != 0,
+        ));
+        *seen = Some(RoomSeen { world, room, at_ms: now, frames: 0, kh2_frames: 0, reported: false });
+    }
+    let Some(s) = seen.as_mut() else { return };
+    s.frames += 1;
+    if kh2 {
+        s.kh2_frames += 1;
+    }
+    if !s.reported && now.saturating_sub(s.at_ms) >= 3000 {
+        s.reported = true;
+        log(&format!(
+            "room {:#x}-{:#x}, first 3 s: KH2 had Sora {} of {} frames; now {} (KH1 state {}, body seen {})",
+            s.world,
+            s.room,
+            s.kh2_frames,
+            s.frames,
+            if kh2 { "KH2 has him".to_string() } else { format!("KH1 has him: {}", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
+            rd::<i32>(actor + 0x70),
+            pose::sora_body_seen(500),
+        ));
+    }
+}
+
+/// KH1's control step this frame (read once per frame, before anything can return early).
+static FROZEN_NOW: AtomicBool = AtomicBool::new(false);
+/// When KH1's control of him last came or went, and until when it is taken for a ride.
+static FLICKER: std::sync::Mutex<std::collections::VecDeque<u64>> = std::sync::Mutex::new(std::collections::VecDeque::new());
+static RIDE_UNTIL: AtomicU64 = AtomicU64::new(0);
+static LAST_FROZEN: AtomicBool = AtomicBool::new(false);
+
+/// KH1's script hold bit (`0x1000000`) taken as left over: KH1 has let Sora act this many frames
+/// in a row with it set (1.5 s).
+const STALE_FRAMES: u32 = 90;
+/// `stale_hold`'s run: the frame last seen, the frames KH1 has let him act, and whether the bit is
+/// taken as left over (until it clears, an event or a ride or another body comes, or KH1's script
+/// has actions for him again: any frame not seen here).
+static STALE: Mutex<(u64, u32, bool)> = Mutex::new((u64::MAX, 0, false));
+static STALE_LOGGED: AtomicU32 = AtomicU32::new(0);
+
+/// The script hold bit is set: is it left over? KH1's script holds him for real while it has
+/// actions for him (`+0x440`), or KH1 holds him (`+0x444` bit 1, what the event script's waits and
+/// KH1's camera read as "can't act"), or he can't act (`0x1402956E0`), or KH1's player control
+/// step was skipped (`frozen`); an event was ruled out before. With none of these for
+/// `STALE_FRAMES`, KH1 itself gives him to the player (its control step reads the pad and moves
+/// him in its own animations): the bit no longer holds him, and KH2 has him. KH1 keeps honouring
+/// the bit as no damage (`hurt`) until a script clears it (the next room's entry does).
+/// The second value says, for the log, what holds him (or that nothing does).
+unsafe fn stale_hold(base: usize, actor: usize, script: usize, frozen: bool) -> (bool, &'static str) {
+    let frame = GAME_FRAME.load(Ordering::Relaxed);
+    let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    let (free, what) = if script != 0 {
+        (false, "")
+    } else if rd::<u32>(actor + 0x444) & 1 != 0 {
+        (false, "; KH1 holds him (+0x444)")
+    } else if frozen {
+        (false, "; KH1's control step skipped")
+    } else if can_act(actor) == 0 {
+        (false, "; he can't act")
+    } else {
+        (true, "; KH1 lets him act")
+    };
+    let Ok(mut s) = STALE.lock() else { return (false, what) };
+    let run = s.0.wrapping_add(1) == frame;
+    let (n, latched) = if run { (s.1, s.2) } else { (0, false) };
+    let latched = latched && script == 0;
+    let n = if free { n.saturating_add(1) } else { 0 };
+    let now = latched || n >= STALE_FRAMES;
+    if now && !latched && STALE_LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
+        log(&format!(
+            "KH1's script hold (flag 0x1000000) left set: KH1 has let him act {:.1} s (no event, no script action, not held, can act, its control step ran; flags {:08x}, +0x444 {:08x}, slot {:?}, battle {}): KH2 takes him back",
+            n as f32 / 60.0,
+            rd::<u32>(actor),
+            rd::<u32>(actor + 0x444),
+            pose::sora_slot(),
+            rd::<u32>(base + BATTLE_RVA) & 1 != 0
+        ));
+    }
+    if s.2 && !now && run && STALE_LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
+        log(&format!("KH1's script hold: its script has actions for him again (flags {:08x}): KH1's", rd::<u32>(actor)));
+    }
+    *s = (frame, n, now);
+    (now, if now { "" } else { what })
+}
+
+/// The frame Sora was last seen in battle (KH1's battle flag), for `scene_frame`.
+static BATTLE_FRAME: AtomicU64 = AtomicU64::new(u64::MAX);
+/// `scene_frame`'s run: the frame last seen, its length, and whether it began in battle.
+static SCENE: Mutex<(u64, u32, bool)> = Mutex::new((u64::MAX, 0, false));
+/// A Drive Form ends when KH1 has had Sora for a scene this long (frames): a cutscene 1 s, a
+/// scene that began in battle (a boss falling, a story moment mid-fight) 2.5 s, any other 20 s.
+const SCENE_EVENT_FRAMES: u32 = 60;
+const SCENE_BATTLE_FRAMES: u32 = 150;
+const SCENE_ANY_FRAMES: u32 = 1200;
+
+/// KH1 has Sora for a scene this frame (an event, or its script holding him: not one of its own
+/// moves, a ride or another body). In a Drive Form, a scene long enough ends the form there and
+/// then (`form::scene_revert`, as a new world does): KH2 reverts a form when a battle ends in a
+/// scene, and a form is never left on under KH1's own animations for long.
+/// `held`: KH1 only holds him still for its script (`+0x444`, no actions for him): such frames
+/// carry a run on, and end the form only in a scene that began in battle (a cup round's victory),
+/// not by the 20 s rule (a talk or a menu held open).
+unsafe fn scene_frame(actor: usize, event: bool, held: bool) {
+    let frame = GAME_FRAME.load(Ordering::Relaxed);
+    let (n, battle) = {
+        let Ok(mut s) = SCENE.lock() else { return };
+        if s.0.wrapping_add(1) == frame {
+            *s = (frame, s.1.saturating_add(1), s.2);
+        } else {
+            // (In battle as it began, or a moment before: KH1 may drop its battle flag as the
+            // boss falls.)
+            let seen = BATTLE_FRAME.load(Ordering::Relaxed);
+            *s = (frame, 1, seen != u64::MAX && frame.saturating_sub(seen) <= 60);
+        }
+        (s.1, s.2)
+    };
+    let long = if event {
+        n >= SCENE_EVENT_FRAMES
+    } else if battle {
+        n >= SCENE_BATTLE_FRAMES
+    } else {
+        !held && n >= SCENE_ANY_FRAMES
+    };
+    if !long || !(super::form::in_form() || super::form::busy()) {
+        return;
+    }
+    // (A limit under way in the form: `form::scene_revert` waits for its end, the run counting
+    // on, so a scene still on after the limit ends the form on its first frame after it.)
+    let Some(kh2) = pose::kh2() else { return };
+    let Ok(mut g) = DRIVER.try_lock() else { return };
+    let Some(d) = g.as_mut() else { return };
+    let why = format!(
+        "KH1 has had Sora {:.1} s for {}",
+        n as f32 / 60.0,
+        if event {
+            "an event"
+        } else if battle {
+            "a scene out of a battle (its script holds him)"
+        } else {
+            "a scene (its script holds him)"
+        }
+    );
+    super::form::scene_revert(&mut d.drive, &mut d.character, &mut d.anim, kh2, actor, &why);
+}
+
+unsafe fn takeover(actor: usize) -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    if actor != rd::<u64>(base + PARTY_RVA) as usize {
+        return false;
+    }
+    let frozen = !CONTROLLED.swap(false, Ordering::Relaxed) && CONTROL_HOOKED.load(Ordering::Relaxed);
+    FROZEN_NOW.store(frozen, Ordering::Relaxed);
+    // (KH1's script has him: `script_has_sora`; its hold bit is added below, once known not left
+    // over.)
+    let limit = super::limits::kh1_limit_holds();
+    KH1_SCENE.store(
+        !limit && (rd::<u32>(base + EVENT_RVA) != 0 || pose::ptr(rd::<u32>(actor + 0x440)) != 0 || rd::<u32>(actor + 0x444) & 1 != 0),
+        Ordering::Relaxed,
+    );
+    // KH1's control of him coming and going every few frames while KH2 has him is one of its
+    // rides (the user: the magic carpet out of the Cave of Wonders didn't move while KH2 had him
+    // between): KH1 has him for 5 s (counted only while KH2 has him: KH1's own frames flicker
+    // too, and counting them kept him KH1's in plain rooms, the user).
+    let now = now_ms();
+    if now < RIDE_UNTIL.load(Ordering::Relaxed) {
+        release("a ride: KH1's control comes and goes");
+        return false;
+    }
+    if rd::<u32>(base + BATTLE_RVA) & 1 != 0 {
+        BATTLE_FRAME.store(GAME_FRAME.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+    if rd::<u32>(base + EVENT_RVA) != 0 {
+        SCRIPTED.store(false, Ordering::Relaxed);
+        release("an event runs");
+        scene_frame(actor, true, false);
+        return false;
+    }
+    // Not in his own body (the Heartless form): KH1 has him, its own moves and animations
+    // (KH2's moves would leave that body standing in KH1's idle).
+    if !pose::sora_body_seen(500) {
+        release("Sora is in another body (not his own model)");
+        return false;
+    }
+    // KH1's area scripts walk / turn him (zone entries and exits, doors): their pending
+    // actions hang off `+0x440` (`0x14028CD60`); KH1 moves and animates him meanwhile.
+    // Flag `0x1000000` (script commands 0x24 / 0x23, `0x14028C550`) is set from a door's turn
+    // until the walk through it ends, and at a zone entry until he has walked in. A script can
+    // leave it set when KH1 has given him back (the user, s307: after Opposite Armor fell, flags
+    // 0110c083 for minutes, no event, no script action, KH1's own run and idle under the stick):
+    // the bit alone holds him only until KH1 has let him act for `STALE_FRAMES` (`stale_hold`).
+    let script = pose::ptr(rd::<u32>(actor + 0x440));
+    let (stale, what) = if rd::<u32>(actor) & 0x0100_0000 != 0 { stale_hold(base, actor, script, frozen) } else { (false, "") };
+    let held_by_script = rd::<u32>(actor) & 0x0100_0000 != 0 && !stale;
+    SCRIPTED.store(script != 0 || held_by_script, Ordering::Relaxed);
+    if held_by_script && !limit {
+        KH1_SCENE.store(true, Ordering::Relaxed);
+    }
+    // (Not while one of KH1's limits runs in Limit Form: its limit module sets the hold bit for
+    // the whole limit (the user's log, s313: Strike Raid, flags 0130c087 / 01308087, no script
+    // actions), and taken as a script here it was a scene: `scene_frame` counted it and reverted
+    // the form 2.5 s in, mid-limit, and the limit's own branch below (the drain, the hand-off's
+    // frames) never ran. The limit's branch has him instead; `SCRIPTED` is kept as KH1 set it, so
+    // the camera and the drawing are as before.)
+    if (script != 0 || held_by_script) && !super::limits::kh1_limit_holds() {
+        let mut kinds = Vec::new();
+        let mut a = script;
+        while a > 0x10000 && kinds.len() < 8 {
+            kinds.push(rd::<u8>(a + 0x10));
+            a = rd::<u64>(a + 0x58) as usize;
+        }
+        release(&format!("KH1's script moves him, actions {kinds:?}, flags {:08x}{what}", rd::<u32>(actor)));
+        scene_frame(actor, false, false);
+        return false;
+    }
+    // KH1 jumped him on its own while KH2 had him (the user: holding jump and pressing L1; the
+    // log: L1 + Circle, KH1's jump motion set from its own state step, its state 2 and jump slot
+    // 12 as KH2 landed, then its air moves): KH2 keeps him, KH1 back in its ground state (its
+    // jump slot is then a leftover, below).
+    if !HANDOFF.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 {
+        let state = rd::<i32>(actor + 0x70);
+        if matches!(state, 1 | 2) && matches!(pose::sora_slot(), Some(8 | 9 | 12 | 13)) {
+            let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+            set(actor, 0);
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("KH1 jumped him under KH2 (state {state}, slot {:?}): taken back", pose::sora_slot()));
+            }
+        }
+    }
+    ground_moves_in_air(base, actor);
+    swim_rescue(base, actor);
+    // KH1's ground step waded him into deep water while KH2 had him on the ground: KH1's swim, as a
+    // hand-off of its own (before, only its swim motion's slot let KH1 have him, and a frame with
+    // the slot not yet changed was KH2's with KH1's state at 17).
+    if !HANDOFF.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 && rd::<i32>(actor + 0x70) == SWIM_STATE {
+        take_for_kh1_move("water (walked in: KH1's swim)", -rd::<f32>(actor + 0x14) - rd::<f32>(actor + 0x3D4));
+        SWIM_MOVE.store(true, Ordering::Relaxed);
+        drop_pose();
+    }
+    // The same for its hang off an edge walked over (`0x1402C6760`, state 13), on the ground (in
+    // the air `ground_moves_in_air` undid it above). KH1 sets the state and snaps him to the edge
+    // in its think, but his motion slot changes a frame later (the logs: "KH1 takes him: bar (KH1
+    // state 15, slot Some(6))"), so that frame was KH2's: its walk moved him off the spot KH1 hung
+    // him from, and KH1 then held a hang with no edge at his hands. Its climb (state 14, from the
+    // hang's input step `0x1402C6C60`) wants the edge's contact (`+0x2D0` bit 0x10) and never came
+    // (the player: "Sora sometimes hangs from the edges, but even when pressing forward, he
+    // doesn't jump onto the platforms"). Now KH1 has him from that frame, a hand-off as its air
+    // grabs are: its own hang, climb and drop (and its jump off the edge), KH2 again once he
+    // stands or falls.
+    if !HANDOFF.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 && rd::<i32>(actor + 0x70) == EDGE_HANG_STATE {
+        take_for_kh1_move("an edge walked over (KH1's hang)", -rd::<f32>(actor + 0x14) - rd::<f32>(actor + 0x3D4));
+        drop_pose();
+    }
+    // Limit Form: one of KH1's own limits runs (`limits::kh1_limit_holds`; any of the five from its
+    // Limit menu or shortcuts, started as a KH1 command's hand-off, `combat::command`). KH1
+    // has him all through it whatever is pressed: its limit module moves and animates him, and its
+    // Keyblade, effects and hits are KH1's (none of the hand-off's cuts below, which would take him
+    // mid-limit). The form stays on and its gauge drains on (`gauge::frame`; out, `form::drain`
+    // waits for KH2 to have him again). When KH1's limit flag clears, the hand-off below ends it as
+    // a KH1 command's end: on the ground KH2's again on KH1's idle, the stick, an Attack or a jump;
+    // in the air KH2's fall.
+    if super::limits::kh1_limit_holds() {
+        // (An Attack meanwhile is dropped, no buffer: the limit plays to its end. KH1's follow-ups
+        // are KH1's own Triangle presses.)
+        if ATTACK_AFTER.swap(false, Ordering::Relaxed) {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log("an Attack during KH1's limit (Limit Form): dropped, the limit plays to its end");
+            }
+        }
+        if let Ok(mut g) = DRIVER.try_lock() {
+            if let Some(d) = g.as_mut() {
+                super::form::drain(&mut d.drive);
+            }
+        }
+        // (The hand-off's frames count on, so its end is taken on the limit's first free frame;
+        // the jump button as held now, so one held through the limit isn't a fresh press.)
+        if HANDOFF.load(Ordering::Relaxed) {
+            HANDOFF_FRAMES.fetch_add(1, Ordering::Relaxed);
+            JUMP_PREV.store(buttons() & jump_button() != 0, Ordering::Relaxed);
+            *HANDOFF_POS.lock().unwrap() = Some(rd::<[f32; 3]>(actor + 0x10));
+        }
+        static HELD: AtomicU32 = AtomicU32::new(0);
+        let n = HELD.fetch_add(1, Ordering::Relaxed);
+        if n % 60 == 0 && n < 60 * 120 {
+            log(&format!("KH1's limit (Limit Form): KH1 has him, KH1 state {}, slot {:?}, {:.0} above the floor, hand-off {}", rd::<i32>(actor + 0x70), pose::sora_slot(), rd::<f32>(actor + 0x3D4), HANDOFF.load(Ordering::Relaxed)));
+        }
+        HANDOFF_SEEN_MS.store(now.max(1), Ordering::Relaxed);
+        HANDOFF_FRAME.store(true, Ordering::Relaxed);
+        release("KH1's limit (Limit Form)");
+        return false;
+    }
+    // KH1 took him for one of its own air moves (`grab`): until it has him standing again.
+    if HANDOFF.load(Ordering::Relaxed) {
+        let state = rd::<i32>(actor + 0x70);
+        let frames = HANDOFF_FRAMES.fetch_add(1, Ordering::Relaxed);
+        // Square there (a dodge roll right after jumping off a pole) is KH2's: KH1 doesn't see
+        // it (`kh1_keeps_square`), and KH2 takes him at once to roll (the user: KH1 had started
+        // its own roll, and he slid backwards when KH2 took over mid-way).
+        let square = buttons() & SQUARE != 0;
+        let attack = ATTACK_AFTER.load(Ordering::Relaxed);
+        // Done with its move and free (KH1's own test `0x1402956E0`: no action running (flag
+        // 4), not reeling, not held) with the stick held: KH2's, whatever animation KH1 walks
+        // him in (the user: after a Hollow Bastion crystal, moving within a second walked him
+        // in KH1's animations, slots it has besides its plain walk and run).
+        let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+        let stick = move_tilt() > 0.15;
+        let free = can_act(actor) != 0 && stick;
+        // Its states as it goes, for the log (what a fall out of it looked like).
+        static LAST_STATE: AtomicU32 = AtomicU32::new(u32::MAX);
+        if frames == 0 {
+            LAST_STATE.store(u32::MAX, Ordering::Relaxed);
+        }
+        if LAST_STATE.swap(state as u32, Ordering::Relaxed) != state as u32 {
+            log(&format!("KH1's move: state {state} at {:.0} above the floor (can act {})", rd::<f32>(actor + 0x3D4), can_act(actor) != 0));
+        }
+        // His speed while KH1 moves him (per frame, KH2's way up), for a fall handed over.
+        let p = rd::<[f32; 3]>(actor + 0x10);
+        let vel = {
+            let mut last = HANDOFF_POS.lock().unwrap();
+            let v = last.map(|l| ([p[0] - l[0], p[2] - l[2]], l[1] - p[1]));
+            *last = Some(p);
+            v
+        };
+        // Out of its move into its plain fall (state 2: off a bar or a pole, down from a ledge,
+        // after a spell in the air), dropping: KH2's fall from there, at KH1's speed (the user:
+        // jumping off a pole he fell in KH1's falling animation, until he landed).
+        let above = rd::<f32>(actor + 0x3D4);
+        // A spell in the air is cast in KH1's air state 2 itself, sinking as it goes (the log:
+        // command 0x2 in the air, state 2 from its first frame, slot 80 the cast); taken then,
+        // the spell was cut off and KH1's fall played on (the user, s155). So a command's fall is
+        // KH2's only once the spell is done (he can act again), in state 1 or 2; a grab's (a bar,
+        // a pole, a ledge) as soon as KH1 drops him in state 2.
+        // A spell cast in the air: KH1 holds its cast pose (and won't let him act) until he
+        // lands (the user: still KH1's animation, then its idle on landing). Its cast motion
+        // played through (KH1's frames, at least 20) counts as done: the spell is out by then.
+        static CAST: Mutex<(usize, u32)> = Mutex::new((usize::MAX, 0));
+        let cast_done = {
+            let slot = pose::sora_slot().unwrap_or(usize::MAX);
+            let mut c = CAST.lock().unwrap();
+            if frames == 0 || c.0 != slot {
+                *c = (slot, 0);
+            }
+            c.1 += 1;
+            let len = pose::slot_frames(slot).unwrap_or(u32::MAX / 2).max(20);
+            !(8..=13).contains(&slot) && slot != usize::MAX && c.1 >= len
+        };
+        // (A cast in the air plays through to the ground now, the user: "fire isn't playing the
+        // full animation"; KH2 takes him on landing, `cast_landed` below.)
+        let done = can_act(actor) != 0 || cast_done && state == 2 && air_cast().is_none();
+        let command = FROM_COMMAND.load(Ordering::Relaxed);
+        // (KH1's leap off a ladder or a pole, state 16, too: once it drops, KH2's fall, the user:
+        // "jumping off a ladder or a pole puts sora into his KH1 fall"; the log: state 15, 16,
+        // then 2 only some 35 above the floor.)
+        let fall_state = if command { matches!(state, 1 | 2) && done } else { matches!(state, 2 | LEAP_OFF_STATE) || state == 1 && done };
+        let falling = fall_state && above > STEP_DOWN && vel.is_some_and(|(_, up)| up < 0.0);
+        // A jump out of KH1's move is a fresh press made while KH1 has him on the ground (its
+        // landing, a ground move), not the button held from before (the user: "if you do kh1 air
+        // attack then hold jump before you land you'll buffer a jump, this is unintended"): a
+        // press in the air doesn't count, and once on the ground only a new press does.
+        let jump_raw = buttons() & jump_button() != 0;
+        if frames == 0 {
+            GROUND_JUMP.store(false, Ordering::Relaxed);
+            JUMP_PREV.store(jump_raw, Ordering::Relaxed);
+        }
+        let jump_fresh = jump_raw && !JUMP_PREV.swap(jump_raw, Ordering::Relaxed);
+        // (No buffer, s249, the user: "comment out any code that is related to queueing/buffering
+        // moves": only this frame's fresh press on the ground counts; s241 kept a press made
+        // earlier in KH1's move for its end:)
+        // if state != 0 {
+        //     GROUND_JUMP.store(false, Ordering::Relaxed);
+        // } else if jump_fresh {
+        //     GROUND_JUMP.store(true, Ordering::Relaxed);
+        // }
+        // let ground_jump = GROUND_JUMP.load(Ordering::Relaxed);
+        let _ = &GROUND_JUMP;
+        let ground_jump = jump_fresh && state == 0;
+        // KH1 jumped him itself out of its move (its air attack's landing reads the jump press
+        // outside its control step, where the press is kept from it; the user's log: state 0, then
+        // state 1 "can act" on the floor, KH1's high jump, and KH2 took him rising 25 a frame: "sora
+        // still gets launched into the air", or on the stick KH2's run: "overwrites high jump with
+        // KH2 run"). Caught on its first frame, still on the floor: KH1's jump undone, KH2's jump.
+        let kh1_took_off = command && state == 1 && super::stylejump::mode() != super::stylejump::JUMP && above < STEP_DOWN && vel.map_or(true, |(_, up)| up >= -0.5);
+        if kh1_took_off {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("KH1 jumped him out of its move ({above:.1} above the floor): KH2's jump instead"));
+            }
+        }
+        let jump = ground_jump && kh1_move_done(base, actor) || kh1_took_off;
+        // Free in KH1's jump or fall (state 1 / 2, KH1 lets him act, not a spell's air cast): its
+        // jump or high jump off a frame KH2 should have had (the first frame after an air cast's
+        // landing or an item, the user), or the fall after a ledge, a ladder or a pole. KH2 takes
+        // him at once, rising or falling, with its own air moves (Aerial Dodge, Glide); KH1's
+        // glide and Superglide never come out of it (its jump / Square are KH2's meanwhile,
+        // `kh1_air_free`).
+        let air_free = kh1_air_free(base, actor) && above > STEP_DOWN && vel.is_some();
+        // The end of a pull-up onto a ledge (the user: "a small visual bug that happens when you
+        // go up from a ledge grab"; the s307 video: KH1's climb, then a pop into KH2's fall with
+        // his arms flung out, held ~11 frames, then a pop into KH2's landing): KH1's climb ends in
+        // its fall state a little over the top it climbed onto, and KH2's fall gained nothing
+        // there (the log: "KH1 holds Sora still: no input for KH2" from the hand-off until KH1's
+        // landing slot). KH1 sets him down there itself, its own fall and landing following its own
+        // climb, and KH2 takes him on the ground (its idle, the stick: `kh1_moving` / `free`).
+        // An Attack, Square or a jump meanwhile still hands him to KH2's fall at once.
+        if GRAB_MOVE.load(Ordering::Relaxed) && !command && fall_state && !SETTLE.load(Ordering::Relaxed) && above < SETTLE_ABOVE {
+            let floor = -p[1] - above;
+            let rise = GRAB_FLOOR.lock().unwrap().map(|f| floor - f);
+            if rise.is_some_and(|r| r.is_finite() && r > CLIMBED_ONTO) {
+                SETTLE.store(true, Ordering::Relaxed);
+                log(&format!(
+                    "KH1's climb ends on top ({above:.0} above a floor {:.0} higher than at the grab, KH1 state {state}): KH1 sets him down itself",
+                    rise.unwrap_or_default()
+                ));
+            }
+        }
+        let settling = SETTLE.load(Ordering::Relaxed) && state != 0 && !(attack || square || jump_fresh);
+        let falling = falling && !settling;
+        let air_free = air_free && !settling;
+        // (Off, s241, the user: "comment out anything related to having kh1 magic animations
+        // transition into kh2 landing animation, its unneeded at the moment and causes more bugs
+        // then fixes anything". KH1's air spell lands in KH1's own landing, and KH2 takes him
+        // after it as after KH1's other moves. s238's way, kept for later:)
+        // // A spell cast in the air (KH1's animation all through): when KH1 sets him down, its
+        // // player step asks for KH2's landing instead of KH1's (`player_step`), and KH2 takes him
+        // // here into it, its short hold and a jump out of it.
+        // // (Should that step not have seen it, KH1's ground state on a later frame with the spell
+        // // still KH1's does the same, logged: KH1's landing must not hold him.)
+        // static GROUND: AtomicU32 = AtomicU32::new(0);
+        // if frames == 0 || state != 0 {
+        //     GROUND.store(0, Ordering::Relaxed);
+        // }
+        // let seen = AIR_SPELL_LANDED.swap(false, Ordering::Relaxed);
+        // let late = air_cast().is_some() && state == 0 && !seen && GROUND.fetch_add(1, Ordering::Relaxed) >= 1;
+        // if late {
+        //     log("KH1's air spell on the ground without its landing seen: KH2's landing");
+        // }
+        // let cast_landed = air_cast().is_some() && (seen || late);
+        // A Drive Form's KH1 air cast set down by KH1 (the user: "when landing from the aerial KH1
+        // magic in final form, it doesn't play final form's landing animation so sora doesnt slide
+        // like he should when hitting the ground"): KH2 takes him into the form's own landing,
+        // sliding on at the speed he cast with (`form_cast_frame`'s), as out of his own fall.
+        let form_landed = super::form::in_form() && command && state == 0 && frames >= 1 && air_cast().is_some() && FORM_CAST.try_lock().ok().is_some_and(|f| f.is_some_and(|f| f.air));
+        if form_landed {
+            let v = FORM_CAST.try_lock().ok().and_then(|f| f.map(|f| f.v));
+            *LAND_SLIDE.lock().unwrap() = v;
+            log(&format!("a form's KH1 air cast landed: the form's landing, sliding at {:.1?}", v));
+        }
+        let cast_landed = form_landed;
+        // KH1's jump or glide (`stylejump`, the Jump / Glide styles at KH1): which, if any.
+        let style_air = super::stylejump::mode();
+        // KH1's glide out of KH2's jump, down on the ground: KH2's landing, as an air spell's.
+        let glide_landed = style_air == super::stylejump::GLIDE && state == 0;
+        if glide_landed {
+            log("KH1's glide landed: KH2's landing");
+        }
+        let cast_landed = cast_landed || glide_landed;
+        // An Attack during a spell: KH2's once the spell is out (its end frames; the user: KH2's
+        // magic can be cut by an attack to go on with the combo), not before (it would cut the
+        // spell). In the air too.
+        // The rest of KH1's cast can be cancelled the same way (the user: "animation cancel the
+        // KH1 spells"): a jump, Square (roll, guard, glide) or moving the stick, once the spell
+        // is out; none of them before (Square or the stick 10 frames in cut the cast itself).
+        let command = FROM_COMMAND.load(Ordering::Relaxed);
+        // What may cut a KH1 spell short, once it is out (spec: KH1 magic is a step of the combo
+        // string): an Attack (the combo's next swing) or another spell (its next step), in the air
+        // too; a jump or Square only on the ground and only out of a step (s168). Never the stick
+        // (spec rule D: a direction pressed cancelled the cast), and nothing out of the combo's
+        // last step (rule E: it plays to its end; a new combo after it).
+        // An Attack or a spell chosen meanwhile: KH1 runs no command during its cast, so they
+        // are read off its command record here (the user: no attack out of magic).
+        if command && !done {
+            match combat::take_chosen_command() {
+                Some(1) => {
+                    ATTACK_AFTER.store(true, Ordering::Relaxed);
+                }
+                Some(2) => {
+                    MAGIC_AFTER.store(true, Ordering::Relaxed);
+                }
+                _ => {}
+            }
+        }
+        let attack = attack || ATTACK_AFTER.load(Ordering::Relaxed);
+        let slot = SPELL_SLOT.load(Ordering::Relaxed);
+        // KH1 moves with a frame from which KH2 may take him (`kh1_cut_frame`; the user: "by a
+        // specified frame kh2 is allowed to take over kh1 sora only if conditions are met": at
+        // that frame or later, an Attack or a Drive chosen). An item: KH2's at its frame, any
+        // input or none (the user: its frame 52 gave KH1's roll, guard or jump).
+        let cut_frame = if command && !done { kh1_cut_frame(state) } else { None };
+        let in_cut = cut_frame.is_some_and(|(f, _)| frames + 1 >= f);
+        // (KH1's own combo, `stylecombo`: a Drive may be chosen all through it, KH2 taking him out
+        // of it to change, the user: "if sora is inputting his kh1 attacks he is unable to select
+        // drive (it is blacked out)".)
+        let combo_drive = super::stylecombo::active() && !super::form::in_form();
+        KH1_WINDOW.store(in_cut || combo_drive, Ordering::Relaxed);
+        let drive_cut = (in_cut || combo_drive) && DRIVE_CUT.swap(false, Ordering::Relaxed);
+        let item_end = in_cut && cut_frame.is_some_and(|(_, item)| item);
+        let last = slot == 3 && !in_cut;
+        // (KH1's own combo plays as in KH1: none of the spell cuts, `stylecombo`.)
+        let kh1_combo = super::stylecombo::active();
+        let out_any = command && !done && !kh1_combo && (spell_out(actor) || in_cut);
+        let out = out_any && air_cast().is_none();
+        let jump_pressed = ground_jump;
+        let magic_after = MAGIC_AFTER.load(Ordering::Relaxed);
+        // In a Drive Form: the form's cast motion's clock (its input window, then its end).
+        let form_cast = if command && !done { form_cast_frame(actor, frames) } else { None };
+        let window = form_cast.map_or(true, |(_, react)| frames >= react) && (cut_frame.is_none() || in_cut);
+        // (At the form motion's end, KH2's idle, whether or not a shot of the spell was counted:
+        // the user, Wisdom's Thunder ends at frame 49 and is in idle by 50, and KH1 held 17
+        // frames more waiting for Aero's or Gravity's "shot".)
+        // (`frames` counts from 0 on the cast's first frame: frame 50 of a 50-frame motion is
+        // KH2's.)
+        let form_clock = form_cast.is_some_and(|(len, _)| frames + 1 >= len) && command && !done;
+        // (In the air too: KH2's fall from there.)
+        let form_end = form_clock && air_cast().is_none();
+        if form_end && !out_any {
+            log("form's cast motion ended before a shot of the KH1 spell was counted: KH2 takes him anyway");
+        }
+        // (A form's KH1 spell takes an Attack at its cast motion's input frame, as the form's
+        // Thunder does in a combo, whether or not KH1 has counted the spell's shot yet: the user,
+        // "allow kh1 exclusive magic to be able to have its animation be interrupted by an attack
+        // on the same frame as thunder".)
+        let form_attack = form_cast.is_some() && command && !done;
+        let attack_cut = attack && (out_any || form_attack) && !last && window;
+        let magic_cut = magic_after && out_any && !last && window;
+        // (A spell is taken during KH1's cast only while it could cut it now, `combat`: no queue.)
+        SPELL_CUT_OPEN.store(out_any && !last && window, Ordering::Relaxed);
+        let other_cut = out && (slot <= 1 || form_cast.is_some()) && window && (jump_pressed || square);
+        let cancel = attack_cut || magic_cut || other_cut || form_end || drive_cut || item_end;
+        let attack = attack && (!command || done || attack_cut);
+        let square = square && (!command || done || other_cut);
+        let jump = jump || other_cut && jump_pressed;
+        if cancel {
+            // KH1's cast action ends here: its "action running" flag off (as at its own end).
+            wr(actor, rd::<u32>(actor) & !4);
+            if slot == 0 {
+                COMBO_ON.store(attack_cut, Ordering::Relaxed);
+            }
+            log(&format!(
+                "spell's end frames cut by {} (combo slot {slot})",
+                if attack_cut { "an Attack: the combo's next swing" } else if magic_cut { "a spell: the combo's next step" } else if other_cut && jump_pressed { "a jump" } else if other_cut { "Square" } else if drive_cut { "a Drive" } else if item_end { "the item's end frame" } else { "the form's cast motion ending" }
+            ));
+        }
+        // (A spell chosen during the cast, which is now over: it runs at once from the queue.)
+        let magic_waits = magic_after && done;
+        // KH1's jump (`stylejump::JUMP`): KH1 keeps him in the air, KH2 takes him there only for
+        // one of its own moves (an Attack for KH2's aerial combo, Square: Aerial Dodge or KH2's
+        // glide, the jump press for KH2's glide on the jump button, a command chosen); no taking
+        // him on the stick in the rise (state 1), only on the ground.
+        let (square_pressed, jump_pressed_air) = super::stylejump::presses(buttons() & SQUARE != 0, buttons() & jump_button() != 0);
+        let in_jump = style_air == super::stylejump::JUMP;
+        // (The jump press in KH1's air is KH2's: its Aerial Dodge, or its glide on the jump button.
+        // Square: KH1's glide with the Glide style at KH1, held while falling; else KH2's.)
+        let kh2_glide_jump = in_jump && jump_pressed_air && matches!(state, 1 | 2);
+        if buttons() & SQUARE == 0 {
+            GLIDE_TRIED.store(false, Ordering::Relaxed);
+        }
+        let kh1_glide_here = in_jump && super::stylejump::kh1_glide() && buttons() & SQUARE != 0 && state == 2 && vel.is_some_and(|(_, up)| up < 0.0) && kh1_glide_open(base) && !GLIDE_TRIED.swap(true, Ordering::Relaxed);
+        if kh1_glide_here {
+            if let Some(what) = kh1_glide_start(base, actor) {
+                super::stylejump::started(super::stylejump::GLIDE, true, buttons() & jump_button() != 0);
+                log(&format!("{what}, out of KH1's jump"));
+            }
+        }
+        let square_pressed = square_pressed && !super::stylejump::kh1_glide();
+        let kh2_air = in_jump && (attack || square_pressed || kh2_glide_jump || super::stylejump::wanted());
+        let air_free = if in_jump { air_free && kh2_air } else { air_free };
+        let falling = falling && !in_jump;
+        let jump = jump || kh2_glide_jump;
+        let square = if in_jump { square_pressed || square && state == 0 } else { square };
+        let ground_states = if in_jump { state == 0 } else { matches!(state, 0 | 1) };
+        if in_jump && kh2_air && !air_free && matches!(state, 1 | 2) {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("KH1's jump: KH2's move asked, but KH1 doesn't let him act yet (state {state}, {above:.0} above the floor)"));
+            }
+        }
+        // KH1's roll (`styleroll`): KH1 keeps him while its motion plays (its request still
+        // pending on the first frames); an Attack KH1 took in it for KH2's combo hands him over at
+        // once with the press.
+        let in_roll = super::styleroll::active();
+        let roll_attack = in_roll && super::styleroll::take_attack();
+        let rolling = in_roll && state == 0 && (rd::<u32>(actor + 0x164) == super::styleroll::ROLL_MOTION || frames < 3 && rd::<u32>(actor + 0x178) != 0);
+        if in_roll && frames < 4 {
+            log(&format!("KH1's roll: frame {frames}, motion {:#x}, flags {:08x}", rd::<u32>(actor + 0x164), rd::<u32>(actor)));
+        }
+        let hold_roll = rolling && !roll_attack;
+        if !hold_roll && (frames >= 1 && (cast_landed || roll_attack || kh1_took_off) || frames >= 2 && air_free || frames >= 10 && (falling || jump || cancel || magic_waits || ground_states && (kh1_moving() || free || square || attack || in_jump && super::stylejump::wanted() && can_act(actor) != 0 || in_roll && super::styleroll::wanted() && can_act(actor) != 0))) {
+            let falling = falling || air_free;
+            JUMP_NOW.store(jump || ground_jump, Ordering::Relaxed);
+            if kh1_took_off {
+                // (KH1's take-off undone: on the floor, no rise.)
+                wr(actor + 0x3B0, 0.0f32);
+                wr(actor + 0x3B8, 0.0f32);
+                wr(actor + 0x3BC, 0.0f32);
+            }
+            // The press is KH2's jump on its first frame that takes input, however long KH1 holds
+            // him still first (the user: "hold a direction + jump the jump will be overwritten by
+            // the running animation": a stick hand-back in KH1's landing, then frozen frames
+            // dropped the press). A button held from before KH1's move stays held for KH2 (its
+            // last frame's press was the jump KH1's air attack came out of).
+            // (No buffer, s249: the jump isn't kept for KH2's first frame with input.)
+            // PENDING_JUMP.store(if jump || ground_jump { PENDING_JUMP_FRAMES } else { 0 }, Ordering::Relaxed);
+            let _ = (&PENDING_JUMP, PENDING_JUMP_FRAMES);
+            JUMP_HELD_OVER.store(if jump_raw && !(jump || ground_jump) { 1 } else { 2 }, Ordering::Relaxed);
+            JUMP_WATCH.store(40, Ordering::Relaxed);
+            // The spell's combo goes on only with an Attack or a spell that cut it or was chosen
+            // during it (else he is back in idle: the combo is over, the user).
+            SPELL_CUT.store(command && (attack_cut || magic_cut || magic_after || ATTACK_AFTER.load(Ordering::Relaxed)), Ordering::Relaxed);
+            // An Attack waiting through a spell (pressed during it): the combo goes on after it,
+            // as after KH2's own casts (the user: magic is part of the combo's queue).
+            // (Not out of KH1's own combo: KH2's starts over after it.)
+            if command && attack && SPELL_SLOT.load(Ordering::Relaxed) == 0 && !kh1_combo {
+                COMBO_ON.store(true, Ordering::Relaxed);
+            }
+            // A spell chosen during the cast runs from the queue once KH2 has him (`resume_command`).
+            MAGIC_AFTER.store(false, Ordering::Relaxed);
+            // (Cut short by KH2: what's left of KH1's motion isn't KH1's own action.)
+            CUT_LEFT.store(cancel, Ordering::Relaxed);
+            // KH1's own motion of the move KH2 cut (an air spell's cast: its `+0x164` stayed the
+            // cast's, 0x84 for Blizzard, then KH1 went on to its own landing 0x07 and its logic;
+            // the user: "we can't have soras animation state and logic from that state act when we
+            // try to set the kh2 landing animation"): KH1 is set to its idle motion at once
+            // (`0x14029D7F0 (actor, 0, 0)`, its own motion request; no action flag).
+            // (Set below, after KH1's state change: leaving its air state queues its own landing,
+            // 0x07, which took the place of the idle asked before it; the user, s220: "nothing has
+            // changed".)
+            if cast_landed {
+                // KH1's cast action ends here (it would at the end of its own landing): its
+                // "action running" flag off, so its can-act test lets KH2's input through.
+                wr(actor, rd::<u32>(actor) & !4);
+                LAND_NOW.store(true, Ordering::Relaxed);
+            }
+            if falling {
+                // (A frame missed would read as a jump in speed: kept to what a fall can be.)
+                *HANDOFF_FALL.lock().unwrap() = vel.map(|(h, up)| {
+                    let n = (h[0] * h[0] + h[1] * h[1]).sqrt();
+                    let k = if n > 20.0 { 20.0 / n } else { 1.0 };
+                    ([h[0] * k, h[1] * k], up.clamp(-30.0, 30.0))
+                });
+            }
+            if form_cast.is_some() && !falling {
+                *HANDOFF_SLIDE.lock().unwrap() = FORM_CAST.try_lock().ok().and_then(|f| f.map(|f| f.v));
+            }
+            let carried = ATTACK_AFTER.swap(false, Ordering::Relaxed);
+            FLY_PRESS_GROUND.store(carried, Ordering::Relaxed);
+            CARRY_FRAMES.store(if carried { CARRY_MAX } else { 0 }, Ordering::Relaxed);
+            HANDOFF.store(false, Ordering::Relaxed);
+            if GRAB_MOVE.load(Ordering::Relaxed) {
+                GRAB_BACK_MS.store(now_ms().max(1), Ordering::Relaxed);
+            }
+            if SWIM_MOVE.swap(false, Ordering::Relaxed) {
+                log(&format!(
+                    "water: out of KH1's swim, KH2 has him again (KH1 state {state}, {above:.0} above the floor, {}under the surface)",
+                    if rd::<f32>(actor + 0x14) >= rd::<f32>(actor + 0x2D4) { "" } else { "not " }
+                ));
+            }
+            SETTLE.store(false, Ordering::Relaxed);
+            KH1_WINDOW.store(false, Ordering::Relaxed);
+            ITEM_COMMAND.store(false, Ordering::Relaxed);
+            set_air_cast(None);
+            // KH1's state back to the ground one KH2 keeps him in, its exit steps run (the
+            // user: after a spell in the air KH1 still had him in its air state 1 / 2 and its
+            // air step glided when the jump button was held, KH1's glide under KH2), and KH2
+            // starts in the air when he is.
+            if state != 0 {
+                let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+                set(actor, 0);
+            }
+            if cancel {
+                // KH1's motion request (`0x14029D7F0` queues it: `+0x178` pending, `+0x17C` the
+                // motion), the last one asked this frame: its idle.
+                let setm: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+                let before = (rd::<u32>(actor + 0x164), rd::<u32>(actor + 0x178), rd::<u32>(actor + 0x17C));
+                setm(actor, 0, 0.0);
+                static N: AtomicU32 = AtomicU32::new(0);
+                if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log(&format!(
+                        "KH1's motion {:#x} of the cut move set to its idle (queued before: {} {:#x}; KH1 state {})",
+                        before.0, before.1, before.2, rd::<i32>(actor + 0x70)
+                    ));
+                }
+                AFTER_CUT_LOG.store(12, Ordering::Relaxed);
+            }
+            if rd::<f32>(actor + 0x3D4) > STEP_DOWN {
+                AIR_START.store(true, Ordering::Relaxed);
+            }
+            ROLL_NOW.store(square, Ordering::Relaxed);
+            FRESH.store(true, Ordering::Relaxed);
+            HANDOFF_POS.lock().unwrap().take();
+            if cast_landed {
+                log("KH1's air cast landed: KH2's landing");
+            } else if falling {
+                NO_GRAB.store(NO_GRAB_FRAMES, Ordering::Relaxed);
+                if air_free {
+                    AIR_MOVES.store(true, Ordering::Relaxed);
+                }
+                log(&format!("KH1's move ended in its {} ({above:.0} above the floor): KH2's fall", if state == 1 { "jump" } else { "fall" }));
+            } else {
+                log(&format!("KH1's move ended (state {state}): KH2 again"));
+            }
+        } else {
+            // An Attack pressed during KH1's move counts only on the frame it was pressed: if it
+            // couldn't cut the move then (the spell not out yet, the combo's last step), it is
+            // dropped, not kept for the move's end (the user: "We don't want a buffer type
+            // system to be in the game and only inputs to be accepted when its in a acceptable
+            // window").
+            if ATTACK_AFTER.swap(false, Ordering::Relaxed) {
+                note_dropped_attack(state);
+            }
+            HANDOFF_SEEN_MS.store(now_ms().max(1), Ordering::Relaxed);
+            HANDOFF_FRAME.store(true, Ordering::Relaxed);
+            release(&format!("KH1's own move, KH1 state {state}"));
+            return false;
+        }
+    }
+    // KH1 plays his death (`hurt`: HP gone, the stats' dying flag 4).
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    if stats > 0x10000 && (rd::<u8>(stats) & 4 != 0 || rd::<i32>(stats + 0x3C) < 1) {
+        release("he is down");
+        return false;
+    }
+    // KH1's own movement modes KH2 has no part in: the Jungle Slider (state 30; the user: he
+    // walked along the vines instead of sliding).
+    // Flight (the user: Sora couldn't fly in Neverland): KH2 has his jumps, so KH1's fall state,
+    // where flight starts, never ran. KH2's jump past its top, as high as KH1 wants, starts
+    // KH1's own flight, which then has him (state 8) until he lands.
+    let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+    let fly_attack = FLY_ATTACK.swap(false, Ordering::Relaxed);
+    let flying = rd::<i32>(actor + 0x70) == FLIGHT_STATE;
+    if fly_attack && flying {
+        // Out of KH1's flight (its exit step runs) to the ground state KH2 keeps him in; KH2
+        // starts in the air with the press.
+        set_state(actor, 0);
+        FLEW.store(true, Ordering::Relaxed);
+        FLY_PRESS.store(true, Ordering::Relaxed);
+        log(&format!("flight: Attack, KH2 takes him for an aerial combo ({:.0} above the floor)", rd::<f32>(actor + 0x3D4)));
+    }
+    if KH2_AIR.load(Ordering::Relaxed) && rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 && matches!(rd::<i32>(actor + 0x70), 0 | 1) {
+        // Coming down out of a jump or a finished air move (not mid-combo: KH2's aerial
+        // attacks sink a little).
+        let falling = DRIVER.try_lock().ok().and_then(|d| d.as_ref().and_then(|d| d.last_out.as_ref().map(|o| o.displacement[1] <= 0.0 && matches!(d.character.state_name(), StateName::Air | StateName::Jump)))).unwrap_or(false);
+        let room: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + FLIGHT_ROOM_RVA);
+        let above = rd::<f32>(actor + 0x3D4);
+        let flew = FLEW.load(Ordering::Relaxed) && above > FLEW_ABOVE;
+        if falling && (above > FLIGHT_ABOVE || flew || room(actor) != 0) {
+            wr(actor + 0x3C4, 0.0f32);
+            FLEW.store(false, Ordering::Relaxed);
+            if above > FLIGHT_ABOVE {
+                let start: unsafe extern "system" fn(usize) = std::mem::transmute(base + FLIGHT_START_RVA);
+                start(actor);
+            } else {
+                set_state(actor, FLIGHT_STATE);
+            }
+            log(&format!("flight: KH1 flies him ({:.0} above the floor; state now {})", above, rd::<i32>(actor + 0x70)));
+        }
+    }
+    if !HANDOFF.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == KH1_GLIDE_STATE && KH2_AIR.load(Ordering::Relaxed) {
+        set_state(actor, 0);
+        log("KH1 started its glide under KH2: back to KH2's");
+    }
+    let state = rd::<i32>(actor + 0x70);
+    let own_mode = kh1_mode(state);
+    KH1_MODE.store(own_mode, Ordering::Relaxed);
+    if own_mode {
+        release(&format!("KH1's own movement mode (KH1 state {state})"));
+        return false;
+    }
+    let slot = pose::sora_slot();
+    // (Also a fall just handed over from one of KH1's moves, before KH2's first frame of it: KH1's
+    // fall slot is still up then, and was taken for KH1's own action, so KH1 kept him falling
+    // in its animation every time (the user: KH1's fall after a spell; the log: "KH2's fall",
+    // then at once "KH1's own action, slot 10").)
+    let handed_fall = AIR_START.load(Ordering::Relaxed) || HANDOFF_FALL.try_lock().map_or(false, |f| f.is_some());
+    let airborne = handed_fall || DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.last_state.is_some() && d.character.airborne())).unwrap_or(false);
+    // (A motion we don't know, as the Dream Shield's own moveset's, is not taken for KH1's own
+    // action: the user saw KH1's idle and attacks with the shield.)
+    // KH1's own jump / fall / landing slots (8..13) with KH1's ground state: what's left of a
+    // fall KH2 has taken over (KH1 changes slot a few frames later), not an action of KH1's
+    // (the user: on landing after a spell, KH1's idle, then a snap to KH2).
+    let leftover_fall = matches!(slot, Some(8..=13)) && rd::<i32>(actor + 0x70) == 0;
+    // A KH1 move KH2 cut short (`CUT_LEFT`): its motion plays on in KH1 a while, and isn't KH1's
+    // to take him back for (the user: past frame 50 of a form's KH1 spell, KH1 still had him in
+    // its Aero motion until the stick moved; an Attack then waited 21-25 frames).
+    let cut_left = CUT_LEFT.load(Ordering::Relaxed) && matches!(slot, Some(s) if s > 7);
+    if !matches!(slot, Some(s) if s > 7) {
+        CUT_LEFT.store(false, Ordering::Relaxed);
+    }
+    if matches!(slot, Some(s) if s > 7) && !leftover_fall && !airborne && !FLY_PRESS.load(Ordering::Relaxed) && !cut_left {
+        release(&format!("KH1's own action, slot {}, KH1 state {}", slot.map_or("?".into(), |s| s.to_string()), rd::<i32>(actor + 0x70)));
+        return false;
+    }
+    let Some(kh2) = pose::kh2() else { return false };
+    let Ok(mut g) = DRIVER.try_lock() else { return false };
+    let d = g.get_or_insert_with(|| {
+        // Its abilities: `menu` (the ini's `abilities`: testing MAX, or KH1's menu and level).
+        let character = kh2.character.clone();
+        log("KH2's controller ready for Sora");
+        let mut anim = RigAnim::new(kh2.rig.clone());
+        // KH2 snaps a finished action straight into idle; softened (the user: smoother out of
+        // a combo).
+        anim.queued_blend = 14.0;
+        Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0, on_top: None, drive: Default::default(), motion_hits: Default::default() }
+    });
+    if FRESH.swap(false, Ordering::Relaxed) {
+        // Out of KH1's move: the jump button as held now, not as KH2 last saw it (`JUMP_HELD_OVER`).
+        match JUMP_HELD_OVER.swap(0, Ordering::Relaxed) {
+            1 => d.held.0 = true,
+            2 => d.held.0 = false,
+            _ => {}
+        }
+        // (KH1's own move left its speed in his push (`+0x120`): not carried into KH2's first
+        // frames, the user: "it teleports sora forward at the start of the attack" after a KH1
+        // spell.)
+        NO_CARRY.store(3, Ordering::Relaxed);
+        wr(actor + 0x120, [0.0f32; 3]);
+        // Back from a command of KH1's (a spell, an item): that was fighting, so KH2's battle
+        // stance with the Keyblade, as after an attack (the user: after a standing spell he went
+        // back to the plain idle).
+        if FROM_COMMAND.swap(false, Ordering::Relaxed) {
+            d.fought = Some(Instant::now());
+        }
+        // Back from KH1's own move: KH2's controller starts over (standing), keeping its
+        // abilities.
+        let abilities = d.character.abilities.clone();
+        let combo = d.character.combo_state();
+        // (In a Drive Form, the form's.)
+        d.character = super::form::character(&d.drive, kh2).clone();
+        d.character.abilities = abilities;
+        // After a KH1 spell: the combo goes on from the slot it took (not after the combo's last).
+        let spell = SPELL_SLOT.swap(0, Ordering::Relaxed);
+        // (Only when something went on from it: an Attack or a spell that cut it or waited
+        // through it, `SPELL_CUT`. A spell played to its end leaves him in idle, and back in idle
+        // the combo is over, the user.)
+        let cut = SPELL_CUT.swap(false, Ordering::Relaxed);
+        if COMBO_ON.swap(false, Ordering::Relaxed) && spell == 0 || matches!(spell, 1 | 2) && cut {
+            d.character.set_combo_state(combo);
+        }
+        d.grounded = true;
+        // An Attack press from before (during KH1's move) is not KH2's (one asked of KH1 then
+        // is: `FLY_PRESS_GROUND`).
+        combat::take_press();
+    }
+    if FLY_PRESS.load(Ordering::Relaxed) || AIR_START.swap(false, Ordering::Relaxed) {
+        // Out of KH1's flight or one of its moves in the air: in the air where it had him.
+        d.grounded = false;
+    }
+    if let Some(v) = HANDOFF_SLIDE.lock().unwrap().take() {
+        // Out of a form's KH1 cast: his slide goes on (KH2's idle / walk / run by the stick).
+        if d.grounded && !d.character.airborne() {
+            d.character.carry_on_ground(v);
+        }
+    }
+    if let Some((h, up)) = HANDOFF_FALL.lock().unwrap().take() {
+        // Out of KH1's fall: falling on as KH1 had him (KH2's fall animation).
+        d.grounded = false;
+        d.character.carry_into_air(h, up);
+        if AIR_MOVES.swap(false, Ordering::Relaxed) {
+            d.character.allow_air_dodge();
+        }
+    }
+    if ROLL_NOW.swap(false, Ordering::Relaxed) {
+        d.held.1 = false;
+    }
+    if JUMP_NOW.swap(false, Ordering::Relaxed) {
+        d.held.0 = false;
+    }
+    if LAND_NOW.swap(false, Ordering::Relaxed) {
+        d.grounded = true;
+        match LAND_SLIDE.lock().unwrap().take() {
+            Some(v) => d.character.land_sliding(v),
+            None => d.character.land_now(),
+        }
+        d.held.0 = false;
+    }
+    d.growth.update(base, &mut d.character);
+    super::form::abilities(&mut d.drive, &mut d.character);
+    // Glide at KH1 (`stylejump`): KH1's glide, none of KH2's.
+    // (Its level kept aside and given back with the style at KH2: Sora's abilities are only set
+    // again when KH1's menu changes, so a 0 left here took KH2's glide away for good, the user:
+    // "unable to input a kh2 glide when glide is set to KH2, nothing comes out".)
+    if super::stylejump::kh1_glide() {
+        if d.character.abilities.glide != 0 {
+            KH2_GLIDE_KEPT.store(d.character.abilities.glide as u32, Ordering::Relaxed);
+            d.character.abilities.glide = 0;
+        }
+    } else if d.character.abilities.glide == 0 {
+        let kept = KH2_GLIDE_KEPT.swap(0, Ordering::Relaxed);
+        if kept != 0 {
+            d.character.abilities.glide = kept as _;
+        }
+    }
+    // Glide on Square, as KH1's Superglide was (the user), or on the jump button (ini `glide`).
+    // (Not out of a flight: there Square is flight's descend.)
+    // Air casts (Reflect) fall as they play, as KH1's spells do (the user).
+    d.character.air_magic_falls = true;
+    // KH1's own fall for them (the user: Reflect should land with KH1's gravity, closer to KH1's
+    // physics): KH1's air state falls `KH1_FALL_ACCEL` × t² / 2 a frame at its 60 Hz step
+    // (`0x1402AD3A0`: 0.4847 × 0.5 × t², the step `0x1423405DC` 1.0), at most `KH1_FALL_MAX` a
+    // frame; `air_cast_fall` scales it.
+    let g = d.character.params.gravity;
+    d.character.air_magic_gravity = if g > 0.0 { super::settings::get().air_cast_fall * KH1_FALL_ACCEL / g } else { 1.0 };
+    d.character.air_magic_fall_max = Some(KH1_FALL_MAX);
+    // Final Form: KH2's own (its cast motions' no-gravity frames, KH2's gravity), as KH2 has it
+    // (the user: "aerial final form reflect is not 1:1 physics wise with kh2").
+    // Base Sora's Aerial Magic style at KH2 (`styles`): KH2's own air casts too (Reflect's with
+    // them), not KH1's fall.
+    // Master Form as Final: its casts are one clip on the ground and in the air (D370..D374, a
+    // no-gravity range through most of each), KH2 holding him there as it plays.
+    if super::form::in_final() || super::form::in_master() || super::formmagic::base_kh2(true) {
+        d.character.air_magic_falls = false;
+        d.character.air_magic_gravity = 1.0;
+        d.character.air_magic_fall_max = None;
+    }
+    d.character.glide_button = if super::settings::get().glide_on_square && !FLEW.load(Ordering::Relaxed) { character_core::GlideButton::Action } else { character_core::GlideButton::Jump };
+    if d.last_state.is_none() {
+        // (Re)starting: face where KH1 had him facing.
+        d.character.set_facing(rd::<f32>(actor + 0x3C));
+    }
+
+    // Input: direction from KH1's camera-relative move direction, tilt from the left stick.
+    let buttons = buttons();
+    let tilt = move_tilt();
+    let dir = stick_dir(actor, tilt);
+    let stick = if tilt > 0.0 { (dir * tilt).to_array() } else { [0.0, 0.0] };
+    // With L1 held the face buttons are KH1's shortcuts, not KH2's jump / action; a button
+    // still held when L1 lets go stays KH1's until released (`held` sees it raw).
+    // (A command submenu open: Circle backs out of it, not KH2's jump.)
+    let l1_menu = super::shortcuts::menu_on_l1(buttons);
+    let shortcut = l1_menu || super::shortcuts::submenu_open();
+    let jump_raw = buttons & jump_button() != 0;
+    let action_raw = buttons & SQUARE != 0;
+    let jump = jump_raw && !shortcut;
+    // (Square stays KH2's with a submenu open: only the L1 shortcut menu uses it; spec 3.2.)
+    let action = action_raw && !l1_menu;
+    // KH1's Attack command (Cross with Attack chosen in the menu) is KH2's attack button.
+    let attack = combat::take_press() | FLY_PRESS.swap(false, Ordering::Relaxed);
+    // A spell chosen and waiting for the move's window goes first: an Attack pressed meanwhile
+    // doesn't take that window from it (the user: in a second finisher, magic then Attack, and
+    // the Attack overrode the magic).
+    let spell_first = combat::spell_waiting() || super::reflect::waiting() || super::formmagic::waiting() || super::limits::waiting();
+    let attack = attack && !spell_first;
+    // KH1 holding him still (its control step skipped or him unable to act: cutscene moments,
+    // tutorial windows; the user: he moved anyway): KH2 gets no input (he still falls, lands
+    // and finishes what he was doing).
+    let frozen = FROZEN_NOW.load(Ordering::Relaxed);
+    if LAST_FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
+        if let Ok(mut q) = FLICKER.lock() {
+            q.push_back(now);
+            while q.front().is_some_and(|t| now.saturating_sub(*t) > 3000) {
+                q.pop_front();
+            }
+            if q.len() >= 10 {
+                q.clear();
+                RIDE_UNTIL.store(now + 5000, Ordering::Relaxed);
+                log(&format!("KH1's control comes and goes (10 times in 3 s): KH1 has him for 5 s (KH1 state {}, flags {:08x})", rd::<i32>(actor + 0x70), rd::<u32>(actor)));
+            }
+        }
+    }
+    if FROZEN.swap(frozen, Ordering::Relaxed) != frozen {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 400 {
+            // What he is doing (the user: the magic carpet after Genie Jafar didn't move).
+            let on = pose::ptr(rd::<u32>(actor + 0x398));
+            let detail = format!(
+                "KH1 state {}, slot {:?} (last {}), flags {:08x}, +0x444 {:08x}, motion {:#x}, on {:#x} (object {})",
+                rd::<i32>(actor + 0x70),
+                pose::sora_slot(),
+                super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed) & 0xFFFF,
+                rd::<u32>(actor),
+                rd::<u32>(actor + 0x444),
+                rd::<u16>(actor + 0x3EA),
+                on,
+                if on > 0x10000 { super::probe::object_id(on) as i64 } else { -1 }
+            );
+            log(&format!("{}; {detail}", if frozen { "KH1 holds Sora still: no input for KH2" } else { "KH1 lets Sora act again" }));
+        }
+    }
+    // Held still on the ground for more than a frame (a cutscene starting, the user: he slid
+    // on and snapped back): KH1 has him, so nothing of KH2's (a run's slide, a lunge) moves him.
+    let still = if frozen { FROZEN_FRAMES.fetch_add(1, Ordering::Relaxed) + 1 } else { FROZEN_FRAMES.store(0, Ordering::Relaxed); 0 };
+    if still >= 2 && !d.character.airborne() {
+        if d.last_state.is_some() {
+            if d.logged < 400 {
+                d.logged += 1;
+                log("KH1 has Sora (KH1 holds him still)");
+            }
+            FRESH.store(true, Ordering::Relaxed);
+        }
+        d.last_state = None;
+        d.held = (true, true);
+        // KH1's script holding him (`+0x444` bit 1: a scene, e.g. a cup round's victory, held
+        // here after its actions for him ended): a scene's frame for a form (`scene_frame`, the
+        // run carried on from its script's frames; counted in `physics`, the Driver taken here).
+        // (The user, s314: the run ended with the script's actions 1 s in, and Valor Form never
+        // reverted in the Pegasus Cup's victory scene.)
+        if rd::<u32>(actor + 0x444) & 1 != 0 {
+            SCENE_HELD.store(true, Ordering::Relaxed);
+            if let Ok(mut w) = LAST_WHY.try_lock() {
+                if !w.starts_with("KH1's script holds him still") {
+                    w.clear();
+                    w.push_str("KH1's script holds him still (+0x444)");
+                }
+            }
+        }
+        // (A carried Attack waits these frames too, `CARRY_MAX` at most.)
+        if FLY_PRESS_GROUND.load(Ordering::Relaxed) && CARRY_FRAMES.fetch_sub(1, Ordering::Relaxed) <= 1 {
+            FLY_PRESS_GROUND.store(false, Ordering::Relaxed);
+        }
+        drop_pose();
+        return false;
+    }
+    // An Attack carried out of a KH1 move's cut: KH2's on the first frame KH1 lets him act (else
+    // dropped after `CARRY_MAX`), whatever waits (it was the cut's own press).
+    let carried_attack = if FLY_PRESS_GROUND.load(Ordering::Relaxed) {
+        if frozen {
+            // (No buffer, s249: dropped at once when KH1 holds him still; s234 kept it up to
+            // `CARRY_MAX` frames:)
+            // if CARRY_FRAMES.fetch_sub(1, Ordering::Relaxed) <= 1 {
+            FLY_PRESS_GROUND.store(false, Ordering::Relaxed);
+            log("an Attack carried out of KH1's move: dropped (KH1 holds him still, no buffer)");
+            // }
+            false
+        } else {
+            FLY_PRESS_GROUND.store(false, Ordering::Relaxed);
+            true
+        }
+    } else {
+        false
+    };
+    // A jump pressed in KH1's move (`PENDING_JUMP`): KH2's first frame with input jumps, held or
+    // tapped; dropped if KH1 holds him still for longer.
+    // (Off, s249: no buffer.)
+    // let forced_jump = if frozen {
+    //     let _ = PENDING_JUMP.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| Some(n.saturating_sub(1)));
+    //     false
+    // } else {
+    //     PENDING_JUMP.swap(0, Ordering::Relaxed) > 0
+    // };
+    let forced_jump = false;
+    if forced_jump {
+        log("a jump pressed in KH1's move: KH2's jump now");
+    }
+    let (stick, jump, action, attack) = if frozen { ([0.0, 0.0], false, false, false) } else { (stick, jump, action, attack || carried_attack) };
+    if carried_attack {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 30 {
+            log(&format!("an Attack carried out of KH1's move: KH2's now ({:?})", d.character.state_name()));
+        }
+    }
+    let input = Input {
+        stick,
+        jump: Button { pressed: jump && !d.held.0 || forced_jump, held: jump },
+        attack: Button { pressed: attack, held: attack },
+        action: Button { pressed: action && !d.held.1, held: action },
+        lock: Button::default(),
+    };
+    d.held = (jump_raw, action_raw);
+    // Jump / Glide at KH1 (`stylejump`): KH1's jump on the fresh jump press, its glide on Square
+    // held while falling.
+    if !action_raw {
+        GLIDE_TRIED.store(false, Ordering::Relaxed);
+    }
+    let style_press = if input.jump.pressed { Some(false) } else if action_raw { Some(true) } else { None };
+    if let Some(glide_press) = style_press.filter(|_| !frozen && !shortcut) {
+        if let Some(what) = style_air_start(base, actor, d, glide_press) {
+            hand_to_kh1(what);
+            FROM_COMMAND.store(false, Ordering::Relaxed);
+            super::stylejump::started(if what.contains("glide") { super::stylejump::GLIDE } else { super::stylejump::JUMP }, action_raw, jump_raw);
+            d.last_state = None;
+            d.held = (true, true);
+            drop_pose();
+            return false;
+        }
+    }
+    // Dodge Roll at KH1 (`styleroll`): KH1's own roll, on the fresh Square with the stick.
+    if input.action.pressed && !frozen && !shortcut && style_roll_start(base, actor, d, dir, tilt) {
+        hand_to_kh1("KH1's dodge roll (the Dodge Roll style is KH1's)");
+        FROM_COMMAND.store(false, Ordering::Relaxed);
+        super::styleroll::started();
+        d.last_state = None;
+        d.held = (true, true);
+        drop_pose();
+        return false;
+    }
+
+    // Where he is, KH2's way up (KH1's world is y-down).
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    let pos = [p[0], -p[1], p[2]];
+    let above = rd::<f32>(actor + 0x3D4);
+    // KH1's own motion on KH2's first steps after a cut of a KH1 move (what KH1 still plays).
+    if AFTER_CUT_LOG.load(Ordering::Relaxed) > 0 {
+        let n = AFTER_CUT_LOG.fetch_sub(1, Ordering::Relaxed);
+        log(&format!(
+            "after the cut, step {}: KH1 motion {:#x} (+0x168 {:#x}, time {:.1}, queued {} {:#x}), KH1 state {}, {:.0} above the floor, KH2 {:?} grounded {}",
+            13 - n,
+            rd::<u32>(actor + 0x164),
+            rd::<u32>(actor + 0x168),
+            rd::<f32>(actor + 0x16C),
+            rd::<u32>(actor + 0x178),
+            rd::<u32>(actor + 0x17C),
+            rd::<i32>(actor + 0x70),
+            above,
+            d.character.state_name(),
+            d.grounded
+        ));
+    }
+    let mut targets = d.strikes.look(actor);
+    // KH1's lock-on (R1): while it holds a target (`0x142DB3F10` its state, the target's handle
+    // at `0x142DB3F18`, which the command menu aims every command at), KH2 locks the same
+    // enemy, so its swings home in on and turn toward it.
+    let locked = if rd::<u32>(base + LOCK_STATE_RVA) != 0 { pose::ptr(rd::<u32>(base + LOCK_TARGET_RVA)) } else { 0 };
+    // KH1 locks a point of the target (`0x142DB3F1C`, an index into its collision record's lock
+    // points; `docs/kh1-lockon.md`): KH2 homes in on that point (the user: locked on Darkside's
+    // hand, Sora went for his body), wherever the actor's root is.
+    if locked > 0x10000 {
+        let point: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
+        let mut v = [0.0f32; 4];
+        let r = point(locked, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0), &mut v);
+        if v[..3].iter().all(|x| x.is_finite()) && r.is_finite() && r >= 0.0 {
+            let r = r.min(500.0);
+            // Its point and size as KH2's target shape (as `combat::bodies` has every target).
+            let t = TargetInfo { id: locked as u32, pos: [v[0], -v[1], v[2]], radius: r.max(10.0), height: r.max(10.0) };
+            match targets.iter_mut().find(|x| x.id == t.id) {
+                Some(x) => *x = t,
+                None => targets.push(t),
+            }
+        }
+    }
+    let lock = (locked > 0x10000).then(|| locked as u32).filter(|id| targets.iter().any(|t| t.id == *id));
+    if lock != d.character.lock() && d.logged < 400 {
+        d.logged += 1;
+        log(&format!("lock-on: {lock:?}"));
+    }
+    d.character.set_lock(lock);
+    // KH2 aims a swing at any enemy in reach; here only at KH1's own target, the R1 lock or the
+    // small cursor's soft target (the user: Sora swung toward points he wasn't targeting). The
+    // other enemies near him still count for the combo rows that look at every enemy (the user:
+    // Magnet Burst hardly came out: its row wants a foe off to the side; Explosion's and
+    // Vicinity Break's likewise), so they stay in the list.
+    let auto_aim = super::settings::get().auto_aim;
+    d.character.set_auto_target(auto_aim);
+    // KH2's combo keeps one direction (the user): the stick aims only a combo's first swing; a
+    // target (R1's lock or KH1's cursor) is faced at the start of each swing, never mid-swing.
+    d.character.set_face_lock(true);
+    d.character.set_combo_direction_lock(true);
+    let env = Env { pos, grounded: d.grounded, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
+    // A Reflect chosen from the Magic menu: KH2's cast as soon as its move allows (`reflect`).
+    super::reflect::before_step(actor, &mut d.character);
+    // A Drive chosen from page 2 (`form`): the change, the form's end.
+    super::form::before_step(&mut d.drive, &mut d.character, &mut d.anim, kh2, actor);
+    // A KH2 spell chosen in Wisdom Form: its cast (`formmagic`).
+    super::formmagic::before_step(actor, &mut d.character);
+    // A Limit Form limit chosen, its script's requests (`limits`).
+    super::limits::before_step(actor, &mut d.character);
+    let tp = Instant::now();
+    let mut out = d.character.step(&input, &env);
+    super::prof::add(super::prof::STEP, tp);
+    // Vicinity Break's and Magnet Burst's rows, when equipped: why a press didn't take one, or
+    // that it did (once per combo each, `Character::take_combo_note`; the player: Vicinity
+    // Break never came).
+    while let Some(n) = d.character.take_combo_note() {
+        static NOTES: AtomicU32 = AtomicU32::new(0);
+        if NOTES.fetch_add(1, Ordering::Relaxed) < 300 {
+            log(&format!("combo rows: {n}"));
+        }
+    }
+    // Out of flight for a combo: he stays up through it (the user: Sora should remain in
+    // flight throughout the combo); KH2's aerial attacks sink between hits, so no sinking while
+    // attacking (rises, as an upward finisher's, stay). Flight takes him again once it's done.
+    let flew = FLEW.load(Ordering::Relaxed) && d.character.airborne();
+    if flew && matches!(d.character.state_name(), StateName::Attack | StateName::Magic | StateName::AerialDodge) {
+        out.displacement[1] = out.displacement[1].max(0.0);
+        // Toward the height of what the swing goes for (KH2's own approach is level).
+        if matches!(d.character.state_name(), StateName::Attack) {
+            let aim = targets
+                .iter()
+                .filter(|t| Some(t.id) == lock || (lock.is_none() && auto_aim))
+                .map(|t| (t, (t.pos[0] - pos[0]).hypot(t.pos[2] - pos[2])))
+                .filter(|(_, h)| *h < FLY_AIM_REACH)
+                .min_by(|a, b| a.1.total_cmp(&b.1));
+            if let Some((t, _)) = aim {
+                let gap = (t.pos[1] - FLY_AIM_BELOW) - pos[1];
+                if gap.abs() > 8.0 {
+                    out.displacement[1] = (gap * FLY_AIM_RATE).clamp(-FLY_AIM_MAX, FLY_AIM_MAX);
+                }
+            }
+        }
+    }
+    // In flight's combo: not down onto the floor unless Square (descend) is held.
+    let descend = buttons & SQUARE != 0;
+    if flew && !descend && out.displacement[1] < 0.0 {
+        out.displacement[1] = out.displacement[1].max(-(above - FLY_FLOOR).max(0.0));
+    }
+    set_sparkle(flew);
+    KH2_AIR.store(d.character.airborne(), Ordering::Relaxed);
+
+    // KH2's displacement: the sideways part through KH1's mover (walls, slopes, steps up); the
+    // height is KH2's while he is in the air (KH1's mover snaps a grounded actor back onto the
+    // floor every frame, which undid a jump's first small rises: the user, stage 8).
+    let air = d.character.airborne();
+    let rising = out.displacement[1] > 0.0;
+    let up_before = -p[1];
+    wr(actor + 0x490, rd::<[f32; 4]>(actor + 0x10));
+    // What KH1's physics step adds to a move (`0x140298230`), as it would: a carrying
+    // platform's motion (`+0x200`, while `+0x160 & 4`) and the frame's push (`+0x120`,
+    // cleared once used), and the touched-objects mask (`+0x90`) cleared before the move.
+    let settings = super::settings::get();
+    let fresh_frame = NO_CARRY.load(Ordering::Relaxed) > 0;
+    if fresh_frame {
+        NO_CARRY.fetch_sub(1, Ordering::Relaxed);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 30 {
+            log(&format!("KH2's first frames after KH1's move: {:?} (motion {}, frame {}), move {:.1?}, KH1's push {:.1?} not carried", out.state, out.motion, out.clip_frame, out.displacement, rd::<[f32; 3]>(actor + 0x120)));
+        }
+    }
+    let mut carry = if settings.carry && !fresh_frame { carried(actor, &mut d.logged) } else { [0.0; 3] };
+    // (In the air just after one of KH1's moves, KH1's push doesn't lift him: a push KH1's move or
+    // landing left is no platform's, and a jump then went far too high, the user.)
+    if JUMP_WATCH.load(Ordering::Relaxed) > 0 && d.character.airborne() && rd::<u32>(actor + 0x160) & 4 == 0 {
+        carry[1] = 0.0;
+    }
+    // (The first KH2 frames after one of KH1's moves, in the air, logged: the user, KH2's high jump
+    // out of KH1's landing after a KH1 air attack went "way higher than it should".)
+    if JUMP_WATCH.load(Ordering::Relaxed) > 0 {
+        if JUMP_WATCH.fetch_sub(1, Ordering::Relaxed) > 0 && d.character.airborne() {
+            log(&format!(
+                "after KH1's move: {:?} up {:.2} carried {:.2?} push {:.2?} above floor {:.1} y {:.1}",
+                out.state, out.displacement[1], carry, rd::<[f32; 3]>(actor + 0x120), rd::<f32>(actor + 0x3D4), -rd::<f32>(actor + 0x14)
+            ));
+        }
+    }
+    if settings.carry {
+        wr(actor + 0x90, 0u64);
+    }
+    let mv: MoveFn = std::mem::transmute(base + MOVE_RVA);
+    // Rising: the rise goes through KH1's mover too, in KH1's fall state for the move so that
+    // it collides as in the air (its collision query `0x140297F20` takes that from the movement
+    // state; in the ground state it snaps him back onto the floor), which stops him at a
+    // ceiling (KH1's own jump: `0x1402AD260`).
+    // Falling too (the user: he couldn't land on boxes): KH1's fall state's mover stops him on
+    // whatever is under him, objects included, as KH1's own fall does; the map floor alone
+    // (`+0x320`) doesn't know boxes.
+    let rise3d = settings.ceilings && (rising || air);
+    // An attack's lunge doesn't walk him into a room exit (`gates`): its face event dropped,
+    // this frame's move undone.
+    // (Not an air attack coming down more than it lunges: under it is a floor or a pit's trigger,
+    // which KH1's own fall would meet, not a doorway; the player: "Fell into the blackness" of the
+    // Bottomless Hall "but didn't transition to the chambers underneath".)
+    let comes_down = air && !rising && -out.displacement[1] > glam::Vec2::new(out.displacement[0], out.displacement[2]).length();
+    let attack_move = matches!(out.state, StateName::Attack) && !comes_down;
+    let before_move = rd::<[f32; 4]>(actor + 0x10);
+    super::gates::pre_move(actor, attack_move);
+    super::gates::attacking(actor, attack_move);
+    if rise3d {
+        let state = rd::<i32>(actor + 0x70);
+        wr(actor + 0x70, AIR_STATE);
+        mv(actor, &[out.displacement[0] + carry[0], -out.displacement[1] + carry[1], out.displacement[2] + carry[2], 0.0], 0);
+        wr(actor + 0x70, state);
+    } else {
+        mv(actor, &[out.displacement[0] + carry[0], 0.0, out.displacement[2] + carry[2], 0.0], 0);
+    }
+    // A face event dropped: the whole move undone, its height too. (KH2's height in the air was
+    // set again below from where the move began, so an air combo sank on through a trigger it had
+    // touched, its event dropped: through a pit's, into the dark under the Bottomless Hall.)
+    let undone = if let Some(e) = super::gates::post_move() {
+        wr(actor + 0x10, before_move);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log(&format!("an attack's lunge touched map event {e}: kept out of it (the move undone{})", if air { ", his height held" } else { "" }));
+        }
+        true
+    } else {
+        false
+    };
+    if settings.carry {
+        wr(actor + 0x120, [0.0f32; 4]);
+    }
+    // The floor under where he is now (KH1 y-down: floor point `+0x320`).
+    let floor_up = -rd::<f32>(actor + 0x324);
+    let walked_up = -rd::<f32>(actor + 0x14);
+    if air || rising {
+        let mut y = up_before + if undone { 0.0 } else { out.displacement[1] };
+        let mut stopped = false;
+        let mut on: Option<usize> = None;
+        if rise3d && !rising && !undone {
+            // Stopped short of a fall (less than half of it happened): standing on something.
+            let got = -rd::<f32>(actor + 0x14);
+            // Only with KH1's collision saying he is on ground (`+0x2D0` bit 0 clear, as its
+            // physics step reads it): a wall beside him also stops the air move, and he hung on
+            // the side of crates and tents (the user's video).
+            let ground = rd::<u32>(actor + 0x2D0) & 1 == 0;
+            stopped = ground && out.displacement[1] < -0.5 && (up_before - got) < -out.displacement[1] * 0.5;
+            if stopped {
+                y = got;
+            }
+        }
+        if !rising {
+            // A box's top crossed by the fall (the user, twice: he couldn't land on boxes; KH1's
+            // fall finds them with its object-top finder, not the mover in our states).
+            let fell = (up_before - y).max(0.0);
+            if let Some((top, obj)) = object_top(base, actor, up_before, fell + 0.5) {
+                if top > floor_up + 0.5 && top >= y - 0.5 {
+                    y = top;
+                    stopped = true;
+                    on = Some(obj);
+                }
+            }
+        }
+        if rising {
+            RISE_FRAMES.fetch_add(1, Ordering::Relaxed);
+        } else {
+            RISE_FRAMES.store(0, Ordering::Relaxed);
+            SLOPE_RUN.store(false, Ordering::Relaxed);
+        }
+        if rise3d && rising && !undone {
+            // KH2's ceiling rule: less than 49% of the rise happened.
+            // (KH1's mover may cut the rise short, never add to it: pushed out of an enemy's
+            // body it lifted him, and swing after swing he rode up the target he was locked on
+            // until he was above it and his swings missed, the user.)
+            let got = (-rd::<f32>(actor + 0x14)).min(up_before + out.displacement[1]);
+            if got < -rd::<f32>(actor + 0x14) - 0.5 {
+                static RODE: AtomicU32 = AtomicU32::new(0);
+                if RODE.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log(&format!("rise: KH1's mover lifted him {:.1} past KH2's rise {:.1} (an actor's body): kept to KH2's", -rd::<f32>(actor + 0x14) - got, out.displacement[1]));
+                }
+            }
+            y = got;
+            // KH1's collision bit 3 (`+0x2D0` 9 = in the air + on a slope's surface): a steep roof
+            // he is on or sliding off, not a ceiling. KH1's air mover pushes him along it rather
+            // than up, and every jump was read as a head bump and cut short until a roll (the
+            // user's rooftops; the logs: "rose 0.0 of 7.5 at height 620.1, flags 9", jump after
+            // jump, where real ceilings show flags 1 and a partial rise). KH2's own rise there.
+            // Only a contact there from the start of the rise and unbroken since: a ceiling met
+            // later in a jump can carry bit 3 too (the user: in Olympus's lobby he jumped through
+            // the roof; the log: "rise on a slope's contact (flags 9)" there).
+            let slope_now = rd::<u32>(actor + 0x2D0) & 8 != 0;
+            let n = RISE_FRAMES.load(Ordering::Relaxed);
+            let run = slope_now && (n <= 3 || SLOPE_RUN.load(Ordering::Relaxed));
+            SLOPE_RUN.store(run, Ordering::Relaxed);
+            let slope = run;
+            if slope && out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
+                y = up_before + out.displacement[1];
+                static SLOPES: AtomicU32 = AtomicU32::new(0);
+                if SLOPES.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log(&format!("rise on a slope's contact (flags {:08x}): KH2's own rise {:.1}, not a ceiling", rd::<u32>(actor + 0x2D0), out.displacement[1]));
+                }
+            } else if out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
+                d.character.hit_ceiling();
+                static BONKS: AtomicU32 = AtomicU32::new(0);
+                if BONKS.fetch_add(1, Ordering::Relaxed) < 40 {
+                    log(&format!("ceiling: rose {:.1} of {:.1} at height {:.1} (collision flags {:08x})", got - up_before, out.displacement[1], up_before - floor_up, rd::<u32>(actor + 0x2D0)));
+                }
+            }
+        }
+        if stopped && !rising && y > floor_up {
+            wr(actor + 0x14, -y);
+            d.grounded = true;
+            d.on_top = Some(y);
+            if let Some(obj) = on {
+                let stand: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + STAND_ON_RVA);
+                stand(actor, obj);
+            }
+            static ON_TOP: AtomicU32 = AtomicU32::new(0);
+            if ON_TOP.fetch_add(1, Ordering::Relaxed) < 40 {
+                log(&format!("landed on something {:.1} above the floor (object {:?}, standing on {:#x})", y - floor_up, on, pose::ptr(rd::<u32>(actor + 0x398))));
+            }
+        } else if y <= floor_up && !rising {
+            wr(actor + 0x14, -floor_up);
+            d.grounded = true;
+            d.on_top = None;
+            // (Pits: a landing with no floor face under him (`+0x2DC` 0xFFFF; KH1's floor query
+            // `0x140194920` then makes up a floor point): logged, for the next look at a pit KH2
+            // doesn't fall into.)
+            let face = rd::<u16>(actor + 0x2DC);
+            if face == 0xFFFF {
+                static N: AtomicU32 = AtomicU32::new(0);
+                if N.fetch_add(1, Ordering::Relaxed) < 30 {
+                    log(&format!(
+                        "landed with no floor face under him (collision flags {:08x}, event {}, world {:#x} room {:#x}, y {floor_up:.0})",
+                        rd::<u32>(actor + 0x2D0),
+                        rd::<u16>(actor + 0x2D8),
+                        rd::<u32>(base + WORLD_RVA),
+                        rd::<u32>(base + ROOM_RVA)
+                    ));
+                }
+            }
+        } else {
+            wr(actor + 0x14, -y.max(floor_up));
+            d.grounded = false;
+            d.on_top = None;
+        }
+    } else {
+        // On the ground: where the mover walked him, stepping down onto a floor up to 24 below
+        // (KH2's floor ray), else walking off the edge into a fall. On top of something (a
+        // box): as long as the ground mover keeps him at its height (it stands him on objects;
+        // the map floor doesn't know them).
+        let drop = walked_up - floor_up;
+        // An object's top under him (KH1's finder, from where he is down a step).
+        let start = walked_up.max(up_before) + 1.0;
+        let top = object_top(base, actor, start, STEP_DOWN + 1.0).filter(|(t, _)| *t > floor_up + 1.0 && start - *t <= STEP_DOWN + 1.0);
+        // Stood on something the map floor doesn't know that isn't an object KH1's finder sees
+        // (the fall's landing above): kept there while KH1's collision has him on ground at
+        // that height.
+        let kept = top.is_none()
+            && d.on_top.is_some_and(|t| walked_up > floor_up + 1.0 && (walked_up - t).abs() <= STEP_DOWN)
+            && rd::<u32>(actor + 0x2D0) & 1 == 0;
+        if kept {
+            d.on_top = Some(walked_up);
+            d.grounded = true;
+        } else if let Some((t, obj)) = top {
+            if d.on_top.is_none() {
+                static STOOD: AtomicU32 = AtomicU32::new(0);
+                if STOOD.fetch_add(1, Ordering::Relaxed) < 40 {
+                    log(&format!("standing on object {obj:#x}, {:.1} above the floor", t - floor_up));
+                }
+            }
+            d.on_top = Some(t);
+            wr(actor + 0x14, -t);
+            let stand: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + STAND_ON_RVA);
+            stand(actor, obj);
+            d.grounded = true;
+        } else if drop <= STEP_DOWN {
+            d.on_top = None;
+            wr(actor + 0x14, -floor_up);
+            d.grounded = true;
+        } else {
+            d.on_top = None;
+            d.grounded = false;
+        }
+    }
+    // Height above the floor for KH2's next step.
+    wr(actor + 0x3D4, (-rd::<f32>(actor + 0x14)) - floor_up);
+    // Facing.
+    let f = out.facing;
+    wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
+    wr(actor + 0x150, f);
+    // KH1's own air moves (its jump's input step `0x1402ADA90` tries them in this order):
+    // vines and climbable walls (state 10), ledges (13), bars (`0x1402C7E00`), objects to
+    // hang from, and water to swim in (17). Tried while KH2 has him falling, the stick held.
+    // As KH1's jump step tries them (`0x1402ADA90`): every frame of the jump, rising too (KH1
+    // skips them only in the 15 frames after jumping off something, flag 0x10000, a jump KH1
+    // has itself; the user: jumping into a ladder didn't catch it until the top of the jump),
+    // the stick held or not (KH1 passes its input either way; the user: ladders and poles were
+    // hit or miss from a jump).
+    let no_grab = NO_GRAB.load(Ordering::Relaxed);
+    if no_grab > 0 {
+        NO_GRAB.store(no_grab - 1, Ordering::Relaxed);
+    }
+    // Water first, in any of KH2's states (an air combo, an Aerial Dodge, a glide, a Quick Run or a
+    // landing into it) and whatever the ini's `grabs` says: KH1's fall state tries its swim every
+    // frame, outside its other grabs' tests (`0x1402ADB54`), and its ground state wades in.
+    let swim_stick = if tilt > 0.0 { [dir.x, 0.0, dir.y, tilt] } else { [0.0; 4] };
+    let swam = water(base, actor, d.character.airborne(), swim_stick, floor_up);
+    // In a flight world, none of KH1's grabs coming down where KH1 would be flying him (more than
+    // 100 over the floor, or under the room's flight height): its fall turns to flight there
+    // (the player, Hook's fight: stuck in midair in a climbing position). Rising, its jump's grabs
+    // as before.
+    let flight_here = !rising && rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 && {
+        let room: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + FLIGHT_ROOM_RVA);
+        rd::<f32>(actor + 0x3D4) > FLIGHT_ABOVE || room(actor) != 0
+    };
+    // (Also out of an Aerial Dodge or a glide: KH2's fall, the user: "KH2 soras falling animation
+    // is unable to grab onto ladders/vines".)
+    if settings.grabs && !swam && !flight_here && rd::<i32>(actor + 0x70) == 0 && no_grab == 0 && d.character.airborne() && matches!(out.state, StateName::Air | StateName::Jump | StateName::AerialDodge | StateName::Glide) {
+        // KH1 tries them in its jump / fall states, whose collision (`0x140297F20`: flag 1)
+        // finds the contacts they read; ours ran in its ground state. So: KH1's fall state (3,
+        // which has these checks too) and a standing-still move there to refresh the contacts.
+        // The move presses a little into where the stick points: KH1's climb check reads the wall
+        // face the move touched (`+0x2DE`), which a standing-still move cleared (the user: he
+        // slid down a ladder he jumped into, caught only at the bottom). Put back if nothing
+        // takes him.
+        // With the stick neutral the frame's own air move (KH1's fall state) left the contacts.
+        let state = rd::<i32>(actor + 0x70);
+        let at = rd::<[f32; 4]>(actor + 0x10);
+        wr(actor + 0x70, AIR_STATE);
+        // With the stick let go, the press goes along his drift (or his facing): KH1's climb
+        // check needs a wall face the move touched (a ladder or vine he falls past otherwise
+        // slipped by).
+        let drift = glam::Vec2::new(out.displacement[0], out.displacement[2]);
+        let toward = if tilt > 0.0 { dir } else if drift.length() > 0.5 { drift.normalize() } else { glam::Vec2::new(out.facing.sin(), out.facing.cos()) };
+        mv(actor, &[toward.x * 4.0, 0.0, toward.y * 4.0, 0.0], 0);
+        // (The floor under him as that move found it, before a grab moves him onto its hold.)
+        let floor = -rd::<f32>(actor + 0x14) - rd::<f32>(actor + 0x3D4);
+        let (gx, gz) = if tilt > 0.0 { (dir.x, dir.y) } else { (0.0, 0.0) };
+        let took = grab(base, actor, [gx, 0.0, gz, tilt]);
+        if took.is_none() {
+            wr(actor + 0x10, at);
+            wr(actor + 0x70, state);
+        }
+        if let Some(what) = took {
+            ATTACK_AFTER.store(false, Ordering::Relaxed);
+            HANDOFF_FRAMES.store(0, Ordering::Relaxed);
+            HANDOFF.store(true, Ordering::Relaxed);
+            GRAB_MOVE.store(true, Ordering::Relaxed);
+            SETTLE.store(false, Ordering::Relaxed);
+            *GRAB_FLOOR.lock().unwrap() = floor.is_finite().then_some(floor);
+            set_air_cast(None);
+            SWIM_MOVE.store(rd::<i32>(actor + 0x70) == SWIM_STATE, Ordering::Relaxed);
+            log(&format!("KH1 takes him: {what} (KH1 state {}, slot {:?})", rd::<i32>(actor + 0x70), pose::sora_slot()));
+        }
+    }
+
+    let q = rd::<[f32; 3]>(actor + 0x10);
+    // Battle or field stance by KH1's battle mode (bit 0 of `0x142867CD8`), as KH2 does by its
+    // own: out of battle KH2's field motions carry no Keyblade, and attacks bring it out.
+    let battle = rd::<u32>(base + BATTLE_RVA) & 1 != 0;
+    if matches!(out.state, StateName::Attack) || !out.hitboxes.is_empty() {
+        d.fought = Some(Instant::now());
+    }
+    let lingering = d.fought.is_some_and(|t| t.elapsed().as_secs_f32() < BATTLE_LINGER);
+    // (In a Drive Form always the battle stance, Keyblades out, as KH2's forms: the user, "dont
+    // let soras keyblades disappear in valor form".)
+    d.anim.field = !battle && !lingering && !super::form::in_form();
+    let tp = Instant::now();
+    d.anim.update(&out, &d.character, [q[0], -q[1], q[2]]);
+    super::prof::add(super::prof::ANIM, tp);
+    // Misc Animations at KH1 (base Sora): standing, walking and running are drawn with KH1's own
+    // animations, KH1's own steps sounding; KH2 still moves him (the user: "idle walk/run plus
+    // items"). Which of them is KH2's state's (`MISC_GAIT`, `pose::kh1_ground_pose`), not KH1's own
+    // pick from the stick: KH1's dead zone and walk / run line aren't KH2's (the logs: KH1 had no
+    // move at all with the stick at 0.5, where KH2 already walked him from 0.28 and ran him from
+    // 0.6), so he slid in KH1's idle at a small tilt and ran in KH1's walk a little further (the
+    // player: "Sora moves but there's no animation ... super fast with the walking animation").
+    let misc_kh1 = super::styles::kh1_now(super::styles::Kind::MiscAnims)
+        && matches!(out.state, StateName::Idle | StateName::Walk | StateName::Run)
+        && d.grounded
+        && !d.character.airborne()
+        && matches!(pose::sora_slot(), Some(0..=7));
+    MISC_GAIT.store(
+        match out.state {
+            StateName::Walk => 1,
+            StateName::Run => 2,
+            _ => 0,
+        },
+        Ordering::Relaxed,
+    );
+    MISC_KH1.store(misc_kh1, Ordering::Relaxed);
+    // Jump at KH1 (base Sora): KH1's own jump / fall / landing drawn over KH2's (`pose`), KH2
+    // still jumping him.
+    let air_slot = if super::styles::kh1_now(super::styles::Kind::Jump) {
+        match out.state {
+            StateName::Jump => 12,
+            StateName::Air if out.displacement[1] > 0.0 => 13,
+            StateName::Air => 10,
+            StateName::Land => 11,
+            _ => 0,
+        }
+    } else {
+        0
+    };
+    KH1_AIR_SLOT.store(air_slot, Ordering::Relaxed);
+    if !misc_kh1 {
+        walk_steps(actor, &out, &d.anim, d.grounded && !d.character.airborne());
+    }
+    keyblade(base, actor, d.anim.weapons_out(), &mut d.logged);
+    GRIP.store(d.anim.weapons_out(), Ordering::Relaxed);
+    GROUNDED.store(d.grounded && !d.character.airborne(), Ordering::Relaxed);
+    if d.grounded && !d.character.airborne() {
+        FLEW.store(false, Ordering::Relaxed);
+    }
+    let battle_rows = super::form::battle(&d.drive, kh2).clone();
+    // KH2's weapon motions hurt as they play, whatever Sora's action: Final Form's Keyblades in its
+    // jump, its fall and its glide (the user: "his keyblades in final form glide and in final form
+    // jump should do damage"; `kh2_rig::MotionHits`: their ATKP rows, powers and re-hit
+    // intervals). The controller runs the jump's push as an action with the same windows: those
+    // are replaced by ours, so a window carried on into the rise stays one swing.
+    let free_hits = matches!(out.state, StateName::Jump | StateName::Air | StateName::Glide);
+    let carried = d.motion_hits.step(&d.anim, &d.character, free_hits);
+    let struck = (!carried.is_empty()).then(|| {
+        let mut o = out.clone();
+        o.hitboxes.retain(|h| !carried.iter().any(|c| c.attack == h.attack && c.weapon == h.weapon));
+        o.hitboxes.extend(carried.iter().copied());
+        o
+    });
+    if !carried.is_empty() {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n % 120 == 0 && n < 120 * 20 {
+            log(&format!("KH2's weapon motion {} attacks as it plays ({:?}): {:?}", out.motion, out.state, carried.iter().map(|h| (h.attack, h.weapon)).collect::<Vec<_>>()));
+        }
+    }
+    let tp = Instant::now();
+    d.strikes.strike(actor, struck.as_ref().unwrap_or(&out), &d.anim, &mut d.character, &battle_rows);
+    super::prof::add(super::prof::STRIKES, tp);
+    // Reflect's script: its cast, barrier, counter and effects.
+    super::reflect::after_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock);
+    // KH2's own sounds for the effect elements this frame starts. In Wisdom Form a frame
+    // trigger 1 is a shot from its model's script instead (`form`).
+    // (Each event's work timed: one over 4 ms is logged, the user: "the new abilities ... lag when
+    // i use them".)
+    let tp = Instant::now();
+    for e in &out.events {
+        let t0 = Instant::now();
+        if super::form::takes(&d.drive, e) {
+            if let character_core::EventKind::Effect(n) = e {
+                super::form::effect(out.motion, *n);
+            }
+            note_slow(t0, || format!("the form's effect event {e:?} of motion {}", out.motion));
+            continue;
+        }
+        super::kh2sound::event(out.motion, *e);
+        note_slow(t0, || format!("KH2 sound for {e:?} of motion {}", out.motion));
+        let t1 = Instant::now();
+        super::kh2fx::event(out.motion, *e);
+        note_slow(t1, || format!("KH2 effect for {e:?} of motion {}", out.motion));
+    }
+    super::prof::add(super::prof::EVENTS, tp);
+    let tp = Instant::now();
+    // (A Wisdom shot landing is its swing connecting: without Combo Master the combo goes on from
+    // it, as from a swing's own hit in `combat::Strikes::strike`.)
+    if super::form::shots_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock) {
+        d.character.register_hit();
+    }
+    super::limits::after_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock);
+    super::form::after_step(&mut d.drive, actor);
+    super::prof::add(super::prof::FORM, tp);
+    super::kh2sound::tick();
+    let tp = Instant::now();
+    super::kh2fx::tick(out.motion);
+    super::prof::add(super::prof::FX_TICK, tp);
+    {
+        // A KH2 swing starting: a new attack motion, or the same one again from its start.
+        let attacking = matches!(out.state, StateName::Attack);
+        let recoil = matches!(out.motion, character_core::reaction::motion::REPELLED | character_core::reaction::motion::REPELLED_AIR);
+        if attacking && !recoil && (d.swing != Some(out.motion) || out.clip_frame < d.swing_frame) {
+            // KH1's attack step counts each attack in the save's tallies (`0x14028A4D0(0x13)`,
+            // `0x1402A4760`); event scripts read them (`0x14028A4B0`): the Dive to the Heart's
+            // "attack" tutorial waits for it (the user's softlock).
+            let count: unsafe extern "system" fn(i32) = std::mem::transmute(base + COUNT_RVA);
+            count(0x13);
+        }
+    }
+    if settings.swing_fx {
+        // A KH2 swing starting: a new attack motion, or the same one again from its start.
+        let attacking = matches!(out.state, StateName::Attack);
+        // (A repel's recoil is not a swing.)
+        let recoil = matches!(out.motion, character_core::reaction::motion::REPELLED | character_core::reaction::motion::REPELLED_AIR);
+        let started = attacking && !recoil && (d.swing != Some(out.motion) || out.clip_frame < d.swing_frame);
+        if started {
+            // (KH2's own voice for the moves whose KH2 sounds play, not KH1's.)
+            d.strikes.swing_start(actor, d.character.airborne(), out.combo_count, d.character.in_finisher(), !super::kh2sound::covers(out.motion));
+        }
+        // (And the guard's swish: its motion's trail window, KH2's Keyblade trail there.)
+        let guard_swish = matches!(out.state, StateName::Guard) && out.weapon_trail;
+        if guard_swish && !d.strikes.has_trail() {
+            d.strikes.trail_for_guard(actor);
+        }
+        // (No Keyblade trail in Anti Form: it has no Keyblade, the user: "sora still has keyblade
+        // trails while in this form, lets not have that".)
+        let anti = super::form::in_anti();
+        d.strikes.trail(actor, !anti && (attacking && !out.hitboxes.is_empty() || guard_swish));
+    }
+    let attacking = matches!(out.state, StateName::Attack);
+    d.swing = attacking.then_some(out.motion);
+    d.swing_frame = out.clip_frame;
+    d.last_out = Some(out.clone());
+    KH2_MOTION.store(out.motion as u32, Ordering::Relaxed);
+    if let Ok(mut pz) = POSE.try_lock() {
+        *pz = Some((d.anim.bones.clone(), d.anim.weapons.first().cloned().unwrap_or_default(), Instant::now()));
+    }
+    // Valor's left Keyblade (the form rig's second weapon), and the clip playing for its trail,
+    // for `leftblade`.
+    // (Its trail in moves only: not standing, walking or running, `leftblade::kh2_left`.)
+    let acting = !matches!(out.state, StateName::Idle | StateName::Walk | StateName::Run);
+    super::leftblade::kh2_left(d.anim.weapons.get(1).map(|w| w.as_slice()), &d.anim.bones, out.motion, out.clip_frame, out.weapon_trail, acting);
+    // The Keyblade during attacks (the user: invisible while attacking): every 15 frames.
+    static ATTACK_FRAMES: AtomicU32 = AtomicU32::new(0);
+    if matches!(out.state, StateName::Attack) {
+        let n = ATTACK_FRAMES.fetch_add(1, Ordering::Relaxed);
+        if n % 15 == 7 && n < 15 * 40 {
+            log(&format!("attacking (motion {}, frame {}): {}", out.motion, out.clip_frame, pose::weapon_report()));
+        }
+    }
+    // KH1's contact sounds (`footstep`) only once KH2 has been walking or running a moment, in
+    // its own walk / run motion (the user: steps heard walking forward mid-combo; between two
+    // swings KH2 can be in its run for a few frames, still showing the swing).
+    static STEPPING: AtomicU32 = AtomicU32::new(0);
+    let walking = matches!(out.state, StateName::Walk | StateName::Run) && matches!(out.motion, character_core::motion::WALK | character_core::motion::RUN);
+    let n = if walking { STEPPING.load(Ordering::Relaxed).saturating_add(1) } else { 0 };
+    STEPPING.store(n, Ordering::Relaxed);
+    KH2_STEPS.store(n >= STEPS_AFTER, Ordering::Relaxed);
+    if d.last_state != Some(out.state) {
+        // KH1's own grunt as KH2's dodge roll starts (a random one of his first swing's, the user:
+        // "Sora is missing a kh1 quote for when he activates dodge roll").
+        if out.state == StateName::DodgeRoll {
+            super::kh1voice::dodge_roll(actor);
+        }
+        if d.logged < 400 {
+            d.logged += 1;
+            log(&format!("KH2 has Sora: {:?} (motion {}), height above floor {above:.1}, KH1 slot {:?}, KH1 state {}, flags {:08x}; {}", out.state, out.motion, slot, rd::<i32>(actor + 0x70), rd::<u32>(actor), pose::weapon_report()));
+        }
+        d.last_state = Some(out.state);
+    }
+    *LAST_END.lock().unwrap() = (GAME_FRAME.load(Ordering::Relaxed), rd::<[f32; 4]>(actor + 0x10));
+    ACTIVE_MS.store(now_ms().max(1), Ordering::Relaxed);
+    true
+}
+
+/// KH1's contact sound (`0x140293C70 (actor, kind)`: a sound from the same floor table as the
+/// steps, by world and material, or kind 4 by the touched object's), held back while KH2 has Sora
+/// and isn't walking or running him (Stage 155, which took it for the footsteps: the user,
+/// footsteps mid-animation). Its callers are KH1's touch / push routines (`0x1402C0D30`,
+/// `0x1402C0ED0`, whose push is `gates`' crate push, and two contact callbacks), not the motions:
+/// the walk / run steps are `0x1402939B0`'s (`STEP_SOUND_RVA`, `walk_steps`).
+const FOOTSTEP_RVA: Rva = Rva(0x293C70);
+const FOOTSTEP_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x56, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_FOOTSTEP: AtomicUsize = AtomicUsize::new(0);
+/// KH2 has Sora walking or running this frame (for `STEPS_AFTER` frames or more).
+static KH2_STEPS: AtomicBool = AtomicBool::new(false);
+/// Frames of KH2's walk / run before KH1's footsteps sound.
+const STEPS_AFTER: u32 = 10;
+
+unsafe extern "system" fn footstep(actor: usize, kind: i32) -> usize {
+    let base = BASE.load(Ordering::Relaxed);
+    if actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize && FRAME_KIND.load(Ordering::Relaxed) == 1 && !KH2_STEPS.load(Ordering::Relaxed) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log("KH1's footstep held back (KH2 isn't walking him)");
+        }
+        return 0;
+    }
+    let f: unsafe extern "system" fn(usize, i32) -> usize = std::mem::transmute(ORIG_FOOTSTEP.load(Ordering::Acquire));
+    f(actor, kind)
+}
+
+/// KH1's footstep / material sound (`0x1402939B0 (actor, kind)`: kinds 0..7 the feet, 0..3 run
+/// and 4..7 walk, the foot alternating by `actor+0x39C`; 8 the stop from a run (`0x1402A7693`,
+/// `0x1402CA135`), 10 the landing (`0x1402BF26E`, KH1's touchdown `0x1402BF100`), others walls
+/// and objects; the sound is the floor table's for the world and `actor+0x39E`, the material
+/// under him). Vanilla's steps come from KH1's walk / run motions: their sound events
+/// (`0x14029DA4E` → `0x140293290`, event id → kind by `0x140529788`: 1 / 2 walk 4 / 5, 3 / 4 run
+/// 0 / 1, 6 landing 10). KH1 keeps Sora in its own walk / run cycle under KH2 whenever the stick
+/// is held, so its steps sounded whatever KH2 played (the user: "footsteps currently follow
+/// whatever the kh1 animations are doing ... we need footstep sfxs to follow what kh2 animations
+/// are doing"), and KH1's stop and landing ones under KH2's moves. While KH2 has Sora, KH1's are
+/// dropped, and `walk_steps` plays the same sound at the feet of the walk / run KH2 draws.
+const STEP_SOUND_RVA: Rva = Rva(0x2939B0);
+/// `mov [rsp+0x20], rsi; push rdi; sub rsp, 0x20`.
+const STEP_SOUND_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_STEP_SOUND: AtomicUsize = AtomicUsize::new(0);
+/// Set while we call it ourselves (`walk_steps`).
+static OUR_STEP: AtomicBool = AtomicBool::new(false);
+
+unsafe extern "system" fn step_sound(actor: usize, kind: i32) {
+    let base = BASE.load(Ordering::Relaxed);
+    if !OUR_STEP.load(Ordering::Relaxed) && actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize && FRAME_KIND.load(Ordering::Relaxed) == 1 && !MISC_KH1.load(Ordering::Relaxed) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log(&format!("KH1's step sound (kind {kind}) dropped: KH2 has Sora, its walk / run steps sound instead"));
+        }
+        return;
+    }
+    let f: unsafe extern "system" fn(usize, i32) = std::mem::transmute(ORIG_STEP_SOUND.load(Ordering::Acquire));
+    f(actor, kind)
+}
+
+unsafe fn play_step(actor: usize, kind: i16) {
+    let orig = ORIG_STEP_SOUND.load(Ordering::Acquire);
+    if orig == 0 {
+        return;
+    }
+    let f: unsafe extern "system" fn(usize, i32) = std::mem::transmute(orig);
+    OUR_STEP.store(true, Ordering::Relaxed);
+    f(actor, kind as i32);
+    OUR_STEP.store(false, Ordering::Relaxed);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 12 {
+        log(&format!("walk step (kind {kind}, KH1's floor sound)"));
+    }
+}
+
+/// Sora's footsteps while KH2 has him: KH1's own step sound (`0x1402939B0`, kinds 0..3 run and
+/// 4..7 walk: the floor's sound for the world and the material under him, `actor+0x39E`, the
+/// foot alternating), only while he walks or runs on the ground, at the foot contacts of the
+/// walk / run KH2 draws (its loops' frame trigger 2, as the rig's track passes them; the
+/// controller plays those loops without frames of its own).
+///
+/// Nothing else steps (after s312, the user: "sora plays his KH2 walk sounds during any forward
+/// movement at all, including dodge rolling, quick stepping, aerial dodging, gliding, and many
+/// other moments when it shouldnt be playing. just keep KH1 walk steps in"). Until then every
+/// frame trigger 2 of KH2's actions played too, through the same KH1 sound: the dodge roll's
+/// (motion 209, kind 10 at frame 26), the landing's that ends a Quick Run, an Aerial Dodge or a
+/// glide (motion 5, kind 10 at frame 2), the jump's (3: 9), the High Jump's (201: 11), and the
+/// combo's, the ability moves', the guard's, the hit reactions' and the forms' moves' (Anti's
+/// most of all), kinds 0 / 4 / 9 / 10 on KH2's frames. The loop's own steps also sounded on any
+/// motion the rig held in a free state (a dodge roll's tail: "Run (motion 209)").
+///
+/// Forms: their own walk / run's contacts. Valor's, Final's, Limit's and Anti's have them;
+/// Wisdom's and Master's have none (they skate; the user had Wisdom's off, "he is gliding across
+/// the ground"), so they step nowhere.
+unsafe fn walk_steps(actor: usize, out: &Output, anim: &RigAnim, grounded: bool) {
+    use character_core::motion::{RUN, WALK};
+    static PREV: Mutex<Option<(u16, bool, f32)>> = Mutex::new(None);
+    let gait = |m: u16| m == WALK || m == RUN;
+    let walking = grounded && matches!(out.state, StateName::Walk | StateName::Run) && gait(out.motion) && !super::form::in_wisdom();
+    let now = anim.playing().filter(|p| walking && gait(p.0));
+    let mut steps: Vec<i16> = Vec::new();
+    if let Ok(mut prev) = PREV.lock() {
+        if let (Some((m, field, f, len)), Some((pm, pfield, pf))) = (now, *prev) {
+            if m == pm && field == pfield && len > 0.0 {
+                if let Some(list) = anim.rig.footsteps.get(&(m, field)) {
+                    let (a, b) = (pf.rem_euclid(len), f.rem_euclid(len));
+                    for &(at, kind) in list {
+                        let crossed = if b >= a { at > a && at <= b } else { at > a || at <= b };
+                        // (Feet only: KH1's 0..7.)
+                        if crossed && (f - pf).abs() < len && (0..8).contains(&kind) {
+                            steps.push(kind);
+                        }
+                    }
+                }
+            }
+        }
+        *prev = now.map(|(m, field, f, _)| (m, field, f));
+    }
+    for k in steps {
+        play_step(actor, k);
+    }
+}
+
+/// KH1's ground state's own moves taken while KH2 had him in the air (`GROUND_STEP_MOVES`). KH1's
+/// think runs its state's input step every frame, KH2's included, and KH2 keeps KH1 in its ground
+/// state 0 all the while, in the air too: so KH1's walking checks ran mid-air (the player: in
+/// Hook's fight "you can get stuck in midair in a climbing position"; under water, "walked on the
+/// bottom"). Its catch of a ladder, an edge to hang from or deep water to wade into then set his
+/// state under KH2, which kept him while airborne (`takeover`'s slot test spares a fall) and moved
+/// him off; on landing KH1 had him in a climb, a hang or a swim with nothing there. Undone here: KH1
+/// back in its ground state where KH2's last frame left him, its motion request back to idle.
+/// KH1's air rules decide instead (`grab`, `water`), as vanilla's fall state has them.
+unsafe fn ground_moves_in_air(base: usize, actor: usize) {
+    if HANDOFF.load(Ordering::Relaxed) || FRAME_KIND.load(Ordering::Relaxed) != 1 || !KH2_AIR.load(Ordering::Relaxed) {
+        return;
+    }
+    let state = rd::<i32>(actor + 0x70);
+    if !GROUND_STEP_MOVES.contains(&state) {
+        return;
+    }
+    let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+    set(actor, 0);
+    let at = rd::<[f32; 4]>(actor + 0x10);
+    let (frame, last) = *LAST_END.lock().unwrap();
+    let restored = frame.wrapping_add(1) == GAME_FRAME.load(Ordering::Relaxed) && last.iter().all(|v| v.is_finite());
+    if restored {
+        wr(actor + 0x10, last);
+    }
+    let setm: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+    setm(actor, 0, 0.0);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        let moved = glam::Vec3::from_slice(&at[..3]).distance(glam::Vec3::from_slice(&last[..3]));
+        log(&format!(
+            "KH1's ground step put him in state {state} ({}) while KH2 had him in the air: undone ({}; {:.0} above the floor)",
+            match state {
+                9 | 10 => "a ladder or climbable wall",
+                13 => "the hang off an edge",
+                SWIM_STATE => "wading into deep water",
+                _ => "a ground move",
+            },
+            if restored { format!("back where KH2 left him, {moved:.0} away") } else { "left where KH1 put him".to_string() },
+            rd::<f32>(actor + 0x3D4)
+        ));
+    }
+}
+
+/// KH1 swims him where its own air rules never would (`NO_SWIM_WORLD` / `NO_SWIM_ROOM`: Hook's ship,
+/// whose sea has no shore or ledge to swim out to; the player: "Once you're swimming you're fully
+/// stuck and cannot escape"). There KH1's fall turns into flight below the room's height
+/// (`0x1402ADA30` with `FLIGHT_ROOM_RVA`): so does this swim (its rise speed cleared, as `takeover`'s
+/// flight start does), and KH1 flies him out.
+unsafe fn swim_rescue(base: usize, actor: usize) {
+    if rd::<i32>(actor + 0x70) != SWIM_STATE || rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG == 0 || !no_swim_room(base) {
+        return;
+    }
+    wr(actor + 0x3C4, 0.0f32);
+    let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+    set(actor, FLIGHT_STATE);
+    let handed = HANDOFF.swap(false, Ordering::Relaxed);
+    if handed {
+        SETTLE.store(false, Ordering::Relaxed);
+        SWIM_MOVE.store(false, Ordering::Relaxed);
+        FRESH.store(true, Ordering::Relaxed);
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!("water: KH1 swam him where it never swims (world {NO_SWIM_WORLD:#x} room {NO_SWIM_ROOM:#x}): KH1's flight instead (state now {}, hand-off {handed})", rd::<i32>(actor + 0x70)));
+    }
+}
+
+/// The room where KH1's air entry into water refuses (`SWIM_RVA`, `0x1402BF100`).
+unsafe fn no_swim_room(base: usize) -> bool {
+    rd::<u32>(base + WORLD_RVA) == NO_SWIM_WORLD && rd::<u32>(base + ROOM_RVA) == NO_SWIM_ROOM
+}
+
+/// Water while KH2 has him, after its move (`docs/kh1-water-pits.md`): KH1's own rules, run here
+/// since KH1's fall and ground states don't run for him. Under the surface he gets KH1's splash
+/// (once per entry, as its physics step gives it). Deep (KH1's own test): in the air KH1's air
+/// entry (`SWIM_RVA`, as its fall state's input step tries it every frame, whatever he is doing),
+/// on the ground its walk-in (`WADE_IN_RVA`); either takes him into KH1's swim (`HANDOFF`), and KH1
+/// hands him back once its swim has him out (the shore, a ledge). Refused in the air in a flight
+/// world: KH1's fall's next step, flight below the room's height. Whether KH1 took him.
+unsafe fn water(base: usize, actor: usize, air: bool, stick: [f32; 4], floor: f32) -> bool {
+    // (KH1 y-down: the feet at or below the water level are under it.)
+    let under = rd::<f32>(actor + 0x14) >= rd::<f32>(actor + 0x2D4);
+    let flags = rd::<u32>(actor);
+    if under && flags & IN_WATER == 0 {
+        if air {
+            // (Its effect is for air states only, `0x1402C0020`: KH1's fall state for the call.)
+            let state = rd::<i32>(actor + 0x70);
+            wr(actor + 0x70, AIR_STATE);
+            let splash: unsafe extern "system" fn(usize) = std::mem::transmute(base + SPLASH_RVA);
+            splash(actor);
+            wr(actor + 0x70, state);
+        }
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log(&format!(
+                "water: under the surface while KH2 has him ({}, {:.0} above the floor, the surface {:.0} above it)",
+                if air { "in the air: KH1's splash" } else { "on the ground" },
+                rd::<f32>(actor + 0x3D4),
+                rd::<f32>(actor + 0x324) - rd::<f32>(actor + 0x2D4)
+            ));
+        }
+    }
+    wr(actor, if under { rd::<u32>(actor) | IN_WATER } else { rd::<u32>(actor) & !IN_WATER });
+    let deep: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + DEEP_WATER_RVA);
+    if !under || deep(actor) == 0 {
+        return false;
+    }
+    // (Some write into the vector they are given: room to spare, as `grab`.)
+    let mut v = [0.0f32; 16];
+    v[..4].copy_from_slice(&stick);
+    type Try = unsafe extern "system" fn(usize, usize) -> i32;
+    let entry: Try = std::mem::transmute(base + if air { SWIM_RVA } else { WADE_IN_RVA });
+    if entry(actor, v.as_mut_ptr() as usize) != 0 && rd::<i32>(actor + 0x70) == SWIM_STATE {
+        take_for_kh1_move(if air { "water (from the air: KH1's swim)" } else { "water (walked in: KH1's swim)" }, floor);
+        SWIM_MOVE.store(true, Ordering::Relaxed);
+        return true;
+    }
+    if air && rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 {
+        let room: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + FLIGHT_ROOM_RVA);
+        if room(actor) != 0 {
+            wr(actor + 0x3C4, 0.0f32);
+            let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+            set(actor, FLIGHT_STATE);
+            log(&format!("water: deep in the air where KH1 doesn't swim: KH1's flight, as its fall has it (state now {})", rd::<i32>(actor + 0x70)));
+            return false;
+        }
+    }
+    static REFUSED: AtomicU64 = AtomicU64::new(0);
+    let now = now_ms();
+    if now.saturating_sub(REFUSED.swap(now, Ordering::Relaxed)) > 2000 {
+        log(&format!(
+            "water: deep, KH1 doesn't take him yet ({}; flags {:08x}, world {:#x} room {:#x})",
+            if air { "its air entry refuses here" } else { "its walk-in waits for him to be able to act" },
+            rd::<u32>(actor),
+            rd::<u32>(base + WORLD_RVA),
+            rd::<u32>(base + ROOM_RVA)
+        ));
+    }
+    false
+}
+
+/// KH1 has him for one of its own moves from KH2's frame (a grab, the water): KH1 keeps him until it
+/// has him standing again (`HANDOFF`), `pose` blending into its animation.
+fn take_for_kh1_move(what: &str, floor: f32) {
+    hand_to_kh1(what);
+    FROM_COMMAND.store(false, Ordering::Relaxed);
+    SWIM_MOVE.store(false, Ordering::Relaxed);
+    GRAB_MOVE.store(true, Ordering::Relaxed);
+    *GRAB_FLOOR.lock().unwrap() = floor.is_finite().then_some(floor);
+    set_air_cast(None);
+}
+
+/// KH1's air moves, tried as its jump's input step does; the one that took him, if any.
+unsafe fn grab(base: usize, actor: usize, stick: [f32; 4]) -> Option<&'static str> {
+    let flags = rd::<u32>(actor);
+    let fine: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    if flags & 0x2004 != 0 || fine(actor) == 0 {
+        return None;
+    }
+    // (Some write into the vector they are given: room to spare.)
+    let mut v = [0.0f32; 16];
+    v[..4].copy_from_slice(&stick);
+    let p = v.as_mut_ptr() as usize;
+    type Try = unsafe extern "system" fn(usize, usize) -> i32;
+    let tries: [(Rva, &str); 5] = [(VINE_RVA, "vine / climb"), (LEDGE_RVA, "ledge"), (BAR_RVA, "bar"), (HANG_RVA, "object to hang from"), (SWIM_RVA, "water")];
+    for (rva, what) in tries {
+        if rva == BAR_RVA && rd::<u32>(base + NO_BARS_RVA) != 0 {
+            continue;
+        }
+        let f: Try = std::mem::transmute(base + rva);
+        if f(actor, p) != 0 {
+            return Some(what);
+        }
+    }
+    None
+}
+
+/// The top of a standable object under him (KH2 height, up), from `from` (up) down to
+/// `down` below it: KH1's own object-top finder, run in its fall state from that height.
+unsafe fn object_top(base: usize, actor: usize, from: f32, down: f32) -> Option<(f32, usize)> {
+    let find: unsafe extern "system" fn(usize, *mut [f32; 4]) -> usize = std::mem::transmute(base + OBJECT_TOP_RVA);
+    let (state, y) = (rd::<i32>(actor + 0x70), rd::<f32>(actor + 0x14));
+    wr(actor + 0x70, FALL_STATE);
+    wr(actor + 0x14, -from);
+    let mut mv = [0.0f32, down.max(0.5), 0.0, 0.0];
+    let obj = find(actor, &mut mv);
+    wr(actor + 0x14, y);
+    wr(actor + 0x70, state);
+    let top = from - mv[1];
+    (obj > 0x10000 && top.is_finite() && top <= from + 0.5).then_some((top, obj))
+}
+
+/// A platform's carry and the frame's push (KH1 world), see the physics step.
+unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
+    let mut c = glam::Vec3::from(rd::<[f32; 3]>(actor + 0x120));
+    let riding = rd::<u32>(actor + 0x160) & 4 != 0;
+    if riding {
+        c += glam::Vec3::from(rd::<[f32; 3]>(actor + 0x200));
+    }
+    if !c.is_finite() || c.length() > 400.0 {
+        return [0.0; 3];
+    }
+    static SEEN: AtomicU32 = AtomicU32::new(0);
+    if c.length_squared() > 1e-4 && *logged < 400 && SEEN.fetch_add(1, Ordering::Relaxed) < 40 {
+        *logged += 1;
+        log(&format!(
+            "carried {c:.2?} (push {:.2?}, platform {:?}, standing on {:#x}, object {})",
+            rd::<[f32; 3]>(actor + 0x120),
+            riding.then(|| rd::<[f32; 3]>(actor + 0x200)),
+            pose::ptr(rd::<u32>(actor + 0x398)),
+            rd::<i32>(actor + 0x2CC)
+        ));
+    }
+    c.to_array()
+}
+
+/// KH1 movement states that are KH1's alone: 30 and up (the Jungle Slider is 30 and 31: its
+/// slide, jumps and swings), 29 (the magic carpet out of the Cave of Wonders: Agrabah room
+/// 0x14 puts Sora in it, `0x1402957F0`; the user: the carpet didn't move, a softlock), 24
+/// (swimming: Atlantica, and End of the World room 0x16's water, `0x140288920`), 25 (Mermaid
+/// Kick's dash, from 24 with KH1 ability 2: `0x1402C9980`) and 8 (flying in Neverland: see
+/// `FLIGHT_FLAG`; with 24 and 25 the states where jump means up, `0x140291660`'s 0x203000100
+/// mask). KH2 has none of these.
+fn kh1_mode(state: i32) -> bool {
+    state >= 29 || matches!(state, 24 | 25 | FLIGHT_STATE)
+}
+
+/// The same, for KH2's camera (KH1's own camera for the carpet, the slider and water). Not
+/// flight: KH1 flies in its ordinary follow camera (mode 1, ours with KH2's camera chosen, KH1's
+/// yaw kept in step so its flight steering matches), the user: the camera snapped to KH1's.
+pub fn kh1_camera_mode(state: i32) -> bool {
+    matches!(state, 24 | 25 | 29 | 30 | 31)
+}
+/// Sora is in one of them (KH2's camera gives way too).
+static KH1_MODE: AtomicBool = AtomicBool::new(false);
+
+/// A cutscene or scripted moment: an event runs (talks with text boxes too), an area script
+/// walks Sora, or KH1 holds him still (for KH2's camera to give way to KH1's).
+pub fn kh1_scene() -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return false;
+    }
+    let event = unsafe { rd::<u32>(base + EVENT_RVA) } != 0;
+    let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
+    // (The Jungle Slider's states only: a summon's own states (38 Simba's charge, 40 the call)
+    // keep KH2's camera, the user.)
+    let own_mode = sora > 0x10000 && kh1_camera_mode(unsafe { rd::<i32>(sora + 0x70) });
+    // Held still counts out of battle only: in battle it is a summon's or a command's moment
+    // (the user: KH2's camera should stay through Simba's charge).
+    let battle = unsafe { rd::<u32>(base + BATTLE_RVA) } & 1 != 0;
+    // (Nor the hold that ends one of KH1's own moves, a spell's landing: the user, KH2's
+    // camera zoomed in to KH1's after a jump cast of Fire out of battle.)
+    let after_move = HANDOFF.load(Ordering::Relaxed) || now_ms().saturating_sub(HANDOFF_SEEN_MS.load(Ordering::Relaxed)) < 1500;
+    let held = FROZEN_FRAMES.load(Ordering::Relaxed) >= 2 && !battle && !after_move;
+    event || own_mode || (active() && (SCRIPTED.load(Ordering::Relaxed) || held))
+}
+
+/// KH1 moves Sora itself in a scene: one of its own movement modes (the Jungle Slider) or an
+/// area script walking him. KH1's camera stays through these even after a camera reset that
+/// KH2's camera takes (`camera.rs`).
+pub fn kh1_moves_sora() -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return false;
+    }
+    let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
+    let own_mode = sora > 0x10000 && kh1_camera_mode(unsafe { rd::<i32>(sora + 0x70) });
+    own_mode || (active() && SCRIPTED.load(Ordering::Relaxed))
+}
+
+/// Whether KH1 may see Square: not while it has Sora back on the ground after one of its own
+/// air moves (KH2 is about to take him; a roll pressed then is KH2's).
+pub fn kh1_keeps_square() -> bool {
+    if !HANDOFF.load(Ordering::Relaxed) {
+        return true;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let sora = if base == 0 { 0 } else { (unsafe { rd::<u64>(base + PARTY_RVA) }) as usize };
+    !(sora > 0x10000 && matches!(unsafe { rd::<i32>(sora + 0x70) }, 0 | 1))
+}
+
+/// KH1 has Sora for one of its moves (`hand_to_kh1`, a grab), until KH2 takes him back.
+pub fn handing_off() -> bool {
+    HANDOFF.load(Ordering::Relaxed)
+}
+
+/// KH2 has Sora this moment (not handed to KH1).
+/// KH1 has him for one of its own moves (`hand_to_kh1`), until he can be KH2's again.
+pub fn kh1_move() -> bool {
+    ON.load(Ordering::Relaxed) && HANDOFF.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 2
+}
+
+/// KH2 would have Sora but KH1 is playing one of its own motions on him (a reaction, or an
+/// action KH1 started itself): his own body, no event or area script, no ride, not one of KH1's
+/// own movement modes. An Attack then is KH2's once KH1 lets go, never KH1's own attack.
+pub unsafe fn kh1_borrows(actor: usize) -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    ON.load(Ordering::Relaxed)
+        && base != 0
+        && actor == rd::<u64>(base + PARTY_RVA) as usize
+        && rd::<u32>(base + EVENT_RVA) == 0
+        && now_ms() >= RIDE_UNTIL.load(Ordering::Relaxed)
+        && pose::sora_body_seen(500)
+        && !SCRIPTED.load(Ordering::Relaxed)
+        && !kh1_mode(rd::<i32>(actor + 0x70))
+        && rd::<i32>(actor + 0x70) != FLIGHT_STATE
+}
+
+/// The button KH1 jumps with: Circle, or Cross when the options swap the confirm button to
+/// Circle (KH1's pad step `0x140288F30` maps Cross to confirm (`0x210001`) and Circle to
+/// jump / cancel (`6`), the other way round when `0x1402F4690` says so; the user: with the swap,
+/// KH1 saw the jump button and took Sora from KH2).
+pub fn jump_button() -> u16 {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return CIRCLE;
+    }
+    let swapped: unsafe extern "system" fn() -> u8 = unsafe { std::mem::transmute(base + CONFIRM_SWAP_RVA) };
+    if unsafe { swapped() } & 1 != 0 {
+        CROSS
+    } else {
+        CIRCLE
+    }
+}
+const CONFIRM_SWAP_RVA: Rva = Rva(0x2F4690);
+/// KH1's button state after its pad step (`0x140288F30`; `0x1402892A0` fills it).
+const BUTTONS_RVA: Rva = Rva(0x298D4A0);
+/// KH1's processed left stick (-1..1, its dead zone applied; the keyboard's keys too).
+const LEFT_STICK_RVA: Rva = Rva(0x298D4E0);
+
+/// The jump button held, as `buttons` reads it before `menujump` holds a press back: the pads'
+/// own records or KH1's merged state (the keyboard).
+pub fn jump_held_raw() -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    RAW_BUTTONS.load(Ordering::Relaxed) as u16 & jump_button() != 0 || (base != 0 && unsafe { rd::<u32>(base + BUTTONS_RVA + 4) } & 6 != 0)
+}
+
+/// The buttons as KH2 reads them: the pads' own records (`RAW_BUTTONS`, before KH1's copy is
+/// masked) and KH1's merged state, which the keyboard feeds too (the user's tester played on
+/// keyboard: the pad records stayed empty, so KH2 had no jump, roll or guard at all). KH1's jump
+/// / cancel (`6`) is read as the jump button, its Square action (`0x100000`) as Square.
+pub fn buttons() -> u16 {
+    let mut b = RAW_BUTTONS.load(Ordering::Relaxed) as u16;
+    let base = BASE.load(Ordering::Relaxed);
+    if base != 0 {
+        let held = unsafe { rd::<u32>(base + BUTTONS_RVA + 4) };
+        if held & 6 != 0 {
+            b |= jump_button();
+        }
+        // (KH1's action bit, `0x100000`, is Square's, but KH1 also sets it with its jump held in
+        // the air: its glide. Read as Square then it cut KH2's jump short and started KH1's glide
+        // on Square, the user: "multiple inputs are being sent ... unable to get the max height on
+        // jump, and if glide is equipped you go straight into glide". With the jump held, only
+        // the pad's own Square counts.)
+        if held & 0x10_0000 != 0 && held & 6 == 0 && b & jump_button() == 0 {
+            b |= SQUARE;
+        } else if held & 0x10_0000 != 0 && b & SQUARE == 0 {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 10 {
+                log(&format!("KH1's action bit with the jump held (KH1 buttons {held:08x}): not taken for Square"));
+            }
+        }
+    }
+    // The press that backed out of a command submenu is the menu's until let go (`menujump`):
+    // KH1's command step closed the menu earlier in this frame, so `shortcuts::submenu_open`
+    // alone no longer says so.
+    if !super::menujump::jump_down(b & jump_button() != 0) {
+        b &= !jump_button();
+    }
+    b
+}
+
+/// How far the left stick is pushed (0..1, KH2's 20% dead zone): the pads' own sticks, or KH1's
+/// processed one when they rest (the keyboard's movement keys).
+pub fn move_tilt() -> f32 {
+    let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
+    let (lx, ly) = ((st[2] as f32 - 128.0) / 127.0, (st[3] as f32 - 128.0) / 127.0);
+    let raw = ((lx * lx + ly * ly).sqrt().min(1.0) - 0.2).max(0.0) / 0.8;
+    if raw > 0.0 {
+        return raw;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return 0.0;
+    }
+    let p = unsafe { rd::<[f32; 2]>(base + LEFT_STICK_RVA) };
+    let m = p[0].hypot(p[1]);
+    if m.is_finite() { m.min(1.0) } else { 0.0 }
+}
+
+/// Attack pressed while KH1 had him for its own move (`combat::exec`): ends that move as soon
+/// as he stands free (KH1 allowed the cancel) and is KH2's first press.
+pub static ATTACK_AFTER: AtomicBool = AtomicBool::new(false);
+
+fn note_dropped_attack(state: i32) {
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 30 {
+        log(&format!("Attack during KH1's move (state {state}) dropped: it couldn't cut the move on that frame (no buffer)"));
+    }
+}
+
+/// Sora's physics frames so far (one per game frame): what frame-locked work (`pose`'s hair and
+/// cloth swing) steps by, not the clock (the user: it stuttered; frames arrive 13..22 ms apart).
+pub static GAME_FRAME: AtomicU64 = AtomicU64::new(0);
+
+/// Sora's actor (KH1's party slot), 0 if none.
+pub fn sora_actor() -> usize {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return 0;
+    }
+    unsafe { rd::<u64>(base + PARTY_RVA) as usize }
+}
+
+pub fn kh2_has() -> bool {
+    ON.load(Ordering::Relaxed) && FRAME_KIND.load(Ordering::Relaxed) == 1 && !HANDOFF.load(Ordering::Relaxed)
+}
+
+/// KH2 has Sora in the air this moment.
+/// (Kept each frame: KH1's command step can run while the driver is locked, and a failed
+/// `try_lock` read as "on the ground", the user: Sonic Blade mid-jump.)
+pub fn kh2_airborne() -> bool {
+    kh2_has() && KH2_AIR.load(Ordering::Relaxed)
+}
+static KH2_AIR: AtomicBool = AtomicBool::new(false);
+
+/// KH2's movement over its last step, sideways (KH1's x / z, per frame): an air spell's KH1 cast
+/// goes on with it (`combat::command`).
+pub fn kh2_sideways() -> [f32; 2] {
+    DRIVER
+        .try_lock()
+        .ok()
+        .and_then(|d| d.as_ref().and_then(|d| d.last_out.as_ref().map(|o| [o.displacement[0], o.displacement[2]])))
+        .filter(|v| v.iter().all(|x| x.is_finite()))
+        .unwrap_or([0.0; 2])
+}
+
+/// KH1 takes Sora for one of its own actions (a command): it keeps him until it has him
+/// standing in a movement motion again (see `HANDOFF`).
+/// The hand-off now running is a command's (`combat::command`): KH2 comes back in its battle
+/// stance.
+pub static FROM_COMMAND: AtomicBool = AtomicBool::new(false);
+
+/// A spell KH1 is casting in the air (its index, when it started), for `pose` to draw KH2's
+/// air cast, fall and landing meanwhile.
+static AIR_CAST: Mutex<Option<(u8, Instant)>> = Mutex::new(None);
+
+pub fn set_air_cast(spell: Option<u8>) {
+    if let Ok(mut c) = AIR_CAST.lock() {
+        *c = spell.map(|s| (s, Instant::now()));
+    }
+}
+
+/// The spell KH1 casts in the air now (while it has him for it) and seconds since it started.
+/// The spell KH1 is casting now (its command's, while KH1 has him for it: Fire 0 .. Aero 6).
+pub fn kh1_spell_now() -> Option<u8> {
+    if !(HANDOFF.load(Ordering::Relaxed) && FROM_COMMAND.load(Ordering::Relaxed)) {
+        return None;
+    }
+    COMMAND.try_lock().ok()?.as_ref()?.spell
+}
+
+pub fn air_cast() -> Option<(u8, f32)> {
+    if !HANDOFF.load(Ordering::Relaxed) {
+        return None;
+    }
+    AIR_CAST.try_lock().ok()?.map(|(s, t)| (s, t.elapsed().as_secs_f32()))
+}
+
+pub fn hand_to_kh1(why: &str) {
+    super::stylecombo::clear();
+    super::stylejump::clear();
+    super::styleroll::clear();
+    AIR_SPELL_LANDED.store(false, Ordering::Relaxed);
+    SPELL_CUT_OPEN.store(false, Ordering::Relaxed);
+    CUT_LEFT.store(false, Ordering::Relaxed);
+    ATTACK_AFTER.store(false, Ordering::Relaxed);
+    HANDOFF_FRAMES.store(0, Ordering::Relaxed);
+    GRAB_MOVE.store(false, Ordering::Relaxed);
+    SETTLE.store(false, Ordering::Relaxed);
+    HANDOFF.store(true, Ordering::Relaxed);
+    log(&format!("KH1 takes him: {why}"));
+}
+
+/// The hand-off running now, or the one KH2 took him back from in the last `GRAB_BLEND_MS`, is
+/// one of KH1's grabs: `pose` blends the change from KH1's own animation to ours (and on to
+/// KH2's own frames) from the pose drawn just before (the user: a pop after the climb up from a
+/// ledge).
+pub fn grab_blend() -> bool {
+    GRAB_MOVE.load(Ordering::Relaxed) && (HANDOFF.load(Ordering::Relaxed) || now_ms().saturating_sub(GRAB_BACK_MS.load(Ordering::Relaxed)) < GRAB_BLEND_MS)
+}
+
+/// While KH2 has Sora: his controller and its last frame (for `hurt`).
+pub fn with_kh2<R>(f: impl FnOnce(&mut Character, &Output) -> R) -> Option<R> {
+    if !kh2_has() {
+        return None;
+    }
+    let mut g = DRIVER.try_lock().ok()?;
+    let d = g.as_mut()?;
+    d.last_state?;
+    let out = d.last_out.clone()?;
+    Some(f(&mut d.character, &out))
+}
+
+/// KH1 shows Sora's Keyblade while his actor's flag `0x4000` is set ("weapon out"):
+/// `0x14029DAB0`, applying a motion, sets it with `0x1402A0CA0(actor, 1)` (flag, and the
+/// combat state's bytes `+0xC..+0xF` = ff ff ff 80, the Keyblade's colour and alpha) for
+/// motions whose table entry is of type 1 (the attacks, the battle stance), and clears it
+/// with `0x1402A10F0` for type 0 (the field idle / walk / run); the flag also makes motion
+/// requests map to their battle variants (`0x14029E050`). KH1's own motions never change
+/// while KH2 has Sora (its attacks are KH2's), so the flag follows KH2's pose here: out while
+/// KH2 has the Keyblade out, put away when KH2 puts it away.
+unsafe fn keyblade(base: usize, actor: usize, out: bool, logged: &mut u32) {
+    let flags = rd::<u32>(actor);
+    let cs = pose::ptr(rd::<u32>(actor + 0x14C));
+    let has = flags & WEAPON_OUT != 0;
+    if has == out {
+        return;
+    }
+    if out {
+        let draw: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + DRAW_WEAPON_RVA);
+        draw(actor, 1);
+    } else {
+        super::kh2fx::weapon_vanish();
+        let put_away: unsafe extern "system" fn(usize) = std::mem::transmute(base + PUT_AWAY_RVA);
+        put_away(actor);
+    }
+    if *logged < 400 {
+        *logged += 1;
+        let colour = if cs > 0x10000 { rd::<[u8; 4]>(cs + 0xC) } else { [0; 4] };
+        log(&format!("Keyblade {}: actor flags {flags:08x} -> {:08x}, colour {colour:02x?}", if out { "out" } else { "put away" }, rd::<u32>(actor)));
+    }
+}
+
+/// Sets the sparkle stub's flag (see `SPARKLE_RVA`).
+unsafe fn set_sparkle(on: bool) {
+    let f = SPARKLE_FLAG.load(Ordering::Relaxed);
+    if f != 0 {
+        std::ptr::write_volatile(f as *mut u8, on as u8);
+    }
+}
+
+/// The flight sparkle's state test: a stub doing `cmp [rdi+0x70],8; je; cmp byte [flag],1`
+/// (ZF set: flying), then the `mov eax,[rdi]` it replaced.
+unsafe fn sparkle_stub(base: usize) {
+    let site = base + SPARKLE_RVA;
+    let Some(stub) = hook::alloc_near(site, 32) else {
+        log("flight sparkle: no memory near its test");
+        return;
+    };
+    let code: [u8; 17] = [0x83, 0x7F, 0x70, 0x08, 0x74, 0x07, 0x80, 0x3D, 0x03, 0x00, 0x00, 0x00, 0x01, 0x8B, 0x07, 0xC3, 0x00];
+    std::ptr::copy_nonoverlapping(code.as_ptr(), stub as *mut u8, code.len());
+    let mut new = [0u8; 8];
+    new[0] = 0xE8;
+    new[1..5].copy_from_slice(&((stub as i64 - (site as i64 + 5)) as i32).to_le_bytes());
+    new[5..8].copy_from_slice(&[0x75, 0x5C, 0x90]);
+    if hook::patch(site, &[0x83, 0x7F, 0x70, 0x08, 0x75, 0x5D, 0x8B, 0x07], &new, "flight sparkle test") {
+        SPARKLE_FLAG.store(stub + 16, Ordering::Relaxed);
+    }
+}
+
+pub unsafe fn install() {
+    let base = sys_base();
+    BASE.store(base, Ordering::Relaxed);
+    sparkle_stub(base);
+    hook::install(base + PHYS_RVA, &PHYS_PROLOGUE, physics as *const () as usize, &ORIG_PHYS, "actor physics step");
+    let _ = hook::install(base + FOOTSTEP_RVA, &FOOTSTEP_PROLOGUE, footstep as *const () as usize, &ORIG_FOOTSTEP, "footstep sound");
+    // (KH1's steps at KH2's walk / run feet, KH1's own dropped while KH2 has him: s229 had them
+    // off, the user then: "revert the changes on footsteps". `walk_steps`.)
+    let _ = hook::install(base + STEP_SOUND_RVA, &STEP_SOUND_PROLOGUE, step_sound as *const () as usize, &ORIG_STEP_SOUND, "step sound (walk / run steps)");
+    // (Off, s241: the air spell's landing is KH1's again, see `takeover`'s hand-off.)
+    // let _ = hook::install(base + PLAYER_STEP_RVA, &PLAYER_STEP_PROLOGUE, player_step as *const () as usize, &ORIG_PLAYER_STEP, "player step (an air spell's landing: KH2's)");
+    if hook::install(base + CONTROL_RVA, &CONTROL_PROLOGUE, control as *const () as usize, &ORIG_CONTROL, "player control step").is_some() {
+        CONTROL_HOOKED.store(true, Ordering::Relaxed);
+    }
+}
+
+unsafe fn sys_base() -> usize {
+    super::sys::GetModuleHandleA(std::ptr::null()) as usize
+}

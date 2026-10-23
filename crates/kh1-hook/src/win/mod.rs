@@ -20,6 +20,7 @@ mod fx12;
 mod hook;
 mod hurt;
 mod kh2fx;
+mod kh2dpx;
 mod kh2slots;
 mod kh1voice;
 mod kh2sound;
@@ -223,6 +224,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         debugmenu::install();
         kh2sound::start();
         kh2fx::start();
+        kh2dpx::start();
         pose::load_kh2();
         model::load();
         CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());

@@ -1,0 +1,57 @@
+# Whitelist .gitignore: everything is ignored unless listed below.
+# This makes it impossible to commit extracted game files, dumps, Ghidra
+# databases or build output by accident. To track a new file, add it here.
+
+# 1. Ignore everything.
+/*
+/**/*
+
+# 2. Re-include directories so git can descend into them.
+!*/
+
+# 3. Top-level project files.
+!/.gitignore
+!/.gitattributes
+!/Cargo.toml
+!/Cargo.lock
+!/rust-toolchain.toml
+!/README.md
+!/AGENTS.md
+!/CREDITS.md
+!/NOTICE
+!/LICENSE-MIT
+!/LICENSE-APACHE
+# The built mod for OpenKH (mod.yml and its DLL, from crates/kh1-hook).
+!/mod.yml
+!/kh1-kh2.dll
+
+# 4. Documentation (notes only: no dumps, no tables copied from the game).
+!/docs/*.md
+
+# 5. Crate sources and manifests.
+!/crates/*/Cargo.toml
+!/crates/*/README.md
+!/crates/*/src/**/*.rs
+!/crates/*/tests/**/*.rs
+# The Steam address table (numbers only: Epic RVA -> Steam RVA).
+!/crates/kh1-hook/src/win/steam_map.in
+!/crates/*/examples/**/*.rs
+!/crates/*/build.rs
+!/crates/kh1-hook/openkh/mod.yml
+!/crates/kh1-hook/openkh/README.txt
+
+# 6. Never track these, even if a rule above would match.
+/target/
+/local/
+*.bin
+*.bar
+*.pkg
+*.hed
+*.dat
+*.dmp
+*.gzf
+*.gpr
+*.rep
+
+# Claude Code worktrees (helpers' scratch checkouts).
+/.claude/

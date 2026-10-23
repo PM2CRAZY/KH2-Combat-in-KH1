@@ -150,6 +150,17 @@ pub struct HedEntry {
     pub real_len: u32,
 }
 
+/// A remastered (HD) asset: its name (e.g. `-3.dds`), its header's `+0x20` (its place in the
+/// stream) and `+0x24` (the offset in the original file of the data it replaces) words, and its
+/// bytes (a DDS image for textures).
+#[derive(Clone, Debug)]
+pub struct HdAsset {
+    pub name: String,
+    pub pkg_offset: u32,
+    pub offset: u32,
+    pub data: Vec<u8>,
+}
+
 /// One `.hed`/`.pkg` pair.
 #[derive(Debug)]
 pub struct Archive {
@@ -286,6 +297,58 @@ impl Archive {
             return Ok((asset_name, data));
         }
         Err(Error::NotFound(format!("{name}: remastered asset {asset}*")))
+    }
+
+    /// Every remastered (HD) asset of `name`, in header order, with the header's `+0x20` word (the
+    /// asset's own place in the stream: t369's run, each one the last one's offset plus its size)
+    /// and `+0x24` word (the offset in the original file of the data it replaces: KH1's own loader
+    /// keys an HD texture by it; the games look an HD texture up by where its PS2 texture lies).
+    pub fn read_remastered_all(&self, keys: &KeyTable, name: &str) -> Result<Vec<HdAsset>> {
+        let e = *self.find(name).ok_or_else(|| Error::NotFound(name.to_string()))?;
+        let mut f = File::open(&self.pkg_path)?;
+        f.seek(SeekFrom::Start(e.offset))?;
+        let mut seed = [0u8; 16];
+        f.read_exact(&mut seed)?;
+        let mut h = Reader::new(&seed);
+        let decompressed = h.i32()?;
+        let remastered = h.i32()?;
+        let compressed = h.i32()?;
+        if decompressed < 0 || !(0..=0x10000).contains(&remastered) {
+            return bad(format!("{name}: implausible pkg header"));
+        }
+        let mut heads = vec![0u8; remastered as usize * 0x30];
+        f.read_exact(&mut heads)?;
+        let len = if compressed >= 0 { compressed } else { decompressed } as i64;
+        f.seek(SeekFrom::Current(len))?;
+        let mut out = Vec::new();
+        for head in heads.chunks_exact(0x30) {
+            let end = head[..0x20].iter().position(|&b| b == 0).unwrap_or(0x20);
+            let asset_name = String::from_utf8_lossy(&head[..end]).into_owned();
+            let mut r = Reader::new(&head[0x20..0x30]);
+            let pkg_offset = r.i32()? as u32;
+            let offset = r.i32()? as u32;
+            let dec = r.i32()?;
+            let comp = r.i32()?;
+            let n = if comp >= 0 { comp } else { dec };
+            if n < 0 || n as u64 > e.stored_len as u64 {
+                return bad(format!("{name}: asset {asset_name} has an implausible length"));
+            }
+            let mut data = vec![0u8; n as usize];
+            f.read_exact(&mut data)?;
+            if comp > -2 {
+                keys.decrypt_head(&seed, &mut data);
+            }
+            if comp > -1 {
+                if data.len() < 2 {
+                    return bad(format!("{name}: asset {asset_name} too short"));
+                }
+                let mut d = Vec::with_capacity(dec.max(0) as usize);
+                flate2::read::DeflateDecoder::new(&data[2..]).read_to_end(&mut d)?;
+                data = d;
+            }
+            out.push(HdAsset { name: asset_name, pkg_offset, offset, data });
+        }
+        Ok(out)
     }
 }
 

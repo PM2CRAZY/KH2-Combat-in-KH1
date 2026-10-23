@@ -1,0 +1,16 @@
+[package]
+name = "kh1-data"
+description = "Reads Kingdom Hearts Final Mix's files from the user's own PC install (KH 1.5+2.5) for the KH1 port of the KH2 combat rewrite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+
+[dependencies]
+kh2-formats.workspace = true
+kh2-anim.workspace = true
+glam = "0.29"
+
+[dev-dependencies]
+kh2-data.workspace = true
+character-core = { path = "../character-core" }

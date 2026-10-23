@@ -1,0 +1,13 @@
+title: KH2 Combat for KH1
+originalAuthor: PM (kh2-combat)
+description: >-
+  Kingdom Hearts II's combat and movement for Sora in Kingdom Hearts Final Mix: KH2's combos,
+  finishers and combo abilities, Quick Run, Aerial Dodge, Glide, Dodge Roll, Guard and reaction
+  moves, KH2's field camera and a fourth shortcut. KH2's animations, sounds and effects are read
+  from your own KH2 install. For the Epic Games Store and Steam releases of KH 1.5+2.5. Settings are in
+  kh1-kh2.ini in the game folder (made on first launch).
+assets:
+- name: dll/kh1-kh2.dll
+  method: copy
+  source:
+  - name: kh1-kh2.dll

@@ -10,6 +10,7 @@
 //! - [`pref`]: movement parameters from `03system.bin`
 //! - [`mdlx`]: model meshes, skeletons and textures
 //! - [`pax`], [`dpd`]: effect packages (elements, emitter programs, textures, sprites, models)
+//! - [`kh1dpx`]: a KH2 effect made into a DPX for KH1's own effect system
 //!
 //! Format knowledge comes from the OpenKH project (Apache-2.0). Parts of
 //! this crate are ports of OpenKH's C# readers; see `NOTICE` and
@@ -22,6 +23,7 @@ pub mod anim;
 pub mod mdlx;
 pub mod bar;
 pub mod dpd;
+pub mod kh1dpx;
 pub mod battle;
 pub mod egs;
 pub mod motion;
