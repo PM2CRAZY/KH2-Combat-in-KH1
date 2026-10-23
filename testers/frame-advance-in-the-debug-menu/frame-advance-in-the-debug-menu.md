@@ -240,4 +240,6 @@
 
 
 > [!note] Tester Mr Bugs
+> I'll send a log but a good lead is the games own pause mechanic, when you pause a game during a battle the whole game freezes and your still able to see the game, a text saying P A U S E appears. I'm sure you can look in the kh1 steam ghididra decomp for that. (I'm pretty sure the regular pause screen works that way too, just with some blur affects added on top)
 > 
+> go ahead
