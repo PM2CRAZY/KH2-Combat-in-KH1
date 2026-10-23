@@ -63,6 +63,11 @@ unsafe fn now() -> (u32, u32) {
     (rd::<u32>(b + WORLD_RVA), rd::<u32>(b + ROOM_RVA))
 }
 
+/// KH1's world and room now (`vanish`: a room's load makes its actors whole).
+pub fn world_room() -> (u32, u32) {
+    unsafe { now() }
+}
+
 unsafe fn cups() -> Option<[u8; CUP_COUNT]> {
     let save = super::menu::save_block(base())?;
     let at = save + crate::story::CUPS;

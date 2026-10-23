@@ -897,7 +897,7 @@ unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     super::gauge::revert();
     let Some(f) = d.form.take() else {
         // (Out of the change: its partners back.)
-        super::vanish::frame();
+        super::vanish::revert();
         return;
     };
     IN_FORM.store(false, Ordering::Relaxed);
@@ -914,8 +914,8 @@ unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
         super::kh2sound::event(REVERT_FX, EventKind::Effect(el));
     }
     log(&format!("Revert ({why}){}", if ch.airborne() { ", falling" } else { "" }));
-    // Its partners back beside him now (`vanish`).
-    super::vanish::frame();
+    // Its partners back beside him now (`vanish`; the party logged before and after).
+    super::vanish::revert();
 }
 
 /// KH1 has had Sora for a scene long enough in the form (`takeover::scene_frame`: a cutscene, a

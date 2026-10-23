@@ -1465,6 +1465,16 @@ The log: "Drive: Goofy leaves for Valor Form" / "Drive: Goofy is back". The rule
   `+0x388`, three places) and sets the new one; `0x14028FFD0` pops. Only the game over pushes.
 - Deleting an actor (`0x140290200`: `+0x374` bit 1, his party slot emptied) can't be undone in the
   room (a new party actor is made only by a room's load), so it isn't used.
+- KH1's actor reset (`0x1402904D0 (actor, place)`, s333) keeps only `0x1004083` of the flags word
+  and sets `0x8000`, its flag stack's depth 0: `0x200` and `0x40` go, the model and shadow bits
+  stay as they were. It is reached from KH1's actor script commands (the queue run by
+  `0x14028C550`, its jump table of 45: command 32 "reset at a point", command 40 "reset every actor
+  in place", `0x140288A30` -> `0x1402902E0`), the actor creation's placing (`0x14028EBD0`, the
+  partners beside Sora) and the partners' catch-up warp (`0x1401D02AC`, `0x1401D03E3`, which also
+  fade him in with `0x14029EDB0`, the actor's fade `+0x60` / `+0x64`). The same queue's commands 6
+  and 7 turn the model on (with that fade) and off, 8 and 9 the shadow, 33 / 34 `0x200`, 42 / 43
+  `0x40`, 13 / 14 the `+0x444` hold. A created actor (`0x14028EBD0`) comes in whole: zeroed,
+  `0x8000 | 0x3`.
 
 **KH1's HUD gauge slots (Checked, exe).** `0x1428123E0`: a u32 "bound" flag per slot, and slot n's
 record at `+ n × 0xDF0`, its actor `+0x28` (bound by `0x140266960 (actor, slot)` ->
@@ -1488,9 +1498,9 @@ in the save's party list, `0x140282EC0`). KH1 sets all three at once at times (`
   - else he is back: his bits as they were, placed 60 units beside Sora (on the side he was on,
     at Sora's height), his HUD entry faded in as KH1's revive does (or left hidden if Sora's own
     entry is hidden then);
-  - his actor gone (a new room, the party changed: no member of his id in the field party) or
-    given `0x8000` back by KH1 itself (a new room's actor at the same place, the game over's
-    pop): nothing of ours is left on it; if the form still takes him he is taken again. KH1
+  - his actor replaced (a new room, the party changed) or given `0x8000` back by KH1 itself (its
+    actor reset, the game over's pop): our record of the hide is dropped, but not what it owes
+    (s333, below): if the form still takes him he is taken again, and out of it he is shown. KH1
     holding him frozen (no `0x8000`, its game over) is waited out.
   - KH1's game over pushed his flags while he was away: on his return the pushed copies get his
     bits back too, and `0x8000` stays as KH1 holds it, so its Continue pops him back whole.
@@ -1574,6 +1584,40 @@ mid-match, in the next round Sora reverts to normal and allies become invisible.
   not KH1's own leaving (`+0x374` bit 28): the bits are cleared and his HUD entry faded in as
   Sora's is. The log: "Drive: Goofy found with our away bits out of a form ...: shown again".
 
+**Partners left invisible after a cup round (s333).** The user: "after reverting from a drive form
+inside a coliseum cup the party members that disappeared remain invisible". Wisdom Form in a
+Pegasus Cup round, two rounds won in it, then the form gauge ran out.
+- The log: "Drive: Donald leaves for Wisdom Form", then at both rounds' victory scenes KH1 has Sora
+  (its script's action 31, then its hold) but no "Donald is back (KH1's script takes Sora)" and no
+  later "leaves"; at the revert only "Drive: Donald is back". The scenes didn't freeze on his
+  pose either: he was stepping. Our record of the hide was gone before the first scene.
+- The cause (Checked: exe; which of KH1's resets the cup's script uses wasn't traced): KH1 resets
+  the party's actors in place around a round's end (its actor reset above, `0x1402904D0`: the
+  same actors, not new ones; a new one would have come in whole, drawn). The reset turned `0x8000`
+  back on and cleared `0x240`, and kept the model and shadow bits off from our hide. The code took
+  an actor given `0x8000` back as "KH1 put him back itself" and dropped the record silently; the
+  re-take wanted `0x8001` both on (s331), the safety net exactly our away bits, and the revert had
+  no record: Donald was left acting (stepping, a foe and touchable again) but undrawn, for good.
+- Now (`partners::vanish`, tested there; `win/vanish.rs`): every check takes the actor in the field
+  party now for his member id. A hide of ours is **owed** until we show him again or his model is
+  seen on (KH1 drew him itself, or a new actor came in whole), or the room changes (a room's load
+  makes its actors whole); our exact away bits count as owed whatever is remembered. Owed and
+  undrawn but acting, he is taken again while the form takes him ("Drive: Donald taken again ...:
+  acting but undrawn after a hide of ours, KH1's reset") and shown when it doesn't, at a scene's
+  start or the form's end, acting, model and shadow on whatever was saved ("Drive: Donald shown
+  again ..."). A partner KH1 hid itself (never owed) is never touched; one shown by us once is ours
+  no more, so a scene's own hide after it isn't fought (one KH1 gives while he is already hidden by
+  us can't be told from ours and is undone at his return, as since s331). KH1's own leaving (`+0x374`
+  bit 28) and its game over's frozen flags are left alone.
+- His HUD entry: hidden by us, it stays owed too, and is faded in (mode 1) once he is drawn and
+  Sora's own entry shows (a scene hides the whole HUD; KH1's own showing of it clears the debt).
+- The log: at each revert "Drive: the party at the revert, before: ..." and "... after: ...", each
+  party slot's actor, member, flags word with the bits named (`+acts -model ...`), `+0x374`, flag
+  stack depth, fade `+0x60` and HUD slot alpha and speed; "Drive: the field party's actors changed
+  (...) with a partner away: ..." whenever the slots' actors change while one of ours is away or
+  owed; "Drive: Donald while away: KH1 gave his actor acting back ..." / "... a new actor for him"
+  when our hide stops being on his actor.
+
 ## Drive Forms in the Coliseum (the rule the user's; the rooms Checked: Log)
 
 The user (s331): "in the coliseum, you should be able to maintain your drive form throughout
@@ -1605,8 +1649,11 @@ if you defeat a round in a drive form it should carry over into the next round".
 - Knocked out still reverts at once, as anywhere.
 
 **Open.** A story scene in the arena (Hercules', Cerberus') no longer ends a form by the scene
-rules either; leaving the arena does. The arena's rooms besides 5 and how KH1 runs a round's change
-(the same room kept or re-entered, the party's actors kept or made again) weren't traced.
+rules either; leaving the arena does. The arena's rooms besides 5 weren't traced. A round's change
+(the s333 log) keeps room 5; the party's actors are reset, not made anew (a new one comes in
+whole, drawn; Donald stayed undrawn) (above, "Partners
+left invisible after a cup round"); which of KH1's reset commands the cup's script sends isn't
+traced.
 
 To check in game: enter a cup in a form (reverted on entering the arena, partners back); Drive in
 round 1, win it (the victory scene plays with the partners, the form and its gauge carry over, the

@@ -3584,6 +3584,15 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-22: Stage 334 (partners no longer left invisible after a Coliseum round)
+- The user: "after reverting from a drive form inside a coliseum cup the party members that
+  disappeared remain invisible". KH1's actor reset (0x1402904D0, from actor script commands 32/40,
+  partner placement and the catch-up warp) turns 0x8000 back on and clears 0x200/0x40 but keeps
+  0x1/0x2 off, so our record was dropped as "KH1 put him back" and he stayed undrawn. Now a hide is
+  owed until we show him, his model is seen on, or the room changes; every check uses the current
+  party-slot actor; a restore sets acting, model and shadow on (`partners::vanish`, tested).
+  Revert logs the party's flags before and after. docs/drive-model.md.
+
 ### 2026-10-22: Stage 333 (Drive Recovery items from drops, chests and shops)
 - The user: "lets make drive recovery and high drive recoveries more available throughout the game
   (mob drops, chests, etc)". Enemy drops: after KH1's own drop (`0x1402A9AB0`), one roll by
