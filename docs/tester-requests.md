@@ -10,6 +10,16 @@ Each thread has a title and is separated from the next one by a line. Finished t
 
   
 
+## Contents
+
+- [Frame advance in the debug menu](#frame-advance-in-the-debug-menu)
+- [Chat history](#chat-history)
+- [KH2 effects in KH1's own effect system](#kh2-effects-in-kh1s-own-effect-system)
+- [KH2's combo row selection](#kh2s-combo-row-selection)
+- [Missing sleeves animation](#missing-sleeves-animation)
+- [KH2 Camera fixes](#kh2-camera-fixes)
+- [Table of contents](#table-of-contents)
+
 ---
 
   
@@ -46,6 +56,8 @@ Before replying to anything here, go read `design-philosophy-instructions.md` in
 - Keep going back and forth as long as anything is unclear. Don't write code while you're still discussing.
 
   
+
+**Contents.** Keep the table of contents under the title current: when you first reply to a new thread, add a link to it (`- [Title](#title-as-a-link)`, GitHub's link for the heading: lowercase, spaces as hyphens, punctuation dropped), and when a thread is closed, remove its line.
 
 **Titles.** Each thread starts with a title that says what the tester's first message asked for. If the tester left the title blank or a placeholder, write one when you first reply.
 
@@ -295,12 +307,25 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >
 >go ahead
 
+> [!tip] Assistant
+> I read all of `docs/chat-history-log.md`. What I'm taking from it:
+>
+> - The rules in it are already in `design-philosophy-instructions.md` (native always, KH2's numbers through KH1's own systems, open scope, performance, no decompiled code in the repo), and I follow that file.
+> - From M004: animations are baked raw from KH2 into KH1's motion slots, and hair, hood and chain movement is baked into them, not physics. I passed that on for the sleeves thread.
+> - Effects: Explosion's step 1 is done (t368 to t370). The element layer, KH2's `pppRyjMegaBirth`, `pppEiDrawShipoly` and retiring the parallel player are still open. That's the effects thread below.
+> - Hit effects: KH2 spell hits now play the KH1 spell's own spark through KH1's contact code, but deciding that a hit lands is still KH2's code running beside KH1's. That part isn't native yet.
+>
+> If there's a later chat you want me to have too, add it to the same file and tell me.
+
+> [!note] Tester Mr Bugs
+> 
+
 
 ---
 
   
 
-## Title (the assistant fills this in if you leave it)
+## KH2 effects in KH1's own effect system
 
   
 
@@ -412,7 +437,7 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 
   
 
-## Title (the assistant fills this in if you leave it)
+## KH2's combo row selection
 
   
 
@@ -461,5 +486,8 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 
 > go ahead
 
+> [!tip] Assistant
+> Done. There's a Contents list at the top of the file, under the title, with a link to every open thread. I added a rule to the assistant section so it stays current: each new thread gets a line when it's first answered, and its line comes off when it's closed.
 
-
+> [!note] Tester Mr Bugs
+> 
