@@ -139,4 +139,8 @@
 
 
 > [!note] Tester Mr Bugs
-> 
+> 1. (a) thats how its supposed to work and when we transition that move to native kh1 it will work the same 
+>    
+>    Okay I recorded it and sent a log I noticed that sora next to a ledge will start a short jump attack
+>    
+>    go ahead

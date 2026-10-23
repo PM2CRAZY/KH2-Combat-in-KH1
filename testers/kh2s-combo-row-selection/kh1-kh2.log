@@ -1,0 +1,1307 @@
+[f0] kh1-kh2 t409 (0.1.0) loaded (build 1792786730) in E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\KINGDOM HEARTS FINAL MIX.exe
+[f0] game build: Steam
+[f0] crash notes on (our code at 0x7ffdc3290000)
+[f0] hooked skeleton pass at 0x7ff7d7151c70
+[f0] hooked skeleton pass with ground IK at 0x7ff7d7152560
+[f0] hooked actor motion set bind (KH2 slots) at 0x7ff7d7047e40
+[f0] hooked motion set bind (KH2 slots) at 0x7ff7d70486f0
+[f0] hooked set motion at 0x7ff7d705f7c0
+[f0] hooked set motion at 0x7ff7d705f980
+[f0] hooked set motion at 0x7ff7d705fa30
+[f0] hooked attack touched actor at 0x7ff7d707f330
+[f0] hooked actor animation update at 0x7ff7d705f0a0
+[f0] hooked pad record at 0x7ff7d6ed2b30
+[f0] hooked event script opcodes (trace) at 0x7ff7d6f73530
+[f0] hooked actor physics step at 0x7ff7d705a3c0
+[f0] hooked footstep sound at 0x7ff7d7055e00
+[f0] hooked step sound (KH2's footsteps) at 0x7ff7d7055b40
+[f0] hooked player control step at 0x7ff7d7066220
+[f0] hooked enemy launch reaction at 0x7ff7d7078530
+[f0] hooked execute attack row at 0x7ff7d70668f0
+[f0] hooked command step at 0x7ff7d7067510
+[f0] hooked menu entry run (spells only in KH2's windows) at 0x7ff7d7053480
+[f0] hooked hit processing at 0x7ff7d705bbd0
+[f0] hooked ability table load at 0x7ff7d704f9d0
+[f0] hooked reward message line at 0x7ff7d6f78ae0
+[f0] hooked party stats at 0x7ff7d7065130
+[f0] settings loaded (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_camera: false, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40])), fx_test: false, hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [true, true, false, false, false, false, false, true, false, false], gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, trace: On, trace_seconds: 6, sound_log: false, trace_game_frames: false, trace_cats: 963, debug_menu: true }
+[f0] KH2 camera: KH1's follow, lock-on and movement-state cameras ([4, 5, 6, 8, 2]) swapped for KH2's (KH1's chosen; KH1's camera calls: KH2's camera)
+[f0] hooked menu text lookup at 0x7ff7d7090970
+[f0] hooked Config help line at 0x7ff7d70ba1a0
+[f0] hooked menu panel (Config pages) at 0x7ff7d7097910
+[f0] hooked Config menu at 0x7ff7d70ba210
+[f0] Config menu: our rows added (Camera Style, Physics and the move styles, on pages of 8 after KH1's)
+[f0] hooked shortcut get at 0x7ff7d7045090
+[f0] hooked shortcut set at 0x7ff7d70457c0
+[f0] hooked magic learned at 0x7ff7d7045260
+[f0] hooked battle menus fill at 0x7ff7d70544c0
+[f0] hooked Customize spell list fill at 0x7ff7d70c41a0
+[f0] hooked Customize spell list fill at 0x7ff7d70c4290
+[f0] hooked Customize spell list window at 0x7ff7d70c2740
+[f0] Customize: Reflect can go in the shortcuts (spell list moved to 0x7ff7c70c0000)
+[f0] hooked command step at 0x7ff7d70537f0
+[f0] shortcut menu: four rows
+[f0] Customize: four shortcut rows
+[f0] shortcuts: four
+[f0] hooked Gummi route start (skip) at 0x7ff7d6fd1070
+[f0] Gummi routes: flown (gummi = vanilla)
+[f0] hooked Equipment weapon list fill at 0x7ff7d70c7290
+[f0] Equipment: Valor row for Sora (stubs at 0x7ff7c6e00000)
+[f0] Reflect: menu entry ready (command 0x7d, learned with Aero, its level Aero's, 1 MP = KH1 cost 100)
+[f0] hooked list draw (Drive title) at 0x7ff7d703a0b0
+[f0] Drive: D-pad left at the battle menu's top flips to page 2 (Attack, Magic, Items, Drive: Valor Form, Wisdom Form)
+[f0] hooked model queue (left Keyblade, KH2 model) at 0x7ff7d6f94070
+[f0] hooked Keyblade trail request (left Keyblade) at 0x7ff7d7082310
+[f0] hooked interpolated replay (KH2 model's counters) at 0x7ff7d6ec25a0
+[f0] KH2 attacks: room exits kept out, crate pushes kept out
+[f0] hooked menu sound log at 0x7ff7d6f3a040
+[f0] hooked voice group log at 0x7ff7d70501f0
+[f0] hooked voice clip log at 0x7ff7d7050930
+[f0] hooked voice call log at 0x7ff7d6e9c210
+[f0] hooked sound effect create log at 0x7ff7d6e9e460
+[f0] hooked sound effect play log at 0x7ff7d6e9ecf0
+[f0] hooked frame end (debug menu input, stat locks) at 0x7ff7d6ec9b40
+[f0] hooked end of the frame's drawing (debug menu) at 0x7ff7d6ebbbe0
+[f0] hooked keyboard mapping (frame advance's period key) at 0x7ff7d6e97e80
+[f0] hooked world-model pass at 0x7ff7d6facf30
+[f0] loaded by Panacea (mod folder E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod/kh1)
+[f0] KH2 model: P_EX100: 228 bones, 2973 triangles in 4 groups, 3 textures
+[f0] form tint: xa_ex_0010.mdls -1c0.dds read from the PKG (1024x1024)
+[f0] left Keyblade: trail windows of W_EX010_BTLF_L for 12 motions
+[f0] form tint: xa_ex_0010.mdls -1c1.dds read from the PKG (1024x1024)
+[f0] form tint: xa_ex_0010.mdls -1c3.dds read from the PKG (1024x512)
+[f0] KH2 model: P_EX100_BTLF: 228 bones, 2973 triangles in 4 groups, 3 textures
+[f0] KH2 effects (native): element 44: effect 31 as 0x72c on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0xa61, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f0] KH2 effects (native): element 45: effect 32 as 0x72d on KH1 Bone(70) (KH2 bone 0x43), flags 0xa61, wait 0, fade-out 0, offset [18.7473, 0.0, 0.0] turned [-1.5707761, 1.5707784, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [18.7473, 0.0, 0.0] / [0, 16384, 16384]), scale [1.0, 1.0, 1.0]
+[f0] KH2 effects (native): element 46: effect 33 as 0x72e on KH1 Bone(93) (KH2 bone 0xaa), flags 0xa61, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, -3.1415634] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, -32768]), scale [1.0, 1.0, 1.0]
+[f0] KH2 effects (native): element 47: effect 33 as 0x72f on KH1 Bone(198) (KH2 bone 0x4e), flags 0xa61, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 3.1415825] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f0] KH2 effects (native): element 48: effect 34 as 0x730 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f0] KH2 model: P_EX100_MAGF: 228 bones, 2973 triangles in 4 groups, 3 textures
+[f0] KH2 effects (native): Explosion's DPX built, 409232 bytes in 0.40 s; particle datas [11, 12, 13, 14], 12 textures, vram 0x3800..0x3ac0 / 0x3d40..0x3d70 (6 TBP, 2 CBP slots); own 0x3080/0x3e10 -> 0x3800/0x3d40; own 0x3060/0x3e0c -> 0x3820/0x3d44; common 0x2c40/0x2e00 -> 0x3840/0x3d48; common 0x2c60/0x2e04 -> 0x3860/0x3d4c; common 0x2c40/0x2e08 -> 0x3840/0x3d50; common 0x2c80/0x2e0c -> 0x3880/0x3d54; common 0x2c40/0x2e10 -> 0x3840/0x3d58; common 0x2c40/0x2e14 -> 0x3840/0x3d5c; common 0x2c60/0x2e18 -> 0x3860/0x3d60; common 0x2a00/0x2e34 -> 0x38c0/0x3d64; common 0x2d00/0x2e1c -> 0x3a80/0x3d68; common 0x2d20/0x2e2c -> 0x3aa0/0x3d6c; particle data 14: programs [241, 241] not in KH1 yet (dummy); effect 31 as 1836 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 32 as 1837 (offset [18.7473, 0.0, 0.0], angles [0, 16384, 16384]); effect 33 as 1838 (offset [0.0, 0.0, 0.0], angles [0, 0, -32768]); effect 33 as 1839 (offset [0.0, 0.0, 0.0], angles [0, 0, 32768]); effect 34 as 1840 (offset [0.0, 0.0, 0.0], angles [0, 0, 0])
+[f0] KH2 effects (native): HD textures: own 0x4c730 (tbp 0x3080) <- -4.dds (8320 bytes); own 0x4eb50 (tbp 0x3060) <- -3.dds (8320 bytes); common 0xa0 (tbp 0x2c40) <- -3.dds (8320 bytes); common 0x8c0 (tbp 0x2c60) <- -4.dds (32896 bytes); common 0x1ce0 (tbp 0x2c40) <- -3.dds (8320 bytes, same TBP); common 0xb140 (tbp 0x2c80) <- -5.dds (16512 bytes); common 0xf560 (tbp 0x2c40) <- -3.dds (8320 bytes, same TBP); common 0xfd80 (tbp 0x2c40) <- -3.dds (8320 bytes, same TBP); common 0x111a0 (tbp 0x2c60) <- -4.dds (32896 bytes, same TBP); common 0x149e0 (tbp 0x2a00) <- -0.dds (131200 bytes); common 0x30e00 (tbp 0x2d00) <- -7.dds (32896 bytes); common 0x3ba60 (tbp 0x2d20) <- -8.dds (32896 bytes); P_EX100 assets [-0.dds for 0x3fe70 (8320 bytes, at 0x850a0), -1.dds for 0x47ef0 (8320 bytes, at 0x87120), -2.dds for 0x42290 (8320 bytes, at 0x891a0), -3.dds for 0x4eb50 (8320 bytes, at 0x8b220), -4.dds for 0x4c730 (8320 bytes, at 0x8d2a0), -5.dds for 0x4a310 (8320 bytes, at 0x8f320), -6.dds for 0x45ad0 (8320 bytes, at 0x913a0), -7.dds for 0x446b0 (8320 bytes, at 0x93420), -8.dds for 0x2007c5f0 (2097280 bytes, at 0x954a0)], texcommon assets [-0.dds for 0x149e0 (131200 bytes, at 0x424d0), -1.dds for 0x33220 (16512 bytes, at 0x62550), -10.dds for 0x2900 (16512 bytes, at 0x665d0), -11.dds for 0x6d20 (16512 bytes, at 0x6a650), -2.dds for 0x37640 (16512 bytes, at 0x6e6d0), -3.dds for 0xa0 (8320 bytes, at 0x72750), -4.dds for 0x8c0 (32896 bytes, at 0x747d0), -5.dds for 0xb140 (16512 bytes, at 0x7c850), -6.dds for 0x3de80 (16512 bytes, at 0x808d0), -7.dds for 0x30e00 (32896 bytes, at 0x84950), -8.dds for 0x3ba60 (32896 bytes, at 0x8c9d0), -9.dds for 0x125c0 (8320 bytes, at 0x94a50)]
+[f0] KH2 model: P_EX100_ULTF: 228 bones, 2973 triangles in 4 groups, 3 textures
+[f0] KH2 model: 30 KH2 Keyblades named (kingdom key W_EX010, oathkeeper W_EX010_10, oblivion W_EX010_20, star seeker W_EX010_30, hidden dragon W_EX010_40, hero's crest W_EX010_50, monochrome W_EX010_60, follow the wind W_EX010_70, circle of life W_EX010_80, photon debugger W_EX010_90, gull wing W_EX010_A0, rumbling rose W_EX010_B0, guardian soul W_EX010_C0, wishing lamp W_EX010_D0, decisive pumpkin W_EX010_E0, sweet memories W_EX010_G0, mysterious abyss W_EX010_H0, sleeping lion W_EX010_F0, bond of flame W_EX010_K0, two become one W_EX010_P0, fatal crest W_EX010_J0, fenrir W_EX010_M0, ultima weapon W_EX010_N0, winners proof W_EX010_R0, struggle sword W_EX010_W0, struggle wand W_EX010_V0, struggle hammer W_EX010_U0, detection saber W_EX010_Y0, frontier of ultima W_EX010_Z0, antiform dummy W_EX000), Live files, in 0.7s
+[f0] KH2 battle walk: ground speed 111 units/s
+[f0] KH2 field walk: ground speed 134 units/s
+[f0] KH2 battle run: ground speed 484 units/s
+[f0] KH2 field run: ground speed 427 units/s
+[f0] KH2 Sora loaded (Live files): 228 bones, 83 motions (3 with field variants), in 0.7s
+[f0] KH2 Wisdom Form loaded: 45 motions, 5 combo rows, script 2750 bytes, effects read, in 0.5s
+[f0] form: Sora's combo row 37 (motion 167, ability 95) added
+[f0] KH2 Valor Form loaded: 38 motions, 16 combo rows, 2 weapons, in 0.3s
+[f0] KH2 Final Form loaded: 50 motions, 12 combo rows, 2 weapons (on bones [Some(178), Some(86)]), effects read, in 0.5s
+[f0] KH1 Sora's motion table: 118 slots
+[f0] KH2 slots: KH2 motion 152 baked (56 frames, 184080 bytes, in 13 ms): 294 keyed channels, 11060 keys, 32 constants, 129 bones built once; travel [0.0, 0.0, 99.5] model units (6 H10 keys); KH1's FK from it within 0.219 units of the pose (worst bone 191)
+[f0] KH2 slots: KH2 motion 152 as KH1 slot 118 (for KH1's slot 99 / request 0xc9, 48 -> 56 frames): 4.0 [(7.0, 0), (9.333333, 0), (28.0, 0), (56.0, 0)]; 4.1 [(7.0, 8), (9.333333, 8), (28.0, 8), (56.0, 8)]; 6.0 [(0.0, 25), (28.599665, 4), (55.255665, 1)]; 1.0 [(20.0, 1), (32.0, 0)]; 5.0 [(30.0, 1), (56.0, 0)]; 7.0 [(20.0, 1), (32.0, 0)]
+[f0] Reflect: magic/REFLECT_1.mag read (142000 bytes)
+[f0] Reflect level 1 (Reflect): script and 17 effect elements ready; cast motions 71 / finisher Some(72) / air 73; sub 0: barrier ATKP 573 kind Some(3), counter 574 (power, re-hit frames) Some((50, 10))
+[f0] KH2 effects: Reflect level 1's package, 17 elements, 8 textures
+[f0] Reflect: magic/REFLECT_2.mag read (187360 bytes)
+[f0] Reflect level 2 (Reflera): script and 17 effect elements ready; cast motions 71 / finisher Some(72) / air 73; sub 2: barrier ATKP 573 kind Some(3), counter 574 (power, re-hit frames) Some((50, 8))
+[f0] KH2 slots: KH2 motion 151 baked (48 frames, 150720 bytes, in 16 ms): 238 keyed channels, 8863 keys, 60 constants, 144 bones built once; travel [0.0, 0.0, 150.0] model units (36 H10 keys); KH1's FK from it within 0.227 units of the pose (worst bone 289)
+[f0] KH2 slots: KH2 motion 151 as KH1 slot 119 (for KH1's slot 98 / request 0xc8, 48 -> 48 frames): 4.0 [(18.0, 0), (46.0, 0)]; 4.1 [(18.0, 8), (32.0, 8), (40.0, 8)]; 6.0 [(0.0, 25), (18.534, 3), (42.0, 2)]; 1.0 [(15.0, 1), (23.0, 0)]; 5.0 [(23.0, 1), (48.0, 0)]; 7.0 [(13.0, 1), (23.0, 0)]
+[f0] KH2 effects: Reflect level 2's package, 17 elements, 8 textures
+[f0] KH2 slots: KH2 motion 151 baked (48 frames, 158336 bytes, in 12 ms): 256 keyed channels, 9274 keys, 60 constants, 139 bones built once; travel [0.0, 0.0, 150.0] model units (36 H10 keys); KH1's FK from it within 0.227 units of the pose (worst bone 289)
+[f0] KH2 slots: KH2 motion 151 as KH1 slot 120 (for KH1's slot 100 / request 0xca, 64 -> 48 frames): 4.0 [(16.5, 0), (18.0, 0), (19.5, 0), (21.0, 0), (22.5, 0)]; 4.1 [(16.5, 8), (18.0, 8), (19.5, 8), (21.0, 8), (22.5, 16)]; 6.0 [(0.0, 25), (14.9535, 3), (43.146, 1)]; 1.0 [(15.0, 1), (23.0, 0)]; 5.0 [(23.0, 1), (48.0, 0)]; 7.0 [(13.0, 1), (23.0, 0)]
+[f0] Reflect: magic/REFLECT_3.mag read (197920 bytes)
+[f0] Reflect level 3 (Reflega): script and 17 effect elements ready; cast motions 71 / finisher Some(72) / air 73; sub 4: barrier ATKP 573 kind Some(3), counter 574 (power, re-hit frames) Some((50, 6))
+[f0] KH2 effects: Reflect level 3's package, 17 elements, 9 textures
+[f0] KH2 slots: KH2 motion 154 baked (80 frames, 198464 bytes, in 17 ms): 262 keyed channels, 11941 keys, 39 constants, 141 bones built once; travel [0.0, 0.0, 145.3] model units (6 H10 keys); KH1's FK from it within 0.289 units of the pose (worst bone 291)
+[f0] KH2 slots: KH2 motion 154 as KH1 slot 121 (for KH1's slot 101 / request 0xcb, 80 -> 80 frames): 4.0 [(8.0, 0), (28.0, 0), (80.0, 0)]; 4.1 [(8.0, 8), (28.0, 8), (80.0, 8)]; 6.0 [(0.0, 25), (8.336, 1), (28.028, 4), (79.918, 2)]; 1.0 [(23.0, 1), (38.0, 0)]; 7.0 [(17.0, 1), (38.0, 0)]
+[f0] KH2 effects: Wisdom Form's package, 43 elements, 10 textures
+[f0] KH2 slots: KH2 motion 181 baked (60 frames, 184336 bytes, in 13 ms): 305 keyed channels, 11097 keys, 8 constants, 127 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.274 units of the pose (worst bone 156)
+[f0] KH2 slots: KH2 motion 181 as KH1 slot 122 (for KH1's slot 102 / request 0xcc, 40 -> 60 frames): 6.0 [(0.0, 25)]; 1.0 [(12.0, 1), (23.0, 0)]; 5.0 [(22.0, 1), (60.0, 0)]; 7.0 [(12.0, 1), (23.0, 0)]
+[f0] KH2 slots: KH2 motion 182 baked (60 frames, 169088 bytes, in 13 ms): 304 keyed channels, 10087 keys, 7 constants, 128 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.299 units of the pose (worst bone 285)
+[f0] KH2 slots: KH2 motion 182 as KH1 slot 123 (for KH1's slot 103 / request 0xcd, 42 -> 60 frames): 6.0 [(0.0, 25)]; 1.0 [(8.0, 1), (22.0, 0)]; 5.0 [(20.0, 1), (60.0, 0)]; 7.0 [(3.0, 1), (22.0, 0)]
+[f0] KH2 slots: KH2 motion 183 baked (66 frames, 196112 bytes, in 15 ms): 311 keyed channels, 11797 keys, 5 constants, 121 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.242 units of the pose (worst bone 110)
+[f0] KH2 slots: KH2 motion 183 as KH1 slot 124 (for KH1's slot 104 / request 0xce, 56 -> 66 frames): 6.0 [(0.0, 25)]; 1.0 [(12.0, 1), (23.0, 0)]; 7.0 [(8.0, 1), (23.0, 0)]
+[f0] KH2 slots: KH2 motion 1 baked (64 frames, 109584 bytes, in 13 ms): 211 keyed channels, 6441 keys, 77 constants, 147 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.318 units of the pose (worst bone 291)
+[f0] KH2 slots: KH2 motion 1 (field) as KH1 slot 125 (for KH1's slot 2 / request 0x1, 60 -> 64 frames): 4.0 [(21.333334, 1), (49.06667, 1)]; 4.1 [(0.0, 9), (29.866669, 9)]; 6.0 [(17.066668, 2), (32.0, 25), (49.06667, 1)]
+[f0] KH2 slots: KH2 motion 1 baked (72 frames, 110576 bytes, in 16 ms): 215 keyed channels, 6504 keys, 73 constants, 146 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.363 units of the pose (worst bone 291)
+[f0] KH2 slots: KH2 motion 1 as KH1 slot 126 (for KH1's slot 3 / request 0x1, 60 -> 72 frames): 4.0 [(24.0, 1), (55.2, 1)]; 4.1 [(0.0, 9), (33.600002, 9)]; 6.0 [(19.2, 2), (36.0, 25), (55.2, 1)]
+[f0] KH2 slots: KH2 motion 1 baked (72 frames, 110336 bytes, in 19 ms): 228 keyed channels, 6476 keys, 74 constants, 145 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.363 units of the pose (worst bone 291)
+[f0] KH2 slots: KH2 motion 1 as KH1 slot 127 (for KH1's slot 4 / request 0x1, 48 -> 72 frames): 4.0 [(30.0, 0), (69.0, 0)]; 4.1 [(30.0, 1), (69.0, 1)]; 6.0 [(12.0, 25), (33.0, 2), (69.0, 1)]
+[f0] KH2 slots: KH2 motion 2 baked (40 frames, 120688 bytes, in 9 ms): 240 keyed channels, 7059 keys, 57 constants, 146 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.228 units of the pose (worst bone 291)
+[f0] KH2 slots: KH2 motion 2 (field) as KH1 slot 128 (for KH1's slot 5 / request 0x2, 36 -> 40 frames): 4.0 [(0.0, 18), (6.666667, 18), (8.888889, 10), (13.333334, 2), (20.0, 18), (28.88889, 10), (33.333336, 2), (35.555557, 18)]; 6.0 [(10.0, 25), (11.111112, 4), (30.000002, 25), (31.111113, 3)]
+[f0] KH2 slots: KH2 motion 2 baked (32 frames, 102976 bytes, in 7 ms): 238 keyed channels, 5977 keys, 59 constants, 146 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.226 units of the pose (worst bone 155)
+[f0] KH2 slots: KH2 motion 2 as KH1 slot 129 (for KH1's slot 6 / request 0x2, 36 -> 32 frames): 4.0 [(0.0, 18), (5.3333335, 18), (7.111111, 10), (10.666667, 2), (16.0, 18), (23.11111, 10), (24.88889, 2), (28.444445, 18)]; 6.0 [(8.0, 25), (8.888889, 4), (24.0, 25), (24.88889, 3)]
+[f0] KH2 slots: KH2 motion 2 baked (32 frames, 102896 bytes, in 7 ms): 238 keyed channels, 5977 keys, 59 constants, 146 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.226 units of the pose (worst bone 155)
+[f0] KH2 slots: KH2 motion 2 as KH1 slot 130 (for KH1's slot 7 / request 0x2, 36 -> 32 frames): 4.0 [(0.0, 18), (5.3333335, 18), (7.111111, 10), (10.666667, 2), (16.0, 18), (23.11111, 10), (28.444445, 2), (30.222223, 18)]; 6.0 [(8.0, 25), (8.888889, 4), (24.0, 25), (24.88889, 3)]
+[f0] KH2 slots: KH2 motion 153 baked (72 frames, 222208 bytes, in 15 ms): 318 keyed channels, 13442 keys, 5 constants, 121 bones built once; travel [0.0, 0.0, 264.4] model units (7 H10 keys); KH1's FK from it within 0.219 units of the pose (worst bone 155)
+[f0] KH2 slots: KH2 motion 153 as KH1 slot 131 (for KH1's slot 99 / request 0xc9, by KH2's row selection, 48 -> 72 frames): 4.0 [(9.0, 0), (12.0, 0), (36.0, 0), (72.0, 0)]; 4.1 [(9.0, 8), (12.0, 8), (36.0, 8), (72.0, 8)]; 6.0 [(0.0, 25), (36.771, 4), (71.043, 1)]; 1.0 [(20.0, 1), (32.0, 0), (38.0, 1), (47.0, 0)]; 5.0 [(44.0, 1), (72.0, 0)]; 7.0 [(20.0, 1), (32.0, 0), (38.0, 1), (47.0, 0)]
+[f0] KH2 slots: KH2 motion 151 baked (48 frames, 167024 bytes, in 11 ms): 263 keyed channels, 9962 keys, 60 constants, 139 bones built once; travel [0.0, 0.0, 150.0] model units (36 H10 keys); KH1's FK from it within 0.227 units of the pose (worst bone 289)
+[f0] KH2 slots: KH2 motion 151 as KH1 slot 132 (for KH1's slot 99 / request 0xc9, by KH2's row selection, 48 -> 48 frames): 4.0 [(6.0, 0), (8.0, 0), (24.0, 0), (48.0, 0)]; 4.1 [(6.0, 8), (8.0, 8), (24.0, 8), (48.0, 8)]; 6.0 [(0.0, 25), (24.514, 4), (47.362, 1)]; 1.0 [(15.0, 1), (23.0, 0)]; 5.0 [(23.0, 1), (48.0, 0)]; 7.0 [(13.0, 1), (23.0, 0)]
+[f0] KH2 slots: KH2 motion 153 baked (72 frames, 200800 bytes, in 15 ms): 294 keyed channels, 12024 keys, 5 constants, 126 bones built once; travel [0.0, 0.0, 264.4] model units (7 H10 keys); KH1's FK from it within 0.219 units of the pose (worst bone 155)
+[f0] KH2 slots: KH2 motion 153 as KH1 slot 133 (for KH1's slot 98 / request 0xc8, by KH2's row selection, 48 -> 72 frames): 4.0 [(27.0, 0), (69.0, 0)]; 4.1 [(27.0, 8), (48.0, 8), (60.0, 8)]; 6.0 [(0.0, 25), (27.801, 3), (63.0, 2)]; 1.0 [(20.0, 1), (32.0, 0), (38.0, 1), (47.0, 0)]; 5.0 [(44.0, 1), (72.0, 0)]; 7.0 [(20.0, 1), (32.0, 0), (38.0, 1), (47.0, 0)]
+[f0] KH2 slots: KH2 motion 152 baked (56 frames, 164992 bytes, in 13 ms): 269 keyed channels, 9788 keys, 32 constants, 134 bones built once; travel [0.0, 0.0, 99.5] model units (6 H10 keys); KH1's FK from it within 0.219 units of the pose (worst bone 191)
+[f0] KH2 slots: KH2 motion 152 as KH1 slot 134 (for KH1's slot 98 / request 0xc8, by KH2's row selection, 48 -> 56 frames): 4.0 [(21.0, 0), (53.666664, 0)]; 4.1 [(21.0, 8), (37.333332, 8), (46.666664, 8)]; 6.0 [(0.0, 25), (21.623, 3), (49.0, 2)]; 1.0 [(20.0, 1), (32.0, 0)]; 5.0 [(30.0, 1), (56.0, 0)]; 7.0 [(20.0, 1), (32.0, 0)]
+[f0] KH2 slots: KH2 motion 153 baked (72 frames, 209264 bytes, in 16 ms): 311 keyed channels, 12488 keys, 5 constants, 121 bones built once; travel [0.0, 0.0, 264.4] model units (7 H10 keys); KH1's FK from it within 0.219 units of the pose (worst bone 155)
+[f0] KH2 slots: KH2 motion 153 as KH1 slot 135 (for KH1's slot 100 / request 0xca, by KH2's row selection, 64 -> 72 frames): 4.0 [(24.75, 0), (27.0, 0), (29.25, 0), (31.5, 0), (33.75, 0)]; 4.1 [(24.75, 8), (27.0, 8), (29.25, 8), (31.5, 8), (33.75, 16)]; 6.0 [(0.0, 25), (22.43025, 3), (64.719, 1)]; 1.0 [(20.0, 1), (32.0, 0), (38.0, 1), (47.0, 0)]; 5.0 [(44.0, 1), (72.0, 0)]; 7.0 [(20.0, 1), (32.0, 0), (38.0, 1), (47.0, 0)]
+[f0] KH2 sounds: effect element 49 has no sound
+[f0] KH2 sounds: effect element 53 has no sound
+[f0] KH2 sounds: effect element 54 has no sound
+[f0] KH2 sounds: effect element 55 has no sound
+[f0] KH2 sounds: effect element 56 has no sound
+[f0] KH2 sounds: effect element 40 has no sound
+[f0] KH2 sounds: effect element 2 has no sound
+[f0] KH2 sounds: effect element 3 has no sound
+[f0] KH2 sounds: effect element 4 has no sound
+[f0] KH2 sounds: effect element 5 has no sound
+[f0] KH2 sounds: effect element 6 has no sound
+[f0] KH2 sounds: effect element 7 has no sound
+[f0] KH2 sounds: effect element 8 has no sound
+[f0] KH2 sounds: effect element 9 has no sound
+[f0] KH2 sounds: effect element 10 has no sound
+[f0] KH2 sounds: effect element 11 has no sound
+[f0] KH2 sounds: effect element 12 has no sound
+[f0] KH2 sounds: effect element 13 has no sound
+[f0] KH2 sounds: effect element 45 has no sound
+[f0] KH2 sounds: effect element 46 has no sound
+[f0] KH2 sounds: effect element 47 has no sound
+[f0] KH2 sounds: effect element 30 has no sound
+[f0] KH2 sounds: effect element 31 has no sound
+[f0] KH2 sounds: effect element 16 has no sound
+[f0] KH2 sounds: effect element 17 has no sound
+[f0] KH2 sounds: effect element 18 has no sound
+[f0] KH2 sounds: effect element 19 has no sound
+[f0] KH2 sounds: effect element 20 has no sound
+[f0] KH2 sounds: effect element 21 has no sound
+[f0] KH2 sounds: effect element 22 has no sound
+[f0] KH2 sounds: effect element 23 has no sound
+[f0] KH2 sounds: effect element 24 has no sound
+[f0] KH2 sounds: effect element 25 has no sound
+[f0] KH2 sounds: effect element 26 has no sound
+[f0] KH2 sounds: effect element 27 has no sound
+[f0] KH2 effects: Valor Form's package, 30 elements, 8 textures
+[f0] KH2 slots: KH2 motion 152 baked (56 frames, 173040 bytes, in 13 ms): 287 keyed channels, 10225 keys, 32 constants, 129 bones built once; travel [0.0, 0.0, 99.5] model units (6 H10 keys); KH1's FK from it within 0.219 units of the pose (worst bone 191)
+[f0] KH2 slots: KH2 motion 152 as KH1 slot 136 (for KH1's slot 100 / request 0xca, by KH2's row selection, 64 -> 56 frames): 4.0 [(19.25, 0), (21.0, 0), (22.75, 0), (24.5, 0), (26.25, 0)]; 4.1 [(19.25, 8), (21.0, 8), (22.75, 8), (24.5, 8), (26.25, 16)]; 6.0 [(0.0, 25), (17.44575, 3), (50.336998, 1)]; 1.0 [(20.0, 1), (32.0, 0)]; 5.0 [(30.0, 1), (56.0, 0)]; 7.0 [(20.0, 1), (32.0, 0)]
+[f0] KH2 effects: Final Form's package, 61 elements, 17 textures
+[f0] KH2 effects: 57 elements, 171 textures loaded in 2.3 s
+[f0] KH2 slots: KH2 motion 155 baked (80 frames, 208960 bytes, in 17 ms): 264 keyed channels, 12597 keys, 37 constants, 141 bones built once; travel [0.0, 0.0, 157.1] model units (7 H10 keys); KH1's FK from it within 0.267 units of the pose (worst bone 291)
+[f0] KH2 slots: KH2 motion 155 as KH1 slot 137 (for KH1's slot 101 / request 0xcb, by KH2's row selection, 80 -> 80 frames): 4.0 [(8.0, 0), (28.0, 0), (80.0, 0)]; 4.1 [(8.0, 8), (28.0, 8), (80.0, 8)]; 6.0 [(0.0, 25), (8.336, 1), (28.028, 4), (79.918, 2)]; 1.0 [(29.0, 1), (39.0, 0)]; 7.0 [(25.0, 1), (39.0, 0)]
+[f0] KH2 slots: KH2 motion 182 baked (60 frames, 164096 bytes, in 12 ms): 307 keyed channels, 9832 keys, 6 constants, 127 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.299 units of the pose (worst bone 285)
+[f0] KH2 slots: KH2 motion 182 as KH1 slot 138 (for KH1's slot 102 / request 0xcc, by KH2's row selection, 40 -> 60 frames): 6.0 [(0.0, 25)]; 1.0 [(8.0, 1), (22.0, 0)]; 5.0 [(20.0, 1), (60.0, 0)]; 7.0 [(3.0, 1), (22.0, 0)]
+[f0] KH2 slots: KH2 motion 181 baked (60 frames, 189392 bytes, in 15 ms): 302 keyed channels, 11355 keys, 9 constants, 128 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.274 units of the pose (worst bone 156)
+[f0] KH2 slots: KH2 motion 181 as KH1 slot 139 (for KH1's slot 103 / request 0xcd, by KH2's row selection, 42 -> 60 frames): 6.0 [(0.0, 25)]; 1.0 [(12.0, 1), (23.0, 0)]; 5.0 [(22.0, 1), (60.0, 0)]; 7.0 [(12.0, 1), (23.0, 0)]
+[f0] KH2 effects: the Keyblade's package, 5 elements
+[f0] KH2 slots: KH2 motion 184 baked (68 frames, 220848 bytes, in 14 ms): 310 keyed channels, 13341 keys, 10 constants, 121 bones built once; travel none (KH1 doesn't move it) (0 H10 keys); KH1's FK from it within 0.265 units of the pose (worst bone 283)
+[f0] KH2 slots: KH2 motion 184 as KH1 slot 140 (for KH1's slot 104 / request 0xce, by KH2's row selection, 56 -> 68 frames): 6.0 [(0.0, 25)]; 1.0 [(12.0, 1), (26.0, 0)]; 7.0 [(9.0, 1), (26.0, 0)]
+[f0] KH2 slots: KH2's row selection on KH1's ground and air combo: 0xc8 -> [151, 153, 152], 0xc9 -> [152, 153, 151], 0xca -> [151, 153, 152], 0xcb -> [154, 155], 0xcc -> [181, 182], 0xcd -> [182, 181], 0xce -> [183, 184]
+[f0] KH2 sound 500050: 48011 Hz, 1 ch, 0.82 s, volume 1.00
+[f0] KH2 sound 999001 (effect element 39): 47997 Hz, 2 ch, 0.69 s, volume 0.65
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 999003 (effect element 50): 47989 Hz, 2 ch, 1.08 s, volume 0.40
+[f0] KH2 sound 500046: 47985 Hz, 1 ch, 1.02 s, volume 1.00
+[f0] KH2 sound 500054: 47988 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 999038 (effect element 33): 48015 Hz, 2 ch, 1.00 s, volume 0.80
+[f0] KH2 sound 999039 (effect element 34): 48005 Hz, 2 ch, 1.31 s, volume 0.70
+[f0] KH2 sound 500044: 47998 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 307: 48002 Hz, 2 ch, 1.27 s, volume 1.00
+[f0] KH2 sound 500044: 47998 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 169 (effect element 51): 47994 Hz, 2 ch, 1.96 s, volume 0.80
+[f0] KH2 sound 999021 (effect element 52): 48002 Hz, 2 ch, 1.31 s, volume 0.60
+[f0] KH2 sound 500044: 47998 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 999040 (effect element 41): 47986 Hz, 2 ch, 1.04 s, volume 0.80
+[f0] KH2 sound 500042: 48015 Hz, 1 ch, 1.02 s, volume 1.00
+[f0] KH2 sound 500057: 47989 Hz, 1 ch, 0.75 s, volume 1.00
+[f0] KH2 sound 500043: 48006 Hz, 1 ch, 0.68 s, volume 1.00
+[f0] KH2 sound 500048: 47989 Hz, 1 ch, 0.66 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500040: 47986 Hz, 1 ch, 0.72 s, volume 1.00
+[f0] KH2 sound 500041: 47987 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 500040: 47986 Hz, 1 ch, 0.72 s, volume 1.00
+[f0] KH2 sound 500043: 48006 Hz, 1 ch, 0.68 s, volume 1.00
+[f0] KH2 sound 114 (effect element 1): 47994 Hz, 2 ch, 2.72 s, volume 1.00
+[f0] KH2 sound 999038 (effect element 44): 48015 Hz, 2 ch, 1.00 s, volume 0.80
+[f0] KH2 sound 999042 (effect element 48): 48009 Hz, 2 ch, 1.38 s, volume 0.90
+[f0] KH2 sound 500042: 48015 Hz, 1 ch, 1.02 s, volume 1.00
+[f0] KH2 sound 999005 (effect element 32): 47990 Hz, 2 ch, 1.34 s, volume 0.60
+[f0] KH2 sound 500043: 48006 Hz, 1 ch, 0.68 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 999019: 47982 Hz, 2 ch, 0.50 s, volume 0.80
+[f0] KH2 sound 999007 (effect element 35): 48001 Hz, 2 ch, 0.85 s, volume 0.45
+[f0] KH2 sound 999008 (effect element 36): 48012 Hz, 2 ch, 0.97 s, volume 0.45
+[f0] KH2 sound 999006 (effect element 37): 47986 Hz, 2 ch, 0.85 s, volume 0.45
+[f0] KH2 sound 999151 (effect element 38): 48005 Hz, 2 ch, 1.08 s, volume 0.80
+[f0] KH2 sound 500048: 47989 Hz, 1 ch, 0.66 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500050: 48011 Hz, 1 ch, 0.82 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500042: 48015 Hz, 1 ch, 1.02 s, volume 1.00
+[f0] KH2 sound 500043: 48006 Hz, 1 ch, 0.68 s, volume 1.00
+[f0] KH2 sound 999001 (effect element 0): 47997 Hz, 2 ch, 0.69 s, volume 0.65
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500054: 47988 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500054: 47988 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 304: 47983 Hz, 1 ch, 0.71 s, volume 1.00
+[f0] KH2 sound 500044: 47998 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 308: 47996 Hz, 2 ch, 2.73 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500048: 47989 Hz, 1 ch, 0.66 s, volume 1.00
+[f0] KH2 sound 305: 47998 Hz, 1 ch, 0.81 s, volume 1.00
+[f0] KH2 sound 303: 47991 Hz, 1 ch, 0.43 s, volume 1.00
+[f0] KH2 sound 500040: 47986 Hz, 1 ch, 0.72 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500050: 48011 Hz, 1 ch, 0.82 s, volume 1.00
+[f0] KH2 sound 500043: 48006 Hz, 1 ch, 0.68 s, volume 1.00
+[f0] KH2 sound 500048: 47989 Hz, 1 ch, 0.66 s, volume 1.00
+[f0] KH2 sound 500052: 47981 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500040: 47986 Hz, 1 ch, 0.72 s, volume 1.00
+[f0] KH2 sound 500052: 47981 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500048: 47989 Hz, 1 ch, 0.66 s, volume 1.00
+[f0] KH2 sound 500040: 47986 Hz, 1 ch, 0.72 s, volume 1.00
+[f0] KH2 sound 500032: 47989 Hz, 1 ch, 0.44 s, volume 1.00
+[f0] KH2 sound 500041: 47987 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 307: 48002 Hz, 2 ch, 1.27 s, volume 1.00
+[f0] KH2 sound 500043: 48006 Hz, 1 ch, 0.68 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 300: 48000 Hz, 2 ch, 2.48 s, volume 1.00
+[f0] KH2 sound 303: 47991 Hz, 1 ch, 0.43 s, volume 1.00
+[f0] KH2 sound 500040: 47986 Hz, 1 ch, 0.72 s, volume 1.00
+[f0] KH2 sound 500044: 47998 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 500032: 47989 Hz, 1 ch, 0.44 s, volume 1.00
+[f0] KH2 sound 308: 47996 Hz, 2 ch, 2.73 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500048: 47989 Hz, 1 ch, 0.66 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500046: 47985 Hz, 1 ch, 1.02 s, volume 1.00
+[f0] KH2 sound 500050: 48011 Hz, 1 ch, 0.82 s, volume 1.00
+[f0] KH2 sound 500054: 47988 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500041: 47987 Hz, 1 ch, 0.63 s, volume 1.00
+[f0] KH2 sound 500042: 48015 Hz, 1 ch, 1.02 s, volume 1.00
+[f0] KH2 sound 500055: 48015 Hz, 1 ch, 0.81 s, volume 1.00
+[f0] KH2 sound 500040: 47986 Hz, 1 ch, 0.72 s, volume 1.00
+[f0] KH2 sound 500042: 48015 Hz, 1 ch, 1.02 s, volume 1.00
+[f0] KH2 sound 999043: 48008 Hz, 2 ch, 1.07 s, volume 0.75
+[f0] KH2 sound 500058: 48002 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500048: 47989 Hz, 1 ch, 0.66 s, volume 1.00
+[f0] KH2 sound 500057: 47989 Hz, 1 ch, 0.75 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500057: 47989 Hz, 1 ch, 0.75 s, volume 1.00
+[f0] KH2 sound 500060: 47993 Hz, 1 ch, 0.76 s, volume 1.00
+[f0] KH2 sound 500060: 47993 Hz, 1 ch, 0.76 s, volume 1.00
+[f0] KH2 sound 305: 47998 Hz, 1 ch, 0.81 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 500051: 48018 Hz, 1 ch, 0.85 s, volume 1.00
+[f0] KH2 sound 500049: 48013 Hz, 1 ch, 0.64 s, volume 1.00
+[f0] KH2 sound 304: 47983 Hz, 1 ch, 0.71 s, volume 1.00
+[f0] KH2 sound 500057: 47989 Hz, 1 ch, 0.75 s, volume 1.00
+[f0] KH2 sound 500059: 47995 Hz, 1 ch, 1.12 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500057: 47989 Hz, 1 ch, 0.75 s, volume 1.00
+[f0] KH2 sound 500059: 47995 Hz, 1 ch, 1.12 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 500053: 47998 Hz, 1 ch, 0.58 s, volume 1.00
+[f0] KH2 sound 115 (effect element 15): 48009 Hz, 2 ch, 1.76 s, volume 1.00
+[f0] KH2 sound 138 (package 1's element 0): 47988 Hz, 2 ch, 0.97 s, volume 0.60
+[f0] KH2 sound 139 (package 1's element 1): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 138 (package 1's element 2): 47988 Hz, 2 ch, 0.97 s, volume 0.60
+[f0] KH2 sound 139 (package 1's element 3): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 4): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 5): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 6): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 173 (package 1's element 7): 48006 Hz, 2 ch, 1.90 s, volume 0.80
+[f0] KH2 sound 172 (package 1's element 8): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 9): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 10): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 174: scd: sound id 174 plays nothing
+[f0] KH2 sound 138 (package 1's element 12): 47988 Hz, 2 ch, 0.97 s, volume 0.60
+[f0] KH2 sound 139 (package 1's element 13): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 14): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 15): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 172 (package 1's element 16): 47999 Hz, 2 ch, 2.99 s, volume 0.65
+[f0] KH2 sound 175 (package 2's element 0): 47993 Hz, 2 ch, 1.96 s, volume 0.65
+[f0] KH2 sound 139 (package 2's element 1): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 175 (package 2's element 2): 47993 Hz, 2 ch, 1.96 s, volume 0.65
+[f0] KH2 sound 139 (package 2's element 3): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 4): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 5): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 6): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 173 (package 2's element 7): 48006 Hz, 2 ch, 1.90 s, volume 0.80
+[f0] KH2 sound 176 (package 2's element 8): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 9): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 10): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 174: scd: sound id 174 plays nothing
+[f0] KH2 sound 175 (package 2's element 12): 47993 Hz, 2 ch, 1.96 s, volume 0.65
+[f0] KH2 sound 139 (package 2's element 13): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 14): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 15): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 176 (package 2's element 16): 48010 Hz, 2 ch, 1.00 s, volume 0.65
+[f0] KH2 sound 177 (package 3's element 0): 47994 Hz, 2 ch, 2.08 s, volume 0.65
+[f0] KH2 sound 139 (package 3's element 1): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 177 (package 3's element 2): 47994 Hz, 2 ch, 2.08 s, volume 0.65
+[f0] KH2 sound 139 (package 3's element 3): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 4): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 5): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 6): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 173 (package 3's element 7): 48006 Hz, 2 ch, 1.90 s, volume 0.80
+[f0] KH2 sound 178 (package 3's element 8): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 9): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 10): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 174: scd: sound id 174 plays nothing
+[f0] KH2 sound 177 (package 3's element 12): 47994 Hz, 2 ch, 2.08 s, volume 0.65
+[f0] KH2 sound 139 (package 3's element 13): 47983 Hz, 1 ch, 0.71 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 14): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 15): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 178 (package 3's element 16): 48009 Hz, 2 ch, 1.47 s, volume 0.65
+[f0] KH2 sound 999001 (package 4's element 0): 47997 Hz, 2 ch, 0.69 s, volume 0.65
+[f0] KH2 sound 999012 (package 4's element 21): 48008 Hz, 2 ch, 0.65 s, volume 0.80
+[f0] KH2 sound 999013 (package 4's element 22): 48010 Hz, 2 ch, 0.31 s, volume 0.80
+[f0] KH2 sound 999013 (package 4's element 23): 48010 Hz, 2 ch, 0.31 s, volume 0.80
+[f0] KH2 sound 999014 (package 4's element 24): 47951 Hz, 2 ch, 0.26 s, volume 0.80
+[f0] KH2 sound 999011 (package 4's element 25): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 26): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 27): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 28): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 29): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 30): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 31): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 32): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 33): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 34): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 35): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 36): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 37): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 38): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 39): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 40): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 41): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 42): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999011 (package 4's element 43): 48002 Hz, 2 ch, 0.60 s, volume 0.90
+[f0] KH2 sound 999018 (package 4's element 110): 48029 Hz, 2 ch, 0.49 s, volume 0.80
+[f0] KH2 sound 999018 (package 4's element 111): 48029 Hz, 2 ch, 0.49 s, volume 0.80
+[f0] KH2 sound 999018 (package 4's element 112): 48029 Hz, 2 ch, 0.49 s, volume 0.80
+[f0] KH2 sound 999001 (package 17's element 0): 47997 Hz, 2 ch, 0.69 s, volume 0.65
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 999002 (package 17's element 15): 48001 Hz, 2 ch, 1.35 s, volume 0.70
+[f0] KH2 sound 999003 (package 17's element 16): 47989 Hz, 2 ch, 1.08 s, volume 0.40
+[f0] KH2 sound 999004 (package 17's element 17): 47983 Hz, 2 ch, 0.58 s, volume 0.70
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 999005 (package 17's element 19): 47990 Hz, 2 ch, 1.34 s, volume 0.60
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 999006 (package 17's element 21): 47986 Hz, 2 ch, 0.85 s, volume 0.45
+[f0] KH2 sound 999007 (package 17's element 22): 48001 Hz, 2 ch, 0.85 s, volume 0.45
+[f0] KH2 sound 999009 (package 17's element 23): 47994 Hz, 2 ch, 1.06 s, volume 0.40
+[f0] KH2 sound 999007 (package 17's element 24): 48001 Hz, 2 ch, 0.85 s, volume 0.45
+[f0] KH2 sound 999008 (package 17's element 25): 48012 Hz, 2 ch, 0.97 s, volume 0.45
+[f0] KH2 sound 0: scd: sound id 0 plays nothing
+[f0] KH2 sound 999001 (package 18's element 0): 47997 Hz, 2 ch, 0.69 s, volume 0.65
+[f0] KH2 sound 999025 (package 18's element 20): 48009 Hz, 2 ch, 1.26 s, volume 0.50
+[f0] KH2 sound 999026 (package 18's element 21): 48006 Hz, 2 ch, 0.92 s, volume 0.60
+[f0] KH2 sound 999027 (package 18's element 22): 48008 Hz, 2 ch, 1.06 s, volume 0.60
+[f0] KH2 sound 999027 (package 18's element 23): 48008 Hz, 2 ch, 1.06 s, volume 0.60
+[f0] KH2 sound 999027 (package 18's element 24): 48008 Hz, 2 ch, 1.06 s, volume 0.60
+[f0] KH2 sound 999028 (package 18's element 28): 48000 Hz, 2 ch, 1.38 s, volume 0.60
+[f0] KH2 sound 999029 (package 18's element 30): 48003 Hz, 2 ch, 0.72 s, volume 0.50
+[f0] KH2 sound 999029 (package 18's element 31): 48003 Hz, 2 ch, 0.72 s, volume 0.50
+[f0] KH2 sound 999029 (package 18's element 32): 48003 Hz, 2 ch, 0.72 s, volume 0.50
+[f0] KH2 sound 999029 (package 18's element 33): 48003 Hz, 2 ch, 0.72 s, volume 0.50
+[f0] KH2 sound 999029 (package 18's element 34): 48003 Hz, 2 ch, 0.72 s, volume 0.50
+[f0] KH2 sound 999029 (package 18's element 35): 48003 Hz, 2 ch, 0.72 s, volume 0.50
+[f0] KH2 sound 999030 (package 18's element 36): 47989 Hz, 2 ch, 0.88 s, volume 0.60
+[f0] KH2 sound 999030 (package 18's element 37): 47989 Hz, 2 ch, 0.88 s, volume 0.60
+[f0] KH2 sound 999030 (package 18's element 38): 47989 Hz, 2 ch, 0.88 s, volume 0.60
+[f0] KH2 sound 999030 (package 18's element 39): 47989 Hz, 2 ch, 0.88 s, volume 0.60
+[f0] KH2 sound 999030 (package 18's element 40): 47989 Hz, 2 ch, 0.88 s, volume 0.60
+[f0] KH2 sound 999031 (package 18's element 41): 47998 Hz, 2 ch, 0.54 s, volume 0.80
+[f0] KH2 sound 999032 (package 18's element 42): 48003 Hz, 2 ch, 1.15 s, volume 0.60
+[f0] KH2 sound 999026 (package 18's element 43): 48006 Hz, 2 ch, 0.92 s, volume 0.60
+[f0] KH2 sound 999033 (package 18's element 44): 48006 Hz, 2 ch, 1.78 s, volume 0.60
+[f0] KH2 sound 999034 (package 18's element 48): 47997 Hz, 2 ch, 1.15 s, volume 0.50
+[f0] KH2 sound 999035 (package 18's element 49): 48000 Hz, 2 ch, 1.06 s, volume 0.50
+[f0] KH2 sound 999036 (package 18's element 52): 48016 Hz, 2 ch, 0.80 s, volume 0.50
+[f0] KH2 sound 999036 (package 18's element 53): 48016 Hz, 2 ch, 0.80 s, volume 0.50
+[f0] KH2 sound 999036 (package 18's element 54): 48016 Hz, 2 ch, 0.80 s, volume 0.50
+[f0] KH2 sound 999036 (package 18's element 55): 48016 Hz, 2 ch, 0.80 s, volume 0.50
+[f0] KH2 sound 999036 (package 18's element 56): 48016 Hz, 2 ch, 0.80 s, volume 0.50
+[f0] KH2 sound 999036 (package 18's element 57): 48016 Hz, 2 ch, 0.80 s, volume 0.50
+[f0] KH2 sound 999003 (package 18's element 58): 47989 Hz, 2 ch, 1.08 s, volume 0.40
+[f0] KH1's ability table 0x7ff7d9ae6118 -> ours 0x148f9cc04d0 (23 KH2 abilities added, ids 66..=88); 6: AP 1 kind 0 order 201 "Combo Plus" / "Extends ground combo attack by one{02}step{68} Equip more to extend it" | 55: AP 2 kind 0 order 209 "Hurricane Blast" / "From an aerial combo{69} unleash an{02}extremely powerful finishing co" | 65: AP 3 kind 0 order 200 "Combo Master" / "Deliver combo attacks even if attacks do not {02}land{68}" | 68: AP 2 kind 0 order 202 "Aerial Recovery" / "Right yourself in midair after being knocked back{68}" | 84: AP 3 kind 0 order 210 "Explosion" / "Finisher{6b} unleash a blast around you{68}"
+[f0] KH2 sound 999008 (package 18's element 60): 48012 Hz, 2 ch, 0.97 s, volume 0.45
+[f0] KH2 sound 999009 (package 18's element 61): 47994 Hz, 2 ch, 1.06 s, volume 0.40
+[f0] KH2 sound 999003 (package 18's element 62): 47989 Hz, 2 ch, 1.08 s, volume 0.40
+[f0] KH2 sound 999001 (package 18's element 64): 47997 Hz, 2 ch, 0.69 s, volume 0.65
+[f0] KH2 sound 116 (package 5's element 0): 47994 Hz, 2 ch, 1.64 s, volume 0.70
+[f0] KH2 sound 117 (package 5's element 2): 48001 Hz, 2 ch, 2.04 s, volume 0.60
+[f0] KH2 sound 118 (package 5's element 3): 47996 Hz, 2 ch, 1.97 s, volume 0.80
+[f0] KH2 sound 119 (package 5's element 4): 47996 Hz, 2 ch, 1.97 s, volume 0.80
+[f0] KH2 sound 117 (package 5's element 5): 48001 Hz, 2 ch, 2.04 s, volume 0.60
+[f0] KH2 sound 999016 (package 5's element 6): 47999 Hz, 2 ch, 1.41 s, volume 0.70
+[f0] KH2 sound 999016 (package 5's element 7): 47999 Hz, 2 ch, 1.41 s, volume 0.70
+[f0] KH2 sound 141 (package 5's element 11): 48007 Hz, 2 ch, 2.26 s, volume 0.80
+[f0] KH2 sound 116 (package 6's element 0): 47994 Hz, 2 ch, 1.64 s, volume 0.70
+[f0] KH2 sound 140 (package 6's element 2): 48003 Hz, 2 ch, 2.10 s, volume 0.60
+[f0] KH2 sound 118 (package 6's element 3): 47996 Hz, 2 ch, 1.97 s, volume 0.80
+[f0] KH2 sound 119 (package 6's element 4): 47996 Hz, 2 ch, 1.97 s, volume 0.80
+[f0] KH2 sound 140 (package 6's element 5): 48003 Hz, 2 ch, 2.10 s, volume 0.60
+[f0] KH2 sound 999016 (package 6's element 6): 47999 Hz, 2 ch, 1.41 s, volume 0.70
+[f0] KH2 sound 999016 (package 6's element 7): 47999 Hz, 2 ch, 1.41 s, volume 0.70
+[f0] KH2 sound 142 (package 6's element 11): 48007 Hz, 2 ch, 2.26 s, volume 0.80
+[f0] KH2 sound 116 (package 7's element 0): 47994 Hz, 2 ch, 1.64 s, volume 0.70
+[f0] KH2 sound 156 (package 7's element 2): 48001 Hz, 2 ch, 2.23 s, volume 0.70
+[f0] KH2 sound 118 (package 7's element 3): 47996 Hz, 2 ch, 1.97 s, volume 0.80
+[f0] KH2 sound 119 (package 7's element 4): 47996 Hz, 2 ch, 1.97 s, volume 0.80
+[f0] KH2 sound 156 (package 7's element 5): 48001 Hz, 2 ch, 2.23 s, volume 0.70
+[f0] KH2 sound 999016 (package 7's element 6): 47999 Hz, 2 ch, 1.41 s, volume 0.70
+[f0] KH2 sound 999016 (package 7's element 7): 47999 Hz, 2 ch, 1.41 s, volume 0.70
+[f0] KH2 sound 146 (package 7's element 11): 48007 Hz, 2 ch, 2.26 s, volume 0.80
+[f0] KH2 sound 120 (package 8's element 0): 47994 Hz, 2 ch, 1.96 s, volume 1.00
+[f0] KH2 sound 121 (package 8's element 1): 47997 Hz, 2 ch, 1.75 s, volume 0.70
+[f0] KH2 sound 122 (package 8's element 3): 47998 Hz, 2 ch, 1.72 s, volume 0.60
+[f0] KH2 sound 123 (package 8's element 4): 48005 Hz, 2 ch, 1.95 s, volume 0.45
+[f0] KH2 sound 124 (package 8's element 5): 48001 Hz, 2 ch, 1.42 s, volume 0.70
+[f0] KH2 sound 125 (package 8's element 6): 47991 Hz, 2 ch, 1.62 s, volume 0.70
+[f0] KH2 sound 120 (package 9's element 0): 47994 Hz, 2 ch, 1.96 s, volume 1.00
+[f0] KH2 sound 143 (package 9's element 1): 48008 Hz, 2 ch, 1.79 s, volume 0.80
+[f0] KH2 sound 144 (package 9's element 3): 48006 Hz, 2 ch, 2.05 s, volume 0.55
+[f0] KH2 sound 145 (package 9's element 4): 48005 Hz, 2 ch, 1.83 s, volume 0.55
+[f0] KH2 sound 124 (package 9's element 5): 48001 Hz, 2 ch, 1.42 s, volume 0.70
+[f0] KH2 sound 125 (package 9's element 6): 47991 Hz, 2 ch, 1.62 s, volume 0.70
+[f0] KH2 sound 120 (package 10's element 0): 47994 Hz, 2 ch, 1.96 s, volume 1.00
+[f0] KH2 sound 159 (package 10's element 1): 47997 Hz, 2 ch, 1.89 s, volume 0.70
+[f0] KH2 sound 160 (package 10's element 3): 47993 Hz, 2 ch, 1.90 s, volume 0.60
+[f0] KH2 sound 161 (package 10's element 4): 47994 Hz, 2 ch, 1.77 s, volume 0.60
+[f0] KH2 sound 124 (package 10's element 5): 48001 Hz, 2 ch, 1.42 s, volume 0.70
+[f0] KH2 sound 125 (package 10's element 6): 47991 Hz, 2 ch, 1.62 s, volume 0.70
+[f0] KH2 sound 126 (package 11's element 0): 47999 Hz, 2 ch, 1.98 s, volume 0.70
+[f0] KH2 sound 127 (package 11's element 2): 48003 Hz, 2 ch, 1.91 s, volume 0.60
+[f0] KH2 sound 127 (package 11's element 3): 48003 Hz, 2 ch, 1.91 s, volume 0.60
+[f0] KH2 sound 128 (package 11's element 4): 48003 Hz, 2 ch, 1.79 s, volume 0.80
+[f0] KH2 sound 126 (package 12's element 0): 47999 Hz, 2 ch, 1.98 s, volume 0.70
+[f0] KH2 sound 148 (package 12's element 2): 48007 Hz, 2 ch, 2.09 s, volume 0.60
+[f0] KH2 sound 148 (package 12's element 3): 48007 Hz, 2 ch, 2.09 s, volume 0.60
+[f0] KH2 sound 128 (package 12's element 4): 48003 Hz, 2 ch, 1.79 s, volume 0.80
+[f0] KH2 sound 126 (package 13's element 0): 47999 Hz, 2 ch, 1.98 s, volume 0.70
+[f0] KH2 sound 164 (package 13's element 2): 47993 Hz, 2 ch, 2.29 s, volume 0.55
+[f0] KH2 sound 164 (package 13's element 3): 47993 Hz, 2 ch, 2.29 s, volume 0.55
+[f0] KH2 sound 128 (package 13's element 4): 48003 Hz, 2 ch, 1.79 s, volume 0.80
+[f0] KH2 sound 129 (package 14's element 0): 47994 Hz, 2 ch, 2.08 s, volume 0.80
+[f0] KH2 sound 130 (package 14's element 3): 47995 Hz, 2 ch, 2.39 s, volume 0.80
+[f0] KH2 sound 131 (package 14's element 4): 47995 Hz, 2 ch, 2.42 s, volume 0.60
+[f0] KH2 sound 129 (package 15's element 0): 47994 Hz, 2 ch, 2.08 s, volume 0.80
+[f0] KH2 sound 150 (package 15's element 3): 47996 Hz, 2 ch, 2.73 s, volume 0.80
+[f0] KH2 sound 151 (package 15's element 4): 48000 Hz, 2 ch, 2.48 s, volume 0.60
+[f0] KH2 sound 129 (package 16's element 0): 47994 Hz, 2 ch, 2.08 s, volume 0.80
+[f0] KH2 sound 166 (package 16's element 3): 48003 Hz, 2 ch, 3.27 s, volume 0.80
+[f0] KH2 sound 167 (package 16's element 4): 47997 Hz, 2 ch, 3.36 s, volume 0.60
+[f0] KH2 voice 4: clips [9, 10, 11, 12, 13] (5 decoded)
+[f0] KH2 voice 6: clips [17, 18, 19, 20] (4 decoded)
+[f0] KH2 voice 7: clips [12, 9, 22, 21, 11] (5 decoded)
+[f0] KH2 voice 8: clips [25, 32, 33] (3 decoded)
+[f0] KH2 voice 5: clips [14, 15, 16] (3 decoded)
+[f0] KH2 voice 30: clips [5] (1 decoded)
+[f0] KH2 voice 3: clips [23, 24] (2 decoded)
+[f0] KH2 voice 1: clips [7] (1 decoded)
+[f0] KH2 voice 29: clips [6] (1 decoded)
+[f0] KH2 voice 36: clips [12, 9, 22, 21, 11] (5 decoded)
+[f0] KH2 voice 25: clips [31] (1 decoded)
+[f0] KH2 sounds: 17 effect, 27 other, 11 voices, 183 of Reflect's loaded in 3.2 s
+[f0] alive 5s; KH1 at 0x7ff7d6dc0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad records: 2 seen (0x2d25efd4ac new): merged for KH2, as KH1 merges them
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0040 ["Down"], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0040 ["Down"], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0040 ["Down"], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] pad 0x2d25efd468: buttons 0040 ["Down"], sticks 80 80 80 80
+[f0] pad 0x2d25efd4ac: buttons 0000 [], sticks 80 80 80 80
+[f0] event ops at 31s (Sora can act: false): 9x1 127x1 128x1 129x1 362x1 417x1 511x1 626x7 719x1
+[f0] posed: a 244-bone model (instance 0x7ff7d91b15d0) by the plain pass
+[f0] posed: a 161-bone model (instance 0x7ff7d91b17d0) by the plain pass
+[f0] KH2 slots: 23 motions placed (handles [9c9e73c0, 9ca142e0, 9ca38fb0, 9ca5fa40, 9ca90190, 9cabd1b0, 9cae6640, 9cb16460, 9cb31080, 9cb4c080, 9cb66f90, 9cb84710, 9cb9d960, 9cbb6b60, 9cbecf70, 9cc15bf0, 9cc46c60, 9cc6f0f0, 9cca2270, 9cccc670, a0ef0080, a0f18190, a0f46570])
+[f0] KH2 slots: Sora's set 0x7ff7d7b917a0 (his own, bound): 88 slots of its own, ours at 88..110, 352 requests; ours stand in for 0xc9 (its slot 61), 0xc8 (its slot 60), 0xca (its slot 62), 0xcb (its slot 63), 0xcc (its slot 64), 0xcd (its slot 65), 0xce (its slot 66), 0x1 (its slot 2), 0x2 (its slot 5)
+[f0] Sora's AP: 100 (KH1's) + 40 (KH2 abilities learned) = 100
+[f0] posed: a 293-bone model (instance 0x7ff7d91b19d0) by the plain pass
+[f0] Sora's instance 0x7ff7d91b19d0 (bones at 0x7ff7d7aeb010)
+[f0] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f0] KH2's own hair, hood, sleeves, necklace and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, necklace Some("86<-165"), 9 chain links
+[f0] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f0] weapon 0x51: KH1's grip turned 0.51 rad from the Keyblade's rest (KH1's grip: axis Vec3(0.84, -0.53, -0.09) angle 2.85, offset Vec3(-0.1, -0.5, 4.0))
+[f0] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f0] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f0] hair, hood, sleeves, necklace and keychain from KH2's own animation: Parts { hair: true, hood: true, chain: true, sleeves: true, necklace: true } (asked Parts { hair: true, hood: true, chain: true, sleeves: true, necklace: true })
+[f0] posed: a 189-bone model (instance 0x7ff7d91b1bd0) by the plain pass
+[f0] posed: a 191-bone model (instance 0x7ff7d91b1dd0) by the plain pass
+[f0] posed: a 7-bone model (instance 0x7ff7d91b1fd0) by the plain pass
+[f0] posed: a 4-bone model (instance 0x7ff7d91b21d0) by the plain pass
+[f0] Reflect: command record 0x7d written at 0x7ff7d9ae3f68
+[f0] Reflect: level 3, Reflega (KH1's Aero level: loaded 3, saved 3)
+[f0] Reflect: magic list rows: 8 (KH1's 7 at 0x7ff7d96149e0 copied to 0x148adcb0ce0)
+[f0] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed true, MP (13, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f0] fourth shortcut in battle: command 0x7d, usable false
+[f0] shared states: KH1's state step at 0x7ff7d9b73860 wrapped (0x7ff7d7071850)
+[f0] shared states: KH1's state step at 0x7ff7d9b738e0 wrapped (0x7ff7d706f6a0)
+[f0] shared states: KH1's state step at 0x7ff7d9b73898 wrapped (0x7ff7d706fda0)
+[f1] room: world 0xb room 0x1 entered; KH1 has Sora (KH1's script moves him, actions [], flags 0100c043) (KH1 state 0, flags 0100c043, script false)
+[f1] physics: KH1 for every move of base Sora's (the ini's `physics`; Drive Forms KH2's)
+[f1] draw: kh1_own (KH1 slot 0)
+[f1] Sora's actor at 0x7ff7d9af7c00 (dt 1.000)
+[f1] Sora's actor first seen: 0100c043 00030000 00000000 00000000 c3a18f36 00000000 452c44b8 40000000 bf4333f6 00000000 bf25a022 00000000 bf4333f4 00000000 bf25a021 c0118fe0 3f800000 3f800000 3f800000 3f800000 c3a18f36 00000000 452c44b8 00000000 3f800000 00000000 81b6eda0 83b1cc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f25a022 00000000 bf4333f6 00000000 80000000 3f800000 00000000 00000000 3f4333f4 00000000 3f25a021 00000000 c3a18f36 00000000 452c44b8 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 816bbf74 81b910a0 00000000 00000000 81b8dc20 00000000 83b134a0 8372b1e0 c0118fe0 81aeae20 81aeae60 831b19d0 00000102 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00200001 81b917a0 87c3ab10 8f32b640 81d4c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 3f25a022 00000000 bf4333f6 00000000 80000000 3f800000 00000000 00000000 3f4333f4 00000000 3f25a021 00000000 c3a18f36 00000000 452c44b8 3f800000 00000000 00000000 00000000 00000000 42f00000 3f800000 00000000 42f00000 00000000 00000000 00000000 00000000 c3a18f36 00000000 452c44b8 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff0751 c3a18f36 80000000 452c44b8 40000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 ffffffff 0000ffff ffffffff 00000000 00000000 c3a18f36 80000000 452c44b8 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000070 00000062 00000053 00000032 00000004 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00040000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 c3a18f36 00000000 452c44b8 3f800000 00000000 00000000 00000000 42280000 01008043 00030001 00000000 00000000 c381601e 00000000 452af9eb 40000000 bf77ec74 00000000 3e7f2e98 00000000 bf77ec74 00000000 3e7f2e98 bfa8d30f 3f800000 3f800000 3f800000 3f800000 c381601e 00000000 452af9eb 3f800000 3f800000 00000000 00000000 83b1cd10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 be7f2e98 00000000 bf77ec74 00000000 00000000 3f800000 00000000 00000000 3f77ec74 00000000 be7f2e98 00000000 c381601e 00000000 452af9eb 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 816bbfec 81de1120 00000000 00000000 81de03a0 83785de0 83b13630 8372b240
+[f1] posed: a 1-bone model (instance 0x7ff7d91b29d0) by the plain pass
+[f1] frame scale 4.00: KH2 steps 4 60 Hz frames a game frame
+[f2] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f19] KH1 takes him: base Sora: KH1's own states (shared)
+[f20] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 19 frames in, blend -1.00
+[f20] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f20] fourth shortcut in battle: command 0x7d, usable true
+[f20] KH2's controller ready for Sora
+[f20] KH1 has Sora (KH1's own states (base Sora, shared))
+[f21] abilities: Glide style KH1: KH2's Glide taken out of the shared abilities, KH1's Glide and Superglide back (on)
+[f21] KH1 Sora: level 1, abilities [64 22 6 (7) (53) (54) (17) 61 (15) 21 (19) 8 8 (18) (20) (55) (57) 65 (56) (11) 13 12 (14) 25 8 (58) (66) 68 (69) 70 (71) (72) 74 75 (73) (77) 76 67 (78) 79 80 (81) 82 (83) (84) 85 (86) (87)], shared [1 2 3 4] (in brackets: not equipped)
+[f21] KH1's menu gives KH2: high jump 1, quick run 0, aerial dodge 1, glide 4, dodge roll 1, guard true, combo plus 1, air combo plus 0, finishing plus 1, negative combo 0, combo master true, aerial recovery true; modifiers [Horizontal Slash, Retaliating Slash, Aerial Dive, Aerial Sweep, Counterguard, Slapshot, Vicinity Break]
+[f21] abilities on with nothing on the other side yet: KH1's [] while KH2 has him; KH2's [Aerial Recovery, Retaliating Slash, Counterguard] while KH1's states have him
+[f29] placement: the skeleton pass's own world matrix matches; using it from now on
+[f29] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
+[f39] draw: baked (KH1 slot 126)
+[f39] posed: a 293-bone model (instance 0x7ff7d91b19d0) by the ground-IK pass
+[f40] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f48] event ops at 33s (Sora can act: true): 3x4 4x4 5x4 6x4 8x50 9x5 10x13 19x1 22x1 27x1 62x1 63x1 69x1 80x4 81x2 82x2 83x4 90x1 112x1 114x1 128x1 129x1 132x1 133x2 150x1 151x1 183x1 199x1 203x48 284x24 285x48 286x24 290x48 291x72 292x48 321x1 338x1 363x1 395x1 417x1 419x48 452x1 512x1 592x1 593x1 606x1 625x1
+[f61] drawn at [-288.7, 0.0, 2786.8]: exact at actor+[10, 50, 100, 260, 2e0, 320]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)"]
+[f85] draw: baked (KH1 slot 129)
+[f86] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f92] big target 0x7ff7d9afa180 (object 200, not pulled): 1 of 1 parts hittable, 36 tall, radius 36, root 746 away
+[f92] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f92] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f92] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+38af4d exe+2a5f39
+[f93] draw: baked (KH1 slot 119)
+[f94] KH2 slots: KH1 plays ours, KH2 motion 151 (for KH1's 98 / request 0xc8; its slot 89 in the set; Sora's request 0xc8)
+[f94] posed: a 191-bone model (instance 0x7ff7d91b1dd0) by the ground-IK pass
+[f109] event ops at 34s (Sora can act: true): 8x62 203x61 284x30 285x60 286x30 290x60 291x90 292x60 419x60
+[f111] posed: a 189-bone model (instance 0x7ff7d91b1bd0) by the ground-IK pass
+[f120] KH1's ground combo, swing 2 of 4: KH2 would take row 6 motion 153 (ability 0, finisher false, KH2's length 4)
+[f120] KH2's row selection: KH1's request 0xc9 plays KH2's row 6 motion 153
+[f120] set motion #1 slot 201 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+fb452 exe+2bf178 exe+29c0e8 exe+386d2e exe+2a630c exe+29a789
+[f121] draw: baked (KH1 slot 131)
+[f121] actors (15): 0x7ff7d9af72a0 kind 2 obj 200 at (0,0,0) r 60 hp? 18 flags 00008003/03204865 | 0x7ff7d9af7750 kind 2 obj 200 at (157,0,3445) r 30 hp? 18 flags 00208003/c3204805 | 0x7ff7d9af7c00 kind 3 obj 0 at (-136,0,2922) r 30 hp? 102 flags 0000c007/c3244d3d | 0x7ff7d9af80b0 kind 3 obj 1 at (-238,0,2742) r 30 hp? 60 flags 00008003/c3204c3d | 0x7ff7d9af8560 kind 3 obj 2 at (-334,0,2874) r 35 hp? 90 flags 00008003/c3204c3d | 0x7ff7d9af8a10 kind 4 obj 200 at (0,0,2520) r -1 hp? 18 flags 00008003/0200db0d | 0x7ff7d9af8ec0 kind 4 obj 200 at (-550,-156,3245) r -1 hp? 18 flags 00008003/c2105b05 | 0x7ff7d9af9370 kind 4 obj 200 at (-565,-150,2945) r -1 hp? 18 flags 00008003/03205b0d | 0x7ff7d9af9820 kind 4 obj 200 at (550,-150,2945) r -1 hp? 18 flags 00008003/c3205b05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (565,-150,3245) r -1 hp? 18 flags 00008003/c3205b05 | 0x7ff7d9afa180 kind 4 obj 200 at (0,-113,3576) r -1 hp? 18 flags 00008003/c2005b65 | 0x7ff7d9afa630 kind 4 obj 200 at (290,-1,3100) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afaae0 kind 4 obj 200 at (-320,0,2750) r -1 hp? 18 flags 00008203/c2021305 | 0x7ff7d9afaf90 kind 5 obj 200 at (-425,0,3100) r -1 hp? 18 flags 00008003/0210d38d | 0x7ff7d9afb440 kind 4 obj 200 at (-300,0,3600) r -1 hp? 18 flags 00008000/c2021305
+[f122] KH2 slots: KH1 plays ours, KH2 motion 153 (for KH1's 99 / request 0xc9; its slot 101 in the set; Sora's request 0xc9)
+[f169] KH1's ground combo, swing 3 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f169] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f169] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+fb452 exe+2bf178 exe+29c0e8 exe+386d2e exe+2a630c exe+29a789
+[f170] draw: baked (KH1 slot 119)
+[f171] KH2 slots: KH1 plays ours, KH2 motion 151 (for KH1's 98 / request 0xc8; its slot 89 in the set; Sora's request 0xc8)
+[f181] drawn at [62.0, 0.0, 3096.7]: exact at actor+[260]; same x/z at ["260 (y 0.0)"]
+[f182] room 0xb-0x1, first 3 s: KH2 had Sora 0 of 182 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
+[f198] KH1's ground combo, swing 4 of 4: KH2 would take row 3 motion 155 (ability 0, finisher true, KH2's length 4)
+[f198] KH2's row selection: KH1's request 0xcb plays KH2's row 3 motion 155
+[f198] set motion #1 slot 203 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+fb452 exe+2bf178 exe+29c0e8 exe+386d2e exe+2a630c exe+29a789
+[f199] draw: baked (KH1 slot 137)
+[f200] KH2 slots: KH1 plays ours, KH2 motion 155 (for KH1's 101 / request 0xcb; its slot 107 in the set; Sora's request 0xcb)
+[f279] KH1 slot 1 (Motion { motion: 0, field: false, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f279] draw: follow (KH1 slot 1): KH2 motion 0 Motion { motion: 0, field: false, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f281] draw: baked (KH1 slot 126)
+[f282] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f284] draw: baked (KH1 slot 129)
+[f285] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f301] drawn at [138.0, 0.0, 3163.9]: exact at actor+[10, 50, 100, 260, 2e0, 320]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)"]
+[f305] draw: baked (KH1 slot 126)
+[f306] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f307] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f307] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f341] KH2 model: KH1 replays frames with an interpolated camera here; KH1's model is drawn while it does
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 3148 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Customize: spell list [0, 1, 2, 3, 4, 5, 6, 7, 7] (Reflect = 7 before none)
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f341] Sora's model 0x7ff7d91b2dd0 drawn 2754 away from his actor: another copy (the pause menu's), left to KH1
+[f348] shortcut panel 0x7ff7d95b1460: x 1738 y 2116..2202 (uv 2..112 / 2..88), menu y 260
+[f348] shortcut panel 0x7ff7d95b1430: x 1745 y 2122..2130 (uv 2..85 / 58..66), menu y 260
+[f348] debug menu: opened (Main)
+[f349] fx: renderer ready (176 textures, 16704 KB; shaders 2024 + 4212 bytes)
+[f349] debug menu: overlay drawn (106 quads, 1920x1080 frame buffer 0, 8x MSAA)
+[f349] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f350] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f352] event ops at 40s (Sora can act: true): 8x10 203x11 284x6 285x12 286x6 290x12 291x18 292x12 419x12
+[f361] actors (15): 0x7ff7d9af72a0 kind 2 obj 200 at (0,0,0) r 60 hp? 18 flags 00008003/0320486d | 0x7ff7d9af7750 kind 2 obj 200 at (157,0,3445) r 30 hp? 18 flags 00208003/0320480d | 0x7ff7d9af7c00 kind 3 obj 0 at (117,0,3145) r 30 hp? 102 flags 0000c003/03204d3d | 0x7ff7d9af80b0 kind 3 obj 1 at (255,0,3110) r 30 hp? 60 flags 00008003/03204c3d | 0x7ff7d9af8560 kind 3 obj 2 at (98,0,3272) r 35 hp? 90 flags 00008003/03204c3d | 0x7ff7d9af8a10 kind 4 obj 200 at (0,0,2520) r -1 hp? 18 flags 00008003/0200db0d | 0x7ff7d9af8ec0 kind 4 obj 200 at (-550,-156,3245) r -1 hp? 18 flags 00008003/02105b0d | 0x7ff7d9af9370 kind 4 obj 200 at (-565,-150,2945) r -1 hp? 18 flags 00008003/03205b0d | 0x7ff7d9af9820 kind 4 obj 200 at (550,-150,2945) r -1 hp? 18 flags 00008003/c3205b05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (565,-150,3245) r -1 hp? 18 flags 00008003/c3205b05 | 0x7ff7d9afa180 kind 4 obj 200 at (0,-113,3576) r -1 hp? 18 flags 00008003/c2005b65 | 0x7ff7d9afa630 kind 4 obj 200 at (290,-1,3100) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afaae0 kind 4 obj 200 at (-320,0,2750) r -1 hp? 18 flags 00008203/c2021305 | 0x7ff7d9afaf90 kind 5 obj 200 at (-425,0,3100) r -1 hp? 18 flags 00008003/0210d38d | 0x7ff7d9afb440 kind 4 obj 200 at (-300,0,3600) r -1 hp? 18 flags 00008000/c2021305
+[f421] drawn at [117.0, 0.0, 3145.3]: exact at actor+[10, 50, 100, 260, 2a0, 2e0, 320, 490]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2a0 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)", "490 (y 0.0)"]
+[f467] trace: seconds count game frames
+[f467] debug menu: frame advance on (R2 / period: one frame, held 1 s: full speed)
+[f467] frame advance: holding 22 tasks (priority, function RVA): 10499 0x189f80, 20001 0x1e1900, 47000 0x28e550, 49999 0x1c2ba0, 50002 0x1a5480, 50002 0x1a2320, 53000 0x28d620, 55000 0x2937f0, 60000 0x29e790, 79998 0x28e6e0, 80000 0x298940, 80001 0x2b4460, 85000 0x2b11b0, 95000 0x2abff0, 100000 0x1e5d90, 110000 0x28cd50, 120000 0xd2830, 129999 0x2be500, 130000 0x2a23e0, 135000 0x28cc10, 137000 0x28f6b0, 139999 0x2aeda0
+[f467] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_camera: false, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40])), fx_test: false, hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [true, true, false, false, false, false, false, true, false, false], gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, trace: On, trace_seconds: 6, sound_log: false, trace_game_frames: true, trace_cats: 963, debug_menu: true }
+[f467] debug menu: closed
+[f467] KH1 has Sora (Sora is in another body (not his own model))
+[f468] KH1 has Sora (KH1's own states (base Sora, shared))
+[f470] event ops at 44s (Sora can act: true): 8x2 203x3 284x2 285x4 286x2 290x4 291x6 292x4 419x4
+[f470] KH1 has Sora (Sora is in another body (not his own model))
+[f471] draw: baked (KH1 slot 126)
+[f471] KH1 has Sora (KH1's own states (base Sora, shared))
+[f472] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f522] draw: baked (KH1 slot 129)
+[f523] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f538] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f541] drawn at [-6.2, 0.0, 2923.9]: exact at actor+[10, 50, 100, 260, 2e0, 320]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)"]
+[f570] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f585] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
+[f586] draw: kh1_own (KH1 slot 129)
+[f588] KH1 has Sora (KH1's script moves him, actions [], flags 0100c003)
+[f589] KH1 has Sora (KH1's script moves him, actions [4], flags 0100c003)
+[f590] KH1 has Sora (KH1's script moves him, actions [], flags 01008003)
+[f591] set motion #1 slot 193 (flags 0x10000) on Sora, from exe+28e8b1 exe+18cba4 exe+28a76d exe+2846be exe+170fd5 exe+1035d9 exe+1095a9
+[f592] draw: kh1_own (KH1 slot 95)
+[f601] actors (15): 0x7ff7d9af72a0 kind 2 obj 200 at (0,0,0) r 60 hp? 18 flags 00008000/03204865 | 0x7ff7d9af7750 kind 2 obj 200 at (157,0,3445) r 30 hp? 18 flags 00208000/03204805 | 0x7ff7d9af7c00 kind 3 obj 0 at (0,0,2580) r 30 hp? 102 flags 01008003/03204d3d | 0x7ff7d9af80b0 kind 3 obj 1 at (112,0,2719) r 30 hp? 60 flags 00008003/c3204c3d | 0x7ff7d9af8560 kind 3 obj 2 at (-98,0,2751) r 35 hp? 90 flags 00008003/c3204c3d | 0x7ff7d9af8a10 kind 4 obj 200 at (0,0,2520) r -1 hp? 18 flags 00008003/0200db0d | 0x7ff7d9af8ec0 kind 4 obj 200 at (-550,-156,3245) r -1 hp? 18 flags 00008003/02105b05 | 0x7ff7d9af9370 kind 4 obj 200 at (-565,-150,2945) r -1 hp? 18 flags 00008003/03205b05 | 0x7ff7d9af9820 kind 4 obj 200 at (550,-150,2945) r -1 hp? 18 flags 00008003/c3205b05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (565,-150,3245) r -1 hp? 18 flags 00008003/c3205b05 | 0x7ff7d9afa180 kind 4 obj 200 at (0,-113,3576) r -1 hp? 18 flags 00008003/02005b65 | 0x7ff7d9afa630 kind 4 obj 200 at (290,-1,3100) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afaae0 kind 4 obj 200 at (-320,0,2750) r -1 hp? 18 flags 00008203/c2021305 | 0x7ff7d9afaf90 kind 5 obj 200 at (-425,0,3100) r -1 hp? 18 flags 00008003/0210d38d | 0x7ff7d9afb440 kind 4 obj 200 at (-300,0,3600) r -1 hp? 18 flags 00008000/c2021305
+[f607] event ops at 47s (Sora can act: false): 1x1 2x2 3x1 4x1 5x1 6x1 8x46 9x4 10x2 26x1 28x1 35x1 36x1 55x1 57x2 69x1 80x1 83x1 87x1 100x1 101x1 103x15 108x2 113x1 115x1 127x1 128x1 129x1 133x1 142x1 177x1 203x39 267x2 284x19 285x38 286x19 290x38 291x57 292x38 306x1 307x2 308x2 315x1 336x1 353x1 362x1 376x1 378x1 394x1 418x1 419x38 438x1 445x1 511x2 513x1 517x1
+[f651] room: world 0xb room 0x0 entered; KH1 has Sora (KH1's script moves him, actions [], flags 01008003) (KH1 state 0, flags 01008003, script false)
+[f651] event ops at 48s (Sora can act: false): 60x1 103x43 127x1 132x1 133x2 340x3 362x1 417x1 511x1 514x1 626x25 719x1
+[f651] Sora's instance 0x7ff7d91b17d0 (bones at 0x7ff7d7aeb010)
+[f651] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f651] KH2's own hair, hood, sleeves, necklace and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, necklace Some("86<-165"), 9 chain links
+[f651] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f651] draw: kh1_own (KH1 slot 0)
+[f651] KH1 has Sora (KH1's script moves him, actions [], flags 01008043)
+[f652] Sora's actor at 0x7ff7d9af7750 (dt 1.000)
+[f652] Sora's actor first seen: 01008043 00030000 00000000 00000000 4190d946 00000000 4483a61a 40000000 3dc46b6c 00000000 bf7ed1e4 00000000 3dc46b6c 00000000 bf7ed1e4 4042ea14 3f800000 3f800000 3f800000 3f800000 4190d946 00000000 4483a61a 00000000 3f800000 00000000 81b6eda0 83b1cc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f7ed1e4 80000000 3dc46b6c 00000000 00000000 3f800000 00000000 00000000 bdc46b6c 00000000 3f7ed1e4 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8176c07c 81b910a0 00000000 00000000 81b8dc20 00000000 83b134a0 8372b1e0 4042ea14 81aeae20 81aeae60 831b17d0 00000102 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00200001 81b917a0 87c3ab10 8f32b640 81d4c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 3f7ed1e4 80000000 3dc46b6c 00000000 00000000 3f800000 00000000 00000000 bdc46b6c 00000000 3f7ed1e4 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 00000000 42f00000 3f800000 00000000 42f00000 00000000 00000000 00000000 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff0021 4190d946 80000000 4483a61a 40000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 ffffffff 0000ffff ffffffff 00000000 00000000 4190d946 80000000 4483a61a 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000082 00000080 0000007e 00000046 00000001 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00010000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 42280000 01008043 00030001 00000000 00000000 42dfea41 00000000 448c5d48 40000000 bf4d7ed7 00000000 bf18ab17 00000000 bf4d7ed7 00000000 bf18ab17 c00d6ca4 3f800000 3f800000 3f800000 3f800000 42dfea41 00000000 448c5d48 3f800000 3f800000 00000000 00000000 83b1cd10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f18ab17 00000000 bf4d7ed7 00000000 80000000 3f800000 00000000 00000000 3f4d7ed7 00000000 3f18ab17 00000000 42dfea41 00000000 448c5d48 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8176c0f4 81de1120 00000000 00000000 81de03a0 8377e4e0 83b13630 8372b240
+[f661] drawn at [18.1, 0.0, 1053.2]: exact at actor+[10, 50, 100, 260, 2a0, 2e0, 320, 490]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2a0 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)", "490 (y 0.0)"]
+[f669] KH1 has Sora (KH1's own states (base Sora, shared))
+[f670] draw: baked (KH1 slot 125)
+[f671] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 2 / request 0x1; its slot 95 in the set; Sora's request 0x1)
+[f672] draw: baked (KH1 slot 128)
+[f673] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f678] check: bone 3 from the locals is 989.077 units from the game's (should be ~0)
+[f704] event ops at 49s (Sora can act: true): 3x2 4x3 5x3 6x3 8x38 10x24 19x1 22x4 27x1 69x1 80x3 81x1 82x1 83x3 96x1 105x1 112x1 114x1 132x9 133x3 150x1 151x1 163x8 199x4 203x212 267x1 284x34 285x68 286x34 290x34 291x68 292x34 321x4 336x1 340x108 363x1 389x1 395x1 417x1 419x34 452x53 512x1 592x1 593x1 625x4
+[f712] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f752] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f765] event ops at 50s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f781] drawn at [124.5, 0.0, 249.9]: exact at actor+[10, 50, 100, 260, 2e0, 320]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)"]
+[f792] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f807] room 0xb-0x0, first 3 s: KH2 had Sora 0 of 157 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
+[f821] KH1 has Sora (Sora is in another body (not his own model))
+[f822] KH1 has Sora (KH1's own states (base Sora, shared))
+[f832] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f841] actors (28): 0x7ff7d9af72a0 kind 2 obj 200 at (-480,0,1170) r 60 hp? 18 flags 01008053/0200486d | 0x7ff7d9af7750 kind 3 obj 0 at (348,0,152) r 30 hp? 102 flags 00008003/c3204d3d | 0x7ff7d9af7c00 kind 3 obj 1 at (191,0,181) r 30 hp? 60 flags 00008003/c3204c3d | 0x7ff7d9af80b0 kind 3 obj 2 at (131,0,127) r 35 hp? 90 flags 00008003/c3204c3d | 0x7ff7d9af8560 kind 4 obj 200 at (-1150,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8a10 kind 4 obj 200 at (-1500,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8ec0 kind 4 obj 200 at (-1850,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9370 kind 4 obj 200 at (1500,0,-1968) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9820 kind 4 obj 200 at (0,-140,1552) r -1 hp? 18 flags 00008003/0320db0d | 0x7ff7d9af9cd0 kind 4 obj 200 at (0,-100,-1984) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9afa180 kind 4 obj 200 at (1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afa630 kind 4 obj 200 at (1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaae0 kind 4 obj 200 at (-1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaf90 kind 4 obj 200 at (-1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb440 kind 4 obj 200 at (2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb8f0 kind 4 obj 200 at (900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afbda0 kind 4 obj 200 at (-900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc250 kind 4 obj 200 at (-2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc700 kind 4 obj 200 at (1500,-100,-1970) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afcbb0 kind 4 obj 200 at (480,-140,1480) r 60 hp? 18 flags 00008003/03205b6d | 0x7ff7d9afd060 kind 4 obj 200 at (-1850,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd510 kind 4 obj 200 at (-1500,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd9c0 kind 4 obj 200 at (-1150,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afde70 kind 4 obj 200 at (520,0,1230) r -1 hp? 18 flags 00008003/03205b0d | 0x7ff7d9afe320 kind 4 obj 200 at (-1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afe7d0 kind 4 obj 200 at (1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afec80 kind 4 obj 200 at (-1675,-1,-1940) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9aff130 kind 4 obj 200 at (0,-1,0) r -1 hp? 18 flags 00008202/c2025b05
+[f872] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f901] drawn at [778.4, 0.0, 200.1]: exact at actor+[10, 50, 100, 260, 2e0, 320]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)"]
+[f912] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f952] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f960] KH1 has Sora (Sora is in another body (not his own model))
+[f961] Sora's actor 8 s later: 00008003 00030000 00000000 00000000 441199a7 00000000 c2cb3f84 40000000 bea11694 00000000 bf72ffd1 41000000 bf7f2dfb 00000000 3da3d3be bfbecfd1 3f800000 3f800000 3f800000 3f800000 441199a7 00000000 c2cb3f84 00000000 3f800000 00000000 81b6eda0 83b1cc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 bda3d3bf 00000000 bf7f2dfd 00000000 00000000 3f800000 00000000 00000000 3f7f2dfb 00000000 bda3d3be 00000000 441199a7 00000000 c2cb3f84 3f800000 c10316f8 42be77b1 43d9dd62 3f800000 00000000 00000000 00000000 00000000 8176c07c 81b910a0 00000000 00000000 81b8dc20 00000000 83b134a0 8372b1e0 c03493f5 81aeae20 81aeae60 831b17d0 00000002 00000002 00000062 41220000 00000000 41000000 00000000 00000002 41020000 41000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 81b917a0 87c3ab10 8f32b640 81d4c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 bda3d3bf 00000000 bf7f2dfd 00000000 00000000 3f800000 00000000 00000000 3f7f2dfb 00000000 bda3d3be 00000000 441199a7 00000000 c2cb3f84 3f800000 00000000 00000000 00000000 00000000 42200000 3f800000 00000000 42200000 00000000 00000000 00000000 00000000 44123abe 00000000 c2bc0f87 3f800000 c0211694 00000000 c0f2ffd1 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff00ff 441199a7 80000000 c2cb3f84 40000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 ffffffff 0000ffff ffffffff 00000000 00000000 441199a7 80000000 c2cb3f84 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000082 00000080 0000007e 00000046 00000001 00000000 00000000 00000000 467e8082 c3204d3d 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00010003 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 44123abe 00000000 c2bc0f87 3f800000 00000000 00000000 00000000 42280000 00008003 00030001 00000000 00000000 443a9a0d 00000000 424b3a32 40000000 beb0fb74 00000000 bf703827 40000000 bf213695 00000000 bf46dcce c01d76ca 3f800000 3f800000 3f800000 3f800000 443ac64c 00000000 4252bbf3 40000000 3f800000 00000000 00000000 83b1cd10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f46dcce 00000000 bf213695 00000000 80000000 3f800000 00000000 00000000 3f213695 00000000 3f46dcce 00000000 443a9a0d 00000000 424b3a32 3f800000 4336189e 42e3fff6 43a4cbae 3f800000 00000000 00000000 00000000 00000000 8176c0f4 81de1120 00000000 00000000 81de03a0 83776be0 83b13630 8372b240
+[f961] KH1 has Sora (KH1's own states (base Sora, shared))
+[f992] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f1002] alive 120s; KH1 at 0x7ff7d6dc0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f1002] alive 240s; KH1 at 0x7ff7d6dc0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f1002] Customize: spell list [0, 1, 2, 3, 4, 5, 6, 7, 7] (Reflect = 7 before none)
+[f1002] debug menu: opened (Main)
+[f1002] debug menu: frame advance off
+[f1002] KH1 has Sora (Sora is in another body (not his own model))
+[f1003] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f1003] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f1003] KH1 has Sora (KH1's own states (base Sora, shared))
+[f1012] event ops at 297s (Sora can act: true): 8x10 203x40 284x10 285x20 286x10 290x10 291x20 292x10 340x20 419x10 452x10
+[f1021] drawn at [268.4, 0.0, -106.5]: exact at actor+[10, 50, 100, 260, 2a0, 2e0, 320, 490]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2a0 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)", "490 (y 0.0)"]
+[f1065] debug menu: closed
+[f1073] draw: baked (KH1 slot 128)
+[f1074] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f1081] actors (28): 0x7ff7d9af72a0 kind 2 obj 200 at (-480,0,1170) r 60 hp? 18 flags 01008053/0200486d | 0x7ff7d9af7750 kind 3 obj 0 at (221,0,-52) r 30 hp? 102 flags 00008003/c3204d3d | 0x7ff7d9af7c00 kind 3 obj 1 at (323,0,-228) r 30 hp? 60 flags 00008003/c3204c3d | 0x7ff7d9af80b0 kind 3 obj 2 at (358,0,-3) r 35 hp? 90 flags 00008003/03204c3d | 0x7ff7d9af8560 kind 4 obj 200 at (-1150,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8a10 kind 4 obj 200 at (-1500,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8ec0 kind 4 obj 200 at (-1850,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9370 kind 4 obj 200 at (1500,0,-1968) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9820 kind 4 obj 200 at (0,-140,1552) r -1 hp? 18 flags 00008003/0320db0d | 0x7ff7d9af9cd0 kind 4 obj 200 at (0,-100,-1984) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9afa180 kind 4 obj 200 at (1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afa630 kind 4 obj 200 at (1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaae0 kind 4 obj 200 at (-1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaf90 kind 4 obj 200 at (-1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb440 kind 4 obj 200 at (2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb8f0 kind 4 obj 200 at (900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afbda0 kind 4 obj 200 at (-900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc250 kind 4 obj 200 at (-2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc700 kind 4 obj 200 at (1500,-100,-1970) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afcbb0 kind 4 obj 200 at (480,-140,1480) r 60 hp? 18 flags 00008003/03205b65 | 0x7ff7d9afd060 kind 4 obj 200 at (-1850,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd510 kind 4 obj 200 at (-1500,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd9c0 kind 4 obj 200 at (-1150,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afde70 kind 4 obj 200 at (520,0,1230) r -1 hp? 18 flags 00008003/03205b05 | 0x7ff7d9afe320 kind 4 obj 200 at (-1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afe7d0 kind 4 obj 200 at (1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afec80 kind 4 obj 200 at (-1675,-1,-1940) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9aff130 kind 4 obj 200 at (0,-1,0) r -1 hp? 18 flags 00008202/c2025b05
+[f1100] set motion #1 slot 220 (flags 0x1000000) on Sora, from exe+2c9e8c exe+2a629a exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff exe+28d39f exe+38af4d exe+294206
+[f1101] draw: kh1_own (KH1 slot 117)
+[f1132] draw: baked (KH1 slot 128)
+[f1133] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f1133] set motion #1 slot 220 (flags 0x1000000) on Sora, from exe+2c9e8c exe+2a629a exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff exe+28d39f exe+38af4d exe+294206
+[f1134] draw: kh1_own (KH1 slot 117)
+[f1141] drawn at [-133.9, 0.0, 346.6]: exact at actor+[260]; same x/z at ["260 (y 0.0)"]
+[f1165] draw: baked (KH1 slot 128)
+[f1166] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f1166] set motion #1 slot 220 (flags 0x1000000) on Sora, from exe+2c9e8c exe+2a629a exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff exe+28d39f exe+38af4d exe+294206
+[f1167] draw: kh1_own (KH1 slot 117)
+[f1198] draw: baked (KH1 slot 128)
+[f1199] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 5 / request 0x2; its slot 98 in the set; Sora's request 0x2)
+[f1200] big target 0x7ff7d9afbda0 (object 200, not pulled): 1 of 1 parts hittable, 80 tall, radius 80, root 272 away
+[f1200] big target 0x7ff7d9afc250 (object 200, not pulled): 1 of 1 parts hittable, 80 tall, radius 80, root 1430 away
+[f1200] big target 0x7ff7d9afcbb0 (object 200, not pulled): 1 of 1 parts hittable, 102 tall, radius 40, root 1315 away
+[f1200] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f1200] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f1200] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+38af4d exe+2a5f39
+[f1201] draw: baked (KH1 slot 119)
+[f1202] KH2 slots: KH1 plays ours, KH2 motion 151 (for KH1's 98 / request 0xc8; its slot 89 in the set; Sora's request 0xc8)
+[f1220] set motion #1 slot 110 (flags 0x1000000) on Sora, from exe+29d754 exe+2bf049 exe+29c05f exe+29d210 exe+29cec0 exe+29d720 exe+29d5f0 exe+29d110 exe+29cfd0 exe+29d650
+[f1221] draw: kh1_own (KH1 slot 72)
+[f1250] draw: baked (KH1 slot 129)
+[f1251] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f1257] set motion #1 slot 9 (flags 0x10000) on Sora, from exe+2afa4a exe+2a629a exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff exe+28d39f exe+38af4d exe+294206
+[f1258] draw: kh1_own (KH1 slot 12)
+[f1261] drawn at [-740.0, 0.0, 904.7]: exact at actor+[10, 50, 100, 260, 2a0, 2e0, 320, 490]; same x/z at ["10 (y 0.0)", "50 (y 0.0)", "100 (y 0.0)", "260 (y 0.0)", "2a0 (y 0.0)", "2e0 (y -0.0)", "320 (y -0.0)", "490 (y 0.0)"]
+[f1268] set motion #1 slot 10 (flags 0x0) on Sora, from exe+2af678 exe+2af862 exe+29a52e exe+386c4e exe+38af4d exe+2984c4 exe+28a76d exe+298b7b exe+2846be exe+170fd5
+[f1268] set motion #2 slot 11 (flags 0x0) on Sora, from exe+2af862 exe+29a52e exe+386c4e exe+38af4d exe+2984c4 exe+28a76d exe+298b7b exe+2846be exe+170fd5 exe+1035d9
+[f1268] draw: kh1_own (KH1 slot 13)
+[f1277] set motion #0 slot 12 (flags 0x1000000) on Sora, from exe+2a4462 exe+2a332b exe+28d39f exe+38af4d exe+294206 exe+29841d exe+28a76d exe+298b7b exe+2846be exe+170fd5
+[f1278] draw: kh1_own (KH1 slot 11)
+[f1291] draw: baked (KH1 slot 129)
+[f1292] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f1305] draw: baked (KH1 slot 126)
+[f1306] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x0)
+[f1306] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f1306] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 304 frames in, blend -1.00
+[f1306] Customize: spell list [0, 1, 2, 3, 4, 5, 6, 7, 7] (Reflect = 7 before none)
+[f1317] draw: baked (KH1 slot 126)
+[f1318] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f1319] draw: baked (KH1 slot 129)
+[f1320] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f1321] actors (28): 0x7ff7d9af72a0 kind 2 obj 200 at (-480,0,1170) r 60 hp? 18 flags 01008053/0200486d | 0x7ff7d9af7750 kind 3 obj 0 at (-974,-120,989) r 30 hp? 102 flags 0000c003/c3204d3d | 0x7ff7d9af7c00 kind 3 obj 1 at (-879,-315,861) r 30 hp? 60 flags 00068003/c3204c3d | 0x7ff7d9af80b0 kind 3 obj 2 at (-750,-100,1053) r 35 hp? 90 flags 00068003/c3204c3d | 0x7ff7d9af8560 kind 4 obj 200 at (-1150,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8a10 kind 4 obj 200 at (-1500,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8ec0 kind 4 obj 200 at (-1850,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9370 kind 4 obj 200 at (1500,0,-1968) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9820 kind 4 obj 200 at (0,-140,1552) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (0,-100,-1984) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9afa180 kind 4 obj 200 at (1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afa630 kind 4 obj 200 at (1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaae0 kind 4 obj 200 at (-1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaf90 kind 4 obj 200 at (-1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb440 kind 4 obj 200 at (2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb8f0 kind 4 obj 200 at (900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afbda0 kind 4 obj 200 at (-900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc250 kind 4 obj 200 at (-2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc700 kind 4 obj 200 at (1500,-100,-1970) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afcbb0 kind 4 obj 200 at (480,-140,1480) r 60 hp? 18 flags 00008003/03205b65 | 0x7ff7d9afd060 kind 4 obj 200 at (-1850,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd510 kind 4 obj 200 at (-1500,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd9c0 kind 4 obj 200 at (-1150,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afde70 kind 4 obj 200 at (520,0,1230) r -1 hp? 18 flags 00008003/03205b05 | 0x7ff7d9afe320 kind 4 obj 200 at (-1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afe7d0 kind 4 obj 200 at (1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afec80 kind 4 obj 200 at (-1675,-1,-1940) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9aff130 kind 4 obj 200 at (0,-1,0) r -1 hp? 18 flags 00008202/c2025b05
+[f1331] event ops at 308s (Sora can act: true): 8x24 203x100 284x26 285x52 286x26 290x26 291x52 292x26 340x50 419x26 452x25
+[f1353] draw: baked (KH1 slot 126)
+[f1354] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f1360] draw: baked (KH1 slot 129)
+[f1361] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f1366] draw: baked (KH1 slot 126)
+[f1367] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f1368] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f1368] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 713 frames in, blend -1.00
+[f1381] drawn at [-1243.4, -120.0, 965.5]: exact at actor+[10, 50, 100, 260, 2a0, 2e0, 320, 490]; same x/z at ["10 (y -120.0)", "50 (y -120.0)", "100 (y -120.0)", "260 (y -120.0)", "2a0 (y -120.0)", "2e0 (y -120.0)", "320 (y -120.0)", "490 (y -120.0)"]
+[f1396] draw: baked (KH1 slot 126)
+[f1397] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f1398] draw: baked (KH1 slot 129)
+[f1399] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f1402] draw: baked (KH1 slot 126)
+[f1403] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 96 in the set; Sora's request 0x1)
+[f1411] draw: baked (KH1 slot 129)
+[f1412] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 99 in the set; Sora's request 0x2)
+[f1429] draw: baked (KH1 slot 126)
+[f1430] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f1430] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 775 frames in, blend -1.00
+[f1504] debug menu: opened (Main)
+[f1561] actors (28): 0x7ff7d9af72a0 kind 2 obj 200 at (-480,0,1170) r 60 hp? 18 flags 01008053/02004865 | 0x7ff7d9af7750 kind 3 obj 0 at (-1355,-120,873) r 30 hp? 102 flags 0000c003/03204d3d | 0x7ff7d9af7c00 kind 3 obj 1 at (-1221,-120,890) r 30 hp? 60 flags 00068003/03204c3d | 0x7ff7d9af80b0 kind 3 obj 2 at (-1342,-120,1010) r 35 hp? 90 flags 00068003/03204c3d | 0x7ff7d9af8560 kind 4 obj 200 at (-1150,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8a10 kind 4 obj 200 at (-1500,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8ec0 kind 4 obj 200 at (-1850,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9370 kind 4 obj 200 at (1500,0,-1968) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9820 kind 4 obj 200 at (0,-140,1552) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (0,-100,-1984) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9afa180 kind 4 obj 200 at (1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afa630 kind 4 obj 200 at (1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaae0 kind 4 obj 200 at (-1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaf90 kind 4 obj 200 at (-1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb440 kind 4 obj 200 at (2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb8f0 kind 4 obj 200 at (900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afbda0 kind 4 obj 200 at (-900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc250 kind 4 obj 200 at (-2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc700 kind 4 obj 200 at (1500,-100,-1970) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afcbb0 kind 4 obj 200 at (480,-140,1480) r 60 hp? 18 flags 00008003/03205b65 | 0x7ff7d9afd060 kind 4 obj 200 at (-1850,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd510 kind 4 obj 200 at (-1500,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd9c0 kind 4 obj 200 at (-1150,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afde70 kind 4 obj 200 at (520,0,1230) r -1 hp? 18 flags 00008003/03205b05 | 0x7ff7d9afe320 kind 4 obj 200 at (-1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afe7d0 kind 4 obj 200 at (1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afec80 kind 4 obj 200 at (-1675,-1,-1940) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9aff130 kind 4 obj 200 at (0,-1,0) r -1 hp? 18 flags 00008202/c2025b05
+[f1801] actors (28): 0x7ff7d9af72a0 kind 2 obj 200 at (-480,0,1170) r 60 hp? 18 flags 01008053/02004865 | 0x7ff7d9af7750 kind 3 obj 0 at (-1355,-120,873) r 30 hp? 102 flags 0000c003/03204d3d | 0x7ff7d9af7c00 kind 3 obj 1 at (-1221,-120,890) r 30 hp? 60 flags 00068003/03204c3d | 0x7ff7d9af80b0 kind 3 obj 2 at (-1342,-120,1010) r 35 hp? 90 flags 00068003/03204c3d | 0x7ff7d9af8560 kind 4 obj 200 at (-1150,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8a10 kind 4 obj 200 at (-1500,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8ec0 kind 4 obj 200 at (-1850,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9370 kind 4 obj 200 at (1500,0,-1968) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9820 kind 4 obj 200 at (0,-140,1552) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (0,-100,-1984) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9afa180 kind 4 obj 200 at (1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afa630 kind 4 obj 200 at (1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaae0 kind 4 obj 200 at (-1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaf90 kind 4 obj 200 at (-1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb440 kind 4 obj 200 at (2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb8f0 kind 4 obj 200 at (900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afbda0 kind 4 obj 200 at (-900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc250 kind 4 obj 200 at (-2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc700 kind 4 obj 200 at (1500,-100,-1970) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afcbb0 kind 4 obj 200 at (480,-140,1480) r 60 hp? 18 flags 00008003/03205b65 | 0x7ff7d9afd060 kind 4 obj 200 at (-1850,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd510 kind 4 obj 200 at (-1500,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd9c0 kind 4 obj 200 at (-1150,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afde70 kind 4 obj 200 at (520,0,1230) r -1 hp? 18 flags 00008003/03205b05 | 0x7ff7d9afe320 kind 4 obj 200 at (-1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afe7d0 kind 4 obj 200 at (1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afec80 kind 4 obj 200 at (-1675,-1,-1940) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9aff130 kind 4 obj 200 at (0,-1,0) r -1 hp? 18 flags 00008202/c2025b05
+[f1913] debug menu: trace categories 0x03d3
+[f1925] debug menu: trace categories 0x03f3
+[f1929] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_camera: false, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40])), fx_test: false, hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [true, true, false, false, false, false, false, true, false, false], gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, trace: On, trace_seconds: 6, sound_log: false, trace_game_frames: true, trace_cats: 1011, debug_menu: true }
+[f2041] actors (28): 0x7ff7d9af72a0 kind 2 obj 200 at (-480,0,1170) r 60 hp? 18 flags 01008053/02004865 | 0x7ff7d9af7750 kind 3 obj 0 at (-1355,-120,873) r 30 hp? 102 flags 0000c003/03204d3d | 0x7ff7d9af7c00 kind 3 obj 1 at (-1221,-120,890) r 30 hp? 60 flags 00068003/03204c3d | 0x7ff7d9af80b0 kind 3 obj 2 at (-1342,-120,1010) r 35 hp? 90 flags 00068003/03204c3d | 0x7ff7d9af8560 kind 4 obj 200 at (-1150,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8a10 kind 4 obj 200 at (-1500,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8ec0 kind 4 obj 200 at (-1850,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9370 kind 4 obj 200 at (1500,0,-1968) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9820 kind 4 obj 200 at (0,-140,1552) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (0,-100,-1984) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9afa180 kind 4 obj 200 at (1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afa630 kind 4 obj 200 at (1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaae0 kind 4 obj 200 at (-1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaf90 kind 4 obj 200 at (-1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb440 kind 4 obj 200 at (2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb8f0 kind 4 obj 200 at (900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afbda0 kind 4 obj 200 at (-900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc250 kind 4 obj 200 at (-2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc700 kind 4 obj 200 at (1500,-100,-1970) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afcbb0 kind 4 obj 200 at (480,-140,1480) r 60 hp? 18 flags 00008003/03205b65 | 0x7ff7d9afd060 kind 4 obj 200 at (-1850,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd510 kind 4 obj 200 at (-1500,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd9c0 kind 4 obj 200 at (-1150,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afde70 kind 4 obj 200 at (520,0,1230) r -1 hp? 18 flags 00008003/03205b05 | 0x7ff7d9afe320 kind 4 obj 200 at (-1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afe7d0 kind 4 obj 200 at (1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afec80 kind 4 obj 200 at (-1675,-1,-1940) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9aff130 kind 4 obj 200 at (0,-1,0) r -1 hp? 18 flags 00008202/c2025b05
+[f2281] actors (28): 0x7ff7d9af72a0 kind 2 obj 200 at (-480,0,1170) r 60 hp? 18 flags 01008053/02004865 | 0x7ff7d9af7750 kind 3 obj 0 at (-1355,-120,873) r 30 hp? 102 flags 0000c003/03204d3d | 0x7ff7d9af7c00 kind 3 obj 1 at (-1221,-120,890) r 30 hp? 60 flags 00068003/03204c3d | 0x7ff7d9af80b0 kind 3 obj 2 at (-1342,-120,1010) r 35 hp? 90 flags 00068003/03204c3d | 0x7ff7d9af8560 kind 4 obj 200 at (-1150,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8a10 kind 4 obj 200 at (-1500,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af8ec0 kind 4 obj 200 at (-1850,0,-1990) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9370 kind 4 obj 200 at (1500,0,-1968) r -1 hp? 18 flags 00008003/0200db05 | 0x7ff7d9af9820 kind 4 obj 200 at (0,-140,1552) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9af9cd0 kind 4 obj 200 at (0,-100,-1984) r -1 hp? 18 flags 00008003/0320db05 | 0x7ff7d9afa180 kind 4 obj 200 at (1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afa630 kind 4 obj 200 at (1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaae0 kind 4 obj 200 at (-1200,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afaf90 kind 4 obj 200 at (-1800,-100,-1600) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb440 kind 4 obj 200 at (2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afb8f0 kind 4 obj 200 at (900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afbda0 kind 4 obj 200 at (-900,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc250 kind 4 obj 200 at (-2100,-100,700) r 80 hp? 18 flags 00008000/c2021365 | 0x7ff7d9afc700 kind 4 obj 200 at (1500,-100,-1970) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afcbb0 kind 4 obj 200 at (480,-140,1480) r 60 hp? 18 flags 00008003/03205b65 | 0x7ff7d9afd060 kind 4 obj 200 at (-1850,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd510 kind 4 obj 200 at (-1500,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afd9c0 kind 4 obj 200 at (-1150,-100,-1990) r -1 hp? 18 flags 00008000/c2021305 | 0x7ff7d9afde70 kind 4 obj 200 at (520,0,1230) r -1 hp? 18 flags 00008003/03205b05 | 0x7ff7d9afe320 kind 4 obj 200 at (-1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afe7d0 kind 4 obj 200 at (1200,-121,1000) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9afec80 kind 4 obj 200 at (-1675,-1,-1940) r -1 hp? 18 flags 00008202/c2025b05 | 0x7ff7d9aff130 kind 4 obj 200 at (0,-1,0) r -1 hp? 18 flags 00008202/c2025b05
+[f2681] debug menu: trace categories 0x07f3
+[f2708] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_camera: false, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40])), fx_test: false, hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [true, true, false, false, false, false, false, true, false, false], gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, trace: On, trace_seconds: 6, sound_log: false, trace_game_frames: true, trace_cats: 2035, debug_menu: true }
+[f2914] trace: seconds count real time
+[f2918] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_camera: false, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40])), fx_test: false, hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [true, true, false, false, false, false, false, true, false, false], gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, trace: On, trace_seconds: 6, sound_log: false, trace_game_frames: false, trace_cats: 2035, debug_menu: true }
+[f3074] debug menu: closed
+[f3122] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3122] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3122] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3122] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3122] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3123] draw: baked (KH1 slot 122)
+[f3142] draw: kh1_own (KH1 slot 11)
+[f3162] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3162] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3162] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3162] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3162] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3163] draw: baked (KH1 slot 122)
+[f3182] draw: kh1_own (KH1 slot 11)
+[f3208] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3208] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3208] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3208] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3208] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3209] draw: baked (KH1 slot 122)
+[f3228] draw: kh1_own (KH1 slot 11)
+[f3247] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3247] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3247] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3247] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3247] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3248] draw: baked (KH1 slot 122)
+[f3267] draw: kh1_own (KH1 slot 11)
+[f3281] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3281] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3281] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3281] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3281] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3282] draw: baked (KH1 slot 122)
+[f3301] draw: kh1_own (KH1 slot 11)
+[f3323] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3323] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3323] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3323] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3323] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3324] draw: baked (KH1 slot 122)
+[f3343] draw: kh1_own (KH1 slot 11)
+[f3362] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3362] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3362] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3362] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3362] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3363] draw: baked (KH1 slot 122)
+[f3382] draw: kh1_own (KH1 slot 11)
+[f3396] draw: baked (KH1 slot 126)
+[f3398] draw: baked (KH1 slot 129)
+[f3398] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f3398] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f3398] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+38af4d exe+2a5f39
+[f3399] draw: baked (KH1 slot 119)
+[f3447] KH1 slot 1 (Motion { motion: 0, field: false, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f3447] draw: follow (KH1 slot 1): KH2 motion 0 Motion { motion: 0, field: false, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f3462] draw: baked (KH1 slot 126)
+[f3463] draw: baked (KH1 slot 129)
+[f3470] draw: baked (KH1 slot 126)
+[f3473] draw: baked (KH1 slot 129)
+[f3480] draw: baked (KH1 slot 126)
+[f3481] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 99/s, climb 0/s
+[f3481] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f3483] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3483] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3483] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3483] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3483] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3484] draw: baked (KH1 slot 122)
+[f3503] draw: kh1_own (KH1 slot 11)
+[f3529] draw: baked (KH1 slot 126)
+[f3530] draw: baked (KH1 slot 129)
+[f3567] draw: baked (KH1 slot 126)
+[f3568] draw: baked (KH1 slot 129)
+[f3573] draw: baked (KH1 slot 126)
+[f3574] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 64/s, climb 0/s
+[f3574] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 93 frames in, blend -1.00
+[f3578] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f3578] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f3578] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b exe+2a630c
+[f3579] draw: baked (KH1 slot 119)
+[f3612] draw: kh1_own (KH1 slot 10)
+[f3635] draw: kh1_own (KH1 slot 11)
+[f3639] set motion #1 slot 9 (flags 0x10000) on Sora, from exe+2afa4a exe+2a62e0 exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff exe+28d39f exe+38af4d exe+294206
+[f3640] draw: kh1_own (KH1 slot 12)
+[f3667] set motion #1 slot 10 (flags 0x0) on Sora, from exe+2af678 exe+2af862 exe+29a52e exe+386c4e exe+38af4d exe+2984c4 exe+28a76d exe+298b7b exe+2846be exe+170fd5
+[f3667] set motion #2 slot 11 (flags 0x0) on Sora, from exe+2af862 exe+29a52e exe+386c4e exe+38af4d exe+2984c4 exe+28a76d exe+298b7b exe+2846be exe+170fd5 exe+1035d9
+[f3667] draw: kh1_own (KH1 slot 13)
+[f3690] trace: 360 frames (6.0s) written to E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2-traces\trace_1792790260_f3690_select_triangle.csv (select_triangle)
+[f3698] draw: kh1_own (KH1 slot 10)
+[f3698] set motion #0 slot 12 (flags 0x1000000) on Sora, from exe+2a4462 exe+2a332b exe+28d39f exe+38af4d exe+294206 exe+29841d exe+28a76d exe+298b7b exe+2846be exe+170fd5
+[f3699] draw: kh1_own (KH1 slot 11)
+[f3717] draw: baked (KH1 slot 126)
+[f3724] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 26/s, climb 0/s
+[f3724] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 244 frames in, blend -1.00
+[f3727] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f3727] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f3727] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b exe+2a630c
+[f3728] draw: baked (KH1 slot 119)
+[f3776] KH1 slot 1 (Motion { motion: 0, field: false, looping: true, group: 0 }) at speed 13/s, climb 0/s
+[f3776] draw: follow (KH1 slot 1): KH2 motion 0 Motion { motion: 0, field: false, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f3776] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3776] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3776] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3776] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3776] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3777] draw: baked (KH1 slot 122)
+[f3796] draw: kh1_own (KH1 slot 11)
+[f3819] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3819] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3819] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3819] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3819] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3820] draw: baked (KH1 slot 122)
+[f3839] draw: kh1_own (KH1 slot 11)
+[f3853] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3853] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3853] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3853] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3853] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3854] draw: baked (KH1 slot 122)
+[f3873] draw: kh1_own (KH1 slot 11)
+[f3887] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3887] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3887] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3887] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3887] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3888] draw: baked (KH1 slot 122)
+[f3907] draw: kh1_own (KH1 slot 11)
+[f3919] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3919] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3919] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3919] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3919] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3920] draw: baked (KH1 slot 122)
+[f3939] draw: kh1_own (KH1 slot 11)
+[f3957] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f3957] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f3957] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f3957] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f3957] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f3958] draw: baked (KH1 slot 122)
+[f3977] draw: kh1_own (KH1 slot 11)
+[f3990] trace: 360 frames (6.0s) written to E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2-traces\trace_1792790265_f3990_select_triangle.csv (select_triangle)
+[f4005] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 13/s, climb 0/s
+[f4005] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f4137] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4137] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4137] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4137] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4137] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4138] draw: baked (KH1 slot 122)
+[f4157] draw: kh1_own (KH1 slot 11)
+[f4175] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4175] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4175] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4175] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4175] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4176] draw: baked (KH1 slot 122)
+[f4195] draw: kh1_own (KH1 slot 11)
+[f4212] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4212] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4212] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4212] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4212] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4213] draw: baked (KH1 slot 122)
+[f4232] draw: kh1_own (KH1 slot 11)
+[f4256] draw: baked (KH1 slot 126)
+[f4264] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4264] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4264] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4264] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4264] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4265] draw: baked (KH1 slot 122)
+[f4284] draw: kh1_own (KH1 slot 11)
+[f4302] draw: baked (KH1 slot 126)
+[f4314] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4314] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4314] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4314] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4314] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4315] draw: baked (KH1 slot 122)
+[f4334] draw: kh1_own (KH1 slot 11)
+[f4351] draw: baked (KH1 slot 126)
+[f4355] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4355] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4355] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4355] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+38af4d
+[f4355] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4356] draw: baked (KH1 slot 122)
+[f4375] draw: kh1_own (KH1 slot 11)
+[f4391] draw: baked (KH1 slot 126)
+[f4394] draw: baked (KH1 slot 129)
+[f4396] draw: kh1_own (KH1 slot 10)
+[f4396] KH1's aerial combo, swing 1 of 3: KH2 would take row 9 motion 181 (ability 0, finisher false, KH2's length 3)
+[f4396] KH2's row selection: KH1's request 0xcc plays KH2's row 9 motion 181
+[f4396] KH2's row selection: KH2's air row 9 motion 181 on KH1's air row 18: KH2's hop, 21 high, 8.0/frame sideways, for KH1's row's own
+[f4396] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a6dcd exe+1890f0 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892
+[f4396] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4397] draw: baked (KH1 slot 122)
+[f4431] draw: kh1_own (KH1 slot 11)
+[f4441] set motion #1 slot 9 (flags 0x10000) on Sora, from exe+2afa4a exe+2a62e0 exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff exe+28d39f exe+38af4d exe+294206
+[f4442] draw: kh1_own (KH1 slot 12)
+[f4450] set motion #1 slot 10 (flags 0x0) on Sora, from exe+2af678 exe+2af862 exe+29a52e exe+386c4e exe+38af4d exe+2984c4 exe+28a76d exe+298b7b exe+2846be exe+170fd5
+[f4450] set motion #2 slot 11 (flags 0x0) on Sora, from exe+2af862 exe+29a52e exe+386c4e exe+38af4d exe+2984c4 exe+28a76d exe+298b7b exe+2846be exe+170fd5 exe+1035d9
+[f4450] draw: kh1_own (KH1 slot 13)
+[f4450] set motion #0 slot 113 (flags 0x0) on Sora, from exe+2b2d76 exe+2a5f39 exe+2b26ce exe+2afd87 exe+2a629a exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff
+[f4450] KH2 takes him in the air at his travel: sideways 8.0/frame, up 2.8/frame (KH1 state 21)
+[f4450] KH2 borrows him: the jump in the air: KH2's Aerial Dodge (KH1 state 21, 122 above the floor)
+[f4450] KH2's controller on KH1's numbers: gravity 0.485, fall 20, jump 290, walk 2.0, run 8.0 (past 0.80 tilt), air steering +0.100 x speed a frame, drag 0.950 a tick
+[f4450] KH2's first frames after KH1's move: AerialDodge (motion 202, frame 0), move [-3.2, 14.5, 17.7], KH1's push [0.0, 0.0, 0.0] not carried
+[f4450] KH2 effect: the Keyblade's vanish
+[f4450] Keyblade put away: actor flags 0000c403 -> 00008403, colour [ff, ff, ff, ff]
+[f4450] Sora's KH1 attack rows (row:motion/data/fx): 0:214/0x4cc8/[03, 05, 06] 1:205/0x4be8/[04, 05, 06] 2:204/0x4b78/[00, 05, 06] 3:216/0x4ef8/[1b, 05, 1b] 4:217/0x4f68/[17, 05, 17] 5:218/0x4fd8/[18, 05, 18] 6:210/0x4d38/[1b, 05, 06] 7:215/0x4e88/[17, 05, 17] 8:203/0x4c58/[03, 05, 06] 9:208/0x50b8/[02, 05, 06] 10:211/0x4cc8/[01, 05, 06] 11:201/0x4be8/[01, 05, 06] 12:207/0x5128/[00, 05, 06] 13:200/0x4b78/[00, 05, 06] 14:202/0x4b78/[02, 05, 06] 15:209/0x5048/[1b, 05, 06] 16:206/0x4c58/[03, 05, 06] 17:205/0x4be8/[04, 05, 06] 18:204/0x4b78/[00, 05, 06] 19:206/0x4c58/[03, 05, 06] 20:205/0x4b78/[04, 05, 06] 21:204/0x4b78/[00, 05, 06] 22:203/0x4c58/[03, 05, 06] 23:201/0x4be8/[01, 05, 06] 24:201/0x4be8/[01, 05, 06] 25:200/0x4b78/[00, 05, 06] 26:202/0x4b78/[02, 05, 06] 27:201/0x5c18/[02, 05, 06] 28:201/0x5c18/[02, 05, 06] 29:201/0x5c18/[02, 05, 06] 30:201/0x5c18/[02, 05, 06] 31:201/0x5c18/[02, 05, 06] 32:201/0x5c18/[02, 05, 06] 33:202/0x5c88/[12, 05, 12] 34:211/0x5a58/[04, 05, 06] 35:212/0x5a58/[00, 05, 06] 36:213/0x5a58/[01, 05, 06] 37:214/0x5a58/[01, 05, 06] 38:215/0x5a58/[01, 05, 06] 39:216/0x5a58/[04, 05, 06] 40:217/0x5b38/[13, 05, 13] 41:218/0x5a58/[02, 05, 06] 42:219/0x5a58/[01, 05, 06] 43:220/0x5a58/[01, 05, 06] 44:221/0x5a58/[03, 05, 06] 45:222/0x52e8/[00, 05, 06] 46:223/0x5ba8/[14, 05, 14] 47:231/0x55f8/[02, 05, 06] 48:231/0x55f8/[02, 05, 06] 49:231/0x55f8/[02, 05, 06] 50:231/0x55f8/[02, 05, 06] 51:232/0x5668/[18, 19, 18] 52:231/0x55f8/[02, 05, 06] 53:232/0x5668/[ff, ff, ff] 54:241/0x5a58/[04, 05, 06] 55:242/0x5a58/[00, 05, 06] 56:243/0x5a58/[01, 05, 06] 57:244/0x5a58/[01, 05, 06] 58:245/0x5ac8/[17, 05, 17] 59:204/0x4b78/[00, 05, 06] 60:200/0x4b78/[00, 05, 06] 61:212/0x4da8/[00, 05, 06] 62:213/0x4e18/[03, 05, 06] 63:200/0x4b78/[00, 05, 06]
+[f4450] their attack data: 0x4cc8: [0 1 3 3 30 2 0 0 0 0 0 3] | 0x4be8: [0 1 3 3 30 0 0 0 0 0 0 3] | 0x4b78: [0 1 3 3 30 0 0 0 0 0 0 3] | 0x4ef8: [0 a 3 3 8 4 0 0 0 0 0 3] | 0x4f68: [0 8 8 8 30 28 c8 0 0 0 0 6] | 0x4fd8: [2 8 3 3 30 fa c8 0 0 0 0 6] | 0x4d38: [0 1 5 5 30 6 4 4 0 0 0 6] | 0x4e88: [4 1 5 5 30 a 0 0 0 0 0 6] | 0x4c58: [0 1 5 5 30 4 4 4 0 0 0 6] | 0x50b8: [0 1 3 3 30 0 0 0 0 0 0 3] | 0x5128: [0 1 3 3 30 0 4 4 0 0 0 3] | 0x5048: [0 1 5 5 30 6 4 4 0 0 0 6] | 0x5c18: [0 a 3 3 30 6 c8 0 0 0 0 0] | 0x5c88: [0 a 3 3 30 a c8 0 0 0 0 0] | 0x5a58: [0 1 3 3 30 0 0 0 0 0 0 0] | 0x5b38: [0 1 3 3 30 a c8 0 0 0 1 0] | 0x52e8: [0 1 3 3 30 6 c8 0 0 0 0 0] | 0x5ba8: [0 1 5 5 30 a c8 0 0 0 2 0] | 0x55f8: [0 1 3 3 30 a c8 0 0 0 0 0] | 0x5668: [0 1 5 5 30 c c8 0 0 0 1 0] | 0x5ac8: [0 1 5 5 30 8 c8 0 0 0 1 0] | 0x4da8: [0 1 0 0 30 0 0 0 0 0 0 0] | 0x4e18: [0 1 3 3 30 0 c8 4 0 0 0 18]
+[f4450] guard: motion 202's window (ATKP 406, on his body, all round) as KH1 guard object 0x7ff7d9b74710, radius 80
+[f4450] clash blade: KH1's Keyblade from its start to its tip 78 long (weapon blade range 0.00..-3.70, length factor 0.80), radius 40
+[f4450] KH2 has Sora: AerialDodge (motion 202), height above floor 121.8, KH1 slot Some(13), KH1 state 0, flags 00008403; weapon bones: KH1's 280 at Vec3(-1396, -184, 868) (det 1.00, 1654 from KH1's hand), 283 at Vec3(-1388, -197, 882) (det 1.00); drawn 280 at Vec3(-1397, -186, 873) (det 1.00, 1651 from the drawn hand), 283 at Vec3(-1386, -181, 891) (det 1.00); small models near Sora: [0x7ff7d91b2dd0 1b 624ms ago at Vec3(-1200, -121, 1000) 458 from drawn hand]
+[f4451] draw: kh2_controller (KH1 slot 75)
+[f4451] fx: drew 2 batches, 396 vertices into a bundle list, frame buffer 0 (1920x1080, 8x MSAA, depth true); clip scale 1, offset (0, 0); viewport [0.0, 0.0, 1920.0, 1080.0]
+[f4451] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f4451] stick direction Vec2(-0.06401715, 0.9979488) from the raw stick (0.92, -0.40) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4451] KH2's first frames after KH1's move: AerialDodge (motion 202, frame 1), move [-3.2, 14.5, 17.7], KH1's push [0.0, 0.0, 0.0] not carried
+[f4451] KH2 sound played: sound 999019 (motion 202) (volume 0.30)
+[f4451] KH2's first frames after KH1's move: AerialDodge (motion 202, frame 2), move [-3.1, 13.7, 17.7], KH1's push [0.0, 0.0, 0.0] not carried
+[f4452] draw: kh2_controller (KH1 slot 11)
+[f4452] KH2 effects: hidden (no physics frame of Sora's for over 120 ms)
+[f4452] frame scale 4.00: KH2 steps 4 60 Hz frames a game frame
+[f4452] stick direction Vec2(-0.20188355, 0.9794095) from the raw stick (0.85, -0.52) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4453] KH1's step sound (kind 10) dropped: KH2 has Sora, KH2's own steps sound
+[f4453] KH2 effects: shown again (the game runs)
+[f4453] fx: drew 2 batches, 996 vertices into a bundle list, frame buffer 0 (1920x1080, 8x MSAA, depth true); clip scale 1, offset (0, 0); viewport [0.0, 0.0, 1920.0, 1080.0]
+[f4453] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f4453] stick direction Vec2(-0.28729272, 0.9578429) from the raw stick (0.81, -0.59) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4454] fx: drew 2 batches, 1068 vertices into a bundle list, frame buffer 0 (1920x1080, 8x MSAA, depth true); clip scale 1, offset (0, 0); viewport [0.0, 0.0, 1920.0, 1080.0]
+[f4454] stick direction Vec2(-0.43133008, 0.9021943) from the raw stick (0.71, -0.71) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4454] carried Vec3(-2.68, 0.00, -1.20) (push [-2.68, 0.00, -1.20], platform None, standing on 0x0, object -1)
+[f4455] stick direction Vec2(-0.43344748, 0.90117884) from the raw stick (0.71, -0.71) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4456] stick direction Vec2(-0.43585813, 0.90001535) from the raw stick (0.71, -0.71) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4457] stick direction Vec2(-0.4384966, 0.89873296) from the raw stick (0.71, -0.71) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4458] stick direction Vec2(-0.44131178, 0.8973538) from the raw stick (0.71, -0.71) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4458] KH2 has Sora: Air (motion 202), height above floor 109.0, KH1 slot Some(11), KH1 state 0, flags 00008007; weapon bones: KH1's 280 at Vec3(-1479, -261, 895) (det 1.00, 4 from KH1's hand), 283 at Vec3(-1481, -266, 874) (det 1.00); drawn 280 at Vec3(-1492, -349, 895) (det 1.00, 4 from the drawn hand), 283 at Vec3(-1473, -354, 903) (det 1.00); small models near Sora: [0x7ff7d91b2dd0 1b 15ms ago at Vec3(-1200, -121, 1000) 387 from drawn hand]
+[f4459] stick direction Vec2(-0.44426918, 0.89589334) from the raw stick (0.71, -0.71) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.18049935, 0.9835751), tilt 1.00
+[f4459] KH1's air state takes him with KH2's momentum: sideways 18.0/frame, up -0.5/frame (KH1's arc: time 6.0, apex at 5.0, 0 higher)
+[f4459] KH1 takes him: KH2's move is over (Air): KH1's own states falling
+[f4460] draw: kh1_own (KH1 slot 10)
+[f4460] KH1 has Sora (KH1's own states (base Sora, shared))
+[f4474] alive 360s; KH1 at 0x7ff7d6dc0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f4481] draw: kh1_own (KH1 slot 11)
+[f4494] draw: baked (KH1 slot 128)
+[f4519] draw: baked (KH1 slot 125)
+[f4519] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f4519] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f4519] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+38af4d exe+2a5f39
+[f4520] draw: baked (KH1 slot 119)
+[f4547] KH1's ground combo, swing 2 of 4: KH2 would take row 6 motion 153 (ability 0, finisher false, KH2's length 4)
+[f4547] KH2's row selection: KH1's request 0xc9 plays KH2's row 6 motion 153
+[f4547] set motion #1 slot 201 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+fb452 exe+2bf178 exe+29c0e8 exe+2a630c exe+194164 exe+386c83
+[f4548] draw: baked (KH1 slot 131)
+[f4575] draw: kh1_own (KH1 slot 10)
+[f4598] draw: kh1_own (KH1 slot 11)
+[f4616] draw: baked (KH1 slot 126)
+[f4618] draw: baked (KH1 slot 129)
+[f4625] set motion #1 slot 9 (flags 0x10000) on Sora, from exe+2afa4a exe+2a629a exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff exe+28d39f exe+38af4d exe+294206
+[f4626] draw: kh1_own (KH1 slot 12)
+[f4626] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f4627] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f4634] set motion #0 slot 113 (flags 0x0) on Sora, from exe+2b2d76 exe+2a5f39 exe+2b26ce exe+2afd87 exe+2a629a exe+194164 exe+386c83 exe+193ca6 exe+19430d exe+2a33ff
+[f4634] set motion #0 slot 113 (flags 0x0) on Sora, from exe+2b2956 exe+386c4e exe+2a3477 exe+28d39f exe+294206 exe+29841d exe+28a76d exe+298b7b exe+2846be exe+170fd5
+[f4634] KH2 takes him in the air at his travel: sideways 8.0/frame, up 18.5/frame (KH1 state 21)
+[f4634] KH2 borrows him: the jump in the air: KH2's Aerial Dodge (KH1 state 21, 119 above the floor)
+[f4634] KH2's controller on KH1's numbers: gravity 0.485, fall 20, jump 290, walk 2.0, run 8.0 (past 0.80 tilt), air steering +0.100 x speed a frame, drag 0.950 a tick
+[f4634] KH2's first frames after KH1's move: AerialDodge (motion 202, frame 0), move [5.4, 14.5, 17.2], KH1's push [0.0, 0.0, 0.0] not carried
+[f4634] KH2 effect: the Keyblade's vanish
+[f4634] Keyblade put away: actor flags 0004c403 -> 00048403, colour [ff, ff, ff, ff]
+[f4634] guard: motion 202's window (ATKP 406, on his body, all round) as KH1 guard object 0x7ff7d9b74710, radius 80
+[f4634] KH2 has Sora: AerialDodge (motion 202), height above floor 119.0, KH1 slot Some(12), KH1 state 0, flags 00048403; weapon bones: KH1's 280 at Vec3(-1484, -261, 911) (det 1.00, 271 from KH1's hand), 283 at Vec3(-1486, -266, 891) (det 1.00); drawn 280 at Vec3(-1488, -354, 919) (det 1.00, 309 from the drawn hand), 283 at Vec3(-1467, -355, 921) (det 1.00); small models near Sora: [0x7ff7d91b2dd0 1b 2117ms ago at Vec3(-1200, -121, 1000) 439 from drawn hand]
+[f4635] draw: kh2_controller (KH1 slot 75)
+[f4635] stick direction Vec2(0.29944625, 0.9541132) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(0.29944625, 0.9541132), tilt 1.00
+[f4635] KH2's first frames after KH1's move: AerialDodge (motion 202, frame 1), move [5.4, 14.5, 17.2], KH1's push [0.0, 0.0, 0.0] not carried
+[f4635] KH2 sound played: sound 999019 (motion 202) (volume 0.30)
+[f4636] draw: kh2_controller (KH1 slot 11)
+[f4636] stick direction Vec2(0.29944625, 0.9541132) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(0.29944625, 0.9541132), tilt 1.00
+[f4636] KH2's first frames after KH1's move: AerialDodge (motion 202, frame 2), move [5.4, 13.7, 17.2], KH1's push [0.0, 0.0, 0.0] not carried
+[f4637] KH1's step sound (kind 10) dropped: KH2 has Sora, KH2's own steps sound
+[f4637] stick direction Vec2(0.29944625, 0.9541132) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(0.29944625, 0.9541132), tilt 1.00
+[f4646] KH2 has Sora: Air (motion 202), height above floor 106.1, KH1 slot Some(11), KH1 state 0, flags 00048007; weapon bones: KH1's 280 at Vec3(-1596, -258, 950) (det 1.00, 4 from KH1's hand), 283 at Vec3(-1607, -263, 933) (det 1.00); drawn 280 at Vec3(-1608, -346, 957) (det 1.00, 4 from the drawn hand), 283 at Vec3(-1587, -351, 955) (det 1.00); small models near Sora: [0x7ff7d91b2dd0 1b 2333ms ago at Vec3(-1200, -121, 1000) 439 from drawn hand]
+[f4647] KH1's air state takes him with KH2's momentum: sideways 18.0/frame, up -0.5/frame (KH1's arc: time 6.0, apex at 5.0, 0 higher)
+[f4647] KH1 takes him: KH2's move is over (Air): KH1's own states falling
+[f4648] draw: kh1_own (KH1 slot 10)
+[f4648] KH1 has Sora (KH1's own states (base Sora, shared))
+[f4669] draw: kh1_own (KH1 slot 11)
+[f4682] draw: baked (KH1 slot 128)
+[f4723] draw: baked (KH1 slot 125)
+[f4806] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f4806] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 813 frames in, blend -1.00
+[f4806] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4806] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4806] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4806] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4806] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4807] draw: baked (KH1 slot 122)
+[f4826] draw: kh1_own (KH1 slot 11)
+[f4846] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4846] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4846] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4846] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4846] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4847] draw: baked (KH1 slot 122)
+[f4866] draw: kh1_own (KH1 slot 11)
+[f4878] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4878] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4878] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4878] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4878] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4879] draw: baked (KH1 slot 122)
+[f4898] draw: kh1_own (KH1 slot 11)
+[f4917] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4917] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4917] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4917] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4917] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4918] draw: baked (KH1 slot 122)
+[f4937] draw: kh1_own (KH1 slot 11)
+[f4953] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f4953] KH1's ground combo, swing 1 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f4953] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f4953] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b
+[f4953] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f4954] draw: baked (KH1 slot 122)
+[f4973] draw: kh1_own (KH1 slot 11)
+[f4996] trace: 360 frames (6.0s) written to E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2-traces\trace_1792790282_f4996_select_triangle.csv (select_triangle)
+[f5001] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f5001] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1008 frames in, blend -1.00
+[f5081] draw: baked (KH1 slot 126)
+[f5083] draw: baked (KH1 slot 129)
+[f5091] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 72/s, climb 0/s
+[f5091] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1098 frames in, blend -1.00
+[f5099] draw: baked (KH1 slot 126)
+[f5101] draw: baked (KH1 slot 129)
+[f5107] draw: baked (KH1 slot 126)
+[f5108] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 73/s, climb 0/s
+[f5108] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1115 frames in, blend -1.00
+[f5121] draw: baked (KH1 slot 126)
+[f5123] draw: baked (KH1 slot 129)
+[f5125] draw: baked (KH1 slot 126)
+[f5127] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 38/s, climb 0/s
+[f5127] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1134 frames in, blend -1.00
+[f5135] draw: baked (KH1 slot 126)
+[f5137] draw: baked (KH1 slot 129)
+[f5140] draw: baked (KH1 slot 126)
+[f5142] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 39/s, climb 0/s
+[f5142] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1149 frames in, blend -1.00
+[f5154] draw: baked (KH1 slot 126)
+[f5159] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 20/s, climb 0/s
+[f5159] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1166 frames in, blend -1.00
+[f5169] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f5169] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f5169] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b exe+2a630c
+[f5170] draw: baked (KH1 slot 119)
+[f5200] KH2's line ahead: no floor within 85 (90 his radius), KH2's row 1 marked
+[f5200] KH1's ground combo, swing 2 of 4: KH2 would take row 1 motion 181 (ability 0, finisher false, KH2's length 4)
+[f5200] KH2's row selection: KH2's hop, row 1 motion 181: KH1's row 2 replaced by its air row 18 (request 0xcc) in its air state, 21 high, 8.0/frame sideways
+[f5200] set motion #1 slot 204 (flags 0x1000000) on Sora, from exe+2a39e0 exe+512b1 exe+2a6958 exe+2a79ad exe+297870 exe+fb452 exe+2bf178 exe+29c0e8 exe+2a630c exe+194164
+[f5200] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f5201] draw: baked (KH1 slot 122)
+[f5220] draw: kh1_own (KH1 slot 11)
+[f5235] draw: baked (KH1 slot 126)
+[f5237] draw: baked (KH1 slot 129)
+[f5269] draw: baked (KH1 slot 126)
+[f5270] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 2/s, climb 0/s
+[f5270] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1277 frames in, blend -1.00
+[f5273] draw: baked (KH1 slot 126)
+[f5274] draw: baked (KH1 slot 129)
+[f5280] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 76/s, climb 0/s
+[f5280] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1287 frames in, blend -1.00
+[f5299] trace: 361 frames (6.0s) written to E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2-traces\trace_1792790287_f5299_select_triangle.csv (select_triangle)
+[f5319] KH1's ground combo, swing 1 of 4: KH2 would take row 5 motion 151 (ability 0, finisher false, KH2's length 4)
+[f5319] KH2's row selection: KH1's request 0xc8 plays KH2's row 5 motion 151
+[f5319] set motion #1 slot 200 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+e6dc9 exe+fb452 exe+386a59 exe+28c892 exe+2a5f9b exe+2a630c
+[f5320] draw: baked (KH1 slot 119)
+[f5349] KH1's ground combo, swing 2 of 4: KH2 would take row 6 motion 153 (ability 0, finisher false, KH2's length 4)
+[f5349] KH2's row selection: KH1's request 0xc9 plays KH2's row 6 motion 153
+[f5349] set motion #1 slot 201 (flags 0x1000000) on Sora, from exe+2a39e0 exe+2a6958 exe+2a79ad exe+297870 exe+fb452 exe+2bf178 exe+29c0e8 exe+2a630c exe+194164 exe+386c83
+[f5350] draw: baked (KH1 slot 131)
+[f5382] draw: kh1_own (KH1 slot 10)
+[f5405] draw: kh1_own (KH1 slot 11)
+[f5413] trace: 361 frames (6.0s) written to E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2-traces\trace_1792790289_f5413_select_triangle.csv (select_triangle)
+[f5433] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f5433] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 1440 frames in, blend -1.00
+[f11746] alive 480s; KH1 at 0x7ff7d6dc0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
