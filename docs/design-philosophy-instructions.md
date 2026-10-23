@@ -29,7 +29,7 @@ The systems I list (see docs/systems-to-port.md) are examples, not the full list
 
 SOURCES OF TRUTH
 - "KH2 source code" means the OG Rust rewrite (OG-KH2-Combat-Rust-Rewrite inside the TESTBRANCH folder).
-- Anything not in it: the Ghidra C decomps in D:\claude\ghidra_12.1.4_PUBLIC_20260921\DECOMPS (Steam KH1 and KH2). For KH1 internals, use the KH1 decomp or assembly.
+- Anything not in it: the Ghidra C decomps in the users decomp folder (Steam KH1 and KH2). For KH1 internals, use the KH1 decomp or assembly.
 - Mark any assumption about how KH1 or KH2 works as an assumption and check it. Never present a guess as fact.
 - My Triangle + Select trace CSVs are ground truth for what I'm seeing.
 - The main branch is in the KH2-Combat-in-KH1-main subfolder of the TESTBRANCH folder, for reference.
