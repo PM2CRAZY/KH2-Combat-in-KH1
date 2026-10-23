@@ -1598,3 +1598,20 @@ elements; **Checked (files)**):
   hand, Final's second floating one) because KH1 has no second Keyblade to bind to.
 - Not checked offline: neither file is staged here, so which bones, flags and programs their
   elements use is only known at load (logged: each element switched on, each left out and why).
+
+### 18.9 The spells' programs
+
+The programs §12.2 lists for the spell packages (Reflect, Fire, Blizzard, Thunder, Cure, Wisdom's),
+compared as in §18.2:
+
+| Programs | Result |
+|---|---|
+| 75 SRandFV, 76 SRandUpFV, 85 KeMatSN (calc), 155 KeShpTail2X (calc; draw found by its decompile), 213 PointLoop, 215 ScaleLoop, 218 DrawMdlLoop (calc, construct; draw found by its decompile) | Same code. **Checked (decomp)**. In `KH1_SAME`. |
+| 210 MoveLoop, 211 AngMoveLoop | Not in either decomp. KH1's (`0x14032AF90`, construct `0x14032B080`) is §7.6's KH2 reading (keys always, the value not while fast-forwarding `0x142E9D804`, construct clearing the velocity). **Checked (exe)** against §7.6. In `KH1_SAME`. |
+| 214 AngleLoop | **Differs** (calc; construct and reset the same): KH2's (`0x1404C0BA0`) brings each angle above 0x10000 down by whole turns after a key; KH1's (`0x14032B620`) doesn't. **Checked (decomp)**, KH1's also **Checked (exe)**. Ported: `kh2ppp::al_calc`. |
+| 157 KeShpTail3X | **Differs** (draw; calc and construct the same): KH2's (`0x1404CEEF0`) steps its trail time (work 0 `+0x1F0` += key `+8`, at the draw's end, after drawing with the old time) only when not held, not paused and not on a computed frame; KH1's (`0x140338160`) on every draw with a model (key `+4` not 0xFFFF; every path of it reaches the step). **Checked (decomp)**. Ported: `kh2ppp::tail3x_draw` runs KH1's draw and takes the step back where KH2 makes none. |
+
+Both are plugged like the others (`KH2_OWN_PROGRAMS`, each KH1 entry checked slot by slot first)
+and are gates. Which spells use them (§12.2): AngleLoop the Loop integrators of Blizzard's shard and
+Wisdom's Blizzard; KeShpTail3X Fire's flame tails and Blizzard 1's sparkle. Not checked offline:
+the spell files aren't staged here.

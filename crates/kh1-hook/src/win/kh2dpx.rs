@@ -135,9 +135,9 @@ const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
 const COLOR: u32 = super::kh2ppp::COLOR;
 const VT_MIME: u32 = super::kh2ppp::VT_MIME;
 /// KH2's own programs an effect needs plugged in before it plays through KH1 (KH1's versions of
-/// 49 and 201 aren't KH2's; 241 isn't in KH1). KH2's pppColor (43) is not a gate: without it
-/// KH1's runs.
-const GATES: [u32; 3] = [MB, SHIPOLY, VT_MIME];
+/// 49, 157, 201 and 214 aren't KH2's; 241 isn't in KH1). KH2's pppColor (43) is not a gate:
+/// without it KH1's runs.
+const GATES: [u32; 5] = [MB, SHIPOLY, VT_MIME, super::kh2ppp::ANGLE_LOOP, super::kh2ppp::TAIL_3X];
 
 /// Program types KH1 runs the same as KH2 (`docs/kh2-effects.md` §18.2): every slot of KH1's
 /// table entry (`0x14054FF00`) against KH2's (`0x140779A00`), normalised decompiles, where both
@@ -158,6 +158,10 @@ const KH1_SAME: &[u32] = &[
     160, // KeShpDtt
     174, 177, 184, // VertexAp, VertexApLc, KeBornRnd6
     217, 219, // DrawMatrixLoop, DrawMdlLoopZ
+    // (The spells', §18.9.)
+    75, 76, 85, // SRandFV, SRandUpFV, KeMatSN
+    155, // KeShpTail2X
+    210, 211, 213, 215, 218, // MoveLoop, AngMoveLoop, PointLoop, ScaleLoop, DrawMdlLoop
 ];
 
 /// The programs of `types` KH1 can't run as KH2 does yet (empty: it can play through KH1).

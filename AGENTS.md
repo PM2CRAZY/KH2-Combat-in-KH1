@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 424 (testing branch: KH2 effects: KH2's pppAngleLoop and pppKeShpTail3X)
+- `al_calc` (KH2 wraps angles above 0x10000) and `tail3x_draw` (KH1's draw, then the trail step taken back when held, paused
+  or on a computed frame), Checked (decomp). Seven more programs added to `KH1_SAME` (SRandFV, SRandUpFV, KeMatSN,
+  KeShpTail2X, PointLoop, ScaleLoop, DrawMdlLoop). Notes §18.9.
+
 ### 2026-10-23: Stage 423 (testing branch: KH2 effects: Valor's and Final's packages through KH1)
 - Body and object-root anchors through KH1; weapon points stay on `kh2fx` (open question). Notes §18.8.
 
