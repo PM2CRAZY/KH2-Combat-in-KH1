@@ -190,4 +190,13 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > The period key only counts while the game window is focused. Your thread's folder is `testers/frame-advance-in-the-debug-menu` if you have traces or logs to add.
 
 > [!note] Tester Mr. Bugs
+> 1. holding for for a second causes it to run at full speed
 > 
+> 2. it needs to work no matter the fps setting, if your unsure on how that works check the C decomp for the steam version of kingdom hearts 1
+> 3. having it set on R2 should disable any inputs R2 usually takes 
+> 4. if I have a button held then I advance to the next frame it will count as a button press, if I let go then advance to the next frame then its not a button press
+>    
+>    also trace recordings need to advance frame by frame as well, so if I have trace set to 3 seconds that timer only advances frame by frame. please let me know how you would implement it.
+
+
+
