@@ -174,7 +174,7 @@ left out (the user: KH1 has no MP Charge).
 | 14 | Damage Drive | 3 | `gauge::frame`: HP lost out of a form, `damage / max HP × 50` a copy |
 | 24 | Form Boost | 5 | `gauge::with` -> `Drive::form_boost`: drain × 0.8 a copy |
 | 38 | Damage Control | 5 | `hurt::damage_control`: each hit record's damage before KH1 applies it |
-| 50 | Drive Converter | 5 | `prize::converted_drop`: an enemy's munny drop |
+| 35 | Drive Converter | 5 | `prize::converted_drop`: an enemy's munny drop |
 
 The levels are one table (`growth::SUPPORT_LEVELS`), none a level another schedule uses; Damage
 Drive comes once the first Drive Form is likely open (Guard Armor). For Drive Converter KH1's three

@@ -120,7 +120,7 @@ a "New Ability" box in KH1's level-up prompt style names it):
 | 34 | Finishing Plus | Sora's | 5 |
 | 38 | Damage Control (half damage at a quarter of max HP or less a copy) | Sora's | 5 |
 | 43 | Retaliating Slash | Sora's | 3 |
-| 50 | Drive Converter (an enemy's munny partly Drive orbs) | Sora's | 5 |
+| 35 | Drive Converter (an enemy's munny partly Drive orbs) | Sora's | 5 |
 
 Damage Drive, Form Boost, Damage Control and Drive Converter are KH2's support abilities for
 the Drive gauge and damage (KH2's own rules, per copy equipped, base Sora's in a Drive Form too:

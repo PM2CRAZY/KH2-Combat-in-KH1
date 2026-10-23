@@ -3584,6 +3584,9 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-23: Stage 337 (Drive Converter at level 35)
+- The user: "make drive converter come at level 35". `growth::SUPPORT_LEVELS` 50 -> 35.
+
 ### 2026-10-23: Stage 336 (Limit Form: limits heal per hit; limits out of battle)
 - The user: "when in limit form, when sora performs a limit, he should get health back. Also, in
   limit form, sora should be able to use the limits whenever, even when out of combat". KH2's ATKP

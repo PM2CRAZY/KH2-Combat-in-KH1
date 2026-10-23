@@ -206,9 +206,10 @@ pub const MENU: [MenuAbility; 16] = [
 ];
 
 /// The support abilities' levels (`MENU` 78..81), in one place to change: Damage Drive 14 (after
-/// Guard Armor, the first Drive Form), Form Boost 24, Damage Control 38, Drive Converter 50. None
-/// is a level another `MENU` row, `LEVEL_GIFTS` or a growth step uses.
-pub const SUPPORT_LEVELS: [u8; 4] = [14, 24, 38, 50];
+/// Guard Armor, the first Drive Form), Form Boost 24, Damage Control 38, Drive Converter 35 (the
+/// user: "make drive converter come at level 35"). None is a level another `MENU` row,
+/// `LEVEL_GIFTS` or a growth step uses.
+pub const SUPPORT_LEVELS: [u8; 4] = [14, 24, 38, 35];
 
 /// The support abilities equipped on base Sora (`crate::support`), from his list.
 pub fn support_of(list: &[u8]) -> crate::support::Support {
@@ -1009,8 +1010,8 @@ mod tests {
         assert_eq!(ids(13), Vec::<u8>::new());
         assert_eq!(ids(14), vec![78]);
         assert_eq!(ids(24), vec![78, 79]);
-        assert_eq!(ids(38), vec![78, 79, 80]);
-        assert_eq!(ids(50), vec![78, 79, 80, 81]);
+        assert_eq!(ids(35), vec![78, 79, 81]);
+        assert_eq!(ids(38), vec![78, 79, 80, 81]);
         // Equipped copies only (bit 7 clear); copies stack.
         let s = sora(60, &[80, 80, 78, 79 | 0x80, 81, kh1::GUARD], &[]).support();
         assert_eq!(s, crate::support::Support { damage_control: 2, damage_drive: 1, form_boost: 0, drive_converter: 1 });
@@ -1036,7 +1037,7 @@ mod tests {
         assert_eq!(make_room(&full), Some(47), "Cheer goes, ours stay");
         // Their AP counts in the bonus once learned.
         assert_eq!(bonus_ap(14, &[]) - bonus_ap(13, &[]), 3);
-        assert_eq!(bonus_ap(50, &[]) - bonus_ap(49, &[]), 5);
+        assert_eq!(bonus_ap(35, &[]) - bonus_ap(34, &[]), 5);
     }
 
     #[test]
