@@ -262,4 +262,12 @@
 
 
 > [!note] Tester Mr Bugs
+> 130000 0x2a23e0 - model render
+> 120000 0x0d2830 - level render
+> 120000 0x0d2830 - characters can move when this is run 
+> 100000 0xle5d90 - seems to control camera
 > 
+> sent ini
+
+
+
