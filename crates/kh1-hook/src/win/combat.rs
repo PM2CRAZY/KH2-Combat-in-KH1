@@ -432,6 +432,7 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
             // A follow-up: KH1's limit has him, its own (nothing of ours in between).
             if follow_up {
                 cmd_log(format!("command {kind:#x} ({full:08x}): KH1's {name} follow-up, KH1's own (limit running {})", super::limits::kh1_limit_running()));
+                super::limits::kh1_follow_up(k);
                 return f(actor, dir);
             }
             // The start: only as KH1 could start it (on the ground, which KH2's air reads as for
@@ -456,6 +457,8 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
                 takeover::ITEM_COMMAND.store(false, Ordering::Relaxed);
                 takeover::command_started(sora_shots(actor), None);
                 takeover::hand_to_kh1(&format!("KH1's {name} in Limit Form (command {kind:#x}, {full:08x}): KH1's limit, the form stays on"));
+                // (Its hits give HP back from here, KH2's rule: `limits::kh1_limit_hit`.)
+                super::limits::kh1_started(k);
             } else {
                 cmd_log(format!("command {kind:#x} ({full:08x}): KH1's {name} didn't start (KH1's limit flag not set); KH2 keeps him"));
             }

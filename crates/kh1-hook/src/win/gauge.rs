@@ -259,7 +259,7 @@ pub fn refill() {
 
 /// KH1's foe test (`0x14028FE30 (a, b)`): `b` isn't marked not-a-foe (`0x200`), and has a team
 /// (`+0x374` bits 5-6) other than `a`'s.
-unsafe fn foe(a: usize, b: usize) -> bool {
+pub(super) unsafe fn foe(a: usize, b: usize) -> bool {
     if b < 0x10000 || !super::crash::readable(b + 0x378) {
         return false;
     }

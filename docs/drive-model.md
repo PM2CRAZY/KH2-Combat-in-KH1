@@ -801,14 +801,40 @@ lists (`.hed` names). Nothing of it is in the repository.
     text. KH1's magic list shows no cost.
   - **Greyed** while KH1 couldn't start it there (`limits::kh1_usable`), its own conditions for
     offering one (`0x14028AF60`): no limit running (bit 16), limits allowed (`0x142D54438` bit 1
-    clear), the limit data loaded, Sora in KH1's ground state (`+0x70` 0) and not in KH2's air, a
-    target (`0x142DB3F18` hittable, `+0x374 & 0x60` = 0x40), for Trinity Limit both others there
+    clear), the limit data loaded, Sora in KH1's ground state (`+0x70` 0) and not in KH2's air,
+    for Trinity Limit both others there
     and able (`+0x88 & 0x30` clear, hittable, not `+0x374 & 0x8000`, not `+0 & 0x200`, within 500
     of Sora), and its MP (KH1's test `0x1402A2A80` with KH1's cost, `*0x142D23730 + 0xF4 + 2k`).
     **Ours:** not the offer's distance (the record's `+0xE`) and height rules (Sonic Blade only
     with the target at most 160 above, Ragnarok only at least 160): they choose the one limit
     the box shows, and in a menu they would always grey one of those two. Where KH1 greys Magic
     itself (save `+0x874` bit 0) the Limit row stays greyed.
+  - **Anywhere, out of battle too (ours; the user: "in limit form, sora should be able to use
+    the limits whenever, even when out of combat").** KH1's offer also wants a target
+    (`0x142DB3F18` hittable, `+0x374 & 0x60` = 0x40), and that is what keeps KH1's limits to
+    battles. The Limit menu and shortcuts no longer ask for one (`limits::kh1_usable`): in the
+    field (no foes, KH1's field mode) or in a battle with nothing aimed at, the limit plays to his
+    facing. Every other gate stays: the MP, Trinity Limit's party, on the ground, no limit
+    running, KH1's "no limits" flag, the limit data loaded, and no event or menu (the command
+    menu isn't there then). Read from the executable, KH1's own code runs a limit without a
+    target:
+    - the limit data `xl_limit.dat` is loaded in the field as in battle: the frame task's gate
+      (`0x14028B420`) takes KH1's mode (`0x14017CEA0`) 0, the field, as well as 2, battle, and
+      looks at no foe;
+    - the command step's dispatch (`0x1402A1470`) and the limit start (`0x14028B240`,
+      `0x14028B670`) check no battle and no target;
+    - every place the limit modules read the target checks it first: the turn toward it
+      (`0x1402A1970`) keeps his own facing (`+0x30`) without one (Ars Arcanum's hits, Strike
+      Raid's throws, Ragnarok's last rise); Sonic Blade's next dash (`0x14039EBF0`) and Strike
+      Raid's throw (`0x1403A0440`) test it and go on along his facing; Ragnarok's shots
+      (`0x14039FD60`) look for a foe within 1000 themselves and fly straight on without one;
+      Trinity Limit aims at nothing;
+    - the limit's flag (bit 16) clears when its module stops, as in battle, so nothing waits on a
+      foe.
+
+    Base Sora is unchanged: his limits are KH1's Triangle offer, target and all, so battles only.
+    The log says "Limit Form: <limit> used out of battle (KH1's field mode)" (or "in battle"),
+    and ", no target: KH1 plays it to his facing" when there is none.
   - **Chosen** (or from a shortcut): KH1's menu passes it on once KH2's move can take a command
     (else the list stays open, as for a spell). `combat::command` turns it into KH1's own limit
     command (type the limit's command id, argument 0, the step's flags kept) and it goes on as
@@ -834,7 +860,7 @@ lists (`.hed` names). Nothing of it is in the repository.
     still takes KH1's out of Sora's ability list (`menu.rs`, s153).
 - **KH1's limits in Limit Form: how they run (ours).**
   - **The start** (`combat::command`) is taken only as KH1 could start it (`limits::kh1_usable`,
-    what greys its menu row: on the ground, a target, Trinity's party, the MP), and only when
+    what greys its menu row: on the ground, Trinity's party, the MP; no target needed, above), and only when
     KH2's move can take a command (`can_take_command`, no queue, as every command here).
     Otherwise it is refused with KH1's "can't". KH1's command step then runs it as KH1 does: its
     limit, its MP cost. If its limit flag (bit 16) is set after that, KH1 takes Sora as for a KH1
@@ -877,9 +903,40 @@ lists (`.hed` names). Nothing of it is in the repository.
     On the ground, KH2 takes him on KH1's idle, the stick, an Attack, a jump or Square. In the
     air (KH1's jump or fall state), it is KH2's fall at KH1's speed. KH2's controller starts over
     in the form (`form::character`) and comes back in its battle stance.
+  - **HP back from its hits (KH2's rule; the user: "when in limit form, when sora performs a
+    limit, he should get health back").** Read from KH2 FM (the Steam executable, its addresses
+    here, and 00battle): an attack's ATKP byte `+0x2F` (OpenKH's last byte, `hp_drain` in
+    `kh2-formats`) is HP its owner gets back for each target it hits. The hit routine
+    (`0x1403D1730`, after the damage) passes it to the owner's stat change (its method `+0xE8`,
+    kind 0, HP; the stat code `0x1403C0C30` adds it clamped to the maximum, as a level-up's HP
+    bonus is added), in HP points, with no sound or effect. Of KH2's 2713 ATKP rows only Limit
+    Form's limits carry it: Infinity's combo 1857..1861 (10, 5, 5, 5, 15; its shots 1862 none),
+    Strike Raid's Raid 1866 and Judgment 1867 (8 each), Sonic Rave's Rave 1878 and Finish 1879 (5
+    each), Last Arcanum 1883..1895 (3, 1 ×5, 2 ×6, 5). So in KH2 a limit gives HP back as its hits
+    land, never for starting it, and nothing when it hits nothing. Ours, on that rule
+    (`limits::LIMIT_HP_PER_HIT`, `limits::kh1_limit_hit`): each hit of KH1's limit in Limit Form
+    that lands on a foe (KH1's hit record, `probe::hit`, KH1's foe test) gives back its KH2
+    counterpart's amount through KH1's own HP change (`0x1402A2790`: clamped to the maximum, its
+    HUD mirror kept, so the HP gauge moves as for any heal): Sonic Blade 5, Strike Raid 8 (KH2's
+    own values), Ars Arcanum 2 (Last Arcanum's 25 over 13 hits, rounded: KH1's hits aren't
+    KH2's), Ragnarok 8 for its combo (Infinity's 40 over 5) and 0 for its shots (after its
+    follow-up 0x5B, as Infinity's shots), Trinity Limit 1 (no KH2 counterpart: ours, KH2's
+    smallest). KH1's HP and KH2's are on the same scale, so the amounts are KH2's as they are. No
+    sound (KH2 plays none). Not while Sora is down (KH1's HP change would clear its down bit), not
+    for a limit refused (it never starts), and out of battle there is nothing to hit, so nothing
+    comes back there, as in KH2. The log: "Limit Form: <limit> hit: HP a -> b of max (+n, KH2's
+    HP drain)" per hit, and "<limit>'s hits gave back n HP in all (m hits)" when the next one
+    starts.
   - **Unchanged out of a form.** Base Sora's KH1 limits still run as before: no hand-off, KH1
     keeping him while its slot is one of its own actions.
 - **Unchecked in game:** all of it. In particular:
+  - the limits out of battle (each of the five in the field with no foe: Sonic Blade's dashes and
+    Strike Raid's throws along his facing, Ragnarok's shots flying straight on, Trinity Limit with
+    the party there, Ars Arcanum's flurry), that each ends and KH2 takes him back, and that a
+    limit in a battle with nothing aimed at plays to his facing;
+  - the HP back per hit (Sora's HP gauge rising on each hit of a KH1 limit in Limit Form; that
+    KH1 makes one hit record per hit, so the amounts aren't taken twice) and that none comes
+    from Ragnarok's shots;
   - whether the KH1F archive loads as a PAX;
   - the Limit menu's rows and names, and the Triangle box with our record (KH1's step runs it
     only at the menu's top level);

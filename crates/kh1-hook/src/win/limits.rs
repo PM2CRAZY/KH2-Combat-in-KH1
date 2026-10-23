@@ -1096,12 +1096,26 @@ unsafe fn hittable(obj: usize) -> bool {
 /// Whether KH1 can start its limit `k` for Sora now (in Limit Form), and why not: KH1's own
 /// conditions for offering one (`0x14028AF60`), equipped or not. No limit running, limits allowed
 /// (`0x142D54438` bit 1), the limit data loaded, Sora in KH1's ground state (`+0x70` 0) and on
-/// KH2's ground, a target to aim at (`0x142DB3F18` hittable, `+0x374 & 0x60` = 0x40), for
-/// Trinity Limit both others there (not KO'd, `+0x88 & 0x30` clear; hittable, not `+0x374 &
-/// 0x8000`, not `+0 & 0x200`; within 500), and the MP (KH1's test `0x1402A2A80` with the cost it
-/// pays). Not KH1's offer's distance and height rules: they choose which one limit to offer,
-/// which a menu doesn't need (Sonic Blade and Ragnarok are told apart there by the target's
-/// height, so one of the two would always be greyed).
+/// KH2's ground, for Trinity Limit both others there (not KO'd, `+0x88 & 0x30` clear; hittable,
+/// not `+0x374 & 0x8000`, not `+0 & 0x200`; within 500), and the MP (KH1's test `0x1402A2A80`
+/// with the cost it pays). Not KH1's offer's distance and height rules: they choose which one
+/// limit to offer, which a menu doesn't need (Sonic Blade and Ragnarok are told apart there by
+/// the target's height, so one of the two would always be greyed).
+///
+/// **No target needed (ours, the user: "in limit form, sora should be able to use the limits
+/// whenever, even when out of combat").** KH1's offer also wants a target (`0x142DB3F18`
+/// hittable, `+0x374 & 0x60` = 0x40), which is what keeps KH1's limits to battles. Here there is
+/// none of that: in the field, or in a battle with nothing aimed at, the limit plays to his
+/// facing. KH1's own code runs them so (read from the executable): the data `xl_limit.dat` is
+/// loaded in the field as in battle (the frame task's gate `0x14028B420` takes KH1's mode 0, the
+/// field, as well as 2, battle); the command step's dispatch and the limit start check no battle
+/// or target; and every place the limit modules read the target checks it first and falls back
+/// to his facing (`0x1402A1970`, the turn toward it: his own `+0x30` without one; Sonic Blade's
+/// next dash `0x14039EBF0` and Strike Raid's throw `0x1403A0440` test it; Ragnarok's shots
+/// `0x14039FD60` look for a foe within 1000 themselves and fly straight on without one; Ars
+/// Arcanum's hits and Trinity Limit aim at nothing). The limit's flag (bit 16) clears when its
+/// module stops, as in battle, so nothing waits on a foe. Base Sora's limits are still KH1's
+/// Triangle offer, target and all (battles only).
 pub unsafe fn kh1_usable(actor: usize, k: usize) -> Result<(), &'static str> {
     let base = base();
     if base == 0 || actor < 0x10000 || k >= KH1_LIMITS.len() {
@@ -1118,10 +1132,6 @@ pub unsafe fn kh1_usable(actor: usize, k: usize) -> Result<(), &'static str> {
     }
     if super::takeover::kh2_airborne() || rd::<i32>(actor + 0x70) != 0 {
         return Err("not on the ground");
-    }
-    let target = pose::ptr(rd::<u32>(base + TARGET_RVA));
-    if !hittable(target) || rd::<u32>(target + 0x374) & 0x60 != 0x40 {
-        return Err("no target");
     }
     if KH1_LIMITS[k].command == 0x52 {
         let me = Vec3::from_array(rd::<[f32; 3]>(actor + 0x10));
@@ -1291,6 +1301,107 @@ pub fn kh1_limit_running() -> bool {
 /// own animation drawn (`pose::follow`), the form on and draining (`form::drain`).
 pub fn kh1_limit_holds() -> bool {
     !KH2_LIMITS && super::form::in_limit() && kh1_limit_running()
+}
+
+// ------------------------------------------------ HP back from a limit's hits in Limit Form
+
+/// HP Sora gets back for each hit of KH1's limit `k` in Limit Form that lands on a foe: before
+/// its first follow-up, and after one. **KH2's rule** (KH2 FM, read from the Steam executable,
+/// whose addresses these are, and 00battle): an attack's ATKP byte `+0x2F` (`hp_drain`) is HP
+/// its owner gets back for each target it hits. The hit routine (`0x1403D1730`, after the
+/// damage) passes it to the owner's stat change (its method `+0xE8` with kind 0, HP: the call
+/// that also tops HP up to the maximum, `0x1403AA8D0`; its stat code `0x1403C0C30` adds the
+/// amount to the HP clamped to the maximum), in HP points, with no sound or effect. In all of
+/// KH2's ATKP only Limit Form's limits carry it:
+/// - Sonic Rave: Rave 1878 and Finish 1879, 5 each → **Sonic Blade 5**;
+/// - Last Arcanum: 1883..1895, 3, then 1 ×5, 2 ×6, and 5 (25 over 13 hits) → **Ars Arcanum 2**
+///   (KH1's hits aren't KH2's, so the per-hit average, rounded);
+/// - Strike Raid: Raid 1866 and Judgment 1867, 8 each → **Strike Raid 8**;
+/// - Infinity: its combo 1857..1861, 10, 5, 5, 5, 15 (40 over 5), its shots 1862 none →
+///   **Ragnarok 8** for its combo, **0** for its shots (its follow-up, 0x5B, fires them);
+/// - Trinity Limit has no KH2 counterpart: **1 (ours)**, KH2's smallest.
+///
+/// KH1's HP and KH2's are on the same scale (both start near 20), so the amounts are KH2's as they
+/// are. Out of battle a limit hits nothing, so (as in KH2) it gives nothing back there. Change a
+/// value here to change it.
+pub const LIMIT_HP_PER_HIT: [(i32, i32); 5] = [(5, 5), (2, 2), (8, 8), (8, 0), (1, 1)];
+
+/// The KH1 limit started last in Limit Form: its index, and bit 8 once a follow-up of it ran
+/// (`u32::MAX`: none).
+static KH1_RUN: AtomicU32 = AtomicU32::new(u32::MAX);
+/// HP given back for the limit under way, and the hits that gave it (for the log).
+static KH1_HEALED: AtomicU32 = AtomicU32::new(0);
+static KH1_HITS: AtomicU32 = AtomicU32::new(0);
+
+/// KH1's battle flag (`BATTLE_FLAGS_RVA` bit 0; `takeover::BATTLE_RVA`).
+fn in_battle() -> bool {
+    let base = base();
+    base != 0 && unsafe { rd::<u32>(base + BATTLE_FLAGS_RVA) } & 1 != 0
+}
+
+/// One of KH1's limits started in Limit Form (`combat::command`, its flag set): its hits give HP
+/// back from here (`kh1_limit_hit`). Logs where it was used.
+pub unsafe fn kh1_started(k: usize) {
+    if k >= KH1_LIMITS.len() {
+        return;
+    }
+    let (healed, hits) = (KH1_HEALED.swap(0, Ordering::Relaxed), KH1_HITS.swap(0, Ordering::Relaxed));
+    if let Some(prev) = KH1_LIMITS.get((KH1_RUN.load(Ordering::Relaxed) & 0xFF) as usize) {
+        if hits > 0 {
+            log(&format!("Limit Form: {}'s hits gave back {healed} HP in all ({hits} hits)", prev.name));
+        }
+    }
+    KH1_RUN.store(k as u32, Ordering::Relaxed);
+    let base = base();
+    let target = if base != 0 { pose::ptr(rd::<u32>(base + TARGET_RVA)) } else { 0 };
+    let (start, after) = LIMIT_HP_PER_HIT[k];
+    log(&format!(
+        "Limit Form: {} used {}{}; {start} HP back per hit on a foe{}",
+        KH1_LIMITS[k].name,
+        if in_battle() { "in battle" } else { "out of battle (KH1's field mode)" },
+        if hittable(target) { "" } else { ", no target: KH1 plays it to his facing" },
+        if after != start { format!(" ({after} after its follow-up)") } else { String::new() }
+    ));
+}
+
+/// A follow-up of KH1's limit `k` passed on (`combat::command`): its hits take the second value
+/// of `LIMIT_HP_PER_HIT` from here.
+pub fn kh1_follow_up(k: usize) {
+    if KH1_RUN.load(Ordering::Relaxed) & 0xFF == k as u32 {
+        KH1_RUN.fetch_or(0x100, Ordering::Relaxed);
+    }
+}
+
+/// One of Sora's hits landed on the foe `target` (`probe::hit`, KH1's hit record made). In Limit
+/// Form, while one of KH1's limits runs, Sora gets `LIMIT_HP_PER_HIT` back through KH1's own HP
+/// change (`form::HP_ADD_RVA`: clamped to the maximum, its HUD mirror kept, so the gauge moves
+/// as for any heal). Not when he is down (that call would clear KH1's down bit).
+pub unsafe fn kh1_limit_hit(sora: usize, target: usize) {
+    if !kh1_limit_holds() || !super::gauge::foe(sora, target) {
+        return;
+    }
+    let run = KH1_RUN.load(Ordering::Relaxed);
+    let Some(&(start, after)) = LIMIT_HP_PER_HIT.get((run & 0xFF) as usize) else { return };
+    let add = if run & 0x100 != 0 { after } else { start };
+    let stats = pose::ptr(rd::<u32>(sora + 0x6C));
+    if add <= 0 || stats < 0x10000 || !super::crash::readable(stats + 0x44) {
+        return;
+    }
+    let (hp, max) = (rd::<i32>(stats + 0x3C), rd::<i32>(stats + 0x40));
+    if hp <= 0 || max <= 0 {
+        return;
+    }
+    let base = base();
+    let f: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + super::form::HP_ADD_RVA);
+    f(sora, add);
+    let now = rd::<i32>(stats + 0x3C);
+    KH1_HEALED.fetch_add((now - hp).max(0) as u32, Ordering::Relaxed);
+    KH1_HITS.fetch_add(1, Ordering::Relaxed);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 200 {
+        let name = KH1_LIMITS[(run & 0xFF) as usize].name;
+        log(&format!("Limit Form: {name} hit: HP {hp} -> {now} of {max} (+{add}{}, KH2's HP drain)", if now - hp < add { ", capped" } else { "" }));
+    }
 }
 
 // ---------------------------------------------------------------- install

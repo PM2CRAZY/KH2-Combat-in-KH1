@@ -343,7 +343,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 }
 
 /// KH1's HP change `(actor, amount)` (`0x1402A2790`: clamped to the maximum, its HUD mirror kept).
-const HP_ADD_RVA: super::addr::Rva = super::addr::Rva(0x2A2790);
+pub(super) const HP_ADD_RVA: super::addr::Rva = super::addr::Rva(0x2A2790);
 
 /// Sora's HP back to full as a Drive starts (the user: "activating a drive form should restore
 /// soras health entirely", as KH2's does).

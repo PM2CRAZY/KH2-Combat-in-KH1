@@ -3584,6 +3584,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-23: Stage 336 (Limit Form: limits heal per hit; limits out of battle)
+- The user: "when in limit form, when sora performs a limit, he should get health back. Also, in
+  limit form, sora should be able to use the limits whenever, even when out of combat". KH2's ATKP
+  `hp_drain` (only Limit Form's limits have one; added per target hit, capped at max HP) as
+  `limits::LIMIT_HP_PER_HIT`: Sonic Blade 5, Strike Raid 8, Ars Arcanum 2, Ragnarok's combo 8 (shots
+  0), Trinity Limit 1 (ours). `limits::kh1_usable` no longer needs a target, so Limit Form's limits
+  work in the field; base Sora unchanged. docs/drive-model.md.
+
 ### 2026-10-23: Stage 335 (Damage Drive, Form Boost, Damage Control, Drive Converter)
 - The user: "lets try to implement berserk charge, damage control, damage drive, drive boost, form
   boost, drive converter?", then Berserk Charge and Drive Boost left out (no MP Charge in KH1) and
