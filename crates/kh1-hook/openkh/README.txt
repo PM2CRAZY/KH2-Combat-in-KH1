@@ -30,8 +30,10 @@ INSTALL
    or, for Steam, Documents\KINGDOM HEARTS HD 1.5+2.5 ReMIX\Steam\<number>\
 2. Open the OpenKH Mods Manager and pick "Kingdom Hearts Final Mix" (KH1) as
    the game.
-3. Mods > Install a New Mod > "Select and install Mod Archive", and choose this
-   zip file (don't unzip it).
+3. Mods > Install a New Mod, and enter PM2CRAZY/KH2-Combat-In-KH1-Mod (a small
+   repository holding only the latest build, so it downloads in seconds).
+   Or, with a zip: "Select and install Mod Archive" and choose the zip file
+   (don't unzip it).
 4. Tick "KH2 Combat for KH1" in the mod list.
 5. Build > "Build and Run" (or "Build Only", then start the game normally).
 6. Load a save. That's it.
@@ -40,8 +42,9 @@ The first launch makes a settings file, kh1-kh2.ini, in your game folder (the
 one with "KINGDOM HEARTS FINAL MIX.exe"), and a log, kh1-kh2.log. Settings are
 read when the game starts.
 
-UPDATING: install the new zip the same way, then Build again (an old build
-left in OpenKH's output folder keeps loading otherwise). To check which
+UPDATING: OpenKH's Mods Manager updates a mod installed from
+PM2CRAZY/KH2-Combat-In-KH1-Mod (or install a new zip the same way), then Build
+again (an old build left in OpenKH's output folder keeps loading otherwise). To check which
 version is running, open Config in the game and move to the "Camera Style"
 row: its help box says "KH2 Combat version s154" (or whichever you have). The
 first line of kh1-kh2.log says it too.
