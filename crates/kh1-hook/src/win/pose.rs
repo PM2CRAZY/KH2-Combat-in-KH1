@@ -1737,7 +1737,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     // KH1's own animation of this move has them, for the retarget (`Retarget::set_own`): KH1
     // plays the move KH2's stands in for underneath (our slots: its template retimed).
     if !ours {
-        own_from_kh1(s, world, &to_world);
+        own_from_kh1(s, world, &to_world, param_world);
     }
     let Some(mut pose) = wanted(s, slot, &to_world) else {
         s.wrote_root = None;
@@ -1888,7 +1888,18 @@ const OWN_UP: usize = 3;
 /// like crazy"). A bone that still holds what we wrote is placed here from its parent by the
 /// relation KH1 last gave it (KH1 keys none of these bones: constants only; Checked (files));
 /// a part whose parent can't be placed keeps its last relation.
-unsafe fn own_from_kh1(s: &mut Sora, world: usize, to_world: &Mat4) {
+///
+/// "Still holds what we wrote" is up to the pass's own last step (Checked (decomp)): both passes
+/// end by adding the pass's world translation to every bone's world matrix, the ones they didn't
+/// place too (blend `0x140392560`, plain `0x140391C70`), after multiplying them by the world's
+/// scale when it is more than 0.005 off 1 (the blend: every bone; the plain pass: all but its skip
+/// bones). So a bone the blend pass left holds our matrix moved by Sora's position (`kept`).
+/// t405 compared it as written, took every such bone as placed, and measured the shorts and hem
+/// from parents one world position off: they were drawn that far from the body, at the map's
+/// origin, on every blend-pass frame (Mr Bugs, t409: "his coat, his pants ... return to the map
+/// origin for 1 frame", from running to neutral; his trace f20377: the pass at each stop,
+/// f20262 / f20282 / f20293 / f20322 / f20340 / f20350 / f20362, is the blend's).
+unsafe fn own_from_kh1(s: &mut Sora, world: usize, to_world: &Mat4, param_world: usize) {
     let Some(r) = s.retarget.as_ref() else { return };
     let inv = to_world.inverse();
     if !inv.is_finite() {
@@ -1898,8 +1909,15 @@ unsafe fn own_from_kh1(s: &mut Sora, world: usize, to_world: &Mat4) {
     s.own_rel.resize(n, None);
     s.kh1_local.resize(n, None);
     s.own_scale.resize(n, Vec3::ONE);
+    // The pass's world translation and scale, as it took them (its rows' lengths; the
+    // translation as stored), read from its world matrix.
+    let pass = (param_world >= 0x10000).then(|| mat(param_world)).filter(|p| p.is_finite()).map(|p| {
+        let s = Vec3::new(p.x_axis.truncate().length(), p.y_axis.truncate().length(), p.z_axis.truncate().length());
+        let scaled = (s - Vec3::ONE).abs().max_element() > 0.005;
+        (p.w_axis.truncate(), scaled.then_some(s))
+    });
     let wrote = &s.wrote;
-    let placed = |i: usize| wrote.get(i).map_or(true, |w| rd::<[f32; 16]>(world + i * 0x40) != *w);
+    let placed = |i: usize| wrote.get(i).map_or(true, |w| !kept(&mat(world + i * 0x40), &Mat4::from_cols_array(w), pass));
     // (Unscaled, and the scale.)
     let model = |i: usize| -> Option<(Mat4, Vec3)> {
         let (sc, q, t) = (inv * mat(world + i * 0x40)).to_scale_rotation_translation();
@@ -1945,6 +1963,22 @@ unsafe fn own_from_kh1(s: &mut Sora, world: usize, to_world: &Mat4) {
     }
     let rel = &s.own_rel;
     r.set_own(|b| rel.get(b).copied().flatten());
+}
+
+/// Does `now` (a bone's world matrix after KH1's pass) still hold `wrote` (what we wrote), as the
+/// pass's last step leaves a bone it didn't place (`pass`: its world translation, and its scale
+/// when it applied one; `own_from_kh1`)? As written, moved by the translation, or scaled and
+/// moved. (The scale's side: KH1 multiplies the bone by the scale the way it puts a bone on its
+/// parent, so on each axis row of its matrix, translation included; Assumption (decomp), from
+/// the composition order of `0x1401DB4D0`'s other calls; it only matters off scale 1.)
+fn kept(now: &Mat4, wrote: &Mat4, pass: Option<(Vec3, Option<Vec3>)>) -> bool {
+    let same = |a: &Mat4, b: &Mat4| a.to_cols_array().iter().zip(b.to_cols_array().iter()).all(|(x, y)| (x - y).abs() <= 1e-3 * y.abs().max(1.0));
+    if same(now, wrote) {
+        return true;
+    }
+    let Some((t, s)) = pass else { return false };
+    let moved = Mat4::from_translation(t);
+    same(now, &(moved * *wrote)) || s.is_some_and(|s| same(now, &(moved * Mat4::from_scale(s) * *wrote)))
 }
 
 /// KH1's size against KH2's (`Retarget::hip_ratio`), 1 without a retarget.

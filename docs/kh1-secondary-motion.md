@@ -382,6 +382,16 @@ guards stay: the belt chain's end and the hem's panels are still swung off the t
   (`Sora::wrote`) is placed from the bone above it by the relation KH1 last gave it on a pass
   that placed both (KH1 keys none of these bones, constants only: Checked (files)), and a part
   whose parent can't be placed keeps its last relation. Checked (decomp, files); not in game.
+  **"Still holding what we wrote" (fixed after t409):** both passes end by adding their world
+  translation to every bone's world matrix, the ones they didn't place too (blend `0x140392560`,
+  plain `0x140391C70`; first multiplying by the world's scale when it is more than 0.005 off 1:
+  every bone in the blend, all but the skip bones in the plain pass). Checked (decomp). So a
+  bone the blend left holds our matrix moved by Sora's world position, not our matrix; t405
+  compared it as written, took every such bone as placed, and measured the shorts and hem from
+  parents one world position off, so they were drawn at the map origin on every blend-pass
+  frame (the tester's t409 picture and trace f20377: each stop from the walk to the idle is a
+  plain pass plus a blend, then blend-only frames). `pose::kept` now tests for that move (and
+  the scaled move). Assumption: on which side the scale is multiplied (only matters off scale 1).
 - `Retarget::attach` (the belt chain, carried by the +x thigh): the root rigidly as before, the
   links under it by their relation to their parent, KH1's own where given (the bind's before).
 

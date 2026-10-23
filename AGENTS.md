@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 411 (testing branch: KH1's own parts: a skipped bone holds our matrix moved)
+- Mr Bugs (t409 picture, trace f20377): "his coat, his pants ... return to the map origin". Both of KH1's passes end by
+  adding the world translation to every bone (after the world scale, if off 1), placed or not (`0x140392560`,
+  `0x140391C70`, decomp); t405's `Sora::wrote` test took the blend's skipped parents as placed, so the hem and shorts
+  were measured one world position off on every blend frame (each stop from walk to idle and the frames after).
+  `pose::kept`. Assumption: the scale's side. Notes `docs/kh1-anim-slots.md` §1.6.
+
 ### 2026-10-23: Stage 410 (testing branch: KH2's combo rows checked in the tester's traces)
 - His t409 traces f37236..f44266 (physics KH1, Base / Aerial Combo KH2): every air pick and per-row hop is KH2's rule
   (heights 21 / 17 / 21, 67..71 toward an enemy above; speeds at the row bounds or the gap's). Notes and two comments
