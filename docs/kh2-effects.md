@@ -1545,3 +1545,16 @@ elements; **Checked (files)**):
 - KH1 instances start unturned: the pool's claim (`0x1401EC690`) clears the instance, and the
   start (`0x1401E0100`) only hands out handles of its place, turn and scale. **Checked (exe)**.
   Not done: 0x04 on KH2's object root (none in Sora's package).
+
+### 18.6 The Drive motion's and Revert's flashes through KH1
+
+- The Drive motion (52, `form::DRIVE_MOTION`) starts elements 1..13 at its frame 0; Revert
+  (`form::revert`) starts 15..27 at once, right after Sora's object is handed back (so their
+  "ends with the owner" flag, 0x200, sees the new owner). All in the package's second DPD, which
+  has no textures of its own: everything they draw is KH2's common textures (**Checked (files)**).
+- Bones: 2..13 and 16..27 on the limbs and spine (§18.3: 67, 2, 170 / 78, 177 / 85, 40 / 11,
+  41 / 12, 44 / 15), flags 0x241 (bound, fade-out on the owner going); 15 on the spine by position
+  (0x245, §18.5). Their programs are all KH1_SAME, KH2's pppColor and MegaBirth.
+- Element 1 (the Drive motion's sphere at the object root, bound until started) runs KH2's
+  pppSnoMdlDttNorm (238, a frame-buffer distortion along the model's normals, §7.10), which KH1
+  doesn't have: it stays with `kh2fx` (which also draws nothing for 238, only its other parts).

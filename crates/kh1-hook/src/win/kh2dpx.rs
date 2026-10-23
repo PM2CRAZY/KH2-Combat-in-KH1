@@ -104,8 +104,12 @@ enum Anchor {
 /// 50) and Aerial Finish (194: 35..38), the last two with KH2's pppVtMime; then the rest of his
 /// moves', with KH1's position binding for KH2's flag 0x04: Guard Break (165: 30..32), Finishing
 /// Leap (167: 33, 34), Aerial Recovery (40: 0), and under `kh2_effects = all` motions 169 (53..56),
-/// 171 (40, 41) and 172 (39).
-const ON: &[i16] = &[44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38, 30, 31, 32, 33, 34, 0, 53, 54, 55, 56, 40, 41, 39];
+/// 171 (40, 41) and 172 (39); then the Drive motion's (52: 1..13) and Revert's flashes (15..27,
+/// `form`). Element 1 runs KH2's pppSnoMdlDttNorm (238), not in KH1: `missing` leaves it to kh2fx.
+const ON: &[i16] = &[
+    44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38, 30, 31, 32, 33, 34, 0, 53, 54, 55, 56, 40, 41, 39, //
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+];
 const MB: u32 = super::kh2ppp::MEGA_BIRTH;
 const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
 const COLOR: u32 = super::kh2ppp::COLOR;

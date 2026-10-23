@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 421 (testing branch: KH2 effects: the Drive motion's and Revert's flashes through KH1)
+- Drive 2..13 and Revert 15..27 through KH1. Element 1 (KH2-only pppSnoMdlDttNorm, 238) stays on `kh2fx`. Notes §18.6.
+
 ### 2026-10-23: Stage 420 (testing branch: KH2 effects: position-only elements on KH1's binding mode 1; the rest of Sora's moves through KH1)
 - KH2's flag 0x04 elements on KH1's binding mode 1 (start `0x1402ADC20`, Checked (exe)); after Sora's pass `posed` sets the
   record's offset to bone place + turn x offset - KH1's point. Guard Break, Finishing Leap, Aerial Recovery, 169 / 171 / 172.
