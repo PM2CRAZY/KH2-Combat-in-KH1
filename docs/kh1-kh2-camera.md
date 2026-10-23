@@ -305,6 +305,27 @@ The tester, option (a): KH2's first-person view, natively. KH2's rules are in
   the head (its yaw is behind him) with its spring.
 - **Not checked in game.** In particular: that alpha 0 hides his Keyblade too before his draw
   bit goes, and that KH1 shows no walk while he turns in place.
+- **The tester's traces** (`testers/kh2-camera-fixes/`), and his words: "kh1s cam feels faster
+  and rigid, controls on the left stick while kh2s cam is slower and smooth, controls on the
+  right stick".
+  - `trace_1792788902_f73164` (t409, Camera KH2): ours. Right stick only. Past its dead zone
+    the right stick's x turns Sora 2.98-3.04° a frame whatever the tilt (KH2 `0x1403a9250`), and
+    the view follows him through KH2's spring (it lags, then catches up at 3° a frame). Its y
+    pitches the view, at up to 2.9° a frame once the spring has caught up, easing in and out.
+    Eye 133.7 above the feet (150 · 0.89), the look point about 300-310 ahead (350 · 0.89, less
+    the spring), FOV 76.1 (KH2's).
+  - `trace_1792788912_f73634` (Camera KH1): KH1's own (Steam KH1 `0x1401E2390`, Checked
+    (decomp) and trace). Left stick only, the right stick does nothing. Its x turns him by 3° ·
+    x a frame (the tilt counts), its y pitches by 3° · y a frame, and the view is placed on
+    him with no spring (the view's yaw matches his facing every frame): "rigid". Eye 120 above
+    the feet, the look point 100 ahead, FOV 53, KH1's 30-frame blend in and out, pitch held to
+    80° up / 60° down.
+  - So ours already has what he describes for KH2 (the right stick, the smooth view). What the
+    decomp can't give is still KH2's pitch rate and limits (`0x140718bf4`, `0x140718bf8` /
+    `0x140718bfc`, exe data; ours 3° a frame, 80° up, 60° down). Also from the decomp (Checked):
+    KH2's first person keeps the field FOV (the mode copies its row's `+0xe0` to the FOV goal,
+    `0x140166100`, `0x140165a70`), and its wall test moves only the look point toward the eye
+    (`0x140165700`, `0x140171210`), which doesn't change the view's direction.
 
 ## 10. Sources
 
