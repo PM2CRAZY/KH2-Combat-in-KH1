@@ -52,6 +52,15 @@
 //! The vtables are copied from KH1's own entries; memory comes from the game's CRT (KH1 frees
 //! HD data with `_aligned_free` if a file is ever dropped; ours never is).
 //!
+//! The bone binding's frame (`docs/kh2-effects.md` §17.7): both games place a bound effect from
+//! the bone matrix their binding read on its previous run, but KH2's first run after the start
+//! reads the bone first (this frame's pose) and keeps reading it while the effect waits, where
+//! KH1's applies the matrix its start read (before this frame's pose pass) and doesn't read
+//! while the effect waits. So for our continuous bindings (modes 2 and 3) the binding's stored
+//! matrix is refreshed with KH1's own bone reads (`0x14029EA00` / `0x14029EB20`, Steam) from
+//! Sora's skeleton pass (`pose`): after it on the start frame, before it on the frames the effect
+//! still waits. KH1's binding then runs as it does; its own effects are not touched.
+//!
 //! Ini: `kh2_fx_native` (on by default): off = these elements are played by `kh2fx` as before.
 //! Elements fall back to `kh2fx` too while the DPX isn't built (or couldn't be).
 
@@ -151,6 +160,19 @@ const EL_BOUND: u32 = 0x20;
 /// `0x14233FBDC` is a multiple of it): a bound element starts at wait <= -2 x it.
 const FRAME_UNIT_STEAM: usize = 0x233FBCC;
 
+/// KH1's binding task list (Steam `0x142DB34B0`: `+0x18` the node added last; a node's `+0x10`
+/// callback, `+0x18` actor, `+0x20` element, `+0x28` its serial, `+0x30` a handle of the 0x70-byte
+/// binding record: `+4` mode, `+8` bone code, `+0xC` t, `+0x30` the matrix it applies, its
+/// place row `+0x60`), filled by `0x1402AE880`; the binding callback `0x1402AE910`.
+const BIND_LIST_STEAM: usize = 0x2DB34B0;
+const BIND_TASK_STEAM: usize = 0x2AE910;
+/// KH1's bone reads, as its binding calls them: `0x14029EA00 (actor, code, out matrix)` and
+/// `0x14029EB20 (actor, code, t, out point)` (Steam).
+const READ_BONE_STEAM: usize = 0x29EA00;
+const READ_POINT_STEAM: usize = 0x29EB20;
+/// Element flag: waiting to start (KH1's binding neither reads nor applies while it is set).
+const EL_WAITING: u32 = 0x10;
+
 /// KH1's frame unit (read on Steam; 1.0, the value KH1 sets it to, elsewhere).
 fn frame_unit() -> f32 {
     if super::addr::Build::current() != super::addr::Build::Steam {
@@ -190,6 +212,22 @@ struct Run {
 }
 
 static RUNNING: Mutex<Vec<Run>> = Mutex::new(Vec::new());
+
+/// A continuous binding of ours whose stored matrix is still read KH2's way (`posed`): KH1's
+/// element and serial, the binding node and record, and Sora's skeleton passes when it started.
+struct Fresh {
+    element: usize,
+    serial: u32,
+    node: usize,
+    record: usize,
+    actor: usize,
+    pass: u32,
+}
+
+static FRESH: Mutex<Vec<Fresh>> = Mutex::new(Vec::new());
+static FRESH_ANY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Sora's skeleton passes (`posed`).
+static PASSES: AtomicU32 = AtomicU32::new(0);
 static LAST_MOTION: AtomicU32 = AtomicU32::new(u32::MAX);
 /// KH1's handles cover 32 MB regions; the DPX stays inside one.
 const REGION: usize = 0x200_0000;
@@ -502,6 +540,9 @@ pub fn event(motion: u16, el: i16) -> bool {
         }
     };
     drop(g);
+    if element != 0 && steam && once == 0 {
+        unsafe { note_binding(base, element, sora) };
+    }
     let set = element != 0 && unsafe { apply(element, &layer, motion) };
     if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
         log(&format!(
@@ -510,6 +551,87 @@ pub fn event(motion: u16, el: i16) -> bool {
         ));
     }
     element != 0
+}
+
+/// The binding KH1's start just made for `element` (the binding list's last node), noted for
+/// `posed`. Steam only.
+unsafe fn note_binding(base: usize, element: usize, actor: usize) {
+    let node = rd::<usize>(base + BIND_LIST_STEAM + 0x18);
+    let ok = node != 0 && rd::<usize>(node + 0x10) == base + BIND_TASK_STEAM && rd::<usize>(node + 0x20) == element;
+    let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
+    if record == 0 || !matches!(rd::<u8>(record + 4), 2 | 3) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 5 {
+            log(&format!("KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it keeps KH1's first placement"));
+        }
+        return;
+    }
+    if let Ok(mut f) = FRESH.lock() {
+        f.push(Fresh { element, serial: rd::<u32>(element + EL_SERIAL), node, record, actor, pass: PASSES.load(Ordering::Relaxed) });
+        FRESH_ANY.store(true, Ordering::Relaxed);
+    }
+}
+
+/// The binding is still `f`'s: its element running with its serial, its node KH1's binding of it.
+unsafe fn fresh_live(base: usize, f: &Fresh) -> bool {
+    instance(f.element, f.serial).is_some()
+        && rd::<u16>(f.node) != 0
+        && rd::<usize>(f.node + 0x10) == base + BIND_TASK_STEAM
+        && rd::<usize>(f.node + 0x20) == f.element
+        && rd::<u32>(f.node + 0x28) == f.serial
+        && super::pose::ptr(rd::<u32>(f.node + 0x30)) == f.record
+}
+
+/// The binding record's matrix read now, as KH1's binding reads it (mode 2: the bone's matrix;
+/// mode 3: that, with the point along the blade as its place).
+unsafe fn read_now(base: usize, f: &Fresh) {
+    let (mode, code, t) = (rd::<u8>(f.record + 4), rd::<u32>(f.record + 8), rd::<f32>(f.record + 0xC));
+    let bone: unsafe extern "system" fn(usize, u32, usize) = std::mem::transmute(base + READ_BONE_STEAM);
+    bone(f.actor, code, f.record + 0x30);
+    if mode == 3 {
+        let point: unsafe extern "system" fn(usize, u32, f32, usize) = std::mem::transmute(base + READ_POINT_STEAM);
+        point(f.actor, code, t, f.record + 0x60);
+    }
+}
+
+/// Sora's skeleton pass (`pose`, the game thread), `after` it or before. KH2's binding reads its
+/// bone first on its first run (Steam KH2 `0x1402C58F0`: `0x1402C5F70` then `0x1402C49D0` while
+/// the element's timer `+0x58` is 0, after the object's pose; then apply, then read) and keeps
+/// reading while the effect waits; KH1's (`0x1402AE910`) applies, then reads, and skips a waiting
+/// element. So a binding of ours started this pass gets this pose after it (KH2's first run); on
+/// later passes, before the pass (the pose KH2's binding read on its run before), while it still
+/// waits, then it is let go (from then on KH1's apply-then-read is KH2's).
+pub fn posed(after: bool) {
+    if !FRESH_ANY.load(Ordering::Relaxed) {
+        if after {
+            PASSES.fetch_add(1, Ordering::Relaxed);
+        }
+        return;
+    }
+    let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
+    let pass = PASSES.load(Ordering::Relaxed);
+    if let Ok(mut g) = FRESH.try_lock() {
+        g.retain(|f| unsafe {
+            if !fresh_live(base, f) {
+                return false;
+            }
+            if after {
+                if f.pass == pass {
+                    read_now(base, f);
+                }
+                return true;
+            }
+            if f.pass == pass {
+                return true;
+            }
+            read_now(base, f);
+            rd::<u32>(f.element + EL_FLAGS) & EL_WAITING != 0
+        });
+        FRESH_ANY.store(!g.is_empty(), Ordering::Relaxed);
+    }
+    if after {
+        PASSES.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 /// KH1's instance of a started element, if it is still that element's.

@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 403 (testing branch: KH2 effects: bound elements take their bone on KH2's frame)
+- The tester (option (a)). From the decomps: both bindings apply the matrix read on their last run (KH2 `0x1402C58F0`, KH1
+  `0x1402AE910`), but KH2's first run reads first, and it reads while waiting; KH1's start reads before Sora's skeleton
+  pass. `kh2dpx::posed` (from `pose`, Sora only) re-reads our continuous bindings' records with KH1's `0x14029EA00` /
+  `0x14029EB20`: after the pass on the start frame, before it while waiting. KH1's own bindings untouched. Notes §17.7.
+
 ### 2026-10-23: Stage 402 (testing branch: KH2 effects: KH2's pppColor for KH2's effects only)
 - The tester (option (a), KH1's effects unchanged): KH2's pppColor (Steam KH2 `0x1404C0F60`, bytes written every call,
   clamped at 32767) as our third entry (`kh2ppp::col_calc`); `kh1dpx` lists our DPX's type-43 words and `kh2ppp::plug`

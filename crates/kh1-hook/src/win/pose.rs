@@ -2012,8 +2012,16 @@ type Pose = unsafe extern "system" fn(usize, usize, f32, usize);
 /// The third argument is a float (XMM2; the hook audit of stage 49).
 type PoseIk = unsafe extern "system" fn(usize, usize, f32);
 
+/// Sora's own instance (not the pause menu's copy): `kh2dpx::posed` around his pass.
+fn is_sora(instance: usize) -> bool {
+    instance != 0 && instance == SORA_INSTANCE.load(Ordering::Relaxed)
+}
+
 unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: usize) {
     let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
+    if is_sora(instance) {
+        super::kh2dpx::posed(false);
+    }
     let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
     match moved {
         Some(m) => {
@@ -2029,11 +2037,17 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
     if instance != 0 {
         check(instance, false, world);
     }
+    if is_sora(instance) {
+        super::kh2dpx::posed(true);
+    }
 }
 
 unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
     LAST_T.store(flags.to_bits(), Ordering::Relaxed);
     let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
+    if is_sora(instance) {
+        super::kh2dpx::posed(false);
+    }
     let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
     match moved {
         Some(m) => {
@@ -2048,6 +2062,9 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
     }
     if instance != 0 {
         check(instance, true, world);
+    }
+    if is_sora(instance) {
+        super::kh2dpx::posed(true);
     }
 }
 

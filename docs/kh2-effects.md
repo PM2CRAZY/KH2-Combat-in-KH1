@@ -1314,8 +1314,8 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   Steam); otherwise, and on other builds, `kh2fx` plays them as before.
 - Not done: flag 0x800 (alpha follows the weapon's visibility; not in `kh2fx` either).
 - KH1's pppColor (43) and KH2's differ: §17.6 (KH2's now runs for our DPX's words).
-- Found, not changed: KH1's bone binding task (`0x1402AE910`, modes 2 and 3) applies the matrix it
-  read on its previous run, then reads the next one.
+- KH1's bone binding and KH2's place an effect from different frames' bones on the first frame
+  only: §17.7.
 
 ### 17.5 Explosion's element 48 (the burst) through KH1
 
@@ -1353,3 +1353,49 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   entry a record has (no other reference to `0x14032B940` or the entry in the decomp), so KH1's
   own effects keep KH1's pppColor exactly. Not a gate: if it isn't plugged (table not as
   expected, or not Steam) the element still plays through KH1, with KH1's pppColor (logged).
+
+### 17.7 Which frame's bone a bound effect sits on
+
+- KH2 (Steam, **Checked (decomp)**): the element task `0x1402C4280` (main task list, priority
+  20300, registered by `0x1402C4330`) runs `0x1402C58F0` per bound element (`+0x70` bit 0): while
+  its timer `+0x58` is 0 (its first run) it reads the bone (`0x1402C5F70` → `0x1403B50F0`, the
+  bone's matrix into the element record `+0x00`) and then applies it to the effect
+  (`0x1402C49D0`: position, angles, scale); after that it applies the matrix it read on its run
+  before, then reads the next, every frame, also while the effect waits (it stops only for flag
+  0x02 once the effect has started, `0x1402BE880`: the instance's wait `+0xBC` > 0). The timer
+  goes up by the frame step at the end of each run. The start (`0x1402C6B30`) only reads. Order
+  in a field frame: the object update (`0x1403BF550`, 20000: the motion advances and fires its
+  triggers (`0x1403C6740`), then the pose, `0x1403C73C0`), the element task (20300), the effect
+  update (`0x1402BD830`, 60001, `0x140162C50`). **Assumption**: `0x1403C73C0` is where the
+  object's bone matrices for the frame are made (its writes not traced to the end).
+- So in KH2 the first tick sits on the start frame's pose, every later one on the pose of the
+  frame before (the matrix read one run earlier).
+- KH1 (Steam, **Checked (exe)**): the start on a bone (`0x1402AE7F0`, mode 3 `0x1402ADD60`) reads
+  the bone and places the element at once, keeping the matrix in its binding record (`+0x30`,
+  place `+0x60`; record from `0x1402AE880`, a node in the list `0x142DB34B0`: `+0x10` callback,
+  `+0x18` actor, `+0x20` element, `+0x28` serial, `+0x30` record handle; the list's `+0x18` is
+  the node added last, `0x14028A900`). The binding task (`0x1402AE910`, run by `0x1402AEDA0` at
+  139999) applies `+0x30` (`0x1402ADB40`), then reads the next (`0x14029EA00`, mode 3 also
+  `0x14029EB20 (actor, code, t in xmm2, out)`), and does nothing while the element waits (flag
+  0x10). The bone matrices it reads are the model's `+0x1B4` array, the one KH1's skeleton pass
+  (`0x140391C70`) and our `pose` write. Inside KH1's actor task (80000) the actor list
+  `0x142D5AB00` runs each actor's update (sub-priority -2000..3000, or 6000 / 7000, by kind, set around
+  `0x140297BCF`; our KH2 controller and its element starts) before the skeleton passes of the
+  actors queued (`0x140298730` at -1000, 5000, 8000); the starts of our slots' KH2 events
+  (`kh2slots::frame`) come inside Sora's pass (after KH1's own bone pass, before our pose is
+  written), so the re-read after the pass (below) covers them too. So KH1's start reads the pose
+  of the frame before, and KH1's first tick sits on that; later ticks sit on the frame before,
+  as KH2's.
+- Difference (KH2's elements only): the first tick (KH1 a frame behind) and, for an element that
+  waits more than a frame, its first tick (KH1: the bone at the start; KH2: the frame before).
+  Explosion's elements all wait 0 (+0.1 bound; **Checked (files)**).
+- Done (`kh2dpx::posed`, Steam): each continuous binding of ours (modes 2 and 3; not 0x10000,
+  which already reads first, then applies and lets go, as KH2's 0x02 element) is noted at its
+  start (the list's last node, checked: callback, element). Sora's skeleton pass (`pose` hooks,
+  his own instance) calls `posed`: after the pass, a binding started before it gets its record
+  re-read with KH1's own calls (this frame's pose: KH2's first run); before later passes, the
+  record is re-read (the frame before's pose: what KH2 applies) while the element waits, and let
+  go once it doesn't. After that nothing of ours touches it: KH1's apply-then-read is KH2's.
+  KH1's own effects and bindings are never touched. Per frame: an atomic check while nothing is
+  noted. **Assumption**: one skeleton pass of Sora a frame (with two, a waiting element's
+  re-read before the second takes this frame's pose).
