@@ -1128,3 +1128,52 @@ Function addresses as before; all **checked** unless marked.
 - KH2 model (MDLX) space is y-up; effects and their bone codes are in the y-down world. The
   `kh2-fx` example maps Sora's posed bones with a y flip; a host must hand `kh2-fx` bone
   matrices in the y-down world.
+
+## 16. KH2's element layer inside KH1's effect system (Steam KH1)
+
+The effects port's step 2 (`kh1-hook/src/win/kh2dpx.rs`): what KH2's PAX element does, done
+with what KH1's own effect instance and element already have. All addresses are the Steam KH1
+build's. Tags: **Checked (exe)** = read in the Steam Ghidra export; **Checked (files)** = read in
+the user's extraction; **Assumption** = not yet checked.
+
+### 16.1 KH1's element and instance (Checked (exe))
+
+- Element (0x3C bytes, 256 at `0x142D678B0`, taken by `0x1402AE5B0`, filled by the effect start
+  `0x1401E0100`): handles to the instance's position `+0x00`, angles `+0x04` (65536 = 360°),
+  scale `+0x08`, colour `+0x0C`, "ended" byte `+0x10`; `+0x14` flags (1 running, 2 ending, 0x10
+  waiting to start, 0x20 has a bone binding), `+0x2C` a handle to the instance, `+0x30` a serial
+  (a global counter; elements are reused), `+0x38` the DPX.
+- Instance (0xE0 bytes, pool `0x142678280`): `+0x00` position, `+0x10` angles, `+0x20` scale
+  (all 1.0 at start), `+0x30` colour RGBA floats (1.0), `+0x91` ended byte, `+0x92` state (1 live,
+  2 dead, 4 ending its loop), `+0xA0` particle data, `+0xB0` its element, `+0xBC` the 30 Hz
+  accumulator, `+0xD0` **start wait**, `+0xD5` paused.
+
+### 16.2 The features
+
+| KH2 element feature | KH1's own | Done |
+|---|---|---|
+| Start wait (`+0x14`, game frames; +0.1 when bound) | **Yes: instance `+0xD0`.** KH1's effect update (`0x1401ECB50`) neither steps nor draws an instance while its wait is above a threshold, and its draw pass (`0x1401ECF30`) counts it down by the frame step (`0x14233FBDC`, 1.0 a 60 Hz frame) unless paused. KH1 seeds it at start from the particle header's `+0x108` (`0x14031D2C0`); KH2's instance start (`0x1404B1600`) seeds nothing: KH2's only wait is the element's. | Set to the element's wait (+0.1 bound) right after the start. |
+| KH1's extra wait for bound effects | KH1 only: an element with a bone binding (flag 0x20) starts at wait ≤ −2 × `0x14233FBCC` (−2 game frames), so the binding has placed it first. KH2 has no such rule. | Kept (KH1's): a bound element starts about 2 game frames later than in KH2. **Open question** for the user. |
+| Offset and rotation (`+0x1C`, `+0x28`) | No field in the binding (mode 2 takes the bone's matrix as it is). But KH1 builds the root (`0x14031CEA0`) as instance position·angles·scale times the particle header's local transform (`+0x80` offset, `+0x90` angles XYZ, `+0xA0` scale), as KH2 does. | Folded into a copy of the particle data per element (its own effect number `0x700 | element`): offset = element offset ÷ element scale + element rotation × header offset; angles = element rotation × header rotation. Exact for a uniform element scale. |
+| Scale (`+0x34`) | Instance `+0x20` (the root's scale, as KH2's). | Written after the start when not 1. |
+| Fade-out (flag 0x40, `+0x05` frames) | Instance colour `+0x30..+0x3C`: KH1's draw programs multiply the vertex colour by it (e.g. `0x14032B940`, `0x14033F250`). KH1 fades its own effects this way (`0x1403970D0`: alpha down each frame, then the ended byte). | Alpha from its value to 0 linearly over the fade-out frames (KH2's rate), then KH1's stop `0x1401EC470 (element)`. Stepped from Sora's frames (`kh2fx::tick`). |
+| End the loop (flag 0x80) | Instance `+0x91` (KH1's ended byte: no more loops, it ends when its pieces do, `0x14031CE10`). | Set on end. Not used by Explosion. |
+| Ends with the motion (0x20) | KH1's binding watches the actor's motion request (`+0x164`, binding `+6`; number bit 0x800) and stops the effect at once when it changes (`0x1402AE910`). That is KH1's request, not KH2's motion, and a stop, not KH2's fade. | KH2's motion change (from `kh2fx::tick`) ends it the KH2 way (above). KH1's bit 0x800 is not used. |
+| Ends with the owner (0x200) | KH1's binding stops the effect when the actor is gone (`0x140291FF0`). | A form change (`kh2fx::owner_gone`) fades or stops it (as `kh2-fx`). |
+| Object root 0x4000 | **Yes: bone code `0x8000`** (`0x14029EA00` / `0x14029EB20`): the actor's position `+0x10` with a frame made from its matrix rows `+0xF0`, `+0xE0`, `+0xD0` (each negated, in that order). KH2's 0x4000 (`0x1403B50F0`): the object's rotation `+0x40` and position. | Not started yet (element 48 waits for steps 3-4). **Assumption**: KH1's 0x8000 frame equals KH2's object frame (to check in game). |
+| Weapon point 0x4003 / 0x4004 | **Yes: bone `0x30`, distance `t`** (`0x14029EB20`): `t` 0..1 mapped into the weapon's blade range (`btltbl` record `+0x28` start, `+0x24` end), the point between the blade bone and its parent (`0x1401D6320`). KH1's binding mode 3 (`0x1402ADD60 (dpx, number, actor, bone, t)`) takes the bone's rotation and that point every frame. KH2's 0x4003 (`0x1403B50F0`): the weapon object's weapon-shape bone (shape kind 0xF) matrix, moved along its x by a length; 0x4005 its root, 0x4007 halfway. | Not started yet (element 44 waits for step 3): 0x4003 → bone 0x30, t = 1.0; 0x4005 → t = 0; 0x4007 → t = 0.5. |
+| Bind position only (0x04) | Binding mode 1 (`0x1402ADC20`): position only, plus a world offset. | Not used by Explosion. |
+| Bind until started (0x02) | No. | Not used by 46/47 (element 48 has it). |
+| Alpha follows the weapon (0x800) | No. | Not done (also not in `kh2fx`). |
+
+### 16.3 What steps 3 and 4 need (Checked (exe))
+
+- KH1's relocation (`0x14031C2F0`) turns each program record's type into a handle of its
+  0x50-byte entry in the program table (`0x14054FF00`); KH1 calls the entry's functions through
+  that handle (construct `+0x20` at start, `0x14031D2C0`). The table can't grow in place (entry
+  241 would run into the security cookie at `0x140554A88`). So a KH2-only program (241
+  pppEiDrawShipoly) or KH2's version of one (201 pppRyjMegaBirth, its 0x30-byte particles and
+  third matrix mode) goes in as our own 0x50-byte entry: after KH1 relocates the DPX, those
+  records' handles are pointed at it (a handle made by `0x14038AD90`). No hook; KH1's dispatch
+  calls it with KH1's instance (its layout, `+0xD5` for KH2's `+0xC1`), and it draws through
+  KH1's shape draw.

@@ -76,6 +76,19 @@ pub fn euler_xyz(a: Vec3) -> Mat3 {
     rot_z(a.z) * rot_y(a.y) * rot_x(a.x)
 }
 
+/// The integer angles (65536 = 360°, applied X, then Y, then Z) of a rotation: the inverse of
+/// [`euler_xyz_i`], as the particle data header holds them. At a quarter turn about y the x
+/// angle is taken as 0.
+pub fn xyz_i_of(r: Mat3) -> [i32; 3] {
+    let to_i = |rad: f32| (rad * 65536.0 / TAU).round() as i32;
+    let sb = (-r.x_axis.z).clamp(-1.0, 1.0);
+    let b = sb.asin();
+    if sb.abs() > 0.99999 {
+        return [0, to_i(b), to_i((-r.y_axis.x).atan2(r.y_axis.y))];
+    }
+    [to_i(r.y_axis.z.atan2(r.z_axis.z)), to_i(b), to_i(r.x_axis.y.atan2(r.x_axis.x))]
+}
+
 /// Rotation, per-axis scale and translation: `T · R · S` (the game's
 /// "rows of R scaled by the scale vector, translation = position").
 pub fn trs(t: Vec3, r: Mat3, s: Vec3) -> Mat4 {
@@ -131,6 +144,20 @@ mod tests {
         assert!(close(m * Vec3::Y, Vec3::Z));
         assert!(close(m * Vec3::X, Vec3::Y));
         assert!(close(euler_xyz(Vec3::new(std::f32::consts::FRAC_PI_2, 0.0, 0.0)) * Vec3::Y, Vec3::Z));
+    }
+
+    #[test]
+    fn xyz_angles_round_trip() {
+        for a in [[0, 0, 0], [0x1234, -0x2000, 0x7000], [0, 0, 0x8000], [0x6000, 0x3000, -0x5000], [0x100, 0x4000, 0x2000]] {
+            let m = euler_xyz_i(a);
+            let back = euler_xyz_i(xyz_i_of(m));
+            for v in [Vec3::X, Vec3::Y, Vec3::Z] {
+                assert!((m * v - back * v).length() < 5e-3, "{a:?} -> {:?}", xyz_i_of(m));
+            }
+        }
+        // A half turn about z (Explosion's wrist flashes).
+        let m = euler_xyz(Vec3::new(0.0, 0.0, std::f32::consts::PI));
+        assert!(close(euler_xyz_i(xyz_i_of(m)) * Vec3::X, -Vec3::X));
     }
 
     #[test]

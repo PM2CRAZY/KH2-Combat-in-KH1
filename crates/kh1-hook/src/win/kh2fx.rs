@@ -337,6 +337,7 @@ fn form_spell_library(package: u8, common: &[u8]) -> Option<Library> {
 /// Sora's object replaced (a form change, `form`): his effects that end with their owner end
 /// (the Drive motion's glows on his limbs loop until then; the user: the glow stayed on him).
 pub fn owner_gone() {
+    super::kh2dpx::owner_gone();
     let Ok(mut g) = STATE.lock() else { return };
     let Some(s) = g.as_mut() else { return };
     let mut n = s.fx.owner_gone();
@@ -548,6 +549,8 @@ pub const NO_MOTION: u16 = u16::MAX - 1;
 /// One game frame of KH2's effects: KH2's motion now, and the frame's delta in 60 Hz frames (1.0
 /// at 60 fps, 2.0 at 30, like the game's own frame delta; the effect clock adds it up).
 pub fn tick(motion: u16, delta: f32) {
+    // (Step 2) The elements KH1 plays: their endings and fades (`kh2dpx`).
+    super::kh2dpx::tick(motion, delta);
     let Ok(mut g) = STATE.lock() else { return };
     let Some(s) = g.as_mut() else { return };
     step(s, Some(motion), delta);

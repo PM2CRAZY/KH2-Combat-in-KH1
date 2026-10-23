@@ -1,3 +1,19 @@
+### 2026-10-23: Stage 376 (testing branch: KH2 effects through KH1's own effect system, step 2: the element layer)
+- The tester Mr Bugs (`docs/tester-requests.md`, "KH2 effects in KH1's own effect system"): KH2's element features in
+  KH1's own effect system, not a layer beside it. Notes: `docs/kh2-effects.md` §16.
+- From the decomp (Steam): KH1's effect instance has a start wait (`+0xD0`, game frames; `0x1401ECB50` /
+  `0x1401ECF30`), a colour its draws multiply by (`+0x30..+0x3C`), an ended byte (`+0x91`) and a scale (`+0x20`);
+  the root is the instance's times the particle header's local transform (`0x14031CEA0`). `0x1401EC470 (owner)` stops
+  the instance whose `+0xB0` is that element.
+- `kh2dpx`: Explosion's elements 46 / 47 get the KH2 element's wait (+0.1 bound) and scale on KH1's instance; their
+  offset and half turn are folded into their own copy of effect 33's particle data (`kh1dpx::build_with`, numbers
+  `0x700 | element`); KH2's motion changing (0x20) or Sora's object going (0x200) ends them the KH2 way: 0x40 fades
+  the instance alpha over the fade-out frames, then KH1's stop (`0x1401EC470`, Steam), 0x80 sets the ended byte
+  (`kh2dpx::tick` / `owner_gone` from `kh2fx`). `kh2_fx::math::xyz_i_of` (inverse of `euler_xyz_i`).
+- Found, not yet used: KH1's object-root code 0x8000 and its point along the Keyblade (bone 0x30, t, binding mode 3
+  `0x1402ADD60`) for KH2's 0x4000 / 0x4003 (elements 48 / 44 wait for steps 3-4).
+- Kept KH1's: a bound element starts at wait <= -2 frames (KH2 has no such rule; asked).
+
 ### 2026-10-23: Stage 375 (testing branch: KH2's sleeve animation on KH1 Sora)
 - The tester Mr Bugs (`docs/tester-requests.md`, "Missing sleeves animation"): under KH2's moves Sora's sleeves didn't
   move. His t371 runs (KH2's run, then KH1's) log no bones; the cause is in the files: KH1's sleeve chains (128-143,

@@ -451,6 +451,29 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >   
 >   
 
+> [!tip] Assistant
+> t376
+>
+> I went through KH1's Steam decomp, and KH1's own effect system already has most of what KH2's element layer does. So this is native, with no layer on top. This covers step 2 (the element layer) for Explosion's wrist flashes:
+> - **Start delay:** KH1's effect instance has its own start timer. The flashes now use KH2's wait through it.
+> - **Fade-out:** KH1 tints every effect by an instance colour and already fades its own effects through its alpha. The flashes now fade over KH2's fade-out frames when KH2's move changes or Sora's object goes, then KH1's own stop removes them.
+> - **Offset and half turn:** KH1 builds every effect's root from the bone plus the effect's own local offset and turn. Each flash now carries KH2's offset and turn in there (its own copy of the effect data).
+> - **Keyblade tip and Sora's root:** KH1 has both anchors (its own "point along the Keyblade" and "object root" codes). Explosion's big flare and burst need them, but those also need KH2's spark and ribbon programs (steps 3 and 4), so they aren't switched on yet.
+>
+> **About the build:** I can't build the Windows DLL from here, so build it from the testing branch as you did for t371.
+>
+> **Check:** decomp (Steam KH1, and Steam KH2 for KH2's side). Notes are in `docs/kh2-effects.md` §16. Not checked: anything in game. I also couldn't check the flashes' real wait, fade and offset numbers, because I don't have the effect file here; the log now prints them for each flash when it loads. And it's an assumption that KH1's arm bones (93 / 198) face the same way as KH2's (170 / 78).
+>
+> Steps 3 and 4 can also be native: KH2's spark and ribbon programs would be our own entries in KH1's program table format, and once KH1 loads the effect file, its program records get pointed at them. No hook needed.
+>
+> Three questions:
+> 1. KH1 starts an effect that's stuck to a bone about 2 frames later than KH2 does. (a) keep KH1's timing, or (b) take those 2 frames off to match KH2?
+> 2. For the big flare and burst: (a) wait until their sparks and ribbon are ported (steps 3 and 4), or (b) play them through KH1 now without those, just to check where they sit?
+> 3. Can you check the wrist flashes' turn looks right? Compare a run with `kh2_fx_native = on` against one with it off (the old player). If they differ, I'll convert the turn through the two skeletons' bind poses.
+
+> [!note] Tester Mr Bugs
+> 
+
 ---
 
   

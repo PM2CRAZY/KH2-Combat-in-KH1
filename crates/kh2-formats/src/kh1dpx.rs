@@ -269,6 +269,34 @@ fn bit(mask_at: usize, pd: &[u8], i: usize) -> bool {
     pd.get(mask_at + i / 8).is_some_and(|b| b >> (i % 8) & 1 != 0)
 }
 
+/// A copy of one effect's particle data under a new effect number, with its header's local
+/// transform under the effect root (`+0x80` offset, `+0x90` angles; KH1 builds the root as the
+/// instance's position, angles and scale times this, `0x14031CEA0`, Steam) replaced. A KH2
+/// element's own offset and rotation are folded into it, so KH1's root (its bone binding) carries
+/// them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Variant {
+    /// The new effect number (below `0x800`: KH1's element start keeps 11 bits).
+    pub number: u32,
+    /// The effect it copies.
+    pub effect: u32,
+    pub offset: [f32; 3],
+    pub angle: [i32; 3],
+}
+
+/// A particle data header's local transform (`+0x80` offset, `+0x90` angles 65536 = 360°,
+/// `+0xA0` scale) for effect `effect` of `pax`.
+pub fn header_local(pax: &[u8], effect: u32) -> Result<([f32; 3], [i32; 3], [f32; 3])> {
+    let dpx_at = u32_at(pax, 12)? as usize;
+    let dpx = pax.get(dpx_at..).ok_or_else(|| crate::Error::Format("kh1dpx: DPX out of range".into()))?;
+    let n = i32_at(dpx, 12)?.clamp(0, 4096) as usize;
+    let e = (0..n).map(|i| 16 + i * 32).find(|&o| u32_at(dpx, o + 8).ok() == Some(effect)).ok_or_else(|| crate::Error::Format(format!("kh1dpx: no effect {effect}")))?;
+    let dpd = dpx.get(u32_at(dpx, e)? as usize..).ok_or_else(|| crate::Error::Format("kh1dpx: DPD out of range".into()))?;
+    let pd = u32_at(dpd, 8 + u32_at(dpx, e + 4)? as usize * 4)? as usize;
+    let f = |at: usize| u32_at(dpd, pd + at).map(f32::from_bits);
+    Ok(([f(0x80)?, f(0x84)?, f(0x88)?], [i32_at(dpd, pd + 0x90)?, i32_at(dpd, pd + 0x94)?, i32_at(dpd, pd + 0x98)?], [f(0xA0)?, f(0xA4)?, f(0xA8)?]))
+}
+
 /// KH1's DPX for KH2 effects `effects` of `pax` (a PAX, `PAX_` first; all in one DPD), with the
 /// KH2 common textures they use taken from `common` (KH2's `effect/texcommon.dpd`).
 ///
@@ -277,6 +305,12 @@ fn bit(mask_at: usize, pd: &[u8], i: usize) -> bool {
 /// (TBP `0x3800`, CBP `0x3D40`) so the effect takes as few of KH1's texture slots as it can.
 /// Shapes, models and vertex sets are kept whole (they take no texture memory).
 pub fn build(pax: &[u8], common: &[u8], effects: &[u32]) -> Result<Kh1Dpx> {
+    build_with(pax, common, effects, &[])
+}
+
+/// [`build`], plus `variants` (each a copy of one of `effects`' particle datas under its own
+/// number, its header's local transform replaced) after them.
+pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Variant]) -> Result<Kh1Dpx> {
     let dpx_at = u32_at(pax, 12)? as usize;
     let dpx = pax.get(dpx_at..).ok_or_else(|| crate::Error::Format("kh1dpx: DPX out of range".into()))?;
     if i32_at(dpx, 0)? != DPX_VERSION {
@@ -451,13 +485,34 @@ pub fn build(pax: &[u8], common: &[u8], effects: &[u32]) -> Result<Kh1Dpx> {
         }
         out.lists[0].push(pd);
     }
+    // Variants: a copy of their effect's particle data (as kept above), its local transform
+    // replaced.
+    let mut extra: Vec<(Vec<u8>, usize)> = Vec::new();
+    for v in variants {
+        let Some(e) = mine.iter().find(|e| u32_at(e, 8).ok() == Some(v.effect)) else {
+            return bad(format!("kh1dpx: variant {} of effect {}, which isn't built", v.number, v.effect));
+        };
+        if v.number >= 0x800 || mine.iter().any(|e| u32_at(e, 8).ok() == Some(v.number)) {
+            return bad(format!("kh1dpx: variant number {} taken or too large", v.number));
+        }
+        let src_pd = kept.iter().position(|&k| k as u32 == u32_at(e, 4).unwrap_or(u32::MAX)).unwrap();
+        let mut pd = out.lists[0][src_pd].clone();
+        for k in 0..3 {
+            put_u32(&mut pd, 0x80 + k * 4, v.offset[k].to_bits());
+            put_u32(&mut pd, 0x90 + k * 4, v.angle[k] as u32);
+        }
+        extra.push((e.to_vec(), out.lists[0].len()));
+        out.lists[0].push(pd);
+        report.push(format!("effect {} as {} (offset {:?}, angles {:?})", v.effect, v.number, v.offset, v.angle));
+    }
     report.insert(0, format!("particle datas {kept:?}, {} textures, vram {KH1_TBP:#x}..{tcur:#x} / {KH1_CBP:#x}..{ccur:#x} ({tslots} TBP, {cslots} CBP slots)", out.lists[1].len()));
     let (dpd, dpd_offs) = join(&out);
-    let head = 16 + mine.len() * 32 + 8;
+    let count = mine.len() + extra.len();
+    let head = 16 + count * 32 + 8;
     let at = (head + 15) & !15;
     let mut bytes = vec![0u8; at + dpd.len()];
     put_u32(&mut bytes, 0, DPX_VERSION as u32);
-    put_u32(&mut bytes, 12, mine.len() as u32);
+    put_u32(&mut bytes, 12, count as u32);
     let mut nums = Vec::new();
     for (i, e) in mine.iter().enumerate() {
         let o = 16 + i * 32;
@@ -467,8 +522,16 @@ pub fn build(pax: &[u8], common: &[u8], effects: &[u32]) -> Result<Kh1Dpx> {
         put_u32(&mut bytes, o + 4, kept.iter().position(|&k| k == old).unwrap() as u32);
         nums.push(u32_at(e, 8)?);
     }
-    put_u32(&mut bytes, 16 + mine.len() * 32, 1);
-    put_u32(&mut bytes, 16 + mine.len() * 32 + 4, at as u32);
+    for (i, ((e, pd), v)) in extra.iter().zip(variants).enumerate() {
+        let o = 16 + (mine.len() + i) * 32;
+        bytes[o..o + 32].copy_from_slice(e);
+        put_u32(&mut bytes, o, at as u32);
+        put_u32(&mut bytes, o + 4, *pd as u32);
+        put_u32(&mut bytes, o + 8, v.number);
+        nums.push(v.number);
+    }
+    put_u32(&mut bytes, 16 + count * 32, 1);
+    put_u32(&mut bytes, 16 + count * 32 + 4, at as u32);
     bytes[at..].copy_from_slice(&dpd);
     for (o, &x) in origins.iter_mut().zip(&dpd_offs[1]) {
         o.dpx_offset = at + x as usize;
@@ -476,4 +539,79 @@ pub fn build(pax: &[u8], common: &[u8], effects: &[u32]) -> Result<Kh1Dpx> {
     use md5::{Digest, Md5};
     let md5: [u8; 16] = Md5::digest(&bytes).into();
     Ok(Kh1Dpx { bytes, md5, textures: origins, own_dpd_at: dpx_at + dpd_off, common_dpd_at, effects: nums, report: report.join("; ") })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A PAX with one effect (number 33) of one particle data without programs or textures, and
+    /// an empty common DPD.
+    fn tiny() -> (Vec<u8>, Vec<u8>) {
+        let dpd_of = |pds: &[Vec<u8>]| {
+            let head = 4 + (4 + 4 * pds.len()) + 4 * 4 + 16;
+            let mut d = vec![0u8; head];
+            put_u32(&mut d, 0, DPD_MAGIC);
+            put_u32(&mut d, 4, pds.len() as u32);
+            let mut at = head;
+            for (i, pd) in pds.iter().enumerate() {
+                put_u32(&mut d, 8 + i * 4, at as u32);
+                at += pd.len();
+            }
+            for pd in pds {
+                d.extend_from_slice(pd);
+            }
+            d
+        };
+        let mut pd = vec![0u8; 0x110 + 0x18];
+        for (k, v) in [1.0f32, 2.0, 3.0].iter().enumerate() {
+            put_u32(&mut pd, 0x80 + k * 4, v.to_bits());
+            put_u32(&mut pd, 0xA0 + k * 4, 1f32.to_bits());
+        }
+        for (k, v) in [100i32, 200, 300].iter().enumerate() {
+            put_u32(&mut pd, 0x90 + k * 4, *v as u32);
+        }
+        put_u32(&mut pd, 0x110 + 8, 0x10);
+        put_u32(&mut pd, 0x110 + 0xC, 0x14);
+        let dpd = dpd_of(&[pd]);
+        let mut dpx = vec![0u8; 16 + 32 + 8];
+        put_u32(&mut dpx, 0, DPX_VERSION as u32);
+        put_u32(&mut dpx, 12, 1);
+        let n = dpx.len() as u32;
+        put_u32(&mut dpx, 16, n);
+        put_u32(&mut dpx, 16 + 8, 33);
+        put_u32(&mut dpx, 48, 1);
+        put_u32(&mut dpx, 52, n);
+        dpx.extend_from_slice(&dpd);
+        let mut pax = b"PAX_".to_vec();
+        pax.extend_from_slice(&[0; 8]);
+        pax.extend_from_slice(&16u32.to_le_bytes());
+        pax.extend_from_slice(&dpx);
+        (pax, dpd_of(&[]))
+    }
+
+    #[test]
+    fn variant_copies_the_particle_data_with_its_local_transform() {
+        let (pax, common) = tiny();
+        assert_eq!(header_local(&pax, 33).unwrap(), ([1.0, 2.0, 3.0], [100, 200, 300], [1.0; 3]));
+        let v = Variant { number: 0x72E, effect: 33, offset: [4.0, 5.0, 6.0], angle: [0, 0, 0x8000] };
+        let r = build_with(&pax, &common, &[33], &[v]).unwrap();
+        assert_eq!(r.effects, vec![33, 0x72E]);
+        let b = &r.bytes;
+        assert_eq!(i32_at(b, 12).unwrap(), 2);
+        // Both entries in the one DPD; the variant's particle data is the second.
+        let dpd_at = u32_at(b, 16).unwrap() as usize;
+        assert_eq!(u32_at(b, 48).unwrap() as usize, dpd_at);
+        assert_eq!((u32_at(b, 16 + 4).unwrap(), u32_at(b, 48 + 4).unwrap(), u32_at(b, 48 + 8).unwrap()), (0, 1, 0x72E));
+        let dpd = &b[dpd_at..];
+        assert_eq!(u32_at(dpd, 4).unwrap(), 2);
+        let (p0, p1) = (u32_at(dpd, 8).unwrap() as usize, u32_at(dpd, 12).unwrap() as usize);
+        assert_eq!(f32::from_bits(u32_at(dpd, p0 + 0x80).unwrap()), 1.0);
+        assert_eq!(f32::from_bits(u32_at(dpd, p1 + 0x84).unwrap()), 5.0);
+        assert_eq!(i32_at(dpd, p1 + 0x98).unwrap(), 0x8000);
+        assert_eq!(dpd[p0 + 0x110..p0 + 0x128], dpd[p1 + 0x110..p1 + 0x128]);
+        // A number KH1 can't start, or one taken, is refused.
+        assert!(build_with(&pax, &common, &[33], &[Variant { number: 33, ..v }]).is_err());
+        assert!(build_with(&pax, &common, &[33], &[Variant { number: 0x800, ..v }]).is_err());
+    }
 }

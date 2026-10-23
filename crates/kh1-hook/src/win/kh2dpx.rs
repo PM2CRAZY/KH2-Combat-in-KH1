@@ -10,8 +10,22 @@
 //! Step 1: Explosion's wrist flashes (Sora's package `obj/P_EX100.a.us`, elements 46 and 47:
 //! effect 33 on KH2 bones 170 and 78), which use only programs KH1 has. KH2's bones are put on
 //! KH1's by the bind poses (option A, as the base attacks): KH2 170 -> KH1 93, KH2 78 -> KH1 198.
-//! Not yet (step 2): the elements' delay, fade-out, end-with-motion and rotation offsets
-//! (both have a half turn about z, which KH1's bone binding doesn't take).
+//!
+//! (Step 2) The element layer, in KH1's own instance fields (Steam decomp; notes in
+//! `docs/kh2-effects.md` §16):
+//! - Start wait: KH1's instance has one, `+0xD0` (game frames; counted down by KH1's effect
+//!   pass, which neither steps nor draws the instance until it runs out, `0x1401ECB50` /
+//!   `0x1401ECF30`; KH1 seeds it from the particle header's `+0x108` at start, `0x14031D2C0`).
+//!   It is set to the KH2 element's wait (+ 0.1 when bound, as KH2 adds) after the start.
+//! - The element's offset and rotation: folded into a copy of its particle data's header local
+//!   transform (`+0x80` / `+0x90`), which KH1 puts under the root its bone binding gives
+//!   (`0x14031CEA0`), as its own effect number (`ELEMENT_NUMBER`); its scale into the instance's
+//!   scale (`+0x20`), KH2's root scale.
+//! - Ending: KH2's motion changing (flag 0x20) or Sora's object going (0x200, `owner_gone`) ends
+//!   it the KH2 way: 0x80 sets KH1's "ended" byte (`+0x91`: no more loops, as KH1's own fades
+//!   do); 0x40 fades KH1's instance colour alpha (`+0x3C`, which KH1's draws multiply every
+//!   vertex colour by) to 0 over the element's fade-out frames, then stops it with KH1's stop
+//!   (`0x1401EC470`). Stepped from `kh2fx::tick` (Sora's frames, KH2's motion).
 //!
 //! KH1 calls (Steam): the DPX relocation `0x1401E0080` (each effect's DPD offset to a handle,
 //! each particle data's programs to KH1's functions; once per DPX), and the start on a bone
@@ -50,6 +64,53 @@ const RAW_BONE: u32 = 0x2000;
 const EXPLOSION: [u32; 4] = [31, 32, 33, 34];
 /// The elements KH1 plays: (KH2 element, effect number, KH1 bone).
 const NATIVE: [(i16, u32, u32); 2] = [(46, 33, 93), (47, 33, 198)];
+/// The effect number in our DPX of a KH2 element's own copy of its effect (its offset and
+/// rotation folded in): `0x700 | element` (KH1's element start keeps the low 11 bits).
+const ELEMENT_NUMBER: u32 = 0x700;
+/// KH1's stop of an element's effect (Steam `0x1401EC470 (element)`: its sound and instances
+/// freed, the instance marked dead; what KH1's bone binding calls when its motion ends).
+const STOP_STEAM: usize = 0x1EC470;
+/// KH2 element flags (`docs/kh2-effects.md` §2).
+const BIND: u32 = 0x01;
+const ENDS_WITH_MOTION: u32 = 0x20;
+const END_FADE: u32 = 0x40;
+const END_LOOP: u32 = 0x80;
+const ENDS_WITH_OWNER: u32 = 0x200;
+/// KH1's effect instance (0xE0 bytes) and element (0x3C) fields used here.
+const INST_SCALE: usize = 0x20;
+const INST_ALPHA: usize = 0x3C;
+const INST_ENDED: usize = 0x91;
+const INST_STATE: usize = 0x92;
+const INST_ELEMENT: usize = 0xB0;
+const INST_WAIT: usize = 0xD0;
+const EL_FLAGS: usize = 0x14;
+const EL_INSTANCE: usize = 0x2C;
+const EL_SERIAL: usize = 0x30;
+
+/// What a native element does beside its start (from the KH2 PAX element).
+#[derive(Clone, Copy, Debug)]
+struct Layer {
+    el: i16,
+    number: u32,
+    bone: u32,
+    flags: u32,
+    wait: f32,
+    fadeout: f32,
+    scale: [f32; 3],
+}
+
+/// A native element started: KH1's element, its serial (KH1 reuses elements), the KH2 motion it
+/// started in, and its fade (alpha per game frame) once ending.
+struct Run {
+    element: usize,
+    serial: u32,
+    motion: u16,
+    layer: Layer,
+    fade: Option<f32>,
+}
+
+static RUNNING: Mutex<Vec<Run>> = Mutex::new(Vec::new());
+static LAST_MOTION: AtomicU32 = AtomicU32::new(u32::MAX);
 /// KH1's handles cover 32 MB regions; the DPX stays inside one.
 const REGION: usize = 0x200_0000;
 /// The name our DPX has in KH1's loaded-file list.
@@ -68,6 +129,7 @@ struct Dpx {
     len: usize,
     md5: [u8; 16],
     hd: Vec<Hd>,
+    layers: Vec<Layer>,
     relocated: bool,
 }
 
@@ -82,7 +144,7 @@ pub fn start() {
     std::thread::spawn(|| {
         let t = std::time::Instant::now();
         match build() {
-            Ok((r, hd, hd_report)) => {
+            Ok((r, hd, hd_report, layers)) => {
                 let dpx = &r.bytes;
                 log(&format!("KH2 effects (native): Explosion's DPX built, {} bytes in {:.2} s; {}", dpx.len(), t.elapsed().as_secs_f32(), r.report));
                 log(&format!("KH2 effects (native): HD textures: {hd_report}"));
@@ -95,7 +157,7 @@ pub fn start() {
                 let off = at - p;
                 buf[off..off + dpx.len()].copy_from_slice(dpx);
                 if let Ok(mut g) = DPX.lock() {
-                    *g = Some(Dpx { _buf: buf, at, len: dpx.len(), md5: r.md5, hd, relocated: false });
+                    *g = Some(Dpx { _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, relocated: false });
                 }
             }
             Err(e) => log(&format!("KH2 effects (native): Explosion's DPX not built ({e}); kh2fx plays it")),
@@ -103,7 +165,33 @@ pub fn start() {
     });
 }
 
-fn build() -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String), String> {
+/// A native element's layer and its copy of its effect: the element's offset and rotation
+/// folded into the header's local transform (`H' = S⁻¹ · T(t) · R · S · H`, S the element's
+/// scale, which KH1 takes as the instance's: KH2's root is `T(B·t) · R(B·R) · S`, KH1's the
+/// bound bone's `B`, times the header).
+fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, effect: u32, bone: u32) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
+    use glam::{Mat3, Vec3};
+    use kh2_fx::math;
+    let e = parsed.element(el as u16).ok_or(format!("no element {el}"))?;
+    let (h_off, h_ang, _) = kh2_formats::kh1dpx::header_local(pax, effect).map_err(|e| e.to_string())?;
+    let s = Vec3::from(e.scale);
+    let safe = Vec3::new(if s.x != 0.0 { s.x } else { 1.0 }, if s.y != 0.0 { s.y } else { 1.0 }, if s.z != 0.0 { s.z } else { 1.0 });
+    let r_e = math::euler_xyz(Vec3::from(e.rotation));
+    let r_h = math::euler_xyz_i(h_ang);
+    let offset = Vec3::from(e.translation) / safe + r_e * Vec3::from(h_off);
+    let rot: Mat3 = r_e * r_h;
+    let angle = math::xyz_i_of(rot);
+    let number = ELEMENT_NUMBER | el as u32;
+    let note = format!(
+        "element {el}: effect {effect} as {number:#x} on KH1 bone {bone}, flags {:#x}, wait {}, fade-out {}, offset {:?} turned {:?} (header {:?} / {:?} -> {:?} / {:?}), scale {:?}{}",
+        e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
+        if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" }
+    );
+    let l = Layer { el, number, bone, flags: e.flags, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
+    Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle }, note))
+}
+
+fn build() -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String, Vec<Layer>), String> {
     let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
     let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
     let src = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
@@ -117,7 +205,16 @@ fn build() -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String), String> {
         .or_else(|| bar.entries.iter().find(|e| e.data.starts_with(b"PAX_")))
         .ok_or("no PAX in P_EX100")?;
     let pax_at = pax.data.as_ptr() as usize - pack.as_ptr() as usize;
-    let r = kh2_formats::kh1dpx::build(pax.data, &common, &EXPLOSION).map_err(|e| e.to_string())?;
+    let parsed = kh2_formats::pax::Pax::parse(pax.data).map_err(|e| e.to_string())?;
+    let mut layers = Vec::new();
+    let mut variants = Vec::new();
+    for &(el, effect, bone) in &NATIVE {
+        let (l, v, note) = layer(pax.data, &parsed, el, effect, bone)?;
+        log(&format!("KH2 effects (native): {note}"));
+        layers.push(l);
+        variants.push(v);
+    }
+    let r = kh2_formats::kh1dpx::build_with(pax.data, &common, &EXPLOSION, &variants).map_err(|e| e.to_string())?;
     // KH2's HD textures for the two files, each keyed by the offset in its file of the texture
     // record's pixels it replaces.
     let own_hd = install.read_remastered_any(src, "obj/P_EX100.a.us").map_err(|e| format!("P_EX100 HD textures: {e}"))?;
@@ -145,7 +242,7 @@ fn build() -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String), String> {
     }
     let list = |v: &Vec<kh2_formats::egs::HdAsset>| v.iter().map(|a| format!("{} for {:#x} ({} bytes, at {:#x})", a.name, a.offset, a.data.len(), a.pkg_offset)).collect::<Vec<_>>().join(", ");
     report.push(format!("P_EX100 assets [{}], texcommon assets [{}]", list(&own_hd), list(&common_hd)));
-    Ok((r, hd, report.join("; ")))
+    Ok((r, hd, report.join("; "), layers))
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -274,13 +371,17 @@ pub fn event(motion: u16, el: i16) -> bool {
     if !super::settings::get().kh2_fx_native {
         return false;
     }
-    let Some(&(_, number, bone)) = NATIVE.iter().find(|n| n.0 == el) else { return false };
+    if !NATIVE.iter().any(|n| n.0 == el) {
+        return false;
+    }
     let sora = super::takeover::sora_actor();
     if sora < 0x10000 {
         return false;
     }
     let Ok(mut g) = DPX.lock() else { return false };
     let Some(d) = g.as_mut() else { return false };
+    let Some(&layer) = d.layers.iter().find(|l| l.el == el) else { return false };
+    let (number, bone) = (layer.number, layer.bone);
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     if !d.relocated {
         match unsafe { register(base, d) } {
@@ -294,8 +395,112 @@ pub fn event(motion: u16, el: i16) -> bool {
     }
     let f: unsafe extern "system" fn(usize, u32, usize, u32) -> usize = unsafe { std::mem::transmute(base + START_ON_BONE_RVA) };
     let element = unsafe { f(d.at, number, sora, RAW_BONE | bone) };
+    drop(g);
+    let set = element != 0 && unsafe { apply(element, &layer, motion) };
     if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!("KH2 effect (native): element {el} of motion {motion} -> KH1 effect {number} on bone {bone}: {}", if element == 0 { "not started (no free element or effect slot)".to_string() } else { format!("element {element:#x}") }));
+        log(&format!(
+            "KH2 effect (native): element {el} of motion {motion} -> KH1 effect {number:#x} on bone {bone}: {}",
+            if element == 0 { "not started (no free element or effect slot)".to_string() } else { format!("element {element:#x}{}", if set { "" } else { " (its instance not found: no wait, scale or ending)" }) }
+        ));
     }
     element != 0
+}
+
+/// KH1's instance of a started element, if it is still that element's.
+unsafe fn instance(element: usize, serial: u32) -> Option<usize> {
+    if rd::<u32>(element + EL_FLAGS) & 3 != 1 || rd::<u32>(element + EL_SERIAL) != serial {
+        return None;
+    }
+    let inst = super::pose::ptr(rd::<u32>(element + EL_INSTANCE));
+    (inst != 0 && rd::<usize>(inst + INST_ELEMENT) == element && rd::<u16>(inst + INST_STATE) & 1 != 0).then_some(inst)
+}
+
+/// The element's wait and scale on KH1's instance just started, and its ending registered.
+unsafe fn apply(element: usize, l: &Layer, motion: u16) -> bool {
+    let serial = rd::<u32>(element + EL_SERIAL);
+    let Some(inst) = instance(element, serial) else { return false };
+    // KH2 adds a tenth of a frame to a bound element's wait.
+    wr::<f32>(inst + INST_WAIT, l.wait + if l.flags & BIND != 0 { 0.1 } else { 0.0 });
+    if l.scale != [1.0; 3] {
+        wr::<[f32; 3]>(inst + INST_SCALE, l.scale);
+    }
+    if l.flags & (ENDS_WITH_MOTION | ENDS_WITH_OWNER) != 0 {
+        if let Ok(mut r) = RUNNING.lock() {
+            r.retain(|x| unsafe { instance(x.element, x.serial) }.is_some());
+            r.push(Run { element, serial, motion, layer: *l, fade: None });
+        }
+    }
+    true
+}
+
+/// KH1's stop of the element (Steam); elsewhere it is left invisible and its loops ended.
+unsafe fn stop(element: usize, inst: usize) {
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+        let f: unsafe extern "system" fn(usize) = std::mem::transmute(base + STOP_STEAM);
+        f(element);
+    } else {
+        wr::<f32>(inst + INST_ALPHA, 0.0);
+        wr::<u8>(inst + INST_ENDED, 1);
+    }
+}
+
+/// KH2's end of an element (`docs/kh2-effects.md` §2): 0x80 ends its loops, else 0x40 fades it
+/// over its fade-out frames (none: at once); else it plays to its own end. True if it's gone.
+unsafe fn end(r: &mut Run, inst: usize) -> bool {
+    if r.layer.flags & END_LOOP != 0 {
+        wr::<u8>(inst + INST_ENDED, 1);
+    } else if r.layer.flags & END_FADE != 0 && r.fade.is_none() {
+        if r.layer.fadeout > 0.0 {
+            r.fade = Some(rd::<f32>(inst + INST_ALPHA) / r.layer.fadeout);
+        } else {
+            stop(r.element, inst);
+            return true;
+        }
+    }
+    false
+}
+
+/// One of Sora's frames (`kh2fx::tick`): KH2's motion now and the frame's delta in 60 Hz frames.
+/// Elements that end with their motion end when it changes; fades step.
+pub fn tick(motion: u16, delta: f32) {
+    let changed = LAST_MOTION.swap(motion as u32, Ordering::Relaxed) != motion as u32;
+    let Ok(mut g) = RUNNING.lock() else { return };
+    if g.is_empty() {
+        return;
+    }
+    g.retain_mut(|r| unsafe {
+        let Some(inst) = instance(r.element, r.serial) else { return false };
+        if changed && r.layer.flags & ENDS_WITH_MOTION != 0 && r.motion != motion && end(r, inst) {
+            return false;
+        }
+        if let Some(rate) = r.fade {
+            let a = rd::<f32>(inst + INST_ALPHA) - rate * delta.max(0.0);
+            if a <= 0.0 {
+                stop(r.element, inst);
+                return false;
+            }
+            wr::<f32>(inst + INST_ALPHA, a);
+        }
+        true
+    });
+}
+
+/// Sora's object replaced (`kh2fx::owner_gone`, a form change): elements that end with their
+/// owner fade over their fade-out frames, or stop (as `kh2_fx::Effects::owner_gone`).
+pub fn owner_gone() {
+    let Ok(mut g) = RUNNING.lock() else { return };
+    g.retain_mut(|r| unsafe {
+        let Some(inst) = instance(r.element, r.serial) else { return false };
+        if r.layer.flags & ENDS_WITH_OWNER == 0 || r.fade.is_some() {
+            return true;
+        }
+        if r.layer.fadeout > 0.0 {
+            r.fade = Some(rd::<f32>(inst + INST_ALPHA) / r.layer.fadeout);
+            true
+        } else {
+            stop(r.element, inst);
+            false
+        }
+    });
 }
