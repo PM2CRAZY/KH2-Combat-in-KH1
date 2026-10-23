@@ -181,21 +181,88 @@ run swinging the sleeves 2-8° against the arm. Baking KH2's run adds 48 keyed c
 three turns each) with the bake's worst joint error unchanged (0.23, bone 155). Not checked in
 game.
 
+## Necklace (t385)
+
+KH1's necklace (85 at the front of the neck base, the link 86, the pendant 87, its tip 88)
+now follows KH2's necklace. Checked (files):
+
+- KH2's necklace is one bone, 165 (a leaf under 164, from the chest 68 at its middle, 126.3
+  high). Its mesh is on it alone: 246 vertices from 114 to 123 high, 2 to 12 in front of the
+  chest, the crown pendant. KH2's motions turn it in 79 of 83, up to 114° from its bind
+  (median 31°).
+- Both bind pointing down and forward: KH1's link 50° below level, KH2's bone's x axis 56°.
+  No constraint or expression in any KH2 motion touches it.
+
+How (`secondary.rs`, `Parts::necklace`, live and in the bake, with the hood): KH1's link 86
+takes 165's turn from its bind relative to KH2's chest, on KH1's neck base (78) as posed now
+(the hood's method). The pendant 87 keeps its relation to 86 (KH2 has no second bone for it).
+
+Guard: KH2's necklace hangs from the middle of its chest, KH1's from the front of its neck, so
+a swing back that clears KH2's chest can reach into KH1's. The pendant and tip keep 0.85 of
+their bind distance from the spine (71 → 78), the link swinging about its joint just far
+enough. Over all 83 KH2 motions (5991 frames) this held it on 3 frames (motion 165); no NaN,
+lengths kept (worst 0.0001). KH1's link then turns 31° from its bind relative to the chest in
+the median frame, 77° at the 95th percentile, 114° at most; KH1's own motions turn it 6°, 58°
+and 105°. Not checked in game.
+
+## Which KH2 bones show on KH2's model (t385)
+
+KH2 Sora's model (`P_EX100.mdlx`) puts each vertex on one bone, with no blending between
+bones (every vertex packet's blend count is 0). Only these bones carry vertices: 2, 12, 15,
+18, 24, 41, 44, 47, 53, 65, 66, 67, 75, 78, 79, 82, 85, 88-108 (fingers), 110, 137, 140, 145,
+147, 149, 151, 153, 155, 157, 163, 165, 167, 170, 171, 174, 177, 180-200 (fingers), 202.
+Checked (files). Assumption: the Steam game draws this same model (it is the one the mod's
+KH2-model option draws).
+
+So many bones KH2's motions key move nothing you can see in KH2:
+
+- the hood bones 72 and 73 (the hood's mesh is on the head, 140, and turns with it);
+- the sleeve flaps 113, 115, 205, 207 (each sleeve's mesh is on 110 / 202 alone);
+- the hair spikes 143, 159 and 161 (the front and top of KH2's hair are on the head);
+- the cloth ring round the lower chest, 129, 131, 133, 135 and 221, 223, 225, 227, and the back
+  piece 70: the same layout as KH1's jacket hem (four a side and one at the back, each bone's
+  bind axis within 7° of KH1's 249, 253, 257, 261 and 73);
+- the trouser bones 27, 29, 32, 34, 20, 22 (and the other leg's), and the pelvis pieces 5, 7,
+  9, 36, 38;
+- every scale key KH2's motions have (on 7, 9, 32, 36, 38, 61, 113, 115, 120, 127, 129, 131,
+  205, 212, 219): all on bones with no vertices.
+
+These keyed-but-hidden bones also sit far from their bind in KH2's motions (the front of the
+chest ring 59° in the median frame, the trouser bone 27 twisted 43°), where KH1's own hem and
+shorts sit 0-17° from theirs in the median frame: copied onto KH1's visible hem and shorts they would hold the hem flared out
+and the shorts' panels twisted. They are not copied (`docs/tester-requests.md`, "Missing
+sleeves animation", the tester's rule: nothing KH1 has no visible KH2 match for).
+
+### Every KH2 part now copied onto KH1
+
+| KH1 part | KH1 bones | KH2 bones | Shows on KH2's model |
+|---|---|---|---|
+| Hair (14 spikes, `Parts::hair`) | joints 153, 156, ..., 192 | nearest spike and second (share), table above: 163, 155, 149, 153, 151, 159, 147, 145, 157, 161; seconds 147, 159, 153, 163, 151, 149, 143, 145, 157, 155 | yes, except 143, 159, 161 (on the head): KH1's 171, 186, 189 and 192 follow 159 or 161 for more than half their turn, 156 for 48%, 174 follows 143 for 40% |
+| Hood (`Parts::hood`) | 80, 81 / 82, 83 | 72 / 73, relative to the chest 68 | no: KH2's hood turns with the head |
+| Keychain (`Parts::chain`) | 283-291 | the Keyblade `W_EX010`'s 3-11 | not checked (no weapon model here) |
+| Sleeves, the shoulder joints (`Parts::sleeves`) | 129, 133, 137, 141 / 233, 237, 241, 245 | 111 / 203 (turned by 110 / 202) | yes (the sleeve's mesh is on 110 / 202) |
+| Sleeves, the joints down the sleeve | 130, 134, 138, 142 / 234, 238, 242, 246 | flaps 113, 115 / 205, 207, relative to the root | no |
+| Necklace (`Parts::necklace`, t385) | 86 | 165, relative to the chest 68 | yes |
+| The body (`retarget.rs`) | root, spine, neck, head, arms, hands, fingers, legs, feet | KH2's body, measured from positions | yes |
+
+Not copied (KH1's own bones, no visible KH2 match): the jacket hem (249-278, 73-74), the
+shorts' panels (27-40, 53-66), the belt chain (11-14), the belt-front pieces (5, 8), the
+necklace's pendant (87).
+
 ## Other parts KH1 animates that still don't move under KH2's moves
 
 Found with the sleeves (bones KH1's own motions turn in 5 or more motions that no retarget part,
 `secondary` part or KH2 match drives). Checked (files); what each is from bone positions only
 (Assumption).
 
-| KH1 bones | What (Assumption) | KH1 motions | Now | KH2's counterpart (keyed) |
+| KH1 bones | What (Assumption) | KH1 motions | Now | KH2's counterpart |
 |---|---|---|---|---|
-| 27-28, 31-32, 35-36, 39-40 (-x); 53-54, 57-58, 61-62, 65-66 (+x) | the shorts' four panels per leg, from the thigh | 51-81, up to 97° | rigid on the thigh | the trouser panels under each thigh (27, 29, 32, 34; 56, 58, 61, 63), 38-82 motions, run up to 112° |
-| 249-250 ... 277-278, 73-74 | the jacket's hem panels from the spine base | 76-105, up to 163° | rigid, pushed off the thighs (`keep_clear`) | cloth from the pelvis (5, 7, 9; 36, 38), 35-78 motions |
-| 11-14 | the belt chain | 106-111, up to 157° | carried by the +x thigh | none found |
-| 5, 8 | belt-front pieces | 22-66 | rigid | none found |
-| 86-87 | the necklace | 97, up to 115° | rigid | none found by position (KH2's chest pieces 116-135 / 208-227 and 164-165 have no KH1 bones) |
+| 27-28, 31-32, 35-36, 39-40 (-x); 53-54, 57-58, 61-62, 65-66 (+x) | the shorts' four panels per leg, from the thigh | 51-81, up to 97° | rigid on the thigh | trouser bones under each thigh (27, 29, 32, 34; 56, 58, 61, 63), keyed but with no vertices |
+| 249-250 ... 277-278, 73-74 | the jacket's hem panels from the spine | 76-105, up to 163° | rigid, pushed off the thighs (`keep_clear`) | the chest ring 129-135 / 221-227 and 70, the same layout, keyed but with no vertices |
+| 11-14 | the belt chain | 106-111, up to 157° | carried by the +x thigh | none |
+| 5, 8 | belt-front pieces | 22-66 | rigid | none (KH2's pelvis pieces 4-9 have no vertices and no KH1 match) |
+| 87 | the necklace's pendant | 96, up to 125° | on the necklace link (86, KH2's 165) | none |
 
-Also not carried: KH2's scale keys (its trouser and pelvis cloth 7, 9, 32, 36, 38, 61 in 18-72
-motions, 0.29-3.7; KH1's own motions key scale on its shorts panels too), and, the other way
+Also not carried: KH2's scale keys (all on bones with no vertices, above), and, the other way
 round, KH1's own animation of all these parts when KH2's model is drawn (`inverse` keeps KH2's
 cloth, hair and hood at its bind relation).

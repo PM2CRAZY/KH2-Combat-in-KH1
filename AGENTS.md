@@ -1,3 +1,11 @@
+### 2026-10-23: Stage 385 (testing branch: KH1's necklace follows KH2's; the KH2 -> KH1 part list)
+- The tester Mr Bugs (`docs/tester-requests.md`, "Missing sleeves animation"): the hem and shorts from KH2, only parts KH1
+  has, and a list of every part shared between the models. From the files: KH2's model puts each vertex on one bone;
+  the hood (72 / 73), sleeve flaps (113 / 115 / 205 / 207), spikes 143 / 159 / 161, the chest ring 129-135 / 221-227 / 70
+  (KH1's hem layout), the trousers and the pelvis pieces carry no vertices, so the hem and shorts aren't copied from them.
+- `Parts::necklace`: KH1 86 <- KH2 165 (which carries its mesh), measured against the chest, held off the chest. Full
+  KH2 -> KH1 list in `docs/kh1-secondary-motion.md`.
+
 ### 2026-10-23: Stage 384 (testing branch: the form's run speed in KH2's camera rates)
 - `camera.rs` passed a fixed run speed of 8; KH2 reads the player's `+0x12C`, so faster forms swing and follow
   faster. It passes the current form's KH2 run speed (or Sora's). Assumption: `+0x12C` is that run speed (the crate's

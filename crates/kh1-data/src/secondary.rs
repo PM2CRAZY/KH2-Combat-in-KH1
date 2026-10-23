@@ -29,13 +29,17 @@
 //!   (KH1's upper arm points along KH2's, so this is nearly none); the joints down the sleeve
 //!   take the flap's turn relative to the root, on KH1's root as just posed. The under and top
 //!   chains blend the two flaps (by where they sit round the arm in the binds).
+//! - **Necklace: the turn, measured against the chest.** KH2's necklace is one bone (165, from
+//!   the chest 68, with its own mesh); KH1's link from the neck base (86) takes its turn as the
+//!   hood does, the pendant below it (87) keeping its own relation to it. Guard: it is held off
+//!   the chest.
 //! Each KH1 bone is turned about its own joint with its subtree, so KH1's link lengths stay.
 //!
 //! The matches are ours, worked out from the two bind poses and from which bones the two
 //! games' motions actually turn (KH1: the spikes' middle bones, hood 80-83, chain 283-291;
 //! KH2: the spikes' second bones, hood 72-73, weapon 3-11; sleeves: KH1 129/130, 133/134,
-//! 137/138, 141/142 and 233/234 ... 245/246, KH2 110, 113, 115 and 202, 205, 207). See
-//! `docs/kh1-secondary-motion.md`.
+//! 137/138, 141/142 and 233/234 ... 245/246, KH2 110, 113, 115 and 202, 205, 207; necklace: KH1
+//! 86, KH2 165). See `docs/kh1-secondary-motion.md`.
 
 use glam::{Mat4, Quat, Vec3};
 use kh2_formats::anim::Bone;
@@ -51,6 +55,11 @@ pub const KH2_CHEST: usize = 68;
 /// 7.9, 12.3 and 16 back from the neck base, KH2's 5 and 12.8 from its chest, so its first
 /// half follows 72 and its second 73).
 pub const HOOD: [(usize, usize); 4] = [(80, 72), (81, 72), (82, 73), (83, 73)];
+/// KH1's necklace link (86, at the front of the neck base, its pendant 87 and tip 88 below) and
+/// KH2's necklace (165, a leaf from the chest at its centre, the only KH2 bone its mesh is on:
+/// the pendant hangs 3-12 in front of the chest). Both bind pointing down and forward (KH1's
+/// link 50° below level, KH2's bone's x 56°).
+pub const NECKLACE: (usize, usize) = (86, 165);
 /// KH1's keychain: 283 (at the pommel) to 291 (the charm, its tip 292); KH2's Keyblade
 /// (`W_EX010`): 3 to 11, the same places in the bind.
 pub const KH1_CHAIN: std::ops::RangeInclusive<usize> = 283..=291;
@@ -110,6 +119,9 @@ const HAIR_IN: f32 = 0.9;
 const HOOD_CLEAR: f32 = 7.0;
 /// ... and at least this far from the head's centre (the spike roots lie 8-13 from it).
 const HOOD_HEAD: f32 = 10.0;
+/// The necklace's pendant and tip keep at least this share of their bind distance from the
+/// spine (71 → 78): the chest's front lies about there.
+const NECKLACE_CLEAR: f32 = 0.85;
 
 /// One KH1 link and the KH2 bone it follows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -129,18 +141,20 @@ pub struct Parts {
     pub hood: bool,
     pub chain: bool,
     pub sleeves: bool,
+    pub necklace: bool,
 }
 
 impl Parts {
-    pub const ALL: Parts = Parts { hair: true, hood: true, chain: true, sleeves: true };
+    pub const ALL: Parts = Parts { hair: true, hood: true, chain: true, sleeves: true, necklace: true };
 
     /// Whether this KH1 bone belongs to one of the parts set (hair 152-193, hood 79-84, chain
-    /// 283-292, sleeves 128-143 and 232-247).
+    /// 283-292, sleeves 128-143 and 232-247, necklace 86-88).
     pub fn covers(&self, bone: usize) -> bool {
         (self.hair && (152..=193).contains(&bone))
             || (self.hood && (79..=84).contains(&bone))
             || (self.chain && (283..=292).contains(&bone))
             || (self.sleeves && ((128..=143).contains(&bone) || (232..=247).contains(&bone)))
+            || (self.necklace && (86..=88).contains(&bone))
     }
 }
 
@@ -165,6 +179,9 @@ pub struct Secondary {
     hood: Vec<Link>,
     chain: Vec<Link>,
     sleeves: Vec<Sleeve>,
+    /// The necklace's link (86 → 87, KH2 165) and how near the spine its pendant and tip may
+    /// come.
+    necklace: Option<(Link, [f32; 2])>,
     /// The head's centre (KH1 bind, the spike roots' middle) and, per spike, how near it the
     /// tip may come.
     head_centre: Vec3,
@@ -277,11 +294,30 @@ impl Secondary {
             Vec::new()
         };
         let sleeves = sleeve_links(kh1, kh2, &kh1_bind, &kh2_bind);
-        Secondary { parent, below, kh1_bind, kh2_bind, weapon_bind, hair, hair_mix, hood, chain, sleeves, head_centre, hair_in }
+        // The necklace: KH1's link from the neck base with a pendant and a tip below it; KH2's
+        // bone a leaf under the chest's child.
+        let (n1, n2) = NECKLACE;
+        let necklace = (n1 + 2 < kh1.len()
+            && kh1[n1 + 1].parent == n1 as i16
+            && kh1[n1 + 2].parent == n1 as i16 + 1
+            && n2 < kh2.len()
+            && kh2[n2].parent >= 0
+            && kh2.get(kh2[n2].parent as usize).is_some_and(|p| p.parent == KH2_CHEST as i16)
+            && 78 < kh1.len())
+        .then(|| {
+            let clear = [n1 + 1, n1 + 2].map(|j| at(&kh1_bind[j]).distance(nearest_on_segment(at(&kh1_bind[j]), at(&kh1_bind[71]), at(&kh1_bind[KH1_NECK_BASE]))) * NECKLACE_CLEAR);
+            (Link { kh1: n1, tip: n1 + 1, kh2: n2 }, clear)
+        });
+        Secondary { parent, below, kh1_bind, kh2_bind, weapon_bind, hair, hair_mix, hood, chain, sleeves, necklace, head_centre, hair_in }
     }
 
     pub fn sleeves(&self) -> &[Sleeve] {
         &self.sleeves
+    }
+
+    /// The necklace's link and the KH2 bone it follows.
+    pub fn necklace(&self) -> Option<Link> {
+        self.necklace.map(|n| n.0)
     }
 
     /// A sleeve chain's two turns (model space, from KH1's bind): the joint at the shoulder (as
@@ -415,6 +451,17 @@ impl Secondary {
             }
             rep.parts.sleeves = any;
         }
+        if let (true, Some((l, clear)), true) = (want.necklace, self.necklace, body.len() > KH2_CHEST.max(NECKLACE.1)) {
+            let chest = (rot(&pose[KH1_NECK_BASE]) * rot(&self.kh1_bind[KH1_NECK_BASE]).inverse()).normalize();
+            if let Some(d) = Self::relative(body, &self.kh2_bind, KH2_CHEST, l.kh2) {
+                rep.parts.necklace = true;
+                let target = (chest * d * rot(&self.kh1_bind[l.kh1])).normalize();
+                self.turn(pose, l.kh1, (target * rot(&pose[l.kh1]).inverse()).normalize());
+                if self.keep_necklace_clear(pose, l.kh1, clear) {
+                    rep.clamped += 1;
+                }
+            }
+        }
         if let (true, false, Some(w)) = (want.chain, self.chain.is_empty(), weapon) {
             if w.len() >= self.weapon_bind.len() && w.iter().all(|m| m.is_finite()) {
                 rep.parts.chain = true;
@@ -483,6 +530,35 @@ impl Secondary {
         moved
     }
 
+    /// The necklace off the chest: where its pendant (`link + 1`) or tip comes nearer the spine
+    /// (71 → 78) than `clear`, the link swings about its joint away from it, step by step, until
+    /// clear (KH2's necklace hangs from the middle of its chest, KH1's from the front of its neck,
+    /// so a swing back that clears KH2's chest can reach into KH1's). Returns whether it had to.
+    fn keep_necklace_clear(&self, pose: &mut [Mat4], link: usize, clear: [f32; 2]) -> bool {
+        let mut moved = false;
+        for _ in 0..8 {
+            let (a, b) = (at(&pose[71]), at(&pose[KH1_NECK_BASE]));
+            let mut worst: Option<(f32, Vec3, Vec3)> = None;
+            for (j, c) in [link + 1, link + 2].into_iter().zip(clear) {
+                let p = at(&pose[j]);
+                let near = nearest_on_segment(p, a, b);
+                let (deficit, away) = (c - p.distance(near), (p - near).normalize_or_zero());
+                if deficit > 1e-3 && away != Vec3::ZERO && worst.map_or(true, |w| deficit > w.0) {
+                    worst = Some((deficit, p, p + away * deficit));
+                }
+            }
+            let Some((_, p, to)) = worst else { break };
+            let r = at(&pose[link]);
+            let (from, to) = ((p - r).normalize_or_zero(), (to - r).normalize_or_zero());
+            if from == Vec3::ZERO || to == Vec3::ZERO {
+                break;
+            }
+            self.turn(pose, link, Quat::from_rotation_arc(from, to));
+            moved = true;
+        }
+        moved
+    }
+
     /// The direction each mapped KH1 link should have for this KH2 pose, computed apart from
     /// `apply` (for checks): hair and hood from KH1's head / neck base as posed in `pose`
     /// (before any cap), the chain from KH2's links.
@@ -499,6 +575,11 @@ impl Secondary {
         for l in &self.hood {
             if let Some(d) = Self::relative(body, &self.kh2_bind, KH2_CHEST, l.kh2) {
                 v.push((*l, (chest * d * bind_dir(l)).normalize()));
+            }
+        }
+        if let Some((l, _)) = self.necklace {
+            if let Some(d) = Self::relative(body, &self.kh2_bind, KH2_CHEST, l.kh2) {
+                v.push((l, (chest * d * bind_dir(&l)).normalize()));
             }
         }
         for sl in &self.sleeves {
@@ -829,11 +910,63 @@ mod tests {
         }
     }
 
+    /// `rigs` with the necklace on both: KH1's 85 at the front of the neck base, its link 86, the
+    /// pendant 87 and tip 88 hanging down in front; KH2's 164 / 165 from the chest's middle.
+    fn necklace_rigs() -> (Vec<Bone>, Vec<Bone>) {
+        let (mut k1, mut k2, _) = rigs();
+        k1[85] = bone(78, [0.0, -1.0, 7.0]);
+        k1[86] = bone(85, [0.0; 3]);
+        k1[87] = bone(86, [0.0, -4.0, 5.0]);
+        k1[88] = bone(87, [0.0, -6.0, 1.0]);
+        k2[164] = bone(68, [0.0, 0.0, -1.0]);
+        k2[165] = bone(164, [0.0; 3]);
+        (k1, k2)
+    }
+
+    #[test]
+    fn the_necklace_swings_as_kh2_s() {
+        let (k1, k2) = necklace_rigs();
+        let s = Secondary::new(&k1, &k2, None);
+        assert_eq!(s.necklace().map(|l| (l.kh1, l.tip, l.kh2)), Some((86, 87, 165)));
+        let (b1, b2) = (kh2_anim::Pose::bind(&k1).bones, kh2_anim::Pose::bind(&k2).bones);
+        // KH2's necklace swung 40° forward (up, away from the chest) about x.
+        let mut body = b2.clone();
+        let fwd = Quat::from_rotation_x(-40f32.to_radians());
+        body[165] = Mat4::from_translation(at(&b2[165])) * Mat4::from_quat(fwd) * Mat4::from_translation(-at(&b2[165])) * body[165];
+        let mut pose = b1.clone();
+        let rep = s.apply(&mut pose, &body, None, Parts { necklace: true, ..Parts::default() });
+        assert!(rep.parts.necklace && rep.clamped == 0, "{rep:?}");
+        assert!(dir(&pose, 86, 87).angle_between(fwd * dir(&b1, 86, 87)) < 1e-3, "{:?}", dir(&pose, 86, 87));
+        let want = s.expected(&b1, &body, None).into_iter().find(|(l, _)| l.kh1 == 86).map(|e| e.1).unwrap();
+        assert!(dir(&pose, 86, 87).angle_between(want) < 1e-3);
+        // The pendant keeps its own bend on the link, and every length.
+        assert!(dir(&pose, 87, 88).angle_between(fwd * dir(&b1, 87, 88)) < 1e-3);
+        for b in 86..88 {
+            assert!((at(&pose[b + 1]).distance(at(&pose[b])) - at(&b1[b + 1]).distance(at(&b1[b]))).abs() < 1e-3);
+        }
+        // Swung back hard (into the chest): held off the spine.
+        let mut body = b2.clone();
+        let back = Quat::from_rotation_x(100f32.to_radians());
+        body[165] = Mat4::from_translation(at(&b2[165])) * Mat4::from_quat(back) * Mat4::from_translation(-at(&b2[165])) * body[165];
+        let mut pose = b1.clone();
+        let rep = s.apply(&mut pose, &body, None, Parts { necklace: true, ..Parts::default() });
+        assert!(rep.clamped == 1);
+        for j in [87, 88] {
+            let p = at(&pose[j]);
+            let bind = at(&b1[j]).distance(nearest_on_segment(at(&b1[j]), at(&b1[71]), at(&b1[78])));
+            assert!(p.distance(nearest_on_segment(p, at(&pose[71]), at(&pose[78]))) > bind * NECKLACE_CLEAR - 0.05, "{j}");
+        }
+        // Without KH2's necklace bone (the default rigs) there is none.
+        let (a, b, _) = rigs();
+        assert!(Secondary::new(&a, &b, None).necklace().is_none());
+    }
+
     #[test]
     fn parts_cover_their_bones() {
         let p = Parts { hair: true, ..Parts::default() };
         assert!(p.covers(153) && !p.covers(80) && !p.covers(285));
         assert!(Parts::ALL.covers(80) && Parts::ALL.covers(292) && !Parts::ALL.covers(151) && !Parts::ALL.covers(282));
         assert!(Parts::ALL.covers(129) && Parts::ALL.covers(247) && !Parts::ALL.covers(93) && !Parts::ALL.covers(198));
+        assert!(Parts::ALL.covers(86) && Parts::ALL.covers(88) && !Parts::ALL.covers(85) && !p.covers(87));
     }
 }
