@@ -245,3 +245,26 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > [!note] Tester Mr. Bugs
 > do option b
 > Go ahead
+
+> [!tip] Assistant
+> t371
+>
+> **Where it is.** Debug menu main page, `Frame Advance < On / Off >` (left / right or confirm). Turning it on also turns on the new `Game Frames` row on the Trace Recorder page (option b), and you can switch that back off there. Turning the debug menu off in Config also turns Frame Advance off. It's Steam only.
+>
+> **How it holds the game.** I used KH1's own pause. Between frames it does what KH1's pause menu does: only KH1's pause-flagged tasks run (the drawing), and every model is marked paused. The pad, drawing and frame pacing keep going, so the picture and the debug menu stay up. It hands control to KH1 while KH1's own pause menu is open.
+>
+> **Correction to my earlier plan.** KH1's frame pacing runs on held frames too, so there's no catch-up jump to fix. A stepped frame gets the same frame scale a normal frame gets at your fps setting (1 at 60, 2 at 30).
+>
+> **Check I made: decomp only.** I read the Steam KH1 decomp for the field loop, the task list and its mask, the model pause call, the frame pacing and the pad record. Nothing has been checked in game yet; a trace from you is the 1:1 check. Notes and addresses are in `docs/kh1-frame-advance.md`.
+>
+> **What I couldn't check or do:**
+> - The mask value KH1's pause uses (1) comes from older work on the Epic build. In the Steam decomp that part of the pause code wasn't decompiled.
+> - **Sound:** I couldn't find what KH1's pause does with sound, so I didn't add anything. Music most likely keeps playing, and sounds already started finish. That's different from what I told you earlier. If you want sound held too, tell me and I'll do it as its own version.
+> - **Period key:** it steps the game, but KH1 itself can still see it. Hiding it from KH1 needs a hook in KH1's key mapping, and I need to read the exe's bytes for that, which I couldn't do this time. R2 is fully hidden.
+> - If you open KH1's pause menu while the game is held, the frame it closes on may play once.
+> - Some of the mod's timers still count real time while the game is held (for example how long Sora keeps his battle stance after a fight). The main ones that decide KH1 vs KH2 control and Sora's model are switched to game time.
+>
+> **Please test:** step through a KH2 combo at 30 fps and at 60 fps, and grab a Select + Triangle trace while stepping (the trace now saves while the game is held, too). Also check that the camera and right stick do nothing while the game is held.
+
+> [!note] Tester Mr. Bugs
+> 

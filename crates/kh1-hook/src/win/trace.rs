@@ -123,6 +123,8 @@ static LIVE_MODE: AtomicU32 = AtomicU32::new(1);
 static LIVE_SECONDS: AtomicU32 = AtomicU32::new(DEFAULT_SECONDS);
 static LIVE_CATS: AtomicU32 = AtomicU32::new(cat::ALL);
 static LIVE_SOUND: AtomicBool = AtomicBool::new(true);
+/// (t371) The seconds count game frames (`game_frames`), not real time.
+static LIVE_GAME_FRAMES: AtomicBool = AtomicBool::new(false);
 static LIVE_FROM: AtomicUsize = AtomicUsize::new(0);
 
 /// Reads the ini's values again when the settings were reloaded (the ini saved: by the menu,
@@ -135,6 +137,7 @@ pub fn refresh() {
         LIVE_SECONDS.store(s.trace_seconds, Ordering::Relaxed);
         LIVE_CATS.store(s.trace_cats, Ordering::Relaxed);
         LIVE_SOUND.store(s.sound_log, Ordering::Relaxed);
+        LIVE_GAME_FRAMES.store(s.trace_game_frames, Ordering::Relaxed);
     }
 }
 
@@ -162,6 +165,14 @@ pub fn sound_log() -> bool {
     LIVE_SOUND.load(Ordering::Relaxed)
 }
 
+/// (t371) The clip's seconds count game frames (the ini's `trace_game_frames`, the Trace Recorder
+/// page's Game Frames row): `seconds` x 60 of the 60 Hz frames KH1 has stepped (`Row::ticks`, 2 a
+/// frame at 30 fps), so a frame-advanced clip (`frameadv`) holds as much play as one at full
+/// speed. Off: `seconds` of real time (`Row::wall_ms`).
+pub fn game_frames() -> bool {
+    LIVE_GAME_FRAMES.load(Ordering::Relaxed)
+}
+
 /// Whether any of `bits` is being recorded (the trace on and the category on): producers ask
 /// before gathering.
 pub fn wants(bits: u32) -> bool {
@@ -186,6 +197,13 @@ pub fn set_sound_log(on: bool) {
     LIVE_SOUND.store(on, Ordering::Relaxed);
     super::settings::save("sound_log", if on { "on" } else { "off" });
     log(&format!("debug menu: sound log {}", if on { "on" } else { "off" }));
+}
+
+pub fn set_game_frames(on: bool) {
+    if LIVE_GAME_FRAMES.swap(on, Ordering::Relaxed) != on {
+        super::settings::save("trace_game_frames", if on { "on" } else { "off" });
+        log(&format!("trace: seconds count {}", if on { "game frames" } else { "real time" }));
+    }
 }
 
 /// Turns the categories in `bits` on or off (each item's ini key written).
@@ -261,6 +279,9 @@ pub struct Row {
     pub ticks: u64,
     pub steps: u32,
     pub ms: u64,
+    /// (t371) Real time (ms), set by `frame`: the clip's window when it counts real time. (`ms`
+    /// is the mod's clock, which stops while Frame Advance holds the game, `frameadv::clock_ms`.)
+    pub wall_ms: u64,
     /// "KH2", "KH1" or "handoff" (`takeover::FRAME_KIND`).
     pub owner: &'static str,
     /// KH1's own states with KH2's moves sharing them (`shared::active`).
@@ -423,6 +444,7 @@ pub fn frame(mut row: Row) {
         return;
     }
     ENABLED.store(true, Ordering::Relaxed);
+    row.wall_ms = super::frameadv::wall_ms();
     let cats = cats();
     row.cats = cats;
     if cats & cat::CONFIG != 0 {
@@ -450,9 +472,13 @@ pub fn frame(mut row: Row) {
     let now = row.ms;
     let select = row.buttons & RAW_SELECT != 0 || row.kh1_buttons & KH1_SELECT != 0;
     let combo = select && row.buttons & RAW_TRIANGLE != 0;
+    // (t371) The clip's window in game frames or in real time (`game_frames`).
+    let game = game_frames();
+    let at = |r: &Row| if game { r.ticks * 1000 / 60 } else { r.wall_ms };
+    let newest = at(&row);
     ring.push_back(row);
     let (keep, max_rows) = (keep_ms(), seconds() as usize * ROWS_PER_SECOND);
-    while ring.len() > max_rows || ring.front().is_some_and(|r| now.saturating_sub(r.ms) > keep) {
+    while ring.len() > max_rows || ring.front().is_some_and(|r| newest.saturating_sub(at(r)) > keep) {
         ring.pop_front();
     }
     if combo && !COMBO_PREV.swap(true, Ordering::Relaxed) {
@@ -486,6 +512,25 @@ pub fn frame(mut row: Row) {
     if let Some(why) = due {
         let tag: String = why.split(':').next().unwrap_or("auto").chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
         dump(&ring, &tag);
+    }
+}
+
+/// (t371) Select + Triangle while Frame Advance holds the game (`frameadv`): no row is made then
+/// (rows come with Sora's physics frames), so the dump is asked for from here, once a frame, with
+/// the pad as pressed. The same press isn't taken twice (`COMBO_PREV`, shared with `frame`).
+pub fn frozen_combo(buttons: u16) {
+    if mode() == Mode::Off {
+        return;
+    }
+    let combo = buttons & RAW_SELECT != 0 && buttons & RAW_TRIANGLE != 0;
+    if !combo {
+        COMBO_PREV.store(false, Ordering::Relaxed);
+        return;
+    }
+    if !COMBO_PREV.swap(true, Ordering::Relaxed) {
+        if let Ok(ring) = RING.lock() {
+            click(dump(&ring, "select_triangle"));
+        }
     }
 }
 

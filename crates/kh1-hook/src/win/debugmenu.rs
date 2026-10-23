@@ -23,6 +23,10 @@
 //!   `0x1402F6700` to Circle `0x2000` or Cross `0x4000`; the hints name them). Every button is kept from the game after it closes until all are
 //!   let go (KH1 would take a held button as a press). While L1 + R1 are held with the menu on,
 //!   KH1 doesn't see Triangle.
+//! - **Frame Advance** (t371, main page, Steam only): holds the game still; R2 or the period key
+//!   plays one frame, held for a second plays at full speed (`frameadv`). Turning it on turns the
+//!   Trace Recorder's Game Frames row on (the seconds count game frames, `trace::game_frames`).
+//!   Not kept in the ini: it starts off each launch.
 //! - **Pages**: Trace Recorder (the trace's mode, seconds, the sound log and its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
@@ -179,7 +183,7 @@ impl Page {
     /// The page's button hint, with KH1's confirm and cancel buttons' marks (`ok`, `no`).
     fn hint(self, ok: &str, no: &str) -> String {
         match self {
-            Page::Main => format!("Up/Down: move   {ok}: select   {no}: close"),
+            Page::Main => format!("Up/Down: move   Left/Right: change   {ok}: select   {no}: close"),
             Page::Trace => format!("Left/Right: change   {ok}: select   {no}: back"),
             Page::Categories => format!("Left/Right: all on/off   {ok}: open   {no}: back"),
             Page::Group(_) => format!("Left/Right/{ok}: on/off   {no}: back"),
@@ -199,6 +203,8 @@ enum Action {
     TraceMode,
     Seconds,
     SoundLog,
+    GameFrames,
+    FrameAdvance,
     GroupRow(usize),
     Item(usize),
     Stat(usize),
@@ -276,6 +282,10 @@ pub fn set_enabled(on: bool) {
     ENABLED.store(on, Ordering::Relaxed);
     if !on && OPEN.swap(false, Ordering::Relaxed) {
         SWALLOW.store(true, Ordering::Relaxed);
+    }
+    // (t371) Frame Advance is a debug menu row: off with the menu, so the game isn't left held.
+    if !on {
+        super::frameadv::set_on(false);
     }
     super::settings::save("debug_menu", if on { "on" } else { "off" });
     log(&format!("Config menu: debug menu {}", if on { "on (L1 + R1 + Triangle)" } else { "off" }));
@@ -376,6 +386,8 @@ unsafe extern "system" fn frame_end(renderer: usize) {
         if OPEN.load(Ordering::Relaxed) {
             step(base);
         }
+        // (t371) Whether the next frame runs or is held (`frameadv`): after this frame's tasks.
+        super::frameadv::frame_end(base);
     }
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_FRAME_END.load(Ordering::Acquire));
     f(renderer);
@@ -398,10 +410,18 @@ unsafe extern "system" fn draw_end(renderer: usize, a: usize, b: usize, c: usize
 unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
     let on_off = |v: bool| if v { "On" } else { "Off" };
     match page {
-        Page::Main => vec![("Trace Recorder  >".into(), Action::Enter(Page::Trace)), ("Stats  >".into(), Action::Enter(Page::Stats)), ("Exit".into(), Action::Exit)],
+        Page::Main => vec![
+            ("Trace Recorder  >".into(), Action::Enter(Page::Trace)),
+            ("Stats  >".into(), Action::Enter(Page::Stats)),
+            // (t371) `frameadv`: Steam only.
+            (format!("{:<16}< {} >", "Frame Advance", if super::frameadv::supported() { on_off(super::frameadv::on()) } else { "Steam only" }), Action::FrameAdvance),
+            ("Exit".into(), Action::Exit),
+        ],
         Page::Trace => vec![
             (format!("{:<16}< {} >", "Trace", match trace::mode() { trace::Mode::Off => "Off", trace::Mode::On => "On", trace::Mode::Always => "Always" }), Action::TraceMode),
             (format!("{:<16}< {} >", "Seconds", trace::seconds()), Action::Seconds),
+            // (t371) On: the seconds count game frames (`trace::game_frames`); Off: real time.
+            (format!("{:<16}< {} >", "Game Frames", on_off(trace::game_frames())), Action::GameFrames),
             (format!("{:<16}< {} >", "Sound Log", on_off(trace::sound_log())), Action::SoundLog),
             ("Categories  >".into(), Action::Enter(Page::Categories)),
             ("Back".into(), Action::Back),
@@ -559,6 +579,16 @@ unsafe fn step(base: usize) {
         Action::SoundLog => {
             trace::set_sound_log(!trace::sound_log());
             sound(1);
+        }
+        Action::GameFrames => {
+            trace::set_game_frames(!trace::game_frames());
+            sound(1);
+        }
+        Action::FrameAdvance => {
+            if super::frameadv::supported() {
+                super::frameadv::set_on(!super::frameadv::on());
+                sound(1);
+            }
         }
         Action::GroupRow(i) if cross => {
             m.page = Page::Group(i);

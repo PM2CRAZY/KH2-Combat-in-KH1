@@ -14,6 +14,7 @@ mod drive;
 mod equipmenu;
 mod feet;
 mod form;
+mod frameadv;
 mod formmagic;
 mod gates;
 mod fx12;

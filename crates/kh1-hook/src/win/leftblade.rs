@@ -175,7 +175,7 @@ static KH2_LEFT: Mutex<std::collections::VecDeque<(u64, Vec<Mat4>, Instant)>> = 
 /// anchors for Valor's and Final's effects).
 pub fn kh2_left_root() -> Option<Mat4> {
     let g = KH2_LEFT.try_lock().ok()?;
-    g.back().filter(|(_, _, t)| t.elapsed().as_secs_f32() < 0.5).and_then(|(_, b, _)| b.first().copied())
+    g.back().filter(|(_, _, t)| super::frameadv::age(*t).as_secs_f32() < 0.5).and_then(|(_, b, _)| b.first().copied())
 }
 
 /// A body pose's signature (its bones' places, bit for bit).
@@ -629,7 +629,7 @@ pub fn note_pose(kh1: &[Mat4], kh1_bind: &[Mat4], kh2_body: &[Mat4], kh2_right: 
     }
     // KH2's left Keyblade of the step whose body this is (else the latest).
     let Some(left) = KH2_LEFT.try_lock().ok().and_then(|g| {
-        let fresh = |t: &Instant| t.elapsed().as_secs_f32() < 0.15;
+        let fresh = |t: &Instant| super::frameadv::age(*t).as_secs_f32() < 0.15;
         let sig = body_sig(kh2_body);
         g.iter().rev().find(|(r, _, t)| *r == sig && fresh(t)).or_else(|| g.back().filter(|(_, _, t)| fresh(t))).map(|(_, b, _)| b[0])
     }) else { return };

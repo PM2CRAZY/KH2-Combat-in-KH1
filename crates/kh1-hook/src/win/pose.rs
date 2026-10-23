@@ -429,7 +429,7 @@ pub fn sora_body_seen(ms: u128) -> bool {
     if super::takeover::resumed_within(800) {
         return true;
     }
-    HANDS_NOW.try_lock().ok().and_then(|h| h.as_ref().map(|h| h.at.elapsed().as_millis() < ms)).unwrap_or(true)
+    HANDS_NOW.try_lock().ok().and_then(|h| h.as_ref().map(|h| super::frameadv::age(h.at).as_millis() < ms)).unwrap_or(true)
 }
 
 /// Small models (≤ 40 bones) posed near Sora: when, where, and where their placement matrix
@@ -727,7 +727,7 @@ fn note_kh2(pose: &[Mat4], to_world: &Mat4) {
 pub fn kh2_pose<R>(f: impl FnOnce(&[Mat4], &Mat4) -> R) -> Option<R> {
     let g = KH2_POSE.lock().ok()?;
     let (pose, w, at) = g.as_ref()?;
-    (at.elapsed().as_secs_f32() < 0.5).then(|| f(pose, w))
+    (super::frameadv::age(*at).as_secs_f32() < 0.5).then(|| f(pose, w))
 }
 
 /// The blend argument of KH1's last ground-IK pass (diagnostics).
@@ -1002,7 +1002,7 @@ fn wanted_inner(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Ve
             let kh2_frame = super::takeover::kh2_frame();
             // (Not over KH1's own moves from their first frame: its combo, its roll, an item's use.)
             let kh1_move = super::stylecombo::active() || super::styleroll::active() || super::takeover::item_use_now() || super::shared::active();
-            let fresh = if kh1_move { None } else { super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, _, t)| kh2_frame || t.elapsed().as_secs_f32() < 0.15).map(|(b, w, _)| (b.clone(), w.clone()))) };
+            let fresh = if kh1_move { None } else { super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, _, t)| kh2_frame || super::frameadv::age(*t).as_secs_f32() < 0.15).map(|(b, w, _)| (b.clone(), w.clone()))) };
             match (fresh, s.retarget.as_ref()) {
                 (Some((b, w)), Some(r)) => {
                     s.follow.slot = slot;
@@ -1807,7 +1807,7 @@ unsafe fn held(instance: usize, world: usize) -> Option<Mat4> {
         return None;
     }
     let hands = (*HANDS_NOW.lock().ok()?)?;
-    if hands.at.elapsed().as_secs_f32() > 0.1 {
+    if super::frameadv::age(hands.at).as_secs_f32() > 0.1 {
         return None;
     }
     let w = mat(world);

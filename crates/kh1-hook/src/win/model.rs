@@ -435,7 +435,7 @@ pub unsafe fn hide(params: usize) -> Option<Hide> {
     let Ok(mut lib) = lib.lock() else { return refuse("not loaded", &MAIN) };
     let Some(body_model) = body(&lib) else { return refuse("not loaded", &MAIN) };
     let Ok(pose) = POSE.lock() else { return refuse("no pose", &MAIN) };
-    let Some(f) = pose.as_ref().filter(|f| f.at.elapsed().as_secs_f32() < FRESH_S) else { return refuse("no pose", &MAIN) };
+    let Some(f) = pose.as_ref().filter(|f| super::frameadv::age(f.at).as_secs_f32() < FRESH_S) else { return refuse("no pose", &MAIN) };
     let has_weapon = std::ptr::read_unaligned((params + P_WEAPON) as *const u64) != 0;
     let k = if f.ratio.is_finite() && f.ratio > 0.1 { f.ratio } else { 1.0 };
     let mut parts = vec![(body_model, f.body.clone())];
@@ -446,7 +446,7 @@ pub unsafe fn hide(params: usize) -> Option<Hide> {
             ours |= 1;
         }
     }
-    let left = LEFT.lock().ok().and_then(|g| g.as_ref().filter(|(_, t)| t.elapsed().as_secs_f32() < FRESH_S).map(|(b, _)| b.clone()));
+    let left = LEFT.lock().ok().and_then(|g| g.as_ref().filter(|(_, t)| super::frameadv::age(*t).as_secs_f32() < FRESH_S).map(|(b, _)| b.clone()));
     if let (true, Some(b), true) = (has_weapon, left, super::form::two_blades()) {
         if let Some(w) = left_weapon(base).and_then(|w| weapon_model(&mut lib, w)) {
             parts.push((w, b));

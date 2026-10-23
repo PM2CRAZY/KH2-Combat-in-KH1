@@ -1,3 +1,22 @@
+### 2026-10-23: Stage 371 (testing branch: Frame Advance in the debug menu)
+- The tester Mr. Bugs (`docs/tester-requests.md`, "Frame advance in the debug menu"): a debug menu row that holds the
+  game; R2 or the period key plays one frame, held 1 s plays at full speed until let go; works at any fps; R2 does
+  nothing else while it's on; a button held over several steps is one press, one let go is released on the next step;
+  the trace's seconds count game frames, with a Game Frames row on the Trace Recorder page (option b: off by default,
+  turned on with Frame Advance). Notes and addresses: `docs/kh1-frame-advance.md`.
+- `frameadv.rs` (new): from KH1's frame end (`debugmenu::frame_end`, after the frame's task list) the next frame is
+  held or run the way KH1's pause holds it: the task mask (Steam `0x142867370`: 1 = only the pause-flagged tasks,
+  0 = all) and the model objects' pause (`0x1401ED6D0`). KH1's pacing runs every frame, so a stepped frame has the
+  frame scale of the fps setting. Before a stepped frame KH1's pad record's held buttons and repeat timers are put
+  back to the last frame that ran. Left to KH1 while its pause machine is up. Steam only (the row says so elsewhere).
+- R2 is taken off every pad record while it's on (`probe::pad`, and `takeover::RAW_BUTTONS`); the period key
+  (`GetAsyncKeyState`, game window in front). Not done: hiding the period key from KH1's keyboard mapping.
+- The mod's clock (`takeover::now_ms` -> `frameadv::clock_ms`) stops while the game is held; the draw's "posed
+  lately" checks (`model`, `pose`, `leftblade`) take `frameadv::age`; `takeover::paused` is false while held.
+- `trace`: Game Frames (`trace_game_frames`, `trace::game_frames`): the clip's window is `seconds` x 60 ticks
+  (`Row::ticks`), else real time (`Row::wall_ms`, new). Select + Triangle writes the trace while held
+  (`trace::frozen_combo`). Debug menu: main page Frame Advance row, Trace Recorder page Game Frames row.
+
 ### 2026-10-22: Stage 370 (testing branch: KH2's HD textures matched by the right header word)
 - The user's t369 run: Explosion still has the squares. The log: the DPX was entered in KH1's loaded files, but with 0
   HD textures, every texture "none". The asset headers' `+0x20` words (P_EX100: `0x850A0`, `0x87120`, ...; texcommon:

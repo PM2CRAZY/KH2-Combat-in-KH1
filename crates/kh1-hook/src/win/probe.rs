@@ -295,6 +295,12 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
         let now: u16 = rd(out);
         std::ptr::write_unaligned(out as *mut u16, now & !super::trace::RAW_SELECT);
     }
+    // (t371) Frame Advance (`frameadv`): R2 steps the game, and nothing else sees it while it's on.
+    if super::frameadv::pad(b_all) {
+        let now: u16 = rd(out);
+        std::ptr::write_unaligned(out as *mut u16, now & !super::frameadv::R2_BIT);
+        super::takeover::RAW_BUTTONS.fetch_and(!(super::frameadv::R2_BIT as u32), Ordering::Relaxed);
+    }
     // The debug menu (`debugmenu`): L1 + R1 + Triangle opens it; while it is open (and after, until
     // every button is let go) KH1 and KH2 see no buttons and centred sticks.
     match super::debugmenu::pad(b_all) {

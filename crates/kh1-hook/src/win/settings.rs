@@ -159,6 +159,10 @@ trace_seconds = 10\r\n\
 ; sound_log: on = every KH1 menu sound, voice group and voice clip played is a line in the log\r\n\
 ; (the id and where it was called from, docs/kh1-sounds.md); off = none (the debug menu switches it)\r\n\
 sound_log = on\r\n\
+; trace_game_frames: on = trace_seconds counts game frames (60 a second, at any frame rate), so\r\n\
+; a frame-advanced clip holds as many frames as one played at full speed; off = real time\r\n\
+; (the debug menu's Trace Recorder page switches it; turning Frame Advance on turns it on)\r\n\
+trace_game_frames = off\r\n\
 ; trace_*: what each trace row holds (on / off each; the debug menu's Trace Recorder page switches\r\n\
 ; them): movement (position, floor, collision, velocity), kh1_state, kh2_state, form, draw\r\n\
 ; (animation draw), feet (feet / IK), kh1_camera, kh2_camera, input, config, log (log lines),\r\n\
@@ -267,6 +271,9 @@ pub struct Settings {
     pub trace_seconds: u32,
     /// KH1's sounds written to the log (`sound_log = on`, `soundlog.rs`).
     pub sound_log: bool,
+    /// The trace's seconds count game frames, not real time (`trace_game_frames = on`; off by
+    /// default; Frame Advance turns it on, `frameadv`).
+    pub trace_game_frames: bool,
     /// What each trace row holds (`trace_*` = on / off, `trace::ITEMS`; all on by default).
     pub trace_cats: u32,
     /// L1 + R1 + Triangle opens the debug menu (`debug_menu = on`, `debugmenu.rs`).
@@ -442,6 +449,7 @@ fn load(first: bool) -> Option<Settings> {
         trace: super::trace::Mode::parse(setting(&text, "trace").as_deref()),
         trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
         sound_log: on(&text, "sound_log", "on", true),
+        trace_game_frames: on(&text, "trace_game_frames", "on", false),
         trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
         debug_menu: on(&text, "debug_menu", "on", false),
     };

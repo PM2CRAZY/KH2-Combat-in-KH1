@@ -283,10 +283,11 @@ static ORIG_PHYS: AtomicUsize = AtomicUsize::new(0);
 pub static RAW_BUTTONS: AtomicU32 = AtomicU32::new(0);
 pub static RAW_STICKS: AtomicU32 = AtomicU32::new(0x8080_8080);
 static ACTIVE_MS: AtomicU64 = AtomicU64::new(0);
-static CLOCK: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
-
+/// (t371) The mod's clock: real time less the time Frame Advance held the game (`frameadv`), so
+/// the gaps and windows here (a pause seen, KH2 active, a handoff's grace) read a stepped frame
+/// the way they read one played at full speed.
 fn now_ms() -> u64 {
-    CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64
+    super::frameadv::clock_ms()
 }
 
 /// Sora's last physics frame, and when the game last came back from a pause (a gap of more than
@@ -304,6 +305,10 @@ pub fn resumed_within(ms: u64) -> bool {
 /// The game stands still now: no physics frame of Sora's for over 120 ms (a pause, or a menu
 /// that stops the field; `kh2fx` draws no effects then). Unknown (no frame yet): no.
 pub fn paused() -> bool {
+    // (t371) Frame Advance holding the game isn't a pause: KH2's effects and model stay drawn.
+    if super::frameadv::holding() {
+        return false;
+    }
     let last = LAST_PHYS_MS.load(Ordering::Relaxed);
     last != 0 && now_ms().saturating_sub(last) > 120
 }
@@ -483,6 +488,8 @@ unsafe fn trace_frame(actor: usize, start: [f32; 4]) {
         ticks: TICKS.load(Ordering::Relaxed),
         steps: steps(),
         ms: now_ms(),
+        // (Set by `trace::frame`.)
+        wall_ms: 0,
         owner: match FRAME_KIND.load(Ordering::Relaxed) {
             1 => "KH2",
             2 => "handoff",
