@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 396 (testing branch: KH2 effects: Explosion's elements 44 and 45 through KH1)
+- Anchors from KH2 bone codes: 0x4003 / 5 / 7 to KH1's blade point (code 0x30, t 1 / 0 / 0.5, binding mode 3 `0x1402ADD60`,
+  t the 5th argument, a float on the stack, Checked (exe)); KH2 67 to KH1 70 (same bind frame). They play only once
+  KH2's MegaBirth is plugged in, else through `kh2fx`. Checked (files): KH2 170 / 78 and KH1 93 / 198 match within 0.05,
+  so the wrist flashes need no turn conversion. Not done: flag 0x800 (alpha with the weapon). Notes §17.4.
+
 ### 2026-10-23: Stage 395 (testing branch: KH2 effects: KH2's pppRyjMegaBirth in KH1's program machine)
 - Step 3 (the tester: option (a), port it). `kh1dpx` lists KH2-own program words (`Kh1Dpx::programs`); `kh2ppp::plug`
   points them at our 0x50-byte entry after KH1's relocation (`0x14031C2F0`), after checking KH1's entry 201. It is KH2's

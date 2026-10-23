@@ -28,7 +28,7 @@
 //! Steam only (the addresses are Steam's); elsewhere KH1's own programs stay.
 
 use super::log;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 // KH1 code (Steam RVAs).
 const ALLOC_STEAM: usize = 0x1EC330;
@@ -74,6 +74,13 @@ const SINE: usize = 0x54BED0;
 pub const MEGA_BIRTH: u32 = 201;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
+/// KH2's MegaBirth is plugged into the DPX (its words point at our entry).
+static PLUGGED: AtomicBool = AtomicBool::new(false);
+
+/// Whether KH2's own programs are in (an effect that runs one may then play through KH1).
+pub fn plugged() -> bool {
+    PLUGGED.load(Ordering::Relaxed)
+}
 
 #[repr(C)]
 struct Entry {
@@ -199,6 +206,7 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
                 other += 1;
             }
         }
+        PLUGGED.store(done > 0, Ordering::Relaxed);
         log(&format!("KH2 effects (native): KH2's MegaBirth plugged into {done} program words ({other} other KH2-only words left to KH1's dummy)"));
     }
 }

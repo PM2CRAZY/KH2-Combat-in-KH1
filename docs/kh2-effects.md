@@ -1161,7 +1161,7 @@ the user's extraction; **Assumption** = not yet checked.
 | Ends with the motion (0x20) | KH1's binding watches the actor's motion request (`+0x164`, binding `+6`; number bit 0x800) and stops the effect at once when it changes (`0x1402AE910`). That is KH1's request, not KH2's motion, and a stop, not KH2's fade. | KH2's motion change (from `kh2fx::tick`) ends it the KH2 way (above). KH1's bit 0x800 is not used. |
 | Ends with the owner (0x200) | KH1's binding stops the effect when the actor is gone (`0x140291FF0`). | A form change (`kh2fx::owner_gone`) fades or stops it (as `kh2-fx`). |
 | Object root 0x4000 | **Yes: bone code `0x8000`** (`0x14029EA00` / `0x14029EB20`): the actor's position `+0x10` with a frame made from its matrix rows `+0xF0`, `+0xE0`, `+0xD0` (each negated, in that order). KH2's 0x4000 (`0x1403B50F0`): the object's rotation `+0x40` and position. | Not started yet (element 48 waits for steps 3-4). **Assumption**: KH1's 0x8000 frame equals KH2's object frame (to check in game). |
-| Weapon point 0x4003 / 0x4004 | **Yes: bone `0x30`, distance `t`** (`0x14029EB20`): `t` 0..1 mapped into the weapon's blade range (`btltbl` record `+0x28` start, `+0x24` end), the point between the blade bone and its parent (`0x1401D6320`). KH1's binding mode 3 (`0x1402ADD60 (dpx, number, actor, bone, t)`) takes the bone's rotation and that point every frame. KH2's 0x4003 (`0x1403B50F0`): the weapon object's weapon-shape bone (shape kind 0xF) matrix, moved along its x by a length; 0x4005 its root, 0x4007 halfway. | Not started yet (element 44 waits for step 3): 0x4003 → bone 0x30, t = 1.0; 0x4005 → t = 0; 0x4007 → t = 0.5. |
+| Weapon point 0x4003 / 0x4004 | **Yes: bone `0x30`, distance `t`** (`0x14029EB20`): `t` 0..1 mapped into the weapon's blade range (`btltbl` record `+0x28` start, `+0x24` end), the point between the blade bone and its parent (`0x1401D6320`). KH1's binding mode 3 (`0x1402ADD60 (dpx, number, actor, bone, t)`) takes the bone's rotation and that point every frame. KH2's 0x4003 (`0x1403B50F0`): the weapon object's weapon-shape bone (shape kind 0xF) matrix, moved along its x by a length; 0x4005 its root, 0x4007 halfway. | Element 44 (§17.4): 0x4003 → bone 0x30, t = 1.0; 0x4005 → t = 0; 0x4007 → t = 0.5. |
 | Bind position only (0x04) | Binding mode 1 (`0x1402ADC20`): position only, plus a world offset. | Not used by Explosion. |
 | Bind until started (0x02) | No. | Not used by 46/47 (element 48 has it). |
 | Alpha follows the weapon (0x800) | No. | Not done (also not in `kh2fx`). |
@@ -1239,3 +1239,33 @@ KH1's: `0x1403212F0`, `0x140320C30`, `0x14031FD00`, `0x140320900`, `0x140320DF0`
   KH1's entry has them (`+0x18`, `+0x38`).
 - Not used yet: no native element runs effects 31, 32 or 34 until their elements are switched
   on (elements 44, 45, 48; they still play through `kh2fx`).
+
+### 17.4 Explosion's elements 44 and 45 through KH1
+
+- Element 44 (effect 31, KH2 bone 0x4003, flags 0xA61, no offset or turn): KH1's start on a
+  point along the weapon (`0x1402ADD60 (dpx, number, actor, 0x30, t)`, Steam; checked in the
+  exe: `t` is the fifth argument, a float on the stack, kept at the binding's `+0xC`), binding
+  mode 3: every frame the blade bone's turn (`0x14029EA00`, code 0x30 through KH1's named-bone
+  table `0x14029FAB0`) with the point `t` along the blade as its place (`0x14029EB20`: code 0x30
+  maps `t` into the weapon's blade range, its `btltbl` record `+0x28` start, `+0x24` end, then
+  the point between the blade bone and its parent, `0x1401D6320`). 0x4003 (KH2's tip) → t = 1;
+  0x4005 (root) → 0; 0x4007 (halfway) → 0.5. **Assumption**: KH1's blade end is where KH2's
+  0x4003 tip is on the Keyblade (each game's own tip), and the blade bone's frame stands for
+  KH2's weapon-shape bone's (44 is sprites facing the camera and a full-sphere spark burst, so
+  the frame's turn hardly shows).
+- Element 45 (effect 32, KH2 bone 67, offset 18.75 along x, turned −90° x / +90° y): KH1 bone
+  70. **Checked (files)**: in the bind poses KH2 67 (a spine bone, 0.30 of the way from the
+  pelvis 102.6 to the chest 68 at 126.5) has the same frame as KH1 70 (0.24 of the way from 92.7
+  to 114.2; x up the spine (0, 0.97, −0.23), y (0, 0.23, 0.97), z (1, 0, 0) in both); KH1 71 has
+  the same frame at 0.47. The same check holds for the wrist flashes: KH2 170 / 78 and KH1 93 /
+  198 have the same bind frames to 0.05, so their turn needs no conversion.
+- Both run KH2's MegaBirth: they play through KH1 only when it is plugged in (`kh2ppp::plugged`,
+  Steam); otherwise, and on other builds, `kh2fx` plays them as before.
+- Not done: flag 0x800 (alpha follows the weapon's visibility; not in `kh2fx` either).
+- Found, not changed: KH1's pppColor (43, `0x14032B940`) writes the colour bytes only on a tick's
+  first frame (the whole program sits under the not-repeat test), KH2's (`0x1404C0F60`) on both
+  frames (only its key deltas wait), and clamps each channel at 32767 before scaling. So under
+  KH1's an element's fade (the instance alpha) shows every other game frame at 60 fps, under
+  KH2's every frame. Every Explosion effect uses pppColor.
+- Found, not changed: KH1's bone binding task (`0x1402AE910`, modes 2 and 3) applies the matrix it
+  read on its previous run, then reads the next one.
