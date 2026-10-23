@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 387 (testing branch: KH1's own parts take KH1's own animation of the move)
+- The tester: a baked motion for KH1-only parts, with KH1's animations as the reference. `retarget::KH1_OWN` (41 bones:
+  belt chain, belt-front pieces, shorts, jacket hem, the necklace's pendant), `Retarget::set_own` / `own_relation`, the
+  belt chain carried with its own links: they take KH1's own motion of the move KH2's stands in for, stretched to KH2's
+  length. Live from KH1's pass (`pose::own_from_kh1`); baked from the template (`Baker::poses`, its slot from
+  `kh2slots::bake_one`). Test `local_own`. Not done: matching the stride phase within a cycle.
+
 ### 2026-10-23: Stage 386 (testing branch: KH2's squash and stretch)
 - The tester: carry KH2's scale keys. `Secondary::scales`, `secondary::apply_scale` (live, last step before the write),
   bake scale channels kinds 1-3. Scale is multiplied down the bones and stretches only each bone (KH1 `0x1403900B0` /

@@ -332,7 +332,21 @@ pub struct Retarget {
     /// The weapon's grip as KH1 holds it now (`set_grip`), when it is turned well away from the
     /// rest pose's (another weapon held another way: the Dream Sword).
     grip_live: std::sync::Mutex<Option<Mat4>>,
+    /// KH1's own parts (`KH1_OWN`) as KH1's animation of the move has them now (`set_own`):
+    /// each one's matrix relative to its parent, unscaled.
+    own: std::sync::Mutex<Vec<Option<Mat4>>>,
 }
+
+/// KH1's own parts with nothing of KH2's to follow (`docs/kh1-secondary-motion.md`): the bones
+/// KH1's motions key that no part here or in `secondary` turns, and whose KH2 counterpart, if
+/// any, has no mesh. Under KH2's moves they take KH1's own animation of the move KH2's stands in
+/// for (`set_own`), relative to their parent: the belt-front pieces (5, 8), the belt chain
+/// (11-14), the shorts' panels (two joints each, four a leg), the hem's back centre (73-74) and
+/// its eight panels (two joints each), the necklace's pendant (87).
+pub const KH1_OWN: [usize; 41] = [
+    5, 8, 11, 12, 13, 14, 27, 28, 31, 32, 35, 36, 39, 40, 53, 54, 57, 58, 61, 62, 65, 66, 73, 74, 87, 249, 250, 253, 254, 257, 258, 261, 262, 265, 266, 269, 270, 273, 274, 277,
+    278,
+];
 
 /// The weapon's grip bone (the Keyblade's, also every other weapon's).
 pub const GRIP_BONE: usize = 280;
@@ -408,6 +422,17 @@ const HOOD_FOLD: f32 = 0.7;
 /// part can't be measured (KH1's own motions leave the thumbs at their bind, which is why KH1's
 /// rest poses never changed them: the user's "thumbs have still not changed").
 const THUMBS: [std::ops::RangeInclusive<usize>; 2] = [103..=107, 207..=211];
+
+/// A bone's relation to its parent in a model-space pose whose axes carry each bone's scale (as
+/// KH1's bone pass leaves them, or `kh2_anim::Pose`): its matrix relative to the parent, unscaled
+/// (for `set_own`), and its own scale (its over its parent's: KH1 multiplies it down the bones).
+pub fn own_relation(parent: &Mat4, bone: &Mat4) -> Option<(Mat4, Vec3)> {
+    let (sp, rp, tp) = parent.to_scale_rotation_translation();
+    let (sb, rb, tb) = bone.to_scale_rotation_translation();
+    let l = Mat4::from_rotation_translation(rp.normalize(), tp).inverse() * Mat4::from_rotation_translation(rb.normalize(), tb);
+    let s = sb / sp.max(Vec3::splat(1e-6));
+    (l.is_finite() && s.is_finite() && s.min_element() > 0.0).then_some((l, s))
+}
 
 /// A turn's part about the model's up (y) axis (swing-twist).
 fn yaw_of(q: Quat) -> Quat {
@@ -504,7 +529,8 @@ impl Retarget {
         }
         let memory = std::sync::Mutex::new((vec![None; kh1.len()], vec![Quat::IDENTITY; cloth.len()]));
         let bind_m = b1.clone();
-        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory, bind_m, grip_live: std::sync::Mutex::new(None) }
+        let own = std::sync::Mutex::new(vec![None; kh1.len()]);
+        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory, bind_m, grip_live: std::sync::Mutex::new(None), own }
     }
 
     /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
@@ -567,6 +593,18 @@ impl Retarget {
         use_live.is_some()
     }
 
+    /// KH1's own parts (`KH1_OWN`) as KH1's own animation has them this frame: `local(bone)`, its
+    /// matrix relative to its parent (unscaled), or `None` to hang it as before (the bind's
+    /// relation). Kept until set again.
+    pub fn set_own(&self, local: impl Fn(usize) -> Option<Mat4>) {
+        let Ok(mut own) = self.own.lock() else { return };
+        for &b in KH1_OWN.iter() {
+            if let Some(o) = own.get_mut(b) {
+                *o = local(b).filter(|m| m.is_finite());
+            }
+        }
+    }
+
     /// The thumbs' open-handed pose (KH1's field idle), for `pose_grip(.., false)`.
     pub fn set_rest_open(&mut self, rest: &[Bone]) {
         let m = kh2_anim::Pose::bind(rest).bones;
@@ -623,6 +661,8 @@ impl Retarget {
         let now = positions(kh2);
         let part: Vec<Option<Quat>> = frames(&self.parts, &now).into_iter().zip(&self.rest_inv).map(|(f, r)| Some(f? * (*r)?)).collect();
         let n = self.pos.len();
+        let own_local = self.own.lock().ok();
+        let own_at = |i: usize| own_local.as_ref().and_then(|o| o.get(i).copied().flatten());
         let mut turn = vec![Quat::IDENTITY; n];
         let mut at = vec![Vec3::ZERO; n];
         let mut out = vec![Mat4::IDENTITY; n];
@@ -637,6 +677,7 @@ impl Retarget {
             });
             let rest = if grip { self.rest_local[i] } else { self.rest_open[i].or(self.rest_local[i]) };
             let rest = if i == GRIP_BONE { self.grip_live.lock().ok().and_then(|g| *g).or(rest) } else { rest };
+            let rest = own_at(i).or(rest);
             if let (None, Some(p), Some(l)) = (own, self.parent[i], rest) {
                 out[i] = out[p] * l;
                 let (_, r, t) = out[i].to_scale_rotation_translation();
@@ -656,29 +697,33 @@ impl Retarget {
             }
             out[i] = Mat4::from_scale_rotation_translation(self.scale[i], (turn[i] * self.rot[i]).normalize(), at[i]);
         }
-        self.attach(&mut out);
+        self.attach(&mut out, &own_at);
+        drop(own_local);
         self.keep_clear(&mut out);
         out
     }
 
-    /// Bones carried rigidly by another as in the bind (`ATTACHED`).
-    fn attach(&self, out: &mut [Mat4]) {
+    /// Bones carried by another as in the bind (`ATTACHED`): the root rigidly, the bones under it
+    /// by their relation to their parent, KH1's own animation of them (`own`) where it is given.
+    fn attach(&self, out: &mut [Mat4], own: &dyn Fn(usize) -> Option<Mat4>) {
         for &(root, to) in ATTACHED.iter() {
             if root >= out.len() || to >= out.len() {
                 continue;
             }
             let carry = out[to] * self.bind_m[to].inverse();
-            for j in 0..out.len() {
-                let mut p = Some(j);
-                for _ in 0..16 {
+            out[root] = carry * self.bind_m[root];
+            for j in root + 1..out.len() {
+                let mut p = self.parent[j];
+                let under = loop {
                     match p {
-                        Some(q) if q == root => {
-                            out[j] = carry * self.bind_m[j];
-                            break;
-                        }
-                        Some(q) => p = self.parent[q],
-                        None => break,
+                        Some(q) if q == root => break true,
+                        Some(q) if q > root => p = self.parent[q],
+                        _ => break false,
                     }
+                };
+                if let (true, Some(q)) = (under, self.parent[j]) {
+                    let local = own(j).unwrap_or_else(|| self.bind_m[q].inverse() * self.bind_m[j]);
+                    out[j] = out[q] * local;
                 }
             }
         }
@@ -686,8 +731,8 @@ impl Retarget {
 
     /// Cloth (the belt chain, the jacket's hem panels) never comes nearer a thigh than it was in
     /// the bind: where a joint would, its chain swings about its root just far enough out
-    /// (KH1 animates this cloth by hand in each of its own motions, so nothing of KH1's fits
-    /// KH2's strides; the user: the chain went through the shorts, the jacket should mesh).
+    /// (The cloth takes KH1's own animation of the move, `set_own`, made for KH1's strides, not
+    /// KH2's; the user: the chain went through the shorts, the jacket should mesh).
     fn keep_clear(&self, out: &mut [Mat4]) {
         let at = |v: &[Mat4], i: usize| v[i].w_axis.truncate();
         let Ok(mut mem) = self.memory.lock() else { return };

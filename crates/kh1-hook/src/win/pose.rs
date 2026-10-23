@@ -310,6 +310,8 @@ struct Sora {
     /// Each bone's own scale for the pose being drawn (KH2's squash and stretch on the parts
     /// `secondary` matched, `Secondary::scales`), kept from frame to frame (no allocation).
     scales: Vec<Vec3>,
+    /// KH1's own scale on its own parts (`retarget::KH1_OWN`) in KH1's last pass (`own_from_kh1`).
+    own_scale: Vec<Vec3>,
 }
 
 /// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
@@ -1064,10 +1066,14 @@ pub struct Baker {
     pub skeleton: Vec<kh2_formats::anim::Bone>,
     retarget: Retarget,
     secondary: kh1_data::secondary::Secondary,
+    /// KH1 Sora's own motions (by slot): a template's animation of KH1's own parts
+    /// (`retarget::KH1_OWN`) for the moves baked on it.
+    motions: Vec<Option<kh1_data::mset::Motion>>,
 }
 
 impl Baker {
-    pub fn new(kh2: &Kh2, skeleton: Vec<kh2_formats::anim::Bone>, rest: Option<&kh1_data::mset::Motion>, rest_open: Option<&kh1_data::mset::Motion>) -> Baker {
+    pub fn new(kh2: &Kh2, skeleton: Vec<kh2_formats::anim::Bone>, motions: &[Option<kh1_data::mset::Motion>]) -> Baker {
+        let (rest, rest_open) = (motions.get(REST_SLOT).and_then(|m| m.as_ref()), motions.first().and_then(|m| m.as_ref()));
         let mut retarget = Retarget::new(&skeleton, &kh2.rig.skeleton);
         if let Some(m) = rest {
             retarget.set_rest(&m.apply(&skeleton, 0.0));
@@ -1076,7 +1082,7 @@ impl Baker {
             retarget.set_rest_open(&m.apply(&skeleton, 0.0));
         }
         let secondary = kh1_data::secondary::Secondary::new(&skeleton, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
-        Baker { skeleton, retarget, secondary }
+        Baker { skeleton, retarget, secondary, motions: motions.to_vec() }
     }
 
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
@@ -1091,9 +1097,15 @@ impl Baker {
     /// and pulls his placement back by it; his body carries it, as KH1's own motions do (H2), so
     /// the model stays on him (`kh1_data::bake`). Else none (empty): the travel stays out.
     ///
+    /// KH1's own parts (`retarget::KH1_OWN`: the belt chain and front, the shorts, the hem, the
+    /// necklace's pendant) as KH1's `template` slot (the move this stands in for) animates them,
+    /// retimed to this length, as KH1 plays a template retimed (the tester: "use kh1's animations
+    /// as a reference").
+    ///
     /// Also each frame's bone scales (KH2's squash and stretch on the parts `secondary` posed,
-    /// `Secondary::scales`), for the bake's scale channels; empty when none differs from 1.
-    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32, travel: bool) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>, Vec<Vec<Vec3>>)> {
+    /// `Secondary::scales`, and KH1's own on its parts), for the bake's scale channels; empty
+    /// when none differs from 1.
+    pub fn poses(&self, kh2: &Kh2, motion: u16, frames: u32, travel: bool, template: Option<usize>) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>, Vec<Vec<Vec3>>)> {
         let rig = &kh2.rig;
         let clip = rig.motions.get(&motion)?;
         let set = super::settings::get();
@@ -1104,8 +1116,23 @@ impl Baker {
         let mut scales: Vec<Vec<Vec3>> = Vec::with_capacity(frames as usize + 1);
         let root_at = |f: u32| roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))).map(|p| Vec3::from(*p));
         let start = root_at(0).unwrap_or(Vec3::ZERO);
+        let template = template.and_then(|t| self.motions.get(t)).and_then(|m| m.as_ref());
         for f in 0..=frames {
             let at = f as f32;
+            // KH1's own parts at the template's time for this frame.
+            let mut own_scale: Vec<(usize, Vec3)> = Vec::new();
+            match template {
+                Some(t) => {
+                    let m = kh2_anim::Pose::bind(&t.apply(&self.skeleton, at * t.frames as f32 / frames.max(1) as f32)).bones;
+                    let rel: Vec<(usize, Option<(Mat4, Vec3)>)> = kh1_data::retarget::KH1_OWN
+                        .iter()
+                        .map(|&b| (b, parents.get(b).filter(|p| **p >= 0).and_then(|&p| kh1_data::retarget::own_relation(m.get(p as usize)?, m.get(b)?))))
+                        .collect();
+                    self.retarget.set_own(|b| rel.iter().find(|r| r.0 == b).and_then(|r| r.1).map(|r| r.0));
+                    own_scale = rel.iter().filter_map(|&(b, r)| Some((b, r?.1))).collect();
+                }
+                None => self.retarget.set_own(|_| None),
+            }
             let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
             let mut weapon = kh2_weapon(rig, motion, at, false, &body);
             if let Some(root) = roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))) {
@@ -1123,6 +1150,11 @@ impl Baker {
                 turn_grip(&mut kh1, &parents);
             }
             let mut sc = vec![Vec3::ONE; kh1.len()];
+            for &(b, s) in &own_scale {
+                if let Some(v) = sc.get_mut(b) {
+                    *v = s;
+                }
+            }
             if set.physics && set.kh2_hair {
                 let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
                 let rep = self.secondary.apply(&mut kh1, &body, weapon, kh1_data::secondary::Parts::ALL);
@@ -1158,7 +1190,7 @@ fn baker(install: &kh1_data::Kh1Install, kh2: &Kh2, motions: &[Option<kh1_data::
     if skeleton.len() != SORA_BONES as usize {
         return Err(format!("xa_ex_0010.mdls has {} bones", skeleton.len()));
     }
-    Ok(Baker::new(kh2, skeleton, motions.get(REST_SLOT).and_then(|m| m.as_ref()), motions.first().and_then(|m| m.as_ref())))
+    Ok(Baker::new(kh2, skeleton, motions))
 }
 
 /// One of our slots baked into a KH1 motion (`kh2slots`, ini `kh1_bake`): KH1 plays it and shows
@@ -1569,7 +1601,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None, secondary: None, inverse: None, kh2_now: None, scales: Vec::new() });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None, secondary: None, inverse: None, kh2_now: None, scales: Vec::new(), own_scale: Vec::new() });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -1694,6 +1726,12 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             }
         }
     }
+    // KH1's own parts (the belt chain and front, the shorts, the hem, the necklace's pendant) as
+    // KH1's own animation of this move has them, for the retarget (`Retarget::set_own`): KH1
+    // plays the move KH2's stands in for underneath (our slots: its template retimed).
+    if !ours {
+        own_from_kh1(s, world, &to_world);
+    }
     let Some(mut pose) = wanted(s, slot, &to_world) else {
         s.wrote_root = None;
         s.to_world = Some(to_world);
@@ -1749,9 +1787,15 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
             let rep = sec.apply(&mut pose, body, weapon, want);
             driven = rep.parts;
-            // KH2's squash and stretch on the parts it just posed (the tester: "yes do it").
+            // KH2's squash and stretch on the parts it just posed (the tester: "yes do it"), and
+            // KH1's own on its own parts.
             s.scales.clear();
             s.scales.resize(pose.len(), Vec3::ONE);
+            for &b in kh1_data::retarget::KH1_OWN.iter() {
+                if let (Some(v), Some(o)) = (s.scales.get_mut(b), s.own_scale.get(b)) {
+                    *v = *o;
+                }
+            }
             sec.scales(body, weapon, rep.parts, &mut s.scales);
             scaled = true;
             static LOGGED: AtomicU32 = AtomicU32::new(0);
@@ -1821,6 +1865,33 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
 }
 
 static KH1_BONES: Mutex<Vec<kh2_formats::anim::Bone>> = Mutex::new(Vec::new());
+
+/// KH1's own parts (`retarget::KH1_OWN`) as KH1's pass just placed them (`world`, the bones it
+/// wrote, `to_world` its placement): each one's relation to its parent goes to the retarget
+/// (`Retarget::set_own`), its own scale to `own_scale`.
+unsafe fn own_from_kh1(s: &mut Sora, world: usize, to_world: &Mat4) {
+    let Some(r) = s.retarget.as_ref() else { return };
+    let inv = to_world.inverse();
+    if !inv.is_finite() {
+        return;
+    }
+    let model = |i: usize| inv * mat(world + i * 0x40);
+    let parents = &s.parents;
+    let rel = |b: usize| -> Option<(Mat4, Vec3)> {
+        let p = *parents.get(b)?;
+        if p < 0 || b >= SORA_BONES as usize {
+            return None;
+        }
+        kh1_data::retarget::own_relation(&model(p as usize), &model(b))
+    };
+    r.set_own(|b| rel(b).map(|r| r.0));
+    s.own_scale.resize(SORA_BONES as usize, Vec3::ONE);
+    for &b in kh1_data::retarget::KH1_OWN.iter() {
+        if let Some(o) = s.own_scale.get_mut(b) {
+            *o = rel(b).map_or(Vec3::ONE, |r| r.1);
+        }
+    }
+}
 
 /// KH1's size against KH2's (`Retarget::hip_ratio`), 1 without a retarget.
 fn r_ratio(r: Option<&Retarget>) -> f32 {

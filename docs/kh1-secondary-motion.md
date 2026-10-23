@@ -247,7 +247,8 @@ sleeves animation", the tester's rule: nothing KH1 has no visible KH2 match for)
 
 Not copied (KH1's own bones, no visible KH2 match): the jacket hem (249-278, 73-74), the
 shorts' panels (27-40, 53-66), the belt chain (11-14), the belt-front pieces (5, 8), the
-necklace's pendant (87).
+necklace's pendant (87). Since t387 these take KH1's own animation of the move ("KH1's own
+parts" below).
 
 ## Squash and stretch (t386)
 
@@ -285,19 +286,58 @@ KH2 bone has scale keys (the hair, hood, necklace: none; the Keyblade's chain: n
 weapon file here). KH2's other scale keys are all on bones with no vertices that nothing of KH1
 follows. Positions are unchanged by it (checked: no bone moved). Not checked in game.
 
-## Other parts KH1 animates that still don't move under KH2's moves
+## KH1's own parts (t387)
 
-Found with the sleeves (bones KH1's own motions turn in 5 or more motions that no retarget part,
-`secondary` part or KH2 match drives). Checked (files); what each is from bone positions only
-(Assumption).
+The tester (point 6 of the thread): "bake a custom animation for the small parts kh2 sora
+doesn't have that kh1 has following the motion of each animation to give them similar looking
+results to kh1's animations ... use kh1's animations as a reference."
 
-| KH1 bones | What (Assumption) | KH1 motions | Now | KH2's counterpart |
+**Which parts** (`retarget::KH1_OWN`, 41 bones): those KH1's own motions turn in 5 or more
+motions that nothing of KH2's drives. Checked (files); what each is from bone positions only
+(Assumption). In every one of KH1's 118 motions their joint words are plain FK (0, or 25: built
+once), so KH1's keys are the whole of their animation. Checked (files).
+
+| KH1 bones | What (Assumption) | KH1 motions | Before t387 | KH2's counterpart |
 |---|---|---|---|---|
-| 27-28, 31-32, 35-36, 39-40 (-x); 53-54, 57-58, 61-62, 65-66 (+x) | the shorts' four panels per leg, from the thigh | 51-81, up to 97° | rigid on the thigh | trouser bones under each thigh (27, 29, 32, 34; 56, 58, 61, 63), keyed but with no vertices |
-| 249-250 ... 277-278, 73-74 | the jacket's hem panels from the spine | 76-105, up to 163° | rigid, pushed off the thighs (`keep_clear`) | the chest ring 129-135 / 221-227 and 70, the same layout, keyed but with no vertices |
-| 11-14 | the belt chain | 106-111, up to 157° | carried by the +x thigh | none |
-| 5, 8 | belt-front pieces | 22-66 | rigid | none (KH2's pelvis pieces 4-9 have no vertices and no KH1 match) |
-| 87 | the necklace's pendant | 96, up to 125° | on the necklace link (86, KH2's 165) | none |
+| 27-28, 31-32, 35-36, 39-40 (-x); 53-54, 57-58, 61-62, 65-66 (+x) | the shorts' four panels per leg (two joints each), from the thigh | 51-90, up to 139° | rigid on the thigh | trouser bones under each thigh (27, 29, 32, 34; 56, 58, 61, 63), keyed but with no vertices |
+| 249-250 ... 277-278 (two joints a panel), 73-74 | the jacket's hem panels from the spine, and its back centre | 74-101, up to 162° | rigid, turned with the hips, pushed off the thighs (`keep_clear`) | the chest ring 129-135 / 221-227 and 70, the same layout, keyed but with no vertices |
+| 11-14 | the belt chain | 104-109, up to 223° | carried by the +x thigh | none |
+| 5, 8 | belt-front pieces | 22 and 66 | rigid | none (KH2's pelvis pieces 4-9 have no vertices and no KH1 match) |
+| 87 | the necklace's pendant | 96, up to 125° | rigid on the link | none (KH2's necklace is one bone, 165, which the link 86 follows) |
+
+**The design: KH1's own animation of the same move.** Each KH2 move KH1 plays stands in for one
+of KH1's (a slot's template: KH1's run for KH2's run, KH1's first swing for KH2's first). These
+parts take, relative to their parent, exactly what KH1's own motion of that move gives them,
+timed to KH2's motion as KH1 times the template (stretched to KH2's length, `slot::retimed`).
+So KH2's run gets KH1's run's belt chain swing, shorts and hem, once per KH2 stride; a KH2 swing
+gets KH1's swing's. Their parents are KH2-posed (the hips, the thighs, the spine, the necklace
+link), so they ride on KH2's body and add KH1's own motion on top. KH1's scale keys on them come
+too (KH1 squashes its shorts' panels, 0.21-1.36). This is the most faithful version: it is KH1's
+own animation, not a made-up one, and needs nothing at run time beyond reading KH1's bones. The
+guards stay: the belt chain's end and the hem's panels are still swung off the thighs
+(`keep_clear`).
+
+- **Baked** (`Baker::poses`, its template given by `kh2slots::bake_one`): the template's FK at
+  `frame × template frames / KH2 frames`, each part's relation to its parent (`own_relation`)
+  given to the retarget (`Retarget::set_own`), its scale to the bake's scale channels.
+- **Live** (`pose.rs`, `own_from_kh1`): KH1's own pass has just placed these bones from the
+  motion it plays (our slot: the template retimed; otherwise KH1's own motion for the slot KH2's
+  is drawn over); their relation to their parent there goes to the retarget, their scale to the
+  final scale pass. Not on frames where KH1's pass didn't run (the last relation stays).
+- `Retarget::attach` (the belt chain, carried by the +x thigh): the root rigidly as before, the
+  links under it by their relation to their parent, KH1's own where given (the bind's before).
+
+Checks (files; `kh1-data` test `local_own`, a scratch run): KH2's run (2) on KH1's run (slot 5,
+36 frames → 32), its walk (1) on KH1's (2, 60 → 72), the swings 151 / 152 / 154 / 181 on 98 / 99 /
+101 / 102, the idle (0) on 1: no NaN; every part's relation to its parent is KH1's motion's
+(float noise only) but where `keep_clear` swung a chain off a thigh; each part's distance from
+its parent is KH1's motion's (KH1 keys some panels' lengths); no cloth node came nearer a thigh
+than 12.2. Over KH2's run the belt chain swings 115°, the hem panels 45°, the pendant 70°, the
+shorts 5° (KH1's run: 23-54°, 10-34°, 37°, 3-12°). Not checked in game.
+
+Not done: matching KH1's stride phase to KH2's within a cycle (the two runs are stretched end to
+end: Assumption that both start on the same foot), and anything for KH2 moves that stand in for
+no KH1 move (they take whatever KH1 plays meanwhile, live).
 
 Also not carried: the other way
 round, KH1's own animation of all these parts when KH2's model is drawn (`inverse` keeps KH2's

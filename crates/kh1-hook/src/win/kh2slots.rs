@@ -180,7 +180,7 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32);
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     let travel = kind == Kind::GroundCombo && travels(requests[request]);
-    let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, motion, frames, &tracks, travel)) {
+    let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, stands_for, motion, frames, &tracks, travel)) {
         Some(Ok(block)) => (block, true),
         Some(Err(e)) => {
             log(&format!("KH2 slots: KH2 motion {motion} not baked ({e}); drawn over its template"));
@@ -214,11 +214,14 @@ fn swing_rows(rows: &[character_core::ComboRow]) -> Vec<(u16, bool)> {
     out
 }
 
-/// KH2's `motion` baked into a KH1 motion on `template` (`kh1_data::bake`), with its report logged.
-/// `travel`: the move's request has KH1's travel flag (`travels`): KH2's root travel goes in its H10.
-fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], motion: u16, frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
+/// KH2's `motion` baked into a KH1 motion on `template` (KH1's slot `stands_for`, whose own
+/// animation of KH1's own parts it keeps, `Baker::poses`; `kh1_data::bake`), with its report
+/// logged. `travel`: the move's request has KH1's travel flag (`travels`): KH2's root travel goes
+/// in its H10.
+#[allow(clippy::too_many_arguments)]
+fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], stands_for: usize, motion: u16, frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
     let t = std::time::Instant::now();
-    let (poses, moved, scales) = b.poses(kh2, motion, frames, travel).ok_or("KH2 has no animation for it")?;
+    let (poses, moved, scales) = b.poses(kh2, motion, frames, travel, Some(stands_for)).ok_or("KH2 has no animation for it")?;
     let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved, &scales).map_err(|e| e.to_string())?;
     log(&format!(
         "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; travel {} ({} H10 keys); KH1's FK from it within {:.3} units of the pose (worst bone {})",
