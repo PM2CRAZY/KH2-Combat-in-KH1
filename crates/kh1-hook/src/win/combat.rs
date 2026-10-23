@@ -101,7 +101,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // Where KH2 would use one of its ability moves at this press instead, KH2 borrows him for it
     // (`combomods`), at either style.
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::shared::active() && super::shared::kh1_combo(matches!(rd::<i32>(actor + 0x70), 1 | 2)) {
-        let (run, hop) = match super::combomods::attack(actor, row, &|r| row_info(actor, r).map(|i| i.motion as u16 as u32)) {
+        let (run, hop) = match super::combomods::attack(actor, row, dir, &|r| row_info(actor, r).map(|i| i.motion as u16 as u32)) {
             super::combomods::Run::Kh2 => return,
             super::combomods::Run::Row(r) => (r, None),
             super::combomods::Run::Hop(r, l) => (r, Some(l)),

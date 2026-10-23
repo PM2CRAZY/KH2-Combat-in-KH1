@@ -102,9 +102,28 @@ pub struct Situation<'a> {
     pub equipped: &'a [u16],
     /// Character's jump height (for [`FLAG_JUMP_ADJUST`]).
     pub jump_height: f32,
+    /// The press chains on from a finisher (Steam exe: the character's `+0x194` bit 5, which the
+    /// count step `0x1403D6CA0` takes as the finisher's chain, count and finisher count up to the
+    /// most finishers): finisher rows pass whatever the count, normal rows only while one
+    /// finisher has run (`0x1403D7780` / `0x1403D7850`).
+    pub finisher_window: bool,
+    /// Berserk Charge equipped (ability number 107, its bit in `+0x5C0` block `+0x1DC` bit 11) and
+    /// MP charging (`0x1403C1D10`: the status's MP Charge time `+0x1C0` above 0): no finisher
+    /// row passes, every normal row does (exe, the same two tests).
+    pub berserk: bool,
+    /// On the ground, the floor gives out ahead of him (the host's test of KH2's line ahead, exe
+    /// `0x140402D20` -> `0x1403B7BD0` / `0x1403BA750`): row 1 is marked, whatever its conditions.
+    pub drop_ahead: bool,
 }
 
-/// Row-level checks that don't depend on a target.
+/// Berserk Charge's ability number (03system item 0x18B; PTYA rows and the equipped bitset name
+/// abilities by it).
+pub const BERSERK_CHARGE: u16 = 107;
+/// The row KH2 marks when the floor gives out ahead (`Situation::drop_ahead`).
+pub const DROP_AHEAD_ROW: u8 = 1;
+
+/// Row-level checks that don't depend on a target (exe `0x140402750`: the ability, ground or
+/// air, then the finisher test `0x1403D7780` or the normal test `0x1403D7850`).
 pub fn condition(r: &ComboRow, s: &Situation) -> bool {
     if r.motion == 0 || (r.ability != 0 && !s.equipped.contains(&r.ability)) {
         return false;
@@ -112,10 +131,15 @@ pub fn condition(r: &ComboRow, s: &Situation) -> bool {
     if r.is_air() != s.air {
         return false;
     }
+    if s.berserk {
+        return !r.is_finisher();
+    }
     if r.is_finisher() {
-        s.count as i32 + r.combo_offset as i32 >= s.max_count as i32
+        s.finisher_window || s.count as i32 + r.combo_offset as i32 >= s.max_count as i32
     } else {
-        s.finishers <= 1
+        // Refused only past the combo's length (or chaining on from a finisher) once more than one
+        // finisher has run.
+        (!s.finisher_window && s.count < s.max_count) || s.finishers <= 1
     }
 }
 
@@ -191,6 +215,12 @@ pub fn select<'a>(rows: &'a [ComboRow], s: &Situation) -> Option<Choice<'a>> {
         alt
     };
     let mut valid: Vec<Choice<'a>> = rows.iter().filter_map(passes).collect();
+    // The floor giving out ahead: row 1 joins the marked ones in its table place, unchecked (exe).
+    if s.drop_ahead && !s.air {
+        if let Some(r) = by_id(DROP_AHEAD_ROW).filter(|r| !valid.iter().any(|c| std::ptr::eq(c.row, *r))) {
+            mark(rows, &mut valid, Choice { row: r, target: s.primary });
+        }
+    }
     if let Some(c) = walk(&valid) {
         return Some(c);
     }
@@ -199,10 +229,16 @@ pub fn select<'a>(rows: &'a [ComboRow], s: &Situation) -> Option<Choice<'a>> {
         // A table without the default rows (test fixtures): repeat the first passing row.
         return valid.first().copied();
     };
-    let at = rows.iter().position(|r| std::ptr::eq(r, fallback)).unwrap_or(rows.len());
-    let before = valid.iter().filter(|c| rows.iter().position(|r| std::ptr::eq(r, c.row)).unwrap_or(0) < at).count();
-    valid.insert(before, Choice { row: fallback, target: s.primary });
+    mark(rows, &mut valid, Choice { row: fallback, target: s.primary });
     walk(&valid)
+}
+
+/// `c` marked too, in its table place among the marked rows (the exe's marks are bits by table
+/// index, walked in table order).
+fn mark<'a>(rows: &'a [ComboRow], valid: &mut Vec<Choice<'a>>, c: Choice<'a>) {
+    let at = rows.iter().position(|r| std::ptr::eq(r, c.row)).unwrap_or(rows.len());
+    let before = valid.iter().filter(|v| rows.iter().position(|r| std::ptr::eq(r, v.row)).unwrap_or(0) < at).count();
+    valid.insert(before, c);
 }
 
 #[cfg(test)]
@@ -224,8 +260,38 @@ mod tests {
     fn sit(count: u8, motion: u16, t: Option<TargetGeom>) -> Situation<'static> {
         Situation {
             air: false, count, finishers: 1, max_count: 3, current_motion: motion, primary: t, all: &[],
-            equipped: &[], jump_height: 0.0,
+            equipped: &[], jump_height: 0.0, finisher_window: false, berserk: false, drop_ahead: false,
         }
+    }
+
+    #[test]
+    fn berserk_charge_and_the_finishers_chain() {
+        let rows = vec![row(1, 3, 1, FLAG_FINISHER, 155, 0.0, 0.0), row(5, 3, 5, 0, 151, 0.0, 0.0)];
+        // At the combo's end: the finisher.
+        assert_eq!(select(&rows, &sit(3, 0, None)).unwrap().row.motion, 155);
+        // Berserk Charge while MP charges: no finisher, the swing goes on.
+        let s = Situation { berserk: true, ..sit(3, 0, None) };
+        assert_eq!(select(&rows, &s).unwrap().row.motion, 151);
+        // Chaining on from a finisher: a finisher at any count; a normal row once two have run.
+        let s = Situation { finisher_window: true, ..sit(1, 0, None) };
+        assert_eq!(select(&rows, &s).unwrap().row.motion, 155);
+        let s = Situation { finishers: 2, ..sit(1, 0, None) };
+        assert!(condition(&rows[1], &s), "under the length a normal row passes, finishers or not");
+        let s = Situation { finishers: 2, finisher_window: true, ..sit(1, 0, None) };
+        assert!(!condition(&rows[1], &s));
+    }
+
+    #[test]
+    fn drop_ahead_marks_row_one() {
+        let mut hop = row(1, 0, -1, 0, 181, 0.0, 0.0);
+        hop.jump = 21.0;
+        let rows = vec![row(3, 3, 3, FLAG_FINISHER, 155, 0.0, 0.0), hop, row(5, 3, 5, 0, 151, 0.0, 0.0)];
+        assert_eq!(select(&rows, &sit(1, 0, None)).unwrap().row.motion, 151);
+        let s = Situation { drop_ahead: true, ..sit(1, 0, None) };
+        assert_eq!(select(&rows, &s).unwrap().row.id, 1);
+        // Not in the air.
+        let s = Situation { drop_ahead: true, air: true, ..sit(1, 0, None) };
+        assert!(select(&rows, &s).map_or(true, |c| c.row.id != 1));
     }
 
     #[test]

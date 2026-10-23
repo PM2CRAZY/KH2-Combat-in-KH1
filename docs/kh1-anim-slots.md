@@ -613,14 +613,48 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
 - Not changed in the air: KH1's air swing's own lunge and hop (above; at physics KH2 on KH2's
   gravity, `shared::physics::air_step`), not KH2's per-row hop (rows 7..10 hop 14..21 with their
   speed windows). **Open** (a question to the tester): KH2's per-row hop on these too.
-- Found, not added (Steam KH2, `0x140402D20`): on the ground, before the walk, KH2 tests a line
-  ahead of Sora (his facing scaled by a stats length `+0x2C` plus `+0x6F0`, laid on the ground,
-  `0x1403B7BD0` / `0x1403BA750`) and marks row 1 if it is blocked (not in the air, not with `+0x18C`
-  bit 6, no object at `+0x9D8`). The OG rewrite doesn't have it. **Assumption:** a wall or obstacle
-  just ahead.
-- Found, not added: `0x1403D7780` / `0x1403D7850` also force a finisher when `+0x194` bit 5 is set
-  and refuse finishers while `+0x5C0` block `+0x1DC` bit 11 and `0x1403C1D10` hold. What those
-  states are: not looked at.
+- **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
+  ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
+  primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,
+  lays it on the ground (`0x1403B7BD0`: across the ground normal `+0x768` twice, its length
+  kept) and sweeps his collision along it from his position (`0x1403BA750` -> `0x14016FEC0`);
+  the result's bit 0 marks row 1 (unchecked, in its table place). Bit 0 is the mover's "no
+  floor": no floor polygon, or the floor below reach (`0x140172640`). So t374's "blocked"
+  guess was wrong: it is a drop ahead, and row 1 is KH2's hop off it (181, a hop of 21). Not
+  done when he is in the air, with `+0x18C` bit 6, with an object at `+0x9D8`, or with his
+  object entry's `+0xC` bit 1 (what those are: not known; none seen on Sora). `+0x6F0` is his
+  radius from the model's first collision shape of kind 0 or 4 (`0x1403B3200` ->
+  `0x1403C9BC0 (…, 0x11)`, `+0x10`; `kh2_data::sora::bg_shape`). **Assumption**: `+0x150` is the
+  plyr record (its `+0x5C` / `+0x68` reads fit auto-lock range / time), so `+0x2C` is
+  `attack_j_front` (Sora's -5; `AttackParams::jump_front`).
+  Ours: `character_core::select` marks row 1 with `Situation::drop_ahead`
+  (`Character::set_drop_ahead`, ground only); the hook tests the line with KH1's own sweep
+  (`combomods::drop_ahead`: `0x1402C6E70`, Steam only, bytes checked; its total length is
+  `+0x2C0` plus the direction's `w`, set so it is KH2's; KH1's collision block put back after)
+  along KH1's direction for the press (to its target, laid flat, or his facing: **assumption**
+  that it matches KH2's primary target's), and the hop plays as KH2's hops do (above).
+- **The finisher tests' status bits** (the tester: "add that"; Steam KH2, Checked (decomp)):
+  - `+0x194` bit 5: the count step (`0x1403D6CA0`) takes it with the press's hit as the
+    finisher chain (count and finisher count up, while under the most finishers `+0x5C0` block
+    `+0x202`; `+0x18C` bit 10 is the same for a swing's window, the count only; with neither,
+    `+0x18C & 0x1C` restarts the count at 1 / 1), and the Square moves' test (`0x1403A9950`)
+    takes either bit as "in a combo window". **Assumption** (no setter found in the decomp's
+    text): bit 5 is "a finisher's combo window open". With it a finisher row passes at any count
+    (`0x1403D7780`), and a normal row is refused once more than one finisher has run, even under
+    the combo's length (`0x1403D7850`; without the bit a normal row under the length always
+    passes). Ours: `Situation::finisher_window`, set when the press chains on from a finisher
+    (`try_attack`'s Finishing Plus step). The other change: a normal row under the length now
+    passes whatever the finisher count (exe), where the OG refused it past one finisher.
+  - `+0x5C0` block `+0x1DC` bit 11 with `0x1403C1D10`: the block's `+0x1D0..` words are the
+    equipped abilities by ability number (`0x140402750` tests a row's ability there), so bit 11
+    of the fourth word is ability 107, item 0x18B in `03system.bin` (Checked (files)): Berserk
+    Charge. `0x1403C1D10` is `+0x1C0 > 0` on the status block whose MP Charge start
+    (`0x1403C20A0`) sets `+0x1C0` / `+0x1BC` and MP 0: MP charging. With both, no finisher row
+    passes and every normal row does (the combo goes on). The same test (`0x1403D7820`) switches
+    the Attack command to command 0x21D (`0x1403F2600`). Ours: `Situation::berserk`
+    (`Character::set_mp_charging`, `BERSERK_CHARGE` among the equipped). KH1 has no MP Charge
+    and no Berserk Charge in our ability list, so in KH1 it never turns on (a question to the
+    tester).
 - Unverified in game: all of it.
 
 ## 8. KH2's walk and run as slots (t389)

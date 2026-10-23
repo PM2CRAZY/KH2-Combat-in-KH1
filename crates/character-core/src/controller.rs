@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 
 use crate::clip::{Clip, EventKind, WindowKind};
-use crate::combo::{condition, select, Choice, ComboRow, Situation, TargetGeom, FLAG_JUMP_ADJUST};
+use crate::combo::{condition, select, Choice, ComboRow, Situation, TargetGeom, BERSERK_CHARGE, FLAG_JUMP_ADJUST};
 use crate::params::{Abilities, AttackParams, ComboRules, GrowthLevel, MoveParams};
 
 /// Motion ids used by the controller (KH2 player moveset numbering).
@@ -431,6 +431,11 @@ pub struct Character {
     /// (`would_take_after`), for the selector's anti-repeat only (the exe compares each row's
     /// motion with the one playing).
     host_motion: Option<u16>,
+    /// The host's test of KH2's line ahead found the floor giving out (`set_drop_ahead`): the
+    /// selector marks row 1 on the ground (exe `0x140402D20`).
+    drop_ahead: bool,
+    /// MP is charging (`set_mp_charging`): with Berserk Charge equipped, no finishers (exe).
+    mp_charging: bool,
     /// Each attack starts facing the locked-on target (a host's choice; off = the game's turn
     /// windows only).
     face_lock: bool,
@@ -584,6 +589,8 @@ impl Character {
             lock: None,
             forced_row: None,
             host_motion: None,
+            drop_ahead: false,
+            mp_charging: false,
             face_lock: false,
             combo_direction_lock: false,
             auto_target: true,
@@ -1155,6 +1162,22 @@ impl Character {
         self.lock
     }
 
+    /// The floor gives out ahead of him, along the line KH2 tests at an attack press (a host's
+    /// own collision test of it: exe `0x140402D20`, his facing toward the primary target, or his
+    /// own, scaled by the plyr record's `+0x2C` plus his collision radius `+0x6F0`, laid on the
+    /// ground, `0x1403B7BD0`, swept by `0x1403BA750`, whose bit 0 the mover sets when no floor
+    /// is found, `0x140172640`). Read by the next press's row selection on the ground.
+    pub fn set_drop_ahead(&mut self, on: bool) {
+        self.drop_ahead = on;
+    }
+
+    /// MP is charging (KH2's MP Charge; a host that has one): with Berserk Charge equipped
+    /// (`BERSERK_CHARGE` among `abilities.equipped`) no finisher row is taken and the combo goes
+    /// on (exe `0x1403D7780` / `0x1403D7850`).
+    pub fn set_mp_charging(&mut self, on: bool) {
+        self.mp_charging = on;
+    }
+
     pub fn set_lock(&mut self, id: Option<u32>) {
         self.lock = id;
     }
@@ -1488,11 +1511,14 @@ impl Character {
         // game; the exe path for this hasn't been traced yet).
         let hit = self.hit || self.abilities.combo_master || (self.airborne && in_attack);
         let saved = (self.count, self.finishers);
+        // (Chaining on from a finisher: the exe's `+0x194` bit 5 for the row tests.)
+        let mut chained = false;
         // The counter moves when the next swing starts.
         if in_finisher {
             if hit && self.finishers < self.max_finishers() {
                 self.count = self.count.saturating_add(1);
                 self.finishers += 1;
+                chained = true;
             } else if in_attack {
                 // The combo's last finisher: nothing new until its animation has ended (spec).
                 (self.combo_carry, self.carry_finisher) = (carry, carry_finisher);
@@ -1548,6 +1574,11 @@ impl Character {
             all: &all,
             equipped: &self.abilities.equipped,
             jump_height: self.params.jump_height,
+            finisher_window: chained,
+            berserk: self.mp_charging && self.abilities.equipped.contains(&BERSERK_CHARGE),
+            // (KH2 also skips it with the character's `+0x18C` bit 6, an object at `+0x9D8` or its
+            // object entry's `+0xC` bit 1: not known, none of them seen on Sora.)
+            drop_ahead: self.drop_ahead && !air && env.grounded,
         };
         // A forced row (a state's own move: Counterguard, Retaliating Slash, the Square moves)
         // that can't be used is no attack at all; it never falls back to the ordinary combo (the

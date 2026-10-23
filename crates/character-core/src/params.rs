@@ -127,11 +127,15 @@ pub struct AttackParams {
     /// (KH2 sstm "attack distance to speed"). Only rows with a nonzero
     /// speed window lunge; Sora's ground rows don't.
     pub distance_to_speed: f32,
+    /// The plyr record's `attack_j_front` (`+0x2C`; Sora's -5): with his collision radius, how
+    /// far ahead KH2 tests the floor at an attack press (`Character::set_drop_ahead`). **Assumption**
+    /// that the exe's `+0x150` record there is plyr (its `+0x5C` / `+0x68` reads fit it).
+    pub jump_front: f32,
 }
 
 impl Default for AttackParams {
     fn default() -> Self {
-        AttackParams { auto_lock_on_range: 300.0, lock_on_range: 1200.0, lock_on_release_range: 1500.0, distance_to_speed: 0.1 }
+        AttackParams { auto_lock_on_range: 300.0, lock_on_range: 1200.0, lock_on_release_range: 1500.0, distance_to_speed: 0.1, jump_front: 0.0 }
     }
 }
 

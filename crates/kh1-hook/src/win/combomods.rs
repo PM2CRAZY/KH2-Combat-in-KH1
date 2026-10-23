@@ -38,7 +38,7 @@
 //! equipped (else no swing); the finisher is picked once the count reaches the stats' (`+0x6C`)
 //! `+0xD4` (ground) / `+0xD5` (air).
 
-use super::addr::Rva;
+use super::addr::{Build, Rva};
 use super::{log, pose, takeover};
 use character_core::{Button, Character, ComboRow, ComboState, Input};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -190,8 +190,14 @@ pub enum Run {
 /// ability moves instead, else the KH1 row to run: `row`, or KH1's plain swing or finisher row in
 /// its place where KH2's row selection takes that (`kh2_row`), or KH2's hop on KH1's air state
 /// (`kh2_hop`). `request_of`: a KH1 row's motion request (its `+0`).
-pub unsafe fn attack(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
-    match attack_row(actor, row, request_of) {
+pub unsafe fn attack(actor: usize, row: i32, dir: usize, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
+    // (On the ground: KH2's line ahead, for its row 1.)
+    if rd::<i32>(actor + 0x70) == 0 && super::styles::kh2(super::styles::Kind::GroundCombo) {
+        takeover::set_drop_ahead(drop_ahead(actor, dir));
+    }
+    let run = attack_row(actor, row, request_of);
+    takeover::set_drop_ahead(false);
+    match run {
         None => Run::Kh2,
         Some(Ok(r)) => Run::Row(r),
         Some(Err((r, l))) => Run::Hop(r, l),
@@ -250,6 +256,65 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         *l = request_of(row).map(|m| (count, m, count >= kh1_len, air));
     }
     Some(Ok(row))
+}
+
+/// KH1's sweep of Sora's collision along a direction (Steam `0x1402C6E70 (actor, direction)`,
+/// Checked: his collision `+0x2A0` moved in steps (`0x140195180`) for his `+0x2C0` plus the
+/// direction's `w`; 1 when a step finds no floor in reach, the mover's bit 0 of `+0x2D0`), the
+/// test KH1's ground picker marks its row 2 with. Steam only (no Epic address); its bytes are
+/// checked before each call.
+const SWEEP_STEAM: usize = 0x2C6E70;
+const SWEEP_BYTES: [u8; 11] = [0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x68, 0x10];
+/// KH1's collision block on the actor the sweep moves (`+0x2A0`, through its result `+0x2E0`),
+/// put back after ours.
+const COLLISION: usize = 0x2A0;
+const COLLISION_LEN: usize = 0x60;
+
+/// KH2's line ahead at an attack press on the ground (the tester: "add that"; Steam KH2
+/// `0x140402D20`, Checked): the direction to the primary target (or his facing with none),
+/// `attack_j_front` plus his collision radius long (KH2's model's first kind 0 / 4 collision
+/// shape, `0x1403C9BC0 (…, 0x11)`), laid on the ground and swept with his collision
+/// (`0x1403B7BD0` / `0x1403BA750`); bit 0 of the sweep's result is set by KH2's mover when no
+/// floor is found (`0x140172640`), and then row 1 is marked (a hop of 21 off the edge, KH2's air
+/// swing 181). Here: KH1's own sweep (`SWEEP_STEAM`) of that length along KH1's direction for the
+/// press (`dir`: to KH1's target, laid flat, or his facing; **assumption** that it is KH2's
+/// primary target's), KH1's collision block put back after. False off Steam or with no KH2 data.
+unsafe fn drop_ahead(actor: usize, dir: usize) -> bool {
+    if Build::current() != Build::Steam || dir < 0x10000 {
+        return false;
+    }
+    let base = takeover::game_base();
+    if rd::<[u8; 11]>(base + SWEEP_STEAM) != SWEEP_BYTES {
+        note("KH2's line ahead: KH1's sweep (0x1402C6E70) isn't the expected code here; not tested".to_string());
+        return false;
+    }
+    let Some(kh2) = pose::kh2() else { return false };
+    let radius = kh2_data::sora::bg_shape(&kh2.rig.body_shapes).map_or(0.0, |s| s.radius);
+    let length = kh2.character.attack.jump_front + radius;
+    let d: [f32; 4] = rd(dir);
+    let flat = d[0].hypot(d[2]);
+    let (x, z) = if flat > 1e-3 && d[0].is_finite() && d[2].is_finite() {
+        (d[0] / flat, d[2] / flat)
+    } else {
+        let yaw: f32 = rd(actor + 0x3C);
+        if !yaw.is_finite() {
+            return false;
+        }
+        (yaw.sin(), yaw.cos())
+    };
+    let own: f32 = rd(actor + COLLISION + 0x20);
+    if !own.is_finite() || length <= 0.0 {
+        return false;
+    }
+    let saved: [u8; COLLISION_LEN] = rd(actor + COLLISION);
+    let line = [x, 0.0f32, z, length - own];
+    let sweep: unsafe extern "system" fn(usize, *const [f32; 4]) -> u64 = std::mem::transmute(base + SWEEP_STEAM);
+    let hit = sweep(actor, &line) as u32 != 0;
+    wr(actor + COLLISION, saved);
+    if hit {
+        note(format!("KH2's line ahead: no floor within {length:.0} ({:.0} his radius), KH2's row 1 marked", radius));
+    }
+    hit
 }
 
 /// KH2's hop out of KH1's ground combo (Base Combo KH2; the tester: "design and implement
@@ -333,7 +398,7 @@ const AIR_COMBO: Kh1Combo = Kh1Combo { style: super::styles::Kind::AirCombo, swi
 /// KH2's row selection over KH1's own rows (Base / Aerial Combo KH2; the tester: "do option
 /// (a)", KH2 1:1, and "the same KH2 row picker on the air combo"): where KH1's picker took a row
 /// of its own that isn't the kind KH2's pick is (on the ground its dash at a target 160+ away,
-/// rows 0 / 1; its hop, row 2; its rows 9 / 10; its ability finishers 3..7; in the air its row
+/// rows 0 / 1; its walk off a drop ahead, row 2; its rows 9 / 10; its ability finishers 3..7; in the air its row
 /// for a target below or its ability finisher; or a swing where KH2 finishes and the other way
 /// round), and KH2's pick is a plain swing or finisher of that combo (`Kh1Combo::plain`), KH1's
 /// own plain row of that kind runs instead: a swing row whose request isn't the one playing

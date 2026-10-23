@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 393 (testing branch: KH2's drop-ahead row and the finisher tests' status bits)
+- From the KH2 decomp (Steam): the "blocked line" is the mover's no-floor flag: row 1 on no floor ahead (`0x140402D20` /
+  `0x1403BA750`, bit 0, `0x140172640`): `drop_ahead`, tested with KH1's sweep `0x1402C6E70` (Steam only) at attack_j_front +
+  radius (assumption: KH2's length field). `+0x194` bit 5 (the finisher chain, assumption) and Berserk Charge during MP
+  Charge (`+0x1DC` bit 11 = ability 107, `0x1403C1D10`) in `combo::condition`; a normal row under the combo length passes
+  whatever the finisher count (the exe; the OG rewrite refused it). KH1 has no MP Charge, so Berserk Charge stays off.
+
 ### 2026-10-23: Stage 392 (testing branch: KH2's hop rows on KH1's air state)
 - The tester: KH2's rows that hop to a target above. KH2's plain hop rows (0: 182, 1: 181): KH1's state 2 (`0x1402B1960`),
   count 1, its air swing row with KH2's motion, then KH2's height and speed on KH1's air fields

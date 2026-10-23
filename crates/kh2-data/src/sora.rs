@@ -238,6 +238,7 @@ pub fn attack_params_for(p: &Pref, moveset: usize) -> AttackParams {
         lock_on_range: f(sstm, SSTM_FIELDS, "lock_on_range"),
         lock_on_release_range: f(sstm, SSTM_FIELDS, "lock_on_release_range"),
         distance_to_speed: sstm.get(SSTM_ATTACK_DISTANCE_TO_SPEED).copied().unwrap_or(0.0),
+        jump_front: g("attack_j_front"),
     }
 }
 

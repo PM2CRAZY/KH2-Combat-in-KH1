@@ -1490,6 +1490,15 @@ pub unsafe fn kh2_would_take(actor: usize, from: Option<character_core::ComboSta
     kh2_would_take_launch(actor, from, playing, air, square).map(|(r, len, neg, _)| (r, len, neg))
 }
 
+/// KH2's line ahead found the floor giving out (`combomods::drop_ahead`): for the next
+/// `kh2_would_take*` only (`Character::set_drop_ahead`), so the air, Square and hand-back asks
+/// never see it.
+static DROP_AHEAD: AtomicBool = AtomicBool::new(false);
+
+pub fn set_drop_ahead(on: bool) {
+    DROP_AHEAD.store(on, Ordering::Relaxed);
+}
+
 /// `kh2_would_take`, with the hop KH2's row starts there (`Character::would_take_launch`: a row
 /// with `jump`, its height and sideways velocity for that target).
 pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::ComboState>, playing: Option<u16>, air: bool, square: bool) -> Option<(character_core::ComboRow, u8, u8, Option<character_core::Launch>)> {
@@ -1514,6 +1523,7 @@ pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::C
     let p = rd::<[f32; 3]>(actor + 0x10);
     let above = rd::<f32>(actor + 0x3D4);
     let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
+    d.character.set_drop_ahead(DROP_AHEAD.swap(false, Ordering::Relaxed) && !air);
     let (row, launch) = d.character.would_take_launch(from, playing, air, square, stick, &env)?;
     Some((row, d.character.combo_length(air), d.character.abilities.negative_combo, launch))
 }
