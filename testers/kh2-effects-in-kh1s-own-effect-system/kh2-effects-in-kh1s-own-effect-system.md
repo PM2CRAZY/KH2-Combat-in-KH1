@@ -10,6 +10,7 @@
 - [4. Mr Bugs: 4. it should be exact to kh2 so for kh2 moves take the 2 fra](#^m4)
 - [5. Assistant: t394 to t398 (one part each; the build at the top of the bra](#^m5)
 - [6. Mr Bugs: 1. (a) just make sure that kh1s effects still behave the sam](#^m6)
+- [7. Assistant: t402 to t404 (one each)](#^m7)
 
 ---
 
@@ -194,3 +195,21 @@
 ^m6
 
 
+> [!tip] Assistant
+> t402 to t404 (one each)
+>
+> 1. **t402:** KH2's effects now use KH2's own colour program, so their fades update every frame like KH2's (clamped as KH2 does). Only the effect file we build for KH2's moves points at it; KH1's own effects keep KH1's colour program exactly, untouched.
+> 2. **t403:** KH2 does the same as KH1 here: an effect follows the bone as it was the frame before. The difference was the first frame: KH2 reads the bone fresh on that frame (and keeps reading while an effect waits to start), while KH1 read it a frame early. KH2's effects now match KH2 on that first frame too. KH1's own effects aren't touched.
+> 3. **t404:** on Steam, Explosion no longer uses the old effect player at all, and the `kh2_fx_native` ini switch is gone. The old player only takes Explosion while the effect file is still building in the first seconds, if it couldn't be built, or on non-Steam builds. It still runs Sora's other moves' effects (Vicinity Break, Magnet Burst, Aerial Finish and the rest), the form, Reflect and Wisdom effects, KH2 magic, and the Keyblade vanish flash. The full list is in `docs/kh2-effects.md` §17.8.
+>
+> **Check:** decomp (both games' colour programs and bone bindings) and the exe. Not checked in game. Assumptions: KH2's colour scale (1/128, an operand the KH2 decomp drops; KH1's and the old player use the same), and that Sora has one skeleton pass per frame.
+>
+> Questions:
+> 1. If KH1 has no free effect slot when Explosion fires, it now just doesn't show, like KH1's own effects. (a) keep that, or (b) let the old player draw it then?
+> 2. Next: (a) Magnet Burst through KH1 (it uses the same two programs), (b) another move's effects, or (c) something else?
+
+^m7
+
+
+> [!note] Tester Mr Bugs
+> 
