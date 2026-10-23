@@ -592,6 +592,24 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   182 alternating (row 9's `sub` 10), finisher 183 (row 8), 184 after it with Finishing Plus;
   a target within 260 ahead or to the side: finisher 184 (row 7); a target below him in reach:
   182 (row 10).
+- **KH2's hops** (the tester: "design and implement natively (KH1's air state with KH2's arc and
+  numbers)"; Base Combo KH2, `combomods::kh2_hop`): KH2's plain hop rows are row 0 (motion 182,
+  a target well above) and row 1 (181, the drop ahead, item 4); both play KH2's air swings and
+  queue its fall (`next_motion` 4). At such a pick KH1's air state has him: `combat::exec` sets
+  KH1's state 2 (`0x1402B1960`, Steam, Checked: state 2 has no enter or exit step,
+  `0x1402B1B80`'s table; the hand-backs already do this, `takeover`, `combat::command`), KH1's
+  count to 1 (KH2's: a hop from the ground restarts it), runs KH1's air swing row (18, or 17
+  when 18's request plays) with its request pointed at our slot of KH2's motion, then puts
+  KH2's hop on KH1's fields (`shared::physics::kh2_hop`): the height and sideways velocity KH2's
+  controller works out for that target (`Character::would_take_launch`, `Launch`: height
+  `clamp(target height, jump_min, jump_max (+ jump height with flag 2))`, speed `clamp(gap /
+  uptime, speed_min, speed_max)` toward the target; no target: the row's `jump` and
+  `speed_max`; the OG rewrite's rule), as KH2's arc on KH2's gravity (physics KH2, carried on by
+  `air_step` as KH2's jump is) or KH1's rise of that height (physics KH1). KH1's air combo goes
+  on from there. Needs the Aerial Combo at KH2 too (else KH1's row is kept, logged). Not checked:
+  in game (that KH1's air row runs as expected right after the state change; the hand-backs do
+  the same before KH1's own air attack), and KH2's hop rule in the KH2 exe (from the OG rewrite).
+  Ability hops (Aerial Sweep 33, Aerial Dive 48) stay borrows.
 - Not changed in the air: KH1's air swing's own lunge and hop (above; at physics KH2 on KH2's
   gravity, `shared::physics::air_step`), not KH2's per-row hop (rows 7..10 hop 14..21 with their
   speed windows). **Open** (a question to the tester): KH2's per-row hop on these too.

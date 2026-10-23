@@ -174,19 +174,38 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
     }
 }
 
+/// What `combat::exec` runs for an Attack KH1's own combo took (`attack`).
+pub enum Run {
+    /// KH2 borrows him for one of its ability moves: no KH1 row.
+    Kh2,
+    /// This KH1 row (its own, or its plain one KH2's row selection took, `kh2_row`).
+    Row(i32),
+    /// KH2's hop (`kh2_hop`): KH1's air state entered, this KH1 air row run, then KH2's arc and
+    /// speed on it (`shared::physics::kh2_hop`).
+    Hop(i32, character_core::Launch),
+}
+
 /// An Attack KH1's own combo took (`combat::exec`, base Sora in KH1's own states, the combo style
-/// KH1's where he is, KH1's `row` about to run): `None` when KH2 borrows him for one of its
-/// ability moves instead (no KH1 row run), else the KH1 row to run: `row`, or KH1's plain swing
-/// or finisher row in its place where KH2's row selection takes that (`kh2_row`). `request_of`:
-/// a KH1 row's motion request (its `+0`).
-pub unsafe fn attack(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<i32> {
+/// KH1's where he is, KH1's `row` about to run): `Run::Kh2` when KH2 borrows him for one of its
+/// ability moves instead, else the KH1 row to run: `row`, or KH1's plain swing or finisher row in
+/// its place where KH2's row selection takes that (`kh2_row`), or KH2's hop on KH1's air state
+/// (`kh2_hop`). `request_of`: a KH1 row's motion request (its `+0`).
+pub unsafe fn attack(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
+    match attack_row(actor, row, request_of) {
+        None => Run::Kh2,
+        Some(Ok(r)) => Run::Row(r),
+        Some(Err((r, l))) => Run::Hop(r, l),
+    }
+}
+
+unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<Result<i32, (i32, character_core::Launch)>> {
     // (KH1's ground state or its jump / fall: not its flight, 8, nor its other states.)
     let state = rd::<i32>(actor + 0x70);
     if !matches!(state, 0..=2) || super::form::in_form() {
-        return Some(row);
+        return Some(Ok(row));
     }
     let air = matches!(state, 1 | 2);
-    let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Some(row) };
+    let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Some(Ok(row)) };
     let last = LAST.try_lock().ok().and_then(|l| *l);
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
@@ -202,7 +221,9 @@ pub unsafe fn attack(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
     // (KH2's motion KH1 plays now for its swing: KH2's anti-repeat passes over it, as over its
     // own swing playing.)
-    let pick = takeover::kh2_would_take(actor, Some(from), super::kh2slots::playing_motion(actor), air, false);
+    let taken = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false);
+    let launch = taken.as_ref().and_then(|t| t.3);
+    let pick = taken.map(|(r, len, neg, _)| (r, len, neg));
     let why = pick.as_ref().and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len));
     note(format!(
         "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",
@@ -214,13 +235,62 @@ pub unsafe fn attack(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         want(Move::Row { id: r.id, state: from });
         return None;
     }
+    if !air {
+        if let Some((r, l)) = pick.as_ref().zip(launch).and_then(|((p, ..), l)| kh2_hop(actor, row, p, l, request_of)) {
+            if let Ok(mut g) = LAST.lock() {
+                *g = request_of(r).map(|m| (1, m, false, true));
+            }
+            return Some(Err((r, l)));
+        }
+    }
     let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
     let row = kh2_row(actor, combo, row, pick.as_ref().map(|(r, ..)| r), request_of);
     select_swing(combo, request_of(row), pick.as_ref().map(|(r, ..)| r));
     if let Ok(mut l) = LAST.lock() {
         *l = request_of(row).map(|m| (count, m, count >= kh1_len, air));
     }
-    Some(row)
+    Some(Ok(row))
+}
+
+/// KH2's hop out of KH1's ground combo (Base Combo KH2; the tester: "design and implement
+/// natively (KH1's air state with KH2's arc and numbers)"): KH2's pick is a ground row that hops
+/// with no ability (row 0, motion 182, at a target well above; row 1, 181, the drop ahead), so
+/// KH1's air state has him for it: KH1's own air swing row (18, or 17 when 18's request is
+/// playing: its air picker's fallback order), whose request then plays our slot of KH2's motion
+/// (KH2's hop rows play its air swings, built for KH1's air requests, `kh2slots`), started out of
+/// KH1's air state (`combat::exec`: KH1's state set to 2 as the hand-backs do) with KH1's combo
+/// count at 1 (KH2's: a hop from the ground restarts the count), then KH2's arc and sideways speed
+/// on it (`launch`: the height and speed KH2's controller works out for the target,
+/// `shared::physics::kh2_hop`). KH1's air combo goes on from there (`AIR_COMBO`). The KH1 air row
+/// to run, if so; `None` (KH1's row as before) with the Aerial Combo at KH1 (the slot plays KH1's
+/// air swing there) or no slot for the motion.
+unsafe fn kh2_hop(actor: usize, row: i32, pick: &ComboRow, launch: character_core::Launch, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<(i32, character_core::Launch)> {
+    use super::styles::{kh2, Kind};
+    if !kh2(Kind::GroundCombo) || pick.is_air() || !pick.is_jump() || pick.ability != 0 {
+        return None;
+    }
+    if !kh2(Kind::AirCombo) {
+        note(format!("KH2's row selection: KH2's hop, row {} motion {}, not played: the Aerial Combo style is KH1's (KH1's row {row} kept)", pick.id, pick.motion));
+        return None;
+    }
+    let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
+    let Some((r, q)) = AIR_COMBO.swing_rows.iter().filter_map(|&r| Some((r, request_of(r)?))).find(|&(_, q)| AIR_COMBO.swings.contains(&q) && q != playing && super::kh2slots::has(q as usize, pick.motion)) else {
+        note(format!("KH2's row selection: KH2's hop, row {} motion {}, not played: no air swing row of KH1's free with a slot for it (KH1's row {row} kept)", pick.id, pick.motion));
+        return None;
+    };
+    super::kh2slots::pick(q as usize, Some(pick.motion));
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    if info >= 0x10000 {
+        wr(info + 0x41, 1u8);
+    }
+    note(format!(
+        "KH2's row selection: KH2's hop, row {} motion {}: KH1's row {row} replaced by its air row {r} (request {q:#x}) in its air state, {:.0} high, {:.1}/frame sideways",
+        pick.id,
+        pick.motion,
+        launch.height,
+        launch.velocity[0].hypot(launch.velocity[1])
+    ));
+    Some((r, launch))
 }
 
 /// KH1's combo, ground or air, for KH2's row selection: its style, its swing requests and its

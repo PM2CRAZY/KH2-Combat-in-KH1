@@ -639,6 +639,44 @@ pub mod physics {
         m
     }
 
+    /// KH2's hop of a combo row (`combomods`: a ground row with `jump`, KH1's air swing row run
+    /// for it out of KH1's air state just entered, `combat::exec`): KH1's arc fields and air speed
+    /// set to KH2's, after the row's start set its own lunge and hop (`0x1402A68F0`, Steam: the
+    /// air rows 15..18 give `+0x3C0` 8 / 12 / 4 along the direction, and the row's own hop).
+    /// `height`: KH2's rise (`Launch`), `vel`: its sideways velocity (x / z, a 60 Hz frame).
+    /// Physics KH2: KH2's arc for that height on KH2's gravity, which `air_step` then carries on
+    /// (as `takeoff` does for KH2's jump); physics KH1: KH1's rise of that height
+    /// (`kh1phys::Arc::hop`, KH1's gravity), the row's height and speed being the move's own
+    /// (`docs/kh1-physics.md` §7).
+    pub unsafe fn kh2_hop(actor: usize, height: f32, vel: [f32; 2]) {
+        let y: f32 = rd(actor + 0x14);
+        if !is_sora(actor) || !y.is_finite() || !height.is_finite() || rd::<i32>(actor + 0x70) != 2 {
+            return;
+        }
+        let vel = kh1phys::carried(vel);
+        let kh2_numbers = if kh2() { numbers() } else { None };
+        let how = match kh2_numbers {
+            Some(n) => {
+                let arc = Arc::new(height, n.gravity);
+                let kh1 = kh1phys::Arc::from_kh2(&arc, y, n.gravity, n.fall_max);
+                set_kh1_motion(actor, &Motion { h: vel, arc: kh1 }, dt());
+                if let Ok(mut a) = AIR.lock() {
+                    *a = Some(Air { arc, last_y: y, asked_up: 0.0, written: Some((y, kh1)) });
+                }
+                format!("KH2's arc, {:.1} frames up", arc.uptime)
+            }
+            None => {
+                set_kh1_motion(actor, &Motion { h: vel, arc: kh1phys::Arc::hop(y, height) }, dt());
+                off_air();
+                "KH1's gravity (physics KH1)".to_string()
+            }
+        };
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 40 {
+            super::super::log(&format!("KH2's hop on KH1's air state: {height:.0} high, {:.1}/frame sideways, {how}", vel[0].hypot(vel[1])));
+        }
+    }
+
     /// The last game frame KH2's arc on KH1's air state was past its apex (`air_step`), 0 none.
     static ARC_FALL_FRAME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 

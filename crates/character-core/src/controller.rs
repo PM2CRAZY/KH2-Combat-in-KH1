@@ -200,6 +200,16 @@ pub struct Output {
     pub events: Vec<EventKind>,
 }
 
+/// The hop a combo row with `jump` starts (`Character::would_take_launch`): the arc's height
+/// (`Arc::new`), the sideways velocity it sets (units a 60 Hz frame, x / z), and the gravity they
+/// were worked out with (the uptime the speed is spread over).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Launch {
+    pub height: f32,
+    pub velocity: [f32; 2],
+    pub gravity: f32,
+}
+
 /// KH2's jump curve. Rising: `y = h * sin(pi/2 * sin(pi/2 * t/T))` with
 /// `T = sqrt(2h/g)`; after the apex, `y = h - g/2 * (t - T)^2`. `t` is in
 /// 60 Hz frames.
@@ -1191,6 +1201,13 @@ impl Character {
     /// playing (exe: the walk compares each valid row's motion with the one playing, Steam
     /// `0x140402C50`), so the host's combo alternates as KH2's does.
     pub fn would_take_after(&mut self, from: Option<ComboState>, playing: Option<u16>, air: bool, square: bool, stick: [f32; 2], env: &Env) -> Option<ComboRow> {
+        self.would_take_launch(from, playing, air, square, stick, env).map(|(row, _)| row)
+    }
+
+    /// `would_take_after`, with the hop the row starts (a row with `jump`: `Launch`, its height and
+    /// sideways velocity as this controller works them out for that target, `try_attack`), so a
+    /// host can start the same hop in its own air state. Nothing of `self` changes.
+    pub fn would_take_launch(&mut self, from: Option<ComboState>, playing: Option<u16>, air: bool, square: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
         // (The moveset isn't cloned: the trial borrows it and gives it back.)
         let moveset = std::mem::take(&mut self.moveset);
         let mut t = self.clone();
@@ -1223,8 +1240,9 @@ impl Character {
             Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) if took => Some(row.clone()),
             _ => None,
         };
+        let launch = row.as_ref().filter(|r| r.is_jump()).and_then(|_| t.arc.filter(|_| t.airborne)).map(|a| Launch { height: a.height, velocity: t.vel_h, gravity: t.params.gravity });
         self.moveset = std::mem::take(&mut t.moveset);
-        row
+        row.map(|r| (r, launch))
     }
 
     /// The combo's length now (swings to its finisher, with Combo Plus, Air Combo Plus and

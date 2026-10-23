@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 392 (testing branch: KH2's hop rows on KH1's air state)
+- The tester: KH2's rows that hop to a target above. KH2's plain hop rows (0: 182, 1: 181): KH1's state 2 (`0x1402B1960`),
+  count 1, its air swing row with KH2's motion, then KH2's height and speed on KH1's air fields
+  (`Character::would_take_launch`, `Launch`, `shared::physics::kh2_hop`; the hop numbers from the OG rewrite's rule, not the
+  KH2 exe). Needs the Aerial Combo style on KH2 too, else KH1's row is kept and logged.
+
 ### 2026-10-23: Stage 391 (testing branch: KH2's row selection on KH1's air combo)
 - The tester: the same picker on the air combo. KH2's pick plays on KH1's air requests 0xCC / 0xCD / 0xCE (slots for 181, 182;
   183, 184, `kh2slots::swing_rows` with `air`); KH1's air rows 18 / 17 / 16 / 15 (`0x1402A6C70`) give way as on the

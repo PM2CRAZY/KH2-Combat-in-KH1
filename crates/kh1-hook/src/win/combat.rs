@@ -101,7 +101,11 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // Where KH2 would use one of its ability moves at this press instead, KH2 borrows him for it
     // (`combomods`), at either style.
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::shared::active() && super::shared::kh1_combo(matches!(rd::<i32>(actor + 0x70), 1 | 2)) {
-        let Some(run) = super::combomods::attack(actor, row, &|r| row_info(actor, r).map(|i| i.motion as u16 as u32)) else { return };
+        let (run, hop) = match super::combomods::attack(actor, row, &|r| row_info(actor, r).map(|i| i.motion as u16 as u32)) {
+            super::combomods::Run::Kh2 => return,
+            super::combomods::Run::Row(r) => (r, None),
+            super::combomods::Run::Hop(r, l) => (r, Some(l)),
+        };
         // KH2's row selection ran KH1's plain row in place of its dash (rows 0 / 1): the ground
         // picker left the dash's distance in the direction's y (`0x1402A6EE0`, Steam, Checked;
         // the plain path has 0 there, the row runner reads it only for rows 0 / 1).
@@ -109,7 +113,17 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
             wr(dir + 4, 0.0f32);
         }
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
-        return f(actor, run, dir);
+        let Some(l) = hop else { return f(actor, run, dir) };
+        // KH2's hop: KH1's air state has him (as the hand-backs put him there, `combat::command`,
+        // `takeover`), KH1's air swing row starts in it, then KH2's arc and speed replace the
+        // row's own lunge and hop.
+        let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
+        set_state(actor, 2);
+        wr(actor + 0x3D0, 0u32);
+        wr(actor, rd::<u32>(actor) & !0x1_0000);
+        f(actor, run, dir);
+        super::shared::physics::kh2_hop(actor, l.height, l.velocity);
+        return;
     }
     // KH1's own combo (`stylecombo`, the Ground / Aerial Combo style set to KH1): its row runs.
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::stylecombo::kh1_row(actor) {

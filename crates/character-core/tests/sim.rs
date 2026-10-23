@@ -246,6 +246,28 @@ fn host_swing_playing_is_passed_over() {
 }
 
 #[test]
+fn host_trial_gives_the_rows_hop() {
+    // A ground row that hops (KH2's rows 0 / 1): the trial gives its launch, the row's own height
+    // and speed with no target; a plain swing gives none.
+    let mut ch = sora();
+    let env = Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: &[], ledges: &[] };
+    let (r, l) = ch.would_take_launch(None, None, false, false, [0.0; 2], &env).unwrap();
+    assert_eq!(r.motion, 100);
+    assert!(l.is_none());
+    let mut hop = row(4, 101, false, false);
+    (hop.jump, hop.jump_min, hop.jump_max, hop.speed_max) = (20.0, 20.0, 20.0, 5.0);
+    ch.moveset.combo_rows.insert(0, hop);
+    let (r, l) = ch.would_take_launch(None, None, false, false, [0.0; 2], &env).unwrap();
+    assert_eq!(r.motion, 101);
+    let l = l.unwrap();
+    assert_eq!(l.height, 20.0);
+    assert!((l.velocity[0].hypot(l.velocity[1]) - 5.0).abs() < 1e-4);
+    assert_eq!(l.gravity, ch.params.gravity);
+    // Nothing of the controller changed.
+    assert!(!ch.airborne());
+}
+
+#[test]
 fn whiffed_swings_do_not_advance_the_combo() {
     let mut w = World::new(sora());
     let (motions, _) = mash(&mut w, false);
