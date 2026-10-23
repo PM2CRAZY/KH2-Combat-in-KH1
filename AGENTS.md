@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 423 (testing branch: KH2 effects: Valor's and Final's packages through KH1)
+- Body and object-root anchors through KH1; weapon points stay on `kh2fx` (open question). Notes §18.8.
+
 ### 2026-10-23: Stage 422 (testing branch: KH2 effects: one DPX per package; the Keyblade's vanish flash and unbound elements)
 - Unbound elements: KH1's start, then the binding disarmed (mode 0 + bind-once, Checked (exe)). Vanish flash at blade
   t = 0.5 (assumption, as the old player). `plug` flags only ever turn on. Notes §18.7.

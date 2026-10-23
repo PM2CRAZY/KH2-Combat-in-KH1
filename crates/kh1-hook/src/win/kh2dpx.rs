@@ -112,6 +112,18 @@ const ON: &[i16] = &[
 ];
 /// The Keyblade's package's elements switched on: its vanish flash (`weapon_vanish`).
 const WEAPON_ON: &[i16] = &[super::kh2fx::WEAPON_VANISH as i16];
+/// The forms' packages (Sora's skeleton: his bones' anchors). Their weapon points stay with
+/// `kh2fx` (open with the tester): 0x4003 / 0x4005 / 0x4007 the first Keyblade's (KH1's blade
+/// binding would turn them with the blade, KH2's weapon bone; `kh2fx` turns them with Sora's
+/// facing, as the tester asked for Valor's grounded finisher), 0x4004 / 0x4006 / 0x4008 the
+/// second's (KH1 has no second Keyblade to bind to).
+fn form_anchor(code: u16) -> Option<Anchor> {
+    if (0x4003..=0x4008).contains(&code) {
+        return None;
+    }
+    anchor(code)
+}
+
 /// The Keyblade's package names its own (weapon skeleton) bones; KH2's call of its vanish flash
 /// isn't traced, and `kh2fx` puts every code half way along the blade, turned as the hand. KH1's:
 /// the point half way along its blade (binding mode 3, t = 0.5), turned as the blade bone.
@@ -324,20 +336,23 @@ struct Hd {
     dds: Vec<u8>,
 }
 
-/// Which package a native element is of: Sora's (`obj/P_EX100.a.us`) or the Keyblade's
-/// (`obj/W_EX010.a.us`).
+/// Which package a native element is of: Sora's (`obj/P_EX100.a.us`), the Keyblade's
+/// (`obj/W_EX010.a.us`), Valor Form's (`obj/P_EX100_BTLF.a.us`) or Final Form's
+/// (`obj/P_EX100_ULTF.a.us`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Pkg {
     Sora,
     Weapon,
+    Valor,
+    Final,
 }
 
 struct Dpx {
     pkg: Pkg,
     /// Its name in the log and (with `kh2fx_` / `_dpx`) in KH1's loaded-file list.
     label: &'static str,
-    /// Its elements switched on for KH1.
-    on: &'static [i16],
+    /// Its elements switched on for KH1 (`None`: every one built).
+    on: Option<&'static [i16]>,
     /// Owns the bytes; never freed or moved (KH1's effects point into it).
     _buf: Vec<u8>,
     at: usize,
@@ -365,7 +380,7 @@ struct Source {
     /// Its file in KH2's install (BAR, or a PAX), and the name of its PAX entry if it has several.
     path: &'static str,
     pax_name: Option<&'static str>,
-    on: &'static [i16],
+    on: Option<&'static [i16]>,
     /// The elements that play together (one DPD each, before the rest's one per effect).
     sets: Vec<Vec<i16>>,
     /// KH1's anchor for one of its KH2 bone codes.
@@ -375,7 +390,8 @@ struct Source {
 }
 
 /// Builds the KH1 DPXs in the background (from the KH2 install, as `kh2fx`): Sora's package
-/// once KH2 Sora's moveset is loaded (its motions group the elements), then the Keyblade's.
+/// once KH2 Sora's moveset is loaded (its motions group the elements), then the Keyblade's, then
+/// (with Drive on) Valor's and Final's (their own movesets' motions group theirs).
 pub fn start() {
     if super::settings::get().kh2_effects.is_none() {
         return;
@@ -393,17 +409,19 @@ pub fn start() {
             std::thread::sleep(std::time::Duration::from_millis(500));
         };
         // The elements each of KH2 Sora's motions starts (in motion order), then Revert's.
-        let mut motions: Vec<(&u16, &character_core::Clip)> = kh2.character.moveset.clips.iter().collect();
-        motions.sort_by_key(|m| *m.0);
-        let mut sets: Vec<Vec<i16>> = motions
-            .iter()
-            .map(|(_, c)| c.events.iter().filter_map(|e| if let character_core::EventKind::Effect(el) = e.kind { Some(el) } else { None }).collect())
-            .collect();
+        let mut sets = motion_sets(&kh2.character);
         sets.push(super::form::REVERT_ELEMENTS.to_vec());
-        let sources = [
-            Source { pkg: Pkg::Sora, label: "p_ex100", path: "obj/P_EX100.a.us", pax_name: Some("p_ex"), on: ON, sets, anchor, ignore: 0 },
-            Source { pkg: Pkg::Weapon, label: "w_ex010", path: "obj/W_EX010.a.us", pax_name: None, on: WEAPON_ON, sets: Vec::new(), anchor: weapon_anchor, ignore: ENDS_WITH_MOTION },
+        let mut sources = vec![
+            Source { pkg: Pkg::Sora, label: "p_ex100", path: "obj/P_EX100.a.us", pax_name: Some("p_ex"), on: Some(ON), sets, anchor, ignore: 0 },
+            Source { pkg: Pkg::Weapon, label: "w_ex010", path: "obj/W_EX010.a.us", pax_name: None, on: Some(WEAPON_ON), sets: Vec::new(), anchor: weapon_anchor, ignore: ENDS_WITH_MOTION },
         ];
+        if super::settings::get().drive {
+            for (pkg, label, path, form) in [(Pkg::Valor, "p_ex100_btlf", "obj/P_EX100_BTLF.a.us", kh2.valor.as_ref()), (Pkg::Final, "p_ex100_ultf", "obj/P_EX100_ULTF.a.us", kh2.final_form.as_ref())] {
+                if let Some(f) = form {
+                    sources.push(Source { pkg, label, path, pax_name: Some("p_ex"), on: None, sets: motion_sets(&f.character), anchor: form_anchor, ignore: 0 });
+                }
+            }
+        }
         let common = (|| -> Result<(kh2_data::Install, kh2_data::Source, Vec<u8>), String> {
             let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
             let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
@@ -431,6 +449,13 @@ pub fn start() {
             }
         }
     });
+}
+
+/// The elements each motion of a moveset starts (its frame triggers 1), in motion order.
+fn motion_sets(c: &character_core::Character) -> Vec<Vec<i16>> {
+    let mut motions: Vec<(&u16, &character_core::Clip)> = c.moveset.clips.iter().collect();
+    motions.sort_by_key(|m| *m.0);
+    motions.iter().map(|(_, c)| c.events.iter().filter_map(|e| if let character_core::EventKind::Effect(el) = e.kind { Some(el) } else { None }).collect()).collect()
 }
 
 /// A native element's layer and its copy of its effect: the element's offset and rotation
@@ -519,7 +544,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, common: &[u8], s: &
         }
         match layer(pax_data, &parsed, el, s.anchor, s.ignore) {
             Ok((l, v, note)) => {
-                if s.on.contains(&el) {
+                if s.on.is_none_or(|on| on.contains(&el)) {
                     log(&format!("KH2 effects (native): {}: {note}", s.label));
                 }
                 layers.push(l);
@@ -757,7 +782,7 @@ pub fn event(motion: u16, el: i16) -> bool {
 fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
     let Ok(mut g) = PACKS.lock() else { return false };
     let Some(d) = g.iter_mut().find(|d| d.pkg == pkg) else { return false };
-    if !d.on.contains(&el) {
+    if !d.on.is_none_or(|on| on.contains(&el)) {
         return false;
     }
     let Some(&layer) = d.layers.iter().find(|l| l.el == el) else { return false };
@@ -835,6 +860,12 @@ fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
         ));
     }
     element != 0 || owned
+}
+
+/// A frame trigger 1 of Valor's or Final's motion (`kh2fx::form_event`): its element from that
+/// form's own package (`play`): true if KH1 plays it.
+pub fn form_event(final_form: bool, motion: u16, el: i16) -> bool {
+    play(if final_form { Pkg::Final } else { Pkg::Valor }, motion, el)
 }
 
 /// The Keyblade's vanish flash (`kh2fx::weapon_vanish`, as KH2 puts the Keyblade away, before

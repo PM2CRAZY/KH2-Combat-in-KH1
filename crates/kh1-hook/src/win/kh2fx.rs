@@ -288,6 +288,11 @@ pub fn form_event(motion: u16, el: i16) {
     if el < 0 || super::settings::get().kh2_effects.is_none() {
         return;
     }
+    // (The effects port) KH1's own effect system plays it once the form's DPX is built (`kh2dpx`).
+    if super::kh2dpx::form_event(super::form::in_final(), motion, el) {
+        unsafe { super::kh2sound::spell_element(if super::form::in_final() { FINAL } else { VALOR }, el as u16) };
+        return;
+    }
     let Ok(mut g) = STATE.lock() else { return };
     let Some(s) = g.as_mut() else { return };
     let tip = s.tip_local;

@@ -1582,3 +1582,19 @@ elements; **Checked (files)**):
   bind-once bit, which KH1's binding task (`0x1402AE910`) answers on its first run by freeing the
   record and ending, without moving the element. **Checked (exe)**. Steam only (the binding list's
   address). KH2 bone 0 (the root, at the hips) is KH1's bone 0 (the same bind frame).
+
+### 18.8 Valor's and Final's packages
+
+- With Drive on, `kh2dpx` also builds Valor Form's (`obj/P_EX100_BTLF.a.us`) and Final Form's
+  (`obj/P_EX100_ULTF.a.us`) packages (PAX "p_ex", else the first), grouped by their own movesets'
+  motions (the frame triggers 1 the mod's form motions fire, `form::effect` →
+  `kh2fx::form_event`). Every element built is switched on; the gate (anchor, flags, programs)
+  decides at play. The element's sound is still `kh2sound::spell_element`'s.
+- Anchors: the forms have Sora's skeleton (`pose::Form`), so his bones' table (§18.3). Their
+  weapon points stay with `kh2fx` for now: 0x4003 / 0x4005 / 0x4007 (the first Keyblade) because
+  `kh2fx` turns them with Sora's facing at the blade's point (the tester's request for Valor's
+  grounded finisher), where KH1's blade binding turns them with the blade as KH2's weapon bone
+  does (a question for the tester); 0x4004 / 0x4006 / 0x4008 (the second Keyblade, Valor's left
+  hand, Final's second floating one) because KH1 has no second Keyblade to bind to.
+- Not checked offline: neither file is staged here, so which bones, flags and programs their
+  elements use is only known at load (logged: each element switched on, each left out and why).
