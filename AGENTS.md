@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 410 (testing branch: KH2's combo rows checked in the tester's traces)
+- His t409 traces f37236..f44266 (physics KH1, Base / Aerial Combo KH2): every air pick and per-row hop is KH2's rule
+  (heights 21 / 17 / 21, 67..71 toward an enemy above; speeds at the row bounds or the gap's). Notes and two comments
+  corrected: KH2's row 10 and KH1's air row 17 are for a target above, 184 / 152 / 154 only off the primary's line. No
+  behaviour change. Notes `docs/kh1-anim-slots.md` §7.
+
 ### 2026-10-23: Stage 409 (testing branch: KH2's walk / run split)
 - The tester ("yes"). Steam KH2 `0x1403a8fa0` / `0x1403aa700`: walk below tilt 0.8, run from it, no dead zone past the
   pad's. `run_threshold` 0.8 (was 0.5), `DEAD_ZONE` 0 (was 0.1); the ledge hang keeps 0.1 (`HANG_PUSH`). Notes:

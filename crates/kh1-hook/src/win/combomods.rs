@@ -415,7 +415,9 @@ impl Kh1Combo {
 /// 201 / 202), its plain finisher row 8.
 const GROUND_COMBO: Kh1Combo = Kh1Combo { style: super::styles::Kind::GroundCombo, swings: 0xC8..=0xCA, finisher: 0xCB, swing_rows: &[13, 11], finisher_rows: &[8] };
 /// The air combo (KH1's air picker `0x1402A6C70`, Steam, Checked): rows 15..18; 18 its plain
-/// swing (no target, or one not more than 100 below), 17 for a target more than 100 below, 16
+/// swing (no target, or one not more than 100 above him), 17 for a target more than 100 above
+/// (KH1's y is down: the test is the target's y less his at -100 or more; the tester's traces
+/// f42760 / f44092 / f44266, enemies above, run 17's 0xCD first, f37236 / f38130 18's 0xCC), 16
 /// its finisher (the count at the stats' `+0xD5`), 15 a finisher by a KH1 ability bit (25);
 /// with none free, 18 down to 15, the first whose request isn't playing. Requests 0xCC / 0xCD
 /// the swings, 0xCE the finisher (`kh2slots`); which row has which is read from the row table
@@ -426,7 +428,7 @@ const AIR_COMBO: Kh1Combo = Kh1Combo { style: super::styles::Kind::AirCombo, swi
 /// (a)", KH2 1:1, and "the same KH2 row picker on the air combo"): where KH1's picker took a row
 /// of its own that isn't the kind KH2's pick is (on the ground its dash at a target 160+ away,
 /// rows 0 / 1; its walk off a drop ahead, row 2; its rows 9 / 10; its ability finishers 3..7; in the air its row
-/// for a target below or its ability finisher; or a swing where KH2 finishes and the other way
+/// for a target above or its ability finisher; or a swing where KH2 finishes and the other way
 /// round), and KH2's pick is a plain swing or finisher of that combo (`Kh1Combo::plain`), KH1's
 /// own plain row of that kind runs instead: a swing row whose request isn't the one playing
 /// (KH1's own anti-repeat, so the request restarts) or the finisher row, its request then

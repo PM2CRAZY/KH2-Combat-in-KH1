@@ -552,13 +552,17 @@ less the target's radius):
 - Air finishers: Magnet Burst (49, any, 0..650), **row 7 (184, any, 0..260, facing
   -0.71..0.92)**, Aerial Finish (29, none), Magnet Burst (50, primary, 300..650), **row 8 (183,
   none, sub 7)**. Air swings: Aerial Spiral (36, primary 0..650 any height, and again any
-  300..650), **row 10 (182, primary, 0..260, a target below him)**, **row 9 (181, none, sub 10:
+  300..650), **row 10 (182, primary, 0..260, a target above him**: flags 9, its window's low
+  end -70 less the target's height, so the target at least 70 plus its height above his feet;
+  corrected after the t409-era traces, it was written as below**)**, **row 9 (181, none, sub 10:
   the default)**. The air rows hop too (jumps 14..21).
 - By id only (kind 0): **row 1 (181, a hop of 21: the drop ahead, below)**, Guard (11), Upper Slash
   (12), Finishing Leap (37), Horizontal Slash (38), Counterguard (39), Retaliating Slash (40).
-- So the plain ground combo is: a target within 180 ahead or to the side: 152 / 151 alternating,
-  finisher 154; 180..300 dead ahead: 153 (row 6) / 151; otherwise 151 / 153, finisher 155. The
-  slots t374 builds (`kh2slots::swing_rows`: 151, 152, 153; 154, 155) are all the plain ground
+- So the plain ground combo is: another target within 180 off the primary target's line (rows 2 /
+  4 are kind 2, their facing window measured from the direction to the primary, which itself is
+  at 1 and never passes): 152 / 151 alternating, finisher 154; the primary 180..300 away: 153
+  (row 6) / 151; otherwise 151 / 153, finisher 155 (the tester's t374 traces with one enemy: 151
+  / 153 / 155 only). The slots t374 builds (`kh2slots::swing_rows`: 151, 152, 153; 154, 155) are all the plain ground
   rows; the plain ones not built are the hops (rows 0, 1) and the air rows.
 
 **Ours (Base Combo KH2, `kh1_slots` on):** at the press KH1's combo takes (`combat::exec`,
@@ -584,7 +588,9 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   (request 0xD0, about 280 units) where KH2 took row 5.
 - **The air combo** (the tester: "the same KH2 row picker on the air combo"; Aerial Combo KH2):
   KH1's air picker (`0x1402A6C70`, Steam, Checked) marks rows 15..18: 18 its plain swing (no
-  target, or one not more than 100 below), 17 for a target more than 100 below, 16 its finisher
+  target, or one not more than 100 above him), 17 for a target more than 100 above (KH1's y is
+  down: the target's y less his at -100 or more marks 18; corrected after the t409-era traces,
+  it was written as below), 16 its finisher
   (the count at the stats' `+0xD5`), 15 a finisher with KH1 ability bit 25; it takes the first
   marked row whose request isn't playing, else 18 down to 15 by the same test. The row runner
   gives rows 15..18 a sideways speed along the direction (`+0x3C0`: 8 on the combo's first
@@ -596,8 +602,9 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   17, finisher 16 / 15, each taken only if its request, read from KH1's row table, is that
   kind and isn't playing). KH2's air rows with an ability stay borrows. With no target: 181 /
   182 alternating (row 9's `sub` 10), finisher 183 (row 8), 184 after it with Finishing Plus;
-  a target within 260 ahead or to the side: finisher 184 (row 7); a target below him in reach:
-  182 (row 10).
+  finisher 184 (row 7) only at a target within 260 off the primary target's line (a kind-2 row's
+  facing window is measured from the direction to the primary target, so the primary itself, at
+  1, never passes its -0.71..0.92); a target above him in reach: 182 (row 10).
 - **KH2's hops** (the tester: "design and implement natively (KH1's air state with KH2's arc and
   numbers)"; Base Combo KH2, `combomods::kh2_hop`): KH2's plain hop rows are row 0 (motion 182,
   a target well above) and row 1 (181, the drop ahead, item 4); both play KH2's air swings and
@@ -704,7 +711,29 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
     (`Character::set_mp_charging`, `BERSERK_CHARGE` among the equipped). KH1 has no MP Charge
     and no Berserk Charge in our ability list, so in KH1 it never turns on (a question to the
     tester).
-- Unverified in game: all of it.
+- **Checked (trace)**, the tester's traces f37236, f38130, f41229, f42760, f44092, f44266 (taken
+  after the t409 build; physics KH1, Base and Aerial Combo KH2, an enemy ahead or below in room 0,
+  enemies above in room 5); the traces carry no target positions and no log came with them, so
+  the targets are inferred from the hop numbers:
+  - Picks: every air combo is three swings, the third the finisher 183 (row 8), never 184 with
+    one enemy. Enemy ahead or below: 181 / 182 / 183 (row 9, its `sub` 10, row 8). Enemy above:
+    182 first (row 10), then 181 (182 playing), then 183. KH1's own row each time: 18 (request
+    0xCC) with the enemy below, 17 (0xCD) with it above; both kept (plain swings), our slot of
+    KH2's motion on them.
+  - Hops: each swing's arc on KH1's fields is KH2's height for its row, `+0x3BC` = -height,
+    `+0x3B8` = `sqrt(2 height / KH1's g)` (physics KH1): no target above 21 / 17 / 21 (the rows'
+    `jump_min`); above 67 (row 10's `jump_max`), 44.4, 71, 52.4, 58.9, the rise to the target
+    within the rows' bounds, his climb toward it matching one target about 260 up (f44266).
+    Sideways: 8 (the bound) on rows 9 / 10 at range, 3.0 / 5.2 when close, the finisher 12 (the
+    bound) or 12.9 .. 14.9, along the direction he turns to (the velocity's direction is his
+    yaw). Each set on the press frame, then KH1's drag (x0.975 a frame, stick idle) and KH1's
+    gravity (physics KH1). His height is KH1's curve exactly in room 5; in room 0 he is 2.6 / 4.5
+    above it while his sideways move is 1 to 3 of the 7 to 13 asked: KH1's collision sliding him
+    over the enemy he presses into (not ours; the jump's first frame there shows it too).
+  - KH1's rows giving way on the ground: not exercised (no ground combo, no drop ahead, no KH1
+    ability finisher); a ground press at an enemy above (f41229) was KH2's Aerial Sweep (row 33,
+    equipped, before row 0 in the table), a borrow.
+  - Not seen: the ground rows, rows 0 / 1 from the ground, the finisher status bits.
 
 ## 8. KH2's walk and run as slots (t389)
 
