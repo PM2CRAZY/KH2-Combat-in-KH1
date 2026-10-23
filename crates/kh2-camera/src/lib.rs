@@ -104,6 +104,18 @@ pub struct Controls {
     pub reset: bool,
     /// Automatic swing-behind allowed (the Camera "Auto" option).
     pub auto: bool,
+    /// KH2's camera hold button is held (bit 32 of the held word; the tester: R2). With `auto`
+    /// it stops the swing behind; without, the camera swings behind only while it is held
+    /// (Steam KH2 `0x140178ae0`, read by the follow update `0x140165110`).
+    pub hold: bool,
+    /// KH2 PC's mouse: its motion this frame (x, y, each within ±1), when it moved (Steam KH2
+    /// `0x1404e51f0`). The follow camera then turns at `max(|10 x|, 1) · 3°` and zooms at
+    /// `max(|10 y|, 1)` times its usual speed (`0x140166100`). The host also puts the mouse on
+    /// `look_stick` (KH2's pad does, `0x14039c180`).
+    pub mouse: Option<Vec2>,
+    /// Keyboard / mouse mode (KH2 `0x142b44a88`): the look point and eye follow at 0.4 (+ 0.0018
+    /// per run speed past 8), not 0.07 (+ 0.0006) (`0x140165700`).
+    pub kbm: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -250,26 +262,39 @@ impl Camera {
     /// its dead zone, `0x140178ab0` / `0x140178b10` turn, `0x140178b50` / `0x140178b80` zoom) and
     /// moves by the stick's whole tilt, not by that axis: diagonally the camera turns and zooms
     /// at full speed together. Returns whether the stick is tilted at all.
-    fn manual(&mut self, c: &Controls, dt: f32) -> bool {
-        self.turn(c, dt);
-        self.zoom(c, dt);
+    /// (`speed`: the turn speed at tilt 1 and the zoom factor, `speeds`.) The tilt is the stick's
+    /// length, not held to 1: KH2's pad scales it by the mouse sensitivity in a mouse frame.
+    fn manual(&mut self, c: &Controls, speed: (f32, f32), dt: f32) -> bool {
+        self.turn(c, speed.0, dt);
+        self.zoom(c, speed.1, dt);
         c.look_stick != Vec2::ZERO
     }
 
-    fn turn(&mut self, c: &Controls, dt: f32) {
+    /// The follow camera's turn speed and zoom factor this frame (Steam KH2 `0x140166100`): 3° a
+    /// frame (the exe's `0x140718bf0`, Checked (exe) through the OG rewrite) and 1; in a frame
+    /// the mouse moved, `max(|10 x|, 1) · 3°` and `max(|10 y|, 1)`. The lock-on camera has
+    /// neither (`0x140176c70`, `0x140176bc0`): `(STICK_YAW, 1)`.
+    pub fn speeds(c: &Controls) -> (f32, f32) {
+        match c.mouse {
+            Some(m) => ((m.x * 10.0).abs().max(1.0) * 3.0f32.to_radians(), (m.y * 10.0).abs().max(1.0)),
+            None => (STICK_YAW, 1.0),
+        }
+    }
+
+    fn turn(&mut self, c: &Controls, speed: f32, dt: f32) {
         let r = c.look_stick;
         if r.x != 0.0 {
             // Right turns the view right: the eye swings the other way.
-            self.yaw = wrap(self.yaw - r.x.signum() * r.length().min(1.0) * STICK_YAW * dt);
+            self.yaw = wrap(self.yaw - r.x.signum() * r.length() * speed * dt);
             self.goal_yaw = self.yaw;
         }
     }
 
-    fn zoom(&mut self, c: &Controls, dt: f32) {
+    fn zoom(&mut self, c: &Controls, factor: f32, dt: f32) {
         let p = self.params;
         let r = c.look_stick;
         if r.y != 0.0 {
-            self.dist = (self.dist - r.y.signum() * r.length().min(1.0) * STICK_ZOOM * dt).clamp(p.dist_min, p.dist_max);
+            self.dist = (self.dist - r.y.signum() * r.length() * STICK_ZOOM * factor * dt).clamp(p.dist_min, p.dist_max);
         }
     }
 
@@ -303,18 +328,21 @@ impl Camera {
                         cut = true;
                     }
                     // (KH2 zooms after its reset branch too, `0x140165110`.)
-                    self.zoom(c, dt);
+                    self.zoom(c, Self::speeds(c).1, dt);
                 } else {
-                    let turned = self.manual(c, dt);
+                    let turned = self.manual(c, Self::speeds(c), dt);
                     // KH2's pad keeps the left stick as a unit direction and a tilt (Steam
                     // 0x14039c180 normalizes the dead-zoned axes in place, 0x140142080, and
                     // keeps the length, at most 1, beside them). The follow update
                     // (0x140165110) tests and scales by the unit direction: no swing while it
                     // points within acos 0.9 (25.8°) of straight back, at any tilt. Its pad y
                     // is positive pulled back; here y is forward, so -y < 0.9.
-                    let lmag = c.move_stick.length().min(1.0);
+                    let lmag = c.move_stick.length();
                     let d = c.move_stick.normalize_or_zero();
-                    if c.auto && moved && lmag > 0.0 && !turned && -d.y < 0.9 {
+                    // The swing flag (`+0x42`): cleared by the hold button with Auto, set only
+                    // by it with Manual (`0x140178ae0`: bit 32, inverted unless Auto).
+                    let swing = c.auto != c.hold;
+                    if swing && moved && lmag > 0.0 && !turned && -d.y < 0.9 {
                         let step = 2.0 * (d.x.abs() + 1.0) * (d.y.abs() + 1.0) * lmag * (RECENTER + (s.run_speed - 8.0) * RECENTER_RUN) * dt;
                         self.yaw = approach_angle(self.yaw, behind, step.max(0.0));
                         self.goal_yaw = self.yaw;
@@ -360,7 +388,7 @@ impl Camera {
                 }
                 // KH2's lock-on (`0x140176c70`) turns and zooms first, then a reset sets the goal
                 // and the distance.
-                self.manual(c, dt);
+                self.manual(c, (STICK_YAW, 1.0), dt);
                 if c.reset {
                     self.goal_yaw = (s.feet.x - self.at_goal.x).atan2(s.feet.z - self.at_goal.z);
                     self.dist = p.dist_alt;
@@ -373,7 +401,7 @@ impl Camera {
         if let Some((hit, n)) = wall(chest, eye_goal) {
             eye_goal = hit + n * WALL_GAP;
         }
-        let (at, mut eye) = self.settle(at_goal, eye_goal, s.run_speed, cut, dt);
+        let (at, mut eye) = self.settle(at_goal, eye_goal, s.run_speed, c.kbm, cut, dt);
         if let Some((hit, n)) = wall(chest, eye) {
             eye = hit + n * WALL_GAP;
         }
@@ -383,13 +411,16 @@ impl Camera {
 
     /// The rendered look point and eye after this frame's spring toward their goals (KH2's
     /// `0x140165700`, run in every mode), or the goals themselves on a cut. Sets the goals.
-    fn settle(&mut self, at_goal: Vec3, eye_goal: Vec3, run_speed: f32, cut: bool, dt: f32) -> (Vec3, Vec3) {
+    /// `kbm`: keyboard / mouse mode, KH2's tighter follow.
+    fn settle(&mut self, at_goal: Vec3, eye_goal: Vec3, run_speed: f32, kbm: bool, cut: bool, dt: f32) -> (Vec3, Vec3) {
         self.prev_at_goal = self.at_goal;
         self.prev_eye_goal = self.eye_goal;
         self.at_goal = at_goal;
         self.eye_goal = eye_goal;
-        // The game's rates are per 30 Hz frame, halved at 60 Hz.
-        let rate = (0.07 + (run_speed - 8.0) * 0.0006) * 0.5;
+        // The game's rates are per 30 Hz frame, halved at 60 Hz. In keyboard / mouse mode
+        // 0.4 + (run - 8) · 0.0018 (`0x140165700`).
+        let (r0, r1) = if kbm { (0.4, 0.0018) } else { (0.07, 0.0006) };
+        let rate = (r0 + (run_speed - 8.0) * r1) * 0.5;
         let steps = if cut { 0.0 } else { dt.max(0.0) };
         if cut {
             self.prev_at_goal = self.at_goal;
@@ -438,7 +469,7 @@ impl Camera {
         let eye_goal = s.feet + Vec3::Y * eye_height;
         let (sp, cp) = self.fp_pitch.sin_cos();
         let ahead = Vec3::new(s.facing.sin() * cp, sp, s.facing.cos() * cp);
-        let (at, eye) = self.settle(eye_goal + ahead * FP_AHEAD, eye_goal, s.run_speed, false, dt);
+        let (at, eye) = self.settle(eye_goal + ahead * FP_AHEAD, eye_goal, s.run_speed, c.kbm, false, dt);
         self.at = at;
         self.eye = eye;
     }
@@ -498,6 +529,69 @@ mod tests {
         let turned = wrap(c.yaw - y0).abs().to_degrees();
         // The first frame has no previous position, so no "moved".
         assert!((turned - 9.0).abs() < 0.05, "{turned}");
+    }
+
+    /// KH2 PC's mouse (`0x140166100`): the follow camera turns at `max(|10 x|, 1) · 3°` and zooms
+    /// at `max(|10 y|, 1)` times; the lock-on camera keeps its own speeds.
+    #[test]
+    fn the_mouse_speeds_up_the_follow_camera() {
+        let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+        let y0 = c.yaw;
+        let ctl = Controls { look_stick: Vec2::new(1.0, 0.0), mouse: Some(Vec2::new(0.3, 0.0)), ..Default::default() };
+        c.update(&sora(Vec3::ZERO, 0.0), &ctl, None, 1.0, &none);
+        assert!((wrap(c.yaw - y0).abs().to_degrees() - 9.0).abs() < 1e-3);
+        // A slow mouse: at least 3° a frame times the tilt.
+        let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+        let ctl = Controls { look_stick: Vec2::new(0.5, 0.0), mouse: Some(Vec2::new(0.02, 0.0)), ..Default::default() };
+        c.update(&sora(Vec3::ZERO, 0.0), &ctl, None, 1.0, &none);
+        assert!((wrap(c.yaw - y0).abs().to_degrees() - 1.5).abs() < 1e-3);
+        // Zoom: 8 · 4 a frame for y 0.4.
+        let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+        let ctl = Controls { look_stick: Vec2::new(0.0, 1.0), mouse: Some(Vec2::new(0.0, 0.4)), ..Default::default() };
+        c.update(&sora(Vec3::ZERO, 0.0), &ctl, None, 1.0, &none);
+        assert!((c.dist - (420.0 - 32.0)).abs() < 1e-3);
+        // Locked on: 3° whatever the mouse.
+        let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+        let ctl = Controls { look_stick: Vec2::new(1.0, 0.0), mouse: Some(Vec2::new(0.3, 0.0)), ..Default::default() };
+        let g = c.goal_yaw;
+        c.update(&sora(Vec3::ZERO, 0.0), &ctl, Some(Vec3::new(0.0, 170.0, 300.0)), 1.0, &none);
+        assert!((wrap(c.goal_yaw - g).abs().to_degrees() - 3.0).abs() < 0.2, "{}", wrap(c.goal_yaw - g).to_degrees());
+    }
+
+    /// Keyboard / mouse mode: the eye closes about 2.5 · 0.2 = 50% of its gap a frame, not 9%.
+    #[test]
+    fn keyboard_mouse_mode_follows_tighter() {
+        let gap = |kbm: bool| {
+            let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+            let ctl = Controls { kbm, ..Default::default() };
+            let before = c.eye;
+            c.update(&sora(Vec3::new(100.0, 0.0, 0.0), 0.0), &ctl, None, 1.0, &none);
+            let goal = before + Vec3::new(100.0, 0.0, 0.0);
+            (c.eye - goal).length() / 100.0
+        };
+        assert!(gap(true) < 0.55 && gap(true) > 0.4, "{}", gap(true));
+        assert!(gap(false) > 0.85, "{}", gap(false));
+    }
+
+    /// The hold button (R2): with Auto it stops the swing behind, with Manual only it swings
+    /// (Steam KH2 `0x140178ae0`).
+    #[test]
+    fn the_hold_button_flips_the_swing() {
+        let run = |auto: bool, hold: bool| {
+            let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+            let ctl = Controls { move_stick: Vec2::new(1.0, 0.0), auto, hold, ..Default::default() };
+            let y0 = c.yaw;
+            let mut feet = Vec3::ZERO;
+            for _ in 0..10 {
+                feet.x -= 8.0;
+                c.update(&sora(feet, -std::f32::consts::FRAC_PI_2), &ctl, None, 1.0, &none);
+            }
+            wrap(c.yaw - y0).abs().to_degrees()
+        };
+        assert!((run(true, false) - 9.0).abs() < 0.05);
+        assert!(run(true, true) < 1e-4);
+        assert!(run(false, false) < 1e-4);
+        assert!((run(false, true) - 9.0).abs() < 0.05);
     }
 
     /// Runs Sora toward the camera for 10 frames with `stick` held (y forward) and returns how

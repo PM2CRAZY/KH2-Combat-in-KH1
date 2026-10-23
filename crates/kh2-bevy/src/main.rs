@@ -798,7 +798,7 @@ fn camera_step(game: Res<Game>, mut latch: ResMut<Latch>, dummies: Query<&Dummy>
         });
         from_rig.unwrap_or(Vec3::from(d.pos) + Vec3::Y * DUMMY_HEIGHT * 0.7)
     });
-    let ctl = kh2_camera::Controls { move_stick: latch.stick, look_stick: latch.camera.clamp_length_max(1.0), reset: std::mem::take(&mut latch.cam_reset), auto };
+    let ctl = kh2_camera::Controls { move_stick: latch.stick, look_stick: latch.camera.clamp_length_max(1.0), reset: std::mem::take(&mut latch.cam_reset), auto, ..Default::default() };
     let arena = Arena::get();
     let wall = |a: Vec3, b: Vec3| arena.map.segment(a, b, map_collision::attr::PLAYER_PASS).map(|h| (h.point, arena.map.polys[h.poly].normal));
     cam.update(&subject, &ctl, lock, 1.0, &wall);

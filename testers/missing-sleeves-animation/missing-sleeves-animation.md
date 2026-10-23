@@ -11,6 +11,7 @@
 - [5. Mr Bugs: I sent a trace and a new log](#^m5)
 - [6. Assistant: t405 to t407 (one each)](#^m6)
 - [7. Mr Bugs: the model is still bugged, it seems to be his clothes, (his ](#^m7)
+- [8. Assistant: t411 and t412](#^m8)
 
 ---
 
@@ -128,3 +129,19 @@
 ^m7
 
 
+> [!tip] Assistant
+> t411 and t412
+>
+> 1. **t411, the coat and pants jumping to one spot.** Found it, and you were right that it's the run-to-neutral change. When KH1 blends between motions, it ends by adding Sora's world position to every joint, even the joints the blend didn't move. We were measuring the coat and pants off those joints, so they were a whole world position off and got drawn at the map origin. In your trace that's every stop from walk to idle and the few blended frames after each one, so a short flash, not just one frame. Fixed now: those joints are recognised as KH1 not having placed them.
+> 2. **t412, the hood.** I looked at how KH2's model is actually built, and it has no hood that sticks out from the back. What it shows of one is part of the upper back on the torso, so in KH2 it moves exactly with the torso and never on its own. In t407 I'd mistaken the back of the hair for it and had the hood turning with the head; that's what you were seeing go. So 1:1, the hood now stays put on the back, which is what KH2 shows but is even less animated than before.
+>
+> **Check:** the KH1 decomp for how its passes place joints, and KH2's model file for the hood. Not checked in game. Assumption: that the patch on KH2's upper back is the hood (I judged it from where it sits; there's nothing else it could be).
+>
+> Question:
+> 1. The hood: (a) keep it 1:1 (still on the back, like KH2's model), (b) give it KH1's own hood animation of the move, like the hem and shorts have, or (c) put back KH2's hood keys (they move, but nothing on KH2's model shows them)?
+
+^m8
+
+
+> [!note] Mr Bugs
+> 

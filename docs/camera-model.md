@@ -56,7 +56,9 @@ There is no pitch control: zooming in lowers the camera along this curve.
   - Not known (exe data): the lock-on camera's own turn speed (`0x14071a470`); ours uses 3°.
   - These are the controller's numbers. KH2 PC's mouse branches (the turn and zoom sped up by
     the mouse's motion, a tighter lag in keyboard / mouse mode) are in `kh2-pad.md`; with a
-    controller none of them runs (Checked (decomp), `0x140166100`, `0x140165700`).
+    controller none of them runs (Checked (decomp), `0x140166100`, `0x140165700`). The crate
+    has them as `Controls::mouse` (the follow camera's speeds, `Camera::speeds`) and
+    `Controls::kbm` (the lag); `kh1-hook` feeds them from KH1's own mouse (Steam).
   - **Ours:** right turns the view right. The mirrored world makes the game's own sign
     meaningless here.
 - **Reset** (R3, or F on the keyboard): goal yaw = behind Sora, distance = default. It is a
@@ -96,9 +98,9 @@ There is no pitch control: zooming in lowers the camera along this curve.
   - The swing also needs the right stick's tilt to be exactly 0 and the camera's swing flag
     (`+0x42`). It is cleared by a held button (bit 32 of the held word, `0x140178ae0`), whose
     sense the Field Camera option flips (`0x1402e5310`: Auto). With Auto, holding it stops the
-    swing; with Manual, the camera swings only while it is held. Which button it is isn't
-    known (the remap table is exe data): `kh2-pad.md`, "Bit 32". **Ours:** Manual never
-    swings (right without the button), Auto always may.
+    swing; with Manual, the camera swings only while it is held. The button is **R2** (the
+    tester, from KH2: "its R2"; the remap table is exe data): `kh2-pad.md`, "Bit 32". The crate
+    takes it as `Controls::hold` and swings only when `auto != hold`.
   - The crate's stick has y forward, so its test is `−y < 0.9` on the stick's unit
     direction. A host has to pass y forward. KH1's stick, like KH2's pad, has y positive
     pulled back, so `kh1-hook` negates it.

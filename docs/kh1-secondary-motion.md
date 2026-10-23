@@ -232,7 +232,8 @@ KH2-model option draws).
 
 So many bones KH2's motions key move nothing you can see in KH2:
 
-- the hood bones 72 and 73 (the hood's mesh is on the head, 140, and turns with it);
+- the hood bones 72 and 73 (KH2's model has no hood standing off the back: what it shows of
+  one is the top of the back, on the torso 67; see "KH2's hood" below);
 - the sleeve flaps 113, 115, 205, 207 (each sleeve's mesh is on 110 / 202 alone);
 - the hair spikes 143, 159 and 161 (the front and top of KH2's hair are on the head);
 - the cloth ring round the lower chest, 129, 131, 133, 135 and 221, 223, 225, 227, and the back
@@ -254,11 +255,13 @@ sleeves animation", the tester's rule: nothing KH1 has no visible KH2 match for)
 The tester's answer to "keep copying the hidden bones, or follow only what KH2 visibly moves":
 "(b) only do what kh2 does so its 1:1". `secondary::KH2_SHOWN_ON`: each keyed KH2 bone with no
 mesh is read as held to the bone its region's mesh is on, at their bind relation, since that is
-how KH2 draws it. The hood 72 / 73 and spikes 143 / 159 / 161 on the head 140, the flaps 113 /
-115 on the sleeve 110, 205 / 207 on 202. So, live and baked:
+how KH2 draws it. The hood 72 / 73 on the torso 67 (t407 had them on the head 140; see "KH2's
+hood"), spikes 143 / 159 / 161 on the head 140, the flaps 113 / 115 on the sleeve 110, 205 / 207
+on 202. So, live and baked:
 
-- KH1's hood (80-83) turns as KH2's head does against its chest, on KH1's neck base (its guards
-  stay);
+- KH1's hood (80-83) keeps its bind relation to KH1's neck base, as KH2's hood keeps its place
+  on KH2's torso (its guards stay: in High Jump, 201, the head comes back onto it for 2 frames,
+  9° of push);
 - KH1's sleeves turn as KH2's sleeve (110 / 202, through the unkeyed root 111 / 203) and no
   more: the joints down each sleeve keep their bind relation to the shoulder joint, with no
   flap turn and no flap squash;
@@ -270,12 +273,36 @@ KH2's parents (Checked (files)): 72 → 71 (under the chest); 141 → 140, each 
 frames, a scratch run) no NaN, and no scale is left for `scales` to carry (worst 1.0): the flaps
 were the only matched KH2 bones with scale keys.
 
+### KH2's hood (after t409)
+
+The tester, on t407: "the hoodie doesn't seem to be animated anymore". t407 had read KH2's hood
+as on the head 140. Checked again in the files (`P_EX100.mdlx`, a scratch render of the bind
+mesh coloured by texture and by bone):
+
+- nothing stands off KH2's back as a hood: behind the neck (y 118-132, z below -6) the only mesh
+  is on the head 140 (42 triangles, the colour of the hair: it is the back of the hair hanging
+  to the nape) and on the torso 67 (36 triangles, the top of the back between the shoulders,
+  coloured apart from the rest of the torso: what KH2 shows of its hood);
+- 67 carries the whole upper body; 68 above it (the chest these parts are measured against)
+  carries no mesh and no KH2 motion turns it off 67 (idle, walk, run, jump, 151, 152, 154, 181,
+  battle and field: 0.0°);
+- so KH2's hood never moves on its own or with the head: it goes with the torso. The head 140
+  does move against the torso (field run 45° of swing, battle run 17°), which is what t407 put on
+  KH1's hood.
+
+So the 1:1 hood is still on the chest. Measured (scratch run on KH2's 0, 1, 2, 3, 151, 154, 181,
+201): KH1's hood stays within 0.04° of its bind relation to the neck base, except High Jump (the
+guard, 9.5°, 2 frames); no NaN. For comparison KH1's own motions turn its hood root 13-31° in the
+walk (slot 2) and up to 72° in the run (slot 5). Not checked in game. Assumption: the patch on
+the top of the back is the hood (judged from its colour and place; the model has no other
+candidate).
+
 ### Every KH2 part now copied onto KH1
 
 | KH1 part | KH1 bones | KH2 bones | Shows on KH2's model |
 |---|---|---|---|
 | Hair (14 spikes, `Parts::hair`) | joints 153, 156, ..., 192 | nearest spike and second (share), table above: 163, 155, 149, 153, 151, 159, 147, 145, 157, 161; seconds 147, 159, 153, 163, 151, 149, 143, 145, 157, 155 | yes, except 143, 159, 161 (on the head), now read as the head (`KH2_SHOWN_ON`): KH1's 171, 186, 189 and 192 follow 159 or 161 for more than half their turn, 156 for 48%, 174 follows 143 for 40% |
-| Hood (`Parts::hood`) | 80, 81 / 82, 83 | 72 / 73, relative to the chest 68, read as the head 140 (`KH2_SHOWN_ON`) | no: KH2's hood turns with the head |
+| Hood (`Parts::hood`) | 80, 81 / 82, 83 | 72 / 73, relative to the chest 68, read as the torso 67 (`KH2_SHOWN_ON`) | no: KH2's hood is the top of its back, on the torso |
 | Keychain (`Parts::chain`) | 283-291 | the Keyblade `W_EX010`'s 3-11 | not checked (no weapon model here) |
 | Sleeves, the shoulder joints (`Parts::sleeves`) | 129, 133, 137, 141 / 233, 237, 241, 245 | 111 / 203 (turned by 110 / 202) | yes (the sleeve's mesh is on 110 / 202) |
 | Sleeves, the joints down the sleeve | 130, 134, 138, 142 / 234, 238, 242, 246 | flaps 113, 115 / 205, 207, relative to the root, read as the sleeve 110 / 202 (`KH2_SHOWN_ON`): no turn of their own | no |
@@ -382,6 +409,16 @@ guards stay: the belt chain's end and the hem's panels are still swung off the t
   (`Sora::wrote`) is placed from the bone above it by the relation KH1 last gave it on a pass
   that placed both (KH1 keys none of these bones, constants only: Checked (files)), and a part
   whose parent can't be placed keeps its last relation. Checked (decomp, files); not in game.
+  **"Still holding what we wrote" (fixed after t409):** both passes end by adding their world
+  translation to every bone's world matrix, the ones they didn't place too (blend `0x140392560`,
+  plain `0x140391C70`; first multiplying by the world's scale when it is more than 0.005 off 1:
+  every bone in the blend, all but the skip bones in the plain pass). Checked (decomp). So a
+  bone the blend left holds our matrix moved by Sora's world position, not our matrix; t405
+  compared it as written, took every such bone as placed, and measured the shorts and hem from
+  parents one world position off, so they were drawn at the map origin on every blend-pass
+  frame (the tester's t409 picture and trace f20377: each stop from the walk to the idle is a
+  plain pass plus a blend, then blend-only frames). `pose::kept` now tests for that move (and
+  the scaled move). Assumption: on which side the scale is multiplied (only matters off scale 1).
 - `Retarget::attach` (the belt chain, carried by the +x thigh): the root rigidly as before, the
   links under it by their relation to their parent, KH1's own where given (the bind's before).
 

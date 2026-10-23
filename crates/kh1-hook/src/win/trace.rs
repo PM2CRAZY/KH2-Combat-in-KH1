@@ -340,7 +340,7 @@ kh1_vel_x,kh1_vel_y,kh1_vel_z,kh1_vel_w,kh1_arc_0,kh1_arc_1,kh1_arc_2,kh1_arc_3,
     (cat::KH1_CAMERA, "cam_who,cam_via,cam_why,cam_lag,cam_mode_now,cam_blend_now,cam_entry,\
 cam_eye_x,cam_eye_up,cam_eye_z,cam_at_x,cam_at_up,cam_at_z,cam_eye_step,cam_at_step,\
 cam_horiz,cam_eye_height,cam_look_height,cam_yaw,cam_pitch,cam_dist,cam_fov,cam_blend_left,cam_blend_time"),
-    (cat::KH2_CAMERA, "kh2cam_yaw,kh2cam_goal_yaw,kh2cam_dist,kh2cam_look_x,kh2cam_look_y,kh2cam_move_x,kh2cam_move_y,kh2cam_reset,kh2cam_auto,kh2cam_lock_dist"),
+    (cat::KH2_CAMERA, "kh2cam_yaw,kh2cam_goal_yaw,kh2cam_dist,kh2cam_look_x,kh2cam_look_y,kh2cam_move_x,kh2cam_move_y,kh2cam_reset,kh2cam_auto,kh2cam_hold,kh2cam_mouse_x,kh2cam_mouse_y,kh2cam_kbm,kh2cam_lock_dist"),
     (cat::FEET, "ik_ground_on,ik_lifted,ik_flags,foot_r_up,foot_l_up,pose_path"),
     (cat::EVENTS, "events"),
 ];
@@ -805,6 +805,14 @@ fn kh2_camera(t: &mut String, r: &Row, has: bool) {
     match c.own.as_ref().filter(|_| has && !c.who.is_empty()) {
         Some(o) => {
             let _ = write!(t, "{:.3},{:.3},{:.1},{:.2},{:.2},{:.2},{:.2},{},{},", o.yaw, o.goal_yaw, o.dist, o.look[0], o.look[1], o.mv[0], o.mv[1], o.reset as u8, o.auto as u8);
+            let _ = write!(t, "{},", o.hold as u8);
+            match o.mouse {
+                Some(m) => {
+                    let _ = write!(t, "{:.3},{:.3},", m[0], m[1]);
+                }
+                None => t.push_str(",,"),
+            }
+            let _ = write!(t, "{},", o.kbm as u8);
             match o.lock_dist {
                 Some(d) => {
                     let _ = write!(t, "{d:.1},");
@@ -812,6 +820,6 @@ fn kh2_camera(t: &mut String, r: &Row, has: bool) {
                 None => t.push(','),
             }
         }
-        None => t.push_str(",,,,,,,,,,"),
+        None => t.push_str(",,,,,,,,,,,,,,"),
     }
 }

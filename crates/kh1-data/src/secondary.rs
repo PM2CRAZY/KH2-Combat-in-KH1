@@ -38,8 +38,8 @@
 //!
 //! **Only what KH2's model shows** (`KH2_SHOWN_ON`): KH2's hood bones, sleeve flaps and three of
 //! its spikes are keyed but carry no mesh, so they are read as held to the bone their region's
-//! mesh is on (the hood and those spikes with the head, the flaps with the sleeve): KH1's hood
-//! turns with KH2's head, its sleeves with no flap motion or flap squash.
+//! mesh is on (the hood with the torso, those spikes with the head, the flaps with the sleeve):
+//! KH1's hood stays with the chest, its sleeves with no flap motion or flap squash.
 //!
 //! **Squash and stretch** (`scales`): KH2's scale on a matched bone (its own, against its parent)
 //! goes on the KH1 bone matched to it, laid onto the KH1 bone's axes. Both games scale a bone the
@@ -62,6 +62,9 @@ pub const KH1_NECK_BASE: usize = 78;
 /// KH2's head and chest.
 pub const KH2_HEAD: usize = 141;
 pub const KH2_CHEST: usize = 68;
+/// KH2's torso: the bone the upper body's mesh is on (68 above it carries none and no motion
+/// turns it off 67), its hood included.
+pub const KH2_TORSO: usize = 67;
 /// KH1's hood: the bones its motions turn, and the KH2 hood bone each follows (KH2's hood is
 /// two bones from the chest, 72 → 73 straight back 7.8 in its bind, 73 a leaf; KH1's runs 4.3,
 /// 7.9, 12.3 and 16 back from the neck base, KH2's 5 and 12.8 from its chest, so its first
@@ -74,12 +77,15 @@ pub const HOOD: [(usize, usize); 4] = [(80, 72), (81, 72), (82, 73), (83, 73)];
 pub const NECKLACE: (usize, usize) = (86, 165);
 /// KH2 bones its motions key that carry no mesh, each with the bone the mesh round it is on: KH2
 /// draws that region as the mesh bone moves, so they are read as held to it at their bind
-/// relation (the tester: "only do what kh2 does so its 1:1"). The hood (72, 73) and the front and
+/// relation (the tester: "only do what kh2 does so its 1:1"). The hood (72, 73) on the torso (67:
+/// KH2's model has no hood standing off the back; what it shows of one is the top of the back,
+/// on 67, while the mesh behind the neck on the head 140 is the back of the hair), the front and
 /// top of the hair (spikes 143, 159, 161) on the head (140), the sleeve flaps on the sleeve (113,
 /// 115 on 110; 205, 207 on 202). Checked (files, `docs/kh1-secondary-motion.md`, "Which KH2 bones
-/// show on KH2's model"). So KH1's hood turns with KH2's head, its sleeves with KH2's sleeve (no
-/// flap motion and no flap squash), and the spikes matched to those three with the head.
-pub const KH2_SHOWN_ON: [(usize, usize); 9] = [(72, 140), (73, 140), (143, 140), (159, 140), (161, 140), (113, 110), (115, 110), (205, 202), (207, 202)];
+/// show on KH2's model"). So KH1's hood keeps its bind relation to the chest, as KH2's does, its
+/// sleeves go with KH2's sleeve (no flap motion and no flap squash), and the spikes matched to
+/// those three with the head.
+pub const KH2_SHOWN_ON: [(usize, usize); 9] = [(72, KH2_TORSO), (73, KH2_TORSO), (143, 140), (159, 140), (161, 140), (113, 110), (115, 110), (205, 202), (207, 202)];
 /// KH1's keychain: 283 (at the pommel) to 291 (the charm, its tip 292); KH2's Keyblade
 /// (`W_EX010`): 3 to 11, the same places in the bind.
 pub const KH1_CHAIN: std::ops::RangeInclusive<usize> = 283..=291;
@@ -833,6 +839,7 @@ mod tests {
         for b in k2.iter_mut().skip(1) {
             b.parent = 0;
         }
+        k2[67] = bone(0, [0.0, 110.0, 0.0]);
         k2[68] = bone(0, [0.0, 126.0, -4.0]);
         k2[71] = bone(68, [0.0, 0.0, -5.0]);
         k2[72] = bone(71, [0.0; 3]);
@@ -922,8 +929,16 @@ mod tests {
         assert!(at(&pose[157]).distance(centre) >= 4.4 && ((at(&pose[157]) + at(&pose[156])) * 0.5).distance(centre) >= 4.4);
     }
 
+    /// KH2's torso (67, its hood's mesh) turned by `q` about its joint, the chest (68) left.
+    fn torso_turned(b2: &[Mat4], q: Quat) -> Vec<Mat4> {
+        let p = at(&b2[KH2_TORSO]);
+        let mut body = b2.to_vec();
+        body[KH2_TORSO] = Mat4::from_translation(p) * Mat4::from_quat(q) * Mat4::from_translation(-p) * body[KH2_TORSO];
+        body
+    }
+
     #[test]
-    fn the_hood_turns_with_kh2_s_head() {
+    fn the_hood_stays_as_kh2_s_torso_has_it() {
         let (b1, b2, _, s) = binds();
         // KH2's hood bones turned alone (they carry no mesh): nothing moves.
         let mut body = b2.clone();
@@ -933,8 +948,14 @@ mod tests {
         let rep = s.apply(&mut pose, &body, None, Parts { hood: true, ..Parts::default() });
         assert!(rep.parts.hood && !rep.parts.hair);
         assert!(dir(&pose, 80, 81).angle_between(dir(&b1, 80, 81)) < 1e-3, "{:?}", dir(&pose, 80, 81));
-        // KH2's head tipped back 60° (its hood's mesh is on it): KH1's hood folds with it.
+        // KH2's head tipped back 60° (the mesh behind its neck is hair): the hood stays.
         let body = head_turned(&b2, Quat::from_rotation_x(-60f32.to_radians()));
+        let mut pose = b1.clone();
+        s.apply(&mut pose, &body, None, Parts { hood: true, ..Parts::default() });
+        assert!(dir(&pose, 80, 81).angle_between(dir(&b1, 80, 81)) < 1e-3, "{:?}", dir(&pose, 80, 81));
+        // KH2's torso tipped back 60° against the chest (in the test rig only: no motion turns
+        // them apart): KH1's hood folds with it.
+        let body = torso_turned(&b2, Quat::from_rotation_x(-60f32.to_radians()));
         let mut pose = b1.clone();
         s.apply(&mut pose, &body, None, Parts { hood: true, ..Parts::default() });
         let want = Quat::from_rotation_x(-60f32.to_radians()) * -Vec3::Z;
@@ -947,8 +968,8 @@ mod tests {
     #[test]
     fn a_hood_turned_into_the_back_is_pushed_off_it() {
         let (b1, b2, _, s) = binds();
-        // Down and forward, through the back (the head turned that far).
-        let body = head_turned(&b2, Quat::from_rotation_x(-150f32.to_radians()));
+        // Down and forward, through the back (the torso turned that far against the chest).
+        let body = torso_turned(&b2, Quat::from_rotation_x(-150f32.to_radians()));
         let mut pose = b1.clone();
         let rep = s.apply(&mut pose, &body, None, Parts { hood: true, ..Parts::default() });
         assert_eq!(rep.clamped, 1);

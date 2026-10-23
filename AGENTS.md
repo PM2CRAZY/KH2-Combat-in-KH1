@@ -1,3 +1,29 @@
+### 2026-10-23: Stage 414 (testing branch: KH2's mouse camera)
+- The tester ("(b)"): KH1 PC's mouse code is KH2 PC's (Steam KH1 `0x140138b30` = KH2 `0x1404e51f0`). Mouse frames: both
+  sticks KH1's processed ones times `1 + 0.02 s`; the follow camera turns `max(|10x|,1)·3°` and zooms `8·max(|10y|,1)`
+  (`0x140166100`); keyboard/mouse mode (`0x1422DB3E8`) lag 0.4 + (run-8)·0.0018 (`0x140165700`). Steam only; prologue
+  checked. Trace `kh2cam_mouse_x/y`, `kh2cam_kbm`. KH1's own mouse camera (`0x1401e7320`) compared in `docs/kh2-pad.md`.
+
+### 2026-10-23: Stage 413 (testing branch: R2 holds KH2's camera swing)
+- The tester ("its R2"): bit 32 of KH2's held word is R2. `kh2_camera::Controls::hold`: the swing behind runs only when
+  `auto != hold` (Steam KH2 `0x140178ae0` / `0x140165110`). `camera::r2_held`: Steam KH1's raw pad word `0x14298C9B4`
+  bit `0x200` (keyboard too; assumption), else `RAW_BUTTONS`; Frame Advance's R2 stays hidden. Trace `kh2cam_hold`.
+  Notes: `docs/kh2-pad.md`, `camera-model.md`.
+
+### 2026-10-23: Stage 412 (testing branch: KH2's hood is on its torso)
+- The tester: "the hoodie doesn't seem to be animated anymore". From the files: KH2's model has no hood standing off the
+  back; the mesh behind the neck on 140 is the hair's, the hood is the top of the back on the torso 67 (68 above carries
+  none, no motion turns it off 67). `KH2_SHOWN_ON` hood 72 / 73 -> 67 (`KH2_TORSO`): KH1's hood keeps its bind relation
+  to the neck base (t407 had it turning with KH2's head). Assumption: that patch is the hood. Notes
+  `docs/kh1-secondary-motion.md` "KH2's hood".
+
+### 2026-10-23: Stage 411 (testing branch: KH1's own parts: a skipped bone holds our matrix moved)
+- Mr Bugs (t409 picture, trace f20377): "his coat, his pants ... return to the map origin". Both of KH1's passes end by
+  adding the world translation to every bone (after the world scale, if off 1), placed or not (`0x140392560`,
+  `0x140391C70`, decomp); t405's `Sora::wrote` test took the blend's skipped parents as placed, so the hem and shorts
+  were measured one world position off on every blend frame (each stop from walk to idle and the frames after).
+  `pose::kept`. Assumption: the scale's side. Notes `docs/kh1-anim-slots.md` §1.6.
+
 ### 2026-10-23: Stage 410 (testing branch: KH2's combo rows checked in the tester's traces)
 - His t409 traces f37236..f44266 (physics KH1, Base / Aerial Combo KH2): every air pick and per-row hop is KH2's rule
   (heights 21 / 17 / 21, 67..71 toward an enemy above; speeds at the row bounds or the gap's). Notes and two comments
