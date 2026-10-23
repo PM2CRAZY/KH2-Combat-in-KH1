@@ -58,6 +58,13 @@ There is no pitch control: zooming in lowers the camera along this curve.
     meaningless here.
 - **Reset** (R3, or F on the keyboard): goal yaw = behind Sora, distance = default. It is a
   hard cut if the left stick is held.
+  - **Checked (decomp)**, Steam follow `0x140165110`: the reset also puts the rendered eye on
+    its last goal, so only the turn eases (10° a frame). With the left stick tilted it calls
+    the placement `0x140164520` with its cut flag: the yaw is set to its goal, and
+    `0x140164d70` sets the look point and eye to their goals, with no spring.
+    **Inferred:** the camera's `+0x8` / `+0x18` are the rendered look point and eye (`+0x84` /
+    `+0x64` their goals), from that copy.
+  - The lock-on camera's reset (`0x140176c70`) sets the goal yaw and the lock distance only.
 - **Swing behind.** It happens only when all of these hold:
   - the camera's auto mode is on (`--manual-camera` turns it off)
   - Sora moved this frame

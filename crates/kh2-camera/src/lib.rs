@@ -271,15 +271,24 @@ impl Camera {
         self.last_feet = Some(s.feet);
         let behind = wrap(s.facing + PI);
         let at_goal;
+        // A hard cut this frame: the rendered points jump to their goals.
+        let mut cut = false;
         match lock {
             None => {
                 self.locked = false;
                 if c.reset {
                     self.goal_yaw = behind;
                     self.dist = p.dist_default;
+                    // KH2's reset also puts the eye on its last goal (`0x140165110`: the eye
+                    // `+0x18` from the eye goal `+0x64`), so only the turn eases.
+                    self.eye = self.eye_goal;
                     if c.move_stick != Vec2::ZERO {
-                        // A hard cut when moving.
+                        // A hard cut when moving: KH2 (`0x140165110`, the reset with the left
+                        // stick tilted) places the camera with its cut flag (`0x140164520`), which
+                        // sets the yaw to its goal and the look point and eye to theirs
+                        // (`0x140164d70`), with no spring.
                         self.yaw = behind;
+                        cut = true;
                     }
                     // (KH2 zooms after its reset branch too, `0x140165110`.)
                     self.zoom(c, dt);
@@ -358,8 +367,12 @@ impl Camera {
         self.eye_goal = eye_goal;
         // The game's rates are per 30 Hz frame, halved at 60 Hz.
         let rate = (0.07 + (s.run_speed - 8.0) * 0.0006) * 0.5;
-        let steps = dt.max(0.0);
-        let (mut at, mut eye) = (self.at, self.eye);
+        let steps = if cut { 0.0 } else { dt.max(0.0) };
+        if cut {
+            self.prev_at_goal = self.at_goal;
+            self.prev_eye_goal = self.eye_goal;
+        }
+        let (mut at, mut eye) = if cut { (self.at_goal, self.eye_goal) } else { (self.at, self.eye) };
         let mut left = steps;
         while left > 0.0 {
             let k = left.min(1.0);
@@ -494,6 +507,24 @@ mod tests {
         c.update(&s, &ctl, None, 1.0, &none);
         assert!((wrap(y0 - c.yaw) - STICK_YAW * 0.5).abs() < 1e-5);
         assert_eq!(c.dist, d0);
+    }
+
+    /// The reset with the left stick held is a cut: the camera is behind Sora at once, with no
+    /// spring (KH2 `0x140164520` / `0x140164d70`).
+    #[test]
+    fn a_reset_while_moving_cuts() {
+        let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+        let s = sora(Vec3::new(8.0, 0.0, 0.0), 1.0);
+        let ctl = Controls { reset: true, move_stick: Vec2::new(0.0, 1.0), ..Default::default() };
+        c.update(&s, &ctl, None, 1.0, &none);
+        let want = Camera::new(Params::FIELD, &s);
+        assert!((c.eye - want.eye).length() < 1e-3, "{} {}", c.eye, want.eye);
+        assert!((c.at - want.at).length() < 1e-3);
+        // Without the stick, the yaw turns at 10° a frame and the spring eases.
+        let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+        let ctl = Controls { reset: true, ..Default::default() };
+        c.update(&s, &ctl, None, 1.0, &none);
+        assert!((c.eye - want.eye).length() > 10.0);
     }
 
     #[test]

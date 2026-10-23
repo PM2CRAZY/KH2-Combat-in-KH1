@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 383 (testing branch: KH2's camera reset puts the eye on its goal; a cut while moving)
+- `0x140165110`: a reset also puts the eye on its goal (only the turn eases); with the left stick held the cut
+  (`0x140164520` with its cut flag, then `0x140164d70`) places the look point and eye with no spring. Which fields are
+  the rendered points is inferred from that copy. `kh2-camera`. Notes: `docs/camera-model.md`.
+
 ### 2026-10-23: Stage 382 (testing branch: KH2's camera turns and zooms by the right stick's whole tilt)
 - From the decomp (Steam KH2): the turn tests each axis's direction bit (`0x140178ab0` / `0x140178b10`, zoom
   `0x140178b50` / `0x140178b80`) and moves by the stick's whole tilt (`+0x2c`), so a full diagonal turns 3 deg and zooms
