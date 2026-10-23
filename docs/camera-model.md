@@ -106,6 +106,41 @@ There is no pitch control: zooming in lowers the camera along this curve.
 - **Walls.** A ray from Sora's chest to the eye (before and after smoothing). If it hits the
   map, the eye goes to the hit point plus 5 along the surface normal.
 
+## First person (Checked, decomp)
+
+Steam KH2: the entry in the follow update `0x140165110`, the mode `0x140165e30`, the fade
+`0x1403b7810`.
+
+- **In:** the first-person button (Select) in the follow camera, where the player may
+  (`0x1403ba300`: his kind allows it and two of his status bits are clear). The camera's mode
+  becomes 1 and its pitch 0. Sora's fade value (`+0xa10`) is set to 1 and steps to 0 over 30
+  frames.
+- **Each frame:**
+  - The eye's goal is his position raised by his `prty` `subjective_offset` (`0x1403b5c50`).
+    Checked (files), staged `03system.bin`: Sora 150; the forms 130, 150, 150, 170, 120.
+  - The view looks along his facing. The look point's goal is 350 ahead of the eye, turned up
+    or down by the pitch.
+  - The camera's own yaw is kept behind him (`0x140164e90`), so leaving puts the follow camera
+    there.
+  - The right stick's up / down turns the pitch by `tilt · axis · rate · step`, within limits.
+    The rate and the limits are exe data (`0x140718bf4`, `0x140718bf8` / `0x140718bfc`). R3
+    (the reset button) levels it. Not while the player's kind has bit 3 (`0x1403babf0`;
+    **Inferred:** a swimming player, see `kh2-pad.md`).
+  - The rendered look point and eye spring to their goals as in every mode (`0x140165700`), so
+    the view eases into his head and back out.
+  - The player stands: his "can move" tests are false (`0x1403a8f00`, `0x1403a7830`). In his
+    standing states he turns ±3° a frame (times the step) on two held pad bits, whatever the
+    tilt (`0x1403a9250`, `0x1403a70a0`).
+- **Out:** the first-person button again, or when he may no longer be in it. The fade value is
+  set to 0 and steps to 1 over 30 frames. The mode goes back to the follow camera.
+- **Ours** (`kh2-camera` `update_first_person`, `kh1-hook` `camera.rs`, `docs/kh1-kh2-camera.md`
+  9c):
+  - **Assumption:** the pitch rate and limits are KH1's own first person's (3° a frame at full
+    tilt, 80° up, 60° down; Steam KH1 `0x1401E2390`).
+  - **Assumption:** the turn bits are the right stick's left / right (the pitch is the right
+    stick's up / down, and the player can't move).
+  - **Ours:** stick up looks up; right turns him right. The game's signs aren't readable here.
+
 ## Lock-on camera (Checked, exe)
 
 - **Look point:** 30% of the way from Sora's chest (170 up) to the target's camera point
@@ -133,6 +168,6 @@ There is no pitch control: zooming in lowers the camera along this curve.
 
 ## Not modelled
 
-- The first-person look, cutscene camera modes and per-room overrides.
+- Cutscene camera modes and per-room overrides.
 - The camera-collision volumes some rooms have (only the background ray is used).
 - The soft auto-target camera (only the lock-on moves the camera).

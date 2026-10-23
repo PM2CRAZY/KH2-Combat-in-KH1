@@ -316,6 +316,18 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
         }
         super::debugmenu::Hide::Nothing => {}
     }
+    // KH2's first person (`camera::first_person`): KH2's player stands and turns 3° a frame by the
+    // stick past its dead zone (Steam KH2 `0x1403a9250`; `takeover::first_person_turn`). KH1's
+    // left stick is centred, so KH1 neither walks nor turns him by it; for base Sora (KH1's own
+    // states) the right stick's left / right is given as a full left stick's, so KH1's own
+    // first-person turn (3° a frame times the stick's x, Steam `0x14028C7E0` in mode 2) turns
+    // him at KH2's 3°. In a Drive Form KH2's controller turns him.
+    if super::camera::first_person() {
+        let rx = character_core::pad::axis(st_all[0]);
+        let lx = if super::form::in_form() || rx == 0.0 { 0x80 } else if rx > 0.0 { 0xFF } else { 0x00 };
+        let now: [u8; 4] = rd(out + 2);
+        std::ptr::write_unaligned((out + 2) as *mut [u8; 4], [now[0], now[1], lx, 0x80]);
+    }
     // Sticks to 3 levels each, so drift doesn't flood the log.
     let q = |v: u8| -> u64 { if v < 0x50 { 0 } else if v > 0xB0 { 2 } else { 1 } };
     let key = b as u64 | q(st[0]) << 16 | q(st[1]) << 18 | q(st[2]) << 20 | q(st[3]) << 22 | ((out as u64 & 0xFFFF) << 32);

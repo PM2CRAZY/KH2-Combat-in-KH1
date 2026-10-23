@@ -79,14 +79,15 @@ alone.
 | 5 state 0xF (ladders, poles) | `0x140507B20` / `0x140506D30` | `0x1401E0E50` / `0x1401E2FB0` | `state_mode::<1>` |
 | 6 ledges (states 0xD / 0xE) | `0x140507B30` / `0x140506D40` | `0x1401E0F80` / `0x1401E30E0` | `state_mode::<2>` |
 | 8 state 0x12 (right stick orbits digitally) | `0x140507B50` / `0x140506D60` | `0x1401E1390` / `0x1401E34F0` | `state_mode::<3>` |
+| 2 first person (update and exit) | `0x140507AF0` / `0x140506D00`, `+8` | `0x1401E0230` / `0x1401E2390`, exit `0x1401E04B0` / `0x1401E2610` | `first_person_mode`, `first_person_exit` (9c) |
 
-All of these have a null exit. Modes 0, 2, 7, 9, 10 and 11 keep KH1's own entries.
+All of these but mode 2 have a null exit. Modes 0, 7, 9, 10 and 11 keep KH1's own entries.
 
 ### 3.2 KH1 functions we call
 
 | Function (Epic / Steam) | Use |
 |---|---|
-| `0x1401E3200` / `0x1401E5360` `(mode, blend)` | mode switch: back to 1 from a movement-state mode (blend 0); first person on Select (mode 2, blend 30) |
+| `0x1401E3200` / `0x1401E5360` `(mode, blend)` | mode switch: back to 1 from a movement-state mode (blend 0); KH2's first person on Select (mode 2, blend 0) and out of it (mode 1, blend 0); it calls the old mode's exit |
 | `0x1401E3320` / `0x1401E5480` | KH1's movement-state camera switch; called only with `camera_calls = kh1` |
 | `0x14028A960` / `0x14028CAF0` `(degrees)` | FOV setter (writes `0x14299C500` and the projection's scale) |
 | `0x140191640` / `0x140193790` | KH1's camera ray (background and objects, under the collision lock), for the wall pull-in |
@@ -169,7 +170,7 @@ lock-on code 0x1402AE710 / 0x1402B08A0         may switch to mode 3 (or back to 
 | Event camera tasks writing the public pair (`0x140287BC0`, `0x1403A0860` at 100000; `0x1402C7530`, `0x1402CB910` at 100500), the orbit op `0x1401BD8C0` | they run after the field camera and overwrite the pair |
 | Conversation camera (mode 7, `0x1401E2170`) | KH1's own mode entry |
 | Area / map cameras (mode 9: fixed points and rails from the map's zones) | KH1's own mode entry. Lock-on inside one stays mode 9 (`0x1401E2040` doesn't switch from 9) |
-| First person (mode 2, Select) | KH1's own; Select from our follow camera switches to it |
+| First person (mode 2, Select) from KH1's own cameras (an area camera, KH1's camera chosen) | KH1's own. Select from our follow camera is KH2's first person in KH1's mode 2 (9c) |
 | Mode 10 (one room's top-down camera), mode 11 (scripted look-around) | KH1's own |
 | Save / load snapshot restore (`0x1401E29D0`) | KH1's; it hands over into ours (entry bit 2) |
 
@@ -267,6 +268,43 @@ KH2's swing-behind rate and the look point / eye spring rates grow with the play
 It now passes the KH2 run speed of the form Sora is in (`form::current`, the form's KH2
 controller numbers), else Sora's. **Assumption** (from the crate's notes): `+0x12C` is the
 form's run speed.
+
+## 9c. KH2's first person in KH1's first-person mode
+
+The tester, option (a): KH2's first-person view, natively. KH2's rules are in
+`camera-model.md` ("First person").
+
+- **KH1's parts used.**
+  - KH1's first-person camera mode (2). Its two mode-table entries are swapped, as for modes
+    1 / 3 / 4 / 5 / 6 / 8. KH1's mode switch enters it and leaves it, and calls its exit
+    whoever switches (an event too).
+  - KH1's entry test (Steam `0x1401E1920`): movement state 0, 8 or 0x18, Sora able to act
+    (`+0x444` bit 0), `0x142867CD8` bit 13 and `0x142867CDC` bit 4 clear. The same test, but
+    the first, is the "may stay" test (Steam `0x1401E2390`). KH2's own test (`0x1403ba300`) is on
+    KH2's player.
+  - Sora's fade: KH1's actor alpha `+0x60`, stepped by `+0x64` a frame times the frame step
+    and stopped at 0 or 1 (Steam KH1 `0x140297fe0`). Checked (decomp). KH1's own first person
+    fades him this way (in the last 60% of its blend, then clears his draw bit, flags `+0`
+    bit 0; its exit sets the bit and fades him in). Ours: 1 to 0 over 30 frames in, 0 to 1 over
+    30 out, KH2's. His draw bit is cleared once he is faded out and set on the way out, as
+    KH1's does.
+  - KH1's own first-person turn for base Sora (KH1's states): in mode 2 its stick-to-move
+    step (Steam KH1 `0x14028C7E0`) turns his facing by `x · 3°` (times KH1's left / right sign)
+    and gives no speed. KH2 turns him a full 3° a frame once the stick is past its dead zone, so
+    `probe::pad` gives KH1 a full left stick in the right stick's left / right direction, and a
+    centred one otherwise. In a Drive Form KH2's controller has him: `takeover` turns its facing
+    ±3° a frame, and `move_tilt` is 0, so he doesn't walk (KH2 `0x1403a8f00`).
+- **KH2's numbers.** The eye at his position plus the form's `prty` `subjective_offset` (times
+  `camera_scale`), the look point 350 ahead along his facing, the pitch by the right stick's up /
+  down, R3 to level it, KH2's spring in and out (no KH1 blend: the switches use blend 0), KH2's
+  field of view kept.
+- **Not KH2's yet** (exe data; questions to the tester): the pitch rate and limits (KH1's: 3° a
+  frame, 80° up, 60° down), and which stick turns him (the right stick, an assumption).
+- **Leaving:** Select again or KH1's "may stay" test failing (R3 no longer leaves). KH1's
+  switch back to mode 1 calls the exit: Sora fades in, and KH2's follow camera carries on from
+  the head (its yaw is behind him) with its spring.
+- **Not checked in game.** In particular: that alpha 0 hides his Keyblade too before his draw
+  bit goes, and that KH1 shows no walk while he turns in place.
 
 ## 10. Sources
 

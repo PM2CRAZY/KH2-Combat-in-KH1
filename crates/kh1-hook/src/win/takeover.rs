@@ -2489,6 +2489,11 @@ unsafe fn takeover(actor: usize) -> bool {
     let tilt = move_tilt();
     let dir = stick_dir(actor, tilt);
     let stick = if tilt > 0.0 { (dir * tilt).to_array() } else { [0.0, 0.0] };
+    // KH2's first person: he stands (no stick, `move_tilt`) and turns 3° a frame while the stick
+    // is past its dead zone (Steam KH2 `0x1403a9250`, `0x1403b7a80`).
+    if let Some(t) = first_person_turn() {
+        d.character.set_facing(d.character.facing() + t * super::shared::physics::dt());
+    }
     // With L1 held the face buttons are KH1's shortcuts, not KH2's jump / action; a button
     // still held when L1 lets go stays KH1's until released (`held` sees it raw).
     // (A command submenu open: Circle backs out of it, not KH2's jump.)
@@ -3504,6 +3509,11 @@ pub fn buttons() -> u16 {
 /// clamped to 1; it was a round 20% dead zone), or KH1's processed one when they rest (the
 /// keyboard's movement keys; KH1 builds it the same way, `0x14028b4f0`).
 pub fn move_tilt() -> f32 {
+    // KH2's first person (`camera::first_person`): KH2's player doesn't move in it (Steam KH2
+    // `0x1403a8f00` / `0x1403a7830`, his "can move" tests, are false while the camera is in it).
+    if super::camera::first_person() {
+        return 0.0;
+    }
     let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
     let raw = character_core::pad::stick(st[2], st[3]).1;
     if raw > 0.0 {
@@ -3516,6 +3526,23 @@ pub fn move_tilt() -> f32 {
     let p = unsafe { rd::<[f32; 2]>(base + LEFT_STICK_RVA) };
     let m = p[0].hypot(p[1]);
     if m.is_finite() { m.min(1.0) } else { 0.0 }
+}
+
+/// KH2's first-person turn this frame, per 60 Hz frame (`camera::first_person`): Steam KH2
+/// `0x1403a9250` turns a standing player by ±3° a frame (times the frame step) on two held pad
+/// bits, whatever the tilt. **Assumption:** they are the right stick's left / right (KH2's
+/// first person pitches by the right stick's up / down, `0x140165e30`, and the player can't
+/// move in it). Right turns him (and the view) right, as the right stick turns KH2's camera
+/// (`camera::look`). For a Drive Form (KH2's controller has him); None otherwise, out of first
+/// person, or with the stick within its dead zone.
+pub fn first_person_turn() -> Option<f32> {
+    // (Base Sora is KH1's own states': KH1's own first-person turn turns him, fed this, `probe`.)
+    if !super::camera::first_person() || !super::form::in_form() {
+        return None;
+    }
+    let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
+    let x = character_core::pad::axis(st[0]);
+    (x != 0.0).then(|| x.signum() * 0.052_359_9)
 }
 
 /// Attack pressed while KH1 had him for its own move (`combat::exec`): ends that move as soon

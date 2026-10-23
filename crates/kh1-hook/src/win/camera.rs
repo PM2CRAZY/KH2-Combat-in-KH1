@@ -27,7 +27,8 @@
 //! - its hand-overs from its other cameras (area cameras, first person, events) blend into ours
 //!   with the field of view eased along with the eye.
 //! Scripted cameras stay KH1's: mode 0 (an event's hold or release), conversations (mode 7),
-//! the event camera tasks writing the public pair, area cameras (mode 9), first person (mode 2).
+//! the event camera tasks writing the public pair, area cameras (mode 9). First person (mode 2)
+//! is KH2's when entered from KH2's follow camera (Select: `first_person_mode`), KH1's own else.
 
 use super::addr::Rva;
 use super::{log, pose};
@@ -88,6 +89,17 @@ const BLEND_TIME_RVA: Rva = Rva(0x2538A1C);
 /// state 0xF (ladders, poles), ledges (0xD / 0xE), state 0x12.
 const STATE_MODES: [(usize, Rva); 4] = [(4, Rva(0x1E0C80)), (5, Rva(0x1E0E50)), (6, Rva(0x1E0F80)), (8, Rva(0x1E1390))];
 static ORIG_STATE: [AtomicUsize; 4] = [AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0)];
+/// KH1's first-person mode (2): its update and exit (Steam `0x1401E2390` / `0x1401E2610`), whose
+/// entries run KH2's first person instead while it is on (`first_person_mode`).
+const FP_UPDATE_RVA: Rva = Rva(0x1E0230);
+const FP_EXIT_RVA: Rva = Rva(0x1E04B0);
+static ORIG_FP: AtomicUsize = AtomicUsize::new(0);
+static ORIG_FP_EXIT: AtomicUsize = AtomicUsize::new(0);
+/// KH2's first-person view is on (Select from KH2's follow camera): KH1's mode 2 runs it.
+static FP: AtomicBool = AtomicBool::new(false);
+/// KH2's player fade in and out of first person (`0x1403b7810` on the player's `+0xa10`, from
+/// `0x140165110` / `0x140165e30`): 30 frames.
+const FP_FADE: f32 = 30.0;
 
 /// KH2's camera is on (the ini's `camera`, the Config menu's row).
 pub static KH2: AtomicBool = AtomicBool::new(true);
@@ -144,6 +156,19 @@ pub unsafe fn install() {
         ORIG_STATE[i].store(cur, Ordering::Release);
         wr(slot, wrappers[i] as *const () as u64);
         swapped.push(*mode);
+    }
+    // KH1's first person (mode 2): KH2's first person in it when entered from KH2's camera
+    // (`first_person_mode`), only if both its entries are KH1's own.
+    let fp = base + MODES_RVA + 0x20;
+    let (u, x) = (rd::<u64>(fp) as usize, rd::<u64>(fp + 8) as usize);
+    if u == base + FP_UPDATE_RVA && x == base + FP_EXIT_RVA {
+        ORIG_FP.store(u, Ordering::Release);
+        ORIG_FP_EXIT.store(x, Ordering::Release);
+        wr(fp, first_person_mode as *const () as u64);
+        wr(fp + 8, first_person_exit as *const () as u64);
+        swapped.push(2);
+    } else {
+        log(&format!("KH2 camera: KH1's first-person mode isn't where expected ({u:#x}, {x:#x}): KH1's own first person"));
     }
     log(&format!(
         "KH2 camera: KH1's follow, lock-on and movement-state cameras ({swapped:?}) swapped for KH2's ({}; KH1's camera calls: {})",
@@ -377,6 +402,10 @@ unsafe fn camera_call(lock: bool) {
     let base = BASE.load(Ordering::Relaxed);
     // (Before `run` clears the first-frame bits.)
     let entry = rd::<u32>(base + ENTRY_FLAGS_RVA);
+    // (KH2's first person left without KH1's mode switch, which calls its exit: Sora back.)
+    if FP.load(Ordering::Relaxed) {
+        first_person_exit();
+    }
     set_why("");
     if let Ok(mut o) = OWN.lock() {
         *o = None;
@@ -662,26 +691,11 @@ unsafe fn run(lock: bool) -> Option<()> {
         .unwrap_or(8.0);
     let subject = kh2_camera::Subject { feet: to_cam(feet, s) - Vec3::Y * (lower / s), facing, run_speed };
 
-    // Input: KH1's processed sticks (-1..1, y down) and buttons. Sora unable to act: no stick.
+    // Input: the sticks (`sticks`) and buttons. Sora unable to act: no right stick.
     let free = rd::<u32>(sora + 0x444) & 1 == 0;
-    // The pad's own sticks as KH2's pad builds them (`character_core::pad`, Steam KH2
-    // `0x14039c180`: 60 of 127.5 off each axis, a unit direction and a tilt), 1:1 (the tester).
-    // KH1's processed sticks are built the same way (Steam KH1 `0x14028b4f0`) and stand in when
-    // the pads' own rest: the keyboard's keys, and the mouse, which writes the right stick.
-    let raw = super::takeover::RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
-    let raw_r = character_core::pad::stick_vec(raw[0], raw[1]);
-    let r = if !free {
-        [0.0; 2]
-    } else if raw_r != [0.0; 2] {
-        raw_r
-    } else {
-        rd::<[f32; 2]>(base + RIGHT_STICK_RVA)
-    };
-    let raw_l = character_core::pad::stick_vec(raw[2], raw[3]);
-    let l = if raw_l != [0.0; 2] { raw_l } else { rd::<[f32; 2]>(base + LEFT_STICK_RVA) };
+    let (r, l) = sticks(base, free);
     let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
-    let turn = rd::<f32>(base + TURN_SIGN_RVA);
-    let turn = if turn < 0.0 { -1.0 } else { 1.0 };
+    let turn = turn_sign(base);
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
     let auto = config < 0x10000 || rd::<i32>(config + 8) == 0;
     let ctl = kh2_camera::Controls {
@@ -689,9 +703,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         // unflipped, "pulled straight back" read as forward and the swing-behind ran while Sora
         // ran toward the camera, turning him in a circle (tester trace f571370).
         move_stick: Vec2::new(l[0], -l[1]).clamp_length_max(1.0),
-        // (Negated: KH1 world turns the other way round from the camera crate's; the user: x was
-        // inverted.)
-        look_stick: Vec2::new(-r[0] * turn, -r[1]).clamp_length_max(1.0),
+        look_stick: look(r, turn),
         reset: free && pressed & R3 != 0,
         auto,
     };
@@ -831,7 +843,6 @@ unsafe fn run(lock: bool) -> Option<()> {
         *g = None;
         return decline("degenerate_camera");
     }
-    LAST_MS.store(now_ms(), Ordering::Relaxed);
     if let Ok(mut o) = OWN.lock() {
         *o = Some(Own {
             yaw: cam.yaw,
@@ -845,31 +856,26 @@ unsafe fn run(lock: bool) -> Option<()> {
         });
     }
     jerk_note(eye * s, at * s, subject.feet * s, dt, cam.yaw);
-    let (e, t) = (to_kh1(eye, s), to_kh1(at, s));
-    wr(base + EYE_RVA, [e[0], e[1], e[2], 1.0f32]);
-    wr(base + TARGET_RVA, [t[0], t[1], t[2], 1.0f32]);
-    if let Ok(mut p) = LAST_PAIR.lock() {
-        *p = internal_pair(base);
-    }
-    // KH1's own view of it (its follow camera carries on from here when chosen again).
-    let d = Vec3::new(e[0] - t[0], e[1] - t[1], e[2] - t[2]);
-    let dist = d.length();
-    wr(base + DIST_RVA, dist);
-    wr(base + YAW_RVA, d.x.atan2(d.z));
-    wr(base + PITCH_RVA, (-d.y / dist).clamp(-1.0, 1.0).asin());
-    for a in KH1_MOTION_RVAS {
-        wr(base + a, 0.0f32);
+    write_view(base, eye, at, s);
+    if !lock && free && pressed & SELECT != 0 && first_person_allowed(base, sora) && rd::<u32>(base + FLAGS_RVA) & 0x2000 == 0 {
+        // Select: first person, where KH1 allows it (KH1's own test, Steam `0x1401E1920`; KH2's
+        // is `0x1403ba300`). KH2's own first person in KH1's first-person mode (2) when its
+        // entries are ours; else KH1's (blend 30).
+        let set: unsafe extern "system" fn(i32, f32) = std::mem::transmute(base + SET_MODE_RVA);
+        if ORIG_FP.load(Ordering::Acquire) != 0 {
+            cam.enter_first_person();
+            drop(g);
+            enter_first_person(sora);
+            set(2, 0.0);
+        } else {
+            drop(g);
+            set(2, 30.0);
+        }
+        set_why("first_person");
+        return Some(());
     }
     drop(g);
     if !lock {
-        // Select: KH1's first-person view, where KH1 allows it.
-        let state = rd::<i32>(sora + 0x70);
-        if free && pressed & SELECT != 0 && matches!(state, 0 | 8 | 0x18) && rd::<u32>(base + FLAGS_RVA) & 0x2000 == 0 && rd::<u32>(base + FLAGS2_RVA) & 0x10 == 0 {
-            let set: unsafe extern "system" fn(i32, f32) = std::mem::transmute(base + SET_MODE_RVA);
-            set(2, 30.0);
-            set_why("first_person");
-            return Some(());
-        }
         // KH1's climbing / ledge cameras: with `camera_calls = kh2` KH2's follow camera goes on
         // through them (the user: ledges took the camera), so KH1's switch into them
         // (`0x1401E3320`, from Sora's state) isn't called; otherwise they take over as they
@@ -886,3 +892,188 @@ unsafe fn run(lock: bool) -> Option<()> {
 
 /// Logged once, the first time KH2's follow camera runs with `camera_calls = kh2`.
 static MODE_LOGGED: AtomicBool = AtomicBool::new(true);
+
+/// The right and left sticks for KH2's camera (KH1's way: -1..1, y positive pulled back). The
+/// pad's own sticks as KH2's pad builds them (`character_core::pad`, Steam KH2 `0x14039c180`: 60
+/// of 127.5 off each axis, a unit direction and a tilt), 1:1 (the tester). KH1's processed sticks
+/// are built the same way (Steam KH1 `0x14028b4f0`) and stand in when the pads' own rest: the
+/// keyboard's keys, and the mouse, which writes the right stick. `free` false (Sora unable to
+/// act): no right stick.
+unsafe fn sticks(base: usize, free: bool) -> ([f32; 2], [f32; 2]) {
+    let raw = super::takeover::RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
+    let raw_r = character_core::pad::stick_vec(raw[0], raw[1]);
+    let r = if !free {
+        [0.0; 2]
+    } else if raw_r != [0.0; 2] {
+        raw_r
+    } else {
+        rd::<[f32; 2]>(base + RIGHT_STICK_RVA)
+    };
+    let raw_l = character_core::pad::stick_vec(raw[2], raw[3]);
+    let l = if raw_l != [0.0; 2] { raw_l } else { rd::<[f32; 2]>(base + LEFT_STICK_RVA) };
+    (r, l)
+}
+
+/// KH1's camera left / right option's sign (+1 normal).
+unsafe fn turn_sign(base: usize) -> f32 {
+    if rd::<f32>(base + TURN_SIGN_RVA) < 0.0 { -1.0 } else { 1.0 }
+}
+
+/// The right stick as the camera crate's look stick (x right, y up).
+fn look(r: [f32; 2], turn: f32) -> Vec2 {
+    // (Negated: KH1 world turns the other way round from the camera crate's; the user: x was
+    // inverted.)
+    Vec2::new(-r[0] * turn, -r[1]).clamp_length_max(1.0)
+}
+
+/// Writes KH2's camera's eye and look point (crate units) to KH1's internal pair, with KH1's own
+/// yaw / pitch / distance kept in step, and notes it as ours.
+unsafe fn write_view(base: usize, eye: Vec3, at: Vec3, s: f32) {
+    LAST_MS.store(now_ms(), Ordering::Relaxed);
+    let (e, t) = (to_kh1(eye, s), to_kh1(at, s));
+    wr(base + EYE_RVA, [e[0], e[1], e[2], 1.0f32]);
+    wr(base + TARGET_RVA, [t[0], t[1], t[2], 1.0f32]);
+    if let Ok(mut p) = LAST_PAIR.lock() {
+        *p = internal_pair(base);
+    }
+    // KH1's own view of it (its follow camera carries on from here when chosen again).
+    let d = Vec3::new(e[0] - t[0], e[1] - t[1], e[2] - t[2]);
+    let dist = d.length();
+    wr(base + DIST_RVA, dist);
+    wr(base + YAW_RVA, d.x.atan2(d.z));
+    wr(base + PITCH_RVA, (-d.y / dist).clamp(-1.0, 1.0).asin());
+    for a in KH1_MOTION_RVAS {
+        wr(base + a, 0.0f32);
+    }
+}
+
+/// KH1's own test for being in first person (its mode 2, Steam `0x1401E2390`, and its entry from
+/// mode 1, `0x1401E1920`): Sora able to act (`+0x444` bit 0 clear), in movement state 0, 8 or
+/// 0x18, and the world not a special-movement one (`0x142867CDC` bit 4). KH2's own test
+/// (`0x1403ba300`: the player's kind allows it, two of his status bits clear) is on KH2's player,
+/// which KH1 doesn't have: KH1's is the stand-in.
+unsafe fn first_person_allowed(base: usize, sora: usize) -> bool {
+    let state = rd::<i32>(sora + 0x70);
+    rd::<u32>(sora + 0x444) & 1 == 0 && matches!(state, 0 | 8 | 0x18) && rd::<u32>(base + FLAGS2_RVA) & 0x10 == 0
+}
+
+/// KH2's first-person view is on (`takeover`: KH2's player doesn't walk in it, `0x1403a8f00`,
+/// and turns by the stick, `0x1403a9250`).
+pub fn first_person() -> bool {
+    FP.load(Ordering::Relaxed)
+}
+
+/// Sora's fade through KH1's own actor alpha (`+0x60`, moved by `+0x64` a frame times the frame
+/// step and stopped at 0 or 1, KH1 `0x140297fe0`; KH1's own first person fades him the same way,
+/// `0x1401E2390` / `0x1401E2610`), with KH2's: from 1 to 0 over 30 frames into first person, from
+/// 0 to 1 over 30 out of it (`0x1403b7810`, which starts the value where it says, then steps).
+unsafe fn fade(sora: usize, out: bool) {
+    if out {
+        // (KH1 removes an actor faded to 0 with its flag bit 3 set, `0x140292390`: not Sora,
+        // but kept off then. KH1's own first person fades him all the same.)
+        if rd::<u32>(sora) & 8 == 0 {
+            wr(sora + 0x60, 1.0f32);
+            wr(sora + 0x64, -1.0f32 / FP_FADE);
+        } else {
+            wr(sora, rd::<u32>(sora) & !1);
+        }
+    } else {
+        // (KH1's draw bit back: hidden at the end of the fade out, below.)
+        wr(sora, rd::<u32>(sora) | 1);
+        wr(sora + 0x60, 0.0f32);
+        wr(sora + 0x64, 1.0f32 / FP_FADE);
+    }
+}
+
+/// Into KH2's first person (`0x140165110`: Select where the player may; the mode set to first
+/// person, Sora faded out over 30 frames). KH1's mode switch follows with no blend (KH2's spring
+/// eases the view into his head).
+unsafe fn enter_first_person(sora: usize) {
+    FP.store(true, Ordering::Relaxed);
+    fade(sora, true);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!("KH2 camera: KH2's first person (Sora state {})", rd::<i32>(sora + 0x70)));
+    }
+}
+
+/// KH1's first-person mode (2): KH2's first person when KH2's camera entered it, else KH1's own.
+unsafe extern "system" fn first_person_mode() {
+    let base = BASE.load(Ordering::Relaxed);
+    let entry = rd::<u32>(base + ENTRY_FLAGS_RVA);
+    if !FP.load(Ordering::Relaxed) {
+        let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_FP.load(Ordering::Acquire));
+        f();
+        record(base, "first_person", "kh1", "kh1_first_person", entry);
+        return;
+    }
+    let sora = rd::<u64>(base + SORA_RVA) as usize;
+    let subject_sora = sora > 0x10000 && rd::<u64>(base + SUBJECT_RVA) as usize == sora;
+    let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
+    // Out on Select again, or when he may no longer be in it (KH2 `0x140165e30`: `0x1403ba300`
+    // false or the first-person button). R3 is KH2's level-the-view here, not KH1's way out.
+    let stay = subject_sora && ours() && first_person_allowed(base, sora) && pressed & SELECT == 0;
+    if !stay || run_first_person(base, sora).is_none() {
+        let set: unsafe extern "system" fn(i32, f32) = std::mem::transmute(base + SET_MODE_RVA);
+        // (KH1's switch calls this mode's exit, `first_person_exit`: Sora fades back in.)
+        set(1, 0.0);
+        record(base, "first_person", "kh2", "first_person_left", entry);
+        return;
+    }
+    record(base, "first_person", "kh2", "", entry);
+}
+
+/// One frame of KH2's first person (`camera_calls` either way). None: leave it.
+unsafe fn run_first_person(base: usize, sora: usize) -> Option<()> {
+    wr(base + ENTRY_FLAGS_RVA, rd::<u32>(base + ENTRY_FLAGS_RVA) & !7);
+    let s = super::settings::get().camera_scale;
+    let dt = rd::<f32>(base + STEP_RVA);
+    let dt = if dt.is_finite() { dt.clamp(0.0, 4.0) } else { 1.0 };
+    let feet = rd::<[f32; 3]>(sora + 0x10);
+    let facing = rd::<f32>(sora + 0x3C);
+    if !feet.iter().all(|v| v.is_finite()) || !facing.is_finite() {
+        return None;
+    }
+    // The form's run speed (the spring's rate) and first-person height (`prty`
+    // subjective_offset, KH2 `0x1403b5c50`), else Sora's.
+    let p = pose::kh2().map(|kh2| super::form::current().and_then(|k| k.data(kh2)).map_or(&kh2.character, |f| &f.character).params.clone());
+    let run_speed = p.as_ref().map(|p| p.run_speed).filter(|v| v.is_finite() && *v > 0.0).unwrap_or(8.0);
+    let eye_height = p.as_ref().map(|p| p.subjective_offset).filter(|v| v.is_finite() && *v > 0.0).unwrap_or(150.0);
+    let subject = kh2_camera::Subject { feet: to_cam(feet, s), facing, run_speed };
+    let (r, _) = sticks(base, true);
+    let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
+    let ctl = kh2_camera::Controls { look_stick: look(r, turn_sign(base)), reset: pressed & R3 != 0, ..Default::default() };
+    let mut g = CAM.lock().ok()?;
+    let cam = g.as_mut()?;
+    cam.update_first_person(&subject, eye_height, &ctl, dt);
+    let (eye, at) = (cam.eye, cam.at);
+    if !eye.is_finite() || !at.is_finite() || (eye - at).length() < 1.0 {
+        return None;
+    }
+    write_view(base, eye, at, s);
+    drop(g);
+    set_fov(kh2_fov());
+    FOV_SET.store(true, Ordering::Relaxed);
+    // Faded out: KH1's own first person then clears his draw bit (his shadow and Keyblade go
+    // too); ours does the same.
+    if rd::<f32>(sora + 0x60) <= 0.0 && rd::<f32>(sora + 0x64) == 0.0 {
+        wr(sora, rd::<u32>(sora) & !1);
+    }
+    Some(())
+}
+
+/// KH1's first-person mode's exit (KH1's mode switch calls it on leaving mode 2, whoever
+/// switches): out of KH2's first person, Sora fades back in over 30 frames (KH2 `0x140165e30`);
+/// else KH1's own exit.
+unsafe extern "system" fn first_person_exit() {
+    if FP.swap(false, Ordering::Relaxed) {
+        let base = BASE.load(Ordering::Relaxed);
+        let sora = rd::<u64>(base + SORA_RVA) as usize;
+        if sora > 0x10000 {
+            fade(sora, false);
+        }
+        return;
+    }
+    let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_FP_EXIT.load(Ordering::Acquire));
+    f();
+}

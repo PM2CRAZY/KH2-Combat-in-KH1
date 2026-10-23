@@ -46,6 +46,9 @@ pub struct MoveParams {
     /// with the stick let go, it is multiplied by `brake` (he slides to a stop).
     pub acceleration: f32,
     pub brake: f32,
+    /// First-person eye height above the feet (`prty` subjective_offset; Sora 150). KH2's
+    /// first-person camera places the eye there (Steam KH2 `0x1403b5c50`).
+    pub subjective_offset: f32,
 }
 
 /// Ledge-grab numbers (KH2 `prty` hang_height/hang_margin, `sstm`
@@ -86,6 +89,7 @@ impl Default for MoveParams {
             ceiling_lock: 16.0,
             acceleration: 0.0,
             brake: 0.0,
+            subjective_offset: 150.0,
         }
     }
 }

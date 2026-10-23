@@ -123,7 +123,18 @@ pub struct Camera {
     last_feet: Option<Vec3>,
     /// Lock-on framing is active.
     pub locked: bool,
+    /// First-person view's pitch (radians, positive looks up).
+    pub fp_pitch: f32,
 }
+
+/// First person (Steam KH2 `0x140165e30`): the look point is this far ahead of the eye.
+pub const FP_AHEAD: f32 = 350.0;
+/// First person: pitch speed at full tilt, and its limits up / down (radians). KH2's are exe
+/// data (`0x140718bf4`, `0x140718bf8` / `0x140718bfc`), not in the decomp: these are KH1's own
+/// first-person numbers (Steam KH1 `0x1401E2390`: 3° a frame, 80° up, 60° down), stand-ins.
+pub const FP_PITCH_RATE: f32 = 0.052_359_9;
+pub const FP_PITCH_UP: f32 = 1.396_263_4;
+pub const FP_PITCH_DOWN: f32 = 1.047_197_6;
 
 /// `approach_angle` (exe): turn `cur` toward `goal` by at most `step`.
 pub fn approach_angle(cur: f32, goal: f32, step: f32) -> f32 {
@@ -167,6 +178,7 @@ impl Camera {
             prev_eye_goal: Vec3::ZERO,
             last_feet: None,
             locked: false,
+            fp_pitch: 0.0,
         };
         let at = s.feet + Vec3::Y * AT_UP;
         c.at = at;
@@ -361,12 +373,23 @@ impl Camera {
         if let Some((hit, n)) = wall(chest, eye_goal) {
             eye_goal = hit + n * WALL_GAP;
         }
+        let (at, mut eye) = self.settle(at_goal, eye_goal, s.run_speed, cut, dt);
+        if let Some((hit, n)) = wall(chest, eye) {
+            eye = hit + n * WALL_GAP;
+        }
+        self.at = at;
+        self.eye = eye;
+    }
+
+    /// The rendered look point and eye after this frame's spring toward their goals (KH2's
+    /// `0x140165700`, run in every mode), or the goals themselves on a cut. Sets the goals.
+    fn settle(&mut self, at_goal: Vec3, eye_goal: Vec3, run_speed: f32, cut: bool, dt: f32) -> (Vec3, Vec3) {
         self.prev_at_goal = self.at_goal;
         self.prev_eye_goal = self.eye_goal;
         self.at_goal = at_goal;
         self.eye_goal = eye_goal;
         // The game's rates are per 30 Hz frame, halved at 60 Hz.
-        let rate = (0.07 + (s.run_speed - 8.0) * 0.0006) * 0.5;
+        let rate = (0.07 + (run_speed - 8.0) * 0.0006) * 0.5;
         let steps = if cut { 0.0 } else { dt.max(0.0) };
         if cut {
             self.prev_at_goal = self.at_goal;
@@ -380,9 +403,42 @@ impl Camera {
             eye = eye.lerp(spring(eye, self.eye_goal, self.prev_eye_goal, rate, 1.0), k);
             left -= 1.0;
         }
-        if let Some((hit, n)) = wall(chest, eye) {
-            eye = hit + n * WALL_GAP;
+        (at, eye)
+    }
+
+    /// Into KH2's first-person view (Steam KH2 follow `0x140165110`, Select where the player may:
+    /// the mode set to 1, the pitch to 0). The host fades the player out (KH2: 30 frames).
+    pub fn enter_first_person(&mut self) {
+        self.fp_pitch = 0.0;
+        self.locked = false;
+    }
+
+    /// One frame of KH2's first-person view (Steam KH2 `0x140165e30`). The eye's goal is the
+    /// player's position raised by `eye_height` (his `prty` `subjective_offset`, Sora 150; KH2
+    /// `0x1403b5c50`), the look point's 350 ahead of it along his facing, turned up by the pitch.
+    /// The right stick's up / down turns the pitch by its tilt (`c.look_stick.y`, y up), within
+    /// limits; a reset (`c.reset`, R3) puts it back level. The camera's own yaw is kept behind him
+    /// (`0x140164e90`), so leaving puts the follow camera there. The rendered points spring to
+    /// the goals as in every mode, so the view eases into and out of his head.
+    pub fn update_first_person(&mut self, s: &Subject, eye_height: f32, c: &Controls, dt: f32) {
+        if c.reset {
+            self.fp_pitch = 0.0;
         }
+        if c.look_stick.y != 0.0 {
+            // (KH2 tests the stick's up / down bits and turns by the tilt times the axis of its
+            // unit direction: the vector's y.)
+            self.fp_pitch = wrap(self.fp_pitch + c.look_stick.y * FP_PITCH_RATE * dt);
+        }
+        self.fp_pitch = self.fp_pitch.clamp(-FP_PITCH_DOWN, FP_PITCH_UP);
+        self.locked = false;
+        let behind = wrap(s.facing + PI);
+        self.yaw = behind;
+        self.goal_yaw = behind;
+        self.last_feet = Some(s.feet);
+        let eye_goal = s.feet + Vec3::Y * eye_height;
+        let (sp, cp) = self.fp_pitch.sin_cos();
+        let ahead = Vec3::new(s.facing.sin() * cp, sp, s.facing.cos() * cp);
+        let (at, eye) = self.settle(eye_goal + ahead * FP_AHEAD, eye_goal, s.run_speed, false, dt);
         self.at = at;
         self.eye = eye;
     }
@@ -525,6 +581,45 @@ mod tests {
         let ctl = Controls { reset: true, ..Default::default() };
         c.update(&s, &ctl, None, 1.0, &none);
         assert!((c.eye - want.eye).length() > 10.0);
+    }
+
+    /// KH2's first person (`0x140165e30`): the eye eases to the player's position plus his
+    /// first-person height, looking 350 ahead along his facing; the right stick's up / down
+    /// pitches within the limits, a reset levels it, and the camera's yaw stays behind him.
+    #[test]
+    fn first_person_looks_ahead_from_the_head() {
+        let feet = Vec3::new(100.0, 0.0, 50.0);
+        let facing = 0.7_f32;
+        let s = sora(feet, facing);
+        let mut c = Camera::new(Params::FIELD, &s);
+        c.enter_first_person();
+        let still = Controls::default();
+        c.update_first_person(&s, 150.0, &still, 1.0);
+        // The first frame only eases toward the head.
+        assert!((c.eye - (feet + Vec3::Y * 150.0)).length() > 50.0);
+        for _ in 0..300 {
+            c.update_first_person(&s, 150.0, &still, 1.0);
+        }
+        assert!((c.eye - (feet + Vec3::Y * 150.0)).length() < 2.0, "{}", c.eye);
+        let ahead = (c.at - c.eye).normalize();
+        assert!((ahead - Vec3::new(facing.sin(), 0.0, facing.cos())).length() < 1e-2, "{ahead}");
+        assert!((wrap(c.yaw - (facing + PI))).abs() < 1e-5);
+        // Stick up: pitch up by 3° a frame at full tilt, to the limit.
+        let up = Controls { look_stick: Vec2::new(0.0, 1.0), ..Default::default() };
+        c.update_first_person(&s, 150.0, &up, 1.0);
+        assert!((c.fp_pitch - FP_PITCH_RATE).abs() < 1e-6);
+        for _ in 0..100 {
+            c.update_first_person(&s, 150.0, &up, 1.0);
+        }
+        assert_eq!(c.fp_pitch, FP_PITCH_UP);
+        let down = Controls { look_stick: Vec2::new(0.0, -0.5), ..Default::default() };
+        for _ in 0..200 {
+            c.update_first_person(&s, 150.0, &down, 1.0);
+        }
+        assert_eq!(c.fp_pitch, -FP_PITCH_DOWN);
+        let reset = Controls { reset: true, ..Default::default() };
+        c.update_first_person(&s, 150.0, &reset, 1.0);
+        assert_eq!(c.fp_pitch, 0.0);
     }
 
     #[test]

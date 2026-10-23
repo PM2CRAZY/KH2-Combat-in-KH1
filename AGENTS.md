@@ -1,3 +1,11 @@
+### 2026-10-23: Stage 408 (testing branch: KH2's first person in KH1's first-person mode)
+- The tester ("KH2 Camera fixes", option (a)): Select's first person is KH2's. KH1's mode 2 entries swapped
+  (`first_person_mode` / `first_person_exit`, Steam `0x1401E2390` / `0x1401E2610`; Epic from the table's neighbours) only
+  if both are KH1's own. Steam KH2 `0x140165e30`: eye at the position + `prty` subjective_offset, 350 ahead along the
+  facing, right stick up/down pitch, R3 levels, Select out. Sora fades over 30 frames each way through KH1's alpha
+  `+0x60` / `+0x64`. He stands (`move_tilt` 0) and turns 3 deg a frame. Assumptions: the pitch rate and limits (KH1's) and
+  which stick turns him. Notes: `camera-model.md`, `kh1-kh2-camera.md` 9c.
+
 ### 2026-10-23: Stage 407 (testing branch: only what KH2's model shows)
 - The tester: "(b) only do what kh2 does so its 1:1". `secondary::KH2_SHOWN_ON`: KH2's keyed bones with no mesh read as
   held to their mesh bone (hood 72 / 73 and spikes 143 / 159 / 161 on 140, flaps 113 / 115 on 110, 205 / 207 on 202). Hood
