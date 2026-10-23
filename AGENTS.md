@@ -1,3 +1,7 @@
+### 2026-10-23: Stage 406 (testing branch: the belt chain, belt-front pieces and pendant set aside)
+- The tester: "remove them from animation for now", keeping the hem and shorts ("2. (a)"). `KH1_OWN` 41 -> 34 bones; 5, 8,
+  11-14, 87 hang as before t387, live and baked.
+
 ### 2026-10-23: Stage 405 (testing branch: KH1's own parts on KH1's blend pass)
 - Mr Bugs ("Missing sleeves animation"): "standing and returning to neutral cause parts of soras model to stretch like
   crazy" (his trace f8434). KH1's blend pass (`0x140392560`, `pose_ik`) writes a non-IK bone only with bone-table bit 30

@@ -1102,8 +1102,7 @@ impl Baker {
     /// and pulls his placement back by it; his body carries it, as KH1's own motions do (H2), so
     /// the model stays on him (`kh1_data::bake`). Else none (empty): the travel stays out.
     ///
-    /// KH1's own parts (`retarget::KH1_OWN`: the belt chain and front, the shorts, the hem, the
-    /// necklace's pendant) as KH1's `template` slot (the move this stands in for) animates them,
+    /// KH1's own parts (`retarget::KH1_OWN`: the shorts, the hem) as KH1's `template` slot (the move this stands in for) animates them,
     /// retimed to this length, as KH1 plays a template retimed (the tester: "use kh1's animations
     /// as a reference").
     ///
@@ -1734,7 +1733,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             }
         }
     }
-    // KH1's own parts (the belt chain and front, the shorts, the hem, the necklace's pendant) as
+    // KH1's own parts (the shorts, the hem) as
     // KH1's own animation of this move has them, for the retarget (`Retarget::set_own`): KH1
     // plays the move KH2's stands in for underneath (our slots: its template retimed).
     if !ours {
@@ -1883,7 +1882,7 @@ const OWN_UP: usize = 3;
 /// change of motion) writes a bone only when its bone-table word has bit 30, or the bone is on
 /// its IK list (decomp); the rest keep what was there, which is the pose we drew last. Every own
 /// part's parent is such a bone (the shorts' 26 / 30 / 34 / 38 and 52 / 56 / 60 / 64, the hem's
-/// 72 and 248-276 with 71 above them, the belt's 4 / 7 / 10; Checked (files)), so the parts were
+/// 72 and 248-276 with 71 above them; Checked (files)), so the parts were
 /// measured against our drawing of it and put where KH1's own motion has them in the model, off
 /// KH2's body (Mr Bugs: "standing and returning to neutral cause parts of soras model to stretch
 /// like crazy"). A bone that still holds what we wrote is placed here from its parent by the

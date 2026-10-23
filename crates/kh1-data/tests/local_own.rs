@@ -71,7 +71,7 @@ fn kh1_s_own_parts_follow_kh1_s_motion_on_kh2_s() {
             }
             match &first {
                 Some(f0) => {
-                    for &b in &[12usize, 28, 250] {
+                    for &b in &[28usize, 74, 250] {
                         let p = parents[b] as usize;
                         let d0 = f0[p].inverse() * f0[b];
                         let d = pose[p].inverse() * pose[b];
@@ -89,7 +89,7 @@ fn kh1_s_own_parts_follow_kh1_s_motion_on_kh2_s() {
     let body = kh2_anim::Pose::bind(&f.kh2).bones;
     let pose = r.pose(&body);
     let b1 = kh2_anim::Pose::bind(&f.kh1).bones;
-    for &b in &[12usize, 28, 87] {
+    for &b in &[28usize, 74, 250] {
         let p = parents[b] as usize;
         let rel = (pose[p].inverse() * pose[b]).to_scale_rotation_translation().1;
         let bind = (b1[p].inverse() * b1[b]).to_scale_rotation_translation().1;

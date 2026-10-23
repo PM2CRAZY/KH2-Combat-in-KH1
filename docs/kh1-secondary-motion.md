@@ -263,8 +263,9 @@ sleeves animation", the tester's rule: nothing KH1 has no visible KH2 match for)
 
 Not copied (KH1's own bones, no visible KH2 match): the jacket hem (249-278, 73-74), the
 shorts' panels (27-40, 53-66), the belt chain (11-14), the belt-front pieces (5, 8), the
-necklace's pendant (87). Since t387 these take KH1's own animation of the move ("KH1's own
-parts" below).
+necklace's pendant (87). Since t387 the hem and shorts take KH1's own animation of the move
+("KH1's own parts" below); the belt chain, the belt-front pieces and the pendant did too until
+the tester set them aside, and hang as before again.
 
 ## Squash and stretch (t386)
 
@@ -308,7 +309,14 @@ The tester (point 6 of the thread): "bake a custom animation for the small parts
 doesn't have that kh1 has following the motion of each animation to give them similar looking
 results to kh1's animations ... use kh1's animations as a reference."
 
-**Which parts** (`retarget::KH1_OWN`, 41 bones): those KH1's own motions turn in 5 or more
+**Set aside** (the tester, after t393: "for the custom animation parts for kh1s model lets set
+that aside and work on it later, remove them from animation for now", with "(a)" to keeping KH1's
+own animation on the hem and shorts): the belt chain (11-14), the belt-front pieces (5, 8) and the
+necklace's pendant (87) are out of `KH1_OWN` and hang as before t387 (the chain carried by the +x
+thigh, the others rigid on their parent), live and baked. The hem and shorts keep it. Of the
+table below, those three rows are history.
+
+**Which parts** (`retarget::KH1_OWN`, 34 bones now, 41 at t387): those KH1's own motions turn in 5 or more
 motions that nothing of KH2's drives. Checked (files); what each is from bone positions only
 (Assumption). In every one of KH1's 118 motions their joint words are plain FK (0, or 25: built
 once), so KH1's keys are the whole of their animation. Checked (files).
@@ -343,7 +351,7 @@ guards stay: the belt chain's end and the hem's panels are still swung off the t
   **KH1's blend pass:** it leaves every bone without bit 30 in its bone-table word
   unwritten (`docs/kh1-anim-slots.md` §1.6, the blend path), and every own part's parent is one
   (the shorts' 26 / 30 / 34 / 38 and 52 / 56 / 60 / 64, the hem's 72 and 248-276 with 71 above,
-  the belt's 4 / 7 / 10). Before this fix the parts were measured against what we drew there last, so
+  and, while they were own parts, the belt's 4 / 7 / 10). Before this fix the parts were measured against what we drew there last, so
   on every blend (each return to the idle, the tester: "standing and returning to neutral cause
   parts of soras model to stretch like crazy") they were put where KH1's own blended pose has
   them in the model, off KH2's hips and thighs. Now a bone still holding what we wrote
