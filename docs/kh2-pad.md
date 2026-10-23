@@ -95,7 +95,7 @@ What it does (Checked (decomp), Steam KH2):
   swimming inertia, the others 0), whose right stick's up / down swims; holding the button
   makes it zoom instead.
 
-Which button it is (not found):
+Which button it is: **R2** (the tester, from KH2 itself: "its R2"). The decomp can't show it:
 
 - The held word is the pad record's raw word put through the remap table `0x1405c3420`
   (exe data, `{raw mask, logical bits}` pairs, ended by 0; `0x14039c720`) and a PC table built
@@ -113,10 +113,27 @@ Which button it is (not found):
 - Other logical bits the camera reads, for the record: pressed 17 (the reset; **Assumption:**
   R3), pressed 22 (first person; **Assumption:** Select), held 18 / 19 (the first person's
   pitch, with the right stick's y), held 20 / 21 (the first person's turn, `0x1403a9250`).
-- **Candidate:** L2, through raw bit 26 or 27: the only raw bits past the buttons and sticks
-  that a camera-side option flips. **Assumption**, not modelled. A check in KH2 itself settles
-  it: with Field Camera on Auto, run in a circle holding L2; if the camera stops swinging behind
-  him, it is L2.
+- (Our earlier guess was L2, through raw bit 26 / 27. Wrong: the tester says R2.)
+
+### Ours (R2)
+
+- `kh2-camera` `Controls::hold`: the follow camera swings behind only when `auto != hold`
+  (Auto: not while R2 is held; Manual: only while it is held), as `0x140178ae0` /
+  `0x140165110`. The lock-on camera has no swing, so R2 + the right stick switching targets
+  there is unaffected.
+- `kh1-hook` `camera::r2_held`: on Steam, bit `0x200` of KH1's raw pad word (`0x14298C9B4`,
+  slot 0's held word, PS2 order, built by KH1's pad step `0x14028b0b0` from its input object's
+  buttons, `+0x18`, the pads and the keyboard; it is the word KH1's button remap reads).
+  Checked (decomp, and the remap table read from the exe: raw R2 `0x200` -> logical
+  `0x400000`, which raw L2 `0x100` also sets, so KH1's logical word can't tell R2 alone). Other
+  builds: the pads' own records (`takeover::RAW_BUTTONS`). **Assumption:** the keyboard's R2
+  key reaches the raw word (KH1's input object merges the keyboard into `+0x18`; not traced
+  through `0x1400D7E80`).
+- Frame Advance keeps R2: while it is on `probe::pad` takes R2 off every pad record and
+  `RAW_BUTTONS`, so the camera doesn't see it then.
+- Not modelled: zoom while swimming with R2 held (KH2's swimming player kind). In KH1, water
+  (state 24) is a KH1-only state, which keeps KH1's own camera.
+- Trace: `kh2cam_hold` (1 while R2 held, as the camera read it).
 
 ## KH1 (Steam)
 

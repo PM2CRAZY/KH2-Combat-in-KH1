@@ -104,6 +104,10 @@ pub struct Controls {
     pub reset: bool,
     /// Automatic swing-behind allowed (the Camera "Auto" option).
     pub auto: bool,
+    /// KH2's camera hold button is held (bit 32 of the held word; the tester: R2). With `auto`
+    /// it stops the swing behind; without, the camera swings behind only while it is held
+    /// (Steam KH2 `0x140178ae0`, read by the follow update `0x140165110`).
+    pub hold: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -314,7 +318,10 @@ impl Camera {
                     // is positive pulled back; here y is forward, so -y < 0.9.
                     let lmag = c.move_stick.length().min(1.0);
                     let d = c.move_stick.normalize_or_zero();
-                    if c.auto && moved && lmag > 0.0 && !turned && -d.y < 0.9 {
+                    // The swing flag (`+0x42`): cleared by the hold button with Auto, set only
+                    // by it with Manual (`0x140178ae0`: bit 32, inverted unless Auto).
+                    let swing = c.auto != c.hold;
+                    if swing && moved && lmag > 0.0 && !turned && -d.y < 0.9 {
                         let step = 2.0 * (d.x.abs() + 1.0) * (d.y.abs() + 1.0) * lmag * (RECENTER + (s.run_speed - 8.0) * RECENTER_RUN) * dt;
                         self.yaw = approach_angle(self.yaw, behind, step.max(0.0));
                         self.goal_yaw = self.yaw;
@@ -498,6 +505,27 @@ mod tests {
         let turned = wrap(c.yaw - y0).abs().to_degrees();
         // The first frame has no previous position, so no "moved".
         assert!((turned - 9.0).abs() < 0.05, "{turned}");
+    }
+
+    /// The hold button (R2): with Auto it stops the swing behind, with Manual only it swings
+    /// (Steam KH2 `0x140178ae0`).
+    #[test]
+    fn the_hold_button_flips_the_swing() {
+        let run = |auto: bool, hold: bool| {
+            let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+            let ctl = Controls { move_stick: Vec2::new(1.0, 0.0), auto, hold, ..Default::default() };
+            let y0 = c.yaw;
+            let mut feet = Vec3::ZERO;
+            for _ in 0..10 {
+                feet.x -= 8.0;
+                c.update(&sora(feet, -std::f32::consts::FRAC_PI_2), &ctl, None, 1.0, &none);
+            }
+            wrap(c.yaw - y0).abs().to_degrees()
+        };
+        assert!((run(true, false) - 9.0).abs() < 0.05);
+        assert!(run(true, true) < 1e-4);
+        assert!(run(false, false) < 1e-4);
+        assert!((run(false, true) - 9.0).abs() < 0.05);
     }
 
     /// Runs Sora toward the camera for 10 frames with `stick` held (y forward) and returns how

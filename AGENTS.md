@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 413 (testing branch: R2 holds KH2's camera swing)
+- The tester ("its R2"): bit 32 of KH2's held word is R2. `kh2_camera::Controls::hold`: the swing behind runs only when
+  `auto != hold` (Steam KH2 `0x140178ae0` / `0x140165110`). `camera::r2_held`: Steam KH1's raw pad word `0x14298C9B4`
+  bit `0x200` (keyboard too; assumption), else `RAW_BUTTONS`; Frame Advance's R2 stays hidden. Trace `kh2cam_hold`.
+  Notes: `docs/kh2-pad.md`, `camera-model.md`.
+
 ### 2026-10-23: Stage 412 (testing branch: KH2's hood is on its torso)
 - The tester: "the hoodie doesn't seem to be animated anymore". From the files: KH2's model has no hood standing off the
   back; the mesh behind the neck on 140 is the hair's, the hood is the top of the back on the torso 67 (68 above carries

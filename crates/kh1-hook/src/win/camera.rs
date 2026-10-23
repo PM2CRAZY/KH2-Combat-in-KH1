@@ -56,6 +56,13 @@ const LEFT_STICK_RVA: Rva = Rva(0x298D4E0);
 const BUTTONS_RVA: Rva = Rva(0x298D4A0);
 const R3: u32 = 0x200;
 const SELECT: u32 = 0x8000;
+/// Steam only: KH1's raw pad word as its pad step (`0x14028b0b0`) leaves it for the button remap
+/// (slot 0's `+4` held, PS2 order: the pads and the keyboard merged, the stick direction bits
+/// above). R2 is `0x200` there; KH1's remap (`0x140528290`) gives R2 no bit of its own (L2 and R2
+/// both set `0x400000`).
+const RAW_HELD_STEAM: usize = 0x298C9B4;
+/// R2 in the PS2 order.
+const RAW_R2: u32 = 0x200;
 /// KH1's config block (`+8`: field camera 0 Auto / 1 Manual).
 const CONFIG_PTR_RVA: Rva = Rva(0x2E1FE70);
 /// The camera left/right option's sign (+1 normal).
@@ -474,6 +481,8 @@ pub struct Own {
     pub mv: [f32; 2],
     pub reset: bool,
     pub auto: bool,
+    /// KH2's camera hold button (R2) held.
+    pub hold: bool,
     /// Lock-on: the distance from Sora's feet to the target's point (KH1 units).
     pub lock_dist: Option<f32>,
 }
@@ -698,6 +707,7 @@ unsafe fn run(lock: bool) -> Option<()> {
     let turn = turn_sign(base);
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
     let auto = config < 0x10000 || rd::<i32>(config + 8) == 0;
+    let hold = r2_held(base);
     let ctl = kh2_camera::Controls {
         // The crate's y is forward; KH1's (like KH2's pad) is positive pulled back. Passed
         // unflipped, "pulled straight back" read as forward and the swing-behind ran while Sora
@@ -706,6 +716,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         look_stick: look(r, turn),
         reset: free && pressed & R3 != 0,
         auto,
+        hold,
     };
     let wall = |a: Vec3, b: Vec3| -> Option<(Vec3, Vec3)> {
         let (fa, fb) = (to_kh1(a, s), to_kh1(b, s));
@@ -852,6 +863,7 @@ unsafe fn run(lock: bool) -> Option<()> {
             mv: [l[0], l[1]],
             reset: ctl.reset,
             auto: ctl.auto,
+            hold: ctl.hold,
             lock_dist: lock_at.map(|t| (t - subject.feet).length() * s),
         });
     }
@@ -912,6 +924,18 @@ unsafe fn sticks(base: usize, free: bool) -> ([f32; 2], [f32; 2]) {
     let raw_l = character_core::pad::stick_vec(raw[2], raw[3]);
     let l = if raw_l != [0.0; 2] { raw_l } else { rd::<[f32; 2]>(base + LEFT_STICK_RVA) };
     (r, l)
+}
+
+/// KH2's camera hold button (bit 32 of KH2's held word; the tester: "its R2"): R2 held as KH1
+/// sees it. Steam: KH1's raw pad word (`RAW_HELD_STEAM`), so the keyboard's R2 key counts; else
+/// the pads' own records (`takeover::RAW_BUTTONS`). Either way Frame Advance's R2 isn't seen:
+/// while it is on, `probe::pad` takes R2 off every pad record (and `RAW_BUTTONS`).
+unsafe fn r2_held(base: usize) -> bool {
+    if super::addr::Build::current() == super::addr::Build::Steam && base != 0 {
+        rd::<u32>(base + RAW_HELD_STEAM) & RAW_R2 != 0
+    } else {
+        super::takeover::RAW_BUTTONS.load(Ordering::Relaxed) & RAW_R2 != 0
+    }
 }
 
 /// KH1's camera left / right option's sign (+1 normal).
