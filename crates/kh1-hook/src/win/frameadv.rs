@@ -1,17 +1,22 @@
-//! Frame Advance (t371, the tester Mr. Bugs, `docs/tester-requests.md`): a debug menu row that
+//! Frame Advance (t371, t372, the tester Mr. Bugs, `docs/tester-requests.md`): a debug menu row that
 //! holds the game still; R2 or the keyboard's period key plays one game frame, and held for a
 //! second plays at full speed until let go. Notes and addresses: `docs/kh1-frame-advance.md`.
 //!
-//! - **Holding the game, KH1's own way.** KH1's field loop (Steam `0x140170D50`) runs its task
-//!   list once a frame (`0x140284690` -> `0x14028A710 (list 0x142867380, mask)`): a task runs only
-//!   when its flags hold every bit of the mask `0x142867370`. KH1's pause sets the mask to 1, so
-//!   only the tasks flagged for a pause run (the draws and the pause menu's own), and marks every
-//!   model object paused (`0x1401ED6D0 (1)`, the pause machine's call as the pause menu opens; 0
-//!   puts them back). Frame Advance does the same between frames, from KH1's frame end
-//!   (`debugmenu::frame_end`, after the frame's task list): the next frame runs (mask 0) or is
-//!   held (mask 1). The field loop's own work around the list (the pad, the pause machine, the
-//!   drawing, the pacing, the present) runs every frame, so the picture, the HUD and the debug
-//!   menu stay up. Nothing of KH1's is hooked for it.
+//! - **Holding the game, as KH1's pause does.** KH1's field loop (Steam `0x140170D50`) runs its
+//!   task list once a frame (`0x140284690` -> `0x14028A710 (list 0x142867380, mask)`): a task runs
+//!   when its flags (`+2`) hold every bit of the mask; KH1's pause runs only the tasks flagged 1
+//!   (the draws, the pause menu's own). Every actor is one task of a second list (`0x142D5AB00`),
+//!   run by the main list's task at 80000 (`0x140298940`), which is not flagged 1.
+//!   (t372) t371 wrote the mask, but the pause machine (`0x14017F150`, run each frame before the
+//!   list) sets it every frame itself, so only the effects held (the tester: Sora went on moving).
+//!   Now, while the game is held, each task of the main list not flagged 1 has its function
+//!   (`+0x10`) swapped for ours, which does nothing (`skip`), and gets it back for a frame that
+//!   runs: the same tasks KH1's pause holds, held whatever the machine writes. From KH1's frame
+//!   end (`debugmenu::frame_end`, after the frame's list), so the next frame is held or runs. The
+//!   effect instances are paused too (`0x1401ED6D0 (1)`, the pause machine's call as its pause
+//!   opens; 0 puts them back). The field loop's own work around the list (the pad, the pause
+//!   machine, the drawing, the pacing, the present) runs every frame, so the picture, the HUD and
+//!   the debug menu stay up. Nothing of KH1's is hooked for it; only data is written.
 //! - **One frame at any frame rate.** KH1's pacing (`0x14018D1F0`, at the end of every pass of the
 //!   loop) sets the frame scale (`0x14233FBDC`) from the 60 Hz vblanks since the last pass: 1 at
 //!   60 fps, 2 at the 30 fps setting. It runs on held frames too, so the stepped frame gets the
@@ -34,7 +39,7 @@
 //!   frame as one played at full speed; `age` does the same for the draw's "posed lately" checks
 //!   (KH2's model, its pose, the hands, the left Keyblade), which would otherwise go stale and
 //!   hand Sora back to KH1's model while the game is held.
-//! - **Steam only**: the task mask and the model pause call are Steam addresses, with no Epic
+//! - **Steam only**: the task list and the effect pause call are Steam addresses, with no Epic
 //!   counterpart checked (the row says so on another build).
 
 use super::addr::{Build, Rva};
@@ -44,12 +49,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-/// KH1's task mask (Steam `0x142867370`, u32): the field loop's task list runs the tasks whose
-/// flags hold all of it (0: all; 1: KH1's pause).
-const TASK_MASK_STEAM: usize = 0x2867370;
-/// KH1's model objects paused or not (Steam `0x1401ED6D0 (on)`).
-const MODEL_PAUSE_STEAM: usize = 0x1ED6D0;
-/// KH1's pause machine (0 while the game runs): while it is up KH1 owns the mask.
+/// KH1's main task list (Steam `0x142867380`): `+0x10` the first task; a task (0x18 bytes):
+/// `+0` in use (0 free), `+2` flags (u16), `+4` priority, `+8` the next, `+0x10` its function
+/// `(task) -> u32` (bit 2: remove it, bit 3: stop the list).
+const TASK_LIST_STEAM: usize = 0x2867380;
+/// The tasks KH1's pause runs have this flag.
+const PAUSE_FLAG: u16 = 1;
+/// KH1's effect instances paused or not (Steam `0x1401ED6D0 (on)`).
+const EFFECT_PAUSE_STEAM: usize = 0x1ED6D0;
+/// KH1's pause machine (0 while the game runs).
 const PAUSE_STATE_RVA: Rva = Rva(0x232E9B4);
 /// KH1's pad record (held `+4`, the repeat timers `+0x1C` / `+0x20`).
 const BUTTONS_RVA: Rva = Rva(0x298D4A0);
@@ -81,6 +89,47 @@ struct State {
     pad: Option<(u32, u32, u32)>,
     /// KH1's pause was up during our hold (it gave the models back as it closed).
     kh1_paused: bool,
+}
+
+/// The tasks held now: (task, its own function).
+static HELD_TASKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+
+/// A held task's function: does nothing, keeps the task.
+unsafe extern "system" fn skip(_task: usize) -> u32 {
+    0
+}
+
+/// Every task of the main list not flagged for a pause is held (its function swapped for
+/// `skip`); tasks added since the last call too.
+unsafe fn hold_tasks(base: usize) {
+    let Ok(mut held) = HELD_TASKS.lock() else { return };
+    let ours = skip as *const () as usize;
+    let mut t: usize = rd(base + TASK_LIST_STEAM + 0x10);
+    let mut n = 0;
+    while t > 0x10000 && n < 1024 && super::crash::readable(t + 0x18) {
+        let f: usize = rd(t + 0x10);
+        if rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && f != ours && f > 0x10000 {
+            // (A task freed and made again meanwhile: its new function is the one to give back.)
+            match held.iter_mut().find(|e| e.0 == t) {
+                Some(e) => e.1 = f,
+                None => held.push((t, f)),
+            }
+            wr::<usize>(t + 0x10, ours);
+        }
+        t = rd(t + 8);
+        n += 1;
+    }
+}
+
+/// The held tasks get their functions back (those still in use and still ours).
+unsafe fn release_tasks() {
+    let Ok(mut held) = HELD_TASKS.lock() else { return };
+    let ours = skip as *const () as usize;
+    for (t, f) in held.drain(..) {
+        if super::crash::readable(t + 0x18) && rd::<u16>(t) != 0 && rd::<usize>(t + 0x10) == ours {
+            wr::<usize>(t + 0x10, f);
+        }
+    }
 }
 
 static STATE: Mutex<State> = Mutex::new(State { held: false, was_down: false, down_at: None, pad: None, kh1_paused: false });
@@ -173,8 +222,8 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-unsafe fn pause_models(base: usize, on: bool) {
-    let f: unsafe extern "system" fn(i32) = std::mem::transmute(base + MODEL_PAUSE_STEAM);
+unsafe fn pause_effects(base: usize, on: bool) {
+    let f: unsafe extern "system" fn(i32) = std::mem::transmute(base + EFFECT_PAUSE_STEAM);
     f(on as i32);
 }
 
@@ -184,11 +233,10 @@ unsafe fn release(base: usize, st: &mut State, kh1_paused: bool) {
         return;
     }
     st.held = false;
-    // (While KH1's pause is up its machine owns the mask and the models: it gives them back when
-    // it closes.)
+    release_tasks();
+    // (While KH1's pause is up it holds the effects itself, and gives them back as it closes.)
     if !kh1_paused {
-        wr::<u32>(base + TASK_MASK_STEAM, 0);
-        pause_models(base, false);
+        pause_effects(base, false);
     }
     let since = HELD_SINCE_MS.swap(0, Ordering::Relaxed);
     if since != 0 {
@@ -229,7 +277,7 @@ pub unsafe fn frame_end(base: usize) {
     let fast = st.down_at.is_some_and(|t| now.duration_since(t) >= FAST_AFTER);
     if kh1_paused {
         // KH1's pause menu (or a menu that stops the field the same way) is up: it holds the game
-        // itself; ours waits.
+        // itself; ours waits (our held tasks stay held).
         st.kh1_paused = st.held;
         return;
     }
@@ -245,14 +293,15 @@ pub unsafe fn frame_end(base: usize) {
             release(base, st, false);
         }
     } else {
-        // (Every frame: KH1's pause machine puts the mask back to 0 as its menu closes.)
-        wr::<u32>(base + TASK_MASK_STEAM, 1);
+        // (Every frame: tasks added meanwhile are held too.)
+        hold_tasks(base);
         if !st.held {
             st.held = true;
-            pause_models(base, true);
+            pause_effects(base, true);
             HELD_SINCE_MS.store(wall_ms() + 1, Ordering::Relaxed);
         } else if after_kh1 {
-            pause_models(base, true);
+            // (KH1's pause gave the effects back as it closed.)
+            pause_effects(base, true);
         }
         // Select + Triangle writes the trace while the game is held (no rows come then).
         super::trace::frozen_combo(super::takeover::RAW_BUTTONS.load(Ordering::Relaxed) as u16);

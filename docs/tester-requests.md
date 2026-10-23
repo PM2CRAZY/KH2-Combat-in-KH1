@@ -290,6 +290,24 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 
 > go ahead
 
+> [!tip] Assistant
+> t372
+>
+> Thanks for the traces; they showed it clearly. In all 8 of them, Sora's physics frames kept running every frame while the game was meant to be held. Only the effects held.
+>
+> **Why.** t371 held the game by writing KH1's task mask, the value KH1's pause uses to run only its pause tasks. But KH1's pause machine sets that mask again every frame, just before the tasks run, so my value was overwritten. The other thing I called was actually KH1's effect pause, not a model pause. That's why effects were the only thing that stepped.
+>
+> **What t372 does.** While the game is held, every task KH1's pause would hold has its function swapped for one of ours that does nothing, and gets its own back for a frame that runs. The actors (Sora, the party, enemies) all run from one of those tasks, so they hold too. The draws, the HUD and the debug menu are pause tasks, so they keep going. Effects are still paused with KH1's effect pause, as before. It's still only data writes, no new hooks. Everything else from t371 is the same: one frame per tap at your fps setting, 1 second held for full speed, the button rules, R2 hidden, Game Frames.
+>
+> **Check:** decomp (the Steam KH1 decomp: the task list, the actor list and its task at priority 80000) plus your t371 traces for what went wrong. Not checked in game yet. Assumption: the tasks KH1's pause keeps running don't move anything in the world. The camera's task might be one of them, so please check whether the right stick moves the camera while held. Notes are in `docs/kh1-frame-advance.md`.
+>
+> Still open from before: the period key isn't hidden from KH1 itself, and the sound question.
+>
+> I moved your files into the thread folders with the hyphen names (`testers/frame-advance-in-the-debug-menu` and so on) so each thread has one folder. I'm working through the other threads now.
+
+> [!note] Tester Mr Bugs
+> 
+
 
 ---
 

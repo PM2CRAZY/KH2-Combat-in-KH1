@@ -1,4 +1,4 @@
-# KH1 frame advance (t371)
+# KH1 frame advance (t371, t372)
 
 How the debug menu's Frame Advance row holds KH1 still and steps it one frame at a time
 (`crates/kh1-hook/src/win/frameadv.rs`). Addresses are the Steam build's (Ghidra decomp of the Steam
@@ -31,17 +31,38 @@ writes are inside the pause machine's jump table, which wasn't decompiled, and t
 to 0 as the machine finishes (`0x14017F150`, state above 6). **Assumption** for the value 1 (from
 the Epic work); **Checked (decomp)** for the reset.
 
-Frame Advance writes the mask between frames (from the frame end, after the task list) while KH1's
-pause machine is idle (`0x14232DFB8` = 0): 1 holds the next frame, 0 lets it run.
+t371 wrote the mask between frames (from the frame end). That didn't hold the game: the tester's t371
+traces show Sora's physics frames going on every frame while the mod's clock stood still (8 traces, at
+30 and 60 fps). The pause machine `0x14017F150` runs every frame before the task list, and its state
+handlers (the jump table) set the mask each frame, so ours was overwritten before the list read it.
+**Checked (trace)** for the result; the cause is an **Assumption** (the handlers weren't decompiled).
 
-## Model objects
+**t372: the held tasks.** A task of the main list (0x18 bytes, from `0x14028A900` and the runner):
+`+0` in use (`0x11` when made, 0 free), `+2` flags (u16, 0 when made; some are set to `0xFFFF` after),
+`+4` priority, `+8` the next task, `+0x10` its function `(task) -> u32` (result bit 2: remove the
+task, bit 3: stop the list); the list's first task at list `+0x10`. **Checked (decomp).** While the
+game is held, Frame Advance swaps the function of every task in use whose flags lack bit 0 for one of
+its own that does nothing, and gives each its function back for a frame that runs. Those are the
+tasks KH1's pause holds (mask 1), held whatever the pause machine writes. New tasks are held as they
+appear (the list is walked every held frame).
 
-`0x1401ED6D0 (on)` marks every model object in use paused or not: 0xE0-byte entries, the first
-entry's in-use byte (bit 0) at `0x142678312`; from that byte, `+0x43` bit 7 set and `+0x49` = 1 (or
-cleared). The pause machine calls it with 1 as
-its pause opens (through the thunk `0x1401E0C70`). Frame Advance calls it with 1 when it holds the
-game and 0 when it lets a frame run. **Checked (decomp)** for what it writes; what the model pass
-does with the flag is an **Assumption** (it keeps the model's animation still).
+## Actors
+
+Each actor is a task of a second list, `0x142D5AB00` (0x28-byte tasks, made by `0x140297980` with
+priority 2000 for Sora, 3000 for the party, 4000 by default, ...; `+0x18` the actor, `+0x20` its kind's
+step), whose runner is `0x140297FE0` (the actor's update, which calls the physics step). That list is
+run with mask 0 by `0x140298940`, the main list's task at priority 80000 (registered by `0x140297890`
+with flags 0). So holding that one task holds every actor. **Checked (decomp).**
+
+## Effect instances
+
+`0x1401ED6D0 (on)` marks every effect instance in use paused or not: the effect pool
+`0x142678280` (0x100 instances of 0xE0 bytes); from each instance's in-use byte (`+0x92`, bit 0),
+`+0x43` bit 7 set and `+0x49` = 1 (or cleared). (t371 called these model objects: they are the effect
+instances, the pool in the effects notes.) The pause machine calls it with 1 as its pause opens
+(through the thunk `0x1401E0C70`). Frame Advance calls it with 1 when it holds the game and 0 when it
+lets a frame run. **Checked (decomp)**; the tester's t371 test: effects held and stepped frame by
+frame (**Checked (trace / in game)**).
 
 ## The frame scale
 

@@ -1,3 +1,15 @@
+### 2026-10-23: Stage 372 (testing branch: Frame Advance holds the actors)
+- The tester's t371 test (`testers/frame-advance-in-the-debug-menu`, 8 traces at 30 / 60 fps, KH1 and KH2 moves):
+  only effects held and stepped; Sora's physics frames went on every frame while the mod's clock stood still. The
+  pause machine (`0x14017F150`, every frame before the task list) sets the task mask each frame itself, so t371's
+  write was overwritten; `0x1401ED6D0` pauses the effect instances (pool `0x142678280`), not models.
+- `frameadv`: while the game is held, every task of KH1's main list (`0x142867380`, 0x18-byte tasks: `+0` in use,
+  `+2` flags, `+8` next, `+0x10` function) in use and not flagged 1 (the flag KH1's pause runs) has its function
+  swapped for `frameadv::skip` (does nothing, keeps the task), and gets it back for a frame that runs; the list is
+  walked every held frame, so new tasks are held too. The actors are one of those tasks (`0x140298940`, priority
+  80000, runs the actor list `0x142D5AB00`). The mask is no longer written. Data writes only, no hook. Notes:
+  `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 371 (testing branch: Frame Advance in the debug menu)
 - The tester Mr. Bugs (`docs/tester-requests.md`, "Frame advance in the debug menu"): a debug menu row that holds the
   game; R2 or the period key plays one frame, held 1 s plays at full speed until let go; works at any fps; R2 does
