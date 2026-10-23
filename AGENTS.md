@@ -1,3 +1,7 @@
+### 2026-10-23: Stage 430 (testing branch: KH2 effects: KH2's body centre 0x4001 on KH1's 0x8005)
+- The tester (option (a)). KH1 0x8005 (the first enabled kind-1 collision part's centre, object frame), Checked (exe);
+  KH2's 0x4001 the same in KH2 (decomp); all packages; both heights logged once (KH2's: 85 for Sora). Notes §18.15.
+
 ### 2026-10-23: Stage 429 (testing branch: KH2 effects: KH2's pppSnoMdlDttNorm, the Drive sphere through KH1)
 - The tester (option (a)). `kh2ppp::dtt_draw` (KH2 `0x1404CBBA0` / `0x1404CAD20`, Checked (decomp)) with KH1's pppKeMdlDtt calls;
   construct and reset KH1 145's. Assumptions: normal 1/4096, push x strength. Drive element 1 through KH1. Notes §18.14.

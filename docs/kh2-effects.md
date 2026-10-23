@@ -1638,8 +1638,8 @@ the spell files aren't staged here.
     still the element's.
 - Not checked offline: none of these files is staged here, so their elements' bones, flags and
   programs are only known at load. What KH1 doesn't have stays with `kh2fx` (logged per element):
-  KH2's body centre 0x4001 (no KH1 anchor found yet), KH2-only programs, and the programs §12.2
-  lists that aren't compared yet (KeShpTail3X and AngleLoop now are, §18.9).
+  KH2-only programs not ported, and the programs §12.2 lists that aren't compared yet
+  (KeShpTail3X and AngleLoop now are, §18.9). KH2's body centre 0x4001: §18.15.
 
 ### 18.11 What still goes through the old player (`kh2fx`)
 
@@ -1651,7 +1651,8 @@ plays everything, as before):
 - Valor's and Final's packages: their second-Keyblade elements while the left Keyblade isn't
   drawn (its model not in yet, §18.13), and any element the load log lists as left out (a bone with no KH1 anchor, a flag KH1's binding doesn't
   do, a program not compared or KH2-only).
-- The spell packages: elements on KH2's body centre (0x4001), and the same load-log cases.
+- The spell packages: the same load-log cases (their body-centre elements are KH1's since
+  §18.15).
 - The Keyblade's flash: only if its element fails the gate (logged).
 - Anything whose package didn't build (logged: the file not read, its HD textures not read, every
   group over KH1's texture slots), and every package on other builds (Epic: Sora's elements without
@@ -1796,4 +1797,29 @@ can play.
 - Element 1's key (**Checked (files)**): model 5 (224 triangles with normals), @0xC −120 (the rate
   at frame 0: `t` falls by 120 a draw), @0x14 = 1 (the second buffer), @0x15 = 1, @0x16 = 0,
   @0x17 = 0, @0x1C = 0.
+
+### 18.15 KH2's body centre (0x4001) on KH1's (0x8005)
+
+- KH2 (**Checked (decomp)**, `0x1403B50F0` case 0x4001): the object's turn (`+0x40`, as for 0x4000)
+  at the centre of its first collision shape of kind 1 whose group is on (`0x1403C9B80 (list, 1)`,
+  `0x1403BA550`), else at the object's place (`+0x670`). A shape's centre (`0x1403C9C00`): its
+  offset (`+8`) through its bone's matrix (`0x4000` the object root's), then its lift (`+0xE`)
+  off the world y (up). Sora's (**Checked (files)**, `P_EX100.mdlx`): entry 1, kind 1, group 0
+  (the only group on by default), on the object root, offset 0, lift 85 (radius 35, height 55).
+- KH1 has the same point (**Checked (exe)**, `0x14029EB20` code 0x8005): the actor's first
+  collision part (`+0x134` → `+0x1C`, 0x14 bytes each, count `+7`; kind the low nibble of `+0`)
+  of kind 1 not switched off (`+0x3AC` bits), else of kind 0 (`0x1402B6D30`), else its main part
+  (`+0x14`), else its place: its point along its bone (`+2` code, `+4` t), raised by its lift
+  (`+8`) × the actor's scale (`+0x44`). With the object-root bit (0x8000) KH1's binding takes the
+  object root's frame (§16.2: − rows `+0xF0`, `+0xE0`, `+0xD0`) at that point (`0x14029EA00`), so
+  KH1's start on a bone with 0x8005 (binding mode 2) is KH2's 0x4001: the object's turn at the body
+  part's centre. So `kh2dpx::anchor` maps 0x4001 to KH1's 0x8005 for every package (option A, as
+  the bones: each game's own body; KH1 Sora's centre is from KH1's own collision data, not
+  KH2's 85), and position-only elements on it use KH1's position binding (mode 1, t 0). The first
+  start logs both heights (KH1's measured on Sora, KH2's from his model). **Assumption** (as for
+  0x8000): KH1's object frame is KH2's object frame; KH1 Sora's kind-1 part is his body's (not
+  checked offline: KH1's collision data isn't read here).
+- Sora's own package has no 0x4001 element (its codes: bones, 0x4000, 0x4003; **Checked
+  (files)**). Which spell, form or Keyblade elements use it isn't known offline (their files aren't
+  staged): the load log names each element's anchor.
 

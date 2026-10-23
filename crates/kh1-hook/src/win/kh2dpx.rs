@@ -141,9 +141,8 @@ fn form_anchor(code: u16) -> Option<Anchor> {
     }
 }
 
-/// The spell packages' anchors, as `kh2fx`'s (Sora's bones and object root, the Keyblade's
-/// points) but for KH2's body centre 0x4001 (the root bone's place, unturned), for which KH1 has
-/// no anchor found yet: kh2fx keeps those.
+/// The spell packages' anchors: Sora's bones, his object root and body centre, the Keyblade's
+/// points (`anchor`).
 fn spell_anchor(code: u16) -> Option<Anchor> {
     anchor(code)
 }
@@ -218,6 +217,7 @@ fn anchor(code: u16) -> Option<Anchor> {
         85 => Anchor::Bone(203),
         177 => Anchor::Bone(98),
         0x4000 => Anchor::Code(KH1_OBJECT_ROOT),
+        0x4001 => Anchor::Code(KH1_BODY_CENTRE),
         0x4003 => Anchor::Blade(1.0),
         0x4005 => Anchor::Blade(0.0),
         0x4007 => Anchor::Blade(0.5),
@@ -239,6 +239,13 @@ const BLADE_BONE: u32 = 0x30;
 /// KH1's object-root code: the actor's place with a frame from its matrix rows (each negated,
 /// `+0xF0`, `+0xE0`, `+0xD0`), KH2's 0x4000.
 const KH1_OBJECT_ROOT: u32 = 0x8000;
+/// KH1's body-centre code, KH2's 0x4001 (`docs/kh2-effects.md` §18.15): the object root's frame
+/// (as 0x8000's, `0x14029EA00`) at the centre of the actor's first collision part of kind 1 that
+/// isn't switched off, else of kind 0 (`0x14029EB20` → `0x1402B6D30 (actor, 1, -1)`: its point
+/// along its bone, raised by its lift × the actor's scale), as KH2's is the object's turn at the
+/// centre of its first enabled kind-1 collision shape (`0x1403B50F0` → `0x1403C9B80 (list, 1)`,
+/// `0x1403C9C00`).
+const KH1_BODY_CENTRE: u32 = 0x8005;
 /// KH1's bone-code bit for "place once, when the wait is over, then let go" (the binding task
 /// `0x1402AE910`: with it, its first run once the element no longer waits places it and ends):
 /// KH2's flag 0x02, bound only until started.
@@ -859,7 +866,7 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     let r_e = math::euler_xyz(Vec3::from(e.rotation));
     let r_h = math::euler_xyz_i(h_ang);
     let position_only = flags & POSITION_ONLY != 0;
-    if position_only && matches!(bone, Anchor::Code(_)) {
+    if position_only && matches!(bone, Anchor::Code(c) if c != KH1_BODY_CENTRE) {
         return Err(format!("element {el}: bound by position only to KH2's {:#x}, which KH1's position binding has no point for yet", e.bone));
     }
     // Position only: the root is `T(B · t) · R · S · H` (KH2), KH1's `T(point + offset) · S · H'`
@@ -1440,6 +1447,8 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     };
     let element = match bone {
         Anchor::Bone(b) if position_only => by_position(RAW_POINT | b, 1.0),
+        // (The body centre's point takes no distance along anything: its part's own.)
+        Anchor::Code(c) if position_only => by_position(c, 0.0),
         Anchor::Blade(t) | Anchor::LeftBlade(t) if position_only => by_position(BLADE_BONE, t),
         Anchor::Bone(b) => on_bone(RAW_BONE | b),
         Anchor::Code(c) => on_bone(c),
@@ -1461,6 +1470,9 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
         unsafe { note_binding(base, element, actor, pos) };
     }
     let set = element != 0 && unsafe { apply(element, &layer, motion) };
+    if element != 0 && bone == Anchor::Code(KH1_BODY_CENTRE) {
+        unsafe { note_body_centre(base, actor) };
+    }
     if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
         log(&format!(
             "KH2 effect (native): {pkg:?} element {el} of motion {motion} -> KH1 effect {number:#x} on {bone:?}: {}",
@@ -1486,6 +1498,27 @@ pub fn form_event(final_form: bool, motion: u16, el: i16) -> bool {
 /// KH1's put-away): true if KH1 plays it (`play`).
 pub fn weapon_vanish(motion: u16) -> bool {
     play(Pkg::Weapon, motion, super::kh2fx::WEAPON_VANISH as i16)
+}
+
+/// Once, for the log: where KH1's body centre is on Sora (its height above his place) against
+/// KH2's (his model's first kind-1 collision shape of group 0: its lift, and its place on the
+/// object root). Steam (KH1's point read).
+unsafe fn note_body_centre(base: usize, actor: usize) {
+    static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if ONCE.swap(true, Ordering::Relaxed) || super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    let point: unsafe extern "system" fn(usize, u32, f32, usize) = std::mem::transmute(base + READ_POINT_STEAM);
+    let mut p = [0f32; 4];
+    point(actor, KH1_BODY_CENTRE, 0.0, p.as_mut_ptr() as usize);
+    let at = rd::<[f32; 3]>(actor + 0x10);
+    let kh2 = super::pose::kh2().and_then(|k| k.rig.body_shapes.iter().find(|s| s.kind == 1 && s.group == 0).map(|s| (s.lift, s.offset, s.bone)));
+    log(&format!(
+        "KH2 effects (native): body centre: KH1's {:.1} above Sora's place (offset {:.1?}); KH2's (his model's first body shape) {}",
+        at[1] - p[1],
+        [p[0] - at[0], p[1] - at[1], p[2] - at[2]],
+        kh2.map_or("not found".to_string(), |(lift, off, bone)| format!("{lift:.1} up, at {off:.1?} on {}", bone.map_or("the object root".to_string(), |b| format!("bone {b}"))))
+    ));
 }
 
 /// The binding KH1's start just made for `element` (the binding list's last node), noted for
