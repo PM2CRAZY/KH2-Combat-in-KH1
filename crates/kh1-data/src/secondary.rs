@@ -36,6 +36,11 @@
 //!   the chest.
 //! Each KH1 bone is turned about its own joint with its subtree, so KH1's link lengths stay.
 //!
+//! **Only what KH2's model shows** (`KH2_SHOWN_ON`): KH2's hood bones, sleeve flaps and three of
+//! its spikes are keyed but carry no mesh, so they are read as held to the bone their region's
+//! mesh is on (the hood and those spikes with the head, the flaps with the sleeve): KH1's hood
+//! turns with KH2's head, its sleeves with no flap motion or flap squash.
+//!
 //! **Squash and stretch** (`scales`): KH2's scale on a matched bone (its own, against its parent)
 //! goes on the KH1 bone matched to it, laid onto the KH1 bone's axes. Both games scale a bone the
 //! same way (KH1 `0x1403900B0` / `0x140394CF0`, KH2 `kh2_anim`): a bone's scale is its parent's
@@ -67,6 +72,14 @@ pub const HOOD: [(usize, usize); 4] = [(80, 72), (81, 72), (82, 73), (83, 73)];
 /// the pendant hangs 3-12 in front of the chest). Both bind pointing down and forward (KH1's
 /// link 50° below level, KH2's bone's x 56°).
 pub const NECKLACE: (usize, usize) = (86, 165);
+/// KH2 bones its motions key that carry no mesh, each with the bone the mesh round it is on: KH2
+/// draws that region as the mesh bone moves, so they are read as held to it at their bind
+/// relation (the tester: "only do what kh2 does so its 1:1"). The hood (72, 73) and the front and
+/// top of the hair (spikes 143, 159, 161) on the head (140), the sleeve flaps on the sleeve (113,
+/// 115 on 110; 205, 207 on 202). Checked (files, `docs/kh1-secondary-motion.md`, "Which KH2 bones
+/// show on KH2's model"). So KH1's hood turns with KH2's head, its sleeves with KH2's sleeve (no
+/// flap motion and no flap squash), and the spikes matched to those three with the head.
+pub const KH2_SHOWN_ON: [(usize, usize); 9] = [(72, 140), (73, 140), (143, 140), (159, 140), (161, 140), (113, 110), (115, 110), (205, 202), (207, 202)];
 /// KH1's keychain: 283 (at the pommel) to 291 (the charm, its tip 292); KH2's Keyblade
 /// (`W_EX010`): 3 to 11, the same places in the bind.
 pub const KH1_CHAIN: std::ops::RangeInclusive<usize> = 283..=291;
@@ -340,9 +353,9 @@ impl Secondary {
         let dir = |p: &[Mat4], (a, b): (usize, usize)| Some((at(p.get(b)?) - at(p.get(a)?)).normalize_or_zero());
         let (d2, d1) = (dir(body, sl.kh2_arm)?, dir(pose, sl.kh1_arm)?);
         let onto = if d1 == Vec3::ZERO || d2 == Vec3::ZERO { Quat::IDENTITY } else { Quat::from_rotation_arc(d2, d1) };
-        let root = (onto * rot(body.get(sl.kh2_root)?) * rot(self.kh2_bind.get(sl.kh2_root)?).inverse()).normalize();
-        let a = Self::relative(body, &self.kh2_bind, sl.kh2_root, sl.flaps.0)?;
-        let b = Self::relative(body, &self.kh2_bind, sl.kh2_root, sl.flaps.1)?;
+        let root = (onto * self.kh2_rot(body, sl.kh2_root)? * rot(self.kh2_bind.get(sl.kh2_root)?).inverse()).normalize();
+        let a = self.relative(body, sl.kh2_root, sl.flaps.0)?;
+        let b = self.relative(body, sl.kh2_root, sl.flaps.1)?;
         let flap = a.slerp(b, sl.share).normalize();
         let joint = (root * rot(&self.kh1_bind[sl.joint])).normalize();
         // The mid joint: the root's turn, then the flap's (both in the bind's axes).
@@ -361,9 +374,9 @@ impl Secondary {
     /// Spike `k`'s turn relative to KH2's head: its nearest KH2 spike's, blended toward the
     /// second nearest's by its share.
     fn hair_turn(&self, k: usize, body: &[Mat4]) -> Option<Quat> {
-        let a = Self::relative(body, &self.kh2_bind, KH2_HEAD, self.hair.get(k)?.kh2)?;
+        let a = self.relative(body, KH2_HEAD, self.hair.get(k)?.kh2)?;
         let (other, share) = *self.hair_mix.get(k)?;
-        let b = Self::relative(body, &self.kh2_bind, KH2_HEAD, other)?;
+        let b = self.relative(body, KH2_HEAD, other)?;
         Some(a.slerp(b, share).normalize())
     }
     pub fn hood(&self) -> &[Link] {
@@ -388,10 +401,19 @@ impl Secondary {
         }
     }
 
-    /// A KH2 bone's turn from its bind, relative to its reference bone (`refr`), in the bind's
-    /// axes: what it would be with the reference at rest.
-    fn relative(now: &[Mat4], bind: &[Mat4], refr: usize, k: usize) -> Option<Quat> {
-        let (rn, rb, kn, kb) = (rot(now.get(refr)?), rot(bind.get(refr)?), rot(now.get(k)?), rot(bind.get(k)?));
+    /// KH2 bone `k`'s turn in KH2's pose `now` as KH2's model shows it: its own, or for a bone
+    /// with no mesh (`KH2_SHOWN_ON`) its mesh bone's with their bind relation.
+    fn kh2_rot(&self, now: &[Mat4], k: usize) -> Option<Quat> {
+        match KH2_SHOWN_ON.iter().find(|(h, _)| *h == k) {
+            Some(&(_, m)) => Some((rot(now.get(m)?) * rot(self.kh2_bind.get(m)?).inverse() * rot(self.kh2_bind.get(k)?)).normalize()),
+            None => Some(rot(now.get(k)?)),
+        }
+    }
+
+    /// A KH2 bone's turn from its bind (as KH2's model shows it, `kh2_rot`), relative to its
+    /// reference bone (`refr`), in the bind's axes: what it would be with the reference at rest.
+    fn relative(&self, now: &[Mat4], refr: usize, k: usize) -> Option<Quat> {
+        let (rn, rb, kn, kb) = (self.kh2_rot(now, refr)?, rot(self.kh2_bind.get(refr)?), self.kh2_rot(now, k)?, rot(self.kh2_bind.get(k)?));
         let q = (rb * rn.inverse() * kn * kb.inverse()).normalize();
         q.is_finite().then_some(q)
     }
@@ -440,7 +462,7 @@ impl Secondary {
             rep.parts.hood = true;
             let chest = (rot(&pose[KH1_NECK_BASE]) * rot(&self.kh1_bind[KH1_NECK_BASE]).inverse()).normalize();
             // Each joint as KH2's hood turns it, relative to the chest.
-            let target: Option<Vec<Quat>> = self.hood.iter().map(|l| Some((chest * Self::relative(body, &self.kh2_bind, KH2_CHEST, l.kh2)? * rot(&self.kh1_bind[l.kh1])).normalize())).collect();
+            let target: Option<Vec<Quat>> = self.hood.iter().map(|l| Some((chest * self.relative(body, KH2_CHEST, l.kh2)? * rot(&self.kh1_bind[l.kh1])).normalize())).collect();
             match target {
                 Some(target) => {
                     for (l, want) in self.hood.iter().zip(&target) {
@@ -465,7 +487,7 @@ impl Secondary {
         }
         if let (true, Some((l, clear)), true) = (want.necklace, self.necklace, body.len() > KH2_CHEST.max(NECKLACE.1)) {
             let chest = (rot(&pose[KH1_NECK_BASE]) * rot(&self.kh1_bind[KH1_NECK_BASE]).inverse()).normalize();
-            if let Some(d) = Self::relative(body, &self.kh2_bind, KH2_CHEST, l.kh2) {
+            if let Some(d) = self.relative(body, KH2_CHEST, l.kh2) {
                 rep.parts.necklace = true;
                 let target = (chest * d * rot(&self.kh1_bind[l.kh1])).normalize();
                 self.turn(pose, l.kh1, (target * rot(&pose[l.kh1]).inverse()).normalize());
@@ -555,7 +577,8 @@ impl Secondary {
                 }
             }
         };
-        let body_s = |k: usize, kh1: usize| self.own_scale(body, &self.kh2_parent, &self.kh2_bind, k, kh1);
+        // (A KH2 bone with no mesh is held to its mesh bone, `KH2_SHOWN_ON`: no scale of its own.)
+        let body_s = |k: usize, kh1: usize| if KH2_SHOWN_ON.iter().any(|(h, _)| *h == k) { Some(Vec3::ONE) } else { self.own_scale(body, &self.kh2_parent, &self.kh2_bind, k, kh1) };
         if want.hair {
             for (k, l) in self.hair.iter().enumerate() {
                 let (other, share) = self.hair_mix[k];
@@ -652,12 +675,12 @@ impl Secondary {
         }
         let chest = rot(&pose[KH1_NECK_BASE]) * rot(&self.kh1_bind[KH1_NECK_BASE]).inverse();
         for l in &self.hood {
-            if let Some(d) = Self::relative(body, &self.kh2_bind, KH2_CHEST, l.kh2) {
+            if let Some(d) = self.relative(body, KH2_CHEST, l.kh2) {
                 v.push((*l, (chest * d * bind_dir(l)).normalize()));
             }
         }
         if let Some((l, _)) = self.necklace {
-            if let Some(d) = Self::relative(body, &self.kh2_bind, KH2_CHEST, l.kh2) {
+            if let Some(d) = self.relative(body, KH2_CHEST, l.kh2) {
                 v.push((l, (chest * d * bind_dir(&l)).normalize()));
             }
         }
@@ -814,7 +837,9 @@ mod tests {
         k2[71] = bone(68, [0.0, 0.0, -5.0]);
         k2[72] = bone(71, [0.0; 3]);
         k2[73] = bone(72, [0.0, 0.0, -8.0]);
-        k2[141] = bone(0, [0.0, 142.0, 0.0]);
+        // The head (140, its mesh) and the spikes' parent under it (141), as KH2's.
+        k2[140] = bone(0, [0.0, 142.0, 0.0]);
+        k2[141] = bone(140, [0.0; 3]);
         k2[142] = bone(141, [6.0, 3.0, 0.0]);
         k2[143] = bone(142, [0.0; 3]);
         k2[144] = bone(141, [-6.0, 3.0, 0.0]);
@@ -846,13 +871,26 @@ mod tests {
         assert_eq!((s.chain()[0].kh1, s.chain()[0].kh2, s.chain()[8].kh1, s.chain()[8].kh2), (283, 3, 291, 11));
     }
 
+    /// KH2's head (140 and everything on it, the spikes) turned by `q` about its joint.
+    fn head_turned(b2: &[Mat4], q: Quat) -> Vec<Mat4> {
+        let p = at(&b2[140]);
+        let m = Mat4::from_translation(p) * Mat4::from_quat(q) * Mat4::from_translation(-p);
+        let mut body = b2.to_vec();
+        for i in 140..=145 {
+            body[i] = m * body[i];
+        }
+        body
+    }
+
     #[test]
     fn a_spike_turns_as_kh2_s_relative_to_the_head() {
         let (b1, b2, _, s) = binds();
-        // KH2's head turned a quarter round, its +x spike tipped up 30° on top of that.
+        // KH2's head turned a quarter round, its -x spike (145, which has mesh) tipped 30° on top
+        // of that, and its +x one (143, which has none: KH2 draws it with the head) too.
         let turn = Mat4::from_rotation_y(std::f32::consts::FRAC_PI_2);
         let about = |p: Vec3| Mat4::from_translation(p) * turn * Mat4::from_translation(-p);
         let mut body: Vec<Mat4> = b2.iter().map(|m| about(at(&b2[141])) * *m).collect();
+        body[145] = body[145] * Mat4::from_rotation_z(30f32.to_radians());
         body[143] = body[143] * Mat4::from_rotation_z(30f32.to_radians());
         // KH1's head turned the same.
         let mut pose: Vec<Mat4> = b1.clone();
@@ -862,11 +900,11 @@ mod tests {
         let before = pose.clone();
         let rep = s.apply(&mut pose, &body, None, Parts::ALL);
         assert!(rep.parts.hair && !rep.parts.chain);
-        let want = turn.transform_vector3(Quat::from_rotation_z(30f32.to_radians()) * Vec3::X);
-        assert!(dir(&pose, 153, 154).angle_between(want) < 1e-3, "{:?} vs {want:?}", dir(&pose, 153, 154));
-        assert!((at(&pose[154]).distance(at(&pose[153])) - 10.0).abs() < 1e-3);
-        // The other spike's KH2 match didn't move: it stays.
-        assert!(dir(&pose, 156, 157).angle_between(dir(&before, 156, 157)) < 1e-3);
+        let want = turn.transform_vector3(Quat::from_rotation_z(30f32.to_radians()) * -Vec3::X);
+        assert!(dir(&pose, 156, 157).angle_between(want) < 1e-3, "{:?} vs {want:?}", dir(&pose, 156, 157));
+        assert!((at(&pose[157]).distance(at(&pose[156])) - 10.0).abs() < 1e-3);
+        // The spike following 143 stays with the head, as KH2's model shows it.
+        assert!(dir(&pose, 153, 154).angle_between(dir(&before, 153, 154)) < 1e-3);
     }
 
     #[test]
@@ -874,25 +912,31 @@ mod tests {
         let (b1, b2, _, s) = binds();
         let mut body = b2.clone();
         // Folded straight back over the head (180° about z): capped, then held short of it.
-        body[143] = body[143] * Mat4::from_rotation_z(std::f32::consts::PI);
+        body[145] = body[145] * Mat4::from_rotation_z(std::f32::consts::PI);
         let mut pose = b1.clone();
         let rep = s.apply(&mut pose, &body, None, Parts::ALL);
         assert_eq!(rep.clamped, 1);
-        let a = dir(&pose, 153, 154).angle_between(Vec3::X).to_degrees();
+        let a = dir(&pose, 156, 157).angle_between(-Vec3::X).to_degrees();
         assert!(a > 90.0 && a < 130.0, "turned {a}°");
         let centre = (at(&b1[152]) + at(&b1[155])) * 0.5;
-        assert!(at(&pose[154]).distance(centre) >= 4.4 && ((at(&pose[154]) + at(&pose[153])) * 0.5).distance(centre) >= 4.4);
+        assert!(at(&pose[157]).distance(centre) >= 4.4 && ((at(&pose[157]) + at(&pose[156])) * 0.5).distance(centre) >= 4.4);
     }
 
     #[test]
-    fn the_hood_folds_as_kh2_s() {
+    fn the_hood_turns_with_kh2_s_head() {
         let (b1, b2, _, s) = binds();
+        // KH2's hood bones turned alone (they carry no mesh): nothing moves.
         let mut body = b2.clone();
         body[72] = body[72] * Mat4::from_rotation_x(-60f32.to_radians());
         body[73] = body[72] * b2[72].inverse() * b2[73];
         let mut pose = b1.clone();
         let rep = s.apply(&mut pose, &body, None, Parts { hood: true, ..Parts::default() });
         assert!(rep.parts.hood && !rep.parts.hair);
+        assert!(dir(&pose, 80, 81).angle_between(dir(&b1, 80, 81)) < 1e-3, "{:?}", dir(&pose, 80, 81));
+        // KH2's head tipped back 60° (its hood's mesh is on it): KH1's hood folds with it.
+        let body = head_turned(&b2, Quat::from_rotation_x(-60f32.to_radians()));
+        let mut pose = b1.clone();
+        s.apply(&mut pose, &body, None, Parts { hood: true, ..Parts::default() });
         let want = Quat::from_rotation_x(-60f32.to_radians()) * -Vec3::Z;
         assert!(dir(&pose, 80, 81).angle_between(want) < 1e-3, "{:?}", dir(&pose, 80, 81));
         for b in 80..84 {
@@ -903,10 +947,8 @@ mod tests {
     #[test]
     fn a_hood_turned_into_the_back_is_pushed_off_it() {
         let (b1, b2, _, s) = binds();
-        let mut body = b2.clone();
-        // Down and forward, through the back.
-        body[72] = body[72] * Mat4::from_rotation_x(-150f32.to_radians());
-        body[73] = body[72] * b2[72].inverse() * b2[73];
+        // Down and forward, through the back (the head turned that far).
+        let body = head_turned(&b2, Quat::from_rotation_x(-150f32.to_radians()));
         let mut pose = b1.clone();
         let rep = s.apply(&mut pose, &body, None, Parts { hood: true, ..Parts::default() });
         assert_eq!(rep.clamped, 1);
@@ -991,7 +1033,7 @@ mod tests {
         let about = |p: Vec3, q: Quat| Mat4::from_translation(p) * Mat4::from_quat(q) * Mat4::from_translation(-p);
         let (drop, flap) = (Quat::from_rotation_z(-30f32.to_radians()), Quat::from_rotation_y(20f32.to_radians()));
         let mut body = b2.clone();
-        for i in [111, 112, 113, 114, 115] {
+        for i in [110, 111, 112, 113, 114, 115] {
             body[i] = about(at(&b2[111]), drop) * body[i];
         }
         body[113] = about(at(&body[113]), drop * flap * drop.inverse()) * body[113];
@@ -1005,9 +1047,11 @@ mod tests {
                 assert!((at(&pose[b + 1]).distance(at(&pose[b])) - at(&b1[b + 1]).distance(at(&b1[b]))).abs() < 1e-3);
             }
         }
-        // The front chain's mid joint takes the front flap; the back chain's stays with the root.
-        assert!(dir(&pose, 234, 235).angle_between(drop * flap * Vec3::X) < 1e-2, "{:?}", dir(&pose, 234, 235));
-        assert!(dir(&pose, 242, 243).angle_between(drop * Vec3::X) < 1e-2);
+        // The flaps carry no mesh (KH2 draws the sleeve on 110): no chain's mid joint takes the
+        // front flap's turn, all stay with the root.
+        for m in [234, 238, 242, 246] {
+            assert!(dir(&pose, m, m + 1).angle_between(drop * Vec3::X) < 1e-2, "{m}: {:?}", dir(&pose, m, m + 1));
+        }
         // The arm and the rest stay.
         assert!(pose[198] == b1[198] && pose[199] == b1[199]);
         for (l, want) in s.expected(&b1, &body, None) {
@@ -1067,33 +1111,36 @@ mod tests {
     }
 
     #[test]
-    fn a_flap_s_squash_goes_on_its_sleeve() {
+    fn a_squash_goes_on_its_match_but_not_a_flap_s() {
+        // KH2's front flap squashed to 0.7 along its x: it carries no mesh, so nothing.
         let (k1, k2) = sleeve_rigs();
         let s = Secondary::new(&k1, &k2, None);
-        let b2 = kh2_anim::Pose::bind(&k2).bones;
-        // KH2's front flap squashed to 0.7 along its x (KH2 multiplies scale down the bones:
-        // the flap's own is its scale over its pivot's).
-        let mut body = b2.clone();
+        let mut body = kh2_anim::Pose::bind(&k2).bones;
         body[113].x_axis *= 0.7;
         let mut out = vec![Vec3::ONE; k1.len()];
         s.scales(&body, None, Parts { sleeves: true, ..Parts::default() }, &mut out);
-        // The front chain's joint down the sleeve takes it (its axes match the flap's here), the
-        // back chain's not; the under and top chains about half; the shoulder joints none.
-        assert!((out[234] - Vec3::new(0.7, 1.0, 1.0)).length() < 0.02, "{:?}", out[234]);
-        assert!((out[242] - Vec3::ONE).length() < 0.02, "{:?}", out[242]);
-        assert!((out[238].x - 0.85).abs() < 0.05, "{:?}", out[238]);
-        assert!(out[233] == Vec3::ONE && out[1] == Vec3::ONE);
+        assert!(out.iter().all(|v| *v == Vec3::ONE), "{:?}", out[234]);
+        // KH2's necklace (it has mesh) squashed to 0.7 along its x (KH2 multiplies scale down the
+        // bones: its own is its scale over its parent's): KH1's link takes it.
+        let (k1, k2) = necklace_rigs();
+        let s = Secondary::new(&k1, &k2, None);
+        let mut body = kh2_anim::Pose::bind(&k2).bones;
+        body[165].x_axis *= 0.7;
+        let mut out = vec![Vec3::ONE; k1.len()];
+        s.scales(&body, None, Parts { necklace: true, ..Parts::default() }, &mut out);
+        assert!((out[86] - Vec3::new(0.7, 1.0, 1.0)).length() < 0.02, "{:?}", out[86]);
+        assert!(out[87] == Vec3::ONE && out[1] == Vec3::ONE);
         // Not asked for: nothing.
         let mut none = vec![Vec3::ONE; k1.len()];
         s.scales(&body, None, Parts { hair: true, ..Parts::default() }, &mut none);
         assert!(none.iter().all(|v| *v == Vec3::ONE));
         // Laid onto other axes: a KH1 bone turned a quarter about z takes KH2's x scale on its y.
         let mut k1t = k1.clone();
-        k1t[234].rotation = [0.0, 0.0, std::f32::consts::FRAC_PI_2];
+        k1t[86].rotation = [0.0, 0.0, std::f32::consts::FRAC_PI_2];
         let st = Secondary::new(&k1t, &k2, None);
         let mut out = vec![Vec3::ONE; k1.len()];
-        st.scales(&body, None, Parts { sleeves: true, ..Parts::default() }, &mut out);
-        assert!((out[234] - Vec3::new(1.0, 0.7, 1.0)).length() < 0.02, "{:?}", out[234]);
+        st.scales(&body, None, Parts { necklace: true, ..Parts::default() }, &mut out);
+        assert!((out[86] - Vec3::new(1.0, 0.7, 1.0)).length() < 0.02, "{:?}", out[86]);
     }
 
     #[test]

@@ -249,15 +249,36 @@ shorts sit 0-17° from theirs in the median frame: copied onto KH1's visible hem
 and the shorts' panels twisted. They are not copied (`docs/tester-requests.md`, "Missing
 sleeves animation", the tester's rule: nothing KH1 has no visible KH2 match for).
 
+### Only what KH2's model shows
+
+The tester's answer to "keep copying the hidden bones, or follow only what KH2 visibly moves":
+"(b) only do what kh2 does so its 1:1". `secondary::KH2_SHOWN_ON`: each keyed KH2 bone with no
+mesh is read as held to the bone its region's mesh is on, at their bind relation, since that is
+how KH2 draws it. The hood 72 / 73 and spikes 143 / 159 / 161 on the head 140, the flaps 113 /
+115 on the sleeve 110, 205 / 207 on 202. So, live and baked:
+
+- KH1's hood (80-83) turns as KH2's head does against its chest, on KH1's neck base (its guards
+  stay);
+- KH1's sleeves turn as KH2's sleeve (110 / 202, through the unkeyed root 111 / 203) and no
+  more: the joints down each sleeve keep their bind relation to the shoulder joint, with no
+  flap turn and no flap squash;
+- the KH1 spikes matched to 143, 159 or 161 stay with the head for that share (171, 186, 189,
+  192 mostly, 156 and 174 in part); the rest follow their visible KH2 spike as before.
+
+KH2's parents (Checked (files)): 72 → 71 (under the chest); 141 → 140, each spike root under
+141; 113 → 112 → 111 → 110, 205 → 204, 207 → 206 → 203 → 202. Over all of KH2's motions (5908
+frames, a scratch run) no NaN, and no scale is left for `scales` to carry (worst 1.0): the flaps
+were the only matched KH2 bones with scale keys.
+
 ### Every KH2 part now copied onto KH1
 
 | KH1 part | KH1 bones | KH2 bones | Shows on KH2's model |
 |---|---|---|---|
-| Hair (14 spikes, `Parts::hair`) | joints 153, 156, ..., 192 | nearest spike and second (share), table above: 163, 155, 149, 153, 151, 159, 147, 145, 157, 161; seconds 147, 159, 153, 163, 151, 149, 143, 145, 157, 155 | yes, except 143, 159, 161 (on the head): KH1's 171, 186, 189 and 192 follow 159 or 161 for more than half their turn, 156 for 48%, 174 follows 143 for 40% |
-| Hood (`Parts::hood`) | 80, 81 / 82, 83 | 72 / 73, relative to the chest 68 | no: KH2's hood turns with the head |
+| Hair (14 spikes, `Parts::hair`) | joints 153, 156, ..., 192 | nearest spike and second (share), table above: 163, 155, 149, 153, 151, 159, 147, 145, 157, 161; seconds 147, 159, 153, 163, 151, 149, 143, 145, 157, 155 | yes, except 143, 159, 161 (on the head), now read as the head (`KH2_SHOWN_ON`): KH1's 171, 186, 189 and 192 follow 159 or 161 for more than half their turn, 156 for 48%, 174 follows 143 for 40% |
+| Hood (`Parts::hood`) | 80, 81 / 82, 83 | 72 / 73, relative to the chest 68, read as the head 140 (`KH2_SHOWN_ON`) | no: KH2's hood turns with the head |
 | Keychain (`Parts::chain`) | 283-291 | the Keyblade `W_EX010`'s 3-11 | not checked (no weapon model here) |
 | Sleeves, the shoulder joints (`Parts::sleeves`) | 129, 133, 137, 141 / 233, 237, 241, 245 | 111 / 203 (turned by 110 / 202) | yes (the sleeve's mesh is on 110 / 202) |
-| Sleeves, the joints down the sleeve | 130, 134, 138, 142 / 234, 238, 242, 246 | flaps 113, 115 / 205, 207, relative to the root | no |
+| Sleeves, the joints down the sleeve | 130, 134, 138, 142 / 234, 238, 242, 246 | flaps 113, 115 / 205, 207, relative to the root, read as the sleeve 110 / 202 (`KH2_SHOWN_ON`): no turn of their own | no |
 | Necklace (`Parts::necklace`, t385) | 86 | 165, relative to the chest 68 | yes |
 | The body (`retarget.rs`) | root, spine, neck, head, arms, hands, fingers, legs, feet | KH2's body, measured from positions | yes |
 
@@ -296,7 +317,10 @@ where the axes match (the sleeves' do).
   constant where it holds, nothing at 1; the poses given are unscaled. A bone whose only channel
   is a constant scale may still be built once (bit 25): KH1 applies the scale to static bones too.
 
-**What this carries today** (Checked (files), all 83 KH2 motions, 5991 frames): only the sleeves'
+**What this carries today: nothing.** Since KH2's hidden bones are read as held to their mesh
+bone ("Only what KH2's model shows" above), the flaps' scale isn't carried, and no other matched
+KH2 bone has scale keys; the pass stays for KH1's own scale on the hem and shorts. Before that
+(Checked (files), all 83 KH2 motions, 5991 frames) it carried only the sleeves'
 joints down the sleeve: 130, 134, 138, 142 (KH2's 207 held at 0.9 in 17 motions' initial pose,
 KH1's 0.81-1.01) and 234, 238, 242, 246 (113 / 115, 0.59-1.14), in 43 motions. No other matched
 KH2 bone has scale keys (the hair, hood, necklace: none; the Keyblade's chain: not checked, no

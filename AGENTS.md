@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 407 (testing branch: only what KH2's model shows)
+- The tester: "(b) only do what kh2 does so its 1:1". `secondary::KH2_SHOWN_ON`: KH2's keyed bones with no mesh read as
+  held to their mesh bone (hood 72 / 73 and spikes 143 / 159 / 161 on 140, flaps 113 / 115 on 110, 205 / 207 on 202). Hood
+  with KH2's head, sleeves without flap motion or squash; t386's scale pass now carries none of KH2's (files).
+
 ### 2026-10-23: Stage 406 (testing branch: the belt chain, belt-front pieces and pendant set aside)
 - The tester: "remove them from animation for now", keeping the hem and shorts ("2. (a)"). `KH1_OWN` 41 -> 34 bones; 5, 8,
   11-14, 87 hang as before t387, live and baked.
