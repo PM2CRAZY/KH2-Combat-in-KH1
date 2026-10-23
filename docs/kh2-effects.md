@@ -1558,3 +1558,27 @@ elements; **Checked (files)**):
 - Element 1 (the Drive motion's sphere at the object root, bound until started) runs KH2's
   pppSnoMdlDttNorm (238, a frame-buffer distortion along the model's normals, §7.10), which KH1
   doesn't have: it stays with `kh2fx` (which also draws nothing for 238, only its other parts).
+
+### 18.7 More packages; the Keyblade's vanish flash; unbound elements
+
+- `kh2dpx` builds one DPX per package (`Source`: its file, its PAX, the sets that play
+  together, its anchors, flags it doesn't apply), each entered in KH1's loaded files under its own
+  name (`kh2fx_<package>_dpx`) with its own HD textures (the package file's remastered assets and
+  texcommon's), relocated and plugged on first use. `kh2ppp::plug` now only ever turns a "plugged
+  in" flag on, so a second DPX without, say, MegaBirth words doesn't turn it off.
+- The Keyblade's package (`obj/W_EX010.a.us`, its first PAX): its vanish flash (element 0,
+  `kh2fx::weapon_vanish`, started as KH2 puts the Keyblade away, before KH1's put-away). Its
+  bones are the weapon skeleton's; KH2's own call of the flash isn't traced, and `kh2fx` put every
+  code half way along the blade turned as the hand. Through KH1: the point half way along KH1's
+  blade, turned as KH1's blade bone (binding mode 3, t = 0.5). **Assumption** (as `kh2fx`'s). Its
+  "ends with the motion" flag isn't applied (as `kh2fx` never ended it: the motion is the
+  Keyblade's own object's, which we don't have). Not checked offline: `W_EX010.a.us` isn't staged
+  here, so its element's flags and programs are read at load (logged); anything not in KH1 keeps
+  it with `kh2fx`.
+- Unbound elements (neither 0x01 nor 0x02: KH2 places them once at the start, from the bone as
+  it is then, `0x1402C6B30` only reads, §17.7): KH1's start on the bone places it the same way
+  (at once, from the bone as the start reads it: the pose before Sora's skeleton pass, as KH2's
+  start before its pose); its binding (the list's last node) is then disarmed: mode 0 with the
+  bind-once bit, which KH1's binding task (`0x1402AE910`) answers on its first run by freeing the
+  record and ending, without moving the element. **Checked (exe)**. Steam only (the binding list's
+  address). KH2 bone 0 (the root, at the hips) is KH1's bone 0 (the same bind frame).

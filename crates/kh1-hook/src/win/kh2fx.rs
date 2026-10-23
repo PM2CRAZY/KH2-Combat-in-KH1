@@ -224,6 +224,10 @@ pub fn weapon_vanish() {
         return;
     }
     let Ok(mut g) = STATE.lock() else { return };
+    // (The effects port) KH1's own effect system plays it once its DPX is built (`kh2dpx`).
+    if super::kh2dpx::weapon_vanish(g.as_ref().map_or(NO_MOTION, |s| s.motion)) {
+        return;
+    }
     let Some(s) = g.as_mut() else { return };
     let tip = s.tip_local;
     let Some(wp) = s.weapon.as_mut() else { return };

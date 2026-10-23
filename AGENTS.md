@@ -1,3 +1,7 @@
+### 2026-10-23: Stage 422 (testing branch: KH2 effects: one DPX per package; the Keyblade's vanish flash and unbound elements)
+- Unbound elements: KH1's start, then the binding disarmed (mode 0 + bind-once, Checked (exe)). Vanish flash at blade
+  t = 0.5 (assumption, as the old player). `plug` flags only ever turn on. Notes §18.7.
+
 ### 2026-10-23: Stage 421 (testing branch: KH2 effects: the Drive motion's and Revert's flashes through KH1)
 - Drive 2..13 and Revert 15..27 through KH1. Element 1 (KH2-only pppSnoMdlDttNorm, 238) stays on `kh2fx`. Notes §18.6.
 

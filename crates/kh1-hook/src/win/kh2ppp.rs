@@ -289,10 +289,11 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
                 other += 1;
             }
         }
-        PLUGGED_MB.store(mb > 0, Ordering::Relaxed);
-        PLUGGED_SHIPOLY.store(sp > 0, Ordering::Relaxed);
-        PLUGGED_COLOR.store(col > 0, Ordering::Relaxed);
-        PLUGGED_VT_MIME.store(vt > 0, Ordering::Relaxed);
+        // (Once in for one DPX, in for all: each DPX's words are plugged when it is relocated.)
+        PLUGGED_MB.fetch_or(mb > 0, Ordering::Relaxed);
+        PLUGGED_SHIPOLY.fetch_or(sp > 0, Ordering::Relaxed);
+        PLUGGED_COLOR.fetch_or(col > 0, Ordering::Relaxed);
+        PLUGGED_VT_MIME.fetch_or(vt > 0, Ordering::Relaxed);
         log(&format!(
             "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col}, its pppVtMime into {vt} ({other} left as they were)"
         ));

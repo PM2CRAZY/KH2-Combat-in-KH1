@@ -110,6 +110,14 @@ const ON: &[i16] = &[
     44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38, 30, 31, 32, 33, 34, 0, 53, 54, 55, 56, 40, 41, 39, //
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
 ];
+/// The Keyblade's package's elements switched on: its vanish flash (`weapon_vanish`).
+const WEAPON_ON: &[i16] = &[super::kh2fx::WEAPON_VANISH as i16];
+/// The Keyblade's package names its own (weapon skeleton) bones; KH2's call of its vanish flash
+/// isn't traced, and `kh2fx` puts every code half way along the blade, turned as the hand. KH1's:
+/// the point half way along its blade (binding mode 3, t = 0.5), turned as the blade bone.
+fn weapon_anchor(_code: u16) -> Option<Anchor> {
+    Some(Anchor::Blade(0.5))
+}
 const MB: u32 = super::kh2ppp::MEGA_BIRTH;
 const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
 const COLOR: u32 = super::kh2ppp::COLOR;
@@ -147,13 +155,14 @@ fn missing(types: &[u32]) -> Vec<u32> {
 
 /// KH1's anchor for a KH2 bone code. The bones by the two bind poses (`docs/kh2-effects.md`
 /// §17.4, §18.3: each KH2 bone on the KH1 bone of the same body part at the same joint, whose
-/// bind frame is the same to 0.05): pelvis 2 -> 2; +x leg: thigh 11 -> 43, shin 12 -> 44, foot 15
+/// bind frame is the same to 0.05): root 0 -> 0, pelvis 2 -> 2; +x leg: thigh 11 -> 43, shin 12 -> 44, foot 15
 /// -> 47, toe 18 -> 50; -x leg: 40 -> 17, 41 -> 18, 44 -> 21, 47 -> 24; spine 67 -> 70; upper arms
 /// 78 -> 198, 170 -> 93; hands 85 -> 203, 177 -> 98. KH2's weapon points 0x4003 / 0x4005 / 0x4007
 /// (tip, root, halfway: `0x1403B43D0`) are KH1's blade points t = 1 / 0 / 0.5; its object root
 /// 0x4000 is KH1's 0x8000.
 fn anchor(code: u16) -> Option<Anchor> {
     Some(match code {
+        0 => Anchor::Bone(0),
         2 => Anchor::Bone(2),
         11 => Anchor::Bone(43),
         12 => Anchor::Bone(44),
@@ -308,8 +317,6 @@ static PASSES: AtomicU32 = AtomicU32::new(0);
 static LAST_MOTION: AtomicU32 = AtomicU32::new(u32::MAX);
 /// KH1's handles cover 32 MB regions; the DPX stays inside one.
 const REGION: usize = 0x200_0000;
-/// The name our DPX has in KH1's loaded-file list.
-const FILE_NAME: &[u8] = b"kh2fx_p_ex100_dpx";
 
 /// An HD texture for one texture record: the record's pixel offset in the DPX, the DDS.
 struct Hd {
@@ -317,7 +324,20 @@ struct Hd {
     dds: Vec<u8>,
 }
 
+/// Which package a native element is of: Sora's (`obj/P_EX100.a.us`) or the Keyblade's
+/// (`obj/W_EX010.a.us`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Pkg {
+    Sora,
+    Weapon,
+}
+
 struct Dpx {
+    pkg: Pkg,
+    /// Its name in the log and (with `kh2fx_` / `_dpx`) in KH1's loaded-file list.
+    label: &'static str,
+    /// Its elements switched on for KH1.
+    on: &'static [i16],
     /// Owns the bytes; never freed or moved (KH1's effects point into it).
     _buf: Vec<u8>,
     at: usize,
@@ -334,11 +354,28 @@ struct Dpx {
     relocated: bool,
 }
 
-static DPX: Mutex<Option<Dpx>> = Mutex::new(None);
+/// The packages built (each its own DPX, entered in KH1's loaded files on first use).
+static PACKS: Mutex<Vec<Dpx>> = Mutex::new(Vec::new());
 static STARTED: AtomicU32 = AtomicU32::new(0);
 
-/// Builds the KH1 DPX of Sora's package in the background (from the KH2 install, as `kh2fx`),
-/// once KH2 Sora's moveset is loaded (its motions group the elements).
+/// What a package is built from.
+struct Source {
+    pkg: Pkg,
+    label: &'static str,
+    /// Its file in KH2's install (BAR, or a PAX), and the name of its PAX entry if it has several.
+    path: &'static str,
+    pax_name: Option<&'static str>,
+    on: &'static [i16],
+    /// The elements that play together (one DPD each, before the rest's one per effect).
+    sets: Vec<Vec<i16>>,
+    /// KH1's anchor for one of its KH2 bone codes.
+    anchor: fn(u16) -> Option<Anchor>,
+    /// KH2 element flags it doesn't apply.
+    ignore: u32,
+}
+
+/// Builds the KH1 DPXs in the background (from the KH2 install, as `kh2fx`): Sora's package
+/// once KH2 Sora's moveset is loaded (its motions group the elements), then the Keyblade's.
 pub fn start() {
     if super::settings::get().kh2_effects.is_none() {
         return;
@@ -355,26 +392,43 @@ pub fn start() {
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         };
-        let t = std::time::Instant::now();
-        match build(kh2) {
-            Ok((r, hd, hd_report, layers)) => {
-                let dpx = &r.bytes;
-                log(&format!("KH2 effects (native): Sora's DPX built, {} bytes, {} effects in {:.2} s; {}", dpx.len(), r.effects.len(), t.elapsed().as_secs_f32(), r.report));
-                log(&format!("KH2 effects (native): HD textures: {hd_report}"));
-                let mut buf = vec![0u8; dpx.len() * 2 + 16];
-                let p = buf.as_ptr() as usize;
-                let mut at = (p + 15) & !15;
-                if (at & !(REGION - 1)) != ((at + dpx.len() - 1) & !(REGION - 1)) {
-                    at = (at + dpx.len()) & !(REGION - 1);
-                }
-                let off = at - p;
-                buf[off..off + dpx.len()].copy_from_slice(dpx);
-                let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
-                if let Ok(mut g) = DPX.lock() {
-                    *g = Some(Dpx { _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, types, refused: Vec::new(), programs: r.programs.clone(), relocated: false });
-                }
+        // The elements each of KH2 Sora's motions starts (in motion order), then Revert's.
+        let mut motions: Vec<(&u16, &character_core::Clip)> = kh2.character.moveset.clips.iter().collect();
+        motions.sort_by_key(|m| *m.0);
+        let mut sets: Vec<Vec<i16>> = motions
+            .iter()
+            .map(|(_, c)| c.events.iter().filter_map(|e| if let character_core::EventKind::Effect(el) = e.kind { Some(el) } else { None }).collect())
+            .collect();
+        sets.push(super::form::REVERT_ELEMENTS.to_vec());
+        let sources = [
+            Source { pkg: Pkg::Sora, label: "p_ex100", path: "obj/P_EX100.a.us", pax_name: Some("p_ex"), on: ON, sets, anchor, ignore: 0 },
+            Source { pkg: Pkg::Weapon, label: "w_ex010", path: "obj/W_EX010.a.us", pax_name: None, on: WEAPON_ON, sets: Vec::new(), anchor: weapon_anchor, ignore: ENDS_WITH_MOTION },
+        ];
+        let common = (|| -> Result<(kh2_data::Install, kh2_data::Source, Vec<u8>), String> {
+            let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
+            let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
+            let src = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
+            let common = install.read_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon.dpd: {e}"))?;
+            Ok((install, src, common))
+        })();
+        let (install, src, common) = match common {
+            Ok(c) => c,
+            Err(e) => {
+                log(&format!("KH2 effects (native): no DPX built ({e}); kh2fx plays the effects"));
+                return;
             }
-            Err(e) => log(&format!("KH2 effects (native): Sora's DPX not built ({e}); kh2fx plays his effects")),
+        };
+        for s in sources {
+            let t = std::time::Instant::now();
+            match build(&install, src, &common, &s) {
+                Ok(d) => {
+                    log(&format!("KH2 effects (native): {}'s DPX built, {} bytes, {} effects in {:.2} s", s.label, d.len, d.layers.len(), t.elapsed().as_secs_f32()));
+                    if let Ok(mut g) = PACKS.lock() {
+                        g.push(d);
+                    }
+                }
+                Err(e) => log(&format!("KH2 effects (native): {}'s DPX not built ({e}); kh2fx plays its effects", s.label)),
+            }
         }
     });
 }
@@ -383,24 +437,25 @@ pub fn start() {
 /// folded into the header's local transform (`H' = S⁻¹ · T(t) · R · S · H`, S the element's
 /// scale, which KH1 takes as the instance's: KH2's root is `T(B·t) · R(B·R) · S`, KH1's the
 /// bound bone's `B`, times the header).
-fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
+fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16) -> Option<Anchor>, ignore: u32) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
     use glam::{Mat3, Vec3};
     use kh2_fx::math;
     let e = parsed.element(el as u16).ok_or(format!("no element {el}"))?;
     let effect = e.effect as u32;
+    let flags = e.flags & !ignore;
     if !(0..0x100).contains(&el) {
         return Err(format!("element {el}: no effect number for it (0x700 | element)"));
     }
-    if let Some(why) = unbindable(e.flags) {
+    if let Some(why) = unbindable(flags) {
         return Err(format!("element {el}: {why} (flags {:#x})", e.flags));
     }
-    let bone = anchor(e.bone).ok_or(format!("element {el}: no KH1 anchor for KH2 bone {:#x}", e.bone))?;
+    let bone = anchor_of(e.bone).ok_or(format!("element {el}: no KH1 anchor for KH2 bone {:#x}", e.bone))?;
     let (h_off, h_ang, _) = kh2_formats::kh1dpx::header_local(pax, effect).map_err(|e| e.to_string())?;
     let s = Vec3::from(e.scale);
     let safe = Vec3::new(if s.x != 0.0 { s.x } else { 1.0 }, if s.y != 0.0 { s.y } else { 1.0 }, if s.z != 0.0 { s.z } else { 1.0 });
     let r_e = math::euler_xyz(Vec3::from(e.rotation));
     let r_h = math::euler_xyz_i(h_ang);
-    let position_only = e.flags & POSITION_ONLY != 0;
+    let position_only = flags & POSITION_ONLY != 0;
     if position_only && matches!(bone, Anchor::Code(_)) {
         return Err(format!("element {el}: bound by position only to KH2's {:#x}, which KH1's position binding has no point for yet", e.bone));
     }
@@ -416,14 +471,14 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16) -> Result<(Layer, 
         e.bone, e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
         if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" }
     );
-    let l = Layer { el, number, anchor: bone, flags: e.flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
+    let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
     Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle }, note))
 }
 
 /// KH2 element flags KH1's binding doesn't do yet (`docs/kh2-effects.md` §2, §18.3).
 fn unbindable(flags: u32) -> Option<&'static str> {
-    if flags & (BIND | BIND_UNTIL_STARTED) == 0 {
-        return Some("not bound (placed once at its start)");
+    if flags & (BIND | BIND_UNTIL_STARTED) == 0 && flags & POSITION_ONLY != 0 {
+        return Some("placed once at its start by position only");
     }
     if flags & BONE_SCALE != 0 {
         return Some("scaled by its bone");
@@ -434,21 +489,24 @@ fn unbindable(flags: u32) -> Option<&'static str> {
     None
 }
 
-fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String, Vec<Layer>), String> {
-    let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
-    let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
-    let src = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
-    let pack = install.read_any(src, "obj/P_EX100.a.us").map_err(|e| e.to_string())?;
-    let common = install.read_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon.dpd: {e}"))?;
-    let bar = kh2_formats::bar::Bar::parse(&pack).map_err(|e| e.to_string())?;
-    let pax = bar
-        .entries
-        .iter()
-        .find(|e| e.name == "p_ex" && e.data.starts_with(b"PAX_"))
-        .or_else(|| bar.entries.iter().find(|e| e.data.starts_with(b"PAX_")))
-        .ok_or("no PAX in P_EX100")?;
-    let pax_at = pax.data.as_ptr() as usize - pack.as_ptr() as usize;
-    let parsed = kh2_formats::pax::Pax::parse(pax.data).map_err(|e| e.to_string())?;
+/// One package's KH1 DPX: every element of it (the first with its id, as KH2's start takes) its
+/// own copy of its effect, grouped (`Source::sets`, then one group per effect), with KH2's HD
+/// textures for its own and the common textures it draws.
+fn build(install: &kh2_data::Install, src: kh2_data::Source, common: &[u8], s: &Source) -> Result<Dpx, String> {
+    let pack = install.read_any(src, s.path).map_err(|e| e.to_string())?;
+    let (pax_data, pax_at): (&[u8], usize) = if pack.starts_with(b"PAX_") {
+        (&pack, 0)
+    } else {
+        let bar = kh2_formats::bar::Bar::parse(&pack).map_err(|e| e.to_string())?;
+        let pax = bar
+            .entries
+            .iter()
+            .find(|e| s.pax_name.is_some_and(|n| e.name == n) && e.data.starts_with(b"PAX_"))
+            .or_else(|| bar.entries.iter().find(|e| e.data.starts_with(b"PAX_")))
+            .ok_or(format!("no PAX in {}", s.path))?;
+        (pax.data, pax.data.as_ptr() as usize - pack.as_ptr() as usize)
+    };
+    let parsed = kh2_formats::pax::Pax::parse(pax_data).map_err(|e| e.to_string())?;
     // Every element (the first with its id, as KH2's start takes): its layer and its copy of its
     // effect.
     let mut layers: Vec<Layer> = Vec::new();
@@ -459,10 +517,10 @@ fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>
         if layers.iter().any(|l| l.el == el) || left.iter().any(|x: &String| x.starts_with(&format!("element {el}:"))) {
             continue;
         }
-        match layer(pax.data, &parsed, el) {
+        match layer(pax_data, &parsed, el, s.anchor, s.ignore) {
             Ok((l, v, note)) => {
-                if ON.contains(&el) {
-                    log(&format!("KH2 effects (native): {note}"));
+                if s.on.contains(&el) {
+                    log(&format!("KH2 effects (native): {}: {note}", s.label));
                 }
                 layers.push(l);
                 variants.push(v);
@@ -471,19 +529,12 @@ fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>
         }
     }
     if !left.is_empty() {
-        log(&format!("KH2 effects (native): not built (kh2fx plays them): {}", left.join("; ")));
+        log(&format!("KH2 effects (native): {}: not built (kh2fx plays them): {}", s.label, left.join("; ")));
     }
-    // Groups: the elements each of KH2 Sora's motions starts (in motion order; an element in
-    // the first motion that starts it), then Revert's, then each other effect's elements; each
-    // group split by the DPD its effects are in.
-    let mut motions: Vec<(&u16, &character_core::Clip)> = kh2.character.moveset.clips.iter().collect();
-    motions.sort_by_key(|m| *m.0);
-    let mut sets: Vec<Vec<i16>> = motions
-        .iter()
-        .map(|(_, c)| c.events.iter().filter_map(|e| if let character_core::EventKind::Effect(el) = e.kind { Some(el) } else { None }).collect())
-        .collect();
-    sets.push(super::form::REVERT_ELEMENTS.to_vec());
-    let dpd_of = |v: &kh2_formats::kh1dpx::Variant| kh2_formats::dpd::effect_source(pax.data, v.effect).ok().flatten().map(|(d, _)| d.as_ptr() as usize);
+    // Groups: the source's sets (an element in the first that holds it), then each other
+    // effect's elements; each group split by the DPD its effects are in.
+    let sets = &s.sets;
+    let dpd_of = |v: &kh2_formats::kh1dpx::Variant| kh2_formats::dpd::effect_source(pax_data, v.effect).ok().flatten().map(|(d, _)| d.as_ptr() as usize);
     let mut groups: Vec<Vec<kh2_formats::kh1dpx::Variant>> = Vec::new();
     let mut placed: Vec<u32> = Vec::new();
     let mut add = |els: &[i16], groups: &mut Vec<Vec<kh2_formats::kh1dpx::Variant>>| {
@@ -503,8 +554,8 @@ fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>
         }
         groups.extend(by_dpd.into_iter().map(|x| x.1));
     };
-    for s in &sets {
-        add(s, &mut groups);
+    for set in sets {
+        add(set, &mut groups);
     }
     let mut effects: Vec<u32> = variants.iter().map(|v| v.effect).collect();
     effects.dedup();
@@ -512,16 +563,17 @@ fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>
         let els: Vec<i16> = layers.iter().zip(&variants).filter(|(_, v)| v.effect == e).map(|(l, _)| l.el).collect();
         add(&els, &mut groups);
     }
-    let r = kh2_formats::kh1dpx::build_groups(pax.data, &common, &groups).map_err(|e| e.to_string())?;
+    let r = kh2_formats::kh1dpx::build_groups(pax_data, common, &groups).map_err(|e| e.to_string())?;
+    log(&format!("KH2 effects (native): {}'s DPX: {}", s.label, r.report));
     // Elements of groups left out (too many texture slots, a texture missing) aren't KH1's.
     for (gi, why) in &r.skipped {
         let els: Vec<i16> = groups[*gi].iter().filter_map(|v| layers.iter().find(|l| l.number == v.number).map(|l| l.el)).collect();
-        log(&format!("KH2 effects (native): elements {els:?} not built ({why}); kh2fx plays them"));
+        log(&format!("KH2 effects (native): {}: elements {els:?} not built ({why}); kh2fx plays them", s.label));
     }
     layers.retain(|l| r.effects.contains(&l.number));
     // KH2's HD textures for the two files, each keyed by the offset in its file of the texture
     // record's pixels it replaces.
-    let own_hd = install.read_remastered_any(src, "obj/P_EX100.a.us").map_err(|e| format!("P_EX100 HD textures: {e}"))?;
+    let own_hd = install.read_remastered_any(src, s.path).map_err(|e| format!("{} HD textures: {e}", s.path))?;
     let common_hd = install.read_remastered_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon HD textures: {e}"))?;
     let mut hd = Vec::new();
     let mut report = Vec::new();
@@ -530,7 +582,7 @@ fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>
     for t in &r.textures {
         // A texture's HD image is the one for its TBP (KH1 and KH2 make one texture per TBP):
         // the asset whose offset is any of the source DPD's records with that TBP.
-        let src_file: &[u8] = if t.own { pax.data } else { &common };
+        let src_file: &[u8] = if t.own { pax_data } else { common };
         if !recs_of.iter().any(|x| x.0 == (t.own, t.src_dpd_at)) {
             let recs = kh2_formats::kh1dpx::texture_records(&src_file[t.src_dpd_at..]).map_err(|e| e.to_string())?;
             recs_of.push(((t.own, t.src_dpd_at), recs));
@@ -551,8 +603,20 @@ fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>
         }
     }
     let list = |v: &Vec<kh2_formats::egs::HdAsset>| v.iter().map(|a| format!("{} for {:#x} ({} bytes, at {:#x})", a.name, a.offset, a.data.len(), a.pkg_offset)).collect::<Vec<_>>().join(", ");
-    report.push(format!("P_EX100 assets [{}], texcommon assets [{}]", list(&own_hd), list(&common_hd)));
-    Ok((r, hd, report.join("; "), layers))
+    report.push(format!("{} assets [{}], texcommon assets [{}]", s.path, list(&own_hd), list(&common_hd)));
+    log(&format!("KH2 effects (native): {}'s HD textures: {}", s.label, report.join("; ")));
+    // The DPX inside one of KH1's 32 MB handle regions.
+    let dpx = &r.bytes;
+    let mut buf = vec![0u8; dpx.len() * 2 + 16];
+    let p = buf.as_ptr() as usize;
+    let mut at = (p + 15) & !15;
+    if (at & !(REGION - 1)) != ((at + dpx.len() - 1) & !(REGION - 1)) {
+        at = (at + dpx.len()) & !(REGION - 1);
+    }
+    let off = at - p;
+    buf[off..off + dpx.len()].copy_from_slice(dpx);
+    let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
+    Ok(Dpx { pkg: s.pkg, label: s.label, on: s.on, _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, types, refused: Vec::new(), programs: r.programs.clone(), relocated: false })
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -620,7 +684,8 @@ unsafe fn register(base: usize, d: &Dpx) -> Result<usize, String> {
     wr(rec + 0x10, d.at);
     wr(rec + 0x18, d.len as u32);
     wr(rec + 0x1C, u32::MAX);
-    for (i, &b) in FILE_NAME.iter().enumerate() {
+    let name = format!("kh2fx_{}_dpx", d.label);
+    for (i, &b) in name.as_bytes().iter().take(0x40).enumerate() {
         wr(rec + 0x20 + i, b);
         wr(rec + 0x1C4 + i, b);
         wr(rec + 0x620 + i, b);
@@ -685,30 +750,36 @@ unsafe fn register(base: usize, d: &Dpx) -> Result<usize, String> {
 /// another build (Epic: no blade binding, no KH2 programs; there elements without those still
 /// play through KH1 and fall back to `kh2fx` if KH1 has no slot).
 pub fn event(motion: u16, el: i16) -> bool {
-    if !ON.contains(&el) {
+    play(Pkg::Sora, motion, el)
+}
+
+/// Element `el` of package `pkg` started by KH1 (see `event`): true if it is KH1's.
+fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
+    let Ok(mut g) = PACKS.lock() else { return false };
+    let Some(d) = g.iter_mut().find(|d| d.pkg == pkg) else { return false };
+    if !d.on.contains(&el) {
         return false;
     }
-    let Ok(mut g) = DPX.lock() else { return false };
-    let Some(d) = g.as_mut() else { return false };
     let Some(&layer) = d.layers.iter().find(|l| l.el == el) else { return false };
     let (number, bone) = (layer.number, layer.anchor);
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
-    // KH1's blade and position bindings are used on Steam only (their addresses are Steam's):
-    // elsewhere kh2fx plays them.
+    // KH1's blade and position bindings, and the binding list (unbound elements), are used on
+    // Steam only (their addresses are Steam's): elsewhere kh2fx plays them.
     let position_only = layer.flags & POSITION_ONLY != 0;
-    if (matches!(bone, Anchor::Blade(_)) || position_only) && !steam {
+    let unbound = layer.flags & (BIND | BIND_UNTIL_STARTED) == 0;
+    if (matches!(bone, Anchor::Blade(_)) || position_only || unbound) && !steam {
         return false;
     }
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     if !d.relocated {
         match unsafe { register(base, d) } {
-            Ok(rec) => log(&format!("KH2 effects (native): Sora's DPX entered in KH1's loaded files ({:#x}) with {} HD textures", rec, d.hd.len())),
-            Err(e) => log(&format!("KH2 effects (native): Sora's DPX not entered in KH1's loaded files ({e}); its textures won't draw")),
+            Ok(rec) => log(&format!("KH2 effects (native): {}'s DPX entered in KH1's loaded files ({:#x}) with {} HD textures", d.label, rec, d.hd.len())),
+            Err(e) => log(&format!("KH2 effects (native): {}'s DPX not entered in KH1's loaded files ({e}); its textures won't draw", d.label)),
         }
         let f: unsafe extern "system" fn(usize) = unsafe { std::mem::transmute(base + RELOCATE_RVA) };
         unsafe { f(d.at) };
         d.relocated = true;
-        log(&format!("KH2 effects (native): Sora's DPX at {:#x} relocated by KH1", d.at));
+        log(&format!("KH2 effects (native): {}'s DPX at {:#x} relocated by KH1", d.label, d.at));
         // KH2's own programs, as entries of ours in KH1's format (`kh2ppp`).
         super::kh2ppp::plug(d.at, &d.programs);
     }
@@ -718,7 +789,7 @@ pub fn event(motion: u16, el: i16) -> bool {
     if !lacks.is_empty() {
         if !d.refused.contains(&el) {
             d.refused.push(el);
-            log(&format!("KH2 effects (native): element {el} runs programs {lacks:?}, not in KH1 as KH2's yet; kh2fx plays it"));
+            log(&format!("KH2 effects (native): {} element {el} runs programs {lacks:?}, not in KH1 as KH2's yet; kh2fx plays it", d.label));
         }
         return false;
     }
@@ -748,18 +819,28 @@ pub fn event(motion: u16, el: i16) -> bool {
         }
     };
     drop(g);
-    if element != 0 && steam && (once == 0 || position_only) {
+    // Not bound (KH2 places it once, at its start, from the bone as it is then): KH1's start has
+    // just placed it the same way; its binding is disarmed so its first run lets go.
+    if element != 0 && unbound {
+        unsafe { disarm(base, element) };
+    } else if element != 0 && steam && (once == 0 || position_only) {
         let pos = position_only.then_some(PosOnly { anchor: bone, offset: layer.bone_offset, prev: [0.0; 4] });
         unsafe { note_binding(base, element, sora, pos) };
     }
     let set = element != 0 && unsafe { apply(element, &layer, motion) };
     if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
         log(&format!(
-            "KH2 effect (native): element {el} of motion {motion} -> KH1 effect {number:#x} on {bone:?}: {}",
+            "KH2 effect (native): {pkg:?} element {el} of motion {motion} -> KH1 effect {number:#x} on {bone:?}: {}",
             if element == 0 { "not started (no free element or effect slot)".to_string() } else { format!("element {element:#x}{}", if set { "" } else { " (its instance not found: no wait, scale or ending)" }) }
         ));
     }
     element != 0 || owned
+}
+
+/// The Keyblade's vanish flash (`kh2fx::weapon_vanish`, as KH2 puts the Keyblade away, before
+/// KH1's put-away): true if KH1 plays it (`play`).
+pub fn weapon_vanish(motion: u16) -> bool {
+    play(Pkg::Weapon, motion, super::kh2fx::WEAPON_VANISH as i16)
 }
 
 /// The binding KH1's start just made for `element` (the binding list's last node), noted for
@@ -779,6 +860,24 @@ unsafe fn note_binding(base: usize, element: usize, actor: usize, pos: Option<Po
         f.push(Fresh { element, serial: rd::<u32>(element + EL_SERIAL), node, record, actor, pass: PASSES.load(Ordering::Relaxed), pos });
         FRESH_ANY.store(true, Ordering::Relaxed);
     }
+}
+
+/// The binding KH1's start just made for `element` made to let go on its first run without
+/// moving it: its mode set to none with the bind-once bit (KH1's binding task, `0x1402AE910`,
+/// then frees the record and ends, as for a mode it doesn't know).
+unsafe fn disarm(base: usize, element: usize) {
+    let node = rd::<usize>(base + BIND_LIST_STEAM + 0x18);
+    let ok = node != 0 && rd::<usize>(node + 0x10) == base + BIND_TASK_STEAM && rd::<usize>(node + 0x20) == element;
+    let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
+    if record == 0 || !matches!(rd::<u8>(record + 4), 2 | 3) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 5 {
+            log(&format!("KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it stays bound"));
+        }
+        return;
+    }
+    wr::<u8>(record + 4, 0);
+    wr::<u32>(record + 8, rd::<u32>(record + 8) | BIND_ONCE);
 }
 
 /// The binding is still `f`'s: its element running with its serial, its node KH1's binding of it.
