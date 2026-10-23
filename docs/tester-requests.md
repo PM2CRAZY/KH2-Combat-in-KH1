@@ -220,4 +220,15 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > If that all sounds right, answer the held-button question and write `Go ahead`.
 
 > [!note] Tester Mr. Bugs
+> yes so if you held square and advanced 5 frames that would be one press e.g
+> square press advance for 5 frames > let go of button > advance next frame > button is counted as released
 > 
+> for R2 make sure the period key works the same way
+> 
+> in the trace menu add a little check that tells the player if in game frames or real time is on like:
+> 
+> game frames = ON 
+> 
+> let the user also disable it as well even if they're in frame advance 
+
+
