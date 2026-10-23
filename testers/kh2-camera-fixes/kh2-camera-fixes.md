@@ -10,6 +10,7 @@
 - [4. Assistant: t379 to t384 (one change each; the build at the top of the b](#^m4)
 - [5. Mr Bugs: kh2 "Found, not changed (KH2's lock-on turn speed is a const](#^m5)
 - [6. Assistant: t408 and t409, plus notes](#^m6)
+- [7. Mr Bugs: 1. not sure what this question means but, kh1s cam feels fas](#^m7)
 
 ---
 
@@ -113,3 +114,6 @@
 > 4. (b) make sure you compare it with the kh1s steam c ghidra decomps mouse cam because they feel pretty close to each other movement wise. 
 >    
 >    go ahead
+
+^m7
+

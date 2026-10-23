@@ -19,6 +19,8 @@
 - [13. Assistant: t378](#^m13)
 - [14. Mr Bugs: its still black when frame advance is on until you advance a](#^m14)
 - [15. Assistant: t399](#^m15)
+- [16. Mr Bugs: I'll send a log but a good lead is the games own pause mecha](#^m16)
+- [17. Assistant: Good lead, thanks. I followed it into the Steam exe this tim](#^m17)
 
 ---
 
@@ -243,3 +245,21 @@
 > I'll send a log but a good lead is the games own pause mechanic, when you pause a game during a battle the whole game freezes and your still able to see the game, a text saying P A U S E appears. I'm sure you can look in the kh1 steam ghididra decomp for that. (I'm pretty sure the regular pause screen works that way too, just with some blur affects added on top)
 > 
 > go ahead
+
+^m16
+
+
+> [!tip] Assistant
+> Good lead, thanks. I followed it into the Steam exe this time (the decomp had skipped that part), and it explains a lot, but not the black screen yet:
+>
+> - **KH1's pause machine** has a small state table. While the game runs (state 0) it writes the "which tasks run" mask back to "all" every frame, which is why t371 didn't hold anything. When the pause starts (state 1), it sets the mask to "pause tasks only" and adds the pause's own task, the one that shows P A U S E. So the battle pause holds exactly the same set of tasks as t372 did, and t372 went black.
+> - So the paused picture isn't coming from KH1 skipping the right tasks. It comes from how KH1's renderer keeps and re-shows the last finished frame (it has a frame it can show again when nothing new was drawn). I'm reading that part now, but it's deep in the renderer and I don't want to guess at it.
+> - Side find for the sound question from before: when KH1 pauses, it also calls its sound code with a "pause" setting (`0x1400DE010`). That's how KH1's pause handles music and sounds, so frame advance can use the same call later.
+>
+> The quickest way to pin down the black screen is the **Held Tasks** page from t399 (debug menu main page). Turn Frame Advance on, then on Held Tasks switch tasks to `Runs` one at a time, starting from the bottom (139999, 137000, 135000, 130000, 129999, 120000, 110000...), until the picture comes back. Then send me the log: every switch is in it with the list of what was running. Even "none of them brought the picture back" tells me it's the renderer side and not a task.
+
+^m17
+
+
+> [!note] Tester Mr Bugs
+> 

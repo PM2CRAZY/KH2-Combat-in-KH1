@@ -10,6 +10,7 @@
 - [4. Assistant: t385 to t389 (one part each; the build at the top of the bra](#^m4)
 - [5. Mr Bugs: I sent a trace and a new log](#^m5)
 - [6. Assistant: t405 to t407 (one each)](#^m6)
+- [7. Mr Bugs: the model is still bugged, it seems to be his clothes, (his ](#^m7)
 
 ---
 
@@ -123,3 +124,6 @@
 >    another thing: the hoodie doesn't seem to be animated anymore
 >    
 >    go ahead
+
+^m7
+
