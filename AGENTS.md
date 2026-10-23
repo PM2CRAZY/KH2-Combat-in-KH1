@@ -1,3 +1,7 @@
+### 2026-10-23: Stage 418 (testing branch: KH2 effects: Sora's whole package built for KH1; Magnet Burst through KH1)
+- Groups per motion (moveset frame triggers), Revert's set, then one per effect. Bind-pose bone table (§18.3). Gate:
+  `KH1_SAME` programs (decomp comparison §18.2) or KH2's own plugged in; anything else goes to `kh2fx`, logged once.
+
 ### 2026-10-23: Stage 417 (testing branch: KH2 effects: the KH1 DPX builder for any effects)
 - The tester ("KH2 effects in KH1's own effect system": "port every effect"). `kh1dpx::build_groups`: one DPD per group,
   from any DPDs of a PAX; each entry's program types and each texture's source DPD reported; a group over KH1's 10 / 6

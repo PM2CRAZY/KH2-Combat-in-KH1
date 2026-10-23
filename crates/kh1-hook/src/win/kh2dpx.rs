@@ -64,6 +64,15 @@
 //! The old effect player (`kh2fx`) is retired for these elements on Steam (the tester): it plays
 //! them only while the DPX isn't built (or couldn't be), if KH2's programs couldn't be plugged
 //! in, or on another build (`event`).
+//!
+//! (The port of every effect, `docs/kh2-effects.md` §18.) Every element of Sora's package is
+//! built, not only Explosion's: one DPD per motion of KH2 Sora's moveset (the elements its frame
+//! triggers start, which play together and so share one run of KH1's texture slots), the rest one
+//! per effect. An element plays through KH1 once it is switched on here (`ON`, one move per
+//! version), its KH2 bone has a KH1 anchor, its flags are ones KH1's binding does, and every
+//! program its effect runs is one KH1 runs the same as KH2 (`KH1_SAME`, checked program by
+//! program) or one of KH2's own that is plugged in (`kh2ppp`). Anything else stays with `kh2fx`,
+//! logged once.
 
 use super::addr::Rva;
 use super::log;
@@ -77,8 +86,6 @@ const START_ON_BONE_RVA: Rva = Rva(0x2ABB60);
 const FILE_OF_RVA: Rva = Rva(0xE2B10);
 /// Bone parameter bit: the low 12 bits are the bone's index in the actor's skeleton.
 const RAW_BONE: u32 = 0x2000;
-/// Explosion's effects in Sora's package (elements 44..48 -> 31, 32, 33, 33, 34).
-const EXPLOSION: [u32; 4] = [31, 32, 33, 34];
 /// Where KH1 binds a native element (option A: KH2's bone on KH1's matching bone).
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Anchor {
@@ -92,27 +99,65 @@ enum Anchor {
     Code(u32),
 }
 
-/// The elements KH1 plays: (KH2 element, effect number, the programs of KH2's own its effect
-/// runs, `kh2ppp`). Their KH1 anchors come from their KH2 bone codes (`anchor`).
-const NATIVE: [(i16, u32, &[u32]); 5] = [
-    (44, 31, &[MB]),
-    (45, 32, &[MB]),
-    (46, 33, &[]),
-    (47, 33, &[]),
-    (48, 34, &[MB, SHIPOLY]),
-];
+/// The elements of Sora's package switched on for KH1 (the tester: every effect, one move per
+/// version): Explosion (motion 166: 44..48), Magnet Burst (197: 51, 52).
+const ON: &[i16] = &[44, 45, 46, 47, 48, 51, 52];
 const MB: u32 = super::kh2ppp::MEGA_BIRTH;
 const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
+const COLOR: u32 = super::kh2ppp::COLOR;
+/// KH2's own programs an effect needs plugged in before it plays through KH1 (KH1's version of
+/// 201 isn't KH2's; 241 isn't in KH1). KH2's pppColor (43) is not a gate: without it KH1's runs.
+const GATES: [u32; 2] = [MB, SHIPOLY];
 
-/// KH1's anchor for a KH2 bone code (the bones by the two bind poses: KH2 170 / 78 / 67 have the
-/// same bind frames as KH1 93 / 198 / 70, `docs/kh2-effects.md` §17.4); KH2's weapon points
-/// 0x4003 / 0x4005 / 0x4007 (tip, root, halfway: `0x1403B43D0`) are KH1's blade points t = 1 / 0 /
-/// 0.5.
+/// Program types KH1 runs the same as KH2 (`docs/kh2-effects.md` §18.2): every slot of KH1's
+/// table entry (`0x14054FF00`) against KH2's (`0x140779A00`), normalised decompiles, where both
+/// are in the decomps; KH1's code read in the exe where they aren't. Differences allowed: the
+/// paused byte's offset in the effect (KH1 `+0xD5`, KH2 `+0xC1`) and how the decompiler wrapped
+/// lines. 1 is `pppDummyFunc`.
+const KH1_SAME: &[u32] = &[
+    1, // pppDummyFunc
+    28, 29, 30, 31, // Accele, AngAccele, SclAccele, ColAccele
+    36, 37, 38, 39, // Move, AngMove, SclMove, ColMove
+    40, 41, 42, // Point, Angle, Scale
+    51, 63, 66, // RandFloat, RandFV, RandIV
+    84, 87, 90, 91, 94, 96, // SMatrix, MatrixXYZ, MatrixYXZ, MatrixZXY, MatrixScl, RyjMatrixNoRot
+    105, 106, // ParMatrix, KeParMatR
+    112, 113, 115, 116, 117, 120, // DrawMatrix, DrawMatrixFront, DrawMatrixWood, KeDMat, KeDMatFr, RyjDrawMatrixWorld
+    124, 125, // KeZCrct, KeZCrctShp
+    137, 138, 139, 142, // DrawMdl3, DrawMdlSemi3, DrawMdlTs3, DrawShapeX
+    160, // KeShpDtt
+    174, 177, 184, // VertexAp, VertexApLc, KeBornRnd6
+    217, 219, // DrawMatrixLoop, DrawMdlLoopZ
+];
+
+/// The programs of `types` KH1 can't run as KH2 does yet (empty: it can play through KH1).
+fn missing(types: &[u32]) -> Vec<u32> {
+    types.iter().copied().filter(|t| !KH1_SAME.contains(t) && *t != COLOR && !(GATES.contains(t) && super::kh2ppp::plugged(*t))).collect()
+}
+
+/// KH1's anchor for a KH2 bone code. The bones by the two bind poses (`docs/kh2-effects.md`
+/// §17.4, §18.3: each KH2 bone on the KH1 bone of the same body part at the same joint, whose
+/// bind frame is the same to 0.05): pelvis 2 -> 2; +x leg: thigh 11 -> 43, shin 12 -> 44, foot 15
+/// -> 47, toe 18 -> 50; -x leg: 40 -> 17, 41 -> 18, 44 -> 21, 47 -> 24; spine 67 -> 70; upper arms
+/// 78 -> 198, 170 -> 93; hands 85 -> 203, 177 -> 98. KH2's weapon points 0x4003 / 0x4005 / 0x4007
+/// (tip, root, halfway: `0x1403B43D0`) are KH1's blade points t = 1 / 0 / 0.5; its object root
+/// 0x4000 is KH1's 0x8000.
 fn anchor(code: u16) -> Option<Anchor> {
     Some(match code {
-        170 => Anchor::Bone(93),
-        78 => Anchor::Bone(198),
+        2 => Anchor::Bone(2),
+        11 => Anchor::Bone(43),
+        12 => Anchor::Bone(44),
+        15 => Anchor::Bone(47),
+        18 => Anchor::Bone(50),
+        40 => Anchor::Bone(17),
+        41 => Anchor::Bone(18),
+        44 => Anchor::Bone(21),
+        47 => Anchor::Bone(24),
         67 => Anchor::Bone(70),
+        78 => Anchor::Bone(198),
+        170 => Anchor::Bone(93),
+        85 => Anchor::Bone(203),
+        177 => Anchor::Bone(98),
         0x4000 => Anchor::Code(KH1_OBJECT_ROOT),
         0x4003 => Anchor::Blade(1.0),
         0x4005 => Anchor::Blade(0.0),
@@ -145,6 +190,9 @@ const ENDS_WITH_MOTION: u32 = 0x20;
 const END_FADE: u32 = 0x40;
 const END_LOOP: u32 = 0x80;
 const ENDS_WITH_OWNER: u32 = 0x200;
+const POSITION_ONLY: u32 = 0x04;
+const BONE_SCALE: u32 = 0x100;
+const TWO_POINT: u32 = 0x1_0000;
 /// KH1's effect instance (0xE0 bytes) and element (0x3C) fields used here.
 const INST_SCALE: usize = 0x20;
 const INST_ALPHA: usize = 0x3C;
@@ -194,8 +242,6 @@ struct Layer {
     el: i16,
     number: u32,
     anchor: Anchor,
-    /// The programs of KH2's own its effect runs: KH1 plays it only once those are plugged in.
-    kh2_programs: &'static [u32],
     flags: u32,
     wait: f32,
     fadeout: f32,
@@ -233,7 +279,7 @@ static LAST_MOTION: AtomicU32 = AtomicU32::new(u32::MAX);
 /// KH1's handles cover 32 MB regions; the DPX stays inside one.
 const REGION: usize = 0x200_0000;
 /// The name our DPX has in KH1's loaded-file list.
-const FILE_NAME: &[u8] = b"kh2fx_explosion_dpx";
+const FILE_NAME: &[u8] = b"kh2fx_p_ex100_dpx";
 
 /// An HD texture for one texture record: the record's pixel offset in the DPX, the DDS.
 struct Hd {
@@ -249,6 +295,10 @@ struct Dpx {
     md5: [u8; 16],
     hd: Vec<Hd>,
     layers: Vec<Layer>,
+    /// Each built element's program types (`kh1dpx::Kh1Dpx::types`), by element.
+    types: Vec<(i16, Vec<u32>)>,
+    /// Elements whose KH1 play has been refused (logged once each).
+    refused: Vec<i16>,
     /// Where KH2's own programs are (`kh1dpx::Kh1Dpx::programs`), for `kh2ppp::plug`.
     programs: Vec<(usize, u32)>,
     relocated: bool,
@@ -257,17 +307,29 @@ struct Dpx {
 static DPX: Mutex<Option<Dpx>> = Mutex::new(None);
 static STARTED: AtomicU32 = AtomicU32::new(0);
 
-/// Builds Explosion's KH1 DPX in the background (from the KH2 install, as `kh2fx`).
+/// Builds the KH1 DPX of Sora's package in the background (from the KH2 install, as `kh2fx`),
+/// once KH2 Sora's moveset is loaded (its motions group the elements).
 pub fn start() {
     if super::settings::get().kh2_effects.is_none() {
         return;
     }
     std::thread::spawn(|| {
         let t = std::time::Instant::now();
-        match build() {
+        let kh2 = loop {
+            if let Some(k) = super::pose::kh2() {
+                break k;
+            }
+            if t.elapsed().as_secs() > 300 {
+                log("KH2 effects (native): KH2 Sora never loaded; kh2fx plays his effects");
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        };
+        let t = std::time::Instant::now();
+        match build(kh2) {
             Ok((r, hd, hd_report, layers)) => {
                 let dpx = &r.bytes;
-                log(&format!("KH2 effects (native): Explosion's DPX built, {} bytes in {:.2} s; {}", dpx.len(), t.elapsed().as_secs_f32(), r.report));
+                log(&format!("KH2 effects (native): Sora's DPX built, {} bytes, {} effects in {:.2} s; {}", dpx.len(), r.effects.len(), t.elapsed().as_secs_f32(), r.report));
                 log(&format!("KH2 effects (native): HD textures: {hd_report}"));
                 let mut buf = vec![0u8; dpx.len() * 2 + 16];
                 let p = buf.as_ptr() as usize;
@@ -277,11 +339,12 @@ pub fn start() {
                 }
                 let off = at - p;
                 buf[off..off + dpx.len()].copy_from_slice(dpx);
+                let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
                 if let Ok(mut g) = DPX.lock() {
-                    *g = Some(Dpx { _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, programs: r.programs.clone(), relocated: false });
+                    *g = Some(Dpx { _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, types, refused: Vec::new(), programs: r.programs.clone(), relocated: false });
                 }
             }
-            Err(e) => log(&format!("KH2 effects (native): Explosion's DPX not built ({e}); kh2fx plays it")),
+            Err(e) => log(&format!("KH2 effects (native): Sora's DPX not built ({e}); kh2fx plays his effects")),
         }
     });
 }
@@ -290,10 +353,17 @@ pub fn start() {
 /// folded into the header's local transform (`H' = S⁻¹ · T(t) · R · S · H`, S the element's
 /// scale, which KH1 takes as the instance's: KH2's root is `T(B·t) · R(B·R) · S`, KH1's the
 /// bound bone's `B`, times the header).
-fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, effect: u32, kh2_programs: &'static [u32]) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
+fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
     use glam::{Mat3, Vec3};
     use kh2_fx::math;
     let e = parsed.element(el as u16).ok_or(format!("no element {el}"))?;
+    let effect = e.effect as u32;
+    if !(0..0x100).contains(&el) {
+        return Err(format!("element {el}: no effect number for it (0x700 | element)"));
+    }
+    if let Some(why) = unbindable(e.flags) {
+        return Err(format!("element {el}: {why} (flags {:#x})", e.flags));
+    }
     let bone = anchor(e.bone).ok_or(format!("element {el}: no KH1 anchor for KH2 bone {:#x}", e.bone))?;
     let (h_off, h_ang, _) = kh2_formats::kh1dpx::header_local(pax, effect).map_err(|e| e.to_string())?;
     let s = Vec3::from(e.scale);
@@ -309,11 +379,28 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, effect: u32, kh2_p
         e.bone, e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
         if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" }
     );
-    let l = Layer { el, number, anchor: bone, kh2_programs, flags: e.flags, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
+    let l = Layer { el, number, anchor: bone, flags: e.flags, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
     Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle }, note))
 }
 
-fn build() -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String, Vec<Layer>), String> {
+/// KH2 element flags KH1's binding doesn't do yet (`docs/kh2-effects.md` §2, §18.3).
+fn unbindable(flags: u32) -> Option<&'static str> {
+    if flags & (BIND | BIND_UNTIL_STARTED) == 0 {
+        return Some("not bound (placed once at its start)");
+    }
+    if flags & POSITION_ONLY != 0 {
+        return Some("bound by position only");
+    }
+    if flags & BONE_SCALE != 0 {
+        return Some("scaled by its bone");
+    }
+    if flags & TWO_POINT != 0 {
+        return Some("a two-point element");
+    }
+    None
+}
+
+fn build(kh2: &super::pose::Kh2) -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String, Vec<Layer>), String> {
     let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
     let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
     let src = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
@@ -328,15 +415,76 @@ fn build() -> Result<(kh2_formats::kh1dpx::Kh1Dpx, Vec<Hd>, String, Vec<Layer>),
         .ok_or("no PAX in P_EX100")?;
     let pax_at = pax.data.as_ptr() as usize - pack.as_ptr() as usize;
     let parsed = kh2_formats::pax::Pax::parse(pax.data).map_err(|e| e.to_string())?;
-    let mut layers = Vec::new();
-    let mut variants = Vec::new();
-    for &(el, effect, kh2_programs) in &NATIVE {
-        let (l, v, note) = layer(pax.data, &parsed, el, effect, kh2_programs)?;
-        log(&format!("KH2 effects (native): {note}"));
-        layers.push(l);
-        variants.push(v);
+    // Every element (the first with its id, as KH2's start takes): its layer and its copy of its
+    // effect.
+    let mut layers: Vec<Layer> = Vec::new();
+    let mut variants: Vec<kh2_formats::kh1dpx::Variant> = Vec::new();
+    let mut left = Vec::new();
+    for e in &parsed.elements {
+        let el = e.id as i16;
+        if layers.iter().any(|l| l.el == el) || left.iter().any(|x: &String| x.starts_with(&format!("element {el}:"))) {
+            continue;
+        }
+        match layer(pax.data, &parsed, el) {
+            Ok((l, v, note)) => {
+                if ON.contains(&el) {
+                    log(&format!("KH2 effects (native): {note}"));
+                }
+                layers.push(l);
+                variants.push(v);
+            }
+            Err(why) => left.push(why),
+        }
     }
-    let r = kh2_formats::kh1dpx::build_with(pax.data, &common, &EXPLOSION, &variants).map_err(|e| e.to_string())?;
+    if !left.is_empty() {
+        log(&format!("KH2 effects (native): not built (kh2fx plays them): {}", left.join("; ")));
+    }
+    // Groups: the elements each of KH2 Sora's motions starts (in motion order; an element in
+    // the first motion that starts it), then Revert's, then each other effect's elements; each
+    // group split by the DPD its effects are in.
+    let mut motions: Vec<(&u16, &character_core::Clip)> = kh2.character.moveset.clips.iter().collect();
+    motions.sort_by_key(|m| *m.0);
+    let mut sets: Vec<Vec<i16>> = motions
+        .iter()
+        .map(|(_, c)| c.events.iter().filter_map(|e| if let character_core::EventKind::Effect(el) = e.kind { Some(el) } else { None }).collect())
+        .collect();
+    sets.push(super::form::REVERT_ELEMENTS.to_vec());
+    let dpd_of = |v: &kh2_formats::kh1dpx::Variant| kh2_formats::dpd::effect_source(pax.data, v.effect).ok().flatten().map(|(d, _)| d.as_ptr() as usize);
+    let mut groups: Vec<Vec<kh2_formats::kh1dpx::Variant>> = Vec::new();
+    let mut placed: Vec<u32> = Vec::new();
+    let mut add = |els: &[i16], groups: &mut Vec<Vec<kh2_formats::kh1dpx::Variant>>| {
+        let mut by_dpd: Vec<(Option<usize>, Vec<kh2_formats::kh1dpx::Variant>)> = Vec::new();
+        for &el in els {
+            let Some(i) = layers.iter().position(|l| l.el == el) else { continue };
+            let v = variants[i];
+            if placed.contains(&v.number) {
+                continue;
+            }
+            placed.push(v.number);
+            let d = dpd_of(&v);
+            match by_dpd.iter_mut().find(|x| x.0 == d) {
+                Some(x) => x.1.push(v),
+                None => by_dpd.push((d, vec![v])),
+            }
+        }
+        groups.extend(by_dpd.into_iter().map(|x| x.1));
+    };
+    for s in &sets {
+        add(s, &mut groups);
+    }
+    let mut effects: Vec<u32> = variants.iter().map(|v| v.effect).collect();
+    effects.dedup();
+    for e in effects {
+        let els: Vec<i16> = layers.iter().zip(&variants).filter(|(_, v)| v.effect == e).map(|(l, _)| l.el).collect();
+        add(&els, &mut groups);
+    }
+    let r = kh2_formats::kh1dpx::build_groups(pax.data, &common, &groups).map_err(|e| e.to_string())?;
+    // Elements of groups left out (too many texture slots, a texture missing) aren't KH1's.
+    for (gi, why) in &r.skipped {
+        let els: Vec<i16> = groups[*gi].iter().filter_map(|v| layers.iter().find(|l| l.number == v.number).map(|l| l.el)).collect();
+        log(&format!("KH2 effects (native): elements {els:?} not built ({why}); kh2fx plays them"));
+    }
+    layers.retain(|l| r.effects.contains(&l.number));
     // KH2's HD textures for the two files, each keyed by the offset in its file of the texture
     // record's pixels it replaces.
     let own_hd = install.read_remastered_any(src, "obj/P_EX100.a.us").map_err(|e| format!("P_EX100 HD textures: {e}"))?;
@@ -495,14 +643,15 @@ unsafe fn register(base: usize, d: &Dpx) -> Result<usize, String> {
 }
 
 /// A KH2 element of Sora's package (`kh2fx::event`, game thread): true if it is KH1's (`kh2fx`
-/// doesn't play it). On Steam, once the DPX is built and KH2's programs its effect runs are
-/// plugged in, Explosion's elements are KH1's alone: KH1 plays them, or (no free element or
-/// effect slot, no Sora) they don't play, as KH1's own effects. `kh2fx` plays them only where
-/// KH1 can't: the DPX not built (yet, or it failed), KH2's programs not plugged in (KH1's
-/// program table not as expected), or another build (Epic: no blade binding, no KH2 programs;
-/// there the wrist flashes still play through KH1 and fall back to `kh2fx` if KH1 has no slot).
+/// doesn't play it). On Steam, once the DPX is built and the element is switched on (`ON`), with
+/// a KH1 anchor and every program its effect runs one KH1 runs as KH2 (`missing`), it is KH1's
+/// alone: KH1 plays it, or (no free element or effect slot, no Sora) it doesn't play, as KH1's own
+/// effects. `kh2fx` plays it only where KH1 can't: the DPX not built (yet, or it failed), a
+/// program not in KH1 yet (or KH2's not plugged in: KH1's program table not as expected), or
+/// another build (Epic: no blade binding, no KH2 programs; there elements without those still
+/// play through KH1 and fall back to `kh2fx` if KH1 has no slot).
 pub fn event(motion: u16, el: i16) -> bool {
-    if !NATIVE.iter().any(|n| n.0 == el) {
+    if !ON.contains(&el) {
         return false;
     }
     let Ok(mut g) = DPX.lock() else { return false };
@@ -517,19 +666,24 @@ pub fn event(motion: u16, el: i16) -> bool {
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     if !d.relocated {
         match unsafe { register(base, d) } {
-            Ok(rec) => log(&format!("KH2 effects (native): Explosion's DPX entered in KH1's loaded files ({:#x}) with {} HD textures", rec, d.hd.len())),
-            Err(e) => log(&format!("KH2 effects (native): Explosion's DPX not entered in KH1's loaded files ({e}); its textures won't draw")),
+            Ok(rec) => log(&format!("KH2 effects (native): Sora's DPX entered in KH1's loaded files ({:#x}) with {} HD textures", rec, d.hd.len())),
+            Err(e) => log(&format!("KH2 effects (native): Sora's DPX not entered in KH1's loaded files ({e}); its textures won't draw")),
         }
         let f: unsafe extern "system" fn(usize) = unsafe { std::mem::transmute(base + RELOCATE_RVA) };
         unsafe { f(d.at) };
         d.relocated = true;
-        log(&format!("KH2 effects (native): Explosion's DPX at {:#x} relocated by KH1", d.at));
+        log(&format!("KH2 effects (native): Sora's DPX at {:#x} relocated by KH1", d.at));
         // KH2's own programs, as entries of ours in KH1's format (`kh2ppp`).
         super::kh2ppp::plug(d.at, &d.programs);
     }
-    // An effect with a program of KH2's own plays through KH1 only with that program plugged in
-    // (KH1's own version, or its dummy, isn't KH2's).
-    if !layer.kh2_programs.iter().all(|&t| super::kh2ppp::plugged(t)) {
+    // An effect with a program KH1 doesn't run as KH2 plays through kh2fx (KH1's own version, or
+    // its dummy, isn't KH2's).
+    let lacks = d.types.iter().find(|t| t.0 == el).map_or_else(Vec::new, |t| missing(&t.1));
+    if !lacks.is_empty() {
+        if !d.refused.contains(&el) {
+            d.refused.push(el);
+            log(&format!("KH2 effects (native): element {el} runs programs {lacks:?}, not in KH1 as KH2's yet; kh2fx plays it"));
+        }
         return false;
     }
     // (Steam: KH1's alone from here on, the old player retired for it.)

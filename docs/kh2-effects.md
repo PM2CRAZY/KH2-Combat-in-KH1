@@ -1445,3 +1445,50 @@ The port of every effect the mod plays onto KH1's own effect system, the way Exp
   texture's source DPD noted (`TexOrigin::src_dpd_at`) for its HD image.
 - Explosion's DPX from it is byte for byte the one t368..t404 built (checked offline with a
   stand-in for `texcommon.dpd`, which isn't staged here).
+
+### 18.2 Which programs KH1 runs as KH2 does
+
+Every slot of KH1's program table entry (`0x14054FF00`, read from the exe) against KH2's
+(`0x140779A00`, each slot from the KH2 decomp's data references, else the KH2 function whose
+decompile matches), as normalised decompiles (addresses, variable names and line wrapping taken
+out; the effect's paused byte KH1 `+0xD5` = KH2 `+0xC1`). Where a function isn't in either
+decomp, KH1's code was read in the exe. The programs of Sora's package (`P_EX100.a.us`, all its
+elements; **Checked (files)**):
+
+| Programs | Result |
+|---|---|
+| 87 MatrixXYZ, 90 MatrixYXZ, 91 MatrixZXY, 94 MatrixScl, 96 RyjMatrixNoRot, 105 ParMatrix, 106 KeParMatR, 113 DrawMatrixFront, 115 DrawMatrixWood (calc), 116 KeDMat, 117 KeDMatFr, 120 RyjDrawMatrixWorld (calc), 124 KeZCrct, 125 KeZCrctShp, 51 RandFloat, 63 RandFV, 66 RandIV, 174 VertexAp (calc), 177 VertexApLc (calc), 184 KeBornRnd6 (calc), 219 DrawMdlLoopZ (calc, draw, construct) | Same code. **Checked (decomp)**. |
+| 137 DrawMdl3, 138 DrawMdlSemi3, 139 DrawMdlTs3, 142 DrawShapeX, 160 KeShpDtt (draws), 49 VtMime (draw, construct, destruct) | Same code (the KH2 function found by its decompile). **Checked (decomp)**. |
+| 28 Accele, 36 Move | Not in either decomp. KH1's are byte for byte its SclAccele / SclMove (exe), which t368 found the same as KH2's. **Checked (exe)**, KH2's **Assumption** (as its siblings). |
+| 217 DrawMatrixLoop | Not in either decomp. KH1's is byte for byte its DrawMatrix (112), the same globals (exe). KH2's **Assumption** (as §7.4 reads it). |
+| 29-31, 37-42, 84, 112, 139 / 142 calcs and constructs | Not in either decomp; t368's comparison (Explosion's programs) found them the same. |
+| 49 VtMime calc | **Differs**: KH1's (`0x14032C2E0`, exe) adds the key's rate delta (`@16`) always; KH2's leaves the rate when it is below −1e38 (§7.4, the keep marker; KH2's calc isn't in the Steam decomp). Sora's VtMime keys use the marker (−FLT_MAX on their last key, **Checked (files)**: Vicinity Break, Aerial Finish), so KH1's would throw the morph away there. Not in KH1_SAME: to port. |
+| 43 Color, 201 RyjMegaBirth, 241 EiDrawShipoly | KH2's own, ported (§17). |
+| 238 SnoMdlDttNorm | KH2 only (a frame-buffer distortion along a model's normals, §7.10). Only element 1 (the Drive motion's sphere) runs it. Not ported: that element stays with `kh2fx` (which runs its state but draws nothing for it either). |
+
+`kh2dpx::KH1_SAME` lists the ones KH1 runs as KH2; an element whose effect runs anything else
+(not KH1_SAME, not KH2's own plugged in) stays with `kh2fx`, logged once.
+
+### 18.3 Sora's package through KH1 (`kh2dpx`)
+
+- Every element of `P_EX100.a.us` is built at load, each as its own copy (`0x700 | element`, its
+  offset and turn folded in, §16.2). The groups (one DPD each): the elements each of KH2 Sora's
+  motions starts (its frame triggers 1, from the moveset the mod loads; an element in the first
+  motion that starts it), Revert's thirteen (`form::REVERT_ELEMENTS`), then each remaining
+  effect's elements; each split by source DPD.
+- KH2 bones on KH1's (option A), each KH2 bone on the KH1 bone of the same body part at the
+  same joint (retarget's parts), their bind frames the same to 0.05 (**Checked (files)**: KH2
+  `P_EX100.mdlx`, KH1 `xa_ex_0010.mdls`), so no turn conversion: pelvis 2 → 2; +x leg thigh 11
+  → 43, shin 12 → 44, foot 15 → 47, toe 18 → 50; −x leg 40 → 17, 41 → 18, 44 → 21, 47 → 24;
+  spine 67 → 70; upper arms 78 → 198, 170 → 93; hands 85 → 203, 177 → 98; 0x4000 → KH1 0x8000,
+  0x4003 / 0x4005 / 0x4007 → KH1's blade points. The effect sits at KH1's joint (KH1's limbs are
+  shorter: the hips 78.9 high against KH2's 88.5).
+- Flags KH1's binding does: 0x01 (mode 2 / 3), 0x02 (KH1's bind-once bit 0x10000), the endings
+  (§16.2). Not yet: unbound elements (KH2 places them once at the start; Sora's 14, 42, 43, none
+  of which a motion starts), 0x100 (scale by the bone), 0x10000 (two points); those stay with
+  `kh2fx`. 0x04 (position only): §18.5.
+- Switched on (`kh2dpx::ON`): Explosion, Magnet Burst (51: object root, y −127, fade-out 4;
+  52: bound until started). Magnet Burst's programs are all in KH1_SAME or KH2's own.
+- Cost: built once in the background (more DPDs than Explosion's one: each motion's copies of
+  the source DPD's shapes and models, and each its own copy of the common textures and their HD
+  images). Per frame nothing more than Explosion's.
