@@ -12,6 +12,7 @@
 - [6. Assistant: t405 to t407 (one each)](#^m6)
 - [7. Mr Bugs: the model is still bugged, it seems to be his clothes, (his ](#^m7)
 - [8. Assistant: t411 and t412](#^m8)
+- [9. Mr Bugs: when I mean model I'm also referring to kh2 sora's skeleton,](#^m9)
 
 ---
 
@@ -146,4 +147,7 @@
 > [!note] Mr Bugs
 > when I mean model I'm also referring to kh2 sora's skeleton, before I prompted you to adjust the bake animations the coat was working how it should, please double check so that we're on the same page.
 > 
+
+^m9
+
  

@@ -12,6 +12,7 @@
 - [6. Assistant: t408 and t409, plus notes](#^m6)
 - [7. Mr Bugs: 1. not sure what this question means but, kh1s cam feels fas](#^m7)
 - [8. Assistant: t413 and t414](#^m8)
+- [9. Mr Bugs: 1. check the decomp for both (steam gihidra c decomp)](#^m9)
 
 ---
 
@@ -144,3 +145,6 @@
 > 3. (a)
 >    
 >   go ahead
+
+^m9
+

@@ -12,6 +12,8 @@
 - [6. Assistant: t400 and t401](#^m6)
 - [7. Mr Bugs: sent the traces](#^m7)
 - [8. Assistant: t410 (notes only, no change in how it plays)](#^m8)
+- [9. Mr Bugs: 1. (a) thats how its supposed to work and when we transition](#^m9)
+- [10. Assistant: t415 and t416](#^m10)
 
 ---
 
@@ -144,3 +146,25 @@
 >    Okay I recorded it and sent a log I noticed that sora next to a ledge will start a short jump attack
 >    
 >    go ahead
+
+^m9
+
+
+> [!tip] Assistant
+> t415 and t416
+>
+> Checked your log and the 4 traces. The short jump attack at the ledge is real KH2: when the floor gives out at the end of an 85-long line ahead of Sora, KH2 does a little hop swing off the edge instead of a ground swing, even mid-combo (that row comes first in Sora's table). In your traces he was 50 to 70 from a 120 drop each time, so KH2 would do it there too. The ground combos in the log are KH2's too: 151, 153, 151, then the finisher 155.
+>
+> Two things were wrong, though:
+> - **t415:** the hop is meant to carry him forward off the ledge at 8 a frame, but KH1 resets his air speed from the stick on the frame he leaves the ground, so with the stick idle he just hopped in place (seven times in a row in one trace). That's fixed: he now goes off the edge with the swing, like KH2.
+> - **t416:** the "no floor ahead" test was KH1's, not KH2's, and it ran along the stick's direction. KH2 only looks at the spot at the end of the 85 line and counts no floor, or a floor more than 24 below his feet, as a drop. It follows the slope under him and aims where KH2 aims (the target, or the way he's facing). It's KH2's now, so small steps, stairs and slopes shouldn't set it off.
+>
+> **Check:** your traces and log, the KH1 decomp (why the speed was wiped) and the KH2 decomp (the floor rule and the line's length, which confirms the 85 I'd assumed in t393). Not checked in game. Assumptions: the line is laid flat on moving platforms, and KH1's collision shape moves it rather than KH2's, so walls may stop it a little sooner or later.
+>
+> A Select + Triangle trace walking off a ledge with an attack, and one swinging near some steps or a ramp, would let me check both.
+
+^m10
+
+
+> [!note] Tester Mr Bugs
+> 
