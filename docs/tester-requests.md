@@ -198,5 +198,26 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >    
 >    also trace recordings need to advance frame by frame as well, so if I have trace set to 3 seconds that timer only advances frame by frame. please let me know how you would implement it.
 
+> [!tip] Assistant
+> Got it, thanks. I checked the Steam KH1 decomp for the fps part. Here's how I'd build it:
+>
+> **How KH1 runs a frame.** Each pass of KH1's field loop (`0x140170D50`) runs the game's update, then draws, then a pacing step (`0x14018D1F0`), then shows the picture. The pacing step counts how many 60 Hz ticks went by since the last pass and sets KH1's frame scale (`0x14233FBDC`) from that: 1 at 60 fps, 2 at the 30 fps setting (KH1 reads which one you picked through `0x1400FDB90`), capped at 5 after a hitch. Everything in KH1, and our KH2 side, moves by that scale.
+>
+> **Freezing.** With Frame Advance on, the update part of that loop is skipped and the drawing and showing keep going. So the picture, HUD and debug menu stay up, the window stays responsive, and nothing in the game moves. Sounds and music pause with it. (Assumption to check before coding: exactly which calls in the loop are the update and which are the drawing. I'll confirm each one in the decomp.)
+>
+> **One step at any fps.** While frozen, the pacing step sees a long gap. If nothing else changed, the first step would jump 5 frames' worth. So each step gets the scale a normal frame gets at your setting: 1 at 60 fps, 2 at 30. One step is always one real game frame, the same as during play. Our KH2 side follows the same scale, so KH2 moves step the same way.
+>
+> **R2.** While Frame Advance is on, R2 is removed from the pad before KH1 and the KH2 side read it, in the same place the debug menu hides buttons now. Nothing else sees R2 (so no lock-on target switching). The period key only counts while the game window is focused.
+>
+> **Holding.** Holding R2 or period for 1 second runs the game at full speed until you let go. Then it freezes again on the next frame.
+>
+> **Buttons.** A stepped frame sees exactly what's held when you step. Nothing pressed and let go in between is kept. One thing to confirm: if you keep a button held over several steps, the first step counts as the press and the next ones as holding it, the way it works in normal play (so holding Square over 5 steps is one press, not 5 swings). Is that what you want?
+>
+> **Trace.** The trace already writes one row per game frame, but its "last 3 seconds" window is measured in real time, so slow stepping would drop rows. With Frame Advance on, the window counts game time instead (each frame's scale): 3 seconds is 180 ticks, so 90 frames at 30 fps or 180 at 60. Select + Triangle still saves the trace while frozen.
+>
+> **The setting.** A Frame Advance row (Off / On) on the debug menu's main page. It's not saved to the ini, so it starts Off each time you launch the game, like the stat locks. Say if you'd rather it be saved.
+>
+> If that all sounds right, answer the held-button question and write `Go ahead`.
 
-
+> [!note] Tester Mr. Bugs
+> 
