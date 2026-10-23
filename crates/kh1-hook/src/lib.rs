@@ -17,10 +17,11 @@ pub mod menujump;
 pub mod mercy;
 pub mod partners;
 pub mod story;
+pub mod support;
 
 /// The mod's version as the user sees it (the Config menu's Camera Style help line, the log):
 /// the stage of the latest `AGENTS.md` entry, bumped with each build handed out (a test checks).
-pub const VERSION: &str = "s334";
+pub const VERSION: &str = "s335";
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod win;

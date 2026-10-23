@@ -3584,6 +3584,16 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-23: Stage 335 (Damage Drive, Form Boost, Damage Control, Drive Converter)
+- The user: "lets try to implement berserk charge, damage control, damage drive, drive boost, form
+  boost, drive converter?", then Berserk Charge and Drive Boost left out (no MP Charge in KH1) and
+  the others "At set levels". `growth::SUPPORT_LEVELS` (ids 78..81: Damage Drive 14 / 3 AP, Form
+  Boost 24 / 5, Damage Control 38 / 5, Drive Converter 50 / 5), KH2's names, help and AP. Rules from
+  the Steam KH2 exe: Damage Drive damage / max HP x 50 per copy out of a form (no longer free); Form
+  Boost x0.8 drain per copy; Damage Control halves (rounded up) at or below 25% HP per copy
+  (`hurt.rs`); Drive Converter keeps munny x0.5 per copy, the rest as Drive orbs. Also the Steam
+  decomps (local/decomps/steam) and docs/steam-epic-addresses.md. docs/drive-model.md.
+
 ### 2026-10-22: Stage 334 (partners no longer left invisible after a Coliseum round)
 - The user: "after reverting from a drive form inside a coliseum cup the party members that
   disappeared remain invisible". KH1's actor reset (0x1402904D0, from actor script commands 32/40,

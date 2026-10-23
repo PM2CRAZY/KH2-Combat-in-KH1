@@ -126,6 +126,72 @@ DriveForms aren't working; Sora only transforms."
   - Final: +1 per Nobody defeated (3000..4014)
   - Master's rule (drive orbs) and Limit's (limit finishers) aren't modelled.
 
+## Support abilities for the gauge and damage (Checked, exe + Data)
+
+Read from the Steam KH2FM executable (image base `0x140000000`) and the install's 03system.
+- **How KH2 counts them.** Each time a party member's abilities change, KH2 rebuilds an ability
+  record (in the member's status at `+0x1D0`; the builder `0x140401730`, called for every
+  equipped ability, base Sora's list and, in a Drive Form, the form's). In a form, base Sora's
+  abilities count only if the item row's byte 6 is 0: his support abilities carry over, his
+  action abilities don't. Each copy applies its step again, so copies stack. The steps' numbers
+  are `sstm`'s (03system `pref`):
+
+| Ability | Item (num) | Record field, start | Per copy (`sstm`) | AP |
+|---|---|---|---|---|
+| Damage Drive | 396 (108) | `+0x58`, 0 | + 50 (`+0x138`) | 3 |
+| Drive Boost | 397 (109) | `+0x40`, 1 | + 0.2 (`+0x13C`) | 3 |
+| Form Boost | 398 (110) | `+0x44`, 1 | × 0.8 (`+0x140`) | 5 |
+| Drive Converter | 540 (174) | `+0x74`, 1 | × 0.5 (`+0x170`) | 5 |
+| Damage Control | 542 (176) | `+0x78`, 0 | + 0.25 (`+0x174`) | 5 |
+
+- **Damage Drive** (the HP-change handler, `0x1403A75F0`): only in the gauge's normal mode (not
+  in a form) and only for HP lost, `lost / max HP × rate` drive points, through the hit's add
+  (`0x1403A9CF0`: ×(2 + Drive Boost) while MP charges, × a world factor that is 1 outside
+  missions, truncated). So 0 without the ability, 50 per copy.
+- **Form Boost** (the form's per-frame drain, `0x1403A92C0`): 1 a frame, × 0.5 out of battle,
+  × the record's factor in a form (`+0x44`, Summon Boost's `+0x70` for a summon). One copy 0.8,
+  two 0.64. Hits and orbs aren't changed by it.
+- **Drive Converter** (the prize drop, `0x1403DC170`): the factor is the product of the party's
+  records (only Sora has it). For each prize type the count is `ceil(row byte × drop factor)`;
+  for the three munny sizes (KH2 types 2, 3, 4: big, medium, small) `count × factor` (truncated)
+  is kept and the rest is made as the type in the exe's table `0x1405C7978` (types 0..8 -> 7 8 8
+  8 7 7 8 7 8): big and medium munny become big Drive orbs, small munny small ones. The orbs are
+  made first. One copy: half kept, so a single coin of a size is always an orb.
+- **Damage Control** (the damage routine's last step, `0x1403C12F0`): when the target's HP
+  (before the hit) is at or below `max HP × share` (truncated), the damage becomes `(damage ×
+  50 + 99) / 100` (`sstm +0x178` is 50, an int): half, rounded up. One copy a quarter of max HP,
+  two half (the help: "Equip two to accelerate the effect"). It comes after Anti Form's ×1.5
+  and the element resistances.
+
+**In the KH1 port** (`crate::support`, `growth::MENU` ids 78..81): learned at Sora's level into
+KH1's menu (Sora's list, KH2's AP, KH2's names and help with its line breaks), counted per copy
+equipped on base Sora (`Kh1Sora::support`; `abilities = all` gives one of each, `test` none).
+In a Drive Form they are base Sora's, as KH2's carry over. Berserk Charge and Drive Boost are
+left out (the user: KH1 has no MP Charge).
+
+| Level | Ability | AP | Where it acts |
+|---|---|---|---|
+| 14 | Damage Drive | 3 | `gauge::frame`: HP lost out of a form, `damage / max HP × 50` a copy |
+| 24 | Form Boost | 5 | `gauge::with` -> `Drive::form_boost`: drain × 0.8 a copy |
+| 38 | Damage Control | 5 | `hurt::damage_control`: each hit record's damage before KH1 applies it |
+| 50 | Drive Converter | 5 | `prize::converted_drop`: an enemy's munny drop |
+
+The levels are one table (`growth::SUPPORT_LEVELS`), none a level another schedule uses; Damage
+Drive comes once the first Drive Form is likely open (Guard Armor). For Drive Converter KH1's three
+munny types (1, 5 and 20 munny) are KH2's small, medium and big: the munny KH1 would make (its count
+times its Jackpot factor, `0x142D619A4`) keeps half a copy, the rest are Drive orbs (20 and 5
+munny big ones, 1 munny small ones), all made by KH1's own spawn (`0x1402A9110`). Damage Control
+reads Sora's HP from his stats and halves each record still to deal damage (not drains or heals),
+in KH2 or KH1's hands and with `hurt` off too, after Anti's ×1.5. The log: one line per ability
+when its equipped copies change ("Damage Control: 1 equipped (was 0): damage taken halved at 25%
+of max HP or less"), "Damage Control x1: 40 -> 20 (HP 20 of 100, at or below 25)" (the first 60,
+then one in 25), "Drive Converter x1: munny drop (1 / 5 / 20) [3, 1, 0] (8 munny) -> [1, 0, 0] (1
+munny) and 2 small, 1 big Drive orbs" (the first 40, then one in 50), and the gauge's summary
+("+5 from damage (Damage Drive x1)", "60 frames of the form (Form Boost x1: drain x0.800)").
+
+**Approximate (ours):** Drive Converter acts on enemies' drops only (KH1's `0x1402A9AB0`), not on
+objects' or events' prize rows. KH2's own "drop factor" is KH1's Jackpot factor here.
+
 ## Wisdom Form's shots (Checked, exe + Data)
 
 Wisdom's attacks have no hitbox windows. Their motions fire frame trigger 1 with an effect id
@@ -1217,10 +1283,11 @@ the user moved it to Chernabog.)
   combo swings 127, 128, 130, 134), a spell 5 (Thunder's level-1 rows 249 / 250), told apart by
   the attack's data (KH1's spells' attack data, `combat::is_kh1_spell_data`). KH2 multiplies by
   0.75 on a normal enemy and truncates: a 3 adds 2 points, a 4 adds 3.
-- *Damage taken*: KH2's Damage Drive rule with one copy, `damage / max HP × 50` points, truncated
-  (`drivegauge::damage_points`): losing a tenth of his HP adds 5. KH2 itself gives nothing
-  without the ability; the user wanted damage to count, so every Sora has it once. Read as his HP
-  dropping from one frame to the next (`gauge::frame`; not across a change of max HP or actor).
+- *Damage taken*: KH2's Damage Drive rule, `damage / max HP × 50` points a copy equipped,
+  truncated (`drivegauge::damage_points`): with one copy losing a tenth of his HP adds 5. As in
+  KH2, nothing without the ability (until the support abilities came, every Sora had it once).
+  Read as his HP dropping from one frame to the next (`gauge::frame`; not across a change of max
+  HP or actor). See "Support abilities" above.
 - *Drive orbs*: a small orb 1 point, a big one 3 (KH2's prize table), below.
 - Save points do not refill it (nothing of KH1's touches it).
 
@@ -1360,7 +1427,7 @@ out)"; "Drive orbs: an enemy's drop (...): 4 small, 0 big" and "Drive orb (small
 - KH1 has no boss mark this reads, so every foe takes KH2's normal-enemy rates (×0.75 drive, ×0.2
   form-gauge drain per hit); KH2's bosses give the full value.
 - KH1's own attacks' drive values (3 physical, 5 spell) are KH2's for the like, not per move.
-- Damage Drive is on for everyone (one copy); MP Charge's ×2 doesn't exist in KH1.
+- MP Charge's ×2 (and so Drive Boost and Berserk Charge) doesn't exist in KH1.
 - Drive orb drops are rolled per drop from KH2's normal-enemy rows, not per enemy kind; KH1's
   bosses drop as any enemy.
 - The form level is its growth ability's level (1..4, the user's rule), not KH2's form EXP (KH1
@@ -1372,7 +1439,7 @@ out)"; "Drive orbs: an enemy's drop (...): 4 small, 0 big" and "Drive orb (small
 growing after Sabor, Riku 1, the final fight, Sephiroth, Kurt Zisa and the Unknown (log), not
 as forms open; each form's gauge as long as its level (Valor with High Jump LV2 learned: 6
 bars, the HUD's number 5 when full); hits
-filling it (KH2 combo, KH1 combo, KH1 spells, limits), taking damage filling it; the Drive list
+filling it (KH2 combo, KH1 combo, KH1 spells, limits), taking damage filling it (with Damage Drive equipped only); the Drive list
 greying rows by cost and showing the costs; a Drive paying its cost (log), the form gauge on the
 HUD draining in and out of battle, hits draining it, orbs refilling it (Anti: draining), the
 revert when it runs out (in the air, mid-combo, mid-KH1-limit in Limit Form); enemies dropping

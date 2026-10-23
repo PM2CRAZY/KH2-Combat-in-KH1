@@ -24,6 +24,10 @@
 //!   have played for it are played here.
 //! Sora's HP gone: KH1 had its dying pass (kind kept), and `takeover` lets KH1 have him.
 //!
+//! Damage Control (KH2FM's support ability, `damage_control`): with it equipped, each record's
+//! damage is halved (rounded up) before KH1 applies it while Sora's HP is at or below a quarter
+//! of his max a copy, whoever has him (KH2 or KH1) and with `hurt` off too.
+//!
 //! Repeated hits (the user: Sephiroth's flame pillar "hits sora way too fast to react to ...
 //! even with leaf bracer its an instant kill"; a player: a Large Body's ground slam "nuked"
 //! Sora, "kh2 sora doesn't have damage immunity after getting hit"): KH1 lets an attack hit an
@@ -116,6 +120,56 @@ fn swing(r: usize) -> Swing {
     unsafe { Swing { from: rd::<u32>(r + 4), data: rd::<u32>(r + 0x2C), bit: rd::<u32>(r + 0x28) } }
 }
 
+/// The ready records (those KH1's pass pops this frame).
+unsafe fn ready_records(actor: usize) -> Vec<usize> {
+    let mut ready = Vec::new();
+    let mut rec = pose::ptr(rd::<u32>(actor + 0x3EC));
+    while rec > 0x10000 && ready.len() < 32 && (rd::<u32>(rec + 0xC) >> 12) & 0xF == 0 {
+        ready.push(rec);
+        rec = pose::ptr(rd::<u32>(rec + 0x30));
+    }
+    ready
+}
+
+/// Damage Controls applied (for the log's rate).
+static CONTROLLED: AtomicU32 = AtomicU32::new(0);
+
+/// Damage Control (KH2FM's, equipped on base Sora, in a form too; `crate::support::
+/// damage_control`): each attack record still to deal damage (not no-effect, not a drain or
+/// heal, types 9..12) deals half, rounded up, while Sora's HP before it is at or below `max HP ×
+/// 0.25` a copy. Written into the record before KH1 applies it (as Anti Form's ×1.5, which comes
+/// first in KH2 too). Records in a row each see the HP the ones before leave. Nothing while KH1
+/// takes no HP (its own no-damage time, a script's, its switch).
+unsafe fn damage_control(base: usize, actor: usize, ready: &[usize]) {
+    let copies = super::menu::support().damage_control;
+    if copies == 0 || ready.is_empty() || rd::<u32>(actor) & KH1_NO_DAMAGE != 0 || rd::<u8>(base + NO_DAMAGE_RVA) & 2 != 0 {
+        return;
+    }
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    if stats < 0x10000 || !super::crash::readable(stats + 0x44) {
+        return;
+    }
+    let (mut hp, max_hp) = (rd::<i32>(stats + 0x3C), rd::<i32>(stats + 0x40));
+    for &r in ready {
+        let d = rd::<i32>(r + 8);
+        if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 || d <= 0 {
+            continue;
+        }
+        let dealt = crate::support::damage_control(d, hp, max_hp, copies);
+        if dealt != d {
+            wr(r + 8, dealt);
+            let n = CONTROLLED.fetch_add(1, Ordering::Relaxed);
+            if n < 60 || n % 25 == 0 {
+                log(&format!(
+                    "Damage Control x{copies}: {d} -> {dealt} (HP {hp} of {max_hp}, at or below {})",
+                    (max_hp as f32 * crate::support::DAMAGE_CONTROL_SHARE * copies as f32) as i32
+                ));
+            }
+        }
+        hp -= dealt;
+    }
+}
+
 unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     // (KH1's pass returns nothing; whatever it leaves in rax is passed back all the same.) Its
     // second argument (rdx) is where its reactions write a vector (the knock-back one,
@@ -124,7 +178,12 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     let f0: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(ORIG.load(Ordering::Acquire));
     let f = |a: usize| f0(a, out);
     let base = BASE.load(Ordering::Relaxed);
-    if actor < 0x10000 || actor != rd::<u64>(base + PARTY_RVA) as usize || !super::settings::get().hurt {
+    if actor < 0x10000 || actor != rd::<u64>(base + PARTY_RVA) as usize {
+        return f(actor);
+    }
+    if !super::settings::get().hurt {
+        // (KH1's hits as they are, but for Damage Control: KH2's rule wherever Sora is hit.)
+        damage_control(base, actor, &ready_records(actor));
         return f(actor);
     }
     // The no-damage time holds while KH2's reaction plays (its motion on its last frame).
@@ -132,13 +191,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     if let Ok(mut m) = MERCY.lock() {
         m.0.see(frame, takeover::KH2_MOTION.load(Ordering::Relaxed));
     }
-    // The ready records (those KH1's pass pops this frame).
-    let mut ready = Vec::new();
-    let mut rec = pose::ptr(rd::<u32>(actor + 0x3EC));
-    while rec > 0x10000 && ready.len() < 32 && (rd::<u32>(rec + 0xC) >> 12) & 0xF == 0 {
-        ready.push(rec);
-        rec = pose::ptr(rd::<u32>(rec + 0x30));
-    }
+    let ready = ready_records(actor);
     if ready.is_empty() {
         return f(actor);
     }
@@ -229,7 +282,10 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         }
         (fates, reacting)
     });
-    let Some((fates, reacting)) = fates else { return f(actor) };
+    let Some((fates, reacting)) = fates else {
+        damage_control(base, actor, &ready);
+        return f(actor);
+    };
     // The attack data entry as an offset into `btltbl.bin` (as `combat`'s rows give it), else
     // its address.
     let data_of = |r: usize| {
@@ -296,6 +352,8 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
             }
         }
     }
+    // Damage Control on what is left to deal (KH2's last step of the damage, after Anti's).
+    damage_control(base, actor, &ready);
     let r = f(actor);
     let stats = pose::ptr(rd::<u32>(actor + 0x6C));
     let down = stats > 0x10000 && (rd::<u8>(stats) & 4 != 0 || rd::<i32>(stats + 0x3C) < 1);

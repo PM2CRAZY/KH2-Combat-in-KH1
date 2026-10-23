@@ -132,15 +132,15 @@ pub fn from_save(bars: u8, points: u8, max: u8) -> (u8, u8) {
 }
 
 /// Drive from damage Sora takes (KH2's HP-change rule, `Drive gauge` in the docs): out of a
-/// form, `damage / max HP × 50` points (KH2 gives `× 0` without Damage Drive and `× 50` with one
-/// copy; here every Sora has it once, the user: "damage Sora takes" fills it), truncated.
-pub const DAMAGE_DRIVE: f32 = 50.0;
+/// form, with Damage Drive equipped, `damage / max HP × 50` points per copy
+/// (`crate::support::damage_drive_rate`; KH2 gives nothing without it), truncated.
+pub const DAMAGE_DRIVE: f32 = crate::support::DAMAGE_DRIVE_RATE;
 
-pub fn damage_points(damage: i32, max_hp: i32) -> i32 {
-    if damage <= 0 || max_hp <= 0 {
+pub fn damage_points(damage: i32, max_hp: i32, copies: u8) -> i32 {
+    if damage <= 0 || max_hp <= 0 || copies == 0 {
         return 0;
     }
-    (damage.min(max_hp) as f32 / max_hp as f32 * DAMAGE_DRIVE) as i32
+    (damage.min(max_hp) as f32 / max_hp as f32 * crate::support::damage_drive_rate(copies)) as i32
 }
 
 /// The drive value of a hit of KH1's own (its combo, its limits, its spells), which has no ATKP
@@ -292,11 +292,16 @@ mod tests {
 
     #[test]
     fn damage_drive() {
-        assert_eq!(damage_points(10, 100), 5);
-        assert_eq!(damage_points(1, 100), 0, "truncated");
-        assert_eq!(damage_points(500, 100), 50, "at most the whole HP");
-        assert_eq!(damage_points(0, 100), 0);
-        assert_eq!(damage_points(5, 0), 0);
+        assert_eq!(damage_points(10, 100, 1), 5);
+        assert_eq!(damage_points(1, 100, 1), 0, "truncated");
+        assert_eq!(damage_points(500, 100, 1), 50, "at most the whole HP");
+        assert_eq!(damage_points(0, 100, 1), 0);
+        assert_eq!(damage_points(5, 0, 1), 0);
+        // Per copy, and nothing without one (KH2's vanilla Sora).
+        assert_eq!(damage_points(10, 100, 2), 10);
+        assert_eq!(damage_points(3, 100, 2), 3, "the rate adds up before the truncation");
+        assert_eq!(damage_points(50, 100, 0), 0);
+        assert_eq!(DAMAGE_DRIVE, 50.0);
     }
 
     #[test]
