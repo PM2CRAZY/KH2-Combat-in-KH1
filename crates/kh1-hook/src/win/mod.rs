@@ -22,6 +22,7 @@ mod hook;
 mod hurt;
 mod kh2fx;
 mod kh2dpx;
+mod kh2ppp;
 mod kh2slots;
 mod kh1voice;
 mod kh2sound;

@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 395 (testing branch: KH2 effects: KH2's pppRyjMegaBirth in KH1's program machine)
+- Step 3 (the tester: option (a), port it). `kh1dpx` lists KH2-own program words (`Kh1Dpx::programs`); `kh2ppp::plug`
+  points them at our 0x50-byte entry after KH1's relocation (`0x14031C2F0`), after checking KH1's entry 201. It is KH2's
+  calc, step, birth, update and draw (Steam KH2 `0x1404BC3B0`..`0x1404BC710`) on KH1's instance, drawn through KH1's
+  shape draw `0x14031E210`, with KH1's construct and destruct. Steam only. Assumptions: two operands the KH2 decomp
+  drops (spin as turn-then-scale; `+0x1B0` the root's axis lengths). Notes §17.1-17.2.
+
 ### 2026-10-23: Stage 394 (testing branch: KH2 effects: bound elements start on KH2's frame)
 - The tester Mr Bugs (`docs/tester-requests.md`, "KH2 effects in KH1's own effect system": "exact to kh2"): `kh2dpx::apply`
   takes KH1's 2-frame extra wait for bound elements (wait <= -2 x `0x14233FBCC`, `0x1401ECB50` / `0x1401ECF30`) off the

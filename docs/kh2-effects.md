@@ -1177,3 +1177,65 @@ the user's extraction; **Assumption** = not yet checked.
   records' handles are pointed at it (a handle made by `0x14038AD90`). No hook; KH1's dispatch
   calls it with KH1's instance (its layout, `+0xD5` for KH2's `+0xC1`), and it draws through
   KH1's shape draw.
+
+## 17. KH2's own programs in KH1's program machine (Steam KH1, steps 3 and 4)
+
+`kh1-hook/src/win/kh2ppp.rs`. Tags as in §16; KH2 addresses are the Steam KH2 decomp's.
+
+### 17.1 How they go in (Checked (exe))
+
+- KH1's relocation (`0x14031C2F0`, called per DPD by `0x1401ECA40` with the table `0x14054FF00`)
+  turns each program record's type (and each word of the particle data's type list, `+0x118`)
+  into a handle (`0x14038AD90`) of `table + type × 0x50`, and each record's keys / work-offsets
+  words into offsets from the record itself. KH1's machine (`0x14031CBE0` calc pass,
+  `0x14031C5F0` draw pass, `0x14031D2C0` instance start) calls an entry's slots through that
+  handle: calc `+0x08` and draw `+0x18` with (instance, current key, record), construct `+0x38`
+  and destruct `+0x48` with (instance, record). Nothing else looks at which entry a record has,
+  but for the fast-forward list (`0x14054FEE0`, calc slots skipped while an instance loop
+  fast-forwards with `0x142E9D804` set): KH1's MegaBirth calc is on it.
+- `kh1dpx::build_with` lists every word whose KH2 type is 201 or 241 (`Kh1Dpx::programs`,
+  `KH2_OWN_PROGRAMS`); after KH1 relocates the DPX, `kh2ppp::plug` points each 201 word that KH1
+  pointed at its own entry 201 at our entry (checked: KH1's entry 201 calc is `0x1403212F0`
+  first). Our entry is a 0x50-byte static in KH1's layout. Steam only.
+
+### 17.2 pppRyjMegaBirth, KH2's
+
+KH2: calc `0x1404BC3B0`, step `0x1404BBBE0`, birth `0x1404BAC40`, update `0x1404BB8B0`, draw
+`0x1404BBDB0`, particle matrix `0x1404BC710`, construct `0x1404BC5F0`, destruct `0x1404BC670`.
+KH1's: `0x1403212F0`, `0x140320C30`, `0x14031FD00`, `0x140320900`, `0x140320DF0` (matrix inline),
+`0x140321520`, `0x1403215A0`. **Checked (decomp)**, compared function by function:
+
+- Same in both: the state at work offset 2 (base matrix `+0x00`, drift direction `+0x40`,
+  handles of the particle / birth-matrix / colour-velocity arrays `+0x50` / `+0x54` / `+0x58`,
+  slots `+0x5C`, counter `+0x60`, vertex cursor `+0x62`), the arrays' sizes (0x60, 0x40, 0x20 a
+  slot, from the effect's allocator `0x1401EC330`), the base matrix refresh, the step (counter,
+  births per burst, the shape animation), construct and destruct (so ours uses KH1's), and the
+  draw packet given to the shape draw (KH2's PC batch `0x1404AE550`, KH1's `0x14031E210`).
+- KH2's changes: the particle record (0x60 bytes) laid out anew: position `+0x00`, direction
+  `+0x10` (w 0; KH1 leaves 1), animation time / step / step drawn / life `+0x20..+0x26`, colour
+  offsets `+0x28`, age `+0x2C`, spin angle, velocity, random part as 16-bit angles `+0x2E` /
+  `+0x30` / `+0x32` (KH1: float degrees, wrapped to ±180), scale, scale velocity, random parts
+  `+0x34..+0x48`, speed `+0x4C`, drift `+0x50`, alpha taken off `+0x54`, size `+0x58`, fade-in,
+  fade-out, grow-in, shrink-out lengths `+0x5C..+0x5F`. New key fields: `0xD2` random mirroring,
+  `0xD3` / `0xD4` grow-in / shrink-out (the size factor), `0xD8` the drift speed's random range;
+  matrix mode 3 (birth matrix = base ∘ instance). The draw builds the particle matrix as
+  diag(rs.x·sx·size, rs.y·sy·size, rs.x·sx·size) turned by the spin through the sine table
+  (KH1's `0x14054BED0` has the same values), clears the projected matrix's z row, and (in two
+  KH2 rooms only, `0x140ABB920` = 1 or 6) moves the Z-corrected depth differently: KH1's rooms are
+  none of those, so the ordinary path is taken.
+- Explosion's MegaBirths (from the file): effect 31 emitter 5 (shape 13, 12 slots, matrix mode
+  1, shrink-out 4), effect 32 emitter 1 (shape 16, 32 slots, mode 1, grow-in 3, shrink-out 4,
+  drift acceleration −0.1), effect 34 emitter 2 (shape 13, 8 slots, mode 2). Random scale flags
+  0x26 in all. **Checked (files)**.
+- KH1's math functions are KH2's same library (same sizes and code: product `0x1400E65E0` /
+  `0x14013F850`, point `0x140386A40` / `0x14013F900`, normalise (3D, w set 0) `0x140386C40` /
+  `0x140142080`, angles `0x1400E6730` / `0x140140560`, random `0x14031BA30` / `0x1404DC710`), so ours
+  calls KH1's. The update's drift step scales the drift direction by the particle's drift
+  (checked in KH1's exe, `0x140320B68`; the KH2 decomp drops that operand).
+- **Assumptions** (operands the KH2 decomp drops, no KH2 exe here): the particle matrix's
+  spin product is (scale ∘ spin), i.e. turned first, then scaled (as §15.3 read it), and its
+  `+0x1B0` vector is the root's axis lengths (KH1's draw reads them there). KH2's table entry 201
+  shows only calc and destruct in the decomp's data references; draw and construct are taken as
+  KH1's entry has them (`+0x18`, `+0x38`).
+- Not used yet: no native element runs effects 31, 32 or 34 until their elements are switched
+  on (elements 44, 45, 48; they still play through `kh2fx`).

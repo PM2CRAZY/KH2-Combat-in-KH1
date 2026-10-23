@@ -30,6 +30,10 @@ const KH1_CBP_SLOTS: i32 = 6;
 pub const KH1_LAST_PROGRAM: u32 = 235;
 /// `pppDummyFunc`.
 const DUMMY_PROGRAM: u32 = 1;
+/// Program types whose KH2 version is KH2's own (not KH1's): 201 `pppRyjMegaBirth` (KH2 rewrote it)
+/// and 241 `pppEiDrawShipoly` (KH2 only). [`Kh1Dpx::programs`] lists where they are, so the host
+/// can point them at its own entries once KH1 has relocated the DPX.
+pub const KH2_OWN_PROGRAMS: [u32; 2] = [201, 241];
 
 fn u16_at(b: &[u8], at: usize) -> Result<u16> {
     b.get(at..at + 2).map(|s| u16::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| crate::Error::Format(format!("kh1dpx: read past the end at {at:#x}")))
@@ -236,6 +240,11 @@ pub struct Kh1Dpx {
     pub common_dpd_at: usize,
     /// The effect numbers it holds (as the KH2 PAX numbers them).
     pub effects: Vec<u32>,
+    /// Each program-type word (an emitter's program record, or a particle data's type list) whose
+    /// KH2 type is one of [`KH2_OWN_PROGRAMS`]: its offset in `bytes` and the KH2 type. In `bytes`
+    /// 201 stays 201 and 241 is `pppDummyFunc`; KH1's relocation turns each word into a handle of
+    /// its program table entry.
+    pub programs: Vec<(usize, u32)>,
     /// What was moved and copied, for the log.
     pub report: String,
 }
@@ -460,7 +469,8 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
     out.lists[4] = src.lists[4].clone();
     out.lists[1] = textures;
     // Kept particle datas: their texture mask rebuilt for the new list, programs KH1 lacks set to
-    // `pppDummyFunc`.
+    // `pppDummyFunc`. KH2's own programs noted (particle data, offset in it, type).
+    let mut own: Vec<(usize, usize, u32)> = Vec::new();
     for (pi, &p) in kept.iter().enumerate() {
         let mut pd = src.lists[0][p].clone();
         for b in &mut pd[0xB0..0xC0] {
@@ -475,6 +485,9 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
         }
         let mut swapped = Vec::new();
         for (at, ty) in program_types(&pd)? {
+            if KH2_OWN_PROGRAMS.contains(&ty) {
+                own.push((pi, at, ty));
+            }
             if ty > KH1_LAST_PROGRAM {
                 put_u32(&mut pd, at, DUMMY_PROGRAM);
                 swapped.push(ty);
@@ -501,6 +514,8 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
             put_u32(&mut pd, 0x80 + k * 4, v.offset[k].to_bits());
             put_u32(&mut pd, 0x90 + k * 4, v.angle[k] as u32);
         }
+        let copies: Vec<(usize, usize, u32)> = own.iter().filter(|o| o.0 == src_pd).map(|o| (out.lists[0].len(), o.1, o.2)).collect();
+        own.extend(copies);
         extra.push((e.to_vec(), out.lists[0].len()));
         out.lists[0].push(pd);
         report.push(format!("effect {} as {} (offset {:?}, angles {:?})", v.effect, v.number, v.offset, v.angle));
@@ -536,9 +551,10 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
     for (o, &x) in origins.iter_mut().zip(&dpd_offs[1]) {
         o.dpx_offset = at + x as usize;
     }
+    let programs: Vec<(usize, u32)> = own.iter().map(|&(pd, off, ty)| (at + dpd_offs[0][pd] as usize + off, ty)).collect();
     use md5::{Digest, Md5};
     let md5: [u8; 16] = Md5::digest(&bytes).into();
-    Ok(Kh1Dpx { bytes, md5, textures: origins, own_dpd_at: dpx_at + dpd_off, common_dpd_at, effects: nums, report: report.join("; ") })
+    Ok(Kh1Dpx { bytes, md5, textures: origins, own_dpd_at: dpx_at + dpd_off, common_dpd_at, effects: nums, programs, report: report.join("; ") })
 }
 
 #[cfg(test)]
@@ -548,6 +564,11 @@ mod tests {
     /// A PAX with one effect (number 33) of one particle data without programs or textures, and
     /// an empty common DPD.
     fn tiny() -> (Vec<u8>, Vec<u8>) {
+        tiny_with(&[])
+    }
+
+    /// [`tiny`] with one emitter running `programs` (each also in the type list).
+    fn tiny_with(programs: &[u32]) -> (Vec<u8>, Vec<u8>) {
         let dpd_of = |pds: &[Vec<u8>]| {
             let head = 4 + (4 + 4 * pds.len()) + 4 * 4 + 16;
             let mut d = vec![0u8; head];
@@ -563,7 +584,8 @@ mod tests {
             }
             d
         };
-        let mut pd = vec![0u8; 0x110 + 0x18];
+        let n = programs.len();
+        let mut pd = vec![0u8; 0x110 + 0x18 + 4 * n + 8 + 0x28 + 16 * n];
         for (k, v) in [1.0f32, 2.0, 3.0].iter().enumerate() {
             put_u32(&mut pd, 0x80 + k * 4, v.to_bits());
             put_u32(&mut pd, 0xA0 + k * 4, 1f32.to_bits());
@@ -572,7 +594,22 @@ mod tests {
             put_u32(&mut pd, 0x90 + k * 4, *v as u32);
         }
         put_u32(&mut pd, 0x110 + 8, 0x10);
-        put_u32(&mut pd, 0x110 + 0xC, 0x14);
+        if n == 0 {
+            put_u32(&mut pd, 0x110 + 0xC, 0x14);
+        } else {
+            // Type list at +0x10, emitter list after it, one emitter after that.
+            put_u32(&mut pd, 0x110 + 0x10, n as u32);
+            let el = 0x14 + 4 * n;
+            put_u32(&mut pd, 0x110 + 0xC, el as u32);
+            put_u32(&mut pd, 0x110 + el, 1);
+            let em = el + 8;
+            put_u32(&mut pd, 0x110 + el + 4, em as u32);
+            put_u16(&mut pd, 0x110 + em + 0x26, n as u16);
+            for (k, &t) in programs.iter().enumerate() {
+                put_u32(&mut pd, 0x110 + 0x14 + 4 * k, t);
+                put_u32(&mut pd, 0x110 + em + 0x28 + 16 * k, t);
+            }
+        }
         let dpd = dpd_of(&[pd]);
         let mut dpx = vec![0u8; 16 + 32 + 8];
         put_u32(&mut dpx, 0, DPX_VERSION as u32);
@@ -613,5 +650,18 @@ mod tests {
         // A number KH1 can't start, or one taken, is refused.
         assert!(build_with(&pax, &common, &[33], &[Variant { number: 33, ..v }]).is_err());
         assert!(build_with(&pax, &common, &[33], &[Variant { number: 0x800, ..v }]).is_err());
+    }
+    #[test]
+    fn kh2_own_programs_are_listed() {
+        let (pax, common) = tiny_with(&[201, 241, 142]);
+        let v = Variant { number: 0x72E, effect: 33, offset: [0.0; 3], angle: [0; 3] };
+        let r = build_with(&pax, &common, &[33], &[v]).unwrap();
+        // The type list and the emitter's records, in the particle data and in its variant's copy.
+        assert_eq!(r.programs.len(), 8);
+        for &(at, ty) in &r.programs {
+            let word = u32_at(&r.bytes, at).unwrap();
+            assert_eq!((ty, word), (ty, if ty == 241 { DUMMY_PROGRAM } else { ty }));
+        }
+        assert_eq!(r.programs.iter().filter(|p| p.1 == 201).count(), 4);
     }
 }

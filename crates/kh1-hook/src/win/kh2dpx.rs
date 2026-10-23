@@ -150,6 +150,8 @@ struct Dpx {
     md5: [u8; 16],
     hd: Vec<Hd>,
     layers: Vec<Layer>,
+    /// Where KH2's own programs are (`kh1dpx::Kh1Dpx::programs`), for `kh2ppp::plug`.
+    programs: Vec<(usize, u32)>,
     relocated: bool,
 }
 
@@ -177,7 +179,7 @@ pub fn start() {
                 let off = at - p;
                 buf[off..off + dpx.len()].copy_from_slice(dpx);
                 if let Ok(mut g) = DPX.lock() {
-                    *g = Some(Dpx { _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, relocated: false });
+                    *g = Some(Dpx { _buf: buf, at, len: dpx.len(), md5: r.md5, hd, layers, programs: r.programs.clone(), relocated: false });
                 }
             }
             Err(e) => log(&format!("KH2 effects (native): Explosion's DPX not built ({e}); kh2fx plays it")),
@@ -412,6 +414,8 @@ pub fn event(motion: u16, el: i16) -> bool {
         unsafe { f(d.at) };
         d.relocated = true;
         log(&format!("KH2 effects (native): Explosion's DPX at {:#x} relocated by KH1", d.at));
+        // KH2's own programs, as entries of ours in KH1's format (`kh2ppp`).
+        super::kh2ppp::plug(d.at, &d.programs);
     }
     let f: unsafe extern "system" fn(usize, u32, usize, u32) -> usize = unsafe { std::mem::transmute(base + START_ON_BONE_RVA) };
     let element = unsafe { f(d.at, number, sora, RAW_BONE | bone) };
