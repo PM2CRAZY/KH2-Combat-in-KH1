@@ -138,6 +138,14 @@ pub fn current() -> Option<Kind> {
     Kind::from_code(CURRENT.load(Ordering::Relaxed))
 }
 
+/// The form he is changing into: asked for (the command), or his Drive motion playing.
+pub fn arriving() -> Option<Kind> {
+    if in_form() || !(CHANGING.load(Ordering::Relaxed) || REQUEST.load(Ordering::Relaxed) == 1) {
+        return None;
+    }
+    Kind::from_code(WANT.load(Ordering::Relaxed))
+}
+
 /// In Wisdom Form (its shots, its spells, its look).
 pub fn in_wisdom() -> bool {
     current() == Some(Kind::Wisdom)

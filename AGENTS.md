@@ -1,3 +1,11 @@
+### 2026-10-23: Stage 427 (testing branch: KH2 effects: packages built when needed, lean, freed when not)
+- The tester ("can we have the files generated at run time so we don't take up extra memory?"). `kh2dpx::manage`: wanted
+  packages (Sora's for the `kh2_effects` moves + Drive and Revert, the Keyblade's, a form's from the Drive command to revert,
+  spells and Reflect at Sora's levels) built in the background, entered at once, freed by KH1's removal `0x1400E2E00` once
+  idle. One 32 MB region for all DPXs; one HD entry per DPD / TBP (`0x14031EC10`, Checked (exe)); common images one KH1
+  texture each from `kh2fx_texcommon_dpx` (`0x14010C050`), shared. Sora's: 6.2 MB + 4.3 MB held -> 1.7 MB, none held. Until a
+  package is built `kh2fx` plays its effects. Notes `docs/kh2-effects.md` §18.12.
+
 ### 2026-10-23: Stage 426 (testing branch: Frame Advance draws the level and the models while held)
 - The tester's Held Tasks test (t399): 130000 (`0x2A23E0`) draws the models, 120000 (`0xD2830`) the level, and with 120000
   running characters can move; 100000 (`0x1E5D90`) seems to be the camera. `frameadv`: 120000 and 130000 run while held by

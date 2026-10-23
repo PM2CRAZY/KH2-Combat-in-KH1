@@ -356,6 +356,12 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
     }
 }
 
+/// MD5 of `bytes` (KH1 keys a loaded file by its data's MD5: its HD textures' lifetime, `0x14010CDA0`).
+pub fn md5(bytes: &[u8]) -> [u8; 16] {
+    use md5::{Digest, Md5};
+    Md5::digest(bytes).into()
+}
+
 /// KH1's DPX for KH2 effects of `pax` (a PAX, `PAX_` first), in groups: each group's variants
 /// (each a copy of a KH2 effect's particle data under its own number, its header's local
 /// transform replaced) become one DPD of the DPX, holding only those particle datas and the

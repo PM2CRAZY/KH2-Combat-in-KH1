@@ -1489,9 +1489,9 @@ elements; **Checked (files)**):
   `kh2fx`. 0x04 (position only): §18.5.
 - Switched on (`kh2dpx::ON`): Explosion, Magnet Burst (51: object root, y −127, fade-out 4;
   52: bound until started). Magnet Burst's programs are all in KH1_SAME or KH2's own.
-- Cost: built once in the background (more DPDs than Explosion's one: each motion's copies of
-  the source DPD's shapes and models, and each its own copy of the common textures and their HD
-  images). Per frame nothing more than Explosion's.
+- Cost: built in the background (more DPDs than Explosion's one: each motion's copies of the
+  source DPD's shapes and models). Per frame nothing more than Explosion's. Since §18.12 only the
+  motions `kh2_effects` lets play are built, and the HD images are held as §18.12 says.
 
 ### 18.4 pppVtMime (49), KH2's calc
 
@@ -1564,7 +1564,8 @@ elements; **Checked (files)**):
 - `kh2dpx` builds one DPX per package (`Source`: its file, its PAX, the sets that play
   together, its anchors, flags it doesn't apply), each entered in KH1's loaded files under its own
   name (`kh2fx_<package>_dpx`) with its own HD textures (the package file's remastered assets and
-  texcommon's), relocated and plugged on first use. `kh2ppp::plug` now only ever turns a "plugged
+  texcommon's), relocated and plugged on first use (since §18.12: as soon as it is built, and the
+  common textures shared). `kh2ppp::plug` now only ever turns a "plugged
   in" flag on, so a second DPX without, say, MegaBirth words doesn't turn it off.
 - The Keyblade's package (`obj/W_EX010.a.us`, its first PAX): its vanish flash (element 0,
   `kh2fx::weapon_vanish`, started as KH2 puts the Keyblade away, before KH1's put-away). Its
@@ -1656,3 +1657,68 @@ plays everything, as before):
   group over KH1's texture slots), and every package on other builds (Epic: Sora's elements without
   KH1's blade or position binding still play through KH1, as before).
 - `fx_test` (it starts `kh2fx`'s own element 51).
+
+### 18.12 Built when needed, lean, freed when not (`kh2dpx::manage`)
+
+The tester: the files made at run time, no extra memory kept. Sizes from the code, Sora's package
+built offline from the staged `P_EX100.a.us` (texcommon not staged: a stand-in with 4 KB records,
+and its HD sizes from the t409 log; `0x2d40`'s assumed 16 KB):
+
+| Sora's package | t417..t425 | now |
+|---|---|---|
+| DPX | 3.12 MB (all 24 DPDs), in a buffer twice its size: 6.2 MB | 1.67 MB with the default `kh2_effects` (9 DPDs: its 7 moves, the Drive motion, Revert), 3.12 MB with `all`, in its own pages |
+| HD images held by us | 84, one per texture record: 4.27 MB, for the whole session | its own images, once each (66 KB), until it is entered (at once), then none |
+| HD images given to KH1 (KH1 makes a texture of each on first draw) | the same 84: 4.27 MB more, from the first play | one per DPD and TBP of its own: 14 (116 KB); the common ones once for every package: 7 (271 KB) |
+
+The other packages (forms, Wisdom, spells, Reflect) were all built at load and kept the same
+way (each its own DPX ×2 and its own copies of the common images); now each exists only while it
+can play.
+
+- **Which record KH1 looks up** (Checked (exe), `0x14031EC10`): a DPD's texture records go into a
+  multimap by TBP; for each TBP the lower bound (the first record of that TBP in the list) is
+  looked up (`0x14010C050 (textures, record + 0x20, 0, 0, width, height)`, the textures list
+  `*0x1422C8FA8`) and the texture handle written to every record of the TBP (`+8`, `+4` = 0xFFFE).
+  So only that record needs an HD entry.
+- **The texture lookup** (Checked (exe), `0x14010C050` → `0x14010BAF0`): the file holding the
+  pointer (`0x1400E2B20`), the offset in it, the HD entry with that key (`+0x54`); if the entry
+  already has its texture (`+0x70`) it is returned as it is, else one is made from its data
+  (`+0x60`, handed over and cleared) and kept there. A made texture keeps its file's MD5 (`+0x58`)
+  and pixel pointer (`+0x80`); it is released only when that file is gone (`0x14010CDA0`: no file
+  with the MD5, or the pointer no longer in it).
+- **Shared common textures**: one small file of ours (`kh2fx_texcommon_dpx`: each common image's
+  first record header in a 0x30-byte slot, never removed). The first package that needs an image
+  gets an HD entry added to that file for it and KH1's lookup called on its slot (KH1 makes the
+  texture); every package's HD entry for that image is then given that texture (`+0x70`, no data).
+  So each common image is one KH1 texture for the session, made from our file, alive as long as
+  it. **Assumption** (not checked in game): calling KH1's lookup at that moment (the game thread,
+  where `manage` runs, not KH1's effect draw pass) is safe, as the draw pass's own call is.
+- **Removal** (Checked (exe), `0x1400E2E00 (entry, 1)`): runs the file type's handler (none for
+  ours, `+0x64C` = −1), marks each HD entry's texture for release after 10 frames (`+0xB0` = 10,
+  `+0xB4` = 1), unlinks the entry and destroys it (`0x1400E2280`: its HD entries `_aligned_free`
+  their data and are deleted; `0x1400E1EB0` writes nothing with `+0x218` = −1; the entry deleted).
+  Our buffer isn't freed by KH1. Before removing a package, its HD entries holding a shared
+  texture let go of it (so it isn't marked).
+- **In use**: a package is freed only when no effect instance (Steam `0x142678280`, 0x100 × 0xE0:
+  `+0x92` state 1 live / 4 ending, `+0x98` its DPD) and no KH1 element (`0x142D678B0`, 0x100 ×
+  0x3C: `+0x14` & 3, `+0x38` a handle of its DPX) is on it (Checked (exe), `0x1401E0100`). KH1's
+  texture slot table (`0x1401EDB00`) keys a run by the DPD's address and isn't cleared: a later
+  DPX at the same address would reuse a stale run (**Assumption**: harmless on PC, where the slot
+  is only where KH1 puts the textures it binds each draw, `0x14010DC50`).
+- **Memory**: one 32 MB region reserved once (one of KH1's 64 handle regions, `0x14038AD90`, for
+  all our DPXs, however often packages come and go); each DPX committed in it page by page and
+  decommitted when freed.
+- **When** (`desired`, checked every 30 frames and at once when the form changes): Sora's (the
+  moves `kh2_effects` allows, the Drive motion, Revert; rebuilt if that setting is reloaded) and
+  the Keyblade's always; Valor's, Final's or Wisdom's archive from the Drive command (the 39-frame
+  Drive motion runs while it builds) until reverted; Reflect's level Sora has; Fire, Blizzard,
+  Thunder and Cure at KH1's level for each while base Sora's Magic styles are KH2's or he is in
+  Wisdom (Fire, Blizzard, Thunder). A package is entered in KH1's loaded files (its own images
+  copied to KH1, the common ones shared, KH1's relocation, KH2's programs plugged) right after it
+  is built, on the game thread: a play never pays for it.
+- **First use**: until a package is built (Sora's at load: the first seconds; a form's: from the
+  Drive command; a spell's: from load or the level-up), `kh2fx` plays its effects on the same
+  frame (its own copies, loaded at start), so no effect misses a frame; once built, KH1 plays it.
+  No hitch: the build is off the game thread, the entering is a copy of the package's own images
+  (tens of KB) and KH1's relocation. KH1 makes each texture on its first draw as for its own
+  effects.
+

@@ -78,7 +78,7 @@ struct SpellFx {
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 
-fn allowed(motion: u16) -> bool {
+pub(super) fn allowed(motion: u16) -> bool {
     match &super::settings::get().kh2_effects {
         None => false,
         Some(None) => true,

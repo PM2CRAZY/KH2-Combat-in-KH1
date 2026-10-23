@@ -139,6 +139,15 @@ pub unsafe fn level(save: usize) -> u8 {
     }
 }
 
+/// Reflect's level now, if Sora has it and it is on (`kh2dpx`: which level's effects can play).
+pub unsafe fn level_now() -> Option<u8> {
+    if base() == 0 || !super::settings::get().reflect {
+        return None;
+    }
+    let save = rd::<u64>(base() + SAVE_PTR_RVA) as usize;
+    learned(save).then(|| level(save))
+}
+
 /// The level cast now: Aero's, or the highest level below it whose files loaded.
 unsafe fn cast_level(save: usize) -> Option<u8> {
     (1..=level(save)).rev().find(|&l| parsed(l).is_some())
