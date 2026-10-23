@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 405 (testing branch: KH1's own parts on KH1's blend pass)
+- Mr Bugs ("Missing sleeves animation"): "standing and returning to neutral cause parts of soras model to stretch like
+  crazy" (his trace f8434). KH1's blend pass (`0x140392560`, `pose_ik`) writes a non-IK bone only with bone-table bit 30
+  (decomp); every `KH1_OWN` part's parent lacks it (files), so `own_from_kh1` measured the shorts, hem and belt pieces
+  against our last drawing. `Sora::wrote` tells a bone KH1 didn't place; it is rebuilt from the one above by KH1's last
+  relation (constants only, files), else the part keeps its last. Notes `docs/kh1-anim-slots.md` §1.6.
+
 ### 2026-10-23: Stage 404 (testing branch: KH2 effects: the old effect player retired for Explosion)
 - The tester (option (b)): on Steam with the DPX built and KH2's programs plugged in, Explosion is KH1's alone (no `kh2fx`
   fallback); `kh2fx` keeps it only before the DPX is built, if plugging fails, or off Steam. Ini `kh2_fx_native` removed.

@@ -309,6 +309,15 @@ struct Sora {
     scales: Vec<Vec3>,
     /// KH1's own scale on its own parts (`retarget::KH1_OWN`) in KH1's last pass (`own_from_kh1`).
     own_scale: Vec<Vec3>,
+    /// KH1's own parts' relation to their parent as `own_from_kh1` last measured it (kept on a
+    /// pass that didn't place the parent).
+    own_rel: Vec<Option<Mat4>>,
+    /// KH1's own relation (unscaled) of each bone above those parts to its parent, from the last
+    /// pass that placed both (`own_from_kh1`): KH1's blend pass doesn't place them.
+    kh1_local: Vec<Option<Mat4>>,
+    /// What we last wrote into each bone's world matrix: a bone still holding it wasn't placed by
+    /// KH1's pass this time.
+    wrote: Vec<[f32; 16]>,
 }
 
 /// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
@@ -1600,7 +1609,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), secondary: None, inverse: None, kh2_now: None, scales: Vec::new(), own_scale: Vec::new() });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), secondary: None, inverse: None, kh2_now: None, scales: Vec::new(), own_scale: Vec::new(), own_rel: Vec::new(), kh1_local: Vec::new(), wrote: Vec::new() });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -1747,7 +1756,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                     let (ks, kr, kt) = kh1.to_scale_rotation_translation();
                     let m = Mat4::from_scale_rotation_translation(fs.lerp(ks, w), fr.slerp(kr, w), ft.lerp(kt, w));
                     if m.is_finite() {
-                        std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * m).to_cols_array());
+                        write_bone(&mut s.wrote, world, i, &(to_world * m));
                     }
                 }
                 // (The dream weapons kept whole through the blend.)
@@ -1813,7 +1822,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         kh1_data::secondary::apply_scale(&mut pose, &s.parents, &s.scales);
     }
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
-        std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
+        write_bone(&mut s.wrote, world, i, &(to_world * *m));
     }
     s.wrote_root = Some(rd(world));
     match s.last_drawn.as_mut() {
@@ -1850,31 +1859,93 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
 
 static KH1_BONES: Mutex<Vec<kh2_formats::anim::Bone>> = Mutex::new(Vec::new());
 
+/// Writes bone `i`'s world matrix and notes it in `wrote` (what `own_from_kh1` tells KH1's own
+/// placements by).
+unsafe fn write_bone(wrote: &mut Vec<[f32; 16]>, world: usize, i: usize, m: &Mat4) {
+    let a = m.to_cols_array();
+    std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], a);
+    if wrote.len() < SORA_BONES as usize {
+        wrote.resize(SORA_BONES as usize, [f32::NAN; 16]);
+    }
+    if let Some(w) = wrote.get_mut(i) {
+        *w = a;
+    }
+}
+
+/// How far above an own part `own_from_kh1` follows bones KH1's pass may leave unplaced.
+const OWN_UP: usize = 3;
+
 /// KH1's own parts (`retarget::KH1_OWN`) as KH1's pass just placed them (`world`, the bones it
 /// wrote, `to_world` its placement): each one's relation to its parent goes to the retarget
 /// (`Retarget::set_own`), its own scale to `own_scale`.
+///
+/// KH1's blend pass (`0x140392560`, the one `pose_ik` hooks: every return to the idle, every
+/// change of motion) writes a bone only when its bone-table word has bit 30, or the bone is on
+/// its IK list (decomp); the rest keep what was there, which is the pose we drew last. Every own
+/// part's parent is such a bone (the shorts' 26 / 30 / 34 / 38 and 52 / 56 / 60 / 64, the hem's
+/// 72 and 248-276 with 71 above them, the belt's 4 / 7 / 10; Checked (files)), so the parts were
+/// measured against our drawing of it and put where KH1's own motion has them in the model, off
+/// KH2's body (Mr Bugs: "standing and returning to neutral cause parts of soras model to stretch
+/// like crazy"). A bone that still holds what we wrote is placed here from its parent by the
+/// relation KH1 last gave it (KH1 keys none of these bones: constants only; Checked (files));
+/// a part whose parent can't be placed keeps its last relation.
 unsafe fn own_from_kh1(s: &mut Sora, world: usize, to_world: &Mat4) {
     let Some(r) = s.retarget.as_ref() else { return };
     let inv = to_world.inverse();
     if !inv.is_finite() {
         return;
     }
-    let model = |i: usize| inv * mat(world + i * 0x40);
-    let parents = &s.parents;
-    let rel = |b: usize| -> Option<(Mat4, Vec3)> {
-        let p = *parents.get(b)?;
-        if p < 0 || b >= SORA_BONES as usize {
-            return None;
-        }
-        kh1_data::retarget::own_relation(&model(p as usize), &model(b))
+    let n = SORA_BONES as usize;
+    s.own_rel.resize(n, None);
+    s.kh1_local.resize(n, None);
+    s.own_scale.resize(n, Vec3::ONE);
+    let wrote = &s.wrote;
+    let placed = |i: usize| wrote.get(i).map_or(true, |w| rd::<[f32; 16]>(world + i * 0x40) != *w);
+    // (Unscaled, and the scale.)
+    let model = |i: usize| -> Option<(Mat4, Vec3)> {
+        let (sc, q, t) = (inv * mat(world + i * 0x40)).to_scale_rotation_translation();
+        let m = Mat4::from_rotation_translation(q.normalize(), t);
+        (m.is_finite() && sc.is_finite()).then_some((m, sc))
     };
-    r.set_own(|b| rel(b).map(|r| r.0));
-    s.own_scale.resize(SORA_BONES as usize, Vec3::ONE);
+    let parent = |i: usize| s.parents.get(i).filter(|p| **p >= 0).map(|p| *p as usize);
     for &b in kh1_data::retarget::KH1_OWN.iter() {
-        if let Some(o) = s.own_scale.get_mut(b) {
-            *o = rel(b).map_or(Vec3::ONE, |r| r.1);
+        // The bones above it KH1 placed this time: their relation, for when it doesn't.
+        let mut i = b;
+        for _ in 0..OWN_UP {
+            let Some(p) = parent(i) else { break };
+            if i != b && placed(i) && placed(p) {
+                if let (Some((mi, _)), Some((mp, _))) = (model(i), model(p)) {
+                    s.kh1_local[i] = Some(mp.inverse() * mi);
+                }
+            }
+            i = p;
         }
+        if b >= n || !placed(b) {
+            continue;
+        }
+        // Its parent as KH1 has it: its own, or from the nearest bone above that KH1 placed.
+        let Some(p) = parent(b) else { continue };
+        let mut up = Mat4::IDENTITY;
+        let mut a = p;
+        let mut found = None;
+        for _ in 0..OWN_UP {
+            if placed(a) {
+                found = model(a);
+                break;
+            }
+            let (Some(l), Some(q)) = (s.kh1_local[a], parent(a)) else { break };
+            up = l * up;
+            a = q;
+        }
+        let Some((ma, sa)) = found else { continue };
+        let (Some((mb, sb)), pm) = (model(b), ma * up) else { continue };
+        // (KH1 keys no scale on the bones between: the parent's scale is the one above's.)
+        let Some((l, sc)) = kh1_data::retarget::own_relation(&(pm * Mat4::from_scale(sa)), &(mb * Mat4::from_scale(sb))) else { continue };
+        s.own_rel[b] = Some(l);
+        s.own_scale[b] = sc;
     }
+    let rel = &s.own_rel;
+    r.set_own(|b| rel.get(b).copied().flatten());
 }
 
 /// KH1's size against KH2's (`Retarget::hip_ratio`), 1 without a retarget.

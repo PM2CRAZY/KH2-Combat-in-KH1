@@ -270,6 +270,12 @@ H6 are under H3.
 - It blends two stored pose snapshots (`instance+0x1C4` / `+0x1C8`) by `param_3`.
 - It then re-solves the aims and two-bone IKs in a list at `instance+0x1CC` (types 1 / 2 / 3,
   with targets kept in the list), with the same ground lift.
+- **It doesn't write every bone** (Checked (decomp)). A bone off the IK list gets its
+  matrices (`+0x1B8` unscaled, `+0x1B4` world) only when its bone-table word (`+0x2C`) has bit 30
+  (`0x40000000`; the pass also sets it on each IK bone's parent); it is composed from the two
+  snapshots up through the bones above it that lack the bit. Those bones keep whatever their
+  matrices held: on Sora, the pose `pose.rs` drew last. 142 of Sora's 293 bones have the bit
+  (Checked (files)); the parents of all of `retarget::KH1_OWN` lack it (`pose::own_from_kh1`).
 - Which motion's IK that list holds while KH1 blends into or out of one of our slots is
   **open**. The check: log it in game while `+0x168` is our slot.
 

@@ -340,6 +340,16 @@ guards stay: the belt chain's end and the hem's panels are still swung off the t
   motion it plays (our slot: the template retimed; otherwise KH1's own motion for the slot KH2's
   is drawn over); their relation to their parent there goes to the retarget, their scale to the
   final scale pass. Not on frames where KH1's pass didn't run (the last relation stays).
+  **KH1's blend pass:** it leaves every bone without bit 30 in its bone-table word
+  unwritten (`docs/kh1-anim-slots.md` §1.6, the blend path), and every own part's parent is one
+  (the shorts' 26 / 30 / 34 / 38 and 52 / 56 / 60 / 64, the hem's 72 and 248-276 with 71 above,
+  the belt's 4 / 7 / 10). Before this fix the parts were measured against what we drew there last, so
+  on every blend (each return to the idle, the tester: "standing and returning to neutral cause
+  parts of soras model to stretch like crazy") they were put where KH1's own blended pose has
+  them in the model, off KH2's hips and thighs. Now a bone still holding what we wrote
+  (`Sora::wrote`) is placed from the bone above it by the relation KH1 last gave it on a pass
+  that placed both (KH1 keys none of these bones, constants only: Checked (files)), and a part
+  whose parent can't be placed keeps its last relation. Checked (decomp, files); not in game.
 - `Retarget::attach` (the belt chain, carried by the +x thigh): the root rigidly as before, the
   links under it by their relation to their parent, KH1's own where given (the bind's before).
 
