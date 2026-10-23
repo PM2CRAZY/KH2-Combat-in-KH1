@@ -83,15 +83,16 @@ unsafe fn stick_dir(actor: usize, tilt: f32) -> glam::Vec2 {
     // he had been going.)
     let can_act: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
     let have_mv = mv[0].is_finite() && mv[2].is_finite() && mv[0].hypot(mv[2]) > 1e-3 && can_act(actor) != 0;
+    // (KH2's pad direction and tilt, `character_core::pad`: the same dead zone as `move_tilt`.)
     let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
-    let (lx, ly) = ((st[2] as f32 - 128.0) / 127.0, (st[3] as f32 - 128.0) / 127.0);
+    let ([lx, ly], raw_tilt) = character_core::pad::stick(st[2], st[3]);
     let (ca, cb, mode) = (rd::<f32>(base + CAM_A_RVA), rd::<f32>(base + CAM_B_RVA), rd::<u32>(base + CAM_MODE_RVA));
     let usual = !matches!(mode, 2 | 0xB) && ca.is_finite() && cb.is_finite();
-    let raw_on = lx.hypot(ly) > 0.2;
+    let raw_on = raw_tilt > 0.0;
     let mvdir = glam::Vec2::new(mv[0], mv[2]).normalize_or_zero();
     let mut best = 0;
     if let Ok(mut fit) = STICK_FIT.lock() {
-        if have_mv && usual && lx.hypot(ly) > 0.5 {
+        if have_mv && usual && raw_tilt > 0.5 {
             for c in 0..8 {
                 let e = 1.0 - stick_through_camera(c, lx, ly, ca, cb).dot(mvdir);
                 fit[c] = fit[c] * 0.95 + e;
@@ -3482,12 +3483,13 @@ pub fn buttons() -> u16 {
     b
 }
 
-/// How far the left stick is pushed (0..1, KH2's 20% dead zone): the pads' own sticks, or KH1's
-/// processed one when they rest (the keyboard's movement keys).
+/// How far the left stick is pushed (0..1): the pads' own sticks as KH2's pad builds its tilt
+/// (`character_core::pad`, Steam KH2 `0x14039c180`: 60 of 127.5 off each axis, the length
+/// clamped to 1; it was a round 20% dead zone), or KH1's processed one when they rest (the
+/// keyboard's movement keys; KH1 builds it the same way, `0x14028b4f0`).
 pub fn move_tilt() -> f32 {
     let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
-    let (lx, ly) = ((st[2] as f32 - 128.0) / 127.0, (st[3] as f32 - 128.0) / 127.0);
-    let raw = ((lx * lx + ly * ly).sqrt().min(1.0) - 0.2).max(0.0) / 0.8;
+    let raw = character_core::pad::stick(st[2], st[3]).1;
     if raw > 0.0 {
         return raw;
     }

@@ -43,5 +43,10 @@ PC pad step compares. Code: `character_core::pad`. Plain-language notes from the
 - KH2's camera (`kh1-hook` `camera.rs`) reads the pads' own bytes this way, and KH1's
   processed sticks when the pads rest (the keyboard; the mouse). Before this it used a round
   15% dead zone, at an earlier request so gentle tilts would move; the tester asked for 1:1.
+- KH2's movement (`takeover::move_tilt`, the tilt KH2's controller walks and runs by, and
+  `stick_dir`'s fallback direction) reads the left stick the same way. Before this it used a
+  round 20% dead zone on the length (labelled KH2's; it wasn't). Still open: which tilt KH2's
+  player takes as a run (`character-core`'s `run_threshold`, 50%, a hypothesis), and the
+  controller's own `DEAD_ZONE` (a tilt of 0.1) on top of the pad's.
 - Not modelled: the mouse's speed scaling of the camera's turn and zoom (KH1's mouse still
   goes through KH1's processed right stick).

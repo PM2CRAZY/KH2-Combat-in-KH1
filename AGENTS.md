@@ -1,3 +1,8 @@
+### 2026-10-23: Stage 381 (testing branch: KH2 movement reads the stick KH2's way)
+- `takeover::move_tilt` had its own round 20% dead zone (labelled KH2's, it wasn't); it and `stick_dir`'s fallback use
+  `character_core::pad::stick` now, so gentle tilts walk Sora as in KH2. Open: KH2's walk / run split (`run_threshold`
+  50% is a hypothesis) and the controller's own 0.1 `DEAD_ZONE` on top of the pad's.
+
 ### 2026-10-23: Stage 380 (testing branch: KH2's camera reads the sticks KH2's way)
 - The tester: KH2's stick dead zone 1:1. `character_core::pad` (`stick`, `stick_vec`) follows Steam KH2 `0x14039c180`
   (60 of 127.5 off each axis, over 67.5, a direction and a tilt clamped to 1); `camera.rs` reads the pad's sticks
