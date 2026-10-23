@@ -229,6 +229,18 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 
 > game frames = ON 
 > 
-> let the user also disable it as well even if they're in frame advance 
+> let the user also disable it as well even if they're in frame advance
 
+> [!tip] Assistant
+> Got it, that's how I'll do the buttons: held over 5 steps is one press, and the first step after you let go sees it released.
+>
+> **Period key, same as R2.** KH1 reads the keyboard through DirectInput (it's set up at `0x1401122E0`). While Frame Advance is on, the period key is taken out of what KH1 reads, so whatever it's bound to in KH1's keyboard settings won't happen. Tapping it steps one frame, and holding it for 1 second runs at full speed until you let go, the same as R2. (Assumption to check before coding: where KH1 keeps the key states it reads each frame. I'll find that in the decomp.)
+>
+> **Game frames row in the trace menu.** A new row on the Trace Recorder page, `Game Frames: On / Off`. On means the trace's seconds count game time; Off means real time. You can switch it either way at any time, frame advance or not, and it's saved to the ini like the other trace settings. One question: what should it start as?
+> - (a) On all the time by default. During normal play, game time and real time only differ when the game slows down or hitches.
+> - (b) Off by default, turning On by itself when you turn Frame Advance on (you can still switch it back).
+>
+> Once you've picked, write `Go ahead` and I'll start.
 
+> [!note] Tester Mr. Bugs
+> 
