@@ -31,6 +31,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [2. Assistant: t376](#kh2-effects-in-kh1s-own-effect-system-2)
   - [3. Assistant: Correction to the build note above: there's a build now. kh1](#kh2-effects-in-kh1s-own-effect-system-3)
   - [4. Mr Bugs: 4. it should be exact to kh2 so for kh2 moves take the 2 fra](#kh2-effects-in-kh1s-own-effect-system-4)
+  - [5. Assistant: t394 to t398 (one part each; the build at the top of the bra](#kh2-effects-in-kh1s-own-effect-system-5)
 - [KH2's combo row selection](#kh2s-combo-row-selection)
   - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](#kh2s-combo-row-selection-1)
   - [2. Assistant: t374](#kh2s-combo-row-selection-2)
@@ -526,6 +527,29 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 > 6. can't check it yet as our frame advance still isn't complete, just do 1. and 2. for now
 >    
 >    go ahead
+
+<a id="kh2-effects-in-kh1s-own-effect-system-5"></a>
+> [!tip] Assistant
+> t394 to t398 (one part each; the build at the top of the branch has them all)
+>
+> Done for 1 and 2:
+> - **t394:** KH2 moves' effects now start on KH2's exact frame. KH1's 2 extra frames are gone, at any fps.
+> - **t395:** KH2's own spark program (MegaBirth, KH2's rewritten version) now runs inside KH1's effect system as a KH1 program, drawn through KH1's own shape draw.
+> - **t396:** Explosion's big flare on the Keyblade tip and the flash at the chest play through KH1 now, anchored with KH1's own "point along the Keyblade" binding.
+> - **t397:** KH2's ribbon program (EiDrawShipoly), which KH1 doesn't have, is ported as a KH1 program too, drawn with KH1's own renderer calls.
+> - **t398:** Explosion's burst at Sora's root plays through KH1 as well. So on Steam, all of Explosion now runs in KH1's own effect system, with no hooks: KH1 loads the effect, and its program records are pointed at our two programs.
+>
+> **Check:** decomp (both programs ported function by function from the Steam KH2 decomp and compared with KH1's version), the exe for the binding call, and the game files for Explosion's real data. Not checked in game. Assumptions: the KH2 decomp drops a few operands (in the spark's spin and size, the ribbon's width and colour scale), so I filled them in from KH1's matching code and the old effect player; and that KH1's "object root" frame matches KH2's. From the bind poses, the wrist flashes' bones line up within 0.05, so they shouldn't need a turn conversion (your in-game check can wait for frame advance). Not ported yet: the ribbon's scrolling variant, which Explosion doesn't use. Notes are in `docs/kh2-effects.md` §16–17.
+>
+> When you test: does the flare sit on the Keyblade tip, and does the burst's ribbon trail draw (texture, brightness, which way it narrows)?
+>
+> Questions:
+> 1. KH1's own colour program updates an effect's colour every other frame at 60 fps; KH2's updates every frame. That makes fades a little steppier than KH2's. (a) port KH2's colour program the same way, or (b) leave it?
+> 2. KH1's bone binding places an effect from the bone position it read the frame before. (a) check whether KH2 does the same and match it, or (b) leave it for now?
+> 3. Next: (a) Magnet Burst (it uses the same two programs, so it can follow the same path), (b) retire the old effect player for Explosion now that it all runs through KH1, or (c) both?
+
+> [!note] Tester Mr Bugs
+> 
 
 ---
 
