@@ -144,4 +144,6 @@
 
 
 > [!note] Mr Bugs
+> when I mean model I'm also referring to kh2 sora's skeleton, before I prompted you to adjust the bake animations the coat was working how it should, please double check so that we're on the same page.
 > 
+ 
