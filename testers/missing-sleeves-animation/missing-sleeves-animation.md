@@ -112,4 +112,14 @@
 
 
 > [!note] Mr Bugs
+> the model is still bugged, it seems to be his clothes, (his coat, his pants) and return to the map origin for 1 frame (actually don't know if that is the map origin but its returning to one spot every time)
 > 
+> I've attached a picture, sent a log and a trace.
+> 
+>1. (a) you can keep the animation but like I said earlier I think its bugged when you transition from a running state to a neutral one
+> 
+> 2. Yes you can leave it for now, when I know the animations are done we can start adding custom polish to it. 
+>    
+>    another thing: the hoodie doesn't seem to be animated anymore
+>    
+>    go ahead

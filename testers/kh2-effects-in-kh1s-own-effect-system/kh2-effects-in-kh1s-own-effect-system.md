@@ -212,4 +212,10 @@
 
 
 > [!note] Tester Mr Bugs
+> 1. (a) if it ever happens in game I'll just let you know and we can rewrite it. but don't worry about it.
+> 2. (a) if your ready to start porting over every effect you can do it I'll give you the go ahead to port every effect
 > 
+> go ahead
+
+
+

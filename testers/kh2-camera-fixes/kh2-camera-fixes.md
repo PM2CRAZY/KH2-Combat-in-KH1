@@ -107,4 +107,9 @@
 
 
 > [!note] Tester Mr Bugs
-> 
+> 1. not sure what this question means but, kh1s cam feels faster and rigid, controls on the left stick while kh2s cam is slower and smooth, controls on the right stick.
+> 2. going to send you a trace for 1 and 2
+> 3. its R2
+> 4. (b) make sure you compare it with the kh1s steam c ghidra decomps mouse cam because they feel pretty close to each other movement wise. 
+>    
+>    go ahead
