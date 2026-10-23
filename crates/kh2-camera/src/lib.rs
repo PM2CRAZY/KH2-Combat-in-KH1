@@ -233,18 +233,32 @@ impl Camera {
         flags
     }
 
+    /// The right stick's turn and zoom (Steam KH2 follow `0x140165110`, lock-on `0x140176c70`,
+    /// zoom `0x1401654d0` / `0x140176bc0`). KH2 tests the stick's direction bits (an axis past
+    /// its dead zone, `0x140178ab0` / `0x140178b10` turn, `0x140178b50` / `0x140178b80` zoom) and
+    /// moves by the stick's whole tilt, not by that axis: diagonally the camera turns and zooms
+    /// at full speed together. Returns whether the stick is tilted at all.
     fn manual(&mut self, c: &Controls, dt: f32) -> bool {
-        let p = self.params;
+        self.turn(c, dt);
+        self.zoom(c, dt);
+        c.look_stick != Vec2::ZERO
+    }
+
+    fn turn(&mut self, c: &Controls, dt: f32) {
         let r = c.look_stick;
         if r.x != 0.0 {
             // Right turns the view right: the eye swings the other way.
-            self.yaw = wrap(self.yaw - r.x * STICK_YAW * dt);
+            self.yaw = wrap(self.yaw - r.x.signum() * r.length().min(1.0) * STICK_YAW * dt);
             self.goal_yaw = self.yaw;
         }
+    }
+
+    fn zoom(&mut self, c: &Controls, dt: f32) {
+        let p = self.params;
+        let r = c.look_stick;
         if r.y != 0.0 {
-            self.dist = (self.dist - r.y * STICK_ZOOM * dt).clamp(p.dist_min, p.dist_max);
+            self.dist = (self.dist - r.y.signum() * r.length().min(1.0) * STICK_ZOOM * dt).clamp(p.dist_min, p.dist_max);
         }
-        r != Vec2::ZERO
     }
 
     /// One frame. `lock` is the lock-on target's camera point, if locked.
@@ -267,6 +281,8 @@ impl Camera {
                         // A hard cut when moving.
                         self.yaw = behind;
                     }
+                    // (KH2 zooms after its reset branch too, `0x140165110`.)
+                    self.zoom(c, dt);
                 } else {
                     let turned = self.manual(c, dt);
                     // KH2's pad keeps the left stick as a unit direction and a tilt (Steam
@@ -321,11 +337,12 @@ impl Camera {
                 } else {
                     at_goal = chest;
                 }
+                // KH2's lock-on (`0x140176c70`) turns and zooms first, then a reset sets the goal
+                // and the distance.
+                self.manual(c, dt);
                 if c.reset {
                     self.goal_yaw = (s.feet.x - self.at_goal.x).atan2(s.feet.z - self.at_goal.z);
                     self.dist = p.dist_alt;
-                } else {
-                    self.manual(c, dt);
                 }
             }
         }
@@ -457,6 +474,26 @@ mod tests {
         let a = 30f32.to_radians();
         let thirty = 2.0 * (a.sin() + 1.0) * (a.cos() + 1.0) * 0.25 * 9.0;
         assert!((turn_running_back(Vec2::new(a.sin(), -a.cos())) - thirty).abs() < 0.05);
+    }
+
+    /// KH2 turns and zooms by the right stick's whole tilt once its axis is past the dead zone:
+    /// a full diagonal turns 3° and zooms 8 a frame, not 3° · 0.71.
+    #[test]
+    fn the_right_stick_turns_and_zooms_by_its_whole_tilt() {
+        let s = sora(Vec3::ZERO, 0.0);
+        let r = 0.5_f32.sqrt();
+        let mut c = Camera::new(Params::FIELD, &s);
+        let (y0, d0) = (c.yaw, c.dist);
+        let ctl = Controls { look_stick: Vec2::new(r, r), ..Default::default() };
+        c.update(&s, &ctl, None, 1.0, &none);
+        assert!((wrap(y0 - c.yaw) - STICK_YAW).abs() < 1e-5, "{}", wrap(y0 - c.yaw));
+        assert!((d0 - c.dist - STICK_ZOOM).abs() < 1e-4);
+        // Half tilt straight right: half speed, no zoom.
+        let mut c = Camera::new(Params::FIELD, &s);
+        let ctl = Controls { look_stick: Vec2::new(0.5, 0.0), ..Default::default() };
+        c.update(&s, &ctl, None, 1.0, &none);
+        assert!((wrap(y0 - c.yaw) - STICK_YAW * 0.5).abs() < 1e-5);
+        assert_eq!(c.dist, d0);
     }
 
     #[test]

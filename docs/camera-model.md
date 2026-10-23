@@ -43,6 +43,17 @@ There is no pitch control: zooming in lowers the camera along this curve.
 ## Free camera (Checked, exe)
 
 - **Right stick:** turns 3° per frame at full tilt, and zooms 8 units per frame.
+  - **Checked (decomp)**, Steam follow `0x140165110`, lock-on `0x140176c70`, zoom
+    `0x1401654d0` / `0x140176bc0`: the turn and zoom are gated by the stick's direction bits
+    (an axis past its dead zone; `0x140178ab0` / `0x140178b10` turn, `0x140178b50` /
+    `0x140178b80` zoom, each pair swapped by an option bit, `0x1402e5330` horizontal,
+    `0x1402e5350` vertical) and move by the stick's whole tilt (`+0x2c`), not by that axis.
+    So a full diagonal turns 3° and zooms 8 a frame together.
+  - **Assumption:** the masks those test (`0x14071aa98`, `0x14071aa88`, exe data) are the
+    right stick's x / y direction bits.
+  - The follow camera zooms after its reset too; the lock-on camera turns and zooms, then a
+    reset sets its goal and distance.
+  - Not known (exe data): the lock-on camera's own turn speed (`0x14071a470`); ours uses 3°.
   - **Ours:** right turns the view right. The mirrored world makes the game's own sign
     meaningless here.
 - **Reset** (R3, or F on the keyboard): goal yaw = behind Sora, distance = default. It is a

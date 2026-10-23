@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 382 (testing branch: KH2's camera turns and zooms by the right stick's whole tilt)
+- From the decomp (Steam KH2): the turn tests each axis's direction bit (`0x140178ab0` / `0x140178b10`, zoom
+  `0x140178b50` / `0x140178b80`) and moves by the stick's whole tilt (`+0x2c`), so a full diagonal turns 3 deg and zooms
+  8 a frame together; the follow camera zooms after a reset, the lock-on camera (`0x140176c70`) turns and zooms first.
+  The swaps are option bits (`0x1402e5330`, `0x1402e5350`). Assumption: the direction masks (exe data) are the right
+  stick's x / y bits. Notes: `docs/camera-model.md`.
+
 ### 2026-10-23: Stage 381 (testing branch: KH2 movement reads the stick KH2's way)
 - `takeover::move_tilt` had its own round 20% dead zone (labelled KH2's, it wasn't); it and `stick_dir`'s fallback use
   `character_core::pad::stick` now, so gentle tilts walk Sora as in KH2. Open: KH2's walk / run split (`run_threshold`
