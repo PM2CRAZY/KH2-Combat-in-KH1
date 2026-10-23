@@ -1,0 +1,47 @@
+# Builds the mod's DLL on Windows for every source change pushed to the testing branch, and
+# commits it as kh1-kh2.dll at the top of the repo (what mod.yml installs), so testers always
+# have a build of the latest testing version.
+name: Build testing DLL
+
+on:
+  push:
+    branches: [testing]
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/build-testing.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-testing
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: testing
+      - name: Rust (stable, MSVC)
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Build kh1-hook
+        run: cargo build --release -p kh1-hook --locked
+      - name: Commit kh1-kh2.dll
+        shell: bash
+        run: |
+          cp target/release/dinput8.dll kh1-kh2.dll
+          version=$(sed -n 's/^pub const VERSION: &str = "\(.*\)";/\1/p' crates/kh1-hook/src/lib.rs)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add kh1-kh2.dll
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -m "Build ${version} (kh1-kh2.dll, from ${GITHUB_SHA::7})"
+          for i in 1 2 3; do
+            git pull --rebase origin testing && git push origin HEAD:testing && exit 0
+            sleep 5
+          done
+          exit 1

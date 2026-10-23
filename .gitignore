@@ -24,6 +24,8 @@
 # The built mod for OpenKH (mod.yml and its DLL, from crates/kh1-hook).
 !/mod.yml
 !/kh1-kh2.dll
+# The GitHub build of that DLL for the testing branch.
+!/.github/workflows/*.yml
 
 # 4. Documentation (notes only: no dumps, no tables copied from the game).
 !/docs/*.md
