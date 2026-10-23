@@ -120,7 +120,7 @@ enum Anchor {
 /// moves', with KH1's position binding for KH2's flag 0x04: Guard Break (165: 30..32), Finishing
 /// Leap (167: 33, 34), Aerial Recovery (40: 0), and under `kh2_effects = all` motions 169 (53..56),
 /// 171 (40, 41) and 172 (39); then the Drive motion's (52: 1..13) and Revert's flashes (15..27,
-/// `form`). Element 1 runs KH2's pppSnoMdlDttNorm (238), not in KH1: `missing` leaves it to kh2fx.
+/// `form`). Element 1 runs KH2's pppSnoMdlDttNorm (238): ours in KH1's machine (`kh2ppp`), a gate.
 const ON: &[i16] = &[
     44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38, 30, 31, 32, 33, 34, 0, 53, 54, 55, 56, 40, 41, 39, //
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
@@ -159,9 +159,9 @@ const SHIPOLY: u32 = super::kh2ppp::SHIPOLY;
 const COLOR: u32 = super::kh2ppp::COLOR;
 const VT_MIME: u32 = super::kh2ppp::VT_MIME;
 /// KH2's own programs an effect needs plugged in before it plays through KH1 (KH1's versions of
-/// 49, 157, 201 and 214 aren't KH2's; 241 isn't in KH1). KH2's pppColor (43) is not a gate:
+/// 49, 157, 201 and 214 aren't KH2's; 238 and 241 aren't in KH1). KH2's pppColor (43) is not a gate:
 /// without it KH1's runs.
-const GATES: [u32; 5] = [MB, SHIPOLY, VT_MIME, super::kh2ppp::ANGLE_LOOP, super::kh2ppp::TAIL_3X];
+const GATES: [u32; 6] = [MB, SHIPOLY, VT_MIME, super::kh2ppp::ANGLE_LOOP, super::kh2ppp::TAIL_3X, super::kh2ppp::DTT_NORM];
 
 /// Program types KH1 runs the same as KH2 (`docs/kh2-effects.md` §18.2): every slot of KH1's
 /// table entry (`0x14054FF00`) against KH2's (`0x140779A00`), normalised decompiles, where both

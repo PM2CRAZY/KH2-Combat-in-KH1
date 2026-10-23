@@ -1464,7 +1464,7 @@ elements; **Checked (files)**):
 | 29-31, 37-42, 84, 112, 139 / 142 calcs and constructs | Not in either decomp; t368's comparison (Explosion's programs) found them the same. |
 | 49 VtMime calc | **Differs**: KH1's (`0x14032C2E0`, exe) adds the key's rate delta (`@16`) always; KH2's leaves the rate when it is below −1e38 (§7.4, the keep marker; KH2's calc isn't in the Steam decomp). Sora's VtMime keys use the marker (−FLT_MAX on their last key, **Checked (files)**: Vicinity Break, Aerial Finish), so KH1's would throw the morph away there. Ported (§18.4). |
 | 43 Color, 201 RyjMegaBirth, 241 EiDrawShipoly | KH2's own, ported (§17). |
-| 238 SnoMdlDttNorm | KH2 only (a frame-buffer distortion along a model's normals, §7.10). Only element 1 (the Drive motion's sphere) runs it. Not ported: that element stays with `kh2fx` (which runs its state but draws nothing for it either). |
+| 238 SnoMdlDttNorm | KH2 only (a frame-buffer distortion along a model's normals). Only element 1 (the Drive motion's sphere) runs it. Ported (§18.14). |
 
 `kh2dpx::KH1_SAME` lists the ones KH1 runs as KH2; an element whose effect runs anything else
 (not KH1_SAME, not KH2's own plugged in) stays with `kh2fx`, logged once.
@@ -1556,8 +1556,8 @@ elements; **Checked (files)**):
   41 / 12, 44 / 15), flags 0x241 (bound, fade-out on the owner going); 15 on the spine by position
   (0x245, §18.5). Their programs are all KH1_SAME, KH2's pppColor and MegaBirth.
 - Element 1 (the Drive motion's sphere at the object root, bound until started) runs KH2's
-  pppSnoMdlDttNorm (238, a frame-buffer distortion along the model's normals, §7.10), which KH1
-  doesn't have: it stays with `kh2fx` (which also draws nothing for 238, only its other parts).
+  pppSnoMdlDttNorm (238, a frame-buffer distortion along the model's normals), which KH1 doesn't
+  have: ported as a KH1 program (§18.14), so element 1 plays through KH1 too.
 
 ### 18.7 More packages; the Keyblade's vanish flash; unbound elements
 
@@ -1646,8 +1646,8 @@ the spell files aren't staged here.
 On Steam, with the packages built (the first seconds after KH2 Sora loads: until then `kh2fx`
 plays everything, as before):
 
-- Sora's package: element 1 (the Drive motion's sphere: KH2's pppSnoMdlDttNorm, §18.6). Every
-  other element is KH1's (§18.3..18.6).
+- Sora's package: none (element 1, the Drive motion's sphere, since §18.14). Every element is
+  KH1's (§18.3..18.6).
 - Valor's and Final's packages: their second-Keyblade elements while the left Keyblade isn't
   drawn (its model not in yet, §18.13), and any element the load log lists as left out (a bone with no KH1 anchor, a flag KH1's binding doesn't
   do, a program not compared or KH2-only).
@@ -1741,4 +1741,59 @@ can play.
   drawn yet) `kh2fx` plays them; when it goes (out of the form) KH1 stops them (**Assumption**:
   KH2's second-weapon effects end with the weapon). Not checked offline: the forms' files aren't
   staged, so which of their elements use 0x4004..0x4008 is only in the load log.
+
+### 18.14 pppSnoMdlDttNorm (238), KH2 only: the Drive sphere's screen distortion
+
+- **The KH2 functions** (Steam KH2 decomp, found by their frame-buffer TEX0 `0xAA000 << 14`, which
+  only the distortion programs build): KeShpDtt's draw `0x1404CFA90` (KH1 `0x140338CE0`), KeMdlDtt's
+  draw `0x1404CA9E0` and triangles `0x1404C9E90` (KH1 145: `0x140334DF0`, `0x1403342A0`, its PC
+  draw `0x1403340A0`), and a third pair with no KH1 counterpart: draw `0x1404CBBA0`, triangles
+  `0x1404CAD20`, the only reader of model kind 1 (triangles with normals). That is 238 (key @4 a
+  model as KeMdlDtt's, @0x15..0x17 and @0x1C as §7.10 lists). §7.10's earlier addresses
+  (`0x1404CD590`, `0x1404CD550`, `0x1404CC710`) are not these functions in this decomp.
+  **Checked (decomp)**.
+- **What it does**: the strength `t` (work 0, with its rate and acceleration) steps on every draw
+  unless effects are held (rate += acceleration, `t` += rate; at the key's frame `t`, rate,
+  acceleration += @8, @0xC, @0x10; no paused or computed-frame test); with a model (@4 ≠ 0xFFFF)
+  and the colour's alpha (work 1 `+0xB`) not 0: the colour is its bytes / 128 (the decomp shows
+  that operand), the strength × the root's scale x if @0x16. For each triangle of the model's
+  leading kind-1 groups (0x1C bytes: three colours, three vertex indices `+0xC`, three normal
+  indices `+0x14`): each vertex `p` goes through the model's matrix (work 2) and the projection
+  (`0x142B0EDE0`, KH1 `0x142E9D600`) for its place; its normal (the model's, or the line from the
+  model's origin with @0x16) through the model's matrix, normalised; the push `d` = that normal (with
+  @0x16 the unit one; with @0x15 its x, y times the unit normal's z) × the strength, from the
+  vertex's matrix place; its texture place = `d` through the projection and the screen map
+  (renderer `+0x10` size, `+0xA0` viewport, `+0x38` screen: u = (x / w) · sx + ox), clamped to the
+  renderer's scale (`+0xB0`); its colour = the triangle's colour × the colour, alpha eased to
+  `(2 − a) a` when the frame step is under 2 (two draws a tick at 60 fps). Then per triangle KH2's
+  PC draw: PRIM, TEX0 = a frame buffer (@0x14: 0 the first, bound with `0x140126890 (0)`; else
+  the second, bound with "setPrevFrameTex", as KH1's KeMdlDtt binds its), ALPHA (@0x1C, 0 → 0x44), CLAMP (the distortion region), the
+  shader 8 (9 monochrome), three vertices (clip place, uv × 4096, colour, 0x1000 0x1000 0), drawn
+  as KH1's KeMdlDtt draws (`0x1400FB9C0 (3, 6, 0)`). Before the triangles, TEST (@0x17: 0x71001,
+  else 0x21001).
+- **Through KH1** (`kh2ppp::dtt_draw`, our seventh entry; draw slot only, construct and reset
+  KH1's KeMdlDtt's `0x140334DB0` / `0x140334DD0`, which clear the same three floats): every KH2
+  call by KH1's matching one, matched by code: PRIM field `0x140472E90` → `0x140386420`, TEX0 /
+  ALPHA / CLAMP / TEST (§17.3), frame texture `0x140126890` → `0x140107F60`, setPrevFrameTex
+  `0x140126C30` → `0x140108300` (KH1's KeMdlDtt draw calls it), renderer getters `0x14011BA10` /
+  `0x14011C290` / `0x14011CC00` / `0x14011C700` → `0x1400FD0E0` / `0x1400FD960` / `0x1400FE2D0` /
+  `0x1400FDDD0`, shader, vertices and their draw (§17.3); the frame buffers `0x140B60250` /
+  `0x140B60248` / `0x140B6025C` / `0x140B60260` → `0x1425381CC` / `0x1425381C4` / `0x1425381D8` /
+  `0x1425381DC`, the CLAMP region `0x140B607D0` → `0x142538218`, the frame step `0x140B60244`
+  (KH2 takes it off the instance's 30 Hz accumulator) → KH1's `0x14233FBDC`; the vector maths
+  (`0x14013F900`, `0x14013F850`, …) done in place, as KH1's same library does it
+  (`0x1400E5AD0`: the rows weighted by the vector; normalise `0x1400E8250`, a zero vector kept).
+  KH1 draws it in its effect draw pass when the instance's program runs, as KH2 does (no
+  depth-sorted queue, unlike KeMdlDtt's). A gate (`kh2dpx::GATES`): element 1 plays through KH1
+  only with it plugged in.
+- **Assumptions** (no KH2 exe here, operands the KH2 decomp drops): the normal's scale before the
+  model matrix is 1/4096 (Sora's sphere, model 5 of his second DPD, has |n| = 4096 for all 114
+  normals: **Checked (files)**); the push's scale is the strength (the one value the triangle code
+  reads and uses nowhere else); the vertex buffer and draw take KH1's KeMdlDtt arguments (3, 0x20,
+  0) and (3, 6, 0) (the decomp shows only the count); KH2's construct and reset are KeMdlDtt's.
+  Not ported: a branch for one KH2 setting (`0x140ABB020`, set from `0x140ABB278` by
+  `0x140156A10`, a PC option not in KH1) that fades vertices at the far left of a wide screen.
+- Element 1's key (**Checked (files)**): model 5 (224 triangles with normals), @0xC −120 (the rate
+  at frame 0: `t` falls by 120 a draw), @0x14 = 1 (the second buffer), @0x15 = 1, @0x16 = 0,
+  @0x17 = 0, @0x1C = 0.
 

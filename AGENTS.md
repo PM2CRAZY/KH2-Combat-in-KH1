@@ -1,3 +1,7 @@
+### 2026-10-23: Stage 429 (testing branch: KH2 effects: KH2's pppSnoMdlDttNorm, the Drive sphere through KH1)
+- The tester (option (a)). `kh2ppp::dtt_draw` (KH2 `0x1404CBBA0` / `0x1404CAD20`, Checked (decomp)) with KH1's pppKeMdlDtt calls;
+  construct and reset KH1 145's. Assumptions: normal 1/4096, push x strength. Drive element 1 through KH1. Notes §18.14.
+
 ### 2026-10-23: Stage 428 (testing branch: KH2 effects: the forms' Keyblade points on KH1's blade binding)
 - The tester (option (a)): 0x4003 / 5 / 7 KH1 blade binding on Sora; 0x4004 / 6 / 8 (KH2's second weapon) on
   `leftblade::left_owner` (refreshed after Sora's pass while bound; stopped when it goes, assumption). Notes §18.8, §18.13.

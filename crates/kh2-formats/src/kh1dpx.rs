@@ -36,9 +36,10 @@ const DUMMY_PROGRAM: u32 = 1;
 /// bytes every call and clamps them), 49 `pppVtMime` (KH2's calc keeps the rate on a marker
 /// key), 157 `pppKeShpTail3X` (KH2's draw steps its trail time only on a real frame), 201
 /// `pppRyjMegaBirth` (KH2 rewrote it), 214 `pppAngleLoop` (KH2 wraps the angles) and 241
-/// `pppEiDrawShipoly` (KH2 only). [`Kh1Dpx::programs`] lists where they are, so the host can point
+/// `pppEiDrawShipoly` (KH2 only), and 238 `pppSnoMdlDttNorm` (KH2 only: a model's screen
+/// distortion along its normals). [`Kh1Dpx::programs`] lists where they are, so the host can point
 /// them at its own entries once KH1 has relocated the DPX (KH1's own DPXs keep KH1's).
-pub const KH2_OWN_PROGRAMS: [u32; 6] = [43, 49, 157, 201, 214, 241];
+pub const KH2_OWN_PROGRAMS: [u32; 7] = [43, 49, 157, 201, 214, 238, 241];
 
 fn u16_at(b: &[u8], at: usize) -> Result<u16> {
     b.get(at..at + 2).map(|s| u16::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| crate::Error::Format(format!("kh1dpx: read past the end at {at:#x}")))
@@ -253,7 +254,7 @@ pub struct Kh1Dpx {
     pub types: Vec<Vec<u32>>,
     /// Each program-type word (an emitter's program record, or a particle data's type list) whose
     /// KH2 type is one of [`KH2_OWN_PROGRAMS`]: its offset in `bytes` and the KH2 type. In `bytes`
-    /// 43, 49, 157, 201 and 214 stay as they are and 241 is `pppDummyFunc`; KH1's relocation turns each word into a handle of
+    /// 43, 49, 157, 201 and 214 stay as they are and 238 and 241 are `pppDummyFunc`; KH1's relocation turns each word into a handle of
     /// its program table entry.
     pub programs: Vec<(usize, u32)>,
     /// The groups left out (their index and why: e.g. more texture slots than KH1 has).

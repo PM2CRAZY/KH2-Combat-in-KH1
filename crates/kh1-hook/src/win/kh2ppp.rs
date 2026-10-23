@@ -51,6 +51,11 @@
 //! reads the time before it steps it). Calc, construct and reset are KH1's (`0x140337D20`,
 //! `0x1403380B0`, `0x140338120`).
 //!
+//! 238 `pppSnoMdlDttNorm` (KH2 only, Steam KH2 `0x1404CBBA0` / `0x1404CAD20`): a model drawn with
+//! the frame behind it, its texture places pushed along its normals (the Drive sphere's
+//! distortion), with KH1's renderer calls as KH1's own model distortion (pppKeMdlDtt) uses them
+//! (`docs/kh2-effects.md` §18.14). Construct and reset are KH1's pppKeMdlDtt's.
+//!
 //! Steam only (the addresses are Steam's); elsewhere KH1's own programs stay.
 
 use super::log;
@@ -121,6 +126,7 @@ pub const COLOR: u32 = 43;
 pub const VT_MIME: u32 = 49;
 pub const ANGLE_LOOP: u32 = 214;
 pub const TAIL_3X: u32 = 157;
+pub const DTT_NORM: u32 = 238;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 /// KH2's MegaBirth / ribbon are plugged into the DPX (their words point at our entries).
@@ -130,6 +136,7 @@ static PLUGGED_COLOR: AtomicBool = AtomicBool::new(false);
 static PLUGGED_VT_MIME: AtomicBool = AtomicBool::new(false);
 static PLUGGED_ANGLE_LOOP: AtomicBool = AtomicBool::new(false);
 static PLUGGED_TAIL_3X: AtomicBool = AtomicBool::new(false);
+static PLUGGED_DTT_NORM: AtomicBool = AtomicBool::new(false);
 
 /// Whether KH2's own program `ty` is in (an effect that runs it may then play through KH1).
 pub fn plugged(ty: u32) -> bool {
@@ -140,6 +147,7 @@ pub fn plugged(ty: u32) -> bool {
         VT_MIME => PLUGGED_VT_MIME.load(Ordering::Relaxed),
         ANGLE_LOOP => PLUGGED_ANGLE_LOOP.load(Ordering::Relaxed),
         TAIL_3X => PLUGGED_TAIL_3X.load(Ordering::Relaxed),
+        DTT_NORM => PLUGGED_DTT_NORM.load(Ordering::Relaxed),
         _ => false,
     }
 }
@@ -152,13 +160,14 @@ struct Entry {
 
 /// Our program entries (KH1's 0x50-byte format). Written once on the game thread before any
 /// record points at them; never moved.
-static mut TABLE: [Entry; 6] = [const { Entry { name: std::ptr::null(), slots: [0; 9] } }; 6];
+static mut TABLE: [Entry; 7] = [const { Entry { name: std::ptr::null(), slots: [0; 9] } }; 7];
 static NAME_MB: &[u8] = b"pppRyjMegaBirth (KH2)\0";
 static NAME_SHIPOLY: &[u8] = b"pppEiDrawShipoly (KH2)\0";
 static NAME_COLOR: &[u8] = b"pppColor (KH2)\0";
 static NAME_VT_MIME: &[u8] = b"pppVtMime (KH2)\0";
 static NAME_ANGLE_LOOP: &[u8] = b"pppAngleLoop (KH2)\0";
 static NAME_TAIL_3X: &[u8] = b"pppKeShpTail3X (KH2)\0";
+static NAME_DTT_NORM: &[u8] = b"pppSnoMdlDttNorm (KH2)\0";
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -233,7 +242,7 @@ unsafe fn add4(out: usize, a: usize, b: usize) {
 }
 
 /// Points our entries at their functions (once); entry 0 MegaBirth, 1 the ribbon, 2 the colour,
-/// 3 the vertex morph, 4 the angle loop, 5 the shape trail.
+/// 3 the vertex morph, 4 the angle loop, 5 the shape trail, 6 the model distortion.
 unsafe fn table(i: usize) -> usize {
     let t = std::ptr::addr_of_mut!(TABLE) as *mut Entry;
     if (*t).name.is_null() {
@@ -265,6 +274,9 @@ unsafe fn table(i: usize) -> usize {
         let k = t.add(5);
         (*k).slots = [b + TAIL_3X_CALC_STEAM, 0, tail3x_draw as *const () as usize, 0, 0, 0, b + TAIL_3X_CONSTRUCT_STEAM, b + TAIL_3X_RESET_STEAM, 0];
         (*k).name = NAME_TAIL_3X.as_ptr();
+        let d = t.add(6);
+        (*d).slots = [0, 0, dtt_draw as *const () as usize, 0, 0, 0, b + KE_MDL_DTT_CONSTRUCT_STEAM, b + KE_MDL_DTT_RESET_STEAM, 0];
+        (*d).name = NAME_DTT_NORM.as_ptr();
     }
     t.add(i) as usize
 }
@@ -307,12 +319,18 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
             log(&format!("KH2 effects (native): KH1's pppAngleLoop ({al_ok}) / pppKeShpTail3X ({t3_ok}) entry as expected; KH2's not plugged in where not"));
         }
         let (ours_mb, ours_sp, ours_col, ours_vt) = (to_handle(table(0)), to_handle(table(1)), to_handle(table(2)), to_handle(table(3)));
-        let (ours_al, ours_t3) = (to_handle(table(4)), to_handle(table(5)));
-        if ours_mb == 0 || ours_sp == 0 || ours_col == 0 || ours_vt == 0 || ours_al == 0 || ours_t3 == 0 {
+        let (ours_al, ours_t3, ours_dn) = (to_handle(table(4)), to_handle(table(5)), to_handle(table(6)));
+        // KH1's pppKeMdlDtt entry, whose construct and reset ours uses.
+        let kh1_md = b + TABLE_STEAM + KE_MDL_DTT as usize * 0x50;
+        let md_ok = rd::<[usize; 9]>(kh1_md + 8) == [0, 0, b + KE_MDL_DTT_DRAW_STEAM, 0, 0, 0, b + KE_MDL_DTT_CONSTRUCT_STEAM, b + KE_MDL_DTT_RESET_STEAM, 0];
+        if !md_ok {
+            log("KH2 effects (native): KH1's pppKeMdlDtt entry isn't as expected; KH2's pppSnoMdlDttNorm not plugged in");
+        }
+        if ours_mb == 0 || ours_sp == 0 || ours_col == 0 || ours_vt == 0 || ours_al == 0 || ours_t3 == 0 || ours_dn == 0 {
             log("KH2 effects (native): no handle for our program table; KH2's programs not plugged in");
             return;
         }
-        let (mut mb, mut sp, mut col, mut vt, mut al, mut t3, mut other) = (0, 0, 0, 0, 0, 0, 0);
+        let (mut mb, mut sp, mut col, mut vt, mut al, mut t3, mut dn, mut other) = (0, 0, 0, 0, 0, 0, 0, 0);
         for &(at, ty) in programs {
             let w = dpx + at;
             let to = ptr(rd::<u32>(w));
@@ -334,6 +352,9 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
             } else if ty == TAIL_3X && t3_ok && to == kh1_t3 {
                 wr::<u32>(w, ours_t3);
                 t3 += 1;
+            } else if ty == DTT_NORM && md_ok && to == kh1_dummy {
+                wr::<u32>(w, ours_dn);
+                dn += 1;
             } else {
                 other += 1;
             }
@@ -345,8 +366,9 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         PLUGGED_VT_MIME.fetch_or(vt > 0, Ordering::Relaxed);
         PLUGGED_ANGLE_LOOP.fetch_or(al > 0, Ordering::Relaxed);
         PLUGGED_TAIL_3X.fetch_or(t3 > 0, Ordering::Relaxed);
+        PLUGGED_DTT_NORM.fetch_or(dn > 0, Ordering::Relaxed);
         log(&format!(
-            "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col}, its pppVtMime into {vt}, its pppAngleLoop into {al}, its pppKeShpTail3X into {t3} ({other} left as they were)"
+            "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col}, its pppVtMime into {vt}, its pppAngleLoop into {al}, its pppKeShpTail3X into {t3}, its pppSnoMdlDttNorm into {dn} ({other} left as they were)"
         ));
     }
 }
@@ -1798,5 +1820,246 @@ unsafe fn strip(model: usize, key: usize, s: usize, colour: usize, ea: &[V4], eb
         };
         wr::<f32>(s + st::SCROLL_V, wrap(rd::<f32>(key + 0x98) + rd::<f32>(s + st::SCROLL_V)));
         wr::<f32>(s + st::SCROLL_U, wrap(rd::<f32>(key + 0x94) + rd::<f32>(s + st::SCROLL_U)));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 238 `pppSnoMdlDttNorm` (KH2 only): a model drawn with the frame behind it, each vertex's
+// texture place pushed along its normal on screen (a heat-haze bulge; `docs/kh2-effects.md`
+// §18.14). Steam KH2: draw `0x1404CBBA0` (its strength stepped there too), the triangles
+// `0x1404CAD20`. KH1 has the same machinery for its own model distortion (pppKeMdlDtt, 145: draw
+// `0x140334DF0`, triangles `0x1403342A0`, their PC draw `0x1403340A0`): the same frame-buffer
+// TEX0, the same renderer calls. Ours is KH2's, drawn with KH1's calls (each KH2 function matched
+// by its code in the two decomps).
+
+/// KH1's pppKeMdlDtt (145): its draw (checked before plugging), construct and reset (both clear
+/// the strength, its rate and acceleration, work 0 `+0..+0xC`; ours uses them: KH2's 238 has
+/// the same state, **Assumption**: its construct and reset aren't in the KH2 decomp).
+const KE_MDL_DTT: u32 = 145;
+const KE_MDL_DTT_DRAW_STEAM: usize = 0x334DF0;
+const KE_MDL_DTT_CONSTRUCT_STEAM: usize = 0x334DB0;
+const KE_MDL_DTT_RESET_STEAM: usize = 0x334DD0;
+/// PRIM from a GIF tag's PRIM field (`0x140472E90`), the first frame buffer bound as texture
+/// slot `n` (`0x140126890`) and the second ("setPrevFrameTex", `0x140126C30`).
+const GS_PRIM_FIELD_STEAM: usize = 0x386420;
+const FRAME_TEX_STEAM: usize = 0x107F60;
+const PREV_FRAME_TEX_STEAM: usize = 0x108300;
+/// The renderer's size (`+0x10`, `0x14011BA10`), viewport (`+0xA0`, `0x14011C290`), scale
+/// (`+0xB0`, `0x14011CC00`) and screen (`+0x38`, `0x14011C700`).
+const REN_SIZE_STEAM: usize = 0xFD0E0;
+const REN_VIEWPORT_STEAM: usize = 0xFD960;
+const REN_SCALE_STEAM: usize = 0xFE2D0;
+const REN_SCREEN_STEAM: usize = 0xFDDD0;
+/// The two frame buffers (`0x140B60250` / `0x140B60248` width, `0x140B6025C` / `0x140B60260`
+/// base), the distortion's CLAMP region (`0x140B607D0`) and the effects' frame step
+/// (`0x140B60244`, 1.0 a 60 Hz frame: KH2 subtracts it from the instance's 30 Hz accumulator).
+const FB0_W: usize = 0x25381CC;
+const FB0_BP: usize = 0x25381D8;
+const FB1_W: usize = 0x25381C4;
+const FB1_BP: usize = 0x25381DC;
+const DTT_CLAMP: usize = 0x2538218;
+const FRAME_STEP: usize = 0x233FBDC;
+/// The GIF tag of KH2's triangle packet (its PRIM field is what the PC draw sets).
+const DTT_TAG: u64 = 0xC02D_C000_0000_8001;
+/// A model's normals are 4.12 fixed point (|n| = 4096 in Sora's Drive sphere, model 5 of his
+/// second DPD: **Checked (files)**); the KH2 decomp drops the scale's operand (**Assumption**).
+const NORMAL_UNIT: f32 = 1.0 / 4096.0;
+
+/// `v · m` (KH1's and KH2's point transform, `0x1400E5AD0` / `0x14013F900`: the rows of `m`
+/// weighted by `v`).
+fn dtt_xform(m: &[f32; 16], v: [f32; 4]) -> [f32; 4] {
+    let mut o = [0f32; 4];
+    for (k, x) in o.iter_mut().enumerate() {
+        *x = m[k] * v[0] + m[4 + k] * v[1] + m[8 + k] * v[2] + m[12 + k] * v[3];
+    }
+    o
+}
+
+/// KH2's pppSnoMdlDttNorm draw on KH1's instance. Work 0: the strength `t`, its rate and
+/// acceleration; work 1: the colour (its bytes at `+8`, pppColor's); work 2: the model's matrix
+/// (a matrix program's). Key: `@4` model (0xFFFF: none), `@8` / `@0xC` / `@0x10` the deltas of
+/// `t`, its rate, its acceleration at the key's frame, `@0x14` which frame buffer (0 the first,
+/// else the second, KH1's "setPrevFrameTex" as its own pppKeMdlDtt binds), `@0x15` the push scaled by the normal's depth, `@0x16` along the
+/// line from the model's origin (else its normals) and the strength times the root's scale x,
+/// `@0x17` the alpha test, `@0x1C` ALPHA (0: 0x44).
+unsafe extern "system" fn dtt_draw(obj: usize, key: usize, prog: usize) {
+    let b = base();
+    // The strength: KH2 steps it on every draw unless effects are held (no paused or computed
+    // frame test, unlike pppKeMdlDtt's).
+    let w0 = work(obj, prog, 0);
+    if rd::<u32>(b + HELD) == 0 {
+        let accel = rd::<f32>(w0 + 8);
+        let rate = rd::<f32>(w0 + 4) + accel;
+        wr::<f32>(w0 + 4, rate);
+        let t = rd::<f32>(w0) + rate;
+        wr::<f32>(w0, t);
+        if rd::<i32>(obj + 0xC) == rd::<i32>(key) {
+            wr::<f32>(w0, t + rd::<f32>(key + 8));
+            wr::<f32>(w0 + 4, rate + rd::<f32>(key + 0xC));
+            wr::<f32>(w0 + 8, accel + rd::<f32>(key + 0x10));
+        }
+    }
+    let model = rd::<i32>(key + 4);
+    let colour = work(obj, prog, 1) + 8;
+    if model == 0xFFFF || rd::<u8>(colour + 3) == 0 {
+        return;
+    }
+    let col: [f32; 4] = std::array::from_fn(|k| rd::<u8>(colour + k) as f32 * (1.0 / 128.0));
+    let ctx = rd::<usize>(b + CTX);
+    let models = rd::<usize>(ctx + 0x20);
+    let rec = models + model as usize * 0x38;
+    let omd = rd::<usize>(rec + 0x28);
+    if omd == 0 {
+        return;
+    }
+    let mut strength = rd::<f32>(w0);
+    let along_origin = rd::<u8>(key + 0x16) != 0;
+    if along_origin {
+        strength *= rd::<f32>(b + RS);
+    }
+    let by_depth = rd::<u8>(key + 0x15) != 0;
+    let at = |o: usize| (omd as isize + rd::<i32>(omd + o) as isize) as usize;
+    let cur = rd::<usize>(b + OBJ);
+    let over = if cur != 0 { ptr(rd::<u32>(cur + 0x90)) } else { 0 };
+    let verts = if over != 0 { over } else { at(8) };
+    let normals = match rd::<usize>(rec + 0x20) {
+        0 => at(0xC),
+        n => n,
+    };
+    // The frame buffer as the texture (TEX0: its base, width / 64, PSMCT32 rgba) and its CLAMP.
+    let (fw, fbp) = if rd::<u8>(key + 0x14) == 0 { (rd::<i32>(b + FB0_W), rd::<u32>(b + FB0_BP)) } else { (rd::<i32>(b + FB1_W), rd::<u32>(b + FB1_BP)) };
+    let tex0: u64 = ((((fw / 64) & 0x3F) as u64 | 0xAA000) << 14) | (((fbp & 0x1FF) << 5) as u16 as u64);
+    let cl = rd::<[u16; 4]>(b + DTT_CLAMP);
+    let clamp: u64 = (((((cl[3].wrapping_sub(1) & 0x3FF) as u64) << 10 | (cl[2] & 0x3FF) as u64) << 10 | (cl[1].wrapping_sub(1) & 0x3FF) as u64) << 10 | (cl[0] & 0x3FF) as u64) << 4 | 5;
+    let alpha: u64 = match rd::<u8>(key + 0x1C) {
+        0 => 0x44,
+        a => a as u64,
+    };
+    let gs = |at: usize, v: u64| {
+        let f: unsafe extern "system" fn(usize, i32) = std::mem::transmute(b + at);
+        f(&v as *const u64 as usize, 0);
+    };
+    gs(GS_TEST_STEAM, if rd::<u8>(key + 0x17) == 0 { 0x71001 } else { 0x21001 });
+    // Screen: the projection's GS place (2048 at the centre) to the frame's texture place.
+    let size = {
+        let f: unsafe extern "system" fn() -> usize = std::mem::transmute(b + REN_SIZE_STEAM);
+        rd::<[f32; 2]>(f())
+    };
+    let view = {
+        let f: unsafe extern "system" fn() -> usize = std::mem::transmute(b + REN_VIEWPORT_STEAM);
+        rd::<[f32; 4]>(f())
+    };
+    let screen = {
+        let f: unsafe extern "system" fn() -> usize = std::mem::transmute(b + REN_SCREEN_STEAM);
+        rd::<[f32; 2]>(f())
+    };
+    let scale = {
+        let f: unsafe extern "system" fn() -> f32 = std::mem::transmute(b + REN_SCALE_STEAM);
+        f()
+    };
+    let sx = (1.0 / size[0]) * view[0];
+    let sy = (1.0 / size[1]) * view[1];
+    let ox = (screen[0] * 0.5 - 2048.0) * sx + (1.0 / size[0]) * view[2];
+    let oy = (screen[1] * 0.5 - 2048.0) * sy + (1.0 / size[1]) * view[3];
+    let proj = rd::<[f32; 16]>(b + PROJ);
+    let s: [f32; 16] = [sx, 0.0, 0.0, 0.0, 0.0, sy, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, ox, oy, 0.0, 1.0];
+    // KH1's (and KH2's) product: each row of the second through the first.
+    let mut sp = [0f32; 16];
+    for r in 0..4 {
+        let row = dtt_xform(&s, [proj[r * 4], proj[r * 4 + 1], proj[r * 4 + 2], proj[r * 4 + 3]]);
+        sp[r * 4..r * 4 + 4].copy_from_slice(&row);
+    }
+    let (lo, hi) = if 1.0 <= scale { (0.0, 1.0) } else { let lo = (1.0 - (scale - 0.01)) * 0.5; (lo, 1.0 - lo) };
+    let m = rd::<[f32; 16]>(work(obj, prog, 2));
+    let shader: unsafe extern "system" fn(i32) = std::mem::transmute(b + SHADER_STEAM);
+    let vbuf: unsafe extern "system" fn(u32, u32, u32) -> usize = std::mem::transmute(b + VERTICES_STEAM);
+    let draw: unsafe extern "system" fn(u32, u32, u32) = std::mem::transmute(b + DRAW_VERTICES_STEAM);
+    let prim: unsafe extern "system" fn(usize) = std::mem::transmute(b + GS_PRIM_FIELD_STEAM);
+    let frame_tex: unsafe extern "system" fn(i32) = std::mem::transmute(b + FRAME_TEX_STEAM);
+    let prev_tex: unsafe extern "system" fn() = std::mem::transmute(b + PREV_FRAME_TEX_STEAM);
+    let fade = rd::<f32>(b + FRAME_STEP) < 2.0;
+    let fb0 = rd::<u32>(b + FB0_BP) as u64;
+    let short3 = |base: usize, i: u16| -> [f32; 3] { std::array::from_fn(|k| rd::<i16>(base + i as usize * 6 + k * 2) as f32) };
+    // The model's groups: only its leading triangle-with-normals groups (kind 1, 0x1C bytes a
+    // triangle) are drawn, up to the list's end (kind 0xFF).
+    let mut g = at(4);
+    loop {
+        let count = rd::<i16>(g + 2);
+        if rd::<u8>(g + 1) != 1 {
+            break;
+        }
+        let next = g + 0x10 + count.max(0) as usize * 0x1C;
+        for i in 0..count.max(0) as usize {
+            let tri = g + 0x10 + i * 0x1C;
+            let mut out = [[0u32; 8]; 3];
+            for (v, o) in out.iter_mut().enumerate() {
+                let p = short3(verts, rd::<u16>(tri + 0xC + v * 2));
+                let wp = dtt_xform(&m, [p[0], p[1], p[2], 1.0]);
+                let clip = dtt_xform(&proj, wp);
+                let rgba: [u32; 4] = std::array::from_fn(|k| (rd::<u8>(tri + v * 4 + k) as f32 * col[k]) as i32 as u32);
+                let n = if along_origin {
+                    [wp[0] - m[12], wp[1] - m[13], wp[2] - m[14], wp[3] - m[15]]
+                } else {
+                    let raw = short3(normals, rd::<u16>(tri + 0x14 + v * 2));
+                    dtt_xform(&m, [raw[0] * NORMAL_UNIT, raw[1] * NORMAL_UNIT, raw[2] * NORMAL_UNIT, 0.0])
+                };
+                let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+                let unit = if len != 0.0 { [n[0] / len, n[1] / len, n[2] / len] } else { [n[0], n[1], n[2]] };
+                let mut d = if along_origin { [unit[0], unit[1], unit[2], 0.0] } else { n };
+                if by_depth {
+                    d[0] *= unit[2];
+                    d[1] *= unit[2];
+                }
+                // The push by the strength (**Assumption**: the operand the KH2 decomp drops here,
+                // the strength being the one value it reads and doesn't otherwise use), from the
+                // vertex's own place.
+                for k in 0..3 {
+                    d[k] = d[k] * strength + wp[k];
+                }
+                d[3] = 1.0;
+                let mut q = dtt_xform(&sp, d);
+                if q[3] != 0.0 {
+                    let r = 1.0 / q[3];
+                    for x in q.iter_mut() {
+                        *x *= r;
+                    }
+                }
+                let u = q[0].clamp(lo, hi);
+                let w = q[1].clamp(lo, hi);
+                let mut c = (rgba[0] & 0xFF) | (rgba[1] & 0xFF) << 8 | (rgba[2] & 0xFF) << 16 | (rgba[3] & 0xFF) << 24;
+                if fade {
+                    let a = rgba[3] as f32 * 0.0078125;
+                    c = (c & 0x00FF_FFFF) | (((2.0 - a) * a * 128.0) as i64 as i32 as u32) << 24;
+                }
+                *o = [clip[0].to_bits(), clip[1].to_bits(), clip[2].to_bits(), clip[3].to_bits(), (u * 4096.0).to_bits(), (w * 4096.0).to_bits(), c, if v < 2 { 0x1000 } else { 0 }];
+            }
+            // Per triangle, as KH2 sets it (KH1's same calls).
+            let field = (DTT_TAG >> 47) & 0x7FF;
+            prim(&field as *const u64 as usize);
+            gs(GS_TEX0_STEAM, tex0);
+            if tex0 & 0x3FFF == fb0 << 5 {
+                frame_tex(0);
+            } else {
+                prev_tex();
+            }
+            gs(GS_ALPHA_STEAM, alpha);
+            gs(GS_CLAMP_STEAM, clamp);
+            shader(8 + (rd::<u32>(b + MONO) != 0) as i32);
+            let vb = vbuf(3, 0x20, 0);
+            if vb == 0 {
+                return;
+            }
+            for (v, o) in out.iter().enumerate() {
+                for (k, &x) in o.iter().take(7).enumerate() {
+                    wr::<u32>(vb + v * 0x20 + k * 4, x);
+                }
+                wr::<u16>(vb + v * 0x20 + 0x1C, o[7] as u16);
+            }
+            draw(3, 6, 0);
+        }
+        g = next;
+        if rd::<u8>(g + 1) == 0xFF {
+            break;
+        }
     }
 }
