@@ -233,8 +233,8 @@ animations (including vanilla animations) will run with kh2s physics instead"; t
   older ini's hair switch `physics = on / off` included); the Config menu's **Physics** row (KH1 /
   KH2, right after Camera Style), switched live and saved to the ini as the other rows are; the
   log says "physics: ..." at start and "Config menu: physics KH1 (was KH2): ..." on a change. The
-  hair's switch is `hair_physics` now (an older ini's `physics = on / off` is still read for it,
-  and is written out as `hair_physics` the first time the row is used, so it isn't lost).
+  hair's switches (`hair_physics`, `kh2_hair`) are gone since t388: KH2's animation of the hair
+  always runs (`docs/kh1-secondary-motion.md`).
 - **Code:** `kh1phys::Rule` (`parse`, `source(in_form)`), `shared::physics::rule` / `set_rule` /
   `source()`. `source()` is the one switch point: the setting, and KH2's in a Drive Form. The
   per-move styles choose the animations only (and whether KH2 borrows him for a KH2-only move);

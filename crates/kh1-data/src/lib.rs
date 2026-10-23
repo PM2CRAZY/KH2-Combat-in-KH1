@@ -11,7 +11,6 @@
 
 pub mod bake;
 pub mod inverse;
-pub mod jiggle;
 pub mod mdls;
 pub mod mset;
 pub mod retarget;

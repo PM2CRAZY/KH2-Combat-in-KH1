@@ -3513,8 +3513,7 @@ fn note_dropped_attack(state: i32) {
     }
 }
 
-/// Sora's physics frames so far (one per game frame; `TICKS` counts them in 60 Hz frames, which
-/// `pose`'s hair and cloth swing steps by).
+/// Sora's physics frames so far (one per game frame; `TICKS` counts them in 60 Hz frames).
 pub static GAME_FRAME: AtomicU64 = AtomicU64::new(0);
 
 /// The game's image base (0 before `install`).

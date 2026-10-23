@@ -12,8 +12,8 @@ Code: `crates/kh1-data/src/secondary.rs` (the matching and the posing),
 
 The retarget (`retarget.rs`) turns KH1's body to match KH2's. It has no part for the hair, the
 hood or the chain, so those just turned with the head, chest or hand. A physics swing
-(`jiggle.rs`: gravity, a breeze, springs back to the pose) then moved them. It was ours, not
-either game's. KH2 does animate these parts by hand in every motion; that animation was
+(`jiggle.rs`: gravity, a breeze, springs back to the pose; removed in t388) then moved them. It
+was ours, not either game's. KH2 does animate these parts by hand in every motion; that animation was
 thrown away.
 
 ## Which bones match
@@ -97,14 +97,31 @@ This runs every frame KH2 poses him, after the retarget, the feet, KH1's wrist (
 - **Bad data.** Non-finite poses or turns are skipped. A part whose KH2 bones are missing
   stays as the retarget left it.
 
-## Switches
+## No switches, no physics (t388)
 
-- `hair_physics = off` (an older ini's `physics = off`): none of this, and no swing either. The parts turn with their parent as
-  before.
-- `kh2_hair = off`: the older physics swing (`jiggle.rs`) instead of KH2's animation.
-- The swing still runs for any chain KH2 didn't pose this frame. That is only the keychain
-  while a dream weapon or the wooden sword is held (`0x52..=0x55`): those have no Keyblade
-  chain, and KH2's chain motion would swing whatever KH1 hangs on those bones.
+The tester (point 6 of "Missing sleeves animation"): "kh2 does not have physics but is instead
+baked so remove those switches out of the code, they're unneeded." Removed: the ini's
+`hair_physics` and `kh2_hair`, their `Settings` fields, and our physics swing (`jiggle.rs`:
+gravity, a breeze, springs) with them. KH2's animation of these parts now always runs on KH2's
+poses, live and in the bake. An older ini's `hair_physics` / `kh2_hair` lines are ignored, and
+its `physics = on / off` (the hair's switch before) still reads as the physics setting's KH2.
+
+Checked that KH2 has no run-time physics on them:
+- the OG Rust rewrite (KH2's source of truth here) has none: its evaluator plays the motions'
+  keys (and their constraints and IK), and nothing else moves hair, hood, sleeves or cloth
+  (Checked: no cloth, spring or swing code outside the camera);
+- in KH2's own files: no constraint or expression in any of Sora's 83 motions targets the hair,
+  the hood, the sleeves, the necklace or the hem ring (they constrain only body joints and IK
+  helpers; the trouser and pelvis cloth bones 7, 9, 27, 29, 36, 38, 56, 58 in one motion each);
+  and the hood, the flaps and the cloth have no vertices at all ("Which KH2 bones show on KH2's
+  model"), so a simulation on them would show nothing. Checked (files);
+- the KH2 Steam decomp has no named cloth or physics strings (Checked (decomp), strings only:
+  the exe is stripped, so this is weak on its own).
+
+The keychain while a dream weapon or the wooden sword is held (`0x52..=0x55`; KH2's chain motion
+would swing whatever KH1 hangs on those bones) used to get the swing; it now keeps KH1's rest
+relation (the battle idle's), with the weapon held whole (`dream_hold`). KH1's own animation
+(KH1's style, or anything KH1 shows itself) never ran any of this and is unchanged.
 
 ## What the checks show
 
@@ -171,8 +188,7 @@ and in the bake, after the retarget, with the hair and hood):
 KH2's scale keys on the flaps (113 in 3 motions down to 0.70, 115 in 1, 205 in 8, 207's 0.9 in
 its initial pose) are carried since t386 ("Squash and stretch" below). Checked (files).
 
-**Switches.** As the hair and hood: `hair_physics = off` or `kh2_hair = off`, and the sleeves
-keep their old rigid relation to the arm (there is no swing for them).
+**Switches.** None since t388 (as the hair and hood).
 
 **Checks** (`kh1-data` unit tests `sleeves_match_their_flaps_round_the_arm`,
 `a_sleeve_hangs_and_flaps_as_kh2_s`; on the files, a scratch run of every KH2 motion): no NaN,

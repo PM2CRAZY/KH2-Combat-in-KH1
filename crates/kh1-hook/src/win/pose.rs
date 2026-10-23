@@ -296,9 +296,6 @@ struct Sora {
     jumps: u32,
     /// KH1's bone parents (for the feet).
     parents: Vec<i16>,
-    /// The hair, hood and keychain's swing under KH2's poses (`kh1_data::jiggle`), and when it
-    /// last moved.
-    jiggle: Option<(kh1_data::jiggle::Jiggle, u64)>,
     /// KH1's hair, hood and keychain following KH2's own animation of them
     /// (`kh1_data::secondary`), built with the retarget.
     secondary: Option<kh1_data::secondary::Secondary>,
@@ -1087,9 +1084,8 @@ impl Baker {
 
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
     /// draws it (`follow_play`, `Play::Slot`): KH2's body and Keyblade, the root travel taken out
-    /// (KH1 moves him), retargeted, KH2's hair, hood, sleeves, necklace and keychain on
-    /// (`hair_physics` and `kh2_hair` on), the Keyblade's teeth-up turn (`keyblade_turn`).
-    /// Nothing else of ours (feet, KH1's wrist, the swing).
+    /// (KH1 moves him), retargeted, KH2's hair, hood, sleeves, necklace and keychain on, the
+    /// Keyblade's teeth-up turn (`keyblade_turn`). Nothing else of ours (feet, KH1's wrist).
     ///
     /// `travel` (t365, a move whose request has KH1's travel flag): KH2's root travel along the
     /// ground (from its first frame, at KH2's full distances: the user, t367) put back on the
@@ -1155,11 +1151,9 @@ impl Baker {
                     *v = s;
                 }
             }
-            if set.physics && set.kh2_hair {
-                let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
-                let rep = self.secondary.apply(&mut kh1, &body, weapon, kh1_data::secondary::Parts::ALL);
-                self.secondary.scales(&body, weapon, rep.parts, &mut sc);
-            }
+            let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
+            let rep = self.secondary.apply(&mut kh1, &body, weapon, kh1_data::secondary::Parts::ALL);
+            self.secondary.scales(&body, weapon, rep.parts, &mut sc);
             scales.push(sc);
             if travel {
                 // (Along the ground only: the root's height stays out, as before.)
@@ -1601,7 +1595,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None, secondary: None, inverse: None, kh2_now: None, scales: Vec::new(), own_scale: Vec::new() });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), secondary: None, inverse: None, kh2_now: None, scales: Vec::new(), own_scale: Vec::new() });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -1774,48 +1768,33 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
     keyblade_teeth_up(&mut pose, &s.parents);
-    let set = super::settings::get();
     let mut scaled = false;
-    if set.physics {
-        // KH2's own animation of the hair, hood, sleeves, necklace and keychain (the user: "add
-        // the animations for sora's hair and chain on each KH2 animation instead"; the sleeves
-        // and necklace: Mr Bugs, "missing animations for the sleeves"), on every pose KH2 gave;
-        // the keychain only on a Keyblade (not the dream weapons or the wooden sword).
-        let mut driven = kh1_data::secondary::Parts::default();
-        if let (true, Some((body, weapon)), Some(sec)) = (set.kh2_hair, s.kh2_now.as_ref(), s.secondary.as_ref()) {
-            let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)), sleeves: true, necklace: true };
-            let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
-            let rep = sec.apply(&mut pose, body, weapon, want);
-            driven = rep.parts;
-            // KH2's squash and stretch on the parts it just posed (the tester: "yes do it"), and
-            // KH1's own on its own parts.
-            s.scales.clear();
-            s.scales.resize(pose.len(), Vec3::ONE);
-            for &b in kh1_data::retarget::KH1_OWN.iter() {
-                if let (Some(v), Some(o)) = (s.scales.get_mut(b), s.own_scale.get(b)) {
-                    *v = *o;
-                }
-            }
-            sec.scales(body, weapon, rep.parts, &mut s.scales);
-            scaled = true;
-            static LOGGED: AtomicU32 = AtomicU32::new(0);
-            if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
-                log(&format!("hair, hood, sleeves, necklace and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
+    // KH2's own animation of the hair, hood, sleeves, necklace and keychain (the user: "add the
+    // animations for sora's hair and chain on each KH2 animation instead"; the sleeves and
+    // necklace: Mr Bugs, "missing animations for the sleeves"), on every pose KH2 gave; the
+    // keychain only on a Keyblade (not the dream weapons or the wooden sword, which keep KH1's
+    // rest relation). Always: KH2 keys these parts and runs no physics on them (Mr Bugs: "kh2
+    // does not have physics but is instead baked so remove those switches"), so there is no
+    // switch and no swing of ours.
+    if let (Some((body, weapon)), Some(sec)) = (s.kh2_now.as_ref(), s.secondary.as_ref()) {
+        let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)), sleeves: true, necklace: true };
+        let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
+        let rep = sec.apply(&mut pose, body, weapon, want);
+        // KH2's squash and stretch on the parts it just posed (the tester: "yes do it"), and
+        // KH1's own on its own parts.
+        s.scales.clear();
+        s.scales.resize(pose.len(), Vec3::ONE);
+        for &b in kh1_data::retarget::KH1_OWN.iter() {
+            if let (Some(v), Some(o)) = (s.scales.get_mut(b), s.own_scale.get(b)) {
+                *v = *o;
             }
         }
-        // The swing (`kh1_data::jiggle`) for any chain KH2 didn't pose. One step per 60 Hz frame
-        // of Sora's physics frames (`takeover::TICKS`: two a game frame at 30 fps), not by the
-        // clock: frames come 13..22 ms apart, and a draw with no step left the chains at his last
-        // place (the user: the animations stuttered). A gap of more than half a second (KH1's own
-        // animation, a pause) starts it over.
-        let frame = super::takeover::TICKS.load(Ordering::Relaxed);
-        let (j, last) = s.jiggle.get_or_insert_with(|| (kh1_data::jiggle::Jiggle::new(kh1_data::jiggle::sora_chains()), frame));
-        let steps = frame.saturating_sub(*last);
-        if steps > 30 {
-            j.reset();
+        sec.scales(body, weapon, rep.parts, &mut s.scales);
+        scaled = true;
+        static LOGGED: AtomicU32 = AtomicU32::new(0);
+        if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
+            log(&format!("hair, hood, sleeves, necklace and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
         }
-        *last = frame;
-        j.apply_except(&mut pose, &s.parents, &to_world, steps.min(3) as usize, |b| driven.covers(b));
     }
     // A dream weapon whole, as KH1 holds it.
     dream_hold(&mut pose, &s.parents, (!ours).then_some(world));

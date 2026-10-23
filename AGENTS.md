@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 388 (testing branch: no hair switches)
+- The tester: KH2 has no physics, its secondary parts are keyed, so the switches go. `hair_physics`, `kh2_hair` and
+  `jiggle.rs` removed; KH2's animation of the hair, hood, sleeves, necklace and chain always runs on KH2's poses (the OG
+  rewrite has no cloth or hair physics; no constraint in KH2's motions drives them). The keychain on a Dream weapon or the
+  wooden sword keeps KH1's rest pose.
+
 ### 2026-10-23: Stage 387 (testing branch: KH1's own parts take KH1's own animation of the move)
 - The tester: a baked motion for KH1-only parts, with KH1's animations as the reference. `retarget::KH1_OWN` (41 bones:
   belt chain, belt-front pieces, shorts, jacket hem, the necklace's pendant), `Retarget::set_own` / `own_relation`, the

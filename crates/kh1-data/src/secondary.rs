@@ -4,8 +4,9 @@
 //!
 //! KH2 animates these parts by hand in every motion: eleven hair spikes on the head, the hood
 //! on the back, and the Keyblade's chain (the weapon's own motion, same id). `Retarget` turns
-//! the body only, so KH1's spikes, hood and chain used to keep their rest shape (or swing by
-//! `jiggle`'s physics). Here each KH1 link takes the movement of the KH2 bone matched to it:
+//! the body only, so KH1's spikes, hood and chain used to keep their rest shape (or swing by a
+//! physics swing of ours, removed in t388: KH2 has none). Here each KH1 link takes the movement
+//! of the KH2 bone matched to it:
 //! - **Hair and hood: the turn, measured against the head (hair) or the chest (hood).** KH2's
 //!   spikes are single bones with no child to point at, so a direction can't be read from
 //!   positions; instead the KH2 bone's turn away from its bind pose, taken relative to the

@@ -112,11 +112,6 @@ reflect = on\r\n\
 ; keyblade_turn: on = every Keyblade held with its teeth up, as KH2 holds it (KH1's grip held\r\n\
 ; them to the ground under KH2's moves); off = as before\r\n\
 keyblade_turn = on\r\n\
-; hair_physics: on = Sora's hair, hood and keychain move during KH2's moves; off = rigid\r\n\
-hair_physics = on\r\n\
-; kh2_hair: on = (hair_physics = on) they move as KH2 animates its own hair, hood and keychain in\r\n\
-; each move; off = the older swing and sway (a breeze and gravity) instead\r\n\
-kh2_hair = on\r\n\
 ; drive: on = D-pad left at the battle menu's top flips to a second page (Attack, Magic, Items,\r\n\
 ; Drive), Drive listing KH2's forms; off = KH1's menu only\r\n\
 drive = on\r\n\
@@ -238,15 +233,9 @@ pub struct Settings {
     pub reflect: bool,
     /// Keyblades turned teeth up in his hand (`keyblade_turn = on`, `pose::keyblade_teeth_up`).
     pub keyblade_turn: bool,
-    /// Hair, hood and keychain move under KH2's moves (`hair_physics = on`; an older ini's
-    /// `physics = on / off`); off, they keep KH1's rest pose.
-    pub physics: bool,
     /// Whose physics move base Sora (`physics = kh1 | kh2`, KH2's by default;
     /// `shared::physics::rule`).
     pub physics_rule: crate::kh1phys::Rule,
-    /// They follow KH2's own animation of them (`kh2_hair = on`, `kh1_data::secondary`) rather
-    /// than the swing (`kh1_data::jiggle`).
-    pub kh2_hair: bool,
     /// The second command page with Drive (`drive = on`).
     pub drive: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
@@ -432,9 +421,7 @@ fn load(first: bool) -> Option<Settings> {
         },
         reflect: on(&text, "reflect", "on", true),
         keyblade_turn: on(&text, "keyblade_turn", "on", true),
-        physics: hair_physics(&text),
         physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
-        kh2_hair: on(&text, "kh2_hair", "on", true),
         drive: on(&text, "drive", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false))],
@@ -457,23 +444,8 @@ fn load(first: bool) -> Option<Settings> {
     Some(s)
 }
 
-/// The hair's switch: `hair_physics`, or an older ini's `physics = on / off` (before `physics`
-/// became the physics setting, `kh1 | kh2`, which leaves the hair on).
-fn hair_physics(text: &str) -> bool {
-    match setting(text, "hair_physics") {
-        Some(_) => on(text, "hair_physics", "on", true),
-        None => !matches!(setting(text, "physics").as_deref(), Some("off" | "0" | "no" | "false")),
-    }
-}
-
-/// Keeps the physics setting in the ini (the Config menu's Physics row). An older ini whose
-/// `physics` line is the hair's switch gets that as `hair_physics` first, so it isn't lost.
+/// Keeps the physics setting in the ini (the Config menu's Physics row).
 pub fn save_physics(r: crate::kh1phys::Rule) {
-    let path = format!("{}\\{INI}", super::exe_dir());
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
-    if setting(&text, "hair_physics").is_none() {
-        save("hair_physics", if hair_physics(&text) { "on" } else { "off" });
-    }
     save("physics", r.key());
 }
 
