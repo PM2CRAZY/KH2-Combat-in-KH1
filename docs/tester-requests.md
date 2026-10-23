@@ -35,6 +35,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](#kh2s-combo-row-selection-1)
   - [2. Assistant: t374](#kh2s-combo-row-selection-2)
   - [3. Mr Bugs: 1. do option (a)](#kh2s-combo-row-selection-3)
+  - [4. Assistant: t390 to t393 (one part each; the build at the top of the bra](#kh2s-combo-row-selection-4)
 - [Missing sleeves animation](#missing-sleeves-animation)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](#missing-sleeves-animation-1)
   - [2. Assistant: t375](#missing-sleeves-animation-2)
@@ -567,6 +568,29 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
 >  4. yes add that
 >
 >go ahead
+
+<a id="kh2s-combo-row-selection-4"></a>
+> [!tip] Assistant
+> t390 to t393 (one part each; the build at the top of the branch has them all)
+>
+> Your traces showed t374 working: with no target it goes 151 → 153 → 155, and with an enemy 120–400 away KH2 picks Flash Step (you have it equipped), so KH2 takes Sora for that move. The one wrong thing was KH1's own dash winning in trace f27098 (the lunge of about 280). I also read Sora's full row table from `00battle.bin` this time (37 rows); it's written up in `docs/kh1-anim-slots.md` §7.
+>
+> - **t390, option (a):** at Base Combo KH2, KH1's own rows give way: its dash, its ability finishers, and the row I'd called a jump at a target above, which is really KH1's attack when there's no floor ahead (it walks him off the edge). KH2's pick always plays.
+> - **t391:** the air combo uses KH2's picker too (181 / 182, finishers 183 / 184), with KH1's air rows giving way the same way.
+> - **t392:** KH2's swing that hops up at an enemy above now plays in KH1's own air state, with KH2's hop height and speed. It needs Aerial Combo on KH2 as well.
+> - **t393:** the two KH2 status bits: one keeps finishers chaining, the other is Berserk Charge (no finishers while MP charges). Also, what I'd guessed was "a wall ahead" is really "no floor ahead": KH2 does a small hop swing off an edge. That's in too, tested with KH1's own collision sweep.
+>
+> **Check:** decomp (KH2's picker and its status bits, KH1's ground and air pickers and row runner) and the row table from the game files. Not checked in game. Assumptions: the hop heights come from the KH2 source's rule, not KH2's exe; which length KH2 uses for the "floor ahead" test; that the finisher-chain bit means what it seems to (I found nothing that sets it); and that KH1's direction for the press matches the direction to KH2's target.
+>
+> A trace near a ledge, one at a flying enemy, and some air combos would help.
+>
+> Questions:
+> 1. Air swings: (a) KH2's own little hop on each air swing too (1:1), or (b) keep KH1's air lunge and hop under KH2's gravity, as now?
+> 2. Berserk Charge needs KH2's MP Charge, which KH1 doesn't have: (a) add MP Charge and Berserk Charge to the ability list as their own system next, or (b) leave it off?
+> 3. The hop swing with Aerial Combo set to KH1: (a) keep KH1's swing, as now, or (b) play KH2's hop anyway?
+
+> [!note] Tester Mr Bugs
+> 
 
 
 ---
