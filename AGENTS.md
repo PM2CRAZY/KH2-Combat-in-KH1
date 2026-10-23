@@ -1,3 +1,10 @@
+### 2026-10-23: Stage 415 (testing branch: KH2's hop out of the ground combo keeps its speed)
+- Mr Bugs (t409 traces f3990..f5413: "next to a ledge will start a short jump attack"): every row-1 hop rose and fell in
+  place, `+0x3C0` 0 from its first frame. KH1's control step (`0x1402A3300`, decomp) sets `+0x3C0` = `+0x20` x `+0x2C` (the
+  stick, from `0x1402AFC20`) on a frame its state changed into 2. `shared::physics::ground_hop_carry` puts `kh2_hop`'s
+  velocity back before KH1's physics step. The hop firing there is KH2's (a 120 drop 50..70 ahead). Notes
+  `docs/kh1-anim-slots.md` §7.
+
 ### 2026-10-23: Stage 414 (testing branch: KH2's mouse camera)
 - The tester ("(b)"): KH1 PC's mouse code is KH2 PC's (Steam KH1 `0x140138b30` = KH2 `0x1404e51f0`). Mouse frames: both
   sticks KH1's processed ones times `1 + 0.02 s`; the follow camera turns `max(|10x|,1)·3°` and zooms `8·max(|10y|,1)`

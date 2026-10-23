@@ -678,6 +678,47 @@ pub mod physics {
         }
     }
 
+    /// KH2's hop out of KH1's ground combo (`combat::exec`, KH1's state just set to 2): the game
+    /// frame and KH1's air velocity (`+0x3C0`) as `kh2_hop` left it.
+    static GROUND_HOP: Mutex<Option<(u64, [f32; 4])>> = Mutex::new(None);
+
+    /// After `kh2_hop` for a hop out of KH1's ground combo (`combat::exec`): KH1's control step
+    /// goes on, after the command, with the state step and then its carry into the air on the
+    /// frame its state changed (Steam `0x1402A3300`, Checked (decomp): with flag `0x400` and state
+    /// 2, `+0x3C0` = the move direction `+0x20` times its speed `+0x2C`, which the air step
+    /// `0x1402AFC20` has just copied from the stick). Standing, that is 0, and KH2's sideways speed
+    /// was gone (the tester's t409 traces f3990..f5413: every ledge hop rose and fell in place, the
+    /// velocity 0 from its first frame, where the log had 8/frame). Kept for `ground_hop_carry`.
+    pub unsafe fn kh2_hop_from_ground(actor: usize) {
+        if !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
+            return;
+        }
+        if let Ok(mut g) = GROUND_HOP.lock() {
+            *g = Some((game_frame(), rd(actor + VEL)));
+        }
+    }
+
+    /// Sora's physics step (`takeover::physics`), before KH1's: on the frame after
+    /// `kh2_hop_from_ground`, KH2's hop's velocity goes back on KH1's air fields in place of KH1's
+    /// carry from the stick, so KH1's physics step moves him by it as KH2's hop (`0x1403CBB00`:
+    /// the velocity the flat direction times the speed) does from its first frame.
+    pub unsafe fn ground_hop_carry(actor: usize) {
+        let Some((at, vel)) = GROUND_HOP.lock().ok().and_then(|mut g| g.take()) else { return };
+        if game_frame().saturating_sub(at) != 1 || !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
+            return;
+        }
+        let was: [f32; 4] = rd(actor + VEL);
+        wr(actor + VEL, vel);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 40 {
+            super::super::log(&format!(
+                "KH2's hop out of KH1's ground combo: its {:.1}/frame sideways put back after KH1's carry into the air (which left {:.1})",
+                vel[0].hypot(vel[2]),
+                was[0].hypot(was[2])
+            ));
+        }
+    }
+
     /// The last game frame KH2's arc on KH1's air state was past its apex (`air_step`), 0 none.
     static ARC_FALL_FRAME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 

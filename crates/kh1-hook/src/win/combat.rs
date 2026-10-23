@@ -126,6 +126,11 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         }
         f(actor, run, dir);
         super::shared::physics::kh2_hop(actor, l.height, l.velocity);
+        // (KH1's carry into the air on the state change would replace its sideways speed:
+        // `ground_hop_carry` puts it back before KH1's physics step.)
+        if from_ground {
+            super::shared::physics::kh2_hop_from_ground(actor);
+        }
         return;
     }
     // KH1's own combo (`stylecombo`, the Ground / Aerial Combo style set to KH1): its row runs.

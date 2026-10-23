@@ -444,6 +444,11 @@ unsafe extern "system" fn physics(actor: usize) {
         // the effect clock adds the delta up itself, `kh2_fx::Effects::tick`.)
         super::kh2fx::tick(motion, steps() as f32);
     }
+    if sora {
+        // KH2's hop out of KH1's ground combo: its sideways speed, which KH1's carry into the air
+        // replaced (`shared::physics::ground_hop_carry`).
+        super::shared::physics::ground_hop_carry(actor);
+    }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
     if sora {

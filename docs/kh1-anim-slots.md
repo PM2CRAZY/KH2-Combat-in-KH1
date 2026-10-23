@@ -627,6 +627,17 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   in game (that KH1's air row runs as expected right after the state change; the hand-backs do
   the same before KH1's own air attack). Ability hops (Aerial Sweep 33, Aerial Dive 48) stay
   borrows.
+  - **KH1's carry into the air** (Steam KH1, Checked (decomp)): KH1's control step
+    (`0x1402A3300`) runs the command (the Attack step, our row) and then the state's step; on a
+    frame the state changed (flag `0x400`, set by `0x1402AF7D0`) with state 2 it sets the air
+    velocity `+0x3C0` to the move direction `+0x20` times its speed `+0x2C`, which the air step
+    (`0x1402AFC20`) has just copied from the stick. That is KH1 carrying the run into a jump;
+    for the hop it replaced KH2's sideways speed (standing: 0). Checked (trace): the tester's
+    t409 traces f3990, f4996, f5299, f5413, every hop from the ground at a ledge (row 1, 21 high,
+    8/frame logged) had `+0x3C0` 0 from its first frame and rose and fell in place. Since the
+    hop's patch: the velocity `kh2_hop` set is put back on Sora's next physics step, before
+    KH1's (`shared::physics::ground_hop_carry`), so KH1's step moves him by KH2's from the first
+    frame. The air rows' own hops (no state change) never had it.
 - **KH2's hop rule** (Steam KH2, Checked (decomp); t392 had the OG rewrite's, which differed):
   after the pick, `0x1403A76B0` / `0x1403A8690` (the Attack press, both) run `0x1403D78D0 (him,
   row, his target)`, `+0xDC8`'s target: the primary target, also for a kind-2 row passed on
