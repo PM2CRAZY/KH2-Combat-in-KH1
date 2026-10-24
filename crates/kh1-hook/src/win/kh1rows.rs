@@ -23,8 +23,8 @@
 //! (`kh2slots`: built on the template's KH1 motion and request kind); no lunge (KH2's root travel
 //! is in the slot, its hop KH2's, `combomods`); and its own attack data (`DATA`, a copy of the
 //! template's in memory of ours near the block, its offset from the block in `+4`), with KH2's
-//! reaction for the move (KH1's launch, kind 5, for a KH2 blow that throws, else a flinch, 3) and,
-//! for Guard Break, KH1's priority past which guards don't stop an attack (`GUARD_THROUGH`). The
+//! reaction for the move (KH1's launch, kind 5, for a KH2 blow that throws, else a flinch, 3) and
+//! the Recoil row's clash rules (`rules`: the template's at KH1, KH2's attack kinds at KH2). The
 //! hits its attack object lands then take KH2's numbers for the move's hit window (power, Magic
 //! scaling, launch: `combat::scale_record` through `kh2_atkp`).
 
@@ -130,7 +130,8 @@ pub struct Ours {
     /// gravity from frame 1, then its fall, `next_motion` 4): KH1's air state from its start, the
     /// root's rise moving him (`shared::physics`'s air step, `kh2slots::air_root`).
     pub rises: bool,
-    /// Guard Break: KH1's guards don't stop it (`GUARD_THROUGH`).
+    /// Guard Break (its clash type and priority are the Recoil row's, `rules` / `kh2_clash`, as
+    /// every row's).
     pub guard_break: bool,
     /// Started by KH1's row runner (an attack: its row's attack object, the press in KH1's
     /// tally); else only its request is asked for (Aerial Recovery, `combomods::recover`), its
@@ -250,6 +251,17 @@ static DATA_AT: [AtomicUsize; OURS.len()] = [const { AtomicUsize::new(0) }; OURS
 /// The KH2 ATKP each of our rows was made for (its first hit window's), for `kh2_atkp` when no
 /// window is open at the hit.
 static ATKP_OF: [AtomicU32; OURS.len()] = [const { AtomicU32::new(u32::MAX) }; OURS.len()];
+/// Each row's clash type (data `+0x38` bits 0..2) and priority (`+0x3C`) under KH1's rules (its
+/// template's) and KH2's (`kh2_clash`), packed `type << 16 | priority`, for `rules` (the Recoil
+/// row switches between them live).
+static CLASH_KH1: [AtomicU32; OURS.len()] = [const { AtomicU32::new(u32::MAX) }; OURS.len()];
+static CLASH_KH2: [AtomicU32; OURS.len()] = [const { AtomicU32::new(u32::MAX) }; OURS.len()];
+/// Which rules the data holds now: 0 none yet, 1 KH1's, 2 KH2's.
+static RULES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+/// KH1's clash type that meets no attack (no entry of KH1's pairing table `0x140528CB8` has its
+/// bit: 1F 09 09 3F 29 18 00 00, Checked (exe)) but still hits bodies (the pass `0x1402B3BE0` keeps
+/// bodies away from types 1, 2 and 4 only, Checked (decomp)): KH2's pierce armor.
+const PIERCE_TYPE: u32 = 6;
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -326,6 +338,7 @@ pub unsafe fn install(actor: usize) {
     let Ok(mut g) = TABLE.try_lock() else { return };
     if let Some(t) = g.as_ref() {
         if t.index == index && now == t.ours {
+            rules();
             return;
         }
         if t.index == index && now == t.kh1 {
@@ -381,8 +394,14 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
         };
         wr(d + 8, kind);
         wr(d + 0xC, kind);
-        if o.guard_break {
-            wr(d + 0x3C, rd::<i32>(d + 0x3C).max(GUARD_THROUGH));
+        // (Clash type and priority by the Recoil row, `rules`: KH1's the template's, KH2's from
+        // the move's ATKP.)
+        let (t1, p1) = (rd::<u32>(d + 0x38) & 7, rd::<i32>(d + 0x3C));
+        let (t2, p2) = kh2_clash(a, t1, p1);
+        CLASH_KH1[n].store(t1 << 16 | (p1 as u32 & 0xFFFF), Ordering::Relaxed);
+        CLASH_KH2[n].store(t2 << 16 | (p2 as u32 & 0xFFFF), Ordering::Relaxed);
+        if o.guard_break && t2 != PIERCE_TYPE {
+            log(&format!("KH1's attack rows: Guard Break's ATKP {atkp:?} is no pierce armor: it keeps its template's clash type under KH2's rules"));
         }
         let off = d as isize - block as isize;
         if off < i32::MIN as isize || off > i32::MAX as isize {
@@ -408,7 +427,52 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
         ));
     }
     log(&format!("KH1's attack rows: Sora's table (character {index}, KH1's at {kh1:#x}) ours with {}", made.join("; ")));
+    RULES.store(0, Ordering::Relaxed);
     Some(Table { index, kh1, ours: rows.as_ptr() as usize })
+}
+
+/// KH2's clash rules for a move's ATKP on KH1's data (the tester, thread
+/// kh2-recoil-and-parry-system, plan step 3; `docs/kh1-kh2-recoil.md` §6.3): KH2's pierce armor
+/// (kind 1: Guard Break 876, Counterguard 1581, Finishing Leap 854; meets only special guards,
+/// never stopped) is KH1's clash type 6, which meets no attack or guard but hits bodies; a normal
+/// attack with "refact self" 2 (Horizontal Slash 963, Retaliating Slash 1582: meets attacks and
+/// guards but is never stopped) gets KH1's priority past which it isn't stopped (`GUARD_THROUGH`,
+/// 0x62: KH1's clash half `0x1402B4BC0` stops only a side under it); the rest keep the template's.
+/// KH2's guard kinds (2, 3) are no attack rows. Returns (type, priority).
+fn kh2_clash(a: Option<&kh2_formats::battle::Atkp>, t: u32, p: i32) -> (u32, i32) {
+    match a {
+        Some(a) if a.kind == 1 => (PIERCE_TYPE, p),
+        Some(a) if a.kind == 0 && a.refact_self == 2 => (t, p.max(GUARD_THROUGH)),
+        _ => (t, p),
+    }
+}
+
+/// Each frame base Sora is posed (`install`): our rows' data hold the Recoil row's rules (KH1's:
+/// the templates' clash type and priority, Guard Break's too; KH2's: `kh2_clash`). KH1 reads them
+/// when it makes the row's attack object (`0x1402B2DC0`: data `+0x38` bits 0..2 → the object's
+/// flags bits 17..19, `+0x3C` → its priority `+0x68`, Checked (decomp)), so a switch takes the
+/// next swing.
+unsafe fn rules() {
+    let want = if super::recoil::kh2() { 2u8 } else { 1 };
+    if RULES.load(Ordering::Relaxed) == want {
+        return;
+    }
+    let mut said = Vec::new();
+    for n in 0..OURS.len() {
+        let d = DATA_AT[n].load(Ordering::Relaxed);
+        let v = if want == 2 { &CLASH_KH2[n] } else { &CLASH_KH1[n] }.load(Ordering::Relaxed);
+        if d == 0 || v == u32::MAX {
+            continue;
+        }
+        let (t, p) = (v >> 16, (v & 0xFFFF) as u16 as i16 as i32);
+        wr(d + 0x38, (rd::<u32>(d + 0x38) & !7) | t);
+        wr(d + 0x3C, p);
+        if OURS[n].attack {
+            said.push(format!("{} type {t} priority {p}", OURS[n].name));
+        }
+    }
+    RULES.store(want, Ordering::Relaxed);
+    log(&format!("KH1's attack rows: {}'s clash rules: {}", if want == 2 { "KH2" } else { "KH1" }, said.join(", ")));
 }
 
 /// Our rows are on Sora's character now.

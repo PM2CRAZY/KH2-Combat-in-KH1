@@ -304,3 +304,58 @@ Performance: no new per-frame hook. Steps 2 and 4 use hooks that already exist (
 - At KH1 nothing changes.
 - Not covered: a Drive Form or a borrowed KH2 move (KH2's controller has Sora) plays KH2's
   controller's recoil (41 / 43) in both settings, as KH1's recoil motions aren't in its movesets.
+
+### 6.3 KH2's clash rules on our attacks (plan step 3; answers 2 "(c)", 3 "(a)")
+
+KH2's ATKP rows of Sora's moves (`00battle.bin` and the clips' hit windows in `W_EX010.mset` /
+`P_EX100.mset`, **Checked (files)**):
+
+| kind | refact self | moves (ATKP) |
+|---|---|---|
+| 1 pierce armor | 2 | Guard Break 876, Counterguard 1581, Finishing Leap 854, Explosion 911 / 912, Vicinity Break 1869, Magnet Burst 1900 / 1901 / 1903 |
+| 0 normal | 2 | Slapshot 890, Dodge Slash 1007 / 1898, Flash Step 1896, Retaliating Slash 1582, Aerial Sweep 909, Horizontal Slash 963 / 967, Aerial Finish 915 / 927, Aerial Dive 1882 |
+| 0 normal | 0 | the plain swings and finishers 126..134 / 147, Upper Slash 170, Slide Dash 968, Aerial Spiral 1131, Retaliating Slash's second hit 1583 |
+
+At Recoil KH2:
+- **Our KH1 rows** (`kh1rows::rules`, from the move's first hit window's ATKP; KH1 reads the data
+  when it makes the row's attack object, `0x1402B2DC0`: `+0x38` bits 0..2 → object flags 17..19,
+  `+0x3C` → priority `+0x68`, **Checked (decomp)**):
+  - pierce armor: KH1 clash type 6. No entry of KH1's pairing table (`0x140528CB8`: 1F 09 09 3F 29
+    18 00 00, **Checked (exe)**) has its bit, and the pass (`0x1402B3BE0`) lets type 6 hit bodies
+    (only types 1, 2 and 4 don't), **Checked (decomp)**. So it meets no enemy attack and no guard
+    and is never stopped: KH2's pierce armor against KH2's normal attacks and plain guards.
+  - refact self 2: priority at least 0x62 (KH1 adds the Keyblade's byte and caps a swing at 99,
+    `0x1402B3270`). KH1's clash half `0x1402B4BC0` doesn't stop a side at 0x62 or more, so the swing
+    goes on; the enemy's attack (under 0x62) is stopped and its owner recoils by KH1's rule, kind 7
+    (big) when our side is more than 40 stronger: the tester's answer 3 "(a)".
+  - the rest: the template's type and priority.
+  - One attack object a row: a move's rules are its first hit window's (Retaliating Slash's
+    second hit, 1583, is normal in KH2 but rides on the first's).
+- **KH2's hit shapes** (`combat::Strikes::strike_as`: borrowed moves and the body-hit moves on
+  KH1's states), by each hit window's own ATKP:
+  - pierce armor meets only special guards (`SPECIAL_GUARDS`) and no enemy attack;
+  - refact self 2: a guard it meets doesn't repel it, but that guard's owner is immune to the swing
+    (KH2's `0x1403D2140` makes the guard's side immune to the attack it met, unless the attack is
+    itself a guard with refact self 2); an enemy attack it meets goes through KH1's clash with our
+    side at priority 99 (not stopped).
+- At Recoil KH1: every row has its template's type and priority (Guard Break included: it no
+  longer passes guards at KH1), and the KH2 shapes' path uses its KH1 row's clash type, as before.
+
+**Special guards** (answer 2 "(c)": enemy by enemy). KH2's kind 3 rows (47 in `00battle.bin`,
+**Checked (files)**) are on Sora and his allies: Aerial Recovery's body guard 124 (every form),
+Reflect's barrier 573, Anti Form's 454 / 1749, Riku P_EX110's 425, King Mickey P_EX200 / P_EX220's
+1197, the Hollow Bastion allies (N_HB530 / 550 / 570 / 580), Hercules N_HE010's 1695 / 324, the
+light cycle, N_EX760's; and three enemy models: Xemnas B_EX170 (1976, range 120), M_EX420 (599),
+M_EX600_LC (971). So in KH2 almost every enemy's guard is a plain guard that Guard Break breaks,
+and a special guard is the kind of block that even pierce armor can't get through (an ally's or
+Sora's own invulnerable guard, Reflect, Xemnas's shield). No KH1 enemy is on the list yet, so at
+KH2 Guard Break meets no KH1 guard. **Assumption** (not checked enemy by enemy): which KH1 enemy
+guards should count. Our rows' type 6 can't meet any guard in KH1's own pass, so a listed enemy
+would only stop KH2's shapes (`strike_as`) until the pass learns it too.
+
+**Not KH2:**
+- A refact-self-2 KH1 row at priority 0x62+ never meets a guard (priority 100: KH1 meets two
+  attacks only when one is under 0x62), so it hits through the guard to the body. In KH2 the
+  guard's owner would be immune. Needs a hook on KH1's clash half or the pass to match.
+- An enemy attack of priority 0x62+ is never stopped by a normal swing (KH1's half), where KH2
+  stops every normal attack a normal attack meets.

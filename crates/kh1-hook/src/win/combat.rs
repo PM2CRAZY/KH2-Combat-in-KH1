@@ -1133,7 +1133,11 @@ unsafe fn shots(sora: usize) -> Vec<Shot> {
 /// A swing meets a shot as KH1's own swing would (`0x1402B2890`, the attack-vs-attack clash,
 /// both ways): KH1 turns the shot back (team swapped, Sora its owner, flag `0x1000000`).
 /// Returns whether it was turned back.
-unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row) -> (bool, bool) {
+/// `unstoppable`: KH2's "refact self" 2 (the Recoil row at KH2): the swing side's priority past
+/// which KH1's clash half doesn't stop it (99, the most KH1 gives a swing, `0x1402B3270`; KH1's half
+/// `0x1402B4BC0` stops only a side under 0x62, Checked (decomp)); the enemy's side then recoils by
+/// KH1's rule (kind 7 for a gap over 40: the tester, answer 3 "(a)").
+unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row, unstoppable: bool) -> (bool, bool) {
     let base = BASE.load(Ordering::Relaxed);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
@@ -1156,6 +1160,9 @@ unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row) -> (bool, bo
     wr(obj + 0x40, c);
     wr(obj + 0x70, c);
     wr(obj + 0xC, at.radius);
+    if unstoppable {
+        wr(obj + 0x68, 99i32);
+    }
     let entry = |o: usize, owner: usize, centre: [f32; 4], r: f32| {
         let mut e = [0u8; 0x40];
         let p = e.as_mut_ptr() as usize;
@@ -1230,6 +1237,24 @@ struct Guard {
 /// KH1's clash table (`0x1405299B8`, symmetric): which clash types meet which (bit n: meets
 /// type n). Types 6 and 7 meet nothing.
 const CLASH_TABLE: [u8; 8] = [0x1F, 0x09, 0x09, 0x3F, 0x29, 0x18, 0x00, 0x00];
+
+/// KH2's special guards (ATKP kind 3), the only guards KH2's pierce armor meets, as KH1 enemies by
+/// object id (`+0x4C` of the actor's object): the tester, answer 2 "(c)", enemy by enemy. KH2's
+/// own (`00battle.bin` and the objects' msets, Checked (files)) are almost all on Sora and his
+/// allies (Aerial Recovery's body 124, Reflect's barrier 573, Riku, the Hollow Bastion allies,
+/// Hercules, King Mickey), and three enemy models (Xemnas B_EX170's 1976, M_EX420's 599,
+/// M_EX600_LC's 971). No KH1 enemy is listed yet, so a pierce-armor hit meets no KH1 guard.
+/// Only the KH2 hit shapes' path (`strike_as`) reads it: KH1's own pass meets nothing with our rows'
+/// pierce type (`kh1rows::kh2_clash`).
+const SPECIAL_GUARDS: &[u16] = &[];
+
+unsafe fn special_guard(owner: usize) -> bool {
+    if SPECIAL_GUARDS.is_empty() {
+        return false;
+    }
+    let obj = pose::ptr(rd::<u32>(owner + 0x130));
+    obj > 0x10000 && SPECIAL_GUARDS.contains(&rd::<u16>(obj + 0x4C))
+}
 
 /// Whether a guard of clash type `guard` meets Sora's swing of type `swing`.
 fn clashes(guard: u32, swing: u32) -> bool {
@@ -1839,7 +1864,20 @@ impl Strikes {
                 Some((b, _)) => b.clone(),
                 None => swept.iter().map(|s| Shape { radius: s.radius.min(blade), height: s.height.min(blade), ..*s }).collect(),
             };
-            let guards: Vec<&Guard> = self.guards.iter().filter(|g| swing_type.map_or(true, |t| clashes(g.kind, t))).collect();
+            // KH2's clash rules (the Recoil row at KH2; `docs/kh1-kh2-recoil.md` §6.3): a pierce-armor
+            // hit (ATKP kind 1: Guard Break, Counterguard, Finishing Leap, Explosion, Vicinity Break,
+            // Magnet Burst) meets only special guards (`SPECIAL_GUARDS`) and no attack; a normal hit
+            // with "refact self" 2 (Horizontal Slash, Retaliating Slash, Aerial Finish, ...) meets
+            // them but is never stopped (KH2's `0x1403D2140`, Checked (decomp); KH2's table
+            // `0x1405C5E98`, Checked (exe)). At KH1, KH1's rules by its row's clash type, as before.
+            let kh2_rules = super::recoil::kh2();
+            let pierce = kh2_rules && first.kind == 1;
+            let holds = kh2_rules && first.kind == 0 && first.refact_self == 2;
+            let guards: Vec<&Guard> = self
+                .guards
+                .iter()
+                .filter(|g| if pierce { special_guard(g.owner) } else { swing_type.map_or(true, |t| clashes(g.kind, t)) })
+                .collect();
             static TYPES: AtomicU32 = AtomicU32::new(0);
             if !self.guards.is_empty() && TYPES.fetch_add(1, Ordering::Relaxed) < 6 {
                 log(&format!("guards near: clash types {:?} against Sora's swing type {swing_type:?} (blade radius {blade}): {} can repel", self.guards.iter().map(|g| g.kind).collect::<Vec<_>>(), guards.len()));
@@ -1864,28 +1902,38 @@ impl Strikes {
                 d < g.radius
             };
             if let Some((gai, gi)) = first_overlap(&thin, &guard_shapes).filter(|(gai, gi)| body_at.map_or(true, |(b, part)| *gai < b && inside(&guard_shapes[*gi], &part))) {
-                self.repelled.insert(h.swing);
-                let bounced = character.register_wall_hit();
-                clang(guards[gi].at);
-                let g = guards[gi];
-                let near_part = self
-                    .bodies
-                    .iter()
-                    .find(|b| b.actor == g.owner)
-                    .and_then(|b| b.parts.iter().map(|p| ((p.shape.center[0] - g.at[0]).hypot(p.shape.center[2] - g.at[2]).hypot(p.shape.center[1] + g.at[1]), p.shape.radius)).min_by(|a, b| a.0.total_cmp(&b.0)));
-                note(format!(
-                    "KH2 attack {} repelled by the guard of actor {:#x}, clash type {} radius {:.0}, motion-bound {:?} (owner motion {}), nearest hittable part {:?} (centre distance, radius) (bounced: {bounced}){}",
-                    h.attack, g.owner, g.kind, g.shape.radius, g.motion, rd::<u32>(g.owner + 0x164), near_part,
-                    on_blade.map_or(" (KH2's shapes)".into(), |(_, along)| format!(" at {:.0}% along KH1's blade", along.get(gai).copied().unwrap_or(0.0) * 100.0))
-                ));
-                continue;
+                if holds {
+                    // Not stopped (KH2: "refact self" 2), but the guard's owner can't be hit by this
+                    // swing any more (KH2 makes the guard's side immune to the attack it met,
+                    // `0x1403D2140`): its record marks the swing, the swing goes on to others.
+                    let owner = guards[gi].owner;
+                    self.records.entry(owner).or_default().mark(h.swing, 0);
+                    note(format!("KH2 attack {} (refact self 2) met the guard of actor {owner:#x}: not stopped, that actor immune to this swing (KH2's rules)", h.attack));
+                } else {
+                    self.repelled.insert(h.swing);
+                    let bounced = character.register_wall_hit();
+                    clang(guards[gi].at);
+                    let g = guards[gi];
+                    let near_part = self
+                        .bodies
+                        .iter()
+                        .find(|b| b.actor == g.owner)
+                        .and_then(|b| b.parts.iter().map(|p| ((p.shape.center[0] - g.at[0]).hypot(p.shape.center[2] - g.at[2]).hypot(p.shape.center[1] + g.at[1]), p.shape.radius)).min_by(|a, b| a.0.total_cmp(&b.0)));
+                    note(format!(
+                        "KH2 attack {} repelled by the guard of actor {:#x}, clash type {} radius {:.0}, motion-bound {:?} (owner motion {}), nearest hittable part {:?} (centre distance, radius) (bounced: {bounced}){}",
+                        h.attack, g.owner, g.kind, g.shape.radius, g.motion, rd::<u32>(g.owner + 0x164), near_part,
+                        on_blade.map_or(" (KH2's shapes)".into(), |(_, along)| format!(" at {:.0}% along KH1's blade", along.get(gai).copied().unwrap_or(0.0) * 100.0))
+                    ));
+                    continue;
+                }
             }
             // An enemy's attack met: as KH1's swing would meet it (`0x1402B2890`): a shot knocked
             // back (the user: Wakka's ball), or a clash (the user: "not allowing him to clank with
             // enemy attacks"). Enemy melee attacks only by KH1's blade (KH2's wide shapes met them
             // far too often, the user, twice).
             let mut stopped = false;
-            if let Some(rows) = self.rows {
+            // (KH2's pierce armor meets no attack, KH2's rules.)
+            if let Some(rows) = self.rows.filter(|_| !pierce) {
                 let clash_shapes: &Vec<Shape> = on_blade.map(|(b, _)| b).unwrap_or(&swept);
                 for shot in self.shots.iter().filter(|s| s.free || on_blade.is_some()) {
                     if self.met_shots.contains(&(h.swing, shot.obj)) {
@@ -1893,7 +1941,7 @@ impl Strikes {
                     }
                     let Some((ai, _)) = first_overlap(clash_shapes, &shot.shapes) else { continue };
                     self.met_shots.insert((h.swing, shot.obj));
-                    let (back, ours) = meet_shot(sora, shot, &clash_shapes[ai], rows[(air as usize) * 2]);
+                    let (back, ours) = meet_shot(sora, shot, &clash_shapes[ai], rows[(air as usize) * 2], holds);
                     if back {
                         character.register_hit();
                     }
