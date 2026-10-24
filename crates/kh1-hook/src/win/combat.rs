@@ -1738,7 +1738,10 @@ impl Strikes {
             if super::shared::active() {
                 // KH1's states have him (a KH2 motion of ours KH1 plays, `takeover::kh2_hits`):
                 // KH2's guard reaction on KH1's states.
-                super::combomods::guard_repel(sora, toward.to_array(), refact);
+                // (The stopped attack's priority, for KH1's block at Guard Repel KH1: the pool's
+                // attack whose hit bit is the one the guard's mask gained.)
+                let priority = (0..ATTACK_SLOTS).map(|k| base + ATTACK_POOL_RVA + k * 0xC0).find(|&a| rd::<u32>(a) & 0x800 != 0 && rd::<u32>(a + 0x54) & new != 0).map(|a| rd::<i32>(a + 0x68));
+                super::combomods::guard_repel(sora, toward.to_array(), refact, priority);
             } else if refact != 2 {
                 character.clash(refact, 0, toward.to_array());
             }

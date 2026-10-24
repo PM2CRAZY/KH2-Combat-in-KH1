@@ -1227,7 +1227,7 @@ pub unsafe fn roll_invulnerable(actor: usize) -> bool {
 /// `combat::guard_step`): `toward` the attacker (x / z), the guard's `refact_self`. 1 (the press's
 /// 161): KH2's repel (`Character::clash`, on the ground): motion 42 facing the attacker, pushed
 /// back 200. 2 (the repel's own 162): nothing more.
-pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8) {
+pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8, attacker_priority: Option<i32>) {
     if refact != 1 || actor < 0x10000 || super::form::in_form() {
         return;
     }
@@ -1237,6 +1237,11 @@ pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8) {
     let now = frame() + 1;
     let last = AT.swap(now, Ordering::Relaxed);
     if last != 0 && now.saturating_sub(last) <= 1 {
+        return;
+    }
+    // (Guard Repel KH1: KH1's own block reaction instead, `kh1_block`.)
+    if !repel_kh2() {
+        kh1_block(actor, attacker_priority);
         return;
     }
     let face = yaw_to(toward);
@@ -1250,6 +1255,90 @@ pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8) {
         *p = Some((back, REPEL_BACK * 0.1));
     }
     note(format!("KH2's guard stopped a hit: its repel (motion 42), pushed back {REPEL_BACK:.0}"));
+}
+
+/// The Guard Repel row (the tester, combo row selection m17: "(b)", the KH1 setting is KH1's own
+/// block): KH2's repel (`guard_repel`, the default) or KH1's. Live, kept in the ini
+/// (`guard_repel = kh2 | kh1`). 0 not read yet, 1 KH1, 2 KH2.
+static REPEL: AtomicU8 = AtomicU8::new(0);
+
+pub fn repel_kh2() -> bool {
+    match REPEL.load(Ordering::Relaxed) {
+        0 => {
+            let v = super::settings::get().guard_repel_kh2;
+            REPEL.store(1 + v as u8, Ordering::Relaxed);
+            v
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config menu's row.
+pub fn set_repel_kh2(v: bool) {
+    REPEL.store(1 + v as u8, Ordering::Relaxed);
+    super::settings::save("guard_repel", if v { "kh2" } else { "kh1" });
+    log(&format!("Config menu: Guard Repel {}", if v { "KH2" } else { "KH1" }));
+}
+
+/// KH1's clash recoils (Steam; the hit pass `0x14029BBD0` runs them for a clash record of kind 6
+/// / 7, its handler table, Checked (decomp)): `0x14029D720 (actor, record, out)` requests 0x6E
+/// (slot 72) with the idle queued, 8 frames of KH1's no-damage timer (`0x140297F30`), KH1's combo
+/// count (combat `+0x41`) one less and, when the record's gap (`+8`) is below 0, a push back of
+/// -gap x btltbl `+0x1C` x his stats' `+0xC4` (`0x1402C7300`); `0x14029D5F0` the big recoil 0x6F,
+/// the same with no push. Both write `out + 0xC` = 0. Their first bytes are checked before a call
+/// (Checked (exe)).
+const CLASH_RECOIL_STEAM: usize = 0x29D720;
+const CLASH_RECOIL_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x40];
+const BIG_RECOIL_STEAM: usize = 0x29D5F0;
+const BIG_RECOIL_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
+
+/// KH1's own block (Guard Repel KH1), what KH1's clash gives the owner of a guard that stopped an
+/// attack (`0x1402B4BC0 (guard, attack)`, Steam, Checked (decomp)): KH1's guard row 0x3D's object
+/// (data 0x4DA8: bone 0x30, clash type 2, priority byte 0) is under 0x62 (its priority is the
+/// Keyblade's `+0x33`, clamped 1..99 by `0x1402B3270`), so the guard side is a melee attack that
+/// clashed: a clash record on its owner (`0x1402BF060`) of kind 6, or 7 when the attacker is more
+/// than 40 stronger (gap = guard - attacker priority), and the guard's result word (combat state
+/// `+0x50`, the object's `+0x60`) gets 0x10 (0x20 for the big one), which KH1's Counterattack reads
+/// with request 0x6E playing (`0x140294220`: command 99, row 0x3E). Here the record's reaction is
+/// run at once (KH1's recoil above), the result word marked, KH2's repel push dropped. The attacker
+/// side (its own recoil) is KH1's clash on our guard objects as before. On the ground only (KH2's
+/// guard is). `attacker`: the stopped attack's priority if known (**Assumption** for a hit record:
+/// its attack data's `+0x3C`, which KH1's player rows add the weapon to but enemy attacks keep);
+/// unknown, a gap of 0 (the small recoil, no push).
+unsafe fn kh1_block(actor: usize, attacker: Option<i32>) {
+    if Build::current() != Build::Steam || rd::<i32>(actor + 0x70) != 0 || super::form::in_form() {
+        note("KH1's block: not run (not the Steam build, not on the ground, or a Drive Form)".to_string());
+        return;
+    }
+    let base = takeover::game_base();
+    if rd::<[u8; 15]>(base + CLASH_RECOIL_STEAM) != CLASH_RECOIL_BYTES || rd::<[u8; 10]>(base + BIG_RECOIL_STEAM) != BIG_RECOIL_BYTES {
+        note("KH1's block: KH1's clash recoils (0x14029D720 / 0x14029D5F0) aren't the expected code here; not run".to_string());
+        return;
+    }
+    let combat = pose::ptr(rd::<u32>(actor + 0x14C));
+    if combat < 0x10000 {
+        return;
+    }
+    let weapon = rd::<u64>(combat + 0x20) as usize;
+    let guard = if weapon >= 0x10000 { (rd::<u8>(weapon + 0x33) as i32).clamp(1, 99) } else { 1 };
+    let gap = attacker.map_or(0, |a| guard - a);
+    let big = gap < -40;
+    let mut record = [0i32; 16];
+    record[2] = gap;
+    let mut out = [0i32; 16];
+    let recoil: unsafe extern "system" fn(usize, *mut i32, *mut i32) = std::mem::transmute(base + if big { BIG_RECOIL_STEAM } else { CLASH_RECOIL_STEAM });
+    recoil(actor, record.as_mut_ptr(), out.as_mut_ptr());
+    wr(combat + 0x50, rd::<u32>(combat + 0x50) | if big { 0x20 } else { 0x10 });
+    if let Ok(mut p) = PUSH.lock() {
+        *p = None;
+    }
+    note(format!(
+        "KH2's guard stopped a hit, Guard Repel KH1: KH1's block, its {} (request {:#x}), guard priority {guard} against {} (gap {gap}){}",
+        if big { "big recoil" } else { "clash recoil" },
+        if big { 0x6F } else { 0x6E },
+        attacker.map_or("unknown".to_string(), |a| a.to_string()),
+        if !big && gap < 0 { ", pushed back by the gap" } else { "" }
+    ));
 }
 
 /// Each KH1 physics frame of Sora's, before it (`takeover::physics`): the repel's push back on

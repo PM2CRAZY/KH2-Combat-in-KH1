@@ -218,7 +218,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                 let fwd = glam::Vec2::new(f[0], f[2]).normalize_or(glam::Vec2::Y);
                 let yaw = if f[3].is_finite() { f[3] } else { fwd.x.atan2(fwd.y) };
                 let all_round = takeover::with_abilities(|a| a.guard_all_round) == Some(true);
-                let mut repel: Option<glam::Vec2> = None;
+                let mut repel: Option<(glam::Vec2, Option<i32>)> = None;
                 for &r in &ready {
                     if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
                         continue;
@@ -235,11 +235,14 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                     }
                     wr(r, rd::<u8>(r) | NO_EFFECT);
                     combat::clang([me[0] + toward.x * 40.0, me[1] - 60.0, me[2] + toward.y * 40.0]);
-                    repel.get_or_insert(toward);
+                    // (The attack's priority, for KH1's block at Guard Repel KH1: its data's
+                    // `+0x3C`, the record's `+0x2C` handle.)
+                    let data = pose::ptr(rd::<u32>(r + 0x2C));
+                    repel.get_or_insert((toward, (data > 0x10000).then(|| rd::<i32>(data + 0x3C))));
                     note(format!("Sora hit by {from:#x} in KH1's states: KH2's guard on the Keyblade (ATKP {atk}, refact self {refact}), no effect (frame {frame})"));
                 }
-                if let Some(t) = repel {
-                    super::combomods::guard_repel(actor, t.to_array(), refact);
+                if let Some((t, priority)) = repel {
+                    super::combomods::guard_repel(actor, t.to_array(), refact, priority);
                 }
             }
         }

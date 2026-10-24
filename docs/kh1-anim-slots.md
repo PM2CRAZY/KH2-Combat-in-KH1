@@ -1229,6 +1229,38 @@ same; nothing to switch. (The OG rewrite's controller lets any button cut a Hurt
 range id 14, "our reading", `character_core` `ActionKind::Hurt`; for the guard repel, borrowed
 cases only, that is earlier than KH2's exe. Not changed here.)
 
+### 7.x.3 The Guard Repel row: KH1's own block (m17 "(b)"; Checked (decomp) and (exe))
+
+Config > Movement > Guard Repel (KH1 | KH2, ini `guard_repel`, default KH2) picks what base Sora's
+KH2 guard (Dodge Roll KH2, motion 173's window) does when it stops a hit with `refact_self` 1. KH2:
+the repel above (motion 42, pushed back 200, Counterguard). KH1: what KH1's own guard gets.
+
+- KH1's guard row 0x3D (attack data 0x4DA8 in `btltbl.bin`, Checked (files)): bone 0x30, clash
+  type 2, its priority byte `+0x3C` 0, so `0x1402B3270` gives the object the Keyblade's priority
+  (weapon record `+0x33`, the weapon at combat state `+0x20`), clamped 1..99, and points its result
+  word (`+0x60`) at combat state `+0x50`. So KH1's guard is **not** a priority-100 guard (an older
+  note in `kh1-roll-guard-native.md` §3.3 said so): it is under 0x62.
+- KH1's clash side `0x1402B4BC0 (p, q)` with p the guard: p under 0x62 and type 2 (not a
+  directional winner), so p's owner gets a clash record (`0x1402BF060`): gap = p's priority less
+  q's, kind 7 when the gap is under -40, else 6; p's result word gets 0x10 (0x20 for kind 7).
+  Checked (decomp).
+- Sora's hit pass `0x14029BBD0` runs kind 6 with `0x14029D720` (request 0x6E, slot 72, the idle
+  queued, KH1's no-damage timer 8 frames, KH1's combo count one less, pushed back -gap x btltbl
+  `+0x1C` x stats `+0xC4` when the gap is below 0) and kind 7 with `0x14029D5F0` (request 0x6F, no
+  push). Checked (decomp); first bytes Checked (exe).
+- KH1's Counterattack (`0x140294220`) offers command 99 (row 0x3E) with KH1's Counterattack bit,
+  request 0x6E playing and the result word set: so a KH1 block is where KH1's Counterattack comes
+  from. This answers §3.4's "not found" in `kh1-roll-guard-native.md`.
+
+At KH1, `combomods::kh1_block` runs that recoil at once (the record's `+8` the gap), marks the
+result word and drops KH2's push. The attacker's priority: the pool attack whose hit bit our guard
+object's mask gained, or for a hit record its attack data's `+0x3C` (**Assumption**: enemy attack
+objects keep their data's priority). Unknown: gap 0. The attacker's own recoil is KH1's clash on
+our guard objects (priority 100) either way, so at KH1 the attacker recoils as against KH1's
+priority-100 guards, not as against KH1's own guard's Keyblade priority (**difference**, kept so
+the row only changes Sora's side). KH2's Counterguard needs the repel (42), so at KH1 only KH1's
+Counterattack follows a block.
+
 ### 7.y Guard Break against guards (Checked (files))
 
 The tester (m15 question 4: "(a) but read the mset"). `obj/W_EX010.mset` motion 165 (Steam

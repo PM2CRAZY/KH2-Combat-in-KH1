@@ -154,6 +154,10 @@ knockback_numbers = kh2\r\n\
 ; medium_hits: blow or flinch, with KH2's hit reactions: KH1's middle hits (20..29% of his max HP)\r\n\
 ;   knock base Sora away (blow) or only flinch him (flinch; 30% and up still knocks him away)\r\n\
 medium_hits = blow\r\n\
+; guard_repel: kh2 or kh1, what base Sora's KH2 guard (roll_style = kh2) does when it blocks a hit:\r\n\
+;   KH2's repel (its motion, pushed back 200, Counterguard) or KH1's own block (KH1's clash recoil,\r\n\
+;   pushed back by the priority gap, KH1's Counterattack); the Config menu's Movement list switches it\r\n\
+guard_repel = kh2\r\n\
 ; jump_style / glide_style: kh1 or kh2, KH1's or KH2's jump and glide for base Sora\r\n\
 jump_style = kh2\r\n\
 glide_style = kh2\r\n\
@@ -276,6 +280,9 @@ pub struct Settings {
     pub knockback_numbers: super::hitreact::Numbers,
     /// KH1's middle hits as KH2 flinches (`medium_hits = flinch`; blow by default; `hitreact`).
     pub medium_hits_flinch: bool,
+    /// KH2's guard repel when base Sora's KH2 guard blocks (`guard_repel = kh2`, the default), or
+    /// KH1's own block reaction (`kh1`; `combomods::guard_repel`).
+    pub guard_repel_kh2: bool,
     /// Skip the Gummi Ship's flights (`gummi = skip`, `gummi.rs`).
     pub gummi_skip: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
@@ -466,6 +473,7 @@ fn load(first: bool) -> Option<Settings> {
         styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false)), on(&text, "cure_style", "kh2", true), on(&text, "hit_reactions", "kh2", false)],
         knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),
         medium_hits_flinch: on(&text, "medium_hits", "flinch", false),
+        guard_repel_kh2: on(&text, "guard_repel", "kh2", true),
         gummi_skip: on(&text, "gummi", "skip", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
