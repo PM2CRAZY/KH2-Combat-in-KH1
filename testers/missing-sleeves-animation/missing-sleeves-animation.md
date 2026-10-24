@@ -227,3 +227,6 @@ go ahead
 
 ^m12
 
+keep researching until we have a good looking animations that emulate kh2s animations as close as possible while still making it look natural to kh1's model
+
+go ahead
