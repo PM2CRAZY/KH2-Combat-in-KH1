@@ -176,4 +176,7 @@
 
 ^m10
 
+I want you to investigate into the kh2 steam c decomp how exactly soras animations work (the hair, cloth, coat, etc) do not make assumptions, come back once you understand how to implement everything properly so that the animations look proper. 
+
+go ahead
 
