@@ -191,7 +191,9 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         // hurt shape of his there (`Fate::Evaded` above): every attack with no effect, no spark.
         // Before the guard, as KH2's test order has it. Also KH2's Quick Run on its KH1 state
         // (`quickrun::invulnerable`: its `fmab` frames from its start, 0 / 8 / 12 / 16 by level).
-        if super::shared::active() && (super::kh2slots::invulnerable(actor) || super::quickrun::invulnerable(actor)) {
+        // And KH2's dodge roll on KH1's roll (`combomods::roll_invulnerable`: the level's
+        // `dodge_roll_star_time` frames, 10 / 16 / 24 / 32).
+        if super::shared::active() && (super::kh2slots::invulnerable(actor) || super::quickrun::invulnerable(actor) || super::combomods::roll_invulnerable(actor)) {
             for &r in &ready {
                 if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
                     continue;

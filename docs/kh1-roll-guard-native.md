@@ -1,8 +1,8 @@
 # Dodge Roll, Guard and Counterguard native (research, t480 round)
 
 Research for the tester thread `testers/dodge-roll-guard-and-counterguard-native/`. All addresses
-are the **Steam** build's (`0x140000000` + RVA) unless marked Epic. Nothing here is implemented
-yet.
+are the **Steam** build's (`0x140000000` + RVA) unless marked Epic. Sections 5..7 are what was
+built from it.
 
 ## 1. What we have now (Checked (code))
 
@@ -144,3 +144,31 @@ makes for KH2's windows.
 Performance: each step is a slot (built once), a row copy (once) and a check in hooks we already
 have (control step, hurt, guard_step); no new per-frame hook. It removes the borrow's per-frame
 KH2 controller run during rolls and guards.
+
+## 5. Built: KH2's dodge roll on KH1's roll (tA)
+
+- **KH1's request table** (`xa_ex_0010.mset`, Checked (files)): request `0xDC` is `0xA075`: slot
+  117, kind 2, **travel flag (bit 15) set**: KH1 moves him by the slot's root (H10), as its ground
+  combo. Slot 117: 38 frames at 60 fps, "may be left" (type 0) at 30, foot effects (type 4) and four
+  floor sounds (type 6, material kinds 5 / 26 / 1 / 4). No untouchable event in the motion: where
+  KH1's flag `0x40` comes from for its roll is still **not found**.
+- **KH1's roll start `0x1402C9E60`** (Checked (decomp)): `0x140297F30 (actor, 12.0)` is KH1's
+  no-damage timer (`+0xC` = 12.0, flags `0x80 | 0x100000`; the same function every reaction calls
+  with 30.0, `docs/kh1-hit-reactions-native.md` §3), then flag `0x100000` again, request
+  `0xDC | 0x1000000`, the idle queued (blend 8). So KH1's roll is 12 frames of no damage (hits still
+  arrive, no damage and no reaction), not a speed (§3.2's "unconfirmed" settled).
+- **What runs now** with Dodge Roll at KH2 (`combomods::roll_press`, from `shared::control`), Square
+  fresh on the ground with the stick pushed and KH2's Dodge Roll equipped, after the guard press
+  (stick at rest) didn't take it: KH1's deep-water test, facing set along the stick, `+0x2C` 0, KH1's
+  roll start, KH1's timer flags and `+0xC` put back as they were. `kh2slots`' roll spec points
+  `0xDC` at our slot of KH2's 209 on template 117 while the style is KH2 (KH1's own slot at KH1):
+  baked with KH2's root travel in its H10 (the request's travel flag), KH1's floor sounds and foot
+  effects rescaled, KH1's "may be left" from KH2's fall-check event (frame 34) to the end in place of
+  KH1's 30. `hurt` evades every hit while our slot's time is under the level's
+  `dodge_roll_star_time` (10 / 16 / 24 / 32, `combomods::roll_invulnerable`), and while its request
+  is pending. Square held through it: KH2's Quick Run (`quickrun::start`) at KH2's check frame,
+  even before KH1 lets him act. The borrow stays for forms, an unbuilt slot, or KH2's Square with no
+  roll (Quick Run only).
+- **Assumptions**: KH1's ground step moves him by `+0x2C` while the action flag is set (as
+  `start_own`); nothing else reads flag `0x100000` as "rolling"; unbaked (`kh1_bake = off`), the
+  slot keeps KH1's roll travel stretched over KH2's length.

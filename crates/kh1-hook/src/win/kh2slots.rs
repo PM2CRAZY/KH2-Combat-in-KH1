@@ -128,7 +128,19 @@ const fn reaction_spec(i: usize) -> Spec {
     Spec { motion, stands_for, request, kind: Kind::HitReactions }
 }
 
-const SPECS: [Spec; 23] = [
+/// KH2's dodge roll on KH1's own roll (the tester, thread dodge-roll-guard-and-counterguard-native:
+/// "dodge roll its own slot ... use kh1s as a base so its native"; `docs/kh1-roll-guard-native.md`
+/// §5). KH1's roll start (Steam `0x1402C9E60`: request `0xDC | 0x1000000`, the idle queued after,
+/// its 12-frame no-damage timer) runs at either Dodge Roll style; at KH2 request `0xDC` plays our
+/// slot of KH2's motion 209 on KH1's roll slot 117 as template. KH1's request table
+/// (`xa_ex_0010.mset`, Checked (files)): `0xDC` is `0xA075`, slot 117, kind 2, travel flag (bit 15)
+/// set, so KH1 moves him by the slot's root (H10): baked, KH2's root travel (`travel`). KH1's slot
+/// 117 is 38 frames at 60 fps, "may be left" at 30, four floor sounds and foot effects (Checked
+/// (files)); ours keeps the floor sounds and foot effects rescaled and is left from KH2's
+/// fall-check event (`roll_free`).
+const ROLL: Spec = Spec { motion: character_core::motion::DODGE_ROLL, stands_for: 117, request: 0xDC, kind: Kind::DodgeRoll };
+
+const SPECS: [Spec; 24] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -152,6 +164,7 @@ const SPECS: [Spec; 23] = [
     reaction_spec(3),
     reaction_spec(4),
     reaction_spec(5),
+    ROLL,
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -362,12 +375,18 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     if ours.is_some_and(|o| o.own_sounds) {
         tracks.retain(|t| t.kind != ks::SOUND);
     }
+    // (KH2's dodge roll on KH1's roll: KH2's free frame as KH1's "may be left", `roll_free`.)
+    if kind == Kind::DodgeRoll {
+        tracks.retain(|t| t.kind != ks::CAN_LEAVE);
+        tracks.push(EventTrack::level(ks::CAN_LEAVE, 0, &[(roll_free(clip) as f32, clip.length.max(1) as f32)]));
+    }
     if cast {
         let more: Vec<EventTrack> = cast_follow(clip, finisher_cast).into_iter().filter(|t| !tracks.iter().any(|o| o.kind == t.kind)).collect();
         tracks.extend(more);
     }
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
-    let travel = kind == Kind::GroundCombo && travels(requests[request]);
+    // (KH1's roll request has it too: KH2's roll moves him by its root, `ROLL`.)
+    let travel = matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request]);
     let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, stands_for, (motion, field), frames, &tracks, travel)) {
         Some(Ok(block)) => (block, true),
         Some(Err(e)) => {
@@ -720,6 +739,15 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own:
         }
     }
     out
+}
+
+/// The frame KH2's dodge roll may be left from: its fall-check event (the OG rewrite's DodgeRoll
+/// action: other actions may cut it there and the stick walks out of it; frame 34 for Sora), else
+/// its last frame. KH1's "may be left" (type 0) from there clears the action flags, so KH1's
+/// control step walks, jumps, rolls or attacks out of it.
+fn roll_free(clip: &character_core::Clip) -> u32 {
+    let len = clip.length.max(1);
+    clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map_or(len - 1, |e| e.frame).min(len - 1)
 }
 
 /// What may follow a KH2 cast on KH1's cast state (the tester, thread kh2-magic-and-reflect-native,

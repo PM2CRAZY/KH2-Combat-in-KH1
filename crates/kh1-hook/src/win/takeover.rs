@@ -923,6 +923,28 @@ pub fn kh2_air_dodge_growth() -> Option<(f32, f32)> {
     }
 }
 
+/// KH2's dodge roll level and its invulnerable frames (`fmab` `dodge_roll_star_time`, 10 / 16 / 24 /
+/// 32 by level) for Sora's Dodge Roll now (`combomods::roll_press`, the native roll). The last answer
+/// while the controller is busy. `None` without KH2's Dodge Roll.
+pub fn kh2_dodge_roll_growth() -> Option<(u8, f32)> {
+    static LAST: Mutex<Option<(u8, f32)>> = Mutex::new(None);
+    let read = DRIVER.try_lock().ok().and_then(|d| {
+        d.as_ref().map(|d| {
+            let level = d.character.abilities.dodge_roll;
+            (level > 0).then(|| (level, d.character.growth_level(level).map_or(0.0, |g| g.dodge_roll_star_time).max(0.0)))
+        })
+    });
+    match read {
+        Some(v) => {
+            if let Ok(mut l) = LAST.lock() {
+                *l = v;
+            }
+            v
+        }
+        None => LAST.lock().ok().and_then(|l| *l),
+    }
+}
+
 /// KH2's Quick Run numbers for Sora's Quick Run level now (`quickrun`, its native state): the
 /// level (1 LV1 .. 4 MAX) and its `fmab` record (KH2's start `0x1403A9830` reads `+0xC` the time,
 /// `+0x10` the speed, `+0x14` the brake, `+0x18` the stop brake, `+0x1C` the invulnerable frames;

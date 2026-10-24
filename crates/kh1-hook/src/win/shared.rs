@@ -260,7 +260,11 @@ pub fn control(s: &Seen) -> u32 {
     };
     let quick_run = s.state == 0 && s.square && s.quick_run && roll_frames > 0.0 && (roll_over || roll_frames >= s.quick_run_check);
     let mut borrow = NONE;
-    if s.can_act {
+    // (KH2's roll on KH1's roll, `combomods::roll_press`: KH1 doesn't let him act until KH2's
+    // fall-check frame, but KH2 turns the held roll into Quick Run at its own check frame before
+    // that, as the OG rewrite's DodgeRoll action does: that one press goes through.)
+    let kh2_roll = quick_run && roll_kh2 && unsafe { super::kh2slots::playing_motion(super::takeover::sora_actor()) } == Some(character_core::motion::DODGE_ROLL);
+    if s.can_act || kh2_roll {
         if quick_run {
             ROLL_HELD.store(false, Ordering::Relaxed);
             ROLL_FRAMES.store(0, Ordering::Relaxed);
@@ -282,6 +286,14 @@ pub fn control(s: &Seen) -> u32 {
         } else if s.state == 0 && square_fresh && roll_kh2 && super::combomods::guard_press() {
             // KH2's guard on KH1's states (stick at rest, Guard equipped): our request for KH2's
             // guard press, no borrow (`combomods::guard_press`). The press is KH2's.
+            return KH1_ACTION_BIT;
+        } else if s.state == 0 && square_fresh && roll_kh2 && super::combomods::roll_press() {
+            // KH2's dodge roll on KH1's own roll (stick pushed, KH2's Dodge Roll equipped): KH1's
+            // roll start with our slot of KH2's 209 on its request, no borrow
+            // (`combomods::roll_press`). The press is KH2's. Square held through it turns into
+            // KH2's Quick Run at KH2's check frame (below).
+            ROLL_HELD.store(true, Ordering::Relaxed);
+            ROLL_FRAMES.store(0, Ordering::Relaxed);
             return KH1_ACTION_BIT;
         } else if s.state == 0 && square_fresh && roll_kh2 {
             // (Nothing of KH2's for Square without those abilities: KH2 would only take him and

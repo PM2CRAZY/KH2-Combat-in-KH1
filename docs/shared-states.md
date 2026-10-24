@@ -29,7 +29,7 @@ at all). Whose **physics numbers** move him is one setting for every move, `phys
 | KH1's own air attacks, air casts, launches | KH1's states | KH1's | (the Aerial Combo / Magic styles at KH1) | their own lunge / hop height / halved speed, on KH2's gravity, fall cap and drift | KH1's |
 | KH2's borrowed moves (below) | KH2 borrows him | | | KH2's | KH1's gravity, fall, jump, walk / run, air steering and drag in KH2's controller; their own heights, speeds and root motion |
 | Aerial Dodge | KH2 borrows him | double jump with Jump at KH1 too | the same |
-| Dodge Roll (Square on the ground) | KH1 at KH1; KH2 borrows at KH2 | KH1's roll and guard; Square held through it: KH2's Quick Run (Quick Run equipped); without KH1's Dodge Roll, Square while moving: KH2's Quick Run | KH2's roll, guard, Quick Run (with them equipped) |
+| Dodge Roll (Square on the ground) | KH1 at KH1; at KH2 KH1's own roll with KH2's 209 on its request (tA), KH2's guard on KH1's states (t489), the borrow only as a fallback | KH1's roll and guard; Square held through it: KH2's Quick Run (Quick Run equipped); without KH1's Dodge Roll, Square while moving: KH2's Quick Run | KH2's roll, guard, Quick Run (with them equipped) |
 | Aerial Combo | KH1's rows at KH1; KH2 borrows at KH2 | KH1's combo, KH2 borrowing him for its ability moves (below) | KH2's combo |
 | Magic / Aerial Magic | KH1 casts at KH1; KH2 borrows at KH2 | KH1's spells | KH2's spells; KH1-only spells keep KH2's cast motions |
 | Reflect, Drive | KH2 borrows him | always KH2's | always KH2's |
