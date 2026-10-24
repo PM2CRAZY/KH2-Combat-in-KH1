@@ -140,7 +140,20 @@ const fn reaction_spec(i: usize) -> Spec {
 /// fall-check event (`roll_free`).
 const ROLL: Spec = Spec { motion: character_core::motion::DODGE_ROLL, stands_for: 117, request: 0xDC, kind: Kind::DodgeRoll };
 
-const SPECS: [Spec; 24] = [
+/// KH2's glide motions on KH1's glide requests (the tester, kh2-glide-in-kh1s-glide-state: KH2's
+/// glide in KH1's glide state, `glide`). KH1's request table (`xa_ex_0010.mset`, Checked (files),
+/// `docs/kh1-anim-slots.md` §1.5): 0x71 / 0x72 slots 75 / 76 (gliding slow / fast), 0x73 / 0x74
+/// slots 77 / 78 (banking). At Glide KH2 KH1's glide state asks 0x71 for KH2's glide 205 and
+/// 0x73 / 0x74 for its banking 206 / 207 (`P_EX100.mset`, Checked (files)); 0x72 also plays 205
+/// (KH2 has one glide motion at any speed). The hover 208 is a request of ours (`kh1rows`).
+const GLIDES: [(u16, usize, usize); 4] = [(205, 75, 0x71), (205, 76, 0x72), (206, 77, 0x73), (207, 78, 0x74)];
+
+const fn glide_spec(i: usize) -> Spec {
+    let (motion, stands_for, request) = GLIDES[i];
+    Spec { motion, stands_for, request, kind: Kind::Glide }
+}
+
+const SPECS: [Spec; 28] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -165,6 +178,10 @@ const SPECS: [Spec; 24] = [
     reaction_spec(4),
     reaction_spec(5),
     ROLL,
+    glide_spec(0),
+    glide_spec(1),
+    glide_spec(2),
+    glide_spec(3),
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking

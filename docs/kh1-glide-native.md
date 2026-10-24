@@ -187,3 +187,24 @@ step, so KH1's mover and its collision move him; against a wall KH1's mover slid
 no wall rule, §7). KH1's +0.4 ramp, its 8 / 16 top speeds and its saw-tooth fall don't run for Sora. **Checked
 (decomp)** both games. Not checked: whether KH2's collision cuts `+0x20` on a head-on wall (our velocity isn't cut
 by KH1's mover: **Assumption** that KH2's isn't either).
+
+### 8.3 The pre-step: turn, hover, motions
+
+State 0x15's pre-step (`0x1402B2880`) wrapped. For Sora at Glide KH2, each frame:
+- **Hover or glide.** The first pre-step picks the hover with the stick neutral, else the glide (`0x1403A8369`).
+  The stick takes the hover into the glide with KH2's stored launch speed put back (`0x140423840` → the glide's
+  enter `0x1403CBD30`); the glide never goes back to the hover. **Checked (decomp)**
+- **Turn.** Toward the stick (`takeover::stick_now`, the stick as KH2 reads it for base Sora) at most the growth
+  level's turn speed (`+0x3C`, set by the glide's enter `0x140423B90`) a 60 Hz frame, through KH1's facing set
+  `0x140297E10` (its `+0x374` bit `0x1000` lock kept) and `+0x150`, as KH1's pre-step sets them. None in the hover.
+  **Checked (decomp)**
+- **Motion.** KH2's pick (`0x140423A70`): 205; 206 / 207 when the stick is more than dot 0.98 off his facing, 206
+  with the cross product of facing and stick pointing up in KH2's y-down world; 208 in the hover; blend 16. Asked
+  every frame through KH1's request `0x14029F7C0` (Steam), which leaves a motion already playing alone. **Checked
+  (decomp)**; that `0x140142120` is `facing x stick` in that order is an **Assumption** (it decides which side
+  is 206), and so is that KH1's world and KH2's turn the same way (both y-down).
+- **Slots.** KH2's 205 / 206 / 207 play on KH1's glide requests 0x71 (and 0x72) / 0x73 / 0x74 at Glide KH2
+  (`kh2slots::GLIDES`, slots 75..78 as templates, so KH1's own looping glide slots); the hover 208 is a request of
+  ours (`kh1rows::OURS`, "Glide hover", KH1's air swing as its template). That template holds at its end, so the
+  pre-step puts the hover's time back to 0 at its end, as KH2 loops it (**Assumption**: KH2 loops 208).
+- **Water.** KH1's water check from the glide (`0x1402C12B0`) still runs at the end, as KH1's pre-step ends.

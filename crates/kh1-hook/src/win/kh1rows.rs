@@ -144,8 +144,10 @@ pub const NO_ROW: u8 = u8::MAX;
 /// ability 96: Attack during the repel, an attack row). The Aerial Dodge (motion 202, its request
 /// only, `combomods::aerial_dodge`) and Quick Run (the tester, quick-run-native: its run 203 and its
 /// stop 204, their requests only, asked by our KH1 state for it, `quickrun`; KH1's ground swing as
-/// their template, its sounds left out).
-pub const OURS: [Ours; 14] = [
+/// their template, its sounds left out). KH2's glide hover (the tester, kh2-glide-in-kh1s-glide-state:
+/// motion 208, its request only, asked by KH1's glide state at Glide KH2, `glide`; KH1's air swing
+/// as its template, its sounds left out).
+pub const OURS: [Ours; 15] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
@@ -160,6 +162,7 @@ pub const OURS: [Ours; 14] = [
     Ours { name: "Aerial Dodge", kh2_row: NO_ROW, motion: character_core::motion::AERIAL_DODGE, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: Some(AERIAL_DODGE_FRAMES), own_sounds: true },
     Ours { name: "Quick Run", kh2_row: NO_ROW, motion: super::quickrun::RUN_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
     Ours { name: "Quick Run stop", kh2_row: NO_ROW, motion: super::quickrun::STOP_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
+    Ours { name: "Glide hover", kh2_row: NO_ROW, motion: character_core::motion::GLIDE_HOVER, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
 ];
 
 /// The Aerial Dodge's slot length (60 Hz frames): longer than any of its rises reaches its apex

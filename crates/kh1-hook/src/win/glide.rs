@@ -38,6 +38,7 @@ const TABLE_RVA: Rva = Rva(0x2DB4240);
 const ENTRY: usize = 0x40;
 const ENTER: usize = 0x08;
 const EXIT: usize = 0x10;
+const PRE_STEP: usize = 0x18;
 const STEP: usize = 0x20;
 const JUMP_PRESS: usize = 0x38;
 const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
@@ -58,6 +59,21 @@ const HOVER_DRAG: f32 = 0.9;
 /// its glide motions (16.0: `0x140423A70`, `0x140423840`).
 const GLIDE_REQUEST: u32 = 0x71;
 const BLEND: f32 = 16.0;
+/// KH1's glide requests for KH2's motions (`kh2slots`: at Glide KH2 they play KH2's): 0x71 the
+/// glide (205), 0x73 / 0x74 KH1's two banking requests (206 / 207). The hover (208) is a request of
+/// ours (`kh1rows`), else KH1's 0x71.
+const TURN_A_REQUEST: u32 = 0x73;
+const TURN_B_REQUEST: u32 = 0x74;
+/// KH2's banking test (`0x140423A70`): the stick more than this off his facing (a dot).
+const BANK_DOT: f32 = 0.98;
+/// KH1's facing set (Steam `0x140297E10 (actor, angle)`: `+0x30..+0x3C`, not while `+0x374` bit
+/// `0x1000` holds it; the glide pre-step's own call) and its water check from the glide (Steam
+/// `0x1402C12B0 (actor, input)`: water ends the glide into the swim state 0x11 with its splash, not
+/// in world 0xD room 8). Checked (decomp). Steam only.
+const SET_FACING_STEAM: usize = 0x297E10;
+const WATER_STEAM: usize = 0x2C12B0;
+const SLOT_TIME: usize = 0x16C;
+
 /// KH1's combat state's glide timer (`[+0x148] +0x100`) and `+0x1CC` bit 0 (enter clears it, exit
 /// sets it).
 const TIMER: usize = 0x100;
@@ -83,6 +99,7 @@ pub(crate) static RUN: Mutex<Option<Glide>> = Mutex::new(None);
 
 static ORIG_ENTER: AtomicUsize = AtomicUsize::new(0);
 static ORIG_EXIT: AtomicUsize = AtomicUsize::new(0);
+static ORIG_PRE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
 static ORIG_FALL_JUMP: AtomicUsize = AtomicUsize::new(0);
 
@@ -124,9 +141,10 @@ pub unsafe fn install(base: usize) {
         return;
     }
     let table = base + TABLE_RVA;
-    let slots: [(usize, &AtomicUsize, usize); 4] = [
+    let slots: [(usize, &AtomicUsize, usize); 5] = [
         (table + STATE as usize * ENTRY + ENTER, &ORIG_ENTER, enter as *const () as usize),
         (table + STATE as usize * ENTRY + EXIT, &ORIG_EXIT, exit as *const () as usize),
+        (table + STATE as usize * ENTRY + PRE_STEP, &ORIG_PRE, pre_step as *const () as usize),
         (table + STATE as usize * ENTRY + STEP, &ORIG_STEP, step as *const () as usize),
         (table + FALL_STATE as usize * ENTRY + JUMP_PRESS, &ORIG_FALL_JUMP, fall_jump as *const () as usize),
     ];
@@ -296,5 +314,109 @@ unsafe extern "system" fn step(actor: usize, disp: *mut [f32; 4]) -> usize {
     drop(lock);
     *disp = [vel[0] * dt, fall * dt, vel[1] * dt, 0.0];
     wr(actor + 0x3C0, [vel[0], fall, vel[1], vel[0].hypot(vel[1])]);
+    0
+}
+
+type PreFn = unsafe extern "system" fn(usize, usize) -> usize;
+
+fn wrap_angle(a: f32) -> f32 {
+    let mut a = a % std::f32::consts::TAU;
+    if a > std::f32::consts::PI {
+        a -= std::f32::consts::TAU;
+    } else if a < -std::f32::consts::PI {
+        a += std::f32::consts::TAU;
+    }
+    a
+}
+
+/// The request that plays KH2's `motion` here (`kh2slots`).
+fn request_for(motion: u16) -> u32 {
+    use character_core::motion::{GLIDE_HOVER, GLIDE_TURN_A, GLIDE_TURN_B};
+    match motion {
+        GLIDE_TURN_A => TURN_A_REQUEST,
+        GLIDE_TURN_B => TURN_B_REQUEST,
+        GLIDE_HOVER => super::kh1rows::by_motion(GLIDE_HOVER)
+            .map(super::kh1rows::request)
+            .filter(|&r| super::kh1rows::installed() && super::kh2slots::has(r as usize, GLIDE_HOVER))
+            .unwrap_or(GLIDE_REQUEST),
+        _ => GLIDE_REQUEST,
+    }
+}
+
+/// State 0x15's pre-step (`(actor, input)`, KH1's think, before the step): KH1's (`0x1402B2880`:
+/// its turn of 2° / 1° a frame, its motion picks at 30°) for Donald and Goofy; for Sora KH2's:
+/// - the hover (`0x140423840`): the stick takes it into the glide, KH2's stored launch speed put
+///   back (the glide's enter `0x1403CBD30`); the glide never goes back to the hover;
+/// - the turn (the glide's input step `0x140423BC0` at the turn speed its enter set, growth
+///   `+0x3C`, `0x140423B90`): toward the stick, at most that much a 60 Hz frame;
+/// - the motion (`0x140423A70`): 205, or 206 / 207 when the stick is more than dot 0.98 off his
+///   facing (206 with the turn's cross product up in KH2's y-down world, so the stick at a positive
+///   angle from his facing, as KH1's), 208 in the hover, blend 16 (`0x140423840`), each frame (a
+///   motion already playing is left alone, as KH1's request does);
+/// - then KH1's water check, as its pre-step ends.
+unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
+    let mine = ours(actor) && RUN.try_lock().ok().is_some_and(|g| g.is_some());
+    let g = if mine { takeover::kh2_glide_growth() } else { None };
+    let Some((_, g)) = g else {
+        let f: PreFn = std::mem::transmute(ORIG_PRE.load(Ordering::Acquire));
+        return f(actor, input);
+    };
+    use character_core::motion::{GLIDE, GLIDE_HOVER, GLIDE_TURN_A, GLIDE_TURN_B};
+    let base = takeover::game_base();
+    let dt = super::shared::physics::dt();
+    let stick = takeover::stick_now(actor);
+    let tilt = stick[0].hypot(stick[1]);
+    let moving = tilt > 0.0;
+    let hover = {
+        let Ok(mut lock) = RUN.lock() else { return 0 };
+        let Some(r) = lock.as_mut() else { return 0 };
+        let was = r.hover;
+        let hover = was.unwrap_or(!moving) && !moving;
+        if was == Some(true) && !hover {
+            if let Some(v) = r.launch {
+                r.vel = v;
+            }
+            note("the stick takes the hover into the glide".to_string());
+        } else if was.is_none() {
+            note(if hover { "the stick neutral: the hover (208)".to_string() } else { "the glide (205)".to_string() });
+        }
+        r.hover = Some(hover);
+        hover
+    };
+    let mut facing: f32 = rd(actor + 0x3C);
+    if !hover && moving {
+        let want = stick[0].atan2(stick[1]);
+        let most = (g.glide_turn_speed * dt).max(0.0);
+        let f = wrap_angle(facing + wrap_angle(want - facing).clamp(-most, most));
+        let set: unsafe extern "system" fn(usize, f32) = std::mem::transmute(base + SET_FACING_STEAM);
+        set(actor, f);
+        wr(actor + 0x150, f);
+        facing = rd(actor + 0x3C);
+    }
+    let motion = if hover {
+        GLIDE_HOVER
+    } else if moving {
+        let (fx, fz) = (facing.sin(), facing.cos());
+        let (sx, sz) = (stick[0] / tilt, stick[1] / tilt);
+        if fx * sx + fz * sz < BANK_DOT {
+            if fz * sx - fx * sz > 0.0 { GLIDE_TURN_A } else { GLIDE_TURN_B }
+        } else {
+            GLIDE
+        }
+    } else {
+        GLIDE
+    };
+    let request: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_RVA);
+    request(actor, request_for(motion), BLEND);
+    // (The hover's slot is made on an air swing of KH1's, which holds at its end: kept going round
+    // as KH2 loops it. KH1's glide slots loop as KH1's own glide has them.)
+    if let Some((GLIDE_HOVER, t)) = super::kh2slots::now_playing(actor) {
+        let len = super::pose::kh2().and_then(|k| k.character.moveset.clips.get(&GLIDE_HOVER).map(|c| c.length as f32));
+        if len.is_some_and(|len| len > 1.0 && t + dt >= len) {
+            wr(actor + SLOT_TIME, 0.0f32);
+        }
+    }
+    let water: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + WATER_STEAM);
+    water(actor, input);
     0
 }
