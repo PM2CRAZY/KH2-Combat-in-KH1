@@ -61,4 +61,6 @@
 
 ^m2
 
+for everything that isn't native yet start a new thread for each and start the research into each, use the kh1 and kh2 decomps (steam c code)
 
+go ahead
