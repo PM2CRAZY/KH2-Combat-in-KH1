@@ -486,6 +486,9 @@ impl Growth {
                 Mode::All => ch.abilities = growth::all(),
                 Mode::Kh1 => self.frames = 59,
             }
+            if self.mode != Mode::Kh1 {
+                super::styles::note_abilities(&ch.abilities);
+            }
         }
         // Beside the level-up's own box when it comes (the user: KH1 shows several at once): for
         // up to 3 s after learning, added to KH1's when it is up; then alone if the box is free.
@@ -782,6 +785,8 @@ impl Growth {
             log(&format!("abilities on with nothing on the other side yet: KH1's [{}] while KH2 has him; KH2's [{}] while KH1's states have him", names(k1), names(k2)));
         }
         if self.mode == Mode::Kh1 {
+            // (A combo ability only KH2 has makes the combo KH2's: `styles::kh2`.)
+            super::styles::note_abilities(&from_kh1);
             ch.abilities = from_kh1;
         }
         self.seen = Some(now);

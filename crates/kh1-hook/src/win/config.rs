@@ -311,7 +311,7 @@ fn value(what: Row) -> bool {
     match what {
         Row::Camera => camera::KH2.load(Ordering::Relaxed),
         Row::Physics => physics::rule() == physics::Rule::Kh2,
-        Row::Style(k) => styles::kh2(k),
+        Row::Style(k) => styles::setting(k),
         Row::Gummi => super::gummi::SKIP.load(Ordering::Relaxed),
         Row::Debug => super::debugmenu::enabled(),
     }

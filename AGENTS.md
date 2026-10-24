@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 488 (testing branch: KH2-only combo abilities make the combo KH2's)
+- The tester (KH2's combo row selection, m15): "go with the recommended choice you had then" ((b): KH2's picker and rules) and "yes only the ones kh2 doesn't have". With Finishing Plus, Negative Combo or Berserk Charge (107) equipped, `styles::kh2(GroundCombo | AirCombo)` reads KH2 whatever the setting; `styles::setting` keeps the Config row showing the player's choice; `menu` feeds `styles::note_abilities` on each ability change (logged). Combo Plus / Air Combo Plus / Combo Master (KH1's own) switch nothing. Berserk Charge isn't in the ability list yet. docs/kh1-move-styles.md.
+
 ### 2026-10-24: Stage 487 (testing branch: KH2's stop at an air cast)
 - The tester (m3 answer 2 (a), "with the exception to drive forms for now"). `shared::physics::cast_stops` (from `kh1_spell_start`, air state 2, base Sora, physics KH2): sideways speed 0 and KH1's arc reset to a fall from rest, then KH2's gravity and the cast's no-gravity hold (range 3). KH1's own air cast keeps 0.7 of the speed and the rise (`0x1402A3600`, Checked (decomp)). Assumption: KH1 doesn't move him on the ground while its action flag is set. docs §4d.
 

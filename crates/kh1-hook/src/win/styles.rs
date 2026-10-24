@@ -86,10 +86,51 @@ fn init() {
     });
 }
 
-/// Base Sora uses KH2's moves of this kind (ignoring Drive Forms: callers check `form::in_form`).
-pub fn kh2(kind: Kind) -> bool {
+/// The Config menu's setting for this kind (KH2's or KH1's), as the player chose it.
+pub fn setting(kind: Kind) -> bool {
     init();
     kind.cell().load(Ordering::Relaxed)
+}
+
+/// Base Sora uses KH2's moves of this kind (ignoring Drive Forms: callers check `form::in_form`):
+/// the setting, and for the Base / Aerial Base Combo also a combo ability only KH2 has equipped
+/// (`kh2_combo_ability`): then the combo is KH2's whatever the setting says.
+pub fn kh2(kind: Kind) -> bool {
+    setting(kind) || (matches!(kind, Kind::GroundCombo | Kind::AirCombo) && KH2_COMBO_ABILITY.load(Ordering::Relaxed))
+}
+
+/// A combo ability KH1 doesn't have is equipped (`note_abilities`).
+static KH2_COMBO_ABILITY: AtomicBool = AtomicBool::new(false);
+
+/// The combo abilities only KH2 has (the tester, combo row selection m15: "(b)" with "(i) only the
+/// ones kh2 doesn't have"): Finishing Plus, Negative Combo and Berserk Charge. KH1 has Combo Plus,
+/// Air Combo Plus and Combo Master itself, so they don't switch anything. With one equipped, a KH1
+/// combo setting plays as Base / Aerial Base Combo KH2 (KH2's row picker and KH2's combo rules on
+/// KH1's rows), since KH1's own combo has no such rule to apply.
+pub fn kh2_combo_ability(a: &character_core::Abilities) -> bool {
+    a.finishing_plus > 0 || a.negative_combo > 0 || a.equipped.contains(&character_core::BERSERK_CHARGE)
+}
+
+/// Sora's abilities as KH1's menu gives them (`menu`, base Sora's own: a Drive Form's don't count),
+/// for `kh2`. Logged when the combo switches because of them.
+pub fn note_abilities(a: &character_core::Abilities) {
+    let on = kh2_combo_ability(a);
+    if KH2_COMBO_ABILITY.swap(on, Ordering::Relaxed) != on {
+        let which = [(a.finishing_plus > 0, "Finishing Plus"), (a.negative_combo > 0, "Negative Combo"), (a.equipped.contains(&character_core::BERSERK_CHARGE), "Berserk Charge")]
+            .iter()
+            .filter(|w| w.0)
+            .map(|w| w.1)
+            .collect::<Vec<_>>()
+            .join(", ");
+        super::log(&format!(
+            "move style: a combo ability only KH2 has is {} ({}): the Base / Aerial Base Combo play as {} (settings: Base Combo {}, Aerial Base Combo {})",
+            if on { "equipped" } else { "no longer equipped" },
+            if on { which.as_str() } else { "none" },
+            if on { "KH2's" } else { "their settings say" },
+            if setting(Kind::GroundCombo) { "KH2" } else { "KH1" },
+            if setting(Kind::AirCombo) { "KH2" } else { "KH1" }
+        ));
+    }
 }
 
 /// Base Sora uses KH1's moves of this kind now: not in a Drive Form, and set to KH1.

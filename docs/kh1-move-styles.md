@@ -35,6 +35,20 @@ Unverified in game: that KH1's command step needs nothing more than its state to
 row; that KH1's can-act test opens only after a swing's recovery (so the stick doesn't hand him
 back between swings); KH1's own hit reactions mid-combo.
 
+### KH2-only combo abilities make the combo KH2's (testing branch)
+
+The tester (thread "KH2's combo row selection", m15): option (b), "(i) only the ones kh2 doesn't
+have". With Finishing Plus, Negative Combo or Berserk Charge equipped (KH1 has no such rule for
+its own combo), the Base Combo and Aerial Base Combo play as if set to KH2, whatever the Config
+menu says: KH2's row picker and KH2's combo rules (length, finishers, Finishing Plus's chain) on
+KH1's own rows (`docs/kh1-anim-slots.md` §7), not KH1's own combo. Combo Plus, Air Combo Plus and
+Combo Master are KH1's own abilities too and switch nothing. `styles::kh2` reads it
+(`styles::note_abilities`, fed by `menu` each time KH1's menu changes Sora's abilities); the Config
+row still shows the player's setting (`styles::setting`), and taking the ability off brings the
+setting back. The log says when it switches ("move style: a combo ability only KH2 has is
+equipped"). Base Sora only (Drive Forms keep their own movesets). Berserk Charge isn't in the mod's
+ability list yet (MP Charge comes later), so today only the first two switch it.
+
 ## Magic
 
 Which style applies is picked when the spell is chosen (or KH1 starts it): Aerial Magic if KH2
