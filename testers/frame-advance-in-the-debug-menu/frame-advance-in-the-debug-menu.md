@@ -23,6 +23,7 @@
 - [17. Assistant: Good lead, thanks. I followed it into the Steam exe this tim](#^m17)
 - [18. Mr Bugs: 130000 0x2a23e0 - model render](#^m18)
 - [19. Assistant: t426](#^m19)
+- [20. Mr Bugs: also if you didn't make the correction "100000 0xle5d90" the](#^m20)
 
 ---
 
@@ -305,3 +306,6 @@
 > also I have more requests in tester-request.md Can you make sure that after a thread is given its own unique folder, that an agent checks to see if there's a request uploaded in that document and gives its own folder like you've been doing now.
 > 
 > go ahead
+
+^m20
+

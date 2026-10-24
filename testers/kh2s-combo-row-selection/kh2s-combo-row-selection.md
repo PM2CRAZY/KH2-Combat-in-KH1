@@ -14,6 +14,7 @@
 - [8. Assistant: t410 (notes only, no change in how it plays)](#^m8)
 - [9. Mr Bugs: 1. (a) thats how its supposed to work and when we transition](#^m9)
 - [10. Assistant: t415 and t416](#^m10)
+- [11. Mr Bugs: I've sent you the traces and log, I assume you don't need my](#^m11)
 
 ---
 
@@ -171,4 +172,7 @@
 > 
 > go ahead
 > 
+
+^m11
+
  

@@ -15,6 +15,7 @@
 - [9. Assistant: t417 to t425 (one piece each; the build at the top of the br](#^m9)
 - [10. Mr Bugs: can we have the files generated at run time so we don't take](#^m10)
 - [11. Assistant: t427 to t430 (one each)](#^m11)
+- [12. Mr Bugs: 1. the older player is to be deprecated](#^m12)
 
 ---
 
@@ -289,3 +290,6 @@
 > do the check
 > 
 > go ahead
+
+^m12
+

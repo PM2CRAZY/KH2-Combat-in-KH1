@@ -12,6 +12,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
 
 ## Contents
 
+- [Config menu rework](../testers/config-menu-rework/config-menu-rework.md)
+  - [1. Mr Bugs: the scope of the config menu currently can't scale to what w](../testers/config-menu-rework/config-menu-rework.md#^m1)
 - [Frame advance in the debug menu](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md)
   - [1. Mr. Bugs: Can you add a frame advance feature into the debug menu? whe](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m1)
   - [2. Assistant: Sounds useful, and since it's a debug menu tool the match-KH](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m2)
@@ -32,6 +34,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [17. Assistant: Good lead, thanks. I followed it into the Steam exe this tim](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m17)
   - [18. Mr Bugs: 130000 0x2a23e0 - model render](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m18)
   - [19. Assistant: t426](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m19)
+  - [20. Mr Bugs: also if you didn't make the correction "100000 0xle5d90" the](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m20)
 - [KH2 Camera fixes](../testers/kh2-camera-fixes/kh2-camera-fixes.md)
   - [1. Mr Bugs: I noticed when you run backwards the camera starts turning s](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m1)
   - [2. Assistant: t373](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m2)
@@ -54,6 +57,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [9. Assistant: t417 to t425 (one piece each; the build at the top of the br](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m9)
   - [10. Mr Bugs: can we have the files generated at run time so we don't take](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m10)
   - [11. Assistant: t427 to t430 (one each)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m11)
+  - [12. Mr Bugs: 1. the older player is to be deprecated](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m12)
 - [KH2's combo row selection](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md)
   - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m1)
   - [2. Assistant: t374](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m2)
@@ -65,6 +69,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [8. Assistant: t410 (notes only, no change in how it plays)](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m8)
   - [9. Mr Bugs: 1. (a) thats how its supposed to work and when we transition](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m9)
   - [10. Assistant: t415 and t416](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m10)
+  - [11. Mr Bugs: I've sent you the traces and log, I assume you don't need my](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m11)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
@@ -246,17 +251,3 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 (Add new threads below this line.)
-
-
----
-
-  
-
-## Config menu rework
-
-  
-
-> [!note] Mr Bugs
-> the scope of the config menu currently can't scale to what we want to add in the future so I want to rewrite it, I want to package all of kh1 in kh2's settings that we have currently into one clickable menu in the config menu on the first page, we need to make the other rows smaller so it can fit on page one the button will be called "KH1 in KH2" clicking it will open a submenu that gives you a list of sub menus, categorized e.g camera, combat, misc, etc. make sure physics is in combat all of soras current movement toggles in the menu, as well as his attacks and magic
-> 
-
