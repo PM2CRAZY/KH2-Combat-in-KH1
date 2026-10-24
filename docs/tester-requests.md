@@ -112,6 +112,9 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [5. Mr Bugs: response to notes](../testers/table-of-contents/table-of-contents.md#^m5)
   - [6. Mr Bugs: I can't seem to click on them in obsidian, can you fix it fo](../testers/table-of-contents/table-of-contents.md#^m6)
   - [7. Assistant: Fixed. The old links used HTML anchors, which GitHub underst](../testers/table-of-contents/table-of-contents.md#^m7)
+- [Testing the new system](../testers/testing-the-new-system/testing-the-new-system.md)
+  - [1. Boogle: This is a test on the new system, did you get it?](../testers/testing-the-new-system/testing-the-new-system.md#^m1)
+  - [2. Assistant: Got it, loud and clear. Your message came through the automa](../testers/testing-the-new-system/testing-the-new-system.md#^m2)
 - [What is still missing for native integration into KH1](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md)
   - [1. Mr Bugs: what else currently are we missing for native integration in](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m1)
   - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m2)
@@ -280,15 +283,3 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 (Add new threads below this line.)
-
-
----
-
-  
-
-## Title (the assistant fills this in if you leave it)
-
-  
-
-> [!note] Boogle
-> This is a test on the new system, did you get it?
