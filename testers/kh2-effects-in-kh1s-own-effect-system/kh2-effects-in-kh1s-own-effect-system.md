@@ -16,6 +16,7 @@
 - [10. Mr Bugs: can we have the files generated at run time so we don't take](#^m10)
 - [11. Assistant: t427 to t430 (one each)](#^m11)
 - [12. Mr Bugs: 1. the older player is to be deprecated](#^m12)
+- [13. Assistant: t437 to t444 (one change each).](#^m13)
 
 ---
 
@@ -293,4 +294,29 @@
 
 ^m12
 
+
+> [!tip] Assistant
+> **t437 to t444** (one change each).
+>
+> From your t430 log: Sora's and the Keyblade's files and your level 3 spells all built and went through KH1, the programs plugged in fine, and there were no slot or binding errors. Four kinds of spell effect had no KH1 anchor yet, and now they all go through KH1:
+> - **t437:** Fire's pieces on Sora's place.
+> - **t438:** Fire's and Blizzard's pieces on the second Keyblade (they play when there are two Keyblades, like Final).
+> - **t439:** Cure's pieces on KH2's own effect point.
+> - **t442:** effects placed once and not attached to anything.
+>
+> **t440:** only the pieces that actually play are built (the Keyblade's file went from 4 effects to just its vanish flash).
+> **t441:** Thunder 3 has two textures with no HD image, so part of it draws untextured. Its file isn't here, so this version logs what's needed to fix it. Please send the log after casting Thunder.
+> **t443:** a form's file is built as soon as you could Drive into it, so it's ready before you pick it.
+> **t444:** the old player is gone. Everything KH2 plays now goes through KH1's own effect system, and Sora's and the Keyblade's files are ready before KH2 takes him. That frees about 16 MB of textures the old player held, plus its work every frame. If something can't play, the log says which effect and why. The `fx_test` ini key is gone.
+>
+> Checked against the KH1 exe, the KH2 decomp and the files; nothing is tested in game yet. Still not playing: two KH2 flags no effect in your log uses (scale by bone, two-point), and the second-Keyblade pieces when Sora has one Keyblade.
+>
+> Questions:
+> 1. Cure's pieces on KH2's effect point: (a) KH2's exact height, 105 above his feet on KH1's Sora (what it does now), or (b) KH1's own body centre, like you chose for the spells' body centre?
+> 2. Some KH2 effects fade when the Keyblade is hidden (two of Fire's). KH1's Keyblade stays out while casting, so it only shows if it's put away mid-effect: (a) port it, or (b) leave it?
+> 3. The debug menu's draw still reserves a 24 MB buffer that was sized for the old effects: (a) shrink it, or (b) leave it?
+>
+> Also: your request that new threads get their own folder is done.
+
+^m13
 

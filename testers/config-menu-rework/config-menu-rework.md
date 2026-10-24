@@ -5,6 +5,9 @@
 ## Messages
 
 - [1. Mr Bugs: the scope of the config menu currently can't scale to what w](#^m1)
+- [2. Assistant: Here's the plan. KH1 already has a sub-menu system: it's how](#^m2)
+- [3. Mr Bugs: 1. Yes if your going to make magic its own sub catagory put ](#^m3)
+- [4. Assistant: Got it, building it now: Config > KH1 in KH2 (above Default ](#^m4)
 
 ---
 
@@ -44,6 +47,7 @@
 
 ^m2
 
+
 > [!note] Mr Bugs
 > 1. Yes if your going to make magic its own sub catagory put it inside of combat, so its config > kh2 in kh1 > combat > magic
 > 2. (a)
@@ -53,4 +57,12 @@
 > 6. (b)
 >    
 >    go ahead
+
+^m3
+
+
+> [!tip] Assistant
+> Got it, building it now: Config > KH1 in KH2 (above Default settings) > Camera / Combat / Movement / Misc, with Magic as its own list inside Combat, the whole Config list shrunk with KH1's zoom, only the current settings, Debug Menu in Misc, and Default settings leaving ours alone. You wrote "kh2 in kh1" in your answer; I'm keeping the button's name as "KH1 in KH2" like your request, tell me if you want it the other way. I'll post the version here when it's done.
+
+^m4
 

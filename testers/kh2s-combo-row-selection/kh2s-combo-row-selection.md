@@ -15,6 +15,7 @@
 - [9. Mr Bugs: 1. (a) thats how its supposed to work and when we transition](#^m9)
 - [10. Assistant: t415 and t416](#^m10)
 - [11. Mr Bugs: I've sent you the traces and log, I assume you don't need my](#^m11)
+- [12. Assistant: t431 to t436 (one change each; the build is on GitHub as kh1](#^m12)
 
 ---
 
@@ -177,3 +178,28 @@
 
 
  
+
+
+> [!tip] Assistant
+> **t431 to t436** (one change each; the build is on GitHub as kh1-kh2.dll).
+>
+> Your ledge traces are good (t431, notes only): next to the edge he hops 21 high and goes forward off it, so t415 works. In the two where he walked off without a hop, he was about 89 from the edge, so KH2's 85 line still found floor and picked a normal swing. That swing's own lunge then carried him off, which I think KH2 does too. There were no steps or ramps in these traces, so that part is still unchecked.
+>
+> What changed (with Base / Aerial Combo on KH2; on KH1 these still use the old KH2 handoff):
+> 1. **t432:** Slapshot, Dodge Slash and Slide Dash now run on KH1's own ground combo like the normal swings. KH2's animation and lunge (Slide Dash always goes 700), KH1's damage. There's no handoff to KH2 anymore, so no flip in the trace.
+> 2. **t433:** Aerial Sweep from the ground is KH1's air state with KH2's hop numbers, and your air combo goes on after it.
+> 3. **t434:** Moves that float him in KH2 now float him in KH1's air state too. Aerial Dive is native and stalls near the end.
+> 4. **t435:** Aerial Spiral and Aerial Finish run on KH1's air combo, with KH2's hop and float (Aerial Finish hovers a long time before its last hit).
+> 5. **t436:** Flash Step is native. During its first 19 frames, hits on him do nothing (a clang), like KH2. It needs `hurt` on in the ini.
+>
+> Checked against the KH2 decomp, the game files and your traces; none of it is tested in game yet. Still on the old handoff: Vicinity Break, Explosion, Magnet Burst, Guard Break, Counterguard, Finishing Leap, Upper Slash, Horizontal Slash, Retaliating Slash and Aerial Recovery.
+>
+> Questions:
+> 1. In KH2, when a ground swing's lunge takes Sora past a ledge, does he (a) keep swinging as he falls, or (b) stop and fall like here?
+> 2. KH2 turns Sora toward a locked enemy during parts of a swing; KH1 only aims at the start. (a) add KH2's turn next, or (b) leave it?
+> 3. Next: (a) Vicinity Break / Explosion (KH2's body hit areas), or (b) Aerial Recovery and Retaliating Slash (new KH1 animations for KH2-only moves)?
+>
+> A Select + Triangle trace and the log with each of these moves equipped would help, plus one combo swinging up some steps.
+
+^m12
+

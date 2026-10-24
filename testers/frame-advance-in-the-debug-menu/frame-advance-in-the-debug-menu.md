@@ -24,6 +24,7 @@
 - [18. Mr Bugs: 130000 0x2a23e0 - model render](#^m18)
 - [19. Assistant: t426](#^m19)
 - [20. Mr Bugs: also if you didn't make the correction "100000 0xle5d90" the](#^m20)
+- [21. Assistant: t445 to t447. Thanks, that correction helped. I found why ef](#^m21)
 
 ---
 
@@ -309,4 +310,28 @@
 
 ^m20
 
+
+> [!tip] Assistant
+> **t445 to t447.** Thanks, that correction helped. I found why effects disappeared: the effect pause I was using also hides every effect, including magic and Keyblade trails. KH1's battle pause can do that because it doesn't draw the game live. It takes a snapshot of the last frame and shows that while paused.
+>
+> **t445:** Frame Advance now does exactly what the battle pause does. It holds everything the pause holds (actors, stats, camera, lock-on, command menu, HUD, scripts, map animation), takes a snapshot of the last frame that ran, and shows it sharp, without the pause blur. Effects, trails, the HUD, the lock-on marker and damage numbers should all be in the picture. The Held Tasks page now labels the tasks (actors, camera, command menu, lock-on, map, models…).
+> **t446:** sound pauses the way KH1's pause does it (sound effects stop, music at half volume). New row: Held Sound < Paused / Plays >.
+> **t447:** a fallback, Held Picture < KH1 Pause / Live >. Live draws the game live like t426, but with effects held by KH1's own developer stop so they stay drawn, Keyblade shape trails held, and the map's sky and fades held.
+>
+> Checked in the exe's pause code and the decomp. Not tested in game: whether the snapshot actually shows when we take it (it's the same call KH1's pause makes). If held frames are black, that's the reason, and Live is the fallback.
+>
+> Please test:
+> 1. Turn Frame Advance on mid-fight while casting a spell, during a Keyblade swing and with lock-on up. Is the picture up and complete, and does anything move or tick while held (HP/MP bars, damage numbers, water, sky)?
+> 2. Step through a combo at 30 and 60 fps: does each step show the new frame correctly?
+> 3. Open the battle pause while held, then close it: P A U S E should show, then our picture comes back.
+> 4. If held frames are black, set Held Picture to Live and send the log.
+> 5. Switch Held Sound between Paused and Plays and tell me how it sounds.
+>
+> Questions:
+> 1. KH1's pause halves the music volume while held. (a) keep that, (b) leave the music alone (needs our own sound handling), or (c) stop the music completely while held?
+> 2. If the KH1 Pause picture works, should I (a) keep Live as a debug option, or (b) remove it?
+>
+> Also: your request that new threads get their own folder is done.
+
+^m21
 
