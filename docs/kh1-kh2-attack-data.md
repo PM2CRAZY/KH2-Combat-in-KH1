@@ -161,3 +161,43 @@ KH2's damage routine is **0x1403C12F0** (Steam KH2; callers 0x1403CE740, 0x1403C
   is an assumption.
 - How far KH2's linear formula on KH1's stats would move damage against KH1's enemy HP: not
   measured (needs a log of Strength / Defense / HP pairs in play).
+
+## 7. Implemented: KH2's power inside KH1's damage function (step 2)
+
+The tester's answers: damage (a), "you pick which one the player is going to feel a difference
+in it feeling like kh2"; criticals a Config row; KH1's MP charge kept (a).
+
+- **The pick: (a), KH1's curve × KH2's power.** KH2's own formula (b) is linear in Strength −
+  Defense, KH1's curve is about ×1.19 a point and reaches 300 at index 29 (§2.3), and KH1's
+  enemy HP is tuned to the curve: on KH1's stats (b) would leave early fights about as they are
+  and make late ones several times longer. (a) keeps KH1's balance and keeps what makes KH2's
+  moves feel like KH2's: each move's power against the others (Explosion's 25% ticks, the
+  finishers), KH2's rounding up per hit, and (with Criticals Off) no random critical.
+  **Assumption** (not measured in play): the late-game gap; a log of Strength / Defense / HP
+  pairs would settle it.
+- **How (Checked (decomp), Checked (exe)).** KH1's damage `0x1402BFA80` loads the curve pointer
+  `0x142DE5DC0` once (`mov rcx, [rip]` at `0x1402BFBB4`, its only reference in the function,
+  Checked (exe)). `win/kh2damage.rs` hooks the function (first 15 bytes
+  `48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18`, Checked (exe)); for an attack of Sora's whose
+  KH2 ATKP is known it points that global at a copy of the curve with every value × KH2's power
+  / 100 × `damage_scale` (× the Magic stand-in, (1 + 0.1 × max MP) × `magic_scale`, for stat
+  source 1), rounded up, for the one call, then puts KH1's pointer back. KH1's function runs
+  whole: its critical and tally 8, the data's min / max, the target's floor / cap, resistance,
+  Aero, mode 2, Second Chance, at least 1; the record builder and everything after it (MP
+  charge, enemy scripts, the hit pass) are untouched. Only the game's thread calls it
+  (**Assumption**, as every hit hook of ours: the record builder runs in the actors' pass).
+- **Which hits.** A borrowed or form move landed through `land_hit` (its power, `combat::landing`);
+  one of our rows (`kh1rows::kh2_atkp`); and now the **native swings on KH1's own rows** (attack
+  data bone 0x30, our KH2 slot playing on Sora: the KH2 motion's hit window at KH1's time in it,
+  else its first window, `kh1rows::native_atkp`). With Base Combo KH1 no slot of ours plays, so
+  KH1's own swings keep KH1's own damage. Elements 8, 9, 11, 12 and object targets never read the
+  curve, so they stay KH1's.
+- **What changed.** `combat::scale_record` no longer rewrites the record's damage or carries
+  fractions while this is in (ini `kh2_damage = off` brings the old after-the-fact way back; on the
+  Epic build the hook isn't made and the old way stays). KH1's row power stays in the curve's
+  index (it is (a) as asked): KH1's finisher rows add 4 or 6 points before KH2's finisher power
+  is applied. Dropping it would be question 1's (c).
+- **Not done (still the plan's steps 1 and 3):** KH2's element and reaction on the native swings'
+  KH1 data (they keep KH1's row's: physical, flinch, finisher launch, which agree with KH2's for
+  Sora's plain combo), and KH2's own hit effect.
+

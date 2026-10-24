@@ -2181,6 +2181,21 @@ impl Strikes {
     }
 }
 
+/// While KH2's hit is landed through `land_hit` (borrowed and form moves): its power in percent
+/// and whether it is Magic-based (`kh2damage`).
+pub fn landing() -> Option<(u32, bool)> {
+    let p = POWER.load(Ordering::Relaxed);
+    (p != 0).then(|| (p, MAGIC.load(Ordering::Relaxed)))
+}
+
+/// KH2's Magic-based hits (ATKP stat source 1): KH1 has no Magic stat, so Sora's max MP stands
+/// in, +10% a point (at most 30), times the ini's `magic_scale` (`scale_record`, `kh2damage`).
+pub fn magic_factor() -> f32 {
+    let base = BASE.load(Ordering::Relaxed);
+    let mp = unsafe { super::menu::save_block(base).map_or(0, |s| rd::<u8>(s + 8)) } as f32;
+    (1.0 + 0.1 * mp.min(30.0)) * super::settings::get().magic_scale
+}
+
 /// Damage of the last landed hit (set by `probe::hit` from the record).
 pub static LAST_DAMAGE: AtomicU32 = AtomicU32::new(0);
 /// The foe a KH2 hit is being landed on, and each foe's damage fraction left over (in
@@ -2476,6 +2491,13 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
         let w = rd::<f32>(rec + 0x1C);
         wr(rec + 0x10, [0.0f32, 0.0, 0.0, w]);
     }
+    // KH2's power is already in the damage KH1's damage function made (`kh2damage`, its hook
+    // on 0x1402BFA80: KH2's power on KH1's curve, rounded up per hit as KH2 does), so nothing
+    // is rewritten after the fact.
+    if super::kh2damage::active() {
+        LAST_DAMAGE.store(rd::<i32>(rec + 8).max(0) as u32, Ordering::Relaxed);
+        return;
+    }
     // KH1's damage times KH2's power (and the ini's `damage_scale`), the fraction carried to
     // the next hit on the same foe (the user: Explosion did too little: its 25% hits on a
     // 6-damage swing were floored from 1.5 to 1, a third of the burst lost).
@@ -2486,9 +2508,7 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     // scale with magic): KH1 has no Magic stat, so Sora's max MP stands in, +10% a point, times
     // the ini's `magic_scale`.
     if own.as_ref().map_or(MAGIC.load(Ordering::Relaxed), |a| a.stat_source == 1) {
-        let base = BASE.load(Ordering::Relaxed);
-        let mp = super::menu::save_block(base).map_or(0, |s| rd::<u8>(s + 8)) as f32;
-        factor *= (1.0 + 0.1 * mp.min(30.0)) * set.magic_scale;
+        factor *= magic_factor();
     }
     let scale = (factor * 100.0).round().max(1.0) as i64;
     let target = if own.is_some() { target } else { TARGET.load(Ordering::Relaxed) };

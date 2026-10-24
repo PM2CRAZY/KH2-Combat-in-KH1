@@ -433,6 +433,18 @@ pub unsafe fn kh2_atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     kh2.battle.attack_for_level(id, 0, 0).cloned()
 }
 
+/// The KH2 ATKP for a native swing on one of KH1's own rows (`kh2damage`): the hit window of the
+/// KH2 motion our slot plays on `actor` now at KH1's time in it, else that motion's first one;
+/// `None` when no slot of ours plays (Base Combo KH1: KH1's own swing, KH1's own damage).
+pub unsafe fn native_atkp(actor: usize) -> Option<kh2_formats::battle::Atkp> {
+    if actor < 0x10000 {
+        return None;
+    }
+    let (m, t) = super::kh2slots::now_playing(actor)?;
+    let id = window_atkp(m, Some(t as u32)).or_else(|| window_atkp(m, None))?;
+    pose::kh2()?.battle.attack_for_level(id, 0, 0).cloned()
+}
+
 /// After KH1's row runner ran one of our air rows (`combat::exec`): the follow-up it queued for
 /// any row not its own (the idle, request 0, `0x14029FA30 (actor, 0x40000000, 0)`) is KH1's fall
 /// instead (request 6), as its own air rows queue (rows 15..18). The queue (`0x14029F980`): its
