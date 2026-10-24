@@ -1298,8 +1298,9 @@ pub mod physics {
     ///
     /// KH2's no-gravity range on our slot playing (`kh2slots::no_gravity`: KH2's ability moves'
     /// motions, Aerial Dive's frames 46..54), either physics: his rise or fall held where it is,
-    /// the arc's time not going on (KH2's controller: no gravity there, the arc kept and gone on
-    /// with after it), the sideways speed KH1's (or KH2's) air drift as before.
+    /// at physics KH2 the arc's time going on (KH2's ACTION_JUMP step, `0x1403CB360`), at physics KH1
+    /// not (the arc kept and gone on with after it; never for a cast slot there, KH1's own cast has
+    /// no hold), the sideways speed KH1's (or KH2's) air drift as before.
     unsafe extern "system" fn air_step(actor: usize, disp: *mut [f32; 4]) -> usize {
         let f: StepFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
         let sora = is_sora(actor);
@@ -1430,7 +1431,19 @@ pub mod physics {
                 air.arc.holdable = false;
             }
         }
-        let up = if held { 0.0 } else { air.arc.advance(dt, n.gravity, n.fall_max) };
+        // KH2's hold runs the arc's clock on (the tester, m5 answer 1: "(b) unless you have kh1
+        // physics on": casts and KH2's moves with the same hold, Aerial Dive, Finishing Leap; this
+        // is the physics KH2 path only). ACTION_JUMP's step `0x1403CB360` (Checked (decomp) KH2
+        // Steam) adds the step to the arc's time `+0xF0` before its hold test (motion flag 0x20,
+        // range id 3, or 0x40, range 24), then moves him by 0 while held; after the hold the arc is
+        // past its apex and he falls at once at the step's cap. Before, the clock stopped and the
+        // fall after the hold began gently again from where the arc was.
+        let up = if held {
+            let _ = air.arc.advance(dt, n.gravity, n.fall_max);
+            0.0
+        } else {
+            air.arc.advance(dt, n.gravity, n.fall_max)
+        };
         // Past the arc's apex (a released jump's hop included): KH2's fall loop shows (`pose`).
         if !air.arc.rising() {
             ARC_FALL_FRAME.store(game_frame().max(1), Ordering::Relaxed);

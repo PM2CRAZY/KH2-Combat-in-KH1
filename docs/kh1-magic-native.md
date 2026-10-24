@@ -315,6 +315,18 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   speed and KH1's fall are KH1's all through. Other KH2 motions (Aerial Dive, Finishing Leap) keep
   their hold at physics KH1 (the tester, m5 answer 1: "(b) unless you have kh1 physics on").
 
+## 4h. KH2's hold with its clock running (done: m5 plan item 4, the tester's answer 1 "(b) unless you have kh1 physics on")
+
+- `shared::physics::air_step` at physics KH2: while our slot's KH2 clip holds him (range id 3 /
+  24, `kh2slots::no_gravity`), KH2's arc time goes on and only the move is 0, as ACTION_JUMP's step
+  `0x1403CB360` does (**Checked (decomp)** KH2 Steam); after the hold he falls at once at the fall
+  cap. For every KH2 motion on KH1's air state: the casts (Fire 58 16..74 ... Reflect 73
+  16..74), Aerial Dive (46..54), Finishing Leap (its root's rise in the hold).
+- Physics KH1: unchanged for the moves (the clock stops in the hold, the fall starts from the arc
+  where it was); none for the casts (§4g).
+- Not changed: KH2's controller (Drive Forms, borrows) still stops the clock in a hold
+  (`character_core`'s physics, `fo.no_gravity`).
+
 ## 4e. Air casts read again: KH1's and KH2's physics (research, the tester's m4 follow-up)
 
 The tester (after t484..t487): "reflect currently does not behave properly for kh1 physics, please
