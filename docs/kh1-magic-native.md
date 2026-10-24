@@ -233,3 +233,26 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   for KH1's air step the same; the air step (`air_step`) then runs it with KH2's gravity and air
   drift, and the no-gravity range holds him as before. On the ground nothing is changed
   (**Assumption:** KH1's ground step moves no actor while its action flag is set).
+
+## 7. Spell hits as KH1 attack objects: the shape choice (the tester's answer 3), not built yet
+
+- The tester: (b) several spheres acting as one hit if it isn't costly, else (a) one sphere.
+- What KH1's pass costs (`0x1402B4460` → `0x1402B47A0` / `0x1402B3800`, **Checked (decomp)**): each
+  live attack object of the 64-object pool is placed and swept from its previous centre into
+  sphere entries (`0x1402B3A00`, about one diameter a step) and every entry meets every earlier
+  one (attack against attack, the clash) and every hittable body part. A KH2 ellipsoid covered by
+  a row of spheres along its long side (Firaga's ring, 240 × 180: 2 to 3 spheres) adds a few
+  entries a frame; at the pass's sizes that is tens to a few hundred sphere tests a frame in
+  KH1's own native code (microseconds). **Assumption** (not measured in game): the cost on the
+  game thread is negligible next to the KH2 script frame that already runs (`formmagic::shots_step`).
+  The binding limit is the pool's 64 objects (the enemies' attacks share it), not time: so (b),
+  with the spheres of one KH2 shape sharing one hit-once bit (`0x1402B3760`) so they hit as one.
+- To build (§5 step 3): each script attack's spheres as free-standing objects of Sora's
+  (`0x1402B2DC0` with KH1's spell data for the element), placed each frame as KH1's own script
+  does (`0x1402B3790`: current, previous, start and end centres, bit 16 "previous valid", bit 14
+  cleared), freed with the attack (`0x1402B3560`); the hit's numbers from the KH2 row in
+  `combat::scale_record`; the hit told back to the script (`attack_is_hit`); KH2's re-hit
+  interval and combo-group count against KH1's hit-once mask (`+0x9C`, ANDed with the live bits
+  each pass) and its interval activity (3, `0x1402B3380`). Still to read: the sweep test
+  `0x1402B3D50` and whether one owner's own spheres meet each other in the attack-against-attack
+  pass (the pairing table `0x1405299B8` by team).
