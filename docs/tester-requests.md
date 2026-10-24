@@ -114,6 +114,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m1)
   - [2. Assistant: t509 to t513. KH2's sounds now go through KH1's own sound sy](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m2)
   - [3. Assistant: t514 and t515. I think I found it, though without a log I ca](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m3)
+  - [4. Assistant: Yes, we're caching sounds, and part of that cache is older t](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m4)
 - [KH2 summons](../testers/kh2-summons/kh2-summons.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-summons/kh2-summons.md#^m1)
 - [KH2's combo row selection](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md)

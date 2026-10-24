@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: t509 to t513. KH2's sounds now go through KH1's own sound sy](#^m2)
 - [3. Assistant: t514 and t515. I think I found it, though without a log I ca](#^m3)
+- [4. Assistant: Yes, we're caching sounds, and part of that cache is older t](#^m4)
 
 ---
 
@@ -97,4 +98,44 @@ go ahead
 
 ^m3
 
+
 why did the ram use go up? are we caching a bunch of sounds? if so you need to tell me because this goes against our rules of optimization so I need a solution presented.
+
+> [!tip] Assistant
+> Yes, we're caching sounds, and part of that cache is older than t509. Sorry, I should have told you when I added to it. Here are the numbers, measured from a t515 log on your PC (the one in the effects thread: 104 sounds cut, 227 sound slots loaded) and from the KH2 sound files:
+>
+> **Before t509 (already there):**
+> - **~56 MB:** every KH2 effect the mod uses, decoded to raw audio and held for the whole session. That's 227 slots but only 104 different sounds. The same sound gets decoded once per thing that uses it (Reflect's three levels and the forms' spells share many), so about 30 MB of it is duplicates.
+> - **~2-3 MB:** Sora's battle quotes, decoded the same way. This one is an estimate: it's 31 mono Vorbis clips, and I didn't measure how long they are.
+> - **~28 MB for 2-3 s at startup:** `se000` (17.4 MB), `se999` (7.5 MB) and `se500` (2.9 MB) are read whole to cut the sounds out, then freed.
+>
+> **What t509-t515 added (about +18.6 MB, which is the rise you saw):**
+> - **9.0 MB:** our own copy of the 104 cut one-sound banks (still compressed ADPCM). We keep it so we can register the banks again after KH1 clears its bank list.
+> - **9.0 MB:** KH1's copy of those same banks. KH1 frees bank data itself when it clears the list (`_aligned_free` in `0x1400DBAC0`), so each registration has to hand it its own copy.
+> - **0.3 MB + 0.3 MB:** the battle voice bank, ours plus KH1's copy.
+> - **About 0** inside KH1's sound engine: a bank there takes a record from a pool that already exists and plays straight from the data (`0x14005E0B0`).
+>
+> So we're at about **77 MB now, against about 58 MB before t509**. Most of it is the old decoded audio, which only exists for the old Windows player that's now just a fallback.
+>
+> **How KH1 does it (Checked (decomp)):** KH1 keeps its sounds compressed and decodes them as they play. It reads a room's sound files when the room loads, and hands the loaded file straight to its engine: `0x1400E0A50` registers it with `0x1400E0F00`, then clears its own pointer, so only one copy ever exists. At map tear-down it frees them all at once (`0x1400D2C70(1)` → `0x1400DBAC0`). It never keeps a decoded copy, and it never frees one bank on its own.
+>
+> **Options:**
+> - **(a) Finish step 5 (≈18.6 MB, down from 77):** remove the decoded audio and the old Windows player, and keep only the compressed banks (ours plus KH1's). Downside: no fallback, so `kh2_sound_engine = mod` goes away, and a sound KH1's engine won't take just doesn't play (KH1 drops its own the same way). I'd only do this once you've heard the native path working.
+> - **(b) (a), but KH1's own lifetime (≈9.3 MB steady):** we keep no copy. After each KH1 bank clear, a background thread reads the sounds again from your KH2 files, cuts them and hands each one to KH1, the way KH1's own file loader does. The cost is about 17 MB for a moment per room load (one KH2 bank at a time) plus some disk and CPU work, and KH2 sounds could be missing for a moment right after a room loads (I haven't measured how long).
+> - **(c) (a) or (b), loading only what can play right now (≈2.5-4 MB in KH1):**
+>   - base Sora's sounds always (2.2 MB);
+>   - Reflect's at your Reflect level (~0.3 MB);
+>   - a form's sounds only while you're in that form (0.3-1.5 MB each; all the forms together are 5.9 MB).
+>
+>   The catch: KH1 never frees a single bank (it only clears them all at once), so dropping a form's sounds on revert means doing by hand what `0x1400DBAC0` does to each entry. That's an assumption until I check it in the exe, so it's the riskiest of the three.
+>
+> Separately, as a quick fix while the native path is still being tested: I can decode each sound only once. That keeps the fallback but saves ~30 MB (77 → ~47 MB).
+>
+> I haven't changed any code. **Checked:** the decomp for KH1's bank load, registration and release; your KH2 files for the sizes; your t515 log for the counts. **Not measured:** the voice clips' decoded size, and the Windows heap's own overhead.
+>
+> Questions:
+> 1. Which one? (a) (needs your OK that the native sounds work first), (b), or (c) on top of (a) or (b)? My pick is (a) as soon as you've heard the native sounds, then (b).
+> 2. Until then: (a) the quick decode-once fix now (keeps the fallback), or (b) leave it as it is until question 1 is done?
+
+^m4
+

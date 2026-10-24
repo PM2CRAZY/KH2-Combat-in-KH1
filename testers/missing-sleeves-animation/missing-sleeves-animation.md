@@ -246,6 +246,7 @@ go ahead
 
 ^m13
 
+
 the coat is still sticking out on kh2 animations
 
 don't worry about the kh2 model for now
