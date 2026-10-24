@@ -31,6 +31,9 @@
 //!   Frame Advance (main page): the Frame Advance row, Held Sound, Camera (Free: the camera
 //!   moves while held, `frameadv::camera_live`; Held), Game Frames (the same row as the Trace
 //!   Recorder's) and the Held Tasks page.
+//! - **KH1 Spells** (main page): Gravity, Stop and Aero each "KH1 cast" (KH1's whole cast, its
+//!   own motion, clock and effects) or "KH2 cast" (KH1's spell on KH2's cast motion, the default)
+//!   at the Magic styles KH2 (`formmagic::kh1_cast`); kept in the ini (`kh1_cast_*`).
 //! - **Pages**: Trace Recorder (the trace's mode, seconds, the sound log and its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
@@ -150,6 +153,9 @@ enum Page {
     FrameAdvance,
     /// (t399) The tasks Frame Advance holds, each one switchable (`frameadv::tasks`).
     HeldTasks,
+    /// Gravity, Stop and Aero: KH1's whole cast or KH2's cast motion at the Magic styles KH2
+    /// (`formmagic::kh1_cast`).
+    Spells,
 }
 
 impl Page {
@@ -161,6 +167,7 @@ impl Page {
             Page::Group(_) => Some(Page::Categories),
             Page::Weapons | Page::Abilities => Some(Page::Stats),
             Page::HeldTasks => Some(Page::FrameAdvance),
+            Page::Spells => Some(Page::Main),
         }
     }
 
@@ -176,6 +183,7 @@ impl Page {
             Page::Group(i) => 6 + i.min(trace::GROUPS.len() - 1),
             Page::HeldTasks => 6 + trace::GROUPS.len(),
             Page::FrameAdvance => 7 + trace::GROUPS.len(),
+            Page::Spells => 8 + trace::GROUPS.len(),
         }
     }
 
@@ -190,6 +198,7 @@ impl Page {
             Page::Abilities => "STATS > ABILITIES".into(),
             Page::FrameAdvance => "DEBUG MENU > FRAME ADVANCE".into(),
             Page::HeldTasks => "FRAME ADVANCE > HELD TASKS".into(),
+            Page::Spells => "DEBUG MENU > KH1 SPELLS".into(),
         }
     }
 
@@ -205,6 +214,7 @@ impl Page {
             Page::Abilities => format!("Left/Right: copies   {ok}: add/remove   {no}: back"),
             Page::FrameAdvance => format!("Left/Right: change   {ok}: select   {no}: back"),
             Page::HeldTasks => format!("Left/Right/{ok}: held / runs   {no}: back"),
+            Page::Spells => format!("Left/Right/{ok}: KH1 / KH2 cast   {no}: back"),
         }
     }
 }
@@ -223,6 +233,8 @@ enum Action {
     HeldSound,
     FreeCamera,
     HeldTask(usize),
+    /// Gravity 4, Stop 5, Aero 6.
+    Kh1Cast(u8),
     GroupRow(usize),
     Item(usize),
     Stat(usize),
@@ -232,7 +244,7 @@ enum Action {
 
 struct Menu {
     page: Page,
-    cursor: [usize; 8 + trace::GROUPS.len()],
+    cursor: [usize; 9 + trace::GROUPS.len()],
     /// The pad last frame, the directions held and since when, the last repeat.
     last: u16,
     held: u16,
@@ -240,7 +252,7 @@ struct Menu {
     repeat_at: Option<Instant>,
 }
 
-static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 8 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
+static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 9 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
 
 /// One of Sora's stats: its name, its place in a stats block (`None`: only in the save), its byte
 /// in his save record, whether that byte is KH1's base number (equipment added on top), its
@@ -432,6 +444,7 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Trace Recorder  >".into(), Action::Enter(Page::Trace)),
             ("Stats  >".into(), Action::Enter(Page::Stats)),
             ("Frame Advance  >".into(), Action::Enter(Page::FrameAdvance)),
+            ("KH1 Spells  >".into(), Action::Enter(Page::Spells)),
             ("Exit".into(), Action::Exit),
         ],
         // (After t463) Frame Advance's own rows.
@@ -447,6 +460,16 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Held Tasks  >".into(), Action::Enter(Page::HeldTasks)),
             ("Back".into(), Action::Back),
         ],
+        // (At the Magic styles KH1 every one is KH1's own anyway.)
+        Page::Spells => {
+            let mut v: Vec<(String, Action)> = ["Gravity", "Stop", "Aero"]
+                .iter()
+                .zip(4u8..)
+                .map(|(name, sp)| (format!("{:<16}< {} >", name, if super::formmagic::kh1_cast(sp) { "KH1 cast" } else { "KH2 cast" }), Action::Kh1Cast(sp)))
+                .collect();
+            v.push(("Back".into(), Action::Back));
+            v
+        }
         Page::HeldTasks => {
             let mut v: Vec<(String, Action)> = super::frameadv::tasks()
                 .iter()
@@ -642,6 +665,10 @@ unsafe fn step(base: usize) {
         }
         Action::HeldTask(i) => {
             super::frameadv::toggle_task(i);
+            sound(1);
+        }
+        Action::Kh1Cast(sp) => {
+            super::formmagic::set_kh1_cast(sp, !super::formmagic::kh1_cast(sp));
             sound(1);
         }
         Action::GroupRow(i) if cross => {

@@ -42,6 +42,37 @@ pub fn base_kh2(air: bool) -> bool {
 /// Magic styles at KH2 in base form (the user: "KH1 spell, KH2 animation").
 pub static BASE_KH1_CAST: AtomicBool = AtomicBool::new(false);
 
+/// The KH1 spell `spell` (Gravity 4, Stop 5, Aero 6) is cast KH1's whole way even with the Magic
+/// styles at KH2 (the debug menu's KH1 Spells page, the ini's `kh1_cast_*`; the tester: "kh2
+/// effects took over some of the native magic effects ... can we have a toggle in the debug
+/// menu?"): its own cast motion, its clock and its own effects, as with the styles at KH1. KH2
+/// has no Gravity, Stop or Aero; what KH2 brings to them is its cast motion (Thunder's for
+/// Gravity, Cure's for Stop and Aero, `kh1_spell_motion`), on whose clock KH1's motion is cut.
+pub fn kh1_cast(spell: u8) -> bool {
+    if !(4..=6).contains(&spell) {
+        return false;
+    }
+    let i = (spell - 4) as usize;
+    match KH1_CAST_SET[i].load(Ordering::Relaxed) {
+        0 => super::settings::get().kh1_casts[i],
+        v => v == 2,
+    }
+}
+
+/// The debug menu's choice this session (0: the ini's, 1: KH2's cast motion, 2: KH1's whole cast).
+static KH1_CAST_SET: [std::sync::atomic::AtomicU8; 3] = [const { std::sync::atomic::AtomicU8::new(0) }; 3];
+
+/// The debug menu's KH1 Spells row: `spell` (4..6) cast KH1's whole way or not, kept in the ini.
+pub fn set_kh1_cast(spell: u8, on: bool) {
+    if !(4..=6).contains(&spell) {
+        return;
+    }
+    let i = (spell - 4) as usize;
+    KH1_CAST_SET[i].store(if on { 2 } else { 1 }, Ordering::Relaxed);
+    super::settings::save(super::settings::KH1_CAST_KEYS[i], if on { "on" } else { "off" });
+    log(&format!("debug menu: KH1 spell {spell} casts {}", if on { "KH1's whole way" } else { "on KH2's cast motion" }));
+}
+
 /// Whose spells these are, for the log.
 fn who() -> &'static str {
     if super::form::in_wisdom() {

@@ -125,6 +125,12 @@ ground_combo = kh2\r\n\
 air_combo = kh2\r\n\
 magic = kh1\r\n\
 air_magic = kh1\r\n\
+; kh1_cast_gravity / kh1_cast_stop / kh1_cast_aero: on = with magic (or air_magic) at kh2, base\r\n\
+; Sora still casts that KH1 spell KH1's whole way (its own animation, timing and effects); off =\r\n\
+; KH1's spell on KH2's cast animation (the debug menu's KH1 Spells page switches them)\r\n\
+kh1_cast_gravity = off\r\n\
+kh1_cast_stop = off\r\n\
+kh1_cast_aero = off\r\n\
 ; jump_style / glide_style: kh1 or kh2, KH1's or KH2's jump and glide for base Sora\r\n\
 jump_style = kh2\r\n\
 glide_style = kh2\r\n\
@@ -261,6 +267,10 @@ pub struct Settings {
     pub trace_cats: u32,
     /// L1 + R1 + Triangle opens the debug menu (`debug_menu = on`, `debugmenu.rs`).
     pub debug_menu: bool,
+    /// Gravity, Stop and Aero (KH1's spells 4..6) cast KH1's whole way at the Magic styles KH2
+    /// (`kh1_cast_gravity` / `_stop` / `_aero = on`; off by default: KH2's cast motion over KH1's
+    /// spell, `formmagic::kh1_cast`).
+    pub kh1_casts: [bool; 3],
 }
 
 static SETTINGS: AtomicPtr<Settings> = AtomicPtr::new(std::ptr::null_mut());
@@ -431,10 +441,14 @@ fn load(first: bool) -> Option<Settings> {
         trace_game_frames: on(&text, "trace_game_frames", "on", false),
         trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
         debug_menu: on(&text, "debug_menu", "on", false),
+        kh1_casts: KH1_CAST_KEYS.map(|k| on(&text, k, "on", false)),
     };
     log(&format!("settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" }));
     Some(s)
 }
+
+/// The ini keys of `kh1_casts` (Gravity, Stop, Aero).
+pub const KH1_CAST_KEYS: [&str; 3] = ["kh1_cast_gravity", "kh1_cast_stop", "kh1_cast_aero"];
 
 /// Keeps the physics setting in the ini (the Config menu's Physics row).
 pub fn save_physics(r: crate::kh1phys::Rule) {

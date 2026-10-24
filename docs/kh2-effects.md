@@ -2025,3 +2025,27 @@ by position), Explosion's wrist and chest flashes and the other 0xa61 elements o
   byte `+0x14C` → `+0xF`, 0x80 when drawn, isn't read); KH2's "hidden" cases (`0x1403BA840`: its
   `+0x124`, `+0x6C8`, `+0x120` bit 10 tests) are KH1's draw bit. Cost: one read of three actor
   fields per such live element per frame.
+
+### 18.19 KH1's Gravity, Stop and Aero at the Magic styles KH2 (the debug menu's KH1 Spells)
+
+The tester (m16): "the kh2 effects took over some of the native magic effects like aero ... can
+we have a toggle in the debug menu? ... I noticed changes on stop, aero, cure".
+
+- What plays (the t463 log, f91349..f91796; the traces f91444, f91638, f91830): Gravity (02000402),
+  Stop (02000502) and Aero (02000602) are KH1's spells, cast by KH1 ("KH1 takes him: command
+  0x2"), with no KH2 effect element started for them (no spell package or Sora's-package element
+  is started by those casts; KH2's cast motions 62 / 65 have no effect trigger, P_EX100.mset,
+  **Checked (files)**). What KH2 brings is the animation: with the Magic style at KH2,
+  `takeover::command_started` draws KH2's cast motion over KH1's (`formmagic::BASE_KH1_CAST`,
+  `pose::follow`: Gravity on Thunder's 62, Stop and Aero on Cure's 65, 68 frames) and runs the cast
+  on that motion's clock: at its end KH1's motion is set to its idle ("spell's end frames cut by
+  the form's cast motion ending"). So KH1's own cast effects sit on KH2's pose (his hands and
+  Keyblade where KH2's animation has them), and those that end with KH1's motion (KH1's binding
+  watches the request, `0x1402AE910`) end at frame 68 with it; Gravity's shot wasn't counted
+  before the cut ("form's cast motion ended before a shot of the KH1 spell was counted").
+- Cure at the Magic style KH2 is KH2's Cure (its own script, animation, heal and effects,
+  `formmagic::spell_chosen`), so its effects are KH2's by design.
+- `formmagic::kh1_cast` (the debug menu's KH1 Spells page, the ini's `kh1_cast_gravity` /
+  `kh1_cast_stop` / `kh1_cast_aero`, off by default): on, that spell is cast KH1's whole way at
+  the Magic styles KH2 (KH1's own cast motion, clock and effects, as at the styles KH1); off, as
+  before. Per spell, base Sora only (Wisdom Form keeps its own cast motions). No cost.

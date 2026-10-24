@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 471 (testing branch: Debug menu: KH1 Spells)
+- **Debug menu: KH1 Spells.** The tester (a toggle for the KH1 magics KH2 changed). No KH2 effect starts for Gravity / Stop / Aero (t463 log; KH2 motions 62 / 65 have no trigger, Checked (files)); at Magic KH2 KH1's effects play on KH2's cast cut at frame 68. Per spell "KH2 cast" (default) / "KH1 cast", base Sora, ini `kh1_cast_*`; its page is on the main page. `formmagic::kh1_cast`. Notes §18.19.
+
 ### 2026-10-23: Stage 470 (testing branch: KH2 effects: 0x4009 on KH1's body centre plus KH2's 20)
 - **KH2 effects: 0x4009 on KH1's body centre plus KH2's 20.** The tester ("try (c)"). 0x8005 plus KH2's kind-9 point minus its kind-1 (Sora 105 − 85, Checked (files)); KH1's body-centre height logged once. Notes §18.16.
 
