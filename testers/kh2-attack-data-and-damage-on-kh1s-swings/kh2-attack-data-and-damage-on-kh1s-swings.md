@@ -35,5 +35,9 @@
 > 3. MP per hit: KH2 gives none, KH1's magic needs it. (a) keep KH1's MP charge on KH2 hits, (b) drop it.
 
 ^m1
+1. either a or b you pick which one the player is going to feel a difference in it feeling like kh2, we're going to implement kh2s other systems like its mp mechanic and drive as a config toggle so this will effect opposite toggle for now.
+2. make it a config selection (criticals on or off for all moves that call it)
+3. (a) same as the 1st answer, we'll change core kh1 mechanics like that when we implement kh2s systems that are related to it.
 
+go ahead
 
