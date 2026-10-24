@@ -41,4 +41,3 @@ this is another test to see if tester folders are working, did you get it?
 
 ^m3
 
-this is another test   
