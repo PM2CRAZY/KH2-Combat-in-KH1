@@ -20,6 +20,7 @@
 - [14. Assistant: t457 to t460 (one change each).](#^m14)
 - [15. Assistant: t473 to t476 (one change each).](#^m15)
 - [16. Assistant: t488 and t489.](#^m16)
+- [17. Assistant: I looked into both in KH2's Steam decomp and your KH2 files.](#^m17)
 
 ---
 
@@ -315,10 +316,26 @@ go ahead
 > 2. Square again during the repel: KH2 lets you guard or roll again after the repel's first frames; here KH1 doesn't take Square until the repel's free frame (40). (a) add KH2's earlier window next, or (b) leave it?
 
 ^m16
+
+
 1. (b)
 2. make repel a switchable option in the config menu, for kh2 setting do option (a)
    
    I will get back to you on the logs
    
    go ahead
+
+
+> [!tip] Assistant
+> I looked into both in KH2's Steam decomp and your KH2 files. Both times KH2 turned out to do what we already do, so there's no new version this round. Details are in `docs/kh1-anim-slots.md` §7.
+>
+> 1. **Guarding in the air (1 (b)).** KH2 does have an air recoil: a small hop back, motion 43, 50 up and about 2.4 a frame backwards (`0x1403D61D0` → `0x1403D4650` / `0x1403D4800`). But it only plays when the guard isn't marked "the move goes on", and every guard Sora can have in the air is marked that way: Aerial Dodge, Aerial Recovery, Magnet Burst and motion 8 (I read every motion in your files). His only guards that repel are the guard press and Flash Step, and both are ground moves. So in KH2 a block in the air just stops the hit and he carries on, which is what happens here already. The air recoil only matters for his own air swings meeting an enemy's guard, which isn't this.
+> 2. **Square during the repel.** I had this wrong last time, sorry. In KH2's code, guard, roll and Quick Run out of the repel all wait for the repel's free frame, 40 (`0x1403A81F0` → `0x1403BFB30`). That's the same frame you can leave it here now. The frame-8 window I mentioned only lets reaction commands through, not Square. So a Guard Repel row would have KH1 and KH2 settings that play exactly the same, and I didn't build it.
+>
+> Question:
+> 1. For the repel row: (a) skip it, since it already plays like KH2's; (b) make the KH1 setting use KH1's own reaction when its guard blocks (no repel animation, no push back), so the row switches between KH1's block and KH2's (I'd research what KH1's guard does on a block first); or (c) did you want the switch to change something else?
+>
+> Logs and traces of guarding, on the ground and in the air, are still welcome whenever you have them.
+
+^m17
 

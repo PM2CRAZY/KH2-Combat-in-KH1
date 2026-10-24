@@ -17,6 +17,7 @@
 - [11. Assistant: Thanks. Nothing in this thread is waiting on a go-ahead righ](#^m11)
 - [12. Assistant: I went back through everything in this thread against KH2's ](#^m12)
 - [13. Assistant: Got it. Here's what I found for each, so you can give the go](#^m13)
+- [14. Assistant: t497 and t498. Your design note is now in docs/design-philos](#^m14)
 
 ---
 
@@ -220,6 +221,23 @@ if you think everything is one to one then close this thread, if not let me know
 > Write "go ahead" (with your picks for the L2 questions) and I'll build 1 and 2 as one version each.
 
 ^m13
+
+
 can you make sure that what I wrote matches the design documents as well? and other agents in these threads remember it 
 
 go ahead
+
+> [!tip] Assistant
+> **t497 and t498.** Your design note is now in `docs/design-philosophy-instructions.md`, the file every agent on this branch reads first, so it applies in every thread from here on.
+>
+> 1. **t497, lock-on side kick:** it follows KH2's rule from its code now (`0x140176EC0`). The enemy is checked first, and Sora only if the enemy is still on screen. If one leaves by the left edge, the camera turns an extra 20° one way; by the right edge, 20° the other way. Leaving only by the top or bottom gives no kick. One thing I worked out: our camera's left and right are mirrored compared with the game's screen, so I flipped the sides to match. I'm fairly sure that's right but couldn't prove it from the code alone. Could you lock on, let the enemy leave once by the left edge and once by the right, and send a Select + Triangle trace?
+> 2. **t498, L2 Camera Hold:** a new row on the Config menu's Camera page, under Camera Style. With it On, holding L2 stops the right stick (and the mouse) from turning or zooming KH2's camera, and R3 won't reset it. First person isn't affected. The decomp shows the camera's button tests, but KH2 builds the table that ties them to L2 while the game runs, so that link comes from your description. I set the row to Off by default for now, and the right stick doesn't act as the d-pad under L2, since you didn't pick on those two questions.
+>
+> Checked: KH2's Steam decomp for the side-kick rule and the camera's button tests, and your KH2 exe for their masks. Not checked in game.
+>
+> Still open:
+> 1. Under L2, should the right stick move the command menu cursor like the d-pad, as in KH2? (a) yes; (b) no, just stop the camera, as now.
+> 2. The row's default: (c) On, KH2's way; (d) Off, as now.
+
+^m14
+
