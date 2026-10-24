@@ -145,6 +145,9 @@ Steam KH2: the entry in the follow update `0x140165110`, the mode `0x140165e30`,
   - **Assumption:** the turn bits are the right stick's left / right (the pitch is the right
     stick's up / down, and the player can't move).
   - **Ours:** stick up looks up; right turns him right. The game's signs aren't readable here.
+  - The mouse (Steam): in a frame it moved, KH2's pad has put it over the right stick, so its
+    left / right turns him the same 3° a frame and its up / down pitches the view
+    (`kh2-pad.md`, "The mouse in KH2's first person").
 
 ## Lock-on camera (Checked, exe)
 

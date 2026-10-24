@@ -294,6 +294,10 @@ The tester, option (a): KH2's first-person view, natively. KH2's rules are in
     `probe::pad` gives KH1 a full left stick in the right stick's left / right direction, and a
     centred one otherwise. In a Drive Form KH2's controller has him: `takeover` turns its facing
     ±3° a frame, and `move_tilt` is 0, so he doesn't walk (KH2 `0x1403a8f00`).
+  - The mouse (Steam): in a frame it moved, its left / right turns him instead (KH2's pad puts
+    it over the right stick): base Sora through KH1's processed left stick for KH1's control
+    step only (`takeover::first_person_mouse_turn`), a Drive Form through `first_person_turn`.
+    `kh2-pad.md`, "The mouse in KH2's first person".
 - **KH2's numbers.** The eye at his position plus the form's `prty` `subjective_offset` (times
   `camera_scale`), the look point 350 ahead along his facing, the pitch by the right stick's up /
   down, R3 to level it, KH2's spring in and out (no KH1 blend: the switches use blend 0), KH2's

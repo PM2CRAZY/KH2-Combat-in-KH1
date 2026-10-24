@@ -737,6 +737,17 @@ unsafe extern "system" fn player_step(actor: usize) {
 }
 
 unsafe extern "system" fn control(actor: usize, dir: usize) {
+    // KH2's first person with the mouse, base Sora: KH1's own turn is fed the mouse for its step
+    // (`first_person_mouse_turn`), its left stick put back after.
+    let base = BASE.load(Ordering::Relaxed);
+    let saved = first_person_mouse_turn(base, actor);
+    control_step(actor, dir);
+    if let Some(l) = saved {
+        wr(base + LEFT_STICK_RVA, l);
+    }
+}
+
+unsafe fn control_step(actor: usize, dir: usize) {
     let base = BASE.load(Ordering::Relaxed);
     if actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize {
         combat::resume_command();
@@ -3540,16 +3551,38 @@ pub fn move_tilt() -> f32 {
 /// bits, whatever the tilt. **Assumption:** they are the right stick's left / right (KH2's
 /// first person pitches by the right stick's up / down, `0x140165e30`, and the player can't
 /// move in it). Right turns him (and the view) right, as the right stick turns KH2's camera
-/// (`camera::look`). For a Drive Form (KH2's controller has him); None otherwise, out of first
-/// person, or with the stick within its dead zone.
+/// (`camera::look`). In a frame the mouse moved (Steam), the mouse's x instead: KH2's pad puts
+/// the mouse over the right stick (`camera::first_person_mouse_x`), so the mouse turns him at
+/// the same steady 3° (`0x1403a9250` has no mouse speed-up). For a Drive Form (KH2's controller
+/// has him); None otherwise, out of first person, or with the stick within its dead zone.
 pub fn first_person_turn() -> Option<f32> {
-    // (Base Sora is KH1's own states': KH1's own first-person turn turns him, fed this, `probe`.)
+    // (Base Sora is KH1's own states': KH1's own first-person turn turns him, fed this, `probe`
+    // and `first_person_mouse_turn`.)
     if !super::camera::first_person() || !super::form::in_form() {
         return None;
     }
-    let st = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
-    let x = character_core::pad::axis(st[0]);
+    let x = match super::camera::first_person_mouse_x() {
+        Some(x) => x,
+        None => character_core::pad::axis(RAW_STICKS.load(Ordering::Relaxed).to_le_bytes()[0]),
+    };
     (x != 0.0).then(|| x.signum() * 0.052_359_9)
+}
+
+/// Base Sora in KH2's first person, in a frame the mouse moved (Steam): KH1's own first-person
+/// turn (`0x14028c7e0` in camera mode 2: 3° a frame times its processed left stick's x,
+/// `0x14298cad0`, read inside this control step `0x1402a6220`) is given a full left stick toward
+/// the mouse's x (none when the mouse moved only up / down), as `probe::pad` gives it the pads'
+/// right stick in other frames (that ran before the mouse was read this frame, `0x1400da9f0`).
+/// Returns the left stick to put back after KH1's step.
+unsafe fn first_person_mouse_turn(base: usize, actor: usize) -> Option<[f32; 2]> {
+    if !super::camera::first_person() || actor < 0x10000 || actor != rd::<u64>(base + PARTY_RVA) as usize || super::form::in_form() {
+        return None;
+    }
+    let x = super::camera::first_person_mouse_x()?;
+    let saved = rd::<[f32; 2]>(base + LEFT_STICK_RVA);
+    let lx = if x > 0.0 { 1.0 } else if x < 0.0 { -1.0 } else { 0.0 };
+    wr(base + LEFT_STICK_RVA, [lx, 0.0f32]);
+    Some(saved)
 }
 
 /// Attack pressed while KH1 had him for its own move (`combat::exec`): ends that move as soon

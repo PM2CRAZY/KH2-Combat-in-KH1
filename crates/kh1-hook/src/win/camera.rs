@@ -1048,6 +1048,24 @@ pub fn first_person() -> bool {
     FP.load(Ordering::Relaxed)
 }
 
+/// KH2's first person with the mouse (Steam): in a frame the mouse moved, the right stick's x as
+/// KH2's pad leaves it, which is the mouse's (`0x14039c180` writes the mouse over the right
+/// stick's bytes, with a dead zone of 1, before it sets the direction bits that turn the player,
+/// `0x1403a9250`). KH1's stick step does the same (`0x14028b4f0`), so this is KH1's processed
+/// right stick's x then. None out of KH2's first person, on other builds, or when the mouse
+/// didn't move: the pads' own right stick turns him.
+pub fn first_person_mouse_x() -> Option<f32> {
+    if !first_person() {
+        return None;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    unsafe {
+        mouse(base).motion?;
+        let x = rd::<[f32; 2]>(base + RIGHT_STICK_RVA)[0];
+        Some(if x.is_finite() { x } else { 0.0 })
+    }
+}
+
 /// Sora's fade through KH1's own actor alpha (`+0x60`, moved by `+0x64` a frame times the frame
 /// step and stopped at 0 or 1, KH1 `0x140297fe0`; KH1's own first person fades him the same way,
 /// `0x1401E2390` / `0x1401E2610`), with KH2's: from 1 to 0 over 30 frames into first person, from

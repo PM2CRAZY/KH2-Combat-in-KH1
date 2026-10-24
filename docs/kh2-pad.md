@@ -98,12 +98,43 @@ What ours does now (`camera.rs` `mouse` / `sticks`, the `kh2-camera` crate's `Co
   (halved at 60 fps), every mode, the first person too (`0x140165700`).
 - The tilt is no longer held to 1 in the crate (KH2's `+0x2c` carries the factor).
 - Trace: `kh2cam_mouse_x`, `kh2cam_mouse_y` (blank when it didn't move), `kh2cam_kbm`.
-- Not done: the mouse turning Sora in the first person (his turn comes from the pad records'
-  right stick through `probe::pad`, which runs before KH1 writes the mouse in), and KH2's
-  mouse-frame dead zone and factor on the left stick for his movement (`takeover::move_tilt`).
+- The mouse turns Sora in KH2's first person (the tester: "check the decomp"; below).
+- Not done: KH2's mouse-frame dead zone and factor on the left stick for his movement
+  (`takeover::move_tilt`).
 - 30 fps: KH2 springs once a frame at the full rate when its step is 2 or more; ours springs
   twice at the half rate (unchanged). With the 0.4 lag that is 75% of the gap a frame where KH2
   closes it all (2.5 · 0.4). At 60 fps they are the same.
+
+### The mouse in KH2's first person
+
+Checked (decomp), Steam KH2:
+
+- The player's first-person turn (`0x1403a9250`, called from his standing states) is 3° a
+  frame times the frame step on held bits 20 / 21, whatever the tilt and with no mouse factor.
+  The pad sets the stick direction bits after it writes the mouse over the right stick's bytes
+  (`0x14039c180`, dead zone 1 that frame), so in a frame the mouse moved the bits are the
+  mouse's. With the tester's reading that KH2's first-person turn is on the right stick (m7),
+  moving the mouse left / right turns him at a steady 3° a frame while it moves (any motion
+  past 1 of 127.5 after the x · 24); moving it only up / down doesn't turn him.
+  **Assumption:** bits 20 / 21 of the logical word are the right stick's left / right (the
+  remap table is exe data).
+- The look up / down (`0x140165e30`) reads the right stick's unit y and tilt, so the mouse's
+  up / down pitches the view, with the tilt's sensitivity factor (ours already did: the
+  camera's look stick is the mouse in a mouse frame).
+
+Ours (Steam only):
+
+- `camera::first_person_mouse_x`: in KH2's first person, when KH1's mouse function
+  (`0x140138b30`) says it moved, KH1's processed right stick's x (`0x14298cac0`; KH1's stick
+  step `0x14028b4f0` writes the mouse in the same way, dead zone 1).
+- Drive Forms (KH2's controller): `takeover::first_person_turn` turns by that x's sign, else
+  by the pads' right stick as before.
+- Base Sora (KH1's states): KH1's own first-person turn (`0x14028c7e0` in camera mode 2, 3° a
+  frame times its processed left stick's x `0x14298cad0`, read inside its control step
+  `0x1402a6220`; Checked (decomp)) gets a full left stick toward the mouse's x for that step
+  (`takeover::first_person_mouse_turn`), put back after. `probe::pad` can't do it: it runs on
+  the pad records before KH1 reads the mouse that frame (`0x1400da9f0` reads the pads first,
+  then the cursor and the mouse record).
 
 ### KH1's own mouse camera against KH2's (the tester: "they feel pretty close")
 

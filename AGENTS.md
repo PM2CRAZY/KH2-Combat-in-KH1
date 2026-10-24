@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 450 (testing branch: The mouse turns Sora in KH2's first person)
+- **The mouse turns Sora in KH2's first person.** The tester ("check the decomp"). KH2 `0x1403a9250`: ±3° a frame on the direction bits, set from the mouse in a mouse frame (`0x14039c180`). `camera::first_person_mouse_x` (KH1 `0x140138b30`, right stick `0x14298cac0`); forms `first_person_turn`; base Sora: KH1's turn `0x14028c7e0` fed a full left stick `0x14298cad0` for its control step `0x1402a6220`, put back after. Steam only. Assumption: bits 20 / 21 are the right stick's x. Notes `docs/kh2-pad.md`.
+
 ### 2026-10-23: Stage 449 (testing branch: Config menu: KH1 in KH2)
 - **Config menu: KH1 in KH2.** The tester (answers 1 Magic inside Combat, 2a, 4b, 5a, 6b). Page 1 has 9 rows: the button above Default; page 2 gone. Lists are KH1 windows (`0x1402E5A40` / `0x1402E3D10` / `0x1402E5E40`, KH1's help line). Back-out goes through the title tab `0x1402FADB0` (prologue `40 57 48 83 EC 40`, Checked (exe)). Steam only. Notes §6.
 
