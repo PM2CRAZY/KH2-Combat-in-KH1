@@ -339,3 +339,8 @@ go ahead
 
 ^m17
 
+(b)
+
+also I noticed that changing the combat settings back to kh1 doesn't seem to change the row selection for sora, (double check to make sure I'm right) he still does kh2 moves in the air and on the ground and also what we were working on earlier was his transition from ground to air when hes by a ledge still behaves like kh2 (double check) 
+
+go ahead
