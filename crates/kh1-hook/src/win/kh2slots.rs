@@ -319,7 +319,13 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     let field_len = field.then(|| kh2.rig.field_motions.get(&motion)).flatten().map(|m| kh2_anim::length_frames(m).round() as u32);
     let frames = field_len.unwrap_or(clip.length).max(1);
     let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
-    let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own, cast);
+    // (KH2's finisher casts end the combo: `cast_follow`.)
+    let finisher_cast = cast && !default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request);
+    let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own, cast);
+    if cast {
+        let more: Vec<EventTrack> = cast_follow(clip, finisher_cast).into_iter().filter(|t| !tracks.iter().any(|o| o.kind == t.kind)).collect();
+        tracks.extend(more);
+    }
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     let travel = kind == Kind::GroundCombo && travels(requests[request]);
     let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, stands_for, (motion, field), frames, &tracks, travel)) {
@@ -650,6 +656,52 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own:
         }
     }
     out
+}
+
+/// What may follow a KH2 cast on KH1's cast state (the tester, thread kh2-magic-and-reflect-native,
+/// answer 1 (a): the cast counts as a step and the combo goes on after it). KH2's rule (the
+/// controller's Magic action, `character_core`): from the cast motion's reaction-command window
+/// (range id 14, `AllowReactionCommand`) other actions may cut it and an Attack goes on with the
+/// combo; with none, only on its last frame. Only presses cut it there (jump, the action button,
+/// Attack), not the stick. On KH1's side: the motion's combo window (type 5, `+0x1CC` bit 22, in
+/// which KH1's menu takes a command with the action flag still set, `0x1402A2EC0`, and KH1's
+/// Attack step `0x1402A7510` counts on from `+0x41`, Checked (decomp)) from there to the end; no
+/// "may be left" (type 0 clears the action flags, `0x14029D399`, and the stick would walk out of
+/// the cast, which KH2's doesn't): a fresh jump or Square there ends the action flag for its own
+/// move (`cast_cut_open`, `formmagic::cast_cut`). A finisher cast that ends the combo has no
+/// combo window: KH1's Attack starts a new one (its jump and Square still cut it). Spells follow
+/// only from KH2's magic window (range id 35, `ComboMagic`): `cast_magic_window`, in
+/// `combat::command`.
+fn cast_follow(clip: &character_core::Clip, finisher: bool) -> Vec<EventTrack> {
+    if finisher {
+        return Vec::new();
+    }
+    vec![EventTrack::level(ks::COMBO, 0, &[(cut_from(clip) as f32, clip.length.max(1) as f32)])]
+}
+
+/// The first frame of a KH2 cast that presses may cut (range id 14; with none, its last frame).
+fn cut_from(clip: &character_core::Clip) -> u32 {
+    let len = clip.length.max(1);
+    clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(len - 1).min(len - 1)
+}
+
+/// Our cast slot playing on `actor` is in its cut window (`cut_from` on).
+pub unsafe fn cast_cut_open(actor: usize) -> bool {
+    let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let t: f32 = rd(actor + TIME_NOW);
+    t.is_finite() && t >= cut_from(clip) as f32
+}
+
+/// Our cast slot playing on `actor`: whether a spell may follow it now (KH2's magic window,
+/// range id 35, `ComboMagic`, from its first frame; none: not during the cast). `None`: no cast
+/// of ours plays.
+pub unsafe fn cast_magic_window(actor: usize) -> Option<bool> {
+    let m = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))?;
+    let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    let from = clip.first(|k| matches!(k, WindowKind::ComboMagic));
+    Some(t.is_finite() && from.is_some_and(|f| t >= f as f32))
 }
 
 /// One of Sora's motion sets with ours added (`docs/kh1-anim-slots.md` §2): KH1 binds a set onto

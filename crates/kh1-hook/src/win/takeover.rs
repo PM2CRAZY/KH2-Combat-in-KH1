@@ -973,6 +973,8 @@ unsafe fn shared_control(base: usize, actor: usize, dir: usize, f: unsafe extern
     let was = f32::from_bits(RISE_Y.swap(y.to_bits(), Ordering::Relaxed));
     let held = rd::<u32>(base + BUTTONS_RVA + 4);
     let kh2_sq = kh2_square();
+    // (A KH2 cast cut by a jump or Square press in its reaction-command window: `formmagic::cast_cut`.)
+    super::formmagic::cast_cut(actor, held & 6 != 0, pad_square());
     let seen = super::shared::Seen {
         state,
         can_act: can(actor) != 0,

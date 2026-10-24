@@ -406,14 +406,19 @@ pub unsafe fn native(spell: u8, air: bool) -> bool {
 pub unsafe fn pick_cast(actor: usize, spell: u8, air: bool) {
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     let stats = pose::ptr(rd::<u32>(actor + 0x6C));
-    let finisher = !air && info >= 0x10000 && stats >= 0x10000 && {
+    // The cast's step of the combo (KH2's `spell_slot`: in the air every step counts, KH2's
+    // `swing_counts`), kept for its start (`kh1_spell_start`, the tester's answer 1 (a)).
+    let step = (info >= 0x10000 && stats >= 0x10000).then(|| {
         let live = rd::<u32>(actor + 0x1CC) >> 22 & 1 != 0;
         let count = rd::<u8>(info + 0x41) as u32;
-        let max = rd::<u8>(stats + 0xD4).max(1) as u32;
-        let counts = rd::<u32>(info + 0x50) != 0 || super::takeover::with_abilities(|a| a.combo_master) == Some(true);
+        let max = rd::<u8>(stats + if air { 0xD5 } else { 0xD4 }).max(1) as u32;
+        let counts = air || rd::<u32>(info + 0x50) != 0 || super::takeover::with_abilities(|a| a.combo_master) == Some(true);
         let step = if !live { 1 } else if counts { count + 1 } else { count.max(1) };
-        step >= max
-    };
+        (step.min(255) as u8, step >= max)
+    });
+    CAST_STEP.store(step.map_or(0, |(s, last)| s as u32 | (last as u32) << 8 | 1 << 16), Ordering::Relaxed);
+    // (KH2 has no finisher cast in the air: the air cast's own motion, the step still the last.)
+    let finisher = !air && step.is_some_and(|s| s.1);
     let ground = 0x36 + spell as usize;
     let m = super::kh2slots::pick_cast(ground, finisher);
     if spell == 0 {
@@ -422,6 +427,47 @@ pub unsafe fn pick_cast(actor: usize, spell: u8, air: bool) {
     if finisher {
         log(&format!("KH2 magic {}: the combo's finisher, KH2's finisher cast {m:?}", SPELL_NAMES[spell as usize]));
     }
+}
+
+/// The step `pick_cast` worked out for the native cast KH1's command step is about to start:
+/// bits 0..7 the step, bit 8 the combo's last, bit 16 set.
+static CAST_STEP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// A native cast takes its step of KH1's combo (the tester's answer 1 (a), KH2's `spell_slot` /
+/// `take_spell_slot`): KH1's count (combat info `+0x41`) at the cast's step and its swing
+/// "connected" (`+0x50`: the step after a spell counts on from it, as after a connected swing in
+/// KH2), so KH1's Attack step in the cast's combo window (`kh2slots::cast_follow`) counts on from
+/// it (`0x1402A7510`: one more inside the window when `+0x50` is set, Checked (decomp)). The
+/// combo's last step (a finisher cast, or the step at the length in the air) ends it: the count
+/// set to 0, so an Attack counted on there starts at 1 (a new combo, as KH2's after its finisher).
+unsafe fn take_step(actor: usize) {
+    let v = CAST_STEP.swap(0, Ordering::Relaxed);
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    if v & 1 << 16 == 0 || info < 0x10000 {
+        return;
+    }
+    let (step, last) = ((v & 0xFF) as u8, v >> 8 & 1 != 0);
+    wr(info + 0x41, if last { 0u8 } else { step });
+    wr(info + 0x50, 1u32);
+    log(&format!("KH2 magic: the cast takes step {step} of KH1's combo{}", if last { " (its last: the combo ends)" } else { "" }));
+}
+
+/// KH1's control step with base Sora in its own states (`takeover::shared_control`, before it
+/// reads whether he can act): a fresh jump or Square in our cast slot's cut window
+/// (`kh2slots::cast_cut_open`, KH2's range id 14) ends the cast's action flag (`+0` bit 2, as
+/// KH1's own move ends do), so KH1's jump, or the Square move KH1 or a borrow of KH2's has for it,
+/// starts this step; the stick alone doesn't (KH2's cast takes only presses there). Whether it
+/// did.
+pub unsafe fn cast_cut(actor: usize, jump: bool, square: bool) -> bool {
+    static LAST: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+    let was = LAST.swap(jump as u8 | (square as u8) << 1, Ordering::Relaxed);
+    let fresh = (jump && was & 1 == 0) || (square && was & 2 == 0);
+    if !fresh || rd::<u32>(actor) & 4 == 0 || !super::kh2slots::cast_cut_open(actor) {
+        return false;
+    }
+    wr(actor, rd::<u32>(actor) & !4);
+    log(&format!("KH2 cast cut by {} in its reaction-command window (KH2 motion {:?})", if jump { "the jump" } else { "Square" }, super::kh2slots::playing_motion(actor)));
+    true
 }
 
 unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -> u64 {
@@ -474,6 +520,7 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
     if let Ok(mut g) = RT.lock() {
         runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion });
     }
+    take_step(actor);
     let v = if finisher { m.voice_finisher } else { m.voice };
     if v != 255 {
         super::kh2sound::voice(v as i16);

@@ -393,6 +393,15 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && super::shared::active() {
         let drive = super::drive::on() && arg >= super::drive::FORM_ARG;
         let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
+        // During a KH2 cast on KH1's cast state a spell follows only from KH2's magic window
+        // (range id 35, `kh2slots::cast_magic_window`; anything else from its reaction-command
+        // window, `kh2slots::cast_follow`): KH2's rule, as KH1 refuses what it can't take.
+        if !drive && super::kh2slots::cast_magic_window(actor) == Some(false) {
+            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+            sound(4);
+            cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, its magic window not open yet"));
+            return;
+        }
         // KH2's Fire, Blizzard, Thunder and Cure in KH1's own cast state (`formmagic::native`):
         // KH1's command step casts it, on KH2's cast motion in our slot, with KH2's script
         // (`formmagic::kh1_spell_start`). KH1 picks its ground or air cast by its own state

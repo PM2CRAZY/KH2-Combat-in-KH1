@@ -134,8 +134,7 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   KH1's ground request of the spell (and Fire's 0x3D) points at our slot of KH2's finisher cast
   (Fire 57, Blizzard 60, Thunder 63; templates 54 / 55 / 56 / 57) for that cast. Cure has none,
   and KH2 has none in the air.
-- Not done: the spell's step itself on KH1's count (KH1's next Attack after the cast starts a new
-  combo, as no combo window is open at the cast's end; question 1).
+- The spell's step on KH1's count: §4c.
 
 ## 5. What step 1 leaves (the plan)
 
@@ -186,3 +185,35 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   KH2's cost first, then has the data read it (in units, at most 99) for that one step, put back
   after. **Open:** the Magic menu still greys KH1's spells by KH1's own cost (that check, called from
   the menu fill), so a spell KH2's cost allows may show grey with less than KH1's cost left.
+
+## 4c. The cast as a step of the combo (done: the tester's answer 1 (a))
+
+- KH2's rule (the controller's Magic action and `spell_slot` / `take_spell_slot` in
+  `character_core`, the KH2 source): a cast takes the combo's next step (the first of a new
+  combo when none is going; in the air every step counts), the step after it counts on as after
+  a connected swing, and the combo goes on; from the cast motion's reaction-command window
+  (range id 14) other actions may cut it and an Attack goes on with the combo (with none, only
+  its last frame); a spell only in its magic window (range id 35); a finisher cast with no
+  finisher to come ends the combo.
+- The windows (`P_EX100.mset`, **Checked (files)**, KH2 frames at 60 per second): range 14 Fire
+  56 from 30, Blizzard 59 from 24, Thunder 62 / Cure 65 from 26, air 58 from 36, 61 from 44,
+  64 / 67 from 38, finishers 57 from 36, 60 from 48, 63 from 42; range 35 Fire 56 34..46 (into
+  71) and from 60 (into 56), Thunder 62 / Cure 65 from 42 (into 62), none on Blizzard 59, the air
+  casts or the finishers. (Range 35's parameter names the cast it leads to; the controller, and
+  so this port, takes any spell there.)
+- On KH1's side (`kh2slots::cast_follow`): our cast slots get KH1's combo window (event type 5,
+  `+0x1CC` bit 22: KH1's menu takes a command there with the action flag still set) from range 14
+  to the end; the finisher casts none. No "may be left" (type 0 clears the action flags, and the
+  stick would then walk out of the cast; KH2's takes only presses): a fresh jump or Square there
+  ends the cast's action flag (`+0` bit 2) before KH1's control step reads it
+  (`formmagic::cast_cut`, from `takeover::shared_control`), so KH1's jump, or the Square move KH1
+  or a borrow of KH2's has, starts at once. `formmagic::take_step` (at the native spell start):
+  KH1's count (combat info `+0x41`) set to the cast's step and `+0x50` (the swing's "connected"
+  flag, which the Keyblade attack wrapper `0x1402B3270` points its attack object at and clears,
+  **Checked (decomp)**) set, so KH1's Attack step (`0x1402A7510`: in the combo window one more
+  when `+0x50` is set or Combo Master is equipped, else no swing; outside it 1, **Checked
+  (decomp)**) counts on from the cast; the combo's last step sets the count to 0 (the next
+  counted Attack is a new combo's first). `combat::command` refuses a spell during our cast
+  before its range 35 (`kh2slots::cast_magic_window`), with KH1's "can't" sound.
+- **Open:** Finishing Plus after a finisher cast (KH2's next finisher in range 50) isn't built;
+  a finisher cast ends the combo.
