@@ -409,6 +409,13 @@ cameras (`0x1401E3320`, by Sora's state) switch nothing while Sora is held, as b
 Not covered: event and scene cameras (99999, 53000, 100500) stay held, so during an event the view
 doesn't move.
 
+KH2's camera's own windows (`camera.rs`: the "was ours" 300 ms, the "untouched" 5 s that lets it
+carry on when KH1's eye / target pair is as it wrote it, the 150 ms between KH1's follow calls, its
+trace and jerk logs) are timed on the mod's clock (`frameadv::clock_ms`) since t480, not real time, so
+a hold reads as no gap at all: before, a hold over 5 s (camera held) started KH2's camera over behind
+Sora on the next step. Select while held stays blocked (the tester left it open; nothing changed).
+**Assumption** (ours, not KH1's): no window there wants real time across a hold.
+
 ## Actors
 
 Each actor is a task of a second list, `0x142D5AB00` (0x28-byte tasks, made by `0x140297980` with

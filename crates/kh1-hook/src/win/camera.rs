@@ -135,9 +135,11 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
+/// (t480) The mod's clock (`frameadv::clock_ms`: real time less the time Frame Advance held the
+/// game), so a hold doesn't read as a gap: after a hold of over 5 s the camera started over
+/// behind Sora on the next step (the "untouched" and "was ours" windows below are in real time).
 fn now_ms() -> u64 {
-    static T0: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    T0.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64 + 1
+    super::frameadv::clock_ms() + 1
 }
 
 /// Swaps KH1's follow and lock-on camera modes for ours.
@@ -614,7 +616,7 @@ fn jerk_note(eye: Vec3, at: Vec3, feet: Vec3, dt: f32, yaw: f32) {
     let Ok(mut st) = ST.lock() else { return };
     let now = now_ms();
     if let Some((e0, a0, f0, ve, va, vf, t0)) = st.last {
-        let gap = now - t0;
+        let gap = now.saturating_sub(t0);
         if gap > 200 {
             st.last = Some((eye, at, feet, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO, now));
             return;
@@ -632,7 +634,7 @@ fn jerk_note(eye: Vec3, at: Vec3, feet: Vec3, dt: f32, yaw: f32) {
             ));
         }
         st.last = Some((eye, at, feet, ve2, va2, vf2, now));
-        if now - st.since >= 5000 {
+        if now.saturating_sub(st.since) >= 5000 {
             if st.n > 10 && LINES.fetch_add(1, Ordering::Relaxed) < 120 {
                 log(&format!(
                     "KH2 camera, last {:.1}s: {:.0} updates/s, {}..{}ms apart, dt {:.2}..{:.2}; biggest change per frame: eye {:.1}, look {:.1}, Sora {:.1}",
