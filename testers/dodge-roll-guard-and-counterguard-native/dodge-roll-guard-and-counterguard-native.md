@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: Thanks. Here's how I read each answer, then one go-ahead to ](#^m2)
 
 ---
 
@@ -44,8 +45,30 @@
 > 3. Once the roll is native, the Dodge Roll style row at KH1: (a) keep it (KH1's own roll animation and numbers); (b) take it out.
 
 ^m1
+
+
 1. unsure go with whats most native and 1:1
 2. (a)
 3. if you can make dodge roll its own slot and just have it get behaviours ported from kh2 so its 1:1 then we just switch which dodge roll out with the config use kh1s as a base so its native. Your call on what would be the best but it seems as a user to me reading it that this is the cleanest way, but tell me what you think. 
 
+
+> [!tip] Assistant
+> Thanks. Here's how I read each answer, then one go-ahead to ask for.
+>
+> 1. Most native and 1:1 means (a), KH2's coverage: front only, all round with Guard Plus. It runs on KH1's own guard object, though, not KH1's ±100° guard data. That's what t489 already does for the guard press: its Keyblade guard is a KH1 guard object, with the front check from KH2's `refact_self`. I'll double-check that t489's front test is KH2's angle and that Guard Plus widens it. If either is off, it gets its own version.
+> 2. (a): while the repel (42) plays, the menu's Attack slot shows KH1's Counterattack command, as KH1 swaps it in during its clash recoil. One thing to flag: KH2 has no such menu change (Attack just does Counterguard there). So this is KH1's look on top of KH2's move. Choosing it would run Counterguard (row 39 / motion 171, our request 0x20A), not KH1's own counterattack row 0x3E. Pressing Attack without the menu still works the same.
+> 3. That's what I'd do too, and it's the plan's step 1. **KH1's roll is the base at both settings:** Square starts KH1's own roll (its state and its request 0xDC), so there's never a borrow. The Dodge Roll row only picks what plays on that roll:
+>    - **At KH2:** the request plays our slot of KH2's motion 209, with KH2's travel, its invulnerable frames by level (10 / 16 / 24 / 32), its free frame (34), and KH2's guard-or-roll rule (stick at rest = guard).
+>    - **At KH1:** KH1's own animation and numbers, as now.
+>
+>    So the row stays, and it's one roll with two sets of behaviour.
+>
+> Things this changes or leaves:
+> - KH1 only rolls with its own Dodge Roll ability on. At KH2 I'd start KH1's roll directly when KH2's Dodge Roll is equipped, so the ability check is KH2's.
+> - Quick Run out of a held roll stays as it is for now (it's the Quick Run thread's).
+> - KH1's roll invulnerability (flag `0x40`, which I still haven't traced to where KH1 sets it) would be replaced at KH2 by KH2's frames on our slot, the way the other slots do it (`kh2slots::invulnerable` → `hurt`).
+>
+> If that all sounds right, write "go ahead" and I'll build: the roll first, then the menu swap (2), then the guard coverage check (1) if it needs a fix. One version each.
+
+^m2
 
