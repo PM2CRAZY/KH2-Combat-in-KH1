@@ -75,6 +75,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
 - [KH2 magic and Reflect native](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md)
   - [1. Mr Bugs: start working on "- KH2 magic and Reflect: a borrow, plus ou](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m1)
   - [2. Assistant: Moved here from "What is still missing", so that thread stay](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m2)
+  - [3. Assistant: t477 and t478. Started on native magic.](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m3)
 - [KH2's combo row selection](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md)
   - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m1)
   - [2. Assistant: t374](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m2)
