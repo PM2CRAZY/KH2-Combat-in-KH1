@@ -701,11 +701,23 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   and 15 ms each at load (9 more slots). Not native yet (still borrows): Flash Step (169: a guard
   on his body, ATKP 406 kind 2, frames 0..19), Vicinity Break (170: a body attack, 1869 group 21,
   power 125), Explosion (166: 911 / 912), Guard Break (165, a finisher; its KH2 guard break isn't
-  KH1's attack data), the hops (Aerial Sweep 191, Aerial Dive 196), the air rows (Aerial Spiral
+  KH1's attack data), Aerial Dive (196; Aerial Sweep, 191, below), the air rows (Aerial Spiral
   192, Aerial Finish 194, Magnet Burst 197), the Square moves, Counterguard and Retaliating Slash.
   What stays KH1's for these, as for the plain swings: the row, its attack object on the
   Keyblade (KH1's shape and damage for that row, not KH2's ATKP: Slapshot's, Dodge Slash's and
   Slide Dash's own power and reactions are not used), its combo count and window from the slot.
+- **Aerial Sweep from the ground** (the tester, t410's question: "when we transition that move to
+  native kh1 it will work the same"; Base and Aerial Combo KH2): row 33 (motion 191, ability 97,
+  PTYA Checked (files): primary, gap 0..260, a target 110 to 250 up, hop 17, bounds 17..117 plus
+  his jump height (flag 2), speed -8..18, `distance_adjust` 55) is a hop whose motion is only a
+  Keyblade swing (no body hit, no gravity range: its ranges are ids 11 and 14), so it runs as
+  KH2's plain hop row 0 does (`combomods::kh2_hop`, no borrow): KH1's state 2, its count at 1,
+  its air swing row 18 (or 17) with our slot of 191 (now built for 0xCC and 0xCD, about 170 KB
+  each), KH2's height and speed for that target from `Character::would_take_launch` (KH2's hop
+  rule above, with row 33's own numbers) on KH1's air fields, KH1's air combo after it. It wins
+  over row 0 where both pass, as in KH2 (it comes first in the table). With the Aerial Combo at
+  KH1 it is still a borrow. Aerial Dive (48, 196) stays a borrow: its motion holds him with no
+  gravity at frames 46..54 (range id 3), which KH1's air state doesn't do yet.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

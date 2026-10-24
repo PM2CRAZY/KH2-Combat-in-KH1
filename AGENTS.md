@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 433 (testing branch: KH2 Aerial Sweep from the ground natively)
+- **KH2's Aerial Sweep from the ground natively.** Row 33 (191) through `kh2_hop`, as row 0, slots on 0xCC / 0xCD. Notes §7.
+
 ### 2026-10-23: Stage 432 (testing branch: KH2 Keyblade-only ability swings on KH1's ground combo)
 - **KH2's Keyblade-only ability swings on KH1's ground combo.** `kh2slots::blade_swing` (weapon hits only, no body attack, guard, invulnerability or air/ground range; P_EX100.mset, Checked (files)); `combomods::native_ability`: Slapshot 162, Dodge Slash 163, Slide Dash 164 on 0xC8..0xCA, no borrow (root travel 50 / 300 / 700). 9 slots, about 1.5 MB. Notes §7.
 
