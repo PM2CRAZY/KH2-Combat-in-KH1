@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 454 (testing branch: KH2 effects: KH2's object frame on KH1's object root)
+- **KH2 effects: KH2's object frame on KH1's object root.** The tester ("reflect is misaligned with sora"). KH1's 0x8000 frame (`0x14029EA00`: rows -+0xF0, -+0xE0, -+0xD0 of the skeleton pass's matrix, Checked (exe)) is KH2's object frame (x, -y, -z: the old player's, Assumption) a quarter turn about y; offsets and turns on 0x8000 / 0x8005 go through `KH2_IN_KH1_OBJECT` (copy, position read, script place). Notes §18.17.
+
 ### 2026-10-23: Stage 453 (testing branch: the coat as before t387)
 - **The coat as before t387.** The tester (after t412): "before I prompted you to adjust the bake animations the coat was working how it should", "model ... also kh2 sora's skeleton". t387 put the jacket hem (73-74, 249-278) in `KH1_OWN`: it took KH1's own motion's relation (baked: the template; live: KH1's pass, hence t405 / t411). Out again: `KH1_OWN` 34 -> 16 (the shorts); the coat is s284..t386's (roots on KH2's pelvis, front panels a thigh share, joints at bind, `keep_clear`), live and baked. Checked (files): all KH2 motions (11906 frames) with KH1's run fed, the coat's 36 bones identical to t386's (t412: up to 27.7). KH2's coat ring (129-135 / 221-227, 70, from chest 68) carries no mesh. Test `local_own`. Notes `docs/kh1-secondary-motion.md` "The coat as before".
 

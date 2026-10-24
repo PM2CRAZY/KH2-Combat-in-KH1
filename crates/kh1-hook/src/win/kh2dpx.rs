@@ -230,6 +230,19 @@ const BLADE_BONE: u32 = 0x30;
 /// KH1's object-root code: the actor's place with a frame from its matrix rows (each negated,
 /// `+0xF0`, `+0xE0`, `+0xD0`), KH2's 0x4000.
 const KH1_OBJECT_ROOT: u32 = 0x8000;
+/// KH2's object frame in KH1's object-root frame (`docs/kh2-effects.md` §18.17): KH1's 0x8000
+/// frame (`0x14029EA00`, Checked (exe)) is the actor's matrix (`+0xD0`, the one its skeleton pass
+/// takes) rows `-z, -y, -x`; KH2's object frame on the same matrix is `x, -y, -z` (forward along
+/// its -z, the old player's frame). So KH2's x is KH1's -z, its z KH1's x: a quarter turn about
+/// y. Column form: KH2's object-frame coordinates to KH1's.
+const KH2_IN_KH1_OBJECT: glam::Mat3 = glam::Mat3::from_cols(glam::Vec3::new(0.0, 0.0, -1.0), glam::Vec3::Y, glam::Vec3::X);
+
+/// KH1's anchors whose frame is KH1's object-root frame (the object root, the body centre; and so
+/// KH2's 0x4009 started on the object root): KH2's offsets and turns on them go through
+/// [`KH2_IN_KH1_OBJECT`].
+fn object_framed(a: Anchor) -> bool {
+    matches!(a, Anchor::Code(KH1_OBJECT_ROOT | KH1_BODY_CENTRE))
+}
 /// KH1's body-centre code, KH2's 0x4001 (`docs/kh2-effects.md` §18.15): the object root's frame
 /// (as 0x8000's, `0x14029EA00`) at the centre of the actor's first collision part of kind 1 that
 /// isn't switched off, else of kind 0 (`0x14029EB20` → `0x1402B6D30 (actor, 1, -1)`: its point
@@ -915,6 +928,10 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     // binding (`posed`).
     let offset = if position_only { r_e * Vec3::from(h_off) } else { Vec3::from(e.translation) / safe + r_e * Vec3::from(h_off) };
     let rot: Mat3 = r_e * r_h;
+    // On KH1's object-root frame, KH2's object frame is a quarter turn from it: the offset and the
+    // turn taken into KH1's (`B₂ = B₁ · C`, so `B₂ · T(t) · R = B₁ · T(C t) · C R`). Position only:
+    // the offset is turned in the binding (`by_position_now`), the turn is the world's (unturned).
+    let (offset, rot) = if object_framed(bone) && !position_only { (KH2_IN_KH1_OBJECT * offset, KH2_IN_KH1_OBJECT * rot) } else { (offset, rot) };
     let angle = math::xyz_i_of(rot);
     let number = ELEMENT_NUMBER | el as u32;
     let note = format!(
@@ -1697,7 +1714,8 @@ unsafe fn by_position_now(base: usize, actor: usize, record: usize, p: &PosOnly)
     };
     bone(actor, rcode, m.as_mut_ptr() as usize);
     point(actor, code, t, pt.as_mut_ptr() as usize);
-    let o = p.offset;
+    // (KH2's offset is in KH2's object frame; KH1's 0x8000 / 0x8005 matrix is KH1's.)
+    let o = if object_framed(p.anchor) { (KH2_IN_KH1_OBJECT * glam::Vec3::from(p.offset)).to_array() } else { p.offset };
     let mut place = [0f32; 3];
     for k in 0..3 {
         let anchor = if matches!(p.anchor, Anchor::Bone(_)) { m[12 + k] } else { pt[k] };
@@ -1983,6 +2001,8 @@ pub fn spell_place(h: u32, at: glam::Mat4) {
                 wr::<[u32; 3]>(turn, [0; 3]);
             }
         } else {
+            // (`at` is KH2's frame; the element's copy was turned for KH1's object frame.)
+            let at = if object_framed(sp.layer.anchor) { at * glam::Mat4::from_mat3(KH2_IN_KH1_OBJECT.transpose()) } else { at };
             let m = at.to_cols_array();
             let apply: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + APPLY_STEAM);
             apply(sp.element, m.as_ptr() as usize);

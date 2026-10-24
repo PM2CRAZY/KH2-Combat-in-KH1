@@ -1160,7 +1160,7 @@ the user's extraction; **Assumption** = not yet checked.
 | End the loop (flag 0x80) | Instance `+0x91` (KH1's ended byte: no more loops, it ends when its pieces do, `0x14031CE10`). | Set on end. Not used by Explosion. |
 | Ends with the motion (0x20) | KH1's binding watches the actor's motion request (`+0x164`, binding `+6`; number bit 0x800) and stops the effect at once when it changes (`0x1402AE910`). That is KH1's request, not KH2's motion, and a stop, not KH2's fade. | KH2's motion change (from `kh2fx::tick`) ends it the KH2 way (above). KH1's bit 0x800 is not used. |
 | Ends with the owner (0x200) | KH1's binding stops the effect when the actor is gone (`0x140291FF0`). | A form change (`kh2fx::owner_gone`) fades or stops it (as `kh2-fx`). |
-| Object root 0x4000 | **Yes: bone code `0x8000`** (`0x14029EA00` / `0x14029EB20`): the actor's position `+0x10` with a frame made from its matrix rows `+0xF0`, `+0xE0`, `+0xD0` (each negated, in that order). KH2's 0x4000 (`0x1403B50F0`): the object's rotation `+0x40` and position. | Element 48 (§17.5). **Assumption**: KH1's 0x8000 frame equals KH2's object frame (to check in game). |
+| Object root 0x4000 | **Yes: bone code `0x8000`** (`0x14029EA00` / `0x14029EB20`): the actor's position `+0x10` with a frame made from its matrix rows `+0xF0`, `+0xE0`, `+0xD0` (each negated, in that order). KH2's 0x4000 (`0x1403B50F0`): the object's rotation `+0x40` and position. | Element 48 (§17.5). The two frames are a quarter turn apart about y: KH2's offsets and turns are turned into KH1's (§18.17). |
 | Weapon point 0x4003 / 0x4004 | **Yes: bone `0x30`, distance `t`** (`0x14029EB20`): `t` 0..1 mapped into the weapon's blade range (`btltbl` record `+0x28` start, `+0x24` end), the point between the blade bone and its parent (`0x1401D6320`). KH1's binding mode 3 (`0x1402ADD60 (dpx, number, actor, bone, t)`) takes the bone's rotation and that point every frame. KH2's 0x4003 (`0x1403B50F0`): the weapon object's weapon-shape bone (shape kind 0xF) matrix, moved along its x by a length; 0x4005 its root, 0x4007 halfway. | Element 44 (§17.4): 0x4003 → bone 0x30, t = 1.0; 0x4005 → t = 0; 0x4007 → t = 0.5. |
 | Bind position only (0x04) | Binding mode 1 (`0x1402ADC20`): position only, plus a world offset. | Not used by Explosion. |
 | Bind until started (0x02) | **Yes: bone-code bit 0x10000**: KH1's binding task (`0x1402AE910`) then places the element on its first run once the element no longer waits (its flag 0x10 clear) and ends. | Element 48 (§17.5). |
@@ -1326,7 +1326,7 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   bit 0x10000 for KH2's 0x02 (KH1's binding places it once, on its first run with the wait over,
   then ends: with the start frame's wait off (§16.2) that is the start frame itself, the binding
   task running at priority 139999 before the effect update). Plays through KH1 only with both
-  KH2 programs plugged in (MegaBirth, the ribbon). **Assumptions**: KH1's 0x8000 frame is KH2's
+  KH2 programs plugged in (MegaBirth, the ribbon). **Assumptions** (the frame: corrected in §18.17): KH1's 0x8000 frame is KH2's
   0x4000 object frame; KH2's 0x02 element is placed for the last time on the frame before its
   first tick, as KH1's is here.
 
@@ -1878,7 +1878,7 @@ can play.
   the bones: each game's own body; KH1 Sora's centre is from KH1's own collision data, not
   KH2's 85), and position-only elements on it use KH1's position binding (mode 1, t 0). The first
   start logs both heights (KH1's measured on Sora, KH2's from his model). **Assumption** (as for
-  0x8000): KH1's object frame is KH2's object frame; KH1 Sora's kind-1 part is his body's (not
+  0x8000, corrected in §18.17): KH1's object frame is KH2's object frame turned; KH1 Sora's kind-1 part is his body's (not
   checked offline: KH1's collision data isn't read here).
 - Sora's own package has no 0x4001 element (its codes: bones, 0x4000, 0x4003; **Checked
   (files)**). Which spell, form or Keyblade elements use it isn't known offline (their files aren't
@@ -1899,3 +1899,31 @@ can play.
   frame: 105 above Sora's place (KH1 Sora is smaller: his hips 78.9 high against KH2's 88.5).
   **Assumption**: the shape's offset is in the object frame the element offsets are in (0 for
   Sora). Cure 3's elements 3 and 4 use it (t430 log).
+
+### 18.17 KH2's object frame on KH1's object root (a quarter turn)
+
+The tester (m14): "reflect is misaligned with sora". Reflect's 17 elements are all on KH2's object
+root 0x4000 (t430 log), none on 0x4001 or 0x4009, with KH2's own offsets (barrier pieces 109, 85
+and 68 above the feet, the 85 ones 22 to the side and 18 ahead, the 68 ones 14.7 ahead).
+
+- KH1 (**Checked (exe)**, `0x14029EA00` with bit 0x8000, bytes at `0x14029EA2C..0x14029EA71`): the
+  frame's rows are `0 − row +0xF0`, `0 − row +0xE0`, `0 − row +0xD0` (`0x140386D10` with
+  `(0, 0, 0, 1)`: `0x1400E5EF0` subtracts), the place `0x14029EB20 (actor, code, 0)`. `+0xD0` is the
+  matrix KH1's skeleton pass is given (`0x1402A0350` → `0x140391C70 (actor + 0xD0, ...)`,
+  **Checked (decomp)**), so its rows are the model's x, y, z in the world; `+0xF0` (its z) is
+  forward: KH1's 0x8002 point ahead is `+0x50` plus `(0, 0, 100 t)` through it (`0x14029EB20`).
+  So KH1's object frame is (−forward, −y, −x): its x points back.
+- KH2's object frame on the same matrix: x, −y, −z (forward along its −z). **From the old
+  player** (`kh2fx`'s 0x4000, `w · diag(1, −1, −1)` on the same model → world, set from the tester's
+  Guard Break check: the spiral 235 along −z in front of him, not behind), x from the frame being a
+  rotation; the KH2 decomp's 0x4000 (`0x1403B50F0`) is the object's `+0x40` turn, whose relation to
+  the model isn't followed here (**Assumption**, as the old player's).
+- So KH2's object frame = KH1's × C, C a quarter turn about y (KH2 x → KH1 −z, KH2 z → KH1 x).
+  Without it every KH2 offset and turn on the object root was turned 90° about Sora: Reflect's
+  side and front pieces landed in front and to the side, its pieces' own turn 90° off. Also on it:
+  Explosion's burst (no offset; its turn), Fire 3's root pieces (position only), Cure's 0x4009 pieces,
+  every 0x4001 element (KH1's 0x8005 uses the same frame), the forms' root effects.
+- `kh2dpx`: an element on 0x8000 / 0x8005 has its copy's offset and turn taken through C at build
+  (`B₂ · T(t) · R = B₁ · T(C t) · C R`); position only, its offset through C each read
+  (`by_position_now`; its turn is the world's); a script's place (`spell_place`, KH2's matrix)
+  through C⁻¹. No per-frame cost beyond a 3×3 multiply per position-only read.
