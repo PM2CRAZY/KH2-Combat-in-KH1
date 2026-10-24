@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 462 (testing branch: Frame Advance: the main list's tasks read one by one)
+- **Frame Advance: the main list's tasks read one by one.** The tester ("look through the c decomp… do that for the rest of the values"). Every registration on the main list read (Steam decomp); 110000 is the view set-up (texture scroll, fog packet), not a camera; KH1's render queue `0x1401CB730` found. Held Tasks labels corrected. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 461 (testing branch: Frame Advance: Live only)
 - **Frame Advance: Live only.** The tester ("the actual pause seems to hold the image in the frame buffer"). KH1's pause picture (task 190020, capture `0x14018B370`) and the Held Picture row removed; effects held by KH1's system stop as in t447. Notes: `docs/kh1-frame-advance.md`.
 

@@ -122,54 +122,134 @@ else a full freeze needs (stats, UI, lock-on). Findings (all Steam):
   after every task), so it is on top. **Assumption** until tested: that the picture shows (if the
   capture didn't see the last frame, held frames would be black, as t372's).
 - **What still runs while held**: only KH1's pause-flagged tasks (as in KH1's pause): 10000
-  `0x1402B51A0`, 10499 (`0x140189F80` when made by the field), 30000 `0x14028ACB0` (the system stop,
+  `0x1402B51A0`, 10499 `0x14017EF90` (the pause's own; the field's 10499 `0x140189F80` is not flagged), 150000 `0x1402847A0`, 30000 `0x14028ACB0` (the system stop,
   below), 40000 `0x1401CB7C0`, 90000 `0x140286200`, 137000 `0x1402AEDC0`, 140000 `0x1401E0F40` (the effect
   update: effects paused), 145000 `0x140296300` (actor-bound sounds), 159998 `0x1400D2920`, 160000
-  `0x1401E0FA0` (the effect draw: effects hidden), 163000 `0x1401CB5C0`, 164003 `0x1401842A0`, 180150
+  `0x1401E0FA0` (the effect draw: effects hidden), 163000 `0x1401CB5C0`, 180150
   `0x140175380`, 184990 `0x1400D2910`, 185000 `0x14028BFA0`, 190000 `0x1401D50E0`, 200000 `0x14028DC30`,
   and our picture task. **Checked (decomp)** for the flags (registrations then `+2` = 0xFFFF or 1).
 
-### What the main list's tasks are (Steam; held unless flagged 1)
+### The main list's tasks, read one by one (after t447; Steam)
 
-Read for this (**Checked (decomp)** where a line says what the code does; "not read" otherwise).
-"Update" changes the game's state; "draw" builds or draws the picture; "mixed" does both.
+The tester's m22: "do not take my word for what I said; look through the C decomp." Every
+registration on the main list was found (the 213 call sites of `0x140284670`, plus
+`0x14028A900 (0x142867380, ...)` in the list's own start `0x1402845B0`) and each task's function
+read in the Steam decomp. **Checked (decomp)** for each line unless it says Assumption. (It
+replaces the t445 table, which had errors: 10499 isn't a plain clear, 20001 is the pad vibration,
+110000 isn't a camera, 129999 queues render states, 164003 isn't flagged, 135000 is a view copy.)
+"Update" changes the game's state; "draw" builds or draws the picture (or what only the picture
+reads: matrices, caches, render states); "mixed" does both. "Pause" is the task's flags (`+2`): 1 or
+`0xFFFF` run under KH1's pause (mask 1), 0 is held by it.
 
-| Priority | Function | What it is | Kind |
-|---|---|---|---|
-| 10499 | `0x140189F80` | clears a block of per-frame words (`0x14233EBF8` on, stride 0x3A) | update |
-| 20001 | `0x1401E1900` | two alpha curves (`0x142537DB0`, 0x48 each) stepped by the frame scale: fades | update |
-| 47000 | `0x14028E550` | 0x20 queued requests (`0x142BA2088`) applied and cleared | update |
-| 49999 | `0x1401C2BA0` | runs the list `0x1423D5288` | not read |
-| 50002 | `0x1401A5480`, `0x1401A2320` | a list / a large step reading the pad and the frame scale | update |
-| 53000 | `0x14028D620` | the system's load / mode machine (`0x14299C220`) | update |
-| 55000 | `0x1402937F0` | the command menu: reads the pad, moves the cursor, issues commands (the tester: Checked (in game)) | update |
-| 60000 | `0x14029E790` | runs the list `0x142D5B810`, then sums the lights' colours | update |
-| 79998 | `0x14028E6E0` | large; writes the system flags `0x142867364` | not read |
-| 80000 | `0x140298940` | the actors (Sora, party, enemies: AI, physics, motion, stats; the tester: what moved) | update |
-| 80001 | `0x1402B4460` | every actor's collision parts into the hit list (attack / damage checks) | update |
-| 85000 | `0x1402B11B0` | the lock-on: its state `0x142DB3510`, target `0x142DB3518`, the R1 list, a 90-frame timer (`0x142DB3828` += scale); `kh1-lockon.md` | update |
-| 95000 | `0x1402ABFF0` | runs a list | not read |
-| 100000 | `0x1401E5D90` | the camera (the tester: Checked (in game)); uses the frame scale | update |
-| 110000 | `0x14028CD50` | the camera's second step | update |
-| 120000 | `0x1400D2830` | the map draw (the tester); also its two sub-lists (map animation time), the sky's turn (`0x14233E174` += scale, `0x140182190`) and the map fades (`0x14019BE70`: 32 timers less the scale) | mixed |
-| 129999 | `0x1402BE500` | clears `0x142DE5DB0`, two words of a record | not read |
-| 130000 | `0x1402A23E0` | runs the list `0x142D5C9F0`: the models (the tester) | draw |
-| 135000 | `0x14028CC10` | copies the camera slot of the other parity into the current one | draw |
-| 137000 | `0x14028F6B0` | runs the list `0x142D22D08` | not read |
-| 139999 | `0x1402AEDA0` | runs the list `0x142DB34B0`: effects placed on their owners' bones (`0x1402AE910`) | update |
-| 145001 | `0x140290A50` | four delayed entries, each a timer less the scale, then played (`0x1400D2CB0`): voices (assumption) | update |
-| 150000, 150001, 159998, 162998 | `0x14021D050`, `0x14021CFC0`, `0x14021C640`, `0x14021C5C0` | 2D draws (`0x142694B38`) | draw |
-| 159999 | `0x1402D53B0`, `0x140396FF0`, `0x1403970D0` | a pass of `0x1402D9B40`...; a special effect's place; a fade (-0.1 a frame) | mixed |
-| 160000 | `0x1402E26D0` | large; uses the frame scale, writes `0x14233FE08` | mixed (not read) |
-| 164000..164004 | `0x1401800E0`, `0x1401C7E10`, `0x140184420`, `0x1401844C0`, `0x140184540`, `0x140184B40`, `0x140185360` | 2D / screen overlays; `0x140185360` uses the frame scale | mixed |
-| 165001 | `0x1402680F0` ... `0x140275B00` (12) | the HUD's parts (GPU draws); `0x140274540` and `0x1402758B0` step by the frame scale | mixed |
-| 169999 | `0x140293750` | the command menu's flags (`0x142D53A4C`) | update |
-| 170001 | `0x14026DB00`, `0x140270620`, `0x140272F10`, `0x1402739D0`, `0x14027B870` | HUD draws; `0x14027B870` steps a fade by the scale unless the system stop is on | mixed |
-| 180000.. 190050 | (about 40) | 2D, menus, text, fades; several step by the frame scale | mixed (not read one by one) |
+**KH1's render queue (found for this; it explains two of the tester's finds).** KH1 has a second,
+double-buffered list of deferred draws, `0x1423E1920` + `0x1423E1910` x 0x6020 (the one being
+filled at `0x1423ED960`). `0x1401CB730 (sub-priority, function)` queues an entry into it; task 40000
+(`0x1401CB7C0`, flags `0xFFFF`) swaps the buffers and starts running last frame's entries in
+sub-priority order; an entry that returns 2 pauses the queue, and the runner continues it after
+every later task (`0x1401CB5A0`, called by the task runner `0x14028A710` after each task); 150000
+(`0x1401CB770` through `0x1402847A0`) drains the rest. So a draw queued in one frame is drawn in the
+next. Who queues: 110000 (the fog's GS registers, `0x14018CC10`), 120000 (the map's and the sky's
+packets), 129999 (two render-state markers), the models' shadows (130000), the map parts' texture
+frames (only when the frame changes). A task that queues and is held drops its draws from the next
+frame. A second queue `0x1423ED978` is run at 163000 (`0x1401CB5C0`).
 
-With KH1's pause picture every one of these is held while the game is held, as in KH1's pause, so
-none of them needs a split: the picture covers what they would draw. (Removed after t447: the
-table below, with what each task really does, is in "The main list's tasks, read one by one".)
+**The field's tasks** (made at every room's start by `0x1401705D0` / `0x14028AC10` / the room's
+`0x14028AAA0`; these are what the tester's logs list):
+
+| Priority | Function | What it is (Steam decomp) | Kind | Pause |
+|---|---|---|---|---|
+| 10000 | `0x1402B51A0` | returns 0: an empty anchor | none | `0xFFFF` |
+| 10499 | `0x140189F80` | clears the 32 "transformed this frame" words of the map collision cache (`0x14233EBF8`, stride 0x40). `0x140188460` (collision queries: physics, camera, the shadows' floor test) transforms a collision group once a frame into a block of the aged heap that it releases at once (`0x14028DB70`: freed by 200000) | draw (a per-frame cache) | 0 |
+| 20001 | `0x1401E1900` | the pad vibration: two curves (`0x142537DB0`, 0x48 each, stepped by the frame scale) into the motor bytes `0x14298C9B0 + pad x 0x70 + 2 / 3`, which the pad read (`0x14028B0B0`) sends and clears every frame | update | 0 |
+| 30000 | `0x14028ACB0` | KH1's system stop toggle (section below) | update | 1 |
+| 40000 | `0x1401CB7C0` | the render queue: swap, run last frame's first part | draw | `0xFFFF` |
+| 47000 | `0x14028E550` | 0x20 queued event triggers (`0x142BA2080`, 0x18 each) handed to the event system (`0x1401A1A10`: an event entry started; `0x1401A1E30`: a room change); then cleared | update | 0 |
+| 47000 | `0x14028A2B0` | (from a script) a scripted freeze of the actors (`0x1401ED6D0` too) | update | 0 |
+| 49999 | `0x1401C2BA0` | runs `0x1423D5288`: the event scripts' effect requests (`0x1401BFF70`: load an effect file, start it, place it) | update | 0 |
+| 50002 | `0x1401A5480` | runs `0x1423D3E18`: the event scripts' threads (`0x1401A2CF0`) | update | 0 |
+| 50002 | `0x1401A2320` | the event zones: the room's event entries (`0x142382AD0`, 0x360 each), their timers (less the frame scale), the confirm-button checks | update | 0 |
+| 53000 | `0x14028D620` | the room data loader (`0x14299C220` state; loads `xl_limit.dat`) and the room change bit `0x142867364` 0x10000 | update | 0 |
+| 55000 | `0x1402937F0` | the command menu: the pad (`0x14298CA94` / `CA98`), the cursor, the commands it issues (`0x142D53A40`), the shortcut buttons; not while the system status has bit 2. The tester: Checked (in game) | update | 0 |
+| 60000 | `0x14029E790` | the lights: runs `0x142D5B810` (light colour fades, less the frame scale), adds the ambient colours, steps the light flicker phases (`0x142340930`..: + a rate a frame) | update | 0 |
+| 79998 | `0x14028E6E0` | the event scripts' actor commands (show / hide, motion, turn, place, collision on / off) | update | 0 |
+| 79999 | `0x1402AACD0` | the enemy spawner: spawn groups, their respawn timers (less the frame scale), `0x140290D60` makes the actors | update | 0 |
+| 80000 | `0x140298940` | the actors: runs `0x142D5AB00` (Sora, party, enemies: AI, physics, motion, stats). The tester: Checked (in game) | update | 0 |
+| 80001 | `0x1402B4460` | every actor's collision parts into the hit list (attacks, damage) | update | 0 |
+| 85000 | `0x1402B11B0` | the lock-on: state `0x142DB3510`, target `0x142DB3518`, the R1 list, its timer (`kh1-lockon.md`) | update | 0 |
+| 90000 | `0x140286200` | runs `0x142868BB0`: the file loads in flight (`0x140286420`) | update (I/O) | `0xFFFF` |
+| 95000 | `0x1402ABFF0` | runs `0x142D60FB0` (`0x1402ACAD0`): the dropped prizes (orbs, munny): wait, then fly to Sora (`0x8003` point) and are taken. **Assumption** that these are the prizes (from the code's shape) | update | 0 |
+| 99999 | `0x1401BD8D0`, `0x1401BF850` | the event camera (a path played by the frame scale; made by event commands) | update | 0 |
+| 100000 | `0x1401E5D90` | the field camera: the camera mode's step (table `0x140506CE0`), its blend into the eye / target `0x14299BAF0` / `0x14299BAE0`. The tester: Checked (in game) | update | 0 |
+| 110000 | `0x14028CD50` | **not a camera (the tester was right: "it stops one of the backgrounds").** The view set-up: the view and projection matrices for this frame's parity slot (`0x14299C1A0 + parity x 0x40`, `0x14299BC40`, the clip `0x14233FD00`) and the yaw `0x14299C194`, all from the camera; inside (`0x14018D410` -> `0x14018CC10`) the fog values, **the fog packet queued** (render queue, sub-priority 0x271A) and **the map's texture scroll** (`0x142336C00`, 16 u / v pairs, += the frame scale x the rates `0x142336D00`, wrapped at 1); first, the screen zoom step (`0x140183BD0`: a delay `0x14233E834`, the zoom `0x1404DD56C` moved by `0x1404DD574` a frame, the viewport through `0x1401703C0`) | mixed (draw, with two steps) | 0 |
+| 120000 | `0x1400D2830` | the map draw (the tester); its sub-lists (map parts: texture frames by the frame scale), the sky's turn and the map fades, queued packets (`0x140182350`), the cutscene bars (`0x140178580`); registers 164002 / 164004 below when they are on | mixed | 0 |
+| 129999 | `0x1402BE500` | queues two render-state markers (`0x1402BEE60` 0x1020 at sub-priorities 45499 / 60499: GS test / alpha registers reset between draw groups) | draw | 0 |
+| 130000 | `0x1402A23E0` | the models: runs `0x142D5C9F0` (`0x1402A1320`, one per object): its matrix, then its colour stepped toward its target by 4 a frame (`+0x370`..`+0x373` toward `+0x350`..`+0x35C`, once `+0x374` bit 0x4000), then its draw (`+0x20`: `0x1402A1B70` & co., with the shadow `0x1402BD6F0`). The tester: Checked (in game) | draw (one step) | 0 |
+| 135000 | `0x14028CC10` | the view copy: the other parity's matrices into the ones the draws from here on use (`0x14299BAA0`, `0x14299BB30`): the effects and 2D draw with last frame's view | draw | 0 |
+| 137000 | `0x14028F6B0` | runs `0x142D22D08` (`0x14028F6D0`): the map objects' behaviour scripts (`0x1402BCEC0` -> `0x1402CC620`, KH1's object script machine) | update | 0 |
+| 137000 | `0x1402AEDC0` | (made by the menu code, `0x1402FE750`) places one effect on a matrix | draw | `0xFFFF` |
+| 139999 | `0x1402AEDA0` | runs `0x142DB34B0`: effects bound to actors: placed on bones (`0x1402AE910`), delayed starts (`0x1402AEBE0`, less the scale), fade-outs (`0x1402AEF20` / `0x1402AEFB0`, less the scale) | mixed | 0 |
+| 140000 | `0x1401E0F40` | the effect update (`0x1401ED720` / `0x1401ECB50`); copies the system stop into `0x142E9D7E0` | update | `0xFFFF` |
+| 145000 | `0x140296300` | the sounds bound to actors: follow them, stop with them | update (sound) | `0xFFFF` |
+| 145001 | `0x140290A50` | four delayed voice / sound plays, each a timer less the frame scale (`0x1400D2CB0`) | update | 0 |
+| 150000 | `0x1402847A0` | the render queue drained (`0x1401CB770`) | draw | `0xFFFF` |
+| 159998 | `0x1400D2920` | two 2D packet buffers allocated for the frame (`0x14017E2E0`) | draw | `0xFFFF` |
+| 160000 | `0x1401E0FA0` | the effect draw pass (`0x1401ECF30`) | draw | `0xFFFF` |
+| 163000 | `0x1401CB5C0` | the second render queue run | draw | `0xFFFF` |
+| 163001 | `0x140292E40` | frees the actors taken off this frame (their models, tasks) | update | 0 |
+| 164003 | `0x1401842A0` | the screen fade overlay (`0x14233E804`: its alpha, colour) | draw | 0 |
+| 165001 | `0x1402680F0`, `0x1402684A0`, `0x14026FE80`, `0x140270F80`, `0x1402719F0`, `0x140272330`, `0x140274400`, `0x140274540`, `0x1402747D0`, `0x1402758B0`, `0x140275B00` | the HUD's parts (made by `0x140266DC0`): pop-ups, numbers (`0x140270F80`: 10 number pop-ups at an actor's point; `0x140272330`: the munny count), gauges. Each is a small state machine (states and timers + 1 a frame) plus sprite animations (`0x14027E460`: frame time += `0x14233FBE0`, the half frame scale) plus its GPU draw. Their data is `0x1427F13D0`..`0x142866D18` (read for this: only HUD functions write there, but the command menu's `0x142852814`; the Gummi Ship's `0x1428119C0` block is read by its own code) | mixed | 0 |
+| 169999 | `0x140293750` | opens / closes the HUD's command menu window when the command menu's flags change (`0x142D53A4C`) | mixed | 0 |
+| 170001 | `0x14026DB00`, `0x140270620`, `0x140272F10`, `0x1402739D0`, `0x14027B870` | more HUD parts, as above (`0x14027B870` draws the command menu's window from the command menu's state `0x142D539F0`; its fades hold on the system stop) | mixed | 0 |
+| 180150 | `0x140175380` | keeps a texture request up (`0x14010DC50`) | draw | `0xFFFF` |
+| 180200 | `0x140172A20` | runs `0x1422EC1A0`: the event message windows (`0x140173680`: open / close by the frame scale, text) | mixed | 0 |
+| 184990 | `0x1400D2910` | the 2D buffers of 159998 released | draw | `0xFFFF` |
+| 185000 | `0x14028BFA0` | runs `0x14299B360`: the finished file loads' callbacks | update (I/O) | `0xFFFF` |
+| 190000 | `0x1401D50E0` | the 2D sprite lists (double-buffered `0x1423FD7D4`): last frame's freed, this frame's built | draw | `0xFFFF` |
+| 190000 | `0x1401EB750` | the screen shake: timers less the frame scale, the offset `0x14018BCC0` | mixed | 0 |
+| 190000 | `0x14018B010` / `0x14018B220` | (a room's start, `0x14018AFE0`) the fade-in: 64 frames less the frame scale | mixed | 0 |
+| 190050 | `0x140170580` | runs `0x1423404C0`: the screen colour fades (`0x14017AA10` & co.: time += the frame scale) | mixed | 0 |
+| 200000 | `0x14028DC30` | the aged heap: ages and packs its blocks, frees the released ones | draw (memory) | `0xFFFF` |
+
+**On demand in the field:** 164002 `0x140184540` and 164004 `0x140184B40` / `0x140185360` (made by
+120000 each frame they're on, one frame each): screen overlays; `0x140185360` steps three pulse
+phases (`0x14233E820` / `824` / `828`, + a rate a frame) and one by the frame scale (`0x14233E838`).
+164000 `0x1401800E0` / `0x1401C7E10` and 164002 `0x140184420` / `0x1401844C0`: event picture and
+screen effects. 100000 `0x140289D40` (from `0x14028A410`, 52000) and `0x1403A06B0` (from `0x1403A10F0`,
+53000): two scenes' own cameras; 100500 `0x1402C96E0` / `0x1402CDAC0`: an actor kind's camera
+follow (`0x1402C9DC0`). 52000 `0x14028A410`: a scene's own list `0x14298C7B0`. 137000 `0x140399890`,
+`0x14039A270`, `0x14039A4A0`, `0x14039AB50`, `0x14039B610`, `0x14039FB60`, 159999 `0x140396FF0` /
+`0x1403970D0`, 164999 `0x140399490`, 50000 `0x140395360` / `0x1403963C0`, 52000 `0x140395A10`,
+`0x140395E70`, `0x140396250`, `0x140396AA0`, `0x1403979E0`, `0x14039C2C0`, `0x14039FEF0`: the special
+battles and scenes of `0x140395800` & co. (`0x14039x`: their state `0x142EFB0F0`, a countdown
+`0x14298C7A4` less the frame scale, their own effects); all update but the 159999 / 164999 places.
+
+**Room changes and event commands** (one-shot or until done; made by the room change
+`0x1401A4780` / `0x140192520` and by event script commands, the `0x1401A8`.. / `0x1401AB`.. /
+`0x1401C3`.. to `0x1401CA`.. handlers, which the decomp has no callers for: they are called through
+the script's table): 50000 `0x14017D860` (load the next room's file), `0x140180860` (its music),
+`0x140192440` (its map), `0x1401B5320`, `0x1401BA320`, `0x1401BADF0` (an event camera step, + 1 a
+frame), `0x1401C44A0`, `0x1401C4500`, `0x1401C79F0`, `0x1401C9650`, `0x1401C9680`, `0x1401C9770`,
+`0x1401C9810`, `0x1401CA810`, `0x1401CB130` (wait for a button, a timer, then a window or a sound);
+50001 `0x1401A3400` (the event start); 50002 `0x1401B3C90`, `0x1401C41B0`.. `0x1401C42F0`,
+`0x1401C9290` (wait for a sound or a load, then go on); 10000 `0x14017A150` (from four commands);
+30000 `0x14018BA00` / `0x14018BA60`; 189999 `0x14017D860`; 190000 `0x14017D990`, `0x14017E170`,
+`0x1401810D0`, `0x14018AD70`, `0x14018B100`, `0x14018B1A0`, `0x14018B2F0`, `0x1401C6EB0`..`0x1401C77A0`
+(the event pictures, the fades, the game over); 190001 `0x1401B39B0`; 190022 `0x14017AF50`. All
+update (they step the event), the 190000 ones draw too.
+
+**KH1's pause and menus:** 10499 `0x14017EF90` (flags 1: redraws the pause picture), 190019
+`0x14017F110` (flags 1: P A U S E), 190018 `0x14017FD40`, 190019 `0x14017FCE0` (flags `0xFFFF`), 190020
+`0x14017FD60` (the capture); 159999 `0x1402D53B0` (the camp menu, from the pause machine's states:
+its flags are the pause's); 160000 `0x1402E26D0` (a menu's background shake, from an event command);
+180100 `0x140301620` / `0x140302610`, 180199 `0x1402F9220` / `0x14030BC70`, 180201 `0x1402F64B0`,
+`0x1402F64E0`, `0x1402F9940`, `0x14030BFA0`, 180250 `0x1402FED10`, 180300 `0x140180240` / `0x1401802C0`,
+180499 `0x14018E8B0` / `0x14018EE80`, 180000 `0x1401CB500` / `0x14038D9B0` (the world / room words):
+menu screens (Jiminy's journal, shops, the save point, the world map). 190050 `0x140170580` is also
+made by the title (`0x140170BB0`, `0x140171410`). **Gummi Ship mode** (`0x14020x`..`0x14025x`):
+120001 `0x140211830` / `0x140220540`, 150000 `0x14021D050`, 150001 `0x14021CFC0`, 159998
+`0x14021C640`, 162998 `0x14021C5C0`, 180200 `0x140221200`, 180201 `0x1401EE930`, `0x1401F8490`,
+`0x1401F9980`, 180250 `0x140215BC0`. Not read line by line (not the field): menus and the Gummi Ship
+are outside what Frame Advance is for (**Assumption**: it's used in the field).
 
 ### KH1's system stop (a second, developer freeze; Checked (decomp) and (exe))
 

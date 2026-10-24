@@ -164,24 +164,43 @@ const TAIL3X_DRAW_STEAM: usize = 0x338160;
 static STOP_SAVED: Mutex<Option<(u32, u32)>> = Mutex::new(None);
 static TAILS_ON: AtomicBool = AtomicBool::new(false);
 
-/// What the main list's tasks are (Steam RVAs), for the Held Tasks page and the log: the tester's
-/// Held Tasks tests (t399, t426: Checked (in game)) and the decomp (`docs/kh1-frame-advance.md`).
-const LABELS: [(usize, &str); 15] = [
-    (0x1E1900, "fades"),
-    (0x28D620, "system"),
+/// What the main list's tasks are (Steam RVAs; 12 characters at most), for the Held Tasks page and
+/// the log: each read in the Steam decomp (after t447: `docs/kh1-frame-advance.md`, "The main
+/// list's tasks, read one by one"), with the tester's Held Tasks tests (t399, t426, after t447).
+const LABELS: [(usize, &str); 33] = [
+    (0x189F80, "coll. cache"),
+    (0x1E1900, "vibration"),
+    (0x28E550, "event trig."),
+    (0x28A2B0, "actor freeze"),
+    (0x1C2BA0, "event fx"),
+    (0x1A5480, "event script"),
+    (0x1A2320, "event zones"),
+    (0x28D620, "room loader"),
     (0x2937F0, "command menu"),
     (0x29E790, "lights"),
+    (0x28E6E0, "event cmds"),
+    (0x2AACD0, "spawner"),
     (0x298940, "actors"),
     (0x2B4460, "hit checks"),
-    (0x1E5D90, "camera"),
-    (0x28CD50, "camera 2"),
-    (0xD2830, "map draw"),
-    (0x2A23E0, "models"),
-    (0x28CC10, "camera copy"),
-    (0x2AEDA0, "fx binding"),
     (0x2B11B0, "lock-on"),
+    (0x2ABFF0, "prizes"),
+    (0x1BD8D0, "event camera"),
+    (0x1BF850, "event camera"),
+    (0x1E5D90, "camera"),
+    (0x289D40, "scene camera"),
+    (0x3A06B0, "scene camera"),
+    (0x2C96E0, "actor camera"),
+    (0x2CDAC0, "actor camera"),
+    (0x28CD50, "view, scroll"),
+    (0xD2830, "map draw"),
+    (0x2BE500, "draw states"),
+    (0x2A23E0, "models"),
+    (0x28CC10, "view copy"),
+    (0x28F6B0, "obj scripts"),
+    (0x2AEDA0, "fx binding"),
     (0x290A50, "delayed play"),
     (0x3970D0, "fx fade"),
+    (0x292E40, "actors freed"),
 ];
 
 fn label(rva: usize) -> &'static str {
