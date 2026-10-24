@@ -264,10 +264,20 @@ pub fn control(s: &Seen) -> u32 {
         if quick_run {
             ROLL_HELD.store(false, Ordering::Relaxed);
             ROLL_FRAMES.store(0, Ordering::Relaxed);
+            // KH2's Quick Run on KH1's state of its own (the tester, quick-run-native: "do your first
+            // purposed route"), along his facing as KH2's roll turns into it (`quickrun::start`, no
+            // borrow). Else the borrow.
+            if unsafe { super::quickrun::start(super::takeover::sora_actor(), [0.0, 0.0], "Square held through KH1's roll") } {
+                return KH1_ACTION_BIT;
+            }
             borrow = QUICK_RUN;
         } else if s.state == 0 && square_fresh && !roll_kh2 && !s.kh1_roll && s.quick_run && s.moving {
             // (Dodge Roll at KH1 without KH1's roll equipped: Square while moving is KH2's Quick
-            // Run, which has no style of its own, when it is equipped.)
+            // Run, which has no style of its own, when it is equipped.) Natively along the stick
+            // (`quickrun::start`), else the borrow.
+            if unsafe { quick_run_on_stick("Square while moving (KH1's Dodge Roll not equipped)") } {
+                return KH1_ACTION_BIT;
+            }
             borrow = SQUARE;
         } else if s.state == 0 && square_fresh && roll_kh2 && super::combomods::guard_press() {
             // KH2's guard on KH1's states (stick at rest, Guard equipped): our request for KH2's
@@ -280,6 +290,13 @@ pub fn control(s: &Seen) -> u32 {
             // Dodge Roll equipped too, its bit `0x20` of `0x142D5F610`, set in its control step
             // from `0x140282A70 (22)`.)
             if s.kh2_square {
+                // KH2's action button while moving with no dodge roll of KH2's but Quick Run (KH2's
+                // order, `0x1403A75A0`: the guard with the stick at rest, else the dodge roll, else
+                // Quick Run): its Quick Run natively (`quickrun::start`), else the borrow.
+                let kh2_runs = s.moving && super::takeover::with_abilities(|a| a.dodge_roll == 0 && a.quick_run > 0) == Some(true);
+                if kh2_runs && unsafe { quick_run_on_stick("Square while moving (the Dodge Roll style KH2, no dodge roll of KH2's)") } {
+                    return KH1_ACTION_BIT;
+                }
                 borrow = SQUARE;
             } else {
                 static N: AtomicU32 = AtomicU32::new(0);
@@ -337,6 +354,15 @@ pub fn control(s: &Seen) -> u32 {
         hide |= KH1_JUMP_BITS | KH1_ACTION_BIT;
     }
     hide
+}
+
+/// KH2's Quick Run natively along the stick (`quickrun::start`).
+unsafe fn quick_run_on_stick(why: &str) -> bool {
+    let actor = super::takeover::sora_actor();
+    if actor < 0x10000 {
+        return false;
+    }
+    super::quickrun::start(actor, super::takeover::stick_now(actor), why)
 }
 
 /// KH2 gives him back to KH1's states: on the ground (KH1's ground state), or falling (KH1's fall

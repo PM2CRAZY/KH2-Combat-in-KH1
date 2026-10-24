@@ -71,6 +71,8 @@ const TICK: f32 = 2.0;
 /// KH2's blend into the stop (204: none, `0x140423500`) and into what follows it (8.0).
 const STOP_BLEND: f32 = 0.0;
 const AFTER_BLEND: f32 = 8.0;
+/// KH1's roll's timer flags (`0x1402C9E60` sets them with its 12.0 at `+0xC`).
+const KH1_ROLL_FLAGS: u32 = 0x10_0080;
 /// KH1's landing request (its ground jump's base 0, + 7) and its idle (`0x4000_0000` queued).
 const LANDING: u32 = 0x07;
 
@@ -172,6 +174,10 @@ pub unsafe fn start(actor: usize, dir: [f32; 2], why: &str) -> bool {
     let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
     let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
     install(base);
+    // Out of KH1's own roll (Square held through it): its 12-frame timer's flags off, as KH1's
+    // think clears them when the timer runs out (`0x140297FE0`, flags `0x80 | 0x100000`, Checked
+    // (decomp)). Assumption: nothing else of KH1's roll needs ending (its motion is replaced).
+    wr(actor, rd::<u32>(actor) & !KH1_ROLL_FLAGS);
     set_state(actor, STATE);
     if rd::<i32>(actor + 0x70) != STATE {
         return false;
