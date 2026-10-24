@@ -78,3 +78,8 @@ go ahead
 
 ^m2
 
+crash when starting the game sent the log
+
+if you find the reason I give you permission to fix it 
+
+go ahead
