@@ -37,5 +37,10 @@
 > 3. Positioned sounds: (a) at Sora (KH1's effects pan by where they are), or (b) centred, as now?
 
 ^m1
+1. a
+2. what ever is closet to how kh1s systems handle it
+3. same as 2
+
+go ahead
 
 
