@@ -38,7 +38,8 @@ pub fn base_kh2(air: bool) -> bool {
 }
 
 /// Base Sora's Cure at the Magic styles KH2 is KH2's (the Config menu's Cure row, `styles::Kind::
-/// Cure`); else KH1's own Cure on KH2's Cure cast motion, as Gravity / Stop / Aero.
+/// Cure`); else KH1's whole Cure: its command step, its own cast motion, script, effects and cost
+/// (the tester, m4: "cure kh1 would cure exactly like kh1 with its effects and cast").
 pub fn kh2_cure() -> bool {
     super::styles::kh2(super::styles::Kind::Cure)
 }

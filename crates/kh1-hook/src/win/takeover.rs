@@ -1311,8 +1311,9 @@ pub fn command_started(shots: usize, spell: Option<u8>) {
     // own KH2 cast motions, the user's choice "KH1 spell, KH2 animation".)
     let air_now = AIR_CAST.try_lock().ok().is_some_and(|a| a.is_some());
     // (Unless that spell is set to cast KH1's whole way, `formmagic::kh1_cast`.)
-    // (KH1's Cure too when the Cure row is KH1's, `formmagic::kh2_cure`.)
-    let base_look = spell.is_some_and(|sp| (sp >= 4 && !super::formmagic::kh1_cast(sp)) || (sp == 3 && !super::formmagic::kh2_cure())) && super::formmagic::base_kh2(air_now);
+    // (Not KH1's Cure with the Cure row at KH1: KH1's whole cast, its own animation and clock, the
+    // tester, kh2-magic-and-reflect-native m4: "cure kh1 would cure exactly like kh1".)
+    let base_look = spell.is_some_and(|sp| sp >= 4 && !super::formmagic::kh1_cast(sp)) && super::formmagic::base_kh2(air_now);
     super::formmagic::BASE_KH1_CAST.store(base_look, Ordering::Relaxed);
     let fc = spell.filter(|_| super::form::in_wisdom() || base_look).and_then(|sp| {
         let air = air_now;

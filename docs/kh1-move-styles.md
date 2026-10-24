@@ -72,9 +72,13 @@ has him in the air then, else Magic (`formmagic::base_kh2`).
     no-gravity frames, KH2's gravity), not KH1's fall, as Final Form's.
 - **Cure** (Config > KH1 in KH2 > Combat > Magic > Cure, ini `cure_style`, KH2 by default; the
   tester, thread kh2-magic-and-reflect-native, answer 5): with the Magic styles at KH2, KH2's Cure
-  (as above) or KH1's own Cure drawn on base Sora's KH2 Cure cast motion and run on its clock, as
-  Gravity / Stop / Aero (`formmagic::kh2_cure`, `kh2_spell`). No effect with the Magic styles at
-  KH1 (KH1's Cure whole) or in a Drive Form (their own).
+  (as above) or KH1's whole Cure (the tester, m4: "cure kh1 would cure exactly like kh1 with its
+  effects and cast"): KH1's command step casts it as unmodded (`combat::command` lets it through),
+  its requests 0x39 / 0x86 keep KH1's own slots 56 / 81 (`kh2slots::redirect`), no KH2 cast motion
+  drawn over it (`takeover::command_started`): KH1's script, effects, heal and cost
+  (`formmagic::kh2_cure`, `kh2_spell`). (Before, KH1's Cure was drawn on KH2's Cure cast motion,
+  as Gravity / Stop / Aero still are.) The Physics row still decides how he moves in the air. No
+  effect with the Magic styles at KH1 (KH1's Cure whole) or in a Drive Form (their own).
 - Costs: base Sora's KH2 spells cost KH2's MP scaled onto KH1's (`mpcost`, `docs/kh1-magic-native.md` §6).
 - The spells' effect packages are loaded with `drive = off` too (they were only with Drive on).
 - If a spell's KH2 file or MAGC row is missing, KH1 casts its own.

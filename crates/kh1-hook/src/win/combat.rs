@@ -445,7 +445,8 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
             // KH2's finisher cast when this cast is the combo's finisher (`formmagic::pick_cast`).
             super::formmagic::pick_cast(actor, arg, kh1_air);
             cmd_log(format!("command {kind:#x} ({full:08x}): KH2's spell {arg} in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
-        } else if drive || arg == super::reflect::SPELL || super::formmagic::base_kh2(air) {
+        } else if drive || arg == super::reflect::SPELL || (super::formmagic::base_kh2(air) && !(arg == 3 && !super::formmagic::kh2_cure())) {
+            // (KH1's Cure with the Cure row at KH1 is KH1's command step's, as unmodded: below.)
             let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
             if can(actor) == 0 {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
