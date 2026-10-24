@@ -16,6 +16,7 @@
 - [10. Assistant: t453. Sorry I missed your message last round; it should have](#^m10)
 - [11. Assistant: I went through the KH2 Steam decomp step by step, from where](#^m11)
 - [12. Assistant: t490 and t491. Everything now follows what KH2's own model s](#^m12)
+- [13. Assistant: t499 and t500.](#^m13)
 
 ---
 
@@ -227,6 +228,21 @@ go ahead
 
 ^m12
 
+
 keep researching until we have a good looking animations that emulate kh2s animations as close as possible while still making it look natural to kh1's model
 
 go ahead
+> [!tip] Assistant
+> **t499 and t500.**
+>
+> - **t499, the legs:** KH2 draws its thighs on the leg bones of its shorts and its shins on its knee bones. Our body retarget was guessing their twist from where the knee pointed. In some moves (the ledge climb, Aerial Recovery, some air moves and swings) that was 40° to 110° off what KH2 actually draws. Now each thigh and shin twists exactly as KH2's bone does: within 0.2° in all 83 of KH2's motions, and nothing snaps more than KH2's own keys do. KH1's shorts hang on the thigh, so they now turn exactly like KH2's shorts too. It covers the live poses and the baked animations.
+> - **t500, the coat:** I measured eleven ways of moving the coat over every KH2 motion: following KH2's waist, following the hips (turned, placed or only twisted), hanging, letting the thighs lead the front panels, and several ways of pushing it off the thighs. Keeping it rigid on the chest, like KH2's jacket, came out best. It only goes into the shorts for a few frames, right at the top of a thigh, in side kicks, splits and spins (about 0.15% of the time). At that spot the coat could go either over the thigh or around it. So every push I tried either flipped from one side to the other within a frame (even in the first swing) or arrived after the kick was over. Following the hips made it clip more, not less. So the coat stays as it is. t500 only adds the measuring tool.
+>
+> **Check:** your KH2 model and all 83 motions in the game files. Not tested in game.
+>
+> Please test: kicks, splits, spins and the ledge climb. Watch the shorts and how the legs twist.
+>
+> Question: the coat's quick clips at the top of the thigh. (a) leave it like KH2's jacket; (b) try a slow, smoothed push anyway (it barely helps and lags behind); or (c) send me a clip of the move where it bothers you, and I'll look at that one?
+
+^m13
+

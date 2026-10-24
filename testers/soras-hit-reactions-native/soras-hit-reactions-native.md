@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: t506 to t508, the first batch. Everything below runs on KH1'](#^m2)
 
 ---
 
@@ -60,6 +61,8 @@
 > 3. After a hit, should the no-damage time be (a) KH1's 30 frames, or (b) KH2's own rule once I find it in the KH2 decomp, with KH1's timer kept only if they match?
 
 ^m1
+
+
 1. unsure make it a switch in the config and when I play test it more I can figure out what to do, still make it native of course. your judgement on how to do it 
 2. how sora receives knock back should also be a config
 3. if the rules are different make it part of the switch in the config for sora knockback, if not keep the same. 
@@ -69,3 +72,28 @@ I tested guard break and it using kh2s collisions (what ever causes a recoil) an
 when it comes to drive forms its not yet native so its deprecated right now, don't worry about it til we start working on drive forms
 
 go ahead 
+> [!tip] Assistant
+> **t506 to t508**, the first batch. Everything below runs on KH1's own hit pass, so KH1 still handles the 30-frame no-damage time, the HUD flash, MP, voices and tallies. Drive Forms aren't touched, as you said.
+>
+> - **t506, Hit Reactions row** (Config > Combat, KH1 / KH2). On KH2, Sora plays KH2's flinch animations on KH1's own reaction slots: 10 to 13 on the ground, 14 / 15 in the air. He can act again from KH2's frame 50. I checked in both decomps that KH1's "front" flinch is the same as KH2's front.
+> - **t507, KH2's push, and the Knock-back Numbers row** (your 1, my call). The push now uses KH2's curve (start at 0.1 × the distance, ×0.9 each frame), through KH1's own push and collision. In the air it's KH2's hop of 50 and its drift. The row picks the distance:
+>   - KH1: KH1's own number for each hit;
+>   - Scaled: KH2's 200 scaled by the damage;
+>   - KH2: 200 for every hit.
+>   The default is KH2, because that's what KH2 itself does when an attack has no knock-back number, and KH1's attacks never have one.
+> - **t508, Medium Hits row** (your 2). Blow / Flinch. On Flinch, KH1's middle hits (20 to 29% of your HP) only flinch you, and only 30% and up knock you away.
+> - **Your 3, the re-hit rule:** both games give 30 frames of no damage after the reaction ends. The one difference is that KH2 still lets hits from the same attack group through, and KH1's attacks have no groups. So I kept KH1's timer, with no switch.
+>
+> **Still to do:** KH2's blow (the launch, and the landing into 17 / 19) as a new KH1 state, and the moves that still borrow KH2's controller going through the same pass.
+>
+> The recoil and parry problem you found with Guard Break has its own thread now: [KH2 recoil and parry system](../kh2-recoil-and-parry-system/kh2-recoil-and-parry-system.md). The research is there, including a bug that explains why you can't parry.
+>
+> Please try: hits from the front and from behind, on the ground and in the air, with each Knock-back Numbers value, and Medium Hits on Flinch.
+>
+> Questions:
+> 1. With Battle Quotes on KH2, should Sora's hurt line be (a) KH1's, as now, or (b) KH2's?
+> 2. In an air flinch, KH2 turns Sora toward the attacker (or away, if he was hit from behind). Should we (a) do that too, or (b) leave his facing alone, like KH1?
+> 3. Flinches while flying or swimming: (a) KH2's numbers too, or (b) keep KH1's?
+
+^m2
+

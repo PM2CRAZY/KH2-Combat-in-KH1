@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: t509 to t513. KH2's sounds now go through KH1's own sound sy](#^m2)
 
 ---
 
@@ -37,10 +38,43 @@
 > 3. Positioned sounds: (a) at Sora (KH1's effects pan by where they are), or (b) centred, as now?
 
 ^m1
+
+
 1. a
 2. what ever is closet to how kh1s systems handle it
 3. same as 2
 
 go ahead
 
+
+> [!tip] Assistant
+> **t509 to t513.** KH2's sounds now go through KH1's own sound system (steps 1 to 4).
+>
+> - **t509:** each KH2 sound gets cut into its own one-sound bank, in exactly the format KH1 uses for its own. To check that, I cut three of KH1's own sound files with it and got back byte-for-byte identical files.
+> - **t510:** those banks are registered with KH1's own loader and put back whenever KH1 clears its banks (on a room change, I believe).
+> - **t511:** your 1 (a) and 3. Effects play through KH1's effect queue at Sora's position, so KH1's pause, Frame Advance, the volume sliders, panning and room stops apply to them.
+> - **t512:** the Keyblade's sounds were on a bus KH1's effects slider never touches. They're on KH1's effects bus now, which matches KH2, since KH2's effects slider covers that bus too.
+> - **t513:** your 2. Battle quotes go through KH1's own voice request on Sora's voice channel: KH1's priority rule, KH1's channel, Sora's mouth movement and the voice slider. The line is picked the way KH2 picks it.
+>
+> Anything KH1 can't take still plays on the old player, and `kh2_sound_engine = mod` in the ini switches back to it completely. I'll remove the old player (step 5) once you've heard this working.
+>
+> **Heads-up:** some sounds from KH2's main bank will sound different, including Magnet Burst, Thunder and some of Reflect's. Our old reader was playing the wrong audio for those 35 sounds; KH1's engine now plays the ones KH2's own data points to.
+>
+> **Check:** the Steam KH1 and KH2 decomps and your sound files. **Not checked:** that KH1's engine actually plays the cut banks and KH2's Vorbis voice clips. That's the big thing to hear.
+>
+> Please test:
+> - Explosion, Magnet Burst, Thunder, Reflect, and a few combos with KH2 quotes on;
+> - pausing mid-sound;
+> - the effects and voice sliders;
+> - sounds panning when the camera turns;
+> - sounds after changing rooms.
+>
+> Please send the log too; the lines starting "KH1 banks:" are the ones I need.
+>
+> Questions:
+> 1. KH2 has one quote at priority 0, and KH1's rule never lets that one through. (a) play it whenever Sora isn't already talking (now), or (b) never?
+> 2. Two of Sora's quote lists include a partner's line. (a) Sora says one of his own there (now); (b) the partner says their KH1 line; or (c) nothing?
+> 3. Is it OK that those 35 sounds now play KH2's own audio? (a) yes; (b) no, keep the old ones.
+
+^m2
 

@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](#^m2)
 
 ---
 
@@ -49,6 +50,7 @@
 
 ^m1
 
+
 do your first purposed route. 
 
 1. make behave exactly 1:1 with kh2 so if its (a) then do it
@@ -56,3 +58,32 @@ do your first purposed route.
    also its getting hard to read which doc gets updated, can you add an extra thread that tells me whats updated and whats needed from me? 
    
    go ahead
+
+> [!tip] Assistant
+> **t501 to t505.** Quick Run is its own KH1 movement state now (state 0x2A, a free slot in KH1's state table), so KH2's controller no longer takes over. Everything runs on KH2's numbers from your 03system.bin.
+>
+> - **t501, the state:** KH2's start speed and its hold timer. The timer only counts down while Square is held, and letting go stops the run at once with KH2's stop brake and its stop motion (204). The brake is applied every second frame, matching KH2's physics tick. KH1's own ground movement carries him, so floors and slopes are KH1's. The speed sits in KH1's momentum field, and when the stop motion ends you get KH1's landing.
+> - **t502, the start points:** Square held through KH1's roll, Square while moving, and KH2's own Square order with Dodge Roll on KH2 (guard at rest, then roll, then Quick Run) all start the state now. The borrow is only left as a fallback for Drive Forms.
+> - **t503, off a ledge:** he drops into a fall from rest with the full slide speed, and he still has his Aerial Dodge, as in KH2.
+> - **t504, invulnerability 1:1:** your (a). LV1 has 0 frames like KH2; LV2 / LV3 / MAX get 8 / 12 / 16. The old 6-frame minimum is gone.
+> - **t505, the start effect:** at LV2 and up, KH2 plays a small effect when the run starts (elements 110 to 112). That's in now.
+>
+> From the decomp: nothing can cut a KH2 Quick Run except letting go of Square. Its two motions have no "free" window, and KH2's jump and command checks need one, so jump and the command menu do nothing mid-run.
+>
+> **Check:** the Steam KH2 and KH1 decomps, and motions 203 and 204 in your files. **Not checked:** how KH2 hands the stop motion over to its landing, and which animation KH2 shows when you run off a ledge.
+>
+> About the extra thread you asked for: it's [Status: what's updated and what's needed from you](../status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md). I'll update it every round.
+>
+> Please test:
+> - a tap, then a full hold at each level;
+> - running off a ledge, then an Aerial Dodge;
+> - getting hit during a run at LV1 and at LV2+;
+> - Square held through KH1's roll;
+> - slopes and stairs.
+>
+> Questions:
+> 1. Running off a ledge mid-run, KH2's fall doesn't ask for an animation of its own. Should he (a) switch to the fall animation at once (what's in now), or (b) keep the Quick Run animation until it ends?
+> 2. The LV2+ start effect: (a) on by default (now), or (b) only with all KH2 effects on?
+
+^m2
+
