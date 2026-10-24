@@ -896,6 +896,36 @@ fn kh2_air_dodge() -> bool {
     }
 }
 
+/// KH2's Aerial Dodge at Sora's level (KH2's `fmab`: its height and its speed a frame), if
+/// equipped (`combomods::aerial_dodge`). The controller busy: the last answer.
+pub fn kh2_air_dodge_growth() -> Option<(f32, f32)> {
+    static LAST: Mutex<Option<(f32, f32)>> = Mutex::new(None);
+    let read = DRIVER.try_lock().ok().and_then(|d| {
+        d.as_ref().map(|d| {
+            let level = d.character.abilities.aerial_dodge;
+            d.character.growth_level(level).map(|g| (g.air_dodge_height, g.air_dodge_speed)).filter(|g| g.0.is_finite() && g.1.is_finite() && g.0 > 0.0)
+        })
+    });
+    match read {
+        Some(v) => {
+            if let Ok(mut l) = LAST.lock() {
+                *l = v;
+            }
+            v
+        }
+        None => LAST.lock().ok().and_then(|l| *l),
+    }
+}
+
+/// KH2's stored launch velocity set by a move KH1's states run (`combomods::aerial_dodge`: the
+/// Aerial Dodge's), for KH2's glide later in the same air time (as `shared_give_back` keeps the
+/// controller's).
+pub fn note_launch(vel: [f32; 2]) {
+    if let Ok(mut l) = LAUNCH.lock() {
+        *l = Some(Some(vel));
+    }
+}
+
 /// KH2's glide would start now (t321, Glide at KH2): KH2's Glide equipped (its level kept aside
 /// counts: `KH2_GLIDE_KEPT`) and `above` (his height over the floor) past its start height.
 fn kh2_glide_open(above: f32) -> bool {

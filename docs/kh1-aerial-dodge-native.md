@@ -139,3 +139,23 @@ for the dodge. No new hook.
   sounds would come with it; a jump slot (KH1's 13) as the template, with its own sounds dropped
   so only 999019 plays, fits a dodge better (**Assumption** until the slot is built and listened
   to).
+
+## 6. Built (testing branch, after the tester's go-ahead)
+
+The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one test a frame); 2,
+(b) the dodge out of KH2's glide goes native too; 3, (a) the dodge first, flight on the next press.
+
+- **t492, the dodge on KH1's air state.** `combomods::aerial_dodge`, from `shared::control`'s
+  fresh jump in the air (the borrow stays the fallback when our request isn't built or in a
+  Drive Form): our request of motion 202 (`kh1rows::OURS` "Aerial Dodge", request only) with the
+  action flag and no blend, KH1's jump state (1) put in its air state first (state 2, `+0x3D0`
+  0, flag `0x10000` off, as KH1's launch `0x1402AF960`), facing the stick, `kh2_hop` with the
+  level's `fmab` height and speed (`takeover::kh2_air_dodge_growth`), the launch velocity kept
+  for KH2's glide (`takeover::note_launch`), once per air time. The slot is 160 frames long
+  (`Ours::frames`), KH2's clip looped over it from its own loop point in the bake and the draw
+  (`pose`), and only KH2's sound (999019) plays on it (`Ours::own_sounds`: KH1's air swing's
+  sounds left out). KH1's air step steers it with the stick as a jump at physics KH2 (it's not
+  treated as one of KH1's own air moves despite the action flag): KH2's dodge steers with
+  `air_control` on all through. **Checked (decomp)** for KH2's side; KH1's loop at the end of a
+  slot with an empty queue (`0x14029F0A0`: from `+0x288`, unless `+0x160` bit 3 holds it) is
+  **Checked (decomp)**, but the slot is long enough that it shouldn't come to that.

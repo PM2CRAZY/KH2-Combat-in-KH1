@@ -317,11 +317,18 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     let old = u32::from_le_bytes(template[4..8].try_into().unwrap());
     // (A field variant's own length: KH2's field walk and run are their own motions.)
     let field_len = field.then(|| kh2.rig.field_motions.get(&motion)).flatten().map(|m| kh2_anim::length_frames(m).round() as u32);
-    let frames = field_len.unwrap_or(clip.length).max(1);
+    // (A move of ours with a slot longer than its clip, `kh1rows::Ours::frames`: the Aerial
+    // Dodge, its clip looped over it as KH2 loops it.)
+    let ours = if own { super::kh1rows::by_motion(motion).map(|n| &super::kh1rows::OURS[n]) } else { None };
+    let frames = ours.and_then(|o| o.frames).filter(|&f| f > clip.length).or(field_len).unwrap_or(clip.length).max(1);
     let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
     // (KH2's finisher casts end the combo: `cast_follow`.)
     let finisher_cast = cast && !default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request);
     let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own, cast);
+    // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
+    if ours.is_some_and(|o| o.own_sounds) {
+        tracks.retain(|t| t.kind != ks::SOUND);
+    }
     if cast {
         let more: Vec<EventTrack> = cast_follow(clip, finisher_cast).into_iter().filter(|t| !tracks.iter().any(|o| o.kind == t.kind)).collect();
         tracks.extend(more);

@@ -290,6 +290,12 @@ pub fn control(s: &Seen) -> u32 {
         } else if air && jump_fresh && s.air_dodge && !AIR_DODGED.load(Ordering::Relaxed) {
             AIR_DODGED.store(true, Ordering::Relaxed);
             DODGE_JUMP_UP.store(false, Ordering::Relaxed);
+            // KH2's Aerial Dodge on KH1's air state (the tester, aerial-dodge-native): our request
+            // of KH2's motion 202 with KH2's hop, no borrow (`combomods::aerial_dodge`). The press
+            // is KH2's: KH1 sees none of it (no glide, no Neverland flight on it). Else the borrow.
+            if unsafe { super::combomods::aerial_dodge(super::takeover::sora_actor()) } {
+                return KH1_JUMP_BITS | KH1_ACTION_BIT;
+            }
             borrow = AIR_JUMP;
         } else if air && s.kh2_glide && square_fresh {
             // KH2's glide (Glide at KH2, t321): KH2's controller glides him, on Square as in the KH2
@@ -1256,8 +1262,11 @@ pub mod physics {
             *g = None;
             return r;
         }
-        // KH1's own move in the air (an air attack, a cast, a blow), flag 4.
-        let action = flags & 4 != 0;
+        // KH1's own move in the air (an air attack, a cast, a blow), flag 4. Not KH2's Aerial Dodge
+        // on our request (`combomods::aerial_dodge`, asked with the flag): KH2 steers it with the
+        // stick all through (its controller's `air_control` with steering on), as a jump.
+        let dodge = super::super::kh2slots::playing_motion(actor) == Some(character_core::motion::AERIAL_DODGE);
+        let action = flags & 4 != 0 && !dodge;
         let dt: f32 = rd(base() + DT_RVA);
         let dt = if dt.is_finite() && dt > 0.0 && dt < 4.0 { dt } else { 1.0 };
         let y: f32 = rd(actor + 0x14);

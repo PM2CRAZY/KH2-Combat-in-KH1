@@ -120,6 +120,13 @@ pub struct Ours {
     /// has a slot of each KH2 finisher KH1's finisher request of its kind plays (`kh2slots`), the
     /// one KH2 picks pointed at (`kh2slots::pick_own`); `motion` is the first.
     pub next_finisher: bool,
+    /// Its slot's length in 60 Hz frames when longer than the KH2 clip (the clip loops over it
+    /// as KH2 loops it: the Aerial Dodge's motion 202 loops from its frame 2 until KH2's apex
+    /// swaps it for the fall, `combomods::dodge_apex`); `None` the clip's own length.
+    pub frames: Option<u32>,
+    /// Only KH2's own sounds for it (`kh2slots::frame`): the template's sounds left out of the
+    /// slot (the Aerial Dodge: KH2's 999019 alone, not KH1's air swing's swish).
+    pub own_sounds: bool,
 }
 
 /// `Ours::kh2_row` for a move with no PTYA row (Aerial Recovery; Sora's rows go to 59).
@@ -135,19 +142,25 @@ pub const NO_ROW: u8 = u8::MAX;
 /// (row 11, motion 173, its request only), its repel (motion 42, no row, its request only, asked
 /// for when the guard stops a hit, `combomods::guard_repel`) and Counterguard (row 39, motion 171,
 /// ability 96: Attack during the repel, an attack row).
-pub const OURS: [Ours; 11] = [
-    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false },
-    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false },
-    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false },
-    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true, attack: true, next_finisher: false },
-    Ours { name: "Retaliating Slash", kh2_row: 40, motion: 172, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false },
-    Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false },
-    Ours { name: "Finishing Plus", kh2_row: NO_ROW, motion: 154, kind: Kind::Finisher, rises: false, guard_break: false, attack: true, next_finisher: true },
-    Ours { name: "Finishing Plus (air)", kh2_row: NO_ROW, motion: 183, kind: Kind::AirFinisher, rises: false, guard_break: false, attack: true, next_finisher: true },
-    Ours { name: "Guard", kh2_row: GUARD_ROW, motion: character_core::motion::GUARD_PRESS, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false },
-    Ours { name: "Guard repel", kh2_row: NO_ROW, motion: character_core::motion::GUARD, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false },
-    Ours { name: "Counterguard", kh2_row: COUNTERGUARD_ROW, motion: 171, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false },
+pub const OURS: [Ours; 12] = [
+    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true, attack: true, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Retaliating Slash", kh2_row: 40, motion: 172, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Finishing Plus", kh2_row: NO_ROW, motion: 154, kind: Kind::Finisher, rises: false, guard_break: false, attack: true, next_finisher: true, frames: None, own_sounds: false },
+    Ours { name: "Finishing Plus (air)", kh2_row: NO_ROW, motion: 183, kind: Kind::AirFinisher, rises: false, guard_break: false, attack: true, next_finisher: true, frames: None, own_sounds: false },
+    Ours { name: "Guard", kh2_row: GUARD_ROW, motion: character_core::motion::GUARD_PRESS, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Guard repel", kh2_row: NO_ROW, motion: character_core::motion::GUARD, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Counterguard", kh2_row: COUNTERGUARD_ROW, motion: 171, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
+    Ours { name: "Aerial Dodge", kh2_row: NO_ROW, motion: character_core::motion::AERIAL_DODGE, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: Some(AERIAL_DODGE_FRAMES), own_sounds: true },
 ];
+
+/// The Aerial Dodge's slot length (60 Hz frames): longer than any of its rises reaches its apex
+/// (KH2's MAX, 300 high: about 77 frames on KH2's gravity, 35 on KH1's), so the slot is still
+/// playing KH2's loop when the apex asks for the fall.
+pub const AERIAL_DODGE_FRAMES: u32 = 160;
 
 /// Sora's PTYA rows for the guard and Counterguard (Checked (files): row 11 kind 0, motion 173,
 /// ability 1; row 39 kind 0, motion 171, ability 96).

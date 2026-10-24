@@ -855,6 +855,60 @@ unsafe fn recover(actor: usize) -> bool {
     true
 }
 
+/// KH1's state change (`0x1402B1960 (actor, state)`, Steam; its exit and enter steps run).
+const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
+
+/// KH2's Aerial Dodge on KH1's air state (the tester, thread aerial-dodge-native: "go ahead",
+/// plan item 1; `docs/kh1-aerial-dodge-native.md`). KH2's jump press in an air action
+/// (`0x1403CB9F0`, Steam KH2, Checked (decomp)): motion 202 with no blend, the growth level's
+/// height (`fmab +4`) and speed (`+8`) along the stick, straight up with it neutral, the launch
+/// velocity stored (`0x1403CBB00`: what KH2's glide takes back). Here: our request of KH2's
+/// motion 202 (`kh1rows`, its slot `kh2slots`) asked with KH1's action flag (free from 202's
+/// air-free frame 4, its `CAN_LEAVE`), his facing turned to the stick, KH2's hop on KH1's air
+/// fields (`shared::physics::kh2_hop`), the launch kept for KH2's glide (`takeover::
+/// note_launch`), once per air time (`shared::mark_air_dodged`). KH1's jump state (1, its
+/// take-off) is put in its air state first, as KH1's own launch `0x1402AF960` does (state 2, the
+/// jump's motion base `+0x3D0` 0, flag `0x10000` off). No borrow: KH2's controller doesn't take
+/// him. False (the borrow then) out of KH1's jump / air state, in a Drive Form, or with our
+/// request not built.
+pub unsafe fn aerial_dodge(actor: usize) -> bool {
+    use character_core::motion::AERIAL_DODGE;
+    if actor < 0x10000 || super::form::in_form() {
+        return false;
+    }
+    let Some(n) = super::kh1rows::by_motion(AERIAL_DODGE) else { return false };
+    let request = super::kh1rows::request(n);
+    let state = rd::<i32>(actor + 0x70);
+    if !super::kh1rows::installed() || !super::kh2slots::has(request as usize, AERIAL_DODGE) || !matches!(state, 1 | 2) {
+        return false;
+    }
+    let Some((height, speed)) = takeover::kh2_air_dodge_growth() else { return false };
+    let base = takeover::game_base();
+    if state != 2 {
+        let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+        set_state(actor, 2);
+        wr(actor + 0x3D0, 0u32);
+        wr(actor, rd::<u32>(actor) & !0x1_0000);
+    }
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+    set(actor, request | 0x0100_0000, 0.0);
+    let stick = takeover::stick_now(actor);
+    let tilt = stick[0].hypot(stick[1]);
+    let vel = if tilt > 1e-3 {
+        let f = stick[0].atan2(stick[1]);
+        wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
+        wr(actor + 0x150, f);
+        [stick[0] / tilt * speed, stick[1] / tilt * speed]
+    } else {
+        [0.0, 0.0]
+    };
+    super::shared::physics::kh2_hop(actor, height, vel);
+    super::shared::mark_air_dodged();
+    takeover::note_launch(vel);
+    note(format!("jump in the air: KH2's Aerial Dodge on KH1's request {request:#x} of its own (KH1 state {state}), {height:.0} high, {:.1}/frame", vel[0].hypot(vel[1])));
+    true
+}
+
 /// KH1 knocked him away itself (`hurt`: a knock-back or launch while KH1's states have him).
 pub fn kh1_blown() {
     BLOWN_AT.store(frame().max(1), Ordering::Relaxed);

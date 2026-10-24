@@ -1125,6 +1125,9 @@ impl Baker {
         let root_at = |f: u32| roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))).map(|p| Vec3::from(*p));
         let start = root_at(0).unwrap_or(Vec3::ZERO);
         let template = template.and_then(|t| self.motions.get(t)).and_then(|m| m.as_ref());
+        // (A slot longer than the clip, `kh1rows::Ours::frames`: the clip loops over it from its
+        // own loop point, as KH2 plays it; the Aerial Dodge's 202.)
+        let looping = frames as f32 > kh2_anim::length_frames(clip) + 1.0;
         for f in 0..=frames {
             let at = f as f32;
             // KH1's own parts at the template's time for this frame.
@@ -1141,8 +1144,8 @@ impl Baker {
                 }
                 None => self.retarget.set_own(|_| None),
             }
-            let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
-            let mut weapon = kh2_weapon(rig, motion, at, false, &body);
+            let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, looping), kh2_anim::Options::default()).bones;
+            let mut weapon = kh2_weapon(rig, motion, at, looping, &body);
             if let Some(root) = roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))) {
                 let un = Mat4::from_translation(-Vec3::from(*root));
                 for m in body.iter_mut().chain(weapon.iter_mut()) {
@@ -1395,7 +1398,12 @@ fn follow_play(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, forced: Optio
             (motion, false, false, new_slot, rate, 0.0)
         }
         // (No rate: drawn at KH1's own time below; blended by KH1's blend clock.)
-        Play::Slot { motion, field } => (motion, field, false, new_slot || f.motion != motion || f.field != field, 60.0, 0.0),
+        // (Looping when our slot is longer than the clip, `kh1rows::Ours::frames`: the Aerial
+        // Dodge's 202, drawn as baked.)
+        Play::Slot { motion, field } => {
+            let long = slot.and_then(super::kh2slots::frames_for).zip(kh2.rig.motions.get(&motion)).is_some_and(|(n, m)| n as f32 > kh2_anim::length_frames(m) + 1.0);
+            (motion, field, long, new_slot || f.motion != motion || f.field != field, 60.0, 0.0)
+        }
     };
     if !restart && matches!(play, Play::Motion { .. }) {
         // Loops change speed as he does: carry the clip position over at the new rate.
