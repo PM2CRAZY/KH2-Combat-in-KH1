@@ -1,3 +1,9 @@
+### 2026-10-23: Stage 449 (testing branch: Config menu: KH1 in KH2)
+- **Config menu: KH1 in KH2.** The tester (answers 1 Magic inside Combat, 2a, 4b, 5a, 6b). Page 1 has 9 rows: the button above Default; page 2 gone. Lists are KH1 windows (`0x1402E5A40` / `0x1402E3D10` / `0x1402E5E40`, KH1's help line). Back-out goes through the title tab `0x1402FADB0` (prologue `40 57 48 83 EC 40`, Checked (exe)). Steam only. Notes §6.
+
+### 2026-10-23: Stage 448 (testing branch: Config list at 92% with KH1's window scale)
+- **Config list at 92% with KH1's window scale.** The tester (answer 3a). Window `+0x6C` bit 0, `+0xA0`/`+0xA4` 0.92, anchor `+0xD8` 1, set in `0x1402FA210` (Checked (decomp)). Notes `docs/kh1-config-menu.md` §5.
+
 ### 2026-10-23: Stage 447 (testing branch: Frame Advance's Held Picture row: Live)
 - **Frame Advance's Held Picture row: Live.** The t426 split with effects stopped by KH1's system stop (`0x142867368` bit 0, `0x142432130`, Checked (decomp) and (exe)), KeShpTail3 / 3X draw steps taken back, and 120000's sky / fades restored. Notes: `docs/kh1-frame-advance.md`.
 

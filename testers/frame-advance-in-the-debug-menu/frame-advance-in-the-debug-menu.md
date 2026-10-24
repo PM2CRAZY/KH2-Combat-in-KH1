@@ -338,6 +338,9 @@
 > [!note] Tester Mr Bugs
 >the actual pause seems to hold the image in the frame buffer so I wouldn't be using it, focus on getting the live version working 
 >
->also the address you listed as camera 2 is wrong, I noticed that it stops one of the backgrounds. do not take my word for what I said make sure you look through the c decomp steam to confirm what they actually are like you did with the effects.
+>also the address you listed as camera 2 is wrong, I noticed that it stops one of the backgrounds. do not take my word for what I said make sure you look through the c decomp steam to confirm what they actually are like you did with the effects. do that for the rest of the values that are undocumented and ones you haven't documented yet.
+> 
+> also agents working on these threads stop posting my !note bubble 
 > 
 > go ahead
+

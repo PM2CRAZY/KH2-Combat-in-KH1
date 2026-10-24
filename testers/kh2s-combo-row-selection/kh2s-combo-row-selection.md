@@ -203,3 +203,14 @@
 
 ^m12
 
+> [!note] Tester Mr Bugs
+>1. it should cancel his animation like kh1, not sure make sure to look at steam kh2 ghidra decomp 
+>2. (a)
+>3. Transfer everything that is not on the new system yet.
+>   
+> after you do that we need to figure out the logic for how abilities that affect soras combos work like finishing plus, I was thinking if sora has an ability like finishing plus and does a kh1 base combo then he gets the same logic as kh2 that decides what move he should do. tell me what you think
+> 
+> go ahead
+
+
+

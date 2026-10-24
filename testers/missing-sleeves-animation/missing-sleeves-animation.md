@@ -145,7 +145,13 @@
 
 
 > [!note] Mr Bugs
-> when I mean model I'm also referring to kh2 sora's skeleton, before I prompted you to adjust the bake animations the coat was working how it should, please double check so that we're on the same page.
+> when I mean model in this case I'm also referring to kh2 sora's skeleton, before I prompted you to adjust the bake animations the coat was working how it should, please double check so that we're on the same page.
+> 
+> I'll start being more technical and referring to his skeleton  
+> 
+> I saw you also ignored this message after I pushed it to github, make sure to have an agent check the github after it pushes to see if there's a thread not being worked on thats been recently pushed
+> 
+> go ahead
 
 ^m9
 
