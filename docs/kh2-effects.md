@@ -1164,7 +1164,7 @@ the user's extraction; **Assumption** = not yet checked.
 | Weapon point 0x4003 / 0x4004 | **Yes: bone `0x30`, distance `t`** (`0x14029EB20`): `t` 0..1 mapped into the weapon's blade range (`btltbl` record `+0x28` start, `+0x24` end), the point between the blade bone and its parent (`0x1401D6320`). KH1's binding mode 3 (`0x1402ADD60 (dpx, number, actor, bone, t)`) takes the bone's rotation and that point every frame. KH2's 0x4003 (`0x1403B50F0`): the weapon object's weapon-shape bone (shape kind 0xF) matrix, moved along its x by a length; 0x4005 its root, 0x4007 halfway. | Element 44 (§17.4): 0x4003 → bone 0x30, t = 1.0; 0x4005 → t = 0; 0x4007 → t = 0.5. |
 | Bind position only (0x04) | Binding mode 1 (`0x1402ADC20`): position only, plus a world offset. | Not used by Explosion. |
 | Bind until started (0x02) | **Yes: bone-code bit 0x10000**: KH1's binding task (`0x1402AE910`) then places the element on its first run once the element no longer waits (its flag 0x10 clear) and ends. | Element 48 (§17.5). |
-| Alpha follows the weapon (0x800) | No. | Not done (also not in `kh2fx`). |
+| Alpha follows the weapon (0x800) | No. | Done (§18.18): KH1 Sora's draw bit, alpha and weapon-out flag. |
 
 ### 16.3 What steps 3 and 4 need (Checked (exe))
 
@@ -1312,7 +1312,7 @@ Magnet ribbon uses it). **Checked (decomp)**; ours is `kh2ppp::sp_*`.
   198 have the same bind frames to 0.05, so their turn needs no conversion.
 - Both run KH2's MegaBirth: they play through KH1 only when it is plugged in (`kh2ppp::plugged`,
   Steam); otherwise, and on other builds, `kh2fx` plays them as before.
-- Not done: flag 0x800 (alpha follows the weapon's visibility; not in `kh2fx` either).
+- Flag 0x800 (alpha follows the weapon's visibility): §18.18.
 - KH1's pppColor (43) and KH2's differ: §17.6 (KH2's now runs for our DPX's words).
 - KH1's bone binding and KH2's place an effect from different frames' bones on the first frame
   only: §17.7.
@@ -1697,11 +1697,7 @@ What doesn't play through KH1 (each logged once, by package and element, with th
 - A package that didn't build (logged: the file not read, its HD textures not read).
 - Off Steam (Epic): elements on KH1's blade, position or unbound bindings, or running KH2's own
   programs (Steam addresses); those on bones with KH1's own programs play.
-- Not applied: flag 0x800 (with a weapon anchor, the effect's alpha is the weapon's each frame, 0
-  while it is hidden: KH2's bindings `0x1402C58F0` / `0x1402C6A10`, **Checked (decomp)**; Fire 3's 8
-  and 11 have it; KH1's Keyblade is out while it casts, so this only matters if it is put away
-  while one plays), and
-  Thunder 3's TBPs 0x3000 / 0x3020 draw untextured until their HD images are found (§18.12).
+- Flag 0x800: applied since §18.18. Not applied: Thunder 3's TBPs 0x3000 / 0x3020 draw untextured until their HD images are found (§18.12).
 
 ### 18.12 Built when needed, lean, freed when not (`kh2dpx::manage`)
 
@@ -1927,3 +1923,29 @@ and 68 above the feet, the 85 ones 22 to the side and 18 ahead, the 68 ones 14.7
   (`B₂ · T(t) · R = B₁ · T(C t) · C R`); position only, its offset through C each read
   (`by_position_now`; its turn is the world's); a script's place (`spell_place`, KH2's matrix)
   through C⁻¹. No per-frame cost beyond a 3×3 multiply per position-only read.
+
+### 18.18 KH2's flag 0x800: the effect's alpha follows its owner's
+
+The tester (m14, 2 (a)). Elements with it in the t430 log: Fire 3's 8 and 11 (0xa45, Keyblade tip,
+by position), Explosion's wrist and chest flashes and the other 0xa61 elements of Sora's package
+(bones), one 0xa65.
+
+- KH2 (**Checked (decomp)**): the element's binding (`0x1402C58F0`, every run, after it places the
+  effect; also `0x1402C6A10`), while the element is bound (its `+0x70` bit 0) and the effect list is
+  the field's (`0x140B63628` = 1, set by `0x1402C4330` / `0x1402C4540` for the main task list),
+  writes the effect's colour alpha (`0x1402BE1E0` → `+0xC`): the object is the owner's weapon for
+  0x4003 / 0x4005 / 0x4007 (`+0xD60`), its second for 0x4004 / 0x4006 / 0x4008 (`+0xD68`), else the
+  owner itself; 0 if it isn't live (`0x1403BA720`: `+0x120` & 0x10080000) or is hidden
+  (`0x1403BA840`), else its alpha (`0x1403CC950`: `+0xA10` × `+0xA08`, times its parent's while
+  attached: a weapon's includes its owner's). KH2's fade-out is apart from that colour (the
+  effect's `+0x38` level and `+0x3C` rate, `0x1402BE6A0`), so the two multiply.
+- KH1's (`kh2dpx::follow_alpha`, each of Sora's frames in `tick`, only for an element bound with
+  0x01 and not yet placed by a script): 0 unless Sora's actor has its draw bit (`+0` bit 0), else
+  his alpha (`+0x60`, KH1's fade, `0x140297FE0`); for the Keyblade also 0 while his "weapon out"
+  flag (`+0` bit 0x4000, `0x1402A0CA0` / `0x1402A10F0`) is clear, for the second Keyblade while
+  there aren't two (`form::two_blades`). Written to the instance alpha (`+0x3C`) times the
+  element's fade level, which KH2's fade-out steps instead of the alpha for these elements.
+- **Assumptions**: KH1's Keyblade has no alpha of its own that changes in play (its combat-state
+  byte `+0x14C` → `+0xF`, 0x80 when drawn, isn't read); KH2's "hidden" cases (`0x1403BA840`: its
+  `+0x124`, `+0x6C8`, `+0x120` bit 10 tests) are KH1's draw bit. Cost: one read of three actor
+  fields per such live element per frame.

@@ -269,6 +269,15 @@ const END_LOOP: u32 = 0x80;
 const ENDS_WITH_OWNER: u32 = 0x200;
 const POSITION_ONLY: u32 = 0x04;
 const BONE_SCALE: u32 = 0x100;
+/// Its alpha follows its owner's while it is bound (a weapon point's: the weapon's; KH2's
+/// bindings `0x1402C58F0` / `0x1402C6A10`, `follow_alpha`).
+const ALPHA_FOLLOWS: u32 = 0x800;
+/// KH1's actor flag: the weapon is out (`takeover`'s `WEAPON_OUT`: set by `0x1402A0CA0`, cleared
+/// by `0x1402A10F0`); bit 0 is its draw bit.
+const ACTOR_WEAPON_OUT: u32 = 0x4000;
+const ACTOR_DRAWN: u32 = 0x1;
+/// KH1's actor alpha (`+0x60`, 0..1, stepped by `+0x64`: `0x140297FE0`).
+const ACTOR_ALPHA: usize = 0x60;
 const TWO_POINT: u32 = 0x1_0000;
 /// KH1's effect instance (0xE0 bytes) and element (0x3C) fields used here.
 const INST_SCALE: usize = 0x20;
@@ -336,6 +345,17 @@ struct Run {
     motion: u16,
     layer: Layer,
     fade: Option<f32>,
+    /// With KH2's 0x800 while still bound: the alpha is the owner's times this fade level (KH2
+    /// keeps its fade apart from the colour the binding writes, `0x1402BE6A0` `+0x38`).
+    follows: bool,
+    level: f32,
+}
+
+impl Run {
+    fn new(element: usize, serial: u32, motion: u16, layer: Layer) -> Run {
+        let follows = layer.flags & (ALPHA_FOLLOWS | BIND) == ALPHA_FOLLOWS | BIND;
+        Run { element, serial, motion, layer, fade: None, follows, level: 1.0 }
+    }
 }
 
 static RUNNING: Mutex<Vec<Run>> = Mutex::new(Vec::new());
@@ -1829,10 +1849,10 @@ unsafe fn apply(element: usize, l: &Layer, motion: u16) -> bool {
     if l.scale != [1.0; 3] {
         wr::<[f32; 3]>(inst + INST_SCALE, l.scale);
     }
-    if l.flags & (ENDS_WITH_MOTION | ENDS_WITH_OWNER) != 0 {
+    if l.flags & (ENDS_WITH_MOTION | ENDS_WITH_OWNER) != 0 || Run::new(element, serial, motion, *l).follows {
         if let Ok(mut r) = RUNNING.lock() {
             r.retain(|x| unsafe { instance(x.element, x.serial) }.is_some());
-            r.push(Run { element, serial, motion, layer: *l, fade: None });
+            r.push(Run::new(element, serial, motion, *l));
         }
     }
     true
@@ -1857,7 +1877,7 @@ unsafe fn end(r: &mut Run, inst: usize) -> bool {
         wr::<u8>(inst + INST_ENDED, 1);
     } else if r.layer.flags & END_FADE != 0 && r.fade.is_none() {
         if r.layer.fadeout > 0.0 {
-            r.fade = Some(rd::<f32>(inst + INST_ALPHA) / r.layer.fadeout);
+            r.fade = Some(fade_from(r, inst) / r.layer.fadeout);
         } else {
             stop(r.element, inst);
             return true;
@@ -1881,15 +1901,58 @@ pub fn tick(motion: u16, delta: f32) {
             return false;
         }
         if let Some(rate) = r.fade {
-            let a = rd::<f32>(inst + INST_ALPHA) - rate * delta.max(0.0);
+            let a = fade_from(r, inst) - rate * delta.max(0.0);
             if a <= 0.0 {
                 stop(r.element, inst);
                 return false;
             }
-            wr::<f32>(inst + INST_ALPHA, a);
+            if r.follows {
+                r.level = a;
+            } else {
+                wr::<f32>(inst + INST_ALPHA, a);
+            }
+        }
+        if r.follows {
+            wr::<f32>(inst + INST_ALPHA, follow_alpha(r.layer.anchor) * r.level);
         }
         true
     });
+}
+
+/// What a fade steps down from: the fade level with KH2's 0x800 (the binding writes the colour),
+/// else the instance's alpha.
+unsafe fn fade_from(r: &Run, inst: usize) -> f32 {
+    if r.follows {
+        r.level
+    } else {
+        rd::<f32>(inst + INST_ALPHA)
+    }
+}
+
+/// KH2's 0x800 (Steam KH2 `0x1402C58F0`, each run while bound, and `0x1402C6A10`; Checked
+/// (decomp)): the effect's colour alpha set to its owner's, the weapon object for 0x4003 / 5 / 7
+/// (`+0xD60`) and 0x4004 / 6 / 8 (`+0xD68`), else the owner itself: 0 if it isn't live
+/// (`0x1403BA720`) or is hidden (`0x1403BA840`), else its alpha (`0x1403CC950`: `+0xA10` x `+0xA08`,
+/// times its parent's when attached, so a weapon's includes Sora's). KH1's: Sora's draw bit and
+/// alpha (`+0x60`); for the Keyblade also its "weapon out" flag (KH1 shows it only then), for the
+/// second Keyblade that it is there. **Assumption**: KH1's Keyblade has no alpha of its own that
+/// changes in play (its combat-state alpha byte, `+0x14C` → `+0xF`, isn't read).
+unsafe fn follow_alpha(anchor: Anchor) -> f32 {
+    let sora = super::takeover::sora_actor();
+    if sora < 0x10000 {
+        return 0.0;
+    }
+    let flags = rd::<u32>(sora);
+    if flags & ACTOR_DRAWN == 0 {
+        return 0.0;
+    }
+    let body = rd::<f32>(sora + ACTOR_ALPHA);
+    let body = if body.is_finite() { body.clamp(0.0, 1.0) } else { 1.0 };
+    match anchor {
+        Anchor::Blade(_) if flags & ACTOR_WEAPON_OUT == 0 => 0.0,
+        Anchor::LeftBlade(_) if !super::form::two_blades() => 0.0,
+        _ => body,
+    }
 }
 
 /// Sora's object replaced (`kh2fx::owner_gone`, a form change): elements that end with their
@@ -1902,7 +1965,7 @@ pub fn owner_gone() {
             return true;
         }
         if r.layer.fadeout > 0.0 {
-            r.fade = Some(rd::<f32>(inst + INST_ALPHA) / r.layer.fadeout);
+            r.fade = Some(fade_from(r, inst) / r.layer.fadeout);
             true
         } else {
             stop(r.element, inst);
@@ -1989,6 +2052,14 @@ pub fn spell_place(h: u32, at: glam::Mat4) {
             if let Ok(mut f) = FRESH.lock() {
                 f.retain(|x| x.element != sp.element);
             }
+            // (Let go: KH2's 0x800 is applied only while bound, `0x1402C58F0`; the alpha is the
+            // script's from now on.)
+            if let Ok(mut g) = RUNNING.lock() {
+                for r in g.iter_mut().filter(|r| r.element == sp.element && r.serial == sp.serial) {
+                    r.follows = false;
+                    r.level = 1.0;
+                }
+            }
         }
         if sp.layer.flags & POSITION_ONLY != 0 {
             let p = at.transform_point3(glam::Vec3::from(sp.layer.bone_offset));
@@ -2018,12 +2089,12 @@ pub fn spell_end(h: u32) {
     let i = match g.iter().position(|r| r.element == element && r.serial == serial) {
         Some(i) => i,
         None => {
-            g.push(Run { element, serial, motion: super::kh2fx::NO_MOTION, layer, fade: None });
+            g.push(Run::new(element, serial, super::kh2fx::NO_MOTION, layer));
             g.len() - 1
         }
     };
     let gone = unsafe { instance(element, serial) }.is_none_or(|inst| unsafe { end(&mut g[i], inst) });
-    if gone || (g[i].fade.is_none() && layer.flags & ENDS_WITH_OWNER == 0) {
+    if gone || (g[i].fade.is_none() && !g[i].follows && layer.flags & ENDS_WITH_OWNER == 0) {
         g.remove(i);
     }
 }

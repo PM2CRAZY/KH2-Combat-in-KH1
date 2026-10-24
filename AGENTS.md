@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 455 (testing branch: KH2 effects: KH2's flag 0x800 (alpha follows the owner))
+- **KH2 effects: KH2's flag 0x800 (alpha follows the owner).** The tester (2 (a)). KH2 `0x1402C58F0` / `0x1402C6A10` (Checked (decomp)): while bound, the effect's alpha is the weapon's (0x4003..8) or owner's, 0 hidden. KH1: Sora's draw bit and `+0x60`, the weapon-out flag for the Keyblade; fade-out on its own level. Assumption: KH1's Keyblade alpha byte unchanged in play. Notes §18.18.
+
 ### 2026-10-23: Stage 454 (testing branch: KH2 effects: KH2's object frame on KH1's object root)
 - **KH2 effects: KH2's object frame on KH1's object root.** The tester ("reflect is misaligned with sora"). KH1's 0x8000 frame (`0x14029EA00`: rows -+0xF0, -+0xE0, -+0xD0 of the skeleton pass's matrix, Checked (exe)) is KH2's object frame (x, -y, -z: the old player's, Assumption) a quarter turn about y; offsets and turns on 0x8000 / 0x8005 go through `KH2_IN_KH1_OBJECT` (copy, position read, script place). Notes §18.17.
 
