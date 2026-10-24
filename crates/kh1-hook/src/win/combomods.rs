@@ -1267,7 +1267,18 @@ pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8, attacker_p
     if let Ok(mut p) = PUSH.lock() {
         *p = Some((back, REPEL_BACK * 0.1));
     }
-    note(format!("KH2's guard stopped a hit: its repel (motion 42), pushed back {REPEL_BACK:.0}"));
+    // KH2's 80 frames without damage after the repel (`0x1403D61D0` sets `+0xD70` = 80.0; while it
+    // runs KH2's intake drops every attack but the cures, Checked (decomp); the tester, thread
+    // kh2-recoil-and-parry-system, plan step 4), with the Recoil row at KH2: KH1's own no-damage
+    // timer, as its reactions start it (`0x140297F30`: `+0xC` = the frames, flag `+0` 0x80 on and
+    // 0x100000 off; while 0x80 is up KH1 takes no damage and starts no reaction but clashes,
+    // `docs/kh1-hit-reactions-native.md` §3, Checked (decomp)). Assumption: KH2's step is 1.0 a
+    // 60 Hz frame at run time, as KH1's.
+    if super::recoil::kh2() {
+        wr(actor + 0xC, REPEL_PROTECTION);
+        wr(actor, (rd::<u32>(actor) & !0x10_0000) | 0x80);
+    }
+    note(format!("KH2's guard stopped a hit: its repel (motion 42), pushed back {REPEL_BACK:.0}{}", if super::recoil::kh2() { ", 80 frames without damage (Recoil KH2)" } else { "" }));
 }
 
 /// The Guard Repel row (the tester, combo row selection m17: "(b)", the KH1 setting is KH1's own
@@ -1353,6 +1364,9 @@ unsafe fn kh1_block(actor: usize, attacker: Option<i32>) {
         if !big && gap < 0 { ", pushed back by the gap" } else { "" }
     ));
 }
+
+/// KH2's guard repel's protection (`+0xD70` = 80.0 in `0x1403D61D0` / `0x1403D6AD0`, Checked (decomp)).
+const REPEL_PROTECTION: f32 = 80.0;
 
 /// KH2's push back by `distance` along `back` (`0x1403D4960`: 0.1 × the distance a frame, × 0.9 a
 /// frame) on KH1's per-frame push, as the repel's (`guard_frame`): KH2's recoil (`recoil`).

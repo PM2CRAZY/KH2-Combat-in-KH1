@@ -359,3 +359,14 @@ would only stop KH2's shapes (`strike_as`) until the pass learns it too.
   guard's owner would be immune. Needs a hook on KH1's clash half or the pass to match.
 - An enemy attack of priority 0x62+ is never stopped by a normal swing (KH1's half), where KH2
   stops every normal attack a normal attack meets.
+
+### 6.4 The guard repel's 80 frames (plan step 4)
+
+- At Recoil KH2, `combomods::guard_repel` (KH2's repel, motion 42, on KH1's states) starts KH1's own
+  no-damage timer at 80: actor `+0xC` = 80.0, flag `+0` 0x80 on and 0x100000 off, as
+  `0x140297F30` does (**Checked (decomp)**). While 0x80 is up KH1 takes no damage from a record and
+  starts no reaction, clashes excepted (`docs/kh1-hit-reactions-native.md` §3, **Checked
+  (decomp)**), which is KH2's `+0xD70` rule (every attack dropped but the cures).
+- **Assumption:** KH2's `+0xD70` counts 60 Hz frames (its step `DAT_140717480` is 1.0 in the file),
+  so 80 frames on KH1's 60 Hz timer.
+- At Recoil KH1 the repel gives none, as before.
