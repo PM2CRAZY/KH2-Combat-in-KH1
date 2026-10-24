@@ -257,7 +257,12 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         if super::shared::active() && ready.iter().any(|&r| rd::<u8>(r) & NO_EFFECT == 0 && (rd::<u32>(r + 0xC) >> 6) & 0xF < 9 && matches!(kind_of(actor, r), 4 | 5)) {
             super::combomods::kh1_blown();
         }
-        return f(actor);
+        // KH2's push and air flinch on the reaction KH1's pass starts (`hitreact`, Hit Reactions
+        // KH2).
+        let was = super::hitreact::before_pass(actor);
+        let r = f(actor);
+        super::hitreact::after_pass(actor, was);
+        return r;
     };
     // KH2's reaction for the strongest taken hit (after KH1's damage, unless he went down).
     let mut react: Option<(u32, glam::Vec2)> = None;

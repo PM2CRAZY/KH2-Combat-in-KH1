@@ -141,6 +141,10 @@ cure_style = kh2\r\n\
 ;   still runs the reaction: its no-damage time, voices, HUD and MP); the Config menu's Combat\r\n\
 ;   list switches it\r\n\
 hit_reactions = kh1\r\n\
+; knockback_numbers: kh2, kh1 or scaled, how far KH2's hit reactions push base Sora (hit_reactions\r\n\
+;   = kh2): KH2's 200 for every hit, KH1's own number for the hit (750 x the damage's share of\r\n\
+;   his max HP, at most 150) on KH2's curve, or KH2's 200 scaled by KH1's share of its cap\r\n\
+knockback_numbers = kh2\r\n\
 ; jump_style / glide_style: kh1 or kh2, KH1's or KH2's jump and glide for base Sora\r\n\
 jump_style = kh2\r\n\
 glide_style = kh2\r\n\
@@ -254,6 +258,9 @@ pub struct Settings {
     pub valor_left_blade: bool,
     /// KH2's (true) or KH1's moves per `styles::Kind` (ground combo, air combo, magic, air magic, jump, glide, dodge roll, misc animations, player model, battle quotes, Cure, hit reactions).
     pub styles: [bool; 12],
+    /// How far KH2's hit reactions push base Sora (`knockback_numbers = kh2 | kh1 | scaled`, KH2's by
+    /// default; `hitreact`).
+    pub knockback_numbers: super::hitreact::Numbers,
     /// Skip the Gummi Ship's flights (`gummi = skip`, `gummi.rs`).
     pub gummi_skip: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
@@ -440,6 +447,7 @@ fn load(first: bool) -> Option<Settings> {
         drive: on(&text, "drive", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false)), on(&text, "cure_style", "kh2", true), on(&text, "hit_reactions", "kh2", false)],
+        knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),
         gummi_skip: on(&text, "gummi", "skip", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {

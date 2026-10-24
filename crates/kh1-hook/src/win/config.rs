@@ -178,6 +178,27 @@ enum Row {
 enum Item {
     Set([u32; 4], Row),
     Open(u32, u32, List),
+    /// A setting with three values (label, the three values left to right, help).
+    Pick([u32; 5], Pick),
+}
+
+/// What a three-value row switches.
+#[derive(Clone, Copy)]
+enum Pick {
+    /// Knock-back Numbers (KH1 | Scaled | KH2, `hitreact::Numbers`).
+    KnockNumbers,
+}
+
+fn pick_value(what: Pick) -> usize {
+    match what {
+        Pick::KnockNumbers => super::hitreact::numbers() as usize,
+    }
+}
+
+fn pick_set(what: Pick, v: usize) {
+    match what {
+        Pick::KnockNumbers => super::hitreact::set_numbers(super::hitreact::Numbers::ALL[v.min(2)]),
+    }
 }
 
 /// Our lists (each its own KH1 window definition).
@@ -230,11 +251,12 @@ const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
 ];
-const COMBAT: [Item; 5] = [
+const COMBAT: [Item; 6] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
     Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
+    Item::Pick([0x7F00_0142, 0x7F00_0002, 0x7F00_0144, 0x7F00_0003, 0x7F00_0143], Pick::KnockNumbers),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
 ];
 const MAGIC: [Item; 3] = [
@@ -260,7 +282,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 52] = [
+const STRINGS: [(u32, &str); 55] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -291,6 +313,9 @@ const STRINGS: [(u32, &str); 52] = [
     (0x7F00_0108, "Choose KH1's or KH2's magic for Sora in the air.\nDrive Forms keep their own."),
     (0x7F00_0140, "Hit Reactions"),
     (0x7F00_0141, "Choose KH1's or KH2's animations when Sora is hit.\nDrive Forms keep their own."),
+    (0x7F00_0142, "Knock-back Numbers"),
+    (0x7F00_0143, "How far KH2's hit reactions push Sora: KH1's numbers,\nKH2's scaled by the damage, or KH2's own."),
+    (0x7F00_0144, "Scaled"),
     (0x7F00_011F, "Cure"),
     (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
     (0x7F00_0109, "Jump"),
@@ -497,6 +522,7 @@ unsafe extern "system" fn help(win: usize) {
     let id = if let Some(list) = list_of(rd::<usize>(win + WIN_PARENT)) {
         match list.items().get(CUR_ROW[list.index()].load(Ordering::Relaxed) as usize) {
             Some(Item::Set(ids, _)) => Some(ids[3]),
+            Some(Item::Pick(ids, _)) => Some(ids[4]),
             Some(Item::Open(_, help, _)) => Some(*help),
             None => None,
         }
@@ -694,6 +720,10 @@ unsafe extern "system" fn list_update(win: usize) {
                     set(*what, !value(*what));
                     sound(1);
                 }
+                Some(Item::Pick(_, what)) => {
+                    pick_set(*what, (pick_value(*what) + 1) % 3);
+                    sound(1);
+                }
                 Some(Item::Open(_, _, child)) => {
                     SAVED_ROW[list.index()].store(row, Ordering::Relaxed);
                     open(win, *child);
@@ -720,6 +750,21 @@ unsafe extern "system" fn list_update(win: usize) {
                     sound(1);
                 }
             }
+            // (A three-value row: a step, or a wrap at either end on a fresh press.)
+            if let Some(Item::Pick(_, what)) = items.get(row as usize) {
+                let v = pick_value(*what);
+                let new = if repeat & LEFT != 0 {
+                    if v > 0 { Some(v - 1) } else if pressed & LEFT != 0 { Some(2) } else { None }
+                } else if repeat & RIGHT != 0 {
+                    if v < 2 { Some(v + 1) } else if pressed & RIGHT != 0 { Some(0) } else { None }
+                } else {
+                    None
+                };
+                if let Some(n) = new {
+                    pick_set(*what, n);
+                    sound(1);
+                }
+            }
         }
     }
     let row = cur.load(Ordering::Relaxed);
@@ -727,6 +772,7 @@ unsafe extern "system" fn list_update(win: usize) {
         match item {
             Item::Set(ids, what) => setting(win, i as i32, row == i as i32, ids, value(*what)),
             Item::Open(label, _, _) => button(win, i as i32, row == i as i32, *label),
+            Item::Pick(ids, what) => picker(win, i as i32, row == i as i32, ids, pick_value(*what)),
         }
     }
 }
@@ -788,6 +834,49 @@ unsafe fn setting(win: usize, row: i32, selected: bool, ids: &[u32; 4], v: bool)
         }
         let yc = y + (h - (rd::<i16>(info + 0x152) as i32 >> 4)) / 2;
         let (x, frame) = if v == 0 { (0x139 - (rd::<i16>(info + 0x150) as i32 >> 4), 0x10) } else { (0x14F, 0xF) };
+        finger(win, x, yc, 0, 0, frame, 0, 0x8080_8080, 0x8080_8080, 0);
+    }
+}
+
+/// A three-value row's panel width.
+const PICK_W: i32 = 0x6A;
+
+/// A three-value row, drawn as `setting` with three narrower value panels between the same two
+/// ends (KH1's two panels span x 0x9F..0x1E9 with a gap of 6; three of 0x6A here), the chosen one
+/// in KH1's chosen-value style, the finger at it when selected.
+unsafe fn picker(win: usize, row: i32, selected: bool, ids: &[u32; 5], v: usize) {
+    let base = BASE.load(Ordering::Relaxed);
+    let panel: unsafe extern "system" fn(usize, i32, i32, i32, i32, i32, i32, i32, u32) = std::mem::transmute(base + PANEL_RVA);
+    let decor: unsafe extern "system" fn(usize, i32, i32, i32) = std::mem::transmute(base + DECOR_RVA);
+    let h = rd::<i32>(base + ROW_H_RVA);
+    let y = row_y(base, row);
+    if selected {
+        let y2 = h / 2 - 1 + y;
+        decor(win, -0x40, y2, 0x4B);
+        // (KH1's arrow before each value panel, as at 0x99 / 0x141 for its two.)
+        decor(win, 0x99, y2, 6);
+        decor(win, 0x9F + PICK_W, y2, 6);
+        decor(win, 0x9F + 2 * PICK_W + 6, y2, 6);
+        decor(win, 0x1E9, y2, 0x17);
+    }
+    panel(win, if selected { 0xB } else { 0 }, 2, 0, 0x0B, y, 0x8E, 0x1B, ids[0]);
+    let styles = base + if selected { STYLES_SELECTED_RVA } else { STYLES_OTHER_RVA };
+    // (KH1's table: value 0's left panel is the chosen style, its right one the other.)
+    let (chosen, other) = (rd::<u32>(styles) as i32, rd::<u32>(styles + 4) as i32);
+    const W: i32 = PICK_W;
+    let xs = [0x9F, 0x9F + W + 6, 0x9F + 2 * (W + 6)];
+    for (i, &x) in xs.iter().enumerate() {
+        panel(win, if i == v { chosen } else { other }, 2, 2, x, y, W, x + W / 2, ids[1 + i]);
+    }
+    if selected {
+        let finger: unsafe extern "system" fn(usize, i32, i32, i32, i32, i32, i32, u32, u32, i32) = std::mem::transmute(base + FINGER_STEAM);
+        let info = rd::<u64>(base + FINGER_INFO_STEAM) as usize;
+        if info < 0x10000 {
+            return;
+        }
+        let yc = y + (h - (rd::<i16>(info + 0x152) as i32 >> 4)) / 2;
+        let x0 = xs[v.min(2)];
+        let (x, frame) = if v == 0 { (x0 + W - 8 - (rd::<i16>(info + 0x150) as i32 >> 4), 0x10) } else { (x0 + 8, 0xF) };
         finger(win, x, yc, 0, 0, frame, 0, 0x8080_8080, 0x8080_8080, 0);
     }
 }

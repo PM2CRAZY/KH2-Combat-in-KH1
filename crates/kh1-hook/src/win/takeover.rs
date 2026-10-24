@@ -458,6 +458,8 @@ unsafe extern "system" fn physics(actor: usize) {
         super::combomods::guard_frame(actor);
         // KH2's Aerial Dodge's fall at its apex (`combomods::dodge_apex`).
         super::combomods::dodge_apex(actor);
+        // KH2's push on KH1's push after a hit (`hitreact`).
+        super::hitreact::push_frame(actor);
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);

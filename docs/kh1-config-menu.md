@@ -384,3 +384,13 @@ What we do (`config.rs`):
 - Mouse: none found. The list cursor (`0x1402EF670`) reads only the menu pad; Assumption that the
   PC build's menus take no mouse here.
 - Our lists are KH1's size (not the 92% of page 1).
+
+### 6.x A three-value row (Knock-back Numbers)
+
+KH1's Config rows all have two values. `config::Item::Pick` draws a row with three: the label as
+KH1's rows, then three value panels of 0x6A between the same ends KH1's two use (x 0x9F..0x1E9,
+gap 6), the chosen one in KH1's chosen-value style (the style table's value-0 left entry), the
+others in its other style; an arrow before each panel; the finger at the chosen one. Left / right
+step it (wrapping on a fresh press at either end), confirm steps it right. **Assumption:** the
+panel call's width and text-centre arguments behave for a narrower panel as for KH1's (not seen
+in game yet).

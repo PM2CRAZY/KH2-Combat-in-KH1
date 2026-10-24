@@ -19,6 +19,7 @@ mod formmagic;
 mod gates;
 mod fx12;
 mod hook;
+mod hitreact;
 mod hurt;
 mod kh2fx;
 mod kh2dpx;

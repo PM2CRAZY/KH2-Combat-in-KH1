@@ -320,11 +320,49 @@ nothing changes.
 
 **Checked (decomp), KH1 Steam:** every reaction sets flag `0x80` and 30.0 at `+0xC`
 (`0x140297F30`). The actor step (`0x140297FE0`) starts the count only once the action flag `4`
-is clear, then counts the 30 down by the frame step. **Assumption:** flag `4` is the reaction's
-action flag (its motion is set with `0x1000000`), so the count starts at the reaction's end. While `0x80`
+is clear, then counts the 30 down by the frame step. Flag `4` is the reaction's action flag: KH1's
+set-motion (`0x14029F980`) sets it for a request with `0x1000000`, as every reaction's is
+(Checked (decomp)). So the count starts at the reaction's end. While `0x80`
 is set, no damage and no reaction but a clash. (This answers §3's assumption.)
 
 **Comparison.** The timing is the same: 30 frames after the reaction motion ends. The one
 difference is KH2's group rule: hits from the same group as the last one still land and react.
 KH1's enemy attacks carry no KH2 group (no ATKP), so that rule has nothing to compare. The
 mod keeps KH1's timer.
+
+## 11. Step 2: KH2's push on KH1's push (done)
+
+`hitreact.rs`. With Hit Reactions at KH2 (base Sora on KH1's states), after KH1's hit pass started
+a reaction:
+
+- **Ground flinch** (`0x48..0x4B`): KH1's flinch has just started its push (`0x1402C7300`: speed
+  `+0x3FC` = distance × 0.22314, flag `+0x88` bit `0x40`). The speed becomes KH2's start, 0.1 × the
+  distance (`0x1403D4960`, Checked (decomp) KH2). Before each of Sora's KH1 physics frames
+  (`takeover::physics`, before the original step), KH1's push field holds KH2's speed for that
+  frame. KH1's push step (`0x1402C7070`) moves him by it with his own collision. KH2's decay
+  (×0.9 per frame step, stop below 1: `0x1403D4570`, Checked (decomp)) is kept on our side, and
+  KH1's flag is kept on until KH2's speed is below 1. If KH1 starts a push of its own meanwhile
+  (its field isn't what its step leaves of ours), ours is dropped.
+- **Air flinch** (`0x4E` / `0x4F`, KH1's air state 2): KH1's hop (20, `0x1402AF960`) and drift
+  (`0x14029D800`: min(40 × share, 8) × push factor along the push) are replaced through
+  `shared::physics::kh2_hop` (KH2's arc at physics KH2, KH1's gravity at KH1).
+  KH2's own air flinch (`0x1403D4800`, Checked (decomp)) is a hop of 50 and a drift of the hit-back
+  distance × sstm `+0x38` (0.048).
+- **Frame step.** KH1's step (`0x14233FBDC`) and KH2's (`0x140717480`) are both 1.0 per 60 Hz
+  frame, so the curves are the same per frame (Checked (decomp): both decays are `powf(k, step)`).
+
+**Knock-back Numbers** (Config > Combat, three values; ini `knockback_numbers`, default `kh2`):
+
+| | Ground push | Air flinch |
+|---|---|---|
+| KH1 | KH1's own distance (750 × share, cap 150, × stats `+0xC4`) | KH1's hop 20, KH1's drift |
+| Scaled | 200 × KH1's distance / its cap (btltbl `+0x24`) | hop 50, 9.6 × KH1's drift / its cap (btltbl `+0x34`) |
+| KH2 | sstm's 200 | hop 50, drift 200 × 0.048 = 9.6 |
+
+KH2 is the default because it is KH2's own rule for an attack that gives no knock-back number:
+`0x1403CEAB0` falls back to sstm's (Checked (decomp)), and KH1's attacks give none. btltbl's block
+pointer is Steam `0x142D22D30` (read as `0x14029D210` reads it, Checked (decomp)); its values from
+the file (Checked (files)).
+
+**Not covered:** KH1's flight and swimming flinches (`0x14029CFD0`, `0x14029D110`, `0x14029D340`)
+still use KH1's push numbers; the hook only acts on the ground and air flinch requests.
