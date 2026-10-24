@@ -730,14 +730,16 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
     super::formmagic::take_step(actor);
     let block = rd::<u64>(base + BTLTBL_STEAM) as usize;
     if air {
+        // (KH2's start at physics KH2, as for KH2's other spells: before KH1's halving, which
+        // `cast_after_command` then undoes, `shared::physics`.)
+        super::shared::physics::cast_stops(actor);
         if block > 0x10000 && super::crash::readable(block + 0xF4) {
             let hop: unsafe extern "system" fn(usize, f32) -> u32 = std::mem::transmute(base + HOP_STEAM);
             let scale: unsafe extern "system" fn(usize, usize, f32) = std::mem::transmute(base + SCALE_STEAM);
             hop(actor, rd::<f32>(block + 0xE8));
             scale(actor + 0x3C0, actor + 0x3C0, rd::<f32>(block + 0xF0));
         }
-        // (KH2's start at physics KH2, as for KH2's other spells, `shared::physics`.)
-        super::shared::physics::cast_stops(actor);
+        super::shared::physics::cast_after_command(actor);
     } else if dir > 0x10000 {
         let norm: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + DIR_STEAM);
         norm(dir, dir);

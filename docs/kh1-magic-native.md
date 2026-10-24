@@ -299,6 +299,22 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   Jump row (`shared::slot_kind`), as for the other native casts.
 - Still the borrow: Drive Forms, KH1's flight (state 8), Epic.
 
+## 4g. KH2's air cast start at physics KH2, none of the clip's hover at physics KH1 (done: m5 plan item 3)
+
+- Physics KH2 (base Sora; Drive Forms as they are): `shared::physics::cast_stops` (the native
+  spells from the spell start hook, Reflect from `reflect::cast_native`) is now KH2's start, not
+  t487's stop: a hop of 40 (sstm `magic_jump`, **Checked (files)**) from where he is on KH2's arc
+  (rise time `sqrt(2h / g)`, 14 frames), the sideways velocity kept, which `air_step` then drifts
+  × 0.95 a tick (`air_drag` in a move; **Assumption:** KH2's stick target is empty during a cast
+  motion with no allow-movement range). KH1's command step halves `+0x3C0` and writes its own 30
+  hop after the spell start (**Checked (decomp)**), so `cast_after_command` (after KH1's command
+  step, `combat::command`; at the end of `cast_native`) puts the kept velocity and KH2's arc back.
+- Physics KH1: KH1's own air cast has no hover (`0x1402AF6A0`, **Checked (decomp)**), but our cast
+  slots' KH2 clip range 3 held him there (`air_step`'s `held` applied at either physics). For a
+  cast slot (`kh2slots::cast_playing`) at physics KH1 the hold is now off, so the 30 hop, half
+  speed and KH1's fall are KH1's all through. Other KH2 motions (Aerial Dive, Finishing Leap) keep
+  their hold at physics KH1 (the tester, m5 answer 1: "(b) unless you have kh1 physics on").
+
 ## 4e. Air casts read again: KH1's and KH2's physics (research, the tester's m4 follow-up)
 
 The tester (after t484..t487): "reflect currently does not behave properly for kh1 physics, please

@@ -642,32 +642,63 @@ pub mod physics {
         wr(actor + ARC_H, a.h);
     }
 
-    /// A KH2 cast starting on KH1's cast state in the air (`formmagic::kh1_spell_start`), physics
-    /// KH2, base Sora (the tester, thread kh2-magic-and-reflect-native, answer 2 (a); Drive Forms
-    /// as they are): KH2's stop. KH2's cast start (the controller's `cast`, the KH2 source): no
-    /// sideways speed, no rise or fall, the arc a fall from rest from there (then the cast
-    /// motion's no-gravity range holds him, `kh2slots::no_gravity`, and the air drift keeps the
-    /// speed at 0). KH1's air cast keeps 0.7 of the sideways speed (`0x1402A3600`, `0x140386CD0
-    /// (+0x3C0, 0.7)`) and its jump's arc (Checked (decomp)): both replaced here, KH2's arc for its
-    /// air step (`air_step`) set to the fall. On the ground nothing: KH1's ground cast moves him
-    /// by nothing either (`0x1402A3DB0` sets no speed; Assumption: KH1's ground step moves no actor
-    /// with the action flag), as KH2's stops him.
+    /// KH2's magic jump (sstm `+0x48` `magic_jump`, 40.0, Checked (files) `03system.bin`): the hop
+    /// KH2's cast start gives an airborne caster (`0x1403C5170` → the action's slot 4
+    /// `0x140409B00` → `0x1403CBC30 (actor, 40)`, Checked (decomp) KH2 Steam). (sstm `+0xD0`, 30.0,
+    /// is for actor `+0x6C8` bit 7 with `+0xDE0 == 7`, not base Sora.)
+    const MAGIC_JUMP: f32 = 40.0;
+
+    /// The velocity a KH2 air cast keeps (`cast_stops`), for after KH1's command step
+    /// (`cast_after_command`): the game frame and KH1's `+0x3C0` before KH1's air cast halved it.
+    static CAST_KEEP: Mutex<Option<(u64, [f32; 4])>> = Mutex::new(None);
+
+    /// A KH2 cast starting on KH1's cast state in the air (`formmagic::kh1_spell_start`,
+    /// `reflect::cast_native`), physics KH2, base Sora: KH2's air cast start (the tester, thread
+    /// kh2-magic-and-reflect-native, m5 plan item 3; Drive Forms as they are). KH2's
+    /// `0x1403C5170` (Checked (decomp) KH2 Steam, `docs/kh1-magic-native.md` §4e): a hop of
+    /// `MAGIC_JUMP` from where he is (`0x1403CBC30` with h ≥ 0: the arc's time 0, its height h, its
+    /// rise time `sqrt(2h / g)`, 14 frames for 40), the launch speed 0 so the sideways velocity is
+    /// **kept**; then ACTION_JUMP's step drifts it × 0.95 a tick (`air_step`'s `air_drag` in a
+    /// move) and the cast motion's no-gravity range holds him (`kh2slots::no_gravity`). KH1's own
+    /// air cast (`0x1402A3600`: a 30 hop, half the sideways speed, Checked (decomp)) is replaced:
+    /// KH2's arc is `air_step`'s from here, and the velocity before KH1's halving is put back
+    /// after KH1's command step (`cast_after_command`). (t487's stop, sideways 0 and a fall from
+    /// rest, is gone: it was not KH2's.) Must be called before KH1's command step halves `+0x3C0`.
     pub unsafe fn cast_stops(actor: usize) {
         if !kh2() || !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
             return;
         }
         let Some(n) = numbers() else { return };
         let y: f32 = rd(actor + 0x14);
-        if !y.is_finite() {
+        let v: [f32; 4] = rd(actor + VEL);
+        if !y.is_finite() || !v.iter().all(|x| x.is_finite()) {
             return;
         }
         let was = kh1_motion(actor);
-        let arc = Arc::fall();
+        let arc = Arc::new(MAGIC_JUMP, n.gravity);
         if let Ok(mut g) = AIR.try_lock() {
             *g = Some(Air { arc, last_y: y, asked_up: 0.0, written: None });
         }
-        set_kh1_motion(actor, &Motion { h: [0.0; 2], arc: kh1phys::Arc::from_kh2(&arc, y, n.gravity, n.fall_max) }, 1.0);
-        super::super::log(&format!("KH2's cast stop in the air (physics KH2): sideways {:.1}/frame and KH1's arc (rising {}) replaced by a fall from rest", was.h[0].hypot(was.h[1]), was.arc.up_speed() > 0.0));
+        set_kh1_motion(actor, &Motion { h: [v[0], v[2]], arc: kh1phys::Arc::from_kh2(&arc, y, n.gravity, n.fall_max) }, 1.0);
+        if let Ok(mut k) = CAST_KEEP.lock() {
+            *k = Some((game_frame(), v));
+        }
+        super::super::log(&format!("KH2's air cast start (physics KH2): a hop of {MAGIC_JUMP:.0} ({:.1} frames up) from where he is (KH1's arc rising {}), sideways {:.1}/frame kept", arc.uptime, was.arc.up_speed() > 0.0, v[0].hypot(v[2])));
+    }
+
+    /// After KH1's command step ran a KH2 air cast (`combat::command`, `reflect::cast_native`):
+    /// KH1's air cast halved `+0x3C0` and wrote its own 30 hop into its arc fields after the spell
+    /// start; KH2's kept velocity and KH2's arc (`cast_stops`) go back on them.
+    pub unsafe fn cast_after_command(actor: usize) {
+        let Some((at, v)) = CAST_KEEP.try_lock().ok().and_then(|mut k| k.take()) else { return };
+        if at != game_frame() || !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
+            return;
+        }
+        let Some(n) = numbers() else { return };
+        let y: f32 = rd(actor + 0x14);
+        let arc = AIR.try_lock().ok().and_then(|g| g.as_ref().map(|a| a.arc));
+        let Some(arc) = arc.filter(|_| y.is_finite()) else { return };
+        set_kh1_motion(actor, &Motion { h: [v[0], v[2]], arc: kh1phys::Arc::from_kh2(&arc, y, n.gravity, n.fall_max) }, 1.0);
     }
 
     /// KH2's motion last written into KH1's fields (`mirror`), KH1's height then and the game
@@ -1273,7 +1304,9 @@ pub mod physics {
         let f: StepFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
         let sora = is_sora(actor);
         let v0: [f32; 4] = if sora { rd(actor + 0x3C0) } else { [0.0; 4] };
-        let held = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0 && super::super::kh2slots::no_gravity(actor);
+        // (Physics KH1: none for a cast slot, as KH1's own air cast has no hover, `0x1402AF6A0`;
+        // the tester, m4: "see how casting is done in the air physics wise to get the same for kh1".)
+        let held = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0 && super::super::kh2slots::no_gravity(actor) && (kh2() || !super::super::kh2slots::cast_playing(actor));
         if held {
             static N: AtomicU32 = AtomicU32::new(0);
             if N.fetch_add(1, Ordering::Relaxed) < 20 {

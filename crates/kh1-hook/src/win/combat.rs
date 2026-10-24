@@ -546,6 +546,11 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         // momentum as out of KH2's own moves (below; `shared::physics`).
         let on_kh2 = if actor == sora && kind == 1 { super::shared::physics::kh2_air_motion(actor) } else { None };
         f(actor, dir);
+        // (A native KH2 air cast at physics KH2: KH2's kept velocity and hop back over KH1's halving
+        // and 30 hop, `shared::physics::cast_after_command`.)
+        if actor == sora && kind == 2 {
+            super::shared::physics::cast_after_command(actor);
+        }
         if let Some(m) = on_kh2 {
             super::shared::physics::kh1_air_attack_started(actor, &m, false);
         }

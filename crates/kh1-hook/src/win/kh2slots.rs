@@ -806,6 +806,11 @@ fn cut_from(clip: &character_core::Clip) -> u32 {
     clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(len - 1).min(len - 1)
 }
 
+/// One of our cast slots plays on `actor` (KH2's spells', Reflect's).
+pub unsafe fn cast_playing(actor: usize) -> bool {
+    current(actor).is_some_and(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))
+}
+
 /// Our cast slot playing on `actor` is in its cut window (`cut_from` on).
 pub unsafe fn cast_cut_open(actor: usize) -> bool {
     let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };

@@ -530,7 +530,8 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion });
     }
     take_step(actor);
-    // (KH2's stop at the cast's start, physics KH2: `shared::physics::cast_stops`.)
+    // (KH2's air cast start, physics KH2: `shared::physics::cast_stops`; its velocity put back
+    // after KH1's command step halves it, `cast_after_command` from `combat::command`.)
     if air {
         super::shared::physics::cast_stops(actor);
     }
