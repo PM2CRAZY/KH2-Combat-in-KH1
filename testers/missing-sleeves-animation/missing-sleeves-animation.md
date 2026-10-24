@@ -14,6 +14,7 @@
 - [8. Assistant: t411 and t412](#^m8)
 - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](#^m9)
 - [10. Assistant: t453. Sorry I missed your message last round; it should have](#^m10)
+- [11. Assistant: I went through the KH2 Steam decomp step by step, from where](#^m11)
 
 ---
 
@@ -180,4 +181,23 @@
 I want you to investigate into the kh2 steam c decomp how exactly soras animations work (the hair, cloth, coat, etc) do not make assumptions, come back once you understand how to implement everything properly so that the animations look proper. 
 
 go ahead
+
+
+> [!tip] Assistant
+> I went through the KH2 Steam decomp step by step, from where the game updates Sora each frame to where his bones end up. The short version: KH2 has no physics, springs or cloth simulation anywhere in that path. Each frame it plays the motion's keyframes, then its constraints, limits and IK (only on the body: legs, spine, arms, hands, head), adjusts the feet to the ground, and blends between motions for a few frames when one changes. Nothing carries over from the last frame, so nothing swings or settles on its own. The hair, hood, sleeves, necklace and coat are only ever moved by their keyframes.
+>
+> The bigger finding is what KH2's model actually shows. Its hair spikes, sleeves (each sleeve as one piece) and necklace have mesh and move. Its jacket is part of the torso mesh, so it moves rigidly with the torso. The skeleton also has coat bones, hood bones, sleeve flaps, three hair spikes and pants bones that are animated in every motion but have no mesh, so in KH2 you never see them move. I don't know why KH2 animates bones it doesn't show. My guess is that another Sora model on the same skeleton uses them; I can check that if you put his world-outfit models (Halloween Town, Christmas Town, Space Paranoids, Timeless River) or the Drive Form models in this thread's folder.
+>
+> So in KH2 terms, our current coat (following his hips) is our own version, not KH2's, and the pants with KH1's own animation aren't KH2's either. Everything KH2 does here is keyframes, so whichever way you pick, it gets built into KH1's own animations with no extra system running.
+>
+> All of this is in `docs/kh1-secondary-motion.md` ("How KH2's exe animates Sora"), checked in the decomp and the KH2 files. No code changed this round.
+>
+> Questions:
+> 1. Pants: (a) keep KH1's own animation, or (b) fixed to the thigh, which is exactly what KH2 shows?
+> 2. The animated bones KH2 doesn't show (hood, sleeve flaps, 3 hair spikes): (a) follow KH2's skeleton anyway, so they move on KH1's model (the hood needs new matching work, its keys sit far from its rest pose), or (b) keep them still, like KH2's model shows them?
+> 3. Coat: (a) keep it as it is now (follows his hips), (b) make it move with his torso like KH2's jacket, or (c) follow KH2's coat bones (they move, but nothing on KH2's model shows them)?
+>
+> I also noticed KH1 may blend between animations differently from KH2: KH2 always turns the short way, and I haven't confirmed KH1 does. I'll check that next and tell you if it differs.
+
+^m11
 

@@ -116,7 +116,9 @@ Checked that KH2 has no run-time physics on them:
   and the hood, the flaps and the cloth have no vertices at all ("Which KH2 bones show on KH2's
   model"), so a simulation on them would show nothing. Checked (files);
 - the KH2 Steam decomp has no named cloth or physics strings (Checked (decomp), strings only:
-  the exe is stripped, so this is weak on its own).
+  the exe is stripped, so this is weak on its own). Since then the whole per-frame path from
+  the object update to the bone matrices has been read in the Steam decomp ("How KH2's exe
+  animates Sora" at the end of this file): no physics, spring or cloth step on it.
 
 The keychain while a dream weapon or the wooden sword is held (`0x52..=0x55`; KH2's chain motion
 would swing whatever KH1 hangs on those bones) used to get the swing; it now keeps KH1's rest
@@ -455,3 +457,87 @@ no KH1 move (they take whatever KH1 plays meanwhile, live).
 Also not carried: the other way
 round, KH1's own animation of all these parts when KH2's model is drawn (`inverse` keeps KH2's
 cloth, hair and hood at its bind relation).
+
+## How KH2's exe animates Sora (Steam decomp, research after t453)
+
+The tester, after t453: "investigate into the kh2 steam c decomp how exactly sora's animations work
+(the hair, cloth, coat, etc) do not make assumptions". Read in the Steam KH2 decomp (the tester's exe,
+SHA-256 `9002b2de...49ed`) and checked against `P_EX100.mdlx` / `P_EX100.mset`. Class names come
+from the exe's run-time type names (`kn::Motion`, `kn::MotionPrototype0`, `kn::MotionRAW`,
+`kn::ModelSKL`, `kn::AnimationWork`); there is no class with a cloth, spring, hair or physics name.
+
+### The per-frame path (Checked (decomp))
+
+1. **Object loop** `0x1403BEEC0` (also `0x1403BFAB0`): per object, `0x1403CCB90` builds the object's
+   world matrix (position, facing), then `0x1403C6AA0` updates its motion, then (objects of kind
+   0x65 only) `0x14040A380` places collision parts. Nothing after the motion update in this loop
+   writes bones.
+2. **Motion update** `0x1403C6AA0`, on the model at object `+0x7B0`:
+   - collects the **ground-adaptation entries** (`0x1403C8070`): the model's collision entries of
+     kind 10 and 11 (`0x1403B4F10` / `0x1403C9B80`: 20-byte entries, kind at +4, joint at +6, a
+     height at +0x12), only when the object's flags allow it (object `+0x168` bit 0 and two more
+     checks in `0x1403C8070`, not read further). Sora's
+     `P_EX100.mdlx` (its `p_ex` entry, 36 entries) has two of kind 10, on joints 12 and 41 (the
+     legs), height 15, and none of kind 11 (Checked (files)). So this is the feet only;
+   - reads the **look-at target** at object `+0x5D0` (`0x1403E4E60`: a position, a joint number and a
+     weight eased as (1 − cos(πt)) / 2). It is passed into the motion evaluation; where the joint
+     pass applies it was not found (the parameter looks unused in the decomp). Not a cloth part;
+   - then either plays one motion (`0x1401A4D40` → the motion's evaluate, below) or, while a
+     blend runs (object `+0x44` / `+0x48`, the clock over the length), blends two
+     (`0x1401A4CD0` → `0x1401C3A30`).
+3. **One motion**, `kn::MotionPrototype0` (vtable `0x1405B4958`), evaluate `0x1401D2C80`:
+   - on a new motion: each bone's local scale / rotation / translation reset to the model's bind,
+     then the motion's initial pose written over it;
+   - the F-curves sampled at the time (`0x1401DAD10` → `0x1401D30C0`; the ±3.14 wrap guard);
+   - each constraint switched on or off by its activation table at that time;
+   - the joint pass `0x1401D3B80`: per joint in the motion's joint order, expressions
+     (`0x1401D9950`), constraints (kinds 0..13), limiters (`0x1401D36F0`: a soft clamp of a position
+     or rotation, sphere or box, with an exponential edge; no time in it), IK (`0x1401C57B0`), the
+     ground adaptation for IK ends (a line test against the map's collision, `0x1401712B0`: two
+     collision queries with mask 0x200; also in the blend), then the world
+     matrices;
+   - a motion whose header word +4 is 1 takes `0x1401D60F0` instead; all 89 of Sora's are 0
+     (Checked (files)).
+4. **Blend** `0x1401C3A30`: per bone, the two motions' local channels lerped by the blend weight,
+   rotations along the short way (the difference wrapped to ±π), then the IK chains re-solved with the
+   ground adaptation (`0x1401C5190` re-places the bones under them).
+5. **No state between frames.** The model keeps two matrix buffers (`+0x50` / `+0x58`, swapped each
+   update by `0x1401A4D40` / `0x1401A4CD0`); neither the joint pass nor the blend reads the previous
+   one, and their work buffers are allocated and zeroed each call. Game code reads bone matrices
+   through copies (`0x1401A7950`, `0x1401A7AF0`); no other function found writing them. So a bone's
+   pose is a function of the motion(s), the time, the blend weight, the IK and ground targets only:
+   nothing swings, lags or settles on its own.
+
+### What drives each of Sora's parts (Checked (files), all 89 motions of `P_EX100.mset`)
+
+- The motions address 228 bones (0..227); the model's table lists 256, bones 228-255 sitting at the
+  root with no length (Checked (files)). Joints from 228 up in a motion are its IK helpers.
+- **Constraints** hold only these model bones: the root 0, the legs (10, 13, 14, 17, 18, 39, 42, 43,
+  46, 47), the spine and chest (66, 67, 68), the arms and hands (77, 80, 85, 86, 169, 172, 177, 178),
+  the head 140 (an aim at helpers), and in one motion each the pelvis pieces 7, 9 and the trouser
+  bones 27, 29, 36, 38, 56, 58. **Expressions** write only IK helpers. **IK chain flags** sit only on
+  the legs (11-13, 40-42), spine (65-68), arms (78-80, 170-172) and hands (85, 86, 177, 178).
+- So the hair (141-163), the hood (71-73), the sleeves and flaps (109-115, 201-207), the necklace
+  (164-165) and the coat ring (70, 128-135, 220-227) move by their F-curve keys and their parents only.
+- **Which bones show** (the earlier table, checked again with a bind-pose pass over every vertex):
+  each vertex is on one bone; the 102 vertex packets are all of type 1, the third row of every
+  packet header is all zeros, and each packet's vertex count equals the sum of its per-bone counts.
+  The mesh is on the body, the hair spikes 145-157 (odd) and 163, the sleeves 110 / 202 (whole), the
+  necklace 165 and the head 140 (2614 corners: face, hair, back of the hair). The torso 67 carries the
+  jacket down to about 104 high (the pelvis is at 102.6); the coat ring, the hood bones, the flaps,
+  the spikes 143 / 159 / 161 and the trouser and pelvis pieces carry nothing. The model has one
+  sub-model (no second model chained after it).
+- **How the hidden bones move** (a scratch run of the battle and field idle, walk and run, angle
+  against the bind relation to the parent part): the coat ring swings up to 51° within a cycle (the
+  field idle under 5°), its median 1-62° off its bind; the hood 73's median is 61-108° off its bind;
+  the flap 113 swings 5-40°; the hidden spike 159 moves like the shown ones
+  (up to 36°); the trouser bone 27 swings up to 113° in the battle walk. Shown parts for comparison:
+  spikes 145 / 147 up to 45°, the sleeve 110 up to 28°, the necklace up to 55°.
+- **Not known:** why KH2 keys bones its model doesn't show. A guess to check, not a finding: other
+  Sora models on the same skeleton (the world outfits or the forms) could carry mesh there. How to
+  find out: read those models' vertex packets the same way.
+- **KH1's blend, for comparison** (`0x140392560`, Checked (decomp) in part): it lerps two stored
+  snapshots per bone (`0x140386B70`, and `0x1400E64D0`, a component-wise lerp of three floats that
+  keeps the fourth). Not yet read: whether those floats are Euler angles and whether KH1 takes the
+  short way round as KH2 does. It matters on the frames a blend runs, for parts that turn far (hair up
+  to 180°).

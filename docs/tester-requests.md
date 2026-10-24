@@ -97,6 +97,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [8. Assistant: t411 and t412](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m8)
   - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m9)
   - [10. Assistant: t453. Sorry I missed your message last round; it should have](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m10)
+  - [11. Assistant: I went through the KH2 Steam decomp step by step, from where](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m11)
 - [Table of contents](../testers/table-of-contents/table-of-contents.md)
   - [1. Mr Bugs: from now on can you add a table of contents to the document ](../testers/table-of-contents/table-of-contents.md#^m1)
   - [2. Assistant: Done. There's a Contents list at the top of the file, under ](../testers/table-of-contents/table-of-contents.md#^m2)
