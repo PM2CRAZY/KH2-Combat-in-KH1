@@ -17,6 +17,7 @@
 - [11. Mr Bugs: I've sent you the traces and log, I assume you don't need my](#^m11)
 - [12. Assistant: t431 to t436 (one change each; the build is on GitHub as kh1](#^m12)
 - [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](#^m13)
+- [14. Assistant: t457 to t460 (one change each).](#^m14)
 
 ---
 
@@ -216,4 +217,30 @@
 
 ^m13
 
+
+> [!tip] Assistant
+> **t457 to t460** (one change each).
+>
+> 1. **t457, the ledge:** I checked KH2's decomp. Normal swings work like KH1: if a swing takes Sora off the edge, KH2 cancels it into his fall and keeps his speed, capped at 8 a frame. KH1 already does exactly that, so no change there. But KH2's finishers (154 / 155), Flash Step's start and Guard Break have a hidden "stop at the edge" window. During it KH2 keeps him on the ledge and the swing carries on. That's in now. It checks 18 past his step for floor, a number I read from your KH2 exe.
+> 2. **t458, (a):** he now turns toward the locked or auto-targeted enemy during each swing's turn windows, at KH2's speed. That's up to twice the window's degrees per frame (the old KH2 source we used only did half that), and only when the enemy is more than 50 away.
+> 3. **t459:** Combo Plus / Negative Combo with Base / Aerial Combo on KH2 no longer hand off to KH2's controller. KH1's own rows do the longer or shorter combo.
+> 4. **t460:** with Base / Aerial Combo on KH1, the ability moves already native (Slapshot, Dodge Slash, Slide Dash, Flash Step, Aerial Sweep, Aerial Dive, Aerial Spiral, Aerial Finish) now play on KH1's rows too. The swings around them stay KH1's.
+>
+> **Check:** the KH2 decomp, your KH2 exe and the KH2 files. Not checked in game. One small difference left: KH1 switches to the fall animation 2 frames after he leaves the floor, KH2 at once.
+>
+> These I couldn't do 1:1 without your call:
+> 1. Vicinity Break / Explosion / Magnet Burst hit with huge oval body shapes, but KH1's attacks are only spheres. (a) KH2's exact shapes and hit numbers, landed through KH1's damage, or (b) KH1 spheres, which means different reach and no Magnet pull?
+> 2. Square moves (Finishing Leap, Upper Slash, Horizontal Slash, Counterguard) and Guard Break: (a) run them on KH1's existing swing/finisher rows (KH1's damage data, so Upper Slash loses KH2's launch), or (b) add new KH1 rows for them with their own data?
+> 3. Aerial Recovery / Retaliating Slash need a KH1 animation request KH1 doesn't have: (a) borrow one of KH1's, or (b) add new ones?
+> 4. Finishing Plus's next finisher: (a) use KH1's spare ability-finisher rows as the second finisher, or (b) a new row?
+>
+> On how abilities should affect combos, my honest opinion: I'd keep KH1's own move picking for a KH1 combo and only bring over KH2's **combo rules**: the length (Combo Plus, Negative Combo), the finisher chain (Finishing Plus), and later Berserk Charge.
+> - **Why not KH2's picker:** if KH2's picker took over whenever one of those abilities is equipped, a KH1 combo with Finishing Plus would become KH2's combo, with KH2's distance rules and dash picks, and the KH1 setting would stop meaning much. KH2's picks are also KH2 motions, and there's no clean way to map them onto KH1's swings.
+> - **What KH1 already has:** a count against a combo length, and a few finisher rows. So Negative Combo can just shorten KH1's length, and Finishing Plus can chain into a second KH1 finisher.
+> - **Trade-offs:** it's less KH2 under the hood, but each setting stays itself and it's simpler and lighter.
+> - **Ability moves are separate:** Slide Dash and the like are KH2's moves at either setting, which is what t460 does.
+>
+> 5. So: (a) KH2's combo rules on KH1's own picker (my pick), (b) KH2's picker for everything whenever a KH2 combo ability is equipped, or (c) keep handing those cases to KH2's controller for now?
+
+^m14
 

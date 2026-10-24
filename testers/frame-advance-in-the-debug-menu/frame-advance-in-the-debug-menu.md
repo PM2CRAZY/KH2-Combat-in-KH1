@@ -26,6 +26,7 @@
 - [20. Mr Bugs: also if you didn't make the correction "100000 0xle5d90" the](#^m20)
 - [21. Assistant: t445 to t447. Thanks, that correction helped. I found why ef](#^m21)
 - [22. Mr Bugs: the actual pause seems to hold the image in the frame buffer](#^m22)
+- [23. Assistant: t461 to t463. Thanks, you were right about that one. I went ](#^m23)
 
 ---
 
@@ -348,4 +349,26 @@
 
 ^m22
 
+
+> [!tip] Assistant
+> **t461 to t463.** Thanks, you were right about that one. I went through every task in the Steam decomp this time, all 213 places that add a task, not just the ones in your logs.
+>
+> The one I'd called "camera 2" (110000, 0x28CD50) isn't a camera. It sets up the view for drawing, scrolls the map's textures and queues the fog for the next frame, which is why holding it stopped one of your backgrounds. Your other labels checked out: 80000 actors, 55000 command menu, 100000 camera, 120000 map, 130000 models. The full table is in `docs/kh1-frame-advance.md`, and the Held Tasks page has the corrected labels (t462).
+>
+> **t461:** Live is now the only mode. The KH1 Pause picture and the Held Picture row are gone.
+>
+> **t463:** while held, every task that only feeds the picture runs (110000 included, plus a few others the picture needed). Everything that changes the game is held. KH1's frame timer is 0 on held frames, so scrolling textures, the sky, fades and HUD animations stand still. The few things that move without the timer get put back after each held frame: HUD pop-ups and timers, the screen zoom, model colour fades. The controller stops vibrating while held, too.
+>
+> **Check:** the Steam decomp for every task. Not checked in game. Menus and the Gummi Ship weren't read line by line.
+>
+> Please check:
+> 1. Mid-fight with lock-on up, a spell going and damage numbers on screen: is the picture complete, and does anything move or tick (HP bars, damage numbers, water, sky, scrolling backgrounds)?
+> 2. Step through a combo at 30 and 60 fps.
+> 3. Does that background still stop?
+>
+> Questions:
+> 1. Should Frame Advance (a) stay field-only, or (b) get the Gummi Ship's tasks too, as its own version?
+> 2. The Held Tasks page: (a) keep it as a debug tool, or (b) remove it now that every task is documented?
+
+^m23
 
