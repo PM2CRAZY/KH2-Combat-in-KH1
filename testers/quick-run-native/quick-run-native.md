@@ -49,4 +49,10 @@
 
 ^m1
 
+do your first purposed route. 
 
+1. make behave exactly 1:1 with kh2 so if its (a) then do it
+   
+   also its getting hard to read which doc gets updated, can you add an extra thread that tells me whats updated and whats needed from me? 
+   
+   go ahead
