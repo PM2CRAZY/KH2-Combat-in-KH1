@@ -71,6 +71,10 @@ const TICK: f32 = 2.0;
 /// KH2's blend into the stop (204: none, `0x140423500`) and into what follows it (8.0).
 const STOP_BLEND: f32 = 0.0;
 const AFTER_BLEND: f32 = 8.0;
+/// KH2's start effect's element for a level: level + this (`0x1403A9830`).
+pub const START_EFFECT_BASE: i16 = 0x6C;
+/// Those elements (LV2, LV3, MAX).
+pub const START_EFFECTS: [i16; 3] = [0x6E, 0x6F, 0x70];
 /// KH1's roll's timer flags (`0x1402C9E60` sets them with its 12.0 at `+0xC`).
 const KH1_ROLL_FLAGS: u32 = 0x10_0080;
 /// KH1's landing request (its ground jump's base 0, + 7) and its idle (`0x4000_0000` queued).
@@ -91,7 +95,6 @@ struct Run {
     star: f32,
     /// In 204 (the timer ran out or Square was let go).
     stopping: bool,
-    level: u8,
 }
 
 static RUN: Mutex<Option<Run>> = Mutex::new(None);
@@ -196,7 +199,6 @@ pub unsafe fn start(actor: usize, dir: [f32; 2], why: &str) -> bool {
         age: 0.0,
         star: g.quick_run_star_time.max(0.0),
         stopping: false,
-        level,
     };
     note(format!(
         "{why}: KH2's Quick Run LV{level} on KH1's state {STATE:#x} (request {request:#x}): speed {:.0}, brake {:.2}, time {:.0}, stop brake {:.2}, invulnerable {:.0}",
@@ -206,17 +208,19 @@ pub unsafe fn start(actor: usize, dir: [f32; 2], why: &str) -> bool {
         *r = Some(run);
     }
     wr(actor + 0x3C0, [vel[0], 0.0, vel[1], g.quick_run_speed]);
+    // KH2's start for the levels above LV1: `0x1403B6670 (actor, level + 0x6C, 1, 0, 0)`, the
+    // actor's effect elements' start (`0x1402C6B30`, by element id in its PAX list; Checked
+    // (decomp)): P_EX100's elements 110 / 111 / 112 (Checked (files): element 110 is effect 18 on
+    // bone 0x4000). Through KH1's own effect system as Sora's other KH2 elements (`kh2fx`).
+    if level > 1 {
+        super::kh2fx::event(RUN_MOTION, character_core::EventKind::Effect(level as i16 + START_EFFECT_BASE));
+    }
     true
 }
 
 /// KH2's invulnerable time of the Quick Run playing (`fmab +0x1C`, its frames from the start).
 pub unsafe fn invulnerable(actor: usize) -> bool {
     running(actor) && RUN.try_lock().ok().and_then(|r| r.as_ref().map(|r| r.age < r.star)).unwrap_or(false)
-}
-
-/// The Quick Run's level playing (for the higher levels' start effect).
-pub fn level() -> u8 {
-    RUN.try_lock().ok().and_then(|r| r.as_ref().map(|r| r.level)).unwrap_or(0)
 }
 
 /// One of our motions plays on him, or one of their requests is pending (KH1 applies a request

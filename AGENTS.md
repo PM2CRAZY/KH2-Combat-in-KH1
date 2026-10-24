@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 505 (testing branch: Quick Run: KH2's start effect above LV1)
+- **Quick Run's start effect above LV1.** Same ask (the research's open point). KH2's start calls `0x1403B6670(actor, level + 0x6C)`, a PAX element by id (`0x1402C6B30`): elements 110 / 111 / 112 of `P_EX100.a.us` for LV2 / LV3 / MAX, started through `kh2fx::event`; 203 joins `kh2fx::DEFAULT_MOTIONS`. Checked (decomp / files).
+
 ### 2026-10-24: Stage 504 (testing branch: Quick Run: invulnerable frames 1:1)
 - **Quick Run's invulnerable frames 1:1.** The tester (question 1: "make behave exactly 1:1 with kh2 so if its (a) then do it"). Stage 104's 6-frame minimum (`QUICK_RUN_STAR_MIN`) is gone: KH2's fmab 0 / 8 / 12 / 16 by level, and `hurt` stops hits during the native run's frames (`quickrun::invulnerable`). Checked (files); Assumption: KH2's counter `+0xD70` counts 60 Hz frames.
 

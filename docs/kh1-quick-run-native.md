@@ -161,3 +161,89 @@ step (already wrapped by `shared::physics`).
 - The level > 1 call `0x1403B6670(level + 0x6C)`.
 - What `0x14029BBD0` / `0x1402A43A0` do for a state number they don't know.
 - The roll's own travel source (`+0x2C` or the motion's root) was not traced.
+
+## 6. Settled from the decomp, and built (after the tester's go-ahead)
+
+The tester's answers: "do your first purposed route" (the new KH1 state) and question 1 (a), KH2's
+real invulnerable frames (LV1 none). The §5 open points, from the Steam KH2 exe:
+
+- **What cuts a Quick Run in KH2: nothing but letting go of Square.** The AIRSLIDE vtable
+  (`0x1405CDB40`) is slots 0..9 (slot 10 is the next class's locator, `ACTION_GLIDEHOVER`).
+  Slot 9 (`0x140422630`) is its jump press (a jump: `0x1403CBB00`, apex motion 4, landing 5), but
+  the input step `0x1403D6FC0` calls it only while the motion state word `+0x18C` has bits
+  `0x1C`, and commands go through `0x1403D6CA0`, which needs the same bits. Those bits are range
+  ids 0 / 1 / 2 (the motion's "free" states: the range handler `0x14040D810` sets `+0x34` of the
+  motion controller at `+0x158`, i.e. `+0x18C`, bit 4 / 8 / 0x10 for them). Motions 203 and 204
+  have none: 203 (A150, 30 frames at 30 fps) has range 3 (no gravity) all through and range 14
+  (reaction commands, bit `0x80000`) from frame 8; 204 (A151, 18 frames, holds its last) has
+  range 3 for 0..28 and range 14 all through, and a sound at 6. **Checked (decomp)** and **Checked
+  (files)** (`P_EX100.mset`). So KH1's menu offers nothing during it (our state's flags have no
+  command bits) and the jump does nothing.
+- **Gravity and ledges.** AIRSLIDE is a ground action (its object's `+0xC` bit 0 is clear in the
+  action table `0x140750D30`, entry 0x10, **Checked (exe)**), held off gravity by its motions'
+  range 3. Losing the floor runs the generic slot 4 (`0x140409B00`: `0x1403CBC30 (actor, 0)`, a
+  fall from rest with no apex swap and landing motion 5, then action 1), which leaves the
+  velocity `+0x20` as it was; the air actions' enter (`0x1403CBD30`) then gives the Aerial Dodge
+  back, since the previous action wasn't airborne. **Checked (decomp)**. Which motion KH2 shows
+  falling off a ledge mid-run isn't settled: the fall action asks for none (**Assumption**: it
+  may keep 203 / 204; we ask KH1's fall).
+- **The end.** At the timer's 0 KH2 plays 204 with no blend and queues motion 4 (the air fall
+  loop, A004, range 1) with blend 8 (`0x1403C8310`, the motion queue `0x1403C6740`). That the
+  fall on the floor then becomes KH2's landing (motion 5) is the end seen in play (s206), not
+  traced: **Assumption**.
+- **The update rate.** The frame scale `0x140717480` is the vsyncs per update times the speed
+  (1.0 on PC at 60 fps, `0x140154600` / `0x140154740`), so the hold timer counts 60 Hz frames.
+  The velocity step (slot 8) runs on the player's physics tick (`0x1403B89A0`: `+0xBA8`, 0 at each
+  action change, counts down by the frame scale; below 0 slot 8 runs with dt 2.0 and the per-frame
+  velocity is half its result), so the brake is per two 60 Hz frames, starting on the first.
+  **Checked (decomp)**.
+- **The higher levels' call.** `0x1403B6670 (actor, level + 0x6C, 1, 0, 0)` starts the actor's
+  effect element of that id (`0x1402C6B30` walks the actor's PAX element list for it): elements
+  110 / 111 / 112 of `P_EX100.a.us` for LV2 / LV3 / MAX (element 110: effect 18 on bone 0x4000).
+  **Checked (decomp)**, **Checked (files)**.
+- **The invulnerable time** is `+0xD70` (`0x1403D7E40`), from the start, in frames (**Assumption**
+  that it counts 60 Hz frames as the timer does; the controller already counted it so).
+
+### Built
+
+1. **The state** (`crates/kh1-hook/src/win/quickrun.rs`). KH1 state `0x2A` written into KH1's
+   table each Sora physics frame (only into an empty slot or ours): flags `0x08` (the platform
+   carry; collision class 0, the ground's; no command / shortcut bits), no enter, exit, pre-step
+   or jump press; our step and transition. The start (`quickrun::start`, KH2's `0x1403A9830`):
+   Sora's Quick Run level's `fmab` record (`takeover::kh2_quick_run_growth`), velocity along the
+   direction × speed, brake, timer, stop brake, invulnerable time; state `0x2A`; our request of
+   motion 203 with KH1's action flag and no blend; facing turned to the direction. The step:
+   KH2's hold timer (Square from `takeover::pad_square`, counted by KH1's frame scale; let go,
+   0), at 0 the stop brake and our request of 204 with no blend; KH2's velocity step on its tick;
+   the move through KH1's own ground step (Steam `0x1402B1850`, so floors and slopes are KH1's)
+   with `+0x20` / `+0x2C` the velocity's direction and length; `+0x3C0` the velocity (KH1's
+   momentum field). The transition: on while one of our motions plays or is pending in KH1's
+   queue (`+0x178` / `+0x17C`); 204 played out: KH1's ground state with KH1's landing (request 7,
+   action flag, blend 8, idle queued); another motion put on him (a hit's reaction, an event):
+   KH1's ground state or fall. Motions 203 / 204 are request-only rows of ours (`kh1rows::OURS`
+   "Quick Run" / "Quick Run stop", KH1's ground swing slot as their template, its sounds left
+   out). `takeover::kh1_mode` leaves state `0x2A` out of "KH1's own modes" (every state ≥ 29).
+2. **The start points** (`shared::control`): Square held through KH1's roll (along his facing,
+   as KH2's roll turns into it; KH1's roll timer flags `0x80 | 0x100000` off as its think clears
+   them, `0x140297FE0`), Square while moving without KH1's Dodge Roll, and Square while moving with
+   the Dodge Roll style KH2 where KH2's action button picks Quick Run (no dodge roll of KH2's;
+   KH2's order `0x1403A75A0`: guard at rest, roll, Quick Run). The borrow stays the fallback (a
+   Drive Form, our requests not built, the Epic build). KH2's own roll held into Quick Run inside
+   its borrow (Dodge Roll KH2 with KH2's roll) is still KH2's controller's.
+3. **Off a ledge** (the transition, airborne): KH1's fall from rest written as `0x1402AF8F0 (actor,
+   0)` does, state 2 set by us (so the physics step's 8-unit walk-off cap doesn't run), action
+   flag off, `+0x3C0` the slide's velocity uncapped, KH1's fall request with blend 8, the Aerial
+   Dodge left.
+4. **Invulnerable frames 1:1**: `hurt` stops KH1's hits during the native run's `fmab` frames
+   (0 / 8 / 12 / 16), as our slots' range 27; the controller's 6-frame minimum (stage 104) is gone
+   (forms and the borrow fallback get KH2's too).
+5. **The start effect above LV1**: elements 110 / 111 / 112 started through `kh2fx` (Sora's package
+   built with them; 203 in `kh2_effects`' default list).
+
+Cost: one state step and transition a frame while he runs (no controller step, no hand-back);
+one table write a frame (a compare when it is already ours).
+
+Not checked in game: all of it. Open: the motion KH2 shows off a ledge mid-run (above); whether
+KH1's camera, which counts only states 0 / 8 / 0x18 as standing, behaves for state `0x2A`; what
+KH1's hit reaction switch `0x14029BBD0` does for a state number it doesn't know (our transition
+puts him back in state 0 the frame after another motion lands on him).

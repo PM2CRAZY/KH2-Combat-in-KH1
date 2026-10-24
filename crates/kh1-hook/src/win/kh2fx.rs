@@ -19,8 +19,9 @@
 /// Vicinity Break's was asked for when it went unnoticed without it, Aerial Finish's (motion
 /// 194, Sora's combo row 29, ability 100) when it was missing), then Guard Break (165: elements
 /// 31, 30, 32), Finishing Leap (167: 33, 34) and Aerial Recovery (40: element 0), the user
-/// finding them without theirs.
-pub const DEFAULT_MOTIONS: [u16; 7] = [166, 170, 197, 194, 165, 167, 40];
+/// finding them without theirs; Quick Run (203: its start effect above LV1, `quickrun`, the
+/// tester's quick-run-native, 1:1 with KH2).
+pub const DEFAULT_MOTIONS: [u16; 8] = [166, 170, 197, 194, 165, 167, 40, 203];
 use character_core::EventKind;
 use glam::Mat4;
 

@@ -875,6 +875,11 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
         Pkg::Sora => {
             let mut sets: Vec<Vec<i16>> = motion_sets(&kh2.character).into_iter().filter(|(m, _)| super::kh2fx::allowed(*m) || super::form::own_motion(*m)).map(|x| x.1).collect();
             sets.push(super::form::REVERT_ELEMENTS.to_vec());
+            // (Quick Run's start effect for the levels above LV1: started by KH2's code, not by a
+            // frame trigger of its motion, `quickrun::start`.)
+            if super::kh2fx::allowed(super::quickrun::RUN_MOTION) {
+                sets.push(super::quickrun::START_EFFECTS.to_vec());
+            }
             s(pkg, "p_ex100", "obj/P_EX100.a.us", Some("p_ex"), None, None, sets, false, anchor, 0)
         }
         Pkg::Weapon => s(pkg, "w_ex010", "obj/W_EX010.a.us", None, None, Some(WEAPON_ON), Vec::new(), true, weapon_anchor, ENDS_WITH_MOTION),
