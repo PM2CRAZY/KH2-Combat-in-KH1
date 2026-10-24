@@ -19,6 +19,7 @@
 - [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](#^m13)
 - [14. Assistant: t457 to t460 (one change each).](#^m14)
 - [15. Assistant: t473 to t476 (one change each).](#^m15)
+- [16. Assistant: Got it, no rush. Nothing changes in this thread until you're](#^m16)
 
 ---
 
@@ -284,3 +285,14 @@
 ^m15
 
 
+<<<<<<< HEAD
+=======
+let me get back to you, this is a test
+
+
+> [!tip] Assistant
+> Got it, no rush. Nothing changes in this thread until you're back; my last reply's questions are still open, and I'll pick up your answer on the next check after you push it.
+
+^m16
+
+>>>>>>> 364841f81724f196b7b624629ba4bbe81d96eb8a
