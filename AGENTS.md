@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 456 (testing branch: fx12's vertex ring sized for the debug overlay)
+- **fx12's vertex ring sized for the debug overlay.** The tester (3 (a)). 4 x 1 MB (was 4 x 6 MB, sized for the old effect player): one overlay draw is at most 18 lines and 2 boxes. The KH2 player model (off) would need it sized again. Notes §18.11.
+
 ### 2026-10-23: Stage 455 (testing branch: KH2 effects: KH2's flag 0x800 (alpha follows the owner))
 - **KH2 effects: KH2's flag 0x800 (alpha follows the owner).** The tester (2 (a)). KH2 `0x1402C58F0` / `0x1402C6A10` (Checked (decomp)): while bound, the effect's alpha is the weapon's (0x4003..8) or owner's, 0 hidden. KH1: Sora's draw bit and `+0x60`, the weapon-out flag for the Keyblade; fade-out on its own level. Assumption: KH1's Keyblade alpha byte unchanged in play. Notes §18.18.
 

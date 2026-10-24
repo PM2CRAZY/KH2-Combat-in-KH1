@@ -358,8 +358,14 @@ const MESH_TEXELS: usize = 6 << 20;
 // Raw COM pointers, used only on the game thread.
 unsafe impl Send for Gpu {}
 
+/// The vertex ring: 4 MB, room for 4 frames of the debug overlay (KH1 keeps at most 3 in flight),
+/// its only user now (until t444 KH2's effects drew through it: 24 MB, 6 MB a slot). One overlay
+/// draw is at most 18 lines of text (16 rows, the title and the hint) plus 2 boxes, 6 vertices of
+/// 36 bytes each a glyph: a 1 MB slot holds 4854 quads, 269 characters on every line. A bigger
+/// draw is cut at a slot (`upload`). (The KH2 player model's draw, off since s259, needs the ring
+/// sized for its meshes again, a few MB a draw, if it comes back.)
 const RING_SLOTS: usize = 4;
-const SLOT_BYTES: usize = 6 << 20;
+const SLOT_BYTES: usize = 1 << 20;
 
 static GPU: Mutex<Option<Gpu>> = Mutex::new(None);
 static OFF: AtomicBool = AtomicBool::new(false);
@@ -632,7 +638,7 @@ unsafe fn mesh_arena(gpu: &mut Gpu) -> bool {
     true
 }
 
-/// Copies `vertices` to the ring's write point, which goes round the whole ring (24 MB): a
+/// Copies `vertices` to the ring's write point, which goes round the whole ring (4 MB): a
 /// draw's vertices stay put for many frames, however many draws a frame has (a slot per draw, as
 /// before, came round again within KH1's 3 frames in flight with several draws a frame).
 /// Returns the vertex buffer view and how many vertices it holds.

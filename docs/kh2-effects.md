@@ -1671,7 +1671,7 @@ KH1's world-model pass, `fx12::draw`) is gone from the hook. `kh2fx` is now only
 game's events call (moves, forms, Revert, the Keyblade, the spell scripts, Sora's frames), each
 handed to `kh2dpx`. The world-model pass hook (`0x1401EADD0`) moved to `model` and is installed
 only while KH2's player model can be drawn (off since s259, so not hooked); `fx12` keeps the
-model's and the debug menu overlay's draws. The ini's `fx_test` (which started the old player's
+model's and the debug menu overlay's draws. Its vertex ring (an upload buffer, 4 slots for KH1's 3 frames in flight) was 24 MB, sized for the old player's effects; since the tester's go-ahead (m14, 3 (a)) it is 4 MB (1 MB a slot: one overlay draw is at most 18 text lines and 2 boxes, 216 bytes a quad), the overlay being its only user (`fx12::SLOT_BYTES`). The ini's `fx_test` (which started the old player's
 element 51) is gone.
 
 Memory and work that went with it (the t430 log): the old player loaded Sora's package and every
