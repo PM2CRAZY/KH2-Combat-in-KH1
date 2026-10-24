@@ -121,11 +121,26 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   time. KH2's turn to the lock (range 28: Blizzard 0..16) is `kh2slots::turn_to_lock`'s.
 - Still ours in step 1: the hits (`combat::Strikes::spell_strike`), Cure's heal, Reflect.
 
+## 4b. KH2's finisher casts (done: step 2)
+
+- KH2 casts the MAGC finisher motion when the spell takes the combo's finishing step
+  (`Character::cast` / `spell_slot`: a spell is one step of the combo string; the step is the
+  finisher when it reaches the combo's length). Its sub is `+ 1` (the finisher's `magi` and ATKP
+  rows) and its voice MAGC's finisher voice (Fire 11, Blizzard 12, Thunder 13), Checked (files).
+- On KH1's combo (`formmagic::pick_cast`, before KH1's command step): the combo is live while the
+  motion playing has KH1's combo window (`+0x1CC` bit 22), the step is KH1's count (combat info
+  `+0x41`) + 1 when the last swing connected (`+0x50`) or with Combo Master, as KH1's Attack step
+  counts (Checked (decomp), `0x1402A7510`), the length KH1's ground one (stats `+0xD4`). Then
+  KH1's ground request of the spell (and Fire's 0x3D) points at our slot of KH2's finisher cast
+  (Fire 57, Blizzard 60, Thunder 63; templates 54 / 55 / 56 / 57) for that cast. Cure has none,
+  and KH2 has none in the air.
+- Not done: the spell's step itself on KH1's count (KH1's next Attack after the cast starts a new
+  combo, as no combo window is open at the cast's end; question 1).
+
 ## 5. What step 1 leaves (the plan)
 
-1. **The cast in KH2's combo string**: KH2's finisher cast motions (57 / 60 / 63 when the next
-   step would be the finisher, `Character::cast`), the spell taking a combo step (KH1's
-   `+0x41`), and KH2's magic-only window (range id 35, Fire 56 from 60, into 71 34..46): KH1's
+1. **The cast in KH2's combo string**: the spell taking a combo step (KH1's `+0x41`, the combo
+   going on after it), and KH2's magic-only window (range id 35, Fire 56 from 60, into 71 34..46): KH1's
    leave point frees him for everything (question 1).
 2. **KH2's cast physics**: KH2 stops him at a cast (`vel_h` 0; in the air no rise or fall, then
    its air-magic gravity); KH1's air cast keeps 0.7 of the sideways speed and KH1's gravity
@@ -142,4 +157,11 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
    objects (question 4).
 5. **Cure's heal**: KH2's `ceil(power × Magic / 100)` (ATKP kind 6) through KH1's heal (element 11)
    on Sora (question 5).
-6. Thunder's turn (range id 22, TurnToTarget, 62 / 65 0..16) as KH1's turn, as range 28 is.
+6. Thunder's and Cure's turn (range id 22, 62 / 65 frames 0..16): KH2's range handler
+   (`0x14040D810`, Checked (decomp)) turns id 22 through `0x1403D4B90` toward the object's own
+   point at `+0xBF8` and id 28 through `0x1403D4B10` toward the player's primary target
+   (`+0xDC8`); both with `0x1403D3A90` (past 50 away, twice the parameter a frame). Who writes
+   `+0xBF8` isn't read yet (Assumption: the spell's target).
+7. **MP**: KH2's costs (03system `cmd`, Checked (files)): Fire 12, Blizzard 15, Thunder 18 at every
+   level, Cure 255 (all of it), Reflect 10, from KH2's MP pool; KH1's MP is whole points and every
+   cast here costs 1 (`reflect::COST`, KH1's own check and payment) (question 6).

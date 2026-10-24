@@ -93,6 +93,11 @@ pub const CASTS: [(u16, usize, usize, bool); 10] = [
     (58, 82, 0x8A, true),
 ];
 
+/// KH2's finisher casts (MAGC's finisher motions, Checked (files): Fire 57, Blizzard 60, Thunder 63;
+/// Cure has none, and none in the air), each on KH1's ground request of its spell (and Fire's
+/// second part, 0x3D, which KH1 plays for a Fire out of a swing): (motion, KH1's slot, request).
+const CAST_FINISHERS: [(u16, usize, usize); 4] = [(57, 54, 0x36), (60, 55, 0x37), (63, 56, 0x38), (57, 57, 0x3D)];
+
 const fn cast_spec(i: usize) -> Spec {
     let (motion, stands_for, request, air) = CASTS[i];
     Spec { motion, stands_for, request, kind: if air { Kind::AirMagic } else { Kind::Magic } }
@@ -233,6 +238,17 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                     moves.push(m);
                     blocks.push(block);
                 }
+            }
+        }
+        // KH2's finisher casts (`CAST_FINISHERS`) on KH1's ground cast requests, picked at a cast
+        // that is the combo's finisher (`pick_cast`).
+        for &(motion, stands_for, request) in CAST_FINISHERS.iter() {
+            if !wanted(motion) || !moves.iter().any(|m| m.request == request && m.default) {
+                continue;
+            }
+            if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, stands_for, request, Kind::Magic), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
+                moves.push(m);
+                blocks.push(block);
             }
         }
         // KH2's moves on KH1 rows of their own (`kh1rows`): each on its own request (0x200 + n),
@@ -1044,11 +1060,44 @@ fn forced(request: usize) -> bool {
 }
 
 fn picked(request: usize) -> Option<usize> {
-    let m = match request.checked_sub(super::kh1rows::FIRST_REQUEST as usize) {
-        Some(n) => OWN_PICKED.get(n)?.load(Ordering::Relaxed),
-        None => PICKED.get(request.checked_sub(0xC8)?)?.load(Ordering::Relaxed),
+    let m = if let Some(i) = CASTS.iter().position(|c| c.2 == request) {
+        CAST_PICKED[i].load(Ordering::Relaxed)
+    } else {
+        match request.checked_sub(super::kh1rows::FIRST_REQUEST as usize) {
+            Some(n) => OWN_PICKED.get(n)?.load(Ordering::Relaxed),
+            None => PICKED.get(request.checked_sub(0xC8)?)?.load(Ordering::Relaxed),
+        }
     };
     (m != usize::MAX).then_some(m)
+}
+
+/// The cast KH2 picked for each of KH1's spell requests (`CASTS`; our move's `slot`,
+/// `usize::MAX`: the request's own).
+static CAST_PICKED: [AtomicUsize; CASTS.len()] = [const { AtomicUsize::new(usize::MAX) }; CASTS.len()];
+
+/// KH1's spell request `request` plays KH2's finisher cast from now (`finisher`, its slot built:
+/// `CAST_FINISHERS`) or its own cast (the entry pointed there at once, before KH1's command step
+/// asks for it; `formmagic::pick_cast`). Returns the KH2 motion it plays.
+pub unsafe fn pick_cast(request: usize, finisher: bool) -> Option<u16> {
+    let i = CASTS.iter().position(|c| c.2 == request)?;
+    let fin = CAST_FINISHERS.iter().find(|f| f.2 == request).and_then(|f| built()?.moves.iter().find(|m| m.request == request && m.motion == f.0 && !m.default)).filter(|_| finisher);
+    CAST_PICKED[i].store(fin.map_or(usize::MAX, |m| m.slot), Ordering::Relaxed);
+    if let Ok(mut g) = PLACED.try_lock() {
+        if let Some(p) = g.as_mut() {
+            redirect(p);
+        }
+    }
+    fin.map(|m| m.motion).or_else(|| cast_motion(request))
+}
+
+/// KH2's motion our slot plays on KH1's spell request `request` now (its pick, else its own).
+pub fn cast_now(request: usize) -> Option<u16> {
+    let i = CASTS.iter().position(|c| c.2 == request)?;
+    let s = CAST_PICKED[i].load(Ordering::Relaxed);
+    if s != usize::MAX {
+        return moved(s).map(|m| m.motion);
+    }
+    cast_motion(request)
 }
 
 /// The motion KH2 picked for each request of ours (`pick_own`; our move's `slot`, `usize::MAX`:

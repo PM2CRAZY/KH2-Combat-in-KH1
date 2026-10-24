@@ -382,6 +382,36 @@ pub unsafe fn native(spell: u8, air: bool) -> bool {
     super::kh2slots::cast_motion(request).is_some() && spell_file(spell, level).is_some() && magc(spell, level).is_some()
 }
 
+/// Before KH1's command step casts KH2's `spell` natively (`combat::command`): its ground cast
+/// requests (and Fire's second part, which KH1 plays for a Fire out of a swing) pointed at KH2's
+/// finisher cast when this cast is the combo's finisher by KH2's rule (`Character::cast` /
+/// `spell_slot`: a spell takes the combo's next step, the finisher when that step reaches the
+/// combo's length), on KH1's own combo: live while the motion playing has KH1's combo window
+/// (`+0x1CC` bit 22, which KH1's Attack step tests, `0x1402A7510`), the step counted on from
+/// KH1's count (combat info `+0x41`) when the last swing connected (`+0x50`) or Combo Master is
+/// on, as KH1's Attack step counts and KH2's `swing_counts`, against KH1's ground combo length
+/// (stats `+0xD4`, `combomods`). In the air KH2 has no finisher cast.
+pub unsafe fn pick_cast(actor: usize, spell: u8, air: bool) {
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    let finisher = !air && info >= 0x10000 && stats >= 0x10000 && {
+        let live = rd::<u32>(actor + 0x1CC) >> 22 & 1 != 0;
+        let count = rd::<u8>(info + 0x41) as u32;
+        let max = rd::<u8>(stats + 0xD4).max(1) as u32;
+        let counts = rd::<u32>(info + 0x50) != 0 || super::takeover::with_abilities(|a| a.combo_master) == Some(true);
+        let step = if !live { 1 } else if counts { count + 1 } else { count.max(1) };
+        step >= max
+    };
+    let ground = 0x36 + spell as usize;
+    let m = super::kh2slots::pick_cast(ground, finisher);
+    if spell == 0 {
+        super::kh2slots::pick_cast(0x3D, finisher);
+    }
+    if finisher {
+        log(&format!("KH2 magic {}: the combo's finisher, KH2's finisher cast {m:?}", SPELL_NAMES[spell as usize]));
+    }
+}
+
 unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -> u64 {
     if (0..=3).contains(&spell) && kh1_spell_start(actor, spell as u8) {
         return 0;
@@ -406,12 +436,15 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         return false;
     }
     let request = rd::<u32>(actor + QUEUE) & 0xFFFF;
-    let Some(&(motion, _, _, air)) = super::kh2slots::CASTS.iter().find(|c| c.2 == request as usize) else { return false };
-    if !native(spell, air) || super::kh2slots::cast_motion(request as usize) != Some(motion) {
+    let Some(&(own, _, _, air)) = super::kh2slots::CASTS.iter().find(|c| c.2 == request as usize) else { return false };
+    if !native(spell, air) {
         return false;
     }
+    // (Its pick, `pick_cast`: KH2's finisher cast, else the request's own.)
+    let Some(motion) = super::kh2slots::cast_now(request as usize) else { return false };
     let level = super::reflect::kh1_spell_level(spell);
     let Some(m) = magc(spell, level) else { return false };
+    let finisher = motion != own && m.finish_motion >= 0 && motion == m.finish_motion as u16;
     // (KH1's command step judged the cast usable with KH1's own check, `0x14028EFD0`.)
     let cost = super::reflect::kh1_spell_cost(spell);
     super::reflect::pay_mp(actor, cost);
@@ -427,15 +460,16 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         }
     }
     if let Ok(mut g) = RT.lock() {
-        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher: false, motion });
+        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion });
     }
-    if m.voice != 255 {
-        super::kh2sound::voice(m.voice as i16);
+    let v = if finisher { m.voice_finisher } else { m.voice };
+    if v != 255 {
+        super::kh2sound::voice(v as i16);
     }
     log(&format!(
         "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}, cost {cost}{}",
         SPELL_NAMES[spell as usize],
-        if air { " (air)" } else { "" },
+        if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
         dropped.map_or(String::new(), |r| format!(", KH1's second part {r:#x} taken off its queue"))
     ));
     true
