@@ -2123,3 +2123,17 @@ slots didn't change it). Both come from §18.17's frame, which didn't know KH1's
 - `note_place`'s log line now gives KH2's offset along the actor's rows as (−x, y, −z), the frame
   above: it should equal the origin it measured.
 - **Assumption** (open): KH1's 0x8005 (body centre) reads the same frame as 0x8000 (§18.15).
+
+### 18.22 Reflect at KH1 Sora's size
+
+The tester (m16, 2 (a)): Reflect's numbers are KH2 Sora's size; scale them to KH1 Sora.
+
+- `kh2dpx::kh1_sized`, Reflect's packages (`Pkg::Spell` 1..3) only: each element's scale and its
+  position-only offset times KH1 Sora's size against KH2 Sora's (`pose::kh1_size`: the hip-height
+  ratio of the two bind poses, `Retarget::hip_ratio`, about 78.9 / 88.5 = 0.89), at its start.
+  KH1's instance scale takes its copy's header offset with it (`0x14031CEA0`: the root's rows
+  scaled before the header local, **Checked (decomp)**), so a bound piece's place above and around
+  him and its size shrink together. Script placements (`spell_place`) are the script's own
+  points (its contact flashes: where an attack met the barrier) and aren't moved.
+- Not scaled: the barrier's attack shapes (ATKP 573, what it blocks), which are gameplay.
+- Before Sora's retarget is made Reflect would play at KH2's size (logged once); a cast needs him.

@@ -1659,6 +1659,7 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
         not_played(pkg, &d.label, el, "left out when its package was built (its load line says why)");
         return Started::NotMine;
     };
+    let layer = kh1_sized(pkg, layer);
     let (number, bone) = (layer.number, layer.anchor);
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
     // KH1's blade and position bindings, and the binding list (unbound elements), are used on
@@ -1757,6 +1758,29 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     } else {
         Started::NotStarted
     }
+}
+
+/// Reflect's packages (`Pkg::Spell` 1..3) are drawn at KH1 Sora's size (the tester, m16 2 (a)):
+/// KH2's numbers are KH2 Sora's (hips 88.5 up), KH1 Sora is smaller (78.9). The element's scale
+/// (KH1's instance scale, which takes its copy's header offset with it: the bound pieces' places
+/// and sizes) and its position-only offset times KH1's size against KH2's (`pose::kh1_size`, from
+/// the two bind poses). Not before Sora's retarget is made (logged once): KH2's size then.
+fn kh1_sized(pkg: Pkg, mut l: Layer) -> Layer {
+    if !matches!(pkg, Pkg::Spell(1..=3)) {
+        return l;
+    }
+    let Some(k) = super::pose::kh1_size() else {
+        static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !ONCE.swap(true, Ordering::Relaxed) {
+            log("KH2 effects (native): Reflect started before KH1 Sora's size was known: at KH2's size");
+        }
+        return l;
+    };
+    for i in 0..3 {
+        l.scale[i] *= k;
+        l.bone_offset[i] *= k;
+    }
+    l
 }
 
 /// A frame trigger 1 of Valor's or Final's motion (`kh2fx::form_event`): its element from that

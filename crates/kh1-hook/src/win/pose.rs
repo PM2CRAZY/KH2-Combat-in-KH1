@@ -1625,6 +1625,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                     r.set_rest_open(&m.apply(&b, 0.0));
                 }
                 log(&format!("retarget ready: {} of {} KH1 bones follow KH2 (the rest hang as in KH1's battle idle: {})", r.mapped(), b.len(), rest.is_some()));
+                KH1_SIZE.store(r.hip_ratio().to_bits(), Ordering::Relaxed);
                 s.retarget = Some(r);
                 let sec = kh1_data::secondary::Secondary::new(&b, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
                 log(&format!(
@@ -1980,6 +1981,16 @@ fn kept(now: &Mat4, wrote: &Mat4, pass: Option<(Vec3, Option<Vec3>)>) -> bool {
     let Some((t, s)) = pass else { return false };
     let moved = Mat4::from_translation(t);
     same(now, &(moved * *wrote)) || s.is_some_and(|s| same(now, &(moved * Mat4::from_scale(s) * *wrote)))
+}
+
+/// KH1 Sora's size against KH2 Sora's (`Retarget::hip_ratio`, his hips' heights in the two bind
+/// poses) once the retarget is made (bits of an `f32`; 0 before).
+static KH1_SIZE: AtomicU32 = AtomicU32::new(0);
+
+/// KH1 Sora's size against KH2 Sora's (KH2 distances to KH1 ones), once his retarget is made.
+pub fn kh1_size() -> Option<f32> {
+    let b = KH1_SIZE.load(Ordering::Relaxed);
+    (b != 0).then(|| f32::from_bits(b)).filter(|k| k.is_finite() && *k > 0.0)
 }
 
 /// KH1's size against KH2's (`Retarget::hip_ratio`), 1 without a retarget.
