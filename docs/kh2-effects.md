@@ -2137,3 +2137,36 @@ The tester (m16, 2 (a)): Reflect's numbers are KH2 Sora's size; scale them to KH
   points (its contact flashes: where an attack met the barrier) and aren't moved.
 - Not scaled: the barrier's attack shapes (ATKP 573, what it blocks), which are gameplay.
 - Before Sora's retarget is made Reflect would play at KH2's size (logged once); a cast needs him.
+
+### 18.23 KH2's object frame on KH1's object root, a third time (Reflect's ground barrier)
+
+The tester (m18, t515 log and trace): "reflect on the ground is the one currently not placed
+correctly" (the air one is). §18.21's derivation took the actor's `+0xF0` row for ahead; it points
+back, so KH1's bound frame is KH2's turned half round about y, not KH2's.
+
+- KH1's actor matrix (`0x1402A0A40`, its usual path with `+0x374 & 0x1000` clear,
+  **Checked (decomp)**): `+0xD0` = normalize(facing × (0, 1, 0)), `+0xF0` = (0, 0, 0, 1) − facing
+  (`0x140386D10` → `0x1400E5EF0`, a − b), `+0xE0` = normalize(`+0xF0` × `+0xD0`), facing being
+  `+0x30` (where our takeover writes (sin f, 0, cos f), KH2's facing). So `+0xF0` points **back**
+  and `+0xE0` down (as the t478 log showed).
+- The skeleton pass draws the model with that matrix's y and z rows negated (`0x140391C70`, given
+  `actor + 0xD0` by `0x14029F0A0`; **Checked (decomp)**): the model's x is `+0xD0`, its up
+  `−(+0xE0)`, its forward `−(+0xF0)` = the facing. So the actor's rows are the model's (x, down,
+  back): KH2's object frame exactly (y down, forward along −z; the old player's Guard Break check,
+  §18.17, and the files: Reflect 3's ground pieces at KH2's (−22, −85, −18.2) are by his raised
+  hands at model x −21..−30, 18 ahead, in motion 71).
+- KH1's 0x8000 frame read straight (rows −`+0xF0`, −`+0xE0`, −`+0xD0`) times its apply's `P` is
+  (−`+0xD0`, `+0xE0`, −`+0xF0`) = the model's (−x, down, forward): KH2's frame turned half round
+  about its y. The t515 log agrees (**Checked (trace)**): Reflect 3's element 0 started at
+  (19.9, −76.8, 16.4) along the actor's rows, KH2's own offset along them being
+  (−19.6, −75.7, −16.2) at KH1's size: x and z reversed, 40 units to his other side and 33
+  behind. The air pieces (x 0, z −14.7) were only 26 behind, and Fire 3's ring (x = z = 0) not off.
+- `kh2dpx`: a bound copy on 0x8000 / 0x8005 takes `H · t` and `H · R`, `H` = diag(−1, 1, −1)
+  (`HALF_TURN_Y`; it commutes with the element's diagonal scale). A position-only offset goes
+  through `P · H` (`KH2_IN_KH1_OBJECT`, columns −z, −y, −x) onto the frame read straight.
+  `note_place`'s "KH2's offset along the same rows" is KH2's own offset on the rows now; the
+  measured origin should equal it. Also changes: Explosion's burst turn, the Guard Break / Finishing
+  Leap / Aerial Finish root pieces, the forms' root effects, Cure's and every 0x4001 / 0x4009
+  element (anything with an x or z offset or a turn on the object root).
+- **Assumption** (open, as before): KH1's 0x8005 (body centre) reads the same frame as 0x8000.
+  §18.21's statement that the rows are (x, down, ahead) is superseded.

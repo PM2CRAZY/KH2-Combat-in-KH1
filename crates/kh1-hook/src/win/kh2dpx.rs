@@ -234,18 +234,25 @@ const BLADE_BONE: u32 = 0x30;
 /// KH1's object-root code: the actor's place with a frame from its matrix rows (each negated,
 /// `+0xF0`, `+0xE0`, `+0xD0`), KH2's 0x4000.
 const KH1_OBJECT_ROOT: u32 = 0x8000;
-/// KH2's object frame in KH1's object-root frame as KH1 reads it (`docs/kh2-effects.md` §18.21):
-/// KH1's 0x8000 frame (`0x14029EA00`, Checked (exe)) is the actor's matrix (`+0xD0`) rows
-/// `-z, -y, -x`, the actor's `+0xE0` row pointing down and `+0xF0` ahead (Checked (trace), §18.20);
-/// that frame's `· P` (KH1's apply turn, [`KH1_APPLY_TURN`]) is (−x, down, back): KH2's object frame
-/// (y down, forward along its −z). Column form: KH2's object-frame coordinates to those of KH1's
-/// frame read straight (a position-only binding's offset). An element KH1 binds to the frame goes
-/// through its apply, which adds the `P` itself: its copy takes KH2's offset and turn as they are.
-const KH2_IN_KH1_OBJECT: glam::Mat3 = KH1_APPLY_TURN;
+/// KH2's object frame in KH1's object-root frame as KH1 reads it (`docs/kh2-effects.md` §18.23,
+/// correcting §18.21): KH1's 0x8000 frame (`0x14029EA00`, Checked (exe)) is the actor's matrix
+/// (`+0xD0`) rows `-z, -y, -x`. The actor's matrix (`0x1402A0A40`, Checked (decomp)) is x = facing ×
+/// (0, 1, 0), z = 0 − facing (`+0x30`, the facing KH2's facing is written to: its `+0xF0` row points
+/// BACK), y = z × x (down); the skeleton pass draws the model with its y and z rows negated
+/// (`0x140391C70`), so the rows are the model's x, down and back: KH2's object frame exactly
+/// (y down, forward along its −z; the old player's Guard Break check). KH1's frame read straight
+/// times `P` (its apply, [`KH1_APPLY_TURN`]) is (−x, down, forward): KH2's turned half round about
+/// its y. Column form: KH2's object-frame coordinates to those of KH1's frame read straight
+/// (a position-only binding's offset): `P · H`, `H` = [`HALF_TURN_Y`].
+const KH2_IN_KH1_OBJECT: glam::Mat3 = glam::Mat3::from_cols(glam::Vec3::NEG_Z, glam::Vec3::NEG_Y, glam::Vec3::NEG_X);
+/// Half a turn about y (x and z reversed): KH2's object frame in the frame KH1 draws an element
+/// bound to its object root with (its frame read straight `· P`). A bound copy takes KH2's offset
+/// and turn through it (`B₂ · T(t) · R = B₁P · T(H t) · H R`).
+const HALF_TURN_Y: glam::Mat3 = glam::Mat3::from_cols(glam::Vec3::NEG_X, glam::Vec3::Y, glam::Vec3::NEG_Z);
 
 /// KH1's anchors whose frame is KH1's object-root frame (the object root, the body centre; and so
 /// KH2's 0x4009 started on the object root): KH2's offsets and turns on them go through
-/// [`KH2_IN_KH1_OBJECT`].
+/// [`HALF_TURN_Y`] (bound) or [`KH2_IN_KH1_OBJECT`] (position only).
 fn object_framed(a: Anchor) -> bool {
     matches!(a, Anchor::Code(KH1_OBJECT_ROOT | KH1_BODY_CENTRE))
 }
@@ -977,9 +984,12 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     let offset = if position_only { r_e * Vec3::from(h_off) } else { Vec3::from(e.translation) / safe + r_e * Vec3::from(h_off) };
     let rot: Mat3 = r_e * r_h;
     // On KH1's object-root frame bound: KH1's apply draws the frame it reads times `P`, which is
-    // KH2's object frame (§18.21), so the offset and turn stay KH2's (the quarter turn t454 put
-    // here was the frame without `P`: Reflect off to one side). Position only: the offset is
-    // turned in the binding (`by_position_now`, the frame read straight), the turn is the world's.
+    // KH2's object frame turned half round about y (§18.23; §18.21 took the actor's `+0xF0` row
+    // for ahead, it points back), so the offset and turn go through `H` (Reflect's ground barrier,
+    // KH2's 22 to his right and 18 ahead, was drawn 20 to his left and 16 behind). The scale is
+    // diagonal, so `H` passes it. Position only: the offset is turned in the binding
+    // (`by_position_now`, the frame read straight), the turn is the world's.
+    let (offset, rot) = if object_framed(bone) && !position_only { (HALF_TURN_Y * offset, HALF_TURN_Y * rot) } else { (offset, rot) };
     let angle = math::xyz_i_of(rot);
     let number = ELEMENT_NUMBER | el as u32;
     let note = format!(
@@ -1855,8 +1865,9 @@ unsafe fn note_place(base: usize, pkg: Pkg, el: i16, element: usize, actor: usiz
     let row = |o: usize| glam::Vec3::from(rd::<[f32; 3]>(actor + o)).normalize_or_zero();
     let d = origin - at;
     let m = [d.dot(row(0xD0)), d.dot(row(0xE0)), d.dot(row(0xF0))];
-    // (KH2's: its object frame along the actor's matrix rows is (−x, y, −z), §18.21; the copy's
-    // offset is KH2's, here taken to those rows to compare.)
+    // (KH2's object frame is the actor's matrix rows themselves (x, down, back), §18.23; the copy's
+    // offset is KH2's turned half round about y (`HALF_TURN_Y`), so (−x, y, −z) of it is KH2's own
+    // offset along those rows, which the measured origin should equal.)
     let kh2 = glam::Vec3::from(l.local);
     log(&format!(
         "KH2 effects (native): {pkg:?} element {el} on {:?}: its origin at the start {:.1?} from Sora's place along his model's x, y, z (KH1's start: place {:.1?}, turn {a:?}); {}",
