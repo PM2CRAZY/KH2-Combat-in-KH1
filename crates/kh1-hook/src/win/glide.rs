@@ -38,6 +38,7 @@ const TABLE_RVA: Rva = Rva(0x2DB4240);
 const ENTRY: usize = 0x40;
 const ENTER: usize = 0x08;
 const EXIT: usize = 0x10;
+const STEP: usize = 0x20;
 const JUMP_PRESS: usize = 0x38;
 const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
 /// KH1's motion request that leaves a motion alone when its slot is already playing (Steam
@@ -46,6 +47,12 @@ const REQUEST_RVA: Rva = Rva(0x29D630);
 /// KH1's world flags (Steam `0x142867364`): `0x20` Neverland's flight.
 const WORLD_FLAGS_RVA: Rva = Rva(0x2867CD8);
 const NEVERLAND: u32 = 0x20;
+
+/// KH2's physics tick: the glide's velocity step runs once every two 60 Hz frames with dt 2
+/// (`0x1403B89A0`; per-frame velocity its result halved, as `quickrun`).
+const TICK: f32 = 2.0;
+/// The hover's step (`0x140423650`): his velocity x 0.9 a tick.
+const HOVER_DRAG: f32 = 0.9;
 
 /// KH1's glide request (slow; `0x1402B2D30` asks it at the start, blend 16) and KH2's blend for
 /// its glide motions (16.0: `0x140423A70`, `0x140423840`).
@@ -76,6 +83,7 @@ pub(crate) static RUN: Mutex<Option<Glide>> = Mutex::new(None);
 
 static ORIG_ENTER: AtomicUsize = AtomicUsize::new(0);
 static ORIG_EXIT: AtomicUsize = AtomicUsize::new(0);
+static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
 static ORIG_FALL_JUMP: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -116,9 +124,10 @@ pub unsafe fn install(base: usize) {
         return;
     }
     let table = base + TABLE_RVA;
-    let slots: [(usize, &AtomicUsize, usize); 3] = [
+    let slots: [(usize, &AtomicUsize, usize); 4] = [
         (table + STATE as usize * ENTRY + ENTER, &ORIG_ENTER, enter as *const () as usize),
         (table + STATE as usize * ENTRY + EXIT, &ORIG_EXIT, exit as *const () as usize),
+        (table + STATE as usize * ENTRY + STEP, &ORIG_STEP, step as *const () as usize),
         (table + FALL_STATE as usize * ENTRY + JUMP_PRESS, &ORIG_FALL_JUMP, fall_jump as *const () as usize),
     ];
     wrap(&slots);
@@ -242,4 +251,50 @@ pub unsafe fn start(actor: usize, why: &str) -> bool {
         if launched { "KH2's stored launch speed" } else { "his speed as it was" }
     ));
     true
+}
+
+type StepFn = unsafe extern "system" fn(usize, *mut [f32; 4]) -> usize;
+
+/// State 0x15's step (`(actor, &displacement)`, before KH1's mover): KH1's (`0x1402B2A20`: its +0.4
+/// a frame speed ramp to 8 / 16, its saw-tooth fall) for Donald and Goofy; for Sora KH2's, on KH2's
+/// physics tick:
+/// - the glide (`0x140423920`): velocity = his facing x `(1 - a) * speed + a * |v|` (growth
+///   `+0x30` a, `+0x20` speed), whatever the stick's tilt;
+/// - the hover (`0x140423650`): velocity x 0.9;
+/// - both: the fall `(height over the floor - +0x28) * +0x24`, at most `+0x2C`, 0 below `+0x28`
+///   (`0x1404237A0`), the height KH1's own (`+0x3D4`).
+///
+/// The frame's displacement is that velocity (x / z) and the fall (y, KH1's y-down) times KH1's
+/// frame step; KH1's mover and collision move him by it (a wall: he slides along it, as KH2's
+/// glide has no wall rule). `+0x3C0` / `+0x3C4` (KH1's air speed, read by its fall state after)
+/// carry KH2's velocity, as KH1's step writes them.
+unsafe extern "system" fn step(actor: usize, disp: *mut [f32; 4]) -> usize {
+    let mine = ours(actor) && !disp.is_null() && RUN.try_lock().ok().is_some_and(|g| g.is_some());
+    let g = if mine { takeover::kh2_glide_growth() } else { None };
+    let Some((_, g)) = g else {
+        let f: StepFn = std::mem::transmute(ORIG_STEP.load(Ordering::Acquire));
+        return f(actor, disp);
+    };
+    let dt = super::shared::physics::dt();
+    let above = rd::<f32>(actor + 0x3D4);
+    let facing: [f32; 4] = rd(actor + 0x30);
+    let Ok(mut lock) = RUN.lock() else { return 0 };
+    let Some(r) = lock.as_mut() else { return 0 };
+    r.tick -= dt;
+    while r.tick < 0.0 {
+        if r.hover == Some(true) {
+            r.vel = [r.vel[0] * HOVER_DRAG, r.vel[1] * HOVER_DRAG];
+        } else {
+            let a = g.glide_acceleration;
+            let speed = (1.0 - a) * g.glide_speed + a * r.vel[0].hypot(r.vel[1]);
+            r.vel = [facing[0] * speed, facing[2] * speed];
+        }
+        r.fall = if above.is_finite() { ((above.max(0.0) - g.glide_fall_height).max(0.0) * g.glide_fall_ratio).min(g.glide_fall_max) } else { 0.0 };
+        r.tick += TICK;
+    }
+    let (vel, fall) = (r.vel, r.fall);
+    drop(lock);
+    *disp = [vel[0] * dt, fall * dt, vel[1] * dt, 0.0];
+    wr(actor + 0x3C0, [vel[0], fall, vel[1], vel[0].hypot(vel[1])]);
+    0
 }

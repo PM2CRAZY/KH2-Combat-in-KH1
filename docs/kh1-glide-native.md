@@ -176,3 +176,14 @@ step, `+0x28` transition, `+0x30` button check, `+0x38` jump press. **Checked (d
 - The fall state's jump press (`0x1402AFD60`, state 2's `+0x38`, wrapped): for Sora at Glide KH2 it no longer
   starts KH1's Glide on the jump (KH2's glide is on Square, the jump in the air is the Aerial Dodge); Neverland's
   flight start (world flag `0x20`) still runs. **Checked (decomp)**
+
+### 8.2 The step
+
+State 0x15's step (`0x1402B2A20`) wrapped. For Sora at Glide KH2: KH2's velocity step on KH2's physics tick (once
+every two 60 Hz frames with dt 2, `0x1403B89A0`, as Quick Run's): the glide `facing x ((1 - a) * speed + a * |v|)`
+(`0x140423920`), the hover `x 0.9` (`0x140423650`), the fall from KH1's own height over the floor `+0x3D4`
+(`0x1404237A0`). The displacement handed back to KH1's physics step is that velocity and fall times KH1's frame
+step, so KH1's mover and its collision move him; against a wall KH1's mover slides him along it (KH2's glide has
+no wall rule, §7). KH1's +0.4 ramp, its 8 / 16 top speeds and its saw-tooth fall don't run for Sora. **Checked
+(decomp)** both games. Not checked: whether KH2's collision cuts `+0x20` on a head-on wall (our velocity isn't cut
+by KH1's mover: **Assumption** that KH2's isn't either).
