@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 511 (testing branch: KH2 sounds: effects through KH1's effect queue at Sora)
+- **KH2's effects through KH1's effect queue at Sora.** The tester (plan step 2; question 3 "same as 2"). Queued with KH1's `0x140179AC0 (no, id, Sora+0x10, 0)`; KH1's queue step `0x1401791E0` creates, pans and plays them; our slot is stopped with KH1's `0x140179D90` once its length has played in game time (`0x1401789F0`), as the step never frees slots (Checked (exe)). The old player is the fallback (not Steam, bank not loaded, queue full). Ini `kh2_sound_engine = kh1 | mod` (default kh1). Checked (decomp); Assumption: the engine plays the cut banks.
+
 ### 2026-10-24: Stage 510 (testing branch: KH2 sounds: banks registered in KH1's engine)
 - **KH2's sounds registered as KH1 banks (nothing plays through them yet).** The tester ("go ahead", plan step 1). `kh1bank.rs`: each sound a `se9NNNNN.win32.scd` bank registered with KH1's `0x1400E0F00` on a copy from KH1's `_aligned_malloc` (IAT `0x1403B0778`; KH1 frees banks with `_aligned_free`), put back after KH1's bank list `0x1404D65D8` changes (`0x1400D2C70(1)` → `0x1400DBAC0` releases all, from the map tear-down steps), only while holding KH1's adding semaphore (`[0x1421AAFD8]+0x18`) and with more than 128 slots left (`0x14004F570`); logged ("KH1 banks:"). Checked (decomp); "room unload" an Assumption.
 

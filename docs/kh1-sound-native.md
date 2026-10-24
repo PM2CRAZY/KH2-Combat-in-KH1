@@ -243,3 +243,38 @@ Where an older doc gives an Epic address, the Steam one is given here and the tr
   semaphore can be taken (so never while KH1's thread adds), the missing ones are registered,
   16 a frame, only while more than 128 bank slots stay free. Every step is logged
   ("KH1 banks: ..."). Nothing plays through them yet.
+
+### KH2's effects through KH1's effect queue (plan step 2, `kh1bank::play`)
+
+- The queue `0x140179AC0 (no, id, position pointer, volume)` takes a free slot (state byte
+  `+0x1C` 0) of the table at `[0x14232D560]` (`0x14232D554` slots, 0x28 or 0x80; 0x20 bytes:
+  `+0` no, `+8` the position pointer (kept: read every frame), `+0x10` volume offset, `+0x14`
+  bank (2 under 1000, else -1), `+0x18` id) and marks it 1; full, it does nothing. **Checked
+  (decomp)**.
+- The step `0x1401791E0`: a slot in state 1 is created (`0x1400D2FD0` -> `SslSeCreate`), its
+  left / right levels come from `0x140178030` (16383 - d^2 / falloff from the camera's two ear
+  points `0x14232DCA0` / `0x14232DCB0`, plus the slot's volume offset, clamped 0..0x3FFF; 0x3FFF
+  as the offset means full and centred), the record's position is set (`0x1400DCDB0`), and it
+  starts (`0x1400D3060` -> `SslSePlay`) unless `0x1401B37B0` says not now; then state 3, which
+  is updated every frame and **never freed by the step**: KH1's callers stop their own sounds
+  by (no, id) with `0x140179D90` (frees the slot, stops and deletes the record with
+  `0x1400DEF50`) or `0x140179A20`. **Checked (decomp, exe)**: the step's only state writes are
+  4, 4 and 3 (Steam `0x1401797EC`, `0x1401797FE`, `0x14017998C`).
+- KH1's own actor sounds pass `actor + 0x10` (the position) and volume 0 (e.g. the hit sound
+  `0x1402ABEA0`: no 0xA8, id = actor `+4` + 1, stopped later by `0x1402ABF80` with the same
+  pair). **Checked (decomp)**.
+- What we do: a KH2 sound effect (an effect element's, a frame trigger 8's, a spell element's)
+  whose bank is in KH1's list is queued with its file number, an id of its own per play
+  (from `0x4B320000`: two plays of one sound can overlap, as KH1's do), Sora's position pointer
+  and volume 0. Our slot is stopped with KH1's own stop once its length has played in game time
+  (KH1's pause and Frame Advance holds not counted) and KH1's "still playing" (`0x1401789F0`)
+  says no, or 2 s after its length. If the bank isn't in KH1's list (yet), the queue is full,
+  or the build isn't Steam, it plays on the mod's player as before. Ini `kh2_sound_engine =
+  kh1 | mod` (default kh1). Battle quotes stay on the mod's player (step 4).
+- So pause, Frame Advance (`0x1400D2F80`, which walks the live records), the volume sliders
+  (buses, set by `0x1400DDD10`) and the panning by position are KH1's for them, and KH1's
+  map tear-down stops them with KH1's own. **Assumption** until tried in game: the engine plays
+  the cut banks (they are in KH1's own file form, and KH1's reader accepts their version), and
+  a bank whose engine handle comes back 0 stays on the mod's player (logged).
+- Unknown: the falloff `0x14232D500` (KH2's sounds at Sora are as loud as KH1's own sounds at
+  Sora, which may differ from before), and what `0x1401B37B0` holds back.

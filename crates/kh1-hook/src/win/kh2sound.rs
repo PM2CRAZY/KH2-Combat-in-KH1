@@ -32,8 +32,14 @@ struct Sound {
     channels: u16,
     data: Arc<Vec<i16>>,
     /// Its one-sound bank's file number in KH1's engine (`kh1bank`), Steam only.
-    #[allow(dead_code)]
     kh1: Option<i32>,
+}
+
+impl Sound {
+    /// Its length in ms.
+    fn ms(&self) -> u32 {
+        (self.data.len() as u64 * 1000 / (self.channels.max(1) as u64 * self.rate.max(1) as u64)) as u32
+    }
 }
 
 /// What's loaded: effect element → sound, sound id → sound, voice id → its choices.
@@ -443,6 +449,15 @@ fn game_volume(c: Channel) -> f32 {
 }
 
 unsafe fn play(s: &Sound, channel: Channel) {
+    // Sound effects through KH1's own sound system (`kh1bank`: its bank, its effect queue at
+    // Sora's position; KH1's buses give the sliders' volume, its pause holds them). The mod's
+    // player below only when that can't (off Steam, the bank not in KH1's list yet, the queue
+    // full, `kh2_sound_engine = mod`). (Voices stay on the mod's player for now.)
+    if let (Channel::Effects, Some(no)) = (channel, s.kh1) {
+        if super::kh1bank::play(no, s.ms()) {
+            return;
+        }
+    }
     let gain = game_volume(channel);
     if gain <= 0.001 {
         static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);

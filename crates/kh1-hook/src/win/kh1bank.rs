@@ -49,6 +49,20 @@ const BANK_COUNT_STEAM: usize = 0x4D65E8;
 const ALIGNED_MALLOC_IAT_STEAM: usize = 0x3B0778;
 const ALIGNED_FREE_IAT_STEAM: usize = 0x3B0780;
 
+/// KH1's effect queue (Steam `0x140179AC0 (no, id, position pointer, volume)`, the one its hit,
+/// object and actor sounds use): `mov [rsp+8], rbx`.
+const QUEUE_STEAM: usize = 0x179AC0;
+const QUEUE_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
+/// KH1's stop of a queued sound (Steam `0x140179D90 (no, id)`: frees its slot and stops / deletes
+/// its record, `0x1400DEF50`) and its "still playing" (Steam `0x1401789F0 (no, id)`, via
+/// `0x1400DEEE0`). Both start `mov r9d, [rip+..]` (the slot count) then `xor r8d, r8d`.
+const STOP_STEAM: usize = 0x179D90;
+const PLAYING_STEAM: usize = 0x1789F0;
+/// The slot table and its slot count (Steam `0x14232D560` pointer, `0x14232D554` count): 0x20
+/// bytes a slot, `+0` no, `+0x18` id, `+0x1C` state (0 free).
+const SLOTS_STEAM: usize = 0x232D560;
+const SLOT_COUNT_STEAM: usize = 0x232D554;
+
 /// Our banks' file numbers (KH1's own are under 100000).
 pub const FIRST_NO: i32 = 900_000;
 /// The bank number our entries carry (`+0x10`). KH1 looks entries up by it with numbers from its
@@ -68,6 +82,8 @@ struct Bank {
     what: String,
     /// In KH1's bank list now.
     present: bool,
+    /// KH1's engine didn't load it (handle 0): never played through KH1.
+    refused: bool,
 }
 
 static BANKS: Mutex<Vec<Bank>> = Mutex::new(Vec::new());
@@ -94,16 +110,15 @@ pub fn add(bytes: Vec<u8>, what: String) -> Option<i32> {
     }
     let mut b = BANKS.lock().ok()?;
     let no = FIRST_NO + b.len() as i32;
-    b.push(Bank { no, bytes, what, present: false });
+    b.push(Bank { no, bytes, what, present: false, refused: false });
     DIRTY.store(true, Ordering::Relaxed);
     Some(no)
 }
 
 /// Whether bank `no` is in KH1's bank list now (as last seen: false from the frame the list
 /// shrinks until ours are back).
-#[allow(dead_code)]
 pub fn present(no: i32) -> bool {
-    BANKS.try_lock().ok().and_then(|b| b.get((no - FIRST_NO) as usize).map(|x| x.present)).unwrap_or(false)
+    BANKS.try_lock().ok().and_then(|b| b.get((no - FIRST_NO) as usize).map(|x| x.present && !x.refused)).unwrap_or(false)
 }
 
 unsafe fn rd<T: Copy>(at: usize) -> T {
@@ -124,6 +139,8 @@ unsafe fn ready(base: usize) -> bool {
             let ok = starts_with(base + REGISTER_STEAM, &REGISTER_PROLOGUE)
                 && starts_with(base + BANKS_LEFT_STEAM, &COUNT_PROLOGUE)
                 && starts_with(base + BANKS_USED_STEAM, &COUNT_PROLOGUE)
+                && starts_with(base + QUEUE_STEAM, &QUEUE_PROLOGUE)
+                && [STOP_STEAM, PLAYING_STEAM].iter().all(|&f| starts_with(base + f, &[0x44, 0x8B, 0x0D]) && starts_with(base + f + 7, &[0x45, 0x33, 0xC0]))
                 && rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM) > 0x10000
                 && rd::<usize>(base + ALIGNED_FREE_IAT_STEAM) > 0x10000;
             if !ok {
@@ -163,7 +180,7 @@ unsafe fn ours_in_list(base: usize) -> Vec<i32> {
 
 /// Registers one bank: a copy in KH1's own allocation, handed to KH1's registration. True if it
 /// went into the list.
-unsafe fn register(base: usize, b: &Bank) -> bool {
+unsafe fn register(base: usize, b: &mut Bank) -> bool {
     let malloc: unsafe extern "C" fn(usize, usize) -> *mut u8 = std::mem::transmute(rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM));
     let free: unsafe extern "C" fn(*mut u8) = std::mem::transmute(rd::<usize>(base + ALIGNED_FREE_IAT_STEAM));
     let data = malloc(b.bytes.len(), 0x10);
@@ -182,6 +199,11 @@ unsafe fn register(base: usize, b: &Bank) -> bool {
         // still ours.)
         free(data);
         note(format!("KH1 banks: se{} ({}) not taken (handle {handle:#x})", b.no, b.what));
+    } else if handle == 0 {
+        // (In the list, but KH1's engine didn't load it: KH1 frees it with the rest; it plays on
+        // the mod's player.)
+        b.refused = true;
+        note(format!("KH1 banks: se{} ({}): KH1's engine didn't load it (handle 0); it stays on the mod's player", b.no, b.what));
     }
     took
 }
@@ -191,6 +213,9 @@ unsafe fn register(base: usize, b: &Bank) -> bool {
 pub unsafe fn frame_end(base: usize) {
     if Build::current() != Build::Steam || base == 0 {
         return;
+    }
+    if rd::<usize>(base + SOUND_UP_STEAM) != 0 && ready(base) {
+        tend(base);
     }
     let count: i32 = rd(base + BANK_COUNT_STEAM);
     let head: usize = rd(base + BANK_LIST_STEAM);
@@ -245,7 +270,7 @@ unsafe fn put_in(base: usize, banks: &mut [Bank]) {
     let mut put = 0;
     let mut full = false;
     SEEN.store(true, Ordering::Relaxed);
-    for b in banks.iter_mut().filter(|b| !b.present) {
+    for b in banks.iter_mut().filter(|b| !b.present && !b.refused) {
         if put == PER_FRAME {
             break;
         }
@@ -261,7 +286,7 @@ unsafe fn put_in(base: usize, banks: &mut [Bank]) {
             break;
         }
     }
-    let missing = banks.iter().filter(|b| !b.present).count();
+    let missing = banks.iter().filter(|b| !b.present && !b.refused).count();
     if put > 0 && (missing == 0 || full) || full && put == 0 {
         note(format!(
             "KH1 banks: {} of {} KH2 sound banks in KH1's engine ({} bank slots left, {} in use{})",
@@ -275,4 +300,97 @@ unsafe fn put_in(base: usize, banks: &mut [Bank]) {
     if missing == 0 || full || put == 0 {
         DIRTY.store(false, Ordering::Relaxed);
     }
+}
+
+// ---- playing through KH1's effect queue (plan step 2) ----
+
+/// A KH2 sound queued in KH1's effect queue: its slot is freed (KH1's own stop) once it has
+/// played its length in game time and KH1 says it's done.
+struct Playing {
+    no: i32,
+    id: i32,
+    /// Game time left (ms; not counting KH1's pause or Frame Advance holds).
+    left_ms: i64,
+}
+
+static PLAYING: Mutex<Vec<Playing>> = Mutex::new(Vec::new());
+/// Each play's own id (KH1 tells sounds of a bank apart by (no, id); two of the same sound can
+/// play at once, as two of KH1's do).
+static NEXT_ID: AtomicI32 = AtomicI32::new(0x4B32_0000);
+static LAST_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+unsafe fn queue_has(base: usize, no: i32, id: i32) -> bool {
+    let slots: usize = rd(base + SLOTS_STEAM);
+    let n: i32 = rd(base + SLOT_COUNT_STEAM);
+    if slots < 0x10000 || !(1..=0x100).contains(&n) {
+        return false;
+    }
+    (0..n as usize).any(|k| {
+        let at = slots + k * 0x20;
+        rd::<u8>(at + 0x1C) != 0 && rd::<i32>(at) == no && rd::<i32>(at + 0x18) == id
+    })
+}
+
+/// Plays bank `no` (a KH2 sound, `ms` long) at Sora through KH1's effect queue, as KH1 plays its
+/// own actors' sounds (`0x140179AC0 (no, id, Sora's position +0x10, 0)`: KH1's queue step
+/// `0x1401791E0` creates and starts it with `SslSeCreate` / `SslSePlay` and pans and fades it by
+/// its distance from the camera's two ears every frame). False if it can't (not Steam, the bank
+/// not in KH1's list, no Sora, the queue full): the caller plays it the old way.
+pub unsafe fn play(no: i32, ms: u32) -> bool {
+    if Build::current() != Build::Steam || !super::settings::get().kh1_sound_engine {
+        return false;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    if base == 0 || rd::<usize>(base + SOUND_UP_STEAM) == 0 || !ready(base) || !present(no) {
+        return false;
+    }
+    let sora = super::takeover::sora_actor();
+    if sora < 0x10000 {
+        return false;
+    }
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let queue: unsafe extern "system" fn(i32, i32, usize, i32) = std::mem::transmute(base + QUEUE_STEAM);
+    queue(no, id, sora + 0x10, 0);
+    if !queue_has(base, no, id) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log(&format!("KH1 banks: KH1's effect queue is full; se{no} plays on the mod's player"));
+        }
+        return false;
+    }
+    if let Ok(mut p) = PLAYING.lock() {
+        p.push(Playing { no, id, left_ms: ms as i64 + 100 });
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        note(format!("KH1 banks: se{no} queued in KH1's effect queue (id {id:#x}, {ms} ms)"));
+    }
+    true
+}
+
+/// Once a frame: frees the slots of ours that have played (KH1's queue keeps a slot until its
+/// sound is stopped by its (no, id), as KH1's own callers do with `0x140179D90`).
+unsafe fn tend(base: usize) {
+    let now = super::frameadv::clock_ms();
+    let last = LAST_MS.swap(now, Ordering::Relaxed);
+    let dt = if last == 0 || super::takeover::paused() || super::frameadv::holding() { 0 } else { now.saturating_sub(last) as i64 };
+    let Ok(mut p) = PLAYING.try_lock() else { return };
+    if p.is_empty() {
+        return;
+    }
+    let playing: unsafe extern "system" fn(i32, i32) -> u32 = std::mem::transmute(base + PLAYING_STEAM);
+    let stop: unsafe extern "system" fn(i32, i32) = std::mem::transmute(base + STOP_STEAM);
+    p.retain_mut(|x| {
+        x.left_ms -= dt;
+        if !queue_has(base, x.no, x.id) {
+            // (KH1 freed it: a room's queue reset, or its own stop.)
+            return false;
+        }
+        // (Its length played; KH1 says it's done, or it's well past it.)
+        if x.left_ms <= 0 && (playing(x.no, x.id) & 0xFF == 0 || x.left_ms < -2000) {
+            stop(x.no, x.id);
+            return false;
+        }
+        true
+    });
 }
