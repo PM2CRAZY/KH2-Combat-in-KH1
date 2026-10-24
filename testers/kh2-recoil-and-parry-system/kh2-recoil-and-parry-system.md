@@ -52,4 +52,8 @@
 > It would help to have a log and a Select + Triangle trace of you swinging into an enemy's attack: once with a plain swing and once with Guard Break, so I can see which case you're running into.
 
 ^m1
-
+1. (b)
+2. unsure what kh2s special guard is or when its used so please let me know, for now do (c)
+3. (a)
+4. should be part of a recoil switch in the config menu, if you switch to kh1 all moves including kh2 uses kh1's rules exactly and vice versa
+go ahead
