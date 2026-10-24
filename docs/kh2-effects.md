@@ -1544,7 +1544,12 @@ elements; **Checked (files)**):
   KH1_SAME or KH2's own (**Checked (files)**).
 - KH1 instances start unturned: the pool's claim (`0x1401EC690`) clears the instance, and the
   start (`0x1401E0100`) only hands out handles of its place, turn and scale. **Checked (exe)**.
-  Not done: 0x04 on KH2's object root (none in Sora's package).
+- 0x04 on KH2's object root (Fire 3's elements 2, 6, 7, 10 in the t430 log; none in Sora's
+  package): KH2's place is the object's place plus its frame times the offset. KH1's point for code
+  0x8000 (**Checked (exe)**, `0x14029EB20`'s last case, neither 0x8002 nor 0x8008) is the actor's
+  place (`+0x10`) plus its frame rows (`+0xD0`) times (0, 0, 100 t): at t = 0 its place. So KH1's
+  position binding on 0x8000 with t = 0, its offset set by `posed` through the object frame
+  (`0x14029EA00` with 0x8000), is KH2's.
 
 ### 18.6 The Drive motion's and Revert's flashes through KH1
 

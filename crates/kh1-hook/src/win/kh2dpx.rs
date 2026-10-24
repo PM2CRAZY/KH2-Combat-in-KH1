@@ -866,7 +866,10 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     let r_e = math::euler_xyz(Vec3::from(e.rotation));
     let r_h = math::euler_xyz_i(h_ang);
     let position_only = flags & POSITION_ONLY != 0;
-    if position_only && matches!(bone, Anchor::Code(c) if c != KH1_BODY_CENTRE) {
+    // (KH1's point for the object root at t = 0 is the actor's place, `0x14029EB20`'s last case:
+    // `+0x10` plus the object frame's rows times (0, 0, 100 t); for the body centre, its part's
+    // centre. KH2's 0x04 on 0x4000 is the object's place plus its frame times the offset.)
+    if position_only && matches!(bone, Anchor::Code(c) if c != KH1_BODY_CENTRE && c != KH1_OBJECT_ROOT) {
         return Err(format!("element {el}: bound by position only to KH2's {:#x}, which KH1's position binding has no point for yet", e.bone));
     }
     // Position only: the root is `T(B · t) · R · S · H` (KH2), KH1's `T(point + offset) · S · H'`
@@ -1447,7 +1450,8 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     };
     let element = match bone {
         Anchor::Bone(b) if position_only => by_position(RAW_POINT | b, 1.0),
-        // (The body centre's point takes no distance along anything: its part's own.)
+        // (The body centre's point takes no distance along anything: its part's own; the object
+        // root's at t = 0 is the actor's place.)
         Anchor::Code(c) if position_only => by_position(c, 0.0),
         Anchor::Blade(t) | Anchor::LeftBlade(t) if position_only => by_position(BLADE_BONE, t),
         Anchor::Bone(b) => on_bone(RAW_BONE | b),

@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 437 (testing branch: KH2 effects: position-only on KH2's object root)
+- **KH2 effects: position-only on KH2's object root.** t430 log (Fire 3: 2, 6, 7, 10). KH1 0x8000 point at t 0 = actor `+0x10` (`0x14029EB20` last case, Checked (exe)); `posed` offset through the object frame. Notes §18.5.
+
 ### 2026-10-23: Stage 436 (testing branch: KH2 guard on his body in KH1's states; Flash Step)
 - **KH2's guard on his body in KH1's states; Flash Step.** `kh2slots::body_guard` (ATKP `refact_self` 2, 00battle Checked (files)); `hurt` marks KH1's records no-effect with KH1's clang. Flash Step 169 native. Notes §7.
 
