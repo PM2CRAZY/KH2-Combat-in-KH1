@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 474 (testing branch: KH2's Square moves and Guard Break on KH1 rows of their own)
+- **KH2's Square moves and Guard Break on KH1 rows of their own.** The tester (m14 2 (b)). `kh1rows`: Sora's table (`0x142D5CAB0`, block `+0xA9F0`, 66 rows, Checked (exe)) + rows 66.., requests 0x200.., own data (launch kind; Guard Break priority 0x62, `0x1402B4BC0`, Assumption); `scale_record` KH2's numbers; Square through KH1's Attack command (`0x140293480`); air fall queued; `kh2slots::air_root` (Finishing Leap). Counterguard left. Notes §7.
+
 ### 2026-10-24: Stage 473 (testing branch: KH2's hits on his body on KH1's rows)
 - **KH2's hits on his body on KH1's rows.** The tester (m14 1 (a)). Vicinity Break 170 / Explosion 166 / Magnet Burst 197 slots (`kh2slots::body_strike`); `takeover::kh2_hits` (`RigAnim::pose_at`, `Strikes::strike_as`, info `+0x50`); KH1's sphere on Keyblade windows only; range 27 in `hurt`. Notes §7.
 

@@ -22,7 +22,8 @@
 //!     count);
 //!   - Finishing Plus: a press during KH1's finisher is KH2's next finisher.
 //! - **Square** in KH1's combo window (`control`): KH2's Square move there (Finishing Leap, Upper
-//!   Slash, Horizontal Slash), if KH1's swing connected or Combo Master is on (as KH2's).
+//!   Slash, Horizontal Slash), if KH1's swing connected or Combo Master is on (as KH2's): on a
+//!   KH1 row of its own (`kh1rows`), through KH1's own Attack step, no borrow.
 //! - **Knocked away** in the air (`launched`, KH1's own reaction, `hurt`): the jump is KH2's
 //!   Aerial Recovery, Square its Retaliating Slash, from the 16th frame (KH2's).
 //! - **Quick Run** on Square while moving, with Dodge Roll at KH1 and no dodge roll of KH1's
@@ -89,6 +90,44 @@ static APPLY: Mutex<Option<(Move, u64)>> = Mutex::new(None);
 static LAST: Mutex<Option<(u8, u32, bool, bool)>> = Mutex::new(None);
 /// When KH1 last knocked him away itself (`hurt`, game frames).
 static BLOWN_AT: AtomicU64 = AtomicU64::new(0);
+/// A KH2 move on a KH1 row of its own (`kh1rows`) for KH1's Attack step this frame (`control`:
+/// a Square move in KH1's combo window): ours, KH2's hop for it, the game frame.
+static OURS: Mutex<Option<(usize, Option<character_core::Launch>, u64)>> = Mutex::new(None);
+
+/// Our row for KH2's pick `row` (`kh1rows`), if it is one of ours and plays: the rows on Sora's
+/// table and our slot of its motion on its request.
+fn ours_for(row: &ComboRow) -> Option<usize> {
+    super::kh1rows::by_kh2_row(row.id).filter(|&n| super::kh1rows::OURS[n].motion == row.motion && super::kh1rows::installed() && super::kh2slots::has(super::kh1rows::request(n) as usize, row.motion))
+}
+
+/// What `combat::exec` runs for our row `n` (`kh1rows`) at this press: KH1's row runner on it,
+/// its request our slot of KH2's motion; in the air with KH2's hop for the row (`air_hop`'s, from
+/// `launch`); a row that leaves the ground by its root (`Ours::rises`, Finishing Leap) out of
+/// KH1's air state, entered as for KH2's hops (`kh2_hop`) with no hop of its own (its root's
+/// rise moves him, `kh2slots::air_root`). KH1's last swing noted for Finishing Plus (`LAST`).
+fn ours_run(n: usize, launch: Option<character_core::Launch>, air: bool, count: u8, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
+    let o = &super::kh1rows::OURS[n];
+    let r = super::kh1rows::row(n);
+    if let Ok(mut l) = LAST.lock() {
+        *l = request_of(r).map(|m| (count, m, o.kind.finisher(), air || o.rises));
+    }
+    note(format!("KH2's {} (row {}, motion {}) on KH1's row {r} of its own (request {:#x}){}", o.name, o.kh2_row, o.motion, super::kh1rows::request(n), if o.rises && !air { ", out of KH1's air state" } else { "" }));
+    if o.rises && !air {
+        let gravity = pose::kh2().map_or(0.0, |k| k.character.params.gravity);
+        return Run::Hop(r, character_core::Launch { height: 0.0, velocity: [0.0; 2], gravity });
+    }
+    match launch.filter(|l| air && o.kind.air() && l.height.is_finite() && l.velocity.iter().all(|v| v.is_finite())) {
+        Some(l) => Run::AirHop(r, l),
+        None => Run::Row(r),
+    }
+}
+
+/// This frame's move of ours for KH1's Attack step (`control` armed it), if any: one left from an
+/// earlier frame is dropped.
+fn take_ours() -> Option<(usize, Option<character_core::Launch>)> {
+    let (n, l, at) = OURS.try_lock().ok().and_then(|mut g| g.take())?;
+    (frame().saturating_sub(at) <= 1).then_some((n, l))
+}
 
 fn frame() -> u64 {
     takeover::GAME_FRAME.load(Ordering::Relaxed)
@@ -233,6 +272,10 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     }
     let air = matches!(state, 1 | 2);
     let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Run::Row(row) };
+    // A Square move of KH2's on its own KH1 row (`control` gave KH1 this Attack for it).
+    if let Some((n, launch)) = take_ours() {
+        return ours_run(n, launch, air, count, request_of);
+    }
     let last = LAST.try_lock().ok().and_then(|l| *l);
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
@@ -263,6 +306,10 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         why.map_or(String::new(), |w| format!(": {w}, KH2 borrows him for it"))
     ));
     if let Some((r, ..)) = pick.as_ref().filter(|_| why.is_some()) {
+        // (One with a KH1 row of its own, `kh1rows`: Guard Break.)
+        if let Some(n) = ours_for(r) {
+            return ours_run(n, launch, air, count, request_of);
+        }
         want(Move::Row { id: r.id, state: from });
         return Run::Kh2;
     }
@@ -655,7 +702,18 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
             return None;
         }
         let from = ComboState { count, finishers: 1, hit: true, finisher_next: false };
-        let (row, ..) = unsafe { takeover::kh2_would_take(actor, Some(from), None, air, true) }?;
+        let (row, _, _, launch) = unsafe { takeover::kh2_would_take_launch(actor, Some(from), None, air, true) }?;
+        // One with a KH1 row of its own (`kh1rows`): KH1's Attack command for it, as KH1's
+        // menu gives it, so KH1's control step runs its Attack step now (its count, its target,
+        // its press in the combo window), whose row is ours (`attack`, `take_ours`).
+        if let Some(n) = ours_for(&row) {
+            if let Ok(mut g) = OURS.lock() {
+                *g = Some((n, launch, frame()));
+            }
+            unsafe { super::kh1rows::command_attack() };
+            note(format!("Square in KH1's combo window (swing {count}): KH2's Square move, row {} motion {}, on KH1's row {} of its own", row.id, row.motion, super::kh1rows::row(n)));
+            return Some(super::shared::KH1_ACTION_BIT);
+        }
         note(format!("Square in KH1's combo window (swing {count}): KH2's Square move, row {} motion {}", row.id, row.motion));
         want(Move::Row { id: row.id, state: from });
         return Some(super::shared::KH1_ACTION_BIT);

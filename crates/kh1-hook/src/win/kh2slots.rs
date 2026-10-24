@@ -33,8 +33,8 @@ use std::sync::{Mutex, OnceLock};
 const TO_HANDLE_RVA: Rva = Rva(0x38B080);
 /// KH1 Sora's own slots (`xa_ex_0010.mset`).
 pub const KH1_SLOTS: usize = 118;
-/// KH1's request ids (`0x141` in use, the table 0x160 long); ours for KH2-only moves would
-/// start at `0x200` (none yet).
+/// KH1's request ids (`0x141` in use, the table 0x160 long); ours for KH2's moves on KH1 rows of
+/// their own start at `0x200` (`kh1rows::FIRST_REQUEST`).
 const KH1_REQUESTS: usize = 0x141;
 const REQUESTS: usize = 0x220;
 const SLOT_TABLE: usize = 0x1D4;
@@ -122,6 +122,10 @@ pub struct Move {
     /// Which of a kind 3 request's three slots this is (`CYCLES`; 0 otherwise): only the first is
     /// pointed at, KH1 adds the rest.
     pub variant: u8,
+    /// A request of ours (`kh1rows`: 0x200 + n, none of KH1's), not one KH1's own: its entry is
+    /// ours in every set, whatever the styles, with the kind bits of KH1's request here (its
+    /// template's, whose slot `stands_for` is).
+    pub own: Option<usize>,
     /// The KH2 clip's sounds, voices and effects, by frame.
     events: Vec<(u32, EventKind)>,
 }
@@ -194,6 +198,22 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 }
             }
         }
+        // KH2's moves on KH1 rows of their own (`kh1rows`): each on its own request (0x200 + n),
+        // built on the KH1 motion and request of its row's kind (the template's travel flag too).
+        for (n, o) in super::kh1rows::OURS.iter().enumerate() {
+            if !wanted(o.motion) {
+                continue;
+            }
+            let k = o.kind;
+            let style = if k.air() { Kind::AirCombo } else { Kind::GroundCombo };
+            if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (o.motion, k.template_slot(), k.template_request() as usize, style), true, (false, 0), KH1_SLOTS + moves.len())? {
+                m.own = Some(m.request);
+                m.request = super::kh1rows::request(n) as usize;
+                log(&format!("KH2 slots: KH2 motion {} ({}) on our request {:#x} (KH1's row {} of ours)", o.motion, o.name, m.request, super::kh1rows::row(n)));
+                moves.push(m);
+                blocks.push(block);
+            }
+        }
         log(&format!(
             "KH2 slots: KH2's row selection on KH1's ground and air combo: {}",
             [0xC8usize, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE].iter().map(|r| format!("{r:#x} -> {:?}", moves.iter().filter(|m| m.request == *r).map(|m| m.motion).collect::<Vec<_>>())).collect::<Vec<_>>().join(", ")
@@ -251,7 +271,7 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
         tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
     ));
     let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Voice(_) | EventKind::Effect(_))).map(|e| (e.frame, e.kind)).collect();
-    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, events }, block)))
+    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events }, block)))
 }
 
 /// The swings KH2's combo rows can take: on the ground (`air` false) the ground rows with no hop
@@ -391,6 +411,40 @@ pub unsafe fn no_gravity(actor: usize) -> bool {
     }
     let moving = clip.windows.iter().any(|w| matches!(w.kind, W::AllowMovement) && w.start == 0 && w.end.is_none());
     !moving && clip.has(t as u32, |k| matches!(k, W::NoGravity))
+}
+
+/// KH2's root travel over the next `dt` 60 Hz frames of our slot playing on `actor`, while its
+/// no-gravity range holds him (`no_gravity`), in the world (KH2's y up), along his facing (KH1's
+/// yaw `+0x3C`, as KH2's controller turns the clip's root by its facing: right = (cos, -sin),
+/// forward = (sin, cos)): KH2 moves him by the root, up and down too, where the clip has no gravity
+/// (the OG rewrite's action step; Finishing Leap's root rises 150 over its frames, Checked
+/// (files)). `None` with no root travel there (every other air motion of Sora's has none).
+/// KH1's air step adds it to his move (`shared::physics`).
+pub unsafe fn air_root(actor: usize, dt: f32) -> Option<[f32; 3]> {
+    if !no_gravity(actor) || !(dt > 0.0) {
+        return None;
+    }
+    let m = current(actor)?;
+    let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    let at = |f: f32| -> [f32; 3] {
+        let n = clip.root.len();
+        if n == 0 {
+            return [0.0; 3];
+        }
+        let f = f.clamp(0.0, (n - 1) as f32);
+        let (i, w) = (f.floor() as usize, f.fract());
+        let (a, b) = (clip.root[i], clip.root[(i + 1).min(n - 1)]);
+        [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w]
+    };
+    let (a, b) = (at(t), at(t + dt));
+    let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    if d.iter().all(|v| v.abs() < 1e-4) || !d.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    let yaw: f32 = rd(actor + 0x3C);
+    let (fw, right) = ([yaw.sin(), yaw.cos()], [yaw.cos(), -yaw.sin()]);
+    Some([d[0] * right[0] + d[2] * fw[0], d[1], d[0] * right[1] + d[2] * fw[1]])
 }
 
 /// KH2's clip of our slot playing on `actor` has its edge stop now (range id 29,
@@ -772,7 +826,9 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
     for (i, m) in p.motions.iter().enumerate() {
         slots[count + i] = m.1;
     }
-    let requests: &'static mut [u32] = Box::leak(vec![0xFFFu32; len].into_boxed_slice());
+    // (Room for our own requests past KH1's, `kh1rows`; 0xFFF, none, between.)
+    let ours_end = if b.moves.iter().any(|m| m.own.is_some()) { super::kh1rows::requests_end() } else { 0 };
+    let requests: &'static mut [u32] = Box::leak(vec![0xFFFu32; len.max(ours_end)].into_boxed_slice());
     for i in 0..len {
         requests[i] = rd::<u32>(r + i * 4);
     }
@@ -780,7 +836,23 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
     // in for (by its signature, `pose::file_slot_of_motion`).
     let mut redirects = Vec::new();
     let mut missing = Vec::new();
+    let mut own_requests = Vec::new();
     for (i, m) in b.moves.iter().enumerate() {
+        // Our own request: its template's kind bits here and our slot (where the template's entry
+        // holds the KH1 motion it stands for).
+        if let Some(t) = m.own {
+            let e = requests.get(t).copied().unwrap_or(0xFFF);
+            let held = (e & 0xFFF) as usize;
+            if held < count && pose::file_slot_of_motion(pose::ptr(slots[held])) == Some(m.stands_for) {
+                if let Some(x) = requests.get_mut(m.request) {
+                    *x = (e & !0xFFF) | (count + i) as u32;
+                    own_requests.push(format!("{:#x}", m.request));
+                }
+            } else {
+                missing.push(format!("{:#x} (as {t:#x})", m.request));
+            }
+            continue;
+        }
         let e = requests.get(m.request).copied().unwrap_or(0xFFF);
         let own = (e & 0xFFF) as usize;
         let holds = own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for);
@@ -792,11 +864,12 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
     }
     let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects };
     log(&format!(
-        "KH2 slots: Sora's set {f:#x} ({why}): {count} slots of its own, ours at {}..{}, {} requests; ours stand in for {}{}",
+        "KH2 slots: Sora's set {f:#x} ({why}): {count} slots of its own, ours at {}..{}, {} requests; ours stand in for {}; our own requests {}{}",
         count,
         count + p.motions.len() - 1,
         len,
         t.redirects.iter().filter(|r| r.5).map(|r| format!("{:#x} (its slot {})", r.0, r.1 & 0xFFF)).collect::<Vec<_>>().join(", "),
+        if own_requests.is_empty() { "none".to_string() } else { own_requests.join(", ") },
         if missing.is_empty() { String::new() } else { format!("; not in this set: {}", missing.join(", ")) }
     ));
     wr(at + 4, t.slots_handle);
@@ -872,6 +945,10 @@ pub unsafe fn frame(actor: usize) {
     }
     redirect(p);
     drop(g);
+    // KH2's moves on KH1 rows of their own, once their requests are ours (`kh1rows`).
+    if b.moves.iter().any(|m| m.own.is_some()) {
+        super::kh1rows::install(actor);
+    }
     tick(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`).
     super::takeover::kh2_hits(actor);

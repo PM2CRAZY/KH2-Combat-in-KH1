@@ -114,7 +114,15 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
             wr(dir + 4, 0.0f32);
         }
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
-        let Some((l, from_ground)) = hop else { return f(actor, run, dir) };
+        // A row of ours (`kh1rows`) in the air: KH1's fall after it, as KH1's own air rows queue.
+        let air_row = super::kh1rows::by_row(run).is_some_and(|o| o.kind.air());
+        let Some((l, from_ground)) = hop else {
+            f(actor, run, dir);
+            if air_row {
+                super::kh1rows::queue_fall(actor);
+            }
+            return;
+        };
         // KH2's hop: KH1's air state has him (as the hand-backs put him there, `combat::command`,
         // `takeover`; already, for an air swing's own hop), KH1's air swing row starts in it, then
         // KH2's arc and speed replace the row's own lunge and hop.
@@ -125,6 +133,9 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
             wr(actor, rd::<u32>(actor) & !0x1_0000);
         }
         f(actor, run, dir);
+        if air_row {
+            super::kh1rows::queue_fall(actor);
+        }
         super::shared::physics::kh2_hop(actor, l.height, l.velocity);
         // (KH1's carry into the air on the state change would replace its sideways speed:
         // `ground_hop_carry` puts it back before KH1's physics step.)
@@ -2214,13 +2225,29 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
 
 /// `probe::hit`: a hit record was just made; while KH2's hit is landed, its damage is KH1's
 /// scaled by KH2's power.
-pub unsafe fn scale_record(rec: usize) {
-    let p = POWER.load(Ordering::Relaxed);
+/// `attack` / `target`: the attack object that made it and the one it hit. One of KH1's own rows of ours (`kh1rows`: its own
+/// attack data) takes KH2's numbers for its move's hit window as KH2's hits landed here do: its
+/// power, its Magic scaling, its launch (a blow that throws, `kh1rows::throws`, KH2's height and
+/// speed: its data's KH1 reaction is the launch already).
+pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
+    let own = if POWER.load(Ordering::Relaxed) == 0 { super::kh1rows::kh2_atkp(attack) } else { None };
+    let p = own.as_ref().map_or(POWER.load(Ordering::Relaxed), |a| a.power.max(1) as u32);
     if p == 0 || rec < 0x10000 {
         return;
     }
+    let own_launch = own.as_ref().filter(|a| super::kh1rows::throws(a)).and_then(|a| {
+        let r = &pose::kh2()?.character.reaction;
+        let (k1, k2) = farther(a.id).unwrap_or((a.knockback_1, a.knockback_2));
+        Some(Launch::kh2(k1, k2, r))
+    });
+    if let Some(a) = own.as_ref() {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log(&format!("KH1's row of ours hit: KH2's ATKP {} (power {}, reaction {}, {}) on record {rec:#x}", a.id, a.power, a.enemy_reaction, if own_launch.is_some() { "KH2's launch" } else { "no launch" }));
+        }
+    }
     // A KH2 launch: KH1's launch reaction (kind 5) with KH2's numbers once it runs.
-    if let Some(l) = PENDING.lock().ok().and_then(|g| *g) {
+    if let Some(l) = own_launch.or_else(|| if own.is_some() { None } else { PENDING.lock().ok().and_then(|g| *g) }) {
         wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 5);
         if let Ok(mut v) = LAUNCHES.lock() {
             let now = takeover_ms();
@@ -2232,7 +2259,7 @@ pub unsafe fn scale_record(rec: usize) {
             log(&format!("KH2 launch asked: record {rec:#x} made a launch (up {:.0} in {:.0} frames, sideways {:.1}/frame)", l.h, l.t, l.speed));
         }
     }
-    if HOLD.load(Ordering::Relaxed) {
+    if own.is_none() && HOLD.load(Ordering::Relaxed) {
         HELD_REC.store(rec, Ordering::Relaxed);
         let w = rd::<f32>(rec + 0x1C);
         wr(rec + 0x10, [0.0f32, 0.0, 0.0, w]);
@@ -2246,13 +2273,13 @@ pub unsafe fn scale_record(rec: usize) {
     // KH2's Magic-based hits (ATKP stat source 1: Explosion's, Magnet Burst's; the user: they
     // scale with magic): KH1 has no Magic stat, so Sora's max MP stands in, +10% a point, times
     // the ini's `magic_scale`.
-    if MAGIC.load(Ordering::Relaxed) {
+    if own.as_ref().map_or(MAGIC.load(Ordering::Relaxed), |a| a.stat_source == 1) {
         let base = BASE.load(Ordering::Relaxed);
         let mp = super::menu::save_block(base).map_or(0, |s| rd::<u8>(s + 8)) as f32;
         factor *= (1.0 + 0.1 * mp.min(30.0)) * set.magic_scale;
     }
     let scale = (factor * 100.0).round().max(1.0) as i64;
-    let target = TARGET.load(Ordering::Relaxed);
+    let target = if own.is_some() { target } else { TARGET.load(Ordering::Relaxed) };
     let mut carry = CARRY.lock().ok();
     let before = carry.as_ref().and_then(|c| c.get(&target).copied()).unwrap_or(0);
     let total = d.max(0) as i64 * p as i64 * scale + before;

@@ -850,6 +850,79 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   enemies looked up once a game frame. Not checked: in game; the moves' Keyblade windows (the
   weapon's mset is not staged: what they hold is read at run time); KH2's guard windows on his
   body make no KH1 guard object here (as for Flash Step, `body_guard` takes the hits on him).
+- **KH2's Square moves and Guard Break on KH1 rows of their own** (the tester, m14 question 2:
+  "(b)", new KH1 rows and requests from 0x200 up with their own data, so they keep KH2's
+  behaviour; `kh1rows`):
+  - **KH1's attack rows** (Steam, Checked (decomp) and (exe)): one table a party character,
+    `0x142D5CAB0[object +0x4C]` (10 pointers, set once from the offsets at `0x140528B80` by
+    `0x1402A3230`, called from `0x14028AC80`); rows of 0x14: `+0` the request (i16), `+2` trail,
+    `+3` effect, `+4` the attack data's offset in the battle data block `0x142D22D40`
+    (`0x14028F950`), `+8` the lunge, `+0xC..+0xE` the attack object's effect / sound bytes, `+0xF`
+    a voice. Sora's is the block's `+0xA9F0`, 66 rows (the next at `+0xAF18`; Checked (exe)).
+    The row start (`0x1402A3980`) asks for the request, makes the attack object from the data
+    (`0x1402B3270`) and plays the trail, effect and voice; the runner (`0x1402A68F0`) has cases
+    for KH1's own indices and, for any other, queues the idle (`0x14029FA30 (actor, 0x40000000,
+    0)`), lunges by `+8`, faces the direction (`0x140297FB0`) and counts the press in KH1's tally
+    (`0x14028C660 (0x13)`).
+  - **Ours**: Sora's table copied with ours after KH1's 66 (rows 66..69), his pointer set to it
+    each frame KH1's own is there (`kh1rows::install`, from `kh2slots::frame`). Each row: KH1's
+    own row of its kind as the template for its trail, effect, sound and voice bytes (plain
+    swing 13, finisher 8, air swing 18, air finisher 16; their requests 0xC8 / 0xCB / 0xCC / 0xCE
+    checked first); its own request 0x200 + n, whose entry in every set of Sora's (`kh2slots`,
+    the request tables made long enough) is our slot of the KH2 motion, built on the template's
+    KH1 motion (98 / 101 / 102 / 104) with the template request's kind bits and travel flag,
+    whatever the styles; no lunge; its **own attack data**: a copy of the template's (0x70) in our
+    memory within an offset's reach of the block (`VirtualAlloc` at the first free address from
+    16 MB past it), its reaction kinds (`+8` / `+0xC`) KH1's launch, 5, for a KH2 blow that
+    throws (`kh1rows::throws`, as `strike` decides KH1's finisher row and KH2's launch), a flinch,
+    3, for KH2's flinch group, else the template's. The rows: Upper Slash (PTYA row 12, motion
+    161, ability 18, a swing), Finishing Leap (37, 167, ability 95, as an air finisher: below),
+    Horizontal Slash (38, 193, ability 99, an air swing), Guard Break (27, 165, ability 93, a
+    finisher). Each move's ATKP is its clip's first hit window's (the Keyblade's first), read
+    at run time (the weapon's mset isn't staged here: Upper Slash's, Horizontal Slash's and Guard
+    Break's are not known offline).
+  - **Their hits**: the attack object KH1's row makes (on the Keyblade, its hit window the
+    slot's Keyblade windows) lands with its own data, and its record takes KH2's numbers
+    (`combat::scale_record`, from `probe::hit`, through `kh1rows::kh2_atkp`: the data is one of
+    ours): the ATKP of the move's window open at KH1's time in the slot (else the row's), its
+    power on KH1's damage, its Magic scaling, and for a blow that throws KH2's launch height and
+    speed (`Launch::kh2`, KH1's launch reaction on the record, `launched`), as KH2's hits landed
+    here do. Hits on his body (Finishing Leap's 854 on group 18) are KH2's hit pass's
+    (`takeover::kh2_hits`, above).
+  - **Guard Break's guard break**: KH1's attack-vs-attack pass (`0x1402B4BC0`, Steam, Checked
+    (decomp)) meets two attacks only while one of them is under priority 0x62; a guard object
+    is 100. Its data's priority (`+0x3C`) is made 0x62 at least, so KH1's guards don't stop its
+    swing and it reaches the body. **Assumption**: that this is what KH2's Guard Break does (its
+    ATKP, in the weapon's mset, not read; KH2's own guard test not read in the decomp).
+  - **The Square moves' press** (`combomods::control`): Square in KH1's combo window with the
+    swing connected or Combo Master on (as before), KH2's Square pick there
+    (`kh2_would_take_launch` with `square`) one of ours: KH1's Attack command is written as KH1's
+    command menu writes it (`0x140293480`, Steam, Checked (decomp): the record `0x142D53A40`
+    type 1, sub 0, its hold bit `0x1000000` clear, `+4` the lock-on's target `0x142DB3518` while
+    `0x142DB3510` is set, else a handle of 0, `0x14038AD90 (0)`), so KH1's control step
+    (`0x1402A6220`, which runs a command it finds through its command step `0x1402A7510` the same
+    frame and clears it) runs KH1's own Attack step now: its count (one more in the combo window,
+    the swing connected or Combo Master), its target, its picker; `combat::exec` then runs our
+    row in place of the picker's (`combomods::attack`, `take_ours`; one frame only). Square is
+    hidden from KH1's step as before. Guard Break: KH2's pick at the press KH1's combo took
+    (`ability_move`'s borrow) runs our row instead.
+  - **In the air** (Horizontal Slash): KH1's air state, our row, KH2's hop for the row on KH1's
+    air fields (`air_hop`'s `Run::AirHop`, from the same trial as the pick); KH1's fall queued
+    after it in place of the runner's idle (`kh1rows::queue_fall`: the queue's count at
+    `+0x178`, entries of 0x10 from `+0x17C`, the second one's request 0x40000000 made
+    0x40000006, as KH1's own air rows 15..18 queue it).
+  - **Finishing Leap** leaves the ground by its root (Checked (files): up 17 / 49 / 66 by frames 8
+    / 16 / 24, 0 at 32, then up to 150 at 64, and 250 forward, with no gravity from frame 1 and
+    its fall after it, `next_motion` 4): KH1's air state from its start, as KH2's hops from the
+    ground (`combat::exec`'s state 2, no hop of its own), and KH2's root travel there while its
+    no-gravity range holds him (`kh2slots::air_root`: the clip's root over the frame's 60 Hz
+    steps, turned by his facing as KH2's controller turns it, added to KH1's air move in
+    `shared::physics`'s air step, either physics; the OG rewrite's action step moves him by the
+    root's height too). Its slot is built on KH1's air finisher (104, request 0xCE's kind, no
+    travel flag: the root is the air step's, not KH1's H10). **Assumption**: KH1's time in the
+    slot when the air step runs is the frame's (at most a frame off, as for the no-gravity hold).
+  - **Not here**: Counterguard (row 39, motion 171) comes out of KH2's guard's repel (motion 42),
+    and KH2's guard is still KH2's controller's (a question to the tester). Not checked in game.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

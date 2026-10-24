@@ -575,7 +575,7 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
         hit_effect_note(attack, target, owner, r);
     }
     if owner != 0 && owner == sora() && r > 0x10000 {
-        super::combat::scale_record(r);
+        super::combat::scale_record(r, attack, target);
     }
     if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");

@@ -1174,6 +1174,9 @@ pub mod physics {
             }
         }
         let kh1_held = if held && !kh2() { Some(kh1_motion(actor)) } else { None };
+        // (KH2's root travel where its clip has no gravity, `kh2slots::air_root`: Finishing Leap.)
+        let root_dt: f32 = rd(base() + DT_RVA);
+        let root = if held { super::super::kh2slots::air_root(actor, if root_dt.is_finite() && root_dt > 0.0 && root_dt < 4.0 { root_dt } else { 1.0 }) } else { None };
         let ours = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && kh2();
         // KH1 set its fields itself since our last write (an air attack's hop from its command
         // step, a blow's launch): KH2's arc goes on from KH1's from here.
@@ -1205,6 +1208,9 @@ pub mod physics {
             wr(actor + ARC_Y0, b.arc.y0);
             wr(actor + VEL_Y, 0.0f32);
             (*disp)[1] = 0.0;
+            if let Some(d) = root {
+                add_root(actor, disp, d);
+            }
         }
         if !sora || rd::<i32>(actor + 0x70) != 2 || disp.is_null() || !kh2() {
             return r;
@@ -1316,6 +1322,22 @@ pub mod physics {
         wr(actor + VEL_Y, -up);
         d[0] = v[0] * dt;
         d[2] = v[1] * dt;
+        if let Some(rt) = root {
+            add_root(actor, disp, rt);
+        }
         r
+    }
+
+    /// KH2's root travel (`kh2slots::air_root`, KH2's y up) on KH1's air move this frame (y down),
+    /// logged for the first few.
+    unsafe fn add_root(actor: usize, disp: *mut [f32; 4], d: [f32; 3]) {
+        let m = &mut *disp;
+        m[0] += d[0];
+        m[1] -= d[1];
+        m[2] += d[2];
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::super::log(&format!("KH2's root travel with no gravity on KH1's air state (KH2 motion {:?}): {:.1} up, {:.1} along", super::super::kh2slots::playing_motion(actor), d[1], d[0].hypot(d[2])));
+        }
     }
 }
