@@ -13,6 +13,7 @@
 - [7. Mr Bugs: the model is still bugged, it seems to be his clothes, (his ](#^m7)
 - [8. Assistant: t411 and t412](#^m8)
 - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](#^m9)
+- [10. Assistant: t453. Sorry I missed your message last round; it should have](#^m10)
 
 ---
 
@@ -157,3 +158,21 @@
 
 
  
+
+
+> [!tip] Assistant
+> **t453.** Sorry I missed your message last round; it should have been picked up after you pushed, and now it is checked after every push.
+>
+> You're right, and we're on the same page now. The coat broke in t387, the update where I gave KH1's small parts KH1's own animation. From then on the coat copied KH1's own coat animation for each move, which was made for KH1's body and stride, not KH2's. The stretching and the jump to the map origin both came from that, and my t405 and t411 fixes only patched the symptoms. The coat is now exactly what it was before t387: it turns with KH2's hips, the front panels lift a little with the thighs, and it's kept off the legs. I compared it against the old version over every one of KH2's motions and it matches exactly.
+>
+> About the skeleton: KH2's skeleton does have its own coat bones, a ring of bones hanging from the chest. They have no mesh on KH2's model, and KH2's motions keep them flared out, which is why the old coat follows KH2's hips instead.
+>
+> **Check:** the KH2 files (every motion in Sora's mset against the t386 coat) and his skeleton. Not checked in game. The pants are unchanged (question 1).
+>
+> Questions:
+> 1. Pants: (a) keep KH1's own animation on them, or (b) put them back to how they were before t387, fixed to the thigh, like the coat?
+> 2. Now that you mean the skeleton too: the hood, the sleeve flaps and three hair spikes are animated in KH2's skeleton but have no mesh, so I've been holding them still. (a) follow KH2's skeleton again (hood animated, sleeves flapping and squashing), or (b) keep them still?
+> 3. Coat: (a) keep it like before (follows KH2's hips), or (b) follow KH2's own coat bones one-to-one (they'd hold it flared out)?
+
+^m10
+
