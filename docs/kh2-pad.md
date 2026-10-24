@@ -250,6 +250,33 @@ doesn't reset it (thread `kh2-camera-fixes`, from KH2's behaviour).
   (`0x1402B11B0`), which this doesn't touch. Frame Advance takes only R2 off the pad records,
   so L2 is always seen.
 
+### Ours (the L2 Stick Menu row)
+
+- KH2's pad (Steam KH2 `0x14039c180`, from the raw-word build `0x14039bbe0`) turns each stick
+  byte past the dead zone (60 from 127.5, `0x140bf3338`; 1 in a mouse frame) into a direction
+  bit: the right stick (record `+2` / `+3`, where the mouse is also written) into bits 16..19
+  (x low 18, x high 16, y low 19, y high 17), the left stick into 20..23. Checked (decomp).
+- The static remap table (`0x1405c3420`, read from the exe) maps the d-pad and the **left**
+  stick's direction bits (20..23) onto the d-pad bits 0x10..0x80; the right stick's (16..19)
+  aren't in it. Checked (exe). **Assumption:** the run-time PC table pairs them with "L2 held"
+  (bit 26) onto the d-pad bits, which is the tester's "the right stick acts like the d-pad under
+  L2"; not read (it exists only while KH2 runs). The held-repeat timers that follow
+  (`0x140bf333c` / `0x140bf3340`) are KH2's own; ours uses KH1's (below).
+- Config > Camera: "L2 Stick Menu: Off / On" under L2 Camera Hold (`config.rs`, `Row::L2Dpad`),
+  ini `l2_stick_menu` (default off). It works with either Camera Style.
+- `camera::dpad_from_stick`, called from `probe::pad` on every pad record KH1 reads (the record
+  `0x140112C70` writes, PS2 order): with the row on and L2 held in the merged buttons, the right
+  stick past KH2's dead zone (67 and below, 188 and above) adds Up 0x10 / Down 0x40 / Left 0x80 /
+  Right 0x20 (a diagonal gives two, as KH2's bits), and the record's right stick is centred. KH1's
+  pad step then handles them as a pressed d-pad (its own first press and repeat, its command
+  menu, and the Drive page flip on Left), and KH1's camera gets no right stick. KH2's camera reads
+  the pads' merged sticks (`RAW_STICKS`, not centred), so `camera::run` drops its right stick and
+  mouse under the same test. R3 stays the L2 Camera Hold row's.
+- Not done: the mouse as the d-pad (KH2's pad writes the mouse onto the right stick bytes before
+  the direction bits; KH1's mouse goes through its own path, `0x14028b4f0`), and the keyboard's
+  camera keys (KH1 merges the keyboard after the pad records). KH2's first person keeps the right
+  stick (not affected by L2 in ours). KH1's own camera keeps the mouse.
+
 ## KH1 (Steam)
 
 - `0x14028b4f0`, from KH1's pad step `0x14028b0b0`, builds its sticks the same way: byte minus

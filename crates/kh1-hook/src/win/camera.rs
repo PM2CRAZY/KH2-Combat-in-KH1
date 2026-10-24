@@ -128,6 +128,50 @@ pub static KH2: AtomicBool = AtomicBool::new(true);
 /// as in KH2 (the tester, "make it a toggle in the cameras config menu"). Off by default.
 pub static L2_HOLD: AtomicBool = AtomicBool::new(false);
 
+/// L2 Stick Menu (the ini's `l2_stick_menu`, the Config menu's Camera row under L2 Camera
+/// Hold): while L2 is held the right stick works as the d-pad (the command menu's cursor) and
+/// moves neither KH1's nor KH2's camera, as KH2's L2 (the tester: "a toggle in the camera menu
+/// that kh1 camera and kh2 camera can use"). Off by default. Done on the pad records
+/// (`dpad_from_stick`, called from `probe::pad`), so KH1's own menu, repeat and camera see it.
+pub static L2_DPAD: AtomicBool = AtomicBool::new(false);
+
+/// The Config menu's L2 Stick Menu row: kept in the ini.
+pub fn set_l2_dpad(on: bool) {
+    L2_DPAD.store(on, Ordering::Relaxed);
+    super::settings::save("l2_stick_menu", if on { "on" } else { "off" });
+    log(&format!("Config menu: L2 stick menu {}", if on { "on" } else { "off" }));
+}
+
+/// The right stick as KH2's d-pad under L2 (L2 Stick Menu). KH2's pad (Steam KH2 `0x14039c180`)
+/// turns each stick byte past its dead zone (60 from 127.5: 67 and below, 188 and above) into a
+/// direction bit, the right stick's into raw bits 16..19; with L2 held KH2 reads those as the
+/// d-pad. Given one pad record's buttons (PS2 order) and its right stick bytes (x, y; 0 = left /
+/// up), returns the d-pad bits to add (Up 0x10, Right 0x20, Down 0x40, Left 0x80; a diagonal
+/// gives both, as KH2's), or `None` when the row is off, L2 isn't held, or KH2's first person
+/// has the right stick (it is not affected by L2 in ours). The caller centres the right stick
+/// in that record, so neither camera turns.
+pub fn dpad_from_stick(buttons_all: u16, rx: u8, ry: u8) -> Option<u16> {
+    if !L2_DPAD.load(Ordering::Relaxed) || buttons_all as u32 & RAW_L2 == 0 || first_person() {
+        return None;
+    }
+    let dir = |v: u8| -> i32 {
+        let f = v as f32 - 127.5;
+        if f <= -60.0 { -1 } else if f >= 60.0 { 1 } else { 0 }
+    };
+    let mut d = 0u16;
+    match dir(ry) {
+        -1 => d |= 0x10,
+        1 => d |= 0x40,
+        _ => {}
+    }
+    match dir(rx) {
+        -1 => d |= 0x80,
+        1 => d |= 0x20,
+        _ => {}
+    }
+    Some(d)
+}
+
 /// The Config menu's L2 Camera Hold row: kept in the ini.
 pub fn set_l2_hold(on: bool) {
     L2_HOLD.store(on, Ordering::Relaxed);
@@ -161,6 +205,7 @@ pub unsafe fn install() {
     BASE.store(base, Ordering::Relaxed);
     KH2.store(super::settings::get().kh2_camera, Ordering::Relaxed);
     L2_HOLD.store(super::settings::get().l2_camera_hold, Ordering::Relaxed);
+    L2_DPAD.store(super::settings::get().l2_stick_menu, Ordering::Relaxed);
     let follow = base + MODES_RVA + 0x10;
     let lock = base + MODES_RVA + 0x30;
     let (f, l) = (rd::<u64>(follow) as usize, rd::<u64>(lock) as usize);
@@ -741,18 +786,22 @@ unsafe fn run(lock: bool) -> Option<()> {
     let hold = r2_held(base);
     // L2 Camera Hold: with the row on and L2 held, no right-stick turn or zoom (the mouse rides
     // the same stick in KH2's pad, so it stops too) and no R3 reset.
-    let l2 = L2_HOLD.load(Ordering::Relaxed) && l2_held(base);
+    let l2_down = l2_held(base);
+    let l2 = L2_HOLD.load(Ordering::Relaxed) && l2_down;
+    // L2 Stick Menu: the right stick is the d-pad under L2, so it doesn't turn or zoom the camera
+    // either (the mouse rides that stick in KH2's pad too); R3 stays the L2 Camera Hold row's.
+    let stick_off = l2 || (L2_DPAD.load(Ordering::Relaxed) && l2_down && !first_person());
     let ctl = kh2_camera::Controls {
         // The crate's y is forward; KH1's (like KH2's pad) is positive pulled back. Passed
         // unflipped, "pulled straight back" read as forward and the swing-behind ran while Sora
         // ran toward the camera, turning him in a circle (tester trace f571370).
         // (Not held to 1: in a mouse frame KH2's pad scales both tilts by the sensitivity.)
         move_stick: Vec2::new(l[0], -l[1]),
-        look_stick: if l2 { Vec2::ZERO } else { look(r, turn) },
+        look_stick: if stick_off { Vec2::ZERO } else { look(r, turn) },
         reset: !l2 && free && pressed & R3 != 0,
         auto,
         hold,
-        mouse: if l2 { None } else { m.motion.map(Vec2::from) },
+        mouse: if stick_off { None } else { m.motion.map(Vec2::from) },
         kbm: m.kbm,
     };
     let wall = |a: Vec3, b: Vec3| -> Option<(Vec3, Vec3)> {

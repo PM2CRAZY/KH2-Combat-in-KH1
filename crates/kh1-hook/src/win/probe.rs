@@ -289,6 +289,16 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     } else if !super::takeover::kh1_keeps_square() && !shortcuts {
         std::ptr::write_unaligned(out as *mut u16, b & !super::takeover::SQUARE);
     }
+    // L2 Stick Menu (`camera::dpad_from_stick`): with L2 held the right stick is the d-pad, as
+    // KH2's L2; the record's right stick is centred so KH1's camera (and KH2's, which reads
+    // `RAW_STICKS`, through `camera::run`'s own test) doesn't turn. KH1's pad step then maps the
+    // d-pad bits, with its own repeat, as a pressed d-pad.
+    if let Some(d) = super::camera::dpad_from_stick(b_all, st_all[0], st_all[1]) {
+        let now: u16 = rd(out);
+        let sticks: [u8; 4] = rd(out + 2);
+        std::ptr::write_unaligned(out as *mut u16, now | d);
+        std::ptr::write_unaligned((out + 2) as *mut [u8; 4], [0x80, 0x80, sticks[2], sticks[3]]);
+    }
     // Select + Triangle writes Sora's trace (`trace`): with Triangle held KH1 doesn't see Select,
     // its first-person view.
     if super::trace::hides_select(b_all) {
