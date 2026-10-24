@@ -119,4 +119,7 @@ go ahead
 
 ^m5
 
-
+1. (b) unless you have kh1 physics on
+2. the jump config controls what landing animation you get currently so follow that
+   
+   go ahead

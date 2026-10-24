@@ -241,3 +241,7 @@ go ahead
 
 ^m14
 
+1. (a) but should be a toggle in the camera menu that kh1 camera and kh2 camera can use
+2. unsure about what a row is
+   
+   go ahead

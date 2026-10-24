@@ -49,5 +49,9 @@
 > 3. KH2's "damage effect" on the enemy (900 ATKP rows use it): KH1's enemies have no KH2 file, so (a) skip it, or (b) use the KH1 enemy's own effect list if it has a matching entry (more research).
 
 ^m1
+1. (c) but for now wait on changing any base effects the keyblade calls as we're going to import models from kh2 and have a switch between kh1 and kh2 keyblades when the time comes
+2. (a) if a vanilla magic attack calls for its vanilla spark then let it, if its from kh2 let it call its own spark
+3. (b)
 
+go ahead
 

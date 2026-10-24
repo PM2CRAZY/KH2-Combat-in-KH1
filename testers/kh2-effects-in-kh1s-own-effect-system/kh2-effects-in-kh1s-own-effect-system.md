@@ -431,4 +431,15 @@ go ahead
 
 ^m17
 
+fire and thunders effects are working can't test blizzard because:
 
+I'm unsure about some of the changes because I can't test them, currently there's now a new bug where kh2s magic doesn't get casted the first time you input said magic. 
+
+I've sent the log and traces in "kh2-effects-in-kh1s-own-effect-system" for this thread thats where it will always be. 
+
+I should also state that reflect on the ground is the one currently not placed correctly, I also sent that in the trace.
+
+1. can't test so unsure
+2. if sora is smaller than kh2 sora then yes scale it down
+
+go ahead

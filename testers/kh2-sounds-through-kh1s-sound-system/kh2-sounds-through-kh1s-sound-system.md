@@ -97,3 +97,4 @@ go ahead
 
 ^m3
 
+why did the ram use go up? are we caching a bunch of sounds? if so you need to tell me because this goes against our rules of optimization so I need a solution presented.
