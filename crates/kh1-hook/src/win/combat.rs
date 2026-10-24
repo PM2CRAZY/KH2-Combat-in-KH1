@@ -1635,6 +1635,17 @@ impl Strikes {
 
     /// After KH2's step and pose: its live attack shapes against the enemies' bodies.
     pub unsafe fn strike(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle) {
+        let air = character.airborne();
+        self.strike_as(sora, out, anim, character, battle, air, 1.0);
+    }
+
+    /// `strike` for the hits of a KH2 motion KH1's own states play (`takeover::kh2_hits`): `air`
+    /// is KH1's (its air state), not KH2's controller's, and the hit records' re-hit clocks move
+    /// on by `ticks` 60 Hz frames (KH1's frame: one call a game frame, as KH2's one update of delta
+    /// 2 at 30 fps). The hits landed.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn strike_as(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle, air: bool, ticks: f32) -> u32 {
+        let mut landed = 0u32;
         if !self.rows_tried {
             self.rows_tried = true;
             self.rows = sora_rows(sora);
@@ -1645,7 +1656,6 @@ impl Strikes {
         let keys: HashSet<(u64, u8)> = out.hitboxes.iter().map(|h| (h.swing, h.weapon)).collect();
         self.volumes.retain(|k, _| keys.contains(k));
         self.met_shots.retain(|(sw, _)| keys.iter().any(|k| k.0 == *sw));
-        let air = character.airborne();
         // KH2's guard windows as KH1 guard objects (the Aerial Dodge's, Aerial Recovery's, the
         // guard's).
         self.guard_step(sora, out, anim, character, battle);
@@ -1835,6 +1845,9 @@ impl Strikes {
                     (air as usize) * 2 + finisher as usize, if air { "air " } else { "ground " }, if finisher { "finisher" } else { "swing" }
                 );
                 let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, info);
+                if dealt.is_some() {
+                    landed += 1;
+                }
                 MAGIC.store(false, Ordering::Relaxed);
                 HOLD.store(false, Ordering::Relaxed);
                 // (Again once the contact is done, in case its direction came after the record.)
@@ -1872,11 +1885,12 @@ impl Strikes {
             }
         }
         for r in self.records.values_mut() {
-            r.tick(1.0, false);
+            r.tick(ticks, false);
         }
         self.live = now;
         let alive: HashSet<usize> = self.bodies.iter().map(|b| b.actor).collect();
         self.records.retain(|a, _| alive.contains(a));
+        landed
     }
 }
 

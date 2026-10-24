@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 473 (testing branch: KH2's hits on his body on KH1's rows)
+- **KH2's hits on his body on KH1's rows.** The tester (m14 1 (a)). Vicinity Break 170 / Explosion 166 / Magnet Burst 197 slots (`kh2slots::body_strike`); `takeover::kh2_hits` (`RigAnim::pose_at`, `Strikes::strike_as`, info `+0x50`); KH1's sphere on Keyblade windows only; range 27 in `hurt`. Notes §7.
+
 ### 2026-10-24: Stage 472 (testing branch: Debug menu: the font in its own buffer)
 - **Debug menu: the font in its own buffer.** The tester ("if the debug allocates for kh2 model then make sure its gone"). `fx12::FontBuf` 147 KB; the 24 MB texture arena only made by a model draw. Notes §18.11.
 

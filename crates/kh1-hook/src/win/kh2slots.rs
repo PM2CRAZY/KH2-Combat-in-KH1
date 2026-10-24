@@ -274,9 +274,10 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
         // (In the air also the ground rows that hop: KH1's air swing rows play them from the
         // ground, `combomods::kh2_hop`; the plain ones' motions are the air rows' own.)
         let here = if air { r.is_air() || r.is_jump() } else { !r.is_air() && !r.is_jump() };
-        // (A ground finisher of an ability's, Guard Break, is left a borrow: its guard break isn't
-        // KH1's finisher's attack data.)
-        let ability_ok = r.ability == 0 || ((r.is_air() || !r.is_finisher()) && clips.get(&r.motion).is_some_and(|c| blade_swing(c, battle)));
+        // (A ground finisher of an ability's that is only a Keyblade swing, Guard Break, is left a
+        // borrow: its guard break isn't KH1's finisher's attack data. One with hits on his body,
+        // Explosion, plays on KH1's finisher row: KH2's hits land through `takeover::kh2_hits`.)
+        let ability_ok = r.ability == 0 || clips.get(&r.motion).is_some_and(|c| ((r.is_air() || !r.is_finisher()) && blade_swing(c, battle)) || body_strike(c, battle));
         if reachable && r.motion != 0 && here && ability_ok && !out.iter().any(|o| o.0 == r.motion) {
             out.push((r.motion, r.is_finisher()));
         }
@@ -295,8 +296,9 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
 /// Dash 164, Flash Step 169 (a guard on his body, ATKP 406, kind 2, `refact_self` 2, frames
 /// 0..19), Aerial Sweep 191, Aerial Dive 196 (no gravity at frames 46..54), Aerial Spiral 192
 /// (16..24) and Aerial Finish 194 (16..100) pass; Magnet Burst 197 (body attacks 1900 / 1901 /
-/// 1903), Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166 (911 / 912), Guard
-/// Break 165 (a finisher, left out above), Finishing Leap 167 and Counterguard 171 don't.
+/// 1903), Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166 (911 / 912),
+/// Finishing Leap 167 and Counterguard 171 don't (`body_strike` takes the first three); Guard
+/// Break 165 is a ground finisher, left out above.
 fn blade_swing(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle) -> bool {
     use character_core::WindowKind as W;
     let blade = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon, .. } if weapon > 0));
@@ -307,6 +309,51 @@ fn blade_swing(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle
         _ => false,
     });
     blade && !other
+}
+
+/// A KH2 ability row's motion that hits with shapes on his own body (`Hitbox` windows with weapon
+/// 0: Vicinity Break, Explosion, Magnet Burst), which KH1's one sphere on the Keyblade can't do.
+/// KH1's row runs it as it runs the Keyblade swings, and KH2's own shapes and hit numbers for those
+/// windows are landed through KH1's damage each frame (`takeover::kh2_hits`, `combat::Strikes::
+/// strike_as`); its invulnerability (range 27) is KH1's hit pass's (`invulnerable`, `hurt`), its
+/// guards on his body that let the hit go are `body_guard`'s, its no-gravity ranges `no_gravity`'s.
+/// Not with a guard of another kind, a guard on the Keyblade, or an air / ground range. Sora's
+/// (`P_EX100.mset`, `00battle.bin`, Checked (files)): Vicinity Break 170 (1869 on group 21,
+/// frames 20..30; guard 406 14..32), Explosion 166 (911 on group 19 32..57, 912 57..64;
+/// invulnerable and guard 124, kind 3, `refact_self` 2, 32..64), Magnet Burst 197 (1900 on 22
+/// 16..56, 1901 on 23 20..56, 1903 on 3 64..70; guard 406 20..70; no gravity 16..82); Finishing
+/// Leap 167 and Counterguard 171 too, but their rows are Square rows (kind 0), not the selector's.
+/// Their Keyblade windows (the weapon's mset, not staged here) are KH1's swing's as for the others.
+fn body_strike(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle) -> bool {
+    use character_core::WindowKind as W;
+    let body = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon: 0, .. }));
+    let lets_go = |attack: u16| battle.attack_for_level(attack, 0, 0).is_some_and(|a| a.refact_self == 2);
+    let other = clip.windows.iter().any(|w| match w.kind {
+        W::Guard { attack, weapon: 0, .. } => !lets_go(attack),
+        W::Guard { .. } | W::Air | W::Grounded => true,
+        _ => false,
+    });
+    body && !other
+}
+
+/// KH2's motion and KH1's time in it (its clip frame) for our slot playing on `actor` now
+/// (`takeover::kh2_hits`).
+pub unsafe fn now_playing(actor: usize) -> Option<(u16, f32)> {
+    let m = current(actor)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    (t.is_finite() && t >= 0.0).then_some((m.motion, t))
+}
+
+/// KH2's invulnerability (range id 27, `WindowKind::Invulnerable`: its hurt shapes off) in our
+/// slot playing on `actor` now, at KH1's time in the slot (Explosion 32..64, Counterguard 0..20,
+/// Finishing Leap 24..38; Checked (files)). `hurt` lets no hit reach him there, as KH2's hit pass
+/// finds no hurt shape of his.
+pub unsafe fn invulnerable(actor: usize) -> bool {
+    use character_core::WindowKind as W;
+    let Some(m) = current(actor) else { return false };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let t: f32 = rd(actor + TIME_NOW);
+    t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::Invulnerable))
 }
 
 /// KH2's guard on his body in our slot playing on `actor` now (`WindowKind::Guard` with weapon 0
@@ -443,13 +490,15 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], stands_for: usize
 }
 
 /// KH1's events for a KH2 clip on a retimed template (`r`: new length / the template's): the
-/// clip's hit windows as KH1's hit window (attack group 0, as KH1's own combo motions), its combo
-/// window, its trail (else its hit windows from 4 frames before); the template's sounds, foot
-/// effects, face changes and the point its action may be left, rescaled.
+/// clip's hit windows on the Keyblade as KH1's hit window (attack group 0, as KH1's own combo
+/// motions: its row's one sphere on the blade), its combo window, its trail (else its Keyblade hit
+/// windows from 4 frames before); the template's sounds, foot effects, face changes and the point
+/// its action may be left, rescaled. Hit windows on his body (`body_strike`) are not KH1's sphere's:
+/// KH2's own shapes land them (`takeover::kh2_hits`).
 fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32) -> Vec<EventTrack> {
     let len = clip.length as f32;
     let span = |w: &character_core::Window| (w.start as f32, w.end.map_or(len, |e| e as f32));
-    let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { .. })).map(span).collect();
+    let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon > 0)).map(span).collect();
     let combo: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Combo)).map(span).collect();
     let mut trail: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::WeaponTrail)).map(span).collect();
     if trail.is_empty() {
@@ -824,6 +873,8 @@ pub unsafe fn frame(actor: usize) {
     redirect(p);
     drop(g);
     tick(actor);
+    // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`).
+    super::takeover::kh2_hits(actor);
 }
 
 /// The swing KH2's row selection picked for each of KH1's combo requests 0xC8..0xCE (ground

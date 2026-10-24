@@ -13,10 +13,10 @@
 //! - **Attack** (`attack`, from `combat::exec`: a press KH1's combo took, its row about to run):
 //!   KH2's combo is asked what it would take at KH1's count (`Character::would_take`, the combo
 //!   carried at KH1's count, the press, KH2's targets and KH1's lock). KH2 takes it when that is
-//!   - a row that needs an ability (an action ability's move: Vicinity Break; the finishers
-//!     Explosion, Guard Break, Magnet Burst ...), opener, step or finisher, except the ones KH1's
-//!     own rows now play natively at either combo style (`native_ability`: Slapshot, Dodge Slash,
-//!     Slide Dash, Flash Step, Aerial Sweep, Aerial Dive, Aerial Spiral, Aerial Finish);
+//!   - a row that needs an ability (the finisher Guard Break ...), opener, step or finisher,
+//!     except the ones KH1's own rows now play natively at either combo style (`native_ability`:
+//!     Slapshot, Dodge Slash, Slide Dash, Flash Step, Vicinity Break, Explosion, Aerial Sweep,
+//!     Aerial Dive, Aerial Spiral, Aerial Finish, Magnet Burst);
 //!   - KH2's finisher where KH1's would still swing, with Negative Combo;
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
 //!     count);
@@ -188,7 +188,11 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
 /// hop, as KH2's plain hop (`kh2_hop`). An air row (Aerial Spiral, the finisher Aerial Finish):
 /// KH1's air swing or finisher row with KH2's motion and its own
 /// hop, as KH2's plain air rows (`air_hop`). Their no-gravity ranges are held on KH1's air state
-/// (`kh2slots::no_gravity`). The rest still borrow.
+/// (`kh2slots::no_gravity`). A move that hits with shapes on his body (Vicinity Break on the
+/// ground swing rows, Explosion on the ground finisher row, Magnet Burst on the air finisher row,
+/// `kh2slots::body_strike`): the same, with KH2's own shapes and hit numbers for those windows
+/// landed through KH1's damage (`takeover::kh2_hits`) and its invulnerability in KH1's hit pass
+/// (`hurt`). The rest still borrow.
 fn native_ability(row: &ComboRow) -> bool {
     row.ability != 0 && super::kh2slots::has_any(row.motion)
 }

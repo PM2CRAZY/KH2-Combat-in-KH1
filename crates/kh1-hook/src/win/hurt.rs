@@ -186,6 +186,19 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         // `refact_self` 2, no reaction, the move goes on; on his body, all round): each attack
         // with no effect and KH1's clash spark, the damage, the reaction and the rest of KH1's
         // pass for it not run.
+        // KH2's invulnerability in the KH2 move KH1 plays now (our slot, range id 27,
+        // `kh2slots::invulnerable`: Explosion's frames 32..64), as KH2's own hit pass finds no
+        // hurt shape of his there (`Fate::Evaded` above): every attack with no effect, no spark.
+        // Before the guard, as KH2's test order has it.
+        if super::shared::active() && super::kh2slots::invulnerable(actor) {
+            for &r in &ready {
+                if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
+                    continue;
+                }
+                wr(r, rd::<u8>(r) | NO_EFFECT);
+                note(format!("Sora hit by {:#x} in KH1's states: KH2's invulnerability (the KH2 move KH1 plays), no effect (frame {frame})", pose::ptr(rd::<u32>(r + 4))));
+            }
+        }
         if super::shared::active() {
             if let Some(atk) = super::kh2slots::body_guard(actor) {
                 for &r in &ready {

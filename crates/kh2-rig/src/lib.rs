@@ -261,6 +261,20 @@ impl RigAnim {
         }
     }
 
+    /// The pose of `motion` at `frame` (60 Hz, played once), its root travel taken out, placed at
+    /// `pos` facing `facing`, with no blend: for a host whose own animation system plays the
+    /// motion and needs its shapes where KH2 would have them (KH1's states playing a KH2 motion,
+    /// its hit windows on his body). False when the rig has no such motion (nothing changes).
+    pub fn pose_at(&mut self, character: &Character, motion: u16, frame: f32, facing: f32, pos: [f32; 3]) -> bool {
+        if !self.rig.motions.contains_key(&motion) || !frame.is_finite() {
+            return false;
+        }
+        self.track = Some(Track { motion, frame: frame.max(0.0), looping: false, field: false, root: true });
+        self.blend_from = None;
+        self.render(character, facing, pos);
+        true
+    }
+
     /// The track for this frame's output, and the blend's start and clock. False when the rig has
     /// no motion for it (nothing changes).
     fn advance(&mut self, out: &Output, character: &Character) -> bool {

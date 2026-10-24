@@ -813,6 +813,43 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   KH2's plain picks (its row selection over KH1's plain rows, Combo Plus / Negative Combo) stay
   out at KH1's style; Combo Plus / Negative Combo there are still borrows. Not checked in game
   (`pose::follow` draws our slot's KH2 motion whatever the styles, baked or not).
+- **KH2's hits on his body on KH1's rows: Vicinity Break, Explosion, Magnet Burst** (the tester,
+  m14 question 1: "(a)", KH2's exact shapes and hit numbers landed through KH1's damage, and
+  KH2's invulnerability, range id 27, into KH1's hit pass): these three hit with shapes on his
+  own body (range id 10 with a body group; `P_EX100.mset` and `00battle.bin`, Checked (files)):
+  Vicinity Break 170 (row 51, a ground swing: ATKP 1869 on group 21 at frames 20..30, power 125,
+  reaction 3, knockback 150; guard 406 on his body 14..32), Explosion 166 (rows 26 / 42, a ground
+  finisher: 911 on group 19 at 32..57, power 25, reaction 9, re-hit every 8; 912 at 57..64, power
+  150, reaction 11; both Magic-based; invulnerable 32..64; guard 124, kind 3, `refact_self` 2, at
+  32..64), Magnet Burst 197 (rows 49 / 50, an air finisher: 1900 on 22 at 16..56, reaction 5, the
+  pull; 1901 on 23 at 20..56, power 25; 1903 on 3 at 64..70, power 150; guard 406 20..70; no
+  gravity 16..82). KH1's attack object is one sphere on the Keyblade, so these were borrows.
+  Now they are built as slots like the Keyblade-only ability moves (`kh2slots::body_strike`:
+  hits on his body allowed, with guards on his body that let the hit go, invulnerability and
+  no-gravity ranges; not with another guard or an air / ground range): 170 on 0xC8..0xCA, 166 on
+  0xCB, 197 on 0xCE (about 170 KB each). KH1's rows run them as they run the others (`kh2_row`,
+  `select_swing`, `air_hop`; KH1's row, request, count, combo window and travel), with:
+  - **The hits** (`takeover::kh2_hits`, once a game frame from `kh2slots::frame`): while our slot
+    plays, the clip's body hit windows open at KH1's time in it (the clip frame) are landed as
+    KH2's controller's hits were (`combat::Strikes::strike_as`, the same code): KH2's rig posed
+    at that frame where KH1 has him (`RigAnim::pose_at`: his position, KH1's yaw as KH2's facing,
+    the clip's root travel taken out, KH1 having moved him by it), the window's group of KH2
+    shapes swept from last frame's against KH1's enemies' body parts, each hit through KH1's
+    contact (`0x1402B1ED0`) with Sora's KH1 swing or finisher row data and KH2's ATKP (power,
+    Magic scaling, launch, the hold, Magnet's pull), once a window and target as KH2's hit
+    records allow, their re-hit clocks moved on by the frame's 60 Hz steps (KH2 updates once a
+    game frame, delta 2 at 30 fps). A landed hit sets the combat info's `+0x50` (KH1's "the swing
+    connected", which its Attack step reads for the next press). Air or ground: KH1's state.
+  - **KH1's sphere** (`kh2slots::kh1_tracks`): KH1's hit window is now made from the clip's
+    Keyblade hit windows only (weapon > 0); the body ones are the hit pass's above. No change for
+    the moves before (none has a body window; Checked (files) for P_EX100's side).
+  - **Invulnerability** (`kh2slots::invulnerable`, `hurt`): with range 27 open at KH1's time,
+    every record of KH1's hit pass on him (`0x140299A40`) is marked no effect (`+0` bit `0x20`),
+    no spark, before the guard test (KH2's order: no hurt shape, no hit).
+  Cost: nothing while no body window is open; with one, a pose of KH2's 228 bones and the
+  enemies looked up once a game frame. Not checked: in game; the moves' Keyblade windows (the
+  weapon's mset is not staged: what they hold is read at run time); KH2's guard windows on his
+  body make no KH1 guard object here (as for Flash Step, `body_guard` takes the hits on him).
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

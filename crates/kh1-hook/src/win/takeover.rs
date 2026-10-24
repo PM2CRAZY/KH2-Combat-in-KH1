@@ -1567,6 +1567,113 @@ pub unsafe fn kh2_primary_target(actor: usize) -> Option<[f32; 3]> {
     d.character.primary_target_pos(&env)
 }
 
+/// KH2's hits on his body in the KH2 motion KH1's own states play on base Sora (our slot,
+/// `kh2slots::body_strike`: Vicinity Break, Explosion, Magnet Burst), the play they belong to, and
+/// whether one was live last frame (so the end of a window reaches the hit records once).
+struct NativeHits {
+    anim: RigAnim,
+    motion: u16,
+    last_t: f32,
+    play: u64,
+    live: bool,
+}
+
+static NATIVE_HITS: Mutex<Option<NativeHits>> = Mutex::new(None);
+
+/// Once a game frame with base Sora in KH1's own states (`kh2slots::frame`, after KH1 posed him):
+/// the hit windows on his body (`Hitbox` with weapon 0) of the KH2 motion our slot plays, at KH1's
+/// time in it (the clip's frame), landed as KH2 lands them and as KH2's controller's hits are
+/// landed here (`combat::Strikes::strike_as`): KH2's rig posed at that frame where KH1 has him
+/// (`RigAnim::pose_at`: his position, KH1's yaw as KH2's facing, the clip's root travel taken out
+/// as KH1 moved him by it), the window's group of KH2 shapes swept from last frame's against
+/// KH1's enemies' body parts, each hit through KH1's contact with Sora's KH1 row data and KH2's
+/// ATKP (power, launch, hold, Magnet's pull), once per window and target as KH2's hit records
+/// allow. KH2 updates once a game frame (delta 2 at 30 fps), so its windows are read at the
+/// frame's time and the records' clocks move on by the frame's 60 Hz steps. A hit landed counts as
+/// KH1's swing connecting (the combat info's `+0x50`, which KH1's Attack step reads for the next
+/// press, `combomods`). Nothing when no such window is open (a few reads a frame while our slot
+/// plays). The Keyblade's windows stay KH1's sphere's (`kh2slots::kh1_tracks`).
+pub unsafe fn kh2_hits(actor: usize) {
+    let Some(kh2) = pose::kh2() else { return };
+    let Ok(mut g) = NATIVE_HITS.try_lock() else { return };
+    let playing = if super::shared::active() && !super::form::in_form() { super::kh2slots::now_playing(actor) } else { None };
+    let clip = playing.and_then(|(m, _)| kh2.character.moveset.clips.get(&m).map(|c| (m, c)));
+    // (A new play: another motion, or the same from its start again.)
+    let n = g.get_or_insert_with(|| NativeHits { anim: RigAnim::new(kh2.rig.clone()), motion: u16::MAX, last_t: 0.0, play: 0, live: false });
+    // (KH1's time held, the game held (Frame Advance draws without updates): nothing new.)
+    if playing.is_some_and(|(m, t)| m == n.motion && t == n.last_t) {
+        return;
+    }
+    let (open, motion, t) = match (playing, clip) {
+        (Some((m, t)), Some((_, c))) => {
+            if m != n.motion || t < n.last_t {
+                n.play = n.play.wrapping_add(1);
+            }
+            n.motion = m;
+            n.last_t = t;
+            let f = t as u32;
+            let open: Vec<(usize, u16, u8)> = c
+                .windows
+                .iter()
+                .enumerate()
+                .filter(|(_, w)| w.contains(f))
+                .filter_map(|(i, w)| match w.kind {
+                    character_core::WindowKind::Hitbox { attack, group, weapon: 0, .. } => Some((i, attack, group)),
+                    _ => None,
+                })
+                .collect();
+            (open, m, t)
+        }
+        _ => {
+            n.motion = u16::MAX;
+            (Vec::new(), 0, 0.0)
+        }
+    };
+    if open.is_empty() && !n.live {
+        return;
+    }
+    let Ok(mut dg) = DRIVER.try_lock() else { return };
+    let d = dg.get_or_insert_with(|| new_driver(kh2));
+    let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    let yaw = rd::<f32>(actor + 0x3C);
+    if !open.is_empty() && !n.anim.pose_at(&d.character, motion, t, yaw, [p[0], -p[1], p[2]]) {
+        return;
+    }
+    let _ = d.strikes.look(actor);
+    // (Our swing ids: the play and the window, marked apart from KH2's controller's own.)
+    let hitboxes = open.iter().map(|&(i, attack, group)| character_core::ActiveHitbox { swing: (1 << 63) | (n.play << 8) | i as u64, attack, group, weapon: 0 }).collect();
+    let out = Output {
+        displacement: [0.0; 3],
+        facing: yaw,
+        state: StateName::Attack,
+        motion,
+        clip_frame: t as u32,
+        hitboxes,
+        invulnerable: false,
+        guarding: false,
+        guard_boxes: Vec::new(),
+        weapon_trail: false,
+        locked: None,
+        combo_count: 0,
+        combo_live: false,
+        events: Vec::new(),
+    };
+    let battle = super::form::battle(&d.drive, kh2).clone();
+    let landed = d.strikes.strike_as(actor, &out, &n.anim, &mut d.character, &battle, air, steps() as f32);
+    n.live = !open.is_empty();
+    if landed > 0 {
+        let info = pose::ptr(rd::<u32>(actor + 0x14C));
+        if info >= 0x10000 {
+            wr(info + 0x50, rd::<u32>(info + 0x50) | 1);
+        }
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log(&format!("KH2's hits on his body in KH1's states: KH2 motion {motion} frame {t:.0}, {landed} landed (ATKP {:?})", open.iter().map(|o| o.1).collect::<Vec<_>>()));
+        }
+    }
+}
+
 /// Sora's KH2 abilities now (from KH1's menu), whoever has him (`combomods`).
 pub fn with_abilities<R>(f: impl FnOnce(&character_core::Abilities) -> R) -> Option<R> {
     DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| f(&d.character.abilities)))
