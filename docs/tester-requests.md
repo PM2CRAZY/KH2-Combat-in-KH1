@@ -93,6 +93,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
 - [KH2 Glide in KH1's glide state](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m1)
   - [2. Assistant: Here's what I think:](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m2)
+  - [3. Assistant: A correction to my last message, before you answer it. I che](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m3)
 - [KH2 hit effects on enemies](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m1)
 - [KH2 Limits](../testers/kh2-limits/kh2-limits.md)

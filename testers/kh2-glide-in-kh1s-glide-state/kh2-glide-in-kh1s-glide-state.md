@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Here's what I think:](#^m2)
+- [3. Assistant: A correction to my last message, before you answer it. I che](#^m3)
 
 ---
 
@@ -65,5 +66,19 @@
 > If that sounds right, write "go ahead" and I'll build the plan from my last message, one version each: the start, the step, the turn and animations, the end, then taking the borrow out. The hover sub-mode comes with the start.
 
 ^m2
+
+
+> [!tip] Assistant
+> A correction to my last message, before you answer it. I checked both points again in the Steam decomps:
+>
+> - **The "area objects" were my mistake.** `0x1401CF9E0` and `0x1401CD050` aren't room zones. They're **Donald's and Goofy's AI** following you: when you jump a gap their AI jumps after you, and if you own Glide or Superglide they glide on their own bodies in KH1's glide state, then their AI ends that glide when they catch up with you. The code only acts on party members 1 and 2 (Sora is 0). Nothing in KH1 starts or ends Sora's own glide from outside the glide state's own code. So question 3 goes away: every change only acts on Sora, and Donald and Goofy keep KH1's glide. (Checked (decomp): the AI think `0x1402A3300` → `0x1401CDBD0` → those functions.)
+> - **What else reads the glide state:** besides Neverland's flight and the water check (both inside the glide's own steps), only KH1's follow and lock-on cameras (`0x1401E6670`, `0x1401E2650`), which treat 0x15 as "in the air" at Camera Style KH1. That's one more reason for the hover as a sub-mode (a): they all see it with no patching.
+> - **Walls:** KH2's glide has no wall rule at all (its glide action's own steps only end on letting go, the end height or landing; the shared air handlers don't test walls either). So (b), sliding along the wall, is KH2's real behaviour, not a stopgap. KH1's own "moved less than 70%, end the glide" check will be skipped at Glide KH2. Still to check: whether KH2's speed drops when you hit a wall head-on.
+>
+> The plan is unchanged otherwise. One small question: Donald and Goofy only glide after you when Sora owns KH1's Glide or Superglide. With Glide KH2, should they (a) stay as they are now, or (b) also glide after you whenever you can glide with KH2's?
+>
+> Write "go ahead" with that answer and I'll build it. The notes are in `docs/kh1-glide-native.md` §7.
+
+^m3
 
 

@@ -131,3 +131,21 @@ The physics setting doesn't touch any of it (the tester's t321 rule).
 - KH2's handling of a wall during the glide, and whether KH2 has any glide cooldown: not found yet.
 - The button bits 4 / 0x10 in KH1's button check: reading not confirmed.
 - KH1's area objects with the glide flag: which ones (and whether KH2's glide should still be started / ended by them).
+
+## 7. Who reads state 0x15, and KH2's wall rule (research for the tester's answers)
+
+All Steam addresses.
+
+| Steam address | What it does | Tag |
+|---|---|---|
+| `0x1402A3300` | Player / party think. When the actor's object (`+0x130`) has its `+0x54` AI byte set, it runs the party AI `0x1401CDBD0` (not in world-flag `0x20000` worlds, nor with `0x142867368` bit 8); otherwise player control `0x1402A6220`. | Checked (decomp) |
+| `0x1401CDBD0` | Party-member AI brain; calls `0x1401CECC0`, `0x1401CFB30`, `0x1401D1400` and others. | Checked (decomp) |
+| `0x1401CF9E0` | AI jump / glide decision, members 1 and 2 only (object `+0x4C`; Sora is 0): in air state 2 with the AI record's `+0x58` bit 0x100 it starts KH1's Glide `0x1402B26C0` or Superglide `0x1402B2750` by Sora's ability bits `0x142D5EC10` (0x80 Glide, 0x100 Superglide); in Neverland flight `0x1402B1EC0` instead; otherwise jumps toward the follow point (`0x1402A3AD0`). | Checked (decomp) |
+| `0x1401CECC0` / `0x1401CD050` | AI step; while the AI's own actor is in 0x15 its glide steering toward the follow point ends that glide (`0x1402B2670`) once close or past it. | Checked (decomp) |
+| `0x1401D3120` | AI jump decision; mask `0x1220104` (states 2, 8, 0x11, 0x15, 0x18) = already airborne or in water. | Checked (decomp) |
+| `0x1401E6670`, `0x1401E2650` | KH1's follow-camera helper and lock-on camera: the followed actor's `+0x70` in 4, 5, 8, 0x15, 0x18, 0x1A is one "airborne" case. Only at Camera Style KH1. That `0x1401E1920` (its caller) is the follow camera is an Assumption. | Checked (decomp) |
+
+- **The "area objects" in §2 / §4 are the party AI**, not map objects. No KH1 code starts or ends Sora's own glide outside the glide state's own handlers and its start calls. **Checked (decomp)** by grep for `+0x70` against 0x15, `case 0x15` and state sets with 0x15 (other spellings may be missed: Assumption).
+- The hover as a sub-mode of 0x15 is covered by every reader above (and Neverland / water, inside 0x15's own handlers); a new state would fall outside the camera's airborne case.
+- Our 0x15 wrappers must check the actor is Sora: Donald and Goofy run the same state handlers.
+- **KH2's glide has no wall rule. Checked (decomp).** ACTION_GLIDE's vtable `0x1405CDBF0`: enter `0x140423B90`, exit `0x140423B70`, update `0x140423A70`, step `0x140423920`, input `0x140423BC0`, plus the shared air slots `0x140409AD0`, `0x140409B00`, `0x1403CB8B0`, `0x1403CB940`, `0x1403CB9F0` (Aerial Dodge out of the air). None tests a wall; it ends grounded / under the end height (`0x1404235B0`) or on release. Whether a wall cuts KH2's speed depends on its collision writing the blocked velocity back into `+0x20`: Assumption, not checked. At Glide KH2 KH1's transition wall end (moved < 70%) is skipped.
