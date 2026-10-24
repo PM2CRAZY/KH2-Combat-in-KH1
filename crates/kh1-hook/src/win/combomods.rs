@@ -15,9 +15,8 @@
 //!   carried at KH1's count, the press, KH2's targets and KH1's lock). KH2 takes it when that is
 //!   - a row that needs an ability (an action ability's move: Vicinity Break; the finishers
 //!     Explosion, Guard Break, Magnet Burst ...), opener, step or finisher, except the ones KH1's
-//!     own rows now play natively (`native_ability`: Slapshot, Dodge Slash, Slide Dash, Flash
-//!     Step, Aerial Sweep, Aerial Dive at Base Combo KH2; Aerial Spiral, Aerial Finish at Aerial
-//!     Combo KH2);
+//!     own rows now play natively at either combo style (`native_ability`: Slapshot, Dodge Slash,
+//!     Slide Dash, Flash Step, Aerial Sweep, Aerial Dive, Aerial Spiral, Aerial Finish);
 //!   - KH2's finisher where KH1's would still swing, with Negative Combo;
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
 //!     count);
@@ -178,20 +177,20 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
 
 /// An ability row of KH2's that KH1's own states play natively, no borrow (the tester: "transfer
 /// everything into kh1's systems"; the KH2-controller borrow is going away): a ground row that is
-/// only a Keyblade swing (`kh2slots::swing_rows`, which builds its motion's slots only then), with
-/// the Base Combo at KH2 (where our slots play). A swing (Slapshot, Dodge Slash, Slide Dash, Flash
+/// only a Keyblade swing (`kh2slots::swing_rows`, which builds its motion's slots only then),
+/// whatever the combo styles (the tester, "transfer everything that is not on the new system
+/// yet", the Base / Aerial Combo KH1 cases: an ability's move is KH2's at either style, as its
+/// borrow was; the style picks KH1's or KH2's plain combo around it, `Kh1Combo::here`). A swing (Slapshot, Dodge Slash, Slide Dash, Flash
 /// Step, its guard on his body taken by KH1's hit pass, `hurt`): KH1's plain ground swing row runs
 /// it as it runs KH2's plain swings (`kh2_row`, `select_swing`): KH1's row, attack object, damage
 /// and windows, KH2's motion and root travel. A hop (Aerial Sweep,
-/// Aerial Dive), with the Aerial Combo at KH2 too: KH1's air state and air swing row with KH2's
-/// hop, as KH2's plain hop (`kh2_hop`). An air row (Aerial Spiral, the finisher Aerial Finish),
-/// with the Aerial Combo at KH2: KH1's air swing or finisher row with KH2's motion and its own
+/// Aerial Dive): KH1's air state and air swing row with KH2's
+/// hop, as KH2's plain hop (`kh2_hop`). An air row (Aerial Spiral, the finisher Aerial Finish):
+/// KH1's air swing or finisher row with KH2's motion and its own
 /// hop, as KH2's plain air rows (`air_hop`). Their no-gravity ranges are held on KH1's air state
 /// (`kh2slots::no_gravity`). The rest still borrow.
 fn native_ability(row: &ComboRow) -> bool {
-    use super::styles::{kh2, Kind};
-    let styles = if row.is_air() { kh2(Kind::AirCombo) } else { kh2(Kind::GroundCombo) && (!row.is_jump() || kh2(Kind::AirCombo)) };
-    row.ability != 0 && styles && super::kh2slots::has_any(row.motion)
+    row.ability != 0 && super::kh2slots::has_any(row.motion)
 }
 
 /// What `combat::exec` runs for an Attack KH1's own combo took (`attack`).
@@ -464,10 +463,13 @@ pub unsafe fn floor_gone(actor: usize, aim: [f32; 2], length: f32) -> Option<Gon
 /// air swing there) or no slot for the motion.
 unsafe fn kh2_hop(actor: usize, row: i32, pick: &ComboRow, launch: character_core::Launch, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<(i32, character_core::Launch)> {
     use super::styles::{kh2, Kind};
-    if !kh2(Kind::GroundCombo) || pick.is_air() || !pick.is_jump() || (pick.ability != 0 && !native_ability(pick)) {
+    // (An ability's hop is KH2's at either style, `native_ability`; KH2's plain hops are KH2's
+    // row selection, with both combo styles at KH2.)
+    let ability = pick.ability != 0;
+    if pick.is_air() || !pick.is_jump() || (ability && !native_ability(pick)) || (!ability && !kh2(Kind::GroundCombo)) {
         return None;
     }
-    if !kh2(Kind::AirCombo) {
+    if !ability && !kh2(Kind::AirCombo) {
         note(format!("KH2's row selection: KH2's hop, row {} motion {}, not played: the Aerial Combo style is KH1's (KH1's row {row} kept)", pick.id, pick.motion));
         return None;
     }
@@ -476,7 +478,7 @@ unsafe fn kh2_hop(actor: usize, row: i32, pick: &ComboRow, launch: character_cor
         note(format!("KH2's row selection: KH2's hop, row {} motion {}, not played: no air swing row of KH1's free with a slot for it (KH1's row {row} kept)", pick.id, pick.motion));
         return None;
     };
-    super::kh2slots::pick(q as usize, Some(pick.motion));
+    super::kh2slots::pick_ability(q as usize, Some(pick.motion), ability && !kh2(Kind::AirCombo));
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     if info >= 0x10000 {
         wr(info + 0x41, 1u8);
@@ -511,6 +513,13 @@ impl Kh1Combo {
         here && (row.ability == 0 || native_ability(row))
     }
 
+    /// KH2's row selection takes this pick on KH1's rows: every pick at the combo style KH2; at
+    /// KH1's, only an ability's move (`native_ability`: KH2's at either style), KH1's own combo
+    /// and its own picks playing around it.
+    fn here(&self, row: &ComboRow) -> bool {
+        super::styles::kh2(self.style) || (row.ability != 0 && native_ability(row))
+    }
+
     /// KH1's own plain rows of this combo play KH2's `row` natively (`kh2_row`, `select_swing`):
     /// the combo style KH2, a plain row of it (`plain`), and a slot of its motion on a request of
     /// its kind (a swing request for a swing, the finisher's for a finisher). Then a pick past
@@ -518,7 +527,7 @@ impl Kh1Combo {
     /// KH1's swing or finisher row of KH2's kind runs it, its count going on as KH1's.
     fn serves(&self, row: &ComboRow) -> bool {
         let fits = |q: u32| super::kh2slots::has(q as usize, row.motion);
-        super::styles::kh2(self.style) && self.plain(row) && if row.is_finisher() { fits(self.finisher) } else { self.swings.clone().any(fits) }
+        self.here(row) && self.plain(row) && if row.is_finisher() { fits(self.finisher) } else { self.swings.clone().any(fits) }
     }
 
     /// KH1's `request` is the kind of KH2's `row` (a swing for a swing, the finisher for a finisher).
@@ -554,10 +563,7 @@ const AIR_COMBO: Kh1Combo = Kh1Combo { style: super::styles::Kind::AirCombo, swi
 /// hits, damage and windows stay KH1's; KH1's dash goes. Unchanged when KH2's motion has no slot
 /// on that request.
 unsafe fn kh2_row(actor: usize, combo: &Kh1Combo, row: i32, pick: Option<&ComboRow>, request_of: &dyn Fn(i32) -> Option<u32>) -> i32 {
-    if !super::styles::kh2(combo.style) {
-        return row;
-    }
-    let Some(p) = pick.filter(|r| combo.plain(r)) else { return row };
+    let Some(p) = pick.filter(|r| combo.plain(r) && combo.here(r)) else { return row };
     let fits = |q: u32| combo.fits(q, p);
     let own = request_of(row);
     if own.is_some_and(fits) {
@@ -586,12 +592,14 @@ unsafe fn kh2_row(actor: usize, combo: &Kh1Combo, row: i32, pick: Option<&ComboR
 fn select_swing(combo: &Kh1Combo, request: Option<u32>, pick: Option<&ComboRow>) -> bool {
     let Some(q) = request.filter(|q| combo.swings.contains(q) || *q == combo.finisher) else { return false };
     let req = q as usize;
-    if !super::styles::kh2(combo.style) {
-        unsafe { super::kh2slots::pick(req, None) };
+    let kh2 = super::styles::kh2(combo.style);
+    let fits = pick.filter(|r| combo.plain(r) && combo.here(r) && combo.fits(q, r));
+    // (At KH1's style only an ability's move plays ours there, KH1's request pointed at it for
+    // that swing, `kh2slots::pick_ability`.)
+    let plays = unsafe { super::kh2slots::pick_ability(req, fits.map(|r| r.motion), !kh2) };
+    if !kh2 && !plays {
         return false;
     }
-    let fits = pick.filter(|r| combo.plain(r) && combo.fits(q, r));
-    let plays = unsafe { super::kh2slots::pick(req, fits.map(|r| r.motion)) };
     note(format!(
         "KH2's row selection: KH1's request {req:#x} plays {}",
         match (pick, plays) {

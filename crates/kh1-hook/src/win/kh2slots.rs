@@ -27,7 +27,7 @@ use super::styles::Kind;
 use super::{log, pose};
 use character_core::{EventKind, WindowKind};
 use kh1_data::slot::{self as ks, EventTrack};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 const TO_HANDLE_RVA: Rva = Rva(0x38B080);
@@ -830,6 +830,18 @@ pub unsafe fn frame(actor: usize) {
 /// 0xC8..0xCB, air 0xCC..0xCE; our move's `slot`; `usize::MAX`: the request's own).
 static PICKED: [AtomicUsize; 7] = [const { AtomicUsize::new(usize::MAX) }; 7];
 
+/// The game frame (`takeover::GAME_FRAME`, + 1) a pick was forced on each of those requests at
+/// KH1's combo style (`pick_ability`: an ability's move of KH2's, which plays ours at either
+/// style), 0 none.
+static FORCED: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];
+/// A forced pick outlives the move it was for by no more than this (game frames with none of
+/// ours playing): KH1 starts the request the frame after its row ran.
+const FORCED_FOR: u64 = 8;
+
+fn forced(request: usize) -> bool {
+    request.checked_sub(0xC8).and_then(|i| FORCED.get(i)).is_some_and(|f| f.load(Ordering::Relaxed) != 0)
+}
+
 fn picked(request: usize) -> Option<usize> {
     let i = request.checked_sub(0xC8).filter(|i| *i < PICKED.len())?;
     let m = PICKED[i].load(Ordering::Relaxed);
@@ -849,7 +861,7 @@ unsafe fn redirect(p: &mut Placed) {
                 continue;
             }
             if let Some(e) = t.requests.get_mut(req) {
-                *e = if on && super::styles::kh2(kind) { (kh1 & !0xFFF) | ours } else { kh1 };
+                *e = if on && (super::styles::kh2(kind) || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
             }
         }
     }
@@ -860,9 +872,23 @@ unsafe fn redirect(p: &mut Placed) {
 /// request table entry pointed there at once, before KH1's row makes the request). `None`, or a
 /// motion with no slot built for that request: the request's own. Whether `motion` plays.
 pub unsafe fn pick(request: usize, motion: Option<u16>) -> bool {
+    pick_ability(request, motion, false)
+}
+
+/// `pick`, and with `force` (the request's combo style KH1: an ability's move of KH2's, which
+/// plays ours at either style, `combomods::native_ability`) the request pointed at ours for that
+/// move even so, every other forced pick dropped (KH1's own motions there again). Not forced:
+/// the style decides, as before.
+pub unsafe fn pick_ability(request: usize, motion: Option<u16>, force: bool) -> bool {
     let Some(i) = request.checked_sub(0xC8).filter(|i| *i < PICKED.len()) else { return false };
     let m = motion.and_then(|mo| built()?.moves.iter().find(|m| m.request == request && m.motion == mo)).map(|m| m.slot);
     PICKED[i].store(m.unwrap_or(usize::MAX), Ordering::Relaxed);
+    for f in &FORCED {
+        f.store(0, Ordering::Relaxed);
+    }
+    if force && m.is_some() {
+        FORCED[i].store(super::takeover::GAME_FRAME.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+    }
     if let Ok(mut g) = PLACED.try_lock() {
         if let Some(p) = g.as_mut() {
             redirect(p);
@@ -885,6 +911,22 @@ pub unsafe fn playing_motion(actor: usize) -> Option<u16> {
 unsafe fn tick(actor: usize) {
     static LAST: Mutex<Option<(usize, f32)>> = Mutex::new(None);
     let Some(m) = current(actor) else {
+        // (A forced pick whose move is over: KH1's own motion on that request again.)
+        let now = super::takeover::GAME_FRAME.load(Ordering::Relaxed) + 1;
+        let stale = FORCED.iter().any(|f| {
+            let at = f.load(Ordering::Relaxed);
+            at != 0 && now.saturating_sub(at) > FORCED_FOR
+        });
+        if stale {
+            for f in &FORCED {
+                f.store(0, Ordering::Relaxed);
+            }
+            if let Ok(mut g) = PLACED.try_lock() {
+                if let Some(p) = g.as_mut() {
+                    redirect(p);
+                }
+            }
+        }
         PLAYING.store(usize::MAX, Ordering::Relaxed);
         PLAYING_MOTION.store(u32::MAX, Ordering::Relaxed);
         if let Ok(mut l) = LAST.try_lock() {

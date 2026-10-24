@@ -799,6 +799,20 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   decides where the finisher comes. KH1's last swing is taken as its finisher by its request
   (0xCB / 0xCE), no longer by the count, for the Finishing Plus press. At the combo style KH1 the
   borrows stay (the open question in the thread: which logic picks at KH1's style).
+- **KH2's ability moves at the combo style KH1** (the tester: "transfer everything that is not on
+  the new system yet", the Base / Aerial Combo KH1 cases): with the style at KH1, KH1's own
+  combo plays (its rows, motions and picks), and KH2's selector was asked only for its ability
+  moves, which borrowed him. Now the ability moves KH1's rows play natively at KH2's style do so
+  at KH1's too (`combomods::native_ability` without the style test, `Kh1Combo::here`): Slapshot,
+  Dodge Slash, Slide Dash, Flash Step on KH1's ground swing rows; Aerial Sweep and Aerial Dive
+  as KH2's hop on KH1's air state (`kh2_hop`), KH1's own air combo after it; Aerial Spiral and
+  Aerial Finish on KH1's air rows with KH2's hop (`air_hop`). KH1's request is pointed at our
+  slot for that one move (`kh2slots::pick_ability`, a forced pick: the request table entry is
+  ours although the style is KH1's; every other forced pick dropped at the next press, and the
+  forced one 8 frames after none of ours plays), so the swings around it are KH1's own motions.
+  KH2's plain picks (its row selection over KH1's plain rows, Combo Plus / Negative Combo) stay
+  out at KH1's style; Combo Plus / Negative Combo there are still borrows. Not checked in game
+  (`pose::follow` draws our slot's KH2 motion whatever the styles, baked or not).
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

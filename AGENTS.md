@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 460 (testing branch: KH2's ability moves on KH1's rows at the combo style KH1)
+- **KH2's ability moves on KH1's rows at the combo style KH1.** `native_ability` style-free, `Kh1Combo::here`, `kh2slots::pick_ability`. Notes §7.
+
 ### 2026-10-23: Stage 459 (testing branch: KH2's Combo Plus / Negative Combo picks on KH1's plain rows)
 - **KH2's Combo Plus / Negative Combo picks on KH1's plain rows.** `Kh1Combo::serves`; no borrow at Base / Aerial Combo KH2. KH1's finisher is known by its request. Notes §7.
 
