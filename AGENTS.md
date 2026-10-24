@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 513 (testing branch: KH2 sounds: battle quotes through KH1's voice path)
+- **KH2's battle quotes through KH1's voice path.** The tester (question 2: "what ever is closet to how kh1s systems handle it"). KH2's voice bank goes into KH1's voice list (`0x1400E0110`, a free bank number from 127 down); a quote is picked by KH2's rule (`0x1403CDB60`) and asked of KH1's `0x140290930 (Sora, clip, VTBL priority)` with `0x142D37270[member]` swapped for the call: KH1's priority, channel `0x142D371D0`, mouth motion and voice bus. Old player the fallback. Checked (decomp); Assumption: KH1's voice create plays KH2's Vorbis clips.
+
 ### 2026-10-24: Stage 512 (testing branch: KH2 sounds: buses 4..8 on KH1's effects bus)
 - **KH2's buses 4..8 on KH1's effects bus 2.** The tester (plan step 3). KH2's effects slider (`0x140138290`) drives buses 2 and 4..8 alike, KH1's (`0x1400DDD10`) 1 / 2 / 3 (5 / 6 to a scale), never 4, 7 or 8: cut banks on 4..8 (the Keyblade bank se500's 8) go on bus 2. Checked (decomp).
 

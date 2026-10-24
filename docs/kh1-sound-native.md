@@ -295,3 +295,45 @@ Where an older doc gives an Epic address, the Steam one is given here and the tr
 - So each cut bank whose sound is on bus 4..8 is put on bus 2 (its record's byte 1): KH1's
   effects slider then reaches it as KH2's slider reaches it in KH2. Logged per bank
   ("bus 8 -> 2"). Effects on 2 and voices on 3 are unchanged.
+
+### Battle quotes through KH1's voice path (plan step 4)
+
+- KH1's voice channels: 4 records of 0x28 bytes at `0x142D371D0` (`+0` state, `+1` kind, `+2`
+  bank number (i8), `+3` clip (i8), `+8` the actor, `+0x18` an in-memory clip for kind 1,
+  `+0x20` from the actor data's `+0x6C`). An actor's channel is its data's (`handle +0x6C`)
+  byte `+0xBD`. **Checked (decomp)**.
+- `0x140290930 (actor, clip, priority)` (KH1's clip request; the group `0x1402901F0` picks a
+  clip and calls it): the channel's standing is 0 free, 1 busy with another actor, 2 busy with
+  this actor; it asks only if that is below `priority`, through `0x140290080`, which (voices not
+  switched off by `0x142867364` bit 0x100000) for a party member (member id at data `+0x4C`
+  under 10) takes the bank number from `0x142D37270[member]` (kind 0) and marks the channel
+  state 2; then `0x1402A10B0 (actor, 0x23)`. **Checked (decomp)**.
+- The channel step `0x140290A50`: state 2 creates the clip (kind 0: `0x1400D2CB0` ->
+  `0x1400DBCF0 (bank, clip)`, the voice bank found in the list `0x1404D65B8` by its number,
+  CreateSound of that sound index, a record in state 3 on the live list) and starts the
+  speaker's mouth motion (`0x140291FF0`, `0x14029EB20`); state 4 starts it (`0x1400D2CD0` ->
+  `0x1400DC210` "IOP Voice Call") and frees the channel once `0x1400D34C0` says it's done.
+  **Checked (decomp)**.
+- KH1's group rows and KH2's VTBL rows are the same idea: a priority and five (clip, chance).
+  KH2's pick (Steam KH2 `0x1403CDB60 (character, id, partner, &priority)`, 14-byte rows:
+  character, id, priority, ?, five (i8 clip, i8 chance)): a roll 0..99 (its random number x
+  0x10DCD a draw, / 0x28F5C29), choices with a chance subtract it and win when the roll drops
+  below 0, those without one are a pool picked evenly; -3 is a partner's line. KH1's
+  (`0x1402901F0`) is the same rule. **Checked (decomp)**. KH2 then queues the clip on the object
+  if nothing is pending / playing or its priority is at least the pending one's (`0x1403CE580`).
+  **Checked (decomp)**.
+- Sora's VTBL priorities (**Checked (files)**, `00battle.bin`): 0 (voice 36), 1 (most swings and
+  moves), 2 (Explosion's 6, 8), 3 (the hurt lines 0, 1, 29, 30), 4 (2).
+- What we do: KH2's whole battle voice bank is registered into KH1's voice list with KH1's own
+  copying registration `0x1400E0110 (size, bank number, data)` (it copies the data with
+  `_aligned_malloc` and loads it; **Checked (decomp)**), under a voice bank number no entry in
+  the list has (127 down to 104; the channel keeps it as an i8), again whenever the list
+  changes and ours is gone (KH1 frees an entry another bank of the same number replaced,
+  `0x1400DC8C0`). A quote picks its clip by KH2's rule above and goes through KH1's own clip
+  request `0x140290930 (Sora, clip, priority)` with Sora's member bank number set to ours for
+  that call only: KH1's priority rule, channel, mouth motion, voice bus and pause apply. If
+  that can't be done it plays on the mod's player. **Assumption** until tried in game: KH1's
+  voice create plays a KH2 Vorbis clip by its sound index (the engine and reader are the same).
+- Open: KH2's priority 0 can't pass KH1's rule (nothing is below 0); it is asked at 1 (plays
+  when Sora's channel is free), which is what KH2's 0 does when nothing is pending. A -3
+  (partner's line) choice is left out as before, so Sora says one of his own there.

@@ -216,6 +216,7 @@ pub unsafe fn frame_end(base: usize) {
     }
     if rd::<usize>(base + SOUND_UP_STEAM) != 0 && ready(base) {
         tend(base);
+        tend_voice(base);
     }
     let count: i32 = rd(base + BANK_COUNT_STEAM);
     let head: usize = rd(base + BANK_LIST_STEAM);
@@ -393,4 +394,136 @@ unsafe fn tend(base: usize) {
         }
         true
     });
+}
+
+// ---- battle quotes through KH1's voice path (plan step 4) ----
+
+/// KH1's registration of a voice bank from a buffer it copies (Steam `0x1400E0110 (size, bank
+/// number, data)`: marks an entry of the same number released (0xFFFF, freed by `0x1400DC8C0`),
+/// copies the data with `_aligned_malloc`, loads it with `0x14004D530`, pushes the entry on the
+/// voice bank list): `push rdi; push r14; push r15; sub rsp, 0x40`.
+const VOICE_REGISTER_STEAM: usize = 0xE0110;
+/// The voice bank list and its count (Steam `0x1404D65B8`, `0x1404D65C8`; `+0x10` the bank
+/// number, `+0x18` the engine handle, `+0x20` the data).
+const VOICE_LIST_STEAM: usize = 0x4D65B8;
+const VOICE_COUNT_STEAM: usize = 0x4D65C8;
+/// Each party member's voice bank number (Steam `0x142D37270`, i8 by member id `< 10`): KH1's
+/// clip request `0x140290080` reads Sora's from it into his voice channel.
+const MEMBER_BANKS_STEAM: usize = 0x2D37270;
+/// KH1's voice channels (Steam `0x142D371D0`, 4 of 0x28 bytes: `+0` state (2 asked), `+1` kind
+/// (0 a member's bank), `+2` bank, `+3` clip, `+8` the actor); an actor's channel is its data's
+/// `+0xBD` (data = handle `+0x6C`).
+const CHANNELS_STEAM: usize = 0x2D371D0;
+
+/// Sora's KH2 battle voice bank (whole, as KH1 keeps a character's voices in one bank), its
+/// number in KH1's voice list and the data KH1 copied it to (to know it's still there).
+static VOICE_BANK: Mutex<Option<Vec<u8>>> = Mutex::new(None);
+static VOICE_NO: AtomicI32 = AtomicI32::new(-1);
+static VOICE_DATA: AtomicUsize = AtomicUsize::new(0);
+static VOICE_COUNT: AtomicI32 = AtomicI32::new(-1);
+
+/// Hands over Sora's KH2 battle voice bank (from the loader thread).
+pub fn set_voice_bank(bytes: Vec<u8>) {
+    if Build::current() != Build::Steam {
+        return;
+    }
+    if let Ok(mut v) = VOICE_BANK.lock() {
+        *v = Some(bytes);
+    }
+    VOICE_COUNT.store(-1, Ordering::Relaxed);
+}
+
+/// Each frame (from `frame_end`): keeps our voice bank in KH1's voice list.
+unsafe fn tend_voice(base: usize) {
+    if !starts_with(base + VOICE_REGISTER_STEAM, &REGISTER_PROLOGUE) {
+        return;
+    }
+    let count: i32 = rd(base + VOICE_COUNT_STEAM);
+    if count == VOICE_COUNT.swap(count, Ordering::Relaxed) {
+        return;
+    }
+    // (The list changed, or the bank is new: is ours still in it?)
+    let mut used = Vec::new();
+    let mut ours = false;
+    let (no, data) = (VOICE_NO.load(Ordering::Relaxed), VOICE_DATA.load(Ordering::Relaxed));
+    let mut node: usize = rd(base + VOICE_LIST_STEAM);
+    let mut n = 0;
+    while node >= 0x10000 && n < 4096 && super::crash::readable(node) && super::crash::readable(node + 0x28) {
+        let b: i32 = rd(node + 0x10);
+        used.push(b);
+        if b == no && rd::<usize>(node + 0x20) == data && data != 0 {
+            ours = true;
+        }
+        node = rd(node + 8);
+        n += 1;
+    }
+    if ours {
+        return;
+    }
+    VOICE_DATA.store(0, Ordering::Relaxed);
+    let Ok(v) = VOICE_BANK.try_lock() else { return };
+    let Some(bytes) = v.as_ref() else { return };
+    // A bank number no voice bank of KH1's has now (the channel keeps it as an i8).
+    let Some(pick) = (104..=127).rev().find(|b| !used.contains(b)) else {
+        note("KH1 banks: no free voice bank number; KH2's battle quotes stay on the mod's player".into());
+        return;
+    };
+    let f: unsafe extern "system" fn(i32, i32, *const u8) = std::mem::transmute(base + VOICE_REGISTER_STEAM);
+    f(bytes.len() as i32, pick, bytes.as_ptr());
+    let head: usize = rd(base + VOICE_LIST_STEAM);
+    if head >= 0x10000 && rd::<i32>(head + 0x10) == pick && rd::<u32>(head + 0x18) != 0 {
+        VOICE_NO.store(pick, Ordering::Relaxed);
+        VOICE_DATA.store(rd(head + 0x20), Ordering::Relaxed);
+        note(format!("KH1 banks: KH2's battle voice bank in KH1's voice list as bank {pick} ({} bytes)", bytes.len()));
+    } else {
+        VOICE_NO.store(-1, Ordering::Relaxed);
+        note(format!("KH1 banks: KH2's battle voice bank not taken as bank {pick}; quotes stay on the mod's player"));
+    }
+    VOICE_COUNT.store(rd(base + VOICE_COUNT_STEAM), Ordering::Relaxed);
+}
+
+/// Asks KH1 for Sora's battle quote `clip` (of KH2's voice bank) at `priority`, through KH1's own
+/// clip request (`kh1voice::clip`, `0x140290930`: it plays only over a line of lower standing,
+/// 0 none, 1 another speaker's, 2 his own, and KH1's voice channel plays it, with its mouth
+/// motion): Sora's member bank number is ours for that call only. False if it can't go that way
+/// (the caller plays it the old way); true also when KH1's priority rule drops it.
+pub unsafe fn voice(clip: u8, priority: i32) -> bool {
+    if Build::current() != Build::Steam || !super::settings::get().kh1_sound_engine || clip > 127 {
+        return false;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let no = VOICE_NO.load(Ordering::Relaxed);
+    if base == 0 || no < 0 || VOICE_DATA.load(Ordering::Relaxed) == 0 || rd::<usize>(base + SOUND_UP_STEAM) == 0 {
+        return false;
+    }
+    let sora = super::takeover::sora_actor();
+    if sora < 0x10000 {
+        return false;
+    }
+    let data = super::pose::ptr(rd(sora + 0x130));
+    let me = super::pose::ptr(rd(sora + 0x6C));
+    if data < 0x10000 || me < 0x10000 || !super::crash::readable(data + 0x4C) || !super::crash::readable(me + 0xBD) {
+        return false;
+    }
+    let member: u16 = rd(data + 0x4C);
+    let ch: i8 = rd(me + 0xBD);
+    if member >= 10 || !(0..4).contains(&ch) {
+        return false;
+    }
+    let slot = base + MEMBER_BANKS_STEAM + member as usize;
+    let old: i8 = rd(slot);
+    if old < 0 {
+        // (KH1 gives Sora no voice bank now: no quotes, as KH1's own.)
+        return true;
+    }
+    std::ptr::write_unaligned(slot as *mut i8, no as i8);
+    super::kh1voice::clip(sora, clip as i32, priority);
+    std::ptr::write_unaligned(slot as *mut i8, old);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        let c = base + CHANNELS_STEAM + ch as usize * 0x28;
+        let took = rd::<u8>(c) == 2 && rd::<i8>(c + 2) == no as i8 && rd::<u8>(c + 3) == clip && rd::<usize>(c + 8) == sora;
+        note(format!("KH1 banks: KH2 quote clip {clip} asked of KH1's voice channel {ch} at priority {priority}: {}", if took { "taken" } else { "KH1 kept the line playing" }));
+    }
+    true
 }

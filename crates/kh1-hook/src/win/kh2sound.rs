@@ -47,10 +47,73 @@ impl Sound {
 struct Loaded {
     elements: HashMap<i16, Sound>,
     sounds: HashMap<u32, Sound>,
-    voices: HashMap<i16, Vec<Sound>>,
+    voices: HashMap<i16, VoiceSet>,
     /// A spell file's effect elements' sounds (`reflect`: REFLECT_<n>.mag's PAX), by (level,
     /// element).
     spell_elements: HashMap<(u8, u16), Sound>,
+}
+
+/// A KH2 battle voice (`00battle`'s VTBL row for Sora): its priority, its five (clip, chance)
+/// choices, and the clips it can pick (by clip number in KH2's voice bank).
+struct VoiceSet {
+    priority: i32,
+    choices: Vec<(i8, i8)>,
+    clips: Vec<(u8, Sound)>,
+}
+
+impl VoiceSet {
+    /// KH2's pick (Steam KH2 `0x1403CDB60`): a roll of 0..99 from its random number (x 0x10DCD a
+    /// draw, / 0x28F5C29); each choice with a chance takes the roll down by it and is picked when
+    /// the roll goes below 0; the choices without a chance are the pool, one picked evenly if
+    /// none was. A negative clip is none (-3, a partner's line, isn't Sora's: left out).
+    fn pick(&self) -> Option<&(u8, Sound)> {
+        static RNG: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let draw = || -> u32 {
+            let mut r = RNG.load(std::sync::atomic::Ordering::Relaxed);
+            if r == 0 {
+                r = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos() | 1);
+            }
+            r = r.wrapping_mul(0x10DCD);
+            RNG.store(r, std::sync::atomic::Ordering::Relaxed);
+            r
+        };
+        let mut roll = (draw() / 0x28F_5C29) as i32;
+        let mut pool: Vec<i8> = Vec::new();
+        let mut chosen = None;
+        for &(clip, chance) in &self.choices {
+            if clip < 0 {
+                continue;
+            }
+            if chance < 1 {
+                pool.push(clip);
+            } else {
+                roll -= chance as i32;
+                if roll < 0 {
+                    chosen = Some(clip);
+                    break;
+                }
+            }
+        }
+        let clip = match chosen {
+            Some(c) => c,
+            None if !pool.is_empty() => {
+                let n = pool.len() as u64;
+                pool[(draw() as u64 / ((n - 1 + 0x1_0000_0000) / n)).min(n - 1) as usize]
+            }
+            None => return None,
+        };
+        self.clips.iter().find(|(c, _)| *c as i8 == clip)
+    }
+
+    /// Sora says it: through KH1's voice channel at the row's priority (`kh1bank::voice`; KH1's
+    /// rule plays it only over a line of lower standing), or on the mod's player.
+    unsafe fn say(&self) -> Option<u8> {
+        let (clip, sound) = self.pick()?;
+        if !super::kh1bank::voice(*clip, self.priority.max(1)) {
+            play(sound, Channel::Voice);
+        }
+        Some(*clip)
+    }
 }
 
 static LOADED: Mutex<Option<Loaded>> = Mutex::new(None);
@@ -292,33 +355,35 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
         let vscd = kh2_formats::scd::Scd::parse(&voice).map_err(|e| e.to_string())?;
         let table = vtbl(&battle);
         for v in voice_ids {
-            let Some(choices) = table.iter().find(|(c, id, _)| *c == 1 && *id as i16 == v).map(|e| e.2.clone()) else { continue };
-            let clips: Vec<Sound> = choices
+            let Some((priority, choices)) = table.iter().find(|(c, id, _, _)| *c == 1 && *id as i16 == v).map(|e| (e.2, e.3.clone())) else { continue };
+            let clips: Vec<(u8, Sound)> = choices
                 .iter()
-                .filter_map(|&c| {
-                    let mut s = decode(vscd.sound_id(c as usize).ok()?);
-                    s.kh1 = native(u32::MAX, &voice, c as usize, format!("KH2 voice {v} clip {c}"));
-                    Some(s)
-                })
+                .filter(|(c, _)| *c >= 0)
+                .filter_map(|&(c, _)| Some((c as u8, decode(vscd.sound_id(c as usize).ok()?))))
                 .collect();
-            log(&format!("KH2 voice {v}: clips {choices:?} ({} decoded)", clips.len()));
+            log(&format!("KH2 voice {v}: priority {priority}, (clip, chance) {choices:?} ({} decoded)", clips.len()));
             if !clips.is_empty() {
-                out.voices.insert(v, clips);
+                out.voices.insert(v, VoiceSet { priority: priority as i32, choices, clips });
             }
+        }
+        // The whole bank for KH1's voice list (as KH1 keeps a character's voices: `kh1bank`).
+        if !out.voices.is_empty() {
+            super::kh1bank::set_voice_bank(voice.clone());
         }
     }
     Ok(out)
 }
 
-/// `00battle.bin`'s VTBL entries: (character, id, the voice clips it picks from).
-fn vtbl(bar: &[u8]) -> Vec<(u8, u8, Vec<i8>)> {
+/// `00battle.bin`'s VTBL entries (14 bytes, as KH2's pick `0x1403CDB60` reads them): (character,
+/// id, priority, five (clip, chance)).
+fn vtbl(bar: &[u8]) -> Vec<(u8, u8, u8, Vec<(i8, i8)>)> {
     let Ok(b) = kh2_formats::bar::Bar::parse(bar) else { return Vec::new() };
     let Some(v) = b.entries.iter().find(|e| e.name.trim_end_matches('\0') == "vtbl") else { return Vec::new() };
     let d = v.data;
     let n = d.get(4..8).map_or(0, |x| u32::from_le_bytes([x[0], x[1], x[2], x[3]]) as usize);
     (0..n)
         .filter_map(|k| d.get(8 + k * 14..8 + k * 14 + 14))
-        .map(|e| (e[0], e[1], (0..5).map(|j| e[4 + 2 * j] as i8).filter(|x| *x >= 0).collect()))
+        .map(|e| (e[0], e[1], e[2], (0..5).map(|j| (e[4 + 2 * j] as i8, e[5 + 2 * j] as i8)).filter(|x| x.0 != -1).collect()))
         .collect()
 }
 
@@ -361,9 +426,7 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
         // (A motion's voice only with `kh2_voice`: Reflect's voices load without it.)
         EventKind::Voice(v) if kh2_voice() => {
             if let Some(c) = l.voices.get(&v) {
-                static PICK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-                let n = PICK.fetch_add(7, std::sync::atomic::Ordering::Relaxed) as usize;
-                play(&c[n % c.len()], Channel::Voice);
+                c.say();
             }
         }
         _ => {}
@@ -402,13 +465,9 @@ pub const REFLECT_VOICES: [i16; 1] = [REFLECT_FINISHER_VOICE];
 /// Reflect's cast voice `v` (`reflect`), whatever `kh2_voice` says: one of its clips at random.
 pub unsafe fn reflect_voice(v: i16) {
     let Ok(g) = LOADED.try_lock() else { return };
-    match g.as_ref().and_then(|l| l.voices.get(&v)) {
-        Some(c) if !c.is_empty() => {
-            let n = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos()) / 1000) as usize % c.len();
-            play(&c[n], Channel::Voice);
-            note_play(|| format!("Reflect voice {v} (clip {n} of {})", c.len()));
-        }
-        _ => note_play(|| format!("Reflect voice {v} not loaded")),
+    match g.as_ref().and_then(|l| l.voices.get(&v)).and_then(|c| c.say()) {
+        Some(clip) => note_play(|| format!("Reflect voice {v} (clip {clip})")),
+        None => note_play(|| format!("Reflect voice {v} not loaded")),
     }
 }
 
@@ -419,9 +478,7 @@ pub unsafe fn voice(v: i16) {
     }
     let Ok(g) = LOADED.try_lock() else { return };
     if let Some(c) = g.as_ref().and_then(|l| l.voices.get(&v)) {
-        static PICK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(3);
-        let n = PICK.fetch_add(7, std::sync::atomic::Ordering::Relaxed) as usize;
-        play(&c[n % c.len()], Channel::Voice);
+        c.say();
     }
 }
 
