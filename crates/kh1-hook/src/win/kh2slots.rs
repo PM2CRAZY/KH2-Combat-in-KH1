@@ -280,20 +280,39 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
     out
 }
 
-/// A KH2 ability row's motion is only a Keyblade swing, so KH1's own ground swing row can play it
-/// as it plays the plain swings (its attack object on the Keyblade, timed by the slot's hit
-/// windows, and KH2's root travel baked in): it hits with the Keyblade's shapes only (a
-/// `Hitbox` window on a weapon, none on his own body), and has no guard, no invulnerability, no
-/// gravity or air / ground range of its own (each of those is KH2 behaviour KH1's swing row
-/// doesn't have). Sora's (`P_EX100.mset`, Checked (files)): Slapshot 162, Dodge Slash 163 and
-/// Slide Dash 164 and Aerial Sweep 191 pass; Aerial Dive 196 (no gravity, frames 46..54), Flash Step 169 (a guard on his body, ATKP 406 kind 2, frames 0..19),
-/// Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166 (911 / 912), Guard Break
-/// 165 (a finisher, left out above), Finishing Leap 167 and Counterguard 171 don't.
+/// A KH2 ability row's motion is only a Keyblade swing, so KH1's own swing row can play it as it
+/// plays the plain swings (its attack object on the Keyblade, timed by the slot's hit windows,
+/// and KH2's root travel baked in): it hits with the Keyblade's shapes only (a `Hitbox` window on
+/// a weapon, none on his own body), and has no guard, no invulnerability, no air / ground range
+/// of its own (each of those is KH2 behaviour KH1's swing row doesn't have). Its no-gravity
+/// ranges are KH1's now (`no_gravity`, `shared::physics`'s air step). Sora's (`P_EX100.mset`,
+/// Checked (files)): Slapshot 162, Dodge Slash 163, Slide Dash 164, Aerial Sweep 191 and Aerial
+/// Dive 196 (no gravity at frames 46..54) pass; Flash Step 169 (a guard on his body, ATKP 406
+/// kind 2, frames 0..19), Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166
+/// (911 / 912), Guard Break 165 (a finisher, left out above), Finishing Leap 167 and
+/// Counterguard 171 don't.
 fn blade_swing(clip: &character_core::Clip) -> bool {
     use character_core::WindowKind as W;
     let blade = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon, .. } if weapon > 0));
-    let other = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon: 0, .. } | W::Guard { .. } | W::Invulnerable | W::NoGravity | W::Air | W::Grounded));
+    let other = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon: 0, .. } | W::Guard { .. } | W::Invulnerable | W::Air | W::Grounded));
     blade && !other
+}
+
+/// KH2's clip of our slot playing on `actor` holds him with no gravity now (its range id 3 / 24,
+/// `WindowKind::NoGravity`, at KH1's time in the slot, which runs in the clip's 60 Hz frames: the
+/// slot is retimed to its length). Not for a clip that allows movement all through (Wisdom
+/// Form's shots), as KH2's controller has it (`Character`'s action step). KH1's air step holds
+/// his rise or fall there (`shared::physics`).
+pub unsafe fn no_gravity(actor: usize) -> bool {
+    use character_core::WindowKind as W;
+    let Some(m) = current(actor) else { return false };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let t: f32 = rd(actor + TIME_NOW);
+    if !(t >= 0.0) || !clip.windows.iter().any(|w| matches!(w.kind, W::NoGravity)) {
+        return false;
+    }
+    let moving = clip.windows.iter().any(|w| matches!(w.kind, W::AllowMovement) && w.start == 0 && w.end.is_none());
+    !moving && clip.has(t as u32, |k| matches!(k, W::NoGravity))
 }
 
 /// KH2's `motion` has a slot of ours on one of KH1's requests (built: an ability row's only when

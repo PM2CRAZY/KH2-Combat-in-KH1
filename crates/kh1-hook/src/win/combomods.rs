@@ -13,10 +13,10 @@
 //! - **Attack** (`attack`, from `combat::exec`: a press KH1's combo took, its row about to run):
 //!   KH2's combo is asked what it would take at KH1's count (`Character::would_take`, the combo
 //!   carried at KH1's count, the press, KH2's targets and KH1's lock). KH2 takes it when that is
-//!   - a row that needs an ability (an action ability's move: Flash Step, Aerial Dive, Vicinity
-//!     Break, Aerial Spiral; the finishers Explosion, Guard Break, Aerial Finish, Magnet Burst
-//!     ...), opener, step or finisher, except the ones KH1's own rows now play natively
-//!     (`native_ability`: Slapshot, Dodge Slash, Slide Dash, Aerial Sweep at Base Combo KH2);
+//!   - a row that needs an ability (an action ability's move: Flash Step, Vicinity Break, Aerial
+//!     Spiral; the finishers Explosion, Guard Break, Aerial Finish, Magnet Burst ...), opener,
+//!     step or finisher, except the ones KH1's own rows now play natively (`native_ability`:
+//!     Slapshot, Dodge Slash, Slide Dash, Aerial Sweep, Aerial Dive at Base Combo KH2);
 //!   - KH2's finisher where KH1's would still swing, with Negative Combo;
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
 //!     count);
@@ -180,9 +180,9 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
 /// only a Keyblade swing (`kh2slots::swing_rows`, which builds its motion's slots only then), with
 /// the Base Combo at KH2 (where our slots play). A swing (Slapshot, Dodge Slash, Slide Dash): KH1's
 /// plain ground swing row runs it as it runs KH2's plain swings (`kh2_row`, `select_swing`): KH1's
-/// row, attack object, damage and windows, KH2's motion and root travel. A hop (Aerial Sweep), with
-/// the Aerial Combo at KH2 too: KH1's air state and air swing row with KH2's hop, as KH2's plain
-/// hop (`kh2_hop`). The rest still borrow.
+/// row, attack object, damage and windows, KH2's motion and root travel. A hop (Aerial Sweep,
+/// Aerial Dive), with the Aerial Combo at KH2 too: KH1's air state and air swing row with KH2's
+/// hop, as KH2's plain hop (`kh2_hop`). The rest still borrow.
 fn native_ability(row: &ComboRow) -> bool {
     use super::styles::{kh2, Kind};
     row.ability != 0 && !row.is_air() && !row.is_finisher() && kh2(Kind::GroundCombo) && (!row.is_jump() || kh2(Kind::AirCombo)) && super::kh2slots::has_any(row.motion)
@@ -416,7 +416,8 @@ pub unsafe fn drop_ahead(actor: usize, aim: [f32; 2]) -> bool {
 /// KH2's hop out of KH1's ground combo (Base Combo KH2; the tester: "design and implement
 /// natively (KH1's air state with KH2's arc and numbers)"): KH2's pick is a ground row that hops
 /// with no ability (row 0, motion 182, at a target well above; row 1, 181, the drop ahead) or an
-/// ability hop KH1 plays natively (`native_ability`: Aerial Sweep, row 33, motion 191), so
+/// ability hop KH1 plays natively (`native_ability`: Aerial Sweep, row 33, motion 191; Aerial
+/// Dive, 48, 196, its no-gravity frames held by KH1's air step, `kh2slots::no_gravity`), so
 /// KH1's air state has him for it: KH1's own air swing row (18, or 17 when 18's request is
 /// playing: its air picker's fallback order), whose request then plays our slot of KH2's motion
 /// (KH2's hop rows play its air swings, built for KH1's air requests, `kh2slots`), started out of

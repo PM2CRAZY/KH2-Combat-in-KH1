@@ -1098,10 +1098,23 @@ pub mod physics {
     /// (`docs/kh1-physics.md` §7): the hop as KH2's hop of that height (`kh1phys::kh1_arc_on_kh2`),
     /// KH2's gravity and fall cap, and KH2's air drift without the stick (`air_drag`, as KH2's own
     /// air attacks outside an allow-movement range). KH2's early release doesn't cut them.
+    ///
+    /// KH2's no-gravity range on our slot playing (`kh2slots::no_gravity`: KH2's ability moves'
+    /// motions, Aerial Dive's frames 46..54), either physics: his rise or fall held where it is,
+    /// the arc's time not going on (KH2's controller: no gravity there, the arc kept and gone on
+    /// with after it), the sideways speed KH1's (or KH2's) air drift as before.
     unsafe extern "system" fn air_step(actor: usize, disp: *mut [f32; 4]) -> usize {
         let f: StepFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
         let sora = is_sora(actor);
         let v0: [f32; 4] = if sora { rd(actor + 0x3C0) } else { [0.0; 4] };
+        let held = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0 && super::super::kh2slots::no_gravity(actor);
+        if held {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                super::super::log(&format!("KH2's no-gravity range on KH1's air state (KH2 motion {:?}): his height held ({})", super::super::kh2slots::playing_motion(actor), if kh2() { "KH2's arc" } else { "KH1's arc" }));
+            }
+        }
+        let kh1_held = if held && !kh2() { Some(kh1_motion(actor)) } else { None };
         let ours = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && kh2();
         // KH1 set its fields itself since our last write (an air attack's hop from its command
         // step, a blow's launch): KH2's arc goes on from KH1's from here.
@@ -1127,6 +1140,13 @@ pub mod physics {
         // (KH1's own arc before its step: where KH2's goes on from if KH1 moved him last.)
         let before = if ours { Some(kh1_motion(actor)) } else { None };
         let r = f(actor, disp);
+        // (Physics KH1: KH1's step undone up and down, its arc's time and start put back.)
+        if let Some(b) = kh1_held.filter(|_| rd::<i32>(actor + 0x70) == 2) {
+            wr(actor + ARC_T, b.arc.t);
+            wr(actor + ARC_Y0, b.arc.y0);
+            wr(actor + VEL_Y, 0.0f32);
+            (*disp)[1] = 0.0;
+        }
         if !sora || rd::<i32>(actor + 0x70) != 2 || disp.is_null() || !kh2() {
             return r;
         }
@@ -1198,7 +1218,7 @@ pub mod physics {
                 air.arc.holdable = false;
             }
         }
-        let up = air.arc.advance(dt, n.gravity, n.fall_max);
+        let up = if held { 0.0 } else { air.arc.advance(dt, n.gravity, n.fall_max) };
         // Past the arc's apex (a released jump's hop included): KH2's fall loop shows (`pose`).
         if !air.arc.rising() {
             ARC_FALL_FRAME.store(game_frame().max(1), Ordering::Relaxed);

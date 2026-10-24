@@ -701,7 +701,7 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   and 15 ms each at load (9 more slots). Not native yet (still borrows): Flash Step (169: a guard
   on his body, ATKP 406 kind 2, frames 0..19), Vicinity Break (170: a body attack, 1869 group 21,
   power 125), Explosion (166: 911 / 912), Guard Break (165, a finisher; its KH2 guard break isn't
-  KH1's attack data), Aerial Dive (196; Aerial Sweep, 191, below), the air rows (Aerial Spiral
+  KH1's attack data), the air rows (Aerial Spiral
   192, Aerial Finish 194, Magnet Burst 197), the Square moves, Counterguard and Retaliating Slash.
   What stays KH1's for these, as for the plain swings: the row, its attack object on the
   Keyblade (KH1's shape and damage for that row, not KH2's ATKP: Slapshot's, Dodge Slash's and
@@ -716,8 +716,25 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   each), KH2's height and speed for that target from `Character::would_take_launch` (KH2's hop
   rule above, with row 33's own numbers) on KH1's air fields, KH1's air combo after it. It wins
   over row 0 where both pass, as in KH2 (it comes first in the table). With the Aerial Combo at
-  KH1 it is still a borrow. Aerial Dive (48, 196) stays a borrow: its motion holds him with no
-  gravity at frames 46..54 (range id 3), which KH1's air state doesn't do yet.
+  KH1 it is still a borrow. Aerial Dive (48, 196): below.
+- **KH2's no-gravity ranges on KH1's air state, and Aerial Dive** (the tester: "transfer
+  everything into kh1's systems"): KH2's motions hold him in the air with range id 3 (and 24,
+  `WindowKind::NoGravity`); KH2's controller (the OG rewrite, `Character`'s action step) then
+  sets no fall speed and doesn't move the arc on, so the rise or fall goes on from where it was
+  after the range, the sideways drift unchanged; not for a clip that allows movement all through.
+  KH1's air state has no such range, so it is added on KH1's own step: `shared::physics`'s air
+  step (state 2, `0x1402AD510`, already wrapped) asks `kh2slots::no_gravity` (our slot playing,
+  KH2's clip, KH1's time in the slot as the clip's 60 Hz frame, the slot being retimed to the
+  clip's length) and holds him: physics KH1, KH1's step's drop undone and its arc's time and
+  start (`+0x3B0`, `+0x3B4`) put back, `+0x3C4` 0; physics KH2, KH2's arc not advanced. Not with
+  KH1's own hold (flag `0x1000`). No new hook; a few reads a frame in state 2 (none when no slot
+  of ours plays). **Assumption**: KH2's exe does what the OG rewrite does in that range (not read
+  in the decomp), and KH1's time for the frame is the one KH1's motion step has reached when the
+  air step runs (at most a frame off). First move on it: Aerial Dive (row 48, motion 196, ability
+  178; PTYA Checked (files): primary, gap 0..650, a target 110 to 250 up, hop 41, bounds 41..117
+  plus his jump height, speed 0..32, `distance_adjust` 105; no gravity at frames 46..54, Keyblade
+  hits only), now native as Aerial Sweep is (`kh2_hop`, slots on 0xCC / 0xCD): KH2's hop for that
+  target on KH1's air state, then the hold near the end of the dive.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

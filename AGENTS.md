@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 434 (testing branch: KH2 no-gravity ranges on KH1's air state; Aerial Dive)
+- **KH2's no-gravity ranges on KH1's air state; Aerial Dive.** `kh2slots::no_gravity`; `shared::physics` air step holds the arc (KH1's step undone / KH2's arc not advanced). Assumption: the exe matches the OG rewrite. Aerial Dive 196 (46..54) native. Notes §7.
+
 ### 2026-10-23: Stage 433 (testing branch: KH2 Aerial Sweep from the ground natively)
 - **KH2's Aerial Sweep from the ground natively.** Row 33 (191) through `kh2_hop`, as row 0, slots on 0xCC / 0xCD. Notes §7.
 
