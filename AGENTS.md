@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 487 (testing branch: KH2's stop at an air cast)
+- The tester (m3 answer 2 (a), "with the exception to drive forms for now"). `shared::physics::cast_stops` (from `kh1_spell_start`, air state 2, base Sora, physics KH2): sideways speed 0 and KH1's arc reset to a fall from rest, then KH2's gravity and the cast's no-gravity hold (range 3). KH1's own air cast keeps 0.7 of the speed and the rise (`0x1402A3600`, Checked (decomp)). Assumption: KH1 doesn't move him on the ground while its action flag is set. docs §4d.
+
 ### 2026-10-24: Stage 486 (testing branch: KH2's casts as a step of KH1's combo)
 - The tester (m3 answer 1 (a)). Cast slots get KH1's combo window (event type 5) from KH2's range 14 to the end (`kh2slots::cast_follow`; Fire 56 from 30, Blizzard 59 from 24, Thunder 62 / Cure 65 from 26, air 58/61/64/67 from 36/44/38/38, finishers 57/60/63 from 36/48/42; Checked (files) `P_EX100.mset`), finisher casts none; a fresh jump or Square there clears the action flag (`formmagic::cast_cut`); KH1's count `+0x41` and `+0x50` set at the native start (`formmagic::take_step`; KH1's Attack step `0x1402A7510`, `+0x50` cleared by `0x1402B3270`, Checked (decomp)); spells only from range 35 (`cast_magic_window`). Open: Finishing Plus after a finisher cast. docs/kh1-magic-native.md §4c.
 

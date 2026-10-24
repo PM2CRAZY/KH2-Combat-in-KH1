@@ -521,6 +521,10 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion });
     }
     take_step(actor);
+    // (KH2's stop at the cast's start, physics KH2: `shared::physics::cast_stops`.)
+    if air {
+        super::shared::physics::cast_stops(actor);
+    }
     let v = if finisher { m.voice_finisher } else { m.voice };
     if v != 255 {
         super::kh2sound::voice(v as i16);

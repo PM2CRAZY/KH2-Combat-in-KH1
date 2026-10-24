@@ -217,3 +217,19 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   before its range 35 (`kh2slots::cast_magic_window`), with KH1's "can't" sound.
 - **Open:** Finishing Plus after a finisher cast (KH2's next finisher in range 50) isn't built;
   a finisher cast ends the combo.
+
+## 4d. KH2's stop at a cast (done: the tester's answer 2 (a), physics KH2; Drive Forms as they are)
+
+- KH2's cast start (the controller's `cast`, the KH2 source): sideways speed 0, and in the air no
+  rise or fall (the arc a fall from rest); during the cast the air drift keeps the speed at 0 and
+  the cast motion's no-gravity range (range id 3: air Fire 58 16..74, Blizzard 61 16..66, Thunder /
+  Cure 64 / 67 16..58, **Checked (files)**) holds him; before it he falls from rest at KH2's
+  gravity, after it on.
+- KH1's air cast (**Checked (decomp)**): `0x1402A3600` keeps 0.7 of the sideways speed
+  (`0x140386CD0 (+0x3C0, 0.7)`) and leaves the jump's arc alone (a cast mid-rise goes on rising);
+  the ground cast (`0x1402A3DB0`) sets no speed.
+- `shared::physics::cast_stops` (from `formmagic::kh1_spell_start`, KH1's air state 2, physics
+  KH2, base Sora): KH1's sideways speed 0 and its arc a fall from rest where he is, and KH2's arc
+  for KH1's air step the same; the air step (`air_step`) then runs it with KH2's gravity and air
+  drift, and the no-gravity range holds him as before. On the ground nothing is changed
+  (**Assumption:** KH1's ground step moves no actor while its action flag is set).

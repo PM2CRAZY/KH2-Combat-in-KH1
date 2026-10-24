@@ -576,6 +576,34 @@ pub mod physics {
         wr(actor + ARC_H, a.h);
     }
 
+    /// A KH2 cast starting on KH1's cast state in the air (`formmagic::kh1_spell_start`), physics
+    /// KH2, base Sora (the tester, thread kh2-magic-and-reflect-native, answer 2 (a); Drive Forms
+    /// as they are): KH2's stop. KH2's cast start (the controller's `cast`, the KH2 source): no
+    /// sideways speed, no rise or fall, the arc a fall from rest from there (then the cast
+    /// motion's no-gravity range holds him, `kh2slots::no_gravity`, and the air drift keeps the
+    /// speed at 0). KH1's air cast keeps 0.7 of the sideways speed (`0x1402A3600`, `0x140386CD0
+    /// (+0x3C0, 0.7)`) and its jump's arc (Checked (decomp)): both replaced here, KH2's arc for its
+    /// air step (`air_step`) set to the fall. On the ground nothing: KH1's ground cast moves him
+    /// by nothing either (`0x1402A3DB0` sets no speed; Assumption: KH1's ground step moves no actor
+    /// with the action flag), as KH2's stops him.
+    pub unsafe fn cast_stops(actor: usize) {
+        if !kh2() || !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
+            return;
+        }
+        let Some(n) = numbers() else { return };
+        let y: f32 = rd(actor + 0x14);
+        if !y.is_finite() {
+            return;
+        }
+        let was = kh1_motion(actor);
+        let arc = Arc::fall();
+        if let Ok(mut g) = AIR.try_lock() {
+            *g = Some(Air { arc, last_y: y, asked_up: 0.0, written: None });
+        }
+        set_kh1_motion(actor, &Motion { h: [0.0; 2], arc: kh1phys::Arc::from_kh2(&arc, y, n.gravity, n.fall_max) }, 1.0);
+        super::super::log(&format!("KH2's cast stop in the air (physics KH2): sideways {:.1}/frame and KH1's arc (rising {}) replaced by a fall from rest", was.h[0].hypot(was.h[1]), was.arc.up_speed() > 0.0));
+    }
+
     /// KH2's motion last written into KH1's fields (`mirror`), KH1's height then and the game
     /// frame (`takeover::GAME_FRAME`).
     static LAST: Mutex<Option<(Motion, f32, u64)>> = Mutex::new(None);
