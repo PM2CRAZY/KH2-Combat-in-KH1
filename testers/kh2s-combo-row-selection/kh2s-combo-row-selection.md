@@ -19,6 +19,7 @@
 - [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](#^m13)
 - [14. Assistant: t457 to t460 (one change each).](#^m14)
 - [15. Assistant: t473 to t476 (one change each).](#^m15)
+- [16. Assistant: t488 and t489.](#^m16)
 
 ---
 
@@ -293,4 +294,25 @@
 
 go ahead
 
+
+> [!tip] Assistant
+> **t488 and t489.**
+>
+> 1. **t488 (answers 1 and 2).** With a combo ability KH1 doesn't have equipped (Finishing Plus or Negative Combo, and Berserk Charge once it's in the ability list), your combo plays exactly like Base / Aerial Base Combo KH2, even with those set to KH1: KH2's row picker and KH2's combo length and finisher rules, on KH1's own rows. Combo Plus, Air Combo Plus and Combo Master don't switch it, since KH1 has those. The Config row still shows what you picked, and taking the ability off puts your setting back. The log says when it switches ("a combo ability only KH2 has is equipped").
+> 2. **t489, Guard native (3a).** With Dodge Roll on KH2, Square standing still with Guard equipped now runs KH2's guard on KH1's own states (no handoff):
+>    - It plays KH2's guard motion (173) and turns to face your lock-on.
+>    - It blocks hits from the front during KH2's frames 6 to 37, the Keyblade guard window in the files: no damage, KH1's clang.
+>    - A block plays KH2's repel (motion 42) and pushes you back 200, as in KH2.
+>    - You can move out of the guard from KH2's free frame (52), and out of the repel from 40.
+>    - **Counterguard:** press Attack during the repel, on the ground, with Counterguard equipped. It runs on its own KH1 row, with KH2's hit, invulnerability (frames 0 to 20) and body guard.
+>    Checked: the motions in your KH2 files and the free-frame rule in the KH2 decomp. Not tested in game.
+> 3. **Guard Break (4a).** I read `W_EX010.mset`. Its hit (ATKP 876) is attack kind 1, which OpenKH calls "pierce armor" (the guard break); your normal swings are kind 0. So KH1's go-through-guards rule stays, no code change. It also has its own guard on the Keyblade during frames 5 to 42, and with t489 that works too (front hits are blocked while it winds up). One assumption: I didn't find KH2's own use of kind 1 in its clash code.
+>
+> Please test, with Select + Triangle traces and the log: Finishing Plus or Negative Combo equipped with Base Combo on KH1; guarding enemies from the front and from behind; a block, then Counterguard; Guard Break into a guarding enemy. Useful log lines start with "move style:", "Square standing: KH2's guard", "KH2's guard stopped a hit", "Attack in KH2's guard repel" and "Sora hit by ... KH2's guard on the Keyblade".
+>
+> Questions:
+> 1. Guarding in the air: KH2's repel is ground-only. (a) a block in the air just stops the hit, as now, or (b) look into KH2's air recoil next?
+> 2. Square again during the repel: KH2 lets you guard or roll again after the repel's first frames; here KH1 doesn't take Square until the repel's free frame (40). (a) add KH2's earlier window next, or (b) leave it?
+
+^m16
 

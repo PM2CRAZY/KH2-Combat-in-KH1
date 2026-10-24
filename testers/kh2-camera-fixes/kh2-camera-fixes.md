@@ -15,6 +15,7 @@
 - [9. Mr Bugs: 1. check the decomp for both (steam gihidra c decomp)](#^m9)
 - [10. Assistant: t450 to t452. Sorry, I missed your answers last round. Here ](#^m10)
 - [11. Assistant: Thanks. Nothing in this thread is waiting on a go-ahead righ](#^m11)
+- [12. Assistant: I went back through everything in this thread against KH2's ](#^m12)
 
 ---
 
@@ -173,3 +174,29 @@ go ahead
 
 
 if you think everything is one to one then close this thread, if not let me know
+
+
+> [!tip] Assistant
+> I went back through everything in this thread against KH2's Steam decomp, and this time I also read the numbers straight out of your KH2 exe. Almost all of it checks out, but it isn't fully one to one yet, so I'd hold off closing.
+>
+> Matching KH2 (checked):
+> - The swing-behind when you run back or diagonally back: the rule and its exact rates.
+> - KH2's stick dead zone, and the turn and zoom moving by the stick's whole tilt.
+> - The R3 reset, and the swing speeding up with the form's run speed.
+> - First person: Select to enter, the right stick turns and looks, 3° a frame, 70° up and down.
+> - R2 holding the swing, the mouse camera, and the 30 fps follow.
+> - The lock-on camera's turn speed: last time I couldn't read it; it's in your exe, 3°, the same as ours.
+>
+> A few guesses I'd marked earlier are now confirmed from KH2's button tables: the turn and zoom really are the right stick, R3 is the reset, and Select is first person.
+>
+> What's still different:
+> 1. **Lock-on side kick.** When the enemy (or Sora) goes off the side of the screen, KH2 turns the camera an extra 20°, and which way depends on which edge it left by. Ours picks the direction from whichever way the camera was already turning. (a) switch to KH2's rule (I'd check the direction with a trace from you), or (b) leave it.
+> 2. **L2 and the right stick.** In KH2, while L2 is held, the right stick stops moving the camera (it acts like the d-pad instead) and R3 doesn't reset it. Ours moves the camera whatever L2 is doing. (a) copy KH2's (I'd first check what L2 does in KH1 with the mod, so nothing clashes), or (b) leave it.
+> 3. **Camera distance.** This one's on purpose: we shrink all of KH2's camera distances to 89% because KH1's Sora is smaller, so he fills the screen the way he does in KH2. KH2 also pulls the camera further back in some big rooms; KH1's rooms don't have that flag, so ours always uses KH2's normal-room distances. (a) keep the 89%, so Sora looks the same size on screen as in KH2, or (b) use KH2's raw distances.
+>
+> Not checked yet: the 16:9 field of view, the exact wall pull-in on Steam, and whether the keyboard's R2 key counts. None of t450 to t452 has been tried in game yet either, so please give those a go too.
+>
+> Tell me your picks and "go ahead" for the ones you want changed; if you're happy with the differences as they are, say so and I'll close the thread.
+
+^m12
+

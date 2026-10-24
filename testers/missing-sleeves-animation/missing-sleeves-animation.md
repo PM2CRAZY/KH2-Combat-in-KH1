@@ -15,7 +15,6 @@
 - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](#^m9)
 - [10. Assistant: t453. Sorry I missed your message last round; it should have](#^m10)
 - [11. Assistant: I went through the KH2 Steam decomp step by step, from where](#^m11)
-- [12. Assistant: Got your test here too: the automatic round picked it up fro](#^m12)
 
 ---
 
@@ -201,7 +200,6 @@ go ahead
 > I also noticed KH1 may blend between animations differently from KH2: KH2 always turns the short way, and I haven't confirmed KH1 does. I'll check that next and tell you if it differs.
 
 ^m11
-
 
 
 to answer your last response, removing the test:

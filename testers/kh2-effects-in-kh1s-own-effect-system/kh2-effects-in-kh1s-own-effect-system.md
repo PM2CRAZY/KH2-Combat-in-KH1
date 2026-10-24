@@ -20,6 +20,7 @@
 - [14. Mr Bugs: 1. (b) (I'm unsure the affects of this as I noticed reflect ](#^m14)
 - [15. Assistant: t454 to t456.](#^m15)
 - [16. Assistant: t466 to t472 (one change each). Your log was from t463, so t](#^m16)
+- [17. Assistant: t481, t482 and t483. Your traces and logs hadn't reached the](#^m17)
 
 ---
 
@@ -411,3 +412,22 @@ do the check
 3. it isn't changed
 
 go ahead
+
+
+> [!tip] Assistant
+> **t481, t482 and t483.** Your traces and logs hadn't reached the thread folder, so I worked from the decomps, the KH2 spell files and the t478 log on the PC.
+>
+> 1. **t481, Blizzard sideways.** I found the cause in KH1's own code. When KH1 sets an effect's direction from a matrix, it reads the angles back in a way that doesn't match how it turns them into a direction again (KH1's apply `0x1402ADB40` and its angle read `0x1402A8EF0`, read in the Steam exe). So anything we handed it came out turned: the front pointed to the side, upside down. Blizzard's shard is aimed by its script every frame, so it flew sideways. We now hand KH1 the matrix pre-turned, so it ends up exactly as KH2's script aims it. Wisdom's shots and Reflect's hit flashes go through the same path, so they change too.
+> 2. **t482, Reflect off to the side (1b) and Firaga's one flame.** The same quirk was behind both. The quarter turn I added earlier for effects on Sora's root was based on the wrong frame; with KH1's turn counted in, KH1's root frame already matches KH2's exactly, so that quarter turn is gone and Reflect's pieces should sit around his raised hands again. For Firaga, the pieces placed only by position on his root had their height flipped: the fire ring at his chest and its other pieces were drawn 70 to 220 units under his feet, inside the floor. The one flame you saw was the Keyblade tip's. Firaga's ring is three spinning rings with two flame trails each, and they should all show now. This also changes Explosion's burst, the forms' root effects and Cure's pieces, which were turned the same way.
+> 3. **t483, Reflect's size (2a).** Reflect's pieces (their places around him and their size) are scaled to KH1 Sora, about 89% of KH2. The barrier's blocking area is unchanged.
+>
+> Checked: KH1's exe (the angle code) and decomp; the t478 log (an effect on Sora's root confirms the turn); KH2's exe and decomp for the direction trap; KH2's spell files (I ran the Fire and Blizzard 3 scripts and read Firaga's ring). Not tested in game.
+>
+> Please test: Blizzard's shard (does it point the way it flies?), Firaga's ring (all the flames, at chest height, spinning), Reflect's place and size, and a quick look at Explosion's burst and the forms' root effects. A log after casting Fire, Blizzard and Reflect would let me check the new "origin" lines against KH2's numbers.
+>
+> Questions:
+> 1. Effects stuck to Sora's bones and the Keyblade go through the same KH1 code, so they may be turned the same way. From your play: (a) they look right, leave them; (b) something on his hands or Keyblade looks turned: send a log and I'll measure it the way I did for the root; (c) apply the same fix to them now (I can't confirm yet whether KH1's bones already make up for it).
+> 2. Reflect's blocking area is still KH2's size: (a) leave it (gameplay stays KH2's), or (b) scale it to KH1 Sora like the visuals?
+
+^m17
+

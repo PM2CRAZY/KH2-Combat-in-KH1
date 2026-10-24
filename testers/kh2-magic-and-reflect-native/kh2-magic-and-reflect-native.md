@@ -7,6 +7,7 @@
 - [1. Mr Bugs: start working on "- KH2 magic and Reflect: a borrow, plus ou](#^m1)
 - [2. Assistant: Moved here from "What is still missing", so that thread stay](#^m2)
 - [3. Assistant: t477 and t478. Started on native magic.](#^m3)
+- [4. Assistant: t484 to t487. The first batch from your answers, one system ](#^m4)
 
 ---
 
@@ -56,3 +57,28 @@
 6.(b)
 
 go ahead
+
+
+> [!tip] Assistant
+> **t484 to t487.** The first batch from your answers, one system per version:
+>
+> - **t484, MP (6b).** Base Sora's KH2 spells now cost KH2's share of his MP: Fire 12%, Blizzard 15%, Thunder 18%, Reflect 10%, and Cure takes all of it. It's measured against KH1's max MP and paid through KH1's own MP payment, so the yellow charge part goes first, then the bars. Drive Forms still cost 1 MP (your exception). Checked: the costs in KH2's files, KH1's payment and MP check in the decomp. One gap: KH1's menu still greys a spell by KH1's own cost, so a spell you can afford at KH2's price can still show grey.
+> - **t485, Cure row (5).** Config > KH1 in KH2 > Combat > Magic has a Cure row (ini `cure_style`, KH2 by default). KH2 casts KH2's Cure. KH1 casts KH1's own Cure on KH2's Cure animation, the way Gravity, Stop and Aero work with Magic on KH2. The row only matters with Magic set to KH2.
+> - **t486, the combo (1a).** A cast now counts as a step of KH1's combo and the combo carries on after it, on KH2's timing from the files:
+>   - From KH2's reaction window (Fire 30, Blizzard 24, Thunder/Cure 26, air casts 36 to 44) an Attack goes on with the combo, and jump or Square cut the cast. The stick alone doesn't, as in KH2.
+>   - Another spell can follow only inside KH2's magic window: Fire 34 to 46 and from 60, Thunder/Cure from 42, never for Blizzard or the air casts.
+>   - A finisher cast ends the combo. Finishing Plus after a finisher cast isn't done yet.
+>   Checked KH1's Attack step in the decomp.
+> - **t487, air casts (2a, physics KH2, Drive Forms unchanged).** An air cast stops him as KH2's does: no sideways speed, no more rise; he drops from rest at KH2's gravity until the cast's hover frames, hovers, then falls. KH1's own air cast kept 70% of his speed and the rise. Ground casts are unchanged (I'm assuming KH1 doesn't move him during them).
+> - **Reflect (4c):** kept as it is, still blocking every hit.
+> - **Spell hits (3):** not built yet. I went through KH1's hit pass and (b) is cheap: a few extra spheres a frame in KH1's own code. The real limit is KH1's 64-slot attack pool, which enemies share, so it'll be (b) with several spheres sharing one hit, next round. The plan is in `docs/kh1-magic-native.md` §7.
+>
+> None of this is tested in game. Please test: the MP drain at a few MP levels (Cure with very little MP too), both Cure settings, Attack / jump / Square out of each cast and spell into spell, a cast mid-combo and as the finisher, and an air cast mid-jump.
+>
+> Questions:
+> 1. KH2 Cure's heal amount (your answer 5 picked the menu, not the formula). Right now it heals a share of max HP. Should it be (a) KH2's formula with max MP standing in for Magic, (b) KH1's Cure amount, or (c) left as it is?
+> 2. Cure on KH1: (a) KH1's Cure on KH2's Cure animation (as built), or (b) KH1's whole cast, its own animation too?
+> 3. Menu greying by KH2's cost: (a) fix it next (a hook on KH1's usable check), or (b) leave it?
+
+^m4
+
