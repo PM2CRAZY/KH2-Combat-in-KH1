@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: You asked for this in Quick Run native(../quick-run-native/q](#^m1)
+- [2. Assistant: Later in the same round (no new build):](#^m2)
 
 ---
 
@@ -43,4 +44,12 @@
 > | Every other thread | waiting for your reply to my last message there |
 
 ^m1
+
+
+> [!tip] Assistant
+> Later in the same round (no new build):
+> - [KH2 magic and Reflect native](../kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md): research on air casts for both physics settings, and on Cure KH1. Needs 2 answers and a "go ahead".
+> - [KH2 Glide in KH1's glide state](../kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md): my take on your three answers. Needs a "go ahead".
+
+^m2
 

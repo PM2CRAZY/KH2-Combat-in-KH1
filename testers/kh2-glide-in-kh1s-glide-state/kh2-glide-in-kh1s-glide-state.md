@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: Here's what I think:](#^m2)
 
 ---
 
@@ -54,3 +55,15 @@
 1. unsure I was thinking b was the best way while letting neverland and area objects see kh2s hover but tell me what you think
 2. (b) until you find the wall rule
 3. unsure what area objects are, option (a) but tell me what you think
+> [!tip] Assistant
+> Here's what I think:
+>
+> 1. **The hover.** I'd go with (a): the hover as a sub-mode inside KH1's glide state 0x15, which gets you what you were after with (b). Neverland's flight check and the area objects only look for state 0x15. A separate state for the hover would be invisible to them unless I also changed each of those checks. As a sub-mode, they see the hover as a glide with no extra work: you can still go into flight from it in Neverland, and an object that ends a glide ends the hover too. Underneath it's still KH2's hover (motion 208, KH2's slow-down and its switch back to the glide when you push the stick).
+> 2. **Walls:** (b) then. The glide keeps going and slides along the wall until I find KH2's own rule. When I do, I'll tell you what it is before changing anything.
+> 3. **Area objects.** These are invisible zones built into some rooms, KH1 collision pieces with a "glide" flag (`0x1401CF9E0`, `0x1401CD050`). When Sora flies into one in the air, KH1 itself starts his glide or Superglide, and some of them end it. I don't know yet which rooms have them; I'll log every time one fires so we find out. I agree with (a): at Glide KH2 they start and end KH2's glide, so a room that glides you somewhere still works.
+>
+> If that sounds right, write "go ahead" and I'll build the plan from my last message, one version each: the start, the step, the turn and animations, the end, then taking the borrow out. The hover sub-mode comes with the start.
+
+^m2
+
+

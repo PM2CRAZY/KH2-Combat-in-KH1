@@ -8,6 +8,7 @@
 - [2. Assistant: Moved here from "What is still missing", so that thread stay](#^m2)
 - [3. Assistant: t477 and t478. Started on native magic.](#^m3)
 - [4. Assistant: t484 to t487. The first batch from your answers, one system ](#^m4)
+- [5. Assistant: Thanks, that clears up Cure. With the Cure row at KH1 you'll](#^m5)
 
 ---
 
@@ -88,3 +89,34 @@ go ahead
    reflect currently does not behave properly for kh1 physics, please see how casting is done in the air physics wise to get the same for kh1, as for kh2 please check the c steam decomp to fix and find any issues with the physics, it was adjusted on the main branch but its not accurate to how kh2 does reflect in the air. 
    
    
+> [!tip] Assistant
+> Thanks, that clears up Cure. With the Cure row at KH1 you'll get KH1's whole Cure: its own animation, its effects and KH1's cost. Right now it's KH1's Cure drawn on KH2's Cure animation. With the row at KH2 it's KH2's Cure all the way through, and its heal will be KH2's formula (that was the question 1 left open). As always, the Physics row decides how he moves while casting.
+>
+> I went back through both decomps for air casts, and my last note was wrong about KH1:
+> - **KH1's own air cast** doesn't keep 70% of your speed or your jump's rise. It halves your sideways speed and gives you a fresh 30-unit hop from wherever you are, then KH1's normal fall, with no hover. Touching down cuts the cast into KH1's landing (`0x1402A3600` → `0x1402AF960`; the 30 and the 0.5 are in btltbl).
+> - Fire, Blizzard, Thunder and Cure already do exactly that at Physics KH1. **Reflect doesn't**, because it's still cast by KH2's controller: it stops you dead, skips the hop, drifts with KH2's drag and lands in KH2's landing. That's what you're seeing.
+> - **KH2's air cast** isn't what we built in t487 either:
+>   - KH2 pops you up 40 units (sstm's "magic jump", 40.0) and keeps your sideways momentum, letting it fade by 0.95 a tick (`0x1403C5170` → `0x140409B00` → `0x1403CBC30`).
+>   - It then holds you for the cast's hover frames (16 to 74 for Reflect). The arc's clock keeps running during the hover, so once it ends you drop at full fall speed straight away.
+>   - Landing during the cast cuts into KH2's landing.
+> - **Ours at Physics KH2** stops you, drops you from rest until the hover, starts the fall gently again afterwards, and Reflect keeps playing on the ground if you land.
+>
+> The full comparison is in `docs/kh1-magic-native.md` §4e.
+>
+> **The plan, one version each:**
+> 1. Cure KH1 as KH1's whole cast.
+> 2. Reflect moved onto KH1's own cast state like the other spells, no more KH2 controller. That alone makes it exactly KH1 at Physics KH1.
+> 3. KH2's 40 hop and kept momentum at Physics KH2, for every air cast.
+> 4. KH2's hover with the clock running, so the fall after it is KH2's.
+> 5. Landing mid-cast cuts like KH2.
+> 6. Next after that: the menu greying spells by KH1's cost instead of KH2's (question 3 last time; I'll take it as "fix it" unless you say otherwise).
+>
+> Questions:
+> 1. The hover's running clock: (a) only for spells, (b) also for KH2's moves with the same kind of hover (Aerial Dive, Finishing Leap), whose falls would change too, or (c) leave hovers as they are?
+> 2. Landing in the middle of an air cast at Physics KH2: (a) KH2's landing animation, (b) KH1's landing, or (c) follow the Misc Animations row?
+>
+> Say "go ahead" with your answers and I'll start with Cure and Reflect.
+
+^m5
+
+
