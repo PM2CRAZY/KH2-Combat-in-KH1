@@ -70,6 +70,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [10. Assistant: t450 to t452. Sorry, I missed your answers last round. Here ](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m10)
   - [11. Assistant: Thanks. Nothing in this thread is waiting on a go-ahead righ](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m11)
   - [12. Assistant: I went back through everything in this thread against KH2's ](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m12)
+  - [13. Assistant: Got it. Here's what I found for each, so you can give the go](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m13)
 - [KH2 effects in KH1's own effect system](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md)
   - [1. Mr Bugs: from chat-history-log.md (kh2 moves hitbox effect bugs)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m1)
   - [2. Assistant: t376](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m2)

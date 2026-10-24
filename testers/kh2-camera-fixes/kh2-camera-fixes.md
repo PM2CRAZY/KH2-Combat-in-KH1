@@ -16,6 +16,7 @@
 - [10. Assistant: t450 to t452. Sorry, I missed your answers last round. Here ](#^m10)
 - [11. Assistant: Thanks. Nothing in this thread is waiting on a go-ahead righ](#^m11)
 - [12. Assistant: I went back through everything in this thread against KH2's ](#^m12)
+- [13. Assistant: Got it. Here's what I found for each, so you can give the go](#^m13)
 
 ---
 
@@ -200,8 +201,23 @@ if you think everything is one to one then close this thread, if not let me know
 
 ^m12
 
+
 1. (a)
 2. (a) but make it a toggle in the cameras config menu
 3. keep  (a) 
    
    one thing about our design, we need to keep everything that kh1 can do in tact without breaking or changing how kh1 plays, if all settings are set to kh1 with our new systems and it still feels like kh1 then we succeeded, the exception is when kh2 systems that are native interact with kh1s. we need to add missing features to kh1s engine and still keep features that were taken out of kh1s engine when they ported everything to kh2. both systems need to be native both need to be combined when they can, both need to share the same systems (like how effects added more calls so kh2s render can work properly) and if there's a critical design choice that affects game feel, then we can make it a toggle for the player to change.  
+
+> [!tip] Assistant
+> Got it. Here's what I found for each, so you can give the go-ahead.
+>
+> 1. **Lock-on side kick, (a).** I found KH2's exact rule in the Steam decomp (`0x140176EC0`, with its screen test `0x140176710`). The enemy is tested first and Sora only if the enemy is still on screen. If it went off by the **left** edge, the camera's goal is turned **+20°**; off by the **right** edge, **−20°**. If it's off both at once, left wins. If it only left by the top or bottom, there's no kick, just the usual swing behind. Ours instead picks the direction from the way the camera was already turning, and I'd switch it to KH2's rule. The only part I can't be sure of from the code is whether KH2's "+" turns the same way as ours, though both use the same yaw formula, so I expect it does. A short trace afterwards would settle it: lock on, then let the enemy leave by the left edge once and the right edge once.
+> 2. **L2 and the right stick, (a) as a toggle.** In KH1, even with the mod, L2 does nothing for the camera. The only use I found is that pressing L2 (or R2) drops KH1's small soft-target cursor (`0x1402B11B0`), and KH2's rule doesn't touch that. So nothing clashes. The plan: a new row on the Config menu's Camera page, **"L2 Camera Hold: On / Off"**. With it On and L2 held, the right stick doesn't move the KH2 camera and R3 doesn't reset it, as in KH2. One question: should the right stick under L2 do anything else, like KH2's d-pad use (moving the command menu cursor)? (a) yes, copy that too; (b) no, just stop the camera. Also, which default? (c) On, KH2's way; (d) Off.
+> 3. **Camera distance:** staying at 89%, as you said.
+>
+> On your design note: understood, and it matches how I've been working. With every row on KH1, KH1 should play exactly as it does without the mod. Where KH2's systems meet KH1's, they share KH1's systems, the way the effects did. KH1's own features stay, and KH2's missing ones are added to KH1's engine. A design choice that changes the feel gets a toggle. Point 2 is an example: a row instead of changing the camera for everyone.
+>
+> Write "go ahead" (with your picks for the L2 questions) and I'll build 1 and 2 as one version each.
+
+^m13
+
