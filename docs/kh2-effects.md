@@ -1572,7 +1572,9 @@ elements; **Checked (files)**):
   texcommon's), relocated and plugged on first use (since §18.12: as soon as it is built, and the
   common textures shared). `kh2ppp::plug` now only ever turns a "plugged
   in" flag on, so a second DPX without, say, MegaBirth words doesn't turn it off.
-- The Keyblade's package (`obj/W_EX010.a.us`, its first PAX): its vanish flash (element 0,
+- The Keyblade's package (`obj/W_EX010.a.us`, its first PAX): only its vanish flash is built
+  (the only element that plays; the t430 log's DPX held all four of its effects, 616,048 bytes,
+  and its element 10 was left out as a two-point element). Its vanish flash (element 0,
   `kh2fx::weapon_vanish`, started as KH2 puts the Keyblade away, before KH1's put-away). Its
   bones are the weapon skeleton's; KH2's own call of the flash isn't traced, and `kh2fx` put every
   code half way along the blade turned as the hand. Through KH1: the point half way along KH1's

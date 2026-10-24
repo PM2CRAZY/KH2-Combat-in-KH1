@@ -969,8 +969,9 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         (pax.data, pax.data.as_ptr() as usize - pack.as_ptr() as usize)
     };
     let parsed = kh2_formats::pax::Pax::parse(pax_data).map_err(|e| e.to_string())?;
-    // The elements built: the sets' (and with `rest` every one), the first with each id.
-    let wanted = |el: i16| s.rest || s.sets.iter().any(|set| set.contains(&el));
+    // The elements built: the sets' (and with `rest` every one), the first with each id; only
+    // those switched on (`on`), the others never play (the Keyblade's: its vanish flash alone).
+    let wanted = |el: i16| s.on.is_none_or(|on| on.contains(&el)) && (s.rest || s.sets.iter().any(|set| set.contains(&el)));
     let mut layers: Vec<Layer> = Vec::new();
     let mut variants: Vec<kh2_formats::kh1dpx::Variant> = Vec::new();
     let mut left = Vec::new();
@@ -981,9 +982,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         }
         match layer(pax_data, &parsed, el, s.anchor, s.ignore, s.effect_point) {
             Ok((l, v, note)) => {
-                if s.on.is_none_or(|on| on.contains(&el)) {
-                    log(&format!("KH2 effects (native): {}: {note}", s.label));
-                }
+                log(&format!("KH2 effects (native): {}: {note}", s.label));
                 layers.push(l);
                 variants.push(v);
             }

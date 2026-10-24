@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 440 (testing branch: KH2 effects: only the elements that play are built)
+- **KH2 effects: only the elements that play are built.** The Keyblade's package: its vanish flash (t430: 4 effects, 616,048 bytes). Notes §18.7.
+
 ### 2026-10-23: Stage 439 (testing branch: KH2 effects: KH2's 0x4009 point)
 - **KH2 effects: KH2's 0x4009 point.** t430 log (Cure 3: 3, 4). KH2 = object turn at the first enabled kind-9 shape's centre (`0x1403B50F0`, Checked (decomp); kind 9 is read nowhere else); Sora's lift 105 on the root (Checked (files)). KH1 0x8000 with the offset moved (`effect_point_of`). Notes §18.16.
 
