@@ -19,12 +19,16 @@
 //! Second Chance, at least 1). Nothing is rewritten after the fact (`combat::scale_record`'s
 //! damage part and its carried fractions are off while this is in).
 //!
+//! The Criticals row (the tester: "make it a config selection (criticals on or off for all moves
+//! that call it)"): Off, KH1's critical roll on Sora's attacks has no chance (the attack's
+//! `+0x94` read as 0 for the call; KH2 has no critical hits).
+//!
 //! Cost: one hook, called once per hit record; a table of at most 256 u16 built per KH2 hit.
 
 use super::addr::Build;
 use super::log;
 use super::sys::*;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 /// KH1's damage function (Steam).
 const DAMAGE_STEAM: usize = 0x2BFA80;
@@ -32,9 +36,10 @@ const DAMAGE_STEAM: usize = 0x2BFA80;
 const DAMAGE_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
 /// The pointer to KH1's damage curve (Steam).
 const CURVE_PTR_STEAM: usize = 0x2DE5DC0;
-/// The attack object: owner handle, data handle.
+/// The attack object: owner handle, data handle, critical chance (f32).
 const ATTACK_OWNER: usize = 0x34;
 const ATTACK_DATA: usize = 0x5C;
+const ATTACK_CRIT_CHANCE: usize = 0x94;
 /// The attack data's bone (0x30: the weapon, Sora's Keyblade swings).
 const DATA_BONE: usize = 0x10;
 const WEAPON_BONE: u32 = 0x30;
@@ -44,6 +49,8 @@ const CURVE_MAX: usize = 256;
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG: AtomicUsize = AtomicUsize::new(0);
 static ON: AtomicBool = AtomicBool::new(false);
+/// Criticals: 0 not read yet, 1 off, 2 on.
+static CRITS: AtomicU8 = AtomicU8::new(0);
 static LOGGED: AtomicU32 = AtomicU32::new(0);
 /// The scaled curve (count then values); only the game's thread runs the damage function.
 static mut CURVE: [u16; CURVE_MAX + 1] = [0; CURVE_MAX + 1];
@@ -61,6 +68,25 @@ pub fn active() -> bool {
     ON.load(Ordering::Relaxed) && super::settings::get().kh2_damage
 }
 
+/// The Config menu's Criticals row.
+pub fn criticals() -> bool {
+    match CRITS.load(Ordering::Relaxed) {
+        0 => {
+            let c = super::settings::get().criticals;
+            CRITS.store(1 + c as u8, Ordering::Relaxed);
+            c
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config menu's row: live, kept in the ini.
+pub fn set_criticals(on: bool) {
+    CRITS.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("criticals", if on { "on" } else { "off" });
+    log(&format!("Config menu: Criticals {}", if on { "On" } else { "Off" }));
+}
+
 /// Hooks KH1's damage function (Steam only; the hook checks its bytes first).
 pub unsafe fn install() {
     if Build::current() != Build::Steam {
@@ -68,7 +94,7 @@ pub unsafe fn install() {
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
-    if super::hook::install(base + DAMAGE_STEAM, &DAMAGE_PROLOGUE, damage as *const () as usize, &ORIG, "KH1's damage (KH2's power)").is_some() {
+    if super::hook::install(base + DAMAGE_STEAM, &DAMAGE_PROLOGUE, damage as *const () as usize, &ORIG, "KH1's damage (KH2's power, criticals)").is_some() {
         ON.store(true, Ordering::Relaxed);
     }
 }
@@ -98,6 +124,12 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
     if !mine {
         return f(attack, target, kind);
     }
+    // Criticals off: no chance for the call.
+    let crit = (!criticals()).then(|| {
+        let c = rd::<f32>(attack + ATTACK_CRIT_CHANCE);
+        wr(attack + ATTACK_CRIT_CHANCE, 0.0f32);
+        c
+    });
     let kh2 = if active() { kh2_power(attack, sora) } else { None };
     let base = BASE.load(Ordering::Relaxed);
     let at = base + CURVE_PTR_STEAM;
@@ -125,6 +157,9 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
     let d = f(attack, target, kind);
     if swapped {
         wr(at, kh1_curve);
+    }
+    if let Some(c) = crit {
+        wr(attack + ATTACK_CRIT_CHANCE, c);
     }
     if let Some((power, magic, from)) = kh2 {
         if LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {

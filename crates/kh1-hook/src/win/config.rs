@@ -176,6 +176,8 @@ enum Row {
     MediumHits,
     /// Guard Repel (KH1 | KH2, `combomods::repel_kh2`): what base Sora's KH2 guard does on a block.
     GuardRepel,
+    /// Criticals (Off | On, `kh2damage::criticals`).
+    Criticals,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -258,13 +260,14 @@ const CAMERA: [Item; 3] = [
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
     Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
 ];
-const COMBAT: [Item; 7] = [
+const COMBAT: [Item; 8] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
     Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
     Item::Pick([0x7F00_0142, 0x7F00_0002, 0x7F00_0144, 0x7F00_0003, 0x7F00_0143], Pick::KnockNumbers),
     Item::Set([0x7F00_0145, 0x7F00_0147, 0x7F00_0148, 0x7F00_0146], Row::MediumHits),
+    Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
 ];
 const MAGIC: [Item; 3] = [
@@ -291,7 +294,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 63] = [
+const STRINGS: [(u32, &str); 65] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -333,6 +336,8 @@ const STRINGS: [(u32, &str); 63] = [
     (0x7F00_0148, "Flinch"),
     (0x7F00_0170, "Guard Repel"),
     (0x7F00_0171, "When Sora's KH2 guard blocks: KH1's recoil (KH1)\nor KH2's repel and push back (KH2). Dodge Roll KH2."),
+    (0x7F00_0149, "Criticals"),
+    (0x7F00_014A, "KH1's critical hits on Sora's attacks (On), or none, as in KH2.\nCritical Plus only works with them On."),
     (0x7F00_011F, "Cure"),
     (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
     (0x7F00_0109, "Jump"),
@@ -370,6 +375,7 @@ fn value(what: Row) -> bool {
         Row::Debug => super::debugmenu::enabled(),
         Row::MediumHits => super::hitreact::medium_flinch(),
         Row::GuardRepel => super::combomods::repel_kh2(),
+        Row::Criticals => super::kh2damage::criticals(),
     }
 }
 
@@ -390,6 +396,7 @@ fn set(what: Row, v: bool) {
         Row::Debug => super::debugmenu::set_enabled(v),
         Row::MediumHits => super::hitreact::set_medium_flinch(v),
         Row::GuardRepel => super::combomods::set_repel_kh2(v),
+        Row::Criticals => super::kh2damage::set_criticals(v),
     }
 }
 

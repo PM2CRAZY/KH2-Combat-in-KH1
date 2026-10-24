@@ -201,3 +201,12 @@ in it feeling like kh2"; criticals a Config row; KH1's MP charge kept (a).
   KH1 data (they keep KH1's row's: physical, flinch, finisher launch, which agree with KH2's for
   Sora's plain combo), and KH2's own hit effect.
 
+## 8. Implemented: the Criticals row
+
+Config > KH1 in KH2 > Combat > Criticals: Off / On (ini `criticals`, default Off as KH2, which has
+none, §3). Off: for each attack of Sora's, the attack object's critical chance (`+0x94`, f32,
+compared with KH1's random roll in `0x1402BFA80`, Checked (decomp)) is 0 for the damage call and
+put back after; so no critical bonus, no record bit 0x20, no journal tally 8, and Critical Plus
+does nothing. On: KH1's critical as it is, KH2 hits included (the bonus is added to the power
+before the curve, then KH2's power applies). Enemies' and partners' attacks are left alone
+(**Assumption** that "all moves that call it" means Sora's).

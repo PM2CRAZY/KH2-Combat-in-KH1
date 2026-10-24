@@ -53,6 +53,9 @@ magic_scale = 1.0\r\n\
 ; kh2_damage: on = KH2's power goes into KH1's own damage function (KH1's curve x KH2's power,\r\n\
 ;   rounded up per hit as KH2); off = KH1's damage rewritten after the hit, as before\r\n\
 kh2_damage = on\r\n\
+; criticals: on = KH1's critical hits on Sora's attacks (Critical Plus); off = none, as in KH2\r\n\
+;   (the Config menu's Combat list switches it)\r\n\
+criticals = off\r\n\
 ; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
 glide = square\r\n\
 ; air_cast_fall: how fast Sora falls while Reflect plays in the air, a share of KH1's own\r\n\
@@ -232,6 +235,9 @@ pub struct Settings {
     pub magic_scale: f32,
     /// KH2's power inside KH1's damage function (`kh2_damage = on`, the default; `kh2damage`).
     pub kh2_damage: bool,
+    /// KH1's critical hits on Sora's attacks (`criticals = on`; off by default, as KH2;
+    /// `kh2damage::criticals`).
+    pub criticals: bool,
     /// Glide on Square (`glide = square`, default) or held jump (`glide = jump`).
     pub glide_on_square: bool,
     /// Gravity's share while a KH2 cast (Reflect) plays in the air, after its fall speed was
@@ -414,6 +420,7 @@ fn load(first: bool) -> Option<Settings> {
         air_cast_fall: setting(&text, "air_cast_fall").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v)).unwrap_or(AIR_CAST_FALL),
         magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
         kh2_damage: on(&text, "kh2_damage", "on", true),
+        criticals: on(&text, "criticals", "on", false),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         bonus_ap: on(&text, "bonus_ap", "on", true),
         auto_aim: on(&text, "auto_aim", "on", false),
