@@ -372,8 +372,8 @@
 
 ^m23
 
-I did notice on your previous build that if the cam 1  + cam 2 bit was running  then we could freely move the camera. Can you investigate why and implement a feature for the frame advance where you can toggle the cam movement on or off
 
+I did notice on your previous build that if the cam 1  + cam 2 bit was running  then we could freely move the camera. Can you investigate why and implement a feature for the frame advance where you can toggle the cam movement on or off
 
 
 1.unsure about gummi ships, will get back to you later 

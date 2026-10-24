@@ -243,6 +243,8 @@
 > 5. So: (a) KH2's combo rules on KH1's own picker (my pick), (b) KH2's picker for everything whenever a KH2 combo ability is equipped, or (c) keep handing those cases to KH2's controller for now?
 
 ^m14
+
+
 1. (a)
 2. (b)
 3. (b)

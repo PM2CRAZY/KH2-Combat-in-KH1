@@ -14,6 +14,7 @@
 - [8. Assistant: t413 and t414](#^m8)
 - [9. Mr Bugs: 1. check the decomp for both (steam gihidra c decomp)](#^m9)
 - [10. Assistant: t450 to t452. Sorry, I missed your answers last round. Here ](#^m10)
+- [11. Assistant: Thanks. Nothing in this thread is waiting on a go-ahead righ](#^m11)
 
 ---
 
@@ -161,6 +162,12 @@
 
 ^m10
 
+
 go ahead
 
+
+> [!tip] Assistant
+> Thanks. Nothing in this thread is waiting on a go-ahead right now: t450 to t452 (the mouse turn in first person, KH2's 30 fps follow, KH2's 70° look limits) are already in the build on GitHub. Give them a try and tell me how they feel, or what you'd like changed next.
+
+^m11
 

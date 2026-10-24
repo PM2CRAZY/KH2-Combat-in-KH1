@@ -349,6 +349,7 @@
 
 ^m15
 
+
 sent log and traces heres what I noticed: 
 
 thunder is squares
