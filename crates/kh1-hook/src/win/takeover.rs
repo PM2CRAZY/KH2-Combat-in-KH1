@@ -418,6 +418,8 @@ unsafe extern "system" fn physics(actor: usize) {
     }
     if sora && ON.load(Ordering::Relaxed) {
         super::shared::physics::install(BASE.load(Ordering::Relaxed));
+        // (Our Quick Run's state in KH1's table, `quickrun`.)
+        super::quickrun::install(BASE.load(Ordering::Relaxed));
     }
     let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
     if sora {
@@ -877,7 +879,7 @@ fn kh2_jump_open() -> bool {
 
 /// Square on the pad (or the keyboard): KH1's action bit, but not the one its held jump sets in
 /// the air (s247's filter).
-fn pad_square() -> bool {
+pub fn pad_square() -> bool {
     let base = BASE.load(Ordering::Relaxed);
     let raw = RAW_BUTTONS.load(Ordering::Relaxed) as u16 & SQUARE != 0;
     let held = if base == 0 { 0 } else { unsafe { rd::<u32>(base + BUTTONS_RVA + 4) } };
@@ -916,6 +918,29 @@ pub fn kh2_air_dodge_growth() -> Option<(f32, f32)> {
             v
         }
         None => LAST.lock().ok().and_then(|l| *l),
+    }
+}
+
+/// KH2's Quick Run numbers for Sora's Quick Run level now (`quickrun`, its native state): the
+/// level (1 LV1 .. 4 MAX) and its `fmab` record (KH2's start `0x1403A9830` reads `+0xC` the time,
+/// `+0x10` the speed, `+0x14` the brake, `+0x18` the stop brake, `+0x1C` the invulnerable frames;
+/// Checked (decomp)). The last answer while the controller is busy. `None` without Quick Run.
+pub fn kh2_quick_run_growth() -> Option<(u8, character_core::GrowthLevel)> {
+    static LAST: Mutex<Option<(u8, character_core::GrowthLevel)>> = Mutex::new(None);
+    let read = DRIVER.try_lock().ok().and_then(|d| {
+        d.as_ref().map(|d| {
+            let level = d.character.abilities.quick_run;
+            d.character.growth_level(level).cloned().filter(|g| g.quick_run_speed.is_finite() && g.quick_run_speed > 0.0).map(|g| (level, g))
+        })
+    });
+    match read {
+        Some(v) => {
+            if let Ok(mut l) = LAST.lock() {
+                *l = v.clone();
+            }
+            v
+        }
+        None => LAST.lock().ok().and_then(|l| l.clone()),
     }
 }
 
@@ -3690,7 +3715,8 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
 /// `FLIGHT_FLAG`; with 24 and 25 the states where jump means up, `0x140291660`'s 0x203000100
 /// mask). KH2 has none of these.
 fn kh1_mode(state: i32) -> bool {
-    state >= 29 || matches!(state, 24 | 25 | FLIGHT_STATE)
+    // (Not our Quick Run's state, `quickrun::STATE`: a state of ours in KH1's table, base Sora's.)
+    (state >= 29 && state != super::quickrun::STATE) || matches!(state, 24 | 25 | FLIGHT_STATE)
 }
 
 /// The same, for KH2's camera (KH1's own camera for the carpet, the slider and water). Not

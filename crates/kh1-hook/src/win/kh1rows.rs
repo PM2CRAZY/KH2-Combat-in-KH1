@@ -141,8 +141,11 @@ pub const NO_ROW: u8 = u8::MAX;
 /// Guard native, then Counterguard on its own KH1 row; `combomods::guard_press`): the guard press
 /// (row 11, motion 173, its request only), its repel (motion 42, no row, its request only, asked
 /// for when the guard stops a hit, `combomods::guard_repel`) and Counterguard (row 39, motion 171,
-/// ability 96: Attack during the repel, an attack row).
-pub const OURS: [Ours; 12] = [
+/// ability 96: Attack during the repel, an attack row). The Aerial Dodge (motion 202, its request
+/// only, `combomods::aerial_dodge`) and Quick Run (the tester, quick-run-native: its run 203 and its
+/// stop 204, their requests only, asked by our KH1 state for it, `quickrun`; KH1's ground swing as
+/// their template, its sounds left out).
+pub const OURS: [Ours; 14] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
@@ -155,6 +158,8 @@ pub const OURS: [Ours; 12] = [
     Ours { name: "Guard repel", kh2_row: NO_ROW, motion: character_core::motion::GUARD, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Counterguard", kh2_row: COUNTERGUARD_ROW, motion: 171, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Aerial Dodge", kh2_row: NO_ROW, motion: character_core::motion::AERIAL_DODGE, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: Some(AERIAL_DODGE_FRAMES), own_sounds: true },
+    Ours { name: "Quick Run", kh2_row: NO_ROW, motion: super::quickrun::RUN_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
+    Ours { name: "Quick Run stop", kh2_row: NO_ROW, motion: super::quickrun::STOP_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
 ];
 
 /// The Aerial Dodge's slot length (60 Hz frames): longer than any of its rises reaches its apex

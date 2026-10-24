@@ -32,6 +32,7 @@ mod menu;
 mod mpcost;
 mod model;
 mod pose;
+mod quickrun;
 mod settings;
 mod shared;
 mod shortcuts;
