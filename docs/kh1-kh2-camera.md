@@ -324,9 +324,8 @@ The tester, option (a): KH2's first-person view, natively. KH2's rules are in
     him with no spring (the view's yaw matches his facing every frame): "rigid". Eye 120 above
     the feet, the look point 100 ahead, FOV 53, KH1's 30-frame blend in and out, pitch held to
     80° up / 60° down.
-  - So ours already has what he describes for KH2 (the right stick, the smooth view). What the
-    decomp can't give is still KH2's pitch rate and limits (`0x140718bf4`, `0x140718bf8` /
-    `0x140718bfc`, exe data; ours 3° a frame, 80° up, 60° down). Also from the decomp (Checked):
+  - So ours already has what he describes for KH2 (the right stick, the smooth view). KH2's pitch rate and limits (`0x140718bf4`, `0x140718bf8` /
+    `0x140718bfc`, exe data) were read from the tester's Steam KH2 exe for t452: 3° a frame, 70° up and down (**Checked (exe)**). Also from the decomp (Checked):
     KH2's first person keeps the field FOV (the mode copies its row's `+0xe0` to the FOV goal,
     `0x140166100`, `0x140165a70`), and its wall test moves only the look point toward the eye
     (`0x140165700`, `0x140171210`), which doesn't change the view's direction.

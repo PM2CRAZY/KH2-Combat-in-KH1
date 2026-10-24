@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 452 (testing branch: KH2's first-person pitch rate and limits from KH2's exe)
+- **KH2's first-person pitch rate and limits from KH2's exe.** The tester ("check the decomp"; the values are exe data). Read from the tester's Steam KH2 exe (SHA-256 `9002b2de...49ed`; its `0x140165e30` reads them, Checked (exe)): `0x140718bf4` 3° a frame, `0x140718bf8` / `0x140718bfc` ±70°. `kh2_camera::FP_PITCH_*` (was KH1's 80° up / 60° down). `0x140718bf0` (the turn) is 3° too, as ours. Notes `camera-model.md`, `kh2-pad.md`.
+
 ### 2026-10-23: Stage 451 (testing branch: KH2's camera springs once a frame at 30 fps)
 - **KH2's camera springs once a frame at 30 fps.** The tester ("(a)"). `kh2_camera::settle`: one spring a frame, the rate halved when the step is under 2, whole from 2 (Steam KH2 `0x140165700`, Checked (decomp)); was two half springs. Keyboard / mouse at 30 fps closes about 91% of the gap a frame (was 75%); pad 17.5% (was about 16.7%). Notes `camera-model.md`.
 

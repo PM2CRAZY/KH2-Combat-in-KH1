@@ -132,7 +132,7 @@ Steam KH2: the entry in the follow update `0x140165110`, the mode `0x140165e30`,
   - The camera's own yaw is kept behind him (`0x140164e90`), so leaving puts the follow camera
     there.
   - The right stick's up / down turns the pitch by `tilt · axis · rate · step`, within limits.
-    The rate and the limits are exe data (`0x140718bf4`, `0x140718bf8` / `0x140718bfc`). R3
+    The rate and the limits are exe data: `0x140718bf4` = 0.0523599 (3° a frame), `0x140718bf8` / `0x140718bfc` = −1.2217305 / 1.2217305 (70° each way); **Checked (exe)**, read from the tester's Steam KH2 exe (SHA-256 `9002b2de...49ed`), whose `0x140165e30` reads them. R3
     (the reset button) levels it. Not while the player's kind has bit 3 (`0x1403babf0`;
     **Inferred:** a swimming player, see `kh2-pad.md`).
   - The rendered look point and eye spring to their goals as in every mode (`0x140165700`), so
@@ -144,8 +144,9 @@ Steam KH2: the entry in the follow update `0x140165110`, the mode `0x140165e30`,
   set to 0 and steps to 1 over 30 frames. The mode goes back to the follow camera.
 - **Ours** (`kh2-camera` `update_first_person`, `kh1-hook` `camera.rs`, `docs/kh1-kh2-camera.md`
   9c):
-  - **Assumption:** the pitch rate and limits are KH1's own first person's (3° a frame at full
-    tilt, 80° up, 60° down; Steam KH1 `0x1401E2390`).
+  - The pitch rate and limits are KH2's (3° a frame at full tilt, 70° up and down; from t452,
+    **Checked (exe)**). KH1's own first person's were the stand-in (3° a frame, 80° up, 60°
+    down; Steam KH1 `0x1401E2390`).
   - **Assumption:** the turn bits are the right stick's left / right (the pitch is the right
     stick's up / down, and the player can't move).
   - **Ours:** stick up looks up; right turns him right. The game's signs aren't readable here.

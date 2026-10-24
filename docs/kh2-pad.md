@@ -55,9 +55,7 @@ controller none of them runs. Checked (decomp), Steam KH2:
 - **Not mouse-only:** the dead zone 60, the swing's rate (`0x140718be8` / `0x140718bec`), the
   reset, the cut, the walls.
 
-The controller's turn constant `0x140718bf0` is exe data (not in the decomp). Ours, 3° a frame
-at full tilt, is the OG rewrite's reading of the Epic exe ("Checked (exe)" in
-`camera-model.md`).
+The controller's turn constant `0x140718bf0` is exe data (not in the decomp): 0.0523599, 3° a frame at full tilt, read from the tester's Steam KH2 exe (SHA-256 `9002b2de...49ed`, **Checked (exe)**), the same as ours (the OG rewrite's reading of the Epic exe).
 
 ### Ours against it (checked t380-t384 for mouse leaks)
 

@@ -141,12 +141,14 @@ pub struct Camera {
 
 /// First person (Steam KH2 `0x140165e30`): the look point is this far ahead of the eye.
 pub const FP_AHEAD: f32 = 350.0;
-/// First person: pitch speed at full tilt, and its limits up / down (radians). KH2's are exe
-/// data (`0x140718bf4`, `0x140718bf8` / `0x140718bfc`), not in the decomp: these are KH1's own
-/// first-person numbers (Steam KH1 `0x1401E2390`: 3° a frame, 80° up, 60° down), stand-ins.
-pub const FP_PITCH_RATE: f32 = 0.052_359_9;
-pub const FP_PITCH_UP: f32 = 1.396_263_4;
-pub const FP_PITCH_DOWN: f32 = 1.047_197_6;
+/// First person: pitch speed at full tilt, and its limits up / down (radians). KH2's exe data,
+/// read from the tester's Steam KH2 exe (the function `0x140165e30` reads them there, Checked
+/// (exe)): the rate `0x140718bf4` = 0.0523599 (3° a frame), the limits `0x140718bf8` = −1.2217305
+/// and `0x140718bfc` = 1.2217305 (70° each way). KH1's own are 3° a frame, 80° up, 60° down
+/// (Steam KH1 `0x1401E2390`).
+pub const FP_PITCH_RATE: f32 = 0.052_359_88;
+pub const FP_PITCH_UP: f32 = 1.221_730_5;
+pub const FP_PITCH_DOWN: f32 = 1.221_730_5;
 
 /// `approach_angle` (exe): turn `cur` toward `goal` by at most `step`.
 pub fn approach_angle(cur: f32, goal: f32, step: f32) -> f32 {
