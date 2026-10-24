@@ -622,14 +622,26 @@ fn desired() -> Vec<(Pkg, String)> {
         return Vec::new();
     }
     let mut v = vec![(Pkg::Sora, sora_sig()), (Pkg::Weapon, String::new())];
+    // A form's package from the moment Sora could change into it (MP for it, out of a form), so it
+    // is built and entered before the change: none of its effects waits for it. In a form (or
+    // changing), that form's alone.
     let form = super::form::current().or_else(super::form::arriving);
-    if s.drive {
-        match form {
-            Some(super::form::Kind::Valor) => v.push((Pkg::Valor, String::new())),
-            Some(super::form::Kind::Final) => v.push((Pkg::Final, String::new())),
-            Some(super::form::Kind::Wisdom) => v.push((Pkg::Spell(super::kh2fx::WISDOM), String::new())),
-            None => {}
-        }
+    let forms: Vec<super::form::Kind> = if !s.drive {
+        Vec::new()
+    } else if let Some(f) = form {
+        vec![f]
+    } else {
+        unsafe { super::form::possible(super::takeover::sora_actor()) }
+    };
+    for f in &forms {
+        v.push((
+            match f {
+                super::form::Kind::Valor => Pkg::Valor,
+                super::form::Kind::Final => Pkg::Final,
+                super::form::Kind::Wisdom => Pkg::Spell(super::kh2fx::WISDOM),
+            },
+            String::new(),
+        ));
     }
     // (The spell packages play through KH1 on Steam only.)
     if super::addr::Build::current() == super::addr::Build::Steam {
@@ -638,7 +650,7 @@ fn desired() -> Vec<(Pkg, String)> {
         }
         use super::styles::{kh2, Kind};
         let base = kh2(Kind::Magic) || kh2(Kind::AirMagic);
-        let wisdom = s.drive && form == Some(super::form::Kind::Wisdom);
+        let wisdom = forms.contains(&super::form::Kind::Wisdom);
         for spell in 0..4u8 {
             if base || (wisdom && spell <= 2) {
                 let level = unsafe { super::reflect::kh1_spell_level(spell) };

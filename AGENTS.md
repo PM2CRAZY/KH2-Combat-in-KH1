@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 443 (testing branch: KH2 effects: a form's package built once Sora could change into it)
+- **KH2 effects: a form's package built once Sora could change into it.** `form::possible` (MP, data, Valor's Keyblade read without writing). Notes §18.12.
+
 ### 2026-10-23: Stage 442 (testing branch: KH2 effects: unbound position-only elements through KH1)
 - **KH2 effects: unbound position-only elements through KH1.** Mode-1 start, place set from `by_position_now`, disarmed. Checked (exe). Notes §18.7.
 

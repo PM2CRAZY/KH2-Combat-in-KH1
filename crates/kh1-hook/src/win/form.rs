@@ -283,6 +283,20 @@ pub unsafe fn usable(sora: usize, kind: Kind) -> bool {
     pose::kh2().is_some_and(|k| kind.data(k).is_some()) && (super::takeover::kh2_has() || super::takeover::kh1_cut_window() || super::shared::active()) && sora > 0x10000 && mp(sora) > COST_MP && own_needs(kind).is_ok()
 }
 
+/// The forms Sora could change into from now on (`kh2dpx`, to have their effects built before
+/// he does): out of a form and not changing, each form whose data loaded, with MP for it and what
+/// it needs itself (`usable` without the frame's own conditions: KH2 having him, KH1's cut window;
+/// Valor's second Keyblade read without `valor::keyblade`'s save write and log).
+pub unsafe fn possible(sora: usize) -> Vec<Kind> {
+    if in_form() || busy() || sora < 0x10000 || mp(sora) <= COST_MP {
+        return Vec::new();
+    }
+    let Some(k) = pose::kh2() else { return Vec::new() };
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let needs = |kind: Kind| kind != Kind::Valor || super::equip::valor_keyblade(base).is_some();
+    Kind::EVERY.into_iter().filter(|&kind| kind.data(k).is_some() && needs(kind)).collect()
+}
+
 /// What a form needs besides MP: Valor its second Keyblade (`valor::keyblade`).
 unsafe fn own_needs(kind: Kind) -> Result<(), String> {
     match kind {

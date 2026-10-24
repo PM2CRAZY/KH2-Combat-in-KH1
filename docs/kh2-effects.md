@@ -1743,8 +1743,11 @@ can play.
   decommitted when freed.
 - **When** (`desired`, checked every 30 frames and at once when the form changes): Sora's (the
   moves `kh2_effects` allows, the Drive motion, Revert; rebuilt if that setting is reloaded) and
-  the Keyblade's always; Valor's, Final's or Wisdom's archive from the Drive command (the 39-frame
-  Drive motion runs while it builds) until reverted; Reflect's level Sora has; Fire, Blizzard,
+  the Keyblade's always; Valor's, Final's and Wisdom's archive (with Wisdom's
+  spells) from the moment Sora could change into them (`form::possible`: out of a form, not
+  changing, MP for a form, its data loaded, Valor's second Keyblade), so each is built and
+  entered before he picks it; in a form, that form's alone, until reverted (it is the one
+  `arriving` from the Drive command on); Reflect's level Sora has; Fire, Blizzard,
   Thunder and Cure at KH1's level for each while base Sora's Magic styles are KH2's or he is in
   Wisdom (Fire, Blizzard, Thunder). A package is entered in KH1's loaded files (its own images
   copied to KH1, the common ones shared, KH1's relocation, KH2's programs plugged) right after it
