@@ -405,6 +405,23 @@ pub unsafe fn native(spell: u8, air: bool) -> bool {
 /// on, as KH1's Attack step counts and KH2's `swing_counts`, against KH1's ground combo length
 /// (stats `+0xD4`, `combomods`). In the air KH2 has no finisher cast.
 pub unsafe fn pick_cast(actor: usize, spell: u8, air: bool) {
+    let step = note_step(actor, air);
+    // (KH2 has no finisher cast in the air: the air cast's own motion, the step still the last.)
+    let finisher = !air && step.is_some_and(|s| s.1);
+    let ground = 0x36 + spell as usize;
+    let m = super::kh2slots::pick_cast(ground, finisher);
+    if spell == 0 {
+        super::kh2slots::pick_cast(0x3D, finisher);
+    }
+    if finisher {
+        log(&format!("KH2 magic {}: the combo's finisher, KH2's finisher cast {m:?}", SPELL_NAMES[spell as usize]));
+    }
+}
+
+/// The step of KH1's combo a cast starting now takes (KH2's `spell_slot`, `pick_cast`) and
+/// whether it is the combo's last, kept for the cast's start (`take_step`). Also for Reflect on
+/// KH1's cast state (`reflect::cast_native`).
+pub unsafe fn note_step(actor: usize, air: bool) -> Option<(u8, bool)> {
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     let stats = pose::ptr(rd::<u32>(actor + 0x6C));
     // The cast's step of the combo (KH2's `spell_slot`: in the air every step counts, KH2's
@@ -418,16 +435,7 @@ pub unsafe fn pick_cast(actor: usize, spell: u8, air: bool) {
         (step.min(255) as u8, step >= max)
     });
     CAST_STEP.store(step.map_or(0, |(s, last)| s as u32 | (last as u32) << 8 | 1 << 16), Ordering::Relaxed);
-    // (KH2 has no finisher cast in the air: the air cast's own motion, the step still the last.)
-    let finisher = !air && step.is_some_and(|s| s.1);
-    let ground = 0x36 + spell as usize;
-    let m = super::kh2slots::pick_cast(ground, finisher);
-    if spell == 0 {
-        super::kh2slots::pick_cast(0x3D, finisher);
-    }
-    if finisher {
-        log(&format!("KH2 magic {}: the combo's finisher, KH2's finisher cast {m:?}", SPELL_NAMES[spell as usize]));
-    }
+    step
 }
 
 /// The step `pick_cast` worked out for the native cast KH1's command step is about to start:
@@ -441,7 +449,7 @@ static CAST_STEP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::n
 /// it (`0x1402A7510`: one more inside the window when `+0x50` is set, Checked (decomp)). The
 /// combo's last step (a finisher cast, or the step at the length in the air) ends it: the count
 /// set to 0, so an Attack counted on there starts at 1 (a new combo, as KH2's after its finisher).
-unsafe fn take_step(actor: usize) {
+pub(super) unsafe fn take_step(actor: usize) {
     let v = CAST_STEP.swap(0, Ordering::Relaxed);
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     if v & 1 << 16 == 0 || info < 0x10000 {

@@ -57,6 +57,13 @@ pub enum Kind {
     Finisher,
     AirSwing,
     AirFinisher,
+    /// A spell cast of ours on KH1's cast state (KH2's Reflect, `reflect::cast_native`): KH1's
+    /// ground cast (Thunder's request 0x38, slot 56) as the template, its own request only.
+    Cast,
+    /// The combo's finisher cast (the same template).
+    CastFinisher,
+    /// The air cast (KH1's air Thunder, request 0x85, slot 81).
+    AirCast,
 }
 
 impl Kind {
@@ -67,6 +74,9 @@ impl Kind {
             Kind::Finisher => 8,
             Kind::AirSwing => 18,
             Kind::AirFinisher => 16,
+            // (A cast's row is never run, its request only: a swing's row for its data copy.)
+            Kind::Cast | Kind::CastFinisher => 13,
+            Kind::AirCast => 18,
         }
     }
 
@@ -77,6 +87,8 @@ impl Kind {
             Kind::Finisher => 0xCB,
             Kind::AirSwing => 0xCC,
             Kind::AirFinisher => 0xCE,
+            Kind::Cast | Kind::CastFinisher => 0x38,
+            Kind::AirCast => 0x85,
         }
     }
 
@@ -87,15 +99,23 @@ impl Kind {
             Kind::Finisher => 101,
             Kind::AirSwing => 102,
             Kind::AirFinisher => 104,
+            Kind::Cast | Kind::CastFinisher => 56,
+            Kind::AirCast => 81,
         }
     }
 
     pub fn air(self) -> bool {
-        matches!(self, Kind::AirSwing | Kind::AirFinisher)
+        matches!(self, Kind::AirSwing | Kind::AirFinisher | Kind::AirCast)
     }
 
     pub fn finisher(self) -> bool {
-        matches!(self, Kind::Finisher | Kind::AirFinisher)
+        matches!(self, Kind::Finisher | Kind::AirFinisher | Kind::CastFinisher)
+    }
+
+    /// A spell cast (`Cast`, `CastFinisher`, `AirCast`): built as a cast slot (`kh2slots`: KH2's
+    /// cast follow-ups, its cut and magic windows).
+    pub fn cast(self) -> bool {
+        matches!(self, Kind::Cast | Kind::CastFinisher | Kind::AirCast)
     }
 }
 
@@ -147,7 +167,11 @@ pub const NO_ROW: u8 = u8::MAX;
 /// their template, its sounds left out). KH2's glide hover (the tester, kh2-glide-in-kh1s-glide-state:
 /// motion 208, its request only, asked by KH1's glide state at Glide KH2, `glide`; KH1's air swing
 /// as its template, its sounds left out).
-pub const OURS: [Ours; 15] = [
+/// KH2's Reflect on KH1's cast state (the tester,
+/// kh2-magic-and-reflect-native m5 plan item 2; `reflect::cast_native`): its MAGC cast motions
+/// (Checked (files), every level: ground 71, combo finisher 72, air 73), their requests only, on
+/// KH1's Thunder cast slots 56 / 81 as templates (their sounds left out: KH2's own play).
+pub const OURS: [Ours; 18] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
@@ -163,6 +187,9 @@ pub const OURS: [Ours; 15] = [
     Ours { name: "Quick Run", kh2_row: NO_ROW, motion: super::quickrun::RUN_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
     Ours { name: "Quick Run stop", kh2_row: NO_ROW, motion: super::quickrun::STOP_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
     Ours { name: "Glide hover", kh2_row: NO_ROW, motion: character_core::motion::GLIDE_HOVER, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
+    Ours { name: "Reflect", kh2_row: NO_ROW, motion: super::reflect::GROUND_MOTION, kind: Kind::Cast, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
+    Ours { name: "Reflect (finisher)", kh2_row: NO_ROW, motion: super::reflect::FINISHER_MOTION, kind: Kind::CastFinisher, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
+    Ours { name: "Reflect (air)", kh2_row: NO_ROW, motion: super::reflect::AIR_MOTION, kind: Kind::AirCast, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
 ];
 
 /// The Aerial Dodge's slot length (60 Hz frames): longer than any of its rises reaches its apex

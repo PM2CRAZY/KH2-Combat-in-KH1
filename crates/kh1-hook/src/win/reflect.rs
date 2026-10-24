@@ -633,6 +633,146 @@ pub unsafe fn chosen(actor: usize) {
     ));
 }
 
+// ---------------------------------------------------------------- on KH1's cast state
+
+/// Reflect's MAGC cast motions (every level, Checked (files) `00battle.bin`): ground, the combo's
+/// finisher, air; each on a request of ours (`kh1rows::OURS`, slots `kh2slots`).
+pub const GROUND_MOTION: u16 = 71;
+pub const FINISHER_MOTION: u16 = 72;
+pub const AIR_MOTION: u16 = 73;
+
+/// KH1's (Steam, Checked (decomp)) command pre-step `0x1402A38E0 (actor, record, dir)` (the turn
+/// to a command's target, run by the command step `0x1402A7510` before every command), its air
+/// cast hop `0x1402AF960 (actor, height)` (state 2, a fresh rise of `height` from where he is),
+/// its vector scale `0x140386CD0 (out, in, k)`, the move direction's normalising copy
+/// `0x1402A93D0 (out, in)` (the ground cast's end, `0x1402A3DB0`), the btltbl block pointer
+/// `0x142D22D30` (`+0xE8` the air cast's hop, 30.0; `+0xF0` its sideways share, 0.5; Checked
+/// (files)) and the command record `0x142D53A40`.
+const PRE_STEP_STEAM: usize = 0x2A38E0;
+const HOP_STEAM: usize = 0x2AF960;
+const SCALE_STEAM: usize = 0x386CD0;
+const DIR_STEAM: usize = 0x2A93D0;
+const BTLTBL_STEAM: usize = 0x2D22D30;
+const COMMAND_STEAM: usize = 0x2D53A40;
+/// KH1's set-motion and queue (`0x14029F980` / `0x14029FA30` Steam: request, blend in XMM2).
+const SET_MOTION_RVA: Rva = Rva(0x29D7F0);
+const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
+
+/// Our request for one of Reflect's cast motions, if it is built (`kh1rows`, `kh2slots`).
+fn request_of(motion: u16) -> Option<u32> {
+    let n = super::kh1rows::by_motion(motion)?;
+    let r = super::kh1rows::request(n);
+    (super::kh1rows::installed() && super::kh2slots::has(r as usize, motion)).then_some(r)
+}
+
+/// Reflect can be cast on KH1's own cast state now (the tester, kh2-magic-and-reflect-native m5,
+/// plan item 2: "Reflect moved onto KH1's own cast state like the other spells, no more KH2
+/// controller"): Steam, base Sora in KH1's own states (`shared`), a state KH1 casts in (its
+/// ground cast in 0 / 6 / 0x18, its air cast in 2, `0x1402A3600`; state 8's cast turns to the
+/// target first, `0x1402A4150`, left to the borrow), our request of the cast motion built.
+pub unsafe fn native_ok(actor: usize) -> bool {
+    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || super::form::in_form() || !super::shared::active() || actor < 0x10000 {
+        return false;
+    }
+    match rd::<i32>(actor + 0x70) {
+        0 | 6 | 0x18 => request_of(GROUND_MOTION).is_some(),
+        2 => request_of(AIR_MOTION).is_some(),
+        _ => false,
+    }
+}
+
+/// KH1's command step got our Reflect with `native_ok` (`combat::command`): cast as KH1's command
+/// step casts a spell (`0x1402A3600`, Checked (decomp)), our request in place of KH1's `0x36 +
+/// spell` / `0x83 + spell` (KH1 has no spell 7 to ask for, its request ids for 7 are Fire's
+/// second parts 0x3D / 0x8A): the pre-step's turn; on the ground the cast request with KH1's
+/// action flag (bit 24) and the idle queued, then the move direction normalised with no length
+/// (`0x1402A3DB0`'s end); in the air the cast request, KH1's fall queued (request 6, blend 8),
+/// then KH1's hop of btltbl `+0xE8` (30) and its sideways speed × btltbl `+0xF0` (0.5). In place of
+/// KH1's spell start (`0x14028F140`), KH2's: the cost (`mpcost`), the combo step (KH2's
+/// `spell_slot`, on KH1's count, `formmagic::note_step` / `take_step`), KH2's finisher cast (72)
+/// when the step is the ground combo's last, the voice, and the level's script started on the
+/// next KH1 frame (`native_step`). KH1 has him all through: its states, its landing (the Jump
+/// row's look), its hits.
+pub unsafe fn cast_native(actor: usize, dir: usize) {
+    let base = base();
+    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
+    let Some(level) = cast_level(save) else {
+        return refuse(base, "its spell files aren't loaded");
+    };
+    if !affordable(base, actor) {
+        return refuse(base, &format!("MP {:?}, KH2's cost {:?} units", mp(actor), super::mpcost::units(actor, SPELL)));
+    }
+    let air = rd::<i32>(actor + 0x70) == 2;
+    let pre: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(base + PRE_STEP_STEAM);
+    if dir > 0x10000 {
+        pre(actor, base + COMMAND_STEAM, dir);
+    }
+    let step = super::formmagic::note_step(actor, air);
+    let finisher = !air && step.is_some_and(|s| s.1) && request_of(FINISHER_MOTION).is_some();
+    let motion = if air { AIR_MOTION } else if finisher { FINISHER_MOTION } else { GROUND_MOTION };
+    let Some(request) = request_of(motion) else { return refuse(base, "its cast motion isn't built") };
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+    let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
+    set(actor, request | 0x0100_0000, 0.0);
+    if air {
+        queue(actor, 0x4000_0006, 8.0);
+    } else {
+        queue(actor, 0x4000_0000, 0.0);
+    }
+    let before = mp(actor);
+    let cost = super::mpcost::pay(actor, SPELL);
+    if let Ok(mut g) = RT.lock() {
+        if let Some(rt) = runtime(&mut g) {
+            rt.fresh = Some((motion, finisher, level));
+            rt.started = Some(Instant::now());
+        }
+    }
+    super::formmagic::take_step(actor);
+    let block = rd::<u64>(base + BTLTBL_STEAM) as usize;
+    if air {
+        if block > 0x10000 && super::crash::readable(block + 0xF4) {
+            let hop: unsafe extern "system" fn(usize, f32) -> u32 = std::mem::transmute(base + HOP_STEAM);
+            let scale: unsafe extern "system" fn(usize, usize, f32) = std::mem::transmute(base + SCALE_STEAM);
+            hop(actor, rd::<f32>(block + 0xE8));
+            scale(actor + 0x3C0, actor + 0x3C0, rd::<f32>(block + 0xF0));
+        }
+        // (KH2's start at physics KH2, as for KH2's other spells, `shared::physics`.)
+        super::shared::physics::cast_stops(actor);
+    } else if dir > 0x10000 {
+        let norm: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + DIR_STEAM);
+        norm(dir, dir);
+        wr(dir + 0xC, 0.0f32);
+    }
+    // (The voice: as KH2's controller's cast had it, `before_step`.)
+    if finisher {
+        let v = magc(level).map(|r| r.voice_finisher).filter(|v| *v != 255).map_or(super::kh2sound::REFLECT_FINISHER_VOICE, |v| v as i16);
+        super::kh2sound::reflect_voice(v);
+    } else {
+        super::kh1voice::swing_grunt(actor);
+    }
+    note(format!(
+        "{} on KH1's cast state (level {level}): request {request:#x}, KH2 motion {motion}{}, step {step:?}, MP {before:?} -> {:?} ({cost:?} units)",
+        NAMES[(level - 1) as usize],
+        if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
+        mp(actor)
+    ));
+}
+
+/// KH2's frame of a Reflect cast on KH1's cast state (`takeover::native_spells`, each KH1 physics
+/// frame of base Sora's while `busy`): `out` the slot's KH2 motion at KH1's time in it and KH1's
+/// facing; the script as KH2's controller's casts run it (`step`), and Sora out of reach of KH1's
+/// hits through the cast and barrier (`intangible`), as `after_step` has it.
+pub unsafe fn native_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
+    step(actor, out, airborne, strikes, battle, lock);
+    let reflecting = BARRIER.load(Ordering::Relaxed) || (out.state == StateName::Magic && cast_motion(out.motion));
+    intangible(actor, reflecting);
+}
+
+/// Something of a Reflect's still runs or plays.
+pub fn busy() -> bool {
+    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| rt.fresh.is_some() || rt.casting.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
+}
+
 // ---------------------------------------------------------------- casting it
 
 
@@ -643,8 +783,9 @@ struct Runtime {
     levels: Vec<u8>,
     /// The cast just started (motion, finisher, level): the script starts with this frame's world.
     fresh: Option<(u16, bool, u8)>,
-    /// The cast motion waiting for its magic-cast event.
-    casting: Option<u16>,
+    /// The cast motion waiting for its magic-cast event, and the frames it hasn't shown since
+    /// (`SEEN` once it has: on KH1's cast state the motion starts at KH1's next animation step).
+    casting: Option<(u16, u8)>,
     /// Script effect id → our drawn effect, and whether its end was passed on.
     fx: HashMap<u64, (Option<u32>, bool)>,
     barrier: bool,
@@ -681,6 +822,10 @@ const COUNTERS: [u16; 3] = [574, 576, 578];
 fn burst_of(counter: u16) -> Option<u16> {
     COUNTERS.iter().position(|c| *c == counter).map(|i| BURSTS[i])
 }
+/// `Runtime::casting`'s count once the cast motion has shown, and the frames a cast on KH1's cast
+/// state may wait for KH1 to start it (`formmagic`'s the same).
+const SEEN: u8 = u8::MAX;
+const NOT_SEEN_FRAMES: u8 = 4;
 /// The party's actors (Sora first).
 const PARTY_RVA: Rva = Rva(0x2D37C80);
 const BURST_ELEMENT: u16 = 7;
@@ -1053,7 +1198,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         }
         match rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) {
             Ok(_) => {
-                rt.casting = Some(motion);
+                rt.casting = Some((motion, 0));
                 rt.hold = Hold::default();
                 rt.blocks = carry;
                 rt.carry = carry;
@@ -1062,13 +1207,15 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
             Err(e) => note(format!("Reflect: the script didn't start ({e})")),
         }
     }
-    if let Some(m) = rt.casting {
+    if let Some((m, waited)) = rt.casting {
         let fired = out.events.iter().any(|e| matches!(e, EventKind::MagicCast(x) if *x as u16 == out.motion)) && out.motion == m;
+        let waited = if out.motion == m { SEEN } else { waited.saturating_add(1).min(SEEN - 1) };
+        rt.casting = Some((m, waited));
         if fired {
             rt.casting = None;
             let ok = rt.magic.release(SORA, &mut world);
             note(format!("Reflect released at frame {} of motion {m} ({})", out.clip_frame, if ok { "barrier" } else { "the script didn't take it" }));
-        } else if out.motion != m || out.state != StateName::Magic {
+        } else if (out.motion != m && (waited == SEEN || waited > NOT_SEEN_FRAMES)) || out.state != StateName::Magic {
             rt.casting = None;
             note(format!("Reflect's cast motion {m} was cut off before its release (now {:?} motion {})", out.state, out.motion));
         }
@@ -1283,9 +1430,18 @@ fn hold(rt: &mut Runtime, blocks: u32, combo: bool) -> bool {
 
 /// KH1 has Sora this frame: a Reflect in flight ends with its effects (KH2 runs it).
 pub fn kh1_frame() {
+    let sora = unsafe { rd::<u64>(base() + PARTY_RVA) as usize };
+    // Base Sora in KH1's own states (`shared`): a Reflect cast there runs on KH1's frames
+    // (`native_step`); only with none in flight his flag and the barrier are put back here.
+    if super::shared::active() && !super::form::in_form() {
+        if !busy() {
+            BARRIER.store(false, Ordering::Relaxed);
+            unsafe { intangible(sora, false) };
+        }
+        return;
+    }
     BARRIER.store(false, Ordering::Relaxed);
     // (KH1's own move: his flag is KH1's again.)
-    let sora = unsafe { rd::<u64>(base() + PARTY_RVA) as usize };
     unsafe { intangible(sora, false) };
     let Ok(mut g) = RT.try_lock() else { return };
     let Some(rt) = g.as_mut() else { return };

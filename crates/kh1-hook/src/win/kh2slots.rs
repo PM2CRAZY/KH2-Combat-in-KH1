@@ -324,7 +324,13 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 continue;
             }
             let k = o.kind;
-            let style = if k.air() { Kind::AirCombo } else { Kind::GroundCombo };
+            // (A cast of ours, Reflect's, `kh1rows::Kind::cast`: built as KH1's cast slots are.)
+            let style = match (k.cast(), k.air()) {
+                (true, true) => Kind::AirMagic,
+                (true, false) => Kind::Magic,
+                (false, true) => Kind::AirCombo,
+                (false, false) => Kind::GroundCombo,
+            };
             // (Finishing Plus's next finisher: every finisher KH1's finisher request of its kind
             // plays, its first the request's own.)
             let mut motions = vec![o.motion];
@@ -389,7 +395,8 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     let frames = ours.and_then(|o| o.frames).filter(|&f| f > clip.length).or(field_len).unwrap_or(clip.length).max(1);
     let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
     // (KH2's finisher casts end the combo: `cast_follow`.)
-    let finisher_cast = cast && !default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request);
+    // (Ours too: Reflect's finisher cast, `kh1rows::Kind::CastFinisher`.)
+    let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()));
     // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
     let reaction = kind == Kind::HitReactions;
     let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own || reaction, cast);

@@ -269,6 +269,36 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   `0x1402B3D50` and whether one owner's own spheres meet each other in the attack-against-attack
   pass (the pairing table `0x1405299B8` by team).
 
+## 4f. Reflect on KH1's cast state (done: the tester's m5 plan item 2)
+
+- KH1's command step for a spell (**Checked (decomp)**, Steam): `0x1402A7510` runs the pre-step
+  `0x1402A38E0 (actor, record, dir)` (a turn to the command's target when its type has one) and
+  then `0x1402A3600`. Ground (states 0 / 6 / 0x18, `0x1402A3DB0`): usable check, the cast request
+  `(0x36 + spell) | 0x1000000` with blend 0, the idle queued, the spell start `0x14028F140`, then
+  the move direction copied normalised (`0x1402A93D0`) with its length `+0xC` 0. Air (state 2):
+  usable check, `(0x83 + spell) | 0x1000000`, the fall queued (request `0x40000006`, blend 8.0),
+  the spell start, the hop `0x1402AF960 (actor, btltbl +0xE8)` and `+0x3C0 ×= btltbl +0xF0`
+  (`0x140386CD0`). KH1's request ids for spell 7 would be Fire's second parts (0x3D / 0x8A), so
+  Reflect can't go through KH1's own branch.
+- `reflect::cast_native` does exactly those steps with our requests (`kh1rows::OURS`: "Reflect"
+  motion 71 on template 56 / request 0x38, "Reflect (finisher)" 72 on the same, "Reflect (air)" 73
+  on template 81 / request 0x85; request only, KH1's template sounds left out), KH2's start in
+  place of KH1's spell start (cost `mpcost`, the combo step `formmagic::note_step` / `take_step`,
+  the finisher cast 72 on the ground combo's last step, its voice), and the physics setting's
+  air start (`shared::physics::cast_stops`). The slots are cast slots (`kh2slots`: KH2's combo
+  window from range 14, none on the finisher, its cut and magic windows), so Reflect follows the
+  same combo rules as the other native casts.
+- The script: `takeover::native_spells` runs `reflect::native_step` each KH1 physics frame while
+  a Reflect runs, with the slot's KH2 motion and KH1's time in it (its magic-cast event at frame
+  0 releases the barrier; up to 4 frames are allowed for KH1 to start the slot, as `formmagic`'s).
+  Sora is untouchable (KH1's flag 0x40) through the cast motion and the barrier, as before.
+  `reflect::kh1_frame` no longer ends a Reflect while base Sora is in KH1's own states.
+- Landing mid-cast (the tester's m5 answer 2, "the jump config controls what landing animation
+  you get currently so follow that"): KH1's own landing (`0x1402A43A0`, request
+  `(+0x3D0) + 7`, the hop having set `+0x3D0` to 0) cuts the cast; its slot 11 is drawn by the
+  Jump row (`shared::slot_kind`), as for the other native casts.
+- Still the borrow: Drive Forms, KH1's flight (state 8), Epic.
+
 ## 4e. Air casts read again: KH1's and KH2's physics (research, the tester's m4 follow-up)
 
 The tester (after t484..t487): "reflect currently does not behave properly for kh1 physics, please

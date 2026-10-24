@@ -1755,7 +1755,9 @@ static NATIVE_HITS: Mutex<Option<NativeHits>> = Mutex::new(None);
 /// 21), KH1's facing, KH1's lock and targets. Nothing when no script of base Sora's runs.
 pub unsafe fn native_spells(actor: usize) {
     static LAST: Mutex<Option<(u16, f32)>> = Mutex::new(None);
-    if !super::shared::active() || super::form::in_form() || !super::formmagic::busy() {
+    // (Reflect's on KH1's cast state too, `reflect::native_step`.)
+    let reflect = super::reflect::busy();
+    if !super::shared::active() || super::form::in_form() || !(super::formmagic::busy() || reflect) {
         if let Ok(mut l) = LAST.try_lock() {
             *l = None;
         }
@@ -1800,6 +1802,9 @@ pub unsafe fn native_spells(actor: usize) {
     };
     let battle = super::form::battle(&d.drive, kh2).clone();
     super::formmagic::shots_step(actor, &out, air, &mut d.strikes, &battle, lock);
+    if reflect {
+        super::reflect::native_step(actor, &out, air, &mut d.strikes, &battle, lock);
+    }
 }
 
 /// Once a game frame with base Sora in KH1's own states (`kh2slots::frame`, after KH1 posed him):

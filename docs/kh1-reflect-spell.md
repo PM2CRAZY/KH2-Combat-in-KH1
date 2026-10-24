@@ -88,6 +88,16 @@ user's files; **Ours** a choice of the mod's where the games don't say.
 
 ## Casting (Checked, exe for KH2's rules; Ours for the hand-over)
 
+- **On KH1's cast state (testing branch, kh2-magic-and-reflect-native m5 plan item 2):** base
+  Sora in KH1's own states (`shared`), in a state KH1 casts in (0 / 6 / 0x18 ground, 2 air), on
+  Steam: `combat::command` hands the command to `reflect::cast_native`, which casts as KH1's
+  command step casts a spell (`0x1402A3600` / `0x1402A3DB0`, Checked (decomp)) with requests of
+  ours for KH2's cast motions 71 / 72 / 73 (`kh1rows::OURS`, slots on KH1's Thunder casts 56 / 81,
+  `kh2slots`), KH1's air hop of 30 and half the sideways speed in the air (btltbl `+0xE8` /
+  `+0xF0`), and KH2's script run on KH1's frames (`reflect::native_step`, from
+  `takeover::native_spells`). The rest of this section is the borrow, still used in Drive Forms,
+  KH1's flight (state 8) and on Epic.
+
 - KH1's command step never sees command type 2 / spell 7: `combat::command` hands it to
   `reflect::chosen`, which refuses (KH1's "can't" sound) when the spell file isn't loaded, KH1
   has Sora, or the MP is short, and otherwise queues it.
