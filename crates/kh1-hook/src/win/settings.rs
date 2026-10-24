@@ -95,8 +95,8 @@ config_row = on\r\n\
 ; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
 ; Customize); 3 = KH1's three\r\n\
 shortcuts = 4\r\n\
-; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
-; KH1's frame: magnet_explosion (Magnet Burst, Explosion, Vicinity Break, Aerial Finish, Guard\r\n\
+; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, played by\r\n\
+; KH1's own effect system: magnet_explosion (Magnet Burst, Explosion, Vicinity Break, Aerial Finish, Guard\r\n\
 ;   Break, Finishing Leap, Aerial Recovery), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
@@ -213,7 +213,6 @@ pub struct Settings {
     pub four_shortcuts: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
     pub kh2_effects: Option<Option<Vec<u16>>>,
-    pub fx_test: bool,
     /// (Test, t335) Values written in turn into byte `hit_fx_byte` (0..=2) of a landed KH2 hit's
     /// KH1 effect / sound bytes (the attack object's `+0xA8`), with bit `0x400000` set (spells
     /// too); empty: off.
@@ -372,7 +371,6 @@ fn load(first: bool) -> Option<Settings> {
             Some("all") => Some(None),
             _ => Some(Some(super::kh2fx::DEFAULT_MOTIONS.to_vec())),
         },
-        fx_test: on(&text, "fx_test", "on", false),
         hit_fx_test: setting(&text, "hit_fx_test")
             .map(|v| {
                 v.split([',', ' '])

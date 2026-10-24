@@ -1,20 +1,21 @@
-//! Draws KH2's effects (`kh2fx`) in KH1's own Direct3D 12 frame: world-space textured
-//! triangles with the PS2 blend modes the effects use, depth-tested against KH1's scene.
+//! Draws into KH1's own Direct3D 12 frame: KH2's player model (`model`, world-space textured
+//! triangles depth-tested against KH1's scene) and the debug menu's overlay (`draw_overlay`).
+//! (Until t430 also KH2's effects, for the old effect player; they are KH1's own now, `kh2dpx`.)
 //!
 //! KH1 renders with D3D12 (`docs/kh1-render.md`): one renderer singleton at `0x1422BB580` holds
 //! the device (`+0x2E0`) and the frame buffers; every draw is recorded inline by the game
-//! thread's tasks into the current command list (`0x1400FD3A0(R)`). Our draw runs right after
-//! the world-model pass (`0x1401EADD0`, task 160000, hooked): the world is drawn, KH1's own
-//! effects and the HUD come after. We record into KH1's list, on its bound frame buffer (its
+//! thread's tasks into the current command list (`0x1400FD3A0(R)`). The model's draw runs right
+//! after the world-model pass (`0x1401EADD0`, task 160000, hooked in `model`): the world is drawn,
+//! KH1's own effects and the HUD come after. We record into KH1's list, on its bound frame buffer (its
 //! targets inherited when the list is one of KH1's bundles), with our own root signature and
 //! pipeline states, then hand KH1 a fresh list the way it does itself when its vertex ring
 //! runs out mid-scene (`0x1400F7300(R, 0)`, `0x140109360(R, 1, 0)`), so its next draw sets
 //! targets, pipeline and constants again.
-//! We touch nothing when no effect is drawing.
+//! We touch nothing when nothing of ours is drawing.
 //!
 //! No descriptor heaps of ours: the root signature is 40 root constants (view, projection,
 //! KH1's clip scale and offset, the batch's depth offset and texture) and one root SRV, a raw
-//! buffer with every effect texture (RGBA8, sampled bilinear with wrap in the pixel shader).
+//! buffer with the textures (RGBA8, sampled bilinear with wrap in the pixel shader).
 //! Vertices go to a 4-slot ring in an upload heap (KH1 keeps at most 3 frames in flight).
 //! Shaders are compiled at run time from the HLSL below (`D3DCompile`, `d3dcompiler_47.dll`);
 //! the root signature is serialised by `d3d12.dll`'s `D3D12SerializeRootSignature`.
@@ -27,9 +28,7 @@
 //!
 //! (t354) Also the debug menu's screen-space overlay (`draw_overlay`, from the frame-end hook in
 //! `debugmenu`): untextured boxes and text from a font texture kept with the model textures,
-//! drawn on top of everything KH1 drew that frame (the HUD included), no depth test. Effect
-//! textures handed over after the renderer came up (the overlay can bring it up first) are
-//! uploaded then (`late_textures`).
+//! drawn on top of everything KH1 drew that frame (the HUD included), no depth test.
 
 use super::addr::Rva;
 use super::crash::readable;
@@ -257,28 +256,11 @@ const _: () = {
     assert!(std::mem::size_of::<kh2_fx::Vertex>() == 36);
 };
 
-/// The PS2 blend equations the effects use.
+/// The blend equation (the model's and the overlay's: `lerp(dst, src, As)`; the old effect
+/// player's PS2 additive, subtract and darken modes went with it).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Mode {
-    /// `dst + src·As`
-    Additive,
-    /// `lerp(dst, src, As)`
     Alpha,
-    /// `dst − src·As`
-    Subtract,
-    /// `dst·(1 − As)`
-    Darken,
-}
-
-impl Mode {
-    pub fn of(b: kh2_fx::Blend) -> Mode {
-        match b.mode() {
-            kh2_fx::BlendMode::Additive => Mode::Additive,
-            kh2_fx::BlendMode::Subtract => Mode::Subtract,
-            kh2_fx::BlendMode::Darken => Mode::Darken,
-            _ => Mode::Alpha,
-        }
-    }
 }
 
 const HLSL: &str = r#"
@@ -350,12 +332,8 @@ struct Gpu {
     ps: Vec<u8>,
     /// (mode, depth test, has depth view, samples, quality, depth write) → pipeline state.
     psos: Vec<(PsoKey, usize)>,
-    ring: usize,
     ring_map: usize,
     ring_va: u64,
-    tex_buf: usize,
-    tex_va: u64,
-    tex: Vec<TexSlot>,
     /// The vertex ring's write point (bytes).
     frame: u64,
     /// Model textures (`draw_mesh`): an append-only buffer made at the first model draw, and
@@ -401,21 +379,12 @@ pub unsafe fn crash_note(base: usize) -> String {
     let now = START.get().map_or(0, |t| t.elapsed().as_millis() as u64);
     let n = DRAWS.load(Ordering::Relaxed);
     let last = LAST_DRAW_MS.load(Ordering::Relaxed);
-    format!("GPU device removed reason {reason}; KH2 effect draws {n}{}", if n > 0 { format!(", the last {} ms ago", now.saturating_sub(last)) } else { String::new() })
+    format!("GPU device removed reason {reason}; our draws (model, debug overlay) {n}{}", if n > 0 { format!(", the last {} ms ago", now.saturating_sub(last)) } else { String::new() })
 }
-/// Textures waiting for the first draw (RGBA8 each).
-static TEXTURES: Mutex<Option<Vec<(u32, u32, Vec<u8>)>>> = Mutex::new(None);
 
 fn fail(what: String) {
     if !OFF.swap(true, Ordering::Relaxed) {
         log(&format!("fx: renderer off: {what}"));
-    }
-}
-
-/// Hands over the effect textures (index = texture id), before the first draw.
-pub fn set_textures(t: Vec<(u32, u32, Vec<u8>)>) {
-    if let Ok(mut g) = TEXTURES.lock() {
-        *g = Some(t);
     }
 }
 
@@ -517,23 +486,10 @@ unsafe fn init(device: usize) -> Result<Gpu, String> {
     if hr < 0 || root.is_null() {
         return Err(format!("CreateRootSignature failed: {:#010x}", hr as u32));
     }
-    let (ring, ring_map, ring_va) = buffer(device, RING_SLOTS * SLOT_BYTES)?;
-    // Textures: one raw buffer, texels as RGBA8 words.
-    let textures = TEXTURES.lock().ok().and_then(|mut g| g.take()).unwrap_or_default();
-    let total: usize = textures.iter().map(|t| (t.0 * t.1) as usize).sum::<usize>().max(1);
-    let (tex_buf, tex_map, tex_va) = buffer(device, total * 4)?;
-    let mut tex = Vec::with_capacity(textures.len());
-    let mut at = 0usize;
-    for (w, h, px) in &textures {
-        let n = (*w * *h) as usize;
-        if px.len() >= n * 4 {
-            std::ptr::copy_nonoverlapping(px.as_ptr(), (tex_map + at * 4) as *mut u8, n * 4);
-        }
-        tex.push(TexSlot { offset: at as u32, w: *w, h: *h });
-        at += n;
-    }
-    log(&format!("fx: renderer ready ({} textures, {} KB; shaders {} + {} bytes)", tex.len(), total * 4 / 1024, vs.len(), ps.len()));
-    Ok(Gpu { device, root: root as usize, vs, ps, psos: Vec::new(), ring, ring_map, ring_va, tex_buf, tex_va, tex, frame: 0, mesh: None })
+    // (The ring stays for the session: KH1's frames in flight may name it.)
+    let (_ring, ring_map, ring_va) = buffer(device, RING_SLOTS * SLOT_BYTES)?;
+    log(&format!("fx: renderer ready (shaders {} + {} bytes)", vs.len(), ps.len()));
+    Ok(Gpu { device, root: root as usize, vs, ps, psos: Vec::new(), ring_map, ring_va, frame: 0, mesh: None })
 }
 
 impl Gpu {
@@ -544,10 +500,7 @@ impl Gpu {
         let (mode, depth, has_dsv, samples, quality, write) = key;
         // Premultiplied output (rgb·As, sat(As)); only rgb is written, KH1's alpha stays.
         let (src, dst, op) = match mode {
-            Mode::Additive => (2, 2, 1),
             Mode::Alpha => (2, 6, 1),
-            Mode::Subtract => (2, 2, 3),
-            Mode::Darken => (1, 6, 1),
         };
         let rt = RtBlend { enable: 1, logic_enable: 0, src, dst, op, src_a: 1, dst_a: 2, op_a: 1, logic_op: 4, mask: 0x7, _p: [0; 3] };
         let none = RtBlend { enable: 0, logic_enable: 0, src: 2, dst: 1, op: 1, src_a: 2, dst_a: 1, op_a: 1, logic_op: 4, mask: 0, _p: [0; 3] };
@@ -662,39 +615,7 @@ unsafe fn ready<'a>(base: usize, g: &'a mut Option<Gpu>) -> Option<&'a mut Gpu> 
             }
         }
     }
-    if let Some(gpu) = g.as_mut() {
-        late_textures(gpu);
-    }
     g.as_mut()
-}
-
-/// The effect textures, when they were handed over after the renderer came up with none.
-unsafe fn late_textures(gpu: &mut Gpu) {
-    if !gpu.tex.is_empty() {
-        return;
-    }
-    let Some(textures) = TEXTURES.try_lock().ok().and_then(|mut g| g.take()) else { return };
-    if textures.is_empty() {
-        return;
-    }
-    let total: usize = textures.iter().map(|t| (t.0 * t.1) as usize).sum::<usize>().max(1);
-    let (buf, map, va) = match buffer(gpu.device, total * 4) {
-        Ok(b) => b,
-        Err(e) => return fail(format!("effect textures: {e}")),
-    };
-    let mut at = 0usize;
-    for (w, h, px) in &textures {
-        let n = (*w * *h) as usize;
-        if px.len() >= n * 4 {
-            std::ptr::copy_nonoverlapping(px.as_ptr(), (map + at * 4) as *mut u8, n * 4);
-        }
-        gpu.tex.push(TexSlot { offset: at as u32, w: *w, h: *h });
-        at += n;
-    }
-    // (The first, empty buffer stays: a frame in flight may still name it.)
-    gpu.tex_buf = buf;
-    gpu.tex_va = va;
-    log(&format!("fx: effect textures uploaded after the renderer came up ({} textures, {} KB)", gpu.tex.len(), total * 4 / 1024));
 }
 
 /// The model texture arena, made the first time it's needed; false if it couldn't be.
@@ -796,67 +717,6 @@ unsafe fn hand_back(base: usize, r: usize) {
 fn note_draw() {
     DRAWS.fetch_add(1, Ordering::Relaxed);
     LAST_DRAW_MS.store(START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64, Ordering::Relaxed);
-}
-
-/// Draws `frame` into KH1's current command list (from the world-pass hook, game thread).
-pub unsafe fn draw(base: usize, frame: &kh2_fx::Frame, view: glam::Mat4, proj: glam::Mat4) {
-    if OFF.load(Ordering::Relaxed) || frame.batches.is_empty() || frame.vertices.is_empty() {
-        return;
-    }
-    let r = base + RENDERER_RVA;
-    let Ok(mut g) = GPU.lock() else { return };
-    let Some(gpu) = ready(base, &mut g) else { return };
-    let Some(t) = target(r) else { return };
-    // Pipeline states first (a failure leaves KH1's list untouched).
-    let mut states = Vec::with_capacity(frame.batches.len());
-    for b in &frame.batches {
-        match gpu.pso((Mode::of(b.blend), b.depth_test, t.has_dsv, t.samples, t.quality, false)) {
-            Ok(p) => states.push(p),
-            Err(e) => return fail(e),
-        }
-    }
-    note_draw();
-    let (vb, n) = upload(gpu, &frame.vertices);
-    let (k, s, ox, oy) = constants(r, view, proj);
-    let Some((cl, list_type)) = begin(base, r, gpu, &t, &vb, &k, gpu.tex_va) else { return };
-    let mut last_pso = 0usize;
-    for (b, &pso) in frame.batches.iter().zip(&states) {
-        let (first, count) = (b.first as usize, b.count as usize);
-        if first >= n || count < 3 {
-            continue;
-        }
-        let count = count.min(n - first) / 3 * 3;
-        if pso != last_pso {
-            com!(cl, CL_SET_PSO, fn(P), pso as P);
-            last_pso = pso;
-        }
-        let tx = b.texture.and_then(|t| gpu.tex.get(t as usize)).copied();
-        let mut flags = if tx.is_some() { 1 } else { 0 };
-        if Mode::of(b.blend) == Mode::Darken {
-            flags |= 2;
-        }
-        let tx = tx.unwrap_or(TexSlot { offset: 0, w: 1, h: 1 });
-        let kb = [b.depth_offset.to_bits(), tx.offset, tx.w, tx.h, flags];
-        com!(cl, CL_ROOT_CONSTANTS, fn(u32, u32, *const u32, u32), 0, 5, kb.as_ptr(), 35);
-        com!(cl, CL_DRAW, fn(u32, u32, u32, u32), count as u32, 1, first as u32, 0);
-    }
-    hand_back(base, r);
-    static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    if LOGGED.fetch_add(1, Ordering::Relaxed) < 3 {
-        log(&format!(
-            "fx: drew {} batches, {} vertices into a {} list, frame buffer {} ({}x{}, {}x MSAA, depth {}); clip scale {s}, offset ({ox}, {oy}); viewport {:?}",
-            frame.batches.len(),
-            n,
-            if list_type == 1 { "bundle" } else { "direct" },
-            t.fbi,
-            rd::<i32>(t.fb + 8),
-            rd::<i32>(t.fb + 0xC),
-            t.samples,
-            t.has_dsv,
-            rd::<[f32; 4]>(r + 0x15C)
-        ));
-    }
-    let _ = (gpu.ring, gpu.tex_buf);
 }
 
 /// A texture a model draw uses: `key` names it for good (the same key, the same pixels).

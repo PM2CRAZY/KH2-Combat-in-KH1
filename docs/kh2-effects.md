@@ -1662,23 +1662,46 @@ the spell files aren't staged here.
   none to bind them to and they don't play (**Assumption**: KH2's scripts start them only with two
   weapons; with slot 1 empty KH2's read would fail).
 
-### 18.11 What still goes through the old player (`kh2fx`)
+### 18.11 The old player removed; what doesn't play through KH1
 
-On Steam, with the packages built (the first seconds after KH2 Sora loads: until then `kh2fx`
-plays everything, as before):
+The tester: "the older player is to be deprecated". Since then (the version after t430) every KH2
+effect plays through KH1's own effect system or not at all; the old player (the `kh2-fx` particle
+machine run by `kh2fx` beside KH1's, its own instances, bones and clock, and its D3D12 draw after
+KH1's world-model pass, `fx12::draw`) is gone from the hook. `kh2fx` is now only the front the
+game's events call (moves, forms, Revert, the Keyblade, the spell scripts, Sora's frames), each
+handed to `kh2dpx`. The world-model pass hook (`0x1401EADD0`) moved to `model` and is installed
+only while KH2's player model can be drawn (off since s259, so not hooked); `fx12` keeps the
+model's and the debug menu overlay's draws. The ini's `fx_test` (which started the old player's
+element 51) is gone.
 
-- Sora's package: none (element 1, the Drive motion's sphere, since §18.14). Every element is
-  KH1's (§18.3..18.6).
-- Valor's and Final's packages: their second-Keyblade elements while the left Keyblade isn't
-  drawn (its model not in yet, §18.13), and any element the load log lists as left out (a bone with no KH1 anchor, a flag KH1's binding doesn't
-  do, a program not compared or KH2-only).
-- The spell packages: the same load-log cases (their body-centre elements are KH1's since
-  §18.15).
-- The Keyblade's flash: only if its element fails the gate (logged).
-- Anything whose package didn't build (logged: the file not read, its HD textures not read, every
-  group over KH1's texture slots), and every package on other builds (Epic: Sora's elements without
-  KH1's blade or position binding still play through KH1, as before).
-- `fx_test` (it starts `kh2fx`'s own element 51).
+Memory and work that went with it (the t430 log): the old player loaded Sora's package and every
+spell, form and Keyblade package at start (57 + 17 × 3 + 43 + 30 + 61 + 5 elements), decoded their
+176 textures to RGBA (16,704 KB, held in memory and copied to a GPU upload buffer of the same size
+when the renderer came up), and stepped and drew its own effects every frame.
+
+What doesn't play through KH1 (each logged once, by package and element, with the reason):
+
+- An element left out when its package is built (its load line): a KH2 bone with no KH1 anchor
+  (Sora's, the forms' and the spells' bones: §18.3's table; Sora's package has none left out), a
+  flag KH1's binding doesn't do (0x100, scaled by its bone; 0x10000, a two-point element: none of
+  the elements that play in the t430 log; the Keyblade's element 10, which never plays, is one),
+  or a group over KH1's 10 / 6 texture slots.
+- An element whose effect runs a program KH1 doesn't run as KH2 (not in `KH1_SAME`, not one of
+  KH2's own plugged in, §18.2, §18.9): none in the t430 log's packages; the forms' and Wisdom's
+  aren't in it (no Drive).
+- The second Keyblade's points (0x4004 / 0x4006 / 0x4008) while there is no second Keyblade (its
+  model not in yet, or one Keyblade: §18.10).
+- An element played before its package is built: Sora's and the Keyblade's are built at load
+  (t430 log: built at frame 0, entered at frame 1, KH2's controller had Sora at frame 19), the
+  forms' once Sora could change into them (§18.12), the spells' at load and at a level up.
+- A package that didn't build (logged: the file not read, its HD textures not read).
+- Off Steam (Epic): elements on KH1's blade, position or unbound bindings, or running KH2's own
+  programs (Steam addresses); those on bones with KH1's own programs play.
+- Not applied: flag 0x800 (with a weapon anchor, the effect's alpha is the weapon's each frame, 0
+  while it is hidden: KH2's bindings `0x1402C58F0` / `0x1402C6A10`, **Checked (decomp)**; Fire 3's 8
+  and 11 have it; KH1's Keyblade is out while it casts, so this only matters if it is put away
+  while one plays), and
+  Thunder 3's TBPs 0x3000 / 0x3020 draw untextured until their HD images are found (§18.12).
 
 ### 18.12 Built when needed, lean, freed when not (`kh2dpx::manage`)
 
@@ -1752,12 +1775,14 @@ can play.
   Wisdom (Fire, Blizzard, Thunder). A package is entered in KH1's loaded files (its own images
   copied to KH1, the common ones shared, KH1's relocation, KH2's programs plugged) right after it
   is built, on the game thread: a play never pays for it.
-- **First use**: until a package is built (Sora's at load: the first seconds; a form's: from the
-  Drive command; a spell's: from load or the level-up), `kh2fx` plays its effects on the same
-  frame (its own copies, loaded at start), so no effect misses a frame; once built, KH1 plays it.
-  No hitch: the build is off the game thread, the entering is a copy of the package's own images
-  (tens of KB) and KH1's relocation. KH1 makes each texture on its first draw as for its own
-  effects.
+- **First use**: each package is built before its effects can first play: Sora's and the
+  Keyblade's at load (the t430 log: built at frame 0 in 0.08 s and entered at frame 1, before
+  KH2's controller had Sora at frame 19), a form's once Sora could change into it (MP for it, out
+  of a form: built and entered long before the change's first effect), a spell's at load or at the
+  level up (**Assumption**: KH1's spell levels change outside battle, from the story). The old
+  player, which played them until then, is gone (§18.11). No hitch: the build is off the game
+  thread, the entering is a copy of the package's own images (tens of KB) and KH1's relocation.
+  KH1 makes each texture on its first draw as for its own effects.
 
 ### 18.13 The second Keyblade's points (Valor's left Keyblade, Final's second)
 

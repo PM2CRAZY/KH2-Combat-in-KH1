@@ -61,29 +61,28 @@
 //! Sora's skeleton pass (`pose`): after it on the start frame, before it on the frames the effect
 //! still waits. KH1's binding then runs as it does; its own effects are not touched.
 //!
-//! The old effect player (`kh2fx`) is retired for these elements on Steam (the tester): it plays
-//! them only while the DPX isn't built (or couldn't be), if KH2's programs couldn't be plugged
-//! in, or on another build (`event`).
+//! The old effect player is gone (t417..t430 kept it as a fallback; the tester: "the older player
+//! is to be deprecated"): every KH2 effect plays here, through KH1, or not at all (logged).
 //!
 //! (The port of every effect, `docs/kh2-effects.md` §18.) Every element of Sora's package is
 //! built, not only Explosion's: one DPD per motion of KH2 Sora's moveset (the elements its frame
 //! triggers start, which play together and so share one run of KH1's texture slots), the rest one
-//! per effect. An element plays through KH1 once it is switched on here (`ON`, one move per
-//! version), its KH2 bone has a KH1 anchor, its flags are ones KH1's binding does, and every
-//! program its effect runs is one KH1 runs the same as KH2 (`KH1_SAME`, checked program by
-//! program) or one of KH2's own that is plugged in (`kh2ppp`). Anything else stays with `kh2fx`,
-//! logged once.
+//! per effect. An element plays through KH1 when its KH2 bone has a KH1 anchor, its flags are ones
+//! KH1's binding does, and every program its effect runs is one KH1 runs the same as KH2
+//! (`KH1_SAME`, checked program by program) or one of KH2's own that is plugged in (`kh2ppp`).
+//! Anything else doesn't play, logged once (`docs/kh2-effects.md` §18.11).
 //!
 //! (Lean and lazy, `docs/kh2-effects.md` §18.12.) A package is built (in the background) when its
 //! effects can play (`manage`: Sora's and the Keyblade's at load, Sora's only for the moves
-//! `kh2_effects` lets play; a form's as Sora changes into it; a spell's at the level he has),
+//! `kh2_effects` lets play; a form's once he could change into it; a spell's at the level he has),
 //! entered in KH1's loaded files as soon as it is built, and freed once it can't play and none of
 //! its effects is left in KH1 (KH1's own file removal). Each DPX sits in its own pages of one
 //! reserved 32 MB region (one of KH1's handle regions for all of them); its own HD images are
 //! handed to KH1 when it is entered and not kept; KH2's common images are made into KH1 textures
 //! once, from a small file of ours, and shared by every package (KH1's texture lookup returns an
-//! HD entry's texture as it is). Until a package is built, `kh2fx` plays its effects on the same
-//! frame.
+//! HD entry's texture as it is). Each is built before its effects can first play (Sora's and the
+//! Keyblade's at load, before KH2 has him; a form's before the change; a spell's at load or at the
+//! level up).
 
 use super::addr::Rva;
 use super::log;
@@ -114,17 +113,6 @@ enum Anchor {
     LeftBlade(f32),
 }
 
-/// The elements of Sora's package switched on for KH1 (the tester: every effect, one move per
-/// version): Explosion (motion 166: 44..48), Magnet Burst (197: 51, 52), Vicinity Break (170: 49,
-/// 50) and Aerial Finish (194: 35..38), the last two with KH2's pppVtMime; then the rest of his
-/// moves', with KH1's position binding for KH2's flag 0x04: Guard Break (165: 30..32), Finishing
-/// Leap (167: 33, 34), Aerial Recovery (40: 0), and under `kh2_effects = all` motions 169 (53..56),
-/// 171 (40, 41) and 172 (39); then the Drive motion's (52: 1..13) and Revert's flashes (15..27,
-/// `form`). Element 1 runs KH2's pppSnoMdlDttNorm (238): ours in KH1's machine (`kh2ppp`), a gate.
-const ON: &[i16] = &[
-    44, 45, 46, 47, 48, 51, 52, 49, 50, 35, 36, 37, 38, 30, 31, 32, 33, 34, 0, 53, 54, 55, 56, 40, 41, 39, //
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
-];
 /// The Keyblade's package's elements switched on: its vanish flash (`weapon_vanish`).
 const WEAPON_ON: &[i16] = &[super::kh2fx::WEAPON_VANISH as i16];
 /// The forms' packages (Sora's skeleton: his bones' anchors). Their weapon points (the tester,
@@ -151,7 +139,7 @@ fn spell_anchor(code: u16) -> Option<Anchor> {
 }
 
 /// The Keyblade's package names its own (weapon skeleton) bones; KH2's call of its vanish flash
-/// isn't traced, and `kh2fx` puts every code half way along the blade, turned as the hand. KH1's:
+/// isn't traced, and the old player put every code half way along the blade, turned as the hand. KH1's:
 /// the point half way along its blade (binding mode 3, t = 0.5), turned as the blade bone.
 fn weapon_anchor(_code: u16) -> Option<Anchor> {
     Some(Anchor::Blade(0.5))
@@ -415,7 +403,7 @@ pub enum Pkg {
     Weapon,
     Valor,
     Final,
-    /// One of `kh2fx`'s spell packages (its numbering): Reflect's levels 1..3, Wisdom's archive 4
+    /// One of the spell packages (`kh2fx::WISDOM`'s numbering): Reflect's levels 1..3, Wisdom's archive 4
     /// (`obj/P_EX100_MAGF.a.us`), then Fire, Blizzard, Thunder and Cure by level (Wisdom's and
     /// base Sora's KH2 magic, `formmagic`).
     Spell(u8),
@@ -440,8 +428,6 @@ struct Dpx {
     layers: Vec<Layer>,
     /// Each built element's program types (`kh1dpx::Kh1Dpx::types`), by element.
     types: Vec<(i16, Vec<u32>)>,
-    /// Elements whose KH1 play has been refused (logged once each).
-    refused: Vec<i16>,
     /// Where KH2's own programs are (`kh1dpx::Kh1Dpx::programs`), for `kh2ppp::plug`.
     programs: Vec<(usize, u32)>,
     /// KH1's loaded-file entry for it, once entered (0: not yet, or entering failed).
@@ -661,7 +647,7 @@ fn desired() -> Vec<(Pkg, String)> {
     v
 }
 
-/// Each game frame (`kh2fx::tick`): the packages that can play now are asked of the builder (in
+/// Each game frame (`kh2fx::tick` → `tick`): the packages that can play now are asked of the builder (in
 /// the background), a package built is entered in KH1's loaded files at once (so a first play
 /// costs nothing more than KH1's own), and one that can't play any more is freed once none of its
 /// effects is left in KH1 (its file removed by KH1's own removal, `0x1400E2E00`, then its pages).
@@ -705,7 +691,7 @@ pub fn manage() {
     }
 }
 
-/// Builds the KH1 DPXs in the background (from the KH2 install, as `kh2fx`), each when it is
+/// Builds the KH1 DPXs in the background (from the KH2 install), each when it is
 /// wanted (`manage`): Sora's and the Keyblade's once KH2 Sora is loaded, the others when their
 /// effects can play.
 pub fn start() {
@@ -725,7 +711,7 @@ fn builder() {
             break k;
         }
         if t.elapsed().as_secs() > 300 {
-            log("KH2 effects (native): KH2 Sora never loaded; kh2fx plays his effects");
+            log("KH2 effects (native): KH2 Sora never loaded; no KH2 effects");
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -750,7 +736,7 @@ fn builder() {
     let (install, src) = match opened {
         Ok(c) => c,
         Err(e) => {
-            log(&format!("KH2 effects (native): no DPX built ({e}); kh2fx plays the effects"));
+            log(&format!("KH2 effects (native): no DPX built ({e}); no KH2 effects"));
             return;
         }
     };
@@ -788,7 +774,7 @@ fn builder() {
                     NEW_BUILT.store(true, Ordering::Relaxed);
                 }
                 Err(e) => {
-                    log(&format!("KH2 effects (native): {pkg:?}'s DPX not built ({e}); kh2fx plays its effects"));
+                    log(&format!("KH2 effects (native): {pkg:?}'s DPX not built ({e}); its effects don't play"));
                     if let Ok(mut g) = FAILED.lock() {
                         g.push((pkg, sig));
                     }
@@ -835,7 +821,7 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
         Pkg::Sora => {
             let mut sets: Vec<Vec<i16>> = motion_sets(&kh2.character).into_iter().filter(|(m, _)| super::kh2fx::allowed(*m) || super::form::own_motion(*m)).map(|x| x.1).collect();
             sets.push(super::form::REVERT_ELEMENTS.to_vec());
-            s(pkg, "p_ex100", "obj/P_EX100.a.us", Some("p_ex"), None, Some(ON), sets, false, anchor, 0)
+            s(pkg, "p_ex100", "obj/P_EX100.a.us", Some("p_ex"), None, None, sets, false, anchor, 0)
         }
         Pkg::Weapon => s(pkg, "w_ex010", "obj/W_EX010.a.us", None, None, Some(WEAPON_ON), Vec::new(), true, weapon_anchor, ENDS_WITH_MOTION),
         Pkg::Valor | Pkg::Final => {
@@ -843,7 +829,7 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
             let sets = motion_sets(&f.character).into_iter().map(|x| x.1).collect();
             s(pkg, label, path, Some("p_ex"), f.archive.clone(), None, sets, true, form_anchor, 0)
         }
-        // The spell packages `kh2fx` plays for the spell scripts (`reflect`, `formmagic`): their
+        // The spell packages the spell scripts play (`reflect`, `formmagic`): their
         // effects don't end with Sora's motion (the scripts end them).
         Pkg::Spell(level) => {
             let (path, pax_name, bytes) = if level == super::kh2fx::WISDOM {
@@ -999,7 +985,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         }
     }
     if !left.is_empty() {
-        log(&format!("KH2 effects (native): {}: not built (kh2fx plays them): {}", s.label, left.join("; ")));
+        log(&format!("KH2 effects (native): {}: not built (they don't play): {}", s.label, left.join("; ")));
     }
     if layers.is_empty() {
         return Err("no element of it can be KH1's".into());
@@ -1042,7 +1028,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     // Elements of groups left out (too many texture slots, a texture missing) aren't KH1's.
     for (gi, why) in &r.skipped {
         let els: Vec<i16> = groups[*gi].iter().filter_map(|v| layers.iter().find(|l| l.number == v.number).map(|l| l.el)).collect();
-        log(&format!("KH2 effects (native): {}: elements {els:?} not built ({why}); kh2fx plays them", s.label));
+        log(&format!("KH2 effects (native): {}: elements {els:?} not built ({why}); they don't play", s.label));
     }
     layers.retain(|l| r.effects.contains(&l.number));
     // The HD images: one per DPD and TBP (the first record of the TBP in the DPD, the one KH1
@@ -1138,7 +1124,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     let at = pages.at;
     unsafe { std::ptr::copy_nonoverlapping(r.bytes.as_ptr(), at as *mut u8, r.bytes.len()) };
     let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
-    Ok(Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: r.bytes.len(), md5: r.md5, hd, layers, types, refused: Vec::new(), programs: r.programs.clone(), entry: 0, relocated: false })
+    Ok(Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: r.bytes.len(), md5: r.md5, hd, layers, types, programs: r.programs.clone(), entry: 0, relocated: false })
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -1429,30 +1415,39 @@ unsafe fn release(base: usize, d: &Dpx) -> Result<(), ()> {
     Ok(())
 }
 
-/// A KH2 element of Sora's package (`kh2fx::event`, game thread): true if it is KH1's (`kh2fx`
-/// doesn't play it). On Steam, once the DPX is built and the element is switched on (`ON`), with
-/// a KH1 anchor and every program its effect runs one KH1 runs as KH2 (`missing`), it is KH1's
-/// alone: KH1 plays it, or (no free element or effect slot, no Sora) it doesn't play, as KH1's own
-/// effects. `kh2fx` plays it only where KH1 can't: the DPX not built (yet, or it failed), a
-/// program not in KH1 yet (or KH2's not plugged in: KH1's program table not as expected), or
-/// another build (Epic: no blade binding, no KH2 programs; there elements without those still
-/// play through KH1 and fall back to `kh2fx` if KH1 has no slot).
+/// A KH2 element of Sora's package (`kh2fx::event`, game thread): true if KH1 started it. Once its
+/// package is built, with a KH1 anchor and every program its effect runs one KH1 runs as KH2
+/// (`missing`), KH1 plays it, or (no free element or effect slot, no Sora) it doesn't play, as
+/// KH1's own effects. Otherwise it doesn't play (logged once): its package not built (yet, or it
+/// failed), left out when it was built, a program not in KH1 yet (or KH2's not plugged in: KH1's
+/// program table not as expected), or another build (Epic: KH1's blade, position and unbound
+/// bindings and our programs are Steam's).
 pub fn event(motion: u16, el: i16) -> bool {
     play(Pkg::Sora, motion, el)
 }
 
-/// Element `el` of package `pkg` started by KH1 (see `event`): true if it is KH1's.
+/// Element `el` of package `pkg` started by KH1 (see `event`): true if it plays.
 fn play(pkg: Pkg, motion: u16, el: i16) -> bool {
-    !matches!(start_el(pkg, motion, el), Started::NotMine)
+    matches!(start_el(pkg, motion, el), Started::Kh1(..))
+}
+
+/// Why an element doesn't play, logged once per package and element (64 at most).
+fn not_played(pkg: Pkg, label: &str, el: i16, why: &str) {
+    static SEEN: Mutex<Vec<(Pkg, i16)>> = Mutex::new(Vec::new());
+    let Ok(mut g) = SEEN.lock() else { return };
+    if g.len() < 64 && !g.contains(&(pkg, el)) {
+        g.push((pkg, el));
+        log(&format!("KH2 effects (native): {label} element {el} doesn't play: {why}"));
+    }
 }
 
 /// What `start_el` did.
 enum Started {
     /// KH1 plays it: its element and layer.
     Kh1(usize, Layer),
-    /// KH1's, but KH1 had no free element or effect slot, or no Sora: it doesn't play.
+    /// KH1 had no free element or effect slot, or no Sora: it doesn't play, as KH1's own.
     NotStarted,
-    /// Not KH1's (`kh2fx` plays it).
+    /// KH1 can't play it (`not_played`).
     NotMine,
 }
 
@@ -1461,18 +1456,26 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     // (Sora's built for the moves allowed now, else the one before while it is rebuilt.)
     let sig = if pkg == Pkg::Sora { sora_sig() } else { String::new() };
     let i = g.iter().position(|d| d.pkg == pkg && d.sig == sig).or_else(|| g.iter().rposition(|d| d.pkg == pkg));
-    let Some(d) = i.map(|i| &mut g[i]) else { return Started::NotMine };
+    let Some(d) = i.map(|i| &mut g[i]) else {
+        not_played(pkg, &format!("{pkg:?}"), el, "its package isn't built (yet, or it failed: see the load lines)");
+        return Started::NotMine;
+    };
     if !d.on.is_none_or(|on| on.contains(&el)) {
+        not_played(pkg, &d.label, el, "not one of its package's elements that play");
         return Started::NotMine;
     }
-    let Some(&layer) = d.layers.iter().find(|l| l.el == el) else { return Started::NotMine };
+    let Some(&layer) = d.layers.iter().find(|l| l.el == el) else {
+        not_played(pkg, &d.label, el, "left out when its package was built (its load line says why)");
+        return Started::NotMine;
+    };
     let (number, bone) = (layer.number, layer.anchor);
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
     // KH1's blade and position bindings, and the binding list (unbound elements), are used on
-    // Steam only (their addresses are Steam's): elsewhere kh2fx plays them.
+    // Steam only (their addresses are Steam's).
     let position_only = layer.flags & POSITION_ONLY != 0;
     let unbound = layer.flags & (BIND | BIND_UNTIL_STARTED) == 0;
     if (matches!(bone, Anchor::Blade(_) | Anchor::LeftBlade(_)) || position_only || unbound) && !steam {
+        not_played(pkg, &d.label, el, "KH1's binding for it is used on Steam only");
         return Started::NotMine;
     }
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
@@ -1480,32 +1483,24 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     if !d.relocated {
         unsafe { enter(base, d) };
     }
-    // An effect with a program KH1 doesn't run as KH2 plays through kh2fx (KH1's own version, or
-    // its dummy, isn't KH2's).
+    // An effect with a program KH1 doesn't run as KH2 doesn't play (KH1's own version, or its
+    // dummy, isn't KH2's).
     let lacks = d.types.iter().find(|t| t.0 == el).map_or_else(Vec::new, |t| missing(&t.1));
     if !lacks.is_empty() {
-        if !d.refused.contains(&el) {
-            d.refused.push(el);
-            log(&format!("KH2 effects (native): {} element {el} runs programs {lacks:?}, not in KH1 as KH2's yet; kh2fx plays it", d.label));
-        }
+        not_played(pkg, &d.label, el, &format!("it runs programs {lacks:?}, not in KH1 as KH2's yet"));
         return Started::NotMine;
     }
-    // (Steam: KH1's alone from here on, the old player retired for it.)
-    let owned = steam;
     let sora = super::takeover::sora_actor();
     if sora < 0x10000 {
-        return if owned { Started::NotStarted } else { Started::NotMine };
+        return Started::NotStarted;
     }
     // The second Keyblade's points are bound to its owner (our copy of Sora on the left Keyblade,
-    // filled now); without it (not drawn) kh2fx plays them.
+    // filled now); without it (one Keyblade, or its model not in yet) they don't play.
     let actor = match bone {
         Anchor::LeftBlade(_) => match super::leftblade::left_owner() {
             Some(a) => a,
             None => {
-                if !d.refused.contains(&el) {
-                    d.refused.push(el);
-                    log(&format!("KH2 effects (native): {} element {el} is on the second Keyblade, which isn't drawn; kh2fx plays it", d.label));
-                }
+                not_played(pkg, &d.label, el, "it is on the second Keyblade, which isn't drawn");
                 return Started::NotMine;
             }
         },
@@ -1565,10 +1560,8 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     }
     if element != 0 {
         Started::Kh1(element, layer)
-    } else if owned {
-        Started::NotStarted
     } else {
-        Started::NotMine
+        Started::NotStarted
     }
 }
 
@@ -1579,9 +1572,16 @@ pub fn form_event(final_form: bool, motion: u16, el: i16) -> bool {
 }
 
 /// The Keyblade's vanish flash (`kh2fx::weapon_vanish`, as KH2 puts the Keyblade away, before
-/// KH1's put-away): true if KH1 plays it (`play`).
-pub fn weapon_vanish(motion: u16) -> bool {
-    play(Pkg::Weapon, motion, super::kh2fx::WEAPON_VANISH as i16)
+/// KH1's put-away): true if KH1 plays it (`play`). (Its "ends with the motion" flag isn't applied,
+/// so the motion is only for the log.)
+pub fn weapon_vanish() -> bool {
+    let motion = LAST_MOTION.load(Ordering::Relaxed);
+    play(Pkg::Weapon, if motion <= u16::MAX as u32 { motion as u16 } else { super::kh2fx::NO_MOTION }, super::kh2fx::WEAPON_VANISH as i16)
+}
+
+/// Package `pkg` is built and entered in KH1 (`kh2fx::spell_ready`, for the log).
+pub fn ready(pkg: Pkg) -> bool {
+    PACKS.lock().is_ok_and(|g| g.iter().any(|d| d.pkg == pkg && d.relocated))
 }
 
 /// Once, for the log: where KH1's body centre is on Sora (its height above his place) against
@@ -1907,7 +1907,7 @@ struct Spell {
 
 static SPELLS: Mutex<Vec<Spell>> = Mutex::new(Vec::new());
 static NEXT_SPELL: AtomicU32 = AtomicU32::new(1);
-/// Our handles' bit in `kh2fx`'s (its own count from 1 below it).
+/// Our spell handles' bit (a count from 1 below it; the old player's handles had it clear).
 pub const NATIVE_SPELL: u32 = 0x0400_0000;
 /// KH1's apply of a binding's matrix to an element (Steam `0x1402ADB40 (element, matrix)`: its
 /// turn from the matrix's rows (`0x1402A8EF0`, in 65536ths of a turn) and its place from the last).
@@ -1919,7 +1919,7 @@ pub enum SpellStart {
     Kh1(u32),
     /// KH1's, not started (no free element or slot).
     NotStarted,
-    /// `kh2fx` plays it.
+    /// KH1 can't play it (logged once, `not_played`).
     NotMine,
 }
 

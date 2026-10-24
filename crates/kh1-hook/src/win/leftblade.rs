@@ -171,13 +171,6 @@ static STATE: Mutex<State> = Mutex::new(State { loaded: None, pending: None, fai
 /// whose body it is drawing, the user: the second Keyblade jittered as Valor fell in place).
 static KH2_LEFT: Mutex<std::collections::VecDeque<(u64, Vec<Mat4>, Instant)>> = Mutex::new(std::collections::VecDeque::new());
 
-/// KH2's left Keyblade's root (KH2 model space) of the last step, if recent (`kh2fx`'s weapon
-/// anchors for Valor's and Final's effects).
-pub fn kh2_left_root() -> Option<Mat4> {
-    let g = KH2_LEFT.try_lock().ok()?;
-    g.back().filter(|(_, _, t)| super::frameadv::age(*t).as_secs_f32() < 0.5).and_then(|(_, b, _)| b.first().copied())
-}
-
 /// A body pose's signature (its bones' places, bit for bit).
 fn body_sig(body: &[Mat4]) -> u64 {
     use std::hash::{Hash, Hasher};

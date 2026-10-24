@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 444 (testing branch: KH2 effects: the old player deprecated)
+- **KH2 effects: the old player deprecated.** The tester ("the older player is to be deprecated"). `kh2fx` is the entry point to `kh2dpx`; player, `fx12::draw` / effect textures and `fx_test` removed; world-pass hook in `model` (installed only while the model is on); misses logged once. t430 log: the old player held 176 textures, 16,704 KB. Notes §18.11.
+
 ### 2026-10-23: Stage 443 (testing branch: KH2 effects: a form's package built once Sora could change into it)
 - **KH2 effects: a form's package built once Sora could change into it.** `form::possible` (MP, data, Valor's Keyblade read without writing). Notes §18.12.
 

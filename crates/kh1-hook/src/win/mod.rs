@@ -226,7 +226,6 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         debugmenu::install();
         frameadv::install();
         kh2sound::start();
-        kh2fx::start();
         kh2dpx::start();
         pose::load_kh2();
         model::load();

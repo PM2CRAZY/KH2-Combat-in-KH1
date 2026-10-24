@@ -15,7 +15,7 @@
 //!   draw: every body mesh masked off (the draw params' mesh mask), and his Keyblade too when
 //!   ours replaces it. KH1 still poses him (hitboxes, effects, the trail and clanks use those
 //!   bones), only his draw is held back.
-//! - **Draw**: from the world-model pass (`kh2fx`), the triangles skinned on the CPU and drawn by
+//! - **Draw**: from the world-model pass (hooked here while the model is on), the triangles skinned on the CPU and drawn by
 //!   `fx12::draw_mesh` (depth-tested and depth-writing, cut out at half alpha, KH1's camera).
 //!
 //! When KH1 animates him (its own moves, KH1-style moves set in the Config menu, scripted walks),
@@ -196,10 +196,47 @@ unsafe extern "system" fn replay(r: usize, n: i32, t: f32) {
     f(r, n, t)
 }
 
-/// The replay counter's hook (diagnostics; nothing changes if it fails).
+/// KH1's world-model pass (task 160000), hooked for the model's draw after it (the hook was the
+/// old effect player's, which drew there too, until t430).
+const WORLD_PASS_RVA: Rva = Rva(0x1EADD0);
+const WORLD_PASS_PROLOGUE: [u8; 15] = [0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x70, 0x10, 0x48, 0x89, 0x78, 0x18];
+static ORIG_WORLD_PASS: AtomicUsize = AtomicUsize::new(0);
+
+unsafe extern "system" fn world_pass() {
+    let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_WORLD_PASS.load(Ordering::Acquire));
+    f();
+    let _ = std::panic::catch_unwind(draw);
+}
+
+/// The replay counter's hook (diagnostics; nothing changes if it fails), and the world-model
+/// pass's while the model can be drawn (`on`; off since s259, so not hooked).
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     super::hook::install(base + REPLAY_RVA, &REPLAY_PROLOGUE, replay as *const () as usize, &ORIG_REPLAY, "interpolated replay (KH2 model's counters)");
+    if on() {
+        super::hook::install(base + WORLD_PASS_RVA, &WORLD_PASS_PROLOGUE, world_pass as *const () as usize, &ORIG_WORLD_PASS, "world-model pass");
+    }
+}
+
+/// KH1's pause machine (`0x14017D030`): 0 while the game runs; 1..6 from the pause button (or a
+/// menu opened the same way: kinds `0x14232E984`, 0 the pause menu `0x1402D3450`) until the
+/// game runs again. While it is up KH1 runs only its pause tasks (task mask `0x142867D74` = 1),
+/// and the menu's own task (`0x1402D3040`, priority 159999) draws the menu's windows before the
+/// world-model pass, then repoints the camera (`0x142340ED8` / `0x142340EE0`) for the party
+/// models it shows there: a draw of ours after the world's would land on top of the menu.
+const PAUSE_STATE_RVA: Rva = Rva(0x232E9B4);
+
+/// The game is paused or a full-screen menu holds it: KH1's pause machine is up, or Sora has had
+/// no physics frame for a while (`takeover::paused`: any other menu that stops the field).
+pub(super) fn paused(base: usize) -> Option<String> {
+    let state = unsafe { std::ptr::read_unaligned((base + PAUSE_STATE_RVA) as *const i32) };
+    if state != 0 {
+        return Some(format!("KH1's pause / menu state {state}"));
+    }
+    if super::takeover::paused() {
+        return Some("no physics frame of Sora's for over 120 ms".into());
+    }
+    None
 }
 
 /// The Config row / ini choice.
@@ -422,7 +459,7 @@ pub unsafe fn hide(params: usize) -> Option<Hide> {
         return refuse("renderer off", &MAIN);
     }
     let base = BASE.load(Ordering::Relaxed);
-    if base == 0 || super::kh2fx::paused(base).is_some() {
+    if base == 0 || paused(base).is_some() {
         return refuse("paused", &MAIN);
     }
     if super::pose::menu_sora_within(150) {

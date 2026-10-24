@@ -38,7 +38,7 @@ use kh2_rig::RigAnim;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
-pub use super::formmagic::{element_sounds, package_spell, shots_step, spell_file, LAST_PACKAGE, SPELL_NAMES};
+pub use super::formmagic::{element_sounds, package_spell, shots_step, LAST_PACKAGE};
 
 pub const DRIVE_MOTION: u16 = 52;
 pub const ARRIVE_MOTION: u16 = 53;

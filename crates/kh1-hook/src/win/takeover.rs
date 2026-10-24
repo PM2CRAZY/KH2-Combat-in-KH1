@@ -304,9 +304,9 @@ pub fn resumed_within(ms: u64) -> bool {
 }
 
 /// The game stands still now: no physics frame of Sora's for over 120 ms (a pause, or a menu
-/// that stops the field; `kh2fx` draws no effects then). Unknown (no frame yet): no.
+/// that stops the field; `model` draws nothing then). Unknown (no frame yet): no.
 pub fn paused() -> bool {
-    // (t371) Frame Advance holding the game isn't a pause: KH2's effects and model stay drawn.
+    // (t371) Frame Advance holding the game isn't a pause: KH2's model stays drawn.
     if super::frameadv::holding() {
         return false;
     }
