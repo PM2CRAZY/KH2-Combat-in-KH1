@@ -102,7 +102,8 @@ static OURS: Mutex<Option<(usize, Option<character_core::Launch>, u64)>> = Mutex
 /// Our row for KH2's pick `row` (`kh1rows`), if it is one of ours and plays: the rows on Sora's
 /// table and our slot of its motion on its request.
 fn ours_for(row: &ComboRow) -> Option<usize> {
-    super::kh1rows::by_kh2_row(row.id).filter(|&n| super::kh1rows::OURS[n].motion == row.motion && super::kh1rows::installed() && super::kh2slots::has(super::kh1rows::request(n) as usize, row.motion))
+    // (Attack rows only: the guard's row 11 is started by its request, `guard_press`.)
+    super::kh1rows::by_kh2_row(row.id).filter(|&n| super::kh1rows::OURS[n].attack && super::kh1rows::OURS[n].motion == row.motion && super::kh1rows::installed() && super::kh2slots::has(super::kh1rows::request(n) as usize, row.motion))
 }
 
 /// What `combat::exec` runs for our row `n` (`kh1rows`) at this press: KH1's row runner on it,
@@ -322,6 +323,11 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // A Square move of KH2's on its own KH1 row (`control` gave KH1 this Attack for it).
     if let Some((n, launch)) = take_ours() {
         return ours_run(n, launch, air, count, request_of);
+    }
+    // Counterguard: Attack during KH2's guard's repel (KH2's own rule, Steam KH2's Hurt step on
+    // motion 42; `counter_window` opened KH1's combo window for it), on its own KH1 row.
+    if let Some(run) = counterguard(actor, air, count, request_of) {
+        return run;
     }
     let last = LAST.try_lock().ok().and_then(|l| *l);
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
@@ -765,7 +771,8 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
     }
     // Square in KH1's combo window (a swing of its combo, slots 98..104): KH2's Square move there,
     // its count KH1's.
-    if square_fresh && s.combo_window && matches!(pose::sora_slot(), Some(98..=104)) {
+    // (Not in KH2's guard repel: KH1's combo window there is Counterguard's, `counter_window`.)
+    if square_fresh && s.combo_window && matches!(pose::sora_slot(), Some(98..=104)) && unsafe { super::kh2slots::playing_motion(actor) } != Some(character_core::motion::GUARD) {
         let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
         let master = takeover::with_abilities(|a| a.combo_master) == Some(true);
         if count == 0 || !(hit || master) {
@@ -943,4 +950,183 @@ pub unsafe fn restore(actor: usize, s: Saved) {
         wr(actor + 0x1CC, rd::<u32>(actor + 0x1CC) & !KH1_COMBO_WINDOW);
     }
     note(format!("KH1's combo goes on from KH2's: count now {}", rd::<u8>(s.info + 0x41)));
+}
+
+/// KH2's guard press, its repel and Counterguard on KH1's states (the tester, combo row selection
+/// m15 question 3: "(a)", Guard native, then Counterguard on its own KH1 row). KH2's rules (the
+/// OG rewrite's `Character::try_action_button` / `clash` / its Hurt step; the windows from the
+/// motion files, Checked (files): P_EX100.mset and W_EX010.mset):
+/// - **The press**: Square on the ground with the stick at rest (KH2's dead zone 0), Guard
+///   equipped (KH2's row 11, motion 173), the Dodge Roll style KH2 (where Square is KH2's): our
+///   request for 173 asked for at once with KH1's action flag (no blend, his speed 0, as KH2's
+///   `vel_h = 0`), facing KH1's locked target if one is held. Its Keyblade guard 161 (frames
+///   6..37) stops a hit from in front (`hurt`, `kh2slots::keyblade_guard`, and KH1 guard objects
+///   from the same window, `takeover::kh2_hits` -> `combat::guard_step`). KH2's free state from
+///   52 (range id 2) is KH1's "may be left".
+/// - **The repel** (`guard_repel`, the guard's `refact_self` 1): our request for motion 42,
+///   facing the attacker, pushed back 200 (KH2's hit-back: 20 a frame, x 0.9 a frame) through
+///   KH1's per-frame push (`+0x120`, `guard_frame`). Its own Keyblade guard 162 (0..40,
+///   `refact_self` 2) stops hits from in front with nothing more. Free from 40.
+/// - **Counterguard** (row 39, motion 171, ability 96): Attack any frame of the repel on the
+///   ground. KH1's Attack step takes it in KH1's combo window (`counter_window`, as Finishing
+///   Plus's), and our row runs it (`counterguard`): its body hit 1581, its invulnerability and
+///   body guard 0..20 are our slot's (`takeover::kh2_hits`, `hurt`).
+static PUSH: Mutex<Option<([f32; 2], f32)>> = Mutex::new(None);
+/// KH2's Counterguard ability (its PTYA row 39's ability, Checked (files)).
+const COUNTERGUARD_ABILITY: u16 = 96;
+/// KH2's guard repel's push back (`Character::clash`: `hit_back(.., 200)`, speed 0.1 of it, x 0.9 a
+/// frame).
+const REPEL_BACK: f32 = 200.0;
+
+/// Our request for KH2's `motion` (a move of ours started by its request alone) asked for now on
+/// the ground, facing `face` (yaw) if given: KH1's action flag, no blend, the idle queued after.
+unsafe fn start_own(actor: usize, motion: u16, face: Option<f32>) -> bool {
+    let Some(n) = super::kh1rows::by_motion(motion) else { return false };
+    let request = super::kh1rows::request(n);
+    if !super::kh1rows::installed() || !super::kh2slots::has(request as usize, motion) || rd::<i32>(actor + 0x70) != 0 {
+        return false;
+    }
+    let base = takeover::game_base();
+    if let Some(f) = face.filter(|f| f.is_finite()) {
+        wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
+        wr(actor + 0x150, f);
+    }
+    // (KH2 stops him: `vel_h = 0`. **Assumption**: KH1's ground step moves him by `+0x2C` while
+    // its action flag is set, as its rows' lunges do.)
+    wr(actor + 0x2C, 0.0f32);
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+    let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
+    set(actor, request | 0x0100_0000, 0.0);
+    queue(actor, 0x4000_0000, 0.0);
+    if let Ok(mut l) = LAST.lock() {
+        *l = None;
+    }
+    FINISHERS.store(0, Ordering::Relaxed);
+    true
+}
+
+/// The yaw (KH1's `+0x3C`, as `recover` writes it) toward `d` (x / z).
+fn yaw_to(d: [f32; 2]) -> Option<f32> {
+    (d[0].hypot(d[1]) > 1e-3).then(|| d[0].atan2(d[1]))
+}
+
+/// Square on the ground with the Dodge Roll style KH2 (`shared::control`): KH2's guard press on
+/// KH1's states, if KH2 would guard here (stick at rest, Guard equipped) and our request is built.
+pub fn guard_press() -> bool {
+    if super::form::in_form() || takeover::move_tilt() > 0.0 || takeover::with_abilities(|a| a.guard) != Some(true) {
+        return false;
+    }
+    unsafe {
+        let actor = sora();
+        if actor < 0x10000 {
+            return false;
+        }
+        let me = rd::<[f32; 3]>(actor + 0x10);
+        let face = super::kh1rows::lock_actor().and_then(|t| {
+            let p = rd::<[f32; 3]>(t + 0x10);
+            yaw_to([p[0] - me[0], p[2] - me[2]])
+        });
+        if !start_own(actor, character_core::motion::GUARD_PRESS, face) {
+            return false;
+        }
+        if let Ok(mut p) = PUSH.lock() {
+            *p = None;
+        }
+        note(format!("Square standing: KH2's guard (motion 173) on KH1's request {:#x} of its own{}", super::kh1rows::by_motion(character_core::motion::GUARD_PRESS).map_or(0, super::kh1rows::request), if face.is_some() { ", facing KH1's lock" } else { "" }));
+        true
+    }
+}
+
+/// KH2's guard stopped a hit in our guard slot (`hurt`, or a KH1 guard object of its window,
+/// `combat::guard_step`): `toward` the attacker (x / z), the guard's `refact_self`. 1 (the press's
+/// 161): KH2's repel (`Character::clash`, on the ground): motion 42 facing the attacker, pushed
+/// back 200. 2 (the repel's own 162): nothing more.
+pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8) {
+    if refact != 1 || actor < 0x10000 || super::form::in_form() {
+        return;
+    }
+    // (Once a frame: the hit pass and a guard object of the same window can both stop something
+    // in it; the repel's own guard is `refact_self` 2.)
+    static AT: AtomicU64 = AtomicU64::new(0);
+    let now = frame() + 1;
+    let last = AT.swap(now, Ordering::Relaxed);
+    if last != 0 && now.saturating_sub(last) <= 1 {
+        return;
+    }
+    let face = yaw_to(toward);
+    if !start_own(actor, character_core::motion::GUARD, face) {
+        note("KH2's guard repel: not started (not on the ground, or no request of ours for motion 42)".to_string());
+        return;
+    }
+    let len = toward[0].hypot(toward[1]);
+    let back = if len > 1e-3 { [-toward[0] / len, -toward[1] / len] } else { [0.0, 0.0] };
+    if let Ok(mut p) = PUSH.lock() {
+        *p = Some((back, REPEL_BACK * 0.1));
+    }
+    note(format!("KH2's guard stopped a hit: its repel (motion 42), pushed back {REPEL_BACK:.0}"));
+}
+
+/// Each KH1 physics frame of Sora's, before it (`takeover::physics`): the repel's push back on
+/// KH1's per-frame push (`+0x120`, which KH1's physics step adds to the move and clears), KH2's
+/// 60 Hz steps for KH1's frame step.
+pub unsafe fn guard_frame(actor: usize) {
+    let Ok(mut g) = PUSH.try_lock() else { return };
+    let Some((dir, mut v)) = *g else { return };
+    if !super::shared::active() || rd::<i32>(actor + 0x70) != 0 {
+        *g = None;
+        return;
+    }
+    let steps = super::shared::physics::dt().round().clamp(1.0, 4.0) as u32;
+    let mut add = [0.0f32; 2];
+    for _ in 0..steps {
+        if v < 1.0 {
+            break;
+        }
+        add[0] += dir[0] * v;
+        add[1] += dir[1] * v;
+        v *= 0.9;
+    }
+    let p = rd::<[f32; 3]>(actor + 0x120);
+    wr(actor + 0x120, [p[0] + add[0], p[1], p[2] + add[1]]);
+    *g = (v >= 1.0).then_some((dir, v));
+}
+
+/// Our slot of KH2's repel (42) playing on the ground, Counterguard equipped (KH2 takes Attack
+/// any frame of it): KH1's combo window this frame (as Finishing Plus's, `kh2slots`), KH1's count
+/// at 0 and its last swing counted as connected, so KH1's Attack step takes the press as a
+/// combo's first (KH2's count after a guard: a new combo).
+pub unsafe fn counter_window(actor: usize) {
+    if !super::shared::active() || super::form::in_form() || rd::<i32>(actor + 0x70) != 0 || super::kh2slots::playing_motion(actor) != Some(character_core::motion::GUARD) {
+        return;
+    }
+    if takeover::with_abilities(|a| a.equipped.contains(&COUNTERGUARD_ABILITY)) != Some(true) {
+        return;
+    }
+    let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    if inst < 0x10000 || info < 0x10000 {
+        return;
+    }
+    wr(inst + 0x14, rd::<u32>(inst + 0x14) | KH1_COMBO_WINDOW);
+    wr(info + 0x41, 0u8);
+    wr(info + 0x50, rd::<u32>(info + 0x50) | 1);
+}
+
+/// An Attack KH1's step took in the repel's window (`counter_window`): KH2's Counterguard on its
+/// own KH1 row, if KH2 would take row 39 now.
+unsafe fn counterguard(actor: usize, air: bool, count: u8, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<Run> {
+    use super::kh1rows as k;
+    if air || super::kh2slots::playing_motion(actor) != Some(character_core::motion::GUARD) {
+        return None;
+    }
+    let n = k::by_kh2_row(k::COUNTERGUARD_ROW).filter(|&n| k::installed() && super::kh2slots::has(k::request(n) as usize, k::OURS[n].motion))?;
+    let Some((row, launch)) = takeover::kh2_would_take_row(actor, k::COUNTERGUARD_ROW, false) else {
+        note("Attack in KH2's guard repel: KH2 wouldn't take Counterguard (row 39) now".to_string());
+        return None;
+    };
+    if let Ok(mut p) = PUSH.lock() {
+        *p = None;
+    }
+    note(format!("Attack in KH2's guard repel: KH2's Counterguard (row {} motion {})", row.id, row.motion));
+    Some(ours_run(n, launch, false, count, request_of))
 }

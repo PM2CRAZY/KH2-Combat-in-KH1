@@ -269,6 +269,10 @@ pub fn control(s: &Seen) -> u32 {
             // (Dodge Roll at KH1 without KH1's roll equipped: Square while moving is KH2's Quick
             // Run, which has no style of its own, when it is equipped.)
             borrow = SQUARE;
+        } else if s.state == 0 && square_fresh && roll_kh2 && super::combomods::guard_press() {
+            // KH2's guard on KH1's states (stick at rest, Guard equipped): our request for KH2's
+            // guard press, no borrow (`combomods::guard_press`). The press is KH2's.
+            return KH1_ACTION_BIT;
         } else if s.state == 0 && square_fresh && roll_kh2 {
             // (Nothing of KH2's for Square without those abilities: KH2 would only take him and
             // give him back two frames later, s261's "kh2 dodge roll is unusable" with Dodge

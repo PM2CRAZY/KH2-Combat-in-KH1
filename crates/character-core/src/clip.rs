@@ -21,6 +21,11 @@ pub enum WindowKind {
     NoGravity,
     Air,
     Grounded,
+    /// KH2's free state on the ground or in the air (range id 2: the motion state word's bit 0x10,
+    /// read with ids 0 / 1's bits 4 / 8 as "free", Steam KH2 `0x14040D810` / `0x140422520`, Checked
+    /// (decomp)). The guard (173 from 52) and its repel (42 from 40) have it. KH2's controller here
+    /// doesn't read it; KH1's states take it as KH1's "may be left" on our requests (`kh2slots`).
+    Free,
     AllowMovement,
     /// KH2's edge stop (range id 29, the motion state word `+0x18C` bit 23; Steam exe range
     /// handler `0x14040D810`): on the ground, a step that would leave the floor keeps only its

@@ -452,6 +452,8 @@ unsafe extern "system" fn physics(actor: usize) {
         super::shared::physics::ground_hop_carry(actor);
         // KH2's turn toward the target in our slot's KH2 motion (`kh2slots::turn_to_lock`).
         super::kh2slots::turn_to_lock(actor);
+        // KH2's guard repel's push back (`combomods::guard_frame`).
+        super::combomods::guard_frame(actor);
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
@@ -1701,6 +1703,23 @@ pub unsafe fn kh2_hits(actor: usize) {
     if playing.is_some_and(|(m, t)| m == n.motion && t == n.last_t) {
         return;
     }
+    // KH2's guard windows on the Keyblade in that motion (the guard press's, its repel's, Guard
+    // Break's): KH1 guard objects, as for KH2's controller's guard (`combat::guard_step`), so an
+    // attack meeting one is stopped before it reaches him (`combomods::guard_repel` then). Those on
+    // his body stay `hurt`'s (`kh2slots::body_guard`).
+    let guards: Vec<(usize, u16, u8, u8)> = match (playing, clip) {
+        (Some((_, t)), Some((_, c))) => c
+            .windows
+            .iter()
+            .enumerate()
+            .filter(|(_, w)| w.contains(t as u32))
+            .filter_map(|(i, w)| match w.kind {
+                character_core::WindowKind::Guard { attack, group, weapon } if weapon > 0 => Some((i, attack, group, weapon)),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     let (open, motion, t) = match (playing, clip) {
         (Some((m, t)), Some((_, c))) => {
             if m != n.motion || t < n.last_t {
@@ -1726,7 +1745,7 @@ pub unsafe fn kh2_hits(actor: usize) {
             (Vec::new(), 0, 0.0)
         }
     };
-    if open.is_empty() && !n.live {
+    if open.is_empty() && guards.is_empty() && !n.live {
         return;
     }
     let Ok(mut dg) = DRIVER.try_lock() else { return };
@@ -1734,7 +1753,7 @@ pub unsafe fn kh2_hits(actor: usize) {
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
     let p = rd::<[f32; 3]>(actor + 0x10);
     let yaw = rd::<f32>(actor + 0x3C);
-    if !open.is_empty() && !n.anim.pose_at(&d.character, motion, t, yaw, [p[0], -p[1], p[2]]) {
+    if (!open.is_empty() || !guards.is_empty()) && !n.anim.pose_at(&d.character, motion, t, yaw, [p[0], -p[1], p[2]]) {
         return;
     }
     let _ = d.strikes.look(actor);
@@ -1749,7 +1768,7 @@ pub unsafe fn kh2_hits(actor: usize) {
         hitboxes,
         invulnerable: false,
         guarding: false,
-        guard_boxes: Vec::new(),
+        guard_boxes: guards.iter().map(|&(i, attack, group, weapon)| character_core::ActiveHitbox { swing: (1 << 63) | (n.play << 8) | i as u64, attack, group, weapon }).collect(),
         weapon_trail: false,
         locked: None,
         combo_count: 0,
@@ -1758,7 +1777,7 @@ pub unsafe fn kh2_hits(actor: usize) {
     };
     let battle = super::form::battle(&d.drive, kh2).clone();
     let landed = d.strikes.strike_as(actor, &out, &n.anim, &mut d.character, &battle, air, steps() as f32);
-    n.live = !open.is_empty();
+    n.live = !open.is_empty() || !guards.is_empty();
     if landed > 0 {
         let info = pose::ptr(rd::<u32>(actor + 0x14C));
         if info >= 0x10000 {

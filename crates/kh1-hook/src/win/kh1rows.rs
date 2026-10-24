@@ -128,11 +128,14 @@ pub const NO_ROW: u8 = u8::MAX;
 /// Ours (Sora's PTYA rows and motions, Checked (files)): the Square moves Upper Slash (row 12,
 /// motion 161, ability 18), Finishing Leap (37, 167, ability 95, `combo_offset` 1), Horizontal
 /// Slash (38, 193, in the air, ability 99, a hop of 14) and the finisher Guard Break (27, 165,
-/// ability 93). Counterguard (39, 171) comes out of KH2's guard's repel (motion 42), which is
-/// still KH2's controller's: not here yet. Out of KH1's knock-away (`docs/aerial-recovery.md`):
-/// Retaliating Slash (row 40, motion 172, ability 101, an air row with a hop of 21..121) and
-/// Aerial Recovery (motion 40, no row: its request only).
-pub const OURS: [Ours; 8] = [
+/// ability 93). Out of KH1's knock-away (`docs/aerial-recovery.md`): Retaliating Slash (row 40,
+/// motion 172, ability 101, an air row with a hop of 21..121) and Aerial Recovery (motion 40, no
+/// row: its request only). KH2's guard (the tester, combo row selection m15 question 3: "(a)",
+/// Guard native, then Counterguard on its own KH1 row; `combomods::guard_press`): the guard press
+/// (row 11, motion 173, its request only), its repel (motion 42, no row, its request only, asked
+/// for when the guard stops a hit, `combomods::guard_repel`) and Counterguard (row 39, motion 171,
+/// ability 96: Attack during the repel, an attack row).
+pub const OURS: [Ours; 11] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false },
@@ -141,7 +144,15 @@ pub const OURS: [Ours; 8] = [
     Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false },
     Ours { name: "Finishing Plus", kh2_row: NO_ROW, motion: 154, kind: Kind::Finisher, rises: false, guard_break: false, attack: true, next_finisher: true },
     Ours { name: "Finishing Plus (air)", kh2_row: NO_ROW, motion: 183, kind: Kind::AirFinisher, rises: false, guard_break: false, attack: true, next_finisher: true },
+    Ours { name: "Guard", kh2_row: GUARD_ROW, motion: character_core::motion::GUARD_PRESS, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false },
+    Ours { name: "Guard repel", kh2_row: NO_ROW, motion: character_core::motion::GUARD, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false },
+    Ours { name: "Counterguard", kh2_row: COUNTERGUARD_ROW, motion: 171, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false },
 ];
+
+/// Sora's PTYA rows for the guard and Counterguard (Checked (files): row 11 kind 0, motion 173,
+/// ability 1; row 39 kind 0, motion 171, ability 96).
+pub const GUARD_ROW: u8 = 11;
+pub const COUNTERGUARD_ROW: u8 = 39;
 
 /// The next-finisher row of ours on the ground or in the air (`Ours::next_finisher`).
 pub fn next_finisher(air: bool) -> Option<usize> {
@@ -415,4 +426,16 @@ pub unsafe fn command_attack() {
         to_handle(0) as u64
     };
     wr(rec + 4, target);
+}
+
+/// KH1's locked target's actor (the lock-on's while it holds one, `0x142DB3510` / `0x142DB3518`
+/// as `command_attack` reads them), if any: what KH2's guard turns him toward (KH2's guard faces
+/// its lock only, `Character::try_action_button`).
+pub unsafe fn lock_actor() -> Option<usize> {
+    let base = super::takeover::game_base();
+    if rd::<u32>(base + LOCK_STATE_RVA) == 0 {
+        return None;
+    }
+    let a = pose::ptr(rd::<u32>(base + LOCK_TARGET_RVA));
+    (a >= 0x10000 && super::crash::readable(a + 0x1F)).then_some(a)
 }

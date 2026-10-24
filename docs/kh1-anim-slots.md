@@ -921,8 +921,7 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
     root's height too). Its slot is built on KH1's air finisher (104, request 0xCE's kind, no
     travel flag: the root is the air step's, not KH1's H10). **Assumption**: KH1's time in the
     slot when the air step runs is the frame's (at most a frame off, as for the no-gravity hold).
-  - **Not here**: Counterguard (row 39, motion 171) comes out of KH2's guard's repel (motion 42),
-    and KH2's guard is still KH2's controller's (a question to the tester). Not checked in game.
+  - Counterguard: now on a row of its own (below, "KH2's guard on KH1's states").
 - **Aerial Recovery and Retaliating Slash on KH1 requests of their own** (the tester, m14
   question 3: "(b)", new KH1 requests for KH2's motions; KH2's rules in
   `docs/aerial-recovery.md`, Checked (exe) there): both out of KH1's own knock-away (`hurt`'s
@@ -1136,6 +1135,60 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
     ability finisher); a ground press at an enemy above (f41229) was KH2's Aerial Sweep (row 33,
     equipped, before row 0 in the table), a borrow.
   - Not seen: the ground rows, rows 0 / 1 from the ground, the finisher status bits.
+
+### 7.x KH2's guard and Counterguard on KH1's states (testing branch)
+
+The tester (m15 question 3: "(a)", Guard native, then Counterguard on its own KH1 row). With the
+Dodge Roll style at KH2, Square on the ground with the stick at rest and Guard equipped no longer
+borrows KH2's controller (`shared::control` -> `combomods::guard_press`); a moving stick still
+borrows it for the roll / Quick Run as before.
+
+- **What KH2 does** (OG rewrite `Character::try_action_button` / `clash` / its Hurt step; the
+  motion files, **Checked (files)**, read from the Steam install's `obj/P_EX100.mset` and
+  `obj/W_EX010.mset`): the press is PTYA row 11 (kind 0, motion 173, ability 1): its Keyblade
+  guard window ATKP 161 (kind 2, `refact_self` 1) at frames 6..37 (60 Hz), its trail 8..37, its
+  free state (range id 2) from 52, KH2's controller facing its lock first and stopping him. A hit
+  stopped there (`refact_self` 1, on the ground) starts the repel: motion 42, facing the attacker,
+  pushed back 200 (`hit_back`: 20 a frame, x 0.9 a frame), its own Keyblade guard 162 (kind 2,
+  `refact_self` 2: stops, nothing more) at 0..40, free from 40. Attack on any frame of the repel on
+  the ground is Counterguard (row 39, kind 0, motion 171, ability 96): body hit 1581 (kind 1,
+  power 100) at 20..28, invulnerable and body guard 124 (`refact_self` 2) at 0..20, its combo
+  window from 34.
+- **Range id 2** (Steam KH2 `0x14040D810`, **Checked (decomp)**): it sets bit 0x10 of the motion
+  state word, beside ids 0 / 1's bits 4 / 8; the free-state tests read the three together
+  (`0x140422520`: bit 4, or bit 0x10 with the ground / air test). So it is a free state too.
+  `kh2-data` now reads it as `WindowKind::Free`; KH2's controller here ignores it (as before);
+  `kh2slots::kh1_tracks` takes it as KH1's "may be left" on our requests. No other motion on our
+  requests or casts has it (41, 42, 173 and some field motions do).
+- **Ours**: three more KH1 requests (`kh1rows::OURS`, 0x208..0x20A): Guard (173) and Guard repel
+  (42), asked for by request alone with KH1's action flag (`combomods::start_own`, KH1's idle
+  queued after), and Counterguard (171) as an attack row. The guard windows: `hurt` takes a hit
+  from in front (or anywhere with Guard all round) inside one (`kh2slots::keyblade_guard`) as no
+  effect with KH1's clash spark; and `takeover::kh2_hits` puts the same windows up as KH1 guard
+  objects (`combat::guard_step`, as for KH2's controller), so an attack meeting one is stopped
+  before it reaches him; either way `refact_self` 1 starts the repel (`combomods::guard_repel`,
+  once a frame), whose push back goes through KH1's per-frame push `+0x120`
+  (`combomods::guard_frame`, before KH1's physics step). In the repel, Counterguard equipped,
+  KH1's combo window is opened each frame with KH1's count at 0 (`combomods::counter_window`), so
+  KH1's own Attack step takes the press; `combomods::counterguard` runs our row if KH2 would take
+  row 39 (`Character::would_take_row`).
+- **Differences / assumptions**: KH2's controller treats its whole guard action as guarding
+  (`out.guarding`); here only the window (6..37) guards, as the files have it. KH1's ground step is
+  taken to move him by its speed `+0x2C` while the action flag is set (zeroed at the start,
+  **Assumption**). Square again inside the repel (KH2: after its reaction-command window) isn't
+  taken: KH1's can-act test is false there. A guard stopping a hit in the air does nothing (KH2's
+  repel is ground-only; its air recoil isn't ported). Not checked in game.
+
+### 7.y Guard Break against guards (Checked (files))
+
+The tester (m15 question 4: "(a) but read the mset"). `obj/W_EX010.mset` motion 165 (Steam
+install, read with the repo's `kh2-combat mset`): its hit is ATKP 876 (group 5, frames 28..42)
+and it carries a guard of its own, 162 (group 2, frames 5..42). 876 is kind 1 (Sora's plain
+swings 126..130 are kind 0; the guards 161 / 162 kind 2), power 250, reaction 11; kind 1 is
+OpenKH's "pierce armor", the guard break (the name is OpenKH's; KH2's own use of kind 1 in its
+clash test isn't read in the decomp, **Assumption** that it is what goes through guards). KH1's
+rule stays (`kh1rows::GUARD_THROUGH`, priority 0x62). Counterguard's 1581 is kind 1 too. Guard
+Break's own guard 162 now goes up as a KH1 guard object while it plays (above, `kh2_hits`).
 
 ## 8. KH2's walk and run as slots (t389)
 

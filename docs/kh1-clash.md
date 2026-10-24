@@ -66,6 +66,11 @@ on enemies), and Aerial Recovery guards on KH2's frames, through its i-frames.
 `hurt`'s own guard (an attack that reaches his body during a guard window) uses the same refact
 self, and a body guard is all round.
 
+In KH1's own states (testing branch: the guard press 173, its repel 42 and Guard Break 165 as KH2
+motions of ours KH1 plays, `docs/kh1-anim-slots.md` §7.x) the same objects come from those motions'
+Keyblade `Guard` windows (`takeover::kh2_hits`), and a stop starts the repel on KH1's states
+(`combomods::guard_repel`) instead of KH2's controller's `clash`.
+
 Left to the controller (not this lane): KH2's Aerial Dodge has no invulnerable frames (ours gives
 10..16 by level, `AIR_DODGE_STAR`), and Aerial Recovery's are its window 0..16 (ours `f <= 16`,
 one frame more).

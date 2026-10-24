@@ -1693,7 +1693,11 @@ impl Strikes {
                 glam::Vec2::new(f[0], f[2])
             });
             let refact = battle.attack_for_level(attack, 0, 0).map_or(2, |a| a.refact_self);
-            if refact != 2 {
+            if super::shared::active() {
+                // KH1's states have him (a KH2 motion of ours KH1 plays, `takeover::kh2_hits`):
+                // KH2's guard reaction on KH1's states.
+                super::combomods::guard_repel(sora, toward.to_array(), refact);
+            } else if refact != 2 {
                 character.clash(refact, 0, toward.to_array());
             }
             if N.fetch_add(1, Ordering::Relaxed) < 60 {

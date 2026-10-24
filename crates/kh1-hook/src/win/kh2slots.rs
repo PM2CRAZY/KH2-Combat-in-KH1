@@ -468,6 +468,27 @@ pub unsafe fn body_guard(actor: usize) -> Option<u16> {
     })
 }
 
+/// KH2's guard on the Keyblade in our slot playing on `actor` now (a `Guard` window on the weapon
+/// at KH1's time in the slot: the guard press 173's ATKP 161 at 6..37, `refact_self` 1, the repel;
+/// its repel 42's 162 at 0..40 and Guard Break 165's 162 at 5..42, `refact_self` 2, nothing;
+/// Checked (files), W_EX010.mset): its ATKP and "refact self". `hurt` takes a hit from in front
+/// there as KH2's guard does (`combomods::guard_repel`).
+pub unsafe fn keyblade_guard(actor: usize) -> Option<(u16, u8)> {
+    use character_core::WindowKind as W;
+    let m = current(actor)?;
+    let kh2 = pose::kh2()?;
+    let clip = kh2.character.moveset.clips.get(&m.motion)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    if !(t >= 0.0) {
+        return None;
+    }
+    let f = t as u32;
+    clip.windows.iter().filter(|w| w.contains(f)).filter_map(|w| match w.kind {
+        W::Guard { attack, weapon, .. } if weapon > 0 => kh2.battle.attack_for_level(attack, 0, 0).map(|a| (attack, a.refact_self)),
+        _ => None,
+    }).min_by_key(|g| g.1)
+}
+
 /// KH2's clip of our slot playing on `actor` holds him with no gravity now (its range id 3 / 24,
 /// `WindowKind::NoGravity`, at KH1's time in the slot, which runs in the clip's 60 Hz frames: the
 /// slot is retimed to its length). Not for a clip that allows movement all through (Wisdom
@@ -640,12 +661,13 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own:
     if trail.is_empty() {
         trail = hits.iter().map(|&(a, b)| ((a - 4.0).max(0.0), b)).collect();
     }
-    // On a request of ours (`own`, `kh1rows`), KH2's "free" state (range id 0 / 1,
-    // `WindowKind::Grounded` / `Air`: control comes back there, Aerial Recovery's from frame 24,
+    // On a request of ours (`own`, `kh1rows`), KH2's "free" state (range id 0 / 1 / 2,
+    // `WindowKind::Grounded` / `Air` / `Free`: control comes back there, Aerial Recovery's from
+    // frame 24, the guard's from 52, its repel's from 40;
     // `docs/aerial-recovery.md`) as KH1's "may be left" (type 0, `+0x1CC` bit 20: `0x14029D399`
     // clears the action flags `0x1004`) from its start, in place of the template's; a clip with
     // none keeps the template's, as every slot on KH1's own requests does.
-    let free: Vec<(f32, f32)> = if own || cast { clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Air | WindowKind::Grounded)).map(span).collect() } else { Vec::new() };
+    let free: Vec<(f32, f32)> = if own || cast { clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Air | WindowKind::Grounded | WindowKind::Free)).map(span).collect() } else { Vec::new() };
     let mut out: Vec<EventTrack> = ks::scaled(template, r).into_iter().filter(|t| matches!(t.kind, ks::FOOT | ks::SOUND | ks::FACE) || (t.kind == ks::CAN_LEAVE && free.is_empty() && !cast)).collect();
     if !free.is_empty() {
         out.push(EventTrack::level(ks::CAN_LEAVE, 0, &free));
@@ -1091,6 +1113,8 @@ pub unsafe fn frame(actor: usize) {
     }
     tick(actor);
     finisher_window(actor);
+    // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
+    super::combomods::counter_window(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`).
     super::takeover::kh2_hits(actor);
 }

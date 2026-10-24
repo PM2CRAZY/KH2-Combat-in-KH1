@@ -199,6 +199,41 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                 note(format!("Sora hit by {:#x} in KH1's states: KH2's invulnerability (the KH2 move KH1 plays), no effect (frame {frame})", pose::ptr(rd::<u32>(r + 4))));
             }
         }
+        // KH2's guard on the Keyblade in the KH2 move KH1 plays now (our guard slots,
+        // `kh2slots::keyblade_guard`: the guard press's 161, its repel's 162), as KH2's own hit
+        // pass takes it (KH2's controller's rule above: a hit from in front, or from anywhere with
+        // Guard all round): no effect, KH1's clash spark, and the guard's reaction by its "refact
+        // self" (1 the repel, `combomods::guard_repel`; 2 nothing).
+        if super::shared::active() {
+            if let Some((atk, refact)) = super::kh2slots::keyblade_guard(actor) {
+                let f = rd::<[f32; 4]>(actor + 0x30);
+                let fwd = glam::Vec2::new(f[0], f[2]).normalize_or(glam::Vec2::Y);
+                let all_round = takeover::with_abilities(|a| a.guard_all_round) == Some(true);
+                let mut repel: Option<glam::Vec2> = None;
+                for &r in &ready {
+                    if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
+                        continue;
+                    }
+                    let from = pose::ptr(rd::<u32>(r + 4));
+                    let toward = if from > 0x10000 && from != actor {
+                        let p = rd::<[f32; 3]>(from + 0x10);
+                        glam::Vec2::new(p[0] - me[0], p[2] - me[2]).normalize_or(fwd)
+                    } else {
+                        fwd
+                    };
+                    if !(toward.dot(fwd) > 0.0 || all_round) {
+                        continue;
+                    }
+                    wr(r, rd::<u8>(r) | NO_EFFECT);
+                    combat::clang([me[0] + toward.x * 40.0, me[1] - 60.0, me[2] + toward.y * 40.0]);
+                    repel.get_or_insert(toward);
+                    note(format!("Sora hit by {from:#x} in KH1's states: KH2's guard on the Keyblade (ATKP {atk}, refact self {refact}), no effect (frame {frame})"));
+                }
+                if let Some(t) = repel {
+                    super::combomods::guard_repel(actor, t.to_array(), refact);
+                }
+            }
+        }
         if super::shared::active() {
             if let Some(atk) = super::kh2slots::body_guard(actor) {
                 for &r in &ready {

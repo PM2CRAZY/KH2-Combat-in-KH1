@@ -323,6 +323,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
                 3 | 24 => WindowKind::NoGravity,
                 0 => WindowKind::Grounded,
                 1 => WindowKind::Air,
+                2 => WindowKind::Free,
                 range_id::ALLOW_MOVEMENT => WindowKind::AllowMovement,
                 range_id::ENABLE_COLLISION => WindowKind::EnableGroup(p(0) as u8),
                 range_id::DISABLE_COLLISION => WindowKind::DisableGroup(p(0) as u8),
