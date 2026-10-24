@@ -315,5 +315,10 @@ go ahead
 > 2. Square again during the repel: KH2 lets you guard or roll again after the repel's first frames; here KH1 doesn't take Square until the repel's free frame (40). (a) add KH2's earlier window next, or (b) leave it?
 
 ^m16
-
+1. (b)
+2. make repel a switchable option in the config menu, for kh2 setting do option (a)
+   
+   I will get back to you on the logs
+   
+   go ahead
 
