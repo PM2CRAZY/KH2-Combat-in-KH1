@@ -16,6 +16,7 @@
 - [10. Assistant: t415 and t416](#^m10)
 - [11. Mr Bugs: I've sent you the traces and log, I assume you don't need my](#^m11)
 - [12. Assistant: t431 to t436 (one change each; the build is on GitHub as kh1](#^m12)
+- [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](#^m13)
 
 ---
 
@@ -203,6 +204,7 @@
 
 ^m12
 
+
 > [!note] Tester Mr Bugs
 >1. it should cancel his animation like kh1, not sure make sure to look at steam kh2 ghidra decomp 
 >2. (a)
@@ -212,5 +214,6 @@
 > 
 > go ahead
 
+^m13
 
 

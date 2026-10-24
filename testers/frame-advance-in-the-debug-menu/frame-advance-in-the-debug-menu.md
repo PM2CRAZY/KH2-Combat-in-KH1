@@ -25,6 +25,7 @@
 - [19. Assistant: t426](#^m19)
 - [20. Mr Bugs: also if you didn't make the correction "100000 0xle5d90" the](#^m20)
 - [21. Assistant: t445 to t447. Thanks, that correction helped. I found why ef](#^m21)
+- [22. Mr Bugs: the actual pause seems to hold the image in the frame buffer](#^m22)
 
 ---
 
@@ -335,6 +336,7 @@
 
 ^m21
 
+
 > [!note] Tester Mr Bugs
 >the actual pause seems to hold the image in the frame buffer so I wouldn't be using it, focus on getting the live version working 
 >
@@ -343,4 +345,7 @@
 > also agents working on these threads stop posting my !note bubble 
 > 
 > go ahead
+
+^m22
+
 

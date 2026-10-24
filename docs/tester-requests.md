@@ -40,6 +40,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [19. Assistant: t426](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m19)
   - [20. Mr Bugs: also if you didn't make the correction "100000 0xle5d90" the](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m20)
   - [21. Assistant: t445 to t447. Thanks, that correction helped. I found why ef](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m21)
+  - [22. Mr Bugs: the actual pause seems to hold the image in the frame buffer](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m22)
 - [KH2 Camera fixes](../testers/kh2-camera-fixes/kh2-camera-fixes.md)
   - [1. Mr Bugs: I noticed when you run backwards the camera starts turning s](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m1)
   - [2. Assistant: t373](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m2)
@@ -64,6 +65,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [11. Assistant: t427 to t430 (one each)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m11)
   - [12. Mr Bugs: 1. the older player is to be deprecated](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m12)
   - [13. Assistant: t437 to t444 (one change each).](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m13)
+  - [14. Mr Bugs: 1. (b) (I'm unsure the affects of this as I noticed reflect ](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m14)
 - [KH2's combo row selection](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md)
   - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m1)
   - [2. Assistant: t374](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m2)
@@ -77,6 +79,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [10. Assistant: t415 and t416](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m10)
   - [11. Mr Bugs: I've sent you the traces and log, I assume you don't need my](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m11)
   - [12. Assistant: t431 to t436 (one change each; the build is on GitHub as kh1](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m12)
+  - [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m13)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
@@ -86,7 +89,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [6. Assistant: t405 to t407 (one each)](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m6)
   - [7. Mr Bugs: the model is still bugged, it seems to be his clothes, (his ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m7)
   - [8. Assistant: t411 and t412](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m8)
-  - [9. Mr Bugs: when I mean model I'm also referring to kh2 sora's skeleton,](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m9)
+  - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m9)
 - [Table of contents](../testers/table-of-contents/table-of-contents.md)
   - [1. Mr Bugs: from now on can you add a table of contents to the document ](../testers/table-of-contents/table-of-contents.md#^m1)
   - [2. Assistant: Done. There's a Contents list at the top of the file, under ](../testers/table-of-contents/table-of-contents.md#^m2)
@@ -95,6 +98,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [5. Mr Bugs: response to notes](../testers/table-of-contents/table-of-contents.md#^m5)
   - [6. Mr Bugs: I can't seem to click on them in obsidian, can you fix it fo](../testers/table-of-contents/table-of-contents.md#^m6)
   - [7. Assistant: Fixed. The old links used HTML anchors, which GitHub underst](../testers/table-of-contents/table-of-contents.md#^m7)
+- [What is still missing for native integration into KH1](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md)
+  - [1. Mr Bugs: what else currently are we missing for native integration in](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m1)
 
 ---
 
@@ -123,7 +128,7 @@ Before replying to anything here, go read `design-philosophy-instructions.md` in
   
 
 **How to reply.** Reply the way you would in a normal chat with the tester: plain, natural, in your own box (`> [!tip] Assistant`) under their message, with nothing extra added and no fixed format. Never rewrite or delete what a tester wrote.
-- After every reply you write, add an empty reply box right under it, with the name of the tester you're talking to already filled in (`> [!note] Tester name`, then a line with just `> `), so they can type their answer without copying a block. If several testers are in the thread, use the name of whoever wrote last. An empty box isn't a message: ignore it when you read the file, and don't add a second one if it's already there.
+- Never write in a tester's box. Don't add an empty reply box (`> [!note] ...`) under your reply or anywhere else, and never post a message as the tester: the tester adds their own box when they answer.
 
 - Read the whole request first. Check the KH2 source, the decomp and the project docs before asking, so you only ask what you can't find out yourself.
 
@@ -148,6 +153,8 @@ Before replying to anything here, go read `design-philosophy-instructions.md` in
 **Closing a thread.** When the tester is satisfied with the implementation, they write `Close`. Then move the whole thread, word for word, to the bottom of `tester-requests-archive.md` with a `Closed` line (git records when), and remove its lines from the Contents. Then delete the thread's folder in `testers` together with its file and everything else in it (only the messages are kept, in the archive). If you can't delete files in your setup, say so in your reply and name the folder, so the tester can delete it. Leave the other threads as they are.
 
   
+
+**After every push (no thread left behind).** After pushing, fetch the branch again and check every thread file and the Requests section: any thread whose last message is a tester's, that no one is working on yet, gets picked up at once (a sub-agent if others are being worked on). A tester may push a message at any time, including while other replies are being written, so check this again before reporting that everything is answered.
 
 **New threads.** A tester starts a new thread at the bottom of this file's Requests section (or by making its folder and file directly). Every time you're told the requests were updated, check the Requests section first, before anything else, with a sub-agent if several things are waiting: any new thread found there gets its own folder and file at once (`testers/<thread>/<thread>.md`: the thread moved word for word, with the title, the link back and the Messages list), is removed from the Requests section, and gets a line in the Contents. Then it's answered in its own file like every other thread.
 
@@ -177,7 +184,7 @@ Before replying to anything here, go read `design-philosophy-instructions.md` in
 
 2. Tell the assistant the tester requests have been updated. It reads this file and every thread's file, and replies in its own box under yours.
 
-3. Type your reply in the empty box the assistant leaves under its message, in the thread's file. If there's no empty box, copy the **reply** block below. Keep going back and forth as long as you need.
+3. To answer, copy the **reply** block below under the assistant's last message in the thread's file and write in it. Keep going back and forth as long as you need.
 
 4. When you're happy with the plan, write `Go ahead` in a reply. That is the approval, and no one else needs to approve. The assistant then starts coding.
 
@@ -218,12 +225,12 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 ```
-
+## Title (the assistant fills this in if you leave it)
 ---
 
   
 
-## Title (the assistant fills this in if you leave it)
+## What is still missing for native integration into KH1
 
   
 
@@ -258,18 +265,3 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 (Add new threads below this line.)
-
-
----
-
-  
-
-## Title (the assistant fills this in if you leave it)
-
-  
-
-> [!note] Mr Bugs
-
-> what else currently are we missing for native integration into kh1?
-> 
-

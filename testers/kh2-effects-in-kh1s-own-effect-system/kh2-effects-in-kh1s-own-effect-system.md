@@ -17,6 +17,7 @@
 - [11. Assistant: t427 to t430 (one each)](#^m11)
 - [12. Mr Bugs: 1. the older player is to be deprecated](#^m12)
 - [13. Assistant: t437 to t444 (one change each).](#^m13)
+- [14. Mr Bugs: 1. (b) (I'm unsure the affects of this as I noticed reflect ](#^m14)
 
 ---
 
@@ -320,9 +321,13 @@
 
 ^m13
 
+
 > [!note] Tester Mr Bugs
 >1. (b) (I'm unsure the affects of this as I noticed reflect is misaligned with sora, should we actually go with a for kh2 magic? )
 >2. (a)
 >3. (a)
 >
+
+^m14
+
 
