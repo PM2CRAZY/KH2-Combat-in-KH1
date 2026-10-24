@@ -270,3 +270,15 @@ Performance: no new per-frame hook. Steps 2 and 4 use hooks that already exist (
    - (a) KH2's (none).
    - (b) KH1's 8.
    - (c) Under the knockback switch from Sora's hit reactions native.
+
+## 6. What's built (testing branch)
+
+### 6.1 The weapon index in `strike_as` (plan step 1)
+
+- `combat::Strikes::strike_as` now puts KH1's blade sweep on KH2's weapon 1 (the right Keyblade)
+  instead of weapon 0 (his body). **Checked (code)**: `kh2_rig::attack_shapes` and `kh2_data::sora`
+  number the body 0 and the weapons from 1.
+- So a borrowed Keyblade swing meets an enemy's melee attack through KH1's own meeting
+  (`meet_shot` → KH1's clash `0x1402B4A20`), and its guards and walls are tested on KH1's blade.
+- Body windows (weapon 0: Explosion, Vicinity Break, Magnet Burst's body hits) keep KH2's shapes
+  for guards and walls and still meet only shots; Valor's left blade (weapon 2) keeps KH2's shapes.

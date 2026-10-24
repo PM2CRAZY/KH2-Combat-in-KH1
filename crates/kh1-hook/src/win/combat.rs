@@ -1789,8 +1789,12 @@ impl Strikes {
         self.blade_prev = blade.as_ref().map(|(p, _)| p.clone());
         for h in &out.hitboxes {
             let shapes = anim.attack_shapes(h.group, h.weapon);
-            // (The right Keyblade's swing: KH1's blade; Valor's left one keeps KH2's shapes.)
-            let on_blade = if h.weapon == 0 { sweep.as_ref() } else { None };
+            // (The right Keyblade's swing: KH1's blade; Valor's left one keeps KH2's shapes. KH2's
+            // weapon index: 0 his body, 1 the right Keyblade, 2 the left (`kh2_rig::attack_shapes`,
+            // `kh2_data::sora`, Checked (code)); it was taken as 0, so the body's windows got the
+            // blade and the Keyblade's swings never met an enemy's melee attack, only shots: the
+            // tester's logs, thread kh2-recoil-and-parry-system.)
+            let on_blade = if h.weapon == 1 { sweep.as_ref() } else { None };
             let vol = self.volumes.entry((h.swing, h.weapon)).or_default();
             let before: Vec<[f32; 3]> = vol.previous().to_vec();
             let swept = vol.update(&shapes);
