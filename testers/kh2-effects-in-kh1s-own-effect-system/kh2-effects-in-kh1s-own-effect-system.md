@@ -21,6 +21,7 @@
 - [15. Assistant: t454 to t456.](#^m15)
 - [16. Assistant: t466 to t472 (one change each). Your log was from t463, so t](#^m16)
 - [17. Assistant: t481, t482 and t483. Your traces and logs hadn't reached the](#^m17)
+- [18. Assistant: t516, t517 and t518. Thanks for the log and traces, they had](#^m18)
 
 ---
 
@@ -431,6 +432,7 @@ go ahead
 
 ^m17
 
+
 fire and thunders effects are working can't test blizzard because:
 
 I'm unsure about some of the changes because I can't test them, currently there's now a new bug where kh2s magic doesn't get casted the first time you input said magic. 
@@ -443,3 +445,28 @@ I should also state that reflect on the ground is the one currently not placed c
 2. if sora is smaller than kh2 sora then yes scale it down
 
 go ahead
+
+> [!tip] Assistant
+> **t516, t517 and t518.** Thanks for the log and traces, they had everything.
+>
+> 1. **t516, magic not cast on the first press.** This came from t477 (KH2's casts running in KH1's own cast state), not from the effects work. KH1 only queues the cast animation when you pick the spell and starts playing it a frame later. KH2's spell scripts end the cast straight away if Sora isn't in his cast animation on their first frame, so the first spell of every combo ended before it fired. Your log shows it: the first cast in each combo never hit, and every cast after that hit about 25 frames in, because the cast animation was already playing. Now the spell script sees Sora in his cast animation from its first frame, the way KH2 sets it up. KH1 itself isn't changed. That should also let you test Blizzard again.
+> 2. **t517, Reflect on the ground.** Your log gave the exact numbers. Reflect's ground pieces should sit 22 to Sora's right and 18 in front, around his raised hands. They were drawn 20 to his left and 16 behind him. KH1's own code turns out to have its "forward" row pointing backwards, so every KH2 effect attached to Sora's root was turned half a turn around him. The air Reflect only looked right because its pieces are centred on him (it was 13 behind, which is hard to notice), and Fire's ring is dead centre, so it wasn't affected. This is fixed for every effect on his root. It also changes Explosion, Guard Break, Finishing Leap, Aerial Finish and the forms' root effects, so give those a quick look too.
+> 3. **t518, answer 2.** KH1 Sora is 0.89 of KH2 Sora's size (measured from the two skeletons' hip heights). Reflect's effects were already scaled to that in t483, and now the barrier's blocking area is scaled the same way, so it blocks what you see. The counter and the burst keep KH2's reach.
+>
+> On question 1 (pieces on his hands and the Keyblade), I left them as they are, as I suggested, until you can test. t517 was a separate mistake in the root's frame, so it tells us nothing about the hands.
+>
+> **Check:** the first-cast bug against KH2's own Fire, Blizzard and Thunder scripts (run offline: with the wrong animation on their first frame they end without firing, with the cast animation they fire) and against your log and traces. The Reflect fix against KH1's decomp (how it builds Sora's matrix and draws his model), your log's numbers and KH2's files (where his hands are in the Reflect animation). Not tested in game.
+>
+> Please test:
+> - The first cast of each spell (Fire, Blizzard, Thunder, Cure), standing and mid-combo.
+> - Blizzard's shard: does it point the way it flies (t481)?
+> - Reflect on the ground and in the air: are the barrier pieces around his raised hands, at the right size?
+> - A quick look at Explosion, Guard Break, Finishing Leap and Aerial Finish's effects, and a Drive Form's arrival.
+>
+> A log after casting Reflect on the ground would let me check the new "origin" lines. They should now match "KH2's offset along the same rows".
+>
+> Questions:
+> 1. Only Reflect is scaled to KH1 Sora. Fire's, Blizzard's and Thunder's pieces on his body and Keyblade are still KH2's size. Should I (a) scale every KH2 spell and move effect on Sora to KH1 Sora's size the same way, or (b) keep the others at KH2's numbers?
+
+^m18
+

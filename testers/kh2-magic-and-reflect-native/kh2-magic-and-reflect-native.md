@@ -9,6 +9,7 @@
 - [3. Assistant: t477 and t478. Started on native magic.](#^m3)
 - [4. Assistant: t484 to t487. The first batch from your answers, one system ](#^m4)
 - [5. Assistant: Thanks, that clears up Cure. With the Cure row at KH1 you'll](#^m5)
+- [6. Assistant: t532 to t535. Your two answers are in, plus items 1 to 5 of ](#^m6)
 
 ---
 
@@ -119,7 +120,42 @@ go ahead
 
 ^m5
 
+
 1. (b) unless you have kh1 physics on
 2. the jump config controls what landing animation you get currently so follow that
    
    go ahead
+
+> [!tip] Assistant
+> **t532 to t535.** Your two answers are in, plus items 1 to 5 of the plan.
+>
+> - **t532, Cure at KH1.** With the Cure row at KH1, you now get KH1's whole Cure: its own animation, effects, heal and cost. KH2's controller no longer borrows Sora for it, and it's no longer drawn on KH2's Cure animation. With the row at KH2 nothing changes.
+> - **t533, Reflect on KH1's cast state.** No more KH2 controller here. Reflect is cast the way KH1's command step casts its own spells, using KH2's Reflect animations (71, finisher 72, air 73) as KH1 animation slots:
+>   - On the ground it holds you in place, then KH1's idle follows.
+>   - In the air, KH1's fall follows. At Physics KH1 you also get KH1's 30-unit hop and your sideways speed is halved.
+>   - It's a combo step like Fire/Blizzard/Thunder/Cure: same windows, KH2's finisher Reflect on the last ground step.
+>   - The barrier, counter, effects and sounds run on KH1's frames.
+>   - **Landing mid-cast (your answer 2):** KH1's landing cuts the cast, and the Jump row decides which landing animation you see, the same as for the other spells.
+>   - Drive Forms and Neverland flight still cast Reflect the old way.
+> - **t534, air casts.**
+>   - **Physics KH2:** KH2's own start. You pop up 40 (KH2's "magic jump") from wherever you are and keep your sideways momentum, which fades by 0.95 a tick. This replaces t487's dead stop.
+>   - **Physics KH1:** casts no longer hover. The hover came from KH2's animation, and KH1's own air cast doesn't have one. So it's KH1's hop, half speed and fall all the way through. This changes Fire/Blizzard/Thunder/Cure too, so my last message was wrong when it said those already matched KH1 exactly.
+> - **t535, the hover's clock (your answer 1 (b)).** At Physics KH2 the jump arc's clock keeps running during a hover, as in KH2's exe. Once the hover ends you drop at full fall speed straight away. This applies to every KH2 move on KH1's states that hovers: casts, Aerial Dive, Finishing Leap. At Physics KH1 the moves keep their old hover.
+>
+> **Check:** KH1's command step and air cast (`0x1402A7510`, `0x1402A3600`, `0x1402A3DB0`, `0x1402AF960`, btltbl's 30 / 0.5) in the Steam KH1 decomp. KH2's cast start, hop and jump step (`0x1403C5170`, `0x1403CBC30`, `0x1403CB360`) in the Steam KH2 decomp. The 40 from KH2's `03system.bin`. **Not checked:**
+> - nothing tested in game;
+> - that KH2 doesn't steer you during a cast (I took the plain 0.95 fade);
+> - the Drive Form / borrowed versions still stop the clock in a hover.
+>
+> **Please test:**
+> - Cure at both Cure settings, on the ground and in the air.
+> - Reflect on the ground, in the air (at both Physics settings) and mid-combo: the finisher Reflect, Attack / jump / Square out of it, spell into spell, landing during an air Reflect with the Jump row on KH1 and on KH2, and the barrier blocking and popping.
+> - Air casts at Physics KH2: the pop up, the kept momentum, and the drop after the hover.
+> - Aerial Dive and Finishing Leap's fall at Physics KH2.
+>
+> **Questions:**
+> 1. KH1's menu still greys spells by KH1's own cost instead of KH2's. Fix it next? (a) yes, (b) leave it.
+> 2. Reflect in Neverland flight and in Drive Forms still uses KH2's controller. (a) Move them onto KH1's cast state next, (b) leave them for now (your Drive Form exception)?
+
+^m6
+

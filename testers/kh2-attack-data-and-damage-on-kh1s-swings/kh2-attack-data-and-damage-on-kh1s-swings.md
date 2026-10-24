@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: Done, in two versions.](#^m2)
 
 ---
 
@@ -35,9 +36,41 @@
 > 3. MP per hit: KH2 gives none, KH1's magic needs it. (a) keep KH1's MP charge on KH2 hits, (b) drop it.
 
 ^m1
+
+
 1. either a or b you pick which one the player is going to feel a difference in it feeling like kh2, we're going to implement kh2s other systems like its mp mechanic and drive as a config toggle so this will effect opposite toggle for now.
 2. make it a config selection (criticals on or off for all moves that call it)
 3. (a) same as the 1st answer, we'll change core kh1 mechanics like that when we implement kh2s systems that are related to it.
 
 go ahead
+
+> [!tip] Assistant
+> Done, in two versions.
+> 
+> **t538: KH2's power inside KH1's damage function.** I picked (a), KH1's curve × KH2's power. KH1's enemy HP is tuned to its damage curve. The curve grows about ×1.19 a point and tops out at 300. KH2's own formula grows in a straight line with Strength − Defense. On KH1's stats I expect (b) to leave the early fights about the same but make the late ones much longer (an estimate from the two formulas, not measured in a fight): a slog, not KH2. With (a) you still get what makes KH2's moves feel like KH2:
+> - every move keeps KH2's power against the others (Explosion's 25% ticks, the finishers);
+> - each hit is rounded up, as KH2 does;
+> - with Criticals Off, there's no random factor.
+> 
+> How it works now: when Sora's attack hits, KH1's own damage function runs as normal. For that one call, its damage curve is swapped for a copy scaled by the KH2 hit's power. So KH1 still does everything after the curve: the clamps, the enemy's floor and cap, element resistance, Aero, Second Chance, the MP charge, the critical and the enemy scripts. Nothing gets rewritten after the hit any more, and the leftover fractions we used to carry from hit to hit are gone (KH2 rounds up per hit).
+> 
+> New in this version: your **native swings on KH1's rows** get KH2's power too. That's the KH2 hit window open in the move at that moment. Before, those swings were 100% KH1's damage. With Base Combo KH1, KH1's own swings keep KH1's own damage. The MP charge stays KH1's, as you said (3a).
+> 
+> **t539: Config > Combat > Criticals: Off / On.** Off is the default, since KH2 has no critical hits. When it's Off, Sora's attacks never roll a critical (KH1's chance reads as 0 for the hit), so Critical Plus does nothing. When it's On, it's KH1's critical as before, on KH2 hits as well. Enemies and Donald / Goofy aren't affected.
+> 
+> What I checked: KH1's damage function `0x1402BFA80` and its one caller (decomp). From the Steam exe: the hook's first bytes, and that the function reads the curve pointer `0x142DE5DC0` only once. What I couldn't check: how the damage numbers feel against late-game enemies; that needs a play log. The `KH2 damage:` lines in `kh1-kh2.log` show the source, the power and the result for the first 40 hits.
+> 
+> Not in these versions: KH2's element and reaction on the native swings (they keep KH1's row's: physical, flinch, launch on finishers, which match KH2's for Sora's plain combo) and KH2's own hit effect. Those are plan steps 1 and 3.
+> 
+> Please test:
+> - your damage numbers in a few fights, early and late, with the plain combo, the Square moves, Explosion and a Drive Form;
+> - the Criticals row both ways (with Critical Plus equipped, a critical shows KH1's critical spark);
+> - that the Combat list fits on screen (it now has nine entries: this round also added a Recoil row from the recoil thread).
+> 
+> Questions:
+> 1. KH1's finisher rows add 4–6 points to the curve before KH2's finisher power is applied, so finishers get a bit of a double boost. (a) Keep it, since that's what (a) is; (b) drop KH1's row power so only KH2's power sets the finisher (that's the old option (c)).
+> 2. Criticals Off: (a) Sora only, as now; (b) everyone's attacks, enemies included.
+> 3. A Config row for the damage formula itself (KH1's damage / KH2's power)? It's in the ini now as `kh2_damage = on/off`. (a) yes, in Combat; (b) no, the ini is enough.
+
+^m2
 

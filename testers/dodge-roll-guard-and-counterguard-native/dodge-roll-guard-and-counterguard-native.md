@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Thanks. Here's how I read each answer, then one go-ahead to ](#^m2)
+- [3. Assistant: Done, one version each:](#^m3)
 
 ---
 
@@ -72,4 +73,36 @@
 
 ^m2
 
+
 go ahead
+
+> [!tip] Assistant
+> Done, one version each:
+>
+> - **t523, the roll.** With Dodge Roll at KH2, Square while moving now starts KH1's own roll (no borrow). Its request plays KH2's roll (motion 209) in KH1's roll slot. KH1's roll request already moves Sora by the animation's root, so he travels KH2's distance. He's invulnerable for KH2's frames by level (10 / 16 / 24 / 32), and KH1's own 12 frames of no damage are taken off. You can move, jump, roll or attack out of it from KH2's frame 34 (KH1's roll lets go at 30). Square with the stick at rest is still the guard (t489), and Square held through the roll still turns into Quick Run at KH2's check frame. At KH1 the roll is KH1's own, as before. The borrow is only a fallback now (Drive Forms, or the slot not built).
+> - **t524, the menu.** While the repel (42) plays and Counterguard is equipped, the command menu's Attack shows KH1's Counterattack command. Choosing it does Counterguard (171), not KH1's own counterattack. It doesn't need a target, because KH2's Counterguard doesn't (KH1's own swap wants a locked enemy).
+> - **t525, guard coverage.** I checked it against KH2's code, and t489's was off. KH2 has **no Guard Plus**: that flag was the old rewrite's own and nothing ever turned it on. KH2's real rule is each guard's own ATKP angle. The guard press (161) holds 120° either side of his facing, not 90°. The repel's own guard (162) holds every side, where before it only held the front. The body guards (Aerial Dodge, Aerial Recovery) were already all round, and they still are. This applies to the hit check and to the KH1 guard objects alike.
+>
+> **How I checked:**
+> - KH1's roll start, its 12-frame timer and the Counterattack swap come from the KH1 Steam decomp.
+> - KH1's roll request (it has KH1's travel flag) and its slot (38 frames, let go at 30) come from KH1's motion file.
+> - KH2's guard angle test (`0x1403D1F40`) comes from the KH2 Steam decomp, and the guard ATKPs' angles from `00battle.bin`.
+>
+> **What I couldn't check:**
+> - Where KH1 gets its roll's untouchable flag. It isn't in the roll's animation, and it doesn't matter at KH2 now.
+> - That nothing else in KH1 reads the roll's timer bit as "rolling".
+> - Which way KH1 turns a guard arc's angle. It's unused, since every angle of Sora's is 0.
+>
+> **Please test:**
+> 1. Roll at each Dodge Roll level. Check the distance, getting hit in the first frames (and just after them), and walking, jumping or attacking out from frame 34.
+> 2. Roll held into Quick Run.
+> 3. Guard a hit from the side (about 100°), and get hit from behind during the repel.
+> 4. During the repel, check that Attack shows Counterattack in the menu and that choosing it does Counterguard.
+> 5. A trace of a roll would help (Select + Triangle).
+>
+> **Questions:**
+> 1. Should the menu's Counterattack also need a locked-on enemy, as in KH1? (a) no, show it whenever Attack would do Counterguard (what t524 does); (b) yes, only with an enemy locked, as KH1 does.
+> 2. KH1's roll has its own floor sounds (thumps by surface), and I kept them under KH2's roll, the same way the swings keep KH1's. (a) keep them; (b) KH2's own roll sounds only.
+
+^m3
+

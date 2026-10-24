@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from Sora's hit reactions native(../so](#^m1)
+- [2. Assistant: Done, one system per version:](#^m2)
 
 ---
 
@@ -52,8 +53,62 @@
 > It would help to have a log and a Select + Triangle trace of you swinging into an enemy's attack: once with a plain swing and once with Guard Break, so I can see which case you're running into.
 
 ^m1
+
+
 1. (b)
 2. unsure what kh2s special guard is or when its used so please let me know, for now do (c)
 3. (a)
 4. should be part of a recoil switch in the config menu, if you switch to kh1 all moves including kh2 uses kh1's rules exactly and vice versa
 go ahead
+
+> [!tip] Assistant
+> Done, one system per version:
+>
+> - **t540**: the bug that stopped parries in the borrowed moves. The code took KH2's weapon 0 (his body) for the Keyblade, so Keyblade swings only ever met thrown things. Now the Keyblade swing meets enemy melee attacks through KH1's own clash.
+> - **t541**: a new **Recoil** row in Config > KH1 in KH2 > Combat (KH1 by default).
+>   - **At KH1**, everything is KH1's: priorities, KH1's recoil animations, its push and its 8 frames where he can't be hurt.
+>   - **At KH2**, KH1 still runs the recoil (combo count, HUD and so on), but Sora plays KH2's recoil: motion 41 on the ground with KH2's push of 50, and 43 in the air with KH2's hop. He gets no protection afterwards.
+>   - KH1's big recoil keeps KH1's own animation, as you picked (1b).
+> - **t542**: KH2's clash rules on our attacks, at Recoil KH2:
+>   - **Pierce armor** (Guard Break, Counterguard, Finishing Leap, Explosion, Vicinity Break, Magnet Burst) meets no enemy attack and no guard, and is never stopped.
+>   - **"Refact self 2" moves** (Horizontal Slash, Retaliating Slash, Slapshot, Dodge Slash, Flash Step, Aerial Sweep, Aerial Finish, Aerial Dive) meet attacks but are never stopped. The enemy's attack is stopped and the enemy gets KH1's big recoil when the gap is big, as you picked (3a).
+>   - At KH1 every move uses KH1's priorities, Guard Break included.
+> - **t543**: KH2's guard repel now gives KH2's 80 frames of no damage (Recoil KH2), using KH1's own no-damage timer.
+> - **t544**: on KH1's states, when a guard stops one of our KH2 hits, it now goes through KH1's own clash, so Sora actually recoils. Before, nothing played.
+>
+> **Two findings:**
+> - In KH2's own data, Explosion, Vicinity Break and Magnet Burst are pierce armor too. So at KH2 they never meet guards or attacks, and t544 only matters at Recoil KH1.
+> - Question 4 is now the Recoil row: at KH1, KH1's 8 frames after a recoil; at KH2, none.
+>
+> **KH2's special guard** (you asked): KH2 has two kinds of guard.
+> - A **plain guard** stops normal attacks. Pierce armor such as Guard Break goes straight through it. Almost every enemy guard in KH2 is this kind, which is why Guard Break breaks guards.
+> - A **special guard** also stops pierce armor. In KH2's files (47 rows), nearly all of them belong to Sora and his allies: Aerial Recovery's invulnerable body guard, Reflect's barrier, Anti Form, Riku, King Mickey, Hercules and the Hollow Bastion fighters. Only three enemies have one: Xemnas's shield and two other Heartless/Nobody models I couldn't name (M_EX420, M_EX600_LC).
+> - So it's the "nothing gets through this" block. For (c) I added an enemy list. It's empty for now, so at KH2 Guard Break meets no KH1 guard until we name enemies for it.
+>
+> **Checked:**
+> - KH1 and KH2 Steam decomps: the recoil functions, KH2's 50 push and hop, and the 80 frames.
+> - The KH1 exe: KH1's pairing table.
+> - Your files: the request slots 72 / 73 / 74, the lengths of 41 and 43, every ATKP kind of Sora's moves, and the special guard owners.
+> - Not checked in game. Two assumptions: KH1 runs one reaction per hit pass, and KH2's 80 counts 60 Hz frames.
+>
+> **Two places it still isn't KH2:**
+> - A "refact self 2" move on KH1's states goes straight through an enemy's guard and damages the enemy behind it. In KH2 that enemy would just be immune to that swing. Fixing it needs a hook on KH1's clash.
+> - An enemy attack of priority 0x62 or more is never stopped by a swing. That's KH1's rule; KH2 stops it.
+>
+> Note: this round the combo-row thread also added a **Guard Repel** row (Movement), which is what Sora's own KH2 guard does when it blocks. The Recoil row here is about his attacks meeting an enemy's attack or guard. They're separate switches.
+>
+> Please test, with Recoil at KH1 and then at KH2:
+> - Swing into an enemy's attack.
+> - Use Horizontal Slash and Guard Break into guards (Large Body's front) and into enemy attacks.
+> - Guard an attack, then take a hit within about a second.
+> - Use Explosion into a guard.
+>
+> A log and a Select + Triangle trace would help.
+>
+> Questions:
+> 1. At Recoil KH1, Guard Break now uses KH1's priority, so guards repel it, as "KH1's rules exactly" says. Should it (a) stay like that, or (b) keep passing guards at KH1 as before?
+> 2. For "refact self 2" moves meeting a guard on KH1's states: (a) leave it (they hit through the guard), or (b) I add the clash hook so the guarded enemy is immune, as in KH2?
+> 3. Are there KH1 enemies whose guards should stop Guard Break (the special guard list)? (a) none for now, (b) these ones: ...
+
+^m2
+

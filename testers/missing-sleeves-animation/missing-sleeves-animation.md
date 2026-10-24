@@ -17,6 +17,7 @@
 - [11. Assistant: I went through the KH2 Steam decomp step by step, from where](#^m11)
 - [12. Assistant: t490 and t491. Everything now follows what KH2's own model s](#^m12)
 - [13. Assistant: t499 and t500.](#^m13)
+- [14. Assistant: t519.](#^m14)
 
 ---
 
@@ -252,3 +253,23 @@ the coat is still sticking out on kh2 animations
 don't worry about the kh2 model for now
 
 go ahead
+
+> [!tip] Assistant
+> **t519.**
+>
+> You were right, and my tool wasn't looking at it. It only measured the coat going into the thighs, never the coat standing away from the body. I added that measure, and it showed the problem straight away. KH2 leans Sora's chest forward of his hips in the idle, walk and run, and the coat was fixed to the chest. So the back of the coat stood about 6 units out behind his hips and the front sank about 7 into them, the whole time, not just in kicks. In KH2's frames it stood out in 42% of them. KH1's own coat, in KH1's own animations, does that in about 15%.
+>
+> Now the top of the coat still moves with the chest like KH2's jacket, but the bottom hangs from the hips. The tips sit where the hips carry them, the middle halfway, and nothing stretches. Why this is the KH2 match: KH1's coat is longer than KH2's jacket. Its tips reach the height of KH2's waist and the top of its shorts, and KH2 moves the top of its shorts with the hips. After the change it never stands out more than 1.5 units in any KH2 move, and the front no longer sinks into the hips.
+>
+> The cost: the front tips touch a thigh that swings forward a bit more often than before (about 0.6% of the time instead of 0.2%). That's in kicks and big steps, and up to about 2 units into the shorts in the run. I also measured seven other ways (the whole lower coat turning with the hips, hanging from the spine, the front panels following the thighs, KH2's waist bone, ...). This one was the best overall. All the numbers are in `docs/kh1-secondary-motion.md` ("The coat's lower half").
+>
+> **Check:** your KH1 and KH2 files, all 83 of KH2's motions, every half frame. Not tested in game, and your message had no new picture or trace, so I worked from what the measure shows. Assumptions: how thick KH1's shorts are (I can't read the mesh yet), and that KH1's own animations measure the same without KH1's leg IK.
+>
+> Please test: standing in battle and out of it, walking, running and turning, and look at the coat from the side and from behind. Also try a few kicks and big swings and watch the front tips against the thighs.
+>
+> Questions:
+> 1. If the front tips going into the thighs bother you in the run or kicks: (a) leave it; (b) let the front panels follow the thighs a little (fewer clips, but they tuck into the belt more, and it's our own rule, not KH2's); or (c) send a clip of the move and I'll look at that one.
+> 2. If I read "sticking out" wrong (for example you meant the thigh sticking out through the coat), tell me which move and roughly where on the coat, and I'll measure that instead.
+
+^m14
+

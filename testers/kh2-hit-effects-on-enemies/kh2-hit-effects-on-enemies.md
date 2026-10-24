@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: Thanks, built with your answers:](#^m2)
 
 ---
 
@@ -49,9 +50,37 @@
 > 3. KH2's "damage effect" on the enemy (900 ATKP rows use it): KH1's enemies have no KH2 file, so (a) skip it, or (b) use the KH1 enemy's own effect list if it has a matching entry (more research).
 
 ^m1
+
+
 1. (c) but for now wait on changing any base effects the keyblade calls as we're going to import models from kh2 and have a switch between kh1 and kh2 keyblades when the time comes
 2. (a) if a vanilla magic attack calls for its vanilla spark then let it, if its from kh2 let it call its own spark
 3. (b)
 
 go ahead
+
+> [!tip] Assistant
+> Thanks, built with your answers:
+>
+> - **t520**: our KH2 effect reader now keeps the word KH2 uses to find hit effects, and writes it into the KH1 effect list we build, as KH1's own kind and group masks. Nothing looks different from this one on its own.
+> - **t521**: KH2's spells now show their own hit spark. That covers KH2-style Fire / Blizzard / Thunder (base Sora with Magic on KH2, and the forms' KH2 casts), Wisdom's shots and Reflect's pop. The hit hands KH1 the spell file's effect list and a copy of the attack data with KH2's group in it, and KH1's own contact code picks, places and turns the spark. A row with no hit effect shows none, as in KH2.
+> - Unchanged, as you asked: Keyblade swings keep KH1's spark for every Keyblade, and KH1's own spells keep theirs. With `kh2_effects` off, or before a spell's package is built, KH2 spells fall back to KH1's spark as before.
+>
+> 1:1 checks: KH2's lookup (`0x1403d1b40`) and KH1's (`0x1402b4320` → `0x1401dffe0`) in the Steam decomps, and every spell file's hit elements in your KH2 install. Fire, Blizzard, Thunder, Magnet, Reflect and Wisdom's archive each have their own kind-1 hit elements for effect-on-hit 1 / 2. What I couldn't check: that a KH2 spell attack really carries its spell file's effects. I didn't find the line in KH2 that sets it; the files fit, but it's an assumption.
+>
+> Smaller notes:
+> - KH1 asks for a hit that doesn't count as its kind 2, which KH2 uses for walls. So in this list KH2's "doesn't count" kind is put on KH1's 2, and KH2's wall kind is left out. Spells hit bodies only through this path, so no wall spark is lost.
+> - If a spell's hit element uses a particle program KH1 can't run as KH2 does yet, that hit shows KH1's spark instead of nothing. The load line says which.
+> - The hit **sound** isn't touched: spells without KH1 data still play the swing's hit sound.
+>
+> **Question 3 (b), the enemy's own damage effect.** KH1 never looks into the enemy's own effect list when a hit lands. I checked every caller of its lookup. Its closest thing is a "damage effect" taken from the **attacker's** list (kind 0x80, `0x1402bf630`), which KH1 plays on a random body part of the enemy during its reaction. KH2 spells' lists have no such entry, so they play none there. That matches KH2, whose attacker side plays nothing at that point. So (b) needs more digging: where a KH1 enemy keeps its own effect list, and whether those lists hold anything a KH2 "damage effect" number could point at.
+>
+> Please test:
+> - KH2-style Fire / Blizzard / Thunder on enemies, Wisdom's shots and Reflect's pop: is the spark KH2's, placed on the enemy where the hit lands and turned with the hit? The log has "KH2 spell hit spark:" lines.
+> - KH1-style magic and Keyblade swings: still KH1's sparks?
+>
+> Open questions:
+> 1. For the enemy damage effect: (a) I keep digging for KH1 enemies' own effect lists and report what's in them before building anything, (b) we use KH1's own attacker-side damage effect (kind 0x80) instead, giving our KH2 lists an entry for KH2's damage_effect number (that's KH1's mechanism, not KH2's, and it would need an element to stand in), or (c) we leave it out for now.
+> 2. Hit sounds for KH2 spells: (a) leave them as they are for now, or (b) start a thread to give KH2 spells their ATKP hit sound through KH1's sound path.
+
+^m2
 

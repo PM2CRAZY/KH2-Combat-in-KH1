@@ -18,6 +18,7 @@
 - [12. Assistant: I went back through everything in this thread against KH2's ](#^m12)
 - [13. Assistant: Got it. Here's what I found for each, so you can give the go](#^m13)
 - [14. Assistant: t497 and t498. Your design note is now in docs/design-philos](#^m14)
+- [15. Assistant: t522: L2 Stick Menu](#^m15)
 
 ---
 
@@ -241,7 +242,30 @@ go ahead
 
 ^m14
 
+
 1. (a) but should be a toggle in the camera menu that kh1 camera and kh2 camera can use
 2. unsure about what a row is
    
    go ahead
+
+> [!tip] Assistant
+> **t522: L2 Stick Menu**
+>
+> 1. **t522, L2 + right stick as the d-pad:** a new option on the Config menu's Camera page, **"L2 Stick Menu: Off / On"**, under L2 Camera Hold. With it On and L2 held, the right stick moves the command menu cursor like the d-pad (up, down, left, right; holding it repeats at KH1's normal menu speed), and it doesn't turn or zoom the camera. It works with either camera: Camera Style on KH1 or on KH2. It's Off by default for now (see question 2). Notes:
+>    - It goes through KH1's own d-pad handling, so anything the d-pad does in KH1 the stick does too, including Left flipping to the Drive page of the command menu.
+>    - R3 still resets the camera under this option. Blocking R3 is the L2 Camera Hold option's job, so you can have either or both.
+>    - Not covered yet: the mouse (it still moves KH1's camera while L2 is held, and it doesn't move the menu cursor) and the keyboard's camera keys. First person keeps the right stick as before.
+>
+> **Check:** KH2's Steam decomp for how its pad turns a stick into direction buttons, and the same dead zone (about half tilt) is used here; your KH2 exe for KH2's built-in button table. That table only turns the *left* stick into the d-pad. The right-stick-under-L2 part lives in a table KH2 only builds while the game runs, so I couldn't read it; that part comes from your description. Not checked in game.
+>
+> **About "row":** sorry, that was jargon. A "row" is just one line (one option) in the Config menu, like "Camera Style: KH1 / KH2". So the question was about the options' default setting, the one a fresh install starts with.
+>
+> Please try: Config > Camera > L2 Stick Menu On, hold L2 and use the right stick on the command menu, once with Camera Style KH1 and once with KH2. Check the camera stays still while you do it.
+>
+> Questions:
+> 1. **Default setting.** When someone installs the mod fresh, should L2 Camera Hold and L2 Stick Menu start (a) both On, like KH2, (b) both Off, as now, or (c) something else (tell me which)?
+> 2. Do you want them as two separate options, or (a) merged into one "L2 + right stick" option that does both (stops the camera, blocks R3 and moves the menu), or (b) kept as two, as now?
+> 3. In KH2 PC, does holding L2 and moving the mouse also move the command menu? (a) yes, copy that, (b) no, or (c) not sure, leave it.
+
+^m15
+

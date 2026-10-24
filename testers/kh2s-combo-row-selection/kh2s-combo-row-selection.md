@@ -21,6 +21,7 @@
 - [15. Assistant: t473 to t476 (one change each).](#^m15)
 - [16. Assistant: t488 and t489.](#^m16)
 - [17. Assistant: I looked into both in KH2's Steam decomp and your KH2 files.](#^m17)
+- [18. Assistant: t536 and t537.](#^m18)
 
 ---
 
@@ -345,3 +346,29 @@ go ahead
 also I noticed that changing the combat settings back to kh1 doesn't seem to change the row selection for sora, (double check to make sure I'm right) he still does kh2 moves in the air and on the ground and also what we were working on earlier was his transition from ground to air when hes by a ledge still behaves like kh2 (double check) 
 
 go ahead
+
+> [!tip] Assistant
+> **t536 and t537.**
+>
+> 1. **t536, (b): Guard Repel row.** Config > Movement > Guard Repel, KH1 or KH2 (default KH2, so nothing changes until you switch it). It only matters with Dodge Roll on KH2, since that's when Square standing is KH2's guard.
+>    - **KH2:** as now. A block plays KH2's repel (42), pushes you back 200, and Counterguard works out of it.
+>    - **KH1:** a block gets exactly what KH1's own guard gets. I traced it in KH1's decomp, and it turned out different from what I'd assumed. KH1's guard isn't an unbreakable guard: it has your Keyblade's priority. So when it stops a hit, KH1 treats Sora's side as a clash, the same as when one of his swings gets clashed. He plays KH1's clash recoil (0x6E), gets KH1's 8 frames of no damage, and his combo count drops by one. If the attacker has the higher priority he's pushed back by the gap; if it's more than 40 stronger he gets KH1's big recoil (0x6F) with no push. That recoil is also what KH1's own Counterattack waits for, so with KH1's Counterattack equipped you should get KH1's counter instead of KH2's Counterguard.
+>    - Checked in the KH1 decomp (the clash, the recoils, the guard row's data in btltbl) and the exe (the recoils' first bytes). One assumption: I take an enemy attack's priority from its attack data. The enemy's own recoil is the same at both settings.
+> 2. **The KH1 settings: you were partly right.** I went through the code:
+>    - **What does switch at KH1:** the plain swings. KH1's own picker chooses the row and KH1's motions play. At a ledge, KH2's drop-ahead test is off and KH1's own row runs. That's KH1's swing that walks him off the edge, so it can look a lot like KH2's little hop.
+>    - **What still comes from KH2, on purpose:**
+>      - With **Finishing Plus or Negative Combo** equipped, both combos are KH2's whatever the Config rows say (t488, your (b) from m15). That includes the ledge hop. The log says it once: "move style: a combo ability only KH2 has is equipped". I think this is the most likely reason for what you saw.
+>      - **KH2's ability moves** stay KH2's at either setting (t460): Slide Dash, Flash Step, Slapshot, Dodge Slash, Aerial Sweep / Dive / Spiral / Finish, Vicinity Break, Explosion, Magnet Burst and Guard Break. Some of these are KH1's own abilities under KH2 names (Sliding Dash, Vortex, Ripple Drive, Hurricane Blast, Stun Impact, Gravity Break), so having those equipped also brings KH2 moves.
+>    - **What was actually wrong, t537:** at KH1, the code still let KH2's combo length decide when one of those ability moves came. With Combo Plus past KH1's length it could even hand Sora to KH2's controller for a plain KH2 swing, and a finisher like Explosion could come before KH1's finisher. Now, at KH1, a KH2 pick only counts if it's an ability move at the point KH1's own count is at: a swing before KH1's length, or a finisher at it. Anything else is KH1's own row. The log says "... combo at the KH1 setting ... not taken, KH1's own row" when it drops one.
+>
+> I couldn't check any of this in game. Please test, with the log and a Select + Triangle trace:
+> - Guard Repel on KH1 and on KH2: block weak and strong enemies, then try KH1's Counterattack after a KH1 block. Log lines: "Guard Repel KH1: KH1's block" and "KH2's guard stopped a hit".
+> - Both combos on KH1 with no KH2 abilities equipped, on flat ground and next to a ledge, then again with only Finishing Plus equipped.
+>
+> Questions:
+> 1. Did you have Finishing Plus or Negative Combo equipped when you saw KH2 moves at KH1? (a) yes, then that's t488 working, (b) no, then please send that log.
+> 2. At the KH1 setting, what should happen to KH2's ability moves? (a) keep them, as now (KH2's picker decides when they come, inside KH1's count), (b) let only KH1's own picker bring an ability move, so a KH2 move comes only where KH1 would put its own ability row and KH2-only ones like Slapshot never come at KH1, or (c) none at all at KH1.
+> 3. Should Finishing Plus / Negative Combo keep overriding the KH1 rows? (a) yes, as you chose in m15, or (b) no, the rows always win (those abilities would then do nothing at KH1).
+
+^m18
+

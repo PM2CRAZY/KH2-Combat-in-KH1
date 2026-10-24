@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Here's what I think:](#^m2)
 - [3. Assistant: A correction to my last message, before you answer it. I che](#^m3)
+- [4. Assistant: Done, as planned, with (b) for Donald and Goofy. One version](#^m4)
 
 ---
 
@@ -85,3 +86,32 @@
 (b)
 
 go ahead
+
+> [!tip] Assistant
+> Done, as planned, with (b) for Donald and Goofy. One version per part:
+>
+> - **t526, the start.** Square in the air puts Sora into KH1's glide state (0x15) with KH2's start: KH2's start height for your Glide level instead of KH1's 50, no KH1 46-frame minimum and no 24-frame wait (KH2 has neither), and his speed isn't halved. If an Aerial Dodge launched him this jump, KH2's stored launch speed comes back as the glide starts, as in KH2. KH1 also stops starting its own glide on him from the jump button.
+> - **t527, the step.** KH2's speed (`(1 - a) * speed + a * |v|` along his facing, whatever the stick's tilt) and KH2's fall from his height over the floor, on KH2's 30 Hz tick. KH1's mover and collision still move him. Against a wall he slides along it (I haven't found KH2's own wall rule yet: see the note at the end).
+> - **t528, turning and animations.** KH2's turn speed for your level, and KH2's motions as KH1 slots: 205 gliding, 206 / 207 banking once the stick is more than about 11° off his facing, 208 for the hover. The hover is the sub-mode we agreed on: start with the stick neutral and he hovers (slowing x0.9), push the stick and it turns into the glide. KH1's water check still runs, so gliding into water still drops him in.
+> - **t529, the end.** Letting go of Square, dropping under KH2's end height, or touching down puts him in KH1's fall with his speed kept: no x0.7 speed cut and no little hop. Neverland's flight from the glide still works exactly as KH1 does it.
+> - **t530, the borrow is gone.** Square in the air now starts the glide in KH1's state, and the jump during the glide (with the dodge left) ends it into the native Aerial Dodge. KH2's controller doesn't glide base Sora any more; Drive Forms keep their own glide.
+> - **t531, Donald and Goofy.** With Glide set to KH2 and KH2's Glide equipped, they now glide after you on jumps, even when you don't have KH1's Glide. Their glide itself is still KH1's (that's their own AI).
+>
+> How I checked it: every number and rule comes from the KH2 Steam decomp (the glide and hover actions' enter, update, step, fall and end), and every KH1 hook point from the KH1 Steam decomp (the state table's layout, the glide state's handlers, the party AI's ability check). There are no new code hooks, only KH1's own state-table entries for 0x15, wrapped for Sora alone. I couldn't check it in game. Two things are still assumptions:
+> - which bank (206 or 207) goes with which side of the turn. I matched what the old borrow did.
+> - that KH2 ends the glide the moment you let go. That check isn't in the glide action's own code; I matched KH2's controller (the t331 exe match).
+>
+> Please test:
+> 1. A glide from a jump, and one right after an Aerial Dodge (the dodge's speed should carry into the glide).
+> 2. Start with the stick neutral to get the hover, then push the stick.
+> 3. Sharp turns: does he bank into the turn, not away from it?
+> 4. Glide into a wall: he should slide along it, not stop.
+> 5. Let go mid-air (no hop, speed kept), and glide down to the floor.
+> 6. Jump during a glide (the Aerial Dodge), water, Neverland's flight, and Donald and Goofy following you over a gap.
+>
+> Still open on my side (no answer needed):
+> - KH2's jump also stores a launch speed (separately from the dodge's). The old borrow never carried it, and neither does this yet, so after a plain jump the glide starts from his speed at that moment. I'll check in KH2's code whether its glide reads that speed and carry it the same way if it does.
+> - I haven't found yet whether KH2 cuts the glide's speed when you hit a wall head-on. Right now the speed isn't cut and he slides. If it feels wrong against walls, tell me and I'll dig into KH2's collision.
+
+^m4
+
