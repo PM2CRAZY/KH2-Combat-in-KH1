@@ -472,6 +472,8 @@ struct Source {
     anchor: fn(u16) -> Option<Anchor>,
     /// KH2 element flags it doesn't apply.
     ignore: u32,
+    /// KH2's 0x4009 point in its owner's object frame (`effect_point_of`).
+    effect_point: Option<[f32; 3]>,
 }
 
 // ---------------------------------------------------------------- memory
@@ -806,7 +808,15 @@ fn common_images(common: &[u8], assets: &[kh2_formats::egs::HdAsset]) -> Result<
 
 /// What package `pkg` is built from (`sig`: Sora's, the moves it is for).
 fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source> {
-    let s = |pkg, label: &str, path: &str, pax_name, bytes, on, sets, rest, anchor, ignore| Source { pkg, sig: sig.to_string(), label: label.to_string(), path: path.to_string(), pax_name, bytes, on, sets, rest, anchor, ignore };
+    // (KH2's 0x4009 point: the owner's model's; a spell's caster is Sora, or Wisdom for its archive.)
+    let point = |rig: &kh2_data::sora::Rig| effect_point_of(rig);
+    let effect_point = match pkg {
+        Pkg::Valor => kh2.valor.as_ref().and_then(|f| point(&f.rig)),
+        Pkg::Final => kh2.final_form.as_ref().and_then(|f| point(&f.rig)),
+        Pkg::Spell(l) if l == super::kh2fx::WISDOM => kh2.wisdom.as_ref().and_then(|f| point(&f.rig)),
+        _ => point(&kh2.rig),
+    };
+    let s = |pkg, label: &str, path: &str, pax_name, bytes, on, sets, rest, anchor, ignore| Source { pkg, sig: sig.to_string(), label: label.to_string(), path: path.to_string(), pax_name, bytes, on, sets, rest, anchor, ignore, effect_point };
     Some(match pkg {
         // Sora's: only the elements of the motions that can play them (`kh2fx::event`: the moves
         // `kh2_effects` allows, the Drive motion), then Revert's.
@@ -839,6 +849,20 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
     })
 }
 
+/// KH2's anchor code for the centre of the owner's first enabled kind-9 collision shape (only the
+/// effect anchors read kind 9 in KH2: `0x1403B50F0` case 0x4009, Checked (decomp)).
+const EFFECT_POINT: u16 = 0x4009;
+
+/// KH2's 0x4009 point in the owner's object frame (KH2's y down): its model's first kind-9 shape
+/// of group 0 (the group on by default, as for 0x4001: `0x1403BA550`), on the object root: its
+/// offset, raised by its lift (`0x1403C9C00`: the offset through the root's matrix, then the lift
+/// off the world y). Sora's: offset 0, lift 105 (radius 70; Checked (files), `P_EX100.mdlx`).
+/// `None` without one on the root.
+fn effect_point_of(rig: &kh2_data::sora::Rig) -> Option<[f32; 3]> {
+    let s = rig.body_shapes.iter().find(|s| s.kind == 9 && s.group == 0)?;
+    s.bone.is_none().then(|| [s.offset[0], s.offset[1] - s.lift, s.offset[2]])
+}
+
 /// The elements each motion of a moveset starts (its frame triggers 1), in motion order.
 fn motion_sets(c: &character_core::Character) -> Vec<(u16, Vec<i16>)> {
     let mut motions: Vec<(&u16, &character_core::Clip)> = c.moveset.clips.iter().collect();
@@ -850,10 +874,23 @@ fn motion_sets(c: &character_core::Character) -> Vec<(u16, Vec<i16>)> {
 /// folded into the header's local transform (`H' = S⁻¹ · T(t) · R · S · H`, S the element's
 /// scale, which KH1 takes as the instance's: KH2's root is `T(B·t) · R(B·R) · S`, KH1's the
 /// bound bone's `B`, times the header).
-fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16) -> Option<Anchor>, ignore: u32) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
+fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16) -> Option<Anchor>, ignore: u32, effect_point: Option<[f32; 3]>) -> Result<(Layer, kh2_formats::kh1dpx::Variant, String), String> {
     use glam::{Mat3, Vec3};
     use kh2_fx::math;
-    let e = parsed.element(el as u16).ok_or(format!("no element {el}"))?;
+    let mut e = parsed.element(el as u16).ok_or(format!("no element {el}"))?.clone();
+    let code = e.bone;
+    // KH2's 0x4009 (`0x1403B50F0`): the object's turn at the centre of its first enabled kind-9
+    // collision shape, which on the object root is 0x4000 moved by that centre in the object's
+    // frame (`effect_point`, from the owner's model): KH1's object root with the element's offset
+    // moved by it.
+    if e.bone == EFFECT_POINT {
+        let p = effect_point.ok_or(format!("element {el}: KH2's 0x4009 point, but its owner's model has no kind-9 shape on its root"))?;
+        e.bone = 0x4000;
+        for k in 0..3 {
+            e.translation[k] += p[k];
+        }
+    }
+    let e = &e;
     let effect = e.effect as u32;
     let flags = e.flags & !ignore;
     if !(0..0x100).contains(&el) {
@@ -884,7 +921,7 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     let number = ELEMENT_NUMBER | el as u32;
     let note = format!(
         "element {el}: effect {effect} as {number:#x} on KH1 {bone:?} (KH2 bone {:#x}), flags {:#x}, wait {}, fade-out {}, offset {:?} turned {:?} (header {:?} / {:?} -> {:?} / {:?}), scale {:?}{}",
-        e.bone, e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
+        code, e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
         if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" }
     );
     let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
@@ -942,7 +979,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         if !wanted(el) || layers.iter().any(|l| l.el == el) || left.iter().any(|x: &String| x.starts_with(&format!("element {el}:"))) {
             continue;
         }
-        match layer(pax_data, &parsed, el, s.anchor, s.ignore) {
+        match layer(pax_data, &parsed, el, s.anchor, s.ignore, s.effect_point) {
             Ok((l, v, note)) => {
                 if s.on.is_none_or(|on| on.contains(&el)) {
                     log(&format!("KH2 effects (native): {}: {note}", s.label));

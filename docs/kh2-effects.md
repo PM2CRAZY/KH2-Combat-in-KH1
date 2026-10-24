@@ -1836,3 +1836,18 @@ can play.
   (files)**). Which spell, form or Keyblade elements use it isn't known offline (their files aren't
   staged): the load log names each element's anchor.
 
+### 18.16 KH2's effect point (0x4009)
+
+- KH2 (**Checked (decomp)**, `0x1403B50F0` case 0x4009): the object's turn (`+0x40`) at the centre
+  of its first collision shape of kind 9 whose group is on (`0x1403C9B80 (list, 9)`,
+  `0x1403BA550`, the centre `0x1403C9C00`); without one, only the turn is written. Kind 9 is read
+  nowhere else in the KH2 decomp: a shape only for effects. Sora's (**Checked (files)**,
+  `P_EX100.mdlx`): entry 11, kind 9, group 0, on the object root, offset 0, lift 105 (radius 70).
+- KH1's anchor codes (`0x14029EB20`: 0x8000..0x8008, §18.15) have no point for it. The point on the root is KH2's
+  0x4000 moved by the shape's centre in the object frame, so `kh2dpx` starts it as 0x4000 (KH1's
+  object root 0x8000, §16.2) with the element's offset moved by (offset − lift up), from the
+  owner's KH2 model (`effect_point_of`: Sora's for his, the Keyblade's and the spells' packages,
+  Wisdom's for its archive, Valor's and Final's for theirs). KH2's own number on KH1's object
+  frame: 105 above Sora's place (KH1 Sora is smaller: his hips 78.9 high against KH2's 88.5).
+  **Assumption**: the shape's offset is in the object frame the element offsets are in (0 for
+  Sora). Cure 3's elements 3 and 4 use it (t430 log).

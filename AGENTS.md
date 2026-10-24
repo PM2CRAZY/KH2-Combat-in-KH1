@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 439 (testing branch: KH2 effects: KH2's 0x4009 point)
+- **KH2 effects: KH2's 0x4009 point.** t430 log (Cure 3: 3, 4). KH2 = object turn at the first enabled kind-9 shape's centre (`0x1403B50F0`, Checked (decomp); kind 9 is read nowhere else); Sora's lift 105 on the root (Checked (files)). KH1 0x8000 with the offset moved (`effect_point_of`). Notes §18.16.
+
 ### 2026-10-23: Stage 438 (testing branch: KH2 effects: the spells' second-weapon points)
 - **KH2 effects: the spells' second-weapon points.** t430 log (Fire 3: 9, 12; Blizzard 3: 7). KH2 0x4004/6/8 = owner weapon slot 1 for any package (`0x1403B5450` → `+0xD68`, Checked (decomp)); `spell_anchor` = `form_anchor`. Assumption: started only with two weapons. Notes §18.10.
 
