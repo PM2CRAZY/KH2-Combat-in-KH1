@@ -1695,6 +1695,18 @@ can play.
   looked up (`0x14010C050 (textures, record + 0x20, 0, 0, width, height)`, the textures list
   `*0x1422C8FA8`) and the texture handle written to every record of the TBP (`+8`, `+4` = 0xFFFE).
   So only that record needs an HD entry.
+- **KH2's extra case** (Checked (decomp), `0x1404AECD0`, the one case KH1's `0x14031EC10` lacks):
+  after the TBP's first record, the i-th further record of the same TBP is looked up at the first
+  record's pixels + i (`0x14012AA20 (textures, first + 0x20 + i, ...)`); if that finds an HD
+  entry, the record gets its own texture and `+4` = 0xFFFD, else the first's and 0xFFFE. So KH2 PC
+  can give each palette (CBP) of one TBP its own HD image, keyed one byte apart. KH1 gives every
+  record of a TBP the first's texture.
+- **The t430 log**: Thunder 3's own TBPs 0x3000 (three records, CBPs 0x3E00 / 0x3E04) and 0x3020
+  found no HD image by any of their records' pixel offsets, while its 0x3040 and 0x3080 did (its
+  file has seven images, `-0`..`-6`); so those textures draw untextured through KH1. Not fixed
+  yet: the file isn't staged here. The build now logs, for such a TBP, each of its records (pixel
+  offset, CBP, format, size) and the file's images no record took (their keys), to tell from the
+  next log how KH2 keys them (**Assumption** to check: by KH2's extra case above, or otherwise).
 - **The texture lookup** (Checked (exe), `0x14010C050` → `0x14010BAF0`): the file holding the
   pointer (`0x1400E2B20`), the offset in it, the HD entry with that key (`+0x54`); if the entry
   already has its texture (`+0x70`) it is returned as it is, else one is made from its data

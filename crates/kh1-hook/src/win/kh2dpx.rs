@@ -1054,6 +1054,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     let mut seen: Vec<(usize, u16)> = Vec::new();
     let mut kept: Vec<(String, std::sync::Arc<Vec<u8>>)> = Vec::new();
     let mut recs_of: Vec<(usize, Vec<(usize, i32)>)> = Vec::new();
+    let mut unmatched: Vec<(usize, i32)> = Vec::new();
     for t in &r.textures {
         let dpd = dpds.iter().rposition(|&p| p <= t.dpx_offset).unwrap_or(0);
         let tbp = u16::from_le_bytes([r.bytes[t.dpx_offset], r.bytes[t.dpx_offset + 1]]);
@@ -1092,10 +1093,37 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
                 report.push(format!("DPD {dpd} own {exact:#x} (tbp {:#x}) <- {} ({} bytes)", t.src_tbp, a.name, a.data.len()));
                 hd.push(Hd { offset, src: HdSrc::Own(data) });
             }
-            None => report.push(format!("DPD {dpd} own {exact:#x} (tbp {:#x}) <- none", t.src_tbp)),
+            None => {
+                report.push(format!("DPD {dpd} own {exact:#x} (tbp {:#x}) <- none", t.src_tbp));
+                if !unmatched.iter().any(|u: &(usize, i32)| u.1 == t.src_tbp && u.0 == t.src_dpd_at) {
+                    unmatched.push((t.src_dpd_at, t.src_tbp));
+                }
+            }
         }
     }
     log(&format!("KH2 effects (native): {}'s HD textures: {}", s.label, report.join("; ")));
+    // (The t430 log: Thunder 3's TBPs 0x3000 and 0x3020 found no HD image, its others did.) For
+    // the next log: every record of each such TBP (its pixels' offset in the file, CBP, size) and
+    // every HD image of the file no record took (its key, `+0x24`), to see how KH2 keys them.
+    if !unmatched.is_empty() {
+        let mut lines = Vec::new();
+        for &(dpd_at, tbp) in &unmatched {
+            if let Some(recs) = recs_of.iter().find(|x| x.0 == dpd_at).map(|x| &x.1) {
+                let base = pax_at + dpd_at;
+                let rs: Vec<String> = recs
+                    .iter()
+                    .filter(|r| r.1 == tbp)
+                    .map(|&(o, _)| {
+                        let h = |k: usize| pax_data.get(dpd_at + o + k..dpd_at + o + k + 2).map_or(0, |b| u16::from_le_bytes([b[0], b[1]]));
+                        format!("{:#x} (cbp {:#x}, psm {:#x}, {}x{})", base + o + 0x20, h(2), h(6), h(0xC), h(0xE))
+                    })
+                    .collect();
+                lines.push(format!("tbp {tbp:#x}: records at {}", rs.join(", ")));
+            }
+        }
+        let free: Vec<String> = own_hd.iter().filter(|a| !kept.iter().any(|k| k.0 == a.name)).map(|a| format!("{} key {:#x} ({} bytes)", a.name, a.offset, a.data.len())).collect();
+        log(&format!("KH2 effects (native): {}: no HD image for {}; HD images no record took: {}", s.label, lines.join("; "), if free.is_empty() { "none".to_string() } else { free.join(", ") }));
+    }
     // The DPX in its own pages (inside our one handle region).
     let pages = Pages::new(r.bytes.len()).ok_or("no memory for it")?;
     let at = pages.at;
