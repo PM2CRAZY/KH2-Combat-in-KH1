@@ -334,8 +334,8 @@ pub const QUICK_RUN_STAR_MIN: f32 = 6.0;
 pub const AIR_DODGE_STAR: f32 = 8.0;
 
 /// Aerial Recovery's hop height and speed along the stick (`plyr.blow_recovery_h` / `_v`).
-const AIR_RECOVERY_HOP: f32 = 100.0;
-const AIR_RECOVERY_SPEED: f32 = 10.0;
+pub const AIR_RECOVERY_HOP: f32 = 100.0;
+pub const AIR_RECOVERY_SPEED: f32 = 10.0;
 /// Combo rows only reached from a state (PTYA kind 0), and the abilities they need.
 /// Counterguard: attack during the guard's repel (motion 42), as the exe's attack-press
 /// handler does (`current motion == 0x2A` → row 0x27). Retaliating Slash: attack while
@@ -1285,6 +1285,31 @@ impl Character {
         };
         let row = match &t.mode {
             Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) if took => Some(row.clone()),
+            _ => None,
+        };
+        let launch = row.as_ref().filter(|r| r.is_jump()).and_then(|_| t.arc.filter(|_| t.airborne)).map(|a| Launch { height: a.height, velocity: t.vel_h, gravity: t.params.gravity });
+        self.moveset = std::mem::take(&mut t.moveset);
+        row.map(|r| (r, launch))
+    }
+
+    /// `would_take_launch` for one row by its id, as the exe forces its own (Retaliating Slash's
+    /// row 40 out of a launch, `0x1403D6030`): whether KH2 would take it now (its conditions, an
+    /// Attack press) and the hop it starts there. For a host whose own states run the move.
+    pub fn would_take_row(&mut self, id: u8, from: Option<ComboState>, air: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+        let moveset = std::mem::take(&mut self.moveset);
+        let mut t = self.clone();
+        t.moveset = moveset;
+        if let Some(c) = from {
+            t.mode = Mode::Free;
+            t.airborne = air;
+            t.arc = if air { Some(Arc::fall()) } else { None };
+            t.set_combo_state(c);
+        }
+        let press = Button { pressed: true, held: true };
+        t.forced_row = Some(id);
+        let took = t.try_attack(&Input { stick, attack: press, ..Input::default() }, env);
+        let row = match &t.mode {
+            Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) if took && row.id == id => Some(row.clone()),
             _ => None,
         };
         let launch = row.as_ref().filter(|r| r.is_jump()).and_then(|_| t.arc.filter(|_| t.airborne)).map(|a| Launch { height: a.height, velocity: t.vel_h, gravity: t.params.gravity });

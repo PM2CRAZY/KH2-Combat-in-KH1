@@ -923,6 +923,35 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
     slot when the air step runs is the frame's (at most a frame off, as for the no-gravity hold).
   - **Not here**: Counterguard (row 39, motion 171) comes out of KH2's guard's repel (motion 42),
     and KH2's guard is still KH2's controller's (a question to the tester). Not checked in game.
+- **Aerial Recovery and Retaliating Slash on KH1 requests of their own** (the tester, m14
+  question 3: "(b)", new KH1 requests for KH2's motions; KH2's rules in
+  `docs/aerial-recovery.md`, Checked (exe) there): both out of KH1's own knock-away (`hurt`'s
+  kind 4 / 5, `combomods::launched`: 16 frames in, in the air), which KH2's controller borrowed
+  him for until now. Two more of ours (`kh1rows`), requests 0x204 / 0x205, slots on KH1's air
+  swing (102, request 0xCC's kind):
+  - **Aerial Recovery** (motion 40, request only, `combomods::recover`): the jump with the
+    ability on, KH1's air state (2): KH1's knock-away ended (its action flag `+0` bit 4 off, as
+    the borrow did), our request asked for at once with no blend and KH1's action flag (KH1's
+    `0x14029F980 (actor, request | 0x1000000, 0)`), KH1's fall queued after it (`0x14029FA30
+    (actor, 0x40000006, 0)`: KH2's motion 4), KH2's hop on KH1's air fields
+    (`shared::physics::kh2_hop`: 100 high, 10 a frame along the stick and facing it, else
+    straight up; `Character`'s `AIR_RECOVERY_HOP` / `_SPEED`, plyr's `blow_recovery_h` / `_v`),
+    no Aerial Dodge after it (`shared::mark_air_dodged`). Its windows from our slot:
+    invulnerable 0..16 (`kh2slots::invulnerable`), guard 124 on his body 0..16 (`body_guard`),
+    and KH2's "air free" state from frame 24 (range id 1) as KH1's "may be left" level (type 0,
+    `+0x1CC` bit 20, from which `0x14029D399` clears the action flags `0x1004`), on our own
+    requests only, in place of the template's (`kh2slots::kh1_tracks`).
+  - **Retaliating Slash** (row 40, motion 172, ability 101): Square with it equipped, KH1's air
+    state, KH2 taking the row there (`Character::would_take_row`, the exe's forced row, counts
+    at 1 / 1; `takeover::kh2_would_take_row`): KH1's knock-away ended, KH1's Attack command
+    written (as for the Square moves), and KH1's Attack step runs our row (an air swing's
+    template, its own data, KH2's numbers on its hits) with KH2's hop for the row (21..121 toward
+    the target, 0..18 sideways, or 21 and 18 along his facing; `air_hop`'s `Run::AirHop`) and
+    KH1's fall after it.
+  Either goes back to the borrow when ours isn't built or he isn't in KH1's air state.
+  **Assumption**: KH1's knock-away keeps no other state that brings it back once its action
+  flag is off and another request plays (none seen with the borrow's hand-back). Not checked in
+  game.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

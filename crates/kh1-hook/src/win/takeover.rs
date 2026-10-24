@@ -1549,6 +1549,44 @@ pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::C
     Some((row, d.character.combo_length(air), d.character.abilities.negative_combo, launch))
 }
 
+/// KH2's forced row `id` for base Sora now, KH1's own states having him (`Character::
+/// would_take_row`: Retaliating Slash's row out of KH1's knock-away, `combomods`): whether KH2
+/// would take it, at a new combo (the exe's counts reset to 1 / 1, `docs/aerial-recovery.md`), and
+/// its hop, with base Sora's targets and KH1's lock as KH2's step sees them.
+pub unsafe fn kh2_would_take_row(actor: usize, id: u8, air: bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
+    let base = BASE.load(Ordering::Relaxed);
+    let kh2 = pose::kh2()?;
+    let mut g = DRIVER.try_lock().ok()?;
+    let d = g.get_or_insert_with(|| new_driver(kh2));
+    d.growth.update(base, &mut d.character);
+    let mut targets = d.strikes.look(actor);
+    let lock = kh1_lock(base, &mut targets);
+    let tilt = move_tilt();
+    let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
+    d.character.set_facing(rd::<f32>(actor + 0x3C));
+    d.character.set_lock(lock);
+    d.character.set_auto_target(super::settings::get().auto_aim);
+    d.character.set_face_lock(true);
+    d.character.set_combo_direction_lock(true);
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    let above = rd::<f32>(actor + 0x3D4);
+    let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
+    d.character.set_drop_ahead(false);
+    let from = character_core::ComboState { count: 0, finishers: 1, hit: false, finisher_next: false };
+    d.character.would_take_row(id, Some(from), air, stick, &env)
+}
+
+/// The stick now as KH2 reads it for base Sora (the world direction times its tilt, KH2's x / z;
+/// 0 below KH1's dead zone): Aerial Recovery's direction (`combomods`).
+pub unsafe fn stick_now(actor: usize) -> [f32; 2] {
+    let tilt = move_tilt();
+    if tilt > 0.0 {
+        (stick_dir(actor, tilt) * tilt).to_array()
+    } else {
+        [0.0, 0.0]
+    }
+}
+
 /// KH2's primary target for base Sora now (KH2's `+0xDC8`: KH1's lock as KH2's lock, else KH2's
 /// auto target among his targets, as `kh2_would_take_launch` sees them), its point (KH2's y-up):
 /// what KH2's turn windows turn him toward (`kh2slots::turn_to_lock`). Only asked inside such a

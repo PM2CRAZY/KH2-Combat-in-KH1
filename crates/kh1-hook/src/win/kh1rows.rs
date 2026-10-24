@@ -112,18 +112,29 @@ pub struct Ours {
     pub rises: bool,
     /// Guard Break: KH1's guards don't stop it (`GUARD_THROUGH`).
     pub guard_break: bool,
+    /// Started by KH1's row runner (an attack: its row's attack object, the press in KH1's
+    /// tally); else only its request is asked for (Aerial Recovery, `combomods::recover`), its
+    /// row never run.
+    pub attack: bool,
 }
+
+/// `Ours::kh2_row` for a move with no PTYA row (Aerial Recovery; Sora's rows go to 59).
+pub const NO_ROW: u8 = u8::MAX;
 
 /// Ours (Sora's PTYA rows and motions, Checked (files)): the Square moves Upper Slash (row 12,
 /// motion 161, ability 18), Finishing Leap (37, 167, ability 95, `combo_offset` 1), Horizontal
 /// Slash (38, 193, in the air, ability 99, a hop of 14) and the finisher Guard Break (27, 165,
 /// ability 93). Counterguard (39, 171) comes out of KH2's guard's repel (motion 42), which is
-/// still KH2's controller's: not here yet.
-pub const OURS: [Ours; 4] = [
-    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false },
-    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false },
-    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false },
-    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true },
+/// still KH2's controller's: not here yet. Out of KH1's knock-away (`docs/aerial-recovery.md`):
+/// Retaliating Slash (row 40, motion 172, ability 101, an air row with a hop of 21..121) and
+/// Aerial Recovery (motion 40, no row: its request only).
+pub const OURS: [Ours; 6] = [
+    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true },
+    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true },
+    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true },
+    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true, attack: true },
+    Ours { name: "Retaliating Slash", kh2_row: 40, motion: 172, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true },
+    Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false },
 ];
 
 /// Our `n`'s KH1 row index.
@@ -143,7 +154,12 @@ pub fn requests_end() -> usize {
 
 /// Ours for KH2's PTYA row `id`, if any.
 pub fn by_kh2_row(id: u8) -> Option<usize> {
-    OURS.iter().position(|o| o.kh2_row == id)
+    OURS.iter().position(|o| o.kh2_row == id && id != NO_ROW)
+}
+
+/// Ours for KH2's `motion` (a move with no row: Aerial Recovery).
+pub fn by_motion(motion: u16) -> Option<usize> {
+    OURS.iter().position(|o| o.motion == motion)
 }
 
 /// Ours at KH1 row index `row`, if it is one of ours.
@@ -303,7 +319,8 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
             log("KH1's attack rows: our attack data is out of an offset's reach: no rows of ours");
             return None;
         }
-        wr(r, request(n) as i16);
+        // (A move started by its request alone has a row that asks for nothing, should it run.)
+        wr(r, if o.attack { request(n) as i16 } else { -1i16 });
         wr(r + 4, off as i32);
         wr(r + 8, 0.0f32);
         DATA_AT[n].store(d, Ordering::Relaxed);

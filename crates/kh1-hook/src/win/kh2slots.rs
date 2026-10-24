@@ -156,7 +156,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
         let mut blocks = Vec::new();
         let wanted = |motion: u16| which.as_ref().map_or(true, |w| w.contains(&motion));
         for s in SPECS.iter().filter(|s| wanted(s.motion)) {
-            if let Some((m, block)) = make(mset, kh2, bake, &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len())? {
+            if let Some((m, block)) = make(mset, kh2, bake, &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
                 moves.push(m);
                 blocks.push(block);
             }
@@ -165,7 +165,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
         for c in CYCLES.iter().filter(|c| wanted(c.motion)) {
             let mut three = Vec::new();
             for v in 0..3u8 {
-                match make(mset, kh2, bake, &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize)? {
+                match make(mset, kh2, bake, &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize, false)? {
                     Some(m) => three.push(m),
                     None => break,
                 }
@@ -192,7 +192,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 if finisher != matches!(s.request, GROUND_FINISHER | AIR_FINISHER) || motion == s.motion || !wanted(motion) {
                     continue;
                 }
-                if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, s.stands_for, s.request, s.kind), false, (false, 0), KH1_SLOTS + moves.len())? {
+                if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, s.stands_for, s.request, s.kind), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
                     moves.push(m);
                     blocks.push(block);
                 }
@@ -206,7 +206,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
             }
             let k = o.kind;
             let style = if k.air() { Kind::AirCombo } else { Kind::GroundCombo };
-            if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (o.motion, k.template_slot(), k.template_request() as usize, style), true, (false, 0), KH1_SLOTS + moves.len())? {
+            if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (o.motion, k.template_slot(), k.template_request() as usize, style), true, (false, 0), KH1_SLOTS + moves.len(), true)? {
                 m.own = Some(m.request);
                 m.request = super::kh1rows::request(n) as usize;
                 log(&format!("KH2 slots: KH2 motion {} ({}) on our request {:#x} (KH1's row {} of ours)", o.motion, o.name, m.request, super::kh1rows::row(n)));
@@ -236,7 +236,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
 /// selection can pick (`pick`); `field`: KH2's field variant of the motion; `variant`: which of a
 /// kind 3 request's three slots (`CYCLES`). `None` if it can't be built (logged).
 #[allow(clippy::too_many_arguments)]
-fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize) -> Result<Option<(Move, Vec<u8>)>, String> {
+fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, Vec<u8>)>, String> {
     let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
         log(&format!("KH2 slots: KH2 motion {motion} has no clip, left out"));
         return Ok(None);
@@ -253,7 +253,7 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     // (A field variant's own length: KH2's field walk and run are their own motions.)
     let field_len = field.then(|| kh2.rig.field_motions.get(&motion)).flatten().map(|m| kh2_anim::length_frames(m).round() as u32);
     let frames = field_len.unwrap_or(clip.length).max(1);
-    let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32);
+    let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own);
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     let travel = kind == Kind::GroundCombo && travels(requests[request]);
     let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, stands_for, (motion, field), frames, &tracks, travel)) {
@@ -549,7 +549,7 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], stands_for: usize
 /// windows from 4 frames before); the template's sounds, foot effects, face changes and the point
 /// its action may be left, rescaled. Hit windows on his body (`body_strike`) are not KH1's sphere's:
 /// KH2's own shapes land them (`takeover::kh2_hits`).
-fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32) -> Vec<EventTrack> {
+fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own: bool) -> Vec<EventTrack> {
     let len = clip.length as f32;
     let span = |w: &character_core::Window| (w.start as f32, w.end.map_or(len, |e| e as f32));
     let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon > 0)).map(span).collect();
@@ -558,7 +558,16 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32) -> V
     if trail.is_empty() {
         trail = hits.iter().map(|&(a, b)| ((a - 4.0).max(0.0), b)).collect();
     }
-    let mut out: Vec<EventTrack> = ks::scaled(template, r).into_iter().filter(|t| matches!(t.kind, ks::FOOT | ks::SOUND | ks::FACE | ks::CAN_LEAVE)).collect();
+    // On a request of ours (`own`, `kh1rows`), KH2's "free" state (range id 0 / 1,
+    // `WindowKind::Grounded` / `Air`: control comes back there, Aerial Recovery's from frame 24,
+    // `docs/aerial-recovery.md`) as KH1's "may be left" (type 0, `+0x1CC` bit 20: `0x14029D399`
+    // clears the action flags `0x1004`) from its start, in place of the template's; a clip with
+    // none keeps the template's, as every slot on KH1's own requests does.
+    let free: Vec<(f32, f32)> = if own { clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Air | WindowKind::Grounded)).map(span).collect() } else { Vec::new() };
+    let mut out: Vec<EventTrack> = ks::scaled(template, r).into_iter().filter(|t| matches!(t.kind, ks::FOOT | ks::SOUND | ks::FACE) || (t.kind == ks::CAN_LEAVE && free.is_empty())).collect();
+    if !free.is_empty() {
+        out.push(EventTrack::level(ks::CAN_LEAVE, 0, &free));
+    }
     for (kind, w) in [(ks::HIT, hits), (ks::COMBO, combo), (ks::TRAIL, trail)] {
         if !w.is_empty() {
             out.push(EventTrack::level(kind, 0, &w));

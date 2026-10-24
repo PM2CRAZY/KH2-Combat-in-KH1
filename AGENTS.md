@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 475 (testing branch: Aerial Recovery and Retaliating Slash on KH1 requests)
+- **Aerial Recovery and Retaliating Slash on KH1 requests.** The tester (m14 3 (b)). Requests 0x205 / 0x204; `combomods::recover` (KH2's hop 100 / 10), `Character::would_take_row`; KH2's free state as KH1's "may be left" on our requests. Assumption: KH1's knock-back ends with flag 4. Notes §7.
+
 ### 2026-10-24: Stage 474 (testing branch: KH2's Square moves and Guard Break on KH1 rows of their own)
 - **KH2's Square moves and Guard Break on KH1 rows of their own.** The tester (m14 2 (b)). `kh1rows`: Sora's table (`0x142D5CAB0`, block `+0xA9F0`, 66 rows, Checked (exe)) + rows 66.., requests 0x200.., own data (launch kind; Guard Break priority 0x62, `0x1402B4BC0`, Assumption); `scale_record` KH2's numbers; Square through KH1's Attack command (`0x140293480`); air fall queued; `kh2slots::air_root` (Finishing Leap). Counterguard left. Notes §7.
 

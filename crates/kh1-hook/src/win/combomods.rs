@@ -676,9 +676,12 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
     let air = matches!(s.state, 1 | 2);
     let all = super::shared::KH1_JUMP_BITS | super::shared::KH1_ACTION_BIT;
     // Knocked away by KH1's own reaction: KH2's Aerial Recovery (the jump) or Retaliating Slash
-    // (Square).
+    // (Square), on KH1 requests of their own (`kh1rows`) in KH1's air state.
     if s.launched && !s.can_act {
         if jump_fresh && takeover::with_abilities(|a| a.aerial_recovery) == Some(true) {
+            if unsafe { recover(actor) } {
+                return Some(all);
+            }
             note("jump while KH1 has him knocked away: KH2's Aerial Recovery".to_string());
             want(Move::Recover);
             return Some(all);
@@ -686,6 +689,20 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
         if square_fresh {
             let row = takeover::kh2_retaliating_slash();
             if let Some(id) = row {
+                // Its own KH1 row: KH1's Attack command for it (as for the Square moves), its row
+                // ours, KH2's hop for the row (counts at 1 / 1, as KH2's).
+                let n = super::kh1rows::by_kh2_row(id).filter(|&n| super::kh1rows::installed() && super::kh2slots::has(super::kh1rows::request(n) as usize, super::kh1rows::OURS[n].motion));
+                if let (Some(n), 2) = (n, s.state) {
+                    if let Some((r, launch)) = unsafe { takeover::kh2_would_take_row(actor, id, true) } {
+                        unsafe { end_kh1_reaction(actor) };
+                        if let Ok(mut g) = OURS.lock() {
+                            *g = Some((n, launch, frame()));
+                        }
+                        unsafe { super::kh1rows::command_attack() };
+                        note(format!("Square while KH1 has him knocked away: KH2's Retaliating Slash (row {} motion {}) on KH1's row {} of its own, {}", r.id, r.motion, super::kh1rows::row(n), launch.map_or("no hop".to_string(), |l| format!("{:.0} high, {:.1}/frame", l.height, l.velocity[0].hypot(l.velocity[1])))));
+                        return Some(all);
+                    }
+                }
                 note("Square while KH1 has him knocked away: KH2's Retaliating Slash".to_string());
                 want(Move::Row { id, state: ComboState { count: 0, finishers: 1, hit: false, finisher_next: false } });
                 return Some(all);
@@ -719,6 +736,63 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
         return Some(super::shared::KH1_ACTION_BIT);
     }
     None
+}
+
+/// KH1's knock-away ends here for a move of KH2's out of it (as a spell's end frames cut KH1's
+/// move, and as the borrow did): its "action running" flag (`+0` bit 4) off, so the move's own
+/// request and flags are what KH1 plays from now. **Assumption**: KH1's reaction keeps no other
+/// state that brings its knock-away back (the borrow's hand-back saw none).
+unsafe fn end_kh1_reaction(actor: usize) {
+    wr(actor, rd::<u32>(actor) & !4);
+    BLOWN_AT.store(0, Ordering::Relaxed);
+}
+
+/// KH1's motion request start (`0x14029F980 (actor, request, blend)`: a fresh queue; bit 24 sets
+/// the action flag 4) and its queue (`0x14029FA30`: one more after it).
+const SET_MOTION_RVA: Rva = Rva(0x29D7F0);
+const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
+
+/// KH2's Aerial Recovery out of KH1's knock-away, on KH1's air state (the tester, m14 question 3:
+/// "(b)", a new KH1 request for KH2's motion; `docs/aerial-recovery.md`, Checked (exe) there):
+/// KH1's knock-away ended (`end_kh1_reaction`), our request of KH2's motion 40 asked for at once
+/// with no blend and KH1's action flag (the exe: motion 40, no blend), KH1's fall queued after it
+/// (motion 4), and KH2's hop on KH1's air fields (`shared::physics::kh2_hop`): 100 high
+/// (`plyr.blow_recovery_h`), 10 a frame along the stick (`blow_recovery_v`) and facing it, or
+/// straight up with his facing kept; the launch's own velocity gone. No Aerial Dodge after it
+/// (the exe's jump action grants none out of an airborne one). Its windows are KH1's from our
+/// slot: invulnerable 0..16 (`kh2slots::invulnerable`), the guard 124 on his body 0..16
+/// (`body_guard`), and KH1's "may be left" from frame 24 (KH2's air free state, range id 1,
+/// `kh2slots::kh1_tracks`). False (the borrow then) without our request built or out of KH1's
+/// air state.
+unsafe fn recover(actor: usize) -> bool {
+    let Some(n) = super::kh1rows::by_motion(character_core::motion::AIR_RECOVERY) else { return false };
+    let request = super::kh1rows::request(n);
+    if !super::kh2slots::has(request as usize, character_core::motion::AIR_RECOVERY) || rd::<i32>(actor + 0x70) != 2 {
+        return false;
+    }
+    let base = takeover::game_base();
+    end_kh1_reaction(actor);
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+    let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
+    set(actor, request | 0x0100_0000, 0.0);
+    queue(actor, 0x4000_0006, 0.0);
+    let stick = takeover::stick_now(actor);
+    let tilt = stick[0].hypot(stick[1]);
+    let vel = if tilt > 1e-3 {
+        let f = stick[0].atan2(stick[1]);
+        wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
+        wr(actor + 0x150, f);
+        [stick[0] / tilt * character_core::AIR_RECOVERY_SPEED, stick[1] / tilt * character_core::AIR_RECOVERY_SPEED]
+    } else {
+        [0.0, 0.0]
+    };
+    super::shared::physics::kh2_hop(actor, character_core::AIR_RECOVERY_HOP, vel);
+    super::shared::mark_air_dodged();
+    if let Ok(mut l) = LAST.lock() {
+        *l = None;
+    }
+    note(format!("jump while KH1 has him knocked away: KH2's Aerial Recovery on KH1's request {request:#x} of its own, {:.0} high, {:.1}/frame", character_core::AIR_RECOVERY_HOP, vel[0].hypot(vel[1])));
+    true
 }
 
 /// KH1 knocked him away itself (`hurt`: a knock-back or launch while KH1's states have him).
