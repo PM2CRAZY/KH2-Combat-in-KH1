@@ -398,6 +398,14 @@ const DROP_FILE_RVA: Rva = Rva(0xE2DF0);
 /// texture set-up calls it (`0x14031EC10`).
 const TEXTURE_OF_STEAM: usize = 0x10C050;
 const TEXTURES_STEAM: usize = 0x22C8FA8;
+/// KH1's DPD texture set-up (Steam `0x14031EC10 (dpd, 0, 0)`, called by its effect draw
+/// `0x1401ECF30` on every draw, done once: it runs only while the DPD's first texture record's `+4`
+/// isn't negative): each TBP's first record looked up (`0x14010C050`) and its texture handed to every
+/// record of that TBP (`+8` its handle, `+4` 0xFFFE). KH2's (`0x1404AECD0`) is the same plus one case
+/// (`palette_textures`). And KH1's pointer to handle (Steam `0x14038AD90`, which registers a region
+/// it doesn't know yet), as the set-up writes `+8`.
+const TEX_SETUP_STEAM: usize = 0x31EC10;
+const TO_HANDLE_STEAM: usize = 0x38AD90;
 /// KH1's effect instances (Steam `0x142678280`, 0x100 of 0xE0 bytes: `+0x98` the DPD it plays,
 /// `+0x92` state, 1 live, 4 ending) and elements (Steam `0x142D678B0`, 0x100 of 0x3C: `+0x38` a
 /// handle of its DPX), for whether a DPX is still in use.
@@ -418,10 +426,12 @@ enum HdSrc {
     Common(i32),
 }
 
-/// An HD texture for one texture record: the record's pixel offset in the DPX, its image. Only
-/// the first record of each TBP in each DPD has one: KH1 makes one texture per DPD and TBP, from
+/// An HD texture for one texture record: the record's pixel offset in the DPX, its image. The
+/// first record of each TBP in each DPD has one: KH1 makes one texture per DPD and TBP, from
 /// that record's HD entry (`0x14031EC10`: its records by TBP in a multimap, the lower bound's
 /// looked up, `0x14010C050`, and its texture handed to every record of the TBP; Checked (exe)).
+/// Where the file has one per palette (KH2's `0x1404AECD0`), each record's is keyed at the first
+/// record's pixels + its place among the TBP's records (`palette_textures`).
 struct Hd {
     offset: u32,
     src: HdSrc,
@@ -463,6 +473,9 @@ struct Dpx {
     types: Vec<(i16, Vec<u32>)>,
     /// Where KH2's own programs are (`kh1dpx::Kh1Dpx::programs`), for `kh2ppp::plug`.
     programs: Vec<(usize, u32)>,
+    /// Its DPDs (offsets in it) with an HD image per record of a TBP (KH2's per-palette case,
+    /// `palette_textures`), textured when it is entered.
+    palettes: Vec<usize>,
     /// KH1's loaded-file entry for it, once entered (0: not yet, or entering failed).
     entry: usize,
     relocated: bool,
@@ -1133,6 +1146,58 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
             }
         }
     }
+    // KH2's per-palette images (Steam KH2 `0x1404AECD0`, the case KH1's `0x14031EC10` lacks;
+    // Checked (decomp)): after a TBP's first record, its records (the first among them) are looked
+    // up one by one at the first record's pixels + 1, + 2, ... (in the DPD's order of that TBP's
+    // records); a record whose key has an HD image gets that texture (`+4` 0xFFFD), the others the
+    // first's. The t463 log: Thunder 3's TBP 0x3000's three records (pixels 0xd230) and 0x3020's two
+    // (0xe650), the file's images keyed 0xd231..0xd233 and 0xe651..0xe652. Our DPD's records of a
+    // TBP are its source's in order (some may be left out), so the i-th of ours (key: our first +
+    // i) gets the image of the source's own index there (source first + j).
+    let mut palettes: Vec<usize> = Vec::new();
+    let mut by_palette: Vec<(usize, i32)> = Vec::new();
+    {
+        let mut groups: Vec<((usize, u16), Vec<&kh2_formats::kh1dpx::TexOrigin>)> = Vec::new();
+        for t in r.textures.iter().filter(|t| t.own) {
+            let dpd = dpds.iter().rposition(|&p| p <= t.dpx_offset).unwrap_or(0);
+            let tbp = u16::from_le_bytes([r.bytes[t.dpx_offset], r.bytes[t.dpx_offset + 1]]);
+            match groups.iter_mut().find(|g| g.0 == (dpd, tbp)) {
+                Some(g) => g.1.push(t),
+                None => groups.push(((dpd, tbp), vec![t])),
+            }
+        }
+        for ((dpd, _), recs) in &groups {
+            let first = recs[0].dpx_offset + 0x20;
+            for (i, t) in recs.iter().enumerate() {
+                if !recs_of.iter().any(|x| x.0 == t.src_dpd_at) {
+                    let rs = kh2_formats::kh1dpx::texture_records(&pax_data[t.src_dpd_at..]).map_err(|e| e.to_string())?;
+                    recs_of.push((t.src_dpd_at, rs));
+                }
+                let src_recs = &recs_of.iter().find(|x| x.0 == t.src_dpd_at).unwrap().1;
+                let same: Vec<usize> = src_recs.iter().filter(|x| x.1 == t.src_tbp).map(|x| x.0).collect();
+                let Some(j) = same.iter().position(|&o| o == t.src_offset) else { continue };
+                let key = pax_at + t.src_dpd_at + same[0] + 0x20 + j + 1;
+                let Some(a) = own_hd.iter().find(|a| a.offset as usize & 0xFF_FFFF == key) else { continue };
+                let data = match kept.iter().find(|k| k.0 == a.name) {
+                    Some(k) => k.1.clone(),
+                    None => {
+                        let d = std::sync::Arc::new(a.data.clone());
+                        kept.push((a.name.clone(), d.clone()));
+                        d
+                    }
+                };
+                report.push(format!("DPD {dpd} own tbp {:#x} record {} (cbp {:#x}) <- {} (key {key:#x}, {} bytes)", t.src_tbp, i + 1, u16::from_le_bytes([r.bytes[t.dpx_offset + 2], r.bytes[t.dpx_offset + 3]]), a.name, a.data.len()));
+                hd.push(Hd { offset: (first + i + 1) as u32, src: HdSrc::Own(data) });
+                if !palettes.contains(&dpds[*dpd]) {
+                    palettes.push(dpds[*dpd]);
+                }
+                if !by_palette.contains(&(t.src_dpd_at, t.src_tbp)) {
+                    by_palette.push((t.src_dpd_at, t.src_tbp));
+                }
+            }
+        }
+    }
+    unmatched.retain(|u| !by_palette.contains(u));
     log(&format!("KH2 effects (native): {}'s HD textures: {}", s.label, report.join("; ")));
     // (The t430 log: Thunder 3's TBPs 0x3000 and 0x3020 found no HD image, its others did.) For
     // the next log: every record of each such TBP (its pixels' offset in the file, CBP, size) and
@@ -1161,7 +1226,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     let at = pages.at;
     unsafe { std::ptr::copy_nonoverlapping(r.bytes.as_ptr(), at as *mut u8, r.bytes.len()) };
     let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
-    Ok(Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: r.bytes.len(), md5: r.md5, hd, layers, types, programs: r.programs.clone(), entry: 0, relocated: false })
+    Ok(Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: r.bytes.len(), md5: r.md5, hd, layers, types, programs: r.programs.clone(), palettes, entry: 0, relocated: false })
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -1405,8 +1470,55 @@ unsafe fn enter(base: usize, d: &mut Dpx) {
     f(d.at);
     d.relocated = true;
     log(&format!("KH2 effects (native): {}'s DPX at {:#x} relocated by KH1", d.label, d.at));
+    // (Its HD entries are in; KH1's draw would set the textures up on the first draw, without KH2's
+    // per-palette case.)
+    if d.entry != 0 && !d.palettes.is_empty() && super::addr::Build::current() == super::addr::Build::Steam {
+        let n = palette_textures(base, d);
+        log(&format!("KH2 effects (native): {}'s DPDs at {:#x?} textured as KH2's (an HD image per palette): {n} records got their own", d.label, d.palettes));
+    }
     // KH2's own programs, as entries of ours in KH1's format (`kh2ppp`).
     super::kh2ppp::plug(d.at, &d.programs);
+}
+
+/// KH2's DPD texture set-up (Steam KH2 `0x1404AECD0`, Checked (decomp)) for our DPDs with an HD
+/// image per palette, once, when the DPX is entered (Steam): KH1's own set-up (`0x14031EC10 (dpd, 0,
+/// 0)`, which KH1's draw then skips: it runs only while the first record's `+4` isn't negative),
+/// then KH2's one extra case: for each TBP (KH1's and KH2's both take each TBP's records in the
+/// DPD's order, a multimap by TBP; **Assumption**: insertion order kept, as the standard multimap
+/// does), the i-th of its records (from 1, the first among them) looked up at the first record's
+/// pixels + i with that record's size (`0x14010C050`, the call KH1's set-up makes); found: its own
+/// texture (`+8` its handle, `0x14038AD90`) and `+4` 0xFFFD, else it keeps the first's. KH1's draw
+/// binds each record its particle data masks at its TBP (`0x1401ECF30` → `0x14010DC50`), as KH2's
+/// (`0x1402C2AE0`). The number of records that got their own.
+unsafe fn palette_textures(base: usize, d: &Dpx) -> usize {
+    let setup: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(base + TEX_SETUP_STEAM);
+    let make: unsafe extern "system" fn(usize, usize, usize, usize, i32, i32) -> usize = std::mem::transmute(base + TEXTURE_OF_STEAM);
+    let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_STEAM);
+    let textures = rd::<usize>(base + TEXTURES_STEAM);
+    let mut n = 0;
+    for &off in &d.palettes {
+        let dpd = d.at + off;
+        setup(dpd, 0, 0);
+        let n0 = rd::<i32>(dpd + 4).clamp(0, 4096) as usize;
+        let count = rd::<i32>(dpd + 8 + n0 * 4).clamp(0, 4096) as usize;
+        let recs: Vec<usize> = (0..count).map(|k| dpd + rd::<i32>(dpd + 0xC + (n0 + k) * 4) as usize).collect();
+        let mut tbps: Vec<i16> = recs.iter().map(|&r| rd::<i16>(r)).collect();
+        tbps.sort_unstable();
+        tbps.dedup();
+        for tbp in tbps {
+            let group: Vec<usize> = recs.iter().copied().filter(|&r| rd::<i16>(r) == tbp).collect();
+            let first = group[0];
+            for (i, &r) in group.iter().enumerate() {
+                let tex = make(textures, first + 0x20 + i + 1, 0, 0, rd::<i16>(r + 0xC) as i32, rd::<i16>(r + 0xE) as i32);
+                if tex != 0 {
+                    wr::<u32>(r + 8, to_handle(tex));
+                    wr::<u16>(r + 4, 0xFFFD);
+                    n += 1;
+                }
+            }
+        }
+    }
+    n
 }
 
 /// Lets a package go (Steam; elsewhere only one not yet entered): Err while KH1 still has one of

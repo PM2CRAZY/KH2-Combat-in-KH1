@@ -588,9 +588,18 @@ fn build_dpd(p: &Pax, com: &Split, common_dpd_at: usize, items: &[Item]) -> Resu
             *b = 0;
         }
         for (ti, t) in out.lists[1].iter().enumerate() {
-            let (a, b) = key(t);
-            let old = (tmap.iter().find(|m| m.1 == a).map(|m| m.0), cmap.iter().find(|m| m.1 == b).map(|m| m.0));
-            if drawn[ii].iter().any(|&(x, y)| Some(x) == old.0 || Some(y) == old.1) && ti < 128 {
+            // The DPD's own records keep KH2's own bit (the draw binds every masked record's
+            // texture at its TBP, the last one winning: with one HD image per palette, KH2's
+            // `0x1404AECD0`, the mask picks the palette). The common ones copied in, which KH2's
+            // mask doesn't index, by what the particle data draws.
+            let on = if origins[ti].own {
+                src.offs[1].iter().position(|&x| x == origins[ti].src_offset).is_some_and(|sj| sj < 128 && bit(0xB0, &src.lists[0][s], sj))
+            } else {
+                let (a, b) = key(t);
+                let old = (tmap.iter().find(|m| m.1 == a).map(|m| m.0), cmap.iter().find(|m| m.1 == b).map(|m| m.0));
+                drawn[ii].iter().any(|&(x, y)| Some(x) == old.0 || Some(y) == old.1)
+            };
+            if on && ti < 128 {
                 pd[0xB0 + ti / 8] |= 1 << (ti % 8);
             }
         }

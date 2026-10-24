@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 466 (testing branch: KH2 effects: KH2's per-palette HD images)
+- **KH2 effects: KH2's per-palette HD images.** The tester's t463 log (Thunder 3: 0xd231..3, 0xe651..2). KH2 `0x1404AECD0` (Checked (decomp)): each record of a TBP at first + 1.. ; `kh2dpx::palette_textures` after KH1's `0x14031EC10`; the builder keeps KH2's mask bits for own records. Notes §18.12.
+
 ### 2026-10-23: Stage 465 (testing branch: Frame Advance: the Camera row (Free: the camera moves while held))
 - **Frame Advance: the Camera row (Free: the camera moves while held).** The tester ("toggle the cam movement on or off"). KH1's pad step runs outside the task list; 100000 `0x1401E5D90` steps the camera mode (`0x140506CE0`) from the live stick, round the held Sora, writing only the camera's state; 110000 builds the view from it (Checked (decomp), table Checked (exe)). Free: 100000 runs held through `camera_live` with the frame's scale (0 otherwise since t463), no Select (first person clears the lock-on and fades Sora), no R3 in first person; KH1's first-person fade `0x1425380F8` holds it. KH2's camera goes along (same scale). Notes: `docs/kh1-frame-advance.md`.
 

@@ -1697,7 +1697,7 @@ What doesn't play through KH1 (each logged once, by package and element, with th
 - A package that didn't build (logged: the file not read, its HD textures not read).
 - Off Steam (Epic): elements on KH1's blade, position or unbound bindings, or running KH2's own
   programs (Steam addresses); those on bones with KH1's own programs play.
-- Flag 0x800: applied since §18.18. Not applied: Thunder 3's TBPs 0x3000 / 0x3020 draw untextured until their HD images are found (§18.12).
+- Flag 0x800: applied since §18.18. Thunder 3's TBPs 0x3000 / 0x3020 (an HD image per palette): KH2's case through KH1 since the version after t463 (§18.12).
 
 ### 18.12 Built when needed, lean, freed when not (`kh2dpx::manage`)
 
@@ -1721,17 +1721,41 @@ can play.
   `*0x1422C8FA8`) and the texture handle written to every record of the TBP (`+8`, `+4` = 0xFFFE).
   So only that record needs an HD entry.
 - **KH2's extra case** (Checked (decomp), `0x1404AECD0`, the one case KH1's `0x14031EC10` lacks):
-  after the TBP's first record, the i-th further record of the same TBP is looked up at the first
-  record's pixels + i (`0x14012AA20 (textures, first + 0x20 + i, ...)`); if that finds an HD
+  after the TBP's first record is looked up, the TBP's records are taken in turn (the first among
+  them, the count starting at 1), the i-th looked up at the first record's pixels + i
+  (`0x14012AA20 (textures, first + 0x20 + i, ..., its own width, height)`); if that finds an HD
   entry, the record gets its own texture and `+4` = 0xFFFD, else the first's and 0xFFFE. So KH2 PC
   can give each palette (CBP) of one TBP its own HD image, keyed one byte apart. KH1 gives every
-  record of a TBP the first's texture.
+  record of a TBP the first's texture. (Read again for the version after t463: the earlier note had
+  "the i-th further record", but the first record is the loop's first, at + 1.)
 - **The t430 log**: Thunder 3's own TBPs 0x3000 (three records, CBPs 0x3E00 / 0x3E04) and 0x3020
   found no HD image by any of their records' pixel offsets, while its 0x3040 and 0x3080 did (its
   file has seven images, `-0`..`-6`); so those textures draw untextured through KH1. Not fixed
   yet: the file isn't staged here. The build now logs, for such a TBP, each of its records (pixel
   offset, CBP, format, size) and the file's images no record took (their keys), to tell from the
-  next log how KH2 keys them (**Assumption** to check: by KH2's extra case above, or otherwise).
+  next log how KH2 keys them.
+- **The t463 log** (the tester's, m16): by KH2's extra case. Thunder 3's TBP 0x3000 has three
+  records (pixels 0xd230, 0x18e90, 0x1a2b0; CBPs 0x3E00, 0x3E04, 0x3E04; PSM 0x13, 64×64), 0x3020
+  two (0xe650, 0x1faf0); the file's images `-0`..`-2` are keyed 0xd231..0xd233, `-3` / `-4` 0xe651 /
+  0xe652 (the key's top byte 0x20 aside): the first record's pixels + 1, + 2, ..., one per record,
+  none at + 0. **Checked (files)** (the log) against **Checked (decomp)**.
+- **KH2's case through KH1** (`kh2dpx::palette_textures`, Steam): the builder gives each of our
+  records of such a TBP an HD entry at our first record's pixels + its place (the image the source
+  keys at its first + its own place among its TBP's records). When the DPX is entered, KH1's own
+  set-up (`0x14031EC10 (dpd, 0, 0)`) is run for those DPDs, then KH2's extra loop: each record
+  looked up at first + i with its own size (`0x14010C050`), found: its handle (`0x14038AD90`) at
+  `+8`, 0xFFFD at `+4`. KH1's draw skips its set-up from then on (it runs only while the DPD's first
+  record's `+4` isn't negative; nothing in KH1 or KH2 reads 0xFFFD; **Checked (decomp)**). Only
+  those DPDs; the others are set up by KH1's draw as before. **Assumption**: both games' multimap
+  by TBP keeps one TBP's records in the DPD's order (the standard multimap's insertion order).
+- **Which record draws** (**Checked (decomp)**): both draws bind the texture of each record the
+  particle data's mask (`+0xB0`) has at that record's TBP slot (KH1 `0x1401ECF30` →
+  `0x14010DC50`, KH2 `0x1402C2AE0` → `0x14012C620`), the last one winning, so with an image per
+  palette the mask picks it. The builder now keeps KH2's own mask bit for each of the DPD's own
+  records (it rebuilt them from the TBPs / CBPs the particle data draws, which sets every record of
+  a TBP); the common records it copies in keep that rule (KH2's mask doesn't index them). Sora's
+  package (`P_EX100.a.us`, every DPD and particle data, **Checked (files)**): both give the same
+  bits, so its DPX is unchanged; none of its TBPs has more than one record.
 - **The texture lookup** (Checked (exe), `0x14010C050` → `0x14010BAF0`): the file holding the
   pointer (`0x1400E2B20`), the offset in it, the HD entry with that key (`+0x54`); if the entry
   already has its texture (`+0x70`) it is returned as it is, else one is made from its data
