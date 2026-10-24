@@ -83,3 +83,8 @@ go ahead
 ^m4
 
 
+1. and 2. when I meant by cure switch it changes what you cast, cure kh1 would cure exactly like kh1 with its effects and cast while the cure switch for kh2 would switch. 
+   
+   reflect currently does not behave properly for kh1 physics, please see how casting is done in the air physics wise to get the same for kh1, as for kh2 please check the c steam decomp to fix and find any issues with the physics, it was adjusted on the main branch but its not accurate to how kh2 does reflect in the air. 
+   
+   
