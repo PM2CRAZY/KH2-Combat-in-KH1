@@ -15,6 +15,7 @@
 - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](#^m9)
 - [10. Assistant: t453. Sorry I missed your message last round; it should have](#^m10)
 - [11. Assistant: I went through the KH2 Steam decomp step by step, from where](#^m11)
+- [12. Assistant: Got your test here too: the automatic round picked it up fro](#^m12)
 
 ---
 
@@ -202,4 +203,18 @@ go ahead
 ^m11
 
 
-this is a test    
+this is a test
+
+
+> [!tip] Assistant
+> Got your test here too: the automatic round picked it up from this thread.
+>
+> No code changed. The three questions in my last reply still need answers before I touch the pants, the bones KH2's model doesn't show, or the coat:
+> 1. Pants: (a) keep KH1's own animation, or (b) fixed to the thigh, as KH2 shows them?
+> 2. Hood, sleeve flaps and the 3 hair spikes: (a) follow KH2's skeleton, or (b) keep them still, as KH2's model shows them?
+> 3. Coat: (a) keep it following his hips, (b) move it with his torso like KH2's jacket, or (c) follow KH2's coat bones?
+>
+> Answer in a `> [!note]` box with your picks and "go ahead".
+
+^m12
+

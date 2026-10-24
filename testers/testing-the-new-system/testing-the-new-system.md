@@ -7,6 +7,7 @@
 - [1. Boogle: This is a test on the new system, did you get it?](#^m1)
 - [2. Assistant: Got it, loud and clear. Your message came through the automa](#^m2)
 - [3. Assistant: Got this one too. The folder side works: this thread lives i](#^m3)
+- [4. Assistant: Got it. This one came through the automatic round without an](#^m4)
 
 ---
 
@@ -41,4 +42,14 @@ this is another test to see if tester folders are working, did you get it?
 
 ^m3
 
-this is another test   
+
+this is another test
+
+
+> [!tip] Assistant
+> Got it. This one came through the automatic round without anyone relaying it: pushing to `testing` is enough, and the next scheduled check picks it up.
+>
+> Nothing to test here. Write "Close" when you're done with this thread and I'll archive it.
+
+^m4
+
