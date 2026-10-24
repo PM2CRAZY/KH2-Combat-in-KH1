@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 432 (testing branch: KH2 Keyblade-only ability swings on KH1's ground combo)
+- **KH2's Keyblade-only ability swings on KH1's ground combo.** `kh2slots::blade_swing` (weapon hits only, no body attack, guard, invulnerability or air/ground range; P_EX100.mset, Checked (files)); `combomods::native_ability`: Slapshot 162, Dodge Slash 163, Slide Dash 164 on 0xC8..0xCA, no borrow (root travel 50 / 300 / 700). 9 slots, about 1.5 MB. Notes §7.
+
 ### 2026-10-23: Stage 431 (testing branch: KH2 ledge hop checked in the t430 traces)
 - **KH2's ledge hop checked in the t430 traces.** f48640 / f48888: row 1 about 40 from the edge, 21 high, 7.8/frame off it (t415 holds). f48311 / f49221: row 6 about 89 out (KH2's rule), 153's travel took him off. KH2's ground-mover edge stop (`0x1403B9090` / `0x1403BAB20`, decomp) is gated on `+0x18C` bit 23 (setter not found; Assumption: no swing sets it). No behaviour change. Notes §7.
 

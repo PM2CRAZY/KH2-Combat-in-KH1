@@ -13,9 +13,10 @@
 //! - **Attack** (`attack`, from `combat::exec`: a press KH1's combo took, its row about to run):
 //!   KH2's combo is asked what it would take at KH1's count (`Character::would_take`, the combo
 //!   carried at KH1's count, the press, KH2's targets and KH1's lock). KH2 takes it when that is
-//!   - a row that needs an ability (an action ability's move: Slide Dash, Flash Step, Aerial
-//!     Dive, Dodge Slash, Vicinity Break, Aerial Sweep, Aerial Spiral; the finishers Explosion,
-//!     Guard Break, Aerial Finish, Magnet Burst ...), opener, step or finisher;
+//!   - a row that needs an ability (an action ability's move: Flash Step, Aerial Dive, Vicinity
+//!     Break, Aerial Sweep, Aerial Spiral; the finishers Explosion, Guard Break, Aerial Finish,
+//!     Magnet Burst ...), opener, step or finisher, except the ones KH1's own rows now play
+//!     natively (`native_ability`: Slapshot, Dodge Slash, Slide Dash at Base Combo KH2);
 //!   - KH2's finisher where KH1's would still swing, with Negative Combo;
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
 //!     count);
@@ -163,7 +164,7 @@ unsafe fn kh1_combo(actor: usize, air: bool) -> Option<(u8, u8, bool)> {
 /// for the log).
 fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u8) -> Option<&'static str> {
     let kh1_finisher = count >= kh1_len;
-    if row.ability != 0 {
+    if row.ability != 0 && !native_ability(row) {
         Some("an action ability's move")
     } else if row.is_finisher() && !kh1_finisher && negative > 0 {
         Some("KH2's finisher a swing sooner (Negative Combo)")
@@ -172,6 +173,17 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
     } else {
         None
     }
+}
+
+/// An ability row of KH2's that KH1's own states play natively, no borrow (the tester: "transfer
+/// everything into kh1's systems"; the KH2-controller borrow is going away): a ground swing that
+/// is only a Keyblade swing (Slapshot, Dodge Slash, Slide Dash: `kh2slots::swing_rows`, which
+/// builds its motion's slots on KH1's ground swing requests only then), with the Base Combo at
+/// KH2 (where our slots play). KH1's plain ground swing row runs it as it runs KH2's plain swings
+/// (`kh2_row`, `select_swing`): KH1's row, attack object, damage and windows, KH2's motion and
+/// root travel. The rest still borrow.
+fn native_ability(row: &ComboRow) -> bool {
+    row.ability != 0 && !row.is_air() && !row.is_jump() && !row.is_finisher() && super::styles::kh2(super::styles::Kind::GroundCombo) && super::kh2slots::has_any(row.motion)
 }
 
 /// What `combat::exec` runs for an Attack KH1's own combo took (`attack`).
@@ -451,11 +463,13 @@ struct Kh1Combo {
 }
 
 impl Kh1Combo {
-    /// KH2's `row` is a plain swing or finisher of this combo: no ability (those are borrows);
-    /// on the ground no hop (KH2's hops aren't KH1 rows), in the air an air row.
+    /// KH2's `row` is a plain swing or finisher of this combo: no ability (those are borrows), or
+    /// an ability swing KH1's swing row plays natively (`native_ability`, on the ground); on the
+    /// ground no hop (KH2's hops aren't KH1 rows), in the air an air row.
     fn plain(&self, row: &ComboRow) -> bool {
-        let here = if self.style == super::styles::Kind::AirCombo { row.is_air() } else { !row.is_air() && !row.is_jump() };
-        here && row.ability == 0
+        let air = self.style == super::styles::Kind::AirCombo;
+        let here = if air { row.is_air() } else { !row.is_air() && !row.is_jump() };
+        here && (row.ability == 0 || (!air && native_ability(row)))
     }
 
     /// KH1's `request` is the kind of KH2's `row` (a swing for a swing, the finisher for a finisher).

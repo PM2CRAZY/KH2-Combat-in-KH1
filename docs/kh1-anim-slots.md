@@ -686,6 +686,26 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   row's own; a KH1 air swing started out of KH2's controller (`combat::command`) has KH1's
   momentum rules after it (`kh1_air_attack_started`, `seed_kh1_lunge`), left as they are (the
   tester: the KH2-controller path is going away). Unverified in game.
+- **KH2's ability swings on KH1's ground combo** (the tester: "transfer everything into kh1's
+  systems"; Base Combo KH2): an ability row whose motion is only a Keyblade swing plays on KH1's
+  ground swing rows as the plain swings do, no borrow (`combomods::native_ability`,
+  `kh2slots::blade_swing`). The test, on KH2's clip (Sora's `P_EX100.mset` ranges, Checked
+  (files)): a hit window on the Keyblade, none on his own body (range id 10 / 33 on his mset), no
+  guard window (an ATKP of kind 2 / 3), no invulnerability (27), no gravity / air / ground range
+  (3, 24, 1, 0); a ground row, no hop, not a finisher. Sora's: Slapshot (row 35, motion 162),
+  Dodge Slash (34 / 44 / 45, 163), Slide Dash (28 / 43, 164). Their PTYA rows have no speed
+  window and no `distance_adjust` (Checked (files)), so KH2 moves him by the motion's root travel
+  only (Slapshot 50 forward, Dodge Slash 300, Slide Dash 700, whatever the target's distance;
+  Checked (files)), which the slot carries (baked into its H10, KH1's travel flag on requests 0xC8..0xCB). Each
+  is built for 0xC8, 0xC9 and 0xCA (KH1's plain swing rows 13 / 11 and its row 14), about 170 KB
+  and 15 ms each at load (9 more slots). Not native yet (still borrows): Flash Step (169: a guard
+  on his body, ATKP 406 kind 2, frames 0..19), Vicinity Break (170: a body attack, 1869 group 21,
+  power 125), Explosion (166: 911 / 912), Guard Break (165, a finisher; its KH2 guard break isn't
+  KH1's attack data), the hops (Aerial Sweep 191, Aerial Dive 196), the air rows (Aerial Spiral
+  192, Aerial Finish 194, Magnet Burst 197), the Square moves, Counterguard and Retaliating Slash.
+  What stays KH1's for these, as for the plain swings: the row, its attack object on the
+  Keyblade (KH1's shape and damage for that row, not KH2's ATKP: Slapshot's, Dodge Slash's and
+  Slide Dash's own power and reactions are not used), its combo count and window from the slot.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

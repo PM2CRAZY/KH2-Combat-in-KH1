@@ -184,7 +184,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 continue;
             }
             let air = s.kind == Kind::AirCombo;
-            for (motion, finisher) in swing_rows(&kh2.character.moveset.combo_rows, air) {
+            for (motion, finisher) in swing_rows(&kh2.character.moveset.combo_rows, &kh2.character.moveset.clips, air) {
                 if finisher != matches!(s.request, GROUND_FINISHER | AIR_FINISHER) || motion == s.motion || !wanted(motion) {
                     continue;
                 }
@@ -254,23 +254,49 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, events }, block)))
 }
 
-/// The swings KH2's combo rows can take with no ability (an ability's row is a borrow,
-/// `combomods`): on the ground (`air` false) the ground rows with no hop (a row with `jump` leaves
-/// the ground), in the air the air rows (each hops a little, as KH1's air swings do):
-/// (motion, finisher), each once. The rows the selector marks (kind 1, 2, 3) and the rows their
-/// `sub` swaps to (any kind; the exe's anti-repeat keeps the `sub` row, Steam `0x140402C50`).
-fn swing_rows(rows: &[character_core::ComboRow], air: bool) -> Vec<(u16, bool)> {
+/// The swings KH2's combo rows can take: on the ground (`air` false) the ground rows with no hop
+/// (a row with `jump` leaves the ground), in the air the air rows (each hops a little, as KH1's
+/// air swings do): (motion, finisher), each once. The rows the selector marks (kind 1, 2, 3) and
+/// the rows their `sub` swaps to (any kind; the exe's anti-repeat keeps the `sub` row, Steam
+/// `0x140402C50`). With no ability, and the ground ability swings that are only a Keyblade swing
+/// (`blade_swing`: Slapshot, Dodge Slash, Slide Dash), which KH1's ground swing rows play natively
+/// as they do the plain ones (`combomods::native_ability`); the other ability rows are still
+/// borrows (`combomods`).
+fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashMap<u16, character_core::Clip>, air: bool) -> Vec<(u16, bool)> {
     let picked = |r: &character_core::ComboRow| r.kind != 0;
     let subs: Vec<i8> = rows.iter().filter(|r| picked(r)).map(|r| r.sub).collect();
     let mut out: Vec<(u16, bool)> = Vec::new();
     for r in rows {
         let reachable = picked(r) || subs.contains(&(r.id as i8));
         let here = if air { r.is_air() } else { !r.is_air() && !r.is_jump() };
-        if reachable && r.motion != 0 && here && r.ability == 0 && !out.iter().any(|o| o.0 == r.motion) {
+        let ability_ok = r.ability == 0 || (!air && !r.is_finisher() && clips.get(&r.motion).is_some_and(blade_swing));
+        if reachable && r.motion != 0 && here && ability_ok && !out.iter().any(|o| o.0 == r.motion) {
             out.push((r.motion, r.is_finisher()));
         }
     }
     out
+}
+
+/// A KH2 ability row's motion is only a Keyblade swing, so KH1's own ground swing row can play it
+/// as it plays the plain swings (its attack object on the Keyblade, timed by the slot's hit
+/// windows, and KH2's root travel baked in): it hits with the Keyblade's shapes only (a
+/// `Hitbox` window on a weapon, none on his own body), and has no guard, no invulnerability, no
+/// gravity or air / ground range of its own (each of those is KH2 behaviour KH1's swing row
+/// doesn't have). Sora's (`P_EX100.mset`, Checked (files)): Slapshot 162, Dodge Slash 163 and
+/// Slide Dash 164 pass; Flash Step 169 (a guard on his body, ATKP 406 kind 2, frames 0..19),
+/// Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166 (911 / 912), Guard Break
+/// 165 (a finisher, left out above), Finishing Leap 167 and Counterguard 171 don't.
+fn blade_swing(clip: &character_core::Clip) -> bool {
+    use character_core::WindowKind as W;
+    let blade = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon, .. } if weapon > 0));
+    let other = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon: 0, .. } | W::Guard { .. } | W::Invulnerable | W::NoGravity | W::Air | W::Grounded));
+    blade && !other
+}
+
+/// KH2's `motion` has a slot of ours on one of KH1's requests (built: an ability row's only when
+/// it is a Keyblade swing, `swing_rows`).
+pub fn has_any(motion: u16) -> bool {
+    built().is_some_and(|b| b.moves.iter().any(|m| m.motion == motion))
 }
 
 /// KH2's `motion` baked into a KH1 motion on `template` (KH1's slot `stands_for`, whose own
