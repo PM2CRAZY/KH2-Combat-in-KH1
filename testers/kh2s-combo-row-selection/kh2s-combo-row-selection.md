@@ -167,4 +167,8 @@
 
 
 > [!note] Tester Mr Bugs
+> I've sent you the traces and log, I assume you don't need my input from this point so try to transfer everything into kh1's systems like you've been doing and looking through the steam c decomp, I'll give you the go ahead on the check. Just let me know what you changed how the behaviours are different after so I can debug and make sure it works
 > 
+> go ahead
+> 
+ 

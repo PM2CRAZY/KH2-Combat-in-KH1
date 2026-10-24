@@ -283,4 +283,9 @@
 
 
 > [!note] Tester Mr Bugs
+> 1. the older player is to be deprecated
+> 2. (a)
 > 
+> do the check
+> 
+> go ahead

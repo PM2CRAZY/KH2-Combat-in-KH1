@@ -296,4 +296,12 @@
 
 
 > [!note] Tester Mr Bugs
+> also if you didn't make the correction "100000 0xle5d90" the l is actually a 1 my ocr got it wrong so 100000 0x1e5d90 and what I said is the characters moving is wrong, I meant to put in 80000 0x298940
 > 
+> 55000 0x2937f0 is the command menu, unsure if its the ui
+> 
+> even with the map map parts running I still don't see effects rendering on held frames, I also see that  every other effect (magics, keyblade swings, etc) aren't rendering so there's probably a connection, for the rest of the values and the ones I provided I want you to look into the c decomp (steam ghidra) and figure out further how everything works, what we need to work out that I know of is: stats changing, ui, effects, lock on, etc... there might be more to freezing the entire game state so look further
+> 
+> also I have more requests in tester-request.md Can you make sure that after a thread is given its own unique folder, that an agent checks to see if there's a request uploaded in that document and gives its own folder like you've been doing now.
+> 
+> go ahead
