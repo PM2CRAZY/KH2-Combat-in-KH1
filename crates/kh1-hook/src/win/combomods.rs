@@ -356,6 +356,19 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // length (Combo Plus) or a finisher before it (Negative Combo) is KH2's row selection on
     // KH1's rows, `kh2_row`, not a borrow.)
     let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    // (At the combo style KH1 KH1's own count rules: KH2's pick counts only when it is one of its
+    // ability moves of the kind KH1's own count is at, a swing before KH1's length, a finisher at
+    // it. KH2's plain swings, and its length's say (Combo Plus past KH1's, Negative Combo before
+    // it), are nothing there: KH1's row and motion as unmodded, never a borrow.)
+    let pick = if super::styles::kh2(combo.style) {
+        pick
+    } else {
+        let kept = pick.clone().filter(|(r, ..)| r.ability != 0 && r.is_finisher() == (count >= kh1_len));
+        if let (Some((r, ..)), None) = (pick.as_ref(), kept.as_ref()) {
+            note(format!("KH1's {} combo at the KH1 setting, swing {count} of {kh1_len}: KH2's row {} motion {} (ability {}, finisher {}) not taken, KH1's own row", if air { "aerial" } else { "ground" }, r.id, r.motion, r.ability, r.is_finisher()));
+        }
+        kept
+    };
     let why = pick.as_ref().filter(|(r, ..)| !combo.serves(r)).and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len));
     note(format!(
         "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",

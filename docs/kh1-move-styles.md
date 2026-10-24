@@ -49,6 +49,27 @@ setting back. The log says when it switches ("move style: a combo ability only K
 equipped"). Base Sora only (Drive Forms keep their own movesets). Berserk Charge isn't in the mod's
 ability list yet (MP Charge comes later), so today only the first two switch it.
 
+### What the KH1 setting still takes from KH2 (testing branch, checked in the code)
+
+With base Sora on KH1's own states (`shared`), every Attack goes through `combomods::attack`
+whatever the style. At Base / Aerial Base Combo KH1 (and no KH2-only combo ability equipped):
+
+- KH1's picker (`0x1402A6EE0` ground, `0x1402A6C70` air) picks the row; KH2's row selection doesn't
+  replace it (`Kh1Combo::here` false for plain rows), and KH1's request table entries point at KH1's
+  own motions again from the next press (`kh2slots::redirect` with `styles::kh2` false).
+- KH2's drop-ahead test is off (`test_drop_ahead(false)`), so at a ledge KH1's own row 2 (its swing
+  that walks him off a drop ahead) runs, not KH2's hop (row 1); KH2's edge stop only acts while one
+  of our KH2 slots plays.
+- KH2's ability moves stay KH2's (t460, `native_ability`): Slapshot, Dodge Slash, Slide Dash, Flash
+  Step, Aerial Sweep, Aerial Dive, Aerial Spiral, Aerial Finish, Vicinity Break, Explosion, Magnet
+  Burst, Guard Break, on KH1's rows, where KH2's picker would use them. Since this change a pick only counts
+  there when it is an ability move of the kind KH1's own count is at (a swing before KH1's length, a
+  finisher at it); KH2's plain picks and its length's say (Combo Plus past KH1's length, which
+  borrowed KH2's controller before, Negative Combo early) are dropped and logged ("KH1's ... combo at
+  the KH1 setting ... not taken").
+- With Finishing Plus or Negative Combo equipped, all of the above is KH2's (t488, the section
+  above).
+
 ## Magic
 
 Which style applies is picked when the spell is chosen (or KH1 starts it): Aerial Magic if KH2
