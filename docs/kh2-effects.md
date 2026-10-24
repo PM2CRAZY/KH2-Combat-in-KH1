@@ -2135,7 +2135,11 @@ The tester (m16, 2 (a)): Reflect's numbers are KH2 Sora's size; scale them to KH
   scaled before the header local, **Checked (decomp)**), so a bound piece's place above and around
   him and its size shrink together. Script placements (`spell_place`) are the script's own
   points (its contact flashes: where an attack met the barrier) and aren't moved.
-- Not scaled: the barrier's attack shapes (ATKP 573, what it blocks), which are gameplay.
+- The barrier's attack shapes (ATKP 573, what it blocks against enemy attack objects) are scaled
+  too since the tester's m18 answer 2 ("if sora is smaller than kh2 sora then yes scale it down"):
+  `reflect::kh1_sized_barrier`, their centres' offsets from Sora and their radius and height times
+  the same ratio. `hurt`'s stop of hits on Sora while the barrier stands doesn't test shapes.
+  The counter / pop shapes (574, 667..669) stay KH2's.
 - Before Sora's retarget is made Reflect would play at KH2's size (logged once); a cast needs him.
 
 ### 18.23 KH2's object frame on KH1's object root, a third time (Reflect's ground barrier)
