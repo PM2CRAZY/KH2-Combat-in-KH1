@@ -243,4 +243,12 @@
 > 5. So: (a) KH2's combo rules on KH1's own picker (my pick), (b) KH2's picker for everything whenever a KH2 combo ability is equipped, or (c) keep handing those cases to KH2's controller for now?
 
 ^m14
-
+1. (a)
+2. (b)
+3. (b)
+4. (b)
+   5. I think I would go with kh2s picker (if kh2s picker is a native implementation and not our old way of doing it) The reason being is that when a player picks a kh2 move it needs to look and behave like kh2. So, messing with any of the values could feel off. I wanna give your take, would it actually be better to have b but then have kh1s rules inside of b instead? 
+   
+   you can do 1. 2. 3. and 4. but answer my question on 5.
+   
+   go ahead
