@@ -220,4 +220,6 @@ if you think everything is one to one then close this thread, if not let me know
 > Write "go ahead" (with your picks for the L2 questions) and I'll build 1 and 2 as one version each.
 
 ^m13
+can you make sure that what I wrote matches the design documents as well? and other agents in these threads remember it 
 
+go ahead
