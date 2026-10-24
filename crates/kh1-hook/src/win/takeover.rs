@@ -1907,7 +1907,7 @@ pub unsafe fn kh2_hits(actor: usize) {
         events: Vec::new(),
     };
     let battle = super::form::battle(&d.drive, kh2).clone();
-    let landed = d.strikes.strike_as(actor, &out, &n.anim, &mut d.character, &battle, air, steps() as f32);
+    let landed = d.strikes.strike_as(actor, &out, &n.anim, &mut d.character, &battle, air, steps() as f32, true);
     n.live = !open.is_empty() || !guards.is_empty();
     if landed > 0 {
         let info = pose::ptr(rd::<u32>(actor + 0x14C));

@@ -1224,6 +1224,8 @@ unsafe fn wall_between(from: [f32; 3], to: [f32; 3]) -> Option<[f32; 3]> {
 /// repels whatever attack meets it), e.g. the Large Body's belly, shields. Directional ones
 /// (type bits `0xE0000` of 1 or 3) only guard an arc in front of their owner (`0x1402B24B0`).
 struct Guard {
+    /// Its attack object in KH1's pool.
+    obj: usize,
     shape: Shape,
     /// KH1 world centre.
     at: [f32; 3],
@@ -1366,7 +1368,7 @@ unsafe fn guards(sora: usize) -> Vec<Guard> {
                 log(&format!("guard seen: actor {owner:#x} (object {id}), radius {r:.0}, flags {flags:08x}"));
             }
         }
-        out.push(Guard { shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner, kind: (flags >> 17) & 7, motion: ((flags >> 2) & 3 == 2).then(|| rd::<u32>(g + 0x58)) });
+        out.push(Guard { obj: g, shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner, kind: (flags >> 17) & 7, motion: ((flags >> 2) & 3 == 2).then(|| rd::<u32>(g + 0x58)) });
     }
     out
 }
@@ -1779,7 +1781,7 @@ impl Strikes {
     /// After KH2's step and pose: its live attack shapes against the enemies' bodies.
     pub unsafe fn strike(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle) {
         let air = character.airborne();
-        self.strike_as(sora, out, anim, character, battle, air, 1.0);
+        self.strike_as(sora, out, anim, character, battle, air, 1.0, false);
     }
 
     /// `strike` for the hits of a KH2 motion KH1's own states play (`takeover::kh2_hits`): `air`
@@ -1787,7 +1789,10 @@ impl Strikes {
     /// on by `ticks` 60 Hz frames (KH1's frame: one call a game frame, as KH2's one update of delta
     /// 2 at 30 fps). The hits landed.
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn strike_as(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle, air: bool, ticks: f32) -> u32 {
+    /// `native`: KH1's own states have Sora (`takeover::kh2_hits`), not KH2's controller: a guard
+    /// that stops a swing puts KH1's own clash on him (his recoil is KH1's hit pass's, `recoil`).
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn strike_as(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle, air: bool, ticks: f32, native: bool) -> u32 {
         let mut landed = 0u32;
         if !self.rows_tried {
             self.rows_tried = true;
@@ -1914,6 +1919,19 @@ impl Strikes {
                     let bounced = character.register_wall_hit();
                     clang(guards[gi].at);
                     let g = guards[gi];
+                    // On KH1's states KH2's controller doesn't drive him (`register_wall_hit` plays
+                    // nothing): the guard meets the swing through KH1's own clash (`meet_shot`, the
+                    // guard's object against a swing of his KH1 row), which stops the swing and puts
+                    // a kind 6 / 7 record on Sora as KH1's half `0x1402B4BC0` does for any swing a
+                    // priority-100 guard stops (Checked (decomp)); KH1's hit pass plays his recoil
+                    // (KH1's at Recoil KH1, KH2's at KH2, `recoil`). Plan step 5.
+                    if native {
+                        if let Some(rows) = self.rows {
+                            let as_attack = Shot { obj: g.obj, shapes: vec![g.shape], owner: g.owner, free: false };
+                            let (_, ours) = meet_shot(sora, &as_attack, &thin[gai], rows[(air as usize) * 2], false);
+                            note(format!("KH2 attack {} met the guard of actor {:#x} on KH1's states: KH1's clash, the swing stopped {ours} (his recoil from KH1's hit pass)", h.attack, g.owner));
+                        }
+                    }
                     let near_part = self
                         .bodies
                         .iter()

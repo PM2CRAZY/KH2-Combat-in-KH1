@@ -370,3 +370,19 @@ would only stop KH2's shapes (`strike_as`) until the pass learns it too.
 - **Assumption:** KH2's `+0xD70` counts 60 Hz frames (its step `DAT_140717480` is 1.0 in the file),
   so 80 frames on KH1's 60 Hz timer.
 - At Recoil KH1 the repel gives none, as before.
+
+### 6.5 Body-hit moves meeting a guard on KH1's states (plan step 5)
+
+- KH2's own data makes Explosion, Vicinity Break and Magnet Burst pierce armor (§6.3, **Checked
+  (files)**), so at Recoil KH2 they meet no guard and no attack: no recoil, as in KH2.
+- Where a KH2 hit on KH1's states (`takeover::kh2_hits` → `strike_as(.., native)`) is stopped by a
+  guard (Recoil KH1, or a normal KH2 hit at KH2), the guard now meets it through KH1's own clash
+  (`meet_shot` with the guard's attack object against a swing of his KH1 row): KH1's half
+  `0x1402B4BC0` stops the swing and queues a kind 6 / 7 record on Sora (**Checked (decomp)**), and
+  KH1's hit pass plays the recoil (KH1's at Recoil KH1; KH2's 41 / 43 at KH2, §6.2). Before, the
+  swing was only marked repelled and `register_wall_hit` went to a controller that wasn't driving
+  him.
+- A priority-100 guard against a swing under 60 is a gap over 40: kind 7, KH1's big recoil, which
+  is what KH1's own swings get from it (**Assumption:** the swing row's priority; it is the KH1
+  template's plus the Keyblade's byte).
+- Borrowed moves (KH2's controller) keep `register_wall_hit` (KH2's repel off the guard).

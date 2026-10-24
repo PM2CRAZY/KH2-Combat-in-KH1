@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 544 (testing branch: Recoil: KH2 hits stopped by a guard on KH1's states recoil natively)
+- **A guard that stops a KH2 hit on KH1's states meets it through KH1's own clash.** The tester (plan step 5). `strike_as(.., native)` from `takeover::kh2_hits`: `meet_shot` with the guard's attack object (new `Guard::obj`) against a swing of his KH1 row, so KH1's half `0x1402B4BC0` queues the kind 6 / 7 record on Sora and KH1's hit pass plays his recoil (KH1's or KH2's by the Recoil row); before, `register_wall_hit` went to a controller not driving him. Explosion / Vicinity Break / Magnet Burst are pierce armor in KH2 (Checked (files)), so at KH2 they meet no guard at all. Checked (decomp).
+
 ### 2026-10-24: Stage 543 (testing branch: Recoil: the guard repel's 80 frames)
 - **KH2's guard repel gives 80 frames without damage (Recoil KH2).** The tester (plan step 4). `combomods::guard_repel` sets KH1's own no-damage timer to 80 (`+0xC` = 80.0, flag 0x80 on / 0x100000 off, as `0x140297F30`), KH2's `+0xD70` = 80 from `0x1403D61D0`. Checked (decomp); Assumption: KH2's step 1.0 a 60 Hz frame.
 
