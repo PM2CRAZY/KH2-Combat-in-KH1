@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 431 (testing branch: KH2 ledge hop checked in the t430 traces)
+- **KH2's ledge hop checked in the t430 traces.** f48640 / f48888: row 1 about 40 from the edge, 21 high, 7.8/frame off it (t415 holds). f48311 / f49221: row 6 about 89 out (KH2's rule), 153's travel took him off. KH2's ground-mover edge stop (`0x1403B9090` / `0x1403BAB20`, decomp) is gated on `+0x18C` bit 23 (setter not found; Assumption: no swing sets it). No behaviour change. Notes §7.
+
 ### 2026-10-23: Stage 430 (testing branch: KH2 effects: KH2's body centre 0x4001 on KH1's 0x8005)
 - The tester (option (a)). KH1 0x8005 (the first enabled kind-1 collision part's centre, object frame), Checked (exe);
   KH2's 0x4001 the same in KH2 (decomp); all packages; both heights logged once (KH2's: 85 for Sora). Notes §18.15.

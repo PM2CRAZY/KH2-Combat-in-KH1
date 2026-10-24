@@ -744,6 +744,34 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
     on the same block took KH2's 151 / 153 (rows 5 / 6). KH1's own row 2 was marked at each of
     them too (the log: "KH1's row 2 replaced"), so the two tests agreed here; they part for drops
     between 24 and half KH1's height, at gaps the line crosses, and on slopes.
+  - **Checked (trace)**, after t415 / t416: the tester's t430 traces f48311, f48640, f48888, f49221
+    and their log (room 0 of world 0xB, the same 120 block, its edge at about z 799; no target,
+    stick idle, physics KH1, Base and Aerial Combo KH2). f48640 / f48888: presses about 40 from
+    the edge took row 1 ("the floor 120 below at 85 ahead"), KH1's row 2 or 11 replaced by its
+    air row 18 (0xCC) playing 181; he rose exactly 21 (120 to 141) and went forward off the edge
+    from the first air frame (7.8 a frame, KH2's 8 after one frame of KH1's drag x0.975, then
+    the drag each frame) and landed on the floor below 32 frames on: t415's speed is kept. f48311
+    / f49221: the second press about 89 from the edge (the line's end 4 short of it, on the
+    floor) took row 6 (153), KH2's rule; that swing's own travel (about 26 a frame over its
+    frames 21..24, about 105, KH2's root travel baked into the slot) took him past the edge,
+    where KH1's mover dropped him into its fall (state 2, request 6) and the swing ended there.
+    Every other ground press in the log (12) took rows 5 / 6 / 3 on flat floor. Not covered: steps
+    or a ramp (the traces have only the 0 and 120 floors).
+  - **KH2's edge stop** (Steam KH2, Checked (decomp); not added): KH2's ground mover
+    (`0x1403B9090`, from `0x1403B89A0`) stops the horizontal step at an edge when `0x1403BAB20`
+    says so: it runs the same no-floor sweep as the line ahead (`0x1403BA750`) along the step
+    lengthened by a constant times his radius (`DAT_14074B060 x +0x6F0`) and, with no floor, keeps
+    only the vertical part (and zeroes `+0xD24..+0xD2F` with `+0x6C8` bit 1). `0x1403BAB20` is
+    true with the motion state word `+0x18C` bit 23, or standing on an object that allows it
+    (`+0x9D8`'s `+0x18C` bit 28 clear and `+0x6C8` bit 15 clear), or `+0x6C8` bit 1 with `+0xD30`
+    above 0, or the movement state (`0x1403B5DC0`) 0xF. Which range trigger sets bit 23 isn't
+    found (**assumption**: none of Sora's swing motions, whose ranges are ids 11, 14, 23, 28, 29,
+    50 only; `docs/aerial-recovery.md` has ids 0..2 setting bits 2..4 and 11 bit 10), so a swing
+    whose travel crosses an edge would take him off in KH2 too, as here. Open: what KH2 does
+    with the swing once he is off (KH1 cuts it into its fall).
+  - A detail seen in f48640 / f48888: the hop's rise starts one frame before KH2's motion does
+    (KH1 starts the new request the frame after the row runs, as for every swing; the state and
+    speed are set on the press), so for one frame he rises in the end of the ground swing.
 - **The finisher tests' status bits** (the tester: "add that"; Steam KH2, Checked (decomp)):
   - `+0x194` bit 5: the count step (`0x1403D6CA0`) takes it with the press's hit as the
     finisher chain (count and finisher count up, while under the most finishers `+0x5C0` block
