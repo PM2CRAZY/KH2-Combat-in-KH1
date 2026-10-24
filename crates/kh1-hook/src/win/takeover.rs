@@ -454,6 +454,8 @@ unsafe extern "system" fn physics(actor: usize) {
         super::kh2slots::turn_to_lock(actor);
         // KH2's guard repel's push back (`combomods::guard_frame`).
         super::combomods::guard_frame(actor);
+        // KH2's Aerial Dodge's fall at its apex (`combomods::dodge_apex`).
+        super::combomods::dodge_apex(actor);
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);

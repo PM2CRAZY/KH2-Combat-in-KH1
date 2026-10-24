@@ -909,6 +909,35 @@ pub unsafe fn aerial_dodge(actor: usize) -> bool {
     true
 }
 
+/// KH2's Aerial Dodge swaps to its fall this many frames before its arc's apex (KH2's air step
+/// `0x1403CB680`: with the arc's time `+0xF0` + 5 at or past its rise time `+0xF4`, the apex
+/// motion `+0x118`, which the dodge set to 4, through `0x1403CB610`; Checked (decomp)).
+const DODGE_FALL_MARGIN: f32 = 5.0;
+/// KH2's blend into that fall (`0x1403CB610`: motion 4 with blend 8.0, Checked (decomp)).
+const DODGE_FALL_BLEND: f32 = 8.0;
+
+/// Each KH1 physics frame of Sora's, before it (`takeover::physics`): KH2's Aerial Dodge on our
+/// request (`aerial_dodge`) goes into KH1's fall (request 6) at KH2's apex swap, 5 frames before
+/// the apex of his arc as KH1's air fields keep it (`+0x3B0` its time, `+0x3B8` its rise time;
+/// KH2's arc writes them at physics KH2, KH1's own at physics KH1), with KH2's blend. KH1's own
+/// apex swap (`0x1402AF630`) only fires for its own jump's requests, so this is ours to ask, as
+/// KH2's own air step asks it. Nothing while something else is pending in KH1's queue (`+0x178`),
+/// as KH1's apex swap. KH1's action flag 4 the request raises is cleared (a plain fall).
+pub unsafe fn dodge_apex(actor: usize) {
+    use character_core::motion::AERIAL_DODGE;
+    if actor < 0x10000 || rd::<i32>(actor + 0x70) != 2 || super::kh2slots::playing_motion(actor) != Some(AERIAL_DODGE) {
+        return;
+    }
+    let (t, up) = (rd::<f32>(actor + 0x3B0), rd::<f32>(actor + 0x3B8));
+    if !(t.is_finite() && up.is_finite()) || t + DODGE_FALL_MARGIN < up || rd::<i32>(actor + 0x178) != 0 {
+        return;
+    }
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(takeover::game_base() + SET_MOTION_RVA);
+    set(actor, 0x06, DODGE_FALL_BLEND);
+    wr(actor, rd::<u32>(actor) & !4);
+    note(format!("KH2's Aerial Dodge: its apex ({t:.1} of {up:.1} frames up), KH1's fall (request 6, blend {DODGE_FALL_BLEND})"));
+}
+
 /// KH1 knocked him away itself (`hurt`: a knock-back or launch while KH1's states have him).
 pub fn kh1_blown() {
     BLOWN_AT.store(frame().max(1), Ordering::Relaxed);

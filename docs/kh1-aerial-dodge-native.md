@@ -159,3 +159,10 @@ The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one te
   `air_control` on all through. **Checked (decomp)** for KH2's side; KH1's loop at the end of a
   slot with an empty queue (`0x14029F0A0`: from `+0x288`, unless `+0x160` bit 3 holds it) is
   **Checked (decomp)**, but the slot is long enough that it shouldn't come to that.
+- **t493, the fall at the apex.** `combomods::dodge_apex`, each KH1 physics frame of Sora's while
+  our dodge slot plays in his air state: once KH1's arc fields say 5 frames or less to the apex
+  (`+0x3B0` + 5 >= `+0x3B8`) and nothing is pending in KH1's queue, KH1's fall request (6) with
+  KH2's blend 8, the action flag cleared. KH2's rule (`0x1403CB680` → `0x1403CB610`, motion 4,
+  blend 8) **Checked (decomp)**. That KH1's arc fields are in the same frames as KH2's arc here
+  (so the 5 is the same 5) is what `kh1phys::Arc::from_kh2` writes (Checked (code)). Landing stays
+  KH1's own (its landing request on touching down).
