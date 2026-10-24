@@ -5,7 +5,6 @@
 ## Messages
 
 - [1. Mr Bugs: the scope of the config menu currently can't scale to what w](#^m1)
-- [2. Assistant: Here's the plan. KH1 already has a sub-menu system: it's how](#^m2)
 
 ---
 
@@ -44,4 +43,14 @@
 > Tell me those and give me the go ahead, and I'll build it.
 
 ^m2
+
+> [!note] Mr Bugs
+> 1. Yes if your going to make magic its own sub catagory put it inside of combat, so its config > kh2 in kh1 > combat > magic
+> 2. (a)
+> 3. (a)
+> 4. (b)
+> 5. (a)
+> 6. (b)
+>    
+>    go ahead
 
