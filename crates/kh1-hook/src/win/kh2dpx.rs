@@ -1069,7 +1069,18 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     for set in &s.sets {
         add(set, &mut groups);
     }
-    if s.rest {
+    // A spell's file plays as one (its script starts its pieces together): one DPD per DPD of the
+    // file, as KH2's file has them. KH1 shares its 10 TBP / 6 CBP texture slots between every DPD
+    // drawn in a frame (`0x1401EDB00`: a run per DPD, another DPD's run taken over when they run
+    // out), and every DPD of ours carries its own copy of the KH2 common textures it draws (KH2's
+    // are resident and take no slot: its draw binds only TBPs from 0x3000 to slots, `0x1402C2AE0`).
+    // One DPD per effect (as before) put Fire 3 at 24 TBP slots at once, Thunder 3 at 26, Reflect 3
+    // at 37 (the t463 log). A group over KH1's slots is split back into one per effect.
+    let together = matches!(s.pkg, Pkg::Spell(_));
+    if s.rest && together {
+        let els: Vec<i16> = layers.iter().map(|l| l.el).collect();
+        add(&els, &mut groups);
+    } else if s.rest {
         let mut effects: Vec<u32> = variants.iter().map(|v| v.effect).collect();
         effects.dedup();
         for e in effects {
@@ -1077,7 +1088,28 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
             add(&els, &mut groups);
         }
     }
-    let r = kh2_formats::kh1dpx::build_groups(pax_data, &common, &groups).map_err(|e| e.to_string())?;
+    let mut r = kh2_formats::kh1dpx::build_groups(pax_data, &common, &groups).map_err(|e| e.to_string())?;
+    if together && !r.skipped.is_empty() {
+        let mut split: Vec<Vec<kh2_formats::kh1dpx::Variant>> = Vec::new();
+        for (gi, g) in groups.iter().enumerate() {
+            let Some((_, why)) = r.skipped.iter().find(|x| x.0 == gi) else {
+                split.push(g.clone());
+                continue;
+            };
+            log(&format!("KH2 effects (native): {}: a DPD of all its pieces of one file isn't possible ({why}); one per effect", s.label));
+            let mut effects: Vec<u32> = Vec::new();
+            for v in g {
+                if !effects.contains(&v.effect) {
+                    effects.push(v.effect);
+                }
+            }
+            for e in effects {
+                split.push(g.iter().filter(|v| v.effect == e).copied().collect());
+            }
+        }
+        groups = split;
+        r = kh2_formats::kh1dpx::build_groups(pax_data, &common, &groups).map_err(|e| e.to_string())?;
+    }
     log(&format!("KH2 effects (native): {}'s DPX: {}", s.label, r.report));
     // Elements of groups left out (too many texture slots, a texture missing) aren't KH1's.
     for (gi, why) in &r.skipped {

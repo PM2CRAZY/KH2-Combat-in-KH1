@@ -1654,6 +1654,23 @@ the spell files aren't staged here.
   programs are only known at load. What KH1 doesn't have stays with `kh2fx` (logged per element):
   KH2-only programs not ported, and the programs §12.2 lists that aren't compared yet
   (KeShpTail3X and AngleLoop now are, §18.9). KH2's body centre 0x4001: §18.15.
+- **One DPD per DPD of the spell's file** (the version after t463; the tester: "firaga doesn't
+  have all of its flames"). KH1 gives texture slots per DPD when it draws (`0x1401ECF30` →
+  `0x1401EDB00 (runs, 10, instance, its TBP count +0xA9)`, then 6 and `+0xAA` for CBPs; **Checked
+  (exe)**, the counts from the call sites' `r9`): one run of the 10 TBP slots per DPD drawn in the
+  frame (the table cleared once per pass, `0x1401EDD60`), a second instance of the same DPD and
+  particle data in the frame told its textures are bound already (−1); with no free run, another
+  DPD's run of the same size or the smallest larger one is taken over, else the smaller runs are
+  dropped. KH2's draw (`0x1402C2AE0`) binds only TBPs from 0x3000 to slots (its common textures
+  are resident), so a KH2 spell file takes slots only for its own textures; every DPD of ours
+  carries its own copy of the common textures it draws (§18.1). Built one DPD per effect (§18.10 as
+  it was), the t463 log's level-3 spells needed at once: Fire 24 TBP slots (8 DPDs), Thunder 26,
+  Cure 21, Blizzard 31, Reflect 37. Now a spell package is built as KH2's file has it, one DPD for
+  all the pieces of each DPD of the file (they play together); a DPD that would need more than
+  KH1's slots is split back into one per effect (logged). **Assumption**: the flames missing were
+  pieces drawn while another DPD had taken their run over (not checked in game; KH1's
+  depth-sorted draws, e.g. KeShpTail3X with `@0x54` 0, may resolve their textures after the run
+  was taken over).
 - The second weapon's points 0x4004 / 0x4006 / 0x4008 in a spell package (Fire 3's elements 9 and
   12, Blizzard 3's 7 in the t430 log): KH2 reads them from the owner's second weapon for every
   package (`0x1403B50F0` → `0x1403B5450 (object, 1)`: with the object's weapon flag (`+0x6C8`

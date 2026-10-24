@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 468 (testing branch: KH2 effects: a spell's pieces in one DPD per file DPD)
+- **KH2 effects: a spell's pieces in one DPD per file DPD.** The tester (Firaga missing flames). KH1's 10 texture slots per frame (`0x1401EDB00`, Checked (exe)); t463 log: level-3 spells needed 21..37. One DPD per file DPD as KH2's; split per effect when over. Assumption: the cause of the missing flames. Notes §18.10.
+
 ### 2026-10-23: Stage 467 (testing branch: KH2 effects: MatrixLoop (216) as KH1's)
 - **KH2 effects: MatrixLoop (216) as KH1's.** The tester's t463 log (Blizzard's shard). Calc-only in both (KH1 `0x14032EBF0`, KH2 `0x1404C4540`, bytes equal but call displacements, Checked (exe)); `KH1_SAME`. Notes §18.9.
 
