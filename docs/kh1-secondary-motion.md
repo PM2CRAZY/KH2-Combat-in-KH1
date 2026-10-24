@@ -522,6 +522,41 @@ sit about 6.3 from it; 21% of the coat's joint-frames come more than 2 nearer a 
 bind (8% before, when it followed the pelvis; its nearest then was 3.9, in one motion). No NaN,
 lengths kept. Not checked in game.
 
+### The coat against the thighs (research after t491)
+
+The tester's answer to "(a) like KH2's jacket, (b) rigid but pushed off the thighs, (c) the lower
+part following KH2's waist and hips": "keep researching until we have a good looking animations that
+emulate kh2s animations as close as possible while still making it look natural to kh1's model".
+Measured offline (`examples/coat_check.rs`, every motion of `P_EX100.mset`, 83 motions, 11816 half
+frames, the coat's 18 lower joints; Checked (files)). "Inside the shorts" is a joint closer to a
+thigh's axis, along the thigh, than KH1's shorts' panel bones sit in the bind (6.4 at the hip, 11.2
+from mid-thigh: Assumption, the mesh isn't read); "pops" is the largest second difference of a
+joint's place against the chest (the knees' own: 20 at the 99.9th percentile).
+
+| Rule | Inside the shorts (deepest) | Off KH2's jacket, mean / max | Pops, p99.9 / max | Motions where the coat pops more than the knee |
+|---|---|---|---|---|
+| Rigid on the chest (t491, KH2's jacket) | 0.15% (8.4 in 8; else 4.5) | 0 / 0 | 0 / 0 | 0 |
+| (c) KH2's waist bone 66 at the tips | 0.21% | 0.5 / 6 | 0.2 / 1.2 | 0 |
+| (c) lower joints turned with the hips (half / all) | 0.51% / 2.3% | 1.3 / 13; 7 / 34 | 0.5 / 12; 1.8 / 14 | 0 |
+| (c) lower joints placed between chest and hips | 0.55-1.4% | 5-7 / 27-31 | 1.4-2.2 / 11-15 | 0 |
+| (c) the hips' twist only | 0.16-0.17% | 0.9-1.4 / 9-13 | 0.4-0.6 / 1-1.5 | 0 |
+| hanging (the chest's yaw, half or none of its lean) | 0.22% / 1.4% | 0.6 / 7; 4.5 / 29 | 1.0 / 14; 5 / 27 | 0 / 4 |
+| front panels led by the thigh's swing | 1.0-2.1% | 1.4-2.4 / 15-23 | 2.2-3.1 / 46-60 | 3-4 |
+| (b) pushed out of the shorts, at once (variants) | 0.00-0.09% | 0.02-0.1 / 21 | 2.6-5.8 / 34-39 | 12-32 (one-frame flips up to 20 units, the first swing 151 among them) |
+| (b) pushed, ramped in at the hip | 0.13% | 0 / 21 | 0.4 / 33 | 2 |
+| (b) pushed, eased (0.1-0.2 rad a step) | 0.12-0.13% | 0.02 / 10 | 0.9-1.6 / 4-8 | 1-2 |
+| (b) the old `keep_clear` (s284-t489's) on the rigid coat, clearance 8-14 | 0.03-0.10% | | 3.3-5.8 / 11 | 18-47 |
+
+Where the rigid coat goes in: almost always a front tip (251 / 267) right at the top of a thigh
+(within 3 units of the hip along it), in side kicks, splits and spins where KH2's torso twists
+against its hips (155, 167, 196, 10, 183, 169, 172, 162; 8 is a climb with the leg through the
+body). At the hip crease the way out is ambiguous (over the thigh or round its side), so a push
+there flips from one side to the other within a frame, and an eased push arrives after the kick
+is over. Following the hips moves the coat off KH2's jacket in every frame and makes the tips
+meet the thighs more, not less. So the coat stays rigid on the chest as KH2's jacket (t491): it
+measures best on everything but the brief clips, which no rule tried removes without pops.
+Not seen in game.
+
 ### The thighs' and shins' roll (after t491)
 
 The tester, after t491: "keep researching until we have a good looking animations that emulate kh2s
