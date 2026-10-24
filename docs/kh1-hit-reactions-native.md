@@ -106,8 +106,8 @@ handles it each frame:
 While `0x80` is set, KH1 takes no damage from a record and starts no reaction, except clashes
 6 / 7 (section 2, steps 3 and 6). Hits still arrive: effects, records, tallies.
 
-**Assumption:** whether `0x100000` is cleared elsewhere while the reaction motion plays (which
-would start the 30 frames at the motion's end) is not checked.
+**Checked (decomp)** (§10): the count only starts once the action flag `4` is clear, so the 30
+frames run from the reaction motion's end.
 
 Our `REHIT_GRACE` and "no hit during a blow" rules stand in for this. They exist only because
 KH2's reactions run without KH1's timer.
@@ -119,23 +119,25 @@ queue the next one with `0x14029FA30` (Epic `0x14029D8A0`, a blend of 8.0). Ever
 the 30-frame timer (section 3).
 
 - **Ground flinch** `0x14029D210`:
-  - motion request `0x4A` from the front, `0x48` from behind; `0x4B` / `0x49` when the record's
+  - motion request `0x48` when `dot(facing, the record's push direction +0x10)` is below 0 (hit
+    from in front), `0x4A` otherwise (from behind); `0x49` / `0x4B` when the record's
     `+0x20` is 1 (another hit part, **Assumption**)
   - next motion idle (`0x40000000`); velocity `+0x3C0` zeroed
   - pushed back through KH1's push (`0x1402C7300`): distance = btltbl `+0x20` (750) × damage /
     max HP, capped at btltbl `+0x24` (150), × the stats' `+0xC4` (a push factor)
 - **Ground knock-back (4 and 5)** `0x14029CEC0`:
-  - motion request `0x4D` from the front, `0x4C` from behind; turns to face the attacker
+  - motion request `0x4C` from in front (the same test below 0), `0x4D` from behind; turns to
+    face the attacker (from behind: away from him)
     (`+0x150`, `0x140297E10`)
   - writes his position to the out vector, zeroes velocity
   - no push and no launch here: the motion carries him (**Assumption**: its root motion or its
     events; the air state 2 that `combomods::recover` checks must come from it)
 - **Air flinch** `0x14029CD80`:
-  - motion `0x4E` / `0x4F` (+ `0x1000000`)
+  - motion `0x4E` from in front, `0x4F` from behind (+ `0x1000000`)
   - `0x1402AF960 (actor, 20.0)` (a hop, **Assumption**)
   - `0x14029D800` sets the air velocity `+0x3C0`
 - **Air knock-back** `0x14029CC40`:
-  - motion `0x50` / `0x51`, faces the attacker
+  - motion `0x50` from in front, `0x51` from behind, faces the attacker
   - a launch `0x1402B7F20 (actor, 20.0, dir)`: hop 20, horizontal speed btltbl `+0x3C` (16)
     along the push direction into `+0x3C0`
 - **Flight** `0x14029CFD0` / `0x14029D110`: motions `0x50` / `0x51` / `0x4E` / `0x4F` with
@@ -265,3 +267,64 @@ while launched.
   attacks have no KH2 group. Stage 85 (old) made 4 a blow.
 - Where KH1's ground knock-back motion takes him into the air (motion events or root motion).
 - `0x140528ADC`, the second Second Chance rule.
+
+## 9. Step 1: KH2's reaction motions on KH1's requests (done)
+
+The Config menu's Combat list has a **Hit Reactions** row (KH1 / KH2; ini `hit_reactions`,
+default `kh1`, `styles::Kind::HitReactions`). At KH2, base Sora on KH1's states plays KH2's
+reaction motions on KH1's own reaction requests, through the baked slots (`kh2slots::REACTIONS`).
+KH1's hit pass and its reaction functions run as before, so its no-damage timer, push, idle /
+fall queued after, rumble, tally, HUD portrait, MP from damage and voices all stay KH1's. At KH1
+nothing changes.
+
+- **Which way he was hit (Checked (decomp)).** KH1's flinch picks `0x48` when
+  `dot(facing, record +0x10) < 0`, else `0x4A`; KH2's routine (`0x1403D2FE0`) calls a hit "from
+  the front" on the same test (`character_core::reaction::respond`). So `0x48` = KH2's 10
+  (front), `0x4A` = 12 (behind). The earlier note in §4 had them the other way round; corrected.
+- **Requests and slots (Checked (files)).** KH1 `xa_ex_0010.mset`'s request table: `0x48..0x4B`
+  slots 61..64 (70 frames, "may be left" at 46), `0x4E` / `0x4F` slots 67 / 68 (30 frames).
+  KH2 `P_EX100.mset`: 10..13 70 frames, free state (range id 2) from 50, a reaction-command
+  window (range id 14) from 8; 14 / 15 36 frames, no free state.
+
+  | KH1 request | KH1 slot | KH2 motion |
+  |---|---|---|
+  | `0x48` ground flinch, front | 61 | 10 |
+  | `0x49` the same, other part | 62 | 11 |
+  | `0x4A` ground flinch, behind | 63 | 12 |
+  | `0x4B` the same, other part | 64 | 13 |
+  | `0x4E` air flinch, front | 67 | 14 |
+  | `0x4F` air flinch, behind | 68 | 15 |
+
+- **When he may act again.** KH2's free state (frame 50) is KH1's "may be left" on the flinch slots
+  (KH1's own was 46). The air flinches have none in either game; KH1 queues its fall when the slot
+  ends (`0x40000006`).
+- **Voices.** KH2's clips start voice 29 / 30 at frame 0 (Checked (files)). Left out: KH1's pass
+  already plays its own hurt voice group 0 / 1 (`0x1402901F0`). With Battle Quotes at KH2 the hurt
+  line is still KH1's (open question).
+- **Not in this step:** KH1's knock-backs `0x4C` / `0x4D` (slots 65 / 66, 72 frames, in place) and
+  `0x50` / `0x51`. KH2 plays a launch there (16 / 18, then 17 / 19 when he lands), which needs
+  KH2's blow (step 3). Sora has no KO request: `0x43` is `0xFFF` in his table (Checked (files)). His
+  HP gone is KH1's game over (`0x14029BBD0`, Checked (decomp)); `0x14029CA60`'s death motion is
+  the partners'.
+
+## 10. KH2's rule against re-hits while reeling (question 3)
+
+**Checked (decomp), KH2 Steam:**
+- `0x1403CF600`, the hit admission: a hit counts if it is a Cure kind (ATKP kind 5 / 6), or its
+  attack's bit is clear and one of these holds: its group is the target's last group, its group is
+  `0xFF`, or the target's group timer (`+0x2C` of the record) is at or below 0. A hit that counts
+  on an object with `+0x6C8` bit 2 (the player) sets the timer to 30.
+- `0x1403CF230` / `0x1403CF4B0`: each frame the timer counts down by the frame step
+  (`0x140717480`), except while the object plays a reaction motion (`0x1403D4880`: its motion
+  `+0x180` is 10..39).
+
+**Checked (decomp), KH1 Steam:** every reaction sets flag `0x80` and 30.0 at `+0xC`
+(`0x140297F30`). The actor step (`0x140297FE0`) starts the count only once the action flag `4`
+is clear, then counts the 30 down by the frame step. **Assumption:** flag `4` is the reaction's
+action flag (its motion is set with `0x1000000`), so the count starts at the reaction's end. While `0x80`
+is set, no damage and no reaction but a clash. (This answers §3's assumption.)
+
+**Comparison.** The timing is the same: 30 frames after the reaction motion ends. The one
+difference is KH2's group rule: hits from the same group as the last one still land and react.
+KH1's enemy attacks carry no KH2 group (no ATKP), so that rule has nothing to compare. The
+mod keeps KH1's timer.

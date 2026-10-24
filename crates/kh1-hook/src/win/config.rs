@@ -11,7 +11,7 @@
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
-//! - Camera: Camera Style, L2 Camera Hold; Combat: Physics, Base Combo, Aerial Base Combo, and Magic, its own list
+//! - Camera: Camera Style, L2 Camera Hold; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, and Magic, its own list
 //!   (answer 1): Magic, Aerial Magic; Movement: Jump, Glide, Dodge Roll, Misc Animations; Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a).
 //!
@@ -230,10 +230,11 @@ const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
 ];
-const COMBAT: [Item; 4] = [
+const COMBAT: [Item; 5] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
+    Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
 ];
 const MAGIC: [Item; 3] = [
@@ -259,7 +260,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 50] = [
+const STRINGS: [(u32, &str); 52] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -288,6 +289,8 @@ const STRINGS: [(u32, &str); 50] = [
     (0x7F00_0106, "Choose KH1's or KH2's magic for Sora on the ground.\nDrive Forms keep their own."),
     (0x7F00_0107, "Aerial Magic"),
     (0x7F00_0108, "Choose KH1's or KH2's magic for Sora in the air.\nDrive Forms keep their own."),
+    (0x7F00_0140, "Hit Reactions"),
+    (0x7F00_0141, "Choose KH1's or KH2's animations when Sora is hit.\nDrive Forms keep their own."),
     (0x7F00_011F, "Cure"),
     (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
     (0x7F00_0109, "Jump"),

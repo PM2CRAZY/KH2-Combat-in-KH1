@@ -103,7 +103,32 @@ const fn cast_spec(i: usize) -> Spec {
     Spec { motion, stands_for, request, kind: if air { Kind::AirMagic } else { Kind::Magic } }
 }
 
-const SPECS: [Spec; 17] = [
+/// KH2's reaction motions on KH1's reaction requests (the tester, thread
+/// soras-hit-reactions-native, plan step 1: "KH2's reaction motions on KH1's reaction requests";
+/// `docs/kh1-hit-reactions-native.md` §4, §7). KH1's hit pass (Steam `0x14029BBD0`) still runs
+/// the reaction function for Sora's movement state and kind, which sets its motion with KH1's
+/// set-motion (`0x14029F980`), its 30-frame no-damage timer (`0x140297F30`), its push and its idle
+/// / fall queued after, and the pass the rumble, tally, HUD, MP and voice; only the motion played
+/// is ours, by these requests (Checked (decomp)). KH1 picks the request by `dot(facing, the
+/// record's push direction +0x10)`: below 0 0x48 (0x49 with the record's `+0x20` = 1) on the
+/// ground, 0x4E in the air, else 0x4A (0x4B) / 0x4F; KH2's routine (`0x1403D2FE0`,
+/// `character_core::reaction::respond`) the same test for its front motions 10 (11) / 14 and back
+/// ones 12 (13) / 15 (Checked (decomp) both; KH2's alternate is by body part, KH1's by `+0x20`,
+/// taken as KH1's). KH1's request table (`xa_ex_0010.mset`, Checked (files)): 0x48..0x4B slots
+/// 61..64 (70 frames, may be left at 46), 0x4E / 0x4F slots 67 / 68 (30 frames); KH2's
+/// (`P_EX100.mset`, Checked (files)): 10..13 70 frames, free from 50 (range id 2: KH1's "may be
+/// left" there), 14 / 15 36 frames. KH1's knock-backs (0x4C / 0x4D on the ground, slots 65 / 66,
+/// 72 frames in place; 0x50 / 0x51 in the air) are KH2 blows (16 / 18, then 17 / 19 on landing),
+/// which need KH2's launch: not here (plan step 3). Sora's request table has no KO request (0x43
+/// is 0xFFF in it, Checked (files)): his HP gone is KH1's game over, not the partners' KO handler.
+const REACTIONS: [(u16, usize, usize); 6] = [(10, 61, 0x48), (11, 62, 0x49), (12, 63, 0x4A), (13, 64, 0x4B), (14, 67, 0x4E), (15, 68, 0x4F)];
+
+const fn reaction_spec(i: usize) -> Spec {
+    let (motion, stands_for, request) = REACTIONS[i];
+    Spec { motion, stands_for, request, kind: Kind::HitReactions }
+}
+
+const SPECS: [Spec; 23] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -121,6 +146,12 @@ const SPECS: [Spec; 17] = [
     cast_spec(7),
     cast_spec(8),
     cast_spec(9),
+    reaction_spec(0),
+    reaction_spec(1),
+    reaction_spec(2),
+    reaction_spec(3),
+    reaction_spec(4),
+    reaction_spec(5),
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -324,7 +355,9 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
     // (KH2's finisher casts end the combo: `cast_follow`.)
     let finisher_cast = cast && !default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request);
-    let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own, cast);
+    // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
+    let reaction = kind == Kind::HitReactions;
+    let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own || reaction, cast);
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
     if ours.is_some_and(|o| o.own_sounds) {
         tracks.retain(|t| t.kind != ks::SOUND);
@@ -349,7 +382,9 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
         if default { "" } else { ", by KH2's row selection" },
         tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
     ));
-    let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Voice(_) | EventKind::Effect(_))).map(|e| (e.frame, e.kind)).collect();
+    // (A hit reaction's KH2 voice, 29 / 30 at frame 0, Checked (files), left out: KH1's hit pass plays
+    // its own hurt voice for it, `0x1402901F0 (actor, 0 | 1, 0)`, Checked (decomp).)
+    let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Effect(_)) || (!reaction && matches!(e.kind, EventKind::Voice(_)))).map(|e| (e.frame, e.kind)).collect();
     Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events }, block)))
 }
 

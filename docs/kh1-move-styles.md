@@ -79,6 +79,15 @@ has him in the air then, else Magic (`formmagic::base_kh2`).
 - The spells' effect packages are loaded with `drive = off` too (they were only with Drive on).
 - If a spell's KH2 file or MAGC row is missing, KH1 casts its own.
 
+## Hit Reactions (testing branch)
+
+Config > KH1 in KH2 > Combat > Hit Reactions (ini `hit_reactions`, KH1 by default; the tester,
+thread soras-hit-reactions-native). At KH2, base Sora on KH1's states plays KH2's flinches on
+KH1's own reaction requests (`kh2slots::REACTIONS`: ground 10..13, air 14 / 15); KH1's hit pass
+still runs every reaction (no-damage time, push, voices, HUD, MP, tallies). At KH1, KH1's
+reactions as they are. Drive Forms and KH2's borrowed moves keep KH2's controller's reaction.
+Notes: `docs/kh1-hit-reactions-native.md` §9.
+
 ## Jump and Glide
 
 `stylejump.rs` (ini `jump_style`, `glide_style`; Config rows Jump, Glide). Base Sora only.

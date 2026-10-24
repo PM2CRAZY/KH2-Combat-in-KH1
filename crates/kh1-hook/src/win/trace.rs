@@ -328,7 +328,7 @@ pub struct Row {
 const COLUMNS: [(u32, &str); 12] = [
     (0, "frame,ticks,steps,ms,owner,shared,world,room,event"),
     (cat::CONFIG, "cfg_camera,cfg_physics,physics_now,cfg_ground_combo,cfg_air_combo,cfg_magic,cfg_air_magic,cfg_jump,cfg_glide,\
-cfg_dodge_roll,cfg_misc_anims,cfg_player_model,cfg_battle_quotes,cfg_cure"),
+cfg_dodge_roll,cfg_misc_anims,cfg_player_model,cfg_battle_quotes,cfg_cure,cfg_hit_reactions"),
     (cat::MOVEMENT, "pos_x,pos_up,pos_z,moved_x,moved_up,moved_z,asked_x,asked_up,asked_z,\
 above_floor,floor_up,collision,stand_on,platform,yaw,\
 kh1_vel_x,kh1_vel_y,kh1_vel_z,kh1_vel_w,kh1_arc_0,kh1_arc_1,kh1_arc_2,kh1_arc_3,push_x,push_y,push_z"),

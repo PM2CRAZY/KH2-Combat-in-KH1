@@ -137,6 +137,10 @@ kh1_cast_aero = off\r\n\
 ; cure_style: kh1 or kh2, with magic (or air_magic) at kh2: base Sora casts KH2's Cure, or KH1's\r\n\
 ; own Cure on KH2's Cure cast animation (the Config menu's Magic list switches it)\r\n\
 cure_style = kh2\r\n\
+; hit_reactions: kh1 or kh2, KH1's or KH2's reaction animations when base Sora is hit (KH1\r\n\
+;   still runs the reaction: its no-damage time, voices, HUD and MP); the Config menu's Combat\r\n\
+;   list switches it\r\n\
+hit_reactions = kh1\r\n\
 ; jump_style / glide_style: kh1 or kh2, KH1's or KH2's jump and glide for base Sora\r\n\
 jump_style = kh2\r\n\
 glide_style = kh2\r\n\
@@ -248,8 +252,8 @@ pub struct Settings {
     pub drive: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
     pub valor_left_blade: bool,
-    /// KH2's (true) or KH1's moves per `styles::Kind` (ground combo, air combo, magic, air magic, jump, glide, dodge roll, misc animations, player model, battle quotes, Cure).
-    pub styles: [bool; 11],
+    /// KH2's (true) or KH1's moves per `styles::Kind` (ground combo, air combo, magic, air magic, jump, glide, dodge roll, misc animations, player model, battle quotes, Cure, hit reactions).
+    pub styles: [bool; 12],
     /// Skip the Gummi Ship's flights (`gummi = skip`, `gummi.rs`).
     pub gummi_skip: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
@@ -435,7 +439,7 @@ fn load(first: bool) -> Option<Settings> {
         physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
         drive: on(&text, "drive", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
-        styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false)), on(&text, "cure_style", "kh2", true)],
+        styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false)), on(&text, "cure_style", "kh2", true), on(&text, "hit_reactions", "kh2", false)],
         gummi_skip: on(&text, "gummi", "skip", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {

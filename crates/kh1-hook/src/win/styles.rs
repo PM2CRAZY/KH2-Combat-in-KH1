@@ -28,10 +28,14 @@ pub enum Kind {
     /// gets casted kh1 cure or kh2"): KH2's (its script, `formmagic`) or KH1's own spell on KH2's
     /// Cure cast motion, as KH1's Gravity / Stop / Aero are there.
     Cure,
+    /// Sora's hit reactions (the tester, thread soras-hit-reactions-native: KH2's reaction
+    /// motions on KH1's reaction requests, `kh2slots::REACTIONS`; KH1 still runs every reaction:
+    /// its no-damage timer, HUD, MP, voices and tallies). Base Sora on KH1's states only.
+    HitReactions,
 }
 
 impl Kind {
-    pub const EVERY: [Kind; 11] = [Kind::GroundCombo, Kind::AirCombo, Kind::Magic, Kind::AirMagic, Kind::Jump, Kind::Glide, Kind::DodgeRoll, Kind::MiscAnims, Kind::PlayerModel, Kind::BattleQuotes, Kind::Cure];
+    pub const EVERY: [Kind; 12] = [Kind::GroundCombo, Kind::AirCombo, Kind::Magic, Kind::AirMagic, Kind::Jump, Kind::Glide, Kind::DodgeRoll, Kind::MiscAnims, Kind::PlayerModel, Kind::BattleQuotes, Kind::Cure, Kind::HitReactions];
 
     /// Its ini key.
     pub fn key(self) -> &'static str {
@@ -47,6 +51,7 @@ impl Kind {
             Kind::PlayerModel => "player_model",
             Kind::BattleQuotes => "battle_quotes",
             Kind::Cure => "cure_style",
+            Kind::HitReactions => "hit_reactions",
         }
     }
 
@@ -64,6 +69,7 @@ impl Kind {
             Kind::PlayerModel => "Player Model",
             Kind::BattleQuotes => "Battle Quotes",
             Kind::Cure => "Cure",
+            Kind::HitReactions => "Hit Reactions",
         }
     }
 
@@ -74,7 +80,7 @@ impl Kind {
 
 /// KH2's (true) or KH1's, per `Kind`: every kind KH1's by default (the user: "kh1 is on by default
 /// for all settings").
-static KH2: [AtomicBool; 11] = [const { AtomicBool::new(false) }; 11];
+static KH2: [AtomicBool; 12] = [const { AtomicBool::new(false) }; 12];
 static INIT: Once = Once::new();
 
 fn init() {

@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 506 (testing branch: Hit reactions: KH2's flinches on KH1's reaction requests)
+- **KH2's flinches on KH1's reaction requests (Hit Reactions row).** The tester (soras-hit-reactions-native m1: "go ahead"). Config > Combat > Hit Reactions (ini `hit_reactions`, default KH1). At KH2, `kh2slots::REACTIONS` plays KH2's 10 / 11 / 12 / 13 on KH1's ground flinch requests 0x48..0x4B (slots 61..64) and 14 / 15 on the air flinches 0x4E / 0x4F (67 / 68); KH1's reaction functions and the hit pass `0x14029BBD0` still run the timer, push, voice, HUD and MP; KH2's free state from 50 is KH1's "may be left"; KH2's clip voices left out. Checked (decomp): KH1's 0x48 is front by KH2's own test (`0x1403D2FE0`); Checked (files): both msets' lengths. Knock-backs wait for KH2's blow state. docs/kh1-hit-reactions-native.md.
+
 ### 2026-10-24: Stage 505 (testing branch: Quick Run: KH2's start effect above LV1)
 - **Quick Run's start effect above LV1.** Same ask (the research's open point). KH2's start calls `0x1403B6670(actor, level + 0x6C)`, a PAX element by id (`0x1402C6B30`): elements 110 / 111 / 112 of `P_EX100.a.us` for LV2 / LV3 / MAX, started through `kh2fx::event`; 203 joins `kh2fx::DEFAULT_MOTIONS`. Checked (decomp / files).
 
