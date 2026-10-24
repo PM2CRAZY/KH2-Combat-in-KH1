@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 503 (testing branch: Quick Run: off a ledge)
+- **Quick Run off a ledge.** Same ask. KH2's slot 4 (`0x140409B00` → `0x1403CBC30(actor, 0)`): a fall from rest keeping the velocity, the Aerial Dodge left (AIRSLIDE isn't airborne, its `+0xC` bit 0 clear in the exe's action table `0x140750D30`). Ours: KH1's fall from rest as `0x1402AF8F0` writes it, state 2 set by our transition (so the physics step's 8-unit walk-off cap doesn't run), the slide's velocity in `+0x3C0`, fall request 6 blend 8. Checked (decomp / exe); Assumption: the fall motion (KH2's fall action asks none).
+
 ### 2026-10-24: Stage 502 (testing branch: Quick Run: the start points start the state)
 - **Quick Run's start points start KH1's Quick Run state, no borrow.** Same ask. `shared::control`: Square held through KH1's roll (its roll flags `0x80 | 0x100000` cleared as KH1's think does, `0x140297FE0`), Square while moving without KH1's Dodge Roll, and KH2's action button picking Quick Run at Dodge Roll KH2 (KH2's order `0x1403A75A0`: guard at rest, roll, Quick Run) call `quickrun::start`. The borrow stays the fallback (forms, Epic, requests not built). Checked (decomp).
 

@@ -296,10 +296,8 @@ unsafe extern "system" fn transition(actor: usize, airborne: i32) -> u32 {
         return if airborne != 0 { 2 } else { 0 };
     }
     if airborne != 0 {
-        if let Ok(mut g) = RUN.lock() {
-            *g = None;
-        }
-        note("off the ground: KH1's fall".to_string());
+        let vel = RUN.lock().ok().and_then(|mut g| g.take()).map_or([0.0; 2], |r| r.vel);
+        off_ledge(actor, vel);
         return 2;
     }
     // 204 played to its end (KH2 then plays its queued fall, motion 4 with blend 8, which on the
@@ -323,4 +321,38 @@ unsafe extern "system" fn transition(actor: usize, airborne: i32) -> u32 {
     queue(actor, 0x4000_0000, 0.0);
     note("the stop played out: KH1's landing (request 7)".to_string());
     0
+}
+
+/// KH1's fall's request (its ground jump's base 0, + 6) and KH2's blend into its fall (8.0, the
+/// stop's queued motion 4).
+const FALL: u32 = 0x06;
+
+/// Off a ledge in a Quick Run: KH2's ground action loses the floor and goes to the fall action
+/// (vtable slot 4, `0x140409B00`: `0x1403CBC30 (actor, 0)`, a fall from rest with no apex swap,
+/// landing motion 5, then action 1; the slide's velocity `+0x20` left as it was; Checked
+/// (decomp)), whose enter (`0x1403CBD30`) gives the Aerial Dodge back since Quick Run's action
+/// isn't airborne (its object's `+0xC` bit 0, Checked (exe)). On KH1: its fall from rest as KH1's
+/// `0x1402AF8F0 (actor, 0)` writes it (`+0x3B0`, `+0x3B8`, `+0x3BC`, `+0x3D0` 0, `+0x3B4` his
+/// height, state 2, flag `0x10000` off), the action flag 4 off as KH1's own walk-off does, and
+/// `+0x3C0` the slide's velocity uncapped (KH1's own walk-off caps it at 8, the physics step
+/// `0x14029A3C0`, which runs only when the transition changes the state: we change it here, so it
+/// sees state 2 already). KH1's fall request with KH2's blend 8 (Assumption: KH2's motion off a
+/// ledge; the fall action itself asks none, so KH2 may keep 203 / 204 playing in the air: open).
+/// The Aerial Dodge is still there (`shared::AIR_DODGED` is cleared on the ground before).
+unsafe fn off_ledge(actor: usize, vel: [f32; 2]) {
+    let base = takeover::game_base();
+    let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+    let y = rd::<[f32; 3]>(actor + 0x10)[1];
+    wr(actor + 0x3B0, 0.0f32);
+    wr(actor + 0x3B4, y);
+    wr(actor + 0x3B8, 0.0f32);
+    wr(actor + 0x3BC, 0.0f32);
+    wr(actor + 0x3D0, 0u32);
+    set_state(actor, 2);
+    wr(actor, rd::<u32>(actor) & !(0x1_0000 | 4));
+    let speed = vel[0].hypot(vel[1]);
+    wr(actor + 0x3C0, [vel[0], 0.0, vel[1], speed]);
+    set(actor, FALL, AFTER_BLEND);
+    note(format!("off the ground: KH1's fall at the slide's speed {speed:.1} (KH2's fall from rest, the Aerial Dodge left)"));
 }
