@@ -11,7 +11,7 @@
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
-//! - Camera: Camera Style; Combat: Physics, Base Combo, Aerial Base Combo, and Magic, its own list
+//! - Camera: Camera Style, L2 Camera Hold; Combat: Physics, Base Combo, Aerial Base Combo, and Magic, its own list
 //!   (answer 1): Magic, Aerial Magic; Movement: Jump, Glide, Dodge Roll, Misc Animations; Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a).
 //!
@@ -161,6 +161,8 @@ const KH1_DEFAULT_ROW: i32 = 7;
 #[derive(Clone, Copy)]
 enum Row {
     Camera,
+    /// L2 Camera Hold (Off | On, `camera::L2_HOLD`).
+    L2Hold,
     /// The physics setting (`shared::physics::rule`): KH1's or KH2's numbers for every move.
     Physics,
     Style(Kind),
@@ -224,7 +226,10 @@ const TOP: [Item; 4] = [
     Item::Open(0x7F00_0209, 0x7F00_020A, List::Movement),
     Item::Open(0x7F00_020B, 0x7F00_020C, List::Misc),
 ];
-const CAMERA: [Item; 1] = [Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera)];
+const CAMERA: [Item; 2] = [
+    Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
+    Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
+];
 const COMBAT: [Item; 4] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
@@ -254,7 +259,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 48] = [
+const STRINGS: [(u32, &str); 50] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -271,6 +276,8 @@ const STRINGS: [(u32, &str); 48] = [
     (0x7F00_0002, "KH1"),
     (0x7F00_0003, "KH2"),
     (0x7F00_0004, "Choose KH1's camera or KH2's field camera."),
+    (0x7F00_0121, "L2 Camera Hold"),
+    (0x7F00_0122, "While L2 is held, the right stick doesn't move KH2's camera\nand R3 doesn't reset it, as in KH2."),
     (0x7F00_0119, "Physics"),
     (0x7F00_011A, "Choose KH1's or KH2's physics for all of Sora's moves.\nDrive Forms keep their own."),
     (0x7F00_0101, "Base Combo"),
@@ -310,6 +317,7 @@ fn value(what: Row) -> bool {
     use super::shared::physics;
     match what {
         Row::Camera => camera::KH2.load(Ordering::Relaxed),
+        Row::L2Hold => camera::L2_HOLD.load(Ordering::Relaxed),
         Row::Physics => physics::rule() == physics::Rule::Kh2,
         Row::Style(k) => styles::setting(k),
         Row::Gummi => super::gummi::SKIP.load(Ordering::Relaxed),
@@ -325,6 +333,7 @@ fn set(what: Row, v: bool) {
             super::settings::save("camera", if v { "kh2" } else { "kh1" });
             log(&format!("Config menu: camera style {}", if v { "KH2" } else { "KH1" }));
         }
+        Row::L2Hold => camera::set_l2_hold(v),
         // (Live: the next physics step reads it; saved and logged by `set_rule`.)
         Row::Physics => physics::set_rule(if v { physics::Rule::Kh2 } else { physics::Rule::Kh1 }),
         Row::Style(k) => styles::set(k, v),

@@ -90,6 +90,9 @@ camera_lower = 0\r\n\
 ;   camera and field of view (events and cutscenes stay KH1's); kh1 = they hand the view to\r\n\
 ;   KH1's camera (older builds)\r\n\
 camera_calls = kh2\r\n\
+; l2_camera_hold: on = while L2 is held the right stick doesn't move KH2's camera and R3\r\n\
+;   doesn't reset it, as in KH2 (the Config menu's Camera row switches it in game too); off = not\r\n\
+l2_camera_hold = off\r\n\
 ; config_row: on = the Config menu's Camera Style row; off = no row (the ini alone switches)\r\n\
 config_row = on\r\n\
 ; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
@@ -217,6 +220,8 @@ pub struct Settings {
     pub camera_lower: f32,
     /// KH1's gameplay camera calls drive KH2's camera (`camera_calls = kh2`, `camera.rs`).
     pub camera_calls_kh2: bool,
+    /// L2 held stops KH2's camera's right stick and R3 (`l2_camera_hold = on`, `camera::L2_HOLD`).
+    pub l2_camera_hold: bool,
     pub config_row: bool,
     /// KH2's fourth shortcut (`shortcuts = 4`).
     pub four_shortcuts: bool,
@@ -379,6 +384,7 @@ fn load(first: bool) -> Option<Settings> {
         camera_lower: setting(&text, "camera_lower").and_then(|v| v.parse::<f32>().ok()).filter(|v| (-200.0..200.0).contains(v)).unwrap_or(0.0),
         camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.89),
         camera_calls_kh2: on(&text, "camera_calls", "kh2", true),
+        l2_camera_hold: on(&text, "l2_camera_hold", "on", false),
         kh2_effects: match setting(&text, "kh2_effects").as_deref() {
             Some("off") | Some("0") | Some("no") => None,
             Some("all") => Some(None),
