@@ -51,3 +51,6 @@
 ^m1
 
 
+1. unsure I was thinking b was the best way while letting neverland and area objects see kh2s hover but tell me what you think
+2. (b) until you find the wall rule
+3. unsure what area objects are, option (a) but tell me what you think
