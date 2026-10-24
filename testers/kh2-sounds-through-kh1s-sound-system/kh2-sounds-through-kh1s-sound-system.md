@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: t509 to t513. KH2's sounds now go through KH1's own sound sy](#^m2)
+- [3. Assistant: t514 and t515. I think I found it, though without a log I ca](#^m3)
 
 ---
 
@@ -78,8 +79,21 @@ go ahead
 
 ^m2
 
+
 crash when starting the game sent the log
 
 if you find the reason I give you permission to fix it 
 
 go ahead
+> [!tip] Assistant
+> **t514 and t515.** I think I found it, though without a log I can't be sure.
+>
+> - **t514, the crash:** when the game starts, the mod hands KH2's battle voice bank to KH1's sound engine. The KH1 function it calls (`0x1400E0110`) takes one more piece of information than I gave it: the bank's name. KH1 uses that name as text right away. Without it, KH1 read whatever garbage was lying around as text and crashed a few seconds after starting, as soon as its sound system was up. It gets a proper name now. Your settings didn't avoid it: the voice bank was loaded even with Battle Quotes on KH1. Checked: KH1's exe, both this function and KH1's own voice loader, which takes the name the same way.
+> - **t515:** `kh2_sound_engine = mod` in the ini now really keeps everything out of KH1's sound engine. Before, it only switched which player played the sounds, so it couldn't have worked around the crash.
+>
+> Please try starting the game and loading a save, then the sound tests from my last message.
+>
+> One request: there was no log in the folder this time, only the ini. Next time, could you push `kh1-kh2.log` and `kh1-kh2.prev.log` from the game folder (next to the game's .exe) into this thread's folder? After a crash, the line starting with `CRASH` tells me exactly where it happened.
+
+^m3
+

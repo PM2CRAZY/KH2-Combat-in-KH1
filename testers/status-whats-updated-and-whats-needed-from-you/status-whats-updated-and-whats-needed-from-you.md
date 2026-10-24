@@ -6,6 +6,7 @@
 
 - [1. Assistant: You asked for this in Quick Run native(../quick-run-native/q](#^m1)
 - [2. Assistant: Later in the same round (no new build):](#^m2)
+- [3. Assistant: Latest build: t515. Your startup crash: t514 fixes the likel](#^m3)
 
 ---
 
@@ -52,4 +53,10 @@
 > - [KH2 Glide in KH1's glide state](../kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md): my take on your three answers. Needs a "go ahead".
 
 ^m2
+
+
+> [!tip] Assistant
+> **Latest build: t515.** Your startup crash: t514 fixes the likely cause (KH1's voice-bank registration got a missing argument), and t515 makes `kh2_sound_engine = mod` a full switch-back. Details in [KH2 sounds through KH1's sound system](../kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md). Needed from you: start the game, and if it still crashes, push `kh1-kh2.log` into that thread's folder.
+
+^m3
 
