@@ -92,6 +92,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m13)
   - [14. Assistant: t457 to t460 (one change each).](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m14)
   - [15. Assistant: t473 to t476 (one change each).](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m15)
+  - [16. Assistant: Got it, no rush. Nothing changes in this thread until you're](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m16)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
