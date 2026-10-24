@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 467 (testing branch: KH2 effects: MatrixLoop (216) as KH1's)
+- **KH2 effects: MatrixLoop (216) as KH1's.** The tester's t463 log (Blizzard's shard). Calc-only in both (KH1 `0x14032EBF0`, KH2 `0x1404C4540`, bytes equal but call displacements, Checked (exe)); `KH1_SAME`. Notes §18.9.
+
 ### 2026-10-23: Stage 466 (testing branch: KH2 effects: KH2's per-palette HD images)
 - **KH2 effects: KH2's per-palette HD images.** The tester's t463 log (Thunder 3: 0xd231..3, 0xe651..2). KH2 `0x1404AECD0` (Checked (decomp)): each record of a TBP at first + 1.. ; `kh2dpx::palette_textures` after KH1's `0x14031EC10`; the builder keeps KH2's mask bits for own records. Notes §18.12.
 

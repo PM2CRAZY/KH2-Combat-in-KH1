@@ -176,6 +176,10 @@ const KH1_SAME: &[u32] = &[
     75, 76, 85, // SRandFV, SRandUpFV, KeMatSN
     155, // KeShpTail2X
     210, 211, 213, 215, 218, // MoveLoop, AngMoveLoop, PointLoop, ScaleLoop, DrawMdlLoop
+    // (The t463 log: Blizzard 3's element 2, its shard, runs it.) KH1's `0x14032EBF0` and KH2's
+    // `0x1404C4540`, calc only in both tables, are each its game's MatrixXYZ (87) to the call
+    // targets (KH1 `0x14032EB10`, KH2 `0x1404C4460`; the bytes differ only in rel32 displacements).
+    216, // MatrixLoop
 ];
 
 /// The programs of `types` KH1 can't run as KH2 does yet (empty: it can play through KH1).
