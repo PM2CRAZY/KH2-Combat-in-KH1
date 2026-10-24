@@ -71,6 +71,32 @@ const PANEL_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x50];
 const CURSOR_ROW_RVA: Rva = Rva(0x2ED030);
 const DECOR_RVA: Rva = Rva(0x2F0740);
 
+/// KH1's own window scale (Steam, Checked (decomp)): with bit 0 of a window's `+0x6C` set, every
+/// primitive the window draws (box `0x1402F2BE0`, text `0x1402EBCD0`, arrows `0x1402F29B0`,
+/// finger `0x1402EEF50`) is scaled by `+0xA0` (x) / `+0xA4` (y) around its anchor (`+0xD8`:
+/// 0 the centre, 1 the top edge at the centre; `0x1402E4F40` / `0x1402E4FB0`). KH1's open / close
+/// zooms (`0x1402E66D0`) use it; the Config list's slide (type 6) doesn't touch these fields.
+/// The tester (answer 3a): the whole Config list about 8% smaller, text and boxes together, so a
+/// ninth row fits above the help box (row 8's bottom: 0.92 x 321 = 295 < 300).
+const LIST_SCALE: f32 = 0.92;
+const WIN_FLAGS2: usize = 0x6C;
+const WIN_SCALE_X: usize = 0xA0;
+const WIN_SCALE_Y: usize = 0xA4;
+const WIN_ANCHOR: usize = 0xD8;
+const ANCHOR_TOP: u32 = 1;
+
+/// The Config list drawn at `LIST_SCALE` from the top of the window (the screen's top, so the first
+/// row moves up 6 and the help box stays clear). Set every update, before it draws.
+unsafe fn scale_list(win: usize) {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    wr(win + WIN_SCALE_X, LIST_SCALE);
+    wr(win + WIN_SCALE_Y, LIST_SCALE);
+    wr(win + WIN_ANCHOR, ANCHOR_TOP);
+    wr(win + WIN_FLAGS2, rd::<u32>(win + WIN_FLAGS2) | 1);
+}
+
 /// Our rows (8 a page: KH1's rows 8..15, scrolled for the rest): the camera, the physics, the
 /// move styles (`ROW_WHAT` says which is which). Each: label, left value, right value, help.
 const FIRST_ROW: i32 = 8;
@@ -343,6 +369,7 @@ unsafe extern "system" fn update(win: usize) {
     let focus: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + FOCUS_RVA);
     let cursor: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CURSOR_ROW_RVA);
     let pad = rd::<u64>(base + PAD_PTR_RVA) as usize;
+    scale_list(win);
     let mut kept: Option<(u32, u32)> = None;
     // The row before this frame's cursor move: the page shown (KH1's and ours alike, so they
     // never both draw; a page change shows a frame late).

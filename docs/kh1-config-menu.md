@@ -292,3 +292,26 @@ entries 0..4: they hold our ids only for the help call and are put back right af
 **[low] check in game:** a page change shows one frame late (the frame the cursor moves, the
 old page, without its selection); that our page with no KH1 rows looks right (whether the
 window's frame or other KH1 pieces are drawn outside the panel call).
+
+## 5. The Config list at 92% with KH1's window scale (Steam)
+
+The tester (Config menu rework, answer 3a): the whole list about 8% smaller, text and boxes
+together, so a ninth row fits on page 1.
+
+- **Checked (decomp)** A window's primitives scale with the window: when bit 0 of window `+0x6C`
+  is set, the box (`0x1402F2BE0`), text (`0x1402EBCD0`, through `0x1402ED2E0`), arrows
+  (`0x1402F29B0`, via `0x1402F2B80`) and finger (`0x1402EEF50`, via `0x1402EEEE0`) all map each
+  corner as `anchor + (p - anchor) x scale`, with x scale `+0xA0` and y scale `+0xA4` (floats).
+  The anchor is `0x1402E4F40` (x) / `0x1402E4FB0` (y) by `+0xD8`: 0 the window's centre; 1 the
+  top edge (y = window `+0xE0`), x at the centre; 2 bottom; 3..8 the other edges and corners.
+- **Checked (decomp)** KH1's open / close zooms (`0x1402E66D0`, types 0xB..0x23 and so on) set
+  and clear these; the Config windows open with type 6 (slide in x) and close with 6 (or 5),
+  which touch only `+0xBC` / `+0xDC`, so values written in the update stay.
+- The list window (def `0x1405463A0`: position 0, 0, size 512 x 384) has its top at the screen's
+  top, so anchor 1 keeps the list's top in place proportionally: row 0 moves from y 71 to 65, a
+  ninth row (y 295..321) ends at 295, above the help box (def `0x140546160`, y 300).
+- Set every frame at the start of the list's update (`0x1402FA210`), before it draws.
+- **Not scaled:** KH1's glove cursor (`0x1402D9920` sets its target from the window's place,
+  `0x1402D9B40` draws it in screen space). For the Config list its target doesn't depend on the
+  row (`+0xF0` is 0 from the def), so it isn't moved either way. Assumption: whether it shows on
+  this screen wasn't checked.

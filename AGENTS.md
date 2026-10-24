@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 448 (testing branch: Config list at 92% with KH1's window scale)
+- **Config list at 92% with KH1's window scale.** The tester (answer 3a). Window `+0x6C` bit 0, `+0xA0`/`+0xA4` 0.92, anchor `+0xD8` 1, set in `0x1402FA210` (Checked (decomp)). Notes `docs/kh1-config-menu.md` §5.
+
 ### 2026-10-23: Stage 447 (testing branch: Frame Advance's Held Picture row: Live)
 - **Frame Advance's Held Picture row: Live.** The t426 split with effects stopped by KH1's system stop (`0x142867368` bit 0, `0x142432130`, Checked (decomp) and (exe)), KeShpTail3 / 3X draw steps taken back, and 120000's sky / fades restored. Notes: `docs/kh1-frame-advance.md`.
 
