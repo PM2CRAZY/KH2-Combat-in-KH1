@@ -417,23 +417,22 @@ impl Camera {
         self.prev_eye_goal = self.eye_goal;
         self.at_goal = at_goal;
         self.eye_goal = eye_goal;
-        // The game's rates are per 30 Hz frame, halved at 60 Hz. In keyboard / mouse mode
-        // 0.4 + (run - 8) · 0.0018 (`0x140165700`).
+        // KH2 springs once a frame (`0x140165700`): 0.07 + (run - 8) · 0.0006, or in keyboard /
+        // mouse mode 0.4 + (run - 8) · 0.0018, halved when the frame step is under 2 (60 fps) and
+        // whole from 2 up (30 fps, or slower). The look point's rate is 0.03 more.
         let (r0, r1) = if kbm { (0.4, 0.0018) } else { (0.07, 0.0006) };
-        let rate = (r0 + (run_speed - 8.0) * r1) * 0.5;
-        let steps = if cut { 0.0 } else { dt.max(0.0) };
+        let rate = (r0 + (run_speed - 8.0) * r1) * if dt < 2.0 { 0.5 } else { 1.0 };
         if cut {
             self.prev_at_goal = self.at_goal;
             self.prev_eye_goal = self.eye_goal;
+            return (self.at_goal, self.eye_goal);
         }
-        let (mut at, mut eye) = if cut { (self.at_goal, self.eye_goal) } else { (self.at, self.eye) };
-        let mut left = steps;
-        while left > 0.0 {
-            let k = left.min(1.0);
-            at = at.lerp(spring(at, self.at_goal, self.prev_at_goal, rate + 0.03, 1.0), k);
-            eye = eye.lerp(spring(eye, self.eye_goal, self.prev_eye_goal, rate, 1.0), k);
-            left -= 1.0;
+        if dt <= 0.0 {
+            // (No frame passed: held.)
+            return (self.at, self.eye);
         }
+        let at = spring(self.at, self.at_goal, self.prev_at_goal, rate + 0.03, 1.0);
+        let eye = spring(self.eye, self.eye_goal, self.prev_eye_goal, rate, 1.0);
         (at, eye)
     }
 
@@ -571,6 +570,23 @@ mod tests {
         };
         assert!(gap(true) < 0.55 && gap(true) > 0.4, "{}", gap(true));
         assert!(gap(false) > 0.85, "{}", gap(false));
+    }
+
+    /// At 30 fps (step 2) KH2 springs once at the whole rate (`0x140165700`): the eye closes
+    /// 2.5 · 0.4 = all of its gap in keyboard / mouse mode, and 2.5 · 0.07 = 17.5% with a pad
+    /// (less the spring's small term for the goal's own motion).
+    #[test]
+    fn thirty_fps_springs_once_at_the_whole_rate() {
+        let gap = |kbm: bool| {
+            let mut c = Camera::new(Params::FIELD, &sora(Vec3::ZERO, 0.0));
+            let ctl = Controls { kbm, ..Default::default() };
+            let before = c.eye;
+            c.update(&sora(Vec3::new(100.0, 0.0, 0.0), 0.0), &ctl, None, 2.0, &none);
+            let goal = before + Vec3::new(100.0, 0.0, 0.0);
+            (c.eye - goal).length() / 100.0
+        };
+        assert!((gap(true) - 0.09).abs() < 0.02, "{}", gap(true));
+        assert!((gap(false) - 0.825).abs() < 0.02, "{}", gap(false));
     }
 
     /// The hold button (R2): with Auto it stops the swing behind, with Manual only it swings

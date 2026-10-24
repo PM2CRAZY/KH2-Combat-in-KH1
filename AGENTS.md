@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 451 (testing branch: KH2's camera springs once a frame at 30 fps)
+- **KH2's camera springs once a frame at 30 fps.** The tester ("(a)"). `kh2_camera::settle`: one spring a frame, the rate halved when the step is under 2, whole from 2 (Steam KH2 `0x140165700`, Checked (decomp)); was two half springs. Keyboard / mouse at 30 fps closes about 91% of the gap a frame (was 75%); pad 17.5% (was about 16.7%). Notes `camera-model.md`.
+
 ### 2026-10-23: Stage 450 (testing branch: The mouse turns Sora in KH2's first person)
 - **The mouse turns Sora in KH2's first person.** The tester ("check the decomp"). KH2 `0x1403a9250`: ±3° a frame on the direction bits, set from the mouse in a mouse frame (`0x14039c180`). `camera::first_person_mouse_x` (KH1 `0x140138b30`, right stick `0x14298cac0`); forms `first_person_turn`; base Sora: KH1's turn `0x14028c7e0` fed a full left stick `0x14298cad0` for its control step `0x1402a6220`, put back after. Steam only. Assumption: bits 20 / 21 are the right stick's x. Notes `docs/kh2-pad.md`.
 

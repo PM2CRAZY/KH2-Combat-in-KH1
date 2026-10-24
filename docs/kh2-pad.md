@@ -101,9 +101,11 @@ What ours does now (`camera.rs` `mouse` / `sticks`, the `kh2-camera` crate's `Co
 - The mouse turns Sora in KH2's first person (the tester: "check the decomp"; below).
 - Not done: KH2's mouse-frame dead zone and factor on the left stick for his movement
   (`takeover::move_tilt`).
-- 30 fps: KH2 springs once a frame at the full rate when its step is 2 or more; ours springs
-  twice at the half rate (unchanged). With the 0.4 lag that is 75% of the gap a frame where KH2
-  closes it all (2.5 · 0.4). At 60 fps they are the same.
+- 30 fps (the tester: "(a)"): KH2 springs once a frame, at half the rate when its frame step
+  is under 2 and the whole rate from 2 up (`0x140165700`, Checked (decomp)). Ours did two half
+  springs at step 2 (75% of the gap a frame with the 0.4 lag, where KH2 closes 2.5 · 0.4, all of
+  it); it now does KH2's one, with the pad's 0.07 too (17.5% a frame, from about 16.7%). See
+  `camera-model.md`, "Smoothing".
 
 ### The mouse in KH2's first person
 

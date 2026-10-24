@@ -108,6 +108,10 @@ There is no pitch control: zooming in lowers the camera along this curve.
   - the look point closes about 16% of its gap per frame
   - the eye about 9%
   - a ~1-unit dead band
+  - once a frame (Steam KH2 `0x140165700`, Checked (decomp)): the rate (0.07 + (run − 8) ·
+    0.0006, the look point 0.03 more; 0.4 + (run − 8) · 0.0018 in keyboard / mouse mode) is
+    halved when the frame step is under 2 (60 fps) and whole from 2 up (30 fps). The figures
+    above are at 60 fps; at 30 fps the eye closes 17.5% a frame (pad), not two half springs.
 - **Walls.** A ray from Sora's chest to the eye (before and after smoothing). If it hits the
   map, the eye goes to the hit point plus 5 along the surface normal.
 
