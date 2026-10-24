@@ -115,6 +115,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
 - [Testing the new system](../testers/testing-the-new-system/testing-the-new-system.md)
   - [1. Boogle: This is a test on the new system, did you get it?](../testers/testing-the-new-system/testing-the-new-system.md#^m1)
   - [2. Assistant: Got it, loud and clear. Your message came through the automa](../testers/testing-the-new-system/testing-the-new-system.md#^m2)
+  - [3. Assistant: Got this one too. The folder side works: this thread lives i](../testers/testing-the-new-system/testing-the-new-system.md#^m3)
 - [What is still missing for native integration into KH1](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md)
   - [1. Mr Bugs: what else currently are we missing for native integration in](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m1)
   - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m2)

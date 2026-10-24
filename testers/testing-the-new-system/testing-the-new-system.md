@@ -6,6 +6,7 @@
 
 - [1. Boogle: This is a test on the new system, did you get it?](#^m1)
 - [2. Assistant: Got it, loud and clear. Your message came through the automa](#^m2)
+- [3. Assistant: Got this one too. The folder side works: this thread lives i](#^m3)
 
 ---
 
@@ -26,5 +27,17 @@
 > Nothing to test here. If you're happy the system works, write "Close" and I'll archive this one.
 
 ^m2
+
+
 this is another test to see if tester folders are working, did you get it?
+
+
+> [!tip] Assistant
+> Got this one too. The folder side works: this thread lives in `testers/testing-the-new-system/`, and anything you drop in that folder next to this file (Select + Triangle trace CSVs, a `kh1-kh2.log`) gets read along with the thread when I pick it up.
+>
+> One small thing: your message came through as plain text under my box rather than in a `> [!note] Boogle` box. I still picked it up (plain text after my reply counts as a message), but the box keeps the Messages list tidy, so use it when you can.
+>
+> Nothing to test here. Write "Close" when you're done with this thread and I'll archive it.
+
+^m3
 
