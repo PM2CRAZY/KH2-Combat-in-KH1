@@ -248,7 +248,11 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     let taken = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false);
     let launch = taken.as_ref().and_then(|t| t.3);
     let pick = taken.map(|(r, len, neg, _)| (r, len, neg));
-    let why = pick.as_ref().and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len));
+    // (Where KH1's own plain rows play KH2's pick, at the combo style KH2, a pick past KH1's
+    // length (Combo Plus) or a finisher before it (Negative Combo) is KH2's row selection on
+    // KH1's rows, `kh2_row`, not a borrow.)
+    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    let why = pick.as_ref().filter(|(r, ..)| !combo.serves(r)).and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len));
     note(format!(
         "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",
         if air { "aerial" } else { "ground" },
@@ -267,11 +271,13 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             return Run::Hop(r, l);
         }
     }
-    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
     let row = kh2_row(actor, combo, row, pick.as_ref().map(|(r, ..)| r), request_of);
     let plays = select_swing(combo, request_of(row), pick.as_ref().map(|(r, ..)| r));
     if let Ok(mut l) = LAST.lock() {
-        *l = request_of(row).map(|m| (count, m, count >= kh1_len, air));
+        // (KH1's finisher: its finisher request; KH2's row selection can run KH1's swing row past
+        // KH1's length (Combo Plus) or its finisher row before it (Negative Combo).)
+        let finisher = |m: u32| if combo.swings.contains(&(m & 0xFFFF)) || m & 0xFFFF == combo.finisher { m & 0xFFFF == combo.finisher } else { count >= kh1_len };
+        *l = request_of(row).map(|m| (count, m, finisher(m), air));
     }
     if air {
         if let Some(l) = pick.as_ref().zip(launch).filter(|_| plays).and_then(|((p, ..), l)| air_hop(row, p, l)) {
@@ -503,6 +509,16 @@ impl Kh1Combo {
         let air = self.style == super::styles::Kind::AirCombo;
         let here = if air { row.is_air() } else { !row.is_air() && !row.is_jump() };
         here && (row.ability == 0 || native_ability(row))
+    }
+
+    /// KH1's own plain rows of this combo play KH2's `row` natively (`kh2_row`, `select_swing`):
+    /// the combo style KH2, a plain row of it (`plain`), and a slot of its motion on a request of
+    /// its kind (a swing request for a swing, the finisher's for a finisher). Then a pick past
+    /// KH1's combo length (Combo Plus) or a finisher before it (Negative Combo) needs no borrow:
+    /// KH1's swing or finisher row of KH2's kind runs it, its count going on as KH1's.
+    fn serves(&self, row: &ComboRow) -> bool {
+        let fits = |q: u32| super::kh2slots::has(q as usize, row.motion);
+        super::styles::kh2(self.style) && self.plain(row) && if row.is_finisher() { fits(self.finisher) } else { self.swings.clone().any(fits) }
     }
 
     /// KH1's `request` is the kind of KH2's `row` (a swing for a swing, the finisher for a finisher).

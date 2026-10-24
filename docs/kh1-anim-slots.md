@@ -787,6 +787,18 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   by at most twice the parameter a game frame. KH1's row still faces the target as it starts.
   Cost: his targets looked up on the frames inside such a range only. Not checked in game;
   **assumption**: `+0x690` is 0 in a swing (it is cleared outside `+0x120` bit 4).
+- **Combo Plus and Negative Combo on KH1's rows** (the tester: "transfer everything that is not
+  on the new system yet"; Base / Aerial Combo KH2): KH2's selector is asked at KH1's count with
+  KH2's combo length (its Combo Plus / Negative Combo, `0x1403D7780`, Checked (decomp)), so its
+  pick past KH1's length is a swing where KH1's picker took its finisher, and its finisher before
+  KH1's length one where KH1 took a swing. Those were borrows (`combomods::ability_move`). Now,
+  when KH1's plain rows serve the pick (`Kh1Combo::serves`: the combo style KH2, a plain row, a
+  slot of its motion on a request of its kind), `kh2_row` runs KH1's swing row (13 / 11, air 18 /
+  17) or finisher row (8, air 16 / 15) of KH2's kind with our slot, no borrow; KH1's count goes
+  on as KH1's (one more a connected press), which is the count KH2 is asked at, so KH2's length
+  decides where the finisher comes. KH1's last swing is taken as its finisher by its request
+  (0xCB / 0xCE), no longer by the count, for the Finishing Plus press. At the combo style KH1 the
+  borrows stay (the open question in the thread: which logic picks at KH1's style).
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

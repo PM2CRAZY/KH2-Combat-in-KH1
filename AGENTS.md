@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 459 (testing branch: KH2's Combo Plus / Negative Combo picks on KH1's plain rows)
+- **KH2's Combo Plus / Negative Combo picks on KH1's plain rows.** `Kh1Combo::serves`; no borrow at Base / Aerial Combo KH2. KH1's finisher is known by its request. Notes §7.
+
 ### 2026-10-23: Stage 458 (testing branch: KH2's turn toward the target in a swing on KH1's rows)
 - **KH2's turn toward the target in a swing on KH1's rows.** Range 28 (`0x1403D4B10` / `0x1403D3A90` / `0x1403B9F70`, Checked (decomp)): up to 2 × the parameter an update toward `+0xDC8`, past 50 away. `kh2slots::turn_to_lock` from `takeover::physics`; target `takeover::kh2_primary_target`. Notes §7.
 
