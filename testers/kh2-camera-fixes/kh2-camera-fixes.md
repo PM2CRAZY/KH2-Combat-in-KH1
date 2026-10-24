@@ -200,4 +200,8 @@ if you think everything is one to one then close this thread, if not let me know
 
 ^m12
 
-
+1. (a)
+2. (a) but make it a toggle in the cameras config menu
+3. keep  (a) 
+   
+   one thing about our design, we need to keep everything that kh1 can do in tact without breaking or changing how kh1 plays, if all settings are set to kh1 with our new systems and it still feels like kh1 then we succeeded, the exception is when kh2 systems that are native interact with kh1s. we need to add missing features to kh1s engine and still keep features that were taken out of kh1s engine when they ported everything to kh2. both systems need to be native both need to be combined when they can, both need to share the same systems (like how effects added more calls so kh2s render can work properly) and if there's a critical design choice that affects game feel, then we can make it a toggle for the player to change.  
