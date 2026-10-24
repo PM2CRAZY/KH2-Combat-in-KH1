@@ -2186,6 +2186,12 @@ pub const NATIVE_SPELL: u32 = 0x0400_0000;
 /// KH1's apply of a binding's matrix to an element (Steam `0x1402ADB40 (element, matrix)`: its
 /// turn from the matrix's rows (`0x1402A8EF0`, in 65536ths of a turn) and its place from the last).
 const APPLY_STEAM: usize = 0x2ADB40;
+/// What KH1's apply does to a turn (`docs/kh2-effects.md` §18.19, Checked (exe)): its angles
+/// (`0x1402A8EF0`: x = atan2(−row1.z, row0.z), y = asin(−row2.z), z = atan2(row2.y, row2.x)) are
+/// not the inverse of the turn KH1 builds from them (`0x140323480`, X then Y then Z), so an
+/// element given matrix `M` is drawn turned `M · P`, `P` this constant (columns z, −y, x: x and z
+/// swapped, y reversed; its own inverse). A matrix that must be drawn as it is goes in as `M · P`.
+const KH1_APPLY_TURN: glam::Mat3 = glam::Mat3::from_cols(glam::Vec3::Z, glam::Vec3::NEG_Y, glam::Vec3::X);
 
 /// What `spell_start` did.
 pub enum SpellStart {
@@ -2267,6 +2273,9 @@ pub fn spell_place(h: u32, at: glam::Mat4) {
         } else {
             // (`at` is KH2's frame; the element's copy was turned for KH1's object frame.)
             let at = if object_framed(sp.layer.anchor) { at * glam::Mat4::from_mat3(KH2_IN_KH1_OBJECT.transpose()) } else { at };
+            // (KH1's apply draws `M · P`: `at · P` goes in so `at` is drawn, as KH2 draws the
+            // turn its `effect_set_dir` made. Blizzard's shard flew turned a quarter round.)
+            let at = at * glam::Mat4::from_mat3(KH1_APPLY_TURN);
             let m = at.to_cols_array();
             let apply: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + APPLY_STEAM);
             apply(sp.element, m.as_ptr() as usize);

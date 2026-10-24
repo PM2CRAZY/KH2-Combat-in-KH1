@@ -2057,3 +2057,38 @@ we have a toggle in the debug menu? ... I noticed changes on stop, aero, cure".
   `kh1_cast_stop` / `kh1_cast_aero`, off by default): on, that spell is cast KH1's whole way at
   the Magic styles KH2 (KH1's own cast motion, clock and effects, as at the styles KH1); off, as
   before. Per spell, base Sora only (Wisdom Form keeps its own cast motions). No cost.
+
+### 18.20 KH1's apply turns an element by a fixed `P` (Blizzard's shard sideways)
+
+The tester (m16, after t466..t472): "blizzard is sideways". Blizzard 3's shard is element 2 (bone
+0, unbound, flags 0); its script sets its place and direction every frame (`trap_effect_set_pos`,
+`trap_effect_set_dir`, traced with `kh2-magic` on the user's `BLIZZARD_3.mag`: 26 of each, the
+shard flying +z at 100 a frame). `formmagic` hands that frame to `kh2dpx::spell_place`, which gives
+it to KH1's apply `0x1402ADB40` (Steam).
+
+- KH2's `trap_effect_set_dir` (system 0 trap 41; trap table at `0x140753040` in the Steam KH2
+  exe, 16-byte entries `(function, argument count)`; **Checked (exe)**): `0x14041E100` turns the
+  vector into angles with `0x1403B7710` (x = atan2(−d.y, |d.xz|), y = atan2(d.x, d.z), z = 0,
+  **Checked (decomp)**) and stores them as the effect's turn (`0x1402BE1B0`). Built X, then Y,
+  then Z, that turn has its +z along `d`: the frame `place` (`formmagic`) gives, up to the roll.
+- KH1's apply (**Checked (exe)**, Steam bytes of `0x1402A8EF0` disassembled): the matrix's rows
+  normalised, then x = atan2(−row1.z, row0.z), y = asin(−row2.z), z = atan2(row2.y, row2.x),
+  written as the element's turn. KH1 draws an element's turn as X, then Y, then Z
+  (`0x140323480`: `0x140345030` z, `0x140344FB0` y, `0x140344F30` x, multiplied by
+  `0x140386BF0` → `0x1400E5A20`, which is `B × A` in row form; the axis matrices are
+  `kh2_fx::math`'s). Those angles aren't that build's inverse: worked through numerically, the
+  turn drawn from apply(`M`) is exactly `M · P` for every `M`, `P` with columns (0, 0, 1),
+  (0, −1, 0), (1, 0, 0): x and z swapped, y reversed (half a turn about (1, 0, 1)); `P · P = 1`.
+- The t478 log agrees (**Checked (trace)**): an element on KH1's 0x8000 (Spell(3) element 2, the
+  user's log) took the turn (32768, 8561, 32768), a plain turn about y once built X-Y-Z; KH1's
+  0x8000 frame read straight (`0x14029EA00`) is the actor's matrix rows (−z, −y, −x), whose y is
+  up, and only its `· P` has y down as that turn has. (Its height came out 108.9 up along the
+  model's y row, KH2's −108.9: so the actor's `+0xE0` row points down.)
+- So the shard, given KH2's frame `at` (its +z ahead), was drawn `at · P`: its +z along `at`'s
+  +x, a quarter turn about y and upside down. `spell_place` now gives KH1 `at · P`, which KH1
+  draws as `at`. Every script-placed spell effect goes this way (Blizzard's shard, Wisdom's shots,
+  Reflect's contact flashes).
+- Not changed here: elements KH1 binds to Sora's bones or the Keyblade also go through the same
+  apply (KH1's binding task `0x1402AE910`, mode 2 and 3), so they are drawn `B · P` on the bone's
+  matrix `B`. Whether KH1's bone matrices already make up for it isn't known (**Assumption** open);
+  the object root's case is §18.21.
