@@ -876,13 +876,6 @@ pub unsafe fn aerial_dodge(actor: usize) -> bool {
     aerial_dodge_with(actor, g)
 }
 
-/// Our Aerial Dodge request is built (`kh1rows`, its slot `kh2slots`) and base Sora can take it
-/// (not in a Drive Form): the native dodge is there (`takeover`'s glide borrow ends for it).
-pub fn native_dodge_built() -> bool {
-    use character_core::motion::AERIAL_DODGE;
-    !super::form::in_form() && super::kh1rows::installed() && super::kh1rows::by_motion(AERIAL_DODGE).is_some_and(|n| super::kh2slots::has(super::kh1rows::request(n) as usize, AERIAL_DODGE))
-}
-
 /// `aerial_dodge` with the level's (height, speed) given (`takeover`, out of KH2's glide's
 /// borrow, where KH2's controller is held).
 pub unsafe fn aerial_dodge_with(actor: usize, (height, speed): (f32, f32)) -> bool {

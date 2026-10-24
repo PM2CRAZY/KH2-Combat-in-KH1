@@ -18,9 +18,10 @@
 //! - **The glide** is not shared any more (t321, the user: "after incorporating kh2 glide as a
 //!   shared ability it stopped it from being 1:1 with kh2's glide"; "not have glide be affected by
 //!   the physics setting"): at Glide KH1 it is KH1's own glide state with KH1's own numbers, at
-//!   Glide KH2 a KH2 borrow (`GLIDE`), KH2's controller's own glide (its speed, fall, turn,
-//!   banking, hover and release) on KH2's glide numbers. The physics setting doesn't touch it.
-//! - **A KH2-only move** (Aerial Dodge, KH2's glide at Glide KH2, KH2's Square moves, KH2's Quick
+//!   Glide KH2 KH2's glide (its start, speed, fall, turn, banking, hover and release) run in
+//!   KH1's glide state (`glide`, the tester's kh2-glide-in-kh1s-glide-state; no borrow). The
+//!   physics setting doesn't touch it.
+//! - **A KH2-only move** (Aerial Dodge, KH2's Square moves, KH2's Quick
 //!   Run out of KH1's roll, the aerial combo at KH2, KH2's spells and Drives for now) is KH2's controller's: it borrows
 //!   Sora out of KH1's states for it (`borrow`), and gives him back to KH1's ground or air state
 //!   the moment the move is over (`give_back`). So with Jump at KH1, Aerial Dodge is still his
@@ -127,10 +128,7 @@ pub const AIR_JUMP: u8 = 2;
 /// Square held through KH1's own roll (Dodge Roll at KH1): KH2's Quick Run out of it, when Sora
 /// has Quick Run (it has no style of its own: KH2's move, by its ability).
 pub const QUICK_RUN: u8 = 3;
-/// Square in the air with the Glide style at KH2: KH2's own glide (t321). Its button is Square, as
-/// the KH2 rewrite binds it (t327, `kh2-bevy`: "Glide on the action button ... jump still Aerial
-/// Dodges"), whether the Aerial Dodge is used or not; the jump in the air is the dodge only.
-pub const GLIDE: u8 = 4;
+// (4 was KH2's glide's borrow, t321..: KH2's glide runs in KH1's glide state now, `glide`.)
 static BORROW: AtomicU8 = AtomicU8::new(NONE);
 /// Square held since it started KH1's roll (`QUICK_RUN`), and how long KH1's roll motion has
 /// played in that hold (frames at 60 Hz, f32 bits; 0 not yet seen).
@@ -326,10 +324,25 @@ pub fn control(s: &Seen) -> u32 {
                 return KH1_JUMP_BITS | KH1_ACTION_BIT;
             }
             borrow = AIR_JUMP;
+        } else if s.state == super::glide::STATE && jump_fresh && s.air_dodge && !AIR_DODGED.load(Ordering::Relaxed) && unsafe { super::glide::running(super::takeover::sora_actor()) } {
+            // The Aerial Dodge out of KH2's glide (KH2's glide action's shared air slot
+            // `0x1403CB9F0`): the glide ends into the fall, then the dodge on KH1's air state
+            // (`combomods::aerial_dodge`). The press is KH2's.
+            AIR_DODGED.store(true, Ordering::Relaxed);
+            DODGE_JUMP_UP.store(false, Ordering::Relaxed);
+            unsafe {
+                let actor = super::takeover::sora_actor();
+                super::glide::end(actor, "the jump: the Aerial Dodge out of the glide");
+                super::combomods::aerial_dodge(actor);
+            }
+            return KH1_JUMP_BITS | KH1_ACTION_BIT;
         } else if air && s.kh2_glide && square_fresh {
-            // KH2's glide (Glide at KH2, t321): KH2's controller glides him, on Square as in the KH2
-            // rewrite (t327): up or down, before or after the Aerial Dodge.
-            borrow = GLIDE;
+            // KH2's glide in KH1's glide state (the tester, kh2-glide-in-kh1s-glide-state: "go
+            // ahead"), on Square as in the KH2 rewrite (t327): up or down, before or after the
+            // Aerial Dodge; no borrow (`glide::start`). The press is KH2's.
+            if unsafe { super::glide::start(super::takeover::sora_actor(), "Square in the air") } {
+                return KH1_JUMP_BITS | KH1_ACTION_BIT;
+            }
         }
     }
     if borrow != NONE {
@@ -361,8 +374,13 @@ pub fn control(s: &Seen) -> u32 {
     if air && !s.rising && s.air_dodge && !styles::kh2(Kind::Glide) && (!AIR_DODGED.load(Ordering::Relaxed) || !DODGE_JUMP_UP.load(Ordering::Relaxed)) {
         hide |= KH1_JUMP_BITS | KH1_ACTION_BIT;
     }
-    // Glide at KH2 (t321): KH1's own glide never, past the rise: the glide is KH2's (`GLIDE`).
+    // Glide at KH2 (t321): KH1's own glide never, past the rise: the glide is KH2's (`glide`).
     if air && !s.rising && styles::kh2(Kind::Glide) {
+        hide |= KH1_JUMP_BITS | KH1_ACTION_BIT;
+    }
+    // In KH2's glide (KH1's glide state at Glide KH2): its buttons are KH2's (Square held glides,
+    // read off the pad by `glide`; the jump is the Aerial Dodge or nothing), none of KH1's.
+    if s.state == super::glide::STATE && styles::kh2(Kind::Glide) {
         hide |= KH1_JUMP_BITS | KH1_ACTION_BIT;
     }
     hide
@@ -447,7 +465,7 @@ pub fn give_back(state: StateName, grounded: bool, falling: bool, combo: (bool, 
 ///   KH1's swing, along his facing, in place of KH1's own travel. KH1's hit objects, timing and
 ///   damage stay.
 /// - Not the glide (t321): KH1's glide state (0x15) is KH1's own with its own numbers at either
-///   physics setting, and at Glide KH2 the glide is KH2's controller's (a borrow, `GLIDE`).
+///   physics setting, and at Glide KH2 it runs KH2's glide (`glide`), whatever the physics setting.
 /// - KH1's other ground actions (its roll, an item's use, a ground cast, its specials) keep their
 ///   own travel: no KH2 numbers for them.
 ///

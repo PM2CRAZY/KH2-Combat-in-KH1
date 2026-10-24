@@ -225,3 +225,16 @@ State 0x15's pre-step (`0x1402B2880`) wrapped. For Sora at Glide KH2, each frame
   request 6 with KH2's blend 16 (KH2 asks its fall motion 4), KH2's launch flag cleared for the rest of the air
   time. Landing: on the ground KH1's fall state lands him the next frame with its own landing, as KH2's fall action
   does. **Checked (decomp)** both games.
+
+### 8.5 The borrow taken out
+
+- Square in the air at Glide KH2 (`shared::control`, fresh, KH1 letting him act, above KH2's start height) calls
+  `glide::start`; the `GLIDE` borrow, its hand-back of the launch speed and the Aerial Dodge out of the borrow
+  (t496) are gone. KH2's stored launch speed is still kept from the borrows that launch him (`takeover::LAUNCH`).
+- The jump in KH2's glide with the Aerial Dodge left (KH2's shared air slot `0x1403CB9F0`): `glide::end` into the
+  fall, then the native Aerial Dodge on KH1's air state (`combomods::aerial_dodge`), once per air time.
+- In the glide state at Glide KH2 KH1's control step sees neither the jump nor Square (both KH2's).
+- KH2's controller no longer glides base Sora (its Glide level kept aside while he is in KH1's states,
+  `KH2_GLIDE_KEPT`, as at Glide KH1): a Square in one of its other borrows (an air combo's) doesn't glide; the
+  glide comes once KH1 has him back. Drive Forms keep the controller's glide (their own movesets).
+- The Steam build only (the KH1 addresses are Steam's); elsewhere Glide KH2 has no glide.

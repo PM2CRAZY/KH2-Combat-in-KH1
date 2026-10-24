@@ -20,9 +20,6 @@
 //! KH2 (Steam KH2 exe, `ACTION_GLIDE` vtable `0x1405CDBF0`, `ACTION_GLIDEHOVER` `0x1405CDB98`,
 //! Checked (decomp)): no minimum time and no re-glide wait (none in either action's functions).
 
-// (Built one part a version; started from `shared::control` once all parts are in.)
-#![allow(dead_code)]
-
 use super::addr::{Build, Rva};
 use super::styles::{self, Kind};
 use super::{log, takeover};

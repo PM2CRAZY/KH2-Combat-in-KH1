@@ -658,7 +658,7 @@ unsafe fn kh1_glide_start(base: usize, actor: usize) -> Option<&'static str> {
         return None;
     }
     // (Glide at KH1 only, t321: KH1's own glide, its own motions and numbers whatever the physics
-    // setting; Glide at KH2 is KH2's controller's own glide, `shared::GLIDE`.)
+    // setting; Glide at KH2 is KH2's glide in KH1's glide state, `glide`.)
     Some(if superglide { "KH1's Superglide (Glide style KH1, KH1's own numbers)" } else { "KH1's glide (Glide style KH1, KH1's own numbers)" })
 }
 
@@ -1070,9 +1070,6 @@ fn quick_run_check() -> f32 {
     })
 }
 
-/// The borrow now running is KH2's glide's (`shared::GLIDE`, t327): an Aerial Dodge it used is
-/// noted at the hand-back (`shared::mark_air_dodged`).
-static GLIDE_BORROW: AtomicBool = AtomicBool::new(false);
 /// KH2's stored launch speed (`Character::launch_vel`, the Steam exe's `+0xE0` with its flag) as KH2's
 /// controller had it when it gave him back in the air (t331): the glide's borrow later in the same
 /// air time starts from it, as if KH2 had kept him (an Aerial Dodge, then KH1's fall, then the
@@ -1995,7 +1992,7 @@ unsafe fn shared_frame(base: usize, actor: usize) -> bool {
         GLIDE_TRIED.store(false, Ordering::Relaxed);
     }
     let falling = vel.is_some_and(|(_, up)| up < 0.0);
-    // (Glide at KH1 only, t321: at KH2 Square is KH2's glide, `shared::GLIDE`.)
+    // (Glide at KH1 only, t321: at KH2 Square is KH2's glide in KH1's glide state, `glide`.)
     if state == 2 && free && square_fresh && falling && super::stylejump::kh1_glide() && glide_on_square_now(base) && kh1_glide_open(base) && !GLIDE_TRIED.swap(true, Ordering::Relaxed) {
         if let Some(what) = kh1_glide_start(base, actor) {
             log(&format!("{what}, on Square (shared states)"));
@@ -2032,8 +2029,6 @@ unsafe fn shared_frame(base: usize, actor: usize) -> bool {
         })
     } else if borrow == super::shared::AIR_JUMP {
         Some("the jump in the air: KH2's Aerial Dodge")
-    } else if borrow == super::shared::GLIDE {
-        Some("the glide button in the air: KH2's glide (the Glide style is KH2's)")
     } else {
         None
     };
@@ -2055,18 +2050,10 @@ unsafe fn shared_frame(base: usize, actor: usize) -> bool {
         }
         NO_GRAB.store(NO_GRAB_FRAMES, Ordering::Relaxed);
     }
-    // The press that borrowed him is KH2's fresh press on its first frame. (KH2's glide: on its
-    // glide button, Square or the jump; with no Aerial Dodge allowed in this borrow, KH2's jump
-    // press in the air is its glide.)
-    // (t327: KH2's glide is on Square; the Aerial Dodge is there in the borrow if it hasn't been
-    // used this air time, as in KH2, and its use is noted at the hand-back.)
-    let glide = borrow == super::shared::GLIDE;
-    GLIDE_BORROW.store(glide, Ordering::Relaxed);
-    if glide && !super::shared::dodge_flags().0 {
-        AIR_MOVES.store(true, Ordering::Relaxed);
-    }
+    // The press that borrowed him is KH2's fresh press on its first frame.
+    // (KH2's glide is no borrow any more: KH1's glide state runs it, `glide`.)
     JUMP_NOW.store(borrow == super::shared::AIR_JUMP, Ordering::Relaxed);
-    ROLL_NOW.store(borrow == super::shared::SQUARE || glide, Ordering::Relaxed);
+    ROLL_NOW.store(borrow == super::shared::SQUARE, Ordering::Relaxed);
     QUICK_RUN_NOW.store(quick_run, Ordering::Relaxed);
     if quick_run {
         if rd::<u32>(actor + 0x164) == super::styleroll::ROLL_MOTION {
@@ -2133,17 +2120,12 @@ unsafe fn kh1_fall_speed(actor: usize, vel: Option<([f32; 2], f32)>) -> ([f32; 2
 /// KH2's move is over (`shared::give_back`): KH1's own states again, on the ground or falling
 /// (KH1's fall state as an air command sets it: the air-time fields, KH2's sideways speed).
 unsafe fn shared_give_back(base: usize, actor: usize, d: &mut Driver, back: super::shared::Back, out: &Output) {
-    // (KH2's glide's borrow had the Aerial Dodge there: used, it is gone for this air time.)
-    // (KH2's stored launch speed kept for a glide later in this air time, t331: from the glide's
-    // borrow, or any borrow that launched him, the Aerial Dodge's.)
-    let glide_borrow = GLIDE_BORROW.load(Ordering::Relaxed);
-    if matches!(back, super::shared::Back::Air) && (glide_borrow || d.character.launch_vel().is_some()) {
+    // (KH2's stored launch speed kept for a glide later in this air time, t331: from any borrow
+    // that launched him, the Aerial Dodge's; KH1's glide state takes it, `glide::start`.)
+    if matches!(back, super::shared::Back::Air) && d.character.launch_vel().is_some() {
         if let Ok(mut l) = LAUNCH.lock() {
             *l = Some(d.character.launch_vel());
         }
-    }
-    if GLIDE_BORROW.swap(false, Ordering::Relaxed) && d.character.abilities.aerial_dodge > 0 && !d.character.air_dodge_available() {
-        super::shared::mark_air_dodged();
     }
     if matches!(back, super::shared::Back::Air | super::shared::Back::Land) {
         // (KH1's air state from KH2's motion, which this step wrote into its fields: KH1's own fall,
@@ -2790,12 +2772,6 @@ unsafe fn takeover(actor: usize) -> bool {
         if AIR_MOVES.swap(false, Ordering::Relaxed) {
             d.character.allow_air_dodge();
         }
-        // KH2's glide out of KH1's air (t331): the stored launch speed as KH2 left it (an Aerial
-        // Dodge's), else his speed at the borrow (KH1's own jump: KH1 keeps no launch speed).
-        if GLIDE_BORROW.load(Ordering::Relaxed) {
-            let kept = LAUNCH.lock().ok().and_then(|mut l| l.take());
-            d.character.set_launch_vel(kept.unwrap_or(Some(h)));
-        }
     }
     if ROLL_NOW.swap(false, Ordering::Relaxed) {
         d.held.1 = false;
@@ -2817,10 +2793,10 @@ unsafe fn takeover(actor: usize) -> bool {
     // (Its level kept aside and given back with the style at KH2: Sora's abilities are only set
     // again when KH1's menu changes, so a 0 left here took KH2's glide away for good, the user:
     // "unable to input a kh2 glide when glide is set to KH2, nothing comes out".)
-    // (Base Sora in KH1's own states, `shared`, t321: at Glide KH2 the glide is KH2's controller's
-    // own, a borrow out of KH1's air (`shared::GLIDE`) or the glide button in its own air moves
-    // (straight out of the Aerial Dodge); at Glide KH1, KH1's glide state, none of KH2's.)
-    if super::stylejump::kh1_glide() {
+    // (Base Sora in KH1's own states, `shared`: at Glide KH2 the glide is KH1's glide state with
+    // KH2's glide in it (the tester, kh2-glide-in-kh1s-glide-state, `glide`), at Glide KH1 KH1's own;
+    // KH2's controller glides only a Drive Form (its moveset's), so none of its glide in a borrow.)
+    if super::stylejump::kh1_glide() || super::shared::on() {
         if d.character.abilities.glide != 0 {
             KH2_GLIDE_KEPT.store(d.character.abilities.glide as u32, Ordering::Relaxed);
             d.character.abilities.glide = 0;
@@ -3100,22 +3076,6 @@ unsafe fn takeover(actor: usize) -> bool {
         } else {
             Input { jump: Button { pressed: false, held: input.jump.held }, attack: Button::default(), action: Button { pressed: false, held: input.action.held }, ..input }
         };
-        // KH2's glide's borrow (Glide at KH2) and the jump pressed for its Aerial Dodge: the borrow
-        // ends here and the dodge is KH1's air state's own (the tester, aerial-dodge-native m1
-        // question 2: "(b) full native"; `combomods::aerial_dodge`, after the give back below).
-        if step == 0 && GLIDE_BORROW.load(Ordering::Relaxed) && super::shared::on() && input.jump.pressed && d.character.airborne() && d.character.air_dodge_available() && d.last_out.is_some() && super::combomods::native_dodge_built() {
-            let growth = d.character.growth_level(d.character.abilities.aerial_dodge).map(|g| (g.air_dodge_height, g.air_dodge_speed));
-            if let Some(g) = growth.filter(|g| g.0 > 0.0 && g.0.is_finite() && g.1.is_finite()) {
-                DODGE_OUT_OF_GLIDE.store(true, Ordering::Relaxed);
-                *DODGE_GROWTH.lock().unwrap() = Some(g);
-                back = Some(super::shared::Back::Air);
-                last = d.last_out.clone();
-                // (The pose settles where he is: no step ran.)
-                let q = rd::<[f32; 3]>(actor + 0x10);
-                anim_pos = [q[0], -q[1], q[2]];
-                break;
-            }
-        }
         // Where he is, KH2's way up (KH1's world is y-down).
         let p = rd::<[f32; 3]>(actor + 0x10);
         let pos = [p[0], -p[1], p[2]];
@@ -3578,22 +3538,9 @@ unsafe fn takeover(actor: usize) -> bool {
     if let Some(back) = back {
         shared_give_back(base, actor, d, back, &out);
         // (This frame was KH2's step; KH1's states from the next.)
-        // Out of KH2's glide's borrow for the Aerial Dodge: the dodge on KH1's air state now, the
-        // borrow given back into it (KH1's fall state) above. Else (not built) KH2's controller
-        // takes him for it again next frame, as the borrow it was.
-        if DODGE_OUT_OF_GLIDE.swap(false, Ordering::Relaxed) {
-            let g = DODGE_GROWTH.lock().unwrap().take();
-            let done = g.is_some_and(|g| super::combomods::aerial_dodge_with(actor, g));
-            log(&format!("KH2's glide's borrow ended by the jump in the air: {}", if done { "its Aerial Dodge native on KH1's air state" } else { "the native Aerial Dodge didn't start (KH1's state not its air state?): this press is lost" }));
-        }
     }
     true
 }
-
-/// The jump in KH2's glide's borrow ended it for a native Aerial Dodge (`shared_frame`), with the
-/// dodge's growth (height, speed) read off KH2's controller while it was held.
-static DODGE_OUT_OF_GLIDE: AtomicBool = AtomicBool::new(false);
-static DODGE_GROWTH: Mutex<Option<(f32, f32)>> = Mutex::new(None);
 
 /// KH1's footstep sound (`0x140293C70 (actor, kind)`: the floor's sound from `footstep.bin`
 /// by world and material), played from his motion's frames. Under KH2, KH1 keeps him in its
