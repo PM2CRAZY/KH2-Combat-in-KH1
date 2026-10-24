@@ -420,6 +420,8 @@ unsafe extern "system" fn physics(actor: usize) {
         super::shared::physics::install(BASE.load(Ordering::Relaxed));
         // (Our Quick Run's state in KH1's table, `quickrun`.)
         super::quickrun::install(BASE.load(Ordering::Relaxed));
+        // (KH2's glide in KH1's glide state, `glide`.)
+        super::glide::install(BASE.load(Ordering::Relaxed));
     }
     let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
     if sora {
@@ -965,6 +967,42 @@ pub fn kh2_quick_run_growth() -> Option<(u8, character_core::GrowthLevel)> {
             v
         }
         None => LAST.lock().ok().and_then(|l| l.clone()),
+    }
+}
+
+/// KH2's glide numbers for Sora's Glide level (`glide`, KH2's glide in KH1's state): (level, its
+/// growth record). Its level kept aside counts (`KH2_GLIDE_KEPT`). The controller busy this step:
+/// as last read.
+pub fn kh2_glide_growth() -> Option<(u8, character_core::GrowthLevel)> {
+    static LAST: Mutex<Option<(u8, character_core::GrowthLevel)>> = Mutex::new(None);
+    let read = DRIVER.try_lock().ok().and_then(|d| {
+        d.as_ref().map(|d| {
+            let level = (d.character.abilities.glide as u32).max(KH2_GLIDE_KEPT.load(Ordering::Relaxed)).min(u8::MAX as u32) as u8;
+            d.character.growth_level(level).cloned().filter(|g| g.glide_speed.is_finite() && g.glide_speed > 0.0).map(|g| (level, g))
+        })
+    });
+    match read {
+        Some(v) => {
+            if let Ok(mut l) = LAST.lock() {
+                *l = v.clone();
+            }
+            v
+        }
+        None => LAST.lock().ok().and_then(|l| l.clone()),
+    }
+}
+
+/// KH2's stored launch speed this air time, if KH2 has one (`LAUNCH`): what KH2's glide enter puts
+/// back (`0x1403CBD30`, `+0x20 = +0xE0` while its flag is set).
+pub fn launch_kept() -> Option<[f32; 2]> {
+    LAUNCH.lock().ok().and_then(|l| *l).flatten()
+}
+
+/// KH2's glide ended into the fall: the launch flag cleared (`0x1403CBC30`), for the rest of this
+/// air time.
+pub fn launch_used() {
+    if let Ok(mut l) = LAUNCH.lock() {
+        *l = Some(None);
     }
 }
 

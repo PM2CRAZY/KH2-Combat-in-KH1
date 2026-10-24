@@ -149,3 +149,30 @@ All Steam addresses.
 - The hover as a sub-mode of 0x15 is covered by every reader above (and Neverland / water, inside 0x15's own handlers); a new state would fall outside the camera's airborne case.
 - Our 0x15 wrappers must check the actor is Sora: Donald and Goofy run the same state handlers.
 - **KH2's glide has no wall rule. Checked (decomp).** ACTION_GLIDE's vtable `0x1405CDBF0`: enter `0x140423B90`, exit `0x140423B70`, update `0x140423A70`, step `0x140423920`, input `0x140423BC0`, plus the shared air slots `0x140409AD0`, `0x140409B00`, `0x1403CB8B0`, `0x1403CB940`, `0x1403CB9F0` (Aerial Dodge out of the air). None tests a wall; it ends grounded / under the end height (`0x1404235B0`) or on release. Whether a wall cuts KH2's speed depends on its collision writing the blocked velocity back into `+0x20`: Assumption, not checked. At Glide KH2 KH1's transition wall end (moved < 70%) is skipped.
+
+## 8. Implementation (testing branch, `crates/kh1-hook/src/win/glide.rs`)
+
+Built after the tester's "go ahead" (hover as a sub-mode of 0x15, walls slide, Donald and Goofy glide after
+him with KH2's Glide). Every wrapper sits on a slot of KH1's state table (Steam `0x142DB3840`) and acts only for
+Sora at Glide KH2 in base form; Donald and Goofy (and Sora at Glide KH1) run KH1's own handler. The table layout,
+read again in the registration `0x1402B1B80`: `+0` flags, `+8` enter, `+0x10` exit, `+0x18` pre-step, `+0x20`
+step, `+0x28` transition, `+0x30` button check, `+0x38` jump press. **Checked (decomp)** (this settles §2's
+**Assumption** on the layout). The button check is called only by the player's control step `0x1402A7B30`, with
+`(actor, buttons, input)`. **Checked (decomp)**
+
+### 8.1 Start, enter, exit
+
+- `glide::start`: from KH1's jump or fall state, above KH2's start height (growth `+0x34`), KH1's state set to
+  0x15 with KH1's set-state `0x1402B1960` (its enter and exit run), KH1's slow glide request 0x71 with KH2's blend
+  16. No KH1 timer read, his speed not halved. His velocity: KH2's stored launch speed when KH2 has one this air
+  time (the Aerial Dodge's, `takeover::LAUNCH`), else his speed as it is (KH1 keeps no launch speed for its own
+  jump, as the borrow did since t331). **Checked (decomp)** KH2's enter `0x1403CBD30`; that KH2's jump's own
+  `+0xE0` (written by `0x1403CBB00`) isn't carried is a known difference kept from the borrow (open).
+- Enter (`0x1402B2D00` wrapped): `+0x1CC` bit 0 cleared as KH1 does; the combat state's timer `+0x100` set to 0
+  instead of KH1's 46-frame minimum. A glide KH1 started on Sora itself (its Superglide on Square,
+  `0x1402A7B30`) is taken over as KH2's start.
+- Exit (`0x1402B29F0` wrapped): `+0x1CC` bit 0 set as KH1 does; the timer 0 instead of KH1's 24-frame wait (KH2
+  has neither: none in `ACTION_GLIDE` / `ACTION_GLIDEHOVER`'s functions). **Checked (decomp)**
+- The fall state's jump press (`0x1402AFD60`, state 2's `+0x38`, wrapped): for Sora at Glide KH2 it no longer
+  starts KH1's Glide on the jump (KH2's glide is on Square, the jump in the air is the Aerial Dodge); Neverland's
+  flight start (world flag `0x20`) still runs. **Checked (decomp)**
