@@ -268,7 +268,7 @@ the exe (as `hook.rs`'s `alloc_near` allocates) would make the game draw our lab
 selection style itself. A selected row 8 would get style 1, with no arrows. The value panels
 and finger would still be ours.
 
-## 4. Five rows of ours: a second page (s236)
+## 4. Five rows of ours: a second page (s236; replaced by section 6)
 
 The mod's rows are Camera Style, Ground Combo, Aerial Combo, Magic and Aerial Magic (8..12),
 13 rows in all (definition `+0x26` / `+0x28` = 13). Thirteen rows at KH1's pitch of 28 don't fit
@@ -315,3 +315,63 @@ together, so a ninth row fits on page 1.
   `0x1402D9B40` draws it in screen space). For the Config list its target doesn't depend on the
   row (`+0xF0` is 0 from the def), so it isn't moved either way. Assumption: whether it shows on
   this screen wasn't checked.
+
+## 6. The KH1 in KH2 button and our lists (Steam; the Config menu rework)
+
+The tester: all our settings behind one "KH1 in KH2" button on page 1, above "Default settings"
+(answer 4b), opening categorised lists; Magic its own list inside Combat (answer 1); only the
+settings that were in the menu (2a); Debug Menu in Misc (5a); Default settings leaves ours alone
+(6b). The second page is gone.
+
+How KH1 does a Config sub-window (pad diagrams, rows 0..2 of `0x1402FA210`), **Checked (decomp)**:
+
+- On confirm: the last window after the list (`0x1402E5510`, following `+0x20`: the help line),
+  the list closed (`0x1402E3D10` sets `+0x68` bit 0 on it and every window after it), sound 2,
+  the new window created (`0x1402E5A40 (def, 6)`; 0 when all 24 pool windows at `0x142E92780`,
+  0x118 bytes each, `+0xB8` state, are used; the new window becomes the focus at once), linked
+  after the help line (`0x1402E2DE0`: `a +0x20 = b`; `0x1402E2E40`: `a +0x18 = b`), its own
+  windows after it, then `0x1402E5E40` (to the front). Row 0 also sets the close type `+0xB0` = 5;
+  rows 1 and 2 don't.
+- A closing window (state 3 with `+0x68` bit 0 -> 4) takes itself out of the chain (its parent's
+  `+0x20` = its next, its next's `+0x18` = its parent) and, once closed, out of the focus stack
+  (`0x142E941C0`, linked by `+0x30` / `+0x28`): the one under it gets the focus.
+- Under them all is the Config title tab (def `0x140546190`, update `0x1402FADB0`): whenever it
+  has the focus (`0x1402E5220`: focus, state 1..3, not closing) it creates the Config list with
+  the cursor on `0x142E98F18` and the help line (def `0x140546160`) after it, then draws the tab
+  (`0x1402D78B0 (tab, 4, 2, 0, 0, 0x7A, 0x6F)`). That is how backing out of a pad diagram returns
+  to the row it came from.
+- A window's update: focus -> cancel (`0x1405456A4`, sound 3) / confirm (`0x1405456A0`) / else
+  the cursor move `0x1402EF670`, the glove's target `0x1402D9920 (win, 8)`, the row
+  `0x1402EF470`, left / right (a step on repeat, a wrap only on a fresh press; sound 1). Then the
+  draw, every frame (also while opening and closing).
+- Finger (rows 0..5, selected): `0x1402EEEE0 (win, x, y, 0, 0, frame, 0, 0x80808080,
+  0x80808080, 0)`, **Checked (exe)**; with `c` = u64 `0x142E91610`, y = row y + (row height -
+  (i16 `c+0x152` >> 4)) / 2; value 0: x = 0x139 - (i16 `c+0x150` >> 4), frame 0x10; value 1:
+  x 0x14F, frame 0xF.
+- Default settings (KH1's row 7, sound 2) resets rows 0, 1, 2, 3, 4, 5 and the inversion floats.
+
+What we do (`config.rs`):
+
+- Page 1 has 9 rows (def `+0x26` / `+0x28`). Row 7 is our button, row 8 KH1's Default. KH1's
+  update runs with its Default label (sysmsg `0x143`, label table `0x140546410` row 7) held back in
+  the panel hook; after it both rows are drawn as KH1 draws row 7 (style 1 selected, 0 not; label
+  only). Confirm on row 8 runs KH1's update with `0x142E98F18` = 7 for the call (KH1's Default
+  settings, ours untouched), then 8 again. Left / right are hidden from KH1's update when the
+  cursor can end the frame on row 8 (KH1 skips 6 and 7 itself; 8 would step the difficulty).
+- Confirm on the button opens our first list as KH1 opens a pad diagram (above). Each list is a KH1
+  window from a copy of the Config list's definition with our update and its row count; under it,
+  KH1's own help line window. Our update is KH1's Config update's input and draw (calls above),
+  on our rows: settings drawn as rows 0..5 (arrows, value panels, finger), buttons as row 7.
+- Back: the list closes (sound 3) and the title tab, when it has the focus again, re-creates its
+  parent list on the row it was opened from (our hook on `0x1402FADB0`, prologue
+  `40 57 48 83 EC 40`, Checked (exe)); for the first list it's KH1's own Config list on row 7
+  (`0x142E98F18` is never changed). The pending parent is dropped unless the tab is open (state 3),
+  so a pause menu closed in a list starts on KH1's Config list next time; the Config list having
+  the focus also drops it.
+- The help line reads its id from the table by the Config row; under one of our lists the slot
+  holds that list's row's id for the call (and our button's / Default's on page 1, rows 7 / 8).
+- A list opens only with 2 free pool windows, else the buzzer (sound 4) and nothing closes.
+  Assumption: KH1 itself doesn't check (it closes the list first); this is ours.
+- Mouse: none found. The list cursor (`0x1402EF670`) reads only the menu pad; Assumption that the
+  PC build's menus take no mouse here.
+- Our lists are KH1's size (not the 92% of page 1).
