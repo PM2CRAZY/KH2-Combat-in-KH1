@@ -170,3 +170,41 @@ Where an older doc gives an Epic address, the Steam one is given here and the tr
 - What exactly calls `0x1400D2C70 (1)` when (room loads assumed).
 - How KH2 itself picks positions / priorities for its sounds (KH2's Steam sound calls not mapped
   here; KH2's ids are `bank * 1000 + index`, `docs/kh2-sound.md`).
+
+## Implementation notes (helper round on the go-ahead)
+
+### KH1's own `.scd` files and the version check
+
+- KH1's room effects are the remastered assets of `amusic/se<world>.dat` (world code from the
+  table at `0x1404DCCA0`: dh, di, dc, tw, ...; the name is built by `0x140178E80`). Each asset
+  is a one-sound bank named `seNNNNNN.win32.scd` (e.g. `amusic/setw.dat` holds `se017113` ..
+  `se021126`, 45 KB to 30 MB). **Checked (files)**, read from the user's install.
+- They are SEDBSSCF **version 3** (as KH2's se999 / se500 / voice banks; KH2's se000 is 4),
+  header 0x30, the bank number at `0x36` = the file number / 1000 (21 for `se021010`).
+  KH1's engine accepts versions 1..4 (`0x140078D40` GetScdHeaderSize: 1 -> 0x10, 2..4 -> 0x20;
+  `0x140078DA0` GetSoundBasicDescSize: 1 -> 8, 2..3 -> 0x10, 4 -> 0x20; anything else asserts
+  "SCD Version"). **Checked (decomp)**. So KH2's banks are inside what KH1's reader takes.
+- The bank layout, read from both games' files (**Checked (files)**): `0x30` u16 sounds, u16
+  tracks, u16 audio streams, u16 bank number; `0x38` track table, `0x3C` audio table, `0x40`
+  layout table (one per sound), `0x44` routing (0 in every file read), `0x48` attribute table,
+  `0x4C` end padding; the sound table at `0x50`. A sound record: byte 0 its track count,
+  byte 1 its bus, f32 volume at `0x08`, and its last 4 bytes per track a (u16 track, u16 audio)
+  pair. KH2's effect banks have no attributes (the table's offset is the first layout's); the
+  voice bank has two. KH1's one-sound files: one sound, track, audio, layout, attribute; in that
+  file order: tables, layout, sound, track, attribute, audio, each 16-aligned.
+- `kh2_formats::scd_cut::cut` makes a one-sound bank of a KH2 sound in that form. Cutting
+  sound 0 of three of KH1's own files (`se021010`, `se017113`, `se021073`) gives back the files
+  byte for byte. Every playable id of se999 (96), se500 (44), se000 (124) and the voice bank
+  (31) cuts and decodes to the same samples as before, except 35 se000 ids (below).
+  **Checked (files)**.
+- **The 35 se000 ids.** Our `Scd` reader reads an audio index past the track count (152 in
+  se000) through the track table running on into the audio table, so it plays audio
+  `index - 152`: e.g. Magnet Burst's 169 (audio 156) has played audio 4, Thunder's 126 / 127 /
+  128 / 148 (audio 205 / 207 / 206 / 208) audio 53..56, Reflect's 138 (183), 139 (180), 176
+  (184) audio 28..32. The cut keeps the record's own pair, which is what the engine reads
+  (KH1's and KH2's reader are the same code), so through KH1's engine these ids play KH2's own
+  audio. **Checked (files)** for the indices; that the engine plays the pair's audio:
+  **Assumption** (it's the record's only audio reference). The full list of affected ids:
+  3, 11, 13, 14, 15, 17, 18, 22, 24, 27, 28, 29, 37, 40, 41, 42, 101, 111, 112, 113, 126, 127,
+  128, 134, 135, 136, 138, 139, 148, 153, 164, 169, 172, 173, 175, 176, 177, 178, 180, 300..303,
+  306..308, 312 (those that play).

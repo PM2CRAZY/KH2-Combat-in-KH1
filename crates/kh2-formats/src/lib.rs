@@ -30,6 +30,7 @@ pub mod motion;
 pub mod msg;
 pub mod pax;
 pub mod scd;
+pub mod scd_cut;
 pub mod objentry;
 pub mod pref;
 pub mod system;
