@@ -1,0 +1,172 @@
+# KH2 sounds through KH1's sound system (native research, t480 round)
+
+Research only, nothing built yet. Thread: `testers/kh2-sounds-through-kh1s-sound-system/`.
+All addresses are the **Steam** KH1 exe's (Ghidra address = 0x140000000 + RVA) unless marked.
+Where an older doc gives an Epic address, the Steam one is given here and the translation said.
+
+## What we have now
+
+- `crates/kh1-hook/src/win/kh2sound.rs` (testing branch) reads KH2's banks from the user's KH2
+  install on a thread (`se/se999`, `se000`, the weapon bank `se500`, Sora's battle voice bank
+  `voice/us/battle/tt0_sora.win32.scd`), decodes every needed sound to 16-bit PCM itself
+  (`kh2_formats::scd`: Microsoft ADPCM, Ogg Vorbis) and plays each one through its own Windows
+  `waveOut` device (`play`: `waveOutOpen` per sound, closed in `tick`). **Checked (code)**
+- Volume: it reads KH1's sliders itself at play time (`game_volume`: master x effects or voice,
+  from KH1's settings block, Steam `0x14012AF20`, `+0x14` / `+0x18` / `+0x1A`). A slider moved
+  while a sound plays doesn't change it. **Checked (code)**
+- Not covered: KH1's pause menu, Frame Advance's held sound (`frameadv.rs` calls KH1's sound
+  pause, which only knows KH1's own sounds), positional panning (KH1 pans its effects by the
+  sound's position against the camera), KH1's stop-all on room changes / cutscenes, the game's
+  "sound off" paths. **Checked (code)**
+- Cost: one `waveOutOpen` and a PCM copy (when the gain isn't 1) per sound on the game thread,
+  and a full decoded copy of every loaded sound in our memory. **Checked (code)**
+
+## Key finding: KH1 and KH2 PC use the same sound engine
+
+- Both exes carry Square Enix's "CDev Sd" sound engine (strings `SQEX::CDev::Engine::Sd::...`,
+  `d:\music2soundgit\cdev\sd\...`) with the same SEDBSSCF bank reader: KH1's stream-bank
+  read step (in `0x140070000` range, the `'SEDB' 'SSCF'` check) and KH2's (in `0x1400A0000`
+  range) are line-for-line the same. **Checked (decomp)**
+- KH1's exe has the Ogg Vorbis (libVorbis 1.2.3 / "20090709") and XAudio2 ADPCM stream
+  transfer classes, the two codecs KH2's banks use. **Checked (decomp, strings)**
+- KH2's files are SEDBSSCF version 3 (se999, the voice bank) and 4 (se000), header size 0x30.
+  KH1's own file versions haven't been read (no KH1 `.scd` extracted on the PC yet). **Checked
+  (files)** for KH2; KH1 side **Assumption** (same engine, so it should accept both).
+- So KH1 can load a KH2 `.scd` from memory as it is, no decoding or re-encoding on our side.
+  **Assumption** until tried (the reader is the same code; the bank's layout tables are what
+  the engine reads).
+
+## How KH1 plays sounds (Steam)
+
+### The engine wrappers
+
+- `0x14004D530 (data, flag) -> bank handle`: loads a bank from a buffer in memory (the Sd
+  driver's load, `0x14005E0B0`), under the engine's lock. **Checked (decomp)**
+- `0x14004DBF0 (out, bank handle, sound index, 0, 1, 0)`: creates a sound object of one entry
+  of a bank (SoundSystem::CreateSound). **Checked (decomp)**
+- `0x14004E9B0 (out, bus)` + `0x1400547F0 (bus, volume, fade)`: a bus's volume. KH1's volume
+  setter `0x1400DDD10 (scale, fade)` sets buses 1 / 2 / 3 from the settings block (`+0x16`,
+  `+0x18`, `+0x1A` divided by 10: music, sound effects, voice) and buses 5 / 6 to the scale.
+  **Checked (decomp)** (the slider-to-bus order; the master slider's own path not traced).
+
+### Banks KH1 knows (the bank list)
+
+- Bank entries (class `Axa::BankEntry_15`) live in a linked list at `0x1404D65D8` (next at
+  `+8`): `+0x10` bank number, `+0x14` the file's number (`atoi` of the name after "se"; -1 for
+  music / title), `+0x18` the engine's bank handle, `+0x20` / `+0x28` the data pointer, `+0x30`
+  the file name. Built by the constructor `0x1400DB1F0`. **Checked (decomp)**, layout matches the
+  log's bank-list dump (`[se000.win32.scd] +0x10 2 +0x14 0`). **Checked (trace)**
+- `0x1400DFE60 (flag, bank number, data)`: registers a bank already in memory (marks any entry
+  of that bank number released (0xFFFF), makes a new entry, loads it with `0x14004D530`) into a
+  second list at `0x1404D65B8`. Its only caller is the bank-from-archive load `0x1400D2D10`
+  (`.vsb` -> `.win32.scd`). **Checked (decomp)**. That the per-frame step `0x1400DC8C0` moves
+  entries from `0x1404D65B8` to `0x1404D65D8` once loaded: **Assumption** (it writes both).
+- `0x1400D2C70 (1)` -> `0x1400DBAC0`: releases **every** bank in `0x1404D65D8` and empties the
+  list. Called from ten places (`0x14016FFA0`, `0x140170230`, `0x140170300`, ...), most likely
+  room / world loads. **Checked (decomp)** that it clears all; what calls it when: **Assumption**.
+  So banks we register must be registered again after each such call.
+- `0x1400DC8C0` (each frame, from the effect queue step) frees entries whose bank number is
+  0xFFFF once the engine says the bank is idle. **Checked (decomp)**
+
+### Effects: one file per sound
+
+- KH1 PC keeps nearly every effect as its own file, `seNNNNNN.win32.scd` with one sound (the
+  log: `se034072`, `se021201`, `se060131`, bank -1), plus one indexed system bank, `se000` as
+  bank 2. **Checked (trace)**
+- `0x1400DE460 SslSeCreate (bank, no, id)` (via `0x1400D2FD0`): if `bank` is the indexed bank
+  (`0x1404D5EB8`, which holds 2: **Checked (exe)**) it creates sound index `no` of the entry with
+  that bank number; otherwise it finds the entry whose file number (`+0x14`) is `no` and creates
+  **sound index 0** of it. The record (0x50 bytes, `mov ecx, 0x50`: **Checked (exe)**, made with
+  KH1's allocator `0x14034B54C` and constructor `0x1400DB3B0`) gets the engine sound at `+0x10`,
+  bank `+0x30`, no `+0x34`, id `+0x38`, state `+0x3C` (1 effect, 2 / 3 voice), and is linked into
+  the live list at `0x1404D6618`. **Checked (decomp)**
+- `0x1400DECF0 SslSePlay (bank, no, id)` (via `0x1400D3060`, which skips it while
+  `0x1423D3F8C` is set unless a third argument is 0): finds the live record and starts it.
+  **Checked (decomp)**. Our sound log hooks both (`soundlog.rs`). **Checked (code)**
+- The game side: `0x140179AC0 (no, id, position pointer, volume)` queues a positioned effect in
+  KH1's effect queue (`0x14232D560`, 0x20-byte slots, 0x28 or 0x80 of them; bank 2 for `no`
+  under 1000, else -1). The queue step `0x1401791E0` (from the field loop) creates and plays each
+  one with `SslSeCreate` / `SslSePlay`, pans it from its position (`0x140178030`, clamped to
+  0..0x3FFF) and handles stops and fades. Fourteen game functions use it (footsteps
+  `0x140295B40`, objects, the attack hits `0x1402ABEA0` / `0x1402AC080`, ...).
+  **Checked (decomp)**
+- Menu sounds: `0x14017A040 (id)` = create + play of bank 2, `no` = id, centred.
+  **Checked (decomp)**
+
+### Voices
+
+- `0x1400DC3E0` (via `0x1400D3370`, the voice create from a `.vsb` archive) makes a bank entry
+  per clip and a live record in state 2 / 3; `0x1400DC210 (bank, no)` ("IOP Voice Call") starts
+  the state-3 record of that bank / clip. KH1's actor voice functions (`0x1402901F0` group,
+  `0x140290930` clip, Steam; the Epic `0x28E060` / `0x28E7A0` in older docs, translated through
+  `steam_map.in`) sit on top and decide priority (a clip doesn't cut a higher-priority one).
+  **Checked (decomp)** for the call chain; the priority rule from `docs/kh1-voice.md`.
+
+### Pause, Frame Advance, stops
+
+- `0x1400DE010 (mode)` (via `0x1400D2F80`): walks the live list `0x1404D6618` and pauses (1),
+  resumes (0) or stops (2) every record, effect and voice alike. KH1's pause machine
+  (`0x14017F150`) calls it as the pause opens / closes, and our Frame Advance already calls
+  `0x1400D2F80` while it holds the game (`frameadv.rs`). **Checked (decomp, code)**
+- So anything that is a record in `0x1404D6618` is paused, resumed, stopped on room exit and
+  follows the buses with no extra work. Our `waveOut` sounds are none of that.
+
+### Buses of KH2's sounds
+
+- KH2's sound records (the table from `0x50`) carry a byte at `+1`: 2 in nearly every se999 /
+  se000 record, 3 in 31 of the voice bank's 34, 8 in 45 of se500's (the Keyblade bank), 1 in
+  what looks like empty records. **Checked (files)**. That this byte is the bus the engine sends
+  the sound to (2 effects, 3 voice, as KH1's buses): **Assumption**. If so, se500's weapon
+  sounds are on bus 8, which KH1's volume setter never touches (they would ignore the effects
+  slider, or be silent if KH1's layout has no bus 8): **open**, has to be checked in game or by
+  reading the bus layout.
+
+### Something else in KH1's exe
+
+- KH1 also carries a second, KH2-style sound manager (`Axa::AxaSoundManager`, its own
+  `SslSeCreate` at `0x140117CF0`, banks found by number at `+0x48` with an index), reached only
+  through a function table (`0x142F21A34`), no direct callers. KH2's own `SslSeCreate` /
+  `SslSePlay` strings match that one. Whether KH1 ever uses it: **Assumption** (unused; the log
+  only shows the `0x1400DE460` path).
+
+## What reads KH1's sound system (don't break)
+
+- Event scripts and the field play their sounds through the effect queue and the voice calls.
+  The queue has 0x28 / 0x80 slots: our sounds take slots too, so a burst of KH2 sounds could
+  push out a KH1 one in a busy frame. **Checked (decomp)** (the queue returns when it's full).
+- `0x1401791E0` checks `0x1400DEEE0 (-8, -1, -1)` (is a bank -8 sound playing) for the music
+  ducking around `se020041` (bank -8 in the log). Our banks must not use -8, -1 or 2 as their
+  bank number (-1 is fine only if the file number is unique). **Checked (decomp, trace)**
+- `0x1400D2C70 (1)` empties the bank list (above): ours have to come back after it.
+
+## Plan (one system per version)
+
+1. **Load KH2's banks into KH1's engine** (no playing yet). After KH1's sound system is up and
+   after every `0x1400D2C70 (1)`, register each KH2 bank we use from our buffer with KH1's own
+   loader (`0x14004D530` through a bank entry, the way `0x1400DFE60` does), with bank numbers
+   no KH1 file uses, and log the engine's handle and the entry. Check: the log shows the banks
+   load, nothing of KH1's changes. Cost: the raw `.scd` bytes stay in our memory (no decoded
+   copy), one load per room.
+2. **Effects through KH1's create / play.** Two ways, to pick in the thread:
+   (a) each KH2 effect we need as its own one-sound bank (cut out of the KH2 bank: its record,
+   track, stream; a small SCD writer in `kh2-formats`), registered with a unique file number,
+   played through KH1's own queue `0x140179AC0 (no, id, Sora's position, volume)`. Fully KH1's
+   path, positioned, paused, stopped, volume by bus; costs the SCD writer.
+   (b) whole KH2 banks registered once, and for each play a KH1 record made the way
+   `SslSeCreate`'s indexed branch makes it (`0x14004DBF0` with the KH2 index, the 0x50-byte
+   record linked into `0x1404D6618`), then KH1's `SslSePlay`. No writer, but ~15 lines that
+   mirror KH1's create, and no queue (centred unless we also set the position).
+3. **Weapon bank and buses.** Check which bus se500's records go to in KH1 and route them to the
+   effects bus if needed (patch the byte in our copy).
+4. **Voices.** KH2 battle quotes as KH1 voice records (state 3, `0x1400DC210`), so KH1's voice
+   priority and the voice slider apply; or as effects on bus 3 if the voice path proves too tied
+   to KH1's `.vsb` archives.
+5. **Retire the `waveOut` player** (`kh2sound::play` / `tick`, `game_volume`), keep its loader.
+
+## Not found yet
+
+- KH1's own `.scd` file version and layout (no KH1 sound file extracted for comparison).
+- The bus layout KH1 creates (which bus numbers exist, and what bus 8 does).
+- What exactly calls `0x1400D2C70 (1)` when (room loads assumed).
+- How KH2 itself picks positions / priorities for its sounds (KH2's Steam sound calls not mapped
+  here; KH2's ids are `bank * 1000 + index`, `docs/kh2-sound.md`).

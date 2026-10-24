@@ -6,6 +6,7 @@
 
 - [1. Mr Bugs: what else currently are we missing for native integration in](#^m1)
 - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](#^m2)
+- [3. Assistant: Done: every item that isn't native yet has its own thread no](#^m3)
 
 ---
 
@@ -65,3 +66,34 @@
 for everything that isn't native yet start a new thread for each and start the research into each, use the kh1 and kh2 decomps (steam c code)
 
 go ahead
+
+> [!tip] Assistant
+> Done: every item that isn't native yet has its own thread now, each with a first round of research from the KH1 and KH2 Steam decomps (and the exes and KH2 files where the decomps didn't show it). Research only, no code yet. Each thread ends with a few questions; answer them there and give the go-ahead when you're happy with the plan.
+>
+> - [Aerial Dodge native](../aerial-dodge-native/aerial-dodge-native.md): it can go native the way Aerial Recovery did in t475, a request of ours on KH1's air state with KH2's hop numbers.
+> - [Dodge Roll, Guard and Counterguard native](../dodge-roll-guard-and-counterguard-native/dodge-roll-guard-and-counterguard-native.md): KH1 has no guard state; its guard is an attack row (a priority-100 guard), so KH2's guard can go on that row.
+> - [Quick Run native](../quick-run-native/quick-run-native.md): KH1's state table has free ids, so Quick Run can be a KH1 state of its own.
+> - [KH2 Glide in KH1's glide state](../kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md): what wasn't 1:1 in t284 to t320, and KH1's glide state mapped piece by piece.
+> - [Drive Forms native](../drive-forms-native/drive-forms-native.md): the gauge first (KH2's gauge, form gauge and orbs mapped), then one form at a time on base Sora's native pieces.
+> - [KH2 attack data and damage on KH1's swings](../kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md): both damage formulas found; KH1 attack data records built from KH2's ATKP.
+> - [Sora's hit reactions native](../soras-hit-reactions-native/soras-hit-reactions-native.md): KH1's hit pass mapped, plus a gap in how borrows skip KH1's 30-frame no-damage timer.
+> - [Baking the rest of the base animations](../baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md): the KH1 requests and slots for idle, jump, fall, landing, glide, items and the Gravity / Stop / Aero casts.
+> - [KH2 sounds through KH1's sound system](../kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md): KH1 and KH2 use the same sound engine on PC, so KH1 should be able to load KH2's banks.
+> - [KH2 player model through KH1's model system](../kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md): a second KH1 model instance carrying KH2's skeleton.
+> - [KH2 hit effects on enemies](../kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md): KH2's hit-spark pick maps straight onto KH1's own lookup.
+> - [KH2 MP and MP Charge](../kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md): KH2's rules on KH1's own MP pool; ties into your (6b) in the magic thread.
+> - [KH2 Limits](../kh2-limits/kh2-limits.md): KH2's limit system and KH1's limit states, which already use the rows path.
+> - [KH2 summons](../kh2-summons/kh2-summons.md): which KH2 summon rules can run on KH1's own summons.
+> - [Reaction commands](../reaction-commands/reaction-commands.md): KH1's Triangle-box context commands could host KH2's RCs natively.
+>
+> Not given threads of their own, because they already have one: KH2's ability moves and their hits (the combo rows thread), magic and Reflect (its own thread), and camera, Frame Advance, effects, sleeves and the Config menu. Epic isn't a native item, so it's still waiting on question 6 from my last message.
+>
+> The notes for each are in `docs/` (named in each thread). Everything in them is tagged Checked (decomp / exe / files / code) or Assumption.
+>
+> Two things that touch more than one thread:
+> - The summons' KH2 cost (3 Drive bars) needs the Drive gauge from the Drive Forms thread.
+> - The MP thread and your (6b) in the magic thread are one shared cost scale. I'll build it once.
+
+^m3
+
+

@@ -1,0 +1,64 @@
+# Sora's hit reactions native
+
+[Back to the tester requests](../../docs/tester-requests.md)
+
+## Messages
+
+- [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+
+---
+
+
+> [!tip] Assistant
+> I started this thread from [What is still missing](../what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md), as you asked. This first message is the research.
+>
+> **What we have now.** When Sora is in KH1's own states, KH1's hit pass (`0x14029BBD0`) plays KH1's reactions. When KH2's controller has him (borrows, Drive Forms), the hook keeps KH1's damage, cancels KH1's reaction, and has the controller play KH2's flinch or blow.
+>
+> Canceling it costs more than I thought. When no KH1 reaction runs, the pass stops early, so these are lost:
+> - KH1's 30-frame no-damage timer after a hit
+> - the HUD portrait's flash
+> - MP from damage
+> - the "low HP" voice
+>
+> Our own re-hit grace was patched in to stand in for the missing timer.
+>
+> **What KH2 does** (KH2 Steam decomp):
+> - Players and enemies share one reaction routine, `0x1403D2FE0`.
+> - It folds the ATKP reaction byte into groups (`0x1403CE980`): push, flinch, flinch with hit-back (or the air flinch, motions 14 / 15), and launch (motion 16 from the front, 18 from behind, then 17 / 19 on landing), plus Magnet.
+> - The hit-back distance comes from the attack's ATKP, or sstm's 200 when it has none.
+> - The push is 0.1 of the distance a frame, ×0.9 each frame.
+> - A launch is a real blow arc: up 24, 40 sideways, brakes 0.8, KH2's gravity.
+>
+> All of that matches our KH2 rewrite.
+>
+> **What KH1 does** (KH1 Steam decomp):
+> - Kind 1 hits become a flinch (3) or a knock-back (4 / 5) by how much of his max HP the hit took: under 20%, 20..29%, 30% and up (btltbl's numbers).
+> - The reaction comes from a table by movement state: ground, air, flight, swimming and a few others.
+> - Ground flinch: requests 0x48..0x4B, pushed back 750 × the damage's share of max HP, capped at 150, on KH1's own push curve (0.223 a frame, ×0.8).
+> - Ground knock-back: a knock-down motion (0x4C / 0x4D) with no launch.
+> - Air knock-back: a hop of 20 and 16 sideways.
+> - Every reaction also starts KH1's 30-frame no-damage timer (actor flag 0x80).
+>
+> **The plan, one system per version:**
+> 1. KH2's reaction motions on KH1's reaction requests, through the baked slots (10 / 12, 14 / 15, 16..19, the KO). KH1 keeps the timer, HUD, MP, voices and tallies because KH1 still runs the reactions.
+> 2. KH2's push on KH1's push: KH2's distance and its 0.1 / 0.9 curve, for Sora only.
+> 3. KH2's blow as a new KH1 movement state (KH1 has no launch for Sora). KH2's arc and landing, and Aerial Recovery / Retaliating Slash read it.
+> 4. Borrows and forms go through the same pass. When a hit lands, Sora is handed to KH1's states for the reaction, and the controller's own reaction and our re-hit grace go away. Guard, Reflect and invulnerability still stop hits before the pass, as now.
+>
+> No new per-frame cost: the hit pass is already hooked, and step 4 removes a parallel system.
+>
+> **What I couldn't find yet:**
+> - KH2's own rule against Sora being hit again while he's reeling (I haven't located it in the Steam decomp).
+> - What lifts Sora into the air in KH1's ground knock-back.
+> - A second Second Chance rule tied to a flag I haven't traced (`0x140528ADC`).
+>
+> Notes: `docs/kh1-hit-reactions-native.md`.
+>
+> Questions:
+> 1. KH1's enemy attacks don't carry KH2's knock-back numbers. For the push and launch, should we use (a) KH2's defaults for every hit (hit-back 200, blow 24 / 40), (b) KH1's own per-hit numbers (750 × the damage's share, cap 150) on KH2's curve, or (c) KH2's defaults scaled by KH1's damage share?
+> 2. KH1's middle kind (4, a hit of 20..29% of his HP): (a) a KH2 blow, as now, or (b) a KH2 flinch, with only kind 5 (30% and up) launching him?
+> 3. After a hit, should the no-damage time be (a) KH1's 30 frames, or (b) KH2's own rule once I find it in the KH2 decomp, with KH1's timer kept only if they match?
+
+^m1
+
+
