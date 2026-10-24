@@ -8,6 +8,7 @@
 - [2. Assistant: Here's the plan. KH1 already has a sub-menu system: it's how](#^m2)
 - [3. Mr Bugs: 1. Yes if your going to make magic its own sub catagory put ](#^m3)
 - [4. Assistant: Got it, building it now: Config > KH1 in KH2 (above Default ](#^m4)
+- [5. Assistant: t448 and t449. Done: Config page 1 now has a "KH1 in KH2" bu](#^m5)
 
 ---
 
@@ -65,4 +66,18 @@
 > Got it, building it now: Config > KH1 in KH2 (above Default settings) > Camera / Combat / Movement / Misc, with Magic as its own list inside Combat, the whole Config list shrunk with KH1's zoom, only the current settings, Debug Menu in Misc, and Default settings leaving ours alone. You wrote "kh2 in kh1" in your answer; I'm keeping the button's name as "KH1 in KH2" like your request, tell me if you want it the other way. I'll post the version here when it's done.
 
 ^m4
+
+
+> [!tip] Assistant
+> **t448 and t449.** Done: Config page 1 now has a "KH1 in KH2" button above Default settings, and the whole list is shrunk about 8% with KH1's own menu zoom so it fits on one page (t448). The second page is gone. The button opens Camera / Combat / Movement / Misc, and Combat has Magic as its own list (t449). They open and close like KH1's button-diagram screens, with KH1's sounds, and backing out puts you on the row you came from at every level. Default settings still only resets KH1's options. The mod version number is now in the button's help line. Same ini keys as before.
+>
+> Checked against the KH1 decomp and exe; not tested in game yet. This menu is Steam only (on Epic, the settings are in the ini).
+>
+> Please check: the whole flow in and out of each list, how the 92% text looks, that the cursor lands back on the button when you back out, and closing the pause menu while you're inside a list.
+>
+> Questions:
+> 1. The sub-lists are KH1's normal size. Should they (a) stay full size like KH1's other sub-screens, or (b) be shrunk to 92% to match page 1?
+> 2. Does the 92% text look OK, or should it be (a) a bit bigger, like 95% (the bottom row would then just touch the help box), or (b) left as is?
+
+^m5
 

@@ -17,6 +17,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [2. Assistant: Here's the plan. KH1 already has a sub-menu system: it's how](../testers/config-menu-rework/config-menu-rework.md#^m2)
   - [3. Mr Bugs: 1. Yes if your going to make magic its own sub catagory put ](../testers/config-menu-rework/config-menu-rework.md#^m3)
   - [4. Assistant: Got it, building it now: Config > KH1 in KH2 (above Default ](../testers/config-menu-rework/config-menu-rework.md#^m4)
+  - [5. Assistant: t448 and t449. Done: Config page 1 now has a "KH1 in KH2" bu](../testers/config-menu-rework/config-menu-rework.md#^m5)
 - [Frame advance in the debug menu](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md)
   - [1. Mr. Bugs: Can you add a frame advance feature into the debug menu? whe](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m1)
   - [2. Assistant: Sounds useful, and since it's a debug menu tool the match-KH](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m2)
