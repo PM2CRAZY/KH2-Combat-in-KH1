@@ -211,7 +211,9 @@ unsafe fn register(base: usize, b: &mut Bank) -> bool {
 /// Once a frame, at the frame's end (`debugmenu::frame_end`): watches KH1's bank list and puts
 /// ours (back) in.
 pub unsafe fn frame_end(base: usize) {
-    if Build::current() != Build::Steam || base == 0 {
+    // (`kh2_sound_engine = mod`: nothing of ours goes into KH1's engine at all, so the mod's
+    // player is the whole way back, as the ini says; before, only the plays were switched.)
+    if Build::current() != Build::Steam || base == 0 || !super::settings::get().kh1_sound_engine {
         return;
     }
     if rd::<usize>(base + SOUND_UP_STEAM) != 0 && ready(base) {
