@@ -23,10 +23,15 @@ pub enum Kind {
     PlayerModel,
     /// Sora's battle quotes (KH2's voice on KH2's moves, or KH1's): everywhere, forms too.
     BattleQuotes,
+    /// Which Cure base Sora casts with Magic / Aerial Magic at KH2 (the tester, thread
+    /// kh2-magic-and-reflect-native, answer 5: "make a menu in the magic config to change what
+    /// gets casted kh1 cure or kh2"): KH2's (its script, `formmagic`) or KH1's own spell on KH2's
+    /// Cure cast motion, as KH1's Gravity / Stop / Aero are there.
+    Cure,
 }
 
 impl Kind {
-    pub const EVERY: [Kind; 10] = [Kind::GroundCombo, Kind::AirCombo, Kind::Magic, Kind::AirMagic, Kind::Jump, Kind::Glide, Kind::DodgeRoll, Kind::MiscAnims, Kind::PlayerModel, Kind::BattleQuotes];
+    pub const EVERY: [Kind; 11] = [Kind::GroundCombo, Kind::AirCombo, Kind::Magic, Kind::AirMagic, Kind::Jump, Kind::Glide, Kind::DodgeRoll, Kind::MiscAnims, Kind::PlayerModel, Kind::BattleQuotes, Kind::Cure];
 
     /// Its ini key.
     pub fn key(self) -> &'static str {
@@ -41,6 +46,7 @@ impl Kind {
             Kind::MiscAnims => "misc_anims",
             Kind::PlayerModel => "player_model",
             Kind::BattleQuotes => "battle_quotes",
+            Kind::Cure => "cure_style",
         }
     }
 
@@ -57,6 +63,7 @@ impl Kind {
             Kind::MiscAnims => "Misc Animations",
             Kind::PlayerModel => "Player Model",
             Kind::BattleQuotes => "Battle Quotes",
+            Kind::Cure => "Cure",
         }
     }
 
@@ -67,7 +74,7 @@ impl Kind {
 
 /// KH2's (true) or KH1's, per `Kind`: every kind KH1's by default (the user: "kh1 is on by default
 /// for all settings").
-static KH2: [AtomicBool; 10] = [const { AtomicBool::new(false) }; 10];
+static KH2: [AtomicBool; 11] = [const { AtomicBool::new(false) }; 11];
 static INIT: Once = Once::new();
 
 fn init() {

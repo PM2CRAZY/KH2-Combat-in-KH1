@@ -37,6 +37,18 @@ pub fn base_kh2(air: bool) -> bool {
     !super::form::in_form() && kh2(if air { Kind::AirMagic } else { Kind::Magic })
 }
 
+/// Base Sora's Cure at the Magic styles KH2 is KH2's (the Config menu's Cure row, `styles::Kind::
+/// Cure`); else KH1's own Cure on KH2's Cure cast motion, as Gravity / Stop / Aero.
+pub fn kh2_cure() -> bool {
+    super::styles::kh2(super::styles::Kind::Cure)
+}
+
+/// Base Sora casts KH2's `spell` (Fire 0 .. Cure 3) with the Magic styles at KH2 (`base_kh2`):
+/// Fire, Blizzard and Thunder, and Cure when the Cure row is KH2's.
+pub fn kh2_spell(spell: u8) -> bool {
+    spell <= 2 || spell == 3 && kh2_cure()
+}
+
 /// The KH1 spell KH1 casts now (Gravity, Stop, Aero) is drawn with base Sora's KH2 cast motion
 /// on its clock, as Wisdom's KH1 spells are (`takeover::command_started`, `pose::follow`): the
 /// Magic styles at KH2 in base form (the user: "KH1 spell, KH2 animation").
@@ -306,7 +318,7 @@ pub unsafe fn spell_chosen(actor: usize, spell: u8) -> bool {
         return false;
     }
     let wisdom = spell <= 2 && super::form::in_wisdom() && super::settings::get().drive;
-    let base = spell <= 3 && base_kh2(super::takeover::kh2_airborne());
+    let base = kh2_spell(spell) && base_kh2(super::takeover::kh2_airborne());
     if !(wisdom || base) {
         return false;
     }
@@ -374,7 +386,7 @@ pub unsafe fn install() {
 /// start hooked, our slot of KH2's cast motion built for KH1's request (`kh2slots::CASTS`), and
 /// the spell's KH2 file and MAGC row there. Else KH2's controller borrows him for it, as before.
 pub unsafe fn native(spell: u8, air: bool) -> bool {
-    if spell > 3 || !NATIVE_HOOKED.load(Ordering::Relaxed) || !base_kh2(air) || !super::shared::active() {
+    if !kh2_spell(spell) || !NATIVE_HOOKED.load(Ordering::Relaxed) || !base_kh2(air) || !super::shared::active() {
         return false;
     }
     let request = if air { 0x83 } else { 0x36 } + spell as usize;

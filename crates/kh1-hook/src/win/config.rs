@@ -231,9 +231,10 @@ const COMBAT: [Item; 4] = [
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
 ];
-const MAGIC: [Item; 2] = [
+const MAGIC: [Item; 3] = [
     Item::Set(kh(0x7F00_0105, 0x7F00_0106), Row::Style(Kind::Magic)),
     Item::Set(kh(0x7F00_0107, 0x7F00_0108), Row::Style(Kind::AirMagic)),
+    Item::Set(kh(0x7F00_011F, 0x7F00_0120), Row::Style(Kind::Cure)),
 ];
 const MOVEMENT: [Item; 4] = [
     Item::Set(kh(0x7F00_0109, 0x7F00_010A), Row::Style(Kind::Jump)),
@@ -253,7 +254,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 46] = [
+const STRINGS: [(u32, &str); 48] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -280,6 +281,8 @@ const STRINGS: [(u32, &str); 46] = [
     (0x7F00_0106, "Choose KH1's or KH2's magic for Sora on the ground.\nDrive Forms keep their own."),
     (0x7F00_0107, "Aerial Magic"),
     (0x7F00_0108, "Choose KH1's or KH2's magic for Sora in the air.\nDrive Forms keep their own."),
+    (0x7F00_011F, "Cure"),
+    (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
     (0x7F00_0109, "Jump"),
     (0x7F00_010A, "Choose KH1's or KH2's jump for Sora.\nDrive Forms keep their own."),
     (0x7F00_010B, "Glide"),
