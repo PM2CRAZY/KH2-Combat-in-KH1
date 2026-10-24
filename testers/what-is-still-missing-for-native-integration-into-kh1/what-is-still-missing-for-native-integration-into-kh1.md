@@ -62,8 +62,3 @@
 ^m2
 
 
-start working on "- KH2 magic and Reflect: a borrow, plus our own copy of KH2's spell scripts and our own spell hit checks. Native would be KH1's cast state with spell objects KH1 hits itself. Large; I first have to work out how KH1 makes its own spells." if it hasn't already been done. make it a separate thread from this one so I can keep this post clean 
-
-go ahead
-
-*update, also make sure that we aren't pulling data from the main branch, still want to get everything integrated with test branch first*

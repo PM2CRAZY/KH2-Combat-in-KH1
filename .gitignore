@@ -29,6 +29,8 @@
 
 # 4. Documentation (notes only: no dumps, no tables copied from the game).
 !/docs/*.md
+# Helper scripts for the tester threads and versions (see docs/project-instructions.md).
+!/tools/testers/*.py
 
 # 5. Crate sources and manifests.
 !/crates/*/Cargo.toml
