@@ -141,9 +141,8 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
 1. **The cast in KH2's combo string**: the spell taking a combo step (KH1's `+0x41`, the combo
    going on after it), and KH2's magic-only window (range id 35, Fire 56 from 60, into 71 34..46): KH1's
    leave point frees him for everything (question 1).
-2. **KH2's cast physics**: KH2 stops him at a cast (`vel_h` 0; in the air no rise or fall, then
-   its air-magic gravity); KH1's air cast keeps 0.7 of the sideways speed and KH1's gravity
-   (`0x140386CD0 (+0x3C0, 0.7)`). Through the physics setting (`shared::physics`) (question 2).
+2. **KH2's cast physics**: through the physics setting (`shared::physics`) (question 2). The
+   numbers once written here (KH2 stops him, KH1 keeps 0.7) were wrong: see §4e.
 3. **Spell attacks as KH1 attack objects**: each script attack a free-standing object of Sora's
    in the pool (KH1's spell data for its element, our own data copies per KH2 ATKP as `kh1rows`
    does, `+0x10` / `+0x70` set from the script's position each frame), KH1's pass hitting them,
@@ -225,9 +224,9 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   the cast motion's no-gravity range (range id 3: air Fire 58 16..74, Blizzard 61 16..66, Thunder /
   Cure 64 / 67 16..58, **Checked (files)**) holds him; before it he falls from rest at KH2's
   gravity, after it on.
-- KH1's air cast (**Checked (decomp)**): `0x1402A3600` keeps 0.7 of the sideways speed
-  (`0x140386CD0 (+0x3C0, 0.7)`) and leaves the jump's arc alone (a cast mid-rise goes on rising);
-  the ground cast (`0x1402A3DB0`) sets no speed.
+- KH1's air cast: **corrected in §4e** (it halves the sideways speed and starts a 30-unit hop;
+  the 0.7 and "leaves the jump's arc alone" written here were wrong). The ground cast
+  (`0x1402A3DB0`) sets no speed.
 - `shared::physics::cast_stops` (from `formmagic::kh1_spell_start`, KH1's air state 2, physics
   KH2, base Sora): KH1's sideways speed 0 and its arc a fall from rest where he is, and KH2's arc
   for KH1's air step the same; the air step (`air_step`) then runs it with KH2's gravity and air
@@ -256,3 +255,102 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   each pass) and its interval activity (3, `0x1402B3380`). Still to read: the sweep test
   `0x1402B3D50` and whether one owner's own spheres meet each other in the attack-against-attack
   pass (the pairing table `0x1405299B8` by team).
+
+## 4e. Air casts read again: KH1's and KH2's physics (research, the tester's m4 follow-up)
+
+The tester (after t484..t487): "reflect currently does not behave properly for kh1 physics, please
+see how casting is done in the air physics wise to get the same for kh1, as for kh2 please check the
+c steam decomp to fix and find any issues with the physics". Steam addresses throughout.
+
+### KH1's own air cast (**Checked (decomp)**, values **Checked (files)**)
+
+- KH1's command step for a command in movement state 2 (`0x1402A3600`, the air branch, command type
+  2): MP check `0x14028EFD0`; the cast motion `0x14029F980 (actor, (0x83 + spell) | 0x1000000)`
+  (Fire: `0x1000083`, then `0x8A` queued); KH1's fall queued after it, `0x14029FA30 (actor,
+  0x40000006, 8.0)`; the spell start `0x14028F140`; **then** `0x1402AF960 (actor, btltbl +0xE8)`
+  and `+0x3C0 ×= btltbl +0xF0` (`0x140386CD0`).
+- btltbl's block (pointer `0x142D22D30` = file + 0x58, `local/re/kh1cmp/orig/btltbl.bin`, the live
+  copy the same): `+0xE8` = **30.0**, `+0xF0` = **0.5**.
+- `0x1402AF960 (actor, h)`: a fresh hop of `h` from where he is: `+0x3B0` (time) 0, `+0x3B8`
+  (time to the top) `sqrt(2h / 0.48469)` = 11.1 frames for 30, `+0x3BC` = −h (y down), `+0x3B4` =
+  his y, `+0x3D0` (landing motion base) 0, state 2 (`0x1402B1960`, no change: already 2), flag
+  `0x10000` off. So KH1's air cast throws away the jump's arc (a cast mid-rise does not go on
+  rising) and pops him 30 up.
+- KH1's air step (`0x1402AF6A0`, state 2): the rise on KH1's double sine to the top, then
+  `0.48469 × (t − top)² / 2` below it, at most 20 a 60 Hz frame; the apex swap `0x1402AF630` only
+  for KH1's jump motion (`+0x164 == +0x3D0 + 4`), not the cast's. Sideways: with no stick speed
+  (`+0x2C <= 0`) `+0x3C0` × stats `+0x18` (its square root at 60 fps); with one, toward the move
+  direction (stats `+0x14` × speed, capped). No hover anywhere.
+  **Assumption:** `+0x2C` stays 0 during the cast (KH1's input step `0x1402A7B30` isn't run while
+  the action flag is set, `0x1402A6220` / `0x140297870`); to trace.
+- Landing (`0x1402A43A0`, the state change 2 → 0): KH1's landing request `(+0x3D0) + 7 |
+  0x1000000` (motion 7) and idle queued: the cast motion is cut there.
+
+### Our air casts at physics KH1 (code)
+
+- Fire / Blizzard / Thunder / Cure native (t477): KH1's own path, so the above exactly
+  (`cast_stops` returns at physics KH1).
+- Reflect is still KH2's controller (`reflect::before_step` → `Character::cast`): sideways 0 (KH1:
+  × 0.5), no hop (KH1: 30 up), a fall from rest at KH1's gravity × `air_cast_fall` capped 20 (KH1:
+  after the hop), KH2's `air_drag` (KH1: its own drag), landing into KH2's Land (KH1: its landing
+  7). The tester's "doesn't behave properly for kh1 physics".
+
+### KH2's own air cast (**Checked (decomp)** KH2 Steam, **Checked (exe)**, **Checked (files)**)
+
+- The cast start is `0x1403C5170 (actor, command, finisher)` (MAGC by command `+0x26`; the
+  finisher motion `+0x2C` when asked, else ground `+0x28`; voice `+0x34`/`+0x35`; sub `level × 2
+  − 2`, `+1` finisher, `+10/+20/+30` by form). Airborne (`0x1403BA9A0`), before the air motion
+  (`+0x30`) it calls the current action's slot 4 with xmm2 = sstm `+0x48` (exe at `0x1403C5244`;
+  sstm `+0xD0` instead when actor `+0x6C8` bit 7 and `+0xDE0 == 7`), and queues motion 4 (fall,
+  A004) after the cast (`0x1403C8310`).
+- sstm `+0x48` is `magic_jump` = **40.0** (+0xD0 = 30.0), `03system.bin` (**Checked (files)**).
+- Slot 4 is `0x140409B00` in every player action's vtable (IDLE `0x1405CCEB8`, JUMP `0x1405CCF10`,
+  ...; names from the exe's RTTI): `0x1403CBC30 (actor, 40)` then `0x1403B4DA0 (actor, 1)` (action
+  JUMP, whose enter `0x1403CBD30` makes the arc's base his height). `0x1403CBC30` with h ≥ 0: a hop
+  of h (`+0xFC` = −h, time `+0xF0` 0, top `+0xF4` = `sqrt(2h / 0.40816)` = 14.0 frames for 40), fall
+  motion swap off (`+0x118` −1), landing motion 5 (`+0x11C`), launch speed `+0xEC` 0 so the
+  velocity `+0x20` is **kept**.
+- ACTION_JUMP's step `0x1403CB360`: the sideways velocity through `0x1403B7AD0 (dt, 0.9, 0.95)`:
+  toward the stick target `+0x10` (its length `+0x1C`) keeping 0.9 a tick, else × 0.95 a tick.
+  **Assumption:** the stick target is empty during a cast motion with no allow-movement range
+  (not traced: the player's input selector), so he drifts at × 0.95.
+- Vertically: the arc's time `+0xF0 += dt` every step **before** the hold test; with motion flag
+  `0x20` (range id 3: `0x14040D810` sets `+0x34 |= 0x20` of the motion player at actor `+0x158`, so
+  actor `+0x18C`) or `0x40` (range 24) the step moves him by 0, but the clock goes on. After the
+  hold the arc is far past its top, so he falls at once at the step's cap (`dt × +0x138`;
+  **Assumption:** `+0x138` is the fall cap, 16 a frame from sstm `fall_max`).
+- Motion 73 (Reflect air, A371, the same clip as Fire's 58; **Checked (files)** `P_EX100.mset`):
+  84 frames at 60 Hz, range 3 (hold) 16..74, range 14 from 36, magic-cast event at 28. So: rise 40
+  over 14 frames (from wherever he was, rising or falling), a frame or two past the top, held
+  16..74, then falling at the cap; a fall loop (4) after 84.
+- Landing mid-cast: ACTION_JUMP's landing slot `0x1403CB940`: KH2's landing motion 5, idle queued,
+  action IDLE (unless the clip has range 49, which motion 73 hasn't): the cast is cut.
+
+### What differs at physics KH2 (ours, t487, and Reflect's controller path)
+
+| | KH2 (exe) | ours |
+|---|---|---|
+| sideways at the start | kept, then × 0.95 a tick | 0 |
+| vertical at the start | a 40 hop from his height (14 frames up) | fall from rest |
+| before the hold (0..16) | rising to 40, at the top | falling from rest, about 52 down by frame 16 |
+| the hold (16..74) | height held, arc clock running | height held, arc clock stopped |
+| after the hold | at once at the fall cap | a fall from rest again |
+| landing mid-cast | KH2's landing 5, cast cut | native: KH1's landing 7 (cut); Reflect: the cast plays on (`air_magic_falls` off) |
+
+- Order on the native path: `cast_stops` runs inside the spell start (`0x14028F140`), and KH1's
+  command step then runs `0x1402AF960` (hop 30) and × 0.5 over it; t487 still works because our air
+  step drives the height from its own arc (`shared::physics::AIR`) and the speed was 0 before the
+  halving. A KH2 start that keeps the speed must be applied after KH1's command step returns.
+- The hold rule in `shared::physics::air_step` (`kh2slots::no_gravity`) stops the arc's clock for
+  every KH2 motion with range 3 (Aerial Dive's 46..54, Finishing Leap): KH2's runs it on. Changing
+  that for casts only is one system; for the ability moves another (asked).
+
+### Cure KH1 (t485) against "exactly KH1"
+
+- t485's Cure KH1: KH1's Cure (its script, effects, heal) on KH2's Cure cast motion: requests 0x39 /
+  0x86 are redirected to our KH2 slot whenever Magic / Aerial Magic is KH2 (`kh2slots::redirect`, by
+  the Spec's kind), and `takeover::command_started` puts it on that motion's clock (`base_look`).
+- Exactly KH1's: requests 0x39 / 0x86 left to KH1's own slots (56 / 81) when the Cure row is KH1
+  (the redirect also asking `formmagic::kh2_cure`), and `base_look` false for Cure then, as the
+  debug menu's `kh1_cast` does for Gravity / Stop / Aero. KH1's own MP cost then (mpcost is only
+  for KH2's spells).
