@@ -261,6 +261,10 @@ unsafe fn affordable(base: usize, sora: usize) -> bool {
     if sora < 0x10000 || save < 0x10000 || rd::<u8>(base + MAGIC_SEAL_RVA) & 4 != 0 || rd::<u8>(save + 0x874) & 1 != 0 {
         return false;
     }
+    // (Base Sora: KH2's cost, 10 of 100, scaled onto KH1's MP, `mpcost`; Drive Forms 1 MP.)
+    if !super::form::in_form() {
+        return super::mpcost::units(sora, SPELL).is_some();
+    }
     let check: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + MP_CHECK_RVA);
     check(sora, COST) & 0xFF != 0
 }
@@ -780,10 +784,15 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     if ch.airborne() {
         note(format!("Reflect in the air: stopped, then falling through the cast (motion {motion})"));
     }
-    // KH1's own payment of a spell's cost: 1 MP at every level.
+    // KH1's own payment of a spell's cost: 1 MP at every level in a Drive Form; base Sora KH2's
+    // cost scaled onto KH1's MP (`mpcost`).
     let pay: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + MP_PAY_RVA);
     let before = mp(actor);
-    pay(actor, COST);
+    if super::form::in_form() {
+        pay(actor, COST);
+    } else {
+        super::mpcost::pay(actor, SPELL);
+    }
     let finisher = Some(motion) == m.finisher && m.finisher != Some(m.ground);
     if let Ok(mut g) = RT.lock() {
         if let Some(rt) = runtime(&mut g) {

@@ -315,7 +315,7 @@ pub unsafe fn spell_chosen(actor: usize, spell: u8) -> bool {
         return false;
     }
     let cost = super::reflect::kh1_spell_cost(spell);
-    if !super::reflect::can_pay(actor, cost) {
+    if !affordable(actor, spell, cost) {
         super::reflect::menu_sound(4);
         log(&format!("{} {} refused: can't pay {cost}", who(), SPELL_NAMES[spell as usize]));
         return true;
@@ -445,9 +445,9 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
     let level = super::reflect::kh1_spell_level(spell);
     let Some(m) = magc(spell, level) else { return false };
     let finisher = motion != own && m.finish_motion >= 0 && motion == m.finish_motion as u16;
-    // (KH1's command step judged the cast usable with KH1's own check, `0x14028EFD0`.)
-    let cost = super::reflect::kh1_spell_cost(spell);
-    super::reflect::pay_mp(actor, cost);
+    // (KH1's command step judged the cast usable with KH1's own check, `0x14028EFD0`, at KH2's
+    // cost, `combat::command`.) KH2's cost scaled onto KH1's MP, through KH1's payment (`mpcost`).
+    let cost = super::mpcost::pay(actor, spell).unwrap_or(0);
     let mut dropped = None;
     if let Some(&(_, second)) = FIRE_SECOND.iter().find(|f| f.0 == request) {
         if count >= 2 && rd::<u32>(actor + QUEUE + QUEUE_ENTRY) & 0xFFFF == second {
@@ -467,12 +467,21 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         super::kh2sound::voice(v as i16);
     }
     log(&format!(
-        "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}, cost {cost}{}",
+        "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}, cost {cost} units{}",
         SPELL_NAMES[spell as usize],
         if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
         dropped.map_or(String::new(), |r| format!(", KH1's second part {r:#x} taken off its queue"))
     ));
     true
+}
+
+/// Whether Sora can pay for `spell` now: in a Drive Form KH1's 1 MP (`cost`); base Sora KH2's
+/// cost scaled onto KH1's MP (`mpcost`), magic allowed as KH1 judges it.
+unsafe fn affordable(actor: usize, spell: u8, cost: i32) -> bool {
+    if super::form::in_form() {
+        return super::reflect::can_pay(actor, cost);
+    }
+    super::reflect::can_pay(actor, 1) && super::mpcost::units(actor, spell).is_some()
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -500,7 +509,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     *w = None;
     let level = super::reflect::kh1_spell_level(spell);
     let cost = super::reflect::kh1_spell_cost(spell);
-    if !super::reflect::can_pay(actor, cost) {
+    if !affordable(actor, spell, cost) {
         super::reflect::menu_sound(4);
         return;
     }
@@ -511,7 +520,11 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
         log(&format!("{} {}: no cast motion ({motions:?})", who(), SPELL_NAMES[spell as usize]));
         return;
     };
-    super::reflect::pay_mp(actor, cost);
+    if super::form::in_form() {
+        super::reflect::pay_mp(actor, cost);
+    } else {
+        super::mpcost::pay(actor, spell);
+    }
     let finisher = Some(motion) == motions.finisher && motions.finisher != Some(motions.ground);
     if let Ok(mut g) = RT.lock() {
         runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion });

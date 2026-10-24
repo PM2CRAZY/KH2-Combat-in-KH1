@@ -29,6 +29,7 @@ mod kh1voice;
 mod kh2sound;
 mod leftblade;
 mod menu;
+mod mpcost;
 mod model;
 mod pose;
 mod settings;

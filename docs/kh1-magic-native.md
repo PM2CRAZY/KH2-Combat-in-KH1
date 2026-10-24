@@ -165,3 +165,24 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
 7. **MP**: KH2's costs (03system `cmd`, Checked (files)): Fire 12, Blizzard 15, Thunder 18 at every
    level, Cure 255 (all of it), Reflect 10, from KH2's MP pool; KH1's MP is whole points and every
    cast here costs 1 (`reflect::COST`, KH1's own check and payment) (question 6).
+
+## 6. KH2's MP costs on KH1's MP (done: the tester's answer 6 (b))
+
+- KH2's costs (03system `cmd`, **Checked (files)**): Fire 12, Blizzard 15, Thunder 18 at every
+  level, Cure 255 (all of it), Reflect 10; KH2 Sora's MP is 100 (00battle `plrp`, character 1,
+  **Checked (files)**).
+- KH1's MP (**Checked (decomp)**, Steam): stats `+0x44` whole bars of `+0x48`, and the charge part
+  `+0xBE` (u16) filling toward the next bar, which comes at `(n + 1) × 30` (`0x1402A4CB0`). The
+  payment `0x1402A5B60 (actor, cost)`: from 100 up `cost / 100` whole bars; below 100 `cost`
+  charge units, the top bar breaking into its own worth (`n × 30`) when they run out (skipped while
+  `0x142867364 & 0x800`, or for party members past 9). The test `0x1402A4C10`: from 100 up
+  `cost / 100 <= bars`; below 100 `cost <= Σ k × 30 + charge`. So bar `k` is worth `k × 30` units.
+- `mpcost`: base Sora's KH2 spell costs `KH2 cost / 100` of his KH1 maximum, in bars, taken from
+  the top down (the charge first at the next bar's worth, then each bar at its own), paid through
+  KH1's payment 30 units at a time (each step breaks at most one bar, as KH1's own payment
+  does). Cure takes every unit, and needs one. Drive Forms keep 1 MP a spell.
+- KH1's command step judges a cast with its usable check `0x14028EFD0` (the spell's attack data
+  `+0x30`, slot `0x142D22B80 + spell × 0x38 + 0x18`): for a native KH2 cast `combat::command` checks
+  KH2's cost first, then has the data read it (in units, at most 99) for that one step, put back
+  after. **Open:** the Magic menu still greys KH1's spells by KH1's own cost (that check, called from
+  the menu fill), so a spell KH2's cost allows may show grey with less than KH1's cost left.

@@ -323,6 +323,18 @@ pub unsafe fn resume_command() {
     }
 }
 
+/// A spell's attack data `+0x30` (its MP cost) put back when dropped (`command`).
+struct CostPatch {
+    at: usize,
+    was: i32,
+}
+
+impl Drop for CostPatch {
+    fn drop(&mut self) {
+        unsafe { wr(self.at, self.was) }
+    }
+}
+
 /// Command types that don't move Sora (`0x1402A1470`): the party's (`+0x98`'s), the menu's.
 const NOT_SORAS: [u8; 21] = [0x1D, 0x1E, 0x46, 0x51, 0x54, 0x64, 0x4B, 0x4D, 0x4E, 0x52, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5E, 0x5F, 0x60, 0x4F, 0x5C, 0x5D];
 
@@ -372,6 +384,8 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         cmd_log(format!("command {kind:#x} ({full:08x}) waits: KH1's jump or glide has him, KH2 takes him for it"));
         return;
     }
+    // KH1's usable check reading KH2's cost for a native cast (below), put back after the step.
+    let mut _cost_patch: Option<CostPatch> = None;
     // Base Sora in KH1's own states (`shared`): a command of KH2's (a spell where the Magic style
     // is KH2's, Reflect, a Drive) waits for KH2 to borrow him (`takeover::shared_frame`), then runs
     // as KH2's (`resume_command`); KH1's own commands (its spells at the KH1 style, items,
@@ -388,6 +402,23 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         let kh1_air = matches!(state, 2 | 8);
         let native = !drive && arg <= 3 && matches!(state, 0 | 6 | 0x18 | 2 | 8) && super::formmagic::native(arg, kh1_air);
         if native {
+            // KH2's cost scaled onto KH1's MP (`mpcost`, the tester's answer 6 (b)): refused as KH1
+            // refuses a spell it can't pay for. KH1's command step judges the cast with its own
+            // usable check (`0x14028EFD0`: the spell's attack data `+0x30` through its MP test
+            // `0x1402A4C10`, which for costs below 100 counts every unit, Checked (decomp)): for
+            // this step the data reads KH2's cost in units (at most 99: ours has already passed),
+            // put back after it. KH1's script, which pays the data's cost, isn't run for a KH2 cast.
+            let Some(units) = super::mpcost::units(actor, arg) else {
+                let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+                sound(4);
+                cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's MP cost of spell {arg} can't be paid"));
+                return;
+            };
+            let data = rd::<u64>(base + MAGIC_SLOTS_RVA + arg as usize * 0x38 + 0x18) as usize;
+            if data > 0x10000 && super::crash::readable(data + 0x34) {
+                _cost_patch = Some(CostPatch { at: data + 0x30, was: rd::<i32>(data + 0x30) });
+                wr(data + 0x30, units.clamp(1, 99));
+            }
             // (The command record's bit 25 has the command step play KH1's voice group for the
             // spell, `0x1402901F0 (actor, spell + 7, target)`: with KH2's battle quotes, KH2's
             // MAGC voice is the cast's, `formmagic::kh1_spell_start`.)

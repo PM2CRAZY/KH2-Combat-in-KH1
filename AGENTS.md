@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 484 (testing branch: KH2's MP costs on KH1's MP)
+- The tester (KH2 magic and Reflect native, m3 answer 6 (b)). `mpcost.rs`: a KH2 spell costs (KH2 cost / 100) of Sora's KH1 max MP, from the top down (the charge part at the next bar's worth, bar k worth k x 30), paid through KH1's payment `0x1402A5B60` (Steam) 30 units a call; Cure takes all (at least one unit). Base Sora's KH2 spells and Reflect; Drive Forms keep 1 MP. KH1's usable check `0x14028EFD0` reads our cost (spell data `+0x30`, capped 99) for the one command step (`CostPatch`). Checked (files): Fire 12, Blizzard 15, Thunder 18, Cure 255, Reflect 10 (03system `cmd`), KH2 Sora's MP 100 (`plrp`); Checked (decomp) `0x1402A5B60`, `0x1402A4C10`, `0x1402A4CB0`, `0x14028EFD0`. Open: KH1's menu still greys by KH1's cost. docs/kh1-magic-native.md §6.
+
 ### 2026-10-24: Stage 483 (testing branch: Reflect's effects at KH1 Sora's size)
 - The tester (m16, 2 (a)): scale Reflect to KH1 Sora. `kh2dpx::kh1_sized`: Reflect's packages' elements' scale and position-only offset times `pose::kh1_size()` (the retarget's hip ratio, about 0.89, new `KH1_SIZE`), at each element's start. KH1's instance scale carries the header offset, Checked (decomp) `0x14031CEA0`. The barrier's attack shapes (ATKP 573) are not scaled (gameplay). docs §18.22.
 
