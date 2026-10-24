@@ -36,6 +36,8 @@
 >
 > Notes, with addresses and how sure each one is: `docs/kh1-roll-guard-native.md`.
 >
+> **Update while I wrote this:** t489 (from the combo row selection thread) has already put KH2's guard (motion 173), its repel (42) and Counterguard on KH1's states as requests of their own, so plan steps 2 and 3 are covered there. What's left here is the native dodge roll, and the questions below about guard coverage and KH1's Counterattack command still apply to how t489 behaves.
+>
 > Questions:
 > 1. Guard's coverage: (a) KH2's, front only unless Guard Plus is on; (b) KH1's guard data, about +-100 degrees.
 > 2. While the repel plays, should the command menu show KH1's Counterattack command in Attack's place? (a) yes, as KH1 does; (b) no, Attack just does Counterguard, as KH2 does.
