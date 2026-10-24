@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 463 (testing branch: Frame Advance: every update held, every draw run)
+- **Frame Advance: every update held, every draw run.** The tester ("focus on getting the live version working"). Runs while held: 10499, 110000, 129999, 135000 (Checked (decomp)); held: 163001, 190000 `0x1EB750`; frame scale `0x14233FBDC` and half `0x14233FBE0` 0 on held frames; 110000's zoom, 164004's pulses, the HUD data `0x1427F13D0`..`0x142866D18` and model colours put back each held frame. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 462 (testing branch: Frame Advance: the main list's tasks read one by one)
 - **Frame Advance: the main list's tasks read one by one.** The tester ("look through the c decomp… do that for the rest of the values"). Every registration on the main list read (Steam decomp); 110000 is the view set-up (texture scroll, fog packet), not a camera; KH1's render queue `0x1401CB730` found. Held Tasks labels corrected. Notes: `docs/kh1-frame-advance.md`.
 

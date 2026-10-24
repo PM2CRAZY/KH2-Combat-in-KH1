@@ -1858,7 +1858,6 @@ const FB0_BP: usize = 0x25381D8;
 const FB1_W: usize = 0x25381C4;
 const FB1_BP: usize = 0x25381DC;
 const DTT_CLAMP: usize = 0x2538218;
-const FRAME_STEP: usize = 0x233FBDC;
 /// The GIF tag of KH2's triangle packet (its PRIM field is what the PC draw sets).
 const DTT_TAG: u64 = 0xC02D_C000_0000_8001;
 /// A model's normals are 4.12 fixed point (|n| = 4096 in Sora's Drive sphere, model 5 of his
@@ -1977,7 +1976,8 @@ unsafe extern "system" fn dtt_draw(obj: usize, key: usize, prog: usize) {
     let prim: unsafe extern "system" fn(usize) = std::mem::transmute(b + GS_PRIM_FIELD_STEAM);
     let frame_tex: unsafe extern "system" fn(i32) = std::mem::transmute(b + FRAME_TEX_STEAM);
     let prev_tex: unsafe extern "system" fn() = std::mem::transmute(b + PREV_FRAME_TEX_STEAM);
-    let fade = rd::<f32>(b + FRAME_STEP) < 2.0;
+    // (Frame Advance: KH1's own scale is 0 on a held frame; the picture is the last run frame's.)
+    let fade = super::frameadv::shown_scale(b) < 2.0;
     let fb0 = rd::<u32>(b + FB0_BP) as u64;
     let short3 = |base: usize, i: u16| -> [f32; 3] { std::array::from_fn(|k| rd::<i16>(base + i as usize * 6 + k * 2) as f32) };
     // The model's groups: only its leading triangle-with-normals groups (kind 1, 0x1C bytes a

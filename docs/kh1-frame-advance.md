@@ -295,6 +295,58 @@ KH1 has a way:
   190000s (2D, menus, text, fades; 180000 `0x14038D9B0` writes the world / room words), and anything
   else in a draw task that steps by frames.
 
+### Every update held, every draw run (after t447)
+
+The tester's m22: "focus on getting the live version working" and freeze the whole game state.
+From the table above (the Steam decomp):
+
+- **Held** (function swapped for one that does nothing, as since t372): every task of the main
+  list before 140000 not flagged for KH1's pause, but those below; from 140000 on, the updates
+  145001 `0x140290A50` (delayed plays), 159999 `0x1403970D0` (a fade, -0.1 a frame), 163001
+  `0x140292E40` (the actors taken off freed) and 190000 `0x1401EB750` (the screen shake: its offset
+  stays set). 120000's two map part lists stay held. The pad vibration (20001) is held, and the
+  pad read clears the motor bytes every frame (`0x14028B0B0`), so the pad stops vibrating while
+  held. **Checked (decomp).**
+- **Run** before 140000 (only the picture uses them): 10499 `0x140189F80` (the collision cache's
+  reset: its blocks are released every frame, so held it would leave the shadows' floor test,
+  which runs in the models' draw, on freed memory), 110000 `0x14028CD50` (the view set-up: its
+  matrices are rebuilt from the held camera, the same ones; the fog packet it queues is drawn the
+  next frame, so held it was missing: the tester's "it stops one of the backgrounds"), 120000
+  `0x1400D2830` (the map, through `map_live`), 129999 `0x1402BE500` (its render-state markers in
+  the render queue), 130000 `0x1402A23E0` (the models), 135000 `0x14028CC10` (the view copy). The
+  Held Tasks page still switches any of them. **Checked (decomp)**; **Assumption** for the
+  background: that the tester's background is the fog packet or the texture scroll (both in
+  110000; the texture scroll stands now by the frame scale).
+- **The frame scale is 0 on a held frame.** The pacing `0x14018D1F0` sets the frame scale
+  `0x14233FBDC` and its half `0x14233FBE0` (min(scale / 2, `0x14233FBCC`)) at the end of every pass,
+  before the frame end where Frame Advance decides; on a held frame both are written 0 there, and
+  the next pass's pacing sets them again. Every draw that runs and steps by them stands: 110000's
+  texture scroll (`0x142336C00`), the sky's turn and the map fades (120000), the map parts'
+  texture frames, 164004's `0x14233E838`, the HUD's sprite animations (`0x14027E460`: frame time +=
+  the half scale; the only readers of the half in the field are the HUD's), the HUD fades
+  `0x1402758B0` / `0x140274540`, the event message windows (180200), the room fade-in (190000
+  `0x14018B010` / `0x14018B220`), the screen fades (190050), the bound effects' timers. Divisions by
+  the scale: only in the camera (`0x1401E5D90`) and the actors (`0x1402C`.., `0x14029A3C0`,
+  `0x1402B2A20`), all held; `0x142867374` (1 / scale, written as the list starts) is read only by
+  actors and one scene, held. The mod's own readers: the KH2 Drive sphere's fade test reads
+  `frameadv::shown_scale` (the last run frame's); the KH2 camera, the physics and the KH2 steps run
+  in held tasks. **Checked (decomp)**; **Assumption**: no running draw needs a scale above 0
+  (none found that divides by it).
+- **Put back at every held frame's end** (saved as the hold begins, after the last frame that
+  ran; saved again after KH1's own pause closes during a hold, since its menu can change what
+  the HUD shows): 110000's screen zoom (`0x140183BD0`: the delay `0x14233E834`, the zoom state
+  `0x1404DD560`..`0x1404DD577`, `0x14233EBA0`), 164004's pulse phases (`0x140185360`: `0x14233E820`,
+  `824`, `828`, + a rate a frame), the HUD's data `0x1427F13D0`..`0x142866D18` (its parts' states
+  and timers, + 1 a frame, and the sprite animations; written only by the HUD's code, the decomp's
+  xrefs: the only other writer in it is the command menu's `0x142852814`, held), and each model's
+  colour (`+0x370`, stepped 4 a frame toward its target by `0x1402A1320`) and its bit 0x4000. Each
+  held frame's draws step them once from the same values, so every held frame shows the same
+  picture, and the next frame that runs starts from where the hold began. About 0.5 MB copied a
+  held frame, nothing when not held. **Checked (decomp)**.
+- **Not covered**: menus and the Gummi Ship (their tasks are listed, not split); KH1's own pause
+  during a hold shows its own picture, as before, and the frame it closes on has the frame scale
+  KH1 gave it (the draws' time steps once then; the updates stay held).
+
 ### Sound while held (after t426)
 
 KH1's pause machine calls `0x1400D2F80` (a jump to `0x1400DE010 (mode)`, KH1's sound pause) with 1 in

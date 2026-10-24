@@ -61,7 +61,17 @@
 //!   animation time on every draw, get the step taken back (their draw slots in KH1's table point
 //!   at ours while held); 120000's own steps (the sky's turn `0x14233E174`, the map fades
 //!   `0x142356370` and their done bits `0x14232DE00`) are put back after it on held frames, and its
-//!   sub-lists stay held. What isn't covered: the notes.
+//!   sub-lists stay held.
+//! - **Every update held, every draw run (after t447: each task read in the decomp, the notes'
+//!   table).** Before 140000, what only the picture uses runs too (`RUN_BY_DEFAULT`: the collision
+//!   cache's reset 10499, the view set-up 110000 with its fog packet, 129999's render states, the
+//!   view copy 135000); from 140000 on, the updates there are held (`LIVE_HOLD`). On a held frame
+//!   KH1's frame scale and its half (the HUD's sprite step) are 0 (written after the pacing that
+//!   set them), so every running draw that steps by them stands: the map's texture scroll, the
+//!   sky, the map fades, the screen fades, the HUD's sprite animations, the message windows. What
+//!   steps a frame without them (110000's screen zoom, 164004's pulse, the HUD parts' states and
+//!   timers, 130000's model colours) is saved as the hold begins and put back at every held
+//!   frame's end (`PUT_BACK`, `save_steps`). So the picture is the held frame's, drawn live.
 //! - **Sound, as KH1's pause holds it.** KH1's pause machine calls its sound pause (`0x1400D2F80`, a
 //!   jump to `0x1400DE010 (mode)`) with 1 as it stops (state 3: playing sound effects paused, the
 //!   streamed music at half its volume) and 0 as it goes (state 4: resumed, the volume back). Frame
@@ -139,13 +149,39 @@ static HELD_TASKS: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
 /// (held with 120000 too), each a row of the Held Tasks page.
 const SUB_LISTS: [(usize, &str); 2] = [(0x233E420, "map parts A"), (0x233E7D0, "map parts B")];
 
-/// The first of KH1's draw passes: tasks from here on run while held, but these.
+/// The first of KH1's draw passes: tasks from here on run while held, but these updates (the
+/// decomp, `docs/kh1-frame-advance.md`): the delayed plays 145001, an effect fade 159999 (-0.1 a
+/// frame), the actors taken off freed 163001, the screen shake 190000 (its offset stays set).
 const FIRST_DRAW: i32 = 140000;
-const LIVE_HOLD: [usize; 2] = [0x290A50, 0x3970D0];
-/// Tasks that run while held by default: the models (130000) and the map (120000), the tester's
-/// t399 test.
+const LIVE_HOLD: [usize; 4] = [0x290A50, 0x3970D0, 0x292E40, 0x1EB750];
+/// Tasks before 140000 that run while held by default: the models (130000) and the map (120000),
+/// the tester's t399 test; and (after t447, the decomp) what only the picture uses: the collision
+/// cache's reset 10499 (its blocks are freed every frame, so a held reset would leave the
+/// shadows' floor test on freed memory), the view set-up 110000 (matrices, the fog packet it
+/// queues; its texture scroll stands with the frame scale at 0, its zoom step is put back),
+/// 129999 (the render states it queues), the view copy 135000.
 const MODELS_RVA: usize = 0x2A23E0;
 const MAP_RVA: usize = 0xD2830;
+const RUN_BY_DEFAULT: [usize; 6] = [MODELS_RVA, MAP_RVA, 0x189F80, 0x28CD50, 0x2BE500, 0x28CC10];
+/// KH1's frame scale (`0x14233FBDC`) and its half (`0x14233FBE0`, the HUD's sprite animations'
+/// step), both set by the pacing `0x14018D1F0` at the end of every pass of the loop, before the
+/// frame end (`frame_end`). 0 on a held frame: every draw that runs steps by them and so stands.
+const FRAME_SCALE_STEAM: usize = 0x233FBDC;
+const HALF_SCALE_STEAM: usize = 0x233FBE0;
+/// The frame scale of the last frame that ran (f32 bits), for draws that look at it while held.
+static SHOWN_SCALE: AtomicU64 = AtomicU64::new(0);
+/// What running draws step a frame without the frame scale, put back at every held frame's end
+/// (saved as the hold begins): the screen zoom of 110000 (`0x140183BD0`: its delay `0x14233E834`,
+/// its state `0x1404DD560`..`0x1404DD577`, its last on / off `0x14233EBA0`); the pulse phases of
+/// the screen overlay 164004 (`0x140185360`: `0x14233E820` / `824` / `828`); the HUD's data (its
+/// parts' states, timers and sprite animations: `0x1427F13D0`..`0x142866D18`, written only by
+/// the HUD's code, the decomp's xrefs).
+const PUT_BACK: [(usize, usize); 5] = [(0x233E834, 4), (0x4DD560, 0x18), (0x233EBA0, 4), (0x233E820, 0xC), (0x27F13D0, 0x142866D18 - 0x1427F13D0)];
+/// 130000's model list (`0x142D5C9F0`): an object's colour (`+0x370`, stepped by 4 a frame
+/// toward `+0x350`.. by `0x1402A1320`) and its flags (`+0x374`, bit 0x4000: the colour set).
+const MODEL_LIST_STEAM: usize = 0x2D5C9F0;
+/// The words saved as the hold began (`PUT_BACK` in order), and the models' (object, colour, flags).
+static SAVED: Mutex<(Vec<u8>, Vec<(usize, u32, u32)>)> = Mutex::new((Vec::new(), Vec::new()));
 /// 120000's own steps, put back after it on held frames: the sky's turn (f32), the map fades
 /// (0x20 x (timer, alpha, rate), `0x14019BE70`), their done bits (u32).
 const SKY_TURN_STEAM: usize = 0x233E174;
@@ -229,7 +265,57 @@ static RUNS: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
 
 /// Whether a task runs while held when the page hasn't switched it.
 fn runs_by_default(rva: usize) -> bool {
-    rva == MODELS_RVA || rva == MAP_RVA
+    RUN_BY_DEFAULT.contains(&rva)
+}
+
+/// KH1's frame scale as the picture shows it: while held, the last frame that ran's (KH1's own
+/// is 0 then).
+pub fn shown_scale(base: usize) -> f32 {
+    if holding() {
+        f32::from_bits(SHOWN_SCALE.load(Ordering::Relaxed) as u32)
+    } else {
+        unsafe { rd::<f32>(base + FRAME_SCALE_STEAM) }
+    }
+}
+
+/// The hold begins (after the last frame that ran): `PUT_BACK` and the models' colours saved.
+unsafe fn save_steps(base: usize) {
+    let Ok(mut saved) = SAVED.lock() else { return };
+    let (words, models) = &mut *saved;
+    words.clear();
+    for (rva, len) in PUT_BACK {
+        words.extend_from_slice(std::slice::from_raw_parts((base + rva) as *const u8, len));
+    }
+    models.clear();
+    let mut t: usize = rd(base + MODEL_LIST_STEAM + 0x10);
+    let mut n = 0;
+    while t > 0x10000 && n < 1024 && super::crash::readable(t + 0x20) {
+        let obj: usize = rd(t + 0x18);
+        if rd::<u16>(t) != 0 && obj > 0x10000 && super::crash::readable(obj + 0x378) {
+            models.push((obj, rd(obj + 0x370), rd(obj + 0x374)));
+        }
+        t = rd(t + 8);
+        n += 1;
+    }
+}
+
+/// A held frame ended: what its draws stepped is put back.
+unsafe fn put_back_steps(base: usize) {
+    let Ok(saved) = SAVED.lock() else { return };
+    let (words, models) = &*saved;
+    let mut at = 0;
+    for (rva, len) in PUT_BACK {
+        if words.len() >= at + len {
+            std::ptr::copy_nonoverlapping(words.as_ptr().add(at), (base + rva) as *mut u8, len);
+        }
+        at += len;
+    }
+    for &(obj, colour, flags) in models {
+        if super::crash::readable(obj + 0x378) {
+            wr::<u32>(obj + 0x370, colour);
+            wr::<u32>(obj + 0x374, rd::<u32>(obj + 0x374) & !0x4000 | flags & 0x4000);
+        }
+    }
 }
 
 fn runs_now(overrides: &[(usize, bool)], rva: usize) -> bool {
@@ -628,6 +714,9 @@ pub unsafe fn frame_end(base: usize) {
     if !ON.load(Ordering::Relaxed) {
         st.was_down = false;
         st.down_at = None;
+        if st.held && !kh1_paused && !st.kh1_paused {
+            put_back_steps(base);
+        }
         release(base, st, kh1_paused);
         return;
     }
@@ -648,6 +737,15 @@ pub unsafe fn frame_end(base: usize) {
         return;
     }
     let after_kh1 = std::mem::take(&mut st.kh1_paused);
+    if st.held {
+        if after_kh1 {
+            // (KH1's pause menu may have changed what the HUD shows: the hold goes on from now.)
+            save_steps(base);
+        } else {
+            // This frame was held: what its draws stepped without the frame scale is put back.
+            put_back_steps(base);
+        }
+    }
     if pressed || fast {
         if st.held {
             // Out of the hold: the stepped frame's presses are against the last frame that ran.
@@ -663,9 +761,15 @@ pub unsafe fn frame_end(base: usize) {
         hold_tasks(base);
         if !st.held {
             st.held = true;
+            SHOWN_SCALE.store(rd::<u32>(base + FRAME_SCALE_STEAM) as u64, Ordering::Relaxed);
             HELD_SINCE_MS.store(wall_ms() + 1, Ordering::Relaxed);
             hold_draws(base);
+            save_steps(base);
         }
+        // The next frame is held: KH1's frame scale and its half are 0 for it (the pacing set them
+        // just before this frame end), so every draw that runs and steps by them stands.
+        wr::<f32>(base + FRAME_SCALE_STEAM, 0.0);
+        wr::<f32>(base + HALF_SCALE_STEAM, 0.0);
         // (Every held frame: KH1's own toggle, task 30000, could have taken it off.)
         system_stop(base, true);
         if after_kh1 {
