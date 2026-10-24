@@ -113,6 +113,17 @@ still runs every reaction (no-damage time, push, voices, HUD, MP, tallies). At K
 reactions as they are. Drive Forms and KH2's borrowed moves keep KH2's controller's reaction.
 Notes: `docs/kh1-hit-reactions-native.md` §9.
 
+## Recoil (testing branch)
+
+Config > KH1 in KH2 > Combat > Recoil (ini `recoil`, KH1 by default; the tester, thread
+kh2-recoil-and-parry-system, answer 4: "if you switch to kh1 all moves including kh2 uses kh1's
+rules exactly and vice versa"). The rules when Sora's attack meets an enemy's attack or guard.
+At KH1, KH1's: its priorities, its recoil animations (0x6E / 0x6F / 0x70) with its push and 8
+frames without damage. At KH2, KH2's: base Sora on KH1's states plays KH2's recoil (41 on the
+ground, 43 in the air; `kh2slots::RECOILS`) with KH2's push of 50 or hop, no protection; KH1's big
+recoil (0x6F) keeps its animation (answer 1). Drive Forms and KH2's borrowed moves keep KH2's
+controller's recoil animation in both. Notes: `docs/kh1-kh2-recoil.md` §6.
+
 ## Jump and Glide
 
 `stylejump.rs` (ini `jump_style`, `glide_style`; Config rows Jump, Glide). Base Sora only.

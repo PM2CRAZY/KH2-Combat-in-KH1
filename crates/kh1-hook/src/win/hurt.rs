@@ -274,8 +274,11 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         // KH2's push and air flinch on the reaction KH1's pass starts (`hitreact`, Hit Reactions
         // KH2).
         let was = super::hitreact::before_pass(actor);
+        // (And KH2's recoil on the attack-clash reaction it starts, `recoil`, Recoil KH2.)
+        let clash = super::recoil::before_pass(actor);
         let r = f(actor);
         super::hitreact::after_pass(actor, was);
+        super::recoil::after_pass(actor, clash);
         return r;
     };
     // KH2's reaction for the strongest taken hit (after KH1's damage, unless he went down).

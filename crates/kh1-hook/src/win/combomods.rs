@@ -1354,6 +1354,14 @@ unsafe fn kh1_block(actor: usize, attacker: Option<i32>) {
     ));
 }
 
+/// KH2's push back by `distance` along `back` (`0x1403D4960`: 0.1 × the distance a frame, × 0.9 a
+/// frame) on KH1's per-frame push, as the repel's (`guard_frame`): KH2's recoil (`recoil`).
+pub fn push_back(back: [f32; 2], distance: f32) {
+    if let Ok(mut p) = PUSH.lock() {
+        *p = Some((back, distance * 0.1));
+    }
+}
+
 /// Each KH1 physics frame of Sora's, before it (`takeover::physics`): the repel's push back on
 /// KH1's per-frame push (`+0x120`, which KH1's physics step adds to the move and clears), KH2's
 /// 60 Hz steps for KH1's frame step.

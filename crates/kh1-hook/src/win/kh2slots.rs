@@ -158,7 +158,23 @@ const fn glide_spec(i: usize) -> Spec {
     Spec { motion, stands_for, request, kind: Kind::Glide }
 }
 
-const SPECS: [Spec; 28] = [
+/// KH2's recoils on KH1's recoil requests (the tester, thread kh2-recoil-and-parry-system, plan
+/// step 2; `docs/kh1-kh2-recoil.md` §6.2). KH1's attack-clash reactions (Steam, Checked (decomp)):
+/// kind 6 on the ground `0x14029D720` asks for request 0x6E, in the air `0x14029D510` for 0x70
+/// (then the fall); kind 7 (KH1's big recoil) `0x14029D5F0` for 0x6F. KH1 Sora's request table
+/// (`xa_ex_0010.mset`, Checked (files)): 0x6E slot 72, 0x6F slot 73, 0x70 slot 74. KH2's recoil
+/// (`0x1403D4650`, Checked (decomp)): motion 41 on the ground, 43 in the air (`P_EX100.mset`,
+/// Checked (files): 30 and 20 frames at 30 fps). KH1's big recoil keeps KH1's own animation (the
+/// tester, answer 1: "(b)"). KH1's reaction functions still run (the combo count, the motion queue,
+/// the fall after the air one); `recoil` puts KH2's push, hop and protection on them.
+pub const RECOILS: [(u16, usize, usize); 2] = [(41, 72, 0x6E), (43, 74, 0x70)];
+
+const fn recoil_spec(i: usize) -> Spec {
+    let (motion, stands_for, request) = RECOILS[i];
+    Spec { motion, stands_for, request, kind: Kind::Recoil }
+}
+
+const SPECS: [Spec; 30] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -187,6 +203,8 @@ const SPECS: [Spec; 28] = [
     glide_spec(1),
     glide_spec(2),
     glide_spec(3),
+    recoil_spec(0),
+    recoil_spec(1),
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -398,7 +416,8 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     // (Ours too: Reflect's finisher cast, `kh1rows::Kind::CastFinisher`.)
     let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()));
     // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
-    let reaction = kind == Kind::HitReactions;
+    // (A recoil, `RECOILS`, the same: KH1's reaction function asked for it.)
+    let reaction = matches!(kind, Kind::HitReactions | Kind::Recoil);
     let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own || reaction, cast);
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
     if ours.is_some_and(|o| o.own_sounds) {

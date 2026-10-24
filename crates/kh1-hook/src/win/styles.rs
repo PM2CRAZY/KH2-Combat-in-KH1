@@ -32,10 +32,15 @@ pub enum Kind {
     /// motions on KH1's reaction requests, `kh2slots::REACTIONS`; KH1 still runs every reaction:
     /// its no-damage timer, HUD, MP, voices and tallies). Base Sora on KH1's states only.
     HitReactions,
+    /// Sora's recoil rules when his attack meets an enemy's attack or guard (the tester, thread
+    /// kh2-recoil-and-parry-system, answer 4: "if you switch to kh1 all moves including kh2 uses
+    /// kh1's rules exactly and vice versa"): KH2's recoil motions, push, hop and no protection on
+    /// KH1's recoil requests (`recoil`, `kh2slots::RECOILS`), KH2's clash rules on our attack data.
+    Recoil,
 }
 
 impl Kind {
-    pub const EVERY: [Kind; 12] = [Kind::GroundCombo, Kind::AirCombo, Kind::Magic, Kind::AirMagic, Kind::Jump, Kind::Glide, Kind::DodgeRoll, Kind::MiscAnims, Kind::PlayerModel, Kind::BattleQuotes, Kind::Cure, Kind::HitReactions];
+    pub const EVERY: [Kind; 13] = [Kind::GroundCombo, Kind::AirCombo, Kind::Magic, Kind::AirMagic, Kind::Jump, Kind::Glide, Kind::DodgeRoll, Kind::MiscAnims, Kind::PlayerModel, Kind::BattleQuotes, Kind::Cure, Kind::HitReactions, Kind::Recoil];
 
     /// Its ini key.
     pub fn key(self) -> &'static str {
@@ -52,6 +57,7 @@ impl Kind {
             Kind::BattleQuotes => "battle_quotes",
             Kind::Cure => "cure_style",
             Kind::HitReactions => "hit_reactions",
+            Kind::Recoil => "recoil",
         }
     }
 
@@ -70,6 +76,7 @@ impl Kind {
             Kind::BattleQuotes => "Battle Quotes",
             Kind::Cure => "Cure",
             Kind::HitReactions => "Hit Reactions",
+            Kind::Recoil => "Recoil",
         }
     }
 
@@ -80,7 +87,7 @@ impl Kind {
 
 /// KH2's (true) or KH1's, per `Kind`: every kind KH1's by default (the user: "kh1 is on by default
 /// for all settings").
-static KH2: [AtomicBool; 12] = [const { AtomicBool::new(false) }; 12];
+static KH2: [AtomicBool; 13] = [const { AtomicBool::new(false) }; 13];
 static INIT: Once = Once::new();
 
 fn init() {

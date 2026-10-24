@@ -11,7 +11,7 @@
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
-//! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, and Magic, its own list
+//! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Recoil, and Magic, its own list
 //!   (answer 1): Magic, Aerial Magic; Movement: Jump, Glide, Dodge Roll, Guard Repel, Misc Animations; Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a).
 //!
@@ -260,7 +260,7 @@ const CAMERA: [Item; 3] = [
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
     Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
 ];
-const COMBAT: [Item; 8] = [
+const COMBAT: [Item; 9] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
@@ -268,6 +268,7 @@ const COMBAT: [Item; 8] = [
     Item::Pick([0x7F00_0142, 0x7F00_0002, 0x7F00_0144, 0x7F00_0003, 0x7F00_0143], Pick::KnockNumbers),
     Item::Set([0x7F00_0145, 0x7F00_0147, 0x7F00_0148, 0x7F00_0146], Row::MediumHits),
     Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
+    Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
 ];
 const MAGIC: [Item; 3] = [
@@ -294,7 +295,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 65] = [
+const STRINGS: [(u32, &str); 67] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -338,6 +339,8 @@ const STRINGS: [(u32, &str); 65] = [
     (0x7F00_0171, "When Sora's KH2 guard blocks: KH1's recoil (KH1)\nor KH2's repel and push back (KH2). Dodge Roll KH2."),
     (0x7F00_0149, "Criticals"),
     (0x7F00_014A, "KH1's critical hits on Sora's attacks (On), or none, as in KH2.\nCritical Plus only works with them On."),
+    (0x7F00_0172, "Recoil"),
+    (0x7F00_0173, "KH1's or KH2's rules when Sora's attack meets an enemy's\nattack or guard, for every move."),
     (0x7F00_011F, "Cure"),
     (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
     (0x7F00_0109, "Jump"),

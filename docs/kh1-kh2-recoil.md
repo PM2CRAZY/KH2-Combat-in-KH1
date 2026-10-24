@@ -282,3 +282,25 @@ Performance: no new per-frame hook. Steps 2 and 4 use hooks that already exist (
   (`meet_shot` → KH1's clash `0x1402B4A20`), and its guards and walls are tested on KH1's blade.
 - Body windows (weapon 0: Explosion, Vicinity Break, Magnet Burst's body hits) keep KH2's shapes
   for guards and walls and still meet only shots; Valor's left blade (weapon 2) keeps KH2's shapes.
+
+### 6.2 The Recoil row and KH2's recoil on KH1's recoil requests (plan step 2)
+
+- Config > KH1 in KH2 > Combat > Recoil, ini `recoil = kh1 | kh2` (KH1 by default, as every row).
+  The tester (answer 4): one switch for every move, KH1's rules exactly at KH1, KH2's at KH2.
+- KH1's request table (`xa_ex_0010.mset`, **Checked (files)**): 0x6E slot 72, 0x6F slot 73, 0x70
+  slot 74. KH2's 41 / 43 (`P_EX100.mset`, **Checked (files)**): 30 / 20 frames at 30 fps.
+- At KH2, `kh2slots::RECOILS` plays KH2's 41 on 0x6E and 43 on 0x70. 0x6F (KH1's big recoil, kind
+  7) keeps KH1's animation (answer 1 "(b)").
+- KH1's reaction functions still run (**Checked (decomp)**, §2.3): the combo count less one (KH2's
+  `+0xD74` the same), the queued idle / fall. After the pass (`recoil::after_pass`, from `hurt`):
+  - 0x6E: KH1's gap push (`0x1402C7300`, `+0x3FC` / `+0x88` bit 0x40) cleared; KH2's 50 back along
+    minus his facing on KH1's per-frame push `+0x120` (`combomods::push_back`, the repel's path:
+    0.1 × 50 a frame, × 0.9 a frame, `0x1403D4960`, **Checked (decomp)**).
+  - 0x70: KH2's hop (`0x1403D4800`: 50 up, 50 × sstm's `hit_back_to_jump` back from his facing)
+    through `shared::physics::kh2_hop`, in place of KH1's 20 and gap drift.
+  - All three: KH1's 8-frame no-damage timer (`0x140297F30`: actor `+0xC` and flag `+0` 0x80) put
+    back as it was before the pass. KH2 gives none (answer 4). **Assumption:** KH1's reaction runs
+    once per pass, so nothing else in the same pass set that timer.
+- At KH1 nothing changes.
+- Not covered: a Drive Form or a borrowed KH2 move (KH2's controller has Sora) plays KH2's
+  controller's recoil (41 / 43) in both settings, as KH1's recoil motions aren't in its movesets.
