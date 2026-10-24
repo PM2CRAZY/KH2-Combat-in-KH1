@@ -503,8 +503,8 @@ under KH2's run and first swing, KH1's own motion offered). Not checked in game.
 
 ### The coat
 
-The coat (KH1's jacket hem: the back centre 72-75 and the eight panels 248-279, from the spine
-base 71) is now carried rigidly by KH1's chest (78) as in the bind, every joint at its bind
+(After t500 its lower half hangs from the hips: "The coat's lower half" below.) The coat (KH1's
+jacket hem: the back centre 72-75 and the eight panels 248-279, from the spine base 71) is now carried rigidly by KH1's chest (78) as in the bind, every joint at its bind
 relation, live and baked (`retarget::ATTACHED`): KH2 draws its jacket on its torso bone 67, which
 turns as the retarget's chest part does, and KH2's coat ring (129-135 / 221-227, 70) carries no
 mesh. Gone with it, being ours and not KH2's: the roots turning with KH2's pelvis, the front
@@ -556,6 +556,51 @@ is over. Following the hips moves the coat off KH2's jacket in every frame and m
 meet the thighs more, not less. So the coat stays rigid on the chest as KH2's jacket (t491): it
 measures best on everything but the brief clips, which no rule tried removes without pops.
 Not seen in game.
+
+### The coat's lower half (after t500)
+
+The tester, after t500: "the coat is still sticking out on kh2 animations" (no new trace or
+picture; read as the hem standing off the body, the stick-out coat_check didn't measure until now).
+`examples/coat_check.rs` now also measures how far the coat's lower joints (bind height under 92)
+stand off the hips' up axis against the bind, in the hips' (3) frame, and the same over KH1's own
+motions (`coat_check <mdls> <KH2 dir> kh1 <xa_ex_0010.mset>`). Every motion of `P_EX100.mset`
+(83, every half frame, 11816 frames), Checked (files):
+
+| Rule | Off the hips: out >2 / >5, max | In >2 (into the belt) | Inside the shorts (deepest) | Nearer a thigh than the bind | Pops p99.9 / max (knees 20 / 72) |
+|---|---|---|---|---|---|
+| Rigid on the chest (t491) | 42% / 8.8%, 7.4 | 9.0% | 0.17% (9.0) | 22% | 0 / 0 |
+| **Top on the chest, hem on the hips (now)** | **0% / 0%, 1.5** | **10.1%** | **0.57% (10.6)** | **14%** | **2.1 / 14.7** |
+| all lower joints turned with the pelvis | 4.8% / 0%, 2.6 | 12.1% | 0.66% | 25% | 0.9 / 7.4 |
+| carried by the spine base 71 (its own parent) | 33% / 7.7%, 6.1 | 10.1% | 0.54% | 25% | |
+| 71's top, hem on the hips | 0% / 0%, 1.6 | 5.6% | 0.82% | 13% | 2.2 / 16.2 |
+| hem on the hips, front panels 12.5-25% toward the thigh | 0% / 0%, 1.8-2.0 | 11.9-15.5% | 0.27-0.39% | 15% | 2.1 / 15-16 |
+| KH2's waist 66 at the tips | 40% / 8.4%, 6.7 | 9.4% | 0.21% | 23% | 0.2 / 1.2 |
+| KH1's own motions (plain FK, its own coat) | 15% / 4.7%, 11.3 | 12.7% | | | |
+
+Where the rigid coat stood out: in KH2's idle, walk and run (0, 1, 2) the chest leans forward of
+the hips and turns a little against them, so the coat's back stood 6.0 / 6.3 / 6.6 out behind the
+hips and its +x front sank 7.3 / 7.4 / 8.2 into them (mean per chain over the motion). That is
+the whole idle, not a few frames; KH1's own coat stands off its hips more than 2 in 15% of its
+frames, the rigid one in 42%.
+
+Now (`retarget::coat_low`, live and baked): each chain's root and root + 1 (one place) stay rigid
+on the chest as KH2's jacket (t491); root + 2 is placed halfway between where the chest and where
+KH1's hips carry it in the bind, root + 3 (the tip) where the hips carry it, each segment re-aimed
+about its upper end, lengths kept (`COAT_LOW` = 0.5, 1.0). Why, in KH2's terms: KH1's coat is
+longer than KH2's jacket; its tips sit at KH2's waist and shorts' top (97-104 in KH2's units),
+which KH2 draws on its spine and its pelvis 2, the shorts' top turning exactly as the pelvis part
+(see the table above). So the top keeps KH2's jacket and the hem lies on what KH1 draws under it,
+the hips, as KH2's shorts' top does. The hem now sits 0.4 in to 0.4 out at the front and 1.5-3.4
+in at the back over the idle and run (the root, on the chest, sits a little forward of the
+hips), within KH1's own range. Cost: the front tips meet a thigh swinging forward more often
+(inside the shorts 0.57% of joint-frames instead of 0.17%; motions 209, 183, 8, 5, 165, 155, the
+run 2.3 deep at most); never a pop larger than the knees' in any motion. Not taken, being ours:
+the front panels' share of the thigh (fewer clips, more sinking into the belt). Assumptions: the
+shorts' radius from KH1's panel bones (the mesh isn't read); KH1's own motions measured in plain
+FK (its IK helpers not evaluated; the coat hangs from the spine, which they don't drive, but the
+hips may differ). Test `local_own` (the coat's top within 0.05 of its bind relation to the chest,
+its lower joints never more than 2.5 off the hips' axis, lengths kept, in KH2's 0, 1, 2, 3, 151,
+154, 181, 201). Not seen in game.
 
 ### The thighs' and shins' roll (after t491)
 

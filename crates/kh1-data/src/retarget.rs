@@ -392,7 +392,18 @@ const THIGHS: [(usize, usize); 2] = [(43, 44), (17, 18)];
 /// in the bind, every joint at its bind relation (the tester: "make everything 1:1 with how its
 /// animated in kh2"). From s284 to t489 its roots turned with KH2's pelvis, the front panels a
 /// share with the thigh, and it was swung off the thighs (`keep_clear`): ours, not KH2's.
+/// Its lower half then hangs from the hips (`coat_low`).
 const ATTACHED: [(usize, usize); 10] = [(10, 43), (72, 78), (248, 78), (252, 78), (256, 78), (260, 78), (264, 78), (268, 78), (272, 78), (276, 78)];
+
+/// The coat's nine chains (root, root + 1 at the same place, two joints below): their roots.
+const COAT: [usize; 9] = [72, 248, 252, 256, 260, 264, 268, 272, 276];
+/// The coat's lower joints (root + 2, root + 3): how far each is placed from where the chest
+/// carries it toward where KH1's hips (3) carry it, as in the bind. KH1's coat reaches lower than
+/// KH2's jacket (its tips at KH2's waist and shorts' top, which KH2 draws on its pelvis), so
+/// carried whole by the chest its back stood out 6 behind the hips and its front sank 7 into
+/// them in KH2's idle, walk and run (the tester: "the coat is still sticking out on kh2
+/// animations"; `examples/coat_check.rs`, docs/kh1-secondary-motion.md "The coat's lower half").
+const COAT_LOW: [f32; 2] = [0.5, 1.0];
 
 /// Each: root, joints, what they keep off (bone pairs), the most distance kept, and a margin
 /// added to the bind's distance.
@@ -723,6 +734,7 @@ impl Retarget {
             out[i] = Mat4::from_scale_rotation_translation(self.scale[i], (turn[i] * self.rot[i]).normalize(), at[i]);
         }
         self.attach(&mut out, &own_at);
+        self.coat_low(&mut out);
         drop(own_local);
         self.keep_clear(&mut out);
         out
@@ -749,6 +761,35 @@ impl Retarget {
                 if let (true, Some(q)) = (under, self.parent[j]) {
                     let local = own(j).unwrap_or_else(|| self.bind_m[q].inverse() * self.bind_m[j]);
                     out[j] = out[q] * local;
+                }
+            }
+        }
+    }
+
+    /// The coat's lower joints placed between where the chest and the hips carry them
+    /// (`COAT_LOW`), each segment re-aimed about its upper end (lengths kept): the top stays on
+    /// the chest as KH2's jacket, the hem lies on the hips under it.
+    fn coat_low(&self, out: &mut [Mat4]) {
+        const CHEST: usize = 78;
+        const HIPS: usize = 3;
+        if out.len() <= COAT[COAT.len() - 1] + 3 {
+            return;
+        }
+        let chest = out[CHEST] * self.bind_m[CHEST].inverse();
+        let hips = out[HIPS] * self.bind_m[HIPS].inverse();
+        let at = |m: &Mat4| m.w_axis.truncate();
+        for &root in COAT.iter() {
+            for (k, j) in [(0usize, root + 2), (1, root + 3)] {
+                let pivot = at(&out[j - 1]);
+                let b = at(&self.bind_m[j]);
+                let want = chest.transform_point3(b).lerp(hips.transform_point3(b), COAT_LOW[k]);
+                let (from, to) = ((at(&out[j]) - pivot).normalize_or_zero(), (want - pivot).normalize_or_zero());
+                if from == Vec3::ZERO || to == Vec3::ZERO {
+                    continue;
+                }
+                let m = Mat4::from_translation(pivot) * Mat4::from_quat(Quat::from_rotation_arc(from, to)) * Mat4::from_translation(-pivot);
+                for o in &mut out[j - 1..=root + 3] {
+                    *o = m * *o;
                 }
             }
         }

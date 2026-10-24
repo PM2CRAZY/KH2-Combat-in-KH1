@@ -1,12 +1,14 @@
 //! The coat (KH1's jacket hem, carried by the chest as KH2's jacket) against the thighs and hips
 //! over every KH2 motion, as it is and under candidate rules (research, `docs/kh1-secondary-motion.md`
 //! "The coat against the thighs").
+//! `<mdls> <KH2 dir> kh1 <xa_ex_0010.mset>`: KH1's own motions, how far its coat stands off its hips.
 //! `<mdls> <KH2 dir> waist`: how KH2's waist bones (65 / 66 / 67) turn between the retarget's
 //! pelvis and chest parts.
 //! `<mdls> <KH2 dir> <letters> [clear w0 w1 w2 lean/thigh margin soft lead0 lead1 lead2 fade lstart step]`:
 //! the coat as `Retarget::pose` makes it, then each lettered rule: w waist blend (KH2 66), h height
 //! blend chest -> hips (+ front panels' thigh share), T thigh lead (swing share), B carry blend
-//! (chest / hips places), L lift by the thigh's swing about the panel's hinge, Y the hips' twist,
+//! (chest / hips places; b: the front panels' hips place a share toward their thigh's), L lift by the thigh's swing about the panel's hinge, Y the hips' twist, K carried by KH1's spine base 71 (its own parent), Q (with h) the
+//! lower turn is 71's,
 //! W hanging (yaw, `lean` of the lean), p hinge search push, s radial push out of the shorts
 //! (C flat top, F clearance frozen per frame, R ramp at the hip end, G only about the panel's
 //! hinge, S tangent while deep, H hips push, E eased), J per-motion lines, D / X / P traces.
@@ -53,6 +55,41 @@ fn main() {
         }
         return;
     }
+    if a.get(2).map(|s| s.as_str()) == Some("kh1") {
+        // KH1's own motions (plain FK, `mset::Motion::apply`): how far its coat's lower joints
+        // stand off the hips' up axis against the bind, in the hips' (3) frame, as KH1's own
+        // animators move it.
+        let motions = kh1_data::mset::parse(&std::fs::read(&a[3]).unwrap()).unwrap();
+        let kb = kh2_anim::Pose::bind(&kh1).bones;
+        let at = |v: &[Mat4], i: usize| v[i].w_axis.truncate();
+        let roots = [72usize, 248, 252, 256, 260, 264, 268, 272, 276];
+        let joints: Vec<usize> = roots.iter().flat_map(|&r| (r + 2)..(r + 4)).collect();
+        let rr = |v: &[Mat4], j: usize| { let l = (rot(&v[3]) * rot(&kb[3]).inverse()).inverse() * (at(v, j) - at(v, 3)); (l.x * l.x + l.z * l.z).sqrt() };
+        let mut outs = vec![];
+        let mut ins = vec![];
+        let mut per: Vec<(usize, f32)> = vec![];
+        for (slot, m) in motions.iter().enumerate() {
+            let Some(m) = m else { continue };
+            let mut mx = 0.0f32;
+            for f in (0..m.frames.max(1)).step_by(2) {
+                let p = kh2_anim::Pose::bind(&m.apply(&kh1, f as f32)).bones;
+                for &j in &joints {
+                    let d = rr(&p, j) - rr(&kb, j);
+                    if d > 0.0 { outs.push(d); mx = mx.max(d); } else { ins.push(-d); }
+                }
+            }
+            per.push((slot, mx));
+        }
+        outs.sort_by(|a, b| a.partial_cmp(b).unwrap()); ins.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let n = (outs.len() + ins.len()) as f32;
+        let q = |v: &Vec<f32>, p: f32| if v.is_empty() { 0.0 } else { v[((v.len() - 1) as f32 * p) as usize] };
+        println!("KH1's own coat off its hips' axis (lower joints, every 2nd frame): out >2 {:.1}%, >5 {:.1}%, out p95 {:.1} p99 {:.1} max {:.1}; in >2 {:.1}%, in max {:.1}",
+            100.0 * outs.iter().filter(|&&d| d > 2.0).count() as f32 / n, 100.0 * outs.iter().filter(|&&d| d > 5.0).count() as f32 / n, q(&outs, 0.95), q(&outs, 0.99), q(&outs, 1.0),
+            100.0 * ins.iter().filter(|&&d| d > 2.0).count() as f32 / n, q(&ins, 1.0));
+        per.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        println!("slots standing out most: {:?}", per.iter().take(12).map(|(s, d)| format!("{s}:{d:.1}")).collect::<Vec<_>>());
+        return;
+    }
     let bind = r.bind();
     let bind2 = kh2_anim::Pose::bind(&rig.skeleton).bones;
     let parent: Vec<Option<usize>> = kh1.iter().map(|b| (b.parent >= 0).then_some(b.parent as usize)).collect();
@@ -89,6 +126,7 @@ fn main() {
         let chest = tr(p, 78);
         let pel = tr(p, 3);
         for (ci, &r0) in roots.iter().enumerate() {
+            let pel = if variant.contains('Q') { tr(p, 71) } else { pel };
             let low = if side[ci] == 0 { pel } else { pel.slerp(tr(p, side[ci]), share[ci] * thigh_k) };
             for (k, j) in ((r0 + 1)..(r0 + 4)).enumerate() {
                 let q = parent[j].unwrap();
@@ -196,14 +234,19 @@ fn main() {
     // Carry blend: each lower joint's place is a blend of where the chest and the hips carry it
     // (as in the bind), by tw[k]; the segments above it re-aimed (lengths kept).
     let cblend = |p: &mut Vec<Mat4>| {
-        let cc = p[78] * bind[78].inverse();
+        let cc = if variant.contains('K') { p[71] * bind[71].inverse() } else { p[78] * bind[78].inverse() };
         let cp = p[3] * bind[3].inverse();
         for &r0 in &roots {
             for (k, j) in ((r0 + 1)..(r0 + 4)).enumerate() {
                 if k == 0 || tw[k] == 0.0 { continue; }
                 let pj = parent[j].unwrap();
                 let piv = at(p, pj);
-                let want = cc.transform_point3(at(&bind, j)).lerp(cp.transform_point3(at(&bind, j)), tw[k]);
+                let ci = roots.iter().position(|&x| x == r0).unwrap();
+                let low = if variant.contains('b') && side[ci] != 0 {
+                    let ct = p[side[ci]] * bind[side[ci]].inverse();
+                    cp.transform_point3(at(&bind, j)).lerp(ct.transform_point3(at(&bind, j)), share[ci] * thigh_k)
+                } else { cp.transform_point3(at(&bind, j)) };
+                let want = cc.transform_point3(at(&bind, j)).lerp(low, tw[k]);
                 let (from, to) = ((at(p, j) - piv).normalize_or_zero(), (want - piv).normalize_or_zero());
                 if from == Vec3::ZERO || to == Vec3::ZERO { continue; }
                 let m = Mat4::from_translation(piv) * Mat4::from_quat(Quat::from_rotation_arc(from, to)) * Mat4::from_translation(-piv);
@@ -351,10 +394,19 @@ fn main() {
             for j in (r0 + 1)..(r0 + 4) { p[j] = m * p[j]; }
         }
     };
+    // KH1's own parent: every chain carried by the spine base 71 (its parent in KH1's skeleton,
+    // turned 0.67 of the way from the pelvis part to the chest part) as in the bind.
+    let by71 = |p: &mut Vec<Mat4>| {
+        let carry = p[71] * bind[71].inverse();
+        for &r0 in &roots { for j in r0..(r0 + 4) { p[j] = carry * bind[j]; } }
+    };
     let bpel = bind[3].inverse();
     let _ = bpel;
     let br: Vec<f32> = joints.iter().map(|&j| { let l = at(&bind, j) - at(&bind, 3); (l.x * l.x + l.z * l.z).sqrt() }).collect();
     let mut waist_in = 0usize;
+    let (mut waist_out, mut waist_out5, mut low_n) = (0usize, 0usize, 0usize);
+    let mut outs: Vec<f32> = vec![];
+    let mut off71 = (0.0f64, 0.0f32);
     println!("variant '{variant}' clear {clear} waist weights {tw:?}");
     let (mut frames, mut deficit2, mut under9) = (0usize, 0usize, 0usize);
     let mut nearest = (f32::MAX, 0u16, 0.0f32, 0usize);
@@ -373,12 +425,14 @@ fn main() {
         let mut ease: std::collections::HashMap<(usize, usize), Quat> = std::collections::HashMap::new();
         let (mut m_coat, mut m_knee) = (0.0f32, 0.0f32);
         let (mut m_pen, mut m_hipj) = (0.0f32, f32::MAX);
+        let mut mo: std::collections::BTreeMap<usize, (f32, usize)> = Default::default();
         for h in 0..(n.max(1) * 2) {
             let f = h as f32 * 0.5;
             let kh2 = kh2_anim::evaluate(&rig.skeleton, m, kh2_anim::key_time(m, f, false), kh2_anim::Options::default()).bones;
             let mut p = r.pose(&kh2);
             if variant.contains('X') { println!("   {id} f{f}"); }
             let rigid = p.clone();
+            if variant.contains('K') { by71(&mut p); }
             if variant.contains('w') { waist(&mut p, &kh2); }
             if variant.contains('h') { hblend(&mut p); }
             if variant.contains('T') { tlead(&mut p); }
@@ -430,6 +484,9 @@ fn main() {
                 let l = (rot(&p[3]) * rot(&bind[3]).inverse()).inverse() * (at(&p, j) - at(&p, 3));
                 let rr = (l.x * l.x + l.z * l.z).sqrt();
                 if at(&bind, j).y < 92.0 && rr < br[k] - 2.0 { waist_in += 1; }
+                if at(&bind, j).y < 92.0 && variant.contains('O') { let ci = roots.iter().position(|&x| x == j - (j - 72) % 4).unwrap_or(0); let e = mo.entry(ci).or_insert((0.0f32, 0usize)); e.0 += rr - br[k]; e.1 += 1; }
+                if at(&bind, j).y < 92.0 { let d = rr - br[k]; if d > 2.0 { waist_out += 1; } if d > 5.0 { waist_out5 += 1; } if d > 0.0 { outs.push(d); } low_n += 1; }
+                let d71 = (at(&p, j) - (p[71] * bind[71].inverse()).transform_point3(at(&bind, j))).length(); off71.0 += d71 as f64; off71.1 = off71.1.max(d71);
                 let dev = (at(&p, j) - at(&rigid, j)).length();
                 off_kh2.0 += dev as f64; off_kh2.1 = off_kh2.1.max(dev);
                 let d = thighs.iter().map(|&(hh, kn)| seg(at(&p, j), at(&p, hh), at(&p, kn)).0).fold(f32::MAX, f32::min);
@@ -448,6 +505,7 @@ fn main() {
             }
         }
         worst_m.push((id, low));
+        if variant.contains('O') { println!("  motion {id}: mean off the hips' axis per chain (back, +x front, side-front, side-back, back, -x front, ...): {:?}", mo.values().map(|(a, n)| format!("{:.1}", a / *n as f32)).collect::<Vec<_>>()); }
         if variant.contains('J') { println!("  motion {id}: coat jerk max {:.1}, knee jerk max {:.1} pen {:.1} hipjoint {:.1}", m_coat, m_knee, m_pen, m_hipj); }
     }
     worst_m.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
@@ -455,6 +513,10 @@ fn main() {
     let jf = (frames * joints.iter().filter(|&&j| measured(j)).count()) as f32;
     println!("{frames} half-frames; joint-frames >2 nearer than bind {:.1}%, inside the shorts {:.2}% (deepest {:.1}, motion {} f{} joint {}); nearest {:.1} (motion {} f{} joint {})", 100.0 * deficit2 as f32 / jf, 100.0 * under9 as f32 / jf, deepest.0, deepest.1, deepest.2, deepest.3, nearest.0, nearest.1, nearest.2, nearest.3);
     println!("joint-frames >2 nearer the hips' axis than in the bind (into the belt / shorts top): {:.1}%", 100.0 * waist_in as f32 / jf);
+    outs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let qo = |p: f32| if outs.is_empty() { 0.0 } else { outs[((outs.len() - 1) as f32 * p) as usize] };
+    println!("standing off the hips' axis (lower joints): out >2 {:.1}%, >5 {:.1}%, out p95 {:.1} p99 {:.1} max {:.1}", 100.0 * waist_out as f32 / low_n.max(1) as f32, 100.0 * waist_out5 as f32 / low_n.max(1) as f32, qo(0.95), qo(0.99), qo(1.0));
+    println!("off where KH1's spine base 71 carries it: mean {:.2} max {:.1}", off71.0 / jf as f64, off71.1);
     println!("off the chest-rigid coat: mean {:.2} max {:.1}; second difference against the chest: p99 {:.2} p99.9 {:.2} max {:.1} (motion {} f{} joint {})", off_kh2.0 / jf as f64, off_kh2.1, steps[(steps.len() as f32 * 0.99) as usize], steps[(steps.len() as f32 * 0.999) as usize], snap.0, snap.1, snap.2, snap.3);
     knee_acc.sort_by(|a, b| a.partial_cmp(b).unwrap());
     println!("the knees' own second difference against the chest: p99 {:.2} p99.9 {:.2} max {:.1}", knee_acc[(knee_acc.len() as f32 * 0.99) as usize], knee_acc[(knee_acc.len() as f32 * 0.999) as usize], knee_acc[knee_acc.len() - 1]);

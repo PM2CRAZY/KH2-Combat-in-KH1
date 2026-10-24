@@ -1,6 +1,6 @@
 //! KH1's shorts and coat under KH2's poses, as KH2 draws its own: the shorts rigid on KH1's
 //! thigh (their bind relation), with nothing of KH1's own animation reaching them
-//! (`retarget::KH1_OWN` is empty); the coat rigid on KH1's chest, as KH2's jacket is on its torso. Needs files from your own installs, skipped without them: KH1's
+//! (`retarget::KH1_OWN` is empty); the coat's top rigid on KH1's chest, as KH2's jacket is on its torso, its hem lying on the hips. Needs files from your own installs, skipped without them: KH1's
 //! `xa_ex_0010.mdls` and `xa_ex_0010.mset` (`KH1_MDLS` / `KH1_MSET`, or `local/re/`) and KH2's
 //! `P_EX100.mdlx` / `P_EX100.mset` (`KH2_RE_DIR`, or `local/re`).
 
@@ -74,33 +74,50 @@ fn kh1_s_shorts_hang_on_the_thigh_under_kh2_s_poses() {
 }
 
 #[test]
-fn kh1_s_coat_moves_with_the_chest_under_kh2_s_poses() {
+fn kh1_s_coat_top_on_the_chest_hem_on_the_hips_under_kh2_s_poses() {
     let Some(f) = files() else { return };
     let mut r = Retarget::new(&f.kh1, &f.kh2);
     r.set_rest(&f.kh1_motions[1].as_ref().unwrap().apply(&f.kh1, 0.0));
     let parents: Vec<i16> = f.kh1.iter().map(|b| b.parent).collect();
     let b1 = kh2_anim::Pose::bind(&f.kh1).bones;
-    // The coat: the back centre 72-75 and the eight panels 248-279, against the chest's 78.
-    let coat: Vec<usize> = (72..=75).chain(248..=279).collect();
-    let chest = 78;
-    for motion in [0usize, 2, 3, 151, 154, 181, 201] {
+    // The coat: the back centre 72-75 and the eight panels 248-279 (root, root + 1, two joints).
+    let roots = [72usize, 248, 252, 256, 260, 264, 268, 272, 276];
+    let (chest, hips) = (78, 3);
+    let rot = |m: &Mat4| m.to_scale_rotation_translation().1;
+    // How far a joint stands from the hips' up axis, in the hips' frame.
+    let off_axis = |pose: &[Mat4], bind: &[Mat4], j: usize| {
+        let l = (rot(&pose[hips]) * rot(&bind[hips]).inverse()).inverse() * (at(&pose[j]) - at(&pose[hips]));
+        (l.x * l.x + l.z * l.z).sqrt()
+    };
+    for motion in [0usize, 1, 2, 3, 151, 154, 181, 201] {
         let m = f.kh2_motions.slot_for(motion, true, true).and_then(|s| s.anb.as_ref()).and_then(|a| a.pose.clone()).expect("KH2 motion");
         let frames = kh2_anim::length_frames(&m).round() as usize;
         for fr in 0..=frames {
             let body = kh2_anim::evaluate(&f.kh2, &m, kh2_anim::key_time(&m, fr as f32, false), kh2_anim::Options::default()).bones;
             let pose = r.pose(&body);
             assert!(pose.iter().all(|m| m.is_finite()), "motion {motion} frame {fr}: NaN");
-            for &b in &coat {
-                let rel = (pose[chest].inverse() * pose[b]).to_scale_rotation_translation();
-                let bind = (b1[chest].inverse() * b1[b]).to_scale_rotation_translation();
-                let off = rel.1.angle_between(bind.1).to_degrees();
-                assert!(off < 0.2, "motion {motion} frame {fr}: coat bone {b} turned {off}° against the chest");
-                let d = rel.2.distance(bind.2);
-                assert!(d < 0.05, "motion {motion} frame {fr}: coat bone {b} moved {d} against the chest");
-                let p = parents[b] as usize;
-                let len = at(&pose[b]).distance(at(&pose[p]));
-                let len0 = at(&b1[b]).distance(at(&b1[p]));
-                assert!((len - len0).abs() < 0.01, "motion {motion} frame {fr}: coat bone {b} length {len} vs {len0}");
+            for &root in &roots {
+                // The top (root and root + 1, one place) rigid on the chest, as KH2's jacket.
+                for b in [root, root + 1] {
+                    let rel = (pose[chest].inverse() * pose[b]).to_scale_rotation_translation();
+                    let bind = (b1[chest].inverse() * b1[b]).to_scale_rotation_translation();
+                    let d = rel.2.distance(bind.2);
+                    assert!(d < 0.05, "motion {motion} frame {fr}: coat bone {b} moved {d} against the chest");
+                }
+                let rel = (pose[chest].inverse() * pose[root]).to_scale_rotation_translation().1;
+                let bind = (b1[chest].inverse() * b1[root]).to_scale_rotation_translation().1;
+                assert!(rel.angle_between(bind).to_degrees() < 0.2, "motion {motion} frame {fr}: coat root {root} turned against the chest");
+                // The hem lies on the hips: never standing out more than 2.5 off their axis.
+                for j in [root + 2, root + 3] {
+                    let out = off_axis(&pose, &b1, j) - off_axis(&b1, &b1, j);
+                    assert!(out < 2.5, "motion {motion} frame {fr}: coat joint {j} stands {out} out off the hips");
+                }
+                for b in root + 1..=root + 3 {
+                    let p = parents[b] as usize;
+                    let len = at(&pose[b]).distance(at(&pose[p]));
+                    let len0 = at(&b1[b]).distance(at(&b1[p]));
+                    assert!((len - len0).abs() < 0.01, "motion {motion} frame {fr}: coat bone {b} length {len} vs {len0}");
+                }
             }
         }
     }
