@@ -993,12 +993,13 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     let angle = math::xyz_i_of(rot);
     let number = ELEMENT_NUMBER | el as u32;
     let note = format!(
-        "element {el}: effect {effect} as {number:#x} on KH1 {bone:?} (KH2 bone {:#x}), flags {:#x}, wait {}, fade-out {}, offset {:?} turned {:?} (header {:?} / {:?} -> {:?} / {:?}), scale {:?}{}",
+        "element {el}: effect {effect} as {number:#x} on KH1 {bone:?} (KH2 bone {:#x}), flags {:#x}, wait {}, fade-out {}, offset {:?} turned {:?} (header {:?} / {:?} -> {:?} / {:?}), scale {:?}{}{}",
         code, e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
-        if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" }
+        if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" },
+        if e.tag != 0 { format!(", lookup kinds {:#x} groups {:#x}", e.tag as u32, e.tag >> 32) } else { String::new() }
     );
     let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale, local: offset.to_array() };
-    Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle }, note))
+    Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle, tag: e.tag }, note))
 }
 
 /// KH2 element flags KH1's binding doesn't do yet (`docs/kh2-effects.md` §2, §18.3).

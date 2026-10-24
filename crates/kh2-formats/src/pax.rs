@@ -43,6 +43,12 @@ pub struct PaxElement {
     /// Bone index, or a special anchor (0x4000 object root, 0x4001 body
     /// centre, 0x4003/0x4004 weapon tips, ...).
     pub bone: u16,
+    /// The 64-bit word at `+8`: what KH2's lookups find the element by (`0x1402c6730`: the first
+    /// element whose word holds the whole mask asked for). Low half: the kinds (1 a hit that counts,
+    /// 4 one that doesn't, 0x10 attack meeting attack, 0x2 / 0x100 a wall, 0x200 a defender's damage
+    /// effect, ...); high half: the groups (bit `g - 1` for an ATKP row's effect_on_hit `g`).
+    /// `docs/kh1-kh2-hit-effects.md` §2. 0 for elements no lookup finds.
+    pub tag: u64,
     pub flags: u32,
     pub start_wait: f32,
     pub sound: i32,
@@ -138,7 +144,7 @@ impl Pax {
             let group = e.u8()?;
             let fadeout_frames = e.u8()?;
             let bone = e.u16()?;
-            let _category = e.u32()? as u64 | (e.u32()? as u64) << 32;
+            let tag = e.u32()? as u64 | (e.u32()? as u64) << 32;
             let flags = e.u32()?;
             let start_wait = e.f32()?;
             let sound = e.i32()?;
@@ -146,7 +152,7 @@ impl Pax {
             let translation = v3()?;
             let rotation = v3()?;
             let scale = v3()?;
-            elements.push(PaxElement { effect, id, group, fadeout_frames, bone, flags, start_wait, sound, translation, rotation, scale });
+            elements.push(PaxElement { effect, id, group, fadeout_frames, bone, tag, flags, start_wait, sound, translation, rotation, scale });
         }
         let effects = if dpx > 0 && (dpx as usize) < buf.len() { parse_dpx(&buf[dpx as usize..])? } else { Vec::new() };
         Ok(Pax { elements, effects })

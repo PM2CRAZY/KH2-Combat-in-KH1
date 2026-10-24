@@ -336,6 +336,7 @@ mod tests {
             group: 0,
             fadeout_frames: 0,
             bone: 0x4000,
+            tag: 0,
             flags,
             start_wait: 0.0,
             sound: 0,

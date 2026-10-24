@@ -305,6 +305,11 @@ pub struct Variant {
     pub effect: u32,
     pub offset: [f32; 3],
     pub angle: [i32; 3],
+    /// The KH2 element's lookup word (`pax::PaxElement::tag`): written into its DPX entry as KH1's
+    /// kind mask (`+0x10`, the low half) and group mask (`+0x14`, the high half), the masks KH1's
+    /// own effect lookup searches (`0x1401dffe0`, Steam: the first entry holding both); 0 leaves the
+    /// entry's words as the source DPX has them (0 in every KH2 PAX checked).
+    pub tag: u64,
 }
 
 /// A particle data header's local transform (`+0x80` offset, `+0x90` angles 65536 = 360°,
@@ -338,7 +343,7 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
     let mut items = Vec::new();
     for &e in effects {
         if p.entry(e).is_some() {
-            items.push(Item { number: e, effect: e, local: None });
+            items.push(Item { number: e, effect: e, local: None, tag: 0 });
         }
     }
     if items.is_empty() {
@@ -348,7 +353,7 @@ pub fn build_with(pax: &[u8], common: &[u8], effects: &[u32], variants: &[Varian
         if !effects.contains(&v.effect) {
             return bad(format!("kh1dpx: variant {} of effect {}, which isn't built", v.number, v.effect));
         }
-        items.push(Item { number: v.number, effect: v.effect, local: Some((v.offset, v.angle)) });
+        items.push(Item { number: v.number, effect: v.effect, local: Some((v.offset, v.angle)), tag: v.tag });
     }
     let r = assemble(&p, pax, common, &[items])?;
     match r.skipped.first() {
@@ -375,7 +380,7 @@ pub fn md5(bytes: &[u8]) -> [u8; 16] {
 /// [`Kh1Dpx::skipped`]; the effect numbers must be unique and below `0x800`.
 pub fn build_groups(pax: &[u8], common: &[u8], groups: &[Vec<Variant>]) -> Result<Kh1Dpx> {
     let p = Pax::read(pax)?;
-    let groups: Vec<Vec<Item>> = groups.iter().map(|g| g.iter().map(|v| Item { number: v.number, effect: v.effect, local: Some((v.offset, v.angle)) }).collect()).collect();
+    let groups: Vec<Vec<Item>> = groups.iter().map(|g| g.iter().map(|v| Item { number: v.number, effect: v.effect, local: Some((v.offset, v.angle)), tag: v.tag }).collect()).collect();
     assemble(&p, pax, common, &groups)
 }
 
@@ -386,6 +391,7 @@ struct Item {
     number: u32,
     effect: u32,
     local: Option<([f32; 3], [i32; 3])>,
+    tag: u64,
 }
 
 /// The PAX's DPX: its entries and the DPDs' places.
@@ -691,6 +697,10 @@ fn assemble(p: &Pax, pax: &[u8], common: &[u8], groups: &[Vec<Item>]) -> Result<
             put_u32(&mut bytes, o, place as u32);
             put_u32(&mut bytes, o + 4, b.pds[k] as u32);
             put_u32(&mut bytes, o + 8, it.number);
+            if it.tag != 0 {
+                put_u32(&mut bytes, o + 0x10, it.tag as u32);
+                put_u32(&mut bytes, o + 0x14, (it.tag >> 32) as u32);
+            }
             nums.push(it.number);
             types.push(b.types[k].clone());
             e += 1;
@@ -788,7 +798,7 @@ mod tests {
     fn variant_copies_the_particle_data_with_its_local_transform() {
         let (pax, common) = tiny();
         assert_eq!(header_local(&pax, 33).unwrap(), ([1.0, 2.0, 3.0], [100, 200, 300], [1.0; 3]));
-        let v = Variant { number: 0x72E, effect: 33, offset: [4.0, 5.0, 6.0], angle: [0, 0, 0x8000] };
+        let v = Variant { number: 0x72E, effect: 33, offset: [4.0, 5.0, 6.0], angle: [0, 0, 0x8000], tag: 0 };
         let r = build_with(&pax, &common, &[33], &[v]).unwrap();
         assert_eq!(r.effects, vec![33, 0x72E]);
         let b = &r.bytes;
@@ -811,7 +821,7 @@ mod tests {
     #[test]
     fn kh2_own_programs_are_listed() {
         let (pax, common) = tiny_with(&[201, 241, 142, 43]);
-        let v = Variant { number: 0x72E, effect: 33, offset: [0.0; 3], angle: [0; 3] };
+        let v = Variant { number: 0x72E, effect: 33, offset: [0.0; 3], angle: [0; 3], tag: 0 };
         let r = build_with(&pax, &common, &[33], &[v]).unwrap();
         // The type list and the emitter's records, in the particle data and in its variant's copy.
         assert_eq!(r.programs.len(), 12);
@@ -890,7 +900,7 @@ mod tests {
     #[test]
     fn groups_make_one_dpd_each() {
         let (pax, common) = two_dpds();
-        let v = |number, effect| Variant { number, effect, offset: [number as f32, 0.0, 0.0], angle: [0; 3] };
+        let v = |number, effect| Variant { number, effect, offset: [number as f32, 0.0, 0.0], angle: [0; 3], tag: 0 };
         let r = build_groups(&pax, &common, &[vec![v(0x70A, 10), v(0x70B, 11), v(0x70C, 10)], vec![v(0x714, 20)]]).unwrap();
         assert!(r.skipped.is_empty(), "{:?}", r.skipped);
         assert_eq!(r.effects, vec![0x70A, 0x70B, 0x70C, 0x714]);
@@ -923,5 +933,17 @@ mod tests {
         let r = build_groups(&pax, &common, &[vec![v(0x70A, 10), v(0x714, 20)], vec![v(0x70B, 11)]]).unwrap();
         assert_eq!((r.skipped.len(), r.skipped[0].0, r.effects.clone()), (1, 0, vec![0x70B]));
         assert!(build_groups(&pax, &common, &[vec![v(0x70A, 10)], vec![v(0x70A, 20)]]).is_err());
+    }
+
+    #[test]
+    fn element_tags_become_kh1_masks() {
+        // A KH2 hit element (kind 1, groups 1 and 2: effect_on_hit 1 or 2) and a plain one: the
+        // first's entry carries the word as KH1's kind / group masks, the second's keeps the source's.
+        let (pax, common) = two_dpds();
+        let v = |number, effect, tag| Variant { number, effect, offset: [0.0; 3], angle: [0; 3], tag };
+        let r = build_groups(&pax, &common, &[vec![v(0x703, 10, 0x3_0000_0001), v(0x704, 11, 0)]]).unwrap();
+        let b = &r.bytes;
+        assert_eq!((u32_at(b, 16 + 0x10).unwrap(), u32_at(b, 16 + 0x14).unwrap()), (1, 3));
+        assert_eq!((u32_at(b, 16 + 32 + 0x10).unwrap(), u32_at(b, 16 + 32 + 0x14).unwrap()), (0, 0));
     }
 }
