@@ -1692,6 +1692,14 @@ only while KH2's player model can be drawn (off since s259, so not hooked); `fx1
 model's and the debug menu overlay's draws. Its vertex ring (an upload buffer, 4 slots for KH1's 3 frames in flight) was 24 MB, sized for the old player's effects; since the tester's go-ahead (m14, 3 (a)) it is 4 MB (1 MB a slot: one overlay draw is at most 18 text lines and 2 boxes, 216 bytes a quad), the overlay being its only user (`fx12::SLOT_BYTES`). The ini's `fx_test` (which started the old player's
 element 51) is gone.
 
+The overlay's font had its place in the KH2 player model's texture arena (`fx12::MESH_TEXELS`, 6 M
+texels: a 24 MB upload buffer made at the first overlay draw). Since the tester's answer (m16, 2:
+"if the debug allocates for kh2 model then make sure its gone") the font has a buffer of its own,
+the font's size (224 × 168 texels, 147 KB, `fx12::FontBuf`, made at the first overlay draw), and
+the 24 MB arena is made only by a model draw (`draw_mesh`, the world-pass hook `model` installs only
+while KH2's player model can be drawn). With the model off: 4 MB of vertex ring and 147 KB of
+font, no arena.
+
 Memory and work that went with it (the t430 log): the old player loaded Sora's package and every
 spell, form and Keyblade package at start (57 + 17 × 3 + 43 + 30 + 61 + 5 elements), decoded their
 176 textures to RGBA (16,704 KB, held in memory and copied to a GPU upload buffer of the same size

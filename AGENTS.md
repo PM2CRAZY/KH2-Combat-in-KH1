@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 472 (testing branch: Debug menu: the font in its own buffer)
+- **Debug menu: the font in its own buffer.** The tester ("if the debug allocates for kh2 model then make sure its gone"). `fx12::FontBuf` 147 KB; the 24 MB texture arena only made by a model draw. Notes §18.11.
+
 ### 2026-10-24: Stage 471 (testing branch: Debug menu: KH1 Spells)
 - **Debug menu: KH1 Spells.** The tester (a toggle for the KH1 magics KH2 changed). No KH2 effect starts for Gravity / Stop / Aero (t463 log; KH2 motions 62 / 65 have no trigger, Checked (files)); at Magic KH2 KH1's effects play on KH2's cast cut at frame 68. Per spell "KH2 cast" (default) / "KH1 cast", base Sora, ini `kh1_cast_*`; its page is on the main page. `formmagic::kh1_cast`. Notes §18.19.
 

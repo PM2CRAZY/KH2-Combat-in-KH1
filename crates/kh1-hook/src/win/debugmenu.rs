@@ -1034,7 +1034,7 @@ const CELL_H: usize = 28;
 const FONT_W: usize = CELL_W * FONT_COLS;
 const FONT_H: usize = CELL_H * 6;
 static FONT_RGBA: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
-/// The font's key among the renderer's model textures ("DBGFONT1").
+/// The font's key in the renderer's font buffer ("DBGFONT1", `fx12::draw_overlay`).
 const FONT_KEY: u64 = 0x4442_4746_4F4E_5431;
 
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];

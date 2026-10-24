@@ -27,7 +27,8 @@
 //! Every failure logs once and turns the renderer off for the session.
 //!
 //! (t354) Also the debug menu's screen-space overlay (`draw_overlay`, from the frame-end hook in
-//! `debugmenu`): untextured boxes and text from a font texture kept with the model textures,
+//! `debugmenu`): untextured boxes and text from a font texture in a buffer of its own (the
+//! font's size; the model's 24 MB texture arena is made only by a model draw),
 //! drawn on top of everything KH1 drew that frame (the HUD included), no depth test.
 
 use super::addr::Rva;
@@ -337,8 +338,21 @@ struct Gpu {
     /// The vertex ring's write point (bytes).
     frame: u64,
     /// Model textures (`draw_mesh`): an append-only buffer made at the first model draw, and
-    /// each texture's place by its caller's key.
+    /// each texture's place by its caller's key. Only the KH2 player model makes it (24 MB).
     mesh: Option<MeshArena>,
+    /// The debug overlay's font (`draw_overlay`): its own buffer, the font's size, made at the
+    /// first overlay draw (the tester: "if the debug allocates for kh2 model then make sure its
+    /// gone"; until the version after t463 it sat in the model's 24 MB arena).
+    font: Option<FontBuf>,
+}
+
+/// The overlay font's texture buffer: its place and the texture in it (by key).
+struct FontBuf {
+    buf: usize,
+    map: usize,
+    va: u64,
+    texels: usize,
+    key: Option<u64>,
 }
 
 type PsoKey = (Mode, bool, bool, u32, u32, bool);
@@ -495,7 +509,7 @@ unsafe fn init(device: usize) -> Result<Gpu, String> {
     // (The ring stays for the session: KH1's frames in flight may name it.)
     let (_ring, ring_map, ring_va) = buffer(device, RING_SLOTS * SLOT_BYTES)?;
     log(&format!("fx: renderer ready (shaders {} + {} bytes)", vs.len(), ps.len()));
-    Ok(Gpu { device, root: root as usize, vs, ps, psos: Vec::new(), ring_map, ring_va, frame: 0, mesh: None })
+    Ok(Gpu { device, root: root as usize, vs, ps, psos: Vec::new(), ring_map, ring_va, frame: 0, mesh: None, font: None })
 }
 
 impl Gpu {
@@ -636,6 +650,34 @@ unsafe fn mesh_arena(gpu: &mut Gpu) -> bool {
         }
     }
     true
+}
+
+/// The overlay font in its own buffer (made the first time, the font's size; the font copied in
+/// when its key is new): its buffer's address and the texture's place there, `None` if it can't be.
+unsafe fn font_buffer(gpu: &mut Gpu, t: &MeshTexture) -> Option<(u64, TexSlot)> {
+    let n = (t.width * t.height) as usize;
+    if n == 0 || t.rgba.len() < n * 4 {
+        return None;
+    }
+    if gpu.font.is_none() {
+        match buffer(gpu.device, n * 4) {
+            Ok((buf, map, va)) => gpu.font = Some(FontBuf { buf, map, va, texels: n, key: None }),
+            Err(e) => {
+                fail(format!("the debug menu's font: {e}"));
+                return None;
+            }
+        }
+    }
+    let f = gpu.font.as_mut()?;
+    if n > f.texels {
+        return None;
+    }
+    if f.key != Some(t.key) {
+        std::ptr::copy_nonoverlapping(t.rgba.as_ptr(), f.map as *mut u8, n * 4);
+        f.key = Some(t.key);
+    }
+    let _ = f.buf;
+    Some((f.va, TexSlot { offset: 0, w: t.width, h: t.height }))
 }
 
 /// Copies `vertices` to the ring's write point, which goes round the whole ring (4 MB): a
@@ -869,9 +911,6 @@ pub unsafe fn draw_overlay(base: usize, quads: &[OverlayQuad], font: &MeshTextur
     let Ok(mut g) = GPU.lock() else { return false };
     let Some(gpu) = ready(base, &mut g) else { return false };
     let Some(t) = target(r) else { return false };
-    if !mesh_arena(gpu) {
-        return false;
-    }
     let pso = match gpu.pso((Mode::Alpha, false, t.has_dsv, t.samples, t.quality, false)) {
         Ok(p) => p,
         Err(e) => {
@@ -879,9 +918,11 @@ pub unsafe fn draw_overlay(base: usize, quads: &[OverlayQuad], font: &MeshTextur
             return false;
         }
     };
-    let arena = gpu.mesh.as_mut().unwrap();
-    let font_slot = arena.slot(font);
-    let arena_va = arena.va;
+    // (No font buffer: the boxes alone, drawn with the root SRV at the ring, never sampled.)
+    let (font_va, font_slot) = match font_buffer(gpu, font) {
+        Some((va, slot)) => (va, Some(slot)),
+        None => (gpu.ring_va, None),
+    };
     // Boxes, then text: two runs.
     let mut vertices: Vec<kh2_fx::Vertex> = Vec::with_capacity(quads.len() * 6);
     let mut runs: Vec<(u32, u32, bool)> = Vec::with_capacity(2);
@@ -913,7 +954,7 @@ pub unsafe fn draw_overlay(base: usize, quads: &[OverlayQuad], font: &MeshTextur
         k[i] = f.to_bits();
     }
     k[32] = 1f32.to_bits();
-    let Some((cl, _)) = begin(base, r, gpu, &t, &vb, &k, arena_va) else { return false };
+    let Some((cl, _)) = begin(base, r, gpu, &t, &vb, &k, font_va) else { return false };
     com!(cl, CL_SET_PSO, fn(P), pso as P);
     for (first, count, textured) in runs {
         if first as usize >= n {
