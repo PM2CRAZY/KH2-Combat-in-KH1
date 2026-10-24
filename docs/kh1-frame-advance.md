@@ -178,6 +178,19 @@ but effects still draw (the effect pass doesn't test it), the HUD fades `0x14026
 readers of bit 0 are those (xrefs, Checked (exe)). It doesn't hold the actors, the camera or the
 scripts. Frame Advance doesn't use it with KH1's pause picture (everything is held there).
 
+### Sound while held (after t426)
+
+KH1's pause machine calls `0x1400D2F80` (a jump to `0x1400DE010 (mode)`, KH1's sound pause) with 1 in
+state 3 (`0x14017F318`) and 0 in state 4 (`0x14017F4E6`) as it ends; the machine has 12 such calls
+(Checked (exe), call sites). `0x1400DE010`: for each sound in its list (`0x1404D6618`), a streamed one
+(`+0x3C` = 0: the music, an assumption from its handling) is set to half its volume (`+0x44` x 0.5) on 1 and back to `+0x44` on 0; a
+sound effect playing is paused on 1 and resumed on 0 (Checked (decomp)). Frame Advance makes the same
+calls as a hold begins (1) and ends (0), so a step plays about one frame of sound and the sound
+effects don't run on while held; the music plays on at half volume while held, as in KH1's pause.
+While KH1's own pause is up it makes its own calls (its 0 as it closes resumes everything), and ours
+is made again after it. The debug menu's Held Sound row (Paused / Plays, this session) turns it off.
+**Assumption**: the music keeps its place (KH1's pause doesn't stop it).
+
 ## Actors
 
 Each actor is a task of a second list, `0x142D5AB00` (0x28-byte tasks, made by `0x140297980` with

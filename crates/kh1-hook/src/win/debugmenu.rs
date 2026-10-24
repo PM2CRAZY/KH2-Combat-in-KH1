@@ -211,6 +211,7 @@ enum Action {
     SoundLog,
     GameFrames,
     FrameAdvance,
+    HeldSound,
     HeldTask(usize),
     GroupRow(usize),
     Item(usize),
@@ -422,6 +423,8 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Stats  >".into(), Action::Enter(Page::Stats)),
             // (t371) `frameadv`: Steam only.
             (format!("{:<16}< {} >", "Frame Advance", if super::frameadv::supported() { on_off(super::frameadv::on()) } else { "Steam only" }), Action::FrameAdvance),
+            // (KH1's pause's sound call while held, or not.)
+            (format!("{:<16}< {} >", "Held Sound", if super::frameadv::hold_sound() { "Paused" } else { "Plays" }), Action::HeldSound),
             ("Held Tasks  >".into(), Action::Enter(Page::HeldTasks)),
             ("Exit".into(), Action::Exit),
         ],
@@ -609,6 +612,10 @@ unsafe fn step(base: usize) {
                 super::frameadv::set_on(!super::frameadv::on());
                 sound(1);
             }
+        }
+        Action::HeldSound => {
+            super::frameadv::set_hold_sound(!super::frameadv::hold_sound());
+            sound(1);
         }
         Action::HeldTask(i) => {
             super::frameadv::toggle_task(i);

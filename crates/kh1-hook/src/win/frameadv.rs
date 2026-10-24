@@ -59,6 +59,12 @@
 //!   picture is exactly the last frame that ran (map, models, effects, trails, HUD, lock-on,
 //!   command menu, damage numbers) and nothing that frame's tasks step goes on. While KH1's own
 //!   pause is up ours doesn't draw (KH1's picture and P A U S E stay).
+//! - **Sound, as KH1's pause holds it.** KH1's pause machine calls its sound pause (`0x1400D2F80`, a
+//!   jump to `0x1400DE010 (mode)`) with 1 as it stops (state 3: playing sound effects paused, the
+//!   streamed music at half its volume) and 0 as it goes (state 4: resumed, the volume back). Frame
+//!   Advance makes the same calls as a hold begins and ends (a step plays one frame's worth of
+//!   sound), unless the debug menu's Held Sound row is Plays. KH1's own pause makes its own calls
+//!   meanwhile, and ours is made again after it.
 
 use super::addr::{Build, Rva};
 use super::log;
@@ -82,6 +88,11 @@ const REGISTER_TASK_STEAM: usize = 0x284670;
 /// full brightness; the pause draws it with spread 0x10, then 0x20).
 const PICTURE_CAPTURE_STEAM: usize = 0x18B370;
 const PICTURE_DRAW_STEAM: usize = 0x183CD0;
+/// KH1's sound pause (Steam `0x1400D2F80 (mode)`: 1 pauses, 0 resumes).
+const SOUND_PAUSE_STEAM: usize = 0xD2F80;
+/// The Held Sound row: sound paused while held (KH1's pause's way); we paused it.
+static HOLD_SOUND: AtomicBool = AtomicBool::new(true);
+static SOUND_PAUSED: AtomicBool = AtomicBool::new(false);
 /// The priority of KH1's pause task that captures and draws the picture (`0x14017FD60`, 190020).
 const PICTURE_PRIORITY: u32 = 190020;
 /// Our picture task (0: none); a capture is due (a hold began); the picture is wanted.
@@ -480,6 +491,27 @@ unsafe fn pause_effects(base: usize, on: bool) {
     f(on as i32);
 }
 
+/// KH1's sound pause (`0x1400D2F80`): on pauses (once), off resumes what we paused.
+unsafe fn pause_sound(base: usize, on: bool) {
+    if SOUND_PAUSED.swap(on, Ordering::Relaxed) == on {
+        return;
+    }
+    let f: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_PAUSE_STEAM);
+    f(on as i32);
+}
+
+/// The debug menu's Held Sound row: Paused (KH1's pause's way) or Plays.
+pub fn hold_sound() -> bool {
+    HOLD_SOUND.load(Ordering::Relaxed)
+}
+
+/// Switches the Held Sound row (applied at the next frame end).
+pub fn set_hold_sound(on: bool) {
+    if HOLD_SOUND.swap(on, Ordering::Relaxed) != on {
+        log(&format!("debug menu: frame advance held sound {}", if on { "paused (KH1's pause: 0x1400D2F80 (1), music at half volume)" } else { "plays" }));
+    }
+}
+
 /// Ends our hold: the next frame runs.
 unsafe fn release(base: usize, st: &mut State, kh1_paused: bool) {
     if !st.held {
@@ -490,9 +522,13 @@ unsafe fn release(base: usize, st: &mut State, kh1_paused: bool) {
     // (Our picture task takes itself off the list the next frame.)
     PICTURE_ON.store(false, Ordering::Relaxed);
     CAPTURE_DUE.store(false, Ordering::Relaxed);
-    // (While KH1's pause is up it holds the effects itself, and gives them back as it closes.)
+    // (While KH1's pause is up it holds the effects and the sound itself, and gives them back as
+    // it closes.)
     if !kh1_paused {
         pause_effects(base, false);
+        pause_sound(base, false);
+    } else {
+        SOUND_PAUSED.store(false, Ordering::Relaxed);
     }
     let since = HELD_SINCE_MS.swap(0, Ordering::Relaxed);
     if since != 0 {
@@ -561,9 +597,11 @@ pub unsafe fn frame_end(base: usize) {
         }
         ensure_picture(base);
         if after_kh1 {
-            // (KH1's pause gave the effects back as it closed.)
+            // (KH1's pause gave the effects and the sound back as it closed.)
             pause_effects(base, true);
+            SOUND_PAUSED.store(false, Ordering::Relaxed);
         }
+        pause_sound(base, HOLD_SOUND.load(Ordering::Relaxed));
         // Select + Triangle writes the trace while the game is held (no rows come then).
         super::trace::frozen_combo(super::takeover::RAW_BUTTONS.load(Ordering::Relaxed) as u16);
     }
