@@ -208,3 +208,38 @@ Where an older doc gives an Epic address, the Steam one is given here and the tr
   3, 11, 13, 14, 15, 17, 18, 22, 24, 27, 28, 29, 37, 40, 41, 42, 101, 111, 112, 113, 126, 127,
   128, 134, 135, 136, 138, 139, 148, 153, 164, 169, 172, 173, 175, 176, 177, 178, 180, 300..303,
   306..308, 312 (those that play).
+
+### Registering KH2's banks with KH1's own registration (plan step 1, `win/kh1bank.rs`)
+
+- KH1's room sounds are registered by `0x1400E0F00 (name, bank number, data, flags) -> engine
+  handle` (Steam), from `0x1400DB910` (game thread) and from the "_add_scd_thread" `0x1400E0A50`
+  (started by `0x1400DBA40`): it skips an entry already there (same name, bank number, flags),
+  makes the `BankEntry_15` with `0x1400DB1F0` (file number = `atoi` of the name after "se"),
+  loads the bank with `0x14004D530` and pushes the entry on the list `0x1404D65D8` (count
+  `0x1404D65E8`). **Checked (decomp)**. `0x1400DFE60` (the doc above) is the voice archives'
+  registration into the other list `0x1404D65B8`, not the effects'.
+- A bank entry's release (`0x1400DB470` / `0x1400DB7A0`, the vtable's) waits for the bank to be
+  idle and frees the data with `_aligned_free`. **Checked (decomp)**. So each registration gets
+  a copy made with KH1's own `_aligned_malloc` (its import at `0x1403B0778`, `_aligned_free` at
+  `0x1403B0780`, api-ms-win-crt-heap; KH1's loads align 16). **Checked (exe)** (import table).
+- `0x1400D2C70 (1)` -> `0x1400DBAC0` releases every bank of the list. Its callers with 1 are
+  `0x14016FFA0`, `0x140170230`, `0x140170300`, `0x140170D50`: each runs it in the same sequence
+  as other unload steps (`0x14017EF70`, `0x140266530`, `0x1401E1490 (0)`, `0x14018C790`, freeing
+  `0x14299C228`, the volume reset `0x1400DDD10 (1.0, 0)`). **Checked (decomp)**; that this is the
+  map / room unload: **Assumption** (strongly suggested by the sequence). `0x1400D2C70 (2)` is
+  something else (`0x1400E38D0`).
+- KH1 registers a whole world's effects at once: Traverse Town's `amusic/setw.dat` holds ~695
+  one-sound banks. **Checked (files)**. The engine's bank slot count (`0x14004F570` remaining =
+  max `0x142F11814` - used `0x142F11810`; the max set by the driver's init `0x14005D6D0` from
+  its config) isn't known statically: it is logged at run time.
+- The adding thread holds the sound system's semaphore (`[0x1421AAFD8] + 0x18`) from
+  `0x1400DBA40`'s `0x1400E43B0` (WaitForSingleObject) to `0x1400E0A50`'s `0x1400E42A0`
+  (ReleaseSemaphore); its thread handle is `+8` while it runs. **Checked (decomp)**.
+- What we do: each KH2 sound (and battle-voice clip) the mod loads is cut into a one-sound bank
+  (`scd_cut`, volume times `kh2_volume`, one bank a sound) named `se9NNNNN.win32.scd` (file
+  numbers from 900000; KH1's own are world * 1000 + n, under 100000), bank number `0x4B320000`
+  (KH1 looks entries up by bank numbers from its own data: 2, -8, -1, 90..103, 16-bit values).
+  From the frame's end, once KH1's list has stood still for 30 frames after a change and the
+  semaphore can be taken (so never while KH1's thread adds), the missing ones are registered,
+  16 a frame, only while more than 128 bank slots stay free. Every step is logged
+  ("KH1 banks: ..."). Nothing plays through them yet.

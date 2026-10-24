@@ -418,6 +418,8 @@ unsafe extern "system" fn frame_end(renderer: usize) {
         }
         // (t371) Whether the next frame runs or is held (`frameadv`): after this frame's tasks.
         super::frameadv::frame_end(base);
+        // KH2's sound banks into KH1's bank list, again after KH1 resets it (`kh1bank`).
+        super::kh1bank::frame_end(base);
     }
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_FRAME_END.load(Ordering::Acquire));
     f(renderer);

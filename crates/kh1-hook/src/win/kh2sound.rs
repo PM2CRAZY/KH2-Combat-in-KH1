@@ -31,6 +31,9 @@ struct Sound {
     rate: u32,
     channels: u16,
     data: Arc<Vec<i16>>,
+    /// Its one-sound bank's file number in KH1's engine (`kh1bank`), Steam only.
+    #[allow(dead_code)]
+    kh1: Option<i32>,
 }
 
 /// What's loaded: effect element → sound, sound id → sound, voice id → its choices.
@@ -188,7 +191,35 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
     let mut out = Loaded::default();
     let decode = |p: kh2_formats::scd::Pcm| -> Sound {
         let data: Vec<i16> = p.samples.iter().map(|&x| (x as f32 * volume * p.volume).clamp(-32768.0, 32767.0) as i16).collect();
-        Sound { rate: p.rate, channels: p.channels, data: Arc::new(data) }
+        Sound { rate: p.rate, channels: p.channels, data: Arc::new(data), kh1: None }
+    };
+    // Each sound also as a one-sound bank for KH1's own engine (`kh1bank`, the tester: "KH2
+    // sounds through KH1's sound system"), at the same volume (the id's own, in the bank's record,
+    // times `kh2_volume`).
+    // (One bank a sound: a sound several moves use, or a clip several voices pick from, is cut
+    // once.)
+    let mut made: HashMap<(u32, usize), Option<i32>> = HashMap::new();
+    let mut native = |key: u32, bank: &[u8], index: usize, what: String| -> Option<i32> {
+        if let Some(no) = made.get(&(key, index)) {
+            return *no;
+        }
+        let no = match kh2_formats::scd_cut::cut(bank, index, (super::kh1bank::FIRST_NO / 1000) as u16) {
+            Ok(mut c) => {
+                let _ = kh2_formats::scd_cut::scale_volume(&mut c.bytes, volume);
+                let (bus, tracks, size) = (c.bus, c.tracks, c.bytes.len());
+                let no = super::kh1bank::add(c.bytes, what.clone());
+                if let Some(no) = no {
+                    log(&format!("KH1 banks: {what} -> se{no} ({size} bytes, bus {bus}, {tracks} track(s))"));
+                }
+                no
+            }
+            Err(e) => {
+                log(&format!("KH1 banks: {what} not cut ({e})"));
+                None
+            }
+        };
+        made.insert((key, index), no);
+        no
     };
     let mut banks: HashMap<u32, Vec<u8>> = HashMap::new();
     for (id, want) in wants {
@@ -220,7 +251,8 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
                     Want::Spell(level, el) => format!(" (package {level}'s element {el})"),
                 };
                 log(&format!("KH2 sound {id}{of}: {} Hz, {} ch, {:.2} s, volume {:.2}", p.rate, p.channels, p.samples.len() as f32 / p.channels.max(1) as f32 / p.rate.max(1) as f32, p.volume));
-                let snd = decode(p);
+                let mut snd = decode(p);
+                snd.kh1 = native(bank, &banks[&bank], index, format!("KH2 sound {id}{of}"));
                 match want {
                     Want::Element(el) => {
                         out.elements.insert(el, snd);
@@ -244,7 +276,14 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
         let table = vtbl(&battle);
         for v in voice_ids {
             let Some(choices) = table.iter().find(|(c, id, _)| *c == 1 && *id as i16 == v).map(|e| e.2.clone()) else { continue };
-            let clips: Vec<Sound> = choices.iter().filter_map(|&c| vscd.sound_id(c as usize).ok()).map(decode).collect();
+            let clips: Vec<Sound> = choices
+                .iter()
+                .filter_map(|&c| {
+                    let mut s = decode(vscd.sound_id(c as usize).ok()?);
+                    s.kh1 = native(u32::MAX, &voice, c as usize, format!("KH2 voice {v} clip {c}"));
+                    Some(s)
+                })
+                .collect();
             log(&format!("KH2 voice {v}: clips {choices:?} ({} decoded)", clips.len()));
             if !clips.is_empty() {
                 out.voices.insert(v, clips);

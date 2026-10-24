@@ -27,6 +27,8 @@ extern "system" {
     pub fn CloseHandle(h: *mut c_void) -> i32;
     pub fn VirtualQuery(addr: *const c_void, info: *mut c_void, size: usize) -> usize;
     pub fn AddVectoredExceptionHandler(first: u32, handler: unsafe extern "system" fn(*mut c_void) -> i32) -> *mut c_void;
+    pub fn WaitForSingleObject(h: *mut c_void, ms: u32) -> u32;
+    pub fn ReleaseSemaphore(h: *mut c_void, by: i32, previous: *mut i32) -> i32;
 }
 
 #[link(name = "user32")]
