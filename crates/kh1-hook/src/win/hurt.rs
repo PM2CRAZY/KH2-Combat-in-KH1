@@ -149,10 +149,15 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                 // The rest of Reflect's cast (before the barrier stands and after it falls): no
                 // harm all the way through (the user), not counted for the counter.
                 Fate::Evaded
-            } else if (out.guarding || !out.guard_boxes.is_empty()) && (toward.dot(fwd) > 0.0 || ch.abilities.guard_all_round || out.guard_boxes.iter().any(|g| g.weapon == 0)) {
+            } else if (out.guarding || !out.guard_boxes.is_empty())
+                && (ch.abilities.guard_all_round
+                    || if out.guard_boxes.is_empty() { toward.dot(fwd) > 0.0 } else { out.guard_boxes.iter().any(|g| guard_faces(g.attack, r, out.facing, toward)) })
+            {
                 // KH2's guard reaction by its windows' ATKP "refact self" (1 the guard repel, 2
                 // nothing: the Aerial Dodge's 406 and Aerial Recovery's 124 go on; the guard
-                // press's 161 repels); a guard on his body guards all round (`combat::guard_step`).
+                // press's 161 repels); which side it holds is its ATKP's reflect range and angle
+                // (`guard_faces`: 161 120 degrees each side, 162 180, the body guards 406 / 124 0,
+                // all round).
                 let refact = super::pose::kh2()
                     .and_then(|k| out.guard_boxes.iter().filter_map(|g| k.battle.attack_for_level(g.attack, 0, 0)).map(|a| a.refact_self).min())
                     .unwrap_or(1);
@@ -211,6 +216,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
             if let Some((atk, refact)) = super::kh2slots::keyblade_guard(actor) {
                 let f = rd::<[f32; 4]>(actor + 0x30);
                 let fwd = glam::Vec2::new(f[0], f[2]).normalize_or(glam::Vec2::Y);
+                let yaw = if f[3].is_finite() { f[3] } else { fwd.x.atan2(fwd.y) };
                 let all_round = takeover::with_abilities(|a| a.guard_all_round) == Some(true);
                 let mut repel: Option<glam::Vec2> = None;
                 for &r in &ready {
@@ -224,7 +230,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                     } else {
                         fwd
                     };
-                    if !(toward.dot(fwd) > 0.0 || all_round) {
+                    if !(all_round || guard_faces(atk, r, yaw, toward)) {
                         continue;
                     }
                     wr(r, rd::<u8>(r) | NO_EFFECT);
@@ -343,4 +349,23 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     hook::install(base + HURT_RVA, &HURT_PROLOGUE, hurt as *const () as usize, &ORIG, "hit processing");
+}
+
+/// KH2's guard takes the hit in hit record `r` from this side (Steam KH2 `0x1403D1F40`, Checked
+/// (decomp): the guard's ATKP reflect range `+0x22`, 0 any side; else the other attack's direction
+/// against the guard owner's facing turned by the ATKP's reflect angle `+0x23` x 2 degrees must be
+/// below -cos(range): `character_core::reaction::clash_angle_ok`). Sora's guard ATKPs (`00battle.bin`,
+/// Checked (files)): the guard press's 161 range 120 (120 degrees either side of his facing, not 90),
+/// its repel's 162 180 (every side), the body guards 406 / 124 / 455 0 (every side); all angle 0. The
+/// attack's direction is KH1's push direction in the record (`+0x10`, KH1's own front / back test
+/// reads it, `docs/kh1-hit-reactions-native.md`), else the line from the attacker (`toward`, from
+/// Sora to it). `yaw`: Sora's facing (KH1's `+0x3C`). An ATKP not found: the front half, as before.
+unsafe fn guard_faces(atkp: u16, r: usize, yaw: f32, toward: glam::Vec2) -> bool {
+    let push = rd::<[f32; 3]>(r + 0x10);
+    let push = glam::Vec2::new(push[0], push[2]);
+    let dir = if push.is_finite() && push.length() > 0.1 { push.normalize() } else { -toward };
+    match pose::kh2().and_then(|k| k.battle.attack_for_level(atkp, 0, 0)) {
+        Some(a) => character_core::reaction::clash_angle_ok(a.reflect_range, a.reflect_angle, yaw, dir.to_array()),
+        None => toward.dot(glam::Vec2::new(yaw.sin(), yaw.cos())) > 0.0,
+    }
 }

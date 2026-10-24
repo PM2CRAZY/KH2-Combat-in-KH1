@@ -190,3 +190,25 @@ KH2 controller run during rolls and guards.
   the repel's combo window (`counter_window`, `counterguard`, t489). KH1's own row 0x3E isn't run.
 - **Assumption**: the fill runs every frame the menu is up (stage 189's "rebuilt each frame"). It
   needs the fill hook, which `shortcuts`, `reflect` or `drive` puts in (all on by default).
+
+## 7. Built: the guard's coverage, KH2's angle test (tC)
+
+- **KH2** (Steam KH2 `0x1403D1F40`, Checked (decomp)): an attack meeting a guard is held only when
+  the guard's ATKP reflect range (`+0x22`) is 0, or the other attack's direction dotted with the
+  guard owner's facing (turned by the reflect angle `+0x23` x 2 degrees) is below -cos(range): the
+  attacker within `range` degrees of his facing. The OG rewrite has the same rule
+  (`character_core::reaction::clash_angle_ok`). **KH2 has no Guard Plus**: the OG rewrite's
+  `guard_all_round` is its own ("ours") and nothing ever sets it.
+- **Sora's guard ATKPs** (`00battle.bin`, Checked (files)): 161 (the guard press 173) range **120**;
+  162 (the repel 42, Guard Break's) **180**; the body guards 406 (Aerial Dodge, Flash Step), 124
+  (Aerial Recovery), 455 range 0 (every side). All angle 0.
+- **Before** (t489): a Keyblade guard held only the front half (90 degrees each side), in `hurt` and
+  in its KH1 guard objects (arc cosine 0). So the press missed hits from 90..120 degrees and the
+  repel's own guard missed everything behind him.
+- **Now**: `hurt::guard_faces` is KH2's test with the window's ATKP, the attack's direction being the
+  hit record's push direction (`+0x10`, which KH1's own front / back test reads), on KH1's states
+  (our guard slots) and in KH2's borrows alike. The KH1 guard objects (`combat::guard_data`) carry
+  the arc as KH1's own directional test reads it (Steam `0x1402B4640`, Checked (decomp): clash types
+  1..4, cosine between the owner's facing turned by data `+0x60` and the line to the other attack's
+  owner at or above data `+0x64`): `+0x64` = cos(range), -1 for range 0; `+0x60` = angle x 2 degrees.
+  **Assumption**: KH1's `+0x60` turn goes the way his yaw does (unused: every angle is 0).

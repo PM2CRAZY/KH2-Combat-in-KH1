@@ -938,8 +938,9 @@ pub struct Strikes {
     /// KH2's live guard windows as KH1 guard attack objects (`guard_step`): by (window, shape),
     /// the object and the clashed-with mask seen last frame.
     guard_objs: HashMap<(u64, usize), (usize, u32)>,
-    /// Our two copies of a swing's attack data for them (front-only, all round), made once.
-    guard_mem: Option<(usize, u32, u32)>,
+    /// Our copies of a swing's attack data for them, one a guard arc (KH2's reflect range and
+    /// angle, `guard_data`), on one page: its address and the copies made (range, angle, handle).
+    guard_mem: Option<(usize, Vec<(u8, i8, u32)>)>,
 }
 
 /// KH1's point along an actor's bone `(actor, bone, t, out)` (`0x14029C990`): for bone 0x30 (the
@@ -1572,33 +1573,51 @@ impl Strikes {
     /// Our attack data copies for guard objects (front-only for a Keyblade's guard, all round
     /// for one on his body), from his swing's data with no power, no reaction, no direction
     /// turn; their handles. Made once.
-    unsafe fn guard_mem(&mut self, sora: usize) -> Option<(usize, u32, u32)> {
-        if let Some(m) = self.guard_mem {
-            return Some(m);
-        }
+    /// Our attack data for a KH1 guard object holding KH2's guard arc: the guard window's ATKP
+    /// reflect `range` (degrees each side of his facing, 0 every side) and `angle` (x 2 degrees,
+    /// turning the arc). KH2's test (Steam KH2 `0x1403D1F40`, Checked (decomp)): the other attack's
+    /// direction against the owner's facing below -cos(range), i.e. the attacker within `range` of
+    /// his facing. KH1's (Steam `0x1402B4640`, Checked (decomp)), for an attack object of clash type
+    /// 1..4 (ours is 4): the cosine between the owner's facing turned by the data's `+0x60` and the
+    /// line toward the other attack's owner (a shot: back along its travel) at or above the data's
+    /// `+0x64`, else the two don't meet. So `+0x64` = cos(range) (-1 for 0), `+0x60` = angle x 2
+    /// degrees in radians (**Assumption**: KH1's turn of `+0x60` goes the way his yaw does; every
+    /// guard ATKP of Sora's has angle 0, so it is never used). A copy of a swing's data (no power,
+    /// no reaction), up to 16 on one page, made once each. Before (t489): cos 0 (90 degrees each
+    /// side) on the Keyblade, -1 on his body.
+    unsafe fn guard_data(&mut self, range: u8, angle: i8) -> Option<u32> {
         let base = BASE.load(Ordering::Relaxed);
+        if self.guard_mem.is_none() {
+            let mem = super::sys::VirtualAlloc(std::ptr::null_mut(), 0x1000, 0x3000, 0x04) as usize;
+            if mem == 0 {
+                return None;
+            }
+            self.guard_mem = Some((mem, Vec::new()));
+        }
         let rows = self.rows?;
-        let mem = super::sys::VirtualAlloc(std::ptr::null_mut(), 0x1000, 0x3000, 0x04) as usize;
-        if mem == 0 {
+        let (mem, made) = self.guard_mem.as_mut()?;
+        if let Some(&(_, _, h)) = made.iter().find(|m| m.0 == range && m.1 == angle) {
+            return Some(h);
+        }
+        if made.len() >= 0x1000 / 0x100 {
             return None;
         }
-        let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_RVA);
+        let d = *mem + made.len() * 0x100;
         let src = base + ATTACK_DATA_RVA + rows[0].data as usize;
-        for (k, cos) in [(0usize, 0.0f32), (1, -1.0)] {
-            let d = mem + k * 0x100;
-            std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, 0x70);
-            wr(d + 8, 0u32);
-            wr(d + 0x60, 0.0f32);
-            wr(d + 0x64, cos);
-        }
-        let (h0, h1) = (to_handle(mem), to_handle(mem + 0x100));
-        if pose::ptr(h0) != mem || pose::ptr(h1) != mem + 0x100 {
-            log(&format!("guards: our attack data's handles don't resolve ({h0:#x} {h1:#x}): no guard objects"));
+        std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, 0x70);
+        wr(d + 8, 0u32);
+        let cos = if range == 0 { -1.0f32 } else { (range as f32).to_radians().cos() };
+        wr(d + 0x60, (angle as f32 * 2.0).to_radians());
+        wr(d + 0x64, cos);
+        let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_RVA);
+        let h = to_handle(d);
+        if pose::ptr(h) != d {
+            log(&format!("guards: our attack data's handle doesn't resolve ({h:#x}): no guard object for range {range}"));
             return None;
         }
-        let _ = sora;
-        self.guard_mem = Some((mem, h0, h1));
-        Some((mem, h0, h1))
+        made.push((range, angle, h));
+        log(&format!("guards: KH1 guard data for KH2's reflect range {range} / angle {angle} (arc cosine {cos:.3})"));
+        Some(h)
     }
 
     /// KH2's guard windows as KH2 has them: every live `Guard` window of Sora's move (the guard
@@ -1645,8 +1664,11 @@ impl Strikes {
         if live.is_empty() {
             return;
         }
-        let Some((_, front, round)) = self.guard_mem(sora) else { return };
         for (key, sh, weapon, attack) in live {
+            // (Its arc: the window's ATKP reflect range and angle, KH2's guard test, `guard_data`;
+            // an ATKP not found: in front on the Keyblade, all round on his body, as before.)
+            let (range, angle) = battle.attack_for_level(attack, 0, 0).map_or(if weapon == 0 { (0, 0) } else { (90, 0) }, |a| (a.reflect_range, a.reflect_angle));
+            let Some(data) = self.guard_data(range, angle) else { continue };
             let c = [sh.center[0], -sh.center[1], sh.center[2], 1.0f32];
             let r = sh.radius.max(sh.height).clamp(10.0, 150.0);
             let (o, last) = match self.guard_objs.get(&key) {
@@ -1654,7 +1676,7 @@ impl Strikes {
                 _ => {
                     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
                     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
-                    let src = pose::ptr(if weapon == 0 { round } else { front });
+                    let src = pose::ptr(data);
                     let o = new_attack(sora, free_bit(), src);
                     if o < 0x10000 {
                         continue;
@@ -1667,13 +1689,13 @@ impl Strikes {
                     wr(o + 0x2C, 0i32);
                     wr(o + 0x30, rd::<u32>(o + 0x30) & !0x1F);
                     wr(o + 0x50, GUARD_REARM);
-                    wr(o + 0x5C, if weapon == 0 { round } else { front });
+                    wr(o + 0x5C, data);
                     wr(o + 0x10, c);
                     wr(o + 0x40, c);
                     wr(o + 0x70, c);
                     wr(o + 0x80, c);
                     if N.fetch_add(1, Ordering::Relaxed) < 60 {
-                        log(&format!("guard: motion {}'s window (ATKP {attack}, {}) as KH1 guard object {o:#x}, radius {r:.0}", out.motion, if weapon == 0 { "on his body, all round" } else { "on the Keyblade, in front" }));
+                        log(&format!("guard: motion {}'s window (ATKP {attack}, {}, reflect range {range}) as KH1 guard object {o:#x}, radius {r:.0}", out.motion, if weapon == 0 { "on his body" } else { "on the Keyblade" }));
                     }
                     self.guard_objs.insert(key, (o, 0));
                     (o, 0)
