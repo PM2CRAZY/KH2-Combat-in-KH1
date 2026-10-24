@@ -9,10 +9,11 @@
 //!   run by the main list's task at 80000 (`0x140298940`), which is not flagged 1.
 //!   (t372) t371 wrote the mask, but the pause machine (`0x14017F150`, run each frame before the
 //!   list) sets it every frame itself, so only the effects held (the tester: Sora went on moving).
-//!   Now, while the game is held, each task of the main list not flagged 1 and before KH1's first
-//!   draw pass (priority 140000; t378: t372 held the draws too, and the picture went black) has its function
+//!   Now, while the game is held, each task of the main list not flagged 1 has its function
 //!   (`+0x10`) swapped for ours, which does nothing (`skip`), and gets it back for a frame that
-//!   runs: the same tasks KH1's pause holds, held whatever the machine writes. From KH1's frame
+//!   runs: the same tasks KH1's pause holds, held whatever the machine writes. (t378 to t426 held
+//!   only those before priority 140000, as the picture went black; KH1's pause picture, below,
+//!   is what the picture needed.) From KH1's frame
 //!   end (`debugmenu::frame_end`, after the frame's list), so the next frame is held or runs. The
 //!   effect instances are paused too (`0x1401ED6D0 (1)`, the pause machine's call as its pause
 //!   opens; 0 puts them back). The field loop's own work around the list (the pad, the pause
@@ -45,6 +46,19 @@
 //!   hand Sora back to KH1's model while the game is held.
 //! - **Steam only**: the task list and the effect pause call are Steam addresses, with no Epic
 //!   counterpart checked (the row says so on another build).
+//! - **KH1's pause picture (the tester's t426 test: effects, magic and Keyblade trails not drawn
+//!   on held frames).** KH1's battle pause (the exe, the pause machine's jump table) holds every
+//!   task not flagged 1, hides and pauses the effects (`0x1401ED6D0 (1)`: `+0xD5` paused, `+0xDB`
+//!   not drawn), and shows the frame it stopped on: its task at 190020 (`0x14017FD60`) captures the
+//!   last frame (`0x14018B370`) and draws it (`0x140183CD0 (brightness, spread)`), and its task at
+//!   10499 (`0x14017EF90`) draws it again every paused frame (spread 0x10 / 0x20: the pause's blur
+//!   layers). Frame Advance now does the same: every task not flagged 1 is held, whatever its
+//!   priority (as t372, and as KH1's pause), and a task of ours at 190020 (flags 1, so KH1's own
+//!   rule keeps it running) captures the last frame that ran once per hold and draws it every held
+//!   frame with spread 0 (the layers on top of each other: the frame as it was, no blur). So the
+//!   picture is exactly the last frame that ran (map, models, effects, trails, HUD, lock-on,
+//!   command menu, damage numbers) and nothing that frame's tasks step goes on. While KH1's own
+//!   pause is up ours doesn't draw (KH1's picture and P A U S E stay).
 
 use super::addr::{Build, Rva};
 use super::log;
@@ -59,12 +73,22 @@ use std::time::{Duration, Instant};
 const TASK_LIST_STEAM: usize = 0x2867380;
 /// The tasks KH1's pause runs have this flag.
 const PAUSE_FLAG: u16 = 1;
-/// (t378) The first of KH1's draw passes (priority 140000, the GPU camera copies and the models'
-/// pre-pass, then the map, models, effects, HUD and menus): tasks from here on run while the game is
-/// held, so the picture is drawn. Only the update tasks before it are held.
-const FIRST_DRAW: i32 = 140000;
 /// The held tasks are written to the log once (priority, function's RVA).
 static LOGGED_TASKS: AtomicBool = AtomicBool::new(false);
+/// KH1's task registration on the main list (Steam `0x140284670 (priority, function) -> task`).
+const REGISTER_TASK_STEAM: usize = 0x284670;
+/// KH1's pause picture: the capture of the last frame (Steam `0x14018B370`, a jump to `0x14018B5D0`
+/// with its record `0x1404DE790`) and its draw (Steam `0x140183CD0 (brightness, spread)`: 0x80 is
+/// full brightness; the pause draws it with spread 0x10, then 0x20).
+const PICTURE_CAPTURE_STEAM: usize = 0x18B370;
+const PICTURE_DRAW_STEAM: usize = 0x183CD0;
+/// The priority of KH1's pause task that captures and draws the picture (`0x14017FD60`, 190020).
+const PICTURE_PRIORITY: u32 = 190020;
+/// Our picture task (0: none); a capture is due (a hold began); the picture is wanted.
+static PICTURE_TASK: AtomicUsize = AtomicUsize::new(0);
+static CAPTURE_DUE: AtomicBool = AtomicBool::new(false);
+static PICTURE_ON: AtomicBool = AtomicBool::new(false);
+static LOGGED_PICTURE: AtomicBool = AtomicBool::new(false);
 /// KH1's effect instances paused or not (Steam `0x1401ED6D0 (on)`).
 const EFFECT_PAUSE_STEAM: usize = 0x1ED6D0;
 /// KH1's pause machine (0 while the game runs).
@@ -111,23 +135,47 @@ struct State {
 /// The tasks held now: (task, its own function, its list: 0 the main one, else the sub-list's RVA).
 static HELD_TASKS: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
 
-/// (t426) Tasks that run while held unless the Held Tasks page holds them: the tester's t399 test
-/// found the picture needs 130000 (`0x1402A23E0`, runs the list `0x142D5C9F0`: the models) and
-/// 120000 (`0x1400D2830`: the level), and that 120000 also let characters move.
-const RUN_BY_DEFAULT: [usize; 2] = [0x2A23E0, 0xD2830];
-static DEFAULTS_SET: AtomicBool = AtomicBool::new(false);
 /// (t426) 120000's own task lists (Steam; run by it with mask 0, each task one animated part of the
-/// map: `0x1401829B0` / `0x1401836E0` make them, `0x1401824C0` / `0x140183460` their steps). Held while the
-/// game is held (an assumption: that they are what moved), each a row of the Held Tasks page.
+/// map: `0x1401829B0` / `0x1401836E0` make them, `0x1401824C0` / `0x140183460` their steps: each moves
+/// its part's animation time on by the frame scale, Checked (decomp)). Held while the game is held
+/// (held with 120000 too), each a row of the Held Tasks page.
 const SUB_LISTS: [(usize, &str); 2] = [(0x233E420, "map parts A"), (0x233E7D0, "map parts B")];
+
+/// What the main list's tasks are (Steam RVAs), for the Held Tasks page and the log: the tester's
+/// Held Tasks tests (t399, t426: Checked (in game)) and the decomp (`docs/kh1-frame-advance.md`).
+const LABELS: [(usize, &str); 17] = [
+    (0x1E1900, "fades"),
+    (0x28D620, "system"),
+    (0x2937F0, "command menu"),
+    (0x29E790, "lights"),
+    (0x298940, "actors"),
+    (0x2B4460, "hit checks"),
+    (0x1E5D90, "camera"),
+    (0x28CD50, "camera 2"),
+    (0xD2830, "map draw"),
+    (0x2A23E0, "models"),
+    (0x28CC10, "camera copy"),
+    (0x2AEDA0, "fx binding"),
+    (0x2B11B0, "lock-on"),
+    (0x290A50, "delayed play"),
+    (0x3970D0, "fx fade"),
+    (0x2E26D0, "160000 pass"),
+    (0x38D9B0, "2D / menus"),
+];
+
+fn label(rva: usize) -> &'static str {
+    LABELS.iter().find(|l| l.0 == rva).map_or("", |l| l.1)
+}
 
 /// (t399) One of the tasks Frame Advance would hold, for the debug menu's Held Tasks page.
 #[derive(Clone, Copy)]
 pub struct TaskRow {
     pub priority: i32,
-    /// A sub-list's name (its RVA in `rva`), or "" for a task of the main list.
+    /// What it is (a sub-list's name, or a known task's), or "".
     pub label: &'static str,
-    /// Its function's RVA in the exe.
+    /// A sub-list of 120000's (its RVA in `rva`), not a task of the main list.
+    pub sub: bool,
+    /// Its function's RVA in the exe (a sub-list's own RVA).
     pub rva: usize,
     /// The tester let it run while the game is held.
     pub runs: bool,
@@ -165,7 +213,7 @@ pub fn toggle_task(i: usize) {
         if let Ok(mut held) = HELD_TASKS.lock() {
             let ours = skip as *const () as usize;
             held.retain(|&(t, f, list)| {
-                let this = if row.label.is_empty() { list == 0 && f.wrapping_sub(base) == row.rva } else { list == row.rva };
+                let this = if !row.sub { list == 0 && f.wrapping_sub(base) == row.rva } else { list == row.rva };
                 if !this {
                     return true;
                 }
@@ -188,28 +236,24 @@ unsafe extern "system" fn skip(_task: usize) -> u32 {
 }
 
 /// Every task of the main list not flagged for a pause is held (its function swapped for
-/// `skip`); tasks added since the last call too.
+/// `skip`), whatever its priority, as KH1's pause holds them (mask 1); tasks added since the
+/// last call too.
 unsafe fn hold_tasks(base: usize) {
     let Ok(mut held) = HELD_TASKS.lock() else { return };
     let ours = skip as *const () as usize;
     let mut t: usize = rd(base + TASK_LIST_STEAM + 0x10);
     let mut n = 0;
-    if !DEFAULTS_SET.swap(true, Ordering::Relaxed) {
-        if let Ok(mut r) = RUNS.lock() {
-            r.extend(RUN_BY_DEFAULT);
-        }
-    }
     let runs = RUNS.lock().map(|r| r.clone()).unwrap_or_default();
     let mut seen: Vec<TaskRow> = Vec::new();
     while t > 0x10000 && n < 1024 && super::crash::readable(t + 0x18) {
         let f: usize = rd(t + 0x10);
-        let candidate = rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && rd::<i32>(t + 4) < FIRST_DRAW && f > 0x10000;
+        let candidate = rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && f > 0x10000;
         if candidate {
             // (Ours already: the task's own function is in `held`.)
             let own = if f == ours { held.iter().find(|e| e.0 == t).map_or(0, |e| e.1) } else { f };
             let rva = own.wrapping_sub(base);
             if own != 0 && !seen.iter().any(|s| s.rva == rva) {
-                seen.push(TaskRow { priority: rd::<i32>(t + 4), label: "", rva, runs: runs.contains(&rva) });
+                seen.push(TaskRow { priority: rd::<i32>(t + 4), label: label(rva), sub: false, rva, runs: runs.contains(&rva) });
             }
         }
         if candidate && f != ours && !runs.contains(&f.wrapping_sub(base)) {
@@ -225,7 +269,7 @@ unsafe fn hold_tasks(base: usize) {
     }
     // (t426) 120000's own lists: every task in them, unless the page lets that list run.
     for (list, label) in SUB_LISTS {
-        seen.push(TaskRow { priority: 120000, label, rva: list, runs: runs.contains(&list) });
+        seen.push(TaskRow { priority: 120000, label, sub: true, rva: list, runs: runs.contains(&list) });
         if runs.contains(&list) {
             continue;
         }
@@ -248,8 +292,65 @@ unsafe fn hold_tasks(base: usize) {
         *tl = seen;
     }
     if !held.is_empty() && !LOGGED_TASKS.swap(true, Ordering::Relaxed) {
-        let list: Vec<String> = held.iter().map(|&(t, f, l)| if l == 0 { format!("{} {:#x}", rd::<i32>(t + 4), f.wrapping_sub(base)) } else { format!("sub-list {l:#x} {:#x}", f.wrapping_sub(base)) }).collect();
-        log(&format!("frame advance: holding {} tasks (priority, function RVA): {}", held.len(), list.join(", ")));
+        let list: Vec<String> = held
+            .iter()
+            .map(|&(t, f, l)| {
+                let rva = f.wrapping_sub(base);
+                if l != 0 {
+                    format!("sub-list {l:#x} {rva:#x}")
+                } else if label(rva).is_empty() {
+                    format!("{} {rva:#x}", rd::<i32>(t + 4))
+                } else {
+                    format!("{} {rva:#x} ({})", rd::<i32>(t + 4), label(rva))
+                }
+            })
+            .collect();
+        log(&format!("frame advance: holding {} tasks, as KH1's pause (priority, function RVA): {}", held.len(), list.join(", ")));
+    }
+}
+
+/// (KH1's pause picture) Our task at 190020, flagged 1 as KH1's pause task is: while the game is
+/// held, the last frame that ran captured once (`0x14018B370`, as KH1's pause task `0x14017FD60`
+/// does) and drawn every held frame (`0x140183CD0 (0x80, 0)`: full brightness, no blur). Not while
+/// KH1's own pause is up (its picture and P A U S E show). Removed (4) once the game runs.
+unsafe extern "system" fn picture_task(_task: usize) -> u32 {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 || !PICTURE_ON.load(Ordering::Relaxed) {
+        PICTURE_TASK.store(0, Ordering::Relaxed);
+        return 4;
+    }
+    if rd::<i32>(base + PAUSE_STATE_RVA) != 0 {
+        return 0;
+    }
+    if CAPTURE_DUE.swap(false, Ordering::Relaxed) {
+        let capture: unsafe extern "system" fn() = std::mem::transmute(base + PICTURE_CAPTURE_STEAM);
+        capture();
+    }
+    let draw: unsafe extern "system" fn(u32, u32) = std::mem::transmute(base + PICTURE_DRAW_STEAM);
+    draw(0x80, 0);
+    0
+}
+
+/// Our picture task is in KH1's list (made again if KH1's list lost it).
+unsafe fn ensure_picture(base: usize) {
+    let ours = picture_task as *const () as usize;
+    let t = PICTURE_TASK.load(Ordering::Relaxed);
+    if t != 0 && super::crash::readable(t + 0x18) && rd::<u16>(t) != 0 && rd::<usize>(t + 0x10) == ours {
+        return;
+    }
+    let register: unsafe extern "system" fn(u32, usize) -> usize = std::mem::transmute(base + REGISTER_TASK_STEAM);
+    let t = register(PICTURE_PRIORITY, ours);
+    if t == 0 || !super::crash::readable(t + 0x18) {
+        PICTURE_TASK.store(0, Ordering::Relaxed);
+        if !LOGGED_PICTURE.swap(true, Ordering::Relaxed) {
+            log("frame advance: KH1's task list is full; the held frames have no picture");
+        }
+        return;
+    }
+    wr::<u16>(t + 2, PAUSE_FLAG);
+    PICTURE_TASK.store(t, Ordering::Relaxed);
+    if !LOGGED_PICTURE.swap(true, Ordering::Relaxed) {
+        log("frame advance: held frames show KH1's pause picture (task 190020: capture 0x14018B370, draw 0x140183CD0 (0x80, 0))");
     }
 }
 
@@ -386,6 +487,9 @@ unsafe fn release(base: usize, st: &mut State, kh1_paused: bool) {
     }
     st.held = false;
     release_tasks();
+    // (Our picture task takes itself off the list the next frame.)
+    PICTURE_ON.store(false, Ordering::Relaxed);
+    CAPTURE_DUE.store(false, Ordering::Relaxed);
     // (While KH1's pause is up it holds the effects itself, and gives them back as it closes.)
     if !kh1_paused {
         pause_effects(base, false);
@@ -451,7 +555,12 @@ pub unsafe fn frame_end(base: usize) {
             st.held = true;
             pause_effects(base, true);
             HELD_SINCE_MS.store(wall_ms() + 1, Ordering::Relaxed);
-        } else if after_kh1 {
+            // The frame that just ran is the picture of the hold.
+            CAPTURE_DUE.store(true, Ordering::Relaxed);
+            PICTURE_ON.store(true, Ordering::Relaxed);
+        }
+        ensure_picture(base);
+        if after_kh1 {
             // (KH1's pause gave the effects back as it closed.)
             pause_effects(base, true);
         }

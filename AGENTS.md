@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 445 (testing branch: Frame Advance holds what KH1's pause holds and shows KH1's pause picture)
+- **Frame Advance holds what KH1's pause holds and shows KH1's pause picture.** KH1's pause: mask 1, task 190020 (`0x14017FD60`), snapshot `0x14018B370`, redraw `0x140183CD0` (Checked (exe)). Every task without the pause flag held; our task at 190020 snapshots once per hold and redraws with spread 0. `0x1401ED6D0` also sets `+0xDB`, which hides effects (Checked (decomp)). Assumption: the snapshot sees the last frame. Held Tasks rows labelled. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 444 (testing branch: KH2 effects: the old player deprecated)
 - **KH2 effects: the old player deprecated.** The tester ("the older player is to be deprecated"). `kh2fx` is the entry point to `kh2dpx`; player, `fx12::draw` / effect textures and `fx_test` removed; world-pass hook in `model` (installed only while the model is on); misses logged once. t430 log: the old player held 176 textures, 16,704 KB. Notes §18.11.
 
