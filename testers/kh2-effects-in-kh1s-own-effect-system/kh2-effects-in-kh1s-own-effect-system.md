@@ -18,6 +18,7 @@
 - [12. Mr Bugs: 1. the older player is to be deprecated](#^m12)
 - [13. Assistant: t437 to t444 (one change each).](#^m13)
 - [14. Mr Bugs: 1. (b) (I'm unsure the affects of this as I noticed reflect ](#^m14)
+- [15. Assistant: t454 to t456.](#^m15)
 
 ---
 
@@ -330,4 +331,21 @@
 
 ^m14
 
+
+> [!tip] Assistant
+> **t454 to t456.**
+>
+> 1. **t454, Reflect:** it wasn't using either body point. All of its pieces sit on Sora's root with KH2's own numbers, so (a) wouldn't have changed it. The real bug was that KH1's root faces a quarter turn away from KH2's, so every KH2 effect on Sora's root (Reflect, Explosion's burst, Fire's and Cure's root pieces, the forms' root effects) was turned 90° around him. Reflect's side pieces ended up in front and its front pieces at the side. That's fixed now.
+> 2. **t455:** KH2 effects now follow Sora's and the Keyblade's visibility like KH2's do. Fire's two pieces go when the Keyblade is put away, and Explosion's flashes also fade with Sora (for example going into first person).
+> 3. **t456:** the debug menu's vertex buffer is now 4 MB instead of 24 MB.
+>
+> **Check:** KH1's root frame in the exe and decomp, and KH2's alpha rule in the decomp. Not checked in game. Assumption: KH2's object frame is the one the old player used (the one you checked with Guard Break).
+>
+> No new log yet for Thunder 3's textures. Please send one after casting Thunder.
+>
+> Questions:
+> 1. Now that Reflect is sorted, Cure's pieces on KH2's effect point: (a) KH2's exact 105 above his feet (what it does now), (b) KH1's own body centre, like the other spells (about 20 lower on his body than KH2's point), or (c) KH1's body centre plus KH2's 20 between the two points?
+> 2. The debug menu also reserves a 24 MB texture buffer meant for the KH2 player model (which is off) just to hold its small font: (a) give the font its own small buffer and only reserve the 24 MB if the model comes back, or (b) leave it?
+
+^m15
 
