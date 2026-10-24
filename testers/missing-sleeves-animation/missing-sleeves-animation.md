@@ -15,6 +15,7 @@
 - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](#^m9)
 - [10. Assistant: t453. Sorry I missed your message last round; it should have](#^m10)
 - [11. Assistant: I went through the KH2 Steam decomp step by step, from where](#^m11)
+- [12. Assistant: t490 and t491. Everything now follows what KH2's own model s](#^m12)
 
 ---
 
@@ -206,4 +207,23 @@ to answer your last response, removing the test:
 
 make everything 1:1 with how its animated in kh2, if there's no equivalences like the ones we talked about then don't add them.
 
-go ahead 
+go ahead
+
+
+> [!tip] Assistant
+> **t490 and t491.** Everything now follows what KH2's own model shows: where KH2 animates a bone but draws nothing on it, that motion isn't copied.
+>
+> - **t490, pants.** KH2 draws its shorts on its hips and on bones the thighs carry; its trouser bones are keyed but have no mesh. So the shorts hang fixed on the thigh again, and KH1's own animation is off them. One small difference: in a few KH2 moves (203 to 208, 42, 171) the thigh's shorts bone is keyed 9° to 30° off the leg. On KH1 that would turn the whole thigh, so it isn't carried.
+> - **t491, coat.** KH2's jacket is drawn on its torso bone only, and its coat bones have no mesh. So the coat now moves rigidly with Sora's chest, like KH2's jacket. The old follow-the-hips motion, the thigh lift on the front panels and the push off the legs are gone, because they were ours.
+> - **No change:** the hood, the sleeve flaps and the three hair spikes stay still, because KH2 has no mesh on those bones. The whole sleeves, hair, necklace and keychain keep following KH2; I checked the keychain, KH2's chain has mesh on every link. The parts only KH1 has (belt chain, belt-front pieces, pendant) get no new motion.
+>
+> Checked: KH2's model and all 83 of its motions in the game files. Not tested in game.
+>
+> Please test: high kicks, landings and swings, and watch the front of the coat around the thighs; also running and the idle.
+>
+> Question: KH1's coat is longer than KH2's jacket. It hangs down to where KH2 has its waist and the top of the shorts, so when a leg comes up its front tips go into the thigh (kicks, landings and some swings: motions 155, 8, 167, 196, ...). KH2's own jacket never gets that low. (a) keep it exactly like KH2's jacket, clipping included; (b) keep it rigid with the chest but push the panels off the thighs only when they'd go in (our own guard, not KH2's); or (c) have the lower part follow what KH2 draws at that height (its waist and hips) and the upper part the chest?
+>
+> Separately, a finding for the body retarget (not changed here, it's another system): its thigh roll differs from KH2's visible thigh bone by up to 43° to 56° in a few motions (7, 8, 40, 183 and some swings). I can look at it in its own thread if you want.
+
+^m12
+

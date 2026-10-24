@@ -134,6 +134,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [9. Mr Bugs: when I mean model in this case I'm also referring to kh2 sor](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m9)
   - [10. Assistant: t453. Sorry I missed your message last round; it should have](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m10)
   - [11. Assistant: I went through the KH2 Steam decomp step by step, from where](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m11)
+  - [12. Assistant: t490 and t491. Everything now follows what KH2's own model s](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m12)
 - [Quick Run native](../testers/quick-run-native/quick-run-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/quick-run-native/quick-run-native.md#^m1)
 - [Reaction commands](../testers/reaction-commands/reaction-commands.md)
