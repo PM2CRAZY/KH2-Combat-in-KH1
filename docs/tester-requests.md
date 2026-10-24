@@ -51,6 +51,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [7. Mr Bugs: 1. not sure what this question means but, kh1s cam feels fas](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m7)
   - [8. Assistant: t413 and t414](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m8)
   - [9. Mr Bugs: 1. check the decomp for both (steam gihidra c decomp)](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m9)
+  - [10. Assistant: t450 to t452. Sorry, I missed your answers last round. Here ](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m10)
 - [KH2 effects in KH1's own effect system](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md)
   - [1. Mr Bugs: from chat-history-log.md (kh2 moves hitbox effect bugs)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m1)
   - [2. Assistant: t376](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m2)

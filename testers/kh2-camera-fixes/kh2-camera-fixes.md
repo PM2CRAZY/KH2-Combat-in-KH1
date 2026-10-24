@@ -13,6 +13,7 @@
 - [7. Mr Bugs: 1. not sure what this question means but, kh1s cam feels fas](#^m7)
 - [8. Assistant: t413 and t414](#^m8)
 - [9. Mr Bugs: 1. check the decomp for both (steam gihidra c decomp)](#^m9)
+- [10. Assistant: t450 to t452. Sorry, I missed your answers last round. Here ](#^m10)
 
 ---
 
@@ -148,4 +149,15 @@
 
 ^m9
 
+
+> [!tip] Assistant
+> **t450 to t452.** Sorry, I missed your answers last round. Here they are now.
+>
+> 1. **t450, mouse in first person:** KH2's code turns Sora a steady 3° a frame from the right stick, and KH2's pad puts the mouse over the right stick whenever it moves. So in KH2, moving the mouse left or right turns him at that same steady speed, with no extra speed for moving it faster. Ours does that now, for base Sora and in forms. Moving it up and down already looked up and down.
+> 2. **t451, 30 fps:** at 30 fps KH2 eases the camera once a frame at the full rate. Ours eased twice at half the rate, which is why it felt looser. It's KH2's now. With keyboard and mouse it follows much more tightly at 30 fps (about 91% of the gap a frame instead of 75%). With a controller the difference is tiny. 60 fps is unchanged.
+> 3. **t452, looking up and down in first person:** KH2's code works the same way as ours, but its speed and top/bottom limits are numbers stored in KH2's exe, which the decomp doesn't show. Your KH2 exe is in the game folder you connected, so I read them straight from it: 3° a frame (same as before) and 70° up and 70° down. Ours used KH1's 80° up / 60° down until now.
+>
+> **Check:** the Steam KH2 decomp for t450 and t451, and your KH2 exe for t452 (the same function the decomp shows reads those three numbers). Not checked in game. Assumption: KH2's first-person turn is on the right stick's left/right, from your trace.
+
+^m10
 
