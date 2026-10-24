@@ -238,3 +238,14 @@ State 0x15's pre-step (`0x1402B2880`) wrapped. For Sora at Glide KH2, each frame
   `KH2_GLIDE_KEPT`, as at Glide KH1): a Square in one of its other borrows (an air combo's) doesn't glide; the
   glide comes once KH1 has him back. Drive Forms keep the controller's glide (their own movesets).
 - The Steam build only (the KH1 addresses are Steam's); elsewhere Glide KH2 has no glide.
+
+### 8.6 Donald and Goofy glide after him (the tester's "(b)")
+
+Their AI's glide (`0x1401CF9E0`, §7) reads Sora's ability bits `0x142D5EC10` (`0x80` KH1's Glide, `0x100`
+Superglide), which KH1 rebuilds from its menu in `0x1402A6380` (a menu closing `0x1402D53B0` → `0x1402A4E50`, map
+setup `0x1402888B0`, an event `0x1402A68D0`). **Checked (decomp)** At Glide KH2, base Sora with KH2's Glide and
+neither of KH1's, `glide::party` sets `0x80` each Sora physics frame, so they glide after his jumps with KH1's
+glide on their own bodies (KH1's handlers run for them); it's taken off again (only if we set it, and only if he
+doesn't have KH1's Glide himself) when he can't glide with KH2's. Sora's only other reader of `0x80` is the fall
+state's jump press, which no longer starts KH1's glide on him at Glide KH2 (§8.1). **Checked (decomp)**, a grep of
+every read of `0x142D5EC10`'s `0x80` / `0x100` bits (the AI's three functions, `0x1402AFD60`, `0x1402A7B30`).

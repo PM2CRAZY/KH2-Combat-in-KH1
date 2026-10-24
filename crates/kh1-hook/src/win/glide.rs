@@ -23,7 +23,7 @@
 use super::addr::{Build, Rva};
 use super::styles::{self, Kind};
 use super::{log, takeover};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 /// KH1's glide state.
@@ -163,6 +163,42 @@ pub unsafe fn install(base: usize) {
         (table + FALL_STATE as usize * ENTRY + JUMP_PRESS, &ORIG_FALL_JUMP, fall_jump as *const () as usize),
     ];
     wrap(&slots);
+    party(base);
+}
+
+/// Sora's ability bits (Steam `0x142D5EC10`, rebuilt from KH1's menu by `0x1402A6380` when a menu
+/// closes or a map is set up: `0x80` KH1's Glide, `0x100` its Superglide). Checked (decomp).
+const ABILITY_BITS_RVA: Rva = Rva(0x2D5F610);
+const KH1_GLIDE_BIT: u32 = 0x80;
+const KH1_SUPERGLIDE_BIT: u32 = 0x100;
+/// We set `KH1_GLIDE_BIT` (Sora doesn't have KH1's Glide himself).
+static PARTY_BIT: AtomicBool = AtomicBool::new(false);
+
+/// Donald and Goofy glide after Sora whenever he can glide with KH2's (the tester, "(b)"). Their AI
+/// (`0x1401CF9E0`, members 1 and 2 only, from the party think `0x1402A3300` -> `0x1401CDBD0`)
+/// follows a jump of his with KH1's Glide (`0x1402B26C0`) or Superglide (`0x1402B2750`) on their own
+/// bodies only when Sora's ability bits have `0x80` / `0x100`, and its glide steering ends it when
+/// they catch up (`0x1401CD050`). So at Glide KH2, with KH2's Glide (any level) and none of KH1's,
+/// `0x80` is set each Sora physics frame (KH1 clears it when it rebuilds the bits), and taken off
+/// again (only if we set it and he still lacks KH1's Glide) when he can't glide with KH2's. Their
+/// glide stays KH1's (KH1's handlers run for them). Sora's own reader of `0x80`, the fall state's
+/// jump press (`0x1402AFD60`), is ours at Glide KH2 (`fall_jump`: no KH1 glide on his jump).
+/// Checked (decomp).
+unsafe fn party(base: usize) {
+    let p = base + ABILITY_BITS_RVA;
+    let v: u32 = rd(p);
+    let want = styles::kh2(Kind::Glide) && built() && takeover::kh2_glide_growth().is_some();
+    if want {
+        if v & (KH1_GLIDE_BIT | KH1_SUPERGLIDE_BIT) == 0 {
+            wr(p, v | KH1_GLIDE_BIT);
+            if !PARTY_BIT.swap(true, Ordering::Relaxed) {
+                note("Donald and Goofy glide after him (KH1's Glide bit set for their AI: Sora has KH2's Glide)".to_string());
+            }
+        }
+    } else if PARTY_BIT.swap(false, Ordering::Relaxed) && v & KH1_GLIDE_BIT != 0 && !takeover::kh1_has_glide(base) {
+        wr(p, v & !KH1_GLIDE_BIT);
+        note("Donald and Goofy's glide back to KH1's rule (Sora has no glide of KH2's here)".to_string());
+    }
 }
 
 pub(crate) unsafe fn wrap(slots: &[(usize, &AtomicUsize, usize)]) {

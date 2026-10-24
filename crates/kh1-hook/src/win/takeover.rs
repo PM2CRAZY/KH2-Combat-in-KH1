@@ -631,6 +631,12 @@ unsafe fn kh1_glide_open(base: usize) -> bool {
     has(4, 0xB) != 0 || has(3, 0xB) != 0
 }
 
+/// Sora has KH1's own Glide (`glide::party`).
+pub(crate) unsafe fn kh1_has_glide(base: usize) -> bool {
+    let has: unsafe extern "system" fn(i32, i32) -> i32 = std::mem::transmute(base + HAS_ABILITY_RVA);
+    has(3, 0xB) != 0
+}
+
 /// Sora has KH1's Superglide: his glide is on Square (vanilla KH1: Glide on the jump button,
 /// Superglide on Square). `glide = square` in the ini (`glide_on_square`, off) forces Square too.
 unsafe fn glide_on_square_now(base: usize) -> bool {
