@@ -80,6 +80,15 @@ const DECOR_RVA: Rva = Rva(0x2F0740);
 /// The list cursor's move (up / down, wrapping on a fresh press) and the glove's target.
 const CURSOR_MOVE_STEAM: usize = 0x2EF670;
 const GLOVE_STEAM: usize = 0x2D9920;
+/// The glow's target set from a point: `(frames, x, y)` (`0x1402D9860`, Checked (decomp)): the
+/// glint `0x1402D9B40` draws (30 x 30 around the point) slides there over `frames`. The window
+/// version above (`0x1402D9920`) puts it at the selected label's top-right corner: x = window x +
+/// 11 + 142, y = window y + 71 + row x the window's row pitch (`+0xF0`, from the def's `+0x22`).
+/// KH1's Config list def has a pitch of 0 (Checked (exe): `0x1405463A0 +0x22` = 0), so in KH1
+/// itself the glint stays on the top row; ours give it the rows' pitch.
+const GLOW_AT_STEAM: usize = 0x2D9860;
+/// A window def's row pitch (window `+0xF0` = it x 16).
+const DEF_PITCH: usize = 0x22;
 /// Window framework: create `(def, open type) -> window` (0 when the 24-window pool is full; it
 /// becomes the focus), close it and the windows after it (`+0x20`), the last window after it,
 /// link `a +0x20 = b` (next) / `a +0x18 = b` (parent), bring to the front.
@@ -405,6 +414,10 @@ pub unsafe fn install() {
         let n = l.items().len() as u16;
         d[0x26..0x28].copy_from_slice(&n.to_le_bytes());
         d[0x28..0x2A].copy_from_slice(&n.to_le_bytes());
+        // The rows' pitch (KH1's own row step, as the update draws them), so the glint follows
+        // the cursor (the tester: "the glowing cursor ... stays at the top").
+        let pitch = (rd::<i32>(base + ROW_H_RVA) + rd::<i32>(base + ROW_GAP_RVA)) as i16;
+        d[DEF_PITCH..DEF_PITCH + 2].copy_from_slice(&pitch.to_le_bytes());
     }
     if hook::install(base + HELP_RVA, &HELP_PROLOGUE, help as *const () as usize, &ORIG_HELP, "Config help line").is_none() {
         return;
@@ -592,8 +605,12 @@ unsafe extern "system" fn update(win: usize) {
     let mut faked = false;
     // The row before this frame's move.
     let row = rd::<i32>(base + ROW_RVA);
+    // KH1's update moves the glint (`0x1402D9920`) when it has the focus and no confirm / cancel.
+    let mut glint = false;
     if pad > 0x10000 && focus(win) {
         PENDING.store(-1, Ordering::Relaxed);
+        let cancel = rd::<u32>(base + CONFIRM_MASK_RVA + 4);
+        glint = rd::<u32>(pad + 8) & (rd::<u32>(base + CONFIRM_MASK_RVA) | cancel) == 0;
         let confirm = rd::<u32>(base + CONFIRM_MASK_RVA);
         let (pressed, repeat) = (rd::<u32>(pad + 8), rd::<u32>(pad + 0x10));
         let mut swallow = 0;
@@ -631,6 +648,9 @@ unsafe extern "system" fn update(win: usize) {
     }
     // Our button and KH1's Default, drawn as KH1 draws its row 7 (style 1 selected, 0 not).
     let row = rd::<i32>(base + ROW_RVA);
+    if glint {
+        glint_to(win, row);
+    }
     button(win, BUTTON_ROW, row == BUTTON_ROW, BUTTON_LABEL);
     button(win, DEFAULT_ROW, row == DEFAULT_ROW, DEFAULT_LABEL.load(Ordering::Relaxed));
 }
@@ -694,6 +714,23 @@ unsafe extern "system" fn list_update(win: usize) {
             Item::Open(label, _, _) => button(win, i as i32, row == i as i32, *label),
         }
     }
+}
+
+/// Page 1's glint at the selected label's top-right corner (x 153, y 71 + row x the rows' pitch),
+/// taken through the list's 92% scale as its boxes are (anchor: the window's top edge, x at its
+/// centre), so it follows the cursor over the scaled rows. KH1's own call (`0x1402D9920`) has
+/// already run in the update with the def's pitch of 0 (the top row); this one, the same frame,
+/// replaces its target. Coordinates in KH1's 1/16 units as `0x1402D9920` makes them.
+unsafe fn glint_to(win: usize, row: i32) {
+    let base = BASE.load(Ordering::Relaxed);
+    let pitch = rd::<i32>(base + ROW_H_RVA) + rd::<i32>(base + ROW_GAP_RVA);
+    let (wx, wy) = (rd::<i32>(win + 0xDC), rd::<i32>(win + 0xE0));
+    let ax = wx + rd::<i16>(win + 0xE4) as i32 / 2;
+    let (px, py) = ((wx + 153 * 16) as f32, (wy + (0x47 + row * pitch) * 16) as f32);
+    let x = ax as f32 + (px - ax as f32) * LIST_SCALE;
+    let y = wy as f32 + (py - wy as f32) * LIST_SCALE;
+    let f: unsafe extern "system" fn(i32, i32, i32) = std::mem::transmute(base + GLOW_AT_STEAM);
+    f(8, (x as i32 - 0x7000) >> 4, (y as i32 - 0x7400) >> 4);
 }
 
 fn row_y(base: usize, row: i32) -> i32 {

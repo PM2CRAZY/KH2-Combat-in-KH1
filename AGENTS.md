@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 479 (testing branch: Config menu: the glint follows the cursor)
+- The tester (Config menu rework): "the glowing cursor that follows each command is not following properly, it stays at the top. use the c decomp". The glint is KH1's `0x1402D9B40` (a 30 x 30 glow at a point), its target from `0x1402D9920 (win, frames)`: the selected label's top-right corner, y = window y + 71 + row x window `+0xF0`. KH1's Config list def has a row pitch of 0 (`0x1405463A0 +0x22`), so in KH1 itself it stays on row 0. Our lists' defs now carry the rows' pitch (26 + 2), so KH1's own call follows the cursor; on page 1, after KH1's update, `0x1402D9860 (8, x, y)` (Steam) puts it at the selected row's corner taken through the 92% scale. Checked (decomp) for both functions and the window fields, Checked (exe) for the def's pitch of 0. Assumption: the glint's size stays unscaled on page 1. Sub-lists stay full size (answer 1a). docs/kh1-config-menu.md §5.
+
 ### 2026-10-24: Stage 478 (testing branch: KH2's finisher casts on KH1's combo)
 - **KH2's finisher casts on KH1's combo.** The tester (same thread). 57/60/63 as alternates on 0x36..0x38 / 0x3D, `kh2slots::pick_cast`; KH2's rule on KH1's count (`+0x41`, `+0x50` or Combo Master, length `+0xD4`), finisher sub and voice. Notes `docs/kh1-magic-native.md` §4b.
 

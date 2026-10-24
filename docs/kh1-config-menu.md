@@ -311,10 +311,19 @@ together, so a ninth row fits on page 1.
   top, so anchor 1 keeps the list's top in place proportionally: row 0 moves from y 71 to 65, a
   ninth row (y 295..321) ends at 295, above the help box (def `0x140546160`, y 300).
 - Set every frame at the start of the list's update (`0x1402FA210`), before it draws.
-- **Not scaled:** KH1's glove cursor (`0x1402D9920` sets its target from the window's place,
-  `0x1402D9B40` draws it in screen space). For the Config list its target doesn't depend on the
-  row (`+0xF0` is 0 from the def), so it isn't moved either way. Assumption: whether it shows on
-  this screen wasn't checked.
+- **The glint (t479).** The "glowing cursor" is KH1's glint: `0x1402D9B40` draws a 30 x 30 glow
+  (pulsing alpha) around a point in screen space, sliding there over a few frames; its target is
+  set by `0x1402D9920 (win, frames)` (the selected label's top-right corner: x = window x + 11 +
+  142 column width, y = window y + 71 + row x window `+0xF0`) or `0x1402D9860 (frames, x, y)`.
+  **Checked (decomp)**. KH1's Config list def has a row pitch of 0 (`0x1405463A0 +0x22` = 0 in
+  the Steam exe, **Checked (exe)**; the window copies it to `+0xF0`), so in KH1 itself the glint
+  stays on the top row whatever row is selected; the tester saw it stuck there. Now: our lists'
+  defs carry the rows' pitch (row height + gap, 26 + 2), so KH1's own `0x1402D9920` call in our
+  update follows the cursor; on page 1, after KH1's update (which ran `0x1402D9920` with pitch 0),
+  `0x1402D9860 (8, x, y)` replaces the target with the corner of the selected row taken through
+  the 92% scale (anchor: window top, x at the window's centre), on the frames KH1 moves it
+  (focus, no confirm / cancel). **Assumption:** the glint's own size isn't scaled (KH1 draws it
+  in screen space), only its place.
 
 ## 6. The KH1 in KH2 button and our lists (Steam; the Config menu rework)
 
