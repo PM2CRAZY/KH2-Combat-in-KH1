@@ -701,8 +701,8 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   and 15 ms each at load (9 more slots). Not native yet (still borrows): Flash Step (169: a guard
   on his body, ATKP 406 kind 2, frames 0..19), Vicinity Break (170: a body attack, 1869 group 21,
   power 125), Explosion (166: 911 / 912), Guard Break (165, a finisher; its KH2 guard break isn't
-  KH1's attack data), the air rows (Aerial Spiral
-  192, Aerial Finish 194, Magnet Burst 197), the Square moves, Counterguard and Retaliating Slash.
+  KH1's attack data), Magnet Burst (197; Aerial Spiral 192 and
+  Aerial Finish 194: below), the Square moves, Counterguard and Retaliating Slash.
   What stays KH1's for these, as for the plain swings: the row, its attack object on the
   Keyblade (KH1's shape and damage for that row, not KH2's ATKP: Slapshot's, Dodge Slash's and
   Slide Dash's own power and reactions are not used), its combo count and window from the slot.
@@ -735,6 +735,21 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   plus his jump height, speed 0..32, `distance_adjust` 105; no gravity at frames 46..54, Keyblade
   hits only), now native as Aerial Sweep is (`kh2_hop`, slots on 0xCC / 0xCD): KH2's hop for that
   target on KH1's air state, then the hold near the end of the dive.
+- **Aerial Spiral and Aerial Finish on KH1's air combo** (the tester: "transfer everything into
+  kh1's systems"; Aerial Combo KH2): KH2's air ability rows whose motion is only a Keyblade swing
+  (`kh2slots::blade_swing`, now with no-gravity ranges allowed, KH1's air step holding them)
+  play on KH1's air rows as the plain air rows do (`combomods::native_ability`, `Kh1Combo::plain`,
+  `kh2_row`, `select_swing`, `air_hop`), no borrow. PTYA and ranges (Checked (files)): Aerial
+  Spiral, row 36 (twice: primary 0..650 at any height, and any target 300..650 dead ahead), motion
+  192, ability 98, hop 14 (14..114), speed 4..18, no gravity 16..24, a swing (built on 0xCC /
+  0xCD); Aerial Finish, row 29, motion 194, ability 100, kind 3, a finisher (built on 0xCE), hop
+  14 (14..114), speed 0..18, `distance_adjust` 55, no gravity 16..100 (the hover before the last
+  blow), its finisher window 89..108, its effects (frame triggers 1: elements 35..38) fired by our
+  slot as KH2's. KH1's air row (18 / 17, finisher 16 / 15) runs, its own lunge and hop replaced
+  by KH2's hop for the row (KH2's hop rule above), then the hold in the range. The air motions
+  have no root travel (all 0: 181..184, 191, 192, 194, 196; Checked (files)). Still borrows: Magnet
+  Burst (197: body attacks 1900 / 1901 / 1903 and a guard), Finishing Plus's next finisher out of
+  KH1's (the press in KH1's finisher), the air Square move (Horizontal Slash, 193, a Square row).
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

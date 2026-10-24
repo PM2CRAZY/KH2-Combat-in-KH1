@@ -260,9 +260,11 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
 /// the rows their `sub` swaps to (any kind; the exe's anti-repeat keeps the `sub` row, Steam
 /// `0x140402C50`). With no ability, and the ground ability rows that are only a Keyblade swing
 /// (`blade_swing`): on the ground its swings (Slapshot, Dodge Slash, Slide Dash), which KH1's
-/// ground swing rows play natively as they do the plain ones, in the air its hops (Aerial Sweep),
-/// which KH1's air swing rows play from the ground as KH2's plain hop (`combomods::native_ability`,
-/// `kh2_hop`); the other ability rows are still borrows (`combomods`).
+/// ground swing rows play natively as they do the plain ones, in the air its hops from the ground
+/// (Aerial Sweep, Aerial Dive), which KH1's air swing rows play as KH2's plain hop, and its air
+/// rows (Aerial Spiral, the finisher Aerial Finish), which KH1's air swing and finisher rows play
+/// as the plain air rows (`combomods::native_ability`, `kh2_hop`, `air_hop`); the other ability
+/// rows are still borrows (`combomods`).
 fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashMap<u16, character_core::Clip>, air: bool) -> Vec<(u16, bool)> {
     let picked = |r: &character_core::ComboRow| r.kind != 0;
     let subs: Vec<i8> = rows.iter().filter(|r| picked(r)).map(|r| r.sub).collect();
@@ -272,7 +274,9 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
         // (In the air also the ground rows that hop: KH1's air swing rows play them from the
         // ground, `combomods::kh2_hop`; the plain ones' motions are the air rows' own.)
         let here = if air { r.is_air() || r.is_jump() } else { !r.is_air() && !r.is_jump() };
-        let ability_ok = r.ability == 0 || (!r.is_air() && !r.is_finisher() && clips.get(&r.motion).is_some_and(blade_swing));
+        // (A ground finisher of an ability's, Guard Break, is left a borrow: its guard break isn't
+        // KH1's finisher's attack data.)
+        let ability_ok = r.ability == 0 || ((r.is_air() || !r.is_finisher()) && clips.get(&r.motion).is_some_and(blade_swing));
         if reachable && r.motion != 0 && here && ability_ok && !out.iter().any(|o| o.0 == r.motion) {
             out.push((r.motion, r.is_finisher()));
         }
@@ -286,8 +290,9 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
 /// a weapon, none on his own body), and has no guard, no invulnerability, no air / ground range
 /// of its own (each of those is KH2 behaviour KH1's swing row doesn't have). Its no-gravity
 /// ranges are KH1's now (`no_gravity`, `shared::physics`'s air step). Sora's (`P_EX100.mset`,
-/// Checked (files)): Slapshot 162, Dodge Slash 163, Slide Dash 164, Aerial Sweep 191 and Aerial
-/// Dive 196 (no gravity at frames 46..54) pass; Flash Step 169 (a guard on his body, ATKP 406
+/// Checked (files)): Slapshot 162, Dodge Slash 163, Slide Dash 164, Aerial Sweep 191, Aerial Dive
+/// 196 (no gravity at frames 46..54), Aerial Spiral 192 (16..24) and Aerial Finish 194 (16..100)
+/// pass; Magnet Burst 197 (body attacks 1900 / 1901 / 1903 and a guard), Flash Step 169 (a guard on his body, ATKP 406
 /// kind 2, frames 0..19), Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166
 /// (911 / 912), Guard Break 165 (a finisher, left out above), Finishing Leap 167 and
 /// Counterguard 171 don't.

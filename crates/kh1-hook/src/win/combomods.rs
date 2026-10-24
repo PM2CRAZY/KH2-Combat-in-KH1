@@ -13,10 +13,11 @@
 //! - **Attack** (`attack`, from `combat::exec`: a press KH1's combo took, its row about to run):
 //!   KH2's combo is asked what it would take at KH1's count (`Character::would_take`, the combo
 //!   carried at KH1's count, the press, KH2's targets and KH1's lock). KH2 takes it when that is
-//!   - a row that needs an ability (an action ability's move: Flash Step, Vicinity Break, Aerial
-//!     Spiral; the finishers Explosion, Guard Break, Aerial Finish, Magnet Burst ...), opener,
-//!     step or finisher, except the ones KH1's own rows now play natively (`native_ability`:
-//!     Slapshot, Dodge Slash, Slide Dash, Aerial Sweep, Aerial Dive at Base Combo KH2);
+//!   - a row that needs an ability (an action ability's move: Flash Step, Vicinity Break; the
+//!     finishers Explosion, Guard Break, Magnet Burst ...), opener, step or finisher, except the
+//!     ones KH1's own rows now play natively (`native_ability`: Slapshot, Dodge Slash, Slide
+//!     Dash, Aerial Sweep, Aerial Dive at Base Combo KH2; Aerial Spiral, Aerial Finish at Aerial
+//!     Combo KH2);
 //!   - KH2's finisher where KH1's would still swing, with Negative Combo;
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
 //!     count);
@@ -182,10 +183,14 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
 /// plain ground swing row runs it as it runs KH2's plain swings (`kh2_row`, `select_swing`): KH1's
 /// row, attack object, damage and windows, KH2's motion and root travel. A hop (Aerial Sweep,
 /// Aerial Dive), with the Aerial Combo at KH2 too: KH1's air state and air swing row with KH2's
-/// hop, as KH2's plain hop (`kh2_hop`). The rest still borrow.
+/// hop, as KH2's plain hop (`kh2_hop`). An air row (Aerial Spiral, the finisher Aerial Finish),
+/// with the Aerial Combo at KH2: KH1's air swing or finisher row with KH2's motion and its own
+/// hop, as KH2's plain air rows (`air_hop`). Their no-gravity ranges are held on KH1's air state
+/// (`kh2slots::no_gravity`). The rest still borrow.
 fn native_ability(row: &ComboRow) -> bool {
     use super::styles::{kh2, Kind};
-    row.ability != 0 && !row.is_air() && !row.is_finisher() && kh2(Kind::GroundCombo) && (!row.is_jump() || kh2(Kind::AirCombo)) && super::kh2slots::has_any(row.motion)
+    let styles = if row.is_air() { kh2(Kind::AirCombo) } else { kh2(Kind::GroundCombo) && (!row.is_jump() || kh2(Kind::AirCombo)) };
+    row.ability != 0 && styles && super::kh2slots::has_any(row.motion)
 }
 
 /// What `combat::exec` runs for an Attack KH1's own combo took (`attack`).
@@ -277,7 +282,8 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
 
 /// KH2's air swing's own hop on KH1's air swing (Aerial Combo KH2; the tester: "(a)", KH2's own
 /// per-row hop on each air swing, 1:1): KH2's pick is a plain air row (rows 7..10: 181 / 182,
-/// finishers 183 / 184; no ability) and KH1's air row plays its motion (`select_swing`), so the
+/// finishers 183 / 184; or an ability's KH1 plays natively, `native_ability`: Aerial Spiral 192,
+/// Aerial Finish 194) and KH1's air row plays its motion (`select_swing`), so the
 /// hop KH2 starts with it (Steam KH2 `0x1403D78D0`: every row with `jump` above 0 starts one, in
 /// the air too, the count kept; `launch`, its height and speed for the primary target, or the
 /// row's `jump` and `speed_max` along his facing with none) replaces the one KH1's row starts
@@ -468,12 +474,12 @@ struct Kh1Combo {
 
 impl Kh1Combo {
     /// KH2's `row` is a plain swing or finisher of this combo: no ability (those are borrows), or
-    /// an ability swing KH1's swing row plays natively (`native_ability`, on the ground); on the
-    /// ground no hop (KH2's hops aren't KH1 rows), in the air an air row.
+    /// an ability row KH1's rows play natively (`native_ability`); on the ground no hop (KH2's
+    /// hops aren't KH1 rows), in the air an air row.
     fn plain(&self, row: &ComboRow) -> bool {
         let air = self.style == super::styles::Kind::AirCombo;
         let here = if air { row.is_air() } else { !row.is_air() && !row.is_jump() };
-        here && (row.ability == 0 || (!air && native_ability(row)))
+        here && (row.ability == 0 || native_ability(row))
     }
 
     /// KH1's `request` is the kind of KH2's `row` (a swing for a swing, the finisher for a finisher).

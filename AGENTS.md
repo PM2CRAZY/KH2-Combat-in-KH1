@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 435 (testing branch: KH2 Aerial Spiral and Aerial Finish on KH1's air combo)
+- **KH2's Aerial Spiral and Aerial Finish on KH1's air combo.** Air ability rows through `Kh1Combo::plain` / `air_hop`, 192 on 0xCC / 0xCD, 194 on 0xCE. Notes §7.
+
 ### 2026-10-23: Stage 434 (testing branch: KH2 no-gravity ranges on KH1's air state; Aerial Dive)
 - **KH2's no-gravity ranges on KH1's air state; Aerial Dive.** `kh2slots::no_gravity`; `shared::physics` air step holds the arc (KH1's step undone / KH2's arc not advanced). Assumption: the exe matches the OG rewrite. Aerial Dive 196 (46..54) native. Notes §7.
 
