@@ -1,0 +1,145 @@
+# KH2 magic and Reflect native (testing branch)
+
+The tester (thread `kh2-magic-and-reflect-native`): KH2's magic and Reflect were a borrow (KH2's
+controller casts), our copy of KH2's spell scripts (`kh2-magic` / `kh2-bdx`, `formmagic.rs`,
+`reflect.rs`) and our own spell hit checks (`combat.rs`), and Cure's heal our own share
+(`CURE_SHARE`). Native: KH1's cast state with KH2's cast motions as slots, spell objects as
+KH1 attack objects hit by KH1's own collision pass, KH2's numbers 1:1. This note is the
+research (how KH1 makes, steps and hits its own spells) and the plan. Steam addresses (image
+base `0x140000000`) unless marked Epic. Plain-language notes only.
+
+Labels: **Checked (decomp)** read in the Steam KH1 decomp, **Checked (exe)** read from the Steam
+exe's bytes, **Checked (files)** read from the staged game files, **Assumption** not checked.
+
+## 1. How KH1 casts (Checked (decomp))
+
+- The command menu writes the command record `0x142D53A40` (type 2 = magic, the spell in bits
+  8..23, the target at `+4`). KH1's control step `0x1402A6220` runs the command step
+  `0x1402A7510` whenever the record is set (not gated by "can act": the menu decides what can be
+  chosen), then clears it.
+- Magic goes to `0x1402A3600`, which picks by Sora's state (`+0x70`): 0, 6, 0x18 the ground cast
+  (`0x1402A3DB0`), 2 the air cast (in `0x1402A3600`), 8 the air cast with a turn to the target
+  (`0x1402A4150`); any other state casts nothing. Each first asks KH1's usable check
+  `0x14028EFD0 (actor, spell)` (not sealed `0x142D53A38 & 4`, the spell's slot loaded at
+  `0x142D22B80 + spell × 0x38`, its attack data at `+0x18`, magic allowed `save + 0x874 & 1`, the
+  spell learned, then the MP check `0x1402A4C10` with the attack data's `+0x30`).
+- **KH1's cast state is no state of its own**: the ground or air state with the action flag
+  (`+0` bit 2, set by a request with bit 24, `0x14029F980`) and a cast request:
+  - ground `0x36 + spell` then the idle queued (`0x14029FA30 (actor, 0x40000000)`); Fire
+    `0x36` then its second part `0x3D` then the idle;
+  - air `0x83 + spell` then the fall (request 6; state 8's `0x75`); Fire `0x83` then `0x8A`;
+  - a Fire chosen while `0x3D` / `0x8A` plays, or out of the swings `0xC8` / `0xCA` in their combo
+    window (`0x14029EFB0`), plays `0x3D` / `0x8A` at once (`0x1402A7510`'s type-2 case): KH1's
+    quick Fire.
+  - The motion queue (`0x14029F980` new, `0x14029FA30` append): count `+0x178`, entries of 0x10
+    from `+0x17C` (request with bit 24 cleared, a start time, the blend, a handle).
+- Then the spell start `0x14028F140 (actor, spell, target)`. The request table
+  (`xa_ex_0010.mset` section 1, Checked (files)): 0x36 → slot 54 (28 frames), 0x37 → 55 (86),
+  0x38 → 56 (68), 0x39 → 56, 0x3A → 55, 0x3B / 0x3C → 56; 0x3D → 57 (60); air 0x83 → 79, 0x84 → 80,
+  0x85 / 0x86 → 81, 0x8A → 82. "May be left" points (event 0.0): Blizzard 55 at 68, Fire's 57 at
+  46, air 80 at 68, 82 at 46; Fire 54 / Thunder and Cure 56 none. No sound or voice events in
+  them (KH1's spell sounds and voices are the scripts').
+- KH1's spell voice is the command step's: with the record's bit 25, `0x1402A3600` plays Sora's
+  voice group `spell + 7` (`0x1402901F0`, `docs/kh1-voice.md`). With KH2's battle quotes a native
+  cast clears that bit and plays KH2's MAGC voice instead; with KH1's, KH1's group plays and
+  KH2's voice doesn't (`kh2sound::voice`).
+- What else of KH1's runs around a cast: nothing in the command step counts it (no tally call in
+  `0x1402A3600` / `0x1402A3DB0` / `0x1402A4150` for magic). Assumption: KH1's `.mag` scripts may
+  count or set things of their own (their files aren't staged); a KH2 spell replaces KH1's
+  script, so whatever those do is not done for the four KH2 spells.
+
+## 2. KH1's spell scripts (Checked (decomp) / (exe))
+
+- `0x14028F140` reads the spell's slot (`0x142D22B80 + spell × 0x38`: `+0` level, `+8` the
+  loaded `.mag`, `+0x18` / `+0x20` its attack data) and starts its script with
+  `0x14028F5E0 (actor, target, arg, code, data, second data)`: a task in the list at
+  `0x142D22D08` (callback `0x14028F6D0`, which sets Sora's `+0x374` bit 23 while it runs) holding
+  a process of KH1's script machine (`0x1402BD420`: one of 32 process slots, flags at
+  `0x142DE51E0`, a 0x800-byte stack each at `0x142DB7BE0`), stepped once a frame
+  (`0x1402BCEC0`).
+- The per-level attack data offsets (table `0x140528638`, 16-byte rows, Checked (exe)): Fire
+  0x5F28 / 0x5F98 / 0x6008, Blizzard 0x6078.., Thunder 0x61C8.., Cure 0x6318.., Gravity 0x6468..,
+  Stop 0x65B8.., Aero 0x6708 / 0x6778 (+ 0x5CF8) / 0x67E8 (+ 0x5D68); `docs/kh1-attack-elements.md`
+  has the fields. Level 1 data seen in play (the tester's t463 log): Fire `1 2 3 3 -1 0x14 ..`
+  (stat source 1 = max MP, element 2, reaction 3 / 3, bone −1 = free-standing, power 20),
+  Blizzard `1 3 3 3 -1 0x16`, Thunder `3 4 3 3 -1 0x10` (stat source 3 = max MP × 2).
+- The script syscalls (table `0x140529180`, 226 entries of (function, argument word), Checked
+  (exe)) that touch attack objects:
+  - 22 (`0x1402BBA00`): a free hit bit (`0x1402B3760`);
+  - 23 (`0x1402BBA20`): **a new attack object** `0x1402B2DC0 (owner, hit bit, data)`, its
+    `+0xA0` the process;
+  - 47 (`0x1402BA250`): **pays the spell's MP** (`0x1402A5B60 (owner, data +0x30)`);
+  - 76 (`0x1402BBAC0`): **puts an object at a point** (`0x1402B3790`: current and previous
+    centres, start and end, the previous-valid flag: a jump, no sweep);
+  - 175 (`0x1402BBBF0`): frees every object of an owner (`0x1402B3600`).
+  So a KH1 spell is a script process moving its own free-standing attack objects; nothing in KH1's
+  engine flies the shot (Assumption: the scripts write the centre `+0x10` through the machine's
+  memory operations between the syscalls above; the `.mag` files aren't staged to confirm).
+
+## 3. KH1's attack objects and its collision pass (Checked (decomp))
+
+- Pool `0x142DB4710` (Epic `0x142DB5110`), 64 objects of 0xC0; live hit bits `0x142DB7710`.
+  Constructor `0x1402B2DC0`: power from the data's stat source (0 Strength, 1 max MP, 3 / 4 / 5 max
+  MP × 2 / 3 / 5, 2 none), element and reaction into `+0x30`, a negative bone makes it
+  free-standing (`+0x30` bit 10, its activity off, the radius the data's `+0x5C`), else bound to the
+  owner's bone. Free `0x1402B3560`; the wrapper with the Keyblade's bonuses `0x1402B3270` (Epic
+  `0x1402B10E0`). Fields: `docs/kh1-reflect.md`.
+- The pass `0x1402B4460` (a task, skipped while `0x142867364 & 0x4000`): `0x1402B47A0` walks the
+  pool (activity: 1 only while `0x142867368` bit 0, 2 while the owner plays request `+0x58` with
+  its hit-window level, 3 re-armed on an interval `0x1402B3380`; an inactive object dies unless
+  bit 8), `0x1402B3800` places and sweeps each into sphere entries (previous centre to current,
+  about a diameter a step) and meets every earlier entry (attack vs attack: the clash
+  `0x1402B4A20` / `0x1402B4BC0`); then each hittable actor's body parts meet the attack entries
+  (the contact, Epic `0x1402B1ED0`: a hit record from the data); then current centres become the
+  previous ones and every hit-once mask (`+0x9C`, actors' `+0x3E0`) is ANDed with the live bits.
+- An attack object's shape is a sphere (radius `+0xC`) swept along its move. KH2's spell attacks
+  are spheres, ellipsoids (radius ≠ height: Firaga's ring 240 × 180) and are swept by KH2's own
+  rule (copies one `min(radius, height)` apart): `docs/magic-model.md`. **Open** (question 3).
+- Damage: the contact's record, then `0x1402BD8D0`: power + stat − Defense on KH1's damage curve,
+  × the target's resistance to the element (Cure's element 11 heals the power, Aero's 12 a
+  barrier). This branch lands KH2's hits as KH1's damage × KH2's power (`combat::scale_record`,
+  Magic-based ones with max MP standing in: +10% a point × `magic_scale`).
+
+## 4. KH2's casts on KH1's cast state (done: step 1)
+
+- `kh2slots::CASTS`: KH2's cast motions (MAGC, `00battle.bin`, Checked (files): Fire 56 / air 58,
+  Blizzard 59 / 61, Thunder 62 / 64, Cure 65 / 67, the same at every level; finishers 57 / 60 / 63)
+  as slots on KH1's requests 0x36..0x39, 0x3D, 0x83..0x86, 0x8A (templates 54, 55, 56, 56, 57, 79,
+  80, 81, 81, 82), pointed at by the Magic / Aerial Magic styles. No "may be left" point of the
+  template's: KH2's cast motions have no free range (`P_EX100.mset`, Checked (files)), they hold
+  him to their end, where KH1's queue takes him on.
+- `combat::command`: a KH2 spell (Fire .. Cure) chosen in KH1's own states, in a state KH1 casts
+  in, is KH1's command step's (no borrow) when `formmagic::native`.
+- `formmagic::kh1_spell_start` (hook on `0x14028F140`, Steam only, prologue
+  `48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 40`, Checked (exe)): with our slot on the request
+  just asked for, KH1's script isn't started; KH2's is (trigger 20 on the next KH1 frame) with
+  KH1's MP cost paid (`reflect::pay_mp`), KH2's MAGC voice (KH1's voice group off with KH2's
+  battle quotes); Fire's second part (0x3D / 0x8A) is
+  taken off KH1's queue. `takeover::native_spells` (each KH1 physics frame with a script of
+  base Sora's running) runs the scripts' frame (`formmagic::shots_step`) with the slot's KH2
+  motion and KH1's time in it; the release (trigger 21) is the clip's magic-cast event at KH1's
+  time. KH2's turn to the lock (range 28: Blizzard 0..16) is `kh2slots::turn_to_lock`'s.
+- Still ours in step 1: the hits (`combat::Strikes::spell_strike`), Cure's heal, Reflect.
+
+## 5. What step 1 leaves (the plan)
+
+1. **The cast in KH2's combo string**: KH2's finisher cast motions (57 / 60 / 63 when the next
+   step would be the finisher, `Character::cast`), the spell taking a combo step (KH1's
+   `+0x41`), and KH2's magic-only window (range id 35, Fire 56 from 60, into 71 34..46): KH1's
+   leave point frees him for everything (question 1).
+2. **KH2's cast physics**: KH2 stops him at a cast (`vel_h` 0; in the air no rise or fall, then
+   its air-magic gravity); KH1's air cast keeps 0.7 of the sideways speed and KH1's gravity
+   (`0x140386CD0 (+0x3C0, 0.7)`). Through the physics setting (`shared::physics`) (question 2).
+3. **Spell attacks as KH1 attack objects**: each script attack a free-standing object of Sora's
+   in the pool (KH1's spell data for its element, our own data copies per KH2 ATKP as `kh1rows`
+   does, `+0x10` / `+0x70` set from the script's position each frame), KH1's pass hitting them,
+   `scale_record` taking KH2's ATKP row (its power, re-hit row by count); hits told back to the
+   script (`attack_is_hit`), walls by KH1's wall test (`0x1402B1870` Epic). Shapes: question 3.
+4. **Reflect**: the barrier (ATKP 573, kind reflect) as a KH1 guard object on Sora (priority 100,
+   a guard clash type: KH1's attack-vs-attack pass meets enemy attacks with it, so each block is
+   KH1's clash and a free-standing enemy shot under priority 98 is turned back by KH1's own
+   reflect, `docs/kh1-reflect.md`), its count from the clashes, the counter / burst as step 3's
+   objects (question 4).
+5. **Cure's heal**: KH2's `ceil(power × Magic / 100)` (ATKP kind 6) through KH1's heal (element 11)
+   on Sora (question 5).
+6. Thunder's turn (range id 22, TurnToTarget, 62 / 65 0..16) as KH1's turn, as range 28 is.

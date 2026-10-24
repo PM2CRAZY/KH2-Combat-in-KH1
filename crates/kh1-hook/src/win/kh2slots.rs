@@ -71,7 +71,34 @@ pub const GROUND_FINISHER: usize = 0xCB;
 /// KH1's air finisher request (slot 104); 0xCC / 0xCD are its swings.
 pub const AIR_FINISHER: usize = 0xCE;
 
-const SPECS: [Spec; 7] = [
+/// KH1's spell casts (`docs/kh1-magic-native.md`; KH1's command step, Steam `0x1402A3DB0` /
+/// `0x1402A3600` / `0x1402A4150` / `0x1402A7510`, Checked (decomp); KH1's request table,
+/// `xa_ex_0010.mset`, Checked (files)): on the ground request `0x36 + spell` (Fire 0x36 slot 54,
+/// Blizzard 0x37 slot 55, Thunder 0x38 slot 56, Cure 0x39 slot 56), in the air `0x83 + spell`
+/// (79, 80, 81, 81); Fire's second part 0x3D (slot 57; on the ground after 0x36, or alone for a
+/// Fire out of a swing or out of 0x3D itself) and 0x8A (slot 82, the air's). With the Magic /
+/// Aerial Magic styles at KH2, each plays KH2's cast motion for the spell (MAGC, `00battle.bin`,
+/// Checked (files): Fire 56 / air 58, Blizzard 59 / 61, Thunder 62 / 64, Cure 65 / 67; the same
+/// motions at every level) in KH1's own cast state (`formmagic::kh1_spell_start`).
+pub const CASTS: [(u16, usize, usize, bool); 10] = [
+    (56, 54, 0x36, false),
+    (59, 55, 0x37, false),
+    (62, 56, 0x38, false),
+    (65, 56, 0x39, false),
+    (56, 57, 0x3D, false),
+    (58, 79, 0x83, true),
+    (61, 80, 0x84, true),
+    (64, 81, 0x85, true),
+    (67, 81, 0x86, true),
+    (58, 82, 0x8A, true),
+];
+
+const fn cast_spec(i: usize) -> Spec {
+    let (motion, stands_for, request, air) = CASTS[i];
+    Spec { motion, stands_for, request, kind: if air { Kind::AirMagic } else { Kind::Magic } }
+}
+
+const SPECS: [Spec; 17] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -79,6 +106,16 @@ const SPECS: [Spec; 7] = [
     Spec { motion: 181, stands_for: 102, request: 0xCC, kind: Kind::AirCombo },
     Spec { motion: 182, stands_for: 103, request: 0xCD, kind: Kind::AirCombo },
     Spec { motion: 183, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
+    cast_spec(0),
+    cast_spec(1),
+    cast_spec(2),
+    cast_spec(3),
+    cast_spec(4),
+    cast_spec(5),
+    cast_spec(6),
+    cast_spec(7),
+    cast_spec(8),
+    cast_spec(9),
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -265,7 +302,8 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     // (A field variant's own length: KH2's field walk and run are their own motions.)
     let field_len = field.then(|| kh2.rig.field_motions.get(&motion)).flatten().map(|m| kh2_anim::length_frames(m).round() as u32);
     let frames = field_len.unwrap_or(clip.length).max(1);
-    let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own);
+    let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
+    let tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own, cast);
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     let travel = kind == Kind::GroundCombo && travels(requests[request]);
     let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, stands_for, (motion, field), frames, &tracks, travel)) {
@@ -524,6 +562,11 @@ pub unsafe fn turn_to_lock(actor: usize) {
     }
 }
 
+/// KH2's cast motion our slot plays for KH1's spell request `request` (`CASTS`), if built.
+pub fn cast_motion(request: usize) -> Option<u16> {
+    built()?.moves.iter().find(|m| m.request == request && m.default && matches!(m.kind, Kind::Magic | Kind::AirMagic)).map(|m| m.motion)
+}
+
 /// KH2's `motion` has a slot of ours on one of KH1's requests (built: an ability row's only when
 /// it is a Keyblade swing, `swing_rows`).
 pub fn has_any(motion: u16) -> bool {
@@ -561,7 +604,12 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], stands_for: usize
 /// windows from 4 frames before); the template's sounds, foot effects, face changes and the point
 /// its action may be left, rescaled. Hit windows on his body (`body_strike`) are not KH1's sphere's:
 /// KH2's own shapes land them (`takeover::kh2_hits`).
-fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own: bool) -> Vec<EventTrack> {
+///
+/// A spell's cast (`cast`, `CASTS`): no "may be left" point of the template's (Blizzard's 55 has
+/// one at 68 of 86, Fire's second part 57 at 46 of 60, Checked (files)): KH2's cast motions hold
+/// him to their end (none has a free range, id 0 / 1; `P_EX100.mset`, Checked (files)), where
+/// KH1's queue takes him on. (KH2's magic-only window, range id 35, is not KH1's yet.)
+fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own: bool, cast: bool) -> Vec<EventTrack> {
     let len = clip.length as f32;
     let span = |w: &character_core::Window| (w.start as f32, w.end.map_or(len, |e| e as f32));
     let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon > 0)).map(span).collect();
@@ -575,8 +623,8 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own:
     // `docs/aerial-recovery.md`) as KH1's "may be left" (type 0, `+0x1CC` bit 20: `0x14029D399`
     // clears the action flags `0x1004`) from its start, in place of the template's; a clip with
     // none keeps the template's, as every slot on KH1's own requests does.
-    let free: Vec<(f32, f32)> = if own { clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Air | WindowKind::Grounded)).map(span).collect() } else { Vec::new() };
-    let mut out: Vec<EventTrack> = ks::scaled(template, r).into_iter().filter(|t| matches!(t.kind, ks::FOOT | ks::SOUND | ks::FACE) || (t.kind == ks::CAN_LEAVE && free.is_empty())).collect();
+    let free: Vec<(f32, f32)> = if own || cast { clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Air | WindowKind::Grounded)).map(span).collect() } else { Vec::new() };
+    let mut out: Vec<EventTrack> = ks::scaled(template, r).into_iter().filter(|t| matches!(t.kind, ks::FOOT | ks::SOUND | ks::FACE) || (t.kind == ks::CAN_LEAVE && free.is_empty() && !cast)).collect();
     if !free.is_empty() {
         out.push(EventTrack::level(ks::CAN_LEAVE, 0, &free));
     }

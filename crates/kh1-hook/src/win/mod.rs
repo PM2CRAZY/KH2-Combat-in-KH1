@@ -218,6 +218,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         gummi::install();
         equipmenu::install();
         reflect::install();
+        formmagic::install();
         drive::install();
         tint::install();
         leftblade::install();

@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 477 (testing branch: KH2's casts in KH1's own cast state)
+- **KH2's casts in KH1's own cast state.** The tester (thread kh2-magic-and-reflect-native). `kh2slots::CASTS`: KH2 56/59/62/65 and air 58/61/64/67 on KH1's requests 0x36..0x39 / 0x83..0x86, plus 0x3D / 0x8A; no template leave point. `combat::command` doesn't borrow; hook on KH1's spell start `0x14028F140` (Steam, Checked (exe)) runs KH2's script instead (`formmagic::kh1_spell_start`): KH1's MP paid, MAGC voice, Fire's second part dropped from the queue; `takeover::native_spells` releases at the clip's magic-cast event on KH1's time. KH1's voice group off at Battle Quotes KH2. Notes `docs/kh1-magic-native.md`.
+
 ### 2026-10-24: Stage 476 (testing branch: Finishing Plus's next finisher on a KH1 row)
 - **Finishing Plus's next finisher on a KH1 row.** The tester (m14 4 (b)). Rows / requests 0x206 / 0x207 with every finisher slot (`pick_own`); KH2's window (range 50) as KH1's combo window (instance `+0x14` bit 22, `0x1402A2EC0`); KH2's finisher count kept. Notes §7.
 

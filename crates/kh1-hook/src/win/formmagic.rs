@@ -24,7 +24,7 @@ use glam::{Mat4, Quat, Vec3};
 use kh2_formats::battle::{Atkp, Battle};
 use kh2_magic::{Event, Magic, SpellFile};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
@@ -101,6 +101,10 @@ const ENVELOPE_FRAMES: u32 = 90;
 const AURA: u16 = 100;
 /// How long a chosen spell waits for KH2's move to allow a cast.
 const WAIT_S: f32 = 5.0;
+/// `Runtime::casting`'s mark for a cast motion seen playing, and how many frames one may wait
+/// for it (ours).
+const SEEN: u8 = u8::MAX;
+const NOT_SEEN_FRAMES: u8 = 4;
 /// Cure's heal: the ATKP row's power / this, of KH1's max HP (ours).
 const CURE_SHARE: f32 = 3000.0;
 
@@ -200,7 +204,10 @@ struct Runtime {
     arrival: Vec<u64>,
     arrival_age: u32,
     fresh: Option<Fresh>,
-    casting: Option<u16>,
+    /// The cast motion waiting for its magic-cast event (the release), and the frames it hasn't
+    /// been seen playing yet (`SEEN` once it has: a cast in KH1's cast state starts its motion at
+    /// KH1's next animation step).
+    casting: Option<(u16, u8)>,
     fired: u32,
     hits: u32,
 }
@@ -325,6 +332,123 @@ pub fn waiting() -> bool {
     WAITING.try_lock().map_or(false, |w| w.is_some())
 }
 
+/// Something of the scripts' still runs or plays (`takeover::native_spells` runs their frame).
+pub fn busy() -> bool {
+    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| !rt.queued.is_empty() || rt.fresh.is_some() || rt.casting.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
+}
+
+// ------------------------------------------------- KH2's spells in KH1's own cast state
+
+/// KH1's spell start (Steam `0x14028F140 (actor, spell, target)`, Checked (decomp) and (exe)):
+/// KH1's command step calls it once it has asked for the cast's request (and queued what follows
+/// it); it starts the spell's `.mag` script (KH1's script machine, a process of the list at
+/// `0x142D22D08`, `0x14028F5E0`), which makes the spell's attack objects (syscall 23,
+/// `0x1402B2DC0`) and pays its MP (syscall 47, `0x1402A5B60` with the attack data's `+0x30`).
+/// `docs/kh1-magic-native.md`. Its prologue: `mov [rsp+8], rbx; mov [rsp+10h], rsi; push rdi;
+/// sub rsp, 40h`.
+const SPELL_START_STEAM: usize = 0x28F140;
+const SPELL_START_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x40];
+static ORIG_SPELL_START: AtomicUsize = AtomicUsize::new(0);
+static NATIVE_HOOKED: AtomicBool = AtomicBool::new(false);
+/// KH1's motion queue on an actor: its count, then entries of 0x10 (the request first).
+const QUEUE_COUNT: usize = 0x178;
+const QUEUE: usize = 0x17C;
+const QUEUE_ENTRY: usize = 0x10;
+/// Fire's second part on the ground and in the air (`kh2slots::CASTS`), queued by KH1 after its
+/// first (0x36 / 0x83).
+const FIRE_SECOND: [(u32, u32); 2] = [(0x36, 0x3D), (0x83, 0x8A)];
+
+/// The hook (Steam only: the address is Steam's).
+pub unsafe fn install() {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    if super::hook::install(base + SPELL_START_STEAM, &SPELL_START_PROLOGUE, spell_start as *const () as usize, &ORIG_SPELL_START, "KH1's spell start (KH2 magic in KH1's cast state)").is_some() {
+        NATIVE_HOOKED.store(true, Ordering::Relaxed);
+    }
+}
+
+/// KH2's `spell` (Fire 0 .. Cure 3) is cast in KH1's own cast state now (`air`: KH1's air cast):
+/// base Sora in KH1's own states (`shared`), the Magic / Aerial Magic style KH2's, KH1's spell
+/// start hooked, our slot of KH2's cast motion built for KH1's request (`kh2slots::CASTS`), and
+/// the spell's KH2 file and MAGC row there. Else KH2's controller borrows him for it, as before.
+pub unsafe fn native(spell: u8, air: bool) -> bool {
+    if spell > 3 || !NATIVE_HOOKED.load(Ordering::Relaxed) || !base_kh2(air) || !super::shared::active() {
+        return false;
+    }
+    let request = if air { 0x83 } else { 0x36 } + spell as usize;
+    let level = super::reflect::kh1_spell_level(spell);
+    super::kh2slots::cast_motion(request).is_some() && spell_file(spell, level).is_some() && magc(spell, level).is_some()
+}
+
+unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -> u64 {
+    if (0..=3).contains(&spell) && kh1_spell_start(actor, spell as u8) {
+        return 0;
+    }
+    let f: unsafe extern "system" fn(usize, i32, usize) -> u64 = std::mem::transmute(ORIG_SPELL_START.load(Ordering::Acquire));
+    f(actor, spell, target)
+}
+
+/// KH1's command step starting `spell` for base Sora, the cast request asked for: with KH2's
+/// slot on that request (`native`), KH2's spell instead of KH1's script: its MP (KH1's cost and
+/// payment, as KH2's borrowed casts pay it, `before_step`), KH2's MAGC voice,
+/// KH2's script started (trigger 20) on the next KH1 frame and released (21) at the cast motion's
+/// magic-cast event at KH1's time (`takeover::native_spells`). Fire's second part, which KH1
+/// queues after its first, is taken off the queue (KH2's one motion is the whole cast). Whether
+/// it was taken (else KH1's own script runs).
+unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
+    if actor < 0x10000 || actor != super::takeover::sora_actor() || super::form::in_form() || !super::shared::active() {
+        return false;
+    }
+    let count = rd::<u32>(actor + QUEUE_COUNT);
+    if count == 0 || count > 8 {
+        return false;
+    }
+    let request = rd::<u32>(actor + QUEUE) & 0xFFFF;
+    let Some(&(motion, _, _, air)) = super::kh2slots::CASTS.iter().find(|c| c.2 == request as usize) else { return false };
+    if !native(spell, air) || super::kh2slots::cast_motion(request as usize) != Some(motion) {
+        return false;
+    }
+    let level = super::reflect::kh1_spell_level(spell);
+    let Some(m) = magc(spell, level) else { return false };
+    // (KH1's command step judged the cast usable with KH1's own check, `0x14028EFD0`.)
+    let cost = super::reflect::kh1_spell_cost(spell);
+    super::reflect::pay_mp(actor, cost);
+    let mut dropped = None;
+    if let Some(&(_, second)) = FIRE_SECOND.iter().find(|f| f.0 == request) {
+        if count >= 2 && rd::<u32>(actor + QUEUE + QUEUE_ENTRY) & 0xFFFF == second {
+            for k in 1..count as usize - 1 {
+                let e: [u8; QUEUE_ENTRY] = rd(actor + QUEUE + (k + 1) * QUEUE_ENTRY);
+                wr(actor + QUEUE + k * QUEUE_ENTRY, e);
+            }
+            wr(actor + QUEUE_COUNT, count - 1);
+            dropped = Some(second);
+        }
+    }
+    if let Ok(mut g) = RT.lock() {
+        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher: false, motion });
+    }
+    if m.voice != 255 {
+        super::kh2sound::voice(m.voice as i16);
+    }
+    log(&format!(
+        "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}, cost {cost}{}",
+        SPELL_NAMES[spell as usize],
+        if air { " (air)" } else { "" },
+        dropped.map_or(String::new(), |r| format!(", KH1's second part {r:#x} taken off its queue"))
+    ));
+    true
+}
+
+unsafe fn rd<T: Copy>(p: usize) -> T {
+    std::ptr::read_unaligned(p as *const T)
+}
+
+unsafe fn wr<T: Copy>(p: usize, v: T) {
+    std::ptr::write_unaligned(p as *mut T, v)
+}
+
 /// Before KH2's step: a chosen spell's cast, as soon as KH2's move allows one.
 pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     let Ok(mut w) = WAITING.try_lock() else { return };
@@ -442,14 +566,18 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             let sub = f.level as i32 * 2 - 2 + f.finisher as i32 + super::form::magic_sub();
             let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
             match rt.magic.cast(file, SORA, f.spell, sub, &magi, &mut world) {
-                Ok(_) => rt.casting = Some(f.motion),
+                Ok(_) => rt.casting = Some((f.motion, 0)),
                 Err(e) => log(&format!("{} {}'s script didn't start ({e})", who(), SPELL_NAMES[f.spell as usize])),
             }
         }
     }
-    if let Some(m) = rt.casting {
+    if let Some((m, waited)) = rt.casting {
         let fired = out.motion == m && out.events.iter().any(|e| matches!(e, character_core::EventKind::MagicCast(x) if *x as u16 == out.motion));
-        if fired || out.motion != m {
+        let waited = if out.motion == m { SEEN } else { waited.saturating_add(1).min(SEEN - 1) };
+        rt.casting = Some((m, waited));
+        // (In KH1's cast state the motion starts at KH1's next animation step: not cut before it
+        // has played, unless it never does.)
+        if fired || (out.motion != m && (waited == SEEN || waited > NOT_SEEN_FRAMES)) {
             rt.casting = None;
             // (Cut off before its release: released anyway, as the spell was paid for.)
             rt.magic.release(SORA, &mut world);

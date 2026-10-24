@@ -443,6 +443,8 @@ unsafe extern "system" fn physics(actor: usize) {
         // (One tick of this frame's delta, as the game takes one update of delta 2 at 30 fps:
         // the effect clock adds the delta up itself, `kh2_fx::Effects::tick`.)
         super::kh2fx::tick(motion, steps() as f32);
+        // KH2's spell scripts of a cast in KH1's own cast state (`formmagic::kh1_spell_start`).
+        native_spells(actor);
     }
     if sora {
         // KH2's hop out of KH1's ground combo: its sideways speed, which KH1's carry into the air
@@ -1617,6 +1619,60 @@ struct NativeHits {
 }
 
 static NATIVE_HITS: Mutex<Option<NativeHits>> = Mutex::new(None);
+
+/// KH2's spell scripts on a KH1 frame of base Sora's in KH1's own states (`formmagic`: a KH2 spell
+/// cast in KH1's own cast state, `formmagic::kh1_spell_start`): their frame as KH2's step runs it
+/// (`formmagic::shots_step`), with KH2's motion KH1 plays in our slot (`kh2slots::now_playing`) and
+/// KH1's time in it, the clip's magic-cast event when KH1's time passes it (the release, trigger
+/// 21), KH1's facing, KH1's lock and targets. Nothing when no script of base Sora's runs.
+pub unsafe fn native_spells(actor: usize) {
+    static LAST: Mutex<Option<(u16, f32)>> = Mutex::new(None);
+    if !super::shared::active() || super::form::in_form() || !super::formmagic::busy() {
+        if let Ok(mut l) = LAST.try_lock() {
+            *l = None;
+        }
+        return;
+    }
+    let Some(kh2) = pose::kh2() else { return };
+    let playing = super::kh2slots::now_playing(actor);
+    let mut events = Vec::new();
+    if let (Some((m, t)), Ok(mut l)) = (playing, LAST.try_lock()) {
+        let from = match *l {
+            Some((lm, lt)) if lm == m && lt <= t => lt,
+            _ => -1.0,
+        };
+        if let Some(c) = kh2.character.moveset.clips.get(&m) {
+            events.extend(c.events.iter().filter(|e| (e.frame as f32) > from && (e.frame as f32) <= t).map(|e| e.kind));
+        }
+        *l = Some((m, t));
+    }
+    let Ok(mut dg) = DRIVER.try_lock() else { return };
+    let d = dg.get_or_insert_with(|| new_driver(kh2));
+    let base = BASE.load(Ordering::Relaxed);
+    let mut targets = d.strikes.look(actor);
+    let lock = kh1_lock(base, &mut targets);
+    let air = matches!(rd::<i32>(actor + 0x70), 1 | 2 | 8);
+    let yaw = rd::<f32>(actor + 0x3C);
+    let (motion, t) = playing.unwrap_or((u16::MAX, 0.0));
+    let out = Output {
+        displacement: [0.0; 3],
+        facing: yaw,
+        state: StateName::Magic,
+        motion,
+        clip_frame: t as u32,
+        hitboxes: Vec::new(),
+        invulnerable: false,
+        guarding: false,
+        guard_boxes: Vec::new(),
+        weapon_trail: false,
+        locked: None,
+        combo_count: 0,
+        combo_live: false,
+        events,
+    };
+    let battle = super::form::battle(&d.drive, kh2).clone();
+    super::formmagic::shots_step(actor, &out, air, &mut d.strikes, &battle, lock);
+}
 
 /// Once a game frame with base Sora in KH1's own states (`kh2slots::frame`, after KH1 posed him):
 /// the hit windows on his body (`Hitbox` with weapon 0) of the KH2 motion our slot plays, at KH1's

@@ -379,7 +379,23 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && super::shared::active() {
         let drive = super::drive::on() && arg >= super::drive::FORM_ARG;
         let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
-        if drive || arg == super::reflect::SPELL || super::formmagic::base_kh2(air) {
+        // KH2's Fire, Blizzard, Thunder and Cure in KH1's own cast state (`formmagic::native`):
+        // KH1's command step casts it, on KH2's cast motion in our slot, with KH2's script
+        // (`formmagic::kh1_spell_start`). KH1 picks its ground or air cast by its own state
+        // (`0x1402A3600`: 0, 6 and 0x18 the ground's, 2 and 8 the air's; in any other state it
+        // casts nothing, so KH2's controller still has those).
+        let state = rd::<i32>(actor + 0x70);
+        let kh1_air = matches!(state, 2 | 8);
+        let native = !drive && arg <= 3 && matches!(state, 0 | 6 | 0x18 | 2 | 8) && super::formmagic::native(arg, kh1_air);
+        if native {
+            // (The command record's bit 25 has the command step play KH1's voice group for the
+            // spell, `0x1402901F0 (actor, spell + 7, target)`: with KH2's battle quotes, KH2's
+            // MAGC voice is the cast's, `formmagic::kh1_spell_start`.)
+            if super::kh2sound::kh2_voice() {
+                wr(base + COMMAND_RVA, full & !0x0200_0000);
+            }
+            cmd_log(format!("command {kind:#x} ({full:08x}): KH2's spell {arg} in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
+        } else if drive || arg == super::reflect::SPELL || super::formmagic::base_kh2(air) {
             let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
             if can(actor) == 0 {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
