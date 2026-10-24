@@ -63,6 +63,8 @@ const SELECT: u32 = 0x8000;
 const RAW_HELD_STEAM: usize = 0x298C9B4;
 /// R2 in the PS2 order.
 const RAW_R2: u32 = 0x200;
+/// L2 in the PS2 order (the L2 Camera Hold row, `l2_held`).
+const RAW_L2: u32 = 0x100;
 /// Steam only: KH1 PC's mouse, the same code as KH2 PC's (`0x1404e51f0` there):
 /// `0x140138b30 (x*, y*, f32*, f32*, sensitivity u16*) -> moved`: the mouse record's motion this
 /// frame, each axis held to ±1 (y flipped), and the sensitivity setting (`0x1404D8614 + 0x24`).
@@ -121,6 +123,17 @@ const FP_FADE: f32 = 30.0;
 
 /// KH2's camera is on (the ini's `camera`, the Config menu's row).
 pub static KH2: AtomicBool = AtomicBool::new(true);
+/// L2 Camera Hold (the ini's `l2_camera_hold`, the Config menu's Camera row under Camera
+/// Style): while L2 is held the right stick doesn't move KH2's camera and R3 doesn't reset it,
+/// as in KH2 (the tester, "make it a toggle in the cameras config menu"). Off by default.
+pub static L2_HOLD: AtomicBool = AtomicBool::new(false);
+
+/// The Config menu's L2 Camera Hold row: kept in the ini.
+pub fn set_l2_hold(on: bool) {
+    L2_HOLD.store(on, Ordering::Relaxed);
+    super::settings::save("l2_camera_hold", if on { "on" } else { "off" });
+    log(&format!("Config menu: L2 camera hold {}", if on { "on" } else { "off" }));
+}
 static ORIG_FOLLOW: AtomicUsize = AtomicUsize::new(0);
 static ORIG_LOCK: AtomicUsize = AtomicUsize::new(0);
 static BASE: AtomicUsize = AtomicUsize::new(0);
@@ -147,6 +160,7 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     KH2.store(super::settings::get().kh2_camera, Ordering::Relaxed);
+    L2_HOLD.store(super::settings::get().l2_camera_hold, Ordering::Relaxed);
     let follow = base + MODES_RVA + 0x10;
     let lock = base + MODES_RVA + 0x30;
     let (f, l) = (rd::<u64>(follow) as usize, rd::<u64>(lock) as usize);
@@ -725,17 +739,20 @@ unsafe fn run(lock: bool) -> Option<()> {
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
     let auto = config < 0x10000 || rd::<i32>(config + 8) == 0;
     let hold = r2_held(base);
+    // L2 Camera Hold: with the row on and L2 held, no right-stick turn or zoom (the mouse rides
+    // the same stick in KH2's pad, so it stops too) and no R3 reset.
+    let l2 = L2_HOLD.load(Ordering::Relaxed) && l2_held(base);
     let ctl = kh2_camera::Controls {
         // The crate's y is forward; KH1's (like KH2's pad) is positive pulled back. Passed
         // unflipped, "pulled straight back" read as forward and the swing-behind ran while Sora
         // ran toward the camera, turning him in a circle (tester trace f571370).
         // (Not held to 1: in a mouse frame KH2's pad scales both tilts by the sensitivity.)
         move_stick: Vec2::new(l[0], -l[1]),
-        look_stick: look(r, turn),
-        reset: free && pressed & R3 != 0,
+        look_stick: if l2 { Vec2::ZERO } else { look(r, turn) },
+        reset: !l2 && free && pressed & R3 != 0,
         auto,
         hold,
-        mouse: m.motion.map(Vec2::from),
+        mouse: if l2 { None } else { m.motion.map(Vec2::from) },
         kbm: m.kbm,
     };
     let wall = |a: Vec3, b: Vec3| -> Option<(Vec3, Vec3)> {
@@ -998,6 +1015,17 @@ unsafe fn r2_held(base: usize) -> bool {
         rd::<u32>(base + RAW_HELD_STEAM) & RAW_R2 != 0
     } else {
         super::takeover::RAW_BUTTONS.load(Ordering::Relaxed) & RAW_R2 != 0
+    }
+}
+
+/// L2 held as KH1 sees it, read exactly as `r2_held` reads R2: Steam, bit `0x100` of KH1's raw
+/// pad word (`RAW_HELD_STEAM`, PS2 order, so the keyboard's L2 key counts the same way); else the
+/// pads' own records. Frame Advance takes only R2 off the records, so L2 is never hidden.
+unsafe fn l2_held(base: usize) -> bool {
+    if super::addr::Build::current() == super::addr::Build::Steam && base != 0 {
+        rd::<u32>(base + RAW_HELD_STEAM) & RAW_L2 != 0
+    } else {
+        super::takeover::RAW_BUTTONS.load(Ordering::Relaxed) & RAW_L2 != 0
     }
 }
 

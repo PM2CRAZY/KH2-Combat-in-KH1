@@ -1175,9 +1175,59 @@ borrows it for the roll / Quick Run as before.
 - **Differences / assumptions**: KH2's controller treats its whole guard action as guarding
   (`out.guarding`); here only the window (6..37) guards, as the files have it. KH1's ground step is
   taken to move him by its speed `+0x2C` while the action flag is set (zeroed at the start,
-  **Assumption**). Square again inside the repel (KH2: after its reaction-command window) isn't
-  taken: KH1's can-act test is false there. A guard stopping a hit in the air does nothing (KH2's
+  **Assumption**). Square again inside the repel isn't taken before its free frame 40: KH1's
+  can-act test is false there, and KH2 waits for the same frame (§7.x.2). A guard stopping a hit in the air does nothing (KH2's
   repel is ground-only; its air recoil isn't ported). Not checked in game.
+
+### 7.x.1 KH2's guard reaction in the air (research for m16 question 1 (b); Checked (decomp) and (files))
+
+KH2's party clash reaction (Steam KH2 `0x1403D61D0 (player, own attack, other attack)`, Checked
+(decomp)) reads its own attack's `refact_self` (ATKP `+0x13`) and the other attack's
+`refact_other` (`+0x14`):
+- either is 2: nothing (no motion, no push), the move goes on;
+- on the ground (`0x1403BA9A0` false: no air state class, `+0x18C & 0x1000020` clear, `+0x120`
+  bit 23 clear), with one of them nonzero: the guard repel, motion 0x2A (42), faced to the clash,
+  pushed back 200 (`0x1403D4960`, 0x43480000), a timer `+0xD70` = 80.0 (decremented per frame in
+  `0x1403D4CC0`, read with other "not now" conditions by `0x1403D65A0` / `0x1403D5310`; what it
+  stops is **not read**);
+- otherwise, the recoil `0x1403D4650` with motion -1 and distance -1 (50): on the ground motion
+  0x29 (41), pushed back 50; **in the air motion 0x2B (43)**, motion mode 4, and a hop
+  (`0x1403D4800`: 50.0 up, 50 x `sstm.hit_back_to_jump` (0.048) = 2.4 a frame sideways), back from
+  his own facing (`0x1403B56E0` times -1), no turn.
+
+So KH2 does have an air recoil, but a guard only reaches it with `refact_self` 0 or 1. Every guard
+window Sora can have in the air is `refact_self` 2 (Checked (files), the Steam install's
+`P_EX100.mset` / `W_EX010.mset` / `00battle.bin`, every motion 0..250):
+
+| motion | window | ATKP | refact self |
+|---|---|---|---|
+| 202 Aerial Dodge | body, all of it | 406 | 2 |
+| 40 Aerial Recovery | body, 0..16 | 124 | 2 |
+| 197 Magnet Burst | body, 20..70 | 406 | 2 |
+| 8 | body, 5..20 | 406 | 2 |
+
+The `refact_self` 1 guards (173's 161 at 6..37, Flash Step 169's 161 at 22..30) are ground moves.
+So in KH2 a block in the air plays no recoil: the hit is stopped and the move goes on, which is
+what KH1's states do here already (`guard_repel` returns for `refact` 2). Nothing ported. The air
+recoil (43 with its hop) is KH2's answer to Sora's own air swing meeting a guard or an attack with
+`refact` 0 / 1 (the wall-hit path), not to his guard blocking.
+
+### 7.x.2 Square during the repel (research for m16 question 2; Checked (decomp) and (files))
+
+KH2's action button handler (Steam KH2 `0x1403A81F0`) gates every branch that can come out of the
+repel on `0x1403BFB30 (player)`: the object's vtable `+0x78` test and `+0x18C & 0x1C`, the free
+state bits that range ids 0 / 1 / 2 set (KH2's range handler `0x14040D810`: 4 / 8 / 0x10 of the
+motion state word, `+0x158 + 0x34`). That is the guard (`0x1403A9C70`), the dodge roll (growth kind
+4, motion 0xD1) and Quick Run (growth kind 1, motion 0xCB); the Square combo moves (`0x1403A9950`)
+want the combo window instead (`+0x18C` bit 10, range id 11, or `+0x194` bit 5), which the repel
+doesn't have. Motion 42's ranges (Checked (files), `P_EX100.mset`): range id 2 from 40, range id
+14 from 8, and effect / sound ranges (id 23). Range id 14 sets `+0x18C` bit 0x80000, which only
+`0x1403BA070` reads, for combo rows with PTYA flag 0x100 (reaction commands, OpenKH's "allow RC"):
+it doesn't open the guard, roll or Quick Run. So in KH2, Square takes nothing in the repel before
+frame 40, the frame KH1's "may be left" opens on our request (`kh2slots::kh1_tracks`). Already the
+same; nothing to switch. (The OG rewrite's controller lets any button cut a Hurt action from its
+range id 14, "our reading", `character_core` `ActionKind::Hurt`; for the guard repel, borrowed
+cases only, that is earlier than KH2's exe. Not changed here.)
 
 ### 7.y Guard Break against guards (Checked (files))
 

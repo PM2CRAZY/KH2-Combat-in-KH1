@@ -163,10 +163,25 @@ Steam KH2: the entry in the follow update `0x140165110`, the mode `0x140165e30`,
 - **No rotation** while the target and Sora (100 above his feet) are both on screen. The test
   uses the game's 512×416 frame with 32-pixel side and 8-pixel top/bottom margins.
 - **When either leaves the screen:** the goal yaw moves the camera onto the line from the
-  look point through Sora, i.e. behind him facing the target. A target escaping to a side
-  adds 20°.
-  - **Inferred:** the 20° is in the direction the camera is already turning (an overshoot
-    that pulls it back in).
+  look point through Sora, i.e. behind him facing the target, turned 20° by the edge it left
+  by.
+  - **Checked (decomp)**, Steam KH2 `0x140176ec0` with its screen test `0x140176710`
+    (screen x below the left bound sets bit 4, above the right bound bit 8; y above the top
+    bit 1, below the bottom bit 2; too near 0x10, too far 0x20): the target is tested first,
+    Sora (100 above his feet) only if the target's flags are 0. Bit 4 (off the left): goal yaw
+    = base + 0.34906584 (20°); else bit 8 (off the right): base − 0.34906584; else (top /
+    bottom / near only): base. Left wins if both are set. Base = atan2(dx, dz) of Sora's feet
+    minus the look-point goal (`0x140176a70`), the same as ours. (Until this change ours took
+    the sign from the way the camera was already turning.)
+  - **Checked (doc, `kh1-render.md` 1.3)** that KH1's screen right is `up × forward` in its
+    y-down world (+x when looking along +z), and the crate's `screen_test` takes right as
+    `forward × up` in its y-up frame (−x along +z). The hook gives the crate KH1's world with
+    only y negated, so the crate's `screen::LEFT` is the game's right, and its yaws are KH1's
+    own: KH2's "left → +20°" is the crate's `RIGHT → +20°` (`kh2_camera::lock_side`). The same
+    rule holds in a true right-handed y-up frame (yaws there are π − KH2's).
+  - **Assumption:** KH2's world and screen have KH1's handedness (both +y down, screen x to
+    the right); the decomp's projection (`0x140166a20`, GS x − 1792) doesn't show the view's
+    axes. A trace (the target leaving by the left edge once and by the right once) settles it.
 - **Distance:** drifts to 380 at 1 per frame. It shrinks 2 per frame while the target or Sora
   sits at the bottom edge.
 - Manual turning, zoom and reset (to 380) still work.

@@ -218,6 +218,38 @@ Which button it is: **R2** (the tester, from KH2 itself: "its R2"). The decomp c
   (state 24) is a KH1-only state, which keeps KH1's own camera.
 - Trace: `kh2cam_hold` (1 while R2 held, as the camera read it).
 
+## L2 and the right stick
+
+KH2: while L2 is held, the right stick doesn't move the camera (it works as the d-pad) and R3
+doesn't reset it (thread `kh2-camera-fixes`, from KH2's behaviour).
+
+- What the decomp shows: the camera's turn and zoom tests read logical bits through the masks
+  at `0x14071aa98` / `0x14071aa88` (`0x140178ab0` / `0x140178b10`, `0x140178b50` /
+  `0x140178b80`; Checked (exe): 0x200000 / 0x100000 and 0x40000 / 0x80000 / 0x200000 /
+  0x100000), and the reset is pressed bit 17 (`0x140165570`). The raw word carries "L2 held" /
+  "L2 not held" as bits 26 / 27 (`0x14039bbe0`). The static remap table (`0x1405c3420`, read
+  from the exe: the soft reset, Start, the two PC masks, and the d-pad and stick-direction bits
+  onto the d-pad bits) has no camera entries, so the camera's bits, and with them the L2 rule,
+  come from the PC table built at run time (`0x140bf3330`, `0x14039c720`). **Assumption:**
+  that table pairs the right stick's directions and R3 with "L2 not held" (bit 27), which is
+  how L2 stops them; not read (it exists only while KH2 runs).
+
+### Ours (the L2 Camera Hold row)
+
+- The Config menu's Camera list: "L2 Camera Hold: Off / On" under Camera Style (`config.rs`,
+  `Row::L2Hold`), kept in the ini as `l2_camera_hold` (default off: the camera as before).
+- `kh1-hook` `camera::l2_held`: read exactly as `r2_held` reads R2. Steam: bit `0x100` of KH1's
+  raw pad word (`0x14298C9B4`, PS2 order); other builds the pads' own records
+  (`takeover::RAW_BUTTONS`). KH1's own remap gives L2 and R2 the same logical bit
+  (`0x400000`), so the raw word is the only place L2 alone shows.
+- With the row on and L2 held, KH2's follow and lock-on cameras get no right stick (turn and
+  zoom), no mouse motion (KH2's pad puts the mouse on the same stick) and no R3 reset. KH2's
+  first person (Select) is not affected. The right stick isn't turned into the d-pad (this
+  version only stops the camera).
+- In KH1, L2 does nothing for the camera; pressing L2 (or R2) drops KH1's soft-target cursor
+  (`0x1402B11B0`), which this doesn't touch. Frame Advance takes only R2 off the pad records,
+  so L2 is always seen.
+
 ## KH1 (Steam)
 
 - `0x14028b4f0`, from KH1's pad step `0x14028b0b0`, builds its sticks the same way: byte minus

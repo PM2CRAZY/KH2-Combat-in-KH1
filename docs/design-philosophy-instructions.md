@@ -49,3 +49,20 @@ WORKFLOW
 - After a fix, state only the update name, e.g. "t306". Don't say it hasn't been compiled.
 - If a request leaves a design choice open, ask me before choosing.
 ```
+
+## KH1 stays whole (the tester's design note, kh2-camera-fixes thread, 2026-10-24)
+
+Every agent working on this branch follows this together with the core block above:
+
+- **All settings on KH1 = KH1.** With every Config row on KH1, the game must play and feel
+  exactly like KH1, even with our new systems running underneath. If it does, we succeeded.
+  The only exception is where a native KH2 system meets one of KH1's.
+- **Keep everything KH1 can do.** Nothing KH1 does may break or change because of our work.
+  Features KH1 has that KH2 lost (the ones dropped when the series moved to KH2) stay in.
+- **Add what's missing to KH1's engine.** KH2's features KH1 lacks are built into KH1's engine
+  (see "Native always, and build what KH1 lacks" above).
+- **Both native, combined where they can be.** KH1's and KH2's systems are both native, are
+  combined where possible, and share the same systems (the example: the effects work gave KH1's
+  renderer the extra calls KH2's effects need, instead of a second renderer).
+- **Toggles for feel.** When a design choice critically affects how the game feels, it becomes
+  a toggle the player can change (a Config row), not a silent change for everyone.

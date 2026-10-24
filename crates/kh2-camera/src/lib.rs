@@ -81,6 +81,28 @@ pub mod screen {
     pub const NEAR: u8 = 0x10;
 }
 
+/// The lock-on goal yaw's side turn for the screen flags that started it (KH2's rule, Steam
+/// `0x140176ec0`): off the game's screen to the left, `+LOCK_SIDE`; else off to the right,
+/// `-LOCK_SIDE`; off only the top / bottom (or too near), none. The target's flags are used,
+/// Sora's only when the target's are 0 (the caller's `off`).
+///
+/// KH2's flags are for its own screen (its world right-handed with +y down, like KH1's). This
+/// crate's [`Camera::screen_test`] assumes a right-handed y-up world, where right is
+/// `forward × up`. Fed KH1's world with only y negated (`kh1-hook`), that frame is mirrored:
+/// the crate's `LEFT` is the game's right, and yaws (atan2 of x, z) are KH2's own, so KH2's
+/// "left → +20°" is the crate's `RIGHT → +20°`. In a true right-handed y-up frame (a half turn
+/// about x from KH2's world) yaws come out as π − KH2's and left stays left, which gives the
+/// same: crate `LEFT → −20°`. So one rule holds in both: `RIGHT` is KH2's bit 4.
+pub fn lock_side(off: u8) -> f32 {
+    if off & screen::RIGHT != 0 {
+        LOCK_SIDE
+    } else if off & screen::LEFT != 0 {
+        -LOCK_SIDE
+    } else {
+        0.0
+    }
+}
+
 /// The player, as the camera sees it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Subject {
@@ -379,10 +401,9 @@ impl Camera {
                     let off = if st != 0 { st } else { sq };
                     if off != 0 {
                         // Behind Sora on the line from the look point through
-                        // him; a target escaping sideways pulls 20° further.
+                        // him, turned 20° by the screen edge it left by.
                         let base = (s.feet.x - self.at_goal.x).atan2(s.feet.z - self.at_goal.z);
-                        let side = if off & (screen::LEFT | screen::RIGHT) != 0 { LOCK_SIDE * wrap(base - self.yaw).signum() } else { 0.0 };
-                        self.goal_yaw = wrap(base + side);
+                        self.goal_yaw = wrap(base + lock_side(off));
                     }
                     at_goal = a;
                 } else {
@@ -760,6 +781,29 @@ mod tests {
         }
         assert!((c.yaw - yaw).abs() < 1e-4, "no rotation while both are on screen");
         assert!((c.dist - 380.0).abs() < 1.0, "drifts to the lock distance: {}", c.dist);
+    }
+
+    #[test]
+    fn lock_on_side_turn_follows_the_edge_left_by() {
+        // KH2's rule (`0x140176ec0`): its left (the crate's RIGHT) +20°, else its right −20°,
+        // top / bottom alone none; KH2's left wins.
+        assert_eq!(lock_side(screen::RIGHT), LOCK_SIDE);
+        assert_eq!(lock_side(screen::LEFT), -LOCK_SIDE);
+        assert_eq!(lock_side(screen::LEFT | screen::RIGHT), LOCK_SIDE);
+        assert_eq!(lock_side(screen::TOP), 0.0);
+        assert_eq!(lock_side(screen::BOTTOM | screen::RIGHT), LOCK_SIDE);
+        assert_eq!(lock_side(0), 0.0);
+        let s = sora(Vec3::ZERO, 0.0);
+        for (x, flag, side) in [(2000.0, screen::LEFT, -LOCK_SIDE), (-2000.0, screen::RIGHT, LOCK_SIDE)] {
+            let mut c = Camera::new(Params::FIELD, &s);
+            // Looking along +z: the crate's right is −x.
+            let t = Vec3::new(x, 100.0, 400.0);
+            assert_eq!(c.screen_test(t) & (screen::LEFT | screen::RIGHT), flag);
+            let at = c.at_goal;
+            let base = (s.feet.x - at.x).atan2(s.feet.z - at.z);
+            c.update(&s, &Controls::default(), Some(t), 1.0, &none);
+            assert!(wrap(c.goal_yaw - (base + side)).abs() < 1e-4, "{} vs {}", c.goal_yaw, base + side);
+        }
     }
 
     #[test]
