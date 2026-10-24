@@ -35,4 +35,8 @@
 
 ^m1
 
+1. unsure you pick what would make it feel 1:1 while making native and having less strain on performance compared to what we have now
+2. (b) full native, glide will get converted
+3. (a)
 
+go ahead
