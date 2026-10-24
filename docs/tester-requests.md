@@ -14,6 +14,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
 
 - [Config menu rework](../testers/config-menu-rework/config-menu-rework.md)
   - [1. Mr Bugs: the scope of the config menu currently can't scale to what w](../testers/config-menu-rework/config-menu-rework.md#^m1)
+  - [2. Assistant: Here's the plan. KH1 already has a sub-menu system: it's how](../testers/config-menu-rework/config-menu-rework.md#^m2)
 - [Frame advance in the debug menu](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md)
   - [1. Mr. Bugs: Can you add a frame advance feature into the debug menu? whe](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m1)
   - [2. Assistant: Sounds useful, and since it's a debug menu tool the match-KH](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m2)
