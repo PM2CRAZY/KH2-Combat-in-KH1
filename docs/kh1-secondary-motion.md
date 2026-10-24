@@ -522,6 +522,28 @@ sit about 6.3 from it; 21% of the coat's joint-frames come more than 2 nearer a 
 bind (8% before, when it followed the pelvis; its nearest then was 3.9, in one motion). No NaN,
 lengths kept. Not checked in game.
 
+### The thighs' and shins' roll (after t491)
+
+The tester, after t491: "keep researching until we have a good looking animations that emulate kh2s
+animations as close as possible while still making it look natural to kh1's model". The body
+retarget rolled KH1's thighs and shins by the knee's direction (the hinge plane, the hips' forward
+while the leg is straight). KH2 draws its thighs on the shorts' legs 24 / 53 and its shins on the
+knees 12 / 41 (the table above), and those bones roll otherwise in some motions. Measured over every
+motion of `P_EX100.mset` (83, every half frame, Checked (files); `examples/leg_roll.rs`): the twist
+about the limb between KH1's thigh and KH2's 24 / 53 reached 109° / 62° (median 0, 95th percentile
+2.7° / 6.7°; motions 8, 7, 169, 153, 40, 183, 204, 42, 171), the shins' against 12 / 41 44° / 69°.
+
+Now (`retarget::Pole::Knee`'s `skin`) each thigh and shin is still aimed along KH2's hip-knee /
+knee-ankle line, and rolls as the KH2 bone that carries it: that bone's turn from its bind applied
+to the part's bind z, made square to the limb; the knee's direction takes over only where that z
+comes within 0.3 of the limb's line (never seen in KH2's motions). Afterwards: twist at most 0.2°
+(thighs) and 0.0° (shins); the remaining 9-10° between the thigh and 24 / 53 is the shorts' leg keyed
+off the leg's line in 203-208 (aim, not roll, kept as the leg's). The largest half-frame turn of
+KH1's thighs and shins is KH2's own (109.6° / 169.1° in motion 8, a jump in KH2's own keys). KH1's
+shorts hang on the thigh, so they now roll exactly as KH2's shorts. The feet (`Pole::Foot`) read the
+shin's hinge and are unchanged in the measure (their own rule keeps soles flat). The positions-only
+path (`frames`, used by `inverse` for the KH2 player model) keeps the knee's direction.
+
 ## How KH2's exe animates Sora (Steam decomp, research after t453)
 
 The tester, after t453: "investigate into the kh2 steam c decomp how exactly sora's animations work

@@ -69,7 +69,7 @@ fn joints(p: &Part) -> Vec<usize> {
             match pole {
                 Pole::Line(a, b) => v.extend([a, b]),
                 Pole::Joint { a, b, c, fallback, .. } => v.extend([a, b, c, fallback.0, fallback.1]),
-                Pole::Knee { a, b, c, hips } => v.extend([a, b, c, hips.0, hips.1]),
+                Pole::Knee { a, b, c, hips, .. } => v.extend([a, b, c, hips.0, hips.1]),
                 Pole::Foot { ankle, .. } => v.push(ankle),
             }
             v
