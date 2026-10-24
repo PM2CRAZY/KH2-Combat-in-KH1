@@ -125,3 +125,81 @@ beside Explosion's.
   Keyblades); KH2 forms' second weapons have their own packages.
 - What KH2 hit effects Sora's own body hits use (P_EX100's 14 / 42 / 43) and which of Sora's ATKP
   rows carry effect_on_hit 3 (logged once step 1 is in).
+
+## 6. The tester's answers (t480 round) and what was built
+
+- **Keyblade swings:** KH1's own spark stays, for every Keyblade (answer 1: "(c) but for now wait
+  on changing any base effects the keyblade calls", until KH2 Keyblade models and a KH1 / KH2
+  Keyblade switch come). Nothing about swings changed.
+- **Spells:** KH1's own spells keep KH1's spark (t345); KH2's spells (KH2-style magic and the
+  forms' KH2 casts, `formmagic`; Reflect's pop, `reflect`) call their own (answer 2 (a)).
+- **Defender's damage effect:** answer 3 (b), research below (§8); nothing built yet.
+
+### 6.1 The PAX word kept (Checked (code))
+
+`kh2_formats::pax::PaxElement::tag` keeps the `+8` word. `kh1dpx::Variant::tag` writes it into the
+built DPX entry: low half at `+0x10` (KH1's kind mask), high half at `+0x14` (KH1's group mask).
+Every KH2 DPX entry checked has 0 in both words (Fire 1, Thunder 3, Reflect 1, `P_EX100.a.us`,
+`P_EX100_MAGF.a.us`: Checked (files)), so nothing else is overwritten.
+
+### 6.2 KH2 spells' hit elements (Checked (files), the user's KH2 install)
+
+| package | element (index / id / effect) | KH2 kinds | groups (effect_on_hit) |
+|---|---|---|---|
+| `FIRE_n.mag` "fire" (n = 1..3) | 3 / 3 / 3 | 0x1 | 1 |
+| | 4 / 4 / 4 | 0x1 | 2 |
+| `BLIZZARD_n.mag` "bliz" | 3 / 3 / 3 | 0x1 | 1 |
+| | 4 / 4 / 4 | 0x1 | 2 |
+| | 5 / 5 / 5 | 0x102 (wall) | 1, 2 |
+| | 6 / 6 / 6 | 0x10 (attack meeting attack) | 1, 2 |
+| `THUNDER_n.mag` "thun" | 4 / 4 / 4 | 0x1 | 1, 2 |
+| | 5 / 4 / 4 | 0x1 | 2 (same id as element 4, never found first) |
+| `MAGNET_n.mag` "magn" | 5 / 5 / 5, 6 / 6 / 6 | 0x1 | 1, 2 |
+| `REFLECT_n.mag` "refl" | 7 / 7 / 7 | 0x1 | 1 |
+| | 11 / 11 / 8 | 0x10 | 2 |
+| `P_EX100_MAGF.a.us` "p_ex" (Wisdom) | 17 / 21 / 11 | 0x1 | 1 |
+| | 18 / 22 / 12 | 0x6 | 1 |
+| | 19 / 23 / 13 | 0x100 (wall) | 1 |
+| | 20 / 24 / 14 | 0x10 | 1 |
+
+All bound to bone 0 with no offset, so `kh2dpx` builds them like any element of the package.
+
+**Assumption** (as §2): a spell attack carries its spell file's PAX (the script runs on an object
+of that file), Wisdom's shots the form's archive. Not traced to the line that sets attack `+0x28`.
+
+### 6.3 Through KH1's own lookup (Checked (code); KH1 side Checked (decomp))
+
+- `combat::SpellAttack::package` names the package an attack came from; `spell_strike` hands it with
+  the ATKP row's effect_on_hit / random_effect to `land_hit` (`Kh2Spark`).
+- `kh2dpx::hit_list (pkg, group)`: the package's DPX once relocated by KH1. Its tagged entries get
+  their masks written in KH1's numbering each time: KH2's kind 4 (a hit that doesn't count) on
+  KH1's 2 (KH1's `0x1402b4320` asks for 4 as 2), KH2's 2 (a wall kind, `0x1403d1960`) dropped, as
+  this list only ever answers a body hit. An entry whose effect runs a program KH1 doesn't run as
+  KH2 yet is unfindable (masks 0); when that entry is the one a counting hit of the group would
+  find, `hit_list` says no and KH1's spark plays instead of none.
+- `land_hit`: a copy of the KH1 data the hit lands with (`hit_data`: one 4 KB page of ours near the
+  battle data, `kh1rows::near`, 32 slots of 0x80, keyed by data and group, refilled on each use) with
+  `+0x28` = effect_on_hit - 1 (+ KH2's random step), -1 for effect_on_hit 0 (no spark, as KH2); the
+  attack object is made from it and its `+8` is the package's DPX handle. KH1's contact
+  (`0x1402b4060` -> `0x1402b4320` -> `0x1401dffe0` -> `0x1402ae650`) then picks, places (contact
+  point from `0x1402b3f50`) and turns (`0x1402ada80`, the record's direction) KH2's element.
+- KH1's record fill also looks the attack's list up for **kind 0x80** with the same group
+  (`0x1402bf630`, Steam: record `+0x34` the list, `+0x38` the entry, -1 none) and plays it on a
+  random enabled body part of the target in its reactions (`0x1402b8790`, `0x1402b9340`, both
+  guard `-1 < +0x38`). No KH2 element has 0x80, so with a KH2 list there is none: KH2 plays no
+  attacker-side damage effect either. Checked (decomp).
+- Not done: the hit sound (still the swing's for spells without KH1 data), KH2's immune-hit system
+  element 0x12 (`00effect.bar`).
+
+## 8. Defender's damage effect (answer 3 (b)): research
+
+- KH2 (`0x1403d1b40`): the **target's** own PAX (`+0x80`), element kind 0x200, group
+  `damage_effect - 1`, one unit above the contact point, unless target `+0x120` bit 9.
+- KH1 has no step that looks into the **target's** effect list on a hit (Checked (decomp): the
+  four callers of `0x1401dffe0` are the attack's list in the contact `0x1402b4320`, the attack's
+  list for kind 0x80 in the record fill `0x1402bf630`, and KH1's global list `0x14232e090` in
+  `0x1402a3ba0` / `0x1402c23e0`). KH1's own "damage effect" is the attacker's kind-0x80 entry
+  above, played on the target's body.
+- So (b) needs: where a KH1 enemy keeps its own effect list (its object / model; not found yet) and
+  whether any KH1 enemy list has entries a KH2 damage_effect could map onto (kind bits and groups
+  of KH1 enemy DPXs: not surveyed). Open; asked in the thread.

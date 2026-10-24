@@ -238,7 +238,7 @@ fn note(s: String) {
 
 /// Memory for our attack data within an i32 offset of the block (rows hold offsets, not
 /// pointers): a page past it, at the first free address from 16 MB on.
-unsafe fn near(block: usize) -> Option<usize> {
+pub(super) unsafe fn near(block: usize) -> Option<usize> {
     for k in 0..512usize {
         let at = (block + 0x0100_0000 + k * 0x0010_0000) & !0xFFFF;
         let p = super::sys::VirtualAlloc(at as *mut _, 0x1000, 0x3000, 0x04) as usize;

@@ -350,6 +350,9 @@ struct Layer {
     scale: [f32; 3],
     /// Its copy's header offset (the element's offset and turn folded in, in KH1's anchor frame).
     local: [f32; 3],
+    /// The KH2 element's lookup word (kinds low, groups high; `pax::PaxElement::tag`), which its
+    /// DPX entry carries as KH1's kind / group masks (`hit_list`). 0: no lookup finds it.
+    tag: u64,
 }
 
 /// A native element started: KH1's element, its serial (KH1 reuses elements), the KH2 motion it
@@ -488,6 +491,9 @@ struct Dpx {
     types: Vec<(i16, Vec<u32>)>,
     /// Where KH2's own programs are (`kh1dpx::Kh1Dpx::programs`), for `kh2ppp::plug`.
     programs: Vec<(usize, u32)>,
+    /// Its entries that KH1's effect lookup can find (a KH2 element with a lookup word): the
+    /// entry's offset in the DPX, the word, the element (`hit_list`).
+    tagged: Vec<(usize, u64, i16)>,
     /// Its DPDs (offsets in it) with an HD image per record of a TBP (KH2's per-palette case,
     /// `palette_textures`), textured when it is entered.
     palettes: Vec<usize>,
@@ -998,7 +1004,7 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
         if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" },
         if e.tag != 0 { format!(", lookup kinds {:#x} groups {:#x}", e.tag as u32, e.tag >> 32) } else { String::new() }
     );
-    let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale, local: offset.to_array() };
+    let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale, local: offset.to_array(), tag: e.tag };
     Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle, tag: e.tag }, note))
 }
 
@@ -1139,6 +1145,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         log(&format!("KH2 effects (native): {}: elements {els:?} not built ({why}); they don't play", s.label));
     }
     layers.retain(|l| r.effects.contains(&l.number));
+    let tagged: Vec<(usize, u64, i16)> = layers.iter().filter(|l| l.tag != 0).filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|k| (16 + k * 32, l.tag, l.el))).collect();
     // The HD images: one per DPD and TBP (the first record of the TBP in the DPD, the one KH1
     // looks up). Own ones from the package file's remastered assets (each by the offset of its
     // record's pixels in the file, else a record's of the same TBP), each kept once; common ones
@@ -1284,7 +1291,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     let at = pages.at;
     unsafe { std::ptr::copy_nonoverlapping(r.bytes.as_ptr(), at as *mut u8, r.bytes.len()) };
     let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
-    Ok(Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: r.bytes.len(), md5: r.md5, hd, layers, types, programs: r.programs.clone(), palettes, entry: 0, relocated: false })
+    Ok(Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: r.bytes.len(), md5: r.md5, hd, layers, types, programs: r.programs.clone(), tagged, palettes, entry: 0, relocated: false })
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -1811,6 +1818,45 @@ pub fn form_event(final_form: bool, motion: u16, el: i16) -> bool {
 pub fn weapon_vanish() -> bool {
     let motion = LAST_MOTION.load(Ordering::Relaxed);
     play(Pkg::Weapon, if motion <= u16::MAX as u32 { motion as u16 } else { super::kh2fx::NO_MOTION }, super::kh2fx::WEAPON_VANISH as i16)
+}
+
+/// KH1's effect list (DPX) for the hit sparks of package `pkg`, for an attack object's `+8`
+/// (`combat::land_hit`, KH2's spell hits): the package's DPX once it is built and relocated by KH1,
+/// whose entries made from KH2 elements with a lookup word carry it as KH1's kind / group masks
+/// (`kh1dpx`), so KH1's own lookup (`0x1402b4320` -> `0x1401dffe0`, Steam: the first entry holding
+/// the hit's kind bit and its attack data's `+0x28` group bit) finds the element KH2's lookup
+/// (`0x1403d1b40` -> `0x1402c6730`) finds. An entry whose effect runs a program KH1 doesn't run as
+/// KH2 yet has its masks cleared (KH1's lookup would start it bypassing `start_el`'s check), and
+/// set again once it does. `None`: not built or entered yet, the list is busy this frame, or the
+/// element a counting hit of `group` (KH2's effect_on_hit - 1; < 0 none) would find is one of
+/// those (so the caller keeps KH1's spark rather than show nothing). With it: the DPX and the
+/// tagged entries (element, kinds, groups, whether KH1's lookup can find it), for the log.
+pub fn hit_list(pkg: Pkg, group: i32) -> Option<(usize, String)> {
+    let Ok(g) = PACKS.try_lock() else { return None };
+    let d = g.iter().rev().find(|d| d.pkg == pkg && d.relocated)?;
+    let mut notes = Vec::new();
+    // The first entry KH2's lookup takes for a counting hit (kind 1) of the group.
+    let mut first: Option<bool> = None;
+    for &(off, tag, el) in &d.tagged {
+        let lacks = d.types.iter().find(|t| t.0 == el).map_or_else(Vec::new, |t| missing(&t.1));
+        // KH1's contact asks for a hit that doesn't count (KH2's kind 4) as kind 2 (`0x1402b4320`);
+        // KH2's 2 is a wall kind (`0x1403d1960`), which this list never answers for (it is only
+        // an attack object's list for a body hit). So KH2's 4 goes on KH1's 2 and KH2's 2 is dropped.
+        let k = tag as u32;
+        let (kinds, groups) = if lacks.is_empty() { ((k & !0x2) | (k & 0x4) >> 1, (tag >> 32) as u32) } else { (0, 0) };
+        if first.is_none() && (0..32).contains(&group) && k & 1 != 0 && (tag >> 32) as u32 >> group & 1 != 0 {
+            first = Some(lacks.is_empty());
+        }
+        unsafe {
+            std::ptr::write_unaligned((d.at + off + 0x10) as *mut u32, kinds);
+            std::ptr::write_unaligned((d.at + off + 0x14) as *mut u32, groups);
+        }
+        notes.push(format!("element {el} KH2 kinds {:#x} (KH1 {kinds:#x}) groups {:#x}{}", tag as u32, tag >> 32, if lacks.is_empty() { String::new() } else { format!(" (not findable: programs {lacks:?})") }));
+    }
+    if first == Some(false) {
+        return None;
+    }
+    Some((d.at, format!("{}: [{}]", d.label, notes.join("; "))))
 }
 
 /// Package `pkg` is built and entered in KH1 (`kh2fx::spell_ready`, for the log).

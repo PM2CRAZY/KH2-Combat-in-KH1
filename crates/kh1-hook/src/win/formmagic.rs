@@ -808,13 +808,14 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         .iter()
         .filter(|a| !a.freed && a.owner == SORA)
         .filter_map(|a| {
+            let pkg = package.get(&a.spell).copied().unwrap_or(super::kh2fx::WISDOM);
             let kh1_data = package.get(&a.spell).and_then(|&p| package_spell(p)).filter(|(spell, _)| *spell <= 2).and_then(|(spell, level)| combat::kh1_spell_data(spell, level));
             let first = row(battle, a.atk, a.sub, 0)?;
             if !combat_core::AttackKind::from_id(first.kind).deals_damage() {
                 return None;
             }
             let shapes = a.shapes();
-            (!shapes.is_empty()).then(|| combat::SpellAttack { kh1_data, key: a.id | KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
+            (!shapes.is_empty()).then(|| combat::SpellAttack { kh1_data, package: Some(pkg), key: a.id | KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
         })
         .collect();
     if !attacks.is_empty() {

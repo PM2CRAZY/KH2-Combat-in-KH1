@@ -1917,7 +1917,7 @@ impl Strikes {
                     h.swing, row.id, row.sub_id >> 8, row.kind, row.element, row.enemy_reaction, row.effect_on_hit, row.damage_effect, row.random_effect, row.hit_sound, row.flags,
                     (air as usize) * 2 + finisher as usize, if air { "air " } else { "ground " }, if finisher { "finisher" } else { "swing" }
                 );
-                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, info);
+                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, None, info);
                 if dealt.is_some() {
                     landed += 1;
                 }
@@ -1973,6 +1973,10 @@ pub struct SpellAttack {
     /// KH1 attack data to land it with (an offset into `ATTACK_DATA_RVA`'s table: a KH1 spell's
     /// own entry, for its element), instead of Sora's swing rows (`kh1_spell_data`).
     pub kh1_data: Option<i32>,
+    /// The KH2 spell package whose PAX the attack carries (`kh2fx`'s numbering, `kh2dpx::Pkg::Spell`):
+    /// its hit spark is that package's element for the row's effect_on_hit (`land_hit`). `None`:
+    /// KH1's spark, as before.
+    pub package: Option<u8>,
     pub key: u64,
     pub group: i64,
     pub atk: u16,
@@ -2035,7 +2039,8 @@ impl Strikes {
                     a.atk, a.sub, r.kind, r.element, r.enemy_reaction, r.effect_on_hit, r.damage_effect, r.random_effect, r.hit_sound, r.flags,
                     knock as usize, if knock { "ground finisher" } else { "ground swing" }
                 );
-                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data, info);
+                let fx = a.package.map(|package| Kh2Spark { package, effect_on_hit: r.effect_on_hit, random_effect: r.random_effect });
+                let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data, fx, info);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
                 out.push((a.key, a.atk, b.actor, dealt));
@@ -2144,8 +2149,80 @@ static CARRY: std::sync::LazyLock<std::sync::Mutex<HashMap<usize, i64>>> = std::
 /// Returns the damage written to the hit record, if one was made.
 /// `info` describes the KH2 side of the hit for the trace's events column (t333: why every KH2
 /// hit shows the plain Keyblade hit effect).
-unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool, info: String) -> Option<u32> {
-    land_hit(sora, part, at, row, power, spell, info)
+unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool, fx: Option<Kh2Spark>, info: String) -> Option<u32> {
+    land_hit(sora, part, at, row, power, spell, fx, info)
+}
+
+/// A KH2 spell hit's own spark (the tester, kh2-hit-effects-on-enemies, answer 2: "if its from
+/// kh2 let it call its own spark"): the spell package its attack carries and its ATKP row's
+/// effect_on_hit (`+0x0B`) and random_effect (`+0x2D`).
+#[derive(Clone, Copy, Debug)]
+pub struct Kh2Spark {
+    pub package: u8,
+    pub effect_on_hit: u8,
+    pub random_effect: u8,
+}
+
+/// KH1's attack data entry (`kh1rows::DATA`) and its hit-effect group (`+0x28`: the bit
+/// `1 << n` KH1's lookup asks of the attack's effect list, < 0 none; `docs/kh1-attack-elements.md`).
+const DATA_SIZE: usize = 0x70;
+const DATA_HIT_GROUP: usize = 0x28;
+/// Copies of KH1 attack data with another `+0x28`, one per (source entry, group), in one page of
+/// ours within reach of the battle data (`kh1rows::near`), 0x80 apart (32 of them). Never freed:
+/// KH1 reads an attack's data by its handle while the hit is applied after the call (the
+/// record's reaction). Refilled from the source on every use (112 bytes).
+static HIT_DATA: std::sync::Mutex<(usize, Vec<(i32, i32)>)> = std::sync::Mutex::new((0, Vec::new()));
+const HIT_DATA_SLOT: usize = 0x80;
+
+/// KH1's attack data `data` (an offset into the battle data) with its hit-effect group set to
+/// `group` (KH2's effect_on_hit - 1, -1 none): a copy of ours (`HIT_DATA`), or `None` without room.
+unsafe fn hit_data(base: usize, data: i32, group: i32) -> Option<usize> {
+    let block = base + ATTACK_DATA_RVA;
+    let mut g = HIT_DATA.lock().ok()?;
+    if g.0 == 0 {
+        g.0 = super::kh1rows::near(block).unwrap_or(usize::MAX);
+        log(&format!("KH2 spell hit sparks: attack data copies at {:#x}", g.0));
+    }
+    if g.0 == usize::MAX {
+        return None;
+    }
+    let k = match g.1.iter().position(|&x| x == (data, group)) {
+        Some(k) => k,
+        None if g.1.len() < 0x1000 / HIT_DATA_SLOT => {
+            g.1.push((data, group));
+            g.1.len() - 1
+        }
+        None => {
+            static FULL: AtomicBool = AtomicBool::new(false);
+            if !FULL.swap(true, Ordering::Relaxed) {
+                log(&format!("KH2 spell hit sparks: no room for another attack data copy (data {data:#x}, group {group}): KH1's spark"));
+            }
+            return None;
+        }
+    };
+    let d = g.0 + k * HIT_DATA_SLOT;
+    std::ptr::copy_nonoverlapping(block.wrapping_add(data as isize as usize) as *const u8, d as *mut u8, DATA_SIZE);
+    wr(d + DATA_HIT_GROUP, group);
+    Some(d)
+}
+
+/// KH2's group for a hit (`0x1403d1b40`, Steam KH2, Checked (decomp)): effect_on_hit - 1, plus a
+/// random step 0..random_effect-1 when the row has one (KH2's own generator, `x *= 0x10DCD`; ours
+/// is seeded apart, Assumption: only which of the row's sparks plays differs); -1 with no
+/// effect_on_hit (no spark, as KH2).
+fn kh2_group(fx: Kh2Spark) -> i32 {
+    if fx.effect_on_hit == 0 {
+        return -1;
+    }
+    let mut g = fx.effect_on_hit as i32 - 1;
+    if fx.random_effect != 0 {
+        static SEED: AtomicU32 = AtomicU32::new(1);
+        let x = SEED.load(Ordering::Relaxed).wrapping_mul(0x10DCD);
+        SEED.store(x, Ordering::Relaxed);
+        let n = fx.random_effect as u64;
+        g += ((x as u64) / ((n - 1 + 0x1_0000_0000) / n)) as i32;
+    }
+    g
 }
 
 /// KH1's own attack data for a spell (Fire 0, Blizzard 1, Thunder 2, Cure 3, Gravity 4, Stop 5,
@@ -2167,14 +2244,39 @@ pub fn kh1_spell_data(spell: u8, level: u8) -> Option<i32> {
     Some(off)
 }
 
-unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool, info: String) -> Option<u32> {
+unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell: bool, fx: Option<Kh2Spark>, info: String) -> Option<u32> {
     let base = BASE.load(Ordering::Relaxed);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
     let contact: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + LAND_RVA);
     let free: unsafe extern "system" fn(usize) = std::mem::transmute(base + FREE_ATTACK_RVA);
+    // A KH2 spell's own spark (`Kh2Spark`): its package's KH1 effect list (`kh2dpx::hit_list`) and a
+    // copy of the row's attack data with KH2's group in `+0x28`, so KH1's own contact
+    // (`0x1402b4060` -> `0x1402b4320` -> `0x1401dffe0`) picks and places KH2's element. Not built
+    // (or `kh2_effects` off): KH1's spark, as before.
+    let kh2_spark = fx.and_then(|f| {
+        let group = kh2_group(f);
+        let (list, note) = super::kh2dpx::hit_list(super::kh2dpx::Pkg::Spell(f.package), group)?;
+        let h = pose::handle(list);
+        let data = if h != 0 { hit_data(base, row.data, group) } else { None };
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log(&format!(
+                "KH2 spell hit spark: package {} effect_on_hit {} random {} -> group {group}, list {list:#x} (handle {h:#010x}), data copy {data:#x?} | {note}",
+                f.package, f.effect_on_hit, f.random_effect
+            ));
+        }
+        Some((h, data?)).filter(|x| x.0 != 0)
+    });
+    if fx.is_some() && kh2_spark.is_none() {
+        static M: AtomicU32 = AtomicU32::new(0);
+        if M.fetch_add(1, Ordering::Relaxed) < 10 {
+            log(&format!("KH2 spell hit spark: package {:?} not ready, or its element for this hit can't play through KH1 yet (see its load line): KH1's spark", fx.map(|f| f.package)));
+        }
+    }
     let bit = free_bit();
-    let obj = new_attack(sora, bit, base + ATTACK_DATA_RVA + row.data as usize);
+    let data_ptr = kh2_spark.map_or(base + ATTACK_DATA_RVA + row.data as usize, |x| x.1);
+    let obj = new_attack(sora, bit, data_ptr);
     if obj < 0x10000 {
         return None;
     }
@@ -2193,7 +2295,10 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     // Thunder and Gravity have none). Before, it was the Keyblade's (`new_attack` on Sora): the Keyblade spark.
     // Not loaded: the Keyblade's, as before.
     let mut spell_fx = String::new();
-    if spell && row.data >= 0x5F28 {
+    if let Some((h, _)) = kh2_spark {
+        wr(obj + 8, h);
+        spell_fx = format!(" | KH2 spark list {h:#010x}");
+    } else if spell && row.data >= 0x5F28 {
         let k = ((row.data - 0x5F28) / 0x70 / 3) as usize;
         if k < 7 {
             let slot = base + MAGIC_SLOTS_RVA + k * 0x38;
@@ -2227,7 +2332,7 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     // the contact use `+0xA8`?
     let fx_before = rd::<[u8; 3]>(obj + 0xA8);
     let flags_before = rd::<u32>(obj);
-    let data_at = base + ATTACK_DATA_RVA + row.data as usize;
+    let data_at = data_ptr;
     // (t354) Only gathered while the trace records hit effects.
     let hit_fx = super::trace::wants(super::trace::cat::HIT_FX);
     let data_words = if hit_fx { (0..8).map(|k| format!("{:08x}", rd::<u32>(data_at + k * 4))).collect::<Vec<_>>().join(" ") } else { String::new() };

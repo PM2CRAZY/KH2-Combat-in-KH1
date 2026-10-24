@@ -1173,7 +1173,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         // once per foe, its key's hit record keeps it from striking again.)
         let Some(burst) = burst_of(a.atk) else { continue };
         let Some(brow) = row(battle, burst, a.sub, 0) else { continue };
-        attacks.push(combat::SpellAttack { kh1_data: None, key: a.id | SPELL_KEY, group: if brow.combo_group != 0 { brow.combo_group as i64 } else { a.group }, atk: burst, sub: a.sub, shapes });
+        attacks.push(combat::SpellAttack { kh1_data: None, package: Some(rt.levels.get(a.spell).copied().unwrap_or(1)), key: a.id | SPELL_KEY, group: if brow.combo_group != 0 { brow.combo_group as i64 } else { a.group }, atk: burst, sub: a.sub, shapes });
     }
     // The burst (the counter's last attack, ATKP 667 / 668 / 669 by tier): its shatter sound,
     // element 7's (173 at every level; the script starts no element for the burst, and element
