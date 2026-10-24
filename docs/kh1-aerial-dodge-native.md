@@ -166,3 +166,13 @@ The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one te
   blend 8) **Checked (decomp)**. That KH1's arc fields are in the same frames as KH2's arc here
   (so the 5 is the same 5) is what `kh1phys::Arc::from_kh2` writes (Checked (code)). Landing stays
   KH1's own (its landing request on touching down).
+- **t494, the guard 406 as KH1 guard objects on the slot.** `takeover::kh2_hits` (once a game
+  frame with our slot playing in KH1's states) made KH1 guard objects only for guard windows on
+  the Keyblade; for the Aerial Dodge's slot its body guard (ATKP 406, group 6, all through 202) is
+  one too, all round, as `combat::guard_step` made it for KH2's controller's dodge. An enemy
+  attack object meeting it is stopped (KH1's clash, priority 100) with no reaction (`refact_self`
+  2, `combomods::guard_repel` does nothing for it); hits his hit pass still finds stay stopped by
+  `hurt` (`kh2slots::body_guard`), as before. Cost: KH2's rig posed once a frame while the dodge
+  plays (as for the slot moves with guards on the Keyblade). Other slots' body guards (Flash
+  Step's 406, Aerial Recovery's 124, Explosion's, Vicinity Break's, Magnet Burst's) are still only
+  `hurt`'s: left as they were (not this thread's).

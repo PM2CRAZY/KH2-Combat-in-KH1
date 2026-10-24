@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 494 (testing branch: Aerial Dodge: its guard as KH1 guard objects)
+- **The Aerial Dodge's guard (ATKP 406) as KH1 guard objects on the native slot.** The tester (aerial-dodge-native m1, plan item 3). `takeover::kh2_hits` takes 202's body guard window too (others only on the Keyblade), so `combat::guard_step` makes the all-round KH1 guard object (priority 100) KH2's controller made for its dodge: enemy attack objects meeting it are stopped, no reaction (`refact_self` 2). Hits his hit pass finds are still `hurt`'s. Checked (files): 202's window and ATKP 406. Notes `docs/kh1-aerial-dodge-native.md` §6.
+
 ### 2026-10-24: Stage 493 (testing branch: Aerial Dodge: the fall at KH2's apex)
 - **The Aerial Dodge's fall at KH2's apex.** The tester (aerial-dodge-native m1: question 1, my pick; plan item 2). `combomods::dodge_apex` (before Sora's KH1 physics frame): with our dodge slot playing in KH1's air state, 5 frames before the apex by KH1's arc fields (`+0x3B0` + 5 >= `+0x3B8`) and nothing pending (`+0x178`), KH1's fall request 6 with blend 8, action flag off. KH2's rule `0x1403CB680` / `0x1403CB610` (motion 4, blend 8.0) Checked (decomp); KH1's apex swap `0x1402AF630` only for its own requests, Checked (decomp). Notes `docs/kh1-aerial-dodge-native.md` §6.
 

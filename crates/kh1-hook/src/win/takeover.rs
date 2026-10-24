@@ -1738,15 +1738,18 @@ pub unsafe fn kh2_hits(actor: usize) {
     // KH2's guard windows on the Keyblade in that motion (the guard press's, its repel's, Guard
     // Break's): KH1 guard objects, as for KH2's controller's guard (`combat::guard_step`), so an
     // attack meeting one is stopped before it reaches him (`combomods::guard_repel` then). Those on
-    // his body stay `hurt`'s (`kh2slots::body_guard`).
+    // his body stay `hurt`'s (`kh2slots::body_guard`), but for the Aerial Dodge's (ATKP 406 on his
+    // body all through 202, the tester's aerial-dodge-native plan item 3): KH1 guard objects too,
+    // as KH2's controller made them for its dodge (`combat::guard_step`, all round), so an enemy's
+    // attack object meets it (the parry) and not only his hit pass.
     let guards: Vec<(usize, u16, u8, u8)> = match (playing, clip) {
-        (Some((_, t)), Some((_, c))) => c
+        (Some((m, t)), Some((_, c))) => c
             .windows
             .iter()
             .enumerate()
             .filter(|(_, w)| w.contains(t as u32))
             .filter_map(|(i, w)| match w.kind {
-                character_core::WindowKind::Guard { attack, group, weapon } if weapon > 0 => Some((i, attack, group, weapon)),
+                character_core::WindowKind::Guard { attack, group, weapon } if weapon > 0 || m == character_core::motion::AERIAL_DODGE => Some((i, attack, group, weapon)),
                 _ => None,
             })
             .collect(),
