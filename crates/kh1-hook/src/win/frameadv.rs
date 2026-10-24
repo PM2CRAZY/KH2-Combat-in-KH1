@@ -78,11 +78,26 @@
 //!   Advance makes the same calls as a hold begins and ends (a step plays one frame's worth of
 //!   sound), unless the debug menu's Held Sound row is Plays. KH1's own pause makes its own calls
 //!   meanwhile, and ours is made again after it.
+//! - **The camera while held: Held or Free (the tester, after t463: "if the cam 1 + cam 2 bit was
+//!   running then we could freely move the camera ... toggle the cam movement on or off").** KH1's
+//!   pad step (`0x14018C790`) runs every frame outside the task list, so the pad record and the
+//!   sticks are live while held; KH1's field camera task (100000, `0x1401E5D90`) reads them (the
+//!   right stick and the mouse, `0x1401E7320`) and steps its mode (KH1's follow / lock-on, or
+//!   KH2's camera in their place, `camera.rs`) round Sora where he is held, writing only the
+//!   camera's own state (`0x142537E44`..`0x142538110`, the mode `0x14299BB08`, the eye / look point
+//!   `0x14299BAE0` / `AF0`); the view set-up (110000, held before t463, "cam 2") makes the view
+//!   from them. Its turns step by the frame scale (and the subject's speed is divided by it),
+//!   which is 0 on a held frame since t463, so 100000 alone would stand. The debug menu's Camera
+//!   row, Free: 100000 runs on held frames through `camera_live`, with the frame scale the pacing
+//!   set for that frame and no Select (first person: KH1's own clears the lock-on and fades Sora,
+//!   KH2's fades him) or, in first person, R3 (its way out); KH1's own first-person fade still
+//!   counting (`0x1425380F8`, it writes Sora's alpha step and draw bit) keeps it held that frame.
+//!   Held (the default): held as before.
 
 use super::addr::{Build, Rva};
 use super::log;
 use super::sys::*;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -161,6 +176,21 @@ const LIVE_HOLD: [usize; 4] = [0x290A50, 0x3970D0, 0x292E40, 0x1EB750];
 /// queues; its texture scroll stands with the frame scale at 0, its zoom step is put back),
 /// 129999 (the render states it queues), the view copy 135000.
 const MODELS_RVA: usize = 0x2A23E0;
+/// KH1's field camera task (100000, `0x1401E5D90`): runs through `camera_live` while the Camera
+/// row is Free.
+const CAMERA_RVA: usize = 0x1E5D90;
+/// The Camera row: Free (the camera task runs while held) or Held.
+static FREE_CAMERA: AtomicBool = AtomicBool::new(false);
+/// The frame scale the pacing set for the frame to come (f32 bits; read at the frame end before
+/// a held frame's is written 0): the camera's while held.
+static CAMERA_SCALE: AtomicU32 = AtomicU32::new(0);
+/// KH1's camera mode (2: first person) and its first person's fade timer (Sora faded out by it).
+const CAMERA_MODE_STEAM: usize = 0x299BB08;
+const FP_FADE_STEAM: usize = 0x25380F8;
+/// In KH1's pad record's pressed word (`+8`): Select (first person in KH1's follow / lock-on
+/// cameras and KH2's), R3 (out of KH1's first person).
+const PRESSED_SELECT: u32 = 0x8000;
+const PRESSED_R3: u32 = 0x200;
 const MAP_RVA: usize = 0xD2830;
 const RUN_BY_DEFAULT: [usize; 6] = [MODELS_RVA, MAP_RVA, 0x189F80, 0x28CD50, 0x2BE500, 0x28CC10];
 /// KH1's frame scale (`0x14233FBDC`) and its half (`0x14233FBE0`, the HUD's sprite animations'
@@ -265,7 +295,7 @@ static RUNS: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
 
 /// Whether a task runs while held when the page hasn't switched it.
 fn runs_by_default(rva: usize) -> bool {
-    RUN_BY_DEFAULT.contains(&rva)
+    RUN_BY_DEFAULT.contains(&rva) || rva == CAMERA_RVA && FREE_CAMERA.load(Ordering::Relaxed)
 }
 
 /// KH1's frame scale as the picture shows it: while held, the last frame that ran's (KH1's own
@@ -319,6 +349,10 @@ unsafe fn put_back_steps(base: usize) {
 }
 
 fn runs_now(overrides: &[(usize, bool)], rva: usize) -> bool {
+    // (The camera: the Camera row's alone.)
+    if rva == CAMERA_RVA {
+        return runs_by_default(rva);
+    }
     overrides.iter().find(|o| o.0 == rva).map_or(runs_by_default(rva), |o| o.1)
 }
 
@@ -332,6 +366,16 @@ pub fn tasks() -> Vec<TaskRow> {
 pub fn toggle_task(i: usize) {
     let Some(row) = TASKS.lock().ok().and_then(|t| t.get(i).copied()) else { return };
     let runs = !row.runs;
+    if !row.sub && row.rva == CAMERA_RVA {
+        // (The camera's row is the Camera row: Free runs it through `camera_live`.)
+        set_free_camera(runs);
+        if let Ok(mut t) = TASKS.lock() {
+            if let Some(x) = t.get_mut(i) {
+                x.runs = runs;
+            }
+        }
+        return;
+    }
     if let Ok(mut r) = RUNS.lock() {
         r.retain(|x| x.0 != row.rva);
         r.push((row.rva, runs));
@@ -364,6 +408,42 @@ unsafe extern "system" fn map_live(task: usize) -> u32 {
     wr::<u32>(base + MAP_FADES_DONE_STEAM, done);
     std::ptr::copy_nonoverlapping(fades.as_ptr(), (base + MAP_FADES_STEAM) as *mut u8, MAP_FADES_LEN);
     r
+}
+
+/// (Camera Free) 100000 (`0x1401E5D90`, KH1's field camera) on a held frame: KH1's own, with the
+/// frame scale the pacing set for this frame (0 for every other task), and without Select (or R3
+/// in first person) in the pad record's pressed word, both put back after. Held this frame while
+/// KH1's own first-person fade counts.
+unsafe extern "system" fn camera_live(task: usize) -> u32 {
+    let base = BASE.load(Ordering::Relaxed);
+    let mode = rd::<i32>(base + CAMERA_MODE_STEAM);
+    if mode == 2 && rd::<f32>(base + FP_FADE_STEAM) > 0.0 {
+        return 0;
+    }
+    let pressed_at = base + BUTTONS_RVA + 8;
+    let pressed: u32 = rd(pressed_at);
+    let keep = if mode == 2 { PRESSED_SELECT | PRESSED_R3 } else { PRESSED_SELECT };
+    wr::<u32>(pressed_at, pressed & !keep);
+    let scale = base + FRAME_SCALE_STEAM;
+    let was: u32 = rd(scale);
+    wr::<u32>(scale, CAMERA_SCALE.load(Ordering::Relaxed));
+    let f: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + CAMERA_RVA);
+    let r = f(task);
+    wr::<u32>(scale, was);
+    wr::<u32>(pressed_at, pressed);
+    r
+}
+
+/// The debug menu's Camera row: Free (the camera moves while held) or Held.
+pub fn free_camera() -> bool {
+    FREE_CAMERA.load(Ordering::Relaxed)
+}
+
+/// Switches the Camera row (applied at this frame's end, `hold_tasks`).
+pub fn set_free_camera(on: bool) {
+    if FREE_CAMERA.swap(on, Ordering::Relaxed) != on {
+        log(&format!("debug menu: frame advance camera {}", if on { "free (100000 0x1401e5d90 runs while held, the frame's scale; no Select)" } else { "held" }));
+    }
 }
 
 /// (Live) KH1's system stop on (saved first) or put back as it was.
@@ -428,7 +508,8 @@ unsafe fn hold_tasks(base: usize) {
     let Ok(mut held) = HELD_TASKS.lock() else { return };
     let skip_f = skip as *const () as usize;
     let map_f = map_live as *const () as usize;
-    let ours = |f: usize| f == skip_f || f == map_f;
+    let cam_f = camera_live as *const () as usize;
+    let ours = |f: usize| f == skip_f || f == map_f || f == cam_f;
     let mut t: usize = rd(base + TASK_LIST_STEAM + 0x10);
     let mut n = 0;
     let overrides = RUNS.lock().map(|r| r.clone()).unwrap_or_default();
@@ -453,7 +534,15 @@ unsafe fn hold_tasks(base: usize) {
                 if !seen.iter().any(|s| s.rva == rva) {
                     seen.push(TaskRow { priority: prio, label: label(rva), sub: false, rva, runs });
                 }
-                let want = if !runs { skip_f } else if rva == MAP_RVA { map_f } else { own };
+                let want = if !runs {
+                    skip_f
+                } else if rva == MAP_RVA {
+                    map_f
+                } else if rva == CAMERA_RVA {
+                    cam_f
+                } else {
+                    own
+                };
                 if f != want {
                     if want == own {
                         wr::<usize>(t + 0x10, own);
@@ -524,10 +613,10 @@ unsafe fn hold_tasks(base: usize) {
 /// The held tasks get their functions back (those still in use and still ours).
 unsafe fn release_tasks() {
     let Ok(mut held) = HELD_TASKS.lock() else { return };
-    let (skip_f, map_f) = (skip as *const () as usize, map_live as *const () as usize);
+    let (skip_f, map_f, cam_f) = (skip as *const () as usize, map_live as *const () as usize, camera_live as *const () as usize);
     for (t, f, _) in held.drain(..) {
         let now = if super::crash::readable(t + 0x18) && rd::<u16>(t) != 0 { rd::<usize>(t + 0x10) } else { 0 };
-        if now == skip_f || now == map_f {
+        if now == skip_f || now == map_f || now == cam_f {
             wr::<usize>(t + 0x10, f);
         }
     }
@@ -703,6 +792,8 @@ pub unsafe fn frame_end(base: usize) {
         return;
     }
     BASE.store(base, Ordering::Relaxed);
+    // (The pacing just set the next frame's scale: the camera's if that frame is held.)
+    CAMERA_SCALE.store(rd::<u32>(base + FRAME_SCALE_STEAM), Ordering::Relaxed);
     let Ok(mut st) = STATE.try_lock() else { return };
     let st = &mut *st;
     let kh1_paused = rd::<i32>(base + PAUSE_STATE_RVA) != 0;

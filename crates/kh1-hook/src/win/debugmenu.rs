@@ -28,8 +28,9 @@
 //!   Trace Recorder's Game Frames row on (the seconds count game frames, `trace::game_frames`).
 //!   Not kept in the ini: it starts off each launch. (The tester, after t463: "make frame advance
 //!   a submenu and throw it plus frame advance option in there".) Its rows are on their own page,
-//!   Frame Advance (main page): the Frame Advance row, Held Sound, Game Frames (the same row as
-//!   the Trace Recorder's) and the Held Tasks page.
+//!   Frame Advance (main page): the Frame Advance row, Held Sound, Camera (Free: the camera
+//!   moves while held, `frameadv::camera_live`; Held), Game Frames (the same row as the Trace
+//!   Recorder's) and the Held Tasks page.
 //! - **Pages**: Trace Recorder (the trace's mode, seconds, the sound log and its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
@@ -220,6 +221,7 @@ enum Action {
     GameFrames,
     FrameAdvance,
     HeldSound,
+    FreeCamera,
     HeldTask(usize),
     GroupRow(usize),
     Item(usize),
@@ -438,6 +440,8 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             (format!("{:<16}< {} >", "Frame Advance", if super::frameadv::supported() { on_off(super::frameadv::on()) } else { "Steam only" }), Action::FrameAdvance),
             // (KH1's pause's sound call while held, or not.)
             (format!("{:<16}< {} >", "Held Sound", if super::frameadv::hold_sound() { "Paused" } else { "Plays" }), Action::HeldSound),
+            // (After t463) The camera moves while held (Free) or not (`frameadv::camera_live`).
+            (format!("{:<16}< {} >", "Camera", if super::frameadv::free_camera() { "Free" } else { "Held" }), Action::FreeCamera),
             // (The Trace Recorder's row: Frame Advance turns it on.)
             (format!("{:<16}< {} >", "Game Frames", on_off(trace::game_frames())), Action::GameFrames),
             ("Held Tasks  >".into(), Action::Enter(Page::HeldTasks)),
@@ -630,6 +634,10 @@ unsafe fn step(base: usize) {
         }
         Action::HeldSound => {
             super::frameadv::set_hold_sound(!super::frameadv::hold_sound());
+            sound(1);
+        }
+        Action::FreeCamera => {
+            super::frameadv::set_free_camera(!super::frameadv::free_camera());
             sound(1);
         }
         Action::HeldTask(i) => {

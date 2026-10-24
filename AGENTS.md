@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 465 (testing branch: Frame Advance: the Camera row (Free: the camera moves while held))
+- **Frame Advance: the Camera row (Free: the camera moves while held).** The tester ("toggle the cam movement on or off"). KH1's pad step runs outside the task list; 100000 `0x1401E5D90` steps the camera mode (`0x140506CE0`) from the live stick, round the held Sora, writing only the camera's state; 110000 builds the view from it (Checked (decomp), table Checked (exe)). Free: 100000 runs held through `camera_live` with the frame's scale (0 otherwise since t463), no Select (first person clears the lock-on and fades Sora), no R3 in first person; KH1's first-person fade `0x1425380F8` holds it. KH2's camera goes along (same scale). Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 464 (testing branch: Frame Advance: its rows on a debug menu page of their own)
 - **Frame Advance: its rows on a debug menu page of their own.** The tester ("make frame advance a submenu and throw it plus frame advance option in there"). Main page: Frame Advance `>`; its page: Frame Advance, Held Sound, Game Frames (also on the Trace Recorder's page), Held Tasks. Notes: `docs/kh1-frame-advance.md`.
 

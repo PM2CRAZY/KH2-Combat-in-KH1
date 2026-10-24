@@ -369,6 +369,46 @@ row, also still on that page; Frame Advance turns it on) and the Held Tasks page
 tool, the tester's answer 2). Back (or the cancel button) goes up to the main page; Held Tasks goes
 back to the Frame Advance page.
 
+### The camera while held: the Camera row (after t463)
+
+The tester: "on your previous build ... if the cam 1 + cam 2 bit was running then we could freely move
+the camera" (the Held Tasks labels before t462: 100000 `0x1E5D90` "camera", 110000 `0x28CD50` "camera 2").
+Why (**Checked (decomp)**):
+- KH1's pad step (`0x14018C790`) runs every frame outside the task list, held or not, so the pad
+  record (`0x14298CA90`) and the processed sticks (right `0x14298CAC0`) are live while held.
+- 100000 (`0x1401E5D90`) runs the camera mode's step from the table at `0x140506CE0` (16 bytes a mode:
+  1 follow `0x1401E1920`, 2 first person `0x1401E2390` / exit `0x1401E2610`, 3 lock-on `0x1401E2650`, ...;
+  read from the exe, **Checked (exe)**; the KH2 camera puts its own in 1 to 6 and 8, `camera.rs`), then
+  blends and copies its internal eye / look point (`0x142537E60` / `0x142537E70`) into the public
+  pair (`0x14299BAE0` / `0x14299BAF0`). The stick and mouse turn (`0x1401E7320`: `0x14298CAC0` /
+  `0x14298CAC4`, the mouse `0x140138B30`, x the frame scale) and the follow camera's rules
+  orbit the eye round the subject (Sora, `0x142537E48`), who is held where he stands. Its writes are
+  the camera's own: `0x142537E44`..`0x14253810C`, the mode `0x14299BB08`, the public pair, the field of
+  view (`0x14028CAF0`), mode 2's offsets in `0x140506DB0`.. (the decomp of the modes and their helpers
+  `0x1401E5530`, `0x1401E6670`, `0x1401E6C10`, `0x1401E6FF0`, `0x1401E62A0`, `0x1401E4820`, `0x1401E5360`).
+  The exceptions: Select in modes 1 and 3 enters first person (`0x1401E5360 (2, 30)`; with `0x142867364`
+  bit 0x2000 a sound, `0x14017A040 (4)`), whose first frame clears the lock-on (`0x1402B0970`) and
+  whose fade writes Sora's alpha step (`+0x64`) and clears his draw bit (`0x1425380F8` counting down by
+  the frame scale); R3 or Select in mode 2 leaves it (its exit fades Sora in).
+- 110000 (the view set-up) builds this frame's view from the public pair. Before t463 it was held by
+  default, so the camera's moves showed only with both running; since t463 it runs.
+- Since t463 the frame scale is 0 on a held frame, and the camera steps by it (and divides the
+  subject's speed by it: `0x142537E50` / `E54` = distance / scale), so 100000 let run alone would stand.
+
+The Camera row (debug menu > Frame Advance, Free / Held, Held by default, this session): Free runs
+100000 on held frames through `frameadv::camera_live`: the frame scale the pacing set for that frame
+(read at the frame end before it is written 0) for the call only, 0 again after; Select taken off the
+pad record's pressed word (`+8`, `0x8000`) for the call, and R3 (`0x200`) too in mode 2, put back
+after; while KH1's first-person fade counts (mode 2, `0x1425380F8` > 0) it is held that frame. So the
+right stick / mouse move KH1's camera (or KH2's: its follow, lock-on and first person read the same
+scale, `camera.rs` `STEP_RVA`) round the held Sora, and nothing else steps. The Held Tasks page's
+100000 row is the same switch. KH2's camera's `run` / `run_first_person` write only the camera and
+the field of view while Select is off (its Select fades Sora, `camera::fade`). **Checked (decomp)**;
+**Assumption**: the area-camera check (`0x1401E5530`, by the subject's place) and the movement-state
+cameras (`0x1401E3320`, by Sora's state) switch nothing while Sora is held, as both read only him.
+Not covered: event and scene cameras (99999, 53000, 100500) stay held, so during an event the view
+doesn't move.
+
 ## Actors
 
 Each actor is a task of a second list, `0x142D5AB00` (0x28-byte tasks, made by `0x140297980` with
