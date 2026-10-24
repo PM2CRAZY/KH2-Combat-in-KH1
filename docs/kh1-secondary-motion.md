@@ -313,8 +313,8 @@ candidate).
 
 Not copied (KH1's own bones, no visible KH2 match): the jacket hem (249-278, 73-74), the
 shorts' panels (27-40, 53-66), the belt chain (11-14), the belt-front pieces (5, 8), the
-necklace's pendant (87). Since t387 the shorts take KH1's own animation of the move ("KH1's own
-parts" below); the hem (the coat), the belt chain, the belt-front pieces and the pendant did too
+necklace's pendant (87). From t387 the shorts took KH1's own animation of the move ("KH1's own
+parts" below), until they went back onto the thigh ("1:1 with what KH2's model shows"); the hem (the coat), the belt chain, the belt-front pieces and the pendant did too
 until the tester set them aside or asked for the coat as before, and hang as before t387 again.
 
 ## Squash and stretch (t386)
@@ -457,6 +457,49 @@ no KH1 move (they take whatever KH1 plays meanwhile, live).
 Also not carried: the other way
 round, KH1's own animation of all these parts when KH2's model is drawn (`inverse` keeps KH2's
 cloth, hair and hood at its bind relation).
+
+## 1:1 with what KH2's model shows (after t489)
+
+The tester's answer to the three questions after the decomp research: "make everything 1:1 with
+how its animated in kh2, if there's no equivalences like the ones we talked about then don't add
+them". Read as: each KH1 part moves as the KH2 bone that carries the matching part of KH2's mesh,
+and a part whose KH2 bones carry no mesh gets no motion of its own.
+
+**Where KH2 draws the lower body** (Checked (files): `P_EX100.mdlx`'s vertex packets in the bind,
+counted by bone and by height in 5-unit bands, a scratch run):
+
+| Height (KH2 units) | Bone | What |
+|---|---|---|
+| 0-15 | 15 / 44, 18 / 47 | feet |
+| 13-59 | 12 / 41 (the knee) | shins |
+| 61-78 | 24 / 53 (under 23 / 52, under the thigh joint 11 / 40) | the shorts' legs |
+| 75-92 | 2 (above the hips 3) | the shorts' top and the belt |
+| 93-95, 97-100 | 65, 66 (the spine) | the waist |
+| 104-126 | 67 | the torso with the jacket |
+
+The hips 3, the thigh joints 11 / 40, the trouser bones (20, 22, 27, 29, 32, 34 and the other
+leg's) and the pelvis pieces 4-9 / 35-38 carry nothing.
+
+**How those bones move against the retarget's parts** (Checked (files): every motion in
+`P_EX100.mset`, 83, every second frame; angle between the bone's turn from its bind and the part's
+turn): 2 against the pelvis 0.0° (at most 0.1°); 24 / 53 against the thigh 0.0° in the median, 9-10°
+at the 95th percentile, at most 43° / 56° (motions 7, 8, 40, 183 and a few swings: the thigh part's
+roll, which comes from the knee's direction, differs there from KH2's thigh bone; and 23 / 24 are
+keyed up to 9-10° off the thigh joint in 203-208, 30° on the -x side in 42 and 171); 67 against the
+chest 0.0° in the median, 36° at most (the jump 3 / 4). So KH2's shorts move with its hips and
+thighs and nothing else, and its jacket with its torso.
+
+### The shorts (pants)
+
+Out of `retarget::KH1_OWN` (empty now): the shorts' panels (KH1 26-41 under the -x thigh 17,
+52-67 under the +x thigh 43, root, joint, joint, tip each) no longer take KH1's own animation of
+the move (t387). They keep their bind relation to KH1's thigh, as before t387, live and baked:
+KH2 draws its shorts' legs on a bone the thigh carries and their top on the pelvis, and its
+trouser bones, which its motions do key, carry nothing. Not carried: KH2's 9-30° key of 23 / 24
+off the thigh joint in the eight motions above (on KH1 that would be a turn of the whole thigh,
+the body retarget's, not the shorts'). The `set_own` / `own_from_kh1` machinery stays, with no
+bones, for the later polish the tester mentioned. Test `local_own` (shorts at their bind relation
+under KH2's run and first swing, KH1's own motion offered). Not checked in game.
 
 ## How KH2's exe animates Sora (Steam decomp, research after t453)
 

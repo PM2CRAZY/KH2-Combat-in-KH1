@@ -337,19 +337,18 @@ pub struct Retarget {
     own: std::sync::Mutex<Vec<Option<Mat4>>>,
 }
 
-/// KH1's own parts with nothing of KH2's to follow (`docs/kh1-secondary-motion.md`): the bones
-/// KH1's motions key that no part here or in `secondary` turns, and whose KH2 counterpart, if
-/// any, has no mesh. Under KH2's moves they take KH1's own animation of the move KH2's stands in
-/// for (`set_own`), relative to their parent: the shorts' panels (two joints each, four a leg).
-/// (The belt-front pieces 5 and 8, the belt chain 11-14 and the necklace's pendant 87 were here
-/// too; the tester set them aside for later: "for the custom animation parts for kh1s model lets
-/// set that aside and work on it later, remove them from animation for now". They hang as
-/// before: the belt chain carried by the +x thigh, the others rigid on their parent. The jacket
-/// (the coat: the hem's back centre 73-74 and its eight panels 249-278) was here too until the
-/// tester: "before I prompted you to adjust the bake animations the coat was working how it
-/// should". It is back as before t387: its panels turn with KH2's pelvis, the front ones a share
-/// with the thigh, kept off the thighs (`keep_clear`), each joint at its bind relation.)
-pub const KH1_OWN: [usize; 16] = [27, 28, 31, 32, 35, 36, 39, 40, 53, 54, 57, 58, 61, 62, 65, 66];
+/// KH1's own parts with nothing of KH2's to follow (`docs/kh1-secondary-motion.md`): bones that
+/// would take KH1's own animation of the move KH2's stands in for (`set_own`), relative to their
+/// parent. None now. The shorts' panels (27-28, 31-32, 35-36, 39-40; 53-54, 57-58, 61-62, 65-66)
+/// were the last (t387-t489); the tester: "make everything 1:1 with how its animated in kh2, if
+/// there's no equivalences ... then don't add them". KH2's shorts are drawn on its pelvis (2) and
+/// on a bone carried by each thigh (24 / 53), so they move with the hips and thighs and nothing
+/// else (Checked (files): `P_EX100.mdlx`'s vertex packets; 24 / 53 turn as the retarget's thigh
+/// part does in the median frame of every motion). So KH1's panels hang rigidly on KH1's thigh
+/// again (their bind relation, as before t387). (The belt-front pieces 5 and 8, the belt chain
+/// 11-14, the necklace's pendant 87 and the coat left earlier.) The machinery stays for later
+/// polish.
+pub const KH1_OWN: [usize; 0] = [];
 
 /// The weapon's grip bone (the Keyblade's, also every other weapon's).
 pub const GRIP_BONE: usize = 280;

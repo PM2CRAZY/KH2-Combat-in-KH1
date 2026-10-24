@@ -1102,7 +1102,7 @@ impl Baker {
     /// and pulls his placement back by it; his body carries it, as KH1's own motions do (H2), so
     /// the model stays on him (`kh1_data::bake`). Else none (empty): the travel stays out.
     ///
-    /// KH1's own parts (`retarget::KH1_OWN`: the shorts) as KH1's `template` slot (the move this stands in for) animates them,
+    /// KH1's own parts (`retarget::KH1_OWN`, none now: the shorts hang on the thigh as KH2's) as KH1's `template` slot (the move this stands in for) animates them,
     /// retimed to this length, as KH1 plays a template retimed (the tester: "use kh1's animations
     /// as a reference").
     ///
@@ -1734,7 +1734,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             }
         }
     }
-    // KH1's own parts (the shorts) as
+    // KH1's own parts (`retarget::KH1_OWN`, none now) as
     // KH1's own animation of this move has them, for the retarget (`Retarget::set_own`): KH1
     // plays the move KH2's stands in for underneath (our slots: its template retimed).
     if !ours {

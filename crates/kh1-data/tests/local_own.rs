@@ -1,5 +1,6 @@
-//! KH1's own parts (`retarget::KH1_OWN`) taking KH1's own animation of a move under KH2's
-//! poses (`Retarget::set_own`). Needs files from your own installs, skipped without them: KH1's
+//! KH1's shorts under KH2's poses: rigid on KH1's thigh (their bind relation), as KH2 draws its
+//! shorts on its pelvis and thighs, with nothing of KH1's own animation reaching them
+//! (`retarget::KH1_OWN` is empty). Needs files from your own installs, skipped without them: KH1's
 //! `xa_ex_0010.mdls` and `xa_ex_0010.mset` (`KH1_MDLS` / `KH1_MSET`, or `local/re/`) and KH2's
 //! `P_EX100.mdlx` / `P_EX100.mset` (`KH2_RE_DIR`, or `local/re`).
 
@@ -36,21 +37,21 @@ fn at(m: &Mat4) -> Vec3 {
 }
 
 #[test]
-fn kh1_s_own_parts_follow_kh1_s_motion_on_kh2_s() {
+fn kh1_s_shorts_hang_on_the_thigh_under_kh2_s_poses() {
     let Some(f) = files() else { return };
+    assert!(KH1_OWN.is_empty(), "nothing of KH1's own animation goes on KH2's poses");
     let mut r = Retarget::new(&f.kh1, &f.kh2);
     r.set_rest(&f.kh1_motions[1].as_ref().unwrap().apply(&f.kh1, 0.0));
-    // The same retarget with none of KH1's own animation given (its cloth eases per call).
-    let mut plain_r = Retarget::new(&f.kh1, &f.kh2);
-    plain_r.set_rest(&f.kh1_motions[1].as_ref().unwrap().apply(&f.kh1, 0.0));
     let parents: Vec<i16> = f.kh1.iter().map(|b| b.parent).collect();
-    // KH2's run (2) on KH1's run (slot 5), KH2's first swing (151) on KH1's (98).
+    let b1 = kh2_anim::Pose::bind(&f.kh1).bones;
+    // The shorts' panels: four a leg (root, two joints, tip), on KH1's thighs 17 / 43.
+    let shorts: Vec<usize> = (26..=41).chain(52..=67).collect();
+    // KH2's run (2) on KH1's run (slot 5), KH2's first swing (151) on KH1's (98): KH1's own
+    // motion offered to `set_own` changes nothing.
     for (motion, slot) in [(2usize, 5usize), (151, 98)] {
         let m = f.kh2_motions.slot_for(motion, true, true).and_then(|s| s.anb.as_ref()).and_then(|a| a.pose.clone()).expect("KH2 motion");
         let t = f.kh1_motions[slot].as_ref().expect("KH1 motion");
         let frames = kh2_anim::length_frames(&m).round() as usize;
-        let mut moved = 0f32;
-        let mut first: Option<Vec<Mat4>> = None;
         for fr in 0..=frames {
             let tm = kh2_anim::Pose::bind(&t.apply(&f.kh1, fr as f32 * t.frames as f32 / frames as f32)).bones;
             let want: Vec<Option<(Mat4, Vec3)>> = (0..f.kh1.len()).map(|b| own_relation(&tm[(parents[b].max(0)) as usize], &tm[b])).collect();
@@ -58,48 +59,16 @@ fn kh1_s_own_parts_follow_kh1_s_motion_on_kh2_s() {
             let body = kh2_anim::evaluate(&f.kh2, &m, kh2_anim::key_time(&m, fr as f32, false), kh2_anim::Options::default()).bones;
             let pose = r.pose(&body);
             assert!(pose.iter().all(|m| m.is_finite()), "motion {motion} frame {fr}: NaN");
-            // Every own part as KH1's motion has it against its parent (within float error).
-            for &b in KH1_OWN.iter() {
-                let have = own_relation(&pose[parents[b] as usize], &pose[b]).unwrap().0;
-                let off = have.to_scale_rotation_translation().1.angle_between(want[b].unwrap().0.to_scale_rotation_translation().1).to_degrees();
-                assert!(off < 0.1, "motion {motion} frame {fr}: bone {b} {off}° off KH1's");
-                // (Its distance from its parent as KH1's motion has it: KH1 keys some panels'.)
-                let len = at(&pose[b]).distance(at(&pose[parents[b] as usize]));
-                let kh1 = at(&want[b].unwrap().0).length();
-                assert!((len - kh1).abs() < 0.01, "motion {motion} frame {fr}: bone {b} length {len} vs {kh1}");
-            }
-            // The jacket (the coat) isn't one of them: KH1's own animation doesn't reach it,
-            // it is posed exactly as with none given (as before t387).
-            let plain = plain_r.pose(&body);
-            for b in (72..=75).chain(248..=279) {
-                assert!(!KH1_OWN.contains(&b), "bone {b} is the jacket's");
-                let d = (plain[b] - pose[b]).to_cols_array().iter().fold(0f32, |a, x| a.max(x.abs()));
-                assert!(d < 1e-3, "motion {motion} frame {fr}: jacket bone {b} moved {d} by KH1's own animation");
-            }
-            match &first {
-                Some(f0) => {
-                    for &b in KH1_OWN.iter() {
-                        let p = parents[b] as usize;
-                        let d0 = f0[p].inverse() * f0[b];
-                        let d = pose[p].inverse() * pose[b];
-                        moved = moved.max(d0.to_scale_rotation_translation().1.angle_between(d.to_scale_rotation_translation().1).to_degrees());
-                    }
-                }
-                None => first = Some(pose.clone()),
+            for &b in &shorts {
+                let p = parents[b] as usize;
+                let rel = (pose[p].inverse() * pose[b]).to_scale_rotation_translation().1;
+                let bind = (b1[p].inverse() * b1[b]).to_scale_rotation_translation().1;
+                let off = rel.angle_between(bind).to_degrees();
+                assert!(off < 0.1, "motion {motion} frame {fr}: shorts bone {b} {off}° off its bind relation");
+                let len = at(&pose[b]).distance(at(&pose[p]));
+                let len0 = at(&b1[b]).distance(at(&b1[p]));
+                assert!((len - len0).abs() < 0.01, "motion {motion} frame {fr}: shorts bone {b} length {len} vs {len0}");
             }
         }
-        // Not rigid: KH1's own animation moves them.
-        assert!(moved > 3.0, "motion {motion}: moved {moved}°");
-    }
-    // Cleared: back to the bind's relation.
-    r.set_own(|_| None);
-    let body = kh2_anim::Pose::bind(&f.kh2).bones;
-    let pose = r.pose(&body);
-    let b1 = kh2_anim::Pose::bind(&f.kh1).bones;
-    for &b in &[28usize, 54, 74, 250] {
-        let p = parents[b] as usize;
-        let rel = (pose[p].inverse() * pose[b]).to_scale_rotation_translation().1;
-        let bind = (b1[p].inverse() * b1[b]).to_scale_rotation_translation().1;
-        assert!(rel.angle_between(bind) < 2e-3, "bone {b}: {}", rel.angle_between(bind));
     }
 }
