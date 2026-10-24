@@ -284,15 +284,17 @@
 
 ^m15
 
+""(b) with KH1's rules inside" would be: KH2 picks which swing plays, but KH1 decides how long the combo is and when the finisher comes. I'd advise against that one. KH2's picker decides finishers by its own length rule, so I'd have to override that rule. The result would match neither game, and it's exactly the "messing with values could feel off" case you mentioned."
 
-<<<<<<< HEAD
-=======
-let me get back to you, this is a test
+1. go with the recommended choice you had then
+2. yes only the ones kh2 doesn't have
+3. (a)
+4. (a) but read the mset to make sure, you should have access to it 
+
+go ahead
 
 
-> [!tip] Assistant
-> Got it, no rush. Nothing changes in this thread until you're back; my last reply's questions are still open, and I'll pick up your answer on the next check after you push it.
 
-^m16
 
->>>>>>> 364841f81724f196b7b624629ba4bbe81d96eb8a
+
+

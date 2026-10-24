@@ -42,17 +42,5 @@ this is another test to see if tester folders are working, did you get it?
 
 ^m3
 
-<<<<<<< HEAD
-=======
+close
 
-this is another test
-
-
-> [!tip] Assistant
-> Got it. This one came through the automatic round without anyone relaying it: pushing to `testing` is enough, and the next scheduled check picks it up.
->
-> Nothing to test here. Write "Close" when you're done with this thread and I'll archive it.
-
-^m4
-
->>>>>>> 364841f81724f196b7b624629ba4bbe81d96eb8a
