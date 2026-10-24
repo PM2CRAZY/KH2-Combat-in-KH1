@@ -145,7 +145,7 @@ Performance: each step is a slot (built once), a row copy (once) and a check in 
 have (control step, hurt, guard_step); no new per-frame hook. It removes the borrow's per-frame
 KH2 controller run during rolls and guards.
 
-## 5. Built: KH2's dodge roll on KH1's roll (tA)
+## 5. Built: KH2's dodge roll on KH1's roll (t523)
 
 - **KH1's request table** (`xa_ex_0010.mset`, Checked (files)): request `0xDC` is `0xA075`: slot
   117, kind 2, **travel flag (bit 15) set**: KH1 moves him by the slot's root (H10), as its ground
@@ -173,7 +173,7 @@ KH2 controller run during rolls and guards.
   `start_own`); nothing else reads flag `0x100000` as "rolling"; unbaked (`kh1_bake = off`), the
   slot keeps KH1's roll travel stretched over KH2's length.
 
-## 6. Built: KH1's Counterattack command during KH2's repel (tB)
+## 6. Built: KH1's Counterattack command during KH2's repel (t524)
 
 - **KH1's own swap** `0x140294220` (Checked (decomp)): each menu refresh it writes the top menu's
   Attack entry (`0x140528914`, the top menu `0x140528900` + `0x14`): 0x62 in two rooms (world 6;
@@ -191,7 +191,7 @@ KH2 controller run during rolls and guards.
 - **Assumption**: the fill runs every frame the menu is up (stage 189's "rebuilt each frame"). It
   needs the fill hook, which `shortcuts`, `reflect` or `drive` puts in (all on by default).
 
-## 7. Built: the guard's coverage, KH2's angle test (tC)
+## 7. Built: the guard's coverage, KH2's angle test (t525)
 
 - **KH2** (Steam KH2 `0x1403D1F40`, Checked (decomp)): an attack meeting a guard is held only when
   the guard's ATKP reflect range (`+0x22`) is 0, or the other attack's direction dotted with the
