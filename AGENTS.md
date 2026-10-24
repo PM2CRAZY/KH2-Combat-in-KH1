@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 476 (testing branch: Finishing Plus's next finisher on a KH1 row)
+- **Finishing Plus's next finisher on a KH1 row.** The tester (m14 4 (b)). Rows / requests 0x206 / 0x207 with every finisher slot (`pick_own`); KH2's window (range 50) as KH1's combo window (instance `+0x14` bit 22, `0x1402A2EC0`); KH2's finisher count kept. Notes §7.
+
 ### 2026-10-24: Stage 475 (testing branch: Aerial Recovery and Retaliating Slash on KH1 requests)
 - **Aerial Recovery and Retaliating Slash on KH1 requests.** The tester (m14 3 (b)). Requests 0x205 / 0x204; `combomods::recover` (KH2's hop 100 / 10), `Character::would_take_row`; KH2's free state as KH1's "may be left" on our requests. Assumption: KH1's knock-back ends with flag 4. Notes §7.
 

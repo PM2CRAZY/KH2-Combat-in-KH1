@@ -206,12 +206,24 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
             }
             let k = o.kind;
             let style = if k.air() { Kind::AirCombo } else { Kind::GroundCombo };
-            if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (o.motion, k.template_slot(), k.template_request() as usize, style), true, (false, 0), KH1_SLOTS + moves.len(), true)? {
-                m.own = Some(m.request);
-                m.request = super::kh1rows::request(n) as usize;
-                log(&format!("KH2 slots: KH2 motion {} ({}) on our request {:#x} (KH1's row {} of ours)", o.motion, o.name, m.request, super::kh1rows::row(n)));
-                moves.push(m);
-                blocks.push(block);
+            // (Finishing Plus's next finisher: every finisher KH1's finisher request of its kind
+            // plays, its first the request's own.)
+            let mut motions = vec![o.motion];
+            if o.next_finisher {
+                for m in moves.iter().filter(|m| m.request == k.template_request() as usize && m.own.is_none()) {
+                    if !motions.contains(&m.motion) {
+                        motions.push(m.motion);
+                    }
+                }
+            }
+            for (j, &motion) in motions.iter().enumerate() {
+                if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (motion, k.template_slot(), k.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
+                    m.own = Some(m.request);
+                    m.request = super::kh1rows::request(n) as usize;
+                    log(&format!("KH2 slots: KH2 motion {motion} ({}) on our request {:#x} (KH1's row {} of ours)", o.name, m.request, super::kh1rows::row(n)));
+                    moves.push(m);
+                    blocks.push(block);
+                }
             }
         }
         log(&format!(
@@ -591,7 +603,7 @@ struct Set {
     requests: &'static mut [u32],
     /// (request, KH1's entry, our slot index in this set, the move's style, the move (its
     /// `slot`), whether it is the request's own).
-    redirects: Vec<(usize, u32, u32, Kind, usize, bool)>,
+    redirects: Vec<(usize, u32, u32, Kind, usize, bool, bool)>,
 }
 
 /// Our motions placed in memory (the game thread) and the sets made with them.
@@ -853,11 +865,14 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
             let e = requests.get(t).copied().unwrap_or(0xFFF);
             let held = (e & 0xFFF) as usize;
             if held < count && pose::file_slot_of_motion(pose::ptr(slots[held])) == Some(m.stands_for) {
-                if let Some(x) = requests.get_mut(m.request) {
+                // (Each of its motions a redirect too, for KH2's pick on a request with several:
+                // Finishing Plus's, `pick_own`.)
+                redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default, true));
+                if let Some(x) = requests.get_mut(m.request).filter(|_| m.default) {
                     *x = (e & !0xFFF) | (count + i) as u32;
                     own_requests.push(format!("{:#x}", m.request));
                 }
-            } else {
+            } else if m.default {
                 missing.push(format!("{:#x} (as {t:#x})", m.request));
             }
             continue;
@@ -866,7 +881,7 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         let own = (e & 0xFFF) as usize;
         let holds = own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for);
         if holds {
-            redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default));
+            redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default, false));
         } else if m.variant == 0 {
             missing.push(format!("{:#x}", m.request));
         }
@@ -959,6 +974,7 @@ pub unsafe fn frame(actor: usize) {
         super::kh1rows::install(actor);
     }
     tick(actor);
+    finisher_window(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`).
     super::takeover::kh2_hits(actor);
 }
@@ -980,9 +996,58 @@ fn forced(request: usize) -> bool {
 }
 
 fn picked(request: usize) -> Option<usize> {
-    let i = request.checked_sub(0xC8).filter(|i| *i < PICKED.len())?;
-    let m = PICKED[i].load(Ordering::Relaxed);
+    let m = match request.checked_sub(super::kh1rows::FIRST_REQUEST as usize) {
+        Some(n) => OWN_PICKED.get(n)?.load(Ordering::Relaxed),
+        None => PICKED.get(request.checked_sub(0xC8)?)?.load(Ordering::Relaxed),
+    };
     (m != usize::MAX).then_some(m)
+}
+
+/// The motion KH2 picked for each request of ours (`pick_own`; our move's `slot`, `usize::MAX`:
+/// the request's own).
+static OWN_PICKED: [AtomicUsize; super::kh1rows::OURS.len()] = [const { AtomicUsize::new(usize::MAX) }; super::kh1rows::OURS.len()];
+
+/// A request of ours with several motions (`kh1rows::Ours::next_finisher`) plays our slot of
+/// KH2's `motion` from now (its entry pointed there at once, before KH1's row asks for it).
+/// Whether it does.
+pub unsafe fn pick_own(request: usize, motion: u16) -> bool {
+    let Some(i) = request.checked_sub(super::kh1rows::FIRST_REQUEST as usize).filter(|i| *i < OWN_PICKED.len()) else { return false };
+    let m = built().and_then(|b| b.moves.iter().find(|m| m.request == request && m.motion == motion)).map(|m| m.slot);
+    OWN_PICKED[i].store(m.unwrap_or(usize::MAX), Ordering::Relaxed);
+    if let Ok(mut g) = PLACED.try_lock() {
+        if let Some(p) = g.as_mut() {
+            redirect(p);
+        }
+    }
+    m.is_some()
+}
+
+/// KH2's Finishing Plus window (range id 50, `WindowKind::Finisher`) on our finisher slot playing
+/// on `actor`, Finishing Plus equipped: KH1's combo window for this frame (`+0x1CC` bit 22, the
+/// level the motion step copies from the instance's `+0x14`, which KH1's skeleton pass has just
+/// worked out: `pose`'s hooks call `frame` after it), so KH1's command menu takes an Attack there
+/// (`0x1402A2EC0`: free, or in the combo window) and KH1's Attack step counts it on as KH1's
+/// combo does (one more, the swing connected or Combo Master), where `combomods` takes KH2's next
+/// finisher. KH2 takes the Square moves there too (either bit, `0x1403A9950`). Sora's (Checked
+/// (files)): 154 / 155 35..64, 183 21..50, 184 23..52, Explosion 60..72, Guard Break 48..60,
+/// Aerial Finish 89..108, Magnet Burst 70..86.
+unsafe fn finisher_window(actor: usize) {
+    use character_core::WindowKind as W;
+    let Some(m) = current(actor) else { return };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return };
+    let t: f32 = rd(actor + TIME_NOW);
+    if !(t >= 0.0) || !clip.has(t as u32, |k| matches!(k, W::Finisher)) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() {
+        return;
+    }
+    let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+    if inst < 0x10000 {
+        return;
+    }
+    wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!("KH2's Finishing Plus window on KH2 motion {} (frame {t:.0}): KH1's combo window", m.motion));
+    }
 }
 
 /// The requests by style (base Sora under shared states; a change applies from KH1's next
@@ -992,13 +1057,14 @@ unsafe fn redirect(p: &mut Placed) {
     let on = super::shared::on();
     for t in p.sets.iter_mut() {
         for i in 0..t.redirects.len() {
-            let (req, kh1, ours, kind, id, default) = t.redirects[i];
+            let (req, kh1, ours, kind, id, default, own) = t.redirects[i];
             let want = picked(req).filter(|m| t.redirects.iter().any(|r| r.0 == req && r.4 == *m));
             if want.map_or(!default, |m| m != id) {
                 continue;
             }
             if let Some(e) = t.requests.get_mut(req) {
-                *e = if on && (super::styles::kh2(kind) || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
+                // (A request of ours is ours whatever the styles.)
+                *e = if own || on && (super::styles::kh2(kind) || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
             }
         }
     }

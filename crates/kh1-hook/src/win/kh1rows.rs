@@ -116,6 +116,10 @@ pub struct Ours {
     /// tally); else only its request is asked for (Aerial Recovery, `combomods::recover`), its
     /// row never run.
     pub attack: bool,
+    /// Finishing Plus's next finisher (the tester, m14 question 4: "(b)", a new row): its request
+    /// has a slot of each KH2 finisher KH1's finisher request of its kind plays (`kh2slots`), the
+    /// one KH2 picks pointed at (`kh2slots::pick_own`); `motion` is the first.
+    pub next_finisher: bool,
 }
 
 /// `Ours::kh2_row` for a move with no PTYA row (Aerial Recovery; Sora's rows go to 59).
@@ -128,14 +132,21 @@ pub const NO_ROW: u8 = u8::MAX;
 /// still KH2's controller's: not here yet. Out of KH1's knock-away (`docs/aerial-recovery.md`):
 /// Retaliating Slash (row 40, motion 172, ability 101, an air row with a hop of 21..121) and
 /// Aerial Recovery (motion 40, no row: its request only).
-pub const OURS: [Ours; 6] = [
-    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true },
-    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true },
-    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true },
-    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true, attack: true },
-    Ours { name: "Retaliating Slash", kh2_row: 40, motion: 172, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true },
-    Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false },
+pub const OURS: [Ours; 8] = [
+    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false },
+    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false },
+    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false },
+    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true, attack: true, next_finisher: false },
+    Ours { name: "Retaliating Slash", kh2_row: 40, motion: 172, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false },
+    Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false },
+    Ours { name: "Finishing Plus", kh2_row: NO_ROW, motion: 154, kind: Kind::Finisher, rises: false, guard_break: false, attack: true, next_finisher: true },
+    Ours { name: "Finishing Plus (air)", kh2_row: NO_ROW, motion: 183, kind: Kind::AirFinisher, rises: false, guard_break: false, attack: true, next_finisher: true },
 ];
+
+/// The next-finisher row of ours on the ground or in the air (`Ours::next_finisher`).
+pub fn next_finisher(air: bool) -> Option<usize> {
+    OURS.iter().position(|o| o.next_finisher && o.kind.air() == air)
+}
 
 /// Our `n`'s KH1 row index.
 pub fn row(n: usize) -> i32 {
@@ -159,7 +170,7 @@ pub fn by_kh2_row(id: u8) -> Option<usize> {
 
 /// Ours for KH2's `motion` (a move with no row: Aerial Recovery).
 pub fn by_motion(motion: u16) -> Option<usize> {
-    OURS.iter().position(|o| o.motion == motion)
+    OURS.iter().position(|o| o.motion == motion && !o.next_finisher)
 }
 
 /// Ours at KH1 row index `row`, if it is one of ours.
@@ -357,7 +368,8 @@ pub unsafe fn kh2_atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     let n = DATA_AT.iter().position(|d| data != 0 && d.load(Ordering::Relaxed) == data)?;
     let kh2 = pose::kh2()?;
     let sora = super::takeover::sora_actor();
-    let now = super::kh2slots::now_playing(sora).filter(|(m, _)| *m == OURS[n].motion).and_then(|(m, t)| window_atkp(m, Some(t as u32)));
+    // (The KH2 motion our slot plays: a next-finisher row's is the one KH2 picked.)
+    let now = super::kh2slots::now_playing(sora).and_then(|(m, t)| window_atkp(m, Some(t as u32)));
     let id = now.or_else(|| u16::try_from(ATKP_OF[n].load(Ordering::Relaxed)).ok())?;
     kh2.battle.attack_for_level(id, 0, 0).cloned()
 }

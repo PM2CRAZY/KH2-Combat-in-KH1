@@ -20,7 +20,8 @@
 //!   - KH2's finisher where KH1's would still swing, with Negative Combo;
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
 //!     count);
-//!   - Finishing Plus: a press during KH1's finisher is KH2's next finisher.
+//!   - Finishing Plus: a press during KH1's finisher is KH2's next finisher (on a KH1 row of its
+//!     own, `next_finisher`; the borrow only when none can play it).
 //! - **Square** in KH1's combo window (`control`): KH2's Square move there (Finishing Leap, Upper
 //!   Slash, Horizontal Slash), if KH1's swing connected or Combo Master is on (as KH2's): on a
 //!   KH1 row of its own (`kh1rows`), through KH1's own Attack step, no borrow.
@@ -43,7 +44,7 @@
 use super::addr::{Build, Rva};
 use super::{log, pose, takeover};
 use character_core::{Button, Character, ComboRow, ComboState, Input};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Mutex;
 
 /// KH1's motion event flag: the combo window (`0x14029CE20`).
@@ -90,6 +91,10 @@ static APPLY: Mutex<Option<(Move, u64)>> = Mutex::new(None);
 static LAST: Mutex<Option<(u8, u32, bool, bool)>> = Mutex::new(None);
 /// When KH1 last knocked him away itself (`hurt`, game frames).
 static BLOWN_AT: AtomicU64 = AtomicU64::new(0);
+/// Finishers in a row so far in KH1's combo (KH2's `+0xD75`, which Finishing Plus counts against:
+/// `finisher_base` + Finishing Plus): 1 after a finisher, one more for each next finisher, 0 after
+/// a swing.
+static FINISHERS: AtomicU8 = AtomicU8::new(0);
 /// A KH2 move on a KH1 row of its own (`kh1rows`) for KH1's Attack step this frame (`control`:
 /// a Square move in KH1's combo window): ours, KH2's hop for it, the game frame.
 static OURS: Mutex<Option<(usize, Option<character_core::Launch>, u64)>> = Mutex::new(None);
@@ -111,6 +116,10 @@ fn ours_run(n: usize, launch: Option<character_core::Launch>, air: bool, count: 
     if let Ok(mut l) = LAST.lock() {
         *l = request_of(r).map(|m| (count, m, o.kind.finisher(), air || o.rises));
     }
+    // (A next finisher's caller counts it on, `next_finisher`.)
+    if !o.next_finisher {
+        FINISHERS.store(o.kind.finisher() as u8, Ordering::Relaxed);
+    }
     note(format!("KH2's {} (row {}, motion {}) on KH1's row {r} of its own (request {:#x}){}", o.name, o.kh2_row, o.motion, super::kh1rows::request(n), if o.rises && !air { ", out of KH1's air state" } else { "" }));
     if o.rises && !air {
         let gravity = pose::kh2().map_or(0.0, |k| k.character.params.gravity);
@@ -120,6 +129,44 @@ fn ours_run(n: usize, launch: Option<character_core::Launch>, air: bool, count: 
         Some(l) => Run::AirHop(r, l),
         None => Run::Row(r),
     }
+}
+
+/// Finishing Plus's next finisher on KH1's rows (the tester, m14 question 4: "(b)", a new row;
+/// `kh1rows::Ours::next_finisher`): KH2's pick `row` at the press in KH1's finisher (KH2's
+/// Finishing Plus window open, `kh2slots::finisher_window`, KH1's Attack step having taken it)
+/// runs on
+/// - its own KH1 row if it has one (Guard Break, `kh1rows`), its request not the one playing;
+/// - else our next-finisher row of this kind (ground or air), our slot of KH2's motion picked on
+///   its request (`kh2slots::pick_own`), when its request isn't the one playing (KH1's finisher's
+///   is, 0xCB / 0xCE: a new request, so KH1 starts KH2's motion fresh);
+/// - else (a third finisher, ours playing) KH1's own finisher row of this kind, our slot of the
+///   pick on its request (KH1's finisher, as `kh2_row` / `select_swing` play KH2's finishers).
+/// In the air with KH2's hop for the row. `None` (the borrow) when none of them can play it.
+fn next_finisher(actor: usize, row: &ComboRow, launch: Option<character_core::Launch>, air: bool, count: u8, playing: u32, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<Run> {
+    use super::kh1rows as k;
+    if let Some(n) = ours_for(row).filter(|&n| k::request(n) != playing) {
+        return Some(ours_run(n, launch, air, count, request_of));
+    }
+    if let Some(n) = k::next_finisher(air).filter(|&n| k::installed() && k::request(n) != playing) {
+        if unsafe { super::kh2slots::pick_own(k::request(n) as usize, row.motion) } {
+            return Some(ours_run(n, launch, air, count, request_of));
+        }
+    }
+    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    let fin = combo.finisher_rows.iter().filter_map(|&r| Some((r, request_of(r)?))).find(|&(_, q)| q == combo.finisher && q != playing && super::kh2slots::has(q as usize, row.motion))?;
+    let plays = unsafe { super::kh2slots::pick_ability(fin.1 as usize, Some(row.motion), !super::styles::kh2(combo.style)) };
+    if !plays {
+        return None;
+    }
+    let _ = actor;
+    if let Ok(mut l) = LAST.lock() {
+        *l = Some((count, fin.1, true, air));
+    }
+    note(format!("KH2's next finisher (row {} motion {}) on KH1's finisher row {} (request {:#x}): ours is playing", row.id, row.motion, fin.0, fin.1));
+    Some(match launch.filter(|l| air && l.height.is_finite() && l.velocity.iter().all(|v| v.is_finite())) {
+        Some(l) => Run::AirHop(fin.0, l),
+        None => Run::Row(fin.0),
+    })
 }
 
 /// This frame's move of ours for KH1's Attack step (`control` armed it), if any: one left from an
@@ -280,9 +327,14 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     if let Some((n, _, true, _)) = last.filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
-        let from = ComboState { count: n, finishers: 1, hit: true, finisher_next: true };
-        if let Some((row, ..)) = takeover::kh2_would_take(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()) {
-            note(format!("Attack in KH1's finisher (count {n}): KH2's next finisher, row {} motion {} (Finishing Plus)", row.id, row.motion));
+        let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
+        let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
+        if let Some((row, _, _, launch)) = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()) {
+            note(format!("Attack in KH1's finisher (count {n}, finisher {finishers}): KH2's next finisher, row {} motion {} (Finishing Plus)", row.id, row.motion));
+            if let Some(run) = next_finisher(actor, &row, launch, air, n, playing, request_of) {
+                FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
+                return run;
+            }
             want(Move::Row { id: row.id, state: from });
             return Run::Kh2;
         }
@@ -328,6 +380,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         // KH1's length (Combo Plus) or its finisher row before it (Negative Combo).)
         let finisher = |m: u32| if combo.swings.contains(&(m & 0xFFFF)) || m & 0xFFFF == combo.finisher { m & 0xFFFF == combo.finisher } else { count >= kh1_len };
         *l = request_of(row).map(|m| (count, m, finisher(m), air));
+        FINISHERS.store(l.is_some_and(|x| x.2) as u8, Ordering::Relaxed);
     }
     if air {
         if let Some(l) = pick.as_ref().zip(launch).filter(|_| plays).and_then(|((p, ..), l)| air_hop(row, p, l)) {

@@ -952,6 +952,34 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   **Assumption**: KH1's knock-away keeps no other state that brings it back once its action
   flag is off and another request plays (none seen with the borrow's hand-back). Not checked in
   game.
+- **Finishing Plus's next finisher on a KH1 row of its own** (the tester, m14 question 4: "(b)", a
+  new row; `kh1rows::Ours::next_finisher`, `combomods::next_finisher`): two more rows of ours,
+  ground (like KH1's finisher row 8) and air (like 16), requests 0x206 / 0x207, each with a slot
+  of every KH2 finisher KH1's finisher request of its kind plays (ground: 0xCB's, 154, 155 and
+  Explosion 166; air: 0xCE's, 183, 184, Aerial Finish 194 and Magnet Burst 197), the first the
+  request's own, the one KH2 picks pointed at before the row runs (`kh2slots::pick_own`; a
+  request of ours with several motions: each a redirect, ours whatever the styles).
+  - **The window** (KH2: range id 50, `WindowKind::Finisher`, the only place a next finisher is
+    taken; Sora's 154 / 155 35..64, 183 21..50, 184 23..52, Explosion 60..72, Guard Break
+    48..60, Aerial Finish 89..108, Magnet Burst 70..86, Checked (files)): with Finishing Plus
+    equipped and our finisher slot inside it at KH1's time, KH1's combo window level (bit 22)
+    is set on the instance's level flags (`+0x14`, which KH1's skeleton pass has just worked
+    out and its motion step copies to `+0x1CC`: `kh2slots::finisher_window`, from `frame`,
+    which `pose`'s hooks call after the pass). So KH1's command menu takes an Attack there
+    (`0x1402A2EC0`: free, or bit 22 of `+0x1CC`; Steam, Checked (decomp)) and KH1's Attack step
+    counts it on (one more, the swing connected or Combo Master). Before, the press came only
+    once KH1's template let him act (its own "may be left" point). KH2's Square moves take the
+    same window (`0x1403A9950`, either bit), and so do ours (`control`).
+  - **The press** (the Attack in KH1's finisher, `attack`): KH2's pick there (KH2's trial with
+    the finisher chain, now with the finishers so far, `FINISHERS`, KH2's `+0xD75`, so Finishing
+    Plus's count of extra finishers is KH2's: before it was always 1) runs on its own row if it
+    has one (Guard Break), else on our next-finisher row of its kind (its request isn't the one
+    playing, so KH1 starts KH2's motion fresh), else (a third finisher, ours playing) on KH1's own
+    finisher row with our slot of the pick; in the air with KH2's hop for the row. The borrow is
+    left only for a pick none of these can play. Its hits: its own data and KH2's numbers
+    (`kh1rows`), KH2's body hits (`takeover::kh2_hits`) for Explosion and Magnet Burst.
+  **Assumption**: KH1's motion step copies the level flags after the skeleton pass on every path
+  (the plain and the blend pass; §1.3 step 6). Not checked in game.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,
