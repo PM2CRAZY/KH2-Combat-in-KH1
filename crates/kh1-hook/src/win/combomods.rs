@@ -1305,6 +1305,46 @@ pub unsafe fn counter_window(actor: usize) {
     wr(info + 0x50, rd::<u32>(info + 0x50) | 1);
 }
 
+/// KH1's top command menu (Steam `0x140528900`): its entries from `+0x14`, Attack's first.
+const MENU_RVA: Rva = Rva(0x529600);
+/// KH1's Counterattack command (KH1's Attack entry swap, Steam `0x140294220`, Checked (decomp)).
+const KH1_COUNTERATTACK: u8 = 99;
+
+/// Attack does KH2's Counterguard now: our slot of KH2's repel (42) playing on the ground, base
+/// Sora on KH1's states, Counterguard equipped (`counter_window`'s test).
+pub unsafe fn counter_open(actor: usize) -> bool {
+    actor > 0x10000
+        && super::shared::active()
+        && !super::form::in_form()
+        && rd::<i32>(actor + 0x70) == 0
+        && super::kh2slots::playing_motion(actor) == Some(character_core::motion::GUARD)
+        && takeover::with_abilities(|a| a.equipped.contains(&COUNTERGUARD_ABILITY)) == Some(true)
+}
+
+/// After KH1's battle-menu fill (`drive::fill`, from whichever of `shortcuts` / `reflect` / `drive`
+/// hooked it): while Attack does KH2's Counterguard (`counter_open`), the menu's Attack entry shows
+/// KH1's Counterattack command (99), as KH1 swaps it in during its own clash recoil (the tester,
+/// thread dodge-roll-guard-and-counterguard-native, question 2: "(a)"). KH1's own swap
+/// (`0x140294220`, Checked (decomp)): entry `+0x14` = 99 instead of 1 with KH1's Counterattack on
+/// (ability bit `0x4` of `0x142D5EC10`), the lock-on target an enemy, his request `0x6E` (its clash
+/// recoil) and his attack's result word with any bit but `0x1` / `0x100`; it then calls the fill
+/// (`0x1402944C0`), so ours runs after it. Only over Attack (1): a context command (Talk) or a
+/// world's own entry (0x62) stays. KH2 needs no target for Counterguard, so none is asked for here.
+/// Choosing it runs Counterguard (`combat::command` turns it into KH1's Attack).
+pub unsafe fn counter_entry(actor: usize) {
+    if !counter_open(actor) {
+        return;
+    }
+    let e = takeover::game_base() + MENU_RVA + 0x14;
+    if rd::<u8>(e) == 1 {
+        wr(e, KH1_COUNTERATTACK);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 10 {
+            note("KH2's guard repel: the command menu's Attack shows KH1's Counterattack (KH2's Counterguard)".to_string());
+        }
+    }
+}
+
 /// An Attack KH1's step took in the repel's window (`counter_window`): KH2's Counterguard on its
 /// own KH1 row, if KH2 would take row 39 now.
 unsafe fn counterguard(actor: usize, air: bool, count: u8, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<Run> {

@@ -172,3 +172,21 @@ KH2 controller run during rolls and guards.
 - **Assumptions**: KH1's ground step moves him by `+0x2C` while the action flag is set (as
   `start_own`); nothing else reads flag `0x100000` as "rolling"; unbaked (`kh1_bake = off`), the
   slot keeps KH1's roll travel stretched over KH2's length.
+
+## 6. Built: KH1's Counterattack command during KH2's repel (tB)
+
+- **KH1's own swap** `0x140294220` (Checked (decomp)): each menu refresh it writes the top menu's
+  Attack entry (`0x140528914`, the top menu `0x140528900` + `0x14`): 0x62 in two rooms (world 6;
+  world 0x10 room 0x18), else **99** when KH1's Counterattack bit (`0x142D5EC10 & 4`) is on, the
+  lock-on target (`0x142DB3518`) is an enemy (`+0x374 & 0x60 == 0x40`), Sora's request is `0x6E`
+  and his attack's result word (combat state `+0x50`) has any bit but `0x1` / `0x100`; else 1. Then
+  it calls the battle-menu fill `0x1402944C0` (which we hook already) and the context commands
+  (`0x1402948F0`, Talk through `0x140290E70`).
+- **Ours** (`combomods::counter_entry`, from `drive::fill` after KH1's fill): while our slot of KH2's
+  repel (42) plays on the ground with KH2's Counterguard equipped (`counter_open`), an Attack entry
+  of 1 becomes 99, so the menu shows KH1's Counterattack command there. No target is asked for (KH2's
+  Counterguard needs none). Choosing it (`combat::command`) turns the command record's type into 1
+  (KH1's Attack, target kept) before KH1's command step, which then runs KH2's Counterguard through
+  the repel's combo window (`counter_window`, `counterguard`, t489). KH1's own row 0x3E isn't run.
+- **Assumption**: the fill runs every frame the menu is up (stage 189's "rebuilt each frame"). It
+  needs the fill hook, which `shortcuts`, `reflect` or `drive` puts in (all on by default).

@@ -350,6 +350,14 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     let base = BASE.load(Ordering::Relaxed);
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_COMMAND.load(Ordering::Acquire));
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
+    // KH1's Counterattack command (99) shown in Attack's place during KH2's guard repel
+    // (`combomods::counter_entry`): KH2's Counterguard, so the command runs as KH1's Attack (type
+    // 1, its target kept), which KH1's Attack step takes in the repel's combo window
+    // (`combomods::counter_window` / `counterguard`), not KH1's own counterattack row 0x3E.
+    if actor == sora && rd::<u8>(base + COMMAND_RVA) == 99 && super::combomods::counter_open(actor) {
+        wr(base + COMMAND_RVA, 1u8);
+        cmd_log("command 0x63 (KH1's Counterattack) during KH2's guard repel: KH2's Counterguard, as KH1's Attack".to_string());
+    }
     let kind = rd::<u8>(base + COMMAND_RVA);
     // In the air KH1 allows only magic, kind 99 and kind 0x47 (`0x1402912F0`); KH1 judges the
     // air by his flags (`0x1402A0D30`), which stay the ground's while KH2 has him, and also

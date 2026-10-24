@@ -168,6 +168,9 @@ unsafe fn usable(actor: usize, k: usize) -> bool {
 
 /// After KH1's battle-menu fill (and Reflect's entry): page 2's Drive row and list.
 pub unsafe fn fill(actor: usize, _flags: usize) {
+    // (KH1's Counterattack command in Attack's place during KH2's guard repel, whatever the
+    // Drive setting: `combomods::counter_entry`.)
+    super::combomods::counter_entry(actor);
     let base = base();
     if !on() || base == 0 {
         return;
