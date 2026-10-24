@@ -510,7 +510,7 @@ struct Source {
     anchor: fn(u16) -> Option<Anchor>,
     /// KH2 element flags it doesn't apply.
     ignore: u32,
-    /// KH2's 0x4009 point in its owner's object frame (`effect_point_of`).
+    /// KH2's 0x4009 point less its 0x4001 point, in its owner's object frame (`effect_point_of`).
     effect_point: Option<[f32; 3]>,
 }
 
@@ -903,14 +903,16 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
 /// effect anchors read kind 9 in KH2: `0x1403B50F0` case 0x4009, Checked (decomp)).
 const EFFECT_POINT: u16 = 0x4009;
 
-/// KH2's 0x4009 point in the owner's object frame (KH2's y down): its model's first kind-9 shape
-/// of group 0 (the group on by default, as for 0x4001: `0x1403BA550`), on the object root: its
-/// offset, raised by its lift (`0x1403C9C00`: the offset through the root's matrix, then the lift
-/// off the world y). Sora's: offset 0, lift 105 (radius 70; Checked (files), `P_EX100.mdlx`).
-/// `None` without one on the root.
+/// KH2's 0x4009 point from its 0x4001 point, in the owner's object frame (KH2's y down): its
+/// model's first kind-9 shape of group 0 (the group on by default, as for 0x4001: `0x1403BA550`)
+/// less its first kind-1 one, both on the object root: each its offset raised by its lift
+/// (`0x1403C9C00`: the offset through the root's matrix, then the lift off the world y). Sora's:
+/// kind 9 lift 105, kind 1 lift 85, offsets 0 (Checked (files), `P_EX100.mdlx`): 20 above. `None`
+/// without both on the root.
 fn effect_point_of(rig: &kh2_data::sora::Rig) -> Option<[f32; 3]> {
-    let s = rig.body_shapes.iter().find(|s| s.kind == 9 && s.group == 0)?;
-    s.bone.is_none().then(|| [s.offset[0], s.offset[1] - s.lift, s.offset[2]])
+    let point = |kind: u8| rig.body_shapes.iter().find(|s| s.kind == kind && s.group == 0).filter(|s| s.bone.is_none()).map(|s| [s.offset[0], s.offset[1] - s.lift, s.offset[2]]);
+    let (e, b) = (point(9)?, point(1)?);
+    Some([e[0] - b[0], e[1] - b[1], e[2] - b[2]])
 }
 
 /// The elements each motion of a moveset starts (its frame triggers 1), in motion order.
@@ -930,12 +932,12 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     let mut e = parsed.element(el as u16).ok_or(format!("no element {el}"))?.clone();
     let code = e.bone;
     // KH2's 0x4009 (`0x1403B50F0`): the object's turn at the centre of its first enabled kind-9
-    // collision shape, which on the object root is 0x4000 moved by that centre in the object's
-    // frame (`effect_point`, from the owner's model): KH1's object root with the element's offset
-    // moved by it.
+    // collision shape. The tester (m16, "try (c)"): KH1's own body centre (KH2's 0x4001 on KH1's
+    // 0x8005, §18.15) plus KH2's distance from its body centre to that point (`effect_point`, from
+    // the owner's model; Sora's 20 up): KH1's body centre with the element's offset moved by it.
     if e.bone == EFFECT_POINT {
-        let p = effect_point.ok_or(format!("element {el}: KH2's 0x4009 point, but its owner's model has no kind-9 shape on its root"))?;
-        e.bone = 0x4000;
+        let p = effect_point.ok_or(format!("element {el}: KH2's 0x4009 point, but its owner's model has no kind-9 and kind-1 shapes on its root"))?;
+        e.bone = 0x4001;
         for k in 0..3 {
             e.translation[k] += p[k];
         }

@@ -1937,6 +1937,14 @@ can play.
   frame: 105 above Sora's place (KH1 Sora is smaller: his hips 78.9 high against KH2's 88.5).
   **Assumption**: the shape's offset is in the object frame the element offsets are in (0 for
   Sora). Cure 3's elements 3 and 4 use it (t430 log).
+- **(c) since the version after t463** (the tester, m16: "cure is currently in the center of
+  sora", "try (c)"): KH1's own body centre (KH2's 0x4001 on KH1's 0x8005, §18.15) plus KH2's
+  distance from its body centre to its effect point: the owner's model's first kind-9 shape of
+  group 0 less its first kind-1 one, both on the root (`effect_point_of`; Sora's 105 − 85 = 20 up,
+  **Checked (files)**). So `kh2dpx` starts 0x4009 as 0x4001 (KH1's 0x8005, its object frame, §18.17)
+  with the element's offset moved by those 20; Cure 3's 3 and 4 are by position only (0x245), on
+  KH1's position binding at the body centre (mode 1, t 0). Without both shapes on the owner's root
+  the element isn't built (logged).
 
 ### 18.17 KH2's object frame on KH1's object root (a quarter turn)
 

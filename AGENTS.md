@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 470 (testing branch: KH2 effects: 0x4009 on KH1's body centre plus KH2's 20)
+- **KH2 effects: 0x4009 on KH1's body centre plus KH2's 20.** The tester ("try (c)"). 0x8005 plus KH2's kind-9 point minus its kind-1 (Sora 105 − 85, Checked (files)); KH1's body-centre height logged once. Notes §18.16.
+
 ### 2026-10-23: Stage 469 (testing branch: KH2 effects: Reflect's frame re-examined; spell pieces' start places logged)
 - **KH2 effects: Reflect's frame re-examined; spell pieces' start places logged.** The tester ("reflect still is misplaced"). t454's frame holds (KH2 decomp `+0x40`, the old player's diag(1,−1,−1), motion 71's barrier at the hands, Checked (decomp / exe / files)). `note_place` logs each spell piece's start place beside KH2's numbers. Notes §18.17.
 
