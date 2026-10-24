@@ -1954,7 +1954,7 @@ can play.
   KH1's position binding at the body centre (mode 1, t 0). Without both shapes on the owner's root
   the element isn't built (logged).
 
-### 18.17 KH2's object frame on KH1's object root (a quarter turn)
+### 18.17 KH2's object frame on KH1's object root (a quarter turn; superseded by §18.21)
 
 The tester (m14): "reflect is misaligned with sora". Reflect's 17 elements are all on KH2's object
 root 0x4000 (t430 log), none on 0x4001 or 0x4009, with KH2's own offsets (barrier pieces 109, 85
@@ -2092,3 +2092,34 @@ it to KH1's apply `0x1402ADB40` (Steam).
   apply (KH1's binding task `0x1402AE910`, mode 2 and 3), so they are drawn `B · P` on the bone's
   matrix `B`. Whether KH1's bone matrices already make up for it isn't known (**Assumption** open);
   the object root's case is §18.21.
+
+### 18.21 KH2's object frame on KH1's object root, again (Reflect off to one side, Firaga's ring)
+
+The tester (m16): Reflect is "(b) off to one side"; Firaga "has one flame still" (t468's texture
+slots didn't change it). Both come from §18.17's frame, which didn't know KH1's apply turn (§18.20).
+
+- KH1's 0x8000 frame read straight (`0x14029EA00`): the actor's matrix rows (−z, −y, −x). The
+  actor's rows are (x, down, ahead) (§18.20: `+0xE0` points down, **Checked (trace)**; `+0xF0`
+  ahead, **Checked (exe)**, §18.17), so that frame is (back, up, −x).
+- An element KH1 binds to it goes through its apply (`0x1402ADB40`, mode 2 of the binding task):
+  drawn as that frame `· P` = (−x, down, back). KH2's object frame is y down, forward along its −z
+  (§18.17, the old player's Guard Break check), so its x is down × back = −x: KH2's frame exactly.
+  A bound element's copy takes KH2's offset and turn unchanged. §18.17's quarter turn `C` turned
+  every bound object-root element 90° about Sora: Reflect's barrier pieces (KH2's (−22, −85,
+  −18.2): 22 to his side, 85 up, 18 ahead) were drawn 18 to the side and 22 behind, at the right
+  height, which is the tester's "off to one side". Also Explosion's burst, Fire 3's element 5, the
+  forms' root effects and every 0x4001 / 0x4009 element.
+- A position-only element (KH1's mode 1, `by_position_now`) is placed by the frame read straight:
+  KH2's offset `t` is now taken through `P` (`KH2_IN_KH1_OBJECT = P`). Through §18.17's `C` its
+  height came out reversed (`Q · C = diag(1, −1, −1)` on the actor's rows): Fire 3's ring
+  (element 2, KH2's (0, −72, 0): at his chest) was drawn 72 below his feet, in the floor, and its
+  other position-only pieces (6, 7, 10: 85, 121 and 218 up) as far down. The flames left to see
+  were the Keyblade tip's (elements 0, 1): "one flame". Fire 3's ring is effect 2: three spinning
+  emitters (0, 4, 6; `pppAngMove` about y) each spawning two flame tails (`pppVertexApLc`, two
+  vertices of its own vertex set, children with `pppKeShpTail3X`), read from the user's
+  `FIRE_3.mag` (**Checked (files)**); the script starts it at the cast (traced, `kh2-magic`).
+  KH1's `pppVertexApLc` (`0x14033D330`) and KH2's (`0x1404D3E00`) decompile the same.
+- `spell_place` gives every frame `at · P` (§18.20); the object-framed case no longer takes `C`.
+- `note_place`'s log line now gives KH2's offset along the actor's rows as (−x, y, −z), the frame
+  above: it should equal the origin it measured.
+- **Assumption** (open): KH1's 0x8005 (body centre) reads the same frame as 0x8000 (§18.15).

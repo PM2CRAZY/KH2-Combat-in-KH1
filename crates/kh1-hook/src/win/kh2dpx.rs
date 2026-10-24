@@ -234,12 +234,14 @@ const BLADE_BONE: u32 = 0x30;
 /// KH1's object-root code: the actor's place with a frame from its matrix rows (each negated,
 /// `+0xF0`, `+0xE0`, `+0xD0`), KH2's 0x4000.
 const KH1_OBJECT_ROOT: u32 = 0x8000;
-/// KH2's object frame in KH1's object-root frame (`docs/kh2-effects.md` §18.17): KH1's 0x8000
-/// frame (`0x14029EA00`, Checked (exe)) is the actor's matrix (`+0xD0`, the one its skeleton pass
-/// takes) rows `-z, -y, -x`; KH2's object frame on the same matrix is `x, -y, -z` (forward along
-/// its -z, the old player's frame). So KH2's x is KH1's -z, its z KH1's x: a quarter turn about
-/// y. Column form: KH2's object-frame coordinates to KH1's.
-const KH2_IN_KH1_OBJECT: glam::Mat3 = glam::Mat3::from_cols(glam::Vec3::new(0.0, 0.0, -1.0), glam::Vec3::Y, glam::Vec3::X);
+/// KH2's object frame in KH1's object-root frame as KH1 reads it (`docs/kh2-effects.md` §18.21):
+/// KH1's 0x8000 frame (`0x14029EA00`, Checked (exe)) is the actor's matrix (`+0xD0`) rows
+/// `-z, -y, -x`, the actor's `+0xE0` row pointing down and `+0xF0` ahead (Checked (trace), §18.20);
+/// that frame's `· P` (KH1's apply turn, [`KH1_APPLY_TURN`]) is (−x, down, back): KH2's object frame
+/// (y down, forward along its −z). Column form: KH2's object-frame coordinates to those of KH1's
+/// frame read straight (a position-only binding's offset). An element KH1 binds to the frame goes
+/// through its apply, which adds the `P` itself: its copy takes KH2's offset and turn as they are.
+const KH2_IN_KH1_OBJECT: glam::Mat3 = KH1_APPLY_TURN;
 
 /// KH1's anchors whose frame is KH1's object-root frame (the object root, the body centre; and so
 /// KH2's 0x4009 started on the object root): KH2's offsets and turns on them go through
@@ -969,10 +971,10 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     // binding (`posed`).
     let offset = if position_only { r_e * Vec3::from(h_off) } else { Vec3::from(e.translation) / safe + r_e * Vec3::from(h_off) };
     let rot: Mat3 = r_e * r_h;
-    // On KH1's object-root frame, KH2's object frame is a quarter turn from it: the offset and the
-    // turn taken into KH1's (`B₂ = B₁ · C`, so `B₂ · T(t) · R = B₁ · T(C t) · C R`). Position only:
-    // the offset is turned in the binding (`by_position_now`), the turn is the world's (unturned).
-    let (offset, rot) = if object_framed(bone) && !position_only { (KH2_IN_KH1_OBJECT * offset, KH2_IN_KH1_OBJECT * rot) } else { (offset, rot) };
+    // On KH1's object-root frame bound: KH1's apply draws the frame it reads times `P`, which is
+    // KH2's object frame (§18.21), so the offset and turn stay KH2's (the quarter turn t454 put
+    // here was the frame without `P`: Reflect off to one side). Position only: the offset is
+    // turned in the binding (`by_position_now`, the frame read straight), the turn is the world's.
     let angle = math::xyz_i_of(rot);
     let number = ELEMENT_NUMBER | el as u32;
     let note = format!(
@@ -1824,14 +1826,15 @@ unsafe fn note_place(base: usize, pkg: Pkg, el: i16, element: usize, actor: usiz
     let row = |o: usize| glam::Vec3::from(rd::<[f32; 3]>(actor + o)).normalize_or_zero();
     let d = origin - at;
     let m = [d.dot(row(0xD0)), d.dot(row(0xE0)), d.dot(row(0xF0))];
-    // (KH2's: its object frame is the model's x, -y, -z; the element's offset there, as the model's.)
-    let kh2 = KH2_IN_KH1_OBJECT.transpose() * glam::Vec3::from(l.local);
+    // (KH2's: its object frame along the actor's matrix rows is (−x, y, −z), §18.21; the copy's
+    // offset is KH2's, here taken to those rows to compare.)
+    let kh2 = glam::Vec3::from(l.local);
     log(&format!(
         "KH2 effects (native): {pkg:?} element {el} on {:?}: its origin at the start {:.1?} from Sora's place along his model's x, y, z (KH1's start: place {:.1?}, turn {a:?}); {}",
         l.anchor,
         m,
         (p - at).to_array(),
-        if object_framed(l.anchor) { format!("KH2's offset as the model's x, y, z: {:.1?}", [kh2.x * s.x, -kh2.y * s.y, -kh2.z * s.z]) } else { "on a bone or the Keyblade".to_string() }
+        if object_framed(l.anchor) { format!("KH2's offset along the same rows: {:.1?}", [-kh2.x * s.x, kh2.y * s.y, -kh2.z * s.z]) } else { "on a bone or the Keyblade".to_string() }
     ));
 }
 
@@ -2271,8 +2274,7 @@ pub fn spell_place(h: u32, at: glam::Mat4) {
                 wr::<[u32; 3]>(turn, [0; 3]);
             }
         } else {
-            // (`at` is KH2's frame; the element's copy was turned for KH1's object frame.)
-            let at = if object_framed(sp.layer.anchor) { at * glam::Mat4::from_mat3(KH2_IN_KH1_OBJECT.transpose()) } else { at };
+            // (`at` is KH2's frame, the element's copy KH2's offset and turn on any anchor.)
             // (KH1's apply draws `M · P`: `at · P` goes in so `at` is drawn, as KH2 draws the
             // turn its `effect_set_dir` made. Blizzard's shard flew turned a quarter round.)
             let at = at * glam::Mat4::from_mat3(KH1_APPLY_TURN);
