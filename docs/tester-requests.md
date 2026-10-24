@@ -100,6 +100,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [7. Assistant: Fixed. The old links used HTML anchors, which GitHub underst](../testers/table-of-contents/table-of-contents.md#^m7)
 - [What is still missing for native integration into KH1](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md)
   - [1. Mr Bugs: what else currently are we missing for native integration in](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m1)
+  - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m2)
 
 ---
 
