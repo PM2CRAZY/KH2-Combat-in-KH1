@@ -930,9 +930,6 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
 
 /// KH2 element flags KH1's binding doesn't do yet (`docs/kh2-effects.md` §2, §18.3).
 fn unbindable(flags: u32) -> Option<&'static str> {
-    if flags & (BIND | BIND_UNTIL_STARTED) == 0 && flags & POSITION_ONLY != 0 {
-        return Some("placed once at its start by position only");
-    }
     if flags & BONE_SCALE != 0 {
         return Some("scaled by its bone");
     }
@@ -1533,8 +1530,12 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
         }
     }
     // Not bound (KH2 places it once, at its start, from the bone as it is then): KH1's start has
-    // just placed it the same way; its binding is disarmed so its first run lets go.
+    // just placed it the same way (by position only: at KH2's `B · offset`, `place_by_position`);
+    // its binding is disarmed so its first run lets go.
     if element != 0 && unbound {
+        if position_only {
+            unsafe { place_by_position(base, element, actor, PosOnly { anchor: bone, offset: layer.bone_offset, prev: [0.0; 4] }) };
+        }
         unsafe { disarm(base, element) };
     } else if element != 0 && steam && (once == 0 || position_only) {
         let pos = position_only.then_some(PosOnly { anchor: bone, offset: layer.bone_offset, prev: [0.0; 4] });
@@ -1609,6 +1610,22 @@ unsafe fn note_binding(base: usize, element: usize, actor: usize, pos: Option<Po
         f.push(Fresh { element, serial: rd::<u32>(element + EL_SERIAL), node, record, actor, pass: PASSES.load(Ordering::Relaxed), pos });
         FRESH_ANY.store(true, Ordering::Relaxed);
     }
+}
+
+/// An unbound position-only element (KH2: placed once at its start at `B · offset`, turned by its
+/// own rotation alone): KH1's start bound it by position (mode 1), which placed it at the bare
+/// point; its place is set to KH2's from the bone now (the pose its start read, as KH2's start
+/// reads its bone before the pose pass), from KH1's own reads (`by_position_now`). Steam only.
+unsafe fn place_by_position(base: usize, element: usize, actor: usize, p: PosOnly) {
+    let node = rd::<usize>(base + BIND_LIST_STEAM + 0x18);
+    let ok = node != 0 && rd::<usize>(node + 0x10) == base + BIND_TASK_STEAM && rd::<usize>(node + 0x20) == element;
+    let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
+    let place = super::pose::ptr(rd::<u32>(element));
+    if record == 0 || rd::<u8>(record + 4) != 1 || place == 0 {
+        return;
+    }
+    let at = by_position_now(base, actor, record, &p);
+    wr::<[f32; 3]>(place, [at[0], at[1], at[2]]);
 }
 
 /// The binding KH1's start just made for `element` made to let go on its first run without

@@ -1590,6 +1590,12 @@ elements; **Checked (files)**):
   bind-once bit, which KH1's binding task (`0x1402AE910`) answers on its first run by freeing the
   record and ending, without moving the element. **Checked (exe)**. Steam only (the binding list's
   address). KH2 bone 0 (the root, at the hips) is KH1's bone 0 (the same bind frame).
+- Unbound and by position only (flag 0x04 without 0x01 / 0x02: KH2 places it once at its start at
+  `B · offset`, turned by its own rotation alone, §2): KH1's start bound by position (mode 1,
+  §18.5) places it at the bare point (its world offset is (0, 0, 0, 1) then); its place is then set
+  to KH2's from KH1's own bone and point reads at that moment (`by_position_now`, as for the
+  bound ones), and its binding disarmed as above. **Checked (exe)** for KH1's calls; until t430
+  these stayed with `kh2fx` ("placed once at its start by position only").
 
 ### 18.8 Valor's and Final's packages
 

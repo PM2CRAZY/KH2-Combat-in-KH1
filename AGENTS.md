@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 442 (testing branch: KH2 effects: unbound position-only elements through KH1)
+- **KH2 effects: unbound position-only elements through KH1.** Mode-1 start, place set from `by_position_now`, disarmed. Checked (exe). Notes §18.7.
+
 ### 2026-10-23: Stage 441 (testing branch: KH2 effects: logging HD images a texture record didn't find)
 - **KH2 effects: logging HD images a texture record didn't find.** t430: Thunder 3's TBPs 0x3000/0x3020 untextured. KH2's extra per-record case (`0x1404AECD0`, 0xFFFD, Checked (decomp)) noted; not fixed. Notes §18.12.
 
