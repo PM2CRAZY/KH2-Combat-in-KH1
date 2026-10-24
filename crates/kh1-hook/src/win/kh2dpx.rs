@@ -339,6 +339,8 @@ struct Layer {
     wait: f32,
     fadeout: f32,
     scale: [f32; 3],
+    /// Its copy's header offset (the element's offset and turn folded in, in KH1's anchor frame).
+    local: [f32; 3],
 }
 
 /// A native element started: KH1's element, its serial (KH1 reuses elements), the KH2 motion it
@@ -976,7 +978,7 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
         code, e.flags, e.start_wait, e.fadeout_frames, e.translation, e.rotation, h_off, h_ang, offset.to_array(), angle, e.scale,
         if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" }
     );
-    let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale };
+    let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale, local: offset.to_array() };
     Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle }, note))
 }
 
@@ -1737,6 +1739,9 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     if element != 0 && bone == Anchor::Code(KH1_BODY_CENTRE) {
         unsafe { note_body_centre(base, actor) };
     }
+    if element != 0 && steam && matches!(pkg, Pkg::Spell(_)) && !position_only {
+        unsafe { note_place(base, pkg, el, element, actor, &layer) };
+    }
     if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
         log(&format!(
             "KH2 effect (native): {pkg:?} element {el} of motion {motion} -> KH1 effect {number:#x} on {bone:?}: {}",
@@ -1787,6 +1792,44 @@ unsafe fn note_body_centre(base: usize, actor: usize) {
         at[1] - p[1],
         [p[0] - at[0], p[1] - at[1], p[2] - at[2]],
         kh2.map_or("not found".to_string(), |(lift, off, bone)| format!("{lift:.1} up, at {off:.1?} on {}", bone.map_or("the object root".to_string(), |b| format!("bone {b}"))))
+    ));
+}
+
+/// Once per spell package and element, for the log (the tester: "reflect still is misplaced"):
+/// where its effect's origin is from Sora's place at its start, in his model's axes (KH1's model
+/// matrix `+0xD0` rows: x, y, z; z ahead), from KH1's own start (the element's place and turn, set
+/// at once by KH1's start, `0x1402ADB40`) and its copy's header offset (the root KH1 builds,
+/// `0x14031CEA0`: the header local under the instance's turn and scale). And KH2's own number for
+/// it, the element's offset in KH2's object frame (x, -y, -z of the model): the two should agree.
+unsafe fn note_place(base: usize, pkg: Pkg, el: i16, element: usize, actor: usize, l: &Layer) {
+    static SEEN: Mutex<Vec<(Pkg, i16)>> = Mutex::new(Vec::new());
+    let Ok(mut g) = SEEN.lock() else { return };
+    if g.len() >= 96 || g.contains(&(pkg, el)) {
+        return;
+    }
+    g.push((pkg, el));
+    let _ = base;
+    let (place, turn) = (super::pose::ptr(rd::<u32>(element)), super::pose::ptr(rd::<u32>(element + 4)));
+    if place == 0 || turn == 0 {
+        return;
+    }
+    let p = glam::Vec3::from(rd::<[f32; 3]>(place));
+    let a = rd::<[i32; 3]>(turn);
+    let r = kh2_fx::math::euler_xyz_i(a);
+    let s = glam::Vec3::from(l.scale);
+    let origin = p + r * (s * glam::Vec3::from(l.local));
+    let at = glam::Vec3::from(rd::<[f32; 3]>(actor + 0x10));
+    let row = |o: usize| glam::Vec3::from(rd::<[f32; 3]>(actor + o)).normalize_or_zero();
+    let d = origin - at;
+    let m = [d.dot(row(0xD0)), d.dot(row(0xE0)), d.dot(row(0xF0))];
+    // (KH2's: its object frame is the model's x, -y, -z; the element's offset there, as the model's.)
+    let kh2 = KH2_IN_KH1_OBJECT.transpose() * glam::Vec3::from(l.local);
+    log(&format!(
+        "KH2 effects (native): {pkg:?} element {el} on {:?}: its origin at the start {:.1?} from Sora's place along his model's x, y, z (KH1's start: place {:.1?}, turn {a:?}); {}",
+        l.anchor,
+        m,
+        (p - at).to_array(),
+        if object_framed(l.anchor) { format!("KH2's offset as the model's x, y, z: {:.1?}", [kh2.x * s.x, -kh2.y * s.y, -kh2.z * s.z]) } else { "on a bone or the Keyblade".to_string() }
     ));
 }
 

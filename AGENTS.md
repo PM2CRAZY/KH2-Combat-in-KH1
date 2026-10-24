@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 469 (testing branch: KH2 effects: Reflect's frame re-examined; spell pieces' start places logged)
+- **KH2 effects: Reflect's frame re-examined; spell pieces' start places logged.** The tester ("reflect still is misplaced"). t454's frame holds (KH2 decomp `+0x40`, the old player's diag(1,−1,−1), motion 71's barrier at the hands, Checked (decomp / exe / files)). `note_place` logs each spell piece's start place beside KH2's numbers. Notes §18.17.
+
 ### 2026-10-23: Stage 468 (testing branch: KH2 effects: a spell's pieces in one DPD per file DPD)
 - **KH2 effects: a spell's pieces in one DPD per file DPD.** The tester (Firaga missing flames). KH1's 10 texture slots per frame (`0x1401EDB00`, Checked (exe)); t463 log: level-3 spells needed 21..37. One DPD per file DPD as KH2's; split per effect when over. Assumption: the cause of the missing flames. Notes §18.10.
 

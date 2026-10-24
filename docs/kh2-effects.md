@@ -1965,6 +1965,32 @@ and 68 above the feet, the 85 ones 22 to the side and 18 ahead, the 68 ones 14.7
   (`B₂ · T(t) · R = B₁ · T(C t) · C R`); position only, its offset through C each read
   (`by_position_now`; its turn is the world's); a script's place (`spell_place`, KH2's matrix)
   through C⁻¹. No per-frame cost beyond a 3×3 multiply per position-only read.
+- **Re-examined** (the version after t463; the tester, m16: "reflect still is misplaced"):
+  - KH2's 0x4000 (`0x1403B50F0`, **Checked (decomp)**): the object's matrix `+0x40` as it is, its
+    place `+0x670` (`+0x70` for one object class, `0x1403DA520`). The object update
+    (`0x1403CCB90`) makes the model's root (`+0x808`, KH2's 0x4002, the skeleton pass's input,
+    `0x1403C6AA0`) as `+0x40` times the motion's root correction (`0x1403C7B20`: the root's travel
+    and turn, taken back); Sora's motions keep no root travel (P_EX100.mset, `track`: root 0 in
+    every frame of motion 71), so for him KH2's object frame is his model root's frame.
+  - The old player's 0x4000 (`kh2fx` before t444, `pose::kh2_pose`'s `w`): `w · diag(1, −1, −1)`,
+    `w` the matrix KH1's skeleton pass was given (`from_param`, the placement), the one KH1's
+    0x8000 reads (`0x14029EA00`: `(0, 0, 0, 1) − row`, `0x140386D10` → `0x1400E5EF0` `a − b`, the
+    constant `0x140527FF0` (0, 0, 0, 1); **Checked (exe)**). So C is the old player's frame on
+    KH1's, as t454 had it.
+  - From the files (**Checked (files)**, P_EX100.mdlx / mset, motion 71, Reflect's ground cast;
+    the model's y up, z ahead): at its frames 0..4 his hands are at x −21..−30, 67..102 up, 29..49
+    ahead, his chest at x −10..−12, 75..77 up. Reflect 3's barrier pieces (elements 0, 1, 4..6, the
+    t463 log) at KH2's (−22, −85, −18.2) are, through `diag(1, −1, −1)`, at the model's
+    (−22, 85 up, 18.2 ahead): by his raised hands. Through `(−x, −y, z)` they would be behind him.
+    So the frame holds; KH1's root (`0x14031CEA0`, **Checked (exe)**) puts the header offset under
+    the instance's turn and scale with the header turn applied first (T · R), as the build folds
+    it, and the angle conventions match (`0x140323480`: X, then Y, then Z; `0x140344FB0` the y
+    turn, x to (cos, 0, −sin), as `kh2_fx::math`).
+  - Not found: what else is off. The log now gives, once per spell element, its origin at its
+    start from Sora's place along his model's x, y, z, beside KH2's own numbers for it
+    (`kh2dpx::note_place`), to tell from the next log whether it is the place, the height or the
+    turn. **Assumption** (open): KH2's numbers are KH2 Sora's size (his hips 88.5 up) on KH1 Sora
+    (78.9), about 11% high and wide.
 
 ### 18.18 KH2's flag 0x800: the effect's alpha follows its owner's
 
