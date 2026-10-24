@@ -178,6 +178,38 @@ but effects still draw (the effect pass doesn't test it), the HUD fades `0x14026
 readers of bit 0 are those (xrefs, Checked (exe)). It doesn't hold the actors, the camera or the
 scripts. Frame Advance doesn't use it with KH1's pause picture (everything is held there).
 
+### The Held Picture row's Live (a fallback to debug with, after t426)
+
+`Held Picture < KH1 Pause / Live >` on the debug menu's main page (this session). Live draws the
+picture live, as t426 did, with what those draws step held where KH1 has a way:
+
+- Held: the tasks before 140000, and two known update tasks after it (145001 `0x140290A50`: four
+  delayed entries, a timer less the frame scale each, then played; 159999 `0x1403970D0`: a fade, -0.1 a
+  frame). 130000 (models) and 120000 (map) run by default; 120000's sub-lists stay held.
+- Effects: KH1's system stop (`0x142867368` bit 0 set, `0x142432130` = 1, both put back after; set again
+  every held frame in case KH1's 30000 toggle took it off): the effects' held flag `0x142E9D7E0`
+  follows at 140000, every program's step stops and the pass still draws them (no `+0xDB`). The HUD
+  fades that test bit 0 (`0x14026D570`, `0x14027B870`, `0x14027F780`) stop too. **Checked (decomp)**.
+- The shape trails (KH1 programs 156 KeShpTail3 `0x140337450` and 157 KeShpTail3X `0x140338160`) step
+  their animation time (work 0 `+0x1F0`, by the key's `+8`) in their draws, on every draw with a model,
+  held or not (**Checked (decomp)**). The other programs' draws were searched for a step (a field
+  added to from the key, or the frame scale): only these two showed one (a search, not a full read:
+  **Assumption** for the rest); the ones not decompiled (50, 140, 143, 144, 146..151, 158, 159) are
+  `ret 0` stubs (**Checked (exe)**). While held their slots in KH1's program table
+  (`0x14054FF00` + i x 0x50 + 0x18) point at ours, which run KH1's and take the step back (only when the
+  slot holds KH1's own; put back after). The ribbon trails (161 RyjDrawShipoly, 200 RyjDrawShipolyBone)
+  advance their ring only when not held (`0x14033AF90`: `0x142E9D7E0`, `+0xD5`, `+0xD8`), and take the
+  bones' places in the draw (the same while the models are held). **Checked (decomp)**.
+  **Assumption**: KH1's Keyblade trail is one of the ribbon programs (the weapon's effect data isn't
+  staged here).
+- 120000 runs through `map_live`: KH1's own, then its steps put back: the sky's turn `0x14233E174`
+  (`0x140182190`: += scale x `0x14233E010`), the 32 map fades `0x142356370` (timer, alpha, rate; the draw
+  reads the alpha before the step) and their done bits `0x14232DE00` (`0x14019BE70`). **Checked (decomp)**.
+- Not covered in Live (all run while held): the HUD's other steps (165001 `0x140274540`,
+  `0x1402758B0`; 164004 `0x140185360`: the frame scale), the 160000 pass `0x1402E26D0`, the 180000s and
+  190000s (2D, menus, text, fades; 180000 `0x14038D9B0` writes the world / room words), and anything
+  else in a draw task that steps by frames. KH1's pause picture has none of these gaps.
+
 ### Sound while held (after t426)
 
 KH1's pause machine calls `0x1400D2F80` (a jump to `0x1400DE010 (mode)`, KH1's sound pause) with 1 in

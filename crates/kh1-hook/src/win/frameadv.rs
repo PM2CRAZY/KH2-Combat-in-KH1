@@ -59,6 +59,18 @@
 //!   picture is exactly the last frame that ran (map, models, effects, trails, HUD, lock-on,
 //!   command menu, damage numbers) and nothing that frame's tasks step goes on. While KH1's own
 //!   pause is up ours doesn't draw (KH1's picture and P A U S E stay).
+//! - **The Held Picture row's Live (a fallback to debug with).** The picture drawn live instead of
+//!   KH1's pause picture: as t426, only the tasks before priority 140000 are held (and two known
+//!   update tasks after it, the delayed plays 145001 `0x140290A50` and an effect fade 159999
+//!   `0x1403970D0`), and 120000 (the map) and 130000 (the models) run. What of those draws steps the
+//!   game is held natively where KH1 has a way: the effects by KH1's system stop (`0x142867368`
+//!   bit 0 and `0x142432130`, which the effects' held flag `0x142E9D7E0` follows: every effect
+//!   program's step stops, the effect pass still draws; the HUD fades `0x14027B870` & co. stop too),
+//!   not by the effect pause (which hides them); the shape trails KeShpTail3 / 3X (KH1's programs
+//!   156 / 157), whose draws step their animation time on every draw, get the step taken back (their
+//!   draw slots in KH1's table point at ours while held); 120000's own steps (the sky's turn
+//!   `0x14233E174`, the map fades `0x142356370` and their done bits `0x14232DE00`) are put back after
+//!   it on held frames, and its sub-lists stay held. What isn't covered: the notes.
 //! - **Sound, as KH1's pause holds it.** KH1's pause machine calls its sound pause (`0x1400D2F80`, a
 //!   jump to `0x1400DE010 (mode)`) with 1 as it stops (state 3: playing sound effects paused, the
 //!   streamed music at half its volume) and 0 as it goes (state 4: resumed, the volume back). Frame
@@ -141,6 +153,8 @@ struct State {
     pad: Option<(u32, u32, u32)>,
     /// KH1's pause was up during our hold (it gave the models back as it closed).
     kh1_paused: bool,
+    /// The Held Picture row this hold was made with (Live).
+    live: bool,
 }
 
 /// The tasks held now: (task, its own function, its list: 0 the main one, else the sub-list's RVA).
@@ -152,9 +166,36 @@ static HELD_TASKS: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
 /// (held with 120000 too), each a row of the Held Tasks page.
 const SUB_LISTS: [(usize, &str); 2] = [(0x233E420, "map parts A"), (0x233E7D0, "map parts B")];
 
+/// (Live) The first of KH1's draw passes: tasks from here on run while held in Live, but these.
+const FIRST_DRAW: i32 = 140000;
+const LIVE_HOLD: [usize; 2] = [0x290A50, 0x3970D0];
+/// (Live) Tasks that run while held by default: the models (130000) and the map (120000), the
+/// tester's t399 test.
+const MODELS_RVA: usize = 0x2A23E0;
+const MAP_RVA: usize = 0xD2830;
+/// (Live) 120000's own steps, put back after it on held frames: the sky's turn (f32), the map
+/// fades (0x20 x (timer, alpha, rate), `0x14019BE70`), their done bits (u32).
+const SKY_TURN_STEAM: usize = 0x233E174;
+const MAP_FADES_STEAM: usize = 0x2356370;
+const MAP_FADES_LEN: usize = 0x20 * 0xC;
+const MAP_FADES_DONE_STEAM: usize = 0x232DE00;
+/// (Live) KH1's system stop: the status word's bit 0 and the effects' stop `0x142432130` (which
+/// task 140000 copies into the effects' held flag `0x142E9D7E0`).
+const SYSTEM_STATUS_STEAM: usize = 0x2867368;
+const SYSTEM_STOP_FX_STEAM: usize = 0x2432130;
+/// (Live) KH1's program table (0x50 an entry, the draw at `+0x18`) and its KeShpTail3 / 3X draws.
+const PPP_TABLE_STEAM: usize = 0x54FF00;
+const TAIL3_DRAW_STEAM: usize = 0x337450;
+const TAIL3X_DRAW_STEAM: usize = 0x338160;
+/// The Held Picture row: Live.
+static LIVE: AtomicBool = AtomicBool::new(false);
+/// (Live) What the system stop words were before our hold.
+static STOP_SAVED: Mutex<Option<(u32, u32)>> = Mutex::new(None);
+static TAILS_ON: AtomicBool = AtomicBool::new(false);
+
 /// What the main list's tasks are (Steam RVAs), for the Held Tasks page and the log: the tester's
 /// Held Tasks tests (t399, t426: Checked (in game)) and the decomp (`docs/kh1-frame-advance.md`).
-const LABELS: [(usize, &str); 17] = [
+const LABELS: [(usize, &str); 15] = [
     (0x1E1900, "fades"),
     (0x28D620, "system"),
     (0x2937F0, "command menu"),
@@ -170,8 +211,6 @@ const LABELS: [(usize, &str); 17] = [
     (0x2B11B0, "lock-on"),
     (0x290A50, "delayed play"),
     (0x3970D0, "fx fade"),
-    (0x2E26D0, "160000 pass"),
-    (0x38D9B0, "2D / menus"),
 ];
 
 fn label(rva: usize) -> &'static str {
@@ -195,50 +234,52 @@ pub struct TaskRow {
 /// The tasks seen the last time the game was held (priority order, as KH1's list keeps them).
 static TASKS: Mutex<Vec<TaskRow>> = Mutex::new(Vec::new());
 /// (t399) The functions (RVAs) the tester lets run while held (the Held Tasks page; this session).
-static RUNS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+/// (The tester's switches: function RVA, runs; a task not switched takes the mode's default.)
+static RUNS: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
+
+/// Whether a task runs while held when the page hasn't switched it.
+fn runs_by_default(live: bool, rva: usize) -> bool {
+    live && (rva == MODELS_RVA || rva == MAP_RVA)
+}
+
+fn runs_now(overrides: &[(usize, bool)], live: bool, rva: usize) -> bool {
+    overrides.iter().find(|o| o.0 == rva).map_or(runs_by_default(live, rva), |o| o.1)
+}
+
+/// The Held Picture row: KH1's pause picture (false) or Live.
+pub fn live() -> bool {
+    LIVE.load(Ordering::Relaxed)
+}
+
+/// Switches the Held Picture row (applied at the next frame end, also while held).
+pub fn set_live(on: bool) {
+    if LIVE.swap(on, Ordering::Relaxed) != on {
+        LOGGED_TASKS.store(false, Ordering::Relaxed);
+        log(&format!("debug menu: frame advance picture {}", if on { "live (draw tasks run; effects by KH1's system stop)" } else { "KH1's pause picture" }));
+    }
+}
 
 /// The Held Tasks page's rows.
 pub fn tasks() -> Vec<TaskRow> {
     TASKS.lock().map(|t| t.clone()).unwrap_or_default()
 }
 
-/// The Held Tasks page: row `i` held <-> runs while the game is held (to find a task the
-/// picture needs: the tester's t378 test, still black). A task let run gets its function back at
-/// once; one held again is held from the next held frame.
+/// The Held Tasks page: row `i` held <-> runs while the game is held (a debugging tool: the
+/// tester's t399 and t426 tests). Applied at this frame's end (`hold_tasks`).
 pub fn toggle_task(i: usize) {
     let Some(row) = TASKS.lock().ok().and_then(|t| t.get(i).copied()) else { return };
     let runs = !row.runs;
     if let Ok(mut r) = RUNS.lock() {
-        r.retain(|&x| x != row.rva);
-        if runs {
-            r.push(row.rva);
-        }
+        r.retain(|x| x.0 != row.rva);
+        r.push((row.rva, runs));
     }
     if let Ok(mut t) = TASKS.lock() {
         if let Some(x) = t.get_mut(i) {
             x.runs = runs;
         }
     }
-    if runs {
-        let base = BASE.load(Ordering::Relaxed);
-        if let Ok(mut held) = HELD_TASKS.lock() {
-            let ours = skip as *const () as usize;
-            held.retain(|&(t, f, list)| {
-                let this = if !row.sub { list == 0 && f.wrapping_sub(base) == row.rva } else { list == row.rva };
-                if !this {
-                    return true;
-                }
-                unsafe {
-                    if super::crash::readable(t + 0x18) && rd::<u16>(t) != 0 && rd::<usize>(t + 0x10) == ours {
-                        wr::<usize>(t + 0x10, f);
-                    }
-                }
-                false
-            });
-        }
-    }
-    let list = RUNS.lock().map(|r| r.iter().map(|x| format!("{x:#x}")).collect::<Vec<_>>().join(", ")).unwrap_or_default();
-    log(&format!("frame advance: task {} {:#x} {} while held (running while held: [{list}])", row.priority, row.rva, if runs { "runs" } else { "held" }));
+    let list = RUNS.lock().map(|r| r.iter().map(|x| format!("{:#x} {}", x.0, if x.1 { "runs" } else { "held" })).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+    log(&format!("frame advance: task {} {:#x} {} while held (switched: [{list}])", row.priority, row.rva, if runs { "runs" } else { "held" }));
 }
 
 /// A held task's function: does nothing, keeps the task.
@@ -246,54 +287,152 @@ unsafe extern "system" fn skip(_task: usize) -> u32 {
     0
 }
 
+/// (Live) 120000 (`0x1400D2830`, the map draw) on a held frame: KH1's own, then what it stepped put
+/// back (the sky's turn, the map fades and their done bits; its draws read them before stepping).
+unsafe extern "system" fn map_live(task: usize) -> u32 {
+    let base = BASE.load(Ordering::Relaxed);
+    let sky: u32 = rd(base + SKY_TURN_STEAM);
+    let done: u32 = rd(base + MAP_FADES_DONE_STEAM);
+    let mut fades = [0u8; MAP_FADES_LEN];
+    std::ptr::copy_nonoverlapping((base + MAP_FADES_STEAM) as *const u8, fades.as_mut_ptr(), MAP_FADES_LEN);
+    let f: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + MAP_RVA);
+    let r = f(task);
+    wr::<u32>(base + SKY_TURN_STEAM, sky);
+    wr::<u32>(base + MAP_FADES_DONE_STEAM, done);
+    std::ptr::copy_nonoverlapping(fades.as_ptr(), (base + MAP_FADES_STEAM) as *mut u8, MAP_FADES_LEN);
+    r
+}
+
+/// (Live) KH1's system stop on (saved first) or put back as it was.
+unsafe fn system_stop(base: usize, on: bool) {
+    let Ok(mut saved) = STOP_SAVED.lock() else { return };
+    let status = base + SYSTEM_STATUS_STEAM;
+    let fx = base + SYSTEM_STOP_FX_STEAM;
+    if on {
+        if saved.is_none() {
+            *saved = Some((rd::<u32>(status) & 1, rd::<u32>(fx)));
+        }
+        // (Every held frame: KH1's own toggle, task 30000, could have taken it off.)
+        wr::<u32>(status, rd::<u32>(status) | 1);
+        wr::<u32>(fx, 1);
+    } else if let Some((bit, was)) = saved.take() {
+        wr::<u32>(status, rd::<u32>(status) & !1 | bit);
+        wr::<u32>(fx, was);
+    }
+}
+
+/// (Live) KeShpTail3's and KeShpTail3X's draw slots (programs 156 and 157 of KH1's table) at ours
+/// or back at KH1's (only when they hold KH1's own).
+unsafe fn tails(base: usize, on: bool) {
+    if TAILS_ON.swap(on, Ordering::Relaxed) == on {
+        return;
+    }
+    for (i, kh1, ours) in [(156usize, TAIL3_DRAW_STEAM, tail3_live as *const () as usize), (157, TAIL3X_DRAW_STEAM, tail3x_live as *const () as usize)] {
+        let slot = base + PPP_TABLE_STEAM + i * 0x50 + 0x18;
+        let (from, to) = if on { (base + kh1, ours) } else { (ours, base + kh1) };
+        if rd::<usize>(slot) == from {
+            wr::<usize>(slot, to);
+        }
+    }
+}
+
+/// The trail time step KH1's KeShpTail3 / 3X draws make on every draw with a model (work 0
+/// `+0x1F0` += the key's `+8`, Checked (decomp) `0x140337450`, `0x140338160`), taken back.
+unsafe fn tail_back(obj: usize, key: usize, prog: usize) {
+    if rd::<i32>(key + 4) != 0xFFFF {
+        let list = (prog as isize + rd::<i32>(prog + 0xC) as isize) as usize;
+        let t = (obj as isize + 0x290 + rd::<i32>(list) as isize) as usize;
+        wr::<i32>(t, rd::<i32>(t).wrapping_sub(rd::<i32>(key + 8)));
+    }
+}
+
+unsafe extern "system" fn tail3_live(obj: usize, key: usize, prog: usize) {
+    let f: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + TAIL3_DRAW_STEAM);
+    f(obj, key, prog);
+    tail_back(obj, key, prog);
+}
+
+unsafe extern "system" fn tail3x_live(obj: usize, key: usize, prog: usize) {
+    let f: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + TAIL3X_DRAW_STEAM);
+    f(obj, key, prog);
+    tail_back(obj, key, prog);
+}
+
 /// Every task of the main list not flagged for a pause is held (its function swapped for
 /// `skip`), whatever its priority, as KH1's pause holds them (mask 1); tasks added since the
-/// last call too.
-unsafe fn hold_tasks(base: usize) {
+/// last call too. (Live) only those before 140000 and `LIVE_HOLD`, and 120000 runs through
+/// `map_live`. Tasks the page lets run get their own function back.
+unsafe fn hold_tasks(base: usize, live: bool) {
     let Ok(mut held) = HELD_TASKS.lock() else { return };
-    let ours = skip as *const () as usize;
+    let skip_f = skip as *const () as usize;
+    let map_f = map_live as *const () as usize;
+    let ours = |f: usize| f == skip_f || f == map_f;
     let mut t: usize = rd(base + TASK_LIST_STEAM + 0x10);
     let mut n = 0;
-    let runs = RUNS.lock().map(|r| r.clone()).unwrap_or_default();
+    let overrides = RUNS.lock().map(|r| r.clone()).unwrap_or_default();
     let mut seen: Vec<TaskRow> = Vec::new();
     while t > 0x10000 && n < 1024 && super::crash::readable(t + 0x18) {
         let f: usize = rd(t + 0x10);
-        let candidate = rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && f > 0x10000;
-        if candidate {
+        let next: usize = rd(t + 8);
+        if rd::<u16>(t) != 0 && rd::<u16>(t + 2) & PAUSE_FLAG == 0 && f > 0x10000 {
             // (Ours already: the task's own function is in `held`.)
-            let own = if f == ours { held.iter().find(|e| e.0 == t).map_or(0, |e| e.1) } else { f };
+            let own = if ours(f) { held.iter().find(|e| e.0 == t).map_or(0, |e| e.1) } else { f };
             let rva = own.wrapping_sub(base);
-            if own != 0 && !seen.iter().any(|s| s.rva == rva) {
-                seen.push(TaskRow { priority: rd::<i32>(t + 4), label: label(rva), sub: false, rva, runs: runs.contains(&rva) });
+            let prio = rd::<i32>(t + 4);
+            if own == 0 {
+            } else if live && prio >= FIRST_DRAW && !LIVE_HOLD.contains(&rva) {
+                // (Not held in Live: given back if it was, as when the picture row switched.)
+                if ours(f) {
+                    wr::<usize>(t + 0x10, own);
+                    held.retain(|e| e.0 != t);
+                }
+            } else {
+                let runs = runs_now(&overrides, live, rva);
+                if !seen.iter().any(|s| s.rva == rva) {
+                    seen.push(TaskRow { priority: prio, label: label(rva), sub: false, rva, runs });
+                }
+                let want = if !runs { skip_f } else if live && rva == MAP_RVA { map_f } else { own };
+                if f != want {
+                    if want == own {
+                        wr::<usize>(t + 0x10, own);
+                        held.retain(|e| e.0 != t);
+                    } else {
+                        // (A task freed and made again meanwhile: its new function is the one to give back.)
+                        match held.iter_mut().find(|e| e.0 == t) {
+                            Some(e) => e.1 = own,
+                            None => held.push((t, own, 0)),
+                        }
+                        wr::<usize>(t + 0x10, want);
+                    }
+                }
             }
         }
-        if candidate && f != ours && !runs.contains(&f.wrapping_sub(base)) {
-            // (A task freed and made again meanwhile: its new function is the one to give back.)
-            match held.iter_mut().find(|e| e.0 == t) {
-                Some(e) => e.1 = f,
-                None => held.push((t, f, 0)),
-            }
-            wr::<usize>(t + 0x10, ours);
-        }
-        t = rd(t + 8);
+        t = next;
         n += 1;
     }
     // (t426) 120000's own lists: every task in them, unless the page lets that list run.
     for (list, label) in SUB_LISTS {
-        seen.push(TaskRow { priority: 120000, label, sub: true, rva: list, runs: runs.contains(&list) });
-        if runs.contains(&list) {
-            continue;
-        }
+        let runs = runs_now(&overrides, live, list);
+        seen.push(TaskRow { priority: 120000, label, sub: true, rva: list, runs });
         let mut t: usize = rd(base + list + 0x10);
         let mut n = 0;
         while t > 0x10000 && n < 1024 && super::crash::readable(t + 0x18) {
             let f: usize = rd(t + 0x10);
-            if rd::<u16>(t) != 0 && f != ours && f > 0x10000 {
-                match held.iter_mut().find(|e| e.0 == t) {
-                    Some(e) => e.1 = f,
-                    None => held.push((t, f, list)),
+            if rd::<u16>(t) != 0 && f > 0x10000 {
+                if runs {
+                    if f == skip_f {
+                        if let Some(own) = held.iter().find(|e| e.0 == t).map(|e| e.1) {
+                            wr::<usize>(t + 0x10, own);
+                        }
+                        held.retain(|e| e.0 != t);
+                    }
+                } else if f != skip_f {
+                    match held.iter_mut().find(|e| e.0 == t) {
+                        Some(e) => e.1 = f,
+                        None => held.push((t, f, list)),
+                    }
+                    wr::<usize>(t + 0x10, skip_f);
                 }
-                wr::<usize>(t + 0x10, ours);
             }
             t = rd(t + 8);
             n += 1;
@@ -368,15 +507,16 @@ unsafe fn ensure_picture(base: usize) {
 /// The held tasks get their functions back (those still in use and still ours).
 unsafe fn release_tasks() {
     let Ok(mut held) = HELD_TASKS.lock() else { return };
-    let ours = skip as *const () as usize;
+    let (skip_f, map_f) = (skip as *const () as usize, map_live as *const () as usize);
     for (t, f, _) in held.drain(..) {
-        if super::crash::readable(t + 0x18) && rd::<u16>(t) != 0 && rd::<usize>(t + 0x10) == ours {
+        let now = if super::crash::readable(t + 0x18) && rd::<u16>(t) != 0 { rd::<usize>(t + 0x10) } else { 0 };
+        if now == skip_f || now == map_f {
             wr::<usize>(t + 0x10, f);
         }
     }
 }
 
-static STATE: Mutex<State> = Mutex::new(State { held: false, was_down: false, down_at: None, pad: None, kh1_paused: false });
+static STATE: Mutex<State> = Mutex::new(State { held: false, was_down: false, down_at: None, pad: None, kh1_paused: false, live: false });
 
 fn start() -> Instant {
     *START.get_or_init(Instant::now)
@@ -512,6 +652,35 @@ pub fn set_hold_sound(on: bool) {
     }
 }
 
+/// The picture's side of a hold: KH1's pause picture (effects paused and hidden, the picture
+/// captured), or Live (KH1's system stop, the trails' steps taken back).
+unsafe fn hold_picture(base: usize, live: bool) {
+    if live {
+        system_stop(base, true);
+        tails(base, true);
+    } else {
+        pause_effects(base, true);
+        // The frame that just ran is the picture of the hold.
+        CAPTURE_DUE.store(true, Ordering::Relaxed);
+        PICTURE_ON.store(true, Ordering::Relaxed);
+    }
+}
+
+unsafe fn release_picture(base: usize, live: bool, kh1_paused: bool) {
+    if live {
+        system_stop(base, false);
+        tails(base, false);
+    } else {
+        // (Our picture task takes itself off the list the next frame.)
+        PICTURE_ON.store(false, Ordering::Relaxed);
+        CAPTURE_DUE.store(false, Ordering::Relaxed);
+        // (While KH1's pause is up it holds the effects itself, and gives them back as it closes.)
+        if !kh1_paused {
+            pause_effects(base, false);
+        }
+    }
+}
+
 /// Ends our hold: the next frame runs.
 unsafe fn release(base: usize, st: &mut State, kh1_paused: bool) {
     if !st.held {
@@ -519,13 +688,9 @@ unsafe fn release(base: usize, st: &mut State, kh1_paused: bool) {
     }
     st.held = false;
     release_tasks();
-    // (Our picture task takes itself off the list the next frame.)
-    PICTURE_ON.store(false, Ordering::Relaxed);
-    CAPTURE_DUE.store(false, Ordering::Relaxed);
-    // (While KH1's pause is up it holds the effects and the sound itself, and gives them back as
-    // it closes.)
+    release_picture(base, st.live, kh1_paused);
+    // (While KH1's pause is up it holds the sound itself, and gives it back as it closes.)
     if !kh1_paused {
-        pause_effects(base, false);
         pause_sound(base, false);
     } else {
         SOUND_PAUSED.store(false, Ordering::Relaxed);
@@ -585,20 +750,31 @@ pub unsafe fn frame_end(base: usize) {
             release(base, st, false);
         }
     } else {
+        let live = LIVE.load(Ordering::Relaxed);
+        if st.held && st.live != live {
+            // (The Held Picture row switched while held: the other way from this frame.)
+            release_picture(base, st.live, false);
+            hold_picture(base, live);
+            st.live = live;
+        }
         // (Every frame: tasks added meanwhile are held too.)
-        hold_tasks(base);
+        hold_tasks(base, live);
         if !st.held {
             st.held = true;
-            pause_effects(base, true);
+            st.live = live;
             HELD_SINCE_MS.store(wall_ms() + 1, Ordering::Relaxed);
-            // The frame that just ran is the picture of the hold.
-            CAPTURE_DUE.store(true, Ordering::Relaxed);
-            PICTURE_ON.store(true, Ordering::Relaxed);
+            hold_picture(base, live);
         }
-        ensure_picture(base);
+        if live {
+            system_stop(base, true);
+        } else {
+            ensure_picture(base);
+        }
         if after_kh1 {
             // (KH1's pause gave the effects and the sound back as it closed.)
-            pause_effects(base, true);
+            if !live {
+                pause_effects(base, true);
+            }
             SOUND_PAUSED.store(false, Ordering::Relaxed);
         }
         pause_sound(base, HOLD_SOUND.load(Ordering::Relaxed));

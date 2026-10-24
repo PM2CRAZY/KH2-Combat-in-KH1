@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 447 (testing branch: Frame Advance's Held Picture row: Live)
+- **Frame Advance's Held Picture row: Live.** The t426 split with effects stopped by KH1's system stop (`0x142867368` bit 0, `0x142432130`, Checked (decomp) and (exe)), KeShpTail3 / 3X draw steps taken back, and 120000's sky / fades restored. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 446 (testing branch: Frame Advance holds the sound as KH1's pause does)
 - **Frame Advance holds the sound as KH1's pause does.** `0x1400D2F80` (1 / 0) at hold start / end (pause states 3 and 4, Checked (exe)). Held Sound row.
 
