@@ -120,6 +120,19 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   motion and KH1's time in it; the release (trigger 21) is the clip's magic-cast event at KH1's
   time. KH2's turn to the lock (range 28: Blizzard 0..16) is `kh2slots::turn_to_lock`'s.
 - Still ours in step 1: the hits (`combat::Strikes::spell_strike`), Cure's heal, Reflect.
+- **The cast motion before KH1 plays it** (the tester, kh2-effects-in-kh1s-own-effect-system:
+  "kh2s magic doesn't get casted the first time you input said magic"; since t477). KH1 only
+  queues the cast's request in the command step; its animation step plays it from the next frame
+  (the trace: KH1's slot still the idle on the cast frame, our slot at a time below 0 the frame
+  after). KH2's spell scripts end a cast at once when the caster isn't in the cast motion on their
+  first run: `FIRE_3.mag`, `BLIZZARD_3.mag` and `THUNDER_3.mag` run with `kh2-magic` and Sora's
+  motion other than 56 on the first frame (0, or none) end on that frame with no release and no
+  attack; with 56 from the first frame they release and make their attacks (502; 248; 249 / 250)
+  (**Checked (files)**). KH2 sets the cast motion before the script first runs. A second cast in
+  the same combo worked because the cast motion was already playing (the tester's t515 log: every
+  combo's step 1 made no hit, steps 2 on hit 24..26 frames in). `formmagic::shots_step` now gives
+  the scripts Sora in the cast motion while the cast hasn't been seen playing (`casting`'s
+  `SEEN`), only in the scripts' world (`KhWorld`), not in KH1.
 
 ## 4b. KH2's finisher casts (done: step 2)
 

@@ -669,6 +669,20 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     if world.target.is_none() {
         world.target = auto_target(&world, out.facing);
     }
+    // (A cast in KH1's cast state: KH1 queues its motion and plays it from its next animation
+    // step, so for a frame or two KH1's slot is still the one before, or at a time below 0. KH2's
+    // spell scripts end a cast at once when the caster isn't in a cast motion on its first run
+    // (FIRE_3 / BLIZZARD_3 / THUNDER_3 run with the caster's motion other than 56 on their first
+    // frame: no release, no attack; Checked (files)); KH2 sets the cast motion before the script
+    // first runs. So until KH1 plays it, the scripts see Sora in the cast motion. The tester:
+    // "kh2s magic doesn't get casted the first time you input said magic"; a second cast in the
+    // combo worked, the motion already playing.)
+    let starting = rt.fresh.as_ref().map(|f| f.motion).or(rt.casting.filter(|c| c.1 != SEEN).map(|c| c.0));
+    if let (Some(m), Some(me)) = (starting, world.objs.first_mut()) {
+        if out.motion != m {
+            me.motion = m;
+        }
+    }
     // A spell cast this frame (trigger 20), its release (21) at the motion's magic-cast event.
     if let Some(f) = rt.fresh.take() {
         if let Some(file) = spell_index(rt, f.spell, f.level) {
