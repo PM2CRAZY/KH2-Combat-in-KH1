@@ -60,5 +60,12 @@
 > 3. After a hit, should the no-damage time be (a) KH1's 30 frames, or (b) KH2's own rule once I find it in the KH2 decomp, with KH1's timer kept only if they match?
 
 ^m1
+1. unsure make it a switch in the config and when I play test it more I can figure out what to do, still make it native of course. your judgement on how to do it 
+2. how sora receives knock back should also be a config
+3. if the rules are different make it part of the switch in the config for sora knockback, if not keep the same. 
 
+I tested guard break and it using kh2s collisions (what ever causes a recoil) and not kh1s is not working properly in the engine, we need a separate thread investigating how to make kh2s recoil system work properly, right now it doesn't behave the same so you can't parry enemy attacks from what I remember. 
 
+when it comes to drive forms its not yet native so its deprecated right now, don't worry about it til we start working on drive forms
+
+go ahead 
