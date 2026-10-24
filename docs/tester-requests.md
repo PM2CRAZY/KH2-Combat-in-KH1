@@ -258,3 +258,18 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 (Add new threads below this line.)
+
+
+---
+
+  
+
+## Title (the assistant fills this in if you leave it)
+
+  
+
+> [!note] Mr Bugs
+
+> what else currently are we missing for native integration into kh1?
+> 
+
