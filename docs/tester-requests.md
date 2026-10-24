@@ -42,6 +42,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [21. Assistant: t445 to t447. Thanks, that correction helped. I found why ef](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m21)
   - [22. Mr Bugs: the actual pause seems to hold the image in the frame buffer](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m22)
   - [23. Assistant: t461 to t463. Thanks, you were right about that one. I went ](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m23)
+  - [24. Assistant: t464 and t465. Found it. KH1 reads the pad every frame outsi](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m24)
 - [KH2 Camera fixes](../testers/kh2-camera-fixes/kh2-camera-fixes.md)
   - [1. Mr Bugs: I noticed when you run backwards the camera starts turning s](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m1)
   - [2. Assistant: t373](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m2)

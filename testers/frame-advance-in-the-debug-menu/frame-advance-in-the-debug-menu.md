@@ -27,6 +27,7 @@
 - [21. Assistant: t445 to t447. Thanks, that correction helped. I found why ef](#^m21)
 - [22. Mr Bugs: the actual pause seems to hold the image in the frame buffer](#^m22)
 - [23. Assistant: t461 to t463. Thanks, you were right about that one. I went ](#^m23)
+- [24. Assistant: t464 and t465. Found it. KH1 reads the pad every frame outsi](#^m24)
 
 ---
 
@@ -378,3 +379,22 @@ I did notice on your previous build that if the cam 1  + cam 2 bit was running  
 
 1.unsure about gummi ships, will get back to you later 
 2.keep it but make frame advance a submenu and throw it plus frame advance option in there
+
+> [!tip] Assistant
+> **t464 and t465.** Found it. KH1 reads the pad every frame outside the tasks we hold, so the stick stays live while the game is held. 100000 is the actual camera: it reads the stick and swings the camera round Sora where he's frozen. 110000 then builds the view from it, which is why you needed both. Since t463, 110000 always runs, but held frames have a frame time of 0, and the camera moves by that time, so running 100000 by itself wouldn't do anything any more.
+>
+> **t464:** Frame Advance is its own page in the debug menu now, with Frame Advance, Held Sound, Game Frames and Held Tasks on it.
+> **t465:** a new row on that page, Camera < Held / Free >. On Free, the camera runs on held frames with a normal frame's time, so you can move it with the right stick or mouse (KH1's camera or KH2's) while everything else stays still. Select (first person) is ignored while held, because going into first person clears the lock-on and fades Sora. Event cameras stay held.
+>
+> **Check:** the Steam decomp for the camera task and its modes, and the exe for the mode table. Not tested in game.
+>
+> Please check:
+> 1. Hold, set Camera to Free, and move the camera, normally and locked on. Does anything other than the camera move?
+> 2. Step a few frames after moving it. Does Sora run the way the camera now faces?
+>
+> Question:
+> 1. While held, should Select (a) stay blocked, or (b) work, with Sora's fade and the lock-on clear happening on your next step?
+> 2. I also found that KH2's camera times its gaps in real time, so after a hold longer than 5 seconds it probably snaps back behind Sora on the next step. (a) fix it to use the mod's frame-advance clock, or (b) leave it?
+
+^m24
+
