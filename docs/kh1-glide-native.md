@@ -208,3 +208,20 @@ State 0x15's pre-step (`0x1402B2880`) wrapped. For Sora at Glide KH2, each frame
   ours (`kh1rows::OURS`, "Glide hover", KH1's air swing as its template). That template holds at its end, so the
   pre-step puts the hover's time back to 0 at its end, as KH2 loops it (**Assumption**: KH2 loops 208).
 - **Water.** KH1's water check from the glide (`0x1402C12B0`) still runs at the end, as KH1's pre-step ends.
+
+### 8.4 The end
+
+- **Letting go.** State 0x15's button check (`0x1402B2BF0`, called by the player's control step) wrapped: for
+  Sora at Glide KH2, Square let go ends the glide or the hover at once (no 46-frame minimum), KH2's glide button
+  (the rewrite's binding, t327; KH2's controller ends it so, matched to the exe in t331). **Checked (code)**; where
+  KH2's exe tests the release isn't found in the glide action's own functions (an air action's shared slot):
+  **Assumption** that it's at once.
+- **Transition.** State 0x15's transition (`0x1402B2780`) wrapped: Neverland's flight first, exactly as KH1's
+  (world flag `0x20` with `0x1402B1DA0`, action flag 4 off, state 8); then on the ground, or under KH2's end height
+  (growth `+0x38`, `0x1404235B0`), the end; else gliding on. KH1's wall end (moved under 70% of the last step)
+  doesn't run: KH2's glide has none, he slides along the wall. **Checked (decomp)**
+- **Into the fall** (`glide::end`, KH2's `0x1403CBC30`): KH1's fall from rest `0x1402AF8F0 (actor, 0)` (state 2,
+  its arc fields from rest, as KH2's fall from rest), `+0x3C0` his velocity kept (no x0.7, no hop of 8), KH1's fall
+  request 6 with KH2's blend 16 (KH2 asks its fall motion 4), KH2's launch flag cleared for the rest of the air
+  time. Landing: on the ground KH1's fall state lands him the next frame with its own landing, as KH2's fall action
+  does. **Checked (decomp)** both games.

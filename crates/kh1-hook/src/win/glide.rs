@@ -40,6 +40,8 @@ const ENTER: usize = 0x08;
 const EXIT: usize = 0x10;
 const PRE_STEP: usize = 0x18;
 const STEP: usize = 0x20;
+const TRANSITION: usize = 0x28;
+const BUTTONS: usize = 0x30;
 const JUMP_PRESS: usize = 0x38;
 const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
 /// KH1's motion request that leaves a motion alone when its slot is already playing (Steam
@@ -73,6 +75,17 @@ const BANK_DOT: f32 = 0.98;
 const SET_FACING_STEAM: usize = 0x297E10;
 const WATER_STEAM: usize = 0x2C12B0;
 const SLOT_TIME: usize = 0x16C;
+/// KH1's fall from rest (Steam `0x1402AF8F0 (actor, rise)` with 0: `+0x3B0` / `+0x3B8` / `+0x3BC`
+/// / `+0x3D0` 0, `+0x3B4` his height, state 2, flag `0x10000` off) and Neverland's flight-room test
+/// (Steam `0x1402B1DA0 (actor)`, the glide transition's own). Checked (decomp). Steam only.
+const FALL_FROM_REST_STEAM: usize = 0x2AF8F0;
+const FLIGHT_ROOM_STEAM: usize = 0x2B1DA0;
+/// KH1's fall request (its ground jump's base 0, + 6), with KH2's blend into its fall motion 4
+/// (16.0, `0x1404235B0`).
+const FALL_REQUEST: u32 = 0x06;
+/// KH1's flight state and the action flag its glide transition clears going into it.
+const FLIGHT_STATE: u32 = 8;
+const ACTION_FLAG: u32 = 4;
 
 /// KH1's combat state's glide timer (`[+0x148] +0x100`) and `+0x1CC` bit 0 (enter clears it, exit
 /// sets it).
@@ -101,6 +114,8 @@ static ORIG_ENTER: AtomicUsize = AtomicUsize::new(0);
 static ORIG_EXIT: AtomicUsize = AtomicUsize::new(0);
 static ORIG_PRE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
+static ORIG_TRANSITION: AtomicUsize = AtomicUsize::new(0);
+static ORIG_BUTTONS: AtomicUsize = AtomicUsize::new(0);
 static ORIG_FALL_JUMP: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -141,11 +156,13 @@ pub unsafe fn install(base: usize) {
         return;
     }
     let table = base + TABLE_RVA;
-    let slots: [(usize, &AtomicUsize, usize); 5] = [
+    let slots: [(usize, &AtomicUsize, usize); 7] = [
         (table + STATE as usize * ENTRY + ENTER, &ORIG_ENTER, enter as *const () as usize),
         (table + STATE as usize * ENTRY + EXIT, &ORIG_EXIT, exit as *const () as usize),
         (table + STATE as usize * ENTRY + PRE_STEP, &ORIG_PRE, pre_step as *const () as usize),
         (table + STATE as usize * ENTRY + STEP, &ORIG_STEP, step as *const () as usize),
+        (table + STATE as usize * ENTRY + TRANSITION, &ORIG_TRANSITION, transition as *const () as usize),
+        (table + STATE as usize * ENTRY + BUTTONS, &ORIG_BUTTONS, buttons as *const () as usize),
         (table + FALL_STATE as usize * ENTRY + JUMP_PRESS, &ORIG_FALL_JUMP, fall_jump as *const () as usize),
     ];
     wrap(&slots);
@@ -419,4 +436,80 @@ unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
     let water: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + WATER_STEAM);
     water(actor, input);
     0
+}
+
+/// KH2's glide ends into the fall (`0x1403CBC30`, from the glide's end check `0x1404235B0` or on
+/// letting go): his velocity kept, the launch flag cleared, no hop and no speed cut (KH1's release
+/// `0x1402B2670` takes x0.7 and hops 8). On KH1: its fall from rest (`0x1402AF8F0` with 0, state 2;
+/// our exit runs), `+0x3C0` his velocity, KH1's fall request with KH2's blend 16 (KH2's fall
+/// motion 4). Nothing if he isn't in KH2's glide.
+pub unsafe fn end(actor: usize, why: &str) -> bool {
+    let Some(r) = RUN.lock().ok().and_then(|mut g| g.take()) else { return false };
+    if !ours(actor) || rd::<i32>(actor + 0x70) != STATE {
+        return false;
+    }
+    let base = takeover::game_base();
+    let fall: unsafe extern "system" fn(usize, f32) -> u64 = std::mem::transmute(base + FALL_FROM_REST_STEAM);
+    fall(actor, 0.0);
+    let speed = r.vel[0].hypot(r.vel[1]);
+    wr(actor + 0x3C0, [r.vel[0], 0.0, r.vel[1], speed]);
+    let request: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_RVA);
+    request(actor, FALL_REQUEST, BLEND);
+    takeover::launch_used();
+    note(format!("{why}: KH2's fall at speed {speed:.1} ({:.0} above the floor; KH1 state now {})", rd::<f32>(actor + 0x3D4), rd::<i32>(actor + 0x70)));
+    true
+}
+
+type ButtonsFn = unsafe extern "system" fn(usize, usize, usize) -> usize;
+
+/// State 0x15's button check (`(actor, buttons, input)`, the player's control step only): KH1's
+/// (`0x1402B2BF0`: its 46-frame minimum, then its release when the button lets go) for Sora at
+/// Glide KH1; for Sora at Glide KH2 KH2's: Square let go ends the glide (and the hover) into the
+/// fall at once, with no minimum time (the KH2 rewrite's glide button, t327; KH2's controller ends
+/// it so, `character-core`'s glide step, matched to the exe in t331).
+unsafe extern "system" fn buttons(actor: usize, held: usize, input: usize) -> usize {
+    if !running(actor) {
+        let f: ButtonsFn = std::mem::transmute(ORIG_BUTTONS.load(Ordering::Acquire));
+        return f(actor, held, input);
+    }
+    if !takeover::pad_square() {
+        end(actor, "Square let go");
+    }
+    0
+}
+
+type TransitionFn = unsafe extern "system" fn(usize, i32) -> u32;
+
+/// State 0x15's transition (`(actor, airborne) -> state`, after KH1's mover): KH1's
+/// (`0x1402B2780`) for Donald and Goofy; for Sora at Glide KH2:
+/// - Neverland's flight first, as KH1's (world flag `0x20` and its flight-room test: the action
+///   flag 4 off, state 8);
+/// - on the ground, or under KH2's end height over the floor (growth `+0x38`), KH2's end
+///   (`0x1404235B0`) into the fall (on the ground KH1's fall state lands him the next frame, its
+///   landing request, as KH2's fall action lands him);
+/// - else still gliding. KH1's own end on a wall (the frame moved less than 70% of the last one)
+///   isn't run: KH2's glide has no wall rule, he slides along it (§7).
+unsafe extern "system" fn transition(actor: usize, airborne: i32) -> u32 {
+    let g = if running(actor) { takeover::kh2_glide_growth() } else { None };
+    let Some((_, g)) = g else {
+        let f: TransitionFn = std::mem::transmute(ORIG_TRANSITION.load(Ordering::Acquire));
+        return f(actor, airborne);
+    };
+    let base = takeover::game_base();
+    let flight_room: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(base + FLIGHT_ROOM_STEAM);
+    if rd::<u32>(base + WORLD_FLAGS_RVA) & NEVERLAND != 0 && flight_room(actor) as u32 != 0 {
+        wr(actor, rd::<u32>(actor) & !ACTION_FLAG);
+        note("Neverland: KH1's flight from the glide".to_string());
+        return FLIGHT_STATE;
+    }
+    let above = rd::<f32>(actor + 0x3D4);
+    if airborne == 0 {
+        end(actor, "on the ground");
+        return FALL_STATE as u32;
+    }
+    if above.is_finite() && above < g.glide_end_height {
+        end(actor, &format!("under the end height {:.0}", g.glide_end_height));
+        return FALL_STATE as u32;
+    }
+    STATE as u32
 }
