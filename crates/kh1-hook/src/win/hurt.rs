@@ -189,8 +189,9 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         // KH2's invulnerability in the KH2 move KH1 plays now (our slot, range id 27,
         // `kh2slots::invulnerable`: Explosion's frames 32..64), as KH2's own hit pass finds no
         // hurt shape of his there (`Fate::Evaded` above): every attack with no effect, no spark.
-        // Before the guard, as KH2's test order has it.
-        if super::shared::active() && super::kh2slots::invulnerable(actor) {
+        // Before the guard, as KH2's test order has it. Also KH2's Quick Run on its KH1 state
+        // (`quickrun::invulnerable`: its `fmab` frames from its start, 0 / 8 / 12 / 16 by level).
+        if super::shared::active() && (super::kh2slots::invulnerable(actor) || super::quickrun::invulnerable(actor)) {
             for &r in &ready {
                 if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
                     continue;

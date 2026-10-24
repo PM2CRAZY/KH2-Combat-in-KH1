@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 504 (testing branch: Quick Run: invulnerable frames 1:1)
+- **Quick Run's invulnerable frames 1:1.** The tester (question 1: "make behave exactly 1:1 with kh2 so if its (a) then do it"). Stage 104's 6-frame minimum (`QUICK_RUN_STAR_MIN`) is gone: KH2's fmab 0 / 8 / 12 / 16 by level, and `hurt` stops hits during the native run's frames (`quickrun::invulnerable`). Checked (files); Assumption: KH2's counter `+0xD70` counts 60 Hz frames.
+
 ### 2026-10-24: Stage 503 (testing branch: Quick Run: off a ledge)
 - **Quick Run off a ledge.** Same ask. KH2's slot 4 (`0x140409B00` → `0x1403CBC30(actor, 0)`): a fall from rest keeping the velocity, the Aerial Dodge left (AIRSLIDE isn't airborne, its `+0xC` bit 0 clear in the exe's action table `0x140750D30`). Ours: KH1's fall from rest as `0x1402AF8F0` writes it, state 2 set by our transition (so the physics step's 8-unit walk-off cap doesn't run), the slide's velocity in `+0x3C0`, fall request 6 blend 8. Checked (decomp / exe); Assumption: the fall motion (KH2's fall action asks none).
 

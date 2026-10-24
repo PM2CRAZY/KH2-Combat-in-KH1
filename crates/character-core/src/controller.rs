@@ -327,9 +327,6 @@ enum Mode {
 const WALL_HOP: f32 = 50.0;
 /// Frames into a launch before Aerial Recovery / Retaliating Slash can be used (exe: 16).
 const RECOVERY_AFTER: u32 = 16;
-/// Quick Run's fewest invulnerable frames (KH2 gives LV1 none).
-pub const QUICK_RUN_STAR_MIN: f32 = 6.0;
-
 /// Aerial Dodge's invulnerable frames before its level's (2 more per level).
 pub const AIR_DODGE_STAR: f32 = 8.0;
 
@@ -2288,9 +2285,9 @@ impl Character {
             }
             ActionKind::QuickRun => {
                 let g = self.growth(self.abilities.quick_run).cloned().unwrap_or_default();
-                // KH2's (fmab: 0 / 8 / 12 / 16 frames by level); LV1 gets 6 too (the user: Quick
-                // Run should always have some).
-                if (f as f32) < g.quick_run_star_time.max(QUICK_RUN_STAR_MIN) {
+                // KH2's (fmab: 0 / 8 / 12 / 16 frames by level; LV1 none, 1:1: the tester,
+                // quick-run-native, question 1 (a); stage 104's 6-frame minimum is gone).
+                if (f as f32) < g.quick_run_star_time {
                     fo.invulnerable = true;
                 }
                 fo.no_gravity = true;
