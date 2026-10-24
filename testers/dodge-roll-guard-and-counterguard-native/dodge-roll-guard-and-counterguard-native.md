@@ -44,5 +44,8 @@
 > 3. Once the roll is native, the Dodge Roll style row at KH1: (a) keep it (KH1's own roll animation and numbers); (b) take it out.
 
 ^m1
+1. unsure go with whats most native and 1:1
+2. (a)
+3. if you can make dodge roll its own slot and just have it get behaviours ported from kh2 so its 1:1 then we just switch which dodge roll out with the config use kh1s as a base so its native. Your call on what would be the best but it seems as a user to me reading it that this is the cleanest way, but tell me what you think. 
 
 
