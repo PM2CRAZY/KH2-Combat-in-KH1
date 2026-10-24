@@ -360,6 +360,15 @@ While KH1's own pause is up it makes its own calls (its 0 as it closes resumes e
 is made again after it. The debug menu's Held Sound row (Paused / Plays, this session) turns it off.
 **Assumption**: the music keeps its place (KH1's pause doesn't stop it).
 
+### The debug menu's Frame Advance page (after t463)
+
+The tester ("make frame advance a submenu and throw it plus frame advance option in there"): the
+main page has one row, Frame Advance `>`, opening a page of its own (`debugmenu::Page::FrameAdvance`)
+with the Frame Advance row (On / Off), Held Sound (Paused / Plays), Game Frames (the Trace Recorder's
+row, also still on that page; Frame Advance turns it on) and the Held Tasks page (kept as a debug
+tool, the tester's answer 2). Back (or the cancel button) goes up to the main page; Held Tasks goes
+back to the Frame Advance page.
+
 ## Actors
 
 Each actor is a task of a second list, `0x142D5AB00` (0x28-byte tasks, made by `0x140297980` with

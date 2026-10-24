@@ -23,10 +23,13 @@
 //!   `0x1402F6700` to Circle `0x2000` or Cross `0x4000`; the hints name them). Every button is kept from the game after it closes until all are
 //!   let go (KH1 would take a held button as a press). While L1 + R1 are held with the menu on,
 //!   KH1 doesn't see Triangle.
-//! - **Frame Advance** (t371, main page, Steam only): holds the game still; R2 or the period key
+//! - **Frame Advance** (t371, Steam only): holds the game still; R2 or the period key
 //!   plays one frame, held for a second plays at full speed (`frameadv`). Turning it on turns the
 //!   Trace Recorder's Game Frames row on (the seconds count game frames, `trace::game_frames`).
-//!   Not kept in the ini: it starts off each launch.
+//!   Not kept in the ini: it starts off each launch. (The tester, after t463: "make frame advance
+//!   a submenu and throw it plus frame advance option in there".) Its rows are on their own page,
+//!   Frame Advance (main page): the Frame Advance row, Held Sound, Game Frames (the same row as
+//!   the Trace Recorder's) and the Held Tasks page.
 //! - **Pages**: Trace Recorder (the trace's mode, seconds, the sound log and its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
@@ -142,6 +145,8 @@ enum Page {
     Stats,
     Weapons,
     Abilities,
+    /// The Frame Advance rows (after t463: the tester's submenu).
+    FrameAdvance,
     /// (t399) The tasks Frame Advance holds, each one switchable (`frameadv::tasks`).
     HeldTasks,
 }
@@ -150,11 +155,11 @@ impl Page {
     fn parent(self) -> Option<Page> {
         match self {
             Page::Main => None,
-            Page::Trace | Page::Stats => Some(Page::Main),
+            Page::Trace | Page::Stats | Page::FrameAdvance => Some(Page::Main),
             Page::Categories => Some(Page::Trace),
             Page::Group(_) => Some(Page::Categories),
             Page::Weapons | Page::Abilities => Some(Page::Stats),
-            Page::HeldTasks => Some(Page::Main),
+            Page::HeldTasks => Some(Page::FrameAdvance),
         }
     }
 
@@ -169,6 +174,7 @@ impl Page {
             Page::Abilities => 5,
             Page::Group(i) => 6 + i.min(trace::GROUPS.len() - 1),
             Page::HeldTasks => 6 + trace::GROUPS.len(),
+            Page::FrameAdvance => 7 + trace::GROUPS.len(),
         }
     }
 
@@ -181,6 +187,7 @@ impl Page {
             Page::Stats => "DEBUG MENU > STATS".into(),
             Page::Weapons => "STATS > WEAPONS".into(),
             Page::Abilities => "STATS > ABILITIES".into(),
+            Page::FrameAdvance => "DEBUG MENU > FRAME ADVANCE".into(),
             Page::HeldTasks => "FRAME ADVANCE > HELD TASKS".into(),
         }
     }
@@ -195,6 +202,7 @@ impl Page {
             Page::Stats => format!("Left/Right: change   {ok}: lock   {no}: back"),
             Page::Weapons => format!("Left/Right: count   {ok}: equip   {no}: back"),
             Page::Abilities => format!("Left/Right: copies   {ok}: add/remove   {no}: back"),
+            Page::FrameAdvance => format!("Left/Right: change   {ok}: select   {no}: back"),
             Page::HeldTasks => format!("Left/Right/{ok}: held / runs   {no}: back"),
         }
     }
@@ -222,7 +230,7 @@ enum Action {
 
 struct Menu {
     page: Page,
-    cursor: [usize; 7 + trace::GROUPS.len()],
+    cursor: [usize; 8 + trace::GROUPS.len()],
     /// The pad last frame, the directions held and since when, the last repeat.
     last: u16,
     held: u16,
@@ -230,7 +238,7 @@ struct Menu {
     repeat_at: Option<Instant>,
 }
 
-static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 7 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
+static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 8 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
 
 /// One of Sora's stats: its name, its place in a stats block (`None`: only in the save), its byte
 /// in his save record, whether that byte is KH1's base number (equipment added on top), its
@@ -421,12 +429,19 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
         Page::Main => vec![
             ("Trace Recorder  >".into(), Action::Enter(Page::Trace)),
             ("Stats  >".into(), Action::Enter(Page::Stats)),
+            ("Frame Advance  >".into(), Action::Enter(Page::FrameAdvance)),
+            ("Exit".into(), Action::Exit),
+        ],
+        // (After t463) Frame Advance's own rows.
+        Page::FrameAdvance => vec![
             // (t371) `frameadv`: Steam only.
             (format!("{:<16}< {} >", "Frame Advance", if super::frameadv::supported() { on_off(super::frameadv::on()) } else { "Steam only" }), Action::FrameAdvance),
             // (KH1's pause's sound call while held, or not.)
             (format!("{:<16}< {} >", "Held Sound", if super::frameadv::hold_sound() { "Paused" } else { "Plays" }), Action::HeldSound),
+            // (The Trace Recorder's row: Frame Advance turns it on.)
+            (format!("{:<16}< {} >", "Game Frames", on_off(trace::game_frames())), Action::GameFrames),
             ("Held Tasks  >".into(), Action::Enter(Page::HeldTasks)),
-            ("Exit".into(), Action::Exit),
+            ("Back".into(), Action::Back),
         ],
         Page::HeldTasks => {
             let mut v: Vec<(String, Action)> = super::frameadv::tasks()

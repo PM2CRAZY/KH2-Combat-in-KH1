@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 464 (testing branch: Frame Advance: its rows on a debug menu page of their own)
+- **Frame Advance: its rows on a debug menu page of their own.** The tester ("make frame advance a submenu and throw it plus frame advance option in there"). Main page: Frame Advance `>`; its page: Frame Advance, Held Sound, Game Frames (also on the Trace Recorder's page), Held Tasks. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 463 (testing branch: Frame Advance: every update held, every draw run)
 - **Frame Advance: every update held, every draw run.** The tester ("focus on getting the live version working"). Runs while held: 10499, 110000, 129999, 135000 (Checked (decomp)); held: 163001, 190000 `0x1EB750`; frame scale `0x14233FBDC` and half `0x14233FBE0` 0 on held frames; 110000's zoom, 164004's pulses, the HUD data `0x1427F13D0`..`0x142866D18` and model colours put back each held frame. Notes: `docs/kh1-frame-advance.md`.
 
