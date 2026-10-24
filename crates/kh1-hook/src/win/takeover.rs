@@ -3013,6 +3013,22 @@ unsafe fn takeover(actor: usize) -> bool {
         } else {
             Input { jump: Button { pressed: false, held: input.jump.held }, attack: Button::default(), action: Button { pressed: false, held: input.action.held }, ..input }
         };
+        // KH2's glide's borrow (Glide at KH2) and the jump pressed for its Aerial Dodge: the borrow
+        // ends here and the dodge is KH1's air state's own (the tester, aerial-dodge-native m1
+        // question 2: "(b) full native"; `combomods::aerial_dodge`, after the give back below).
+        if step == 0 && GLIDE_BORROW.load(Ordering::Relaxed) && super::shared::on() && input.jump.pressed && d.character.airborne() && d.character.air_dodge_available() && d.last_out.is_some() && super::combomods::native_dodge_built() {
+            let growth = d.character.growth_level(d.character.abilities.aerial_dodge).map(|g| (g.air_dodge_height, g.air_dodge_speed));
+            if let Some(g) = growth.filter(|g| g.0 > 0.0 && g.0.is_finite() && g.1.is_finite()) {
+                DODGE_OUT_OF_GLIDE.store(true, Ordering::Relaxed);
+                *DODGE_GROWTH.lock().unwrap() = Some(g);
+                back = Some(super::shared::Back::Air);
+                last = d.last_out.clone();
+                // (The pose settles where he is: no step ran.)
+                let q = rd::<[f32; 3]>(actor + 0x10);
+                anim_pos = [q[0], -q[1], q[2]];
+                break;
+            }
+        }
         // Where he is, KH2's way up (KH1's world is y-down).
         let p = rd::<[f32; 3]>(actor + 0x10);
         let pos = [p[0], -p[1], p[2]];
@@ -3475,9 +3491,22 @@ unsafe fn takeover(actor: usize) -> bool {
     if let Some(back) = back {
         shared_give_back(base, actor, d, back, &out);
         // (This frame was KH2's step; KH1's states from the next.)
+        // Out of KH2's glide's borrow for the Aerial Dodge: the dodge on KH1's air state now, the
+        // borrow given back into it (KH1's fall state) above. Else (not built) KH2's controller
+        // takes him for it again next frame, as the borrow it was.
+        if DODGE_OUT_OF_GLIDE.swap(false, Ordering::Relaxed) {
+            let g = DODGE_GROWTH.lock().unwrap().take();
+            let done = g.is_some_and(|g| super::combomods::aerial_dodge_with(actor, g));
+            log(&format!("KH2's glide's borrow ended by the jump in the air: {}", if done { "its Aerial Dodge native on KH1's air state" } else { "the native Aerial Dodge didn't start (KH1's state not its air state?): this press is lost" }));
+        }
     }
     true
 }
+
+/// The jump in KH2's glide's borrow ended it for a native Aerial Dodge (`shared_frame`), with the
+/// dodge's growth (height, speed) read off KH2's controller while it was held.
+static DODGE_OUT_OF_GLIDE: AtomicBool = AtomicBool::new(false);
+static DODGE_GROWTH: Mutex<Option<(f32, f32)>> = Mutex::new(None);
 
 /// KH1's footstep sound (`0x140293C70 (actor, kind)`: the floor's sound from `footstep.bin`
 /// by world and material), played from his motion's frames. Under KH2, KH1 keeps him in its

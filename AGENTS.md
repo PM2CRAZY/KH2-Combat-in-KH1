@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 496 (testing branch: Aerial Dodge out of KH2's glide, native)
+- **The Aerial Dodge out of KH2's glide goes native.** The tester (aerial-dodge-native m1, question 2: "(b) full native, glide will get converted"). In KH2's glide's borrow, a jump press with the dodge left ends the borrow before KH2's step (`shared_give_back` into KH1's fall state, the glide's launch kept) and starts `combomods::aerial_dodge_with` on KH1's air state (numbers from KH2's controller while held). Only with our dodge request built (`native_dodge_built`), else the controller's dodge as before. KH2's `0x1403CB9F0` in the air actions' tables Checked (decomp); which is the glide's: Assumption. Notes `docs/kh1-aerial-dodge-native.md` §6.
+
 ### 2026-10-24: Stage 495 (testing branch: Aerial Dodge: the early release)
 - **The Aerial Dodge's early release.** The tester (aerial-dodge-native m1, plan item 4). KH2's dodge is holdable: bit `0x10000` → the shared enter's held jump `0x20000` (`0x1403CBD30`), release marked by `0x1403D6FC0`, cut by `0x1403CB680` (fall swap `0x1403CB610`, then the release hop), Checked (decomp). The native dodge's hop is held (`shared::physics::kh2_hop_held`), `air_step`'s existing early release cuts it at physics KH2 and asks KH1's fall at once (`combomods::dodge_fall`, shared with the apex). Notes `docs/kh1-aerial-dodge-native.md` §6.
 

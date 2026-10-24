@@ -872,6 +872,20 @@ const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
 /// him. False (the borrow then) out of KH1's jump / air state, in a Drive Form, or with our
 /// request not built.
 pub unsafe fn aerial_dodge(actor: usize) -> bool {
+    let Some(g) = takeover::kh2_air_dodge_growth() else { return false };
+    aerial_dodge_with(actor, g)
+}
+
+/// Our Aerial Dodge request is built (`kh1rows`, its slot `kh2slots`) and base Sora can take it
+/// (not in a Drive Form): the native dodge is there (`takeover`'s glide borrow ends for it).
+pub fn native_dodge_built() -> bool {
+    use character_core::motion::AERIAL_DODGE;
+    !super::form::in_form() && super::kh1rows::installed() && super::kh1rows::by_motion(AERIAL_DODGE).is_some_and(|n| super::kh2slots::has(super::kh1rows::request(n) as usize, AERIAL_DODGE))
+}
+
+/// `aerial_dodge` with the level's (height, speed) given (`takeover`, out of KH2's glide's
+/// borrow, where KH2's controller is held).
+pub unsafe fn aerial_dodge_with(actor: usize, (height, speed): (f32, f32)) -> bool {
     use character_core::motion::AERIAL_DODGE;
     if actor < 0x10000 || super::form::in_form() {
         return false;
@@ -882,7 +896,6 @@ pub unsafe fn aerial_dodge(actor: usize) -> bool {
     if !super::kh1rows::installed() || !super::kh2slots::has(request as usize, AERIAL_DODGE) || !matches!(state, 1 | 2) {
         return false;
     }
-    let Some((height, speed)) = takeover::kh2_air_dodge_growth() else { return false };
     let base = takeover::game_base();
     if state != 2 {
         let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);

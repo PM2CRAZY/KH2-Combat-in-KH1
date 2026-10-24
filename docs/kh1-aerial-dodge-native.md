@@ -185,3 +185,11 @@ The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one te
   (`shared::physics::kh2_hop_held`, the arc `holdable`), so `air_step`'s early release (the one
   KH2's jump on KH1's state already uses) cuts it, and asks KH1's fall at once
   (`combomods::dodge_fall`). Physics KH1: no release (KH1's numbers, as before).
+- **t496, the dodge out of KH2's glide.** The tester's answer 2 (b). In KH2's glide's borrow (Glide
+  at KH2, still KH2's controller's), the jump pressed with the dodge still there: before KH2's
+  step the borrow is given back into KH1's fall state (`shared_give_back`, `Back::Air`, KH2's
+  glide's launch kept), and the dodge starts natively on it (`combomods::aerial_dodge_with`, the
+  level's numbers read off KH2's controller while it's held). Only when our dodge request is built
+  (`combomods::native_dodge_built`); else the borrow's controller dodges as before. KH2: the jump
+  handler `0x1403CB9F0` is in the glide's action table too (one of its 17), **Checked (decomp)**
+  for the table refs; which entry is the glide's is an **Assumption**.
