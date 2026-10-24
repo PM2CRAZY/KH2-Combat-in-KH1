@@ -142,9 +142,12 @@ fn form_anchor(code: u16) -> Option<Anchor> {
 }
 
 /// The spell packages' anchors: Sora's bones, his object root and body centre, the Keyblade's
-/// points (`anchor`).
+/// points (`anchor`), and the second Keyblade's (`form_anchor`): KH2 reads 0x4004 / 0x4006 / 0x4008
+/// from the owner's second weapon (`0x1403B50F0` -> `0x1403B5450 (object, 1)` -> weapon slot `+0xD68`,
+/// Checked (decomp)) for every package, so a spell cast with two Keyblades (Final Form) has them
+/// there; with one Keyblade KH1 has no second one to bind to and they don't play.
 fn spell_anchor(code: u16) -> Option<Anchor> {
-    anchor(code)
+    form_anchor(code)
 }
 
 /// The Keyblade's package names its own (weapon skeleton) bones; KH2's call of its vanish flash

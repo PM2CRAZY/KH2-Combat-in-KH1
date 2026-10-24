@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 438 (testing branch: KH2 effects: the spells' second-weapon points)
+- **KH2 effects: the spells' second-weapon points.** t430 log (Fire 3: 9, 12; Blizzard 3: 7). KH2 0x4004/6/8 = owner weapon slot 1 for any package (`0x1403B5450` → `+0xD68`, Checked (decomp)); `spell_anchor` = `form_anchor`. Assumption: started only with two weapons. Notes §18.10.
+
 ### 2026-10-23: Stage 437 (testing branch: KH2 effects: position-only on KH2's object root)
 - **KH2 effects: position-only on KH2's object root.** t430 log (Fire 3: 2, 6, 7, 10). KH1 0x8000 point at t 0 = actor `+0x10` (`0x14029EB20` last case, Checked (exe)); `posed` offset through the object frame. Notes §18.5.
 

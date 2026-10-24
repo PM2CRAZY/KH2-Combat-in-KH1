@@ -1645,6 +1645,14 @@ the spell files aren't staged here.
   programs are only known at load. What KH1 doesn't have stays with `kh2fx` (logged per element):
   KH2-only programs not ported, and the programs §12.2 lists that aren't compared yet
   (KeShpTail3X and AngleLoop now are, §18.9). KH2's body centre 0x4001: §18.15.
+- The second weapon's points 0x4004 / 0x4006 / 0x4008 in a spell package (Fire 3's elements 9 and
+  12, Blizzard 3's 7 in the t430 log): KH2 reads them from the owner's second weapon for every
+  package (`0x1403B50F0` → `0x1403B5450 (object, 1)`: with the object's weapon flag (`+0x6C8`
+  bit 2) the weapon object in slot 1, `+0xD68`, whose first kind-15 collision shape names its
+  bone, `0x1403B5D40`; **Checked (decomp)**). So they are the second Keyblade's (§18.13), as in
+  the forms' packages: Final Form's two Keyblades. With one Keyblade (base Sora, Wisdom) KH1 has
+  none to bind them to and they don't play (**Assumption**: KH2's scripts start them only with two
+  weapons; with slot 1 empty KH2's read would fail).
 
 ### 18.11 What still goes through the old player (`kh2fx`)
 
