@@ -241,3 +241,48 @@ pub unsafe fn push_frame(actor: usize) {
     wr(actor + PUSH_FLAG_FIELD, rd::<u32>(actor + PUSH_FLAG_FIELD) | PUSH_FLAG);
     *g = Some((v * KH2_DECAY.powf(dt), v));
 }
+
+/// KH1's middle kind of hit (kind 4: 20..29% of his max HP, btltbl `+0x10` / `+0x11`, mapped from
+/// kind 1 by `0x1402BF290`, Checked (decomp)) as a KH2 flinch (the Config menu's Medium Hits row,
+/// ini `medium_hits = blow | flinch`; the tester: "how sora receives knock back should also be a
+/// config"): only kind 5 (30% and up) knocks him away. Blow (default): KH1's kind 4 as it is, a
+/// knock-back (KH1's knock-down on the ground until KH2's blow is in, plan step 3; KH2's controller's
+/// blow in a borrow). 0 not read yet, 1 blow, 2 flinch.
+static MEDIUM: AtomicU8 = AtomicU8::new(0);
+
+pub fn medium_flinch() -> bool {
+    match MEDIUM.load(Ordering::Relaxed) {
+        0 => {
+            let f = super::settings::get().medium_hits_flinch;
+            MEDIUM.store(1 + f as u8, Ordering::Relaxed);
+            f
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config menu's row: live, kept in the ini.
+pub fn set_medium_flinch(f: bool) {
+    MEDIUM.store(1 + f as u8, Ordering::Relaxed);
+    super::settings::save("medium_hits", if f { "flinch" } else { "blow" });
+    log(&format!("Config menu: Medium Hits {}", if f { "Flinch" } else { "Blow" }));
+}
+
+/// Before KH1's hit pass on Sora on KH1's states (`hurt`), Hit Reactions KH2 and Medium Hits
+/// Flinch: each ready record KH1 would map to kind 4 is given kind 3, which `0x1402BF290` passes
+/// through as it is (only kind 1 is mapped by the damage), so KH1's pass runs its flinch for it
+/// (and its reaction order: a kind 5 in the same pass still wins). `kind_of` is KH1's mapping.
+pub unsafe fn medium_hits(actor: usize, ready: &[usize], kind_of: unsafe extern "system" fn(usize, usize) -> u32) {
+    if !on() || !medium_flinch() {
+        return;
+    }
+    for &r in ready {
+        if rd::<u8>(r) & 0x20 != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
+            continue;
+        }
+        if kind_of(actor, r) == 4 {
+            wr(r + 0xC, (rd::<u32>(r + 0xC) & !0x1F) | 3);
+            note(|| format!("Medium Hits Flinch: a kind 4 hit ({} damage) taken as KH1's flinch (kind 3)", rd::<i32>(r + 8)));
+        }
+    }
+}

@@ -366,3 +366,41 @@ the file (Checked (files)).
 
 **Not covered:** KH1's flight and swimming flinches (`0x14029CFD0`, `0x14029D110`, `0x14029D340`)
 still use KH1's push numbers; the hook only acts on the ground and air flinch requests.
+
+## 12. Medium Hits (question 2) (done)
+
+Config > Combat > **Medium Hits** (Blow / Flinch; ini `medium_hits`, default `blow`).
+KH1's middle kind (4: a hit of 20..29% of his max HP; btltbl `+0x10` = 20, `+0x11` = 30) is
+mapped from kind 1 by `0x1402BF290` inside the pass. Any other kind passes through unchanged
+(Checked (decomp)).
+
+- **On KH1's states with Hit Reactions KH2, at Flinch:** before KH1's pass, each ready record KH1
+  would map to 4 gets kind 3 (`hitreact::medium_hits`). KH1's pass then runs its flinch for it:
+  KH2's flinch motion (step 1), KH2's push (step 2), KH1's no-damage time, the light rumble and
+  voice. A kind 5 in the same pass still wins (KH1's strongest-hit rule). Aerial Recovery's note
+  of a KH1 knock-back (`combomods::kh1_blown`) doesn't see those hits.
+- **In KH2's borrowed moves** (base Sora only, not Drive Forms): KH2's controller plays a flinch for
+  4 instead of a blow, with KH1's flinch rumble and voice.
+- **At Blow:** as before. On KH1's states that is KH1's own knock-down (`0x4C` / `0x4D`) until
+  KH2's blow is in (step 3); in a borrow, KH2's controller's blow.
+- At Hit Reactions KH1 the row does nothing on KH1's states.
+
+## 13. Step 3 groundwork: KH1's movement state table (not built yet)
+
+**Checked (decomp)**, KH1 Steam. `0x1402B1B80 (id, flags, a, b, c, d, e, f, g)` writes state `id`'s
+0x40-byte entry at `0x142DB3840 + id × 0x40`: `+0` the flags (u32), `+8` a, `+0x10` b, `+0x18` c,
+`+0x20` d, `+0x28` e, `+0x30` f, `+0x38` g. `shared::physics` already hooks `+0x18` (the per-state
+input / pre-step) and `+0x20` (the movement step) of states 0..2. Registrations found (id: flags):
+0: 0xFC, 1: 0x34, 2: 0x3D, 3: 5, 4: 2, 5: 2, 7: 1, 8 (flight): 0x76, 9..0xB: 0x101, 0xC: 0,
+0xD / 0xE: 1, 0xF: 1, 0x11 (swimming): 1, 0x12: 0, 0x15 (glide): 5, 0x18: 0x7E, 0x19: 0xE,
+0x1A: 5, 0x1B: 0, 0x1C: 4, 0x1D: 0x1E, 0x1E: 0x18, 0x1F: 0x19, 0x20: 4, 0x21: 6, 0x22: 1, 0x26: 4,
+0x28: 0x100, 0x32: 2. Ids 6, 0x10, 0x13, 0x14, 0x16, 0x17 and 0x23..0x25 had no registration in the
+callers read. **Assumption:** that they are free (other callers may register them), and what each
+flag bit means.
+
+KH1's hit pass (§2) runs the "any other state" reactions for a state it has no row for, so a new
+blow state takes KH1's air reactions. Step 3 would register KH2's blow there (KH2's arc: up 24,
+40 sideways, brakes 0.8 down to 0.1 of the start, gravity 20/49, fall cap 16;
+`character_core::reaction::Blow`), moved through KH1's mover, with motion 16 / 18 and 17 / 19 on
+landing, entered from KH1's knock-back reactions (`0x14029CEC0` on the ground, `0x14029CC40` in the
+air) for Sora.

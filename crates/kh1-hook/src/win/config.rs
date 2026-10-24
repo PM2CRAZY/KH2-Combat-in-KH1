@@ -170,6 +170,8 @@ enum Row {
     Gummi,
     /// The debug menu (Off | On, `debugmenu`).
     Debug,
+    /// Medium Hits (Blow | Flinch, `hitreact::medium_flinch`).
+    MediumHits,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -251,12 +253,13 @@ const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
 ];
-const COMBAT: [Item; 6] = [
+const COMBAT: [Item; 7] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
     Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
     Item::Pick([0x7F00_0142, 0x7F00_0002, 0x7F00_0144, 0x7F00_0003, 0x7F00_0143], Pick::KnockNumbers),
+    Item::Set([0x7F00_0145, 0x7F00_0147, 0x7F00_0148, 0x7F00_0146], Row::MediumHits),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
 ];
 const MAGIC: [Item; 3] = [
@@ -282,7 +285,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 55] = [
+const STRINGS: [(u32, &str); 59] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -316,6 +319,10 @@ const STRINGS: [(u32, &str); 55] = [
     (0x7F00_0142, "Knock-back Numbers"),
     (0x7F00_0143, "How far KH2's hit reactions push Sora: KH1's numbers,\nKH2's scaled by the damage, or KH2's own."),
     (0x7F00_0144, "Scaled"),
+    (0x7F00_0145, "Medium Hits"),
+    (0x7F00_0146, "With KH2's hit reactions, a hit of 20-29% of Sora's HP\nknocks him away (Blow) or only flinches him."),
+    (0x7F00_0147, "Blow"),
+    (0x7F00_0148, "Flinch"),
     (0x7F00_011F, "Cure"),
     (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
     (0x7F00_0109, "Jump"),
@@ -350,6 +357,7 @@ fn value(what: Row) -> bool {
         Row::Style(k) => styles::setting(k),
         Row::Gummi => super::gummi::SKIP.load(Ordering::Relaxed),
         Row::Debug => super::debugmenu::enabled(),
+        Row::MediumHits => super::hitreact::medium_flinch(),
     }
 }
 
@@ -367,6 +375,7 @@ fn set(what: Row, v: bool) {
         Row::Style(k) => styles::set(k, v),
         Row::Gummi => super::gummi::set(v),
         Row::Debug => super::debugmenu::set_enabled(v),
+        Row::MediumHits => super::hitreact::set_medium_flinch(v),
     }
 }
 

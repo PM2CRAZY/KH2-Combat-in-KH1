@@ -254,6 +254,9 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                 }
             }
         }
+        // (KH1's middle hits as flinches, the Medium Hits row: `hitreact::medium_hits`; before the
+        // knock-back note below, which then doesn't see them.)
+        super::hitreact::medium_hits(actor, &ready, kind_of);
         if super::shared::active() && ready.iter().any(|&r| rd::<u8>(r) & NO_EFFECT == 0 && (rd::<u32>(r + 0xC) >> 6) & 0xF < 9 && matches!(kind_of(actor, r), 4 | 5)) {
             super::combomods::kh1_blown();
         }
@@ -314,9 +317,10 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     }
     // KH1's knock-backs (4) and launches (5) knock him away as KH2's blows do (so Aerial
     // Recovery has something to recover from; the user: it never came out, every 4 was a flinch).
-    let blow = kind >= 4;
+    // (The Medium Hits row at Flinch: KH1's kind 4 a flinch, base Sora only; `hitreact`.)
+    let blow = kind >= 5 || (kind == 4 && (super::form::in_form() || !super::hitreact::medium_flinch()));
     // KH1's voice and rumble: 3 a flinch's, 4 / 5 a knock-back's.
-    let big = kind >= 4;
+    let big = blow;
     let dir = [-toward.x, -toward.y];
     let (reaction, knockback) = if blow { (4, (0, 0)) } else { (3, (i16::MAX, 0)) };
     takeover::with_kh2(|ch, _| ch.take_hit(&Hit { reaction, knockback, dir, part: 0 }));
