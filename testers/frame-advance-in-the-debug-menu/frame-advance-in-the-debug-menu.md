@@ -28,6 +28,7 @@
 - [22. Mr Bugs: the actual pause seems to hold the image in the frame buffer](#^m22)
 - [23. Assistant: t461 to t463. Thanks, you were right about that one. I went ](#^m23)
 - [24. Assistant: t464 and t465. Found it. KH1 reads the pad every frame outsi](#^m24)
+- [25. Assistant: t480. No problem, I went with what the check says for both:](#^m25)
 
 ---
 
@@ -398,10 +399,27 @@ I did notice on your previous build that if the cam 1  + cam 2 bit was running  
 
 ^m24
 
+
  unsure about your questions 
  
  do the check
  
  go ahead
- 
- 
+
+> [!tip] Assistant
+> **t480.** No problem, I went with what the check says for both:
+>
+> - **Question 2 (KH2's camera after a long hold): fixed.** All of KH2's camera's timing windows now run on the mod's frame-advance clock, which stops while the game is held, instead of real time. Before, a hold longer than 5 seconds looked like a long gap to it, so it started over behind Sora on your next step. Now a hold of any length counts as no gap at all, so the camera carries on from where it was.
+> - **Question 1 (Select while held): left as it is, blocked.** Letting it through would clear the lock-on and fade Sora on the next step, which is more likely to get in the way than help. If you ever want first person while held, just say so.
+>
+> **Check:** every timing window in our camera code (they're ours, so there's nothing in the decomp to check against). Assumption: none of them needs real time across a hold. Not checked in game.
+>
+> Please test (KH2 camera on):
+> 1. Hold for more than 5 seconds with Camera on Held, then step. The camera should stay where it was and not snap behind Sora. Try it locked on too.
+> 2. Same with Camera on Free: move the camera while held, wait a bit, then step. It should keep the view you set.
+> 3. Turn Frame Advance off and play normally for a bit. Cutscenes, menus and room changes should hand the camera over the same as before.
+>
+> No open questions from me. Gummi Ship support can wait until you've decided.
+
+^m25
+
