@@ -349,4 +349,27 @@
 
 ^m15
 
+sent log and traces heres what I noticed: 
 
+thunder is squares
+blizzards projectile doesn't render
+firaga doesn't have all of its flames  
+reflect still is misplaced
+cure is currently in the center of sora
+
+I also noticed that the kh2 effects took over some of the native magic effects like aero, for those effects can we have a toggle in the debug menu? kh2's casting that has its own animations should stay because the move behaves differently I noticed changes on
+
+stop, 
+aero,
+cure
+
+if I got anything wrong let me know, I'm trusting you for your decision
+
+please have a toggle for those magics for now
+
+1. try (c)?
+ 2. if the debug allocates for kh2 model then make sure its gone
+
+go ahead
+
+  
