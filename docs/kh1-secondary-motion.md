@@ -311,9 +311,9 @@ candidate).
 
 Not copied (KH1's own bones, no visible KH2 match): the jacket hem (249-278, 73-74), the
 shorts' panels (27-40, 53-66), the belt chain (11-14), the belt-front pieces (5, 8), the
-necklace's pendant (87). Since t387 the hem and shorts take KH1's own animation of the move
-("KH1's own parts" below); the belt chain, the belt-front pieces and the pendant did too until
-the tester set them aside, and hang as before again.
+necklace's pendant (87). Since t387 the shorts take KH1's own animation of the move ("KH1's own
+parts" below); the hem (the coat), the belt chain, the belt-front pieces and the pendant did too
+until the tester set them aside or asked for the coat as before, and hang as before t387 again.
 
 ## Squash and stretch (t386)
 
@@ -364,10 +364,28 @@ results to kh1's animations ... use kh1's animations as a reference."
 that aside and work on it later, remove them from animation for now", with "(a)" to keeping KH1's
 own animation on the hem and shorts): the belt chain (11-14), the belt-front pieces (5, 8) and the
 necklace's pendant (87) are out of `KH1_OWN` and hang as before t387 (the chain carried by the +x
-thigh, the others rigid on their parent), live and baked. The hem and shorts keep it. Of the
-table below, those three rows are history.
+thigh, the others rigid on their parent), live and baked. The hem and shorts kept it until the
+coat went back (below). Of the table below, only the shorts' row is still in use.
 
-**Which parts** (`retarget::KH1_OWN`, 34 bones now, 41 at t387): those KH1's own motions turn in 5 or more
+**The coat as before** (the tester, after t412: "before I prompted you to adjust the bake
+animations the coat was working how it should", "when I mean model in this case I'm also referring
+to kh2 sora's skeleton"): the jacket hem's panels (249-278) and back centre (73-74) are out of
+`KH1_OWN` (16 bones left, the shorts). The coat is posed again exactly as from s284 to t386: each
+panel's root (72, 248, 252, ..., 276) turns with KH2's pelvis (the front panels 25 / 15 / 5% with
+the thigh as it rises), every joint below at its bind relation, and the chains swung off KH1's
+thighs (`keep_clear`), live and baked. KH2's own skeleton hangs its coat ring (129-135 / 221-227
+and the back piece 70, 10-13 long, at 109-111 high) from the chest 68, not the pelvis; those bones
+carry no mesh in `P_EX100.mdlx` and sit far from their bind in KH2's motions (above), which is why
+the coat follows KH2's pelvis and not them. Checked (files): over every KH2 motion in
+`P_EX100.mset` (battle and field slots, 11906 frames, a scratch run), with KH1's own run fed to the
+retarget as the bake does, the coat's 36 bones (72-75, 248-279) come out identical to t386's
+retarget (worst 0 units); t412's differed on every frame, by up to 27.7. Why t387-t412 broke it:
+the coat took its relation to its parent from KH1's own motion of the move (baked: KH1's
+template; live: what KH1's pass just placed), made for KH1's body and strides, not KH2's, and live
+that hung on which bones KH1's blend pass places (t405's stretch, t411's map-origin flash). The
+coat no longer reads KH1's pass at all, so neither can reach it. Not checked in game.
+
+**Which parts** (`retarget::KH1_OWN`, 16 bones now, 34 at t406, 41 at t387): those KH1's own motions turn in 5 or more
 motions that nothing of KH2's drives. Checked (files); what each is from bone positions only
 (Assumption). In every one of KH1's 118 motions their joint words are plain FK (0, or 25: built
 once), so KH1's keys are the whole of their animation. Checked (files).

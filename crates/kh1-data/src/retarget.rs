@@ -340,15 +340,16 @@ pub struct Retarget {
 /// KH1's own parts with nothing of KH2's to follow (`docs/kh1-secondary-motion.md`): the bones
 /// KH1's motions key that no part here or in `secondary` turns, and whose KH2 counterpart, if
 /// any, has no mesh. Under KH2's moves they take KH1's own animation of the move KH2's stands in
-/// for (`set_own`), relative to their parent: the shorts' panels (two joints each, four a leg),
-/// the hem's back centre (73-74) and its eight panels (two joints each). (The belt-front pieces 5
-/// and 8, the belt chain 11-14 and the necklace's pendant 87 were here too; the tester set them
-/// aside for later: "for the custom animation parts for kh1s model lets set that aside and work
-/// on it later, remove them from animation for now". They hang as before: the belt chain carried
-/// by the +x thigh, the others rigid on their parent.)
-pub const KH1_OWN: [usize; 34] = [
-    27, 28, 31, 32, 35, 36, 39, 40, 53, 54, 57, 58, 61, 62, 65, 66, 73, 74, 249, 250, 253, 254, 257, 258, 261, 262, 265, 266, 269, 270, 273, 274, 277, 278,
-];
+/// for (`set_own`), relative to their parent: the shorts' panels (two joints each, four a leg).
+/// (The belt-front pieces 5 and 8, the belt chain 11-14 and the necklace's pendant 87 were here
+/// too; the tester set them aside for later: "for the custom animation parts for kh1s model lets
+/// set that aside and work on it later, remove them from animation for now". They hang as
+/// before: the belt chain carried by the +x thigh, the others rigid on their parent. The jacket
+/// (the coat: the hem's back centre 73-74 and its eight panels 249-278) was here too until the
+/// tester: "before I prompted you to adjust the bake animations the coat was working how it
+/// should". It is back as before t387: its panels turn with KH2's pelvis, the front ones a share
+/// with the thigh, kept off the thighs (`keep_clear`), each joint at its bind relation.)
+pub const KH1_OWN: [usize; 16] = [27, 28, 31, 32, 35, 36, 39, 40, 53, 54, 57, 58, 61, 62, 65, 66];
 
 /// The weapon's grip bone (the Keyblade's, also every other weapon's).
 pub const GRIP_BONE: usize = 280;
@@ -733,8 +734,8 @@ impl Retarget {
 
     /// Cloth (the belt chain, the jacket's hem panels) never comes nearer a thigh than it was in
     /// the bind: where a joint would, its chain swings about its root just far enough out
-    /// (The cloth takes KH1's own animation of the move, `set_own`, made for KH1's strides, not
-    /// KH2's; the user: the chain went through the shorts, the jacket should mesh).
+    /// (KH1 animates this cloth by hand in each of its own motions, so nothing of KH1's fits
+    /// KH2's strides; the user: the chain went through the shorts, the jacket should mesh).
     fn keep_clear(&self, out: &mut [Mat4]) {
         let at = |v: &[Mat4], i: usize| v[i].w_axis.truncate();
         let Ok(mut mem) = self.memory.lock() else { return };

@@ -40,6 +40,9 @@ fn kh1_s_own_parts_follow_kh1_s_motion_on_kh2_s() {
     let Some(f) = files() else { return };
     let mut r = Retarget::new(&f.kh1, &f.kh2);
     r.set_rest(&f.kh1_motions[1].as_ref().unwrap().apply(&f.kh1, 0.0));
+    // The same retarget with none of KH1's own animation given (its cloth eases per call).
+    let mut plain_r = Retarget::new(&f.kh1, &f.kh2);
+    plain_r.set_rest(&f.kh1_motions[1].as_ref().unwrap().apply(&f.kh1, 0.0));
     let parents: Vec<i16> = f.kh1.iter().map(|b| b.parent).collect();
     // KH2's run (2) on KH1's run (slot 5), KH2's first swing (151) on KH1's (98).
     for (motion, slot) in [(2usize, 5usize), (151, 98)] {
@@ -55,23 +58,27 @@ fn kh1_s_own_parts_follow_kh1_s_motion_on_kh2_s() {
             let body = kh2_anim::evaluate(&f.kh2, &m, kh2_anim::key_time(&m, fr as f32, false), kh2_anim::Options::default()).bones;
             let pose = r.pose(&body);
             assert!(pose.iter().all(|m| m.is_finite()), "motion {motion} frame {fr}: NaN");
-            // Every own part as KH1's motion has it against its parent, but where the cloth was
-            // swung off a thigh (the belt chain, the hem: `keep_clear` turns a chain about its
-            // root, so its first joint turns against the root; the rest within float error).
+            // Every own part as KH1's motion has it against its parent (within float error).
             for &b in KH1_OWN.iter() {
                 let have = own_relation(&pose[parents[b] as usize], &pose[b]).unwrap().0;
                 let off = have.to_scale_rotation_translation().1.angle_between(want[b].unwrap().0.to_scale_rotation_translation().1).to_degrees();
-                let first_joint = matches!(b, 11 | 73) || (249..=278).contains(&b) && (b - 249) % 4 == 0;
-                let cloth = matches!(b, 11..=14 | 73 | 74 | 249..=278);
-                assert!(first_joint || off < if cloth { 0.2 } else { 0.1 }, "motion {motion} frame {fr}: bone {b} {off}° off KH1's");
+                assert!(off < 0.1, "motion {motion} frame {fr}: bone {b} {off}° off KH1's");
                 // (Its distance from its parent as KH1's motion has it: KH1 keys some panels'.)
                 let len = at(&pose[b]).distance(at(&pose[parents[b] as usize]));
                 let kh1 = at(&want[b].unwrap().0).length();
                 assert!((len - kh1).abs() < 0.01, "motion {motion} frame {fr}: bone {b} length {len} vs {kh1}");
             }
+            // The jacket (the coat) isn't one of them: KH1's own animation doesn't reach it,
+            // it is posed exactly as with none given (as before t387).
+            let plain = plain_r.pose(&body);
+            for b in (72..=75).chain(248..=279) {
+                assert!(!KH1_OWN.contains(&b), "bone {b} is the jacket's");
+                let d = (plain[b] - pose[b]).to_cols_array().iter().fold(0f32, |a, x| a.max(x.abs()));
+                assert!(d < 1e-3, "motion {motion} frame {fr}: jacket bone {b} moved {d} by KH1's own animation");
+            }
             match &first {
                 Some(f0) => {
-                    for &b in &[28usize, 74, 250] {
+                    for &b in KH1_OWN.iter() {
                         let p = parents[b] as usize;
                         let d0 = f0[p].inverse() * f0[b];
                         let d = pose[p].inverse() * pose[b];
@@ -89,7 +96,7 @@ fn kh1_s_own_parts_follow_kh1_s_motion_on_kh2_s() {
     let body = kh2_anim::Pose::bind(&f.kh2).bones;
     let pose = r.pose(&body);
     let b1 = kh2_anim::Pose::bind(&f.kh1).bones;
-    for &b in &[28usize, 74, 250] {
+    for &b in &[28usize, 54, 74, 250] {
         let p = parents[b] as usize;
         let rel = (pose[p].inverse() * pose[b]).to_scale_rotation_translation().1;
         let bind = (b1[p].inverse() * b1[b]).to_scale_rotation_translation().1;
