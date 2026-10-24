@@ -212,8 +212,6 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
         clavicle: usize,
         finger_shift: usize,
     }
-    let mut thigh_plus = 0;
-    let mut thigh_minus = 0;
     // Parts whose rest frame is measured on KH1's bind (not KH2's): the KH1 bones then take
     // KH2's direction outright, where the two binds hold that limb differently.
     let mut kh1_rest: Vec<(usize, Part)> = vec![];
@@ -252,11 +250,6 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
         for b in c + 9..=c + 12 {
             one(b, hand, &mut bones);
         }
-        if k.hip == 42 {
-            thigh_plus = thigh;
-        } else {
-            thigh_minus = thigh;
-        }
         // The thumb: KH2's is one segment (base → tip, 89 → 92 / 181 → 184), lying along the
         // fingers in its bind; KH1's (103-107 / 207-211) points straight forward in its bind.
         // Turned by the difference from KH2's bind it kept KH1's forward thumb (the user:
@@ -280,21 +273,6 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
             for b in k1 + 2..=k1 + 4 {
                 one(b, second, &mut bones);
             }
-        }
-    }
-    // The jacket's hem: nine cloth chains from the spine base (71) down over the shorts: back
-    // centre 72, and per side front, side-front, side-back and back (248 / 252 / 256 / 260 on
-    // +x, 264 / 268 / 272 / 276 on -x). KH2 parents its own hem to the pelvis (its bones 4-9,
-    // 35-38), so ours turns with the hips, not the chest, and a thigh pushes the panels in front
-    // of it along as it rises (front most, back least). Before, the hem rode on the chest and
-    // stuck out, or cut into the thighs, whenever KH2 leaned or strode (the user: make the
-    // jacket mesh with KH2's motions).
-    let _ = chest;
-    bones.push((72, pelvis, pelvis, 0.0));
-    let _ = thigh_plus;
-    for (base, thigh) in [(248, thigh_plus), (264, thigh_minus)] {
-        for (k, share) in [0.25, 0.15, 0.05, 0.0].into_iter().enumerate() {
-            bones.push((base + 4 * k, pelvis, thigh, share));
         }
     }
     (parts, bones, kh1_rest)
@@ -368,7 +346,7 @@ fn limit(prev: Option<Quat>, want: Quat) -> Quat {
 }
 
 /// A cloth chain: its root, every bone it moves, and per joint the thigh segment (hip, knee)
-/// and the distance from it the joint keeps (its bind distance, at most `CLEAR_MAX`).
+/// and the distance from it the joint keeps (its bind distance plus a margin, at most a cap).
 struct Cloth {
     root: usize,
     bones: Vec<usize>,
@@ -377,31 +355,30 @@ struct Cloth {
 
 /// KH1's thighs (hip joint, knee) and the cloth chains kept off them.
 const THIGHS: [(usize, usize); 2] = [(43, 44), (17, 18)];
-const CLEAR_MAX: f32 = 14.0;
-/// Chain roots and joints: the belt chain (10: 12-15), the hem's back centre (72: 73-75) and
-/// its eight panels (root: root + 2, + 3).
+/// Chains carried rigidly by another bone as in the bind (`attach`): (root, carrier).
 /// The belt chain (10-15) runs from the belt down over the +x shorts panel to the back pocket:
 /// it is carried by that thigh (43) as in the bind, as the shorts' panels are, so it keeps
 /// lying on them however the leg goes (hanging free it fell inside the shorts whenever the
 /// battle stance spread the legs: the user's chain clipping through the pants).
-const ATTACHED: [(usize, usize); 1] = [(10, 43)];
+/// The jacket's hem (the coat): nine cloth chains from the spine base (71) down over the shorts:
+/// back centre 72, and per side front, side-front, side-back and back (248 / 252 / 256 / 260 on
+/// +x, 264 / 268 / 272 / 276 on -x). KH2 draws its jacket on its torso bone 67 and on nothing
+/// else (its coat ring 129-135 / 221-227 / 70 and pelvis pieces carry no mesh), and 67 turns as
+/// the chest part does (Checked (files)). So the coat is carried rigidly by KH1's chest (78) as
+/// in the bind, every joint at its bind relation (the tester: "make everything 1:1 with how its
+/// animated in kh2"). From s284 to t489 its roots turned with KH2's pelvis, the front panels a
+/// share with the thigh, and it was swung off the thighs (`keep_clear`): ours, not KH2's.
+const ATTACHED: [(usize, usize); 10] = [(10, 43), (72, 78), (248, 78), (252, 78), (256, 78), (260, 78), (264, 78), (268, 78), (272, 78), (276, 78)];
 
 /// Each: root, joints, what they keep off (bone pairs), the most distance kept, and a margin
 /// added to the bind's distance.
 fn cloth_chains() -> Vec<(usize, Vec<usize>, Vec<(usize, usize)>, f32, f32)> {
-    let thighs = THIGHS.to_vec();
-    let mut v = vec![
-        // The belt chain, carried by the +x thigh, also stands CHAIN_OUT further off it than in
-        // the bind: its back part (skinned with the hips, which the thigh turns against in
-        // KH2's stances) lay in the back of the shorts (the user: the back of the chain clips
-        // into the shorts, in every stance).
-        (10usize, vec![14usize, 15], vec![THIGHS[0]], 22.0, CHAIN_OUT),
-        (72, vec![73, 74, 75], thighs.clone(), CLEAR_MAX, 0.0),
-    ];
-    for root in [248usize, 252, 256, 260, 264, 268, 272, 276] {
-        v.push((root, vec![root + 2, root + 3], thighs.clone(), CLEAR_MAX, 0.0));
-    }
-    v
+    // The belt chain, carried by the +x thigh, also stands CHAIN_OUT further off it than in the
+    // bind: its back part (skinned with the hips, which the thigh turns against in KH2's stances)
+    // lay in the back of the shorts (the user: the back of the chain clips into the shorts, in
+    // every stance). (The coat's nine chains were kept off the thighs here too until KH2's
+    // jacket was followed 1:1: KH2 keeps nothing off anything.)
+    vec![(10usize, vec![14usize, 15], vec![THIGHS[0]], 22.0, CHAIN_OUT)]
 }
 
 const CHAIN_OUT: f32 = 4.0;
@@ -731,7 +708,7 @@ impl Retarget {
         }
     }
 
-    /// Cloth (the belt chain, the jacket's hem panels) never comes nearer a thigh than it was in
+    /// Cloth (the belt chain) never comes nearer a thigh than it was in
     /// the bind: where a joint would, its chain swings about its root just far enough out
     /// (KH1 animates this cloth by hand in each of its own motions, so nothing of KH1's fits
     /// KH2's strides; the user: the chain went through the shorts, the jacket should mesh).

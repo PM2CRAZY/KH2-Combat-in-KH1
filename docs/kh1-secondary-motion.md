@@ -369,7 +369,7 @@ necklace's pendant (87) are out of `KH1_OWN` and hang as before t387 (the chain 
 thigh, the others rigid on their parent), live and baked. The hem and shorts kept it until the
 coat went back (below). Of the table below, only the shorts' row is still in use.
 
-**The coat as before** (the tester, after t412: "before I prompted you to adjust the bake
+**The coat as before** (superseded after t489: the coat is now carried by the chest, "1:1 with what KH2's model shows" below; the tester, after t412: "before I prompted you to adjust the bake
 animations the coat was working how it should", "when I mean model in this case I'm also referring
 to kh2 sora's skeleton"): the jacket hem's panels (249-278) and back centre (73-74) are out of
 `KH1_OWN` (16 bones left, the shorts). The coat is posed again exactly as from s284 to t386: each
@@ -500,6 +500,27 @@ off the thigh joint in the eight motions above (on KH1 that would be a turn of t
 the body retarget's, not the shorts'). The `set_own` / `own_from_kh1` machinery stays, with no
 bones, for the later polish the tester mentioned. Test `local_own` (shorts at their bind relation
 under KH2's run and first swing, KH1's own motion offered). Not checked in game.
+
+### The coat
+
+The coat (KH1's jacket hem: the back centre 72-75 and the eight panels 248-279, from the spine
+base 71) is now carried rigidly by KH1's chest (78) as in the bind, every joint at its bind
+relation, live and baked (`retarget::ATTACHED`): KH2 draws its jacket on its torso bone 67, which
+turns as the retarget's chest part does, and KH2's coat ring (129-135 / 221-227, 70) carries no
+mesh. Gone with it, being ours and not KH2's: the roots turning with KH2's pelvis, the front
+panels' share of the thigh's rise (25 / 15 / 5%), and `keep_clear` on the coat's nine chains (the
+belt chain keeps it). Test `local_own` (the coat's 36 bones within 0.2° and 0.05 of their bind
+relation to the chest in KH2's 0, 2, 3, 151, 154, 181 and 201).
+
+**Where it differs from KH2.** KH1's coat is longer than KH2's jacket: its tips sit 86-93 high on
+KH1, about 97-104 in KH2's units, where KH2 draws its waist (66, 97-100) and the top of its shorts
+(2), not its jacket (67, from 104 up). KH2's jacket never reaches the thighs; KH1's, carried by the
+chest, does when a leg comes up. Measured over every motion of `P_EX100.mset` (83, every second
+frame, 2954 frames, a scratch run): the front tips (251, 267) come within 2.9-3.5 of a thigh's axis
+in kicks, landings and swings (155, 8, 167, 196, 59, 10, 137, 209, 11), where the shorts' panels
+sit about 6.3 from it; 21% of the coat's joint-frames come more than 2 nearer a thigh than in the
+bind (8% before, when it followed the pelvis; its nearest then was 3.9, in one motion). No NaN,
+lengths kept. Not checked in game.
 
 ## How KH2's exe animates Sora (Steam decomp, research after t453)
 
