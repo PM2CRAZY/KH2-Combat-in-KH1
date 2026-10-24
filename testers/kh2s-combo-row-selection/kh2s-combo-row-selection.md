@@ -19,7 +19,6 @@
 - [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](#^m13)
 - [14. Assistant: t457 to t460 (one change each).](#^m14)
 - [15. Assistant: t473 to t476 (one change each).](#^m15)
-- [16. Assistant: Got it, no rush. Nothing changes in this thread until you're](#^m16)
 
 ---
 
@@ -284,6 +283,7 @@
 
 ^m15
 
+
 ""(b) with KH1's rules inside" would be: KH2 picks which swing plays, but KH1 decides how long the combo is and when the finisher comes. I'd advise against that one. KH2's picker decides finishers by its own length rule, so I'd have to override that rule. The result would match neither game, and it's exactly the "messing with values could feel off" case you mentioned."
 
 1. go with the recommended choice you had then
@@ -292,9 +292,5 @@
 4. (a) but read the mset to make sure, you should have access to it 
 
 go ahead
-
-
-
-
 
 

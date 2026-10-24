@@ -396,6 +396,8 @@ go ahead
 > 3. Firaga: are all the flames there now?
 
 ^m16
+
+
 thunder works, 
 blizzard is sideways,
 firaga has one flame still

@@ -45,8 +45,9 @@
 >
 > About the main branch: nothing reads data from the main folder. The current magic code itself (the spell runtime and part of the KH2 spell-script crate) was carried over from main when the testing branch was made; the native version replaces it step by step.
 
-
 ^m3
+
+
 1.(a) 
 2.(a) (with the exception to drive forms for now)
 3.if b doesn't cost a lot of computational cost then do it, if not a

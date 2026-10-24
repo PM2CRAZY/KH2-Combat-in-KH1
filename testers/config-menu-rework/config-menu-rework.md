@@ -9,6 +9,7 @@
 - [3. Mr Bugs: 1. Yes if your going to make magic its own sub catagory put ](#^m3)
 - [4. Assistant: Got it, building it now: Config > KH1 in KH2 (above Default ](#^m4)
 - [5. Assistant: t448 and t449. Done: Config page 1 now has a "KH1 in KH2" bu](#^m5)
+- [6. Assistant: (Re-posted: the force push to testing at 07:16 UTC replaced ](#^m6)
 
 ---
 
@@ -88,3 +89,23 @@
 do the check
 
 update
+
+
+> [!tip] Assistant
+> (Re-posted: the force push to `testing` at 07:16 UTC replaced t479, its build and this reply. I put t479 back on top of your push, with the same version number; nothing of yours was undone.)
+>
+> **t479.** Got it: the sub-lists stay full size (1a), and if more rows get added later I'll shrink that list to fit.
+>
+> The glow: it's KH1's glint. One function draws a small glowing light at a point and slides it there over a few frames. Another one aims it at the selected command's top-right corner, using the menu's row spacing. KH1's own Config list has a row spacing of 0 in the exe, so even in plain KH1 that glint never leaves the top row. Now it follows: our lists use the real row spacing, so KH1's own call moves the glint with the cursor. On page 1, right after KH1's update, I aim the glint at the selected row's corner myself, adjusted for the 92% size.
+>
+> Checked against the Steam decomp (the glint, its two aiming calls and the window fields) and the Steam exe (the Config list's 0 spacing). Not tested in game.
+>
+> Please check: on page 1 and in each list (Camera, Combat, Magic, Movement, Misc), the glint slides to each row as you move up and down, including the KH1 in KH2 button and Default settings, and it sits where KH1 puts it on its other menus (the top-right corner of the selected box).
+>
+> Questions:
+> 1. On page 1 the glint's spot moves with the 92% rows, but the glint itself stays KH1's normal size. Does that look fine, or should it (a) shrink to 92% too, or (b) stay as is?
+> 2. This also makes the glint follow on KH1's own Config rows (Camera, Vibration, ...), where plain KH1 leaves it at the top. Keep it that way (a), or (b) only on our rows?
+
+^m6
+
+
