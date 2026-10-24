@@ -399,10 +399,16 @@ unsafe fn tend(base: usize) {
 // ---- battle quotes through KH1's voice path (plan step 4) ----
 
 /// KH1's registration of a voice bank from a buffer it copies (Steam `0x1400E0110 (size, bank
-/// number, data)`: marks an entry of the same number released (0xFFFF, freed by `0x1400DC8C0`),
+/// number, data, name)`; KH1 itself never calls it; its own voice banks go through `0x1400DFE60`,
+/// which also takes the entry's name in r9, Checked (decomp / exe)): marks an entry of the same number released (0xFFFF, freed by `0x1400DC8C0`),
 /// copies the data with `_aligned_malloc`, loads it with `0x14004D530`, pushes the entry on the
 /// voice bank list): `push rdi; push r14; push r15; sub rsp, 0x40`.
 const VOICE_REGISTER_STEAM: usize = 0xE0110;
+/// Our voice bank's entry name (the registration's fourth argument): under 0x20 bytes with its
+/// end and no `%`, in the form of KH1's own voice entries' names (`0x1400D2D10`: the file's name
+/// up to `_vsb`, then `.win32.scd`).
+const VOICE_NAME: &[u8] = b"kh2_tt0_sora.win32.scd\0";
+const _: () = assert!(VOICE_NAME.len() <= 0x20);
 /// The voice bank list and its count (Steam `0x1404D65B8`, `0x1404D65C8`; `+0x10` the bank
 /// number, `+0x18` the engine handle, `+0x20` the data).
 const VOICE_LIST_STEAM: usize = 0x4D65B8;
@@ -461,15 +467,27 @@ unsafe fn tend_voice(base: usize) {
         return;
     }
     VOICE_DATA.store(0, Ordering::Relaxed);
-    let Ok(v) = VOICE_BANK.try_lock() else { return };
+    let Ok(v) = VOICE_BANK.try_lock() else {
+        // (The loader is handing it over: next frame.)
+        VOICE_COUNT.store(-1, Ordering::Relaxed);
+        return;
+    };
     let Some(bytes) = v.as_ref() else { return };
     // A bank number no voice bank of KH1's has now (the channel keeps it as an i8).
     let Some(pick) = (104..=127).rev().find(|b| !used.contains(b)) else {
         note("KH1 banks: no free voice bank number; KH2's battle quotes stay on the mod's player".into());
         return;
     };
-    let f: unsafe extern "system" fn(i32, i32, *const u8) = std::mem::transmute(base + VOICE_REGISTER_STEAM);
-    f(bytes.len() as i32, pick, bytes.as_ptr());
+    // (Its fourth argument, r9, is the entry's name: KH1 keeps it in r15 and passes it as the
+    // format of `sprintf (entry + 0x30, name)` (`0x140051260`) before linking the entry, Checked
+    // (exe) at `0x1400E0132` and `0x1400E0279..0x1400E0280`; the decomp shows three arguments.
+    // The entry is 0x50 bytes (`0x14034B54C (0x50)`), so 0x20 for the name, and no `%`. Without
+    // it KH1 formatted whatever r9 held.)
+    if bytes.is_empty() || bytes.len() > i32::MAX as usize {
+        return;
+    }
+    let f: unsafe extern "system" fn(i32, i32, *const u8, *const u8) = std::mem::transmute(base + VOICE_REGISTER_STEAM);
+    f(bytes.len() as i32, pick, bytes.as_ptr(), VOICE_NAME.as_ptr());
     let head: usize = rd(base + VOICE_LIST_STEAM);
     if head >= 0x10000 && rd::<i32>(head + 0x10) == pick && rd::<u32>(head + 0x18) != 0 {
         VOICE_NO.store(pick, Ordering::Relaxed);
