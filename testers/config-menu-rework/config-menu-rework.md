@@ -82,3 +82,9 @@
 ^m5
 
 
+1. (a) for now if more options get added to a menu you an shrink the ui to fit
+2. looks perfect, the only thing thats missing is the glowing cursor that follows each command is not following properly, it stays at the top. use the c decomp to figure this out (steam)
+
+do the check
+
+update
