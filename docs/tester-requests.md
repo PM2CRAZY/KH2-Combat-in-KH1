@@ -225,12 +225,12 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 ```
-## Title (the assistant fills this in if you leave it)
+
 ---
 
   
 
-## What is still missing for native integration into KH1
+## Title (the assistant fills this in if you leave it)
 
   
 
