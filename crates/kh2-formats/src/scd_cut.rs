@@ -220,6 +220,13 @@ pub fn scale_volume(bank: &mut [u8], by: f32) -> Result<()> {
     Ok(())
 }
 
+/// Sets a cut bank's sound bus (its record's byte 1).
+pub fn set_bus(bank: &mut [u8], bus: u8) -> Result<()> {
+    let r = record_at(bank)?;
+    bank[r + 1] = bus;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,6 +327,14 @@ mod tests {
         let mut src = bank();
         src[0x190] = 0;
         assert!(cut(&src, 0, 990).is_err());
+    }
+
+    #[test]
+    fn bus_sets() {
+        let mut c = cut(&bank(), 0, 990).unwrap().bytes;
+        set_bus(&mut c, 8).unwrap();
+        let rec = u32_at(&c, 0x50).unwrap() as usize;
+        assert_eq!(c[rec + 1], 8);
     }
 
     #[test]

@@ -278,3 +278,20 @@ Where an older doc gives an Epic address, the Steam one is given here and the tr
   a bank whose engine handle comes back 0 stays on the mod's player (logged).
 - Unknown: the falloff `0x14232D500` (KH2's sounds at Sora are as loud as KH1's own sounds at
   Sora, which may differ from before), and what `0x1401B37B0` holds back.
+
+### Buses (plan step 3)
+
+- KH2's volume sliders (Steam KH2): `0x140137D50 (step 1..10)` sets bus 1 (music) and
+  `0x140138290 (step)` sets bus 2 (bus 3 instead while `0x1408BBD14` is set) and buses 4, 5, 6,
+  7 and 8 to the same level from the table `0x1405AB960`; called from `0x140505D00`,
+  `0x140506170`, `0x140506180`. **Checked (decomp)**. So in KH2 the Keyblade bank's bus 8 (and
+  se000's 4 / 5) follow the sound-effect slider like bus 2.
+- KH1's volume setter `0x1400DDD10` sets buses 1 / 2 / 3 from its music / effects / voice
+  sliders and 5 / 6 to its scale argument (1.0 but for its fades); it never touches 4, 7 or 8.
+  The same KH2-style bus code is in KH1's exe (`0x140116DB0`, buses 2 / 3 and 4..8) but belongs to
+  the second sound manager reached only through its function table (unused, above). **Checked
+  (decomp)**. (KH1's own `se017113` is on bus 5, so it doesn't follow KH1's effects slider
+  either: KH1's own behaviour, left as it is.)
+- So each cut bank whose sound is on bus 4..8 is put on bus 2 (its record's byte 1): KH1's
+  effects slider then reaches it as KH2's slider reaches it in KH2. Logged per bank
+  ("bus 8 -> 2"). Effects on 2 and voices on 3 are unchanged.

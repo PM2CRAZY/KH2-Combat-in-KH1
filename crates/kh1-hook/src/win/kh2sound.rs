@@ -55,6 +55,9 @@ struct Loaded {
 
 static LOADED: Mutex<Option<Loaded>> = Mutex::new(None);
 
+/// KH1's sound-effect bus (its slider's, `0x1400DDD10`).
+const EFFECTS_BUS: u8 = 2;
+
 /// The Keyblade's sound bank: frame trigger 8's bank 500 is the equipped weapon's own
 /// (`0x1403DA0D0` in KH2: ids 500000..500999 take the weapon's bank); the Kingdom Key's is 500.
 const WEAPON_BANK: u32 = 500;
@@ -212,7 +215,15 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
         let no = match kh2_formats::scd_cut::cut(bank, index, (super::kh1bank::FIRST_NO / 1000) as u16) {
             Ok(mut c) => {
                 let _ = kh2_formats::scd_cut::scale_volume(&mut c.bytes, volume);
-                let (bus, tracks, size) = (c.bus, c.tracks, c.bytes.len());
+                // (KH2's sound-effect slider sets buses 2 and 4..8 alike, KH2 `0x140138290`;
+                // KH1's sets 2 only, `0x1400DDD10`, its 5 / 6 follow a scale. So a KH2 effect on
+                // 4..8, the Keyblade's bank on 8 among them, goes on KH1's effects bus 2, where
+                // KH1's slider reaches it as KH2's does.)
+                let kh2_bus = c.bus;
+                if (4..=8).contains(&kh2_bus) {
+                    let _ = kh2_formats::scd_cut::set_bus(&mut c.bytes, EFFECTS_BUS);
+                }
+                let (bus, tracks, size) = (if (4..=8).contains(&kh2_bus) { format!("{kh2_bus} -> {EFFECTS_BUS}") } else { kh2_bus.to_string() }, c.tracks, c.bytes.len());
                 let no = super::kh1bank::add(c.bytes, what.clone());
                 if let Some(no) = no {
                     log(&format!("KH1 banks: {what} -> se{no} ({size} bytes, bus {bus}, {tracks} track(s))"));

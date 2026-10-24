@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 512 (testing branch: KH2 sounds: buses 4..8 on KH1's effects bus)
+- **KH2's buses 4..8 on KH1's effects bus 2.** The tester (plan step 3). KH2's effects slider (`0x140138290`) drives buses 2 and 4..8 alike, KH1's (`0x1400DDD10`) 1 / 2 / 3 (5 / 6 to a scale), never 4, 7 or 8: cut banks on 4..8 (the Keyblade bank se500's 8) go on bus 2. Checked (decomp).
+
 ### 2026-10-24: Stage 511 (testing branch: KH2 sounds: effects through KH1's effect queue at Sora)
 - **KH2's effects through KH1's effect queue at Sora.** The tester (plan step 2; question 3 "same as 2"). Queued with KH1's `0x140179AC0 (no, id, Sora+0x10, 0)`; KH1's queue step `0x1401791E0` creates, pans and plays them; our slot is stopped with KH1's `0x140179D90` once its length has played in game time (`0x1401789F0`), as the step never frees slots (Checked (exe)). The old player is the fallback (not Steam, bank not loaded, queue full). Ini `kh2_sound_engine = kh1 | mod` (default kh1). Checked (decomp); Assumption: the engine plays the cut banks.
 
