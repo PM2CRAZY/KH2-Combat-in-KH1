@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 461 (testing branch: Frame Advance: Live only)
+- **Frame Advance: Live only.** The tester ("the actual pause seems to hold the image in the frame buffer"). KH1's pause picture (task 190020, capture `0x14018B370`) and the Held Picture row removed; effects held by KH1's system stop as in t447. Notes: `docs/kh1-frame-advance.md`.
+
 ### 2026-10-23: Stage 460 (testing branch: KH2's ability moves on KH1's rows at the combo style KH1)
 - **KH2's ability moves on KH1's rows at the combo style KH1.** `native_ability` style-free, `Kh1Combo::here`, `kh2slots::pick_ability`. Notes §7.
 

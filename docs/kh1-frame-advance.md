@@ -1,4 +1,4 @@
-# KH1 frame advance (t371, t372, t377, t378, t399, t426, then the pause picture)
+# KH1 frame advance (t371, t372, t377, t378, t399, t426, t445 to t447, then Live only)
 
 How the debug menu's Frame Advance row holds KH1 still and steps it one frame at a time
 (`crates/kh1-hook/src/win/frameadv.rs`). Addresses are the Steam build's (Ghidra decomp of the Steam
@@ -109,7 +109,10 @@ else a full freeze needs (stats, UI, lock-on). Findings (all Steam):
   **Checked (exe)** for the calls and values; **Assumption**: the capture copies the frame shown
   last (on the pause's first frame only the flagged tasks have drawn, and the battle pause shows the
   game, the tester's t399 report), and spread 0 gives the sharp frame.
-- **So Frame Advance now does what KH1's pause does:** every task of the main list not flagged 1 is
+- **Removed after t447 (the tester: "the actual pause seems to hold the image in the frame buffer so
+  I wouldn't be using it, focus on getting the live version working").** The picture task, the
+  capture and the Held Picture row are gone; Live (below) is the only way. What follows is kept as
+  the record of KH1's pause. **t445 to t447 (removed):** every task of the main list not flagged 1 is
   held at any priority (t372's set, which is KH1's mask 1), effects paused and hidden
   (`0x1401ED6D0 (1)`, as before), and our own task at 190020 (flags 1; `0x140284670` registers it, as
   KH1 registers its pause task) captures once per hold (the frame that just ran) and draws the picture
@@ -165,7 +168,8 @@ Read for this (**Checked (decomp)** where a line says what the code does; "not r
 | 180000.. 190050 | (about 40) | 2D, menus, text, fades; several step by the frame scale | mixed (not read one by one) |
 
 With KH1's pause picture every one of these is held while the game is held, as in KH1's pause, so
-none of them needs a split: the picture covers what they would draw.
+none of them needs a split: the picture covers what they would draw. (Removed after t447: the
+table below, with what each task really does, is in "The main list's tasks, read one by one".)
 
 ### KH1's system stop (a second, developer freeze; Checked (decomp) and (exe))
 
@@ -176,12 +180,13 @@ from the second pad record (`0x14298CA20`: a press of `+8` bit 3 toggles it, a r
 but effects still draw (the effect pass doesn't test it), the HUD fades `0x14026D570` / `0x14027B870` /
 `0x14027F780` hold, `0x140395360` (50000) returns, and `0x1402B47A0` keeps a flag. The exe's only
 readers of bit 0 are those (xrefs, Checked (exe)). It doesn't hold the actors, the camera or the
-scripts. Frame Advance doesn't use it with KH1's pause picture (everything is held there).
+scripts. Frame Advance uses it (Live, below) to hold the effects while they still draw.
 
-### The Held Picture row's Live (a fallback to debug with, after t426)
+### Live: the draws run while held (t447; the only way after t447)
 
-`Held Picture < KH1 Pause / Live >` on the debug menu's main page (this session). Live draws the
-picture live, as t426 did, with what those draws step held where KH1 has a way:
+(t447 added it as the `Held Picture < KH1 Pause / Live >` row; after t447 the row is gone and this is
+how every hold works.) The picture is drawn live, as t426 did, with what those draws step held where
+KH1 has a way:
 
 - Held: the tasks before 140000, and two known update tasks after it (145001 `0x140290A50`: four
   delayed entries, a timer less the frame scale each, then played; 159999 `0x1403970D0`: a fade, -0.1 a
@@ -208,7 +213,7 @@ picture live, as t426 did, with what those draws step held where KH1 has a way:
 - Not covered in Live (all run while held): the HUD's other steps (165001 `0x140274540`,
   `0x1402758B0`; 164004 `0x140185360`: the frame scale), the 160000 pass `0x1402E26D0`, the 180000s and
   190000s (2D, menus, text, fades; 180000 `0x14038D9B0` writes the world / room words), and anything
-  else in a draw task that steps by frames. KH1's pause picture has none of these gaps.
+  else in a draw task that steps by frames.
 
 ### Sound while held (after t426)
 
@@ -237,10 +242,10 @@ with flags 0). So holding that one task holds every actor. **Checked (decomp).**
 `0x142678280` (0x100 instances of 0xE0 bytes); from each instance's in-use byte (`+0x92`, bit 0),
 `+0x43` bit 7 set and `+0x49` = 1 (or cleared). (t371 called these model objects: they are the effect
 instances, the pool in the effects notes.) The pause machine calls it with 1 as its pause opens
-(through the thunk `0x1401E0C70`). Frame Advance calls it with 1 when it holds the game and 0 when it
-lets a frame run. (After t426) The second byte it writes, `+0xDB` (the decomp's `pbVar1[6]` from
+(through the thunk `0x1401E0C70`). Frame Advance called it (t371 to t446) with 1 when it held the game and 0 when it
+let a frame run. (After t426) The second byte it writes, `+0xDB` (the decomp's `pbVar1[6]` from
 `+0xD5`), stops the effect draw pass drawing the instance (`0x1401ECF30`, Checked (decomp)), so held
-effects are only seen through KH1's pause picture (above). KH1's other freezes call it too: the
+effects are only seen through a captured picture (KH1's pause, above), so Frame Advance no longer calls it (Live uses the system stop). KH1's other freezes call it too: the
 pause machine (three sites), `0x14017FCA0`, `0x14028A2B0` (task 47000, a scripted freeze of the actors)
 and its ends `0x140289060` / `0x140289750` (Checked (exe), call sites). **Checked (decomp)**; the tester's t371 test: effects held and stepped frame by
 frame (**Checked (trace / in game)**).
