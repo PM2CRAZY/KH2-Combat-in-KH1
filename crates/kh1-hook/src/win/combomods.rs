@@ -902,7 +902,8 @@ pub unsafe fn aerial_dodge(actor: usize) -> bool {
     } else {
         [0.0, 0.0]
     };
-    super::shared::physics::kh2_hop(actor, height, vel);
+    // (Held: let go early, the rise is cut as KH2's held jump is, `kh2_hop_held`.)
+    super::shared::physics::kh2_hop_held(actor, height, vel);
     super::shared::mark_air_dodged();
     takeover::note_launch(vel);
     note(format!("jump in the air: KH2's Aerial Dodge on KH1's request {request:#x} of its own (KH1 state {state}), {height:.0} high, {:.1}/frame", vel[0].hypot(vel[1])));
@@ -932,10 +933,21 @@ pub unsafe fn dodge_apex(actor: usize) {
     if !(t.is_finite() && up.is_finite()) || t + DODGE_FALL_MARGIN < up || rd::<i32>(actor + 0x178) != 0 {
         return;
     }
+    dodge_fall(actor, &format!("its apex, {t:.1} of {up:.1} frames up"));
+}
+
+/// KH2's Aerial Dodge into KH1's fall now (request 6, KH2's blend; KH1's action flag 4 the
+/// request raises off): at its apex (`dodge_apex`), or as the held jump is let go early
+/// (`shared::physics`'s air step: KH2's release also swaps to the apex motion before its hop,
+/// `0x1403CB680` → `0x1403CB610`, Checked (decomp)). Only while our dodge slot plays.
+pub unsafe fn dodge_fall(actor: usize, why: &str) {
+    if actor < 0x10000 || super::kh2slots::playing_motion(actor) != Some(character_core::motion::AERIAL_DODGE) {
+        return;
+    }
     let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(takeover::game_base() + SET_MOTION_RVA);
     set(actor, 0x06, DODGE_FALL_BLEND);
     wr(actor, rd::<u32>(actor) & !4);
-    note(format!("KH2's Aerial Dodge: its apex ({t:.1} of {up:.1} frames up), KH1's fall (request 6, blend {DODGE_FALL_BLEND})"));
+    note(format!("KH2's Aerial Dodge: {why}, KH1's fall (request 6, blend {DODGE_FALL_BLEND})"));
 }
 
 /// KH1 knocked him away itself (`hurt`: a knock-back or launch while KH1's states have him).

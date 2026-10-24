@@ -1,3 +1,6 @@
+### 2026-10-24: Stage 495 (testing branch: Aerial Dodge: the early release)
+- **The Aerial Dodge's early release.** The tester (aerial-dodge-native m1, plan item 4). KH2's dodge is holdable: bit `0x10000` → the shared enter's held jump `0x20000` (`0x1403CBD30`), release marked by `0x1403D6FC0`, cut by `0x1403CB680` (fall swap `0x1403CB610`, then the release hop), Checked (decomp). The native dodge's hop is held (`shared::physics::kh2_hop_held`), `air_step`'s existing early release cuts it at physics KH2 and asks KH1's fall at once (`combomods::dodge_fall`, shared with the apex). Notes `docs/kh1-aerial-dodge-native.md` §6.
+
 ### 2026-10-24: Stage 494 (testing branch: Aerial Dodge: its guard as KH1 guard objects)
 - **The Aerial Dodge's guard (ATKP 406) as KH1 guard objects on the native slot.** The tester (aerial-dodge-native m1, plan item 3). `takeover::kh2_hits` takes 202's body guard window too (others only on the Keyblade), so `combat::guard_step` makes the all-round KH1 guard object (priority 100) KH2's controller made for its dodge: enemy attack objects meeting it are stopped, no reaction (`refact_self` 2). Hits his hit pass finds are still `hurt`'s. Checked (files): 202's window and ATKP 406. Notes `docs/kh1-aerial-dodge-native.md` §6.
 

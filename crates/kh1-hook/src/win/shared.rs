@@ -688,6 +688,18 @@ pub mod physics {
     /// (`kh1phys::Arc::hop`, KH1's gravity), the row's height and speed being the move's own
     /// (`docs/kh1-physics.md` §7).
     pub unsafe fn kh2_hop(actor: usize, height: f32, vel: [f32; 2]) {
+        kh2_hop_as(actor, height, vel, false);
+    }
+
+    /// `kh2_hop` for a rise the jump button holds (KH2's Aerial Dodge: its `+0x120` bit `0x10000`,
+    /// which the air actions' shared enter `0x1403CBD30` turns into the held jump `0x20000`;
+    /// `0x1403D6FC0` marks its release, `0x1403CB680` cuts the rise there; Checked (decomp)):
+    /// physics KH2, its early release is `air_step`'s, as for KH2's jump.
+    pub unsafe fn kh2_hop_held(actor: usize, height: f32, vel: [f32; 2]) {
+        kh2_hop_as(actor, height, vel, true);
+    }
+
+    unsafe fn kh2_hop_as(actor: usize, height: f32, vel: [f32; 2], holdable: bool) {
         let y: f32 = rd(actor + 0x14);
         if !is_sora(actor) || !y.is_finite() || !height.is_finite() || rd::<i32>(actor + 0x70) != 2 {
             return;
@@ -696,7 +708,8 @@ pub mod physics {
         let kh2_numbers = if kh2() { numbers() } else { None };
         let how = match kh2_numbers {
             Some(n) => {
-                let arc = Arc::new(height, n.gravity);
+                let mut arc = Arc::new(height, n.gravity);
+                arc.holdable = holdable;
                 let kh1 = kh1phys::Arc::from_kh2(&arc, y, n.gravity, n.fall_max);
                 set_kh1_motion(actor, &Motion { h: vel, arc: kh1 }, dt());
                 if let Ok(mut a) = AIR.lock() {
@@ -1320,6 +1333,10 @@ pub mod physics {
             if !held && air.arc.t > character_core::HOLD_MIN_FRAMES && air.arc.t < air.arc.uptime - character_core::HOLD_APEX_MARGIN {
                 let hop = character_core::release_hop(n.gravity);
                 air.arc = Arc::new(hop, n.gravity);
+                // (KH2's Aerial Dodge let go: its fall now, as KH2's release does, `combomods`.)
+                if dodge {
+                    super::super::combomods::dodge_fall(actor, "the jump let go");
+                }
             } else if air.arc.t >= air.arc.uptime - character_core::HOLD_APEX_MARGIN {
                 air.arc.holdable = false;
             }

@@ -176,3 +176,12 @@ The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one te
   plays (as for the slot moves with guards on the Keyblade). Other slots' body guards (Flash
   Step's 406, Aerial Recovery's 124, Explosion's, Vicinity Break's, Magnet Burst's) are still only
   `hurt`'s: left as they were (not this thread's).
+- **t495, the early release.** KH2's dodge is holdable: it sets `+0x120` bit `0x10000`, the air
+  actions' shared enter (`0x1403CBD30`) turns that into the held-jump bit `0x20000`, the input
+  step (`0x1403D6FC0`) marks the release (`0x40000`) when the jump isn't held, and the air step
+  (`0x1403CB680`) then, between 6 frames in and 5 before the apex, swaps to the apex motion (the
+  fall, `0x1403CB610`) and cuts the rise to the release hop (`DAT_142A243D8`). **Checked
+  (decomp)** (this settles the §2 assumption). Here: the dodge's hop is held
+  (`shared::physics::kh2_hop_held`, the arc `holdable`), so `air_step`'s early release (the one
+  KH2's jump on KH1's state already uses) cuts it, and asks KH1's fall at once
+  (`combomods::dodge_fall`). Physics KH1: no release (KH1's numbers, as before).
