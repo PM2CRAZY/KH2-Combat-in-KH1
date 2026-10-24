@@ -1179,6 +1179,39 @@ borrows it for the roll / Quick Run as before.
   taken: KH1's can-act test is false there. A guard stopping a hit in the air does nothing (KH2's
   repel is ground-only; its air recoil isn't ported). Not checked in game.
 
+### 7.x.1 KH2's guard reaction in the air (research for m16 question 1 (b); Checked (decomp) and (files))
+
+KH2's party clash reaction (Steam KH2 `0x1403D61D0 (player, own attack, other attack)`, Checked
+(decomp)) reads its own attack's `refact_self` (ATKP `+0x13`) and the other attack's
+`refact_other` (`+0x14`):
+- either is 2: nothing (no motion, no push), the move goes on;
+- on the ground (`0x1403BA9A0` false: no air state class, `+0x18C & 0x1000020` clear, `+0x120`
+  bit 23 clear), with one of them nonzero: the guard repel, motion 0x2A (42), faced to the clash,
+  pushed back 200 (`0x1403D4960`, 0x43480000), a timer `+0xD70` = 80.0 (decremented per frame in
+  `0x1403D4CC0`, read with other "not now" conditions by `0x1403D65A0` / `0x1403D5310`; what it
+  stops is **not read**);
+- otherwise, the recoil `0x1403D4650` with motion -1 and distance -1 (50): on the ground motion
+  0x29 (41), pushed back 50; **in the air motion 0x2B (43)**, motion mode 4, and a hop
+  (`0x1403D4800`: 50.0 up, 50 x `sstm.hit_back_to_jump` (0.048) = 2.4 a frame sideways), back from
+  his own facing (`0x1403B56E0` times -1), no turn.
+
+So KH2 does have an air recoil, but a guard only reaches it with `refact_self` 0 or 1. Every guard
+window Sora can have in the air is `refact_self` 2 (Checked (files), the Steam install's
+`P_EX100.mset` / `W_EX010.mset` / `00battle.bin`, every motion 0..250):
+
+| motion | window | ATKP | refact self |
+|---|---|---|---|
+| 202 Aerial Dodge | body, all of it | 406 | 2 |
+| 40 Aerial Recovery | body, 0..16 | 124 | 2 |
+| 197 Magnet Burst | body, 20..70 | 406 | 2 |
+| 8 | body, 5..20 | 406 | 2 |
+
+The `refact_self` 1 guards (173's 161 at 6..37, Flash Step 169's 161 at 22..30) are ground moves.
+So in KH2 a block in the air plays no recoil: the hit is stopped and the move goes on, which is
+what KH1's states do here already (`guard_repel` returns for `refact` 2). Nothing ported. The air
+recoil (43 with its hop) is KH2's answer to Sora's own air swing meeting a guard or an attack with
+`refact` 0 / 1 (the wall-hit path), not to his guard blocking.
+
 ### 7.y Guard Break against guards (Checked (files))
 
 The tester (m15 question 4: "(a) but read the mset"). `obj/W_EX010.mset` motion 165 (Steam
