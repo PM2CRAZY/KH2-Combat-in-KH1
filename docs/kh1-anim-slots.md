@@ -698,8 +698,8 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   only (Slapshot 50 forward, Dodge Slash 300, Slide Dash 700, whatever the target's distance;
   Checked (files)), which the slot carries (baked into its H10, KH1's travel flag on requests 0xC8..0xCB). Each
   is built for 0xC8, 0xC9 and 0xCA (KH1's plain swing rows 13 / 11 and its row 14), about 170 KB
-  and 15 ms each at load (9 more slots). Not native yet (still borrows): Flash Step (169: a guard
-  on his body, ATKP 406 kind 2, frames 0..19), Vicinity Break (170: a body attack, 1869 group 21,
+  and 15 ms each at load (9 more slots). Not native yet (still borrows): Flash Step (169; below),
+  Vicinity Break (170: a body attack, 1869 group 21,
   power 125), Explosion (166: 911 / 912), Guard Break (165, a finisher; its KH2 guard break isn't
   KH1's attack data), Magnet Burst (197; Aerial Spiral 192 and
   Aerial Finish 194: below), the Square moves, Counterguard and Retaliating Slash.
@@ -750,6 +750,23 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   have no root travel (all 0: 181..184, 191, 192, 194, 196; Checked (files)). Still borrows: Magnet
   Burst (197: body attacks 1900 / 1901 / 1903 and a guard), Finishing Plus's next finisher out of
   KH1's (the press in KH1's finisher), the air Square move (Horizontal Slash, 193, a Square row).
+- **KH2's guard on his body in KH1's states, and Flash Step** (the tester: "transfer everything
+  into kh1's systems"; Base Combo KH2): Flash Step (rows 46 / 47 / 59, motion 169, ability 177;
+  PTYA Checked (files): primary 180..400, primary 120..400, any target dead ahead 180..400, no
+  speed window) is a Keyblade swing with 400 of root travel and a guard on his body at frames
+  0..19 (range id 10, ATKP 406: kind 2, `refact_self` 2; Checked (files)). KH2's controller, and
+  `hurt` while it has him, takes a hit inside such a guard as no effect with no reaction of his
+  own (`refact_self` 2; 1 is the guard repel), the move going on, all round for a guard on his
+  body. Now the same in KH1's states: KH1's hit pass (`0x140299A40`, already hooked by `hurt`)
+  asks `kh2slots::body_guard` (our slot playing, its KH2 clip's guard windows at KH1's time) and
+  marks each attack's hit record no-effect (`+0` bit `0x20`, as `hurt` does for KH2's guard)
+  with KH1's clash spark (`combat::clang`), so KH1's damage, reaction, voice and hit count for it
+  don't run. Only `refact_self` 2 guards are taken this way; a motion with another kind of guard
+  is still not native (`kh2slots::blade_swing`). Flash Step then plays on KH1's ground swing rows
+  as Slapshot does (above). Needs the ini's `hurt` on (as KH2's own guard does). Not done: KH2's
+  turn toward the locked target in a swing (`TurnToLock`, range id 28: Flash Step's 0.785 a
+  frame at 18..22; every native swing has some) is not on KH1's swing rows, which face the
+  target as KH1's row starts.
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

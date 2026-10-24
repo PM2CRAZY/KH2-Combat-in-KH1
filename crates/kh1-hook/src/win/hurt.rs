@@ -181,6 +181,30 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         // KH1's own states have base Sora (`shared`): KH1's reaction, as unmodded. A knock-back
         // or launch of KH1's is where KH2's Aerial Recovery and Retaliating Slash can borrow him
         // (`combomods::launched`).
+        // KH2's guard on his body in the KH2 move KH1 plays now (our slot, `kh2slots::body_guard`:
+        // Flash Step's frames 0..19, ATKP 406), as KH2's guard takes a hit there (above: its
+        // `refact_self` 2, no reaction, the move goes on; on his body, all round): each attack
+        // with no effect and KH1's clash spark, the damage, the reaction and the rest of KH1's
+        // pass for it not run.
+        if super::shared::active() {
+            if let Some(atk) = super::kh2slots::body_guard(actor) {
+                for &r in &ready {
+                    if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
+                        continue;
+                    }
+                    let from = pose::ptr(rd::<u32>(r + 4));
+                    let toward = if from > 0x10000 && from != actor {
+                        let p = rd::<[f32; 3]>(from + 0x10);
+                        glam::Vec2::new(p[0] - me[0], p[2] - me[2]).normalize_or(glam::Vec2::Y)
+                    } else {
+                        glam::Vec2::Y
+                    };
+                    wr(r, rd::<u8>(r) | NO_EFFECT);
+                    combat::clang([me[0] + toward.x * 40.0, me[1] - 60.0, me[2] + toward.y * 40.0]);
+                    note(format!("Sora hit by {from:#x} in KH1's states: KH2's guard on his body (ATKP {atk}, the KH2 move KH1 plays), no effect (frame {frame})"));
+                }
+            }
+        }
         if super::shared::active() && ready.iter().any(|&r| rd::<u8>(r) & NO_EFFECT == 0 && (rd::<u32>(r + 0xC) >> 6) & 0xF < 9 && matches!(kind_of(actor, r), 4 | 5)) {
             super::combomods::kh1_blown();
         }

@@ -13,10 +13,10 @@
 //! - **Attack** (`attack`, from `combat::exec`: a press KH1's combo took, its row about to run):
 //!   KH2's combo is asked what it would take at KH1's count (`Character::would_take`, the combo
 //!   carried at KH1's count, the press, KH2's targets and KH1's lock). KH2 takes it when that is
-//!   - a row that needs an ability (an action ability's move: Flash Step, Vicinity Break; the
-//!     finishers Explosion, Guard Break, Magnet Burst ...), opener, step or finisher, except the
-//!     ones KH1's own rows now play natively (`native_ability`: Slapshot, Dodge Slash, Slide
-//!     Dash, Aerial Sweep, Aerial Dive at Base Combo KH2; Aerial Spiral, Aerial Finish at Aerial
+//!   - a row that needs an ability (an action ability's move: Vicinity Break; the finishers
+//!     Explosion, Guard Break, Magnet Burst ...), opener, step or finisher, except the ones KH1's
+//!     own rows now play natively (`native_ability`: Slapshot, Dodge Slash, Slide Dash, Flash
+//!     Step, Aerial Sweep, Aerial Dive at Base Combo KH2; Aerial Spiral, Aerial Finish at Aerial
 //!     Combo KH2);
 //!   - KH2's finisher where KH1's would still swing, with Negative Combo;
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
@@ -179,9 +179,10 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
 /// An ability row of KH2's that KH1's own states play natively, no borrow (the tester: "transfer
 /// everything into kh1's systems"; the KH2-controller borrow is going away): a ground row that is
 /// only a Keyblade swing (`kh2slots::swing_rows`, which builds its motion's slots only then), with
-/// the Base Combo at KH2 (where our slots play). A swing (Slapshot, Dodge Slash, Slide Dash): KH1's
-/// plain ground swing row runs it as it runs KH2's plain swings (`kh2_row`, `select_swing`): KH1's
-/// row, attack object, damage and windows, KH2's motion and root travel. A hop (Aerial Sweep,
+/// the Base Combo at KH2 (where our slots play). A swing (Slapshot, Dodge Slash, Slide Dash, Flash
+/// Step, its guard on his body taken by KH1's hit pass, `hurt`): KH1's plain ground swing row runs
+/// it as it runs KH2's plain swings (`kh2_row`, `select_swing`): KH1's row, attack object, damage
+/// and windows, KH2's motion and root travel. A hop (Aerial Sweep,
 /// Aerial Dive), with the Aerial Combo at KH2 too: KH1's air state and air swing row with KH2's
 /// hop, as KH2's plain hop (`kh2_hop`). An air row (Aerial Spiral, the finisher Aerial Finish),
 /// with the Aerial Combo at KH2: KH1's air swing or finisher row with KH2's motion and its own

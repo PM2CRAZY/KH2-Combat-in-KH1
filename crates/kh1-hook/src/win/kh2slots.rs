@@ -184,7 +184,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 continue;
             }
             let air = s.kind == Kind::AirCombo;
-            for (motion, finisher) in swing_rows(&kh2.character.moveset.combo_rows, &kh2.character.moveset.clips, air) {
+            for (motion, finisher) in swing_rows(&kh2.character.moveset.combo_rows, &kh2.character.moveset.clips, &kh2.battle, air) {
                 if finisher != matches!(s.request, GROUND_FINISHER | AIR_FINISHER) || motion == s.motion || !wanted(motion) {
                     continue;
                 }
@@ -265,7 +265,7 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
 /// rows (Aerial Spiral, the finisher Aerial Finish), which KH1's air swing and finisher rows play
 /// as the plain air rows (`combomods::native_ability`, `kh2_hop`, `air_hop`); the other ability
 /// rows are still borrows (`combomods`).
-fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashMap<u16, character_core::Clip>, air: bool) -> Vec<(u16, bool)> {
+fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashMap<u16, character_core::Clip>, battle: &kh2_formats::battle::Battle, air: bool) -> Vec<(u16, bool)> {
     let picked = |r: &character_core::ComboRow| r.kind != 0;
     let subs: Vec<i8> = rows.iter().filter(|r| picked(r)).map(|r| r.sub).collect();
     let mut out: Vec<(u16, bool)> = Vec::new();
@@ -276,7 +276,7 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
         let here = if air { r.is_air() || r.is_jump() } else { !r.is_air() && !r.is_jump() };
         // (A ground finisher of an ability's, Guard Break, is left a borrow: its guard break isn't
         // KH1's finisher's attack data.)
-        let ability_ok = r.ability == 0 || ((r.is_air() || !r.is_finisher()) && clips.get(&r.motion).is_some_and(blade_swing));
+        let ability_ok = r.ability == 0 || ((r.is_air() || !r.is_finisher()) && clips.get(&r.motion).is_some_and(|c| blade_swing(c, battle)));
         if reachable && r.motion != 0 && here && ability_ok && !out.iter().any(|o| o.0 == r.motion) {
             out.push((r.motion, r.is_finisher()));
         }
@@ -287,20 +287,46 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
 /// A KH2 ability row's motion is only a Keyblade swing, so KH1's own swing row can play it as it
 /// plays the plain swings (its attack object on the Keyblade, timed by the slot's hit windows,
 /// and KH2's root travel baked in): it hits with the Keyblade's shapes only (a `Hitbox` window on
-/// a weapon, none on his own body), and has no guard, no invulnerability, no air / ground range
-/// of its own (each of those is KH2 behaviour KH1's swing row doesn't have). Its no-gravity
-/// ranges are KH1's now (`no_gravity`, `shared::physics`'s air step). Sora's (`P_EX100.mset`,
-/// Checked (files)): Slapshot 162, Dodge Slash 163, Slide Dash 164, Aerial Sweep 191, Aerial Dive
-/// 196 (no gravity at frames 46..54), Aerial Spiral 192 (16..24) and Aerial Finish 194 (16..100)
-/// pass; Magnet Burst 197 (body attacks 1900 / 1901 / 1903 and a guard), Flash Step 169 (a guard on his body, ATKP 406
-/// kind 2, frames 0..19), Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166
-/// (911 / 912), Guard Break 165 (a finisher, left out above), Finishing Leap 167 and
-/// Counterguard 171 don't.
-fn blade_swing(clip: &character_core::Clip) -> bool {
+/// a weapon, none on his own body), and has no invulnerability, no air / ground range of its own
+/// (each of those is KH2 behaviour KH1's swing row doesn't have), and no guard but one on his
+/// body whose ATKP lets the hit go with no effect (`refact_self` 2). Its no-gravity ranges and
+/// those guards are KH1's now (`no_gravity`, `shared::physics`'s air step; `body_guard`, `hurt`).
+/// Sora's (`P_EX100.mset`, `00battle.bin`, Checked (files)): Slapshot 162, Dodge Slash 163, Slide
+/// Dash 164, Flash Step 169 (a guard on his body, ATKP 406, kind 2, `refact_self` 2, frames
+/// 0..19), Aerial Sweep 191, Aerial Dive 196 (no gravity at frames 46..54), Aerial Spiral 192
+/// (16..24) and Aerial Finish 194 (16..100) pass; Magnet Burst 197 (body attacks 1900 / 1901 /
+/// 1903), Vicinity Break 170 (a body attack, 1869 on group 21), Explosion 166 (911 / 912), Guard
+/// Break 165 (a finisher, left out above), Finishing Leap 167 and Counterguard 171 don't.
+fn blade_swing(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle) -> bool {
     use character_core::WindowKind as W;
     let blade = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon, .. } if weapon > 0));
-    let other = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon: 0, .. } | W::Guard { .. } | W::Invulnerable | W::Air | W::Grounded));
+    let lets_go = |attack: u16| battle.attack_for_level(attack, 0, 0).is_some_and(|a| a.refact_self == 2);
+    let other = clip.windows.iter().any(|w| match w.kind {
+        W::Guard { attack, weapon: 0, .. } => !lets_go(attack),
+        W::Hitbox { weapon: 0, .. } | W::Guard { .. } | W::Invulnerable | W::Air | W::Grounded => true,
+        _ => false,
+    });
     blade && !other
+}
+
+/// KH2's guard on his body in our slot playing on `actor` now (`WindowKind::Guard` with weapon 0
+/// at KH1's time in the slot), if its ATKP lets the hit go with no effect (`refact_self` 2: KH2's
+/// guard reaction is none, the move goes on; Flash Step's 406). `hurt` stops KH1's hits there
+/// as KH2's guard does (a guard on his body is all round).
+pub unsafe fn body_guard(actor: usize) -> Option<u16> {
+    use character_core::WindowKind as W;
+    let m = current(actor)?;
+    let kh2 = pose::kh2()?;
+    let clip = kh2.character.moveset.clips.get(&m.motion)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    if !(t >= 0.0) {
+        return None;
+    }
+    let f = t as u32;
+    clip.windows.iter().filter(|w| w.contains(f)).find_map(|w| match w.kind {
+        W::Guard { attack, weapon: 0, .. } if kh2.battle.attack_for_level(attack, 0, 0).is_some_and(|a| a.refact_self == 2) => Some(attack),
+        _ => None,
+    })
 }
 
 /// KH2's clip of our slot playing on `actor` holds him with no gravity now (its range id 3 / 24,

@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 436 (testing branch: KH2 guard on his body in KH1's states; Flash Step)
+- **KH2's guard on his body in KH1's states; Flash Step.** `kh2slots::body_guard` (ATKP `refact_self` 2, 00battle Checked (files)); `hurt` marks KH1's records no-effect with KH1's clang. Flash Step 169 native. Notes §7.
+
 ### 2026-10-23: Stage 435 (testing branch: KH2 Aerial Spiral and Aerial Finish on KH1's air combo)
 - **KH2's Aerial Spiral and Aerial Finish on KH1's air combo.** Air ability rows through `Kh1Combo::plain` / `air_hop`, 192 on 0xCC / 0xCD, 194 on 0xCE. Notes §7.
 
