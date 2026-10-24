@@ -18,6 +18,7 @@
 - [12. Assistant: t431 to t436 (one change each; the build is on GitHub as kh1](#^m12)
 - [13. Mr Bugs: 1. it should cancel his animation like kh1, not sure make su](#^m13)
 - [14. Assistant: t457 to t460 (one change each).](#^m14)
+- [15. Assistant: t473 to t476 (one change each).](#^m15)
 
 ---
 
@@ -254,3 +255,31 @@
    you can do 1. 2. 3. and 4. but answer my question on 5.
    
    go ahead
+
+
+> [!tip] Assistant
+> **t473 to t476** (one change each).
+>
+> 1. **t473:** Vicinity Break, Explosion and Magnet Burst now run on KH1's own rows. Their hits use KH2's exact body shapes and hit numbers (Magnet's pull, Explosion's launch), landed through KH1's damage. KH2's invulnerability (like Explosion's 32..64) now blocks KH1's hits on him.
+> 2. **t474:** Upper Slash, Finishing Leap, Horizontal Slash and Guard Break each have their own KH1 row and request (from 0x200), with their own attack data, so Upper Slash launches with KH2's numbers. Square in the combo window now goes through KH1's own Attack step. Finishing Leap rises by its own motion, as in KH2.
+> 3. **t475:** Aerial Recovery and Retaliating Slash are new KH1 requests in KH1's air state, using KH2's hops (Aerial Recovery 100 high, 10 a frame along the stick). Control comes back at frame 24, as in KH2.
+> 4. **t476:** Finishing Plus's next finisher plays on a new KH1 row. It's now taken inside KH2's own finisher window, and the number of extra finishers follows KH2's count (before, it had no limit).
+>
+> **Check:** the KH1 exe and decomp for the rows and the Attack step, the KH2 files for the moves' ranges and attack data. Not checked in game. I don't have the Keyblade's motion file (`obj/W_EX010.mset`), so its hit windows are only read in game.
+>
+> **On 5:** yes, KH2's picker is native now. Since t374/t390 it doesn't take Sora over: when you press attack, KH1's own Attack step runs, KH2's selection rule only decides which KH2 motion KH1's row plays, and KH1 runs the swing.
+>
+> What you described as (b) is basically what Base Combo KH2 already does: KH2's picker, KH1's count, KH2's combo length. So (b) at the KH1 setting means "this combo becomes the KH2 one whenever a KH2 combo ability is equipped".
+>
+> "(b) with KH1's rules inside" would be: KH2 picks which swing plays, but KH1 decides how long the combo is and when the finisher comes. I'd advise against that one. KH2's picker decides finishers by its own length rule, so I'd have to override that rule. The result would match neither game, and it's exactly the "messing with values could feel off" case you mentioned.
+>
+> Questions:
+> 1. Combo abilities at the KH1 setting: (a) KH1's picker with KH2's combo rules on top, (b) KH2's picker and KH2's rules for any combo where a KH2 combo ability is equipped, so it plays as Base Combo KH2 (my pick, given what you said), or (c) KH2's picker inside KH1's rules?
+> 2. If (b), which abilities switch it? (i) only the ones KH1 doesn't have: Finishing Plus, Negative Combo, Berserk Charge later, or (ii) Combo Plus, Air Combo Plus and Combo Master too? KH1 has those itself, so most saves would end up on KH2's combo.
+> 3. Counterguard comes out of KH2's Guard, which still runs on KH2's controller: (a) make Guard native next, then Counterguard runs on its own KH1 row, or (b) leave Counterguard as it is for now?
+> 4. Guard Break goes through enemy guards by KH1's own rule (a high attack priority), because I couldn't read KH2's exact guard-break rule here: (a) keep it like that, or (b) send me `obj/W_EX010.mset` and I'll check KH2's version?
+>
+> A Select + Triangle trace and the log with these moves equipped would help, mainly the lines starting with "KH2's hits on his body", "KH1's attack rows", "KH1's row of ours hit" and "KH2's Finishing Plus window".
+
+^m15
+
