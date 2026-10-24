@@ -280,3 +280,15 @@ The grey boxes below are code blocks, so you can copy the text exactly as writte
   
 
 (Add new threads below this line.)
+
+
+---
+
+  
+
+## Title (the assistant fills this in if you leave it)
+
+  
+
+> [!note] Boogle
+> This is a test on the new system, did you get it?
