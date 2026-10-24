@@ -86,9 +86,11 @@ const ROWS: usize = 8;
 /// How long a chosen Reflect waits for KH2's move to allow a cast (as KH1's queued commands).
 const WAIT_S: f32 = 5.0;
 
-/// Sora in the spell scripts' world; enemies are `FOE0 + i`.
+/// Sora in the spell scripts' world; enemies are `FOE0 + i`, the partners in the field
+/// `PARTNER0 + slot` (KH1's party slots 1 and 2).
 pub(super) const SORA: ObjId = 1;
 pub(super) const FOE0: ObjId = 100;
+pub(super) const PARTNER0: ObjId = 50;
 /// Spell attacks' keys in the hit records (apart from KH2's swing ids).
 const SPELL_KEY: u64 = 1 << 60;
 
@@ -837,6 +839,9 @@ pub(super) struct Obj {
 /// (Also Wisdom Form's shots', `form`.)
 pub(super) struct KhWorld {
     pub(super) objs: Vec<Obj>,
+    /// The partners in the field and their actors: the scripts' party (`World::party`, which
+    /// KH2's Cure heals in range), never their targets or foes.
+    pub(super) party: Vec<(Obj, usize)>,
     pub(super) target: Option<ObjId>,
     pub(super) floor: f32,
     pub(super) rng: u32,
@@ -856,12 +861,43 @@ pub(super) unsafe fn world_now(actor: usize, out: &Output, airborne: bool, strik
     }
     let target = lock.and_then(|l| targets.iter().position(|t| t.0 == l)).map(|i| FOE0 + i as u32);
     let floor = -rd::<f32>(actor + 0x324);
-    KhWorld { objs, target, floor, rng: seed }
+    KhWorld { objs, target, floor, rng: seed, party: partners(actor) }
+}
+
+/// The partners in the field (KH1's party slots 1 and 2), each where KH1 has him; not one
+/// knocked out (KH1's down bits `+0x88 & 0x30`, the test `0x140299A30`, or no HP: KH1's own
+/// code brings him back).
+unsafe fn partners(sora: usize) -> Vec<(Obj, usize)> {
+    let base = base();
+    if base == 0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for slot in 1..=2usize {
+        let a = rd::<u64>(base + PARTY_RVA + slot * 8) as usize;
+        if a < 0x10000 || a == sora || !super::crash::readable(a) || !super::crash::readable(a + 0x378) {
+            continue;
+        }
+        let stats = pose::ptr(rd::<u32>(a + 0x6C));
+        if stats < 0x10000 || !super::crash::readable(stats + 0x44) || rd::<i32>(stats + 0x3C) <= 0 || rd::<u32>(a + 0x88) & 0x30 != 0 {
+            continue;
+        }
+        let p = rd::<[f32; 3]>(a + 0x10);
+        let pos = Vec3::new(p[0], -p[1], p[2]);
+        let centre = pos + Vec3::Y * 60.0;
+        out.push((Obj { id: PARTNER0 + slot as u32, pos, facing: 0.0, motion: 0, air: false, target: centre, centre }, a));
+    }
+    out
 }
 
 impl KhWorld {
     fn get(&self, o: ObjId) -> Option<&Obj> {
-        self.objs.iter().find(|x| x.id == o)
+        self.objs.iter().find(|x| x.id == o).or_else(|| self.party.iter().map(|p| &p.0).find(|x| x.id == o))
+    }
+
+    /// A partner's actor (`PARTNER0 + slot`).
+    pub(super) fn partner_actor(&self, o: ObjId) -> Option<usize> {
+        self.party.iter().find(|p| p.0.id == o).map(|p| p.1)
     }
 }
 
@@ -914,7 +950,10 @@ impl World for KhWorld {
         }
     }
     fn party(&self, n: u32) -> Option<ObjId> {
-        (n == 0).then_some(SORA)
+        match n {
+            0 => Some(SORA),
+            _ => self.party.iter().find(|p| p.0.id == PARTNER0 + n).map(|p| p.0.id),
+        }
     }
     fn has_ability(&self, _: ObjId, _: u32) -> bool {
         false

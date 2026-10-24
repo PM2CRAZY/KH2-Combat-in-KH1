@@ -26,7 +26,9 @@ weakness does 0.
 | — | Anti Form: damage Sora takes in Anti Form is scaled by a system rate. Not modelled. | Checked (exe), not implemented |
 
 Cure (ATKP type 5) heals `ceil(target max HP × power × stat / 10000)`. C-Cure (type 6) heals
-`ceil(power × stat / 100)`. **Checked (exe).**
+`ceil(power × stat / 100)`, `stat` the caster's. **Checked (exe).** Then, for heals as for
+damage, the target's low-HP rate (step 8) applies. The Cure spells are type 6, Magic: ATKP 708
+on the caster, 709 (half its power) on each party member in range (`kh1-move-styles.md`).
 
 ## Attack rows
 

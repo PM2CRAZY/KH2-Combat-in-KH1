@@ -9,6 +9,7 @@
 
 #![allow(clippy::missing_safety_doc)]
 
+pub mod cure;
 pub mod drivegauge;
 pub mod driveitems;
 pub mod growth;
@@ -21,7 +22,7 @@ pub mod support;
 
 /// The mod's version as the user sees it (the Config menu's Camera Style help line, the log):
 /// the stage of the latest `AGENTS.md` entry, bumped with each build handed out (a test checks).
-pub const VERSION: &str = "s338";
+pub const VERSION: &str = "s339";
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod win;

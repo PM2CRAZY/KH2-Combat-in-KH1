@@ -558,7 +558,8 @@ impl World for LimitWorld<'_> {
         self.kh.target_of(o)
     }
     fn party(&self, n: u32) -> Option<ObjId> {
-        self.kh.party(n)
+        // (Sora alone: the form has taken his partners, `vanish`.)
+        (n == 0).then_some(SORA)
     }
     fn has_ability(&self, o: ObjId, n: u32) -> bool {
         self.kh.has_ability(o, n)

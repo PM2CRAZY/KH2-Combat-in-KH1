@@ -3584,6 +3584,14 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-24: Stage 339 (KH2-style Cure heals by KH2's rule)
+- The user: "using cure with KH2 magic selected barely heals sora". `formmagic::heal` was
+  ceil(max HP x power / 3000) (13-20%), Sora only. KH2's heal (kind 6): ceil(power x Magic / 100);
+  Cure's rows 708 (caster: 400 / 500 / 600) and 709 (each partner in range: half). New `cure.rs`:
+  KH1's live max MP x 3 x `magic_scale` stands in for Magic (near-full heals, as KH2's); partners
+  in the field healed (`reflect::KhWorld`), knocked-out ones skipped. KH1-style and the forms'
+  Cure unchanged. docs/kh1-move-styles.md, docs/combat-model.md.
+
 ### 2026-10-23: Stage 338 (forced reverts: partners fully back, Drive gauge full)
 - The user: "The sora is force reverted in any circumstances (reverted outside of the player's
   control) make sure the party members are fully visible, and fully refill sora's drive gauge".
