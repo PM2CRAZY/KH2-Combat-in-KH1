@@ -19,6 +19,7 @@
 - [13. Assistant: t437 to t444 (one change each).](#^m13)
 - [14. Mr Bugs: 1. (b) (I'm unsure the affects of this as I noticed reflect ](#^m14)
 - [15. Assistant: t454 to t456.](#^m15)
+- [16. Assistant: t466 to t472 (one change each). Your log was from t463, so t](#^m16)
 
 ---
 
@@ -374,3 +375,25 @@ please have a toggle for those magics for now
 go ahead
 
   
+
+
+> [!tip] Assistant
+> **t466 to t472** (one change each). Your log was from t463, so t454 to t456 were already in it.
+>
+> 1. **t466, Thunder:** KH2 gives each palette of a texture its own HD image, one key apart, and KH1 only ever used the first. Our effects now do it KH2's way, so Thunder should be textured.
+> 2. **t467, Blizzard:** the shard used one program we hadn't checked yet. It turned out to be identical in both games, so it plays now.
+> 3. **t468, Firaga:** KH1 has only 10 texture slots for all the effects drawn in a frame, and the way the spells were built, Firaga needed 24 at once (Reflect needed 37). Spells are now packed the way KH2's own files are, so they fit. I think that's what was hiding the flames, but I can't confirm it here.
+> 4. **t469, Reflect:** I re-checked the turn fix against the KH2 code, the old player and KH2's own Reflect animation, and it holds: the barrier lines up with his raised hands. So it's something else. The log now writes where each spell piece starts next to KH2's numbers for it, so the next log will show exactly what's off.
+> 5. **t470, Cure:** (c) is in: KH1's body centre plus KH2's 20.
+> 6. **t471, magic toggle:** Stop and Aero never got KH2 effects. They're KH1's own effects, but drawn on KH2's cast animation and cut at its end, which makes them look different. The debug menu has a new KH1 Spells page (on the main page) where you can set Gravity, Stop and Aero each to "KH2 cast" (as now) or "KH1 cast" (KH1's whole cast, effects and all). Cure with Magic on KH2 is KH2's own Cure, so its effects being KH2's is expected, and I left it alone. Also, Gravity's hit didn't seem to come out before the cast animation ended in your log; that's gameplay, so tell me if you want it looked at.
+> 7. **t472, debug menu memory:** the font has its own small buffer now, and the 24 MB model buffer is only made when the KH2 model is on.
+>
+> **Check:** the KH2 decomp against your log for Thunder, the exes for Blizzard's program and KH1's texture slots, the KH2 files for Cure and the casts. Not checked in game.
+>
+> Questions:
+> 1. Reflect: is it (a) too high, (b) off to one side, or (c) turned? A log after casting it would help.
+> 2. Reflect's numbers are KH2 Sora's size, and KH1 Sora is about 11% smaller. Should I (a) scale them to KH1 Sora, or (b) keep KH2's exact numbers?
+> 3. Firaga: are all the flames there now?
+
+^m16
+

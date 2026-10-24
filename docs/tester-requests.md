@@ -71,6 +71,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [13. Assistant: t437 to t444 (one change each).](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m13)
   - [14. Mr Bugs: 1. (b) (I'm unsure the affects of this as I noticed reflect ](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m14)
   - [15. Assistant: t454 to t456.](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m15)
+  - [16. Assistant: t466 to t472 (one change each). Your log was from t463, so t](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m16)
 - [KH2's combo row selection](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md)
   - [1. Mr Bugs: In the KH2S model rendering there was a suggestion to implem](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m1)
   - [2. Assistant: t374](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m2)
