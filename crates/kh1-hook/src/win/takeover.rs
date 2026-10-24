@@ -448,6 +448,8 @@ unsafe extern "system" fn physics(actor: usize) {
         // KH2's hop out of KH1's ground combo: its sideways speed, which KH1's carry into the air
         // replaced (`shared::physics::ground_hop_carry`).
         super::shared::physics::ground_hop_carry(actor);
+        // KH2's turn toward the target in our slot's KH2 motion (`kh2slots::turn_to_lock`).
+        super::kh2slots::turn_to_lock(actor);
     }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
@@ -1544,6 +1546,24 @@ pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::C
     d.character.set_drop_ahead(drop);
     let (row, launch) = d.character.would_take_launch(from, playing, air, square, stick, &env)?;
     Some((row, d.character.combo_length(air), d.character.abilities.negative_combo, launch))
+}
+
+/// KH2's primary target for base Sora now (KH2's `+0xDC8`: KH1's lock as KH2's lock, else KH2's
+/// auto target among his targets, as `kh2_would_take_launch` sees them), its point (KH2's y-up):
+/// what KH2's turn windows turn him toward (`kh2slots::turn_to_lock`). Only asked inside such a
+/// window (it looks his targets up).
+pub unsafe fn kh2_primary_target(actor: usize) -> Option<[f32; 3]> {
+    let base = BASE.load(Ordering::Relaxed);
+    let kh2 = pose::kh2()?;
+    let mut g = DRIVER.try_lock().ok()?;
+    let d = g.get_or_insert_with(|| new_driver(kh2));
+    let mut targets = d.strikes.look(actor);
+    let lock = kh1_lock(base, &mut targets);
+    d.character.set_lock(lock);
+    d.character.set_auto_target(super::settings::get().auto_aim);
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    let env = Env { pos: [p[0], -p[1], p[2]], grounded: rd::<i32>(actor + 0x70) == 0, height_above_ground: rd::<f32>(actor + 0x3D4).max(0.0), targets: &targets, ledges: &[] };
+    d.character.primary_target_pos(&env)
 }
 
 /// Sora's KH2 abilities now (from KH1's menu), whoever has him (`combomods`).

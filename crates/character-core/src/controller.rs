@@ -1178,6 +1178,12 @@ impl Character {
         self.drop_ahead = on;
     }
 
+    /// The primary target now (the lock, else the auto target; KH2's `+0xDC8`), for a host that
+    /// turns him toward it (KH2's `TurnToLock` range on a host's own states).
+    pub fn primary_target_pos(&self, env: &Env) -> Option<[f32; 3]> {
+        self.primary_target(env).map(|t| t.pos)
+    }
+
     /// The selector's direction at an attack press now (exe `0x1404028D0`, Checked (decomp)):
     /// flat, to the primary target, or his facing with none (`0x1403B56E0`). Rows are measured
     /// from it, and KH2's line ahead for row 1 runs along it (`set_drop_ahead`). x / z.

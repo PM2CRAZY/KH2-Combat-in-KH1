@@ -359,6 +359,58 @@ pub unsafe fn edge_stop(actor: usize) -> bool {
     t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::EdgeStop))
 }
 
+/// KH2's turn toward the target in our slot playing on `actor` (the tester: "(a)", KH2's turn
+/// during swings on KH1's rows; Steam KH2, Checked (decomp)): KH2's range handler (`0x14040D810`)
+/// runs range id 28 (`TurnToLock`, `WindowKind::TurnToLock`, its parameter in degrees) each motion
+/// update while the motion's time is in it (`0x14040E740`: start <= t < end) through `0x1403D4B10`:
+/// with a primary target (the player's `+0xDC8`), `0x1403D3A90` takes the flat line from his
+/// position (`+0x670`, plus `+0x690`, 0 outside a few states) to the target's point
+/// (`0x1403BDDE0`) and, longer than 50, turns him toward it (`0x1403B9F70`) by at most twice the
+/// parameter (radians) an update, wherever he faced. KH2 takes one update a game frame (delta 2
+/// at 30 fps, `docs/animations.md`), so this is per game frame too. Here: KH1's time in the slot
+/// as the clip's frame, the target as KH2's controller picks it (`takeover::kh2_primary_target`:
+/// KH1's lock, else KH2's auto target), and KH1's facing fields set (`+0x30`, its yaw `+0x3C`
+/// and the yaw it turns toward `+0x150`, as `takeover` sets them for KH2's facing). Before KH1's
+/// physics frame (`takeover::physics`). The OG rewrite turned by the parameter once a 60 Hz
+/// frame, half the exe's at 60 fps.
+pub unsafe fn turn_to_lock(actor: usize) {
+    use character_core::WindowKind as W;
+    let Some(m) = current(actor) else { return };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return };
+    let t: f32 = rd(actor + TIME_NOW);
+    if !(t >= 0.0) {
+        return;
+    }
+    let Some(rate) = clip.open(t as u32).find_map(|w| match w.kind {
+        W::TurnToLock(r) => Some(r),
+        _ => None,
+    }) else {
+        return;
+    };
+    let Some(target) = super::takeover::kh2_primary_target(actor) else { return };
+    let p: [f32; 3] = rd(actor + 0x10);
+    let d = [target[0] - p[0], target[2] - p[2]];
+    let yaw: f32 = rd(actor + 0x3C);
+    if !(d[0].hypot(d[1]) > 50.0) || !yaw.is_finite() {
+        return;
+    }
+    let want = d[0].atan2(d[1]);
+    let tau = std::f32::consts::TAU;
+    let diff = (want - yaw + std::f32::consts::PI).rem_euclid(tau) - std::f32::consts::PI;
+    let max = 2.0 * rate;
+    let f = yaw + diff.clamp(-max, max);
+    let f = (f + std::f32::consts::PI).rem_euclid(tau) - std::f32::consts::PI;
+    if !f.is_finite() {
+        return;
+    }
+    wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
+    wr(actor + 0x150, f);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log(&format!("KH2's turn to the target (KH2 motion {} frame {:.0}, up to {:.2} a frame): {:.2} -> {f:.2} (the target at {:.2})", m.motion, t, max, yaw, want));
+    }
+}
+
 /// KH2's `motion` has a slot of ours on one of KH1's requests (built: an ability row's only when
 /// it is a Keyblade swing, `swing_rows`).
 pub fn has_any(motion: u16) -> bool {

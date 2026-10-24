@@ -763,10 +763,30 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   with KH1's clash spark (`combat::clang`), so KH1's damage, reaction, voice and hit count for it
   don't run. Only `refact_self` 2 guards are taken this way; a motion with another kind of guard
   is still not native (`kh2slots::blade_swing`). Flash Step then plays on KH1's ground swing rows
-  as Slapshot does (above). Needs the ini's `hurt` on (as KH2's own guard does). Not done: KH2's
-  turn toward the locked target in a swing (`TurnToLock`, range id 28: Flash Step's 0.785 a
-  frame at 18..22; every native swing has some) is not on KH1's swing rows, which face the
-  target as KH1's row starts.
+  as Slapshot does (above). Needs the ini's `hurt` on (as KH2's own guard does). KH2's turn
+  toward the target in a swing: below.
+- **KH2's turn toward the target in a swing** (the tester: "(a)"; Steam KH2, Checked (decomp)
+  and (exe)): KH2's range handler (`0x14040D810`, one case per range id) runs range id 28
+  (`TurnToLock`, its parameter in degrees) each motion update while the motion's time is in it
+  (`0x14040E740`: start <= t < end) through `0x1403D4B10`: with a primary target (the player's
+  `+0xDC8`), `0x1403D3A90` takes the flat line from his position (`+0x670` plus `+0x690`) to the
+  target's point (`0x1403BDDE0`, its kind-3 shape) and, if longer than 50, turns him toward it
+  (`0x1403B9F70`) by at most **twice** the parameter (radians) an update (the OG rewrite turned by
+  the parameter once a 60 Hz frame, half the exe's at 60 fps); it also sets `+0x194` bit 3. One
+  update a game frame (delta 2 at 30 fps). Range 22 (`TurnToTarget`) turns toward his own
+  `+0xBF8` the same way (none on Sora's swings). Sora's (`P_EX100.mset`, Checked (files)): 151 /
+  152 frames 0..12 at 15 degrees, 153 0..12 and 32..44 at 15, 154 0..8 at 22, 155 0..4 at 45
+  and 32..38 at 5, Slapshot 0..8 at 22, Dodge Slash 0..12 at 15, 26..30 and 44..48 at 22, Slide
+  Dash 0..8 at 22, Flash Step 0..8 at 22 and 18..22 at 45, Vicinity Break / Counterguard /
+  Finishing Leap 0..8 at 22, 181 0..23, 182 0..22 at 15, 184 0..10 at 18 (183 none), Aerial
+  Spiral 0..8 at 22, Aerial Finish 0..80, Aerial Dive 0..43, Magnet Burst 0..12 at 15.
+  Ours (`kh2slots::turn_to_lock`, from `takeover::physics` before KH1's physics frame, KH1
+  having him): our slot's KH2 clip at KH1's time in the slot, the target as KH2's controller
+  picks it (`takeover::kh2_primary_target`: KH1's lock, else KH2's auto target, the ini's
+  `auto_aim`), and KH1's facing (`+0x30`, yaw `+0x3C`, the yaw it turns toward `+0x150`) turned
+  by at most twice the parameter a game frame. KH1's row still faces the target as it starts.
+  Cost: his targets looked up on the frames inside such a range only. Not checked in game;
+  **assumption**: `+0x690` is 0 in a swing (it is cleared outside `+0x120` bit 4).
 - **The drop ahead, row 1** (the tester: "add that"; Steam KH2, Checked (decomp)): on the
   ground, before the walk, the selector (`0x140402D20`) takes the selector's direction (to the
   primary target, else his facing, `0x1404028D0`), scales it by `+0x150`'s `+0x2C` plus `+0x6F0`,

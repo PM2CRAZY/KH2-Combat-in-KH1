@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 458 (testing branch: KH2's turn toward the target in a swing on KH1's rows)
+- **KH2's turn toward the target in a swing on KH1's rows.** Range 28 (`0x1403D4B10` / `0x1403D3A90` / `0x1403B9F70`, Checked (decomp)): up to 2 × the parameter an update toward `+0xDC8`, past 50 away. `kh2slots::turn_to_lock` from `takeover::physics`; target `takeover::kh2_primary_target`. Notes §7.
+
 ### 2026-10-23: Stage 457 (testing branch: KH2's edge stop on KH1's ground swings)
 - **KH2's edge stop on KH1's ground swings.** Range id 29 (`0x14040D810` → `+0x18C` bit 23, Checked (decomp)): `0x1403B9090` sweeps the step + 0.2 (`0x14074B060`, Checked (exe)) × 90 and keeps only its vertical part. `kh2slots::edge_stop`, `shared::physics` ground step, `combomods::floor_gone`. 154 / 155 / 165 / 169 / 161 (Checked (files)). Plain swings still cut into the fall, as in KH2 (`0x1403D6430`) and KH1 (`0x14029A3C0`). Notes §7.
 
