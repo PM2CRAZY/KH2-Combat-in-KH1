@@ -137,7 +137,7 @@ Before replying to anything here, go read `design-philosophy-instructions.md` in
 
   
 
-**New threads.** A tester starts a new thread at the bottom of this file's Requests section (or by making its folder and file directly). When you first reply to one, move it word for word into its own file (`testers/<thread>/<thread>.md`, with the title, the link back and the Messages list) and remove it from the Requests section.
+**New threads.** A tester starts a new thread at the bottom of this file's Requests section (or by making its folder and file directly). Every time you're told the requests were updated, check the Requests section first, before anything else, with a sub-agent if several things are waiting: any new thread found there gets its own folder and file at once (`testers/<thread>/<thread>.md`: the thread moved word for word, with the title, the link back and the Messages list), is removed from the Requests section, and gets a line in the Contents. Then it's answered in its own file like every other thread.
 
 **Thread folders.** Testers put their trace CSVs and log files for a thread in the `testers` folder at the top of the repo (next to `docs`), in a subfolder named after the thread title in lowercase with hyphens. When you first reply to a new thread, create that subfolder with the thread's file in it, and tell the tester its name in your reply. When you work on a thread, look in its folder for the tester's files.
 
