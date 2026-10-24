@@ -203,24 +203,9 @@ go ahead
 ^m11
 
 
-<<<<<<< HEAD
-=======
-this is a test
 
+to answer your last response, removing the test:
 
-> [!tip] Assistant
-> Got your test here too: the automatic round picked it up from this thread.
->
-> No code changed. The three questions in my last reply still need answers before I touch the pants, the bones KH2's model doesn't show, or the coat:
-> 1. Pants: (a) keep KH1's own animation, or (b) fixed to the thigh, as KH2 shows them?
-> 2. Hood, sleeve flaps and the 3 hair spikes: (a) follow KH2's skeleton, or (b) keep them still, as KH2's model shows them?
-> 3. Coat: (a) keep it following his hips, (b) move it with his torso like KH2's jacket, or (c) follow KH2's coat bones?
->
-> Answer in a `> [!note]` box with your picks and "go ahead".
+make everything 1:1 with how its animated in kh2, if there's no equivalences like the ones we talked about then don't add them.
 
-
->>>>>>> 364841f81724f196b7b624629ba4bbe81d96eb8a
-
-^m12
-
-
+go ahead 
