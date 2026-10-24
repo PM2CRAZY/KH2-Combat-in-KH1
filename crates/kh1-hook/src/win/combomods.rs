@@ -344,22 +344,52 @@ const NORMAL_BYTES: [u8; 11] = [0xF3, 0x0F, 0x10, 0x15, 0xC4, 0x27, 0x25, 0x00, 
 /// KH2's rule. KH1's own test (row 2) differs: any step with the floor more than half KH1's
 /// height below. KH1's block put back after. False off Steam or with no KH2 data.
 pub unsafe fn drop_ahead(actor: usize, aim: [f32; 2]) -> bool {
-    if Build::current() != Build::Steam {
-        return false;
-    }
-    let base = takeover::game_base();
-    if rd::<[u8; 10]>(base + SETUP_STEAM) != SETUP_BYTES || rd::<[u8; 10]>(base + MOVER_STEAM) != MOVER_BYTES || rd::<[u8; 11]>(base + NORMAL_STEAM) != NORMAL_BYTES {
-        note("KH2's line ahead: KH1's collision calls (0x14029A0B0 / 0x140195180 / 0x1401907F0) aren't the expected code here; not tested".to_string());
-        return false;
-    }
     let Some(kh2) = pose::kh2() else { return false };
     let Some(shape) = kh2_data::sora::bg_shape(&kh2.rig.body_shapes) else { return false };
     let length = kh2.character.attack.jump_front + shape.radius;
+    match floor_gone(actor, aim, length) {
+        Some(Gone { found: true, below, reach }) => {
+            note(format!("KH2's line ahead: the floor {below:.0} below at {length:.0} ahead (more than {reach:.0}: none), KH2's row 1 marked"));
+            true
+        }
+        Some(_) => {
+            note(format!("KH2's line ahead: no floor under the point {length:.0} ahead, KH2's row 1 marked"));
+            true
+        }
+        None => false,
+    }
+}
+
+/// KH2's no-floor result for a line (`floor_gone`): whether a floor was found under its end, how
+/// far below his feet it is, and KH2's limit (more than that below is no floor).
+pub struct Gone {
+    pub found: bool,
+    pub below: f32,
+    pub reach: f32,
+}
+
+/// KH2's sweep for "no floor" (`0x1403BA750` -> `0x14016FEC0`, the rule in `drop_ahead`'s notes)
+/// along `aim` (x / z), `length` long, on KH1's collision: `Some` when there is no floor at its
+/// end (none, or more than KH2's lift less height less 1 below his feet), `None` when there is
+/// floor (or it couldn't be tested). Shared by KH2's line ahead (`drop_ahead`) and its edge stop
+/// (`shared::physics`'s ground step, `kh2slots::edge_stop`). KH1's block put back after. Steam
+/// only, the three calls' bytes checked.
+pub unsafe fn floor_gone(actor: usize, aim: [f32; 2], length: f32) -> Option<Gone> {
+    if Build::current() != Build::Steam {
+        return None;
+    }
+    let base = takeover::game_base();
+    if rd::<[u8; 10]>(base + SETUP_STEAM) != SETUP_BYTES || rd::<[u8; 10]>(base + MOVER_STEAM) != MOVER_BYTES || rd::<[u8; 11]>(base + NORMAL_STEAM) != NORMAL_BYTES {
+        note("KH2's floor sweep: KH1's collision calls (0x14029A0B0 / 0x140195180 / 0x1401907F0) aren't the expected code here; not tested".to_string());
+        return None;
+    }
+    let kh2 = pose::kh2()?;
+    let shape = kh2_data::sora::bg_shape(&kh2.rig.body_shapes)?;
     // (KH2's mover: the floor more than this below his feet is none.)
     let reach = shape.lift - shape.height - 1.0;
     let flat = aim[0].hypot(aim[1]);
     if !(flat > 1e-3) || !(length > 0.0) || !reach.is_finite() {
-        return false;
+        return None;
     }
     let v = glam::Vec3::new(aim[0] / flat, 0.0, aim[1] / flat);
     let saved: [u8; COLLISION_LEN] = rd(actor + COLLISION);
@@ -393,7 +423,7 @@ pub unsafe fn drop_ahead(actor: usize, aim: [f32; 2]) -> bool {
     let mut left = across.length();
     if !(step > 0.5) || !start_y.is_finite() || !(left > 0.0) {
         wr(actor + COLLISION, saved);
-        return false;
+        return None;
     }
     let dir = across / left;
     let mut steps = 0;
@@ -409,15 +439,7 @@ pub unsafe fn drop_ahead(actor: usize, aim: [f32; 2]) -> bool {
     let found = rd::<u16>(actor + COLLISION + 0x3C) != 0xFFFF;
     let below = rd::<f32>(actor + COLLISION + 0x68) - (start_y + line.y.max(0.0));
     wr(actor + COLLISION, saved);
-    let drop = !found || !(below <= reach);
-    if drop {
-        note(if found {
-            format!("KH2's line ahead: the floor {below:.0} below at {length:.0} ahead (more than {reach:.0}: none), KH2's row 1 marked")
-        } else {
-            format!("KH2's line ahead: no floor under the point {length:.0} ahead, KH2's row 1 marked")
-        });
-    }
-    drop
+    (!found || !(below <= reach)).then_some(Gone { found, below, reach })
 }
 
 /// KH2's hop out of KH1's ground combo (Base Combo KH2; the tester: "design and implement

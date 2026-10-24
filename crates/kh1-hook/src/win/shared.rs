@@ -942,31 +942,9 @@ pub mod physics {
             .flatten()
             .filter(|s| (98..=101).contains(s));
         if let Some(slot) = swing {
-            if !kh2() {
-                return f(actor, disp);
-            }
-            // (Ours baked with KH2's root travel in its H10 (t365, `kh2slots::moves_itself`):
-            // KH1's own root travel moves him (`0x14029A3C0` adds `+0x200` after this step) and
-            // keeps the model on him; feeding KH2's travel here too moved him twice, and KH1
-            // pulled the model back by the template's travel: the t364 trace, the model trailing
-            // the screen's centre, then jumping to it at the swing's end.)
-            if super::super::kh2slots::moves_itself(actor) {
-                if let Ok(mut g) = SWING.try_lock() {
-                    *g = None;
-                }
-                return f(actor, disp);
-            }
-            // (KH1's own move vector and speed put back after its step: the next frame, with the
-            // stick let go, KH1's input filter for the state (`0x1402A5F10`) takes the move vector
-            // as the input, and the ground pre-step (`0x1402CC1A0`, `0x140297FB0`) turns his
-            // desired facing (`+0x150`) toward it; KH1's turn (`0x1402A3300`, π/16 a frame) then
-            // turned him toward KH2's travel, sideways in its finisher: the t363 trace.)
-            let kept: [f32; 4] = rd(actor + 0x20);
-            let fed = swing_travel(actor, slot);
-            let r = f(actor, disp);
-            if fed {
-                wr(actor + 0x20, kept);
-            }
+            let r = swing_step(actor, slot, disp, f);
+            // KH2's edge stop in our slot's motion (either physics: it is the motion's own).
+            edge_stop(actor, disp);
             return r;
         }
         let r = f(actor, disp);
@@ -993,6 +971,87 @@ pub mod physics {
             let d = &mut *disp;
             d[0] *= k;
             d[2] *= k;
+        }
+        r
+    }
+
+    /// KH2's edge stop factor: its ground mover sweeps the step lengthened by this times his
+    /// collision radius (`+0x6F0`, Sora's 90) for the floor (`0x1403B9090`: `DAT_14074B060`, 0.2,
+    /// Checked (exe)).
+    const EDGE_REACH: f32 = 0.2;
+    /// KH1's travel flag on the actor (`+0x160` bit 4) and the frame's travel it adds after the
+    /// state's step (`+0x200`, the physics step `0x14029A3C0`, Checked (decomp)).
+    const TRAVEL_ON: u32 = 4;
+    const TRAVEL: usize = 0x200;
+
+    /// KH2's edge stop on KH1's ground swing (the tester: "it should cancel his animation like
+    /// kh1, ... look at steam kh2 ghidra decomp"; Steam KH2, Checked (decomp)): while KH2's motion
+    /// has range id 29 open (`kh2slots::edge_stop`: its range handler `0x14040D810` sets the motion
+    /// state word `+0x18C` bit 23), KH2's ground mover (`0x1403B9090`, its test `0x1403BAB20`) sweeps
+    /// the horizontal step lengthened by 0.2 of his radius for the floor (`0x1403BA750`, the same
+    /// no-floor rule as the line ahead) and, with none, keeps only the step's vertical part: he
+    /// stays on the ledge and the swing goes on. Outside it he steps off and KH2 cuts the swing into
+    /// its fall (below), as KH1 does. Here: this frame's step (KH1's step's result and the motion's
+    /// travel KH1 adds after it, `+0x200`), on KH1's collision (`combomods::floor_gone`); with no
+    /// floor, both lose their horizontal part.
+    unsafe fn edge_stop(actor: usize, disp: *mut [f32; 4]) {
+        if disp.is_null() || !super::super::kh2slots::edge_stop(actor) {
+            return;
+        }
+        let travel = rd::<u32>(actor + 0x160) & TRAVEL_ON != 0;
+        let t: [f32; 4] = if travel { rd(actor + TRAVEL) } else { [0.0; 4] };
+        let d = *disp;
+        let step = [d[0] + t[0], d[2] + t[2]];
+        let len = step[0].hypot(step[1]);
+        if !(len > 1e-3) || !len.is_finite() {
+            return;
+        }
+        let Some(radius) = super::super::pose::kh2().and_then(|k| kh2_data::sora::bg_shape(&k.rig.body_shapes).map(|s| s.radius)) else { return };
+        if super::super::combomods::floor_gone(actor, step, len + EDGE_REACH * radius).is_none() {
+            return;
+        }
+        let d = &mut *disp;
+        d[0] = 0.0;
+        d[2] = 0.0;
+        if travel {
+            wr(actor + TRAVEL, [0.0f32, t[1], 0.0, t[3]]);
+        }
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 40 {
+            super::super::log(&format!(
+                "KH2's edge stop (KH2 motion {:?}): no floor {:.0} ahead, his {len:.1} step this frame kept on the ledge",
+                super::super::kh2slots::playing_motion(actor),
+                len + EDGE_REACH * radius
+            ));
+        }
+    }
+
+    /// KH1's ground swing's step (state 0, our wrapper): KH2's swing travel with physics KH2.
+    unsafe fn swing_step(actor: usize, slot: usize, disp: *mut [f32; 4], f: StepFn) -> usize {
+        if !kh2() {
+            return f(actor, disp);
+        }
+        // (Ours baked with KH2's root travel in its H10 (t365, `kh2slots::moves_itself`):
+        // KH1's own root travel moves him (`0x14029A3C0` adds `+0x200` after this step) and
+        // keeps the model on him; feeding KH2's travel here too moved him twice, and KH1
+        // pulled the model back by the template's travel: the t364 trace, the model trailing
+        // the screen's centre, then jumping to it at the swing's end.)
+        if super::super::kh2slots::moves_itself(actor) {
+            if let Ok(mut g) = SWING.try_lock() {
+                *g = None;
+            }
+            return f(actor, disp);
+        }
+        // (KH1's own move vector and speed put back after its step: the next frame, with the
+        // stick let go, KH1's input filter for the state (`0x1402A5F10`) takes the move vector
+        // as the input, and the ground pre-step (`0x1402CC1A0`, `0x140297FB0`) turns his
+        // desired facing (`+0x150`) toward it; KH1's turn (`0x1402A3300`, π/16 a frame) then
+        // turned him toward KH2's travel, sideways in its finisher: the t363 trace.)
+        let kept: [f32; 4] = rd(actor + 0x20);
+        let fed = swing_travel(actor, slot);
+        let r = f(actor, disp);
+        if fed {
+            wr(actor + 0x20, kept);
         }
         r
     }

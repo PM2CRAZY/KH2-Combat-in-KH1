@@ -1,3 +1,6 @@
+### 2026-10-23: Stage 457 (testing branch: KH2's edge stop on KH1's ground swings)
+- **KH2's edge stop on KH1's ground swings.** Range id 29 (`0x14040D810` → `+0x18C` bit 23, Checked (decomp)): `0x1403B9090` sweeps the step + 0.2 (`0x14074B060`, Checked (exe)) × 90 and keeps only its vertical part. `kh2slots::edge_stop`, `shared::physics` ground step, `combomods::floor_gone`. 154 / 155 / 165 / 169 / 161 (Checked (files)). Plain swings still cut into the fall, as in KH2 (`0x1403D6430`) and KH1 (`0x14029A3C0`). Notes §7.
+
 ### 2026-10-23: Stage 456 (testing branch: fx12's vertex ring sized for the debug overlay)
 - **fx12's vertex ring sized for the debug overlay.** The tester (3 (a)). 4 x 1 MB (was 4 x 6 MB, sized for the old effect player): one overlay draw is at most 18 lines and 2 boxes. The KH2 player model (off) would need it sized again. Notes §18.11.
 

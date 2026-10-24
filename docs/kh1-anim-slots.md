@@ -838,18 +838,43 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
     where KH1's mover dropped him into its fall (state 2, request 6) and the swing ended there.
     Every other ground press in the log (12) took rows 5 / 6 / 3 on flat floor. Not covered: steps
     or a ramp (the traces have only the 0 and 120 floors).
-  - **KH2's edge stop** (Steam KH2, Checked (decomp); not added): KH2's ground mover
-    (`0x1403B9090`, from `0x1403B89A0`) stops the horizontal step at an edge when `0x1403BAB20`
-    says so: it runs the same no-floor sweep as the line ahead (`0x1403BA750`) along the step
-    lengthened by a constant times his radius (`DAT_14074B060 x +0x6F0`) and, with no floor, keeps
-    only the vertical part (and zeroes `+0xD24..+0xD2F` with `+0x6C8` bit 1). `0x1403BAB20` is
-    true with the motion state word `+0x18C` bit 23, or standing on an object that allows it
-    (`+0x9D8`'s `+0x18C` bit 28 clear and `+0x6C8` bit 15 clear), or `+0x6C8` bit 1 with `+0xD30`
-    above 0, or the movement state (`0x1403B5DC0`) 0xF. Which range trigger sets bit 23 isn't
-    found (**assumption**: none of Sora's swing motions, whose ranges are ids 11, 14, 23, 28, 29,
-    50 only; `docs/aerial-recovery.md` has ids 0..2 setting bits 2..4 and 11 bit 10), so a swing
-    whose travel crosses an edge would take him off in KH2 too, as here. Open: what KH2 does
-    with the swing once he is off (KH1 cuts it into its fall).
+  - **KH2's edge stop** (Steam KH2, Checked (decomp) and (exe); the tester, after t431: "it
+    should cancel his animation like kh1, ... look at steam kh2 ghidra decomp"): KH2's ground
+    mover (`0x1403B9090`, from `0x1403B89A0`) stops the horizontal step at an edge when
+    `0x1403BAB20` says so: it runs the same no-floor sweep as the line ahead (`0x1403BA750`) along
+    the step lengthened by `DAT_14074B060` (0.2, Checked (exe)) times his radius (`+0x6F0`, 90:
+    18 past the step) and, with no floor, keeps only the step's vertical part (and zeroes
+    `+0xD24..+0xD2F` with `+0x6C8` bit 1). `0x1403BAB20` is true with the motion state word
+    `+0x18C` bit 23, or standing on an object that allows it (`+0x9D8`'s `+0x18C` bit 28 clear and
+    `+0x6C8` bit 15 clear), or `+0x6C8` bit 1 with `+0xD30` above 0, or the movement state
+    (`0x1403B5DC0`) 0xF; not with `+0x6CC` bit 2. **Bit 23 is range id 29** (KH2's range handler
+    `0x14040D810`, Steam, Checked (decomp): one case per range id, 29 sets `+0x18C` bit 23 through
+    the motion block at `+0x158`; t431's assumption that no swing has it was wrong). Sora's
+    (`P_EX100.mset`, Checked (files)): the finishers 154 (frames 0..38) and 155 (0..39), Guard Break
+    165 (0..40), Flash Step 169 (0..17), 161 (0..28); none of 151 / 152 / 153, Slapshot, Dodge
+    Slash, Slide Dash or the air motions.
+  - **What KH2 does once he is off** (Steam KH2, Checked (decomp)): after the move, with no floor
+    under him (`+0x744` bit 0), bit 23 clear and no no-gravity range (`+0x18C` bits 5 / 24 / 6:
+    range ids 3, 30, 24) nor the object entry's `+0xC` bits 0 / 1, `0x1403B9090` sets his velocity
+    (`+0x20`) to the step over the frame delta (`0x140717480`) capped at 8, clears `+0x120` bit 26,
+    and calls the player's "left the ground" method (vtable `0x1405C43C0` `+0x50`: `0x1403A71B0`
+    -> `0x1403D6430`): **the fall motion 4 with a 16-frame blend** (`0x1403C6DC0`, not with
+    `+0x194` bit 4, range id 49) and the class's state change (`0x1403B7850`). So KH2 cuts the
+    swing into its fall, as KH1 does. KH1's own (Steam `0x14029A3C0`, its physics step, Checked
+    (decomp)): on the transition to state 2 it clears the action flag 4 (the swing ends), starts a
+    fall from rest (`0x1402AF8F0`) and sets `+0x3C0` to the frame's step per 60 Hz frame capped at 8:
+    KH2's own rule. Checked (trace): f48311 / f49221 (t430), `+0x3C0` 8.0 on the frame he left
+    (the swing's 26 a frame capped), then KH1's drag; the fall request 6 two frames later (KH2:
+    at once, the one difference left).
+  - **Ours** (`shared::physics`'s ground step, `kh2slots::edge_stop`, `combomods::floor_gone`,
+    after t436): while our slot's KH2 motion has range 29 open at KH1's time (either physics: it
+    is the motion's), this frame's step (KH1's state step's result plus the motion's travel KH1
+    adds after it, `+0x200` with `+0x160` bit 4) is swept on KH1's collision for 0.2 x 90 past
+    its end by KH2's no-floor rule (the line ahead's sweep, made common); with no floor both lose
+    their horizontal part, so he stays on the ledge and the finisher plays on. The plain swings
+    are unchanged: off he goes, into KH1's fall, as in KH2. Not checked in game; the
+    model's pull-back by the travel (`+0x210`, `0x14029F0A0`) is KH1's and not touched
+    (**assumption**: it follows the motion, not the travel KH1 applied).
   - A detail seen in f48640 / f48888: the hop's rise starts one frame before KH2's motion does
     (KH1 starts the new request the frame after the row runs, as for every swing; the state and
     speed are set on the press), so for one frame he rises in the end of the ground swing.

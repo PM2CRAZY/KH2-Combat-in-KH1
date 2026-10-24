@@ -22,6 +22,10 @@ pub enum WindowKind {
     Air,
     Grounded,
     AllowMovement,
+    /// KH2's edge stop (range id 29, the motion state word `+0x18C` bit 23; Steam exe range
+    /// handler `0x14040D810`): on the ground, a step that would leave the floor keeps only its
+    /// vertical part (`0x1403B9090` / `0x1403BAB20`), so the move stops at a ledge.
+    EdgeStop,
     KeepMomentum,
     AllowReactionCommand,
     WeaponTrail,

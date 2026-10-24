@@ -346,6 +346,19 @@ pub unsafe fn no_gravity(actor: usize) -> bool {
     !moving && clip.has(t as u32, |k| matches!(k, W::NoGravity))
 }
 
+/// KH2's clip of our slot playing on `actor` has its edge stop now (range id 29,
+/// `WindowKind::EdgeStop`, at KH1's time in the slot, the clip's frame): KH2's ground mover keeps
+/// him on the ledge there (`shared::physics`'s ground step). Sora's (`P_EX100.mset`, Checked
+/// (files)): the finishers 154 (frames 0..38) and 155 (0..39), Guard Break 165 (0..40), Flash Step
+/// 169 (0..17), and 161 (0..28).
+pub unsafe fn edge_stop(actor: usize) -> bool {
+    use character_core::WindowKind as W;
+    let Some(m) = current(actor) else { return false };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let t: f32 = rd(actor + TIME_NOW);
+    t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::EdgeStop))
+}
+
 /// KH2's `motion` has a slot of ours on one of KH1's requests (built: an ability row's only when
 /// it is a Keyblade swing, `swing_rows`).
 pub fn has_any(motion: u16) -> bool {
