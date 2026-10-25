@@ -24,7 +24,9 @@
 //!    of the body (t569's clearance rules: the coat and the belt pieces outside the shorts round
 //!    each thigh, 6.4 at the hip to 11.2 from mid-thigh plus 1, never more than the bind's
 //!    distance, and no more than 5 nearer the hips' up axis than in the bind; each shorts panel
-//!    no nearer its thigh's axis than 0.95 of its bind distance).
+//!    no nearer its thigh's axis than 0.95 of its bind distance). Each link's middle is kept out
+//!    as well as its tip (each with its own bind distance), so a link can't cut through a thigh
+//!    between two points that are clear.
 //! 4. Each link's bone is turned (its subtree with it) so it points at its simulated tip; the bone
 //!    keeps its rest roll.
 //!
@@ -176,8 +178,8 @@ struct Chain {
     held: Option<Mat4>,
     /// (bone turned, its tip): the simulated points are the tips.
     links: Vec<(usize, usize)>,
-    /// Segments (a, b) and each tip's clearance from them.
-    obstacles: Vec<((usize, usize), Vec<Clear>)>,
+    /// Segments (a, b) and each link's clearance from them: its tip's, then its middle's.
+    obstacles: Vec<((usize, usize), Vec<[Clear; 2]>)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -257,31 +259,34 @@ impl ClothSim {
         if !(ok(279) && ok(SPINE) && ok(CHEST)) {
             return ClothSim { below, parent, rest, chains, state: Vec::new(), started: false, last: Vec::new() };
         }
-        let bind_d = |j: usize, (a, b): (usize, usize)| nearest(at(&bind[j]), at(&bind[a]), at(&bind[b])).0.distance(at(&bind[j]));
-        let outside_shorts = |tips: &[usize]| -> Vec<((usize, usize), Vec<Clear>)> {
-            let mut o: Vec<((usize, usize), Vec<Clear>)> = THIGHS.iter().map(|&t| (t, tips.iter().map(|&j| Clear::Shorts(bind_d(j, t))).collect())).collect();
-            o.push(((HIPS, SPINE), tips.iter().map(|&j| Clear::Fixed(bind_d(j, (HIPS, SPINE)) - HIPS_IN)).collect()));
+        // A point's distance from a segment in the bind; each link's tip and middle.
+        let bind_d = |p: Vec3, (a, b): (usize, usize)| nearest(p, at(&bind[a]), at(&bind[b])).0.distance(p);
+        let points = |l: &(usize, usize)| [at(&bind[l.1]), (at(&bind[l.0]) + at(&bind[l.1])) * 0.5];
+        let outside_shorts = |links: &[(usize, usize)]| -> Vec<((usize, usize), Vec<[Clear; 2]>)> {
+            let mut o: Vec<((usize, usize), Vec<[Clear; 2]>)> = THIGHS.iter().map(|&t| (t, links.iter().map(|l| points(l).map(|p| Clear::Shorts(bind_d(p, t)))).collect())).collect();
+            o.push(((HIPS, SPINE), links.iter().map(|l| points(l).map(|p| Clear::Fixed(bind_d(p, (HIPS, SPINE)) - HIPS_IN))).collect()));
             o
         };
         for &r in &COAT {
-            let tips = [r + 2, r + 3];
+            let links = vec![(r + 1, r + 2), (r + 2, r + 3)];
             let held = bind[CHEST].inverse() * bind[r];
-            chains.push(Chain { part: Part::Coat, carrier: CHEST, bones: (r..=r + 3).collect(), held: Some(held), links: vec![(r + 1, r + 2), (r + 2, r + 3)], obstacles: outside_shorts(&tips) });
+            chains.push(Chain { part: Part::Coat, carrier: CHEST, bones: (r..=r + 3).collect(), held: Some(held), obstacles: outside_shorts(&links), links });
         }
         for (side, panels) in SHORTS.iter().enumerate() {
             let thigh = THIGHS[side];
             for &r in panels {
-                let tips = [r + 2, r + 3];
-                chains.push(Chain { part: Part::Shorts, carrier: thigh.0, bones: (r..=r + 3).collect(), held: None, links: vec![(r + 1, r + 2), (r + 2, r + 3)], obstacles: vec![(thigh, tips.iter().map(|&j| Clear::Fixed(bind_d(j, thigh) * PANEL_CLEAR)).collect())] });
+                let links = vec![(r + 1, r + 2), (r + 2, r + 3)];
+                let clears = links.iter().map(|l| points(l).map(|p| Clear::Fixed(bind_d(p, thigh) * PANEL_CLEAR))).collect();
+                chains.push(Chain { part: Part::Shorts, carrier: thigh.0, bones: (r..=r + 3).collect(), held: None, links, obstacles: vec![(thigh, clears)] });
             }
         }
         {
-            let tips: Vec<usize> = BELT[2..].to_vec();
-            chains.push(Chain { part: Part::Belt, carrier: HIPS, bones: BELT.to_vec(), held: None, links: BELT[1..].windows(2).map(|w| (w[0], w[1])).collect(), obstacles: outside_shorts(&tips) });
+            let links: Vec<(usize, usize)> = BELT[1..].windows(2).map(|w| (w[0], w[1])).collect();
+            chains.push(Chain { part: Part::Belt, carrier: HIPS, bones: BELT.to_vec(), held: None, obstacles: outside_shorts(&links), links });
         }
         {
-            let tips: Vec<usize> = FRONT_LINKS.iter().map(|l| l.1).collect();
-            chains.push(Chain { part: Part::Front, carrier: 4, bones: FRONT.to_vec(), held: None, links: FRONT_LINKS.to_vec(), obstacles: outside_shorts(&tips) });
+            let links = FRONT_LINKS.to_vec();
+            chains.push(Chain { part: Part::Front, carrier: 4, bones: FRONT.to_vec(), held: None, obstacles: outside_shorts(&links), links });
         }
         // (Every chain bone's parent is the one before it, or the carrier; a held root may have
         // another parent.)
@@ -410,19 +415,24 @@ impl ClothSim {
                         d = Quat::from_rotation_arc(rest_dir, d).slerp(Quat::IDENTITY, 1.0 - swing / ang) * rest_dir;
                     }
                     p = start + d * len;
+                    // Out of the body: the link's middle (the link swung about its start), then
+                    // its tip (tNNN: tips only before, so a link could cut through a thigh).
                     for ((_, clears), (a, b)) in c.obstacles.iter().zip(&obst) {
-                        let (q, s) = nearest(p, *a, *b);
-                        let need = match clears[i] {
-                            Clear::Fixed(r) => r,
-                            Clear::Shorts(cap) => (shorts_r(s) + SHORTS_MARGIN).min(cap),
-                        } * scale;
-                        let v = p - q;
-                        let dist = v.length();
-                        if dist < need && dist > 1e-4 {
-                            p = q + v * (need / dist);
-                            p = start + (p - start).normalize_or(d) * len;
-                            if k == n {
-                                rep.pushed += 1;
+                        for (which, clear) in [(1usize, clears[i][1]), (0, clears[i][0])] {
+                            let at_point = if which == 1 { (start + p) * 0.5 } else { p };
+                            let (q, s) = nearest(at_point, *a, *b);
+                            let need = match clear {
+                                Clear::Fixed(r) => r,
+                                Clear::Shorts(cap) => (shorts_r(s) + SHORTS_MARGIN).min(cap),
+                            } * scale;
+                            let v = at_point - q;
+                            let dist = v.length();
+                            if dist < need && dist > 1e-4 {
+                                let out = q + v * (need / dist);
+                                p = start + (out - start).normalize_or(d) * len;
+                                if k == n {
+                                    rep.pushed += 1;
+                                }
                             }
                         }
                     }

@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 615 (testing branch: Cloth: links' middles clear the thighs)
+- **Cloth physics: each link's middle kept out of the thighs.** The tester: "sora at the peak of his run around frame 11 is clipping through his shorts". t569's clearance rules were tested only at each link's tip, so with a knee up a link could pass through the thigh between two clear points. Each link's middle is now held to the same rules (each point with its own bind-distance cap), the link swung about its start to clear it. Assumption: which part clipped at frame 11 (coat, belt or shorts link over the rising thigh) isn't known; not checked against KH2's run frame by frame. docs/kh1-secondary-motion.md.
+
 ### 2026-10-25: Stage 614 (testing branch: Frame Advance panel: Animation)
 - **Frame Advance panel: the frame line reads Animation.** The tester: "I assume field frame run is the animation count, change it to animation so its understandable". The panel's line "Frame: field run 12 / 40   Loop 3" now reads "Animation: field run, frame 12 / 40, loop 3" (`fapanel::lines`). docs/kh1-frame-advance.md.
 

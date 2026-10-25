@@ -808,7 +808,13 @@ not read (Assumption: the jacket by the necklace rides the chest, as the stretch
    6.4 at the hip to 11.2 from mid-thigh, plus 1, capped at the bind's distance, and no more than
    5 nearer the hips' up axis 3→71 than in the bind; each shorts panel no nearer its thigh's axis
    than 0.95 of its bind distance). Assumption, as in t569: the shorts' thickness from the panel
-   bones, not the mesh.
+   bones, not the mesh. From tNNN each link's middle is held to the same rules as its tip (its
+   own bind distance as the cap), the link swung about its start to clear it: before, only the
+   tips were tested, so with a knee up (the tester, after t596: "sora at the peak of his run
+   around frame 11 is clipping through his shorts") a link could pass through the thigh between
+   two clear points. Not checked against KH2's run frame by frame (KH2's motion can't be
+   evaluated on the PC without our tools); which part clipped at frame 11 is not known
+   (Assumption: a coat, belt or shorts link over the rising thigh).
 4. Each link's bone is turned (subtree with it) to point at its tip; its roll stays the rest's.
 
 **KH1's own run, measured** (`cloth_sim`, Checked (files)): each link's swing about its own mean
