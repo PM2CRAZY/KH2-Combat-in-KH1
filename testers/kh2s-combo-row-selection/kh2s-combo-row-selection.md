@@ -26,6 +26,7 @@
 - [20. Assistant: You're right that there's still a seam. Here's what the code](#^m20)
 - [21. Assistant: Got your picks. Here's how I read them:](#^m21)
 - [22. Assistant: t580 and t581.](#^m22)
+- [23. Assistant: t586 to t591, one each:](#^m23)
 
 ---
 
@@ -575,6 +576,8 @@ do 1. if its the best way to implement more features into kh1's already existing
 > 4. Something I found: while you're locked on (R1, or KH1's small cursor), our "group" check only sees the locked enemy, so the group places never pass. KH2 counts every enemy there. (a) make it KH2's, as its own version, or (b) leave it?
 
 ^m22
+
+
 1. (b)
 2. (b)
 3. (b) and bring back zantetsuken and make it b as well
@@ -583,3 +586,39 @@ do 1. if its the best way to implement more features into kh1's already existing
 	also you need to make sure every kh1 finisher can go into other kh1/kh2 finishers, lets make sure that kh1 finishers that are listed as AOE follow explosions rule where if there's enemies around then explosion goes first over guard break, if its one enemy then guard break (single attacks) over explosion. (assumption) if you have two single hit vanilla moves then the priority should be based off of which one launches and keeps the enemy closer, the one that keeps the enemy closer should come out first.  also it seems like guard breaks knock back is wrong (it was sending the enemy really far) please make a separate thread for investigating and implementing kh2's knockback on enemies
 	
 go ahead  
+
+
+> [!tip] Assistant
+> **t586 to t591**, one each:
+>
+> - **t586:** Tweaks is inside Combat now, as its last row, and KH1 in KH2 is back to its four buttons. Ten rows don't fit above the help box at KH1's size, so Combat's list is drawn at 85%, the same way the main Config page is shrunk. Tell me if it's too small to read.
+> - **t587:** KH1 Ability Chance is Off by default. If your ini already says `on`, it stays on until you switch it in Tweaks.
+> - **t588:** Hurricane Blast keeps its KH1 rule. KH1's own air picker runs its test (a target no more than 100 above you), like Blitz, and the walk only takes it when that passes. Otherwise Aerial Finish and the rest follow as before.
+> - **t589:** Zantetsuken is back. The mod doesn't take it out of Sora's list any more, and if it took yours out before, you get it back once, off. Its KH1 rule is KH1's third 30% roll, on the same roll as Stun Impact and Gravity Break. It always rolls, whatever KH1 Ability Chance says, because the roll is its own rule in KH1. It sits with the single-target moves.
+> - **t590:** while locked on, the group checks count every enemy, as KH2's selector does (checked in the KH2 decomp: its "any enemy" rows look at every target; the lock only decides which one is in front). So Explosion, Stun Impact, Ripple Drive and Magnet Burst can take the crowd places with R1 held. This is Base / Aerial Base Combo KH1; at KH2 the selector still only looks at the locked enemy (question 1).
+> - **t591:** every KH1 finisher can chain with Finishing Plus. KH1's own finisher and its ability finishers get KH2's Finishing Plus window, at the same point of KH1's animation as in KH2's 155 (ground) / 183 (air). That placement is my assumption, since KH1's finishers have no window of their own. The next finisher comes from the same walk, skipping the one playing. After KH1's own normal finisher, the next normal one is KH2's, picked by KH2's check: 154 with an enemy in its window, else 155 (air 184, else 183).
+>
+> **Your priority rule.** The crowd rule was already in t580: with enemies around, Stun Impact, Ripple Drive and Explosion come first; against one enemy, Guard Break, Gravity Break, Zantetsuken and Blitz. For your assumption about two single-target KH1 moves, I measured how far each moves the enemy. KH1 has no knockback number per attack: the enemy reacts by type (checked in the KH1 decomp and `btltbl.bin`):
+> - Gravity Break crushes it in place (0);
+> - Zantetsuken is a flinch push, up to 80;
+> - Blitz launches it, 20–35 a frame sideways and 27–47 up.
+>
+> So by "keeps the enemy closer" the order is Gravity Break, Zantetsuken, Blitz, which also keeps your "Blitz last".
+>
+> **Guard Break's knockback:** your new thread is [KH2 knockback on enemies](../kh2-knockback-on-enemies/kh2-knockback-on-enemies.md). I found the cause there: in KH2 Guard Break pops the enemy straight up with no slide, and ours drags it along with Sora's dash.
+>
+> Not tested in game. Please try:
+> - the Combat > Tweaks layout;
+> - Hurricane Blast with an enemy above you and one level with you;
+> - Zantetsuken equipped, with Chance on and off;
+> - locked on in a group: Explosion / Stun Impact / Magnet Burst;
+> - Finishing Plus after KH1's finisher and after Stun Impact / Gravity Break / Zantetsuken / Blitz / Hurricane Blast, and two KH1 finishers in a row.
+>
+> Log lines: "Finishing Plus window on KH1's own finisher", "KH1's ground finisher walk" / "KH1's aerial finisher walk" (failed rolls are listed), "Zantetsuken given back to Sora".
+>
+> Questions:
+> 1. Should the KH2 setting's own selector count every enemy while locked on too, like KH2? (a) yes, as its own version, or (b) leave it (it was locked to stop Sora lunging at the wrong enemy)?
+> 2. Guard Break in the single-target group: (a) keep it first, before Gravity Break, Zantetsuken and Blitz, or (b) put KH1's single-target moves ahead of it?
+
+^m23
+
