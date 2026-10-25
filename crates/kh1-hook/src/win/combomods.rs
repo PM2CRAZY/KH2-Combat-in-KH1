@@ -1042,6 +1042,8 @@ fn air_hop(row: i32, pick: &ComboRow, launch: character_core::Launch) -> Option<
     if !AIR_COMBO.plain(pick) || !pick.is_jump() || !launch.height.is_finite() || !launch.velocity.iter().all(|v| v.is_finite()) {
         return None;
     }
+    // (Aerial Finish's and Magnet Burst's hop and air step follow the Air Physics row.)
+    super::shared::physics::air_physics_hop(pick.motion);
     note(format!(
         "KH2's row selection: KH2's air row {} motion {} on KH1's air row {row}: KH2's hop, {:.0} high, {:.1}/frame sideways, for KH1's row's own",
         pick.id,
