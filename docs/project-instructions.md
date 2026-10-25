@@ -12,6 +12,14 @@ brings Kingdom Hearts 2's combat into Kingdom Hearts 1 (PC, Steam build). Tester
 markdown files in the repo; the user (the project owner) relays when they've written, usually with one
 word: "update".
 
+## What "native" means
+
+Native means giving KH1's engine more abilities (new states, rows, requests, motion slots, particle programs,
+sound banks, camera modes, functions patched into KH1's own ones) so KH1 runs KH2's thing itself, 1:1. The
+effects work is the model. A KH2 system of ours running beside KH1's and copying its result into KH1's fields
+(KH2's controller taking Sora, a separate KH2 selector, our own hit sweeps, spell runtime or renderer) is not
+native, even if it never borrows Sora. Full text: `docs/design-philosophy-instructions.md`, "100% NATIVE".
+
 ## The one hard scope rule: testing branch only
 
 - Repo: `PM2CRAZY/KH2-Combat-in-KH1`, branch **`testing`**. Every change you make, code or docs, goes on
@@ -137,7 +145,8 @@ word: "update".
 
 Give each sub-agent a brief that stands on its own:
 - the thread file to read in full, the tester's latest message, and exactly what was approved;
-- the rules above (native, 1:1, Steam addresses, no decompiled code, no main-branch data, mark assumptions,
+- the rules above (native as defined in "What native means": KH1's engine extended, never a KH2 system
+  beside it; 1:1, Steam addresses, no decompiled code, no main-branch data, mark assumptions,
   one system per patch, don't guess an open design choice: implement what's clear and ask with options);
 - its own worktree (`git worktree add -b wt-<name> <dir> testing`) and its own cargo target dir; it must
   not commit to `testing`, push, or bump VERSION / AGENTS.md: it delivers one patch per item (`git diff`

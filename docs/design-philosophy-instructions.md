@@ -18,6 +18,11 @@ If, after a real attempt, the native result still can't match KH2 1:1, stop and 
 
 Running natively is worth doing even when it saves little performance. Two systems side by side create interaction bugs (the main branch's KH1/KH2 animation conflicts are the example).
 
+100% NATIVE (THE TESTER'S DEFINITION, what-is-still-missing thread, 2026-10-25)
+Native means giving KH1's engine more abilities so it can do everything KH2 can, so that KH2 runs 1:1 inside KH1. We add to KH1's own systems: new states in its state table, new rows and requests in its tables, new motion slots, new particle programs, new sound banks, new camera modes, and new functions or wrappers patched into KH1's own functions. KH1 then runs KH2's thing itself: it steps it, draws it, plays it, collides it and ends it. The model is the effects work: KH1's effect engine was taught KH2's programs, and there is no second effect player.
+
+It is not native when KH2's logic runs beside KH1's in our own object, interpreter, player or renderer and copies its result into KH1's fields: KH2's controller (character-core) taking Sora, a separate KH2 selector asked next to KH1's picker, our own hit sweeps, our own spell-script runtime, our own D3D12 draw. That code is "running along" or "deprecated", and every change should move it into KH1's system. When a feature can only run along for now, say so in the thread and ask before shipping it that way.
+
 TARGET VS METHOD
 - Target: with a setting on KH2, every value matches KH2's exe exactly (timings, frame data, momentum, speeds, windows, camera). No approximating.
 - Method: those values run inside KH1's engine, through KH1's own systems. We bring KH2's numbers and logic into KH1, not KH2's controller.

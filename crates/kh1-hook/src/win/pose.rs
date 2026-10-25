@@ -1072,6 +1072,9 @@ pub struct Baker {
     pub skeleton: Vec<kh2_formats::anim::Bone>,
     retarget: Retarget,
     secondary: kh1_data::secondary::Secondary,
+    /// The test bake's hood, coat and shorts from KH2's hidden keys, smoothed and kept clear
+    /// (`kh1_data::cloth`, `CLOTH_MOTIONS` only).
+    cloth: kh1_data::cloth::ClothBake,
     /// KH1 Sora's own motions (by slot): a template's animation of KH1's own parts
     /// (`retarget::KH1_OWN`) for the moves baked on it.
     motions: Vec<Option<kh1_data::mset::Motion>>,
@@ -1088,7 +1091,8 @@ impl Baker {
             retarget.set_rest_open(&m.apply(&skeleton, 0.0));
         }
         let secondary = kh1_data::secondary::Secondary::new(&skeleton, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
-        Baker { skeleton, retarget, secondary, motions: motions.to_vec() }
+        let cloth = kh1_data::cloth::ClothBake::new(&skeleton, &kh2.rig.skeleton);
+        Baker { skeleton, retarget, secondary, cloth, motions: motions.to_vec() }
     }
 
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
@@ -1112,6 +1116,11 @@ impl Baker {
     ///
     /// `field`: KH2's field (out-of-combat) variant of the motion, where it has one (its walk and
     /// run, `kh2slots::CYCLES`).
+    ///
+    /// KH2's walk and run (`CLOTH_MOTIONS`, battle and field) also get the test bake's hood, coat
+    /// and shorts (`kh1_data::cloth`: KH2's hidden keys for them, smoothed over the motion and kept
+    /// off his body; Mr Bugs, "Missing sleeves animation": "just do a test bake into soras running
+    /// and walking animations for now"), worked out over the whole motion before its travel goes on.
     #[allow(clippy::type_complexity)]
     pub fn poses(&self, kh2: &Kh2, motion: u16, field: bool, frames: u32, travel: bool, template: Option<usize>) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>, Vec<Vec<Vec3>>)> {
         let rig = &kh2.rig;
@@ -1128,6 +1137,12 @@ impl Baker {
         // (A slot longer than the clip, `kh1rows::Ours::frames`: the clip loops over it from its
         // own loop point, as KH2 plays it; the Aerial Dodge's 202.)
         let looping = frames as f32 > kh2_anim::length_frames(clip) + 1.0;
+        let cloth = CLOTH_MOTIONS.contains(&motion);
+        // The loop the cloth pass smooths round: the clip's length, when whole and within the slot
+        // (KH2's walk and run fill their slot exactly).
+        let len = kh2_anim::length_frames(clip);
+        let cycle = (cloth && (len - len.round()).abs() < 0.01 && len.round() >= 2.0 && len.round() as u32 <= frames).then(|| len.round() as usize);
+        let mut bodies: Vec<Vec<Mat4>> = Vec::new();
         for f in 0..=frames {
             let at = f as f32;
             // KH1's own parts at the template's time for this frame.
@@ -1170,9 +1185,19 @@ impl Baker {
             let rep = self.secondary.apply(&mut kh1, &body, weapon, kh1_data::secondary::Parts::ALL);
             self.secondary.scales(&body, weapon, rep.parts, &mut sc);
             scales.push(sc);
-            if travel {
+            if cloth {
+                bodies.push(body);
+            }
+            out.push(kh1);
+        }
+        if cloth {
+            let rep = self.cloth.bake(&mut out, &bodies, cycle, kh1_data::cloth::Parts::ALL);
+            log(&format!("KH2 slots: KH2 motion {motion}{}: hood, coat and shorts from KH2's hidden keys (test bake), {} chains, smoothed round {cycle:?}; {} chain-frames kept off the body (at most {:.0} degrees), deepest left inside {:.2}", if field { " (field)" } else { "" }, rep.chains, rep.pushed, rep.max_push, rep.worst_inside));
+        }
+        if travel {
+            for (f, kh1) in out.iter_mut().enumerate() {
                 // (Along the ground only: the root's height stays out, as before.)
-                let d = root_at(f).map_or(Vec3::ZERO, |p| p - start);
+                let d = root_at(f as u32).map_or(Vec3::ZERO, |p| p - start);
                 // (KH2's units as they are: H10 moves him 1:1 in the world, Sora's placement
                 // having scale 1 (t364's KH1 trace: swing 98's H10 1.3 and 6.32 a frame, moved
                 // 1.30 and 6.32).)
@@ -1182,7 +1207,6 @@ impl Baker {
                 }
                 moved.push(t);
             }
-            out.push(kh1);
         }
         if scales.iter().flatten().all(|s| *s == Vec3::ONE) {
             scales.clear();
@@ -1190,6 +1214,11 @@ impl Baker {
         Some((out, moved, scales))
     }
 }
+
+/// KH2's motions whose bake gets the test bake's hood, coat and shorts (`kh1_data::cloth`): its
+/// walk and run (`kh2slots::CYCLES`; their field variants too). The live pose doesn't (the pass
+/// needs the whole motion), so with `kh1_bake` off the walk and run look as before.
+const CLOTH_MOTIONS: [u16; 2] = [character_core::motion::WALK, character_core::motion::RUN];
 
 /// The baker for `kh2slots::prepare` (the loader thread): KH1 Sora's skeleton from
 /// `xa_ex_0010.mdls`, his battle idle (slot 1) and field idle (slot 0) as the retarget's rest.

@@ -10,6 +10,7 @@
 - [4. Assistant: Yes, we're caching sounds, and part of that cache is older t](#^m4)
 - [5. Assistant: t565 to t567. The old player is gone, every KH2 sound now go](#^m5)
 - [6. Assistant: 2. Epic: done (docs only, no new version). I added a note to](#^m6)
+- [7. Assistant: t568, KH2's quote cut. With Battle Quotes on KH2, a new KH2 ](#^m7)
 
 ---
 
@@ -202,6 +203,34 @@ go ahead
 > Say go ahead with your pick and I'll build it as its own version.
 
 ^m6
+
+
 do your recommendation
 
 go ahead 
+
+
+> [!tip] Assistant
+> **t568, KH2's quote cut.** With Battle Quotes on KH2, a new KH2 line now cuts the one Sora is still saying when its priority is at least the playing line's. A lower one is dropped. That's KH2's rule (its quote request `0x1403CE580` and voice step `0x1403CE260`).
+>
+> - **Your pick, (a):** KH2 quotes only cut Sora's own KH2 quotes. KH1's voice channel doesn't store a priority for the line it's playing, only "free, someone else, or the same speaker", so there's nothing to weigh a KH2 line against one of KH1's. KH1's own lines (hurt lines, scripts, events) are never cut, so cutscenes can't break.
+> - **A correction while checking:** KH1's "stop-all" I'd planned to borrow only pauses voices (it's the same call as the pause menu's), so it couldn't stop one. The cut uses KH1's real stop instead, the one KH1 itself uses to stop an effect and to clear finished sounds each frame. The new line then goes through KH1's own channel as before, with the mouth motion, the voice slider and pause all applying.
+> - **Safety:** we only stop the old line and free the channel the way KH1 does when a line ends. KH1's own per-frame cleanup removes the stopped sound from its list, so we never edit that list ourselves.
+>
+> **Check:** KH2's decomp (the quote rule), KH1's decomp (the channel, voice records and cleanup) and the exe (the stop's first bytes and how KH1 calls it). Not checked: in game, and that the stop cuts a voice instantly. Notes are in `docs/kh1-sound-native.md`.
+>
+> Please test, with Battle Quotes on KH2:
+> - a few ground and air combos: each swing's line should cut the last one, not overlap it or get skipped;
+> - getting hit mid-quote: hurt lines are higher priority, so they should cut a swing line;
+> - Explosion: its lines are priority 2, so a priority-1 swing line asked while one plays should be dropped;
+> - Reflect's finisher line;
+> - talking to someone or a cutscene right after a fight: KH1's own lines should be untouched;
+> - pausing mid-line.
+>
+> Please send `kh1-kh2.log`. The lines I need start with "KH2 quotes:" and "KH1 banks: KH2 quote clip".
+>
+> Question:
+> 1. Does the cut sound abrupt? KH2 cuts with no fade, and I matched that. (a) keep it like KH2, or (b) add a very short fade-out (KH1's stop takes a fade length).
+
+^m7
+

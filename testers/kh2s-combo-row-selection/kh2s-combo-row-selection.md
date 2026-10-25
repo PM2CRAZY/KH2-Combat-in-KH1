@@ -24,6 +24,7 @@
 - [18. Assistant: t536 and t537.](#^m18)
 - [19. Assistant: t557 and t558. You're right, I had it backwards: at the KH1 ](#^m19)
 - [20. Assistant: You're right that there's still a seam. Here's what the code](#^m20)
+- [21. Assistant: Got your picks. Here's how I read them:](#^m21)
 
 ---
 
@@ -460,6 +461,7 @@ when it comes to it we now have two pickers, if its native thats good but what I
 
 ^m20
 
+
 1. (a) like kh2 (I had an assumption and it was wrong)
 2. for explosion it should come last, for hurricane blast it should come first. 
 3. have kh1 play a kh2 normal finisher
@@ -467,3 +469,48 @@ when it comes to it we now have two pickers, if its native thats good but what I
 5. (a)
 
 one thing why can't we include kh2's combat configs in kh1's picker? shouldn't the goal be to have kh1's engine have more abilities and the config just switches what the logic does in kh1's picker so that its 1:1 with kh2?
+
+
+> [!tip] Assistant
+> Got your picks. Here's how I read them:
+>
+> 1. **(a):** KH2's exact order in a group. With a second enemy close and off to the side, 154 can come before Guard Break, and 184 before Aerial Finish.
+> 2. **The twins:** with Explosion and its KH1 twins (Ripple Drive, Stun Impact) all equipped, the KH1 ones go first and **Explosion comes last**. With Hurricane Blast and Aerial Finish both equipped, **Hurricane Blast comes first**. With Finishing Plus they take turns in that order. Tell me if I've got that backwards.
+> 3. The second normal finisher is a KH2 normal finisher on KH1's finisher row.
+> 4. **(a):** KH2's finisher window from 155 / 183, put at the same point in KH1's finisher.
+> 5. **(a):** if no Square move passes, Square does the normal roll or guard.
+>
+> **On your question: yes, that should be the goal, and the code isn't there yet.** Here's what the two settings do today (checked in the code):
+>
+> - **Base Combo KH1:** KH1's own picker (`0x1402A6EE0` ground, `0x1402A6C70` air) makes the real choice. Our hook then asks a copy of the KH2 controller to check KH2's ability rows. KH2's checks are right, but they run on that copy, not inside KH1's walk.
+> - **Base Combo KH2:** this is the bigger seam. KH1's picker still runs and picks a KH1 row. Then, in the step that runs the row:
+>   - we copy the whole KH2 controller and have that copy "press Attack" at KH1's count;
+>   - KH1's pick is thrown away and swapped for a KH1 row that plays KH2's motion;
+>   - KH2's combo length is faked by letting KH1's swing row run past KH1's own length;
+>   - a few ability moves with no KH1 row still hand Sora to the KH2 controller for that one move.
+>
+>   So it plays like KH2, but it's two pickers, and the second overrides the first after the fact.
+>
+> **What you're describing, as I'd build it:** one picker inside KH1's walk, with the Config row only switching which rule set that walk uses.
+> - **KH1 setting:** KH1's rows, count, length and its own abilities. KH2's ability rows go into the same list with your mapping and order, and KH2's checks run as a test on each row.
+> - **KH2 setting:** KH2's table and order in the same walk: first passing row wins, no random chance, KH2's anti-repeat and its fallback rows. KH2's length goes into the length KH1's picker reads (the way Negative Combo is already patched in), so KH1 itself brings the finisher where KH2 would. KH2's finisher count runs in the same walk.
+> - **Either setting:** the row checks are fed from KH1's own data (its count, the request playing, its target and lock, the enemies around him). The copied KH2 controller, the after-the-fact swap and the leftover hand-offs all go away. Nothing is taken out of KH1: its engine gets a bigger table and a second rule set.
+>
+> **So the 3-item plan becomes part of a bigger change.** In this order, one system per version:
+> 1. **One walk in KH1's picker, KH1 rule set:** KH1's rows and KH2's ability rows in one list, with your mapping, the twin order and KH2's group order. This replaces KH1's 30% roll on Stun Impact and Gravity Break, and Blitz's no-enemies test.
+> 2. **KH2 rule set in the same walk:** Base / Aerial Base Combo KH2 moves onto it, and KH2's separate selector, the row swap and the last hand-offs go.
+> 3. **Square moves, Counterguard and Retaliating Slash** as Square-only rows in that walk, at both settings. Square with nothing passing does the normal roll or guard.
+> 4. **Finishing Plus on KH1's finishers:** KH2's 155 / 183 window at the same point in KH1's finisher, the next normal finisher a KH2 one.
+>
+> What should change in play: at KH2 it should play the same as now, minus the hand-off seams on the moves that still borrowed Sora, and with less work per press. At KH1, KH1's own ability finishers follow KH2's order instead of KH1's 30% rolls (your mapping). Drive Forms are untouched.
+>
+> Still to check, not guess: where KH2's finisher count lives on KH1's side (KH2 keeps it at `+0xD75`; I'll look for a spare field in KH1's combat info before deciding), and placing the 155 / 183 window inside KH1's finisher is my assumption, as I said last time.
+>
+> Questions:
+> 1. Gravity Break and Blitz next to Guard Break, when both are equipped: (a) KH1's first, Guard Break last, like the Explosion group; (b) Guard Break first, like Hurricane Blast / Aerial Finish; or (c) KH2's own row order decides, with Gravity Break and Blitz taking Guard Break's place?
+> 2. The second normal finisher on the ground: (a) KH2's own check picks it, 154 with an enemy in its window, else 155 (in the air 184 or 183 the same way), as KH2 does; or (b) always 155?
+>
+> Say go ahead and I'll start with version 1, the one walk in KH1's picker with the KH1 rule set.
+
+^m21
+

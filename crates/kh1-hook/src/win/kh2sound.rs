@@ -103,11 +103,11 @@ impl VoiceSet {
         self.clips.iter().copied().find(|c| *c as i8 == clip)
     }
 
-    /// Sora says it: through KH1's voice channel at the row's priority (`kh1bank::voice`; KH1's
-    /// rule plays it only over a line of lower standing).
+    /// Sora says it: through KH1's voice channel at the row's priority (`kh1bank::voice`: KH2's
+    /// rule over his KH2 lines, KH1's over KH1's own).
     unsafe fn say(&self) -> Option<u8> {
         let clip = self.pick()?;
-        if !super::kh1bank::voice(clip, self.priority.max(1)) {
+        if !super::kh1bank::voice(clip, self.priority) {
             dropped(|| format!("quote clip {clip}: KH1's voice path can't take it now"));
         }
         Some(clip)

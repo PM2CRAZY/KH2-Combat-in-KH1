@@ -106,7 +106,12 @@ Where an older doc gives an Epic address, the Steam one is given here and the tr
 ### Pause, Frame Advance, stops
 
 - `0x1400DE010 (mode)` (via `0x1400D2F80`): walks the live list `0x1404D6618` and pauses (1),
-  resumes (0) or stops (2) every record, effect and voice alike. KH1's pause machine
+  resumes (0) or, for records of state 0 only, stops (2) every record. (Correction, tNNN
+  round: for effect and voice records, state 1..3, modes 1 and 2 make the same call,
+  `0x140056860` / `0x140056890 (sound, 50)`, the one mode 0 undoes with `0x140056960` /
+  `0x140056990 (sound, 100)` once `0x140056D10` says it's paused. **Checked (decomp)**. So mode 2
+  pauses those, it doesn't stop them; that `0x140056890` is a pause and not a stop:
+  **Assumption** from that pairing. The engine's stop is `0x1400565A0`, below.) KH1's pause machine
   (`0x14017F150`) calls it as the pause opens / closes, and our Frame Advance already calls
   `0x1400D2F80` while it holds the game (`frameadv.rs`). **Checked (decomp, code)**
 - So anything that is a record in `0x1404D6618` is paused, resumed, stopped on room exit and
@@ -428,7 +433,7 @@ after KH1 clears its bank list, and KH1's, which its release frees. Now there is
   where a swing has only its own line. `soundlog`'s hook on the voice group (always installed)
   does it, telling the call by its return address. KH1's other voices of Sora (hurt lines,
   spells, scripts) and every row that plays KH1's own motion keep KH1's voice. **Checked (code)**
-- **KH2's own rule (open).** KH2's quote request (Steam KH2 `0x1403CE580`) takes a new line if
+- **KH2's own rule (was open; built in the next section).** KH2's quote request (Steam KH2 `0x1403CE580`) takes a new line if
   nothing is pending or playing, or if its priority is at least the last one taken (`+0x10`,
   which is never reset). Its voice step (`0x1403CE260`) then stops the line that is playing
   (`0x1401DE500 (handle, 0)`) and starts the new one. **Checked (decomp)**. So in KH2 each swing's
@@ -438,3 +443,58 @@ after KH1 clears its bank list, and KH1's, which its release frees. Now there is
   only. **Checked (decomp)**. Under KH1's rule, while Sora's own KH2 line still plays, the next
   one is dropped. Matching KH2 needs a voice stop added to KH1's engine: a question for the
   tester.
+
+## KH2's quote cut, through KH1's engine
+
+The tester (m5, question 1): "(b)", a voice cut so KH2's rule works 1:1; then "do your
+recommendation, go ahead". Built: a KH2 quote may cut only Sora's own KH2 quotes (option (a) of
+the last question): KH1 keeps no priority for the line its channel plays (below), so a KH2 line
+can't be weighed against one of KH1's own, and KH1's own lines (its event scripts' among them)
+are never cut.
+
+- **KH2's rule.** KH2's quote request `0x1403CE580 (object, clip, priority, ...)` takes the line
+  when nothing is pending (`+0xC < 0`) and nothing plays (`+0x14 == 0`), or when its priority is at
+  least the last line taken (`+0x10`, written on each take, never reset). Its voice step
+  `0x1403CE260` then stops the playing handle (`0x1401DE500 (handle, 0)`) and starts the new line;
+  `+0x14` goes back to 0 once the handle stops playing. A lower line is dropped. **Checked (decomp,
+  KH2 Steam)**
+- **KH1's channel keeps no priority.** `0x140290930 (actor, clip, priority)` compares the new
+  priority only with the channel's standing (0 free, 1 another speaker, 2 the same one), and
+  `0x140290080` writes state, kind, bank, clip, speaker and data `+0x6C` into the channel, no
+  priority. **Checked (decomp)**
+- **How KH1 itself ends a voice record.** The channel step `0x140290A50` in state 4 asks
+  `0x1400D34C0` -> `0x1400E0500 (bank, clip)` whether the first state-3 record of that bank / clip
+  in the live list still plays (`0x140056BD0`), and frees the channel (state 0) when it doesn't.
+  The record itself is taken out of the live list and deleted by KH1's frame clean-up
+  `0x1400DC8C0` (from the effect queue step `0x1401791E0`): every record whose sound is valid
+  (`0x140055FD0`) and no longer plays is stopped (`0x1400565A0`), unlinked (count `0x1404D6628`,
+  tail `0x1404D6620`) and deleted through its vtable. **Checked (decomp)**
+- **The stop.** `0x1400565A0 (sound, &fade)`: `movd xmm0, [rdx]; cvtdq2ps xmm0, xmm0` (the
+  fade in 1/300000ths, made into ms), then the stop `0x1400565D0` under the engine's own lock
+  (`0x142F11978`). KH1's `SslSeStop` (`0x1400DEF50`) and the clean-up call it on a record's `+0x10`
+  with a fade of 0 (at `0x1400DCA9C`: `mov [rsp+0x20], r14d` (0); `lea rdx, [rsp+0x20]`; `lea rcx,
+  [rbx+0x10]`; `call`). **Checked (exe, decomp)**. `SslSeStop` also releases the record's `+0x40`
+  (`0x140005E70`); voice records never set it (`0x1400DB3B0` makes it -1, `0x1400DBCF0` leaves it).
+  **Checked (decomp)**
+- **What we do** (`kh1bank::voice`, Steam only). When a KH2 quote is asked and Sora's channel
+  holds one of ours (state 2, 3 or 4, kind 0, our voice bank number, Sora the speaker):
+  - priority below the last KH2 quote taken: dropped, as KH2 does ("KH2 quotes: clip ... dropped:
+    KH2's rule keeps clip ... playing");
+  - otherwise every state-3 record of our voice bank in the live list gets the engine's stop at
+    fade 0, the channel is set to state 0 (what KH1's own step writes when a line ends), and
+    KH1's clip request then takes the new line as on a free channel: KH1's channel, mouth
+    motion, voice bus and pause, as for every quote ("KH2 quotes: clip ... cut for clip ...").
+    The stopped records are left in the list for KH1's clean-up to delete, as its own finished
+    ones are; our code doesn't unlink or delete anything. The stop's first bytes are checked
+    first; if they differ nothing is stopped and KH1's rule stands (logged). **Checked (code)**
+  - The last priority taken is kept as KH2's `+0x10` (each quote KH1's channel took).
+  - A channel holding a line of KH1's own (another bank, another speaker, kind 1) keeps KH1's
+    rule, unchanged. With Battle Quotes on KH1 nothing of this runs (no KH2 quotes are asked).
+- **Assumptions until heard in game.** That a stopped voice record stops at once and KH1's
+  clean-up deletes it the next frame or so (if the engine took longer, the old record could
+  stay a little in the list, after the new one: the channel step and the lip sync find the
+  newest first, it being pushed at the head, and `0x1400DC210` starts only records not yet
+  started, `+0x49 == 0`). That a channel left in state 4 for the one frame after a line ended
+  (before KH1's step frees it) counts as playing for the rule: a lower line asked in exactly that
+  frame is dropped, where KH2 would have taken it.
+
