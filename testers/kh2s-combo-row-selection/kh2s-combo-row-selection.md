@@ -622,3 +622,12 @@ go ahead
 
 ^m23
 
+1. (a)
+2. wait for the knockback update before we change this
+
+is zantestukens percent chance still on? I get a normal finisher from time to time 
+   
+   also if kh2 moves aren't running in kh1's row selector that needs to happen, remember that the goal is to patch features into kh1's engine so that it has the ability to be 1:1 with kh2 right now I noticed I can't do any kh1 finisher on kh2 combat settings.
+   
+   go ahead
+   
