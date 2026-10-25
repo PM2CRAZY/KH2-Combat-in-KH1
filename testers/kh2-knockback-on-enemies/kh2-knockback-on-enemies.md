@@ -50,3 +50,8 @@
 
 ^m1
 
+(b) but make it a toggle in the config menu
+(a)
+(a)
+
+go ahead
