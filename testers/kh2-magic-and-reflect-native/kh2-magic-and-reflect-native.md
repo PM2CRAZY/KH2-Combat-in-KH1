@@ -13,6 +13,7 @@
 - [7. Assistant: t570 to t573, your three answers, one system each.](#^m7)
 - [8. Assistant: Thanks. There's one thing to check on answer 1 first, then t](#^m8)
 - [9. Assistant: t582 to t585. (a) it is for question 1: Fire / Blizzard / Th](#^m9)
+- [10. Assistant: t607 to t610. Your two answers are in, and I found what was ](#^m10)
 
 ---
 
@@ -267,9 +268,38 @@ go ahead
 > 2. Attack out of a cast comes from the cast's reaction-command window. In KH2 it depends on a flag in each combo row (only Blizzard's cast has a real combo window, from frame 36). (a) check Sora's rows and make it exact next, or (b) keep it as now?
 
 ^m9
+
+
 1.(a)
 2.(a)
 
 reflect is still sending its shots on the first hit, I've sent you a trace it should be in the same folder as this thread
 
 go ahead
+
+> [!tip] Assistant
+> t607 to t610. Your two answers are in, and I found what was going on with Reflect. One system per version.
+>
+> - **t607, jump / Square out of KH1 spells (1 (a)).** The older path that let a jump or Square end a KH1 spell once it was out is gone (a spell started out of one of KH2's moves, and a Drive Form's KH1 spell). They now wait until the spell is over, as in both games. Attack, or another spell in the combo, still cuts it as before. Checked against KH2's input step in the Steam decomp: a jump or Square only in a free state, which no cast has.
+> - **t608, Attack out of a cast, exactly KH2 (2 (a)).** KH2's Attack check (`0x1403D6CA0`) takes an Attack in only three places: the combo window, the finisher window (with Finishing Plus left), or a free state. The reaction-command window we were using is only for reaction commands. In Sora's animation file only Blizzard's cast has a combo window, from frame 36. So now:
+>   - during Fire, Thunder, Cure, Reflect and every air cast, pressing Attack does nothing until the cast ends, and the next swing starts a new combo;
+>   - during Blizzard, an Attack from frame 36 goes on with the combo;
+>   - spells still follow in KH2's magic window as before.
+>
+>   Checked in the KH2 Steam decomp and `P_EX100.mset`. Not built yet: Finishing Plus after a finisher cast.
+> - **t609, Reflect's shots on the first hit: found it.** Your traces showed every barrier going down after exactly 27 frames, with the counter firing straight after. Reflect's script keeps its barrier for as long as the barrier effect lives, and effect lengths are counted in KH2's 30 Hz effect ticks. Our spell runner counted them in 60 Hz frames, so the barrier (27 ticks = 54 frames, 0.9 s) ended at half time and the counter fired while the barrier you see was still up. It now lasts the full 54 frames, and the counter comes as it drops, as in KH2. Checked against Reflect's own script, KH2's effect clock in the decomp and your traces. Heads-up: this is the shared spell clock, so other KH2 spells change wherever they wait on an effect. Most visibly, Blizzard's shard now flies its full KH2 length (twice as long as before).
+> - **t610, Reflect into Reflect.** In t572 I said nothing in KH2 ends a running Reflect. That was wrong: KH2 has a block of memory that all of Reflect's casts share (`0x1403F6DF0`), and Reflect's script uses it. A new Reflect ends the old barrier, the old cast hands its blocked hits on and fires nothing, and the newest Reflect's counter counts the whole chain. Ours gave every cast its own block, so each one countered on its own. Checked in the decomp and Reflect's script. I couldn't run the offline test of the chain here.
+>
+> None of this is tested in game. Please test:
+> - A Reflect hit early, and one hit late: the counter should only come after the barrier you see is gone (about 0.9 s).
+> - Two or three Reflects in a row while being hit: the earlier barriers should vanish as you recast, with one counter at the end, stronger with more hits.
+> - Attack mashed during Fire / Thunder / Cure / Reflect (nothing until the end, then a new combo), and during Blizzard (from about halfway it goes on with the combo).
+> - Jump and Square during a KH1 spell (nothing until it's over).
+> - Blizzard's shard and Fire / Thunder / Cure, to see if anything else looks different now.
+>
+> Questions:
+> 1. In the air, after a cast has ended, KH2's controller (Drive Forms) still lets the combo go on until you land, but KH2's own rule starts a new combo there. (a) make it KH2's, or (b) leave it?
+> 2. Finishing Plus after a finisher cast (KH2's finisher window on the finisher casts): (a) build it next, or (b) leave it?
+
+^m10
+

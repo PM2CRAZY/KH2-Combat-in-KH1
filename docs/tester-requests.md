@@ -132,6 +132,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [7. Assistant: t570 to t573, your three answers, one system each.](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m7)
   - [8. Assistant: Thanks. There's one thing to check on answer 1 first, then t](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m8)
   - [9. Assistant: t582 to t585. (a) it is for question 1: Fire / Blizzard / Th](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m9)
+  - [10. Assistant: t607 to t610. Your two answers are in, and I found what was ](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m10)
 - [KH2 MP and MP Charge](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md)
   - [1. Assistant: Started from What is still missing(../what-is-still-missing-](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md#^m1)
 - [KH2 player model through KH1's model system](../testers/kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md)
