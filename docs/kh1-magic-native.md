@@ -441,12 +441,14 @@ c steam decomp to fix and find any issues with the physics". Steam addresses thr
 - ACTION_JUMP's step `0x1403CB360`: the sideways velocity through `0x1403B7AD0 (dt, 0.9, 0.95)`:
   toward the stick target `+0x10` (its length `+0x1C`) keeping 0.9 a tick, else × 0.95 a tick.
   **Assumption:** the stick target is empty during a cast motion with no allow-movement range
-  (not traced: the player's input selector), so he drifts at × 0.95.
+  (not traced: the player's input selector), so he drifts at × 0.95. (§4m: the × 0.95 is per
+  call, so per 30 Hz tick, **Checked (decomp)**; the stick target's writer found, the cast case
+  still an assumption.)
 - Vertically: the arc's time `+0xF0 += dt` every step **before** the hold test; with motion flag
   `0x20` (range id 3: `0x14040D810` sets `+0x34 |= 0x20` of the motion player at actor `+0x158`, so
   actor `+0x18C`) or `0x40` (range 24) the step moves him by 0, but the clock goes on. After the
   hold the arc is far past its top, so he falls at once at the step's cap (`dt × +0x138`;
-  **Assumption:** `+0x138` is the fall cap, 16 a frame from sstm `fall_max`).
+  `+0x138` is sstm `fall_max`, 16 a frame, **Checked (decomp)** §4m).
 - Motion 73 (Reflect air, A371, the same clip as Fire's 58; **Checked (files)** `P_EX100.mset`):
   84 frames at 60 Hz, range 3 (hold) 16..74, range 14 from 36, magic-cast event at 28. So: rise 40
   over 14 frames (from wherever he was, rising or falling), a frame or two past the top, held
@@ -638,3 +640,37 @@ those animations actually carry:
   play only triggers 1, 8 and 13 / 14), so KH1's animation and KH2's are the same here. Porting it
   is a system of its own (KH2's surface table and the effect set it picks from), asked in the
   thread before any code.
+
+## 4m. The air physics assumptions settled (thread air-physics-for-kh2-magic-aerial-finish-and-magnet-burst)
+
+The three open points of §4e, read again in the Steam KH2 decomp and exe:
+
+- **The fall cap is sstm `fall_max`.** The player's set-up `0x1403B3200` fills a block at actor
+  `+0x128` with `0x14040A440`: `+0x128` 2.0, `+0x12C` 8.0, `+0x130` 160.0, `+0x134` π/16, `+0x138`
+  = sstm `+0x14` (`fall_max`, 16.0 in `03system.bin`; the sstm pointer `0x142AE5760`, the same the
+  cast start reads `magic_jump` from at `0x1403C5244`), `+0x140` 0.95. ACTION_JUMP's step
+  `0x1403CB360` caps each step's drop at `dt × +0x138`. **Checked (decomp)**, **Checked (exe)**.
+  (Nothing else found writing the player's `+0x138`; the writes at `0x1403C87C0` and in
+  `0x140428950..0x14042A2D0` are other objects' fields at the same offset.)
+- **The × 0.95 drift is per tick.** `0x1403B7AD0 (actor, out, dt, 0.9, 0.95)` multiplies the
+  velocity `+0x20` by 0.95 (no target) or steers it toward `+0x10` keeping 0.9 once per call, and
+  only the returned move is scaled by `dt`. The step runs once per 30 Hz tick (movement-model
+  "Physics tick", **Checked (exe)**), so 0.95 a tick, as `air_step` does (`dt / 2` powers at 60
+  fps). **Checked (decomp)**.
+- **The stick during a cast.** The target `+0x10` / its length `+0x1C` is written from the pad by
+  `0x1403B9C60` (camera-relative, length = the tilt), reached only through a script trap
+  (`0x14042B1D0`), so whether the player's script feeds it while a cast motion plays is still not
+  traced. **Assumption** (unchanged): no steer in a cast with no allow-movement range.
+- **The cast's hop starts from where he is.** The action change `0x1403B4DA0` always runs the old
+  action's exit and the new one's enter, JUMP to JUMP too, and JUMP's enter `0x1403CBD30` adds his
+  height to the arc's base `+0xF8` that `0x1403CBC30` zeroed. **Checked (decomp)**.
+
+So the model in §4e / §4h stands: a 40 hop (14 frames up), the hold with the clock running, then
+the drop at 16 a frame from the hold's last frame, the sideways speed × 0.95 a tick.
+
+The tester's trace `trace_1792960831_f47567` (air Reflect twice, every row KH2, Jump KH1): a 40
+hop over 14 frames, a 2-unit dip on frames 14..15, held at clip frames 16..73, 16 a frame from
+clip frame 74 to the floor, sideways × 0.95 a tick (1.8 → 0.5 over 50 frames). Each value matches
+the above (**Checked (trace)**). After the cast's 84 frames KH1's own fall animation (slot 10) and
+landing (11) are drawn, as the Jump row is KH1 there; KH2 queues its fall loop (motion 4) after the
+cast (`0x1403C8310`) and lands into its motion 5.
