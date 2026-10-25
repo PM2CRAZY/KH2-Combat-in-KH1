@@ -425,7 +425,13 @@ fn set(what: Row, v: bool) {
         Row::L2Dpad => camera::set_l2_dpad(v),
         // (Live: the next physics step reads it; saved and logged by `set_rule`.)
         Row::Physics => physics::set_rule(if v { physics::Rule::Kh2 } else { physics::Rule::Kh1 }),
-        Row::Style(k) => styles::set(k, v),
+        Row::Style(k) => {
+            styles::set(k, v);
+            // (The shared list follows the Glide style at once, `menu::glide_style_now`.)
+            if k == Kind::Glide {
+                unsafe { super::menu::glide_style_now(BASE.load(Ordering::Relaxed)) };
+            }
+        }
         Row::Gummi => super::gummi::set(v),
         Row::Debug => super::debugmenu::set_enabled(v),
         Row::MediumHits => super::hitreact::set_medium_flinch(v),

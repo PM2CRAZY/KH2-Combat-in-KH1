@@ -286,3 +286,18 @@ not one of Sora's levels). Against the traces (Glide LV4 in the log), **Checked 
   an Aerial Dodge, 0 after a neutral one), back when the stick takes the hover into the glide.
 - Start height 60 (every start in the log was above it).
 Wrong in t530: the left bank (§8.3) and the release (§8.4), both fixed.
+
+### 8.8 The ability list follows the Glide style at once (glide thread m6)
+
+The swap of KH1's Glide / Superglide for KH2's own Glide (id 88, `growth::glide_swap`, t323) ran only from
+`menu::Growth::update`, every 60th call, and every call comes from one of Sora's physics frames
+(`takeover::shared_frame` → `refresh_kh2_numbers`, the borrow steps). While KH1's pause menu is up Sora has no
+physics frames, so a Glide style switched in the Config menu left KH1's Abilities screen showing KH1's Glide and
+Superglide and no KH2 Glide until the game ran again for a second. **Checked (code)**; the logs agree: every
+"Glide style" line comes a few dozen frames after the Config save, never while paused (the tester's t544 log,
+f16914 → f16963, f17162 → f17203; the PC's t567 log likewise). Now `config::set` for the Glide row calls
+`menu::glide_style_now` on the spot (KH1's menu update, the game's thread): the same swap, KH2's Glide's name
+with its level, logged ("abilities: Glide style ... set in the Config menu"). KH1 rebuilds Sora's ability bits
+(`0x142D5EC10`) itself when the menu closes (`0x1402A6380`, §8.6). Assumption: that this is what the tester saw
+(no log of the report's session; the swap itself works in both logs I have).
+

@@ -138,6 +138,33 @@ unsafe fn glide_style_list(save: usize, now: &Kh1Sora, kh2: bool) -> bool {
     true
 }
 
+/// The Glide style switched in the Config menu (`config::set`, KH1's menu update, the game's
+/// thread): the shared list swapped there and then, not at the next second of Sora's physics
+/// frames (`Growth::update` runs only from them, so while the pause menu is up KH1's Abilities
+/// screen still showed KH1's Glide and Superglide and no KH2 Glide: the tester, glide thread m6).
+/// KH2's Glide's menu name gets its level at once too. Only with `abilities = kh1` (the other
+/// modes keep KH1's lists, `Growth::update`).
+pub unsafe fn glide_style_now(base: usize) {
+    if base == 0 || super::settings::get().abilities != Mode::Kh1 {
+        return;
+    }
+    let Some(save) = save_block(base) else { return };
+    let Some(now) = Growth::kh1(base) else { return };
+    let kh2 = super::styles::kh2(super::styles::Kind::Glide);
+    let changed = glide_style_list(save, &now, kh2);
+    if let Some(after) = Growth::kh1(base) {
+        if kh2 && growth::has(&after.shared, growth::ours::GLIDE) {
+            set_glide_name(growth::kh2_glide_level(after.level, &after.progress));
+        }
+        log(&format!(
+            "abilities: Glide style {} set in the Config menu: shared list {} now ({:?})",
+            if kh2 { "KH2" } else { "KH1" },
+            if changed { "swapped" } else { "already right" },
+            after.shared.iter().take_while(|b| **b != 0).collect::<Vec<_>>()
+        ));
+    }
+}
+
 /// Writes Quick Run's level into its menu name ("Quick Run LV2", "Quick Run MAX").
 pub fn set_quick_run_name(level: u8) {
     let p = QR_NAME.load(std::sync::atomic::Ordering::Relaxed);
