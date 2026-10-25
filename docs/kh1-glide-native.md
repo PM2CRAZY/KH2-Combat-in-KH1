@@ -201,12 +201,21 @@ State 0x15's pre-step (`0x1402B2880`) wrapped. For Sora at Glide KH2, each frame
 - **Motion.** KH2's pick (`0x140423A70`): 205; 206 / 207 when the stick is more than dot 0.98 off his facing, 206
   with the cross product of facing and stick pointing up in KH2's y-down world; 208 in the hover; blend 16. Asked
   every frame through KH1's request `0x14029F7C0` (Steam), which leaves a motion already playing alone. **Checked
-  (decomp)**; that `0x140142120` is `facing x stick` in that order is an **Assumption** (it decides which side
-  is 206), and so is that KH1's world and KH2's turn the same way (both y-down).
+  (decomp)**; `0x140142120` is `facing x stick` in that order (**Checked (decomp)**, t-glide fix below); that
+  KH1's world and KH2's turn the same way (both y-down) is an **Assumption** (it decides which side is 206).
 - **Slots.** KH2's 205 / 206 / 207 play on KH1's glide requests 0x71 (and 0x72) / 0x73 / 0x74 at Glide KH2
   (`kh2slots::GLIDES`, slots 75..78 as templates, so KH1's own looping glide slots); the hover 208 is a request of
   ours (`kh1rows::OURS`, "Glide hover", KH1's air swing as its template). That template holds at its end, so the
   pre-step puts the hover's time back to 0 at its end, as KH2 loops it (**Assumption**: KH2 loops 208).
+- **The left bank (207) in a bound set.** KH1 asks 0x73 for a turn to the positive side and 0x74 for the other
+  (its pre-step `0x1402B2880`: `'s'` past +30°, `'t'` past -30°, **Checked (decomp)**). The file has 0x74 on slot
+  78 (`xa_ex_0010.mset`: 0x73 `0x204D`, 0x74 `0x204E`, **Checked (files)**), but the set Sora is bound to in a
+  world (88 slots of its own in the tester's t530 log) has 0x74's entry on slot 77, the right bank's: the log's
+  "not in this set: 0x74", and the trace drawing KH1's own slot 77 (KH2's 206 through `pose`) for every left
+  bank (**Checked (trace)**). So 207 never played and both sides showed 206. `kh2slots::also_stands_for`: 207
+  stands in for 0x74 whether the set's entry holds slot 78 or 77. KH2's pick itself was right: 206 when
+  `(facing x stick).y > 0`, else 207 (`0x140142120` is `a x b` with a = facing from `0x1403B56E0`, b = the stick
+  `+0x10`, **Checked (decomp)**).
 - **Water.** KH1's water check from the glide (`0x1402C12B0`) still runs at the end, as KH1's pre-step ends.
 
 ### 8.4 The end

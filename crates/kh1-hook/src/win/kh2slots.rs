@@ -153,6 +153,19 @@ const ROLL: Spec = Spec { motion: character_core::motion::DODGE_ROLL, stands_for
 /// (KH2 has one glide motion at any speed). The hover 208 is a request of ours (`kh1rows`).
 const GLIDES: [(u16, usize, usize); 4] = [(205, 75, 0x71), (205, 76, 0x72), (206, 77, 0x73), (207, 78, 0x74)];
 
+/// A request whose entry in a bound set (Sora's per-world set, not the file's 118 slots) can hold
+/// another KH1 slot than its template: the tester's t530 log, "Sora's set ... (his own, bound): 88
+/// slots of its own ... not in this set: 0x74", and his trace (request 0x74 drawn as KH1's slot 77):
+/// in that set KH1's left bank 0x74 plays slot 77, the same as its right bank 0x73 (the file has
+/// 0x74 on slot 78, Checked (files) `xa_ex_0010.mset`: 0x73 `0x204D`, 0x74 `0x204E`). So KH2's 207
+/// stands in for 0x74 whichever of KH1's two banking slots the set's entry holds (Checked (trace)).
+fn also_stands_for(request: usize) -> Option<usize> {
+    match request {
+        0x74 => Some(77),
+        _ => None,
+    }
+}
+
 const fn glide_spec(i: usize) -> Spec {
     let (motion, stands_for, request) = GLIDES[i];
     Spec { motion, stands_for, request, kind: Kind::Glide }
@@ -1140,7 +1153,8 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         }
         let e = requests.get(m.request).copied().unwrap_or(0xFFF);
         let own = (e & 0xFFF) as usize;
-        let holds = own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for);
+        let held = if own < count { pose::file_slot_of_motion(pose::ptr(slots[own])) } else { None };
+        let holds = held.is_some() && (held == Some(m.stands_for) || held == also_stands_for(m.request));
         if holds {
             redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default, false));
         } else if m.variant == 0 {
