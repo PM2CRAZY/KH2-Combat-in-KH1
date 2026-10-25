@@ -331,3 +331,10 @@ your currently fundamentally misunderstanding me, sora's hoodie still stays rigi
 
 ^m16
 
+do (c)
+
+1. no it should be like kh2
+2. (a) just do a test bake into soras running and walking animations for now so I can see how it looks.
+3. don't worry about it
+
+go ahead
