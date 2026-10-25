@@ -8,6 +8,7 @@
 - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](#^m2)
 - [3. Assistant: Done: every item that isn't native yet has its own thread no](#^m3)
 - [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](#^m4)
+- [5. Assistant: Here's the list from my last message, updated with this roun](#^m5)
 
 ---
 
@@ -135,4 +136,22 @@ currently I've noticed some agents getting around native implementation or not u
 
 ^m4
 
+
 give me an update 
+> [!tip] Assistant
+> Here's the list from my last message, updated with this round (t621 to t631):
+>
+> **Moved to native**
+> - 1, row picks: done for the combo. KH2's pick is made inside KH1's picker (t622, t623), and every KH2 combo move, plain swings included, is now its own KH1 attack row that the picker returns (t631).
+> - 7, fallbacks: in the combo, KH2's controller no longer takes Sora. When no KH1 row can play a move, KH1's own picked row plays (t630). Other fallbacks (flight, Epic, Drive Forms) are unchanged.
+> - 4, animations: item use, the fall, jump and High Jump are KH1 slots now (t625 to t627). Idle and the landing are still drawn over, waiting on one answer in the baking thread.
+> - The magic combo: Finishing Plus after a finisher cast (t624).
+>
+> **Still running along KH1:** 2 (body hits for Vicinity Break, Explosion and Magnet Burst), 3 (the KH2 spells' scripts and hits), the rest of 4 (idle, landing), 5 (hood / coat / shorts rules, MP Charge).
+>
+> **Still on the deprecated controller or renderer:** 6 Drive Forms, 8 hits taken during a form, 9 the KH2 player model.
+>
+> My two questions from last time still stand: which to convert next ((b) body hits, (c) spells, (d) idle and landing, (e) Drive Forms, or another order), and whether a missing KH1 system like MP Charge should just be built into KH1's engine (a) or asked about each time (b).
+
+^m5
+

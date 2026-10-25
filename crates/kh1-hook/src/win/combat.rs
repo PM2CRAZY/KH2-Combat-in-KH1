@@ -102,7 +102,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // (`combomods`), at either style.
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::shared::active() && super::shared::kh1_combo(matches!(rd::<i32>(actor + 0x70), 1 | 2)) {
         let (run, hop) = match super::combomods::attack(actor, row, dir, &|r| row_info(actor, r).map(|i| i.motion as u16 as u32)) {
-            super::combomods::Run::Kh2 => return,
+            super::combomods::Run::Nothing => return,
             super::combomods::Run::Row(r) => (r, None),
             super::combomods::Run::Hop(r, l) => (r, Some((l, true))),
             super::combomods::Run::AirHop(r, l) => (r, Some((l, false))),
@@ -346,7 +346,36 @@ const NOT_SORAS: [u8; 21] = [0x1D, 0x1E, 0x46, 0x51, 0x54, 0x64, 0x4B, 0x4D, 0x4
 /// air, Sora is first put in KH1's jump state as falling from where he is (the fields KH1's
 /// own ceiling bonk `0x1402AD260` sets: rise time `+0x3B8` 0, time `+0x3B0` 0, height `+0x3BC`
 /// 0, base `+0x3B4` his height), so the air version plays and KH1 lands him.
+/// KH1's Fire out of a swing for one of our combo rows (the tester, combo row selection after m25,
+/// answer 3 (a): "patch in any features missing in kh1's row"). KH1's Attack step (Steam
+/// `0x1402A7510`, Checked (decomp)) casts a plain Fire (command 2, no spell bits) during its first
+/// or third ground swing (`+0x164` 200 / 0xCA) in its combo window (`+0x1CC` bit 22) as Fire's
+/// second part alone (0x3D, or 0x8A / its flight one in the air states), not the whole cast; with
+/// KH2's swings on KH1 rows of their own `+0x164` holds our request, so for this one call it shows
+/// the KH1 request our row stands for (`kh1rows::kh1_request_for`; 152's is 0xC9, KH1's second
+/// swing, which KH1 leaves out too), put back after unless KH1 asked for a new motion.
 unsafe extern "system" fn command(actor: usize, dir: usize) {
+    let base = BASE.load(Ordering::Relaxed);
+    let sora = rd::<u64>(base + PARTY_RVA) as usize;
+    let shown = if actor == sora && actor >= 0x10000 && rd::<u32>(base + COMMAND_RVA) & 0xFF_FFFF == 2 {
+        let q = rd::<u32>(actor + 0x164);
+        super::kh1rows::kh1_request_for(q).filter(|k| matches!(k, 0xC8 | 0xCA)).map(|k| (q, k))
+    } else {
+        None
+    };
+    if let Some((q, k)) = shown {
+        wr(actor + 0x164, k);
+        cmd_log(format!("Fire during our swing (request {q:#x}): KH1's Attack step sees KH1's swing {k:#x} (its Fire out of a swing)"));
+    }
+    command_step(actor, dir);
+    if let Some((q, k)) = shown {
+        if rd::<u32>(actor + 0x164) == k {
+            wr(actor + 0x164, q);
+        }
+    }
+}
+
+unsafe fn command_step(actor: usize, dir: usize) {
     let base = BASE.load(Ordering::Relaxed);
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_COMMAND.load(Ordering::Acquire));
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
@@ -2434,7 +2463,7 @@ unsafe fn hit_data(base: usize, data: i32, group: i32) -> Option<usize> {
     let block = base + ATTACK_DATA_RVA;
     let mut g = HIT_DATA.lock().ok()?;
     if g.0 == 0 {
-        g.0 = super::kh1rows::near(block).unwrap_or(usize::MAX);
+        g.0 = super::kh1rows::near(block, 0x1000).unwrap_or(usize::MAX);
         log(&format!("KH2 spell hit sparks: attack data copies at {:#x}", g.0));
     }
     if g.0 == usize::MAX {

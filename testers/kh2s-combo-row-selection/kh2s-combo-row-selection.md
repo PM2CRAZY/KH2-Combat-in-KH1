@@ -29,6 +29,7 @@
 - [23. Assistant: t586 to t591, one each:](#^m23)
 - [24. Assistant: t611 and t612.](#^m24)
 - [25. Assistant: t622 and t623: the first two steps of the native plan. Neith](#^m25)
+- [26. Assistant: t629, t630 and t631, one each:](#^m26)
 
 ---
 
@@ -708,8 +709,34 @@ is zantestukens percent chance still on? I get a normal finisher from time to ti
 
 ^m25
 
+
 1. no it should change on the toggle we have like the other moves, if you have ability chance off then it should be 100 percent like the other moves, if not then 30% chance is back
 2. (b)
 3. (a) make sure you patch in any features missing in kh1's row so that it can handle it 1:1 
 
 go ahead
+> [!tip] Assistant
+> t629, t630 and t631, one each:
+>
+> - **t629, Zantetsuken and the Tweak.** Zantetsuken now works like Stun Impact and Gravity Break. With KH1 Ability Chance on, it rolls KH1's 30% (its third roll, the way KH1's picker does it). With it off, it comes whenever its checks pass. One thing you'll notice with it off: Gravity Break comes before Zantetsuken in the single-target group and always passes there, so Zantetsuken only comes out when Gravity Break isn't equipped, or as the Finishing Plus finisher after it.
+> - **t630, no more hand-offs.** KH2's controller never takes Sora for a combo move any more. If no KH1 row can play the move KH2 picked (its animation slot didn't build, or there's no free row for another finisher in a row), KH1's own row that its picker chose plays instead. For Square or jump moves with no KH1 row (Square moves, Retaliating Slash, Aerial Recovery), you get KH1's own roll, guard or jump. The log says when this happens: "no KH1 row plays it, KH1's own row N runs".
+> - **t631, every KH2 combo move on its own KH1 row.** Every move of KH2's combo is now its own row in KH1's attack table, not only the ability moves: 151–155, 181–184, Slapshot, Dodge Slash, Slide Dash, Flash Step, Vicinity Break, Explosion, Aerial Spiral, Aerial Sweep, Aerial Dive, Aerial Finish and Magnet Burst. KH1's picker returns that row directly, and KH1's own swings are no longer re-pointed at KH2's animations on each press.
+>   - Each row has its own request and KH2's animation, the trail, effect and voice of the KH1 swing it's based on, and its own attack data with KH2's reaction for the move.
+>   - I patched the two places where KH1 reads which swing is playing: KH1's quick Fire during the 1st or 3rd swing still works on these rows, and Dive to the Heart's "Press to attack" window still sees an attack.
+>   - **This will feel different:** KH2's plain swings and finishers now push and launch enemies with KH2's own knock-back numbers. Before, they used KH1's swing reactions; the ability moves already worked this way. Enemy Weight applies.
+>
+> Checked in the KH1 Steam decomp (the picker's return goes straight to the row runner, `0x1402A7510`, and every place that reads the swing playing) and the game files for the rows. One assumption: a script handler that picks an effect when an actor's swing is 200 (`0x14039A4A0`) looks like it's for other actors, not Sora. Nothing checked in game.
+>
+> Please test, with the log and a Select + Triangle trace:
+> - ground and air combos at the KH2 setting, near, far and above, locked and unlocked; also the ledge hop and Aerial Sweep / Aerial Dive from the ground;
+> - KH1's quick Fire during a ground combo, with Magic on KH1;
+> - the Dive to the Heart attack tutorial on a new game, if you can;
+> - Zantetsuken with KH1 Ability Chance on and off;
+> - how enemies get knocked back by the plain swings and finishers now.
+>
+> Questions:
+> 1. When the t630 fallback happens at the KH2 setting, KH1's row still shows its default KH2 swing (151 / 152 / 154 / 181 / 182 / 183). Should it (a) stay like that, or (b) show KH1's own animation?
+> 2. The KH2 knock-back on the plain swings and finishers: (a) keep it (KH2's behaviour), or (b) KH1's reactions on those?
+
+^m26
+

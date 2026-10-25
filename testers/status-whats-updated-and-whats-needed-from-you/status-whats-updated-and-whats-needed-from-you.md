@@ -8,6 +8,7 @@
 - [2. Assistant: Later in the same round (no new build):](#^m2)
 - [3. Assistant: Latest build: t515. Your startup crash: t514 fixes the likel](#^m3)
 - [4. Assistant: Will do: from now on every round ends with a message here in](#^m4)
+- [5. Assistant: Latest build: t631 (2026-10-25; the build bot is making it n](#^m5)
 
 ---
 
@@ -108,4 +109,30 @@ go ahead
 
 ^m4
 
+
 give me an update
+
+> [!tip] Assistant
+> **Latest build:** t631 (2026-10-25; the build bot is making it now).
+>
+> **Updated since the last status:**
+> - [Air physics for KH2 magic, Aerial Finish and Magnet Burst](../air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md): t621 (Aerial Finish and Magnet Burst back on the main Physics row). The fall after an air cast matches the Steam exe frame for frame, so it isn't changed; a KH2 recording would help.
+> - [KH2's combo row selection](../kh2s-combo-row-selection/kh2s-combo-row-selection.md): t622, t623 (KH2's pick made inside KH1's picker, one copy of KH2's rules), t629 (Zantetsuken follows the Tweak), t630 (no more KH2-controller hand-offs in the combo), t631 (every KH2 combo move on its own KH1 row).
+> - [KH2 magic and Reflect native](../kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md): t624 (Finishing Plus after a finisher cast).
+> - [Baking the rest of the base animations](../baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md): t625 (item use), t626 (the fall and KH2's switch into it), t627 (jump and High Jump), all as KH1 slots.
+> - [Missing sleeves animation](../missing-sleeves-animation/missing-sleeves-animation.md): t628 (the hair switches out again).
+>
+> **What each thread needs from you:**
+>
+> | Thread | Needs |
+> |---|---|
+> | Air physics for KH2 magic, Aerial Finish and Magnet Burst | test t621; what KH2 shows after the hover that ours doesn't (3 questions), a KH2 clip helps |
+> | KH2's combo row selection | test t629 to t631 (a trace helps); 2 questions |
+> | KH2 magic and Reflect native | test t624 with Finishing Plus; 1 question |
+> | Baking the rest of the base animations | test t625 to t627; 1 question (what answer 1 meant, for idle and landing) |
+> | Missing sleeves animation | check t628 |
+> | What is still missing | the updated list there |
+> | Every other thread | waiting for your reply to my last message there |
+
+^m5
+
