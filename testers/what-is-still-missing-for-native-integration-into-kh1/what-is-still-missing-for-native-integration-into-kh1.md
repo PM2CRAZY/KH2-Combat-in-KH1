@@ -97,3 +97,5 @@ go ahead
 ^m3
 
 
+currently I've noticed some agents getting around native implementation or not understanding what I mean by native, what I mean by native is giving the kh1's engine more abilities so that it can do everything kh2 can so that kh2 is 1:1 inside of kh1. what currently is technically "native" and runs along the kh1 version, what currently is using the deprecated player. and can you please update the instructions and memory so that its understood what I mean by 100% native. (to my understanding our effects is what I want, giving kh1's effect engine the ability to do kh2's effects properly)
+
