@@ -35,24 +35,36 @@ Unverified in game: that KH1's command step needs nothing more than its state to
 row; that KH1's can-act test opens only after a swing's recovery (so the stick doesn't hand him
 back between swings); KH1's own hit reactions mid-combo.
 
-### KH2-only combo abilities make the combo KH2's (testing branch)
+### KH2-only combo abilities follow the combo settings (testing branch)
 
-The tester (thread "KH2's combo row selection", m15): option (b), "(i) only the ones kh2 doesn't
-have". With Finishing Plus, Negative Combo or Berserk Charge equipped (KH1 has no such rule for
-its own combo), the Base Combo and Aerial Base Combo play as if set to KH2, whatever the Config
-menu says: KH2's row picker and KH2's combo rules (length, finishers, Finishing Plus's chain) on
-KH1's own rows (`docs/kh1-anim-slots.md` §7), not KH1's own combo. Combo Plus, Air Combo Plus and
-Combo Master are KH1's own abilities too and switch nothing. `styles::kh2` reads it
-(`styles::note_abilities`, fed by `menu` each time KH1's menu changes Sora's abilities); the Config
-row still shows the player's setting (`styles::setting`), and taking the ability off brings the
-setting back. The log says when it switches ("move style: a combo ability only KH2 has is
-equipped"). Base Sora only (Drive Forms keep their own movesets). Berserk Charge isn't in the mod's
-ability list yet (MP Charge comes later), so today only the first two switch it.
+t488 (the thread "KH2's combo row selection", m15) made Finishing Plus, Negative Combo and Berserk
+Charge turn the Base / Aerial Base Combo to KH2's whatever the Config menu said. The tester (m19):
+"the ability should not ignore the combat settings". Now `styles::kh2` is the setting alone, and at
+KH1 the abilities act on KH1's own combo:
+
+- **Negative Combo**: KH1's length (the stats' `+0xD4` ground / `+0xD5` air, KH1's Combo Plus /
+  Air Combo Plus already in it) less one a copy, at least 1, as KH2's length takes it off its own.
+  Our wrap of KH1's row picker (`kh1picker::shorten`) lowers the byte only while KH1's picker runs,
+  so KH1's own finisher test marks the finisher a swing sooner; `combomods::kh1_combo` reads the
+  same length. Not applied to KH1's swimming combo (state 0x18, its Attack step reads the byte
+  itself) nor to a spell's combo-finisher test (`formmagic`).
+- **Finishing Plus**: KH2's Finishing Plus window on one of KH2's ability finishers playing on KH1's
+  rows (Explosion, Guard Break, Aerial Finish, Magnet Burst ...; `kh2slots::finisher_window`) opens
+  KH1's combo window while another finisher is left (one plus the copies, KH2's count), so KH1's
+  Attack step counts the press on past its length; KH1's own picker then takes a finisher (a KH2
+  ability finisher by KH2's row checks, or KH1's own), run on a KH1 row whose request isn't the one
+  playing (`combomods::attack`, `next_finisher`). KH1's own finisher motions have no such window, so
+  no chain follows KH1's own finisher (an open question to the tester).
+- **Berserk Charge**: not in the mod's ability list yet (MP Charge comes later); its refusal of
+  finishers is in KH2's row checks (`Character::ability_row`).
+
+The log says when one comes or goes ("move style: a combo ability only KH2 has is equipped ... it
+follows the settings").
 
 ### What the KH1 setting still takes from KH2 (testing branch, checked in the code)
 
 With base Sora on KH1's own states (`shared`), every Attack goes through `combomods::attack`
-whatever the style. At Base / Aerial Base Combo KH1 (and no KH2-only combo ability equipped):
+whatever the style. At Base / Aerial Base Combo KH1:
 
 - KH1's picker (`0x1402A6EE0` ground, `0x1402A6C70` air) picks the row; KH2's row selection doesn't
   replace it (`Kh1Combo::here` false for plain rows), and KH1's request table entries point at KH1's
@@ -67,8 +79,7 @@ whatever the style. At Base / Aerial Base Combo KH1 (and no KH2-only combo abili
   equipped ability rows of that kind join its choice by KH2's own row checks, and the one taken runs
   on KH1's rows as before (KH2's motion, KH1's row, hits and timing). KH2's plain swings, KH2's
   combo length and its walk over the whole table play no part (t537's filter is gone).
-- With Finishing Plus or Negative Combo equipped, all of the above is KH2's (t488, the section
-  above).
+- Finishing Plus and Negative Combo work on KH1's own combo at this setting (the section above).
 
 ## Magic
 

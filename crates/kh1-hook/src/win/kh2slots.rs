@@ -1338,7 +1338,9 @@ pub unsafe fn pick_own(request: usize, motion: u16) -> bool {
 /// worked out: `pose`'s hooks call `frame` after it), so KH1's command menu takes an Attack there
 /// (`0x1402A2EC0`: free, or in the combo window) and KH1's Attack step counts it on as KH1's
 /// combo does (one more, the swing connected or Combo Master), where `combomods` takes KH2's next
-/// finisher. KH2 takes the Square moves there too (either bit, `0x1403A9950`). Sora's (Checked
+/// finisher. At the combo style KH1 only while another finisher is left (one plus Finishing Plus's
+/// copies, `combomods::finisher_chain_open`), KH1's own picker taking the next one. KH2 takes the
+/// Square moves there too (either bit, `0x1403A9950`). Sora's (Checked
 /// (files)): 154 / 155 35..64, 183 21..50, 184 23..52, Explosion 60..72, Guard Break 48..60,
 /// Aerial Finish 89..108, Magnet Burst 70..86.
 unsafe fn finisher_window(actor: usize) {
@@ -1346,7 +1348,7 @@ unsafe fn finisher_window(actor: usize) {
     let Some(m) = current(actor) else { return };
     let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return };
     let t: f32 = rd(actor + TIME_NOW);
-    if !(t >= 0.0) || !clip.has(t as u32, |k| matches!(k, W::Finisher)) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() {
+    if !(t >= 0.0) || !clip.has(t as u32, |k| matches!(k, W::Finisher)) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() || !super::combomods::finisher_chain_open() {
         return;
     }
     let inst = pose::ptr(rd::<u32>(actor + 0x15C));

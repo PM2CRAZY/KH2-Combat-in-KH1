@@ -1314,6 +1314,11 @@ returns the KH1 row it runs on (KH1's plain row of its kind whose request isn't 
 runner plays it as the KH2 setting's ability moves play (KH2's motion and hop, KH1's row, attack object,
 damage and windows). Where KH1 took one of its own ability rows, or its drop-ahead row 2, it stays.
 
+KH2's combo abilities at this setting (no longer turning the combo to KH2's, `docs/kh1-move-styles.md`):
+Negative Combo lowers the length byte KH1's picker reads for the call (`kh1picker::shorten`);
+Finishing Plus's next finisher out of a KH2 ability finisher's window is KH1's picker's finisher
+(`combomods::attack`), up to one plus its copies.
+
 KH2's selector (its whole-table walk, its combo length) isn't run at this setting. Assumption: KH2's
 ability rows going after KH1's own ability rows and before its plain rows (KH1's own order for its own
 ability rows) is the right place for them; KH2 has no rule for mixing the two tables.

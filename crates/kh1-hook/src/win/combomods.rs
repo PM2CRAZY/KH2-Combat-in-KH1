@@ -241,13 +241,44 @@ unsafe fn sora() -> usize {
 }
 
 /// KH1's combo now: its count, its length here (ground or air), and whether its swing connected.
+/// At the combo style KH1 the length is KH1's less Negative Combo's copies (`kh1_length`), as its
+/// row picker sees it (`kh1picker`).
 unsafe fn kh1_combo(actor: usize, air: bool) -> Option<(u8, u8, bool)> {
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     let stats = pose::ptr(rd::<u32>(actor + 0x6C));
     if info < 0x10000 || stats < 0x10000 {
         return None;
     }
-    Some((rd::<u8>(info + 0x41), rd::<u8>(stats + if air { 0xD5 } else { 0xD4 }), rd::<u32>(info + 0x50) != 0))
+    let len = rd::<u8>(stats + if air { 0xD5 } else { 0xD4 });
+    let kind = if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo };
+    let len = if super::styles::kh2(kind) { len } else { kh1_length(len) };
+    Some((rd::<u8>(info + 0x41), len, rd::<u32>(info + 0x50) != 0))
+}
+
+/// Negative Combo on KH1's own combo (the combo style KH1; the tester, m19: "the ability should
+/// not ignore the combat settings"): KH1's length (the stats' `+0xD4` / `+0xD5`, Combo Plus and
+/// Air Combo Plus already in it) less one a copy, at least 1, as KH2's length takes it off its own
+/// (`Character::combo_length`: base and Combo Plus less Negative Combo, at least 1).
+pub fn kh1_length(len: u8) -> u8 {
+    if len == 0 {
+        return len;
+    }
+    let negative = takeover::with_abilities(|a| a.negative_combo).unwrap_or(0);
+    len.saturating_sub(negative).max(1)
+}
+
+/// Finishing Plus on KH1's own combo (the combo style KH1, where the finisher playing is one of
+/// KH2's ability finishers on KH1's rows): another finisher is left (KH2's count, `+0xD75`
+/// against one plus Finishing Plus's copies; `FINISHERS`). At the style KH2: always (KH2's own
+/// pick counts them).
+pub fn finisher_chain_open() -> bool {
+    let air = LAST.try_lock().ok().and_then(|l| *l).is_some_and(|l| l.3);
+    let kind = if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo };
+    if super::styles::kh2(kind) {
+        return true;
+    }
+    let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
+    FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus
 }
 
 /// Whether KH2's pick is one of its ability moves over KH1's combo at `count` (what makes it so,
@@ -334,8 +365,10 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     }
     let last = LAST.try_lock().ok().and_then(|l| *l);
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
+    // (At the combo style KH1 KH1's own picker picks it: below.)
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
-    if let Some((n, _, true, _)) = last.filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
+    let kh2_style = super::styles::kh2(if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo });
+    if let Some((n, _, true, _)) = last.filter(|l| kh2_style && l.3 == air && l.1 & 0xFFFF == playing) {
         let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
         let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
         if let Some((row, _, _, launch)) = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()) {
@@ -371,6 +404,42 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // length (Combo Plus) or a finisher before it (Negative Combo) is KH2's row selection on
     // KH1's rows, `kh2_row`, not a borrow.)
     if kh1_style {
+        // Finishing Plus at the combo style KH1: a press in one of KH2's ability finishers'
+        // Finishing Plus window (`kh2slots::finisher_window`, open while `finisher_chain_open`),
+        // which KH1's Attack step counted on past KH1's length: the KH2 finisher KH1's picker
+        // took, on a KH1 row whose request isn't the one playing (`next_finisher`: its own row,
+        // our next-finisher row, or KH1's finisher row), or KH1's own finisher it took (its plain
+        // one or one of its abilities', not a swing: its fallback when its finisher's request is
+        // the one playing); none
+        // free, or the last finisher already run, no attack (KH2's: nothing after the last
+        // finisher until it ends).
+        if let Some((_, _, true, _)) = last.filter(|l| l.3 == air && l.1 & 0xFFFF == playing && count >= kh1_len) {
+            let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
+            let run = if !finisher_chain_open() {
+                None
+            } else if let Some((r, ..)) = pick.as_ref().filter(|(r, ..)| r.is_finisher()) {
+                next_finisher(actor, r, launch, air, count, playing, request_of)
+            } else {
+                request_of(row).filter(|&q| !combo.swings.contains(&(q & 0xFFFF)) && q & 0xFFFF != playing).map(|q| {
+                    if let Ok(mut l) = LAST.lock() {
+                        *l = Some((count, q, true, air));
+                    }
+                    let _ = select_swing(combo, Some(q), None);
+                    Run::Row(row)
+                })
+            };
+            note(format!(
+                "Attack in KH1's finisher at the KH1 setting (count {count}, finisher {finishers}, Finishing Plus): {}",
+                match (&run, pick.as_ref()) {
+                    (None, _) => "no next finisher (the last one, or no finisher row free): no attack".to_string(),
+                    (Some(_), Some((r, ..))) => format!("KH2's finisher row {} motion {} from KH1's picker", r.id, r.motion),
+                    (Some(_), None) => format!("KH1's own row {row} (not a swing of its combo)"),
+                }
+            ));
+            let Some(run) = run else { return Run::Kh2 };
+            FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
+            return run;
+        }
         // (One with a KH1 row of its own, `kh1rows`: Guard Break.)
         if let Some(n) = pick.as_ref().and_then(|(r, ..)| ours_for(r)) {
             return ours_run(n, launch, air, count, request_of);

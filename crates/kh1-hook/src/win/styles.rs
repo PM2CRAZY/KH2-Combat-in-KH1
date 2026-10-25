@@ -106,26 +106,26 @@ pub fn setting(kind: Kind) -> bool {
 }
 
 /// Base Sora uses KH2's moves of this kind (ignoring Drive Forms: callers check `form::in_form`):
-/// the setting, and for the Base / Aerial Base Combo also a combo ability only KH2 has equipped
-/// (`kh2_combo_ability`): then the combo is KH2's whatever the setting says.
+/// the setting. (t488 made a KH2-only combo ability turn the Base / Aerial Base Combo to KH2's
+/// whatever the setting said; the tester, combo row selection m19: "the ability should not ignore
+/// the combat settings". At KH1 those abilities now act on KH1's own combo: Negative Combo
+/// shortens KH1's length inside its row picker, Finishing Plus chains KH1's finishers,
+/// `kh1picker`, `combomods`.)
 pub fn kh2(kind: Kind) -> bool {
-    setting(kind) || (matches!(kind, Kind::GroundCombo | Kind::AirCombo) && KH2_COMBO_ABILITY.load(Ordering::Relaxed))
+    setting(kind)
 }
 
-/// A combo ability KH1 doesn't have is equipped (`note_abilities`).
+/// A combo ability KH1 doesn't have is equipped (`note_abilities`), for the log.
 static KH2_COMBO_ABILITY: AtomicBool = AtomicBool::new(false);
 
-/// The combo abilities only KH2 has (the tester, combo row selection m15: "(b)" with "(i) only the
-/// ones kh2 doesn't have"): Finishing Plus, Negative Combo and Berserk Charge. KH1 has Combo Plus,
-/// Air Combo Plus and Combo Master itself, so they don't switch anything. With one equipped, a KH1
-/// combo setting plays as Base / Aerial Base Combo KH2 (KH2's row picker and KH2's combo rules on
-/// KH1's rows), since KH1's own combo has no such rule to apply.
+/// The combo abilities only KH2 has: Finishing Plus, Negative Combo and Berserk Charge (KH1 has
+/// Combo Plus, Air Combo Plus and Combo Master itself).
 pub fn kh2_combo_ability(a: &character_core::Abilities) -> bool {
     a.finishing_plus > 0 || a.negative_combo > 0 || a.equipped.contains(&character_core::BERSERK_CHARGE)
 }
 
-/// Sora's abilities as KH1's menu gives them (`menu`, base Sora's own: a Drive Form's don't count),
-/// for `kh2`. Logged when the combo switches because of them.
+/// Sora's abilities as KH1's menu gives them (`menu`, base Sora's own: a Drive Form's don't count).
+/// Logged when a KH2-only combo ability comes or goes, with what it does at each setting.
 pub fn note_abilities(a: &character_core::Abilities) {
     let on = kh2_combo_ability(a);
     if KH2_COMBO_ABILITY.swap(on, Ordering::Relaxed) != on {
@@ -136,10 +136,9 @@ pub fn note_abilities(a: &character_core::Abilities) {
             .collect::<Vec<_>>()
             .join(", ");
         super::log(&format!(
-            "move style: a combo ability only KH2 has is {} ({}): the Base / Aerial Base Combo play as {} (settings: Base Combo {}, Aerial Base Combo {})",
+            "move style: a combo ability only KH2 has is {} ({}): it follows the settings (Base Combo {}, Aerial Base Combo {}; at KH1 on KH1's own combo)",
             if on { "equipped" } else { "no longer equipped" },
             if on { which.as_str() } else { "none" },
-            if on { "KH2's" } else { "their settings say" },
             if setting(Kind::GroundCombo) { "KH2" } else { "KH1" },
             if setting(Kind::AirCombo) { "KH2" } else { "KH1" }
         ));

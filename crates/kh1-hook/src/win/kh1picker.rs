@@ -10,8 +10,9 @@
 //! / `+0xD5`, its ability rows by its ability bits `0x142D5EC10` and chances, the target's
 //! distance and height) and walks it in table order, the first marked row whose request isn't the
 //! one playing winning. Ours wrap both: KH1's picker runs whole, then, with base Sora at the combo
-//! style KH1 where he is, KH2's ability rows join its choice (`combomods::picker`). Flight and
-//! every other case: KH1's row as it picked it. Steam only; the prologues are checked.
+//! style KH1 where he is, KH2's ability rows join its choice (`combomods::picker`), and Negative
+//! Combo shortens the length KH1's picker reads (`shorten`). Flight and every other case: KH1's
+//! row as it picked it. Steam only; the prologues are checked.
 
 use super::addr::Build;
 use super::sys::GetModuleHandleA;
@@ -46,22 +47,51 @@ unsafe fn ours(actor: usize, air: bool) -> bool {
         && !kh2(if air { Kind::AirCombo } else { Kind::GroundCombo })
 }
 
+/// Negative Combo on KH1's own length for its picker's call (`combomods::kh1_length`): the stats'
+/// length byte (`+0xD4` ground, `+0xD5` air; the pickers' own finisher test, Checked (decomp))
+/// lowered while KH1's picker runs and put back after, so KH1 itself marks its finisher a swing
+/// sooner. Nothing else reads it in that call. The byte's address and value, to put back.
+unsafe fn shorten(actor: usize, air: bool) -> Option<(usize, u8)> {
+    let stats = super::pose::ptr(rd::<u32>(actor + 0x6C));
+    if stats < 0x10000 {
+        return None;
+    }
+    let at = stats + if air { 0xD5 } else { 0xD4 };
+    let was = rd::<u8>(at);
+    let now = super::combomods::kh1_length(was);
+    if now == was {
+        return None;
+    }
+    std::ptr::write_unaligned(at as *mut u8, now);
+    Some((at, was))
+}
+
+unsafe fn put_back(saved: Option<(usize, u8)>) {
+    if let Some((at, was)) = saved {
+        std::ptr::write_unaligned(at as *mut u8, was);
+    }
+}
+
 unsafe extern "system" fn ground(actor: usize, target: usize, dir: usize) -> u64 {
     let f: GroundFn = std::mem::transmute(ORIG_GROUND.load(Ordering::Acquire));
-    let row = f(actor, target, dir);
     if rd::<i32>(actor + 0x70) != 0 || !ours(actor, false) {
-        return row;
+        return f(actor, target, dir);
     }
+    let saved = shorten(actor, false);
+    let row = f(actor, target, dir);
+    put_back(saved);
     super::combomods::picker(actor, row as i32, dir, false) as u32 as u64
 }
 
 unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
     let f: AirFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
-    let row = f(actor, target, dir);
     // (State 8, flight, runs KH1's picker too: KH1's own there.)
     if rd::<i32>(actor + 0x70) != 2 || !ours(actor, true) {
-        return row;
+        return f(actor, target, dir);
     }
+    let saved = shorten(actor, true);
+    let row = f(actor, target, dir);
+    put_back(saved);
     super::combomods::picker(actor, row, dir, true)
 }
 
