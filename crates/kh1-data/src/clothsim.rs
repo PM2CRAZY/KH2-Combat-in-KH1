@@ -83,10 +83,13 @@ pub struct Settings {
 impl Settings {
     /// Tuned offline against KH1's own field run (slot 5): each part's mean swing off its rest on
     /// KH2's field run, settled, as near as the search got to KH1's own mean swing of that part
-    /// in its run (`examples/cloth_sim.rs -- ... fit`; numbers in the docs).
+    /// in its run (`examples/cloth_sim.rs -- ... fit`; numbers in the docs). The coat, from tNNN,
+    /// much calmer (the tester: "kh1 soras coat is way less pronounced"): stiffer, a third of the
+    /// weight, a 20 degree cap, so a start, stop or turn moves its hem less than KH1's own run
+    /// moves it (docs, "The coat calmer").
     pub const TUNED: Settings = Settings {
         parts: [
-            Params { stiffness: 0.02, damping: 0.30, weight: 0.25, swing: 40.0 },
+            Params { stiffness: 0.06, damping: 0.40, weight: 0.10, swing: 20.0 },
             Params { stiffness: 0.20, damping: 0.45, weight: 0.25, swing: 30.0 },
             Params { stiffness: 0.06, damping: 0.05, weight: 0.25, swing: 100.0 },
             Params { stiffness: 0.06, damping: 0.45, weight: 0.50, swing: 60.0 },

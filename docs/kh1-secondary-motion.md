@@ -838,10 +838,26 @@ settled):
 
 | Part | Stiffness | Damping | Weight | Swing cap |
 |---|---|---|---|---|
-| Coat | 0.02 | 0.30 | 0.25 | 40° |
+| Coat | 0.06 (0.02 before tNNN) | 0.40 (0.30) | 0.10 (0.25) | 20° (40°) |
 | Shorts | 0.20 | 0.45 | 0.25 | 30° |
 | Belt chain | 0.06 | 0.05 | 0.25 | 100° |
 | Belt front | 0.06 | 0.45 | 0.50 | 60° |
+
+**The coat calmer (tNNN).** The tester, after t596: "when it comes to the bottom part of soras
+coat it currently moves way too much, kh1 soras coat is way less pronounced then that and is also
+why its causing a lot of stretching on the top part of the coat". KH1's own field run (slot 5,
+plain FK; Checked (files), a scratch Python reading of `xa_ex_0010.mset` on the PC) moves each hem
+tip at most 0.3-4.6 units from its mean place against the chest (rms 0.2-2.7, mean 1.2), its links
+2-14 degrees rms; it never turns a root. Against that, t592's coat (on a straight run, the same
+physics in a Python copy driven by KH1's own run pose moved along at 8 a frame) moved its hem tips
+up to 5.7 off their running place when he stopped dead, 5.5 when he started and 4.6 in a 90-degree
+turn: more than KH1's own run ever moves them. The coat's numbers are now stiffness 0.06, damping
+0.40, weight 0.10, swing cap 20: 1.5 on a stop, 1.5 on a start, 0.8 in the turn (KH1's own run: up to 4.6, at most 2.7 rms), and its response to the stride's bob (as a damped spring: the run's 40-frame stride and
+its 20-frame bob) a quarter to two fifths of t592's, so on KH2's run the hem swings roughly a third
+of the 8.5 degrees measured before. Assumptions: KH2's run's own excitation isn't evaluated (KH2's
+motions can't be read on the PC without our tools), so the "a third" is from the spring's response,
+not a run; the numbers are ours (neither game has physics), meant as a calmer start for the tester
+to tune on the Cloth Physics page.
 
 What this matches and what it doesn't: the amount of swing and how choppy it is, part by part,
 against KH1's own run; the rest is KH1's own average hang in its run. Not matched: when in the
