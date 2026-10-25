@@ -30,60 +30,73 @@ use std::time::Instant;
 
 pub const SPELL_NAMES: [&str; 4] = ["Fire", "Blizzard", "Thunder", "Cure"];
 
-/// Base Sora casts KH2's magic for a spell cast now, on the ground or in the air (the move
-/// styles' Magic / Aerial Magic set to KH2, `styles`; not in a Drive Form, which keep their own).
-pub fn base_kh2(air: bool) -> bool {
-    use super::styles::{kh2, Kind};
-    !super::form::in_form() && kh2(if air { Kind::AirMagic } else { Kind::Magic })
+/// The Config menu's row for what `spell` (Fire 0 .. Cure 3) base Sora casts (`styles`; the
+/// tester, thread kh2-effects-in-kh1s-own-effect-system m19: "each magic should have its own
+/// settings of which magic you can choose ... fire: kh1 | kh2 and that would change what gets
+/// casted"), on the ground and in the air alike (the Magic / Aerial Magic rows are gone).
+fn spell_row(spell: u8) -> Option<super::styles::Kind> {
+    use super::styles::Kind;
+    match spell {
+        0 => Some(Kind::Fire),
+        1 => Some(Kind::Blizzard),
+        2 => Some(Kind::Thunder),
+        3 => Some(Kind::Cure),
+        _ => None,
+    }
 }
 
-/// Base Sora's Cure at the Magic styles KH2 is KH2's (the Config menu's Cure row, `styles::Kind::
-/// Cure`); else KH1's whole Cure: its command step, its own cast motion, script, effects and cost
-/// (the tester, m4: "cure kh1 would cure exactly like kh1 with its effects and cast").
-pub fn kh2_cure() -> bool {
-    super::styles::kh2(super::styles::Kind::Cure)
+/// The row for `spell`'s cast animation (Blizzard 1 .. Aero 6; the tester, m19: "you can also
+/// change the animation of magic with the exception being reflect, and fire"). Fire has none (its
+/// animation is its spell's), nor Reflect (always KH2's).
+fn anim_row(spell: u8) -> Option<super::styles::Kind> {
+    use super::styles::Kind;
+    match spell {
+        1 => Some(Kind::BlizzardAnim),
+        2 => Some(Kind::ThunderAnim),
+        3 => Some(Kind::CureAnim),
+        4 => Some(Kind::GravityAnim),
+        5 => Some(Kind::StopAnim),
+        6 => Some(Kind::AeroAnim),
+        _ => None,
+    }
 }
 
-/// Base Sora casts KH2's `spell` (Fire 0 .. Cure 3) with the Magic styles at KH2 (`base_kh2`):
-/// Fire, Blizzard and Thunder, and Cure when the Cure row is KH2's.
+/// `spell` (Fire 0 .. Cure 3) is set to KH2's on its row (whether or not he is in a Drive Form).
 pub fn kh2_spell(spell: u8) -> bool {
-    spell <= 2 || spell == 3 && kh2_cure()
+    spell_row(spell).is_some_and(super::styles::setting)
+}
+
+/// Base Sora casts KH2's `spell` now (its row KH2's, not in a Drive Form, which keep their own).
+pub fn base_kh2_spell(spell: u8) -> bool {
+    !super::form::in_form() && kh2_spell(spell)
+}
+
+/// Base Sora's cast of `spell` (Fire 0 .. Aero 6) plays KH2's cast motion now: a spell cast KH2's
+/// way always (its script needs its cast motion: `docs/kh1-magic-native.md` §4), Fire as its
+/// spell, and KH1's Blizzard .. Aero by their animation rows. Not in a Drive Form.
+pub fn anim_kh2(spell: u8) -> bool {
+    !super::form::in_form() && (kh2_spell(spell) || anim_row(spell).is_some_and(super::styles::setting))
 }
 
 /// The KH1 spell KH1 casts now (Gravity, Stop, Aero) is drawn with base Sora's KH2 cast motion
-/// on its clock, as Wisdom's KH1 spells are (`takeover::command_started`, `pose::follow`): the
-/// Magic styles at KH2 in base form (the user: "KH1 spell, KH2 animation").
+/// on its clock, as Wisdom's KH1 spells are (`takeover::command_started`, `pose::follow`): its
+/// animation row at KH2 (the user: "KH1 spell, KH2 animation").
 pub static BASE_KH1_CAST: AtomicBool = AtomicBool::new(false);
 
-/// The KH1 spell `spell` (Gravity 4, Stop 5, Aero 6) is cast KH1's whole way even with the Magic
-/// styles at KH2 (the debug menu's KH1 Spells page, the ini's `kh1_cast_*`; the tester: "kh2
-/// effects took over some of the native magic effects ... can we have a toggle in the debug
-/// menu?"): its own cast motion, its clock and its own effects, as with the styles at KH1. KH2
-/// has no Gravity, Stop or Aero; what KH2 brings to them is its cast motion (Thunder's for
-/// Gravity, Cure's for Stop and Aero, `kh1_spell_motion`), on whose clock KH1's motion is cut.
+/// The KH1 spell `spell` (Gravity 4, Stop 5, Aero 6) is cast KH1's whole way (the debug menu's
+/// KH1 Spells page, which now shows the Config menu's animation rows for them): its animation row
+/// at KH1. KH2 has no Gravity, Stop or Aero; what KH2 brings to them is its cast motion (Thunder's
+/// for Gravity, Cure's for Stop and Aero, `kh1_spell_motion`).
 pub fn kh1_cast(spell: u8) -> bool {
-    if !(4..=6).contains(&spell) {
-        return false;
-    }
-    let i = (spell - 4) as usize;
-    match KH1_CAST_SET[i].load(Ordering::Relaxed) {
-        0 => super::settings::get().kh1_casts[i],
-        v => v == 2,
-    }
+    (4..=6).contains(&spell) && !anim_row(spell).is_some_and(super::styles::setting)
 }
 
-/// The debug menu's choice this session (0: the ini's, 1: KH2's cast motion, 2: KH1's whole cast).
-static KH1_CAST_SET: [std::sync::atomic::AtomicU8; 3] = [const { std::sync::atomic::AtomicU8::new(0) }; 3];
-
-/// The debug menu's KH1 Spells row: `spell` (4..6) cast KH1's whole way or not, kept in the ini.
+/// The debug menu's KH1 Spells row: `spell` (4..6) cast KH1's whole way or not: its animation row
+/// (kept in the ini, as the Config menu keeps it).
 pub fn set_kh1_cast(spell: u8, on: bool) {
-    if !(4..=6).contains(&spell) {
-        return;
+    if let Some(k) = anim_row(spell).filter(|_| (4..=6).contains(&spell)) {
+        super::styles::set(k, !on);
     }
-    let i = (spell - 4) as usize;
-    KH1_CAST_SET[i].store(if on { 2 } else { 1 }, Ordering::Relaxed);
-    super::settings::save(super::settings::KH1_CAST_KEYS[i], if on { "on" } else { "off" });
-    log(&format!("debug menu: KH1 spell {spell} casts {}", if on { "KH1's whole way" } else { "on KH2's cast motion" }));
 }
 
 /// Whose spells these are, for the log.
@@ -182,7 +195,7 @@ pub fn element_sounds(kh2: &pose::Kh2) -> Vec<(u8, u16, i32)> {
     if let Some(a) = kh2.final_form.as_ref().and_then(|f| f.archive.as_ref()) {
         add(super::kh2fx::FINAL, a);
     }
-    // (Also for base Sora's KH2 magic, `base_kh2`, which the Config menu switches in game.)
+    // (Also for base Sora's KH2 magic, `base_kh2_spell`, which the Config menu switches in game.)
     {
         for spell in 0..4u8 {
             for level in 1..=3u8 {
@@ -309,7 +322,7 @@ pub fn end_all() {
 }
 
 /// A KH1 spell chosen (`combat::command`, magic `spell`): in the form, KH2's; in base form,
-/// KH2's when the Magic style (ground or air, as he is now) is KH2's (`base_kh2`). Returns
+/// KH2's when the spell's row is KH2's (`base_kh2_spell`). Returns
 /// whether it was taken (else KH1 casts its own).
 pub unsafe fn spell_chosen(actor: usize, spell: u8) -> bool {
     // (Wisdom: Fire, Blizzard, Thunder; Cure is KH1's own on the form's Cure motion, as Gravity,
@@ -319,7 +332,7 @@ pub unsafe fn spell_chosen(actor: usize, spell: u8) -> bool {
         return false;
     }
     let wisdom = spell <= 2 && super::form::in_wisdom() && super::settings::get().drive;
-    let base = kh2_spell(spell) && base_kh2(super::takeover::kh2_airborne());
+    let base = base_kh2_spell(spell);
     if !(wisdom || base) {
         return false;
     }
@@ -387,7 +400,7 @@ pub unsafe fn install() {
 /// start hooked, our slot of KH2's cast motion built for KH1's request (`kh2slots::CASTS`), and
 /// the spell's KH2 file and MAGC row there. Else KH2's controller borrows him for it, as before.
 pub unsafe fn native(spell: u8, air: bool) -> bool {
-    if !kh2_spell(spell) || !NATIVE_HOOKED.load(Ordering::Relaxed) || !base_kh2(air) || !super::shared::active() {
+    if !base_kh2_spell(spell) || !NATIVE_HOOKED.load(Ordering::Relaxed) || !super::shared::active() {
         return false;
     }
     let request = if air { 0x83 } else { 0x36 } + spell as usize;

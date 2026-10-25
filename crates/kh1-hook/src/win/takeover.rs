@@ -1311,13 +1311,12 @@ pub fn command_started(shots: usize, spell: Option<u8>) {
     // as thunder, available input window, when the animation is supposed to end"), and slides
     // as the form's casts do ("the same velocity in his casts as he does for the KH2 adjacent
     // spells").
-    // (Base Sora too, with the Magic style at KH2 (`styles`): KH1's Gravity, Stop and Aero on his
-    // own KH2 cast motions, the user's choice "KH1 spell, KH2 animation".)
+    // (Base Sora too, with their animation rows at KH2 (`formmagic::anim_kh2`): KH1's Gravity, Stop
+    // and Aero on his own KH2 cast motions, the user's choice "KH1 spell, KH2 animation".)
     let air_now = AIR_CAST.try_lock().ok().is_some_and(|a| a.is_some());
-    // (Unless that spell is set to cast KH1's whole way, `formmagic::kh1_cast`.)
     // (Not KH1's Cure with the Cure row at KH1: KH1's whole cast, its own animation and clock, the
     // tester, kh2-magic-and-reflect-native m4: "cure kh1 would cure exactly like kh1".)
-    let base_look = spell.is_some_and(|sp| sp >= 4 && !super::formmagic::kh1_cast(sp)) && super::formmagic::base_kh2(air_now);
+    let base_look = spell.is_some_and(|sp| sp >= 4 && super::formmagic::anim_kh2(sp));
     super::formmagic::BASE_KH1_CAST.store(base_look, Ordering::Relaxed);
     let fc = spell.filter(|_| super::form::in_wisdom() || base_look).and_then(|sp| {
         let air = air_now;

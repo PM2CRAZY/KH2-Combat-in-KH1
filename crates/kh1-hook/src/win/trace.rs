@@ -290,7 +290,7 @@ pub struct Row {
     pub room: u32,
     pub event: bool,
     /// The Config menu's rows, bit per `CONFIG` column (set: KH2), filled by `frame`.
-    pub config: u16,
+    pub config: u32,
     pub pos: [f32; 3],
     pub moved: [f32; 3],
     pub asked: Option<[f32; 3]>,
@@ -328,7 +328,8 @@ pub struct Row {
 const COLUMNS: [(u32, &str); 12] = [
     (0, "frame,ticks,steps,ms,owner,shared,world,room,event"),
     (cat::CONFIG, "cfg_camera,cfg_physics,physics_now,cfg_ground_combo,cfg_air_combo,cfg_magic,cfg_air_magic,cfg_jump,cfg_glide,\
-cfg_dodge_roll,cfg_misc_anims,cfg_player_model,cfg_battle_quotes,cfg_cure,cfg_hit_reactions,cfg_recoil"),
+cfg_dodge_roll,cfg_misc_anims,cfg_player_model,cfg_battle_quotes,cfg_cure,cfg_hit_reactions,cfg_recoil,\
+cfg_fire,cfg_blizzard,cfg_thunder,cfg_anim_blizzard,cfg_anim_thunder,cfg_anim_cure,cfg_anim_gravity,cfg_anim_stop,cfg_anim_aero"),
     (cat::MOVEMENT, "pos_x,pos_up,pos_z,moved_x,moved_up,moved_z,asked_x,asked_up,asked_z,\
 above_floor,floor_up,collision,stand_on,platform,yaw,\
 kh1_vel_x,kh1_vel_y,kh1_vel_z,kh1_vel_w,kh1_arc_0,kh1_arc_1,kh1_arc_2,kh1_arc_3,push_x,push_y,push_z"),
@@ -355,11 +356,11 @@ fn header(mask: u32) -> String {
 const CONFIG: usize = 3 + super::styles::Kind::EVERY.len();
 
 /// The Config menu's KH1 / KH2 rows now (bit set: KH2's), `CONFIG`'s order.
-fn config_now() -> u16 {
+fn config_now() -> u32 {
     use super::shared::physics::{self, Rule};
     let mut bits = [super::camera::KH2.load(Ordering::Relaxed), physics::rule() == Rule::Kh2, physics::source() == Rule::Kh2].to_vec();
     bits.extend(super::styles::Kind::EVERY.iter().map(|k| super::styles::kh2(*k)));
-    bits.iter().enumerate().fold(0, |m, (i, b)| m | (*b as u16) << i)
+    bits.iter().enumerate().fold(0, |m, (i, b)| m | (*b as u32) << i)
 }
 
 /// Set from the ini on the first frame (`note` can't read the settings: their first read logs).

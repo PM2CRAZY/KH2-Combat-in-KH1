@@ -1,3 +1,26 @@
+### 2026-10-25: Stage 562 (testing branch: Magic: a Config row per spell and its animation)
+- **Magic's rows per spell.** The tester (same thread, m19: "each magic should have its
+own settings of which magic you can choose, e.g fire: kh1 | kh2 and that would change what gets
+casted, we'll remove ground magic ... you can also change the animation of magic with the exception
+being reflect, and fire"). Config > KH1 in KH2 > Combat > Magic is now Fire, Blizzard, Thunder,
+Cure (what is cast, ground and air alike; ini `magic_fire`, `magic_blizzard`, `magic_thunder`,
+`magic_cure`) and Animations, its own list (Blizzard, Thunder, Cure, Gravity, Stop, Aero: the cast
+animation of KH1's spell; ini `anim_blizzard` .. `anim_aero`), so both lists keep KH1's full-size
+rows on screen (config-menu-rework answer 1 (a)). The Magic and Aerial Magic rows are gone; the old
+`magic`, `cure_style`, `kh1_cast_*` keys are read only as the new keys' defaults (an ini from before
+casts what it did). `formmagic::kh2_spell` / `base_kh2_spell` / `anim_kh2` replace `base_kh2`; a
+spell cast KH2's way always plays KH2's cast motion (its script needs it, §4 of
+docs/kh1-magic-native.md); Fire's animation is its spell's, Reflect's KH2's. KH1's Blizzard, Thunder
+and Cure with their animation row at KH2: KH1's requests 0x37..0x39 / 0x84..0x86 point at our KH2
+cast slots (`kh2slots::redirect` by the new `cast_spell`), KH1's own script runs on them (no
+borrow). Gravity / Stop / Aero at KH2 as before in this version (borrowed, drawn on KH2's motion).
+The debug menu's KH1 Spells page now shows and sets the Gravity / Stop / Aero animation rows. Trace
+CSV: the config field is 32 bits, columns `cfg_fire` .. `cfg_anim_aero` added (`cfg_magic` /
+`cfg_air_magic` are the old keys' values, no longer used). Checked: the code paths (combat::command,
+kh1_spell_start, redirect). Assumption: KH1's spell scripts time their shots by their own frames,
+not by the cast motion (KH1's cast motions carry no spell events, Checked (files)), so KH1's spell
+comes out at KH1's time on KH2's animation. `docs/kh1-move-styles.md` Magic.
+
 ### 2026-10-25: Stage 561 (testing branch: Effects: Fire at KH1 Sora's size)
 - **Fire's KH2 effects at KH1 Sora's size.** The tester (kh2-effects-in-kh1s-own-effect-system
 m19: "1.for fire do (a)", answering m18's question 1, "(a) scale every KH2 spell and move effect on

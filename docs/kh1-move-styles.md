@@ -1,8 +1,8 @@
 # Move styles (KH1 or KH2, per kind of move)
 
-`styles.rs`: Ground Combo, Aerial Combo, Magic, Aerial Magic, each KH1 or KH2, for base Sora
+`styles.rs`: Ground Combo, Aerial Combo, each spell (Magic below), each KH1 or KH2, for base Sora
 only (Drive Forms keep their own KH2 movesets). Read from `kh1-kh2.ini` (`ground_combo`,
-`air_combo`, `magic`, `air_magic`), switched in game from the Config menu. Defaults: combos KH2,
+`air_combo`, `magic_fire` ...), switched in game from the Config menu. Defaults: combos KH2,
 magic KH1 (as before the switches).
 
 ## Combos
@@ -83,34 +83,43 @@ whatever the style. At Base / Aerial Base Combo KH1:
 
 ## Magic
 
-Which style applies is picked when the spell is chosen (or KH1 starts it): Aerial Magic if KH2
-has him in the air then, else Magic (`formmagic::base_kh2`).
+Per spell since the testing branch's per-spell rows (the tester, thread
+kh2-effects-in-kh1s-own-effect-system m19: "each magic should have its own settings of which magic
+you can choose, e.g fire: kh1 | kh2 and that would change what gets casted, we'll remove ground
+magic and change air magic to air physics"). The Magic and Aerial Magic rows are gone; the ini's
+old `magic` / `air_magic` / `cure_style` / `kh1_cast_*` keys are read only as the new keys'
+defaults, so an ini from before keeps what it cast (`settings`).
 
-- **KH1** (default): as before. KH1 casts every spell; Reflect is KH2's.
-- **KH2**:
-  - Fire, Blizzard, Thunder, Cure are KH2's base-form spells (`formmagic::spell_chosen`, the
-    path Wisdom's spells take): the spell's MAGC row (world 0) gives base Sora's own cast
-    motions (ground, air, combo finisher) in his KH2 moveset, cast through the controller (its
-    combo slots, its cast windows); KH2's script `magic/<SPELL>_<level>.mag` at base Sora's magic
-    sub (level × 2 − 2, + 1 for the finisher; Wisdom's are + 10, `form::magic_sub`), its effects
-    and sounds, its attacks through the spell hit records with KH1's own data for the spell at
-    its level (element). Level: KH1's spell level; cost: KH1's (1 MP). Cure heals a share of
-    KH1's max HP by the ATKP row's power (as Wisdom's did).
-  - Gravity, Stop, Aero (no KH2 version): KH1 casts the spell, drawn with base Sora's KH2 cast
-    motion (Gravity on Thunder's, Stop and Aero on Cure's, the air ones in the air) and run on
-    that motion's clock, input window and movement, as Wisdom's KH1-only spells
-    (`takeover::command_started`'s `FormCast`, `pose::follow`, `formmagic::BASE_KH1_CAST`).
-  - Aerial Magic at KH2: air casts (Reflect too) use KH2's own air physics (the cast motions'
-    no-gravity frames, KH2's gravity), not KH1's fall, as Final Form's.
-- **Cure** (Config > KH1 in KH2 > Combat > Magic > Cure, ini `cure_style`, KH2 by default; the
-  tester, thread kh2-magic-and-reflect-native, answer 5): with the Magic styles at KH2, KH2's Cure
-  (as above) or KH1's whole Cure (the tester, m4: "cure kh1 would cure exactly like kh1 with its
-  effects and cast"): KH1's command step casts it as unmodded (`combat::command` lets it through),
-  its requests 0x39 / 0x86 keep KH1's own slots 56 / 81 (`kh2slots::redirect`), no KH2 cast motion
-  drawn over it (`takeover::command_started`): KH1's script, effects, heal and cost
-  (`formmagic::kh2_cure`, `kh2_spell`). (Before, KH1's Cure was drawn on KH2's Cure cast motion,
-  as Gravity / Stop / Aero still are.) The Physics row still decides how he moves in the air. No
-  effect with the Magic styles at KH1 (KH1's Cure whole) or in a Drive Form (their own).
+Config > KH1 in KH2 > Combat > Magic:
+
+- **Fire, Blizzard, Thunder, Cure** (`styles::Kind::Fire` .. `Cure`, ini `magic_fire`,
+  `magic_blizzard`, `magic_thunder`, `magic_cure`; KH1 by default): which game's spell base Sora
+  casts, on the ground and in the air alike (`formmagic::kh2_spell`, `base_kh2_spell`). At KH2,
+  KH2's spell on KH1's cast state (`formmagic::native`, `kh1_spell_start`: KH2's script, MAGC
+  motion, effects, sounds, KH2's MP cost scaled, `docs/kh1-magic-native.md`), or borrowed by
+  KH2's controller in a state KH1 casts nothing in. At KH1, KH1's command step casts KH1's
+  spell as unmodded (its script, effects, heal, cost), on the animation its row below picks.
+- **Animations** (its own list, so both lists keep KH1's full-size rows on screen; the tester's
+  config-menu-rework answer "(a) for now if more options get added to a menu you can shrink the ui
+  to fit"): Blizzard, Thunder, Cure, Gravity, Stop, Aero (`Kind::BlizzardAnim` .. `AeroAnim`, ini
+  `anim_blizzard` .. `anim_aero`; KH1 by default): the cast animation of **KH1's** spell
+  (`formmagic::anim_kh2`). The tester: "you can also change the animation of magic with the
+  exception being reflect, and fire": Fire has no row (its animation is its spell's), Reflect's is
+  always KH2's (KH1 has none).
+  - A spell cast KH2's way always plays KH2's cast motion: KH2's spell scripts end the cast when
+    Sora isn't in it on their first frame and release on its magic-cast event
+    (`docs/kh1-magic-native.md` §4). (Open with the tester: KH2's spell on KH1's animation.)
+  - KH1's Blizzard, Thunder, Cure at KH2: KH1's requests (0x37 / 0x38 / 0x39, air 0x84 / 0x85 /
+    0x86) point at our slots of KH2's cast motions (`kh2slots::redirect`, by `cast_spell`), and
+    KH1's own script runs on them (`kh1_spell_start` leaves KH1's spells alone): KH2's
+    animation, its combo / cut windows (`cast_follow`) and its motion's own sounds; KH1's spell,
+    effects, timing and cost. **Assumption**: KH1's spell scripts time their shots by their own
+    frames, not by the cast motion's events (KH1's cast motions carry no spell events: §1 of
+    `docs/kh1-magic-native.md`, **Checked (files)**), so the shot comes out at KH1's time.
+  - KH1's Gravity, Stop, Aero at KH2: as before (Gravity on Thunder's cast motion, Stop and Aero
+    on Cure's, the air ones in the air, run on that motion's clock, input window and movement:
+    `takeover::command_started`'s `FormCast`, `pose::follow`, `formmagic::BASE_KH1_CAST`). The
+    debug menu's KH1 Spells page shows and sets these three rows (KH1 cast = KH1).
 - Costs: base Sora's KH2 spells cost KH2's MP scaled onto KH1's (`mpcost`, `docs/kh1-magic-native.md` §6).
 - The spells' effect packages are loaded with `drive = off` too (they were only with Drive on).
 - If a spell's KH2 file or MAGC row is missing, KH1 casts its own.

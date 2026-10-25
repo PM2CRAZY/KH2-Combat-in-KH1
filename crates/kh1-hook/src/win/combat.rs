@@ -400,7 +400,6 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // specials, summons) are KH1's as unmodded.
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && super::shared::active() {
         let drive = super::drive::on() && arg >= super::drive::FORM_ARG;
-        let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
         // During a KH2 cast on KH1's cast state a spell follows only from KH2's magic window
         // (range id 35, `kh2slots::cast_magic_window`; anything else from its reaction-command
         // window, `kh2slots::cast_follow`): KH2's rule, as KH1 refuses what it can't take.
@@ -418,6 +417,11 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         let state = rd::<i32>(actor + 0x70);
         let kh1_air = matches!(state, 2 | 8);
         let native = !drive && arg <= 3 && matches!(state, 0 | 6 | 0x18 | 2 | 8) && super::formmagic::native(arg, kh1_air);
+        // (KH1's own Blizzard, Thunder or Cure on our slot of KH2's cast motion, its animation row
+        // at KH2: the request's own cast motion, not a finisher cast a KH2 spell picked before.)
+        if !native && !drive && (1..=3).contains(&arg) {
+            super::kh2slots::pick_cast(0x36 + arg as usize, false);
+        }
         if native {
             // KH2's cost scaled onto KH1's MP (`mpcost`, the tester's answer 6 (b)): refused as KH1
             // refuses a spell it can't pay for. KH1's command step judges the cast with its own
@@ -451,8 +455,11 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
             super::reflect::cast_native(actor, dir);
             cmd_log(format!("command {kind:#x} ({full:08x}): KH2's Reflect in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
             return;
-        } else if drive || arg == super::reflect::SPELL || (super::formmagic::base_kh2(air) && !(arg == 3 && !super::formmagic::kh2_cure())) {
-            // (KH1's Cure with the Cure row at KH1 is KH1's command step's, as unmodded: below.)
+        } else if drive || arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg)) || ((4..=6).contains(&arg) && super::formmagic::anim_kh2(arg)) {
+            // (A spell whose row is KH1's is KH1's command step's, as unmodded: below; with its
+            // animation row at KH2, KH1's Blizzard, Thunder and Cure play our slot of KH2's cast
+            // motion on KH1's request, `kh2slots::redirect`. Gravity, Stop and Aero with theirs at
+            // KH2 are still borrowed and drawn on KH2's motion, `takeover::command_started`.)
             let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
             if can(actor) == 0 {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);

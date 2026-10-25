@@ -12,7 +12,8 @@
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
 //! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Recoil, and Magic, its own list
-//!   (answer 1): Magic, Aerial Magic; Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
+//!   (answer 1): Fire, Blizzard, Thunder, Cure and Animations, its own list (Blizzard, Thunder, Cure,
+//!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a).
 //!
 //! Only the settings that were in the Config menu (answer 2a); "Default settings" leaves ours alone
@@ -21,7 +22,7 @@
 //! focus, and its hook does it for ours.
 //!
 //! The choices are kept in `kh1-kh2.ini` (`camera`, `physics`, `ground_combo`, `air_combo`,
-//! `magic`, `air_magic`... = kh1 / kh2; `debug_menu` off / on, t354), not the save.
+//! `magic_fire`, `anim_gravity`... = kh1 / kh2; `debug_menu` off / on, t354), not the save.
 //!
 //! Steam only (the windows' calls are Steam addresses); the text lookup is in for both builds.
 
@@ -216,8 +217,10 @@ enum List {
     Magic,
     Movement,
     Misc,
+    /// Magic > Animations: each KH1 spell's cast animation (the tester, m19).
+    MagicAnim,
 }
-const LISTS: [List; 6] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc];
+const LISTS: [List; 7] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim];
 
 impl List {
     fn index(self) -> usize {
@@ -228,6 +231,7 @@ impl List {
         match self {
             List::Top => None,
             List::Magic => Some(List::Combat),
+            List::MagicAnim => Some(List::Magic),
             _ => Some(List::Top),
         }
     }
@@ -239,6 +243,7 @@ impl List {
             List::Magic => &MAGIC,
             List::Movement => &MOVEMENT,
             List::Misc => &MISC,
+            List::MagicAnim => &MAGIC_ANIM,
         }
     }
 }
@@ -269,10 +274,23 @@ const COMBAT: [Item; 9] = [
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
 ];
-const MAGIC: [Item; 3] = [
-    Item::Set(kh(0x7F00_0105, 0x7F00_0106), Row::Style(Kind::Magic)),
-    Item::Set(kh(0x7F00_0107, 0x7F00_0108), Row::Style(Kind::AirMagic)),
+// (The tester, thread kh2-effects-in-kh1s-own-effect-system m19: a row per spell for what is
+// cast, "we'll remove ground magic"; each KH1 spell's animation in its own list, so both lists
+// keep KH1's full-size rows on screen.)
+const MAGIC: [Item; 5] = [
+    Item::Set(kh(0x7F00_0180, 0x7F00_0181), Row::Style(Kind::Fire)),
+    Item::Set(kh(0x7F00_0182, 0x7F00_0183), Row::Style(Kind::Blizzard)),
+    Item::Set(kh(0x7F00_0184, 0x7F00_0185), Row::Style(Kind::Thunder)),
     Item::Set(kh(0x7F00_011F, 0x7F00_0120), Row::Style(Kind::Cure)),
+    Item::Open(0x7F00_020D, 0x7F00_020E, List::MagicAnim),
+];
+const MAGIC_ANIM: [Item; 6] = [
+    Item::Set(kh(0x7F00_0182, 0x7F00_0186), Row::Style(Kind::BlizzardAnim)),
+    Item::Set(kh(0x7F00_0184, 0x7F00_0187), Row::Style(Kind::ThunderAnim)),
+    Item::Set(kh(0x7F00_011F, 0x7F00_0188), Row::Style(Kind::CureAnim)),
+    Item::Set(kh(0x7F00_0189, 0x7F00_018A), Row::Style(Kind::GravityAnim)),
+    Item::Set(kh(0x7F00_018B, 0x7F00_018C), Row::Style(Kind::StopAnim)),
+    Item::Set(kh(0x7F00_018D, 0x7F00_018E), Row::Style(Kind::AeroAnim)),
 ];
 const MOVEMENT: [Item; 4] = [
     Item::Set(kh(0x7F00_0109, 0x7F00_010A), Row::Style(Kind::Jump)),
@@ -295,7 +313,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 65] = [
+const STRINGS: [(u32, &str); 78] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -303,7 +321,24 @@ const STRINGS: [(u32, &str); 65] = [
     (0x7F00_0205, "Combat"),
     (0x7F00_0206, "Choose KH1's or KH2's physics, combos and magic for Sora."),
     (0x7F00_0207, "Magic"),
-    (0x7F00_0208, "Choose KH1's or KH2's magic for Sora on the ground and in the air."),
+    (0x7F00_0208, "Choose KH1's or KH2's version of each spell for Sora."),
+    (0x7F00_020D, "Animations"),
+    (0x7F00_020E, "Choose KH1's or KH2's cast animation for each KH1 spell."),
+    (0x7F00_0180, "Fire"),
+    (0x7F00_0181, "Cast KH1's or KH2's Fire, on the ground and in the air.\nIts animation is its own. Drive Forms keep their own."),
+    (0x7F00_0182, "Blizzard"),
+    (0x7F00_0183, "Cast KH1's or KH2's Blizzard, on the ground and in the air.\nDrive Forms keep their own."),
+    (0x7F00_0184, "Thunder"),
+    (0x7F00_0185, "Cast KH1's or KH2's Thunder, on the ground and in the air.\nDrive Forms keep their own."),
+    (0x7F00_0186, "KH1's Blizzard on KH1's or KH2's cast animation.\nKH2's Blizzard always plays KH2's."),
+    (0x7F00_0187, "KH1's Thunder on KH1's or KH2's cast animation.\nKH2's Thunder always plays KH2's."),
+    (0x7F00_0188, "KH1's Cure on KH1's or KH2's cast animation.\nKH2's Cure always plays KH2's."),
+    (0x7F00_0189, "Gravity"),
+    (0x7F00_018A, "KH1's Gravity on KH1's or KH2's cast animation\n(KH2's Thunder cast)."),
+    (0x7F00_018B, "Stop"),
+    (0x7F00_018C, "KH1's Stop on KH1's or KH2's cast animation\n(KH2's Cure cast)."),
+    (0x7F00_018D, "Aero"),
+    (0x7F00_018E, "KH1's Aero on KH1's or KH2's cast animation\n(KH2's Cure cast)."),
     (0x7F00_0209, "Movement"),
     (0x7F00_020A, "Choose KH1's or KH2's jump, glide, dodge roll and animations for Sora."),
     (0x7F00_020B, "Misc"),
@@ -322,10 +357,6 @@ const STRINGS: [(u32, &str); 65] = [
     (0x7F00_0102, "Choose KH1's or KH2's ground combo for Sora.\nDrive Forms keep their own."),
     (0x7F00_0103, "Aerial Base Combo"),
     (0x7F00_0104, "Choose KH1's or KH2's aerial combo for Sora.\nDrive Forms keep their own."),
-    (0x7F00_0105, "Magic"),
-    (0x7F00_0106, "Choose KH1's or KH2's magic for Sora on the ground.\nDrive Forms keep their own."),
-    (0x7F00_0107, "Aerial Magic"),
-    (0x7F00_0108, "Choose KH1's or KH2's magic for Sora in the air.\nDrive Forms keep their own."),
     (0x7F00_0140, "Hit Reactions"),
     (0x7F00_0141, "Choose KH1's or KH2's animations when Sora is hit.\nDrive Forms keep their own."),
     (0x7F00_0142, "Knock-back Numbers"),
@@ -340,7 +371,7 @@ const STRINGS: [(u32, &str); 65] = [
     (0x7F00_0172, "Recoil"),
     (0x7F00_0173, "KH1's or KH2's recoil, parry and guard repel when Sora's\nattack or guard meets an enemy's, for every move."),
     (0x7F00_011F, "Cure"),
-    (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
+    (0x7F00_0120, "Cast KH1's or KH2's Cure, on the ground and in the air.\nDrive Forms keep their own."),
     (0x7F00_0109, "Jump"),
     (0x7F00_010A, "Choose KH1's or KH2's jump for Sora.\nDrive Forms keep their own."),
     (0x7F00_010B, "Glide"),

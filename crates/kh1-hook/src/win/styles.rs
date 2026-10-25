@@ -1,5 +1,5 @@
 //! Which game's moves base Sora uses, per kind (the user: "toggle what sora uses for his ground
-//! and aerial moves": Ground Combo, Aerial Combo, Magic, Aerial Magic, each KH1 | KH2). Read
+//! and aerial moves": Ground Combo, Aerial Combo, then each spell, each KH1 | KH2). Read
 //! from `kh1-kh2.ini` at start, switched in game from the Config menu (`config`), kept in the
 //! ini. Drive Forms keep their own KH2 movesets whatever these say (the user's choice).
 
@@ -23,10 +23,10 @@ pub enum Kind {
     PlayerModel,
     /// Sora's battle quotes (KH2's voice on KH2's moves, or KH1's): everywhere, forms too.
     BattleQuotes,
-    /// Which Cure base Sora casts with Magic / Aerial Magic at KH2 (the tester, thread
-    /// kh2-magic-and-reflect-native, answer 5: "make a menu in the magic config to change what
-    /// gets casted kh1 cure or kh2"): KH2's (its script, `formmagic`) or KH1's own spell on KH2's
-    /// Cure cast motion, as KH1's Gravity / Stop / Aero are there.
+    /// Which Cure base Sora casts (the tester, thread kh2-magic-and-reflect-native, answer 5:
+    /// "make a menu in the magic config to change what gets casted kh1 cure or kh2"; m4: KH1's is
+    /// KH1's whole Cure): KH2's (its script, `formmagic`) or KH1's own, on the ground and in the
+    /// air (since the per-spell rows, m19, no longer only with Magic at KH2).
     Cure,
     /// Sora's hit reactions (the tester, thread soras-hit-reactions-native: KH2's reaction
     /// motions on KH1's reaction requests, `kh2slots::REACTIONS`; KH1 still runs every reaction:
@@ -37,10 +37,52 @@ pub enum Kind {
     /// kh1's rules exactly and vice versa"): KH2's recoil motions, push, hop and no protection on
     /// KH1's recoil requests (`recoil`, `kh2slots::RECOILS`), KH2's clash rules on our attack data.
     Recoil,
+    /// Which Fire, Blizzard and Thunder base Sora casts, KH1's or KH2's, on the ground and in the
+    /// air (the tester, thread kh2-effects-in-kh1s-own-effect-system m19: "each magic should have
+    /// its own settings of which magic you can choose, e.g fire: kh1 | kh2 and that would change
+    /// what gets casted"). Cure's is `Cure`. These replace the Magic / Aerial Magic rows
+    /// (`Magic` / `AirMagic` stay as the cast slots' kind, `kh2slots`, and read the old ini keys).
+    Fire,
+    Blizzard,
+    Thunder,
+    /// The cast animation of a spell base Sora casts KH1's version of (KH1's own cast motion, or
+    /// KH2's cast motion as a slot on KH1's request, `kh2slots::CASTS`): the tester, m19, "you can
+    /// also change the animation of magic with the exception being reflect, and fire". A spell
+    /// cast KH2's way plays KH2's cast motion whatever these say (`formmagic::anim_kh2`); Fire's
+    /// animation is its spell's, Reflect's always KH2's.
+    BlizzardAnim,
+    ThunderAnim,
+    CureAnim,
+    GravityAnim,
+    StopAnim,
+    AeroAnim,
 }
 
 impl Kind {
-    pub const EVERY: [Kind; 13] = [Kind::GroundCombo, Kind::AirCombo, Kind::Magic, Kind::AirMagic, Kind::Jump, Kind::Glide, Kind::DodgeRoll, Kind::MiscAnims, Kind::PlayerModel, Kind::BattleQuotes, Kind::Cure, Kind::HitReactions, Kind::Recoil];
+    pub const EVERY: [Kind; COUNT] = [
+        Kind::GroundCombo,
+        Kind::AirCombo,
+        Kind::Magic,
+        Kind::AirMagic,
+        Kind::Jump,
+        Kind::Glide,
+        Kind::DodgeRoll,
+        Kind::MiscAnims,
+        Kind::PlayerModel,
+        Kind::BattleQuotes,
+        Kind::Cure,
+        Kind::HitReactions,
+        Kind::Recoil,
+        Kind::Fire,
+        Kind::Blizzard,
+        Kind::Thunder,
+        Kind::BlizzardAnim,
+        Kind::ThunderAnim,
+        Kind::CureAnim,
+        Kind::GravityAnim,
+        Kind::StopAnim,
+        Kind::AeroAnim,
+    ];
 
     /// Its ini key.
     pub fn key(self) -> &'static str {
@@ -55,9 +97,19 @@ impl Kind {
             Kind::MiscAnims => "misc_anims",
             Kind::PlayerModel => "player_model",
             Kind::BattleQuotes => "battle_quotes",
-            Kind::Cure => "cure_style",
+            // (Its own key since the spell rows: `cure_style` only counted with Magic at KH2.)
+            Kind::Cure => "magic_cure",
             Kind::HitReactions => "hit_reactions",
             Kind::Recoil => "recoil",
+            Kind::Fire => "magic_fire",
+            Kind::Blizzard => "magic_blizzard",
+            Kind::Thunder => "magic_thunder",
+            Kind::BlizzardAnim => "anim_blizzard",
+            Kind::ThunderAnim => "anim_thunder",
+            Kind::CureAnim => "anim_cure",
+            Kind::GravityAnim => "anim_gravity",
+            Kind::StopAnim => "anim_stop",
+            Kind::AeroAnim => "anim_aero",
         }
     }
 
@@ -77,6 +129,15 @@ impl Kind {
             Kind::Cure => "Cure",
             Kind::HitReactions => "Hit Reactions",
             Kind::Recoil => "Recoil",
+            Kind::Fire => "Fire",
+            Kind::Blizzard => "Blizzard",
+            Kind::Thunder => "Thunder",
+            Kind::BlizzardAnim => "Blizzard Animation",
+            Kind::ThunderAnim => "Thunder Animation",
+            Kind::CureAnim => "Cure Animation",
+            Kind::GravityAnim => "Gravity Animation",
+            Kind::StopAnim => "Stop Animation",
+            Kind::AeroAnim => "Aero Animation",
         }
     }
 
@@ -87,7 +148,10 @@ impl Kind {
 
 /// KH2's (true) or KH1's, per `Kind`: every kind KH1's by default (the user: "kh1 is on by default
 /// for all settings").
-static KH2: [AtomicBool; 13] = [const { AtomicBool::new(false) }; 13];
+static KH2: [AtomicBool; COUNT] = [const { AtomicBool::new(false) }; COUNT];
+
+/// How many kinds there are (`Kind::EVERY`, the ini's `settings::styles`).
+pub const COUNT: usize = 22;
 static INIT: Once = Once::new();
 
 fn init() {

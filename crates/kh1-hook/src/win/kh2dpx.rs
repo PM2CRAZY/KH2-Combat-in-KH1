@@ -710,11 +710,10 @@ fn desired() -> Vec<(Pkg, String)> {
         if let Some(l) = unsafe { super::reflect::level_now() } {
             v.push((Pkg::Spell(l), String::new()));
         }
-        use super::styles::{kh2, Kind};
-        let base = kh2(Kind::Magic) || kh2(Kind::AirMagic);
         let wisdom = forms.contains(&super::form::Kind::Wisdom);
         for spell in 0..4u8 {
-            if base || (wisdom && spell <= 2) {
+            // (Each spell's package when its row is KH2's, `formmagic::kh2_spell`.)
+            if super::formmagic::kh2_spell(spell) || (wisdom && spell <= 2) {
                 let level = unsafe { super::reflect::kh1_spell_level(spell) };
                 v.push((Pkg::Spell(super::formmagic::spell_package(spell, level)), String::new()));
             }

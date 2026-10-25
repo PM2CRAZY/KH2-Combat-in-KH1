@@ -76,10 +76,11 @@ pub const AIR_FINISHER: usize = 0xCE;
 /// `xa_ex_0010.mset`, Checked (files)): on the ground request `0x36 + spell` (Fire 0x36 slot 54,
 /// Blizzard 0x37 slot 55, Thunder 0x38 slot 56, Cure 0x39 slot 56), in the air `0x83 + spell`
 /// (79, 80, 81, 81); Fire's second part 0x3D (slot 57; on the ground after 0x36, or alone for a
-/// Fire out of a swing or out of 0x3D itself) and 0x8A (slot 82, the air's). With the Magic /
-/// Aerial Magic styles at KH2, each plays KH2's cast motion for the spell (MAGC, `00battle.bin`,
-/// Checked (files): Fire 56 / air 58, Blizzard 59 / 61, Thunder 62 / 64, Cure 65 / 67; the same
-/// motions at every level) in KH1's own cast state (`formmagic::kh1_spell_start`).
+/// Fire out of a swing or out of 0x3D itself) and 0x8A (slot 82, the air's). With the spell's
+/// row at KH2 (or, for KH1's spell, its animation row: `formmagic::anim_kh2`), each plays KH2's
+/// cast motion for the spell (MAGC, `00battle.bin`, Checked (files): Fire 56 / air 58, Blizzard
+/// 59 / 61, Thunder 62 / 64, Cure 65 / 67; the same motions at every level) in KH1's own cast
+/// state (KH2's spell: `formmagic::kh1_spell_start`; KH1's: KH1's own script on it).
 pub const CASTS: [(u16, usize, usize, bool); 10] = [
     (56, 54, 0x36, false),
     (59, 55, 0x37, false),
@@ -96,10 +97,16 @@ pub const CASTS: [(u16, usize, usize, bool); 10] = [
 /// KH2's finisher casts (MAGC's finisher motions, Checked (files): Fire 57, Blizzard 60, Thunder 63;
 /// Cure has none, and none in the air), each on KH1's ground request of its spell (and Fire's
 /// second part, 0x3D, which KH1 plays for a Fire out of a swing): (motion, KH1's slot, request).
-/// KH1's Cure requests, ground and air (`CASTS`): left to KH1's own slots (56 / 81) when the Cure
-/// row is KH1's (`redirect`).
-const CURE_GROUND: usize = 0x39;
-const CURE_AIR: usize = 0x86;
+/// The spell of one of KH1's cast requests (`CASTS`: ground `0x36 + spell`, air `0x83 + spell`,
+/// Fire's second parts 0x3D / 0x8A; Fire 0 .. Aero 6), for its rows (`redirect`).
+fn cast_spell(request: usize) -> Option<u8> {
+    match request {
+        0x36..=0x3C => Some((request - 0x36) as u8),
+        0x83..=0x89 => Some((request - 0x83) as u8),
+        0x3D | 0x8A => Some(0),
+        _ => None,
+    }
+}
 
 const CAST_FINISHERS: [(u16, usize, usize); 4] = [(57, 54, 0x36), (60, 55, 0x37), (63, 56, 0x38), (57, 57, 0x3D)];
 
@@ -1376,10 +1383,14 @@ unsafe fn redirect(p: &mut Placed) {
             }
             if let Some(e) = t.requests.get_mut(req) {
                 // (A request of ours is ours whatever the styles.)
-                // (KH1's Cure, 0x39 / 0x86, KH1's own slot when the Cure row is KH1's: KH1's whole
-                // cast, its own animation, the tester's m4 answer, `formmagic::kh2_cure`.)
-                let kh1_cure = matches!(req, CURE_GROUND | CURE_AIR) && !super::formmagic::kh2_cure();
-                *e = if own || on && !kh1_cure && (super::styles::kh2(kind) || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
+                // (KH1's spell requests by their spell's rows, `formmagic::anim_kh2`: KH2's cast
+                // motion for a spell cast KH2's way, else the spell's animation row; the tester,
+                // m19. KH1's own slot otherwise: KH1's whole cast, as the Cure row at KH1, m4.)
+                let style = match cast_spell(req) {
+                    Some(spell) if matches!(kind, Kind::Magic | Kind::AirMagic) => super::formmagic::anim_kh2(spell),
+                    _ => super::styles::kh2(kind),
+                };
+                *e = if own || on && (style || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
             }
         }
     }

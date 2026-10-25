@@ -137,21 +137,26 @@ valor_left_blade = on\r\n\
 ;   gravity, air drift, attack travel), whatever the move styles below (they choose the\r\n\
 ;   animations); Drive Forms always KH2's. The Config menu's Physics row switches it in game\r\n\
 physics = kh2\r\n\
-; ground_combo / air_combo / magic / air_magic: kh1 or kh2, which game's moves base Sora uses\r\n\
+; ground_combo / air_combo: kh1 or kh2, which game's moves base Sora uses\r\n\
 ; for each (Drive Forms keep their own); the Config menu switches them in game too\r\n\
 ground_combo = kh2\r\n\
 air_combo = kh2\r\n\
-magic = kh1\r\n\
-air_magic = kh1\r\n\
-; kh1_cast_gravity / kh1_cast_stop / kh1_cast_aero: on = with magic (or air_magic) at kh2, base\r\n\
-; Sora still casts that KH1 spell KH1's whole way (its own animation, timing and effects); off =\r\n\
-; KH1's spell on KH2's cast animation (the debug menu's KH1 Spells page switches them)\r\n\
-kh1_cast_gravity = off\r\n\
-kh1_cast_stop = off\r\n\
-kh1_cast_aero = off\r\n\
-; cure_style: kh1 or kh2, with magic (or air_magic) at kh2: base Sora casts KH2's Cure, or KH1's\r\n\
-; own Cure on KH2's Cure cast animation (the Config menu's Magic list switches it)\r\n\
-cure_style = kh2\r\n\
+; magic_fire / magic_blizzard / magic_thunder / magic_cure: kh1 or kh2, which game's spell base\r\n\
+;   Sora casts, on the ground and in the air (Drive Forms keep their own); the Config menu's\r\n\
+;   Magic list switches them\r\n\
+magic_fire = kh1\r\n\
+magic_blizzard = kh1\r\n\
+magic_thunder = kh1\r\n\
+magic_cure = kh1\r\n\
+; anim_blizzard / anim_thunder / anim_cure / anim_gravity / anim_stop / anim_aero: kh1 or kh2,\r\n\
+;   the cast animation of KH1's spell (a spell cast KH2's way always plays KH2's; Fire's follows\r\n\
+;   its spell, Reflect's is KH2's); the Config menu's Magic > Animations list switches them\r\n\
+anim_blizzard = kh1\r\n\
+anim_thunder = kh1\r\n\
+anim_cure = kh1\r\n\
+anim_gravity = kh1\r\n\
+anim_stop = kh1\r\n\
+anim_aero = kh1\r\n\
 ; hit_reactions: kh1 or kh2, KH1's or KH2's reaction animations when base Sora is hit (KH1\r\n\
 ;   still runs the reaction: its no-damage time, voices, HUD and MP); the Config menu's Combat\r\n\
 ;   list switches it\r\n\
@@ -291,8 +296,8 @@ pub struct Settings {
     pub drive: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
     pub valor_left_blade: bool,
-    /// KH2's (true) or KH1's moves per `styles::Kind` (ground combo, air combo, magic, air magic, jump, glide, dodge roll, misc animations, player model, battle quotes, Cure, hit reactions, recoil).
-    pub styles: [bool; 13],
+    /// KH2's (true) or KH1's moves per `styles::Kind`, in `Kind::EVERY`'s order.
+    pub styles: [bool; super::styles::COUNT],
     /// How far KH2's hit reactions push base Sora (`knockback_numbers = kh2 | kh1 | scaled`, KH2's by
     /// default; `hitreact`).
     pub knockback_numbers: super::hitreact::Numbers,
@@ -323,10 +328,6 @@ pub struct Settings {
     pub trace_cats: u32,
     /// L1 + R1 + Triangle opens the debug menu (`debug_menu = on`, `debugmenu.rs`).
     pub debug_menu: bool,
-    /// Gravity, Stop and Aero (KH1's spells 4..6) cast KH1's whole way at the Magic styles KH2
-    /// (`kh1_cast_gravity` / `_stop` / `_aero = on`; off by default: KH2's cast motion over KH1's
-    /// spell, `formmagic::kh1_cast`).
-    pub kh1_casts: [bool; 3],
 }
 
 static SETTINGS: AtomicPtr<Settings> = AtomicPtr::new(std::ptr::null_mut());
@@ -488,7 +489,36 @@ fn load(first: bool) -> Option<Settings> {
         physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
         drive: on(&text, "drive", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
-        styles: [on(&text, "ground_combo", "kh2", false), on(&text, "air_combo", "kh2", false), on(&text, "magic", "kh2", false), on(&text, "air_magic", "kh2", false), on(&text, "jump_style", "kh2", false), on(&text, "glide_style", "kh2", false), on(&text, "roll_style", "kh2", false), on(&text, "misc_anims", "kh2", false), on(&text, "player_model", "kh2", false), on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false)), on(&text, "cure_style", "kh2", true), on(&text, "hit_reactions", "kh2", false), on(&text, "recoil", "kh2", false)],
+        styles: {
+            // (The Magic / Aerial Magic rows before the per-spell rows, m19: the new rows' defaults
+            // from them, so an ini from before keeps what it cast.)
+            let magic = on(&text, "magic", "kh2", false);
+            let kh1_cast = KH1_CAST_KEYS.map(|k| on(&text, k, "on", false));
+            [
+                on(&text, "ground_combo", "kh2", false),
+                on(&text, "air_combo", "kh2", false),
+                magic,
+                on(&text, "air_magic", "kh2", false),
+                on(&text, "jump_style", "kh2", false),
+                on(&text, "glide_style", "kh2", false),
+                on(&text, "roll_style", "kh2", false),
+                on(&text, "misc_anims", "kh2", false),
+                on(&text, "player_model", "kh2", false),
+                on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false)),
+                on(&text, "magic_cure", "kh2", magic && on(&text, "cure_style", "kh2", true)),
+                on(&text, "hit_reactions", "kh2", false),
+                on(&text, "recoil", "kh2", false),
+                on(&text, "magic_fire", "kh2", magic),
+                on(&text, "magic_blizzard", "kh2", magic),
+                on(&text, "magic_thunder", "kh2", magic),
+                on(&text, "anim_blizzard", "kh2", false),
+                on(&text, "anim_thunder", "kh2", false),
+                on(&text, "anim_cure", "kh2", false),
+                on(&text, "anim_gravity", "kh2", magic && !kh1_cast[0]),
+                on(&text, "anim_stop", "kh2", magic && !kh1_cast[1]),
+                on(&text, "anim_aero", "kh2", magic && !kh1_cast[2]),
+            ]
+        },
         knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),
         medium_hits_flinch: on(&text, "medium_hits", "flinch", false),
         gummi_skip: on(&text, "gummi", "skip", false),
@@ -505,13 +535,13 @@ fn load(first: bool) -> Option<Settings> {
         trace_game_frames: on(&text, "trace_game_frames", "on", false),
         trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
         debug_menu: on(&text, "debug_menu", "on", false),
-        kh1_casts: KH1_CAST_KEYS.map(|k| on(&text, k, "on", false)),
     };
     log(&format!("settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" }));
     Some(s)
 }
 
-/// The ini keys of `kh1_casts` (Gravity, Stop, Aero).
+/// The ini keys that said Gravity, Stop and Aero cast KH1's whole way at Magic KH2 (before the
+/// per-spell rows: read only for `anim_gravity` / `_stop` / `_aero`'s defaults).
 pub const KH1_CAST_KEYS: [&str; 3] = ["kh1_cast_gravity", "kh1_cast_stop", "kh1_cast_aero"];
 
 /// Keeps the physics setting in the ini (the Config menu's Physics row).
