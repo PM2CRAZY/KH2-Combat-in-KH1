@@ -10,11 +10,12 @@
 //! scale (answer 3a) so the ninth row fits. The button opens KH1 windows of our own, the way the
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
-//! - KH1 in KH2: Camera, Combat, Movement, Misc;
+//! - KH1 in KH2: Camera, Combat, Movement, Misc, Tweaks;
 //! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Recoil, and Magic, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
-//!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a).
+//!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a); Tweaks: KH1 Ability Chance (combo row
+//!   selection m21).
 //!
 //! Only the settings that were in the Config menu (answer 2a); "Default settings" leaves ours alone
 //! (answer 6b). Backing out of a list re-creates its parent with the cursor on the row it came
@@ -177,6 +178,8 @@ enum Row {
     MediumHits,
     /// Criticals (Off | On, `kh2damage::criticals`).
     Criticals,
+    /// Tweaks > KH1 Ability Chance (Off | On, `kh1picker::chance`).
+    AbilityChance,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -219,8 +222,11 @@ enum List {
     Misc,
     /// Magic > Animations: each KH1 spell's cast animation (the tester, m19).
     MagicAnim,
+    /// Tweaks: small changes to how KH1's own rules feel (the tester, combo row selection m21:
+    /// "these will be in the gameplay config in a sub menu called Tweaks").
+    Tweaks,
 }
-const LISTS: [List; 7] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim];
+const LISTS: [List; 8] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks];
 
 impl List {
     fn index(self) -> usize {
@@ -244,6 +250,7 @@ impl List {
             List::Movement => &MOVEMENT,
             List::Misc => &MISC,
             List::MagicAnim => &MAGIC_ANIM,
+            List::Tweaks => &TWEAKS,
         }
     }
 }
@@ -252,12 +259,14 @@ const KH: [u32; 2] = [0x7F00_0002, 0x7F00_0003];
 const fn kh(label: u32, help: u32) -> [u32; 4] {
     [label, KH[0], KH[1], help]
 }
-const TOP: [Item; 4] = [
+const TOP: [Item; 5] = [
     Item::Open(0x7F00_0203, 0x7F00_0204, List::Camera),
     Item::Open(0x7F00_0205, 0x7F00_0206, List::Combat),
     Item::Open(0x7F00_0209, 0x7F00_020A, List::Movement),
     Item::Open(0x7F00_020B, 0x7F00_020C, List::Misc),
+    Item::Open(0x7F00_020F, 0x7F00_0210, List::Tweaks),
 ];
+const TWEAKS: [Item; 1] = [Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance)];
 const CAMERA: [Item; 3] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
@@ -314,7 +323,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 80] = [
+const STRINGS: [(u32, &str); 84] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -346,6 +355,10 @@ const STRINGS: [(u32, &str); 80] = [
     (0x7F00_020A, "Choose KH1's or KH2's jump, glide, dodge roll and animations for Sora."),
     (0x7F00_020B, "Misc"),
     (0x7F00_020C, "Battle quotes, Gummi routes and the debug menu."),
+    (0x7F00_020F, "Tweaks"),
+    (0x7F00_0210, "Small changes to how KH1's own rules play."),
+    (0x7F00_0191, "KH1 Ability Chance"),
+    (0x7F00_0192, "On: KH1's 30 percent chance on Stun Impact and Gravity Break.\nWhen it fails, the next move that fits comes, as in KH2."),
     (0x7F00_0001, "Camera Style"),
     (0x7F00_0002, "KH1"),
     (0x7F00_0003, "KH2"),
@@ -410,6 +423,7 @@ fn value(what: Row) -> bool {
         Row::Debug => super::debugmenu::enabled(),
         Row::MediumHits => super::hitreact::medium_flinch(),
         Row::Criticals => super::kh2damage::criticals(),
+        Row::AbilityChance => super::kh1picker::chance(),
     }
 }
 
@@ -436,6 +450,7 @@ fn set(what: Row, v: bool) {
         Row::Debug => super::debugmenu::set_enabled(v),
         Row::MediumHits => super::hitreact::set_medium_flinch(v),
         Row::Criticals => super::kh2damage::set_criticals(v),
+        Row::AbilityChance => super::kh1picker::set_chance(v),
     }
 }
 
@@ -545,7 +560,7 @@ pub unsafe fn install() {
     super::sys::VirtualProtect((base + ROWS_RVA) as *mut _, 4, 0x04, &mut old);
     wr(base + ROWS_RVA, PAGE_ROWS);
     wr(base + VISIBLE_RVA, PAGE_ROWS);
-    log("Config menu: the KH1 in KH2 button added (Camera, Combat, Movement, Misc)");
+    log("Config menu: the KH1 in KH2 button added (Camera, Combat, Movement, Misc, Tweaks)");
 }
 
 /// KH1's sysmsg lookup (its own instructions, re-done here: its first one is RIP-relative, so

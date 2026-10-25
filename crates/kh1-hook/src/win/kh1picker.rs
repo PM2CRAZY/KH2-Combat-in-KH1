@@ -20,7 +20,7 @@
 //! and the walk marks them by KH1's own rules in their new places. Blitz's bit stays: KH1's own
 //! test for it (row 6: its finisher marked and nothing beside him, row 11's count 0) runs inside
 //! KH1's picker, which returns 6 when it passes. KH1's 30% chance on Stun Impact and Gravity
-//! Break is the ini's `kh1_ability_chance` (`chance`).
+//! Break is the ini's `kh1_ability_chance`, the Config menu's Tweaks row (`chance`).
 
 use super::addr::Build;
 use super::sys::GetModuleHandleA;
@@ -47,7 +47,7 @@ pub const HELD_AIR: u32 = 1 << 25;
 const RANDOM_STEAM: usize = 0x31BA30;
 const RANDOM_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 static RANDOM: AtomicUsize = AtomicUsize::new(0);
-/// KH1 Ability Chance (0 not read yet, 1 off, 2 on).
+/// The Tweaks row "KH1 Ability Chance" (0 not read yet, 1 off, 2 on).
 static CHANCE: AtomicU8 = AtomicU8::new(0);
 
 /// KH1's 30% chance on Stun Impact and Gravity Break (the tester, m21: "a toggle in the config
@@ -63,6 +63,13 @@ pub fn chance() -> bool {
         }
         v => v == 2,
     }
+}
+
+/// The Config row (Tweaks > KH1 Ability Chance): live, kept in the ini.
+pub fn set_chance(on: bool) {
+    CHANCE.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("kh1_ability_chance", if on { "on" } else { "off" });
+    super::log(&format!("Config menu: KH1 Ability Chance {}", if on { "On" } else { "Off" }));
 }
 
 /// KH1's random number (0..1), as its picker draws it; `None` if the function isn't the

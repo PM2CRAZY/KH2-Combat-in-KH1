@@ -1378,7 +1378,7 @@ checks fail (`Character::row_in_range`, KH2's `in_range` against Sora's targets 
 
 - KH1's moves: their bit as KH1 set it, their row's request not the one playing (KH1's own
   anti-repeat). Stun Impact and Gravity Break: with KH1 Ability Chance on (ini
-  `kh1_ability_chance`), KH1's roll: one random number per press,
+  `kh1_ability_chance`, the Config menu's Tweaks list), KH1's roll: one random number per press,
   0.3 off it for each roll reached, so each keeps exactly KH1's 30% whichever comes first; a
   failed roll isn't rolled again further down (Stun Impact is in two groups). Off: they pass
   whenever their group does. Blitz: only when KH1's picker returned 6 (its own test passed).

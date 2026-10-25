@@ -385,6 +385,17 @@ What we do (`config.rs`):
   PC build's menus take no mouse here.
 - Our lists are KH1's size (not the 92% of page 1).
 
+### 6.y The Tweaks list (combo row selection m21)
+
+The tester: "lets make a toggle in the config for the 30 percent chance to exist ... these will be
+in the gameplay config in a sub menu called Tweaks". KH1 in KH2's list gets a fifth button,
+"Tweaks", opening our list `List::Tweaks` (a KH1 window from the same copied definition as the
+others, so it opens, backs out and returns to its row as they do; parent the KH1 in KH2 list). Its
+one row so far: "KH1 Ability Chance" (Off | On, `kh1picker::chance`, ini `kh1_ability_chance`,
+default on): KH1's 30% roll on Stun Impact and Gravity Break in the KH1 combo's finisher walk
+(`docs/kh1-anim-slots.md` §7.z.1). Assumption: "the gameplay config" is the KH1 in KH2 list (there
+is no list of that name); asked in the thread.
+
 ### 6.x A three-value row (Knock-back Numbers)
 
 KH1's Config rows all have two values. `config::Item::Pick` draws a row with three: the label as

@@ -55,7 +55,7 @@ kh2_damage = on\r\n\
 criticals = off\r\n\
 ; kh1_ability_chance: on = KH1's 30% chance on Stun Impact and Gravity Break in KH1's combo\r\n\
 ;   (a failed roll picks the next move that fits); off = they come whenever they fit, as KH2's\r\n\
-;   rows\r\n\
+;   rows (the Config menu's Tweaks list switches it)\r\n\
 kh1_ability_chance = on\r\n\
 ; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
 glide = square\r\n\
@@ -252,7 +252,7 @@ pub struct Settings {
     /// `kh2damage::criticals`).
     pub criticals: bool,
     /// KH1's 30% chance on Stun Impact and Gravity Break in the KH1 combo's finisher walk
-    /// (`kh1_ability_chance = on`, the default; `kh1picker::chance`).
+    /// (`kh1_ability_chance = on`, the default; the Config menu's Tweaks list, `kh1picker::chance`).
     pub kh1_ability_chance: bool,
     /// Glide on Square (`glide = square`, default) or held jump (`glide = jump`).
     pub glide_on_square: bool,
