@@ -740,3 +740,7 @@ go ahead
 
 ^m26
 
+1. remove the fall back, and make them their own animations if they aren't already
+2. (b) the enemy knock back setting in the config should change this
+   
+   go ahead
