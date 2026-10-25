@@ -269,3 +269,14 @@ go ahead
 
 ^m15
 
+R2 should be the button for locking the camera
+
+go ahead
+
+(b)
+
+(b)
+
+(c) not sure, will look later
+
+go ahead 
