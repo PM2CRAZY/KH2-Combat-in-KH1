@@ -210,6 +210,50 @@ pub struct Launch {
     pub gravity: f32,
 }
 
+/// Where an Attack press starts from (`Character::plan_press`).
+#[derive(Clone, Copy, Debug)]
+struct PressState {
+    current_motion: Option<u16>,
+    in_finisher: bool,
+    carry: bool,
+    carry_finisher: bool,
+    count: u8,
+    finishers: u8,
+    hit: bool,
+    airborne: bool,
+    facing: f32,
+    forced: Option<u8>,
+    host_motion: Option<u16>,
+    vel_h: [f32; 2],
+}
+
+/// A row's hop: its height, and the sideways velocity it sets (`None`: the speed he has is kept).
+#[derive(Clone, Copy, Debug)]
+struct Hop {
+    height: f32,
+    velocity: Option<[f32; 2]>,
+}
+
+/// What an Attack press would start (`plan_press`).
+#[derive(Clone, Debug)]
+struct AttackPlan {
+    row: ComboRow,
+    count: u8,
+    finishers: u8,
+    facing: f32,
+    hop: Option<Hop>,
+    lunge: f32,
+}
+
+#[derive(Clone, Debug)]
+enum PressOutcome {
+    /// Refused before the count moved: the carried combo kept.
+    Kept,
+    /// Refused after it: the carried combo used up, the count as before, facing as given.
+    Dropped { facing: f32 },
+    Taken(AttackPlan),
+}
+
 /// KH2's jump curve. Rising: `y = h * sin(pi/2 * sin(pi/2 * t/T))` with
 /// `T = sqrt(2h/g)`; after the apex, `y = h - g/2 * (t - T)^2`. `t` is in
 /// 60 Hz frames.
@@ -1201,11 +1245,16 @@ impl Character {
     /// flat, to the primary target, or his facing with none (`0x1403B56E0`). Rows are measured
     /// from it, and KH2's line ahead for row 1 runs along it (`set_drop_ahead`). x / z.
     pub fn selector_aim(&self, env: &Env) -> [f32; 2] {
+        self.selector_aim_facing(env, self.facing)
+    }
+
+    /// `selector_aim` with the character facing `facing` (an Attack press's plan, `plan_press`).
+    fn selector_aim_facing(&self, env: &Env, facing: f32) -> [f32; 2] {
         self.primary_target(env)
             .map(|t| [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]])
             .filter(|d| len2(*d) > 1e-3)
             .map(norm)
-            .unwrap_or_else(|| self.forward())
+            .unwrap_or_else(|| [facing.sin(), facing.cos()])
     }
 
     /// MP is charging (KH2's MP Charge; a host that has one): with Berserk Charge equipped
@@ -1266,68 +1315,60 @@ impl Character {
 
     /// `would_take_after`, with the hop the row starts (a row with `jump`: `Launch`, its height and
     /// sideways velocity as this controller works them out for that target, `try_attack`), so a
-    /// host can start the same hop in its own air state. Nothing of `self` changes.
+    /// host can start the same hop in its own air state. Nothing of `self` changes: the press is
+    /// planned on the host's press state (`plan_press`), with no copy of the controller.
     pub fn would_take_launch(&mut self, from: Option<ComboState>, playing: Option<u16>, air: bool, square: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
-        // (The moveset isn't cloned: the trial borrows it and gives it back.)
-        let moveset = std::mem::take(&mut self.moveset);
-        let mut t = self.clone();
-        t.moveset = moveset;
-        t.host_motion = playing;
-        if let Some(c) = from {
-            t.mode = Mode::Free;
-            t.airborne = air;
-            t.arc = if air { Some(Arc::fall()) } else { None };
-            t.set_combo_state(c);
-        }
-        let press = Button { pressed: true, held: true };
-        let input = if square { Input { stick, action: press, ..Input::default() } } else { Input { stick, attack: press, ..Input::default() } };
-        let took = if square {
+        // KH2's table walk on the press state the host gives (`plan_press`), no copy of the
+        // controller: `from` (the host's combo) or this controller's own, with the host's motion
+        // playing.
+        let mut st = match from {
+            Some(c) => self.press_state_from(c, air, playing),
+            None => PressState { host_motion: playing, ..self.press_state() },
+        };
+        let plan = if square {
             let mut rows: Vec<u8> = Vec::new();
-            if let Some((ground, air_row)) = t.square_finishers {
-                rows.push(if t.airborne { air_row } else { ground });
+            if let Some((ground, air_row)) = self.square_finishers {
+                rows.push(if st.airborne { air_row } else { ground });
             }
-            rows.extend(SQUARE_MOVES.iter().filter(|m| m.2 == t.airborne && t.abilities.equipped.contains(&m.1)).map(|m| m.0));
-            let mode = t.mode.clone();
-            rows.into_iter().any(|row| {
-                t.mode = mode.clone();
-                t.forced_row = Some(row);
-                t.try_attack(&input, env)
+            rows.extend(SQUARE_MOVES.iter().filter(|m| m.2 == st.airborne && self.abilities.equipped.contains(&m.1)).map(|m| m.0));
+            // (Each row tried as a press of its own, from what the one before left: a refused one
+            // that got past the count has used up the carried combo and may have turned him.)
+            rows.into_iter().find_map(|row| {
+                st.forced = Some(row);
+                match self.plan_press(&st, stick, env) {
+                    PressOutcome::Taken(p) => Some(p),
+                    PressOutcome::Kept => None,
+                    PressOutcome::Dropped { facing } => {
+                        (st.carry, st.carry_finisher, st.facing) = (false, false, facing);
+                        None
+                    }
+                }
             })
         } else {
-            t.try_attack(&input, env)
-        };
-        let row = match &t.mode {
-            Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) if took => Some(row.clone()),
-            _ => None,
-        };
-        let launch = row.as_ref().filter(|r| r.is_jump()).and_then(|_| t.arc.filter(|_| t.airborne)).map(|a| Launch { height: a.height, velocity: t.vel_h, gravity: t.params.gravity });
-        self.moveset = std::mem::take(&mut t.moveset);
-        row.map(|r| (r, launch))
+            match self.plan_press(&st, stick, env) {
+                PressOutcome::Taken(p) => Some(p),
+                _ => None,
+            }
+        }?;
+        let launch = plan.hop.map(|h| Launch { height: h.height.max(0.0), velocity: h.velocity.unwrap_or(st.vel_h), gravity: self.params.gravity });
+        Some((plan.row, launch))
     }
 
     /// `would_take_launch` for one row by its id, as the exe forces its own (Retaliating Slash's
     /// row 40 out of a launch, `0x1403D6030`): whether KH2 would take it now (its conditions, an
     /// Attack press) and the hop it starts there. For a host whose own states run the move.
     pub fn would_take_row(&mut self, id: u8, from: Option<ComboState>, air: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
-        let moveset = std::mem::take(&mut self.moveset);
-        let mut t = self.clone();
-        t.moveset = moveset;
-        if let Some(c) = from {
-            t.mode = Mode::Free;
-            t.airborne = air;
-            t.arc = if air { Some(Arc::fall()) } else { None };
-            t.set_combo_state(c);
-        }
-        let press = Button { pressed: true, held: true };
-        t.forced_row = Some(id);
-        let took = t.try_attack(&Input { stick, attack: press, ..Input::default() }, env);
-        let row = match &t.mode {
-            Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) if took && row.id == id => Some(row.clone()),
-            _ => None,
+        let mut st = match from {
+            Some(c) => self.press_state_from(c, air, self.host_motion),
+            None => self.press_state(),
         };
-        let launch = row.as_ref().filter(|r| r.is_jump()).and_then(|_| t.arc.filter(|_| t.airborne)).map(|a| Launch { height: a.height, velocity: t.vel_h, gravity: t.params.gravity });
-        self.moveset = std::mem::take(&mut t.moveset);
-        row.map(|r| (r, launch))
+        st.forced = Some(id);
+        let PressOutcome::Taken(plan) = self.plan_press(&st, stick, env) else { return None };
+        if plan.row.id != id {
+            return None;
+        }
+        let launch = plan.hop.map(|h| Launch { height: h.height.max(0.0), velocity: h.velocity.unwrap_or(st.vel_h), gravity: self.params.gravity });
+        Some((plan.row, launch))
     }
 
     /// KH2's ability rows as extra candidates of a host's own combo picker (the KH1 port's Base /
@@ -1696,52 +1737,97 @@ impl Character {
     }
 
     /// Tries to start an attack. Returns false if no combo row fits.
-    fn try_attack(&mut self, input: &Input, env: &Env) -> bool {
+    /// Where an Attack press starts from (`plan_press`'s inputs): the attack playing (its motion,
+    /// whether it is a finisher, a finisher cast included), the combo carried over (a spell or a
+    /// host's own combo, `set_combo_state`), the counts, the last swing's hit, in the air, the
+    /// facing, a forced row, a host's own motion playing (`would_take_after`) and the sideways
+    /// speed (kept by a moving air attack).
+    fn press_state(&self) -> PressState {
         let (current_motion, in_finisher) = match &self.mode {
             Mode::Action(Action { kind: ActionKind::Attack { row }, motion, .. }) => (Some(*motion), row.is_finisher()),
             // A spell cast as a finisher is the finisher playing (`spell_slot`).
             Mode::Action(Action { kind: ActionKind::Magic, motion, .. }) if self.cast_finisher => (Some(*motion), true),
             _ => (None, false),
         };
-        let in_attack = current_motion.is_some();
-        let carry = std::mem::take(&mut self.combo_carry);
-        let carry_finisher = std::mem::take(&mut self.carry_finisher);
+        PressState {
+            current_motion,
+            in_finisher,
+            carry: self.combo_carry,
+            carry_finisher: self.carry_finisher,
+            count: self.count,
+            finishers: self.finishers,
+            hit: self.hit,
+            airborne: self.airborne,
+            facing: self.facing,
+            forced: self.forced_row,
+            host_motion: self.host_motion,
+            vel_h: self.vel_h,
+        }
+    }
+
+    /// The press state a host's own combo gives (`set_combo_state`'s `c`, the character free there,
+    /// in the air or not), as the trials used to set it on a copy of the controller.
+    fn press_state_from(&self, c: ComboState, air: bool, playing: Option<u16>) -> PressState {
+        PressState {
+            current_motion: None,
+            in_finisher: false,
+            carry: c.count > 0,
+            carry_finisher: c.finisher_next,
+            count: c.count,
+            finishers: c.finishers,
+            hit: c.hit,
+            airborne: air,
+            facing: self.facing,
+            forced: self.forced_row,
+            host_motion: playing,
+            vel_h: self.vel_h,
+        }
+    }
+
+    /// KH2's combo table walk for an Attack press from `s` (KH2's selector, Steam `0x140402D20`,
+    /// and its count and finisher steps before it), worked out without changing anything: what
+    /// `try_attack` then does. The count moves when the next swing starts; the row is the forced
+    /// one (when its conditions pass) or the selector's (`combo::select`); a row that hops gets
+    /// KH2's hop (`0x1403D78D0`), the others their lunge.
+    fn plan_press(&self, s: &PressState, stick: [f32; 2], env: &Env) -> PressOutcome {
+        let in_attack = s.current_motion.is_some();
+        let carry = s.carry;
+        let carry_finisher = s.carry_finisher;
         // After a spell that took a finisher slot with Finishing Plus leaving another: the next
         // finisher.
-        let in_finisher = in_finisher || (carry && carry_finisher);
-        if in_attack && self.abilities.one_swing_on_miss && !self.abilities.combo_master && !self.hit {
-            (self.combo_carry, self.carry_finisher) = (carry, carry_finisher);
-            return false;
+        let in_finisher = s.in_finisher || (carry && carry_finisher);
+        if in_attack && self.abilities.one_swing_on_miss && !self.abilities.combo_master && !s.hit {
+            return PressOutcome::Kept;
         }
         // Ground swings only advance the combo when the previous one
         // connected (read from the exe). In the air, whiffed swings advance
         // it too, so an air combo always ends in its finisher (matches the
         // game; the exe path for this hasn't been traced yet).
-        let hit = self.hit || self.abilities.combo_master || (self.airborne && in_attack);
-        let saved = (self.count, self.finishers);
+        let hit = s.hit || self.abilities.combo_master || (s.airborne && in_attack);
+        let (mut count, mut finishers) = (s.count, s.finishers);
         // (Chaining on from a finisher: the exe's `+0x194` bit 5 for the row tests.)
         let mut chained = false;
         // The counter moves when the next swing starts.
         if in_finisher {
-            if hit && self.finishers < self.max_finishers() {
-                self.count = self.count.saturating_add(1);
-                self.finishers += 1;
+            if hit && finishers < self.max_finishers() {
+                count = count.saturating_add(1);
+                finishers += 1;
                 chained = true;
             } else if in_attack {
                 // The combo's last finisher: nothing new until its animation has ended (spec).
-                (self.combo_carry, self.carry_finisher) = (carry, carry_finisher);
-                return false;
+                return PressOutcome::Kept;
             } else {
-                self.count = 1;
-                self.finishers = 1;
+                count = 1;
+                finishers = 1;
             }
         } else if (in_attack || carry) && hit {
-            self.count = self.count.saturating_add(1);
+            count = count.saturating_add(1);
         } else if !in_attack && !carry {
-            self.count = 1;
-            self.finishers = 1;
+            count = 1;
+            finishers = 1;
         }
 
+        let mut facing = s.facing;
         // Locked on (when the host asks for it): the swing faces the target, near or far,
         // before the row is picked (rows that want the target dead ahead then see it there).
         let to_lock = if self.face_lock {
@@ -1753,15 +1839,15 @@ impl Character {
             None
         };
         if let Some(d) = to_lock {
-            self.facing = yaw_of(d);
+            facing = yaw_of(d);
         }
-        let air = self.airborne;
+        let air = s.airborne;
         // The selector faces the primary target (exe `0x140401BB0`), so its own rows (kind 1,
         // facing window 0.99996..1) always face it and the all-target rows (kind 2) are
         // measured from it. (Before, Sora's own facing was used: kind-1 rows such as Aerial
         // Sweep, Aerial Dive, Slide Dash and the jump to an airborne foe almost never passed.)
         let primary_info = self.primary_target(env);
-        let aim = self.selector_aim(env);
+        let aim = self.selector_aim_facing(env, facing);
         // Every target, locked on or not (KH2's selector `0x140402D20` runs its kind-2 pass
         // `0x1404029F0` on every target its iterator gives; the lock only picks the primary
         // target; Steam KH2, Checked (decomp); the tester, combo row selection m23 answer 1 (a)).
@@ -1771,10 +1857,10 @@ impl Character {
         let primary = primary_info.map(|t| TargetGeom { facing_dot: 1.0, ..self.geom(env, t, aim) });
         let sit = Situation {
             air,
-            count: self.count,
-            finishers: self.finishers,
+            count,
+            finishers,
             max_count: self.max_count(air),
-            current_motion: current_motion.or(self.host_motion).unwrap_or(u16::MAX),
+            current_motion: s.current_motion.or(s.host_motion).unwrap_or(u16::MAX),
             primary,
             all: &all,
             equipped: &self.abilities.equipped,
@@ -1788,7 +1874,7 @@ impl Character {
         // A forced row (a state's own move: Counterguard, Retaliating Slash, the Square moves)
         // that can't be used is no attack at all; it never falls back to the ordinary combo (the
         // user: Sora could attack while knocked into the air).
-        let wanted = self.forced_row.take();
+        let wanted = s.forced;
         // A Square move that isn't a finisher (Upper Slash, Horizontal Slash) stands for one
         // swing of the combo, so it is only there while the combo has a swing left before its
         // finisher; at the end the press does nothing and the Attack button's finisher is next.
@@ -1807,40 +1893,39 @@ impl Character {
             (None, None) => select(&self.moveset.combo_rows, &sit),
         };
         let Some(choice) = picked else {
-            (self.count, self.finishers) = saved;
-            return false;
+            return PressOutcome::Dropped { facing };
         };
         let row = choice.row.clone();
         let target = choice.target;
         if self.clip(row.motion).is_none() {
-            (self.count, self.finishers) = saved;
-            return false;
+            return PressOutcome::Dropped { facing };
         }
         // No target: face the stick direction immediately (with the combo's direction locked,
         // only for a combo's first swing; one that follows keeps the combo's direction).
         let follows = in_attack || carry;
-        if to_lock.is_none() && target.is_none() && len2(input.stick) > DEAD_ZONE && !(self.combo_direction_lock && follows) {
-            self.facing = yaw_of(input.stick);
+        if to_lock.is_none() && target.is_none() && len2(stick) > DEAD_ZONE && !(self.combo_direction_lock && follows) {
+            facing = yaw_of(stick);
         }
         // A target there: the swing starts facing it (and holds that through the swing).
         if self.combo_direction_lock && to_lock.is_none() {
             if let Some(t) = target.and_then(|t| env.targets.iter().find(|x| x.id == t.id)) {
                 let d = [t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]];
                 if len2(d) > 1e-3 {
-                    self.facing = yaw_of(d);
+                    facing = yaw_of(d);
                 }
             }
         }
         let dir = match target.and_then(|t| env.targets.iter().find(|x| x.id == t.id)) {
             Some(t) => norm([t.pos[0] - env.pos[0], t.pos[2] - env.pos[2]]),
-            None => self.forward(),
+            None => [facing.sin(), facing.cos()],
         };
         let mut lunge = 0.0;
+        let mut hop = None;
         if row.is_jump() {
-            if !self.airborne {
+            if !s.airborne {
                 // Launching into the air restarts the count.
-                self.count = 1;
-                self.finishers = 1;
+                count = 1;
+                finishers = 1;
             }
             // KH2's hop (Steam KH2 `0x1403D78D0`, Checked (decomp)): measured to the primary
             // target (the character's own target, `+0xDC8`, whatever target a kind-2 row passed
@@ -1865,31 +1950,59 @@ impl Character {
                 }
                 None => (row.jump, row.speed_max, dir),
             };
-            self.start_arc(height);
             // A moving air attack (an allow-movement range: Wisdom Form's air shot) keeps the
             // speed he has (the user: "sora should not loose his velocity when doing an air move
-            // in wisdom form"); the rest go at the row's speed.
+            // in wisdom form"); the rest go at the row's speed. (The hop has him in the air by
+            // then, so it is the range alone that decides, as before.)
             let moving = self.clip(row.motion).is_some_and(|c| c.windows.iter().any(|w| matches!(w.kind, WindowKind::AllowMovement)));
-            if !(moving && self.airborne) {
-                self.vel_h = scale(dir, speed);
+            hop = Some(Hop { height, velocity: if moving { None } else { Some(scale(dir, speed)) } });
+        } else if let Some(t) = target {
+            if row.speed_max > 0.0 {
+                let gap = (t.distance - t.radius).max(0.0);
+                lunge = ((gap + row.distance_adjust) * self.attack.distance_to_speed).clamp(row.speed_min, row.speed_max);
             }
-            self.vel_y = 0.0;
-        } else {
-            self.vel_h = [0.0; 2];
-            if let Some(t) = target {
-                if row.speed_max > 0.0 {
-                    let gap = (t.distance - t.radius).max(0.0);
-                    lunge = ((gap + row.distance_adjust) * self.attack.distance_to_speed).clamp(row.speed_min, row.speed_max);
+        }
+        PressOutcome::Taken(AttackPlan { row, count, finishers, facing, hop, lunge })
+    }
+
+    fn try_attack(&mut self, input: &Input, env: &Env) -> bool {
+        let s = self.press_state();
+        let carry = std::mem::take(&mut self.combo_carry);
+        let carry_finisher = std::mem::take(&mut self.carry_finisher);
+        match self.plan_press(&s, input.stick, env) {
+            PressOutcome::Kept => {
+                (self.combo_carry, self.carry_finisher) = (carry, carry_finisher);
+                false
+            }
+            PressOutcome::Dropped { facing } => {
+                self.forced_row = None;
+                self.facing = facing;
+                false
+            }
+            PressOutcome::Taken(p) => {
+                self.forced_row = None;
+                self.count = p.count;
+                self.finishers = p.finishers;
+                self.facing = p.facing;
+                match p.hop {
+                    Some(h) => {
+                        self.start_arc(h.height);
+                        if let Some(v) = h.velocity {
+                            self.vel_h = v;
+                        }
+                        self.vel_y = 0.0;
+                    }
+                    None => self.vel_h = [0.0; 2],
                 }
+                self.hit = false;
+                let motion = p.row.motion;
+                self.start_action(ActionKind::Attack { row: p.row }, motion);
+                if let Mode::Action(a) = &mut self.mode {
+                    a.lunge = p.lunge;
+                }
+                true
             }
         }
-        self.hit = false;
-        let motion = row.motion;
-        self.start_action(ActionKind::Attack { row }, motion);
-        if let Mode::Action(a) = &mut self.mode {
-            a.lunge = lunge;
-        }
-        true
     }
 
     fn try_action_button(&mut self, input: &Input, env: &Env) -> bool {
@@ -2975,5 +3088,124 @@ mod tests {
             }
         }
         assert!(b.advance(2.0, g, 16.0) >= -32.0 - 1e-4, "fall step capped");
+    }
+
+    /// The table walk the host trials now run (`plan_press`, no copy of the controller) gives what
+    /// the old trial on a copy gave: `try_attack` run on a clone set up from the host's combo.
+    fn trial_by_copy(ch: &Character, from: Option<ComboState>, playing: Option<u16>, air: bool, square: bool, forced: Option<u8>, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+        let mut t = ch.clone();
+        t.host_motion = playing;
+        if let Some(c) = from {
+            t.mode = Mode::Free;
+            t.airborne = air;
+            t.arc = if air { Some(Arc::fall()) } else { None };
+            t.set_combo_state(c);
+        }
+        let press = Button { pressed: true, held: true };
+        let input = if square { Input { stick, action: press, ..Input::default() } } else { Input { stick, attack: press, ..Input::default() } };
+        let took = if let Some(id) = forced {
+            t.forced_row = Some(id);
+            t.try_attack(&input, env)
+        } else if square {
+            let mut rows: Vec<u8> = Vec::new();
+            if let Some((ground, air_row)) = t.square_finishers {
+                rows.push(if t.airborne { air_row } else { ground });
+            }
+            rows.extend(SQUARE_MOVES.iter().filter(|m| m.2 == t.airborne && t.abilities.equipped.contains(&m.1)).map(|m| m.0));
+            let mode = t.mode.clone();
+            rows.into_iter().any(|row| {
+                t.mode = mode.clone();
+                t.forced_row = Some(row);
+                t.try_attack(&input, env)
+            })
+        } else {
+            t.try_attack(&input, env)
+        };
+        let row = match &t.mode {
+            Mode::Action(Action { kind: ActionKind::Attack { row }, .. }) if took => Some(row.clone()),
+            _ => None,
+        };
+        let row = row.filter(|r| forced.is_none_or(|id| r.id == id));
+        let launch = row.as_ref().filter(|r| r.is_jump()).and_then(|_| t.arc.filter(|_| t.airborne)).map(|a| Launch { height: a.height, velocity: t.vel_h, gravity: t.params.gravity });
+        row.map(|r| (r, launch))
+    }
+
+    fn test_row(id: u8, kind: u8, motion: u16, flag: u32, ability: u16) -> ComboRow {
+        ComboRow {
+            id, kind, sub: -1, combo_offset: 0, flag, motion, next_motion: 0,
+            jump: if flag & crate::combo::FLAG_AIR != 0 || id == 20 { 20.0 } else { 0.0 },
+            jump_min: 10.0, jump_max: 150.0, speed_min: 2.0, speed_max: 12.0,
+            near: 0.0, far: if kind == 3 { 0.0 } else { 400.0 }, low: -400.0, high: 400.0, inner_min: -2.0, inner_max: 2.0,
+            blend_time: 0.0, distance_adjust: 30.0, ability, score: 1,
+        }
+    }
+
+    #[test]
+    fn host_trials_walk_the_table_as_the_copy_did() {
+        use crate::combo::{FLAG_AIR, FLAG_FINISHER};
+        let mut ms = Moveset::default();
+        for m in [100u16, 101, 110, 120, 121, 130, 140, 161, 193, 167] {
+            ms.clips.insert(m, Clip::plain(m, 40));
+        }
+        ms.combo_rows = vec![
+            test_row(20, 1, 140, 0, 0),
+            test_row(1, 3, 110, FLAG_FINISHER, 0),
+            test_row(5, 2, 130, FLAG_FINISHER, 0),
+            test_row(0, 3, 100, 0, 0),
+            test_row(4, 1, 101, 0, 0),
+            test_row(3, 3, 121, FLAG_FINISHER | FLAG_AIR, 0),
+            test_row(2, 3, 120, FLAG_AIR, 0),
+            test_row(12, 0, 161, 0, 18),
+            test_row(38, 0, 193, FLAG_AIR, 99),
+            test_row(37, 0, 167, FLAG_FINISHER, 95),
+        ];
+        let mut ch = Character::new(ms, MoveParams::default(), Vec::new(), AttackParams::default());
+        ch.abilities = Abilities::max_growth();
+        ch.abilities.equipped = vec![18, 95, 99];
+        ch.set_facing(0.7);
+        let target_sets: Vec<Vec<TargetInfo>> = vec![
+            vec![],
+            vec![TargetInfo { id: 7, pos: [0.0, 0.0, 150.0], radius: 30.0, height: 80.0 }],
+            vec![TargetInfo { id: 7, pos: [200.0, 120.0, 60.0], radius: 30.0, height: 80.0 }, TargetInfo { id: 8, pos: [-90.0, 0.0, 20.0], radius: 20.0, height: 60.0 }],
+        ];
+        let (mut n, mut hops) = (0, 0u32);
+        for targets in &target_sets {
+            for lock in [None, Some(7)] {
+                for air in [false, true] {
+                    let env = Env { pos: [0.0, if air { 100.0 } else { 0.0 }, 0.0], grounded: !air, height_above_ground: if air { 100.0 } else { 0.0 }, targets, ledges: &[] };
+                    ch.set_lock(lock.filter(|_| !targets.is_empty()));
+                    for face_lock in [false, true] {
+                        ch.set_face_lock(face_lock);
+                        ch.set_combo_direction_lock(face_lock);
+                        for count in 0..5u8 {
+                            for (hit, finisher_next) in [(true, false), (false, false), (true, true)] {
+                                let from = ComboState { count, finishers: 1, hit, finisher_next };
+                                for playing in [None, Some(100), Some(110), Some(120)] {
+                                    for stick in [[0.0, 0.0], [0.8, -0.3]] {
+                                        for (square, forced) in [(false, None), (true, None), (false, Some(12)), (false, Some(20))] {
+                                            // (From None: this controller's own combo, free or in a swing.)
+                                            let mut busy = ch.clone();
+                                            busy.try_attack(&Input { attack: Button { pressed: true, held: true }, ..Input::default() }, &env);
+                                            for (f, ch) in [(Some(from), &ch), (None, &ch), (None, &busy)] {
+                                                let mut a = ch.clone();
+                                                let got = match forced {
+                                                    Some(id) => a.would_take_row(id, f, air, stick, &env),
+                                                    None => a.would_take_launch(f, playing, air, square, stick, &env),
+                                                };
+                                                let want = trial_by_copy(&ch, f, if forced.is_some() { ch.host_motion } else { playing }, air, square, forced, stick, &env);
+                                                hops += got.as_ref().is_some_and(|g| g.1.is_some()) as u32;
+                                                assert_eq!(got.as_ref().map(|(r, l)| (r.id, *l)), want.as_ref().map(|(r, l)| (r.id, *l)), "targets {targets:?} lock {lock:?} air {air} face {face_lock} from {f:?} playing {playing:?} stick {stick:?} square {square} forced {forced:?}");
+                                                n += 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(n > 1000 && hops > 100, "{n} trials, {hops} with a hop");
     }
 }

@@ -1570,8 +1570,30 @@ KH1's plain row of KH2's kind after the picker returned (`kh2_row`).
   didn't run, which only happens when the hook isn't installed), it asks as before.
 - Expected in play: nothing different. One KH2 trial per press instead of two.
 
-**Not done here:** KH2's table walk still runs on KH2's controller (step 2); KH1's table itself
-isn't extended with KH2's rows (see the reply in m24's thread: what that would mean).
+### 7.z.4 KH2's table walk without a controller copy (combo row selection m24, step 2)
+
+Before, every KH2 pick for a press of KH1's (`Character::would_take_launch`, `would_take_row`,
+and through them `ability_row_id` / `normal_finisher`) copied the whole KH2 controller, set the
+copy up as KH1 had him, pressed Attack on it (`try_attack`) and read back the row and hop.
+
+Now `Character::plan_press` is KH2's press step as a plain function: from a press state (the count
+and finisher count, the last swing's hit, the carried combo, in the air, the facing, a forced row,
+the motion KH1 plays now) and the targets it works out the count step, the lock turn, the
+selector's walk over the row table (`combo::select`, Steam KH2 `0x140402D20`, Checked (decomp) as
+in §7.z.1), the forced-row and Square-move rules, the hop (`0x1403D78D0`) or lunge, without
+changing anything. `try_attack` (KH2's own press when the controller has him) is that plan,
+applied; the host trials build the press state from KH1's data (KH1's count `+0x41`, its hit flag,
+the request playing through our slot, KH1's facing, its lock and the enemies around him, as before)
+and run the plan, with no copy. The row table and Sora's numbers (`00battle.bin`'s PTYA, his
+params and abilities) are still read from the KH2 controller object, where KH2's data is loaded.
+
+Checked: a unit test (`host_trials_walk_the_table_as_the_copy_did`) runs both ways over 34,000
+cases (targets near, far, above, a second one; lock on / off; ground / air; counts 0..4; hit /
+missed / finisher carried; host motions; stick; Attack, Square and forced rows; free or mid-swing)
+and they give the same row and hop. Expected in play: nothing different, less work per press.
+
+**Not done here:** KH1's table itself isn't extended with KH2's rows (see the reply in m24's
+thread: what that would mean).
 
 ## 8. KH2's walk and run as slots (t389)
 
