@@ -965,8 +965,6 @@ pub struct Strikes {
     /// Enemies a Magnet (ATKP reaction 5: Magnet Burst) caught: the swing, orbit radius and
     /// swirl. Pulled every frame while the swing lasts.
     pulled: HashMap<usize, (u64, f32, f32)>,
-    /// Enemies a holding blow (Aerial Finish's spin) hit: frames left to keep them beside Sora.
-    held: HashMap<usize, u32>,
     /// (swing, shot) pairs already met (once a swing).
     met_shots: HashSet<(u64, usize)>,
     /// (Reflect barrier, enemy attack) pairs already met (`barrier_meet`), by barrier key.
@@ -1533,39 +1531,6 @@ impl Strikes {
         }
     }
 
-    /// KH2's holding blows (reaction 9 with a small lift and a pull toward Sora: Aerial
-    /// Finish's spin) keep the foe up beside him until the throw (the user: they slipped out of
-    /// it). Each held foe is drawn toward a point beside Sora at his height through KH1's
-    /// per-frame push (`+0x120`), for `HOLD_FRAMES` after its last such hit.
-    unsafe fn hold(&mut self, sora: usize) {
-        if self.held.is_empty() {
-            return;
-        }
-        let alive: HashSet<usize> = self.bodies.iter().filter(|b| !b.fixed).map(|b| b.actor).collect();
-        self.held.retain(|a, left| {
-            *left = left.saturating_sub(1);
-            *left > 0 && alive.contains(a)
-        });
-        let s = rd::<[f32; 3]>(sora + 0x10);
-        for &actor in self.held.keys() {
-            let p = rd::<[f32; 3]>(actor + 0x10);
-            let (dx, dz) = (p[0] - s[0], p[2] - s[2]);
-            let d = (dx * dx + dz * dz).sqrt();
-            // Beside him: no farther than HOLD_REACH, his feet's height a little up (y down).
-            let k = if d > HOLD_REACH { HOLD_REACH / d } else { 1.0 };
-            let goal = [s[0] + dx * k, s[1] - HOLD_UP, s[2] + dz * k];
-            let mut m = [(goal[0] - p[0]) * 0.35, (goal[1] - p[1]) * 0.35, (goal[2] - p[2]) * 0.35];
-            let len = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt();
-            if len > 30.0 {
-                for v in &mut m {
-                    *v *= 30.0 / len;
-                }
-            }
-            let push = rd::<[f32; 3]>(actor + 0x120);
-            wr(actor + 0x120, [push[0] + m[0], push[1] + m[1], push[2] + m[2]]);
-        }
-    }
-
     /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
     /// A trail has been asked of KH1 for the current move.
     pub fn has_trail(&self) -> bool {
@@ -2032,15 +1997,12 @@ impl Strikes {
                     continue;
                 }
                 character.register_hit();
-                // A blow that throws (KH1's finisher row, a launch): not one that holds the foe
-                // up beside Sora, as Aerial Finish's spinning hits do (reaction 9, up 5..12,
-                // sideways -1 / -10: toward him). KH1's finisher row sent the foe ~250 away on
-                // the first, and the rest missed (the user: pushed out of the finisher).
+                // Every KH2 blow (reaction group 4) is a launch: KH1's finisher row (its kind-5
+                // record) with KH2's starting speeds (the tester, kh2-knockback-on-enemies: the
+                // "holding blow" rule for small numbers is gone; Aerial Finish's spins and Guard
+                // Break's 20-up blow launch as KH2's do).
                 let blow = character_core::reaction::category(row.enemy_reaction) == 4;
-                let k1 = if row.knockback_1 == i16::MAX { 0 } else { row.knockback_1 };
-                let k2 = row.knockback_2;
-                let throws = (k1 == 0 && k2 == 0) || k2 >= 10 || k1 >= 30;
-                let finisher = blow && throws;
+                let finisher = blow;
                 let Some(rows) = self.rows else { continue };
                 let kh1 = rows[(air as usize) * 2 + finisher as usize];
                 // KH2's launch, its own height and speed (the user: Upper Slash didn't send them
@@ -2048,16 +2010,11 @@ impl Strikes {
                 // (Not for the big and the immovable: KH1's own reaction stays, the user: Magnet
                 // Burst and Aerial Finish moved Dragon Maleficent.)
                 if let Ok(mut p) = PENDING.lock() {
-                    let (k1, k2) = farther(h.attack).unwrap_or((row.knockback_1, row.knockback_2));
-                    *p = (finisher && !b.fixed).then(|| Launch::kh2(k1, k2, &character.reaction));
+                    *p = (finisher && !b.fixed).then(|| Launch::kh2(row.knockback_1, row.knockback_2, &character.reaction));
                 }
-                // A holding blow (Aerial Finish's spin) flinches the foe where it is: KH1's
-                // flinch knocks an airborne foe along the record's direction, and spin after
-                // spin slid it out of reach (the user); the direction is zeroed (`scale_record`).
                 // (Every hit lands as it is: s179's silent multi-hit ticks were taken out again in
                 // s193, the user: "revert this back to before we asked to make any revenge value
                 // changes".)
-                HOLD.store(blow && !throws && !b.fixed, Ordering::Relaxed);
                 MAGIC.store(row.stat_source == 1, Ordering::Relaxed);
                 // (The move this hit belongs to: its action, `swing`'s high bits.)
                 let info = format!(
@@ -2071,21 +2028,11 @@ impl Strikes {
                     landed += 1;
                 }
                 MAGIC.store(false, Ordering::Relaxed);
-                HOLD.store(false, Ordering::Relaxed);
-                // (Again once the contact is done, in case its direction came after the record.)
-                let rec = HELD_REC.swap(0, Ordering::Relaxed);
-                if rec > 0x10000 {
-                    let w = rd::<f32>(rec + 0x1C);
-                    wr(rec + 0x10, [0.0f32, 0.0, 0.0, w]);
-                }
                 if let Ok(mut p) = PENDING.lock() {
                     *p = None;
                 }
                 // A Magnet's catch (the user: Magnet Burst didn't pull them together): KH2 picks
                 // the orbit radius between the two knockback values, the swirl from the next.
-                if blow && !throws && dealt.is_some() && !b.fixed {
-                    self.held.insert(b.actor, HOLD_FRAMES);
-                }
                 if character_core::reaction::category(row.enemy_reaction) == 5 && !b.fixed {
                     let (a, c) = (row.knockback_1 as f32, row.knockback_2 as f32);
                     let t = ((b.actor >> 4) % 97) as f32 / 96.0;
@@ -2098,7 +2045,6 @@ impl Strikes {
             }
         }
         self.pull(out, anim, battle);
-        self.hold(sora);
         let now: HashSet<u64> = out.hitboxes.iter().map(|h| h.swing).collect();
         self.repelled.retain(|s| now.contains(s));
         for ended in self.live.difference(&now) {
@@ -2689,8 +2635,7 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     }
     let own_launch = own.as_ref().filter(|a| super::kh1rows::throws(a)).and_then(|a| {
         let r = &pose::kh2()?.character.reaction;
-        let (k1, k2) = farther(a.id).unwrap_or((a.knockback_1, a.knockback_2));
-        Some(Launch::kh2(k1, k2, r))
+        Some(Launch::kh2(a.knockback_1, a.knockback_2, r))
     });
     if let Some(a) = own.as_ref() {
         static N: AtomicU32 = AtomicU32::new(0);
@@ -2708,13 +2653,18 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
         }
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log(&format!("KH2 launch asked: record {rec:#x} made a launch (up {:.0} in {:.0} frames, sideways {:.1}/frame)", l.h, l.t, l.speed));
+            log(&format!("KH2 launch asked: record {rec:#x} made a launch (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed));
         }
-    }
-    if own.is_none() && HOLD.load(Ordering::Relaxed) {
-        HELD_REC.store(rec, Ordering::Relaxed);
-        let w = rd::<f32>(rec + 0x1C);
-        wr(rec + 0x10, [0.0f32, 0.0, 0.0, w]);
+    } else if let Some(a) = own.as_ref().filter(|a| character_core::reaction::category(a.enemy_reaction) == 3) {
+        // A KH2 flinch on one of our rows whose data is a launch (the move's first hit window
+        // launches): KH1's flinch for it, not KH1's own launch.
+        if rd::<u32>(rec + 0xC) & 0x1F == 5 {
+            wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 3);
+            static F: AtomicU32 = AtomicU32::new(0);
+            if F.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("KH2's flinch (ATKP {}, reaction {}) on a launching row of ours: KH1's flinch (kind 3)", a.id, a.enemy_reaction));
+            }
+        }
     }
     // KH2's power is already in the damage KH1's damage function made (`kh2damage`, its hook
     // on 0x1402BFA80: KH2's power on KH1's curve, rounded up per hit as KH2 does), so nothing
@@ -2753,21 +2703,27 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     LAST_DAMAGE.store(scaled as u32, Ordering::Relaxed);
 }
 
-/// A KH2 launch for KH1's launch reaction: apex height above the start, frames to it, and the
-/// starting horizontal speed (KH1 units, 60 Hz frames). `docs/kh1-launch.md`.
+/// A KH2 launch for KH1's launch reaction: KH2's starting speeds, per 60 Hz frame (Steam KH2
+/// `0x1403CEA00`: the ATKP's first knockback number is the up speed and its second the sideways
+/// one; only when both are 0 sstm's defaults, 24 up and 40 sideways; Checked (decomp)). The
+/// enemy's weight (`knockback::launch_factor`) and the apex (`apex`) are worked out when KH1's
+/// launch runs on it. `docs/kh1-launch.md` §4.
 #[derive(Clone, Copy, Debug)]
-struct Launch {
-    h: f32,
-    t: f32,
-    speed: f32,
+pub struct Launch {
+    pub up: f32,
+    pub speed: f32,
 }
 
 impl Launch {
-    /// From an ATKP launch's knockback values (up speed, horizontal speed; both 0: the
-    /// defaults), flown as KH2's blow flies (`character_core::reaction::Blow`), to its apex.
     fn kh2(k1: i16, k2: i16, p: &character_core::reaction::ReactionParams) -> Launch {
         let (up, speed) = if k1 == 0 && k2 == 0 { (p.blow_up, p.blow_speed) } else { (k1 as f32, k2 as f32) };
-        let mut b = character_core::reaction::Blow::new([0.0, speed.abs()], up, p);
+        Launch { up, speed: speed.abs() }
+    }
+
+    /// KH2's blow flown to its apex (`character_core::reaction::Blow`, a 30 Hz tick): its height
+    /// above the start and the 60 Hz frames to it.
+    fn apex(self, p: &character_core::reaction::ReactionParams) -> (f32, f32) {
+        let mut b = character_core::reaction::Blow::new([0.0, self.speed], self.up, p);
         let (mut y, mut h, mut t, mut frames) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
         for _ in 0..200 {
             let d = b.tick(2.0, p);
@@ -2781,28 +2737,10 @@ impl Launch {
                 break;
             }
         }
-        Launch { h: h.max(1.0), t: t.max(2.0), speed: speed.abs() }
+        (h.max(1.0), t.max(2.0))
     }
 }
 
-/// KH2 launches sent farther than their ATKP's knockback (up, sideways): Explosion's last blast
-/// (ATKP 912: reaction 11, up 15, sideways 30) left the foe beside Sora (the user: "the finishing
-/// hitbox on explosion doesn't send the enemies far away enough to give them a chance to
-/// recover"): twice KH2's default blow's distance, and a third higher than its height (the user,
-/// s226: "the launch distance is good but now can you have the enemies launch a little higher").
-const FARTHER: [(u16, (i16, i16)); 1] = [(912, (32, 60))];
-
-fn farther(attack: u16) -> Option<(i16, i16)> {
-    FARTHER.iter().find(|(id, _)| *id == attack).map(|(_, k)| *k)
-}
-
-/// How long a holding blow keeps its foe beside Sora (frames), how far out and how high.
-const HOLD_FRAMES: u32 = 24;
-const HOLD_REACH: f32 = 90.0;
-const HOLD_UP: f32 = 30.0;
-/// The hit being landed holds the foe in place (its record's push direction is zeroed).
-static HOLD: AtomicBool = AtomicBool::new(false);
-static HELD_REC: AtomicUsize = AtomicUsize::new(0);
 static PENDING: std::sync::Mutex<Option<Launch>> = std::sync::Mutex::new(None);
 /// Records made with a KH2 launch: (record, launch, when).
 static LAUNCHES: std::sync::Mutex<Vec<(usize, Launch, u64)>> = std::sync::Mutex::new(Vec::new());
@@ -2846,15 +2784,21 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
         }
         return;
     }
+    let Some(p) = pose::kh2().map(|k| k.character.reaction.clone()) else { return };
+    // KH2's speeds, times KH1's own weight for this enemy while the Enemy Weight setting is on
+    // (the tester, kh2-knockback-on-enemies question 1 (b)).
+    let k = super::knockback::launch_factor(actor);
+    let l = Launch { up: l.up * k, speed: l.speed * k };
+    let (h, t) = l.apex(&p);
     let dir = rd::<[f32; 3]>(actor + 0x20);
     let n = (dir[0] * dir[0] + dir[2] * dir[2]).sqrt();
     let (dx, dz) = if n > 1e-3 { (dir[0] / n, dir[2] / n) } else { (0.0, 0.0) };
     wr(actor + 0x3B0, 0.0f32);
-    wr(actor + 0x3B8, l.t);
-    wr(actor + 0x3BC, -l.h);
+    wr(actor + 0x3B8, t);
+    wr(actor + 0x3BC, -h);
     wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed]);
     if N.fetch_add(1, Ordering::Relaxed) < 30 {
-        log(&format!("KH2 launch on {actor:#x}: up {:.0} in {:.0} frames, sideways {:.1}/frame", l.h, l.t, l.speed));
+        log(&format!("KH2 launch on {actor:#x}: up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed));
     }
 }
 

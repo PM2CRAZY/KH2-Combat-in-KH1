@@ -201,3 +201,51 @@ Hook `0x1402B6390`; for each call log the record (`+0xC`, `+0x10`), the actor's 
 stats `+0xC4` / `+0x18`, and after KH1 returns `+0x3EA`, `+0x70`, `+0x3B0..+0x3BC`,
 `+0x3C0`, `+0x3E4`. Expect Shadows / Soldiers: base 0x52, state 2, `+0x3BC` = -(1.35 x s) and
 `|+0x3C0|` = s. Then try (a) on a Soldier and watch `+0x14` rise by h.
+
+## 4. KH2's knock-back on enemies (testing branch, thread kh2-knockback-on-enemies)
+
+Steam addresses. KH1's enemy reactions stay the only system; KH2's numbers go into them for
+hits that KH2's moves land (`crates/kh1-hook/src/win/knockback.rs`). Hits of KH1's own moves
+keep KH1's numbers.
+
+### KH2's reaction routine (Steam KH2)
+
+**Checked (decomp).** `0x1403D2FE0` (Sora and every enemy) sorts the ATKP reaction into a group
+(`0x1403CE980`): push only (1, 0xC), flinch plus a push (3, 6, 8, 10, 0xD, 0x10, 0x12), blow
+(4, 7, 9, 0xB, 0xF, 0x11), Magnet's pull (5).
+- **Blow:** `0x1403CEA00` gives the starting speeds: up = the ATKP's first knockback number,
+  sideways = its second; only when both are 0, sstm's defaults (`+0x24` 24 up, `+0x28` 40
+  sideways). The blow's velocity provider (`0x140410330`) multiplies the sideways speed by sstm
+  `+0x3C` (0.8) each physics tick; the rise ×0.8, gravity 20/49, fall capped at 16 (sstm,
+  `character_core::reaction::Blow`, a 30 Hz tick as everywhere in KH2's physics).
+- **Push:** `0x1403D4960` starts it at the distance × 0.1 (distance from `0x1403CEAB0`: the ATKP's
+  first knockback number, or sstm's 200 when it is 32767); `0x1403D4570` each update stops it
+  below 1, else moves by speed × the frame step (`0x140717480`) and then speed × 0.9^step.
+- **Air flinch:** `0x1403D4800`: a 50 hop, drifting at the push distance × sstm `+0x38` (0.048).
+- No per-enemy factor in this routine.
+
+### KH1's per-enemy weight
+
+**Checked (decomp).** The actor's stats block (`+0x6C`) `+0xC4` scales KH1's reactions:
+- launch `0x1402B8530`: speed `s = 20 + (35 - 20) × w` (btltbl reaction block `*0x142D22D30`
+  u16 `+0x14` / `+0x16`), height `1.35 s` (`+0x18`);
+- flinch push `0x1402B7E60`: distance btltbl `+0x2C` (80) × w, given to KH1's push
+  `0x1402C7300` (direction `+0x3F0`, speed `+0x3FC` = distance × 0.22314355, `+0x88` bit 0x40);
+- air flinch `0x1402B8B90`: a hop of 20 (`0x1402AF960`), `+0x3C0` = direction × btltbl `+0x38`
+  (4) × w.
+
+The Enemy Weight setting (Config > Combat > Tweaks, ini `enemy_weight`, on by default) multiplies
+KH2's numbers by it: pushes and drifts by w, launches (both speeds) by `s(w) / 35`.
+**Assumption:** w = 1 is KH1's full weight, so such an enemy takes KH2's numbers as they are.
+Each enemy's w is logged once ("enemy weight: ...").
+
+### Launches
+
+Every KH2 blow is a launch: the record gets kind 5 (KH1's launch), and after KH1's launch ran
+(`0x1402B8530`, hooked through Epic `0x1402B6390`, mapped) and the enemy did launch (motion
+0x52 / 0x5C, state 2), the arc is KH2's blow flown to its apex (`+0x3B8` frames, `+0x3BC`
+height) and `+0x3C0` KH2's sideways speed. Gone: the "holding blow" rule (small blows flinched
+in place and pulled beside Sora for 24 frames) and Explosion's last blast's override (32 up /
+60 sideways): its ATKP 912 is 15 up / 30 sideways, as KH2. A KH2 flinch on one of our rows whose
+data launches gets KH1's flinch (kind 3). Enemies KH1 can't launch (no motion 0x52 / 0x5C) and
+the big and fixed ones keep KH1's own reaction.

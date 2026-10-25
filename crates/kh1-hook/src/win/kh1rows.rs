@@ -309,12 +309,12 @@ fn window_atkp(motion: u16, frame: Option<u32>) -> Option<u16> {
     hits(true).or_else(|| hits(false))
 }
 
-/// KH2's blow that throws (a launch: as `combat::Strikes::strike` takes a KH2 hit for KH1's
-/// finisher row and KH2's launch).
+/// KH2's blow (reaction group 4, Steam KH2 `0x1403CE980`, Checked (decomp)): a launch, KH1's
+/// kind 5 with KH2's starting speeds, whatever its numbers (as `combat::Strikes::strike` takes a
+/// KH2 hit for KH1's finisher row and KH2's launch; the tester, kh2-knockback-on-enemies: no more
+/// "holding" blows).
 pub fn throws(a: &kh2_formats::battle::Atkp) -> bool {
-    let k1 = if a.knockback_1 == i16::MAX { 0 } else { a.knockback_1 };
-    let k2 = a.knockback_2;
-    character_core::reaction::category(a.enemy_reaction) == 4 && ((k1 == 0 && k2 == 0) || k2 >= 10 || k1 >= 30)
+    character_core::reaction::category(a.enemy_reaction) == 4
 }
 
 /// Each frame base Sora is posed (`kh2slots::frame`, ours built): his character's row table is

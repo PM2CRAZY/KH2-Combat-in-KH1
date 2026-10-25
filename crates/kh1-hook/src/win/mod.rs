@@ -34,6 +34,7 @@ mod kh1picker;
 mod kh1rows;
 mod kh2damage;
 mod kh1voice;
+mod knockback;
 mod kh2sound;
 mod leftblade;
 mod menu;
