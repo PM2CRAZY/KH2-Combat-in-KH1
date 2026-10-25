@@ -466,8 +466,10 @@ fn note_play(what: impl FnOnce() -> String) {
 /// Reflect's finisher line (KH2's voice 25, clip 31), loaded whatever `kh2_voice` says
 /// (`reflect_voice`).
 pub const REFLECT_FINISHER_VOICE: i16 = 25;
-/// (Its casts' grunts are KH1's, `kh1voice`; only the finisher's line is KH2's.)
-pub const REFLECT_VOICES: [i16; 1] = [REFLECT_FINISHER_VOICE];
+/// Its cast voice (MAGC `+0x34`, every level), with Battle Quotes KH2 (`reflect::cast_voice`).
+pub const REFLECT_CAST_VOICE: i16 = 7;
+/// (Loaded whatever `kh2_voice` says, as Battle Quotes may change in the Config menu.)
+pub const REFLECT_VOICES: [i16; 2] = [REFLECT_CAST_VOICE, REFLECT_FINISHER_VOICE];
 
 /// Reflect's cast voice `v` (`reflect`), whatever `kh2_voice` says: one of its clips at random.
 pub unsafe fn reflect_voice(v: i16) {

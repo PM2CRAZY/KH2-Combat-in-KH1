@@ -356,3 +356,14 @@ barrier and the contact effect as before. Melee attacks unchanged (t573). Epic k
   finisher (as `formmagic` already plays KH2's MAGC voices); Battle Quotes KH1: the grunt per
   cast, and on the finisher KH1's Aero line "Defense!" (`docs/kh1-voice.md`, clip 46 or 47, at
   the spell rows' priority 3) through KH1's clip play (Steam `0x140290930`).
+
+### Reflect's voice (built, m9 "go ahead")
+`reflect::cast_voice`, on KH1's cast state and the borrowed path alike:
+- Battle Quotes KH2: the MAGC row's voice 7 on a ground or air cast (KH2's even pick of five
+  clips, through KH1's voice channel as KH2's other quotes, `kh2sound`), voice 25 ("Protect!")
+  on the finisher cast. Both are loaded whatever the Config says (`REFLECT_VOICES`). **Checked
+  (decomp, files)**.
+- Battle Quotes KH1: a KH1 swing grunt (group 4) on a cast; on the finisher KH1's Aero clip 46
+  at priority 3 through KH1's clip play (`kh1voice::defense`). **Assumption**: that clip 46 (not
+  47) is "Defense!"; the log line "KH1 voice: Reflect finisher, KH1's Aero line ... (clip 46 ...)"
+  names the clip each time (first 40).

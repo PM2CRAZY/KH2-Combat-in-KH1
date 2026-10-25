@@ -72,4 +72,9 @@ The mod plays clip 37 alone at the group's priority (3) as a Drive starts.
 "Defense!" clip instead; with Battle Quotes at KH2, KH2's own MAGC voices, below in
 `docs/kh1-reflect-spell.md`.)
 
+**Reflect's voice (testing branch, built)**: Battle Quotes KH2: KH2's MAGC voice 7 per cast and 25
+("Protect!") on the finisher. Battle Quotes KH1: a swing grunt (group 4) per cast and KH1's Aero
+clip 46 on the finisher (`kh1voice::DEFENSE_CLIP`; **Assumption** that 46 is "Defense!", the
+other Aero clip is 47). `docs/kh1-reflect-spell.md` "Reflect's voice".
+
 **Dodge roll**: a KH1 swing grunt (group 4, KH1's own random pick of its five clips).

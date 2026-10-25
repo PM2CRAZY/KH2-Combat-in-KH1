@@ -32,6 +32,11 @@ pub const SWING_GROUP: i32 = 4;
 /// "Give me strength!": the summons' call (group 17)'s own clip, and that group's priority.
 pub const GIVE_ME_STRENGTH_CLIP: i32 = 37;
 const CALL_PRIORITY: i32 = 3;
+/// "Defense!": one of Sora's two own Aero clips (group 13: clips 46 / 47, 50 / 50, `btltbl.bin`,
+/// Checked (files)); which of the two is "Defense!" is not heard yet (**Assumption**: 46), so
+/// every play is logged with its clip. The spell rows' priority is 3.
+pub const DEFENSE_CLIP: i32 = 46;
+const SPELL_PRIORITY: i32 = 3;
 
 fn base() -> usize {
     unsafe { super::sys::GetModuleHandleA(std::ptr::null()) as usize }
@@ -92,4 +97,14 @@ pub unsafe fn dodge_roll(actor: usize) {
     static N: AtomicU32 = AtomicU32::new(0);
     note(&N, || "the dodge roll's grunt".into());
     play(actor, SWING_GROUP);
+}
+
+/// Reflect's finisher with Battle Quotes KH1 (the tester: "the finisher will say "defence!" its
+/// one of the lines he picks when casting aero"): KH1's Aero clip, through KH1's clip play.
+pub unsafe fn defense(actor: usize) {
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log(&format!("KH1 voice: Reflect finisher, KH1's Aero line \"Defense!\" (clip {DEFENSE_CLIP}, priority {SPELL_PRIORITY}; if it isn't \"Defense!\" it is the other Aero clip, 47)"));
+    }
+    clip(actor, DEFENSE_CLIP, SPELL_PRIORITY);
 }

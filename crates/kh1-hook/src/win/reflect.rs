@@ -782,19 +782,38 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
         norm(dir, dir);
         wr(dir + 0xC, 0.0f32);
     }
-    // (The voice: as KH2's controller's cast had it, `before_step`.)
-    if finisher {
-        let v = magc(level).map(|r| r.voice_finisher).filter(|v| *v != 255).map_or(super::kh2sound::REFLECT_FINISHER_VOICE, |v| v as i16);
-        super::kh2sound::reflect_voice(v);
-    } else {
-        super::kh1voice::swing_grunt(actor);
-    }
+    cast_voice(actor, level, finisher);
     note(format!(
         "{} on KH1's cast state (level {level}): request {request:#x}, KH2 motion {motion}{}, step {step:?}, MP {before:?} -> {:?} ({cost:?} units)",
         NAMES[(level - 1) as usize],
         if flying { " (flight)" } else if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
         mp(actor)
     ));
+}
+
+/// Reflect's voice on a cast (the tester, kh2-magic-and-reflect-native m7 answer 3: "if battle
+/// quotes is kh2 then (a) for kh1 we keep the grunts but the finisher will say "defence!" its one
+/// of the lines he picks when casting aero"), on the cast state and the borrowed path alike:
+/// - Battle Quotes KH2: KH2's own lines, as KH2's cast start (Steam KH2 `0x1403C5170`) takes them
+///   from the MAGC row: its voice (`+0x34`, 7: an even pick of five clips) on a ground or air cast,
+///   its finisher voice (`+0x35`, 25, "Protect!") on the combo's finisher cast. Checked (decomp,
+///   files).
+/// - Battle Quotes KH1: a KH1 swing grunt (group 4), and on the finisher KH1's Aero line
+///   "Defense!" (`kh1voice::defense`: one of Aero's group 13 clips, at the spell rows' priority 3).
+unsafe fn cast_voice(actor: usize, level: u8, finisher: bool) {
+    if super::kh2sound::kh2_voice() {
+        let row = magc(level);
+        let v = if finisher {
+            row.map(|r| r.voice_finisher).filter(|v| *v != 255).map_or(super::kh2sound::REFLECT_FINISHER_VOICE, |v| v as i16)
+        } else {
+            row.map(|r| r.voice).filter(|v| *v != 255).map_or(super::kh2sound::REFLECT_CAST_VOICE, |v| v as i16)
+        };
+        super::kh2sound::reflect_voice(v);
+    } else if finisher {
+        super::kh1voice::defense(actor);
+    } else {
+        super::kh1voice::swing_grunt(actor);
+    }
 }
 
 /// KH2's frame of a Reflect cast on KH1's cast state (`takeover::native_spells`, each KH1 physics
@@ -962,18 +981,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
             rt.started = Some(Instant::now());
         }
     }
-    // His voice, always (not `kh2_voice`'s): on a ground or air cast one of his KH1 combo swing
-    // grunts at random (`kh1voice`; the user: "pick a few grunt sounds to play at random each time
-    // reflect is casted (pretty much the same as his base attack)", then "sfx is calling kh2 battle
-    // quotes but I need kh1 battle quotes"); on the combo's finisher the line "Protect!" (the
-    // user), which only KH2 has (KH1 has no Reflect): KH2's MAGC finisher voice for Reflect, 25
-    // (Fire / Blizzard / Thunder name theirs 11 / 12 / 13).
-    if finisher {
-        let v = magc(level).map(|r| r.voice_finisher).filter(|v| *v != 255).map_or(super::kh2sound::REFLECT_FINISHER_VOICE, |v| v as i16);
-        super::kh2sound::reflect_voice(v);
-    } else {
-        super::kh1voice::swing_grunt(actor);
-    }
+    cast_voice(actor, level, finisher);
     note(format!(
         "{} cast (level {level}): motion {motion}{}, MP {before:?} -> {:?} (its effects loaded: {})",
         NAMES[(level - 1) as usize],
