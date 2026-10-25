@@ -1157,9 +1157,31 @@ borrows it for the roll / Quick Run as before.
 - **Range id 2** (Steam KH2 `0x14040D810`, **Checked (decomp)**): it sets bit 0x10 of the motion
   state word, beside ids 0 / 1's bits 4 / 8; the free-state tests read the three together
   (`0x140422520`: bit 4, or bit 0x10 with the ground / air test). So it is a free state too.
-  `kh2-data` now reads it as `WindowKind::Free`; KH2's controller here ignores it (as before);
-  `kh2slots::kh1_tracks` takes it as KH1's "may be left" on our requests. No other motion on our
-  requests or casts has it (41, 42, 173 and some field motions do).
+  `kh2-data` reads it as `WindowKind::Free`; KH2's controller takes a jump or the action button
+  only in it (or ids 0 / 1), `docs/movement-model.md` "Leaving a move"; `kh2slots::kh1_tracks`
+  takes it as KH1's "may be left". No other motion on our requests or casts has it (41, 42, 173
+  and some field motions do).
+- **Leaving KH2's moves on KH1's states** (the tester, kh2-magic-and-reflect-native m8: "you can
+  jump and dodge roll out of moves during its end frames ... so its exact"). KH2 takes a jump only
+  in a free state (range id 0 / 1 / 2) or the landing, and the action button's guard, roll and
+  Quick Run the same (Steam KH2 `0x1403D6FC0`, `0x1403BFB30`, **Checked (decomp)**); none of
+  Sora's swings, ability moves or casts has one (**Checked (files)**). `kh2slots::Leave`:
+  - KH2's swings on KH1's combo requests (0xC8..0xCE, and the row picks on them), our own rows
+    and the casts: KH1's "may be left" (type 0) only from KH2's free state, none if it has none.
+    Before, the swings on KH1's requests kept KH1's template's own point (KH1's swing's), from
+    which KH1's control step jumped, rolled or walked him out of KH2's swing. Now KH1's action
+    flag clears at the motion's end: the row runner `0x1402A68F0` (and `combomods`' own starts)
+    queue the idle / fall after with bit `0x40000000`, which `0x14029F6E0` takes to clear flag 4
+    as the motion ends (**Checked (decomp)**, KH1 Steam). KH1's combo window (type 5) is KH2's as
+    before, so Attack and commands still come in it.
+  - The reactions: KH2's free state, else the template's (some of KH1's reaction idles are
+    queued without that bit, `0x14029FA30 (actor, +0x3EA + 6, 0)`).
+  - The dodge roll: from KH2's free state (range id 2, frame 36 of 209), not its fall-check event
+    (34).
+  - KH2's casts on KH1's cast state: a jump or Square cuts them only in a free state
+    (`cast_cut_open`), so never for Sora's; an Attack still from the reaction-command window.
+  **Assumption:** nothing of ours needed KH1's "can act" at the old template point during a KH2
+  swing (the give-back waits for the combo's end anyway).
 - **Ours**: three more KH1 requests (`kh1rows::OURS`, 0x208..0x20A): Guard (173) and Guard repel
   (42), asked for by request alone with KH1's action flag (`combomods::start_own`, KH1's idle
   queued after), and Counterguard (171) as an attack row. The guard windows: `hurt` takes a hit

@@ -161,7 +161,7 @@ const fn reaction_spec(i: usize) -> Spec {
 /// set, so KH1 moves him by the slot's root (H10): baked, KH2's root travel (`travel`). KH1's slot
 /// 117 is 38 frames at 60 fps, "may be left" at 30, four floor sounds and foot effects (Checked
 /// (files)); ours keeps the floor sounds and foot effects rescaled and is left from KH2's
-/// fall-check event (`roll_free`).
+/// free state (range id 2 at 36; its fall-check event at 34 before, `roll_free`).
 const ROLL: Spec = Spec { motion: character_core::motion::DODGE_ROLL, stands_for: 117, request: 0xDC, kind: Kind::DodgeRoll };
 
 /// KH2's glide motions on KH1's glide requests (the tester, kh2-glide-in-kh1s-glide-state: KH2's
@@ -456,7 +456,16 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
     // (A recoil, `RECOILS`, the same: KH1's reaction function asked for it.)
     let reaction = matches!(kind, Kind::HitReactions | Kind::Recoil);
-    let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, own || reaction, cast);
+    // (Where KH1 may leave it, `Leave`: KH2's free state only for KH2's swings, ability moves and
+    // casts; KH2's, else the template's, for the reactions.)
+    let leave = if own || cast || matches!(kind, Kind::GroundCombo | Kind::AirCombo) {
+        Leave::Kh2
+    } else if reaction {
+        Leave::Kh2OrTemplate
+    } else {
+        Leave::Template
+    };
+    let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, leave);
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
     if ours.is_some_and(|o| o.own_sounds) {
         tracks.retain(|t| t.kind != ks::SOUND);
@@ -799,7 +808,7 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], stands_for: usize
 /// one at 68 of 86, Fire's second part 57 at 46 of 60, Checked (files)): KH2's cast motions hold
 /// him to their end (none has a free range, id 0 / 1; `P_EX100.mset`, Checked (files)), where
 /// KH1's queue takes him on. (KH2's magic-only window, range id 35, is not KH1's yet.)
-fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own: bool, cast: bool) -> Vec<EventTrack> {
+fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leave: Leave) -> Vec<EventTrack> {
     let len = clip.length as f32;
     let span = |w: &character_core::Window| (w.start as f32, w.end.map_or(len, |e| e as f32));
     let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon > 0)).map(span).collect();
@@ -814,8 +823,9 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own:
     // `docs/aerial-recovery.md`) as KH1's "may be left" (type 0, `+0x1CC` bit 20: `0x14029D399`
     // clears the action flags `0x1004`) from its start, in place of the template's; a clip with
     // none keeps the template's, as every slot on KH1's own requests does.
-    let free: Vec<(f32, f32)> = if own || cast { clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Air | WindowKind::Grounded | WindowKind::Free)).map(span).collect() } else { Vec::new() };
-    let mut out: Vec<EventTrack> = ks::scaled(template, r).into_iter().filter(|t| matches!(t.kind, ks::FOOT | ks::SOUND | ks::FACE) || (t.kind == ks::CAN_LEAVE && free.is_empty() && !cast)).collect();
+    let free: Vec<(f32, f32)> = if leave == Leave::Template { Vec::new() } else { clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Air | WindowKind::Grounded | WindowKind::Free)).map(span).collect() };
+    let keep_template = leave == Leave::Template || (leave == Leave::Kh2OrTemplate && free.is_empty());
+    let mut out: Vec<EventTrack> = ks::scaled(template, r).into_iter().filter(|t| matches!(t.kind, ks::FOOT | ks::SOUND | ks::FACE) || (t.kind == ks::CAN_LEAVE && keep_template)).collect();
     if !free.is_empty() {
         out.push(EventTrack::level(ks::CAN_LEAVE, 0, &free));
     }
@@ -827,27 +837,50 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, own:
     out
 }
 
-/// The frame KH2's dodge roll may be left from: its fall-check event (the OG rewrite's DodgeRoll
-/// action: other actions may cut it there and the stick walks out of it; frame 34 for Sora), else
-/// its last frame. KH1's "may be left" (type 0) from there clears the action flags, so KH1's
+/// Where KH1 may leave one of our motions early (KH1's "may be left", type 0, `+0x1CC` bit 20: its
+/// control step walks, jumps, rolls or takes Square from there).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Leave {
+    /// KH2's free state (range id 0 / 1 / 2) only; with none, nothing before the motion's end, as in
+    /// KH2 (the tester, kh2-magic-and-reflect-native m8: "you can jump and dodge roll out of moves
+    /// during its end frames ... so its exact"; Steam KH2's input step `0x1403D6FC0` takes a jump,
+    /// and `0x1403BFB30` the guard, roll and Quick Run, only in a free state, Checked (decomp)):
+    /// KH2's swings, ability moves and casts, none of which has one (`P_EX100.mset`, Checked
+    /// (files)). KH1's action flag then clears at the motion's end: KH1's row runner
+    /// (`0x1402A68F0`) and our own starts (`combomods`) queue the idle / fall after it with bit
+    /// `0x40000000`, which `0x14029F6E0` takes as "clear the action flag 4" when the motion ends
+    /// (Checked (decomp)). Before, KH2's swings on KH1's combo requests kept the KH1 template's own
+    /// "may be left" point (KH1's swing's), and KH1 let him jump or roll out there.
+    Kh2,
+    /// KH2's free state, else the template's (the reactions: KH1's reaction functions queue some
+    /// of their idles without bit `0x40000000`, `0x14029FA30 (actor, +0x3EA + 6, 0)`, so the
+    /// template's point is what lets him go there).
+    Kh2OrTemplate,
+    /// The template's (KH1's own point: glides, cycles, the roll before its own override).
+    Template,
+}
+
+/// The frame KH2's dodge roll may be left from: its free state (range id 2, frame 36 of Sora's 209,
+/// `Clip::first_free`; KH2 takes a jump or the action button only there, Checked (decomp) and
+/// (files)), else its fall-check event (34, the OG rewrite's reading), else its last frame. KH1's "may be left" (type 0) from there clears the action flags, so KH1's
 /// control step walks, jumps, rolls or attacks out of it.
 fn roll_free(clip: &character_core::Clip) -> u32 {
     let len = clip.length.max(1);
-    clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map_or(len - 1, |e| e.frame).min(len - 1)
+    clip.first_free().or_else(|| clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map(|e| e.frame)).unwrap_or(len - 1).min(len - 1)
 }
 
 /// What may follow a KH2 cast on KH1's cast state (the tester, thread kh2-magic-and-reflect-native,
 /// answer 1 (a): the cast counts as a step and the combo goes on after it). KH2's rule (the
 /// controller's Magic action, `character_core`): from the cast motion's reaction-command window
 /// (range id 14, `AllowReactionCommand`) other actions may cut it and an Attack goes on with the
-/// combo; with none, only on its last frame. Only presses cut it there (jump, the action button,
-/// Attack), not the stick. On KH1's side: the motion's combo window (type 5, `+0x1CC` bit 22, in
+/// combo; with none, only on its last frame. (A jump or the action button only in a free state,
+/// which no cast motion of Sora's has: `cast_cut_open`.) On KH1's side: the motion's combo window (type 5, `+0x1CC` bit 22, in
 /// which KH1's menu takes a command with the action flag still set, `0x1402A2EC0`, and KH1's
 /// Attack step `0x1402A7510` counts on from `+0x41`, Checked (decomp)) from there to the end; no
 /// "may be left" (type 0 clears the action flags, `0x14029D399`, and the stick would walk out of
-/// the cast, which KH2's doesn't): a fresh jump or Square there ends the action flag for its own
-/// move (`cast_cut_open`, `formmagic::cast_cut`). A finisher cast that ends the combo has no
-/// combo window: KH1's Attack starts a new one (its jump and Square still cut it). Spells follow
+/// the cast, which KH2's doesn't). A fresh jump or Square ends the action flag for its own move
+/// only in a free state (`cast_cut_open`, `formmagic::cast_cut`): never during Sora's casts. A
+/// finisher cast that ends the combo has no combo window: KH1's Attack starts a new one. Spells follow
 /// only from KH2's magic window (range id 35, `ComboMagic`): `cast_magic_window`, in
 /// `combat::command`.
 fn cast_follow(clip: &character_core::Clip, finisher: bool) -> Vec<EventTrack> {
@@ -868,12 +901,16 @@ pub unsafe fn cast_playing(actor: usize) -> bool {
     current(actor).is_some_and(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))
 }
 
-/// Our cast slot playing on `actor` is in its cut window (`cut_from` on).
+/// Our cast slot playing on `actor` may be left by a jump or Square now: KH2's free state (range
+/// id 0 / 1 / 2, `Clip::free_at`; Steam KH2 `0x1403D6FC0` / `0x1403BFB30`, Checked (decomp)), not
+/// its reaction-command window (`cut_from`, which only an Attack takes). None of Sora's cast
+/// motions (56..73) has one (`P_EX100.mset`, Checked (files)), so a jump or Square waits for the
+/// cast's end, as in KH2.
 pub unsafe fn cast_cut_open(actor: usize) -> bool {
     let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };
     let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
-    t.is_finite() && t >= cut_from(clip) as f32
+    t.is_finite() && t >= 0.0 && clip.free_at(t as u32)
 }
 
 /// Our cast slot playing on `actor`: whether a spell may follow it now (KH2's magic window,

@@ -595,8 +595,9 @@ pub(super) unsafe fn take_step(actor: usize) {
 }
 
 /// KH1's control step with base Sora in its own states (`takeover::shared_control`, before it
-/// reads whether he can act): a fresh jump or Square in our cast slot's cut window
-/// (`kh2slots::cast_cut_open`, KH2's range id 14) ends the cast's action flag (`+0` bit 2, as
+/// reads whether he can act): a fresh jump or Square in our cast slot's free state
+/// (`kh2slots::cast_cut_open`, KH2's range id 0 / 1 / 2; none of Sora's casts has one, so in
+/// practice never: KH2 takes neither during a cast) ends the cast's action flag (`+0` bit 2, as
 /// KH1's own move ends do), so KH1's jump, or the Square move KH1 or a borrow of KH2's has for it,
 /// starts this step; the stick alone doesn't (KH2's cast takes only presses there). Whether it
 /// did.
@@ -608,7 +609,7 @@ pub unsafe fn cast_cut(actor: usize, jump: bool, square: bool) -> bool {
         return false;
     }
     wr(actor, rd::<u32>(actor) & !4);
-    log(&format!("KH2 cast cut by {} in its reaction-command window (KH2 motion {:?})", if jump { "the jump" } else { "Square" }, super::kh2slots::playing_motion(actor)));
+    log(&format!("KH2 cast cut by {} in its free state (KH2 motion {:?})", if jump { "the jump" } else { "Square" }, super::kh2slots::playing_motion(actor)));
     true
 }
 
