@@ -1801,14 +1801,18 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
 /// (KH1's instance scale, which takes its copy's header offset with it: the bound pieces' places
 /// and sizes) and its position-only offset times KH1's size against KH2's (`pose::kh1_size`, from
 /// the two bind poses). Not before Sora's retarget is made (logged once): KH2's size then.
+/// Fire's packages too (its three levels, base Sora's and Wisdom's: the tester, thread
+/// kh2-effects-in-kh1s-own-effect-system m19, "for fire do (a)": its ring, flames and Keyblade
+/// pieces scaled to KH1 Sora the same way). Blizzard's, Thunder's and Cure's stay KH2's size.
 fn kh1_sized(pkg: Pkg, mut l: Layer) -> Layer {
-    if !matches!(pkg, Pkg::Spell(1..=3)) {
+    let fire = matches!(pkg, Pkg::Spell(p) if super::formmagic::package_spell(p).is_some_and(|(spell, _)| spell == 0));
+    if !matches!(pkg, Pkg::Spell(1..=3)) && !fire {
         return l;
     }
     let Some(k) = super::pose::kh1_size() else {
         static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if !ONCE.swap(true, Ordering::Relaxed) {
-            log("KH2 effects (native): Reflect started before KH1 Sora's size was known: at KH2's size");
+            log("KH2 effects (native): Reflect or Fire started before KH1 Sora's size was known: at KH2's size");
         }
         return l;
     };

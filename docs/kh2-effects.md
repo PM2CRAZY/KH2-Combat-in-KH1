@@ -2162,6 +2162,14 @@ The tester (m16, 2 (a)): Reflect's numbers are KH2 Sora's size; scale them to KH
   the same ratio. `hurt`'s stop of hits on Sora while the barrier stands doesn't test shapes.
   The counter / pop shapes (574, 667..669) stay KH2's.
 - Before Sora's retarget is made Reflect would play at KH2's size (logged once); a cast needs him.
+- **Fire too** (the tester, m19: "for fire do (a)", answering m18's question 1 for Fire): Fire's
+  packages (its three levels, `formmagic::spell_package(0, level)`, used by base Sora's KH2 Fire
+  and Wisdom's) go through the same `kh1_sized`: every bound piece (the ring and its flame trails
+  on his root, the Keyblade-tip and second-Keyblade pieces) and every position-only offset at
+  0.89. Fire's attack shapes (its ring's 240 x 180 hit, `docs/magic-model.md`) stay KH2's size
+  (open: the tester's call, as Reflect's barrier was). Blizzard's, Thunder's and Cure's packages
+  are unchanged. **Assumption**: none of Fire's pieces is placed by its script (`spell_place`),
+  which isn't scaled; `FIRE_3.mag` only starts its elements (§18.21).
 
 ### 18.23 KH2's object frame on KH1's object root, a third time (Reflect's ground barrier)
 

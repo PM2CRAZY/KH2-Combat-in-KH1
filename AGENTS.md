@@ -1,3 +1,15 @@
+### 2026-10-25: Stage 561 (testing branch: Effects: Fire at KH1 Sora's size)
+- **Fire's KH2 effects at KH1 Sora's size.** The tester (kh2-effects-in-kh1s-own-effect-system
+m19: "1.for fire do (a)", answering m18's question 1, "(a) scale every KH2 spell and move effect on
+Sora to KH1 Sora's size the same way"). `kh2dpx::kh1_sized`, which scaled Reflect's packages since
+t483, now also takes Fire's three packages (`formmagic::spell_package(0, level)`, base Sora's KH2
+Fire and Wisdom's): each element's scale (KH1's instance scale, which carries its header offset:
+the ring, its flame trails and the Keyblade pieces, places and sizes) and its position-only offset
+x `pose::kh1_size` (0.89, the two bind poses' hip ratio). Fire's attack shapes stay KH2's size;
+Blizzard, Thunder, Cure unchanged. Checked (decomp): KH1's instance scale `0x14031CEA0` (t483's
+check). Assumption: none of Fire's pieces is placed by its script (`spell_place`, not scaled).
+`docs/kh2-effects.md` §18.22.
+
 ### 2026-10-25: Stage 560 (testing branch: Hit effects: KH2 swings call the Kingdom Key's KH2 hit spark)
 - **KH2 swings' Keyblade hits show KH2's own hit element, through KH1's lookup.** The tester (m2 answer 1: "when you hit an enemy an effect spawns on the enemy (keyblade hit effect, fire hit effect etc.) Please look into it and find an implementation thats native, I give you the go ahead"). `combat::swing_spark`: a hit of a KH2 swing's right-Keyblade shapes (weapon 1) by base Sora with the Kingdom Key (0x51, save `+0x36`) lands with `Kh2Spark { Pkg::Weapon, effect_on_hit, random_effect }` (Kh2Spark now carries a `kh2dpx::Pkg`) through t521's path: attack `+8` = the Kingdom Key's KH2 package (`W_EX010.a.us`), data copy `+0x28` = effect_on_hit − 1; KH1's contact (`0x1402b4060` → `0x1402b4320` → `0x1401dffe0` → `0x1402ae650`) picks, places and turns it. `kh2dpx::WEAPON_ON` builds hit elements 1 / 2 / 3 (kinds 1, 1, 0x102; Checked (files)); pppKeBornRnd5 (183) joins `KH1_SAME` (KH1 `0x14033E3D0` / `0x14033E4B0` / `0x140349EA0` vs KH2 `0x1404D4EA0` / `0x1404D4F80` / `0x1404E1780` decompile the same but the paused offset; constructs `0x14033E490` / `0x1404D4F60` same bytes; Checked (decomp), Checked (exe)). ini `kh2_hit_sparks` (default on). KH1's own swings, other Keyblades (answer 1 (c)), body shapes, Drive Forms and the hit sound unchanged. KH2's damage_effect is the target's own set (`target + 0x80`, kind 0x200, Checked (decomp) `0x1403d1b40`): KH1's enemies have none, left out. Assumption: a swing's attack carries its weapon's PAX. docs/kh1-kh2-hit-effects.md §9.
 
