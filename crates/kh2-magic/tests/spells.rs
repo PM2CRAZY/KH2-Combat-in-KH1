@@ -337,6 +337,59 @@ fn reflect_chain_counters_from_the_last_cast() {
     assert!(counters > 0, "the last Reflect of the chain didn't counter");
 }
 
+/// Reflect cast into Reflect without any help from the host: the scripts share KH2's teamwork
+/// block (`trap_teamwork_alloc`, one per key for every script, Steam `0x1403F6DF0`). The second
+/// cast's release ends the first barrier's element; the first script adds its hits to the block
+/// and ends without a counter; the second barrier's counter (one series) counts both casts' hits.
+#[test]
+fn reflect_chain_shares_the_teamwork_block() {
+    let d = dir();
+    let (Ok(system), Ok(bytes)) = (std::fs::read(d.join("03system.bin")), std::fs::read(d.join("REFLECT_1.mag"))) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    let magi = pref.magi.get(0).unwrap();
+    let mut magic = Magic::new();
+    let spell = magic.add_spell(SpellFile::parse("REFLECT_1.mag", &bytes).unwrap());
+    let mut w = Fake { frame: 0, release_at: 0, motion_end: 60, seed: 1 };
+    magic.cast(spell, SORA, 5, 0, magi, &mut w).unwrap();
+    assert!(magic.release(SORA, &mut w));
+    let first_barrier = |m: &Magic| m.attacks.iter().filter(|a| a.atk == 573 && !a.freed).map(|a| a.key).min();
+    let mut old = None;
+    let mut counters = std::collections::BTreeSet::new();
+    let mut counter_ids = std::collections::BTreeSet::new();
+    for f in 1..300 {
+        w.frame = f;
+        if f == 12 {
+            old = first_barrier(&magic);
+            magic.cast(spell, SORA, 5, 0, magi, &mut w).unwrap();
+            assert!(magic.release(SORA, &mut w));
+        }
+        magic.update(&mut w);
+        if f == 5 {
+            magic.attacks.iter_mut().find(|a| a.atk == 573 && !a.freed).unwrap().reflect_count = 3;
+        }
+        if f == 20 {
+            assert!(old.is_some_and(|k| magic.attacks.iter().all(|a| a.key != k || a.freed)), "the first barrier still stands");
+            magic.attacks.iter_mut().filter(|a| a.atk == 573 && !a.freed).last().unwrap().reflect_count += 2;
+        }
+        for a in magic.attacks.iter().filter(|a| a.atk != 573 && !a.freed && a.pos.is_some()) {
+            counters.insert(a.atk);
+            if (574..=578).contains(&a.atk) {
+                counter_ids.insert(a.key);
+            }
+        }
+        if magic.casts.is_empty() {
+            break;
+        }
+    }
+    // Five hits in all: the second tier (576 / 668), one counter series.
+    eprintln!("chain: attacks {counters:?}, counter series {counter_ids:?}");
+    assert_eq!(counter_ids.len(), 1, "one counter for the chain");
+    assert!(counters.contains(&576) && counters.contains(&668), "{counters:?}");
+}
+
 /// Wisdom Form's spells: Fire, Blizzard, Thunder and Cure at Wisdom's magic sub (level × 2 − 2
 /// + 10), as the KH1 port casts them in the form: each starts, puts out its attacks (Cure: a
 /// direct application to Sora) and ends.

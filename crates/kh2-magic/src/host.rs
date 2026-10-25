@@ -73,7 +73,29 @@ pub(crate) fn start_object_effect(magic: &mut Magic, vm: &mut Vm, t: &mut Tables
 pub(crate) fn run(magic: &mut Magic, cast: &mut Cast, world: &mut dyn World) -> Result<(), BdxError> {
     let main = cast.main;
     let vm = &mut cast.vm;
-    let mut b = Bridge { magic, t: &mut cast.t, world };
+    // The teamwork blocks this cast holds: KH2's are one block per key for every script
+    // (`trap_teamwork_alloc`), ours a copy in each cast's memory, brought up to date before it
+    // runs and handed back after (scripts run one after another, so this is the same).
+    for (key, addr) in &cast.t.teamwork {
+        if let Some(block) = magic.teamwork.get(key) {
+            vm.mem.write(*addr, block)?;
+        }
+    }
+    let result = run_trees(magic, vm, &mut cast.t, main, world);
+    for (key, addr) in &cast.t.teamwork {
+        if let Some(block) = magic.teamwork.get_mut(key) {
+            let n = block.len() as u32;
+            block.copy_from_slice(vm.mem.bytes(*addr, n)?);
+        }
+    }
+    let main_done = result?;
+    cast.finished = main_done && cast.t.threads.is_empty();
+    Ok(())
+}
+
+/// Runs the cast's main tree and its threads; whether the main one is done.
+fn run_trees(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, main: CtxId, world: &mut dyn World) -> Result<bool, BdxError> {
+    let mut b = Bridge { magic, t, world };
     vm.owner = None;
     let main_done = vm.run_tree(main, &mut b)?;
     let mut i = 0;
@@ -86,8 +108,7 @@ pub(crate) fn run(magic: &mut Magic, cast: &mut Cast, world: &mut dyn World) -> 
             i += 1;
         }
     }
-    cast.finished = main_done && cast.t.threads.is_empty();
-    Ok(())
+    Ok(main_done)
 }
 
 struct Bridge<'a> {
@@ -502,15 +523,28 @@ impl Host for Bridge<'_> {
                 Some(Cell::addr(rec))
             }
             (2, 21) => {
-                let key = (a(0).v, a(1).v);
+                // KH2's `trap_teamwork_alloc (key, size)` (Steam `0x1403F6DF0`, Checked (decomp)): one
+                // block per key for every script, made zeroed `size + 1` bytes the first time;
+                // asked again, its first byte is set to 1 and the same block comes back. Reflect's
+                // script keeps there its newest barrier's element and the hits counted, so a new
+                // Reflect ends the last one's barrier and its counter counts both (`docs/kh1-reflect-spell.md`).
+                let (key, size) = (a(0).v, a(1).i().max(0) as usize);
+                match self.magic.teamwork.get_mut(&key) {
+                    Some(block) => block[0] = 1,
+                    None => {
+                        self.magic.teamwork.insert(key, vec![0; size + 1]);
+                    }
+                }
+                let block = self.magic.teamwork[&key].clone();
                 let r = match self.t.teamwork.get(&key) {
                     Some(r) => *r,
                     None => {
-                        let r = vm.mem.alloc(64);
+                        let r = vm.mem.alloc((block.len() as u32).max(4));
                         self.t.teamwork.insert(key, r);
                         r
                     }
                 };
+                vm.mem.write(r, &block)?;
                 Some(Cell::addr(r))
             }
             (2, 23) => {

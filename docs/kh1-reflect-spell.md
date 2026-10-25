@@ -392,3 +392,23 @@ barrier and the contact effect as before. Melee attacks unchanged (t573). Epic k
   script waits on an element: Blizzard's shard flies for as long as its element lives (twice as
   long as before), and Fire / Thunder / Cure / Magnet and the forms' scripts check their elements
   the same way.
+
+## Reflect into Reflect: KH2's teamwork block (corrects t572's assumption)
+
+- Reflect's script (every level) asks at its cast for KH2's teamwork block with key 0x10002
+  (`trap_teamwork_alloc`, 12 bytes). KH2 keeps one block per key for every script: made zeroed
+  (`size + 1` bytes) the first time, the same block every time after (Steam `0x1403F6DF0`, a
+  table of (key, block) pairs at `0x142AE75D0`, count `0x142AE7650`). **Checked (decomp)**.
+- What the script does with it (**Checked (files)**, `REFLECT_3.mag` read with our disassembler):
+  at its release, if the block's +4 holds a barrier element, it ends it (`trap_effect_kill`), then
+  puts its own there. Its barrier loop runs while its own element lives. After it, it adds its own
+  count to the block's +8; only if the block's +4 is still its own element (it is the newest
+  Reflect) does it clear +4 / +8 and fire the counter, its tier by the whole sum. So a Reflect
+  cast while another stands ends the older barrier at once, the older script hands its hits on and
+  fires nothing, and the newest one's counter counts the whole chain. t572's "each cast keeps its
+  own barrier and counter" (an **Assumption** then: nothing was found that ended the last one) was
+  wrong; this is where KH2 does it.
+- `kh2-magic` had a block per cast (keyed by key and size), so the chain never met. Now
+  `Magic::teamwork` holds one block per key, and each cast's copy is brought up to date before its
+  script runs and written back after (scripts run one at a time, so this is the same as KH2's one
+  block). Test `reflect_chain_shares_the_teamwork_block` (needs the extracted files; not run here).

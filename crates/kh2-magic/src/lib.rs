@@ -195,7 +195,9 @@ pub(crate) struct Tables {
     pub attacks: HashMap<u32, u64>,
     pub effects: HashMap<u32, u64>,
     pub targets: HashMap<ObjId, u32>,
-    pub teamwork: HashMap<(u32, u32), u32>,
+    /// The teamwork blocks this cast holds (`trap_teamwork_alloc`): key, its copy in this cast's
+    /// memory (`Magic::teamwork` holds the shared bytes).
+    pub teamwork: HashMap<u32, u32>,
     pub statics: host::Statics,
     pub threads: Vec<CtxId>,
     /// The caster's battle target, picked when the cast starts.
@@ -237,6 +239,9 @@ pub struct Magic {
     next_id: u64,
     next_group: i64,
     pub(crate) events: Vec<Event>,
+    /// KH2's teamwork blocks (`trap_teamwork_alloc`, Steam `0x1403F6DF0`): one per key, shared by
+    /// every script.
+    pub(crate) teamwork: HashMap<u32, Vec<u8>>,
 }
 
 impl Default for Magic {
@@ -248,7 +253,7 @@ impl Default for Magic {
 impl Magic {
     pub fn new() -> Magic {
         // Attack groups the game makes up start at 0x100.
-        Magic { spells: Vec::new(), casts: Vec::new(), attacks: Vec::new(), effects: Vec::new(), frametime: 1.0, trace: std::env::var_os("KH2_MAGIC_TRACE").is_some(), next_id: 1, next_group: 0x100, events: Vec::new() }
+        Magic { spells: Vec::new(), casts: Vec::new(), attacks: Vec::new(), effects: Vec::new(), frametime: 1.0, trace: std::env::var_os("KH2_MAGIC_TRACE").is_some(), next_id: 1, next_group: 0x100, events: Vec::new(), teamwork: HashMap::new() }
     }
 
     pub fn add_spell(&mut self, file: SpellFile) -> usize {

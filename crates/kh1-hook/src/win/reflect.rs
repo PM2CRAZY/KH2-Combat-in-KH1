@@ -1207,22 +1207,28 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         let sub = level as i32 * 2 - 2 + finisher as i32 + super::form::magic_sub();
         let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
         let spell = rt.spells[(level - 1) as usize].unwrap_or(0);
-        // Cast again while the last one is still in flight: each cast runs on its own, as KH2's
-        // magic runs every cast's script (`0x1403C5170` starts a new one; the script machine runs
-        // each per frame): the last one keeps its barrier, its count and its counter (t572, the
-        // tester, m6: "reflect is currently not 1:1 with kh2"). Before, the last one ended
-        // without its counter and its hits carried over (main's s175 / s182).
+        // Cast again while the last one is still in flight: each cast runs its own script (KH2's
+        // `0x1403C5170` starts a new one), and the scripts share KH2's teamwork block
+        // (`trap_teamwork_alloc`, one per key for every script, `kh2_magic`): the new Reflect's
+        // release ends the last one's barrier element, whose script then adds its hits to the
+        // block and ends without a counter; the newest barrier's counter, as it drops, counts the
+        // whole chain (Checked (files), REFLECT_3's script; Checked (decomp) `0x1403F6DF0`).
+        // (t572 had each cast keep its own barrier and counter; nothing was found then that ended
+        // the last one.)
         let carry = 0;
-        if rt.magic.busy(SORA) {
-            note("Reflect cast again in flight: the last one goes on (its own barrier and counter)".to_string());
+        let chained = rt.magic.busy(SORA);
+        if chained {
+            note("Reflect cast again in flight: the new one ends the last one's barrier and counts its hits (KH2's teamwork block)".to_string());
         }
         match rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) {
             Ok(_) => {
                 rt.casting = Some((motion, 0));
                 rt.hold = Hold::default();
-                rt.blocks = carry;
+                if !chained {
+                    rt.blocks = carry;
+                    rt.counter_hits = 0;
+                }
                 rt.carry = carry;
-                rt.counter_hits = 0;
             }
             Err(e) => note(format!("Reflect: the script didn't start ({e})")),
         }
