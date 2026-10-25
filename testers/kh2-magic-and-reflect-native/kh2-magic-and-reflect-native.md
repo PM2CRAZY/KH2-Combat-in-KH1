@@ -10,6 +10,7 @@
 - [4. Assistant: t484 to t487. The first batch from your answers, one system ](#^m4)
 - [5. Assistant: Thanks, that clears up Cure. With the Cure row at KH1 you'll](#^m5)
 - [6. Assistant: t532 to t535. Your two answers are in, plus items 1 to 5 of ](#^m6)
+- [7. Assistant: t570 to t573, your three answers, one system each.](#^m7)
 
 ---
 
@@ -159,8 +160,39 @@ go ahead
 
 ^m6
 
+
 1. (a) based off of the config; we need to give kh1's menu and mp the ability to allow costs like kh2 cure, where kh2 cure is if you have mp regardless of the amount then you can spend it on a cure but it wipes your whole mp bar. this needs to be a feature in the engine if it isn't already so that kh2 cure can call for it. as design choice lets make sure that you have at least 1 bar of blue mp before you can cast kh2 cure.
 2. (a)
 3. reflect is currently not 1:1 with kh2, from how it falls to how it behaves in game, please look at the steam c decomp.
 
 go ahead
+
+
+> [!tip] Assistant
+> **t570 to t573**, your three answers, one system each.
+>
+> - **t570, KH2 costs in KH1's own MP.** KH1's MP check and MP payment now understand two more kinds of cost: "all of your MP, but you need at least one full bar" (KH2 Cure with your one-bar rule) and "a share of your max MP" (KH2's other spells). KH1's own menu check uses them, so the Magic menu, the shortcuts and the cast itself grey out and refuse by KH2's cost when that spell's Magic row is KH2, and by KH1's cost when it's KH1. KH2 Cure greys out until you have a whole blue bar, then empties every bar and the yellow part.
+>   - Checked: KH1's check, payment and menu check in the KH1 decomp, the hook bytes in the exe, and KH2's menu state and payment in the KH2 decomp.
+>   - One thing KH2 does differently from what you described: in KH2, Cure works with any MP at all, and so does every other spell when you're short of its cost. Casting it empties your MP and starts MP Charge. The one-bar rule for Cure is yours, and the other spells still need their full cost (question 1).
+> - **t571, Reflect in Neverland flight** now goes through KH1's own flight cast: it aims at your target, plays the air Reflect animation, and goes back to flying after. No hop and no half speed, because KH1's flight cast doesn't do those. Checked against the KH1 decomp. **Drive Forms couldn't move yet:** a form still runs fully on KH2's controller with no KH1 state underneath, so Reflect moves over once the forms do (the Drive Forms native thread).
+> - **t572, Reflect's counter as KH2 runs it.** From KH2's own Reflect script: the barrier stands 27 frames; if nothing hits it, there's no counter; if something does, the counter hits again every 10 / 8 / 6 frames (by level) from frame 30 to 57, then the burst from 58 to 63. Before, only one "pop" hit each enemy once. Casting Reflect again no longer cancels the one still running: each cast keeps its own barrier, count and counter, as KH2's spell scripts do (I found nothing in KH2 that cancels a running Reflect, so that part is an assumption). Checked: the files and KH2's meeting code in the decomp.
+> - **t573, what reaches you.** KH2's Reflect animations have no invulnerable frames, so you're now only safe while a barrier is actually up. You can be hit before the finisher Reflect's barrier comes out, and after any barrier drops. An enemy's melee attack that hits the barrier now bounces off it (the enemy recoils), as in KH2. Before, it was only counted. Checked: the animation files and KH2's guard-meeting code.
+> - **Falling:** for base Sora at Air Physics KH2, the air cast already matches KH2's exe: the 40-unit hop, your speed kept and fading, the hover from frame 16 to 74 with the jump's timer still running, and landing cuts the cast. At KH1 it's KH1's 30-unit hop and half speed. I didn't find anything else that differs. Not checked: that KH2 ignores the stick during an air cast. Drive Forms still fall the old way. If you still see a difference in the fall, a trace of one air Reflect would show me where.
+>
+> None of this is tested in game. Please test:
+> - Cure at KH2 with less than one bar, exactly one, and several (the menu greying, then your MP after);
+> - Fire / Blizzard / Thunder at KH2 and at KH1 near empty MP, to check the menu greys by the right cost;
+> - Reflect in Neverland flight;
+> - Reflect hit by one and by several enemies (counter hits, then the burst), and two Reflects in a row;
+> - getting hit before or after the barrier and during the finisher Reflect's wind-up;
+> - melee enemies bouncing off the barrier.
+>
+> Log lines I'd like: "KH2 MP cost of spell", "on KH1's cast state ... (flight)", "Reflect: an attack met barrier", "Reflect counter: ATKP", "Reflect burst", "Reflect barrier met enemy", and the "hooked KH1's MP check / payment / usable check" lines at start-up.
+>
+> Questions:
+> 1. Spells you can't fully afford: (a) keep it as now, where they need their full cost, or (b) KH2's rule, where any MP lets you cast and it empties the bar? With (b), Cure keeps your one-bar rule unless you say otherwise. Real MP Charge (the refill after emptying) belongs to the MP thread either way.
+> 2. Enemy shots hitting the barrier: (a) stop them, as KH2 does (I'd need to find KH1's way to stop a shot without sending it back), or (b) keep KH1's way of sending them back?
+> 3. Reflect's voice: (a) KH2's own cast and finisher lines whenever Battle Quotes is KH2, or (b) keep KH1's swing grunt plus "Protect!" on the finisher, as now?
+
+^m7
+

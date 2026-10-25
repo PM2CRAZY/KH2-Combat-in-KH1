@@ -9,6 +9,7 @@
 - [3. Assistant: A correction to my last message, before you answer it. I che](#^m3)
 - [4. Assistant: Done, as planned, with (b) for Donald and Goofy. One version](#^m4)
 - [5. Assistant: Thanks for the trace and the log. They showed exactly what w](#^m5)
+- [6. Assistant: Thanks. (a) it is: after you let go, the fall keeps followin](#^m6)
 
 ---
 
@@ -159,6 +160,7 @@ go ahead
 
 ^m5
 
+
 lets have (a) for now
 
 also glide and super glide don't get removed anymore when setting glide to kh2, and kh2's glide growth ability isn't there.
@@ -166,3 +168,29 @@ also glide and super glide don't get removed anymore when setting glide to kh2, 
 I also noticed when sora turns to another bank after hes banking in a direction he resets his animation which doesn't seem like kh2. please fix 
 
 go ahead
+
+
+> [!tip] Assistant
+> Thanks. (a) it is: after you let go, the fall keeps following your Physics setting, which is how it works now, so nothing changes there.
+>
+> **t574, the ability list.** I found why Glide and Superglide stayed and KH2's Glide wasn't there. The swap only ran once a second while the game was actually running Sora, so if you switched Glide to KH2 in the Config menu and looked at Abilities in the same pause, it hadn't run yet. Now it happens the moment you change the setting: KH1's Glide and Superglide go out and KH2's Glide (with its level, e.g. "Glide MAX") goes in, and back the other way at KH1.
+> - Checked: the code path; both logs I have (yours and one from the PC) show the swap working once the game runs.
+> - Not checked: that this is what you saw, since I don't have a log from that session. If they still show after you unpause and play for a second, please send that log.
+>
+> **t575, banking.** I went through KH2's glide code before changing anything. Every frame KH2 picks 205 (straight) or 206 / 207 (bank left / right). Whenever the pick changes, it starts the new motion from its first frame and blends into it over 16 frames. KH2 only keeps an animation's place when switching between walk and run, not in the glide, and all three glide motions are 1-second loops. So restarting the bank animation is KH2's own rule, and our glide asks KH1 for exactly that. In your earlier traces, every left / right change also went through one frame of straight glide as the stick crossed the middle, which KH2 does too.
+>
+> What I couldn't check is how KH2 blends when a new motion is asked mid-blend, compared with KH1. So t575 doesn't change the animation: it logs every glide motion change with what KH1 was playing and how far its blend was, so we can find exactly where it looks different.
+>
+> Please test:
+> 1. Switch Glide to KH2 in Config, then open Abilities without unpausing: KH1's Glide and Superglide should be gone and KH2's Glide there. Then switch back to KH1.
+> 2. Glide, bank hard one way, then sweep the stick to the other side a few times: once through the middle of the stick and once around the edge. A Select + Triangle trace during it plus the log would help most.
+>
+> Log lines: "abilities: Glide style ... set in the Config menu", "glide (native) motion: ...".
+>
+> Questions:
+> 1. When he switches bank in KH2, does it look like (a) a smooth lean from one side to the other, or (b) the lean "starting over", only softer than ours? If (a), I'll compare KH2's blend with KH1's using your trace.
+> 2. If KH2's rule still looks wrong in game: (a) keep KH2's rule and only fix the blend, or (b) keep the bank animation's place when switching sides? (b) isn't KH2's rule; KH2 only does that for walk / run.
+> 3. Were you in the paused Config menu when you saw Glide and Superglide stay: (a) yes, or (b) no, they were still there in normal play?
+
+^m6
+
