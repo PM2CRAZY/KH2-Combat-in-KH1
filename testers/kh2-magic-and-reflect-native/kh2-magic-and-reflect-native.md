@@ -232,3 +232,9 @@ go ahead
 
 ^m8
 
+1. (a)
+if you need to add more features into kh1's engine to get reflect working then do it.
+I need a new thread for an agent to start working on air physics for kh2's magic as well as aerial finish and magnet burst, its still not 1:1 with kh2
+also we have something residual from the previous branch that is not 1:1 with kh2, you can jump and dodge roll out of moves during its end frames (I think around the same frames as when you can attack?) so this needs to be looked into the steam c decomp so its exact. 
+
+go ahead
