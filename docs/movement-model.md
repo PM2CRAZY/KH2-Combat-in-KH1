@@ -141,8 +141,10 @@ Unit question still open: the invulnerability timers are treated as 60 Hz frames
   A jump ends the hold at any frame (the user).
 - **Stick neutral:** the landing motion plays and velocity is the stick's, so Sora stops dead.
   Air momentum isn't carried (this was the "slide on landing").
-- Buttons are accepted again from the motion's "allow reaction command" window (frame 8);
-  **Hypothesis**.
+- A jump at any frame of it: KH2's input step takes the jump while motion 5 plays
+  (Steam KH2 `0x1403D6FC0`, **Checked (decomp)**). Square and Attack from its free state, range
+  id 2 at frame 12 (`P_EX100.mset`, **Checked (files)**); before this was read as the
+  reaction-command window (frame 8). See "Leaving a move" below.
 
 ## Ledge grab
 
@@ -351,7 +353,41 @@ What this produces on your install (`kh2-combat sora`):
   Force, No-combo).
 
 - **Auto-target selection** (nearest within reach).
-- **Dodge Roll / Quick Run cancel points.**
+- (Dodge Roll / Quick Run cancel points: settled, "Leaving a move" below.)
+
+## Leaving a move: jump and the action button (KH2's free state)
+
+**Checked (decomp)**, Steam KH2, and **Checked (files)** (`P_EX100.mset`, frames at 60 Hz).
+
+- **The motion state word.** KH2's range handler (`0x14040D810`, run each motion update for every
+  range the motion time is in, `0x14040E740`) sets bits of the motion controller's `+0x34` (the
+  player's `+0x18C`; the controller is at `+0x158`): range id 0 → 4, 1 → 8, 2 → 0x10 (the "free"
+  states: ground, air, either), 11 → 0x400 (combo), 14 → 0x80000 (reaction commands); range id
+  50 (finisher) sets `+0x194` bit 0x20. The current motion id is `+0x180`.
+- **Jump** (the input step `0x1403D6FC0`, field-command bit 2): the current action's jump
+  handler (its vtable `+0x48`) is called only with `+0x18C & 0x1C` (a free state) or while motion
+  5 (the landing) plays. Otherwise the press does nothing (no buffer).
+- **The action button** (bit 8, the player's handler `0x1403A81F0`): the guard (`0x1403A9C70`), the
+  dodge roll (growth kind 4, motion 209), Quick Run (kind 1, motion 203) and the glide all test
+  `0x1403BFB30`: the object's vtable `+0x78` and `+0x18C & 0x1C`. Only the Square combo moves
+  (`0x1403A9950`, rows 0x25 / 0xC / 0x26) take the combo window (`+0x18C` bit 0x400) or the
+  finisher window (`+0x194` bit 0x20), as Attack does.
+- **Attack and commands** (`0x1403D6CA0`): the finisher window (with Finishing Plus left), the
+  combo window (the count goes up), or a free state (a new combo, count 1); otherwise refused.
+  The reaction-command window (range 14) is read only by `0x1403BA070`, for combo rows with PTYA
+  flag 0x100 (reaction commands). So "the same frames as when you can attack" is not KH2's rule:
+  Attack has its combo / finisher windows, a jump or Square only the free state.
+- **What has a free state** (range id 0 / 1 / 2): idle, walk, run, the falls (A000..A004), the
+  landing (5: id 2 from 12), the dodge roll (209: id 2 from 36; its fall-check event is at 34),
+  the guard (173: from 52), its repel (42: from 40), the recoil (41: from 40), Aerial Recovery
+  (40: id 1 from 24), the Aerial Dodge (202: id 1 from 4), the flinches (9 from 36, 10..13 from
+  50; the air ones 14..16 / 18 none) and get-ups (17 / 19 from 40). **None** of Sora's swings
+  (151..155, 181..184), ability moves (161..172, 191..197) or cast motions (56..73) has one: a jump
+  or Square is taken only once the motion has ended and the action's free motion plays.
+- **Here:** `Clip::free_at` / `first_free` (character-core), used by `Character`'s actions (a jump
+  or the action button only in a free state; the landing's jump at any frame; the roll from its
+  free frame) and `Character::can_leave` (`kh1-hook`'s jump out of a KH2 move). The KH1-state path
+  (`kh2slots`) is in `docs/kh1-anim-slots.md`.
 
 
 ## Ground inertia and moving attacks (stage 192)

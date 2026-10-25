@@ -23,8 +23,9 @@ pub enum WindowKind {
     Grounded,
     /// KH2's free state on the ground or in the air (range id 2: the motion state word's bit 0x10,
     /// read with ids 0 / 1's bits 4 / 8 as "free", Steam KH2 `0x14040D810` / `0x140422520`, Checked
-    /// (decomp)). The guard (173 from 52) and its repel (42 from 40) have it. KH2's controller here
-    /// doesn't read it; KH1's states take it as KH1's "may be left" on our requests (`kh2slots`).
+    /// (decomp)). The guard (173 from 52) and its repel (42 from 40) have it. With `Air` / `Grounded`
+    /// it is the only window a jump or the action button (guard, roll, Quick Run) is taken in
+    /// during a motion ([`Clip::free_at`]); KH1's states take it as KH1's "may be left" (`kh2slots`).
     Free,
     AllowMovement,
     /// KH2's edge stop (range id 29, the motion state word `+0x18C` bit 23; Steam exe range
@@ -119,6 +120,22 @@ impl Clip {
 
     pub fn has(&self, frame: u32, pred: impl Fn(&WindowKind) -> bool) -> bool {
         self.open(frame).any(|w| pred(&w.kind))
+    }
+
+    /// KH2's free state at `frame` (range id 0 / 1 / 2: `Grounded`, `Air`, `Free`). KH2 takes a
+    /// jump press (the action's jump handler) and the action button's guard, dodge roll and Quick
+    /// Run only then, whatever combo, finisher or reaction-command window is open (Steam KH2: the
+    /// input step `0x1403D6FC0` calls the jump handler only with `+0x18C & 0x1C`, or while motion 5,
+    /// the landing, plays; the action button's moves test it through `0x1403BFB30`; Checked
+    /// (decomp)). Sora's swings, ability moves and casts have none (`P_EX100.mset`, Checked
+    /// (files)): nothing but Attack (its combo / finisher window) cuts them before their end.
+    pub fn free_at(&self, frame: u32) -> bool {
+        self.has(frame, |k| matches!(k, WindowKind::Grounded | WindowKind::Air | WindowKind::Free))
+    }
+
+    /// The first frame of KH2's free state ([`Clip::free_at`]), if the clip has one.
+    pub fn first_free(&self) -> Option<u32> {
+        self.first(|k| matches!(k, WindowKind::Grounded | WindowKind::Air | WindowKind::Free))
     }
 
     /// First frame at which a window matching `pred` opens.

@@ -880,12 +880,14 @@ static JUMP_OUT_PREV: AtomicBool = AtomicBool::new(true);
 
 /// KH2's move can be left for a jump now: free (idle, walking, running, landing) or in a window
 /// that takes a command (a combo's), on the ground.
+/// KH2's move may be left by a jump now (KH2's free state, `Character::can_leave`: not its combo,
+/// finisher or reaction-command windows, which only an Attack or a command takes).
 fn kh2_jump_open() -> bool {
     DRIVER
         .try_lock()
         .ok()
         .and_then(|d| {
-            d.as_ref().map(|d| d.grounded && !d.character.airborne() && (matches!(d.character.state_name(), StateName::Idle | StateName::Walk | StateName::Run | StateName::Land) || d.character.can_take_command()))
+            d.as_ref().map(|d| d.grounded && !d.character.airborne() && (matches!(d.character.state_name(), StateName::Idle | StateName::Walk | StateName::Run | StateName::Land) || d.character.can_leave()))
         })
         .unwrap_or(false)
 }

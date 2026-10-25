@@ -555,8 +555,30 @@ fn hurt_clips(ch: &mut Character) {
     for m in [10u16, 11, 12, 13, 14, 15, 16, 17, 18, 19] {
         let mut c = Clip::plain(m, 30);
         c.windows.push(Window { start: 8, end: None, kind: WindowKind::AllowReactionCommand });
+        // (KH2's free state, range id 2, late in the flinch: 50 of 70 in Sora's 10..13.)
+        c.windows.push(Window { start: 20, end: None, kind: WindowKind::Free });
         ch.moveset.clips.insert(m, c);
     }
+}
+
+#[test]
+fn no_jump_or_roll_out_of_a_swing_before_its_end() {
+    // KH2: a swing's combo window takes the next Attack, not a jump or the action button; those
+    // come only in a free state (range id 0 / 1 / 2), which Sora's swings don't have, so at the
+    // swing's end (the tester: "you can jump and dodge roll out of moves during its end frames").
+    let mut w = World::new(sora());
+    w.step(Pad { attack: true, ..IDLE });
+    assert_eq!(w.step(IDLE).state, StateName::Attack);
+    w.run(22, IDLE);
+    assert_eq!(w.step(Pad { jump: true, ..IDLE }).state, StateName::Attack);
+    assert_eq!(w.step(Pad { action: true, stick: [1.0, 0.0], ..IDLE }).state, StateName::Attack);
+    // The swing's own free state, if a clip has one, lets them through.
+    let mut ch = sora();
+    ch.moveset.clips.get_mut(&100).unwrap().windows.push(Window { start: 30, end: None, kind: WindowKind::Free });
+    let mut w = World::new(ch);
+    w.step(Pad { attack: true, ..IDLE });
+    w.run(31, IDLE);
+    assert_eq!(w.step(Pad { jump: true, ..IDLE }).state, StateName::Jump);
 }
 
 #[test]
@@ -571,12 +593,16 @@ fn sora_flinches_and_is_pushed_back_by_a_small_hit() {
     assert_eq!(outs[0].state, StateName::Hurt);
     assert_eq!(outs[0].motion, 10);
     assert!(w.pos[2] < -100.0 && w.pos[2] > -125.0, "{:?}", w.pos);
-    // From frame 8 a jump cuts the flinch; an Attack doesn't (the user: no attacking out of a
+    // A jump cuts the flinch only from its free state (KH2's range id 2), not from the
+    // reaction-command window (frame 8); an Attack doesn't (the user: no attacking out of a
     // damage reaction).
     let mut w2 = World::new({ let mut c = sora(); hurt_clips(&mut c); c });
     w2.step(IDLE);
     w2.ch.take_hit(&reaction::Hit { reaction: 3, knockback: (125, 0), dir: [0.0, -1.0], part: 0 });
     w2.run(8, IDLE);
+    let o = w2.step(Pad { jump: true, ..IDLE });
+    assert_eq!(o.state, StateName::Hurt);
+    w2.run(12, IDLE);
     let o = w2.step(Pad { attack: true, ..IDLE });
     assert_eq!(o.state, StateName::Hurt);
     let o = w2.step(Pad { jump: true, ..IDLE });

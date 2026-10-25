@@ -1151,6 +1151,22 @@ impl Character {
         }
     }
 
+    /// Whether a jump would be taken now (KH2's rule, [`Clip::free_at`]): free movement or a
+    /// glide, the landing (any frame), or an action in its clip's free state.
+    pub fn can_leave(&self) -> bool {
+        if self.ceiling_lock > 0.0 {
+            return false;
+        }
+        match &self.mode {
+            Mode::Free | Mode::Glide => true,
+            Mode::Action(a) => match a.kind {
+                ActionKind::Land => true,
+                ActionKind::Hang { .. } | ActionKind::Climb | ActionKind::Blow { .. } | ActionKind::AerialDodge => false,
+                _ => self.clip(a.motion).is_some_and(|c| c.free_at(a.frame.saturating_sub(1))),
+            },
+        }
+    }
+
     /// Whether the moveset has a clip for `motion`.
     pub fn clip_exists(&self, motion: u16) -> bool {
         self.clip(motion).is_some()
@@ -2251,6 +2267,14 @@ impl Character {
         // combo's last finisher plays to its end before anything new (spec).
         let finisher_more = self.finishers < self.max_finishers();
         let mut cancel_allowed = clip.has(f, |k| matches!(k, WindowKind::Combo) || matches!(k, WindowKind::Finisher) && finisher_more) && self.ceiling_lock <= 0.0;
+        // A jump or the action button (guard, roll, Quick Run) only in KH2's free state (range id
+        // 0 / 1 / 2, `Clip::free_at`), not in the combo / finisher / reaction-command windows an
+        // Attack takes (the tester: "you can jump and dodge roll out of moves during its end
+        // frames ... so its exact"; Steam KH2 input step `0x1403D6FC0`, `0x1403BFB30`, Checked
+        // (decomp)). The arms below add the landing's jump at any frame (motion 5) and the roll's
+        // and landing's own frames.
+        let free = clip.free_at(f) && self.ceiling_lock <= 0.0;
+        let (mut jump_ok, mut square_ok) = (free, free);
         let target = self.primary_target(env).map(|t| t.pos);
 
         for (wi, w) in clip.windows.iter().enumerate() {
@@ -2343,11 +2367,14 @@ impl Character {
                 if len2(input.stick) > DEAD_ZONE && f >= LAND_HOLD {
                     finished = true;
                 }
-                let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(0);
-                // Jump at any moment of it (the user: the hold is right, but jumping out of it
-                // should work).
-                if f >= open || input.jump.pressed {
+                // KH2: the jump at any frame of it (the input step takes it while motion 5 plays,
+                // `0x1403D6FC0`), Square and Attack from its free state (range id 2, frame 12 for
+                // Sora's 5; Checked (decomp) and (files)).
+                let open = clip.first_free().or_else(|| clip.first(|k| matches!(k, WindowKind::AllowReactionCommand))).unwrap_or(0);
+                jump_ok = true;
+                if f >= open {
                     cancel_allowed = true;
+                    square_ok = true;
                 }
             }
             ActionKind::DodgeRoll => {
@@ -2355,11 +2382,14 @@ impl Character {
                 if (f as f32) < g.dodge_roll_star_time {
                     fo.invulnerable = true;
                 }
-                // Other actions may interrupt from the fall-check event
-                // (frame 34 for Sora) (not yet checked).
-                let free_at = clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map_or(clip.length, |e| e.frame);
+                // Other actions from KH2's free state (range id 2, frame 36 for Sora's 209; its
+                // fall-check event at 34 is not it: Checked (decomp) and (files)); a clip with none
+                // from its fall-check event, else its end.
+                let free_at = clip.first_free().or_else(|| clip.events.iter().find(|e| e.kind == EventKind::FallCheck).map(|e| e.frame)).unwrap_or(clip.length);
                 if f >= free_at {
                     cancel_allowed = true;
+                    jump_ok = true;
+                    square_ok = true;
                     // The stick walks out of the roll's recovery there too, as it does out of a
                     // landing (the user: too much of a freeze after the roll).
                     if len2(input.stick) > DEAD_ZONE {
@@ -2401,6 +2431,9 @@ impl Character {
                 }
             }
             ActionKind::AerialDodge => {
+                // (Its presses are this arm's: the glide out of it. Not the generic cut below.)
+                jump_ok = false;
+                square_ok = false;
                 // No invulnerability (KH2's dodge has none; its clip's Guard window guards it all
                 // through, the KH1 port's user: "I only want a guard hitbox").
                 // The glide button mid-dodge: straight into Glide.
@@ -2458,6 +2491,8 @@ impl Character {
                 // only the combo's next finisher (Finishing Plus leaving one), an Attack in its
                 // finisher window (or a spell, `can_cast`).
                 cancel_allowed = false;
+                jump_ok = false;
+                square_ok = false;
                 // (A press counts only on a frame the window is open: no buffer, the user: "only
                 // inputs to be accepted when its in a acceptable window".)
                 let next = finisher_more && finisher_window(&clip, f);
@@ -2473,7 +2508,8 @@ impl Character {
                 }
             }
             ActionKind::Magic => {
-                // Other actions once the reaction-command window opens.
+                // An Attack once the reaction-command window opens (a jump or Square only in a
+                // free state, which no cast motion of Sora's has: `free` above).
                 let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
                 if f >= open {
                     cancel_allowed = true;
@@ -2510,12 +2546,10 @@ impl Character {
                     }
                     self.forced_row = None;
                 }
-                // Buttons are taken once the reaction-command window opens
-                // (frame 8 for Sora's damage motions); our reading.
-                let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
-                if f >= open {
-                    cancel_allowed = true;
-                }
+                // A jump or Square from KH2's free state (range id 2: frame 50 of Sora's flinches
+                // 10..13, 36 of 9, none in the air ones; `free` above; Checked (files)); before,
+                // from the reaction-command window (frame 8), our old reading. (An Attack takes it
+                // only at its end, below.)
                 if self.airborne && f >= clip.length {
                     // Air flinch done: keep falling.
                     finished = true;
@@ -2613,7 +2647,7 @@ impl Character {
         // (A damage reaction takes no Attack before it ends, the user: "sora is able to cancel his
         // taking damage animations into attack"; a jump or the action button still may.)
         let attack_cuts = !matches!(act.kind, ActionKind::Attack { .. } | ActionKind::Hurt);
-        if !finished && cancel_allowed && (input.jump.pressed || input.action.pressed || (input.attack.pressed && attack_cuts)) {
+        if !finished && ((jump_ok && input.jump.pressed) || (square_ok && input.action.pressed) || (cancel_allowed && input.attack.pressed && attack_cuts)) {
             finished = true;
         }
 
@@ -2632,13 +2666,12 @@ impl Character {
             self.start_action(ActionKind::Land, motion::LAND);
             return false;
         }
-        if cancel_allowed || f >= clip.length {
-            if (input.attack.pressed && (attack_cuts || f >= clip.length || !matches!(act.kind, ActionKind::Hurt)) && self.try_attack(input, env))
-                || (input.jump.pressed && self.try_jump(input, env))
-                || (input.action.pressed && self.try_action_button(input, env))
-            {
-                return true;
-            }
+        let end = f >= clip.length;
+        if ((cancel_allowed || end) && input.attack.pressed && (attack_cuts || end || !matches!(act.kind, ActionKind::Hurt)) && self.try_attack(input, env))
+            || ((jump_ok || end) && input.jump.pressed && self.try_jump(input, env))
+            || ((square_ok || end) && input.action.pressed && self.try_action_button(input, env))
+        {
+            return true;
         }
         false
     }
