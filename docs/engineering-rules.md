@@ -5,6 +5,11 @@ Detail behind the HARD RULES in the core instructions (`design-philosophy-instru
 ## Steam vs Epic addresses
 I play the Steam version. The Rust rewrite and the main branch's addresses came from the Epic exe. The logic is the same between builds; only memory addresses change. Never reuse an Epic address. Find the Steam address by matching the logic in the Steam decomp, and check the bytes before hooking. A hook should refuse to install if the bytes don't match (the main branch's `hook.rs` already does this, so keep it).
 
+The Epic build comes later: for now the testing branch's new hooks are Steam-only (the KH2 sounds
+through KH1's engine, for example, play on Steam only). Once the Steam work is done, every
+Steam-only hook gets its Epic address too, so the Epic build works exactly like the Steam one
+(tester's call, kh2-sounds thread, 2026-10-25).
+
 ## No decompiled code in the repo
 Don't copy decompiled code or game files into the repo or the docs. Decomp findings go in as plain-language notes (address, what it does, how sure we are), never as pasted decompiler output. Ghidra databases and output stay outside the repo.
 

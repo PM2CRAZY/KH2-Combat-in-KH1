@@ -364,6 +364,14 @@ The tester (m4 answer): "I want you to gut the old system and transfer everythin
 - Battle quotes: the clip list keeps the clips whose sound record has audio (the cut's own
   test), instead of the clips that decoded. **Checked (code)**
 
+## Epic build: not yet (planned after Steam)
+
+The KH2 sounds run only on the Steam build for now: off Steam no KH2 bank is registered, so no
+KH2 sound plays on the Epic build (the old `waveOut` player was the only path that worked
+there, and it is gone). The tester's call (m5 answer, 2026-10-25): fine for now; **once the
+Steam work is done, every hook that is Steam-only today gets its Epic address too, so the
+Epic build works exactly like the Steam one.** Until then, Steam is the only build tested.
+
 ## One copy of each bank (RAM)
 
 The tester (m4, about RAM): "are we caching a bunch of sounds? if so you need to tell me". With

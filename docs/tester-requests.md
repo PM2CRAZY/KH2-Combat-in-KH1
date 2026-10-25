@@ -132,6 +132,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [3. Assistant: t514 and t515. I think I found it, though without a log I ca](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m3)
   - [4. Assistant: Yes, we're caching sounds, and part of that cache is older t](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m4)
   - [5. Assistant: t565 to t567. The old player is gone, every KH2 sound now go](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m5)
+  - [6. Assistant: 2. Epic: done (docs only, no new version). I added a note to](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m6)
 - [KH2 spell hit sounds](../testers/kh2-spell-hit-sounds/kh2-spell-hit-sounds.md)
   - [1. Assistant: I started this thread from KH2 hit effects on enemies(../kh2](../testers/kh2-spell-hit-sounds/kh2-spell-hit-sounds.md#^m1)
 - [KH2 summons](../testers/kh2-summons/kh2-summons.md)

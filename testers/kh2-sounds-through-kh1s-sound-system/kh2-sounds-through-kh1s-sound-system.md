@@ -9,6 +9,7 @@
 - [3. Assistant: t514 and t515. I think I found it, though without a log I ca](#^m3)
 - [4. Assistant: Yes, we're caching sounds, and part of that cache is older t](#^m4)
 - [5. Assistant: t565 to t567. The old player is gone, every KH2 sound now go](#^m5)
+- [6. Assistant: 2. Epic: done (docs only, no new version). I added a note to](#^m6)
 
 ---
 
@@ -182,6 +183,23 @@ go ahead
 > 2. Is it fine that the Epic build gets no KH2 sounds? (a) Yes, Steam only. (b) No, I'd need the Epic addresses for the same sound functions.
 
 ^m5
+
+
 1. (b)
 2. right now yes update the doc to notify that after we're done with steam we'll update all the missing hooks so that epic works exactly like the steam version
+
+
+> [!tip] Assistant
+> 2. **Epic: done (docs only, no new version).** I added a note to `docs/kh1-sound-native.md` ("Epic build: not yet") and to `docs/engineering-rules.md`. For now the KH2 sounds are Steam-only. Once the Steam work is done, every hook that's Steam-only today gets its Epic address, so the Epic build works exactly like Steam.
+> 1. **(b), the voice cut.** Here's what I'd build. I want your go-ahead first.
+>    - **What KH2 does (Checked (decomp)).** KH2's quote request (`0x1403CE580`) takes a new line if nothing is pending or playing, or if its priority is at least the last line taken. Its voice step (`0x1403CE260`) then stops the line that's playing and starts the new one. So each swing's line cuts the one before.
+>    - **What KH1 lacks (Checked (decomp)).** KH1's voice channel step (`0x140290A50`) starts a new clip without stopping the old one. Its only voice stop is the stop-all (`0x1400DE010 (2)`), and `SslSeStop` (`0x1400DEF50`) only stops effects.
+>    - **The plan.** Add a single-voice stop to KH1's engine. It finds the live record of Sora's channel in KH1's live sound list (`0x1404D6618`) and stops just that record, the way the stop-all stops each one. A KH2 quote whose priority is at least that of the line playing then stops it and takes the channel, through KH1's own clip request, mouth motion, bus and pause. KH1's own voice rule stays as it is for everything else.
+>    - **Assumption until I check the exe:** that stopping one voice record with the stop-all's per-record step is safe on its own. I'll confirm that in the decomp before writing it.
+>
+> Question: which lines may a KH2 quote cut? (a) Only Sora's own KH2 quotes, so KH1's own voices (hurt lines from KH1's damage, spells, scripts) are never cut; or (b) any of Sora's lines, the way KH2 cuts whatever he's saying when the new line's priority is at least as high? Either way it only applies with Battle Quotes on KH2. At KH1 nothing changes.
+>
+> Say go ahead with your pick and I'll build it as its own version.
+
+^m6
 
