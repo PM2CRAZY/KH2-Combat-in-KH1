@@ -184,6 +184,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [23. Assistant: t586 to t591, one each:](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m23)
   - [24. Assistant: t611 and t612.](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m24)
   - [25. Assistant: t622 and t623: the first two steps of the native plan. Neith](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m25)
+  - [26. Assistant: t629, t630 and t631, one each:](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m26)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
@@ -224,6 +225,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [2. Assistant: Later in the same round (no new build):](../testers/status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md#^m2)
   - [3. Assistant: Latest build: t515. Your startup crash: t514 fixes the likel](../testers/status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md#^m3)
   - [4. Assistant: Will do: from now on every round ends with a message here in](../testers/status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md#^m4)
+  - [5. Assistant: Latest build: t631 (2026-10-25; the build bot is making it n](../testers/status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md#^m5)
 - [Table of contents](../testers/table-of-contents/table-of-contents.md)
   - [1. Mr Bugs: from now on can you add a table of contents to the document ](../testers/table-of-contents/table-of-contents.md#^m1)
   - [2. Assistant: Done. There's a Contents list at the top of the file, under ](../testers/table-of-contents/table-of-contents.md#^m2)
@@ -237,6 +239,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m2)
   - [3. Assistant: Done: every item that isn't native yet has its own thread no](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m3)
   - [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m4)
+  - [5. Assistant: Here's the list from my last message, updated with this roun](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m5)
 
 ---
 
