@@ -24,6 +24,7 @@
 - [18. Assistant: t516, t517 and t518. Thanks for the log and traces, they had](#^m18)
 - [19. Assistant: t561 to t564 (one change each).](#^m19)
 - [20. Assistant: t576 to t579 (one change each).](#^m20)
+- [21. Assistant: Thanks! No new version this time, and here's why.](#^m21)
 
 ---
 
@@ -542,7 +543,27 @@ go ahead
 > 2. Gravity, Stop and Aero on the ground: KH2 holds him still, so I left it. (a) KH2's hold as now, or (b) the old slide anyway (not KH2's)?
 
 ^m20
+
+
 (b)
 (a)
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! No new version this time, and here's why.
+>
+> 1. **Your (b), KH2's sparkle and swish on KH1's cast animation.** Before building it I opened KH2's cast animations themselves, and I was wrong in my last message: they don't carry a sparkle or a swish. In your KH2 files (Sora's and the Keyblade's motion files), none of base Sora's cast animations (Fire, Blizzard, Thunder, Cure, Reflect; ground, air and finisher) has an effect, sound or voice trigger. The hand sparkle and the cast sounds you see and hear in KH2 come from the spell's own script, and that already runs on KH1's animation exactly as it does on KH2's. The swish on KH2's animation is KH1's own cast sound, which we keep on that slot, and KH1's animation plays it itself. So KH2's spell on KH1's animation already has everything KH2's animation would add. I've corrected the notes (`docs/kh1-magic-native.md` §4l).
+> 2. **Your (a), Gravity, Stop and Aero on the ground:** they keep KH2's hold, so nothing changed.
+>
+> Check: every trigger in each cast animation in your KH2 motion files, and KH2's Steam decomp for what each trigger does. Nothing in game.
+>
+> One thing I found while in there that the mod doesn't do anywhere yet: KH2's animations carry a "foot on the ground" effect trigger. On the casts it fires at Blizzard's frames 13, 22, 48 and 70, and Thunder and Cure's 5, 14, 52 and 62; it's also on idle, walk, run, the swings and more. KH2 casts a ray to the floor under a foot and starts an effect picked by the surface. I'm assuming that's dust or splashes depending on the floor (the calls are checked in the decomp; what they look like isn't). The mod doesn't play it on KH2's animations either, so KH1's and KH2's animations already match here. Porting it would be its own system (KH2's surface table and the effects it picks from).
+>
+> Please test: nothing new from this round; t576–t579's list still stands (KH2 spells on KH1's animation, KH1 spells on KH2's animation, Air Physics KH2's hover, Firaga's hits).
+>
+> Question:
+> 1. KH2's foot-on-ground effects: (a) port them, in their own thread, so they play on every KH2 animation; (b) only the casts' for now; or (c) leave them out?
+
+^m21
+
