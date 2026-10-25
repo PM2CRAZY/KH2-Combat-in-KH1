@@ -195,8 +195,27 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
 - KH1's command step judges a cast with its usable check `0x14028EFD0` (the spell's attack data
   `+0x30`, slot `0x142D22B80 + spell × 0x38 + 0x18`): for a native KH2 cast `combat::command` checks
   KH2's cost first, then has the data read it (in units, at most 99) for that one step, put back
-  after. **Open:** the Magic menu still greys KH1's spells by KH1's own cost (that check, called from
-  the menu fill), so a spell KH2's cost allows may show grey with less than KH1's cost left.
+  after. (Before t570: the Magic menu greyed by KH1's own cost.)
+- **t570: KH2's cost kinds in KH1's engine** (the tester, m6 answer 1). KH1's MP check
+  `0x1402A4C10` and payment `0x1402A5B60` are hooked to take two more kinds of cost besides KH1's
+  (charge units under 100, bars × 100 from 100 up), tagged in the cost's high bits: "all MP, at
+  least N whole bars" (`0x40000000 | N`, KH2's Cure, N = 1 by the tester's design) and "a share
+  of max MP" (`0x20000000 | percent`, the scale above). KH1's usable check `0x14028EFD0` (the
+  Magic menu fill `0x1402944C0`, the shortcuts and the command step's casts all go through it,
+  **Checked (decomp)**) is hooked: for base Sora's Fire .. Cure whose Config row is KH2 the
+  spell data's cost reads the KH2 kind for that one call, so KH1's own menu greys and refuses by
+  KH2's cost, and by KH1's with the row at KH1. Our KH2 casts pay with the same kind through
+  KH1's payment. Prologues **Checked (exe)**. Cure's kind pays the charge part in steps under
+  100 (no bar breaks) and then every bar as one bars × 100 cost (repeated while KH1's MP change
+  `0x1402A4A00` leaves one: its halving rule).
+- KH2's own rule (**Checked (decomp)**, KH2 Steam): the magic command's state (`0x140401D60`,
+  case 2) is 5 (greyed) while MP Charge runs, else 2 with MP under the cost, and its callers take
+  any state under 4 as usable (`0x1403A9EA0`), unless a per-command flag greys it (`0x1403C5940`,
+  bit table `0x1409ACFF4`, **Assumption**: not identified). The payment `0x1403D3CF0` going below
+  0 sets MP to 0 and starts MP Charge. So in KH2 Cure works with any MP left, and every spell can
+  be cast with less MP than its cost (emptying the pool). Ours: Cure needs one whole bar (the
+  tester's design); the other spells still need their full cost (asked); no MP Charge (its own
+  thread, `docs/kh1-kh2-mp.md`).
 
 ## 4c. The cast as a step of the combo (done: the tester's answer 1 (a))
 

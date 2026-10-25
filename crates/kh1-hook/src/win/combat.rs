@@ -448,8 +448,10 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
                 cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's MP cost of spell {arg} can't be paid"));
                 return;
             };
+            // (With KH2's cost kinds in KH1's engine, `mpcost::install`, the usable check itself
+            // reads KH2's cost for this spell, by its Config row: nothing to patch here.)
             let data = rd::<u64>(base + MAGIC_SLOTS_RVA + arg as usize * 0x38 + 0x18) as usize;
-            if data > 0x10000 && super::crash::readable(data + 0x34) {
+            if !super::mpcost::hooked() && data > 0x10000 && super::crash::readable(data + 0x34) {
                 _cost_patch = Some(CostPatch { at: data + 0x30, was: rd::<i32>(data + 0x30) });
                 wr(data + 0x30, units.clamp(1, 99));
             }

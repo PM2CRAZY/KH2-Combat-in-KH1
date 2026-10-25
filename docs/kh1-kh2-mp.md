@@ -154,10 +154,20 @@ MP) in KH1 points, or in KH1's gauge units (under 100, 30 a point) so 12 / 15 / 
 The scale is built once here (or there) and both use it; Cure "all" then means "empty KH1's MP and
 start the charge" under (A).
 
+## 6b. KH2's cost kinds in KH1's engine (t570, the magic thread)
+
+KH1's MP check `0x1402A4C10` and payment `0x1402A5B60` take two KH2 kinds of cost besides KH1's
+own (`mpcost::encode`, high-bit tags no KH1 cost has): every unit of MP with at least one whole
+bar first (KH2's Cure; the bar is the tester's rule, KH2 needs only "not charging"), and a share
+of max MP. KH1's usable check `0x14028EFD0` reads the KH2 kind for base Sora's spells whose Magic
+row is KH2. **Checked (decomp)** both games; **Checked (exe)** the three prologues. KH2's "below
+0 starts MP Charge" isn't there yet (this thread's plan item 2).
+
 ## 7. Not found / open
 
 - MP Haste / Hastera / Hastega's rates (`+0x20C` setter), MP Rage's `+0x22C` per copy.
 - KH2's Sora max MP per level (for the scale; `03system` / `00battle` lvup tables not read here).
-- Which `0x1403D88E0` states grey the command; how KH2's HUD draws MP Charge (pink bar, text).
+- Which per-command flag `0x1403C5940` greys a magic command with MP under its cost (states
+  under 4 are usable: `0x1403A9EA0`, Checked (decomp); 2 = "MP under the cost, still usable"); how KH2's HUD draws MP Charge (pink bar, text).
 - KH1's HUD MP bar draw (to put the charge on it).
 - The KH1 refill callers `0x1402AD0B0` / `0x1403A0BF0` (save point or elixir).

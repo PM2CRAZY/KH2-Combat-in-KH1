@@ -230,6 +230,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         equipmenu::install();
         reflect::install();
         formmagic::install();
+        mpcost::install();
         drive::install();
         tint::install();
         leftblade::install();
