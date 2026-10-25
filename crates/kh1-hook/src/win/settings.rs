@@ -50,7 +50,8 @@ magic_scale = 1.0\r\n\
 ; kh2_damage: on = KH2's power goes into KH1's own damage function (KH1's curve x KH2's power,\r\n\
 ;   rounded up per hit as KH2); off = KH1's damage rewritten after the hit, as before\r\n\
 kh2_damage = on\r\n\
-; criticals: on = KH1's critical hits on Sora's attacks (Critical Plus); off = none, as in KH2\r\n\
+; criticals: on = KH1's critical hits on every attack, enemies' too (Critical Plus); off = none,\r\n\
+;   as in KH2\r\n\
 ;   (the Config menu's Combat list switches it)\r\n\
 criticals = off\r\n\
 ; kh1_ability_chance: on = KH1's 30% chance on Stun Impact and Gravity Break in KH1's combo\r\n\
@@ -250,7 +251,7 @@ pub struct Settings {
     pub magic_scale: f32,
     /// KH2's power inside KH1's damage function (`kh2_damage = on`, the default; `kh2damage`).
     pub kh2_damage: bool,
-    /// KH1's critical hits on Sora's attacks (`criticals = on`; off by default, as KH2;
+    /// KH1's critical hits on every attack (`criticals = on`; off by default, as KH2;
     /// `kh2damage::criticals`).
     pub criticals: bool,
     /// KH1's 30% chance on Stun Impact and Gravity Break in the KH1 combo's finisher walk

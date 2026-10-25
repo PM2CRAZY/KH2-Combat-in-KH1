@@ -20,8 +20,8 @@
 //! damage part and its carried fractions are off while this is in).
 //!
 //! The Criticals row (the tester: "make it a config selection (criticals on or off for all moves
-//! that call it)"): Off, KH1's critical roll on Sora's attacks has no chance (the attack's
-//! `+0x94` read as 0 for the call; KH2 has no critical hits).
+//! that call it)", then 2 (b): every attack, enemies included): Off, KH1's critical roll has no
+//! chance for any attack (the attack's `+0x94` read as 0 for the call; KH2 has no critical hits).
 //!
 //! Cost: one hook, called once per hit record; a table of at most 256 u16 built per KH2 hit.
 
@@ -68,7 +68,7 @@ pub fn active() -> bool {
     ON.load(Ordering::Relaxed) && super::settings::get().kh2_damage
 }
 
-/// The Config menu's Criticals row.
+/// The Config menu's Criticals row (every attack KH1's damage function sees).
 pub fn criticals() -> bool {
     match CRITS.load(Ordering::Relaxed) {
         0 => {
@@ -120,16 +120,22 @@ type DamageF = unsafe extern "system" fn(usize, usize, usize) -> u32;
 unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u32 {
     let f: DamageF = std::mem::transmute(ORIG.load(Ordering::Acquire));
     let sora = super::takeover::sora_actor();
-    let mine = attack > 0x10000 && sora > 0x10000 && super::pose::ptr(rd::<u32>(attack + ATTACK_OWNER)) == sora;
-    if !mine {
-        return f(attack, target, kind);
-    }
-    // Criticals off: no chance for the call.
-    let crit = (!criticals()).then(|| {
+    let owner = if attack > 0x10000 { super::pose::ptr(rd::<u32>(attack + ATTACK_OWNER)) } else { 0 };
+    let mine = sora > 0x10000 && owner == sora;
+    // Criticals off: no chance for the call, whoever owns the attack (the tester, 2 (b): Sora,
+    // his party and enemies alike; KH1 rolls for every attack here, Checked (decomp)).
+    let crit = (attack > 0x10000 && !criticals()).then(|| {
         let c = rd::<f32>(attack + ATTACK_CRIT_CHANCE);
         wr(attack + ATTACK_CRIT_CHANCE, 0.0f32);
         c
     });
+    if !mine {
+        let d = f(attack, target, kind);
+        if let Some(c) = crit {
+            wr(attack + ATTACK_CRIT_CHANCE, c);
+        }
+        return d;
+    }
     let kh2 = if active() { kh2_power(attack, sora) } else { None };
     let base = BASE.load(Ordering::Relaxed);
     let at = base + CURVE_PTR_STEAM;

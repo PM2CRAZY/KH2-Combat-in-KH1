@@ -208,5 +208,14 @@ none, §3). Off: for each attack of Sora's, the attack object's critical chance 
 compared with KH1's random roll in `0x1402BFA80`, Checked (decomp)) is 0 for the damage call and
 put back after; so no critical bonus, no record bit 0x20, no journal tally 8, and Critical Plus
 does nothing. On: KH1's critical as it is, KH2 hits included (the bonus is added to the power
-before the curve, then KH2's power applies). Enemies' and partners' attacks are left alone
-(**Assumption** that "all moves that call it" means Sora's).
+before the curve, then KH2's power applies).
+
+**Every attack (the tester, 2 (b)).** KH1 rolls its critical in `0x1402BFA80` for every attack it
+damages, whoever owns it: a random float below the attack's `+0x94` adds the attack's `+0x98` to
+the power and sets the record's bit 0x20; only the journal tally 8 is the player's
+(`0x140291FF0`: owner `+0x374` bit 1 set, bit 2 clear), and object targets (kinds 4 / 5 / 9 / 10)
+never roll (**Checked (decomp)**). The chance and bonus are made when the attack object is
+(`0x1402B2DC0` / `0x1402B3270`: the data's chance and bonus times the owner's critical factor and
+the weapon's, **Checked (decomp)**, m3 of the thread). So with Criticals Off the hook zeroes
+`+0x94` for the call on any attack, Sora's, his party's and enemies' alike, and puts it back after;
+On leaves KH1's roll exactly as it is.

@@ -409,7 +409,7 @@ const STRINGS: [(u32, &str); 84] = [
     (0x7F00_0147, "Blow"),
     (0x7F00_0148, "Flinch"),
     (0x7F00_0149, "Criticals"),
-    (0x7F00_014A, "KH1's critical hits on Sora's attacks (On), or none, as in KH2.\nCritical Plus only works with them On."),
+    (0x7F00_014A, "KH1's critical hits on every attack, enemies' too (On),\nor none, as in KH2. Critical Plus only works with them On."),
     (0x7F00_0172, "Recoil"),
     (0x7F00_0173, "KH1's or KH2's recoil, parry and guard repel when Sora's\nattack or guard meets an enemy's, for every move."),
     (0x7F00_011F, "Cure"),
