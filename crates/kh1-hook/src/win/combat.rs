@@ -2719,7 +2719,8 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     // KH2's power is already in the damage KH1's damage function made (`kh2damage`, its hook
     // on 0x1402BFA80: KH2's power on KH1's curve, rounded up per hit as KH2 does), so nothing
     // is rewritten after the fact.
-    if super::kh2damage::active() {
+    // KH2 Damage Off (the Config row, the tester 3 (a)): KH1's damage exactly, nothing scaled.
+    if super::kh2damage::active() || !super::kh2damage::kh2_damage() {
         LAST_DAMAGE.store(rd::<i32>(rec + 8).max(0) as u32, Ordering::Relaxed);
         return;
     }

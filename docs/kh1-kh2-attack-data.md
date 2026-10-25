@@ -193,8 +193,8 @@ in it feeling like kh2"; criticals a Config row; KH1's MP charge kept (a).
   KH1's own swings keep KH1's own damage. Elements 8, 9, 11, 12 and object targets never read the
   curve, so they stay KH1's.
 - **What changed.** `combat::scale_record` no longer rewrites the record's damage or carries
-  fractions while this is in (ini `kh2_damage = off` brings the old after-the-fact way back; on the
-  Epic build the hook isn't made and the old way stays). KH1's row power stays in the curve's
+  fractions while this is in (on the Epic build the hook isn't made and the old after-the-fact
+  way stays). KH2 Damage Off (§9) is KH1's damage exactly. KH1's row power stays in the curve's
   index (it is (a) as asked): KH1's finisher rows add 4 or 6 points before KH2's finisher power
   is applied. Dropping it would be question 1's (c).
 - **Not done (still the plan's steps 1 and 3):** KH2's element and reaction on the native swings'
@@ -230,3 +230,12 @@ side (`+0x374` bits 5..6 equal to his; the damage function itself tells the enem
 than in plain KH1. **Assumption:** every actor on that side but Sora is a party member (a
 summon's own attack object, if its owner is on that side, follows this row too); an attack whose
 owner is gone by the hit follows Criticals.
+
+## 9. Implemented: the KH2 Damage row
+
+Config > Combat > KH2 Damage: Off / On (the tester, 3 (a); ini `kh2_damage`, default On, live).
+On: §7. Off: KH1's damage exactly, for every hit of Sora's: the damage hook leaves KH1's curve as it
+is and `combat::scale_record` no longer rewrites the record's damage after the hit (before, ini
+`kh2_damage = off` meant the old after-the-fact KH1 × KH2 power way; that way now runs only where
+the hook couldn't be made, the Epic build). `damage_scale` and `magic_scale` act only with it On.
+Reactions, launches and the criticals rows don't depend on it.

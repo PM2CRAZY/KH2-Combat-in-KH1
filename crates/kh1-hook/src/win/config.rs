@@ -11,7 +11,7 @@
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
-//! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Party Criticals, Recoil, Magic, its own list, and Tweaks, its own list
+//! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals, Recoil, Magic, its own list, and Tweaks, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
@@ -200,6 +200,8 @@ enum Row {
     Debug,
     /// Medium Hits (Blow | Flinch, `hitreact::medium_flinch`).
     MediumHits,
+    /// KH2 Damage (Off | On, `kh2damage::kh2_damage`).
+    Kh2Damage,
     /// Criticals (Off | On, `kh2damage::criticals`).
     Criticals,
     /// Party Criticals (Off | On, `kh2damage::party_criticals`).
@@ -299,13 +301,14 @@ const CAMERA: [Item; 3] = [
     Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
 ];
 // (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
-const COMBAT: [Item; 11] = [
+const COMBAT: [Item; 12] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
     Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
     Item::Pick([0x7F00_0142, 0x7F00_0002, 0x7F00_0144, 0x7F00_0003, 0x7F00_0143], Pick::KnockNumbers),
     Item::Set([0x7F00_0145, 0x7F00_0147, 0x7F00_0148, 0x7F00_0146], Row::MediumHits),
+    Item::Set([0x7F00_014D, 0x7F00_011D, 0x7F00_011E, 0x7F00_014E], Row::Kh2Damage),
     Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
     Item::Set([0x7F00_014B, 0x7F00_011D, 0x7F00_011E, 0x7F00_014C], Row::PartyCriticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
@@ -352,7 +355,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 86] = [
+const STRINGS: [(u32, &str); 88] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -411,6 +414,8 @@ const STRINGS: [(u32, &str); 86] = [
     (0x7F00_0146, "With KH2's hit reactions, a hit of 20-29% of Sora's HP\nknocks him away (Blow) or only flinches him."),
     (0x7F00_0147, "Blow"),
     (0x7F00_0148, "Flinch"),
+    (0x7F00_014D, "KH2 Damage"),
+    (0x7F00_014E, "KH2's attack power on Sora's KH2 moves, on KH1's damage (On),\nor KH1's damage exactly (Off)."),
     (0x7F00_0149, "Criticals"),
     (0x7F00_014A, "KH1's critical hits on every attack, enemies' too (On),\nor none, as in KH2. Critical Plus only works with them On."),
     (0x7F00_014B, "Party Criticals"),
@@ -453,6 +458,7 @@ fn value(what: Row) -> bool {
         Row::Gummi => super::gummi::SKIP.load(Ordering::Relaxed),
         Row::Debug => super::debugmenu::enabled(),
         Row::MediumHits => super::hitreact::medium_flinch(),
+        Row::Kh2Damage => super::kh2damage::kh2_damage(),
         Row::Criticals => super::kh2damage::criticals(),
         Row::PartyCriticals => super::kh2damage::party_criticals(),
         Row::AbilityChance => super::kh1picker::chance(),
@@ -481,6 +487,7 @@ fn set(what: Row, v: bool) {
         Row::Gummi => super::gummi::set(v),
         Row::Debug => super::debugmenu::set_enabled(v),
         Row::MediumHits => super::hitreact::set_medium_flinch(v),
+        Row::Kh2Damage => super::kh2damage::set_kh2_damage(v),
         Row::Criticals => super::kh2damage::set_criticals(v),
         Row::PartyCriticals => super::kh2damage::set_party_criticals(v),
         Row::AbilityChance => super::kh1picker::set_chance(v),

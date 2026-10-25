@@ -48,7 +48,7 @@ damage_scale = 1.0\r\n\
 ;   grow with Sora's max MP, +10% a point)\r\n\
 magic_scale = 1.0\r\n\
 ; kh2_damage: on = KH2's power goes into KH1's own damage function (KH1's curve x KH2's power,\r\n\
-;   rounded up per hit as KH2); off = KH1's damage rewritten after the hit, as before\r\n\
+;   rounded up per hit as KH2); off = KH1's damage exactly (the Combat list's KH2 Damage row)\r\n\
 kh2_damage = on\r\n\
 ; criticals: on = KH1's critical hits on every attack, enemies' too (Critical Plus); off = none,\r\n\
 ;   as in KH2\r\n\

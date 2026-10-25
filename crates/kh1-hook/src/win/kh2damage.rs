@@ -54,6 +54,8 @@ static ORIG: AtomicUsize = AtomicUsize::new(0);
 static ON: AtomicBool = AtomicBool::new(false);
 /// Criticals: 0 not read yet, 1 off, 2 on.
 static CRITS: AtomicU8 = AtomicU8::new(0);
+/// KH2 Damage (the Config row; ini `kh2_damage`): the same.
+static KH2: AtomicU8 = AtomicU8::new(0);
 /// Party Criticals: the same.
 static PARTY_CRITS: AtomicU8 = AtomicU8::new(0);
 /// An actor's side (`+0x374` bits 5..6; 2 the enemies', Checked (decomp): `0x1402BFA80`).
@@ -69,10 +71,30 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-/// KH2's power is put in by KH1's damage function (the hook is in and the ini's `kh2_damage` is
-/// on): `combat::scale_record` leaves the damage alone.
+/// KH2's power is put in by KH1's damage function (the hook is in and KH2 Damage is on):
+/// `combat::scale_record` leaves the damage alone.
 pub fn active() -> bool {
-    ON.load(Ordering::Relaxed) && super::settings::get().kh2_damage
+    ON.load(Ordering::Relaxed) && kh2_damage()
+}
+
+/// The Config menu's KH2 Damage row (the tester, 3 (a)): On, KH2's power on Sora's KH2 hits; Off,
+/// KH1's damage exactly (no power put in, nothing rewritten after: `combat::scale_record`).
+pub fn kh2_damage() -> bool {
+    match KH2.load(Ordering::Relaxed) {
+        0 => {
+            let c = super::settings::get().kh2_damage;
+            KH2.store(1 + c as u8, Ordering::Relaxed);
+            c
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config menu's row: live, kept in the ini.
+pub fn set_kh2_damage(on: bool) {
+    KH2.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("kh2_damage", if on { "on" } else { "off" });
+    log(&format!("Config menu: KH2 Damage {}", if on { "On" } else { "Off" }));
 }
 
 /// The Config menu's Criticals row (every attack KH1's damage function sees).
