@@ -250,15 +250,15 @@ What KH2 does:
 - **Falls** (the air cast 73): `docs/kh1-magic-native.md` §4e / §4g / §4h: a 40 hop with his
   speed kept and drifting × 0.95, held 16..74 with the arc's clock running, landing cuts the cast.
 
-What changed (t572, base Sora on KH1's cast state and the borrowed path alike):
+What changed (t572 and t573, base Sora on KH1's cast state and the borrowed path alike):
 - Every attack of the script strikes with its own row (the counter's re-hits, then the burst),
   where main's s229 / s233 let one pop strike once per foe with the burst's numbers.
 - A second Reflect leaves the first running (its own barrier, count and counter), where main's
   s175 / s182 ended it without its counter and carried its hits over.
 - Each barrier counts the attacks that met it (the newest one counts what `hurt` stops).
-- He is out of reach (KH1's flag 0x40) only while a barrier stands, not all through the cast
+- (t573) He is out of reach (KH1's flag 0x40) only while a barrier stands, not all through the cast
   motion (main's s179); `hurt` no longer evades hits in the cast.
-- An enemy's melee attack meeting the barrier gets KH1's clash with a guard, its owner's recoil
+- (t573) An enemy's melee attack meeting the barrier gets KH1's clash with a guard, its owner's recoil
   (`Strikes::barrier_meet`), as shots already did; main's s226 only counted it.
 
 What still differs (asked or open):

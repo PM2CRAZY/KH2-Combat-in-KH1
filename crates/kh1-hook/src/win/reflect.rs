@@ -803,7 +803,10 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
 /// hits through the cast and barrier (`intangible`), as `after_step` has it.
 pub unsafe fn native_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
     step(actor, out, airborne, strikes, battle, lock);
-    let reflecting = BARRIER.load(Ordering::Relaxed) || (out.state == StateName::Magic && cast_motion(out.motion));
+    // Behind the barrier only: KH2's Reflect casts (71 / 72 / 73) have no invulnerable range
+    // (range id 27, Checked (files)), so before the barrier stands and after it falls he can be
+    // hit, as in KH2 (t572; main's s179 kept him out of reach all through the cast).
+    let reflecting = BARRIER.load(Ordering::Relaxed);
     intangible(actor, reflecting);
 }
 
@@ -892,15 +895,6 @@ static BARRIER: AtomicBool = AtomicBool::new(false);
 static BLOCKS: AtomicU32 = AtomicU32::new(0);
 
 /// `hurt`: a barrier stands around Sora now.
-/// Sora is in one of Reflect's cast motions (any level's ground, air or finisher; `hurt`: he
-/// can't be hurt all through it, the user, not only while the barrier stands).
-pub fn cast_motion(motion: u16) -> bool {
-    (1..=3).any(|l| {
-        let m = motions(l);
-        motion == m.ground || motion == m.air || Some(motion) == m.finisher
-    })
-}
-
 pub fn barrier_up() -> bool {
     BARRIER.load(Ordering::Relaxed)
 }
@@ -1145,7 +1139,8 @@ pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     // Out of reach of every hit while KH2 has him invulnerable (a dodge, Quick Run, Aerial
     // Dodge, Aerial Recovery, the Drive) or behind Reflect (its cast and barrier), as KH1's
     // dodge roll is (`intangible`).
-    let reflecting = BARRIER.load(Ordering::Relaxed) || (out.state == StateName::Magic && cast_motion(out.motion));
+    // (Behind the barrier only, as `native_step`.)
+    let reflecting = BARRIER.load(Ordering::Relaxed);
     intangible(actor, out.invulnerable || reflecting);
 }
 

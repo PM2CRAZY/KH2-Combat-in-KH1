@@ -2243,9 +2243,12 @@ impl Strikes {
             let r = shapes[ai].radius.min(l);
             let at = [b[0] + d[0] / l * r, -(b[1] + d[1] / l * r), b[2] + d[2] / l * r];
             met.push(at);
-            // KH1 leaves an attack that already clashed this pass alone (`+4`); a melee attack
-            // is only counted.
-            if !shot.free || rd::<u32>(shot.obj + 4) & 0x30 != 0 {
+            // KH1 leaves an attack that already clashed this pass alone (`+4`): only counted. A
+            // melee attack meets the barrier as a shot does (t572): KH2's barrier is a special
+            // guard (ATKP 573 kind 3, refact self 2), and an enemy attack meeting it is stopped and
+            // its owner plays its clash reaction (`0x1403D2140`, Checked (decomp) KH2): here
+            // KH1's clash with a guard, the owner's recoil (main's s226 only counted them).
+            if rd::<u32>(shot.obj + 4) & 0x30 != 0 {
                 static MELEE: AtomicU32 = AtomicU32::new(0);
                 if MELEE.fetch_add(1, Ordering::Relaxed) < 100 {
                     log(&format!("Reflect barrier met enemy {} {:#x} of {:#x}: counted", if shot.free { "shot" } else { "attack" }, shot.obj, shot.owner));
