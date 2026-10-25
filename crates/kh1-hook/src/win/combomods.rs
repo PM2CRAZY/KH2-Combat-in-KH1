@@ -304,10 +304,15 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
     }
     let Some((_, request, true, air)) = LAST.try_lock().ok().and_then(|l| *l) else { return };
     let kind = if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo };
-    if super::styles::kh2(kind) || request & 0xFFFF != rd::<u32>(actor + 0x164) & 0xFFFF || super::kh2slots::playing_motion(actor).is_some() {
+    if request & 0xFFFF != rd::<u32>(actor + 0x164) & 0xFFFF || super::kh2slots::playing_motion(actor).is_some() {
         return;
     }
-    if takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !finisher_chain_open() {
+    // (At the combo style KH2 a KH1 finisher plays only when the KH2 setting's walk took one of
+    // KH1's own, `kh2_finisher_walk`; another finisher is left by KH2's count, `+0xD75` against
+    // one plus Finishing Plus's copies.)
+    let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
+    let left = if super::styles::kh2(kind) { FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus } else { finisher_chain_open() };
+    if plus == 0 || !left {
         return;
     }
     let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
@@ -412,6 +417,16 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // motion 42; `counter_window` opened KH1's combo window for it), on its own KH1 row.
     if let Some(run) = counterguard(actor, air, count, request_of) {
         return run;
+    }
+    // One of KH1's own ability finishers the KH2 setting's walk took in KH1's picker
+    // (`kh2_finisher_walk`): KH1's row runs whole.
+    if let Some((n, chained)) = take_kh1_take().filter(|&(n, _)| n == row) {
+        if let Ok(mut l) = LAST.lock() {
+            *l = request_of(n).map(|m| (count, m, true, air));
+        }
+        let f = if chained { FINISHERS.load(Ordering::Relaxed).max(1).saturating_add(1) } else { 1 };
+        FINISHERS.store(f, Ordering::Relaxed);
+        return Run::Row(n);
     }
     let last = LAST.try_lock().ok().and_then(|l| *l);
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
@@ -717,6 +732,57 @@ const AIR_FINISHERS: [Group; 5] = [
 const GROUND_KH1_ONLY: [Group; 1] = [Group { gate: None, steps: &[STUN_IMPACT, GRAVITY_BREAK, ZANTETSUKEN, BLITZ, RIPPLE_DRIVE, Step::Plain] }];
 const AIR_KH1_ONLY: [Group; 1] = [Group { gate: None, steps: &[HURRICANE_BLAST, Step::Plain] }];
 
+/// KH1's own rules for its ability finishers in a finisher walk (`finisher_walk`, and the KH2
+/// setting's `kh2_finisher_walk`): what KH1's picker took (`row`), Sora's ability bits as KH1 set
+/// them, whether KH1 took its dash (its own ability finishers stay out then, as in KH1's walk),
+/// and KH1's one random number per press (0.3 taken off it for each roll reached, as KH1's picker
+/// `0x1402A6EE0` does; a failed roll isn't rolled again further down).
+struct Kh1Rules {
+    row: i32,
+    bits: u32,
+    dash: bool,
+    chance: bool,
+    roll: Option<f32>,
+    used: f32,
+    failed: Vec<i32>,
+}
+
+impl Kh1Rules {
+    fn new(row: i32, bits: u32, dash: bool) -> Self {
+        Kh1Rules { row, bits, dash, chance: super::kh1picker::chance(), roll: None, used: 0.0, failed: Vec::new() }
+    }
+
+    /// KH1's ability finisher row `n` (ability bit `bit`) passes its KH1 rule now: its bit set,
+    /// its request not the one playing (KH1's anti-repeat), and its rule (KH1's own test, which
+    /// its picker ran and returned `n` for; KH1's 30% roll; or none).
+    unsafe fn pass(&mut self, n: i32, bit: u32, rule: Kh1Rule, name: &'static str, plays_now: &dyn Fn(i32) -> bool, trail: &mut Vec<String>) -> bool {
+        if self.dash || self.bits & bit == 0 || self.failed.contains(&n) || plays_now(n) {
+            return false;
+        }
+        match rule {
+            Kh1Rule::Always => true,
+            Kh1Rule::Kh1Test => {
+                let ok = self.row == n;
+                if !ok {
+                    trail.push(format!("{name}: KH1's own test fails"));
+                }
+                ok
+            }
+            Kh1Rule::Chance if !self.chance => true,
+            Kh1Rule::Chance | Kh1Rule::Roll => {
+                let r = *self.roll.get_or_insert_with(|| super::kh1picker::random().unwrap_or(1.0));
+                let won = r - self.used < 0.3;
+                self.used += 0.3;
+                if !won {
+                    self.failed.push(n);
+                    trail.push(format!("{name}: KH1's 30% roll failed"));
+                }
+                won
+            }
+        }
+    }
+}
+
 /// What the walk took.
 enum Took {
     Kh1(i32, &'static str),
@@ -764,36 +830,9 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
     let dash = row == 1;
     let chance = super::kh1picker::chance();
     let kh2_playing = super::kh2slots::playing_motion(actor);
-    let mut roll: Option<f32> = None;
-    let mut used = 0.0f32;
-    let mut failed: Vec<i32> = Vec::new();
+    let mut rules = Kh1Rules::new(row, bits, dash);
     let mut trail: Vec<String> = Vec::new();
-    let mut kh1_step = |n: i32, bit: u32, rule: Kh1Rule, name: &'static str, trail: &mut Vec<String>| -> bool {
-        if dash || bits & bit == 0 || failed.contains(&n) || plays_now(n) {
-            return false;
-        }
-        match rule {
-            Kh1Rule::Always => true,
-            Kh1Rule::Kh1Test => {
-                let ok = row == n;
-                if !ok {
-                    trail.push(format!("{name}: KH1's own test fails"));
-                }
-                ok
-            }
-            Kh1Rule::Chance if !chance => true,
-            Kh1Rule::Chance | Kh1Rule::Roll => {
-                let r = *roll.get_or_insert_with(|| super::kh1picker::random().unwrap_or(1.0));
-                let won = r - used < 0.3;
-                used += 0.3;
-                if !won {
-                    failed.push(n);
-                    trail.push(format!("{name}: KH1's 30% roll failed"));
-                }
-                won
-            }
-        }
-    };
+    let mut kh1_step = |n: i32, bit: u32, rule: Kh1Rule, name: &'static str, trail: &mut Vec<String>| -> bool { rules.pass(n, bit, rule, name, &plays_now, trail) };
     // Finishing Plus's next finisher with KH1's own normal finisher the one playing (its picker
     // took a swing, its finisher's request not free): KH2's normal finisher in its place (the
     // tester, m20 answer 3: "have kh1 play a kh2 normal finisher"; m21 answer 2 (a): KH2's own
@@ -876,6 +915,117 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
         if chance { "on" } else { "off" }
     ));
     run
+}
+
+/// KH1's own ability finisher the KH2 setting's walk took at this press (`kh2_finisher_walk`):
+/// KH1's row, whether it chains on from a finisher (Finishing Plus), the game frame. Taken by the
+/// row runner's `attack` that same frame.
+static KH1_TAKE: Mutex<Option<(i32, bool, u64)>> = Mutex::new(None);
+
+fn take_kh1_take() -> Option<(i32, bool)> {
+    let (n, chained, at) = KH1_TAKE.try_lock().ok().and_then(|mut g| g.take())?;
+    (frame().saturating_sub(at) <= 1).then_some((n, chained))
+}
+
+/// KH2's pick at this press at the combo style KH2, as the row runner's `attack` asks it (KH1's
+/// count, this press counted; Finishing Plus's next finisher when KH1's last row was a finisher
+/// still playing): the row, KH2's combo length, whether it chains on from a finisher. `None`
+/// without KH2's data or a pick.
+pub unsafe fn kh2_press(actor: usize, air: bool) -> Option<(ComboRow, u8, bool)> {
+    let (count, _, _) = kh1_combo(actor, air)?;
+    let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
+    let kh2_playing = super::kh2slots::playing_motion(actor);
+    if let Some((n, _, true, _)) = LAST.try_lock().ok().and_then(|l| *l).filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
+        let from = ComboState { count: n, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit: true, finisher_next: true };
+        if let Some((r, len, ..)) = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false).filter(|(r, ..)| r.is_finisher()) {
+            return Some((r, len, true));
+        }
+    }
+    takeover::test_drop_ahead(!air && rd::<i32>(actor + 0x70) == 0);
+    let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
+    let taken = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false);
+    takeover::test_drop_ahead(false);
+    taken.map(|(r, len, ..)| (r, len, false))
+}
+
+/// KH1's own ability finishers at the combo style KH2 (the tester, combo row selection m23: "I
+/// can't do any kh1 finisher on kh2 combat settings", "the goal is to patch features into kh1's
+/// engine"). Called from our hook on KH1's picker (`kh1picker`) after KH1's picker ran with its
+/// ability finisher bits held back and KH2's combo length on the length it reads, so KH1's own
+/// finisher (and Blitz's and Hurricane Blast's own tests) fall where KH2's does. When KH2's pick
+/// at this press (`kh2_press`) is a finisher, the same walk as the KH1 setting's (`GROUND_FINISHERS`
+/// / `AIR_FINISHERS`: KH2's table order, KH1's twins in their KH2 move's place, each group gated by
+/// its KH2 row's checks) runs with KH1's rules (`Kh1Rules`, KH1's dash aside: there is none at this
+/// setting); where it reaches a KH2 row that passes, or the plain finisher, KH2's own pick stands
+/// (the row runner's `attack` runs it as before); where it reaches one of KH1's that passes, KH1's
+/// own row is what the picker returns, and `attack` runs it whole (KH1's motion, attack data,
+/// damage). The row KH1 runs.
+pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, press: Option<(ComboRow, u8, bool)>) -> i32 {
+    if let Ok(mut g) = KH1_TAKE.lock() {
+        *g = None;
+    }
+    let Some((pick, kh2_len, chained)) = press.filter(|(r, ..)| r.is_finisher()) else { return row };
+    let what = if air { "aerial" } else { "ground" };
+    let request_of = |r: i32| super::combat::row_motion(actor, r);
+    let playing = rd::<i32>(actor + 0x164);
+    let plays_now = |r: i32| request_of(r).is_some_and(|q| q as u16 as i32 == playing & 0xFFFF);
+    let kh2_playing = super::kh2slots::playing_motion(actor);
+    let mut rules = Kh1Rules::new(row, bits, false);
+    let mut trail: Vec<String> = Vec::new();
+    let walked = takeover::kh2_rows(actor, air, |ch, stick, env| {
+        let groups: &[Group] = if air { &AIR_FINISHERS } else { &GROUND_FINISHERS };
+        for g in groups {
+            if g.gate.is_some_and(|gate| !ch.row_in_range(gate, env)) {
+                continue;
+            }
+            for st in g.steps {
+                match *st {
+                    Step::Kh1(n, bit, rule, name) => {
+                        if rules.pass(n, bit, rule, name, &plays_now, &mut trail) {
+                            return Some((n, name));
+                        }
+                    }
+                    Step::Kh2(id) => {
+                        if let Some((r, _)) = ch.ability_row_id(id, true, air, kh2_playing, &|_| true, stick, env) {
+                            trail.push(format!("KH2's row {} motion {} first", r.id, r.motion));
+                            return None;
+                        }
+                    }
+                    Step::Plain => return None,
+                }
+            }
+        }
+        None
+    })
+    .flatten();
+    let tried = if trail.is_empty() { String::new() } else { format!(" ({})", trail.join("; ")) };
+    let Some((n, name)) = walked.filter(|&(n, _)| request_of(n).is_some()) else {
+        note(format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}): KH2's own pick, row {} motion {} (KH2's length {kh2_len}{}){tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
+        return row;
+    };
+    note(format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}, KH2 would take row {} motion {}): KH1's {name} (row {n}){}{tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
+    if let Ok(mut g) = KH1_TAKE.lock() {
+        *g = Some((n, chained, frame()));
+    }
+    n
+}
+
+/// KH2's combo length on the length byte KH1's picker reads (the stats' `+0xD4` ground / `+0xD5`
+/// air, the pickers' own finisher test `len <= count`, Steam `0x1402A6EE0` / `0x1402A6C70`,
+/// Checked (decomp)) for its call at the combo style KH2 (`kh1picker`): the byte's address and
+/// value, to put back.
+pub unsafe fn kh2_length_for_picker(actor: usize, air: bool, kh2_len: u8) -> Option<(usize, u8)> {
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    if stats < 0x10000 || kh2_len == 0 {
+        return None;
+    }
+    let at = stats + if air { 0xD5 } else { 0xD4 };
+    let was = rd::<u8>(at);
+    if was == kh2_len {
+        return None;
+    }
+    wr(at, kh2_len);
+    Some((at, was))
 }
 
 /// KH2's air swing's own hop on KH1's air swing (Aerial Combo KH2; the tester: "(a)", KH2's own

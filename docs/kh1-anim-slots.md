@@ -1508,6 +1508,36 @@ primary one). `combo::select` now gives a kind-2 row the primary target as its a
 target that passed). Checked (decomp, Steam KH2). Unlocked play changes the same way: a group row
 that passed on a foe beside him is aimed at the primary foe, not at that one.
 
+### 7.z.2 KH1's ability finishers at the KH2 setting (combo row selection m23)
+
+The tester (m23): "I noticed I can't do any kh1 finisher on kh2 combat settings". Why, before:
+with Base / Aerial Base Combo KH2, KH1's picker ran as vanilla (its own 30% rolls included), then
+the row runner (`combomods::attack`) asked KH2's selector for this press and, where KH2's pick was a
+plain swing or finisher, put KH1's plain row in place of KH1's (`kh2_row`, t390, the tester's m3
+answer 1 (a): "KH1's own rows give way"). KH2's table has no KH1 move, so Stun Impact, Gravity
+Break, Zantetsuken, Blitz, Ripple Drive and Hurricane Blast never came at this setting.
+
+Now (`kh1picker::at_kh2`, `combomods::kh2_press`, `kh2_finisher_walk`), in KH1's own picker:
+- KH2's pick at this press is asked first (the same trial the row runner asks: KH1's count, this
+  press counted; Finishing Plus's next finisher when KH1's last row was a finisher still playing).
+- KH1's picker then runs with its ability finisher bits held back (`HELD_GROUND`, as at the KH1
+  setting) and KH2's combo length on the length byte it reads (stats `+0xD4` / `+0xD5`, its test
+  `len <= count`, Checked (decomp) `0x1402A6EE0` / `0x1402A6C70`), so KH1's own finisher, and
+  Blitz's and Hurricane Blast's own KH1 tests, fall at KH2's finisher.
+- When KH2's pick is a finisher, the walk of §7.z.1 runs (`GROUND_FINISHERS` / `AIR_FINISHERS`,
+  each group gated by its KH2 row's checks), KH1's moves by their KH1 rules (`Kh1Rules`: ability
+  bit, KH1's anti-repeat, Zantetsuken's roll, Stun Impact / Gravity Break's roll with KH1 Ability
+  Chance on, Blitz / Hurricane Blast's own test). KH1's dash exception is off (no KH1 dash here).
+  The first KH2 row that passes, or the plain finisher's place, leaves KH2's own pick, run as
+  before; one of KH1's that passes is the row the picker returns, and the row runner runs KH1's row
+  whole (`take_kh1_take`; KH1's motion, attack data and damage).
+- Finishing Plus: KH1's own finisher at this setting gets the same window as at the KH1 setting
+  (`kh1_finisher_window`), while KH2's count leaves another finisher (`FINISHERS` against one plus
+  the copies); the next press walks again, so KH1 → KH2 and KH2 → KH1 finishers chain.
+- Cost: one more KH2 trial per Attack press at this setting (a controller copy), nothing per frame.
+- Assumption: KH1's moves keep their KH1 rules at the KH2 setting (the rules the tester chose for
+  them at m21 / m22); KH2's own rows have no chance.
+
 ## 8. KH2's walk and run as slots (t389)
 
 The tester (`docs/tester-requests.md`, "Missing sleeves animation", point 6): "can you also bake

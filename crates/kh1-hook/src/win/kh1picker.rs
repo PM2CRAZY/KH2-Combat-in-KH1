@@ -22,6 +22,12 @@
 //! KH1's picker, which returns 6 when it passes. So does Hurricane Blast's (row 15: a target, no
 //! more than 100 above him; the tester, m22 answer 3 (b)). KH1's 30% chance on Stun Impact and Gravity
 //! Break is the ini's `kh1_ability_chance`, the Config menu's Tweaks row (`chance`).
+//!
+//! At the combo style KH2 (the tester, m23: "I can't do any kh1 finisher on kh2 combat settings")
+//! the same hooks run KH1's picker with its ability finisher bits held back and KH2's combo length
+//! on the length it reads, and when KH2's pick at this press is a finisher the same walk takes
+//! KH1's own ability finishers in their KH2 places (`combomods::kh2_finisher_walk`); otherwise KH2's
+//! pick stands, as before (the row runner's `combomods::attack`).
 
 use super::addr::Build;
 use super::sys::GetModuleHandleA;
@@ -146,8 +152,39 @@ unsafe fn put_back(saved: Option<(usize, u8)>) {
     }
 }
 
+/// Base Sora with KH2's combo style where he is (as `ours`, the style KH2): KH1's own ability
+/// finishers join KH2's finisher walk (`combomods::kh2_finisher_walk`).
+unsafe fn ours_kh2(actor: usize, air: bool) -> bool {
+    use super::styles::{kh2, Kind};
+    actor >= 0x10000
+        && actor == super::takeover::sora_actor()
+        && super::takeover::ON.load(Ordering::Relaxed)
+        && super::shared::active()
+        && !super::form::in_form()
+        && kh2(if air { Kind::AirCombo } else { Kind::GroundCombo })
+}
+
+/// KH1's picker at the combo style KH2 (the tester, combo row selection m23: "I can't do any kh1
+/// finisher on kh2 combat settings"): KH2's pick at this press first (`combomods::kh2_press`),
+/// then KH1's picker with KH2's combo length on the length it reads (`kh2_length_for_picker`) and
+/// its ability finisher bits held back (`held`), then the walk (`combomods::kh2_finisher_walk`).
+unsafe fn at_kh2(actor: usize, air: bool, held: u32, f: impl FnOnce() -> i32) -> i32 {
+    let press = super::combomods::kh2_press(actor, air);
+    if press.is_none() {
+        // (No KH2 pick to walk with: KH1's picker as it is, the row runner as before.)
+        return f();
+    }
+    let saved = press.as_ref().and_then(|p| super::combomods::kh2_length_for_picker(actor, air, p.1));
+    let (row, bits) = holding(held, f);
+    put_back(saved);
+    super::combomods::kh2_finisher_walk(actor, row, air, bits, press)
+}
+
 unsafe extern "system" fn ground(actor: usize, target: usize, dir: usize) -> u64 {
     let f: GroundFn = std::mem::transmute(ORIG_GROUND.load(Ordering::Acquire));
+    if rd::<i32>(actor + 0x70) == 0 && ours_kh2(actor, false) {
+        return at_kh2(actor, false, HELD_GROUND, || f(actor, target, dir) as i32) as u32 as u64;
+    }
     if rd::<i32>(actor + 0x70) != 0 || !ours(actor, false) {
         return f(actor, target, dir);
     }
@@ -160,6 +197,9 @@ unsafe extern "system" fn ground(actor: usize, target: usize, dir: usize) -> u64
 unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
     let f: AirFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
     // (State 8, flight, runs KH1's picker too: KH1's own there.)
+    if rd::<i32>(actor + 0x70) == 2 && ours_kh2(actor, true) {
+        return at_kh2(actor, true, HELD_AIR, || f(actor, target, dir));
+    }
     if rd::<i32>(actor + 0x70) != 2 || !ours(actor, true) {
         return f(actor, target, dir);
     }
