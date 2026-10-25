@@ -12,6 +12,7 @@
 - [6. Assistant: t532 to t535. Your two answers are in, plus items 1 to 5 of ](#^m6)
 - [7. Assistant: t570 to t573, your three answers, one system each.](#^m7)
 - [8. Assistant: Thanks. There's one thing to check on answer 1 first, then t](#^m8)
+- [9. Assistant: t582 to t585. (a) it is for question 1: Fire / Blizzard / Th](#^m9)
 
 ---
 
@@ -232,9 +233,38 @@ go ahead
 
 ^m8
 
+
 1. (a)
 if you need to add more features into kh1's engine to get reflect working then do it.
 I need a new thread for an agent to start working on air physics for kh2's magic as well as aerial finish and magnet burst, its still not 1:1 with kh2
 also we have something residual from the previous branch that is not 1:1 with kh2, you can jump and dodge roll out of moves during its end frames (I think around the same frames as when you can attack?) so this needs to be looked into the steam c decomp so its exact. 
 
 go ahead
+
+> [!tip] Assistant
+> **t582 to t585.** (a) it is for question 1: Fire / Blizzard / Thunder / Reflect keep needing their full cost on KH1's bar, and Cure keeps your one-bar rule. No change there.
+>
+> - **t582, shots stopped by the barrier, like KH2.** KH2 marks the shot's attack as over and tells its script; nothing is sent back. KH1 had no single "stop" for that, so I gave KH1's engine one out of its own pieces: the shot gets KH1's "hit something that can't be hurt" result, its own hit script runs as if it had struck Sora (so it reacts the way it does to any hit), and its attack is switched off, so KH1 removes it like any finished attack. It keeps its side and owner, still counts toward the counter, and the contact effect still plays. Melee still bounces off (t573). Checked in the KH1 and KH2 Steam decomps and the exe. Not checked: what each enemy's shot does when its script hears it hit; that's its own script, as in KH2.
+> - **t583, Reflect's voice.** Battle Quotes KH2: KH2's cast line on every Reflect (an even pick of five clips) and "Protect!" on the finisher. Battle Quotes KH1: the grunts, and the finisher plays KH1's Aero line. I can't tell from the files which of Aero's two clips is "Defense!", so I started with clip 46.
+> - **t584 and t585, jump and dodge roll out of moves, KH2's exact rule.** In KH2's Steam decomp it isn't "the same frames as when you can attack". KH2 has two separate rules: Attack comes in the combo window (or the finisher window with Finishing Plus); a jump, or Square's guard / dodge roll / Quick Run, only comes when the animation is in a "free" state, which is a flag in the animation file. None of Sora's swings, ability moves or casts has one, so in KH2 you can't jump or roll out of them at all: the press does nothing until the animation is over, and nothing is buffered. Our old rule let jump and Square through in the attack windows. The animations that do have a free state:
+>   - landing: jump on any frame; Square and Attack from frame 12 (was 8);
+>   - dodge roll: from frame 36 (was 34);
+>   - guard: 52; guard repel and recoil: 40;
+>   - ground flinches: 50 (was 8); air flinches: only at the end.
+>
+>   t584 is KH2's own controller (the moves it still borrows, Drive Forms, the jump out of a KH2 move). t585 is KH2's swings on KH1's combo: they were using KH1's own swing's leave point, which is where KH1 let you jump or roll out; they now hold until the swing ends. Attack and commands still come in the combo window. A jump or Square can't cut a KH2 cast on KH1's cast state any more; Attack still can, as before. Checked in the KH2 and KH1 Steam decomps and the KH2 animation files.
+>
+> **Air physics:** your new thread is [Air physics for KH2 magic, Aerial Finish and Magnet Burst](../air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md). I've put what I found there, with a few questions.
+>
+> None of this is tested in game. Please test:
+> - Reflect against thrown and fired shots (Wakka's ball, Darkballs, the casters): they should stop at the barrier, not fly back. Log: "Reflect barrier stopped enemy shot ...". If one keeps going you'll see "... still flying 10 frames after meeting the barrier"; tell me which enemy.
+> - Melee still bouncing off, and the counter still firing after shots meet the barrier.
+> - A finisher Reflect with Battle Quotes KH1: is it "Defense!"? The log says which clip ("KH1 voice: Reflect finisher ... clip 46"). If it's the other line I'll switch to 47. With Battle Quotes KH2: the cast line and "Protect!".
+> - Jump and Square during and right after ground and air swings, ability moves and casts (only once the move is over); jump out of a landing at any frame and Square a bit later; roll into jump / roll / attack; guard into a jump; a flinch into a jump. Also check the combo still chains and you walk off a swing without a stuck frame.
+>
+> Questions:
+> 1. One older path still lets a jump or Square cut a KH1 spell's end frames once the spell is out (a spell started out of one of KH2's own moves, and spells in Drive Forms). Neither KH1 nor KH2 does that. (a) remove it so the spell plays to its own end, or (b) leave it for now?
+> 2. Attack out of a cast comes from the cast's reaction-command window. In KH2 it depends on a flag in each combo row (only Blizzard's cast has a real combo window, from frame 36). (a) check Sora's rows and make it exact next, or (b) keep it as now?
+
+^m9
+
