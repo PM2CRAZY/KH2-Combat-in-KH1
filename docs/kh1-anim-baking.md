@@ -204,3 +204,39 @@ retarget plus foot IK while it plays. No new hooks.
 - The apex request's blend length (the decomp loses that argument).
 - The item effect's wait values, against KH2's item motion (50 frames, per our code's note).
 - In game: how KH1's blend treats an FK slot next to its own IK motions (open since t349).
+
+## 7. Built (after the tester's go-ahead, m1's answers)
+
+The tester's answers: 1 "I don't want a hybrid layer just do (a) without baking on top of it" (open:
+asked again, idle and the landing stay drawn over as before); 2 "same as kh1 for now" (KH1's landing
+lock stays KH1's own); 3 "(b) kh2 voice plays if the toggle for kh2 voices is on".
+
+- **Step 1, Gravity / Stop / Aero: already done** before this round (t563, `kh2slots::CASTS`
+  entries 10..15: 0x3A / 0x3B / 0x3C on KH2's 62 / 65 / 65, air 0x87 / 0x88 / 0x89 on 64 / 67 / 67,
+  by each spell's animation row). The `pose::follow` branch for them is left only for the borrow
+  (a state KH1 casts nothing in). **Checked (code)**.
+- **Step 5, glide slow / fast: already native** (the KH2-glide thread). At Glide KH2 our pre-step
+  (`glide::pre_step`) replaces KH1's `0x1402B2880` and asks only 0x71 (205), 0x73 / 0x74 (206 / 207)
+  and the hover request of ours, so KH1's slow / fast pair 0x71 / 0x72 never switches under KH2 and
+  205 doesn't restart; at Glide KH1 KH1's own glide plays. **Checked (code)**.
+
+### 7.1 Item use (step 2)
+
+- `kh2slots::ITEMS`: KH2's motion 9 on 0x3E (template slot 58) and 0x3F (template 59), style Misc
+  Animations. KH1's command step (`0x1402A3DB0`, type 3) asks them with bit 24 (action flag 4) and
+  blend 8, queues the idle with `0x40000000` and blend 8, and starts the item's effect task
+  (`0x1402C2760`), none of it tied to the motion. **Checked (decomp)**.
+- KH1's "may be left" (type 0) is KH2's free state (range id 2 from frame 36 of 50, **Checked
+  (files)**), so the stick and buttons take him from 36, as in KH2; the slot ends at 50 into KH1's
+  queued idle (KH1's own action end).
+- Sounds: KH1's item sound (track type 6 at 30.8 in slots 58 / 59) is left out of the slot; KH2's
+  own sound 305 at frame 10 plays from the slot's KH2 events (`kh2slots::tick` →
+  `kh2sound::event`), whatever `kh2_sounds` lists (`kh2sound::allowed`); KH2's voice 3 at frame 0
+  only with KH2's battle quotes on (`kh2sound::kh2_voice`). No KH1 voice is started by the item's
+  command step or its task (**Checked (decomp)**, `0x1402A3DB0` case 3, `0x1402C2760`).
+- `takeover::item_use_now` ends with KH1's item slot (58 / 59) when the slot is built, no longer by
+  the 51-frame wall clock (`ITEM_CUT` stays for the hand-off path, `kh1_cut_frame`).
+- Per frame: nothing new (the slot is in KH1's table; the item's draw-over and its retarget are gone
+  while it plays). Two more bakes at load (50 frames each).
+- **Not checked**: in game; whether the item's heal (its task's wait, `0x142D22D30` bytes) lands
+  before KH2's motion lets him go at 36.

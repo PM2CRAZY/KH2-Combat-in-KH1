@@ -1248,7 +1248,7 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
 }
 
 /// KH2 Sora's item-use motion (P_EX100 motion 9, `A110`).
-const KH2_ITEM_USE: u16 = 9;
+const KH2_ITEM_USE: u16 = super::kh2slots::KH2_ITEM_USE;
 
 /// KH2's misc animations for base Sora (the Misc Animations row at KH2, not in a form).
 fn misc_kh2() -> bool {

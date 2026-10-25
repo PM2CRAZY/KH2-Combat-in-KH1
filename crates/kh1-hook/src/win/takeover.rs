@@ -1264,8 +1264,18 @@ pub fn item_use_now() -> bool {
         return true;
     }
     // In KH1's own states (`shared`): from the command until its use motion has played (KH1's
-    // use runs ~52 frames: `ITEM_CUT`).
-    let in_use = super::shared::active() && ITEM_AT.try_lock().ok().and_then(|t| *t).is_some_and(|t| t.elapsed().as_secs_f32() < (ITEM_CUT as f32 + 4.0) / 60.0);
+    // use runs ~52 frames: `ITEM_CUT`). With KH2's item use as KH1's own item slots
+    // (`kh2slots::ITEMS`), KH1's own action end: while KH1's item slot (58 / 59) plays, after the
+    // few frames before KH1's step starts it.
+    let since = ITEM_AT.try_lock().ok().and_then(|t| *t).map(|t| t.elapsed().as_secs_f32());
+    let in_use = super::shared::active()
+        && since.is_some_and(|s| {
+            if super::kh2slots::has(0x3E, super::kh2slots::KH2_ITEM_USE) {
+                s < 10.0 / 60.0 || matches!(pose::sora_slot(), Some(58 | 59))
+            } else {
+                s < (ITEM_CUT as f32 + 4.0) / 60.0
+            }
+        });
     if !in_use && super::shared::active() {
         ITEM_COMMAND.store(false, Ordering::Relaxed);
     }

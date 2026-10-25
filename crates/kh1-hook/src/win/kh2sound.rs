@@ -126,6 +126,11 @@ const WEAPON_BANK: u32 = 500;
 const VOICE_FILE: &str = "voice/us/battle/tt0_sora.win32.scd";
 
 fn allowed(motion: u16) -> bool {
+    // (KH2's item use: KH1's item sound is left out of its slot, `kh2slots::ITEMS`, so KH2's own
+    // plays whatever `kh2_sounds` lists, the tester's "(b)".)
+    if motion == super::kh2slots::KH2_ITEM_USE {
+        return true;
+    }
     match &super::settings::get().kh2_sounds {
         None => false,
         Some(None) => true,
@@ -160,7 +165,7 @@ pub fn start() {
             .moveset
             .clips
             .iter()
-            .filter(|(m, _)| moves && allowed(**m) || super::form::own_motion(**m))
+            .filter(|(m, _)| moves && allowed(**m) || **m == super::kh2slots::KH2_ITEM_USE || super::form::own_motion(**m))
             .flat_map(|(_, c)| c.events.iter().map(|e| e.kind))
             .collect();
         // Every move's battle voice (the Battle Quotes row switches them in game, on every move:

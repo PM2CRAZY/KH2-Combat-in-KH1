@@ -206,7 +206,33 @@ const fn recoil_spec(i: usize) -> Spec {
     Spec { motion, stands_for, request, kind: Kind::Recoil }
 }
 
-const SPECS: [Spec; 36] = [
+/// KH2's item use on KH1's item requests (the tester, thread baking-the-rest-of-the-base-animations,
+/// plan step 2). KH1's command step (Steam `0x1402A3DB0`, command type 3, Checked (decomp)) asks
+/// 0x3E (on himself, or no target) or 0x3F (on someone else) with its action flag (bit 24) and
+/// blend 8, queues the idle with bit `0x40000000` (action over) and starts the item's effect as its
+/// own task (`0x1402C2760`), not tied to the motion. KH1's request table (`xa_ex_0010.mset`,
+/// Checked (files)): 0x3E slot 58 (82 frames, "may be left" at 74, the item sound at 30.8), 0x3F
+/// slot 59 (72 frames, 62, the same sound). KH2's item use is motion 9 (`P_EX100.mset`, Checked
+/// (files): 50 frames, free from 36 (range id 2), its voice 3 at 0 and sound 305 at 10), for both.
+/// With Misc Animations at KH2, KH1 plays it in its own item step: KH1's "may be left" is KH2's free
+/// state (`Leave::Kh2OrTemplate`), and its end is KH1's queued idle. KH1's item sound is left out of
+/// the slot and KH2's own sound plays (the tester's answer 3, "(b)"); KH2's voice only with KH2's
+/// battle quotes on ("kh2 voice plays if the toggle for kh2 voices is on", `kh2sound::event`).
+const ITEMS: [(u16, usize, usize); 2] = [(KH2_ITEM_USE, 58, 0x3E), (KH2_ITEM_USE, 59, 0x3F)];
+/// KH2 Sora's item-use motion (P_EX100 motion 9, `A110`).
+pub const KH2_ITEM_USE: u16 = 9;
+
+/// One of KH1's item requests (`ITEMS`).
+fn is_item(request: usize) -> bool {
+    ITEMS.iter().any(|i| i.2 == request)
+}
+
+const fn item_spec(i: usize) -> Spec {
+    let (motion, stands_for, request) = ITEMS[i];
+    Spec { motion, stands_for, request, kind: Kind::MiscAnims }
+}
+
+const SPECS: [Spec; 38] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -243,6 +269,8 @@ const SPECS: [Spec; 36] = [
     glide_spec(3),
     recoil_spec(0),
     recoil_spec(1),
+    item_spec(0),
+    item_spec(1),
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -456,18 +484,20 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
     // (A recoil, `RECOILS`, the same: KH1's reaction function asked for it.)
     let reaction = matches!(kind, Kind::HitReactions | Kind::Recoil);
+    // (An item's use, `ITEMS`: KH2's free state as KH1's "may be left", and only KH2's own sound.)
+    let item = is_item(request) && !own;
     // (Where KH1 may leave it, `Leave`: KH2's free state only for KH2's swings, ability moves and
     // casts; KH2's, else the template's, for the reactions.)
     let leave = if own || cast || matches!(kind, Kind::GroundCombo | Kind::AirCombo) {
         Leave::Kh2
-    } else if reaction {
+    } else if reaction || item {
         Leave::Kh2OrTemplate
     } else {
         Leave::Template
     };
     let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, leave);
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
-    if ours.is_some_and(|o| o.own_sounds) {
+    if ours.is_some_and(|o| o.own_sounds) || item {
         tracks.retain(|t| t.kind != ks::SOUND);
     }
     // (KH2's dodge roll on KH1's roll: KH2's free frame as KH1's "may be left", `roll_free`.)
