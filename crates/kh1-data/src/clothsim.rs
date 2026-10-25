@@ -10,8 +10,8 @@
 //! Checked (files)); this only makes motion to judge and bake.
 //!
 //! **The model.** Each part is a chain of KH1 bones hanging from a carrier bone the animation
-//! moves (the coat from the spine base 71, a shorts panel from its thigh 17 / 43, the belt chain
-//! from the hips 3, the belt-front pieces from 4). Each frame:
+//! moves (the coat from the chest 78, its roots held there as in the bind; a shorts panel from
+//! its thigh 17 / 43, the belt chain from the hips 3, the belt-front pieces from 4). Each frame:
 //! 1. The chain is put in its **rest**: each bone's relation to its parent as KH1's own matching
 //!    move holds it on average (for KH2's field run: KH1's field run, slot 5, averaged over its
 //!    36 frames), carried by the carrier as drawn. Where each link's tip is then is its target.
@@ -121,6 +121,12 @@ impl Default for Settings {
 
 /// KH1 bones (`examples/zz_probe` / the skeleton, Checked (files)).
 const SPINE: usize = 71;
+/// The chest (neck base), which carries the jacket above the coat: the coat's roots are held on it
+/// as in the bind. KH1 holds 71 and 78 rigid in its motions and never turns the coat's roots
+/// (Checked (files), its field run: 0.0007 degrees), so on KH1 the coat hangs from the chest as
+/// much as from 71; our retarget turns 71 only 67% toward KH2's chest, and a coat hung on 71
+/// sheared against the jacket above it (the tester's stretch by the necklace).
+const CHEST: usize = 78;
 const HIPS: usize = 3;
 const THIGHS: [(usize, usize); 2] = [(17, 18), (43, 44)];
 const COAT: [usize; 9] = [72, 248, 252, 256, 260, 264, 268, 272, 276];
@@ -165,6 +171,9 @@ struct Chain {
     carrier: usize,
     /// The bones put in their rest, parent before child.
     bones: Vec<usize>,
+    /// The first bone held on the carrier at this relation instead of its parent's (the coat's
+    /// root on the chest, as in the bind).
+    held: Option<Mat4>,
     /// (bone turned, its tip): the simulated points are the tips.
     links: Vec<(usize, usize)>,
     /// Segments (a, b) and each tip's clearance from them.
@@ -245,7 +254,7 @@ impl ClothSim {
         let mut rest: Vec<Mat4> = (0..n).map(|b| local(&bind, b)).collect();
         let mut chains = Vec::new();
         let ok = |b: usize| b < n;
-        if !(ok(279) && ok(SPINE)) {
+        if !(ok(279) && ok(SPINE) && ok(CHEST)) {
             return ClothSim { below, parent, rest, chains, state: Vec::new(), started: false, last: Vec::new() };
         }
         let bind_d = |j: usize, (a, b): (usize, usize)| nearest(at(&bind[j]), at(&bind[a]), at(&bind[b])).0.distance(at(&bind[j]));
@@ -256,30 +265,32 @@ impl ClothSim {
         };
         for &r in &COAT {
             let tips = [r + 2, r + 3];
-            chains.push(Chain { part: Part::Coat, carrier: parent[r].unwrap_or(SPINE), bones: (r..=r + 3).collect(), links: vec![(r + 1, r + 2), (r + 2, r + 3)], obstacles: outside_shorts(&tips) });
+            let held = bind[CHEST].inverse() * bind[r];
+            chains.push(Chain { part: Part::Coat, carrier: CHEST, bones: (r..=r + 3).collect(), held: Some(held), links: vec![(r + 1, r + 2), (r + 2, r + 3)], obstacles: outside_shorts(&tips) });
         }
         for (side, panels) in SHORTS.iter().enumerate() {
             let thigh = THIGHS[side];
             for &r in panels {
                 let tips = [r + 2, r + 3];
-                chains.push(Chain { part: Part::Shorts, carrier: thigh.0, bones: (r..=r + 3).collect(), links: vec![(r + 1, r + 2), (r + 2, r + 3)], obstacles: vec![(thigh, tips.iter().map(|&j| Clear::Fixed(bind_d(j, thigh) * PANEL_CLEAR)).collect())] });
+                chains.push(Chain { part: Part::Shorts, carrier: thigh.0, bones: (r..=r + 3).collect(), held: None, links: vec![(r + 1, r + 2), (r + 2, r + 3)], obstacles: vec![(thigh, tips.iter().map(|&j| Clear::Fixed(bind_d(j, thigh) * PANEL_CLEAR)).collect())] });
             }
         }
         {
             let tips: Vec<usize> = BELT[2..].to_vec();
-            chains.push(Chain { part: Part::Belt, carrier: HIPS, bones: BELT.to_vec(), links: BELT[1..].windows(2).map(|w| (w[0], w[1])).collect(), obstacles: outside_shorts(&tips) });
+            chains.push(Chain { part: Part::Belt, carrier: HIPS, bones: BELT.to_vec(), held: None, links: BELT[1..].windows(2).map(|w| (w[0], w[1])).collect(), obstacles: outside_shorts(&tips) });
         }
         {
             let tips: Vec<usize> = FRONT_LINKS.iter().map(|l| l.1).collect();
-            chains.push(Chain { part: Part::Front, carrier: 4, bones: FRONT.to_vec(), links: FRONT_LINKS.to_vec(), obstacles: outside_shorts(&tips) });
+            chains.push(Chain { part: Part::Front, carrier: 4, bones: FRONT.to_vec(), held: None, links: FRONT_LINKS.to_vec(), obstacles: outside_shorts(&tips) });
         }
-        // (Every chain bone's parent is the one before it, or the carrier.)
-        chains.retain(|c| c.bones.iter().enumerate().all(|(i, &b)| parent[b] == Some(if i == 0 { c.carrier } else { c.bones[i - 1] })));
+        // (Every chain bone's parent is the one before it, or the carrier; a held root may have
+        // another parent.)
+        chains.retain(|c| c.bones.iter().enumerate().all(|(i, &b)| (i == 0 && c.held.is_some()) || parent[b] == Some(if i == 0 { c.carrier } else { c.bones[i - 1] })));
         if let Some(m) = motion {
             let frames = m.frames.max(1);
             let poses: Vec<Vec<Mat4>> = (0..frames).map(|f| kh2_anim::Pose::bind(&m.apply(kh1, f as f32)).bones).collect();
             for c in &chains {
-                for &b in &c.bones {
+                for &b in c.bones.iter().skip(c.held.is_some() as usize) {
                     let ls: Vec<Mat4> = poses.iter().map(|p| local(p, b)).collect();
                     let q = average(ls.iter().map(|l| l.to_scale_rotation_translation().1));
                     let t = ls.iter().map(|l| at(l)).sum::<Vec3>() / ls.len() as f32;
@@ -329,9 +340,14 @@ impl ClothSim {
     /// Puts every chain in its rest (on its carrier as `pose` has it).
     fn put_rest(&self, pose: &mut [Mat4]) {
         for c in &self.chains {
-            for &b in &c.bones {
-                if let Some(p) = self.parent[b] {
-                    pose[b] = pose[p] * self.rest[b];
+            for (i, &b) in c.bones.iter().enumerate() {
+                match (i, c.held) {
+                    (0, Some(h)) => pose[b] = pose[c.carrier] * h,
+                    _ => {
+                        if let Some(p) = self.parent[b] {
+                            pose[b] = pose[p] * self.rest[b];
+                        }
+                    }
                 }
             }
         }

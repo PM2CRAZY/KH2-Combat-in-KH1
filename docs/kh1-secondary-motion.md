@@ -779,10 +779,22 @@ motion on a KH2 move, look at it in game, and later bake it into that move (the 
 
 | Part | Chains | Carrier | Simulated links (bone turned → tip) |
 |---|---|---|---|
-| Coat | 72, 248, 252 .. 276 (each `r`, `r+1` at its place, `r+2`, `r+3`) | spine base 71 | `r+1 → r+2`, `r+2 → r+3` |
+| Coat | 72, 248, 252 .. 276 (each `r`, `r+1` at its place, `r+2`, `r+3`) | chest 78 (the root held as in the bind; spine base 71 before tNNN) | `r+1 → r+2`, `r+2 → r+3` |
 | Shorts | 26, 30, 34, 38 (-x) / 52, 56, 60, 64 (+x), same layout | thigh 17 / 43 | `r+1 → r+2`, `r+2 → r+3` |
 | Belt chain | 10, 11 (at 10's place), 12 .. 15 | hips 3 | 11→12, 12→13, 13→14, 14→15 |
 | Belt front | 5 → 6, then 7 / 8 at 6's place → 9 | 4 | 5→6, 8→9 |
+
+**The coat hangs from the chest (tNNN).** The tester, after t596: "the part of the coat next to
+soras necklace doesn't move with the rest of the coat so the mesh stretches". t592 put each coat
+root back on its parent, the spine base 71, at KH1's run's relation; the retarget turns 71 only
+67% of the way from KH2's pelvis to KH2's chest (`retarget::layout`), while the chest 78 (which
+carries the jacket above the coat, by the necklace) turns fully with KH2's chest. So in KH2's run
+the coat's top ring sheared against the jacket above it. In KH1 the two never differ: KH1's field
+run holds 71 and 78 rigid to each other (0.0007 degrees) and never turns a coat root (the roots
+72, 248, ..., 276 aren't keyed; their joints r+1 and r+2 are), Checked (files). Now each root is
+held on the chest exactly as in the bind (as the retarget's `ATTACHED` already drew it before
+t592), and the joints below hang from it as before. Which mesh band is skinned to which bone is
+not read (Assumption: the jacket by the necklace rides the chest, as the stretch suggests).
 
 **Each frame** (one step per 60 Hz frame KH1 ran; none on a held Frame Advance frame):
 1. The chains go to their rest: each bone's relation to its parent, averaged over KH1's own
@@ -936,7 +948,8 @@ physics frames) adds, after the other categories and before the events:
 - Sora's placement (KH1 world, `up` = minus its y), yaw, speed and turn a 60 Hz frame;
 - for every bone the physics moves (5..15, 26..41, 52..67, 72..75, 248..279): its turn against its
   parent (`qx qy qz qw`) and its place against the hips 3 (`hips_x/y/z`), as drawn;
-- the body bones its rest and collision use (3, 4, 17, 18, 43, 44, 71): turn and place in model
+- the body bones its rest and collision use (3, 4, 17, 18, 43, 44, 71, and the coat's carrier 78
+  from tNNN): turn and place in model
   space.
 
 The ticks and frame columns are always there; the bone columns are empty on a frame the physics

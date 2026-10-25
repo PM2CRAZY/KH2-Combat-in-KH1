@@ -154,7 +154,7 @@ pub fn step(kh1: &[kh2_formats::anim::Bone], pose: &mut [Mat4], to_world: &Mat4,
 /// the coat 72..75 and 248..279), and the body bones its rest and collision use (the hips 3, 4,
 /// the thighs 17, 18, 43, 44, the spine base 71).
 pub const BONES: [std::ops::RangeInclusive<usize>; 5] = [5..=15, 26..=41, 52..=67, 72..=75, 248..=279];
-pub const BODY: [usize; 7] = [3, 4, 17, 18, 43, 44, 71];
+pub const BODY: [usize; 8] = [3, 4, 17, 18, 43, 44, 71, 78];
 
 /// The last frame's bone numbers (`BONES`: each one's turn against its parent, x y z w, and its
 /// place against the hips 3, x y z; then `BODY`: turn and place in model space), the placement
