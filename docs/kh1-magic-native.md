@@ -537,7 +537,8 @@ casts it and vice versa".
   **Assumption**: the start frame is the frame KH1's command step starts the spell (our script's
   first frame); KH1's own script may run its first step there or a frame later (the task order of
   the spell list `0x142D22D08` against the actors' step wasn't read), so ±1 frame.
-  KH2's cast motion's own frame events (its hand sparkles, its swish) don't play on KH1's animation.
+  What KH2's cast motion would have added on KH1's animation: nothing that is a sparkle or a sound
+  (§4l).
 - **KH1's spell on KH2's animation** (t-b): KH1's Blizzard, Thunder, Cure (their rows at KH1, their
   animation at KH2), Gravity, Stop and Aero (animation at KH2) run KH1's own script on our slot of
   KH2's cast motion, so before this they cast at KH1's own count (28 to 36 frames), not on KH2's
@@ -573,3 +574,41 @@ KH2's base Sora does there (no change made):
   inertia and allow-movement range, main's s206), which base Sora's KH2 casts don't have.
   **Assumption** (not traced in the KH2 decomp): no other KH2 action step moves base Sora while
   a command motion plays on the ground (`+0x124` bit `0x40000`, set by `0x1403A9DD0`).
+
+## 4l. What KH2's cast animations carry (the tester's m20 question 1)
+
+The tester picked "(b)": play KH2's cast animation's sparkle and swish on KH1's cast animation. What
+those animations actually carry:
+
+- **No sparkle, swish or voice in the cast motions.** KH2's frame triggers that start an effect
+  (1, a PAX element), play a sound (8) or say a line (13 / 14) are on none of base Sora's cast
+  motions: Fire 56 / 57 / 58, Blizzard 59 / 60 / 61, Thunder and Cure 62..70 (clips A364 / A365 /
+  A372), Reflect 71 / 72 / 73, neither in Sora's `P_EX100.mset` nor in the Keyblade's `W_EX010.mset`
+  (whose cast slots have no triggers at all). **Checked (files)** (`kh2-combat mset --all`, the
+  user's Steam install). Their frame triggers are 17 (the magic-cast event), 16, 19, 21 and 31 only.
+  So the hand sparkle and the cast sounds seen in KH2 are the spell scripts' (trigger 20's code
+  starts its effect elements, whose sounds play with them), which run on KH1's animation as on
+  KH2's (§4j); the swish heard on our slots of KH2's cast motions is the KH1 template's own sound
+  track, kept when the slot is built (`kh2slots`), which KH1's own animation plays itself. Nothing
+  to add here; no code changed.
+- **KH2's frame trigger dispatcher** (Steam KH2 `0x14040DD70`, run for each trigger passed by
+  `0x14040E960` from the motion step `0x1403C6740`, **Checked (decomp)**): 1 starts a PAX element
+  (`0x1402C6B30`), 8 a sound (`0x1403C8280`, bank × 1000 + index), 13 / 14 a voice, 17 the magic
+  cast (`0x1403C6150`), 16 (0x10) stores its parameter in an object float (`+0xB94`), 21 (0x15)
+  turns the object toward its target by the parameter's angle, 31 (0x1F) looks the parameter up in
+  a table (`0x142AE59E0`, set by `0x1403EEF80`) and hands the found record to `0x14019AE60`
+  (**Assumption**: a pad-rumble or screen pattern; not a sound or effect start). Blizzard 59 / 61
+  carry 31 with 2.
+- **Trigger 19 (0x13), KH2's foot effects** (`0x140424C60`, **Checked (decomp)** for the calls):
+  even parameters take the point codes `0x8028` / `0x802C`, odd ones `0x8029` / `0x802D` (one foot
+  each, **Assumption**), test a ray to the ground (`0x1403F3CC0`), and start an effect through the
+  same element start as trigger 1 (`0x1402C6B30`, priority `0x2711`), the element picked
+  (`0x1402C6730`) by a mask of a per-surface byte (table `0x1405D4FF0`, indexed by `0x1403B84E0` of
+  the object) and bit `0x20 +` the parameter; nothing on a surface whose byte is 0, nothing unless
+  `0x1401625E0` allows. **Assumption**: dust / splashes where a foot meets the floor, by surface.
+  The casts carry it at Blizzard 59 frames 13 / 22 / 48 / 70 (12, 13, 12, 13), Thunder / Cure 62 /
+  65 at 5 / 14 / 52 / 62; it is also on the idle, walk, run, the swings and many other motions
+  (`P_EX100.mset`, **Checked (files)**). The mod plays it nowhere yet (our slots of KH2's motions
+  play only triggers 1, 8 and 13 / 14), so KH1's animation and KH2's are the same here. Porting it
+  is a system of its own (KH2's surface table and the effect set it picks from), asked in the
+  thread before any code.
