@@ -249,3 +249,17 @@ in place and pulled beside Sora for 24 frames) and Explosion's last blast's over
 60 sideways): its ATKP 912 is 15 up / 30 sideways, as KH2. A KH2 flinch on one of our rows whose
 data launches gets KH1's flinch (kind 3). Enemies KH1 can't launch (no motion 0x52 / 0x5C) and
 the big and fixed ones keep KH1's own reaction.
+
+### The flight
+
+A KH2-launched enemy flies by KH2's blow in KH1's air state: after KH1's state-2 step
+(`0x1402AD510` Epic / `0x1402AF6A0` Steam, through KH1's state table, wrapped by
+`shared::physics::air_step` for every actor) `knockback::air_step` replaces the step's
+displacement with KH2's: one `Blow` tick (30 Hz: sideways ×0.8, floored at a tenth of the start;
+rise ×0.8; gravity 20/49; fall capped at 16) every second 60 Hz frame, half of it each frame
+(KH1's frame scale 2 at 30 fps: one tick a game frame). `+0x3C0` holds KH2's sideways speed and
+`+0x3C4` the frame's drop. KH1's mover, collision, landing (motions +2 / +3), lying and get-up
+stay KH1's. The flight ends when the enemy leaves state 2, when KH1 writes another arc (a new
+reaction of its own: its launch, air flinch, knock-back), or after 600 frames. **Checked
+(code)**; the 30 Hz tick is the project's reading of KH2's physics (`docs/combat-model.md`),
+not re-checked frame by frame here.

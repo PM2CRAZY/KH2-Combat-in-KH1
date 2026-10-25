@@ -103,3 +103,116 @@ pub unsafe fn launch_factor(actor: usize) -> f32 {
     }
     k
 }
+
+// ---------------------------------------------------------------------------------------------
+// The flight: KH2's blow rules in KH1's air state's step.
+// ---------------------------------------------------------------------------------------------
+
+/// KH1's arc fields (`docs/kh1-physics.md`): time to the apex and the apex's offset (y down).
+const ARC_UP_T: usize = 0x3B8;
+const ARC_H: usize = 0x3BC;
+/// Its sideways velocity (vec4, w its length) and the frame's drop.
+const VEL: usize = 0x3C0;
+const DROP: usize = 0x3C4;
+/// KH1's movement state (2: in the air).
+const STATE: usize = 0x70;
+/// A flight is let go after this many frames whatever happens (a stuck enemy).
+const MAX_FRAMES: u32 = 600;
+
+/// How an enemy KH2 knocked into the air moves.
+#[derive(Clone, Copy, Debug)]
+enum Fly {
+    /// KH2's blow (`character_core::reaction::Blow`): one 30 Hz tick every second 60 Hz frame,
+    /// half of it a frame (as KH2's controller and `character_core::npc` run it).
+    Blow { blow: character_core::reaction::Blow, step: [f32; 3], phase: u32 },
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Flight {
+    actor: usize,
+    fly: Fly,
+    /// The arc fields written for it: KH1 writing others (a new reaction of its own) ends ours.
+    up_t: f32,
+    h: f32,
+    frames: u32,
+}
+
+static FLIGHTS: std::sync::Mutex<Vec<Flight>> = std::sync::Mutex::new(Vec::new());
+
+/// `combat::launched`: KH1 launched `actor` for a KH2 blow and its arc is KH2's (`up_t`, `h` as
+/// written): its flight from here is KH2's blow with these starting speeds (per 60 Hz frame,
+/// `vel_h` along KH1's launch direction, `up` up).
+pub unsafe fn fly_blow(actor: usize, vel_h: [f32; 2], up: f32, up_t: f32, h: f32) {
+    let Some(p) = pose::kh2().map(|k| k.character.reaction.clone()) else { return };
+    let blow = character_core::reaction::Blow::new(vel_h, up, &p);
+    start(Flight { actor, fly: Fly::Blow { blow, step: [0.0; 3], phase: 0 }, up_t, h, frames: 0 });
+}
+
+fn start(f: Flight) {
+    if let Ok(mut v) = FLIGHTS.lock() {
+        v.retain(|g| g.actor != f.actor);
+        if v.len() > 64 {
+            v.remove(0);
+        }
+        v.push(f);
+    }
+}
+
+/// KH1 gave `actor` a reaction of its own (not KH2's): its flight is KH1's again.
+pub fn land_kh1(actor: usize) {
+    if let Ok(mut v) = FLIGHTS.lock() {
+        v.retain(|g| g.actor != actor);
+    }
+}
+
+/// After KH1's air state's step (`shared::physics::air_step`, state 2's `0x1402AD510` through
+/// KH1's state table, for every actor) on an enemy: KH2's flight replaces the step's displacement
+/// (`disp`, y down) while the flight is ours. KH1's mover, collision, landing and get-up then run
+/// on it as on KH1's own flight.
+pub unsafe fn air_step(actor: usize, disp: *mut [f32; 4]) {
+    let Ok(mut v) = FLIGHTS.try_lock() else { return };
+    let Some(i) = v.iter().position(|g| g.actor == actor) else { return };
+    let g = &mut v[i];
+    let ours = rd::<i32>(actor + STATE) == 2 && rd::<f32>(actor + ARC_UP_T) == g.up_t && rd::<f32>(actor + ARC_H) == -g.h && g.frames < MAX_FRAMES;
+    if !ours {
+        static E: AtomicU32 = AtomicU32::new(0);
+        if E.fetch_add(1, Ordering::Relaxed) < 30 {
+            log(&format!("KH2 flight on {actor:#x} ended after {} frames (state {}, KH1's arc {})", g.frames, rd::<i32>(actor + STATE), if rd::<f32>(actor + ARC_UP_T) == g.up_t { "ours" } else { "its own" }));
+        }
+        v.remove(i);
+        return;
+    }
+    let dt = super::shared::physics::dt();
+    let n = (dt.round() as u32).clamp(1, 4);
+    let Some(p) = pose::kh2().map(|k| k.character.reaction.clone()) else { return };
+    let mut total = [0.0f32; 3];
+    let vel_h = match &mut g.fly {
+        Fly::Blow { blow, step, phase } => {
+            for _ in 0..n {
+                if *phase % 2 == 0 {
+                    let d = blow.tick(2.0, &p);
+                    *step = [d[0] / 2.0, d[1] / 2.0, d[2] / 2.0];
+                }
+                *phase += 1;
+                for k in 0..3 {
+                    total[k] += step[k];
+                }
+            }
+            blow.vel_h
+        }
+    };
+    g.frames += n;
+    // (KH1 is y down: KH2's rise is a negative drop.)
+    (*disp)[0] = total[0];
+    (*disp)[1] = -total[1];
+    (*disp)[2] = total[2];
+    let s = vel_h[0].hypot(vel_h[1]);
+    std::ptr::write_unaligned((actor + VEL) as *mut [f32; 4], [vel_h[0], 0.0, vel_h[1], s]);
+    std::ptr::write_unaligned((actor + DROP) as *mut f32, -total[1]);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if g.frames <= n || g.frames % 10 == 0 {
+        if N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log(&format!("KH2 flight on {actor:#x}: frame {}, moved {:.1} sideways, {:.1} up", g.frames, total[0].hypot(total[2]), total[1]));
+        }
+    }
+}

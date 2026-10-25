@@ -2773,6 +2773,7 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
         if M.fetch_add(1, Ordering::Relaxed) < 20 {
             log(&format!("KH1 launch reaction on {actor:#x} for record {rec:#x} (not a KH2 launch)"));
         }
+        super::knockback::land_kh1(actor);
         return;
     };
     let motion = rd::<u16>(actor + 0x3EA);
@@ -2797,6 +2798,8 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
     wr(actor + 0x3B8, t);
     wr(actor + 0x3BC, -h);
     wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed]);
+    // Its flight is KH2's blow (`knockback::air_step`).
+    super::knockback::fly_blow(actor, [dx * l.speed, dz * l.speed], l.up, t, h);
     if N.fetch_add(1, Ordering::Relaxed) < 30 {
         log(&format!("KH2 launch on {actor:#x}: up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed));
     }

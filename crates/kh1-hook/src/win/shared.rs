@@ -1473,6 +1473,10 @@ pub mod physics {
         // (KH1's own arc before its step: where KH2's goes on from if KH1 moved him last.)
         let before = if ours { Some(kh1_motion(actor)) } else { None };
         let r = f(actor, disp);
+        // An enemy KH2 knocked into the air: KH2's flight in KH1's step (`knockback`).
+        if !sora && !disp.is_null() {
+            super::super::knockback::air_step(actor, disp);
+        }
         // (Physics KH1: KH1's step undone up and down, its arc's time and start put back.)
         if let Some(b) = kh1_held.filter(|_| rd::<i32>(actor + 0x70) == 2) {
             wr(actor + ARC_T, b.arc.t);
