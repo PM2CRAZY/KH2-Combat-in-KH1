@@ -267,4 +267,9 @@ go ahead
 > 2. Attack out of a cast comes from the cast's reaction-command window. In KH2 it depends on a flag in each combo row (only Blizzard's cast has a real combo window, from frame 36). (a) check Sora's rows and make it exact next, or (b) keep it as now?
 
 ^m9
+1.(a)
+2.(a)
 
+reflect is still sending its shots on the first hit, I've sent you a trace it should be in the same folder as this thread
+
+go ahead
