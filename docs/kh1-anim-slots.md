@@ -1597,6 +1597,30 @@ and they give the same row and hop. Expected in play: nothing different, less wo
 **Not done here:** KH1's table itself isn't extended with KH2's rows (see the reply in m24's
 thread: what that would mean).
 
+### 7.z.5 No more borrows: KH1's own row where no KH1 row can play KH2's move (combo row selection, after m25)
+
+The tester, answer 2 to m25's question ("When no KH1 row can play a KH2 move ... (b) KH1's own row
+that its picker chose"). Before, a few presses still handed Sora to KH2's controller for one move
+(`combomods::want`, taken by `takeover::shared_frame`, set on KH2's first step by `before_step`).
+That path is gone; each case now stays in KH1's states:
+
+| Case | Before | Now |
+| --- | --- | --- |
+| Attack: KH2's pick is an ability move with no slot built (`native_ability` false), or a Negative Combo / Combo Plus pick no KH1 request of its kind has a slot for (`ability_move`, KH2 setting) | KH2 borrowed him for the row | KH1's row its picker returned (at the KH2 setting KH1's picker ran with KH2's length and its ability finisher bits held back, `kh1picker::at_kh2`), on its request with no KH2 pick (`kh1_own_row` -> `select_swing(None)`: the request's default slot at the KH2 setting, as when KH2 takes nothing; its own motion at the KH1 setting) |
+| Finishing Plus's next finisher at the KH2 setting, no row free (`next_finisher` None: no row of its own, our next-finisher row's request playing, KH1's finisher row's request playing or no slot) | borrow | the same: KH1's picker's row; if it is a finisher it counts as the next one (`FINISHERS` + 1), a swing resets the chain |
+| Finishing Plus's next finisher at the KH1 setting, no row free for KH2's pick | no attack | KH1's own finisher its picker took, by the rule already used when it took its own (not a swing of its combo, its request not the one playing); else no attack |
+| Square in KH1's combo window, KH2's Square move has no KH1 row built (`ours_for` None) | borrow | KH1's own Square (its roll or guard), as when no Square move passes (m20 answer 5 (a)) |
+| Square while knocked away, Retaliating Slash without its KH1 row, or not KH1's air state | borrow | KH1's own Square |
+| Jump while knocked away, Aerial Recovery's KH1 request not built, or not KH1's air state (`recover` false) | borrow | KH1's own jump |
+
+`Run::Kh2` is now `Run::Nothing` (no row on this press: only Finishing Plus's last finisher already
+run, KH2's rule). Logged: "KH2's row ... : no KH1 row plays it, KH1's own row N runs", "KH2's next
+finisher ...: no KH1 row free to play it", and the Square / jump lines. Per frame: nothing (one fewer
+lock read in `shared_frame`). How often these come in play isn't measured (Assumption: rarely, mostly a slot that didn't build
+or a third finisher in a row); the log lines say when.
+Assumption: at the KH2 setting the "KH1 row its picker chose" is the one it picks with KH2's combo
+length on its length byte (t612), not KH1's own length.
+
 ## 8. KH2's walk and run as slots (t389)
 
 The tester (`docs/tester-requests.md`, "Missing sleeves animation", point 6): "can you also bake

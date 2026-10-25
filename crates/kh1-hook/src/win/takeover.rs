@@ -2070,16 +2070,13 @@ unsafe fn shared_frame(base: usize, actor: usize) -> bool {
     let attack = ATTACK_AFTER.swap(false, Ordering::Relaxed);
     let command = super::shared::take_want_kh2();
     let borrow = super::shared::take_borrow();
-    // One of KH2's ability moves out of KH1's own combo or knock-back (`combomods`): taken where
-    // KH2 would use it (a press KH1's combo took, Square in its combo window, the jump or Square
-    // while knocked away), so not only on a free frame.
-    let ability = super::combomods::take_want();
+    // (KH2's ability moves out of KH1's own combo or knock-back no longer borrow him: KH1's rows
+    // play them, or KH1's own row / button where none can; the tester, combo row selection after
+    // m25, answer 2: "(b)".)
     // KH1's roll held into KH2's Quick Run: KH2 takes him then (KH1 let him act; what is left of
     // KH1's roll motion, if any, is set to its idle as when KH2 cuts a KH1 move).
     let quick_run = borrow == super::shared::QUICK_RUN && free;
-    let what = if ability.is_some() {
-        Some("one of KH2's ability moves out of KH1's own combo or knock-back")
-    } else if quick_run {
+    let what = if quick_run {
         Some("Square held through KH1's roll: KH2's Quick Run (Quick Run equipped)")
     } else if !free {
         if attack {
@@ -2142,18 +2139,6 @@ unsafe fn shared_frame(base: usize, actor: usize) -> bool {
     if state != 0 {
         let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
         set(actor, 0);
-    }
-    if let Some(m) = ability {
-        // KH1's swing or reaction ends here, as a spell's end frames cut does: its "action
-        // running" flag off, its motion request its idle (after the state change, which queues
-        // KH1's own landing when it leaves the air state).
-        if !free {
-            wr(actor, rd::<u32>(actor) & !4);
-            let setm: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
-            setm(actor, 0, 0.0);
-            AFTER_CUT_LOG.store(12, Ordering::Relaxed);
-        }
-        super::combomods::lent(m);
     }
     FRESH.store(true, Ordering::Relaxed);
     HANDOFF_POS.lock().unwrap().take();
@@ -3156,9 +3141,6 @@ unsafe fn takeover(actor: usize) -> bool {
         super::form::before_step(&mut d.drive, &mut d.character, &mut d.anim, kh2, actor);
         // A KH2 spell chosen in Wisdom Form: its cast (`formmagic`).
         super::formmagic::before_step(actor, &mut d.character);
-        // KH2's ability move it borrowed him for out of KH1's own combo (`combomods`): its row and
-        // KH1's combo count, the press (the frame's first step only).
-        let input = if step == 0 { super::combomods::before_step(&mut d.character, input) } else { input };
         let mut out = d.character.step(&input, &env);
         // Out of flight for a combo: he stays up through it (the user: Sora should remain in
         // flight throughout the combo); KH2's aerial attacks sink between hits, so no sinking while

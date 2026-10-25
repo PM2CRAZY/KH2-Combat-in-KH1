@@ -5,10 +5,11 @@
 //!
 //! With the Base / Aerial Combo style at KH1, KH1's own combo plays: its rows, motions and hits,
 //! and its own abilities, which KH1 reads itself (Combo Plus, Air Combo Plus, Combo Master and
-//! KH1's modifiers are the same KH1 abilities KH2's come from). KH2's abilities on top of it are
-//! borrows, as Aerial Dodge is with Jump at KH1: at the press where KH2 would use one, KH2's
-//! controller borrows him for that move (`takeover::shared_frame`), KH1's swing cut there as a
-//! spell's end frames are. Where none applies, KH1's own combo plays.
+//! KH1's modifiers are the same KH1 abilities KH2's come from). KH2's abilities on top of it play
+//! on KH1's own rows (KH1's or ours, `kh1rows`); where no KH1 row can play one (its slot not
+//! built, no row free), KH1's own row its picker chose plays, or KH1's own button for a Square or
+//! jump move (the tester, combo row selection after m25, answer 2: "(b)"; KH2's controller used to
+//! borrow him for that one move). Where none applies, KH1's own combo plays.
 //!
 //! - **Attack at the combo style KH1** (`picker`, from our hooks on KH1's own row pickers,
 //!   `kh1picker`): KH1's picker chooses; KH2's ability rows are among its choices by KH2's own
@@ -24,7 +25,7 @@
 //!   - KH2's step where KH1's would finish, KH2's combo being the longer (Combo Plus KH1 didn't
 //!     count);
 //!   - Finishing Plus: a press during KH1's finisher is KH2's next finisher (on a KH1 row of its
-//!     own, `next_finisher`; the borrow only when none can play it).
+//!     own, `next_finisher`; KH1's own row when none can play it).
 //! - **Square** in KH1's combo window (`control`): KH2's Square move there (Finishing Leap, Upper
 //!   Slash, Horizontal Slash), if KH1's swing connected or Combo Master is on (as KH2's): on a
 //!   KH1 row of its own (`kh1rows`), through KH1's own Attack step, no borrow.
@@ -46,7 +47,7 @@
 
 use super::addr::{Build, Rva};
 use super::{log, pose, takeover};
-use character_core::{Button, Character, ComboRow, ComboState, Input};
+use character_core::{Character, ComboRow, ComboState};
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Mutex;
 
@@ -75,20 +76,6 @@ fn note(s: String) {
     }
 }
 
-/// What KH2 borrows him for.
-#[derive(Clone, Copy, Debug)]
-pub enum Move {
-    /// That combo row (`Character::force_row`) with the combo carried at `state`, on an Attack
-    /// press.
-    Row { id: u8, state: ComboState },
-    /// Aerial Recovery.
-    Recover,
-}
-
-/// The move KH2 is to borrow him for (taken by `takeover::shared_frame` this frame), and the one
-/// it borrowed him for, to set on KH2's first step (`before_step`), with its game frame.
-static WANT: Mutex<Option<(Move, u64)>> = Mutex::new(None);
-static APPLY: Mutex<Option<(Move, u64)>> = Mutex::new(None);
 /// KH1's last swing of its own combo that ran: its count, its motion, whether it was KH1's
 /// finisher, in the air.
 static LAST: Mutex<Option<(u8, u32, bool, bool)>> = Mutex::new(None);
@@ -145,7 +132,7 @@ fn ours_run(n: usize, launch: Option<character_core::Launch>, air: bool, count: 
 ///   is, 0xCB / 0xCE: a new request, so KH1 starts KH2's motion fresh);
 /// - else (a third finisher, ours playing) KH1's own finisher row of this kind, our slot of the
 ///   pick on its request (KH1's finisher, as `kh2_row` / `select_swing` play KH2's finishers).
-/// In the air with KH2's hop for the row. `None` (the borrow) when none of them can play it.
+/// In the air with KH2's hop for the row. `None` when none of them can play it (KH1's own row then).
 fn next_finisher(actor: usize, row: &ComboRow, launch: Option<character_core::Launch>, air: bool, count: u8, playing: u32, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<Run> {
     use super::kh1rows as k;
     if let Some(n) = ours_for(row).filter(|&n| k::request(n) != playing) {
@@ -182,58 +169,6 @@ fn take_ours() -> Option<(usize, Option<character_core::Launch>)> {
 
 fn frame() -> u64 {
     takeover::GAME_FRAME.load(Ordering::Relaxed)
-}
-
-fn want(m: Move) {
-    if let Ok(mut w) = WANT.lock() {
-        *w = Some((m, frame()));
-    }
-}
-
-/// This frame's ability borrow (`takeover::shared_frame`; one left from an earlier frame, KH1's
-/// physics step not run since, is dropped: no buffer).
-pub fn take_want() -> Option<Move> {
-    let (m, at) = WANT.try_lock().ok().and_then(|mut w| w.take())?;
-    if frame().saturating_sub(at) > 1 {
-        note(format!("KH2's ability move {m:?} dropped: KH1's states didn't let it go that frame"));
-        return None;
-    }
-    Some(m)
-}
-
-/// KH2 borrowed him for it: set on its first step.
-pub fn lent(m: Move) {
-    if let Ok(mut a) = APPLY.lock() {
-        *a = Some((m, frame()));
-    }
-    BLOWN_AT.store(0, Ordering::Relaxed);
-    if let Ok(mut l) = LAST.lock() {
-        *l = None;
-    }
-}
-
-/// Right before KH2's step: the move it borrowed him for (a few frames at most after the borrow:
-/// KH1 holding him still in between drops it), as the step's press.
-pub fn before_step(ch: &mut Character, input: Input) -> Input {
-    let Some((m, at)) = APPLY.try_lock().ok().and_then(|mut a| a.take()) else { return input };
-    if frame().saturating_sub(at) > 3 {
-        note(format!("KH2's ability move {m:?} dropped: its step came too late"));
-        return input;
-    }
-    let release = |b: Button| Button { pressed: false, held: b.held };
-    match m {
-        Move::Row { id, state } => {
-            ch.set_combo_state(state);
-            ch.force_row(id);
-            Input { attack: Button { pressed: true, held: true }, action: release(input.action), jump: release(input.jump), ..input }
-        }
-        Move::Recover => {
-            if !ch.air_recovery(input.stick) {
-                note("Aerial Recovery out of KH1's knock-away: KH2 couldn't (not in the air)".to_string());
-            }
-            Input { jump: release(input.jump), action: release(input.action), ..input }
-        }
-    }
 }
 
 unsafe fn sora() -> usize {
@@ -393,15 +328,16 @@ fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u
 /// ground swing rows, Explosion on the ground finisher row, Magnet Burst on the air finisher row,
 /// `kh2slots::body_strike`): the same, with KH2's own shapes and hit numbers for those windows
 /// landed through KH1's damage (`takeover::kh2_hits`) and its invulnerability in KH1's hit pass
-/// (`hurt`). The rest still borrow.
+/// (`hurt`). The rest have no slot: KH1's own row plays where one is picked (`kh1_own_row`).
 fn native_ability(row: &ComboRow) -> bool {
     row.ability != 0 && super::kh2slots::has_any(row.motion)
 }
 
 /// What `combat::exec` runs for an Attack KH1's own combo took (`attack`).
 pub enum Run {
-    /// KH2 borrows him for one of its ability moves: no KH1 row.
-    Kh2,
+    /// No row on this press (Finishing Plus's last finisher already ran: KH2's rule, nothing after
+    /// it until it ends).
+    Nothing,
     /// This KH1 row (its own, or its plain one KH2's row selection took, `kh2_row`).
     Row(i32),
     /// KH2's hop (`kh2_hop`): KH1's air state entered, this KH1 air row run, then KH2's arc and
@@ -413,8 +349,8 @@ pub enum Run {
 }
 
 /// An Attack KH1's own combo took (`combat::exec`, base Sora in KH1's own states, the combo style
-/// KH1's where he is, KH1's `row` about to run): `Run::Kh2` when KH2 borrows him for one of its
-/// ability moves instead, else the KH1 row to run: `row`, or KH1's plain swing or finisher row in
+/// KH1's where he is, KH1's `row` about to run): `Run::Nothing` for no attack, else the KH1 row
+/// to run: `row`, or KH1's plain swing or finisher row in
 /// its place where KH2's row selection takes that (`kh2_row`), or KH2's hop on KH1's air state
 /// (`kh2_hop`). `request_of`: a KH1 row's motion request (its `+0`).
 pub unsafe fn attack(actor: usize, row: i32, _dir: usize, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
@@ -424,6 +360,23 @@ pub unsafe fn attack(actor: usize, row: i32, _dir: usize, request_of: &dyn Fn(i3
     let run = attack_row(actor, row, request_of);
     takeover::test_drop_ahead(false);
     run
+}
+
+/// KH1's own row its picker chose (`row`), run with its own motion, where no KH1 row can play
+/// KH2's pick (the tester, combo row selection after m25, answer 2: "(b)"; before, KH2's
+/// controller borrowed him for that one move): KH1's request with no KH2 pick on it
+/// (`select_swing`: at the combo style KH2 its default slot, as when KH2 takes nothing; at KH1's
+/// its own motion), and the combo noted as for any of KH1's rows (`LAST`; a finisher
+/// counted on from `chain`, the finishers so far, when it runs as Finishing Plus's next one).
+fn kh1_own_row(combo: &Kh1Combo, row: i32, count: u8, kh1_len: u8, air: bool, chain: Option<u8>, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
+    let _ = select_swing(combo, request_of(row), None);
+    if let Ok(mut l) = LAST.lock() {
+        let finisher = |m: u32| if combo.swings.contains(&(m & 0xFFFF)) || m & 0xFFFF == combo.finisher { m & 0xFFFF == combo.finisher } else { count >= kh1_len };
+        *l = request_of(row).map(|m| (count, m, finisher(m), air));
+        let fin = l.is_some_and(|x| x.2);
+        FINISHERS.store(if fin { chain.map_or(1, |f| f.saturating_add(1)) } else { 0 }, Ordering::Relaxed);
+    }
+    Run::Row(row)
 }
 
 unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
@@ -472,14 +425,18 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             Some(p) => p.as_ref().filter(|p| p.chained).map(|p| (p.row.clone(), p.len, p.neg, p.launch)),
             None => takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()),
         };
-        if let Some((row, _, _, launch)) = chained {
-            note(format!("Attack in KH1's finisher (count {n}, finisher {finishers}): KH2's next finisher, row {} motion {} (Finishing Plus)", row.id, row.motion));
-            if let Some(run) = next_finisher(actor, &row, launch, air, n, playing, request_of) {
+        if let Some((next, _, _, launch)) = chained {
+            note(format!("Attack in KH1's finisher (count {n}, finisher {finishers}): KH2's next finisher, row {} motion {} (Finishing Plus)", next.id, next.motion));
+            if let Some(run) = next_finisher(actor, &next, launch, air, n, playing, request_of) {
                 FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
                 return run;
             }
-            want(Move::Row { id: row.id, state: from });
-            return Run::Kh2;
+            // No KH1 row can play it (its slot not built, or every finisher row's request the one
+            // playing): KH1's own row its picker chose, with its own motion (the tester, combo
+            // row selection after m25, answer 2: "(b)"; KH2's controller no longer borrows him).
+            note(format!("KH2's next finisher row {} motion {}: no KH1 row free to play it, KH1's own row {row} runs", next.id, next.motion));
+            let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+            return kh1_own_row(combo, row, count, kh1_len, air, Some(finishers), request_of);
         }
     }
     let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
@@ -522,11 +479,9 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         // finisher until it ends).
         if let Some((_, _, true, _)) = last.filter(|l| l.3 == air && l.1 & 0xFFFF == playing && count >= kh1_len) {
             let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
-            let run = if !finisher_chain_open() {
-                None
-            } else if let Some((r, ..)) = pick.as_ref().filter(|(r, ..)| r.is_finisher()) {
-                next_finisher(actor, r, launch, air, count, playing, request_of)
-            } else {
+            // (KH1's own finisher its picker took, not a swing of its combo, its request not the
+            // one playing.)
+            let own = || {
                 request_of(row).filter(|&q| !combo.swings.contains(&(q & 0xFFFF)) && q & 0xFFFF != playing).map(|q| {
                     if let Ok(mut l) = LAST.lock() {
                         *l = Some((count, q, true, air));
@@ -535,15 +490,29 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
                     Run::Row(row)
                 })
             };
+            let kh2_next = pick.as_ref().filter(|(r, ..)| r.is_finisher());
+            let mut ran_kh2 = false;
+            let run = if !finisher_chain_open() {
+                None
+            } else if let Some((r, ..)) = kh2_next {
+                // (No KH1 row free to play KH2's: KH1's own row its picker chose, by the same
+                // rule; the tester, combo row selection after m25, answer 2: "(b)".)
+                let r = next_finisher(actor, r, launch, air, count, playing, request_of);
+                ran_kh2 = r.is_some();
+                r.or_else(own)
+            } else {
+                own()
+            };
             note(format!(
                 "Attack in KH1's finisher at the KH1 setting (count {count}, finisher {finishers}, Finishing Plus): {}",
-                match (&run, pick.as_ref()) {
+                match (&run, kh2_next) {
                     (None, _) => "no next finisher (the last one, or no finisher row free): no attack".to_string(),
-                    (Some(_), Some((r, ..))) => format!("KH2's finisher row {} motion {} from KH1's picker", r.id, r.motion),
+                    (Some(_), Some((r, ..))) if ran_kh2 => format!("KH2's finisher row {} motion {} from KH1's picker", r.id, r.motion),
+                    (Some(_), Some((r, ..))) => format!("KH1's own row {row} (no KH1 row free to play KH2's finisher row {} motion {})", r.id, r.motion),
                     (Some(_), None) => format!("KH1's own row {row} (not a swing of its combo)"),
                 }
             ));
-            let Some(run) = run else { return Run::Kh2 };
+            let Some(run) = run else { return Run::Nothing };
             FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
             return run;
         }
@@ -558,7 +527,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",
             if air { "aerial" } else { "ground" },
             pick.as_ref().map_or("nothing".to_string(), |(r, len, _)| format!("row {} motion {} (ability {}, finisher {}, KH2's length {len})", r.id, r.motion, r.ability, r.is_finisher())),
-            why.map_or(String::new(), |w| format!(": {w}, KH2 borrows him for it"))
+            why.map_or(String::new(), |w| format!(": {w}"))
         ));
     }
     if let Some((r, ..)) = pick.as_ref().filter(|_| why.is_some()) {
@@ -566,8 +535,11 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         if let Some(n) = ours_for(r) {
             return ours_run(n, launch, air, count, request_of);
         }
-        want(Move::Row { id: r.id, state: ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false } });
-        return Run::Kh2;
+        // No KH1 row can play it (its motion's slot not built): KH1's own row its picker chose,
+        // with its own motion (the tester, combo row selection after m25, answer 2: "(b)"; KH2's
+        // controller no longer borrows him).
+        note(format!("KH2's row {} motion {}: no KH1 row plays it, KH1's own row {row} runs", r.id, r.motion));
+        return kh1_own_row(combo, row, count, kh1_len, air, None, request_of);
     }
     if !air {
         if let Some((r, l)) = pick.as_ref().zip(launch).and_then(|((p, ..), l)| kh2_hop(actor, row, p, l, request_of)) {
@@ -1475,9 +1447,11 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
             if unsafe { recover(actor) } {
                 return Some(all);
             }
-            note("jump while KH1 has him knocked away: KH2's Aerial Recovery".to_string());
-            want(Move::Recover);
-            return Some(all);
+            // (Its KH1 request not built, or not KH1's air state: the jump stays KH1's, as with
+            // no Aerial Recovery; KH2's controller no longer borrows him, the tester, combo row
+            // selection after m25, answer 2: "(b)".)
+            note("jump while KH1 has him knocked away: no KH1 request for KH2's Aerial Recovery here, KH1's own jump".to_string());
+            return None;
         }
         if square_fresh {
             let row = takeover::kh2_retaliating_slash();
@@ -1496,9 +1470,10 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
                         return Some(all);
                     }
                 }
-                note("Square while KH1 has him knocked away: KH2's Retaliating Slash".to_string());
-                want(Move::Row { id, state: ComboState { count: 0, finishers: 1, hit: false, finisher_next: false } });
-                return Some(all);
+                // (No KH1 row of its own built for it, or not KH1's air state: Square stays KH1's;
+                // no borrow, the tester, after m25, answer 2: "(b)".)
+                note(format!("Square while KH1 has him knocked away: no KH1 row for KH2's Retaliating Slash (row {id}) here, KH1's own Square"));
+                return None;
             }
         }
         return None;
@@ -1525,9 +1500,11 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
             note(format!("Square in KH1's combo window (swing {count}): KH2's Square move, row {} motion {}, on KH1's row {} of its own", row.id, row.motion, super::kh1rows::row(n)));
             return Some(super::shared::KH1_ACTION_BIT);
         }
-        note(format!("Square in KH1's combo window (swing {count}): KH2's Square move, row {} motion {}", row.id, row.motion));
-        want(Move::Row { id: row.id, state: from });
-        return Some(super::shared::KH1_ACTION_BIT);
+        // (No KH1 row of its own built for it: Square is KH1's own there, its roll or guard, as
+        // when no Square move passes (the tester, m20 answer 5 (a)); no borrow, after m25, answer
+        // 2: "(b)".)
+        note(format!("Square in KH1's combo window (swing {count}): KH2's Square move row {} motion {} has no KH1 row here, KH1's own Square", row.id, row.motion));
+        return None;
     }
     None
 }
@@ -1556,7 +1533,7 @@ const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
 /// (the exe's jump action grants none out of an airborne one). Its windows are KH1's from our
 /// slot: invulnerable 0..16 (`kh2slots::invulnerable`), the guard 124 on his body 0..16
 /// (`body_guard`), and KH1's "may be left" from frame 24 (KH2's air free state, range id 1,
-/// `kh2slots::kh1_tracks`). False (the borrow then) without our request built or out of KH1's
+/// `kh2slots::kh1_tracks`). False (KH1's own jump then) without our request built or out of KH1's
 /// air state.
 unsafe fn recover(actor: usize) -> bool {
     let Some(n) = super::kh1rows::by_motion(character_core::motion::AIR_RECOVERY) else { return false };
