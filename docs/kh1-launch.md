@@ -263,3 +263,19 @@ stay KH1's. The flight ends when the enemy leaves state 2, when KH1 writes anoth
 reaction of its own: its launch, air flinch, knock-back), or after 600 frames. **Checked
 (code)**; the 30 Hz tick is the project's reading of KH2's physics (`docs/combat-model.md`),
 not re-checked frame by frame here.
+
+### Flinch pushes
+
+KH1's enemy flinch push `0x1402B7E60 (actor, record)` (Steam, prologue `48 89 5C 24 18 57 48 83
+EC 40`, Checked (exe)) is hooked. KH1's runs first (its motion, its push started through
+`0x1402C7300`, the record marked done); for a record a KH2 hit made (noted per record in
+`combat::scale_record`, fresh for 250 ms), KH1's push speed `+0x3FC` is set to KH2's distance ×
+0.1 (× the enemy's weight with Enemy Weight on), and before each of the enemy's physics steps
+(`takeover::physics`, Steam `0x14029A3C0`) KH2's speed for the frame goes into KH1's field, so
+KH1's own push step `0x1402C7070` moves it (with its collision), KH2's ×0.9 a frame (raised to
+the frame step) kept by us. Ends below 1, as both games do. The distance: the ATKP's first
+knock-back number, sstm's 200 when it has none, halved for reactions 0xC / 0xD; a plain flinch
+(group 2) none. Left to KH1: an enemy whose weight is 0 (KH1 never pushes it), a KH2 blow on an
+enemy KH1 can't launch (KH1's fallback), and any push KH1 starts itself meanwhile. **Checked
+(decomp)** for both games' push rules; the hand-over between the two is **Checked (code)**.
+Spells' hits (`Strikes::spell_strike`) are not included: they keep KH1's rows' reactions.

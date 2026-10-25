@@ -2023,7 +2023,10 @@ impl Strikes {
                     (air as usize) * 2 + finisher as usize, if air { "air " } else { "ground " }, if finisher { "finisher" } else { "swing" }
                 );
                 let fx = swing_spark(h.weapon, &row);
+                // (KH2's numbers for KH1's reaction to it, `knockback`; not on the big and fixed.)
+                super::knockback::set_current((!b.fixed).then_some(super::knockback::Kh2Hit { reaction: row.enemy_reaction, k1: row.knockback_1, k2: row.knockback_2 }));
                 let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, fx, info);
+                super::knockback::set_current(None);
                 if dealt.is_some() {
                     landed += 1;
                 }
@@ -2632,6 +2635,10 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     let p = own.as_ref().map_or(POWER.load(Ordering::Relaxed), |a| a.power.max(1) as u32);
     if p == 0 || rec < 0x10000 {
         return;
+    }
+    // KH2's numbers on this record for KH1's reactions to it (`knockback`).
+    if let Some(h) = own.as_ref().map(|a| super::knockback::Kh2Hit { reaction: a.enemy_reaction, k1: a.knockback_1, k2: a.knockback_2 }).or_else(|| if own.is_some() { None } else { super::knockback::current() }) {
+        super::knockback::note_record(rec, h);
     }
     let own_launch = own.as_ref().filter(|a| super::kh1rows::throws(a)).and_then(|a| {
         let r = &pose::kh2()?.character.reaction;

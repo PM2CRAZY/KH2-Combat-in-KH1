@@ -216,3 +216,168 @@ pub unsafe fn air_step(actor: usize, disp: *mut [f32; 4]) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// KH2's hit numbers on KH1's hit records.
+// ---------------------------------------------------------------------------------------------
+
+/// What KH2's reaction routine reads from a hit's ATKP: its reaction id and two knock-back numbers.
+#[derive(Clone, Copy, Debug)]
+pub struct Kh2Hit {
+    pub reaction: u8,
+    pub k1: i16,
+    pub k2: i16,
+}
+
+/// The KH2 hit being landed now (`combat`'s swing path), for `combat::scale_record`.
+static CURRENT: std::sync::Mutex<Option<Kh2Hit>> = std::sync::Mutex::new(None);
+/// KH1's hit records made by KH2's hits: (record, hit, when). KH1 reuses its records, so only
+/// fresh ones count (its reactions run within a frame or two).
+static RECORDS: std::sync::Mutex<Vec<(usize, Kh2Hit, u64)>> = std::sync::Mutex::new(Vec::new());
+const FRESH_MS: u64 = 250;
+
+fn now_ms() -> u64 {
+    static T0: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    T0.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
+}
+
+pub fn set_current(hit: Option<Kh2Hit>) {
+    if let Ok(mut c) = CURRENT.lock() {
+        *c = hit;
+    }
+}
+
+pub fn current() -> Option<Kh2Hit> {
+    CURRENT.lock().ok().and_then(|c| *c)
+}
+
+/// `combat::scale_record`: KH1's record `rec` was made by this KH2 hit.
+pub fn note_record(rec: usize, hit: Kh2Hit) {
+    if let Ok(mut v) = RECORDS.lock() {
+        let now = now_ms();
+        v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < FRESH_MS);
+        v.push((rec, hit, now));
+    }
+}
+
+fn record(rec: usize) -> Option<Kh2Hit> {
+    let now = now_ms();
+    RECORDS.lock().ok()?.iter().find(|(r, _, t)| *r == rec && now.saturating_sub(*t) < FRESH_MS).map(|(_, h, _)| *h)
+}
+
+/// KH2's push distance for a hit (`character_core::reaction::hit_back_distance`: the ATKP's first
+/// knock-back number, sstm's 200 when it has none (32767), halved for reactions 0xC / 0xD; Steam KH2
+/// `0x1403CEAB0`), and none for a plain flinch (group 2). `None` for a blow (KH1's fallback for an
+/// enemy it can't launch stays KH1's).
+fn push_distance(h: &Kh2Hit) -> Option<f32> {
+    use character_core::reaction::{category, hit_back_distance, Hit};
+    let p = pose::kh2().map(|k| k.character.reaction.clone()).unwrap_or_default();
+    match category(h.reaction) {
+        4 | 5 => None,
+        2 => Some(0.0),
+        _ => Some(hit_back_distance(&Hit { reaction: h.reaction, knockback: (h.k1, h.k2), dir: [0.0, 1.0], part: 0 }, &p)),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The flinch push: KH2's distance and curve in KH1's enemy push.
+// ---------------------------------------------------------------------------------------------
+
+/// KH1's enemy flinch push (Steam `0x1402B7E60 (actor, record)`, Checked (decomp)): direction the
+/// record's `+0x10`, distance btltbl `+0x2C` (80) × the weight, through KH1's push `0x1402C7300`.
+/// `mov [rsp+0x18], rbx; push rdi; sub rsp, 0x40` (Checked (exe)).
+const FLINCH_PUSH_STEAM: usize = 0x2B7E60;
+const FLINCH_PUSH_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40];
+static ORIG_FLINCH_PUSH: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// KH1's push (`0x1402C7300` starts it, `0x1402C7070` steps it from the physics step; Checked
+/// (decomp)): speed `+0x3FC` (KH1 starts it at distance × 0.22314355 and keeps × 0.8 a frame),
+/// on while `+0x88` bit 0x40.
+const PUSH_SPEED: usize = 0x3FC;
+const PUSH_FLAGS: usize = 0x88;
+const PUSH_ON: u32 = 0x40;
+const KH1_DECAY: f32 = 0.8;
+/// KH2's (Steam KH2 `0x1403D4960` / `0x1403D4570`, Checked (decomp)).
+const KH2_START: f32 = 0.1;
+const KH2_DECAY: f32 = 0.9;
+
+/// Enemies on KH2's push: (actor, KH2's speed for the next frame, what was last written).
+static PUSHES: std::sync::Mutex<Vec<(usize, f32, f32)>> = std::sync::Mutex::new(Vec::new());
+
+unsafe fn wr<T: Copy>(p: usize, v: T) {
+    std::ptr::write_unaligned(p as *mut T, v)
+}
+
+unsafe extern "system" fn flinch_push(actor: usize, rec: usize) {
+    let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_FLINCH_PUSH.load(Ordering::Acquire));
+    f(actor, rec);
+    let Some(hit) = record(rec) else {
+        drop_push(actor);
+        return;
+    };
+    let Some(d) = push_distance(&hit) else { return };
+    // KH1's weight: none means KH1 doesn't move this enemy (big and fixed ones): KH1's own stays.
+    let w = kh1_weight(actor);
+    if w == Some(0.0) {
+        return;
+    }
+    let d = if weight() { d * w.unwrap_or(1.0) } else { d };
+    let v = d * KH2_START;
+    wr(actor + PUSH_SPEED, v);
+    let flags = rd::<u32>(actor + PUSH_FLAGS);
+    wr(actor + PUSH_FLAGS, if v >= 1.0 { flags | PUSH_ON } else { flags & !PUSH_ON });
+    if let Ok(mut p) = PUSHES.lock() {
+        p.retain(|(a, _, _)| *a != actor);
+        if v >= 1.0 {
+            if p.len() > 64 {
+                p.remove(0);
+            }
+            p.push((actor, v, v));
+        }
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log(&format!("KH2's push on {actor:#x} (reaction {}, knock-back {} / {}): {d:.0} (weight {:?}{}), {v:.1} a frame, x{KH2_DECAY} a frame", hit.reaction, hit.k1, hit.k2, w, if weight() { "" } else { ", off" }));
+    }
+}
+
+fn drop_push(actor: usize) {
+    if let Ok(mut p) = PUSHES.lock() {
+        p.retain(|(a, _, _)| *a != actor);
+    }
+}
+
+/// Before KH1's physics step for an enemy (`takeover::physics`): KH2's push speed for this frame
+/// in KH1's push (which moves it by that × the frame step, with its collision), KH2's decay for
+/// the next. Dropped when KH1 started a push of its own meanwhile (its field isn't what KH1's push
+/// leaves of ours).
+pub unsafe fn push_frame(actor: usize) {
+    let Ok(mut p) = PUSHES.try_lock() else { return };
+    let Some(i) = p.iter().position(|(a, _, _)| *a == actor) else { return };
+    let (_, v, written) = p[i];
+    let field: f32 = rd(actor + PUSH_SPEED);
+    let dt = super::shared::physics::dt();
+    let kh1_left = written * KH1_DECAY.powf(dt);
+    let ours = (field - written).abs() < 1e-3 || (field - kh1_left).abs() < 1e-3 * written.max(1.0);
+    if !ours {
+        p.remove(i);
+        return;
+    }
+    if v < 1.0 {
+        wr(actor + PUSH_SPEED, 0.0f32);
+        wr(actor + PUSH_FLAGS, rd::<u32>(actor + PUSH_FLAGS) & !PUSH_ON);
+        p.remove(i);
+        return;
+    }
+    wr(actor + PUSH_SPEED, v);
+    wr(actor + PUSH_FLAGS, rd::<u32>(actor + PUSH_FLAGS) | PUSH_ON);
+    p[i] = (actor, v * KH2_DECAY.powf(dt), v);
+}
+
+pub unsafe fn install() {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    super::hook::install(base + FLINCH_PUSH_STEAM, &FLINCH_PUSH_PROLOGUE, flinch_push as *const () as usize, &ORIG_FLINCH_PUSH, "enemy flinch push (KH2's push)");
+}

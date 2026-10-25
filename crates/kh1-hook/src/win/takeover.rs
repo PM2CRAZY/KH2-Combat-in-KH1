@@ -466,6 +466,10 @@ unsafe extern "system" fn physics(actor: usize) {
         // KH2's push on KH1's push after a hit (`hitreact`).
         super::hitreact::push_frame(actor);
     }
+    // An enemy on KH2's push after a KH2 hit (`knockback`).
+    if !sora && actor > 0x10000 {
+        super::knockback::push_frame(actor);
+    }
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
     if sora {
