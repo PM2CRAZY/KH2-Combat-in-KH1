@@ -23,6 +23,7 @@
 - [17. Assistant: I looked into both in KH2's Steam decomp and your KH2 files.](#^m17)
 - [18. Assistant: t536 and t537.](#^m18)
 - [19. Assistant: t557 and t558. You're right, I had it backwards: at the KH1 ](#^m19)
+- [20. Assistant: You're right that there's still a seam. Here's what the code](#^m20)
 
 ---
 
@@ -425,3 +426,37 @@ go ahead
 3. (b) find a way to make it native with kh1's picker.
 
 when it comes to it we now have two pickers, if its native thats good but what I don't get is how come you don't just patch it to where kh2 moves can have the same logic they do inside of kh1's picker it should be as if your patching extra features into kh1's mechanics, not taking away from kh1 but adding more that the engine can do. 
+
+
+> [!tip] Assistant
+> You're right that there's still a seam. Here's what the code does today at the KH1 setting:
+> - **Attack:** KH1's picker is the only picker. But when it lands on a plain row, it calls a separate list of KH2 ability rows, which runs KH2's checks on its own KH2 object after KH1's own ability rows. So the KH2 rows are tacked on after KH1's walk, not inside it.
+> - **Square moves, Counterguard and Retaliating Slash** still call KH2's selector, then hand the pick to KH1's Attack step, which skips KH1's picker for them.
+>
+> Your idea is the right fix: one list inside KH1's own walk, with KH1's rows and the KH2 rows in a single order. KH2's row checks become an extra test KH1's walk runs on a row, and KH2's separate selector goes away for these. Nothing gets taken out of KH1.
+>
+> I checked KH2's rule in the Steam decomp (`0x140402C50` walks the rows, `0x1403D7850` is the finisher test). You're right, with one catch:
+> - KH2 walks its rows in table order and takes the first one that passes. There's no random chance.
+> - With one enemy, an equipped ability finisher always beats the normal finisher.
+> - With Finishing Plus, the next finisher skips the move that's still playing. So it's another ability if you have one, otherwise the normal finisher. With no abilities you get 155, then 154. With two Finishing Plus the first ability comes back on the third. The same move never plays twice in a row.
+> - The catch: in a group, KH2's own table puts its normal finisher 154 ahead of Guard Break when a second enemy is close and off to the side, and 184 ahead of Aerial Finish in the air. Explosion and Magnet Burst still come first.
+>
+> The plan, one version each:
+> 1. **Your mapping.** Stun Impact and Ripple Drive take Explosion's place and checks, Gravity Break and Blitz take Guard Break's, and Hurricane Blast takes Aerial Finish's. That replaces KH1's 30% roll on Stun Impact and Gravity Break, and Blitz's "no enemies around" test. Those are KH1's own rules, so this changes how KH1's abilities behave at the KH1 setting. You asked for it, but I want to be clear about it.
+> 2. **A Finishing Plus window on KH1's own finishers.**
+> 3. **Square moves through KH1's picker.** Square in KH1's combo window gives KH1 an Attack press, and KH1's picker then only looks at the Square rows (Upper Slash, Horizontal Slash, Finishing Leap) with KH2's checks. Counterguard and Retaliating Slash would go the same way.
+>
+> Questions:
+> 1. In a group: (a) KH2's exact order, so 154 / 184 can come before Guard Break / Aerial Finish when a second enemy is beside you, or (b) abilities always first, as you wrote?
+> 2. When a KH1 ability and its KH2 twin are both equipped (say Explosion and Ripple Drive), which goes first: (a) the KH2 one, or (b) the KH1 one? Either way, with Finishing Plus they'd take turns.
+> 3. KH1 has only one normal ground finisher, so a second normal finisher has nothing to pick, and right now you'd get no attack there. (a) KH1's finisher plays again, the way KH2's 155 hands over to 154, or (b) Finishing Plus only adds a slot when an ability can fill it?
+> 4. The window on KH1's finishers:
+>    - (a) KH2's own finisher window from 155 / 183, placed at the same point in KH1's finisher (I'd read the frames from your KH2 files; the placement is my assumption).
+>    - (b) the same spot as KH1's combo window on its normal swings.
+>    - (c) the last 6 frames, the rule we already use for Wisdom's finisher (ours, not KH2's).
+> 5. Square when no Square move passes: (a) Square does its normal roll or guard, as in KH2, or (b) nothing?
+>
+> If that sounds right, give me a go-ahead with your picks and I'll do the three items as their own versions.
+
+^m20
+

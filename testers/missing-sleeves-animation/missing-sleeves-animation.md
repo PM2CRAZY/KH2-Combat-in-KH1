@@ -19,6 +19,7 @@
 - [13. Assistant: t499 and t500.](#^m13)
 - [14. Assistant: t519.](#^m14)
 - [15. Assistant: t552.](#^m15)
+- [16. Assistant: Sorry, I see the mix-up now. Two things changed along the wa](#^m16)
 
 ---
 
@@ -306,3 +307,27 @@ go ahead
 
 
 your currently fundamentally misunderstanding me, sora's hoodie still stays rigid, its currently worse than it was when we had physics around t375, that had better animations what do you think instead we approximate the animation and put it on soras coat, hoodie, legs etc. it needs to look natural and his clothes not clip. 
+
+
+> [!tip] Assistant
+> Sorry, I see the mix-up now. Two things changed along the way:
+>
+> - **What you liked around t375 wasn't physics.** The hood followed KH2's own hidden hood bones (KH2 keys them in every move but draws no mesh on them). On top of that, a rule of ours kept it off his back and head. That's why it swayed so much.
+> - **Why it's rigid now.** In t407 / t412 we went fully 1:1 with what KH2's model *shows*. KH2 shows no hood, so the hood got locked to his chest, and it hasn't moved since. That's stiffer than KH1's own animations, which turn it 13° to 31°. The shorts went rigid on the thigh the same way (t490). The coat follows KH2's hidden coat bones now (t552), but those clip.
+>
+> So you're right: "only what KH2 shows" leaves the hood dead, because KH2 never shows one. Making these parts look natural without clipping has to be our own rule on top of KH2's motion, since KH2 has nothing to copy for it. I'll mark it as ours in the docs.
+>
+> How we could do it:
+> - (a) **Bring back a physics layer.** The clothes lag and settle behind KH2's pose and are kept out of the body. It feels the most alive. But KH2 has no physics, and it brings back the splaying, clipping and stutter we had with the old hair physics.
+> - (b) **Borrow KH1's own cloth animation** from the closest KH1 move (KH1's run for KH2's run). We tried this for the coat in t387, and it stretched and jumped because KH1's moves don't line up with KH2's stride.
+> - (c) **My pick.** Start from KH2's hidden hood, coat and trouser keys, which really do move with every step and swing. Then smooth them and add clearance, so the hood stays off his back and head and the coat tips and shorts stay off the thighs. Everything KH2 visibly animates (hair, sleeves, necklace, keychain) stays exactly KH2's. It's all worked out from the motion, so it bakes into KH1's own animations with nothing extra running each frame.
+>
+> Questions:
+> 1. Is (c) the look you want, or do you want the clothes to lag and settle after he stops, like physics? That needs (a) or something like it.
+> 2. Which parts: (a) hood, coat and shorts; (b) those plus the belt chain and the belt-front pieces (KH2 has nothing for those, so their motion would be fully ours); or (c) the hood first, so you can judge the look?
+> 3. The log in your folder is from t544, before the coat change. The screenshot there (Olympus Coliseum) shows the Keyblade's long red swing trail, not his clothes, so I think it belongs to another thread. If you can, send a t552 or later trace of a run, the idle and a swing.
+>
+> If (c) sounds right, say go ahead and I'll start with the hood.
+
+^m16
+
