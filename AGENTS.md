@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 607 (testing branch: KH1 spells: no jump or Square cut)
+- **KH1 spells: no jump or Square cut.** The tester (kh2-magic-and-reflect-native m9, answer 1): "(a)". `takeover`'s hand-off path (a KH1 spell started out of one of KH2's moves, and a Drive Form's KH1 spell) let a jump or Square end the cast once the spell was out (s168's "other cut"); that cut is removed, so jump and Square wait until KH1 lets him act. Attack or another spell still cut the cast as before (`attack_cut` / `magic_cut`). KH2 takes a jump or the action button only in a free state (Steam KH2 `0x1403D6FC0` / `0x1403BFB30`), which no cast has. Checked (decomp). docs/kh1-anim-slots.md.
+
 ### 2026-10-25: Stage 606 (testing branch: Tweaks: Enemy Weight)
 - **Config: Tweaks > Enemy Weight.** The tester (kh2-knockback-on-enemies m1, answer 1): "(b) but make it a toggle in the config menu". Combat > Tweaks gets a second row, Enemy Weight (Off | On, text ids `0x7F00_0193` / `0x7F00_0194`), switching `knockback::weight` live and saved as `enemy_weight` (default on). On: KH2's knock-back × KH1's per-enemy weight (t602-t605); Off: KH2's numbers for every enemy. docs/kh1-config-menu.md §6.y.
 

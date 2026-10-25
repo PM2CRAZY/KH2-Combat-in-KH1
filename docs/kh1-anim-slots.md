@@ -1180,6 +1180,10 @@ borrows it for the roll / Quick Run as before.
     (34).
   - KH2's casts on KH1's cast state: a jump or Square cuts them only in a free state
     (`cast_cut_open`), so never for Sora's; an Attack still from the reaction-command window.
+  - KH1's own spells handed to KH1 (a spell out of one of KH2's moves, a Drive Form's KH1 spell,
+    `takeover`'s hand-off): a jump or Square no longer ends the cast once the spell is out (s168's
+    "other cut" is gone, the tester m9 answer 1 (a)); they wait for KH1 to let him act, as both
+    games do. An Attack or another spell still cut it once it is out (`attack_cut`, `magic_cut`).
   **Assumption:** nothing of ours needed KH1's "can act" at the old template point during a KH2
   swing (the give-back waits for the combo's end anyway).
 - **Ours**: three more KH1 requests (`kh1rows::OURS`, 0x208..0x20A): Guard (173) and Guard repel

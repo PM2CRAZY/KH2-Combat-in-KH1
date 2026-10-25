@@ -2455,13 +2455,11 @@ unsafe fn takeover(actor: usize) -> bool {
         // An Attack during a spell: KH2's once the spell is out (its end frames; the user: KH2's
         // magic can be cut by an attack to go on with the combo), not before (it would cut the
         // spell). In the air too.
-        // The rest of KH1's cast can be cancelled the same way (the user: "animation cancel the
-        // KH1 spells"): a jump, Square (roll, guard, glide) or moving the stick, once the spell
-        // is out; none of them before (Square or the stick 10 frames in cut the cast itself).
+        // (A jump or Square no longer cuts it: `cancel` below.)
         let command = FROM_COMMAND.load(Ordering::Relaxed);
         // What may cut a KH1 spell short, once it is out (spec: KH1 magic is a step of the combo
         // string): an Attack (the combo's next swing) or another spell (its next step), in the air
-        // too; a jump or Square only on the ground and only out of a step (s168). Never the stick
+        // too; never a jump or Square (they wait for its end, below). Never the stick
         // (spec rule D: a direction pressed cancelled the cast), and nothing out of the combo's
         // last step (rule E: it plays to its end; a new combo after it).
         // An Attack or a spell chosen meanwhile: KH1 runs no command during its cast, so they
@@ -2496,8 +2494,6 @@ unsafe fn takeover(actor: usize) -> bool {
         // (KH1's own combo plays as in KH1: none of the spell cuts, `stylecombo`.)
         let kh1_combo = super::stylecombo::active();
         let out_any = command && !done && !kh1_combo && (spell_out(actor) || in_cut);
-        let out = out_any && air_cast().is_none();
-        let jump_pressed = ground_jump;
         let magic_after = MAGIC_AFTER.load(Ordering::Relaxed);
         // In a Drive Form: the form's cast motion's clock (its input window, then its end).
         // (Its slide one 60 Hz frame at a time.)
@@ -2523,11 +2519,15 @@ unsafe fn takeover(actor: usize) -> bool {
         let magic_cut = magic_after && out_any && !last && window;
         // (A spell is taken during KH1's cast only while it could cut it now, `combat`: no queue.)
         SPELL_CUT_OPEN.store(out_any && !last && window, Ordering::Relaxed);
-        let other_cut = out && (slot <= 1 || form_cast.is_some()) && window && (jump_pressed || square);
-        let cancel = attack_cut || magic_cut || other_cut || form_end || drive_cut || item_end;
+        // No jump or Square cuts a KH1 spell short (the tester, kh2-magic-and-reflect-native m9
+        // answer 1 (a): "remove it so the spell plays to its own end"): neither KH1 (its control
+        // step reads them only once the cast's action flag is off) nor KH2 (a jump or the action
+        // button only in a free state, Steam KH2 `0x1403D6FC0` / `0x1403BFB30`, which no cast
+        // motion has) lets them in. Before, once the spell was out, a jump or Square on the ground
+        // ended the cast (s168), for a spell out of one of KH2's moves and a form's KH1 spell.
+        let cancel = attack_cut || magic_cut || form_end || drive_cut || item_end;
         let attack = attack && (!command || done || attack_cut);
-        let square = square && (!command || done || other_cut);
-        let jump = jump || other_cut && jump_pressed;
+        let square = square && (!command || done);
         if cancel {
             // KH1's cast action ends here: its "action running" flag off (as at its own end).
             wr(actor, rd::<u32>(actor) & !4);
@@ -2536,7 +2536,7 @@ unsafe fn takeover(actor: usize) -> bool {
             }
             log(&format!(
                 "spell's end frames cut by {} (combo slot {slot})",
-                if attack_cut { "an Attack: the combo's next swing" } else if magic_cut { "a spell: the combo's next step" } else if other_cut && jump_pressed { "a jump" } else if other_cut { "Square" } else if drive_cut { "a Drive" } else if item_end { "the item's end frame" } else { "the form's cast motion ending" }
+                if attack_cut { "an Attack: the combo's next swing" } else if magic_cut { "a spell: the combo's next step" } else if drive_cut { "a Drive" } else if item_end { "the item's end frame" } else { "the form's cast motion ending" }
             ));
         }
         // (A spell chosen during the cast, which is now over: it runs at once from the queue.)
