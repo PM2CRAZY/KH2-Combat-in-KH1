@@ -275,3 +275,27 @@ lock stays KH1's own); 3 "(b) kh2 voice plays if the toggle for kh2 voices is on
 - **Assumption**: KH2's arc clock and blend are in 60 Hz frames here as KH1's (the earlier glide /
   dodge work's reading). **Not checked**: in game; the third jump set (`+0x3D0` = 0xAB) is left to
   KH1.
+
+### 7.3 Jump and High Jump (step 4)
+
+- `kh2slots::JUMPS`: KH2's jump (motion 3, 26 frames) on KH1's takeoff 0x4 (template slot 8, 26
+  frames) and KH2's High Jump (201, 64 frames) on 0x9 (template slot 12, 34 frames), style Jump.
+  KH1's takeoff `0x1402AF9F0` asks them with bit 16 (hold at the end, **Assumption** (likely), read
+  from the apply's flag arithmetic, §3). **Checked (files)**: KH2's 3 and 201 leave the ground at
+  frame 4 (their frame trigger 0), 201 has no range id 49 (`+0x194` bit 4, which would keep KH2's
+  swap off), only "air" from 8.
+- KH2's jump start (`0x140422630`, `0x1403B59B0`, **Checked (decomp)**) plays 3, or 201 with High
+  Jump, and sets the fall motion `+0x118` = 4 for both, so the High Jump's 201 is cut by the same
+  swap 5 frames before the apex (§7.2), not played to its end as the OG rewrite's rig (`kh2_rig`,
+  "plays to its end however the rise goes") has it: the exe's rule is taken.
+- KH1's apex requests (5 / 0xA, slots 9 / 13) are never asked at Jump KH2 (the apex wrapper), so
+  they are not built; the plan's "jump held 6 frames" apex slot isn't needed.
+- KH1's takeoff sounds and foot effects stay at KH1's own frames (not stretched to 201's 64): the
+  takeoff is frame 4 in both. KH2's own jump sound (303) isn't played (not in `kh2_sounds`' list),
+  as before.
+- `pose`'s drawn-over swap to the fall (`shared::physics::kh2_arc_falling`) stays only for when the
+  slots aren't built.
+- Per frame: the takeoff's retarget and our foot IK while he rises are gone. Two more bakes at load
+  (26 and 64 frames).
+- **Not checked**: in game; KH1's blend between its takeoff and our slot (KH1's takeoff request's
+  blend, from `0x1402AF9F0`).

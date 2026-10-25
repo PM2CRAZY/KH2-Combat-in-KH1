@@ -243,11 +243,29 @@ const fn item_spec(i: usize) -> Spec {
 /// (`ALIASES`).
 const FALL: Spec = Spec { motion: character_core::motion::FALL, stands_for: 10, request: 0x6, kind: Kind::Jump };
 
+/// KH2's jump and High Jump on KH1's takeoff requests (the tester, same thread, plan step 4). KH1's
+/// takeoff (`0x1402AF9F0`) asks 0x10004 (its jump) or 0x10009 (with High Jump, ability bit 0x200),
+/// bit 16 holding the motion at its end; KH1's request table (`xa_ex_0010.mset`, Checked (files)):
+/// 0x4 slot 8 (26 frames, the takeoff's foot effects at 4, its sounds at 2 and 14.5), 0x9 slot 12
+/// (34 frames, foot effects at 4, sounds at 4, 8.8 and 27.5). KH2's jump start (Steam KH2
+/// `0x140422630` with `0x1403B59B0`, Checked (decomp)) plays motion 3, or 201 (0xC9) with High
+/// Jump; `P_EX100.mset` (Checked (files)): 3 is 26 frames at 60 Hz, 201 is 64, each leaving the
+/// ground at frame 4 (their frame trigger 0). Both play until KH2's swap into the fall 5 frames
+/// before the apex (`kh2_apex`), which replaces KH1's apex request (5 / 0xA): not built. Style
+/// Jump. KH1's own sounds and foot effects at KH1's own frames (`make`: the takeoff is frame 4 in
+/// both), as KH1 played them under the drawn KH2 jump before.
+const JUMPS: [(u16, usize, usize); 2] = [(character_core::motion::JUMP, 8, 0x4), (character_core::motion::HIGH_JUMP, 12, 0x9)];
+
+const fn jump_spec(i: usize) -> Spec {
+    let (motion, stands_for, request) = JUMPS[i];
+    Spec { motion, stands_for, request, kind: Kind::Jump }
+}
+
 /// KH1 requests pointed at another request's slot of ours (alias, request): the High Jump's fall
 /// 0xB plays the plain jump's (KH1's table has both on slot 10).
 const ALIASES: [(usize, usize); 1] = [(0xB, 0x6)];
 
-const SPECS: [Spec; 39] = [
+const SPECS: [Spec; 41] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -287,6 +305,8 @@ const SPECS: [Spec; 39] = [
     item_spec(0),
     item_spec(1),
     FALL,
+    jump_spec(0),
+    jump_spec(1),
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -514,7 +534,10 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     } else {
         Leave::Template
     };
-    let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, frames as f32 / old.max(1) as f32, leave);
+    // (The jump's takeoffs, `JUMPS`: the template's sounds and foot effects at KH1's own frames, the
+    // takeoff being frame 4 in both games; not stretched over KH2's longer High Jump.)
+    let r = if kind == Kind::Jump { 1.0 } else { frames as f32 / old.max(1) as f32 };
+    let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, r, leave);
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
     if ours.is_some_and(|o| o.own_sounds) || item {
         tracks.retain(|t| t.kind != ks::SOUND);
