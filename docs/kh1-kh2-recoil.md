@@ -419,3 +419,18 @@ would only stop KH2's shapes (`strike_as`) until the pass learns it too.
   KH2's controller (Drive Forms, borrowed moves), which keeps KH2's recoil and guards in both
   settings as before.
 - Recoil KH2: every window as KH2 has it.
+
+### 6.8 Guard Break pierces at Recoil KH1 too
+
+- The tester (m2 answer 1): "guard break should function like how it does in kh2, it should pierce
+  any normal enemies" (it was the answer to "should Guard Break be repelled by guards at KH1").
+- Recoil KH2: as §6.3, KH1 clash type 6 (meets no attack and no guard, hits bodies).
+- Recoil KH1: KH1's own way of letting an attack through, its row's priority at least 0x62
+  (`kh1rows::GUARD_THROUGH`, KH1 adds the Keyblade's byte and caps at 99). KH1's half
+  `0x1402B4BC0` meets two attacks only when one is under 0x62 and never stops a side at 0x62 or
+  more (**Checked (decomp)**), so a guard (100) never meets it and it reaches the body behind. An
+  enemy attack under 0x62 still meets it: that attack is stopped and its owner recoils by KH1's
+  rule (kind 7 when the gap is over 40). That last part is KH1's, not KH2's (KH2's pierce meets no
+  normal attack at all).
+- Counterguard and Finishing Leap (also pierce armor in KH2) keep their templates' priority at
+  KH1 (only Guard Break was asked for).

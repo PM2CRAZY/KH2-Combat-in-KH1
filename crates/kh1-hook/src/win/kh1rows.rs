@@ -397,6 +397,11 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
         // (Clash type and priority by the Recoil row, `rules`: KH1's the template's, KH2's from
         // the move's ATKP.)
         let (t1, p1) = (rd::<u32>(d + 0x38) & 7, rd::<i32>(d + 0x3C));
+        // (Guard Break pierces at Recoil KH1 too, the way KH1 lets an attack through: a priority of
+        // 0x62 or more, which KH1's clash half `0x1402B4BC0` never meets with a guard (100) and
+        // never stops (Checked (decomp)). The tester, thread kh2-recoil-and-parry-system m2: "guard
+        // break should function like how it does in kh2, it should pierce any normal enemies".)
+        let p1 = if o.guard_break { p1.max(GUARD_THROUGH) } else { p1 };
         let (t2, p2) = kh2_clash(a, t1, p1);
         CLASH_KH1[n].store(t1 << 16 | (p1 as u32 & 0xFFFF), Ordering::Relaxed);
         CLASH_KH2[n].store(t2 << 16 | (p2 as u32 & 0xFFFF), Ordering::Relaxed);
@@ -448,7 +453,7 @@ fn kh2_clash(a: Option<&kh2_formats::battle::Atkp>, t: u32, p: i32) -> (u32, i32
 }
 
 /// Each frame base Sora is posed (`install`): our rows' data hold the Recoil row's rules (KH1's:
-/// the templates' clash type and priority, Guard Break's too; KH2's: `kh2_clash`). KH1 reads them
+/// the templates' clash type and priority, Guard Break's priority at least `GUARD_THROUGH`; KH2's: `kh2_clash`). KH1 reads them
 /// when it makes the row's attack object (`0x1402B2DC0`: data `+0x38` bits 0..2 → the object's
 /// flags bits 17..19, `+0x3C` → its priority `+0x68`, Checked (decomp)), so a switch takes the
 /// next swing.
