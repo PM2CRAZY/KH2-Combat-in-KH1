@@ -384,6 +384,12 @@ mapped from kind 1 by `0x1402BF290` inside the pass. Any other kind passes throu
 - **At Blow:** as before. On KH1's states that is KH1's own knock-down (`0x4C` / `0x4D`) until
   KH2's blow is in (step 3); in a borrow, KH2's controller's blow.
 - At Hit Reactions KH1 the row does nothing on KH1's states.
+- **Only on the ground and in normal air** (the tester's m3 answer 3: "(b)"). The row's kind
+  4 → 3 runs only when Sora's movement state (`+0x70`, read before the pass) is one KH1's pass
+  gives its ground reactions (0, 1, 0xC, 0x1C, 0x20, 0x26) or its plain air ones (states with no
+  row of their own: 2, 3, ...) (Checked (decomp), the pass's switch). Flight (8), swimming
+  (0x11), Atlantica's water states (0x18 / 0x19: KH1's ground functions, but swimming), the
+  carpet (0x1D), the Jungle Slider (0x1E / 0x1F) and 0x27 keep KH1's own kind 4.
 
 ## 13. Step 3 groundwork: KH1's movement state table (not built yet)
 
@@ -473,3 +479,9 @@ air state 2 (the flight flinch asks `0x4E` / `0x4F` too, from state 8, and is sk
 test). Two KH2 parts still reach them (**open**, asked): the flight flinch's `0x4E` / `0x4F`
 play KH2's air flinch motions 14 / 15 (the slots are by request, `kh2slots::REACTIONS`), and the
 Medium Hits row's kind 4 → 3 also applies in flight and swimming.
+
+**Answered (m3).** The flight flinch's animation follows the Hit Reactions row (answer 2:
+"toggle dependent"): at KH1 KH1's own slots 67 / 68, at KH2 KH2's 14 / 15. That is how the slots
+already work (`kh2slots::redirect` points the requests at ours only with the row at KH2, from
+KH1's next request), so no change. Medium Hits applies only on the ground and in normal air
+(answer 3: "(b)", §12).

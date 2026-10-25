@@ -301,12 +301,23 @@ pub fn set_medium_flinch(f: bool) {
     log(&format!("Config menu: Medium Hits {}", if f { "Flinch" } else { "Blow" }));
 }
 
+/// Where the Medium Hits row applies (the tester, m3 question 3: "(b)", only on the ground and in
+/// normal air): the movement states (`+0x70`) for which KH1's hit pass (Steam `0x14029BBD0`) runs
+/// its ground reactions (0, 1, 0xC, 0x1C, 0x20, 0x26) or its plain air ones (any state it has no
+/// row for: the air states 2, 3, ...), Checked (decomp). Left out, KH1's own kind 4 kept: flight
+/// (8), swimming (0x11), Atlantica's water states 0x18 / 0x19 (KH1 gives them its ground
+/// functions, but they are swimming: stages 111 / 118), and the states with rows of their own,
+/// 0x1D (the carpet), 0x1E / 0x1F (the Jungle Slider) and 0x27 (no reaction).
+fn medium_state(state: u32) -> bool {
+    !matches!(state, 8 | 0x11 | 0x18 | 0x19 | 0x1D | 0x1E | 0x1F | 0x27)
+}
+
 /// Before KH1's hit pass on Sora on KH1's states (`hurt`), Hit Reactions KH2 and Medium Hits
 /// Flinch: each ready record KH1 would map to kind 4 is given kind 3, which `0x1402BF290` passes
 /// through as it is (only kind 1 is mapped by the damage), so KH1's pass runs its flinch for it
 /// (and its reaction order: a kind 5 in the same pass still wins). `kind_of` is KH1's mapping.
 pub unsafe fn medium_hits(actor: usize, ready: &[usize], kind_of: unsafe extern "system" fn(usize, usize) -> u32) {
-    if !on() || !medium_flinch() {
+    if !on() || !medium_flinch() || !medium_state(rd::<u32>(actor + 0x70)) {
         return;
     }
     for &r in ready {

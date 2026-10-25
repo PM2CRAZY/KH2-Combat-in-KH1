@@ -422,6 +422,61 @@ fn note_bank(motion: u16, asked: u32, before: (u32, f32, f32, f32), tilt: f32) {
     }
 }
 
+/// KH1's blend fields of the motion playing: its length `+0x170` (0 when no blend is under way)
+/// and its clock `+0x174`, and the motion's speed `+0x284` (KH1's motion update, Steam
+/// `0x14029F0A0`'s blend branch, and its apply `0x1402A0350`; Checked (decomp)).
+const BLEND_LEN: usize = 0x170;
+const BLEND_CLOCK: usize = 0x174;
+const MOTION_SPEED: usize = 0x284;
+/// KH2's blend clock when a blended motion starts (Steam KH2 `0x1403C8A40`: `+0x44 = 2.0`;
+/// Checked (decomp)).
+const KH2_BLEND_START: f32 = 2.0;
+
+/// Set while a glide motion's blend is under way, until its time is seen running: the frame the
+/// blend ends KH2 skips the motion's frame 1 (below).
+static SKIP_ARMED: AtomicBool = AtomicBool::new(false);
+
+/// KH2's motion clock on the glide's motions (205 / 206 / 207 / 208), in KH1's own motion fields
+/// (glide thread m7: the bank change "resets his animation"). Both games hold the new motion at its
+/// start frame through the blend and then play it on (KH2's motion update `0x1403C6740`, KH1's
+/// `0x14029F0A0`; Checked (decomp) both), so the restart is KH2's own; they differ in the clock:
+/// - KH2 starts a blend's clock at 2 (`0x1403C8A40`) and asks the glide's motions in its action
+///   update (the object's `+0x28` slot, after that frame's motion update in `0x1403BFD30`), so the
+///   clock reads 2 the frame it is asked and 2 + k k frames on; KH1 starts it at one frame step
+///   (its apply, `+0x174 = dt x +0x284`), one frame behind. On the first frame after KH1's apply
+///   (the clock still its first step) it is put at KH2's 2, so the weight from the old pose and the
+///   blend's end (14 frames on, not 15) are KH2's from there.
+/// - KH2's update turns a time stepping from 0 to exactly 1 into 2 (`0x1403C6740`), which every
+///   start (a blend's end at time 0, or a start without blend) goes through; KH1 plays 0, 1, 2. The
+///   first frame after a glide motion's blend ended at time 0 (60 fps: a step of 1) its time is
+///   put at 1, so KH1's update makes it KH2's 2.
+///
+/// Before the pre-step's request (a motion asked this frame is applied in KH1's update after).
+unsafe fn kh2_clock(actor: usize, dt: f32) {
+    use character_core::motion::{GLIDE, GLIDE_HOVER, GLIDE_TURN_A, GLIDE_TURN_B};
+    let Some((m, t)) = super::kh2slots::now_playing(actor) else { return };
+    if !matches!(m, GLIDE | GLIDE_TURN_A | GLIDE_TURN_B | GLIDE_HOVER) {
+        return;
+    }
+    let (len, clock, speed) = (rd::<f32>(actor + BLEND_LEN), rd::<f32>(actor + BLEND_CLOCK), rd::<f32>(actor + MOTION_SPEED));
+    let step = dt * if speed.is_finite() && speed > 0.0 { speed } else { 1.0 };
+    static N: AtomicU32 = AtomicU32::new(0);
+    if len > 0.0 {
+        SKIP_ARMED.store(true, Ordering::Relaxed);
+        if clock.is_finite() && clock < KH2_BLEND_START && (clock - step).abs() < 1e-3 && KH2_BLEND_START < len {
+            wr(actor + BLEND_CLOCK, KH2_BLEND_START);
+            if N.fetch_add(1, Ordering::Relaxed) < 12 {
+                log(&format!("glide (native) motion {m}: KH1's blend clock {clock:.1} -> KH2's {KH2_BLEND_START:.1} (blend {len:.0})"));
+            }
+        }
+    } else if SKIP_ARMED.swap(false, Ordering::Relaxed) && t == 0.0 && (step - 1.0).abs() < 1e-4 {
+        wr(actor + SLOT_TIME, 1.0f32);
+        if N.fetch_add(1, Ordering::Relaxed) < 12 {
+            log(&format!("glide (native) motion {m}: blend over at time 0, KH2's skip of frame 1 (KH1's update makes it 2)"));
+        }
+    }
+}
+
 /// State 0x15's pre-step (`(actor, input)`, KH1's think, before the step): KH1's (`0x1402B2880`:
 /// its turn of 2° / 1° a frame, its motion picks at 30°) for Donald and Goofy; for Sora KH2's:
 /// - the hover (`0x140423840`): the stick takes it into the glide, KH2's stored launch speed put
@@ -487,6 +542,7 @@ unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
     };
     let request: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_RVA);
     let asked = request_for(motion);
+    kh2_clock(actor, dt);
     let before = bank_fields(actor);
     request(actor, asked, BLEND);
     note_bank(motion, asked, before, tilt);

@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from your message in KH2 magic and Ref](#^m1)
+- [2. Assistant: Thanks! Going ahead with your answers: (b) for question 1, D](#^m2)
 
 ---
 
@@ -51,10 +52,39 @@
 
 ^m1
 
+
 1. (b)
 2. don't worry about drive forms, that's getting transferred over to the new systems once we get base sora done. 
 3. (c) sent a trace
 
 
-
 go ahead
+
+> [!tip] Assistant
+> Thanks! Going ahead with your answers: (b) for question 1, Drive Forms left for the new systems, and your trace for the fall.
+>
+> **t617, Aerial Finish and Magnet Burst follow the Air Physics row:**
+> - These two now follow Combat > Magic > Air Physics instead of the Physics row, the same as the air casts.
+> - At KH2 they get KH2's hop on KH2's gravity, then the hover with KH2's clock running, then the drop at 16 a frame as soon as the hover ends.
+> - At KH1 they get KH1's gravity, a hover that pauses the clock, and KH1's gentler fall after it.
+> - The Physics and Air Physics help lines say so now.
+> - Check: in KH2's decomp both moves run on the same jump-state step as the air casts, so one row for all of them is how KH2 groups them. I couldn't check them against a trace (yours only has Reflect) or in game.
+>
+> **The assumptions from my last message**, read again in KH2's decomp (notes only, no code change, because the mod already did it this way):
+> - the fall cap really is the 16 from your 03system.bin: Sora's setup copies it into the value the jump step caps with;
+> - the ×0.95 sideways fade is applied once per 30 Hz tick, as we do;
+> - the cast's 40 hop starts from his current height, even mid-jump;
+> - the stick during a cast is still unconfirmed: I found what writes KH2's stick target, but it's driven by a script, so I can't yet say whether it's cut off during a cast.
+>
+> **Your trace (the fall):** both air Reflects match KH2's numbers frame by frame: 40 up over 14 frames, then a tiny dip; held from frame 16 to 73; 16 a frame down from frame 74 to the floor; sideways fading ×0.95 a tick. So I didn't change the fall's speed or timing. What isn't KH2 there is the look: with Jump set to KH1, KH1's own fall animation plays after the cast, then KH1's landing, where KH2 plays its own fall loop and lands into its own landing.
+>
+> Could you test:
+> - one Aerial Finish and one Magnet Burst from the top of a jump, with Air Physics at KH2 and again at KH1, with a trace;
+> - an air Fire with Jump set to KH2, to see if the fall then looks right to you.
+>
+> Questions:
+> 1. What looks wrong about the fall after a cast? (a) it drops too fast, (b) it drops too suddenly (KH2's drop starts at full speed the moment the hover ends), (c) the animation (KH1's fall because Jump is KH1), or (d) something else (please describe it)?
+> 2. If it's (c): should KH2's fall loop play after KH2's air casts even with Jump at KH1? (a) yes, KH2's fall after a KH2 move, or (b) no, the Jump row decides every fall.
+
+^m2
+

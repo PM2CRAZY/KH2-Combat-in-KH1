@@ -642,6 +642,32 @@ pub mod physics {
         super::active() && cast_rule() == Rule::Kh2 && !super::super::form::in_form()
     }
 
+    /// KH2's air finishers that follow the Air Physics row, not the Physics row (the tester, thread
+    /// air-physics-for-kh2-magic-aerial-finish-and-magnet-burst, m1 answer 1: "(b)"): Aerial Finish
+    /// (motion 194) and Magnet Burst (197). Both play inside KH2's jump state as its casts do (their
+    /// combo row's hop `0x1403D78D0`, then ACTION_JUMP's step `0x1403CB360` with its hold, clock and
+    /// fall cap; Checked (decomp) KH2 Steam), so they share the casts' row.
+    const AIR_PHYSICS_MOVES: [u16; 2] = [194, 197];
+
+    /// The game frame KH2's hop for one of `AIR_PHYSICS_MOVES` was asked for (`air_physics_hop`), 0
+    /// none: the move's request isn't applied (`kh2slots::playing_motion`) until a frame later.
+    static AIR_MOVE_AT: AtomicU64 = AtomicU64::new(0);
+
+    /// KH2's air row about to hop on KH1's air state (`combomods::air_hop`): note it when it is one
+    /// of `AIR_PHYSICS_MOVES` (its hop then follows the Air Physics row, `kh2_hop`), forget it
+    /// otherwise.
+    pub fn air_physics_hop(motion: u16) {
+        let at = if AIR_PHYSICS_MOVES.contains(&motion) { game_frame().max(1) } else { 0 };
+        AIR_MOVE_AT.store(at, Ordering::Relaxed);
+    }
+
+    /// Base Sora is in Aerial Finish or Magnet Burst on KH1's air state now (playing, or its hop
+    /// asked for in the last 2 frames).
+    unsafe fn air_physics_move(actor: usize) -> bool {
+        let at = AIR_MOVE_AT.load(Ordering::Relaxed);
+        (at != 0 && game_frame().saturating_sub(at) <= 2) || super::super::kh2slots::playing_motion(actor).is_some_and(|m| AIR_PHYSICS_MOVES.contains(&m))
+    }
+
     /// KH1's request ids of its air casts (`kh2slots::CASTS`: `0x83 + spell`, Fire's second part
     /// 0x8A; Checked (files) `xa_ex_0010.mset`), whatever plays on them.
     const AIR_CAST_REQUESTS: std::ops::RangeInclusive<u32> = 0x83..=0x8A;
@@ -874,7 +900,10 @@ pub mod physics {
             return;
         }
         let vel = kh1phys::carried(vel);
-        let kh2_numbers = if kh2() { numbers() } else { None };
+        // (Aerial Finish's and Magnet Burst's hop: the Air Physics row's, `air_physics_move`.)
+        let air_move = air_physics_move(actor);
+        let on_kh2 = if air_move { cast_kh2() } else { kh2() };
+        let kh2_numbers = if on_kh2 { numbers() } else { None };
         let how = match kh2_numbers {
             Some(n) => {
                 let mut arc = Arc::new(height, n.gravity);
@@ -899,7 +928,7 @@ pub mod physics {
         };
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            super::super::log(&format!("KH2's hop on KH1's air state: {height:.0} high, {:.1}/frame sideways, {how}", vel[0].hypot(vel[1])));
+            super::super::log(&format!("KH2's hop on KH1's air state: {height:.0} high, {:.1}/frame sideways, {how}{}", vel[0].hypot(vel[1]), if air_move { " (Aerial Finish / Magnet Burst: the Air Physics row)" } else { "" }));
         }
     }
 
@@ -1424,10 +1453,12 @@ pub mod physics {
         // Whose physics move him this frame: the Air Physics row's while he casts in the air
         // (`cast_rule`, the tester's m19), else the Physics row's.
         let casting = sora && casting_in_air(actor);
-        let phys = if casting { cast_kh2() } else { kh2() };
-        // (A cast at Air Physics KH1 under physics KH2: no arc of ours through it, so KH2's arc
-        // after it goes on from KH1's, not from the one before the cast.)
-        if casting && !phys && kh2() {
+        // (Aerial Finish and Magnet Burst too: the Air Physics row's, `AIR_PHYSICS_MOVES`.)
+        let air_move = sora && !casting && air_physics_move(actor);
+        let phys = if casting || air_move { cast_kh2() } else { kh2() };
+        // (A cast, Aerial Finish or Magnet Burst at Air Physics KH1 under physics KH2: no arc of
+        // ours through it, so KH2's arc after it goes on from KH1's, not from the one before it.)
+        if (casting || air_move) && !phys && kh2() {
             off_air();
         }
         // (Physics KH1: none for a cast slot, as KH1's own air cast has no hover, `0x1402AF6A0`;

@@ -10,6 +10,7 @@
 - [4. Assistant: Done, as planned, with (b) for Donald and Goofy. One version](#^m4)
 - [5. Assistant: Thanks for the trace and the log. They showed exactly what w](#^m5)
 - [6. Assistant: Thanks. (a) it is: after you let go, the fall keeps followin](#^m6)
+- [7. Assistant: Thanks for the trace and the log. I went through them frame ](#^m7)
 
 ---
 
@@ -193,6 +194,30 @@ go ahead
 > 3. Were you in the paused Config menu when you saw Glide and Superglide stay: (a) yes, or (b) no, they were still there in normal play?
 
 ^m6
+
+
 sent a trace and updated log, go ahead with any changes you need to make it 1:1
 
 go ahead
+
+> [!tip] Assistant
+> Thanks for the trace and the log. I went through them frame by frame against KH2's own code. Here's what I found.
+>
+> **The bank "reset" is KH2's own rule.** When KH2 switches to a new motion with a blend, it holds the new motion on its first frame for the whole blend and only starts playing it once the blend is done. KH1 does the same. Your log shows it: 34 frames after a bank change, the bank animation was on frame 18, so it waited 16 frames, then played. When you rock the stick, each new bank starts over in both games. The quick one-frame straight glide between left and right in your trace is the stick passing close to his facing, which KH2 also does.
+>
+> **t618, the blend timing.** There was one real difference, in the timing. KH2's blend clock starts at 2, and KH2 asks for the glide motion after it has updated that frame's animation, so in KH2 the new bank leans in one frame sooner and finishes its blend after 14 frames instead of KH1's 15. KH2 also skips frame 1 when a motion comes out of its blend (0, 2, 3...), where KH1 went 0, 1, 2. The glide's motions (straight, both banks, hover) now run on KH2's clock inside KH1's own animation fields. The only part still KH1's is the very first frame of each blend (1/16 instead of 2/16), because KH1 sets that up inside its own animation update.
+> - Checked: the KH2 and KH1 decomps (the blend and the frame-1 skip), KH2's exe for the order it does things in each frame, and your log.
+> - Not checked: in game. I'm also assuming KH2 steps its animations by exactly 1 each 60 fps frame; the decomp doesn't show that number.
+>
+> **Everything else** I checked again against your trace, and it all matches KH2: speed and its ramp, the fall, the turn speed, the bank pick, the ends (letting go, the end height, the ground), and the speed kept when you let go. The ability swap from the Config menu also shows up working in this log.
+>
+> Please test:
+> 1. Glide and rock the stick left and right a few times, then hold one bank for a second. The lean should come in a touch sooner and settle a frame earlier than before; it'll be subtle.
+> 2. A Select + Triangle trace of that would help, with the log lines "KH1's blend clock ... -> KH2's 2.0" and "KH2's skip of frame 1".
+>
+> Questions:
+> 1. KH1 plays every KH2 animation with this same one-frame-late blend and no frame-1 skip (attacks, landings, the fall and so on). Should I (a) bring KH2's clock to all of them, as its own version, or (b) keep it to the glide for now?
+> 2. If the bank change still looks different from KH2 after this, what do you see in KH2: (a) the lean blends smoothly from one side to the other, or (b) it visibly starts over, just more softly?
+
+^m7
+
