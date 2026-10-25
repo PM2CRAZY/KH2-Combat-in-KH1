@@ -470,4 +470,6 @@ sora at the peak of his run around frame 11 is clipping through his shorts
 
 sent a trace with the physics I want, everything is a little to pronounced at the moment
 
+also when it comes to the bottom part of soras coat it currently moves way too much, kh1 soras coat is way less pronounced then that and is also why its causing a lot of stretching on the top part of the coat.
+
 go ahead
