@@ -43,6 +43,10 @@ From the user's KH2 data:
 | 40 Aerial Recovery | Guard, group 6 (body), and Invulnerable | 0..16 both | 124 (kind 3, power 0) | 2 |
 | 173 guard press | Guard, group 2 (Keyblade) | 6..37 | 161 (kind 2, power 0) | 1 (guard repel) |
 | 42 guard repel | Guard, group 2 (Keyblade) | 0..40 | 162 (kind 2, power 0) | 2 |
+| 166 Explosion | Guard, group 6 (body), and Invulnerable | 32..64 both | 124 (kind 3) | 2 |
+| 197 Magnet Burst | Guard, group 6 (body); no Invulnerable | 20..70 | 406 (kind 2) | 2 |
+| 169 Flash Step | Guard, group 6 (body) / Keyblade guards | body 0..19; Keyblade 162 17..22, 161 22..30 | 406 / 162 / 161 | 2 / 2 / 1 |
+| 170 Vicinity Break | Guard, group 6 (body) / Keyblade guard | body 14..32; Keyblade 162 14..32 | 406 / 162 | 2 / 2 |
 
 - KH1's attack-vs-attack pass meets attack objects, not the actor: Sora's untouchable flag (0x40,
   his i-frames) keeps him out of the hit pass but not his own attack objects. A guard is an
@@ -70,6 +74,31 @@ In KH1's own states (testing branch: the guard press 173, its repel 42 and Guard
 motions of ours KH1 plays, `docs/kh1-anim-slots.md` §7.x) the same objects come from those motions'
 Keyblade `Guard` windows (`takeover::kh2_hits`), and a stop starts the repel on KH1's states
 (`combomods::guard_repel`) instead of KH2's controller's `clash`.
+
+### Body guards on KH1's states (thread "Body guards on KH2 moves")
+
+- KH2's range test (`0x14040E740`, Steam KH2) runs a range trigger while `start <= t < end`
+  (end 0xFFFF = to the clip's end), Checked (decomp): the same as `Window::contains` on the
+  floored KH1 time of our slots, so the frames above are the frames he has them.
+- KH2's controller turns every `Guard` window into guard boxes, with no filter
+  (`character_core` controller, the guard boxes of the action's clip). Since the thread "Body
+  guards on KH2 moves", `takeover::kh2_hits` does the same for the KH2 motions KH1's own states
+  play: Aerial Recovery 40, Explosion 166 and Magnet Burst 197 (and Aerial Dodge 202 since t494)
+  now put all-round KH1 guard objects on his body in those windows, so an enemy attack object
+  meeting one is stopped (KH1's clash: its owner recoils by KH1's rule, a shot is turned back),
+  with no reaction on Sora (refact self 2). Before, only hits reaching his body were stopped
+  (`hurt`, `kh2slots::body_guard`), which still holds.
+- ATKP 124 is kind 3 (KH2's special guard: also stops pierce-armor attacks), 406 kind 2. KH1's
+  enemy attacks carry no KH2 kind, only KH1's priority, so both are the same priority-100 guard
+  object here. **Assumption:** no KH1 enemy attack should pass a kind-2 guard but not a kind-3 one.
+- Flash Step 169 and Vicinity Break 170 are not played on KH1's states yet: their clips carry
+  Keyblade guard windows (W_EX010.mset, above), which `kh2slots::blade_swing` / `body_strike`
+  don't accept, so they aren't baked (Checked (trace): no "KH2 motion 169 / 170 baked" in the
+  t544 logs; 170 "KH2 borrows him for it"). KH2's controller plays them and makes all their guard
+  objects already.
+- Not identified yet: range id 44 (the motion state's second word, bit 2, KH2's handler
+  `0x14040D810`), present in exactly Explosion's 32..64 and Magnet Burst's 20..70, the same frames
+  as their body guards. No reader found in the Steam KH2 decomp yet.
 
 Left to the controller (not this lane): KH2's Aerial Dodge has no invulnerable frames (ours gives
 10..16 by level, `AIR_DODGE_STAR`), and Aerial Recovery's are its window 0..16 (ours `f <= 16`,

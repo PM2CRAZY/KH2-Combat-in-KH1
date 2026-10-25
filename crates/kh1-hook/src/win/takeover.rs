@@ -1832,21 +1832,24 @@ pub unsafe fn kh2_hits(actor: usize) {
     if playing.is_some_and(|(m, t)| m == n.motion && t == n.last_t) {
         return;
     }
-    // KH2's guard windows on the Keyblade in that motion (the guard press's, its repel's, Guard
-    // Break's): KH1 guard objects, as for KH2's controller's guard (`combat::guard_step`), so an
-    // attack meeting one is stopped before it reaches him (`combomods::guard_repel` then). Those on
-    // his body stay `hurt`'s (`kh2slots::body_guard`), but for the Aerial Dodge's (ATKP 406 on his
-    // body all through 202, the tester's aerial-dodge-native plan item 3): KH1 guard objects too,
-    // as KH2's controller made them for its dodge (`combat::guard_step`, all round), so an enemy's
-    // attack object meets it (the parry) and not only his hit pass.
+    // KH2's guard windows in that motion: KH1 guard objects, as KH2's controller makes them for
+    // every `Guard` window of its moves (`combat::guard_step`), so an enemy's attack object meeting
+    // one is stopped before it reaches him (the parry; `combomods::guard_repel` then, by the ATKP's
+    // refact self). On the Keyblade: the guard press's, its repel's, Guard Break's. On his body
+    // (all round, refact self 2: stopped, no reaction, the move goes on): the Aerial Dodge's 406
+    // all through 202 (t494), and now every other one, as KH2 has them (the tester, thread "Body
+    // guards on KH2 moves", from aerial-dodge-native's question 7: "(a)"): Aerial Recovery 40's 124
+    // at 0..16, Explosion 166's 124 at 32..64, Magnet Burst 197's 406 at 20..70 (Checked (files):
+    // `P_EX100.mset`, 00battle.bin's ATKP 124 kind 3 / 406 kind 2, both refact self 2, reflect range
+    // 0). Hits his hit pass finds there are still `hurt`'s too (`kh2slots::body_guard`).
     let guards: Vec<(usize, u16, u8, u8)> = match (playing, clip) {
-        (Some((m, t)), Some((_, c))) => c
+        (Some((_, t)), Some((_, c))) => c
             .windows
             .iter()
             .enumerate()
             .filter(|(_, w)| w.contains(t as u32))
             .filter_map(|(i, w)| match w.kind {
-                character_core::WindowKind::Guard { attack, group, weapon } if weapon > 0 || m == character_core::motion::AERIAL_DODGE => Some((i, attack, group, weapon)),
+                character_core::WindowKind::Guard { attack, group, weapon } => Some((i, attack, group, weapon)),
                 _ => None,
             })
             .collect(),
