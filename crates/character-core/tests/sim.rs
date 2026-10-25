@@ -1756,5 +1756,11 @@ fn ability_rows_by_id_and_range_checks_for_a_host_walk() {
     // A swing press doesn't take a finisher row; its motion playing doesn't either.
     assert!(ch.ability_row_id(27, false, false, None, &any, [0.0; 2], &env(&one)).is_none());
     assert!(ch.ability_row_id(27, true, false, Some(151), &any, [0.0; 2], &env(&one)).is_none());
+    // Locked on the one ahead, the group row still sees the other (KH2's kind-2 pass counts every
+    // enemy, the lock playing no part), and still needs it.
+    ch.set_lock(Some(7));
+    assert!(ch.row_in_range(26, &env(&two)));
+    assert!(!ch.row_in_range(26, &env(&one)));
+    assert_eq!(ch.ability_row_id(26, true, false, None, &any, [0.0; 2], &env(&two)).map(|r| r.0.id), Some(26));
     assert_eq!(ch.state_name(), StateName::Idle);
 }

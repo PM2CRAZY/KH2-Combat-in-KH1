@@ -1437,9 +1437,17 @@ finisher 16 and plain swing 18 are marked then too. `kh1picker` no longer holds 
 (`HELD_AIR` = 0), so KH1's picker runs that test itself and returns 15 when it passes; the walk
 takes Hurricane Blast in Aerial Finish's place only then (`Kh1Rule::Kh1Test`, as Blitz), KH1's
 plain finisher being 16 (18 when 16's request is playing). Nothing else of the walk changes. Assumptions: that KH1's own finisher stands in KH2's 154 / 184 place (the tester's
-m20 1 (a)). Not checked: in game. Note: with a lock, KH2's "any target" rows
-(26, 2, 49, 7) see only the locked foe (ours, `ability_row`'s rule since t557), so the group
-places don't pass while locked on.
+m20 1 (a)). Not checked: in game. **Locked on, the group checks count every enemy** (the tester, m22 answer 4 (a), its own
+version). Before, `Character::row_targets` kept only the locked foe for KH2's "any target" rows
+(26, 2, 49, 7 and the ability swings' kind-2 rows), so the group places never passed while locked
+on (R1, or KH1's small cursor, both a lock to us). KH2's selector `0x140402D20` (Steam, Checked
+(decomp)) runs its kind-2 pass `0x1404029F0 (selector, target, 2)` on every target shape the
+iterator `0x1403BDAC0` gives on an attackable actor (`+0x6C8` bit 17), whatever the lock; only the
+kind-1 pass uses the primary target (the locked one when locked). Now every target goes in; the
+primary and the selector's direction are still the locked one's, so the locked foe itself sits at
+the line's centre and a group row needs another one off it, as in KH2. Only the Base / Aerial Base
+Combo KH1 walk and KH1's picker's KH2 ability rows use this; KH2's own selector at the KH2 setting
+(`try_attack`) still measures only the locked foe while locked (AGENTS.md stage 207's rule), unchanged.
 
 ## 8. KH2's walk and run as slots (t389)
 

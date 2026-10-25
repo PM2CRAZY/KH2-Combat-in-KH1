@@ -1405,12 +1405,15 @@ impl Character {
         Self::range_of(r, &all, primary, self.params.jump_height)
     }
 
-    /// The targets as `ability_row` measures them: every target (the locked one alone when
-    /// locked) and the primary target, by the selector's direction.
+    /// The targets as `ability_row` measures them: every target, locked on or not (KH2's: its
+    /// selector `0x140402D20`'s kind-2 pass, `0x1404029F0 (selector, target, 2)`, runs for every
+    /// target shape its iterator `0x1403BDAC0` gives on an attackable actor (`+0x6C8` bit 17), the
+    /// lock playing no part; only the kind-1 pass uses the primary target, the locked one when locked; Steam KH2,
+    /// Checked (decomp); the tester, combo row selection m22 answer 4 (a)), and the primary target,
+    /// by the selector's direction (toward the locked target when locked).
     fn row_targets(&self, env: &Env) -> (Vec<TargetGeom>, Option<TargetGeom>) {
         let aim = self.selector_aim(env);
-        let locked = self.lock.filter(|id| env.targets.iter().any(|t| t.id == *id));
-        let all: Vec<TargetGeom> = env.targets.iter().filter(|t| locked.is_none_or(|id| t.id == id)).map(|t| self.geom(env, t, aim)).collect();
+        let all: Vec<TargetGeom> = env.targets.iter().map(|t| self.geom(env, t, aim)).collect();
         let primary = self.primary_target(env).map(|t| TargetGeom { facing_dot: 1.0, ..self.geom(env, t, aim) });
         (all, primary)
     }
