@@ -82,6 +82,13 @@ unsafe extern "system" fn event_op(ctx: usize, op: i32, c: usize, d: usize) -> u
         let sora = rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize;
         let top = rd::<i32>(ctx + 0x194);
         if actor > 0x10000 && actor == sora && (0..32).contains(&top) {
+            // (One of our attack rows playing, `kh1rows`: the KH1 request it stands for, so a
+            // script waiting for KH1's attack sees one; the tester, combo row selection after m25,
+            // answer 3 (a), every KH2 swing on a KH1 row and request of its own.)
+            let slot = ctx + 0x198 + top as usize * 4;
+            if let Some(k) = super::kh1rows::kh1_request_for(std::ptr::read_unaligned(slot as *const u32)) {
+                std::ptr::write_unaligned(slot as *mut u32, k);
+            }
             if let Some(m) = super::combat::attack_seen() {
                 std::ptr::write_unaligned((ctx + 0x198 + top as usize * 4) as *mut u32, m);
                 static N: AtomicU32 = AtomicU32::new(0);

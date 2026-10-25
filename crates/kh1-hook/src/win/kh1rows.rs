@@ -148,6 +148,37 @@ pub struct Ours {
     /// Only KH2's own sounds for it (`kh2slots::frame`): the template's sounds left out of the
     /// slot (the Aerial Dodge: KH2's 999019 alone, not KH1's air swing's swish).
     pub own_sounds: bool,
+    /// One of KH2's combo rows of Sora's (`COMBO`, the tester, combo row selection after m25,
+    /// answer 3 (a): "every KH2 combo row gets its own KH1 row"): found by its KH2 motion
+    /// (`by_combo_motion`; several of KH2's PTYA rows share a motion: one KH1 row plays them all,
+    /// KH2's rows differing only in when they're picked).
+    pub combo: bool,
+    /// KH1's own row it is like when not its kind's first (`Kind::template_row`): (row, its request,
+    /// that request's slot). 152, KH2's second swing, on KH1's second (row 11, 0xC9, slot 99), as it
+    /// stood on that request before.
+    pub template: Option<(usize, u32, usize)>,
+}
+
+impl Ours {
+    /// KH1's row it copies (its trail, effect, sound and voice bytes and its attack data).
+    pub fn template_row(&self) -> usize {
+        self.template.map_or(self.kind.template_row(), |t| t.0)
+    }
+
+    /// That row's request.
+    pub fn template_request(&self) -> u32 {
+        self.template.map_or(self.kind.template_request(), |t| t.1)
+    }
+
+    /// The KH1 slot that request plays (our slot's template, `kh2slots`).
+    pub fn template_slot(&self) -> usize {
+        self.template.map_or(self.kind.template_slot(), |t| t.2)
+    }
+}
+
+/// A KH2 combo row of Sora's on a KH1 row of its own (`COMBO`).
+const fn combo(name: &'static str, motion: u16, kind: Kind) -> Ours {
+    Ours { name, kh2_row: NO_ROW, motion, kind, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: true, template: None }
 }
 
 /// `Ours::kh2_row` for a move with no PTYA row (Aerial Recovery; Sora's rows go to 59).
@@ -172,25 +203,52 @@ pub const NO_ROW: u8 = u8::MAX;
 /// kh2-magic-and-reflect-native m5 plan item 2; `reflect::cast_native`): its MAGC cast motions
 /// (Checked (files), every level: ground 71, combo finisher 72, air 73), their requests only, on
 /// KH1's Thunder cast slots 56 / 81 as templates (their sounds left out: KH2's own play).
-pub const OURS: [Ours; 18] = [
-    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true, attack: true, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Retaliating Slash", kh2_row: 40, motion: 172, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Finishing Plus", kh2_row: NO_ROW, motion: 154, kind: Kind::Finisher, rises: false, guard_break: false, attack: true, next_finisher: true, frames: None, own_sounds: false },
-    Ours { name: "Finishing Plus (air)", kh2_row: NO_ROW, motion: 183, kind: Kind::AirFinisher, rises: false, guard_break: false, attack: true, next_finisher: true, frames: None, own_sounds: false },
-    Ours { name: "Guard", kh2_row: GUARD_ROW, motion: character_core::motion::GUARD_PRESS, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Guard repel", kh2_row: NO_ROW, motion: character_core::motion::GUARD, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Counterguard", kh2_row: COUNTERGUARD_ROW, motion: 171, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false },
-    Ours { name: "Aerial Dodge", kh2_row: NO_ROW, motion: character_core::motion::AERIAL_DODGE, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: Some(AERIAL_DODGE_FRAMES), own_sounds: true },
-    Ours { name: "Quick Run", kh2_row: NO_ROW, motion: super::quickrun::RUN_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
-    Ours { name: "Quick Run stop", kh2_row: NO_ROW, motion: super::quickrun::STOP_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
-    Ours { name: "Glide hover", kh2_row: NO_ROW, motion: character_core::motion::GLIDE_HOVER, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
-    Ours { name: "Reflect", kh2_row: NO_ROW, motion: super::reflect::GROUND_MOTION, kind: Kind::Cast, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
-    Ours { name: "Reflect (finisher)", kh2_row: NO_ROW, motion: super::reflect::FINISHER_MOTION, kind: Kind::CastFinisher, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
-    Ours { name: "Reflect (air)", kh2_row: NO_ROW, motion: super::reflect::AIR_MOTION, kind: Kind::AirCast, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true },
+pub const OURS: [Ours; 38] = [
+    Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Guard Break", kh2_row: 27, motion: 165, kind: Kind::Finisher, rises: false, guard_break: true, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Retaliating Slash", kh2_row: 40, motion: 172, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Aerial Recovery", kh2_row: NO_ROW, motion: character_core::motion::AIR_RECOVERY, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Finishing Plus", kh2_row: NO_ROW, motion: 154, kind: Kind::Finisher, rises: false, guard_break: false, attack: true, next_finisher: true, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Finishing Plus (air)", kh2_row: NO_ROW, motion: 183, kind: Kind::AirFinisher, rises: false, guard_break: false, attack: true, next_finisher: true, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Guard", kh2_row: GUARD_ROW, motion: character_core::motion::GUARD_PRESS, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Guard repel", kh2_row: NO_ROW, motion: character_core::motion::GUARD, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Counterguard", kh2_row: COUNTERGUARD_ROW, motion: 171, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None },
+    Ours { name: "Aerial Dodge", kh2_row: NO_ROW, motion: character_core::motion::AERIAL_DODGE, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: Some(AERIAL_DODGE_FRAMES), own_sounds: true, combo: false, template: None },
+    Ours { name: "Quick Run", kh2_row: NO_ROW, motion: super::quickrun::RUN_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None },
+    Ours { name: "Quick Run stop", kh2_row: NO_ROW, motion: super::quickrun::STOP_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None },
+    Ours { name: "Glide hover", kh2_row: NO_ROW, motion: character_core::motion::GLIDE_HOVER, kind: Kind::AirSwing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None },
+    Ours { name: "Reflect", kh2_row: NO_ROW, motion: super::reflect::GROUND_MOTION, kind: Kind::Cast, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None },
+    Ours { name: "Reflect (finisher)", kh2_row: NO_ROW, motion: super::reflect::FINISHER_MOTION, kind: Kind::CastFinisher, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None },
+    Ours { name: "Reflect (air)", kh2_row: NO_ROW, motion: super::reflect::AIR_MOTION, kind: Kind::AirCast, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None },    // Every KH2 combo row of Sora's on a KH1 row of its own (`combo`; the tester, combo row
+    // selection after m25, answer 3 (a)). Sora's PTYA (`00battle.bin` moveset 1, Checked (files),
+    // `docs/kh1-anim-slots.md` section 7): the ground swings (rows 4..6, 151..153; Slapshot 35,
+    // Dodge Slash 34 / 44 / 45, Slide Dash 28 / 43, Flash Step 46 / 47 / 59, Vicinity Break 51),
+    // the ground finishers (rows 2 / 3, 154 / 155; Explosion 26 / 42; Guard Break 27 is above),
+    // the air swings (rows 9 / 10, 181 / 182, which the ground hops 0 / 1 play too; Aerial Spiral
+    // 36; the ground-to-air hops Aerial Sweep 33 and Aerial Dive 48) and the air finishers (rows
+    // 7 / 8, 184 / 183; Aerial Finish 29, Magnet Burst 49 / 50).
+    combo("151", 151, Kind::Swing),
+    Ours { template: Some((11, 0xC9, 99)), ..combo("152", 152, Kind::Swing) },
+    combo("153", 153, Kind::Swing),
+    combo("Slapshot", 162, Kind::Swing),
+    combo("Dodge Slash", 163, Kind::Swing),
+    combo("Slide Dash", 164, Kind::Swing),
+    combo("Flash Step", 169, Kind::Swing),
+    combo("Vicinity Break", 170, Kind::Swing),
+    combo("154", 154, Kind::Finisher),
+    combo("155", 155, Kind::Finisher),
+    combo("Explosion", 166, Kind::Finisher),
+    combo("181", 181, Kind::AirSwing),
+    combo("182", 182, Kind::AirSwing),
+    combo("Aerial Spiral", 192, Kind::AirSwing),
+    combo("Aerial Sweep", 191, Kind::AirSwing),
+    combo("Aerial Dive", 196, Kind::AirSwing),
+    combo("183", 183, Kind::AirFinisher),
+    combo("184", 184, Kind::AirFinisher),
+    combo("Aerial Finish", 194, Kind::AirFinisher),
+    combo("Magnet Burst", 197, Kind::AirFinisher),
 ];
 
 /// The Aerial Dodge's slot length (60 Hz frames): longer than any of its rises reaches its apex
@@ -231,6 +289,20 @@ pub fn by_kh2_row(id: u8) -> Option<usize> {
 /// Ours for KH2's `motion` (a move with no row: Aerial Recovery).
 pub fn by_motion(motion: u16) -> Option<usize> {
     OURS.iter().position(|o| o.motion == motion && !o.next_finisher)
+}
+
+/// Our KH1 row for KH2's combo motion `motion` (`Ours::combo`), if any.
+pub fn by_combo_motion(motion: u16) -> Option<usize> {
+    OURS.iter().position(|o| o.combo && o.motion == motion)
+}
+
+/// The KH1 request a script should see for one of our attack rows' requests (`request`), its
+/// template's (KH1's own swing, finisher or air swing request): event scripts read Sora's `+0x164`
+/// (opcode 322; Dive to the Heart's "Press to attack" window waits for KH1's attack request
+/// there), and KH1's Attack step tests it for a spell out of a swing (`combat::command`).
+pub fn kh1_request_for(request: u32) -> Option<u32> {
+    let n = request.checked_sub(FIRST_REQUEST).map(|n| n as usize)?;
+    OURS.get(n).filter(|o| o.attack && !o.kind.cast()).map(|o| o.template_request())
 }
 
 /// Ours at KH1 row index `row`, if it is one of ours.
@@ -280,10 +352,10 @@ fn note(s: String) {
 
 /// Memory for our attack data within an i32 offset of the block (rows hold offsets, not
 /// pointers): a page past it, at the first free address from 16 MB on.
-pub(super) unsafe fn near(block: usize) -> Option<usize> {
+pub(super) unsafe fn near(block: usize, size: usize) -> Option<usize> {
     for k in 0..512usize {
         let at = (block + 0x0100_0000 + k * 0x0010_0000) & !0xFFFF;
-        let p = super::sys::VirtualAlloc(at as *mut _, 0x1000, 0x3000, 0x04) as usize;
+        let p = super::sys::VirtualAlloc(at as *mut _, size, 0x3000, 0x04) as usize;
         if p == at {
             return Some(p);
         }
@@ -383,15 +455,16 @@ pub unsafe fn install(actor: usize) {
 unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
     let block = base + BLOCK_RVA;
     // KH1's rows of each kind are what we take them for.
-    for k in [Kind::Swing, Kind::Finisher, Kind::AirSwing, Kind::AirFinisher] {
-        let q = rd::<i16>(kh1 + k.template_row() * ROW);
-        if q as i32 as u32 != k.template_request() {
-            log(&format!("KH1's attack rows: Sora's row {} asks for {q:#x}, not {:#x}: no rows of ours", k.template_row(), k.template_request()));
+    for o in OURS.iter().filter(|o| !o.kind.cast()) {
+        let q = rd::<i16>(kh1 + o.template_row() * ROW);
+        if q as i32 as u32 != o.template_request() {
+            log(&format!("KH1's attack rows: Sora's row {} asks for {q:#x}, not {:#x}: no rows of ours", o.template_row(), o.template_request()));
             return None;
         }
     }
     let Some(kh2) = pose::kh2() else { return None };
-    let Some(mem) = near(block) else {
+    // (0x80 a row's data: 38 rows take 0x1300.)
+    let Some(mem) = near(block, (OURS.len() * 0x80 + 0xFFF) & !0xFFF) else {
         log("KH1's attack rows: no memory within reach of KH1's battle data for our attack data: no rows of ours");
         return None;
     };
@@ -399,7 +472,7 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
     std::ptr::copy_nonoverlapping(kh1 as *const u8, rows.as_mut_ptr(), KH1_ROWS * ROW);
     let mut made = Vec::new();
     for (n, o) in OURS.iter().enumerate() {
-        let t = kh1 + o.kind.template_row() * ROW;
+        let t = kh1 + o.template_row() * ROW;
         let r = rows.as_mut_ptr() as usize + (KH1_ROWS + n) * ROW;
         std::ptr::copy_nonoverlapping(t as *const u8, r as *mut u8, ROW);
         // Its own data: the template's, with KH2's reaction for the move.
@@ -447,7 +520,7 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
             o.kh2_row,
             o.motion,
             request(n),
-            o.kind.template_row(),
+            o.template_row(),
             rd::<i32>(d + 0x3C),
             atkp
         ));

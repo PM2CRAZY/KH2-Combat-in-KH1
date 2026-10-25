@@ -90,10 +90,55 @@ static FINISHERS: AtomicU8 = AtomicU8::new(0);
 static OURS: Mutex<Option<(usize, Option<character_core::Launch>, u64)>> = Mutex::new(None);
 
 /// Our row for KH2's pick `row` (`kh1rows`), if it is one of ours and plays: the rows on Sora's
-/// table and our slot of its motion on its request.
+/// table and our slot of its motion on its request. By its PTYA row (the Square moves, Guard
+/// Break, Counterguard...), else by its motion for every other combo row (`kh1rows::Ours::combo`:
+/// the tester, combo row selection after m25, answer 3 (a), every KH2 combo row on a KH1 row of
+/// its own).
 fn ours_for(row: &ComboRow) -> Option<usize> {
+    use super::kh1rows as k;
     // (Attack rows only: the guard's row 11 is started by its request, `guard_press`.)
-    super::kh1rows::by_kh2_row(row.id).filter(|&n| super::kh1rows::OURS[n].attack && super::kh1rows::OURS[n].motion == row.motion && super::kh1rows::installed() && super::kh2slots::has(super::kh1rows::request(n) as usize, row.motion))
+    let plays = |n: usize| k::OURS[n].attack && k::OURS[n].motion == row.motion && k::installed() && super::kh2slots::has(k::request(n) as usize, row.motion);
+    k::by_kh2_row(row.id).filter(|&n| plays(n)).or_else(|| k::by_combo_motion(row.motion).filter(|&n| plays(n)))
+}
+
+/// KH2's pick `pick` (in the air or not, its hop `launch`) on a combo row of ours (`ours_for`): the
+/// row KH1's picker returns for it. A hop from the ground (an air row picked on the ground: rows 0
+/// / 1, Aerial Sweep, Aerial Dive) needs KH2's hop worked out, and for a plain one the Aerial
+/// Combo at KH2 too (as `kh2_hop` had it: KH2's plain hops are KH2's row selection with both combo
+/// styles at KH2); else `None` (KH1's row as before).
+fn combo_row(pick: &ComboRow, air: bool, launch: Option<character_core::Launch>) -> Option<usize> {
+    let n = ours_for(pick)?;
+    let o = &super::kh1rows::OURS[n];
+    if !air && o.kind.air() && !o.rises {
+        let hop = launch.is_some_and(|l| l.height.is_finite() && l.velocity.iter().all(|v| v.is_finite()));
+        if !pick.is_jump() || !hop || (pick.ability == 0 && !super::styles::kh2(super::styles::Kind::AirCombo)) {
+            return None;
+        }
+    }
+    Some(n)
+}
+
+/// What `combat::exec` runs for a combo row of ours `n` (`combo_row`): from the ground an air row
+/// is KH2's hop (KH1's air state entered with KH1's count at 1, KH2's: a hop from the ground
+/// restarts it; then KH2's arc on it, `shared::physics::kh2_hop`), as `kh2_hop` ran it on KH1's
+/// air swing row; else `ours_run`.
+unsafe fn ours_combo_run(actor: usize, n: usize, launch: Option<character_core::Launch>, air: bool, count: u8, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
+    use super::kh1rows as k;
+    let o = &k::OURS[n];
+    if let Some(l) = launch.filter(|_| !air && o.kind.air() && !o.rises) {
+        let info = pose::ptr(rd::<u32>(actor + 0x14C));
+        if info >= 0x10000 {
+            wr(info + 0x41, 1u8);
+        }
+        let r = k::row(n);
+        if let Ok(mut g) = LAST.lock() {
+            *g = request_of(r).map(|m| (1, m, false, true));
+        }
+        FINISHERS.store(0, Ordering::Relaxed);
+        note(format!("KH2's hop {} (motion {}) on KH1's air row {r} of its own (request {:#x}) out of KH1's air state, {:.0} high, {:.1}/frame sideways", o.name, o.motion, k::request(n), l.height, l.velocity[0].hypot(l.velocity[1])));
+        return Run::Hop(r, l);
+    }
+    ours_run(n, launch, air, count, request_of)
 }
 
 /// What `combat::exec` runs for our row `n` (`kh1rows`) at this press: KH1's row runner on it,
@@ -516,10 +561,28 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
             return run;
         }
-        // (One with a KH1 row of its own, `kh1rows`: Guard Break.)
+        // (One with a KH1 row of its own, `kh1rows`: every combo row, and Guard Break.)
+        if let Some(n) = pick.as_ref().and_then(|(r, ..)| combo_row(r, air, launch)) {
+            return ours_combo_run(actor, n, launch, air, count, request_of);
+        }
         if let Some(n) = pick.as_ref().and_then(|(r, ..)| ours_for(r)) {
             return ours_run(n, launch, air, count, request_of);
         }
+    } else if let Some(n) = pick.as_ref().and_then(|(r, ..)| combo_row(r, air, launch)) {
+        // At the combo style KH2: KH2's pick on its own KH1 row (the tester, combo row selection
+        // after m25, answer 3 (a)), the row KH1's picker returned for it (`kh2_pick_in_picker`):
+        // KH1's row runner runs it, KH1's plain rows not re-pointed at it.
+        let (r, len, _) = pick.as_ref().unwrap();
+        note(format!(
+            "KH1's {} combo, swing {count} of {kh1_len}: KH2's row {} motion {} (ability {}, finisher {}, KH2's length {len}) on KH1's row {} of its own",
+            if air { "aerial" } else { "ground" },
+            r.id,
+            r.motion,
+            r.ability,
+            r.is_finisher(),
+            super::kh1rows::row(n)
+        ));
+        return ours_combo_run(actor, n, launch, air, count, request_of);
     }
     let why = if kh1_style { None } else { pick.as_ref().filter(|(r, ..)| !combo.serves(r)).and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len)) };
     if !kh1_style {
@@ -644,8 +707,15 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -
         return row;
     };
     let request_of = |r: i32| super::combat::row_motion(actor, r);
-    // (Our own row, or a hop from the ground: `attack` picks its row.)
-    let run = if ours_for(&pick).is_some() || (!air && pick.is_jump()) { row } else { kh2_row(actor, combo, row, Some(&pick), &request_of) };
+    // (Its own KH1 row, the row KH1's picker returns, `combo_row`; else, our own row or a hop from
+    // the ground with none: `attack` picks its row.)
+    let run = if let Some(n) = combo_row(&pick, air, launch) {
+        super::kh1rows::row(n)
+    } else if ours_for(&pick).is_some() || (!air && pick.is_jump()) {
+        row
+    } else {
+        kh2_row(actor, combo, row, Some(&pick), &request_of)
+    };
     // (KH1's dash, row 1, left its distance in the direction's y, which only rows 0 / 1 read.)
     if run != row && row == 1 && dir >= 0x10000 {
         wr(dir + 4, 0.0f32);
@@ -907,7 +977,13 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
         Took::Plain => (plain, format!("KH1's own finisher row {plain}")),
         Took::Kh1(n, name) => (n, format!("KH1's {name} (row {n})")),
         Took::Kh2(pick, launch) => {
-            let run = if ours_for(&pick).is_some() || (!air && pick.is_jump()) { plain } else { kh2_row(actor, combo, plain, Some(&pick), &request_of) };
+            let run = if let Some(n) = combo_row(&pick, air, launch) {
+                super::kh1rows::row(n)
+            } else if ours_for(&pick).is_some() || (!air && pick.is_jump()) {
+                plain
+            } else {
+                kh2_row(actor, combo, plain, Some(&pick), &request_of)
+            };
             let line = format!(
                 "KH2's row {} motion {} (ability {}): KH1's row {run} runs it{}",
                 pick.id,
@@ -1006,7 +1082,14 @@ pub unsafe fn kh2_pick_in_picker(actor: usize, row: i32, dir: usize, air: bool, 
     let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
     let request_of = |r: i32| super::combat::row_motion(actor, r);
     let mut run = row;
-    if let (Some(p), Some((count, kh1_len, _))) = (press.as_ref().filter(|p| !p.chained), kh1_combo(actor, air)) {
+    let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
+    // (KH2's pick on its own KH1 row: the row KH1's picker returns; the tester, combo row selection
+    // after m25, answer 3 (a). Finishing Plus's next finisher only while that row's request isn't
+    // the one playing, KH1's anti-repeat, as `next_finisher` takes it.)
+    let own = press.as_ref().and_then(|p| combo_row(&p.row, air, p.launch).filter(|&n| !p.chained || super::kh1rows::request(n) != playing));
+    if let Some(n) = own {
+        run = super::kh1rows::row(n);
+    } else if let (Some(p), Some((count, kh1_len, _))) = (press.as_ref().filter(|p| !p.chained), kh1_combo(actor, air)) {
         let borrow = !combo.serves(&p.row) && ability_move(&p.row, p.len, p.neg, count, kh1_len).is_some();
         if !borrow && !(!air && p.row.is_jump()) {
             run = kh2_row(actor, combo, row, Some(&p.row), &request_of);

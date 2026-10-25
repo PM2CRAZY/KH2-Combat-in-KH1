@@ -52,24 +52,19 @@ struct Spec {
     kind: Kind,
 }
 
-/// KH1's ground combo, KH2's swings for it as `pose` draws them (`pose::swing_motion`): KH1's
-/// first and third swing (98, request 0xC8) KH2's first (151); its second (99, 0xC9) KH2's second
-/// (152; the user: "sora base attack 2, kh2 base attack 2"); slot 100 (0xCA, taken as another
-/// swing) KH2's first; its finisher (101, 0xCB) KH2's finisher (154; "kh1 base finisher, kh2 base
-/// finishers"). These are each request's own; with the Base Combo at KH2, KH2's row selection
-/// picks among the other ground swings KH2's rows can take, built for each request too (`pick`,
-/// `swing_rows`).
-///
-/// KH1's air combo (slots 102..104, requests 0xCC..0xCE), KH2's aerial swings for it as `pose`
-/// draws them: 181 for KH1's first air swing (102), 182 for its second (103), 183 for its finisher
-/// (104), KH2's own order in the air (181 / 182 alternate, 183 finishes). With these built, the Attack in the air at Aerial Base Combo KH2 stays in KH1's air
-/// state (`covers`, `shared::kh1_combo`) instead of borrowing him for KH2's own air combo.
-/// These are each request's own; with the Aerial Combo at KH2, KH2's row selection picks among
-/// KH2's other air swings for them too (`pick`, `swing_rows`).
-/// KH1's ground finisher request (slot 101); 0xC8..0xCA are its swings.
-pub const GROUND_FINISHER: usize = 0xCB;
-/// KH1's air finisher request (slot 104); 0xCC / 0xCD are its swings.
-pub const AIR_FINISHER: usize = 0xCE;
+// KH1's ground combo, KH2's swings for it as `pose` draws them (`pose::swing_motion`): KH1's
+// first and third swing (98, request 0xC8) KH2's first (151); its second (99, 0xC9) KH2's second
+// (152; the user: "sora base attack 2, kh2 base attack 2"); slot 100 (0xCA, taken as another
+// swing) KH2's first; its finisher (101, 0xCB) KH2's finisher (154; "kh1 base finisher, kh2 base
+// finishers"). These are each request's own; KH2's other swings (and these too, for KH2's row
+// selection) are on KH1 rows and requests of their own (`kh1rows::Ours::combo`; the tester, combo
+// row selection after m25, answer 3 (a)), no longer picked onto these requests.
+//
+// KH1's air combo (slots 102..104, requests 0xCC..0xCE), KH2's aerial swings for it as `pose`
+// draws them: 181 for KH1's first air swing (102), 182 for its second (103), 183 for its finisher
+// (104), KH2's own order in the air (181 / 182 alternate, 183 finishes). With these built, the Attack in the air at Aerial Base Combo KH2 stays in KH1's air
+// state (`covers`, `shared::kh1_combo`) instead of borrowing him for KH2's own air combo.
+// These are each request's own (KH2's air rows on KH1 rows of their own, as above).
 
 /// KH1's spell casts (`docs/kh1-magic-native.md`; KH1's command step, Steam `0x1402A3DB0` /
 /// `0x1402A3600` / `0x1402A4150` / `0x1402A7510`, Checked (decomp); KH1's request table,
@@ -410,25 +405,13 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 log(&format!("KH2 slots: KH2 motion {} left out: not all three of KH1's slots {}..{} built", c.motion, c.slot, c.slot + 2));
             }
         }
-        // KH2's row selection on KH1's ground and air swings (`pick`): every other swing KH2's
-        // combo rows can take there, built for each KH1 request of its kind (on the ground a
-        // swing for 0xC8..0xCA, a finisher for 0xCB; in the air a swing for 0xCC / 0xCD, a
-        // finisher for 0xCE) on that request's own template.
-        for s in SPECS.iter().filter(|s| matches!(s.kind, Kind::GroundCombo | Kind::AirCombo)) {
-            if !moves.iter().any(|m| m.request == s.request && m.default) {
-                continue;
-            }
-            let air = s.kind == Kind::AirCombo;
-            for (motion, finisher) in swing_rows(&kh2.character.moveset.combo_rows, &kh2.character.moveset.clips, &kh2.battle, air) {
-                if finisher != matches!(s.request, GROUND_FINISHER | AIR_FINISHER) || motion == s.motion || !wanted(motion) {
-                    continue;
-                }
-                if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, s.stands_for, s.request, s.kind), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
-                    moves.push(m);
-                    blocks.push(block);
-                }
-            }
-        }
+        // (KH2's other swings are no longer built on KH1's own ground and air requests for KH2's
+        // row selection to point them at: every KH2 combo row has a KH1 row and request of its
+        // own, below (`kh1rows::Ours::combo`; the tester, combo row selection after m25, answer
+        // 3 (a)). KH1's requests keep only their own move above, `SPECS`.)
+        // The combo rows' motions KH1's rows can play natively (`swing_rows`: the plain ones, and
+        // the ability rows that are a Keyblade swing or hit with his body).
+        let combo_ok: Vec<u16> = [false, true].iter().flat_map(|&air| swing_rows(&kh2.character.moveset.combo_rows, &kh2.character.moveset.clips, &kh2.battle, air)).map(|(m, _)| m).collect();
         // KH2's finisher casts (`CAST_FINISHERS`) on KH1's ground cast requests, picked at a cast
         // that is the combo's finisher (`pick_cast`).
         for &(motion, stands_for, request) in CAST_FINISHERS.iter() {
@@ -443,7 +426,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
         // KH2's moves on KH1 rows of their own (`kh1rows`): each on its own request (0x200 + n),
         // built on the KH1 motion and request of its row's kind (the template's travel flag too).
         for (n, o) in super::kh1rows::OURS.iter().enumerate() {
-            if !wanted(o.motion) {
+            if !wanted(o.motion) || (o.combo && !combo_ok.contains(&o.motion)) {
                 continue;
             }
             let k = o.kind;
@@ -458,14 +441,14 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
             // plays, its first the request's own.)
             let mut motions = vec![o.motion];
             if o.next_finisher {
-                for m in moves.iter().filter(|m| m.request == k.template_request() as usize && m.own.is_none()) {
+                for m in moves.iter().filter(|m| m.request == o.template_request() as usize && m.own.is_none()) {
                     if !motions.contains(&m.motion) {
                         motions.push(m.motion);
                     }
                 }
             }
             for (j, &motion) in motions.iter().enumerate() {
-                if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (motion, k.template_slot(), k.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
+                if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
                     m.own = Some(m.request);
                     m.request = super::kh1rows::request(n) as usize;
                     log(&format!("KH2 slots: KH2 motion {motion} ({}) on our request {:#x} (KH1's row {} of ours)", o.name, m.request, super::kh1rows::row(n)));
