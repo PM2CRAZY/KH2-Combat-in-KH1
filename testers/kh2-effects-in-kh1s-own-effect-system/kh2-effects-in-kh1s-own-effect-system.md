@@ -506,4 +506,12 @@ go ahead
 
 ^m19
 
+1. if a kh2 spell is casted on a kh1 animation then it should cast on the frame that the kh1 animation casts it and vice versa
+2. (b) hold him like kh2, the player expects it to be like kh2
+3. (a)
+4. (b) like kh2
+   
+   for the physics settings players are expecting that switch to make magic behave how it does in their respected games.
+   
+go ahead
 
