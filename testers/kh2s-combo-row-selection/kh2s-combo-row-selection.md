@@ -708,3 +708,8 @@ is zantestukens percent chance still on? I get a normal finisher from time to ti
 
 ^m25
 
+1. no it should change on the toggle we have like the other moves, if you have ability chance off then it should be 100 percent like the other moves, if not then 30% chance is back
+2. (b)
+3. (a) make sure you patch in any features missing in kh1's row so that it can handle it 1:1 
+
+go ahead
