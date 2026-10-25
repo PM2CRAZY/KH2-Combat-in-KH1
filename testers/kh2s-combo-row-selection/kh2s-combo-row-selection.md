@@ -416,3 +416,12 @@ go ahead
 ^m19
 
 
+1.  (c) it should follow the logic of how kh2 picks I will tell you what moves should have what:
+	1. gravity break and blitz follow guard break
+	2. ripple drive, stun impact should follow explosions logic
+	3. hurricane blast should follow aerial finish 
+		-an ability should always take priority over the normal finisher, if you have a finishing plus equipped but not an extra ability to fill that slot then the ability is a normal finisher (like kh2) if you have a finishing plus and no abilities then both are normal finishers, make sure you check your notes, if you still are unsure check the c steam decomp to make sure I'm right with kh2
+2. (b)
+3. (b) find a way to make it native with kh1's picker.
+
+when it comes to it we now have two pickers, if its native thats good but what I don't get is how come you don't just patch it to where kh2 moves can have the same logic they do inside of kh1's picker it should be as if your patching extra features into kh1's mechanics, not taking away from kh1 but adding more that the engine can do. 
