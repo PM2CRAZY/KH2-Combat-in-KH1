@@ -513,4 +513,9 @@ one thing why can't we include kh2's combat configs in kh1's picker? shouldn't t
 > Say go ahead and I'll start with version 1, the one walk in KH1's picker with the KH1 rule set.
 
 ^m21
+do 1. if its the best way to implement more features into kh1's already existing engine, you need to keep blitz's rule and lets make a toggle in the config for the 30 percent chance to exist, if it does then if the 30 percent chance roll fails then it picks a similar kh2 move. these will be in the gameplay config in a sub menu called Tweaks 
 
+1. gravity break and blitz last, if its blitz and gravity equipped then blitz last, let me know how kh2 prioritizes moves, the reason I picked the ones I did is because:
+		-one does aoe damage (explosion group), the other focuses on one enemy (guard break, etc.)
+	let me know if my priority list aligns with kh2, check your notes and if your unsure check the c steam decomp
+2. (a)
