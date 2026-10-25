@@ -840,27 +840,11 @@ struct Runtime {
     paused: Option<Instant>,
 }
 
-/// The counter's burst attacks (tiers 1..3) and the element whose sound is the burst's.
-///
-/// The burst is Reflect's one pop: per cast, it alone hits, once per foe (its rows re-arm never),
-/// as the barrier's effects end (script frame ~58), its tier by the hits the barrier counted. The
-/// script's counter attack before it (ATKP 574: power 50, a flinch, re-armed every 10 / 8 / 6
-/// frames over its 28) hit each foe in reach 3 to 5 times, and every second attack on the barrier
-/// was taken for another pop (the user: "reflect under one cast regardless of if the multiple
-/// enemies are hitting the same reflect should pop only once at the end of the reflect effects
-/// animation"): it runs in the script (its effect plays) but strikes nothing.
+/// The burst attacks (tiers 1..3, by the hits the barrier counted), whose first frame plays the
+/// burst's sound (element 7's, `BURST_ELEMENT`). Every attack of the script strikes with its own
+/// row (t572; the burst runs at script frames 58..63 after the counter 574 / 576 / 578 at 30..57,
+/// Checked (files) through `kh2-magic`'s test `reflect_counters_what_it_blocked`).
 const BURSTS: [u16; 3] = [667, 668, 669];
-/// The counter attacks by tier (the script's, from the barrier's drop, frame 30: 574 for 1..4
-/// hits, 576 for 5..6, 578 for more; Data, the sample files run through `kh2-magic`). Each is the
-/// pop: it strikes once per foe, with its tier's burst row (667 / 668 / 669) for damage, as its
-/// animation (element 4 / 5 / 6) starts; the burst at frame 58 no longer strikes (the user: the
-/// hitbox "right when the reflect effect is about to disappear").
-const COUNTERS: [u16; 3] = [574, 576, 578];
-
-/// The burst row a counter attack pops with.
-fn burst_of(counter: u16) -> Option<u16> {
-    COUNTERS.iter().position(|c| *c == counter).map(|i| BURSTS[i])
-}
 /// `Runtime::casting`'s count once the cast motion has shown, and the frames a cast on KH1's cast
 /// state may wait for KH1 to start it (`formmagic`'s the same).
 const SEEN: u8 = u8::MAX;
@@ -1217,23 +1201,14 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         let sub = level as i32 * 2 - 2 + finisher as i32 + super::form::magic_sub();
         let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
         let spell = rt.spells[(level - 1) as usize].unwrap_or(0);
-        // Cast again while the last one is still in flight (its barrier, or its counter not yet
-        // done): that one ends here without its counter, and the hits it blocked carry over to
-        // this one, whose counter then fires for them all (the user: "reflect needs to not do
-        // the burst damage until the player stops spamming it").
-        let mut carry = 0;
+        // Cast again while the last one is still in flight: each cast runs on its own, as KH2's
+        // magic runs every cast's script (`0x1403C5170` starts a new one; the script machine runs
+        // each per frame): the last one keeps its barrier, its count and its counter (t572, the
+        // tester, m6: "reflect is currently not 1:1 with kh2"). Before, the last one ended
+        // without its counter and its hits carried over (main's s175 / s182).
+        let carry = 0;
         if rt.magic.busy(SORA) {
-            // Every hit blocked along the chain so far (`rt.blocks` counts this cast's and what it
-            // carried; the barrier's count, if one still stands): also when the counter had
-            // already begun (the user: "delay the burst until the last reflect, all attacks and
-            // triggers should burst at the last reflect").
-            carry = rt.magic.attacks.iter().filter(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3)).map(|a| a.reflect_count as u32).max().unwrap_or(0).max(rt.carry).max(rt.blocks);
-            rt.magic.cancel(SORA);
-            for h in rt.fx.values().filter_map(|v| v.0) {
-                super::kh2fx::spell_kill(h);
-            }
-            rt.fx.clear();
-            note(format!("Reflect cast again in flight: the last one ends without its counter, {carry} blocked hit(s) carried over"));
+            note("Reflect cast again in flight: the last one goes on (its own barrier and counter)".to_string());
         }
         match rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) {
             Ok(_) => {
@@ -1270,7 +1245,8 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         }
     }
     if blocks > 0 {
-        let barrier = rt.magic.attacks.iter_mut().find(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3));
+        // (The newest barrier: the one round him now.)
+        let barrier = rt.magic.attacks.iter_mut().rev().find(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3));
         match barrier {
             Some(a) => {
                 a.reflect_count = a.reflect_count.saturating_add(blocks.min(255) as u8);
@@ -1355,21 +1331,21 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
             guards.push((a.id | SPELL_KEY, kh1_sized_barrier(actor, shapes)));
             continue;
         }
-        // (Only the pop strikes: the counter's first frame, with its tier's burst row, `COUNTERS`;
-        // once per foe, its key's hit record keeps it from striking again.)
-        let Some(burst) = burst_of(a.atk) else { continue };
-        let Some(brow) = row(battle, burst, a.sub, 0) else { continue };
-        attacks.push(combat::SpellAttack { kh1_data: None, package: Some(rt.levels.get(a.spell).copied().unwrap_or(1)), key: a.id | SPELL_KEY, group: if brow.combo_group != 0 { brow.combo_group as i64 } else { a.group }, atk: burst, sub: a.sub, shapes });
+        // Each attack the script makes strikes with its own row, as in KH2 (t572): the counter
+        // (574 / 576 / 578 by the hits counted, power 50, re-armed by its row's interval, 10 / 8 /
+        // 6 frames by level) from frame 30 to 57, then the burst (667 / 668 / 669) 58 to 63.
+        // (Main's s229 / s233 had only one pop strike, once per foe, with the burst's numbers.)
+        attacks.push(combat::SpellAttack { kh1_data: None, package: Some(rt.levels.get(a.spell).copied().unwrap_or(1)), key: a.id | SPELL_KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes });
     }
     // The burst (the counter's last attack, ATKP 667 / 668 / 669 by tier): its shatter sound,
     // element 7's (173 at every level; the script starts no element for the burst, and element
     // 11's 174 plays nothing in the PC files; the user: no burst sound). Ours: KH2's own hit
     // effect for it (`trap_attack_set_pax`) is not modelled.
-    for a in rt.magic.attacks.iter().filter(|a| !a.freed && a.owner == SORA && burst_of(a.atk).is_some()) {
+    for a in rt.magic.attacks.iter().filter(|a| !a.freed && a.owner == SORA && BURSTS.contains(&a.atk)) {
         if rt.burst_heard.insert(a.key) {
             let level = rt.levels.get(a.spell).copied().unwrap_or(1);
             super::kh2sound::spell_element(level, BURST_ELEMENT);
-            log(&format!("Reflect pop (counter ATKP {}, burst row {:?}, the cast's only one): {} hit(s) blocked", a.atk, burst_of(a.atk), rt.blocks));
+            log(&format!("Reflect burst (ATKP {}): {} hit(s) blocked", a.atk, rt.blocks));
         }
     }
     // The barrier as a guard: enemy shots it touches turned back (counted, they never reach
@@ -1383,7 +1359,15 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         let level = rt.magic.attacks.iter().find(|a| !a.freed && a.owner == SORA).and_then(|a| rt.levels.get(a.spell).copied()).unwrap_or(1);
         for (key, shapes) in &guards {
             for at in strikes.barrier_meet(actor, *key, shapes) {
-                blocked(0);
+                // Counted on the barrier it met (each cast's own count, as KH2's meeting counts on
+                // its own attack, `0x1403D2140` `+0xB0`; t572).
+                if let Some(a) = rt.magic.attacks.iter_mut().find(|a| !a.freed && a.id | SPELL_KEY == *key) {
+                    a.reflect_count = a.reflect_count.saturating_add(1);
+                    rt.blocks += 1;
+                    note(format!("Reflect: an attack met barrier ATKP {} (count {})", a.atk, a.reflect_count));
+                } else {
+                    blocked(0);
+                }
                 if let Some(h) = super::kh2fx::spell_start(level, CONTACT_ELEMENT) {
                     super::kh2fx::spell_place(h, Mat4::from_translation(Vec3::from(at)));
                 }
@@ -1396,7 +1380,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         let hits = strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned());
         for (_, atk, foe, dealt) in hits {
             rt.counter_hits += 1;
-            log(&format!("Reflect pop: ATKP {atk} hit {foe:#x} -> damage {dealt:?} ({} blocked)", rt.blocks));
+            log(&format!("Reflect counter: ATKP {atk} hit {foe:#x} -> damage {dealt:?} ({} blocked)", rt.blocks));
         }
     }
     for a in rt.magic.freed().filter(|a| a.owns_id) {

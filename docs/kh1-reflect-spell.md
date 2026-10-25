@@ -219,3 +219,55 @@ shatter: the script starts no element for it and element 11's 174 plays nothing 
 - Voices (always, not `kh2_voice`'s): a ground or air cast plays one of his swings' grunts at
   random (VTBL voice 4: clips 9..13), the finisher Reflect KH2's MAGC finisher line for Reflect
   (voice 25, clip 31; Fire / Blizzard / Thunder have 11 / 12 / 13, their name calls).
+
+## Against KH2's own Reflect (testing branch, t572 audit)
+
+The tester (kh2-magic-and-reflect-native m6): "reflect is currently not 1:1 with kh2, from how it
+falls to how it behaves in game, please look at the steam c decomp". Steam addresses. Tags:
+**Checked (decomp)** KH2 / KH1 Steam decomps, **Checked (files)** the KH2 files (`00battle.bin`
+ATKP, `P_EX100.mset`, `REFLECT_1.mag` run through `kh2-magic`), **Assumption** not verified.
+
+What KH2 does:
+- **The barrier** is ATKP 573: kind 3 (special guard), power 0, refact self 2, no reflect range
+  (every side), at every sub. **Checked (files).** KH2's attack-against-attack pass
+  (`0x1403D08E0`) meets it with an enemy's kind 0 (normal) or 1 (pierce armor) attack (the 7 × 7
+  table `0x1405C5E98`), not with guards or kinds 4..6 (`docs/kh1-kh2-recoil.md` 1.1). Each side
+  then (`0x1403D2140`): the meeting is counted on the barrier (`+0xB0`, what the script reads as
+  its reflect count); the barrier goes on (refact self 2); the enemy's attack stops (unless its
+  own refact self is 2) and its owner plays its clash reaction (its ATKP reflected motion and hit
+  back); Sora's own clash reaction is only the effect (refact self 2: no motion, no push).
+  **Checked (decomp).** So KH2's Reflect stops enemy shots; it doesn't send them back.
+- **The script** (REFLECT_1, any hit count): the barrier from script frame 2 for 27 frames; no
+  hits, no counter; with hits the counter (574 for 1..4, 576 for 5..6, 578 more; power 50, kind 1,
+  a flinch, re-armed every 10 / 8 / 6 frames by level) from 30 to 57, then the burst (667 / 668 /
+  669) 58 to 63. **Checked (files).** Every cast is its own script: a second Reflect doesn't end
+  the first (`0x1403C5170` starts a cast each time; **Assumption**: nothing in KH2 cancels a
+  running Reflect, none found).
+- **No invulnerability** of its own: motions 71 / 72 (and 73, `docs/kh1-magic-native.md` §4e)
+  carry no invulnerable range (range id 27, which Aerial Recovery has 0..16). **Checked (files).**
+  The barrier, covering him, is what stops hits; the finisher Reflect (72) releases at frame 28,
+  so he can be hit before that, and after the barrier falls.
+- **Falls** (the air cast 73): `docs/kh1-magic-native.md` §4e / §4g / §4h: a 40 hop with his
+  speed kept and drifting × 0.95, held 16..74 with the arc's clock running, landing cuts the cast.
+
+What changed (t572, base Sora on KH1's cast state and the borrowed path alike):
+- Every attack of the script strikes with its own row (the counter's re-hits, then the burst),
+  where main's s229 / s233 let one pop strike once per foe with the burst's numbers.
+- A second Reflect leaves the first running (its own barrier, count and counter), where main's
+  s175 / s182 ended it without its counter and carried its hits over.
+- Each barrier counts the attacks that met it (the newest one counts what `hurt` stops).
+- He is out of reach (KH1's flag 0x40) only while a barrier stands, not all through the cast
+  motion (main's s179); `hurt` no longer evades hits in the cast.
+- An enemy's melee attack meeting the barrier gets KH1's clash with a guard, its owner's recoil
+  (`Strikes::barrier_meet`), as shots already did; main's s226 only counted it.
+
+What still differs (asked or open):
+- Shots: KH1's clash with a priority-100 guard turns a free-standing shot back (KH1's own
+  reflect, `docs/kh1-reflect.md`); KH2 only stops it.
+- Which attacks the barrier meets: KH2's table by ATKP kind (no guards, no kinds 4..6); KH1's
+  enemy attacks have no KH2 kind, and while the barrier stands every KH1 attack misses him.
+- The burst's sound (element 7's, 173) is inferred; the script starts no element for it.
+- The voice: a KH1 swing grunt per cast and "Protect!" on the finisher (main's choice); KH2 plays
+  MAGC voice 7 per cast (and 25 on the finisher) with Battle Quotes KH2.
+- Drive Forms still cast Reflect on KH2's controller (its stop and hold, clock stopped).
+- The held barrier and the combo wait (main's s172 / s180) were already off in the code.
