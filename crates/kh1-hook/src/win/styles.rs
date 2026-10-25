@@ -56,6 +56,13 @@ pub enum Kind {
     GravityAnim,
     StopAnim,
     AeroAnim,
+    /// How base Sora moves while he casts in the air, every spell (KH1's or KH2's, Reflect too):
+    /// KH1's air cast (its 30 hop, half the sideways speed, KH1's fall, no hover) or KH2's (its 40
+    /// hop, the speed kept, KH2's gravity and drag, the cast motion's hover with the arc's clock
+    /// running), whatever the Physics row says (`shared::physics::cast_rule`; the tester, m19:
+    /// "change air magic to air physics kh1 | kh2 ... remove anything related to the main physics
+    /// setting that has magic in it and put it in this new air setting").
+    AirPhysics,
 }
 
 impl Kind {
@@ -82,6 +89,7 @@ impl Kind {
         Kind::GravityAnim,
         Kind::StopAnim,
         Kind::AeroAnim,
+        Kind::AirPhysics,
     ];
 
     /// Its ini key.
@@ -110,6 +118,7 @@ impl Kind {
             Kind::GravityAnim => "anim_gravity",
             Kind::StopAnim => "anim_stop",
             Kind::AeroAnim => "anim_aero",
+            Kind::AirPhysics => "magic_air_physics",
         }
     }
 
@@ -138,6 +147,7 @@ impl Kind {
             Kind::GravityAnim => "Gravity Animation",
             Kind::StopAnim => "Stop Animation",
             Kind::AeroAnim => "Aero Animation",
+            Kind::AirPhysics => "Air Physics",
         }
     }
 
@@ -151,7 +161,7 @@ impl Kind {
 static KH2: [AtomicBool; COUNT] = [const { AtomicBool::new(false) }; COUNT];
 
 /// How many kinds there are (`Kind::EVERY`, the ini's `settings::styles`).
-pub const COUNT: usize = 22;
+pub const COUNT: usize = 23;
 static INIT: Once = Once::new();
 
 fn init() {

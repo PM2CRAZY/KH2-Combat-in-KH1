@@ -99,6 +99,17 @@ Config > KH1 in KH2 > Combat > Magic:
   motion, effects, sounds, KH2's MP cost scaled, `docs/kh1-magic-native.md`), or borrowed by
   KH2's controller in a state KH1 casts nothing in. At KH1, KH1's command step casts KH1's
   spell as unmodded (its script, effects, heal, cost), on the animation its row below picks.
+- **Air Physics** (`Kind::AirPhysics`, ini `magic_air_physics`; its default the old `physics`
+  key's value, KH2's without it, since air casts followed the Physics row before): how he moves
+  while he casts in the air, every spell, KH1's or KH2's, Reflect included, whatever the Physics
+  row says (the tester, m19: "change air magic to air physics kh1 | kh2 so now you can cast kh2
+  fire with kh1 air physics like how we did for reflect. remove anything related to the main
+  physics setting that has magic in it and put it in this new air setting";
+  `shared::physics::cast_rule`). KH1: KH1's air cast (its 30 hop, half the sideways speed, KH1's
+  fall, no hover; `0x1402A3600`). KH2: KH2's (`cast_stops`: its 40 hop, the speed kept and drifting
+  × 0.95 a tick; KH2's gravity; the cast motion's no-gravity range holding him with the arc's
+  clock running), for KH1's own spells too (`formmagic::spell_start` calls `cast_stops` for them).
+  `docs/kh1-magic-native.md` §4i.
 - **Animations** (its own list, so both lists keep KH1's full-size rows on screen; the tester's
   config-menu-rework answer "(a) for now if more options get added to a menu you can shrink the ui
   to fit"): Blizzard, Thunder, Cure, Gravity, Stop, Aero (`Kind::BlizzardAnim` .. `AeroAnim`, ini

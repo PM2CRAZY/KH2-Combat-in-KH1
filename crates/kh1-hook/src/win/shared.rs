@@ -466,6 +466,7 @@ pub fn give_back(state: StateName, grounded: bool, falling: bool, combo: (bool, 
 ///   are written from it every frame, so KH1's apex animation, its air-move gating and its own air
 ///   moves go on from KH2's motion; KH1's own early cut (flag `0x40000`) is kept off. Landing
 ///   stays KH1's (its collision).
+/// - (Air casts follow the Air Physics row, not this one: `physics::cast_rule`, the tester's m19.)
 /// - KH1's own air moves (its air attacks, casts, a blow's launch: no KH2 numbers of their own):
 ///   their own lunge, speed and hop height, on KH2's gravity, fall and drift (`air_step`).
 /// - The ground combo's swings (slots 98..101, its action flag 4 up; KH1's or KH2's animation):
@@ -624,6 +625,36 @@ pub mod physics {
         super::active() && source() == Rule::Kh2 && !super::super::form::in_form()
     }
 
+    /// The Air Physics row (Config > Combat > Magic; `styles::Kind::AirPhysics`): whose physics move
+    /// base Sora while he casts in the air, every spell, in place of the Physics row (the tester,
+    /// thread kh2-effects-in-kh1s-own-effect-system m19: "change air magic to air physics kh1 |
+    /// kh2 so now you can cast kh2 fire with kh1 air physics like how we did for reflect. remove
+    /// anything related to the main physics setting that has magic in it and put it in this new
+    /// air setting"). Drive Forms are KH2's (their own casts), as for the Physics row.
+    pub fn cast_rule() -> Rule {
+        if super::super::form::in_form() || super::super::styles::setting(super::super::styles::Kind::AirPhysics) {
+            Rule::Kh2
+        } else {
+            Rule::Kh1
+        }
+    }
+
+    /// KH2's air-cast physics apply to KH1's air state now (`cast_rule`, base Sora on KH1's states).
+    fn cast_kh2() -> bool {
+        super::active() && cast_rule() == Rule::Kh2 && !super::super::form::in_form()
+    }
+
+    /// KH1's request ids of its air casts (`kh2slots::CASTS`: `0x83 + spell`, Fire's second part
+    /// 0x8A; Checked (files) `xa_ex_0010.mset`), whatever plays on them.
+    const AIR_CAST_REQUESTS: std::ops::RangeInclusive<u32> = 0x83..=0x8A;
+
+    /// Base Sora is casting in KH1's air state now: its action flag (`+0` bit 2) with KH1's air
+    /// cast request applied (`+0x164`'s low half, `0x14029DAB0`; KH1's own cast motion or our slot
+    /// of KH2's on it), or a cast slot of ours (Reflect's requests, `kh2slots::cast_playing`).
+    unsafe fn casting_in_air(actor: usize) -> bool {
+        rd::<i32>(actor + 0x70) == 2 && rd::<u32>(actor) & 4 != 0 && (AIR_CAST_REQUESTS.contains(&(rd::<u32>(actor + 0x164) & 0xFFFF)) || super::super::kh2slots::cast_playing(actor))
+    }
+
     /// KH1's sideways velocity (`+0x3C0`: x, y, z, w = its length, per 60 Hz frame) and its
     /// vertical step this frame (`+0x3C4`).
     const VEL: usize = 0x3C0;
@@ -675,7 +706,8 @@ pub mod physics {
     /// after KH1's command step (`cast_after_command`). (t487's stop, sideways 0 and a fall from
     /// rest, is gone: it was not KH2's.) Must be called before KH1's command step halves `+0x3C0`.
     pub unsafe fn cast_stops(actor: usize) {
-        if !kh2() || !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
+        // (The Air Physics row's, not the Physics row's: `cast_rule`.)
+        if !cast_kh2() || !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
             return;
         }
         let Some(n) = numbers() else { return };
@@ -693,7 +725,7 @@ pub mod physics {
         if let Ok(mut k) = CAST_KEEP.lock() {
             *k = Some((game_frame(), v));
         }
-        super::super::log(&format!("KH2's air cast start (physics KH2): a hop of {MAGIC_JUMP:.0} ({:.1} frames up) from where he is (KH1's arc rising {}), sideways {:.1}/frame kept", arc.uptime, was.arc.up_speed() > 0.0, v[0].hypot(v[2])));
+        super::super::log(&format!("KH2's air cast start (Air Physics KH2): a hop of {MAGIC_JUMP:.0} ({:.1} frames up) from where he is (KH1's arc rising {}), sideways {:.1}/frame kept", arc.uptime, was.arc.up_speed() > 0.0, v[0].hypot(v[2])));
     }
 
     /// After KH1's command step ran a KH2 air cast (`combat::command`, `reflect::cast_native`):
@@ -1348,20 +1380,29 @@ pub mod physics {
         let f: StepFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
         let sora = is_sora(actor);
         let v0: [f32; 4] = if sora { rd(actor + 0x3C0) } else { [0.0; 4] };
+        // Whose physics move him this frame: the Air Physics row's while he casts in the air
+        // (`cast_rule`, the tester's m19), else the Physics row's.
+        let casting = sora && casting_in_air(actor);
+        let phys = if casting { cast_kh2() } else { kh2() };
+        // (A cast at Air Physics KH1 under physics KH2: no arc of ours through it, so KH2's arc
+        // after it goes on from KH1's, not from the one before the cast.)
+        if casting && !phys && kh2() {
+            off_air();
+        }
         // (Physics KH1: none for a cast slot, as KH1's own air cast has no hover, `0x1402AF6A0`;
         // the tester, m4: "see how casting is done in the air physics wise to get the same for kh1".)
-        let held = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0 && super::super::kh2slots::no_gravity(actor) && (kh2() || !super::super::kh2slots::cast_playing(actor));
+        let held = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0 && super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2());
         if held {
             static N: AtomicU32 = AtomicU32::new(0);
             if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                super::super::log(&format!("KH2's no-gravity range on KH1's air state (KH2 motion {:?}): his height held ({})", super::super::kh2slots::playing_motion(actor), if kh2() { "KH2's arc" } else { "KH1's arc" }));
+                super::super::log(&format!("KH2's no-gravity range on KH1's air state (KH2 motion {:?}): his height held ({})", super::super::kh2slots::playing_motion(actor), if phys { "KH2's arc" } else { "KH1's arc" }));
             }
         }
-        let kh1_held = if held && !kh2() { Some(kh1_motion(actor)) } else { None };
+        let kh1_held = if held && !phys { Some(kh1_motion(actor)) } else { None };
         // (KH2's root travel where its clip has no gravity, `kh2slots::air_root`: Finishing Leap.)
         let root_dt: f32 = rd(base() + DT_RVA);
         let root = if held { super::super::kh2slots::air_root(actor, if root_dt.is_finite() && root_dt > 0.0 && root_dt < 4.0 { root_dt } else { 1.0 }) } else { None };
-        let ours = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && kh2();
+        let ours = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && phys;
         // KH1 set its fields itself since our last write (an air attack's hop from its command
         // step, a blow's launch): KH2's arc goes on from KH1's from here.
         let mut kh1_set = false;
@@ -1396,7 +1437,7 @@ pub mod physics {
                 add_root(actor, disp, d);
             }
         }
-        if !sora || rd::<i32>(actor + 0x70) != 2 || disp.is_null() || !kh2() {
+        if !sora || rd::<i32>(actor + 0x70) != 2 || disp.is_null() || !phys {
             return r;
         }
         let Some(n) = numbers() else { return r };

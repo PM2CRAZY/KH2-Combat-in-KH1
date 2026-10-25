@@ -496,6 +496,13 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     if (0..=3).contains(&spell) && kh1_spell_start(actor, spell as u8) {
         return 0;
     }
+    // KH1's own spell in the air, base Sora: the Air Physics row's start too (KH2's 40 hop and
+    // speed kept at KH2, `shared::physics::cast_stops`, put back over KH1's halving after the
+    // command step, `cast_after_command`; nothing at KH1: KH1's own 30 hop and half speed), so a
+    // KH1 spell and a KH2 one move him alike (the tester, m19: "air physics kh1 | kh2").
+    if actor > 0x10000 && actor == super::takeover::sora_actor() && !super::form::in_form() && super::shared::active() && rd::<i32>(actor + 0x70) == 2 {
+        super::shared::physics::cast_stops(actor);
+    }
     let f: unsafe extern "system" fn(usize, i32, usize) -> u64 = std::mem::transmute(ORIG_SPELL_START.load(Ordering::Acquire));
     f(actor, spell, target)
 }

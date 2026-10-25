@@ -2872,10 +2872,10 @@ unsafe fn takeover(actor: usize) -> bool {
     d.character.air_magic_fall_max = Some(KH1_FALL_MAX);
     // Final Form: KH2's own (its cast motions' no-gravity frames, KH2's gravity), as KH2 has it
     // (the user: "aerial final form reflect is not 1:1 physics wise with kh2").
-    // Base Sora with physics KH2 (`shared::physics::source`, whatever the Aerial Magic style):
-    // KH2's own air casts too (Reflect's with them), not KH1's fall. With physics KH1, KH1's fall
-    // (the gravity above is KH1's then: `air_cast_fall` of it).
-    let base_kh2 = !super::form::in_form() && super::shared::physics::source() == super::shared::physics::Rule::Kh2;
+    // Base Sora with the Air Physics row at KH2 (`shared::physics::cast_rule`, the tester's m19:
+    // the Physics row no longer decides air casts): KH2's own air casts too (Reflect's with them),
+    // not KH1's fall. At KH1, KH1's fall (the gravity above is KH1's then: `air_cast_fall` of it).
+    let base_kh2 = !super::form::in_form() && super::shared::physics::cast_rule() == super::shared::physics::Rule::Kh2;
     if super::form::in_final() || base_kh2 {
         d.character.air_magic_falls = false;
         d.character.air_magic_gravity = 1.0;

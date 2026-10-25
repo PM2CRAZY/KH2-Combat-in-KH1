@@ -12,7 +12,7 @@
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
 //! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Recoil, and Magic, its own list
-//!   (answer 1): Fire, Blizzard, Thunder, Cure and Animations, its own list (Blizzard, Thunder, Cure,
+//!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a).
 //!
@@ -277,11 +277,12 @@ const COMBAT: [Item; 9] = [
 // (The tester, thread kh2-effects-in-kh1s-own-effect-system m19: a row per spell for what is
 // cast, "we'll remove ground magic"; each KH1 spell's animation in its own list, so both lists
 // keep KH1's full-size rows on screen.)
-const MAGIC: [Item; 5] = [
+const MAGIC: [Item; 6] = [
     Item::Set(kh(0x7F00_0180, 0x7F00_0181), Row::Style(Kind::Fire)),
     Item::Set(kh(0x7F00_0182, 0x7F00_0183), Row::Style(Kind::Blizzard)),
     Item::Set(kh(0x7F00_0184, 0x7F00_0185), Row::Style(Kind::Thunder)),
     Item::Set(kh(0x7F00_011F, 0x7F00_0120), Row::Style(Kind::Cure)),
+    Item::Set(kh(0x7F00_018F, 0x7F00_0190), Row::Style(Kind::AirPhysics)),
     Item::Open(0x7F00_020D, 0x7F00_020E, List::MagicAnim),
 ];
 const MAGIC_ANIM: [Item; 6] = [
@@ -313,7 +314,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 78] = [
+const STRINGS: [(u32, &str); 80] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -333,6 +334,8 @@ const STRINGS: [(u32, &str); 78] = [
     (0x7F00_0186, "KH1's Blizzard on KH1's or KH2's cast animation.\nKH2's Blizzard always plays KH2's."),
     (0x7F00_0187, "KH1's Thunder on KH1's or KH2's cast animation.\nKH2's Thunder always plays KH2's."),
     (0x7F00_0188, "KH1's Cure on KH1's or KH2's cast animation.\nKH2's Cure always plays KH2's."),
+    (0x7F00_018F, "Air Physics"),
+    (0x7F00_0190, "KH1's or KH2's physics while Sora casts in the air,\nfor every spell. Drive Forms keep their own."),
     (0x7F00_0189, "Gravity"),
     (0x7F00_018A, "KH1's Gravity on KH1's or KH2's cast animation\n(KH2's Thunder cast)."),
     (0x7F00_018B, "Stop"),
@@ -352,7 +355,7 @@ const STRINGS: [(u32, &str); 78] = [
     (0x7F00_0123, "L2 Stick Menu"),
     (0x7F00_0124, "While L2 is held, the right stick moves the command menu\nlike the d-pad, with either camera, as in KH2."),
     (0x7F00_0119, "Physics"),
-    (0x7F00_011A, "Choose KH1's or KH2's physics for all of Sora's moves.\nDrive Forms keep their own."),
+    (0x7F00_011A, "Choose KH1's or KH2's physics for Sora's moves. Air casts:\nCombat > Magic > Air Physics. Drive Forms keep their own."),
     (0x7F00_0101, "Base Combo"),
     (0x7F00_0102, "Choose KH1's or KH2's ground combo for Sora.\nDrive Forms keep their own."),
     (0x7F00_0103, "Aerial Base Combo"),

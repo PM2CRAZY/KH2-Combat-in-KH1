@@ -1,3 +1,21 @@
+### 2026-10-25: Stage 564 (testing branch: Magic: Air Physics row)
+- **Air Physics: KH1 | KH2 for every air cast.** The tester (same thread, m19: "change
+air magic to air physics kh1 | kh2 so now you can cast kh2 fire with kh1 air physics like how we
+did for reflect. remove anything related to the main physics setting that has magic in it and put
+it in this new air setting"). Config > Combat > Magic > Air Physics (ini `magic_air_physics`, its
+default the old `physics` value), `shared::physics::cast_rule`. Moved off the Physics row:
+`cast_stops` (KH2's 40 hop and kept speed, or KH1's own 30 hop and half speed), `air_step` while a
+cast plays in KH1's air state (new `casting_in_air`: action flag + KH1's air cast request 0x83..0x8A
+at `+0x164`, or a cast slot of ours; KH2's arc / gravity / drift / no-gravity hold with the clock,
+or KH1's step), and the KH2 controller's borrowed air casts (`takeover`'s `air_magic_falls`). New:
+KH1's own spells in the air take the row's start too (`formmagic::spell_start` calls `cast_stops`
+for them). A cast at Air Physics KH1 under Physics KH2 drops our arc so the fall after it goes on
+from KH1's fields. Physics row help text points to Air Physics. Checked (decomp) for the KH1 / KH2
+air cast numbers (t534's §4g); Checked (files) the request range. Assumption: KH1's halving and 30
+hop come after the spell start in `0x1402A3600` (what §4g already relies on). With a KH1 cast
+animation (no KH2 slot) there is no KH2 hover at Air Physics KH2 (asked). `docs/kh1-magic-native.md`
+§4i, `docs/kh1-move-styles.md`.
+
 ### 2026-10-25: Stage 563 (testing branch: Magic: KH1's Gravity, Stop and Aero on KH2 cast slots)
 - **Gravity, Stop and Aero on KH2's cast animation, natively.** The same ask (their
 animation rows at KH2). Before, KH2's controller borrowed Sora for them and KH2's cast motion was

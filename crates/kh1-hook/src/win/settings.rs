@@ -59,8 +59,8 @@ criticals = off\r\n\
 ; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
 glide = square\r\n\
 ; air_cast_fall: how fast Sora falls while Reflect plays in the air, a share of KH1's own\r\n\
-;   gravity (0 = he hangs, 1 = KH1's); his fall is stopped as the cast starts (physics = kh1,\r\n\
-;   and Valor / Wisdom; with physics = kh2 base Sora's air casts are KH2's own)\r\n\
+;   gravity (0 = he hangs, 1 = KH1's); his fall is stopped as the cast starts (magic_air_physics\r\n\
+;   = kh1, and Valor / Wisdom; with magic_air_physics = kh2 base Sora's air casts are KH2's own)\r\n\
 air_cast_fall = 1.0\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
 ; (battle_quotes, below, takes its place once set)\r\n\
@@ -133,7 +133,7 @@ drive = on\r\n\
 ; valor_left_blade: on = in Valor Form, its Keyblade in Sora's left hand (KH1's own model of it);\r\n\
 ; off = nothing of it is installed (turn it off if it misbehaves)\r\n\
 valor_left_blade = on\r\n\
-; physics: kh1 or kh2, whose physics move base Sora in every move (run speeds, jump arc,\r\n\
+; physics: kh1 or kh2, whose physics move base Sora in every move but air casts (run speeds, jump arc,\r\n\
 ;   gravity, air drift, attack travel), whatever the move styles below (they choose the\r\n\
 ;   animations); Drive Forms always KH2's. The Config menu's Physics row switches it in game\r\n\
 physics = kh2\r\n\
@@ -157,6 +157,10 @@ anim_cure = kh1\r\n\
 anim_gravity = kh1\r\n\
 anim_stop = kh1\r\n\
 anim_aero = kh1\r\n\
+; magic_air_physics: kh1 or kh2, how base Sora moves while he casts in the air, every spell\r\n\
+;   (KH1's 30 hop, half speed and fall; or KH2's 40 hop, speed kept, KH2's gravity and the cast's\r\n\
+;   hover), whatever physics says; the Config menu's Magic list switches it\r\n\
+magic_air_physics = kh2\r\n\
 ; hit_reactions: kh1 or kh2, KH1's or KH2's reaction animations when base Sora is hit (KH1\r\n\
 ;   still runs the reaction: its no-damage time, voices, HUD and MP); the Config menu's Combat\r\n\
 ;   list switches it\r\n\
@@ -517,6 +521,8 @@ fn load(first: bool) -> Option<Settings> {
                 on(&text, "anim_gravity", "kh2", magic && !kh1_cast[0]),
                 on(&text, "anim_stop", "kh2", magic && !kh1_cast[1]),
                 on(&text, "anim_aero", "kh2", magic && !kh1_cast[2]),
+                // (Air casts moved by the Physics row before: its value, KH2's without it.)
+                on(&text, "magic_air_physics", "kh2", crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()) == crate::kh1phys::Rule::Kh2),
             ]
         },
         knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),

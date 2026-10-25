@@ -425,3 +425,32 @@ c steam decomp to fix and find any issues with the physics". Steam addresses thr
   (the redirect also asking `formmagic::kh2_cure`), and `base_look` false for Cure then, as the
   debug menu's `kh1_cast` does for Gravity / Stop / Aero. KH1's own MP cost then (mpcost is only
   for KH2's spells).
+
+## 4i. Air casts by the Air Physics row, not the Physics row (the tester, kh2-effects-in-kh1s-own-effect-system m19)
+
+"we'll remove ground magic and change air magic to air physics kh1 | kh2 so now you can cast kh2
+fire with kh1 air physics like how we did for reflect. remove anything related to the main
+physics setting that has magic in it and put it in this new air setting."
+
+- Config > Combat > Magic > Air Physics (`styles::Kind::AirPhysics`, ini `magic_air_physics`),
+  read through `shared::physics::cast_rule` (Drive Forms KH2's, as for the Physics row).
+- What moved from the Physics row to it (every place the Physics row decided something about a
+  cast, found in the code):
+  - `cast_stops` (§4g: KH2's 40 hop and kept speed at a cast's start, or none: KH1's own 30 hop
+    and half speed);
+  - `air_step`'s while a cast plays in KH1's air state (`casting_in_air`: the action flag with
+    KH1's air cast request `0x83..0x8A` applied at `+0x164`, **Checked (files)** the request
+    table; or one of our cast slots): KH2's arc, gravity and drift, and the cast motion's
+    no-gravity hold with the arc's clock running (§4h), or KH1's own air step (no hold);
+  - the KH2 controller's borrowed air casts (`takeover`'s `air_magic_falls`: KH2's own, or KH1's
+    fall).
+- New: KH1's own spells in the air take the row's start too (`formmagic::spell_start` calls
+  `cast_stops` for them before KH1's command step halves the speed; `cast_after_command` after
+  it, as for KH2's), so KH1's Fire and KH2's Fire move him alike at either setting.
+- A cast at Air Physics KH1 under Physics KH2 drops our arc (`off_air`), so KH2's fall after the
+  cast goes on from KH1's arc fields rather than the jump before it. Under Physics KH1 at Air
+  Physics KH2 the fall after the cast is KH1's own from the fields KH2's arc wrote.
+- **Assumption**: KH1's halving of the sideways speed and its 30 hop come after the spell start
+  (`0x14028F140`) in `0x1402A3600`, as §4g's `cast_stops` / `cast_after_command` already rely on.
+- With a KH1 cast animation (no slot of ours) there is no KH2 hover to hold him at Air Physics
+  KH2: his 40 hop, kept speed and KH2's fall only (open with the tester).
