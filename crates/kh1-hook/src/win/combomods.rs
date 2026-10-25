@@ -408,6 +408,8 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         return Run::Row(row);
     }
     let air = matches!(state, 1 | 2);
+    // (KH2's pick KH1's picker made for this row, taken here so none is left for a later press.)
+    let made = take_kh2_pick(row, air);
     let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Run::Row(row) };
     // A Square move of KH2's on its own KH1 row (`control` gave KH1 this Attack for it).
     if let Some((n, launch)) = take_ours() {
@@ -433,10 +435,19 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // (At the combo style KH1 KH1's own picker picks it: below.)
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     let kh2_style = super::styles::kh2(if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo });
+    // At the combo style KH2, KH2's pick KH1's picker made at this press (`kh2_pick_in_picker`;
+    // the tester, m24: "(a)"): KH2's selector isn't run again here, and the row KH1's picker
+    // returned already plays it. Without one (KH1's picker didn't make it), KH2's selector is asked
+    // here, as before.
+    let made = if kh2_style { made } else { None };
     if let Some((n, _, true, _)) = last.filter(|l| kh2_style && l.3 == air && l.1 & 0xFFFF == playing) {
         let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
         let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
-        if let Some((row, _, _, launch)) = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()) {
+        let chained = match &made {
+            Some(p) => p.as_ref().filter(|p| p.chained).map(|p| (p.row.clone(), p.len, p.neg, p.launch)),
+            None => takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()),
+        };
+        if let Some((row, _, _, launch)) = chained {
             note(format!("Attack in KH1's finisher (count {n}, finisher {finishers}): KH2's next finisher, row {} motion {} (Finishing Plus)", row.id, row.motion));
             if let Some(run) = next_finisher(actor, &row, launch, air, n, playing, request_of) {
                 FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
@@ -454,6 +465,12 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     let (pick, launch) = if kh1_style {
         match take_pick() {
             Some((p, l)) => (Some((p, kh1_len, 0)), l),
+            None => (None, None),
+        }
+    } else if let Some(p) = &made {
+        // (KH1's picker's pick; a Finishing Plus one was taken above.)
+        match p.as_ref().filter(|p| !p.chained) {
+            Some(p) => (Some((p.row.clone(), p.len, p.neg)), p.launch),
             None => (None, None),
         }
     } else {
@@ -535,7 +552,9 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             return Run::Hop(r, l);
         }
     }
-    let row = kh2_row(actor, combo, row, pick.as_ref().map(|(r, ..)| r), request_of);
+    // (KH1's picker returned the row that plays KH2's pick when it made it, `kh2_pick_in_picker`:
+    // no row swapped here after the fact.)
+    let row = if made.is_some() { row } else { kh2_row(actor, combo, row, pick.as_ref().map(|(r, ..)| r), request_of) };
     let plays = select_swing(combo, request_of(row), pick.as_ref().map(|(r, ..)| r));
     if let Ok(mut l) = LAST.lock() {
         // (KH1's finisher: its finisher request; KH2's row selection can run KH1's swing row past
@@ -927,25 +946,82 @@ fn take_kh1_take() -> Option<(i32, bool)> {
     (frame().saturating_sub(at) <= 1).then_some((n, chained))
 }
 
-/// KH2's pick at this press at the combo style KH2, as the row runner's `attack` asks it (KH1's
-/// count, this press counted; Finishing Plus's next finisher when KH1's last row was a finisher
-/// still playing): the row, KH2's combo length, whether it chains on from a finisher. `None`
-/// without KH2's data or a pick.
-pub unsafe fn kh2_press(actor: usize, air: bool) -> Option<(ComboRow, u8, bool)> {
+/// KH2's pick at an Attack press at the combo style KH2 (`kh2_press`): the row, KH2's combo length
+/// and Negative Combo's copies, its hop, and whether it chains on from a finisher (Finishing Plus).
+#[derive(Clone)]
+pub struct Press {
+    pub row: ComboRow,
+    pub len: u8,
+    pub neg: u8,
+    pub launch: Option<character_core::Launch>,
+    pub chained: bool,
+}
+
+/// KH2's pick at this press at the combo style KH2, made once, in KH1's picker (`kh1picker`), at
+/// KH1's count (this press counted); Finishing Plus's next finisher when KH1's last row was a
+/// finisher still playing. `None` without KH2's data or a pick.
+pub unsafe fn kh2_press(actor: usize, air: bool) -> Option<Press> {
     let (count, _, _) = kh1_combo(actor, air)?;
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     let kh2_playing = super::kh2slots::playing_motion(actor);
     if let Some((n, _, true, _)) = LAST.try_lock().ok().and_then(|l| *l).filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
         let from = ComboState { count: n, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit: true, finisher_next: true };
-        if let Some((r, len, ..)) = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false).filter(|(r, ..)| r.is_finisher()) {
-            return Some((r, len, true));
+        if let Some((row, len, neg, launch)) = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false).filter(|(r, ..)| r.is_finisher()) {
+            return Some(Press { row, len, neg, launch, chained: true });
         }
     }
     takeover::test_drop_ahead(!air && rd::<i32>(actor + 0x70) == 0);
     let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
     let taken = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false);
     takeover::test_drop_ahead(false);
-    taken.map(|(r, len, ..)| (r, len, false))
+    taken.map(|(row, len, neg, launch)| Press { row, len, neg, launch, chained: false })
+}
+
+/// KH2's pick KH1's picker made at this press (`kh2_pick_in_picker`), for the row runner's
+/// `attack` that same frame: the pick (`None`: KH2 takes nothing), the row KH1's picker returned,
+/// in the air, the game frame.
+struct Kh2Pick {
+    press: Option<Press>,
+    row: i32,
+    air: bool,
+    at: u64,
+}
+
+static KH2_PICK: Mutex<Option<Kh2Pick>> = Mutex::new(None);
+
+/// The pick KH1's picker made for this row run (`row`, `air`), if it made one this frame.
+fn take_kh2_pick(row: i32, air: bool) -> Option<Option<Press>> {
+    let p = KH2_PICK.try_lock().ok().and_then(|mut g| g.take())?;
+    (frame().saturating_sub(p.at) <= 1 && p.row == row && p.air == air).then_some(p.press)
+}
+
+/// KH2's whole pick in KH1's picker at the combo style KH2 (the tester, combo row selection m24:
+/// "(a)", step 1 of the native plan): after KH1's picker ran (with KH2's length, `kh1picker`) and
+/// the finisher walk left KH2's pick standing (`kh2_finisher_walk`), KH1's picker returns the KH1
+/// row that plays KH2's move: for a plain swing or finisher of KH2's (`Kh1Combo::plain`), KH1's
+/// plain row of that kind whose request isn't the one playing (`kh2_row`, which the row runner
+/// used to do after the fact); for a Finishing Plus next finisher, a hop from the ground or a move
+/// on a KH1 row of its own, the row KH1's picker took (the row runner's `attack` picks the row for
+/// those, as before). The pick is kept for `attack` (`KH2_PICK`), which no longer runs KH2's
+/// selector again. KH1's dash (rows 0 / 1) replaced: its distance in the direction's y cleared, as
+/// `picker` does. The row KH1 runs.
+pub unsafe fn kh2_pick_in_picker(actor: usize, row: i32, dir: usize, air: bool, press: Option<Press>) -> i32 {
+    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    let request_of = |r: i32| super::combat::row_motion(actor, r);
+    let mut run = row;
+    if let (Some(p), Some((count, kh1_len, _))) = (press.as_ref().filter(|p| !p.chained), kh1_combo(actor, air)) {
+        let borrow = !combo.serves(&p.row) && ability_move(&p.row, p.len, p.neg, count, kh1_len).is_some();
+        if !borrow && !(!air && p.row.is_jump()) {
+            run = kh2_row(actor, combo, row, Some(&p.row), &request_of);
+        }
+    }
+    if run != row && matches!(row, 0 | 1) && dir >= 0x10000 {
+        wr(dir + 4, 0.0f32);
+    }
+    if let Ok(mut g) = KH2_PICK.lock() {
+        *g = Some(Kh2Pick { press, row: run, air, at: frame() });
+    }
+    run
 }
 
 /// KH1's own ability finishers at the combo style KH2 (the tester, combo row selection m23: "I
@@ -959,12 +1035,13 @@ pub unsafe fn kh2_press(actor: usize, air: bool) -> Option<(ComboRow, u8, bool)>
 /// setting); where it reaches a KH2 row that passes, or the plain finisher, KH2's own pick stands
 /// (the row runner's `attack` runs it as before); where it reaches one of KH1's that passes, KH1's
 /// own row is what the picker returns, and `attack` runs it whole (KH1's motion, attack data,
-/// damage). The row KH1 runs.
-pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, press: Option<(ComboRow, u8, bool)>) -> i32 {
+/// damage). KH1's row when one of its moves won; `None` when KH2's pick stands
+/// (`kh2_pick_in_picker` then picks its row).
+pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, press: Option<&Press>) -> Option<i32> {
     if let Ok(mut g) = KH1_TAKE.lock() {
         *g = None;
     }
-    let Some((pick, kh2_len, chained)) = press.filter(|(r, ..)| r.is_finisher()) else { return row };
+    let (pick, kh2_len, chained) = press.filter(|p| p.row.is_finisher()).map(|p| (&p.row, p.len, p.chained))?;
     let what = if air { "aerial" } else { "ground" };
     let request_of = |r: i32| super::combat::row_motion(actor, r);
     let playing = rd::<i32>(actor + 0x164);
@@ -1001,13 +1078,13 @@ pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, pr
     let tried = if trail.is_empty() { String::new() } else { format!(" ({})", trail.join("; ")) };
     let Some((n, name)) = walked.filter(|&(n, _)| request_of(n).is_some()) else {
         note(format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}): KH2's own pick, row {} motion {} (KH2's length {kh2_len}{}){tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
-        return row;
+        return None;
     };
     note(format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}, KH2 would take row {} motion {}): KH1's {name} (row {n}){}{tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
     if let Ok(mut g) = KH1_TAKE.lock() {
         *g = Some((n, chained, frame()));
     }
-    n
+    Some(n)
 }
 
 /// KH2's combo length on the length byte KH1's picker reads (the stats' `+0xD4` ground / `+0xD5`

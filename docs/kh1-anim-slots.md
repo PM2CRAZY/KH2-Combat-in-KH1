@@ -1539,6 +1539,40 @@ Now (`kh1picker::at_kh2`, `combomods::kh2_press`, `kh2_finisher_walk`), in KH1's
 - Assumption: KH1's moves keep their KH1 rules at the KH2 setting (the rules the tester chose for
   them at m21 / m22); KH2's own rows have no chance.
 
+### 7.z.3 KH2's whole pick in KH1's picker at the KH2 setting (combo row selection m24, step 1)
+
+The tester (m24): "(a) is there a way for kh2's tables to be included in kh1's tables as extra
+features to the engine?" and "go ahead" on the native plan's steps 1 → 2 → 3.
+
+**KH1's side** (Checked (decomp), Steam `0x1402A7510`, KH1's Attack step): for the Attack command
+it counts the press, then asks its ground picker `0x1402A6EE0` in state 0 or its air picker
+`0x1402A6C70` in states 2 / 8, and runs the row the picker returns with the row runner
+`0x1402A68F0` (its only caller; the pickers' only caller too). State 1 runs no row. So for every
+row the row runner runs on an Attack press in states 0 / 2, the picker ran on the same frame just
+before.
+
+**Before (t612):** at the KH2 setting the pick was asked twice per press (once in the picker for the
+finisher walk, once again in the row runner hook), and the row runner hook swapped KH1's row for
+KH1's plain row of KH2's kind after the picker returned (`kh2_row`).
+
+**Now** (`kh1picker::at_kh2`, `combomods::kh2_press` / `kh2_pick_in_picker`):
+- KH2's pick is made once, in the picker hook, before KH1's picker runs (KH1's count, this press
+  counted; Finishing Plus's next finisher first when KH1's last row was a finisher still playing).
+- KH1's picker runs with KH2's length and its ability finisher bits held back, then the finisher
+  walk (§7.z.2). Where KH2's pick stands, the picker itself returns the KH1 row that plays it:
+  for a plain swing or finisher, KH1's plain row of that kind whose request isn't the one playing
+  (`kh2_row`). For a Finishing Plus next finisher, a hop from the ground, or a move on one of our
+  own KH1 rows (`kh1rows`), it returns KH1's own pick and the row runner hook picks the row from
+  the same kept pick, as before. Replacing KH1's dash (rows 0 / 1) clears its distance in the
+  direction's y, as `picker` does at the KH1 setting.
+- The row runner hook (`attack`) takes the kept pick (`KH2_PICK`: same frame, same row, same
+  air); it no longer runs KH2's selector or swaps the row. If no pick was kept (the picker hook
+  didn't run, which only happens when the hook isn't installed), it asks as before.
+- Expected in play: nothing different. One KH2 trial per press instead of two.
+
+**Not done here:** KH2's table walk still runs on KH2's controller (step 2); KH1's table itself
+isn't extended with KH2's rows (see the reply in m24's thread: what that would mean).
+
 ## 8. KH2's walk and run as slots (t389)
 
 The tester (`docs/tester-requests.md`, "Missing sleeves animation", point 6): "can you also bake

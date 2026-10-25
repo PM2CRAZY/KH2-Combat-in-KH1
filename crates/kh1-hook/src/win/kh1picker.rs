@@ -27,7 +27,8 @@
 //! the same hooks run KH1's picker with its ability finisher bits held back and KH2's combo length
 //! on the length it reads, and when KH2's pick at this press is a finisher the same walk takes
 //! KH1's own ability finishers in their KH2 places (`combomods::kh2_finisher_walk`); otherwise KH2's
-//! pick stands, as before (the row runner's `combomods::attack`).
+//! pick stands, and the picker returns the KH1 row that plays it (`combomods::kh2_pick_in_picker`;
+//! m24: "(a)", KH2's whole pick made in KH1's picker), which the row runner runs as it is.
 
 use super::addr::Build;
 use super::sys::GetModuleHandleA;
@@ -165,25 +166,31 @@ unsafe fn ours_kh2(actor: usize, air: bool) -> bool {
 }
 
 /// KH1's picker at the combo style KH2 (the tester, combo row selection m23: "I can't do any kh1
-/// finisher on kh2 combat settings"): KH2's pick at this press first (`combomods::kh2_press`),
-/// then KH1's picker with KH2's combo length on the length it reads (`kh2_length_for_picker`) and
-/// its ability finisher bits held back (`held`), then the walk (`combomods::kh2_finisher_walk`).
-unsafe fn at_kh2(actor: usize, air: bool, held: u32, f: impl FnOnce() -> i32) -> i32 {
+/// finisher on kh2 combat settings"; m24: "(a)", KH2's whole pick in KH1's picker): KH2's pick at
+/// this press first (`combomods::kh2_press`, the only time KH2's selector runs for it), then KH1's
+/// picker with KH2's combo length on the length it reads (`kh2_length_for_picker`) and its
+/// ability finisher bits held back (`held`), then the walk (`combomods::kh2_finisher_walk`), and,
+/// where KH2's pick stands, the KH1 row that plays it (`combomods::kh2_pick_in_picker`).
+unsafe fn at_kh2(actor: usize, air: bool, held: u32, dir: usize, f: impl FnOnce() -> i32) -> i32 {
     let press = super::combomods::kh2_press(actor, air);
     if press.is_none() {
-        // (No KH2 pick to walk with: KH1's picker as it is, the row runner as before.)
-        return f();
+        // (No KH2 pick: KH1's picker as it is; the row runner is told KH2 takes nothing.)
+        let row = f();
+        return super::combomods::kh2_pick_in_picker(actor, row, dir, air, None);
     }
-    let saved = press.as_ref().and_then(|p| super::combomods::kh2_length_for_picker(actor, air, p.1));
+    let saved = press.as_ref().and_then(|p| super::combomods::kh2_length_for_picker(actor, air, p.len));
     let (row, bits) = holding(held, f);
     put_back(saved);
-    super::combomods::kh2_finisher_walk(actor, row, air, bits, press)
+    if let Some(n) = super::combomods::kh2_finisher_walk(actor, row, air, bits, press.as_ref()) {
+        return n;
+    }
+    super::combomods::kh2_pick_in_picker(actor, row, dir, air, press)
 }
 
 unsafe extern "system" fn ground(actor: usize, target: usize, dir: usize) -> u64 {
     let f: GroundFn = std::mem::transmute(ORIG_GROUND.load(Ordering::Acquire));
     if rd::<i32>(actor + 0x70) == 0 && ours_kh2(actor, false) {
-        return at_kh2(actor, false, HELD_GROUND, || f(actor, target, dir) as i32) as u32 as u64;
+        return at_kh2(actor, false, HELD_GROUND, dir, || f(actor, target, dir) as i32) as u32 as u64;
     }
     if rd::<i32>(actor + 0x70) != 0 || !ours(actor, false) {
         return f(actor, target, dir);
@@ -198,7 +205,7 @@ unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
     let f: AirFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
     // (State 8, flight, runs KH1's picker too: KH1's own there.)
     if rd::<i32>(actor + 0x70) == 2 && ours_kh2(actor, true) {
-        return at_kh2(actor, true, HELD_AIR, || f(actor, target, dir));
+        return at_kh2(actor, true, HELD_AIR, dir, || f(actor, target, dir));
     }
     if rd::<i32>(actor + 0x70) != 2 || !ours(actor, true) {
         return f(actor, target, dir);
