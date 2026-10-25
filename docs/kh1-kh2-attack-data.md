@@ -219,3 +219,14 @@ never roll (**Checked (decomp)**). The chance and bonus are made when the attack
 the weapon's, **Checked (decomp)**, m3 of the thread). So with Criticals Off the hook zeroes
 `+0x94` for the call on any attack, Sora's, his party's and enemies' alike, and puts it back after;
 On leaves KH1's roll exactly as it is.
+
+**Party Criticals (the tester: "in the config menu make a separate option for party member
+criticals").** Config > Combat > Party Criticals: Off / On (ini `party_criticals`, default Off as
+KH2). It decides, instead of Criticals, for an attack whose owner (`+0x34`) is an actor on Sora's
+side (`+0x374` bits 5..6 equal to his; the damage function itself tells the enemies' side by
+`& 0x60 == 0x40`, **Checked (decomp)**) other than Sora: Donald, Goofy and the guests. In
+`btltbl.bin` Donald's and Goofy's plain attack rows have a chance of 20 and a bonus of 0, so their
+"critical" adds their weapon's bonus on nearly every hit (m3); with Off they deal a little less
+than in plain KH1. **Assumption:** every actor on that side but Sora is a party member (a
+summon's own attack object, if its owner is on that side, follows this row too); an attack whose
+owner is gone by the hit follows Criticals.

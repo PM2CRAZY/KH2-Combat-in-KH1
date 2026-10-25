@@ -54,6 +54,9 @@ kh2_damage = on\r\n\
 ;   as in KH2\r\n\
 ;   (the Config menu's Combat list switches it)\r\n\
 criticals = off\r\n\
+; party_criticals: the same for Donald's, Goofy's and the guests' attacks (the Combat list's\r\n\
+;   Party Criticals row)\r\n\
+party_criticals = off\r\n\
 ; kh1_ability_chance: on = KH1's 30% chance on Stun Impact and Gravity Break in KH1's combo\r\n\
 ;   (a failed roll picks the next move that fits); off = they come whenever they fit, as KH2's\r\n\
 ;   rows, the default (the Config menu's Combat > Tweaks list switches it)\r\n\
@@ -254,6 +257,9 @@ pub struct Settings {
     /// KH1's critical hits on every attack (`criticals = on`; off by default, as KH2;
     /// `kh2damage::criticals`).
     pub criticals: bool,
+    /// KH1's critical hits on Sora's party members' attacks (`party_criticals = on`; off by
+    /// default, as KH2; `kh2damage::party_criticals`).
+    pub party_criticals: bool,
     /// KH1's 30% chance on Stun Impact and Gravity Break in the KH1 combo's finisher walk
     /// (`kh1_ability_chance = on`; off by default, the tester, combo row selection m22 answer 2 (b);
     /// the Config menu's Combat > Tweaks list, `kh1picker::chance`).
@@ -436,6 +442,7 @@ fn load(first: bool) -> Option<Settings> {
         magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
         kh2_damage: on(&text, "kh2_damage", "on", true),
         criticals: on(&text, "criticals", "on", false),
+        party_criticals: on(&text, "party_criticals", "on", false),
         kh1_ability_chance: on(&text, "kh1_ability_chance", "on", false),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         bonus_ap: on(&text, "bonus_ap", "on", true),

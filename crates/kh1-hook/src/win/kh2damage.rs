@@ -22,6 +22,9 @@
 //! The Criticals row (the tester: "make it a config selection (criticals on or off for all moves
 //! that call it)", then 2 (b): every attack, enemies included): Off, KH1's critical roll has no
 //! chance for any attack (the attack's `+0x94` read as 0 for the call; KH2 has no critical hits).
+//! The Party Criticals row (the tester: "in the config menu make a separate option for party
+//! member criticals") decides instead for attacks whose owner is on Sora's side and isn't Sora
+//! (Donald, Goofy, the guests; `party_member`).
 //!
 //! Cost: one hook, called once per hit record; a table of at most 256 u16 built per KH2 hit.
 
@@ -51,6 +54,10 @@ static ORIG: AtomicUsize = AtomicUsize::new(0);
 static ON: AtomicBool = AtomicBool::new(false);
 /// Criticals: 0 not read yet, 1 off, 2 on.
 static CRITS: AtomicU8 = AtomicU8::new(0);
+/// Party Criticals: the same.
+static PARTY_CRITS: AtomicU8 = AtomicU8::new(0);
+/// An actor's side (`+0x374` bits 5..6; 2 the enemies', Checked (decomp): `0x1402BFA80`).
+const ACTOR_FLAGS: usize = 0x374;
 static LOGGED: AtomicU32 = AtomicU32::new(0);
 /// The scaled curve (count then values); only the game's thread runs the damage function.
 static mut CURVE: [u16; CURVE_MAX + 1] = [0; CURVE_MAX + 1];
@@ -85,6 +92,42 @@ pub fn set_criticals(on: bool) {
     CRITS.store(1 + on as u8, Ordering::Relaxed);
     super::settings::save("criticals", if on { "on" } else { "off" });
     log(&format!("Config menu: Criticals {}", if on { "On" } else { "Off" }));
+}
+
+/// The Config menu's Party Criticals row (attacks of Sora's party members, `party_member`).
+pub fn party_criticals() -> bool {
+    match PARTY_CRITS.load(Ordering::Relaxed) {
+        0 => {
+            let c = super::settings::get().party_criticals;
+            PARTY_CRITS.store(1 + c as u8, Ordering::Relaxed);
+            c
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config menu's row: live, kept in the ini.
+pub fn set_party_criticals(on: bool) {
+    PARTY_CRITS.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("party_criticals", if on { "on" } else { "off" });
+    log(&format!("Config menu: Party Criticals {}", if on { "On" } else { "Off" }));
+}
+
+/// An attack's owner is one of Sora's party (Donald, Goofy, a guest): an actor on Sora's side
+/// (`+0x374` bits 5..6 equal to his) that isn't Sora. Assumption: every actor on that side but
+/// Sora is a party member (summons' own attacks would count too, if their owner is on it).
+unsafe fn party_member(owner: usize, sora: usize) -> bool {
+    let side = |a: usize| (rd::<u32>(a + ACTOR_FLAGS) >> 5) & 3;
+    owner > 0x10000 && sora > 0x10000 && owner != sora && side(owner) == side(sora)
+}
+
+/// Whether KH1's critical roll runs for an attack of `owner`'s.
+unsafe fn crits_for(owner: usize, sora: usize) -> bool {
+    if party_member(owner, sora) {
+        party_criticals()
+    } else {
+        criticals()
+    }
 }
 
 /// Hooks KH1's damage function (Steam only; the hook checks its bytes first).
@@ -122,9 +165,10 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
     let sora = super::takeover::sora_actor();
     let owner = if attack > 0x10000 { super::pose::ptr(rd::<u32>(attack + ATTACK_OWNER)) } else { 0 };
     let mine = sora > 0x10000 && owner == sora;
-    // Criticals off: no chance for the call, whoever owns the attack (the tester, 2 (b): Sora,
-    // his party and enemies alike; KH1 rolls for every attack here, Checked (decomp)).
-    let crit = (attack > 0x10000 && !criticals()).then(|| {
+    // Criticals off: no chance for the call, whoever owns the attack (the tester, 2 (b): Sora
+    // and enemies alike; his party by its own row; KH1 rolls for every attack here, Checked
+    // (decomp)).
+    let crit = (attack > 0x10000 && !crits_for(owner, sora)).then(|| {
         let c = rd::<f32>(attack + ATTACK_CRIT_CHANCE);
         wr(attack + ATTACK_CRIT_CHANCE, 0.0f32);
         c
