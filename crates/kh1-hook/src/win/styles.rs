@@ -45,11 +45,11 @@ pub enum Kind {
     Fire,
     Blizzard,
     Thunder,
-    /// The cast animation of a spell base Sora casts KH1's version of (KH1's own cast motion, or
-    /// KH2's cast motion as a slot on KH1's request, `kh2slots::CASTS`): the tester, m19, "you can
-    /// also change the animation of magic with the exception being reflect, and fire". A spell
-    /// cast KH2's way plays KH2's cast motion whatever these say (`formmagic::anim_kh2`); Fire's
-    /// animation is its spell's, Reflect's always KH2's.
+    /// The cast animation of a spell base Sora casts (KH1's own cast motion, or KH2's cast motion
+    /// as a slot on KH1's request, `kh2slots::CASTS`): the tester, m19, "you can also change the
+    /// animation of magic with the exception being reflect, and fire". KH1's spell or KH2's alike
+    /// (m20: each casts on that animation's cast frame, `formmagic::anim_kh2`); Fire's animation
+    /// is its spell's, Reflect's always KH2's.
     BlizzardAnim,
     ThunderAnim,
     CureAnim,

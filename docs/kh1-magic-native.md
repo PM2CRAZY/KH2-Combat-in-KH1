@@ -485,3 +485,49 @@ physics setting that has magic in it and put it in this new air setting."
   (`0x14028F140`) in `0x1402A3600`, as §4g's `cast_stops` / `cast_after_command` already rely on.
 - With a KH1 cast animation (no slot of ours) there is no KH2 hover to hold him at Air Physics
   KH2: his 40 hop, kept speed and KH2's fall only (open with the tester).
+
+## 4j. Each animation's own cast frame (the tester, kh2-effects-in-kh1s-own-effect-system m20)
+
+"if a kh2 spell is casted on a kh1 animation then it should cast on the frame that the kh1 animation
+casts it and vice versa".
+
+- **KH1's scripts** (`xm_fire0N.mag` .. `xm_stop0N.mag`, N = 1..3, and `xm_air01.mag`, read from the
+  user's install with `kh1-extract`, **Checked (files)**; the machine `0x1402CC620`, **Checked
+  (decomp)**). The `.mag` header: `+4` the script (a `.bd`, its first word a jump to the entry), `+8`
+  its effect data. KH1's script machine: 16-bit words, low 4 bits the class (0 unary and control:
+  0x0000 yields the frame, 0x0800 ends; 1 binary; 2 push; 3 store; 4 / 5 / 6 jump, jump if zero, if
+  not; 7 compare; 8 call; 9 add; 10 load; 11 a script call, its number in the high byte, from the
+  table `0x140529180`, 16 bytes each: function, argument count, bit 30 "returns"). Script call 5
+  (`0x1402B98E0`) returns KH1's frame scale `0x14233FBDC` (1.0 a frame at 60 fps); call 51
+  (`0x1402BA320`) Sora's applied motion request `+0x164`. Every spell's main thread waits by
+  subtracting call 5 from a count each frame, then checks call 51 is still its cast request
+  (Blizzard 0x37 / 0x84, Thunder 0x38 / 0x85, Fire's second part 0x3D / 0x8A, Aero 0x3C / 0x89) and
+  ends without casting if not; then it makes the shot (call 20 a thread, 23 an attack object) and
+  pays its MP (call 47). The waits, the same at every level and in the air:
+
+  | Spell | KH1's cast frame (60 Hz, from the spell start) |
+  |---|---|
+  | Fire | when its first motion (0x36 / 0x83, slots 54 / 79, 28 frames) ends: Fire's second part (0x3D / 0x8A) |
+  | Blizzard | 28 |
+  | Thunder | 30 |
+  | Cure | 36 (then the heal) |
+  | Gravity | 28 (its parameter block's `+0x1C`) |
+  | Stop | 4, an effect, then 24 more: 28 |
+  | Aero | 30, or as soon as its cast motion (0x3C / 0x89) ends |
+
+  So KH1's spell **does not** follow the animation it is drawn on (t562's assumption was right):
+  its shot comes at its own count, whatever motion plays on the request.
+- **KH2's cast frames** (the cast motion's frame trigger 17, the magic-cast event, `P_EX100.mset`,
+  **Checked (files)**, 60 Hz frames): Fire 56 at 22, 58 (air) at 28; Blizzard 59 at 16, 61 at 36;
+  Thunder 62 / Cure 65 (one clip, A364) at 18, 64 / 67 (A372) at 30.
+- **KH2's spell on KH1's animation** (t-a): `formmagic::anim_kh2` follows the spell's animation row
+  for KH2's Blizzard, Thunder and Cure too (Fire has no row). At KH1, `kh2slots::redirect` leaves
+  KH1's request on KH1's own slot, `kh1_spell_start` still starts KH2's script (its finisher sub by
+  the combo step, KH2's motion as its cast motion), and `shots_step` gives the script Sora in KH2's
+  cast motion until its release (its first-frame test, §4), releasing it when KH1's frames since
+  the start reach `KH1_CAST_FRAME` (each KH1 physics frame adds KH1's frame scale), or at once if
+  KH1's cast request stops playing (a hit, a cut; it was paid for, as on KH2's animation).
+  **Assumption**: the start frame is the frame KH1's command step starts the spell (our script's
+  first frame); KH1's own script may run its first step there or a frame later (the task order of
+  the spell list `0x142D22D08` against the actors' step wasn't read), so ±1 frame.
+  KH2's cast motion's own frame events (its hand sparkles, its swish) don't play on KH1's animation.

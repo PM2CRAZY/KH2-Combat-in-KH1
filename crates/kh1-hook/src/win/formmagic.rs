@@ -71,11 +71,30 @@ pub fn base_kh2_spell(spell: u8) -> bool {
     !super::form::in_form() && kh2_spell(spell)
 }
 
-/// Base Sora's cast of `spell` (Fire 0 .. Aero 6) plays KH2's cast motion now: a spell cast KH2's
-/// way always (its script needs its cast motion: `docs/kh1-magic-native.md` §4), Fire as its
-/// spell, and KH1's Blizzard .. Aero by their animation rows. Not in a Drive Form.
+/// Base Sora's cast of `spell` (Fire 0 .. Aero 6) plays KH2's cast motion now: by the spell's
+/// animation row, KH1's spell or KH2's (the tester, kh2-effects-in-kh1s-own-effect-system m20:
+/// "if a kh2 spell is casted on a kh1 animation then it should cast on the frame that the kh1
+/// animation casts it and vice versa": a KH2 spell on KH1's animation releases at KH1's cast
+/// frame, `KH1_CAST_FRAME`); Fire has no row, its animation its spell's. Not in a Drive Form.
 pub fn anim_kh2(spell: u8) -> bool {
-    !super::form::in_form() && (kh2_spell(spell) || anim_row(spell).is_some_and(super::styles::setting))
+    !super::form::in_form() && anim_row(spell).map_or(spell == 0 && kh2_spell(0), super::styles::setting)
+}
+
+/// The frame KH1's own spell script casts its spell, in 60 Hz frames from its start (KH1's
+/// scripts, `xm_<spell>0N.mag`, every level, ground and air alike, **Checked (files)**: each waits
+/// on KH1's frame scale, script call 5 `0x1402B98E0` reading `0x14233FBDC`, then checks the cast
+/// request is still playing (call 51, `+0x164`) and makes its shot / pays its MP (calls 20, 47)):
+/// Blizzard 28, Thunder 30, Cure 36, Gravity 28 (its parameter block's `+0x1C`), Stop 4 + 24,
+/// Aero 30 (sooner when its cast motion ends). Fire has none: it waits for its first motion
+/// (0x36 / 0x83, KH1's slot 54 / 79: 28 frames) to end. `docs/kh1-magic-native.md` §4j.
+pub const KH1_CAST_FRAME: [f32; 7] = [28.0, 28.0, 30.0, 36.0, 28.0, 28.0, 30.0];
+
+/// KH1's frame scale (Steam `0x14233FBDC`: 1.0 a frame at 60 fps, 2.0 at 30; `frameadv`).
+const FRAME_SCALE_STEAM: usize = 0x233FBDC;
+
+unsafe fn frame_scale() -> f32 {
+    let s: f32 = rd(super::sys::GetModuleHandleA(std::ptr::null()) as usize + FRAME_SCALE_STEAM);
+    if s.is_finite() && s > 0.0 && s < 4.0 { s } else { 1.0 }
 }
 
 /// The KH1 spell KH1 casts now (Gravity, Stop, Aero) is drawn with base Sora's KH2 cast motion
@@ -213,6 +232,9 @@ struct Fresh {
     level: u8,
     finisher: bool,
     motion: u16,
+    /// On KH1's own cast animation (its animation row at KH1): KH1's cast request and the frame
+    /// KH1's script would cast at (`KH1_CAST_FRAME`).
+    kh1_anim: Option<(u32, f32)>,
 }
 
 struct Runtime {
@@ -234,6 +256,10 @@ struct Runtime {
     /// been seen playing yet (`SEEN` once it has: a cast in KH1's cast state starts its motion at
     /// KH1's next animation step).
     casting: Option<(u16, u8)>,
+    /// A cast on KH1's own animation (`Fresh::kh1_anim`): KH1's cast request, the 60 Hz frames
+    /// since the script started, the frame it is released at, and whether KH1 has applied the
+    /// request yet (it plays from KH1's next animation step).
+    kh1_clock: Option<(u32, f32, f32, bool)>,
     fired: u32,
     hits: u32,
 }
@@ -268,7 +294,7 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
                 }
             }
         });
-        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, fired: 0, hits: 0 }
+        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, kh1_clock: None, fired: 0, hits: 0 }
     })
 }
 
@@ -311,6 +337,7 @@ pub fn end_all() {
     rt.arrival.clear();
     rt.fresh = None;
     rt.casting = None;
+    rt.kh1_clock = None;
     rt.magic.cancel(SORA);
     for e in rt.magic.effects.iter_mut() {
         e.kill();
@@ -360,7 +387,7 @@ pub fn waiting() -> bool {
 
 /// Something of the scripts' still runs or plays (`takeover::native_spells` runs their frame).
 pub fn busy() -> bool {
-    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| !rt.queued.is_empty() || rt.fresh.is_some() || rt.casting.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
+    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| !rt.queued.is_empty() || rt.fresh.is_some() || rt.casting.is_some() || rt.kh1_clock.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
 }
 
 // ------------------------------------------------- KH2's spells in KH1's own cast state
@@ -532,6 +559,10 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
     let level = super::reflect::kh1_spell_level(spell);
     let Some(m) = magc(spell, level) else { return false };
     let finisher = motion != own && m.finish_motion >= 0 && motion == m.finish_motion as u16;
+    // (On KH1's own cast animation, its animation row at KH1: KH2's script released at the frame
+    // KH1's own script casts, `KH1_CAST_FRAME`; it still sees Sora in KH2's cast motion until then,
+    // as KH2 sets it, `shots_step`.)
+    let kh1_anim = (!anim_kh2(spell)).then(|| (request, KH1_CAST_FRAME[spell as usize]));
     // (KH1's command step judged the cast usable with KH1's own check, `0x14028EFD0`, at KH2's
     // cost, `combat::command`.) KH2's cost scaled onto KH1's MP, through KH1's payment (`mpcost`).
     let cost = super::mpcost::pay(actor, spell).unwrap_or(0);
@@ -547,7 +578,7 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         }
     }
     if let Ok(mut g) = RT.lock() {
-        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion });
+        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion, kh1_anim });
     }
     take_step(actor);
     // (KH2's air cast start, physics KH2: `shared::physics::cast_stops`; its velocity put back
@@ -560,9 +591,10 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         super::kh2sound::voice(v as i16);
     }
     log(&format!(
-        "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}, cost {cost} units{}",
+        "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}{}, cost {cost} units{}",
         SPELL_NAMES[spell as usize],
         if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
+        kh1_anim.map_or(String::new(), |(_, f)| format!(", on KH1's cast animation: released at KH1's cast frame {f:.0}")),
         dropped.map_or(String::new(), |r| format!(", KH1's second part {r:#x} taken off its queue"))
     ));
     true
@@ -620,7 +652,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     }
     let finisher = Some(motion) == motions.finisher && motions.finisher != Some(motions.ground);
     if let Ok(mut g) = RT.lock() {
-        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion });
+        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion, kh1_anim: None });
     }
     let v = if finisher { m.voice_finisher } else { m.voice };
     if v != 255 {
@@ -692,7 +724,7 @@ unsafe fn heal(actor: usize, power: u16) -> Option<(i32, i32)> {
 pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
     let Ok(mut g) = RT.try_lock() else { return };
     let Some(rt) = g.as_mut() else { return };
-    if rt.queued.is_empty() && rt.fresh.is_none() && rt.casting.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
+    if rt.queued.is_empty() && rt.fresh.is_none() && rt.casting.is_none() && rt.kh1_clock.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
         return;
     }
     let mut world = world_now(actor, out, airborne, strikes, lock, 0x51A7_0000 ^ rt.fired.wrapping_mul(2_654_435_761));
@@ -707,7 +739,9 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     // first runs. So until KH1 plays it, the scripts see Sora in the cast motion. The tester:
     // "kh2s magic doesn't get casted the first time you input said magic"; a second cast in the
     // combo worked, the motion already playing.)
-    let starting = rt.fresh.as_ref().map(|f| f.motion).or(rt.casting.filter(|c| c.1 != SEEN).map(|c| c.0));
+    // (On KH1's own cast animation KH2's cast motion never plays: the scripts see it until their
+    // release, `kh1_clock`.)
+    let starting = rt.fresh.as_ref().map(|f| f.motion).or(rt.casting.filter(|c| c.1 != SEEN || rt.kh1_clock.is_some()).map(|c| c.0));
     if let (Some(m), Some(me)) = (starting, world.objs.first_mut()) {
         if out.motion != m {
             me.motion = m;
@@ -720,12 +754,32 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             let sub = f.level as i32 * 2 - 2 + f.finisher as i32 + super::form::magic_sub();
             let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
             match rt.magic.cast(file, SORA, f.spell, sub, &magi, &mut world) {
-                Ok(_) => rt.casting = Some((f.motion, 0)),
+                Ok(_) => {
+                    rt.casting = Some((f.motion, 0));
+                    rt.kh1_clock = f.kh1_anim.map(|(request, at)| (request, 0.0, at, false));
+                }
                 Err(e) => log(&format!("{} {}'s script didn't start ({e})", who(), SPELL_NAMES[f.spell as usize])),
             }
         }
     }
-    if let Some((m, waited)) = rt.casting {
+    if let (Some((m, _)), Some((request, t, at, seen))) = (rt.casting, rt.kh1_clock) {
+        // KH2's spell on KH1's own cast animation (the tester's m20): released at the frame KH1's
+        // script casts (`KH1_CAST_FRAME`, 60 Hz frames from its start, KH1's frame scale a game
+        // frame); KH1's cast request no longer playing once it has (`+0x164`: a hit, a cut), or
+        // never applied, releases it then, paid for as below.
+        let now = rd::<u32>(actor + 0x164) & 0xFFFF;
+        let seen = seen || now == request;
+        let cut = if seen { now != request || rd::<u32>(actor) & 4 == 0 } else { t > NOT_SEEN_FRAMES as f32 };
+        if t >= at || cut {
+            rt.casting = None;
+            rt.kh1_clock = None;
+            rt.magic.release(SORA, &mut world);
+            log(&format!("KH2 magic on KH1's cast animation: released at frame {t:.0} ({})", if t >= at { format!("KH1's cast frame {at:.0}") } else { format!("its cast cut, request now {now:#x}") }));
+        } else {
+            rt.kh1_clock = Some((request, t + frame_scale(), at, seen));
+            let _ = m;
+        }
+    } else if let Some((m, waited)) = rt.casting {
         let fired = out.motion == m && out.events.iter().any(|e| matches!(e, character_core::EventKind::MagicCast(x) if *x as u16 == out.motion));
         let waited = if out.motion == m { SEEN } else { waited.saturating_add(1).min(SEEN - 1) };
         rt.casting = Some((m, waited));

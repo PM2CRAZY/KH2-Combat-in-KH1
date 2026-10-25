@@ -117,9 +117,14 @@ Config > KH1 in KH2 > Combat > Magic:
   (`formmagic::anim_kh2`). The tester: "you can also change the animation of magic with the
   exception being reflect, and fire": Fire has no row (its animation is its spell's), Reflect's is
   always KH2's (KH1 has none).
-  - A spell cast KH2's way always plays KH2's cast motion: KH2's spell scripts end the cast when
-    Sora isn't in it on their first frame and release on its magic-cast event
-    (`docs/kh1-magic-native.md` §4). (Open with the tester: KH2's spell on KH1's animation.)
+  - The rows apply to KH2's spells too (the tester, kh2-effects-in-kh1s-own-effect-system m20:
+    "if a kh2 spell is casted on a kh1 animation then it should cast on the frame that the kh1
+    animation casts it and vice versa"). KH2's Blizzard, Thunder or Cure with its animation at
+    KH1: KH1's own cast motion plays on KH1's request, KH2's script runs (seeing Sora in KH2's
+    cast motion until its release, as KH2 sets it) and is released at KH1's cast frame (Blizzard
+    28, Thunder 30, Cure 36 frames from the cast's start; `formmagic::KH1_CAST_FRAME`, read from
+    KH1's own scripts, `docs/kh1-magic-native.md` §4j). With its animation at KH2: KH2's cast
+    motion and its magic-cast event, as before.
   - KH1's Blizzard, Thunder, Cure at KH2: KH1's requests (0x37 / 0x38 / 0x39, air 0x84 / 0x85 /
     0x86) point at our slots of KH2's cast motions (`kh2slots::redirect`, by `cast_spell`), and
     KH1's own script runs on them (`kh1_spell_start` leaves KH1's spells alone): KH2's
