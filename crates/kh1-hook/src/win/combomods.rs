@@ -1252,7 +1252,7 @@ pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8, attacker_p
     if last != 0 && now.saturating_sub(last) <= 1 {
         return;
     }
-    // (Guard Repel KH1: KH1's own block reaction instead, `kh1_block`.)
+    // (Recoil KH1: KH1's own block reaction instead, `kh1_block`.)
     if !repel_kh2() {
         kh1_block(actor, attacker_priority);
         return;
@@ -1281,27 +1281,13 @@ pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8, attacker_p
     note(format!("KH2's guard stopped a hit: its repel (motion 42), pushed back {REPEL_BACK:.0}{}", if super::recoil::kh2() { ", 80 frames without damage (Recoil KH2)" } else { "" }));
 }
 
-/// The Guard Repel row (the tester, combo row selection m17: "(b)", the KH1 setting is KH1's own
-/// block): KH2's repel (`guard_repel`, the default) or KH1's. Live, kept in the ini
-/// (`guard_repel = kh2 | kh1`). 0 not read yet, 1 KH1, 2 KH2.
-static REPEL: AtomicU8 = AtomicU8::new(0);
-
+/// What a block of base Sora's KH2 guard does: KH2's repel (motion 42, pushed back 200, its 80
+/// frames, Counterguard) at Recoil KH2, KH1's own block (`kh1_block`) at Recoil KH1. The Guard
+/// Repel row (t536) is part of the Recoil row now (the tester, thread kh2-recoil-and-parry-system:
+/// "we need to also combine guard repel and recoil into the same config"); ini `guard_repel` is no
+/// longer read.
 pub fn repel_kh2() -> bool {
-    match REPEL.load(Ordering::Relaxed) {
-        0 => {
-            let v = super::settings::get().guard_repel_kh2;
-            REPEL.store(1 + v as u8, Ordering::Relaxed);
-            v
-        }
-        v => v == 2,
-    }
-}
-
-/// The Config menu's row.
-pub fn set_repel_kh2(v: bool) {
-    REPEL.store(1 + v as u8, Ordering::Relaxed);
-    super::settings::save("guard_repel", if v { "kh2" } else { "kh1" });
-    log(&format!("Config menu: Guard Repel {}", if v { "KH2" } else { "KH1" }));
+    super::recoil::kh2()
 }
 
 /// KH1's clash recoils (Steam; the hit pass `0x14029BBD0` runs them for a clash record of kind 6
@@ -1316,7 +1302,7 @@ const CLASH_RECOIL_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 
 const BIG_RECOIL_STEAM: usize = 0x29D5F0;
 const BIG_RECOIL_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 
-/// KH1's own block (Guard Repel KH1), what KH1's clash gives the owner of a guard that stopped an
+/// KH1's own block (Recoil KH1), what KH1's clash gives the owner of a guard that stopped an
 /// attack (`0x1402B4BC0 (guard, attack)`, Steam, Checked (decomp)): KH1's guard row 0x3D's object
 /// (data 0x4DA8: bone 0x30, clash type 2, priority byte 0) is under 0x62 (its priority is the
 /// Keyblade's `+0x33`, clamped 1..99 by `0x1402B3270`), so the guard side is a melee attack that
@@ -1357,7 +1343,7 @@ unsafe fn kh1_block(actor: usize, attacker: Option<i32>) {
         *p = None;
     }
     note(format!(
-        "KH2's guard stopped a hit, Guard Repel KH1: KH1's block, its {} (request {:#x}), guard priority {guard} against {} (gap {gap}){}",
+        "KH2's guard stopped a hit, Recoil KH1: KH1's block, its {} (request {:#x}), guard priority {guard} against {} (gap {gap}){}",
         if big { "big recoil" } else { "clash recoil" },
         if big { 0x6F } else { 0x6E },
         attacker.map_or("unknown".to_string(), |a| a.to_string()),

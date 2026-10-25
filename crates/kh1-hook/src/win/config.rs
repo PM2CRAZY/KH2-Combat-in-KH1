@@ -12,7 +12,7 @@
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
 //! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Recoil, and Magic, its own list
-//!   (answer 1): Magic, Aerial Magic; Movement: Jump, Glide, Dodge Roll, Guard Repel, Misc Animations; Misc:
+//!   (answer 1): Magic, Aerial Magic; Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a).
 //!
 //! Only the settings that were in the Config menu (answer 2a); "Default settings" leaves ours alone
@@ -174,8 +174,6 @@ enum Row {
     Debug,
     /// Medium Hits (Blow | Flinch, `hitreact::medium_flinch`).
     MediumHits,
-    /// Guard Repel (KH1 | KH2, `combomods::repel_kh2`): what base Sora's KH2 guard does on a block.
-    GuardRepel,
     /// Criticals (Off | On, `kh2damage::criticals`).
     Criticals,
 }
@@ -276,11 +274,13 @@ const MAGIC: [Item; 3] = [
     Item::Set(kh(0x7F00_0107, 0x7F00_0108), Row::Style(Kind::AirMagic)),
     Item::Set(kh(0x7F00_011F, 0x7F00_0120), Row::Style(Kind::Cure)),
 ];
-const MOVEMENT: [Item; 5] = [
+const MOVEMENT: [Item; 4] = [
     Item::Set(kh(0x7F00_0109, 0x7F00_010A), Row::Style(Kind::Jump)),
     Item::Set(kh(0x7F00_010B, 0x7F00_010C), Row::Style(Kind::Glide)),
     Item::Set(kh(0x7F00_010D, 0x7F00_010E), Row::Style(Kind::DodgeRoll)),
-    Item::Set(kh(0x7F00_0170, 0x7F00_0171), Row::GuardRepel),
+    // (Guard Repel is part of the Recoil row now, Combat: the tester, thread
+    // kh2-recoil-and-parry-system, "we need to also combine guard repel and recoil into the same
+    // config".)
     Item::Set(kh(0x7F00_0115, 0x7F00_0116), Row::Style(Kind::MiscAnims)),
     // (Player Model, off for now, s259, the user: "comment it out for now":)
     // Item::Set(kh(0x7F00_0117, 0x7F00_0118), Row::Style(Kind::PlayerModel)),
@@ -295,7 +295,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 67] = [
+const STRINGS: [(u32, &str); 65] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -335,12 +335,10 @@ const STRINGS: [(u32, &str); 67] = [
     (0x7F00_0146, "With KH2's hit reactions, a hit of 20-29% of Sora's HP\nknocks him away (Blow) or only flinches him."),
     (0x7F00_0147, "Blow"),
     (0x7F00_0148, "Flinch"),
-    (0x7F00_0170, "Guard Repel"),
-    (0x7F00_0171, "When Sora's KH2 guard blocks: KH1's recoil (KH1)\nor KH2's repel and push back (KH2). Dodge Roll KH2."),
     (0x7F00_0149, "Criticals"),
     (0x7F00_014A, "KH1's critical hits on Sora's attacks (On), or none, as in KH2.\nCritical Plus only works with them On."),
     (0x7F00_0172, "Recoil"),
-    (0x7F00_0173, "KH1's or KH2's rules when Sora's attack meets an enemy's\nattack or guard, for every move."),
+    (0x7F00_0173, "KH1's or KH2's recoil, parry and guard repel when Sora's\nattack or guard meets an enemy's, for every move."),
     (0x7F00_011F, "Cure"),
     (0x7F00_0120, "Choose KH1's or KH2's Cure for Sora when Magic is KH2.\nKH1's Cure plays on KH2's Cure animation."),
     (0x7F00_0109, "Jump"),
@@ -377,7 +375,6 @@ fn value(what: Row) -> bool {
         Row::Gummi => super::gummi::SKIP.load(Ordering::Relaxed),
         Row::Debug => super::debugmenu::enabled(),
         Row::MediumHits => super::hitreact::medium_flinch(),
-        Row::GuardRepel => super::combomods::repel_kh2(),
         Row::Criticals => super::kh2damage::criticals(),
     }
 }
@@ -398,7 +395,6 @@ fn set(what: Row, v: bool) {
         Row::Gummi => super::gummi::set(v),
         Row::Debug => super::debugmenu::set_enabled(v),
         Row::MediumHits => super::hitreact::set_medium_flinch(v),
-        Row::GuardRepel => super::combomods::set_repel_kh2(v),
         Row::Criticals => super::kh2damage::set_criticals(v),
     }
 }

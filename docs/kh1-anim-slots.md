@@ -1231,6 +1231,10 @@ cases only, that is earlier than KH2's exe. Not changed here.)
 
 ### 7.x.3 The Guard Repel row: KH1's own block (m17 "(b)"; Checked (decomp) and (exe))
 
+(Since the recoil thread's merge the row is gone: the Recoil row in Combat decides it, KH1's block
+at Recoil KH1, KH2's repel at KH2; `docs/kh1-kh2-recoil.md` §6.6. The text below is the row's
+history.)
+
 Config > Movement > Guard Repel (KH1 | KH2, ini `guard_repel`, default KH2) picks what base Sora's
 KH2 guard (Dodge Roll KH2, motion 173's window) does when it stops a hit with `refact_self` 1. KH2:
 the repel above (motion 42, pushed back 200, Counterguard). KH1: what KH1's own guard gets.

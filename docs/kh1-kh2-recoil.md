@@ -386,3 +386,14 @@ would only stop KH2's shapes (`strike_as`) until the pass learns it too.
   is what KH1's own swings get from it (**Assumption:** the swing row's priority; it is the KH1
   template's plus the Keyblade's byte).
 - Borrowed moves (KH2's controller) keep `register_wall_hit` (KH2's repel off the guard).
+
+### 6.6 One Recoil row for recoil, parry and the guard repel
+
+- The tester (thread m2 answer 1): "we need to also combine guard repel and recoil into the same
+  config". The Guard Repel row (Movement, t536, ini `guard_repel`) is gone; `combomods::repel_kh2`
+  is now the Recoil row. What base Sora's KH2 guard does on a block (`combomods::guard_repel`):
+  - Recoil KH1: KH1's own block (`combomods::kh1_block`: KH1's clash recoil 0x6E / 0x6F by the
+    priority gap, its 8 frames, KH1's Counterattack after it; `docs/kh1-anim-slots.md` §7.x.3).
+  - Recoil KH2: KH2's repel (motion 42, pushed back 200, KH2's 80 frames of §6.4, Counterguard).
+- The old ini default was `guard_repel = kh2` while `recoil` defaults to KH1, so a fresh ini (and
+  the tester's, `recoil = kh1`) now gets KH1's block. **Checked (code).**

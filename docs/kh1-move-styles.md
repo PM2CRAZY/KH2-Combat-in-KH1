@@ -124,6 +124,11 @@ ground, 43 in the air; `kh2slots::RECOILS`) with KH2's push of 50 or hop, no pro
 recoil (0x6F) keeps its animation (answer 1). Drive Forms and KH2's borrowed moves keep KH2's
 controller's recoil animation in both. Notes: `docs/kh1-kh2-recoil.md` §6.
 
+The Guard Repel row (Movement, t536) is part of this row now (the tester: "we need to also combine
+guard repel and recoil into the same config"): what base Sora's KH2 guard does on a block follows
+Recoil, KH1's own block at KH1, KH2's repel (42, 200 back, 80 frames, Counterguard) at KH2. The ini
+`guard_repel` is no longer read (`docs/kh1-kh2-recoil.md` §6.6).
+
 ## Jump and Glide
 
 `stylejump.rs` (ini `jump_style`, `glide_style`; Config rows Jump, Glide). Base Sora only.
