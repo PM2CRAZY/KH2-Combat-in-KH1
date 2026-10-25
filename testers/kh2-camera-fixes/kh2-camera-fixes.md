@@ -19,6 +19,7 @@
 - [13. Assistant: Got it. Here's what I found for each, so you can give the go](#^m13)
 - [14. Assistant: t497 and t498. Your design note is now in docs/design-philos](#^m14)
 - [15. Assistant: t522: L2 Stick Menu](#^m15)
+- [16. Assistant: t601: the camera hold is on R2 now.](#^m16)
 
 ---
 
@@ -269,6 +270,7 @@ go ahead
 
 ^m15
 
+
 R2 should be the button for locking the camera
 
 go ahead
@@ -279,4 +281,26 @@ go ahead
 
 (c) not sure, will look later
 
-go ahead 
+go ahead
+
+> [!tip] Assistant
+> **t601: the camera hold is on R2 now.**
+>
+> - The Camera page option that stops the camera is renamed **"R2 Camera Hold: Off / On"**. With it On, holding R2 stops the right stick (and the mouse) from turning or zooming KH2's camera, and R3 won't reset it.
+> - R2 still does what it already did: holding it stops the camera swinging behind Sora (on Auto). So with the option On, R2 freezes the camera completely.
+> - The keyboard's R2 key counts too, and if you had the old L2 option On, it carries over, now on R2.
+> - L2 Stick Menu stays on L2 (L2 + right stick moves the command menu), since that part is KH2's L2.
+> - Check: the button is your pick. KH2's own table that ties the camera lock to a button is only built while KH2 runs, so I couldn't read it. R2 is read the same way as the existing R2 hold from t413; nothing new was taken from the decomp.
+>
+> Your other answers:
+> - **Defaults (b):** both options stay Off on a fresh install.
+> - **Two options (b):** kept as two separate options.
+> - **L2 + mouse moving the command menu (c):** left as it is until you've checked it in KH2. Just tell me when you know.
+>
+> Please try: Config > Camera > R2 Camera Hold On, then hold R2 and move the right stick, the mouse, and press R3: the camera should stay put. L2 + right stick (with L2 Stick Menu On) should still move the command menu. With Frame Advance on, R2 steps frames instead, so the hold won't work then.
+>
+> Question:
+> 1. I read "R2 should be the button for locking the camera" as moving the camera hold from L2 to R2 and leaving L2 Stick Menu on L2. Is that right? (a) yes; (b) no, move L2 Stick Menu to R2 as well; (c) something else.
+
+^m16
+

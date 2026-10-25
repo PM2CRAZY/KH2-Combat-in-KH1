@@ -83,6 +83,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [13. Assistant: Got it. Here's what I found for each, so you can give the go](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m13)
   - [14. Assistant: t497 and t498. Your design note is now in docs/design-philos](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m14)
   - [15. Assistant: t522: L2 Stick Menu](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m15)
+  - [16. Assistant: t601: the camera hold is on R2 now.](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m16)
 - [KH2 effects in KH1's own effect system](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md)
   - [1. Mr Bugs: from chat-history-log.md (kh2 moves hitbox effect bugs)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m1)
   - [2. Assistant: t376](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m2)
