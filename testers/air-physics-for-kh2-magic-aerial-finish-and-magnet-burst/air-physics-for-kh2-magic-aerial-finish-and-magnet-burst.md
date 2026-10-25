@@ -87,4 +87,11 @@ go ahead
 > 2. If it's (c): should KH2's fall loop play after KH2's air casts even with Jump at KH1? (a) yes, KH2's fall after a KH2 move, or (b) no, the Jump row decides every fall.
 
 ^m2
+I misunderstood, abilities should follow the main physics config.
 
+your still not understanding me, I need you to look through the steam c decomp again because the same issue is still here:
+I cast air magic > air magic keep me suspended in the air > after its done suspending me I fall straight down (not like kh2)
+
+keep going until you find the problem 
+
+go ahead
