@@ -575,4 +575,11 @@ do 1. if its the best way to implement more features into kh1's already existing
 > 4. Something I found: while you're locked on (R1, or KH1's small cursor), our "group" check only sees the locked enemy, so the group places never pass. KH2 counts every enemy there. (a) make it KH2's, as its own version, or (b) leave it?
 
 ^m22
+1. (b)
+2. (b)
+3. (b) and bring back zantetsuken and make it b as well
+4. (a)
 
+	also you need to make sure every kh1 finisher can go into other kh1/kh2 finishers, lets make sure that kh1 finishers that are listed as AOE follow explosions rule where if there's enemies around then explosion goes first over guard break, if its one enemy then guard break (single attacks) over explosion. (assumption) if you have two single hit vanilla moves then the priority should be based off of which one launches and keeps the enemy closer, the one that keeps the enemy closer should come out first.  also it seems like guard breaks knock back is wrong (it was sending the enemy really far) please make a separate thread for investigating and implementing kh2's knockback on enemies
+	
+go ahead  
