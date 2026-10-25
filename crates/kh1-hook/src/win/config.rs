@@ -10,12 +10,12 @@
 //! scale (answer 3a) so the ninth row fits. The button opens KH1 windows of our own, the way the
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
-//! - KH1 in KH2: Camera, Combat, Movement, Misc, Tweaks;
-//! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Recoil, and Magic, its own list
+//! - KH1 in KH2: Camera, Combat, Movement, Misc;
+//! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, Criticals, Recoil, Magic, its own list, and Tweaks, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
-//!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a); Tweaks: KH1 Ability Chance (combo row
-//!   selection m21).
+//!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
+//!   (combo row selection m21, inside Combat m22).
 //!
 //! Only the settings that were in the Config menu (answer 2a); "Default settings" leaves ours alone
 //! (answer 6b). Backing out of a list re-creates its parent with the cursor on the row it came
@@ -135,6 +135,25 @@ const OPEN_TYPE: i32 = 6;
 /// The tester (answer 3a): the whole Config list about 8% smaller, text and boxes together, so a
 /// ninth row fits above the help box (row 8's bottom: 0.92 x 321 = 295 < 300).
 const LIST_SCALE: f32 = 0.92;
+/// The help box's top (def `0x140546160`, y 300; §5 of `docs/kh1-config-menu.md`).
+const HELP_TOP: f32 = 300.0;
+
+/// The scale one of our lists of `rows` rows is drawn at so its last row ends above the help box
+/// (row `r` spans `0x47 + r x 28` .. `+ 26`, from the window's top at the screen's top): 1 (KH1's
+/// size) while they fit; the Combat list's ten rows (Tweaks inside it, the tester, combo row
+/// selection m22 answer 1 (b)): 300 / 349, 0.85.
+fn list_scale(base: usize, rows: usize) -> f32 {
+    if rows == 0 {
+        return 1.0;
+    }
+    let bottom = row_y(base, rows as i32 - 1) as f32 + unsafe { rd::<i32>(base + ROW_H_RVA) } as f32;
+    if bottom <= HELP_TOP {
+        1.0
+    } else {
+        // (Rounded down a hundredth so the edge clears the box.)
+        ((HELP_TOP / bottom) * 100.0).floor() / 100.0
+    }
+}
 const WIN_FLAGS2: usize = 0x6C;
 const WIN_SCALE_X: usize = 0xA0;
 const WIN_SCALE_Y: usize = 0xA4;
@@ -144,11 +163,16 @@ const ANCHOR_TOP: u32 = 1;
 /// The Config list drawn at `LIST_SCALE` from the top of the window (the screen's top, so the first
 /// row moves up 6 and the help box stays clear). Set every update, before it draws.
 unsafe fn scale_list(win: usize) {
+    scale_by(win, LIST_SCALE);
+}
+
+/// `win` drawn at `scale` (KH1's window scale, anchored at the window's top as page 1).
+unsafe fn scale_by(win: usize, scale: f32) {
     if Build::current() != Build::Steam {
         return;
     }
-    wr(win + WIN_SCALE_X, LIST_SCALE);
-    wr(win + WIN_SCALE_Y, LIST_SCALE);
+    wr(win + WIN_SCALE_X, scale);
+    wr(win + WIN_SCALE_Y, scale);
     wr(win + WIN_ANCHOR, ANCHOR_TOP);
     wr(win + WIN_FLAGS2, rd::<u32>(win + WIN_FLAGS2) | 1);
 }
@@ -238,6 +262,7 @@ impl List {
             List::Top => None,
             List::Magic => Some(List::Combat),
             List::MagicAnim => Some(List::Magic),
+            List::Tweaks => Some(List::Combat),
             _ => Some(List::Top),
         }
     }
@@ -259,12 +284,11 @@ const KH: [u32; 2] = [0x7F00_0002, 0x7F00_0003];
 const fn kh(label: u32, help: u32) -> [u32; 4] {
     [label, KH[0], KH[1], help]
 }
-const TOP: [Item; 5] = [
+const TOP: [Item; 4] = [
     Item::Open(0x7F00_0203, 0x7F00_0204, List::Camera),
     Item::Open(0x7F00_0205, 0x7F00_0206, List::Combat),
     Item::Open(0x7F00_0209, 0x7F00_020A, List::Movement),
     Item::Open(0x7F00_020B, 0x7F00_020C, List::Misc),
-    Item::Open(0x7F00_020F, 0x7F00_0210, List::Tweaks),
 ];
 const TWEAKS: [Item; 1] = [Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance)];
 const CAMERA: [Item; 3] = [
@@ -272,7 +296,8 @@ const CAMERA: [Item; 3] = [
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
     Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
 ];
-const COMBAT: [Item; 9] = [
+// (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
+const COMBAT: [Item; 10] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
@@ -282,6 +307,7 @@ const COMBAT: [Item; 9] = [
     Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
+    Item::Open(0x7F00_020F, 0x7F00_0210, List::Tweaks),
 ];
 // (The tester, thread kh2-effects-in-kh1s-own-effect-system m19: a row per spell for what is
 // cast, "we'll remove ground magic"; each KH1 spell's animation in its own list, so both lists
@@ -329,7 +355,7 @@ const STRINGS: [(u32, &str); 84] = [
     (0x7F00_0203, "Camera"),
     (0x7F00_0204, "Choose KH1's or KH2's camera."),
     (0x7F00_0205, "Combat"),
-    (0x7F00_0206, "Choose KH1's or KH2's physics, combos and magic for Sora."),
+    (0x7F00_0206, "Choose KH1's or KH2's physics, combos and magic for Sora, and tweaks."),
     (0x7F00_0207, "Magic"),
     (0x7F00_0208, "Choose KH1's or KH2's version of each spell for Sora."),
     (0x7F00_020D, "Animations"),
@@ -560,7 +586,7 @@ pub unsafe fn install() {
     super::sys::VirtualProtect((base + ROWS_RVA) as *mut _, 4, 0x04, &mut old);
     wr(base + ROWS_RVA, PAGE_ROWS);
     wr(base + VISIBLE_RVA, PAGE_ROWS);
-    log("Config menu: the KH1 in KH2 button added (Camera, Combat, Movement, Misc, Tweaks)");
+    log("Config menu: the KH1 in KH2 button added (Camera, Combat, Movement, Misc)");
 }
 
 /// KH1's sysmsg lookup (its own instructions, re-done here: its first one is RIP-relative, so
@@ -774,7 +800,7 @@ unsafe extern "system" fn update(win: usize) {
     // Our button and KH1's Default, drawn as KH1 draws its row 7 (style 1 selected, 0 not).
     let row = rd::<i32>(base + ROW_RVA);
     if glint {
-        glint_to(win, row);
+        glint_to(win, row, LIST_SCALE);
     }
     button(win, BUTTON_ROW, row == BUTTON_ROW, BUTTON_LABEL);
     button(win, DEFAULT_ROW, row == DEFAULT_ROW, DEFAULT_LABEL.load(Ordering::Relaxed));
@@ -786,6 +812,11 @@ unsafe extern "system" fn list_update(win: usize) {
     let Some(list) = list_of(win) else { return };
     let items = list.items();
     let cur = &CUR_ROW[list.index()];
+    // (A list taller than the space above the help box is drawn smaller, as page 1.)
+    let scale = list_scale(base, items.len());
+    if scale < 1.0 {
+        scale_by(win, scale);
+    }
     let pad = rd::<u64>(base + PAD_PTR_RVA) as usize;
     if pad > 0x10000 && focus(win) {
         let confirm = rd::<u32>(base + CONFIRM_MASK_RVA);
@@ -819,6 +850,9 @@ unsafe extern "system" fn list_update(win: usize) {
             call2(GLOVE_STEAM, win, 8);
             let row = cursor(win);
             cur.store(row, Ordering::Relaxed);
+            if scale < 1.0 {
+                glint_to(win, row, scale);
+            }
             // KH1's left / right on a two-value row: a step, or a wrap on a fresh press.
             if let Some(Item::Set(_, what)) = items.get(row as usize) {
                 let v = value(*what);
@@ -866,14 +900,14 @@ unsafe extern "system" fn list_update(win: usize) {
 /// centre), so it follows the cursor over the scaled rows. KH1's own call (`0x1402D9920`) has
 /// already run in the update with the def's pitch of 0 (the top row); this one, the same frame,
 /// replaces its target. Coordinates in KH1's 1/16 units as `0x1402D9920` makes them.
-unsafe fn glint_to(win: usize, row: i32) {
+unsafe fn glint_to(win: usize, row: i32, scale: f32) {
     let base = BASE.load(Ordering::Relaxed);
     let pitch = rd::<i32>(base + ROW_H_RVA) + rd::<i32>(base + ROW_GAP_RVA);
     let (wx, wy) = (rd::<i32>(win + 0xDC), rd::<i32>(win + 0xE0));
     let ax = wx + rd::<i16>(win + 0xE4) as i32 / 2;
     let (px, py) = ((wx + 153 * 16) as f32, (wy + (0x47 + row * pitch) * 16) as f32);
-    let x = ax as f32 + (px - ax as f32) * LIST_SCALE;
-    let y = wy as f32 + (py - wy as f32) * LIST_SCALE;
+    let x = ax as f32 + (px - ax as f32) * scale;
+    let y = wy as f32 + (py - wy as f32) * scale;
     let f: unsafe extern "system" fn(i32, i32, i32) = std::mem::transmute(base + GLOW_AT_STEAM);
     f(8, (x as i32 - 0x7000) >> 4, (y as i32 - 0x7400) >> 4);
 }

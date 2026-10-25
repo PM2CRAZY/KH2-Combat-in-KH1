@@ -396,6 +396,14 @@ default on): KH1's 30% roll on Stun Impact and Gravity Break in the KH1 combo's 
 (`docs/kh1-anim-slots.md` §7.z.1). Assumption: "the gameplay config" is the KH1 in KH2 list (there
 is no list of that name); asked in the thread.
 
+Moved inside Combat (the tester, m22 answer 1 (b)): Tweaks is Combat's tenth row, after Magic, a
+button opening the same list; backing out of Tweaks returns to Combat on that row. KH1 in KH2 has
+its four buttons again. Ten rows at KH1's size would reach y 349, inside the help box (y 300), so a
+list whose last row would end below 300 is drawn with KH1's window scale (as page 1, anchored at
+the window's top) at 300 / its bottom, rounded down to a hundredth: Combat at 0.85. The glint is
+re-aimed through the same scale on the frames the cursor moves. Ours, not KH1's layout;
+**Assumption** until seen: the 85% text reads well and clears the help box.
+
 ### 6.x A three-value row (Knock-back Numbers)
 
 KH1's Config rows all have two values. `config::Item::Pick` draws a row with three: the label as
