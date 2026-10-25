@@ -380,7 +380,7 @@ so I tried it and the hoodie looks good but the rest of sora's clothes don't his
 
 you do physics like before for the parts that are clipping: (his jacket, pants belt, chain) but I will use frame advance to record each frame of an animation, the trace then has a natural (when I mean natural I don't mean real life, I mean how it looks compared to kh2's baked animations) looking animation that you can then bake into kh2's animations and then we can disable the physics for each animation we haven't done yet. tell me what you think and if you think its good then what I need from you is:
 
-1. in the debug menu when you frame advance it tells you the animation state your in followed by the animation count so I can give you the exact trace (make sure this doesn't appear in the debug menu but a separate window pops up with the info)
+1. in the debug menu when you frame advance it tells you the animation state your in followed by the animationcount so I can give you the exact trace (make sure this doesn't appear in the debug menu but a separate window pops up with the info)
 2. when setting trace to count game frames the seconds number becomes frame count
 3. just tell me what you need in the trace and I'll record it, feel free to add anything thats missing so the bake can be exactly how it looks in game
 4. for the parts that are kh1's make sure the physics follow closely with how it looks in the kh1 animations, 
@@ -428,3 +428,15 @@ if there's anything else you would need let me know, then if we're good we'll tr
 
 ^m18
 
+lets do "another option" we'll have you run the program tuned to kh1's own animations, what can you is have that be tuned to our physics and I can see how it looks in game before a baking starts, when I see the in game example and it looks good then I can give you the go ahead to bake. 
+
+1. (a)
+2. (a)
+3. by chain I'm referring to the chain that sora has on his left hip we give that physics too and tuned to kh1's animations
+4. physics only on the move, we'll tweak each animation until it looks solid
+5. (b) try to get the offline as close as possible
+6. (a and b) you'll tune it from kh1's animations then I can still tweak a value if something looks off then send you the trace.
+
+start with soras running animation without the keyblade
+
+go ahead
