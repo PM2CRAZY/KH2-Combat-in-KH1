@@ -672,3 +672,7 @@ is zantestukens percent chance still on? I get a normal finisher from time to ti
 
 ^m24
 
+1. if percent chance is on then even when kh2 combat is on it still rolls for a percent chance to work.
+2. (a) is there a way for kh2's tables to be included in kh1's tables as extra features to the engine?
+   
+   go ahead
