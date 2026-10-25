@@ -23,6 +23,7 @@
 - [17. Assistant: t569, the test bake: walk and run only, battle and field ver](#^m17)
 - [18. Assistant: Glad the hood works. Your plan is sound, and it fits how bot](#^m18)
 - [19. Assistant: t592 to t596. No bake yet: this is the physics live in game ](#^m19)
+- [20. Assistant: Thanks, that's all clear. t613 to t616, one change each:](#^m20)
 
 ---
 
@@ -462,6 +463,7 @@ go ahead
 
 ^m19
 
+
 the part of the coat next to soras necklace doesn't move with the rest of the coat so the mesh stretches, that needs to be fixed
 
 I assume field frame run is the animation count, change it to animation so its understandable
@@ -473,3 +475,22 @@ sent a trace with the physics I want, everything is a little to pronounced at th
 also when it comes to the bottom part of soras coat it currently moves way too much, kh1 soras coat is way less pronounced then that and is also why its causing a lot of stretching on the top part of the coat.
 
 go ahead
+
+> [!tip] Assistant
+> Thanks, that's all clear. t613 to t616, one change each:
+>
+> - **t613, the coat by the necklace.** This was a mistake on our side from t592. The physics hung the coat's top on Sora's lower spine, while the jacket above it (by the necklace) follows his chest. Our retarget only turns that lower spine part of the way with KH2's chest, so in the run the top of the coat twisted against the jacket and the mesh stretched between them. In KH1's own animations those two bones never move apart, and KH1 never turns the top of the coat. So the coat now hangs from the chest exactly as in Sora's rest pose, like before t592, and only the parts below it swing. Checked in KH1's files. I can't read which part of the mesh is attached to which bone, so it's possible some of the stretch comes from elsewhere.
+> - **t614, the label.** The panel's line now reads "Animation: field run, frame 12 / 40, loop 3".
+> - **t615, clipping at the run's peak.** Until now the physics only kept the *ends* of each coat, belt and shorts piece out of the thighs. With a knee up, the middle of a piece could still pass through the leg. Now the middle of each piece is kept out too. I couldn't check KH2's run frame by frame offline, and I'm not sure which part you saw clipping (question 1).
+> - **t616, a much calmer coat bottom.** KH1's own run moves the bottom of the coat by about 1-3 units at most; ours moved it 5-6 when he started, stopped or turned. The coat's physics is now stiffer, a third as heavy and limited to 20°. In my offline check a start or stop now moves it about 1.5 and a turn about 0.8, and on the run's stride it should swing about a third as much as before. The Cloth Physics page's Reset goes back to these new numbers.
+>
+> **Your tuned values: not applied yet.** The trace you sent doesn't have them: the Cloth category was off in it, and it only covers about 3 seconds after the changes. Could you send them one of these ways? (a) the numbers from the Cloth Physics page, written here; (b) your `kh1-kh2.log` from that session (every change writes a "cloth physics settings id" line with all the numbers); or (c) a new trace with Trace Recorder > Categories > Cloth on. Since the coat changed in t616, re-tune the coat first if it still looks off.
+>
+> Please test: run straight, start, stop and turn in the field without the Keyblade. Watch the top of the coat by the necklace, how much the coat bottom moves, and frame ~11 with Frame Advance.
+>
+> Questions:
+> 1. At frame 11, what goes through what: (a) the front of the coat into the raised thigh, (b) the leg poking out through the shorts panels, or (c) the inner shorts or the belt chain? A Frame Advance screenshot at that frame would settle it.
+> 2. If the stretch by the necklace is still there: (a) does the jacket stretch between the necklace and the top of the coat, or (b) is it inside the coat itself, between its top and bottom?
+
+^m20
+
