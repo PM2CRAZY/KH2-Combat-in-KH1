@@ -247,3 +247,25 @@ Not checked in game: all of it. Open: the motion KH2 shows off a ledge mid-run (
 KH1's camera, which counts only states 0 / 8 / 0x18 as standing, behaves for state `0x2A`; what
 KH1's hit reaction switch `0x14029BBD0` does for a state number it doesn't know (our transition
 puts him back in state 0 the frame after another motion lands on him).
+
+### Out of KH1's own roll at KH2's frame (the tester's trace, Dodge Roll KH1)
+
+- **What the trace showed.** With Dodge Roll KH1, KH1's roll motion `0xDC` played from frame 9384
+  and the Quick Run started at 9414, 30 frames in: the end of KH1's roll motion (its travel 17.8 a
+  frame for 10 frames, 11.3 for 12, then 5 still frames). With Dodge Roll KH2 (log, f7301 / f7311)
+  it started 10 frames into the roll. **Checked (trace)**, **Checked (log)**.
+- **Why.** `shared::control` let the held roll into Quick Run only on a frame KH1's can-act test
+  passed, and KH1 holds its action flag until its roll motion ends. KH2's roll on KH1's roll was
+  already let through at the check frame (it bypassed the can-act test). **Checked (code)**.
+- **KH2's rule.** KH2's dodge roll (motion 209, `P_EX100` A180) turns into Quick Run at its Quick Run
+  check, frame trigger 34 at frame 10 (60 Hz), while Square is held. **Checked (files)** (motion 209:
+  length 52, trigger 34 at 10, trigger 35 the fall check at 34). The OG rewrite's DodgeRoll action
+  does the same.
+- **Now.** KH1's own roll held into Quick Run is cut at the same frame (10 frames from the roll's
+  first frame, the same counter as KH2's roll on KH1's roll), whatever KH1's can-act test says;
+  the Quick Run itself (start speed, brake, hold timer, stop) was already identical both ways (log:
+  speed 30, brake 0.94, time 14, the stop after 13 frames at 19.5 in both).
+- **Distance.** What still differs is the roll part before the cut: KH2's roll's root travel is
+  220.8 by frame 10 (23.1, 22.8, ... 22.1 a frame; 438.4 at its end, frame 24), KH1's roll ~160 by
+  its frame 10 (17.8 a frame, its first frame still). **Checked (files)** (motion 209's root),
+  **Checked (trace)** (KH1's roll). That is KH1's own roll speed, which the KH1 row keeps.

@@ -262,7 +262,15 @@ pub fn control(s: &Seen) -> u32 {
     // fall-check frame, but KH2 turns the held roll into Quick Run at its own check frame before
     // that, as the OG rewrite's DodgeRoll action does: that one press goes through.)
     let kh2_roll = quick_run && roll_kh2 && unsafe { super::kh2slots::playing_motion(super::takeover::sora_actor()) } == Some(character_core::motion::DODGE_ROLL);
-    if s.can_act || kh2_roll {
+    // KH1's own roll (Dodge Roll KH1) held into KH2's Quick Run at the same point as KH2's roll
+    // (the tester, quick-run-native: "waits until dodge roll finishes to go into quick run ...
+    // make sure it behaves the same as kh2 dodge roll"): KH2's roll turns into Quick Run at its
+    // clip's Quick Run check (motion 209's trigger 34, frame 10; the OG rewrite's DodgeRoll action),
+    // counted from the roll's first frame on the same counter as KH2's roll on KH1's roll above.
+    // KH1 doesn't let him act until its roll motion is over (30 frames in the tester's trace), so
+    // that check let KH2's Quick Run in only then; now it cuts KH1's roll at KH2's frame.
+    let kh1_roll_cut = quick_run && !roll_kh2 && s.kh1_rolling && roll_frames >= s.quick_run_check;
+    if s.can_act || kh2_roll || kh1_roll_cut {
         if quick_run {
             ROLL_HELD.store(false, Ordering::Relaxed);
             ROLL_FRAMES.store(0, Ordering::Relaxed);
