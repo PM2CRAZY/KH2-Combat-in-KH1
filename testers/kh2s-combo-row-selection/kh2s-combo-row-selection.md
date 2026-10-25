@@ -28,6 +28,7 @@
 - [22. Assistant: t580 and t581.](#^m22)
 - [23. Assistant: t586 to t591, one each:](#^m23)
 - [24. Assistant: t611 and t612.](#^m24)
+- [25. Assistant: t622 and t623: the first two steps of the native plan. Neith](#^m25)
 
 ---
 
@@ -672,7 +673,38 @@ is zantestukens percent chance still on? I get a normal finisher from time to ti
 
 ^m24
 
+
 1. if percent chance is on then even when kh2 combat is on it still rolls for a percent chance to work.
 2. (a) is there a way for kh2's tables to be included in kh1's tables as extra features to the engine?
    
    go ahead
+
+> [!tip] Assistant
+> t622 and t623: the first two steps of the native plan. Neither should change how it plays; they change how it works underneath.
+>
+> **Your point 1, the chance:** that's already how it works since t612, so there's no new version for it. At the KH2 setting, with KH1 Ability Chance on, Stun Impact and Gravity Break roll KH1's 30% exactly as at the KH1 setting, and a failed roll moves on to the next move that fits (Explosion, Guard Break...). With it off, they come whenever their checks pass, like KH2's rows. Zantetsuken is the one exception: since t589 it always rolls, whatever the Tweak says (question 1).
+>
+> **Your question 2, putting KH2's tables into KH1's tables.** Honest answer: half of it is already done that way, and the other half can't be data in KH1, because KH1 doesn't keep that part as data.
+> - **KH1's attack table** (a list of rows per character, 0x14 bytes each) holds *what* a row does: the motion request, the attack data (power, element, reaction), the trail, effect and voice. That table can grow, and it already has: KH2's moves KH1 never had (Upper Slash, Finishing Leap, Horizontal Slash, Guard Break, Counterguard, Retaliating Slash, Aerial Recovery, the Finishing Plus finishers) are new rows in it, numbered from 0x200, with their own requests and attack data. KH2's other moves play on KH1's own rows, with KH2's animation in KH1's request.
+> - **KH1's pickers** (`0x1402A6EE0` ground, `0x1402A6C70` air) decide *when* a row comes. That isn't a table: it's code with the rules written in (the count against the length, the 30% rolls, "a target more than 100 above", "nothing beside him" for Blitz). KH2 keeps the same thing as data (its PTYA table: kind, distance, height and facing windows, ability, finisher flag, replacement row). So "including KH2's table" means KH1's picker gets an extra pass that reads KH2's table as a second rule set and returns a KH1 row. That's what our hook on the picker is, and t622 moves the last part of it inside.
+>
+> What changed:
+> - **t622, step 1:** at the KH2 setting, KH2's whole pick is now made inside KH1's picker, swings as well as finishers. The picker itself returns the KH1 row that plays KH2's move, and the step that runs the row just runs it: no second ask of KH2's rules, no row swapped after the fact. Check: KH1's Steam decomp. The Attack step always asks its picker right before running the row, and the pickers and the row runner have no other callers, so the pick made in the picker is always the one that runs. Not checked in game.
+> - **t623, step 2:** KH2's table walk now runs straight from KH1's data (KH1's count, its hit flag, the move playing, your lock and the enemies around you) as a plain calculation. Before, each pick made a whole copy of KH2's controller and "pressed Attack" on it. KH2's own presses use the same calculation, so there's only one copy of KH2's rules. Check: a test runs both ways over about 34,000 situations (near, far and high enemies, a second enemy, locked or not, ground and air, every combo count, hit or missed, Square moves) and they pick the same row and hop every time. Not checked in game.
+>
+> **Step 3, not done yet:** every KH2 combo move of base Sora already plays on KH1 rows, so the only places that still hand Sora to KH2's controller are fallbacks for when no KH1 row can play the move: a move whose animation slot wasn't built, or no free row for a third finisher in a row. What should happen there is your call (question 2).
+>
+> Please test, with Base / Aerial Base Combo on KH2, with the log and a Select + Triangle trace:
+> - ground and air combos at different distances, locked and unlocked; they should feel exactly as before;
+> - KH1's finishers (Stun Impact, Gravity Break, Zantetsuken, Blitz, Ripple Drive, Hurricane Blast) and Finishing Plus both ways;
+> - the ledge hop and an enemy above you.
+>
+> Log lines: "KH2's ground/aerial finisher walk at the KH2 setting", "KH2's row selection", "KH1's ground/aerial combo, swing …".
+>
+> Questions:
+> 1. Zantetsuken: (a) keep KH1's rule, always rolling whatever KH1 Ability Chance says (as now); or (b) follow the Tweak like Stun Impact and Gravity Break, so with it off it comes whenever its checks pass?
+> 2. When no KH1 row can play a KH2 move (the fallbacks above): (a) no attack on that press, like KH2 when nothing can come; (b) KH1's own row that its picker chose; or (c) keep handing that one move to KH2's controller, as now?
+> 3. A further native step: (a) give every KH2 combo row its own KH1 row (the plain swings 151–155 and 181–184 too, not only the ability moves), so KH1's picker returns that row straight and KH1's plain swings are no longer re-pointed at KH2's animations; or (b) leave the plain swings on KH1's own rows as now?
+
+^m25
+
