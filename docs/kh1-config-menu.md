@@ -396,6 +396,12 @@ default off since m22 answer 2 (b); it was on at t581): KH1's 30% roll on Stun I
 (`docs/kh1-anim-slots.md` §7.z.1). Assumption: "the gameplay config" is the KH1 in KH2 list (there
 is no list of that name); asked in the thread.
 
+Second row, "Enemy Weight" (Off | On, `knockback::weight`, ini `enemy_weight`, default on; the
+tester, kh2-knockback-on-enemies question 1: "(b) but make it a toggle in the config menu"): On,
+KH2's knock-back on enemies (launch speeds, flinch pushes, air flinch drifts) is multiplied by
+KH1's own weight for each enemy (stats `+0xC4`); Off, KH2's numbers for every enemy
+(`docs/kh1-launch.md` §4). Live, kept in the ini.
+
 Moved inside Combat (the tester, m22 answer 1 (b)): Tweaks is Combat's tenth row, after Magic, a
 button opening the same list; backing out of Tweaks returns to Combat on that row. KH1 in KH2 has
 its four buttons again. Ten rows at KH1's size would reach y 349, inside the help box (y 300), so a

@@ -47,6 +47,13 @@ pub fn weight() -> bool {
     }
 }
 
+/// The Config row (Combat > Tweaks > Enemy Weight): live, kept in the ini.
+pub fn set_weight(on: bool) {
+    WEIGHT_ON.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("enemy_weight", if on { "on" } else { "off" });
+    log(&format!("Config menu: Enemy Weight {}", if on { "On" } else { "Off" }));
+}
+
 /// KH1's weight stat of this enemy (stats `+0xC4`), if it reads as a number.
 pub unsafe fn kh1_weight(actor: usize) -> Option<f32> {
     if actor < 0x10000 {

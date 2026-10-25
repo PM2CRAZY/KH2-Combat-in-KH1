@@ -208,6 +208,8 @@ enum Row {
     PartyCriticals,
     /// Tweaks > KH1 Ability Chance (Off | On, `kh1picker::chance`).
     AbilityChance,
+    /// Tweaks > Enemy Weight (Off | On, `knockback::weight`).
+    EnemyWeight,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -294,7 +296,12 @@ const TOP: [Item; 4] = [
     Item::Open(0x7F00_0209, 0x7F00_020A, List::Movement),
     Item::Open(0x7F00_020B, 0x7F00_020C, List::Misc),
 ];
-const TWEAKS: [Item; 1] = [Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance)];
+// (Enemy Weight: the tester, kh2-knockback-on-enemies question 1: "(b) but make it a toggle in the
+// config menu".)
+const TWEAKS: [Item; 2] = [
+    Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
+    Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
+];
 const CAMERA: [Item; 3] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
@@ -355,7 +362,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 88] = [
+const STRINGS: [(u32, &str); 90] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -391,6 +398,8 @@ const STRINGS: [(u32, &str); 88] = [
     (0x7F00_0210, "Small changes to how KH1's own rules play."),
     (0x7F00_0191, "KH1 Ability Chance"),
     (0x7F00_0192, "On: KH1's 30 percent chance on Stun Impact and Gravity Break.\nWhen it fails, the next move that fits comes, as in KH2."),
+    (0x7F00_0193, "Enemy Weight"),
+    (0x7F00_0194, "On: KH2's knock-back on enemies times KH1's weight for each\nenemy. Off: KH2's own numbers for every enemy."),
     (0x7F00_0001, "Camera Style"),
     (0x7F00_0002, "KH1"),
     (0x7F00_0003, "KH2"),
@@ -462,6 +471,7 @@ fn value(what: Row) -> bool {
         Row::Criticals => super::kh2damage::criticals(),
         Row::PartyCriticals => super::kh2damage::party_criticals(),
         Row::AbilityChance => super::kh1picker::chance(),
+        Row::EnemyWeight => super::knockback::weight(),
     }
 }
 
@@ -491,6 +501,7 @@ fn set(what: Row, v: bool) {
         Row::Criticals => super::kh2damage::set_criticals(v),
         Row::PartyCriticals => super::kh2damage::set_party_criticals(v),
         Row::AbilityChance => super::kh1picker::set_chance(v),
+        Row::EnemyWeight => super::knockback::set_weight(v),
     }
 }
 

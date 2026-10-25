@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 606 (testing branch: Tweaks: Enemy Weight)
+- **Config: Tweaks > Enemy Weight.** The tester (kh2-knockback-on-enemies m1, answer 1): "(b) but make it a toggle in the config menu". Combat > Tweaks gets a second row, Enemy Weight (Off | On, text ids `0x7F00_0193` / `0x7F00_0194`), switching `knockback::weight` live and saved as `enemy_weight` (default on). On: KH2's knock-back × KH1's per-enemy weight (t602-t605); Off: KH2's numbers for every enemy. docs/kh1-config-menu.md §6.y.
+
 ### 2026-10-25: Stage 605 (testing branch: KH2's air flinch)
 - **KH2's air flinch in KH1's enemy air flinch.** The tester (kh2-knockback-on-enemies m1, the plan's step 3). A new Steam hook on `0x1402B8B90 (actor, record, float front)` (third argument in XMM2), prologue `48 89 5C 24 18 48 89 74 24 20 57 48 83 EC 60` (Checked (exe)). After KH1's runs (its motion 0x4E / 0x4F, hop 20, drift 4 × weight), for a KH2 record KH1's arc fields take KH2's 50 hop and the flight is KH2's: the hop on KH2's jump curve with a constant drift of push distance × 0.048 (× weight with Enemy Weight on) along the record's direction (KH2 `0x1403D4800`: 50.0 and sstm `+0x38`, Checked (decomp)). Assumption: the constant drift follows `character_core::npc`'s model. Not done: KH2's turn of the flinched body (`0x1403D3840`). docs/kh1-launch.md §4.
 
