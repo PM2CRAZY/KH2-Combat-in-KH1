@@ -159,4 +159,10 @@ go ahead
 
 ^m5
 
+lets have (a) for now
 
+also glide and super glide don't get removed anymore when setting glide to kh2, and kh2's glide growth ability isn't there.
+
+I also noticed when sora turns to another bank after hes banking in a direction he resets his animation which doesn't seem like kh2. please fix 
+
+go ahead
