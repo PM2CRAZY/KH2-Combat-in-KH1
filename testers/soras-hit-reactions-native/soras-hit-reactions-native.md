@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: t506 to t508, the first batch. Everything below runs on KH1'](#^m2)
+- [3. Assistant: t550 and t551. Your 3 needed no code: flight and swimming al](#^m3)
 
 ---
 
@@ -97,8 +98,37 @@ go ahead
 
 ^m2
 
+
 1. (b)
 2. (a)
 3. (b)
 
 go ahead
+
+
+> [!tip] Assistant
+> t550 and t551. Your 3 needed no code: flight and swimming already kept KH1's numbers, so I just checked it.
+>
+> - **t550, KH2's hurt line.** With Battle Quotes on KH2, Sora says KH2's line when he's hit, the same line KH2's reaction motion says:
+>   - voice 29 on a flinch;
+>   - voice 30 on the alternate flinches and an air flinch from behind;
+>   - voice 1 on a knock-back.
+>
+>   It plays through KH1's own voice path at the moment KH1 would say its line, and KH1's line is skipped. The low-HP line and the knocked-out line stay KH1's, because KH2's reaction motions don't have them. In the moves that still borrow KH2's controller, KH1's line was playing on top of KH2's. Now only KH2's plays.
+>   Check: the voice numbers come from your P_EX100.mset and 00battle.bin, and KH1's voice call from the KH1 decomp's hit pass.
+> - **t551, the air flinch turn.** With Hit Reactions on KH2, an air flinch now turns him at once, as KH2 does: toward the attacker if he was hit from the front, away from him if he was hit from behind. It uses the same turn KH1's own knock-back does. KH2's ground flinch doesn't turn him, so that's unchanged.
+>   Check: the KH2 decomp's air and ground flinch, matched to the KH2 rewrite, and KH1's knock-back turn. One assumption: Ghidra drops one argument of KH2's vector copy, and I read it as the hit direction, which is what the rewrite does.
+> - **Your 3, flight and swimming:** these already used KH1's numbers. KH2's push and hop only run on the ground flinch and in his normal air state. t551's turn is limited the same way.
+>
+> Please try:
+> - Battle Quotes on KH2: get hit from the front, from behind and in the air, and take a big hit. Listen for KH2's line, and make sure only one line plays.
+> - Hit Reactions on KH2: get hit in the air from the front and from behind, and check which way he ends up facing.
+>
+> Questions:
+> 1. With Hit Reactions on KH1 but Battle Quotes on KH2, KH1's reaction animation now plays with KH2's line. Should it be (a) KH2's line, as now (the Battle Quotes row decides), or (b) KH2's line only when Hit Reactions is also on KH2?
+> 2. Flinches while flying still play KH2's air-flinch animation, because KH1 asks for the same animation there. Should flight (a) keep KH2's animation, or (b) go back to KH1's?
+> 3. Medium Hits on Flinch also turns medium hits into flinches while flying and swimming. Should it (a) apply there too, or (b) apply only on the ground and in normal air?
+
+^m3
+
+

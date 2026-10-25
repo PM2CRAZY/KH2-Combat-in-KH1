@@ -8,6 +8,7 @@
 - [2. Assistant: Here's what I think:](#^m2)
 - [3. Assistant: A correction to my last message, before you answer it. I che](#^m3)
 - [4. Assistant: Done, as planned, with (b) for Donald and Goofy. One version](#^m4)
+- [5. Assistant: Thanks for the trace and the log. They showed exactly what w](#^m5)
 
 ---
 
@@ -115,6 +116,7 @@ go ahead
 
 ^m4
 
+
 I've recorded a trace and sent a log, should be in the same folder as this thread. I noticed sora can't bank to the left but can to the right
 	-momentum currently doesn't work with letting go mid glide I just drop.
 	 -the other systems seem to work but not sure if the values are correct so just double check
@@ -122,3 +124,39 @@ I've recorded a trace and sent a log, should be in the same folder as this threa
 keep looking for 
 
 go ahead
+
+
+> [!tip] Assistant
+> Thanks for the trace and the log. They showed exactly what was wrong with both. Two fixes:
+>
+> **t548, the left bank.** KH2 picks the bank correctly: 206 for one side, 207 for the other. The problem was on KH1's side. KH1 asks for a different motion for each side of a turn, but the motion set Sora uses in a world sends the left one to the same KH1 slot as the right one. The file has them on separate slots. So KH2's 207 never got hooked up, and both sides played 206. Your log even said it ("not in this set: 0x74"). Now 207 plays on the left whichever slot the set uses.
+> Checked: KH2 decomp (the bank pick, and which way round the turn's cross product goes), KH1 decomp (the turn requests), KH1's motion file, your log and trace.
+> Not checked: in game. Which side counts as "left" assumes KH1's and KH2's worlds turn the same way. Your trace fits that: stick right, he turns right, 206.
+>
+> **t549, momentum when you let go.** KH2's glide end keeps the whole glide velocity going into the fall. We did write it, but KH1 overwrote it in the same frame. When Sora enters the fall state during KH1's input step, KH1 resets his air speed to the stick's direction times its tilt, which is at most 1 a frame. Your trace shows it: 30.1 a frame at the release, 1.1 the next. Now his glide speed goes back on before KH1 moves him. We already handle KH1's carry the same way for the hop out of a ground combo. Landing and dropping under the end height weren't affected, since those ends happen at another point in the frame.
+> Checked: KH2 decomp (the glide end only resets the arc and the launch flag), KH1 decomp (the think step's carry into the fall), your trace frame by frame.
+> Not checked: in game. After the release, how he slows down follows your Physics setting. Your traces were on Physics KH1: KH1's fall keeps the speed while you hold the stick and slows it a little each frame without.
+>
+> **The other values.** I checked them against KH2's growth table and your traces, frame by frame, for Glide MAX:
+> - **Speed:** heads toward 32 at KH2's 0.97, once every two frames (18.42 → 18.83 → 19.22).
+> - **Hover:** x0.9 every two frames.
+> - **Fall:** 1.0 a frame until he's under about 130 over the floor, then (height − 30) x 0.01.
+> - **Turn:** 0.052 a frame.
+> - **Banking:** kicks in past about 11° off his facing.
+> - **Start height:** 60.
+> - **Aerial Dodge carry-over:** the dodge's speed (18, or 0 after a neutral dodge) comes back as the glide starts, and again when the hover turns into the glide.
+>
+> All of these match KH2, so there's nothing else to change there. The full table is in `docs/kh1-glide-native.md` §8.7.
+>
+> Please test:
+> 1. Glide and turn hard left, then hard right: he should bank into each side with its own animation.
+> 2. Let go mid-glide, with the stick held and with it neutral. He should keep his speed and fly on, not drop.
+> 3. Let go right after an Aerial Dodge into the glide, and glide all the way down to the floor.
+>
+> Still open (no answer needed): KH2's plain jump also stores a launch speed, which its glide would take back. Ours doesn't carry that yet, so a glide right after a jump starts from his current speed. I'll check it in KH2's code next.
+>
+> One question: after you let go, should the fall follow (a) your Physics setting, as it does now (KH1's air steering at Physics KH1), or (b) always KH2's fall steering once you've glided with KH2's Glide?
+
+^m5
+
+

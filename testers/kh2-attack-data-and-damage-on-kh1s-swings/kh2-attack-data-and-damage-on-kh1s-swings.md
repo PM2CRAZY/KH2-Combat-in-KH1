@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Done, in two versions.](#^m2)
+- [3. Assistant: Got it. No code this round, since there's no go-ahead yet; h](#^m3)
 
 ---
 
@@ -74,6 +75,29 @@ go ahead
 
 ^m2
 
+
 1. unsure have to see how much damage is done with the new system so (a)
 2. if party members can also do crits then yeah (b)
 3. (a)
+
+
+> [!tip] Assistant
+> Got it. No code this round, since there's no go-ahead yet; here's what I found and what each answer would mean.
+>
+> **1. (a): stays as it is.** Finishers keep KH1's 4–6 row points on the curve with KH2's power on top. Once you've seen the numbers in a few fights we can drop that if finishers hit too hard.
+>
+> **2. Can party members crit in KH1? Yes.** I checked this in the KH1 decomp (the damage function `0x1402BFA80` and the attack object's constructor `0x1402B2DC0` / `0x1402B3270`). KH1 rolls a critical on every attack, whoever owns it. The chance and the bonus come from the attack's own data, times the owner's critical factor, times the weapon's.
+> - **Donald and Goofy:** in your `btltbl.bin` their plain attack rows have a critical chance of 20 (Sora's finishers have 4) and a bonus of 0. So nearly every hit they land is a "critical" that adds their weapon's critical bonus (I haven't read their weapons' numbers yet). The guests' rows have 4 / 6, like Sora's.
+> - **Enemies:** their factor is 1, so they crit only if their own attack data says so. That data comes with each enemy's files, which I haven't checked.
+>
+> So (b) would make Criticals Off apply to every attack: Sora, Donald, Goofy, the guests and enemies all never crit. On stays KH1's exactly. One side effect to know about: with Off, Donald and Goofy lose their weapon's critical bonus on almost every hit, so they'd deal a bit less damage than in plain KH1.
+>
+> **3. (a):** a Config > Combat row "KH2 Damage: Off / On" for `kh2_damage`, where Off is KH1's damage exactly. That would make the Combat list ten rows.
+>
+> Can I go ahead with 2 (b) and 3 (a)?
+>
+> One question: does the Combat list still fit on screen with nine rows? I'd like to know before I add a tenth.
+
+^m3
+
+

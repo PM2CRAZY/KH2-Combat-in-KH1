@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Thanks! For question 1 I went with (a), the fall at KH2's ap](#^m2)
+- [3. Assistant: Thanks, and thanks for the traces! They showed exactly what ](#^m3)
 
 ---
 
@@ -68,6 +69,7 @@ go ahead
 
 ^m2
 
+
 1. unsure about the levels, check the decomp
 2. currently sora in kh1 mode cancels his air dodge, that doesn't fit with how kh2 does air dodge in the base game. I recorded a trace will be in the same folder as this thread
 3. none its fixed now
@@ -77,3 +79,28 @@ go ahead
 7. (a) go and investigate those moves and ensure that they have the proper frame data and timings in its own thread
 
 go ahead
+
+
+> [!tip] Assistant
+> Thanks, and thanks for the traces! They showed exactly what was going on.
+>
+> - **t545: the dodge isn't cut short at Physics KH1 anymore.** In both traces, every dodge got cut at its 6th frame into KH1's little release hop (5 frames, about 6 units), and that happened even while you were still holding jump. That's KH1's own variable jump. KH1 tracks two flags on Sora: "the cut is still open" and "jump still held". The dodge kept the flags from the jump before it. In your traces you'd let go of that first jump for a moment, so KH1 thought the button was already released and cut the dodge as soon as its window opened. Now the dodge sets both flags fresh, the same way KH1's own takeoff does. KH1's variable jump then works on the dodge like it does on a jump: hold it and you get the full rise; let go between 6 frames in and 5 before the apex and the rise is cut, then the fall starts right away. That's the same window KH2 uses for its dodge, just with KH1's hop because Physics is on KH1. Physics KH2 isn't affected. Checked: KH1's button handler `0x1402A7B30` and takeoff `0x1402AFDA0` in the decomp, KH2's `0x1403CB680` window, and your two traces.
+> - **The levels are right, so no change.** I checked KH2's decomp: `0x1403CB9F0` reads your Aerial Dodge level, and `0x1403E92D0` picks that level's record and reads the height at +4 and the speed at +8. I also read those values straight out of your `03system.bin`: LV1 145 high / 18 a frame, LV2 155 / 24, LV3 200 / 30, MAX 300 / 36. That matches what the mod uses. Your traces show 145, so LV1. One thing to know: at Physics KH1 the same height takes a little less time to reach, since KH1's gravity is a bit stronger.
+> - **Walking off a ledge:** you get the dodge there, same as KH2. KH2 has no separate fall action. Walking off puts Sora in its jump action, and entering that from the ground gives you the dodge. The mod already did this. One caveat: "walking off uses the jump action" is my reading, since KH2 has no fall action at all. I didn't find the exact call.
+> - **The 160-frame slot is fine.** The dodge's animation only plays up to the fall swap, about 33 frames at MAX, so 160 is plenty.
+> - Also settled: the dodge out of the glide and the hover uses KH2's own glide tables (checked by class name in the exe). Before, that was a guess.
+>
+> Your 7 (a): the body guards on Flash Step, Aerial Recovery, Explosion, Vicinity Break and Magnet Burst have their own thread now, "[Body guards on KH2 moves](../body-guards-on-kh2-moves/body-guards-on-kh2-moves.md)". The frame data and timings for those moves get checked there.
+>
+> What I'd like tested (Physics KH1, a trace each if you can):
+> 1. Jump, let go, then dodge while holding jump. It should rise all the way.
+> 2. Dodge and tap jump. It should be cut short, with the fall starting right as you let go.
+> 3. Walk off a ledge and dodge.
+>
+> One question: with Physics KH1, the dodge now has KH1's early release (tap = short, hold = full). In t495 I'd said there was no release at KH1. Which do you want?
+> (a) Keep the release, with KH1's hop (what t545 does, and closest to KH2's dodge).
+> (b) No release at Physics KH1: the dodge always rises fully.
+
+^m3
+
+

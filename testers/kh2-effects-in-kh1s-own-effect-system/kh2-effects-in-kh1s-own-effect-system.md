@@ -22,6 +22,7 @@
 - [16. Assistant: t466 to t472 (one change each). Your log was from t463, so t](#^m16)
 - [17. Assistant: t481, t482 and t483. Your traces and logs hadn't reached the](#^m17)
 - [18. Assistant: t516, t517 and t518. Thanks for the log and traces, they had](#^m18)
+- [19. Assistant: t561 to t564 (one change each).](#^m19)
 
 ---
 
@@ -470,6 +471,7 @@ go ahead
 
 ^m18
 
+
 everything looks good except for cure, I sent a link for reflect and cure please look, kh1's cure seems to not be positioned like vanilla and kh2 cure doesn't seem to be positioned properly either,
 
 1.for fire do (a)
@@ -477,4 +479,31 @@ everything looks good except for cure, I sent a link for reflect and cure please
 we also need to redo the magic system, each magic should have its own settings of which magic you can choose, e.g fire: kh1 | kh2 and that would change what gets casted, we'll remove ground magic and change air magic to air physics kh1 | kh2 so now you can cast kh2 fire with kh1 air physics like how we did for reflect. remove anything related to the main physics setting that has magic in it and put it in this new air setting. you can also change the animation of magic with the exception being reflect, and fire as they have a different behaviour from the other animations.
 
 go ahead
+
+
+> [!tip] Assistant
+> t561 to t564 (one change each).
+>
+> 1. **t561, Fire at KH1 Sora's size (your (a)).** Fire's KH2 effects are now scaled to KH1 Sora (0.89) the same way Reflect's are: the ring, its flame trails and the Keyblade pieces, both their sizes and where they sit on him. This covers base Sora's KH2 Fire and Wisdom's. Blizzard, Thunder and Cure keep KH2's size. Checked: it uses the same KH1 scaling path that was checked in the decomp for Reflect.
+> 2. **t562, a row per spell.** Config > KH1 in KH2 > Combat > Magic is now Fire, Blizzard, Thunder and Cure (KH1 | KH2), and each row decides what gets cast, on the ground and in the air. The ground Magic and Aerial Magic rows are gone. The animations have their own list under Magic > Animations: Blizzard, Thunder, Cure, Gravity, Stop and Aero. Fire and Reflect aren't in it, as you said. I put them in a second list so both lists keep KH1's full-size rows and still fit on screen. With KH1's Blizzard, Thunder or Cure set to the KH2 animation, KH1 casts its own spell (its script, effects and cost) on KH2's cast animation, through KH1's own cast state. Your old settings carry over to the new rows. The debug menu's KH1 Spells page now just mirrors the Gravity/Stop/Aero animation rows. Checked: KH1's request table in your files. Not checked: that KH1's spell scripts time their shot by their own frames rather than by the animation (I'm assuming they do, because KH1's cast animations have no spell events in them). Also, KH2's cast animation brings its own swish sounds with it.
+> 3. **t563, Gravity, Stop and Aero on KH2's animation, native.** Before, KH2's controller borrowed Sora for these and drew KH2's animation over KH1's cast. Now KH1 casts them in its own cast state, on KH2's Thunder cast (Gravity) or Cure cast (Stop, Aero), the same way as t562. Checked: the request numbers in your files. One difference: the old version let him slide during the cast like Wisdom's casts. Now he holds still the way KH1's own ground casts do.
+> 4. **t564, Air Physics.** There's a new Magic row, Air Physics: KH1 | KH2. It decides how Sora moves while he casts in the air, for every spell including Reflect, whatever the main Physics row says. KH1 gives KH1's 30 hop, half speed and fall with no hover. KH2 gives KH2's 40 hop with your speed kept, KH2's gravity, and the cast's hover. Everything magic-related has moved off the main Physics row (the cast start, the air step while casting, and the borrowed casts), and that row's help now points to Air Physics. KH1's own spells use the row too, so KH2 Fire with KH1 air physics works, and the other way round. It starts with whatever your Physics row was set to. Checked: it reuses the decomp-checked air-cast rules from t534/t535. Not checked: that KH1 halves your speed after the spell starts, which this relies on.
+>
+> Reflect's and Cure's positioning (KH1's Cure and KH2's Cure) is being fixed in the hit-effects thread's versions, not here. I couldn't find the link you mentioned for Reflect and Cure in the thread or its folder. Could you post it again there?
+>
+> None of this is tested in game. Please test:
+> - Each spell at KH1 and KH2, on the ground and in the air.
+> - KH1's Blizzard, Thunder and Cure with their animation at KH2.
+> - Gravity, Stop and Aero at both animation settings.
+> - Air Physics at both settings with KH1 and KH2 spells and Reflect, mixed with both Physics settings.
+> - Firaga's size around him.
+>
+> Questions:
+> 1. KH2's spell on KH1's animation (e.g. KH2 Blizzard with KH1's cast). KH2's spell scripts need KH2's cast animation playing, and they fire on its frame, so for now a KH2 spell always plays KH2's animation. Should I (a) leave it like that, (b) run KH2's spell on KH1's animation with KH2's timing taken from its own animation's frames, or (c) run it on KH1's animation and fire it on KH1's cast frame?
+> 2. Air Physics KH2 with a KH1 cast animation has no hover, because the hover comes from KH2's animation. Should it (a) stay like that, or (b) hold him for KH2's cast hover frames, timed from the cast start?
+> 3. Fire's hit area is still KH2's size. Should I (a) scale it to KH1 Sora like Reflect's barrier, or (b) keep KH2's?
+> 4. Gravity/Stop/Aero at the KH2 animation now hold him still on the ground, as KH1's casts do. Should I (a) keep that, or (b) let him slide the way KH2's cast animation allows?
+
+^m19
+
 

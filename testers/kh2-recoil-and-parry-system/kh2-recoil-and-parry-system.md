@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from Sora's hit reactions native(../so](#^m1)
 - [2. Assistant: Done, one system per version:](#^m2)
+- [3. Assistant: Done, one system per version. Your trace and log (the log wa](#^m3)
 
 ---
 
@@ -111,10 +112,41 @@ go ahead
 > 3. Are there KH1 enemies whose guards should stop Guard Break (the special guard list)? (a) none for now, (b) these ones: ...
 
 ^m2
+
+
 1. guard break should function like how it does in kh2, it should pierce any normal enemies and when we're ready to figure out how special guard works for in the game then we can add to your list. I also noticed that guard break and other kh moves still use the kh2s recoil mechanics when I set recoil to kh1, I've recorded a trace and log showing it off, I want the recoil setting in the config to change the system fundamentally so all kh2 moves behave just how a kh1 move would, if I change it to kh2 then all the kh1 and kh2 moves behave how kh2s recoil system works. (same with parry, everything should work how kh1 handles when you hit an enemy with guard, your recoil animation, parry, etc...) we need to also combine guard repel and recoil into the same config
 2. add it and include in the kh2 config for recoil
 3. (a) we'll get back to this list later
 
 go ahead
+
+
+> [!tip] Assistant
+> Done, one system per version. Your trace and log (the log was in the missing-sleeves folder, the same session) showed exactly what you saw: at Recoil KH1, Guard Break still put up its own KH2 guard on the Keyblade (KH2's data gives Guard Break a guard window, ATKP 162, frames 5 to 42), and that guard took the enemy's three hits. That's KH2's mechanic running under the KH1 setting.
+>
+> - **t553**: Guard Repel is part of the **Recoil** row now (the Movement row is gone). At KH1, when your guard blocks you get KH1's own block: KH1's recoil, its push by the priority gap, its 8 frames, and KH1's Counterattack after it. At KH2 you get KH2's repel: motion 42, pushed back 200, 80 frames without damage, then Counterguard. Your old `guard_repel` ini line isn't read any more. Its default was KH2 and Recoil's is KH1, so with your ini (`recoil = kh1`) your guard now does KH1's block.
+> - **t554**: at Recoil KH1, Sora's attacks don't carry KH2 guards any more. KH1's swings have no guard. When an enemy's attack meets one, KH1's own clash decides by priority, or the attack hits him. So Guard Break's and Vicinity Break's Keyblade guards are off at KH1. The guard press and its repel keep theirs, since that's your guard. Checked against your trace and KH1's clash in the decomp.
+> - **t555**: Guard Break pierces at Recoil KH1 too, done the way KH1 lets an attack through. Its priority is at least 0x62, which KH1 never meets with a guard and never stops, so it goes through the guard to the body. One difference from KH2: an enemy attack that meets Guard Break at KH1 is stopped, and the enemy recoils by KH1's rule (KH1's big recoil when the gap is large). KH2's pierce just passes through attacks. At KH2 it's unchanged: it meets no attack or guard. Checked in KH1's decomp.
+> - **t556** (your item 2): at Recoil KH2, a "refact self 2" move (Horizontal Slash, Retaliating Slash) that meets an enemy's guard isn't stopped, and that enemy becomes immune to that swing, as in KH2. I used KH1's own hit-once immunity, the same flag KH1 sets when a hit lands, through a hook on KH1's attack meeting. KH1's clash spark stands in for KH2's clash effect. Checked in both decomps and the exe. One assumption: in a frame where the swing touches the guard and the body behind it together, I assumed KH1 tests the guard first. If it doesn't, the first frame's hit could land.
+>
+> Not checked in game. Special guards stay empty, as you said (3a).
+>
+> Still not 1:1, in case you want them:
+> - Drive Forms and the moves KH2's controller still borrows keep KH2's recoil and guards at both settings.
+> - Sora's body guards (Aerial Dodge, Flash Step, Aerial Recovery, Counterguard, Vicinity Break's body guard) are untouched here. They're in the body guard thread.
+>
+> Please test, at Recoil KH1 and then KH2:
+> - Guard Break into an enemy's attack and into a guard (Large Body's front).
+> - Horizontal Slash into a guard at KH2: the enemy behind it shouldn't take that swing.
+> - Guard a hit at each setting: KH1's block, then KH2's repel.
+>
+> A log and a Select + Triangle trace would help.
+>
+> Questions:
+> 1. At Recoil KH2, KH1's own guard (Dodge Roll KH1, KH1's Block) still plays KH1's block, which shows up as KH2's attack recoil (41, pushed 50). Should it (a) stay that way, (b) be KH2's guard repel (42, 200 back, 80 frames, Counterguard), or (c) stay fully KH1's whatever the Recoil row says?
+> 2. At Recoil KH2, an enemy attack of priority 0x62 or more can't be stopped by a swing (KH1's rule). KH2 stops any normal attack. Should we (a) keep KH1's rule (those may be KH1's "unblockable" attacks), (b) let a swing stop them at KH2, or (c) go enemy by enemy?
+> 3. Counterguard and Finishing Leap are pierce armor in KH2 too. At KH1, should they (a) stay as KH1 swings, or (b) pierce like Guard Break?
+
+^m3
 
 

@@ -7,6 +7,7 @@
 - [1. Assistant: You asked for this in Quick Run native(../quick-run-native/q](#^m1)
 - [2. Assistant: Later in the same round (no new build):](#^m2)
 - [3. Assistant: Latest build: t515. Your startup crash: t514 fixes the likel](#^m3)
+- [4. Assistant: Will do: from now on every round ends with a message here in](#^m4)
 
 ---
 
@@ -64,3 +65,46 @@
 make sure you update this everytime you do an update, the exact same way you replied the first time on anything new.
 
 go ahead
+
+
+> [!tip] Assistant
+> Will do: from now on every round ends with a message here in this same layout (latest build, what changed and where, what each thread needs).
+>
+> **Latest build:** t567 (2026-10-25).
+>
+> **Updated this round:**
+> - [Aerial Dodge native](../aerial-dodge-native/aerial-dodge-native.md): t545 (at Physics KH1 the dodge is held as KH1's own jump, so it's no longer cut 6 frames in). Levels checked, unchanged.
+> - [Body guards on KH2 moves](../body-guards-on-kh2-moves/body-guards-on-kh2-moves.md): new thread (your 7 (a) from Aerial Dodge). t546: Aerial Recovery, Explosion and Magnet Burst's body guards parry like the dodge's.
+> - [Quick Run native](../quick-run-native/quick-run-native.md): t547 (out of KH1's roll at KH2's frame 10).
+> - [KH2 Glide in KH1's glide state](../kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md): t548 (left bank), t549 (speed kept when you let go).
+> - [Sora's hit reactions native](../soras-hit-reactions-native/soras-hit-reactions-native.md): t550 (KH2's hurt lines), t551 (KH2's air flinch turn).
+> - [Missing sleeves animation](../missing-sleeves-animation/missing-sleeves-animation.md): t552 (the coat moves with KH2's coat bones in every baked animation).
+> - [KH2 recoil and parry system](../kh2-recoil-and-parry-system/kh2-recoil-and-parry-system.md): t553 to t556 (Guard Repel merged into Recoil, Recoil KH1 behaves as KH1 for KH2 moves, Guard Break pierces, refact self 2 at KH2).
+> - [KH2's combo row selection](../kh2s-combo-row-selection/kh2s-combo-row-selection.md): t557, t558 (reimplemented: KH1's own row picker picks the KH2 ability moves at Combo KH1).
+> - [KH2 hit effects on enemies](../kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md): t559 (KH2 Cure centred), t560 (KH2 swings' Kingdom Key hit spark).
+> - [KH2 effects in KH1's own effect system](../kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md): t561 to t564 (Fire's size, a Config row per spell plus Animations, Gravity / Stop / Aero on KH2 cast slots, the Air Physics row).
+> - [KH2 sounds through KH1's sound system](../kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md): t565 to t567 (the old player removed, one copy of each bank, battle quotes play).
+> - [KH2 attack data and damage on KH1's swings](../kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md): research reply, no code (no go-ahead yet).
+> - [KH2 spell hit sounds](../kh2-spell-hit-sounds/kh2-spell-hit-sounds.md): new thread (your 2 (b) from hit effects), plan only.
+>
+> **What each thread needs from you:**
+>
+> | Thread | Needs |
+> |---|---|
+> | Aerial Dodge native | test t545; 1 question (keep KH1's release hop at Physics KH1) |
+> | Body guards on KH2 moves | test t546; 2 questions (Flash Step / Vicinity Break, range id 44) |
+> | Quick Run native | test t547; 1 question (the roll's speed before the cut) |
+> | KH2 Glide in KH1's glide state | test t548, t549 (a trace helps); 1 question |
+> | Sora's hit reactions native | test t550, t551; 3 questions |
+> | Missing sleeves animation | test t552; 1 question for the clipping later |
+> | KH2 recoil and parry system | test t553 to t556 (Recoil both ways); 3 questions |
+> | KH2's combo row selection | test t557, t558 at Combo KH1; 3 questions |
+> | KH2 hit effects on enemies | test t559, t560; 4 questions (and the link didn't come through: describe it in words) |
+> | KH2 effects in KH1's own effect system | test t561 to t564 (the new Magic lists); 4 questions |
+> | KH2 sounds through KH1's sound system | test t565 to t567, watch RAM; 2 questions |
+> | KH2 attack data and damage on KH1's swings | "go ahead" for criticals off for everyone and the KH2 Damage row |
+> | KH2 spell hit sounds | 1 question and "go ahead" |
+> | Every other thread | waiting for your reply to my last message there |
+
+^m4
+

@@ -22,6 +22,7 @@
 - [16. Assistant: t488 and t489.](#^m16)
 - [17. Assistant: I looked into both in KH2's Steam decomp and your KH2 files.](#^m17)
 - [18. Assistant: t536 and t537.](#^m18)
+- [19. Assistant: t557 and t558. You're right, I had it backwards: at the KH1 ](#^m19)
 
 ---
 
@@ -372,6 +373,7 @@ go ahead
 
 ^m18
 
+
 I think you fundamentally don't understand what I want, if an ability is equipped thats kh2s and your combat config is set to kh1 then you should be able to do kh1s moves, and its row picks, we need to modify kh1s so that it can choose explosion and other moves during its kh1 combo. the ability should not ignore the combat settings, 
 
 do a new reimplementation and come back to me when your finished
@@ -379,4 +381,38 @@ do a new reimplementation and come back to me when your finished
 UPDATE:  if your still unsure I need you to patch the extra functions that kh2 uses in kh1, thats the goal of native not to have separate systems, but if possible allow to patch in extra mechanics into the game while keeping the 1:1 feel of kh2 and kh1 this seems to have been done with kh2s effects, the extra functions they call are now apart of kh1. 
 
 go ahead
- 
+
+
+> [!tip] Assistant
+> t557 and t558. You're right, I had it backwards: at the KH1 setting KH2's picker was still running beside KH1's and handing it moves. That's gone now. KH1's own picker does the picking, and KH2's ability moves are new choices inside it.
+>
+> How it works now, with Base / Aerial Base Combo on KH1:
+>
+> 1. **t557, KH1's picker picks KH2's moves.** I hooked KH1's two row pickers (ground and air, the functions its Attack step calls for every swing).
+>    - KH1's picker runs first, exactly as in vanilla: its count, its combo length, when the finisher comes, its own abilities' rows and their chances, its dash, its target.
+>    - Then the new part runs inside the picker. If KH1 picked one of its plain rows (a normal swing, its dash or its finisher), your equipped KH2 ability moves get checked next, the same way KH1 checks its own ability rows before its plain ones.
+>    - Each KH2 move uses KH2's own check for that row (distance, height, facing, one enemy or any enemy around, the ability equipped). The kind is decided by KH1's count: before KH1's finisher only KH2 ability swings (Slapshot, Slide Dash, Vicinity Break, Aerial Spiral...), at KH1's finisher only KH2 ability finishers (Explosion, Guard Break, Aerial Finish, Magnet Burst...).
+>    - The first one that passes is what the picker returns, and it plays on KH1's row (KH2's animation, KH1's hit and timing), like the native moves already did.
+>    - If none passes, or KH1 picked one of its own ability rows, KH1's row plays as normal.
+>    - KH2's own selector, and KH2's combo length, aren't used for the combo at this setting anymore. t537's filter is gone too.
+>    - Check: KH1's pickers and Attack step in the Steam KH1 decomp, the hook bytes in your exe, and KH2's row checks are the same ones checked against the KH2 decomp earlier.
+> 2. **t558, the abilities follow your settings.** Finishing Plus and Negative Combo no longer switch the combo to KH2's (that was t488). At KH1 they now work on KH1's own combo:
+>    - **Negative Combo** shortens KH1's own combo length by one per copy (never below 1, KH2's rule). It's patched into the length KH1's picker reads, so KH1 itself brings the finisher a swing sooner.
+>    - **Finishing Plus:** after one of KH2's ability finishers (Explosion etc.), its Finishing Plus window lets KH1 take another press. KH1's picker then picks the next finisher, a KH2 one or KH1's own, up to 1 + your copies.
+>    - Check: KH2's length and finisher-count rules from the KH2 source, and where KH1's pickers read the length in the decomp.
+>
+> Neither is tested in game. Please try these, with the log and a Select + Triangle trace:
+> - Base Combo KH1 with Explosion / Vicinity Break / Slide Dash equipped, near one enemy and in a group.
+> - Aerial Base Combo KH1 with Aerial Spiral / Aerial Finish / Magnet Burst.
+> - Negative Combo, then Finishing Plus, at KH1.
+>
+> Useful log lines start with "KH1's ground row picker", "KH1's aerial row picker" and "Attack in KH1's finisher at the KH1 setting".
+>
+> Questions:
+> 1. Order inside KH1's picker: (a) KH1's own ability rows first, then KH2's, then KH1's plain rows (what I did); (b) KH2's ability rows before KH1's own ones; or (c) KH1's own ability rows and KH2's ones on the same random chance?
+> 2. Finishing Plus after KH1's own finisher: KH1's finisher animation has no Finishing Plus window, so right now only KH2's ability finishers can chain. (a) leave it like that; (b) give KH1's finishers a window (I'd need to pick the frames, since KH1 has none); or (c) something else?
+> 3. The Square moves in KH1's combo window (Upper Slash, Finishing Leap, Horizontal Slash) still use KH2's selector at this setting, because KH1 has no Square combo moves to patch. (a) leave them; (b) move them into KH1's picker the same way, as Square-only choices?
+
+^m19
+
+

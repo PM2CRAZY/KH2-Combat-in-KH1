@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Thanks, built with your answers:](#^m2)
+- [3. Assistant: I didn't find a link in either thread or its folder (and I d](#^m3)
 
 ---
 
@@ -84,8 +85,46 @@ go ahead
 
 ^m2
 
+
 reflect, it still seems off centred, before these changes it wasn't how were you attaching it to sora? can we do the same while keeping it native? same goes for cure as well.
 1. from my judgement I don't think an enemy would hold what effect it can receive, what I'm referring to is when you hit an enemy an effect spawns on the enemy (keyblade hit effect, fire hit effect etc.) Please look into it and find an implementation thats native, I give you the go ahead to work it in 
 2.(b)
 
 go ahead
+
+
+> [!tip] Assistant
+> I didn't find a link in either thread or its folder (and I don't open links anyway), so I worked from the traces and the logs in the repo.
+>
+> **How Reflect and Cure were attached before.** The old player (before the effects went native) had three anchors:
+> - Everything of Reflect's was on Sora's drawn model, turned half round. That's the same frame KH1's object root gives now. So Reflect's attach point hasn't changed since; what has changed is its 0.89 size (t483) and that it now casts in KH1's own cast state (t533).
+> - Cure's two main pieces sit on KH2's "effect point". The old player had no anchor for that point at all, so they didn't play there.
+> - The rest of Cure (the Keyblade-tip pieces and a burst at his hips) was on the same bones it's on now.
+>
+> So "the same as before" doesn't exist for Cure. Instead I made it KH2's own rule:
+> - **t559, KH2 Cure's position.** Since t470, Cure's main pieces were on KH1's body centre plus 20. That's one of KH1 Sora's collision parts riding on a bone, so it sways with the cast. Your t544 log has it 10 units off to one side. KH2's effect point is fixed on the object root, 105 above his feet, and no animation moves it. Cure's pieces now sit there on KH1's own object root, scaled to KH1 Sora like Reflect (about 93 up), centred on him. Check: KH2's decomp for that point, Cure 3's file (which pieces use it) and your t544 log for the old offset. Not tested in game.
+> - **t560, the hit effect on enemies.** You're right that the effect you see on a hit belongs to the attack. In KH2 the swing looks up its own weapon file by the attack's "effect on hit" number and spawns that piece on the enemy, where the blade meets it. KH2 swings now do that with the Kingdom Key's own KH2 hit effects, through KH1's own hit lookup (the same path the KH2 spells' sparks use since t521). Rows with no hit effect show none, as in KH2.
+>   - Still KH1's spark: KH1's own swings (Base Combo rows on KH1), the other Keyblades (no KH2 file, your earlier (c)), Drive Forms, and hits from Sora's body.
+>   - Two of the Kingdom Key's pieces needed one more particle program in KH1. I checked it's identical in both games' code.
+>   - `kh2_hit_sparks = off` in the ini puts KH1's spark back.
+>   - Check: KH2's hit code, the Kingdom Key's file, and that program in both exes. What I couldn't check: the line where KH2 hands a swing its weapon's file. The files fit, but it's an assumption.
+>
+>   For the record, KH2 does have a second, separate effect that comes from the enemy's own file: an enemy-specific flash on top of the spark. KH1's enemies have no KH2 file, so that one stays out.
+> - **2 (b), hit sounds:** started as its own thread, [KH2 spell hit sounds](../kh2-spell-hit-sounds/kh2-spell-hit-sounds.md). It goes through KH1's sound path, which the sounds work covers.
+>
+> **KH1's Cure:** with the Cure row on KH1, the whole cast is KH1's own (t532), and your trace shows KH1's own animation with nothing of ours drawn on it. I couldn't find anything of ours that moves KH1's effects, so I didn't change anything there.
+>
+> Please test:
+> - KH2 Cure on the ground and in the air: are the main pieces centred on Sora at about chest height now?
+> - KH2 combo swings and ability moves with the Kingdom Key on enemies: is the spark KH2's, at the point the blade meets them?
+> - Reflect: is it still off-centre for you? The other thread said everything but Cure looks good, so I left it alone.
+>
+> Questions:
+> 1. KH1's Cure: what looks off compared to vanilla? (a) too high or low, (b) off to one side, (c) it follows him differently. A short description is enough, since I can't open the link.
+> 2. Reflect: (a) it looks right now, (b) still off-centre on the ground, (c) still off in the air.
+> 3. Cure's size: (a) keep its pieces at KH2's size (only the height scaled), or (b) scale all of Cure's pieces to KH1 Sora like Reflect.
+> 4. Hit sparks for Drive Forms and the other Keyblades: (a) leave them KH1's until the KH1 / KH2 Keyblade switch comes, or (b) give the forms' Keyblades their own KH2 sparks next.
+
+^m3
+
+

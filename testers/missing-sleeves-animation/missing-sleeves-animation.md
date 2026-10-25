@@ -18,6 +18,7 @@
 - [12. Assistant: t490 and t491. Everything now follows what KH2's own model s](#^m12)
 - [13. Assistant: t499 and t500.](#^m13)
 - [14. Assistant: t519.](#^m14)
+- [15. Assistant: t552.](#^m15)
 
 ---
 
@@ -273,9 +274,34 @@ go ahead
 
 ^m14
 
+
 1. we'll fix the clipping later
 2. when I mean by sticking out is that the coat is stiff and not animated at all. redo the coat so that its actually animated
    
    I've sent you a log and a trace showing a kh2 animation with the coat sticking out and stiff, this is happening on all kh2 animations that we've baked so far. its in the same folder as this thread.
 
 go ahead
+
+
+> [!tip] Assistant
+> **t552.**
+>
+> Thanks, that clears it up: you meant the coat never moves, not that it stands off his hips. You're right, since t491 it's been stuck rigid to his chest in every KH2 move, live and baked.
+>
+> Now it moves the way KH2 animates its own coat. KH2's skeleton has a ring of coat bones under the chest (a back piece and four panels a side), laid out just like KH1's coat, and every KH2 motion keys them. I'd read them wrong before: I said they "hold it flared out", but they're actually keyed to hang down from the chest when he leans forward in the battle stance, and they sway with every step and swing. KH2's own jacket is too short to show it, but KH1's coat is long enough. So each of KH1's nine coat panels now turns exactly as its KH2 bone does relative to the chest. The panel keeps KH1's own shape and length, and the top stays on the chest.
+>
+> How much it moves now: about 10 to 20 degrees of sway in the idle and the run, about 33 on average across all of KH2's moves, and up to about 110 in big swings, jumps and when he gets hit. The field idle barely moves, same as KH2's.
+>
+> **Check:** KH2's skeleton and the coat bones' keys in all 83 of Sora's KH2 motions (game files). A test checks every KH1 panel stays within 0.3° of its KH2 bone and really swings in the run and the swings. Both the baked animations and the live pose use it. Not tested in game, and your new trace had no bone data in it.
+>
+> Since it's 1:1, it clips more than before (you said to leave that for later):
+> - In the run and walk, his chest is turned a little against his hips, so the right front panel's tip sits in the front of the shorts and the left one swings out.
+> - In jumps, spins and hit reactions the panels fly up past horizontal for a few frames (about 1% of the time).
+>
+> Please test: the battle idle, walking, running and turning, a few combos, a jump and getting hit. Watch whether the coat moves now and whether the motion looks right, ignoring the clipping for now.
+>
+> Question for when we get to the clipping: (a) leave it fully 1:1 for now, (b) keep KH2's motion but limit how far up a panel can fly, or (c) keep KH2's motion but keep the front tips out of the shorts (that part would be our own, not KH2's).
+
+^m15
+
+

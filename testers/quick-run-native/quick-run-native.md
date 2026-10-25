@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](#^m2)
+- [3. Assistant: Thanks for the trace, it showed it clearly.](#^m3)
 
 ---
 
@@ -87,6 +88,7 @@ do your first purposed route.
 
 ^m2
 
+
 quick run seems to work on kh2 dodge roll with kh1 on the other hand it:
 waits until dodge roll finishes to go into quick run
 doesn't get the same distance
@@ -95,3 +97,27 @@ I recorded a trace and sent you the logs its in the same folder as this thread i
 make sure it behaves the same as kh2 dodge roll
 
 go ahead
+
+
+> [!tip] Assistant
+> Thanks for the trace, it showed it clearly.
+>
+> **t547, Quick Run out of KH1's roll at KH2's frame.** In your trace KH1's roll started at frame 9384 and the Quick Run only at 9414, 30 frames later, which is the end of KH1's roll animation. With the KH2 roll it starts 10 frames in. KH2's rule is that its roll turns into Quick Run at a marker in the roll animation, frame 10, while Square is held. Our check reached frame 10 with KH1's roll too, but it then waited for KH1 to let Sora act, and KH1 only does that once its roll is over. Now KH1's roll is cut at frame 10, the same frame and counter as the KH2 roll.
+>
+> The Quick Run part was already the same both ways: in your log both start at speed 30 and stop after 13 frames at 19.5.
+>
+> Check: your trace frame by frame, the KH2-roll timings in your log, and KH2's roll animation (motion 209) read from your files. Not checked: in game.
+>
+> **Distance.** Most of the gap was the 20 extra frames of KH1's roll. What's left is the roll itself before the cut. KH2's roll covers about 221 units in its first 10 frames, KH1's about 160 (17.8 a frame, and its first frame doesn't move). That's KH1's own roll speed, so I left it alone with the row on KH1.
+>
+> Please test, with Dodge Roll KH1 and then KH2:
+> - roll and hold Square: the Quick Run should start at the same point both ways;
+> - roll and let go before the Quick Run starts;
+> - a Quick Run at each level you have.
+>
+> Question:
+> 1. The roll part before the Quick Run, with the row on KH1: (a) keep KH1's own roll speed (about 60 units shorter than KH2's by the cut, KH1 stays exactly KH1), (b) when Square is held, move him by KH2's roll travel for those 10 frames so the whole thing matches KH2's distance, or (c) something else?
+
+^m3
+
+

@@ -8,6 +8,7 @@
 - [2. Assistant: t509 to t513. KH2's sounds now go through KH1's own sound sy](#^m2)
 - [3. Assistant: t514 and t515. I think I found it, though without a log I ca](#^m3)
 - [4. Assistant: Yes, we're caching sounds, and part of that cache is older t](#^m4)
+- [5. Assistant: t565 to t567. The old player is gone, every KH2 sound now go](#^m5)
 
 ---
 
@@ -139,6 +140,47 @@ why did the ram use go up? are we caching a bunch of sounds? if so you need to t
 
 ^m4
 
+
 I want you to gut the old system and transfer everything, research into whats needed to get it working properly, I give you full permission to do what you need to do to get it fully working
 
 go ahead
+
+
+> [!tip] Assistant
+> **t565 to t567.** The old player is gone, every KH2 sound now goes only through KH1's engine, and the RAM is down.
+>
+> - **t565, the old system out.**
+>   - Removed: the Windows audio player, all the decoded audio, its own volume reading and the `kh2_sound_engine` ini switch.
+>   - The loader now only cuts the sounds out of KH2's banks, still compressed, hands them to KH1 and frees the banks. KH1 decodes them as it plays them, the way it does its own.
+>   - Effects, Keyblade swings, magic, Reflect, the forms and the battle quotes all go through KH1's effect queue or voice channel now. There's no fallback: if KH1 can't take a sound at that moment (for example right after a room load, before our banks are back), it isn't heard, just like KH1's own sounds. Those cases are logged as "KH2 sound not played".
+>   - Footsteps were already KH1's own.
+>   - Check: your KH2 files (every effect sound we use is ADPCM, which lets me read each sound's length from its header without decoding) and KH1's queue path from t511.
+> - **t566, RAM.** There's now one copy of each sound instead of two.
+>   - KH1 only frees a bank's data if the entry still points at it. So right after KH1 takes one of ours, I clear that pointer: KH1's room reset unloads the sound from its engine but leaves the data, and we hand the same data back.
+>   - Steady use should be about 9-10 MB in total. It was ~77 MB at t515 and ~58 MB before t509.
+>   - Startup still reads the three big KH2 banks for a couple of seconds (~28 MB) and frees them.
+>   - Check: KH1's decomp (its bank release and everything else that reads the list) and the exe. Not checked: that KH1's engine never writes anything else into a bank while playing it. It does write one byte when it loads one. I check each bank before reusing it, so if something else changed, that sound is left out and logged instead of crashing.
+> - **t567, battle quotes.** Your logs from t544 showed that no KH2 quote ever played: every one said "KH1 kept the line playing".
+>   - The cause: KH1's attack row starts its own swing grunt a couple of frames before the KH2 motion asks for its quote. KH1's rule then keeps Sora's channel for the grunt.
+>   - With Battle Quotes on KH2, KH1's row grunt is now left out on moves that play a KH2 animation, so the KH2 line takes its place, as in KH2. Hurt lines, spells and KH1's own moves keep KH1's voice.
+>   - Check: KH1's exe (the call), its decomp and your btltbl (Sora's swing rows carry voice 4 / 5).
+>   - Not checked: in game.
+>
+> **What's left and why:**
+> - I didn't do "only load what can play right now" (forms' sounds only in the form). KH1 never frees a single bank by itself, so it would mean doing that by hand, and with t566 the whole set is only ~9 MB.
+> - On the Epic build no KH2 sound plays at all now, since the old player was the only thing working there.
+>
+> Please test:
+> - Explosion, Magnet Burst, Thunder, Reflect, Valor / Final swings and a few combos with Battle Quotes on KH2;
+> - the quotes in particular: do you hear them now, and no KH1 grunt on top?
+> - pausing mid-sound, the sliders, changing rooms a few times (the sounds should still be there after);
+> - RAM in Task Manager against t515.
+> - Please send `kh1-kh2.log`. The lines I need start with "KH1 banks:", "KH2 sound not played" and "KH2 quotes:".
+>
+> Questions:
+> 1. In KH2, each swing's line cuts off the line Sora is still saying. KH1's voice system can't cut a line, so right now the next quote is skipped while the last one is still playing. That means fewer quotes than in KH2. (a) Leave it like KH1. (b) Add a voice cut to KH1's engine so KH2's rule works 1:1 (more work, and I'd add to KH1's own voice handling).
+> 2. Is it fine that the Epic build gets no KH2 sounds? (a) Yes, Steam only. (b) No, I'd need the Epic addresses for the same sound functions.
+
+^m5
+
+
