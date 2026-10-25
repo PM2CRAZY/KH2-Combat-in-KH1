@@ -22,6 +22,7 @@
 - [16. Assistant: Sorry, I see the mix-up now. Two things changed along the wa](#^m16)
 - [17. Assistant: t569, the test bake: walk and run only, battle and field ver](#^m17)
 - [18. Assistant: Glad the hood works. Your plan is sound, and it fits how bot](#^m18)
+- [19. Assistant: t592 to t596. No bake yet: this is the physics live in game ](#^m19)
 
 ---
 
@@ -428,6 +429,7 @@ if there's anything else you would need let me know, then if we're good we'll tr
 
 ^m18
 
+
 lets do "another option" we'll have you run the program tuned to kh1's own animations, what can you is have that be tuned to our physics and I can see how it looks in game before a baking starts, when I see the in game example and it looks good then I can give you the go ahead to bake. 
 
 1. (a)
@@ -440,3 +442,23 @@ lets do "another option" we'll have you run the program tuned to kh1's own anima
 start with soras running animation without the keyblade
 
 go ahead
+
+> [!tip] Assistant
+> **t592 to t596.** No bake yet: this is the physics live in game so you can judge it first, as you asked.
+>
+> - **t592, the physics on the field run (no Keyblade).** The coat, the shorts panels, the chain on his left hip and the two belt-front pieces now run on physics, only on KH2's field run. Everything else looks as before, including the hood. Each part pulls back to the way KH1's own run holds it on average, swings with the body's bounce, sway, leg swing and turns, and is kept off the hips and thighs with t569's rules. I tuned it against KH1's own run in your files so each part swings about as much as KH1 animates it: coat about 8.5° (KH1 8.6), shorts 3.9° (3.7), the hip chain 38° (36), belt front 18° (18). The same code runs offline, so a bake later will match what you see in game, and it settles into a clean loop.
+> - **t593, the info panel.** While Frame Advance is on, a small box in the top right (not in the debug menu) shows the animation drawn (KH2 motion, battle or field, KH1 slot), whether it's baked or live, the frame within it (for example "field run 12 / 40") with its loop count, and the trace frame number.
+> - **t594:** with Game Frames on, the Seconds row reads Frames and shows the frame count. It still steps by 60.
+> - **t595, the Cloth trace category.** Off by default because it's wide. It records what the bake needs: the animation and its frame, the physics state and settings number, his movement, and every physics bone.
+> - **t596, Debug menu > Cloth Physics.** Turn the physics on or off and change each part's stiffness, damping, weight and swing live. The page title shows a settings number (0 = my tuned numbers) and every change goes into the log, so I know what you tested.
+>
+> Checked against your KH1 and KH2 files; not seen in game. What I couldn't match is when in the stride each part swings: KH1's run is 36 frames and KH2's field run 40, and KH1's legs come from its own IK, which I don't evaluate. The swing limits are my own numbers.
+>
+> Please test: run straight, turn and stop in the field without the Keyblade, and watch the coat, shorts, hip chain and belt front, especially around the knees. If something looks off, tweak it on the Cloth Physics page and send a trace with Cloth on: 10+ seconds of straight running, then a few turns. Log lines: "cloth physics ready", "cloth physics settings id ...", "cloth physics: started (again) ...".
+>
+> Questions:
+> 1. The coat's resting hang is how KH1's own run holds it, which hangs differently from KH2's coat motion. (a) keep KH1's, or (b) rest on KH2's coat motion and only swing on top of it?
+> 2. Your changes on the Cloth Physics page: (a) for this session only, as now, or (b) saved in the ini?
+
+^m19
+

@@ -190,6 +190,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [16. Assistant: Sorry, I see the mix-up now. Two things changed along the wa](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m16)
   - [17. Assistant: t569, the test bake: walk and run only, battle and field ver](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m17)
   - [18. Assistant: Glad the hood works. Your plan is sound, and it fits how bot](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m18)
+  - [19. Assistant: t592 to t596. No bake yet: this is the physics live in game ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m19)
 - [Quick Run native](../testers/quick-run-native/quick-run-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/quick-run-native/quick-run-native.md#^m1)
   - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](../testers/quick-run-native/quick-run-native.md#^m2)
