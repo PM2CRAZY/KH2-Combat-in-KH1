@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Done, in two versions.](#^m2)
 - [3. Assistant: Got it. No code this round, since there's no go-ahead yet; h](#^m3)
+- [4. Assistant: Done, in three versions.](#^m4)
 
 ---
 
@@ -100,11 +101,30 @@ go ahead
 
 ^m3
 
+
 1. sounds good
 2. lets do (b) and in the config menu make a separate option for party member criticals
 3. (a)
 go ahead
 
+> [!tip] Assistant
+> Done, in three versions.
+>
+> - **t598: Criticals Off now covers every attack.** I checked in the KH1 decomp that KH1 rolls its critical inside its damage function for every attack, whoever made it. With Criticals Off that roll gets no chance for any attack: Sora's, the enemies', everyone's. On is KH1's own roll, untouched. What I couldn't check: which enemies' attacks can crit at all; that's in each enemy's own files, which I haven't read.
+> - **t599: Combat > Party Criticals: Off / On.** The separate row you asked for. It decides for Donald's, Goofy's and the guests' attacks, and Criticals decides for everyone else. Off is the default, as in KH2. Remember from last time: their plain attacks "crit" on nearly every hit to add their weapon's bonus, so with it Off they hit a little softer than in plain KH1. KH1 tells an attack's side from a flag on its owner (checked in the decomp). I'm assuming everyone on Sora's side except Sora counts as party, so a summon's own attacks would probably follow this row too; I haven't confirmed that.
+> - **t600: Combat > KH2 Damage: Off / On.** On is what you have now: KH2's power on KH1's damage. Off is KH1's damage exactly: nothing of ours touches the number, and `damage_scale` / `magic_scale` do nothing. It switches live, so you can compare the same fight both ways.
+>
+> The Combat list is twelve rows now, so it's drawn smaller to stay above the help box (about three quarters of KH1's size).
+>
+> Please test:
+> - Criticals Off with Critical Plus on: no critical sparks from Sora, the Heartless, or Donald / Goofy (with Party Criticals Off);
+> - Party Criticals On: Donald and Goofy crit again, while Sora's stay off;
+> - KH2 Damage Off vs On on the same enemy: Off should match plain KH1's numbers;
+> - whether the Combat list is still easy to read at its smaller size.
+>
+> Questions:
+> 1. Guests and summons: (a) keep them under Party Criticals, as now; (b) Party Criticals only for Donald and Goofy, with guests under Criticals.
+> 2. If the Combat list reads too small: (a) leave it; (b) move KH2 Damage, Criticals and Party Criticals into their own "Damage" list inside Combat, like Tweaks.
 
-
+^m4
 

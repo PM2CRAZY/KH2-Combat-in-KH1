@@ -66,6 +66,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md#^m1)
   - [2. Assistant: Done, in two versions.](../testers/kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md#^m2)
   - [3. Assistant: Got it. No code this round, since there's no go-ahead yet; h](../testers/kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md#^m3)
+  - [4. Assistant: Done, in three versions.](../testers/kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md#^m4)
 - [KH2 Camera fixes](../testers/kh2-camera-fixes/kh2-camera-fixes.md)
   - [1. Mr Bugs: I noticed when you run backwards the camera starts turning s](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m1)
   - [2. Assistant: t373](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m2)
