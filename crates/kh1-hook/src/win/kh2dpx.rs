@@ -353,6 +353,8 @@ struct Layer {
     /// The KH2 element's lookup word (kinds low, groups high; `pax::PaxElement::tag`), which its
     /// DPX entry carries as KH1's kind / group masks (`hit_list`). 0: no lookup finds it.
     tag: u64,
+    /// On KH2's 0x4009 point (started on KH1's object root with that point in its offset).
+    at_point: bool,
 }
 
 /// A native element started: KH1's element, its serial (KH1 reuses elements), the KH2 motion it
@@ -525,7 +527,7 @@ struct Source {
     anchor: fn(u16) -> Option<Anchor>,
     /// KH2 element flags it doesn't apply.
     ignore: u32,
-    /// KH2's 0x4009 point less its 0x4001 point, in its owner's object frame (`effect_point_of`).
+    /// KH2's 0x4009 point in its owner's object frame, from the object root (`effect_point_of`).
     effect_point: Option<[f32; 3]>,
 }
 
@@ -923,16 +925,16 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
 /// effect anchors read kind 9 in KH2: `0x1403B50F0` case 0x4009, Checked (decomp)).
 const EFFECT_POINT: u16 = 0x4009;
 
-/// KH2's 0x4009 point from its 0x4001 point, in the owner's object frame (KH2's y down): its
+/// KH2's 0x4009 point in the owner's object frame (KH2's y down), from the object root: its
 /// model's first kind-9 shape of group 0 (the group on by default, as for 0x4001: `0x1403BA550`)
-/// less its first kind-1 one, both on the object root: each its offset raised by its lift
-/// (`0x1403C9C00`: the offset through the root's matrix, then the lift off the world y). Sora's:
-/// kind 9 lift 105, kind 1 lift 85, offsets 0 (Checked (files), `P_EX100.mdlx`): 20 above. `None`
-/// without both on the root.
+/// on the object root: its offset raised by its lift (`0x1403C9C00`: the offset through the
+/// root's matrix, then the lift off the world y). Sora's: kind 9, lift 105, offset 0 (Checked
+/// (files), `P_EX100.mdlx`): 105 above his place. `None` without one on the root.
+/// (Until this version KH1's body centre plus this less the kind-1 shape's point, 20; KH1's body
+/// centre is a collision part on one of his bones, which sways with the cast and sat 10 to one
+/// side in the t544 log, "body centre: KH1's 90.0 above Sora's place (offset [10.0, -90.0, -0.8])".)
 fn effect_point_of(rig: &kh2_data::sora::Rig) -> Option<[f32; 3]> {
-    let point = |kind: u8| rig.body_shapes.iter().find(|s| s.kind == kind && s.group == 0).filter(|s| s.bone.is_none()).map(|s| [s.offset[0], s.offset[1] - s.lift, s.offset[2]]);
-    let (e, b) = (point(9)?, point(1)?);
-    Some([e[0] - b[0], e[1] - b[1], e[2] - b[2]])
+    rig.body_shapes.iter().find(|s| s.kind == 9 && s.group == 0).filter(|s| s.bone.is_none()).map(|s| [s.offset[0], s.offset[1] - s.lift, s.offset[2]])
 }
 
 /// The elements each motion of a moveset starts (its frame triggers 1), in motion order.
@@ -952,12 +954,16 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
     let mut e = parsed.element(el as u16).ok_or(format!("no element {el}"))?.clone();
     let code = e.bone;
     // KH2's 0x4009 (`0x1403B50F0`): the object's turn at the centre of its first enabled kind-9
-    // collision shape. The tester (m16, "try (c)"): KH1's own body centre (KH2's 0x4001 on KH1's
-    // 0x8005, §18.15) plus KH2's distance from its body centre to that point (`effect_point`, from
-    // the owner's model; Sora's 20 up): KH1's body centre with the element's offset moved by it.
-    if e.bone == EFFECT_POINT {
-        let p = effect_point.ok_or(format!("element {el}: KH2's 0x4009 point, but its owner's model has no kind-9 and kind-1 shapes on its root"))?;
-        e.bone = 0x4001;
+    // collision shape, which on the object root is the object root moved by that centre in the
+    // object frame (`effect_point`, from the owner's model; Sora's 105 up). KH1: its object root
+    // (0x8000, KH2's 0x4000, its frame §18.23) with the element's offset moved by it, at KH1 Sora's
+    // size (`kh1_point`). The tester (hit-effects thread, after t544: "same goes for cure as well";
+    // effects thread: "kh2 cure doesn't seem to be positioned properly"): KH1's body centre (t470)
+    // swayed with his cast and sat off to one side; KH2's point doesn't move with the motion.
+    let at_point = e.bone == EFFECT_POINT;
+    if at_point {
+        let p = effect_point.ok_or(format!("element {el}: KH2's 0x4009 point, but its owner's model has no kind-9 shape on its root"))?;
+        e.bone = 0x4000;
         for k in 0..3 {
             e.translation[k] += p[k];
         }
@@ -1004,7 +1010,7 @@ fn layer(pax: &[u8], parsed: &kh2_formats::pax::Pax, el: i16, anchor_of: fn(u16)
         if s.x != s.y || s.y != s.z { " (not uniform: the offset is exact, the turn approximate)" } else { "" },
         if e.tag != 0 { format!(", lookup kinds {:#x} groups {:#x}", e.tag as u32, e.tag >> 32) } else { String::new() }
     );
-    let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale, local: offset.to_array(), tag: e.tag };
+    let l = Layer { el, number, anchor: bone, flags, bone_offset: if position_only { e.translation } else { [0.0; 3] }, wait: e.start_wait, fadeout: e.fadeout_frames as f32, scale: e.scale, local: offset.to_array(), tag: e.tag, at_point };
     Ok((l, kh2_formats::kh1dpx::Variant { number, effect, offset: offset.to_array(), angle, tag: e.tag }, note))
 }
 
@@ -1682,7 +1688,7 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
         not_played(pkg, &d.label, el, "left out when its package was built (its load line says why)");
         return Started::NotMine;
     };
-    let layer = kh1_sized(pkg, layer);
+    let layer = kh1_point(pkg, kh1_sized(pkg, layer));
     let (number, bone) = (layer.number, layer.anchor);
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
     // KH1's blade and position bindings, and the binding list (unbound elements), are used on
@@ -1802,6 +1808,37 @@ fn kh1_sized(pkg: Pkg, mut l: Layer) -> Layer {
     for i in 0..3 {
         l.scale[i] *= k;
         l.bone_offset[i] *= k;
+    }
+    l
+}
+
+/// KH2's 0x4009 point (`effect_point_of`, KH2 Sora's 105 above his place) at KH1 Sora's size
+/// (`pose::kh1_size`, about 0.89: 93 above his place), for a position-only element on it (Cure's
+/// elements 3 and 4, `CURE_n.mag`, flags 0x245, Checked (files)): its offset from the object root,
+/// the point included, times KH1's size against KH2's. Reflect's are scaled by `kh1_sized` already
+/// (none of them is on 0x4009). A bound element on the point keeps KH2's numbers (its offset is in
+/// its DPX copy; none of the spells has one, logged once if met). Before Sora's retarget is made:
+/// KH2's size.
+fn kh1_point(pkg: Pkg, mut l: Layer) -> Layer {
+    if !l.at_point || matches!(pkg, Pkg::Spell(1..=3)) {
+        return l;
+    }
+    if l.flags & POSITION_ONLY == 0 {
+        static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !ONCE.swap(true, Ordering::Relaxed) {
+            log(&format!("KH2 effects (native): {pkg:?} element {} is bound to KH2's 0x4009 point (not by position): at KH2's size", l.el));
+        }
+        return l;
+    }
+    let k = super::pose::kh1_size();
+    if let Some(k) = k {
+        for i in 0..3 {
+            l.bone_offset[i] *= k;
+        }
+    }
+    static SEEN: AtomicU32 = AtomicU32::new(0);
+    if SEEN.fetch_add(1, Ordering::Relaxed) < 6 {
+        log(&format!("KH2 effects (native): {pkg:?} element {} on KH2's 0x4009 point: KH1's object root, offset {:.1?} in KH2's object frame (y down; KH1's size {k:?})", l.el, l.bone_offset));
     }
     l
 }

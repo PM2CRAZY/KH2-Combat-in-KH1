@@ -1953,6 +1953,27 @@ can play.
   with the element's offset moved by those 20; Cure 3's 3 and 4 are by position only (0x245), on
   KH1's position binding at the body centre (mode 1, t 0). Without both shapes on the owner's root
   the element isn't built (logged).
+- **KH2's own rule, at KH1 Sora's size (the version after t544; superseding (c))**. The tester
+  (kh2-hit-effects-on-enemies: "reflect, it still seems off centred ... same goes for cure as
+  well"; kh2-effects-in-kh1s-own-effect-system: "kh2 cure doesn't seem to be positioned properly
+  either"). KH1's body centre isn't a fixed point: it is KH1 Sora's first kind-1 collision part,
+  a point along one of his bones raised by its lift (`0x14029EB20` → `0x1402B6D30`, §18.15), so it
+  moves with the cast motion; the t544 log has it 90 above his place and 10 to one side ("body
+  centre: KH1's 90.0 above Sora's place (offset [10.0, -90.0, -0.8])", **Checked (trace)**). KH2's
+  0x4009 point is the kind-9 shape's centre on the object root, which no motion moves (Sora's 105
+  above his place, **Checked (files)**). `kh2dpx` now starts 0x4009 as KH2's 0x4000 (KH1's object
+  root 0x8000, its frame §18.23) with the element's offset moved by the whole point
+  (`effect_point_of`), and `kh1_point` scales a position-only element's offset on it by KH1 Sora's
+  size against KH2's (`pose::kh1_size`, about 0.89, as Reflect's: 93 above his place). Cure's
+  elements 3 and 4 (`CURE_n.mag`, flags 0x245, offsets (0, 7.9, 0) and 0, Checked (files)) come out
+  86 and 93 above his place, centred on him, turned as the world (KH2's position-only rule). A
+  bound element on the point would keep KH2's numbers (none of the spells has one). The start of
+  each is logged ("on KH2's 0x4009 point").
+- What the old player did (asked by the tester: "how were you attaching it to sora?"; before
+  t425): its bone lookup (`kh2fx::bone`) had no case for 0x4009, so Cure's elements 3 and 4 had no
+  bone (they didn't play there); its 0x4001 was KH2's hips (bone 0) as drawn, and 0x4000 (all of
+  Reflect's pieces) the drawn model's matrix turned half round about x, which is the frame KH1's
+  object root gives now (§18.23).
 
 ### 18.17 KH2's object frame on KH1's object root (a quarter turn; superseded by §18.21)
 
