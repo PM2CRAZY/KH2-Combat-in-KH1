@@ -1001,6 +1001,10 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                 return None;
             }
             let shapes = a.shapes();
+            // (Fire's at KH1 Sora's size, as its effects since t561 and Reflect's barrier since t518:
+            // the tester's m20 answer 3, "(a)".)
+            let fire = package.get(&a.spell).and_then(|&p| package_spell(p)).is_some_and(|(spell, _)| spell == 0);
+            let shapes = if fire { unsafe { super::reflect::kh1_sized_shapes(actor, shapes) } } else { shapes };
             (!shapes.is_empty()).then(|| combat::SpellAttack { kh1_data, package: Some(pkg), key: a.id | KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
         })
         .collect();

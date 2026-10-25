@@ -1024,8 +1024,10 @@ pub(super) struct KhWorld {
 /// centres' offsets from his place and their radius and height times `pose::kh1_size` (the hip
 /// ratio of the two bind poses, about 0.89, as the barrier's effects since t483), so what it
 /// blocks matches what is drawn (the tester: "if sora is smaller than kh2 sora then yes scale it
-/// down"). The shapes are in the scripts' world, KH2 y up (`world_now`'s place for Sora).
-unsafe fn kh1_sized_barrier(actor: usize, mut shapes: Vec<combat_core::Shape>) -> Vec<combat_core::Shape> {
+/// down"). The shapes are in the scripts' world, KH2 y up (`world_now`'s place for Sora). Also
+/// Fire's attacks (`formmagic::shots_step`, the tester's m20 answer 3: "(a)", Fire's hit area scaled
+/// as Reflect's barrier).
+pub(super) unsafe fn kh1_sized_shapes(actor: usize, mut shapes: Vec<combat_core::Shape>) -> Vec<combat_core::Shape> {
     let Some(k) = pose::kh1_size().filter(|k| (0.5..1.5).contains(k)) else { return shapes };
     let p = rd::<[f32; 3]>(actor + 0x10);
     let at = [p[0], -p[1], p[2]];
@@ -1323,7 +1325,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         }
         if first.kind == 3 {
             barrier = true;
-            guards.push((a.id | SPELL_KEY, kh1_sized_barrier(actor, shapes)));
+            guards.push((a.id | SPELL_KEY, kh1_sized_shapes(actor, shapes)));
             continue;
         }
         // Each attack the script makes strikes with its own row, as in KH2 (t572): the counter
