@@ -34,7 +34,7 @@ Sora's table is at `btltbl.bin + 0xBC48`, 20 groups (Donald's follows at `0xBD28
 | 4 | 21, 22, 23, 24, 28 (equal) | his combo swings (every swing row of motions 200, 201, 204, 205...) |
 | 5 | 25, 26, 27, 33 | the combo finishers (rows of 203, 206, ...) |
 | 6 | 29, 31, 32 | air finishers and others (rows of 202, 207, 210, 216..218) |
-| 7..13 | 40..47 (75) with 30 / 18 / 19 (25) | **Inferred**: the seven spells in order (Cure 10 and Aero 13 have the ally branch `0xFD`) |
+| 7..13 | 40..47 (75) with 30 / 18 / 19 (25) | the seven spells in order (Cure 10 and Aero 13 have the ally branch `0xFD`): see "Spell casts" below |
 | 15 | 35, 38 | a summon sequence's step (Mushu's) |
 | 17 | 37 (75), 30 (25) | the summons' call (the sequences `0x1403959B0`.. listed with xs_dumbo .. xs_simba) |
 | 19 | 24 | one special's row (motion 212) |
@@ -43,7 +43,33 @@ Sora's table is at `btltbl.bin + 0xBC48`, 20 groups (Donald's follows at `0xBD28
 group 17, whose own clip 37 no other group has (30 is a plain grunt shared with the spells).
 The mod plays clip 37 alone at the group's priority (3) as a Drive starts.
 
+## Spell casts (testing branch, Steam addresses)
+
+- KH1's command step for a spell (Steam `0x1402A3600`, reached from the command step
+  `0x1402A7510`) plays the caster's voice when the command word has bit 25: for a magic command
+  (type 2) whose command record byte `+2` is negative, the group is **spell index + 7** (spell in
+  bits 8..23 of the command word), through the group play (Steam `0x1402901F0 (actor, group,
+  other)`, `other` the command's target handle `param[1]`); other commands use the record's `+2`
+  byte as the group. **Checked (decomp)**, KH1 Steam.
+- So Fire 7, Blizzard 8, Thunder 9, Cure 10, Gravity 11, Stop 12, Aero 13. Sora's rows from
+  `btltbl.bin` (`+0xBC48 + group * 11`), **Checked (files)**:
+  - 7 Fire: clip 40 (75), 30 (25); 8 Blizzard: 41 (75), 30 (25); 9 Thunder: 42 (75), 18 (25);
+  - 10 Cure: `0xFD` (100, the target ally's line when he cures an ally), 43 (75), 19 (25);
+  - 11 Gravity: 44 (75), 30 (equal share); 12 Stop: 45 (75), 18 (equal share);
+  - **13 Aero: `0xFD` (100: the ally's line when cast on an ally), else clips 46 and 47, 50 / 50**;
+    priority 3 (every spell row).
+- The tester (kh2-magic-and-reflect-native m8): KH1's Sora says "Defense!" as one of his Aero
+  lines. That makes it clip 46 or 47 (**Checked**: they are Aero's only two own clips).
+  **Assumption / open**: which of the two it is; not listened to. The sound log's "KH1 sound:
+  voice call bank 0 no N" line names the clip each Aero cast plays, so one self-cast Aero heard in
+  game settles it.
+- Clip play for a single line: Steam `0x140290930 (actor, clip, priority)` (Epic `0x14028E7A0`),
+  as "Give me strength!" uses.
+
 **Reflect's finisher, "Protect!"**: KH1 has no Reflect and no such line, so it stays KH2's
 (MAGC finisher voice 25); Reflect's other casts take a KH1 swing grunt (group 4).
+(Testing branch, m8 asked: with Battle Quotes at KH1 the finisher would take KH1's Aero
+"Defense!" clip instead; with Battle Quotes at KH2, KH2's own MAGC voices, below in
+`docs/kh1-reflect-spell.md`.)
 
 **Dodge roll**: a KH1 swing grunt (group 4, KH1's own random pick of its five clips).

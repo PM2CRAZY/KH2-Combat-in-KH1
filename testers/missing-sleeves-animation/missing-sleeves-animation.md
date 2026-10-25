@@ -21,6 +21,7 @@
 - [15. Assistant: t552.](#^m15)
 - [16. Assistant: Sorry, I see the mix-up now. Two things changed along the wa](#^m16)
 - [17. Assistant: t569, the test bake: walk and run only, battle and field ver](#^m17)
+- [18. Assistant: Glad the hood works. Your plan is sound, and it fits how bot](#^m18)
 
 ---
 
@@ -374,6 +375,7 @@ go ahead
 
 ^m17
 
+
 so I tried it and the hoodie looks good but the rest of sora's clothes don't his jacket has a lot of clipping and his pants do to when running, instead of trying to guess how it would look in game by translating the animation I came up with an idea:
 
 you do physics like before for the parts that are clipping: (his jacket, pants belt, chain) but I will use frame advance to record each frame of an animation, the trace then has a natural (when I mean natural I don't mean real life, I mean how it looks compared to kh2's baked animations) looking animation that you can then bake into kh2's animations and then we can disable the physics for each animation we haven't done yet. tell me what you think and if you think its good then what I need from you is:
@@ -382,4 +384,47 @@ you do physics like before for the parts that are clipping: (his jacket, pants b
 2. when setting trace to count game frames the seconds number becomes frame count
 3. just tell me what you need in the trace and I'll record it, feel free to add anything thats missing so the bake can be exactly how it looks in game
 4. for the parts that are kh1's make sure the physics follow closely with how it looks in the kh1 animations, 
-if there's anything else you would need let me know, then if we're good we'll try the bake on soras non keyblade walking animation 
+if there's anything else you would need let me know, then if we're good we'll try the bake on soras non keyblade walking animation
+
+
+> [!tip] Assistant
+> Glad the hood works. Your plan is sound, and it fits how both games do it: KH2 and KH1 both key their clothes by hand, with no physics at run time. So if we use physics only as a tool to make the motion and then bake it out, the game ends up playing plain keyframes in KH1's own animations, with nothing extra running each frame. A few things to know first:
+>
+> - **The physics has to be written fresh.** The old one (removed in t388) only swung the hair, hood and keychain, and it clipped because nothing kept it off his body. For the coat, shorts and belt it needs collision against his hips and thighs. I'd reuse t569's clearance rules for that.
+> - **A baked motion can't run physics.** Once the walk is baked, KH1 plays it by itself and my pose isn't drawn over it. So while we're working on a move it has to be drawn live (not baked), with physics on. After we bake it, the physics goes off for that move.
+> - **A loop has to be recorded walking straight, at a steady speed, after it has settled.** The physics reacts to speed and turns. If you turn or change speed during the recording, that sway gets baked into every loop. The first couple of loops after you start walking aren't settled yet either. For the same reason a bake can't lag or settle when you stop or turn: it plays the same loop every time, which is what KH2 does too.
+> - **Another option.** Since I'd be writing the physics, I can run the exact same code offline over the walk (straight, at the walk's own speed) until it repeats, and bake that. That's the same result as a clean recording of a straight walk, with a perfect loop seam, and I can re-bake straight away whenever we tweak it. Your recording would still matter: it's what you actually saw, and I'd check the bake against it frame by frame. If they differ, your trace wins and I bake from it.
+>
+> What I'd build, one version each:
+>
+> 1. **Info panel.** A small panel in a corner of the screen while Frame Advance is on, separate from the debug menu box. It shows:
+>    - which animation is drawn: the KH2 motion, battle or field, and the KH1 slot;
+>    - whether it's live or baked;
+>    - the frame within the animation (for example "field walk 12 / 34");
+>    - how many times it has looped;
+>    - the trace's frame number, so you can tell me "trace frames X to Y".
+> 2. **Seconds becomes Frames.** With Game Frames on, the Trace Recorder's Seconds row reads "Frames" and shows the frame count (KH1's 60 frames a second).
+> 3. **The trace.** A new "Cloth" category (off by default, because it's wide). Each frame it adds:
+>    - the frame and tick counts, and how many physics steps ran that frame;
+>    - the animation drawn, its frame and its loop count (as in the panel);
+>    - Sora's position, facing, speed and turn rate (mostly there already);
+>    - for every physics bone, its turn against its parent and its position against his hips: the coat (72 and 248–279), the shorts panels (26–41, 52–67), the belt chain (10–15) and the belt-front pieces (5, 8);
+>    - the hip and thigh bones the collision uses;
+>    - a number for the physics settings, so I know which tuning you recorded;
+>    - a mark when the physics restarted (room change, warp).
+>
+>    All you'd need to record: Cloth on, walk straight in the field at a steady full walk for 10+ seconds, no Keyblade. Frame Advance is only needed if you want to look at frames on the way.
+> 4. **KH1's look for the physics.** I'd tune it against KH1's own animations, measured from the game files: I run the same physics over KH1's own walk and run (his own motion and travel) and compare it with how KH1 animates the belt chain, coat and shorts by hand in those moves (how far they swing, how late, where they rest), then pick the settings that come closest. The rest pose it pulls toward would be KH1's own pose of the part in the matching KH1 move, not the T-pose. I'd give you the numbers.
+>
+> Questions:
+> 1. Info panel: (a) drawn on the game screen in a corner (my pick; works in fullscreen), or (b) a real separate Windows window next to the game (in fullscreen the game would lose focus to it)?
+> 2. "Animation count": (a) the frame within the animation, (b) how many times it has looped, or (c) both?
+> 3. "Chain": (a) the belt chain only (the keychain keeps KH2's own keys), or (b) the keychain on physics too?
+> 4. Until a move is baked: (a) physics on every KH2 move that isn't baked yet, off for each one we bake, or (b) physics only on the move we're working on, everything else as now?
+> 5. The bake: (a) from your recorded trace, or (b) offline from the same physics, with your trace as the check (falling back to (a) if they differ)?
+> 6. A debug-menu page to tune the physics live (stiffness, swing, weight per part), so you can judge it in game before recording? (a) yes, or (b) no, I tune it from KH1's animations and you judge?
+>
+> If that sounds right, say go ahead and I'll start with the physics on the field (no-Keyblade) walk, plus items 1–3.
+
+^m18
+

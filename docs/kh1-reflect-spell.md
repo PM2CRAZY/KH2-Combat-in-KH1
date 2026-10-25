@@ -271,3 +271,57 @@ What still differs (asked or open):
   MAGC voice 7 per cast (and 25 on the finisher) with Battle Quotes KH2.
 - Drive Forms still cast Reflect on KH2's controller (its stop and hold, clock stopped).
 - The held barrier and the combo wait (main's s172 / s180) were already off in the code.
+
+## Shots on the barrier and Reflect's voice (testing branch, research for m8)
+
+Steam addresses. Tags as above.
+
+### KH2: the barrier stops a shot, it doesn't send it back
+- Each side of a meeting goes through `0x1403D2140 (own, other)`: the meeting counted on its own
+  attack (`+0xB0`); unless its own ATKP refact self (`+0x13`) is 2, its attack gets flag `0x200`
+  and remembers the other (`+0x90`); unless the attack has flag `0x100`, its owner's clash
+  reaction runs (class vtable `+0xD0`); and its script (`+0xA4`) is told with event 3.
+  **Checked (decomp)**, KH2 Steam.
+- Flag `0x200` is one of the flags `0x1403D1F20` reads as "this attack is over" (with `2`, `8`,
+  `0x10`). **Checked (decomp)**. The barrier (ATKP 573, refact self 2) is left standing; the shot
+  is over, and what the shot object does then (vanish, fall) is its own script's answer to event
+  3. **Assumption**: that the shots of KH2's enemies vanish on it (each script's own).
+
+### KH1: what the mod does now, and KH1's own way to stop a shot
+- Now: `Strikes::barrier_meet` runs KH1's clash half (Steam `0x1402B4BC0 (shot, barrier)`) with
+  the barrier as a priority-100 guard. For a free-standing shot (`+0x30` bit `0x400`) under
+  priority 0x62 that is KH1's **reflect**: team bits 12..13 flipped (`| 0x1001000` /
+  `0x1002000`), flag `0x1000000`, owner = the barrier's. **Checked (decomp)**, KH1 Steam. So the
+  shot is sent back, which KH2 doesn't do.
+- KH1 has no clash result that stops a free-standing shot without turning it: the clash half only
+  reflects it, or leaves it alone (priority 98 / 99, or a winning directional shot); KH1 never
+  marks a free-standing object spent (`0x100000` only when `+0x30 & 0x400` is clear).
+  **Checked (decomp)**.
+- What KH1 does when a shot strikes an actor that can't be hurt: the body contact (Steam
+  `0x1402B4060 (attack entry, body entry)`) writes the result into the attack's `+4` and into its
+  result word (`*(+0x60)`): `1` a hit, **`4` when the body's actor flags have `0x1000080`** (the
+  30-frame no-damage flag `0x80` after a reaction, or the script hold `0x1000000`), `0x40` for a
+  no-effect record. The shot keeps its team and owner, and its controller (its script) reads the
+  result as it reads any hit. **Checked (decomp)**.
+- Plan (not built; m8 answer 2 (a)): a shot meeting the barrier gets that "struck someone who
+  can't be hurt" result (`+4` and `*(+0x60)` `|= 4`) instead of the clash half: no reflect, no
+  team or owner change, counted on the barrier as now, the contact effect as now. That is KH1's
+  own stop for a shot, and the nearest thing to KH2's `0x200` + script event 3.
+  **Assumption**: that each KH1 shot's script ends or drops the shot on that result as it does on
+  a hit (the scripts aren't read); the log would show any shot that flies on.
+- Melee attacks meeting the barrier: unchanged (counted; their owner's recoil as t573 has it).
+
+### Reflect's voice in KH2
+- KH2's cast start (`0x1403C5170`): the MAGC row's voice `+0x34` for a ground or air cast,
+  `+0x35` for the combo finisher cast (when it has a finisher motion), `+0x36` instead when the
+  caster's `+0xBF8` handle is himself; played through the owner's vtable `+0xA0 (obj, voice, 0)`
+  when not negative. **Checked (decomp)**, KH2 Steam.
+- Reflect's rows (every level, world 0): voice 7, finisher voice 25, no `+0x36` (255).
+  **Checked (files)**, `00battle.bin`. VTBL (character 1): voice 7 = clips 12, 9, 22, 21, 11 (an
+  equal share each, priority 1), the same cast voice as Fire; voice 25 = clip 31 ("Protect!").
+  **Checked (files)**.
+- Now (t573): a cast plays a KH1 swing grunt and the finisher always KH2's voice 25, whatever
+  Battle Quotes says. Plan (m8 answer 3): Battle Quotes KH2: KH2's voice 7 per cast, 25 on the
+  finisher (as `formmagic` already plays KH2's MAGC voices); Battle Quotes KH1: the grunt per
+  cast, and on the finisher KH1's Aero line "Defense!" (`docs/kh1-voice.md`, clip 46 or 47, at
+  the spell rows' priority 3) through KH1's clip play (Steam `0x140290930`).

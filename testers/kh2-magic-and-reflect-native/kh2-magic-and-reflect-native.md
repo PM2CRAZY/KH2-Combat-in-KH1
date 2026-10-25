@@ -11,6 +11,7 @@
 - [5. Assistant: Thanks, that clears up Cure. With the Cure row at KH1 you'll](#^m5)
 - [6. Assistant: t532 to t535. Your two answers are in, plus items 1 to 5 of ](#^m6)
 - [7. Assistant: t570 to t573, your three answers, one system each.](#^m7)
+- [8. Assistant: Thanks. There's one thing to check on answer 1 first, then t](#^m8)
 
 ---
 
@@ -196,6 +197,38 @@ go ahead
 
 ^m7
 
+
 1. (b) reason we'll do b is for now is because we haven't implemented kh2's mp mechanics in the game so its to fit with kh1's mp mechanics. if we get to implementing the mp mechanics we'll come back to it and make it 1:1 with kh2 on kh2's mp bar
 2. (a) it needs to work exactly as kh2
-3. if battle quotes is kh2 then (a) for kh1 we keep the grunts but the finisher will say "defence! " its one of the lines he picks when casting aero 
+3. if battle quotes is kh2 then (a) for kh1 we keep the grunts but the finisher will say "defence! " its one of the lines he picks when casting aero
+
+
+> [!tip] Assistant
+> Thanks. There's one thing to check on answer 1 first, then the plan for 2 and 3.
+>
+> **1. I think your answer and your reason point to different options.** (b) was KH2's rule. Your reason, matching KH1's MP until KH2's MP bar is in, sounds more like (a) to me. Which one do you want?
+> - **(a) Keep it as now.** Fire / Blizzard / Thunder / Reflect need their full cost on KH1's bar. If you're short, they grey out, the way KH1's own spells do.
+> - **(b) KH2's rule on KH1's bar.** Any MP at all lets you cast. The spell empties the whole bar, blue and yellow. There's no MP Charge refill yet, so you're dry until KH1's normal MP gain (hits, orbs) brings it back.
+>
+> With either one, Cure keeps your one-bar rule. When KH2's MP mechanics come in, we redo this 1:1 on KH2's bar, as you said.
+>
+> **2. Shots on the barrier, stopped like KH2.** In KH2 (`0x1403D2140`), a shot meeting Reflect is marked finished (flag `0x200`) and its own script is told. The barrier stays up and nothing is sent back. Ours sends shots back because we run KH1's clash with the barrier as a guard (`0x1402B4BC0`), and for a free-flying shot that clash is KH1's reflect. KH1's clash has no way to stop a shot without turning it around.
+>
+> KH1 does have its own "you hit something" signal, though. When a shot strikes someone who can't be hurt (`0x1402B4060`), KH1 writes a "hit, no damage" result on the shot. The shot keeps its team and owner, and its own script handles it the way it handles any hit.
+>
+> The plan: a shot touching the barrier gets that result instead of the clash. No reflect, no change of side. It still counts toward the counter, and the contact effect still plays.
+> - Checked in the KH1 and KH2 Steam decomps.
+> - Assumption: that every KH1 enemy's shot script drops its shot on that result the way it does on a hit. I haven't read each script. The log will show any shot that keeps flying after it meets the barrier.
+>
+> Melee attacks stay as t573 has them (they bounce off).
+>
+> **3. Reflect's voice.**
+> - **Battle Quotes KH2: KH2's own lines.** KH2's cast start (`0x1403C5170`) takes them from Reflect's spell row: voice 7 on every cast (it picks evenly from five clips, the same cast line as KH2's Fire), and voice 25 ("Protect!") on the finisher. Checked in the decomp and in `00battle.bin`.
+> - **Battle Quotes KH1: the grunts stay, and the finisher says "Defense!".** KH1 picks a spell's voice by spell number (`0x1402A3600`: group = spell + 7), so Aero is group 13. Its own lines are clips 46 and 47, 50/50, and one of those is "Defense!". Checked in the decomp and `btltbl.bin`. I can't tell which of the two it is without hearing them. Every KH1 voice line already goes into the log as "voice call bank 0 no 46" or "no 47", so if you cast Aero once and tell me roughly when you heard "Defense!", I'll pin it. Otherwise I'll start with 46 and the Reflect log line will say which clip played, so you can tell me if it's the wrong one.
+>
+> I've written these findings into `docs/kh1-reflect-spell.md` and `docs/kh1-voice.md`.
+>
+> Say "go ahead", with (a) or (b) for question 1, and I'll do these one version each: the MP rule, the shot stop, then the voice.
+
+^m8
+
