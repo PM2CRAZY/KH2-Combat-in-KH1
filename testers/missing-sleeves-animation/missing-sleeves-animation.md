@@ -24,6 +24,7 @@
 - [18. Assistant: Glad the hood works. Your plan is sound, and it fits how bot](#^m18)
 - [19. Assistant: t592 to t596. No bake yet: this is the physics live in game ](#^m19)
 - [20. Assistant: Thanks, that's all clear. t613 to t616, one change each:](#^m20)
+- [21. Assistant: t620: done, Sora's clothes are back to how they were in t375](#^m21)
 
 ---
 
@@ -494,6 +495,7 @@ go ahead
 
 ^m20
 
+
 I want you to revert changes made in this thread to "> t375
 >
 > Good catch, you were right. Under KH2's moves the sleeves had no animation at all: they stayed fixed to the upper arm like a solid tube. Both games animate the sleeves in their moves (KH2 does it with keyframes, not cloth physics); we just never copied KH2's over. Now each sleeve hangs and flaps the way KH2's sleeve does in the same move, both live and in the baked animations. KH2 has 2 flaps per sleeve and KH1 has 4, so the front and back follow KH2's front and back flaps, and the top and bottom are a mix of the two. The sleeves follow the same switches as the hair (`hair_physics`, `kh2_hair`)."
@@ -501,3 +503,38 @@ I want you to revert changes made in this thread to "> t375
 and bake the animations for me. we'll figure out a way later, keep the debug menu frame and frame count changes
 
 go ahead
+
+> [!tip] Assistant
+> t620: done, Sora's clothes are back to how they were in t375. That means:
+> - KH2's sleeve flaps are back (the four KH1 flaps follow KH2's two), along with the hair, hood and keychain from KH2's own animation, both live and in the baked animations;
+> - the `hair_physics` / `kh2_hair` switches are back, since t375 had them (both on by default, which plays KH2's animation);
+> - the coat and shorts are back on t375's rules, and the thighs twist the way they did then.
+>
+> Everything this thread changed after that is out:
+> - the necklace and squash-and-stretch (t385, t386);
+> - KH1's own cloth animation and its fixes (t387, t405, t406, t411);
+> - the "only what KH2's model shows" changes (t407, t412);
+> - all the coat and shorts versions (t453, t490, t491, t519, t552, and the t500 tool);
+> - the thigh and shin twist (t499);
+> - the walk/run cloth test bake (t569);
+> - the live cloth physics with its trace category and Cloth Physics page (t592, t595, t596, t613, t615, t616).
+>
+> Kept, as you asked:
+> - the Frame Advance info panel (t593; I only took out its cloth line, since the physics is gone);
+> - the Frames row in the Trace Recorder (t594);
+> - the "Animation" label (t614).
+>
+> I also kept t389, KH2's walk and run baked into KH1's slots, because a lot of later work from other threads is built on it.
+>
+> I checked this against the branch history, file by file; anything other threads changed in the same files stays as it was. Not seen in game yet.
+>
+> About baking: the bake isn't a file I make and send. The mod builds it when the game loads, from your own KH1 and KH2 files. So everything that's already baked (combos, walk, run, the casts, the ability swings) now comes out with t375's sleeves and cloth automatically, and the parts still drawn live show the same thing live.
+>
+> Please test: walk, run, the idle, a few combos and a jump, in battle and out of it, and check the sleeves flap and the coat and shorts look like they did around t375. Also check that the Frame Advance panel and the Frames row still work.
+>
+> Questions:
+> 1. "Bake the animations": did you mean (a) what's baked now (done: the bake carries t375's motion), or (b) also bake the animations that are still drawn live (idle, jump, fall, landing, glide, item use, Gravity / Stop / Aero), which is the plan in the "[Baking the rest of the base animations](../baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)" thread? If (b), answer its questions there and say go ahead.
+> 2. The `hair_physics` / `kh2_hair` switches came back with t375 (you'd asked to remove them in t388). (a) keep them since we're on t375, or (b) take them out again without changing anything else?
+
+^m21
+
