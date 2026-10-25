@@ -27,6 +27,7 @@
 - [21. Assistant: Got your picks. Here's how I read them:](#^m21)
 - [22. Assistant: t580 and t581.](#^m22)
 - [23. Assistant: t586 to t591, one each:](#^m23)
+- [24. Assistant: t611 and t612.](#^m24)
 
 ---
 
@@ -622,6 +623,7 @@ go ahead
 
 ^m23
 
+
 1. (a)
 2. wait for the knockback update before we change this
 
@@ -630,4 +632,43 @@ is zantestukens percent chance still on? I get a normal finisher from time to ti
    also if kh2 moves aren't running in kh1's row selector that needs to happen, remember that the goal is to patch features into kh1's engine so that it has the ability to be 1:1 with kh2 right now I noticed I can't do any kh1 finisher on kh2 combat settings.
    
    go ahead
-   
+
+> [!tip] Assistant
+> t611 and t612.
+>
+> - **t611, your (a):** with Base / Aerial Base Combo on KH2 and locked on, the group checks now count every enemy, as KH2's selector does. I checked the KH2 decomp to make sure this doesn't bring back the old "lunges at the enemy beside him" problem: KH2's group check only marks the row as allowed, it doesn't remember which enemy passed it, and the swing's hop and lunge always go to your main (locked) target. Ours used to aim at whichever enemy passed, which is why the lock filter was added back then. It now aims at the main target like KH2, so the filter is gone. This also applies when you're not locked on.
+> - **t612, KH1 finishers on KH2 settings:** you were right. KH1's picker still ran at the KH2 setting, but each time KH2 picked a plain finisher, KH1's ability finisher row was swapped out for the plain one (the "KH1's own rows give way" choice from t390), and KH2's table has no KH1 moves, so Stun Impact, Gravity Break, Zantetsuken, Blitz, Ripple Drive and Hurricane Blast could never come out. Now the KH2 setting runs the same finisher walk inside KH1's picker:
+>   - KH1's picker reads KH2's combo length, so its finisher (and Blitz's and Hurricane Blast's own tests) lands where KH2's does;
+>   - at the finisher, KH2's table order with your mapping decides: the crowd group (Stun Impact, Ripple Drive, Explosion), then the single-target group (Guard Break, Gravity Break, Zantetsuken, Blitz), and so on;
+>   - KH1's moves keep their KH1 rules;
+>   - when a KH1 move wins, KH1's own row plays it whole: its animation, its hit and its damage;
+>   - Finishing Plus chains both ways: KH1 → KH2 and KH2 → KH1.
+>
+>   Check: the KH1 decomp for where KH1's pickers read the length and its ability bits and roll; the KH2 table order from your files. Not tested in game.
+>
+> **Item 2:** left for now, as you said. The knockback update is out now (t602 to t606 in "[KH2 knockback on enemies](../kh2-knockback-on-enemies/kh2-knockback-on-enemies.md)"; Guard Break now pops the enemy straight up, as in KH2), so once you've tried it we can come back to this.
+>
+> **Zantetsuken's chance:** yes, it's still on, and always on. Since t589 it rolls KH1's own 30% whatever KH1 Ability Chance says, because in KH1 that roll is its rule. So a normal finisher about 7 times out of 10 when Zantetsuken's turn comes is expected and matches KH1: when its roll fails, KH1 plays its normal finisher. You'll also get a normal finisher in two more cases:
+> - with enemies around, the crowd group comes first (Stun Impact, Ripple Drive, Explosion, or the second-enemy normal finisher);
+> - in the single-target group, Guard Break and Gravity Break come before Zantetsuken, and Gravity Break always passes there with Ability Chance off, unless it's the one already playing.
+>
+> Before t612 none of this applied on KH2 settings, where Zantetsuken never came out.
+>
+> **Your native point:** at the KH1 setting, KH2's moves are already chosen inside KH1's picker. At the KH2 setting, after t612 only the finisher walk is. The rest of the KH2 setting still works the old way, which isn't native yet: KH2's pick comes from a trial run on a copy of KH2's controller, KH1's row is swapped afterwards in the step that runs it, and a few ability moves with no KH1 row still borrow Sora. Here's how I'd finish it, one version each:
+> 1. KH2's whole pick (swings too) is made in KH1's picker at the KH2 setting. The picker returns the KH1 row that plays KH2's move, and the after-the-fact swap goes. No change in feel expected.
+> 2. Replace the controller-copy trial with KH2's table walk run straight from KH1's data (its count, request, target, lock and the enemies around). That takes out the controller copy and its cost per press.
+> 3. Give the moves that still borrow Sora their own KH1 rows, so the KH2 controller isn't used for combos at all.
+>
+> Please test (Base / Aerial Base Combo on KH2, with the log and a Select + Triangle trace):
+> - locked on in a group: Explosion and Magnet Burst should come out, and swings should go to the locked enemy;
+> - Stun Impact, Gravity Break, Zantetsuken, Blitz, Ripple Drive and Hurricane Blast equipped, against one enemy and in a group;
+> - Finishing Plus: a KH1 finisher into a KH2 one and the other way round.
+>
+> Log lines start with "KH2's ground finisher walk at the KH2 setting" / "KH2's aerial finisher walk at the KH2 setting" (failed rolls are listed).
+>
+> Questions:
+> 1. KH1's moves at the KH2 setting: (a) keep their KH1 rules, as t612 does (Zantetsuken's 30% roll, Stun Impact / Gravity Break by the Tweak, Blitz / Hurricane Blast by their own tests); (b) KH2's rule, so they come whenever their KH2 checks pass, no chance at all; or (c) KH1 rules at the KH1 setting and KH2's at the KH2 setting, with Blitz and Hurricane Blast keeping their tests?
+> 2. The native plan above: (a) go ahead with steps 1 → 2 → 3 in that order, or (b) a different order or scope?
+
+^m24
+
