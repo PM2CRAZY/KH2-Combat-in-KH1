@@ -1764,3 +1764,34 @@ fn ability_rows_by_id_and_range_checks_for_a_host_walk() {
     assert_eq!(ch.ability_row_id(26, true, false, None, &any, [0.0; 2], &env(&two)).map(|r| r.0.id), Some(26));
     assert_eq!(ch.state_name(), StateName::Idle);
 }
+
+/// KH2's normal finisher for a host's next finisher (`normal_finisher`, the KH1 port's Finishing
+/// Plus after KH1's own normal finisher): 154 at a group, else 155 (rows 2 / 3 in Sora's table; 40 /
+/// 41 here, past the test moveset's own), the one playing
+/// passed over for its `sub`.
+#[test]
+fn normal_finisher_by_kh2s_walk() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(154, attack_clip(154, 40, (10, 16), 8, 20));
+    ch.moveset.clips.insert(155, attack_clip(155, 40, (10, 16), 8, 20));
+    let mut group = row(40, 154, true, false);
+    (group.kind, group.far, group.low, group.high, group.inner_min, group.inner_max) = (2, 180.0, 500.0, -500.0, -1.0, 0.92);
+    let mut last = row(41, 155, true, false);
+    last.sub = 40;
+    ch.moveset.combo_rows.retain(|r| !r.is_finisher() && r.id != 40 && r.id != 41);
+    ch.moveset.combo_rows.extend([group, last]);
+    let one = [TargetInfo { id: 7, pos: [0.0, 0.0, 100.0], radius: 10.0, height: 100.0 }];
+    let two = [TargetInfo { id: 7, pos: [0.0, 0.0, 100.0], radius: 10.0, height: 100.0 }, TargetInfo { id: 8, pos: [120.0, 0.0, 0.0], radius: 10.0, height: 100.0 }];
+    fn env(t: &[TargetInfo]) -> Env<'_> {
+        Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: t, ledges: &[] }
+    }
+    ch.set_auto_target(true);
+    assert_eq!(ch.normal_finisher(false, None, [0.0; 2], &env(&one)).map(|r| r.0.id), Some(41));
+    assert!(ch.row_in_range(40, &env(&two)));
+    assert_eq!(ch.normal_finisher(false, None, [0.0; 2], &env(&two)).map(|r| r.0.id), Some(40));
+    // 155 playing: its sub, 154, whatever its range.
+    assert_eq!(ch.normal_finisher(false, Some(155), [0.0; 2], &env(&one)).map(|r| r.0.id), Some(40));
+    // None in the air here.
+    assert!(ch.normal_finisher(true, None, [0.0; 2], &env(&one)).is_none());
+    assert_eq!(ch.state_name(), StateName::Idle);
+}

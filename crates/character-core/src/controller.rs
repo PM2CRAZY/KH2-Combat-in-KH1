@@ -1391,6 +1391,56 @@ impl Character {
         self.would_take_row(id, Some(from), air, stick, env)
     }
 
+    /// KH2's normal finisher (no ability) for a host's next finisher (the KH1 port: Finishing Plus
+    /// after KH1's own normal finisher, whose row is the one playing; the tester, combo row
+    /// selection m20 answer 3, "have kh1 play a kh2 normal finisher", m21 answer 2 (a), "154 with
+    /// an enemy in its window, else 155"). KH2's walk `0x140402C50` over its finisher rows that need
+    /// no ability, on the ground or in the air as `air` says, in table order (Sora's: 154 row 2 at a
+    /// group, 155 row 3; air 184 row 7, 183 row 8): the first whose checks pass (`condition`, its
+    /// range) and whose motion isn't `playing` (or whose `sub` is its own id) wins; with none, the
+    /// `sub` of the first passing row whose motion is playing (KH2's fallback, `0x1403EBEE0`),
+    /// whatever its own checks. Checked (decomp). With its hop (`would_take_row`'s) when it has one.
+    pub fn normal_finisher(&mut self, air: bool, playing: Option<u16>, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+        let (all, primary) = self.row_targets(env);
+        let max = self.max_count(air);
+        let sit = Situation {
+            air,
+            count: max.max(1),
+            finishers: 1,
+            max_count: max,
+            current_motion: playing.unwrap_or(u16::MAX),
+            primary,
+            all: &all,
+            equipped: &self.abilities.equipped,
+            jump_height: self.params.jump_height,
+            finisher_window: false,
+            berserk: false,
+            drop_ahead: false,
+        };
+        let jump_height = self.params.jump_height;
+        let mut fallback: Option<u8> = None;
+        let mut take: Option<u8> = None;
+        for r in self.moveset.combo_rows.iter().filter(|r| r.ability == 0 && matches!(r.kind, 1..=3) && r.is_finisher()) {
+            if !condition(r, &sit) || !Self::range_of(r, &all, primary, jump_height) {
+                continue;
+            }
+            if r.sub == r.id as i8 || Some(r.motion) != playing {
+                take = Some(r.id);
+                break;
+            }
+            if fallback.is_none() && r.sub >= 0 {
+                fallback = Some(r.sub as u8);
+            }
+        }
+        let from = ComboState { count: max, finishers: 1, hit: true, finisher_next: false };
+        if let Some(id) = take {
+            return self.would_take_row(id, Some(from), air, stick, env);
+        }
+        let id = fallback?;
+        let row = self.moveset.combo_rows.iter().find(|r| r.id == id)?.clone();
+        Some(self.would_take_row(id, Some(from), air, stick, env).unwrap_or((row, None)))
+    }
+
     /// Whether row `id`'s range checks alone pass now, as KH2's selector measures them (kind 1
     /// the primary target, kind 2 any target, kind 3 none; `in_range`), whatever its ability,
     /// count or motion: a host's walk uses a row's checks for moves of its own in that row's

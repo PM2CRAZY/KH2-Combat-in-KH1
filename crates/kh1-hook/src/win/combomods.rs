@@ -281,6 +281,56 @@ pub fn finisher_chain_open() -> bool {
     FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus
 }
 
+/// KH2's normal finishers whose Finishing Plus window KH1's own finishers take (the tester, m20
+/// answer 4 (a): "KH2's own finisher window from 155 / 183, placed at the same point in KH1's
+/// finisher"): 155 on the ground (its window 35..64), 183 in the air (21..50; Checked (files)).
+const KH1_FINISHER_WINDOW_FROM: [u16; 2] = [155, 183];
+
+/// Finishing Plus on KH1's own finishers (Base / Aerial Base Combo KH1; the tester, m22: "make
+/// sure every kh1 finisher can go into other kh1/kh2 finishers"): while KH1's own finisher motion
+/// plays on Sora (its plain finisher 0xCB / 0xCE or one of its ability finishers, the last row
+/// KH1's Attack step ran being a finisher, `LAST`, its request the one playing, no KH2 motion of
+/// ours on it), Finishing Plus equipped and another finisher left (`finisher_chain_open`), KH1's
+/// combo window (`+0x1CC` bit 22, through the instance's `+0x14`, as `kh2slots::finisher_window`
+/// opens it on KH2's) is open at the same share of the motion as KH2's 155 / 183 Finishing Plus
+/// window is of its clip: KH1's time over its length (`+0x16C` / `+0x280`, the share KH1 itself
+/// works out in `0x14029FF80`, Checked (decomp)) × the KH2 clip's length. KH1's command menu then
+/// takes an Attack and its Attack step counts it on past the length; KH1's picker's finisher walk
+/// picks the next finisher (KH1's, KH2's, or KH2's normal one when KH1's is the one playing).
+/// Placing KH2's window by share is an **Assumption** (KH1's finishers have none of their own).
+pub unsafe fn kh1_finisher_window(actor: usize) {
+    if Build::current() != Build::Steam || actor < 0x10000 || !super::shared::active() || super::form::in_form() {
+        return;
+    }
+    let Some((_, request, true, air)) = LAST.try_lock().ok().and_then(|l| *l) else { return };
+    let kind = if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo };
+    if super::styles::kh2(kind) || request & 0xFFFF != rd::<u32>(actor + 0x164) & 0xFFFF || super::kh2slots::playing_motion(actor).is_some() {
+        return;
+    }
+    if takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !finisher_chain_open() {
+        return;
+    }
+    let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
+    if !(t >= 0.0 && len > 0.0) {
+        return;
+    }
+    let from = KH1_FINISHER_WINDOW_FROM[air as usize];
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&from)) else { return };
+    let at = (t / len * clip.length as f32) as u32;
+    if !clip.has(at, |k| matches!(k, character_core::WindowKind::Finisher)) {
+        return;
+    }
+    let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+    if inst < 0x10000 {
+        return;
+    }
+    wr(inst + 0x14, rd::<u32>(inst + 0x14) | KH1_COMBO_WINDOW);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!("Finishing Plus window on KH1's own finisher (request {:#x}, time {t:.1} of {len:.1}, KH2 {from}'s frame {at}): KH1's combo window", request & 0xFFFF));
+    }
+}
+
 /// Whether KH2's pick is one of its ability moves over KH1's combo at `count` (what makes it so,
 /// for the log).
 fn ability_move(row: &ComboRow, kh2_len: u8, negative: u8, count: u8, kh1_len: u8) -> Option<&'static str> {
@@ -744,7 +794,22 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
             }
         }
     };
+    // Finishing Plus's next finisher with KH1's own normal finisher the one playing (its picker
+    // took a swing, its finisher's request not free): KH2's normal finisher in its place (the
+    // tester, m20 answer 3: "have kh1 play a kh2 normal finisher"; m21 answer 2 (a): KH2's own
+    // check, 154 with a foe in its window, else 155, in the air 184 / 183;
+    // `Character::normal_finisher`).
+    let kh1_finisher_free = request_of(plain).is_some_and(|q| q & 0xFFFF == combo.finisher);
+    let kh2_normal = count > kh1_len && !kh1_finisher_free;
     let walked = takeover::kh2_rows(actor, air, |ch, stick, env| {
+        let plain_step = |ch: &mut Character| -> Took {
+            if kh2_normal {
+                if let Some((r, l)) = ch.normal_finisher(air, kh2_playing, stick, env) {
+                    return Took::Kh2(r, l);
+                }
+            }
+            Took::Plain
+        };
         let groups: &[Group] = if air { &AIR_FINISHERS } else { &GROUND_FINISHERS };
         for g in groups {
             if let Some(gate) = g.gate {
@@ -764,11 +829,11 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
                             return Took::Kh2(r, l);
                         }
                     }
-                    Step::Plain => return Took::Plain,
+                    Step::Plain => return plain_step(ch),
                 }
             }
         }
-        Took::Plain
+        plain_step(ch)
     });
     let no_kh2 = walked.is_none();
     let took = walked.unwrap_or_else(|| {

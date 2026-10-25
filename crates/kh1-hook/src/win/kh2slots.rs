@@ -1312,6 +1312,8 @@ pub unsafe fn frame(actor: usize) {
     }
     tick(actor);
     finisher_window(actor);
+    // The same on KH1's own finishers at the combo style KH1 (`combomods::kh1_finisher_window`).
+    super::combomods::kh1_finisher_window(actor);
     // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
     super::combomods::counter_window(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`).

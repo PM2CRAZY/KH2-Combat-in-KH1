@@ -1437,7 +1437,31 @@ finisher 16 and plain swing 18 are marked then too. `kh1picker` no longer holds 
 (`HELD_AIR` = 0), so KH1's picker runs that test itself and returns 15 when it passes; the walk
 takes Hurricane Blast in Aerial Finish's place only then (`Kh1Rule::Kh1Test`, as Blitz), KH1's
 plain finisher being 16 (18 when 16's request is playing). Nothing else of the walk changes. Assumptions: that KH1's own finisher stands in KH2's 154 / 184 place (the tester's
-m20 1 (a)). Not checked: in game. **Locked on, the group checks count every enemy** (the tester, m22 answer 4 (a), its own
+m20 1 (a)). Not checked: in game. **Finishing Plus on KH1's own finishers** (the tester, m22: "make sure every kh1 finisher can go
+into other kh1/kh2 finishers"; m20 answers 3 and 4 (a), m21 answer 2 (a)). Before, at the KH1
+setting only KH2's ability finishers on our slots had a Finishing Plus window
+(`kh2slots::finisher_window`), so KH1's own finisher and its ability finishers (Stun Impact,
+Gravity Break, Zantetsuken, Blitz, Ripple Drive, Hurricane Blast) ended the combo.
+- The window (`combomods::kh1_finisher_window`, every frame from `kh2slots`' frame step): while
+  KH1's own finisher motion plays (the last row KH1's Attack step ran was a finisher, its request
+  `+0x164`, no KH2 motion of ours on it), Finishing Plus equipped, another finisher left, KH1's
+  combo window bit (`+0x1CC` bit 22, set through the instance's `+0x14`) is set at the same share
+  of KH1's motion as KH2's Finishing Plus window is of 155 (ground, 35..64) / 183 (air, 21..50):
+  KH2 frame = `+0x16C` / `+0x280` × the clip's length (KH1 computes that same share in
+  `0x14029FF80`, Checked (decomp)). **Assumption**: placing KH2's window by share (KH1's finishers
+  have none). KH1's command menu takes the Attack there and its Attack step counts it on, as for
+  KH2's ability finishers.
+- The pick: KH1's picker runs at the count past its length and the walk picks the next finisher
+  in the same order, the one playing passed over (KH1's rows by their request, KH2's by the KH2
+  motion). When KH1's own normal finisher is the one playing (its picker took a swing), the walk's
+  "KH1's own finisher" places take KH2's normal finisher by KH2's own walk
+  (`Character::normal_finisher`, Checked (decomp) `0x140402C50`): the first of Sora's
+  no-ability finisher rows of that kind that passes (154, row 2, with a foe 0..180 off the line;
+  else 155, row 3; in the air 184, row 7, else 183, row 8), the playing one skipped for its `sub`.
+  It plays on KH1's rows as Finishing Plus's KH2 finishers do (`next_finisher`).
+- The chain stops at 1 + Finishing Plus's copies (`FINISHERS`, KH2's `+0xD75` rule).
+
+**Locked on, the group checks count every enemy** (the tester, m22 answer 4 (a), its own
 version). Before, `Character::row_targets` kept only the locked foe for KH2's "any target" rows
 (26, 2, 49, 7 and the ability swings' kind-2 rows), so the group places never passed while locked
 on (R1, or KH1's small cursor, both a lock to us). KH2's selector `0x140402D20` (Steam, Checked
