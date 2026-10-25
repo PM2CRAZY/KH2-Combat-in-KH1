@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 587 (testing branch: KH1 Ability Chance off by default)
+- **KH1 Ability Chance off by default.** The tester (m22 answer 2): "(b)". `settings` default false, ini template `kh1_ability_chance = off`. An ini line already written keeps its value.
+
 ### 2026-10-25: Stage 586 (testing branch: Tweaks inside Combat)
 - **Tweaks inside Combat.** The tester (KH2's combo row selection, m22 answer 1): "(b)". Tweaks is Combat's tenth row (after Magic), its list's parent Combat; KH1 in KH2 is back to Camera, Combat, Movement, Misc. A list that would reach below the help box (y 300, def `0x140546160`) is drawn with KH1's window scale (`+0x6C` bit 0, `+0xA0` / `+0xA4`, anchor top) at 300 / its bottom: Combat at 0.85, the glint re-aimed through it (`config::list_scale`, `glint_to`). Checked (docs/kh1-config-menu.md §5 layout). Assumption: 85% fits and reads well. docs/kh1-config-menu.md §6.y.
 

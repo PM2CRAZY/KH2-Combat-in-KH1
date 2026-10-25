@@ -392,7 +392,7 @@ in the gameplay config in a sub menu called Tweaks". KH1 in KH2's list gets a fi
 "Tweaks", opening our list `List::Tweaks` (a KH1 window from the same copied definition as the
 others, so it opens, backs out and returns to its row as they do; parent the KH1 in KH2 list). Its
 one row so far: "KH1 Ability Chance" (Off | On, `kh1picker::chance`, ini `kh1_ability_chance`,
-default on): KH1's 30% roll on Stun Impact and Gravity Break in the KH1 combo's finisher walk
+default off since m22 answer 2 (b); it was on at t581): KH1's 30% roll on Stun Impact and Gravity Break in the KH1 combo's finisher walk
 (`docs/kh1-anim-slots.md` §7.z.1). Assumption: "the gameplay config" is the KH1 in KH2 list (there
 is no list of that name); asked in the thread.
 
