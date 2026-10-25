@@ -8,7 +8,7 @@
 //! - the animation drawn: KH2's motion (battle or field) on KH1's slot, or KH1's own;
 //! - how it is drawn: baked into KH1's motion (KH1 plays it), live (our pose over KH1's), KH2's
 //!   controller's pose, or KH1's own animation;
-//! - the frame within it, of its length ("field run 12 / 40"), and how many times it has looped
+//! - the frame within it, of its length ("Animation: field run, frame 12 / 40"), and how many times it has looped
 //!   since it began;
 //! - the trace's frame number (the trace's `frame` column, `takeover::GAME_FRAME`), so a stretch can
 //!   be named as "trace frames X to Y";
@@ -118,7 +118,7 @@ pub fn lines() -> Vec<String> {
         _ => "KH1's own",
     }));
     let name = a.motion.map_or("anim".to_string(), |m| format!("{} {}", if a.field { "field" } else { "battle" }, motion_name(m)));
-    v.push(if a.len > 0 { format!("Frame: {name} {} / {}   Loop {}", a.frame, a.len, a.loops) } else { format!("Frame: {}   Loop {}", a.frame, a.loops) });
+    v.push(if a.len > 0 { format!("Animation: {name}, frame {} / {}, loop {}", a.frame, a.len, a.loops) } else { format!("Animation: frame {}, loop {}", a.frame, a.loops) });
     v.push(format!("Trace frame: {}", super::takeover::GAME_FRAME.load(std::sync::atomic::Ordering::Relaxed)));
     let c = super::clothlive::seen();
     if c.active {

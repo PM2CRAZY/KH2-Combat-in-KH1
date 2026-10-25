@@ -475,8 +475,9 @@ frame's drawing; `fapanel.rs`, `debugmenu::draw_end`) shows:
   it is one of our slots), or KH1's own animation / KH2's controller's pose;
 - how it is drawn: baked (KH1 plays our baked motion), live (our pose written over KH1's), KH2's
   controller, or KH1's own;
-- the frame within the animation of its length ("field run 12 / 40") and how many times it has
-  looped since it began;
+- the frame within the animation of its length and how many times it has looped since it began,
+  on a line labelled "Animation" ("Animation: field run, frame 12 / 40, loop 3"; before tNNN it
+  read "Frame: field run 12 / 40   Loop 3", which the tester read as a "field frame run" count);
 - the trace's frame number (the trace's `frame` column), so a stretch can be named "trace frames X
   to Y";
 - the cloth physics' settings id and steps when it runs (`clothlive`).
