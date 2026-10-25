@@ -493,6 +493,35 @@ pub unsafe fn end(actor: usize, why: &str) -> bool {
     true
 }
 
+/// KH2's velocity at a glide's end in KH1's control step (`buttons`: Square let go), with the game
+/// frame (`takeover::GAME_FRAME`), for `carry`.
+static CARRY: Mutex<Option<(u64, [f32; 4])>> = Mutex::new(None);
+
+/// Sora's physics step (`takeover::physics`), before KH1's: the glide let go in KH1's control step
+/// keeps its speed into the fall. KH1's think (Steam `0x1402A3300`, Checked (decomp)) clears flag
+/// `0x400` first (`0x1402A43A0`), runs the control step (our `buttons` -> `end`: state 2, so the
+/// flag set), the new state's pre-step (state 2's `0x1402AFC20` copies the stick into `+0x20`),
+/// then, with flag `0x400` and state 2, sets `+0x3C0` to the move direction `+0x20` times the
+/// stick's tilt `+0x2C` (at most 1 a frame): KH1's own carry into a fall, which replaced the
+/// glide's velocity (the tester's t530 traces: 30.1 at the release, 1.1 the next frame, then KH1's
+/// 0.8 a frame of air steering from there: "I just drop"). KH2's end (`0x1403CBC30`) keeps the
+/// glide's velocity `+0x20` as it is, so it goes back on `+0x3C0` here, before KH1's physics step
+/// moves him (KH1's fall state's step, or KH2's arc on it with physics KH2, `shared::physics`,
+/// both take their speed from `+0x3C0`). Ends in KH1's physics step (the transition: the ground,
+/// the end height) aren't touched by that carry (the flag is cleared at the next think's start).
+pub unsafe fn carry(actor: usize) {
+    let Some((at, vel)) = CARRY.try_lock().ok().and_then(|mut c| c.take()) else { return };
+    if takeover::GAME_FRAME.load(Ordering::Relaxed).saturating_sub(at) != 1 || actor != takeover::sora_actor() || rd::<i32>(actor + 0x70) != FALL_STATE {
+        return;
+    }
+    let was: [f32; 4] = rd(actor + 0x3C0);
+    wr(actor + 0x3C0, vel);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        note(format!("KH2's glide velocity {:.1}/frame kept into the fall (KH1's carry from the stick had left {:.1})", vel[3], was[0].hypot(was[2])));
+    }
+}
+
 type ButtonsFn = unsafe extern "system" fn(usize, usize, usize) -> usize;
 
 /// State 0x15's button check (`(actor, buttons, input)`, the player's control step only): KH1's
@@ -505,8 +534,10 @@ unsafe extern "system" fn buttons(actor: usize, held: usize, input: usize) -> us
         let f: ButtonsFn = std::mem::transmute(ORIG_BUTTONS.load(Ordering::Acquire));
         return f(actor, held, input);
     }
-    if !takeover::pad_square() {
-        end(actor, "Square let go");
+    if !takeover::pad_square() && end(actor, "Square let go") {
+        if let Ok(mut c) = CARRY.lock() {
+            *c = Some((takeover::GAME_FRAME.load(Ordering::Relaxed), rd(actor + 0x3C0)));
+        }
     }
     0
 }

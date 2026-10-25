@@ -454,6 +454,9 @@ unsafe extern "system" fn physics(actor: usize) {
         // KH2's hop out of KH1's ground combo: its sideways speed, which KH1's carry into the air
         // replaced (`shared::physics::ground_hop_carry`).
         super::shared::physics::ground_hop_carry(actor);
+        // KH2's glide let go in KH1's control step: its velocity, which KH1's carry into the fall
+        // replaced (`glide::carry`).
+        super::glide::carry(actor);
         // KH2's turn toward the target in our slot's KH2 motion (`kh2slots::turn_to_lock`).
         super::kh2slots::turn_to_lock(actor);
         // KH2's guard repel's push back (`combomods::guard_frame`).

@@ -232,7 +232,20 @@ State 0x15's pre-step (`0x1402B2880`) wrapped. For Sora at Glide KH2, each frame
 - **Into the fall** (`glide::end`, KH2's `0x1403CBC30`): KH1's fall from rest `0x1402AF8F0 (actor, 0)` (state 2,
   its arc fields from rest, as KH2's fall from rest), `+0x3C0` his velocity kept (no x0.7, no hop of 8), KH1's fall
   request 6 with KH2's blend 16 (KH2 asks its fall motion 4), KH2's launch flag cleared for the rest of the air
-  time. Landing: on the ground KH1's fall state lands him the next frame with its own landing, as KH2's fall action
+  time. KH2's end (`0x1403CBC30` with 0) touches only the arc (`+0xF0` / `+0xF8` / `+0xFC` from rest) and the
+  launch flag `+0xEC`, never the velocity `+0x20`: the glide's whole velocity goes on into ACTION_JUMP's fall.
+  **Checked (decomp)** KH2 Steam.
+- **KH1's carry into the fall undid it (fixed).** A release comes in KH1's control step, inside KH1's think
+  `0x1402A3300`: that think clears flag `0x400` first (`0x1402A43A0`), runs the control step (our end sets state
+  2, so `0x400`), the new state's pre-step (state 2's `0x1402AFC20` copies the stick into `+0x20`), then, with
+  `0x400` and state 2, sets `+0x3C0` = `+0x20` x `+0x2C` (the stick's direction times its tilt, at most 1).
+  **Checked (decomp)** KH1 Steam. The tester's t530 traces: 30.1 a frame at the release, 1.1 the next frame,
+  then KH1's air steering adding 0.8 a frame ("I just drop"). `glide::carry` puts the glide's velocity back on
+  `+0x3C0` in Sora's physics hook before KH1's physics step (as `shared::physics::ground_hop_carry` does for the
+  same carry), so KH1's fall step (physics KH1) or KH2's arc on it (physics KH2), which both start from `+0x3C0`,
+  go on at the glide's speed. Ends in KH1's physics step (the transition: the ground, the end height) aren't hit:
+  `0x400` is cleared at the next think's start (the Aerial Dodge's apex, also in the physics step, kept its speed
+  in the same traces). **Checked (trace)** Landing: on the ground KH1's fall state lands him the next frame with its own landing, as KH2's fall action
   does. **Checked (decomp)** both games.
 
 ### 8.5 The borrow taken out
@@ -258,3 +271,18 @@ glide on their own bodies (KH1's handlers run for them); it's taken off again (o
 doesn't have KH1's Glide himself) when he can't glide with KH2's. Sora's only other reader of `0x80` is the fall
 state's jump press, which no longer starts KH1's glide on him at Glide KH2 (§8.1). **Checked (decomp)**, a grep of
 every read of `0x142D5EC10`'s `0x80` / `0x100` bits (the AI's three functions, `0x1402AFD60`, `0x1402A7B30`).
+
+### 8.7 The values, checked frame by frame (the tester's t530 traces)
+
+KH2's growth table (`03system.bin` `pref` / `fmab`, records 0..3 = Glide LV1..MAX, **Checked (files)**): speed
+16 / 20 / 24 / 32, fall ratio 0.015 / 0.015 / 0.015 / 0.01, fall height 0 / 30 / 30 / 30, fall max 3 / 2.5 / 2 / 1,
+acceleration 0.91 / 0.93 / 0.95 / 0.97, start height 60, end height 10, turn speed 0.0524 (record 4, speed 64, is
+not one of Sora's levels). Against the traces (Glide LV4 in the log), **Checked (trace)**:
+- Speed on KH2's tick (a new value every second frame): 18.42 → 18.83 → 19.22 ... = 0.03 x 32 + 0.97 x |v|.
+- Hover: 16.20 → 14.58 → 13.12 ... = x 0.9 a tick.
+- Fall: 1.00 a frame while (height - 30) x 0.01 is over 1; 0.98 at 128 over the floor, 0.96 at 126 ...
+- Turn: 0.052 rad a frame toward the stick (KH2's turn `0x1403B9F70` doubles `+0x134` for its 2-frame tick).
+- Banking past dot 0.98 (a stick about 11° off his facing); the start with KH2's stored launch speed (18 after
+  an Aerial Dodge, 0 after a neutral one), back when the stick takes the hover into the glide.
+- Start height 60 (every start in the log was above it).
+Wrong in t530: the left bank (§8.3) and the release (§8.4), both fixed.
