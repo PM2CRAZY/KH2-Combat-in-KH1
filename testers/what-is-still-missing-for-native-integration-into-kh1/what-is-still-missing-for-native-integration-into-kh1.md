@@ -155,3 +155,6 @@ give me an update
 
 ^m5
 
+(b), (c), make sure its the responses are updated in the threads
+
+go ahead
