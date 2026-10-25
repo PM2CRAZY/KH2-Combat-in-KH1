@@ -397,7 +397,7 @@ const STRINGS: [(u32, &str); 90] = [
     (0x7F00_020F, "Tweaks"),
     (0x7F00_0210, "Small changes to how KH1's own rules play."),
     (0x7F00_0191, "KH1 Ability Chance"),
-    (0x7F00_0192, "On: KH1's 30 percent chance on Stun Impact and Gravity Break.\nWhen it fails, the next move that fits comes, as in KH2."),
+    (0x7F00_0192, "On: KH1's 30 percent chance on Stun Impact, Gravity Break\nand Zantetsuken; when it fails, the next move that fits comes."),
     (0x7F00_0193, "Enemy Weight"),
     (0x7F00_0194, "On: KH2's knock-back on enemies times KH1's weight for each\nenemy. Off: KH2's own numbers for every enemy."),
     (0x7F00_0001, "Camera Style"),

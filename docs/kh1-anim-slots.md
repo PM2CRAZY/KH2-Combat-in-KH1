@@ -1421,8 +1421,10 @@ checks fail (`Character::row_in_range`, KH2's `in_range` against Sora's targets 
   KH1's rule is the third 30% roll on the same random number, after Stun Impact and Gravity Break
   (Checked (decomp): `0x1402A6EE0` takes 0.3 off for each equipped one in that order, and only
   when all three fail marks row 8, the plain finisher). The walk rolls it the same way (one
-  number per press, 0.3 off per roll reached) whatever KH1 Ability Chance says: its own rule, not a
-  tweak. Its place: the single-target group, after Gravity Break, before Blitz (by how close each
+  number per press, 0.3 off per roll reached) with KH1 Ability Chance on, and with it off it passes
+  whenever its group does, like Stun Impact and Gravity Break (the tester, after m25: "it should
+  change on the toggle we have like the other moves, if you have ability chance off then it should
+  be 100 percent like the other moves"; t589 rolled it always). Its place: the single-target group, after Gravity Break, before Blitz (by how close each
   keeps the foe, below). Its data (row 5, `0x4FD8`, Checked (files)): stat source 2 (none), element
   8 (gravity: a share of the target's HP), power 250, reaction 3 (a flinch).
 - Without KH2's data: KH1's own order (Stun Impact, Gravity Break, Zantetsuken, Blitz, Ripple Drive,
@@ -1527,7 +1529,7 @@ Now (`kh1picker::at_kh2`, `combomods::kh2_press`, `kh2_finisher_walk`), in KH1's
   Blitz's and Hurricane Blast's own KH1 tests, fall at KH2's finisher.
 - When KH2's pick is a finisher, the walk of §7.z.1 runs (`GROUND_FINISHERS` / `AIR_FINISHERS`,
   each group gated by its KH2 row's checks), KH1's moves by their KH1 rules (`Kh1Rules`: ability
-  bit, KH1's anti-repeat, Zantetsuken's roll, Stun Impact / Gravity Break's roll with KH1 Ability
+  bit, KH1's anti-repeat, Stun Impact / Gravity Break / Zantetsuken's roll with KH1 Ability
   Chance on, Blitz / Hurricane Blast's own test). KH1's dash exception is off (no KH1 dash here).
   The first KH2 row that passes, or the plain finisher's place, leaves KH2's own pick, run as
   before; one of KH1's that passes is the row the picker returns, and the row runner runs KH1's row

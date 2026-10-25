@@ -718,11 +718,11 @@ enum Step {
 enum Kh1Rule {
     /// Its checks are its group's (`Group::gate`) alone (Ripple Drive, Hurricane Blast).
     Always,
-    /// KH1's 30% roll with KH1 Ability Chance on (Stun Impact, Gravity Break).
+    /// KH1's 30% roll with KH1 Ability Chance on (Stun Impact, Gravity Break, Zantetsuken: the
+    /// tester, combo row selection after m25, "it should change on the toggle we have like the
+    /// other moves, if you have ability chance off then it should be 100 percent like the other
+    /// moves, if not then 30% chance is back"; t589's "always rolls" is gone).
     Chance,
-    /// KH1's 30% roll always, its own rule (Zantetsuken: the tester, m22 answer 3, "bring back
-    /// zantetsuken and make it b as well").
-    Roll,
     /// KH1's own test, run inside KH1's picker, which returned this row (Blitz, row 6: nothing
     /// beside him; Hurricane Blast, row 15: a target no more than 100 above).
     Kh1Test,
@@ -738,7 +738,7 @@ struct Group {
 const STUN_IMPACT: Step = Step::Kh1(3, 1 << 27, Kh1Rule::Chance, "Stun Impact");
 const GRAVITY_BREAK: Step = Step::Kh1(4, 1 << 28, Kh1Rule::Chance, "Gravity Break");
 const BLITZ: Step = Step::Kh1(BLITZ_ROW, 1 << 3, Kh1Rule::Kh1Test, "Blitz");
-const ZANTETSUKEN: Step = Step::Kh1(5, 1 << 29, Kh1Rule::Roll, "Zantetsuken");
+const ZANTETSUKEN: Step = Step::Kh1(5, 1 << 29, Kh1Rule::Chance, "Zantetsuken");
 const RIPPLE_DRIVE: Step = Step::Kh1(7, 1 << 26, Kh1Rule::Always, "Ripple Drive");
 const HURRICANE_BLAST: Step = Step::Kh1(HURRICANE_ROW, 1 << 25, Kh1Rule::Kh1Test, "Hurricane Blast");
 
@@ -813,7 +813,7 @@ impl Kh1Rules {
                 ok
             }
             Kh1Rule::Chance if !self.chance => true,
-            Kh1Rule::Chance | Kh1Rule::Roll => {
+            Kh1Rule::Chance => {
                 let r = *self.roll.get_or_insert_with(|| super::kh1picker::random().unwrap_or(1.0));
                 let won = r - self.used < 0.3;
                 self.used += 0.3;
@@ -844,8 +844,8 @@ enum Took {
 /// (KH2's `in_range` against base Sora's targets and KH1's lock, `Character::row_in_range`) is
 /// passed over; in a group the first move that passes wins:
 /// - KH1's: its ability bit set (`bits`, as KH1 set them), its row's request not the one playing
-///   (KH1's own anti-repeat), and its rule: Stun Impact / Gravity Break KH1's 30% roll with KH1
-///   Ability Chance on (`kh1picker::chance`; one KH1 random number per press, 0.3 taken off it
+///   (KH1's own anti-repeat), and its rule: Stun Impact / Gravity Break / Zantetsuken KH1's 30% roll
+///   with KH1 Ability Chance on (`kh1picker::chance`; one KH1 random number per press, 0.3 taken off it
 ///   for each roll reached, as KH1's picker does, so each keeps exactly 30%; a failed roll isn't
 ///   rolled again further down);
 ///   Blitz / Hurricane Blast only when KH1's picker found its test passing (row 6 / 15, KH1's

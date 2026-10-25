@@ -20,8 +20,8 @@
 //! and the walk marks them by KH1's own rules in their new places. Blitz's bit stays: KH1's own
 //! test for it (row 6: its finisher marked and nothing beside him, row 11's count 0) runs inside
 //! KH1's picker, which returns 6 when it passes. So does Hurricane Blast's (row 15: a target, no
-//! more than 100 above him; the tester, m22 answer 3 (b)). KH1's 30% chance on Stun Impact and Gravity
-//! Break is the ini's `kh1_ability_chance`, the Config menu's Tweaks row (`chance`).
+//! more than 100 above him; the tester, m22 answer 3 (b)). KH1's 30% chance on Stun Impact, Gravity
+//! Break and Zantetsuken is the ini's `kh1_ability_chance`, the Config menu's Tweaks row (`chance`).
 //!
 //! At the combo style KH2 (the tester, m23: "I can't do any kh1 finisher on kh2 combat settings")
 //! the same hooks run KH1's picker with its ability finisher bits held back and KH2's combo length
@@ -47,8 +47,8 @@ const AIR_PROLOGUE: [u8; 11] = [0x40, 0x53, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 
 const ABILITY_BITS_STEAM: usize = 0x2D5EC10;
 /// Held back while KH1's picker runs at the combo style KH1 (the walk marks them): Ripple Drive,
 /// Stun Impact, Gravity Break, Zantetsuken on the ground (KH1's rows 7, 3, 4, 5; Zantetsuken's
-/// 30% roll is KH1's third, after the other two, so the walk rolls it the same way, always: the
-/// tester's m22 answer 3 (b)). Blitz (3, row 6) stays KH1's own, and so does Hurricane Blast in
+/// 30% roll is KH1's third, after the other two, so the walk rolls it the same way, with KH1
+/// Ability Chance on like the other two: the tester, after m25). Blitz (3, row 6) stays KH1's own, and so does Hurricane Blast in
 /// the air (25, row 15: its KH1 rule, a target no more than 100 above him, m22 answer 3 (b)):
 /// KH1's picker returns their row when its own test passes, and the walk takes that as their rule.
 /// (Holding Zantetsuken back also keeps KH1's row 8 marked, which Blitz's test needs.)
@@ -62,7 +62,7 @@ static RANDOM: AtomicUsize = AtomicUsize::new(0);
 /// The Tweaks row "KH1 Ability Chance" (0 not read yet, 1 off, 2 on).
 static CHANCE: AtomicU8 = AtomicU8::new(0);
 
-/// KH1's 30% chance on Stun Impact and Gravity Break (the tester, m21: "a toggle in the config
+/// KH1's 30% chance on Stun Impact, Gravity Break and Zantetsuken (the tester, m21: "a toggle in the config
 /// for the 30 percent chance to exist, if it does then if the 30 percent chance roll fails then
 /// it picks a similar kh2 move"). On: each rolls as in KH1, and a failed roll goes on down the
 /// walk. Off: they pass whenever their checks do, as KH2's rows.
