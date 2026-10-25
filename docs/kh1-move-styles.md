@@ -129,9 +129,9 @@ Config > KH1 in KH2 > Combat > Magic:
     0x86) point at our slots of KH2's cast motions (`kh2slots::redirect`, by `cast_spell`), and
     KH1's own script runs on them (`kh1_spell_start` leaves KH1's spells alone): KH2's
     animation, its combo / cut windows (`cast_follow`) and its motion's own sounds; KH1's spell,
-    effects, timing and cost. **Assumption**: KH1's spell scripts time their shots by their own
-    frames, not by the cast motion's events (KH1's cast motions carry no spell events: §1 of
-    `docs/kh1-magic-native.md`, **Checked (files)**), so the shot comes out at KH1's time.
+    effects and cost, cast on KH2's animation's cast frame (m20, "and vice versa"): KH1's scripts
+    count their own wait (Checked (files)), so their clock is timed to KH2's magic-cast event
+    (`formmagic::script_step`, `docs/kh1-magic-native.md` §4j).
   - KH1's Gravity, Stop, Aero at KH2: on KH1's cast state as Blizzard / Thunder / Cure above:
     KH1's requests 0x3A / 0x3B / 0x3C (air 0x87 / 0x88 / 0x89; KH1's slots 55 / 56 / 56, air 80 /
     81 / 81, **Checked (files)** `xa_ex_0010.mset`) point at our slots of KH2's Thunder cast (62 /

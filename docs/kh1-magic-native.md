@@ -531,3 +531,20 @@ casts it and vice versa".
   first frame); KH1's own script may run its first step there or a frame later (the task order of
   the spell list `0x142D22D08` against the actors' step wasn't read), so ±1 frame.
   KH2's cast motion's own frame events (its hand sparkles, its swish) don't play on KH1's animation.
+- **KH1's spell on KH2's animation** (t-b): KH1's Blizzard, Thunder, Cure (their rows at KH1, their
+  animation at KH2), Gravity, Stop and Aero (animation at KH2) run KH1's own script on our slot of
+  KH2's cast motion, so before this they cast at KH1's own count (28 to 36 frames), not on KH2's
+  animation's cast frame. Now KH1's script-call table entry 5 (`0x140529180 + 5 × 0x10`, its
+  function pointer, **Checked (exe)**: the original `0x1402B98E0`) points at ours
+  (`formmagic::script_step`): it calls KH1's, and for the process of such a cast (the spell start
+  `0x14028F140` returns the task's `+0x18`; its process is the task's `+0x38`, `0x14028F5E0`,
+  **Checked (decomp)**; the running process is `0x142DB7B48`, set around each run of the machine by
+  `0x1402BCEC0` / `0x1402BD540`, **Checked (decomp)**) scales the frame it returns by KH1's cast
+  frame over KH2's (the clip's magic-cast event) for KH2's cast frame's worth of game frames. KH1's
+  wait then ends on KH2's frame and the rest of the script (its check, shot, MP) runs as KH1's.
+  Ground: Blizzard 28 on 16, Thunder 30 on 18, Cure 36 on 18, Gravity 28 on 18 (Thunder's clip),
+  Stop 28 / Aero 30 on 18 (Cure's); air: Blizzard 28 on 36, Thunder 30 / Gravity 28 on 30, Cure
+  36 / Stop 28 / Aero 30 on 30. What else the script times with call 5 before its cast (its
+  charge effect's fade) runs at the same rate. Every other script (enemies', objects', KH1's
+  spells on KH1's animation) gets KH1's frame as before. **Assumption** (as above): ±1 frame from
+  the order of the script task and our frame count (`takeover::GAME_FRAME`).

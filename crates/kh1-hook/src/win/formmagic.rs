@@ -420,6 +420,99 @@ pub unsafe fn install() {
     if super::hook::install(base + SPELL_START_STEAM, &SPELL_START_PROLOGUE, spell_start as *const () as usize, &ORIG_SPELL_START, "KH1's spell start (KH2 magic in KH1's cast state)").is_some() {
         NATIVE_HOOKED.store(true, Ordering::Relaxed);
     }
+    // KH1's script call 5 (the frame scale its scripts count their waits in), ours in KH1's own
+    // script-call table, for KH1's spells on KH2's cast animation (`script_step`).
+    let entry = base + SCRIPT_CALLS_STEAM + 5 * SCRIPT_CALL_SIZE;
+    let was = ((base + SCRIPT_STEP_STEAM) as u64).to_le_bytes();
+    let ours = (script_step as *const () as usize as u64).to_le_bytes();
+    if super::hook::patch(entry, &was, &ours, "KH1's script call 5 (KH1's spells timed to KH2's cast animation)") {
+        log(&format!("KH1's script call 5 at {entry:#x} is ours (KH1's spells on KH2's cast animation cast on its cast frame)"));
+    }
+}
+
+/// KH1's script-call table (Steam `0x140529180`, 16 bytes a call: the function, then its argument
+/// count with bit 30 "returns a value"; Checked (exe)) and call 5's function (`0x1402B98E0`: writes
+/// KH1's frame scale `0x14233FBDC` into its one argument, `movss xmm0, [rip+..]; movss [rcx],
+/// xmm0; ret`, Checked (exe)); the process the script machine is running (`0x142DB7B48`, set by
+/// `0x1402BCEC0` / `0x1402BD540` around each run of `0x1402CC620`, Checked (decomp)).
+const SCRIPT_CALLS_STEAM: usize = 0x529180;
+const SCRIPT_CALL_SIZE: usize = 0x10;
+const SCRIPT_STEP_STEAM: usize = 0x2B98E0;
+const SCRIPT_RUNNING_STEAM: usize = 0x2DB7B48;
+
+/// A KH1 spell cast on KH2's cast animation (the tester, m20, "vice versa"): its script process,
+/// its clock's rate (KH1's cast frame over KH2's), the 60 Hz frames run, the frames it runs for
+/// (KH2's cast frame) and the last game frame counted.
+struct Timed {
+    process: usize,
+    rate: f32,
+    run: f32,
+    upto: f32,
+    frame: u64,
+}
+
+static TIMED: Mutex<Option<Timed>> = Mutex::new(None);
+
+/// KH1's script call 5 (ours, `install`): KH1's frame scale, as KH1's; for the process of a KH1
+/// spell cast on KH2's cast animation (`time_kh1_spell`), times its rate until KH2's cast frame,
+/// so KH1's script's own wait (`KH1_CAST_FRAME`) ends on the frame KH2's animation casts. KH1's
+/// scripts count every wait in this call (`docs/kh1-magic-native.md` §4j); nothing else of the
+/// script changes.
+unsafe extern "system" fn script_step(out: *mut f32) {
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let f: unsafe extern "system" fn(*mut f32) = std::mem::transmute(base + SCRIPT_STEP_STEAM);
+    f(out);
+    if out.is_null() {
+        return;
+    }
+    let Ok(mut g) = TIMED.try_lock() else { return };
+    let Some(t) = g.as_mut() else { return };
+    if rd::<usize>(base + SCRIPT_RUNNING_STEAM) != t.process {
+        return;
+    }
+    let step = *out;
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    if frame != t.frame {
+        if t.frame != 0 {
+            t.run += step;
+        }
+        t.frame = frame;
+    }
+    if t.run >= t.upto {
+        log(&format!("KH1's spell on KH2's cast animation: its script's clock back to KH1's after {:.0} frames", t.run));
+        *g = None;
+        return;
+    }
+    *out = step * t.rate;
+}
+
+/// After KH1's spell start for one of KH1's own spells (Blizzard .. Aero) on our slot of KH2's
+/// cast motion (its animation row at KH2, `anim_kh2`; `kh2slots::redirect` points its request
+/// there): its script's clock runs at KH1's cast frame over KH2's (the clip's magic-cast event,
+/// frame trigger 17) until KH2's cast frame, so it casts there (the tester, m20: "and vice
+/// versa"). `started`: what KH1's spell start returned (the task's `+0x18`; its process at `+0x20`,
+/// `0x14028F5E0`, Checked (decomp)). `request`: the cast's request, queued first.
+unsafe fn time_kh1_spell(actor: usize, spell: u8, request: u32, started: u64) {
+    if !(1..=6).contains(&spell) || started < 0x10000 || !anim_kh2(spell) || kh2_spell(spell) && spell <= 3 {
+        return;
+    }
+    let Some(motion) = super::kh2slots::cast_motion(request as usize) else { return };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&motion)) else { return };
+    let casts = |want: bool| clip.events.iter().find(|e| matches!(e.kind, character_core::EventKind::MagicCast(x) if !want || x as u16 == motion)).map(|e| e.frame as f32);
+    let Some(upto) = casts(true).or_else(|| casts(false)).filter(|f| *f > 0.0) else { return };
+    let process = rd::<usize>(started as usize + 0x20);
+    if process < 0x10000 {
+        return;
+    }
+    let own = KH1_CAST_FRAME[spell as usize];
+    // (A hair over KH1's frame over KH2's, so the count reaches 0 on KH2's frame and not a frame
+    // later by rounding.)
+    let rate = own / upto * 1.0001;
+    if let Ok(mut g) = TIMED.lock() {
+        *g = Some(Timed { process, rate, run: 0.0, upto, frame: 0 });
+    }
+    let _ = actor;
+    log(&format!("KH1's spell {spell} on KH2's cast motion {motion} (request {request:#x}): KH1's script casts on KH2's cast frame {upto:.0} (its own {own:.0}; its clock x{rate:.3} until then)"));
 }
 
 /// KH2's `spell` (Fire 0 .. Cure 3) is cast in KH1's own cast state now (`air`: KH1's air cast):
@@ -530,8 +623,17 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     if actor > 0x10000 && actor == super::takeover::sora_actor() && !super::form::in_form() && super::shared::active() && rd::<i32>(actor + 0x70) == 2 {
         super::shared::physics::cast_stops(actor);
     }
+    // (KH1's own spell on our slot of KH2's cast motion: timed to KH2's cast frame,
+    // `time_kh1_spell`.)
+    let sora = actor > 0x10000 && actor == super::takeover::sora_actor() && !super::form::in_form() && super::shared::active();
+    let count = if sora { rd::<u32>(actor + QUEUE_COUNT) } else { 0 };
+    let request = if (1..=8).contains(&count) { rd::<u32>(actor + QUEUE) & 0xFFFF } else { 0 };
     let f: unsafe extern "system" fn(usize, i32, usize) -> u64 = std::mem::transmute(ORIG_SPELL_START.load(Ordering::Acquire));
-    f(actor, spell, target)
+    let r = f(actor, spell, target);
+    if sora && (1..=6).contains(&spell) && super::kh2slots::CASTS.iter().any(|c| c.2 == request as usize) {
+        time_kh1_spell(actor, spell as u8, request, r);
+    }
+    r
 }
 
 /// KH1's command step starting `spell` for base Sora, the cast request asked for: with KH2's
