@@ -303,3 +303,7 @@ go ahead
 
 ^m10
 
+1. don't worry about drive forms because they're going to be transferred over to the new system once we get base sora done
+2. (a)
+   
+   go ahead
