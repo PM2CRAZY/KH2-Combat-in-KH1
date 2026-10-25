@@ -1,3 +1,15 @@
+### 2026-10-25: Stage 563 (testing branch: Magic: KH1's Gravity, Stop and Aero on KH2 cast slots)
+- **Gravity, Stop and Aero on KH2's cast animation, natively.** The same ask (their
+animation rows at KH2). Before, KH2's controller borrowed Sora for them and KH2's cast motion was
+drawn over KH1's cast on its clock (`takeover::command_started`, `pose::follow`,
+`BASE_KH1_CAST`). Now `kh2slots::CASTS` adds our slots of KH2's Thunder cast (62, air 64) for
+Gravity and Cure's (65, air 67) for Stop and Aero on KH1's own requests 0x3A / 0x3B / 0x3C and air
+0x87 / 0x88 / 0x89 (KH1's request table: slots 55 / 56 / 56, air 80 / 81 / 81, Checked (files)
+`xa_ex_0010.mset`), and `combat::command` lets KH1's command step cast them there with KH1's own
+script, cost and effects (`kh1_on_kh2`, KH1 states 0 / 6 / 0x18 / 2 / 8). The borrow is left only for
+a state KH1 casts nothing in. KH2's cast windows (cut / combo, `cast_follow`) apply on them. Six more
+baked slots at load. `docs/kh1-move-styles.md`.
+
 ### 2026-10-25: Stage 562 (testing branch: Magic: a Config row per spell and its animation)
 - **Magic's rows per spell.** The tester (same thread, m19: "each magic should have its
 own settings of which magic you can choose, e.g fire: kh1 | kh2 and that would change what gets

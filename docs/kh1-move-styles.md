@@ -116,10 +116,14 @@ Config > KH1 in KH2 > Combat > Magic:
     effects, timing and cost. **Assumption**: KH1's spell scripts time their shots by their own
     frames, not by the cast motion's events (KH1's cast motions carry no spell events: §1 of
     `docs/kh1-magic-native.md`, **Checked (files)**), so the shot comes out at KH1's time.
-  - KH1's Gravity, Stop, Aero at KH2: as before (Gravity on Thunder's cast motion, Stop and Aero
-    on Cure's, the air ones in the air, run on that motion's clock, input window and movement:
-    `takeover::command_started`'s `FormCast`, `pose::follow`, `formmagic::BASE_KH1_CAST`). The
-    debug menu's KH1 Spells page shows and sets these three rows (KH1 cast = KH1).
+  - KH1's Gravity, Stop, Aero at KH2: on KH1's cast state as Blizzard / Thunder / Cure above:
+    KH1's requests 0x3A / 0x3B / 0x3C (air 0x87 / 0x88 / 0x89; KH1's slots 55 / 56 / 56, air 80 /
+    81 / 81, **Checked (files)** `xa_ex_0010.mset`) point at our slots of KH2's Thunder cast (62 /
+    air 64) for Gravity and Cure's (65 / 67) for Stop and Aero (`kh2slots::CASTS`), and KH1's
+    command step casts them with KH1's own script (`combat::command`'s `kh1_on_kh2`). Before, KH2's
+    controller borrowed him and drew KH2's motion over KH1's cast (`takeover::command_started`'s
+    `FormCast`, `pose::follow`, `formmagic::BASE_KH1_CAST`): that is left only for a state KH1 casts
+    nothing in. The debug menu's KH1 Spells page shows and sets these three rows (KH1 cast = KH1).
 - Costs: base Sora's KH2 spells cost KH2's MP scaled onto KH1's (`mpcost`, `docs/kh1-magic-native.md` §6).
 - The spells' effect packages are loaded with `drive = off` too (they were only with Drive on).
 - If a spell's KH2 file or MAGC row is missing, KH1 casts its own.

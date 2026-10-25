@@ -81,7 +81,13 @@ pub const AIR_FINISHER: usize = 0xCE;
 /// cast motion for the spell (MAGC, `00battle.bin`, Checked (files): Fire 56 / air 58, Blizzard
 /// 59 / 61, Thunder 62 / 64, Cure 65 / 67; the same motions at every level) in KH1's own cast
 /// state (KH2's spell: `formmagic::kh1_spell_start`; KH1's: KH1's own script on it).
-pub const CASTS: [(u16, usize, usize, bool); 10] = [
+///
+/// KH1's Gravity, Stop and Aero (no KH2 spell) at their animation rows KH2: KH2's Thunder cast for
+/// Gravity, Cure's for Stop and Aero (the motions `formmagic::kh1_spell_motion` and `pose::follow`
+/// drew over them before), on KH1's own requests (KH1's request table, `xa_ex_0010.mset`,
+/// **Checked (files)**: 0x3A slot 55, 0x3B / 0x3C slot 56; air 0x87 slot 80, 0x88 / 0x89 slot 81),
+/// so KH1's command step casts them on KH2's animation with KH1's own script (no borrow).
+pub const CASTS: [(u16, usize, usize, bool); 16] = [
     (56, 54, 0x36, false),
     (59, 55, 0x37, false),
     (62, 56, 0x38, false),
@@ -92,6 +98,12 @@ pub const CASTS: [(u16, usize, usize, bool); 10] = [
     (64, 81, 0x85, true),
     (67, 81, 0x86, true),
     (58, 82, 0x8A, true),
+    (62, 55, 0x3A, false),
+    (65, 56, 0x3B, false),
+    (65, 56, 0x3C, false),
+    (64, 80, 0x87, true),
+    (67, 81, 0x88, true),
+    (67, 81, 0x89, true),
 ];
 
 /// KH2's finisher casts (MAGC's finisher motions, Checked (files): Fire 57, Blizzard 60, Thunder 63;
@@ -194,7 +206,7 @@ const fn recoil_spec(i: usize) -> Spec {
     Spec { motion, stands_for, request, kind: Kind::Recoil }
 }
 
-const SPECS: [Spec; 30] = [
+const SPECS: [Spec; 36] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -212,6 +224,12 @@ const SPECS: [Spec; 30] = [
     cast_spec(7),
     cast_spec(8),
     cast_spec(9),
+    cast_spec(10),
+    cast_spec(11),
+    cast_spec(12),
+    cast_spec(13),
+    cast_spec(14),
+    cast_spec(15),
     reaction_spec(0),
     reaction_spec(1),
     reaction_spec(2),

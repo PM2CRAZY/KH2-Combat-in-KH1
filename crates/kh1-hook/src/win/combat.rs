@@ -422,6 +422,19 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         if !native && !drive && (1..=3).contains(&arg) {
             super::kh2slots::pick_cast(0x36 + arg as usize, false);
         }
+        // KH1's Gravity, Stop or Aero with its animation row at KH2, in a state KH1 casts in: KH1's
+        // command step casts it on our slot of KH2's cast motion for it (`kh2slots::CASTS`, its
+        // request pointed there by `redirect`), KH1's own script, cost and effects; no borrow, and
+        // none of the old drawing over KH1's cast (`formmagic::BASE_KH1_CAST`).
+        let kh1_on_kh2 = !drive
+            && (4..=6).contains(&arg)
+            && super::formmagic::anim_kh2(arg)
+            && matches!(state, 0 | 6 | 0x18 | 2 | 8)
+            && super::kh2slots::cast_motion(if kh1_air { 0x83 } else { 0x36 } + arg as usize).is_some();
+        if kh1_on_kh2 {
+            super::formmagic::BASE_KH1_CAST.store(false, Ordering::Relaxed);
+            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in KH1's own cast state on KH2's cast motion {:?} ({})", super::kh2slots::cast_motion(if kh1_air { 0x83 } else { 0x36 } + arg as usize), if kh1_air { "air" } else { "ground" }));
+        }
         if native {
             // KH2's cost scaled onto KH1's MP (`mpcost`, the tester's answer 6 (b)): refused as KH1
             // refuses a spell it can't pay for. KH1's command step judges the cast with its own
@@ -455,11 +468,12 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
             super::reflect::cast_native(actor, dir);
             cmd_log(format!("command {kind:#x} ({full:08x}): KH2's Reflect in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
             return;
-        } else if drive || arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg)) || ((4..=6).contains(&arg) && super::formmagic::anim_kh2(arg)) {
+        } else if drive || arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg)) || ((4..=6).contains(&arg) && super::formmagic::anim_kh2(arg) && !kh1_on_kh2) {
             // (A spell whose row is KH1's is KH1's command step's, as unmodded: below; with its
             // animation row at KH2, KH1's Blizzard, Thunder and Cure play our slot of KH2's cast
-            // motion on KH1's request, `kh2slots::redirect`. Gravity, Stop and Aero with theirs at
-            // KH2 are still borrowed and drawn on KH2's motion, `takeover::command_started`.)
+            // motion on KH1's request, `kh2slots::redirect`, and so do Gravity, Stop and Aero with
+            // theirs at KH2 (`kh1_on_kh2`); only in a state KH1 casts nothing in are those borrowed
+            // and drawn on KH2's motion, `takeover::command_started`.)
             let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
             if can(actor) == 0 {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
