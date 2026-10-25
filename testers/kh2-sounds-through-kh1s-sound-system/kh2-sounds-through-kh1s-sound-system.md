@@ -182,5 +182,6 @@ go ahead
 > 2. Is it fine that the Epic build gets no KH2 sounds? (a) Yes, Steam only. (b) No, I'd need the Epic addresses for the same sound functions.
 
 ^m5
-
+1. (b)
+2. right now yes update the doc to notify that after we're done with steam we'll update all the missing hooks so that epic works exactly like the steam version
 
