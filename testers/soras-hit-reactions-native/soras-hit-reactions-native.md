@@ -132,3 +132,8 @@ go ahead
 ^m3
 
 
+1. (a)
+2. toggle dependent, if kh1 then kh1 if kh2 then kh2
+3. (b)
+
+go ahead
