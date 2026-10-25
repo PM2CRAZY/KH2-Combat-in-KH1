@@ -114,6 +114,9 @@ shortcuts = 4\r\n\
 ; KH1's own effect system: magnet_explosion (Magnet Burst, Explosion, Vicinity Break, Aerial Finish, Guard\r\n\
 ;   Break, Finishing Leap, Aerial Recovery), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
+; kh2_hit_sparks: on = a KH2 swing's Keyblade hit on an enemy shows KH2's own hit effect for its\r\n\
+;   attack (Kingdom Key, base Sora); off = KH1's Keyblade spark. Needs kh2_effects\r\n\
+kh2_hit_sparks = on\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
 ; round in his hand (0x53: the Dream Shield); none = off\r\n\
 flip_weapons = 0x53\r\n\
@@ -251,6 +254,8 @@ pub struct Settings {
     pub bonus_ap: bool,
     pub auto_aim: bool,
     pub wall_clink: bool,
+    /// A KH2 swing's Keyblade hit shows KH2's hit element (`combat::swing_spark`).
+    pub kh2_hit_sparks: bool,
     pub kh2_camera: bool,
     pub camera_scale: f32,
     pub camera_lower: f32,
@@ -424,6 +429,7 @@ fn load(first: bool) -> Option<Settings> {
         bonus_ap: on(&text, "bonus_ap", "on", true),
         auto_aim: on(&text, "auto_aim", "on", false),
         wall_clink: on(&text, "wall_clink", "on", true),
+        kh2_hit_sparks: on(&text, "kh2_hit_sparks", "on", true),
         kh2_camera: on(&text, "camera", "kh2", true),
         config_row: on(&text, "config_row", "on", true),
         four_shortcuts: on(&text, "shortcuts", "4", true),

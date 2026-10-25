@@ -113,8 +113,10 @@ enum Anchor {
     LeftBlade(f32),
 }
 
-/// The Keyblade's package's elements switched on: its vanish flash (`weapon_vanish`).
-const WEAPON_ON: &[i16] = &[super::kh2fx::WEAPON_VANISH as i16];
+/// The Keyblade's package's elements switched on: its vanish flash (`weapon_vanish`), and its hit
+/// elements 1, 2 (a counting hit of effect_on_hit 1 / 2) and 3 (a wall), which only KH1's own hit
+/// lookup starts (`hit_list`, `combat::swing_spark`; `W_EX010.a.us`, Checked (files)).
+const WEAPON_ON: &[i16] = &[super::kh2fx::WEAPON_VANISH as i16, 1, 2, 3];
 /// The forms' packages (Sora's skeleton: his bones' anchors). Their weapon points (the tester,
 /// 1 (a)): the first Keyblade's 0x4003 / 0x4005 / 0x4007 on KH1's blade binding (turned with the
 /// blade, as KH2's weapon bone turns them), the second's 0x4004 / 0x4006 / 0x4008 on KH1's blade
@@ -171,6 +173,11 @@ const KH1_SAME: &[u32] = &[
     137, 138, 139, 142, // DrawMdl3, DrawMdlSemi3, DrawMdlTs3, DrawShapeX
     160, // KeShpDtt
     174, 177, 184, // VertexAp, VertexApLc, KeBornRnd6
+    // (The Kingdom Key's hit elements 1 and 2.) KH1's table entry (calc `0x14033E3D0`, construct
+    // `0x14033E490`, child set-up `0x14033E4B0`, vertex picker `0x140349EA0`) against KH2's
+    // (`0x1404D4EA0`, `0x1404D4F60`, `0x1404D4F80`, `0x1404E1780`): the same decompiles but for the
+    // paused byte's offset; the construct (not decompiled) byte for byte the same.
+    183, // KeBornRnd5
     217, 219, // DrawMatrixLoop, DrawMdlLoopZ
     // (The spells', §18.9.)
     75, 76, 85, // SRandFV, SRandUpFV, KeMatSN

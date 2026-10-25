@@ -2038,7 +2038,8 @@ impl Strikes {
                     h.swing, row.id, row.sub_id >> 8, row.kind, row.element, row.enemy_reaction, row.effect_on_hit, row.damage_effect, row.random_effect, row.hit_sound, row.flags,
                     (air as usize) * 2 + finisher as usize, if air { "air " } else { "ground " }, if finisher { "finisher" } else { "swing" }
                 );
-                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, None, info);
+                let fx = swing_spark(h.weapon, &row);
+                let dealt = land(sora, &b.parts[ti], &swept[ai], kh1, row.power, false, fx, info);
                 if dealt.is_some() {
                     landed += 1;
                 }
@@ -2160,7 +2161,7 @@ impl Strikes {
                     a.atk, a.sub, r.kind, r.element, r.enemy_reaction, r.effect_on_hit, r.damage_effect, r.random_effect, r.hit_sound, r.flags,
                     knock as usize, if knock { "ground finisher" } else { "ground swing" }
                 );
-                let fx = a.package.map(|package| Kh2Spark { package, effect_on_hit: r.effect_on_hit, random_effect: r.random_effect });
+                let fx = a.package.map(|package| Kh2Spark { pkg: super::kh2dpx::Pkg::Spell(package), effect_on_hit: r.effect_on_hit, random_effect: r.random_effect });
                 let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data, fx, info);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
@@ -2289,14 +2290,41 @@ unsafe fn land(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, spell
     land_hit(sora, part, at, row, power, spell, fx, info)
 }
 
-/// A KH2 spell hit's own spark (the tester, kh2-hit-effects-on-enemies, answer 2: "if its from
-/// kh2 let it call its own spark"): the spell package its attack carries and its ATKP row's
-/// effect_on_hit (`+0x0B`) and random_effect (`+0x2D`).
+/// A KH2 hit's own spark (the tester, kh2-hit-effects-on-enemies, answer 2: "if its from kh2 let
+/// it call its own spark"; after t544, "when you hit an enemy an effect spawns on the enemy
+/// (keyblade hit effect, fire hit effect etc.)"): the package its attack carries (a spell's file,
+/// or the Kingdom Key's `W_EX010.a.us` for a KH2 swing's Keyblade hit, `swing_spark`) and its ATKP
+/// row's effect_on_hit (`+0x0B`) and random_effect (`+0x2D`).
 #[derive(Clone, Copy, Debug)]
 pub struct Kh2Spark {
-    pub package: u8,
+    pub pkg: super::kh2dpx::Pkg,
     pub effect_on_hit: u8,
     pub random_effect: u8,
+}
+
+/// The Kingdom Key (KH1 item 0x51): the one KH1 Keyblade with a KH2 file of its own (KH2's
+/// `obj/W_EX010.a.us`; `docs/kh1-kh2-hit-effects.md` §5).
+const KINGDOM_KEY: u8 = 0x51;
+
+/// A KH2 swing's own Keyblade spark (`docs/kh1-kh2-hit-effects.md` §9): a hit of the right
+/// Keyblade's shapes (weapon 1, `kh2_rig::attack_shapes`) by base Sora holding the Kingdom Key
+/// takes the Kingdom Key's KH2 package (`kh2dpx::Pkg::Weapon`: its hit elements 1 and 2, groups
+/// effect_on_hit 1 / 2, kind 1, Checked (files)) and the ATKP row's effect_on_hit, as KH2's hit
+/// (`0x1403d1730` → `0x1403d1b40`) looks the swing's own PAX up (**Assumption**, as for spells:
+/// the swing's attack carries its weapon's PAX; not traced to the line that sets attack `+0x28`).
+/// Not for the other Keyblades (no KH2 file: KH1's spark, the tester's answer 1 (c)), Sora's body
+/// shapes (weapon 0: KH2 looks them up in Sora's own `P_EX100.a.us`, not built for it yet), a
+/// form's Keyblades (their own KH2 packages, not built for it yet), or with `kh2_hit_sparks` off.
+/// KH1's own swings (Base / Aerial Base Combo at KH1) don't land here: theirs stays KH1's.
+fn swing_spark(weapon: u8, row: &kh2_formats::battle::Atkp) -> Option<Kh2Spark> {
+    if weapon != 1 || !super::settings::get().kh2_hit_sparks || super::form::current().is_some() || super::form::arriving().is_some() {
+        return None;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    if unsafe { super::equip::sora_weapon(base) } != Some(KINGDOM_KEY) {
+        return None;
+    }
+    Some(Kh2Spark { pkg: super::kh2dpx::Pkg::Weapon, effect_on_hit: row.effect_on_hit, random_effect: row.random_effect })
 }
 
 /// KH1's attack data entry (`kh1rows::DATA`) and its hit-effect group (`+0x28`: the bit
@@ -2392,14 +2420,14 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     // (or `kh2_effects` off): KH1's spark, as before.
     let kh2_spark = fx.and_then(|f| {
         let group = kh2_group(f);
-        let (list, note) = super::kh2dpx::hit_list(super::kh2dpx::Pkg::Spell(f.package), group)?;
+        let (list, note) = super::kh2dpx::hit_list(f.pkg, group)?;
         let h = pose::handle(list);
         let data = if h != 0 { hit_data(base, row.data, group) } else { None };
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
             log(&format!(
-                "KH2 spell hit spark: package {} effect_on_hit {} random {} -> group {group}, list {list:#x} (handle {h:#010x}), data copy {data:#x?} | {note}",
-                f.package, f.effect_on_hit, f.random_effect
+                "KH2 hit spark: package {:?} effect_on_hit {} random {} -> group {group}, list {list:#x} (handle {h:#010x}), data copy {data:#x?} | {note}",
+                f.pkg, f.effect_on_hit, f.random_effect
             ));
         }
         Some((h, data?)).filter(|x| x.0 != 0)
@@ -2407,7 +2435,7 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
     if fx.is_some() && kh2_spark.is_none() {
         static M: AtomicU32 = AtomicU32::new(0);
         if M.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH2 spell hit spark: package {:?} not ready, or its element for this hit can't play through KH1 yet (see its load line): KH1's spark", fx.map(|f| f.package)));
+            log(&format!("KH2 hit spark: package {:?} not ready, or its element for this hit can't play through KH1 yet (see its load line): KH1's spark", fx.map(|f| f.pkg)));
         }
     }
     let bit = free_bit();

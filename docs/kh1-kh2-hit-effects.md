@@ -203,3 +203,45 @@ of that file), Wisdom's shots the form's archive. Not traced to the line that se
 - So (b) needs: where a KH1 enemy keeps its own effect list (its object / model; not found yet) and
   whether any KH1 enemy list has entries a KH2 damage_effect could map onto (kind bits and groups
   of KH1 enemy DPXs: not surveyed). Open; asked in the thread.
+
+## 9. KH2 swings' own Keyblade spark (the round after t544)
+
+The tester (after t544): "from my judgement I don't think an enemy would hold what effect it can
+receive, what I'm referring to is when you hit an enemy an effect spawns on the enemy (keyblade hit
+effect, fire hit effect etc.) Please look into it and find an implementation thats native".
+
+- The effect a hit spawns on the enemy is KH2's attack-side lookup (§2): the attack's own PAX,
+  element tagged with the ATKP row's effect_on_hit, started at the contact point on the target's
+  surface, turned along the hit. KH1 does the same lookup on the attack's effect list (§3). Spells
+  already take KH2's (t521, §6.3); this adds KH2's swings.
+- The damage effect (§8) is a second, separate element: KH2's `0x1403d1b40` does start it from the
+  **target's** own effect set (`target + 0x80`, kind `0x200`, group damage_effect − 1), only when the
+  record isn't immune (`+0x18` bit 2 clear) and the target's `+0x120` bit 9 is clear (**Checked
+  (decomp)**, KH2 Steam). So in KH2 the enemy's own file does hold it (an enemy-specific flash on
+  top of the weapon's spark). KH1's enemies have no KH2 file and KH1 has no such step (§8), so it
+  stays out; nothing of it is built.
+- `combat::swing_spark`: a hit of a KH2 swing's right-Keyblade shapes (weapon 1) by base Sora with
+  the Kingdom Key (KH1 item 0x51, save `+0x36`) lands with `Kh2Spark { Pkg::Weapon, effect_on_hit,
+  random_effect }` through t521's path: the attack object's `+8` is the Kingdom Key's KH2 package
+  (`obj/W_EX010.a.us`) built in KH1's effect system, and its attack data is a copy with `+0x28` =
+  effect_on_hit − 1; KH1's contact (`0x1402b4060` → `0x1402b4320` → `0x1401dffe0` → `0x1402ae650`)
+  picks, places and turns KH2's element. Rows with effect_on_hit 0 show none, as KH2; rows with 3
+  find no kind-1 element in the Keyblade's file (KH2 the same: none).
+- `kh2dpx::WEAPON_ON` now builds the package's hit elements 1, 2 and 3 (kinds 1, 1, 0x102; groups
+  1, 2, 1|2; Checked (files)). Elements 1 and 2 run pppKeBornRnd5 (183), now in `KH1_SAME`: KH1's
+  entry (calc `0x14033E3D0`, construct `0x14033E490`, child set-up `0x14033E4B0`, vertex picker
+  `0x140349EA0`) and KH2's (`0x1404D4EA0`, `0x1404D4F60`, `0x1404D4F80`, `0x1404E1780`) decompile the
+  same but for the paused byte's offset; the construct (not decompiled) is the same bytes
+  (**Checked (decomp)**, **Checked (exe)**, both Steam). Any other package element using 183 now
+  plays through KH1 too.
+- Not changed: KH1's own swings (Base / Aerial Base Combo at KH1: KH1's rows and attack objects,
+  KH1's spark); the other Keyblades (no KH2 file: KH1's spark, answer 1 (c)); Sora's body shapes
+  (weapon 0: KH2 looks those up in `P_EX100.a.us`, elements 14 / 42 / 43, not built for hits);
+  Drive Forms (their weapons' KH2 packages aren't built for hits); the hit sound (still KH1's
+  Keyblade byte, `+0xA8`); KH1's kind-0x80 "damage effect" from the attacker's list (KH2's list has
+  none, so a KH2 swing hit plays none, as KH2's attacker side).
+- **Assumption** (as §2 / §6.2): a KH2 swing's attack carries its weapon's PAX (`+0x28`); not
+  traced to its constructor. ini `kh2_hit_sparks = off` puts KH1's spark back (and with
+  `kh2_effects = off` the package isn't built: KH1's spark).
+- Cost: one more small package built on the background thread at load (three elements); per hit
+  KH1's own lookup. No hook, nothing per frame.
