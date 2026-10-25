@@ -441,3 +441,35 @@ In KH2's borrowed moves (`hurt`'s other branch) KH2's controller plays KH2's rea
 whose frame trigger 14 already says KH2's line through `kh2sound::event`; the hook's replay of
 KH1's group 0 / 1 is now skipped then (it doubled the line).
 
+## 15. KH2's air flinch turn (the tester's m2 answer 2: "(a)")
+
+**KH2 (Checked (decomp), Steam KH2 `0x1403D3840`).** The air flinch takes the hit's push
+direction (the vector copy `0x1401A8E60`; Ghidra drops its source argument, read as the hit's
+direction: **Assumption**, matching the OG rewrite's `reaction::respond`), negates it when
+dot(facing, push) < 0 (hit from the front), and sets it as the object's facing (`0x1403B6420`) at
+once, then plays 14 (front) / 15 (behind). So he faces the attacker when hit from the front and
+faces away when hit from behind. KH2's ground flinch (`0x1403D43B0`) doesn't turn him (Checked
+(decomp)), so only the air flinch does.
+
+**KH1 (Checked (decomp)).** KH1's air flinch `0x14029CD80` doesn't turn him; its knock-back
+`0x14029CEC0` turns him by the same rule, with `atan2(x, z)` of the (negated) push direction into
+KH1's facing set `0x140297E10 (actor, angle)` (`+0x30` = sin, `+0x38` = cos, `+0x3C` the angle;
+skipped while `+0x374` bit `0x1000` holds his facing) and `+0x150`.
+
+**What the mod does.** With Hit Reactions at KH2 (base Sora on KH1's states), after KH1's air
+flinch (requests `0x4E` / `0x4F`, his air state 2), `hitreact::air_flinch_turn` makes that same
+turn the way KH1's knock-back makes it: the push direction is the one KH1's air flinch just gave
+his air velocity (`0x14029D800`: record `+0x10` × the drift); `0x4E` (front) faces him along its
+negation, `0x4F` (behind) along it. If KH1 gave him no drift (a push factor of 0), the direction
+isn't known and he isn't turned. Any Knock-back Numbers value. Steam only. At Hit Reactions KH1
+nothing changes.
+
+## 16. Flinches while flying or swimming (the tester's m2 answer 3: "(b)", KH1's)
+
+KH1's flight and swimming reactions (`0x14029D110` / `0x14029CFD0` flight, `0x14029D340`
+swimming, Checked (decomp)) keep KH1's numbers: KH2's push (§11) acts only on the ground flinch
+requests in KH1's ground reaction, the air flinch hop / drift and turn (§11, §15) only in his
+air state 2 (the flight flinch asks `0x4E` / `0x4F` too, from state 8, and is skipped by that
+test). Two KH2 parts still reach them (**open**, asked): the flight flinch's `0x4E` / `0x4F`
+play KH2's air flinch motions 14 / 15 (the slots are by request, `kh2slots::REACTIONS`), and the
+Medium Hits row's kind 4 → 3 also applies in flight and swimming.

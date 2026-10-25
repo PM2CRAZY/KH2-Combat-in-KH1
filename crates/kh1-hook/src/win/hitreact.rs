@@ -210,10 +210,43 @@ pub unsafe fn after_pass(actor: usize, was: (u32, u32)) {
                 Numbers::Scaled => (KH2_AIR_HOP, hit_back * to_jump * (kh1 / air_cap).clamp(0.0, 1.0)),
             };
             physics::kh2_hop(actor, hop, [dir[0] * speed, dir[1] * speed]);
+            // KH2's turn (the tester's m2 answer 2: "(a)"): toward the attacker from the front,
+            // away from him from behind (`air_flinch_turn`).
+            if kh1 > 1e-4 {
+                air_flinch_turn(actor, request, dir);
+            }
             note(|| format!("KH2's air flinch on KH1's (request {request:#x}, {how:?}): hop {hop:.0}, drift {speed:.1} a frame (KH1's own {kh1:.1})"));
         }
         _ => {}
     }
+}
+
+/// KH1's facing set (Steam `0x140297E10 (actor, angle)`: `+0x30..+0x3C` = sin, 0, cos, angle,
+/// skipped while `+0x374` bit `0x1000` holds his facing; Checked (decomp)), as `glide` uses it.
+const SET_FACING_STEAM: usize = 0x297E10;
+/// His wanted facing (KH1's knock-back reaction writes it with the facing, `0x14029CEC0`).
+const FACING_WANTED: usize = 0x150;
+
+/// KH2's air flinch turns him (Steam KH2 `0x1403D3840`, Checked (decomp)): along the hit's push
+/// direction, negated when the hit is from the front (dot(facing, push) < 0), set as his facing at
+/// once; so he faces the attacker when hit from the front and faces away when hit from behind
+/// (`character_core::reaction::respond`'s `AirFlinch::face`, the same rule). KH1's air flinch
+/// (`0x14029CD80`) doesn't turn him; its knock-back (`0x14029CEC0`) turns him by this very rule
+/// with KH1's facing set and `+0x150` (Checked (decomp)), so the turn is made the way KH1 makes it.
+/// `dir`: the push direction KH1's air flinch just gave his air velocity (`0x14029D800`: record
+/// `+0x10` × its drift, Checked (decomp)); `request` 0x4E front, 0x4F behind (KH1's own front test,
+/// the same as KH2's, §9). Only in KH1's air state 2 (the caller): flight and swimming keep KH1's
+/// (the tester's m2 answer 3: "(b)").
+unsafe fn air_flinch_turn(actor: usize, request: u32, dir: [f32; 2]) {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    let face = if request == 0x4E { [-dir[0], -dir[1]] } else { dir };
+    let angle = face[0].atan2(face[1]);
+    let set: unsafe extern "system" fn(usize, f32) = std::mem::transmute(super::takeover::game_base() + SET_FACING_STEAM);
+    set(actor, angle);
+    wr(actor + FACING_WANTED, angle);
+    note(|| format!("KH2's air flinch turn (request {request:#x}): facing {:.2} rad ({} the attacker)", angle, if request == 0x4E { "toward" } else { "away from" }));
 }
 
 /// Before KH1's physics frame for Sora (`takeover::physics`): KH2's push speed for this frame in
