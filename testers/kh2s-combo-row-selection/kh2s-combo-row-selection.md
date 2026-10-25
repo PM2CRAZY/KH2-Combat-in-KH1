@@ -372,9 +372,11 @@ go ahead
 
 ^m18
 
-I think you fundamentally don't understand what I want, if an ability is equipped thats kh2s and your combat config is set to kh1 then you should be able to do kh1s moves, and its row picks, we need to modify kh1s so that it can choose explosion and other moves during its kh1 combo. the ability should not ignore the combat settings
+I think you fundamentally don't understand what I want, if an ability is equipped thats kh2s and your combat config is set to kh1 then you should be able to do kh1s moves, and its row picks, we need to modify kh1s so that it can choose explosion and other moves during its kh1 combo. the ability should not ignore the combat settings, 
 
 do a new reimplementation and come back to me when your finished
+
+UPDATE:  if your still unsure I need you to patch the extra functions that kh2 uses in kh1, thats the goal of native not to have separate systems, but if possible allow to patch in extra mechanics into the game while keeping the 1:1 feel of kh2 and kh1 this seems to have been done with kh2s effects, the extra functions they call are now apart of kh1. 
 
 go ahead
  
