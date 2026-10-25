@@ -305,3 +305,4 @@ go ahead
 ^m15
 
 
+your currently fundamentally misunderstanding me, sora's hoodie still stays rigid, its currently worse than it was when we had physics around t375, that had better animations what do you think instead we approximate the animation and put it on soras coat, hoodie, legs etc. it needs to look natural and his clothes not clip. 
