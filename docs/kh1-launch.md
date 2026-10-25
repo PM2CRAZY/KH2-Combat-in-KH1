@@ -279,3 +279,17 @@ knock-back number, sstm's 200 when it has none, halved for reactions 0xC / 0xD; 
 enemy KH1 can't launch (KH1's fallback), and any push KH1 starts itself meanwhile. **Checked
 (decomp)** for both games' push rules; the hand-over between the two is **Checked (code)**.
 Spells' hits (`Strikes::spell_strike`) are not included: they keep KH1's rows' reactions.
+
+### Air flinches
+
+KH1's enemy air flinch `0x1402B8B90 (actor, record, front)` (Steam; the third argument a float in
+XMM2, its sign the front / back motion 0x4E / 0x4F; prologue `48 89 5C 24 18 48 89 74 24 20 57 48
+83 EC 60`, Checked (exe)) is hooked. KH1's runs first (its motion, its hop of 20, its drift); for
+a KH2 hit's record, KH1's arc fields become KH2's hop (`+0x3B0` 0, `+0x3B4` its height, `+0x3B8`
+the 50 hop's rise time under KH2's gravity, `+0x3BC` −50), `+0x3C0` the drift, and the flight
+(`knockback::air_step`, as for launches) is KH2's: a 50 hop on KH2's jump curve and gravity
+(20/49, fall capped at 16), drifting at a constant push distance × 0.048 (× the enemy's weight with
+Enemy Weight on) along the record's direction (Steam KH2 `0x1403D4800`: 50.0 and sstm `+0x38`,
+Checked (decomp); the constant drift is `character_core::npc`'s reading of KH2's air flinch,
+`docs/combat-model.md`). Not done: KH2's turn of the flinched body (`0x1403D3840` faces it along
+the push, negated from the front); KH1's air flinch keeps its facing.

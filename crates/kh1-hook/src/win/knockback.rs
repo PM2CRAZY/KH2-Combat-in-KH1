@@ -125,6 +125,9 @@ enum Fly {
     /// KH2's blow (`character_core::reaction::Blow`): one 30 Hz tick every second 60 Hz frame,
     /// half of it a frame (as KH2's controller and `character_core::npc` run it).
     Blow { blow: character_core::reaction::Blow, step: [f32; 3], phase: u32 },
+    /// KH2's air flinch (Steam KH2 `0x1403D4800`): a hop of 50 on KH2's jump curve and gravity
+    /// (`character_core::Arc`), drifting at a constant `vel` (per 60 Hz frame) along the push.
+    Hop { arc: character_core::Arc, vel: [f32; 2] },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -199,6 +202,15 @@ pub unsafe fn air_step(actor: usize, disp: *mut [f32; 4]) {
                 }
             }
             blow.vel_h
+        }
+        Fly::Hop { arc, vel } => {
+            for _ in 0..n {
+                let dy = arc.advance(1.0, character_core::KH2_GRAVITY, p.fall_max);
+                total[0] += vel[0];
+                total[1] += dy;
+                total[2] += vel[1];
+            }
+            *vel
         }
     };
     g.frames += n;
@@ -374,10 +386,66 @@ pub unsafe fn push_frame(actor: usize) {
     p[i] = (actor, v * KH2_DECAY.powf(dt), v);
 }
 
+// ---------------------------------------------------------------------------------------------
+// The air flinch: KH2's hop and drift in KH1's.
+// ---------------------------------------------------------------------------------------------
+
+/// KH1's enemy air flinch (Steam `0x1402B8B90 (actor, record, front)`, the third a float in XMM2:
+/// its sign picks motion 0x4E / 0x4F; Checked (decomp)): a hop of 20 (`0x1402AF960`) and
+/// `+0x3C0` = the record's direction × btltbl `+0x38` (4) × the weight. `mov [rsp+0x18], rbx;
+/// mov [rsp+0x20], rsi; push rdi; sub rsp, 0x60` (Checked (exe)).
+const AIR_FLINCH_STEAM: usize = 0x2B8B90;
+const AIR_FLINCH_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x60];
+static ORIG_AIR_FLINCH: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// KH2's air flinch hop (Steam KH2 `0x1403D4800`: 50.0, Checked (decomp)).
+const KH2_AIR_HOP: f32 = 50.0;
+const ARC_T: usize = 0x3B0;
+const ARC_Y0: usize = 0x3B4;
+
+unsafe extern "system" fn air_flinch(actor: usize, rec: usize, front: f32) {
+    let f: unsafe extern "system" fn(usize, usize, f32) = std::mem::transmute(ORIG_AIR_FLINCH.load(Ordering::Acquire));
+    f(actor, rec, front);
+    let Some(hit) = record(rec) else {
+        land_kh1(actor);
+        return;
+    };
+    let Some(d) = push_distance(&hit) else {
+        land_kh1(actor);
+        return;
+    };
+    let w = kh1_weight(actor);
+    // (KH1 never moves an enemy of weight 0: its own stays.)
+    if w == Some(0.0) || rd::<i32>(actor + STATE) != 2 {
+        land_kh1(actor);
+        return;
+    }
+    let to_jump = pose::kh2().map_or(0.048, |k| k.character.reaction.hit_back_to_jump);
+    let speed = d * to_jump * if weight() { w.unwrap_or(1.0) } else { 1.0 };
+    let r: [f32; 4] = rd(rec + 0x10);
+    let n = r[0].hypot(r[2]);
+    let dir = if n > 1e-4 { [r[0] / n, r[2] / n] } else { [0.0, 0.0] };
+    let vel = [dir[0] * speed, dir[1] * speed];
+    let arc = character_core::Arc::new(KH2_AIR_HOP, character_core::KH2_GRAVITY);
+    // KH1's arc fields as KH2's hop (its apex time and height, from where it is), so KH1's own
+    // timing off them (its apex) follows KH2's.
+    let y: f32 = rd(actor + 0x14);
+    wr(actor + ARC_T, 0.0f32);
+    wr(actor + ARC_Y0, y);
+    wr(actor + ARC_UP_T, arc.uptime);
+    wr(actor + ARC_H, -KH2_AIR_HOP);
+    wr(actor + VEL, [vel[0], 0.0, vel[1], speed]);
+    start(Flight { actor, fly: Fly::Hop { arc, vel }, up_t: arc.uptime, h: KH2_AIR_HOP, frames: 0 });
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log(&format!("KH2's air flinch on {actor:#x} (reaction {}, knock-back {} / {}): hop {KH2_AIR_HOP:.0}, drift {speed:.1} a frame (push {d:.0}, weight {w:?}{})", hit.reaction, hit.k1, hit.k2, if weight() { "" } else { ", off" }));
+    }
+}
+
 pub unsafe fn install() {
     if super::addr::Build::current() != super::addr::Build::Steam {
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    super::hook::install(base + AIR_FLINCH_STEAM, &AIR_FLINCH_PROLOGUE, air_flinch as *const () as usize, &ORIG_AIR_FLINCH, "enemy air flinch (KH2's hop and drift)");
     super::hook::install(base + FLINCH_PUSH_STEAM, &FLINCH_PUSH_PROLOGUE, flinch_push as *const () as usize, &ORIG_FLINCH_PUSH, "enemy flinch push (KH2's push)");
 }
