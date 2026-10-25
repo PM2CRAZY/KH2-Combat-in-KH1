@@ -203,6 +203,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/quick-run-native/quick-run-native.md#^m1)
   - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](../testers/quick-run-native/quick-run-native.md#^m2)
   - [3. Assistant: Thanks for the trace, it showed it clearly.](../testers/quick-run-native/quick-run-native.md#^m3)
+  - [4. Assistant: Thanks! (a) it is, so nothing changes: with Dodge Roll on KH](../testers/quick-run-native/quick-run-native.md#^m4)
 - [Reaction commands](../testers/reaction-commands/reaction-commands.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/reaction-commands/reaction-commands.md#^m1)
 - [Sora's hit reactions native](../testers/soras-hit-reactions-native/soras-hit-reactions-native.md)

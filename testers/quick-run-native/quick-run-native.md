@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](#^m2)
 - [3. Assistant: Thanks for the trace, it showed it clearly.](#^m3)
+- [4. Assistant: Thanks! (a) it is, so nothing changes: with Dodge Roll on KH](#^m4)
 
 ---
 
@@ -120,6 +121,15 @@ go ahead
 
 ^m3
 
+
 (a) this is fine 
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! (a) it is, so nothing changes: with Dodge Roll on KH1 the roll before the Quick Run keeps KH1's own roll speed (about 60 units shorter than KH2's by the cut), and KH1 stays exactly KH1. The Quick Run itself already starts at KH2's frame from either roll (t547), and its speed and length are the same both ways.
+>
+> No new version for this one. If anything about the roll into Quick Run still feels off in game, a trace of it with Dodge Roll on KH1 and then KH2 would show it.
+
+^m4
+
