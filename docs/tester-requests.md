@@ -119,6 +119,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [3. Assistant: I didn't find a link in either thread or its folder (and I d](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m3)
 - [KH2 knockback on enemies](../testers/kh2-knockback-on-enemies/kh2-knockback-on-enemies.md)
   - [1. Assistant: I started this thread from your message in KH2's combo row s](../testers/kh2-knockback-on-enemies/kh2-knockback-on-enemies.md#^m1)
+  - [2. Assistant: Thanks for the answers! This is the knockback update the com](../testers/kh2-knockback-on-enemies/kh2-knockback-on-enemies.md#^m2)
 - [KH2 Limits](../testers/kh2-limits/kh2-limits.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-limits/kh2-limits.md#^m1)
 - [KH2 magic and Reflect native](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md)

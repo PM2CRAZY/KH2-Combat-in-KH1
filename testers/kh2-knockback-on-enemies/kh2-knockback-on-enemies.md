@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from your message in KH2's combo row s](#^m1)
+- [2. Assistant: Thanks for the answers! This is the knockback update the com](#^m2)
 
 ---
 
@@ -50,8 +51,40 @@
 
 ^m1
 
+
 (b) but make it a toggle in the config menu
 (a)
 (a)
 
 go ahead
+
+> [!tip] Assistant
+> Thanks for the answers! This is the knockback update the combo row thread was waiting on, in five versions. It's all for hits from KH2's moves; KH1's own moves keep KH1's knockback.
+>
+> - **t602: launches.** Every KH2 blow now goes through KH1's own launch with KH2's starting speeds: the attack's first number up, the second sideways, or KH2's 24 / 40 when both are 0. The "holding" rule is gone, and so is Explosion's farther blast (your 3 (a)): its last hit is KH2's 15 up / 30 sideways. Guard Break now pops the enemy straight up where it stands, with no slide. Checked against KH2's decomp (`0x1403CEA00`) and KH1's launch (`0x1402B8530`).
+> - **t603: the flight.** A launched enemy flies by KH2's rules inside KH1's own air state: sideways speed ×0.8 each tick, the rise ×0.8, KH2's gravity, the fall capped at 16. KH1 still does the collision, landing, lying and getting up. The rules come from KH2's decomp; I haven't compared it frame by frame against a KH2 recording.
+> - **t604: flinch pushes.** KH2's push distance (the attack's first number, or 200), starting at a tenth of it and ×0.9 a frame, running through KH1's own enemy push. Checked in both decomps.
+> - **t605: air flinches.** KH2's 50 hop on KH2's curve, drifting at the push distance × 0.048, through KH1's own air flinch. Numbers from KH2's decomp.
+> - **t606: the toggle.** Config > Combat > Tweaks > Enemy Weight, On by default as you picked. On multiplies KH2's numbers by KH1's weight for each enemy; Off gives every enemy KH2's numbers. Distances aren't scaled for KH1 Sora's size (your 2 (a)).
+>
+> How I applied the weight: KH1 multiplies its pushes and air drifts directly by the enemy's weight stat, but for launches it picks a speed between 20 and 35 by that stat. So pushes and drifts get ×weight, and launches get ×(KH1's launch speed for that enemy ÷ 35), which makes a weight of 1.0 "KH2's numbers as they are". That's my reading, not something KH1 says outright, so the log now prints each enemy's weight once ("enemy weight: ...").
+>
+> What stays KH1's:
+> - enemies KH1 can't launch (no launch animation; the big and fixed ones);
+> - enemies whose weight is 0, even with the toggle off, since KH1 never moves them;
+> - spell hits (Reflect's counter, Wisdom's shots), which still use KH1's reactions.
+>
+> Could you test, with a trace and the log:
+> 1. A Guard Break and an Aerial Finish on one Shadow / Soldier, then on a group.
+> 2. Explosion's last blast.
+> 3. Plain combo flinches, on the ground and in the air.
+> 4. The same with Enemy Weight Off.
+>
+> Questions:
+> 1. KH2 also turns an enemy hit in the air to face along the push; KH1's air flinch doesn't. (a) add KH2's turn, or (b) leave KH1's facing?
+> 2. KH2's push-only reactions still play KH1's flinch animation along with KH2's push. (a) make them push only, as in KH2, or (b) leave them?
+> 3. Spell hits: (a) give them KH2's knockback too, or (b) leave them for now?
+> 4. If the logged weights look off once you've played, should the launch factor be (a) as above, or (b) the weight stat itself, as for pushes?
+
+^m2
+
