@@ -159,3 +159,8 @@ go ahead
 
 ^m6
 
+1. (a) based off of the config; we need to give kh1's menu and mp the ability to allow costs like kh2 cure, where kh2 cure is if you have mp regardless of the amount then you can spend it on a cure but it wipes your whole mp bar. this needs to be a feature in the engine if it isn't already so that kh2 cure can call for it. as design choice lets make sure that you have at least 1 bar of blue mp before you can cast kh2 cure.
+2. (a)
+3. reflect is currently not 1:1 with kh2, from how it falls to how it behaves in game, please look at the steam c decomp.
+
+go ahead
