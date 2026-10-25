@@ -460,3 +460,10 @@ when it comes to it we now have two pickers, if its native thats good but what I
 
 ^m20
 
+1. (a) like kh2 (I had an assumption and it was wrong)
+2. for explosion it should come last, for hurricane blast it should come first. 
+3. have kh1 play a kh2 normal finisher
+4. (a)
+5. (a)
+
+one thing why can't we include kh2's combat configs in kh1's picker? shouldn't the goal be to have kh1's engine have more abilities and the config just switches what the logic does in kh1's picker so that its 1:1 with kh2?
