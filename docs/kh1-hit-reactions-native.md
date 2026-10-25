@@ -299,8 +299,8 @@ nothing changes.
   (KH1's own was 46). The air flinches have none in either game; KH1 queues its fall when the slot
   ends (`0x40000006`).
 - **Voices.** KH2's clips start voice 29 / 30 at frame 0 (Checked (files)). Left out: KH1's pass
-  already plays its own hurt voice group 0 / 1 (`0x1402901F0`). With Battle Quotes at KH2 the hurt
-  line is still KH1's (open question).
+  already plays its own hurt voice group 0 / 1 (`0x1402901F0`). With Battle Quotes at KH2 that
+  call says KH2's line instead (§14).
 - **Not in this step:** KH1's knock-backs `0x4C` / `0x4D` (slots 65 / 66, 72 frames, in place) and
   `0x50` / `0x51`. KH2 plays a launch there (16 / 18, then 17 / 19 when he lands), which needs
   KH2's blow (step 3). Sora has no KO request: `0x43` is `0xFFF` in his table (Checked (files)). His
@@ -404,3 +404,40 @@ blow state takes KH1's air reactions. Step 3 would register KH2's blow there (KH
 `character_core::reaction::Blow`), moved through KH1's mover, with motion 16 / 18 and 17 / 19 on
 landing, entered from KH1's knock-back reactions (`0x14029CEC0` on the ground, `0x14029CC40` in the
 air) for Sora.
+
+## 14. KH2's hurt line with Battle Quotes KH2 (the tester's m2 answer 1: "(b)")
+
+**What KH2 says (Checked (files)).** KH2's reaction motions say their line from frame trigger 14
+(a VTBL battle voice) at frame 0 (`P_EX100.mset`):
+
+| KH2 motion | voice | | KH2 motion | voice |
+|---|---|---|---|---|
+| 10 ground flinch, front | 29 | | 14 air flinch, front | 29 |
+| 11 alternate | 30 | | 15 air flinch, behind | 30 |
+| 12 ground flinch, behind | 29 | | 16 / 18 blow, front / behind | 1 |
+| 13 alternate | 30 | | 17 / 19 (blow landings) | none |
+
+`00battle.bin`'s VTBL rows for Sora (character 1): 29 is clip 6, 30 clip 5, 1 clip 7, each the
+only choice, priority 3. The same motions also carry frame trigger 31 at frame 0 (params 3 on the
+flinches, 4 on the blows); what 31 does isn't known (**Assumption**: not a voice).
+
+**Where KH1 says its line (Checked (decomp)).** The last call of KH1's hit pass `0x14029BBD0` is
+the voice group `0x1402901F0 (actor, group, 0)`: group 2 when his HP is gone, 0x14 (low HP) when
+the hit takes the party leader from above half HP to half or less, else 0 for a flinch (kind 3)
+and 1 for a knock-back (kind 4 / 5); clashes 6 / 7 say nothing. It returns nothing. By then the
+reaction function has queued the reaction's request (actor `+0x178` count, `+0x17C` request).
+
+**What the mod does.** With Battle Quotes at KH2, `hitreact::hurt_line` (run from the voice
+group's hook, `soundlog::voice_group`, only while Sora's hit pass on KH1's states runs) turns
+groups 0 / 1 into KH2's voice for the reaction just asked for: 1 → voice 1; 0 → voice 30 for
+requests `0x49` / `0x4B` / `0x4F` (KH2's 11 / 13 / 15), else 29. It goes through KH1's own voice
+path (`kh2sound::hurt_voice` → `kh1bank::voice`, as every KH2 battle quote does); if KH2's voice
+isn't loaded, KH1's line is said. The low-HP (0x14) and HP-gone (2) lines stay KH1's (KH2's
+reaction motions have none). The rule follows the Battle Quotes row whatever the Hit Reactions
+row says, so with Hit Reactions at KH1 KH1's reaction motion plays with KH2's line
+(**open**: the tester may want it only at Hit Reactions KH2).
+
+In KH2's borrowed moves (`hurt`'s other branch) KH2's controller plays KH2's reaction motion,
+whose frame trigger 14 already says KH2's line through `kh2sound::event`; the hook's replay of
+KH1's group 0 / 1 is now skipped then (it doubled the line).
+

@@ -141,6 +141,13 @@ unsafe extern "system" fn menu_sound(id: i32) -> usize {
 }
 
 unsafe extern "system" fn voice_group(actor: usize, group: i32, other: usize) -> usize {
+    // (Sora's hurt voice in his hit pass, Battle Quotes KH2: KH2's line instead, `hitreact`.)
+    if super::hitreact::hurt_line(actor, group) {
+        if live() {
+            emit(format!("KH1 sound: voice group {group} on Sora: KH2's hurt line instead"));
+        }
+        return 0;
+    }
     if live() {
         let from = caller();
         let with = if other == 0 { String::new() } else { format!(", other {}", who(other)) };

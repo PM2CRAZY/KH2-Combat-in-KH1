@@ -482,6 +482,15 @@ pub unsafe fn voice(v: i16) {
     }
 }
 
+/// Sora's hurt line `v` (`hitreact::hurt_line`, KH2's battle quotes): whether it was said.
+pub unsafe fn hurt_voice(v: i16) -> bool {
+    if !kh2_voice() {
+        return false;
+    }
+    let Ok(g) = LOADED.try_lock() else { return false };
+    g.as_ref().and_then(|l| l.voices.get(&v)).and_then(|c| c.say()).is_some()
+}
+
 /// KH1's global settings (`0x14012AC50` returns them): its volume sliders, 0..10 each:
 /// master `+0x10` (the device's, `0x14011BE4A`), then channels 1..3 `+0x12`, `+0x14`, `+0x16`
 /// (`0x1400DDD00` sets each channel to its slider / 10), in the options menu's order: music,

@@ -276,7 +276,10 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         let was = super::hitreact::before_pass(actor);
         // (And KH2's recoil on the attack-clash reaction it starts, `recoil`, Recoil KH2.)
         let clash = super::recoil::before_pass(actor);
+        // (Its hurt voice KH2's with Battle Quotes KH2, `hitreact::hurt_line`.)
+        super::hitreact::in_pass(true);
         let r = f(actor);
+        super::hitreact::in_pass(false);
         super::hitreact::after_pass(actor, was);
         super::recoil::after_pass(actor, clash);
         return r;
@@ -346,7 +349,11 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     count(0xD);
     wr(base + COMMAND_RVA, 0u64);
     wr(base + COMMAND_RVA + 8, 0u32);
-    voice(actor, if big { 1 } else { 0 }, 0);
+    // (With KH2's battle quotes the reaction motion KH2's controller plays says KH2's line, its
+    // frame trigger 14: KH1's isn't said over it.)
+    if !super::kh2sound::covers(0) {
+        voice(actor, if big { 1 } else { 0 }, 0);
+    }
     note(format!("KH2 reaction: {} toward {:.2?}, HP {}", if blow { "blow" } else { "flinch" }, dir, if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
     r
 }

@@ -35,7 +35,7 @@
 use super::shared::physics;
 use super::styles::{self, Kind};
 use super::{log, pose};
-use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
 
 /// The Knock-back Numbers setting (`knockback_numbers`).
@@ -285,4 +285,48 @@ pub unsafe fn medium_hits(actor: usize, ready: &[usize], kind_of: unsafe extern 
             note(|| format!("Medium Hits Flinch: a kind 4 hit ({} damage) taken as KH1's flinch (kind 3)", rd::<i32>(r + 8)));
         }
     }
+}
+
+/// KH2's hurt line with the Battle Quotes row at KH2 (the tester, soras-hit-reactions-native,
+/// m2 question 1: "(b)", KH2's). KH2 says it from its reaction motion's frame trigger 14 at frame
+/// 0 (`P_EX100.mset`, Checked (files)): the flinches 10 / 12 / 14 battle voice 29, their
+/// alternates 11 / 13 and the air flinch from behind 15 voice 30, the blows 16 / 18 voice 1;
+/// `00battle.bin`'s VTBL for Sora (Checked (files)): 29 clip 6, 30 clip 5, 1 clip 7, each alone,
+/// priority 3. KH1's hit pass (Steam `0x14029BBD0`) ends with its hurt voice group,
+/// `0x1402901F0 (actor, group, 0)`: 0 a flinch (kind 3), 1 a knock-back (4 / 5), 0x14 his low-HP
+/// line, 2 his HP gone (Checked (decomp)); the reaction it started is queued by then. So at that
+/// call groups 0 / 1 become KH2's voice for the reaction KH1 just asked for, through KH1's own
+/// voice path (`kh2sound::hurt_voice`, as every KH2 battle quote is), at KH2's moment (the
+/// reaction's first frame). The low-HP and HP-gone lines stay KH1's (KH2's motions have none).
+/// Whatever the Hit Reactions row says: the Battle Quotes row decides the voice.
+const KH2_FLINCH_VOICE: i16 = 29;
+const KH2_FLINCH_ALT_VOICE: i16 = 30;
+const KH2_BLOW_VOICE: i16 = 1;
+
+/// Sora's KH1 hit pass is running (`hurt`, KH1's states only).
+static IN_PASS: AtomicBool = AtomicBool::new(false);
+
+/// `hurt`: around KH1's hit pass for Sora on KH1's states.
+pub fn in_pass(on: bool) {
+    IN_PASS.store(on, Ordering::Relaxed);
+}
+
+/// KH1's voice group play (`soundlog`'s hook on `0x1402901F0`): true when it was Sora's hurt
+/// voice in his hit pass and KH2's line was said instead (KH1's is skipped); false leaves KH1's
+/// (Battle Quotes KH1, another group, or KH2's voice not loaded).
+pub unsafe fn hurt_line(actor: usize, group: i32) -> bool {
+    if !IN_PASS.load(Ordering::Relaxed) || !matches!(group, 0 | 1) || actor == 0 || actor != super::takeover::sora_actor() || !super::kh2sound::kh2_voice() {
+        return false;
+    }
+    let (count, request): (u32, u32) = (rd(actor + QUEUE), rd::<u32>(actor + QUEUE + 4) & 0xFFFF);
+    let v = if group == 1 {
+        KH2_BLOW_VOICE
+    } else if count != 0 && matches!(request, 0x49 | 0x4B | 0x4F) {
+        KH2_FLINCH_ALT_VOICE
+    } else {
+        KH2_FLINCH_VOICE
+    };
+    let said = super::kh2sound::hurt_voice(v);
+    note(|| format!("Sora's hurt voice (KH1's group {group}, request {request:#x}): {}", if said { format!("KH2's voice {v}") } else { format!("KH2's voice {v} not loaded, KH1's") }));
+    said
 }
