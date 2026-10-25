@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from your message in KH2 magic and Ref](#^m1)
 - [2. Assistant: Thanks! Going ahead with your answers: (b) for question 1, D](#^m2)
+- [3. Assistant: Sorry for the confusion, and thanks for sticking with it.](#^m3)
 
 ---
 
@@ -87,6 +88,8 @@ go ahead
 > 2. If it's (c): should KH2's fall loop play after KH2's air casts even with Jump at KH1? (a) yes, KH2's fall after a KH2 move, or (b) no, the Jump row decides every fall.
 
 ^m2
+
+
 I misunderstood, abilities should follow the main physics config.
 
 your still not understanding me, I need you to look through the steam c decomp again because the same issue is still here:
@@ -95,3 +98,23 @@ I cast air magic > air magic keep me suspended in the air > after its done suspe
 keep going until you find the problem 
 
 go ahead
+
+> [!tip] Assistant
+> Sorry for the confusion, and thanks for sticking with it.
+>
+> **t621: Aerial Finish and Magnet Burst follow the main Physics row again.** It's back to exactly how it was before t617, help texts included; the Air Physics row only covers air casts now. Check: a straight undo of t617's code. Not checked in game.
+>
+> **The fall after an air cast.** I went through KH2's Steam decomp again, line by line this time, not just the numbers: everything that moves Sora each frame while an air cast plays (the order of a frame, the stick, the clip's root motion, the vertical step and the cast's end), plus the clips in your KH2 files. Here's what KH2 does:
+> - **The stick:** KH2 reads it every frame, then throws it away unless the animation has a "free movement" or "allow movement" window. The air-cast animation has neither, so the stick does nothing during the whole cast. KH2's fall loop after the cast does have one, so the stick steers him again only once the cast animation is over (frame 84).
+> - **Sideways speed:** the speed he had when he cast fades ×0.95 every two frames. The cast animation has no root motion, so nothing else moves him sideways.
+> - **Height:** he's held in place from frame 16 to 74 while the jump's clock keeps running, and nothing resets that clock when the hold ends. So on the very first step after frame 74 he's already falling at KH2's top speed of 16 a frame. Unless he still has sideways speed, that's straight down.
+>
+> Your trace does exactly this, frame for frame, so I couldn't find a physics difference, and I didn't change it (the findings are in the notes, `docs/kh1-magic-native.md` §4n). The one thing in your trace that isn't KH2 comes after frame 84: KH1's own fall and landing animations play there (your Jump row is on KH1), where KH2 plays its own fall loop and landing.
+>
+> I don't want to guess, so could you help me see what you're seeing in KH2?
+> 1. Could you record a short clip in KH2 itself of an air Fire (or Reflect) from the top of a jump, and the same in KH1, so I can compare frame by frame?
+> 2. In KH2, what does Sora do after the hover that ours doesn't? (a) he keeps drifting forward, (b) he starts falling slowly and speeds up, (c) he hops up a little first, (d) the stick moves him while he falls, or (e) something else (please describe it).
+> 3. Were you holding the stick when you saw it, and in which direction?
+
+^m3
+
