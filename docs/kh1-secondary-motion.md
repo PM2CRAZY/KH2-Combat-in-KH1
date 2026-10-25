@@ -942,3 +942,12 @@ physics frames) adds, after the other categories and before the events:
 The ticks and frame columns are always there; the bone columns are empty on a frame the physics
 didn't run. That's everything a bake needs to reproduce what was drawn (the carrier poses, the
 part bones and the settings).
+
+### The debug menu's Cloth Physics page
+
+Debug menu > Cloth Physics: Physics (field run) On / Off (on by default), then for each part (Coat,
+Shorts, Belt Chain, Belt Front) its Stiffness (steps of 0.01), Damping and Weight (0.05) and Swing
+cap (5 degrees), changed live with left / right; Reset to tuned. The page's title shows the
+settings id (0 = `Settings::TUNED`; any other a 16-bit hash of the numbers); each change writes a
+log line "cloth physics settings id N (...): ..." with every part's numbers, so a trace's
+`cloth_settings` column can be matched to them. Not kept in the ini (the session only).

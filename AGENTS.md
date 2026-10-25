@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 596 (testing branch: Debug menu: Cloth Physics page)
+- **Debug menu: Cloth Physics page.** The tester (m19 6 (a and b)): the field-run physics on / off and each part's stiffness, damping, weight and swing cap live, plus Reset to tuned; the settings id in the page title and every change logged ("cloth physics settings id N ..."); session only. docs/kh1-secondary-motion.md.
+
 ### 2026-10-25: Stage 595 (testing branch: Trace: Cloth category)
 - **Trace: Cloth category.** The tester (m19 3), off by default (ini `trace_cloth = off`, its own group): the animation drawn as the panel shows it, the physics state (on, baked / live, steps, restarts, settings id, max swing, tips pushed out), Sora's place / yaw / speed / turn rate per 60 Hz frame, every physics bone's turn against its parent and place against the hips, and the collision bones (3, 4, 17, 18, 43, 44, 71). docs/kh1-secondary-motion.md "the trace's Cloth columns".
 
