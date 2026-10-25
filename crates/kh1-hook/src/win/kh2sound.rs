@@ -362,6 +362,45 @@ pub fn covers(motion: u16) -> bool {
     kh2_voice() && LOADED.try_lock().map_or(false, |g| g.is_some())
 }
 
+/// The return address of KH1's voice-group call in its attack row start (Steam `0x1402A3980`:
+/// the row's `+0xF` voice, `0x1402901F0 (actor, voice, 0)` at `0x1402A3AAF`, Checked (exe)).
+const ROW_VOICE_RETURN_STEAM: usize = 0x2A3AB4;
+/// Where the row start keeps the row it runs: Sora's combat state (the handle at `+0x14C`)
+/// `+0x40` (byte), written just before the voice call. Checked (decomp).
+const ROW_IN_STATE: usize = 0x40;
+
+/// KH1's voice group `0x1402901F0` is called (`soundlog`'s hook, `from` the call's return RVA):
+/// true to leave it out. With KH2's battle quotes on, the voice KH1's attack row start gives Sora
+/// (its row's `+0xF`, the grunt of KH1's swing) isn't said on a row that plays a KH2 motion of
+/// ours: that motion's own KH2 quote takes its place (its frame trigger 14, `event`), as in KH2,
+/// where the swing has only its own line. Before, KH1's grunt took Sora's voice channel first, and
+/// KH1's priority rule then kept every KH2 quote out (the t544 logs: "KH1 kept the line playing"
+/// on every one). KH1's other voices of Sora (hurt lines, spells, scripts) are untouched.
+pub unsafe fn holds_back(actor: usize, from: usize) -> bool {
+    if from != ROW_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
+        return false;
+    }
+    if actor < 0x10000 || actor != super::takeover::sora_actor() {
+        return false;
+    }
+    // (KH2's quotes loaded: otherwise KH1's grunt stays.)
+    if !LOADED.try_lock().map_or(false, |g| g.as_ref().map_or(false, |l| !l.voices.is_empty())) {
+        return false;
+    }
+    let cs = super::pose::ptr(std::ptr::read_unaligned((actor + 0x14C) as *const u32));
+    if cs < 0x10000 || !super::crash::readable(cs + ROW_IN_STATE) {
+        return false;
+    }
+    let row = std::ptr::read_unaligned((cs + ROW_IN_STATE) as *const u8) as usize;
+    let Some(request) = super::kh1rows::row_request(actor, row) else { return false };
+    let held = super::kh2slots::plays_kh2(request as usize);
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if held && N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+        log(&format!("KH2 quotes: KH1's swing voice of row {row} (request {request:#x}) left out; the KH2 motion's quote takes its place"));
+    }
+    held
+}
+
 /// Sora's `motion` reached a KH2 event: its sound, if it has one.
 pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     use character_core::EventKind;

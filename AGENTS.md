@@ -1,3 +1,19 @@
+### 2026-10-25: Stage 567 (testing branch: Battle quotes: KH1's swing voice held back where KH2's quote plays)
+- **KH1's swing grunt no longer takes Sora's voice channel ahead of KH2's quote.**
+- Found in the tester's t544 logs (Battle Quotes KH2): every KH2 quote asked of KH1 was refused ("KH1 kept the line playing", all of them).
+- The cause:
+  - KH1's attack row start `0x1402A3980` ends with the row's `+0xF` voice through the voice group `0x1402901F0`. The call is at `0x1402A3AAF` (return `0x1402A3AB4`). Checked (exe).
+  - Sora's rows carry one: air 16 / 17 / 18 have 5 / 4 / 4, ground 13 / 14 have 4 (`btltbl.bin` `+0xA9F0`). Checked (files).
+  - The group then holds the channel for Sora (standing 2). KH1's clip request `0x140290930` only asks when the standing is below the new priority, so KH2's priority-1 / 2 quote never got in. Checked (decomp).
+- Now, with Battle Quotes KH2 and KH2's voices loaded, `soundlog`'s voice-group hook leaves that call out on Sora when the row's request plays a KH2 motion of ours.
+  - The call is told by its return address.
+  - The row is read from combat state `+0x40`, which the row start writes just before. Checked (decomp).
+  - The request comes from Sora's row table; `kh2slots::plays_kh2` = KH2's row selection picked a motion for it.
+  - The KH2 motion's own quote takes its place, as in KH2, where a swing has only its own line.
+- KH1's other voices of Sora, and rows that play KH1's own motions, are unchanged. Logged ("KH2 quotes: KH1's swing voice of row ...", first 20).
+- Open: KH2's own priority rule. KH2 `0x1403CE580` / `0x1403CE260` take a line of priority at least the last taken and stop the playing one (Checked (decomp)). KH1's voice path never stops a line, so while Sora's last KH2 line plays the next is dropped. Asked in the thread.
+- `docs/kh1-sound-native.md` "KH1's swing voice and KH2's quotes".
+
 ### 2026-10-25: Stage 566 (testing branch: KH2 sounds: one copy of each bank (RAM))
 - **One copy of each KH2 sound bank.** This answers the tester's RAM question from m4 ("are we caching a bunch of sounds?").
 - KH1's bank-entry destructors (`0x1400DB470` / `0x1400DB7A0`) free the entry's `+0x20` with `_aligned_free` only when it isn't 0. No KH1 function that walks the bank list `0x1404D65D8` reads `+0x20` / `+0x28` afterwards. The engine keeps its own pointer (bank `+8`, `0x14005E0B0`). Checked (decomp).

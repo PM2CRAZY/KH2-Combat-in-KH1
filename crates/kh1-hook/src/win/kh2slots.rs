@@ -1309,6 +1309,12 @@ fn picked(request: usize) -> Option<usize> {
     (m != usize::MAX).then_some(m)
 }
 
+/// Whether KH1's request `request` plays a KH2 motion of ours now (KH2's row selection picked one
+/// for it, or it is one of our own rows' requests with its move picked).
+pub fn plays_kh2(request: usize) -> bool {
+    picked(request).is_some()
+}
+
 /// The cast KH2 picked for each of KH1's spell requests (`CASTS`; our move's `slot`,
 /// `usize::MAX`: the request's own).
 static CAST_PICKED: [AtomicUsize; CASTS.len()] = [const { AtomicUsize::new(usize::MAX) }; CASTS.len()];

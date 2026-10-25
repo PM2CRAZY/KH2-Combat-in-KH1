@@ -320,6 +320,27 @@ pub fn throws(a: &kh2_formats::battle::Atkp) -> bool {
 /// Each frame base Sora is posed (`kh2slots::frame`, ours built): his character's row table is
 /// ours (made the first time from KH1's). Only once our slots are on his request tables, so a row
 /// of ours never asks for a request KH1 can't play.
+/// The motion request (`+0`, i16; `None` for -1) of row `row` of `actor`'s attack table, the one
+/// KH1's row start `0x1402A3980` reads (`0x142D5CAB0[object +0x4C] + row * 0x14`, Steam).
+pub unsafe fn row_request(actor: usize, row: usize) -> Option<u32> {
+    let base = super::takeover::game_base();
+    let obj = pose::ptr(rd::<u32>(actor + 0x130));
+    if base == 0 || obj < 0x10000 || !super::crash::readable(obj + 0x4C) {
+        return None;
+    }
+    let index = rd::<u16>(obj + 0x4C);
+    if index >= 10 {
+        return None;
+    }
+    let table = rd::<u64>(base + ROWS_RVA + index as usize * 8) as usize;
+    let at = table + row * ROW;
+    if table < 0x10000 || !super::crash::readable(at + 2) {
+        return None;
+    }
+    let r = rd::<i16>(at);
+    (r >= 0).then_some(r as u32)
+}
+
 pub unsafe fn install(actor: usize) {
     if actor < 0x10000 {
         return;

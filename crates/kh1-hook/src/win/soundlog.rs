@@ -109,6 +109,20 @@ unsafe fn caller() -> String {
     }
 }
 
+/// The game code that called the hooked function, as an RVA of the running exe (0 if it isn't
+/// the game's).
+#[inline(never)]
+unsafe fn caller_rva() -> usize {
+    let mut frame: [*mut c_void; 1] = [std::ptr::null_mut()];
+    let n = super::sys::RtlCaptureStackBackTrace(2, 1, frame.as_mut_ptr(), std::ptr::null_mut());
+    let (at, base) = (frame[0] as usize, BASE.load(Ordering::Relaxed));
+    if n == 0 || at < base || at >= base + IMAGE.load(Ordering::Relaxed) {
+        0
+    } else {
+        at - base
+    }
+}
+
 fn who(actor: usize) -> String {
     if actor != 0 && actor == super::takeover::sora_actor() {
         "Sora".to_string()
@@ -148,10 +162,15 @@ unsafe extern "system" fn voice_group(actor: usize, group: i32, other: usize) ->
         }
         return 0;
     }
+    // (KH1's swing voice under KH2's quotes, `kh2sound::holds_back`.)
+    let held = super::kh2sound::holds_back(actor, caller_rva());
     if live() {
         let from = caller();
         let with = if other == 0 { String::new() } else { format!(", other {}", who(other)) };
-        emit(format!("KH1 sound: voice group {group} on {}{with} ({from})", who(actor)));
+        emit(format!("KH1 sound: voice group {group} on {}{with} ({from}){}", who(actor), if held { ", left out for KH2's quote" } else { "" }));
+    }
+    if held {
+        return 0;
     }
     let f: unsafe extern "system" fn(usize, i32, usize) -> usize = std::mem::transmute(ORIG_GROUP.load(Ordering::Acquire));
     f(actor, group, other)

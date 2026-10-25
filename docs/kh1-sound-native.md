@@ -397,3 +397,36 @@ after KH1 clears its bank list, and KH1's, which its release frees. Now there is
   couple of seconds at startup the loader still reads se000 / se999 / se500 whole (~28 MB) to
   cut them, then frees them. Sizes from the tester's t515 / t544 logs and the KH2 files.
   **Checked (trace, files)**; the Windows heap's overhead not measured.
+
+## KH1's swing voice and KH2's quotes
+
+- **What the logs showed.** In the tester's t544 logs (quick-run, sleeves and glide threads,
+  Battle Quotes on KH2), every KH2 quote asked of KH1 was refused: "KH1 kept the line playing",
+  every time. **Checked (trace)**
+- **Why.** KH1's attack row start (Steam `0x1402A3980`) ends by saying the row's voice (`+0xF`)
+  through the voice group `0x1402901F0 (actor, voice, 0)`; its call is at `0x1402A3AAF` (return
+  address `0x1402A3AB4`). **Checked (exe)**. Just before, it stores the row in Sora's combat
+  state (handle `+0x14C`) `+0x40`. **Checked (decomp)**. The group picks a clip and asks for it
+  at its row's priority through `0x140290930`. That puts Sora's voice channel in state 2 with
+  Sora on it, a couple of frames before the KH2 motion's frame trigger 14 asks for KH2's line.
+  Sora's rows carry such a voice: his air rows 16 / 17 / 18 (the t544 log's air combo) have 5 /
+  4 / 4, his ground swing rows 13 / 14 4, row 27 none (`btltbl.bin` `+0xA9F0`, 0x14 a row).
+  **Checked (files)**. KH1's rule (`0x140290930`) asks only when the channel's standing is below the new priority
+  (0 free, 1 another speaker, 2 the same speaker), so a KH2 quote at priority 1 or 2 never got
+  past KH1's own grunt. **Checked (decomp)**
+- **Now.** With Battle Quotes on KH2 and KH2's voices loaded, the row start's voice group call
+  on Sora is left out when the row's request plays a KH2 motion of ours (`kh2slots::plays_kh2`:
+  KH2's row selection picked one for it). The KH2 motion's own quote takes its place, as in KH2,
+  where a swing has only its own line. `soundlog`'s hook on the voice group (always installed)
+  does it, telling the call by its return address. KH1's other voices of Sora (hurt lines,
+  spells, scripts) and every row that plays KH1's own motion keep KH1's voice. **Checked (code)**
+- **KH2's own rule (open).** KH2's quote request (Steam KH2 `0x1403CE580`) takes a new line if
+  nothing is pending or playing, or if its priority is at least the last one taken (`+0x10`,
+  which is never reset). Its voice step (`0x1403CE260`) then stops the line that is playing
+  (`0x1401DE500 (handle, 0)`) and starts the new one. **Checked (decomp)**. So in KH2 each swing's
+  line cuts the previous one. KH1's voice path has no such cut: its channel step
+  (`0x140290A50`) creates the new clip without stopping the old record, and KH1's only voice stop
+  is the stop-all (`0x1400DE010 (2)`); `SslSeStop` (`0x1400DEF50`) stops effect records (state 1)
+  only. **Checked (decomp)**. Under KH1's rule, while Sora's own KH2 line still plays, the next
+  one is dropped. Matching KH2 needs a voice stop added to KH1's engine: a question for the
+  tester.
