@@ -99,9 +99,8 @@ This runs every frame KH2 poses him, after the retarget, the feet, KH1's wrist (
 
 ## Switches
 
-- `hair_physics = off` (an older ini's `physics = off`): none of this, and no swing either. The parts turn with their parent as
-  before.
-- `kh2_hair = off`: the older physics swing (`jiggle.rs`) instead of KH2's animation.
+- None since t628: the `hair_physics` / `kh2_hair` switches are gone again (the tester, missing-sleeves-animation after
+  m21: "(b)", take them out). KH2's own animation of these parts always runs, as the switches' defaults did.
 - The swing still runs for any chain KH2 didn't pose this frame. That is only the keychain
   while a dream weapon or the wooden sword is held (`0x52..=0x55`): those have no Keyblade
   chain, and KH2's chain motion would swing whatever KH1 hangs on those bones.
@@ -171,8 +170,7 @@ and in the bake, after the retarget, with the hair and hood):
 Not carried: KH2's scale keys on the flaps (113 in 3 motions down to 0.70, 115 in 1, 205 in 8,
 207's 0.9 in its initial pose). The retarget and the bake carry turns only. Checked (files).
 
-**Switches.** As the hair and hood: `hair_physics = off` or `kh2_hair = off`, and the sleeves
-keep their old rigid relation to the arm (there is no swing for them).
+**Switches.** None since t628 (the hair switches are gone; the sleeves always follow KH2's flaps).
 
 **Checks** (`kh1-data` unit tests `sleeves_match_their_flaps_round_the_arm`,
 `a_sleeve_hangs_and_flaps_as_kh2_s`; on the files, a scratch run of every KH2 motion): no NaN,
@@ -206,7 +204,7 @@ The tester ("Missing sleeves animation", after t613-t616): "revert changes made 
 t375 ... and bake the animations for me. we'll figure out a way later, keep the debug menu frame
 and frame count changes". Everything above is t375's state again, live and in the bake: KH2's
 sleeve flaps (four KH1 chains from KH2's two flaps), the hair, hood and keychain from KH2's keys,
-the switches `hair_physics` / `kh2_hair` and the old swing (`jiggle.rs`) for chains KH2 doesn't
+the switches `hair_physics` / `kh2_hair` (taken out again in t628, the tester's "(b)") and the old swing (`jiggle.rs`) for chains KH2 doesn't
 pose. Taken out with it: the necklace match (t385), KH2's squash and stretch (t386), KH1's own
 animation on its own parts and its blend-pass fixes (t387, t405, t406, t411), "only what KH2's
 model shows" (t407, t412), the coat and shorts rules (t453, t490, t491, t519, t552, the research

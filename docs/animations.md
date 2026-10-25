@@ -72,7 +72,6 @@ Other ini keys that change what is drawn or who moves him:
 | `air_cast_fall` | 1.0 | How fast he sinks while Reflect plays in the air (with physics KH1, and in Valor / Wisdom; not with physics KH2, nor in Final). |
 | `drive` | on | Loads Valor, Wisdom and Final and shows the Drive page. |
 | `valor_left_blade` | on | Valor's second Keyblade in his left hand. |
-| `hair_physics` / `kh2_hair` | on / on | Hair, hood and keychain move under KH2's poses: KH2's own animation of them, else a swing. (Was `physics = on / off`, still read from an older ini when `hair_physics` is missing; `physics` is the physics setting now.) |
 | `keyblade_turn` | on | Keyblades turned teeth up under KH2's poses. |
 | `flip_weapons` | 0x53 | Weapons held with KH1's wrist under KH2's poses (the Dream Shield). |
 | `swing_fx`, `kh2_sounds`, `kh2_effects`, `battle_quotes` | on, abilities, magnet_explosion, kh1 | Trails, sounds, effects and voices per KH2 motion. They don't change the motion. |

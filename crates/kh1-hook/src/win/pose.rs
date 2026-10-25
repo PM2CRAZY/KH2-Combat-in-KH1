@@ -1078,8 +1078,7 @@ impl Baker {
 
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
     /// draws it (`follow_play`, `Play::Slot`): KH2's body and Keyblade, the root travel taken out
-    /// (KH1 moves him), retargeted, KH2's hair, hood, sleeves and keychain on (`hair_physics` and
-    /// `kh2_hair` on), the Keyblade's teeth-up turn (`keyblade_turn`). Nothing else of ours (feet,
+    /// (KH1 moves him), retargeted, KH2's hair, hood, sleeves and keychain on, the Keyblade's teeth-up turn (`keyblade_turn`). Nothing else of ours (feet,
     /// KH1's wrist, the swing).
     ///
     /// `travel` (t365, a move whose request has KH1's travel flag): KH2's root travel along the
@@ -1122,7 +1121,7 @@ impl Baker {
             if set.keyblade_turn {
                 turn_grip(&mut kh1, &parents);
             }
-            if set.physics && set.kh2_hair {
+            {
                 self.secondary.apply(&mut kh1, &body, (!weapon.is_empty()).then_some(weapon.as_slice()), kh1_data::secondary::Parts::ALL);
             }
             if travel {
@@ -1743,14 +1742,13 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
     keyblade_teeth_up(&mut pose, &s.parents);
-    let set = super::settings::get();
-    if set.physics {
+    {
         // KH2's own animation of the hair, hood, sleeves and keychain (the user: "add the
         // animations for sora's hair and chain on each KH2 animation instead"; the sleeves: Mr
         // Bugs, "missing animations for the sleeves"), on every pose KH2 gave; the keychain only
         // on a Keyblade (not the dream weapons or the wooden sword).
         let mut driven = kh1_data::secondary::Parts::default();
-        if let (true, Some((body, weapon)), Some(sec)) = (set.kh2_hair, s.kh2_now.as_ref(), s.secondary.as_ref()) {
+        if let (Some((body, weapon)), Some(sec)) = (s.kh2_now.as_ref(), s.secondary.as_ref()) {
             let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)), sleeves: true };
             let rep = sec.apply(&mut pose, body, (!weapon.is_empty()).then_some(weapon.as_slice()), want);
             driven = rep.parts;
