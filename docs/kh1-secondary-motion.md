@@ -5,6 +5,7 @@ animates its own hair, hood and chain in that same move. KH1's own animations ar
 KH1 draws those itself, and this code only runs on poses KH2's motions made.
 
 Code: `crates/kh1-data/src/secondary.rs` (the matching and the posing),
+`crates/kh1-data/src/cloth.rs` (the walk and run test bake's hood, coat and shorts, below),
 `crates/kh1-hook/src/win/pose.rs` (where it runs). Check: `crates/kh1-data/examples/secondary_check.rs`,
 `crates/kh1-data/tests/local_secondary.rs`.
 
@@ -679,6 +680,91 @@ KH1's thighs and shins is KH2's own (109.6° / 169.1° in motion 8, a jump in KH
 shorts hang on the thigh, so they now roll exactly as KH2's shorts. The feet (`Pole::Foot`) read the
 shin's hinge and are unchanged in the measure (their own rule keeps soles flat). The positions-only
 path (`frames`, used by `inverse` for the KH2 player model) keeps the knee's direction.
+
+## Hood, coat and shorts from KH2's hidden keys (test bake, tNNN)
+
+The tester, after t552 ("sora's hoodie still stays rigid, its currently worse than it was when we
+had physics around t375 ... it needs to look natural and his clothes not clip"), chose option (c)
+of our reply: start from KH2's hidden hood, coat and trouser keys, smooth them and keep the clothes
+off the body, everything KH2 visibly animates staying exactly KH2's. His answers: "no it should be
+like kh2" (no physics lag or settling), "(a) just do a test bake into soras running and walking
+animations for now so I can see how it looks" (hood, coat and shorts).
+
+**Where it runs.** Only in the bake of KH2's walk (1) and run (2), battle and field variants
+(`pose::CLOTH_MOTIONS`, `Baker::poses`, after the retarget and `Secondary`, before the motion's
+travel goes on), over the whole motion at once. Nothing runs per frame in game: KH1 plays the
+baked walk and run as it plays them now. The live pose (with `kh1_bake` off, and every other
+move) is unchanged: the hood still rigid on the chest, the shorts on the thigh, the coat as KH2's
+ring (t552). Each bake logs a line ("hood, coat and shorts from KH2's hidden keys (test bake)").
+
+**What moves them** (`kh1_data::cloth`):
+
+| Part | KH1 joints | Driven by | Source |
+|---|---|---|---|
+| Hood | 80, 81 / 82, 83 (one chain from 80) | KH2's hood 72 / 73, their turn from the bind against KH2's chest 68, on KH1's neck base 78 (t375's method, `KH2_SHOWN_ON` not applied) | KH2's keys: Checked (files). Using keys KH2's model doesn't show: ours (the tester's choice) |
+| Coat | the nine chains' joints 73, 249, 253, ..., 277 | KH2's coat ring as `Retarget::coat_kh2` already turns them (t552) | Checked (files) |
+| Shorts | the eight panels' joints 27, 31, 35, 39 / 53, 57, 61, 65 | KH2's trouser leaves on that thigh (-x: 56, 58, 63; +x: 27, 29, 34), each one's turn against KH2's thigh 40 / 11 taken as a sway about its mean over the motion, blended by where the leaves' pivots and the panel sit round the thigh in the binds (as the sleeve flaps), put on the panel's bind relation to KH1's thigh | KH2's keys: Checked (files). The sway about the mean and the blend: ours (Assumption: which KH2 bone stands for which panel, from positions) |
+
+The shares (Checked (files), the binds): KH1's front panels 27 / 53 follow KH2's front leaf 63 /
+34 (99%); the outer 31 / 57 the back-out leaf 58 / 29 (67%), the front-out 56 / 27 (21%); the back
+35 / 61 the back-out (74%); the inner 39 / 65 all three (30 / 27 / 43%). Why the mean and not the
+bind: the trouser leaves sit 10-60 degrees off their bind in KH2's walk and run (27 in the battle
+walk 60 degrees off on average, 56 38 degrees; Checked (files)), as the hood and ring do, so their
+bind isn't a neutral for KH1's panels; their sway about the mean is what KH2 animates.
+
+**Ours, not KH2's** (KH2 keeps nothing off anything, and smooths nothing):
+
+- *Smoothing*: every joint's turn against its carrier is averaged with its neighbours in time
+  (Gaussian, sigma 1.2 frames, three each way), round the loop. Centred, so it never lags KH2's
+  keys (the tester's "it should be like kh2"); it takes out KH2's one-frame jumps on the hidden
+  bones (Checked (files): the trouser leaf 56 turns up to 33 degrees between two frames of KH2's
+  battle run, 27 up to 22 in the field run, the hood 73 up to 12).
+- *Clearance*: the hood off the spine (7) and the head's centre (10), as `Secondary`'s hood
+  guards; the coat outside the shorts round each thigh (radius 6.4 at the hip to 11.2 from
+  mid-thigh, plus 1, at most its bind distance: Assumption, the mesh isn't read) and no more than 5
+  nearer the hips' up axis (3 → 71) than in the bind (KH1's own run, slot 5, takes it 5.7 nearer,
+  its walk 2.4: Checked (files), plain FK); each shorts panel no nearer its thigh's axis than 0.95
+  of its bind distance.
+- *How it is kept clear*: a chain is swung about one of its joints, round an axis fixed for the
+  whole motion in its carrier's frame: of eight axes round the chain, the one that needs the least
+  swing over the motion. Fixed per motion is the side memory: the t500 pushes flipped from one side
+  of a thigh to the other within a frame because each frame chose its own way out; this never
+  does. A panel (coat, shorts) takes half the swing it needs at its top and bends at its middle
+  joint for the rest, then its middle is cleared if still needed, so it drapes round a knee
+  instead of standing out straight. Each swing is spread over the frames around it (the most within
+  3 frames, then smoothed), so it starts before the contact and lets go after it, never less than
+  needed on any frame.
+
+**Measured** (`examples/cloth_check.rs` on the tester's files, KH1's battle idle as the rest, every
+frame; Checked (files)). "Swing": the largest turn within the motion of a part's joints against
+their carrier; "inside": the deepest a checked joint is inside its clearance; "pops": the largest
+second difference of a joint's place against its carrier (the knees': 20).
+
+| KH2 motion | Hood swing | Coat swing / inside (before → after) | Shorts swing | Largest swing for clearance | Pops after |
+|---|---|---|---|---|---|
+| walk, battle (1, 72 frames) | 0 → 40 | 25 → 26 / 5.9 → 0 | 0 → 36 | 29 | 0.3 |
+| run, battle (2, 32) | 0 → 29 | 29 → 32 / 7.3 → 1.6 | 0 → 35 | 58 (the +x front panel's bend) | 1.9 |
+| walk, field (1, 64) | 0 → 36 | 52 → 52 / 0 → 0 | 0 → 29 | 9 | 0.3 |
+| run, field (2, 40) | 0 → 72 | 61 → 60 / 6.1 → 0 | 0 → 55 | 54 (front panels over the rising knee) | 1.5 |
+
+- The hood now hangs down the back (its tip 13 below and 12-17 behind the neck base on average,
+  where the rigid one stood straight out 23 behind and 3 above) and sways with the stride.
+- The shorts' panels turn up to 10-30 degrees from their bind on the thigh (tips 9-25 off the
+  thigh's axis, 9-14 in the bind); KH1's own run turns them 3-12.
+- The coat's front panels lift and bend over the rising knee in the runs (top up to 38 degrees,
+  bend up to 58). The battle run's +x front panel is the one left a little inside (1.6 toward the
+  hips' axis): KH2's ring turns it into the hips there all the cycle (t552's note), and swinging
+  it out further than this bent it more than it cleared.
+- No bone length changed by the pass, no NaN, the loops still close (frame 0 = the last), and the
+  bake fits as closely as before (KH1's FK from the block within 0.15-0.28 of the pose, unchanged;
+  45-66 more keyed channels). About 0.1 s a motion at load.
+- Tried for the coat and not taken (same measure): its bind relation to the chest, or to the hips,
+  with KH2's ring as a sway about its mean (the top needed up to 80 degrees in the battle run, the
+  hips' up to 132); one swing at the top with no bend (up to 100 in the battle run, failing).
+
+Test `local_cloth` (files): 18 chains, nothing more than 2 inside, no length changed, the loop
+closing, the hood and a shorts panel moving more than 5 degrees, in all four motions. Not seen in
+game.
 
 ## How KH2's exe animates Sora (Steam decomp, research after t453)
 
