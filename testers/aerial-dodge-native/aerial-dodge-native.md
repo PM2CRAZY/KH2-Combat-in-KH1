@@ -68,4 +68,12 @@ go ahead
 
 ^m2
 
+1. unsure about the levels, check the decomp
+2. currently sora in kh1 mode cancels his air dodge, that doesn't fit with how kh2 does air dodge in the base game. I recorded a trace will be in the same folder as this thread
+3. none its fixed now
+4. seems good
+5. working here
+6. I don't hear any
+7. (a) go and investigate those moves and ensure that they have the proper frame data and timings in its own thread
 
+go ahead
