@@ -322,3 +322,33 @@ So the restart at frame 0 is KH2's own rule, and nothing in the code shows our b
 doesn't. Not checked: how KH2's blender treats a request in the middle of a blend (its layered holder
 `0x1403C88C0` / `0x1403C8CD0`), against KH1's mid-blend path. The glide now logs every motion change with KH1's
 slot, time and blend fields before the request ("glide (native) motion: ..."), to compare with a trace.
+
+### 8.10 KH2's blend clock on the glide's motions (glide thread m7: "make it 1:1")
+
+The tester's t596 trace (f60998..f61178) and log, read against both decomps:
+- **The bank restart is KH2's.** KH2's motion update `0x1403C6740` holds the new motion at its start
+  time (`+0x4C`) while a blend runs: `+0x44` is then the blend clock, and only when it reaches the
+  length `+0x48` does the time become `clock - length + start`. KH1's update (Steam `0x14029F0A0`)
+  does the same with `+0x174` / `+0x170` and `+0x16C`. **Checked (decomp)** both; the log agrees
+  (KH1's time 18 thirty-four frames after a bank request: held 16 frames, then played). The trace's
+  one-frame 205s between 206 and 207 are the stick passing within dot 0.98 of his facing, as KH2
+  picks too. **Checked (trace)**.
+- **KH2's clock starts at 2** (`0x1403C8A40`: `+0x44 = 2.0`, the length in `+0x48`, the start time
+  in `+0x4C`), and the glide's request comes from its action update, the object's vtable `+0x28`
+  (`0x1403B2DA0` -> `0x1403B4780` -> the action's `+0x38`, `0x140423A70`; OBJ / STDOBJ / ACTOR
+  vtables, RTTI), which `0x1403BFD30` calls after that frame's motion update. So KH2 draws the
+  frame of the request at weight 2/16 and ends the blend 14 frames later. KH1's apply
+  (`0x1402A0350`) starts `+0x174` at one frame step (`dt x +0x284`): weight 1/16, the end 15
+  frames on, one frame behind. **Checked (decomp / exe: the vtable bytes)**.
+- **KH2 skips frame 1 of a start.** Its update turns a time stepping from exactly 0 to 1 into 2,
+  so a motion coming out of its blend at time 0 plays 0, 2, 3 ...; KH1 plays 0, 1, 2.
+  **Checked (decomp)**. Assumption: KH2's motion step per 60 Hz frame is 1 (the parameter isn't
+  visible in the decomp's call).
+- **Now** (`glide::kh2_clock`, in the pre-step before its request): on the first frame after KH1
+  applied a glide motion (205..208) with a blend, its clock is put at KH2's 2; on the first frame
+  after such a blend ended at time 0 (at 60 fps), its time is put at 1, which KH1's update makes 2.
+  From the second frame on, weight, blend end and loop phase are KH2's; the request frame itself
+  still draws KH1's 1/16 (KH1 applies and poses inside its update). KH1's events between time 0
+  and 1 of these loops aren't fired on that frame (KH2 fires 0..2; none known on 205..208).
+  Logged: "glide (native) motion ...: KH1's blend clock ... -> KH2's 2.0", "... KH2's skip of
+  frame 1" (first 12).
