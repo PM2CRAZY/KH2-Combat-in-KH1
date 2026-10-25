@@ -53,6 +53,10 @@ kh2_damage = on\r\n\
 ; criticals: on = KH1's critical hits on Sora's attacks (Critical Plus); off = none, as in KH2\r\n\
 ;   (the Config menu's Combat list switches it)\r\n\
 criticals = off\r\n\
+; kh1_ability_chance: on = KH1's 30% chance on Stun Impact and Gravity Break in KH1's combo\r\n\
+;   (a failed roll picks the next move that fits); off = they come whenever they fit, as KH2's\r\n\
+;   rows\r\n\
+kh1_ability_chance = on\r\n\
 ; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
 glide = square\r\n\
 ; air_cast_fall: how fast Sora falls while Reflect plays in the air, a share of KH1's own\r\n\
@@ -247,6 +251,9 @@ pub struct Settings {
     /// KH1's critical hits on Sora's attacks (`criticals = on`; off by default, as KH2;
     /// `kh2damage::criticals`).
     pub criticals: bool,
+    /// KH1's 30% chance on Stun Impact and Gravity Break in the KH1 combo's finisher walk
+    /// (`kh1_ability_chance = on`, the default; `kh1picker::chance`).
+    pub kh1_ability_chance: bool,
     /// Glide on Square (`glide = square`, default) or held jump (`glide = jump`).
     pub glide_on_square: bool,
     /// Gravity's share while a KH2 cast (Reflect) plays in the air, after its fall speed was
@@ -424,6 +431,7 @@ fn load(first: bool) -> Option<Settings> {
         magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
         kh2_damage: on(&text, "kh2_damage", "on", true),
         criticals: on(&text, "criticals", "on", false),
+        kh1_ability_chance: on(&text, "kh1_ability_chance", "on", true),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         bonus_ap: on(&text, "bonus_ap", "on", true),
         auto_aim: on(&text, "auto_aim", "on", false),

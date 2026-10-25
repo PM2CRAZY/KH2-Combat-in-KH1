@@ -1330,10 +1330,18 @@ impl Character {
     ///
     /// with the hop it starts there (`would_take_row`'s). Nothing of `self` changes.
     pub fn ability_row(&mut self, finisher: bool, air: bool, playing: Option<u16>, usable: &dyn Fn(&ComboRow) -> bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
-        let aim = self.selector_aim(env);
-        let locked = self.lock.filter(|id| env.targets.iter().any(|t| t.id == *id));
-        let all: Vec<TargetGeom> = env.targets.iter().filter(|t| locked.is_none_or(|id| t.id == id)).map(|t| self.geom(env, t, aim)).collect();
-        let primary = self.primary_target(env).map(|t| TargetGeom { facing_dot: 1.0, ..self.geom(env, t, aim) });
+        let ids: Vec<u8> = self.moveset.combo_rows.iter().filter(|r| r.ability != 0).map(|r| r.id).collect();
+        ids.into_iter().find_map(|id| self.ability_row_id(id, finisher, air, playing, usable, stick, env))
+    }
+
+    /// One of KH2's ability rows, by id, tested as `ability_row` tests each of its candidates
+    /// (the ability equipped, the kind, ground or air, usable, not playing, KH2's range checks),
+    /// with its hop: for a host whose own walk puts KH2's rows in an order of its own (the KH1
+    /// port's finisher walk, KH1's picker with KH2's rows in it). `None` if it doesn't pass (or
+    /// there is no such row, or it needs no ability).
+    pub fn ability_row_id(&mut self, id: u8, finisher: bool, air: bool, playing: Option<u16>, usable: &dyn Fn(&ComboRow) -> bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+        let r = self.moveset.combo_rows.iter().find(|r| r.id == id)?.clone();
+        let (all, primary) = self.row_targets(env);
         let max = self.max_count(air);
         // (The count at the host's kind: past the length for a finisher, the first swing for a
         // swing, so `condition` judges only the ability, the air and Berserk Charge.)
@@ -1351,24 +1359,52 @@ impl Character {
             berserk: self.mp_charging && self.abilities.equipped.contains(&BERSERK_CHARGE),
             drop_ahead: false,
         };
-        let jump_height = self.params.jump_height;
-        let passing: Vec<u8> = self
-            .moveset
-            .combo_rows
-            .iter()
-            .filter(|r| r.ability != 0 && matches!(r.kind, 1..=3) && r.is_finisher() == finisher && condition(r, &sit))
-            .filter(|r| Some(r.motion) != playing && usable(r))
-            .filter(|r| match r.kind {
-                1 => primary.is_some_and(|t| in_range(r, &t, jump_height)),
-                2 => all.iter().any(|t| in_range(r, t, jump_height)),
-                _ => true,
-            })
-            .map(|r| r.id)
-            .collect();
+        let pass = r.ability != 0
+            && matches!(r.kind, 1..=3)
+            && r.is_finisher() == finisher
+            && condition(&r, &sit)
+            && Some(r.motion) != playing
+            && usable(&r)
+            && Self::range_of(&r, &all, primary, self.params.jump_height);
+        if !pass {
+            return None;
+        }
         // (A finisher trial past the length; a swing from a fresh count, which `condition` passes
         // with one finisher run.)
         let from = ComboState { count: if finisher { max } else { 0 }, finishers: 1, hit: true, finisher_next: false };
-        passing.into_iter().find_map(|id| self.would_take_row(id, Some(from), air, stick, env))
+        self.would_take_row(id, Some(from), air, stick, env)
+    }
+
+    /// Whether row `id`'s range checks alone pass now, as KH2's selector measures them (kind 1
+    /// the primary target, kind 2 any target, kind 3 none; `in_range`), whatever its ability,
+    /// count or motion: a host's walk uses a row's checks for moves of its own in that row's
+    /// place (the KH1 port: KH1's Stun Impact and Ripple Drive on Explosion's checks). False with
+    /// no such row or a kind-0 row.
+    pub fn row_in_range(&self, id: u8, env: &Env) -> bool {
+        let Some(r) = self.moveset.combo_rows.iter().find(|r| r.id == id) else { return false };
+        if !matches!(r.kind, 1..=3) {
+            return false;
+        }
+        let (all, primary) = self.row_targets(env);
+        Self::range_of(r, &all, primary, self.params.jump_height)
+    }
+
+    /// The targets as `ability_row` measures them: every target (the locked one alone when
+    /// locked) and the primary target, by the selector's direction.
+    fn row_targets(&self, env: &Env) -> (Vec<TargetGeom>, Option<TargetGeom>) {
+        let aim = self.selector_aim(env);
+        let locked = self.lock.filter(|id| env.targets.iter().any(|t| t.id == *id));
+        let all: Vec<TargetGeom> = env.targets.iter().filter(|t| locked.is_none_or(|id| t.id == id)).map(|t| self.geom(env, t, aim)).collect();
+        let primary = self.primary_target(env).map(|t| TargetGeom { facing_dot: 1.0, ..self.geom(env, t, aim) });
+        (all, primary)
+    }
+
+    fn range_of(r: &ComboRow, all: &[TargetGeom], primary: Option<TargetGeom>, jump_height: f32) -> bool {
+        match r.kind {
+            1 => primary.is_some_and(|t| in_range(r, &t, jump_height)),
+            2 => all.iter().any(|t| in_range(r, t, jump_height)),
+            _ => true,
+        }
     }
 
     /// The combo's length now (swings to its finisher, with Combo Plus, Air Combo Plus and

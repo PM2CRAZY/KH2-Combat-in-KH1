@@ -1322,6 +1322,83 @@ Finishing Plus's next finisher out of a KH2 ability finisher's window is KH1's p
 KH2's selector (its whole-table walk, its combo length) isn't run at this setting. Assumption: KH2's
 ability rows going after KH1's own ability rows and before its plain rows (KH1's own order for its own
 ability rows) is the right place for them; KH2 has no rule for mixing the two tables.
+At the finisher this is now one walk in KH2's order with KH1's twins in their KH2 move's place
+(§7.z.1); swings are as above.
+
+### 7.z.1 One finisher walk: KH1's ability finishers and KH2's in KH2's order (combo row selection m21)
+
+The tester (m19 / m20 / m21): KH1's twins follow their KH2 move ("gravity break and blitz follow
+guard break", "ripple drive, stun impact should follow explosions logic", "hurricane blast should
+follow aerial finish"), KH2's exact order in a group (m20 1 (a)), "for explosion it should come
+last, for hurricane blast it should come first", "gravity break and blitz last, if its blitz and
+gravity equipped then blitz last", "you need to keep blitz's rule", and a toggle for KH1's 30%
+chance ("if the 30 percent chance roll fails then it picks a similar kh2 move").
+
+**KH1's ability finishers** (Steam, Checked (decomp)): Sora's ability bits `0x142D5EC10` are set
+from his equipped abilities by `0x1402A6380` (`0x140284BE0 (id)` for each): bit 3 Blitz (20), 25
+Hurricane Blast (55), 26 Ripple Drive (56), 27 Stun Impact (57), 28 Gravity Break (58), 29
+Zantetsuken (59); also 0 Vortex (17), 1 Aerial Sweep (18), 2 Counterattack (19), 4 Guard (21), 5
+Dodge Roll (22), 23 Slapshot (53), 24 Sliding Dash (54), 7 / 8 Glide / Superglide. The ground
+picker `0x1402A6EE0`, at the finisher (the count at the stats' `+0xD4`): one KH1 random number
+(`0x14031BA30`: three `rand` bytes x 2^-24, prologue `48 89 5C 24 08 57 48 83 EC 20`, Checked
+(exe)), 0.3 taken off it for each of Stun Impact (row 3), Gravity Break (4), Zantetsuken (5)
+equipped in that order, the first that goes below 0 marked; none, the plain finisher (8). Ripple
+Drive (7) is marked with any finisher. Blitz (6) is marked when the plain finisher is and row 11
+isn't (`0x1402A7320` counts row 11 for each lock point beside him, the dot with the direction
+between `0x142D5EC28` and `0x142D5EC2C`, nearer than `0x142D5EC14`: nothing close beside him).
+The walk is table order, so a dash at a far target (rows 0 / 1, marked before) beats all of
+them. The air picker `0x1402A6C70` marks 15 (Hurricane Blast) with the finisher in state 2 for a
+target not more than 100 above, before 16.
+
+**KH2's order** (Sora's PTYA, `00battle.bin`, Checked (files); the walk `0x140402C50` takes the
+first marked row in table order whose `sub` is its own id or whose motion isn't playing, no
+chance anywhere, Checked (decomp)):
+- ground finishers: Explosion 26 (any target 0..300, facing -1..0.92: a foe off the line to the
+  main one, a group), 154 (row 2, a foe 0..180 off the line), Guard Break 27 (no range), Explosion
+  42 (no range), 155 (row 3);
+- air finishers: Magnet Burst 49 (any target 0..650 off the line), 184 (row 7, 0..260 off the
+  line), Aerial Finish 29 (no range), Magnet Burst 50 (the main target 300..650), 183 (row 8).
+So KH2 puts the area move first only in a group (26 / 49), then the single-target move (27 / 29),
+then the area move again for one foe (42; 50 only far). The tester's "one does aoe damage
+(explosion group), the other focuses on one enemy (guard break, etc.)" matches that table.
+
+**The walk** (`combomods::finisher_walk`, Base / Aerial Base Combo KH1, base Sora, not flight):
+`kh1picker` runs KH1's picker with bits 26, 27, 28 (ground) / 25 (air) held back, so it marks only
+its plain finisher, its dash, its drop ahead, Zantetsuken and Blitz by its own rules, and returns
+its pick. Then, at the finisher, groups in KH2's order, each passed over when its row's range
+checks fail (`Character::row_in_range`, KH2's `in_range` against Sora's targets and KH1's lock):
+
+| Ground | Moves in order | Air | Moves in order |
+| --- | --- | --- | --- |
+| row 26's checks | Stun Impact, Ripple Drive, Explosion | row 49's | Magnet Burst |
+| row 2's | KH1's own finisher | row 7's | KH1's own finisher |
+| row 27's (none) | Guard Break, Gravity Break, Blitz | row 29's (none) | Hurricane Blast, Aerial Finish |
+| row 42's (none) | Stun Impact, Ripple Drive, Explosion | row 50's | Magnet Burst |
+| | KH1's own finisher | | KH1's own finisher |
+
+- KH1's moves: their bit as KH1 set it, their row's request not the one playing (KH1's own
+  anti-repeat). Stun Impact and Gravity Break: with KH1 Ability Chance on (ini
+  `kh1_ability_chance`), KH1's roll: one random number per press,
+  0.3 off it for each roll reached, so each keeps exactly KH1's 30% whichever comes first; a
+  failed roll isn't rolled again further down (Stun Impact is in two groups). Off: they pass
+  whenever their group does. Blitz: only when KH1's picker returned 6 (its own test passed).
+  None of KH1's when its picker took its dash (row 1): KH1's walk has the dash first.
+- KH2's moves: `Character::ability_row_id` (equipped, playable on KH1's rows, not the KH2 motion
+  playing, its own checks), run on KH1's rows as in §7.z.
+- KH1's own finisher: its picker's pick (row 8, or 16; row 8 when it returned Blitz; its dash or a
+  swing when it took one).
+- Zantetsuken (bit 29, row 5) is left to KH1's picker (it is taken out of Sora's list, `menu`).
+- Without KH2's data: KH1's own order (Stun Impact, Gravity Break, Blitz, Ripple Drive, finisher).
+- Logged: "KH1's ground finisher walk ..." / "KH1's aerial finisher walk ...", with each failed
+  roll and Blitz test.
+
+What changes against KH1 alone: Ripple Drive and Stun Impact come before KH1's finisher in a
+group, Gravity Break and Blitz after Guard Break; Hurricane Blast plays with no target or one high
+above (it takes Aerial Finish's checks, none); KH1's own finisher comes first in a group (the 154
+/ 184 place). Assumptions: that KH1's own finisher stands in KH2's 154 / 184 place (the tester's
+m20 1 (a)); Zantetsuken's place. Not checked: in game. Note: with a lock, KH2's "any target" rows
+(26, 2, 49, 7) see only the locked foe (ours, `ability_row`'s rule since t557), so the group
+places don't pass while locked on.
 
 ## 8. KH2's walk and run as slots (t389)
 

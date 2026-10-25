@@ -536,8 +536,10 @@ fn kh1_plays(r: &ComboRow) -> bool {
 /// its kind's targets; `Character::ability_row`, KH2's `condition` / `in_range`, Steam KH2
 /// `0x140402750` / `0x1404029F0`). Then the picker returns the KH1 row it runs on (KH1's plain row
 /// of its kind, `kh2_row`; for its own row or a hop from the ground the row runner's `attack`
-/// picks it) and the row runner plays it as before (`attack`). The row KH1 runs.
-pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool) -> i32 {
+/// picks it) and the row runner plays it as before (`attack`). At KH1's finisher it is one walk
+/// of KH1's and KH2's finishers (`finisher_walk`); `bits` are Sora's ability bits as KH1 set them
+/// (`kh1picker` held some back for KH1's picker's call). The row KH1 runs.
+pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -> i32 {
     if let Ok(mut g) = PICK.lock() {
         *g = None;
     }
@@ -546,6 +548,11 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool) -> i32 {
     let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return row };
     let finisher = count >= kh1_len;
     let what = if air { "aerial" } else { "ground" };
+    // At KH1's finisher: KH1's ability finishers and KH2's in one walk (`finisher_walk`). Row 6
+    // (Blitz, its own KH1 test passed in KH1's picker) joins it there.
+    if finisher && (plain || (!air && row == BLITZ_ROW)) {
+        return finisher_walk(actor, row, dir, air, bits, count, kh1_len);
+    }
     if !plain {
         note(format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's own row {row} (one of its own abilities' or its drop ahead), kept"));
         return row;
@@ -573,6 +580,216 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool) -> i32 {
     if let Ok(mut g) = PICK.lock() {
         *g = Some((pick, launch, frame()));
     }
+    run
+}
+
+/// KH1's Blitz row (ground picker `0x1402A6EE0`: marked with ability bit 3 when its plain
+/// finisher, row 8, is and its row 11 isn't: nothing close beside him, `0x1402A7320`'s count;
+/// Checked (decomp)).
+const BLITZ_ROW: i32 = 6;
+
+/// One move of the finisher walk.
+#[derive(Clone, Copy)]
+enum Step {
+    /// One of KH1's own ability finisher rows, its ability bit (Sora's ability bits) and its rule.
+    Kh1(i32, u32, Kh1Rule, &'static str),
+    /// One of KH2's ability finisher rows (Sora's PTYA id), by KH2's own checks.
+    Kh2(u8),
+    /// KH1's plain finisher (what its picker took: row 8 or 16, its dash at a far target, or a
+    /// swing when the finisher's request is the one playing).
+    Plain,
+}
+
+#[derive(Clone, Copy)]
+enum Kh1Rule {
+    /// Its checks are its group's (`Group::gate`) alone (Ripple Drive, Hurricane Blast).
+    Always,
+    /// KH1's 30% roll with KH1 Ability Chance on (Stun Impact, Gravity Break).
+    Chance,
+    /// KH1's own test for Blitz (KH1's picker returned row 6: its test passed inside KH1).
+    Blitz,
+}
+
+/// A place in KH2's finisher table: the row whose range checks the moves in it take (`None`:
+/// none), then the moves in their order.
+struct Group {
+    gate: Option<u8>,
+    steps: &'static [Step],
+}
+
+const STUN_IMPACT: Step = Step::Kh1(3, 1 << 27, Kh1Rule::Chance, "Stun Impact");
+const GRAVITY_BREAK: Step = Step::Kh1(4, 1 << 28, Kh1Rule::Chance, "Gravity Break");
+const BLITZ: Step = Step::Kh1(BLITZ_ROW, 1 << 3, Kh1Rule::Blitz, "Blitz");
+const RIPPLE_DRIVE: Step = Step::Kh1(7, 1 << 26, Kh1Rule::Always, "Ripple Drive");
+const HURRICANE_BLAST: Step = Step::Kh1(15, 1 << 25, Kh1Rule::Always, "Hurricane Blast");
+
+/// The ground finisher walk, KH1's rule set (the tester, m19 / m20 / m21): KH2's own table order
+/// for Sora's ground finishers (`00battle.bin` PTYA, Checked (files); KH2's walk `0x140402C50`
+/// takes the first row that passes, no chance, Checked (decomp)): Explosion at a group (row 26:
+/// any target 0..300 off the line to the primary one), the normal finisher 154 at a group (row 2:
+/// any target 0..180 off the line), Guard Break (27, no range), Explosion (42, no range), the
+/// normal finisher 155 (row 3). KH1's twins take their KH2 move's place and checks: Stun Impact
+/// and Ripple Drive Explosion's, before it ("for explosion it should come last"); Gravity Break and
+/// Blitz Guard Break's, after it, Blitz last ("gravity break and blitz last, if its blitz and
+/// gravity equipped then blitz last"). KH1's normal finisher stands for KH2's 154 and 155.
+const GROUND_FINISHERS: [Group; 5] = [
+    Group { gate: Some(26), steps: &[STUN_IMPACT, RIPPLE_DRIVE, Step::Kh2(26)] },
+    Group { gate: Some(2), steps: &[Step::Plain] },
+    Group { gate: Some(27), steps: &[Step::Kh2(27), GRAVITY_BREAK, BLITZ] },
+    Group { gate: Some(42), steps: &[STUN_IMPACT, RIPPLE_DRIVE, Step::Kh2(42)] },
+    Group { gate: None, steps: &[Step::Plain] },
+];
+/// The air finisher walk: KH2's air finishers in table order (Checked (files)): Magnet Burst at a
+/// group (49: any target 0..650 off the line), the normal finisher 184 at a group (row 7: any
+/// target 0..260 off the line), Aerial Finish (29, no range), Magnet Burst at a far primary
+/// target (50: 300..650), the normal finisher 183 (row 8). Hurricane Blast takes Aerial Finish's
+/// place and checks, before it ("for hurricane blast it should come first").
+const AIR_FINISHERS: [Group; 5] = [
+    Group { gate: Some(49), steps: &[Step::Kh2(49)] },
+    Group { gate: Some(7), steps: &[Step::Plain] },
+    Group { gate: Some(29), steps: &[HURRICANE_BLAST, Step::Kh2(29)] },
+    Group { gate: Some(50), steps: &[Step::Kh2(50)] },
+    Group { gate: None, steps: &[Step::Plain] },
+];
+/// Without KH2's data (no checks to run): KH1's own order (its picker's: Stun Impact, Gravity
+/// Break, Blitz, Ripple Drive, its finisher; Hurricane Blast before its air finisher).
+const GROUND_KH1_ONLY: [Group; 1] = [Group { gate: None, steps: &[STUN_IMPACT, GRAVITY_BREAK, BLITZ, RIPPLE_DRIVE, Step::Plain] }];
+const AIR_KH1_ONLY: [Group; 1] = [Group { gate: None, steps: &[HURRICANE_BLAST, Step::Plain] }];
+
+/// What the walk took.
+enum Took {
+    Kh1(i32, &'static str),
+    Kh2(ComboRow, Option<character_core::Launch>),
+    Plain,
+}
+
+/// KH1's finisher with KH1's and KH2's ability finishers in one walk (Base / Aerial Base Combo
+/// KH1; the tester, m21: "do 1", one walk in KH1's picker with KH1's rule set). KH1's picker has
+/// run with its own ability finishers held back (`kh1picker::HELD_GROUND` / `HELD_AIR`, Blitz's
+/// excepted) and took `row`: its plain finisher (8 / 16), its dash at a far target (1), a swing
+/// (its finisher's request playing), or Blitz (6, whose KH1 test it ran). The walk goes through
+/// `GROUND_FINISHERS` / `AIR_FINISHERS` in order: a group whose gate row's range checks fail now
+/// (KH2's `in_range` against base Sora's targets and KH1's lock, `Character::row_in_range`) is
+/// passed over; in a group the first move that passes wins:
+/// - KH1's: its ability bit set (`bits`, as KH1 set them), its row's request not the one playing
+///   (KH1's own anti-repeat), and its rule: Stun Impact / Gravity Break KH1's 30% roll with KH1
+///   Ability Chance on (`kh1picker::chance`; one KH1 random number per press, 0.3 taken off it
+///   for each roll reached, as KH1's picker does, so each keeps exactly 30%; a failed roll isn't
+///   rolled again further down);
+///   Blitz only when KH1's picker found its test passing (row 6); none of KH1's when its picker
+///   took its dash (row 1, which comes before them in KH1's own walk);
+/// - KH2's: KH2's own checks (`Character::ability_row_id`: equipped, not the KH2 motion playing,
+///   playable on KH1's rows, `kh1_plays`), its hop;
+/// - the plain one: KH1's own pick (row 8 when it took Blitz).
+/// KH1's row then runs it (KH2's on KH1's rows as `picker` runs them, `attack`).
+unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32, count: u8, kh1_len: u8) -> i32 {
+    let what = if air { "aerial" } else { "ground" };
+    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    let request_of = |r: i32| super::combat::row_motion(actor, r);
+    let playing = rd::<i32>(actor + 0x164);
+    let plays_now = |r: i32| request_of(r).is_some_and(|q| q as u16 as i32 == playing & 0xFFFF);
+    let plain = if row == BLITZ_ROW && !plays_now(8) { 8 } else { row };
+    let blitz_ok = row == BLITZ_ROW;
+    // (KH1's dash at a far target, row 1, comes before its ability finishers in KH1's own walk:
+    // KH1's stay out there, as in KH1. KH2's take its place, as since t557.)
+    let dash = row == 1;
+    let chance = super::kh1picker::chance();
+    let kh2_playing = super::kh2slots::playing_motion(actor);
+    let mut roll: Option<f32> = None;
+    let mut used = 0.0f32;
+    let mut failed: Vec<i32> = Vec::new();
+    let mut trail: Vec<String> = Vec::new();
+    let mut kh1_step = |n: i32, bit: u32, rule: Kh1Rule, name: &'static str, trail: &mut Vec<String>| -> bool {
+        if dash || bits & bit == 0 || failed.contains(&n) || plays_now(n) {
+            return false;
+        }
+        match rule {
+            Kh1Rule::Always => true,
+            Kh1Rule::Blitz => {
+                if !blitz_ok {
+                    trail.push(format!("{name}: KH1's test (nothing beside him) fails"));
+                }
+                blitz_ok
+            }
+            Kh1Rule::Chance if !chance => true,
+            Kh1Rule::Chance => {
+                let r = *roll.get_or_insert_with(|| super::kh1picker::random().unwrap_or(1.0));
+                let won = r - used < 0.3;
+                used += 0.3;
+                if !won {
+                    failed.push(n);
+                    trail.push(format!("{name}: KH1's 30% roll failed"));
+                }
+                won
+            }
+        }
+    };
+    let walked = takeover::kh2_rows(actor, air, |ch, stick, env| {
+        let groups: &[Group] = if air { &AIR_FINISHERS } else { &GROUND_FINISHERS };
+        for g in groups {
+            if let Some(gate) = g.gate {
+                if !ch.row_in_range(gate, env) {
+                    continue;
+                }
+            }
+            for st in g.steps {
+                match *st {
+                    Step::Kh1(n, bit, rule, name) => {
+                        if kh1_step(n, bit, rule, name, &mut trail) {
+                            return Took::Kh1(n, name);
+                        }
+                    }
+                    Step::Kh2(id) => {
+                        if let Some((r, l)) = ch.ability_row_id(id, true, air, kh2_playing, &kh1_plays, stick, env) {
+                            return Took::Kh2(r, l);
+                        }
+                    }
+                    Step::Plain => return Took::Plain,
+                }
+            }
+        }
+        Took::Plain
+    });
+    let no_kh2 = walked.is_none();
+    let took = walked.unwrap_or_else(|| {
+        let groups: &[Group] = if air { &AIR_KH1_ONLY } else { &GROUND_KH1_ONLY };
+        for st in groups[0].steps {
+            match *st {
+                Step::Kh1(n, bit, rule, name) if kh1_step(n, bit, rule, name, &mut trail) => return Took::Kh1(n, name),
+                Step::Plain => return Took::Plain,
+                _ => {}
+            }
+        }
+        Took::Plain
+    });
+    let tried = if trail.is_empty() { String::new() } else { format!(" ({})", trail.join("; ")) };
+    let (run, line) = match took {
+        Took::Plain => (plain, format!("KH1's own finisher row {plain}")),
+        Took::Kh1(n, name) => (n, format!("KH1's {name} (row {n})")),
+        Took::Kh2(pick, launch) => {
+            let run = if ours_for(&pick).is_some() || (!air && pick.is_jump()) { plain } else { kh2_row(actor, combo, plain, Some(&pick), &request_of) };
+            let line = format!(
+                "KH2's row {} motion {} (ability {}): KH1's row {run} runs it{}",
+                pick.id,
+                pick.motion,
+                pick.ability,
+                launch.map_or(String::new(), |l| format!(", KH2's hop {:.0} high, {:.1}/frame", l.height, l.velocity[0].hypot(l.velocity[1])))
+            );
+            if let Ok(mut g) = PICK.lock() {
+                *g = Some((pick, launch, frame()));
+            }
+            (run, line)
+        }
+    };
+    // (KH1's dash, row 1, left its distance in the direction's y, which only rows 0 / 1 read.)
+    if run != row && row == 1 && dir >= 0x10000 {
+        wr(dir + 4, 0.0f32);
+    }
+    note(format!(
+        "KH1's {what} finisher walk, swing {count} of {kh1_len} (KH1's picker took row {row}{}, KH1 Ability Chance {}): {line}{tried}",
+        if no_kh2 { "; no KH2 data: KH1's own order" } else { "" },
+        if chance { "on" } else { "off" }
+    ));
     run
 }
 

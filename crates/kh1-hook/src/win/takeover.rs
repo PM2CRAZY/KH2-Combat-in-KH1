@@ -1657,6 +1657,14 @@ pub fn test_drop_ahead(on: bool) {
 /// against base Sora's targets and KH1's lock as KH2's step sees them, with its hop
 /// (`Character::ability_row`). KH2's combo length and selector walk aren't run.
 pub unsafe fn kh2_ability_row(actor: usize, finisher: bool, air: bool, playing: Option<u16>, usable: &dyn Fn(&character_core::ComboRow) -> bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
+    kh2_rows(actor, air, |ch, stick, env| ch.ability_row(finisher, air, playing, usable, stick, env)).flatten()
+}
+
+/// KH2's row checks for KH1's own walk (`combomods::finisher_walk`, Base / Aerial Base Combo KH1):
+/// `f` gets KH2's rows and checks (`Character::ability_row_id`, `row_in_range`) with base Sora's
+/// targets and KH1's lock as KH2's step sees them, the stick, and his place; nothing of KH2's
+/// controller moves him. `None` without KH2's data.
+pub unsafe fn kh2_rows<R>(actor: usize, air: bool, f: impl FnOnce(&mut Character, [f32; 2], &Env) -> R) -> Option<R> {
     let base = BASE.load(Ordering::Relaxed);
     let kh2 = pose::kh2()?;
     let mut g = DRIVER.try_lock().ok()?;
@@ -1675,7 +1683,7 @@ pub unsafe fn kh2_ability_row(actor: usize, finisher: bool, air: bool, playing: 
     let above = rd::<f32>(actor + 0x3D4);
     let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     d.character.set_drop_ahead(false);
-    d.character.ability_row(finisher, air, playing, usable, stick, &env)
+    Some(f(&mut d.character, stick, &env))
 }
 
 /// `kh2_would_take`, with the hop KH2's row starts there (`Character::would_take_launch`: a row

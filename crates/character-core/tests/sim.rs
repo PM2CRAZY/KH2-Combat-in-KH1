@@ -1695,3 +1695,40 @@ fn ability_row_joins_a_host_picker_at_its_count() {
     assert_eq!(ch.combo_count(), 0);
     assert_eq!(ch.state_name(), StateName::Idle);
 }
+
+#[test]
+fn ability_rows_by_id_and_range_checks_for_a_host_walk() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(150, attack_clip(150, 40, (10, 16), 8, 20));
+    ch.moveset.clips.insert(151, attack_clip(151, 40, (10, 16), 8, 20));
+    // A group finisher (kind 2, any target 0..300 off the aim, as Explosion's row 26) and a
+    // no-range one (kind 3, as Guard Break's row 27).
+    let mut group = row(26, 150, true, false);
+    (group.ability, group.kind, group.far, group.low, group.high, group.inner_min, group.inner_max) = (94, 2, 300.0, 500.0, -500.0, -1.0, 0.92);
+    let mut single = row(27, 151, true, false);
+    (single.ability, single.kind) = (93, 3);
+    ch.moveset.combo_rows.extend([group, single]);
+    let any = |_: &ComboRow| true;
+    let one = [TargetInfo { id: 7, pos: [0.0, 0.0, 100.0], radius: 10.0, height: 100.0 }];
+    let two = [TargetInfo { id: 7, pos: [0.0, 0.0, 100.0], radius: 10.0, height: 100.0 }, TargetInfo { id: 8, pos: [150.0, 0.0, 0.0], radius: 10.0, height: 100.0 }];
+    fn env(t: &[TargetInfo]) -> Env<'_> {
+        Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: t, ledges: &[] }
+    }
+    // The range checks alone, whatever is equipped: the group row needs a second target off the
+    // line to the primary one; the no-range row always passes.
+    ch.set_auto_target(true);
+    assert!(!ch.row_in_range(26, &env(&one)));
+    assert!(ch.row_in_range(26, &env(&two)));
+    assert!(ch.row_in_range(27, &env(&one)));
+    assert!(!ch.row_in_range(99, &env(&one)));
+    // By id: not equipped, nothing; equipped, its own checks.
+    assert!(ch.ability_row_id(27, true, false, None, &any, [0.0; 2], &env(&one)).is_none());
+    ch.abilities.equipped.extend([93, 94]);
+    assert_eq!(ch.ability_row_id(27, true, false, None, &any, [0.0; 2], &env(&one)).map(|r| r.0.id), Some(27));
+    assert!(ch.ability_row_id(26, true, false, None, &any, [0.0; 2], &env(&one)).is_none());
+    assert_eq!(ch.ability_row_id(26, true, false, None, &any, [0.0; 2], &env(&two)).map(|r| r.0.id), Some(26));
+    // A swing press doesn't take a finisher row; its motion playing doesn't either.
+    assert!(ch.ability_row_id(27, false, false, None, &any, [0.0; 2], &env(&one)).is_none());
+    assert!(ch.ability_row_id(27, true, false, Some(151), &any, [0.0; 2], &env(&one)).is_none());
+    assert_eq!(ch.state_name(), StateName::Idle);
+}
