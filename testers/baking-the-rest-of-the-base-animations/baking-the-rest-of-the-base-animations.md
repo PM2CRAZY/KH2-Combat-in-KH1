@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Thanks! Three versions, one step of the plan each:](#^m2)
+- [3. Assistant: Thanks! Built as you picked, in t632: KH1's own leg IK on th](#^m3)
 
 ---
 
@@ -79,6 +80,29 @@ go ahead
 
 ^m2
 
+
 (a)
 
 go ahead
+> [!tip] Assistant
+> Thanks! Built as you picked, in t632: **KH1's own leg IK on the baked animations.** Idle and the landing aren't baked yet; they're drawn over like before.
+>
+> - **What changed.** All of KH1 Sora's own animations move his legs through KH1's leg rig: each foot follows a target, and when the ground under it is higher, KH1 bends the leg so the foot lands on it. That's what keeps his feet on slopes and stairs. Our baked animations (walk, run, combos, casts, item, fall, jump, High Jump) used to have plain legs. Now they keep KH1's leg rig, with its targets set to KH2's ankles and feet from the animation. So on flat ground you see KH2's legs, and on slopes and stairs KH1 bends them onto the ground itself, the same as in its own animations. Nothing of ours runs per frame for this.
+> - **Our own foot fix** still only runs on the animations we draw over KH1 (idle, landing, glide). It never ran on the baked ones, so the two never stack.
+> - **Check.** KH1's bone pass and IK solver in the Steam decomp and exe (`0x1403900B0`, `0x14038FC20`); Sora's own model data says which bones KH1 lifts (the thighs) and by how much (his ankle height, 17.4). Offline, KH1's replayed pass rebuilds KH2's legs within about half a unit on ten baked animations.
+> - **Two small differences you might notice:** the small hip joint above each thigh now points at the ankle, the way KH1 always points it; and where a KH2 swing dips a foot slightly into the floor (a couple of units in some swings), KH1 now lifts it out, as it does in its own animations.
+> - **Switch.** `kh1_leg_ik = off` in kh1-kh2.ini brings back the old plain legs, if you want to compare.
+> - **Not checked:** in game. One assumption: KH1's switch that turns its ground lift on should be on during our animations as during its own (it was on in your earlier trace).
+>
+> Please test:
+> - walking and running up and down stairs and slopes, in and out of battle;
+> - ground combos and casts on uneven ground (the feet should sit on the steps);
+> - jumping and falling onto a slope (the take-off and fall are baked, the landing is still drawn);
+> - anything odd around the hips or the top of the shorts.
+>
+> Questions:
+> 1. Do you see any change at the hips or the top of the shorts compared with the last build? If it looks wrong, we can look at KH1's skin weights on that hip joint.
+> 2. Once this looks right, should idle and the landing be baked next on top of it? Then they'd use KH1's own lift too, and our drawn-over foot fix could go.
+
+^m3
+

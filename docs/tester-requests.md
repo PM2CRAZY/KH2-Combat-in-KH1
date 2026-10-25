@@ -24,6 +24,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
 - [Baking the rest of the base animations](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m1)
   - [2. Assistant: Thanks! Three versions, one step of the plan each:](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m2)
+  - [3. Assistant: Thanks! Built as you picked, in t632: KH1's own leg IK on th](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m3)
 - [Body guards on KH2 moves](../testers/body-guards-on-kh2-moves/body-guards-on-kh2-moves.md)
   - [1. Assistant: I started this thread from Aerial Dodge native's question 7,](../testers/body-guards-on-kh2-moves/body-guards-on-kh2-moves.md#^m1)
 - [Config menu rework](../testers/config-menu-rework/config-menu-rework.md)
