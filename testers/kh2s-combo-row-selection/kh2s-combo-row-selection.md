@@ -372,3 +372,9 @@ go ahead
 
 ^m18
 
+I think you fundamentally don't understand what I want, if an ability is equipped thats kh2s and your combat config is set to kh1 then you should be able to do kh1s moves, and its row picks, we need to modify kh1s so that it can choose explosion and other moves during its kh1 combo. the ability should not ignore the combat settings
+
+do a new reimplementation and come back to me when your finished
+
+go ahead
+ 

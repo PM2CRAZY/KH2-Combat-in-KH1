@@ -84,3 +84,8 @@ go ahead
 
 ^m2
 
+reflect, it still seems off centred, before these changes it wasn't how were you attaching it to sora? can we do the same while keeping it native? same goes for cure as well.
+1. from my judgement I don't think an enemy would hold what effect it can receive, what I'm referring to is when you hit an enemy an effect spawns on the enemy (keyblade hit effect, fire hit effect etc.) Please look into it and find an implementation thats native, I give you the go ahead to work it in 
+2.(b)
+
+go ahead

@@ -111,4 +111,10 @@ go ahead
 > 3. Are there KH1 enemies whose guards should stop Guard Break (the special guard list)? (a) none for now, (b) these ones: ...
 
 ^m2
+1. guard break should function like how it does in kh2, it should pierce any normal enemies and when we're ready to figure out how special guard works for in the game then we can add to your list. I also noticed that guard break and other kh moves still use the kh2s recoil mechanics when I set recoil to kh1, I've recorded a trace and log showing it off, I want the recoil setting in the config to change the system fundamentally so all kh2 moves behave just how a kh1 move would, if I change it to kh2 then all the kh1 and kh2 moves behave how kh2s recoil system works. (same with parry, everything should work how kh1 handles when you hit an enemy with guard, your recoil animation, parry, etc...) we need to also combine guard repel and recoil into the same config
+2. add it and include in the kh2 config for recoil
+3. (a) we'll get back to this list later
+
+go ahead
+
 

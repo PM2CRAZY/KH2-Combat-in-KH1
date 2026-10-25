@@ -87,4 +87,11 @@ do your first purposed route.
 
 ^m2
 
+quick run seems to work on kh2 dodge roll with kh1 on the other hand it:
+waits until dodge roll finishes to go into quick run
+doesn't get the same distance
 
+I recorded a trace and sent you the logs its in the same folder as this thread is (quick-run-native)
+make sure it behaves the same as kh2 dodge roll
+
+go ahead

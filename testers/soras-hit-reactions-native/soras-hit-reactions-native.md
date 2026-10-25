@@ -97,4 +97,8 @@ go ahead
 
 ^m2
 
+1. (b)
+2. (a)
+3. (b)
 
+go ahead

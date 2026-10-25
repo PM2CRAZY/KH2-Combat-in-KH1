@@ -115,3 +115,10 @@ go ahead
 
 ^m4
 
+I've recorded a trace and sent a log, should be in the same folder as this thread. I noticed sora can't bank to the left but can to the right
+	-momentum currently doesn't work with letting go mid glide I just drop.
+	 -the other systems seem to work but not sure if the values are correct so just double check
+	
+keep looking for 
+
+go ahead

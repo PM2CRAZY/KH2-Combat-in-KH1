@@ -74,3 +74,6 @@ go ahead
 
 ^m2
 
+1. unsure have to see how much damage is done with the new system so (a)
+2. if party members can also do crits then yeah (b)
+3. (a)

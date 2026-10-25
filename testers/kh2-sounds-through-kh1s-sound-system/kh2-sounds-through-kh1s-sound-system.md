@@ -139,4 +139,6 @@ why did the ram use go up? are we caching a bunch of sounds? if so you need to t
 
 ^m4
 
+I want you to gut the old system and transfer everything, research into whats needed to get it working properly, I give you full permission to do what you need to do to get it fully working
 
+go ahead

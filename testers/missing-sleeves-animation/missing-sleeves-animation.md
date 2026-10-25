@@ -273,3 +273,9 @@ go ahead
 
 ^m14
 
+1. we'll fix the clipping later
+2. when I mean by sticking out is that the coat is stiff and not animated at all. redo the coat so that its actually animated
+   
+   I've sent you a log and a trace showing a kh2 animation with the coat sticking out and stiff, this is happening on all kh2 animations that we've baked so far. its in the same folder as this thread.
+
+go ahead
