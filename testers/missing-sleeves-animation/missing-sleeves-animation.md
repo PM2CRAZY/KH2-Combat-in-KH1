@@ -25,6 +25,7 @@
 - [19. Assistant: t592 to t596. No bake yet: this is the physics live in game ](#^m19)
 - [20. Assistant: Thanks, that's all clear. t613 to t616, one change each:](#^m20)
 - [21. Assistant: t620: done, Sora's clothes are back to how they were in t375](#^m21)
+- [22. Assistant: t628: the hair_physics / kh2_hair switches are out again, an](#^m22)
 
 ---
 
@@ -538,5 +539,13 @@ go ahead
 
 ^m21
 
+
 1.I will go to the thread
 2.(b)
+> [!tip] Assistant
+> t628: the `hair_physics` / `kh2_hair` switches are out again, and nothing else changed. KH2's own animation of the hair, hood, sleeves and keychain always runs, exactly as it did with both switches on (their defaults). The old ini lines are simply ignored now. Checked against every place in the code that read the two switches; not seen in game.
+>
+> Please check that the hair, hood, sleeves and keychain still move as in t620.
+
+^m22
+

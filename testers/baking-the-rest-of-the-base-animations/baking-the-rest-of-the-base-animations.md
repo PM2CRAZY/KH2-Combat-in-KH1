@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
+- [2. Assistant: Thanks! Three versions, one step of the plan each:](#^m2)
 
 ---
 
@@ -53,4 +54,28 @@
 
 go ahead
 
+
+> [!tip] Assistant
+> Thanks! Three versions, one step of the plan each:
+>
+> - **t625, item use.** Using an item now plays KH2's item animation right inside KH1's own item move, on yourself and on a partner, when Misc Animations is KH2. You can move again where KH2 lets you (frame 36 of 50), and the move ends where KH1's own action ends, not on a timer of ours. As you picked (b), KH1's item sound is gone and KH2's own item sound plays; KH2's item voice only plays with the KH2 voices (Battle Quotes) toggle on. Checked against KH1's item command code (Steam `0x1402A3DB0`), Sora's motion file and KH2's item motion. I couldn't check when the heal itself lands, since it runs on its own timer.
+> - **t626, falling.** KH2's fall is now a real KH1 slot, and KH1 loops it the way KH2 does (from frame 12, not from the start). The switch from the jump into the fall is KH2's too: 5 frames before the top with an 8-frame blend, or right away when you let go of jump early. KH1's own "apex" animation no longer plays at Jump KH2. Checked in both games' code (KH1's apex step `0x1402AF630`, KH2's jump update `0x1403CB680`) and the files. One side effect: a drawn animation right after a baked one now blends instead of snapping. You'll see it from the fall into the landing, and from walk/run into idle, which used to snap.
+> - **t627, jump and High Jump.** KH2's jump and High Jump are now KH1's own takeoff slots. One difference from before: in KH2's exe the High Jump's flip also switches to the fall 5 frames before the top, like the normal jump, while our old rewrite let it play to the end. I went with the exe. KH1's takeoff sounds and dust stay where KH1 has them (the takeoff is frame 4 in both games).
+> - **Gravity / Stop / Aero and the glide's slow/fast** were already KH1 slots before this round (t563 and the glide thread), so nothing changed there.
+> - **Landing lock:** stays KH1's own, as you said.
+>
+> None of it is checked in game yet. Please test:
+> - items on yourself and on a partner (the sound, the voice with the toggle on and off, when you can move again);
+> - plain jumps, tapped jumps and High Jumps (when the fall starts; the High Jump's flip cut at the top);
+> - walking off ledges and a long fall (it should loop smoothly);
+> - the landing blend, and walk/run into idle.
+>
+> One question about your answer 1 ("I don't want a hybrid layer just do (a) without baking on top of it"). It decides idle and the landing, so I want to be sure:
+> - (a) build KH1's own leg IK onto the baked slots (feet on slopes and stairs), but don't bake idle and landing yet;
+> - (b) bake idle and landing now with flat feet, and no leg layer at all;
+> - (c) leave idle and landing drawn over like now.
+>
+> Until you answer, idle and the landing stay drawn over as before.
+
+^m2
 

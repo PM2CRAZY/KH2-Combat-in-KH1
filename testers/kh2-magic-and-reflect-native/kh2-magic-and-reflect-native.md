@@ -14,6 +14,7 @@
 - [8. Assistant: Thanks. There's one thing to check on answer 1 first, then t](#^m8)
 - [9. Assistant: t582 to t585. (a) it is for question 1: Fire / Blizzard / Th](#^m9)
 - [10. Assistant: t607 to t610. Your two answers are in, and I found what was ](#^m10)
+- [11. Assistant: t624: Finishing Plus now works after a finisher cast. Drive ](#^m11)
 
 ---
 
@@ -303,7 +304,33 @@ go ahead
 
 ^m10
 
+
 1. don't worry about drive forms because they're going to be transferred over to the new system once we get base sora done
 2. (a)
    
    go ahead
+> [!tip] Assistant
+> t624: Finishing Plus now works after a finisher cast. Drive Forms are left alone, as you said.
+>
+> - With Finishing Plus equipped, a ground finisher cast (Fire, Blizzard, Thunder or Reflect as the combo's last step) can now be followed in KH2's finisher window:
+>   - **Attack** gives the next finisher, picked the same way as after a finisher swing (KH2's pick at Base Combo KH2, KH1's picker at KH1);
+>   - **a spell** becomes another finisher cast.
+> - KH2 allows one extra finisher per Finishing Plus. Once they're used up, the window stays shut and the cast ends the combo as before. Without Finishing Plus nothing changes.
+> - Air casts have no finisher window in KH2, so nothing changes in the air.
+>
+> Checked in the Steam KH2 decomp: KH2's Attack check (`0x1403D6CA0`) takes Attack, and through the input step a spell too, in the finisher window while finishers are left. The window frames come from `P_EX100.mset`: Fire 54–84, Blizzard 46–76, Thunder 42–78, Reflect 54–84. Not checked:
+> - in game;
+> - that KH2's limit is exactly one plus your Finishing Plus copies (the reading the mod already uses; I didn't find what writes it);
+> - that KH1 cleanly restarts the same spell's finisher cast when you chain, say, Fire's finisher into Fire's finisher.
+>
+> Please test, with Finishing Plus on:
+> - a ground combo ending in Fire / Blizzard / Thunder / Reflect, then Attack late in the cast: you should get the next finisher;
+> - the same with a spell instead: another finisher cast;
+> - with two Finishing Plus, a third finisher; with one, nothing after the second;
+> - the same at Base Combo KH1;
+> - without Finishing Plus, a finisher cast still ends the combo.
+>
+> Question: after a finisher *swing* at Base Combo KH2, the Finishing Plus window still opens when you have no finishers left, so a spell picked there becomes a finisher cast. KH2 would refuse it. (a) close the window when no finisher is left, as KH2 does, or (b) leave it?
+
+^m11
+
