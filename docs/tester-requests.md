@@ -16,6 +16,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/aerial-dodge-native/aerial-dodge-native.md#^m1)
   - [2. Assistant: Thanks! For question 1 I went with (a), the fall at KH2's ap](../testers/aerial-dodge-native/aerial-dodge-native.md#^m2)
   - [3. Assistant: Thanks, and thanks for the traces! They showed exactly what ](../testers/aerial-dodge-native/aerial-dodge-native.md#^m3)
+  - [4. Assistant: Thanks! Done, (b) it is.](../testers/aerial-dodge-native/aerial-dodge-native.md#^m4)
 - [Air physics for KH2 magic, Aerial Finish and Magnet Burst](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md)
   - [1. Assistant: I started this thread from your message in KH2 magic and Ref](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md#^m1)
 - [Baking the rest of the base animations](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)

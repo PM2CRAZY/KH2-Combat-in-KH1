@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Thanks! For question 1 I went with (a), the fall at KH2's ap](#^m2)
 - [3. Assistant: Thanks, and thanks for the traces! They showed exactly what ](#^m3)
+- [4. Assistant: Thanks! Done, (b) it is.](#^m4)
 
 ---
 
@@ -107,3 +108,18 @@ go ahead
 (b)
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! Done, (b) it is.
+>
+> - **t597: the dodge always rises fully at Physics KH1.** KH1 has a flag on Sora that means "the jump can still be cut short", and its variable jump only cuts a rise while that flag is on. The dodge now turns that flag off as it starts, so KH1 never cuts it: hold jump or let go, you get the full height, and the fall still starts near the top like KH2's. Physics KH2 isn't touched; there the dodge keeps KH2's own release, as in KH2. Checked: KH1's button handler `0x1402A7B30` in the Steam decomp. That flag is the only thing the cut looks at, and no other KH1 code reads it on Sora. Not checked yet: in game.
+>
+> What I'd like tested (Physics KH1, a trace each if you can):
+> 1. Dodge and tap jump right away. It should still rise all the way, with the fall starting near the top.
+> 2. Jump, let go, then dodge. The old cut 6 frames into the dodge shouldn't show up anywhere.
+> 3. A normal KH1 jump right after a dodge, tapped and then held. KH1's own short and full jump should still work as before.
+>
+> No open questions on my side.
+
+^m4
+
