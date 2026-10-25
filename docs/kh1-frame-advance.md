@@ -485,3 +485,10 @@ The frame is the clip's own time (KH1's motion time `+0x16C` for our slots; our 
 clips drawn with no slot), floored. A loop is counted when that time comes round by more than half
 the length (Assumption: KH1 wraps a looping motion's time at its length; a time past the length is
 also taken round). Cost: only while Frame Advance is on; a handful of short strings a frame.
+
+## Seconds shown as Frames (tester, "Missing sleeves animation" m19)
+
+With the Trace Recorder's Game Frames row on (Frame Advance turns it on), the clip's length row
+reads "Frames" and shows the clip in game frames (the seconds x 60: the trace counts 60 Hz frames
+then, `trace::game_frames`). Left / right still change it a second (60 frames) at a time, as the
+ini keeps it in seconds (`trace_seconds`). With Game Frames off it reads "Seconds" as before.

@@ -34,7 +34,7 @@
 //! - **KH1 Spells** (main page): Gravity, Stop and Aero each "KH1 cast" (KH1's whole cast, its
 //!   own motion, clock and effects) or "KH2 cast" (KH1's spell on KH2's cast motion): the Config
 //!   menu's Magic > Animations rows for them (`formmagic::kh1_cast`; ini `anim_gravity` ..).
-//! - **Pages**: Trace Recorder (the trace's mode, seconds, the sound log and its categories,
+//! - **Pages**: Trace Recorder (the trace's mode, seconds (shown as frames, 60 a second, with Game Frames on), the sound log and its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
 //!   HP, max HP, MP, max MP, Strength, Defense and AP: left / right change it, Cross locks it).
@@ -487,7 +487,10 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
         }
         Page::Trace => vec![
             (format!("{:<16}< {} >", "Trace", match trace::mode() { trace::Mode::Off => "Off", trace::Mode::On => "On", trace::Mode::Always => "Always" }), Action::TraceMode),
-            (format!("{:<16}< {} >", "Seconds", trace::seconds()), Action::Seconds),
+            // (With Game Frames on, the clip's length in game frames: the tester, "when setting
+            // trace to count game frames the seconds number becomes frame count". Still kept as
+            // seconds, a step of the row being one second, 60 frames.)
+            if trace::game_frames() { (format!("{:<16}< {} >", "Frames", trace::seconds() * 60), Action::Seconds) } else { (format!("{:<16}< {} >", "Seconds", trace::seconds()), Action::Seconds) },
             // (t371) On: the seconds count game frames (`trace::game_frames`); Off: real time.
             (format!("{:<16}< {} >", "Game Frames", on_off(trace::game_frames())), Action::GameFrames),
             (format!("{:<16}< {} >", "Sound Log", on_off(trace::sound_log())), Action::SoundLog),

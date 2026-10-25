@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 594 (testing branch: Trace Recorder: Frames)
+- **Trace Recorder: Frames.** The tester (m19 2): with Game Frames on, the Seconds row reads "Frames" and shows seconds × 60 (it still steps by a second; the ini keeps seconds). docs/kh1-frame-advance.md.
+
 ### 2026-10-25: Stage 593 (testing branch: Frame Advance info panel)
 - **Frame Advance info panel.** The tester (m19 1 (a), 2 (a)): a top-right box while Frame Advance is on, apart from the debug menu (`fapanel.rs`, drawn from `debugmenu::draw_end`): KH2 motion, battle / field, KH1 slot (and ours), drawn baked / live / by KH2's controller / KH1's own, the frame within the animation ("field run 12 / 40"), loops, the trace frame, cloth settings id and steps. Assumption: KH1 wraps a looping motion's time at its length. docs/kh1-frame-advance.md "The info panel".
 
