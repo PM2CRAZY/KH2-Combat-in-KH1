@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 597 (testing branch: Aerial Dodge: no release at Physics KH1)
+- **Aerial Dodge: no early release at Physics KH1.** The tester (aerial-dodge-native m3): "(b)" (no release at Physics KH1: the dodge always rises fully), "go ahead". On the frame a dodge starts at Physics KH1, `shared::physics::kh1_held_jump` now clears Sora's `+0` flag `0x40000` (KH1's early-release cut still open) instead of setting t545's `0x60000`. KH1's button handler `0x1402A7B30` (Steam, from the control step `0x1402A6220`) runs its variable-jump cut (`0x1402AF8F0 (actor, 5.0)` from air time 6) only while that bit is on, so the dodge always rises fully, held or let go; the fall still swaps at the apex (`combomods::dodge_apex`). No other KH1 code reads that bit on the actor (the other `0xE0000` tests are on attack objects). Checked (decomp). Physics KH2 unchanged (KH2's own release, `0x1403CB680`). docs/kh1-aerial-dodge-native.md §8.
+
 ### 2026-10-25: Stage 596 (testing branch: Debug menu: Cloth Physics page)
 - **Debug menu: Cloth Physics page.** The tester (m19 6 (a and b)): the field-run physics on / off and each part's stiffness, damping, weight and swing cap live, plus Reset to tuned; the settings id in the page title and every change logged ("cloth physics settings id N ..."); session only. docs/kh1-secondary-motion.md.
 

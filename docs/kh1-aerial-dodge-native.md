@@ -240,3 +240,15 @@ The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one te
 - **The 160-frame slot.** The dodge's slot only plays until the fall swap 5 frames before the apex:
   at most ~33 frames for MAX at KH1's gravity (rise sqrt(600 / 0.48469) = 35.2) or ~33 at KH2's
   (38.3), 86 for the 1700 special. 160 covers every rise. **Checked (arithmetic)**.
+
+## 8. Third round (the tester's m3 answer: no release at physics KH1)
+
+- The tester chose "(b) No release at Physics KH1: the dodge always rises fully" over t545's KH1
+  release. `shared::physics::kh1_held_jump` (after KH1's control step on the frame the dodge
+  starts at physics KH1) now clears `+0` flag `0x40000` instead of setting `0x60000`. KH1's button
+  handler (`0x1402A7B30`, Steam) runs its variable-jump cut only while `0x40000` is on (and clears
+  it itself past 5 frames before the apex or out of state 2), so with it off the dodge's rise is
+  never cut, held or let go; the fall swap stays at the apex (`combomods::dodge_apex`, 5 frames
+  before it). No other KH1 code reads that bit of the actor's `+0` word: the other `0xE0000`
+  tests in the decomp are on attack objects. **Checked (decomp)**. Physics KH2 is unchanged
+  (KH2's own held-dodge release, `0x1403CB680`, in `air_step`).

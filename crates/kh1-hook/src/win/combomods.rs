@@ -1390,7 +1390,8 @@ pub unsafe fn aerial_dodge_with(actor: usize, (height, speed): (f32, f32)) -> bo
     } else {
         [0.0, 0.0]
     };
-    // (Held: let go early, the rise is cut as KH2's held jump is, `kh2_hop_held`.)
+    // (Held: physics KH2, let go early the rise is cut as KH2's held jump is; physics KH1, the
+    // full rise always, `kh2_hop_held`.)
     super::shared::physics::kh2_hop_held(actor, height, vel);
     super::shared::mark_air_dodged();
     takeover::note_launch(vel);
