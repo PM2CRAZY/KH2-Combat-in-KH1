@@ -512,3 +512,21 @@ fn reflect_pop_frame_ignores_hit_count() {
         assert!(frames.windows(2).all(|p| p[0] == p[1]), "{file}: the pop moved with the hits: {frames:?}");
     }
 }
+
+/// An effect element lives its particle data's length in KH2's 30 Hz effect ticks: twice as many
+/// game frames (`effect::FRAMES_PER_TICK`; KH2 `0x1402C1D80`). Reflect's barrier (27 ticks) stands
+/// 54 frames, so its counter comes after the drawn barrier, not halfway through it.
+#[test]
+fn effects_live_their_length_in_30_hz_ticks() {
+    use kh2_formats::pax::{Emitter, PaxEffect, PaxElement};
+    let element = PaxElement { effect: 0, id: 0, group: 0, fadeout_frames: 0, bone: 0, tag: 0, flags: 0, start_wait: 0.0, sound: -1, translation: [0.0; 3], rotation: [0.0; 3], scale: [1.0; 3] };
+    let timing = PaxEffect { number: 0, emitters: vec![Emitter { start: Some(0.0), total: Some(27.0), looping: None }] };
+    let w = Fake { frame: 0, release_at: 0, motion_end: 60, seed: 1 };
+    let mut e = kh2_magic::Effect::new(1, 0, element, timing, None, &w);
+    let mut frames = 0;
+    while e.alive() && frames < 200 {
+        e.tick(1.0, &w);
+        frames += 1;
+    }
+    assert_eq!(frames, 54);
+}

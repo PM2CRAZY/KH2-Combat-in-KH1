@@ -7,6 +7,11 @@ use kh2_formats::pax::{flags, PaxEffect, PaxElement};
 
 use crate::{flip, ObjId, World};
 
+/// Game frames (60 Hz, a `frametime` of 1.0 each) per effect tick: KH2's effect clock adds the
+/// frame delta to an accumulator and runs one tick per 2.0 (`0x1402C1D80`, Checked (decomp),
+/// `docs/kh2-effects.md` §1). Start waits and fade-outs count game frames.
+pub const FRAMES_PER_TICK: f32 = 2.0;
+
 #[derive(Clone, Debug)]
 pub struct Effect {
     pub id: u64,
@@ -98,7 +103,12 @@ impl Effect {
                 return false;
             }
         }
-        self.age < self.timing.length(self.ended_at)
+        // The particle data's lengths are effect ticks, which run at 30 Hz (one per
+        // `FRAMES_PER_TICK` game frames, KH2 `0x1402C1D80`, `docs/kh2-effects.md` §1); `age` and
+        // `ended_at` count game frames. (Before, the two were compared as one: every element
+        // died at half its length, Reflect's barrier after 27 frames instead of 54, so its
+        // counter came while the drawn barrier still stood.)
+        self.age / FRAMES_PER_TICK < self.timing.length(self.ended_at.map(|a| a / FRAMES_PER_TICK))
     }
 
     /// The particle system still exists (the game keeps it until the

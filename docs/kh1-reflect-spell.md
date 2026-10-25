@@ -367,3 +367,28 @@ barrier and the contact effect as before. Melee attacks unchanged (t573). Epic k
   at priority 3 through KH1's clip play (`kh1voice::defense`). **Assumption**: that clip 46 (not
   47) is "Defense!"; the log line "KH1 voice: Reflect finisher, KH1's Aero line ... (clip 46 ...)"
   names the clip each time (first 40).
+
+## The counter came before the barrier was gone (the tester, m9: "still sending its shots on the first hit")
+
+- The trace (`testers/kh2-magic-and-reflect-native/trace_1792960190_f42073`, `..._f42322`,
+  `..._f42330`): every cast's barrier attack stood 27 game frames ("barrier up" one frame after
+  the cast, "barrier down 0.48 s after the cast"), and the counter's element 4 and the first 574
+  hits came the next frame, while hits that met the barrier on its first frames had flashed it
+  (element 1). **Checked (trace)**.
+- Reflect's script keeps its barrier for as long as its element 0 is alive (`trap_effect_is_alive`
+  in its barrier loop; the counter starts after the loop). **Checked (files)**, `REFLECT_3.mag`
+  read with our disassembler. An element lives its particle data's length in **effect ticks**,
+  which KH2 runs at 30 Hz (one per two game frames, `0x1402C1D80`, `docs/kh2-effects.md` §1).
+  Element 0's data is 27 ticks long: KH2's barrier stands **54** frames (0.9 s).
+- `kh2-magic`'s `Effect::alive` compared its age in game frames with that length in ticks, so
+  every element died at half its length. Reflect's barrier attack went at frame 27 and the counter
+  fired then, while KH1's effect engine (which runs KH2's elements on their own 30 Hz clock) still
+  drew the barrier for another 27 frames: the shots came out of a barrier still standing.
+- Fixed in `kh2_magic::effect` (`FRAMES_PER_TICK`): ages compare in ticks. Test
+  `effects_live_their_length_in_30_hz_ticks`. The barrier now stands 54 frames, its element 4
+  and counter (574 / 576 / 578, re-hit every 10 / 8 / 6 frames by level for the magi row's time)
+  as it drops, then the burst, as KH2's script runs them.
+- This is the spell runtime's clock, so every KH2 spell run by `kh2-magic` changes where its
+  script waits on an element: Blizzard's shard flies for as long as its element lives (twice as
+  long as before), and Fire / Thunder / Cure / Magnet and the forms' scripts check their elements
+  the same way.

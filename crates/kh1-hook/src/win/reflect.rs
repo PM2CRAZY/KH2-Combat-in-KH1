@@ -864,7 +864,8 @@ struct Runtime {
 
 /// The burst attacks (tiers 1..3, by the hits the barrier counted), whose first frame plays the
 /// burst's sound (element 7's, `BURST_ELEMENT`). Every attack of the script strikes with its own
-/// row (t572; the burst runs at script frames 58..63 after the counter 574 / 576 / 578 at 30..57,
+/// row (t572; the burst runs after the counter 574 / 576 / 578, which starts as the barrier's
+/// element 0 dies: 54 frames, its 27 effect ticks at 30 Hz, `kh2_magic::effect::FRAMES_PER_TICK`;
 /// Checked (files) through `kh2-magic`'s test `reflect_counters_what_it_blocked`).
 const BURSTS: [u16; 3] = [667, 668, 669];
 /// `Runtime::casting`'s count once the cast motion has shown, and the frames a cast on KH1's cast
