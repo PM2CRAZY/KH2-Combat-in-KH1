@@ -654,6 +654,14 @@ const SCALE_STEAM: usize = 0x386CD0;
 const DIR_STEAM: usize = 0x2A93D0;
 const BTLTBL_STEAM: usize = 0x2D22D30;
 const COMMAND_STEAM: usize = 0x2D53A40;
+/// KH1's flight cast (`0x1402A4150`, movement state 8, Checked (decomp)): a target's lock point
+/// `0x1402B04C0 (target, point, out) -> radius`, the vector difference `0x140386D10 (out, a, b)`
+/// (a − b), and the turn rate it sets in the stats (`+0xD0` = π/16).
+const LOCK_POINT_STEAM: usize = 0x2B04C0;
+const SUB_STEAM: usize = 0x386D10;
+const FLIGHT_TURN: f32 = std::f32::consts::PI / 16.0;
+/// KH1's flight motion request queued after a flight cast (`0x40000075`, blend 8.0).
+const FLIGHT_REQUEST: u32 = 0x4000_0075;
 /// KH1's set-motion and queue (`0x14029F980` / `0x14029FA30` Steam: request, blend in XMM2).
 const SET_MOTION_RVA: Rva = Rva(0x29D7F0);
 const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
@@ -668,15 +676,15 @@ fn request_of(motion: u16) -> Option<u32> {
 /// Reflect can be cast on KH1's own cast state now (the tester, kh2-magic-and-reflect-native m5,
 /// plan item 2: "Reflect moved onto KH1's own cast state like the other spells, no more KH2
 /// controller"): Steam, base Sora in KH1's own states (`shared`), a state KH1 casts in (its
-/// ground cast in 0 / 6 / 0x18, its air cast in 2, `0x1402A3600`; state 8's cast turns to the
-/// target first, `0x1402A4150`, left to the borrow), our request of the cast motion built.
+/// ground cast in 0 / 6 / 0x18, its air cast in 2, `0x1402A3600`; its flight cast in 8,
+/// `0x1402A4150`, the tester's m6 answer 2 (a)), our request of the cast motion built.
 pub unsafe fn native_ok(actor: usize) -> bool {
     if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || super::form::in_form() || !super::shared::active() || actor < 0x10000 {
         return false;
     }
     match rd::<i32>(actor + 0x70) {
         0 | 6 | 0x18 => request_of(GROUND_MOTION).is_some(),
-        2 => request_of(AIR_MOTION).is_some(),
+        2 | 8 => request_of(AIR_MOTION).is_some(),
         _ => false,
     }
 }
@@ -702,10 +710,30 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
     if !affordable(base, actor) {
         return refuse(base, &format!("MP {:?}, KH2's cost {:?} units", mp(actor), super::mpcost::units(actor, SPELL)));
     }
-    let air = rd::<i32>(actor + 0x70) == 2;
+    let state = rd::<i32>(actor + 0x70);
+    // KH1's flight (Neverland): its flight cast, `0x1402A4150` (no hop, no halving; the flight
+    // motion queued after the cast).
+    let flying = state == 8;
+    let air = state == 2 || flying;
     let pre: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(base + PRE_STEP_STEAM);
     if dir > 0x10000 {
         pre(actor, base + COMMAND_STEAM, dir);
+    }
+    // The flight cast first aims his move direction at the command's target's lock point (the
+    // record's `+4` handle, `+8` the point) and sets the stats' turn rate, as KH1's does.
+    if flying && dir > 0x10000 {
+        let target = pose::ptr(rd::<u32>(base + COMMAND_STEAM + 4));
+        let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+        if target > 0x10000 && target != actor {
+            let point: unsafe extern "system" fn(usize, u32, usize) -> f32 = std::mem::transmute(base + LOCK_POINT_STEAM);
+            let sub: unsafe extern "system" fn(usize, usize, usize) = std::mem::transmute(base + SUB_STEAM);
+            let mut at = [0.0f32; 4];
+            point(target, rd::<u32>(base + COMMAND_STEAM + 8), at.as_mut_ptr() as usize);
+            sub(dir, at.as_ptr() as usize, actor + 0x10);
+            if stats > 0x10000 {
+                wr(stats + 0xD0, FLIGHT_TURN);
+            }
+        }
     }
     let step = super::formmagic::note_step(actor, air);
     let finisher = !air && step.is_some_and(|s| s.1) && request_of(FINISHER_MOTION).is_some();
@@ -714,7 +742,9 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
     let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
     let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
     set(actor, request | 0x0100_0000, 0.0);
-    if air {
+    if flying {
+        queue(actor, FLIGHT_REQUEST, 8.0);
+    } else if air {
         queue(actor, 0x4000_0006, 8.0);
     } else {
         queue(actor, 0x4000_0000, 0.0);
@@ -729,7 +759,14 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
     }
     super::formmagic::take_step(actor);
     let block = rd::<u64>(base + BTLTBL_STEAM) as usize;
-    if air {
+    if flying {
+        // (KH1's flight cast ends as its ground one: the move direction normalised, no length.)
+        if dir > 0x10000 {
+            let norm: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + DIR_STEAM);
+            norm(dir, dir);
+            wr(dir + 0xC, 0.0f32);
+        }
+    } else if air {
         // (KH2's start at physics KH2, as for KH2's other spells: before KH1's halving, which
         // `cast_after_command` then undoes, `shared::physics`.)
         super::shared::physics::cast_stops(actor);
@@ -755,7 +792,7 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
     note(format!(
         "{} on KH1's cast state (level {level}): request {request:#x}, KH2 motion {motion}{}, step {step:?}, MP {before:?} -> {:?} ({cost:?} units)",
         NAMES[(level - 1) as usize],
-        if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
+        if flying { " (flight)" } else if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
         mp(actor)
     ));
 }

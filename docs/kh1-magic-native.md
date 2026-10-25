@@ -316,7 +316,19 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   you get currently so follow that"): KH1's own landing (`0x1402A43A0`, request
   `(+0x3D0) + 7`, the hop having set `+0x3D0` to 0) cuts the cast; its slot 11 is drawn by the
   Jump row (`shared::slot_kind`), as for the other native casts.
-- Still the borrow: Drive Forms, KH1's flight (state 8), Epic.
+- Still the borrow: Drive Forms, Epic. (KH1's flight, state 8, since t571, below.)
+- **t571: Reflect in KH1's flight** (the tester, m6 answer 2 (a)). KH1's flight cast
+  `0x1402A4150` (**Checked (decomp)**): the usable check; with a target in the command record
+  (`+4` handle, `+8` lock point) the move direction is aimed at the point (`0x1402B04C0` the
+  point, `0x140386D10` point − position) and the stats' `+0xD0` set to π/16; the air cast request
+  `(0x83 + spell) | 0x1000000`; KH1's flight motion queued after it (`0x40000075`, blend 8.0);
+  the spell start; the move direction normalised with no length. No hop and no halving (those
+  are the state-2 branch's). `reflect::cast_native` now does exactly that in state 8 with our air
+  request (motion 73), the rest of the cast as in state 2 (cost, combo step, script on KH1's
+  frames). KH2 has no flight, so neither Air Physics setting changes it.
+- **Drive Forms** stay on the borrow: a form runs wholly on KH2's controller (`shared` is off in
+  a form, `docs/kh1-drive-forms-native.md` §1), so there is no KH1 cast state under him to cast
+  on; it moves when the forms themselves do (the drive-forms-native thread).
 
 ## 4g. KH2's air cast start at physics KH2, none of the clip's hover at physics KH1 (done: m5 plan item 3)
 
