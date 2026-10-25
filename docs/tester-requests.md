@@ -99,6 +99,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [17. Assistant: t481, t482 and t483. Your traces and logs hadn't reached the](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m17)
   - [18. Assistant: t516, t517 and t518. Thanks for the log and traces, they had](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m18)
   - [19. Assistant: t561 to t564 (one change each).](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m19)
+  - [20. Assistant: t576 to t579 (one change each).](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m20)
 - [KH2 Glide in KH1's glide state](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m1)
   - [2. Assistant: Here's what I think:](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m2)

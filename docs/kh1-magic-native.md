@@ -555,3 +555,21 @@ casts it and vice versa".
   charge effect's fade) runs at the same rate. Every other script (enemies', objects', KH1's
   spells on KH1's animation) gets KH1's frame as before. **Assumption** (as above): ±1 frame from
   the order of the script task and our frame count (`takeover::GAME_FRAME`).
+
+## 4k. Gravity, Stop and Aero on KH2's ground cast animation: no slide (the tester's m20 answer 4)
+
+The tester picked "(b) like kh2" for whether Sora slides during these casts on the ground. What
+KH2's base Sora does there (no change made):
+
+- His ground cast clips (Thunder's 62 and Cure's 65, one clip A364, which Gravity / Stop / Aero
+  play; Fire 56, Blizzard 59 too) have no allow-movement range (id 41) and no root travel (every
+  root key 0, `kh2-combat mset --root`), **Checked (files)** `P_EX100.mset`.
+- KH2's cast start on the ground (`0x1403C5170`, **Checked (decomp)** KH2 Steam) only sets the
+  motion; the KH2 source's cast (`character_core::Character::cast`) sets the sideways speed to 0
+  for a clip with no allow-movement range, and base Sora's ground inertia is none (prty
+  acceleration / brake 0 / 0, `docs/movement-model.md` "Ground inertia"): he stops where he is.
+- KH1's ground cast holds him still too (t563). So both Physics settings already hold him, as
+  each game does. The slide the old borrow had came from the Drive Forms' cast path (the form's
+  inertia and allow-movement range, main's s206), which base Sora's KH2 casts don't have.
+  **Assumption** (not traced in the KH2 decomp): no other KH2 action step moves base Sora while
+  a command motion plays on the ground (`+0x124` bit `0x40000`, set by `0x1403A9DD0`).

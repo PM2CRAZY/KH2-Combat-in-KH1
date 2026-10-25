@@ -23,6 +23,7 @@
 - [17. Assistant: t481, t482 and t483. Your traces and logs hadn't reached the](#^m17)
 - [18. Assistant: t516, t517 and t518. Thanks for the log and traces, they had](#^m18)
 - [19. Assistant: t561 to t564 (one change each).](#^m19)
+- [20. Assistant: t576 to t579 (one change each).](#^m20)
 
 ---
 
@@ -506,6 +507,7 @@ go ahead
 
 ^m19
 
+
 1. if a kh2 spell is casted on a kh1 animation then it should cast on the frame that the kh1 animation casts it and vice versa
 2. (b) hold him like kh2, the player expects it to be like kh2
 3. (a)
@@ -514,4 +516,30 @@ go ahead
    for the physics settings players are expecting that switch to make magic behave how it does in their respected games.
    
 go ahead
+
+
+> [!tip] Assistant
+> **t576 to t579** (one change each).
+>
+> 1. **t576, KH2 spell on KH1's animation.** The Animations rows now apply to KH2's Blizzard, Thunder and Cure too (Fire has no row). With the animation at KH1, KH1's own cast animation plays and KH2's spell comes out on the frame KH1's own spell would. I got those frames from KH1's own spell scripts in your files: Blizzard 28, Thunder 30, Cure 36 (60 a second, from the cast's start; the same at every level and in the air). If the cast is cut before then (you're hit), the spell still comes out at that moment, since it's paid for, same as on KH2's animation.
+> 2. **t577, the other way: KH1 spell on KH2's animation.** KH1's spells count their own wait whatever animation plays, so on KH2's animation they came out late. KH1's spell script now runs its clock at the right rate up to KH2's animation's cast frame, so the shot comes out there. On the ground Blizzard comes out at 16 instead of 28, and Thunder and Gravity at 18 instead of 30 and 28; in the air KH2's animations cast later (30 to 36). Everything else about the spell is still KH1's: its shot, effects, MP and heal. Its charge-up effect before the cast speeds up or slows down by the same amount.
+> 3. **t578, Air Physics KH2 on KH1's animation (your 2b).** He now hovers like KH2 even on KH1's cast animation. The hover window comes from KH2's air cast for that spell (Thunder and Cure 16 to 58, Blizzard 16 to 66; Gravity uses Thunder's, Stop and Aero use Cure's), timed from the cast's start. KH1's air cast animations are longer than those windows, so the hover ends inside them, just as KH2's ends inside its own. Air Physics KH1 is unchanged: no hover. So the Physics row now switches magic between each game's own behaviour, as you said.
+> 4. **t579, Fire's hit area (your 3a).** Fire's hit area is scaled to KH1 Sora (0.89), the same way as Reflect's barrier, so it matches what you see. Wisdom's Fire too.
+> 5. **Your 4b (slide like KH2).** I checked, and KH2's base Sora doesn't slide during these casts: his ground cast animations have no movement window and no root motion, KH2's cast start just plays the motion, and base Sora has no ground momentum. So he holds still in KH2, and that's what he does now. The slide in the old version came from the Drive Forms' cast code (forms like Wisdom have momentum). So nothing changed here; notes are in `docs/kh1-magic-native.md` §4k.
+>
+> **Check:** KH1's spell scripts in your files (read with KH1's script machine and its table in the exe), KH2's cast and hover frames in KH2's files, and KH2's cast start in the KH2 decomp. Not checked: whether KH1's spell script takes its first step on the cast's frame or one frame later, so a spell could come out one frame off. Not tested in game. Nothing here changes the MP costs or Reflect from t570 to t573.
+>
+> Please test:
+> - KH2's Blizzard, Thunder and Cure with their animation at KH1, on the ground and in the air: does the spell come out where KH1's animation casts?
+> - KH1's Blizzard, Thunder, Cure, Gravity, Stop and Aero with their animation at KH2: does the shot now come out on KH2's cast frame?
+> - Air Physics KH2 with any spell on KH1's animation: the hop, then the hover, then the fall. Air Physics KH1 should still be KH1's.
+> - Firaga's hits against what you see.
+>
+> Log lines: "on KH1's cast animation: released at KH1's cast frame", "released at frame", "KH1's script casts on KH2's cast frame", "clock back to KH1's after", "Air Physics KH2 on KH1's air cast animation".
+>
+> Questions:
+> 1. On KH1's animation, KH2's spell skips the effects and sounds built into KH2's cast animation (its hand sparkle and swish), because that animation isn't playing. (a) leave it, since it's KH1's animation, or (b) play KH2's cast animation's sparkle and swish on KH1's animation, timed from the cast's start?
+> 2. Gravity, Stop and Aero on the ground: KH2 holds him still, so I left it. (a) KH2's hold as now, or (b) the old slide anyway (not KH2's)?
+
+^m20
 
