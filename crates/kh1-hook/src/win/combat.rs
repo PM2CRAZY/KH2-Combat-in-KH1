@@ -735,6 +735,11 @@ struct Row {
     voice: i8,
 }
 
+/// A row of Sora's attack table's motion request (its `+0`), for `combomods::picker`.
+pub unsafe fn row_motion(actor: usize, row: i32) -> Option<u32> {
+    row_info(actor, row).map(|i| i.motion as u16 as u32)
+}
+
 unsafe fn row_info(actor: usize, row: i32) -> Option<Row> {
     let base = BASE.load(Ordering::Relaxed);
     let obj = pose::ptr(rd::<u32>(actor + 0x130));

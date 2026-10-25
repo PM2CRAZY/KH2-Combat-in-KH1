@@ -1276,6 +1276,48 @@ clash test isn't read in the decomp, **Assumption** that it is what goes through
 rule stays (`kh1rows::GUARD_THROUGH`, priority 0x62). Counterguard's 1581 is kind 1 too. Guard
 Break's own guard 162 now goes up as a KH1 guard object while it plays (above, `kh2_hits`).
 
+### 7.z KH2's ability rows inside KH1's own row picker (Base / Aerial Base Combo KH1)
+
+The tester (m19): "if an ability is equipped thats kh2s and your combat config is set to kh1 then you
+should be able to do kh1s moves, and its row picks, we need to modify kh1s so that it can choose
+explosion and other moves during its kh1 combo", "patch the extra functions that kh2 uses in kh1".
+
+KH1's pickers (Steam, Checked (decomp)):
+- The Attack step `0x1402A7510` counts the press first (the combat info's `+0x41`: 1 outside a combo
+  window, one more inside it when the swing connected or Combo Master is on), then asks the ground
+  picker `0x1402A6EE0 (actor, target, dir)` in state 0, the air picker `0x1402A6C70` in state 2 and in
+  flight (8), and runs the row with `0x1402A68F0`.
+- The ground picker marks rows in a flag array (one int a row, 66 rows): the finisher (8) at the
+  stats' `+0xD4`, KH1's ability finishers 3 / 4 / 5 by its ability bits `0x142D5EC10` bits 27..29
+  (30% each, a random number from `0x14031BA30`), 7 by bit 26, 6 by bit 3 with the finisher; the dash
+  at a target over 160 away (0 with ability bit 1, else 1); 9 by bit 24 and 10 by bit 0 by the
+  target's height; 11 / 13 / 14 by the targets around and ahead (`0x1402A7320`); 2 when its sweep
+  `0x1402C6E70` finds a drop ahead. It walks the rows in table order and takes the first marked row
+  whose request isn't the one playing; with none, 13 (11 in some cases).
+- The air picker: 16 its finisher at `+0xD5`, 15 a finisher with ability bit 25, 17 a target more than
+  100 above, 18 its plain swing; walked from 15 the same way, 18 down to 15 with none.
+- Prologues (Checked (exe)): ground `4C 8B DC 55 56 57 49 8D AB 48 FF FF FF`, air `40 53 55 56 57 41
+  54 41 56 41 57`.
+
+What we add (`kh1picker.rs`, `combomods::picker`): both pickers are wrapped. KH1's picker runs whole;
+then, base Sora with the combo style KH1 where he is (not flight, not a Drive Form), if it took one of
+its plain rows (ground 1, 8, 11, 13, 14; air 16, 17, 18), KH2's ability rows come next, the way KH1's
+own ability rows come before its plain ones. The candidate is the first of KH2's ability rows in
+table order (`Character::ability_row`) that is equipped, of the kind KH1's count is at (a finisher at
+KH1's length, else a swing), on the ground or in the air as he is, playable on KH1's rows (a KH1 row
+of its own, or our slot of its motion on a KH1 request of its kind), not the KH2 motion playing (KH2's
+anti-repeat), and passes KH2's own row checks: the ability and Berserk Charge test (KH2 `0x140402750`)
+and its distance, height and facing windows against the primary target (kind 1) or any target (kind
+2) measured as KH2's selector measures them (KH2 `0x1404029F0`, Checked (decomp) earlier in §7). Kind 0
+rows (the Square moves, Counterguard, Retaliating Slash) are only forced, as in KH2. The picker then
+returns the KH1 row it runs on (KH1's plain row of its kind whose request isn't playing), and the row
+runner plays it as the KH2 setting's ability moves play (KH2's motion and hop, KH1's row, attack object,
+damage and windows). Where KH1 took one of its own ability rows, or its drop-ahead row 2, it stays.
+
+KH2's selector (its whole-table walk, its combo length) isn't run at this setting. Assumption: KH2's
+ability rows going after KH1's own ability rows and before its plain rows (KH1's own order for its own
+ability rows) is the right place for them; KH2 has no rule for mixing the two tables.
+
 ## 8. KH2's walk and run as slots (t389)
 
 The tester (`docs/tester-requests.md`, "Missing sleeves animation", point 6): "can you also bake

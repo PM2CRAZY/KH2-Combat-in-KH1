@@ -28,6 +28,7 @@ mod kh2dpx;
 mod kh2ppp;
 mod kh2slots;
 mod kh1bank;
+mod kh1picker;
 mod kh1rows;
 mod kh2damage;
 mod kh1voice;
@@ -217,6 +218,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         probe::install();
         takeover::install();
         combat::install();
+        kh1picker::install();
         kh2damage::install();
         recoil::install();
         hurt::install();

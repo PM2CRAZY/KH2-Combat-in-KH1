@@ -1652,6 +1652,33 @@ pub fn test_drop_ahead(on: bool) {
     DROP_TEST.store(on, Ordering::Relaxed);
 }
 
+/// KH2's ability rows inside KH1's own row picker (`combomods::picker`, Base / Aerial Base Combo
+/// KH1): the first equipped ability row of the kind KH1's count is at (`finisher`), playable on
+/// KH1's rows (`usable`), not the KH2 motion playing (`playing`), that passes KH2's own row checks
+/// against base Sora's targets and KH1's lock as KH2's step sees them, with its hop
+/// (`Character::ability_row`). KH2's combo length and selector walk aren't run.
+pub unsafe fn kh2_ability_row(actor: usize, finisher: bool, air: bool, playing: Option<u16>, usable: &dyn Fn(&character_core::ComboRow) -> bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
+    let base = BASE.load(Ordering::Relaxed);
+    let kh2 = pose::kh2()?;
+    let mut g = DRIVER.try_lock().ok()?;
+    let d = g.get_or_insert_with(|| new_driver(kh2));
+    d.growth.update(base, &mut d.character);
+    let mut targets = d.strikes.look(actor);
+    let lock = kh1_lock(base, &mut targets);
+    let tilt = move_tilt();
+    let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
+    d.character.set_facing(rd::<f32>(actor + 0x3C));
+    d.character.set_lock(lock);
+    d.character.set_auto_target(super::settings::get().auto_aim);
+    d.character.set_face_lock(true);
+    d.character.set_combo_direction_lock(true);
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    let above = rd::<f32>(actor + 0x3D4);
+    let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
+    d.character.set_drop_ahead(false);
+    d.character.ability_row(finisher, air, playing, usable, stick, &env)
+}
+
 /// `kh2_would_take`, with the hop KH2's row starts there (`Character::would_take_launch`: a row
 /// with `jump`, its height and sideways velocity for that target).
 pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::ComboState>, playing: Option<u16>, air: bool, square: bool) -> Option<(character_core::ComboRow, u8, u8, Option<character_core::Launch>)> {

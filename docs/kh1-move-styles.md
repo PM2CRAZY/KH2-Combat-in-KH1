@@ -60,13 +60,13 @@ whatever the style. At Base / Aerial Base Combo KH1 (and no KH2-only combo abili
 - KH2's drop-ahead test is off (`test_drop_ahead(false)`), so at a ledge KH1's own row 2 (its swing
   that walks him off a drop ahead) runs, not KH2's hop (row 1); KH2's edge stop only acts while one
   of our KH2 slots plays.
-- KH2's ability moves stay KH2's (t460, `native_ability`): Slapshot, Dodge Slash, Slide Dash, Flash
-  Step, Aerial Sweep, Aerial Dive, Aerial Spiral, Aerial Finish, Vicinity Break, Explosion, Magnet
-  Burst, Guard Break, on KH1's rows, where KH2's picker would use them. Since this change a pick only counts
-  there when it is an ability move of the kind KH1's own count is at (a swing before KH1's length, a
-  finisher at it); KH2's plain picks and its length's say (Combo Plus past KH1's length, which
-  borrowed KH2's controller before, Negative Combo early) are dropped and logged ("KH1's ... combo at
-  the KH1 setting ... not taken").
+- KH2's ability moves come only out of KH1's own row picker (the tester, m19: "modify kh1s so that
+  it can choose explosion and other moves during its kh1 combo"; `docs/kh1-anim-slots.md` §7.z). KH2's
+  selector isn't asked at this setting any more: KH1's picker decides the count, swing or finisher by
+  KH1's own length, its own ability rows and its target; where it took one of its plain rows, KH2's
+  equipped ability rows of that kind join its choice by KH2's own row checks, and the one taken runs
+  on KH1's rows as before (KH2's motion, KH1's row, hits and timing). KH2's plain swings, KH2's
+  combo length and its walk over the whole table play no part (t537's filter is gone).
 - With Finishing Plus or Negative Combo equipped, all of the above is KH2's (t488, the section
   above).
 

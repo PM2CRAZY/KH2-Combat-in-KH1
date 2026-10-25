@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 
 use crate::clip::{Clip, EventKind, WindowKind};
-use crate::combo::{condition, select, Choice, ComboRow, Situation, TargetGeom, BERSERK_CHARGE, FLAG_JUMP_ADJUST};
+use crate::combo::{condition, in_range, select, Choice, ComboRow, Situation, TargetGeom, BERSERK_CHARGE, FLAG_JUMP_ADJUST};
 use crate::params::{Abilities, AttackParams, ComboRules, GrowthLevel, MoveParams};
 
 /// Motion ids used by the controller (KH2 player moveset numbering).
@@ -1312,6 +1312,63 @@ impl Character {
         let launch = row.as_ref().filter(|r| r.is_jump()).and_then(|_| t.arc.filter(|_| t.airborne)).map(|a| Launch { height: a.height, velocity: t.vel_h, gravity: t.params.gravity });
         self.moveset = std::mem::take(&mut t.moveset);
         row.map(|r| (r, launch))
+    }
+
+    /// KH2's ability rows as extra candidates of a host's own combo picker (the KH1 port's Base /
+    /// Aerial Base Combo KH1: KH1's picker runs, and KH2's ability moves join its choices with
+    /// KH2's own row checks). The host's own count says whether this press is a swing or a
+    /// finisher (`finisher`), so KH2's combo length and selector walk play no part. The first of
+    /// KH2's ability rows in table order that
+    /// - needs an ability that is equipped, is of that kind and on the ground or in the air as
+    ///   `air` says (KH2's `condition`, with Berserk Charge's refusal of finishers);
+    /// - is one the selector itself picks (kind 1..3; kind 0 rows are only forced: the Square
+    ///   moves, Counterguard, Retaliating Slash);
+    /// - the host can play (`usable`) and whose motion isn't `playing` (KH2's anti-repeat);
+    /// - passes KH2's own range checks (`in_range`) as KH2's selector measures them (its
+    ///   direction to the primary target, the locked target alone when locked): kind 1 against
+    ///   the primary target, kind 2 against any target, kind 3 none;
+    ///
+    /// with the hop it starts there (`would_take_row`'s). Nothing of `self` changes.
+    pub fn ability_row(&mut self, finisher: bool, air: bool, playing: Option<u16>, usable: &dyn Fn(&ComboRow) -> bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+        let aim = self.selector_aim(env);
+        let locked = self.lock.filter(|id| env.targets.iter().any(|t| t.id == *id));
+        let all: Vec<TargetGeom> = env.targets.iter().filter(|t| locked.is_none_or(|id| t.id == id)).map(|t| self.geom(env, t, aim)).collect();
+        let primary = self.primary_target(env).map(|t| TargetGeom { facing_dot: 1.0, ..self.geom(env, t, aim) });
+        let max = self.max_count(air);
+        // (The count at the host's kind: past the length for a finisher, the first swing for a
+        // swing, so `condition` judges only the ability, the air and Berserk Charge.)
+        let sit = Situation {
+            air,
+            count: if finisher { max.max(1) } else { 1 },
+            finishers: 1,
+            max_count: max,
+            current_motion: playing.unwrap_or(u16::MAX),
+            primary,
+            all: &all,
+            equipped: &self.abilities.equipped,
+            jump_height: self.params.jump_height,
+            finisher_window: false,
+            berserk: self.mp_charging && self.abilities.equipped.contains(&BERSERK_CHARGE),
+            drop_ahead: false,
+        };
+        let jump_height = self.params.jump_height;
+        let passing: Vec<u8> = self
+            .moveset
+            .combo_rows
+            .iter()
+            .filter(|r| r.ability != 0 && matches!(r.kind, 1..=3) && r.is_finisher() == finisher && condition(r, &sit))
+            .filter(|r| Some(r.motion) != playing && usable(r))
+            .filter(|r| match r.kind {
+                1 => primary.is_some_and(|t| in_range(r, &t, jump_height)),
+                2 => all.iter().any(|t| in_range(r, t, jump_height)),
+                _ => true,
+            })
+            .map(|r| r.id)
+            .collect();
+        // (A finisher trial past the length; a swing from a fresh count, which `condition` passes
+        // with one finisher run.)
+        let from = ComboState { count: if finisher { max } else { 0 }, finishers: 1, hit: true, finisher_next: false };
+        passing.into_iter().find_map(|id| self.would_take_row(id, Some(from), air, stick, env))
     }
 
     /// The combo's length now (swings to its finisher, with Combo Plus, Air Combo Plus and

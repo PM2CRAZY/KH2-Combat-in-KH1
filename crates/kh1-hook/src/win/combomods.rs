@@ -10,8 +10,11 @@
 //! controller borrows him for that move (`takeover::shared_frame`), KH1's swing cut there as a
 //! spell's end frames are. Where none applies, KH1's own combo plays.
 //!
-//! - **Attack** (`attack`, from `combat::exec`: a press KH1's combo took, its row about to run):
-//!   KH2's combo is asked what it would take at KH1's count (`Character::would_take`, the combo
+//! - **Attack at the combo style KH1** (`picker`, from our hooks on KH1's own row pickers,
+//!   `kh1picker`): KH1's picker chooses; KH2's ability rows are among its choices by KH2's own
+//!   row checks at KH1's count, and `attack` runs the one it took. KH2's selector isn't asked.
+//! - **Attack** (`attack`, from `combat::exec`: a press KH1's combo took, its row about to run;
+//!   at the combo style KH2): KH2's combo is asked what it would take at KH1's count (`Character::would_take`, the combo
 //!   carried at KH1's count, the press, KH2's targets and KH1's lock). KH2 takes it when that is
 //!   - a row that needs an ability (the finisher Guard Break ...), opener, step or finisher,
 //!     except the ones KH1's own rows now play natively at either combo style (`native_ability`:
@@ -345,43 +348,49 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             return Run::Kh2;
         }
     }
-    // KH2's combo at KH1's count (this press counted: `count` is this swing's).
-    let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
-    // (KH2's motion KH1 plays now for its swing: KH2's anti-repeat passes over it, as over its
-    // own swing playing.)
-    let taken = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false);
-    let launch = taken.as_ref().and_then(|t| t.3);
-    let pick = taken.map(|(r, len, neg, _)| (r, len, neg));
+    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    // At the combo style KH1: KH1's own row picker chose (`picker`, KH2's ability rows among its
+    // choices by KH2's own row checks at KH1's count); KH2's selector isn't asked. Its pick, if it
+    // took one of KH2's ability moves at this press.
+    let kh1_style = !super::styles::kh2(combo.style);
+    let (pick, launch) = if kh1_style {
+        match take_pick() {
+            Some((p, l)) => (Some((p, kh1_len, 0)), l),
+            None => (None, None),
+        }
+    } else {
+        // KH2's combo at KH1's count (this press counted: `count` is this swing's).
+        let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
+        // (KH2's motion KH1 plays now for its swing: KH2's anti-repeat passes over it, as over its
+        // own swing playing.)
+        let taken = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false);
+        let launch = taken.as_ref().and_then(|t| t.3);
+        (taken.map(|(r, len, neg, _)| (r, len, neg)), launch)
+    };
     // (Where KH1's own plain rows play KH2's pick, at the combo style KH2, a pick past KH1's
     // length (Combo Plus) or a finisher before it (Negative Combo) is KH2's row selection on
     // KH1's rows, `kh2_row`, not a borrow.)
-    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
-    // (At the combo style KH1 KH1's own count rules: KH2's pick counts only when it is one of its
-    // ability moves of the kind KH1's own count is at, a swing before KH1's length, a finisher at
-    // it. KH2's plain swings, and its length's say (Combo Plus past KH1's, Negative Combo before
-    // it), are nothing there: KH1's row and motion as unmodded, never a borrow.)
-    let pick = if super::styles::kh2(combo.style) {
-        pick
-    } else {
-        let kept = pick.clone().filter(|(r, ..)| r.ability != 0 && r.is_finisher() == (count >= kh1_len));
-        if let (Some((r, ..)), None) = (pick.as_ref(), kept.as_ref()) {
-            note(format!("KH1's {} combo at the KH1 setting, swing {count} of {kh1_len}: KH2's row {} motion {} (ability {}, finisher {}) not taken, KH1's own row", if air { "aerial" } else { "ground" }, r.id, r.motion, r.ability, r.is_finisher()));
+    if kh1_style {
+        // (One with a KH1 row of its own, `kh1rows`: Guard Break.)
+        if let Some(n) = pick.as_ref().and_then(|(r, ..)| ours_for(r)) {
+            return ours_run(n, launch, air, count, request_of);
         }
-        kept
-    };
-    let why = pick.as_ref().filter(|(r, ..)| !combo.serves(r)).and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len));
-    note(format!(
-        "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",
-        if air { "aerial" } else { "ground" },
-        pick.as_ref().map_or("nothing".to_string(), |(r, len, _)| format!("row {} motion {} (ability {}, finisher {}, KH2's length {len})", r.id, r.motion, r.ability, r.is_finisher())),
-        why.map_or(String::new(), |w| format!(": {w}, KH2 borrows him for it"))
-    ));
+    }
+    let why = if kh1_style { None } else { pick.as_ref().filter(|(r, ..)| !combo.serves(r)).and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len)) };
+    if !kh1_style {
+        note(format!(
+            "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",
+            if air { "aerial" } else { "ground" },
+            pick.as_ref().map_or("nothing".to_string(), |(r, len, _)| format!("row {} motion {} (ability {}, finisher {}, KH2's length {len})", r.id, r.motion, r.ability, r.is_finisher())),
+            why.map_or(String::new(), |w| format!(": {w}, KH2 borrows him for it"))
+        ));
+    }
     if let Some((r, ..)) = pick.as_ref().filter(|_| why.is_some()) {
         // (One with a KH1 row of its own, `kh1rows`: Guard Break.)
         if let Some(n) = ours_for(r) {
             return ours_run(n, launch, air, count, request_of);
         }
-        want(Move::Row { id: r.id, state: from });
+        want(Move::Row { id: r.id, state: ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false } });
         return Run::Kh2;
     }
     if !air {
@@ -407,6 +416,95 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         }
     }
     Run::Row(row)
+}
+
+/// KH1's row picker's pick of one of KH2's ability moves at this press (`picker`): the row, its
+/// hop, the game frame. Taken by the row runner's `attack` that same frame.
+static PICK: Mutex<Option<(ComboRow, Option<character_core::Launch>, u64)>> = Mutex::new(None);
+
+fn take_pick() -> Option<(ComboRow, Option<character_core::Launch>)> {
+    let (r, l, at) = PICK.try_lock().ok().and_then(|mut g| g.take())?;
+    (frame().saturating_sub(at) <= 1).then_some((r, l))
+}
+
+/// KH1's own rows the picker's KH2 ability rows may stand in for: its plain ones (KH1's ground
+/// picker `0x1402A6EE0`, Steam, Checked (decomp): 1 its dash with no ability, 8 its finisher, 11 /
+/// 13 / 14 its swings, 11 / 13 also its fallbacks; air picker `0x1402A6C70`: 16 its finisher,
+/// 17 / 18 its swings). KH1's rows that need one of its own abilities (ground 0 its ability dash,
+/// 3..7 its ability finishers, 9, 10; air 15) come first in KH1's own order and stay; so does 2,
+/// its walk off a drop ahead.
+const GROUND_PLAIN: [i32; 5] = [1, 8, 11, 13, 14];
+const AIR_PLAIN: [i32; 3] = [16, 17, 18];
+
+/// KH2's ability row `r` plays on KH1's rows (`picker`): a KH1 row of its own (`kh1rows`), or our
+/// slot of its motion on a KH1 request of its kind (a ground hop on an air swing's, `kh2_hop`).
+fn kh1_plays(r: &ComboRow) -> bool {
+    if ours_for(r).is_some() {
+        return true;
+    }
+    if !native_ability(r) {
+        return false;
+    }
+    let has = |q: u32| super::kh2slots::has(q as usize, r.motion);
+    if !r.is_air() && r.is_jump() {
+        return AIR_COMBO.swings.clone().any(has);
+    }
+    let combo = if r.is_air() { &AIR_COMBO } else { &GROUND_COMBO };
+    if r.is_finisher() { has(combo.finisher) } else { combo.swings.clone().any(has) }
+}
+
+/// KH1's own row picker with KH2's ability rows in it (the tester, combo row selection m19: "we
+/// need to modify kh1s so that it can choose explosion and other moves during its kh1 combo",
+/// "patch the extra functions that kh2 uses in kh1"). Called from our hooks on KH1's ground and
+/// air pickers (`kh1picker`) after KH1's own picker ran, with the row it picked (`row`), base Sora
+/// with the combo style KH1 where he is. KH1's picker has decided everything KH1 decides: the
+/// count (the Attack step counted the press before), swing or finisher by KH1's own length (the
+/// count at the stats' `+0xD4` / `+0xD5`), its own ability rows by its ability bits and chances,
+/// its target and direction. Where it took one of its plain rows (`GROUND_PLAIN` / `AIR_PLAIN`),
+/// KH2's ability rows come next, as KH1's own ability rows come before its plain ones: the first
+/// equipped one of the kind KH1's count is at, playable on KH1's rows (`kh1_plays`), not the KH2
+/// motion playing, that passes KH2's own row checks (its distance, height and facing windows,
+/// its kind's targets; `Character::ability_row`, KH2's `condition` / `in_range`, Steam KH2
+/// `0x140402750` / `0x1404029F0`). Then the picker returns the KH1 row it runs on (KH1's plain row
+/// of its kind, `kh2_row`; for its own row or a hop from the ground the row runner's `attack`
+/// picks it) and the row runner plays it as before (`attack`). The row KH1 runs.
+pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool) -> i32 {
+    if let Ok(mut g) = PICK.lock() {
+        *g = None;
+    }
+    let combo = if air { &AIR_COMBO } else { &GROUND_COMBO };
+    let plain = if air { AIR_PLAIN.contains(&row) } else { GROUND_PLAIN.contains(&row) };
+    let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return row };
+    let finisher = count >= kh1_len;
+    let what = if air { "aerial" } else { "ground" };
+    if !plain {
+        note(format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's own row {row} (one of its own abilities' or its drop ahead), kept"));
+        return row;
+    }
+    let playing = super::kh2slots::playing_motion(actor);
+    let Some((pick, launch)) = takeover::kh2_ability_row(actor, finisher, air, playing, &kh1_plays) else {
+        note(format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's row {row}; no KH2 ability {} passes KH2's checks", if finisher { "finisher" } else { "swing" }));
+        return row;
+    };
+    let request_of = |r: i32| super::combat::row_motion(actor, r);
+    // (Our own row, or a hop from the ground: `attack` picks its row.)
+    let run = if ours_for(&pick).is_some() || (!air && pick.is_jump()) { row } else { kh2_row(actor, combo, row, Some(&pick), &request_of) };
+    // (KH1's dash, row 1, left its distance in the direction's y, which only rows 0 / 1 read.)
+    if run != row && row == 1 && dir >= 0x10000 {
+        wr(dir + 4, 0.0f32);
+    }
+    note(format!(
+        "KH1's {what} row picker, swing {count} of {kh1_len}: KH2's {} row {} motion {} (ability {}) in place of KH1's row {row}: KH1's row {run} runs it{}",
+        if finisher { "finisher" } else { "swing" },
+        pick.id,
+        pick.motion,
+        pick.ability,
+        launch.map_or(String::new(), |l| format!(", KH2's hop {:.0} high, {:.1}/frame", l.height, l.velocity[0].hypot(l.velocity[1])))
+    ));
+    if let Ok(mut g) = PICK.lock() {
+        *g = Some((pick, launch, frame()));
+    }
+    run
 }
 
 /// KH2's air swing's own hop on KH1's air swing (Aerial Combo KH2; the tester: "(a)", KH2's own

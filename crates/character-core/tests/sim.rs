@@ -1656,3 +1656,42 @@ fn would_take_reads_kh2_ability_moves_over_a_host_combo() {
     assert_eq!(ch.state_name(), StateName::Idle);
     assert!(ch.moveset.clips.contains_key(&130));
 }
+
+/// KH2's ability rows inside a host's own picker (`ability_row`, the KH1 port's Base Combo KH1):
+/// the host's count picks the kind, KH2's own range checks pick the row, KH2's length plays no
+/// part, and nothing of the controller changes.
+#[test]
+fn ability_row_joins_a_host_picker_at_its_count() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(130, attack_clip(130, 40, (10, 16), 6, 20));
+    ch.moveset.clips.insert(150, attack_clip(150, 40, (10, 16), 8, 20));
+    // An ability swing that wants the primary target 0..200 away (kind 1, as Slide Dash's).
+    let mut step = row(4, 130, false, false);
+    (step.ability, step.kind, step.far, step.low, step.high) = (91, 1, 200.0, 500.0, -500.0);
+    // An ability finisher with no range (kind 3, as Explosion's all-foes row checks none here).
+    let mut fin = row(5, 150, true, false);
+    fin.ability = 94;
+    ch.moveset.combo_rows.extend([step, fin]);
+    let any = |_: &ComboRow| true;
+    let near = [TargetInfo { id: 7, pos: [0.0, 0.0, 100.0], radius: 10.0, height: 100.0 }];
+    let far = [TargetInfo { id: 7, pos: [0.0, 0.0, 900.0], radius: 10.0, height: 100.0 }];
+    fn env(t: &[TargetInfo]) -> Env<'_> {
+        Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: t, ledges: &[] }
+    }
+    // Not equipped: nothing.
+    assert!(ch.ability_row(false, false, None, &any, [0.0; 2], &env(&near)).is_none());
+    ch.abilities.equipped.extend([91, 94]);
+    // A swing: the ability swing in range, none out of range (the host's own row then).
+    assert_eq!(ch.ability_row(false, false, None, &any, [0.0; 2], &env(&near)).map(|r| r.0.id), Some(4));
+    assert!(ch.ability_row(false, false, None, &any, [0.0; 2], &env(&far)).is_none());
+    // A finisher: the ability finisher, whatever KH2's own length (Combo Plus) says.
+    ch.abilities.combo_plus = 3;
+    assert_eq!(ch.ability_row(true, false, None, &any, [0.0; 2], &env(&far)).map(|r| r.0.id), Some(5));
+    // Its motion playing: passed over (KH2's anti-repeat); one the host can't play: passed over.
+    assert!(ch.ability_row(true, false, Some(150), &any, [0.0; 2], &env(&far)).is_none());
+    assert!(ch.ability_row(true, false, None, &|r: &ComboRow| r.id != 5, [0.0; 2], &env(&far)).is_none());
+    // Not in the air.
+    assert!(ch.ability_row(true, true, None, &any, [0.0; 2], &env(&far)).is_none());
+    assert_eq!(ch.combo_count(), 0);
+    assert_eq!(ch.state_name(), StateName::Idle);
+}
