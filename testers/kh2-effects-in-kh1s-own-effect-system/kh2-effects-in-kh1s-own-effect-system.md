@@ -542,4 +542,7 @@ go ahead
 > 2. Gravity, Stop and Aero on the ground: KH2 holds him still, so I left it. (a) KH2's hold as now, or (b) the old slide anyway (not KH2's)?
 
 ^m20
+(b)
+(a)
 
+go ahead
