@@ -921,3 +921,24 @@ from the exe's run-time type names (`kn::Motion`, `kn::MotionPrototype0`, `kn::M
   keeps the fourth). Not yet read: whether those floats are Euler angles and whether KH1 takes the
   short way round as KH2 does. It matters on the frames a blend runs, for parts that turn far (hair up
   to 180°).
+
+### The trace's Cloth columns
+
+The Trace Recorder's Cloth category (debug menu > Trace Recorder > Categories > Cloth; ini
+`trace_cloth`, off by default because it is wide: about 600 columns). Each row (one of Sora's
+physics frames) adds, after the other categories and before the events:
+
+- the animation drawn as the Frame Advance panel shows it: route (baked / live / kh2_controller /
+  kh1_own), KH2 motion, field, KH1 slot, the frame within it, its length, its loop count;
+- the physics: on this frame, drawn (baked: KH1's drawing moved; live: our pose), its steps (60 Hz
+  frames) this frame, restarted this frame, restarts so far, the settings id (0 = the tuned ones;
+  the log has every id's numbers), the largest swing off the rest, tips pushed out of the body;
+- Sora's placement (KH1 world, `up` = minus its y), yaw, speed and turn a 60 Hz frame;
+- for every bone the physics moves (5..15, 26..41, 52..67, 72..75, 248..279): its turn against its
+  parent (`qx qy qz qw`) and its place against the hips 3 (`hips_x/y/z`), as drawn;
+- the body bones its rest and collision use (3, 4, 17, 18, 43, 44, 71): turn and place in model
+  space.
+
+The ticks and frame columns are always there; the bone columns are empty on a frame the physics
+didn't run. That's everything a bake needs to reproduce what was drawn (the carrier poses, the
+part bones and the settings).

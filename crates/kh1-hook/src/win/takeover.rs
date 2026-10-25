@@ -549,6 +549,7 @@ unsafe fn trace_frame(actor: usize, start: [f32; 4]) {
         cam: Default::default(),
         feet: Default::default(),
         events: String::new(),
+        cloth: None,
         // (Filled by `trace::frame`.)
         cats: 0,
     });

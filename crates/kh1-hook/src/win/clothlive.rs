@@ -144,6 +144,132 @@ pub fn step(kh1: &[kh2_formats::anim::Bone], pose: &mut [Mat4], to_world: &Mat4,
     if let Ok(mut s) = SEEN.try_lock() {
         *s = Seen { active: true, frame, baked, report, settings: set.id() };
     }
+    if super::trace::wants(super::trace::cat::CLOTH) {
+        note_bones(kh1, pose, to_world, steps);
+    }
+}
+
+/// The physics' bones, written to the trace's Cloth columns (KH1 Sora's, Checked (files)): every
+/// bone the physics moves (the belt front 5..9, the belt chain 10..15, the shorts 26..41 / 52..67,
+/// the coat 72..75 and 248..279), and the body bones its rest and collision use (the hips 3, 4,
+/// the thighs 17, 18, 43, 44, the spine base 71).
+pub const BONES: [std::ops::RangeInclusive<usize>; 5] = [5..=15, 26..=41, 52..=67, 72..=75, 248..=279];
+pub const BODY: [usize; 7] = [3, 4, 17, 18, 43, 44, 71];
+
+/// The last frame's bone numbers (`BONES`: each one's turn against its parent, x y z w, and its
+/// place against the hips 3, x y z; then `BODY`: turn and place in model space), the placement
+/// (KH1 world, `up` = minus its y), its yaw, and its speed and turn a 60 Hz frame.
+#[derive(Clone, Debug, Default)]
+struct Bones {
+    values: Vec<f32>,
+    pos: [f32; 3],
+    yaw: f32,
+    speed: f32,
+    turn: f32,
+    ticks: u64,
+}
+static BONES_NOW: Mutex<Option<Bones>> = Mutex::new(None);
+
+fn note_bones(kh1: &[kh2_formats::anim::Bone], pose: &[Mat4], to_world: &Mat4, steps: u32) {
+    let rot = |m: &Mat4| m.to_scale_rotation_translation().1.normalize();
+    let mut values = Vec::with_capacity(BONES.iter().map(|r| r.clone().count()).sum::<usize>() * 7 + BODY.len() * 7);
+    let hips_inv = pose.get(3).map_or(Mat4::IDENTITY, |m| m.inverse());
+    for b in BONES.iter().flat_map(|r| r.clone()) {
+        let (Some(m), Some(p)) = (pose.get(b), kh1.get(b).map(|k| k.parent)) else { values.extend([f32::NAN; 7]); continue };
+        let parent = (p >= 0).then(|| pose.get(p as usize)).flatten().copied().unwrap_or(Mat4::IDENTITY);
+        let q = rot(&(parent.inverse() * *m));
+        let h = hips_inv.transform_point3(m.w_axis.truncate());
+        values.extend([q.x, q.y, q.z, q.w, h.x, h.y, h.z]);
+    }
+    for &b in &BODY {
+        let Some(m) = pose.get(b) else { values.extend([f32::NAN; 7]); continue };
+        let q = rot(m);
+        let t = m.w_axis.truncate();
+        values.extend([q.x, q.y, q.z, q.w, t.x, t.y, t.z]);
+    }
+    let pos = to_world.w_axis.truncate();
+    let fwd = to_world.z_axis.truncate();
+    let yaw = fwd.x.atan2(fwd.z);
+    let ticks = super::takeover::TICKS.load(Ordering::Relaxed);
+    let Ok(mut g) = BONES_NOW.try_lock() else { return };
+    let (speed, turn) = match g.as_ref() {
+        Some(o) if steps > 0 && ticks > o.ticks => {
+            let n = (ticks - o.ticks) as f32;
+            let d = glam::Vec3::new(pos.x - o.pos[0], 0.0, pos.z - o.pos[2]);
+            let mut dy = yaw - o.yaw;
+            while dy > std::f32::consts::PI {
+                dy -= std::f32::consts::TAU;
+            }
+            while dy < -std::f32::consts::PI {
+                dy += std::f32::consts::TAU;
+            }
+            (d.length() / n, dy / n)
+        }
+        Some(o) => (o.speed, o.turn),
+        None => (0.0, 0.0),
+    };
+    *g = Some(Bones { values, pos: [pos.x, -pos.y, pos.z], yaw, speed, turn, ticks });
+}
+
+/// A trace row's Cloth columns (`trace::cat::CLOTH`).
+#[derive(Clone, Debug, Default)]
+pub struct Record {
+    pub anim: super::fapanel::Anim,
+    pub seen: Seen,
+    pub restarts: u64,
+    bones: Option<Bones>,
+}
+
+/// This frame's Cloth columns.
+pub fn record() -> Record {
+    let seen = seen();
+    let bones = if seen.active && seen.frame == super::takeover::GAME_FRAME.load(Ordering::Relaxed) { BONES_NOW.try_lock().ok().and_then(|b| b.clone()) } else { None };
+    Record { anim: super::fapanel::anim(), seen, restarts: restarts(), bones }
+}
+
+/// The Cloth columns' header.
+pub fn header() -> String {
+    let mut h = String::from("cloth_anim_route,cloth_anim_kh2_motion,cloth_anim_field,cloth_anim_kh1_slot,cloth_anim_frame,cloth_anim_len,cloth_anim_loop,\
+cloth_on,cloth_drawn,cloth_steps,cloth_restart,cloth_restarts,cloth_settings,cloth_max_swing,cloth_pushed,\
+sora_x,sora_up,sora_z,sora_yaw,sora_speed,sora_turn");
+    for b in BONES.iter().flat_map(|r| r.clone()) {
+        for c in ["qx", "qy", "qz", "qw", "hips_x", "hips_y", "hips_z"] {
+            h.push_str(&format!(",b{b}_{c}"));
+        }
+    }
+    for b in BODY {
+        for c in ["qx", "qy", "qz", "qw", "x", "y", "z"] {
+            h.push_str(&format!(",body{b}_{c}"));
+        }
+    }
+    h
+}
+
+/// A row's Cloth columns (each with its comma).
+pub fn columns(t: &mut String, r: Option<&Record>) {
+    use std::fmt::Write as _;
+    let n = 21 + (BONES.iter().map(|r| r.clone().count()).sum::<usize>() + BODY.len()) * 7;
+    let Some(r) = r else {
+        t.push_str(&",".repeat(n));
+        return;
+    };
+    let a = &r.anim;
+    let _ = write!(t, "{},{},{},{},{},{},{},", a.route, a.motion.map_or(String::new(), |m| m.to_string()), a.field as u8, a.kh1_slot.map_or(String::new(), |s| s.to_string()), a.frame, a.len, a.loops);
+    let s = &r.seen;
+    if s.active {
+        let _ = write!(t, "1,{},{},{},{},{},{:.2},{},", if s.baked { "baked" } else { "live" }, s.report.steps, s.report.restarted as u8, r.restarts, s.settings, s.report.max_swing, s.report.pushed);
+    } else {
+        let _ = write!(t, "0,,,,{},,,,", r.restarts);
+    }
+    match r.bones.as_ref() {
+        Some(b) => {
+            let _ = write!(t, "{:.2},{:.2},{:.2},{:.4},{:.3},{:.5},", b.pos[0], b.pos[1], b.pos[2], b.yaw, b.speed, b.turn);
+            for v in &b.values {
+                let _ = write!(t, "{v:.5},");
+            }
+        }
+        None => t.push_str(&",".repeat(n - 15)),
+    }
 }
 
 /// A frame drawn without the physics.

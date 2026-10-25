@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 595 (testing branch: Trace: Cloth category)
+- **Trace: Cloth category.** The tester (m19 3), off by default (ini `trace_cloth = off`, its own group): the animation drawn as the panel shows it, the physics state (on, baked / live, steps, restarts, settings id, max swing, tips pushed out), Sora's place / yaw / speed / turn rate per 60 Hz frame, every physics bone's turn against its parent and place against the hips, and the collision bones (3, 4, 17, 18, 43, 44, 71). docs/kh1-secondary-motion.md "the trace's Cloth columns".
+
 ### 2026-10-25: Stage 594 (testing branch: Trace Recorder: Frames)
 - **Trace Recorder: Frames.** The tester (m19 2): with Game Frames on, the Seconds row reads "Frames" and shows seconds × 60 (it still steps by a second; the ini keeps seconds). docs/kh1-frame-advance.md.
 

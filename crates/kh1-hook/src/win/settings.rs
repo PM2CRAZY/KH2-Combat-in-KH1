@@ -212,7 +212,8 @@ trace_game_frames = off\r\n\
 ; trace_*: what each trace row holds (on / off each; the debug menu's Trace Recorder page switches\r\n\
 ; them): movement (position, floor, collision, velocity), kh1_state, kh2_state, form, draw\r\n\
 ; (animation draw), feet (feet / IK), kh1_camera, kh2_camera, input, config, log (log lines),\r\n\
-; hit_fx (hit effect lines), sounds (sound log lines)\r\n\
+; hit_fx (hit effect lines), sounds (sound log lines), cloth (the cloth physics' bones and the\r\n\
+; animation drawn, wide: off by default)\r\n\
 trace_movement = on\r\n\
 trace_kh1_state = on\r\n\
 trace_kh2_state = on\r\n\
@@ -226,6 +227,7 @@ trace_config = on\r\n\
 trace_log = on\r\n\
 trace_hit_fx = on\r\n\
 trace_sounds = on\r\n\
+trace_cloth = off\r\n\
 ; debug_menu: on = L1 + R1 + Triangle opens the debug menu (the Config menu's Debug Menu row\r\n\
 ; switches it in game too); off = the buttons do nothing\r\n\
 debug_menu = off\r\n";
@@ -331,7 +333,8 @@ pub struct Settings {
     /// The trace's seconds count game frames, not real time (`trace_game_frames = on`; off by
     /// default; Frame Advance turns it on, `frameadv`).
     pub trace_game_frames: bool,
-    /// What each trace row holds (`trace_*` = on / off, `trace::ITEMS`; all on by default).
+    /// What each trace row holds (`trace_*` = on / off, `trace::ITEMS`; all on by default but
+    /// `trace::cat::OFF_BY_DEFAULT`, the Cloth columns).
     pub trace_cats: u32,
     /// L1 + R1 + Triangle opens the debug menu (`debug_menu = on`, `debugmenu.rs`).
     pub debug_menu: bool,
@@ -542,7 +545,7 @@ fn load(first: bool) -> Option<Settings> {
         trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
         sound_log: on(&text, "sound_log", "on", true),
         trace_game_frames: on(&text, "trace_game_frames", "on", false),
-        trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
+        trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", it.bit & super::trace::cat::OFF_BY_DEFAULT == 0)).fold(0, |m, it| m | it.bit),
         debug_menu: on(&text, "debug_menu", "on", false),
     };
     log(&format!("settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" }));
