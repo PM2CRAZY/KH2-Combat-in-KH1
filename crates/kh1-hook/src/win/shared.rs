@@ -655,6 +655,47 @@ pub mod physics {
         rd::<i32>(actor + 0x70) == 2 && rd::<u32>(actor) & 4 != 0 && (AIR_CAST_REQUESTS.contains(&(rd::<u32>(actor + 0x164) & 0xFFFF)) || super::super::kh2slots::cast_playing(actor))
     }
 
+    /// KH1's own air cast animation (KH1's slot on KH1's air cast request, no slot of ours) at Air
+    /// Physics KH2: the request, the 60 Hz frames since it began playing and the game frame last
+    /// counted (`kh1_cast_hold`).
+    static KH1_CAST: Mutex<Option<(u32, f32, u64)>> = Mutex::new(None);
+
+    /// Air Physics KH2 with KH1's own air cast animation (the tester, kh2-effects-in-kh1s-own-
+    /// effect-system m20 answer 2: "(b) hold him like kh2, the player expects it to be like kh2"):
+    /// KH2's hover for that cast, timed from the cast's start: the no-gravity range (id 3) of KH2's
+    /// air cast clip for the spell (`kh2slots::CASTS`: Fire 58 16..74, Blizzard 61 16..66, Thunder
+    /// 64 / Cure 67 16..58; Gravity on Thunder's, Stop and Aero on Cure's; Checked (files)
+    /// `P_EX100.mset`) at the frames KH1's cast motion has played, KH2's arc clock running through it
+    /// as for our slots (§4h). KH1's air cast motions outlast those ranges (slots 80 / 81: 78 / 68
+    /// frames, Checked (files) `xa_ex_0010.mset`), so the hold ends inside KH1's cast as KH2's
+    /// does. Nothing at Air Physics KH1 (KH1's own air cast has no hover).
+    unsafe fn kh1_cast_hold(actor: usize, dt: f32) -> bool {
+        use character_core::WindowKind as W;
+        let Ok(mut g) = KH1_CAST.try_lock() else { return false };
+        if !cast_kh2() || !casting_in_air(actor) || super::super::kh2slots::cast_playing(actor) {
+            *g = None;
+            return false;
+        }
+        let request = rd::<u32>(actor + 0x164) & 0xFFFF;
+        let frame = game_frame();
+        let t = match *g {
+            Some((r, t, f)) if r == request && f == frame => t,
+            Some((r, t, f)) if r == request && f + 1 == frame => t + dt,
+            _ => 0.0,
+        };
+        *g = Some((request, t, frame));
+        let Some(&(motion, ..)) = super::super::kh2slots::CASTS.iter().find(|c| c.2 == request as usize && c.3) else { return false };
+        let Some(clip) = super::super::pose::kh2().and_then(|k| k.character.moveset.clips.get(&motion)) else { return false };
+        let moving = clip.windows.iter().any(|w| matches!(w.kind, W::AllowMovement) && w.start == 0 && w.end.is_none());
+        let hold = !moving && clip.has(t as u32, |k| matches!(k, W::NoGravity));
+        static N: AtomicU32 = AtomicU32::new(0);
+        if hold && N.load(Ordering::Relaxed) < 20 && clip.first(|k| matches!(k, W::NoGravity)).is_some_and(|s| (t as u32) == s) {
+            N.fetch_add(1, Ordering::Relaxed);
+            super::super::log(&format!("Air Physics KH2 on KH1's air cast animation (request {request:#x}): KH2's hover of motion {motion} from frame {t:.0}"));
+        }
+        hold
+    }
+
     /// KH1's sideways velocity (`+0x3C0`: x, y, z, w = its length, per 60 Hz frame) and its
     /// vertical step this frame (`+0x3C4`).
     const VEL: usize = 0x3C0;
@@ -1391,7 +1432,12 @@ pub mod physics {
         }
         // (Physics KH1: none for a cast slot, as KH1's own air cast has no hover, `0x1402AF6A0`;
         // the tester, m4: "see how casting is done in the air physics wise to get the same for kh1".)
-        let held = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0 && super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2());
+        let step_dt: f32 = rd(base() + DT_RVA);
+        let step_dt = if step_dt.is_finite() && step_dt > 0.0 && step_dt < 4.0 { step_dt } else { 1.0 };
+        let air_ok = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0;
+        // (KH1's own air cast animation at Air Physics KH2: KH2's hover for it, `kh1_cast_hold`.)
+        let kh1_hold = sora && kh1_cast_hold(actor, step_dt);
+        let held = air_ok && (kh1_hold || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
         if held {
             static N: AtomicU32 = AtomicU32::new(0);
             if N.fetch_add(1, Ordering::Relaxed) < 20 {

@@ -108,7 +108,8 @@ Config > KH1 in KH2 > Combat > Magic:
   `shared::physics::cast_rule`). KH1: KH1's air cast (its 30 hop, half the sideways speed, KH1's
   fall, no hover; `0x1402A3600`). KH2: KH2's (`cast_stops`: its 40 hop, the speed kept and drifting
   × 0.95 a tick; KH2's gravity; the cast motion's no-gravity range holding him with the arc's
-  clock running), for KH1's own spells too (`formmagic::spell_start` calls `cast_stops` for them).
+  clock running; on KH1's own cast animation too, timed from the cast's start, m20: "hold him like
+  kh2"), for KH1's own spells too (`formmagic::spell_start` calls `cast_stops` for them).
   `docs/kh1-magic-native.md` §4i.
 - **Animations** (its own list, so both lists keep KH1's full-size rows on screen; the tester's
   config-menu-rework answer "(a) for now if more options get added to a menu you can shrink the ui

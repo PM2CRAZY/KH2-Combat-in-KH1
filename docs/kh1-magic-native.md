@@ -483,8 +483,15 @@ physics setting that has magic in it and put it in this new air setting."
   Physics KH2 the fall after the cast is KH1's own from the fields KH2's arc wrote.
 - **Assumption**: KH1's halving of the sideways speed and its 30 hop come after the spell start
   (`0x14028F140`) in `0x1402A3600`, as §4g's `cast_stops` / `cast_after_command` already rely on.
-- With a KH1 cast animation (no slot of ours) there is no KH2 hover to hold him at Air Physics
-  KH2: his 40 hop, kept speed and KH2's fall only (open with the tester).
+- With a KH1 cast animation (no slot of ours) at Air Physics KH2 (t-c; the tester, m20 answer 2:
+  "(b) hold him like kh2, the player expects it to be like kh2"): KH2's hover all the same, timed
+  from the cast's start (`shared::physics::kh1_cast_hold`): the no-gravity range of KH2's air cast
+  clip for the spell (Fire 58 16..74, Blizzard 61 16..66, Thunder 64 and Cure 67 16..58; Gravity
+  on Thunder's clip, Stop and Aero on Cure's, as their KH2 animations; **Checked (files)**
+  `P_EX100.mset`) at the 60 Hz frames KH1's air cast request has played, with KH2's arc clock
+  running through it (§4h). KH1's air cast motions are longer (slots 80 / 81: 78 / 68 frames,
+  **Checked (files)** `xa_ex_0010.mset`), so the hold ends inside KH1's animation, as KH2's ends
+  inside its own. Air Physics KH1: none, as before.
 
 ## 4j. Each animation's own cast frame (the tester, kh2-effects-in-kh1s-own-effect-system m20)
 
