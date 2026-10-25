@@ -462,3 +462,12 @@ go ahead
 
 ^m19
 
+the part of the coat next to soras necklace doesn't move with the rest of the coat so the mesh stretches, that needs to be fixed
+
+I assume field frame run is the animation count, change it to animation so its understandable
+
+sora at the peak of his run around frame 11 is clipping through his shorts
+
+sent a trace with the physics I want, everything is a little to pronounced at the moment
+
+go ahead
