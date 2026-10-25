@@ -311,6 +311,37 @@ Steam addresses. Tags as above.
   a hit (the scripts aren't read); the log would show any shot that flies on.
 - Melee attacks meeting the barrier: unchanged (counted; their owner's recoil as t573 has it).
 
+### Shots stopped by the barrier (built, m9 "go ahead")
+The tester: "if you need to add more features into kh1's engine to get reflect working then do
+it". Reading further in the KH1 Steam decomp:
+- An attack object made by an enemy's script (the script native Steam `0x1402BBA20`, through the
+  attack maker `0x1402B2DC0`) carries its script process at `+0xA0` (the process running when it
+  was made, `0x142DB7B40`) and starts with no result word (`+0x60` null) and no hit label
+  (`+0x38` 0; the script sets one). **Checked (decomp)**.
+- When an attack strikes an actor, KH1's contact `0x1402BF330` makes the hit record and, when the
+  attack has a hit label, runs the shot's script there at once: `0x1402BCC00 (process, label, 1,
+  &the struck actor's handle, 0)` (the script machine run at a code offset, the handle pushed as
+  its argument). That is how a KH1 shot's own script learns it hit something, the counterpart of
+  KH2's event 3. The body contact `0x1402B4060` goes through it first, then writes the result
+  (`4` for a body with `0x1000080`). **Checked (decomp)**.
+- KH1's "this attack is over": an attack whose activity bits (`0xC`) are clear is marked by KH1's
+  attack pass `0x1402B47A0` with `0x200000` (unless its owner keeps it, word bit `0x100`) and
+  freed at the next pass (`0x1402B3560`, which runs its free callback `+0xB4`). KH1's own script
+  command for an attack's activity is `0x1402BBC10`. **Checked (decomp)**.
+
+What the mod does now (Steam; `combat::stop_shot`): a free-standing shot meeting the barrier gets
+(1) result `4` in `+4` and in `*(+0x60)` when it has one, (2) its hit label run with Sora's handle,
+as when it strikes an actor, (3) its activity cleared, so KH1 frees it as an attack that's over
+(KH2's flag `0x200`). No reflect, no team or owner change, no hit record on Sora. Counted on the
+barrier and the contact effect as before. Melee attacks unchanged (t573). Epic keeps the old clash
+(turned back).
+- **Assumption**: what each enemy's hit label does (vanish, burst, fall) is its own script's,
+  as in KH2; not read per enemy. Passing Sora as the one struck is ours (KH1 has no barrier
+  object of its own to pass).
+- Log: "Reflect barrier stopped enemy shot ... its hit script told / none, attack switched off";
+  "Reflect: enemy shot ... still flying 10 frames after meeting the barrier" if its script turns
+  it back on.
+
 ### Reflect's voice in KH2
 - KH2's cast start (`0x1403C5170`): the MAGC row's voice `+0x34` for a ground or air cast,
   `+0x35` for the combo finisher cast (when it has a finisher motion), `+0x36` instead when the

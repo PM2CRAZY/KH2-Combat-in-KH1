@@ -971,6 +971,9 @@ pub struct Strikes {
     met_shots: HashSet<(u64, usize)>,
     /// (Reflect barrier, enemy attack) pairs already met (`barrier_meet`), by barrier key.
     barrier_met: HashSet<(u64, usize)>,
+    /// Shots a Reflect barrier stopped (`stop_shot`): the object, its owner and data handles, and
+    /// frames since; one still active 10 frames on is logged (`look`).
+    stopped: Vec<(usize, u32, u32, u32)>,
     shots: Vec<Shot>,
     /// KH1's Keyblade as drawn last frame (`blade_points`, KH1 world): the swing's clash sweep
     /// runs from there to now.
@@ -1634,6 +1637,7 @@ impl Strikes {
         self.bodies = bodies(sora);
         self.guards = guards(sora);
         self.shots = shots(sora);
+        self.stopped_check();
         self.bodies.iter().map(|b| b.target).collect()
     }
 
@@ -2212,7 +2216,8 @@ impl Strikes {
     /// and barrier): where it met it (KH1 world). A melee attack only counts (it passes through
     /// Sora, intangible meanwhile: no recoil on its owner, which read as Reflect hitting back at
     /// every hit, the user); a shot is stopped as KH1's guard stops one (turned back when KH1
-    /// lets it be).
+    /// lets it be). On Steam a shot is stopped as KH2's barrier stops it instead, never turned
+    /// back (`stop_shot`); a melee attack gets KH1's clash with a guard (t573).
     pub unsafe fn barrier_meet(&mut self, sora: usize, key: u64, shapes: &[Shape]) -> Vec<[f32; 3]> {
         if !self.rows_tried {
             self.rows_tried = true;
@@ -2255,6 +2260,26 @@ impl Strikes {
                 }
                 continue;
             }
+            // A free-standing shot is stopped as KH2's barrier stops it (the tester, m7
+            // answer 2: "(a) it needs to work exactly as kh2"): KH1's own "struck, no damage"
+            // result, its hit script told, the attack over (`stop_shot`), never turned back.
+            if shot.free && super::addr::Build::current() == super::addr::Build::Steam {
+                let (h_owner, h_data) = (rd::<u32>(shot.obj + 0x34), rd::<u32>(shot.obj + 0x5C));
+                let (told, ended, kept) = stop_shot(base, sora, shot.obj);
+                self.stopped.retain(|s| s.0 != shot.obj);
+                self.stopped.push((shot.obj, h_owner, h_data, 0));
+                static STOP: AtomicU32 = AtomicU32::new(0);
+                if STOP.fetch_add(1, Ordering::Relaxed) < 200 {
+                    log(&format!(
+                        "Reflect barrier stopped enemy shot {:#x} of {:#x}: result 4 (struck, no damage), its hit script {}, attack {}",
+                        shot.obj,
+                        shot.owner,
+                        if told { "told" } else { "none (no hit label)" },
+                        if ended { if kept { "switched off (its owner keeps the object)" } else { "switched off (KH1's pass frees it)" } } else { "already gone" }
+                    ));
+                }
+                continue;
+            }
             let obj = new_attack(sora, free_bit(), base + ATTACK_DATA_RVA + rows[0].data as usize);
             if obj < 0x10000 {
                 continue;
@@ -2282,6 +2307,76 @@ impl Strikes {
         }
         met
     }
+}
+
+impl Strikes {
+    /// Shots a Reflect barrier stopped: one KH1 still runs as active 10 frames on (its script
+    /// switched it back on) is logged, so a shot that flies on after the barrier shows.
+    fn stopped_check(&mut self) {
+        if self.stopped.is_empty() {
+            return;
+        }
+        for s in &mut self.stopped {
+            s.3 += 1;
+            if s.3 == 10 {
+                let flags = unsafe { rd::<u32>(s.0) };
+                let same = unsafe { rd::<u32>(s.0 + 0x34) == s.1 && rd::<u32>(s.0 + 0x5C) == s.2 };
+                if flags & 0x800 != 0 && same && flags & 0xC != 0 {
+                    static STILL: AtomicU32 = AtomicU32::new(0);
+                    if STILL.fetch_add(1, Ordering::Relaxed) < 100 {
+                        log(&format!("Reflect: enemy shot {:#x} still flying 10 frames after meeting the barrier (word {flags:#x})", s.0));
+                    }
+                }
+            }
+        }
+        self.stopped.retain(|s| s.3 < 10);
+    }
+}
+
+/// KH1's script process run at a label `(process, label, argument count, arguments, out)`
+/// (Steam `0x1402BCC00`): what KH1's attack contact `0x1402BF330` calls with an attack's hit
+/// label (`+0x38`) on its script process (`+0xA0`), the actor struck as the one argument.
+/// Checked (decomp), KH1 Steam.
+const RUN_LABEL_STEAM: usize = 0x2BCC00;
+
+/// A free-standing enemy shot meeting a Reflect barrier, stopped as KH2 stops one (KH2's meeting
+/// `0x1403D2140`: the shot's attack marked over, flag `0x200`, and its script told, event 3; the
+/// barrier stands; Checked (decomp), KH2 Steam), with KH1's own pieces (`docs/kh1-reflect-spell.md`
+/// "Shots stopped by the barrier"):
+/// - KH1's "struck someone who can't be hurt" result, as its body contact (Steam `0x1402B4060`)
+///   writes it for a body with actor flags `0x1000080`: `4` into the attack's `+4` and its result
+///   word (`*(+0x60)`, when it has one). Team and owner unchanged.
+/// - Its hit label told, as KH1's contact `0x1402BF330` tells it when the shot strikes an actor:
+///   `0x1402BCC00 (process +0xA0, label +0x38, 1, &Sora's handle, 0)`.
+/// - Over: its activity bits (`0xC`) cleared, as KH1's own "set activity" command (Steam
+///   `0x1402BBC10`) does; KH1's attack pass (`0x1402B47A0`) then marks an inactive attack
+///   (without the owner's keep bit `0x100`) to be freed (`0x200000`) and frees it the pass after,
+///   running its free callback (`+0xB4`). Checked (decomp), KH1 Steam.
+/// Returns (its script told, the attack switched off, its owner keeps it).
+unsafe fn stop_shot(base: usize, sora: usize, g: usize) -> (bool, bool, bool) {
+    let (h_owner, h_data) = (rd::<u32>(g + 0x34), rd::<u32>(g + 0x5C));
+    wr(g + 4, rd::<u32>(g + 4) | 4);
+    let res = rd::<u64>(g + 0x60) as usize;
+    if res > 0x10000 && super::crash::readable(res) {
+        wr(res, rd::<u32>(res) | 4);
+    }
+    let label = rd::<i32>(g + 0x38);
+    let process = pose::ptr(rd::<u32>(g + 0xA0));
+    let mut told = false;
+    if label != 0 && process > 0x10000 && super::crash::readable(process) {
+        let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_RVA);
+        let run: unsafe extern "system" fn(usize, i32, u32, usize, usize) = std::mem::transmute(base + RUN_LABEL_STEAM);
+        let mut h = to_handle(sora);
+        run(process, label, 1, &mut h as *mut u32 as usize, 0);
+        told = true;
+    }
+    // (Its script may have freed or replaced it meanwhile.)
+    let flags = rd::<u32>(g);
+    if flags & 0x800 == 0 || rd::<u32>(g + 0x34) != h_owner || rd::<u32>(g + 0x5C) != h_data {
+        return (told, false, false);
+    }
+    wr(g, flags & !0xC);
+    (told, true, flags & 0x100 != 0)
 }
 
 /// While KH2's hit is landed through `land_hit` (borrowed and form moves): its power in percent
