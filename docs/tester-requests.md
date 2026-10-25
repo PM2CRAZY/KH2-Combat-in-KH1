@@ -133,6 +133,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [4. Assistant: Yes, we're caching sounds, and part of that cache is older t](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m4)
   - [5. Assistant: t565 to t567. The old player is gone, every KH2 sound now go](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m5)
   - [6. Assistant: 2. Epic: done (docs only, no new version). I added a note to](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m6)
+  - [7. Assistant: t568, KH2's quote cut. With Battle Quotes on KH2, a new KH2 ](../testers/kh2-sounds-through-kh1s-sound-system/kh2-sounds-through-kh1s-sound-system.md#^m7)
 - [KH2 spell hit sounds](../testers/kh2-spell-hit-sounds/kh2-spell-hit-sounds.md)
   - [1. Assistant: I started this thread from KH2 hit effects on enemies(../kh2](../testers/kh2-spell-hit-sounds/kh2-spell-hit-sounds.md#^m1)
 - [KH2 summons](../testers/kh2-summons/kh2-summons.md)
@@ -158,6 +159,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [18. Assistant: t536 and t537.](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m18)
   - [19. Assistant: t557 and t558. You're right, I had it backwards: at the KH1 ](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m19)
   - [20. Assistant: You're right that there's still a seam. Here's what the code](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m20)
+  - [21. Assistant: Got your picks. Here's how I read them:](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m21)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
@@ -175,6 +177,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [14. Assistant: t519.](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m14)
   - [15. Assistant: t552.](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m15)
   - [16. Assistant: Sorry, I see the mix-up now. Two things changed along the wa](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m16)
+  - [17. Assistant: t569, the test bake: walk and run only, battle and field ver](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m17)
 - [Quick Run native](../testers/quick-run-native/quick-run-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/quick-run-native/quick-run-native.md#^m1)
   - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](../testers/quick-run-native/quick-run-native.md#^m2)
@@ -202,6 +205,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Mr Bugs: what else currently are we missing for native integration in](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m1)
   - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m2)
   - [3. Assistant: Done: every item that isn't native yet has its own thread no](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m3)
+  - [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m4)
 
 ---
 

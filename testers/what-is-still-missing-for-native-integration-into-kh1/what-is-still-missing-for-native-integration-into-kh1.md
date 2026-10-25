@@ -7,6 +7,7 @@
 - [1. Mr Bugs: what else currently are we missing for native integration in](#^m1)
 - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](#^m2)
 - [3. Assistant: Done: every item that isn't native yet has its own thread no](#^m3)
+- [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](#^m4)
 
 ---
 
@@ -98,4 +99,39 @@ go ahead
 
 
 currently I've noticed some agents getting around native implementation or not understanding what I mean by native, what I mean by native is giving the kh1's engine more abilities so that it can do everything kh2 can so that kh2 is 1:1 inside of kh1. what currently is technically "native" and runs along the kh1 version, what currently is using the deprecated player. and can you please update the instructions and memory so that its understood what I mean by 100% native. (to my understanding our effects is what I want, giving kh1's effect engine the ability to do kh2's effects properly)
+
+
+> [!tip] Assistant
+> Got it, thanks for spelling it out. I've added your definition to the instructions: `docs/design-philosophy-instructions.md` ("100% NATIVE") and `docs/project-instructions.md` ("What native means"), which every helper brief now points to. In short: native means giving KH1's engine new abilities (new states, rows, requests, motion slots, effect programs, sound banks, camera modes, functions patched into KH1's own ones) so KH1 runs KH2's thing itself. The effects work is the model. A KH2 system of ours running next to KH1's and copying its results in doesn't count, even if it never borrows Sora. (I can't write the project's memory from here; the instruction files are what every session reads, and I've asked the owner to paste the updated project instructions.)
+>
+> Here's where everything stands by that rule.
+>
+> **Native (KH1's own system doing KH2's thing)**
+> - Effects through KH1's effect engine, with KH2's missing programs added to it; KH2's hit sparks through KH1's own hit lookup.
+> - Sounds and battle quotes through KH1's sound engine (the old player is gone since t565).
+> - Animations baked as KH1 motion slots: the combos, walk and run, the KH2 casts, the ability swings, the glide's motions.
+> - Quick Run as a KH1 state, Aerial Dodge on KH1's air state, the dodge roll on KH1's roll, the guard on KH1's guard row, KH2 Glide in KH1's glide state, the body guards as KH1 guard objects.
+> - Most ability moves on KH1 attack rows; KH2's power inside KH1's damage function; KH2's flinches, pushes and recoils on KH1's reaction requests; the casts in KH1's cast state.
+> - The KH2 camera as a mode in KH1's camera table.
+>
+> **Running along KH1 (our own KH2 logic beside KH1's system)**
+> 1. Row picks: the KH2 ability rows, the Square moves, Counterguard and Retaliating Slash are still checked by a separate KH2 object, not inside KH1's picker. The [combo rows thread](../kh2s-combo-row-selection/kh2s-combo-row-selection.md) now has the plan to fix this (one walk in KH1's picker).
+> 2. Body hits (Vicinity Break, Explosion, Magnet Burst): our own sweep of KH2's shapes, then KH1's contact. KH1's own collision pass doesn't see them.
+> 3. The KH2 spells after the cast: their scripts (Reflect's barrier and counter, the shots) run in our own interpreter, and their hits go through our own records, not KH1 spell objects ([magic thread](../kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md)).
+> 4. Idle, jump, fall, landing and item use are still drawn over KH1's pose every frame ([baking thread](../baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)).
+> 5. Our own hood, coat and shorts rules ([sleeves thread](../missing-sleeves-animation/missing-sleeves-animation.md)), and KH2's MP costs on KH1's MP with no MP Charge yet ([MP thread](../kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md)).
+>
+> **Still on the deprecated KH2 controller or renderer**
+> 6. Drive Forms, all of them ([Drive Forms thread](../drive-forms-native/drive-forms-native.md)).
+> 7. The fallbacks: when a native path can't run (a slot not built, a state KH1 doesn't cast in, flight, or Epic), KH2's controller still borrows Sora. Some ability moves still hit this; your t544 log had Vicinity Break borrowed. I can't list exactly which ones without a trace.
+> 8. Hits taken during a borrow or a form are decided and played by KH2's controller.
+> 9. The KH2 player model: our own renderer, switched off ([model thread](../kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md)).
+>
+> Limits, summons and reaction commands aren't in at all yet, so they're on neither list.
+>
+> Questions:
+> 1. Which do you want converted first? (a) the row picks (1), since it's planned already and every combo goes through it; (b) the body hits (2) and the fallback borrows (7), so base Sora never touches KH2's controller; (c) the spells (3), as KH1 spell objects; (d) the remaining animations (4); (e) Drive Forms (6, with 8), the biggest one; or (f) another order, just list it.
+> 2. When a native version needs something KH1 has no system for at all (MP Charge, for example): (a) build it into KH1's engine, the way Quick Run got a new state, or (b) ask you each time first?
+
+^m4
 

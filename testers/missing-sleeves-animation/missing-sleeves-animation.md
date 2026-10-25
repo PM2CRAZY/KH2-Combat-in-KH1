@@ -20,6 +20,7 @@
 - [14. Assistant: t519.](#^m14)
 - [15. Assistant: t552.](#^m15)
 - [16. Assistant: Sorry, I see the mix-up now. Two things changed along the wa](#^m16)
+- [17. Assistant: t569, the test bake: walk and run only, battle and field ver](#^m17)
 
 ---
 
@@ -331,6 +332,7 @@ your currently fundamentally misunderstanding me, sora's hoodie still stays rigi
 
 ^m16
 
+
 do (c)
 
 1. no it should be like kh2
@@ -338,3 +340,37 @@ do (c)
 3. don't worry about it
 
 go ahead
+
+
+> [!tip] Assistant
+> **t569, the test bake: walk and run only, battle and field versions.** The hood, coat and shorts now start from KH2's own hidden keys for them, smoothed a little and kept off his body. Everything KH2 visibly animates (hair, sleeves, necklace, keychain) is untouched.
+>
+> - **Hood.** It follows KH2's hood keys against his chest, like around t375. It hangs down his back now and sways with each step, instead of sticking straight out behind him, and it's kept off his back and head.
+> - **Coat.** Same KH2 coat motion as t552, but now kept out of the shorts and hips. When a knee comes up in the run, the front flap lifts and bends over it instead of going through the leg.
+> - **Shorts.** Each of KH1's eight shorts panels sways the way KH2's hidden trouser keys on that leg sway. Before, they were stuck rigid to the thigh. They're kept off the leg.
+> - **Like KH2, no physics.** Nothing lags behind or settles after he stops. Each frame is worked out from KH2's motion around it. The smoothing only evens out KH2's one-frame jumps on those hidden bones. The "keep it out of the body" part is our own rule, since KH2 keeps nothing off anything.
+>
+> How much it moves now, in degrees of swing:
+>
+> | | Hood | Shorts |
+> |---|---|---|
+> | Battle walk | 0 → 40 | 0 → 36 |
+> | Battle run | 0 → 29 | 0 → 35 |
+> | Field walk | 0 → 36 | 0 → 29 |
+> | Field run | 0 → 72 | 0 → 55 |
+>
+> The coat swings about as before. The deepest it goes into his body went from about 6-7 to 0, except one flap in the battle run (1.6, see question 1).
+>
+> It's only in the baked walk and run, so you'll see it with baking on (the default). Live poses and every other move are unchanged.
+>
+> **Check:** your KH1 and KH2 files, every frame of the four cycles. No stretching, the loops still close, and the baked animation is as accurate as before. Not seen in game. Assumptions: which of KH2's trouser bones stands for which KH1 shorts panel (judged from where they sit), and how thick the shorts are (from the bones, not the mesh). Notes are in `docs/kh1-secondary-motion.md`.
+>
+> Please test: walk and run, in battle and out of it, looking from the side and from behind. Watch the hood, the front of the coat as the knee comes up, and the shorts.
+>
+> Questions:
+> 1. The battle run's right front coat flap stays slightly into the hips (about 1.6), because KH2's coat keys turn it inward the whole time. (a) leave it, (b) let that flap follow his hips a bit more (less KH2), or (c) let it lift further, which bends it more?
+> 2. In the runs the front flaps lift and bend quite far over the knee (up to about 50°). (a) good, (b) too much, so tone the bend down and accept a little clipping, or (c) not enough?
+> 3. If it looks right, next: (a) bake it into the idle and the combos too, or (b) also put it on the live pose?
+
+^m17
+
