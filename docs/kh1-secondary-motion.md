@@ -309,9 +309,10 @@ candidate).
 | Sleeves, the shoulder joints (`Parts::sleeves`) | 129, 133, 137, 141 / 233, 237, 241, 245 | 111 / 203 (turned by 110 / 202) | yes (the sleeve's mesh is on 110 / 202) |
 | Sleeves, the joints down the sleeve | 130, 134, 138, 142 / 234, 238, 242, 246 | flaps 113, 115 / 205, 207, relative to the root, read as the sleeve 110 / 202 (`KH2_SHOWN_ON`): no turn of their own | no |
 | Necklace (`Parts::necklace`, t385) | 86 | 165, relative to the chest 68 | yes |
+| Coat (jacket hem, `retarget::coat_kh2`, after t519) | joints 73, 249, 253, 257, 261 / 265, 269, 273, 277 (the joints below rigid on them) | the coat ring's leaves 70, 129, 131, 133, 135 / 221, 223, 225, 227, relative to the chest 68 | no (KH2's jacket is shorter, on its torso 67) |
 | The body (`retarget.rs`) | root, spine, neck, head, arms, hands, fingers, legs, feet | KH2's body, measured from positions | yes |
 
-Not copied (KH1's own bones, no visible KH2 match): the jacket hem (249-278, 73-74), the
+Not copied (KH1's own bones, no visible KH2 match; the jacket hem follows KH2's coat ring since t519's follow-up, above): the jacket hem (249-278, 73-74), the
 shorts' panels (27-40, 53-66), the belt chain (11-14), the belt-front pieces (5, 8), the
 necklace's pendant (87). From t387 the shorts took KH1's own animation of the move ("KH1's own
 parts" below), until they went back onto the thigh ("1:1 with what KH2's model shows"); the hem (the coat), the belt chain, the belt-front pieces and the pendant did too
@@ -503,7 +504,7 @@ under KH2's run and first swing, KH1's own motion offered). Not checked in game.
 
 ### The coat
 
-(After t500 its lower half hangs from the hips: "The coat's lower half" below.) The coat (KH1's
+(After t500 its lower half hung from the hips: "The coat's lower half" below; after t519 it follows KH2's coat ring: "The coat follows KH2's coat ring".) The coat (KH1's
 jacket hem: the back centre 72-75 and the eight panels 248-279, from the spine base 71) is now carried rigidly by KH1's chest (78) as in the bind, every joint at its bind
 relation, live and baked (`retarget::ATTACHED`): KH2 draws its jacket on its torso bone 67, which
 turns as the retarget's chest part does, and KH2's coat ring (129-135 / 221-227, 70) carries no
@@ -559,6 +560,8 @@ Not seen in game.
 
 ### The coat's lower half (after t500)
 
+(Replaced after t519 by "The coat follows KH2's coat ring" below: `coat_low` is gone.)
+
 The tester, after t500: "the coat is still sticking out on kh2 animations" (no new trace or
 picture; read as the hem standing off the body, the stick-out coat_check didn't measure until now).
 `examples/coat_check.rs` now also measures how far the coat's lower joints (bind height under 92)
@@ -601,6 +604,59 @@ FK (its IK helpers not evaluated; the coat hangs from the spine, which they don'
 hips may differ). Test `local_own` (the coat's top within 0.05 of its bind relation to the chest,
 its lower joints never more than 2.5 off the hips' axis, lengths kept, in KH2's 0, 1, 2, 3, 151,
 154, 181, 201). Not seen in game.
+
+### The coat follows KH2's coat ring (after t519)
+
+The tester, after t519: "when I mean by sticking out is that the coat is stiff and not animated at
+all. redo the coat so that its actually animated ... this is happening on all kh2 animations that
+we've baked so far" (and "we'll fix the clipping later"). From t491 to t519 the coat was rigid on the
+chest (t519: its hem on the hips), so under KH2's moves it never moved on its own, live or baked.
+
+**KH2's coat ring, read again** (Checked (files): `P_EX100.mdlx`'s skeleton and every motion of
+`P_EX100.mset`, `examples/coat_ring.rs` and a scratch probe). Per panel a root and a leaf at the same
+place, every root under the chest 68: back 69 / 70, +x front 128 / 129, side-front 130 / 131,
+side-back 132 / 133, back 134 / 135, the -x side 220 / 221 .. 226 / 227. Each leaf's bind axis lies
+within 7 degrees of the matching KH1 panel's (KH1's back centre 72-75, +x 248 / 252 / 256 / 260, -x
+264 / 268 / 272 / 276; root, joint at the same place, two joints). The motions key the leaves only
+(F-curves; no constraint, expression or IK touches them: "How KH2's exe animates Sora" below). What
+the keys do: in the field idle (133 / 138) the leaves sit within 10 degrees of their bind relation to
+the chest; in the battle stance, the swings and the jumps the chest leans forward and the leaves are
+keyed to hang down from it (against the chest the front leaves point 45-60 degrees forward of their
+bind, so in the body's own frame they hang near straight down), and they sway with the stride and the
+swing: 10-21 degrees within the battle idle, 9-18 in the run, up to 50-120 in swings, jumps and hit
+reactions. The earlier reading ("KH2's motions keep them flared out", t453 / t489) measured that hang
+against the chest and took it for a flare; it is the coat hanging as the chest leans. They carry no
+mesh on KH2's model (KH2's jacket ends at about 104 high, on its torso 67), so in KH2 nothing shows it;
+KH1's coat is long enough to.
+
+**Now** (`retarget::coat_kh2`, live and baked; replaces t519's `coat_low`): each chain's root stays
+rigid on KH1's chest (78) as in the bind (`ATTACHED`); its joint (root + 1, at the root's place) takes
+its KH2 leaf's turn from its bind with KH2's chest's turn (68) taken out, put on KH1's chest's turn,
+twist included (as the hair takes its spike's against the head); the two joints below keep their bind
+relation to it (KH2's panel is one bone), so KH1's own panel shape and every length stay. A chain whose
+KH2 bones are missing or not finite stays rigid on the chest. Nothing is guarded or eased: KH2 keeps
+nothing off anything (the clipping is for later, the tester).
+
+Measured over every motion of `P_EX100.mset` (83, every half frame / frame; Checked (files)):
+
+| | Rigid on the chest, hem on the hips (t519) | KH2's coat ring (now) | KH1's own coat in KH1's motions |
+|---|---|---|---|
+| A tip's swing against the chest within a motion, median / max | 0 at the top (the hem only went where the hips took it) | 33 / 109 degrees (battle idle 11-20, run 12-18, field idle 0-4) | |
+| Lower joints standing off the hips' axis: out >2 / >5, max | 0% / 0%, 1.5 | 44.5% / 12.3%, 10.7 | 15% / 4.7%, 11.3 |
+| In >2 (toward the hips' axis) | 10.4% | 5.1% | 12.7% |
+| Inside the shorts (deepest) | 0.55% (10.7) | 1.19% (10.2, motion 8) | |
+| A tip turned more than 60 / 90 degrees from its bind against the chest | 0 | 10.9% / 1.0% of chain-frames (jumps, spins, hit reactions 3, 9-19, 41, 60, 165, 184, 193, 196: the coat flying up) | |
+| Pops (second difference against the chest), p99.9 / max | 2.15 / 14.7 | 1.28 / 8.4 | |
+
+Where it now clips most (the tester: for later): in KH2's run and walk (2, 1) KH1's chest is turned a
+little against his hips, and the coat follows the chest as KH2's ring does, so the +x front panel's tip
+sits 8-12 nearer the hips' axis than in the bind (into the front of the shorts) and the -x one 6-8 out,
+the back centre 6-7 out behind (flying back); in the jumps and spins the panels fly up past horizontal.
+Test `local_own` (`kh1_s_coat_turns_as_kh2_s_coat_ring_under_kh2_s_poses`: roots rigid on the chest,
+each joint within 0.3 degrees of its KH2 leaf's turn against the chest, joints below at their bind
+relation, lengths kept, and every chain swinging more than 5 degrees in KH2's run 2 and swings 151 /
+181, in KH2's 0, 1, 2, 3, 151, 154, 181, 201). Not seen in game. Assumption: the Steam game's
+`P_EX100.mset` is the one read here (the tester's files on the owner's PC, `local/re`).
 
 ### The thighs' and shins' roll (after t491)
 

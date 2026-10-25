@@ -392,18 +392,22 @@ const THIGHS: [(usize, usize); 2] = [(43, 44), (17, 18)];
 /// in the bind, every joint at its bind relation (the tester: "make everything 1:1 with how its
 /// animated in kh2"). From s284 to t489 its roots turned with KH2's pelvis, the front panels a
 /// share with the thigh, and it was swung off the thighs (`keep_clear`): ours, not KH2's.
-/// Its lower half then hangs from the hips (`coat_low`).
+/// Its chains then turn as KH2's coat ring (`coat_kh2`).
 const ATTACHED: [(usize, usize); 10] = [(10, 43), (72, 78), (248, 78), (252, 78), (256, 78), (260, 78), (264, 78), (268, 78), (272, 78), (276, 78)];
 
 /// The coat's nine chains (root, root + 1 at the same place, two joints below): their roots.
 const COAT: [usize; 9] = [72, 248, 252, 256, 260, 264, 268, 272, 276];
-/// The coat's lower joints (root + 2, root + 3): how far each is placed from where the chest
-/// carries it toward where KH1's hips (3) carry it, as in the bind. KH1's coat reaches lower than
-/// KH2's jacket (its tips at KH2's waist and shorts' top, which KH2 draws on its pelvis), so
-/// carried whole by the chest its back stood out 6 behind the hips and its front sank 7 into
-/// them in KH2's idle, walk and run (the tester: "the coat is still sticking out on kh2
-/// animations"; `examples/coat_check.rs`, docs/kh1-secondary-motion.md "The coat's lower half").
-const COAT_LOW: [f32; 2] = [0.5, 1.0];
+/// KH2's coat ring (Checked (files): `P_EX100.mdlx`'s skeleton): a root and a leaf at the same
+/// place per panel, every root under the chest 68 (the back's 69 / 70 too), the leaf's bind axis
+/// within 7 degrees of the matching KH1 panel's (back 70, +x front 129, side-front 131, side-back
+/// 133, back 135; -x 221 .. 227). KH2's motions key the leaves only (F-curves, no constraint,
+/// expression or IK on them: `docs/kh1-secondary-motion.md` "How KH2's exe animates Sora"): in
+/// the field idle they sit at their bind relation to the chest, in the battle stance and the
+/// swings they hang down from the leaning chest and sway with the stride. Each KH1 chain
+/// (`COAT[k]`, its joint `COAT[k] + 1`) takes its leaf's turn as the hair takes its spike's.
+const COAT_KH2: [usize; 9] = [70, 129, 131, 133, 135, 221, 223, 225, 227];
+/// KH2's chest (the ring's parent), KH1's (the coat's carrier, `ATTACHED`).
+const COAT_CHEST: (usize, usize) = (68, 78);
 
 /// Each: root, joints, what they keep off (bone pairs), the most distance kept, and a margin
 /// added to the bind's distance.
@@ -734,7 +738,7 @@ impl Retarget {
             out[i] = Mat4::from_scale_rotation_translation(self.scale[i], (turn[i] * self.rot[i]).normalize(), at[i]);
         }
         self.attach(&mut out, &own_at);
-        self.coat_low(&mut out);
+        self.coat_kh2(&mut out, kh2);
         drop(own_local);
         self.keep_clear(&mut out);
         out
@@ -766,30 +770,44 @@ impl Retarget {
         }
     }
 
-    /// The coat's lower joints placed between where the chest and the hips carry them
-    /// (`COAT_LOW`), each segment re-aimed about its upper end (lengths kept): the top stays on
-    /// the chest as KH2's jacket, the hem lies on the hips under it.
-    fn coat_low(&self, out: &mut [Mat4]) {
-        const CHEST: usize = 78;
-        const HIPS: usize = 3;
-        if out.len() <= COAT[COAT.len() - 1] + 3 {
+    /// The coat as KH2's coat ring moves (`COAT_KH2`): each chain's joint (root + 1, at the root's
+    /// place on the chest) takes its KH2 leaf's turn from its bind with KH2's chest's turn taken out,
+    /// put on KH1's chest's turn; the joints below keep their bind relation to it (KH2's panel is
+    /// one bone), lengths and KH1's own shape kept. A chain whose KH2 bones are missing or not
+    /// finite stays as `attach` left it (rigid on the chest).
+    fn coat_kh2(&self, out: &mut [Mat4], kh2: &[Mat4]) {
+        let (c2, c1) = COAT_CHEST;
+        if out.len() <= COAT[COAT.len() - 1] + 3 || kh2.len() <= COAT_KH2.iter().copied().max().unwrap_or(0) || kh2.len() <= c2 {
             return;
         }
-        let chest = out[CHEST] * self.bind_m[CHEST].inverse();
-        let hips = out[HIPS] * self.bind_m[HIPS].inverse();
-        let at = |m: &Mat4| m.w_axis.truncate();
-        for &root in COAT.iter() {
-            for (k, j) in [(0usize, root + 2), (1, root + 3)] {
-                let pivot = at(&out[j - 1]);
-                let b = at(&self.bind_m[j]);
-                let want = chest.transform_point3(b).lerp(hips.transform_point3(b), COAT_LOW[k]);
-                let (from, to) = ((at(&out[j]) - pivot).normalize_or_zero(), (want - pivot).normalize_or_zero());
-                if from == Vec3::ZERO || to == Vec3::ZERO {
-                    continue;
-                }
-                let m = Mat4::from_translation(pivot) * Mat4::from_quat(Quat::from_rotation_arc(from, to)) * Mat4::from_translation(-pivot);
-                for o in &mut out[j - 1..=root + 3] {
-                    *o = m * *o;
+        let rot = |m: &Mat4| m.to_scale_rotation_translation().1.normalize();
+        let (Some(r2c), Some(_)) = (self.kh2_rest.get(c2), self.bind_m.get(c1)) else { return };
+        let chest2 = (rot(&kh2[c2]) * r2c.inverse()).normalize();
+        let chest1 = (rot(&out[c1]) * rot(&self.bind_m[c1]).inverse()).normalize();
+        for (k, &root) in COAT.iter().enumerate() {
+            let leaf = COAT_KH2[k];
+            let Some(r2) = self.kh2_rest.get(leaf) else { continue };
+            let rel = (chest2.inverse() * rot(&kh2[leaf]) * r2.inverse()).normalize();
+            let turn = (chest1 * rel).normalize();
+            let j = root + 1;
+            let old = out[j];
+            let (sc, _, at) = old.to_scale_rotation_translation();
+            let new = Mat4::from_scale_rotation_translation(sc, (turn * rot(&self.bind_m[j])).normalize(), at);
+            let m = new * old.inverse();
+            if !rel.is_finite() || !m.is_finite() {
+                continue;
+            }
+            for i in j..out.len() {
+                let mut p = Some(i);
+                let under = loop {
+                    match p {
+                        Some(q) if q == j => break true,
+                        Some(q) if q > j => p = self.parent[q],
+                        _ => break false,
+                    }
+                };
+                if under {
+                    out[i] = m * out[i];
                 }
             }
         }
