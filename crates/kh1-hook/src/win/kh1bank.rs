@@ -492,6 +492,48 @@ const MEMBER_BANKS_STEAM: usize = 0x2D37270;
 /// `+0xBD` (data = handle `+0x6C`).
 const CHANNELS_STEAM: usize = 0x2D371D0;
 
+/// KH1's live sound list (Steam `0x1404D6618`, next at `+8`): each record (`Axa::SoundEntry`,
+/// 0x50 bytes) has its engine sound at `+0x10`, bank `+0x30`, clip `+0x34`, state `+0x3C` (3 a
+/// voice clip, `0x1400DBCF0`). Checked (decomp).
+const LIVE_LIST_STEAM: usize = 0x4D6618;
+/// The engine's sound stop (Steam `0x1400565A0 (sound, &fade)`: `movd xmm0, [rdx]; cvtdq2ps xmm0,
+/// xmm0`, then the stop `0x1400565D0` under the engine's lock), the call KH1's own `SslSeStop`
+/// (`0x1400DEF50`) and its frame clean-up (`0x1400DC8C0`, at `0x1400DCA9C`: `lea rdx, [rsp+0x20]`
+/// = 0; `lea rcx, [rbx+0x10]`) make on a record. Checked (exe, decomp).
+const SOUND_STOP_STEAM: usize = 0x565A0;
+const SOUND_STOP_PROLOGUE: [u8; 7] = [0x66, 0x0F, 0x6E, 0x02, 0x0F, 0x5B, 0xC0];
+
+/// KH2's last quote priority taken (KH2's quote request `0x1403CE580`, its object's `+0x10`: set
+/// on each line taken, never reset; a new line is taken while one plays only if its priority is
+/// at least this). Checked (decomp, KH2).
+static LAST_PRIORITY: AtomicI32 = AtomicI32::new(0);
+
+/// Stops every voice clip record of KH1's live list on bank `no` (only Sora's KH2 quotes use it),
+/// with the engine's stop at no fade, as KH1's own stop does; KH1's frame clean-up
+/// (`0x1400DC8C0`) then takes each one out of the list and deletes it once it no longer plays,
+/// as it does with its own finished records. The list itself is left to KH1. `None` if the stop
+/// isn't the one expected (nothing done).
+unsafe fn stop_voice_records(base: usize, no: i32) -> Option<u32> {
+    if !starts_with(base + SOUND_STOP_STEAM, &SOUND_STOP_PROLOGUE) {
+        return None;
+    }
+    let stop: unsafe extern "system" fn(usize, *const i32) = std::mem::transmute(base + SOUND_STOP_STEAM);
+    let fade: i32 = 0;
+    let mut stopped = 0;
+    let mut node: usize = rd(base + LIVE_LIST_STEAM);
+    let mut n = 0;
+    while node >= 0x10000 && n < 4096 && super::crash::readable(node) && super::crash::readable(node + 0x4F) {
+        let next: usize = rd(node + 8);
+        if rd::<i32>(node + 0x3C) == 3 && rd::<i32>(node + 0x30) == no {
+            stop(node + 0x10, &fade);
+            stopped += 1;
+        }
+        node = next;
+        n += 1;
+    }
+    Some(stopped)
+}
+
 /// Sora's KH2 battle voice bank (whole, as KH1 keeps a character's voices in one bank), its
 /// number in KH1's voice list and the data KH1 copied it to (to know it's still there).
 static VOICE_BANK: Mutex<Option<Vec<u8>>> = Mutex::new(None);
@@ -571,11 +613,19 @@ unsafe fn tend_voice(base: usize) {
     VOICE_COUNT.store(rd(base + VOICE_COUNT_STEAM), Ordering::Relaxed);
 }
 
-/// Asks KH1 for Sora's battle quote `clip` (of KH2's voice bank) at `priority`, through KH1's own
-/// clip request (`kh1voice::clip`, `0x140290930`: it plays only over a line of lower standing,
-/// 0 none, 1 another speaker's, 2 his own, and KH1's voice channel plays it, with its mouth
-/// motion): Sora's member bank number is ours for that call only. False if it can't go that way
-/// (not heard); true also when KH1's priority rule drops it.
+/// Asks KH1 for Sora's battle quote `clip` (of KH2's voice bank) at KH2's `priority`, through
+/// KH1's own clip request (`kh1voice::clip`, `0x140290930`: it plays only over a line of lower
+/// standing, 0 none, 1 another speaker's, 2 his own, and KH1's voice channel plays it, with its
+/// mouth motion), at `priority` (1 at least: KH1 has nothing below 0): Sora's member bank number
+/// is ours for that call only.
+///
+/// KH2's rule over its own lines (`0x1403CE580` / `0x1403CE260`): while one of Sora's KH2 quotes
+/// is on his channel, a new one of priority at least the last taken stops it and takes the
+/// channel; a lower one is dropped. The playing line's records are stopped
+/// (`stop_voice_records`) and the channel set free (state 0, what KH1's channel step
+/// `0x140290A50` writes when a line ends), then KH1's request takes the new line as on a free
+/// channel. A line of KH1's own on the channel (another bank or speaker) keeps KH1's rule.
+/// False if it can't go that way (not heard); true also when a rule drops it.
 pub unsafe fn voice(clip: u8, priority: i32) -> bool {
     if Build::current() != Build::Steam || clip > 127 {
         return false;
@@ -605,13 +655,43 @@ pub unsafe fn voice(clip: u8, priority: i32) -> bool {
         // (KH1 gives Sora no voice bank now: no quotes, as KH1's own.)
         return true;
     }
+    let c = base + CHANNELS_STEAM + ch as usize * 0x28;
+    // (Channel: `+0` state (2 asked, 3 made, 4 playing), `+1` kind (0 a member's bank), `+2`
+    // bank, `+3` clip, `+8` the speaker.)
+    let state: u8 = rd(c);
+    let ours = (2..=4).contains(&state) && rd::<u8>(c + 1) == 0 && rd::<i8>(c + 2) == no as i8 && rd::<usize>(c + 8) == sora;
+    if ours {
+        static CUTS: AtomicU32 = AtomicU32::new(0);
+        let (last, playing) = (LAST_PRIORITY.load(Ordering::Relaxed), rd::<i8>(c + 3));
+        if priority < last {
+            if CUTS.fetch_add(1, Ordering::Relaxed) < 40 {
+                note(format!("KH2 quotes: clip {clip} (priority {priority}) dropped: KH2's rule keeps clip {playing} (priority {last}) playing"));
+            }
+            return true;
+        }
+        match stop_voice_records(base, no) {
+            Some(n) => {
+                std::ptr::write_unaligned(c as *mut u8, 0);
+                if CUTS.fetch_add(1, Ordering::Relaxed) < 40 {
+                    note(format!("KH2 quotes: clip {playing} (priority {last}, channel state {state}) cut for clip {clip} (priority {priority}), {n} KH1 voice record(s) stopped"));
+                }
+            }
+            None => {
+                if CUTS.fetch_add(1, Ordering::Relaxed) < 40 {
+                    note("KH2 quotes: KH1's sound stop isn't the one expected; KH1's rule keeps the line".into());
+                }
+            }
+        }
+    }
     std::ptr::write_unaligned(slot as *mut i8, no as i8);
-    super::kh1voice::clip(sora, clip as i32, priority);
+    super::kh1voice::clip(sora, clip as i32, priority.max(1));
     std::ptr::write_unaligned(slot as *mut i8, old);
+    let took = rd::<u8>(c) == 2 && rd::<i8>(c + 2) == no as i8 && rd::<u8>(c + 3) == clip && rd::<usize>(c + 8) == sora;
+    if took {
+        LAST_PRIORITY.store(priority, Ordering::Relaxed);
+    }
     static N: AtomicU32 = AtomicU32::new(0);
     if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        let c = base + CHANNELS_STEAM + ch as usize * 0x28;
-        let took = rd::<u8>(c) == 2 && rd::<i8>(c + 2) == no as i8 && rd::<u8>(c + 3) == clip && rd::<usize>(c + 8) == sora;
         note(format!("KH1 banks: KH2 quote clip {clip} asked of KH1's voice channel {ch} at priority {priority}: {}", if took { "taken" } else { "KH1 kept the line playing" }));
     }
     true
