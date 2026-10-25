@@ -766,6 +766,78 @@ Test `local_cloth` (files): 18 chains, nothing more than 2 inside, no length cha
 closing, the hood and a shorts panel moving more than 5 degrees, in all four motions. Not seen in
 game.
 
+## Cloth physics (live, to tune before a bake)
+
+Ours, not KH1's or KH2's: neither game runs physics on these parts; both key them by hand
+(Checked (files): KH1's `xa_ex_0010.mset` keys the coat, shorts panels, belt chain and belt-front
+bones in its run; KH2's `P_EX100.mset` keys its own). The physics is only a tool to make their
+motion on a KH2 move, look at it in game, and later bake it into that move (the tester's plan,
+"Missing sleeves animation" m18/m19). Code: `kh1_data::clothsim` (shared), live in
+`kh1-hook/src/win/clothlive.rs`, offline in `kh1-data/examples/cloth_sim.rs`.
+
+**Bones** (KH1 Sora's skeleton, Checked (files)):
+
+| Part | Chains | Carrier | Simulated links (bone turned → tip) |
+|---|---|---|---|
+| Coat | 72, 248, 252 .. 276 (each `r`, `r+1` at its place, `r+2`, `r+3`) | spine base 71 | `r+1 → r+2`, `r+2 → r+3` |
+| Shorts | 26, 30, 34, 38 (-x) / 52, 56, 60, 64 (+x), same layout | thigh 17 / 43 | `r+1 → r+2`, `r+2 → r+3` |
+| Belt chain | 10, 11 (at 10's place), 12 .. 15 | hips 3 | 11→12, 12→13, 13→14, 14→15 |
+| Belt front | 5 → 6, then 7 / 8 at 6's place → 9 | 4 | 5→6, 8→9 |
+
+**Each frame** (one step per 60 Hz frame KH1 ran; none on a held Frame Advance frame):
+1. The chains go to their rest: each bone's relation to its parent, averaged over KH1's own
+   matching move (for KH2's field run: KH1's field run, slot 5, 36 frames), carried by the carrier
+   as drawn. Each link's tip there is its target.
+2. Each tip's offset from its target is a damped spring in the target's moving frame:
+   `v = v·(1 − damping) − weight·(target's acceleration) − stiffness·offset`. A steady run moves
+   nothing; the body's bob, sway, leg swing and turns do.
+3. Lengths kept; each link at most `swing` degrees off its rest; out of the body by t569's
+   clearance rules (the coat, belt chain and belt front outside the shorts round each thigh,
+   6.4 at the hip to 11.2 from mid-thigh, plus 1, capped at the bind's distance, and no more than
+   5 nearer the hips' up axis 3→71 than in the bind; each shorts panel no nearer its thigh's axis
+   than 0.95 of its bind distance). Assumption, as in t569: the shorts' thickness from the panel
+   bones, not the mesh.
+4. Each link's bone is turned (subtree with it) to point at its tip; its roll stays the rest's.
+
+**KH1's own run, measured** (`cloth_sim`, Checked (files)): each link's swing about its own mean
+direction in its carrier's frame, mean of the part's links (rms degrees), and the largest change
+of a link's direction in one frame:
+
+| Part | KH1's field run (slot 5) | KH2 field run before the physics | With the tuned physics (settled, 8th loop) |
+|---|---|---|---|
+| Coat | 8.6 / 9.7 | 16.2 / 6.9 (KH2's coat ring, t552) | 8.5 / 8.4 |
+| Shorts | 3.7 / 18.4 | 0.0 / 0.0 (rigid on the thigh, t490) | 3.9 / 8.7 |
+| Belt chain | 36.2 / 20.3 | 26.2 / 18.7 | 38.0 / 20.9 |
+| Belt front | 18.1 / 20.7 | 0.0 / 0.0 | 18.0 / 20.4 |
+
+KH1's battle run (slot 6) measures the same. The settled loop repeats to 0.005 units from one
+loop to the next (a clean loop for a bake). Speed doesn't change it on a straight run (the model
+only feels accelerations).
+
+**Tuned numbers** (`Settings::TUNED`, settings id 0; found by `cloth_sim ... fit`: per part, a
+search over stiffness, damping and weight for the swing nearest KH1's, no choppier than KH1's own,
+settled):
+
+| Part | Stiffness | Damping | Weight | Swing cap |
+|---|---|---|---|---|
+| Coat | 0.02 | 0.30 | 0.25 | 40° |
+| Shorts | 0.20 | 0.45 | 0.25 | 30° |
+| Belt chain | 0.06 | 0.05 | 0.25 | 100° |
+| Belt front | 0.06 | 0.45 | 0.50 | 60° |
+
+What this matches and what it doesn't: the amount of swing and how choppy it is, part by part,
+against KH1's own run; the rest is KH1's own average hang in its run. Not matched: when in the
+stride each part swings (KH1's run is 36 frames, KH2's field run 40, and KH1's legs come from its
+IK helpers, which our FK reading of KH1's motions doesn't evaluate, so KH1's stride can't be lined
+up with KH2's here). The swing caps are ours.
+
+**Live** (`clothlive`): only on our slot for KH2's field run (the first of the run's three slots,
+on KH1's field run 5). Baked (`kh1_bake`, the default): KH1 plays the bake and draws it; the
+physics' bones are read back from KH1's drawing (`+0x1B4`), moved and written back. Drawn live
+(`kh1_bake` off): on the pose we draw, before its write. Starts over on the move's first frame
+after any other, a jump of over 200 in a frame, or over 30 frames missed. Cost: only on the run's
+frames; 79 bones, a few hundred matrix products a frame.
+
 ## How KH2's exe animates Sora (Steam decomp, research after t453)
 
 The tester, after t453: "investigate into the kh2 steam c decomp how exactly sora's animations work

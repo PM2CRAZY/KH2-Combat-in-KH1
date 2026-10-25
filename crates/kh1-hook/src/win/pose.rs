@@ -692,6 +692,8 @@ pub fn load_kh2() {
             }
             let _ = REST.set(motions.get(REST_SLOT).cloned().flatten());
             let _ = REST_OPEN.set(motions.first().cloned().flatten());
+            // (The cloth physics' rest: KH1's field run, `clothlive`.)
+            let _ = super::clothlive::REST.set(motions.get(super::clothlive::REST_SLOT).cloned().flatten());
             Ok((map, lengths))
         })();
         match slots {
@@ -1807,6 +1809,13 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 *h = Some(Hands { orig: o, drawn: o, at: Instant::now() });
             }
         }
+        // The cloth physics on the move worked on (`clothlive`), our slot baked: KH1's drawing of
+        // it moved (the coat, shorts, belt chain, belt-front pieces and what hangs under them).
+        if !ours && DRAW_ROUTE.load(Ordering::Relaxed) == 3 && super::clothlive::wants(slot) {
+            cloth_on_kh1(s, world, &to_world);
+        } else {
+            super::clothlive::idle();
+        }
         // KH2's model (`model`) on KH1's own animation, as drawn.
         if let (true, Some(inv)) = (super::model::on(), s.inverse.as_ref()) {
             let back = to_world.inverse();
@@ -1846,6 +1855,14 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
             log(&format!("hair, hood, sleeves, necklace and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
         }
+    }
+    // The cloth physics on the move worked on (`clothlive`), drawn live: on the pose we draw.
+    if super::clothlive::wants(slot) {
+        if let Ok(b) = KH1_BONES.try_lock() {
+            super::clothlive::step(&b, &mut pose, &to_world, false);
+        }
+    } else {
+        super::clothlive::idle();
     }
     // A dream weapon whole, as KH1 holds it.
     dream_hold(&mut pose, &s.parents, (!ours).then_some(world));
@@ -1895,6 +1912,30 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
 }
 
 static KH1_BONES: Mutex<Vec<kh2_formats::anim::Bone>> = Mutex::new(Vec::new());
+
+/// The cloth physics (`clothlive`) on KH1's own drawing of a baked slot: its world matrices read
+/// back into model space, the physics' bones moved, and those that changed written again.
+unsafe fn cloth_on_kh1(s: &mut Sora, world: usize, to_world: &Mat4) {
+    let n = SORA_BONES as usize;
+    if !super::crash::readable(world) || !super::crash::readable(world + n * 0x40 - 1) {
+        return;
+    }
+    let back = to_world.inverse();
+    let drawn: Vec<Mat4> = (0..n).map(|i| mat(world + i * 0x40)).collect();
+    if !drawn.iter().all(|m| m.is_finite()) {
+        return;
+    }
+    let mut pose: Vec<Mat4> = drawn.iter().map(|m| back * *m).collect();
+    let Ok(b) = KH1_BONES.try_lock() else { return };
+    super::clothlive::step(&b, &mut pose, to_world, true);
+    drop(b);
+    for (i, m) in pose.iter().enumerate() {
+        let w = *to_world * *m;
+        if w.is_finite() && !close(&w, &drawn[i], 1e-4) {
+            write_bone(&mut s.wrote, world, i, &w);
+        }
+    }
+}
 
 /// Writes bone `i`'s world matrix and notes it in `wrote` (what `own_from_kh1` tells KH1's own
 /// placements by).

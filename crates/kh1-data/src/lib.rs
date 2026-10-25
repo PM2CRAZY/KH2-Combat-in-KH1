@@ -11,6 +11,7 @@
 
 pub mod bake;
 pub mod cloth;
+pub mod clothsim;
 pub mod inverse;
 pub mod mdls;
 pub mod mset;
