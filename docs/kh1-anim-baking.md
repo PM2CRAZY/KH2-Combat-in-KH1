@@ -299,3 +299,98 @@ lock stays KH1's own); 3 "(b) kh2 voice plays if the toggle for kh2 voices is on
   (26 and 64 frames).
 - **Not checked**: in game; KH1's blend between its takeoff and our slot (KH1's takeoff request's
   blend, from `0x1402AF9F0`).
+
+## 8. KH1's own leg IK on the baked slots (after m2's "(a) go ahead")
+
+The tester's answer to m2's question: "(a)": KH1's own leg IK on the baked slots (feet on slopes and
+stairs), idle and the landing **not** baked yet (they stay drawn over, with our foot IK). This is not
+a layer of ours: KH1's own bone pass runs its own leg rig on our motion, the way it runs it on every
+one of its own motions; only the motion data is ours. `kh1_data::legs`, `bake::baked(.., kh1_legs)`,
+ini `kh1_leg_ik = on` (default; `off` = the plain FK legs of t349..t627).
+
+### 8.1 KH1's leg rig (Checked (files + decomp + exe))
+
+- **Every one of Sora's 118 motions has it, twice** (`examples/bake_legs.rs` over `xa_ex_0010.mset`:
+  no slot with other than two legs): bones 16..20 on helper 9 (A / P field 10) and 42..46 on helper 8.
+  Hip 16 / 42 `lo` 1 (aim at the helper), thigh 17 / 43 mode 2 (two-bone IK, no pole), shin 18 / 44
+  (solved with the thigh), ankle 19 / 45 (`P` = the helper, keep position, world parent), foot 20 / 46
+  `lo` 2 (the helper's turn). Hip and thigh sit at one point (thigh bind translation 0), the shin and
+  ankle on their parent's x (29.63, 32.01), scale 1. The shorts' panels hang from the thighs (17: 26,
+  30, 34, 38; 43: 52, 56, 60, 64), the hip carries only the thigh.
+- **The pass** (Steam bone pass `0x1403900B0`, solver `0x14038FC20`, helper build in `0x140391C70`
+  with `0x1401DB080`): the matrix helpers are D3D rows (glam's columns), `0x1401DB4D0 (out, a, b)` is
+  `a * b` in glam's terms (it calls `0x1400E5A20` with a, b, whose rows are b's rows times a,
+  **Checked (exe)**), `0x1401DAD10 (out, m, v)` is `m * v`, the x turn `0x1400E6AC0` makes `Rx * m`
+  (rows of m times Rx, **Checked (exe)**). So, in glam's terms:
+  - hip: x toward the helper's position from the bone's sampled translation (parent space), y the
+    parent's y made square to it, z = x × y, then `× Rx(its sampled rotation x)`;
+  - thigh: the solver's frame (`d` to the target, `p = (-d.y, d.x, 0)`, `z = d × p`) `× Rx(thigh's
+    rotation x) × Rz(α)`; shin `T(l1) × Rz(θ) × Rx(shin's rotation x)`, `l1` / `l2` the shin's and
+    ankle's bind x times the sampled scales, the knee angle from the law of cosines, sine positive
+    (bend flag 0 = mode 2 − 2);
+  - ankle: at `world(shin) × bind(ankle)`, turned by its own sampled Euler (X→Y→Z) against helper
+    matrix 0, the model;
+  - foot: the helper's rows (normalised), at `world(ankle) × its sampled translation`;
+  - helper k: `matrix[record parent] × (scale, Euler X→Y→Z, translation)`, its channels sampled into
+    the motion's own record every pass (`0x140391C70`), so a record's parent is the motion's.
+- **Ground lift** (the thigh's step): with the instance's `+0x14 & 3` and the thigh listed in the
+  model's lift list, KH1 casts down
+  (`0x140193230`) from 32 above the helper's position (the ankle's bind x) and, where the floor is
+  above "helper − that height", lifts the target onto it (`+0x14 |= 0x200000`). On Sora this is on:
+  the t348 trace, KH1's own idle on uneven ground, `+0x14 = 0x00200001`, ankles 17.4 / 29.8 above
+  the floor under his centre. The list is in the model header's info block (header `+8`, an offset
+  from the header; the pass reads it through the instance's model, `*(*instance) + 8`): four heights
+  at `+0..+0xC`, the head bone at `+0x10`, the lift bones (bone + 1) at `+0x90..+0x9C`. Sora's
+  (`xa_ex_0010.mdls`, **Checked (files)**): heights 17.434 ×4 (his ankle's bind height, 17.43),
+  head 151, lift bones 44, 18, 44, 18: the thighs 43 and 17. **Assumption**: that the instance's
+  bits 0..1 are on while our slot plays as while KH1's own does (they are the instance's, not the
+  motion's; who sets them wasn't found in the decomp).
+
+### 8.2 What the bake writes for a leg
+
+`legs::find` keeps a leg only when the template has exactly that layout and its helper is used by
+no other bone and no helper hangs from it. Then, per frame of the retargeted pose (`legs::frame`):
+
+| What | Keyed to |
+|---|---|
+| helper 8 / 9 | parent changed to matrix 0 (the model, as the poses), scale 1; rotation = the pose's foot (20 / 46) turn in the model, translation = the pose's ankle (19 / 45); the template's channels on it dropped |
+| hip 16 / 42 rotation x | the roll that makes KH1's thigh turn exactly as the pose's thigh (`Rx = hip0⁻¹ × thigh × Rz(-α)`), the thigh's own rotation x left at its bind, as KH1's own motions do (slot 0's hip word `0x02000029` static, slot 5's `0x00000029` keyed, the thigh's static in both) |
+| shin 18 / 44 rotation x | the pose's shin roll about its own x |
+| ankle 19 / 45 rotation | the pose's ankle turn in the model |
+| foot 20 / 46 translation | as in the plain bake (its local, the bind) |
+| the other channels of these bones | the bind (nothing written; KH1's IK and the helper place them) |
+| their joint words | the template's (the hip's static bit only when nothing on it moves) |
+
+Arms, spine and root stay plain FK as before (the tester asked for the legs).
+
+**Checked (files)**, `examples/bake_legs.rs` on the user's files (KH2 walk 1 / run 2 / swings 151, 152,
+154 / air 181 / fall 4 / jump 3 / High Jump 201 / item 9 / Blizzard 56 on their KH1 templates): with
+KH1's pass replayed (`legs::build`, flat ground) every joint within 0.19..0.69 units of the pose (the
+plain FK bake: 0.19..0.30; the worst, 0.69, a nearly straight knee in the item motion), thigh and shin
+within 0.06..1.35°. Unit tests `legs::tests` (bent legs of any roll rebuilt within 0.01).
+- **What differs from the plain bake on flat ground:** the hip bone 16 / 42 is KH1's aim at the
+  ankle, 53..84° off the retarget's hip, which turned it with the thigh. It carries only the thigh,
+  which is placed as before; any skin weights on the hip itself now move as in KH1's own motions.
+- **Feet lower than KH1's ankle height**: the baked ankles stand at 17.4 on flat ground like KH1's bind
+  (17.43), but some frames go lower (swings 151 / 154: 14.8, soles 2.6 under the floor). There KH1's
+  lift raises the ankle to its own height (17.434, the lift list's), as it does in its own motions.
+
+### 8.3 Our foot IK (`win/feet.rs`) on the baked slots
+
+It never ran there and still doesn't: `pose::follow` returns at `follow_baked` (no pose drawn) before
+`feet::place` (it lives in the drawn path, `follow_play`). So on a baked slot only KH1's lift acts;
+on a drawn clip (idle, landing, glide, the drawn casts) only ours does, as before. **Checked (code).**
+
+### 8.4 Cost
+
+- Per frame: nothing of ours. KH1's pass does on our slots what it does on its own motions: two aims,
+  two two-bone solves and, with the lift bits, two floor casts, instead of ten FK bones.
+- At load: a few hundred more helper keys per baked motion (169..731 in the list above, 16 bytes
+  each) and one leg frame worked out per pose frame.
+
+### 8.5 Open
+
+- In game: the lift on stairs and slopes in walk, run and the swings; KH1's blend into and out of our
+  slots now meets KH1's own IK list on the legs (the blend pass re-solves the list, `0x140392560`).
+- Idle and the landing: still drawn over (the tester's "(a)").
+- Who sets the instance's lift bits (`+0x14 & 3`).

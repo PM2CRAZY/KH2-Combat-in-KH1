@@ -840,9 +840,14 @@ pub fn has_any(motion: u16) -> bool {
 fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
     let t = std::time::Instant::now();
     let (poses, moved) = b.poses(kh2, motion, field, frames, travel).ok_or("KH2 has no animation for it")?;
-    let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved).map_err(|e| e.to_string())?;
+    // (t-legs) KH1's own leg IK and ground lift kept on the baked motion (`kh1_data::legs`, ini
+    // `kh1_leg_ik`): the template's leg joint words stay, its foot helpers H8 / H9 keyed to the
+    // baked ankles and feet, so KH1's pass puts his feet on slopes and stairs in our motions as in
+    // its own (`docs/kh1-anim-baking.md` §8).
+    let legs = super::settings::get().kh1_leg_ik;
+    let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved, legs).map_err(|e| e.to_string())?;
     log(&format!(
-        "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; travel {} ({} H10 keys); KH1's FK from it within {:.3} units of the pose (worst bone {})",
+        "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; travel {} ({} H10 keys); KH1's legs {} ({} helper keys; KH1's hip aim {:.0} deg off the retarget's hip, thigh / shin within {:.2} deg); KH1's pass from it within {:.3} units of the pose (worst bone {})",
         block.len(),
         t.elapsed().as_secs_f32() * 1000.0,
         r.keyed_channels,
@@ -851,6 +856,10 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): 
         r.static_bones,
         moved.last().map_or("none (KH1 doesn't move it)".to_string(), |v| format!("{:.1?} model units", v.to_array())),
         r.travel_keys,
+        if legs { r.kh1_legs.to_string() } else { "off (kh1_leg_ik)".to_string() },
+        r.leg_keys,
+        r.leg_hip_turn.to_degrees(),
+        r.leg_turn.to_degrees(),
         r.max_error,
         r.worst_bone
     ));

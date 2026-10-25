@@ -8,6 +8,8 @@
 //!   bends (two-bone IK: thigh, shin; the foot only moves, keeping its flat sole) to put a
 //!   planted sole on its floor, or to lift a raised foot out of a step it would cut into.
 //! Changes are eased over a few frames, and fade out when KH2 lets go or he leaves the ground.
+//! (Only on clips we draw over KH1's pass: a baked slot (`kh1_bake`) draws nothing of ours, so
+//! this never runs there; KH1's own leg IK and ground lift do, `kh1_leg_ik`, `kh1_data::legs`.)
 
 use super::addr::Rva;
 use glam::{Mat4, Quat, Vec3};

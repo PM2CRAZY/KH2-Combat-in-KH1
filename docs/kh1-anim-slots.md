@@ -359,7 +359,7 @@ There are two tiers.
 
 **Tier B: a full bake (built at t349, `kh1_data::bake`, `kh1_bake = on`; untested in game).**
 
-First build: the legs are plain FK like every other bone (no foot lift on slopes in these moves yet; tier A had none there either). The hybrid legs below are the next step once the raw bake looks right.
+First build: the legs are plain FK like every other bone (no foot lift on slopes in these moves yet; tier A had none there either). The legs below on KH1's own IK are built since t-legs (`kh1_data::legs`, `docs/kh1-anim-baking.md` §8).
 
 The user's rules: a raw bake first, behind an ini switch (`kh1_bake = on / off`; off is tier A).
 None of our corrections go in (Keyblade teeth-up, `flip_weapons`, our feet, `held`). We test in

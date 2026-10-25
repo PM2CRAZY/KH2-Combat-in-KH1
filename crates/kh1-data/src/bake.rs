@@ -29,6 +29,7 @@
 //!   are replaced by `travel` (model space, per frame), and the poses given carry it too.
 //! - **Events.** Those given (as `slot::retimed`).
 
+use crate::legs;
 use crate::slot::{self, put, u32_at, EventTrack};
 use glam::{Mat4, Vec3};
 use kh2_formats::anim::Bone;
@@ -61,6 +62,13 @@ pub struct Report {
     /// the pose given, over every frame, and its bone.
     pub max_error: f32,
     pub worst_bone: usize,
+    /// Legs kept on KH1's own leg IK and ground lift (`legs`), the keys their helpers got, and
+    /// the most the hip (KH1 aims it at the ankle) and the thigh or shin KH1 builds turn from the
+    /// pose given (radians).
+    pub kh1_legs: usize,
+    pub leg_keys: usize,
+    pub leg_hip_turn: f32,
+    pub leg_turn: f32,
 }
 
 struct Keyed {
@@ -77,6 +85,11 @@ fn parent(skeleton: &[Bone], i: usize) -> Option<usize> {
 /// `a` plus the whole turns that bring it nearest `near`.
 fn unwrap(a: f32, near: f32) -> f32 {
     a + ((near - a) / TAU).round() * TAU
+}
+
+/// [`continuous`], for `legs`.
+pub(crate) fn continuous_euler(e: Vec3, prev: Vec3) -> Vec3 {
+    continuous(e, prev)
 }
 
 /// The Euler triple for `e`'s rotation nearest `prev` (the other triple of the same rotation,
@@ -131,8 +144,9 @@ fn sample(keys: &[(u32, f32)], frame: f32) -> f32 {
 /// The KH1 motion that shows `poses` (one per frame, `0..=frames`, KH1 model space, one matrix
 /// per bone of `skeleton`), built on `template` (a KH1 motion in file layout) lasting `frames`,
 /// with `events`. `travel` (empty, or one per pose): the motion's travel for H10, already in
-/// `poses`.
-pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bone], poses: &[Vec<Mat4>], travel: &[Vec3]) -> Result<(Vec<u8>, Report)> {
+/// `poses`. `kh1_legs`: the template's legs stay on KH1's own leg IK and ground lift
+/// (`legs`), keyed to the poses' ankles, knees and feet; else plain FK like every other bone.
+pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bone], poses: &[Vec<Mat4>], travel: &[Vec3], kh1_legs: bool) -> Result<(Vec<u8>, Report)> {
     let bad = |m: String| Error::Format(format!("bake: {m}"));
     let n = skeleton.len();
     if frames == 0 || frames as usize + 1 > MAX_KEYS {
@@ -171,11 +185,46 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
         }
     }
 
+    // KH1's own legs (`legs`, t-legs): where the template has KH1's leg rig, its joint words stay,
+    // and the channels its pass reads are keyed so that it rebuilds the pose's legs on flat
+    // ground: the hip's rotation x (the knee's side), the shin's rotation x, the ankle's rotation
+    // in the model; the thigh and the other channels of these bones stay at the bind (the IK and
+    // the helper place them). The helper itself (below) gets the ankle's position and the foot's
+    // turn.
+    let (h_count, h_at) = (u32_at(&r, 0x2C)? as usize, u32_at(&r, 0x30)? as usize);
+    let helper_parents: Vec<i32> = (0..h_count).map(|k| u32_at(&r, h_at + k * 40 + 0xC).map(|v| v as i32)).collect::<Result<_>>()?;
+    let legs = if kh1_legs { legs::find(&words, skeleton, &helper_parents) } else { Vec::new() };
+    let mut leg_frames: Vec<Vec<legs::Frame>> = Vec::new();
+    let mut report = Report::default();
+    for leg in &legs {
+        let h = leg.hip;
+        let mut v: Vec<legs::Frame> = Vec::with_capacity(frames_n);
+        for (f, p) in poses.iter().enumerate() {
+            let fr = legs::frame(*leg, skeleton, p, pos[h][f], v.last());
+            report.leg_hip_turn = report.leg_hip_turn.max(fr.turn_error[0]);
+            report.leg_turn = report.leg_turn.max(fr.turn_error[1]).max(fr.turn_error[2]);
+            v.push(fr);
+        }
+        for f in 0..frames_n {
+            let fr = &v[f];
+            let bind = |j: usize| (Vec3::from(skeleton[h + j].rotation), Vec3::from(skeleton[h + j].translation));
+            let (r0, _) = bind(0);
+            rot[h][f] = Vec3::new(fr.hip_roll, r0.y, r0.z);
+            (rot[h + 1][f], pos[h + 1][f]) = bind(1);
+            let (r2, t2) = bind(2);
+            (rot[h + 2][f], pos[h + 2][f]) = (Vec3::new(fr.shin_roll, r2.y, r2.z), t2);
+            (rot[h + 3][f], pos[h + 3][f]) = (fr.ankle, bind(3).1);
+            rot[h + 4][f] = bind(4).0;
+        }
+        leg_frames.push(v);
+    }
+    report.kh1_legs = legs.len();
+
     // Channels: nothing at the bind, a constant, or keys.
     let mut keyed: Vec<Keyed> = Vec::new();
     let mut constants: Vec<(u16, u16, f32)> = Vec::new();
     let mut new_words = words.clone();
-    let mut report = Report::default();
+    let mut moved = vec![false; n];
     for i in 0..n {
         if words[i] & SKIP != 0 {
             continue;
@@ -201,7 +250,16 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
             keyed.push(Keyed { bone: i as u16, kind, keys: reduce(&values, tol) });
         }
         new_words[i] = if moves { 0 } else { STATIC };
+        moved[i] = moves;
         report.static_bones += !moves as usize;
+    }
+    // The legs' own words (the template's), the hip built once only when nothing on it moves,
+    // as KH1's own motions have it (slot 0's hip `0x02000029`, slot 5's `0x00000029`).
+    for leg in &legs {
+        for j in 0..5 {
+            new_words[leg.hip + j] = words[leg.hip + j];
+        }
+        new_words[leg.hip] = (words[leg.hip] & !STATIC) | if moved[leg.hip] { 0 } else { STATIC };
     }
     report.keyed_channels = keyed.len();
     report.constant_channels = constants.len();
@@ -209,7 +267,6 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
 
     // The template's helper channels and their keys (retimed), but for the travel helper's
     // translation when `travel` is given: ours.
-    let (h_count, h_at) = (u32_at(&r, 0x2C)? as usize, u32_at(&r, 0x30)? as usize);
     if !travel.is_empty() && h_count == 0 {
         return Err(bad("travel given, but the template has no helpers".into()));
     }
@@ -221,6 +278,10 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
         let e = hc_at + c * 6;
         let s: [u8; 6] = r.get(e..e + 6).ok_or_else(|| bad("helper channel past the end".into()))?.try_into().unwrap();
         if !travel.is_empty() && u16::from_le_bytes([s[0], s[1]]) == last && (7..=9).contains(&(s[2] & 15)) {
+            continue;
+        }
+        // (A leg's helper: ours, below.)
+        if legs.iter().any(|l| l.helper == u16::from_le_bytes([s[0], s[1]]) as usize) {
             continue;
         }
         let (count, first) = (s[3] as usize, u16::from_le_bytes([s[4], s[5]]) as usize);
@@ -245,11 +306,45 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
             report.travel_keys += keys.len();
         }
     }
+    let mut helpers = r.get(h_at..h_at + h_count * 40).ok_or_else(|| bad("helpers past the end".into()))?.to_vec();
+    // A leg's helper: under helper matrix 0 (the model, as the poses), scale 1, the first frame's
+    // values in its record and keys where they move (KH1 samples a helper channel into the
+    // motion's own record each frame, `0x140391C70`, and builds matrix k = matrix[parent] × its
+    // scale, Euler X→Y→Z and translation, `0x1401DB080`).
+    let mut leg_helper: Vec<[Option<Vec<(u32, f32)>>; 6]> = Vec::new();
+    for (leg, v) in legs.iter().zip(&leg_frames) {
+        let e = leg.helper * 40;
+        let first = [v[0].helper_rot, v[0].helper_pos];
+        let rec = &mut helpers[e..e + 40];
+        for c in 0..3 {
+            rec[c * 4..c * 4 + 4].copy_from_slice(&1f32.to_le_bytes());
+            rec[0x10 + c * 4..0x14 + c * 4].copy_from_slice(&first[0][c].to_le_bytes());
+            rec[0x1C + c * 4..0x20 + c * 4].copy_from_slice(&first[1][c].to_le_bytes());
+        }
+        rec[0xC..0x10].copy_from_slice(&0i32.to_le_bytes());
+        let mut chans: [Option<Vec<(u32, f32)>>; 6] = Default::default();
+        for c in 0..6 {
+            let values: Vec<f32> = v.iter().map(|fr| if c < 3 { fr.helper_rot[c] } else { fr.helper_pos[c - 3] }).collect();
+            let (same, tol) = if c < 3 { (SAME_ROT, ROT_TOL) } else { (SAME_POS, POS_TOL) };
+            if values.iter().all(|x| (x - values[0]).abs() <= same) {
+                continue;
+            }
+            let keys = reduce(&values, tol);
+            let mut s = [0u8; 6];
+            s[..2].copy_from_slice(&(leg.helper as u16).to_le_bytes());
+            s[2] = 4 + c as u8;
+            s[3] = keys.len() as u8;
+            helper_channels.push(s);
+            helper_keys.push(keys.iter().flat_map(|&(f, x)| key(f, x)).collect());
+            report.leg_keys += keys.len();
+            chans[c] = Some(keys);
+        }
+        leg_helper.push(chans);
+    }
     let total_keys = report.keys + helper_keys.iter().map(|k| k.len() / 16).sum::<usize>();
     if total_keys > u16::MAX as usize {
         return Err(bad(format!("{total_keys} keys")));
     }
-    let helpers = r.get(h_at..h_at + h_count * 40).ok_or_else(|| bad("helpers past the end".into()))?.to_vec();
     let tracks = slot::events(&r)?;
 
     // The block: the template's header, then joint words, helpers, channels, helper channels,
@@ -306,8 +401,10 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
     }
     slot::append_events(&mut out, &tracks);
 
-    // How close KH1 comes: its FK from the channels against the poses given.
+    // How close KH1 comes: its FK from the channels (and, on the legs, its leg pass, `legs::build`,
+    // with no ground lift) against the poses given.
     let mut world = vec![Mat4::IDENTITY; n];
+    let mut sampled = vec![(Vec3::ZERO, Vec3::ZERO); n];
     for (f, p) in poses.iter().enumerate() {
         for i in 0..n {
             let b = &skeleton[i];
@@ -326,9 +423,35 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
                     _ => t3[k.kind as usize - 7] = v,
                 }
             }
-            let local = Mat4::from_rotation_translation(kh2_anim::euler_quat(r3), t3);
-            let w = parent(skeleton, i).map_or(local, |q| world[q] * local);
-            world[i] = w;
+            sampled[i] = (r3, t3);
+        }
+        for i in 0..n {
+            if let Some(li) = legs.iter().position(|l| (l.hip..l.hip + 5).contains(&i)) {
+                let leg = legs[li];
+                if i == leg.hip {
+                    let ch = &leg_helper[li];
+                    let at = |c: usize, first: f32| ch[c].as_ref().map_or(first, |k| sample(k, f as f32));
+                    let helper_rot = Vec3::new(at(0, leg_frames[li][0].helper_rot.x), at(1, leg_frames[li][0].helper_rot.y), at(2, leg_frames[li][0].helper_rot.z));
+                    let helper_pos = Vec3::new(at(3, leg_frames[li][0].helper_pos.x), at(4, leg_frames[li][0].helper_pos.y), at(5, leg_frames[li][0].helper_pos.z));
+                    let s = |j: usize| sampled[leg.hip + j];
+                    let built = legs::build(leg, skeleton, parent(skeleton, i).map_or(Mat4::IDENTITY, |q| world[q]), &legs::Sampled {
+                        hip_t: s(0).1,
+                        hip_roll: s(0).0.x,
+                        thigh_t: s(1).1,
+                        thigh_roll: s(1).0.x,
+                        shin_roll: s(2).0.x,
+                        ankle: s(3).0,
+                        foot_t: s(4).1,
+                        helper_rot,
+                        helper_pos,
+                    });
+                    world[i..i + 5].copy_from_slice(&built);
+                }
+            } else {
+                let (r3, t3) = sampled[i];
+                let local = Mat4::from_rotation_translation(kh2_anim::euler_quat(r3), t3);
+                world[i] = parent(skeleton, i).map_or(local, |q| world[q] * local);
+            }
             if words[i] & SKIP == 0 {
                 let e = (world[i].w_axis - p[i].w_axis).truncate().length();
                 if e > report.max_error {
@@ -398,7 +521,7 @@ mod tests {
         put(&mut t, 0x38, 0x90);
         put(&mut t, 0x3C, 0x90);
         put(&mut t, 0x90, slot::END);
-        let (b, rep) = baked(&t, frames, &[], &skeleton, &poses, &[]).unwrap();
+        let (b, rep) = baked(&t, frames, &[], &skeleton, &poses, &[], true).unwrap();
         assert!(rep.max_error < 0.05, "{rep:?}");
         assert_eq!(u32_at(&b, 4).unwrap(), frames);
         // The tip never moves against its parent: built once (static, bit 25).
@@ -411,7 +534,7 @@ mod tests {
         // With travel: the last helper (here H0) gets a z channel, two keys for a line.
         let travel: Vec<Vec3> = (0..=frames).map(|f| Vec3::new(0.0, 0.0, f as f32 * 3.0)).collect();
         let moved: Vec<Vec<Mat4>> = poses.iter().zip(&travel).map(|(p, t)| p.iter().map(|m| Mat4::from_translation(*t) * *m).collect()).collect();
-        let (b, rep) = baked(&t, frames, &[], &skeleton, &moved, &travel).unwrap();
+        let (b, rep) = baked(&t, frames, &[], &skeleton, &moved, &travel, true).unwrap();
         assert!(rep.max_error < 0.05, "{rep:?}");
         assert_eq!(rep.travel_keys, 2);
         assert_eq!(u32_at(&b, 0x20).unwrap(), 1);
