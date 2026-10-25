@@ -509,15 +509,11 @@ physics setting that has magic in it and put it in this new air setting."
 - A cast at Air Physics KH1 under Physics KH2 drops our arc (`off_air`), so KH2's fall after the
   cast goes on from KH1's arc fields rather than the jump before it. Under Physics KH1 at Air
   Physics KH2 the fall after the cast is KH1's own from the fields KH2's arc wrote.
-- Aerial Finish (motion 194) and Magnet Burst (197) follow this row too, not the Physics row (the
-  tester, thread air-physics-for-kh2-magic-aerial-finish-and-magnet-burst m1 answer 1: "(b)"):
-  KH2 plays them inside its jump state as its casts (their row's hop `0x1403D78D0`, then
-  ACTION_JUMP's step `0x1403CB360`, **Checked (decomp)**). `combomods::air_hop` notes the pick
-  (`shared::physics::air_physics_hop`); `kh2_hop` and `air_step` take `cast_kh2()` for them
-  (`air_physics_move`: the move playing, or its hop asked for in the last 2 frames). At KH2: KH2's
-  hop on KH2's gravity, the hover with the arc's clock running, the drop at the cap; at KH1: the
-  hop on KH1's gravity, the hover freezing KH1's clock, KH1's fall after (as the Physics row's KH1
-  gave them before). Drive Forms unchanged (their own controller).
+- Aerial Finish (motion 194) and Magnet Burst (197) follow the **Physics** row, not this one (the
+  tester, thread air-physics-for-kh2-magic-aerial-finish-and-magnet-burst m3: "abilities should
+  follow the main physics config"; t617 had put them on this row, undone). In KH2 they play inside
+  its jump state as its casts do (their row's hop `0x1403D78D0`, then ACTION_JUMP's step
+  `0x1403CB360`, **Checked (decomp)**); the grouping of the Config rows is ours.
 - **Assumption**: KH1's halving of the sideways speed and its 30 hop come after the spell start
   (`0x14028F140`) in `0x1402A3600`, as §4g's `cast_stops` / `cast_after_command` already rely on.
 - With a KH1 cast animation (no slot of ours) at Air Physics KH2 (t-c; the tester, m20 answer 2:
