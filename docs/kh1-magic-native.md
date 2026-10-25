@@ -246,8 +246,8 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   (decomp)**) counts on from the cast; the combo's last step sets the count to 0 (the next
   counted Attack is a new combo's first). `combat::command` refuses a spell during our cast
   before its range 35 (`kh2slots::cast_magic_window`), with KH1's "can't" sound.
-- **Open:** Finishing Plus after a finisher cast (KH2's next finisher in range 50) isn't built;
-  a finisher cast ends the combo.
+- Finishing Plus after a finisher cast: §4c.2 (a finisher cast ends the combo unless Finishing
+  Plus leaves another finisher).
 
 ### 4c.1 Attack out of a cast: KH2's combo window only (the tester, m9 answer 2 (a))
 
@@ -270,10 +270,42 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   and an item (KH1's "can't") outside range 11 (`kh2slots::cast_attack_window`). KH2's controller
   (Drive Forms, borrows): the Magic action takes an Attack only in range 11 (`cancel_allowed`);
   sim test `attack_out_of_a_cast_only_in_its_combo_window`.
-- **Not built:** the finisher casts' finisher window (Finishing Plus after a finisher cast).
+- The finisher casts' finisher window (Finishing Plus after a finisher cast): §4c.2.
 - **Kept (ours):** in the air, KH2's controller still carries the combo on after a cast that has
   ended (until the landing), where KH2's free state would start a new one; KH1's cast state
   already starts a new one.
+
+### 4c.2 Finishing Plus after a finisher cast (the tester, after m10, question 2 (a))
+
+- **Checked (decomp)**, Steam KH2 `0x1403D6CA0`: in the finisher window (`+0x194` bit 0x20, range
+  id 50) with the finisher count `+0xD75` under the maximum (`[+0x5C0] + 0x202`), a press is
+  taken: the count `+0xD74` and the finisher count one more each. A new combo sets both to 1
+  (`0x101`, the free-state branch and `0x1403D6CA0`'s other callers). The input step
+  `0x1403D6FC0` runs this check for the Attack command (kind 1, with its "pressed in a window"
+  flag `+0x120` bit 0x2000000) and for the magic command (kind 2, always with the window test on)
+  before the cast starts (`0x1403A9DD0`). So in KH2 an Attack or a spell in a finisher cast's
+  window, with Finishing Plus left, is the next finisher (an Attack: the selector's finisher; a
+  spell: its finisher cast, the step being past the length).
+- **Assumption** (the reading `combomods::finisher_chain_open` already used): the maximum
+  `[+0x5C0] + 0x202` is 1 + Finishing Plus's copies; what writes it wasn't found.
+- **Checked (files)** (`P_EX100.mset`): range 50 on the ground finisher casts 57 (54..84), 60
+  (46..76), 63 / 68 (42..78), 72 (54..84); the air casts have none (KH2 has no air finisher cast).
+- Ours (base Sora on KH1's cast state):
+  - `formmagic::note_step` also notes whether the cast was taken past the length (KH1's count at
+    the length or more, in KH1's combo window: a finisher's Finishing Plus window).
+  - `formmagic::take_step` (KH2's spells and Reflect): every cast is noted as a step of the combo
+    (`combomods::cast_step`, as a swing is: `LAST`, `FINISHERS` 0 for a plain cast, 1 for the
+    combo's first finisher, one more when taken in a Finishing Plus window). A ground finisher
+    cast with another finisher left (`combomods::finisher_left`: `FINISHERS` under 1 + Finishing
+    Plus, KH2's own test whatever the combo style) keeps KH1's count `+0x41` at its step instead
+    of 0.
+  - `kh2slots::finisher_window` opens KH1's combo window in range 50 on a finisher cast only
+    while a finisher is left; `kh2slots::cast_finisher_open` tells `combat::command` an Attack or
+    a spell is taken there (items still only in range 11, as t608).
+  - So KH1's Attack step counts on past the length and the next finisher is picked as after a
+    finisher swing (`combomods::kh2_press` / `attack_row`: KH2's next finisher at the KH2 setting,
+    KH1's picker's at the KH1 setting); a spell there is the next finisher cast.
+- Not checked in game. Drive Forms left alone (the tester: they move to the new system later).
 
 ## 4d. KH2's stop at a cast (done: the tester's answer 2 (a), physics KH2; Drive Forms as they are)
 

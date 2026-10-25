@@ -757,7 +757,7 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
             rt.started = Some(Instant::now());
         }
     }
-    super::formmagic::take_step(actor);
+    super::formmagic::take_step(actor, request, finisher, air);
     let block = rd::<u64>(base + BTLTBL_STEAM) as usize;
     if flying {
         // (KH1's flight cast ends as its ground one: the move direction normalised, no length.)

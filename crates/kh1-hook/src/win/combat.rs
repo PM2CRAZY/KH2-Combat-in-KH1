@@ -375,7 +375,10 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // (`kh2slots::cast_follow`). Refused as KH2 refuses it: nothing happens (the tester,
     // kh2-magic-and-reflect-native m9 answer 2 (a)). After the cast KH1's Attack step starts a new
     // combo, as KH2's free state does.
-    if actor == sora && matches!(kind, 1 | 3) && super::kh2slots::cast_attack_window(actor) == Some(false) {
+    // An Attack in a finisher cast's Finishing Plus window (range id 50, another finisher left)
+    // is KH2's next finisher (`kh2slots::cast_finisher_open`; the tester, after m10, question 2
+    // (a)); items stay outside it.
+    if actor == sora && matches!(kind, 1 | 3) && super::kh2slots::cast_attack_window(actor) == Some(false) && !(kind == 1 && super::kh2slots::cast_finisher_open(actor)) {
         if kind == 3 {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
@@ -418,7 +421,9 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
         // During a KH2 cast on KH1's cast state a spell follows only from KH2's magic window
         // (range id 35, `kh2slots::cast_magic_window`; anything else from its reaction-command
         // window, `kh2slots::cast_follow`): KH2's rule, as KH1 refuses what it can't take.
-        if !drive && super::kh2slots::cast_magic_window(actor) == Some(false) {
+        // (A finisher cast's Finishing Plus window takes a spell too, as KH2's `0x1403D6CA0`
+        // does for its magic command: the next finisher, a finisher cast, `formmagic::note_step`.)
+        if !drive && super::kh2slots::cast_magic_window(actor) == Some(false) && !super::kh2slots::cast_finisher_open(actor) {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
             cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, its magic window not open yet"));

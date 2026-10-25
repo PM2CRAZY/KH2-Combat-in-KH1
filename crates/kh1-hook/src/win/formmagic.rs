@@ -565,11 +565,21 @@ pub unsafe fn note_step(actor: usize, air: bool) -> Option<(u8, bool)> {
         let max = rd::<u8>(stats + if air { 0xD5 } else { 0xD4 }).max(1) as u32;
         let counts = air || rd::<u32>(info + 0x50) != 0 || super::takeover::with_abilities(|a| a.combo_master) == Some(true);
         let step = if !live { 1 } else if counts { count + 1 } else { count.max(1) };
+        // (Past the length: taken in a finisher's Finishing Plus window, KH2's `+0xD75` one more,
+        // `0x1403D6CA0`.)
+        CHAINED.store(live && counts && count >= max, Ordering::Relaxed);
         (step.min(255) as u8, step >= max)
     });
+    if step.is_none() {
+        CHAINED.store(false, Ordering::Relaxed);
+    }
     CAST_STEP.store(step.map_or(0, |(s, last)| s as u32 | (last as u32) << 8 | 1 << 16), Ordering::Relaxed);
     step
 }
+
+/// The cast `note_step` worked out comes out of a finisher's Finishing Plus window (KH1's count
+/// already at the combo's length or past it).
+static CHAINED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The step `pick_cast` worked out for the native cast KH1's command step is about to start:
 /// bits 0..7 the step, bit 8 the combo's last, bit 16 set.
@@ -582,16 +592,36 @@ static CAST_STEP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::n
 /// it (`0x1402A7510`: one more inside the window when `+0x50` is set, Checked (decomp)). The
 /// combo's last step (a finisher cast, or the step at the length in the air) ends it: the count
 /// set to 0, so an Attack counted on there starts at 1 (a new combo, as KH2's after its finisher).
-pub(super) unsafe fn take_step(actor: usize) {
+/// Except a ground finisher cast with Finishing Plus's next finisher left
+/// (`combomods::finisher_left`; the tester, after m10, question 2 (a)): its count stays at its
+/// step, so KH1's Attack step in its Finishing Plus window (range id 50,
+/// `kh2slots::finisher_window`) counts on past the length, and the cast is noted as a finisher of
+/// the combo (`combomods::cast_step`), so the next finisher is KH2's (or KH1's, at the combo style
+/// KH1) as after a finisher swing. `request`: the KH1 request the cast plays on; `finisher`: it
+/// plays KH2's finisher cast (Cure has none).
+pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: bool) {
     let v = CAST_STEP.swap(0, Ordering::Relaxed);
+    let chained = CHAINED.swap(false, Ordering::Relaxed);
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     if v & 1 << 16 == 0 || info < 0x10000 {
         return;
     }
     let (step, last) = ((v & 0xFF) as u8, v >> 8 & 1 != 0);
-    wr(info + 0x41, if last { 0u8 } else { step });
+    let finisher = finisher && last && !air;
+    super::combomods::cast_step(step, request & 0xFFFF, finisher, chained, air);
+    let plus = finisher && super::combomods::finisher_left();
+    wr(info + 0x41, if last && !plus { 0u8 } else { step });
     wr(info + 0x50, 1u32);
-    log(&format!("KH2 magic: the cast takes step {step} of KH1's combo{}", if last { " (its last: the combo ends)" } else { "" }));
+    log(&format!(
+        "KH2 magic: the cast takes step {step} of KH1's combo{}",
+        if plus {
+            if chained { " (Finishing Plus's next finisher; another left)" } else { " (its finisher; Finishing Plus leaves another)" }
+        } else if last {
+            " (its last: the combo ends)"
+        } else {
+            ""
+        }
+    ));
 }
 
 /// KH1's control step with base Sora in its own states (`takeover::shared_control`, before it
@@ -683,7 +713,7 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
     if let Ok(mut g) = RT.lock() {
         runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion, kh1_anim });
     }
-    take_step(actor);
+    take_step(actor, request, finisher, air);
     // (KH2's air cast start, physics KH2: `shared::physics::cast_stops`; its velocity put back
     // after KH1's command step halves it, `cast_after_command` from `combat::command`.)
     if air {

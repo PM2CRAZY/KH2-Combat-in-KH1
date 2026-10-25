@@ -916,6 +916,21 @@ pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
     Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| matches!(k, WindowKind::Combo)))
 }
 
+/// Our finisher cast playing on `actor` is in its Finishing Plus window now (the tester,
+/// kh2-magic-and-reflect-native after m10, question 2 (a)): KH2's finisher window (range id 50,
+/// `WindowKind::Finisher`; the ground finisher casts Fire 57 54..84, Blizzard 60 46..76, Thunder
+/// 63 / Cure's 68 42..78, Reflect 72 54..84, Checked (files) `P_EX100.mset`) with Finishing Plus's
+/// next finisher left (`combomods::finisher_left`), base Sora on KH1's states. Steam KH2's Attack
+/// and command check `0x1403D6CA0` takes an Attack, and a spell (command kind 2, the same check
+/// from the input step `0x1403D6FC0`), there: the count and the finisher count one more
+/// (Checked (decomp)). `finisher_window` opens KH1's combo window there.
+pub unsafe fn cast_finisher_open(actor: usize) -> bool {
+    let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };
+    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let t: f32 = rd(actor + TIME_NOW);
+    t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| matches!(k, WindowKind::Finisher)) && super::shared::active() && super::combomods::finisher_left()
+}
+
 /// One of our cast slots plays on `actor` (KH2's spells', Reflect's).
 pub unsafe fn cast_playing(actor: usize) -> bool {
     current(actor).is_some_and(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))
@@ -1439,6 +1454,11 @@ unsafe fn finisher_window(actor: usize) {
     let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return };
     let t: f32 = rd(actor + TIME_NOW);
     if !(t >= 0.0) || !clip.has(t as u32, |k| matches!(k, W::Finisher)) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() || !super::combomods::finisher_chain_open() {
+        return;
+    }
+    // (A finisher cast's: only while Finishing Plus leaves another finisher, KH2's own test,
+    // `cast_finisher_open`.)
+    if matches!(m.kind, Kind::Magic | Kind::AirMagic) && !super::combomods::finisher_left() {
         return;
     }
     let inst = pose::ptr(rd::<u32>(actor + 0x15C));

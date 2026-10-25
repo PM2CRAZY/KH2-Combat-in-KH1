@@ -281,6 +281,31 @@ pub fn finisher_chain_open() -> bool {
     FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus
 }
 
+/// Finishing Plus's next finisher is left (KH2's own test in its Attack and command check, Steam
+/// KH2 `0x1403D6CA0`: the finisher window, range id 50, taken only while the finisher count
+/// `+0xD75` is under the maximum, `[+0x5C0] + 0x202`; Checked (decomp)), whatever the combo
+/// style: the finishers so far (`FINISHERS`, at least 1) under one plus Finishing Plus's copies
+/// (the maximum's reading as `finisher_chain_open` takes it), Finishing Plus equipped.
+pub fn finisher_left() -> bool {
+    let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
+    plus > 0 && FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus
+}
+
+/// A KH2 cast on KH1's cast state took its step of KH1's combo (`formmagic::take_step`): noted as
+/// a swing of the combo is (`LAST`, `FINISHERS`), so Finishing Plus's next finisher can follow a
+/// finisher cast as it follows a finisher swing (the tester, kh2-magic-and-reflect-native after
+/// m10, question 2 (a)). `request`: KH1's request the cast plays on (its `+0x164` while it plays);
+/// `finisher`: a finisher cast; `chained`: taken in a finisher's Finishing Plus window (KH2's
+/// `+0xD75` one more, `0x1403D6CA0`), else the combo's first finisher (`+0xD75` 1, KH2's new
+/// combo `0x101`) or no finisher (0, as after a swing).
+pub fn cast_step(step: u8, request: u32, finisher: bool, chained: bool, air: bool) {
+    if let Ok(mut l) = LAST.lock() {
+        *l = Some((step, request, finisher, air));
+    }
+    let f = if !finisher { 0 } else if chained { FINISHERS.load(Ordering::Relaxed).max(1).saturating_add(1) } else { 1 };
+    FINISHERS.store(f, Ordering::Relaxed);
+}
+
 /// KH2's normal finishers whose Finishing Plus window KH1's own finishers take (the tester, m20
 /// answer 4 (a): "KH2's own finisher window from 155 / 183, placed at the same point in KH1's
 /// finisher"): 155 on the ground (its window 35..64), 183 in the air (21..50; Checked (files)).
