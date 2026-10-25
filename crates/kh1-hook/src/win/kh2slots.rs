@@ -232,7 +232,22 @@ const fn item_spec(i: usize) -> Spec {
     Spec { motion, stands_for, request, kind: Kind::MiscAnims }
 }
 
-const SPECS: [Spec; 38] = [
+/// KH2's fall on KH1's fall requests (the tester, thread baking-the-rest-of-the-base-animations,
+/// plan step 3). KH1 asks request 6 (its jump's base 0 + 6) or 0xB (the High Jump's base 5 + 6),
+/// both slot 10 in its request table (`xa_ex_0010.mset`, `0x200A`, kind 2, Checked (files)): from
+/// the player step when he walks off a ledge (state 2), from the ceiling bonk `0x1402AF3F0`, after
+/// its apex (`apex`), and our own (the glide's end, the Aerial Dodge's apex). Neither request has
+/// the hold bit, so KH1 loops the slot. KH2's fall is motion 4 (`P_EX100.mset`, Checked (files): 32
+/// frames at 60 Hz, looping back to frame 12, its `frame_return` 6 at 30 fps), which KH1 loops from
+/// there through its own loop range (`loop_range`). Style Jump. 0xB is pointed at the same slot
+/// (`ALIASES`).
+const FALL: Spec = Spec { motion: character_core::motion::FALL, stands_for: 10, request: 0x6, kind: Kind::Jump };
+
+/// KH1 requests pointed at another request's slot of ours (alias, request): the High Jump's fall
+/// 0xB plays the plain jump's (KH1's table has both on slot 10).
+const ALIASES: [(usize, usize); 1] = [(0xB, 0x6)];
+
+const SPECS: [Spec; 39] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -271,6 +286,7 @@ const SPECS: [Spec; 38] = [
     recoil_spec(1),
     item_spec(0),
     item_spec(1),
+    FALL,
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -320,6 +336,9 @@ pub struct Move {
     pub own: Option<usize>,
     /// The KH2 clip's sounds, voices and effects, by frame.
     events: Vec<(u32, EventKind)>,
+    /// Where KH2 loops it back to (60 Hz frames from its start), when KH1 loops it on a request
+    /// with no hold (`loop_range`; the fall, `FALL`).
+    loop_from: Option<f32>,
 }
 
 struct Built {
@@ -531,7 +550,13 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     // (A hit reaction's KH2 voice, 29 / 30 at frame 0, Checked (files), left out: KH1's hit pass plays
     // its own hurt voice for it, `0x1402901F0 (actor, 0 | 1, 0)`, Checked (decomp).)
     let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Effect(_)) || (!reaction && matches!(e.kind, EventKind::Voice(_)))).map(|e| (e.frame, e.kind)).collect();
-    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events }, block)))
+    // (KH2's own loop point, for the fall: `loop_range`.)
+    let loop_from = (kind == Kind::Jump && !own).then(|| kh2.rig.motions.get(&motion)).flatten().and_then(|m| {
+        let k = 60.0 / m.fps.max(1e-3);
+        let from = (m.frame_return - m.frame_start) * k;
+        (from > 0.5 && from < frames as f32 - 0.5).then_some(from)
+    });
+    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events, loop_from }, block)))
 }
 
 /// The swings KH2's combo rows can take: on the ground (`air` false) the ground rows with no hop
@@ -1287,6 +1312,16 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         } else if m.variant == 0 {
             missing.push(format!("{:#x}", m.request));
         }
+        // (KH1 requests that play the same slot of ours, `ALIASES`, where their own entry holds it.)
+        for &(alias, _) in ALIASES.iter().filter(|a| a.1 == m.request && m.default) {
+            let e = requests.get(alias).copied().unwrap_or(0xFFF);
+            let own = (e & 0xFFF) as usize;
+            if own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for) {
+                redirects.push((alias, e, (count + i) as u32, m.kind, m.slot, true, false));
+            } else {
+                missing.push(format!("{alias:#x} (as {:#x})", m.request));
+            }
+        }
     }
     let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects };
     log(&format!(
@@ -1353,6 +1388,10 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     super::hook::install(base + BIND_OWN_RVA, &BIND_OWN_PROLOGUE, bind_own as *const () as usize, &ORIG_BIND_OWN, "actor motion set bind (KH2 slots)");
     super::hook::install(base + BIND_SET_RVA, &BIND_SET_PROLOGUE, bind_set as *const () as usize, &ORIG_BIND_SET, "motion set bind (KH2 slots)");
+    // (KH2's swap into the fall in KH1's jump, `kh2_apex`: Steam only.)
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        super::hook::install(base + APEX_STEAM, &APEX_PROLOGUE, apex as *const () as usize, &ORIG_APEX, "jump apex (KH2's fall swap)");
+    }
 }
 
 /// Each frame Sora is posed (`pose`, the game thread): ours on the set bound and the one KH1
@@ -1376,6 +1415,7 @@ pub unsafe fn frame(actor: usize) {
         super::kh1rows::install(actor);
     }
     tick(actor);
+    loop_range(actor);
     finisher_window(actor);
     // The same on KH1's own finishers at the combo style KH1 (`combomods::kh1_finisher_window`).
     super::combomods::kh1_finisher_window(actor);
@@ -1383,6 +1423,102 @@ pub unsafe fn frame(actor: usize) {
     super::combomods::counter_window(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`).
     super::takeover::kh2_hits(actor);
+}
+
+/// KH1's motion flags (`+0x160`): bit 3 holds the motion at its end (else it loops), bit 6 a loop
+/// range of its own (`+0x288` start, `+0x28C` end, `+0x290`), which KH1's apply (`0x14029FC40`)
+/// clears with each new request and its start (`0x1402A0350`) then sets to the whole motion; KH1's
+/// own setter is `0x14029FA10 (actor, start, end, third)` (Checked (decomp), Steam).
+const MOTION_FLAGS: usize = 0x160;
+const HOLD_AT_END: u32 = 8;
+const OWN_LOOP: u32 = 0x40;
+const LOOP_START: usize = 0x288;
+const LOOP_END: usize = 0x28C;
+const LOOP_THIRD: usize = 0x290;
+
+/// Our slot playing on `actor` loops from KH2's own loop point (`Move::loop_from`: the fall's 12 of
+/// its 32 frames), not from its start: KH1's own loop range for it (`MOTION_FLAGS`), set once after
+/// KH1 started it (each frame KH1 posed him checks it; KH1's step wraps the time to the loop start
+/// when it passes the end, `0x14029F0A0`, Checked (decomp)). Nothing on a request that holds.
+unsafe fn loop_range(actor: usize) {
+    let Some(m) = current(actor) else { return };
+    let Some(from) = m.loop_from else { return };
+    let flags = rd::<u32>(actor + MOTION_FLAGS);
+    if flags & (HOLD_AT_END | OWN_LOOP) != 0 {
+        return;
+    }
+    wr(actor + LOOP_START, from);
+    wr(actor + LOOP_END, m.frames as f32);
+    wr(actor + LOOP_THIRD, 0.0f32);
+    wr(actor + MOTION_FLAGS, flags | OWN_LOOP);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 10 {
+        log(&format!("KH2 slots: KH2 motion {} loops from frame {from:.0} of {} (KH1's loop range)", m.motion, m.frames));
+    }
+}
+
+/// KH1's apex step (Steam `0x1402AF630 (actor)`, from its jump's rise each frame: `0x1402AF530`,
+/// `0x1402AF6A0`, `0x1402AFAE0`): with its arc's time `+0x3B0` + 6 at or past the rise time
+/// `+0x3B8`, nothing queued (`+0x178`) and its takeoff request playing (`+0x164` = base `+0x3D0` +
+/// 4), it asks its apex (base + 5, blend 6.0, the constant at `0x14042F93C`) and queues its fall
+/// (base + 6, blend 0). Checked (decomp, exe).
+const APEX_STEAM: usize = 0x2AF630;
+const APEX_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_APEX: AtomicUsize = AtomicUsize::new(0);
+/// KH1's motion request (`0x14029F980 (actor, request, blend)`, Steam; a fresh queue).
+const SET_MOTION_STEAM: usize = 0x29F980;
+/// KH2's swap into the fall (Steam KH2 `0x1403CB680`, the jump's update; Checked (decomp)): with the
+/// arc's time `+0xF0` + 5 at or past its rise time `+0xF4`, while the jump's motion is still up
+/// (`+0x124` bit 0, cleared by the swap), it asks the fall motion (`+0x118`, which the jump's start
+/// `0x140422630` sets to 4 for the jump and the High Jump alike) through `0x1403CB610` with blend
+/// 8.0; on an early release (after 6 frames, more than 5 before the apex) the same swap at once,
+/// before the release's hop.
+const KH2_FALL_MARGIN: f32 = 5.0;
+const KH2_FALL_BLEND: f32 = 8.0;
+
+/// KH2's jump rule in KH1's jump (Jump style KH2, base Sora, our fall slot built): KH1's apex and
+/// its 6-frame apex motion give way to KH2's swap, KH1's fall request asked 5 frames before the
+/// apex with KH2's blend. True when it is ours to decide (KH1's apex step then doesn't run).
+unsafe fn kh2_apex(actor: usize) -> bool {
+    if !super::shared::on() || !super::styles::kh2(Kind::Jump) || !is_sora(actor) || !has(FALL.request, FALL.motion) {
+        return false;
+    }
+    let base = rd::<i32>(actor + 0x3D0);
+    if base != 0 && base != 5 {
+        return false;
+    }
+    let (t, up) = (rd::<f32>(actor + 0x3B0), rd::<f32>(actor + 0x3B8));
+    if t.is_finite() && up.is_finite() && up <= t + KH2_FALL_MARGIN {
+        fall_now(actor, &format!("{t:.1} of {up:.1} frames up"));
+    }
+    true
+}
+
+unsafe extern "system" fn apex(actor: usize) {
+    if kh2_apex(actor) {
+        return;
+    }
+    let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_APEX.load(Ordering::Acquire));
+    f(actor);
+}
+
+/// KH2's swap into the fall now (`kh2_apex`, or KH2's early release in our arc,
+/// `shared::physics`), while KH1's takeoff request plays with nothing queued: KH1's fall request
+/// (base + 6) with KH2's blend. Only at Jump KH2 with our fall slot.
+pub unsafe fn fall_now(actor: usize, why: &str) {
+    if !super::shared::on() || !super::styles::kh2(Kind::Jump) || !has(FALL.request, FALL.motion) || super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    let base = rd::<i32>(actor + 0x3D0);
+    if (base != 0 && base != 5) || rd::<i32>(actor + 0x164) != base + 4 || rd::<i32>(actor + 0x178) != 0 {
+        return;
+    }
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(super::takeover::game_base() + SET_MOTION_STEAM);
+    set(actor, (base + 6) as u32, KH2_FALL_BLEND);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!("KH2's jump: into the fall ({why}): KH1's request {:#x}, blend {KH2_FALL_BLEND}", base + 6));
+    }
 }
 
 /// The swing KH2's row selection picked for each of KH1's combo requests 0xC8..0xCE (ground

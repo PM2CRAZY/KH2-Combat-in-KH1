@@ -1557,6 +1557,9 @@ pub mod physics {
             if !held && air.arc.t > character_core::HOLD_MIN_FRAMES && air.arc.t < air.arc.uptime - character_core::HOLD_APEX_MARGIN {
                 let hop = character_core::release_hop(n.gravity);
                 air.arc = Arc::new(hop, n.gravity);
+                // (KH2's release swaps the jump's motion for its fall at once, before its hop:
+                // `0x1403CB680` -> `0x1403CB610`, Checked (decomp); KH1's fall request on our slot.)
+                super::super::kh2slots::fall_now(actor, "the jump let go");
                 // (KH2's Aerial Dodge let go: its fall now, as KH2's release does, `combomods`.)
                 if dodge {
                     super::super::combomods::dodge_fall(actor, "the jump let go");

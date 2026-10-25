@@ -1158,11 +1158,16 @@ fn baker(install: &kh1_data::Kh1Install, kh2: &Kh2, motions: &[Option<kh1_data::
 /// it with no pose of ours. KH2's pose for the same frame is still noted for KH2's effects on
 /// his bones (`kh2fx`, `reflect`), as a tier A slot notes it; the next clip of ours doesn't blend
 /// from a pose drawn before this one.
+///
+/// (t-bake) The KH2 pose of the baked frame (body and Keyblade, its root taken out, as `follow_play`
+/// keeps its own) is kept as the last pose drawn, so a clip of ours drawn over KH1's next slot
+/// blends from it as from one of its own: KH2's landing, still drawn, out of the baked fall.
 fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16) -> Option<Vec<Mat4>> {
     s.follow.slot = slot;
     s.follow.play = None;
     s.follow.last_at = None;
     s.follow.blend_start = None;
+    s.follow.motion = motion;
     let actor = super::takeover::sora_actor();
     let frames = match slot {
         Some(n) if actor > 0x10000 => unsafe { super::kh2slots::kh1_time(actor, n) },
@@ -1172,13 +1177,16 @@ fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16)
         let field = slot.is_some_and(super::kh2slots::is_field).then(|| kh2.rig.field_motions.get(&motion)).flatten();
         if let Some(clip) = field.or_else(|| kh2.rig.motions.get(&motion)) {
             let mut pose = kh2_anim::evaluate(&kh2.rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
+            let mut weapon = kh2_weapon(&kh2.rig, motion, at, false, &pose);
             if let Some(root) = kh2.roots.get(&motion).and_then(|r| r.get((at as usize).min(r.len().saturating_sub(1)))) {
                 let un = Mat4::from_translation(-Vec3::from(*root));
-                for m in pose.iter_mut() {
+                for m in pose.iter_mut().chain(weapon.iter_mut()) {
                     *m = un * *m;
                 }
             }
             note_kh2(&pose, to_world);
+            s.follow.last = pose.iter().chain(weapon.iter()).copied().collect();
+            s.follow.last_at = Some(Instant::now());
         }
     }
     DRAW_ROUTE.store(3, Ordering::Relaxed);

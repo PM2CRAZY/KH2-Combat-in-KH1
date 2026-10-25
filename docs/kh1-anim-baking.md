@@ -240,3 +240,38 @@ lock stays KH1's own); 3 "(b) kh2 voice plays if the toggle for kh2 voices is on
   while it plays). Two more bakes at load (50 frames each).
 - **Not checked**: in game; whether the item's heal (its task's wait, `0x142D22D30` bytes) lands
   before KH2's motion lets him go at 36.
+
+### 7.2 The fall, and KH2's swap into it (step 3)
+
+- `kh2slots::FALL`: KH2's fall (motion 4) on KH1's fall request 6, slot 10 as its template, style
+  Jump; the High Jump's fall 0xB (also slot 10) points at the same slot (`kh2slots::ALIASES`).
+  **Checked (files)**: both entries `0x200A`; KH2's 4 is 32 frames at 60 Hz with its loop point
+  (`frame_return`) 6 at 30 fps, i.e. 12.
+- **KH1's loop range.** KH1 loops a request without the hold bit (`+0x160` bit 3, from request bit
+  16, `0x14029FC40`) over its whole motion: KH1's start (`0x1402A0350`) sets `+0x288` = 0 and
+  `+0x28C` = its length unless `+0x160` bit 6 (a range of its own, KH1's setter `0x14029FA10
+  (actor, start, end, third)`), and its step (`0x14029F0A0`) wraps the time from `+0x28C` to
+  `+0x288` + the overshoot. The apply (`0x14029FC40`) clears bit 6 with each new request.
+  **Checked (decomp)**. `kh2slots::loop_range` sets KH2's loop point there (12..32) once KH1 has
+  started our fall (each frame KH1 poses him: one compare), so KH1 loops it as KH2 does.
+- **KH1's apex.** KH1's apex step `0x1402AF630` (from the rise, each frame) asks its apex (base + 5,
+  blend 6.0, the float at `0x14042F93C`) when `+0x3B0` + 6 ≥ `+0x3B8`, nothing queued, its takeoff
+  (base + 4) playing, and queues its fall (base + 6, blend 0). **Checked (decomp, exe)**. KH2's jump
+  update (KH2 Steam `0x1403CB680`) instead swaps straight to the fall (`+0x118`, set to 4 by the
+  jump's start `0x140422630` for the plain jump and the High Jump, whose motion 201 comes from
+  `0x1403B59B0`) through `0x1403CB610`, blend 8.0, when `+0xF0` + 5 ≥ `+0xF4`; and on an early
+  release (after 6 frames, more than 5 before the apex) at once, before the hop. **Checked
+  (decomp)**. So at Jump KH2 (base Sora, our fall built) a wrapper on `0x1402AF630` (prologue
+  `40 53 48 83 EC 20`, Steam only) runs KH2's rule: KH1's fall request with blend 8 at apex − 5,
+  no apex motion; `shared::physics`'s early release asks the same at once
+  (`kh2slots::fall_now`). Whatever else reads the request: only `0x1402AF630` itself tests
+  base + 5 (**Checked (decomp)**, every `+0x3D0` + n in KH1).
+- The landing stays drawn over (feet, open question 1). So that it blends from the baked fall
+  instead of snapping, `pose::follow_baked` now keeps the baked frame's KH2 pose (body and Keyblade)
+  as the last pose drawn; this also gives a blend into any drawn clip after a baked one (a baked walk
+  or run into the drawn idle, which snapped since t389).
+- Per frame: the loop check, the apex wrapper's few compares while rising, and one Keyblade
+  evaluation on baked frames (for the blend). One more bake at load (32 frames).
+- **Assumption**: KH2's arc clock and blend are in 60 Hz frames here as KH1's (the earlier glide /
+  dodge work's reading). **Not checked**: in game; the third jump set (`+0x3D0` = 0xAB) is left to
+  KH1.
