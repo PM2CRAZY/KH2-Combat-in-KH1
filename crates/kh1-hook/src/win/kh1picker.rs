@@ -19,7 +19,8 @@
 //! while KH1's picker runs its ability bits for them are held back (`HELD_GROUND` / `HELD_AIR`)
 //! and the walk marks them by KH1's own rules in their new places. Blitz's bit stays: KH1's own
 //! test for it (row 6: its finisher marked and nothing beside him, row 11's count 0) runs inside
-//! KH1's picker, which returns 6 when it passes. KH1's 30% chance on Stun Impact and Gravity
+//! KH1's picker, which returns 6 when it passes. So does Hurricane Blast's (row 15: a target, no
+//! more than 100 above him; the tester, m22 answer 3 (b)). KH1's 30% chance on Stun Impact and Gravity
 //! Break is the ini's `kh1_ability_chance`, the Config menu's Tweaks row (`chance`).
 
 use super::addr::Build;
@@ -38,10 +39,12 @@ const AIR_PROLOGUE: [u8; 11] = [0x40, 0x53, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 
 /// Impact (57), 28 Gravity Break (58), 29 Zantetsuken (59)).
 const ABILITY_BITS_STEAM: usize = 0x2D5EC10;
 /// Held back while KH1's picker runs at the combo style KH1 (the walk marks them): Ripple Drive,
-/// Stun Impact, Gravity Break on the ground (KH1's rows 7, 3, 4); Hurricane Blast in the air
-/// (row 15). Zantetsuken (29, row 5) and Blitz (3, row 6) stay KH1's own.
+/// Stun Impact, Gravity Break on the ground (KH1's rows 7, 3, 4). Zantetsuken (29, row 5) and
+/// Blitz (3, row 6) stay KH1's own, and so does Hurricane Blast in the air (25, row 15: its KH1
+/// rule, a target no more than 100 above him, the tester's m22 answer 3 (b)): KH1's picker
+/// returns their row when its own test passes, and the walk takes that as their rule.
 pub const HELD_GROUND: u32 = 1 << 26 | 1 << 27 | 1 << 28;
-pub const HELD_AIR: u32 = 1 << 25;
+pub const HELD_AIR: u32 = 0;
 /// KH1's random number in 0..1 (`0x14031BA30`: three `rand` bytes x 2^-24; its picker's 30% rolls
 /// use it), `mov [rsp+8], rbx; push rdi; sub rsp, 0x20` (Checked (exe)).
 const RANDOM_STEAM: usize = 0x31BA30;

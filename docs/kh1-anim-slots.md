@@ -1403,7 +1403,8 @@ checks fail (`Character::row_in_range`, KH2's `in_range` against Sora's targets 
   `kh1_ability_chance`, the Config menu's Tweaks list), KH1's roll: one random number per press,
   0.3 off it for each roll reached, so each keeps exactly KH1's 30% whichever comes first; a
   failed roll isn't rolled again further down (Stun Impact is in two groups). Off: they pass
-  whenever their group does. Blitz: only when KH1's picker returned 6 (its own test passed).
+  whenever their group does. Blitz / Hurricane Blast: only when KH1's picker returned 6 / 15 (its
+  own test passed).
   None of KH1's when its picker took its dash (row 1): KH1's walk has the dash first.
 - KH2's moves: `Character::ability_row_id` (equipped, playable on KH1's rows, not the KH2 motion
   playing, its own checks), run on KH1's rows as in §7.z.
@@ -1415,9 +1416,18 @@ checks fail (`Character::row_in_range`, KH2's `in_range` against Sora's targets 
   roll and Blitz test.
 
 What changes against KH1 alone: Ripple Drive and Stun Impact come before KH1's finisher in a
-group, Gravity Break and Blitz after Guard Break; Hurricane Blast plays with no target or one high
-above (it takes Aerial Finish's checks, none); KH1's own finisher comes first in a group (the 154
-/ 184 place). Assumptions: that KH1's own finisher stands in KH2's 154 / 184 place (the tester's
+group, Gravity Break and Blitz after Guard Break; KH1's own finisher comes first in a group (the
+154 / 184 place). (Hurricane Blast took Aerial Finish's checks at t580, so it came with no target
+or one high above; since m22 answer 3 (b) it keeps KH1's rule, below.)
+
+**Hurricane Blast keeps KH1's rule** (the tester, m22 answer 3 (b), "like Blitz"). KH1's air
+picker `0x1402A6C70` (Steam, Checked (decomp)) marks row 15 in state 2 at the finisher only when
+there is a target and its lock point (`0x1402B04C0`) less his position has y at -100 or more (KH1's
+y is down: the target no more than 100 above him), its request not the one playing; its plain
+finisher 16 and plain swing 18 are marked then too. `kh1picker` no longer holds bit 25 back
+(`HELD_AIR` = 0), so KH1's picker runs that test itself and returns 15 when it passes; the walk
+takes Hurricane Blast in Aerial Finish's place only then (`Kh1Rule::Kh1Test`, as Blitz), KH1's
+plain finisher being 16 (18 when 16's request is playing). Nothing else of the walk changes. Assumptions: that KH1's own finisher stands in KH2's 154 / 184 place (the tester's
 m20 1 (a)); Zantetsuken's place. Not checked: in game. Note: with a lock, KH2's "any target" rows
 (26, 2, 49, 7) see only the locked foe (ours, `ability_row`'s rule since t557), so the group
 places don't pass while locked on.

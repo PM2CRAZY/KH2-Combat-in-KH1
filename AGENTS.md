@@ -1,3 +1,6 @@
+### 2026-10-25: Stage 588 (testing branch: Hurricane Blast keeps KH1's rule)
+- **Hurricane Blast keeps KH1's rule.** The tester (m22 answer 3): "(b)". KH1's air picker `0x1402A6C70` (Steam, Checked (decomp)) marks row 15 only in state 2 at the finisher, with a target whose lock point (`0x1402B04C0`) is no more than 100 above him (y down), its request not the one playing. Bit 25 is no longer held back (`kh1picker::HELD_AIR` 0); the walk takes Hurricane Blast in Aerial Finish's place only when KH1's picker returned 15 (`Kh1Rule::Kh1Test`, as Blitz); the plain finisher is then 16 (18 if 16 plays), Blitz's 8 (13 if 8 plays; it fell back to 6 before). docs/kh1-anim-slots.md §7.z.1.
+
 ### 2026-10-25: Stage 587 (testing branch: KH1 Ability Chance off by default)
 - **KH1 Ability Chance off by default.** The tester (m22 answer 2): "(b)". `settings` default false, ini template `kh1_ability_chance = off`. An ini line already written keeps its value.
 

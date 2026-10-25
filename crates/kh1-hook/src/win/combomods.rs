@@ -548,9 +548,9 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -
     let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return row };
     let finisher = count >= kh1_len;
     let what = if air { "aerial" } else { "ground" };
-    // At KH1's finisher: KH1's ability finishers and KH2's in one walk (`finisher_walk`). Row 6
-    // (Blitz, its own KH1 test passed in KH1's picker) joins it there.
-    if finisher && (plain || (!air && row == BLITZ_ROW)) {
+    // At KH1's finisher: KH1's ability finishers and KH2's in one walk (`finisher_walk`). Rows 6
+    // (Blitz) and 15 (Hurricane Blast), their own KH1 tests passed in KH1's picker, join it there.
+    if finisher && (plain || (!air && row == BLITZ_ROW) || (air && row == HURRICANE_ROW)) {
         return finisher_walk(actor, row, dir, air, bits, count, kh1_len);
     }
     if !plain {
@@ -587,6 +587,11 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -
 /// finisher, row 8, is and its row 11 isn't: nothing close beside him, `0x1402A7320`'s count;
 /// Checked (decomp)).
 const BLITZ_ROW: i32 = 6;
+/// KH1's Hurricane Blast row (air picker `0x1402A6C70`: marked with ability bit 25 in state 2 at
+/// the finisher when there is a target and the target's lock point is no more than 100 above him,
+/// KH1's y down: `-100 <= dy`; Checked (decomp)). Its plain finisher (16) is marked then too, and
+/// its plain swing (18).
+const HURRICANE_ROW: i32 = 15;
 
 /// One move of the finisher walk.
 #[derive(Clone, Copy)]
@@ -606,8 +611,9 @@ enum Kh1Rule {
     Always,
     /// KH1's 30% roll with KH1 Ability Chance on (Stun Impact, Gravity Break).
     Chance,
-    /// KH1's own test for Blitz (KH1's picker returned row 6: its test passed inside KH1).
-    Blitz,
+    /// KH1's own test, run inside KH1's picker, which returned this row (Blitz, row 6: nothing
+    /// beside him; Hurricane Blast, row 15: a target no more than 100 above).
+    Kh1Test,
 }
 
 /// A place in KH2's finisher table: the row whose range checks the moves in it take (`None`:
@@ -619,9 +625,9 @@ struct Group {
 
 const STUN_IMPACT: Step = Step::Kh1(3, 1 << 27, Kh1Rule::Chance, "Stun Impact");
 const GRAVITY_BREAK: Step = Step::Kh1(4, 1 << 28, Kh1Rule::Chance, "Gravity Break");
-const BLITZ: Step = Step::Kh1(BLITZ_ROW, 1 << 3, Kh1Rule::Blitz, "Blitz");
+const BLITZ: Step = Step::Kh1(BLITZ_ROW, 1 << 3, Kh1Rule::Kh1Test, "Blitz");
 const RIPPLE_DRIVE: Step = Step::Kh1(7, 1 << 26, Kh1Rule::Always, "Ripple Drive");
-const HURRICANE_BLAST: Step = Step::Kh1(15, 1 << 25, Kh1Rule::Always, "Hurricane Blast");
+const HURRICANE_BLAST: Step = Step::Kh1(HURRICANE_ROW, 1 << 25, Kh1Rule::Kh1Test, "Hurricane Blast");
 
 /// The ground finisher walk, KH1's rule set (the tester, m19 / m20 / m21): KH2's own table order
 /// for Sora's ground finishers (`00battle.bin` PTYA, Checked (files); KH2's walk `0x140402C50`
@@ -643,7 +649,8 @@ const GROUND_FINISHERS: [Group; 5] = [
 /// group (49: any target 0..650 off the line), the normal finisher 184 at a group (row 7: any
 /// target 0..260 off the line), Aerial Finish (29, no range), Magnet Burst at a far primary
 /// target (50: 300..650), the normal finisher 183 (row 8). Hurricane Blast takes Aerial Finish's
-/// place and checks, before it ("for hurricane blast it should come first").
+/// place, before it ("for hurricane blast it should come first"), with its own KH1 rule (m22
+/// answer 3 (b): a target no more than 100 above him, KH1's picker's test).
 const AIR_FINISHERS: [Group; 5] = [
     Group { gate: Some(49), steps: &[Step::Kh2(49)] },
     Group { gate: Some(7), steps: &[Step::Plain] },
@@ -665,9 +672,10 @@ enum Took {
 
 /// KH1's finisher with KH1's and KH2's ability finishers in one walk (Base / Aerial Base Combo
 /// KH1; the tester, m21: "do 1", one walk in KH1's picker with KH1's rule set). KH1's picker has
-/// run with its own ability finishers held back (`kh1picker::HELD_GROUND` / `HELD_AIR`, Blitz's
-/// excepted) and took `row`: its plain finisher (8 / 16), its dash at a far target (1), a swing
-/// (its finisher's request playing), or Blitz (6, whose KH1 test it ran). The walk goes through
+/// run with its own ability finishers held back (`kh1picker::HELD_GROUND`; Blitz's and, in the
+/// air, Hurricane Blast's excepted) and took `row`: its plain finisher (8 / 16), its dash at a far
+/// target (1), a swing (its finisher's request playing), Blitz (6) or Hurricane Blast (15), whose
+/// KH1 tests it ran. The walk goes through
 /// `GROUND_FINISHERS` / `AIR_FINISHERS` in order: a group whose gate row's range checks fail now
 /// (KH2's `in_range` against base Sora's targets and KH1's lock, `Character::row_in_range`) is
 /// passed over; in a group the first move that passes wins:
@@ -676,11 +684,12 @@ enum Took {
 ///   Ability Chance on (`kh1picker::chance`; one KH1 random number per press, 0.3 taken off it
 ///   for each roll reached, as KH1's picker does, so each keeps exactly 30%; a failed roll isn't
 ///   rolled again further down);
-///   Blitz only when KH1's picker found its test passing (row 6); none of KH1's when its picker
+///   Blitz / Hurricane Blast only when KH1's picker found its test passing (row 6 / 15, KH1's
+///   own rule); none of KH1's when its picker
 ///   took its dash (row 1, which comes before them in KH1's own walk);
 /// - KH2's: KH2's own checks (`Character::ability_row_id`: equipped, not the KH2 motion playing,
 ///   playable on KH1's rows, `kh1_plays`), its hop;
-/// - the plain one: KH1's own pick (row 8 when it took Blitz).
+/// - the plain one: KH1's own pick (row 8 / 16 when it took Blitz / Hurricane Blast).
 /// KH1's row then runs it (KH2's on KH1's rows as `picker` runs them, `attack`).
 unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32, count: u8, kh1_len: u8) -> i32 {
     let what = if air { "aerial" } else { "ground" };
@@ -688,8 +697,14 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
     let request_of = |r: i32| super::combat::row_motion(actor, r);
     let playing = rd::<i32>(actor + 0x164);
     let plays_now = |r: i32| request_of(r).is_some_and(|q| q as u16 as i32 == playing & 0xFFFF);
-    let plain = if row == BLITZ_ROW && !plays_now(8) { 8 } else { row };
-    let blitz_ok = row == BLITZ_ROW;
+    // (KH1's plain finisher when its picker took Blitz or Hurricane Blast: 8 / 16 (marked with
+    // them, Checked (decomp)); with its request the one playing, its plain swing (13 / 18): KH1's
+    // finisher isn't free.)
+    let plain = match row {
+        BLITZ_ROW => if plays_now(8) { 13 } else { 8 },
+        HURRICANE_ROW => if plays_now(16) { 18 } else { 16 },
+        _ => row,
+    };
     // (KH1's dash at a far target, row 1, comes before its ability finishers in KH1's own walk:
     // KH1's stay out there, as in KH1. KH2's take its place, as since t557.)
     let dash = row == 1;
@@ -705,11 +720,12 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
         }
         match rule {
             Kh1Rule::Always => true,
-            Kh1Rule::Blitz => {
-                if !blitz_ok {
-                    trail.push(format!("{name}: KH1's test (nothing beside him) fails"));
+            Kh1Rule::Kh1Test => {
+                let ok = row == n;
+                if !ok {
+                    trail.push(format!("{name}: KH1's own test fails"));
                 }
-                blitz_ok
+                ok
             }
             Kh1Rule::Chance if !chance => true,
             Kh1Rule::Chance => {
