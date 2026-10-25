@@ -464,3 +464,24 @@ it. **Checked (decomp).** `0x1400D7E80` reads the key bytes of the buffer `+0x14
 start (first bytes `40 56 41 56 48 83 EC 48`, `push rsi; push r14; sub rsp, 0x48`, **Checked (exe)**: the
 Steam exe, SHA-256 `d7907462...4bac`) and, while Frame Advance is on, clears the period key's byte
 (DirectInput 0x34) in both buffers, so KH1 never sees it.
+
+## The info panel (tester, "Missing sleeves animation" m19)
+
+While Frame Advance is on, a small box in the screen's top right corner (apart from the debug
+menu's box, drawn whether the menu is open or not, in the same overlay pass at the end of the
+frame's drawing; `fapanel.rs`, `debugmenu::draw_end`) shows:
+
+- the animation drawn: KH2's motion, battle or field, with KH1's slot it stands for (and ours when
+  it is one of our slots), or KH1's own animation / KH2's controller's pose;
+- how it is drawn: baked (KH1 plays our baked motion), live (our pose written over KH1's), KH2's
+  controller, or KH1's own;
+- the frame within the animation of its length ("field run 12 / 40") and how many times it has
+  looped since it began;
+- the trace's frame number (the trace's `frame` column), so a stretch can be named "trace frames X
+  to Y";
+- the cloth physics' settings id and steps when it runs (`clothlive`).
+
+The frame is the clip's own time (KH1's motion time `+0x16C` for our slots; our clock for KH2's
+clips drawn with no slot), floored. A loop is counted when that time comes round by more than half
+the length (Assumption: KH1 wraps a looping motion's time at its length; a time past the length is
+also taken round). Cost: only while Frame Advance is on; a handful of short strings a frame.

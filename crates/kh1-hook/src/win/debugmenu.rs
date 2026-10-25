@@ -429,7 +429,8 @@ unsafe extern "system" fn frame_end(renderer: usize) {
 /// The end of the frame's drawing: the menu drawn into the frame's list first (once a frame).
 unsafe extern "system" fn draw_end(renderer: usize, a: usize, b: usize, c: usize) -> i32 {
     let base = BASE.load(Ordering::Relaxed);
-    if base != 0 && OPEN.load(Ordering::Relaxed) && !DRAWN.swap(true, Ordering::Relaxed) {
+    // (The Frame Advance panel, `fapanel`, while Frame Advance is on, the menu open or not.)
+    if base != 0 && (OPEN.load(Ordering::Relaxed) || super::frameadv::on()) && !DRAWN.swap(true, Ordering::Relaxed) {
         draw(base);
     }
     let f: unsafe extern "system" fn(usize, usize, usize, usize) -> i32 = std::mem::transmute(ORIG_DRAW_END.load(Ordering::Acquire));
@@ -1060,6 +1061,41 @@ fn text(out: &mut Vec<fx12::OverlayQuad>, x: f32, y: f32, cw: f32, ch: f32, s: &
 
 unsafe fn draw(base: usize) {
     let Some(size) = fx12::overlay_size(base) else { return };
+    let mut q: Vec<fx12::OverlayQuad> = Vec::with_capacity(512);
+    if OPEN.load(Ordering::Relaxed) {
+        menu_quads(base, size, &mut q);
+    }
+    if super::frameadv::on() {
+        panel_quads(size, &mut q);
+    }
+    if q.is_empty() {
+        return;
+    }
+    let rgba = FONT_RGBA.get_or_init(super::debugfont::decode);
+    let font = fx12::MeshTexture { key: FONT_KEY, width: FONT_W as u32, height: FONT_H as u32, rgba };
+    fx12::draw_overlay(base, &q, &font, size);
+}
+
+/// The Frame Advance panel (`fapanel`): its own box in the screen's top right corner.
+fn panel_quads(size: (f32, f32), q: &mut Vec<fx12::OverlayQuad>) {
+    let lines = super::fapanel::lines();
+    let s = (size.1 / 1080.0).max(0.5);
+    let (cw, ch) = ((CELL_W as f32 * s * 0.8).round(), (CELL_H as f32 * s * 0.8).round());
+    let line = (ch * 1.1).round();
+    let pad = (12.0 * s).round();
+    let chars = lines.iter().map(|t| t.len()).max().unwrap_or(10) as f32;
+    let w = chars * cw + pad * 2.0;
+    let h = pad * 2.0 + line * lines.len() as f32;
+    let (x0, y0) = ((size.0 - w - 48.0 * s).round().max(0.0), (48.0 * s).round());
+    q.push(fx12::OverlayQuad { rect: [x0, y0, w, h], uv: [0.0; 4], color: BOX, textured: false });
+    let mut y = y0 + pad;
+    for (i, t) in lines.iter().enumerate() {
+        text(q, x0 + pad, y, cw, ch, t, if i == 0 { YELLOW } else { WHITE });
+        y += line;
+    }
+}
+
+unsafe fn menu_quads(base: usize, size: (f32, f32), q: &mut Vec<fx12::OverlayQuad>) {
     let (page, cur) = match MENU.lock() {
         Ok(m) => (m.page, m.cursor[m.page.slot()]),
         Err(_) => return,
@@ -1083,20 +1119,16 @@ unsafe fn draw(base: usize) {
     let (x0, y0) = ((48.0 * s).round(), (48.0 * s).round());
     let w = chars * cw + pad * 2.0;
     let h = pad * 2.0 + line * (list.len() as f32 + 2.0) + pad;
-    let mut q: Vec<fx12::OverlayQuad> = Vec::with_capacity(512);
     q.push(fx12::OverlayQuad { rect: [x0, y0, w, h], uv: [0.0; 4], color: BOX, textured: false });
     let mut y = y0 + pad;
-    text(&mut q, x0 + pad, y, cw, ch, &title, WHITE);
+    text(q, x0 + pad, y, cw, ch, &title, WHITE);
     y += line;
     q.push(fx12::OverlayQuad { rect: [x0 + pad, y - (line - ch) * 0.5, w - pad * 2.0, (2.0 * s).max(1.0).round()], uv: [0.0; 4], color: RULE, textured: false });
     y += pad * 0.5;
     for (i, (t, _)) in list.iter().enumerate() {
-        text(&mut q, x0 + pad, y, cw, ch, t, if i == cur.min(list.len().saturating_sub(1)) { YELLOW } else { WHITE });
+        text(q, x0 + pad, y, cw, ch, t, if i == cur.min(list.len().saturating_sub(1)) { YELLOW } else { WHITE });
         y += line;
     }
     y += pad * 0.5;
-    text(&mut q, x0 + pad, y, cw, ch, &hint, DIM);
-    let rgba = FONT_RGBA.get_or_init(super::debugfont::decode);
-    let font = fx12::MeshTexture { key: FONT_KEY, width: FONT_W as u32, height: FONT_H as u32, rgba };
-    fx12::draw_overlay(base, &q, &font, size);
+    text(q, x0 + pad, y, cw, ch, &hint, DIM);
 }

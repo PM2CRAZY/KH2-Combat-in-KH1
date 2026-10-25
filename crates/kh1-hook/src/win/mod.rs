@@ -13,6 +13,7 @@ mod debugfont;
 mod debugmenu;
 mod drive;
 mod equipmenu;
+mod fapanel;
 mod feet;
 mod form;
 mod frameadv;
