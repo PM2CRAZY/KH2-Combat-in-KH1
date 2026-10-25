@@ -1437,7 +1437,28 @@ finisher 16 and plain swing 18 are marked then too. `kh1picker` no longer holds 
 (`HELD_AIR` = 0), so KH1's picker runs that test itself and returns 15 when it passes; the walk
 takes Hurricane Blast in Aerial Finish's place only then (`Kh1Rule::Kh1Test`, as Blitz), KH1's
 plain finisher being 16 (18 when 16's request is playing). Nothing else of the walk changes. Assumptions: that KH1's own finisher stands in KH2's 154 / 184 place (the tester's
-m20 1 (a)). Not checked: in game. **Finishing Plus on KH1's own finishers** (the tester, m22: "make sure every kh1 finisher can go
+m20 1 (a)). Not checked: in game. **Which of KH1's single-target finishers comes first** (the tester, m22: "(assumption) if you have
+two single hit vanilla moves then the priority should be based off of which one launches and keeps
+the enemy closer, the one that keeps the enemy closer should come out first"). KH1 has no
+per-attack knock-back distance: an enemy's reaction is picked by its row's attack data `+0xC`
+alone (§ `docs/kh1-launch.md`), and each kind moves it a fixed way (Steam, Checked (decomp): the
+enemy hit pass `0x1402B8E10`; Checked (files): `btltbl.bin`, rows at `+0xA9F0`, block `+0x58`):
+
+| Move (row, data) | Reaction vs enemies | What it does to the enemy | Moves it |
+| --- | --- | --- | --- |
+| Gravity Break (4, `0x4F68`; element 8, power 40) | 8 | `0x1402B7DE0`: motion 0x66 on the ground (crushed where it stands), or KH1's air state 0x16 / 0x17 with motion 0x68 and its sideways speed `+0x2C` set to 0 | 0 |
+| Zantetsuken (5, `0x4FD8`; element 8, power 250) | 3 | a flinch, `0x1402B9230` → `0x1402B7E60`: KH1's push of block `+0x2C` (80) × the enemy's push factor (stats `+0xC4`) | up to 80 |
+| Blitz (6, `0x4D38`; element 1, power 6) | 5 | a launch, `0x1402B8530`: 20..35 a frame sideways (block `+0x14` / `+0x16` by stats `+0xC4`), up 1.35 × that (27..47), slowed by the enemy's own decay | the farthest |
+
+So the order in the single-target place is Gravity Break, Zantetsuken, Blitz (after KH2's Guard
+Break, the tester's m21 "gravity break and blitz last ... blitz last"), which the walk already had
+for Gravity Break and Blitz; Zantetsuken goes between them. Stun Impact (3, `0x4EF8`: element 10,
+reaction 3, bone 8, not the Keyblade) and Ripple Drive (7, `0x4E88`: max MP × 3, reaction 5) stay
+in Explosion's places, first with a crowd and after the single-target moves against one foe (KH2's
+rows 26 / 42, unchanged since t580). (Zantetsuken's gravity power 250 takes a share of the foe's HP
+of 250%, floored at its `+0xC0`: most foes it hits don't live to be pushed.)
+
+**Finishing Plus on KH1's own finishers** (the tester, m22: "make sure every kh1 finisher can go
 into other kh1/kh2 finishers"; m20 answers 3 and 4 (a), m21 answer 2 (a)). Before, at the KH1
 setting only KH2's ability finishers on our slots had a Finishing Plus window
 (`kh2slots::finisher_window`), so KH1's own finisher and its ability finishers (Stun Impact,
