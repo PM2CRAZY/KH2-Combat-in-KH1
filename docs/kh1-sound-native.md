@@ -363,3 +363,37 @@ The tester (m4 answer): "I want you to gut the old system and transfer everythin
   **Checked (files)** (se999 / se000 / se500).
 - Battle quotes: the clip list keeps the clips whose sound record has audio (the cut's own
   test), instead of the clips that decoded. **Checked (code)**
+
+## One copy of each bank (RAM)
+
+The tester (m4, about RAM): "are we caching a bunch of sounds? if so you need to tell me". With
+the old player gone, what was left was two copies of each cut bank: ours, to register it again
+after KH1 clears its bank list, and KH1's, which its release frees. Now there is one.
+
+- A bank entry's destructors (`0x1400DB470`, `0x1400DB7A0`, Steam, the `BankEntry_15` vtable's)
+  wait until the engine says the bank is idle, unload it from the engine, and then call
+  `_aligned_free` on the entry's `+0x20` **only if it isn't 0**, then set it to 0. **Checked
+  (decomp)**. The registration `0x1400E0F00` -> `0x1400DB1F0` writes the data pointer to both
+  `+0x20` and `+0x28`; no function of KH1's that walks the bank list reads either afterwards
+  (searched every function that references the list head `0x1404D65D8`). **Checked (decomp)**.
+  The engine keeps its own pointer to the data (the bank object's `+8`, `0x14005E0B0`).
+- So right after KH1 takes one of ours, `kh1bank` sets the entry's `+0x20` to 0. KH1's release
+  then unloads the bank but leaves the buffer, which stays ours for the whole session and is
+  handed to the next registration as it is. Each buffer is made once with KH1's own
+  `_aligned_malloc`, and our `Vec` copy is dropped at that point. **Checked (code)**
+- KH1's engine writes into a bank as it loads it: the ActualBank set-up (`0x1400748F0`, the
+  vtable at `0x140428790`'s third entry, called from `0x14005E0B0`) sets byte `+0xF` of every
+  sound record to 0xFF. **Checked (decomp, exe)** (the vtable read from the exe).
+  `scd_cut::as_loaded` writes the same before the first registration, and before each later one
+  the buffer gets it again and is checked against the hash taken at the cut. A bank in which
+  anything else changed is logged ("changed while KH1 had it") and left out, instead of being
+  handed back to the engine in a state we don't know. That nothing else changes during play:
+  **Assumption** (the effect banks are Microsoft ADPCM, which the engine decodes into buffers of
+  its own as far as we know); the log will say.
+- The battle voice bank still has two copies (ours and KH1's, 0.3 MB each): its registration
+  `0x1400E0110` copies the data itself. Left as it is.
+- Steady state now: about 9.0 MB for the 104 cut effect banks (one copy, in KH1's engine) plus
+  0.6 MB for the voice bank, against ~77 MB before this round and ~58 MB before t509. For a
+  couple of seconds at startup the loader still reads se000 / se999 / se500 whole (~28 MB) to
+  cut them, then frees them. Sizes from the tester's t515 / t544 logs and the KH2 files.
+  **Checked (trace, files)**; the Windows heap's overhead not measured.

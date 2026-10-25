@@ -12,10 +12,17 @@
 //!
 //! KH1 releases every bank of the list at once (`0x1400D2C70 (1)` -> `0x1400DBAC0`, from its map
 //! tear-down steps `0x14016FFA0`, `0x140170230`, `0x140170300`, `0x140170D50`), freeing each
-//! bank's data with `_aligned_free`. So each registration gets its own copy of the bank made with
-//! KH1's own `_aligned_malloc` (its import, alignment 16 as KH1's loads), and once the list has
-//! changed and stood still for `SETTLE` frames, the banks missing from it are registered again,
-//! a few a frame. Nothing of KH1's is hooked; it runs from the frame's end (`debugmenu`), on the
+//! bank's data with `_aligned_free` if the entry's data pointer (`+0x20`) isn't 0 (its
+//! destructors `0x1400DB470` / `0x1400DB7A0`; nothing else of KH1's reads `+0x20`, Checked
+//! (decomp)). Each of ours is one buffer for the whole session, made once with KH1's own
+//! `_aligned_malloc` (its import, alignment 16 as KH1's loads); right after KH1 takes it, the
+//! entry's `+0x20` is set to 0, so KH1's release unloads the bank from its engine but leaves the
+//! buffer, and once the list has changed and stood still for `SETTLE` frames, the banks missing
+//! from it are registered again from the same buffers, a few a frame. So only one copy of each
+//! exists (the tester: RAM use; before, ours and KH1's). KH1's engine writes into a bank as it
+//! loads it (`0x1400748F0`: byte `+0xF` of each sound record to 0xFF); `scd_cut::as_loaded` does
+//! the same up front, and a bank registered again is checked against its first bytes' hash
+//! (logged, and left out, if anything else in it changed). Nothing of KH1's is hooked; it runs from the frame's end (`debugmenu`), on the
 //! game's thread, as KH1's own game-thread registrations do (`0x1400DB910`).
 //!
 //! The engine has a fixed number of bank slots (`0x14004F570`: remaining, `0x14004F5F0`: in
@@ -45,10 +52,9 @@ const SOUND_UP_STEAM: usize = 0x21AAFD8;
 /// The bank list's head and its count (Steam `0x1404D65D8`, `0x1404D65E8`).
 const BANK_LIST_STEAM: usize = 0x4D65D8;
 const BANK_COUNT_STEAM: usize = 0x4D65E8;
-/// KH1's `_aligned_malloc` / `_aligned_free` imports (Steam IAT `0x1403B0778` / `0x1403B0780`,
-/// api-ms-win-crt-heap).
+/// KH1's `_aligned_malloc` import (Steam IAT `0x1403B0778`, api-ms-win-crt-heap; its
+/// `_aligned_free`, which KH1's bank release calls, is at `0x1403B0780`).
 const ALIGNED_MALLOC_IAT_STEAM: usize = 0x3B0778;
-const ALIGNED_FREE_IAT_STEAM: usize = 0x3B0780;
 
 /// KH1's effect queue (Steam `0x140179AC0 (no, id, position pointer, volume)`, the one its hit,
 /// object and actor sounds use): `mov [rsp+8], rbx`.
@@ -79,7 +85,13 @@ const KEEP_FREE: i32 = 128;
 
 struct Bank {
     no: i32,
+    /// The bank until its buffer is made (then empty).
     bytes: Vec<u8>,
+    /// Its buffer (KH1's `_aligned_malloc`, kept for the session: KH1 never frees it) and size.
+    data: usize,
+    len: usize,
+    /// The bank's hash as cut (and as KH1's engine leaves it after a release).
+    hash: u64,
     what: String,
     /// In KH1's bank list now.
     present: bool,
@@ -105,13 +117,16 @@ fn note(line: String) {
 }
 
 /// Adds a one-sound bank (from the loader thread); its file number, or `None` off Steam.
-pub fn add(bytes: Vec<u8>, what: String) -> Option<i32> {
+pub fn add(mut bytes: Vec<u8>, what: String) -> Option<i32> {
     if Build::current() != Build::Steam {
         return None;
     }
+    kh2_formats::scd_cut::as_loaded(&mut bytes);
+    let hash = hash(&bytes);
     let mut b = BANKS.lock().ok()?;
     let no = FIRST_NO + b.len() as i32;
-    b.push(Bank { no, bytes, what, present: false, refused: false });
+    let len = bytes.len();
+    b.push(Bank { no, bytes, data: 0, len, hash, what, present: false, refused: false });
     DIRTY.store(true, Ordering::Relaxed);
     Some(no)
 }
@@ -142,8 +157,7 @@ unsafe fn ready(base: usize) -> bool {
                 && starts_with(base + BANKS_USED_STEAM, &COUNT_PROLOGUE)
                 && starts_with(base + QUEUE_STEAM, &QUEUE_PROLOGUE)
                 && [STOP_STEAM, PLAYING_STEAM].iter().all(|&f| starts_with(base + f, &[0x44, 0x8B, 0x0D]) && starts_with(base + f + 7, &[0x45, 0x33, 0xC0]))
-                && rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM) > 0x10000
-                && rd::<usize>(base + ALIGNED_FREE_IAT_STEAM) > 0x10000;
+                && rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM) > 0x10000;
             if !ok {
                 log("KH1 banks: KH1's bank registration isn't where the Steam build has it; KH2's sounds won't play");
             }
@@ -179,30 +193,62 @@ unsafe fn ours_in_list(base: usize) -> Vec<i32> {
     out
 }
 
-/// Registers one bank: a copy in KH1's own allocation, handed to KH1's registration. True if it
-/// went into the list.
+/// A quick 64-bit hash of a bank's bytes (FNV-1a over 8-byte words).
+fn hash(b: &[u8]) -> u64 {
+    let mut h: u64 = 0xCBF2_9CE4_8422_2325;
+    let mut words = b.chunks_exact(8);
+    for w in &mut words {
+        h = (h ^ u64::from_le_bytes([w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]])).wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    for &x in words.remainder() {
+        h = (h ^ x as u64).wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    h ^ b.len() as u64
+}
+
+/// Registers one bank from its buffer (made in KH1's own allocation the first time), handed to
+/// KH1's registration. True if it went into the list.
 unsafe fn register(base: usize, b: &mut Bank) -> bool {
-    let malloc: unsafe extern "C" fn(usize, usize) -> *mut u8 = std::mem::transmute(rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM));
-    let free: unsafe extern "C" fn(*mut u8) = std::mem::transmute(rd::<usize>(base + ALIGNED_FREE_IAT_STEAM));
-    let data = malloc(b.bytes.len(), 0x10);
-    if data.is_null() {
+    if b.data == 0 {
+        let malloc: unsafe extern "C" fn(usize, usize) -> *mut u8 = std::mem::transmute(rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM));
+        let data = malloc(b.len, 0x10);
+        if data.is_null() {
+            return false;
+        }
+        std::ptr::copy_nonoverlapping(b.bytes.as_ptr(), data, b.len);
+        b.data = data as usize;
+        // (The buffer is the only copy from here.)
+        b.bytes = Vec::new();
+    } else if {
+        // (What KH1's load writes, its sound records' `+0xF`, it writes again: put back first.)
+        let bank = std::slice::from_raw_parts_mut(b.data as *mut u8, b.len);
+        kh2_formats::scd_cut::as_loaded(bank);
+        hash(bank) != b.hash
+    } {
+        // (KH1's engine changed more in it than its load writes: not given to it again.)
+        b.refused = true;
+        note(format!("KH1 banks: se{} ({}) changed while KH1 had it (not only what its load writes); left out", b.no, b.what));
         return false;
     }
-    std::ptr::copy_nonoverlapping(b.bytes.as_ptr(), data, b.bytes.len());
+    let data = b.data as *mut u8;
     let name = format!("se{}.win32.scd\0", b.no);
     let count: i32 = rd(base + BANK_COUNT_STEAM);
     let f: unsafe extern "system" fn(*const u8, i32, *mut u8, i32) -> u32 = std::mem::transmute(base + REGISTER_STEAM);
     let handle = f(name.as_ptr(), BANK_NUMBER, data, 0);
     let head: usize = rd(base + BANK_LIST_STEAM);
     let took = rd::<i32>(base + BANK_COUNT_STEAM) == count + 1 && head >= 0x10000 && rd::<i32>(head + 0x14) == b.no && rd::<usize>(head + 0x20) == data as usize;
+    if took {
+        // (KH1's release frees `+0x20` if it isn't 0: the buffer stays ours, for the next
+        // registration. The engine keeps its own pointer, `0x14005E0B0`'s bank `+8`.)
+        std::ptr::write_unaligned((head + 0x20) as *mut usize, 0);
+    }
     if !took {
-        // (Not taken: KH1's sound system not up, or the same entry already there. The data is
-        // still ours.)
-        free(data);
+        // (Not taken: KH1's sound system not up, or the same entry already there. The buffer
+        // is still ours.)
         note(format!("KH1 banks: se{} ({}) not taken (handle {handle:#x})", b.no, b.what));
     } else if handle == 0 {
-        // (In the list, but KH1's engine didn't load it: KH1 frees it with the rest; it isn't
-        // played.)
+        // (In the list, but KH1's engine didn't load it: KH1 releases the entry with the rest;
+        // it isn't played.)
         b.refused = true;
         note(format!("KH1 banks: se{} ({}): KH1's engine didn't load it (handle 0); it won't play", b.no, b.what));
     }

@@ -254,6 +254,22 @@ fn adpcm_ms(a: &[u8]) -> Option<u32> {
     Some(((whole + part.min(per_block)) * 1000 / rate) as u32)
 }
 
+/// Writes into a bank what KH1's engine writes into it as it loads it (Steam KH1 `0x1400748F0`,
+/// the bank's set-up: byte `+0xF` of every sound record set to 0xFF), so the bytes are the same
+/// before a load and after a release (`kh1bank` checks a bank it registers again against them).
+pub fn as_loaded(bank: &mut [u8]) {
+    let Ok(header) = u16_at(bank, 0x0E) else { return };
+    let header = header as usize;
+    let Ok(n) = u16_at(bank, header) else { return };
+    let table = header + if u32_at(bank, 8).unwrap_or(0) == 1 { 0x10 } else { 0x20 };
+    for i in 0..n as usize {
+        let Ok(r) = u32_at(bank, table + 4 * i) else { return };
+        if let Some(b) = bank.get_mut(r as usize + 0x0F) {
+            *b = 0xFF;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,5 +443,18 @@ mod tests {
         assert_eq!(adpcm_ms(&a), Some(((640 + 2 + 8) * 1000 / 48000) as u32));
         w(&mut a, 0x0C, 6);
         assert_eq!(adpcm_ms(&a), None);
+    }
+
+    #[test]
+    fn as_loaded_marks_each_sound_record() {
+        let mut c = cut(&bank(), 1, 990).unwrap().bytes;
+        // (The test bank's audio has no ADPCM format: length unknown.)
+        assert_eq!(length_ms(&c), None);
+        let rec = u32_at(&c, 0x50).unwrap() as usize;
+        let before = c.clone();
+        as_loaded(&mut c);
+        assert_eq!(c[rec + 0x0F], 0xFF);
+        let changed: Vec<usize> = (0..c.len()).filter(|&i| c[i] != before[i]).collect();
+        assert!(changed.iter().all(|&i| i == rec + 0x0F));
     }
 }

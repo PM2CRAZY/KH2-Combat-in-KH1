@@ -1,3 +1,19 @@
+### 2026-10-25: Stage 566 (testing branch: KH2 sounds: one copy of each bank (RAM))
+- **One copy of each KH2 sound bank.** This answers the tester's RAM question from m4 ("are we caching a bunch of sounds?").
+- KH1's bank-entry destructors (`0x1400DB470` / `0x1400DB7A0`) free the entry's `+0x20` with `_aligned_free` only when it isn't 0. No KH1 function that walks the bank list `0x1404D65D8` reads `+0x20` / `+0x28` afterwards. The engine keeps its own pointer (bank `+8`, `0x14005E0B0`). Checked (decomp).
+- So `kh1bank` now:
+  - makes each bank's buffer once, with KH1's `_aligned_malloc`;
+  - drops our `Vec` at that point;
+  - sets the entry's `+0x20` to 0 right after KH1 takes it;
+  - registers the same buffer again after each KH1 bank clear.
+- KH1's engine writes into a bank as it loads it: ActualBank set-up `0x1400748F0` (vtable `0x140428790` entry 2) sets byte `+0xF` of each sound record to 0xFF. Checked (decomp, exe).
+  - `scd_cut::as_loaded` writes the same up front, and again before each re-registration.
+  - The buffer is then checked against the hash taken at the cut. A changed bank is logged and left out.
+- Assumption: nothing else in an ADPCM bank changes during play. The log will say.
+- RAM: ~9.0 MB (one copy) plus the voice bank's 0.6 MB. Before this round it was ~77 MB; before t509, ~58 MB.
+- The voice bank keeps KH1's copying registration (`0x1400E0110`).
+- `docs/kh1-sound-native.md` "One copy of each bank". Test `as_loaded_marks_each_sound_record`.
+
 ### 2026-10-25: Stage 565 (testing branch: KH2 sounds: only through KH1's engine (the old player removed))
 - **KH2's sounds go only through KH1's own sound engine; the mod's player and its decoded audio are gone.** The tester asked: "I want you to gut the old system and transfer everything ... get it fully working."
 - `kh2sound.rs` no longer decodes anything. The loader reads each KH2 bank, cuts the wanted sounds into one-sound banks (`scd_cut::cut`), hands them to `kh1bank` and frees the whole banks. That removes ~56 MB of decoded effects plus the decoded quotes.
