@@ -104,9 +104,9 @@ camera_lower = 0\r\n\
 ;   camera and field of view (events and cutscenes stay KH1's); kh1 = they hand the view to\r\n\
 ;   KH1's camera (older builds)\r\n\
 camera_calls = kh2\r\n\
-; l2_camera_hold: on = while L2 is held the right stick doesn't move KH2's camera and R3\r\n\
-;   doesn't reset it, as in KH2 (the Config menu's Camera row switches it in game too); off = not\r\n\
-l2_camera_hold = off\r\n\
+; r2_camera_hold: on = while R2 is held the right stick doesn't move KH2's camera and R3\r\n\
+;   doesn't reset it (the Config menu's Camera row switches it in game too); off = not\r\n\
+r2_camera_hold = off\r\n\
 ; l2_stick_menu: on = while L2 is held the right stick moves the command menu like the d-pad and\r\n\
 ;   doesn't move the camera (KH1's or KH2's), as in KH2 (the Config menu's Camera row too); off = not\r\n\
 l2_stick_menu = off\r\n\
@@ -282,8 +282,8 @@ pub struct Settings {
     pub camera_lower: f32,
     /// KH1's gameplay camera calls drive KH2's camera (`camera_calls = kh2`, `camera.rs`).
     pub camera_calls_kh2: bool,
-    /// L2 held stops KH2's camera's right stick and R3 (`l2_camera_hold = on`, `camera::L2_HOLD`).
-    pub l2_camera_hold: bool,
+    /// R2 held stops KH2's camera's right stick and R3 (`r2_camera_hold = on`, `camera::R2_HOLD`).
+    pub r2_camera_hold: bool,
     /// L2 + the right stick is the d-pad (`l2_stick_menu = on`, `camera::L2_DPAD`).
     pub l2_stick_menu: bool,
     pub config_row: bool,
@@ -455,7 +455,9 @@ fn load(first: bool) -> Option<Settings> {
         camera_lower: setting(&text, "camera_lower").and_then(|v| v.parse::<f32>().ok()).filter(|v| (-200.0..200.0).contains(v)).unwrap_or(0.0),
         camera_scale: setting(&text, "camera_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.3..3.0).contains(v)).unwrap_or(0.89),
         camera_calls_kh2: on(&text, "camera_calls", "kh2", true),
-        l2_camera_hold: on(&text, "l2_camera_hold", "on", false),
+        // (The row was L2 Camera Hold up to t522: an ini that still has `l2_camera_hold` keeps
+        // its choice, now on R2.)
+        r2_camera_hold: on(&text, "r2_camera_hold", "on", on(&text, "l2_camera_hold", "on", false)),
         l2_stick_menu: on(&text, "l2_stick_menu", "on", false),
         kh2_effects: match setting(&text, "kh2_effects").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

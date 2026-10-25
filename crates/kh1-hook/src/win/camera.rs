@@ -61,9 +61,9 @@ const SELECT: u32 = 0x8000;
 /// above). R2 is `0x200` there; KH1's remap (`0x140528290`) gives R2 no bit of its own (L2 and R2
 /// both set `0x400000`).
 const RAW_HELD_STEAM: usize = 0x298C9B4;
-/// R2 in the PS2 order.
+/// R2 in the PS2 order (KH2's camera hold, `r2_held`, and the R2 Camera Hold row).
 const RAW_R2: u32 = 0x200;
-/// L2 in the PS2 order (the L2 Camera Hold row, `l2_held`).
+/// L2 in the PS2 order (the L2 Stick Menu row, `l2_held`).
 const RAW_L2: u32 = 0x100;
 /// Steam only: KH1 PC's mouse, the same code as KH2 PC's (`0x1404e51f0` there):
 /// `0x140138b30 (x*, y*, f32*, f32*, sensitivity u16*) -> moved`: the mouse record's motion this
@@ -123,10 +123,12 @@ const FP_FADE: f32 = 30.0;
 
 /// KH2's camera is on (the ini's `camera`, the Config menu's row).
 pub static KH2: AtomicBool = AtomicBool::new(true);
-/// L2 Camera Hold (the ini's `l2_camera_hold`, the Config menu's Camera row under Camera
-/// Style): while L2 is held the right stick doesn't move KH2's camera and R3 doesn't reset it,
-/// as in KH2 (the tester, "make it a toggle in the cameras config menu"). Off by default.
-pub static L2_HOLD: AtomicBool = AtomicBool::new(false);
+/// R2 Camera Hold (the ini's `r2_camera_hold`, the Config menu's Camera row under Camera
+/// Style): while R2 is held the right stick doesn't move KH2's camera and R3 doesn't reset it
+/// (the tester, "make it a toggle in the cameras config menu"; after m15: "R2 should be the
+/// button for locking the camera"; it was L2 in t498). R2 is also KH2's own camera hold button (no
+/// swing-behind, `r2_held`), so with the row on one button stops both. Off by default.
+pub static R2_HOLD: AtomicBool = AtomicBool::new(false);
 
 /// L2 Stick Menu (the ini's `l2_stick_menu`, the Config menu's Camera row under L2 Camera
 /// Hold): while L2 is held the right stick works as the d-pad (the command menu's cursor) and
@@ -172,11 +174,11 @@ pub fn dpad_from_stick(buttons_all: u16, rx: u8, ry: u8) -> Option<u16> {
     Some(d)
 }
 
-/// The Config menu's L2 Camera Hold row: kept in the ini.
-pub fn set_l2_hold(on: bool) {
-    L2_HOLD.store(on, Ordering::Relaxed);
-    super::settings::save("l2_camera_hold", if on { "on" } else { "off" });
-    log(&format!("Config menu: L2 camera hold {}", if on { "on" } else { "off" }));
+/// The Config menu's R2 Camera Hold row: kept in the ini.
+pub fn set_r2_hold(on: bool) {
+    R2_HOLD.store(on, Ordering::Relaxed);
+    super::settings::save("r2_camera_hold", if on { "on" } else { "off" });
+    log(&format!("Config menu: R2 camera hold {}", if on { "on" } else { "off" }));
 }
 static ORIG_FOLLOW: AtomicUsize = AtomicUsize::new(0);
 static ORIG_LOCK: AtomicUsize = AtomicUsize::new(0);
@@ -204,7 +206,7 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     KH2.store(super::settings::get().kh2_camera, Ordering::Relaxed);
-    L2_HOLD.store(super::settings::get().l2_camera_hold, Ordering::Relaxed);
+    R2_HOLD.store(super::settings::get().r2_camera_hold, Ordering::Relaxed);
     L2_DPAD.store(super::settings::get().l2_stick_menu, Ordering::Relaxed);
     let follow = base + MODES_RVA + 0x10;
     let lock = base + MODES_RVA + 0x30;
@@ -784,13 +786,12 @@ unsafe fn run(lock: bool) -> Option<()> {
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
     let auto = config < 0x10000 || rd::<i32>(config + 8) == 0;
     let hold = r2_held(base);
-    // L2 Camera Hold: with the row on and L2 held, no right-stick turn or zoom (the mouse rides
-    // the same stick in KH2's pad, so it stops too) and no R3 reset.
-    let l2_down = l2_held(base);
-    let l2 = L2_HOLD.load(Ordering::Relaxed) && l2_down;
+    // R2 Camera Hold: with the row on and R2 held (the same R2 as `hold`), no right-stick turn
+    // or zoom (the mouse rides the same stick in KH2's pad, so it stops too) and no R3 reset.
+    let locked = R2_HOLD.load(Ordering::Relaxed) && hold;
     // L2 Stick Menu: the right stick is the d-pad under L2, so it doesn't turn or zoom the camera
-    // either (the mouse rides that stick in KH2's pad too); R3 stays the L2 Camera Hold row's.
-    let stick_off = l2 || (L2_DPAD.load(Ordering::Relaxed) && l2_down && !first_person());
+    // either (the mouse rides that stick in KH2's pad too); R3 stays the R2 Camera Hold row's.
+    let stick_off = locked || (L2_DPAD.load(Ordering::Relaxed) && l2_held(base) && !first_person());
     let ctl = kh2_camera::Controls {
         // The crate's y is forward; KH1's (like KH2's pad) is positive pulled back. Passed
         // unflipped, "pulled straight back" read as forward and the swing-behind ran while Sora
@@ -798,7 +799,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         // (Not held to 1: in a mouse frame KH2's pad scales both tilts by the sensitivity.)
         move_stick: Vec2::new(l[0], -l[1]),
         look_stick: if stick_off { Vec2::ZERO } else { look(r, turn) },
-        reset: !l2 && free && pressed & R3 != 0,
+        reset: !locked && free && pressed & R3 != 0,
         auto,
         hold,
         mouse: if stick_off { None } else { m.motion.map(Vec2::from) },
@@ -1067,7 +1068,7 @@ unsafe fn r2_held(base: usize) -> bool {
     }
 }
 
-/// L2 held as KH1 sees it, read exactly as `r2_held` reads R2: Steam, bit `0x100` of KH1's raw
+/// L2 held as KH1 sees it (the L2 Stick Menu row), read exactly as `r2_held` reads R2: Steam, bit `0x100` of KH1's raw
 /// pad word (`RAW_HELD_STEAM`, PS2 order, so the keyboard's L2 key counts the same way); else the
 /// pads' own records. Frame Advance takes only R2 off the records, so L2 is never hidden.
 unsafe fn l2_held(base: usize) -> bool {

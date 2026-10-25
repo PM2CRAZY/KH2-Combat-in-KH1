@@ -234,21 +234,26 @@ doesn't reset it (thread `kh2-camera-fixes`, from KH2's behaviour).
   that table pairs the right stick's directions and R3 with "L2 not held" (bit 27), which is
   how L2 stops them; not read (it exists only while KH2 runs).
 
-### Ours (the L2 Camera Hold row)
+### Ours (the R2 Camera Hold row)
 
-- The Config menu's Camera list: "L2 Camera Hold: Off / On" under Camera Style (`config.rs`,
-  `Row::L2Hold`), kept in the ini as `l2_camera_hold` (default off: the camera as before).
-- `kh1-hook` `camera::l2_held`: read exactly as `r2_held` reads R2. Steam: bit `0x100` of KH1's
-  raw pad word (`0x14298C9B4`, PS2 order); other builds the pads' own records
-  (`takeover::RAW_BUTTONS`). KH1's own remap gives L2 and R2 the same logical bit
-  (`0x400000`), so the raw word is the only place L2 alone shows.
-- With the row on and L2 held, KH2's follow and lock-on cameras get no right stick (turn and
-  zoom), no mouse motion (KH2's pad puts the mouse on the same stick) and no R3 reset. KH2's
-  first person (Select) is not affected. The right stick isn't turned into the d-pad (this
-  version only stops the camera).
-- In KH1, L2 does nothing for the camera; pressing L2 (or R2) drops KH1's soft-target cursor
-  (`0x1402B11B0`), which this doesn't touch. Frame Advance takes only R2 off the pad records,
-  so L2 is always seen.
+- The Config menu's Camera list: "R2 Camera Hold: Off / On" under Camera Style (`config.rs`,
+  `Row::R2Hold`), kept in the ini as `r2_camera_hold` (default off: the camera as before). Up to
+  t522 it was "L2 Camera Hold" on L2 (KH2's L2 rule above); the tester then asked for R2 ("R2
+  should be the button for locking the camera"), so it is R2 now, by the tester's choice, not
+  from KH2's tables (the run-time table isn't readable). An ini that still has
+  `l2_camera_hold` keeps its on / off, now on R2.
+- R2 is read by `camera::r2_held`, the same read as KH2's camera hold (bit 32 above): Steam, bit
+  `0x200` of KH1's raw pad word (`0x14298C9B4`, PS2 order, so the keyboard's R2 key counts);
+  other builds the pads' own records (`takeover::RAW_BUTTONS`). KH1's own remap gives L2 and R2
+  the same logical bit (`0x400000`), so the raw word is the only place R2 alone shows.
+- R2 held always stops the swing-behind (KH2's own hold, Auto) or lets it run (Manual). With the
+  row on, R2 held also gives KH2's follow and lock-on cameras no right stick (turn and zoom), no
+  mouse motion (KH2's pad puts the mouse on the same stick) and no R3 reset. KH2's first person
+  (Select) is not affected.
+- With Frame Advance on, R2 steps frames and `probe::pad` takes it off the pad records, so the
+  hold (both parts) doesn't act then.
+- In KH1, R2 does nothing for the camera; pressing R2 (or L2) drops KH1's soft-target cursor
+  (`0x1402B11B0`), which this doesn't touch.
 
 ### Ours (the L2 Stick Menu row)
 
@@ -262,7 +267,7 @@ doesn't reset it (thread `kh2-camera-fixes`, from KH2's behaviour).
   (bit 26) onto the d-pad bits, which is the tester's "the right stick acts like the d-pad under
   L2"; not read (it exists only while KH2 runs). The held-repeat timers that follow
   (`0x140bf333c` / `0x140bf3340`) are KH2's own; ours uses KH1's (below).
-- Config > Camera: "L2 Stick Menu: Off / On" under L2 Camera Hold (`config.rs`, `Row::L2Dpad`),
+- Config > Camera: "L2 Stick Menu: Off / On" under R2 Camera Hold (`config.rs`, `Row::L2Dpad`),
   ini `l2_stick_menu` (default off). It works with either Camera Style.
 - `camera::dpad_from_stick`, called from `probe::pad` on every pad record KH1 reads (the record
   `0x140112C70` writes, PS2 order): with the row on and L2 held in the merged buttons, the right
@@ -271,7 +276,7 @@ doesn't reset it (thread `kh2-camera-fixes`, from KH2's behaviour).
   pad step then handles them as a pressed d-pad (its own first press and repeat, its command
   menu, and the Drive page flip on Left), and KH1's camera gets no right stick. KH2's camera reads
   the pads' merged sticks (`RAW_STICKS`, not centred), so `camera::run` drops its right stick and
-  mouse under the same test. R3 stays the L2 Camera Hold row's.
+  mouse under the same test. R3 stays the R2 Camera Hold row's.
 - Not done: the mouse as the d-pad (KH2's pad writes the mouse onto the right stick bytes before
   the direction bits; KH1's mouse goes through its own path, `0x14028b4f0`), and the keyboard's
   camera keys (KH1 merges the keyboard after the pad records). KH2's first person keeps the right

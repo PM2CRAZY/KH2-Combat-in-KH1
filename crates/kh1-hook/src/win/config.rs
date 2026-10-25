@@ -11,7 +11,7 @@
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Misc;
-//! - Camera: Camera Style, L2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals, Recoil, Magic, its own list, and Tweaks, its own list
+//! - Camera: Camera Style, R2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals, Recoil, Magic, its own list, and Tweaks, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
@@ -187,8 +187,8 @@ const KH1_DEFAULT_ROW: i32 = 7;
 #[derive(Clone, Copy)]
 enum Row {
     Camera,
-    /// L2 Camera Hold (Off | On, `camera::L2_HOLD`).
-    L2Hold,
+    /// R2 Camera Hold (Off | On, `camera::R2_HOLD`).
+    R2Hold,
     /// L2 Stick Menu (Off | On, `camera::L2_DPAD`): L2 + the right stick is the d-pad.
     L2Dpad,
     /// The physics setting (`shared::physics::rule`): KH1's or KH2's numbers for every move.
@@ -297,7 +297,7 @@ const TOP: [Item; 4] = [
 const TWEAKS: [Item; 1] = [Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance)];
 const CAMERA: [Item; 3] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
-    Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::L2Hold),
+    Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
     Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
 ];
 // (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
@@ -395,8 +395,8 @@ const STRINGS: [(u32, &str); 88] = [
     (0x7F00_0002, "KH1"),
     (0x7F00_0003, "KH2"),
     (0x7F00_0004, "Choose KH1's camera or KH2's field camera."),
-    (0x7F00_0121, "L2 Camera Hold"),
-    (0x7F00_0122, "While L2 is held, the right stick doesn't move KH2's camera\nand R3 doesn't reset it, as in KH2."),
+    (0x7F00_0121, "R2 Camera Hold"),
+    (0x7F00_0122, "While R2 is held, the right stick doesn't move KH2's camera\nand R3 doesn't reset it."),
     (0x7F00_0123, "L2 Stick Menu"),
     (0x7F00_0124, "While L2 is held, the right stick moves the command menu\nlike the d-pad, with either camera, as in KH2."),
     (0x7F00_0119, "Physics"),
@@ -451,7 +451,7 @@ fn value(what: Row) -> bool {
     use super::shared::physics;
     match what {
         Row::Camera => camera::KH2.load(Ordering::Relaxed),
-        Row::L2Hold => camera::L2_HOLD.load(Ordering::Relaxed),
+        Row::R2Hold => camera::R2_HOLD.load(Ordering::Relaxed),
         Row::L2Dpad => camera::L2_DPAD.load(Ordering::Relaxed),
         Row::Physics => physics::rule() == physics::Rule::Kh2,
         Row::Style(k) => styles::setting(k),
@@ -473,7 +473,7 @@ fn set(what: Row, v: bool) {
             super::settings::save("camera", if v { "kh2" } else { "kh1" });
             log(&format!("Config menu: camera style {}", if v { "KH2" } else { "KH1" }));
         }
-        Row::L2Hold => camera::set_l2_hold(v),
+        Row::R2Hold => camera::set_r2_hold(v),
         Row::L2Dpad => camera::set_l2_dpad(v),
         // (Live: the next physics step reads it; saved and logged by `set_rule`.)
         Row::Physics => physics::set_rule(if v { physics::Rule::Kh2 } else { physics::Rule::Kh1 }),
