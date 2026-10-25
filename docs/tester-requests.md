@@ -212,6 +212,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/soras-hit-reactions-native/soras-hit-reactions-native.md#^m1)
   - [2. Assistant: t506 to t508, the first batch. Everything below runs on KH1'](../testers/soras-hit-reactions-native/soras-hit-reactions-native.md#^m2)
   - [3. Assistant: t550 and t551. Your 3 needed no code: flight and swimming al](../testers/soras-hit-reactions-native/soras-hit-reactions-native.md#^m3)
+  - [4. Assistant: t619, plus two answers that needed no code.](../testers/soras-hit-reactions-native/soras-hit-reactions-native.md#^m4)
 - [Status: what's updated and what's needed from you](../testers/status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md)
   - [1. Assistant: You asked for this in Quick Run native(../quick-run-native/q](../testers/status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md#^m1)
   - [2. Assistant: Later in the same round (no new build):](../testers/status-whats-updated-and-whats-needed-from-you/status-whats-updated-and-whats-needed-from-you.md#^m2)

@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: t506 to t508, the first batch. Everything below runs on KH1'](#^m2)
 - [3. Assistant: t550 and t551. Your 3 needed no code: flight and swimming al](#^m3)
+- [4. Assistant: t619, plus two answers that needed no code.](#^m4)
 
 ---
 
@@ -137,3 +138,20 @@ go ahead
 3. (b)
 
 go ahead
+
+> [!tip] Assistant
+> t619, plus two answers that needed no code.
+>
+> - **Your 1, (a):** nothing to change. The Battle Quotes row already decides the hurt line on its own, so KH1's reaction with Battle Quotes on KH2 says KH2's line.
+> - **Your 2, the flight flinch follows the toggle:** it already does. Hit Reactions on KH1 plays KH1's own flight flinch; on KH2 it plays KH2's air flinch. The swap happens from the next hit after you change the row. I checked this in our slot code, and it's in the notes now.
+> - **t619, Medium Hits only on the ground and in normal air (your 3).** On Flinch, the row now only turns medium hits into flinches when Sora is on the ground or in normal air (standing, walking, running, jumping, falling, gliding and so on). These keep KH1's own medium-hit reaction: flying in Neverland, swimming (Atlantica's water too), the magic carpet and the Jungle Slider. Check: the list comes straight from the KH1 decomp's hit pass, which picks the reaction by his movement state. Couldn't check: what a few rare "ground" states are (KH1 treats them as ground, so I did too); counting Atlantica's two water states as swimming comes from our earlier notes, not new research.
+>
+> Please try:
+> - Medium Hits on Flinch, Hit Reactions on KH2: take a medium hit (about a quarter of your HP) on the ground and in a jump. It should flinch.
+> - The same while flying in Neverland or swimming in Atlantica: it should be KH1's own reaction.
+> - Flip Hit Reactions between KH1 and KH2 while flying, and check the flinch animation changes with it.
+>
+> Question: should a medium hit while gliding (a) count as normal air, as now, so the row applies, or (b) be left to KH1, like flight?
+
+^m4
+
