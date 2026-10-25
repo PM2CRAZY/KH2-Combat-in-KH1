@@ -193,4 +193,6 @@ go ahead
 > 3. Were you in the paused Config menu when you saw Glide and Superglide stay: (a) yes, or (b) no, they were still there in normal play?
 
 ^m6
+sent a trace and updated log, go ahead with any changes you need to make it 1:1
 
+go ahead
