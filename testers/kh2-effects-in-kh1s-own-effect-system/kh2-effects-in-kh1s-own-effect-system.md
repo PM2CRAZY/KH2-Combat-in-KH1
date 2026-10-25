@@ -470,3 +470,11 @@ go ahead
 
 ^m18
 
+everything looks good except for cure, I sent a link for reflect and cure please look, kh1's cure seems to not be positioned like vanilla and kh2 cure doesn't seem to be positioned properly either,
+
+1.for fire do (a)
+
+we also need to redo the magic system, each magic should have its own settings of which magic you can choose, e.g fire: kh1 | kh2 and that would change what gets casted, we'll remove ground magic and change air magic to air physics kh1 | kh2 so now you can cast kh2 fire with kh1 air physics like how we did for reflect. remove anything related to the main physics setting that has magic in it and put it in this new air setting. you can also change the animation of magic with the exception being reflect, and fire as they have a different behaviour from the other animations.
+
+go ahead
+
