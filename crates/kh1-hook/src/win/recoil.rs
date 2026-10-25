@@ -67,6 +67,21 @@ pub fn kh2() -> bool {
     styles::kh2(Kind::Recoil)
 }
 
+/// Whether a KH2 guard window of `motion` on `weapon` (KH2's index: 0 his body, 1 / 2 the
+/// Keyblades) guards (the tester, thread kh2-recoil-and-parry-system m2: "guard break and other kh
+/// moves still use the kh2s recoil mechanics when I set recoil to kh1 ... everything should work how
+/// kh1 handles when you hit an enemy"; his trace and log: Guard Break's own Keyblade guard, ATKP 162
+/// frames 5..42, stopped the enemy's three hits at Recoil KH1). KH1's swings carry no guard: an
+/// enemy attack meeting one is KH1's clash by priority (`0x1402B4BC0`, Checked (decomp)), or it
+/// hits him. So at Recoil KH1 base Sora's Keyblade guard windows guard only in his guard moves (the
+/// guard press 173 and its repel 42, KH1's Block's place); in his attacks (Guard Break 165, Vicinity
+/// Break 170) they don't. His body guards (Aerial Dodge, Flash Step, Aerial Recovery, Counterguard,
+/// Vicinity Break's 406) are untouched here. Recoil KH2 and the Drive Forms: every window, as KH2.
+pub fn guard_window_on(motion: u16, weapon: u8) -> bool {
+    use character_core::motion::{GUARD, GUARD_PRESS};
+    kh2() || super::form::in_form() || weapon == 0 || motion == GUARD_PRESS || motion == GUARD
+}
+
 /// Base Sora on KH1's states (a Drive Form's recoils are its KH2 controller's).
 fn on() -> bool {
     super::shared::active() && !super::form::in_form()

@@ -397,3 +397,25 @@ would only stop KH2's shapes (`strike_as`) until the pass learns it too.
   - Recoil KH2: KH2's repel (motion 42, pushed back 200, KH2's 80 frames of §6.4, Counterguard).
 - The old ini default was `guard_repel = kh2` while `recoil` defaults to KH1, so a fresh ini (and
   the tester's, `recoil = kh1`) now gets KH1's block. **Checked (code).**
+
+### 6.7 Recoil KH1: no guard windows in his attacks
+
+- The tester (m2): "guard break and other kh moves still use the kh2s recoil mechanics when I set
+  recoil to kh1". His trace (`trace_1792887810_f39547`) and log (t544, `recoil = kh1`): Guard
+  Break (KH2 motion 165 on our row 69, request 0x203) put its own Keyblade guard up (ATKP 162,
+  frames 5..42, kind 2 refact self 2) as three KH1 guard objects, and `hurt` took the enemy's three
+  hits on it ("KH2's guard on the Keyblade (ATKP 162, refact self 2), no effect"). **Checked
+  (trace).** KH2's own data puts guard windows in some attacks (Guard Break 165's 162, Vicinity
+  Break 170's three 162s; **Checked (files)**, `W_EX010.mset` via the log's guard lines).
+- KH1's swings carry no guard: an enemy attack meeting a KH1 swing is KH1's clash by priority
+  (`0x1402B4BC0`, both sides under 0x62 both recoil; a side at 0x62 or more isn't stopped), or it
+  reaches his body. **Checked (decomp).**
+- So at Recoil KH1 (`recoil::guard_window_on`) a Keyblade guard window (KH2 weapon 1 / 2) guards
+  only in Sora's guard moves (the guard press 173 and its repel 42); in attacks it is neither a KH1
+  guard object (`combat::guard_step`) nor a guard `hurt` takes a hit on (`kh2slots::keyblade_guard`).
+  The swing's own KH1 row object meets the enemy's attack in KH1's pass as any KH1 swing does.
+- Not changed: his body guards (weapon 0: Aerial Dodge 202 / Flash Step 169 / Vicinity Break 170's
+  406, Aerial Recovery 40 / Counterguard 171's 124), which are another thread's (body guards), and
+  KH2's controller (Drive Forms, borrowed moves), which keeps KH2's recoil and guards in both
+  settings as before.
+- Recoil KH2: every window as KH2 has it.

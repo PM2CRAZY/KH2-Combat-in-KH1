@@ -1685,7 +1685,8 @@ impl Strikes {
             f & 0x800 != 0 && f & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(o + 0x34)) == sora
         };
         let mut live: Vec<((u64, usize), Shape, u8, u16)> = Vec::new();
-        for g in &out.guard_boxes {
+        // (Recoil KH1: no guard windows in his attacks, `recoil::guard_window_on`.)
+        for g in out.guard_boxes.iter().filter(|g| super::recoil::guard_window_on(out.motion, g.weapon)) {
             for (i, sh) in anim.attack_shapes(g.group, g.weapon).into_iter().take(GUARD_SHAPES).enumerate() {
                 live.push(((g.swing, i), sh, g.weapon, g.attack));
             }

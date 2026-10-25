@@ -606,7 +606,7 @@ pub unsafe fn keyblade_guard(actor: usize) -> Option<(u16, u8)> {
     }
     let f = t as u32;
     clip.windows.iter().filter(|w| w.contains(f)).filter_map(|w| match w.kind {
-        W::Guard { attack, weapon, .. } if weapon > 0 => kh2.battle.attack_for_level(attack, 0, 0).map(|a| (attack, a.refact_self)),
+        W::Guard { attack, weapon, .. } if weapon > 0 && super::recoil::guard_window_on(m.motion, weapon) => kh2.battle.attack_for_level(attack, 0, 0).map(|a| (attack, a.refact_self)),
         _ => None,
     }).min_by_key(|g| g.1)
 }
