@@ -47,3 +47,10 @@
 ^m1
 
 
+1. I don't want a hybrid layer just do (a) without baking on top of it
+2. same as kh1 for now
+3. (b) kh2 voice plays if the toggle for kh2 voices is on
+
+go ahead
+
+
