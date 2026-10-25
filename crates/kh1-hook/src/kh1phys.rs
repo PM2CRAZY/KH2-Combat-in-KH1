@@ -242,7 +242,7 @@ pub enum Rule {
 
 impl Rule {
     /// The ini's value: `kh1`, else KH2's (the default, and what an older ini's `physics = on /
-    /// off`, the hair's old switch, reads as).
+    /// off`, the hair's switch before `hair_physics`, reads as).
     pub fn parse(v: Option<&str>) -> Rule {
         match v.map(|v| v.trim().to_ascii_lowercase()) {
             Some(v) if v == "kh1" => Rule::Kh1,

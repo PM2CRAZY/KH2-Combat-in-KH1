@@ -92,8 +92,9 @@ at all). Whose **physics numbers** move him is one setting for every move, `phys
   the config there's not a setting to switch between KH1 and KH2 physics"): ini `physics = kh1 |
   kh2` (KH2's without it), the Config menu's **Physics** row (after Camera Style, live, saved to
   the ini, logged "Config menu: physics ..."). `shared::physics::source()` is the one switch
-  point (`kh1phys::Rule`); a Drive Form is KH2's either way. (The hair's old switches are gone
-  since t388.) Details and every choice: `docs/kh1-physics.md`
+  point (`kh1phys::Rule`); a Drive Form is KH2's either way. (The hair's old `physics = on / off`
+  is `hair_physics` now; an older ini's line is still read for the hair and moved to
+  `hair_physics` the first time the row is used.) Details and every choice: `docs/kh1-physics.md`
   §7.
 - **Physics KH2 on KH1's states** (`shared::physics`, KH1's state table `0x142DB4240` wrapped
   for Sora), whatever the move styles:

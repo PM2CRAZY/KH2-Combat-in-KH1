@@ -18,10 +18,7 @@
 //!   and shin (the foot's direction only while the leg is nearly straight; a foot kicked back
 //!   sole-up in KH2's run had spun the thigh 166° when the foot set the roll), the shin for the
 //!   foot, where the elbow points for the upper arm (the knuckle line while the arm is nearly
-//!   straight), the knuckle line for forearm, hand and finger segments. Thigh and shin take
-//!   their roll from the KH2 bone that carries that part of KH2's mesh (the shorts' legs
-//!   24 / 53, the knees 12 / 41; the knee's direction differed from it by up to 61-109° in a
-//!   few motions), the knee's direction only where that bone's z nears the limb's line.
+//!   straight), the knuckle line for forearm, hand and finger segments.
 //! KH1 bones outside every part (skirt, belt, pouches, face, hair, thumbs, the weapon chain)
 //! turn with their parent. Bone lengths stay KH1's: each joint is placed from its parent along
 //! its own bind offset; the hips' translation is scaled by the ratio of the two hip heights.
@@ -45,11 +42,7 @@ pub(crate) enum Pole {
     /// first fallback, turns against the knee whenever a raised thigh points the toes down
     /// (falls, landings, jumps, combos), and the thigh then rolled 180° within a frame as the
     /// leg straightened (the user: a trouser leg snapped while falling).
-    /// `skin`: the KH2 bone that carries this part of KH2's mesh and the part's z in the bind:
-    /// with KH2's turns given (`frames_with`), the roll about the limb is that bone's (KH2's
-    /// shorts' legs 24 / 53 on the thighs, its knees 12 / 41 on the shins), the knee's direction
-    /// only where the bone's z comes near the limb's line.
-    Knee { a: usize, b: usize, c: usize, hips: (usize, usize), skin: Option<(usize, Vec3)> },
+    Knee { a: usize, b: usize, c: usize, hips: (usize, usize) },
     /// A foot: the ankle's hinge (the shin part's x, so the foot rolls with the shin as a real
     /// ankle does), turning to the model's up while the foot lies flat near the ground (a
     /// planted sole stays flat when KH2's shins lean out: the user's contorted shoes). `sign`
@@ -71,10 +64,6 @@ pub(crate) enum Part {
     /// y along `from` → `to`, z along the pole made square to y.
     Aim { from: usize, to: usize, pole: Pole },
 }
-
-/// Below this length the skinned bone's z, made square to the limb, gives way to the knee's
-/// direction (fully at half of it; it lies along the limb there and its roll is undefined).
-const SKIN_NEAR: f32 = 0.3;
 
 /// The sine of a joint's bend: below the first the limb counts as straight (fallback pole),
 /// above the second as bent.
@@ -99,7 +88,7 @@ fn perp(v: Vec3, axis: Vec3) -> Vec3 {
 }
 
 impl Part {
-    fn frame(&self, p: &[Vec3], done: &[Option<Quat>], turn: &dyn Fn(usize) -> Option<Quat>) -> Option<Quat> {
+    fn frame(&self, p: &[Vec3], done: &[Option<Quat>]) -> Option<Quat> {
         let at = |i: usize| p.get(i).copied();
         let (x, y, z) = match *self {
             Part::Torso { right, up } => {
@@ -118,7 +107,7 @@ impl Part {
                         let dir = dir * if flip { -1.0 } else { 1.0 };
                         (fb * (1.0 - w) + dir * w).normalize_or_zero()
                     }
-                    Pole::Knee { a, b, c, hips, skin } => {
+                    Pole::Knee { a, b, c, hips } => {
                         // The hips' forward, swung along with the segment from hanging straight
                         // down to where it points: square to the segment however far the thigh
                         // is raised (a raised thigh lies along the plain forward, and its roll
@@ -128,14 +117,7 @@ impl Part {
                         let forward = right.cross(up);
                         let fb = perp(Quat::from_rotation_arc(-up, y) * forward, y).normalize_or_zero();
                         let (w, dir) = bend(at(a)?, at(b)?, at(c)?, y);
-                        let knee = (fb * (1.0 - w) + dir * w).normalize_or_zero();
-                        match skin.and_then(|(bone, rest_z)| Some(perp(turn(bone)? * rest_z, y))) {
-                            Some(zs) => {
-                                let k = ((zs.length() - SKIN_NEAR) / SKIN_NEAR).clamp(0.0, 1.0);
-                                (zs.normalize_or_zero() * k + knee * (1.0 - k)).normalize_or_zero()
-                            }
-                            None => knee,
-                        }
+                        (fb * (1.0 - w) + dir * w).normalize_or_zero()
                     }
                     Pole::Foot { shin, ankle, sign } => {
                         let hinge = (*done.get(shin)?)? * Vec3::X;
@@ -230,6 +212,8 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
         clavicle: usize,
         finger_shift: usize,
     }
+    let mut thigh_plus = 0;
+    let mut thigh_minus = 0;
     // Parts whose rest frame is measured on KH1's bind (not KH2's): the KH1 bones then take
     // KH2's direction outright, where the two binds hold that limb differently.
     let mut kh1_rest: Vec<(usize, Part)> = vec![];
@@ -238,13 +222,9 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
             parts.push(p);
             parts.len() - 1
         };
-        // The thigh rolls as KH2's shorts' leg (24 / 53, under 23 / 52 under the thigh joint),
-        // the shin as KH2's knee bone: they carry those parts of KH2's mesh, the thigh joint
-        // and hips carry none (`docs/kh1-secondary-motion.md`). Their z in the bind is filled in
-        // by `Retarget::new`.
-        let knee = |skin: usize| Pole::Knee { a: s.hip, b: s.knee, c: s.ankle, hips: (minus_x().hip, PLUS_X.hip), skin: Some((skin, Vec3::Z)) };
-        let thigh = add(Part::Aim { from: s.hip, to: s.knee, pole: knee(s.hip + 13) });
-        let shin = add(Part::Aim { from: s.knee, to: s.ankle, pole: knee(s.knee) });
+        let knee = Pole::Knee { a: s.hip, b: s.knee, c: s.ankle, hips: (minus_x().hip, PLUS_X.hip) };
+        let thigh = add(Part::Aim { from: s.hip, to: s.knee, pole: knee });
+        let shin = add(Part::Aim { from: s.knee, to: s.ankle, pole: knee });
         let foot = add(Part::Aim { from: s.heel, to: s.toe, pole: Pole::Foot { shin, ankle: s.ankle, sign: 1.0 } });
         let clav = add(Part::Aim { from: s.clavicle, to: s.shoulder, pole: Pole::Line(67, 137) });
         let upper = add(Part::Aim { from: s.shoulder, to: s.elbow, pole: Pole::Joint { a: s.shoulder, b: s.elbow, c: s.wrist, fallback: (s.little, s.index), flip: true } });
@@ -272,6 +252,11 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
         for b in c + 9..=c + 12 {
             one(b, hand, &mut bones);
         }
+        if k.hip == 42 {
+            thigh_plus = thigh;
+        } else {
+            thigh_minus = thigh;
+        }
         // The thumb: KH2's is one segment (base → tip, 89 → 92 / 181 → 184), lying along the
         // fingers in its bind; KH1's (103-107 / 207-211) points straight forward in its bind.
         // Turned by the difference from KH2's bind it kept KH1's forward thumb (the user:
@@ -297,6 +282,21 @@ fn layout() -> (Vec<Part>, Vec<(usize, usize, usize, f32)>, Vec<(usize, Part)>) 
             }
         }
     }
+    // The jacket's hem: nine cloth chains from the spine base (71) down over the shorts: back
+    // centre 72, and per side front, side-front, side-back and back (248 / 252 / 256 / 260 on
+    // +x, 264 / 268 / 272 / 276 on -x). KH2 parents its own hem to the pelvis (its bones 4-9,
+    // 35-38), so ours turns with the hips, not the chest, and a thigh pushes the panels in front
+    // of it along as it rises (front most, back least). Before, the hem rode on the chest and
+    // stuck out, or cut into the thighs, whenever KH2 leaned or strode (the user: make the
+    // jacket mesh with KH2's motions).
+    let _ = chest;
+    bones.push((72, pelvis, pelvis, 0.0));
+    let _ = thigh_plus;
+    for (base, thigh) in [(248, thigh_plus), (264, thigh_minus)] {
+        for (k, share) in [0.25, 0.15, 0.05, 0.0].into_iter().enumerate() {
+            bones.push((base + 4 * k, pelvis, thigh, share));
+        }
+    }
     (parts, bones, kh1_rest)
 }
 
@@ -309,8 +309,6 @@ pub struct Retarget {
     parts: Vec<Part>,
     /// Each part's frame in KH2's bind pose, inverted.
     rest_inv: Vec<Option<Quat>>,
-    /// KH2's bind rotations (model space), for the parts that read a KH2 bone's turn.
-    kh2_rest: Vec<Quat>,
     /// Per KH1 bone: (part a, part b, blend).
     turns: Vec<Option<(usize, usize, f32)>>,
     /// KH1 hip height / KH2 hip height.
@@ -334,23 +332,7 @@ pub struct Retarget {
     /// The weapon's grip as KH1 holds it now (`set_grip`), when it is turned well away from the
     /// rest pose's (another weapon held another way: the Dream Sword).
     grip_live: std::sync::Mutex<Option<Mat4>>,
-    /// KH1's own parts (`KH1_OWN`) as KH1's animation of the move has them now (`set_own`):
-    /// each one's matrix relative to its parent, unscaled.
-    own: std::sync::Mutex<Vec<Option<Mat4>>>,
 }
-
-/// KH1's own parts with nothing of KH2's to follow (`docs/kh1-secondary-motion.md`): bones that
-/// would take KH1's own animation of the move KH2's stands in for (`set_own`), relative to their
-/// parent. None now. The shorts' panels (27-28, 31-32, 35-36, 39-40; 53-54, 57-58, 61-62, 65-66)
-/// were the last (t387-t489); the tester: "make everything 1:1 with how its animated in kh2, if
-/// there's no equivalences ... then don't add them". KH2's shorts are drawn on its pelvis (2) and
-/// on a bone carried by each thigh (24 / 53), so they move with the hips and thighs and nothing
-/// else (Checked (files): `P_EX100.mdlx`'s vertex packets; 24 / 53 turn as the retarget's thigh
-/// part does in the median frame of every motion). So KH1's panels hang rigidly on KH1's thigh
-/// again (their bind relation, as before t387). (The belt-front pieces 5 and 8, the belt chain
-/// 11-14, the necklace's pendant 87 and the coat left earlier.) The machinery stays for later
-/// polish.
-pub const KH1_OWN: [usize; 0] = [];
 
 /// The weapon's grip bone (the Keyblade's, also every other weapon's).
 pub const GRIP_BONE: usize = 280;
@@ -370,7 +352,7 @@ fn limit(prev: Option<Quat>, want: Quat) -> Quat {
 }
 
 /// A cloth chain: its root, every bone it moves, and per joint the thigh segment (hip, knee)
-/// and the distance from it the joint keeps (its bind distance plus a margin, at most a cap).
+/// and the distance from it the joint keeps (its bind distance, at most `CLEAR_MAX`).
 struct Cloth {
     root: usize,
     bones: Vec<usize>,
@@ -379,45 +361,31 @@ struct Cloth {
 
 /// KH1's thighs (hip joint, knee) and the cloth chains kept off them.
 const THIGHS: [(usize, usize); 2] = [(43, 44), (17, 18)];
-/// Chains carried rigidly by another bone as in the bind (`attach`): (root, carrier).
+const CLEAR_MAX: f32 = 14.0;
+/// Chain roots and joints: the belt chain (10: 12-15), the hem's back centre (72: 73-75) and
+/// its eight panels (root: root + 2, + 3).
 /// The belt chain (10-15) runs from the belt down over the +x shorts panel to the back pocket:
 /// it is carried by that thigh (43) as in the bind, as the shorts' panels are, so it keeps
 /// lying on them however the leg goes (hanging free it fell inside the shorts whenever the
 /// battle stance spread the legs: the user's chain clipping through the pants).
-/// The jacket's hem (the coat): nine cloth chains from the spine base (71) down over the shorts:
-/// back centre 72, and per side front, side-front, side-back and back (248 / 252 / 256 / 260 on
-/// +x, 264 / 268 / 272 / 276 on -x). KH2 draws its jacket on its torso bone 67 and on nothing
-/// else (its coat ring 129-135 / 221-227 / 70 and pelvis pieces carry no mesh), and 67 turns as
-/// the chest part does (Checked (files)). So the coat is carried rigidly by KH1's chest (78) as
-/// in the bind, every joint at its bind relation (the tester: "make everything 1:1 with how its
-/// animated in kh2"). From s284 to t489 its roots turned with KH2's pelvis, the front panels a
-/// share with the thigh, and it was swung off the thighs (`keep_clear`): ours, not KH2's.
-/// Its chains then turn as KH2's coat ring (`coat_kh2`).
-const ATTACHED: [(usize, usize); 10] = [(10, 43), (72, 78), (248, 78), (252, 78), (256, 78), (260, 78), (264, 78), (268, 78), (272, 78), (276, 78)];
-
-/// The coat's nine chains (root, root + 1 at the same place, two joints below): their roots.
-const COAT: [usize; 9] = [72, 248, 252, 256, 260, 264, 268, 272, 276];
-/// KH2's coat ring (Checked (files): `P_EX100.mdlx`'s skeleton): a root and a leaf at the same
-/// place per panel, every root under the chest 68 (the back's 69 / 70 too), the leaf's bind axis
-/// within 7 degrees of the matching KH1 panel's (back 70, +x front 129, side-front 131, side-back
-/// 133, back 135; -x 221 .. 227). KH2's motions key the leaves only (F-curves, no constraint,
-/// expression or IK on them: `docs/kh1-secondary-motion.md` "How KH2's exe animates Sora"): in
-/// the field idle they sit at their bind relation to the chest, in the battle stance and the
-/// swings they hang down from the leaning chest and sway with the stride. Each KH1 chain
-/// (`COAT[k]`, its joint `COAT[k] + 1`) takes its leaf's turn as the hair takes its spike's.
-const COAT_KH2: [usize; 9] = [70, 129, 131, 133, 135, 221, 223, 225, 227];
-/// KH2's chest (the ring's parent), KH1's (the coat's carrier, `ATTACHED`).
-const COAT_CHEST: (usize, usize) = (68, 78);
+const ATTACHED: [(usize, usize); 1] = [(10, 43)];
 
 /// Each: root, joints, what they keep off (bone pairs), the most distance kept, and a margin
 /// added to the bind's distance.
 fn cloth_chains() -> Vec<(usize, Vec<usize>, Vec<(usize, usize)>, f32, f32)> {
-    // The belt chain, carried by the +x thigh, also stands CHAIN_OUT further off it than in the
-    // bind: its back part (skinned with the hips, which the thigh turns against in KH2's stances)
-    // lay in the back of the shorts (the user: the back of the chain clips into the shorts, in
-    // every stance). (The coat's nine chains were kept off the thighs here too until KH2's
-    // jacket was followed 1:1: KH2 keeps nothing off anything.)
-    vec![(10usize, vec![14usize, 15], vec![THIGHS[0]], 22.0, CHAIN_OUT)]
+    let thighs = THIGHS.to_vec();
+    let mut v = vec![
+        // The belt chain, carried by the +x thigh, also stands CHAIN_OUT further off it than in
+        // the bind: its back part (skinned with the hips, which the thigh turns against in
+        // KH2's stances) lay in the back of the shorts (the user: the back of the chain clips
+        // into the shorts, in every stance).
+        (10usize, vec![14usize, 15], vec![THIGHS[0]], 22.0, CHAIN_OUT),
+        (72, vec![73, 74, 75], thighs.clone(), CLEAR_MAX, 0.0),
+    ];
+    for root in [248usize, 252, 256, 260, 264, 268, 272, 276] {
+        v.push((root, vec![root + 2, root + 3], thighs.clone(), CLEAR_MAX, 0.0));
+    }
+    v
 }
 
 const CHAIN_OUT: f32 = 4.0;
@@ -441,33 +409,17 @@ const HOOD_FOLD: f32 = 0.7;
 /// rest poses never changed them: the user's "thumbs have still not changed").
 const THUMBS: [std::ops::RangeInclusive<usize>; 2] = [103..=107, 207..=211];
 
-/// A bone's relation to its parent in a model-space pose whose axes carry each bone's scale (as
-/// KH1's bone pass leaves them, or `kh2_anim::Pose`): its matrix relative to the parent, unscaled
-/// (for `set_own`), and its own scale (its over its parent's: KH1 multiplies it down the bones).
-pub fn own_relation(parent: &Mat4, bone: &Mat4) -> Option<(Mat4, Vec3)> {
-    let (sp, rp, tp) = parent.to_scale_rotation_translation();
-    let (sb, rb, tb) = bone.to_scale_rotation_translation();
-    let l = Mat4::from_rotation_translation(rp.normalize(), tp).inverse() * Mat4::from_rotation_translation(rb.normalize(), tb);
-    let s = sb / sp.max(Vec3::splat(1e-6));
-    (l.is_finite() && s.is_finite() && s.min_element() > 0.0).then_some((l, s))
-}
-
 /// A turn's part about the model's up (y) axis (swing-twist).
 fn yaw_of(q: Quat) -> Quat {
     let t = Quat::from_xyzw(0.0, q.y, 0.0, q.w);
     if t.length_squared() < 1e-8 { Quat::IDENTITY } else { t.normalize() }
 }
 
-/// Every part's frame, in order (a foot reads its shin's), from joint positions alone.
+/// Every part's frame, in order (a foot reads its shin's).
 pub(crate) fn frames(parts: &[Part], p: &[Vec3]) -> Vec<Option<Quat>> {
-    frames_with(parts, p, &|_| None)
-}
-
-/// As `frames`, `turn(bone)` giving a KH2 bone's turn from its bind for the parts that read one.
-pub(crate) fn frames_with(parts: &[Part], p: &[Vec3], turn: &dyn Fn(usize) -> Option<Quat>) -> Vec<Option<Quat>> {
     let mut done: Vec<Option<Quat>> = Vec::with_capacity(parts.len());
     for part in parts {
-        let f = part.frame(p, &done, turn);
+        let f = part.frame(p, &done);
         done.push(f);
     }
     done
@@ -501,18 +453,11 @@ impl Retarget {
                 }
             }
         }
-        let rest_frames = frames(&parts, &rest);
-        for (p, f) in parts.iter_mut().zip(&rest_frames) {
-            if let (Part::Aim { pole: Pole::Knee { skin: Some((_, z)), .. }, .. }, Some(f)) = (p, f) {
-                *z = *f * Vec3::Z;
-            }
-        }
-        let mut rest_inv: Vec<Option<Quat>> = rest_frames.into_iter().map(|q| q.map(|q| q.inverse())).collect();
-        let kh2_rest: Vec<Quat> = b2.iter().map(|m| m.to_scale_rotation_translation().1.normalize()).collect();
+        let mut rest_inv: Vec<Option<Quat>> = frames(&parts, &rest).into_iter().map(|q| q.map(|q| q.inverse())).collect();
         let rest1 = positions(&b1);
         for (i, p) in kh1_rest {
             if let Some(r) = rest_inv.get_mut(i) {
-                *r = p.frame(&rest1, &[], &|_| None).map(|q| q.inverse());
+                *r = p.frame(&rest1, &[]).map(|q| q.inverse());
             }
         }
         let mut turns = vec![None; kh1.len()];
@@ -559,8 +504,7 @@ impl Retarget {
         }
         let memory = std::sync::Mutex::new((vec![None; kh1.len()], vec![Quat::IDENTITY; cloth.len()]));
         let bind_m = b1.clone();
-        let own = std::sync::Mutex::new(vec![None; kh1.len()]);
-        Retarget { parent, pos, rot, scale, parts, rest_inv, kh2_rest, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory, bind_m, grip_live: std::sync::Mutex::new(None), own }
+        Retarget { parent, pos, rot, scale, parts, rest_inv, turns, hip_ratio, rest_local, rest_open, hang, cloth, memory, bind_m, grip_live: std::sync::Mutex::new(None) }
     }
 
     /// KH1's hip height over KH2's (KH2 distances to KH1 ones).
@@ -623,18 +567,6 @@ impl Retarget {
         use_live.is_some()
     }
 
-    /// KH1's own parts (`KH1_OWN`) as KH1's own animation has them this frame: `local(bone)`, its
-    /// matrix relative to its parent (unscaled), or `None` to hang it as before (the bind's
-    /// relation). Kept until set again.
-    pub fn set_own(&self, local: impl Fn(usize) -> Option<Mat4>) {
-        let Ok(mut own) = self.own.lock() else { return };
-        for &b in KH1_OWN.iter() {
-            if let Some(o) = own.get_mut(b) {
-                *o = local(b).filter(|m| m.is_finite());
-            }
-        }
-    }
-
     /// The thumbs' open-handed pose (KH1's field idle), for `pose_grip(.., false)`.
     pub fn set_rest_open(&mut self, rest: &[Bone]) {
         let m = kh2_anim::Pose::bind(rest).bones;
@@ -675,20 +607,10 @@ impl Retarget {
         self.turns.iter().filter(|t| t.is_some()).count()
     }
 
-    /// Every part's frame in a KH2 model-space pose (positions `now`), the skinned limbs reading
-    /// their KH2 bone's turn from its bind.
-    fn part_frames(&self, kh2: &[Mat4], now: &[Vec3]) -> Vec<Option<Quat>> {
-        frames_with(&self.parts, now, &|b| {
-            let m = kh2.get(b)?;
-            let q = (m.to_scale_rotation_translation().1.normalize() * self.kh2_rest.get(b)?.inverse()).normalize();
-            q.is_finite().then_some(q)
-        })
-    }
-
     /// Each part's turn for a KH2 pose (debugging).
     pub fn part_turns(&self, kh2: &[Mat4]) -> Vec<Option<Quat>> {
         let now = positions(kh2);
-        self.part_frames(kh2, &now).into_iter().zip(&self.rest_inv).map(|(f, r)| Some(f? * (*r)?)).collect()
+        frames(&self.parts, &now).into_iter().zip(&self.rest_inv).map(|(f, r)| Some(f? * (*r)?)).collect()
     }
 
     /// KH1 model-space bone matrices for a KH2 model-space pose (hands gripping).
@@ -699,10 +621,8 @@ impl Retarget {
     /// As `pose`; `grip` false gives the thumbs KH1's open-handed pose.
     pub fn pose_grip(&self, kh2: &[Mat4], grip: bool) -> Vec<Mat4> {
         let now = positions(kh2);
-        let part: Vec<Option<Quat>> = self.part_frames(kh2, &now).into_iter().zip(&self.rest_inv).map(|(f, r)| Some(f? * (*r)?)).collect();
+        let part: Vec<Option<Quat>> = frames(&self.parts, &now).into_iter().zip(&self.rest_inv).map(|(f, r)| Some(f? * (*r)?)).collect();
         let n = self.pos.len();
-        let own_local = self.own.lock().ok();
-        let own_at = |i: usize| own_local.as_ref().and_then(|o| o.get(i).copied().flatten());
         let mut turn = vec![Quat::IDENTITY; n];
         let mut at = vec![Vec3::ZERO; n];
         let mut out = vec![Mat4::IDENTITY; n];
@@ -717,7 +637,6 @@ impl Retarget {
             });
             let rest = if grip { self.rest_local[i] } else { self.rest_open[i].or(self.rest_local[i]) };
             let rest = if i == GRIP_BONE { self.grip_live.lock().ok().and_then(|g| *g).or(rest) } else { rest };
-            let rest = own_at(i).or(rest);
             if let (None, Some(p), Some(l)) = (own, self.parent[i], rest) {
                 out[i] = out[p] * l;
                 let (_, r, t) = out[i].to_scale_rotation_translation();
@@ -737,83 +656,35 @@ impl Retarget {
             }
             out[i] = Mat4::from_scale_rotation_translation(self.scale[i], (turn[i] * self.rot[i]).normalize(), at[i]);
         }
-        self.attach(&mut out, &own_at);
-        self.coat_kh2(&mut out, kh2);
-        drop(own_local);
+        self.attach(&mut out);
         self.keep_clear(&mut out);
         out
     }
 
-    /// Bones carried by another as in the bind (`ATTACHED`): the root rigidly, the bones under it
-    /// by their relation to their parent, KH1's own animation of them (`own`) where it is given.
-    fn attach(&self, out: &mut [Mat4], own: &dyn Fn(usize) -> Option<Mat4>) {
+    /// Bones carried rigidly by another as in the bind (`ATTACHED`).
+    fn attach(&self, out: &mut [Mat4]) {
         for &(root, to) in ATTACHED.iter() {
             if root >= out.len() || to >= out.len() {
                 continue;
             }
             let carry = out[to] * self.bind_m[to].inverse();
-            out[root] = carry * self.bind_m[root];
-            for j in root + 1..out.len() {
-                let mut p = self.parent[j];
-                let under = loop {
+            for j in 0..out.len() {
+                let mut p = Some(j);
+                for _ in 0..16 {
                     match p {
-                        Some(q) if q == root => break true,
-                        Some(q) if q > root => p = self.parent[q],
-                        _ => break false,
+                        Some(q) if q == root => {
+                            out[j] = carry * self.bind_m[j];
+                            break;
+                        }
+                        Some(q) => p = self.parent[q],
+                        None => break,
                     }
-                };
-                if let (true, Some(q)) = (under, self.parent[j]) {
-                    let local = own(j).unwrap_or_else(|| self.bind_m[q].inverse() * self.bind_m[j]);
-                    out[j] = out[q] * local;
                 }
             }
         }
     }
 
-    /// The coat as KH2's coat ring moves (`COAT_KH2`): each chain's joint (root + 1, at the root's
-    /// place on the chest) takes its KH2 leaf's turn from its bind with KH2's chest's turn taken out,
-    /// put on KH1's chest's turn; the joints below keep their bind relation to it (KH2's panel is
-    /// one bone), lengths and KH1's own shape kept. A chain whose KH2 bones are missing or not
-    /// finite stays as `attach` left it (rigid on the chest).
-    fn coat_kh2(&self, out: &mut [Mat4], kh2: &[Mat4]) {
-        let (c2, c1) = COAT_CHEST;
-        if out.len() <= COAT[COAT.len() - 1] + 3 || kh2.len() <= COAT_KH2.iter().copied().max().unwrap_or(0) || kh2.len() <= c2 {
-            return;
-        }
-        let rot = |m: &Mat4| m.to_scale_rotation_translation().1.normalize();
-        let (Some(r2c), Some(_)) = (self.kh2_rest.get(c2), self.bind_m.get(c1)) else { return };
-        let chest2 = (rot(&kh2[c2]) * r2c.inverse()).normalize();
-        let chest1 = (rot(&out[c1]) * rot(&self.bind_m[c1]).inverse()).normalize();
-        for (k, &root) in COAT.iter().enumerate() {
-            let leaf = COAT_KH2[k];
-            let Some(r2) = self.kh2_rest.get(leaf) else { continue };
-            let rel = (chest2.inverse() * rot(&kh2[leaf]) * r2.inverse()).normalize();
-            let turn = (chest1 * rel).normalize();
-            let j = root + 1;
-            let old = out[j];
-            let (sc, _, at) = old.to_scale_rotation_translation();
-            let new = Mat4::from_scale_rotation_translation(sc, (turn * rot(&self.bind_m[j])).normalize(), at);
-            let m = new * old.inverse();
-            if !rel.is_finite() || !m.is_finite() {
-                continue;
-            }
-            for i in j..out.len() {
-                let mut p = Some(i);
-                let under = loop {
-                    match p {
-                        Some(q) if q == j => break true,
-                        Some(q) if q > j => p = self.parent[q],
-                        _ => break false,
-                    }
-                };
-                if under {
-                    out[i] = m * out[i];
-                }
-            }
-        }
-    }
-
-    /// Cloth (the belt chain) never comes nearer a thigh than it was in
+    /// Cloth (the belt chain, the jacket's hem panels) never comes nearer a thigh than it was in
     /// the bind: where a joint would, its chain swings about its root just far enough out
     /// (KH1 animates this cloth by hand in each of its own motions, so nothing of KH1's fits
     /// KH2's strides; the user: the chain went through the shorts, the jacket should mesh).

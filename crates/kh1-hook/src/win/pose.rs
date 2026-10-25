@@ -296,6 +296,9 @@ struct Sora {
     jumps: u32,
     /// KH1's bone parents (for the feet).
     parents: Vec<i16>,
+    /// The hair, hood and keychain's swing under KH2's poses (`kh1_data::jiggle`), and when it
+    /// last moved.
+    jiggle: Option<(kh1_data::jiggle::Jiggle, u64)>,
     /// KH1's hair, hood and keychain following KH2's own animation of them
     /// (`kh1_data::secondary`), built with the retarget.
     secondary: Option<kh1_data::secondary::Secondary>,
@@ -304,20 +307,6 @@ struct Sora {
     inverse: Option<kh1_data::inverse::Inverse>,
     /// The KH2 pose (Sora's bones, the Keyblade's) the pose being drawn came from, if KH2's.
     kh2_now: Option<(Vec<Mat4>, Vec<Mat4>)>,
-    /// Each bone's own scale for the pose being drawn (KH2's squash and stretch on the parts
-    /// `secondary` matched, `Secondary::scales`), kept from frame to frame (no allocation).
-    scales: Vec<Vec3>,
-    /// KH1's own scale on its own parts (`retarget::KH1_OWN`) in KH1's last pass (`own_from_kh1`).
-    own_scale: Vec<Vec3>,
-    /// KH1's own parts' relation to their parent as `own_from_kh1` last measured it (kept on a
-    /// pass that didn't place the parent).
-    own_rel: Vec<Option<Mat4>>,
-    /// KH1's own relation (unscaled) of each bone above those parts to its parent, from the last
-    /// pass that placed both (`own_from_kh1`): KH1's blend pass doesn't place them.
-    kh1_local: Vec<Option<Mat4>>,
-    /// What we last wrote into each bone's world matrix: a bone still holding it wasn't placed by
-    /// KH1's pass this time.
-    wrote: Vec<[f32; 16]>,
 }
 
 /// The pass's world matrix as the model → world the bones are drawn with: the pass flips the
@@ -692,8 +681,6 @@ pub fn load_kh2() {
             }
             let _ = REST.set(motions.get(REST_SLOT).cloned().flatten());
             let _ = REST_OPEN.set(motions.first().cloned().flatten());
-            // (The cloth physics' rest: KH1's field run, `clothlive`.)
-            let _ = super::clothlive::REST.set(motions.get(super::clothlive::REST_SLOT).cloned().flatten());
             Ok((map, lengths))
         })();
         match slots {
@@ -1068,23 +1055,16 @@ fn kh2_weapon(rig: &Rig, motion: u16, frames: f32, looping: bool, body: &[Mat4])
 
 /// What baking KH2's motions into KH1 motions takes at load (`kh2slots`, ini `kh1_bake`,
 /// `kh1_data::bake`): KH1 Sora's skeleton from its own file, the retarget with KH1's battle and
-/// field idles as its rest, and KH2's own hair, hood, sleeves, necklace and keychain
-/// (`secondary`), built as `check` builds them for the field's Sora.
+/// field idles as its rest, and KH2's own hair, hood, sleeves and keychain (`secondary`), built
+/// as `check` builds them for the field's Sora.
 pub struct Baker {
     pub skeleton: Vec<kh2_formats::anim::Bone>,
     retarget: Retarget,
     secondary: kh1_data::secondary::Secondary,
-    /// The test bake's hood, coat and shorts from KH2's hidden keys, smoothed and kept clear
-    /// (`kh1_data::cloth`, `CLOTH_MOTIONS` only).
-    cloth: kh1_data::cloth::ClothBake,
-    /// KH1 Sora's own motions (by slot): a template's animation of KH1's own parts
-    /// (`retarget::KH1_OWN`) for the moves baked on it.
-    motions: Vec<Option<kh1_data::mset::Motion>>,
 }
 
 impl Baker {
-    pub fn new(kh2: &Kh2, skeleton: Vec<kh2_formats::anim::Bone>, motions: &[Option<kh1_data::mset::Motion>]) -> Baker {
-        let (rest, rest_open) = (motions.get(REST_SLOT).and_then(|m| m.as_ref()), motions.first().and_then(|m| m.as_ref()));
+    pub fn new(kh2: &Kh2, skeleton: Vec<kh2_formats::anim::Bone>, rest: Option<&kh1_data::mset::Motion>, rest_open: Option<&kh1_data::mset::Motion>) -> Baker {
         let mut retarget = Retarget::new(&skeleton, &kh2.rig.skeleton);
         if let Some(m) = rest {
             retarget.set_rest(&m.apply(&skeleton, 0.0));
@@ -1093,14 +1073,14 @@ impl Baker {
             retarget.set_rest_open(&m.apply(&skeleton, 0.0));
         }
         let secondary = kh1_data::secondary::Secondary::new(&skeleton, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
-        let cloth = kh1_data::cloth::ClothBake::new(&skeleton, &kh2.rig.skeleton);
-        Baker { skeleton, retarget, secondary, cloth, motions: motions.to_vec() }
+        Baker { skeleton, retarget, secondary }
     }
 
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
     /// draws it (`follow_play`, `Play::Slot`): KH2's body and Keyblade, the root travel taken out
-    /// (KH1 moves him), retargeted, KH2's hair, hood, sleeves, necklace and keychain on, the
-    /// Keyblade's teeth-up turn (`keyblade_turn`). Nothing else of ours (feet, KH1's wrist).
+    /// (KH1 moves him), retargeted, KH2's hair, hood, sleeves and keychain on (`hair_physics` and
+    /// `kh2_hair` on), the Keyblade's teeth-up turn (`keyblade_turn`). Nothing else of ours (feet,
+    /// KH1's wrist, the swing).
     ///
     /// `travel` (t365, a move whose request has KH1's travel flag): KH2's root travel along the
     /// ground (from its first frame, at KH2's full distances: the user, t367) put back on the
@@ -1108,23 +1088,10 @@ impl Baker {
     /// and pulls his placement back by it; his body carries it, as KH1's own motions do (H2), so
     /// the model stays on him (`kh1_data::bake`). Else none (empty): the travel stays out.
     ///
-    /// KH1's own parts (`retarget::KH1_OWN`, none now: the shorts hang on the thigh as KH2's) as KH1's `template` slot (the move this stands in for) animates them,
-    /// retimed to this length, as KH1 plays a template retimed (the tester: "use kh1's animations
-    /// as a reference").
-    ///
-    /// Also each frame's bone scales (KH2's squash and stretch on the parts `secondary` posed,
-    /// `Secondary::scales`, and KH1's own on its parts), for the bake's scale channels; empty
-    /// when none differs from 1.
-    ///
     /// `field`: KH2's field (out-of-combat) variant of the motion, where it has one (its walk and
     /// run, `kh2slots::CYCLES`).
-    ///
-    /// KH2's walk and run (`CLOTH_MOTIONS`, battle and field) also get the test bake's hood, coat
-    /// and shorts (`kh1_data::cloth`: KH2's hidden keys for them, smoothed over the motion and kept
-    /// off his body; Mr Bugs, "Missing sleeves animation": "just do a test bake into soras running
-    /// and walking animations for now"), worked out over the whole motion before its travel goes on.
     #[allow(clippy::type_complexity)]
-    pub fn poses(&self, kh2: &Kh2, motion: u16, field: bool, frames: u32, travel: bool, template: Option<usize>) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>, Vec<Vec<Vec3>>)> {
+    pub fn poses(&self, kh2: &Kh2, motion: u16, field: bool, frames: u32, travel: bool) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>)> {
         let rig = &kh2.rig;
         let clip = field.then(|| rig.field_motions.get(&motion)).flatten().or_else(|| rig.motions.get(&motion))?;
         let set = super::settings::get();
@@ -1132,35 +1099,13 @@ impl Baker {
         let parents: Vec<i16> = self.skeleton.iter().map(|b| b.parent).collect();
         let mut out = Vec::with_capacity(frames as usize + 1);
         let mut moved = Vec::new();
-        let mut scales: Vec<Vec<Vec3>> = Vec::with_capacity(frames as usize + 1);
         let root_at = |f: u32| roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))).map(|p| Vec3::from(*p));
         let start = root_at(0).unwrap_or(Vec3::ZERO);
-        let template = template.and_then(|t| self.motions.get(t)).and_then(|m| m.as_ref());
         // (A slot longer than the clip, `kh1rows::Ours::frames`: the clip loops over it from its
         // own loop point, as KH2 plays it; the Aerial Dodge's 202.)
         let looping = frames as f32 > kh2_anim::length_frames(clip) + 1.0;
-        let cloth = CLOTH_MOTIONS.contains(&motion);
-        // The loop the cloth pass smooths round: the clip's length, when whole and within the slot
-        // (KH2's walk and run fill their slot exactly).
-        let len = kh2_anim::length_frames(clip);
-        let cycle = (cloth && (len - len.round()).abs() < 0.01 && len.round() >= 2.0 && len.round() as u32 <= frames).then(|| len.round() as usize);
-        let mut bodies: Vec<Vec<Mat4>> = Vec::new();
         for f in 0..=frames {
             let at = f as f32;
-            // KH1's own parts at the template's time for this frame.
-            let mut own_scale: Vec<(usize, Vec3)> = Vec::new();
-            match template {
-                Some(t) => {
-                    let m = kh2_anim::Pose::bind(&t.apply(&self.skeleton, at * t.frames as f32 / frames.max(1) as f32)).bones;
-                    let rel: Vec<(usize, Option<(Mat4, Vec3)>)> = kh1_data::retarget::KH1_OWN
-                        .iter()
-                        .map(|&b| (b, parents.get(b).filter(|p| **p >= 0).and_then(|&p| kh1_data::retarget::own_relation(m.get(p as usize)?, m.get(b)?))))
-                        .collect();
-                    self.retarget.set_own(|b| rel.iter().find(|r| r.0 == b).and_then(|r| r.1).map(|r| r.0));
-                    own_scale = rel.iter().filter_map(|&(b, r)| Some((b, r?.1))).collect();
-                }
-                None => self.retarget.set_own(|_| None),
-            }
             let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, looping), kh2_anim::Options::default()).bones;
             let mut weapon = kh2_weapon(rig, motion, at, looping, &body);
             if let Some(root) = roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))) {
@@ -1177,29 +1122,12 @@ impl Baker {
             if set.keyblade_turn {
                 turn_grip(&mut kh1, &parents);
             }
-            let mut sc = vec![Vec3::ONE; kh1.len()];
-            for &(b, s) in &own_scale {
-                if let Some(v) = sc.get_mut(b) {
-                    *v = s;
-                }
+            if set.physics && set.kh2_hair {
+                self.secondary.apply(&mut kh1, &body, (!weapon.is_empty()).then_some(weapon.as_slice()), kh1_data::secondary::Parts::ALL);
             }
-            let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
-            let rep = self.secondary.apply(&mut kh1, &body, weapon, kh1_data::secondary::Parts::ALL);
-            self.secondary.scales(&body, weapon, rep.parts, &mut sc);
-            scales.push(sc);
-            if cloth {
-                bodies.push(body);
-            }
-            out.push(kh1);
-        }
-        if cloth {
-            let rep = self.cloth.bake(&mut out, &bodies, cycle, kh1_data::cloth::Parts::ALL);
-            log(&format!("KH2 slots: KH2 motion {motion}{}: hood, coat and shorts from KH2's hidden keys (test bake), {} chains, smoothed round {cycle:?}; {} chain-frames kept off the body (at most {:.0} degrees), deepest left inside {:.2}", if field { " (field)" } else { "" }, rep.chains, rep.pushed, rep.max_push, rep.worst_inside));
-        }
-        if travel {
-            for (f, kh1) in out.iter_mut().enumerate() {
+            if travel {
                 // (Along the ground only: the root's height stays out, as before.)
-                let d = root_at(f as u32).map_or(Vec3::ZERO, |p| p - start);
+                let d = root_at(f).map_or(Vec3::ZERO, |p| p - start);
                 // (KH2's units as they are: H10 moves him 1:1 in the world, Sora's placement
                 // having scale 1 (t364's KH1 trace: swing 98's H10 1.3 and 6.32 a frame, moved
                 // 1.30 and 6.32).)
@@ -1209,18 +1137,11 @@ impl Baker {
                 }
                 moved.push(t);
             }
+            out.push(kh1);
         }
-        if scales.iter().flatten().all(|s| *s == Vec3::ONE) {
-            scales.clear();
-        }
-        Some((out, moved, scales))
+        Some((out, moved))
     }
 }
-
-/// KH2's motions whose bake gets the test bake's hood, coat and shorts (`kh1_data::cloth`): its
-/// walk and run (`kh2slots::CYCLES`; their field variants too). The live pose doesn't (the pass
-/// needs the whole motion), so with `kh1_bake` off the walk and run look as before.
-const CLOTH_MOTIONS: [u16; 2] = [character_core::motion::WALK, character_core::motion::RUN];
 
 /// The baker for `kh2slots::prepare` (the loader thread): KH1 Sora's skeleton from
 /// `xa_ex_0010.mdls`, his battle idle (slot 1) and field idle (slot 0) as the retarget's rest.
@@ -1230,7 +1151,7 @@ fn baker(install: &kh1_data::Kh1Install, kh2: &Kh2, motions: &[Option<kh1_data::
     if skeleton.len() != SORA_BONES as usize {
         return Err(format!("xa_ex_0010.mdls has {} bones", skeleton.len()));
     }
-    Ok(Baker::new(kh2, skeleton, motions))
+    Ok(Baker::new(kh2, skeleton, motions.get(REST_SLOT).and_then(|m| m.as_ref()), motions.first().and_then(|m| m.as_ref())))
 }
 
 /// One of our slots baked into a KH1 motion (`kh2slots`, ini `kh1_bake`): KH1 plays it and shows
@@ -1647,7 +1568,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         };
         log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
         let bind = kh2_anim::Pose::bind(&kh1).bones;
-        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), secondary: None, inverse: None, kh2_now: None, scales: Vec::new(), own_scale: Vec::new(), own_rel: Vec::new(), kh1_local: Vec::new(), wrote: Vec::new() });
+        *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None, secondary: None, inverse: None, kh2_now: None });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
     }
     let s = g.as_mut().unwrap();
@@ -1668,12 +1589,11 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 s.retarget = Some(r);
                 let sec = kh1_data::secondary::Secondary::new(&b, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
                 log(&format!(
-                    "KH2's own hair, hood, sleeves, necklace and keychain: {} spikes ({}), {} hood joints, {} sleeve chains, necklace {:?}, {} chain links",
+                    "KH2's own hair, hood, sleeves and keychain: {} spikes ({}), {} hood joints, {} sleeve chains, {} chain links",
                     sec.hair().len(),
                     sec.hair().iter().map(|l| format!("{}<-{}", l.kh1, l.kh2)).collect::<Vec<_>>().join(" "),
                     sec.hood().len(),
                     sec.sleeves().len(),
-                    sec.necklace().map(|l| format!("{}<-{}", l.kh1, l.kh2)),
                     sec.chain().len()
                 ));
                 s.secondary = Some(sec);
@@ -1773,12 +1693,6 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             }
         }
     }
-    // KH1's own parts (`retarget::KH1_OWN`, none now) as
-    // KH1's own animation of this move has them, for the retarget (`Retarget::set_own`): KH1
-    // plays the move KH2's stands in for underneath (our slots: its template retimed).
-    if !ours {
-        own_from_kh1(s, world, &to_world, param_world);
-    }
     let Some(mut pose) = wanted(s, slot, &to_world) else {
         s.wrote_root = None;
         s.to_world = Some(to_world);
@@ -1795,7 +1709,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                     let (ks, kr, kt) = kh1.to_scale_rotation_translation();
                     let m = Mat4::from_scale_rotation_translation(fs.lerp(ks, w), fr.slerp(kr, w), ft.lerp(kt, w));
                     if m.is_finite() {
-                        write_bone(&mut s.wrote, world, i, &(to_world * m));
+                        std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * m).to_cols_array());
                     }
                 }
                 // (The dream weapons kept whole through the blend.)
@@ -1809,13 +1723,6 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 *h = Some(Hands { orig: o, drawn: o, at: Instant::now() });
             }
         }
-        // The cloth physics on the move worked on (`clothlive`), our slot baked: KH1's drawing of
-        // it moved (the coat, shorts, belt chain, belt-front pieces and what hangs under them).
-        if !ours && DRAW_ROUTE.load(Ordering::Relaxed) == 3 && super::clothlive::wants(slot) {
-            cloth_on_kh1(s, world, &to_world);
-        } else {
-            super::clothlive::idle();
-        }
         // KH2's model (`model`) on KH1's own animation, as drawn.
         if let (true, Some(inv)) = (super::model::on(), s.inverse.as_ref()) {
             let back = to_world.inverse();
@@ -1828,41 +1735,35 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
     keyblade_teeth_up(&mut pose, &s.parents);
-    let mut scaled = false;
-    // KH2's own animation of the hair, hood, sleeves, necklace and keychain (the user: "add the
-    // animations for sora's hair and chain on each KH2 animation instead"; the sleeves and
-    // necklace: Mr Bugs, "missing animations for the sleeves"), on every pose KH2 gave; the
-    // keychain only on a Keyblade (not the dream weapons or the wooden sword, which keep KH1's
-    // rest relation). Always: KH2 keys these parts and runs no physics on them (Mr Bugs: "kh2
-    // does not have physics but is instead baked so remove those switches"), so there is no
-    // switch and no swing of ours.
-    if let (Some((body, weapon)), Some(sec)) = (s.kh2_now.as_ref(), s.secondary.as_ref()) {
-        let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)), sleeves: true, necklace: true };
-        let weapon = (!weapon.is_empty()).then_some(weapon.as_slice());
-        let rep = sec.apply(&mut pose, body, weapon, want);
-        // KH2's squash and stretch on the parts it just posed (the tester: "yes do it"), and
-        // KH1's own on its own parts.
-        s.scales.clear();
-        s.scales.resize(pose.len(), Vec3::ONE);
-        for &b in kh1_data::retarget::KH1_OWN.iter() {
-            if let (Some(v), Some(o)) = (s.scales.get_mut(b), s.own_scale.get(b)) {
-                *v = *o;
+    let set = super::settings::get();
+    if set.physics {
+        // KH2's own animation of the hair, hood, sleeves and keychain (the user: "add the
+        // animations for sora's hair and chain on each KH2 animation instead"; the sleeves: Mr
+        // Bugs, "missing animations for the sleeves"), on every pose KH2 gave; the keychain only
+        // on a Keyblade (not the dream weapons or the wooden sword).
+        let mut driven = kh1_data::secondary::Parts::default();
+        if let (true, Some((body, weapon)), Some(sec)) = (set.kh2_hair, s.kh2_now.as_ref(), s.secondary.as_ref()) {
+            let want = kh1_data::secondary::Parts { hair: true, hood: true, chain: !held_weapon().is_some_and(|w| (0x52..=0x55).contains(&w)), sleeves: true };
+            let rep = sec.apply(&mut pose, body, (!weapon.is_empty()).then_some(weapon.as_slice()), want);
+            driven = rep.parts;
+            static LOGGED: AtomicU32 = AtomicU32::new(0);
+            if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
+                log(&format!("hair, hood, sleeves and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
             }
         }
-        sec.scales(body, weapon, rep.parts, &mut s.scales);
-        scaled = true;
-        static LOGGED: AtomicU32 = AtomicU32::new(0);
-        if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
-            log(&format!("hair, hood, sleeves, necklace and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
+        // The swing (`kh1_data::jiggle`) for any chain KH2 didn't pose. One step per 60 Hz frame
+        // of Sora's physics frames (`takeover::TICKS`: two a game frame at 30 fps), not by the
+        // clock: frames come 13..22 ms apart, and a draw with no step left the chains at his last
+        // place (the user: the animations stuttered). A gap of more than half a second (KH1's own
+        // animation, a pause) starts it over.
+        let frame = super::takeover::TICKS.load(Ordering::Relaxed);
+        let (j, last) = s.jiggle.get_or_insert_with(|| (kh1_data::jiggle::Jiggle::new(kh1_data::jiggle::sora_chains()), frame));
+        let steps = frame.saturating_sub(*last);
+        if steps > 30 {
+            j.reset();
         }
-    }
-    // The cloth physics on the move worked on (`clothlive`), drawn live: on the pose we draw.
-    if super::clothlive::wants(slot) {
-        if let Ok(b) = KH1_BONES.try_lock() {
-            super::clothlive::step(&b, &mut pose, &to_world, false);
-        }
-    } else {
-        super::clothlive::idle();
+        *last = frame;
+        j.apply_except(&mut pose, &s.parents, &to_world, steps.min(3) as usize, |b| driven.covers(b));
     }
     // A dream weapon whole, as KH1 holds it.
     dream_hold(&mut pose, &s.parents, (!ours).then_some(world));
@@ -1870,13 +1771,8 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     if let (Some((body, weapon)), true) = (s.kh2_now.as_ref(), super::form::in_final()) {
         super::leftblade::final_float(&mut pose, &s.bind, body, weapon, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()));
     }
-    // Each bone's scale, as KH1's own bone pass would put it (multiplied down the bones, on the
-    // axes only), last: everything above works on the unscaled pose.
-    if scaled {
-        kh1_data::secondary::apply_scale(&mut pose, &s.parents, &s.scales);
-    }
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
-        write_bone(&mut s.wrote, world, i, &(to_world * *m));
+        std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
     }
     s.wrote_root = Some(rd(world));
     match s.last_drawn.as_mut() {
@@ -1912,154 +1808,6 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
 }
 
 static KH1_BONES: Mutex<Vec<kh2_formats::anim::Bone>> = Mutex::new(Vec::new());
-
-/// The cloth physics (`clothlive`) on KH1's own drawing of a baked slot: its world matrices read
-/// back into model space, the physics' bones moved, and those that changed written again.
-unsafe fn cloth_on_kh1(s: &mut Sora, world: usize, to_world: &Mat4) {
-    let n = SORA_BONES as usize;
-    if !super::crash::readable(world) || !super::crash::readable(world + n * 0x40 - 1) {
-        return;
-    }
-    let back = to_world.inverse();
-    let drawn: Vec<Mat4> = (0..n).map(|i| mat(world + i * 0x40)).collect();
-    if !drawn.iter().all(|m| m.is_finite()) {
-        return;
-    }
-    let mut pose: Vec<Mat4> = drawn.iter().map(|m| back * *m).collect();
-    let Ok(b) = KH1_BONES.try_lock() else { return };
-    super::clothlive::step(&b, &mut pose, to_world, true);
-    drop(b);
-    for (i, m) in pose.iter().enumerate() {
-        let w = *to_world * *m;
-        if w.is_finite() && !close(&w, &drawn[i], 1e-4) {
-            write_bone(&mut s.wrote, world, i, &w);
-        }
-    }
-}
-
-/// Writes bone `i`'s world matrix and notes it in `wrote` (what `own_from_kh1` tells KH1's own
-/// placements by).
-unsafe fn write_bone(wrote: &mut Vec<[f32; 16]>, world: usize, i: usize, m: &Mat4) {
-    let a = m.to_cols_array();
-    std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], a);
-    if wrote.len() < SORA_BONES as usize {
-        wrote.resize(SORA_BONES as usize, [f32::NAN; 16]);
-    }
-    if let Some(w) = wrote.get_mut(i) {
-        *w = a;
-    }
-}
-
-/// How far above an own part `own_from_kh1` follows bones KH1's pass may leave unplaced.
-const OWN_UP: usize = 3;
-
-/// KH1's own parts (`retarget::KH1_OWN`) as KH1's pass just placed them (`world`, the bones it
-/// wrote, `to_world` its placement): each one's relation to its parent goes to the retarget
-/// (`Retarget::set_own`), its own scale to `own_scale`.
-///
-/// KH1's blend pass (`0x140392560`, the one `pose_ik` hooks: every return to the idle, every
-/// change of motion) writes a bone only when its bone-table word has bit 30, or the bone is on
-/// its IK list (decomp); the rest keep what was there, which is the pose we drew last. Every own
-/// part's parent is such a bone (the shorts' 26 / 30 / 34 / 38 and 52 / 56 / 60 / 64; the hem's
-/// 72 and 248-276 with 71 above them while the hem was one of them, t387-t412; Checked (files)),
-/// so the parts were
-/// measured against our drawing of it and put where KH1's own motion has them in the model, off
-/// KH2's body (Mr Bugs: "standing and returning to neutral cause parts of soras model to stretch
-/// like crazy"). A bone that still holds what we wrote is placed here from its parent by the
-/// relation KH1 last gave it (KH1 keys none of these bones: constants only; Checked (files));
-/// a part whose parent can't be placed keeps its last relation.
-///
-/// "Still holds what we wrote" is up to the pass's own last step (Checked (decomp)): both passes
-/// end by adding the pass's world translation to every bone's world matrix, the ones they didn't
-/// place too (blend `0x140392560`, plain `0x140391C70`), after multiplying them by the world's
-/// scale when it is more than 0.005 off 1 (the blend: every bone; the plain pass: all but its skip
-/// bones). So a bone the blend pass left holds our matrix moved by Sora's position (`kept`).
-/// t405 compared it as written, took every such bone as placed, and measured the shorts and hem
-/// from parents one world position off: they were drawn that far from the body, at the map's
-/// origin, on every blend-pass frame (Mr Bugs, t409: "his coat, his pants ... return to the map
-/// origin for 1 frame", from running to neutral; his trace f20377: the pass at each stop,
-/// f20262 / f20282 / f20293 / f20322 / f20340 / f20350 / f20362, is the blend's).
-unsafe fn own_from_kh1(s: &mut Sora, world: usize, to_world: &Mat4, param_world: usize) {
-    let Some(r) = s.retarget.as_ref() else { return };
-    let inv = to_world.inverse();
-    if !inv.is_finite() {
-        return;
-    }
-    let n = SORA_BONES as usize;
-    s.own_rel.resize(n, None);
-    s.kh1_local.resize(n, None);
-    s.own_scale.resize(n, Vec3::ONE);
-    // The pass's world translation and scale, as it took them (its rows' lengths; the
-    // translation as stored), read from its world matrix.
-    let pass = (param_world >= 0x10000).then(|| mat(param_world)).filter(|p| p.is_finite()).map(|p| {
-        let s = Vec3::new(p.x_axis.truncate().length(), p.y_axis.truncate().length(), p.z_axis.truncate().length());
-        let scaled = (s - Vec3::ONE).abs().max_element() > 0.005;
-        (p.w_axis.truncate(), scaled.then_some(s))
-    });
-    let wrote = &s.wrote;
-    let placed = |i: usize| wrote.get(i).map_or(true, |w| !kept(&mat(world + i * 0x40), &Mat4::from_cols_array(w), pass));
-    // (Unscaled, and the scale.)
-    let model = |i: usize| -> Option<(Mat4, Vec3)> {
-        let (sc, q, t) = (inv * mat(world + i * 0x40)).to_scale_rotation_translation();
-        let m = Mat4::from_rotation_translation(q.normalize(), t);
-        (m.is_finite() && sc.is_finite()).then_some((m, sc))
-    };
-    let parent = |i: usize| s.parents.get(i).filter(|p| **p >= 0).map(|p| *p as usize);
-    for &b in kh1_data::retarget::KH1_OWN.iter() {
-        // The bones above it KH1 placed this time: their relation, for when it doesn't.
-        let mut i = b;
-        for _ in 0..OWN_UP {
-            let Some(p) = parent(i) else { break };
-            if i != b && placed(i) && placed(p) {
-                if let (Some((mi, _)), Some((mp, _))) = (model(i), model(p)) {
-                    s.kh1_local[i] = Some(mp.inverse() * mi);
-                }
-            }
-            i = p;
-        }
-        if b >= n || !placed(b) {
-            continue;
-        }
-        // Its parent as KH1 has it: its own, or from the nearest bone above that KH1 placed.
-        let Some(p) = parent(b) else { continue };
-        let mut up = Mat4::IDENTITY;
-        let mut a = p;
-        let mut found = None;
-        for _ in 0..OWN_UP {
-            if placed(a) {
-                found = model(a);
-                break;
-            }
-            let (Some(l), Some(q)) = (s.kh1_local[a], parent(a)) else { break };
-            up = l * up;
-            a = q;
-        }
-        let Some((ma, sa)) = found else { continue };
-        let (Some((mb, sb)), pm) = (model(b), ma * up) else { continue };
-        // (KH1 keys no scale on the bones between: the parent's scale is the one above's.)
-        let Some((l, sc)) = kh1_data::retarget::own_relation(&(pm * Mat4::from_scale(sa)), &(mb * Mat4::from_scale(sb))) else { continue };
-        s.own_rel[b] = Some(l);
-        s.own_scale[b] = sc;
-    }
-    let rel = &s.own_rel;
-    r.set_own(|b| rel.get(b).copied().flatten());
-}
-
-/// Does `now` (a bone's world matrix after KH1's pass) still hold `wrote` (what we wrote), as the
-/// pass's last step leaves a bone it didn't place (`pass`: its world translation, and its scale
-/// when it applied one; `own_from_kh1`)? As written, moved by the translation, or scaled and
-/// moved. (The scale's side: KH1 multiplies the bone by the scale the way it puts a bone on its
-/// parent, so on each axis row of its matrix, translation included; Assumption (decomp), from
-/// the composition order of `0x1401DB4D0`'s other calls; it only matters off scale 1.)
-fn kept(now: &Mat4, wrote: &Mat4, pass: Option<(Vec3, Option<Vec3>)>) -> bool {
-    let same = |a: &Mat4, b: &Mat4| a.to_cols_array().iter().zip(b.to_cols_array().iter()).all(|(x, y)| (x - y).abs() <= 1e-3 * y.abs().max(1.0));
-    if same(now, wrote) {
-        return true;
-    }
-    let Some((t, s)) = pass else { return false };
-    let moved = Mat4::from_translation(t);
-    same(now, &(moved * *wrote)) || s.is_some_and(|s| same(now, &(moved * Mat4::from_scale(s) * *wrote)))
-}
 
 /// KH1 Sora's size against KH2 Sora's (`Retarget::hip_ratio`, his hips' heights in the two bind
 /// poses) once the retarget is made (bits of an `f32`; 0 before).

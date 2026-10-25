@@ -553,7 +553,6 @@ unsafe fn trace_frame(actor: usize, start: [f32; 4]) {
         cam: Default::default(),
         feet: Default::default(),
         events: String::new(),
-        cloth: None,
         // (Filled by `trace::frame`.)
         cats: 0,
     });
@@ -3998,7 +3997,8 @@ fn note_dropped_attack(state: i32) {
     }
 }
 
-/// Sora's physics frames so far (one per game frame; `TICKS` counts them in 60 Hz frames).
+/// Sora's physics frames so far (one per game frame; `TICKS` counts them in 60 Hz frames, which
+/// `pose`'s hair and cloth swing steps by).
 pub static GAME_FRAME: AtomicU64 = AtomicU64::new(0);
 
 /// The game's image base (0 before `install`).

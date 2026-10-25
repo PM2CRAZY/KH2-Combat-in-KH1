@@ -275,13 +275,14 @@ H6 are under H3.
   (`0x40000000`; the pass also sets it on each IK bone's parent); it is composed from the two
   snapshots up through the bones above it that lack the bit. Those bones keep whatever their
   matrices held: on Sora, the pose `pose.rs` drew last. 142 of Sora's 293 bones have the bit
-  (Checked (files)); the parents of all of `retarget::KH1_OWN` lack it (`pose::own_from_kh1`).
+  (Checked (files)).
 - **Its last step moves every bone** (Checked (decomp)): when the world's row lengths are more
   than 0.005 off 1 it multiplies every bone's `+0x1B4` by that scale, then it adds the world
   translation to every bone's `+0x1B4`, placed or not. So a bone it skipped holds what was there
-  moved by Sora's world position (`pose::kept`). The plain pass ends the same way (its scale
-  step skips the bit-26 skip bones). In KH1 itself the skipped bones drift by one world position
-  per blend; none carries a vertex, so it never shows.
+  moved by Sora's world position. The plain pass ends the same way (its scale step skips the
+  bit-26 skip bones). In KH1 itself the skipped bones drift by one world position per blend;
+  none carries a vertex, so it never shows. (Found for t405 / t411, whose code was taken out in
+  tA with the rest of the sleeves thread after t375; the findings stand.)
 - Which motion's IK that list holds while KH1 blends into or out of one of our slots is
   **open**. The check: log it in game while `+0x168` is our slot.
 

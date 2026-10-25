@@ -479,8 +479,10 @@ frame's drawing; `fapanel.rs`, `debugmenu::draw_end`) shows:
   on a line labelled "Animation" ("Animation: field run, frame 12 / 40, loop 3"; before tNNN it
   read "Frame: field run 12 / 40   Loop 3", which the tester read as a "field frame run" count);
 - the trace's frame number (the trace's `frame` column), so a stretch can be named "trace frames X
-  to Y";
-- the cloth physics' settings id and steps when it runs (`clothlive`).
+  to Y".
+
+(Until tA it also showed the cloth physics' settings id and steps; the cloth physics was taken
+out with the rest of the sleeves thread's changes after t375.)
 
 The frame is the clip's own time (KH1's motion time `+0x16C` for our slots; our clock for KH2's
 clips drawn with no slot), floored. A loop is counted when that time comes round by more than half

@@ -31,10 +31,6 @@
 //!   Frame Advance (main page): the Frame Advance row, Held Sound, Camera (Free: the camera
 //!   moves while held, `frameadv::camera_live`; Held), Game Frames (the same row as the Trace
 //!   Recorder's) and the Held Tasks page.
-//! - **Cloth Physics** (main page): the cloth physics on KH2's field run (`clothlive`): on / off,
-//!   and each part's stiffness (steps of 0.01), damping and weight (0.05) and swing cap (5
-//!   degrees), live; Reset to tuned. The page's title shows the settings id (0 = the tuned ones);
-//!   every change is logged with its id and numbers. Not kept in the ini: the session only.
 //! - **KH1 Spells** (main page): Gravity, Stop and Aero each "KH1 cast" (KH1's whole cast, its
 //!   own motion, clock and effects) or "KH2 cast" (KH1's spell on KH2's cast motion): the Config
 //!   menu's Magic > Animations rows for them (`formmagic::kh1_cast`; ini `anim_gravity` ..).
@@ -160,9 +156,6 @@ enum Page {
     /// Gravity, Stop and Aero: KH1's whole cast or KH2's cast motion at the Magic styles KH2
     /// (`formmagic::kh1_cast`).
     Spells,
-    /// The cloth physics' numbers (`clothlive`; Mr Bugs, "Missing sleeves animation": "I can still
-    /// tweak a value if something looks off then send you the trace").
-    Cloth,
 }
 
 impl Page {
@@ -174,7 +167,7 @@ impl Page {
             Page::Group(_) => Some(Page::Categories),
             Page::Weapons | Page::Abilities => Some(Page::Stats),
             Page::HeldTasks => Some(Page::FrameAdvance),
-            Page::Spells | Page::Cloth => Some(Page::Main),
+            Page::Spells => Some(Page::Main),
         }
     }
 
@@ -191,7 +184,6 @@ impl Page {
             Page::HeldTasks => 6 + trace::GROUPS.len(),
             Page::FrameAdvance => 7 + trace::GROUPS.len(),
             Page::Spells => 8 + trace::GROUPS.len(),
-            Page::Cloth => 9 + trace::GROUPS.len(),
         }
     }
 
@@ -207,7 +199,6 @@ impl Page {
             Page::FrameAdvance => "DEBUG MENU > FRAME ADVANCE".into(),
             Page::HeldTasks => "FRAME ADVANCE > HELD TASKS".into(),
             Page::Spells => "DEBUG MENU > KH1 SPELLS".into(),
-            Page::Cloth => format!("DEBUG MENU > CLOTH PHYSICS  (settings {})", super::clothlive::settings().id()),
         }
     }
 
@@ -224,7 +215,6 @@ impl Page {
             Page::FrameAdvance => format!("Left/Right: change   {ok}: select   {no}: back"),
             Page::HeldTasks => format!("Left/Right/{ok}: held / runs   {no}: back"),
             Page::Spells => format!("Left/Right/{ok}: KH1 / KH2 cast   {no}: back"),
-            Page::Cloth => format!("Left/Right: change   {ok}: select   {no}: back"),
         }
     }
 }
@@ -245,11 +235,6 @@ enum Action {
     HeldTask(usize),
     /// Gravity 4, Stop 5, Aero 6.
     Kh1Cast(u8),
-    /// The cloth physics on / off, one part's number (part, which: 0 stiffness, 1 damping, 2
-    /// weight, 3 swing), back to the tuned numbers.
-    ClothOn,
-    ClothParam(u8, u8),
-    ClothReset,
     GroupRow(usize),
     Item(usize),
     Stat(usize),
@@ -259,7 +244,7 @@ enum Action {
 
 struct Menu {
     page: Page,
-    cursor: [usize; 10 + trace::GROUPS.len()],
+    cursor: [usize; 9 + trace::GROUPS.len()],
     /// The pad last frame, the directions held and since when, the last repeat.
     last: u16,
     held: u16,
@@ -267,7 +252,7 @@ struct Menu {
     repeat_at: Option<Instant>,
 }
 
-static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 10 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
+static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 9 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
 
 /// One of Sora's stats: its name, its place in a stats block (`None`: only in the save), its byte
 /// in his save record, whether that byte is KH1's base number (equipment added on top), its
@@ -463,7 +448,6 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Stats  >".into(), Action::Enter(Page::Stats)),
             ("Frame Advance  >".into(), Action::Enter(Page::FrameAdvance)),
             ("KH1 Spells  >".into(), Action::Enter(Page::Spells)),
-            ("Cloth Physics  >".into(), Action::Enter(Page::Cloth)),
             ("Exit".into(), Action::Exit),
         ],
         // (After t463) Frame Advance's own rows.
@@ -479,20 +463,6 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Held Tasks  >".into(), Action::Enter(Page::HeldTasks)),
             ("Back".into(), Action::Back),
         ],
-        // (`clothlive`: KH2's field run only.)
-        Page::Cloth => {
-            let set = super::clothlive::settings();
-            let mut v: Vec<(String, Action)> = vec![(format!("{:<20}< {} >", "Physics (field run)", on_off(super::clothlive::on())), Action::ClothOn)];
-            for (pi, part) in kh1_data::clothsim::Part::ALL.iter().enumerate() {
-                let p = set.get(*part);
-                for (k, (name, val)) in [("Stiffness", format!("{:.2}", p.stiffness)), ("Damping", format!("{:.2}", p.damping)), ("Weight", format!("{:.2}", p.weight)), ("Swing", format!("{:.0}", p.swing))].into_iter().enumerate() {
-                    v.push((format!("{:<20}< {:>5} >", format!("{} {}", part.name(), name), val), Action::ClothParam(pi as u8, k as u8)));
-                }
-            }
-            v.push((format!("Reset to tuned{}", if set.id() == 0 { "  (tuned now)" } else { "" }), Action::ClothReset));
-            v.push(("Back".into(), Action::Back));
-            v
-        }
         // (The Config menu's Magic > Animations rows for them, `formmagic::kh1_cast`.)
         Page::Spells => {
             let mut v: Vec<(String, Action)> = ["Gravity", "Stop", "Aero"]
@@ -705,32 +675,6 @@ unsafe fn step(base: usize) {
         }
         Action::Kh1Cast(sp) => {
             super::formmagic::set_kh1_cast(sp, !super::formmagic::kh1_cast(sp));
-            sound(1);
-        }
-        Action::ClothOn => {
-            super::clothlive::set_on(!super::clothlive::on());
-            sound(1);
-        }
-        Action::ClothParam(pi, k) if delta != 0 => {
-            let part = kh1_data::clothsim::Part::ALL[pi as usize];
-            let mut p = super::clothlive::settings().get(part);
-            let d = delta as f32;
-            match k {
-                0 => p.stiffness = (p.stiffness + d * 0.01).clamp(0.0, 1.0),
-                1 => p.damping = (p.damping + d * 0.05).clamp(0.0, 1.0),
-                2 => p.weight = (p.weight + d * 0.05).clamp(0.0, 1.0),
-                _ => p.swing = (p.swing + d * 5.0).clamp(0.0, 180.0),
-            }
-            // (Rounded to the step, so going back and forth gives the same numbers and id.)
-            p.stiffness = (p.stiffness * 100.0).round() / 100.0;
-            p.damping = (p.damping * 100.0).round() / 100.0;
-            p.weight = (p.weight * 100.0).round() / 100.0;
-            p.swing = p.swing.round();
-            super::clothlive::set_part(part, p);
-            sound(1);
-        }
-        Action::ClothReset if cross => {
-            super::clothlive::reset_settings();
             sound(1);
         }
         Action::GroupRow(i) if cross => {
