@@ -1762,11 +1762,12 @@ impl Character {
         // Sweep, Aerial Dive, Slide Dash and the jump to an airborne foe almost never passed.)
         let primary_info = self.primary_target(env);
         let aim = self.selector_aim(env);
-        // Locked on, the locked target is the only one the rows are measured against (the user:
-        // locked onto one ahead with another beside him, Sora took the base finisher and lunged
-        // at the one beside him instead of the locked one's Aerial Finish).
-        let locked = self.lock.filter(|id| env.targets.iter().any(|t| t.id == *id));
-        let all: Vec<TargetGeom> = env.targets.iter().filter(|t| locked.is_none_or(|id| t.id == id)).map(|t| self.geom(env, t, aim)).collect();
+        // Every target, locked on or not (KH2's selector `0x140402D20` runs its kind-2 pass
+        // `0x1404029F0` on every target its iterator gives; the lock only picks the primary
+        // target; Steam KH2, Checked (decomp); the tester, combo row selection m23 answer 1 (a)).
+        // (Stage 207 kept only the locked one, so Sora wouldn't lunge at the one beside him: the
+        // pass only marks the row, and the move is aimed at the primary target, `combo::select`.)
+        let all: Vec<TargetGeom> = env.targets.iter().map(|t| self.geom(env, t, aim)).collect();
         let primary = primary_info.map(|t| TargetGeom { facing_dot: 1.0, ..self.geom(env, t, aim) });
         let sit = Situation {
             air,

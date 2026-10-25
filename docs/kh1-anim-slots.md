@@ -1496,8 +1496,17 @@ iterator `0x1403BDAC0` gives on an attackable actor (`+0x6C8` bit 17), whatever 
 kind-1 pass uses the primary target (the locked one when locked). Now every target goes in; the
 primary and the selector's direction are still the locked one's, so the locked foe itself sits at
 the line's centre and a group row needs another one off it, as in KH2. Only the Base / Aerial Base
-Combo KH1 walk and KH1's picker's KH2 ability rows use this; KH2's own selector at the KH2 setting
-(`try_attack`) still measures only the locked foe while locked (AGENTS.md stage 207's rule), unchanged.
+Combo KH1 walk and KH1's picker's KH2 ability rows use this.
+
+**The KH2 setting too** (the tester, m23 answer 1 (a)). KH2's own selector at the KH2 setting
+(`Character::try_attack`, also the trial `would_take` the KH2-setting combo asks) counts every
+target while locked, as above; stage 207's rule (only the locked foe, so Sora wouldn't lunge at
+the one beside him) is gone. What stops the wrong-foe lunge now is KH2's own rule: the kind-2 pass
+`0x1404029F0` only sets the row's bit in the selector's mark array (`+0x60`), it keeps no target,
+and the hop and lunge (`0x1403D78D0`) are measured to the character's own target `+0xDC8` (the
+primary one). `combo::select` now gives a kind-2 row the primary target as its aim (it gave the
+target that passed). Checked (decomp, Steam KH2). Unlocked play changes the same way: a group row
+that passed on a foe beside him is aimed at the primary foe, not at that one.
 
 ## 8. KH2's walk and run as slots (t389)
 

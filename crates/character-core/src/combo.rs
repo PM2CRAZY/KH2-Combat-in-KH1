@@ -166,8 +166,8 @@ pub fn in_range(r: &ComboRow, t: &TargetGeom, jump_height: f32) -> bool {
     r.inner_min < t.facing_dot && t.facing_dot <= r.inner_max
 }
 
-/// What [`select`] chose: the row and, for range-checked rows, the target
-/// it was checked against.
+/// What [`select`] chose: the row and the target its move is aimed at (the
+/// primary target; kind 1 only passes against it, kind 2 against any target).
 #[derive(Clone, Copy, Debug)]
 pub struct Choice<'a> {
     pub row: &'a ComboRow,
@@ -194,7 +194,13 @@ pub fn select<'a>(rows: &'a [ComboRow], s: &Situation) -> Option<Choice<'a>> {
                 Some(t) if in_range(r, &t, s.jump_height) => Some(t),
                 _ => return None,
             },
-            2 => Some(*s.all.iter().find(|t| in_range(r, t, s.jump_height))?),
+            // The kind-2 pass (`0x1404029F0`) only marks the row: whichever target passed it, the
+            // move's hop and lunge are measured to the primary target (`+0xDC8`, `0x1403D78D0`;
+            // Steam KH2, Checked (decomp)).
+            2 => {
+                s.all.iter().find(|t| in_range(r, t, s.jump_height))?;
+                s.primary
+            }
             3 => s.primary,
             _ => return None,
         };
@@ -279,6 +285,23 @@ mod tests {
         assert!(condition(&rows[1], &s), "under the length a normal row passes, finishers or not");
         let s = Situation { finishers: 2, finisher_window: true, ..sit(1, 0, None) };
         assert!(!condition(&rows[1], &s));
+    }
+
+    /// A kind-2 row passes on any target, and its move is aimed at the primary target (KH2's
+    /// kind-2 pass only marks the row; the tester, combo row selection m23 answer 1 (a)).
+    #[test]
+    fn group_row_passes_on_any_target_and_aims_at_the_primary() {
+        let rows = vec![row(26, 2, -1, FLAG_FINISHER, 166, 0.0, 300.0), row(3, 3, 3, FLAG_FINISHER, 155, 0.0, 0.0)];
+        let primary = TargetGeom { id: 7, ..geom(900.0) };
+        let beside = [primary, TargetGeom { id: 9, ..geom(100.0) }];
+        let s = Situation { all: &beside, ..sit(3, 0, Some(primary)) };
+        let c = select(&rows, &s).unwrap();
+        assert_eq!(c.row.id, 26);
+        assert_eq!(c.target.map(|t| t.id), Some(7));
+        // Only the primary target there (out of reach): the normal finisher.
+        let alone = [primary];
+        let s = Situation { all: &alone, ..sit(3, 0, Some(primary)) };
+        assert_eq!(select(&rows, &s).unwrap().row.id, 3);
     }
 
     #[test]
