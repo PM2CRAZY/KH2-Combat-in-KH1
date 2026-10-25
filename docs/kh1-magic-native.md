@@ -679,3 +679,45 @@ clip frame 74 to the floor, sideways × 0.95 a tick (1.8 → 0.5 over 50 frames)
 the above (**Checked (trace)**). After the cast's 84 frames KH1's own fall animation (slot 10) and
 landing (11) are drawn, as the Jump row is KH1 there; KH2 queues its fall loop (motion 4) after the
 cast (`0x1403C8310`) and lands into its motion 5.
+
+## 4n. The fall after an air cast's hover, read again (thread air-physics-for-kh2-magic-aerial-finish-and-magnet-burst, m3)
+
+The tester (m3): "I cast air magic > air magic keep me suspended in the air > after its done
+suspending me I fall straight down (not like kh2)". Everything that moves the player in KH2 while
+an air cast plays, read again in the Steam KH2 decomp (addresses Steam):
+
+- **The frame's order** (the actor's update `0x1403BFD30`): the action's think, the motion update
+  `0x1403C6740` (its ranges set the flags at actor `+0x18C`, cleared every update by
+  `0x1403C83B0`, which keeps only `0x7183`, so range 3's `0x20` lasts exactly its frames), the
+  player's input and commands (`0x1403A89A0`), then the move `0x1403B89A0`. **Checked (decomp)**.
+- **The stick during a cast (settles §4m's assumption).** `0x1403A89A0` writes the stick target
+  `+0x10` / `+0x1C` from the pad every frame (`0x1403A8FA0`: the stick through the camera, length
+  the walk or run speed by the tilt; stick let go: length 0), runs the commands, and then **clears
+  the target** unless the motion has range id 0, 1 or 2 (flags `0x4 / 0x8 / 0x10`) or range 41
+  (`0x80000000`, allow movement). The air casts' clip (A371, motions 58 / 73) has none of them
+  (ranges 3, 14, 23 only, **Checked (files)** `P_EX100.mset`), so the stick does nothing all
+  through the cast and he drifts × 0.95 a tick. KH2's fall loop queued after it (motion 4, A004)
+  has range 1 from frame 0, so from the cast's end (frame 84) the stick steers him again (0.9 a
+  tick toward its speed). Ours: KH1's action flag 4 keeps `air_step` on the drift until KH1 ends
+  the cast motion (the trace: flags `0x2C007` → `0x2C003` at clip frame 82..84), then the stick.
+  The same. **Checked (decomp)**, **Checked (trace)**.
+- **Root motion.** The move adds the motion's root travel every frame in every action
+  (`0x1403B7CA0`, not only in holds), but the air cast clip has none (root 0 on every key,
+  **Checked (files)**), nor has the fall loop. Nothing moves him sideways but the kept speed.
+- **The vertical step** (`0x1403CB360`, called every other frame with dt 2 by `0x1403B89A0`, its
+  move halved over the two frames): the arc's time `+0xF0` goes on before the hold test; while
+  range 3 holds him the move is 0; out of it the move is (the arc's height at the new time − his
+  height), at most 2 × `+0x138` (sstm `fall_max` 16, **Checked (files)**) a tick. Nothing found
+  that resets the time or the arc's base at the hold's end: the only other writers of `+0xF0` are
+  the hops (`0x1403CBC30`, `0x1403CBB00`, `0x1403B81D0`, `0x1403B8150`) and the glide's step; the base `+0xF8`
+  only moves by what collision took off the move. So the first tick after frame 74 already drops
+  32 (16 a frame), straight down when the kept speed has faded. **Checked (decomp)**.
+- Frame 84's event (trigger 16, parameter 20) sets actor `+0xB94` = 20, the timer
+  `0x1403BA070` waits out before commands without row flag `0x100`; no effect on the fall.
+  Range 23's calls (`0x1403CD890`) only touch the model's face/effects object. **Checked (decomp)**.
+
+So with the stick let go, KH2's air cast ends in a straight drop at 16 a frame from frame 74, as the
+tester's trace does; with the stick held, KH2 steers him only from frame 84. No physics difference
+was found against `air_step`. What differs in the trace is what is drawn after frame 84 (KH1's fall
+slot 10 and landing 11 with the Jump row at KH1; KH2's fall loop 4, blended in over 8 frames, and
+its landing 5). Asked the tester for a KH2-side recording.
