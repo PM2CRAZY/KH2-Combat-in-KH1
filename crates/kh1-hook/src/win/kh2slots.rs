@@ -476,8 +476,10 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
         tracks.push(EventTrack::level(ks::CAN_LEAVE, 0, &[(roll_free(clip) as f32, clip.length.max(1) as f32)]));
     }
     if cast {
-        let more: Vec<EventTrack> = cast_follow(clip, finisher_cast).into_iter().filter(|t| !tracks.iter().any(|o| o.kind == t.kind)).collect();
-        tracks.extend(more);
+        // (The cast's own KH1 combo window, `cast_follow`, in place of the one `kh1_tracks` made
+        // from range id 11 alone.)
+        tracks.retain(|t| t.kind != ks::COMBO);
+        tracks.extend(cast_follow(clip, finisher_cast));
     }
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     // (KH1's roll request has it too: KH2's roll moves him by its root, `ROLL`.)
@@ -870,30 +872,51 @@ fn roll_free(clip: &character_core::Clip) -> u32 {
 }
 
 /// What may follow a KH2 cast on KH1's cast state (the tester, thread kh2-magic-and-reflect-native,
-/// answer 1 (a): the cast counts as a step and the combo goes on after it). KH2's rule (the
-/// controller's Magic action, `character_core`): from the cast motion's reaction-command window
-/// (range id 14, `AllowReactionCommand`) other actions may cut it and an Attack goes on with the
-/// combo; with none, only on its last frame. (A jump or the action button only in a free state,
-/// which no cast motion of Sora's has: `cast_cut_open`.) On KH1's side: the motion's combo window (type 5, `+0x1CC` bit 22, in
-/// which KH1's menu takes a command with the action flag still set, `0x1402A2EC0`, and KH1's
-/// Attack step `0x1402A7510` counts on from `+0x41`, Checked (decomp)) from there to the end; no
-/// "may be left" (type 0 clears the action flags, `0x14029D399`, and the stick would walk out of
-/// the cast, which KH2's doesn't). A fresh jump or Square ends the action flag for its own move
-/// only in a free state (`cast_cut_open`, `formmagic::cast_cut`): never during Sora's casts. A
-/// finisher cast that ends the combo has no combo window: KH1's Attack starts a new one. Spells follow
-/// only from KH2's magic window (range id 35, `ComboMagic`): `cast_magic_window`, in
-/// `combat::command`.
+/// m3 answer 1 (a): a cast counts as a step; m9 answer 2 (a): Attack out of it exactly as KH2).
+/// Steam KH2's Attack check `0x1403D6CA0` takes an Attack only in the combo window (range id 11,
+/// `+0x18C` bit 0x400; the combo goes on), the finisher window (range id 50, `+0x194` bit 0x20,
+/// with Finishing Plus left) or a free state (range ids 0 / 1 / 2; a new combo, count 1); the
+/// reaction-command window (range id 14) is read only for reaction-command rows (Checked
+/// (decomp)). Of Sora's casts only Blizzard's (59) has a combo window, from frame 36; none has a
+/// free state (Checked (files), `P_EX100.mset`). A spell follows only in the magic window (range
+/// id 35, `ComboMagic`: Fire 56 34..46 and from 60, Thunder 62 / Cure 65 from 42).
+/// On KH1's side: the motion's combo window (type 5, `+0x1CC` bit 22, in which KH1's menu takes a
+/// command with the action flag still set, `0x1402A2EC0`, and KH1's Attack step `0x1402A7510`
+/// counts on from `+0x41`, Checked (decomp)) over KH2's combo window and its magic window (so the
+/// menu takes a spell there); `combat::command` refuses an Attack outside the combo window
+/// (`cast_attack_window`) and a spell outside the magic window (`cast_magic_window`). Outside
+/// both, KH1's Attack step waits for the cast's end and then starts a new combo (count 1), as
+/// KH2's free state does. No "may be left" (type 0 clears the action flags, `0x14029D399`, and
+/// the stick would walk out of the cast, which KH2's doesn't). A fresh jump or Square ends the
+/// action flag for its own move only in a free state (`cast_cut_open`, `formmagic::cast_cut`):
+/// never during Sora's casts. A finisher cast that ends the combo has no combo window: KH1's
+/// Attack starts a new one (KH2's finisher window with Finishing Plus is not built).
 fn cast_follow(clip: &character_core::Clip, finisher: bool) -> Vec<EventTrack> {
     if finisher {
         return Vec::new();
     }
-    vec![EventTrack::level(ks::COMBO, 0, &[(cut_from(clip) as f32, clip.length.max(1) as f32)])]
+    let len = clip.length.max(1) as f32;
+    let spans: Vec<(f32, f32)> = clip
+        .windows
+        .iter()
+        .filter(|w| matches!(w.kind, WindowKind::Combo | WindowKind::ComboMagic))
+        .map(|w| (w.start as f32, w.end.map_or(len, |e| e as f32).min(len)))
+        .filter(|(a, b)| b > a)
+        .collect();
+    if spans.is_empty() {
+        return Vec::new();
+    }
+    vec![EventTrack::level(ks::COMBO, 0, &spans)]
 }
 
-/// The first frame of a KH2 cast that presses may cut (range id 14; with none, its last frame).
-fn cut_from(clip: &character_core::Clip) -> u32 {
-    let len = clip.length.max(1);
-    clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(len - 1).min(len - 1)
+/// Our cast slot playing on `actor`: whether an Attack may follow it now (KH2's combo window,
+/// range id 11, `WindowKind::Combo`; Steam KH2 `0x1403D6CA0`, Checked (decomp)). `None`: no cast
+/// of ours plays.
+pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
+    let m = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))?;
+    let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| matches!(k, WindowKind::Combo)))
 }
 
 /// One of our cast slots plays on `actor` (KH2's spells', Reflect's).
@@ -903,7 +926,7 @@ pub unsafe fn cast_playing(actor: usize) -> bool {
 
 /// Our cast slot playing on `actor` may be left by a jump or Square now: KH2's free state (range
 /// id 0 / 1 / 2, `Clip::free_at`; Steam KH2 `0x1403D6FC0` / `0x1403BFB30`, Checked (decomp)), not
-/// its reaction-command window (`cut_from`, which only an Attack takes). None of Sora's cast
+/// its combo window (`cast_attack_window`, which only an Attack takes). None of Sora's cast
 /// motions (56..73) has one (`P_EX100.mset`, Checked (files)), so a jump or Square waits for the
 /// cast's end, as in KH2.
 pub unsafe fn cast_cut_open(actor: usize) -> bool {

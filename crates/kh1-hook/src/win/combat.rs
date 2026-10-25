@@ -368,6 +368,21 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     // Our Reflect (magic, spell byte 7, which KH1 has no spell for): KH2's, never KH1's.
     // A Drive form (page 2's Drive list, `drive`).
     let arg = ((full >> 8) & 0xFF) as u8;
+    // During a KH2 cast on KH1's cast state an Attack (or an item) is taken only in the cast's
+    // combo window (range id 11, `kh2slots::cast_attack_window`; Steam KH2's Attack and command
+    // check `0x1403D6CA0`, Checked (decomp); of Sora's casts only Blizzard's has one, from 36): KH1's
+    // combo window there is also open over KH2's magic window (range id 35) for the spells
+    // (`kh2slots::cast_follow`). Refused as KH2 refuses it: nothing happens (the tester,
+    // kh2-magic-and-reflect-native m9 answer 2 (a)). After the cast KH1's Attack step starts a new
+    // combo, as KH2's free state does.
+    if actor == sora && matches!(kind, 1 | 3) && super::kh2slots::cast_attack_window(actor) == Some(false) {
+        if kind == 3 {
+            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+            sound(4);
+        }
+        cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, outside its combo window"));
+        return;
+    }
     // KH1 has him for its jump or glide (`stylejump`): a command (magic, an item, a Drive) is
     // KH2's, after KH2 takes him back (it waits for that, `resume_command`).
     // (KH1's roll, `styleroll`, too: KH2's once the roll is over.)

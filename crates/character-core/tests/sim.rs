@@ -907,7 +907,10 @@ fn neutral_aerial_dodge_goes_straight_up() {
 #[test]
 fn spell_mid_combo_is_a_step_of_it() {
     let mut ch = sora();
-    ch.moveset.clips.insert(71, Clip::plain(71, 30));
+    // (A cast with a combo window, as Blizzard's: the Attack goes on with the combo there.)
+    let mut c71 = Clip::plain(71, 30);
+    c71.windows.push(Window { start: 20, end: None, kind: WindowKind::Combo });
+    ch.moveset.clips.insert(71, c71);
     let mut w = World::new(ch);
     w.step(Pad { attack: true, ..IDLE });
     let mut cast = None;
@@ -1019,6 +1022,9 @@ fn magic_sora(fp: u8) -> Character {
     ch.moveset.clips.insert(110, fin);
     let mut c71 = Clip::plain(71, 40);
     c71.windows.push(Window { start: 20, end: None, kind: WindowKind::AllowReactionCommand });
+    // (An Attack follows a cast only in its combo window, range id 11, as Blizzard's 59 from 36:
+    // `attack_out_of_a_cast_only_in_its_combo_window`.)
+    c71.windows.push(Window { start: 20, end: None, kind: WindowKind::Combo });
     c71.windows.push(Window { start: 25, end: Some(35), kind: WindowKind::ComboMagic });
     ch.moveset.clips.insert(71, c71);
     let mut c72 = Clip::plain(72, 50);
@@ -1152,6 +1158,53 @@ fn reflect_mid_combo_is_one_step() {
     assert_eq!(w.ch.cast(CAST), Some(71), "second spell, second step");
     let o = until(&mut w, 60, true, |o, _| o.state == StateName::Attack).unwrap();
     assert_eq!(o.motion, 110);
+}
+
+/// An Attack follows a cast only in the cast's combo window (range id 11), as Steam KH2's Attack
+/// check `0x1403D6CA0` (combo window, finisher window or a free state; the reaction-command
+/// window, range id 14, is for reaction commands): without one (Fire, Thunder, Cure, Reflect,
+/// the air casts) mashing does nothing until the cast has ended, and on the ground the swing
+/// after it starts a new combo (the free state); with one (Blizzard's from 36) the Attack there
+/// goes on with the combo.
+#[test]
+fn attack_out_of_a_cast_only_in_its_combo_window() {
+    for combo_window in [false, true] {
+        let mut ch = sora();
+        let mut c71 = Clip::plain(71, 40);
+        c71.windows.push(Window { start: 20, end: None, kind: WindowKind::AllowReactionCommand });
+        if combo_window {
+            c71.windows.push(Window { start: 30, end: None, kind: WindowKind::Combo });
+        }
+        ch.moveset.clips.insert(71, c71);
+        ch.abilities.combo_master = true;
+        let mut w = World::new(ch);
+        w.step(Pad { attack: true, ..IDLE });
+        let mut cast = None;
+        for _ in 0..45 {
+            w.step(IDLE);
+            if cast.is_none() && w.ch.can_cast() {
+                cast = w.ch.cast(CastMotions { ground: 71, finisher: None, air: 73 });
+                break;
+            }
+        }
+        assert_eq!(cast, Some(71));
+        let mut first = None;
+        for i in 0..60 {
+            let o = w.step(Pad { attack: i % 2 == 0, ..IDLE });
+            if o.state == StateName::Attack && o.clip_frame == 0 {
+                first = Some((i, o.motion));
+                break;
+            }
+        }
+        let (at, motion) = first.expect("a swing after the cast");
+        if combo_window {
+            assert!((29..32).contains(&at), "taken in the combo window: {at}");
+            assert_ne!(motion, 100, "the combo goes on");
+        } else {
+            assert!(at >= 39, "not before the cast's end: {at}");
+            assert_eq!(motion, 100, "a new combo from the free state");
+        }
+    }
 }
 
 /// KH1's spells (`magic_step` at the hand-off, `combo_state` / `set_combo_state` around it).

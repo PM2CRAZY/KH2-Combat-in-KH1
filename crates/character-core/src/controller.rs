@@ -2561,20 +2561,17 @@ impl Character {
                 }
             }
             ActionKind::Magic => {
-                // An Attack once the reaction-command window opens (a jump or Square only in a
-                // free state, which no cast motion of Sora's has: `free` above).
-                let open = clip.first(|k| matches!(k, WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
-                if f >= open {
-                    cancel_allowed = true;
-                }
-                // An Attack once the window opens goes on with the combo (`combo_carry`, set when
-                // the cast came mid-combo); pressed before, it is not kept (no buffer, the user).
-                if input.attack.pressed && (f >= open || f + 1 >= clip.length) {
-                    self.mode = Mode::Action(act.clone());
-                    if self.try_attack(input, env) {
-                        return true;
-                    }
-                            }
+                // An Attack only in the cast's combo window (range id 11; `cancel_allowed` above),
+                // where it goes on with the combo (`combo_carry`, set when the cast came
+                // mid-combo), as Steam KH2's Attack check `0x1403D6CA0` takes only the combo window
+                // (`+0x18C` bit 0x400), the finisher window (Finishing Plus) or a free state; the
+                // reaction-command window (range id 14) is only for reaction commands (Checked
+                // (decomp)). Of Sora's casts only Blizzard's (59) has one, from frame 36 (Checked
+                // (files), `P_EX100.mset`); the others take an Attack once they have ended, from
+                // the free state (on the ground a new combo, below). (The tester,
+                // kh2-magic-and-reflect-native m9 answer 2 (a). Before: from range 14.) A jump or
+                // Square only in a free state, which no cast motion has (`free` above). Pressed
+                // outside the window, the press is not kept (no buffer, the user).
                 if finished && !self.airborne {
                     // Played to its end on the ground: back in idle, the combo is over (the
                     // user). (In the air it goes on until the landing, as a swing's does.)

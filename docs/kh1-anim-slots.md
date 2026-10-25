@@ -1179,7 +1179,8 @@ borrows it for the roll / Quick Run as before.
   - The dodge roll: from KH2's free state (range id 2, frame 36 of 209), not its fall-check event
     (34).
   - KH2's casts on KH1's cast state: a jump or Square cuts them only in a free state
-    (`cast_cut_open`), so never for Sora's; an Attack still from the reaction-command window.
+    (`cast_cut_open`), so never for Sora's; an Attack only in the cast's combo window (range id
+    11, only Blizzard's 59 from 36; `docs/kh1-magic-native.md` §4c, m9 answer 2 (a)).
   - KH1's own spells handed to KH1 (a spell out of one of KH2's moves, a Drive Form's KH1 spell,
     `takeover`'s hand-off): a jump or Square no longer ends the cast once the spell is out (s168's
     "other cut" is gone, the tester m9 answer 1 (a)); they wait for KH1 to let him act, as both

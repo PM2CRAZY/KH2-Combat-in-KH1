@@ -249,6 +249,32 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
 - **Open:** Finishing Plus after a finisher cast (KH2's next finisher in range 50) isn't built;
   a finisher cast ends the combo.
 
+### 4c.1 Attack out of a cast: KH2's combo window only (the tester, m9 answer 2 (a))
+
+- **Checked (decomp)**, Steam KH2 `0x1403D6CA0` (Attack and commands, from the input step
+  `0x1403D6FC0` and the Square moves `0x1403A9950`): an Attack is taken in the finisher window
+  (`+0x194` bit 0x20, range id 50) while Finishing Plus leaves a finisher, in the combo window
+  (`+0x18C` bit 0x400, range id 11; the count `+0xD74` goes up), or in a free state (`+0x18C &
+  0x1C`, range ids 0 / 1 / 2; the count set back to 1: a new combo). Otherwise nothing. The
+  reaction-command window (range id 14, `+0x18C` bit 0x80000) is not one of them: it is read only
+  for reaction-command rows (`0x1403BA070`).
+- **Checked (files)** (`P_EX100.mset`, KH2 frames at 60 per second): range 11 on Sora's casts only
+  on Blizzard 59 (from 36); range 50 on the finisher casts 57 (54..84), 60 (46..76), 63 / 68
+  (42..78), 72 (54..84); range 35 as in §4c; no free state on any cast.
+- So: during Fire, Thunder, Cure, Reflect and every air cast an Attack does nothing; once the cast
+  has ended, an Attack starts a new combo (on the ground). During Blizzard, an Attack from 36 goes
+  on with the combo. Before (t486), an Attack was taken from range 14 on every cast and the combo
+  went on.
+- KH1's cast state (`kh2slots::cast_follow`): KH1's combo window over range 11 and range 35 (the
+  menu takes a spell in the magic window); `combat::command` refuses an Attack (silently, as KH2)
+  and an item (KH1's "can't") outside range 11 (`kh2slots::cast_attack_window`). KH2's controller
+  (Drive Forms, borrows): the Magic action takes an Attack only in range 11 (`cancel_allowed`);
+  sim test `attack_out_of_a_cast_only_in_its_combo_window`.
+- **Not built:** the finisher casts' finisher window (Finishing Plus after a finisher cast).
+- **Kept (ours):** in the air, KH2's controller still carries the combo on after a cast that has
+  ended (until the landing), where KH2's free state would start a new one; KH1's cast state
+  already starts a new one.
+
 ## 4d. KH2's stop at a cast (done: the tester's answer 2 (a), physics KH2; Drive Forms as they are)
 
 - KH2's cast start (the controller's `cast`, the KH2 source): sideways speed 0, and in the air no
