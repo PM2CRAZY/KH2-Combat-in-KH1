@@ -136,6 +136,11 @@ reflect = on\r\n\
 ; keyblade_turn: on = every Keyblade held with its teeth up, as KH2 holds it (KH1's grip held\r\n\
 ; them to the ground under KH2's moves); off = as before\r\n\
 keyblade_turn = on\r\n\
+; hair_physics: on = Sora's hair, hood and keychain move during KH2's moves; off = rigid\r\n\
+hair_physics = on\r\n\
+; kh2_hair: on = (hair_physics = on) they move as KH2 animates its own hair, hood and keychain in\r\n\
+; each move; off = the older swing and sway (a breeze and gravity) instead\r\n\
+kh2_hair = on\r\n\
 ; drive: on = D-pad left at the battle menu's top flips to a second page (Attack, Magic, Items,\r\n\
 ; Drive), Drive listing KH2's forms; off = KH1's menu only\r\n\
 drive = on\r\n\
@@ -220,8 +225,7 @@ trace_game_frames = off\r\n\
 ; trace_*: what each trace row holds (on / off each; the debug menu's Trace Recorder page switches\r\n\
 ; them): movement (position, floor, collision, velocity), kh1_state, kh2_state, form, draw\r\n\
 ; (animation draw), feet (feet / IK), kh1_camera, kh2_camera, input, config, log (log lines),\r\n\
-; hit_fx (hit effect lines), sounds (sound log lines), cloth (the cloth physics' bones and the\r\n\
-; animation drawn, wide: off by default)\r\n\
+; hit_fx (hit effect lines), sounds (sound log lines)\r\n\
 trace_movement = on\r\n\
 trace_kh1_state = on\r\n\
 trace_kh2_state = on\r\n\
@@ -235,7 +239,6 @@ trace_config = on\r\n\
 trace_log = on\r\n\
 trace_hit_fx = on\r\n\
 trace_sounds = on\r\n\
-trace_cloth = off\r\n\
 ; debug_menu: on = L1 + R1 + Triangle opens the debug menu (the Config menu's Debug Menu row\r\n\
 ; switches it in game too); off = the buttons do nothing\r\n\
 debug_menu = off\r\n";
@@ -312,9 +315,15 @@ pub struct Settings {
     pub reflect: bool,
     /// Keyblades turned teeth up in his hand (`keyblade_turn = on`, `pose::keyblade_teeth_up`).
     pub keyblade_turn: bool,
+    /// Hair, hood and keychain move under KH2's moves (`hair_physics = on`; an older ini's
+    /// `physics = on / off`); off, they keep KH1's rest pose.
+    pub physics: bool,
     /// Whose physics move base Sora (`physics = kh1 | kh2`, KH2's by default;
     /// `shared::physics::rule`).
     pub physics_rule: crate::kh1phys::Rule,
+    /// They follow KH2's own animation of them (`kh2_hair = on`, `kh1_data::secondary`) rather
+    /// than the swing (`kh1_data::jiggle`).
+    pub kh2_hair: bool,
     /// The second command page with Drive (`drive = on`).
     pub drive: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
@@ -347,8 +356,7 @@ pub struct Settings {
     /// The trace's seconds count game frames, not real time (`trace_game_frames = on`; off by
     /// default; Frame Advance turns it on, `frameadv`).
     pub trace_game_frames: bool,
-    /// What each trace row holds (`trace_*` = on / off, `trace::ITEMS`; all on by default but
-    /// `trace::cat::OFF_BY_DEFAULT`, the Cloth columns).
+    /// What each trace row holds (`trace_*` = on / off, `trace::ITEMS`; all on by default).
     pub trace_cats: u32,
     /// L1 + R1 + Triangle opens the debug menu (`debug_menu = on`, `debugmenu.rs`).
     pub debug_menu: bool,
@@ -514,7 +522,9 @@ fn load(first: bool) -> Option<Settings> {
         },
         reflect: on(&text, "reflect", "on", true),
         keyblade_turn: on(&text, "keyblade_turn", "on", true),
+        physics: hair_physics(&text),
         physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
+        kh2_hair: on(&text, "kh2_hair", "on", true),
         drive: on(&text, "drive", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {
@@ -563,7 +573,7 @@ fn load(first: bool) -> Option<Settings> {
         trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
         sound_log: on(&text, "sound_log", "on", true),
         trace_game_frames: on(&text, "trace_game_frames", "on", false),
-        trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", it.bit & super::trace::cat::OFF_BY_DEFAULT == 0)).fold(0, |m, it| m | it.bit),
+        trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
         debug_menu: on(&text, "debug_menu", "on", false),
     };
     log(&format!("settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" }));
@@ -574,8 +584,23 @@ fn load(first: bool) -> Option<Settings> {
 /// per-spell rows: read only for `anim_gravity` / `_stop` / `_aero`'s defaults).
 pub const KH1_CAST_KEYS: [&str; 3] = ["kh1_cast_gravity", "kh1_cast_stop", "kh1_cast_aero"];
 
-/// Keeps the physics setting in the ini (the Config menu's Physics row).
+/// The hair's switch: `hair_physics`, or an older ini's `physics = on / off` (before `physics`
+/// became the physics setting, `kh1 | kh2`, which leaves the hair on).
+fn hair_physics(text: &str) -> bool {
+    match setting(text, "hair_physics") {
+        Some(_) => on(text, "hair_physics", "on", true),
+        None => !matches!(setting(text, "physics").as_deref(), Some("off" | "0" | "no" | "false")),
+    }
+}
+
+/// Keeps the physics setting in the ini (the Config menu's Physics row). An older ini whose
+/// `physics` line is the hair's switch gets that as `hair_physics` first, so it isn't lost.
 pub fn save_physics(r: crate::kh1phys::Rule) {
+    let path = format!("{}\\{INI}", super::exe_dir());
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    if setting(&text, "hair_physics").is_none() {
+        save("hair_physics", if hair_physics(&text) { "on" } else { "off" });
+    }
     save("physics", r.key());
 }
 

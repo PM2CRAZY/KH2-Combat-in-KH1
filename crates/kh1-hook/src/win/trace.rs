@@ -73,11 +73,7 @@ pub mod cat {
     pub const LOG: u32 = 1 << 10;
     pub const HIT_FX: u32 = 1 << 11;
     pub const SOUNDS: u32 = 1 << 12;
-    /// The cloth physics' bones and the animation drawn (`clothlive::Record`): wide, off by default.
-    pub const CLOTH: u32 = 1 << 13;
-    pub const ALL: u32 = (1 << 14) - 1;
-    /// Off unless the ini or the debug menu turns it on.
-    pub const OFF_BY_DEFAULT: u32 = CLOTH;
+    pub const ALL: u32 = (1 << 13) - 1;
     /// The events column's sources.
     pub const EVENTS: u32 = LOG | HIT_FX | SOUNDS;
 }
@@ -90,7 +86,7 @@ pub struct Item {
 }
 
 /// Every category, in the debug menu's order.
-pub const ITEMS: [Item; 14] = [
+pub const ITEMS: [Item; 13] = [
     Item { bit: cat::MOVEMENT, key: "trace_movement", name: "Movement & Physics" },
     Item { bit: cat::KH1_STATE, key: "trace_kh1_state", name: "KH1 State" },
     Item { bit: cat::KH2_STATE, key: "trace_kh2_state", name: "KH2 State" },
@@ -104,7 +100,6 @@ pub const ITEMS: [Item; 14] = [
     Item { bit: cat::LOG, key: "trace_log", name: "Log Lines" },
     Item { bit: cat::HIT_FX, key: "trace_hit_fx", name: "Hit Effects" },
     Item { bit: cat::SOUNDS, key: "trace_sounds", name: "Sounds" },
-    Item { bit: cat::CLOTH, key: "trace_cloth", name: "Cloth" },
 ];
 
 /// The debug menu's groups of categories (indices into `ITEMS`).
@@ -113,21 +108,20 @@ pub struct Group {
     pub items: &'static [usize],
 }
 
-pub const GROUPS: [Group; 7] = [
+pub const GROUPS: [Group; 6] = [
     Group { name: "KH1 Actor", items: &[0, 1] },
     Group { name: "KH2 Controller", items: &[2, 3] },
     Group { name: "Pose", items: &[4, 5] },
     Group { name: "Camera", items: &[6, 7] },
     Group { name: "Input & Config", items: &[8, 9] },
     Group { name: "Events", items: &[10, 11, 12] },
-    Group { name: "Cloth", items: &[13] },
 ];
 
 /// The live settings (from the ini, or the debug menu's since): the mode (0 off, 1 on, 2
 /// always), the seconds, the categories, the sound log; and the settings they were read from.
 static LIVE_MODE: AtomicU32 = AtomicU32::new(1);
 static LIVE_SECONDS: AtomicU32 = AtomicU32::new(DEFAULT_SECONDS);
-static LIVE_CATS: AtomicU32 = AtomicU32::new(cat::ALL & !cat::OFF_BY_DEFAULT);
+static LIVE_CATS: AtomicU32 = AtomicU32::new(cat::ALL);
 static LIVE_SOUND: AtomicBool = AtomicBool::new(true);
 /// (t371) The seconds count game frames (`game_frames`), not real time.
 static LIVE_GAME_FRAMES: AtomicBool = AtomicBool::new(false);
@@ -326,9 +320,6 @@ pub struct Row {
     /// KH1's own skeleton pass's result for his feet (`pose::take_feet`), filled by `frame`.
     pub feet: super::pose::FeetSeen,
     pub events: String,
-    /// (Cloth) The animation drawn and the cloth physics' bones (`clothlive::record`), filled by
-    /// `frame`.
-    pub cloth: Option<Box<super::clothlive::Record>>,
     /// The categories this row was made with (`cat`), filled by `frame`.
     pub cats: u32,
 }
@@ -355,22 +346,9 @@ cam_horiz,cam_eye_height,cam_look_height,cam_yaw,cam_pitch,cam_dist,cam_fov,cam_
     (cat::EVENTS, "events"),
 ];
 
-/// The CSV's header for the categories in `mask` (the Cloth columns, built from the bone list,
-/// before the events).
+/// The CSV's header for the categories in `mask`.
 fn header(mask: u32) -> String {
-    let mut v: Vec<String> = Vec::new();
-    for (c, h) in COLUMNS.iter() {
-        if *c == cat::EVENTS && mask & cat::CLOTH != 0 {
-            v.push(super::clothlive::header());
-        }
-        if *c == 0 || mask & c != 0 {
-            v.push(h.to_string());
-        }
-    }
-    if mask & cat::EVENTS == 0 && mask & cat::CLOTH != 0 {
-        v.push(super::clothlive::header());
-    }
-    v.join(",")
+    COLUMNS.iter().filter(|(c, _)| *c == 0 || mask & c != 0).map(|(_, h)| *h).collect::<Vec<_>>().join(",")
 }
 
 /// Columns in `Row::config` (as in `HEADER`): Camera Style, Physics, the physics in use now, then
@@ -483,9 +461,6 @@ pub fn frame(mut row: Row) {
     let feet = super::pose::take_feet();
     if cats & cat::FEET != 0 {
         row.feet = feet;
-    }
-    if cats & cat::CLOTH != 0 {
-        row.cloth = Some(Box::new(super::clothlive::record()));
     }
     if let Ok(mut e) = EVENTS.lock() {
         row.events = std::mem::take(&mut *e);
@@ -759,9 +734,6 @@ fn line(t: &mut String, r: &Row, mask: u32) {
     }
     if col(cat::FEET) {
         feet(t, r, has(cat::FEET));
-    }
-    if col(cat::CLOTH) {
-        super::clothlive::columns(t, r.cloth.as_deref().filter(|_| has(cat::CLOTH)));
     }
     if col(cat::EVENTS) {
         if !r.events.is_empty() {

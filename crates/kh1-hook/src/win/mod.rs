@@ -4,7 +4,6 @@
 
 mod addr;
 mod camera;
-mod clothlive;
 mod combat;
 mod combomods;
 mod config;

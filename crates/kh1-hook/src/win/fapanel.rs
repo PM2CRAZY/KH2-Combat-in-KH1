@@ -11,8 +11,7 @@
 //! - the frame within it, of its length ("Animation: field run, frame 12 / 40"), and how many times it has looped
 //!   since it began;
 //! - the trace's frame number (the trace's `frame` column, `takeover::GAME_FRAME`), so a stretch can
-//!   be named as "trace frames X to Y";
-//! - the cloth physics when it runs (`clothlive`): its settings id, steps this frame, a restart.
+//!   be named as "trace frames X to Y".
 //!
 //! The frame within the animation is the clip's own time (KH1's motion time for our slots, which
 //! KH1 plays one frame a 60 Hz frame; our clock for KH2's controller's), floored; a loop is counted
@@ -21,7 +20,7 @@
 
 use std::sync::Mutex;
 
-/// The animation drawn, as the panel and the trace's Cloth columns show it.
+/// The animation drawn, as the panel shows it.
 #[derive(Clone, Debug, Default)]
 pub struct Anim {
     /// "baked", "live", "kh2_controller" or "kh1_own".
@@ -120,9 +119,5 @@ pub fn lines() -> Vec<String> {
     let name = a.motion.map_or("anim".to_string(), |m| format!("{} {}", if a.field { "field" } else { "battle" }, motion_name(m)));
     v.push(if a.len > 0 { format!("Animation: {name}, frame {} / {}, loop {}", a.frame, a.len, a.loops) } else { format!("Animation: frame {}, loop {}", a.frame, a.loops) });
     v.push(format!("Trace frame: {}", super::takeover::GAME_FRAME.load(std::sync::atomic::Ordering::Relaxed)));
-    let c = super::clothlive::seen();
-    if c.active {
-        v.push(format!("Cloth: physics on, settings {}, {} step{}{}", c.settings, c.report.steps, if c.report.steps == 1 { "" } else { "s" }, if c.report.restarted { ", restarted" } else { "" }));
-    }
     v
 }

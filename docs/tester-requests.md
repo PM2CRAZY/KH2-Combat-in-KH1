@@ -201,6 +201,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [18. Assistant: Glad the hood works. Your plan is sound, and it fits how bot](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m18)
   - [19. Assistant: t592 to t596. No bake yet: this is the physics live in game ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m19)
   - [20. Assistant: Thanks, that's all clear. t613 to t616, one change each:](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m20)
+  - [21. Assistant: t620: done, Sora's clothes are back to how they were in t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m21)
 - [Quick Run native](../testers/quick-run-native/quick-run-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/quick-run-native/quick-run-native.md#^m1)
   - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](../testers/quick-run-native/quick-run-native.md#^m2)
