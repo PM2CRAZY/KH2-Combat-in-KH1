@@ -114,6 +114,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [4. Assistant: Done, as planned, with (b) for Donald and Goofy. One version](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m4)
   - [5. Assistant: Thanks for the trace and the log. They showed exactly what w](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m5)
   - [6. Assistant: Thanks. (a) it is: after you let go, the fall keeps followin](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m6)
+  - [7. Assistant: Thanks for the trace and the log. I went through them frame ](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m7)
 - [KH2 hit effects on enemies](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m1)
   - [2. Assistant: Thanks, built with your answers:](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m2)
