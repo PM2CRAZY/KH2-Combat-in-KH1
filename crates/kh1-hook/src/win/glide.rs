@@ -276,6 +276,7 @@ unsafe extern "system" fn fall_jump(actor: usize) -> usize {
 /// KH2's start on his speed now: the stored launch speed put back when KH2 has one (`0x1403CBD30`:
 /// `+0x20 = +0xE0` with its flag; ours `takeover::launch_kept`), else his velocity as it is.
 unsafe fn begin(actor: usize) -> Glide {
+    LAST_MOTION.store(0, Ordering::Relaxed);
     let v: [f32; 4] = rd(actor + 0x3C0);
     let launch = takeover::launch_kept();
     let vel = launch.unwrap_or([v[0], v[2]]);
@@ -393,6 +394,34 @@ fn request_for(motion: u16) -> u32 {
     }
 }
 
+/// KH1's motion fields at a glide motion change (the bank-change diagnostics, glide thread m6):
+/// the slot playing `+0x168`, its time `+0x16C`, the blend length `+0x170` (0 when no blend is
+/// under way) and the blend's own step `+0x174`, as KH1's motion apply `0x1402A0350` sets them
+/// (Checked (decomp): a request while `+0x170 > 0` goes through its mid-blend path `0x140393B30`).
+unsafe fn bank_fields(actor: usize) -> (u32, f32, f32, f32) {
+    (rd(actor + 0x168), rd(actor + SLOT_TIME), rd(actor + 0x170), rd(actor + 0x174))
+}
+
+/// The glide motion last asked (KH2's 205 / 206 / 207 / 208), for `note_bank`.
+static LAST_MOTION: AtomicU32 = AtomicU32::new(0);
+
+/// Logs each change of the glide motion asked (first 80): KH2's motion, KH1's request, and KH1's
+/// slot / time / blend before the request, so a bank change (206 <-> 207, and any 205 between)
+/// can be read frame by frame with the trace (the frame is in the log line).
+fn note_bank(motion: u16, asked: u32, before: (u32, f32, f32, f32), tilt: f32) {
+    let was = LAST_MOTION.swap(motion as u32, Ordering::Relaxed);
+    if was == motion as u32 {
+        return;
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 80 {
+        log(&format!(
+            "glide (native) motion: {was} -> {motion} (KH1 request {asked:#x}); KH1 before it: slot {}, time {:.1}, blend {:.1} (step {:.1}); stick tilt {tilt:.2}",
+            before.0, before.1, before.2, before.3
+        ));
+    }
+}
+
 /// State 0x15's pre-step (`(actor, input)`, KH1's think, before the step): KH1's (`0x1402B2880`:
 /// its turn of 2° / 1° a frame, its motion picks at 30°) for Donald and Goofy; for Sora KH2's:
 /// - the hover (`0x140423840`): the stick takes it into the glide, KH2's stored launch speed put
@@ -457,7 +486,10 @@ unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
         GLIDE
     };
     let request: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_RVA);
-    request(actor, request_for(motion), BLEND);
+    let asked = request_for(motion);
+    let before = bank_fields(actor);
+    request(actor, asked, BLEND);
+    note_bank(motion, asked, before, tilt);
     // (The hover's slot is made on an air swing of KH1's, which holds at its end: kept going round
     // as KH2 loops it. KH1's glide slots loop as KH1's own glide has them.)
     if let Some((GLIDE_HOVER, t)) = super::kh2slots::now_playing(actor) {

@@ -301,3 +301,24 @@ with its level, logged ("abilities: Glide style ... set in the Config menu"). KH
 (`0x142D5EC10`) itself when the menu closes (`0x1402A6380`, §8.6). Assumption: that this is what the tester saw
 (no log of the report's session; the swap itself works in both logs I have).
 
+### 8.9 Changing bank mid-glide (glide thread m6: "he resets his animation")
+
+What KH2 does, **Checked (decomp)**: the glide update `0x140423A70` asks every frame for 205, or 206 / 207 by the
+side of the turn, through `0x1403C6DC0 (holder, motion, 16.0, 0)`. That call does nothing when the motion asked
+is already playing; otherwise it starts the new one at time 0 (its last argument) with a 16-frame blend. The only
+motion pair whose play time carries over is ids 1 / 2 (walk / run: `fmodf` of the time scaled by the two
+lengths); 205..208 aren't. So in KH2 a bank change (206 → 207, and any 205 between when the stick crosses the
+middle or comes within dot 0.98 of his facing) restarts the new loop from frame 0, blended over 16 frames.
+205 / 206 / 207 are 30-frame loops at 30 fps with return frame 0, 208 a 50-frame loop (`P_EX100.mset` A170..A173,
+**Checked (files)**).
+
+What KH1 does with the same requests, **Checked (decomp)**: `0x14029F7C0` returns when the slot asked is
+playing (`+0x168`) and otherwise queues it with start 0 (for the player; only enemies get a walk / run phase
+sync there), and `0x1402A0350` applies it: a blend of `+0x170` = 16 frames, or, when a blend is still under way,
+its mid-blend path `0x140393B30`, which keeps the sampled channels of `+0x1B0` as the pose it blends from. KH1's
+own glide pre-step only asks when `+0x170` is 0 (no blend under way); ours asks every frame, as KH2's does.
+
+So the restart at frame 0 is KH2's own rule, and nothing in the code shows our bank change doing anything KH2's
+doesn't. Not checked: how KH2's blender treats a request in the middle of a blend (its layered holder
+`0x1403C88C0` / `0x1403C8CD0`), against KH1's mid-blend path. The glide now logs every motion change with KH1's
+slot, time and blend fields before the request ("glide (native) motion: ..."), to compare with a trace.
