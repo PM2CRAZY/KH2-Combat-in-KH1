@@ -24,9 +24,11 @@
 //! timer the recoil started is put back as it was before the pass (KH2 gives none, answer 4). No
 //! hook of its own: the hit pass is `hurt`'s.
 
+use super::addr::Build;
 use super::styles::{self, Kind};
+use super::sys::*;
 use super::{log, pose};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 /// KH1's motion queue: count `+0x178`, first entry's request `+0x17C` (`0x14029F980`).
 const QUEUE: usize = 0x178;
@@ -140,4 +142,105 @@ pub unsafe fn after_pass(actor: usize, b: Before) {
         }
         _ => note(|| format!("recoil (KH2): KH1's big recoil (request {request:#x}, its own animation, answer 1), no protection")),
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// KH2's "refact self" 2 against a guard (the tester, thread kh2-recoil-and-parry-system m2, item 2:
+// "add it and include in the kh2 config for recoil"; `docs/kh1-kh2-recoil.md` §6.9).
+//
+// KH2 (`0x1403D2140`, Steam KH2, Checked (decomp)): when a normal attack with refact self 2 meets a
+// guard, the attack goes on (refact self 2: not stopped) and the guard's side, the guard and its
+// owner, becomes immune to that attack (the exemption is only for an *attack* that is itself a
+// refact-2 guard). So the guarded enemy takes no hit from that swing.
+//
+// KH1 (Steam, Checked (decomp)): the collision pass `0x1402B3BE0` calls the meeting
+// `0x1402B4A20 (entry, entry)` for two attack entries that overlap and pass KH1's pairing table;
+// the meeting runs each side's directional test `0x1402B4640 (own, other)` and returns if either
+// fails, then the two halves `0x1402B4BC0`. Our refact-2 rows are at priority 0x62 or more at
+// Recoil KH2 (`kh1rows::kh2_clash`) and a guard is 100, so both halves return 0 at once (one side
+// must be under 0x62): nothing happens and the swing reaches the body behind the guard. A body is
+// skipped by the same pass when the actor's hit-once bits (`+0x3E0`) hold the attack's bit
+// (`+0x54`); KH1 sets that bit when a hit lands and takes it off when the attack re-arms
+// (`0x1402B3380`) or is freed (the in-use mask, `0x1402B4460`). That is KH1's own "this actor is
+// immune to this attack".
+//
+// So the meeting is hooked: after KH1's own, when one side is Sora's attack of a refact-2 row
+// (`kh1rows::unstoppable`) and the other an enemy's guard (priority 100, owner not Sora), both
+// directional tests pass and the Recoil row is KH2, the guard's owner gets the swing's hit-once
+// bit (immune until the swing re-arms or ends, as KH2's immunity lasts the attack's life), with
+// KH1's clash spark standing in for KH2's clash effect (KH2's `0x1403D61D0` plays effect 0xD only
+// for refact self 2). Recoil KH1: nothing (KH1's rule: the swing hits through).
+// ---------------------------------------------------------------------------------------------
+
+/// KH1's attack meeting (Steam `0x1402B4A20`): `push rbx; push rsi; push rdi; push r14;
+/// sub rsp, 0x78` (Checked (exe)).
+const MEET_STEAM: usize = 0x2B4A20;
+const MEET_PROLOGUE: [u8; 10] = [0x40, 0x53, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x78];
+/// KH1's directional test (Steam `0x1402B4640 (own, other) -> 0 / 1`; it only reads; Checked
+/// (decomp)), its first bytes checked before a call (Checked (exe)).
+const FACES_STEAM: usize = 0x2B4640;
+const FACES_BYTES: [u8; 8] = [0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x20, 0x57];
+/// A KH1 guard's priority (`combat::GUARD_PRIORITY`; KH1's half `0x1402B4BC0` treats 100 as a
+/// guard).
+const GUARD_PRIORITY: i32 = 100;
+
+static BASE: AtomicUsize = AtomicUsize::new(0);
+static ORIG_MEET: AtomicUsize = AtomicUsize::new(0);
+
+/// Hooks KH1's attack meeting (Steam only; the hook checks its bytes first).
+pub unsafe fn install() {
+    if Build::current() != Build::Steam {
+        return;
+    }
+    let base = GetModuleHandleA(std::ptr::null()) as usize;
+    BASE.store(base, Ordering::Relaxed);
+    super::hook::install(base + MEET_STEAM, &MEET_PROLOGUE, meet as *const () as usize, &ORIG_MEET, "KH1's attack meeting (KH2's refact self 2 against guards)");
+}
+
+unsafe extern "system" fn meet(a: usize, b: usize) {
+    let orig: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_MEET.load(Ordering::Relaxed));
+    orig(a, b);
+    if !kh2() || !on() {
+        return;
+    }
+    let (oa, ob) = (rd::<usize>(a + 0x18), rd::<usize>(b + 0x18));
+    if oa < 0x10000 || ob < 0x10000 {
+        return;
+    }
+    let sora = super::takeover::sora_actor();
+    if sora < 0x10000 {
+        return;
+    }
+    let owner = |o: usize| pose::ptr(rd::<u32>(o + 0x34));
+    let mine = |o: usize| owner(o) == sora && super::kh1rows::unstoppable(o);
+    let guard = |o: usize| rd::<i32>(o + 0x68) == GUARD_PRIORITY && { let w = owner(o); w > 0x10000 && w != sora };
+    let (swing, g, ge, se) = if mine(oa) && guard(ob) {
+        (oa, ob, b, a)
+    } else if mine(ob) && guard(oa) {
+        (ob, oa, a, b)
+    } else {
+        return;
+    };
+    let base = BASE.load(Ordering::Relaxed);
+    let faces_at = base + FACES_STEAM;
+    if std::slice::from_raw_parts(faces_at as *const u8, FACES_BYTES.len()) != FACES_BYTES {
+        return;
+    }
+    let faces: unsafe extern "system" fn(usize, usize) -> i32 = std::mem::transmute(faces_at);
+    if faces(g, swing) == 0 || faces(swing, g) == 0 {
+        return;
+    }
+    let target = owner(g);
+    let bit: u32 = rd(swing + 0x54);
+    let had: u32 = rd(target + 0x3E0);
+    if bit == 0 || had & bit != 0 {
+        return;
+    }
+    wr(target + 0x3E0, had | bit);
+    // (KH1's spark where the two entries met, as KH1's meeting places its own: halfway between
+    // the entries' `+0x30`.)
+    let p: [f32; 4] = rd(ge + 0x30);
+    let q: [f32; 4] = rd(se + 0x30);
+    super::combat::clang([(p[0] + q[0]) * 0.5, (p[1] + q[1]) * 0.5, (p[2] + q[2]) * 0.5]);
+    note(|| format!("recoil (KH2): Sora's refact-self-2 swing {swing:#x} met the guard {g:#x} of actor {target:#x}: not stopped, that actor immune to it (hit-once bit {bit:#x})"));
 }

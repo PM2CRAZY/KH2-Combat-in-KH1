@@ -502,6 +502,14 @@ pub unsafe fn kh2_atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     kh2.battle.attack_for_level(id, 0, 0).cloned()
 }
 
+/// An attack object of one of our rows whose KH2 hit now is a normal attack with "refact self" 2
+/// (Horizontal Slash 963, Retaliating Slash 1582, ...: KH2 meets attacks and guards with it but
+/// never stops it; `docs/kh1-kh2-recoil.md` §6.3). `recoil`'s meeting hook makes a guard's owner
+/// immune to it at Recoil KH2.
+pub unsafe fn unstoppable(attack: usize) -> bool {
+    kh2_atkp(attack).is_some_and(|a| a.kind == 0 && a.refact_self == 2)
+}
+
 /// The KH2 ATKP for a native swing on one of KH1's own rows (`kh2damage`): the hit window of the
 /// KH2 motion our slot plays on `actor` now at KH1's time in it, else that motion's first one;
 /// `None` when no slot of ours plays (Base Combo KH1: KH1's own swing, KH1's own damage).

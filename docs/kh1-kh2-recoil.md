@@ -434,3 +434,30 @@ would only stop KH2's shapes (`strike_as`) until the pass learns it too.
   normal attack at all).
 - Counterguard and Finishing Leap (also pierce armor in KH2) keep their templates' priority at
   KH1 (only Guard Break was asked for).
+
+### 6.9 Recoil KH2: a refact-self-2 swing makes the guard's owner immune (item 2)
+
+- The tester (m2 item 2): "add it and include in the kh2 config for recoil", the answer to "the
+  clash hook so the guarded enemy is immune, as in KH2" (§6.3 "Not KH2").
+- KH2 (`0x1403D2140`, **Checked (decomp)**): a normal attack with refact self 2 meeting a guard is
+  not stopped, and the guard's side (the guard and its owner) becomes immune to it, so the guarded
+  enemy takes no hit from that swing.
+- KH1 (**Checked (decomp)**): the pass `0x1402B3BE0` calls the meeting `0x1402B4A20 (entry,
+  entry)` for overlapping attacks the pairing table lets meet (entry `+0x18` the attack object,
+  `+0x30` its point); the meeting returns unless both directional tests `0x1402B4640 (own, other)`
+  pass, then runs the halves `0x1402B4BC0`, which do nothing when neither side is under 0x62: our
+  refact-2 rows (priority 0x62+, §6.3) against a guard (100). The pass skips a body when the
+  actor's hit-once bits `+0x3E0` hold the attack's bit `+0x54`; KH1 clears the bit when the attack
+  re-arms (`0x1402B3380`) or is freed (`0x1402B4460`'s in-use mask).
+- Built (`recoil::meet`, a hook on the meeting, Steam only, first bytes `40 53 56 57 41 56 48 83 EC
+  78` **Checked (exe)**): after KH1's own meeting, at Recoil KH2, when one side is Sora's attack of
+  a refact-2 row (`kh1rows::unstoppable`: the KH2 hit window now has ATKP kind 0, refact self 2)
+  and the other a guard of priority 100 whose owner isn't Sora, and both of KH1's directional tests
+  pass (`0x1402B4640`, its first bytes checked before the call), the guard's owner gets the swing's
+  hit-once bit: KH1's own immunity to that attack, until it re-arms or ends. KH1's clash spark
+  (`combat::clang`, at the entries' midpoint as KH1's meeting places its own) stands in for KH2's
+  clash effect 0xD. Recoil KH1: nothing (the swing hits through, KH1's rule for 0x62+).
+- **Assumption:** in a frame where the swing touches both the guard and the body behind it, KH1's
+  pass tests the meeting before the body (the pass's entry order is not read). If not, the first
+  frame's body hit lands and the immunity starts the frame after.
+- Cost: one hook on a function KH1 calls only for overlapping attack pairs; a few reads per call.

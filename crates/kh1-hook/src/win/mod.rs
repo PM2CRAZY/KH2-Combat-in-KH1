@@ -218,6 +218,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         takeover::install();
         combat::install();
         kh2damage::install();
+        recoil::install();
         hurt::install();
         menu::install();
         camera::install();
