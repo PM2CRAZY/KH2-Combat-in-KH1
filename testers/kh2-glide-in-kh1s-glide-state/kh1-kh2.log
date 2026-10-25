@@ -5257,3 +5257,784 @@
 [f61165] draw: kh1_own (KH1 slot 11)
 [f61178] trace: 181 frames (3.0s) written to E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2-traces\trace_1792961059_f61178_select_triangle.csv (select_triangle)
 [f61193] draw: kh1_own (KH1 slot 0)
+[f67488] alive 3360s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f67932] draw: kh1_own (KH1 slot 3)
+[f67933] draw: kh1_own (KH1 slot 6)
+[f67938] draw: kh1_own (KH1 slot 3)
+[f67939] draw: kh1_own (KH1 slot 0)
+[f67954] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f67959] draw: kh1_own (KH1 slot 3)
+[f67960] draw: kh1_own (KH1 slot 6)
+[f67966] event ops at 3375s (Sora can act: true): 8x12 203x52 284x14 285x28 286x14 290x14 291x28 292x14 340x26 419x14 452x13
+[f67993] draw: baked (KH1 slot 147)
+[f68012] draw: kh1_own (KH1 slot 6)
+[f68017] draw: baked (KH1 slot 147)
+[f68037] KH2 quotes: clip 11 (priority 1, channel state 4) cut for clip 9 (priority 1), 0 KH1 voice record(s) stopped
+[f68055] draw: kh1_own (KH1 slot 6)
+[f68056] draw: baked (KH1 slot 147)
+[f68075] draw: kh1_own (KH1 slot 6)
+[f68076] draw: baked (KH1 slot 147)
+[f68093] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f68094] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f68096] draw: kh1_own (KH1 slot 6)
+[f68097] event ops at 3382s (Sora can act: true): 8x4 203x16 284x4 285x8 286x4 290x4 291x8 292x4 340x8 419x4 452x4
+[f68240] draw: kh1_own (KH1 slot 3)
+[f68241] draw: kh1_own (KH1 slot 0)
+[f68245] draw: kh1_own (KH1 slot 3)
+[f68252] draw: kh1_own (KH1 slot 0)
+[f68287] draw: kh1_own (KH1 slot 3)
+[f68325] draw: kh1_own (KH1 slot 0)
+[f68328] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f68329] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f68332] draw: kh1_own (KH1 slot 6)
+[f68349] event ops at 3412s (Sora can act: true): 8x22 203x84 284x20 285x40 286x20 290x20 291x40 292x20 340x42 419x20 452x21
+[f68363] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f68364] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f68379] event ops at 3460s (Sora can act: true): 8x16 203x64 284x16 285x32 286x16 290x16 291x32 292x16 340x32 419x16 452x16
+[f68382] draw: kh1_own (KH1 slot 12)
+[f68383] KH1's High Jump with KH2's arc: 235 high, 33.9 frames up (KH1's own: 290; its air acceleration 0.100, drag 0.950)
+[f68386] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH2's arc, 26.7 frames up
+[f68387] draw: baked (KH1 slot 208)
+[f68388] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f68391] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 209 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f68391] glide (native): the glide (205)
+[f68392] draw: baked (KH1 slot 148)
+[f68392] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f68392] fourth shortcut in battle: command 0x7d, usable false
+[f68394] draw: baked (KH1 slot 151)
+[f68396] draw: baked (KH1 slot 148)
+[f68397] draw: baked (KH1 slot 150)
+[f68399] draw: baked (KH1 slot 148)
+[f68402] glide (native): Square let go: KH2's fall at speed 22.0 (187 above the floor; KH1 state now 2)
+[f68403] glide (native): KH2's glide velocity 22.0/frame kept into the fall (KH1's carry from the stick had left 0.9)
+[f68403] KH2's arc on KH1's air state from KH1's own: falling at 0.0/frame
+[f68403] draw: kh1_own (KH1 slot 10)
+[f68403] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f68403] fourth shortcut in battle: command 0x7d, usable true
+[f68414] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f68422] draw: kh1_own (KH1 slot 11)
+[f68422] event ops at 3472s (Sora can act: true): 8x8 203x32 284x8 285x16 286x8 290x8 291x16 292x8 340x16 419x8 452x8
+[f68435] draw: kh1_own (KH1 slot 6)
+[f68461] draw: kh1_own (KH1 slot 3)
+[f68462] draw: kh1_own (KH1 slot 6)
+[f68467] draw: kh1_own (KH1 slot 3)
+[f68470] draw: kh1_own (KH1 slot 6)
+[f68473] draw: kh1_own (KH1 slot 3)
+[f68475] draw: kh1_own (KH1 slot 6)
+[f68479] draw: kh1_own (KH1 slot 0)
+[f68480] draw: kh1_own (KH1 slot 6)
+[f68485] draw: kh1_own (KH1 slot 3)
+[f68486] draw: kh1_own (KH1 slot 6)
+[f68489] draw: kh1_own (KH1 slot 0)
+[f68490] draw: kh1_own (KH1 slot 6)
+[f68492] draw: kh1_own (KH1 slot 0)
+[f68493] draw: kh1_own (KH1 slot 3)
+[f68494] draw: kh1_own (KH1 slot 6)
+[f68495] draw: kh1_own (KH1 slot 3)
+[f68496] draw: kh1_own (KH1 slot 6)
+[f68499] draw: kh1_own (KH1 slot 0)
+[f68500] draw: kh1_own (KH1 slot 3)
+[f68501] draw: kh1_own (KH1 slot 6)
+[f68502] draw: kh1_own (KH1 slot 0)
+[f68503] draw: kh1_own (KH1 slot 3)
+[f68504] draw: kh1_own (KH1 slot 6)
+[f68506] draw: kh1_own (KH1 slot 0)
+[f68507] draw: kh1_own (KH1 slot 3)
+[f68508] draw: kh1_own (KH1 slot 6)
+[f68509] draw: kh1_own (KH1 slot 3)
+[f68510] draw: kh1_own (KH1 slot 6)
+[f68512] draw: kh1_own (KH1 slot 0)
+[f68513] draw: kh1_own (KH1 slot 3)
+[f68514] draw: kh1_own (KH1 slot 6)
+[f68518] draw: kh1_own (KH1 slot 3)
+[f68519] draw: kh1_own (KH1 slot 6)
+[f68522] draw: kh1_own (KH1 slot 0)
+[f68523] draw: kh1_own (KH1 slot 3)
+[f68524] draw: kh1_own (KH1 slot 0)
+[f68525] draw: kh1_own (KH1 slot 3)
+[f68526] draw: kh1_own (KH1 slot 6)
+[f68530] draw: kh1_own (KH1 slot 0)
+[f68533] draw: kh1_own (KH1 slot 6)
+[f68538] draw: kh1_own (KH1 slot 0)
+[f68547] draw: kh1_own (KH1 slot 3)
+[f68550] draw: kh1_own (KH1 slot 12)
+[f68553] KH1's High Jump with KH2's arc: 235 high, 33.9 frames up (KH1's own: 290; its air acceleration 0.100, drag 0.950)
+[f68558] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH2's arc, 26.7 frames up
+[f68559] draw: baked (KH1 slot 208)
+[f68560] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f68566] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 178 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f68566] glide (native): the glide (205)
+[f68567] draw: baked (KH1 slot 148)
+[f68567] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f68567] fourth shortcut in battle: command 0x7d, usable false
+[f68572] draw: baked (KH1 slot 151)
+[f68575] draw: baked (KH1 slot 148)
+[f68576] draw: baked (KH1 slot 150)
+[f68580] draw: baked (KH1 slot 148)
+[f68581] draw: baked (KH1 slot 151)
+[f68585] draw: baked (KH1 slot 148)
+[f68586] draw: baked (KH1 slot 150)
+[f68589] draw: baked (KH1 slot 148)
+[f68590] draw: baked (KH1 slot 151)
+[f68594] draw: baked (KH1 slot 148)
+[f68595] draw: baked (KH1 slot 150)
+[f68599] draw: baked (KH1 slot 148)
+[f68600] draw: baked (KH1 slot 151)
+[f68603] draw: baked (KH1 slot 148)
+[f68604] draw: baked (KH1 slot 150)
+[f68608] draw: baked (KH1 slot 148)
+[f68609] draw: baked (KH1 slot 151)
+[f68612] draw: baked (KH1 slot 150)
+[f68644] draw: baked (KH1 slot 148)
+[f68646] draw: baked (KH1 slot 151)
+[f68649] draw: baked (KH1 slot 148)
+[f68650] draw: baked (KH1 slot 150)
+[f68654] draw: baked (KH1 slot 148)
+[f68655] draw: baked (KH1 slot 151)
+[f68658] draw: baked (KH1 slot 148)
+[f68659] draw: baked (KH1 slot 150)
+[f68704] draw: baked (KH1 slot 151)
+[f68709] draw: baked (KH1 slot 150)
+[f68712] draw: baked (KH1 slot 148)
+[f68713] draw: baked (KH1 slot 151)
+[f68716] draw: baked (KH1 slot 150)
+[f68720] draw: baked (KH1 slot 151)
+[f68723] draw: baked (KH1 slot 148)
+[f68725] draw: baked (KH1 slot 150)
+[f68727] draw: baked (KH1 slot 148)
+[f68728] draw: baked (KH1 slot 151)
+[f68730] draw: baked (KH1 slot 150)
+[f68733] draw: baked (KH1 slot 148)
+[f68734] draw: baked (KH1 slot 151)
+[f68737] draw: baked (KH1 slot 150)
+[f68741] draw: baked (KH1 slot 148)
+[f68742] draw: baked (KH1 slot 151)
+[f68745] draw: baked (KH1 slot 148)
+[f68746] draw: baked (KH1 slot 150)
+[f68749] draw: baked (KH1 slot 148)
+[f68750] draw: baked (KH1 slot 151)
+[f68753] draw: baked (KH1 slot 150)
+[f68757] draw: baked (KH1 slot 148)
+[f68757] glide (native): Square let go: KH2's fall at speed 31.2 (54 above the floor; KH1 state now 2)
+[f68758] glide (native): KH2's glide velocity 31.2/frame kept into the fall (KH1's carry from the stick had left 0.1)
+[f68758] KH2's arc on KH1's air state from KH1's own: falling at 0.0/frame
+[f68758] draw: kh1_own (KH1 slot 10)
+[f68758] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f68758] fourth shortcut in battle: command 0x7d, usable true
+[f68763] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH2's arc, 10.1 frames up
+[f68763] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 23.1/frame and rise 0 left; kept 23.1/frame and KH1's hop
+[f68764] draw: baked (KH1 slot 122)
+[f68787] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH2's arc, 9.1 frames up
+[f68787] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 12.5/frame and rise 0 left; kept 12.5/frame and KH1's hop
+[f68788] draw: baked (KH1 slot 123)
+[f68789] KH2 quotes: clip 12 (priority 1, channel state 4) cut for clip 10 (priority 1), 1 KH1 voice record(s) stopped
+[f68810] KH2's hop on KH1's air state: 21 high, 18.0/frame sideways, KH2's arc, 10.1 frames up
+[f68810] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 21; KH2's speed 6.9/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f68811] draw: baked (KH1 slot 124)
+[f68812] KH2 quotes: clip 10 (priority 1, channel state 4) cut for clip 14 (priority 1), 1 KH1 voice record(s) stopped
+[f68833] draw: kh1_own (KH1 slot 11)
+[f68846] draw: kh1_own (KH1 slot 6)
+[f68888] draw: kh1_own (KH1 slot 12)
+[f68891] KH1's High Jump with KH2's arc: 235 high, 33.9 frames up (KH1's own: 290; its air acceleration 0.100, drag 0.950)
+[f68896] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH2's arc, 10.1 frames up
+[f68896] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 152 left; kept 8.0/frame and KH1's hop
+[f68897] draw: baked (KH1 slot 122)
+[f68906] alive 3480s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f68920] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.3/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f68921] draw: baked (KH1 slot 123)
+[f68922] KH2 quotes: clip 10 (priority 1, channel state 4) cut for clip 12 (priority 1), 1 KH1 voice record(s) stopped
+[f68942] KH1's air attack out of KH2's motion: its own lunge 0.0/frame and hop 14; KH2's speed 4.6/frame and rise 0 left; kept 4.6/frame and KH1's hop
+[f68943] draw: baked (KH1 slot 185)
+[f68944] KH2 quotes: clip 12 (priority 1, channel state 4) cut for clip 11 (priority 1), 1 KH1 voice record(s) stopped
+[f68959] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1148.6772, 126.34514, 567.99084]: landed with KH1 row motion 204 -> Some(1)
+[f68959] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 1 landed (ATKP [1900])
+[f68963] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f68966] event ops at 3481s (Sora can act: true): 8x60 25x1 26x1 203x240 284x60 285x120 286x60 290x60 291x120 292x60 314x1 335x1 336x1 340x120 419x60 423x1 424x1 452x60 639x1 640x1
+[f69007] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106dbda0 part 0 at [-1077.9951, 188.6952, 606.2146]: landed with KH1 row motion 206 -> Some(5)
+[f69007] KH2's hits on his body in KH1's states: KH2 motion 197 frame 64, 1 landed (ATKP [1903])
+[f69016] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 21; KH2's speed 0.7/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f69017] draw: baked (KH1 slot 201)
+[f69018] KH2 quotes: clip 16 (priority 1) dropped: KH2's rule keeps clip 18 (priority 2) playing
+[f69035] KH1's row of ours hit: KH2's ATKP 133 (power 200, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f69035] KH2 launch asked: record 0x7ff710785e10 made a launch (up 7 in 8 frames, sideways 45.0/frame)
+[f69050] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 7.5/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f69051] draw: baked (KH1 slot 122)
+[f69052] KH2 quotes: clip 12 (priority 1) dropped: KH2's rule keeps clip 18 (priority 2) playing
+[f69079] KH1's air attack out of KH2's motion: its own lunge 12.0/frame and hop 21; KH2's speed 3.8/frame and rise 0 left; kept 12.0/frame and KH1's hop
+[f69080] draw: baked (KH1 slot 124)
+[f69111] KH1's air attack out of KH2's motion: its own lunge 12.0/frame and hop 21; KH2's speed 5.3/frame and rise 0 left; kept 12.0/frame and KH1's hop
+[f69112] draw: baked (KH1 slot 203)
+[f69113] KH2 quotes: clip 15 (priority 1, channel state 4) cut for clip 16 (priority 1), 1 KH1 voice record(s) stopped
+[f69141] KH1's air attack out of KH2's motion: its own lunge 12.0/frame and hop 21; KH2's speed 5.6/frame and rise 0 left; kept 12.0/frame and KH1's hop
+[f69142] draw: baked (KH1 slot 124)
+[f69143] KH2 quotes: clip 16 (priority 1, channel state 4) cut for clip 14 (priority 1), 1 KH1 voice record(s) stopped
+[f69170] KH1's air attack out of KH2's motion: its own lunge 12.0/frame and hop 21; KH2's speed 5.7/frame and rise 0 left; kept 12.0/frame and KH1's hop
+[f69171] draw: baked (KH1 slot 203)
+[f69172] KH2 quotes: clip 14 (priority 1, channel state 4) cut for clip 15 (priority 1), 1 KH1 voice record(s) stopped
+[f69197] KH1's air attack out of KH2's motion: its own lunge 12.0/frame and hop 21; KH2's speed 6.0/frame and rise 0 left; kept 12.0/frame and KH1's hop
+[f69198] draw: baked (KH1 slot 124)
+[f69199] KH2 quotes: clip 15 (priority 1, channel state 4) cut for clip 16 (priority 1), 1 KH1 voice record(s) stopped
+[f69224] KH1's air attack out of KH2's motion: its own lunge 14.7/frame and hop 21; KH2's speed 6.0/frame and rise 0 left; kept 14.7/frame and KH1's hop
+[f69225] draw: baked (KH1 slot 203)
+[f69226] KH2 quotes: clip 16 (priority 1, channel state 4) cut for clip 15 (priority 1), 1 KH1 voice record(s) stopped
+[f69250] KH1's air attack out of KH2's motion: its own lunge 12.8/frame and hop 21; KH2's speed 7.6/frame and rise 0 left; kept 12.8/frame and KH1's hop
+[f69251] draw: baked (KH1 slot 124)
+[f69252] KH2 quotes: clip 15 (priority 1, channel state 4) cut for clip 15 (priority 1), 1 KH1 voice record(s) stopped
+[f69270] event ops at 3486s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f69276] KH1's air attack out of KH2's motion: its own lunge 12.0/frame and hop 21; KH2's speed 6.6/frame and rise 0 left; kept 12.0/frame and KH1's hop
+[f69277] draw: baked (KH1 slot 203)
+[f69278] KH2 quotes: clip 15 (priority 1, channel state 4) cut for clip 14 (priority 1), 1 KH1 voice record(s) stopped
+[f69303] KH1's air attack out of KH2's motion: its own lunge 12.0/frame and hop 21; KH2's speed 6.0/frame and rise 0 left; kept 12.0/frame and KH1's hop
+[f69304] draw: baked (KH1 slot 124)
+[f69305] KH2 quotes: clip 14 (priority 1, channel state 4) cut for clip 14 (priority 1), 1 KH1 voice record(s) stopped
+[f69347] draw: kh1_own (KH1 slot 11)
+[f69354] draw: kh1_own (KH1 slot 12)
+[f69355] KH1's High Jump with KH2's arc: 235 high, 33.9 frames up (KH1's own: 290; its air acceleration 0.100, drag 0.950)
+[f69364] draw: kh1_own (KH1 slot 13)
+[f69365] draw: baked (KH1 slot 208)
+[f69366] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f69387] draw: kh1_own (KH1 slot 10)
+[f69436] draw: kh1_own (KH1 slot 11)
+[f69440] draw: kh1_own (KH1 slot 12)
+[f69441] KH1's High Jump with KH2's arc: 235 high, 33.9 frames up (KH1's own: 290; its air acceleration 0.100, drag 0.950)
+[f69449] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 3 left; kept 8.0/frame and KH1's hop
+[f69450] draw: baked (KH1 slot 122)
+[f69473] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.3/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f69474] draw: baked (KH1 slot 123)
+[f69475] KH2 quotes: clip 12 (priority 1, channel state 4) cut for clip 10 (priority 1), 1 KH1 voice record(s) stopped
+[f69495] KH1's air attack out of KH2's motion: its own lunge 0.0/frame and hop 14; KH2's speed 4.6/frame and rise 0 left; kept 4.6/frame and KH1's hop
+[f69496] draw: baked (KH1 slot 185)
+[f69497] KH2 quotes: clip 10 (priority 1, channel state 4) cut for clip 21 (priority 1), 1 KH1 voice record(s) stopped
+[f69512] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1554.8297, 158.56087, 587.7345]: landed with KH1 row motion 204 -> Some(1)
+[f69512] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1554.8297, 158.56087, 587.7345]: landed with KH1 row motion 204 -> Some(1)
+[f69512] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f69516] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f69572] event ops at 3491s (Sora can act: true): 8x60 25x2 26x2 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x2 335x2 336x2 340x122 419x62 423x2 424x2 452x61 639x2 640x1
+[f69573] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 21; KH2's speed 0.6/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f69574] draw: baked (KH1 slot 201)
+[f69575] KH2 quotes: clip 16 (priority 1) dropped: KH2's rule keeps clip 19 (priority 2) playing
+[f69604] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.1/frame and rise 0 left; kept 8.1/frame and KH1's hop
+[f69605] draw: baked (KH1 slot 122)
+[f69630] KH1's air attack out of KH2's motion: its own lunge 12.6/frame and hop 21; KH2's speed 4.2/frame and rise 0 left; kept 12.6/frame and KH1's hop
+[f69631] draw: baked (KH1 slot 124)
+[f69632] KH2 quotes: clip 10 (priority 1, channel state 4) cut for clip 15 (priority 1), 1 KH1 voice record(s) stopped
+[f69676] draw: kh1_own (KH1 slot 11)
+[f69689] draw: kh1_own (KH1 slot 6)
+[f69707] draw: kh1_own (KH1 slot 12)
+[f69716] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 137 left; kept 8.0/frame and KH1's hop
+[f69717] draw: baked (KH1 slot 122)
+[f69741] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.2/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f69742] draw: baked (KH1 slot 123)
+[f69743] KH2 quotes: clip 11 (priority 1, channel state 4) cut for clip 10 (priority 1), 1 KH1 voice record(s) stopped
+[f69754] event ops at 3494s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f69764] KH1's air attack out of KH2's motion: its own lunge 0.0/frame and hop 14; KH2's speed 4.4/frame and rise 0 left; kept 4.4/frame and KH1's hop
+[f69765] draw: baked (KH1 slot 185)
+[f69766] KH2 quotes: clip 10 (priority 1, channel state 4) cut for clip 11 (priority 1), 1 KH1 voice record(s) stopped
+[f69781] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1482.5638, 130.28258, 675.02783]: landed with KH1 row motion 204 -> Some(1)
+[f69781] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1482.5638, 130.28258, 675.02783]: landed with KH1 row motion 204 -> Some(1)
+[f69781] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f69785] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f69815] event ops at 3495s (Sora can act: true): 8x62 25x2 26x2 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x122 419x60 423x2 424x2 452x61 639x2 640x1
+[f69838] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 21; KH2's speed 0.7/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f69839] draw: baked (KH1 slot 201)
+[f69868] draw: kh1_own (KH1 slot 11)
+[f69874] draw: kh1_own (KH1 slot 12)
+[f69875] event ops at 3496s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f69884] draw: kh1_own (KH1 slot 13)
+[f69884] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 7.2/frame and rise 1 left; kept 8.0/frame and KH1's hop
+[f69885] draw: baked (KH1 slot 122)
+[f69909] draw: baked (KH1 slot 123)
+[f69934] draw: baked (KH1 slot 185)
+[f69950] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1385.7701, 142.65004, 624.53784]: landed with KH1 row motion 204 -> Some(1)
+[f69950] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1385.7701, 142.65004, 624.53784]: landed with KH1 row motion 204 -> Some(1)
+[f69950] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f69954] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f69997] event ops at 3498s (Sora can act: true): 8x62 25x2 26x2 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x122 419x60 423x2 424x2 452x61 639x2 640x1
+[f70006] draw: baked (KH1 slot 201)
+[f70032] draw: baked (KH1 slot 122)
+[f70058] draw: kh1_own (KH1 slot 11)
+[f70071] draw: kh1_own (KH1 slot 6)
+[f70081] draw: baked (KH1 slot 119)
+[f70107] draw: baked (KH1 slot 174)
+[f70134] draw: baked (KH1 slot 119)
+[f70161] draw: baked (KH1 slot 176)
+[f70200] draw: baked (KH1 slot 198)
+[f70228] KH1's row of ours hit: KH2's ATKP 130 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f70228] KH2 launch asked: record 0x7ff710785e10 made a launch (up 17 in 10 frames, sideways 45.0/frame)
+[f70280] draw: kh1_own (KH1 slot 6)
+[f70291] draw: kh1_own (KH1 slot 12)
+[f70300] event ops at 3503s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f70303] draw: baked (KH1 slot 122)
+[f70328] draw: baked (KH1 slot 123)
+[f70351] draw: baked (KH1 slot 185)
+[f70367] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1484.6205, 147.24284, 654.01526]: landed with KH1 row motion 204 -> Some(1)
+[f70367] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1484.6205, 147.24284, 654.01526]: landed with KH1 row motion 204 -> Some(1)
+[f70367] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f70371] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f70421] event ops at 3505s (Sora can act: true): 8x62 25x2 26x2 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x122 419x60 423x2 424x2 452x61 639x2 640x1
+[f70432] draw: baked (KH1 slot 201)
+[f70463] draw: kh1_own (KH1 slot 11)
+[f70470] draw: kh1_own (KH1 slot 12)
+[f70480] draw: kh1_own (KH1 slot 13)
+[f70481] event ops at 3506s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f70490] draw: baked (KH1 slot 122)
+[f70515] draw: baked (KH1 slot 123)
+[f70538] draw: baked (KH1 slot 185)
+[f70554] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1494.0107, 142.61748, 596.09955]: landed with KH1 row motion 204 -> Some(1)
+[f70554] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1494.0107, 142.61748, 596.09955]: landed with KH1 row motion 204 -> Some(1)
+[f70554] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f70558] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f70602] event ops at 3508s (Sora can act: true): 8x60 25x2 26x2 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x2 335x2 336x2 340x122 419x62 423x2 424x2 452x61 639x2 640x1
+[f70622] draw: baked (KH1 slot 201)
+[f70651] draw: kh1_own (KH1 slot 11)
+[f70662] draw: kh1_own (KH1 slot 12)
+[f70663] event ops at 3509s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f70672] draw: baked (KH1 slot 208)
+[f70673] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f70694] draw: kh1_own (KH1 slot 10)
+[f70710] draw: baked (KH1 slot 122)
+[f70735] draw: baked (KH1 slot 123)
+[f70758] draw: baked (KH1 slot 185)
+[f70774] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1558.8129, 265.9768, 717.64764]: landed with KH1 row motion 204 -> Some(1)
+[f70774] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1558.8129, 265.9768, 717.64764]: landed with KH1 row motion 204 -> Some(1)
+[f70774] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f70778] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f70783] event ops at 3511s (Sora can act: true): 8x60 25x2 26x2 203x240 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x120 419x60 423x2 424x2 452x60 639x2 640x1
+[f70844] event ops at 3512s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f70846] draw: kh1_own (KH1 slot 11)
+[f70859] draw: kh1_own (KH1 slot 6)
+[f70861] KH2's arc on KH1's air state from KH1's own: falling at 0.0/frame
+[f70861] draw: kh1_own (KH1 slot 10)
+[f70886] draw: kh1_own (KH1 slot 11)
+[f70892] draw: kh1_own (KH1 slot 12)
+[f70899] draw: baked (KH1 slot 122)
+[f70924] draw: baked (KH1 slot 123)
+[f70947] draw: baked (KH1 slot 185)
+[f70963] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1380.0201, 115.02716, 250.18536]: landed with KH1 row motion 204 -> Some(1)
+[f70963] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 1 landed (ATKP [1900])
+[f70967] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f71025] draw: baked (KH1 slot 201)
+[f71026] event ops at 3515s (Sora can act: true): 8x60 25x1 26x1 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x1 335x1 336x1 340x122 419x62 423x1 424x1 452x61 639x1 640x1
+[f71051] draw: kh1_own (KH1 slot 11)
+[f71058] draw: kh1_own (KH1 slot 12)
+[f71067] draw: baked (KH1 slot 122)
+[f71087] event ops at 3516s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f71094] draw: baked (KH1 slot 123)
+[f71116] draw: baked (KH1 slot 124)
+[f71146] draw: kh1_own (KH1 slot 11)
+[f71159] draw: kh1_own (KH1 slot 6)
+[f71189] draw: kh1_own (KH1 slot 12)
+[f71196] draw: baked (KH1 slot 122)
+[f71220] draw: baked (KH1 slot 123)
+[f71242] draw: baked (KH1 slot 185)
+[f71258] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1459.7615, 94.185326, 740.0]: landed with KH1 row motion 204 -> Some(1)
+[f71258] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1459.7615, 94.185326, 740.0]: landed with KH1 row motion 204 -> Some(1)
+[f71258] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f71262] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f71269] event ops at 3519s (Sora can act: true): 8x62 25x2 26x2 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x122 419x60 423x2 424x2 452x61 639x2 640x1
+[f71326] draw: kh1_own (KH1 slot 11)
+[f71329] event ops at 3520s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f71339] draw: kh1_own (KH1 slot 6)
+[f71341] draw: kh1_own (KH1 slot 12)
+[f71350] draw: baked (KH1 slot 122)
+[f71375] draw: baked (KH1 slot 123)
+[f71399] draw: baked (KH1 slot 185)
+[f71415] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1325.9978, 109.16061, 394.74118]: landed with KH1 row motion 204 -> Some(1)
+[f71415] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 1 landed (ATKP [1900])
+[f71419] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f71450] event ops at 3522s (Sora can act: true): 8x60 25x1 26x1 203x240 284x60 285x120 286x60 290x60 291x120 292x60 314x1 335x1 336x1 340x120 419x60 423x1 424x1 452x60 639x1 640x1
+[f71484] draw: kh1_own (KH1 slot 11)
+[f71496] draw: kh1_own (KH1 slot 12)
+[f71504] draw: baked (KH1 slot 122)
+[f71510] event ops at 3523s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f71529] draw: baked (KH1 slot 123)
+[f71552] draw: baked (KH1 slot 185)
+[f71568] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1619.6829, 130.28261, 512.30524]: landed with KH1 row motion 204 -> Some(1)
+[f71568] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1619.6829, 130.28261, 512.30524]: landed with KH1 row motion 204 -> Some(1)
+[f71568] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f71572] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f71616] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106dc250 part 0 at [-1688.7279, 192.63268, 549.2869]: landed with KH1 row motion 206 -> Some(5)
+[f71616] KH2's hits on his body in KH1's states: KH2 motion 197 frame 64, 1 landed (ATKP [1903])
+[f71631] event ops at 3525s (Sora can act: true): 8x62 25x3 26x3 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x3 335x3 336x3 340x122 419x60 423x3 424x3 452x61 639x3 640x2
+[f71639] draw: kh1_own (KH1 slot 11)
+[f71650] draw: kh1_own (KH1 slot 12)
+[f71659] draw: baked (KH1 slot 122)
+[f71684] draw: baked (KH1 slot 123)
+[f71692] event ops at 3526s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f71707] draw: baked (KH1 slot 185)
+[f71723] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1311.1592, 144.86238, 497.95276]: landed with KH1 row motion 204 -> Some(1)
+[f71723] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1311.1592, 144.86238, 497.95276]: landed with KH1 row motion 204 -> Some(1)
+[f71723] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f71727] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f71752] event ops at 3527s (Sora can act: true): 8x60 25x2 26x2 203x240 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x120 419x60 423x2 424x2 452x60 639x2 640x1
+[f71771] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106dbda0 part 0 at [-1234.4552, 207.21245, 482.1009]: landed with KH1 row motion 206 -> Some(5)
+[f71771] KH2's hits on his body in KH1's states: KH2 motion 197 frame 64, 1 landed (ATKP [1903])
+[f71772] event ops at 3528s (Sora can act: true): 8x20 203x80 284x20 285x40 286x20 290x20 291x40 292x20 340x40 419x20 452x20
+[f71773] event ops at 3550s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f71795] draw: kh1_own (KH1 slot 11)
+[f71808] draw: kh1_own (KH1 slot 6)
+[f71810] draw: kh1_own (KH1 slot 12)
+[f71822] draw: kh1_own (KH1 slot 13)
+[f71823] draw: baked (KH1 slot 208)
+[f71824] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f71831] draw: baked (KH1 slot 122)
+[f71834] event ops at 3551s (Sora can act: true): 8x60 25x1 26x1 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x1 335x1 336x1 340x122 419x62 423x1 424x1 452x61 639x1 640x1
+[f71856] draw: baked (KH1 slot 123)
+[f71879] draw: baked (KH1 slot 185)
+[f71895] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1521.4482, 243.82208, 741.37213]: landed with KH1 row motion 204 -> Some(1)
+[f71895] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1521.4482, 243.82208, 741.37213]: landed with KH1 row motion 204 -> Some(1)
+[f71895] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f71895] event ops at 3552s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f71899] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f71954] draw: baked (KH1 slot 201)
+[f71955] event ops at 3553s (Sora can act: true): 8x60 25x2 26x2 203x240 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x120 419x60 423x2 424x2 452x60 639x2 640x1
+[f71982] draw: kh1_own (KH1 slot 11)
+[f71995] draw: kh1_own (KH1 slot 6)
+[f72008] draw: kh1_own (KH1 slot 12)
+[f72014] draw: baked (KH1 slot 122)
+[f72016] event ops at 3554s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f72041] draw: kh1_own (KH1 slot 11)
+[f72054] draw: kh1_own (KH1 slot 6)
+[f72063] draw: kh1_own (KH1 slot 12)
+[f72070] draw: baked (KH1 slot 122)
+[f72096] draw: baked (KH1 slot 123)
+[f72119] draw: baked (KH1 slot 185)
+[f72135] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1314.8193, 196.5996, 446.17487]: landed with KH1 row motion 204 -> Some(1)
+[f72135] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 1 landed (ATKP [1900])
+[f72139] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f72149] event ops at 3557s (Sora can act: true): 8x14 25x1 26x1 203x52 284x12 285x24 286x12 290x12 291x24 292x12 314x1 335x1 336x1 340x26 419x12 423x1 424x1 452x13 639x1 640x1
+[f72165] event ops at 3567s (Sora can act: true): 8x16 203x64 284x16 285x32 286x16 290x16 291x32 292x16 340x32 419x16 452x16
+[f72195] draw: baked (KH1 slot 201)
+[f72226] draw: baked (KH1 slot 122)
+[f72254] draw: kh1_own (KH1 slot 11)
+[f72267] draw: kh1_own (KH1 slot 6)
+[f72309] draw: kh1_own (KH1 slot 12)
+[f72321] draw: baked (KH1 slot 208)
+[f72322] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f72325] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 179 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f72325] glide (native): the glide (205)
+[f72326] draw: baked (KH1 slot 148)
+[f72326] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f72326] fourth shortcut in battle: command 0x7d, usable false
+[f72334] glide (native): Square let go: KH2's fall at speed 20.0 (170 above the floor; KH1 state now 2)
+[f72335] glide (native): KH2's glide velocity 20.0/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f72335] KH2's arc on KH1's air state from KH1's own: falling at 0.0/frame
+[f72335] draw: kh1_own (KH1 slot 10)
+[f72335] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f72335] fourth shortcut in battle: command 0x7d, usable true
+[f72344] draw: baked (KH1 slot 122)
+[f72368] draw: baked (KH1 slot 123)
+[f72391] draw: baked (KH1 slot 185)
+[f72407] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106daae0 part 0 at [-1343.0116, 191.44603, -1435.9081]: landed with KH1 row motion 204 -> Some(1)
+[f72407] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106daf90 part 0 at [-1343.0116, 191.44603, -1435.9081]: landed with KH1 row motion 204 -> Some(1)
+[f72407] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f72411] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f72427] KH2 attack 1901 (power 25, reaction 9) hit actor 0x7ff7106daae0 part 0 at [-1352.131, 201.44603, -1480.5986]: landed with KH1 row motion 204 -> Some(1)
+[f72427] KH2's hits on his body in KH1's states: KH2 motion 197 frame 36, 1 landed (ATKP [1900, 1901])
+[f72455] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106daae0 part 0 at [-1358.51, 253.7961, -1515.0077]: landed with KH1 row motion 206 -> Some(5)
+[f72455] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106daf90 part 0 at [-1358.51, 253.7961, -1515.0077]: landed with KH1 row motion 206 -> Some(5)
+[f72455] KH2's hits on his body in KH1's states: KH2 motion 197 frame 64, 2 landed (ATKP [1903])
+[f72467] event ops at 3572s (Sora can act: true): 8x62 25x5 26x5 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x5 335x5 336x5 340x122 419x60 423x5 424x5 452x61 639x5 640x3
+[f72470] draw: baked (KH1 slot 203)
+[f72519] draw: kh1_own (KH1 slot 11)
+[f72528] event ops at 3573s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f72532] draw: kh1_own (KH1 slot 6)
+[f72556] draw: kh1_own (KH1 slot 12)
+[f72568] draw: kh1_own (KH1 slot 13)
+[f72569] draw: baked (KH1 slot 208)
+[f72570] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f72575] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 202 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f72575] glide (native): the glide (205)
+[f72576] draw: baked (KH1 slot 148)
+[f72576] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f72576] fourth shortcut in battle: command 0x7d, usable false
+[f72581] draw: baked (KH1 slot 151)
+[f72592] draw: baked (KH1 slot 148)
+[f72593] draw: baked (KH1 slot 150)
+[f72598] draw: baked (KH1 slot 148)
+[f72600] draw: baked (KH1 slot 151)
+[f72608] draw: baked (KH1 slot 150)
+[f72618] draw: baked (KH1 slot 148)
+[f72623] glide (native): Square let go: KH2's fall at speed 25.3 (154 above the floor; KH1 state now 2)
+[f72624] glide (native): KH2's glide velocity 25.3/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f72624] draw: kh1_own (KH1 slot 10)
+[f72624] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f72624] fourth shortcut in battle: command 0x7d, usable true
+[f72634] draw: baked (KH1 slot 122)
+[f72657] draw: baked (KH1 slot 123)
+[f72680] draw: baked (KH1 slot 185)
+[f72696] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1357.1877, 177.23128, 594.3203]: landed with KH1 row motion 204 -> Some(1)
+[f72696] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dc250 part 0 at [-1357.1877, 177.23128, 594.3203]: landed with KH1 row motion 204 -> Some(1)
+[f72696] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f72700] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f72709] event ops at 3576s (Sora can act: true): 8x60 25x2 26x2 203x240 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x120 419x60 423x2 424x2 452x60 639x2 640x1
+[f72744] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106dbda0 part 0 at [-1343.7175, 239.58134, 690.2082]: landed with KH1 row motion 206 -> Some(5)
+[f72744] KH2's hits on his body in KH1's states: KH2 motion 197 frame 64, 1 landed (ATKP [1903])
+[f72756] draw: baked (KH1 slot 201)
+[f72763] draw: kh1_own (KH1 slot 11)
+[f72776] draw: kh1_own (KH1 slot 6)
+[f72793] draw: kh1_own (KH1 slot 10)
+[f72797] draw: baked (KH1 slot 208)
+[f72798] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f72809] draw: baked (KH1 slot 122)
+[f72831] event ops at 3578s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f72832] draw: baked (KH1 slot 123)
+[f72855] draw: baked (KH1 slot 185)
+[f72871] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106dbda0 part 0 at [-1013.1287, 283.81195, 259.98987]: landed with KH1 row motion 204 -> Some(1)
+[f72871] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 1 landed (ATKP [1900])
+[f72875] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f72892] event ops at 3579s (Sora can act: true): 8x60 25x1 26x1 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x1 335x1 336x1 340x122 419x62 423x1 424x1 452x61 639x1 640x1
+[f72931] draw: baked (KH1 slot 201)
+[f72952] event ops at 3580s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f72974] draw: kh1_own (KH1 slot 11)
+[f72979] draw: kh1_own (KH1 slot 12)
+[f72987] draw: baked (KH1 slot 208)
+[f72988] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f72992] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 173 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f72992] glide (native): the glide (205)
+[f72993] draw: baked (KH1 slot 148)
+[f72993] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f72993] fourth shortcut in battle: command 0x7d, usable false
+[f73009] draw: baked (KH1 slot 150)
+[f73009] glide (native): Square let go: KH2's fall at speed 21.4 (156 above the floor; KH1 state now 2)
+[f73010] glide (native): KH2's glide velocity 21.4/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f73010] draw: kh1_own (KH1 slot 10)
+[f73010] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f73010] fourth shortcut in battle: command 0x7d, usable true
+[f73022] draw: baked (KH1 slot 122)
+[f73046] draw: baked (KH1 slot 123)
+[f73069] draw: baked (KH1 slot 185)
+[f73085] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106daae0 part 0 at [-1435.5623, 164.78911, -1389.3511]: landed with KH1 row motion 204 -> Some(1)
+[f73085] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106daf90 part 0 at [-1435.5623, 164.78911, -1389.3511]: landed with KH1 row motion 204 -> Some(1)
+[f73085] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f73089] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f73133] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106daae0 part 0 at [-1458.6993, 227.13918, -1464.6917]: landed with KH1 row motion 206 -> Some(5)
+[f73133] KH2 attack 1903 (power 150, reaction 11) hit actor 0x7ff7106daf90 part 0 at [-1458.6993, 227.13918, -1464.6917]: landed with KH1 row motion 206 -> Some(5)
+[f73133] KH2's hits on his body in KH1's states: KH2 motion 197 frame 64, 2 landed (ATKP [1903])
+[f73134] event ops at 3583s (Sora can act: true): 8x60 25x2 26x2 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x2 335x2 336x2 340x122 419x62 423x2 424x2 452x61 639x2 640x1
+[f73147] draw: baked (KH1 slot 203)
+[f73190] draw: kh1_own (KH1 slot 11)
+[f73203] draw: kh1_own (KH1 slot 6)
+[f73242] draw: kh1_own (KH1 slot 12)
+[f73251] draw: baked (KH1 slot 208)
+[f73252] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f73255] event ops at 3585s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f73258] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 178 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f73258] glide (native): the glide (205)
+[f73259] draw: baked (KH1 slot 148)
+[f73259] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f73259] fourth shortcut in battle: command 0x7d, usable false
+[f73265] draw: baked (KH1 slot 150)
+[f73274] draw: baked (KH1 slot 151)
+[f73282] draw: baked (KH1 slot 148)
+[f73283] draw: baked (KH1 slot 150)
+[f73287] draw: baked (KH1 slot 148)
+[f73288] draw: baked (KH1 slot 151)
+[f73292] draw: baked (KH1 slot 148)
+[f73294] draw: baked (KH1 slot 150)
+[f73326] draw: baked (KH1 slot 151)
+[f73336] draw: baked (KH1 slot 148)
+[f73337] draw: baked (KH1 slot 150)
+[f73342] draw: baked (KH1 slot 148)
+[f73345] draw: baked (KH1 slot 151)
+[f73350] draw: baked (KH1 slot 148)
+[f73351] draw: baked (KH1 slot 150)
+[f73356] draw: baked (KH1 slot 148)
+[f73357] draw: baked (KH1 slot 151)
+[f73364] draw: baked (KH1 slot 150)
+[f73369] draw: baked (KH1 slot 148)
+[f73374] glide (native): Square let go: KH2's fall at speed 29.6 (80 above the floor; KH1 state now 2)
+[f73375] glide (native): KH2's glide velocity 29.6/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f73375] draw: kh1_own (KH1 slot 10)
+[f73375] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f73375] fourth shortcut in battle: command 0x7d, usable true
+[f73386] draw: baked (KH1 slot 122)
+[f73410] draw: baked (KH1 slot 123)
+[f73431] draw: baked (KH1 slot 185)
+[f73447] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106db440 part 0 at [1374.6129, 104.03178, 516.7074]: landed with KH1 row motion 204 -> Some(1)
+[f73447] KH2 attack 1900 (power 0, reaction 5) hit actor 0x7ff7106db8f0 part 0 at [1374.6129, 104.03178, 516.7074]: landed with KH1 row motion 204 -> Some(1)
+[f73447] KH2's hits on his body in KH1's states: KH2 motion 197 frame 16, 2 landed (ATKP [1900])
+[f73451] guard: motion 197's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff7107547d0, radius 80
+[f73497] event ops at 3589s (Sora can act: true): 8x62 25x2 26x2 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x122 419x60 423x2 424x2 452x61 639x2 640x1
+[f73502] draw: baked (KH1 slot 201)
+[f73527] draw: kh1_own (KH1 slot 11)
+[f73540] draw: kh1_own (KH1 slot 6)
+[f73557] event ops at 3590s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f73571] draw: kh1_own (KH1 slot 12)
+[f73580] draw: baked (KH1 slot 208)
+[f73581] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f73585] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 158 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f73585] glide (native): the glide (205)
+[f73586] draw: baked (KH1 slot 148)
+[f73586] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f73586] fourth shortcut in battle: command 0x7d, usable false
+[f73595] glide (native): Square let go: KH2's fall at speed 20.0 (148 above the floor; KH1 state now 2)
+[f73596] glide (native): KH2's glide velocity 20.0/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f73596] draw: kh1_own (KH1 slot 10)
+[f73596] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f73596] fourth shortcut in battle: command 0x7d, usable true
+[f73623] draw: kh1_own (KH1 slot 11)
+[f73628] draw: kh1_own (KH1 slot 12)
+[f73636] draw: baked (KH1 slot 208)
+[f73637] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f73658] draw: kh1_own (KH1 slot 10)
+[f73671] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 225 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f73671] glide (native): the glide (205)
+[f73672] draw: baked (KH1 slot 148)
+[f73672] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f73672] fourth shortcut in battle: command 0x7d, usable false
+[f73678] glide (native): Square let go: KH2's fall at speed 19.6 (218 above the floor; KH1 state now 2)
+[f73679] glide (native): KH2's glide velocity 19.6/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f73679] draw: kh1_own (KH1 slot 10)
+[f73679] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f73679] fourth shortcut in battle: command 0x7d, usable true
+[f73712] draw: kh1_own (KH1 slot 11)
+[f73717] draw: kh1_own (KH1 slot 12)
+[f73724] draw: baked (KH1 slot 208)
+[f73725] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f73732] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 186 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f73732] glide (native): the glide (205)
+[f73733] draw: baked (KH1 slot 148)
+[f73733] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f73733] fourth shortcut in battle: command 0x7d, usable false
+[f73743] glide (native): Square let go: KH2's fall at speed 20.3 (175 above the floor; KH1 state now 2)
+[f73744] glide (native): KH2's glide velocity 20.3/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f73744] draw: kh1_own (KH1 slot 10)
+[f73744] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f73744] fourth shortcut in battle: command 0x7d, usable true
+[f73774] draw: kh1_own (KH1 slot 11)
+[f73787] draw: kh1_own (KH1 slot 6)
+[f73794] draw: kh1_own (KH1 slot 12)
+[f73803] draw: baked (KH1 slot 208)
+[f73804] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f73825] draw: kh1_own (KH1 slot 10)
+[f73864] draw: kh1_own (KH1 slot 11)
+[f73868] draw: kh1_own (KH1 slot 12)
+[f73879] draw: kh1_own (KH1 slot 13)
+[f73882] draw: baked (KH1 slot 208)
+[f73883] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f73904] draw: kh1_own (KH1 slot 10)
+[f73946] draw: kh1_own (KH1 slot 11)
+[f73952] draw: kh1_own (KH1 slot 12)
+[f73961] draw: baked (KH1 slot 208)
+[f73962] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f73983] draw: kh1_own (KH1 slot 10)
+[f74024] draw: kh1_own (KH1 slot 11)
+[f74028] draw: kh1_own (KH1 slot 12)
+[f74037] draw: baked (KH1 slot 208)
+[f74038] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74059] draw: kh1_own (KH1 slot 10)
+[f74100] draw: kh1_own (KH1 slot 11)
+[f74107] draw: kh1_own (KH1 slot 12)
+[f74114] draw: baked (KH1 slot 208)
+[f74115] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74122] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 186 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f74122] glide (native): the glide (205)
+[f74123] draw: baked (KH1 slot 148)
+[f74123] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (9, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f74123] fourth shortcut in battle: command 0x7d, usable false
+[f74138] draw: baked (KH1 slot 150)
+[f74144] draw: baked (KH1 slot 148)
+[f74145] draw: baked (KH1 slot 151)
+[f74147] draw: baked (KH1 slot 148)
+[f74155] draw: baked (KH1 slot 150)
+[f74158] draw: baked (KH1 slot 148)
+[f74160] draw: baked (KH1 slot 151)
+[f74164] alive 3600s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f74165] draw: baked (KH1 slot 148)
+[f74166] draw: baked (KH1 slot 150)
+[f74172] draw: baked (KH1 slot 148)
+[f74177] glide (native): Square let go: KH2's fall at speed 26.0 (131 above the floor; KH1 state now 2)
+[f74178] glide (native): KH2's glide velocity 26.0/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f74178] draw: kh1_own (KH1 slot 10)
+[f74178] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f74178] fourth shortcut in battle: command 0x7d, usable true
+[f74204] draw: kh1_own (KH1 slot 11)
+[f74209] draw: kh1_own (KH1 slot 12)
+[f74218] draw: baked (KH1 slot 208)
+[f74219] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74240] draw: kh1_own (KH1 slot 10)
+[f74281] draw: kh1_own (KH1 slot 11)
+[f74287] draw: kh1_own (KH1 slot 12)
+[f74295] draw: baked (KH1 slot 208)
+[f74296] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74317] draw: kh1_own (KH1 slot 10)
+[f74357] draw: kh1_own (KH1 slot 11)
+[f74361] draw: kh1_own (KH1 slot 12)
+[f74371] draw: kh1_own (KH1 slot 13)
+[f74380] draw: baked (KH1 slot 208)
+[f74381] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74402] draw: kh1_own (KH1 slot 10)
+[f74443] draw: kh1_own (KH1 slot 11)
+[f74445] draw: kh1_own (KH1 slot 12)
+[f74454] draw: baked (KH1 slot 208)
+[f74455] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74476] draw: kh1_own (KH1 slot 10)
+[f74492] Config menu: physics KH1 (was KH2): KH1's numbers for every move of base Sora's, KH2's borrowed moves too (KH2's controller given KH1's gravity, fall, jump, speeds and air steering)
+[f74492] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, kh2_damage: true, criticals: false, kh1_ability_chance: false, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_hit_sparks: true, kh2_camera: true, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, l2_camera_hold: false, l2_stick_menu: false, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40, 203])), hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [true, true, true, true, false, true, true, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, true], knockback_numbers: Kh1, medium_hits_flinch: false, gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, trace: On, trace_seconds: 3, sound_log: false, trace_game_frames: true, trace_cats: 16383, debug_menu: true }
+[f74506] event ops at 3611s (Sora can act: true): 8x14 203x56 284x14 285x28 286x14 290x14 291x28 292x14 340x28 419x14 452x14
+[f74515] draw: kh1_own (KH1 slot 11)
+[f74520] draw: kh1_own (KH1 slot 12)
+[f74527] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f74528] draw: baked (KH1 slot 208)
+[f74529] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74548] draw: kh1_own (KH1 slot 10)
+[f74586] draw: kh1_own (KH1 slot 11)
+[f74590] draw: kh1_own (KH1 slot 12)
+[f74598] draw: kh1_own (KH1 slot 13)
+[f74598] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f74599] draw: baked (KH1 slot 208)
+[f74600] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74619] draw: kh1_own (KH1 slot 10)
+[f74657] draw: kh1_own (KH1 slot 11)
+[f74663] draw: kh1_own (KH1 slot 12)
+[f74670] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f74671] draw: baked (KH1 slot 208)
+[f74672] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74690] draw: kh1_own (KH1 slot 10)
+[f74729] draw: kh1_own (KH1 slot 11)
+[f74731] draw: kh1_own (KH1 slot 12)
+[f74739] draw: kh1_own (KH1 slot 13)
+[f74740] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f74741] draw: baked (KH1 slot 208)
+[f74742] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f74761] draw: kh1_own (KH1 slot 10)
+[f74799] draw: kh1_own (KH1 slot 11)
+[f74802] draw: kh1_own (KH1 slot 12)
+[f74809] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f74810] draw: baked (KH1 slot 208)
+[f74830] draw: kh1_own (KH1 slot 10)
+[f74868] draw: kh1_own (KH1 slot 11)
+[f74871] draw: kh1_own (KH1 slot 12)
+[f74879] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f74936] event ops at 3622s (Sora can act: true): 8x20 203x80 284x20 285x40 286x20 290x20 291x40 292x20 340x40 419x20 452x20
+[f74963] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75039] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75099] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75164] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75236] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75312] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75365] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75420] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75541] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75607] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75661] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75714] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75782] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f75852] held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's
+[f79177] event ops at 3692s (Sora can act: true): 8x62 25x2 26x2 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x2 335x2 336x2 340x122 419x60 423x2 424x2 452x61 639x2 640x2
+[f79289] KH1's row of ours hit: KH2's ATKP 130 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f79289] KH2 launch asked: record 0x7ff710785e10 made a launch (up 17 in 10 frames, sideways 45.0/frame)
+[f79376] KH1's row of ours hit: KH2's ATKP 130 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f79376] KH2 launch asked: record 0x7ff710785e10 made a launch (up 17 in 10 frames, sideways 45.0/frame)
+[f79541] event ops at 3698s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f80873] alive 3720s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f88146] alive 3840s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f95419] alive 3960s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f102693] alive 4080s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f109965] alive 4200s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f117237] alive 4320s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f124510] alive 4440s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f131782] alive 4560s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f139054] alive 4680s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f146329] alive 4800s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]

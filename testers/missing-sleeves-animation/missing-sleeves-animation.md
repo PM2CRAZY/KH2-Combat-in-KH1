@@ -494,3 +494,10 @@ go ahead
 
 ^m20
 
+I want you to revert changes made in this thread to "> t375
+>
+> Good catch, you were right. Under KH2's moves the sleeves had no animation at all: they stayed fixed to the upper arm like a solid tube. Both games animate the sleeves in their moves (KH2 does it with keyframes, not cloth physics); we just never copied KH2's over. Now each sleeve hangs and flaps the way KH2's sleeve does in the same move, both live and in the baked animations. KH2 has 2 flaps per sleeve and KH1 has 4, so the front and back follow KH2's front and back flaps, and the top and bottom are a mix of the two. The sleeves follow the same switches as the hair (`hair_physics`, `kh2_hair`)."
+
+and bake the animations for me. we'll figure out a way later, keep the debug menu frame and frame count changes
+
+go ahead
