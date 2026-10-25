@@ -100,4 +100,11 @@ go ahead
 
 ^m3
 
+1. sounds good
+2. lets do (b) and in the config menu make a separate option for party member criticals
+3. (a)
+go ahead
+
+
+
 
