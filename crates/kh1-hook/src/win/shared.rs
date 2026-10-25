@@ -481,7 +481,7 @@ pub mod physics {
     use super::super::addr::Rva;
     use crate::kh1phys::{self, Motion};
     use character_core::{Arc, Character, Output};
-    use std::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     pub use crate::kh1phys::Rule;
@@ -541,6 +541,8 @@ pub mod physics {
     const ARC_H: usize = 0x3BC;
     /// KH1's early-release cut is still open (its button handler, `0x1402A59A0`).
     const CUT_OPEN: u32 = 0x4_0000;
+    /// KH1's jump button still held since the takeoff (cleared by its button handler on release).
+    const KH1_HELD: u32 = 0x2_0000;
 
     static ORIG_GROUND: AtomicUsize = AtomicUsize::new(0);
     static ORIG_AIR: AtomicUsize = AtomicUsize::new(0);
@@ -781,7 +783,8 @@ pub mod physics {
     /// `kh2_hop` for a rise the jump button holds (KH2's Aerial Dodge: its `+0x120` bit `0x10000`,
     /// which the air actions' shared enter `0x1403CBD30` turns into the held jump `0x20000`;
     /// `0x1403D6FC0` marks its release, `0x1403CB680` cuts the rise there; Checked (decomp)):
-    /// physics KH2, its early release is `air_step`'s, as for KH2's jump.
+    /// physics KH2, its early release is `air_step`'s, as for KH2's jump; physics KH1, KH1's own
+    /// variable jump on it (`kh1_held_jump`).
     pub unsafe fn kh2_hop_held(actor: usize, height: f32, vel: [f32; 2]) {
         kh2_hop_as(actor, height, vel, true);
     }
@@ -807,12 +810,44 @@ pub mod physics {
             None => {
                 set_kh1_motion(actor, &Motion { h: vel, arc: kh1phys::Arc::hop(y, height) }, dt());
                 off_air();
+                if holdable {
+                    // (KH1's own held jump for it once KH1's control step this frame is done,
+                    // `kh1_held_jump`.)
+                    HELD_JUMP_AT.store(game_frame().max(1), Ordering::Relaxed);
+                }
                 "KH1's gravity (physics KH1)".to_string()
             }
         };
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
             super::super::log(&format!("KH2's hop on KH1's air state: {height:.0} high, {:.1}/frame sideways, {how}", vel[0].hypot(vel[1])));
+        }
+    }
+
+    /// The game frame a held hop (`kh2_hop_held`) was started at physics KH1, 0 none.
+    static HELD_JUMP_AT: AtomicU64 = AtomicU64::new(0);
+
+    /// After KH1's control step (`takeover::shared_control`): a held hop started in it at physics
+    /// KH1 (KH2's Aerial Dodge, `combomods::aerial_dodge`) gets KH1's own held jump, `+0` flags
+    /// `0x40000` (the cut open) and `0x20000` (held), as KH1's own takeoff sets them (`0x1402AFDA0`,
+    /// Steam, Checked (decomp)). KH1's button handler (`0x1402A7B30`, from the control step
+    /// `0x1402A6220`, Checked (decomp)) then runs KH1's variable jump on it, the same rule as KH2's
+    /// held dodge (`0x1403CB680`): the jump let go clears `0x20000`, and from 6 frames into the
+    /// rise to 5 before its apex that cuts the rise to KH1's release hop (`0x1402AF8F0 (actor,
+    /// 5.0)`); held, the full rise. Before, the dodge left the flags of the jump before it: let go
+    /// once in that jump (`0x40000` on, `0x20000` off), KH1 cut the dodge 6 frames in even with the
+    /// jump held (the tester's traces f80604 / f80807: the arc rewritten to 5 frames, 6.06 high, at
+    /// air time 6 of every dodge). Set after the step, since the dodge's own press is hidden from
+    /// it (it would read as let go at once).
+    pub unsafe fn kh1_held_jump(actor: usize) {
+        let at = HELD_JUMP_AT.swap(0, Ordering::Relaxed);
+        if at == 0 || at != game_frame() || !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
+            return;
+        }
+        wr(actor, rd::<u32>(actor) | CUT_OPEN | KH1_HELD);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::super::log("held hop at physics KH1: KH1's own held jump on it (flags 0x60000), its variable-jump cut as KH1's jump's");
         }
     }
 

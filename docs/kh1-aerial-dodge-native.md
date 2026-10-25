@@ -193,3 +193,50 @@ The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one te
   (`combomods::native_dodge_built`); else the borrow's controller dodges as before. KH2: the jump
   handler `0x1403CB9F0` is in the glide's action table too (one of its 17), **Checked (decomp)**
   for the table refs; which entry is the glide's is an **Assumption**.
+
+## 7. Second round (the tester's m2 answers)
+
+- **The levels** (the tester: "unsure about the levels, check the decomp"). KH2's jump press in
+  the air actions (`0x1403CB9F0`, Steam KH2) reads the Aerial Dodge level with `0x140401680
+  (player, 2)` (byte `+0x22` of the player's growth levels; 5 in KH2's special place) and the
+  record with `0x1403E92D0 (level)`: the table `0x142AE5778` is a count and offsets, and level L
+  takes offset L (record L - 1); the height is the record's `+4`, the speed its `+8` (used only
+  with the stick tilted). **Checked (decomp)**. The table is `03system.bin`'s pref `fmab` (count
+  5, offsets 24 / 92 / 160 / 228 / 296), and its `+4` / `+8` in the user's file (`local/re-fresh`
+  and `local/re` the same): LV1 145 / 18, LV2 155 / 24, LV3 200 / 30, MAX 300 / 36, the special
+  5th 1700 / 36. **Checked (files)**. Ours: `pref::FMAB_FIELDS` puts `air_dodge_height` /
+  `air_dodge_speed` at `+4` / `+8` and `Character::growth` takes record `level - 1`: the same.
+  No change.
+- **The dodge cut short at physics KH1** (the tester: "sora in kh1 mode cancels his air dodge";
+  traces f80604 and f80807: Physics KH1, Jump KH1). In both traces every dodge's arc was rewritten
+  at its air time 6 to a 5-frame rise of 6.06 (KH1's release hop: `0x1402AF8F0 (actor, 5.0)`,
+  0.5 x 0.48469 x 25), the jump still held in the second, and the fall swap followed. That is
+  KH1's variable jump in Sora's button handler (`0x1402A7B30`, called from the control step
+  `0x1402A6220`, **Checked (decomp)**): with `+0` flag `0x40000` (the cut open) and the arc more
+  than 5 frames from its apex in state 2, `0x20000` (held) on and the jump let go clears it,
+  `0x20000` off and the air time at 6 or more cuts the rise; past the apex margin it closes
+  `0x40000`. KH1's takeoff (`0x1402AFDA0`) sets both. The dodge left the jump's own flags, and
+  the jump had been let go once before the dodge (`0x40000` on, `0x20000` off, the trace's
+  `actor_flags` `0x6c003` -> `0x4c003`), so KH1 cut the dodge 6 frames in whatever the button did.
+  Fix (`shared::physics::kh1_held_jump`, after KH1's control step in `takeover::shared_control`):
+  a dodge started at physics KH1 gets `0x60000` like KH1's own takeoff, so KH1's own variable jump
+  runs on it: held, the full rise; let go between 6 frames in and 5 before the apex, KH1's release
+  hop, and the fall swap (`combomods::dodge_apex`) at once. That is KH2's held-dodge rule
+  (`0x1403CB680`, same 6 / 5 frames) with KH1's hop, as physics KH1 gives KH1's numbers. At
+  physics KH2 nothing changes (`air_step` keeps KH1's cut off and runs KH2's release). Set after
+  the step since the dodge's own press is hidden from it (KH1 would read it as let go at once).
+- **Walking off a ledge.** KH2 has no fall action of its own (Steam KH2 RTTI: the air actions are
+  ACTION_JUMP, HOP, BLOW, GLIDE, GLIDEHOVER, AIRSLIDE, ... no ACTION_FALL), so a walk-off fall is
+  ACTION_JUMP (**Assumption**, strong: no other air action fits), whose enter is the shared enter
+  `0x1403CBD30` (vtable slot `+8`, **Checked (exe)** by RTTI), which sets the "dodge left" bit when
+  the previous action wasn't airborne: the dodge is there after walking off. Ours already gives it
+  (`shared::control` clears `AIR_DODGED` on the ground, any KH1 air state 1 / 2 allows it).
+  `docs/movement-model.md`'s "it doesn't" came from the Epic exe and isn't confirmed here.
+- **Which table is the glide's** (t496's assumption). By RTTI on the Steam KH2 exe, the jump-press
+  handler's 17 references are slot `+0x48` of the vtables of ACTION_JUMP, PRIZEBOX, BLOW, HOP,
+  CARPETJUMP, FLYJUMP, TORNADO, GLIDEHOVER, GLIDE, CARPETBLOW, DUSKJUMP, LKDASH_JUMP and some world
+  ones; the glide's is ACTION_GLIDE's (`0x1405CDC38`, vtable `0x1405CDBF0`), and the hover's
+  (`0x1405CDBE0`) too. **Checked (exe)**. So the dodge out of the glide and the hover is KH2's.
+- **The 160-frame slot.** The dodge's slot only plays until the fall swap 5 frames before the apex:
+  at most ~33 frames for MAX at KH1's gravity (rise sqrt(600 / 0.48469) = 35.2) or ~33 at KH2's
+  (38.3), 86 for the 1700 special. 160 covers every rise. **Checked (arithmetic)**.
