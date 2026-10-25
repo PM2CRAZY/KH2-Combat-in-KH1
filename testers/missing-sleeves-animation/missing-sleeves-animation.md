@@ -374,3 +374,12 @@ go ahead
 
 ^m17
 
+so I tried it and the hoodie looks good but the rest of sora's clothes don't his jacket has a lot of clipping and his pants do to when running, instead of trying to guess how it would look in game by translating the animation I came up with an idea:
+
+you do physics like before for the parts that are clipping: (his jacket, pants belt, chain) but I will use frame advance to record each frame of an animation, the trace then has a natural (when I mean natural I don't mean real life, I mean how it looks compared to kh2's baked animations) looking animation that you can then bake into kh2's animations and then we can disable the physics for each animation we haven't done yet. tell me what you think and if you think its good then what I need from you is:
+
+1. in the debug menu when you frame advance it tells you the animation state your in followed by the animation count so I can give you the exact trace (make sure this doesn't appear in the debug menu but a separate window pops up with the info)
+2. when setting trace to count game frames the seconds number becomes frame count
+3. just tell me what you need in the trace and I'll record it, feel free to add anything thats missing so the bake can be exactly how it looks in game
+4. for the parts that are kh1's make sure the physics follow closely with how it looks in the kh1 animations, 
+if there's anything else you would need let me know, then if we're good we'll try the bake on soras non keyblade walking animation 

@@ -196,3 +196,6 @@ go ahead
 
 ^m7
 
+1. (b) reason we'll do b is for now is because we haven't implemented kh2's mp mechanics in the game so its to fit with kh1's mp mechanics. if we get to implementing the mp mechanics we'll come back to it and make it 1:1 with kh2 on kh2's mp bar
+2. (a) it needs to work exactly as kh2
+3. if battle quotes is kh2 then (a) for kh1 we keep the grunts but the finisher will say "defence! " its one of the lines he picks when casting aero 
