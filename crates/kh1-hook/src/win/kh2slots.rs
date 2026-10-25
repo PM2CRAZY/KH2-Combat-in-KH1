@@ -1511,5 +1511,4 @@ unsafe fn tick(actor: usize) {
             super::kh2fx::event(m.motion, *e);
         }
     }
-    super::kh2sound::tick();
 }

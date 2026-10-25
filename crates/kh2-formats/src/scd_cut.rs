@@ -227,6 +227,33 @@ pub fn set_bus(bank: &mut [u8], bus: u8) -> Result<()> {
     Ok(())
 }
 
+/// How long a cut bank's sound plays (ms), read from its first audio stream's header without
+/// decoding: Microsoft ADPCM (codec 12) only, whole blocks of the WAVEFORMATEX's samples per block
+/// and a part block for the rest. `None` for any other codec (Vorbis has no sample count in its
+/// header) or a header that doesn't read.
+pub fn length_ms(bank: &[u8]) -> Option<u32> {
+    let audio = u32_at(bank, u32_at(bank, 0x3C).ok()? as usize).ok()? as usize;
+    adpcm_ms(bank.get(audio..)?)
+}
+
+/// `length_ms` of one audio stream (its 0x20-byte header, then its extra data).
+fn adpcm_ms(a: &[u8]) -> Option<u32> {
+    let (size, channels, rate, codec, extra) = (u32_at(a, 0).ok()? as u64, u32_at(a, 4).ok()? as u64, u32_at(a, 8).ok()? as u64, u32_at(a, 0x0C).ok()?, u32_at(a, 0x18).ok()? as usize);
+    if codec != 12 || channels == 0 || rate == 0 || extra < 20 {
+        return None;
+    }
+    let fmt = a.get(0x20..0x20 + extra)?;
+    let (block, per_block) = (u16_at(fmt, 12).ok()? as u64, u16_at(fmt, 18).ok()? as u64);
+    if block < 7 * channels || per_block < 2 {
+        return None;
+    }
+    // (A part block holds its two header samples and two a byte per channel after its header.)
+    let whole = size / block * per_block;
+    let rest = size % block;
+    let part = if rest >= 7 * channels { 2 + (rest - 7 * channels) * 2 / channels } else { 0 };
+    Some(((whole + part.min(per_block)) * 1000 / rate) as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +410,22 @@ mod tests {
             eprintln!("{}: {ok} cut, {same} the same, {past} on audio past the track count", p.display());
             assert_eq!(ok, same + past);
         }
+    }
+
+    #[test]
+    fn adpcm_length_from_the_header() {
+        // 48000 Hz mono, 0x24-byte blocks of 64 samples, 10 whole blocks and a part one of 7 + 4.
+        let mut a = vec![0u8; 0x20 + 32];
+        let w = |a: &mut Vec<u8>, at: usize, v: u32| a[at..at + 4].copy_from_slice(&v.to_le_bytes());
+        w(&mut a, 0, 0x24 * 10 + 11);
+        w(&mut a, 4, 1);
+        w(&mut a, 8, 48000);
+        w(&mut a, 0x0C, 12);
+        w(&mut a, 0x18, 32);
+        a[0x20 + 12..0x20 + 14].copy_from_slice(&0x24u16.to_le_bytes());
+        a[0x20 + 18..0x20 + 20].copy_from_slice(&64u16.to_le_bytes());
+        assert_eq!(adpcm_ms(&a), Some(((640 + 2 + 8) * 1000 / 48000) as u32));
+        w(&mut a, 0x0C, 6);
+        assert_eq!(adpcm_ms(&a), None);
     }
 }

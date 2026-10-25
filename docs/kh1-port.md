@@ -28,7 +28,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `commands` | `on` (default), `off` | KH1's own commands (magic, items, specials, summons) take him from KH2. |
 | `swing_fx` | `on` (default), `off` | KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice. |
 | `kh2_sounds` | `magnet_explosion` (default), `all`, `off` | Which moves play KH2's own sounds (its effect and Keyblade sounds, from the KH2 install). |
-| `kh2_volume` | `1.0` (default) | Their volume. |
+| `kh2_volume` | `1.0` (default) | Their volume (written into the cut banks' records; KH1's sliders do the rest). |
 | `kh2_voice` | `off` (default), `on` | `on`: Sora's KH2 battle voice on those moves; `off`: KH1's voice. |
 | `kh2_effects` | `magnet_explosion` (default), `all`, `off` | Which moves show KH2's own visual effects (its particle effects, from the KH2 install, played by KH1's own effect system). |
 | `flip_weapons` | KH1 item ids, `0x53` (default), `none` | Weapons KH2's grip holds the wrong way round, turned half round in his hand (the Dream Shield). |

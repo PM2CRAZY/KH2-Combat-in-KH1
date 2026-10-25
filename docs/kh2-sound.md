@@ -23,7 +23,10 @@ Our reading, Checked against the files unless marked.
 - **Lengths:** 999038 0.57 s, 999042 1.29 s, 169 0.81 s (mono), 999021 0.94 s.
 - `kh2-combat sound --game <install> --id N --out x.wav` writes one for listening (local only).
 - In KH1: `kh1-hook/src/win/kh2sound.rs` loads the sounds of the chosen motions' elements
-  at start (background thread) and plays them through `waveOut` when the element starts.
+  at start (background thread), cuts each into a one-sound bank in KH1's file form and plays
+  it through KH1's own sound engine when the element starts (`docs/kh1-sound-native.md`; the
+  mod's own `waveOut` player and its decoded copies are gone since the "gut the old system"
+  round).
 
 ## Sound ids are id records, not streams (KH1 stage 41)
 

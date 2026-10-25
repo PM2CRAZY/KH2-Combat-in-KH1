@@ -42,9 +42,6 @@ hit_effect_on = target\r\n\
 ; move, the plain combo too), off\r\n\
 kh2_sounds = abilities\r\n\
 kh2_volume = 1.0\r\n\
-; kh2_sound_engine: kh1 = KH2's sound effects play through KH1's own sound system (its banks and\r\n\
-;   effect queue: KH1's pause, volume sliders and panning apply); mod = the mod's own player\r\n\
-kh2_sound_engine = kh1\r\n\
 ; damage_scale: times the damage of Sora's KH2 attacks (1.0 = KH1's hit x KH2's power)\r\n\
 damage_scale = 1.0\r\n\
 ; magic_scale: times KH2's Magic-based attacks on top (Explosion, Magnet Burst; they also\r\n\
@@ -241,8 +238,6 @@ pub struct Settings {
     /// Which motions play KH2's own sounds: `None` off, `Some(None)` all.
     pub kh2_sounds: Option<Option<Vec<u16>>>,
     pub kh2_volume: f32,
-    /// KH2's sound effects through KH1's own sound system (`kh1bank`), else the mod's player.
-    pub kh1_sound_engine: bool,
     /// Times the damage of Sora's KH2 hits (KH1's damage x KH2's power x this).
     pub damage_scale: f32,
     /// Times KH2's Magic-based hits on top (Explosion, Magnet Burst), which also grow with MP.
@@ -420,7 +415,6 @@ fn load(first: bool) -> Option<Settings> {
             _ => Some(Some(super::kh2sound::DEFAULT_MOTIONS.to_vec())),
         },
         kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
-        kh1_sound_engine: on(&text, "kh2_sound_engine", "kh1", true),
         damage_scale: setting(&text, "damage_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
         // (Glide on Square held off, t319: a glide is the jump button after the Aerial Dodge. The
         // `glide = square` setting and the Square glide code stay, behind this flag, for later.)

@@ -7,16 +7,22 @@
 //! at frame 60); 8, on the Keyblade's motion set, plays a sound of the weapon's bank (both:
 //! 500042 / 500044 at frame 18); 14 plays a battle voice (`00battle` VTBL id → a choice of
 //! clips in `voice/us/battle/*_sora.win32.scd`: Explosion 6 at 0, Magnet Burst 7 at 0 and 6
-//! at 50). Sound ids name the bank's id records, not its streams (`kh2_formats::scd`). Once
-//! KH2 Sora is loaded, a thread reads them from the user's own KH2 install, decodes them
-//! (Microsoft ADPCM, Ogg Vorbis for voices) and keeps them; nothing is copied anywhere. They play through Windows' `waveOut`, a device handle per sound, closed
-//! when it is done. Ini: `kh2_sounds` (`magnet_explosion` the default, `all`, `off`) and
-//! `kh2_volume`. The default is every KH2 ability move (`DEFAULT_MOTIONS`).
+//! at 50). Sound ids name the bank's id records, not its streams (`kh2_formats::scd`).
+//!
+//! Every one of them plays through KH1's own sound engine, nothing else (the tester, "gut the
+//! old system and transfer everything"; `docs/kh1-sound-native.md`): once KH2 Sora is loaded, a
+//! thread reads the banks from the user's own KH2 install, cuts each sound into a one-sound bank
+//! in KH1's file form (`kh2_formats::scd_cut`, still compressed: KH1's engine decodes it as it
+//! plays, as it does its own) and hands it to `kh1bank`, which keeps it in KH1's bank list;
+//! effects go through KH1's effect queue at Sora, battle quotes through KH1's voice channel.
+//! Nothing is decoded on our side and no sound of ours has a player of its own: what KH1's
+//! engine can't take (off Steam, the queue full) isn't heard, as KH1 drops its own. Ini:
+//! `kh2_sounds` (`abilities` the default, `all`, `off`) and `kh2_volume` (in the cut banks'
+//! records, as KH1's own volumes are).
 
 use super::log;
-use super::sys::{waveOutClose, waveOutOpen, waveOutPrepareHeader, waveOutUnprepareHeader, waveOutWrite, WaveFormatEx, WaveHdr, WAVE_MAPPER, WHDR_DONE};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 /// KH2's ability moves (the user: their exact sounds, as Explosion's and Magnet Burst's): Upper
 /// Slash 161, Slapshot 162, Dodge Slash 163, Slide Dash 164, Guard Break 165, Explosion 166,
@@ -27,19 +33,11 @@ use std::sync::{Arc, Mutex};
 /// missing its sfx"). (The plain combo's swings keep KH1's.)
 pub const DEFAULT_MOTIONS: [u16; 20] = [161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202];
 
+/// A KH2 sound as KH1 knows it: its one-sound bank's file number in KH1's engine (`kh1bank`)
+/// and its length (ms; `None` when it can't be told without decoding: a Vorbis effect).
 struct Sound {
-    rate: u32,
-    channels: u16,
-    data: Arc<Vec<i16>>,
-    /// Its one-sound bank's file number in KH1's engine (`kh1bank`), Steam only.
-    kh1: Option<i32>,
-}
-
-impl Sound {
-    /// Its length in ms.
-    fn ms(&self) -> u32 {
-        (self.data.len() as u64 * 1000 / (self.channels.max(1) as u64 * self.rate.max(1) as u64)) as u32
-    }
+    kh1: i32,
+    ms: Option<u32>,
 }
 
 /// What's loaded: effect element → sound, sound id → sound, voice id → its choices.
@@ -54,11 +52,11 @@ struct Loaded {
 }
 
 /// A KH2 battle voice (`00battle`'s VTBL row for Sora): its priority, its five (clip, chance)
-/// choices, and the clips it can pick (by clip number in KH2's voice bank).
+/// choices, and the clips of KH2's voice bank it can pick that play something.
 struct VoiceSet {
     priority: i32,
     choices: Vec<(i8, i8)>,
-    clips: Vec<(u8, Sound)>,
+    clips: Vec<u8>,
 }
 
 impl VoiceSet {
@@ -66,7 +64,7 @@ impl VoiceSet {
     /// draw, / 0x28F5C29); each choice with a chance takes the roll down by it and is picked when
     /// the roll goes below 0; the choices without a chance are the pool, one picked evenly if
     /// none was. A negative clip is none (-3, a partner's line, isn't Sora's: left out).
-    fn pick(&self) -> Option<&(u8, Sound)> {
+    fn pick(&self) -> Option<u8> {
         static RNG: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let draw = || -> u32 {
             let mut r = RNG.load(std::sync::atomic::Ordering::Relaxed);
@@ -102,17 +100,17 @@ impl VoiceSet {
             }
             None => return None,
         };
-        self.clips.iter().find(|(c, _)| *c as i8 == clip)
+        self.clips.iter().copied().find(|c| *c as i8 == clip)
     }
 
     /// Sora says it: through KH1's voice channel at the row's priority (`kh1bank::voice`; KH1's
-    /// rule plays it only over a line of lower standing), or on the mod's player.
+    /// rule plays it only over a line of lower standing).
     unsafe fn say(&self) -> Option<u8> {
-        let (clip, sound) = self.pick()?;
-        if !super::kh1bank::voice(*clip, self.priority.max(1)) {
-            play(sound, Channel::Voice);
+        let clip = self.pick()?;
+        if !super::kh1bank::voice(clip, self.priority.max(1)) {
+            dropped(|| format!("quote clip {clip}: KH1's voice path can't take it now"));
         }
-        Some(*clip)
+        Some(clip)
     }
 }
 
@@ -126,17 +124,6 @@ const EFFECTS_BUS: u8 = 2;
 const WEAPON_BANK: u32 = 500;
 /// Sora's battle voices (KH2 loads a world's set; Twilight Town's here).
 const VOICE_FILE: &str = "voice/us/battle/tt0_sora.win32.scd";
-
-struct Voice {
-    handle: usize,
-    hdr: Box<WaveHdr>,
-    _data: Arc<Vec<i16>>,
-}
-
-// The header and buffer live in the voice until it is closed.
-unsafe impl Send for Voice {}
-
-static VOICES: Mutex<Vec<Voice>> = Mutex::new(Vec::new());
 
 fn allowed(motion: u16) -> bool {
     match &super::settings::get().kh2_sounds {
@@ -261,21 +248,15 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
         }
     }
     let mut out = Loaded::default();
-    let decode = |p: kh2_formats::scd::Pcm| -> Sound {
-        let data: Vec<i16> = p.samples.iter().map(|&x| (x as f32 * volume * p.volume).clamp(-32768.0, 32767.0) as i16).collect();
-        Sound { rate: p.rate, channels: p.channels, data: Arc::new(data), kh1: None }
-    };
-    // Each sound also as a one-sound bank for KH1's own engine (`kh1bank`, the tester: "KH2
-    // sounds through KH1's sound system"), at the same volume (the id's own, in the bank's record,
-    // times `kh2_volume`).
-    // (One bank a sound: a sound several moves use, or a clip several voices pick from, is cut
-    // once.)
-    let mut made: HashMap<(u32, usize), Option<i32>> = HashMap::new();
-    let mut native = |key: u32, bank: &[u8], index: usize, what: String| -> Option<i32> {
-        if let Some(no) = made.get(&(key, index)) {
-            return *no;
+    // Each sound as a one-sound bank for KH1's own engine (`kh1bank`), at the id's own volume (in
+    // the bank's record) times `kh2_volume`. One bank a sound: a sound several moves use is cut
+    // once. Nothing is decoded: KH1's engine plays the cut bank's compressed audio as it is.
+    let mut made: HashMap<(u32, usize), Option<Sound>> = HashMap::new();
+    let mut native = |key: u32, bank: &[u8], index: usize, what: String| -> Option<Sound> {
+        if let Some(s) = made.get(&(key, index)) {
+            return s.as_ref().map(|s| Sound { kh1: s.kh1, ms: s.ms });
         }
-        let no = match kh2_formats::scd_cut::cut(bank, index, (super::kh1bank::FIRST_NO / 1000) as u16) {
+        let snd = match kh2_formats::scd_cut::cut(bank, index, (super::kh1bank::FIRST_NO / 1000) as u16) {
             Ok(mut c) => {
                 let _ = kh2_formats::scd_cut::scale_volume(&mut c.bytes, volume);
                 // (KH2's sound-effect slider sets buses 2 and 4..8 alike, KH2 `0x140138290`;
@@ -286,20 +267,23 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
                 if (4..=8).contains(&kh2_bus) {
                     let _ = kh2_formats::scd_cut::set_bus(&mut c.bytes, EFFECTS_BUS);
                 }
+                let ms = kh2_formats::scd_cut::length_ms(&c.bytes);
                 let (bus, tracks, size) = (if (4..=8).contains(&kh2_bus) { format!("{kh2_bus} -> {EFFECTS_BUS}") } else { kh2_bus.to_string() }, c.tracks, c.bytes.len());
                 let no = super::kh1bank::add(c.bytes, what.clone());
-                if let Some(no) = no {
-                    log(&format!("KH1 banks: {what} -> se{no} ({size} bytes, bus {bus}, {tracks} track(s))"));
+                match no {
+                    Some(no) => log(&format!("KH1 banks: {what} -> se{no} ({size} bytes, bus {bus}, {tracks} track(s), {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms")))),
+                    None => log(&format!("KH1 banks: {what} not added (KH1's sound engine is used on the Steam build only)")),
                 }
-                no
+                no.map(|kh1| Sound { kh1, ms })
             }
             Err(e) => {
                 log(&format!("KH1 banks: {what} not cut ({e})"));
                 None
             }
         };
-        made.insert((key, index), no);
-        no
+        let back = snd.as_ref().map(|s| Sound { kh1: s.kh1, ms: s.ms });
+        made.insert((key, index), snd);
+        back
     };
     let mut banks: HashMap<u32, Vec<u8>> = HashMap::new();
     for (id, want) in wants {
@@ -315,60 +299,44 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
                 }
             }
         }
-        // (A bank that doesn't parse costs its own sounds, not all of them.)
-        let scd = match kh2_formats::scd::Scd::parse(&banks[&bank]) {
-            Ok(s) => s,
-            Err(e) => {
-                log(&format!("KH2 sounds: bank {bank} not readable ({e})"));
-                continue;
-            }
+        let of = match want {
+            Want::Element(el) => format!(" (effect element {el})"),
+            Want::Sound(_) => String::new(),
+            Want::Spell(level, el) => format!(" (package {level}'s element {el})"),
         };
-        match scd.sound_id(index) {
-            Ok(p) => {
-                let of = match want {
-                    Want::Element(el) => format!(" (effect element {el})"),
-                    Want::Sound(_) => String::new(),
-                    Want::Spell(level, el) => format!(" (package {level}'s element {el})"),
-                };
-                log(&format!("KH2 sound {id}{of}: {} Hz, {} ch, {:.2} s, volume {:.2}", p.rate, p.channels, p.samples.len() as f32 / p.channels.max(1) as f32 / p.rate.max(1) as f32, p.volume));
-                let mut snd = decode(p);
-                snd.kh1 = native(bank, &banks[&bank], index, format!("KH2 sound {id}{of}"));
-                match want {
-                    Want::Element(el) => {
-                        out.elements.insert(el, snd);
-                    }
-                    Want::Sound(s) => {
-                        out.sounds.insert(s, snd);
-                    }
-                    Want::Spell(level, el) => {
-                        out.spell_elements.insert((level, el), snd);
-                    }
-                }
+        let Some(snd) = native(bank, &banks[&bank], index, format!("KH2 sound {id}{of}")) else { continue };
+        match want {
+            Want::Element(el) => {
+                out.elements.insert(el, snd);
             }
-            Err(e) => log(&format!("KH2 sound {id}: {e}")),
+            Want::Sound(s) => {
+                out.sounds.insert(s, snd);
+            }
+            Want::Spell(level, el) => {
+                out.spell_elements.insert((level, el), snd);
+            }
         }
     }
+    // (The whole KH2 banks were only read to cut the sounds out: freed here.)
+    drop(banks);
     // Voices: `00battle`'s VTBL (character 1 = Sora: id, priority, five (voice, chance)).
     if !voice_ids.is_empty() {
         let battle = install.read_any(src, "00battle.bin").map_err(|e| e.to_string())?;
         let voice = install.read_any(src, VOICE_FILE).map_err(|e| e.to_string())?;
-        let vscd = kh2_formats::scd::Scd::parse(&voice).map_err(|e| e.to_string())?;
         let table = vtbl(&battle);
         for v in voice_ids {
             let Some((priority, choices)) = table.iter().find(|(c, id, _, _)| *c == 1 && *id as i16 == v).map(|e| (e.2, e.3.clone())) else { continue };
-            let clips: Vec<(u8, Sound)> = choices
-                .iter()
-                .filter(|(c, _)| *c >= 0)
-                .filter_map(|&(c, _)| Some((c as u8, decode(vscd.sound_id(c as usize).ok()?))))
-                .collect();
-            log(&format!("KH2 voice {v}: priority {priority}, (clip, chance) {choices:?} ({} decoded)", clips.len()));
+            // (A clip KH1's voice create could play: its sound record has audio, the same test
+            // the cut makes.)
+            let clips: Vec<u8> = choices.iter().filter(|(c, _)| *c >= 0).map(|&(c, _)| c as u8).filter(|&c| kh2_formats::scd_cut::cut(&voice, c as usize, 0).is_ok()).collect();
+            log(&format!("KH2 voice {v}: priority {priority}, (clip, chance) {choices:?} ({} playable)", clips.len()));
             if !clips.is_empty() {
                 out.voices.insert(v, VoiceSet { priority: priority as i32, choices, clips });
             }
         }
         // The whole bank for KH1's voice list (as KH1 keeps a character's voices: `kh1bank`).
         if !out.voices.is_empty() {
-            super::kh1bank::set_voice_bank(voice.clone());
+            super::kh1bank::set_voice_bank(voice);
         }
     }
     Ok(out)
@@ -409,7 +377,7 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     match kind {
         EventKind::Effect(el) => {
             if let Some(s) = l.elements.get(&el) {
-                play(s, Channel::Effects);
+                play(s);
                 note_play(|| format!("Sora's element {el} (motion {motion})"));
             }
         }
@@ -417,7 +385,7 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
             let id = if (500_000..501_000).contains(&id) { id - 500_000 + WEAPON_BANK * 1000 } else { id };
             match l.sounds.get(&id) {
                 Some(s) => {
-                    play(s, Channel::Effects);
+                    play(s);
                     note_play(|| format!("sound {id} (motion {motion}{})", if valor { ", Valor" } else { "" }));
                 }
                 None => note_play(|| format!("sound {id} (motion {motion}) not loaded")),
@@ -439,7 +407,7 @@ pub unsafe fn spell_element(level: u8, el: u16) {
     let Ok(g) = LOADED.try_lock() else { return };
     match g.as_ref().and_then(|l| l.spell_elements.get(&(level, el))) {
         Some(s) => {
-            play(s, Channel::Effects);
+            play(s);
             note_play(|| format!("package {level}'s element {el}"));
         }
         None if g.is_none() => note_play(|| format!("package {level}'s element {el}: KH2 sounds not loaded (yet)")),
@@ -452,7 +420,7 @@ pub unsafe fn spell_element(level: u8, el: u16) {
 fn note_play(what: impl FnOnce() -> String) {
     static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 40 {
-        log(&format!("KH2 sound played: {} (volume {:.2})", what(), game_volume(Channel::Effects)));
+        log(&format!("KH2 sound played: {}", what()));
     }
 }
 
@@ -491,93 +459,21 @@ pub unsafe fn hurt_voice(v: i16) -> bool {
     g.as_ref().and_then(|l| l.voices.get(&v)).and_then(|c| c.say()).is_some()
 }
 
-/// KH1's global settings (`0x14012AC50` returns them): its volume sliders, 0..10 each:
-/// master `+0x10` (the device's, `0x14011BE4A`), then channels 1..3 `+0x12`, `+0x14`, `+0x16`
-/// (`0x1400DDD00` sets each channel to its slider / 10), in the options menu's order: music,
-/// sound effects, voice. Steam's build keeps them 4 bytes later (`+0x14..+0x1A`).
-const SETTINGS_RVA: super::addr::Rva = super::addr::Rva(0x12AC50);
-
-#[derive(Clone, Copy)]
-enum Channel {
-    Effects,
-    Voice,
-}
-
-/// The game's volume for KH2's sounds of a kind now: master × its channel (the user: KH2's
-/// sounds ignored the game's volume sliders).
-fn game_volume(c: Channel) -> f32 {
-    let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
-    if base == 0 {
-        return 1.0;
-    }
-    let get: unsafe extern "system" fn() -> usize = unsafe { std::mem::transmute(base + SETTINGS_RVA) };
-    let s = unsafe { get() };
-    if s < 0x10000 {
-        return 1.0;
-    }
-    let shift = if super::addr::Build::current() == super::addr::Build::Steam { 4 } else { 0 };
-    let rd = |off: usize| unsafe { std::ptr::read_unaligned((s + off + shift) as *const i16) } as f32;
-    let master = rd(0x10);
-    let ch = rd(match c {
-        Channel::Effects => 0x14,
-        Channel::Voice => 0x16,
-    });
-    ((master / 10.0).clamp(0.0, 1.0)) * ((ch / 10.0).clamp(0.0, 1.0))
-}
-
-unsafe fn play(s: &Sound, channel: Channel) {
-    // Sound effects through KH1's own sound system (`kh1bank`: its bank, its effect queue at
-    // Sora's position; KH1's buses give the sliders' volume, its pause holds them). The mod's
-    // player below only when that can't (off Steam, the bank not in KH1's list yet, the queue
-    // full, `kh2_sound_engine = mod`). (Voices stay on the mod's player for now.)
-    if let (Channel::Effects, Some(no)) = (channel, s.kh1) {
-        if super::kh1bank::play(no, s.ms()) {
-            return;
-        }
-    }
-    let gain = game_volume(channel);
-    if gain <= 0.001 {
-        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 5 {
-            log("KH2 sound: muted (the game's volume for it is 0)");
-        }
-        return;
-    }
-    let block = s.channels * 2;
-    let fmt = WaveFormatEx { format_tag: 1, channels: s.channels, samples_per_sec: s.rate, avg_bytes_per_sec: s.rate * block as u32, block_align: block, bits_per_sample: 16, cb_size: 0 };
-    let mut handle = 0usize;
-    let r = waveOutOpen(&mut handle, WAVE_MAPPER, &fmt, 0, 0, 0);
-    if r != 0 {
-        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 10 {
-            log(&format!("KH2 sound: Windows refused to open the sound device (waveOutOpen {r}, {} Hz, {} ch; {} playing)", s.rate, s.channels, VOICES.lock().map_or(0, |v| v.len())));
-        }
-        return;
-    }
-    let data = if gain < 0.999 { Arc::new(s.data.iter().map(|&x| (x as f32 * gain) as i16).collect::<Vec<i16>>()) } else { s.data.clone() };
-    let mut hdr = Box::new(WaveHdr { data: data.as_ptr() as *mut u8, buffer_length: (data.len() * 2) as u32, bytes_recorded: 0, user: 0, flags: 0, loops: 0, next: std::ptr::null_mut(), reserved: 0 });
-    let size = std::mem::size_of::<WaveHdr>() as u32;
-    if waveOutPrepareHeader(handle, &mut *hdr, size) != 0 || waveOutWrite(handle, &mut *hdr, size) != 0 {
-        waveOutClose(handle);
-        return;
-    }
-    if let Ok(mut v) = VOICES.lock() {
-        v.push(Voice { handle, hdr, _data: data });
+/// Plays a KH2 sound effect at Sora through KH1's effect queue (`kh1bank::play`); when KH1 can't
+/// take it now (its bank not back in KH1's list yet after a room load, the queue full), it isn't
+/// heard, as KH1 drops its own sounds then (logged).
+unsafe fn play(s: &Sound) {
+    if !super::kh1bank::play(s.kh1, s.ms) {
+        dropped(|| format!("se{}: KH1's effect queue or bank list can't take it now", s.kh1));
     }
 }
 
-/// Every frame: closes the sounds that finished.
-pub unsafe fn tick() {
-    let Ok(mut v) = VOICES.try_lock() else { return };
-    let size = std::mem::size_of::<WaveHdr>() as u32;
-    v.retain_mut(|voice| {
-        let done = std::ptr::read_volatile(&voice.hdr.flags) & WHDR_DONE != 0;
-        if done {
-            waveOutUnprepareHeader(voice.handle, &mut *voice.hdr, size);
-            waveOutClose(voice.handle);
-        }
-        !done
-    });
+/// A KH2 sound KH1's engine couldn't take, for the log (the first 20).
+fn dropped(what: impl FnOnce() -> String) {
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+        log(&format!("KH2 sound not played: {}", what()));
+    }
 }
 
 /// KH2's battle quotes for Sora (the Battle Quotes row / ini `battle_quotes`; `kh2_voice` without

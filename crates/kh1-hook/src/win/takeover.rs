@@ -3490,7 +3490,6 @@ unsafe fn takeover(actor: usize) -> bool {
         }
         super::form::shots_step(actor, &out, d.character.airborne(), &mut d.strikes, &battle_rows, lock);
         super::form::after_step(&mut d.drive, actor, rd::<u32>(base + BATTLE_RVA) & 1 != 0);
-        super::kh2sound::tick();
         {
             // A KH2 swing starting: a new attack motion, or the same one again from its start.
             let attacking = matches!(out.state, StateName::Attack);

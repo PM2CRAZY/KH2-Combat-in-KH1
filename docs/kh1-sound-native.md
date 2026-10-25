@@ -1,6 +1,7 @@
-# KH2 sounds through KH1's sound system (native research, t480 round)
+# KH2 sounds through KH1's sound system
 
-Research only, nothing built yet. Thread: `testers/kh2-sounds-through-kh1s-sound-system/`.
+Research from the t480 round, built t509..t515; the old player removed in the "gut the old
+system" round (see "Only KH1's engine" at the end). Thread: `testers/kh2-sounds-through-kh1s-sound-system/`.
 All addresses are the **Steam** KH1 exe's (Ghidra address = 0x140000000 + RVA) unless marked.
 Where an older doc gives an Epic address, the Steam one is given here and the translation said.
 
@@ -337,3 +338,28 @@ Where an older doc gives an Epic address, the Steam one is given here and the tr
 - Open: KH2's priority 0 can't pass KH1's rule (nothing is below 0); it is asked at 1 (plays
   when Sora's channel is free), which is what KH2's 0 does when nothing is pending. A -3
   (partner's line) choice is left out as before, so Sora says one of his own there.
+
+## Only KH1's engine (the old player removed)
+
+The tester (m4 answer): "I want you to gut the old system and transfer everything". Since then:
+
+- `kh2sound.rs` decodes nothing. The loader reads each KH2 bank, cuts the wanted sounds out
+  (`scd_cut::cut`), hands the cut banks to `kh1bank`, and frees the whole banks. The ~56 MB of
+  decoded effects and ~2-3 MB of decoded quotes are gone. **Checked (code)**
+- The mod's `waveOut` player (`play`, `tick`, its 16-bit copies), its volume reading
+  (`game_volume`, KH1's settings block) and the ini's `kh2_sound_engine` are removed. Volume,
+  pause, Frame Advance, panning and room stops are KH1's (its buses and live list), as for its
+  own sounds. **Checked (code)**
+- A sound KH1's engine can't take at that moment (its bank not back in KH1's list yet after a
+  room load, the effect queue full, a voice line KH1's priority rule keeps) isn't heard, as KH1
+  drops its own sounds then; the first 20 are logged ("KH2 sound not played: ..."). Off Steam
+  nothing is registered, so no KH2 sound is heard there. **Checked (code)**
+- Our effect slot in KH1's queue is still stopped by us (KH1's step never frees slots): after
+  the sound's length, now read from its audio header without decoding (`scd_cut::length_ms`:
+  Microsoft ADPCM whole blocks x samples per block, a part block for the rest), and once KH1's
+  "still playing" `0x1401789F0` says no. A stream of another codec (no length in its header) is
+  stopped once KH1 has said it plays and then that it doesn't, or after 2 s if it never starts,
+  30 s at most. **Checked (code)**; every effect sound the mod uses is ADPCM (codec 12),
+  **Checked (files)** (se999 / se000 / se500).
+- Battle quotes: the clip list keeps the clips whose sound record has audio (the cut's own
+  test), instead of the clips that decoded. **Checked (code)**

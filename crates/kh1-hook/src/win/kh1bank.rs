@@ -21,7 +21,8 @@
 //! The engine has a fixed number of bank slots (`0x14004F570`: remaining, `0x14004F5F0`: in
 //! use, Checked (decomp)); its size isn't known here, so ours are registered only while more than
 //! `KEEP_FREE` stay free for KH1's own (logged, both counts). Steam build only (the addresses are
-//! the Steam exe's); elsewhere nothing is registered and the sounds play as before.
+//! the Steam exe's); elsewhere nothing is registered and KH2's sounds aren't heard (the mod has no
+//! player of its own: `kh2sound`).
 
 use super::addr::Build;
 use super::log;
@@ -144,7 +145,7 @@ unsafe fn ready(base: usize) -> bool {
                 && rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM) > 0x10000
                 && rd::<usize>(base + ALIGNED_FREE_IAT_STEAM) > 0x10000;
             if !ok {
-                log("KH1 banks: KH1's bank registration isn't where the Steam build has it; KH2's sounds stay on the mod's player");
+                log("KH1 banks: KH1's bank registration isn't where the Steam build has it; KH2's sounds won't play");
             }
             CHECKED.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
             ok
@@ -200,10 +201,10 @@ unsafe fn register(base: usize, b: &mut Bank) -> bool {
         free(data);
         note(format!("KH1 banks: se{} ({}) not taken (handle {handle:#x})", b.no, b.what));
     } else if handle == 0 {
-        // (In the list, but KH1's engine didn't load it: KH1 frees it with the rest; it plays on
-        // the mod's player.)
+        // (In the list, but KH1's engine didn't load it: KH1 frees it with the rest; it isn't
+        // played.)
         b.refused = true;
-        note(format!("KH1 banks: se{} ({}): KH1's engine didn't load it (handle 0); it stays on the mod's player", b.no, b.what));
+        note(format!("KH1 banks: se{} ({}): KH1's engine didn't load it (handle 0); it won't play", b.no, b.what));
     }
     took
 }
@@ -211,9 +212,7 @@ unsafe fn register(base: usize, b: &mut Bank) -> bool {
 /// Once a frame, at the frame's end (`debugmenu::frame_end`): watches KH1's bank list and puts
 /// ours (back) in.
 pub unsafe fn frame_end(base: usize) {
-    // (`kh2_sound_engine = mod`: nothing of ours goes into KH1's engine at all, so the mod's
-    // player is the whole way back, as the ini says; before, only the plays were switched.)
-    if Build::current() != Build::Steam || base == 0 || !super::settings::get().kh1_sound_engine {
+    if Build::current() != Build::Steam || base == 0 {
         return;
     }
     if rd::<usize>(base + SOUND_UP_STEAM) != 0 && ready(base) {
@@ -312,8 +311,14 @@ unsafe fn put_in(base: usize, banks: &mut [Bank]) {
 struct Playing {
     no: i32,
     id: i32,
-    /// Game time left (ms; not counting KH1's pause or Frame Advance holds).
+    /// Game time left (ms; not counting KH1's pause or Frame Advance holds); for a sound of
+    /// unknown length, the time it may take to start.
     left_ms: i64,
+    /// Its length is known (`left_ms` counts it down); else it is stopped once KH1 has said it
+    /// plays and then that it's done.
+    timed: bool,
+    /// KH1 said it plays (for an untimed one).
+    seen: bool,
 }
 
 static PLAYING: Mutex<Vec<Playing>> = Mutex::new(Vec::new());
@@ -338,9 +343,10 @@ unsafe fn queue_has(base: usize, no: i32, id: i32) -> bool {
 /// own actors' sounds (`0x140179AC0 (no, id, Sora's position +0x10, 0)`: KH1's queue step
 /// `0x1401791E0` creates and starts it with `SslSeCreate` / `SslSePlay` and pans and fades it by
 /// its distance from the camera's two ears every frame). False if it can't (not Steam, the bank
-/// not in KH1's list, no Sora, the queue full): the caller plays it the old way.
-pub unsafe fn play(no: i32, ms: u32) -> bool {
-    if Build::current() != Build::Steam || !super::settings::get().kh1_sound_engine {
+/// not in KH1's list, no Sora, the queue full): it isn't played, as KH1 drops its own then.
+/// `ms` is its length when known.
+pub unsafe fn play(no: i32, ms: Option<u32>) -> bool {
+    if Build::current() != Build::Steam {
         return false;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
@@ -357,16 +363,19 @@ pub unsafe fn play(no: i32, ms: u32) -> bool {
     if !queue_has(base, no, id) {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH1 banks: KH1's effect queue is full; se{no} plays on the mod's player"));
+            log(&format!("KH1 banks: KH1's effect queue is full; se{no} isn't played"));
         }
         return false;
     }
     if let Ok(mut p) = PLAYING.lock() {
-        p.push(Playing { no, id, left_ms: ms as i64 + 100 });
+        p.push(match ms {
+            Some(ms) => Playing { no, id, left_ms: ms as i64 + 100, timed: true, seen: false },
+            None => Playing { no, id, left_ms: 2000, timed: false, seen: false },
+        });
     }
     static N: AtomicU32 = AtomicU32::new(0);
     if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        note(format!("KH1 banks: se{no} queued in KH1's effect queue (id {id:#x}, {ms} ms)"));
+        note(format!("KH1 banks: se{no} queued in KH1's effect queue (id {id:#x}, {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms"))));
     }
     true
 }
@@ -389,8 +398,22 @@ unsafe fn tend(base: usize) {
             // (KH1 freed it: a room's queue reset, or its own stop.)
             return false;
         }
-        // (Its length played; KH1 says it's done, or it's well past it.)
-        if x.left_ms <= 0 && (playing(x.no, x.id) & 0xFF == 0 || x.left_ms < -2000) {
+        let now_playing = playing(x.no, x.id) & 0xFF != 0;
+        let done = if x.timed {
+            // (Its length played; KH1 says it's done, or it's well past it.)
+            x.left_ms <= 0 && (!now_playing || x.left_ms < -2000)
+        } else if now_playing {
+            // (Of unknown length: KH1 says it plays; done when it says it doesn't, 30 s at most.)
+            if !x.seen {
+                x.seen = true;
+                x.left_ms = 30_000;
+            }
+            x.left_ms <= 0
+        } else {
+            // (Played and done, or never started within its 2 s.)
+            x.seen || x.left_ms <= 0
+        };
+        if done {
             stop(x.no, x.id);
             return false;
         }
@@ -477,7 +500,7 @@ unsafe fn tend_voice(base: usize) {
     let Some(bytes) = v.as_ref() else { return };
     // A bank number no voice bank of KH1's has now (the channel keeps it as an i8).
     let Some(pick) = (104..=127).rev().find(|b| !used.contains(b)) else {
-        note("KH1 banks: no free voice bank number; KH2's battle quotes stay on the mod's player".into());
+        note("KH1 banks: no free voice bank number; KH2's battle quotes won't play".into());
         return;
     };
     // (Its fourth argument, r9, is the entry's name: KH1 keeps it in r15 and passes it as the
@@ -497,7 +520,7 @@ unsafe fn tend_voice(base: usize) {
         note(format!("KH1 banks: KH2's battle voice bank in KH1's voice list as bank {pick} ({} bytes)", bytes.len()));
     } else {
         VOICE_NO.store(-1, Ordering::Relaxed);
-        note(format!("KH1 banks: KH2's battle voice bank not taken as bank {pick}; quotes stay on the mod's player"));
+        note(format!("KH1 banks: KH2's battle voice bank not taken as bank {pick}; quotes won't play"));
     }
     VOICE_COUNT.store(rd(base + VOICE_COUNT_STEAM), Ordering::Relaxed);
 }
@@ -506,9 +529,9 @@ unsafe fn tend_voice(base: usize) {
 /// clip request (`kh1voice::clip`, `0x140290930`: it plays only over a line of lower standing,
 /// 0 none, 1 another speaker's, 2 his own, and KH1's voice channel plays it, with its mouth
 /// motion): Sora's member bank number is ours for that call only. False if it can't go that way
-/// (the caller plays it the old way); true also when KH1's priority rule drops it.
+/// (not heard); true also when KH1's priority rule drops it.
 pub unsafe fn voice(clip: u8, priority: i32) -> bool {
-    if Build::current() != Build::Steam || !super::settings::get().kh1_sound_engine || clip > 127 {
+    if Build::current() != Build::Steam || clip > 127 {
         return false;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;

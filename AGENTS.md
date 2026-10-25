@@ -1,3 +1,20 @@
+### 2026-10-25: Stage 565 (testing branch: KH2 sounds: only through KH1's engine (the old player removed))
+- **KH2's sounds go only through KH1's own sound engine; the mod's player and its decoded audio are gone.** The tester asked: "I want you to gut the old system and transfer everything ... get it fully working."
+- `kh2sound.rs` no longer decodes anything. The loader reads each KH2 bank, cuts the wanted sounds into one-sound banks (`scd_cut::cut`), hands them to `kh1bank` and frees the whole banks. That removes ~56 MB of decoded effects plus the decoded quotes.
+- The battle-quote clip list keeps the clips whose record has audio.
+- Removed:
+  - the `waveOut` player (`play` / `tick`, the PCM copies, `sys.rs`'s winmm imports);
+  - its volume read (`game_volume`, KH1's settings block);
+  - the ini's `kh2_sound_engine` and every "mod's player" fallback.
+- A sound KH1's engine can't take at that moment isn't heard, as KH1 drops its own. That covers a bank not yet back after a room load, the queue full, or a voice line KH1's priority rule keeps. The first 20 are logged ("KH2 sound not played: ...").
+- Our effect slot in KH1's queue (`0x140179AC0`) is still stopped with KH1's `0x140179D90` once its length has played and `0x1401789F0` says it's done.
+  - The length now comes from the audio header (`scd_cut::length_ms`: Microsoft ADPCM blocks x samples per block).
+  - A stream with no length in its header is stopped once KH1 has said it plays and then that it doesn't (2 s if it never starts, 30 s at most).
+- Off Steam nothing is registered, so no KH2 sound is heard there.
+- Checked (code).
+- Checked (files): every effect stream in se999 / se000 / se500 is codec 12 (ADPCM); the voice bank is 31 Vorbis streams. The lengths match the decoder's own block math.
+- `docs/kh1-sound-native.md` "Only KH1's engine". Test `adpcm_length_from_the_header`.
+
 ### 2026-10-25: Stage 564 (testing branch: Magic: Air Physics row)
 - **Air Physics: KH1 | KH2 for every air cast.** The tester (same thread, m19: "change
 air magic to air physics kh1 | kh2 so now you can cast kh2 fire with kh1 air physics like how we
