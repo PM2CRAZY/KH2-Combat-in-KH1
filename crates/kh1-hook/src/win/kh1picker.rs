@@ -39,11 +39,13 @@ const AIR_PROLOGUE: [u8; 11] = [0x40, 0x53, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 
 /// Impact (57), 28 Gravity Break (58), 29 Zantetsuken (59)).
 const ABILITY_BITS_STEAM: usize = 0x2D5EC10;
 /// Held back while KH1's picker runs at the combo style KH1 (the walk marks them): Ripple Drive,
-/// Stun Impact, Gravity Break on the ground (KH1's rows 7, 3, 4). Zantetsuken (29, row 5) and
-/// Blitz (3, row 6) stay KH1's own, and so does Hurricane Blast in the air (25, row 15: its KH1
-/// rule, a target no more than 100 above him, the tester's m22 answer 3 (b)): KH1's picker
-/// returns their row when its own test passes, and the walk takes that as their rule.
-pub const HELD_GROUND: u32 = 1 << 26 | 1 << 27 | 1 << 28;
+/// Stun Impact, Gravity Break, Zantetsuken on the ground (KH1's rows 7, 3, 4, 5; Zantetsuken's
+/// 30% roll is KH1's third, after the other two, so the walk rolls it the same way, always: the
+/// tester's m22 answer 3 (b)). Blitz (3, row 6) stays KH1's own, and so does Hurricane Blast in
+/// the air (25, row 15: its KH1 rule, a target no more than 100 above him, m22 answer 3 (b)):
+/// KH1's picker returns their row when its own test passes, and the walk takes that as their rule.
+/// (Holding Zantetsuken back also keeps KH1's row 8 marked, which Blitz's test needs.)
+pub const HELD_GROUND: u32 = 1 << 26 | 1 << 27 | 1 << 28 | 1 << 29;
 pub const HELD_AIR: u32 = 0;
 /// KH1's random number in 0..1 (`0x14031BA30`: three `rand` bytes x 2^-24; its picker's 30% rolls
 /// use it), `mov [rsp+8], rbx; push rdi; sub rsp, 0x20` (Checked (exe)).

@@ -73,7 +73,7 @@ rows are `KH1_ABILITIES`, and ours are `MENU`.
 | 56 | Ripple Drive | `Hook` (was Vicinity Break) |
 | 57 | Stun Impact | `Hook` (was Guard Break) |
 | 58 | Gravity Break | `Hook` (was Aerial Finish) |
-| 59 | Zantetsuken | `Kh1Own`. The mod still takes it out of Sora's list (the user's earlier ask: room). |
+| 59 | Zantetsuken | `Kh1Own`. In Sora's list again since combo row selection m22 ("bring back zantetsuken"); a copy the mod took out before is given back once, off. Played by KH1's own 30% roll in the finisher walk (`docs/kh1-anim-slots.md` §7.z.1). |
 | 60-64 | Tech Boost, Encounter Plus, Leaf Bracer, Evolution, EXP Zero | `Kh1Own` |
 | 65 | Combo Master | `Kh2`: Combo Master |
 
@@ -185,8 +185,9 @@ moved over once, the first time the game sees it with `abilities = kh1`:
 
 **What isn't undone.** The old build gave some KH1 abilities early (Vortex for Sabor, Sliding
 Dash at 30, ...), and took out KH1's own later copies of them. Those early KH1 copies stay: they
-are learned KH1 abilities now. KH1's own level-ups may later give a second copy. Zantetsuken is
-still taken out.
+are learned KH1 abilities now. KH1's own level-ups may later give a second copy. Zantetsuken is no
+longer taken out (m22); one the mod took out earlier (its line "Zantetsuken taken out" in
+`kh1-kh2-removed.txt`) is given back once, off, making room if the list is full.
 
 A save without the old ids (a new game, or a plain KH1 save) just gets the mark. Its KH1
 modifiers stay as they are, and their KH2 namesakes come off.

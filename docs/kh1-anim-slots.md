@@ -1394,7 +1394,7 @@ checks fail (`Character::row_in_range`, KH2's `in_range` against Sora's targets 
 | --- | --- | --- | --- |
 | row 26's checks | Stun Impact, Ripple Drive, Explosion | row 49's | Magnet Burst |
 | row 2's | KH1's own finisher | row 7's | KH1's own finisher |
-| row 27's (none) | Guard Break, Gravity Break, Blitz | row 29's (none) | Hurricane Blast, Aerial Finish |
+| row 27's (none) | Guard Break, Gravity Break, Zantetsuken, Blitz | row 29's (none) | Hurricane Blast, Aerial Finish |
 | row 42's (none) | Stun Impact, Ripple Drive, Explosion | row 50's | Magnet Burst |
 | | KH1's own finisher | | KH1's own finisher |
 
@@ -1410,8 +1410,17 @@ checks fail (`Character::row_in_range`, KH2's `in_range` against Sora's targets 
   playing, its own checks), run on KH1's rows as in §7.z.
 - KH1's own finisher: its picker's pick (row 8, or 16; row 8 when it returned Blitz; its dash or a
   swing when it took one).
-- Zantetsuken (bit 29, row 5) is left to KH1's picker (it is taken out of Sora's list, `menu`).
-- Without KH2's data: KH1's own order (Stun Impact, Gravity Break, Blitz, Ripple Drive, finisher).
+- Zantetsuken (bit 29, row 5; the tester, m22 answer 3: "bring back zantetsuken and make it b as
+  well", its KH1 rule): held back with the others, so KH1's row 8 stays marked for Blitz's test.
+  KH1's rule is the third 30% roll on the same random number, after Stun Impact and Gravity Break
+  (Checked (decomp): `0x1402A6EE0` takes 0.3 off for each equipped one in that order, and only
+  when all three fail marks row 8, the plain finisher). The walk rolls it the same way (one
+  number per press, 0.3 off per roll reached) whatever KH1 Ability Chance says: its own rule, not a
+  tweak. Its place: the single-target group, after Gravity Break, before Blitz (by how close each
+  keeps the foe, below). Its data (row 5, `0x4FD8`, Checked (files)): stat source 2 (none), element
+  8 (gravity: a share of the target's HP), power 250, reaction 3 (a flinch).
+- Without KH2's data: KH1's own order (Stun Impact, Gravity Break, Zantetsuken, Blitz, Ripple Drive,
+  finisher).
 - Logged: "KH1's ground finisher walk ..." / "KH1's aerial finisher walk ...", with each failed
   roll and Blitz test.
 
@@ -1428,7 +1437,7 @@ finisher 16 and plain swing 18 are marked then too. `kh1picker` no longer holds 
 (`HELD_AIR` = 0), so KH1's picker runs that test itself and returns 15 when it passes; the walk
 takes Hurricane Blast in Aerial Finish's place only then (`Kh1Rule::Kh1Test`, as Blitz), KH1's
 plain finisher being 16 (18 when 16's request is playing). Nothing else of the walk changes. Assumptions: that KH1's own finisher stands in KH2's 154 / 184 place (the tester's
-m20 1 (a)); Zantetsuken's place. Not checked: in game. Note: with a lock, KH2's "any target" rows
+m20 1 (a)). Not checked: in game. Note: with a lock, KH2's "any target" rows
 (26, 2, 49, 7) see only the locked foe (ours, `ability_row`'s rule since t557), so the group
 places don't pass while locked on.
 

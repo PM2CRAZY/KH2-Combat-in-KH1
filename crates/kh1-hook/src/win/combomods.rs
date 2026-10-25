@@ -611,6 +611,9 @@ enum Kh1Rule {
     Always,
     /// KH1's 30% roll with KH1 Ability Chance on (Stun Impact, Gravity Break).
     Chance,
+    /// KH1's 30% roll always, its own rule (Zantetsuken: the tester, m22 answer 3, "bring back
+    /// zantetsuken and make it b as well").
+    Roll,
     /// KH1's own test, run inside KH1's picker, which returned this row (Blitz, row 6: nothing
     /// beside him; Hurricane Blast, row 15: a target no more than 100 above).
     Kh1Test,
@@ -626,6 +629,7 @@ struct Group {
 const STUN_IMPACT: Step = Step::Kh1(3, 1 << 27, Kh1Rule::Chance, "Stun Impact");
 const GRAVITY_BREAK: Step = Step::Kh1(4, 1 << 28, Kh1Rule::Chance, "Gravity Break");
 const BLITZ: Step = Step::Kh1(BLITZ_ROW, 1 << 3, Kh1Rule::Kh1Test, "Blitz");
+const ZANTETSUKEN: Step = Step::Kh1(5, 1 << 29, Kh1Rule::Roll, "Zantetsuken");
 const RIPPLE_DRIVE: Step = Step::Kh1(7, 1 << 26, Kh1Rule::Always, "Ripple Drive");
 const HURRICANE_BLAST: Step = Step::Kh1(HURRICANE_ROW, 1 << 25, Kh1Rule::Kh1Test, "Hurricane Blast");
 
@@ -641,7 +645,7 @@ const HURRICANE_BLAST: Step = Step::Kh1(HURRICANE_ROW, 1 << 25, Kh1Rule::Kh1Test
 const GROUND_FINISHERS: [Group; 5] = [
     Group { gate: Some(26), steps: &[STUN_IMPACT, RIPPLE_DRIVE, Step::Kh2(26)] },
     Group { gate: Some(2), steps: &[Step::Plain] },
-    Group { gate: Some(27), steps: &[Step::Kh2(27), GRAVITY_BREAK, BLITZ] },
+    Group { gate: Some(27), steps: &[Step::Kh2(27), GRAVITY_BREAK, ZANTETSUKEN, BLITZ] },
     Group { gate: Some(42), steps: &[STUN_IMPACT, RIPPLE_DRIVE, Step::Kh2(42)] },
     Group { gate: None, steps: &[Step::Plain] },
 ];
@@ -659,8 +663,8 @@ const AIR_FINISHERS: [Group; 5] = [
     Group { gate: None, steps: &[Step::Plain] },
 ];
 /// Without KH2's data (no checks to run): KH1's own order (its picker's: Stun Impact, Gravity
-/// Break, Blitz, Ripple Drive, its finisher; Hurricane Blast before its air finisher).
-const GROUND_KH1_ONLY: [Group; 1] = [Group { gate: None, steps: &[STUN_IMPACT, GRAVITY_BREAK, BLITZ, RIPPLE_DRIVE, Step::Plain] }];
+/// Break, Zantetsuken, Blitz, Ripple Drive, its finisher; Hurricane Blast before its air finisher).
+const GROUND_KH1_ONLY: [Group; 1] = [Group { gate: None, steps: &[STUN_IMPACT, GRAVITY_BREAK, ZANTETSUKEN, BLITZ, RIPPLE_DRIVE, Step::Plain] }];
 const AIR_KH1_ONLY: [Group; 1] = [Group { gate: None, steps: &[HURRICANE_BLAST, Step::Plain] }];
 
 /// What the walk took.
@@ -728,7 +732,7 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
                 ok
             }
             Kh1Rule::Chance if !chance => true,
-            Kh1Rule::Chance => {
+            Kh1Rule::Chance | Kh1Rule::Roll => {
                 let r = *roll.get_or_insert_with(|| super::kh1picker::random().unwrap_or(1.0));
                 let won = r - used < 0.3;
                 used += 0.3;

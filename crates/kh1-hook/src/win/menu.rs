@@ -289,46 +289,12 @@ unsafe fn stats_inner(member: i32, out: usize) {
     }
 }
 
-/// KH1's event command that adds a reward's line to a message window (`0x1401B6990(event)`:
-/// the reward id at the event stack's top `+0x198 + sp * 4`, its record `0x14028D810(id)`, a
-/// u16: low 4 bits the kind, 1 an ability, its id the high byte, the party member bits 4..7;
-/// it pops 2 and returns 2). Abilities are added by the command `0x1401AF120` from the same
-/// record (`0x140282CA0(id, member)`).
-const REWARD_LINE_RVA: Rva = Rva(0x1B6990);
-const REWARD_LINE_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const REWARD_RECORD_RVA: Rva = Rva(0x28D810);
-static ORIG_REWARD_LINE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-/// No "learned" line for Zantetsuken (it's taken out again at once, the user): the command is
-/// popped as KH1 does when it shows nothing. (Before the split the mod gave some KH1 abilities
-/// early and hid KH1's own later line for them; KH1's abilities come at KH1's own points now.)
-unsafe extern "system" fn reward_line(ev: usize) -> u64 {
-    let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_REWARD_LINE.load(std::sync::atomic::Ordering::Acquire));
-    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
-    if super::settings::get().abilities == growth::Mode::Kh1 && ev > 0x10000 {
-        let sp = rd::<i32>(ev + 0x194);
-        if (0..64).contains(&sp) {
-            let id = rd::<u32>(ev + 0x198 + sp as usize * 4);
-            let rec: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + REWARD_RECORD_RVA);
-            let r = rec(id);
-            if r > 0x10000 {
-                let v = rd::<u16>(r);
-                let (kind, member, ability) = (v & 0xF, (v >> 4) & 0xF, (v >> 8) as u8);
-                if kind == 1 && member == 0 && ability == growth::kh1::ZANTETSUKEN {
-                    std::ptr::write_unaligned((ev + 0x194) as *mut i32, sp - 2);
-                    log(&format!("no \"learned\" line for {}: the mod takes it out", growth::name(ability)));
-                    return 2;
-                }
-            }
-        }
-    }
-    f(ev)
-}
+// (KH1's reward-line hook, `0x1401B6990`, which hid Zantetsuken's "learned" line, is gone: the
+// tester, combo row selection m22 answer 3, "bring back zantetsuken".)
 
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     super::hook::install(base + TABLE_LOAD_RVA, &TABLE_LOAD_PROLOGUE, table_load as *const () as usize, &ORIG_LOAD, "ability table load");
-    super::hook::install(base + REWARD_LINE_RVA, &REWARD_LINE_PROLOGUE, reward_line as *const () as usize, &ORIG_REWARD_LINE, "reward message line");
     super::hook::install(base + STATS_RVA, &STATS_PROLOGUE, stats as *const () as usize, &ORIG_STATS, "party stats");
 }
 
@@ -436,9 +402,15 @@ fn given_back() -> Vec<u8> {
     let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
     let mut ids = Vec::new();
     for line in text.lines() {
+        // (Zantetsuken, which the mod took out of Sora's list before m22: "level N: Zantetsuken
+        // taken out (the mod has none)".)
+        if line.contains("Zantetsuken taken out") && !ids.contains(&growth::kh1::ZANTETSUKEN) {
+            ids.push(growth::kh1::ZANTETSUKEN);
+            continue;
+        }
         let Some(i) = line.find("(id ") else { continue };
         let Some(id) = line[i + 4..].split(')').next().and_then(|n| n.trim().parse::<u8>().ok()) else { continue };
-        if !growth::MAKE_ROOM.contains(&id) && id != growth::kh1::ZANTETSUKEN && !ids.contains(&id) {
+        if !growth::MAKE_ROOM.contains(&id) && !ids.contains(&id) {
             ids.push(id);
         }
     }
@@ -586,27 +558,10 @@ impl Growth {
                     now.shared = kept;
                 }
                 // (Superglide is KH1's own again since the split: KH2's Glide MAX while it is on.)
-                // No Zantetsuken (the user): it goes from Sora's list wherever KH1 gives it, a slot
-                // for KH2's abilities (a finished save's list was full).
-                {
-                    let list = save + 0x44;
-                    let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
-                    // (Unless the debug menu gave it, `debugmenu::ability_forced`.)
-                    if growth::has(&bytes, growth::kh1::ZANTETSUKEN) && super::debugmenu::ability_forced(growth::kh1::ZANTETSUKEN) != Some(true) {
-                        let end = bytes.iter().position(|b| *b == 0).unwrap_or(48);
-                        let mut kept: Vec<u8> = bytes[..end].iter().copied().filter(|b| b & 0x7F != growth::kh1::ZANTETSUKEN).collect();
-                        let n = end - kept.len();
-                        kept.resize(48, 0);
-                        for (k, b) in kept.iter().enumerate() {
-                            std::ptr::write((list + k) as *mut u8, *b);
-                        }
-                        log(&format!("Zantetsuken taken out of Sora's list ({n} cop{})", if n == 1 { "y" } else { "ies" }));
-                        remember(&format!("level {}: Zantetsuken taken out (the mod has none)", now.level));
-                        if let Some(again) = Self::kh1(base) {
-                            now = again;
-                        }
-                    }
-                }
+                // (Zantetsuken stays in Sora's list now, the tester, combo row selection m22
+                // answer 3: "bring back zantetsuken". KH1's picker's finisher walk plays it by its
+                // KH1 rule, `combomods::finisher_walk`. A copy the mod took out before is given
+                // back once, off, `given_back`.)
                 // The split (testing): a save from before it, where KH1's modifiers stood for
                 // KH2's (Hurricane Blast was Explosion), is moved over once (`growth::migrate`),
                 // before KH1's namesakes bring KH2's abilities (off) below. Marked in the save's

@@ -30,7 +30,8 @@ pub mod kh1 {
     pub const MERMAID_KICK: u8 = 2;
     pub const GLIDE: u8 = 3;
     pub const SUPERGLIDE: u8 = 4;
-    /// Zantetsuken: taken out of Sora's list (the user: room for KH2's abilities).
+    /// Zantetsuken (taken out of Sora's list until the tester's combo row selection m22: "bring
+    /// back zantetsuken"; one taken out then is given back, `menu::given_back`).
     pub const ZANTETSUKEN: u8 = 59;
     pub const COMBO_PLUS: u8 = 6;
     pub const AIR_COMBO_PLUS: u8 = 7;

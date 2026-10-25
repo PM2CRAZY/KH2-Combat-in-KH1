@@ -69,7 +69,7 @@
 //!   Mermaid Kick) and how many are on: right adds a copy (off in his list, as KH1's own learning
 //!   does), left takes one (an off copy first), Cross adds one or takes them all. The mod's own
 //!   upkeep (`menu::Growth::update`: KH2's abilities given by level, boss or namesake, Aerial Dodge
-//!   held back until Genie Jafar, no Zantetsuken, ours taken out at `abilities = test / all`)
+//!   held back until Genie Jafar, ours taken out at `abilities = test / all`)
 //!   leaves alone what was added or taken here this session (`ability_forced`).
 
 use super::addr::Rva;
