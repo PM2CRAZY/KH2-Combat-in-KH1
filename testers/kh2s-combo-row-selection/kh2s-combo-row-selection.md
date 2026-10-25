@@ -25,6 +25,7 @@
 - [19. Assistant: t557 and t558. You're right, I had it backwards: at the KH1 ](#^m19)
 - [20. Assistant: You're right that there's still a seam. Here's what the code](#^m20)
 - [21. Assistant: Got your picks. Here's how I read them:](#^m21)
+- [22. Assistant: t580 and t581.](#^m22)
 
 ---
 
@@ -513,9 +514,65 @@ one thing why can't we include kh2's combat configs in kh1's picker? shouldn't t
 > Say go ahead and I'll start with version 1, the one walk in KH1's picker with the KH1 rule set.
 
 ^m21
+
+
 do 1. if its the best way to implement more features into kh1's already existing engine, you need to keep blitz's rule and lets make a toggle in the config for the 30 percent chance to exist, if it does then if the 30 percent chance roll fails then it picks a similar kh2 move. these will be in the gameplay config in a sub menu called Tweaks 
 
 1. gravity break and blitz last, if its blitz and gravity equipped then blitz last, let me know how kh2 prioritizes moves, the reason I picked the ones I did is because:
 		-one does aoe damage (explosion group), the other focuses on one enemy (guard break, etc.)
 	let me know if my priority list aligns with kh2, check your notes and if your unsure check the c steam decomp
 2. (a)
+
+
+> [!tip] Assistant
+> **t580 and t581.**
+>
+> **How KH2 picks finishers, and your list.** KH2 has no priority value and no chance anywhere: it walks Sora's row table top to bottom and takes the first row that passes (`0x140402C50` in the Steam decomp; the finisher test is `0x1403D7850`). Sora's table, from your KH2 files:
+> - **Ground:**
+>   1. Explosion if another enemy is within 300, off to the side of the one you're hitting (a group).
+>   2. The normal finisher 154 if another enemy is within 180, off to the side.
+>   3. Guard Break, always.
+>   4. Explosion again, always.
+>   5. The normal finisher 155.
+> - **Air:**
+>   1. Magnet Burst in a group.
+>   2. 184 in a group.
+>   3. Aerial Finish, always.
+>   4. Magnet Burst again when your one target is 300 to 650 away.
+>   5. 183.
+>
+> So your reasoning matches KH2: the area move comes first only when there's a crowd, the single-target move comes first against one enemy, and the area move only comes back against one enemy if you don't have the single-target one. Putting Stun Impact and Ripple Drive with Explosion, and Gravity Break and Blitz with Guard Break, fits that.
+>
+> - **t580, one walk inside KH1's picker (Base / Aerial Base Combo KH1).**
+>   - KH1's picker still decides everything it decides today: the count, when the finisher comes, its dash, and Blitz's own "nothing next to you" test, which runs inside KH1's own code. I only hold back its other ability finishers while it runs.
+>   - At the finisher, the walk then goes through KH2's order with your mapping:
+>     - **Group (a second enemy off to the side):** Stun Impact → Ripple Drive → Explosion.
+>     - **Group (second enemy within 180, 154's place):** KH1's normal finisher.
+>     - **Always:** Guard Break → Gravity Break → Blitz.
+>     - **Always:** Stun Impact → Ripple Drive → Explosion.
+>     - **Last:** KH1's normal finisher.
+>     - **Air:** Magnet Burst (group) → KH1's air finisher (group, 184's place) → Hurricane Blast → Aerial Finish → Magnet Burst (far) → KH1's air finisher.
+>   - Blitz keeps its KH1 rule: it only comes when KH1's own test passes.
+>   - **The 30% roll:** with KH1 Ability Chance on, Stun Impact and Gravity Break roll exactly as in KH1, one random number per press, 30% each. If the roll fails, the walk carries on to the next move that fits (Explosion, Guard Break...). With it off they come whenever they fit, like KH2's rows.
+>   - When KH1 dashes at a far enemy at the finisher, KH1's own ability finishers wait, as in vanilla. KH2's can still take the dash's place, as before.
+> - **t581, Tweaks:** Config > KH1 in KH2 > Tweaks > KH1 Ability Chance (Off / On, default On). There's no list called "gameplay config", so I took KH1 in KH2 to be the one you meant (question 1).
+> - **Your 2 (a):** noted for the Finishing Plus step. The second normal finisher will be picked by KH2's own check: 154 with an enemy in its window, else 155; in the air 184 or 183.
+>
+> **Check:** the KH1 Steam decomp for both pickers, the ability bits and the roll; the exe for the bytes of KH1's random function; the KH2 decomp for the walk; your KH2 files for the table order. **Not checked:** nothing tested in game. Assumptions: KH1's own finisher stands in 154 / 184's place; Zantetsuken stays KH1's (the mod takes it out of Sora's list anyway).
+>
+> Please try, with Base / Aerial Base Combo on KH1:
+> - Stun Impact + Ripple Drive + Explosion: one enemy, then a group.
+> - Guard Break + Gravity Break + Blitz: one enemy, then with a second enemy close beside you.
+> - KH1 Ability Chance on, then off.
+> - In the air: Hurricane Blast + Aerial Finish, then Magnet Burst in a group.
+>
+> Log lines start with "KH1's ground finisher walk", "KH1's aerial finisher walk" and "Config menu: KH1 Ability Chance".
+>
+> Questions:
+> 1. Tweaks is a fifth button on the KH1 in KH2 list. (a) keep it there, (b) move it inside Combat, or (c) somewhere else?
+> 2. KH1 Ability Chance by default: (a) On, KH1's own odds (what I did), or (b) Off?
+> 3. Hurricane Blast now uses Aerial Finish's checks, so it can come with no target or one high above you. KH1 needs a target no more than 100 above. (a) keep it like this, or (b) keep its KH1 rule too, like Blitz?
+> 4. Something I found: while you're locked on (R1, or KH1's small cursor), our "group" check only sees the locked enemy, so the group places never pass. KH2 counts every enemy there. (a) make it KH2's, as its own version, or (b) leave it?
+
+^m22
+
