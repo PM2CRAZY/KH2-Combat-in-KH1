@@ -68,7 +68,7 @@ pub enum Kind {
 
 impl Kind {
     /// KH1's own row of this kind (`combomods`'s `GROUND_COMBO` / `AIR_COMBO`).
-    fn template_row(self) -> usize {
+    pub fn template_row(self) -> usize {
         match self {
             Kind::Swing => 13,
             Kind::Finisher => 8,
@@ -538,7 +538,7 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
 /// guards but is never stopped) gets KH1's priority past which it isn't stopped (`GUARD_THROUGH`,
 /// 0x62: KH1's clash half `0x1402B4BC0` stops only a side under it); the rest keep the template's.
 /// KH2's guard kinds (2, 3) are no attack rows. Returns (type, priority).
-fn kh2_clash(a: Option<&kh2_formats::battle::Atkp>, t: u32, p: i32) -> (u32, i32) {
+pub(super) fn kh2_clash(a: Option<&kh2_formats::battle::Atkp>, t: u32, p: i32) -> (u32, i32) {
     match a {
         Some(a) if a.kind == 1 => (PIERCE_TYPE, p),
         Some(a) if a.kind == 0 && a.refact_self == 2 => (t, p.max(GUARD_THROUGH)),
@@ -574,6 +574,20 @@ unsafe fn rules() {
     log(&format!("KH1's attack rows: {}'s clash rules: {}", if want == 2 { "KH2" } else { "KH1" }, said.join(", ")));
 }
 
+/// Sora's own KH1 row `row` (KH1's table, not ours): its attack data's address and its effect and
+/// sound bytes (`+0xC..+0xE`, which KH1's row start puts in the attack object's `+0xA8`), for the
+/// KH1 attack objects of KH2's hits on his body (`bodyhits`).
+pub unsafe fn kh1_row(row: usize) -> Option<(usize, [u8; 3])> {
+    let kh1 = TABLE.try_lock().ok()?.as_ref().map(|t| t.kh1)?;
+    let base = super::takeover::game_base();
+    if kh1 < 0x10000 || base == 0 || row >= KH1_ROWS {
+        return None;
+    }
+    let at = kh1 + row * ROW;
+    let data = (base + BLOCK_RVA).wrapping_add(rd::<i32>(at + 4) as isize as usize);
+    (data > 0x10000).then(|| (data, rd::<[u8; 3]>(at + 0xC)))
+}
+
 /// Our rows are on Sora's character now.
 pub fn installed() -> bool {
     TABLE.try_lock().ok().and_then(|g| g.as_ref().map(|t| t.ours != t.kh1)).unwrap_or(false)
@@ -585,6 +599,10 @@ pub fn installed() -> bool {
 pub unsafe fn kh2_atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     if attack < 0x10000 {
         return None;
+    }
+    // (One of KH2's hit windows on his body, as a KH1 attack object of its own: that window's.)
+    if let Some(a) = super::bodyhits::atkp(attack) {
+        return Some(a);
     }
     let data = pose::ptr(rd::<u32>(attack + 0x5C));
     let n = DATA_AT.iter().position(|d| data != 0 && d.load(Ordering::Relaxed) == data)?;

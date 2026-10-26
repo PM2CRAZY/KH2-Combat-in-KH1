@@ -3,6 +3,7 @@
 //! with that in the shared KH folder, so it is not used).
 
 mod addr;
+mod bodyhits;
 mod camera;
 mod combat;
 mod combomods;
@@ -224,6 +225,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         knockback::install();
         kh2damage::install();
         recoil::install();
+        bodyhits::install();
         hurt::install();
         menu::install();
         camera::install();

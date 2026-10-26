@@ -658,9 +658,9 @@ fn blade_swing(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle
 
 /// A KH2 ability row's motion that hits with shapes on his own body (`Hitbox` windows with weapon
 /// 0: Vicinity Break, Explosion, Magnet Burst), which KH1's one sphere on the Keyblade can't do.
-/// KH1's row runs it as it runs the Keyblade swings, and KH2's own shapes and hit numbers for those
-/// windows are landed through KH1's damage each frame (`takeover::kh2_hits`, `combat::Strikes::
-/// strike_as`); its invulnerability (range 27) is KH1's hit pass's (`invulnerable`, `hurt`), its
+/// KH1's row runs it as it runs the Keyblade swings, and each of those windows is a KH1 attack
+/// object of ours with KH2's shapes, on a KH1 attack group of its own, that KH1's collision pass
+/// collides (`bodyhits`; KH2's own sweep, `takeover::kh2_hits`, where that isn't in); its invulnerability (range 27) is KH1's hit pass's (`invulnerable`, `hurt`), its
 /// guards on his body that let the hit go are `body_guard`'s, its no-gravity ranges `no_gravity`'s.
 /// Not with a guard of another kind, a guard on the Keyblade, or an air / ground range. Sora's
 /// (`P_EX100.mset`, `00battle.bin`, Checked (files)): Vicinity Break 170 (1869 on group 21,
@@ -905,7 +905,8 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): 
 /// motions: its row's one sphere on the blade), its combo window, its trail (else its Keyblade hit
 /// windows from 4 frames before); the template's sounds, foot effects, face changes and the point
 /// its action may be left, rescaled. Hit windows on his body (`body_strike`) are not KH1's sphere's:
-/// KH2's own shapes land them (`takeover::kh2_hits`).
+/// each is KH1's hit window of its own attack group (`body_windows`: 1, 2, 3 in the clip's order),
+/// which KH1 attack objects of ours with KH2's shapes are tied to (`bodyhits`).
 ///
 /// A spell's cast (`cast`, `CASTS`): no "may be left" point of the template's (Blizzard's 55 has
 /// one at 68 of 86, Fire's second part 57 at 46 of 60, Checked (files)): KH2's cast motions hold
@@ -937,7 +938,48 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
             out.push(EventTrack::level(kind, 0, &w));
         }
     }
+    // KH2's hit windows on his body, each on KH1's hit window of its own attack group (`+0x1CC` bit
+    // `0x10000 << group`, which a motion-tied attack object of that group needs, `0x1402B47A0`).
+    for b in body_windows(clip) {
+        let end = b.end.map_or(len, |e| e as f32);
+        out.push(EventTrack::level(ks::HIT, b.channel as u16, &[(b.start as f32, end)]));
+    }
     out
+}
+
+/// One of KH2's hit windows on Sora's own body (a `Hitbox` window with weapon 0) and the KH1 attack
+/// group it is played on (`kh1_tracks`, `bodyhits`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BodyWindow {
+    /// Its index in the clip's windows.
+    pub index: usize,
+    pub attack: u16,
+    /// KH2's collision group of his body shapes it switches on.
+    pub group: u8,
+    pub start: u32,
+    pub end: Option<u32>,
+    /// KH1's attack group (1..=3; KH1's 0 is the Keyblade's).
+    pub channel: u8,
+}
+
+/// KH1 has four attack groups a motion's events switch (`+0x1CC` bits 16..19); 0 is the Keyblade's.
+pub const BODY_CHANNELS: usize = 3;
+
+/// The clip's hit windows on his body, in the clip's order, each with its KH1 attack group (1, 2,
+/// 3; a fourth and later are left out: none of Sora's moves has more than three, Magnet Burst's
+/// 1900 / 1901 / 1903, Checked (files)).
+pub fn body_windows(clip: &character_core::Clip) -> Vec<BodyWindow> {
+    clip.windows
+        .iter()
+        .enumerate()
+        .filter_map(|(index, w)| match w.kind {
+            WindowKind::Hitbox { attack, group, weapon: 0, .. } => Some(BodyWindow { index, attack, group, start: w.start, end: w.end, channel: 0 }),
+            _ => None,
+        })
+        .take(BODY_CHANNELS)
+        .enumerate()
+        .map(|(i, b)| BodyWindow { channel: i as u8 + 1, ..b })
+        .collect()
 }
 
 /// Where KH1 may leave one of our motions early (KH1's "may be left", type 0, `+0x1CC` bit 20: its
@@ -1470,7 +1512,9 @@ pub unsafe fn frame(actor: usize) {
     super::combomods::kh1_finisher_window(actor);
     // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
     super::combomods::counter_window(actor);
-    // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`).
+    // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`): KH1 attack objects of
+    // ours (`bodyhits`), else KH2's own sweep (`kh2_hits`, which keeps the guards and the pull).
+    super::bodyhits::frame(actor);
     super::takeover::kh2_hits(actor);
 }
 

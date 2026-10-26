@@ -1874,6 +1874,10 @@ pub unsafe fn native_spells(actor: usize) {
 /// KH1's swing connecting (the combat info's `+0x50`, which KH1's Attack step reads for the next
 /// press, `combomods`). Nothing when no such window is open (a few reads a frame while our slot
 /// plays). The Keyblade's windows stay KH1's sphere's (`kh2slots::kh1_tracks`).
+///
+/// (t-native body hits) On Steam the body windows are KH1 attack objects of ours that KH1's own
+/// collision pass collides (`bodyhits`); this sweep then takes no body window and only keeps the
+/// guard windows and the Magnet pull of enemies KH1's pass caught. Elsewhere it runs as before.
 pub unsafe fn kh2_hits(actor: usize) {
     let Some(kh2) = pose::kh2() else { return };
     let Ok(mut g) = NATIVE_HITS.try_lock() else { return };
@@ -1908,6 +1912,10 @@ pub unsafe fn kh2_hits(actor: usize) {
             .collect(),
         _ => Vec::new(),
     };
+    // (KH2's hit windows on his body are KH1 attack objects of ours when `bodyhits` is in: KH1's
+    // own collision pass hits with them, not this sweep.)
+    let native_body = super::bodyhits::native();
+    let catches = if native_body { super::bodyhits::catches() } else { Vec::new() };
     let (open, motion, t) = match (playing, clip) {
         (Some((m, t)), Some((_, c))) => {
             if m != n.motion || t < n.last_t {
@@ -1922,7 +1930,7 @@ pub unsafe fn kh2_hits(actor: usize) {
                 .enumerate()
                 .filter(|(_, w)| w.contains(f))
                 .filter_map(|(i, w)| match w.kind {
-                    character_core::WindowKind::Hitbox { attack, group, weapon: 0, .. } => Some((i, attack, group)),
+                    character_core::WindowKind::Hitbox { attack, group, weapon: 0, .. } if !native_body => Some((i, attack, group)),
                     _ => None,
                 })
                 .collect();
@@ -1933,7 +1941,7 @@ pub unsafe fn kh2_hits(actor: usize) {
             (Vec::new(), 0, 0.0)
         }
     };
-    if open.is_empty() && guards.is_empty() && !n.live {
+    if open.is_empty() && guards.is_empty() && !n.live && catches.is_empty() {
         return;
     }
     let Ok(mut dg) = DRIVER.try_lock() else { return };
@@ -1945,6 +1953,9 @@ pub unsafe fn kh2_hits(actor: usize) {
         return;
     }
     let _ = d.strikes.look(actor);
+    if !catches.is_empty() {
+        d.strikes.native_pull(&catches);
+    }
     // (Our swing ids: the play and the window, marked apart from KH2's controller's own.)
     let hitboxes = open.iter().map(|&(i, attack, group)| character_core::ActiveHitbox { swing: (1 << 63) | (n.play << 8) | i as u64, attack, group, weapon: 0 }).collect();
     let out = Output {

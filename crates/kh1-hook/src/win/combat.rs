@@ -1557,26 +1557,26 @@ impl Strikes {
         let alive: HashMap<usize, f32> = self.bodies.iter().filter(|b| !b.fixed).map(|b| (b.actor, b.tall)).collect();
         self.pulled.retain(|a, (swing, _, _)| centres.contains_key(swing) && alive.contains_key(a));
         for (&actor, &(swing, radius, swirl)) in &self.pulled {
-            let c = centres[&swing];
-            let p = rd::<[f32; 3]>(actor + 0x10);
-            // KH2's frame (y up), from the body's middle.
-            let body = [p[0], -p[1] + alive[&actor] * 0.5, p[2]];
-            let d = [c[0] - body[0], c[1] - body[1], c[2] - body[2]];
-            let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
-            if len < 1e-3 {
-                continue;
-            }
-            let n = [d[0] / len, d[1] / len, d[2] / len];
-            let radial = ((len - radius) * 0.1).clamp(-20.0, 20.0);
-            let tl = (n[2] * n[2] + n[0] * n[0]).sqrt();
-            let t = if tl > 1e-4 { [n[2] / tl, -n[0] / tl] } else { [0.0, 0.0] };
-            let m = [n[0] * radial + t[0] * swirl, n[1] * radial, n[2] * radial + t[1] * swirl];
-            let push = rd::<[f32; 3]>(actor + 0x120);
-            wr(actor + 0x120, [push[0] + m[0], push[1] - m[1], push[2] + m[2]]);
+            magnet_push(actor, alive[&actor], centres[&swing], radius, swirl);
         }
         static SEEN: AtomicU32 = AtomicU32::new(0);
         if SEEN.fetch_add(1, Ordering::Relaxed) % 60 == 0 {
             note(format!("Magnet: {} enemies held around {} centre(s)", self.pulled.len(), centres.len()));
+        }
+    }
+
+    /// The Magnet pull for enemies KH1's own collision pass caught with one of KH2's hit windows on
+    /// his body (`bodyhits`: a KH1 attack object of ours whose ATKP is a Magnet, reaction 5): each
+    /// `(actor, centre (KH2 y-up), orbit radius, swirl)`, while that window is live. As `pull`: not
+    /// the big and immovable (`Body::fixed`), from the bodies `look` found this frame.
+    pub unsafe fn native_pull(&mut self, catches: &[(usize, [f32; 3], f32, f32)]) {
+        for &(actor, c, radius, swirl) in catches {
+            let Some(b) = self.bodies.iter().find(|b| b.actor == actor && !b.fixed) else { continue };
+            magnet_push(actor, b.tall, c, radius, swirl);
+        }
+        static SEEN: AtomicU32 = AtomicU32::new(0);
+        if !catches.is_empty() && SEEN.fetch_add(1, Ordering::Relaxed) % 60 == 0 {
+            note(format!("Magnet (KH1's pass): {} enemies held", catches.len()));
         }
     }
 
@@ -2112,6 +2112,27 @@ impl Strikes {
         self.records.retain(|a, _| alive.contains(a));
         landed
     }
+}
+
+/// One frame of KH2's Magnet suction on `actor` (its hit parts' top `tall` above its root) toward
+/// `c` (KH2 y-up): toward the orbit radius at up to 20 a frame plus the swirl, through KH1's push
+/// `+0x120` (its physics step adds it to the move and clears it).
+unsafe fn magnet_push(actor: usize, tall: f32, c: [f32; 3], radius: f32, swirl: f32) {
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    // KH2's frame (y up), from the body's middle.
+    let body = [p[0], -p[1] + tall * 0.5, p[2]];
+    let d = [c[0] - body[0], c[1] - body[1], c[2] - body[2]];
+    let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    if len < 1e-3 {
+        return;
+    }
+    let n = [d[0] / len, d[1] / len, d[2] / len];
+    let radial = ((len - radius) * 0.1).clamp(-20.0, 20.0);
+    let tl = (n[2] * n[2] + n[0] * n[0]).sqrt();
+    let t = if tl > 1e-4 { [n[2] / tl, -n[0] / tl] } else { [0.0, 0.0] };
+    let m = [n[0] * radial + t[0] * swirl, n[1] * radial, n[2] * radial + t[1] * swirl];
+    let push = rd::<[f32; 3]>(actor + 0x120);
+    wr(actor + 0x120, [push[0] + m[0], push[1] - m[1], push[2] + m[2]]);
 }
 
 /// A spell's attack this frame (`reflect`): its hit-record key and group, ATKP id and sub, and

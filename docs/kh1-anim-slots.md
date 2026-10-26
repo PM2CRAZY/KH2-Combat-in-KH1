@@ -1710,3 +1710,79 @@ Differences from before, for the tester to look at:
 Not checked: in game; that KH1's walk and run states loop our slots over their whole length
 (Assumption: no custom loop range, `+0x288..+0x28C`, is set for them); which of KH1's states
 picks the third variant (4 / 7).
+
+### 7.z.8 KH2's hits on his body in KH1's own collision pass (what-is-still-missing m5 "(b)")
+
+Before, `takeover::kh2_hits` posed KH2's rig where KH1 has him, swept KH2's body shapes against
+KH1's enemies itself and called KH1's contact for each hit (our own sweep beside KH1's pass). Now
+each hit window on his body is a KH1 attack object of Sora's that KH1's collision pass collides
+itself (`bodyhits.rs`). Steam only; elsewhere the old sweep stays.
+
+KH1's collision pass (Steam, **Checked (decomp)**):
+- Task `0x1402B4460` (registered at priority 0x13881 by `0x1402B3700`): an entry list of 0x4000
+  bytes (`0x14028DA20`), then `0x1402B47A0` over the attack pool `0x142DB4710` (64 × 0xC0, in use
+  `+0` bit `0x800`), then every hittable actor's body parts (`0x140292070`; parts at
+  `[[actor +0x134] +0x18]`, count `[..] +6`, off bits `+0x3A8`; shape by `0x1402B5E50`), each
+  tested with `0x1402B3BE0`. At the end `+0x10` / `+0x40` are copied to `+0x70` / `+0x80` (last
+  frame's place, flag `0x10000`) for every object updated (`0x8000`), and every actor's hit-once
+  bits `+0x3E0` are masked by the bits in use (`0x142DB7710`).
+- `0x1402B47A0`: an object of activity 2 (`(flags >> 2) & 3`, set for a bone-tied object by the
+  maker) is live only while its owner's `+0x164` equals its `+0x58` (`0xFFF`: taken from the owner
+  on its first pass, which then skips), the owner's `+0x160` bit `0x100` is clear and the owner's
+  `+0x1CC` has bit `0x10000 << ((flags >> 4) & 3)` (its attack group, from data `+0x34` low 2 bits;
+  KH1's motion events 1.n set those bits, §1.4); another request marks it dead (`0x200000`) and
+  the next pass frees it (`0x1402B3560`). A live one runs its re-arm (`0x1402B3380`: `+0x50` > 0,
+  its clock `+0xA4` by the frame scale; at the interval its bit is taken off every actor) and
+  `0x1402B3800 (object, list, count) -> count`.
+- `0x1402B3800`: a bone-tied object's two points on its bone (`0x14029EB20 (owner, bone, t, out)`:
+  `t` between the bone's parent and the bone, `0x1401D6320`; bone ids `0x4000 | n` are raw bone
+  indices, `0x8003` the first body part's centre) go to `+0x10` and `+0x40`, and `0x1402B3D50`
+  puts spheres of the radius `+0xC` from one to the other (and from last frame's `+0x70`, for the
+  sweep) into the list, each tested at once against the entries already in (attack against attack,
+  KH1's clash); then a wall test unless flag `0x100000` (data `+0x38` bit 16) is set.
+- An entry is 0x40 bytes: `+0` team, `+8` owner, `+0x10` hit bit, `+0x18` the attack object (0 for
+  a body part), `+0x20` shape type, `+0x24` radius, `+0x28` half height, `+0x30` centre (w 1).
+- `0x1402B3BE0 (entry, list, count)`: another team and actor; for a body against an attack, the
+  actor must not hold the attack's bit in `+0x3E0`; the overlap is `0x1402B5EF0` and the contact
+  `0x1402B4060 (attack entry, body entry)` (record `0x1402BF330`, the hit flag `+4` and the owner's
+  "connected" word through `+0x60`).
+- `0x1402B5EF0` shape types: 1 ellipsoid (radius across, half height up: the gap over the summed
+  sizes inside the unit sphere), 2 column, 3 box. KH2's overlap (`combat_core::Shape::overlaps`,
+  from KH2's exe) is the same for ellipsoid / sphere (KH2 0 / 3 = KH1 1) and column (KH2 1 = KH1 2);
+  KH2's cube never hits.
+
+Ours (`bodyhits`):
+- **KH1 attack groups for the windows**: each hit window on his body (`kh2slots::body_windows`, in
+  the clip's order) is KH1's hit window of attack group 1, 2 or 3 in our slot's events
+  (`kh1_tracks`; the Keyblade's stays 0). Sora's moves have at most three (Magnet Burst's 1900 /
+  1901 / 1903). **Checked (files)**, `P_EX100.mset`.
+- **The objects**: when our slot of a move with such windows starts (`frame`), one object per shape
+  of each window's group, through KH1's row object maker `0x1402B3270` with a hit bit of its own
+  (`0x1402B3760`), the template row's effect and sound bytes (`+0xA8`, `0x400000`) and the request
+  playing taken at once (`+0x58`). KH1 frees them when the request changes; a new play frees the
+  last ones first. Their data: a copy of Sora's KH1 row the old sweep landed with (ground / air by
+  his state; swing, or finisher for a KH2 blow), KH2's reaction on it (5 for a blow, 3 for a
+  flinch), the window's attack group in `+0x34`, bone `0x8003`, the Recoil row's clash rules
+  (`kh1rows::kh2_clash`) and "spent" (no wall test). `kh1rows::kh2_atkp` gives the window's ATKP
+  for them, so power, Magic, launch and knock-back are KH2's as for the other rows.
+- **The shapes** (`P_EX100.mdlx`, **Checked (files)**): Explosion group 19 an ellipsoid on his root
+  (lift 120, 350 across, 180 half height), Vicinity Break 21 (60, 450, 150), Magnet Burst 22 (80,
+  750, 450), 23 (90, 130, 160) and 3 a sphere of 400 on KH2 bone 67 (KH1 bone 70, same bind frame,
+  `docs/kh2-effects.md`). The entry builder `0x1402B3800` is hooked (prologue `40 55 56 57 48 81 EC
+  80 00 00 00`, **Checked (exe)**): for ours, KH2's shape at its place (root: his `+0x10`, the
+  offset turned by his yaw `+0x3C`, raised by the lift; bone: KH1's bone point and its drawn
+  matrix) with its own half height, and KH2's sweep toward last frame's centre (copies one radius
+  apart while over 1.5 radii are left; none on the window's first frame), each tested with KH1's
+  `0x1402B3BE0`.
+- **Re-hits**: KH2 re-arms per target, `interval` 60 Hz frames after that target's hit (ATKP
+  `+0x26`; Explosion's 911 every 8, the others once a window; **Checked (files)** `00battle.bin`).
+  KH1's re-arm is one clock per object, so it is left off and each target's bit is taken off at its
+  own time (`hit` notes it from `probe::hit`).
+- **Kept ours**: the Magnet pull (reaction 5, 1900): KH1 has no such reaction; the enemies KH1's
+  pass caught are pulled toward that object's centre as before (`combat::Strikes::native_pull`).
+  KH2's guard windows on his body stay `kh2_hits`'s.
+- **Differences from before**: the overlap is KH1's own test (the same maths for ellipsoids;
+  columns and boxes against KH1's own parts by KH1's rules); the big and immovable get KH2's launch
+  numbers as every row of ours does (KH1 has no launch motion for them anyway). **Assumption**: KH2
+  bone shapes with an offset take it in KH1's bone frame (none of Sora's body attack shapes has
+  one). Not checked in game.
