@@ -290,6 +290,20 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   ended (until the landing), where KH2's free state would start a new one; KH1's cast state
   already starts a new one.
 
+### 4c.1d An Attack after a cast only when its spell connected (t650, the tester, combo row selection m30 answer 1 (a))
+
+- **Checked (decomp)**, Steam KH2: the Attack command in the input step `0x1403D6FC0` asks
+  `0x1403D6CA0` with the window test on only when the owner's `+0x120` bit 0x2000000 ("connected")
+  is set or the Combo Master bit is (`[+0x5C0] + 0x1E4` bit 13); else only a free state takes it (a
+  new combo). The magic command always asks with the window test on. `0x1403D6CA0` clears the
+  flag when it takes a press; KH2's hit routine `0x1403D12C0` sets it on the attack's owner (a
+  spell's attacks are Sora's, so a spell's hit sets it).
+- Ours: `formmagic::take_step` clears KH1's "connected" (`+0x50`) as the cast takes its step;
+  `formmagic::spell_hit` (from `probe::hit`, KH1's contact, for Sora's free-standing attack
+  objects, `+0x30` bit 0x400) sets it while the cast plays. KH1's Attack step then counts on in
+  the cast's window only after a hit or with Combo Master, else takes no swing; after the cast's
+  end it starts a new combo. `note_step` counts a cast on in any window (KH2's magic command).
+
 ### 4c.2 Finishing Plus after a finisher cast (the tester, after m10, question 2 (a))
 
 - **Checked (decomp)**, Steam KH2 `0x1403D6CA0`: in the finisher window (`+0x194` bit 0x20, range

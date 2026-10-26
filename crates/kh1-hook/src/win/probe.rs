@@ -599,6 +599,8 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
         super::combat::scale_record(r, attack, target);
         // (KH2's re-hit interval and the Magnet catch for KH2's hits on his body, `bodyhits`.)
         super::bodyhits::hit(attack, target, r);
+        // (A spell's hit: the cast's "connected", for the Attack after it, `formmagic::spell_hit`.)
+        super::formmagic::spell_hit(owner, attack);
     }
     if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");

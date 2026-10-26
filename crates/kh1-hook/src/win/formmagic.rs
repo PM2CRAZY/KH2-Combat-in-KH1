@@ -563,7 +563,10 @@ pub unsafe fn note_step(actor: usize, air: bool) -> Option<(u8, bool)> {
         let live = rd::<u32>(actor + 0x1CC) >> 22 & 1 != 0;
         let count = rd::<u8>(info + 0x41) as u32;
         let max = rd::<u8>(stats + if air { 0xD5 } else { 0xD4 }).max(1) as u32;
-        let counts = air || rd::<u32>(info + 0x50) != 0 || super::takeover::with_abilities(|a| a.combo_master) == Some(true);
+        // (KH2's magic command is checked with the window test on whatever hit, `0x1403D6FC0` →
+        // `0x1403D6CA0 (actor, 1)`: in a combo or finisher window a cast always counts on; only
+        // the Attack command needs the last move to have connected, `take_step`. Checked (decomp).)
+        let counts = true;
         let step = if !live { 1 } else if counts { count + 1 } else { count.max(1) };
         // (Past the length: taken in a finisher's Finishing Plus window, KH2's `+0xD75` one more,
         // `0x1403D6CA0`.)
@@ -611,7 +614,14 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
     super::combomods::cast_step(step, request & 0xFFFF, finisher, chained, air);
     let plus = finisher && super::combomods::finisher_left();
     wr(info + 0x41, if last && !plus { 0u8 } else { step });
-    wr(info + 0x50, 1u32);
+    // (KH2 clears its "connected" flag, `+0x120` bit 0x2000000, as the cast is taken
+    // (`0x1403D6CA0`), and its hit routine `0x1403D12C0` sets it again on the owner when one of the
+    // spell's attacks connects; the Attack command counts on in a window only with it set, or with
+    // Combo Master (`0x1403D6FC0`'s Attack case; Checked (decomp)). KH1's Attack step reads its
+    // swing's "connected" `+0x50` the same way (`0x1402A7510`, Checked (decomp)): cleared here,
+    // set by the spell's hit, `spell_hit`. The tester, combo row selection m30 answer 1 (a).)
+    wr(info + 0x50, 0u32);
+    SPELL_HITS.store(true, Ordering::Relaxed);
     log(&format!(
         "KH2 magic: the cast takes step {step} of KH1's combo{}",
         if plus {
@@ -622,6 +632,31 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
             ""
         }
     ));
+}
+
+/// A cast took its step (`take_step`) and its hits now count as its "connected".
+static SPELL_HITS: AtomicBool = AtomicBool::new(false);
+
+/// One of Sora's free-standing attack objects (a spell's: KH1's own script's or a KH2 spell's on
+/// KH1's pool, `+0x30` bit 0x400) made a hit record (`probe::hit`): while the cast that took its
+/// step of the combo plays (KH1's ground cast requests 0x36..0x3D, or one of our cast slots), its
+/// "connected" (`+0x50`) is set, so KH1's Attack step counts on from the cast in its window, as
+/// KH2's hit routine sets the owner's flag for a spell's hit (`0x1403D12C0`, Checked (decomp)).
+pub unsafe fn spell_hit(actor: usize, attack: usize) {
+    if !SPELL_HITS.load(Ordering::Relaxed) || actor < 0x10000 || rd::<u32>(attack + 0x30) & 0x400 == 0 {
+        return;
+    }
+    let request = rd::<u32>(actor + 0x164) & 0xFFFF;
+    if !((0x36..=0x3D).contains(&request) || super::kh2slots::cast_playing(actor)) {
+        SPELL_HITS.store(false, Ordering::Relaxed);
+        return;
+    }
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    if info < 0x10000 || rd::<u32>(info + 0x50) != 0 {
+        return;
+    }
+    wr(info + 0x50, 1u32);
+    log(&format!("KH2 magic: the cast's spell connected (request {request:#x}): an Attack in its window goes on with the combo"));
 }
 
 /// KH1's control step with base Sora in its own states (`takeover::shared_control`, before it
