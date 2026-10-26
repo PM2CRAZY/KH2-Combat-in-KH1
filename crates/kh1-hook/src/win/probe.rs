@@ -54,7 +54,8 @@ const EVENT_OPS: usize = 768;
 static EVENT_COUNTS: [AtomicU32; EVENT_OPS] = [const { AtomicU32::new(0) }; EVENT_OPS];
 
 unsafe extern "system" fn event_op(ctx: usize, op: i32, c: usize, d: usize) -> u64 {
-    if (0..EVENT_OPS as i32).contains(&op) {
+    // (The once-a-second opcode trace's counts: a debug tool, `debug_on`.)
+    if super::debug_on() && (0..EVENT_OPS as i32).contains(&op) {
         EVENT_COUNTS[op as usize].fetch_add(1, Ordering::Relaxed);
     }
     // Opcode 322 (`0x1401AB6E0`) pushes the script actor's motion request (`+0x164`): note
@@ -155,7 +156,13 @@ unsafe extern "system" fn actor(a: usize, dt: f32) {
     }
     if SORA_ACTOR.swap(a, Ordering::Relaxed) != a {
         log(&format!("Sora's actor at {a:#x} (dt {dt:.3})"));
-        dump(a, "first seen");
+        if super::debug_on() {
+            dump(a, "first seen");
+        }
+    }
+    // (The actor dumps, position search and actor list below are debug probes, `debug_on`.)
+    if !super::debug_on() {
+        return;
     }
     let n = ACTOR_CALLS.fetch_add(1, Ordering::Relaxed);
     if n % 120 == 60 && n < 120 * 12 {
@@ -592,7 +599,8 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     }
     let r = f(attack, target);
     // (t338) Which hit effect KH1's contact will start for this hit (any attack on anyone but Sora).
-    if attack > 0x10000 && target > 0x10000 && target != sora() {
+    // (Debug only: the trace's and log's hit-effect notes, `debug_on`.)
+    if super::debug_on() && attack > 0x10000 && target > 0x10000 && target != sora() {
         hit_effect_note(attack, target, owner, r);
     }
     if owner != 0 && owner == sora() && r > 0x10000 {
@@ -602,7 +610,8 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
         // (A spell's hit: the cast's "connected", for the Attack after it, `formmagic::spell_hit`.)
         super::formmagic::spell_hit(owner, attack);
     }
-    if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
+    // (Debug only: KH1's own swing's record kept and dumped, read by nothing else, `debug_on`.)
+    if super::debug_on() && owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");
         if let Ok(mut t) = ATTACK_TEMPLATE.lock() {
             *t = Some(std::slice::from_raw_parts(attack as *const u8, 0xC0).to_vec());

@@ -298,9 +298,13 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
-    ENABLED.store(super::settings::get().debug_menu, Ordering::Relaxed);
-    hook::install(base + FRAME_END_RVA, &FRAME_END_PROLOGUE, frame_end as *const () as usize, &ORIG_FRAME_END, "frame end (debug menu input, stat locks)");
-    hook::install(base + DRAW_END_RVA, &DRAW_END_PROLOGUE, draw_end as *const () as usize, &ORIG_DRAW_END, "end of the frame's drawing (debug menu)");
+    ENABLED.store(super::debug_on() && super::settings::get().debug_menu, Ordering::Relaxed);
+    // (Always: KH2's sound banks go back into KH1's list from it, `kh1bank::frame_end`.)
+    hook::install(base + FRAME_END_RVA, &FRAME_END_PROLOGUE, frame_end as *const () as usize, &ORIG_FRAME_END, "frame end (KH2 sound banks; debug menu input, stat locks)");
+    // (The menu's drawing: only with the debug tools loaded, `debug_on`.)
+    if super::debug_on() {
+        hook::install(base + DRAW_END_RVA, &DRAW_END_PROLOGUE, draw_end as *const () as usize, &ORIG_DRAW_END, "end of the frame's drawing (debug menu)");
+    }
 }
 
 /// The Config menu's Debug Menu row.
@@ -308,7 +312,11 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
+/// The Config menu's row (there only with the debug tools loaded, `config::List::Misc`): for this
+/// session only. The ini's `debug_menu` is not written: it is what loads the debug tools at start,
+/// so turning the row off doesn't take the row away at the next start.
 pub fn set_enabled(on: bool) {
+    let on = on && super::debug_on();
     ENABLED.store(on, Ordering::Relaxed);
     if !on && OPEN.swap(false, Ordering::Relaxed) {
         SWALLOW.store(true, Ordering::Relaxed);
@@ -317,13 +325,15 @@ pub fn set_enabled(on: bool) {
     if !on {
         super::frameadv::set_on(false);
     }
-    super::settings::save("debug_menu", if on { "on" } else { "off" });
-    log(&format!("Config menu: debug menu {}", if on { "on (L1 + R1 + Triangle)" } else { "off" }));
+    log(&format!("Config menu: debug menu {} (this session)", if on { "on (L1 + R1 + Triangle)" } else { "off" }));
 }
 
 /// Each pad read (`probe::pad`), with KH1's records merged: opens or closes the menu on L1 + R1 +
 /// Triangle, keeps the pad for the menu, and says what the game must not see.
 pub fn pad(buttons: u16) -> Hide {
+    if !super::debug_on() {
+        return Hide::Nothing;
+    }
     PAD.store(buttons as u32, Ordering::Relaxed);
     let enabled = ENABLED.load(Ordering::Relaxed);
     let mods = buttons & (L1 | R1) == L1 | R1;
@@ -412,12 +422,14 @@ fn mark(b: u16) -> &'static str {
 unsafe extern "system" fn frame_end(renderer: usize) {
     let base = BASE.load(Ordering::Relaxed);
     if base != 0 {
-        apply_locks(base);
-        if OPEN.load(Ordering::Relaxed) {
-            step(base);
+        if super::debug_on() {
+            apply_locks(base);
+            if OPEN.load(Ordering::Relaxed) {
+                step(base);
+            }
+            // (t371) Whether the next frame runs or is held (`frameadv`): after this frame's tasks.
+            super::frameadv::frame_end(base);
         }
-        // (t371) Whether the next frame runs or is held (`frameadv`): after this frame's tasks.
-        super::frameadv::frame_end(base);
         // KH2's sound banks into KH1's bank list, again after KH1 resets it (`kh1bank`).
         super::kh1bank::frame_end(base);
     }

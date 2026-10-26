@@ -23,7 +23,9 @@
 //! focus, and its hook does it for ours.
 //!
 //! The choices are kept in `kh1-kh2.ini` (`camera`, `physics`, `ground_combo`, `air_combo`,
-//! `magic_fire`, `anim_gravity`... = kh1 / kh2; `debug_menu` off / on, t354), not the save.
+//! `magic_fire`, `anim_gravity`... = kh1 / kh2), not the save. The Debug Menu row is there only
+//! when the ini's `debug_menu = on` loaded the debug tools at start (`debug_on`), and switches the
+//! menu for that session only (it doesn't write `debug_menu`).
 //!
 //! Steam only (the windows' calls are Steam addresses); the text lookup is in for both builds.
 
@@ -281,7 +283,15 @@ impl List {
             List::Combat => &COMBAT,
             List::Magic => &MAGIC,
             List::Movement => &MOVEMENT,
-            List::Misc => &MISC,
+            // (The ram-use thread, m1 answer 3: the Debug Menu row only with the debug tools
+            // loaded, the ini's `debug_menu = on` at start; it is the list's last row.)
+            List::Misc => {
+                if super::debug_on() {
+                    &MISC
+                } else {
+                    &MISC[..MISC.len() - 1]
+                }
+            }
             List::MagicAnim => &MAGIC_ANIM,
             List::Tweaks => &TWEAKS,
         }
@@ -370,6 +380,9 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
+/// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
+const MISC_HELP: u32 = 0x7F00_020C;
+const MISC_HELP_NO_DEBUG: &str = "Battle quotes and Gummi routes.";
 const STRINGS: [(u32, &str); 94] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
@@ -462,7 +475,7 @@ const STRINGS: [(u32, &str); 94] = [
     (0x7F00_0113, "Vanilla"),
     (0x7F00_0114, "Skip"),
     (0x7F00_011B, "Debug Menu"),
-    (0x7F00_011C, "Turn on the debug menu: L1 + R1 + Triangle opens and closes it."),
+    (0x7F00_011C, "Turn on the debug menu: L1 + R1 + Triangle opens and closes it.\nThis session only; the ini's debug_menu loads it at start."),
     (0x7F00_011D, "Off"),
     (0x7F00_011E, "On"),
 ];
@@ -572,7 +585,13 @@ pub unsafe fn install() {
         STRINGS
             .iter()
             .map(|(id, s)| {
-                let s = if *id == BUTTON_HELP { format!("{s}\nKH2 Combat version {}", crate::VERSION) } else { s.to_string() };
+                let s = if *id == BUTTON_HELP {
+                    format!("{s}\nKH2 Combat version {}", crate::VERSION)
+                } else if *id == MISC_HELP && !super::debug_on() {
+                    MISC_HELP_NO_DEBUG.to_string()
+                } else {
+                    s.to_string()
+                };
                 (*id, Box::leak(super::menu::encode(&s).into_boxed_slice()).as_ptr() as usize)
             })
             .collect()

@@ -119,7 +119,8 @@ pub const GROUPS: [Group; 6] = [
 
 /// The live settings (from the ini, or the debug menu's since): the mode (0 off, 1 on, 2
 /// always), the seconds, the categories, the sound log; and the settings they were read from.
-static LIVE_MODE: AtomicU32 = AtomicU32::new(1);
+/// (Off until the ini is read, and always off without the debug tools, `refresh`.)
+static LIVE_MODE: AtomicU32 = AtomicU32::new(0);
 static LIVE_SECONDS: AtomicU32 = AtomicU32::new(DEFAULT_SECONDS);
 static LIVE_CATS: AtomicU32 = AtomicU32::new(cat::ALL);
 static LIVE_SOUND: AtomicBool = AtomicBool::new(true);
@@ -133,7 +134,10 @@ pub fn refresh() {
     let s = super::settings::get();
     let id = s as *const _ as usize;
     if LIVE_FROM.swap(id, Ordering::Relaxed) != id {
-        LIVE_MODE.store(match s.trace { Mode::Off => 0, Mode::On => 1, Mode::Always => 2 }, Ordering::Relaxed);
+        // (The ram-use thread, m1 answer 3: the trace is a debug tool; without the debug tools
+        // loaded, the ini's `debug_menu = off` at start, nothing is recorded or kept.)
+        let mode = if super::debug_on() { s.trace } else { Mode::Off };
+        LIVE_MODE.store(match mode { Mode::Off => 0, Mode::On => 1, Mode::Always => 2 }, Ordering::Relaxed);
         LIVE_SECONDS.store(s.trace_seconds, Ordering::Relaxed);
         LIVE_CATS.store(s.trace_cats, Ordering::Relaxed);
         LIVE_SOUND.store(s.sound_log, Ordering::Relaxed);
@@ -181,6 +185,9 @@ pub fn wants(bits: u32) -> bool {
 
 /// The debug menu's changes: live at once, and kept in the ini.
 pub fn set_mode(m: Mode) {
+    if !super::debug_on() {
+        return;
+    }
     LIVE_MODE.store(match m { Mode::Off => 0, Mode::On => 1, Mode::Always => 2 }, Ordering::Relaxed);
     ENABLED.store(m != Mode::Off, Ordering::Relaxed);
     super::settings::save("trace", match m { Mode::Off => "off", Mode::On => "on", Mode::Always => "always" });
@@ -426,6 +433,9 @@ pub fn enabled() -> bool {
 
 /// The trace is on (the ini, or the debug menu).
 pub fn on() -> bool {
+    if !super::debug_on() {
+        return false;
+    }
     refresh();
     let on = mode() != Mode::Off;
     ENABLED.store(on, Ordering::Relaxed);

@@ -220,13 +220,13 @@ battle_quotes = kh1\r\n\
 ; gummi: vanilla = fly the Gummi Ship between worlds; skip = land in the chosen world at once\r\n\
 ; (the Config menu's Gummi Routes row switches it in game too)\r\n\
 gummi = vanilla\r\n\
-; trace: on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
+; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
 trace = on\r\n\
 ; trace_seconds: how many seconds before the dump the trace clip holds (1 to 120, default 10)\r\n\
 trace_seconds = 10\r\n\
-; sound_log: on = every KH1 menu sound, voice group and voice clip played is a line in the log\r\n\
+; sound_log: (debug tools: only with debug_menu = on) on = every KH1 menu sound, voice group and voice clip played is a line in the log\r\n\
 ; (the id and where it was called from, docs/kh1-sounds.md); off = none (the debug menu switches it)\r\n\
 sound_log = on\r\n\
 ; trace_game_frames: on = trace_seconds counts game frames (60 a second, at any frame rate), so\r\n\
@@ -250,8 +250,10 @@ trace_config = on\r\n\
 trace_log = on\r\n\
 trace_hit_fx = on\r\n\
 trace_sounds = on\r\n\
-; debug_menu: on = L1 + R1 + Triangle opens the debug menu (the Config menu's Debug Menu row\r\n\
-; switches it in game too); off = the buttons do nothing\r\n\
+; debug_menu: on = the debug tools are loaded: the debug menu (L1 + R1 + Triangle), Frame\r\n\
+; Advance, the trace recorder and the sound log, and the Config menu's Misc list has a Debug\r\n\
+; Menu row (it switches the menu for that session only); off = none of it is loaded or hooked\r\n\
+; and the row isn't there. Read once when the game starts: a change needs a restart.\r\n\
 debug_menu = off\r\n";
 
 #[derive(Debug)]
@@ -374,7 +376,8 @@ pub struct Settings {
     pub trace_game_frames: bool,
     /// What each trace row holds (`trace_*` = on / off, `trace::ITEMS`; all on by default).
     pub trace_cats: u32,
-    /// L1 + R1 + Triangle opens the debug menu (`debug_menu = on`, `debugmenu.rs`).
+    /// The debug tools are loaded (`debug_menu = on`, read once at start: `win::debug_on`), and
+    /// L1 + R1 + Triangle opens the debug menu (`debugmenu.rs`).
     pub debug_menu: bool,
 }
 

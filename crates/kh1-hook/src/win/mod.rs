@@ -76,6 +76,16 @@ static REAL_CREATE: AtomicUsize = AtomicUsize::new(0);
 static LOG: Mutex<Option<std::fs::File>> = Mutex::new(None);
 /// The host is KH1 (everything else only gets the proxy).
 static IN_KH1: AtomicBool = AtomicBool::new(false);
+/// The ini's `debug_menu` as the game started (the tester, ram-use thread m1 answer 3: "if debug
+/// menu is off then we don't inject or load anything related to the debug"): read once, before
+/// any hook goes in, and never changed in the session (a later save of the ini doesn't install or
+/// remove hooks). Off: no debug menu, Frame Advance, trace, sound log hooks or heartbeat thread.
+static DEBUG: AtomicBool = AtomicBool::new(false);
+
+/// The debug tools are loaded this session (`DEBUG`; `docs/kh1-debug-menu.md`).
+pub fn debug_on() -> bool {
+    DEBUG.load(Ordering::Relaxed)
+}
 
 pub const KH1_EXE: &str = "KINGDOM HEARTS FINAL MIX.exe";
 
@@ -236,6 +246,9 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
             return 1;
         }
         log(&format!("game build: {}", build.name()));
+        // (Before every install: the debug tools go in only with `debug_menu = on` at start.)
+        DEBUG.store(settings::get().debug_menu, Ordering::Relaxed);
+        log(&format!("debug tools {}", if debug_on() { "loaded (the ini's debug_menu = on)" } else { "not loaded (the ini's debug_menu = off)" }));
         crash::install();
         pose::install();
         kh2slots::install();
@@ -262,15 +275,24 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         leftblade::install();
         model::install();
         gates::install();
+        // (Its voice group hook carries gameplay and always goes in; the log hooks only with the
+        // debug tools.)
         soundlog::install();
+        // (KH1's frame end hook always goes in: KH2's sound banks are put back there, `kh1bank`;
+        // the menu's input, stat locks and drawing only with the debug tools.)
         debugmenu::install();
-        frameadv::install();
+        if debug_on() {
+            frameadv::install();
+        }
         loadscreen::install();
         kh2sound::start();
         kh2dpx::start();
         pose::load_kh2();
         model::load();
-        CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
+        // (The heartbeat, the Insert test key and the event-opcode trace: debug tools.)
+        if debug_on() {
+            CreateThread(std::ptr::null_mut(), 0, monitor, std::ptr::null_mut(), 0, std::ptr::null_mut());
+        }
     }
     1
 }

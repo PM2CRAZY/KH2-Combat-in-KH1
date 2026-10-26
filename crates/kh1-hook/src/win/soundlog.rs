@@ -25,6 +25,8 @@
 //!
 //! (t354) The hooks go in whatever `sound_log` says, and each writes its line only while the sound
 //! log is on (`trace::sound_log`: the ini's, or the debug menu's since), so it switches in game.
+//! (The ram-use thread, m1 answer 3) Only with the debug tools loaded (the ini's `debug_menu = on`
+//! at start, `debug_on`): otherwise only the voice group hook goes in, for the gameplay it carries.
 //! Its lines are the trace's Sounds category (`log_as`).
 
 use super::addr::{Build, Rva};
@@ -140,9 +142,9 @@ fn emit(line: String) {
     }
 }
 
-/// The sound log is on now.
+/// The sound log is on now (never without the debug tools).
 fn live() -> bool {
-    super::trace::sound_log()
+    super::debug_on() && super::trace::sound_log()
 }
 
 unsafe extern "system" fn menu_sound(id: i32) -> usize {
@@ -298,8 +300,14 @@ pub unsafe fn install() {
     let rd32 = |at: usize| std::ptr::read_unaligned(at as *const u32);
     let pe = base + rd32(base + 0x3C) as usize;
     IMAGE.store(rd32(pe + 0x50) as usize, Ordering::Relaxed);
+    // (Always: KH2's hurt line and KH2's quotes hold KH1's voice back here, `hitreact::hurt_line`,
+    // `kh2sound::holds_back`.)
+    hook::install(base + VOICE_GROUP_RVA, &VOICE_GROUP_PROLOGUE, voice_group as *const () as usize, &ORIG_GROUP, "voice group (KH2 quotes; sound log)");
+    // (The rest only log: in only with the debug tools loaded, the ini's `debug_menu = on` at start.)
+    if !super::debug_on() {
+        return;
+    }
     hook::install(base + MENU_SOUND_RVA, &MENU_SOUND_PROLOGUE, menu_sound as *const () as usize, &ORIG_SOUND, "menu sound log");
-    hook::install(base + VOICE_GROUP_RVA, &VOICE_GROUP_PROLOGUE, voice_group as *const () as usize, &ORIG_GROUP, "voice group log");
     hook::install(base + VOICE_CLIP_RVA, &VOICE_CLIP_PROLOGUE, voice_clip as *const () as usize, &ORIG_CLIP, "voice clip log");
     if Build::current() == Build::Steam {
         hook::install(base + STEAM_VOICE_CALL, &VOICE_CALL_PROLOGUE, voice_call as *const () as usize, &ORIG_VOICE_CALL, "voice call log");
