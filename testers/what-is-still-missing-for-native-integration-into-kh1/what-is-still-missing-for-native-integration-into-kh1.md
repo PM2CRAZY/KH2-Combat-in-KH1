@@ -742,3 +742,13 @@ go ahead
 
 ^m16
 
+1. (a) for now
+2. looks good but I wanna see how it looks with (b)
+3. (a)
+4. (a) and when we implement kh2's mp system we turn it into mp charge when the player toggles either the the kh2 mp system in the config
+5. (a)
+6. (b) I want you to gut out all the custom progression and make it vanilla again. if any custom ability is taking the slot of a vanilla ability revert it and add the custom ability to its own custom ability slot
+7. (a)
+8. if kh2's own air magic system takes a combo step then yes do it for all forms of magic when the magic combo setting is switched on. 
+
+go ahead
