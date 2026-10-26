@@ -67,6 +67,25 @@ Memory (the tester, ram-use m1 answer 2 (a): no duplicates). The baked blocks ar
   (code)**. In the testers' logs the blocks are 16.3 MB for 96 motions, so about 16 MB less after
   placing, and about 16-48 MB less at the start-up peak. **Assumption**: not measured in game.
 
+Repeat bakes (ram-use m1 item 4.7):
+- Of the 91 bakes in a tester's log (quick-run-native, 18.4 MB), 7 are the very same bake as
+  another (same KH2 motion, KH1 template, length and events: Finishing Plus's next finishers 154,
+  155, 166, 183, 184, 194, 197 on a second request of ours), 1.9 MB. **Checked (log)**. With t655
+  the cache handed out the file's copy to the first ask only, so the second was baked again at
+  every start and the file written again every start. Now an ask for a key already made this
+  start gets the same block (`Cache::shared`, logged), nothing baked, one copy in the file and in
+  memory while loading. **Checked (code)**, unit test `same_bake_twice_is_one_block`.
+- The other repeats (Fire's cast on two templates, swing 151 on several requests, ...) differ in
+  template, length or KH1 events, so their bytes differ: not shareable as they are.
+- Where KH1 plays them from, each slot still gets its own copy (`place`), the identical ones too.
+  Sharing one placed motion between two slots isn't done: KH1's pose pass (`0x140391C70`) writes
+  the sampled helper channels into the motion's own helper records (`+0x30`) every pass, so a
+  motion is also KH1's scratch, and two slots on one copy (a blend between them) could read each
+  other's values. **Checked (decomp)**. KH1's own Sora file never shares one motion between
+  slots (118 slots, 118 distinct offsets in `xa_ex_0010.mset`). **Checked (files)**. Sharing them
+  would save about 1.9 MB more; left out unless the pass is shown to sample before every use.
+  **Assumption**: that it would conflict (not seen happen).
+
 Still done every start, not cached (cheap, or used elsewhere): loading KH2 Sora (also used by the
 combo rows, effects and sounds), the baker's retarget set-up, the tables `prepare` makes.
 

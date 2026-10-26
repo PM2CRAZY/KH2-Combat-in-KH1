@@ -772,7 +772,7 @@ fn open_slot_cache(install: &kh1_data::Kh1Install, mset: &[u8]) -> Option<crate:
 }
 
 fn save_slot_cache(c: &crate::slotcache::Cache) {
-    log(&format!("slot cache: {} block(s) from the cache, {} baked", c.hits, c.misses));
+    log(&format!("slot cache: {} block(s) from the cache, {} baked, {} the same bake again (shared)", c.hits, c.misses, c.shared));
     if !c.needs_write() {
         return;
     }

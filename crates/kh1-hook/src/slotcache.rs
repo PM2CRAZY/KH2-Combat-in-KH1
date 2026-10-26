@@ -187,6 +187,8 @@ pub struct Cache {
     dirty: bool,
     pub hits: usize,
     pub misses: usize,
+    /// Asks for a bake already made this start (same key).
+    pub shared: usize,
 }
 
 /// Why the file on disk wasn't used.
@@ -228,6 +230,14 @@ impl Cache {
     /// The block for `key`, baking it with `bake` when the cache doesn't have it. A bake that
     /// fails is not cached (the caller falls back as before).
     pub fn get_or_bake<E>(&mut self, key: u128, bake: impl FnOnce() -> Result<Vec<u8>, E>) -> Result<Block, E> {
+        // (The same bake asked for again this start (a KH2 finisher on two of our requests, with
+        // the same template, length and events): the block already made, not baked again nor kept
+        // twice. Before, the file's copy was taken by the first ask and every later one was baked
+        // again at every start.)
+        if let Some((_, b)) = self.used.iter().find(|(k, _)| *k == key) {
+            self.shared += 1;
+            return Ok(b.clone());
+        }
         if let Some(b) = self.loaded.remove(&key) {
             self.hits += 1;
             self.used.push((key, b.clone()));
@@ -443,6 +453,23 @@ mod tests {
         let (mut c, _) = Cache::open(manifest("a"), None);
         assert!(c.get_or_bake(3, || Err("no")).is_err());
         assert_eq!(decode(&c.encode()).unwrap().1.len(), 0);
+    }
+
+    #[test]
+    fn same_bake_twice_is_one_block() {
+        let (mut c, _) = Cache::open(manifest("a"), None);
+        let a = c.get_or_bake::<()>(5, || Ok(vec![4; 10])).unwrap();
+        let b = c.get_or_bake::<()>(5, || panic!("baked twice")).unwrap();
+        assert!(Arc::ptr_eq(&a.buf, &b.buf));
+        assert_eq!((c.hits, c.misses, c.shared), (0, 1, 1));
+        let file = c.encode();
+        assert_eq!(decode(&file).unwrap().1.len(), 1);
+        // (From the file: one hit, the second ask shares it, nothing baked.)
+        let (mut c2, _) = Cache::open(manifest("a"), Some(file));
+        c2.get_or_bake::<()>(5, || panic!()).unwrap();
+        c2.get_or_bake::<()>(5, || panic!()).unwrap();
+        assert_eq!((c2.hits, c2.misses, c2.shared), (1, 0, 1));
+        assert!(!c2.needs_write());
     }
 
     #[test]

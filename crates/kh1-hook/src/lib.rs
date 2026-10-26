@@ -16,7 +16,7 @@ pub mod slotcache;
 /// The mod's version as the user sees it (the Config menu's Camera Style help line, the log):
 /// the stage of the latest `AGENTS.md` entry, bumped with every change to the source (a test
 /// checks). `t` for the testing branch (the user, from stage 300; `s` before it).
-pub const VERSION: &str = "t661";
+pub const VERSION: &str = "t662";
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod win;
