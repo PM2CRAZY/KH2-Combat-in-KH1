@@ -1710,6 +1710,7 @@ pub unsafe fn aerial_dodge_with(actor: usize, (height, speed): (f32, f32)) -> bo
     super::shared::physics::kh2_hop_held(actor, height, vel);
     super::shared::mark_air_dodged();
     takeover::note_launch(vel);
+    DODGE_SKIP_AT.store(frame().max(1), Ordering::Relaxed);
     note(format!("jump in the air: KH2's Aerial Dodge on KH1's request {request:#x} of its own (KH1 state {state}), {height:.0} high, {:.1}/frame", vel[0].hypot(vel[1])));
     true
 }
@@ -1730,6 +1731,7 @@ const DODGE_FALL_BLEND: f32 = 8.0;
 /// as KH1's apex swap. KH1's action flag 4 the request raises is cleared (a plain fall).
 pub unsafe fn dodge_apex(actor: usize) {
     use character_core::motion::AERIAL_DODGE;
+    dodge_clock(actor);
     if actor < 0x10000 || rd::<i32>(actor + 0x70) != 2 || super::kh2slots::playing_motion(actor) != Some(AERIAL_DODGE) {
         return;
     }
@@ -1738,6 +1740,58 @@ pub unsafe fn dodge_apex(actor: usize) {
         return;
     }
     dodge_fall(actor, &format!("its apex, {t:.1} of {up:.1} frames up"));
+}
+
+/// KH1's motion fields: the time in the slot playing, the blend length (0: no blend under way)
+/// and the motion's speed (KH1's update `0x14029F0A0` and apply `0x1402A0350`, Steam; Checked
+/// (decomp), as `glide::kh2_clock` reads them).
+const SLOT_TIME: usize = 0x16C;
+const BLEND_LEN: usize = 0x170;
+const MOTION_SPEED: usize = 0x284;
+
+/// The game frame our Aerial Dodge request was asked on (`aerial_dodge_with`), until KH1's apply
+/// of it has been seen (`dodge_clock`); 0: none.
+static DODGE_SKIP_AT: AtomicU64 = AtomicU64::new(0);
+
+/// KH2's skip of frame 1 on the Aerial Dodge's motion 202 (the tester, aerial-dodge-native after
+/// m4: the glide out of the dodge came later than in KH2). KH2 starts 202 with no blend at time 0
+/// in its input step, and its next motion update (`0x1403C6740`, Steam KH2) turns a time stepping
+/// from exactly 0 to 1 into 2, so 202 plays 0, 2, 3, 4 and its air-free range (id 1, from frame 4,
+/// `+0x18C` bit 8 through the range step `0x14040D810`) is on 3 updates after the press; KH1
+/// plays our slot 0, 1, 2, 3, 4, one frame behind (Checked (decomp) both). On the first physics
+/// frame after KH1 applied our dodge request (still at time 0, no blend, a 60 Hz step of 1), its
+/// time is put at 1, so KH1's update makes it KH2's 2: pose, sound (999019 at frame 1, fired
+/// between 0 and 2 as KH2 does, `kh2slots::tick`), guard and the free frame keep KH2's timing.
+/// At 30 fps (a step of 2) KH2 doesn't skip either; nothing is done.
+unsafe fn dodge_clock(actor: usize) {
+    use character_core::motion::AERIAL_DODGE;
+    let at = DODGE_SKIP_AT.load(Ordering::Relaxed);
+    if at == 0 || actor < 0x10000 {
+        return;
+    }
+    if frame().saturating_sub(at) > 3 {
+        DODGE_SKIP_AT.store(0, Ordering::Relaxed);
+        return;
+    }
+    let Some((m, t)) = super::kh2slots::now_playing(actor) else { return };
+    if m != AERIAL_DODGE {
+        return;
+    }
+    DODGE_SKIP_AT.store(0, Ordering::Relaxed);
+    let (len, speed) = (rd::<f32>(actor + BLEND_LEN), rd::<f32>(actor + MOTION_SPEED));
+    let step = super::shared::physics::dt() * if speed.is_finite() && speed > 0.0 { speed } else { 1.0 };
+    let skip = t == 0.0 && !(len > 0.0) && (step - 1.0).abs() < 1e-4;
+    if skip {
+        wr(actor + SLOT_TIME, 1.0f32);
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 12 {
+        log(&if skip {
+            "KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)".to_string()
+        } else {
+            format!("KH2's Aerial Dodge: no skip of frame 1 (time {t:.2}, blend {len:.1}, step {step:.2})")
+        });
+    }
 }
 
 /// KH2's Aerial Dodge into KH1's fall now (request 6, KH2's blend; KH1's action flag 4 the

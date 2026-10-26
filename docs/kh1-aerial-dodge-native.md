@@ -252,3 +252,47 @@ The tester's answers: 1, my pick (the fall at KH2's apex, as KH2: 1:1 and one te
   before it). No other KH1 code reads that bit of the actor's `+0` word: the other `0xE0000`
   tests in the decomp are on attack objects. **Checked (decomp)**. Physics KH2 is unchanged
   (KH2's own held-dodge release, `0x1403CB680`, in `air_step`).
+
+## 9. Fourth round: the glide out of the dodge (the tester, after m4)
+
+The tester: the glide can't come out of the dodge as fast as in KH2. What KH2 needs, and when:
+
+- **The glide start** is the player's action-button handler `0x1403A81F0` (PLAYER vtable `+0x100`
+  through `0x1403A7820`; Steam KH2). With Glide (growth 3) above 0, airborne (`0x1403BA9A0`), the
+  height over the floor past the level's start height (`fmab +0x34`), and `0x1403BFB30`: the object
+  may act and the motion state has a free bit (`+0x18C & 0x1C`). **Checked (decomp)**. No minimum
+  time, no "rising" rule, no buffer: it runs on a Square press in the input step
+  (`0x1403D6FC0`: input bit 8 → the object's `+0x100`). **Checked (decomp)**
+- **The free bits** come from the motion's ranges (`0x14040D810`: range id 0 → `+0x34` bit 4, 1 → 8,
+  2 → 0x10, on the motion holder at `+0x158`, so the player's `+0x18C`), cleared each update before
+  the ranges run (`0x1403C83B0`) and at a motion's start (`0x1403C8A40`). **Checked (decomp)**.
+  202's only free range is id 1 from frame 4 (`P_EX100.mset` A160, **Checked (files)**).
+- **The frame order.** PLAYER's frame (`0x1403BFD30`): the motion update `0x1403C6740` (with its
+  range step), then the input step (PLAYER vtable `+0x20` = `0x1403A7090` → `0x1403A89A0`), then the
+  action update. The vtable by RTTI: `0x1405C4A80` is `VTABLE<PLAYER>@PLAYER`, `+0x20` = `0x1403A7090`,
+  `+0x100` = `0x1403A7820`. **Checked (decomp + exe)**.
+- **The clock.** 202 is asked with no blend at time 0 (`0x1403C8A40`: `+0x34` = 1, which makes the
+  same frame's update skip, `0x1403C6740`; cleared by `0x1403C73C0`), and the next update turns
+  0 → 1 into 2. So, with the press on frame N: N time 0, N+1 time 2, N+2 3, N+3 4 → the free bit
+  is on before N+3's input step: **Square glides on N+3**. **Checked (decomp)**; one 60 Hz frame
+  per update is the doc's earlier **Assumption** (`kh1-glide-native.md` §8.10).
+- **Ours before** (the tester's traces f80604 / f80807, sampled after the physics step): press at
+  N (flag 4 on), our slot's time 0 at N's animation, 1, 2, 3, then 4 at N+4's animation, where its
+  "may be left" (KH2's frame 4) clears the action flag; KH1's control step, which runs before the
+  animation (`0x140295E50`), sees it on **N+5** (the traces: `actor_flags` `c007` → `c003` at the
+  fifth frame after the press, the slot's frame 4 drawn). **Checked (trace)**. Two frames late: one
+  from KH2's skip of frame 1, one from KH2 reading input after its motion update.
+
+**Changed (testing branch, tNNN):**
+- `combomods::dodge_clock` (from `dodge_apex`, each physics frame): on the first physics frame after
+  KH1 applied our dodge request (time 0, no blend, a 60 Hz step), the slot's time `+0x16C` is put at
+  1, so KH1's update makes it KH2's 2 (KH2's skip of frame 1, as `glide::kh2_clock` does for the
+  glide). The sound at frame 1 still plays (our slot's events fire between 0 and 2, as KH2's).
+- `kh2slots` (`INPUT_LEAD`): the dodge slot's KH1 "may be left" starts one frame before KH2's free
+  frame (3, not 4), since KH1's control step sees it one frame after the animation fires it while
+  KH2's input step sees its free bit on the same frame.
+- Together: the action flag clears in KH1's animation on N+2 and Square glides on **N+3**, as in KH2.
+  KH1's other moves out of the dodge (an air attack, KH1's own glide at Glide KH1) get the same
+  frame, which is also KH2's (its Attack check takes a free state too).
+- Not changed: the other KH2 slots' free frames carry the same one-frame order lag (each KH2 free
+  frame F is KH1's control step's at F + 1); not this thread's (asked of the tester).

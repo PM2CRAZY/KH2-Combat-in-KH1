@@ -561,6 +561,14 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     if ours.is_some_and(|o| o.own_sounds) || item {
         tracks.retain(|t| t.kind != ks::SOUND);
     }
+    // (The Aerial Dodge: KH1's "may be left" one frame before KH2's free frame, `INPUT_LEAD`.)
+    if own && motion == character_core::motion::AERIAL_DODGE {
+        if let Some(f) = clip.first_free() {
+            tracks.retain(|t| t.kind != ks::CAN_LEAVE);
+            let from = (f as f32 - INPUT_LEAD).max(0.0);
+            tracks.push(EventTrack::level(ks::CAN_LEAVE, 0, &[(from, clip.length.max(1) as f32)]));
+        }
+    }
     // (KH2's dodge roll on KH1's roll: KH2's free frame as KH1's "may be left", `roll_free`.)
     if kind == Kind::DodgeRoll {
         tracks.retain(|t| t.kind != ks::CAN_LEAVE);
@@ -1006,6 +1014,18 @@ enum Leave {
     /// The template's (KH1's own point: glides, cycles, the roll before its own override).
     Template,
 }
+
+/// How much earlier KH1's "may be left" comes on the Aerial Dodge's slot than KH2's free frame
+/// (the tester, aerial-dodge-native after m4: the glide out of the dodge came later than in KH2).
+/// KH2's player frame (`0x1403BFD30`, Steam KH2) runs the motion update (`0x1403C6740`, which sets
+/// the range bits of `+0x18C` from the frame the clip reaches) before the input step (PLAYER's
+/// vtable `+0x20`, `0x1403A7090` -> `0x1403A89A0` -> `0x1403D6FC0`, whose action button runs the
+/// glide start `0x1403A81F0` only with a free bit `+0x18C & 0x1C`, `0x1403BFB30`): Square glides on
+/// the very frame 202 reaches its air-free frame 4 (Checked (decomp); the vtable by RTTI, Checked
+/// (exe)). KH1's actor frame runs its control step before its animation update (`0x140295E50`),
+/// so a "may be left" fired at frame F is seen by the control step one frame later: at F - 1 it
+/// is seen on the frame KH2's input sees F.
+const INPUT_LEAD: f32 = 1.0;
 
 /// The frame KH2's dodge roll may be left from: its free state (range id 2, frame 36 of Sora's 209,
 /// `Clip::first_free`; KH2 takes a jump or the action button only there, Checked (decomp) and
