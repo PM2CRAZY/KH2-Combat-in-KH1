@@ -32,6 +32,7 @@
 - [26. Assistant: t629, t630 and t631, one each:](#^m26)
 - [27. Assistant: Here's t637, and a question on your 2.](#^m27)
 - [28. Assistant: One more from the What is still missing(../what-is-still-mis](#^m28)
+- [29. Assistant: t641, the endless finishers. Found it. With Finishing Plus e](#^m29)
 
 ---
 
@@ -794,6 +795,8 @@ go ahead
 > Please test the three moves on one enemy and on groups at different distances (does each hit land where it should?), Explosion's repeated hits, Magnet Burst pulling enemies in then the last blast, the finishers launching, and Counterguard and Finishing Leap still hitting. Log lines: "KH2 body hits: motion …" when a move starts, "KH2 body hit: ATKP …" per hit.
 
 ^m28
+
+
 if you set combat to kh2 for both settings you can attack out of your finisher indefinitely, it needs to behave exact like kh1 they shouldn't be different in the logic with the exception of animations, hitbox, damage, knockback etc of course.
 
 
@@ -802,3 +805,28 @@ UPDATE:
 I also need to make a config for magic that allows you to combo out of grounded magic like kh2, it should work for all grounded magic in the game, kh1 fire has a special logic where you can keep firing so for that edge case let it do its logic, don't reset the move but let it combo into an attack.
 
 go ahead
+
+> [!tip] Assistant
+> **t641, the endless finishers.** Found it. With Finishing Plus equipped and both combos on KH2, nothing counted the finishers: the check that says "another finisher is left" always said yes at the KH2 setting, so every finisher opened its Finishing Plus window again. KH2 counts them in its Attack check (Steam KH2 `0x1403D6CA0`: the finisher window only works while the finisher count is under one plus your Finishing Plus copies), and the KH1 setting already counted them that way. Now both settings use the same count: one finisher, plus one more per Finishing Plus, then nothing until the last one ends, exactly like the KH1 setting. Check: the KH2 decomp for where the count is made, and our code for every place that opens or takes that window. Not checked in game.
+>
+> If you saw it **without** Finishing Plus equipped, tell me, because that would be a different bug (and a log would help a lot).
+>
+> **Your magic combo setting:** I haven't built this yet, because a few things change how it plays and I'd be guessing. Something to know first: in KH2's own files, Blizzard is the only grounded cast that lets an Attack in before it ends (from frame 36 of its 72). Fire, Thunder and Cure only let *another spell* in early (Fire from 34, Thunder and Cure from 42); an Attack after them waits for the cast to end and starts a new combo. Casts you've set to KH2's animation already work that way here. So "like KH2" read strictly is narrower than what you describe.
+>
+> 1. Which casts does the setting cover?
+>    - (a) KH1's own grounded casts (KH1's animation: Fire, Blizzard, Thunder, Cure, Gravity, Stop, Aero), with KH2-animation casts left on KH2's own windows;
+>    - (b) every grounded cast, KH2-animation ones included, all on the same rule.
+> 2. When can the Attack come in?
+>    - (a) exactly KH2's windows: Blizzard's at the same point of the cast, and the rest at the end of the cast (Gravity / Stop / Aero by Thunder's / Cure's);
+>    - (b) as soon as the spell is out (the shot or effect has started) until the cast ends, for every spell;
+>    - (c) from KH2's early-spell window (Fire 34, Thunder / Cure 42, at the same share of KH1's cast), for every spell.
+> 3. The swing after the spell:
+>    - (a) the combo goes on (the spell counts as one step, so it can lead into the finisher), as KH2 counts a cast;
+>    - (b) it starts a new combo.
+> 4. KH1's quick Fire (Fire again while Fire's second part plays): an Attack there cuts Fire where it is and swings, and choosing Fire again still re-fires it as now. Is that what you meant by "don't reset the move"?
+> 5. Where and what default: (a) Combat > Magic, "Magic Combo: KH1 / KH2", default KH1 so KH1 stays as it is; (b) default KH2; (c) somewhere else.
+>
+> Please test t641 with Finishing Plus x1 and x2 on both KH2 settings, ground and air: the chain should stop after one plus your copies. Log line: "no next finisher left (Finishing Plus): no attack".
+
+^m29
+

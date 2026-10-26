@@ -190,6 +190,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [26. Assistant: t629, t630 and t631, one each:](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m26)
   - [27. Assistant: Here's t637, and a question on your 2.](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m27)
   - [28. Assistant: One more from the What is still missing(../what-is-still-mis](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m28)
+  - [29. Assistant: t641, the endless finishers. Found it. With Finishing Plus e](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m29)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
