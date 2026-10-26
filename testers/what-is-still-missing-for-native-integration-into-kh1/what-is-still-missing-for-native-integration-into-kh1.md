@@ -18,6 +18,7 @@
 - [12. Assistant: Thanks! This is a big list, so I'm doing it one system per v](#^m12)
 - [13. Assistant: Thanks! Here's how I took your answers, then this round's tw](#^m13)
 - [14. Assistant: Thanks! I worked through Valor, then moved Wisdom over too. ](#^m14)
+- [15. Assistant: Thanks! All nine are in. 1 (a) and 5 (a) need no change: the](#^m15)
 
 ---
 
@@ -541,6 +542,8 @@ go ahead
 > Next I'll keep going on Valor and Wisdom by your answers. Then Wisdom's Aerial Recovery (not built yet) and the shots' flight onto KH1's own script machine.
 
 ^m14
+
+
 1. (a)
 2. all three, make it native to kh1 like the base keyblade 
 3. (a)
@@ -552,3 +555,98 @@ go ahead
 9. (a) if rumble is on it should work then
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! All nine are in. 1 (a) and 5 (a) need no change: the left blade keeps KH1's wall bounce, and Wisdom keeps KH2's Cure. The rest is nine versions, one system each. I re-checked each one against the KH2 Steam decomp first.
+>
+> **7, Attack after a missed swing**
+> - **t692.** KH2's Attack button (`0x1403D6CA0`) has no separate air rule. In a swing's combo or finisher window the press only counts if that swing connected, or with Combo Master. Otherwise nothing happens, and once the swing ends the next press starts a new combo. So a whiffed air combo never reaches its finisher.
+> - KH1's own Attack step already works exactly this way, so base Sora, Valor and Wisdom on KH1's states were right.
+> - The old KH2 controller code still used by Master, Final, Limit and Anti let missed air swings chain. That's fixed now.
+> - I also confirmed which of KH2's ability bits are Combo Master and Berserk Charge (both were guesses before).
+>
+> **8, KH1's combo row refusing on its own**
+> - **t693, first step.** When KH2 takes nothing for a press, KH1's own row picker now answers "no attack" itself, and the row runner runs nothing. That's one rule for base Sora at the KH2 combo settings and for Valor and Wisdom. Before, base Sora played KH1's own row there, and the forms used a separate check afterwards.
+> - A refused press also clears KH1's "connected" flag, as KH2's does. With the combo rows at KH1, nothing changes.
+> - **Still running along:** KH2's row choice is still worked out on our KH2 controller object, fed with KH1's state, and the Finishing Plus counter is ours. Next steps: the row choice from KH1's state alone (Square moves and Counterguard move with it), then the finisher counter as a field of KH1's own combat info.
+>
+> **3, the stance after the change**
+> - **t694.** KH2 plays the arrival, then motion 6, then the idle, every time a form starts on the ground (`0x140405630`), for every form. Motion 6 is free all through, so moving, jumping or attacking cuts it.
+> - It's now a baked slot for each form that has one: Valor (half a second) and Wisdom (two thirds of a second). KH1's own motion queue plays it, with KH2's blends. In the air nothing changes.
+>
+> **9, rumble**
+> - **t695.** KH2's trigger 31 is the pad vibration. It's on the hit reactions, recoils and guard repel, the Drive, the casts, Explosion, Finishing Leap, Counterguard, Magnet Burst and Wisdom's shots.
+> - These now fire from KH1's own motion events and play KH2's exact patterns (from KH2's battle file) through KH1's own vibration player.
+> - They only rumble when KH1's Config **Vibration** is on.
+>
+> **4, ledges**
+> - **t696.** KH2 only cuts a ground move into the fall when you're off the floor *and* the move isn't holding you (its no-gravity or edge-stop frames).
+> - KH1's cut is otherwise already KH2's (fall from rest, speed capped at 8). So KH1's ground state now skips the cut while one of our moves holds you.
+> - Valor's 154 holds you all the way through: it carries you off a ledge and you drop when it ends. Valor's 155 holds too, and so do base Sora's 154 / 155 / Upper Slash / Guard Break / Flash Step during their edge-stop frames, and the Drive.
+> - KH1's own moves are unchanged.
+> - It's in the debug menu's main page as **Ledge Carry** On/Off, on by default and saved in the ini.
+>
+> **2, the second Keyblade as one of KH1's own weapons**
+> - **t697, weapon object:** it's now taken from KH1's own weapon pool and built the way KH1 builds Sora's.
+> - **t698, drawing:** KH1's own character draw, the same function that draws Sora and his Keyblade, now draws it.
+> - **t699, trail:** KH1's own trail code makes, fades and ends it. The left blade's trail windows are now a motion event in Valor's moves, read by KH1's own event reader. Vanilla KH1 never reads that event.
+> - The left hits use the new weapon object.
+> - **Still ours:** the "holder". KH1 gives each character one weapon on one set of hand bones, so the left blade needs a second copy of Sora that carries the left hand's bones (taken from KH2's left Keyblade). That's the last step of the plan; see question 3.
+>
+> **6, form levels**
+> - **t700.** Drive Form levels are in KH1 now, by KH2's own rule (`0x1403E8380`), with the EXP per level read from your own KH2 files.
+> - **Valor** gets 1 EXP per hit it lands on an enemy (both Keyblades count).
+> - **Wisdom** gets 1 per enemy you defeat after hitting it last.
+> - Each form's growth ability now follows its level, as in KH2: Valor's High Jump, Wisdom's Quick Run, Final's Glide. It's LV1 at form LV1, LV2 at LV3, LV3 at LV5 and MAX at LV7. This replaces the old "MAX" and "Sora's level + 1" rules.
+> - The levels are kept in three spare bytes of your save. A "Form Level Up" box shows each new level.
+>
+> **What I checked**
+> - The Steam KH2 and KH1 decomps for everything above.
+> - The exe: every new hook's first bytes, and KH2's growth table.
+> - KH2's files: motion ranges and triggers, the vibration table, fmlv.
+>
+> **What I couldn't check**
+> - Anything in game.
+> - Which pad motor KH2's two vibration channels drive.
+> - That KH1's blend counts 60 Hz frames.
+> - That nothing in KH1 touches the new save bytes through a computed pointer.
+>
+> The first start rebakes once (the new stance slots, the rumble events and Valor's left trail windows).
+>
+> **Please test**
+> - **Missed swings** (base Sora at KH2, Valor, Wisdom):
+>   - whiff on the ground and in the air, with and without Combo Master: missed swings shouldn't chain, and air whiffs never reach the finisher;
+>   - mash Attack where KH2 does nothing (after an air combo, during a finisher without Finishing Plus): nothing should come out;
+>   - Square moves and Counterguard should still work.
+> - **Stance:** Drive into Valor and Wisdom on the ground. You should get the stance, then the idle. Move, jump or attack during it.
+> - **Rumble:** with Vibration on, get hit, get repelled, Drive, cast, and use Explosion / Magnet Burst. Then turn Vibration off: nothing should rumble. Try 60 and 30 fps.
+> - **Ledges:** start Valor's 154 near a ledge. You should be carried off and drop when it ends. With Ledge Carry off you drop at once. Base Sora's finishers should still stop at edges.
+> - **Left Keyblade:**
+>   - Does it sit in the hand as before?
+>   - Is its trail on the left blade, in its own look, fading at the swing's end and on revert?
+>   - Change rooms and swap Valor's Keyblade while in Valor.
+> - **Form levels:** land hits in Valor and defeat enemies in Wisdom. Watch the level-up box, and check High Jump / Quick Run improve at form LV3. Save, reload and check the level is kept.
+> - **Log lines:**
+>   - "KH2's walk takes no row"
+>   - "its arrival, then its stance (motion 6)"
+>   - "KH2 rumble"
+>   - "KH2's ledge carry"
+>   - "its KH1 weapon object made"
+>   - "drawn in the left hand by KH1's actor draw"
+>   - "made by KH1's trail step"
+>   - "Valor Form (LVn, x EXP)"
+>
+> **Questions**
+> 1. In KH2 a clash (and two other cases, probably wall bounces) counts as a connected swing but takes one off the combo count, so the next press repeats that step. Should I (a) add that to KH1's clash / wall handling, or (b) leave it?
+> 2. KH2's magic always counts as a combo step, even after a missed swing. Our older controller code (Master, Final, Limit, Anti) still counts a ground spell only after a hit. Should I (a) fix it to KH2's rule, or (b) leave it?
+> 3. The second Keyblade's last step, the holder: should I (a) bake the left hand's weapon bones into Valor's moves so KH1's own animation drives them, or (b) keep using KH2's left Keyblade pose for now?
+> 4. Final's left trail still comes from KH2's data, because Final isn't on KH1's states yet. Should I move it over (a) when Final goes native, or (b) now?
+> 5. Form level cap. KH2 caps form levels at 2 + the forms you own. Here that's Valor and Wisdom (plus Final once you've used it), so LV4, or LV5 with Final. Should I (a) keep KH2's rule, (b) count every KH2 form so the cap is LV7, or (c) wait until Limit and Master are on these states?
+> 6. Base Sora's growth from form levels. In KH2 a form level-up also raises base Sora's own growth ability and gives him that level's reward ability (Auto Valor, Combo Plus, MP Rage, ...). That would change KH1's own ability list. Should I (a) leave it out, (b) add the growth only, or (c) add both?
+> 7. Final's EXP. Final levels on defeating Nobodies, and KH1 has none. Should it (a) never gain EXP, (b) count every enemy defeated in Final, or (c) use another rule you pick?
+> 8. KH2's form level also lengthens the form's gauge. Here forms run on MP. Should higher levels (a) leave the MP drain as it is, or (b) drain more slowly?
+> 9. Rumble on hits. KH1's own hit vibration still starts the moment you're hit, then KH2's reaction vibration replaces it a moment later. KH2 has no separate hit vibration. Should I (a) stop KH1's hit vibration when a KH2 reaction will play its own, or (b) leave both?
+> 10. While you're carried off a ledge, KH1's ground checks (pushes, grabs) still run. Should the carry (a) block ladder and ledge grabs until it ends, or (b) let KH1 grab as it does now?
+
+^m15
+

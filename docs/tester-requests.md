@@ -277,6 +277,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [12. Assistant: Thanks! This is a big list, so I'm doing it one system per v](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m12)
   - [13. Assistant: Thanks! Here's how I took your answers, then this round's tw](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m13)
   - [14. Assistant: Thanks! I worked through Valor, then moved Wisdom over too. ](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m14)
+  - [15. Assistant: Thanks! All nine are in. 1 (a) and 5 (a) need no change: the](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m15)
 
 ---
 
