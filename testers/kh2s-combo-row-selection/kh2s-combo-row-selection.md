@@ -890,3 +890,6 @@ go ahead
 
 ^m31
 
+I noticed an issue where the 2nd attack on kh2 soras ground combos has really crazy tracking and he teleports everywhere. I also noticed that sometimes you can't attack it just resets you. I've recorded a trace and sent a log. If you find the issue go ahead and fix it
+
+go ahead
