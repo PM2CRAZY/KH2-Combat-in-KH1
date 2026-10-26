@@ -155,3 +155,4 @@ did you implement the quick run double effect? I currently don't see it in my bu
 
 ^m5
 
+I didn't see it on quick run max, but james saw it on level 3, unsure about level two can you make it a setting in the debug where I can adjust the growth abilities 
