@@ -574,3 +574,35 @@ a blend's end with `(start, -1)` then `(start, time)`; a motion started with no 
 - KH2's footsteps (trigger 2) aren't written: a baked slot keeps the template's own KH1 foot
   effects and floor sounds, rescaled (`kh1_tracks`), as before.
 
+### 13.5 Effects: one key per frame, from the moveset's own package (Valor, t-vfx)
+
+The tester (what-is-still-missing, after m13): "no effects" in Valor on KH1's own states.
+
+- **Why.** The wrapped handler sent every effect key to `kh2fx::event`, which starts the element
+  from **Sora's** package and only for the motions `kh2_effects` lists. Valor's motions (151..155,
+  181..184, 40, the arrival 53) were not listed, so nothing played; and Valor's element numbers are
+  its own archive's (`P_EX100_BTLF.a.us`), so even a listed one would have started Sora's element
+  of that number. The old controller path sent a form's effects to `form::effect`
+  (`kh2fx::form_event`, Valor's package); the Steam key path didn't know the slot was Valor's.
+- **And the 8-edge cap.** Sora's Drive motion 52 starts 13 elements and a voice at frame 0, Valor's
+  arrival 53 fifteen elements (1..12, 100..102) at frame 0 (Checked (files), `P_EX100.mset`,
+  `P_EX100_BTLF.mset`). KH1 reads 8 edges a call (§13.1), so `add_sound_keys` left 6 / 7 of them
+  out: the Drive's limb glow and Valor's arrival light were cut.
+- **KH2 (Steam KH2, Checked (decomp)).** `0x14040E960` fires every trigger of the frame in the one
+  update (no limit). Trigger 1 (`0x14040DD70` case 1) starts the element from the effect package of
+  the object whose motion it is (`+0x148`, `0x1402C6B30 (package, id, 1, 1)`). Valor's weapon
+  motions (`W_EX010_BTLF_R` / `_L`) carry no trigger 1, only sounds (trigger 8) (Checked (files));
+  all of Valor's elements are on its body motions: 40 [0], 53 [1..12, 100..102], 154 [16 at 64],
+  155 [13, 14 at 0; 15 at 42], 183 [17 at 0; 18 at 26; 19, 20 at 28], 184 [21..26].
+- **Now.** Effects are one type-6 key per frame of the clip: `a` = `KH2_EFFECTS` 0x83, `b` the KH2
+  motion, `c` = the frame | 0x10000 when the slot is the form's (`Move::form`, Valor's moveset)
+  (`kh1_data::slot::kh2_effects_value`). The handler (`kh2slots::effects_at`) takes that frame's
+  effect triggers from the moveset's own clip and starts each: Valor's through `form::effect`
+  (Valor's package, its anchors: the right Keyblade's blade binding, the left one's on
+  `leftblade`'s owner, `kh2dpx::form_anchor`), Sora's through `kh2fx::event` as before. Sounds and
+  voices stay one key each (`KH2_SOUND` / `KH2_VOICE`). The slot cache keys on the tracks, so the
+  slots whose keys changed rebake once.
+- Not done: KH2's frame trigger 31 on 52 (frame 0 [1], 20 [9]) and Valor's 41 ([5]) (Steam KH2
+  `0x1403EEFC0`: a table lookup then `0x14019AE60`; **Assumption**: the pad's rumble, not a
+  visual). Not checked in game.
+

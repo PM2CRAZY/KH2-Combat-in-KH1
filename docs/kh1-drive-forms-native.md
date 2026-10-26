@@ -228,6 +228,8 @@ drains yellow MP as before.
 **Not native yet / not done in this step:**
 
 - (The left Keyblade's hits: done in t680, a KH1 attack object of their own, §7.2.)
+- (Valor's effects: from Valor's own package, the Drive's and arrival's whole frame-0 sets, t-vfx,
+  docs/kh1-anim-baking.md §13.5.)
 - (Valor's Square moves: done on KH1's rows in t679, §7.1.)
 - Valor's guard windows (arrival 53, 155's left-blade guard 162) are not KH1 guard objects
   (`takeover::kh2_hits` skips a form's).

@@ -253,6 +253,21 @@ pub const EDGE_WINDOW: f32 = 2.0;
 pub const KH2_EFFECT: u16 = 0x80;
 pub const KH2_SOUND: u16 = 0x81;
 pub const KH2_VOICE: u16 = 0x82;
+/// Every effect element (KH2 frame trigger 1) of the KH2 motion `b` at one frame, in one key
+/// (KH2 fires all of a frame's triggers in one update; KH1 reads 8 edges a call): `c` from
+/// [`kh2_effects_value`], the frame and which moveset's package (Sora's, or the form's).
+pub const KH2_EFFECTS: u16 = 0x83;
+
+/// `c` of a [`KH2_EFFECTS`] key: the KH2 frame in the low 16 bits, bit 16 set for the form's
+/// moveset (its own effect package).
+pub fn kh2_effects_value(frame: u32, form: bool) -> u32 {
+    (frame & 0xFFFF) | (form as u32) << 16
+}
+
+/// A [`KH2_EFFECTS`] key's `c` back as (frame, form).
+pub fn kh2_effects_of(c: u32) -> (u32, bool) {
+    (c & 0xFFFF, c >> 16 & 1 != 0)
+}
 
 /// The time a KH2 frame trigger at `frame` gets as a KH1 edge key. KH2 fires a trigger at F when
 /// the motion's time goes from `from` to `to` with `from < F <= to` (and F = the start when a
@@ -398,5 +413,12 @@ mod tests {
         assert_eq!(tracks[1].keys.len(), 5);
         // (Two frames on, room again.)
         assert_eq!(add_sound_keys(&mut tracks, &[EventKey { time: 7.5, a: KH2_EFFECT, b: 166, c: 1, d: 0 }]), 0);
+    }
+
+    #[test]
+    fn kh2_effects_value_round_trips() {
+        assert_eq!(kh2_effects_of(kh2_effects_value(0, true)), (0, true));
+        assert_eq!(kh2_effects_of(kh2_effects_value(76, false)), (76, false));
+        assert!(KH2_EFFECTS > KH2_VOICE);
     }
 }

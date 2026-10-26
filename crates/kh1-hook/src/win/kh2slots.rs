@@ -723,8 +723,8 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     // (`sound_event`), plays through `kh2sound` / `kh2fx` (`kh2_trigger_keys`).
     // (Steam only: KH1's handler is wrapped there. Elsewhere the old way, `tick` reading them.)
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
-    let triggers = kh2_trigger_keys(motion, clip, reaction);
-    let events: Vec<(u32, EventKind)> = if steam { Vec::new() } else { triggers.iter().filter_map(|k| Some((k.time.ceil() as u32, kh2_trigger(k.a as i32, k.c)?))).collect() };
+    let triggers = kh2_trigger_keys(motion, clip, reaction, src.form);
+    let events: Vec<(u32, EventKind)> = if steam { Vec::new() } else { kh2_trigger_events(clip, reaction) };
     if steam {
         let dropped = ks::add_sound_keys(&mut tracks, &triggers);
         if dropped > 0 {
@@ -1253,25 +1253,73 @@ fn bake_one(b: &pose::Baker, src: &pose::Src, template: &[u8], (motion, field): 
 }
 
 /// The KH2 clip's sounds (frame trigger 8), voices (13 / 14) and effect elements (1) as KH1 sound
-/// event keys (type 6) of ours (`ks::KH2_SOUND` / `KH2_VOICE` / `KH2_EFFECT` in `a`, the KH2
-/// motion in `b`, the value in `c`), at KH2's frames (`ks::kh2_trigger_time`: the slot's time is
-/// KH2's frame, 60 Hz, as the bake keeps the clip's length). A hit reaction's KH2 voice, 29 / 30 at
-/// frame 0 (Checked (files)), is left out: KH1's hit pass plays its own hurt voice for it,
-/// `0x1402901F0 (actor, 0 | 1, 0)` (Checked (decomp)). (KH2's footsteps, trigger 2, aren't here:
-/// a baked slot keeps the template's own KH1 foot effects and floor sounds, `kh1_tracks`.)
-fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool) -> Vec<ks::EventKey> {
-    clip.events
+/// event keys (type 6) of ours (`ks::KH2_SOUND` / `KH2_VOICE` in `a`, the KH2 motion in `b`, the
+/// value in `c`; effects as one `ks::KH2_EFFECTS` key per frame, `c` the frame and the moveset), at
+/// KH2's frames (`ks::kh2_trigger_time`: the slot's time is KH2's frame, 60 Hz, as the bake keeps
+/// the clip's length). A hit reaction's KH2 voice, 29 / 30 at frame 0 (Checked (files)), is left
+/// out: KH1's hit pass plays its own hurt voice for it, `0x1402901F0 (actor, 0 | 1, 0)` (Checked
+/// (decomp)). (KH2's footsteps, trigger 2, aren't here: a baked slot keeps the template's own KH1
+/// foot effects and floor sounds, `kh1_tracks`.)
+///
+/// Effects (t-vfx): KH2's trigger pass fires every trigger at a frame in the one update (Steam KH2
+/// `0x14040E960`, no limit) and trigger 1 starts the element from the motion's owner's own effect
+/// package (`0x14040DD70` case 1: the object's `+0x148`, `0x1402C6B30`; Checked (decomp)). Sora's
+/// Drive motion 52 starts 13 elements at frame 0 and Valor's arrival 53 fifteen (Checked (files)),
+/// past KH1's 8 edges a call (`ks::EDGES_PER_CALL`): one key per frame keeps them all, and the
+/// moveset tag (`form`: Valor's slot) sends them to Valor's own package (`form::effect`), not
+/// Sora's.
+fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool, form: bool) -> Vec<ks::EventKey> {
+    let mut keys: Vec<ks::EventKey> = clip
+        .events
         .iter()
         .filter_map(|e| {
             let (a, c) = match e.kind {
                 EventKind::Sound(id) => (ks::KH2_SOUND, id),
-                EventKind::Effect(el) => (ks::KH2_EFFECT, el as u16 as u32),
                 EventKind::Voice(v) if !reaction => (ks::KH2_VOICE, v as u16 as u32),
                 _ => return None,
             };
             Some(ks::EventKey { time: ks::kh2_trigger_time(e.frame), a, b: motion, c, d: 0 })
         })
+        .collect();
+    let mut frames: Vec<u32> = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Effect(_))).map(|e| e.frame).collect();
+    frames.sort_unstable();
+    frames.dedup();
+    keys.extend(frames.into_iter().map(|f| ks::EventKey { time: ks::kh2_trigger_time(f), a: ks::KH2_EFFECTS, b: motion, c: ks::kh2_effects_value(f, form), d: 0 }));
+    keys.sort_by(|x, y| x.time.total_cmp(&y.time));
+    keys
+}
+
+/// The same triggers as KH2 events by frame (off Steam: `tick` reads them).
+fn kh2_trigger_events(clip: &character_core::Clip, reaction: bool) -> Vec<(u32, EventKind)> {
+    clip.events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Effect(_)) || matches!(e.kind, EventKind::Voice(_)) && !reaction)
+        .map(|e| (e.frame, e.kind))
         .collect()
+}
+
+/// A `ks::KH2_EFFECTS` key fired on Sora (`sound_event`): every effect trigger of KH2 `motion` at
+/// that frame, from the moveset's clip (Valor's when tagged), started from that moveset's package.
+unsafe fn effects_at(motion: u16, c: u32) {
+    let (frame, form) = ks::kh2_effects_of(c);
+    let Some(kh2) = pose::kh2() else { return };
+    let character = if form { kh2.valor.as_ref().map(|f| &f.character) } else { Some(&kh2.character) };
+    let Some(clip) = character.and_then(|c| c.moveset.clips.get(&motion)) else { return };
+    for e in clip.events.iter().filter(|e| e.frame == frame) {
+        if let EventKind::Effect(n) = e.kind {
+            if form {
+                super::form::effect(motion, n);
+            } else {
+                super::kh2sound::event(motion, e.kind);
+                super::kh2fx::event(motion, e.kind);
+            }
+        }
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if super::log_on(super::LogCat::Effects) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+        let els: Vec<i16> = clip.events.iter().filter(|e| e.frame == frame).filter_map(|e| if let EventKind::Effect(n) = e.kind { Some(n) } else { None }).collect();
+        log!(Effects, "KH2 slots: KH1's motion pass fired {} motion {motion}'s effects at frame {frame}: elements {els:?}{}", if form { "Valor's" } else { "Sora's" }, if form && !(super::form::in_valor() || super::form::in_final()) { " (not in the form: left out)" } else { "" });
+    }
 }
 
 /// One of our sound event keys (`kh2_trigger_keys`) back as the KH2 event it was; `None` for KH1's.
@@ -2155,6 +2203,12 @@ static ORIG_SOUND_EVENT: AtomicUsize = AtomicUsize::new(0);
 /// `0x1401A22B0` sets with a stop of every sound and `0x1401A2130` / `0x1401B02C0` clear,
 /// Checked (decomp); Assumption: an event or cutscene. Our triggers are skipped then too.)
 unsafe extern "system" fn sound_event(actor: usize, a: i32, b: i32, c: u32) {
+    if a == ks::KH2_EFFECTS as i32 {
+        if actor == super::takeover::sora_actor() {
+            effects_at(b as u16, c);
+        }
+        return;
+    }
     if let Some(e) = kh2_trigger(a, c) {
         if actor == super::takeover::sora_actor() {
             let motion = b as u16;
