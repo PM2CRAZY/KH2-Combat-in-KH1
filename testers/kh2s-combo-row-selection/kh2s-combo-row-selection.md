@@ -34,6 +34,7 @@
 - [28. Assistant: One more from the What is still missing(../what-is-still-mis](#^m28)
 - [29. Assistant: t641, the endless finishers. Found it. With Finishing Plus e](#^m29)
 - [30. Assistant: Thanks for checking in KH2, you were right and I was wrong a](#^m30)
+- [31. Assistant: t650 and t651:](#^m31)
 
 ---
 
@@ -867,7 +868,25 @@ go ahead
 
 ^m30
 
+
 1.(a)
 2.(a) make them play the thunder finisher animation, also forgot to add aero to the list so also make it the same as gravity and stop
 
 go ahead
+
+> [!tip] Assistant
+> t650 and t651:
+>
+> - **t650, your 1 (a):** an Attack in a cast's window now only continues the combo if the spell actually hit something, or with Combo Master equipped. Otherwise the press does nothing and the next Attack after the cast ends starts a new combo, as in KH2. A spell can still follow a spell either way, and a cast in a window always counts as the next step. Checked in the KH2 decomp: the Attack command only uses the window when the "connected" flag is set (or Combo Master), the magic command always does, and KH2's hit routine sets that flag on Sora when one of his spell's attacks hits. Ours does the same with KH1's own "connected" flag: cleared when the cast takes its step, set when one of the spell's attacks hits (KH1's spells and KH2's alike).
+> - **t651, your 2:** with their animation set to KH2, Gravity, Stop and Aero on the ground now play KH2's Thunder finisher cast, and Aero is a finisher too, the same as Gravity and Stop: it jumps the combo to its finisher, and with Finishing Plus left another finisher can follow in that finisher cast's window (42 to 78 of its 94 frames). KH1's own script still casts each spell, on the finisher cast's cast frame. Air casts are unchanged. Checked: the Thunder finisher cast's frames in your `P_EX100.mset`. Not checked: in game.
+>
+> Please test:
+> - KH2 Fire, Blizzard, Thunder and Reflect: hit an enemy then Attack in the window (the combo should go on), and miss then Attack (nothing until the cast ends, then a new combo). Try it with Combo Master too.
+> - Gravity, Stop and Aero with their animation at KH2, standing and mid-combo, with and without Finishing Plus.
+>
+> Log lines: "the cast's spell connected", "the combo's finisher: step", "Finishing Plus window".
+>
+> One question: with their animation set to KH1 (and Magic Combo at KH2), Gravity, Stop and Aero are finishers but keep KH1's own cast animation. Should they (a) stay on KH1's animation, or (b) also play KH2's Thunder finisher cast there?
+
+^m31
+
