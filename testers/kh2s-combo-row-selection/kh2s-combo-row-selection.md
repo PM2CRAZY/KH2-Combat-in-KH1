@@ -35,6 +35,7 @@
 - [29. Assistant: t641, the endless finishers. Found it. With Finishing Plus e](#^m29)
 - [30. Assistant: Thanks for checking in KH2, you were right and I was wrong a](#^m30)
 - [31. Assistant: t650 and t651:](#^m31)
+- [32. Assistant: Thanks for the trace and the log, they made both easy to fin](#^m32)
 
 ---
 
@@ -890,6 +891,38 @@ go ahead
 
 ^m31
 
+
 I noticed an issue where the 2nd attack on kh2 soras ground combos has really crazy tracking and he teleports everywhere. I also noticed that sometimes you can't attack it just resets you. I've recorded a trace and sent a log. If you find the issue go ahead and fix it
 
 go ahead
+> [!tip] Assistant
+> Thanks for the trace and the log, they made both easy to find. There were two separate bugs, so there are two versions:
+>
+> - **t669, the 2nd swing's tracking.** The 2nd swing is KH2's 153, and it turns toward the enemy a second time late in the swing (frames 32 to 44).
+>   - The jumps: KH1 places Sora by laying the swing's whole travel so far (about 220 units by then) along his facing as it is *now*. So every turn swung all the distance he'd already covered round to the new direction, and he jumped 70 to 160 units a frame. Your trace shows it exactly: at frame 23027, a 0.52 turn and a jump of about 116.
+>   - The tug-of-war: on top of that, KH1 kept turning him back toward the swing's start direction (π/16 a frame, from its move vector), so each turn fought the last one.
+>   - Now the travel so far turns with him (KH1's `+0x210`), and on the ground KH1's move vector points where KH2 turned him. He should slide forward and curve toward the enemy, as in KH2.
+> - **t670, the press that did nothing.** Since t631, Flash Step and Vicinity Break never got their own KH1 row: their Keyblade guard frames made my check think they couldn't run natively, but that guard already works through KH1's hit pass. So whenever KH2 picked them (Vicinity Break with an enemy behind you, Flash Step at range) the press did nothing. Your log shows it: "KH2's row 51 motion 170 has no KH1 row of its own built: no attack". Both are built now.
+>
+> Checked:
+> - your trace and log;
+> - KH1's motion pass (`0x14029F0A0`), think and ground input step in the Steam KH1 decomp;
+> - Flash Step's and Vicinity Break's windows in your KH2 files: the new rule lets in exactly those two more moves.
+>
+> Not checked:
+> - in game;
+> - KH2's per-frame root step, which I took from our KH2 rewrite rather than the Steam KH2 decomp;
+> - the frame of the turn itself still steps along the old facing for that one frame.
+>
+> A side finding: your trace's rows have one more value than its header, so from `pos_x` on every value sits one column to the right of its name. I read it with that shifted back.
+>
+> Please test:
+> - Ground combos locked on and unlocked, especially the 2nd swing with the enemy off to one side. Log: "KH2's turn to the target … travel so far turned with him".
+> - Vicinity Break with an enemy behind you, and Flash Step from a distance. At start-up the log should list "KH2 motion 169 (Flash Step)" and "170 (Vicinity Break)".
+>
+> Questions:
+> 1. The one-frame lag: (a) also turn that frame's step, so the step right after a turn follows the new facing at once; or (b) leave it until I've checked KH2's order within a frame in the decomp?
+> 2. The trace's shifted columns: (a) fix the trace's header (a debug-only change); or (b) leave it?
+
+^m32
+
