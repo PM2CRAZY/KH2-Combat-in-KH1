@@ -481,4 +481,6 @@ no effects, no proper physics on grounded finisher, attack doesn't interrupt jum
 
 but don't take my word for it compare to how kh2 does it in the c decomp and make sure everything is right. finish valor and wisdom form then we can go from there. make sure when its in the new system that its 1:1 with kh2, our configs don't adjust anything on drive forms atm as we'll treat them as unique in terms of game design. when implementing assume that everything may be wrong on the old controller so double check to make sure its right. it something we've implemented is the same way for drive forms make it apart of that code e.g how magic might work in the air for kh2. if anything is missing from kh1's engine remember, always add that extra ability so that we can achieve 1:1.
 
+for 2nd keyblade it should behave 1:1 with how the main keyblade works, make sure its a file as well 
+
 go ahead
