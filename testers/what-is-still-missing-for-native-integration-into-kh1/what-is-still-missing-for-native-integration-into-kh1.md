@@ -16,6 +16,7 @@
 - [10. Assistant: Thanks! (a) it is, so nothing changes: on starts where the c](#^m10)
 - [11. Assistant: Here's the list brought up to date, from t632 to t675.](#^m11)
 - [12. Assistant: Thanks! This is a big list, so I'm doing it one system per v](#^m12)
+- [13. Assistant: Thanks! Here's how I took your answers, then this round's tw](#^m13)
 
 ---
 
@@ -419,6 +420,8 @@ update what is still missing for native
 > 3. Valor next: (a) its Square moves, or (b) the left Keyblade's own hits as a second KH1 attack object?
 
 ^m12
+
+
 1. (b)
 2. (a)
 3. do both
@@ -426,3 +429,46 @@ update what is still missing for native
 make sure when your moving these over to be native that you double check everything, we're unsure if we had a 1:1 implementation on our old systems so check the kh2 c decomp steam
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! Here's how I took your answers, then this round's two versions.
+>
+> - **1 (b):** Reflect's barrier, Magnet Burst's pull and the invulnerable frames will be moved too. They go after the spell scripts.
+> - **2 (a):** footsteps stay as they are, so nothing changes there.
+> - **3 "do both":** done, one version each, below.
+>
+> The order for the rest stays the same: the other Drive Forms, then KH2's motion-range rules as KH1 motion events, then the spell scripts, then the three from 1. As you asked, each one gets checked again against the KH2 Steam decomp before it moves. This round that check found mistakes in the old versions of both Valor items.
+>
+> **t679, Valor's Square moves on KH1's own rows.** I went through KH2's Square button handler in the Steam decomp (`0x1403A81F0`) and how it reaches each row (`0x1403A9950`, `0x1403A9C70`). In KH2's Valor:
+> - **Square when you're free on the ground** plays the rising double slash (181), standing or moving, with its hop of 90. Valor has no dodge roll or Quick Run, so the "moving" case falls through to it.
+> - **Square during a combo** plays 155 on the ground or 183 in the air. They're a normal combo step, not finishers. They only come out in the combo window, with a swing still left and the last swing connected (or Combo Master), and never out of a finisher.
+>
+> Both run through KH1's own Attack step on Valor's baked slots. KH2's controller isn't involved, and there's no new hook. The old version had two things wrong:
+> - it treated 155 / 183 as finishers, so they came out at the combo's end and from finishers;
+> - it gave Valor Sora's Finishing Leap, which KH2's Valor doesn't have. That's gone now.
+>
+> **t680, Valor's left Keyblade hits on its own.** Each of the left Keyblade's hit windows now runs on a KH1 attack object of its own, which KH1's own collision pass checks. It sits on the left Keyblade where it's drawn, with KH2's spheres for that hit, that window's damage and reaction, and KH2's re-hit timing. KH2 keeps each weapon's attacks apart (Steam KH2 `0x1403D25D0`), so both blades can hit the same enemy in one swing. Ours now does the same. The old version had three things wrong:
+> - the left blade's hits came out of the right blade;
+> - where both blades swing at once (the ground finisher 154, the second air finisher 184), the left hit was lost;
+> - a left swing could let the right blade hit the same enemy twice.
+>
+> Checked: KH2's handler, row checks and attack slots in the Steam KH2 decomp; Valor's combo table, motions, hit windows and weapon spheres in KH2's files; KH1's attack constructor, row maker, collision pass and contact in the Steam KH1 decomp. Not checked: anything in game, and Valor's combo length (KH2 sets it from a script; I used the same length as before).
+>
+> Assumptions:
+> - KH1's "can act" stands for KH2's free state.
+> - Combo Master counts as a connected swing.
+> - The left spheres use KH2's distances along the blade, the same for every Keyblade.
+>
+> Please test in Valor:
+> - Square standing and while running: the rising slash and its hop.
+> - Square after the 1st and 2nd ground swings should give 155, and after it only Finishing Plus can follow. Square at the combo's last swing or during a finisher should do nothing. Do the same in the air with 183, and once after a swing that missed (with and without Combo Master).
+> - Ground and air combos with finishers: left-hand swings should hit enemies on the left side, and both blades should land on one enemy where they cross (154, 184).
+> - With the debug menu's Combat log on, look for lines starting "Valor: Square" and "left Keyblade hits:".
+>
+> Questions:
+> 1. KH2's spheres for each hit are much bigger than KH1's one Keyblade sphere (155's finisher reaches 380). The right Keyblade still uses KH1's sphere, so should I (a) move the right Keyblade to KH2's spheres too, so both blades are 1:1, or (b) leave it as it is?
+> 2. Should the left spheres (a) keep KH2's distances along the blade, or (b) scale to each Keyblade's length, the way KH1's trail does?
+> 3. While checking this I found that base Sora's Upper Slash and Horizontal Slash are refused one swing earlier than KH2 allows. Finishing Leap probably comes one swing early too. Should I (a) fix base Sora to KH2's exact rule as its own version, or (b) leave it?
+
+^m13
+
