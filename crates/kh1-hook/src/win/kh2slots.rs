@@ -380,7 +380,8 @@ pub struct Move {
     /// ours in every set, whatever the styles, with the kind bits of KH1's request here (its
     /// template's, whose slot `stands_for` is).
     pub own: Option<usize>,
-    /// The KH2 clip's sounds, voices and effects, by frame.
+    /// Off Steam only (`tick`): the KH2 clip's sounds, voices and effects, by frame. On Steam they
+    /// are sound events of the motion's own (`kh2_trigger_keys`), which KH1's motion pass fires.
     events: Vec<(u32, EventKind)>,
     /// Where KH2 loops it back to (60 Hz frames from its start), when KH1 loops it on a request
     /// with no hold (`loop_range`; the fall, `FALL`).
@@ -602,6 +603,19 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
         tracks.retain(|t| t.kind != ks::COMBO);
         tracks.extend(cast_follow(clip, finisher_cast));
     }
+    // (t-evts) KH2's frame triggers (sounds, voices, effect elements) as sound events of the
+    // motion's own, which KH1's motion pass fires and KH1's sound event handler, wrapped
+    // (`sound_event`), plays through `kh2sound` / `kh2fx` (`kh2_trigger_keys`).
+    // (Steam only: KH1's handler is wrapped there. Elsewhere the old way, `tick` reading them.)
+    let steam = super::addr::Build::current() == super::addr::Build::Steam;
+    let triggers = kh2_trigger_keys(motion, clip, reaction);
+    let events: Vec<(u32, EventKind)> = if steam { Vec::new() } else { triggers.iter().filter_map(|k| Some((k.time.ceil() as u32, kh2_trigger(k.a as i32, k.c)?))).collect() };
+    if steam {
+        let dropped = ks::add_sound_keys(&mut tracks, &triggers);
+        if dropped > 0 {
+            log!(Animation, "KH2 slots: KH2 motion {motion}: {dropped} of its {} frame triggers left out (more than KH1 reads in one frame)", triggers.len());
+        }
+    }
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     // (KH1's roll request has it too: KH2's roll moves him by its root, `ROLL`.)
     let travel = matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request]);
@@ -631,9 +645,6 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
         if default { "" } else { ", by KH2's row selection" },
         tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
     );
-    // (A hit reaction's KH2 voice, 29 / 30 at frame 0, Checked (files), left out: KH1's hit pass plays
-    // its own hurt voice for it, `0x1402901F0 (actor, 0 | 1, 0)`, Checked (decomp).)
-    let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Effect(_)) || (!reaction && matches!(e.kind, EventKind::Voice(_)))).map(|e| (e.frame, e.kind)).collect();
     // (KH2's own loop point, for the fall: `loop_range`.)
     let loop_from = (kind == Kind::Jump && !own).then(|| kh2.rig.motions.get(&motion)).flatten().and_then(|m| {
         let k = 60.0 / m.fps.max(1e-3);
@@ -1118,6 +1129,38 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): 
         r.worst_bone
     );
     Ok(block)
+}
+
+/// The KH2 clip's sounds (frame trigger 8), voices (13 / 14) and effect elements (1) as KH1 sound
+/// event keys (type 6) of ours (`ks::KH2_SOUND` / `KH2_VOICE` / `KH2_EFFECT` in `a`, the KH2
+/// motion in `b`, the value in `c`), at KH2's frames (`ks::kh2_trigger_time`: the slot's time is
+/// KH2's frame, 60 Hz, as the bake keeps the clip's length). A hit reaction's KH2 voice, 29 / 30 at
+/// frame 0 (Checked (files)), is left out: KH1's hit pass plays its own hurt voice for it,
+/// `0x1402901F0 (actor, 0 | 1, 0)` (Checked (decomp)). (KH2's footsteps, trigger 2, aren't here:
+/// a baked slot keeps the template's own KH1 foot effects and floor sounds, `kh1_tracks`.)
+fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool) -> Vec<ks::EventKey> {
+    clip.events
+        .iter()
+        .filter_map(|e| {
+            let (a, c) = match e.kind {
+                EventKind::Sound(id) => (ks::KH2_SOUND, id),
+                EventKind::Effect(el) => (ks::KH2_EFFECT, el as u16 as u32),
+                EventKind::Voice(v) if !reaction => (ks::KH2_VOICE, v as u16 as u32),
+                _ => return None,
+            };
+            Some(ks::EventKey { time: ks::kh2_trigger_time(e.frame), a, b: motion, c, d: 0 })
+        })
+        .collect()
+}
+
+/// One of our sound event keys (`kh2_trigger_keys`) back as the KH2 event it was; `None` for KH1's.
+fn kh2_trigger(a: i32, c: u32) -> Option<EventKind> {
+    match a {
+        a if a == ks::KH2_SOUND as i32 => Some(EventKind::Sound(c)),
+        a if a == ks::KH2_EFFECT as i32 => Some(EventKind::Effect(c as u16 as i16)),
+        a if a == ks::KH2_VOICE as i32 => Some(EventKind::Voice(c as u16 as i16)),
+        _ => None,
+    }
 }
 
 /// KH1's events for a KH2 clip on a retimed template (`r`: new length / the template's): the
@@ -1761,12 +1804,13 @@ pub unsafe fn install() {
     // (KH2's swap into the fall in KH1's jump, `kh2_apex`: Steam only.)
     if super::addr::Build::current() == super::addr::Build::Steam {
         super::hook::install(base + APEX_STEAM, &APEX_PROLOGUE, apex as *const () as usize, &ORIG_APEX, "jump apex (KH2's fall swap)");
+        super::hook::install(base + SOUND_EVENT_STEAM, &SOUND_EVENT_PROLOGUE, sound_event as *const () as usize, &ORIG_SOUND_EVENT, "motion sound event (KH2's frame triggers)");
     }
 }
 
 /// Each frame Sora is posed (`pose`, the game thread): ours on the set bound and the one KH1
 /// keeps (in case a bind came before our motions were built), the requests pointed at ours by
-/// their moves' styles in every set, and our slot's KH2 sounds and effects.
+/// their moves' styles in every set, and which of ours plays (`tick`).
 pub unsafe fn frame(actor: usize) {
     let Some(b) = built() else { return };
     if !is_sora(actor) {
@@ -1880,6 +1924,42 @@ unsafe fn kh2_apex(actor: usize) -> bool {
         fall_now(actor, &format!("{t:.1} of {up:.1} frames up"));
     }
     true
+}
+
+/// KH1's motion sound event handler (Steam `0x140295420 (actor, a, b, c)`), which KH1's motion
+/// pass calls for each type-6 key whose time it passed: `0x14029FB30 (actor, from, to)` (from the
+/// animation step `0x14029F0A0`: the frame's step, the rest after a loop, and a blend's end; and
+/// from `0x14029FF80`) collects the keys of types 4 and 6, ids 0..3, with `from <= time < to`
+/// through `0x140394900`, then runs foot effects (`0x1402C2660`) and this. It plays a sound by id
+/// (`a` 0), his voice (`a` 0x19) or a material sound (`0x140295B40`, `a` 1..0x1D), after its
+/// own checks (the flags `0x142867364` bit 0x200, the actor's mute bits `+0x9C` by `c`,
+/// `0x14017AF20`, the actor's side). Checked (decomp). `mov [rsp+8], rbx; mov [rsp+0x10], rsi;
+/// push rdi; sub rsp, 0x20`, Checked (exe).
+const SOUND_EVENT_STEAM: usize = 0x295420;
+const SOUND_EVENT_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_SOUND_EVENT: AtomicUsize = AtomicUsize::new(0);
+
+/// KH1's sound event handler with our codes (`kh2_trigger_keys`): a KH2 frame trigger of our
+/// slot, played as KH2's (`kh2sound::event`, `kh2fx::event`, as their own gates say) on Sora;
+/// never handed to KH1's (whose table would read past its end). KH1's own keys go on as before.
+/// (KH1's motion pass itself skips every type-6 key while `0x142867364` bit 0x400 is set, which
+/// `0x1401A22B0` sets with a stop of every sound and `0x1401A2130` / `0x1401B02C0` clear,
+/// Checked (decomp); Assumption: an event or cutscene. Our triggers are skipped then too.)
+unsafe extern "system" fn sound_event(actor: usize, a: i32, b: i32, c: u32) {
+    if let Some(e) = kh2_trigger(a, c) {
+        if actor == super::takeover::sora_actor() {
+            let motion = b as u16;
+            super::kh2sound::event(motion, e);
+            super::kh2fx::event(motion, e);
+            static N: AtomicU32 = AtomicU32::new(0);
+            if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Animation, "KH2 slots: KH1's motion pass fired KH2 motion {motion}'s {e:?} at KH1's time {:.2}", rd::<f32>(actor + TIME_NOW));
+            }
+        }
+        return;
+    }
+    let f: unsafe extern "system" fn(usize, i32, i32, u32) = std::mem::transmute(ORIG_SOUND_EVENT.load(Ordering::Acquire));
+    f(actor, a, b, c);
 }
 
 unsafe extern "system" fn apex(actor: usize) {
@@ -2093,7 +2173,10 @@ pub unsafe fn playing_motion(actor: usize) -> Option<u16> {
     current(actor).map(|m| m.motion)
 }
 
-/// Our slot's KH2 sounds, voices and effects between KH1's last time and its time now.
+/// Which of ours plays (`PLAYING`, for `kh2fx::tick`, the trace and the panel), forced picks whose
+/// move is over put back, and (off Steam only) our slot's KH2 sounds, voices and effects between
+/// KH1's last time and its time now. On Steam KH1's own motion pass fires those: they are sound
+/// events of the baked motion (`kh2_trigger_keys`, `sound_event`).
 unsafe fn tick(actor: usize) {
     static LAST: Mutex<Option<(usize, f32)>> = Mutex::new(None);
     let Some(m) = current(actor) else {
@@ -2143,6 +2226,7 @@ unsafe fn tick(actor: usize) {
         }
     }
     *l = Some((slot, now));
+    // (Empty on Steam.)
     for (f, e) in &m.events {
         let f = *f as f32;
         if f > from && f <= now {

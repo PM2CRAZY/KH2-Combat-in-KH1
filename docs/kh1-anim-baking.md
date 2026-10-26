@@ -511,3 +511,66 @@ Not baked, KH1's own animation at every style:
   summons, KH1's specials, field actions, cutscenes**: KH1-only moves. KH2 has a counterpart only
   for the ledge (hang 7, 190 frames, and climb 8, 30 frames; `P_EX100.mset`, **Checked (files)**);
   KH1's ledge slots aren't identified yet. A question for the tester.
+
+## 13. KH2's frame triggers as KH1 motion events (what-is-still-missing m11, item 6)
+
+Before: KH2's sounds (frame trigger 8), voices (13 / 14) and effect elements (1) on our slots were
+kept Rust side, and `kh2slots::tick` read them each frame between KH1's last and current time.
+Now they are keys of the baked motion's own event list, and KH1's own motion pass fires them.
+
+### 13.1 How KH1 fires a motion's edge events (Steam, Checked (decomp))
+
+- `0x14029FB30 (actor, from, to)` is KH1's edge pass. The animation step `0x14029F0A0` calls it
+  with the frame's step (`[t, min(t + dt, length))`), after a loop with the rest
+  (`[loop start, loop start + rest)`), and when a blend ends with `[start, start + overshoot)`:
+  while a blend runs (`+0x170` > 0) the time is held and no event fires. `0x14029FF80` (the
+  states whose frame follows a value, e.g. the glide's 0x15 / 0x16) calls it too.
+- It asks `0x140394900 (instance, motion, from, to, out, 8)` for the keys of type 4 (foot) and
+  type 6 (sound) of ids 0..3 with `from <= time < to`. For each type and id only the **first**
+  group of that type and id in the list is read. The out buffer holds 8 keys: the caller walks
+  every key counted, so more than 8 in one call reads past it.
+- Type 4 keys go to `0x1402C2660 (actor, a, b)` (unless `0x142867364` bit 0x100); type 6 keys go to
+  `0x140295420 (actor, a, b, c)` (unless `0x142867364` bit 0x400). `0x1401A22B0` sets bit 0x400 with
+  a stop of every sound; `0x1401A2130` / `0x1401B02C0` clear it (Assumption: an event or cutscene).
+- `0x140295420`: after its own checks (`0x142867364` bit 0x200, the actor's mute bits `+0x9C` by
+  `c`, `0x14017AF20`, the actor's side), `a` 0 plays sound `b`, `a` 0x19 his voice `b`, `a`
+  1..0x1D a material sound through the table at `0x140528A87` (`0x140295B40`). The table's
+  entries end at `a` 0x1D (Checked (exe)).
+- Prologue of `0x140295420`: `48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20` (Checked (exe)).
+
+### 13.2 KH2's trigger timing (Steam KH2, Checked (decomp))
+
+`0x14040E960 (triggers, object, from, to)` fires a trigger at frame F when `from < F <= to`, or
+when `to` < 0 and F = `from`. The motion update `0x1403C6740` calls it with the frame's step, and at
+a blend's end with `(start, -1)` then `(start, time)`; a motion started with no blend
+(`0x1403C8A40`) fires its start frame at once. So KH2 holds its triggers through a blend too.
+
+### 13.3 What the bake writes
+
+- `kh2slots::kh2_trigger_keys`: each sound, voice and effect trigger of the clip as a type-6 key of
+  ours: `a` = `KH2_SOUND` 0x81 / `KH2_VOICE` 0x82 / `KH2_EFFECT` 0x80 (past KH1's codes), `b` the
+  KH2 motion, `c` the sound id / voice / element. A hit reaction's KH2 voice is left out as before
+  (KH1's hit pass says his hurt line).
+- Its time: KH2's frame F less 1/64 (`kh1_data::slot::kh2_trigger_time`), so KH1's `from <= t < to`
+  fires it on the same update as KH2's `from < F <= to` with whole-frame steps (60 and 30 fps).
+  Frame 0 stays 0: KH1 fires it on the motion's first update, or at its blend's end, as KH2 does.
+  The slot's time is KH2's frame (the bake keeps the clip's length at 60 Hz).
+- `kh1_data::slot::add_sound_keys` puts them in the template's first sound group (a new 6.0 when
+  there is none), since KH1 reads only that one; a key that would make more than 8 foot and sound
+  keys within 2 frames is left out (logged).
+- The hook `kh2slots::sound_event` wraps `0x140295420`: our codes play through `kh2sound::event`
+  and `kh2fx::event` on Sora, as `tick` did (their own gates: `kh2_sounds`, Battle Quotes,
+  `kh2_effects`); KH1's own keys go to KH1's handler unchanged. Steam only; elsewhere the old
+  per-frame read stays (`Move::events`).
+- The slot cache's bake format is 2, so caches from before rebake.
+
+### 13.4 What changes in play
+
+- Same frame as before on an ordinary update; frame-0 triggers now wait for KH1's blend into the
+  slot to end (before: at the blend's start), as KH2's do.
+- During KH1's sound-off state (`0x142867364` bit 0x400) they don't fire, as KH1's own don't.
+- `kh2slots::tick` now only notes which of ours plays (`PLAYING`, for `kh2fx::tick`, the trace and
+  the Frame Advance panel) and puts back forced picks whose move is over.
+- KH2's footsteps (trigger 2) aren't written: a baked slot keeps the template's own KH1 foot
+  effects and floor sounds, rescaled (`kh1_tracks`), as before.
+

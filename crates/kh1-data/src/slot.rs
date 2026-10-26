@@ -237,6 +237,86 @@ pub fn scaled(tracks: &[EventTrack], r: f32) -> Vec<EventTrack> {
     tracks.iter().map(|t| EventTrack { keys: t.keys.iter().map(|k| EventKey { time: k.time * r, ..*k }).collect(), ..t.clone() }).collect()
 }
 
+/// KH1's edge events are read into a buffer of 8 a call (Steam `0x14029FB30` gives
+/// `0x140394900` room for 8 and then walks every one it counted, Checked (decomp)): no more
+/// than that may fall in one call's window.
+pub const EDGES_PER_CALL: usize = 8;
+/// The widest window one of KH1's edge calls covers in play: one game frame at 30 fps (frame
+/// scale 2). (A blend's end covers its overshoot, under a frame.)
+pub const EDGE_WINDOW: f32 = 2.0;
+
+/// Codes of ours for a sound event's `a` (type 6), the KH2 frame triggers of a KH2 motion baked
+/// into a KH1 slot: KH1's sound event handler (Steam `0x140295420 (actor, a, b, c)`, wrapped by
+/// the hook) takes `a` 0 (a sound by id), 0x19 (his voice) or a material sound's index (its
+/// table `0x140528A87[a]`, `a` 1..0x1D, Checked (exe)); ours are past those. `b` is the KH2 motion,
+/// `c` the trigger's value (`d` unused: KH1's handler gets only `a`, `b`, `c`).
+pub const KH2_EFFECT: u16 = 0x80;
+pub const KH2_SOUND: u16 = 0x81;
+pub const KH2_VOICE: u16 = 0x82;
+
+/// The time a KH2 frame trigger at `frame` gets as a KH1 edge key. KH2 fires a trigger at F when
+/// the motion's time goes from `from` to `to` with `from < F <= to` (and F = the start when a
+/// motion starts, Steam KH2 `0x14040E960` from `0x1403C6740` / `0x1403C8A40`, Checked (decomp));
+/// KH1 fires a key at t when `from <= t < to` (`0x140394900`, Checked (decomp)). With whole-frame
+/// steps both fire F on the same update when the key lies just under F; a start trigger (0) stays
+/// at 0, which KH1 fires on the motion's first update (or its blend's end, as KH2 does).
+pub fn kh2_trigger_time(frame: u32) -> f32 {
+    if frame == 0 {
+        0.0
+    } else {
+        frame as f32 - 1.0 / 64.0
+    }
+}
+
+/// `keys` (sound events, type 6) added to `tracks`. KH1 reads only the first group of a type and
+/// id (`0x140394900` looks each id 0..3 up from the list's start, Checked (decomp)), so they go into
+/// the first sound group there is (else a new 6.0), sorted by time. Keys that would put more than
+/// [`EDGES_PER_CALL`] foot (4) and sound (6) edges in one [`EDGE_WINDOW`] are left out (KH1's own
+/// first); their number is returned.
+pub fn add_sound_keys(tracks: &mut Vec<EventTrack>, keys: &[EventKey]) -> usize {
+    if keys.is_empty() {
+        return 0;
+    }
+    // (KH1's edges as KH1 reads them: the first group of each type 4 / 6 and id 0..3.)
+    let read = |tracks: &[EventTrack]| -> Vec<f32> {
+        let mut seen: Vec<(u16, u16)> = Vec::new();
+        let mut v = Vec::new();
+        for t in tracks {
+            if (t.kind == FOOT || t.kind == SOUND) && t.id < 4 && !seen.contains(&(t.kind, t.id)) {
+                seen.push((t.kind, t.id));
+                v.extend(t.keys.iter().map(|k| k.time));
+            }
+        }
+        v
+    };
+    let fits = |times: &[f32], t: f32| -> bool {
+        // (Every window holding `t` that starts at a key time.)
+        times.iter().chain(std::iter::once(&t)).filter(|&&s| s <= t && t < s + EDGE_WINDOW).all(|&s| times.iter().filter(|&&u| u >= s && u < s + EDGE_WINDOW).count() < EDGES_PER_CALL)
+    };
+    let mut times = read(tracks);
+    let mut taken = Vec::new();
+    let mut dropped = 0;
+    for k in keys {
+        if fits(&times, k.time) {
+            times.push(k.time);
+            taken.push(*k);
+        } else {
+            dropped += 1;
+        }
+    }
+    let at = match tracks.iter().position(|t| t.kind == SOUND && t.id < 4) {
+        Some(i) => i,
+        None => {
+            tracks.push(EventTrack { id: 0, kind: SOUND, keys: Vec::new() });
+            tracks.len() - 1
+        }
+    };
+    let t = &mut tracks[at];
+    t.keys.extend(taken);
+    t.keys.sort_by(|a, b| a.time.total_cmp(&b.time));
+    dropped
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,5 +375,28 @@ mod tests {
         let t = EventTrack::level(HIT, 0, &[(30.0, 40.0), (10.0, 20.0), (18.0, 25.0)]);
         let times: Vec<(f32, u16)> = t.keys.iter().map(|k| (k.time, k.a)).collect();
         assert_eq!(times, vec![(10.0, 1), (25.0, 0), (30.0, 1), (40.0, 0)]);
+    }
+    #[test]
+    fn kh2_triggers_join_the_first_sound_group() {
+        let mut tracks = vec![EventTrack::level(HIT, 0, &[(1.0, 5.0)]), EventTrack { id: 1, kind: SOUND, keys: vec![EventKey { time: 10.0, a: 0, b: 7, c: 0, d: 0 }] }, EventTrack { id: 2, kind: SOUND, keys: vec![] }];
+        let k = |t: u32| EventKey { time: kh2_trigger_time(t), a: KH2_SOUND, b: 151, c: 999019, d: 0 };
+        assert_eq!(add_sound_keys(&mut tracks, &[k(12), k(0)]), 0);
+        let times: Vec<f32> = tracks[1].keys.iter().map(|k| k.time).collect();
+        assert_eq!(times, vec![0.0, 10.0, 12.0 - 1.0 / 64.0]);
+        assert!(tracks[2].keys.is_empty());
+        // (None there: a new 6.0.)
+        let mut none = vec![EventTrack::level(HIT, 0, &[(1.0, 5.0)])];
+        add_sound_keys(&mut none, &[k(3)]);
+        assert_eq!((none[1].kind, none[1].id, none[1].keys.len()), (SOUND, 0, 1));
+    }
+
+    #[test]
+    fn no_more_edges_than_kh1_reads_at_once() {
+        let mut tracks = vec![EventTrack { id: 0, kind: FOOT, keys: vec![EventKey { time: 5.0, a: 0, b: 22, c: 0, d: 0 }; 3] }];
+        let keys: Vec<EventKey> = (0..8).map(|_| EventKey { time: 5.5, a: KH2_EFFECT, b: 166, c: 1, d: 0 }).collect();
+        assert_eq!(add_sound_keys(&mut tracks, &keys), 3);
+        assert_eq!(tracks[1].keys.len(), 5);
+        // (Two frames on, room again.)
+        assert_eq!(add_sound_keys(&mut tracks, &[EventKey { time: 7.5, a: KH2_EFFECT, b: 166, c: 1, d: 0 }]), 0);
     }
 }

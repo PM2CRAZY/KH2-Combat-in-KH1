@@ -22,8 +22,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Bump when the bake's output changes for the same inputs without the mod's version changing
-/// (the version is in the manifest too, so every release rebuilds once anyway).
-pub const BAKE_FORMAT: u32 = 1;
+/// (the version is in the manifest too, so every release rebuilds once anyway). 2: KH2's frame
+/// triggers written into the baked motion's own sound events (`kh2slots::kh2_trigger_keys`).
+pub const BAKE_FORMAT: u32 = 2;
 
 const MAGIC: &[u8; 8] = b"KH1KH2SC";
 /// The file's own layout (this module's), not the bake's.

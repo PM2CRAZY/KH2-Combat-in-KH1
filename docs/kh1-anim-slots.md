@@ -415,7 +415,7 @@ Every KH2 clip window or event (`character_core::Clip`) has a home:
 | `WeaponTrail` window | 7.0 | Else the hit window, from 4 frames before it. |
 | `AllowMovement` | 0.0 | For KH2 moves KH1 must let go of early. |
 | `Invulnerable` | none in KH1's events | Our hook, from the slot's own track (below). |
-| `Sound`, `Voice`, `Effect` | **our track**, kept Rust side next to the slot (it could also be an event type KH1 never reads, as its readers ask only for types 0..7) | `kh2slots::tick` reads it between the last and the current KH1 time, like `0x14029D9A0`, and fires `kh2sound::event` / `kh2fx::event` for that motion. KH2's sounds and effects then fire from KH1's playing slot, on KH1's clock. |
+| `Sound`, `Voice`, `Effect` | 6.x keys of ours (`a` 0x80..0x82), in the template's first sound group | KH1's own edge pass (Steam `0x14029FB30`) fires them; KH1's sound event handler `0x140295420`, wrapped, plays them through `kh2sound::event` / `kh2fx::event` (`docs/kh1-anim-baking.md` §13). Before t-evts: a Rust-side track read by `kh2slots::tick`. |
 | KH1's own sounds and voices (type 6) | kept from the template, times rescaled | The KH1 swing voice and swish. Dropped where KH2's own play (`kh2_sounds` covers the motion). |
 | KH1's foot effects (type 4) | kept from the template, rescaled | |
 
