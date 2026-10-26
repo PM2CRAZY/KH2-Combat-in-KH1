@@ -340,3 +340,17 @@ update what is still missing for native
 
 ^m11
 
+1. I want you to implement everything thats not native into being native inside of kh1's engine, if the feature is not in the engine add it to kh1's base engine so that anything from kh2 can work 1:1
+   note:  leave out "9. The fallbacks left for base Sora: a KH2 spell or Reflect whose cast slot didn't build, Attack in the air when the air slots didn't build, and everything on Epic.  
+2. The drawn-over pose, only when a slot fails to bake or a world's motion set lacks the move. Your last log shows it once, for one frame, on a room entry.  
+3. The KH2 player model: our own renderer, off and not loaded (t659)"
+   "1. Reflect's barrier meeting enemy attacks is our own check each frame, not a KH1 guard object.
+4. Magnet Burst's pull is our own push on the caught enemies.
+5. Sora's invulnerable frames (roll, Quick Run, Explosion, Aerial Recovery) and the Keyblade guard's facing are decided in our hit-pass hook, not by KH1's own no-damage timer and guard objects."
+6. Hood, coat and shorts are on t375's rules, applied at bake time; foot IK is off (t634). Both wait for the cloth work in the [sleeves thread](app://obsidian.md/missing-sleeves-animation/missing-sleeves-animation.md).
+   
+7. I want you to transfer drive forms as well
+   
+   go ahead
+   
+   
