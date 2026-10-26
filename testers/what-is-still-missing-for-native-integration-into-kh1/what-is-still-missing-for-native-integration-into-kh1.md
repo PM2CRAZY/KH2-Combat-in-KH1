@@ -249,7 +249,6 @@ go ahead
 
 ^m8
 
-for what your working on with glide and the command menu, make it a separate thread 
 
 1. (a) then make it a config in the tweaks config menu
 2. (a)

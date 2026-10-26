@@ -100,3 +100,9 @@
 
 ^m1
 
+1. (b) I can measure the ram in my task manager
+2. (a) if the agent isn't removing the duplicates in the asset work then tell it too. 
+3. in the ini I want to make it where if debug menu is off then we don't inject or load anything related to the debug, if its on then we do. keep debug menu in the config menu but if its off in the ini then its gone from that menu. I also want to have our logs attached to the debug menu where you can turn on and off each log and all should be off, if debug menu is off then none of the logs are injected into the game
+4. give the question to the agent working on what is still missing native thread and I'll answer it after its done. 
+
+go ahead

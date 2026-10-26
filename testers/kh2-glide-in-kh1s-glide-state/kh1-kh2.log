@@ -3252,3 +3252,1273 @@
 [f48485] fourth shortcut in battle: command 0x7d, usable true
 [f48510] draw: baked (KH1 slot 159)
 [f48536] draw: kh1_own (KH1 slot 0)
+[f50028] alive 960s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f55521] draw: kh1_own (KH1 slot 3)
+[f55522] draw: kh1_own (KH1 slot 6)
+[f55525] draw: baked (KH1 slot 158)
+[f55536] KH2's jump: into the fall (the jump let go): KH1's request 0xb, blend 8
+[f55536] draw: baked (KH1 slot 156)
+[f55536] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f55537] draw: baked (KH1 slot 189)
+[f55538] KH1 banks: se900008 queued in KH1's effect queue (id 0x4b320026, 498 ms)
+[f55538] KH2 sound played: sound 999019 (motion 202)
+[f55538] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f55559] KH2's Aerial Dodge: its apex, 22.0 of 26.7 frames up, KH1's fall (request 6, blend 8)
+[f55559] draw: baked (KH1 slot 156)
+[f55562] Customize: spell list [0, 1, 2, 3, 4, 5, 6, 7, 7] (Reflect = 7 before none)
+[f55600] draw: baked (KH1 slot 159)
+[f55626] draw: kh1_own (KH1 slot 0)
+[f55685] draw: baked (KH1 slot 158)
+[f55696] KH2's jump: into the fall (the jump let go): KH1's request 0xb, blend 8
+[f55696] draw: baked (KH1 slot 156)
+[f55700] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f55700] KH2 MP cost of spell 0 (Part(12)): 592 of KH1's units paid, MP Some((13, 13, 0)) -> Some((11, 13, 158))
+[f55700] KH2 magic: the cast takes step 1 of KH1's combo
+[f55700] KH1 banks: KH2 quote clip 12 asked of KH1's voice channel 0 at priority 1: taken
+[f55700] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 592 units, KH1's second part 0x8a taken off its queue
+[f55701] KH2 effects (native): Spell(7) element 0 on Blade(1.0): its origin at the start [11.0, -125.2, -90.0] from Sora's place along his model's x, y, z (KH1's start: place [-81.6, -125.2, 39.5], turn [51768, 61661, 51209]); on a bone or the Keyblade
+[f55701] KH2 effect (native): Spell(7) element 0 of motion 65534 -> KH1 effect 0x700 on Blade(1.0): element 0x7ff7107088a0
+[f55701] KH1 banks: se900070 queued in KH1's effect queue (id 0x4b320027, 1640 ms)
+[f55701] KH2 sound played: package 7's element 0
+[f55701] draw: baked (KH1 slot 130)
+[f55730] KH2 effects (native): Spell(7) element 1 on Blade(1.0): its origin at the start [40.9, -132.8, -49.4] from Sora's place along his model's x, y, z (KH1's start: place [-63.6, -132.8, -7.6], turn [56564, 62284, 47877]); on a bone or the Keyblade
+[f55730] KH2 effect (native): Spell(7) element 1 of motion 65534 -> KH1 effect 0x701 on Blade(1.0): element 0x7ff7107088dc
+[f55730] KH2 effects (native): Spell(7) element 5 on Code(32768): its origin at the start [-0.0, -86.4, 0.0] from Sora's place along his model's x, y, z (KH1's start: place [0.0, 0.0, 0.0], turn [0, 55126, 0]); KH2's offset along the same rows: [-0.0, -86.4, -0.0]
+[f55730] KH2 effect (native): Spell(7) element 5 of motion 65534 -> KH1 effect 0x705 on Code(32768): element 0x7ff710708918
+[f55731] KH1 spell attack data (level 1): Fire [1 2 3 3 ffffffff 14 0 0 0 0 0 0] | Blizzard [1 3 3 3 ffffffff 16 0 0 0 0 0 0] | Thunder [3 4 3 3 ffffffff 10 0 0 0 0 0 0]
+[f55731] KH2 body / spell hits: attack data copies at 0x7ff7117c0000
+[f55731] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f55738] draw: baked (KH1 slot 159)
+[f55764] draw: kh1_own (KH1 slot 0)
+[f55772] Customize: spell list [0, 1, 2, 3, 4, 5, 6, 7, 7] (Reflect = 7 before none)
+[f55772] alive 1080s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f55772] move style: Magic Combo KH2
+[f55772] move style: Magic Combo KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] move style: Air Physics KH1
+[f55772] move style: Air Physics KH2
+[f55772] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, kh2_damage: true, criticals: true, party_criticals: true, kh1_ability_chance: false, enemy_weight: true, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_hit_sparks: true, kh2_camera: true, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, r2_camera_hold: false, l2_stick_menu: false, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40, 203])), hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh2, drive: true, valor_left_blade: true, styles: [true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, false], knockback_numbers: Scaled, medium_hits_flinch: false, gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, kh1_leg_ik: false, foot_ik: false, trace: On, trace_seconds: 3, sound_log: false, trace_game_frames: false, trace_cats: 8179, debug_menu: true }
+[f55773] KH2 camera: started (follow, after KH1's: KH2's default), yaw 2.14
+[f55773] event ops at 1124s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f55783] draw: baked (KH1 slot 158)
+[f55794] draw: baked (KH1 slot 156)
+[f55801] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f55801] KH2 MP cost of spell 0 (Part(12)): 525 of KH1's units paid, MP Some((11, 13, 158)) -> Some((9, 13, 263))
+[f55801] KH2 magic: the cast takes step 1 of KH1's combo
+[f55801] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising false), sideways 0.0/frame kept
+[f55801] KH1 banks: KH2 quote clip 22 asked of KH1's voice channel 0 at priority 1: taken
+[f55801] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 525 units, KH1's second part 0x8a taken off its queue
+[f55802] KH2 effect (native): Spell(7) element 0 of motion 65534 -> KH1 effect 0x700 on Blade(1.0): element 0x7ff710708954
+[f55802] draw: baked (KH1 slot 130)
+[f55819] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55820] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55821] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55822] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55823] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55824] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55825] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55826] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55827] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55828] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55829] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55830] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55831] KH2 effect (native): Spell(7) element 1 of motion 65534 -> KH1 effect 0x701 on Blade(1.0): element 0x7ff710708990
+[f55831] KH2 effect (native): Spell(7) element 5 of motion 65534 -> KH1 effect 0x705 on Code(32768): element 0x7ff7107089cc
+[f55831] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55832] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f55832] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55833] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55834] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55834] event ops at 1125s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f55835] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55836] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55837] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55838] KH2's no-gravity range on KH1's air state (KH2 motion Some(58)): his height held (KH2's arc)
+[f55886] draw: baked (KH1 slot 156)
+[f55887] draw: baked (KH1 slot 159)
+[f55898] draw: baked (KH1 slot 158)
+[f55907] draw: baked (KH1 slot 156)
+[f55929] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f55929] KH2 MP cost of spell 0 (Part(12)): 448 of KH1's units paid, MP Some((9, 13, 263)) -> Some((8, 13, 85))
+[f55929] KH2 magic: the cast takes step 1 of KH1's combo
+[f55929] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising false), sideways 0.0/frame kept
+[f55929] KH1 banks: KH2 quote clip 22 asked of KH1's voice channel 0 at priority 1: taken
+[f55929] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 448 units, KH1's second part 0x8a taken off its queue
+[f55930] KH2 effect (native): Spell(7) element 0 of motion 65534 -> KH1 effect 0x700 on Blade(1.0): element 0x7ff710708a08
+[f55930] draw: baked (KH1 slot 130)
+[f55959] KH2 effect (native): Spell(7) element 1 of motion 65534 -> KH1 effect 0x701 on Blade(1.0): element 0x7ff710708a44
+[f55959] KH2 effect (native): Spell(7) element 5 of motion 65534 -> KH1 effect 0x705 on Code(32768): element 0x7ff710708a80
+[f55960] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f56011] draw: baked (KH1 slot 159)
+[f56028] draw: baked (KH1 slot 158)
+[f56039] draw: baked (KH1 slot 156)
+[f56062] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f56062] KH2 MP cost of spell 0 (Part(12)): 377 of KH1's units paid, MP Some((8, 13, 85)) -> Some((6, 13, 158))
+[f56062] KH2 magic: the cast takes step 1 of KH1's combo
+[f56062] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising false), sideways 0.0/frame kept
+[f56062] KH1 banks: KH2 quote clip 9 asked of KH1's voice channel 0 at priority 1: taken
+[f56062] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 377 units, KH1's second part 0x8a taken off its queue
+[f56063] KH2 effect (native): Spell(7) element 0 of motion 65534 -> KH1 effect 0x700 on Blade(1.0): element 0x7ff710708abc
+[f56063] draw: baked (KH1 slot 130)
+[f56092] KH2 effect (native): Spell(7) element 1 of motion 65534 -> KH1 effect 0x701 on Blade(1.0): element 0x7ff710708af8
+[f56092] KH2 effect (native): Spell(7) element 5 of motion 65534 -> KH1 effect 0x705 on Code(32768): element 0x7ff710708b34
+[f56093] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f56144] draw: baked (KH1 slot 159)
+[f56158] draw: baked (KH1 slot 158)
+[f56169] draw: baked (KH1 slot 156)
+[f56199] draw: baked (KH1 slot 159)
+[f56225] draw: kh1_own (KH1 slot 0)
+[f56256] Equipment: Sora's slots 5 rows (weapon, Valor, 3 accessories)
+[f56256] Valor's Keyblade: Ultima Weapon (0x64; Sora's Some(81), Keyblades owned [51, 56, 57, 58, 59, 5a, 5b, 5c, 5d, 5e, 5f, 60, 61, 62, 63, 64, 65, 66])
+[f56256] Equipment: Valor row shows 0x64 (candidates [56, 57, 58, 59, 5a, 5b, 5c, 5d, 5e, 5f, 60, 61, 62, 63, 64, 65, 66])
+[f56257] draw: kh1_own (KH1 slot 3)
+[f56259] draw: kh1_own (KH1 slot 6)
+[f56268] draw: baked (KH1 slot 158)
+[f56272] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f56272] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f56272] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 218 left; kept 8.0/frame and KH1's hop
+[f56273] draw: baked (KH1 slot 205)
+[f56274] KH1 banks: KH2 quote clip 13 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56281] event ops at 1150s (Sora can act: true): 8x26 203x100 284x24 285x48 286x24 290x24 291x48 292x24 340x50 419x24 452x25
+[f56295] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f56295] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f56295] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.4/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f56296] draw: baked (KH1 slot 206)
+[f56297] KH1 banks: KH2 quote clip 10 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56301] KH1 Sora: level 1, abilities [64 22 6 (7) (53) (54) (17) 61 (15) 21 (19) 8 8 (18) (20) (55) (57) 65 (56) (11) 13 12 (14) 25 (58) (66) 68 (69) 70 (71) (72) 74 75 (73) (77) 76 67 (78) 79 80 (81) 82 (83) (84) 85 (86) 87 (59)], shared [1 2 88] (in brackets: not equipped)
+[f56301] KH1's menu gives KH2: high jump 1, quick run 0, aerial dodge 1, glide 4, dodge roll 1, guard true, combo plus 1, air combo plus 0, finishing plus 1, negative combo 0, combo master true, aerial recovery true; modifiers [Horizontal Slash, Retaliating Slash, Aerial Dive, Aerial Sweep, Counterguard, Slapshot, Vicinity Break, Aerial Finish]
+[f56301] abilities on with nothing on the other side yet: KH1's [] while KH2 has him; KH2's [Aerial Recovery, Retaliating Slash, Counterguard] while KH1's states have him
+[f56316] draw: baked (KH1 slot 159)
+[f56329] draw: kh1_own (KH1 slot 6)
+[f56337] draw: baked (KH1 slot 158)
+[f56341] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f56341] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f56341] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 218 left; kept 8.0/frame and KH1's hop
+[f56342] draw: baked (KH1 slot 205)
+[f56343] KH1 banks: KH2 quote clip 12 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56365] KH1's ground combo, swing 2 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
+[f56365] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
+[f56366] draw: baked (KH1 slot 196)
+[f56367] KH1 banks: KH2 quote clip 11 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56414] draw: kh1_own (KH1 slot 6)
+[f56420] draw: baked (KH1 slot 158)
+[f56427] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f56427] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f56427] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 168 left; kept 8.0/frame and KH1's hop
+[f56428] draw: baked (KH1 slot 205)
+[f56429] KH1 banks: KH2 quote clip 9 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56452] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f56452] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f56452] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.2/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f56453] draw: baked (KH1 slot 206)
+[f56454] KH1 banks: KH2 quote clip 12 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56475] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f56475] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f56475] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f56475] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.4/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f56476] draw: baked (KH1 slot 212)
+[f56477] KH1 banks: KH2 quote clip 14 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56494] KH2 effect (native): Sora element 35 of motion 194 -> KH1 effect 0x723 on Code(32768): element 0x7ff710708d14
+[f56508] KH2 effect (native): Sora element 36 of motion 194 -> KH1 effect 0x724 on Code(32768): element 0x7ff710708d50
+[f56524] KH2 effect (native): Sora element 37 of motion 194 -> KH1 effect 0x725 on Code(32768): element 0x7ff710708d8c
+[f56536] KH1 banks: KH2 quote clip 18 asked of KH1's voice channel 0 at priority 2: taken
+[f56556] KH2 effect (native): Sora element 38 of motion 194 -> KH1 effect 0x726 on Code(32768): element 0x7ff710708dc8
+[f56579] draw: baked (KH1 slot 159)
+[f56605] draw: kh1_own (KH1 slot 0)
+[f56607] draw: kh1_own (KH1 slot 6)
+[f56608] draw: baked (KH1 slot 158)
+[f56618] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f56618] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f56618] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 122 left; kept 8.0/frame and KH1's hop
+[f56619] draw: baked (KH1 slot 205)
+[f56620] KH1 banks: KH2 quote clip 10 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56642] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f56642] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f56642] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.3/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f56643] draw: baked (KH1 slot 206)
+[f56644] KH1 banks: KH2 quote clip 13 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56669] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f56669] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f56669] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f56669] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.0/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f56670] draw: baked (KH1 slot 212)
+[f56671] KH1 banks: KH2 quote clip 16 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56730] KH1 banks: KH2 quote clip 17 asked of KH1's voice channel 0 at priority 2: taken
+[f56774] draw: baked (KH1 slot 159)
+[f56788] draw: kh1_own (KH1 slot 3)
+[f56790] draw: kh1_own (KH1 slot 6)
+[f56797] draw: baked (KH1 slot 158)
+[f56808] draw: baked (KH1 slot 156)
+[f56808] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f56808] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f56808] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 3 left; kept 8.0/frame and KH1's hop
+[f56809] draw: baked (KH1 slot 205)
+[f56810] KH1 banks: KH2 quote clip 11 asked of KH1's voice channel 0 at priority 1: KH1 kept the line playing
+[f56833] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f56833] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f56833] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.2/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f56834] draw: baked (KH1 slot 206)
+[f56862] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f56862] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f56862] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f56862] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 3.8/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f56863] draw: baked (KH1 slot 212)
+[f56966] draw: baked (KH1 slot 159)
+[f56979] draw: kh1_own (KH1 slot 6)
+[f56981] draw: baked (KH1 slot 158)
+[f56992] draw: baked (KH1 slot 156)
+[f56995] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f56995] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f56995] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f56996] draw: baked (KH1 slot 205)
+[f57026] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f57026] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f57026] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 3.6/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f57027] draw: baked (KH1 slot 206)
+[f57049] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f57049] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f57049] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f57049] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.4/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f57050] draw: baked (KH1 slot 212)
+[f57153] draw: baked (KH1 slot 159)
+[f57179] draw: kh1_own (KH1 slot 0)
+[f57194] draw: kh1_own (KH1 slot 3)
+[f57197] draw: kh1_own (KH1 slot 6)
+[f57204] draw: baked (KH1 slot 158)
+[f57212] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f57213] draw: baked (KH1 slot 189)
+[f57214] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f57219] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f57219] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f57219] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 15.0/frame and rise 60 left; kept 15.0/frame and KH1's hop
+[f57220] draw: baked (KH1 slot 205)
+[f57243] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f57243] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f57243] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 8.1/frame and rise 0 left; kept 8.1/frame and KH1's hop
+[f57244] draw: baked (KH1 slot 206)
+[f57268] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f57268] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f57268] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f57268] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.3/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f57269] draw: baked (KH1 slot 212)
+[f57378] draw: baked (KH1 slot 159)
+[f57387] draw: baked (KH1 slot 158)
+[f57396] draw: baked (KH1 slot 156)
+[f57397] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f57398] draw: baked (KH1 slot 189)
+[f57399] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f57403] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f57403] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f57403] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 15.4/frame and rise 70 left; kept 15.4/frame and KH1's hop
+[f57404] draw: baked (KH1 slot 205)
+[f57428] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f57428] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f57428] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 8.1/frame and rise 0 left; kept 8.1/frame and KH1's hop
+[f57429] draw: baked (KH1 slot 206)
+[f57452] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f57452] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f57452] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f57452] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.4/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f57453] draw: baked (KH1 slot 212)
+[f57563] draw: baked (KH1 slot 159)
+[f57569] draw: baked (KH1 slot 158)
+[f57577] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f57578] draw: baked (KH1 slot 189)
+[f57579] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f57583] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f57583] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f57583] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 15.4/frame and rise 70 left; kept 15.4/frame and KH1's hop
+[f57584] draw: baked (KH1 slot 205)
+[f57607] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f57607] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f57607] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 8.3/frame and rise 0 left; kept 8.3/frame and KH1's hop
+[f57608] draw: baked (KH1 slot 206)
+[f57629] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f57629] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f57629] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f57629] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.7/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f57630] draw: baked (KH1 slot 212)
+[f57741] draw: baked (KH1 slot 159)
+[f57759] draw: kh1_own (KH1 slot 3)
+[f57889] draw: kh1_own (KH1 slot 0)
+[f59321] alive 1200s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f59786] frame scale 4.00: KH2 steps 4 60 Hz frames a game frame
+[f59787] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f60135] draw: baked (KH1 slot 158)
+[f60142] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f60143] draw: baked (KH1 slot 189)
+[f60144] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f60150] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f60150] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f60150] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 14.7/frame and rise 50 left; kept 14.7/frame and KH1's hop
+[f60151] draw: baked (KH1 slot 205)
+[f60174] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f60174] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f60174] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 7.9/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f60175] draw: baked (KH1 slot 206)
+[f60196] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f60196] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f60196] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f60196] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.6/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f60197] draw: baked (KH1 slot 212)
+[f60258] event ops at 1224s (Sora can act: true): 8x20 203x80 284x20 285x40 286x20 290x20 291x40 292x20 340x40 419x20 452x20
+[f60306] draw: baked (KH1 slot 159)
+[f60332] draw: kh1_own (KH1 slot 0)
+[f60477] draw: kh1_own (KH1 slot 3)
+[f60486] draw: kh1_own (KH1 slot 0)
+[f60511] KH2 camera: KH1's switch into its lock-on camera, from ours: no blend (KH2's camera goes on)
+[f60514] debug menu: opened (Main)
+[f60901] trace: seconds count game frames
+[f60901] debug menu: frame advance on (R2 / period: one frame, held 1 s: full speed)
+[f60901] frame advance: holding 20 tasks (priority, function RVA): 20001 0x1e1900 (vibration), 47000 0x28e550 (event trig.), 49999 0x1c2ba0 (event fx), 50002 0x1a5480 (event script), 50002 0x1a2320 (event zones), 53000 0x28d620 (room loader), 55000 0x2937f0 (command menu), 60000 0x29e790 (lights), 79998 0x28e6e0 (event cmds), 80000 0x298940 (actors), 80001 0x2b4460 (hit checks), 85000 0x2b11b0 (lock-on), 95000 0x2abff0 (prizes), 100000 0x1e5d90 (camera), 120000 0xd2830 (map draw), 137000 0x28f6b0 (obj scripts), 139999 0x2aeda0 (fx binding), 145001 0x290a50 (delayed play), 163001 0x292e40 (actors freed), 190000 0x1eb750
+[f60901] trace: seconds count real time
+[f60901] trace: seconds count game frames
+[f60901] debug menu: frame advance camera free (100000 0x1401e5d90 runs while held, the frame's scale; no Select)
+[f60901] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, kh2_damage: true, criticals: true, party_criticals: true, kh1_ability_chance: false, enemy_weight: true, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_hit_sparks: true, kh2_camera: true, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, r2_camera_hold: false, l2_stick_menu: false, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40, 203])), hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh2, drive: true, valor_left_blade: true, styles: [true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, false], knockback_numbers: Scaled, medium_hits_flinch: false, gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, kh1_leg_ik: false, foot_ik: false, trace: On, trace_seconds: 3, sound_log: false, trace_game_frames: true, trace_cats: 8179, debug_menu: true }
+[f60901] debug menu: frame advance camera held
+[f60901] debug menu: frame advance held sound plays
+[f60901] debug menu: closed (opens on the same page)
+[f60901] KH1 has Sora (Sora is in another body (not his own model))
+[f60902] KH2 camera: KH1's switch into its follow camera, from ours: no blend (KH2's camera goes on)
+[f60902] event ops at 1240s (Sora can act: true): 203x4 284x2 285x4 286x2 290x2 291x4 292x2 340x2 419x2 452x1
+[f60902] KH1 has Sora (KH1's own states (base Sora, shared))
+[f60903] draw: kh1_own (KH1 slot 3)
+[f60903] event ops at 1241s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f60903] KH1 has Sora (Sora is in another body (not his own model))
+[f60904] draw: kh1_own (KH1 slot 6)
+[f60904] KH1 has Sora (KH1's own states (base Sora, shared))
+[f60923] draw: baked (KH1 slot 158)
+[f60937] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f60937] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f60937] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 72 left; kept 8.0/frame and KH1's hop
+[f60938] draw: baked (KH1 slot 205)
+[f60946] event ops at 1242s (Sora can act: true): 8x42 203x172 284x44 285x88 286x44 290x44 291x88 292x44 340x86 419x44 452x43
+[f60961] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f60961] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f60961] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.3/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f60962] draw: baked (KH1 slot 206)
+[f60983] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f60983] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f60983] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f60983] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.6/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f60984] draw: baked (KH1 slot 212)
+[f60999] event ops at 1244s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f60999] KH1 has Sora (Sora is in another body (not his own model))
+[f61000] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61001] event ops at 1245s (Sora can act: true): 8x2 203x8 284x2 285x4 286x2 290x2 291x4 292x2 340x4 419x2 452x2
+[f61001] KH1 has Sora (Sora is in another body (not his own model))
+[f61002] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61003] event ops at 1249s (Sora can act: true): 8x2 203x8 284x2 285x4 286x2 290x2 291x4 292x2 340x4 419x2 452x2
+[f61009] event ops at 1251s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61009] KH1 has Sora (Sora is in another body (not his own model))
+[f61010] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61012] event ops at 1257s (Sora can act: true): 8x2 203x12 284x4 285x8 286x4 290x4 291x8 292x4 340x6 419x4 452x3
+[f61016] KH1 has Sora (Sora is in another body (not his own model))
+[f61017] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61018] trace: flip: KH1 and KH2 traded him 8 times in 60 frames; the last 3s go to a file in 60 frames
+[f61021] event ops at 1261s (Sora can act: true): 8x6 203x20 284x4 285x8 286x4 290x4 291x8 292x4 340x10 419x4 452x5
+[f61021] KH1 has Sora (Sora is in another body (not his own model))
+[f61022] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61023] event ops at 1265s (Sora can act: true): 8x2 203x8 284x2 285x4 286x2 290x2 291x4 292x2 340x4 419x2 452x2
+[f61035] event ops at 1268s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61035] KH1 has Sora (Sora is in another body (not his own model))
+[f61036] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61040] event ops at 1272s (Sora can act: true): 8x4 203x20 284x6 285x12 286x6 290x6 291x12 292x6 340x10 419x6 452x5
+[f61045] event ops at 1274s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61045] KH1 has Sora (Sora is in another body (not his own model))
+[f61046] event ops at 1276s (Sora can act: true): 203x4 284x2 285x4 286x2 290x2 291x4 292x2 340x2 419x2 452x1
+[f61046] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61052] event ops at 1277s (Sora can act: true): 8x6 203x24 284x6 285x12 286x6 290x6 291x12 292x6 340x12 419x6 452x6
+[f61059] KH1 has Sora (Sora is in another body (not his own model))
+[f61060] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61061] event ops at 1282s (Sora can act: true): 8x2 203x8 284x2 285x4 286x2 290x2 291x4 292x2 340x4 419x2 452x2
+[f61063] KH1 has Sora (Sora is in another body (not his own model))
+[f61064] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61065] event ops at 1285s (Sora can act: true): 8x2 203x8 284x2 285x4 286x2 290x2 291x4 292x2 340x4 419x2 452x2
+[f61069] KH1 has Sora (Sora is in another body (not his own model))
+[f61070] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61071] event ops at 1289s (Sora can act: true): 8x2 203x8 284x2 285x4 286x2 290x2 291x4 292x2 340x4 419x2 452x2
+[f61076] KH1 has Sora (Sora is in another body (not his own model))
+[f61077] trace: 181 frames (3.1s) written to E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2-traces\trace_1792984751_f61077_flip.csv (flip)
+[f61077] event ops at 1301s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61077] alive 1320s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f61078] event ops at 1329s (Sora can act: true): 203x4 284x2 285x4 286x2 290x2 291x4 292x2 340x2 419x2 452x1
+[f61079] event ops at 1338s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61080] event ops at 1343s (Sora can act: true): 203x4 284x2 285x4 286x2 290x2 291x4 292x2 340x2 419x2 452x1
+[f61081] event ops at 1346s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61082] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61087] event ops at 1349s (Sora can act: true): 8x6 203x24 284x6 285x12 286x6 290x6 291x12 292x6 340x12 419x6 452x6
+[f61090] event ops at 1351s (Sora can act: true): 203x4 284x2 285x4 286x2 290x2 291x4 292x2 340x2 419x2 452x1
+[f61090] KH1 has Sora (Sora is in another body (not his own model))
+[f61091] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61093] draw: baked (KH1 slot 159)
+[f61094] event ops at 1354s (Sora can act: true): 8x4 203x16 284x4 285x8 286x4 290x4 291x8 292x4 340x8 419x4 452x4
+[f61104] KH1 has Sora (Sora is in another body (not his own model))
+[f61105] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61116] KH1 has Sora (Sora is in another body (not his own model))
+[f61117] event ops at 1359s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61117] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61119] draw: kh1_own (KH1 slot 0)
+[f61121] event ops at 1360s (Sora can act: true): 8x4 203x16 284x4 285x8 286x4 290x4 291x8 292x4 340x8 419x4 452x4
+[f61138] KH1 has Sora (Sora is in another body (not his own model))
+[f61139] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61142] event ops at 1368s (Sora can act: true): 8x4 203x16 284x4 285x8 286x4 290x4 291x8 292x4 340x8 419x4 452x4
+[f61142] KH1 has Sora (Sora is in another body (not his own model))
+[f61143] event ops at 1379s (Sora can act: true): 8x2 203x4 340x2 452x1
+[f61144] event ops at 1382s (Sora can act: true): 203x4 284x2 285x4 286x2 290x2 291x4 292x2 340x2 419x2 452x1
+[f61144] debug menu: opened (FrameAdvance)
+[f61144] debug menu: frame advance off
+[f61145] KH1 has Sora (KH1's own states (base Sora, shared))
+[f61172] event ops at 1390s (Sora can act: true): 8x28 203x112 284x28 285x56 286x28 290x28 291x56 292x28 340x56 419x28 452x28
+[f61191] debug menu: closed (opens on the same page)
+[f61210] draw: baked (KH1 slot 158)
+[f61221] draw: baked (KH1 slot 156)
+[f61224] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f61224] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f61224] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 0.0/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f61225] draw: baked (KH1 slot 205)
+[f61247] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f61247] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f61247] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.4/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f61248] draw: baked (KH1 slot 206)
+[f61269] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f61269] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f61269] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f61269] KH1's air attack out of KH2's motion: its own lunge 18.0/frame and hop 14; KH2's speed 4.6/frame and rise 0 left; kept 18.0/frame and KH1's hop
+[f61270] draw: baked (KH1 slot 212)
+[f61377] draw: baked (KH1 slot 159)
+[f61393] draw: kh1_own (KH1 slot 3)
+[f61394] draw: kh1_own (KH1 slot 6)
+[f61395] draw: baked (KH1 slot 158)
+[f61405] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f61406] draw: baked (KH1 slot 189)
+[f61407] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f61425] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f61425] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f61425] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 10.5/frame and rise 1 left; kept 10.5/frame and KH1's hop
+[f61426] draw: baked (KH1 slot 205)
+[f61449] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f61449] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f61449] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 5.7/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f61450] draw: baked (KH1 slot 206)
+[f61471] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f61471] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f61471] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f61472] draw: baked (KH1 slot 212)
+[f61565] event ops at 1408s (Sora can act: true): 8x48 203x188 284x46 285x92 286x46 290x46 291x92 292x46 340x94 419x46 452x47
+[f61587] draw: baked (KH1 slot 159)
+[f61602] draw: baked (KH1 slot 158)
+[f61613] draw: baked (KH1 slot 156)
+[f61613] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f61613] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f61614] draw: baked (KH1 slot 205)
+[f61637] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f61637] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f61638] draw: baked (KH1 slot 206)
+[f61660] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f61660] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f61660] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f61661] draw: baked (KH1 slot 212)
+[f61767] draw: baked (KH1 slot 159)
+[f61780] draw: kh1_own (KH1 slot 6)
+[f61782] draw: baked (KH1 slot 158)
+[f61787] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f61787] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f61788] draw: baked (KH1 slot 205)
+[f61810] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f61810] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f61811] draw: baked (KH1 slot 206)
+[f61834] draw: baked (KH1 slot 159)
+[f61847] draw: kh1_own (KH1 slot 6)
+[f61857] draw: baked (KH1 slot 158)
+[f61866] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f61867] draw: baked (KH1 slot 189)
+[f61868] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f61877] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f61877] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f61878] draw: baked (KH1 slot 205)
+[f61902] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f61902] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f61903] draw: baked (KH1 slot 206)
+[f61925] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f61925] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f61925] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f61926] draw: baked (KH1 slot 212)
+[f62038] draw: baked (KH1 slot 159)
+[f62043] draw: baked (KH1 slot 158)
+[f62051] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f62052] draw: baked (KH1 slot 189)
+[f62053] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f62061] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f62061] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f62062] draw: baked (KH1 slot 205)
+[f62087] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f62087] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f62088] draw: baked (KH1 slot 206)
+[f62109] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f62109] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f62109] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f62110] draw: baked (KH1 slot 212)
+[f62206] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 8 motion 183 (KH2's length 3, Finishing Plus)
+[f62206] Attack in KH1's finisher (count 3, finisher 1): KH2's next finisher, row 8 motion 183 (Finishing Plus)
+[f62206] KH2's 183 (row 255, motion 183) on KH1's row 100 of its own (request 0x222)
+[f62207] draw: baked (KH1 slot 210)
+[f62248] draw: baked (KH1 slot 159)
+[f62261] draw: kh1_own (KH1 slot 6)
+[f62264] draw: baked (KH1 slot 158)
+[f62273] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f62274] draw: baked (KH1 slot 189)
+[f62275] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f62282] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f62282] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f62283] draw: baked (KH1 slot 205)
+[f62307] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f62307] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f62308] draw: baked (KH1 slot 206)
+[f62330] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f62330] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f62330] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f62331] draw: baked (KH1 slot 212)
+[f62442] draw: baked (KH1 slot 159)
+[f62449] draw: baked (KH1 slot 158)
+[f62458] draw: baked (KH1 slot 156)
+[f62461] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f62461] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f62462] draw: baked (KH1 slot 205)
+[f62486] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f62486] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f62487] draw: baked (KH1 slot 206)
+[f62508] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f62508] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f62508] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f62509] draw: baked (KH1 slot 212)
+[f62615] draw: baked (KH1 slot 159)
+[f62620] draw: baked (KH1 slot 158)
+[f62627] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f62628] draw: baked (KH1 slot 189)
+[f62629] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f62638] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f62638] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f62639] draw: baked (KH1 slot 205)
+[f62661] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f62661] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f62662] draw: baked (KH1 slot 206)
+[f62683] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f62683] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f62683] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f62684] draw: baked (KH1 slot 212)
+[f62773] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 8 motion 183 (KH2's length 3, Finishing Plus)
+[f62773] Attack in KH1's finisher (count 3, finisher 1): KH2's next finisher, row 8 motion 183 (Finishing Plus)
+[f62773] KH2's 183 (row 255, motion 183) on KH1's row 100 of its own (request 0x222)
+[f62774] draw: baked (KH1 slot 210)
+[f62816] draw: baked (KH1 slot 159)
+[f62821] draw: baked (KH1 slot 158)
+[f62830] draw: baked (KH1 slot 156)
+[f62832] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f62832] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f62833] draw: baked (KH1 slot 205)
+[f62856] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f62856] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f62857] draw: baked (KH1 slot 206)
+[f62877] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f62877] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f62877] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f62878] draw: baked (KH1 slot 212)
+[f62969] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f62969] KH2 MP cost of spell 0 (Part(12)): 304 of KH1's units paid, MP Some((6, 13, 158)) -> Some((5, 13, 34))
+[f62969] KH2 magic: the cast takes step 4 of KH1's combo (its last: the combo ends)
+[f62969] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising false), sideways 1.7/frame kept
+[f62969] KH2 quotes: clip 11 (priority 1) dropped: KH2's rule keeps clip 18 (priority 2) playing
+[f62969] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 304 units, KH1's second part 0x8a taken off its queue
+[f62970] draw: baked (KH1 slot 130)
+[f63000] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f63053] draw: baked (KH1 slot 159)
+[f63061] draw: baked (KH1 slot 158)
+[f63070] draw: baked (KH1 slot 156)
+[f63070] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f63071] draw: baked (KH1 slot 189)
+[f63072] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f63093] KH2's Aerial Dodge: its apex, 22.0 of 26.7 frames up, KH1's fall (request 6, blend 8)
+[f63093] draw: baked (KH1 slot 156)
+[f63096] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f63096] KH2 MP cost of spell 0 (Part(12)): 229 of KH1's units paid, MP Some((5, 13, 34)) -> Some((3, 13, 75))
+[f63096] KH2 magic: the cast takes step 1 of KH1's combo
+[f63096] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising true), sideways 9.1/frame kept
+[f63096] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 229 units, KH1's second part 0x8a taken off its queue
+[f63097] draw: baked (KH1 slot 130)
+[f63121] KH2 effects (native): p_ex100_btlf's DPX freed (1036288 bytes)
+[f63121] KH2 effects (native): p_ex100_magf_a_us's DPX freed (638976 bytes)
+[f63121] KH2 effects (native): p_ex100_ultf's DPX freed (3555328 bytes)
+[f63127] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f63181] draw: baked (KH1 slot 156)
+[f63191] draw: baked (KH1 slot 159)
+[f63200] draw: baked (KH1 slot 158)
+[f63209] draw: baked (KH1 slot 156)
+[f63214] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f63214] KH2 MP cost of spell 0 (Part(12)): 160 of KH1's units paid, MP Some((3, 13, 75)) -> Some((2, 13, 5))
+[f63214] KH2 magic: the cast takes step 1 of KH1's combo
+[f63214] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising false), sideways 0.0/frame kept
+[f63214] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 160 units, KH1's second part 0x8a taken off its queue
+[f63215] draw: baked (KH1 slot 130)
+[f63245] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f63299] draw: baked (KH1 slot 156)
+[f63300] draw: baked (KH1 slot 159)
+[f63309] draw: baked (KH1 slot 158)
+[f63318] draw: baked (KH1 slot 156)
+[f63320] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f63320] KH2 MP cost of spell 0 (Part(12)): 81 of KH1's units paid, MP Some((2, 13, 5)) -> Some((0, 13, 14))
+[f63320] KH2 magic: the cast takes step 1 of KH1's combo
+[f63320] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising true), sideways 0.0/frame kept
+[f63320] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 81 units, KH1's second part 0x8a taken off its queue
+[f63321] draw: baked (KH1 slot 130)
+[f63321] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed true, MP (0, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f63321] fourth shortcut in battle: command 0x7d, usable false
+[f63351] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f63405] draw: baked (KH1 slot 156)
+[f63406] draw: baked (KH1 slot 159)
+[f63432] draw: kh1_own (KH1 slot 0)
+[f63443] draw: kh1_own (KH1 slot 58)
+[f63508] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f63508] fourth shortcut in battle: command 0x7d, usable true
+[f63511] KH2 effects (native): p_ex100_btlf: element 0: effect 0 as 0x700 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x1, wait 0, fade-out 0, offset [0.0, -119.125534, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -104.13086, 0.0] / [32768, 0, 32768]), scale [1.1439984, 1.1439984, 1.1439984]
+[f63511] KH2 effects (native): p_ex100_btlf: element 1: effect 1 as 0x701 on KH1 Bone(70) (KH2 bone 0x43), flags 0xa41, wait 0, fade-out 0, offset [16.833832, 3.378603, 1.91e-5] turned [1.5707511, -1.5708662, -1.0252064e-5] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [16.833832, 3.378603, 1.91e-5] / [0, -16384, 16383]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 2: effect 2 as 0x702 on KH1 Bone(2) (KH2 bone 0x2), flags 0x241, wait 0, fade-out 0, offset [10.135808, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [8.064992, 0.0, 0.0] / [0, 0, 0]), scale [1.2567661, 1.2567661, 1.2567661]
+[f63511] KH2 effects (native): p_ex100_btlf: element 3: effect 3 as 0x703 on KH1 Bone(93) (KH2 bone 0xaa), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 3.141528, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32768, 1, 32768]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 4: effect 3 as 0x704 on KH1 Bone(198) (KH2 bone 0x4e), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 3.1415324, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32768, 1, 32768]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 5: effect 4 as 0x705 on KH1 Bone(98) (KH2 bone 0xb1), flags 0xa41, wait 0, fade-out 0, offset [-1.3694408, -1.3694408, 0.0] turned [0.0, 3.1415088, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-1.3694408, -1.3694408, 0.0] / [32768, 1, 32768]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 6: effect 4 as 0x706 on KH1 Bone(203) (KH2 bone 0x55), flags 0xa41, wait 0, fade-out 0, offset [-0.4897189, -1.7343011, 0.0] turned [0.0, 3.1414914, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-0.4897189, -1.7343011, 0.0] / [32768, 1, 32768]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 7: effect 5 as 0x707 on KH1 Bone(17) (KH2 bone 0x28), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [4.768414e-5, -1.5707847, -1.570772] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, -16384, -16383]), scale [1.1396916, 1.1396916, 1.1396916]
+[f63511] KH2 effects (native): p_ex100_btlf: element 8: effect 5 as 0x708 on KH1 Bone(43) (KH2 bone 0xb), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, -1.5708243, -1.5708265] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, -16384, -16384]), scale [1.141001, 1.141001, 1.141001]
+[f63511] KH2 effects (native): p_ex100_btlf: element 9: effect 6 as 0x709 on KH1 Bone(18) (KH2 bone 0x29), flags 0x241, wait 0, fade-out 0, offset [5.3277636, 3.2111726, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [4.443171, 2.6780071, 0.0] / [0, 0, 0]), scale [1.1990904, 1.1990904, 1.1990904]
+[f63511] KH2 effects (native): p_ex100_btlf: element 10: effect 6 as 0x70a on KH1 Bone(44) (KH2 bone 0xc), flags 0x241, wait 0, fade-out 0, offset [4.1557546, 2.6614535, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [3.465542, 2.2194233, 0.0] / [0, 0, 0]), scale [1.1991644, 1.1991644, 1.1991644]
+[f63511] KH2 effects (native): p_ex100_btlf: element 11: effect 7 as 0x70b on KH1 Bone(21) (KH2 bone 0x2c), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [3.1415162, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32767, 0, 0]), scale [1.1168896, 1.1168896, 1.1168896]
+[f63511] KH2 effects (native): p_ex100_btlf: element 12: effect 7 as 0x70c on KH1 Bone(47) (KH2 bone 0xf), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [3.1415088, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32767, 0, 0]), scale [1.1066649, 1.1066649, 1.1066649]
+[f63511] KH2 effects (native): p_ex100_btlf: element 13: effect 8 as 0x70d on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x261, wait 0, fade-out 4, offset [-12.451847, 0.0, -1e-6] turned [0.0, 0.0, -3.1415453] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-9.967307, 0.0, -8.004682e-7] / [0, 0, -32768]), scale [1.2492689, 1.2492689, 1.2492689]
+[f63511] KH2 effects (native): p_ex100_btlf: element 14: effect 8 as 0x70e on KH1 LeftBlade(0.0) (KH2 bone 0x4006), flags 0x261, wait 0, fade-out 4, offset [-12.44983, 0.0, 0.0] turned [0.0, 0.0, 3.141553] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-9.966663, 0.0, 0.0] / [0, 0, 32768]), scale [1.2491473, 1.2491473, 1.2491473]
+[f63511] KH2 effects (native): p_ex100_btlf: element 15: effect 9 as 0x70f on KH1 Code(32768) (KH2 bone 0x4000), flags 0x3, wait 0, fade-out 0, offset [0.0, 0.0, -49.274548] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 41.647213] / [32768, 0, 32768]), scale [1.1831416, 1.1831416, 1.1831416]
+[f63511] KH2 effects (native): p_ex100_btlf: element 16: effect 10 as 0x710 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x261, wait 0, fade-out 6, offset [0.0, -149.4308, 0.0] turned [0.5521796, 0.0, -2.391101e-7] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -149.4308, 0.0] / [-27009, 0, -32768]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 17: effect 11 as 0x711 on KH1 Bone(70) (KH2 bone 0x43), flags 0x265, wait 0, fade-out 6, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.7018118, 1.7018118, 1.7018118]
+[f63511] KH2 effects (native): p_ex100_btlf: element 18: effect 12 as 0x712 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x1, wait 0, fade-out 0, offset [0.0, -74.78412, 5.7526236] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -74.78412, -5.7526236] / [32768, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 19: effect 13 as 0x713 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x261, wait 0, fade-out 8, offset [0.0, -66.15518, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -66.15518, 0.0] / [32768, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 20: effect 14 as 0x714 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x261, wait 0, fade-out 6, offset [-8.628937, -60.402557, -255.99179] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [7.659574, -53.61702, 227.23404] / [32768, 0, 32768]), scale [1.1265557, 1.1265557, 1.1265557]
+[f63511] KH2 effects (native): p_ex100_btlf: element 21: effect 15 as 0x715 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x241, wait 0, fade-out 4, offset [0.0, -143.9999, 0.0] turned [-2.945623, 0.0, 0.60279566] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -238.60677, 0.0] / [2044, 0, 26481]), scale [0.603503, 0.603503, 0.603503]
+[f63511] KH2 effects (native): p_ex100_btlf: element 22: effect 15 as 0x716 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x241, wait 0, fade-out 4, offset [17.999998, -145.47665, 0.0] turned [-3.3370695e-6, 1.822156, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-29.825838, -241.05353, 0.0] / [0, -13762, 0]), scale [0.6035035, 0.6035035, 0.6035035]
+[f63511] KH2 effects (native): p_ex100_btlf: element 23: effect 15 as 0x717 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x241, wait 0, fade-out 4, offset [19.81675, -179.8254, -5e-7] turned [-0.118584454, -2.9871037, 2.1923983] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-32.85659, -298.1543, 8.2901056e-7] / [-1237, 1611, -22868]), scale [0.6031286, 0.6031286, 0.6031286]
+[f63511] KH2 effects (native): p_ex100_btlf: element 24: effect 15 as 0x718 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x241, wait 0, fade-out 4, offset [-11.140387, -183.03656, 0.0] turned [0.0039410545, 2.953475, -1.4092053] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [18.36785, -301.78378, -0.0] / [41, -1962, 14699]), scale [0.6065156, 0.6065156, 0.6065156]
+[f63511] KH2 effects (native): p_ex100_btlf: element 25: effect 16 as 0x719 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x241, wait 0, fade-out 4, offset [0.0, -134.00189, 0.0] turned [-0.06487146, -2.5173817, 0.5015614] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -179.55142, 0.0] / [-677, 6511, -5231]), scale [0.7463148, 0.7463148, 0.7463148]
+[f63511] KH2 effects (native): p_ex100_btlf: element 26: effect 16 as 0x71a on KH1 Code(32768) (KH2 bone 0x4000), flags 0x241, wait 0, fade-out 4, offset [0.0, -133.75423, 2.9e-6] turned [0.08808528, 2.7117972, 2.6752977] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -178.09306, -3.8613352e-6] / [919, -4483, -27904]), scale [0.7510356, 0.7510356, 0.7510356]
+[f63511] KH2 effects (native): p_ex100_btlf: element 100: effect 17 as 0x764 on KH1 Bone(70) (KH2 bone 0x43), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 101: effect 17 as 0x765 on KH1 Bone(70) (KH2 bone 0x43), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf: element 102: effect 17 as 0x766 on KH1 Bone(70) (KH2 bone 0x43), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63511] KH2 effects (native): p_ex100_btlf's DPX: [DPD 0: particle datas [0], 2 textures, vram 0x3800..0x3840 / 0x3d40..0x3d48 (1 TBP, 1 CBP slots); common 0x2d40/0x2e28 -> 0x3800/0x3d40; common 0x2d00/0x2e1c -> 0x3820/0x3d44; effect 0 as 1792 (offset [0.0, -104.13086, 0.0], angles [32768, 0, 32768])] [DPD 1: particle datas [0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 7], 1 textures, vram 0x3800..0x39c0 / 0x3d40..0x3d44 (4 TBP, 1 CBP slots); common 0x2a00/0x2e34 -> 0x3800/0x3d40; effect 1 as 1793 (offset [16.833832, 3.378603, 1.91e-5], angles [0, -16384, 16383]); effect 2 as 1794 (offset [8.064992, 0.0, 0.0], angles [0, 0, 0]); effect 3 as 1795 (offset [0.0, 0.0, 0.0], angles [32768, 1, 32768]); effect 3 as 1796 (offset [0.0, 0.0, 0.0], angles [32768, 1, 32768]); effect 4 as 1797 (offset [-1.3694408, -1.3694408, 0.0], angles [32768, 1, 32768]); effect 4 as 1798 (offset [-0.4897189, -1.7343011, 0.0], angles [32768, 1, 32768]); effect 5 as 1799 (offset [0.0, 0.0, 0.0], angles [0, -16384, -16383]); effect 5 as 1800 (offset [0.0, 0.0, 0.0], angles [0, -16384, -16384]); effect 6 as 1801 (offset [4.443171, 2.6780071, 0.0], angles [0, 0, 0]); effect 6 as 1802 (offset [3.465542, 2.2194233, 0.0], angles [0, 0, 0]); effect 7 as 1803 (offset [0.0, 0.0, 0.0], angles [32767, 0, 0]); effect 7 as 1804 (offset [0.0, 0.0, 0.0], angles [32767, 0, 0]); effect 17 as 1892 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 17 as 1893 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 17 as 1894 (offset [0.0, 0.0, 0.0], angles [0, 0, 0])] [DPD 2: particle datas [0], 4 textures, vram 0x3800..0x3a40 / 0x3d40..0x3d50 (5 TBP, 1 CBP slots); own 0x3000/0x3e04 -> 0x3800/0x3d40; own 0x3040/0x3e00 -> 0x3840/0x3d44; common 0x2a00/0x2e34 -> 0x3860/0x3d48; common 0x2d00/0x2e1c -> 0x3a20/0x3d4c; effect 10 as 1808 (offset [0.0, -149.4308, 0.0], angles [-27009, 0, -32768])] [DPD 3: particle datas [0, 0, 1], 4 textures, vram 0x3800..0x3a20 / 0x3d40..0x3d50 (5 TBP, 1 CBP slots); own 0x3000/0x3e00 -> 0x3800/0x3d40; common 0x2a00/0x2e34 -> 0x3820/0x3d44; common 0x2d00/0x2e1c -> 0x39e0/0x3d48; common 0x2d20/0x2e2c -> 0x3a00/0x3d4c; effect 8 as 1805 (offset [-9.967307, 0.0, -8.004682e-7], angles [0, 0, -32768]); effect 8 as 1806 (offset [-9.966663, 0.0, 0.0], angles [0, 0, 32768]); effect 9 as 1807 (offset [0.0, 0.0, 41.647213], angles [32768, 0, 32768])] [DPD 4: particle datas [1, 2, 3, 4], 3 textures, vram 0x3800..0x3a00 / 0x3d40..0x3d4c (4 TBP, 1 CBP slots); own 0x3040/0x3e00 -> 0x3800/0x3d40; common 0x2a00/0x2e34 -> 0x3820/0x3d44; common 0x2d00/0x2e1c -> 0x39e0/0x3d48; effect 11 as 1809 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 12 as 1810 (offset [0.0, -74.78412, -5.7526236], angles [32768, 0, 32768]); effect 13 as 1811 (offset [0.0, -66.15518, 0.0], angles [32768, 0, 32768]); effect 14 as 1812 (offset [7.659574, -53.61702, 227.23404], angles [32768, 0, 32768])] [DPD 5: particle datas [5, 5, 5, 5, 6, 6], 4 textures, vram 0x3800..0x3a20 / 0x3d40..0x3d50 (5 TBP, 1 CBP slots); own 0x3040/0x3e00 -> 0x3800/0x3d40; own 0x3060/0x3e08 -> 0x3820/0x3d44; common 0x2a00/0x2e34 -> 0x3840/0x3d48; common 0x2d00/0x2e1c -> 0x3a00/0x3d4c; effect 15 as 1813 (offset [0.0, -238.60677, 0.0], angles [2044, 0, 26481]); effect 15 as 1814 (offset [-29.825838, -241.05353, 0.0], angles [0, -13762, 0]); effect 15 as 1815 (offset [-32.85659, -298.1543, 8.2901056e-7], angles [-1237, 1611, -22868]); effect 15 as 1816 (offset [18.36785, -301.78378, -0.0], angles [41, -1962, 14699]); effect 16 as 1817 (offset [0.0, -179.55142, 0.0], angles [-677, 6511, -5231]); effect 16 as 1818 (offset [0.0, -178.09306, -3.8613352e-6], angles [919, -4483, -27904])]
+[f63511] alive 1440s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f63512] KH2 effects (native): p_ex100_btlf's HD textures: DPD 0 common tbp 0x2d40 <- shared; DPD 0 common tbp 0x2d00 <- shared; DPD 1 common tbp 0x2a00 <- shared; DPD 2 own 0x19d00 (tbp 0x3000) <- -1.dds (16512 bytes); DPD 2 own 0x1e120 (tbp 0x3040) <- -2.dds (8320 bytes); DPD 2 common tbp 0x2a00 <- shared; DPD 2 common tbp 0x2d00 <- shared; DPD 3 own 0xcdd0 (tbp 0x3000) <- -0.dds (8320 bytes); DPD 3 common tbp 0x2a00 <- shared; DPD 3 common tbp 0x2d00 <- shared; DPD 3 common tbp 0x2d20 <- shared; DPD 4 own 0x1e120 (tbp 0x3040) <- -2.dds (8320 bytes); DPD 4 common tbp 0x2a00 <- shared; DPD 4 common tbp 0x2d00 <- shared; DPD 5 own 0x1e120 (tbp 0x3040) <- -2.dds (8320 bytes); DPD 5 own 0x20540 (tbp 0x3060) <- -3.dds (8320 bytes); DPD 5 common tbp 0x2a00 <- shared; DPD 5 common tbp 0x2d00 <- shared
+[f63512] KH2 effects (native): p_ex100_btlf's DPX built, 1033120 bytes, 30 effects in 0.02 s (18 HD textures: 6 own, 58112 bytes until entered; 12 of the common images)
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 0: effect 0 as 0x700 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x1, wait 0, fade-out 0, offset [0.0, -119.13709, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -104.14091, 0.0] / [32768, 0, 32768]), scale [1.143999, 1.143999, 1.143999]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 1: effect 1 as 0x701 on KH1 Bone(70) (KH2 bone 0x43), flags 0x241, wait 0, fade-out 0, offset [16.366766, 3.1037424, 0.0827003] turned [0.0, -1.5708518, 1.5709409] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [16.366766, 3.1037424, 0.0827003] / [0, -16384, 16386]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 2: effect 2 as 0x702 on KH1 Bone(2) (KH2 bone 0x2), flags 0x241, wait 0, fade-out 0, offset [6.203553, 0.0, 0.1274834] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [4.831135, 0.0, 0.09928011] / [0, 0, 0]), scale [1.2840779, 1.2840779, 1.2840779]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 3: effect 3 as 0x703 on KH1 Bone(93) (KH2 bone 0xaa), flags 0x241, wait 0, fade-out 0, offset [-2e-7, -1.03458, 0.0] turned [2.391101e-7, 0.0, -3.1415634] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-2e-7, -1.03458, 0.0] / [0, 0, -32768]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 4: effect 3 as 0x704 on KH1 Bone(198) (KH2 bone 0x4e), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [-5.9128266e-5, 0.0, -3.1415234] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [-1, 0, -32767]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 5: effect 4 as 0x705 on KH1 Bone(98) (KH2 bone 0xb1), flags 0x241, wait 0, fade-out 0, offset [-2.156233, 0.0, 0.2363788] turned [-5.48365e-5, 0.0, -3.1415596] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-2.156233, 0.0, 0.2363788] / [-1, 0, -32768]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 6: effect 4 as 0x706 on KH1 Bone(203) (KH2 bone 0x55), flags 0x241, wait 0, fade-out 0, offset [-0.6444554, 0.0, 0.0566935] turned [-2.6232299e-6, 0.0, 3.1415138] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-0.6444554, 0.0, 0.0566935] / [0, 0, 32767]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 7: effect 5 as 0x707 on KH1 Bone(43) (KH2 bone 0xb), flags 0x241, wait 0, fade-out 0, offset [1.7399987, 0.0, 0.15] turned [0.0, 0.0, -1.5708302] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [1.7399987, 0.0, 0.15] / [0, 0, -16384]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 8: effect 5 as 0x708 on KH1 Bone(17) (KH2 bone 0x28), flags 0x241, wait 0, fade-out 0, offset [1.7278303, 0.0, 0.1496548] turned [0.0, 3.1272914, -1.5708137] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [1.7278303, 0.0, 0.1496548] / [32768, 149, 16384]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 9: effect 6 as 0x709 on KH1 Bone(18) (KH2 bone 0x29), flags 0x241, wait 0, fade-out 0, offset [7.3020635, 2.404022, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [6.3748956, 2.0987751, 0.0] / [0, 0, 0]), scale [1.1454405, 1.1454405, 1.1454405]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 10: effect 6 as 0x70a on KH1 Bone(44) (KH2 bone 0xc), flags 0x241, wait 0, fade-out 0, offset [11.500385, 2.4040213, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [9.977324, 2.0856428, 0.0] / [0, 0, 0]), scale [1.1526524, 1.1526524, 1.1526524]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 11: effect 7 as 0x70b on KH1 Bone(21) (KH2 bone 0x2c), flags 0xa41, wait 0, fade-out 0, offset [2.8917058, 0.0, 0.0] turned [0.0, 0.0, -1.5714604] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [2.3003614, 0.0, 0.0] / [0, 0, -16391]), scale [1.2570659, 1.2570659, 1.2570659]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 12: effect 7 as 0x70c on KH1 Bone(47) (KH2 bone 0xf), flags 0xa41, wait 0, fade-out 0, offset [1.6295395, 0.0, 2.2488766] turned [0.0, 0.0, -1.5823885] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [1.2930192, 0.0, 1.7844553] / [0, 0, -16505]), scale [1.2602594, 1.2602594, 1.2602594]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 100: effect 8 as 0x764 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa45, wait 0, fade-out 0, offset [0.0, -56.96114, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [0.9999995, 0.9999995, 0.9999995]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 101: effect 9 as 0x765 on KH1 Bone(70) (KH2 bone 0x43), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 102: effect 9 as 0x766 on KH1 Bone(70) (KH2 bone 0x43), flags 0x241, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 20: effect 10 as 0x714 on KH1 Bone(0) (KH2 bone 0x0), flags 0x0, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0899985, 1.0899985, 1.0899985]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 21: effect 11 as 0x715 on KH1 Bone(0) (KH2 bone 0x0), flags 0x0, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.6119944, 1.6119944, 1.6119944], lookup kinds 0x1 groups 0x1
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 22: effect 12 as 0x716 on KH1 Bone(0) (KH2 bone 0x0), flags 0x0, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.3959973, 1.3959973, 1.3959973], lookup kinds 0x6 groups 0x1
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 23: effect 13 as 0x717 on KH1 Bone(0) (KH2 bone 0x0), flags 0x0, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0], lookup kinds 0x100 groups 0x1
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 24: effect 14 as 0x718 on KH1 Bone(0) (KH2 bone 0x0), flags 0x0, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.2879981, 1.2879981, 1.2879981], lookup kinds 0x10 groups 0x1
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 25: effect 15 as 0x719 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707774, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 26: effect 15 as 0x71a on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707774, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 27: effect 15 as 0x71b on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707811, -2.1450096e-6] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 28: effect 15 as 0x71c on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5708002, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 29: effect 15 as 0x71d on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707829, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 30: effect 15 as 0x71e on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707799, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 31: effect 15 as 0x71f on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.570782, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 32: effect 15 as 0x720 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707806, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 33: effect 15 as 0x721 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707854, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 34: effect 15 as 0x722 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707799, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 35: effect 15 as 0x723 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707816, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 36: effect 15 as 0x724 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707816, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 37: effect 15 as 0x725 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707775, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 38: effect 15 as 0x726 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707748, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 39: effect 15 as 0x727 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707775, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 40: effect 15 as 0x728 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707766, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 41: effect 15 as 0x729 on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707748, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 42: effect 15 as 0x72a on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707725, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 43: effect 15 as 0x72b on KH1 Blade(1.0) (KH2 bone 0x4003), flags 0x803, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 1.5707774, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 16384, 0]), scale [1.0, 1.0, 1.0]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 110: effect 16 as 0x76e on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 10, offset [0.0, -67.04246, 0.0] turned [0.5616464, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -51.625214, 0.0] / [-26910, 0, 32768]), scale [1.2986379, 1.2986379, 1.2986379]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 111: effect 17 as 0x76f on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 10, offset [0.0, -67.02947, 0.0] turned [0.5615689, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -51.650696, 0.0] / [-26911, 0, 32768]), scale [1.2977458, 1.2977458, 1.2977458]
+[f63512] KH2 effects (native): p_ex100_magf_a_us: element 112: effect 18 as 0x770 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 10, offset [0.0, -67.01907, 0.0] turned [0.5616817, 0.0, 5.4120916e-5] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -51.44513, 0.0] / [-26909, 0, 32767]), scale [1.3027292, 1.3027292, 1.3027292]
+[f63512] KH2 effects (native): p_ex100_magf_a_us's DPX: [DPD 0: particle datas [0], 2 textures, vram 0x3800..0x3840 / 0x3d40..0x3d48 (1 TBP, 1 CBP slots); common 0x2d40/0x2e28 -> 0x3800/0x3d40; common 0x2d00/0x2e1c -> 0x3820/0x3d44; effect 0 as 1792 (offset [0.0, -104.14091, 0.0], angles [32768, 0, 32768])] [DPD 1: particle datas [0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 8, 8], 2 textures, vram 0x3800..0x39e0 / 0x3d40..0x3d48 (4 TBP, 1 CBP slots); common 0x2a00/0x2e34 -> 0x3800/0x3d40; common 0x2d20/0x2e2c -> 0x39c0/0x3d44; effect 1 as 1793 (offset [16.366766, 3.1037424, 0.0827003], angles [0, -16384, 16386]); effect 2 as 1794 (offset [4.831135, 0.0, 0.09928011], angles [0, 0, 0]); effect 3 as 1795 (offset [-2e-7, -1.03458, 0.0], angles [0, 0, -32768]); effect 3 as 1796 (offset [0.0, 0.0, 0.0], angles [-1, 0, -32767]); effect 4 as 1797 (offset [-2.156233, 0.0, 0.2363788], angles [-1, 0, -32768]); effect 4 as 1798 (offset [-0.6444554, 0.0, 0.0566935], angles [0, 0, 32767]); effect 5 as 1799 (offset [1.7399987, 0.0, 0.15], angles [0, 0, -16384]); effect 5 as 1800 (offset [1.7278303, 0.0, 0.1496548], angles [32768, 149, 16384]); effect 6 as 1801 (offset [6.3748956, 2.0987751, 0.0], angles [0, 0, 0]); effect 6 as 1802 (offset [9.977324, 2.0856428, 0.0], angles [0, 0, 0]); effect 7 as 1803 (offset [2.3003614, 0.0, 0.0], angles [0, 0, -16391]); effect 7 as 1804 (offset [1.2930192, 0.0, 1.7844553], angles [0, 0, -16505]); effect 8 as 1892 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 9 as 1893 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 9 as 1894 (offset [0.0, 0.0, 0.0], angles [0, 0, 0])] [DPD 2: particle datas [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5], 12 textures, vram 0x3800..0x3b80 / 0x3d40..0x3d70 (7 TBP, 2 CBP slots); own 0x3100/0x3e04 -> 0x3800/0x3d40; own 0x3000/0x3e00 -> 0x3820/0x3d44; own 0x3100/0x3e08 -> 0x3800/0x3d48; common 0x2c40/0x2e00 -> 0x3920/0x3d4c; common 0x2c60/0x2e04 -> 0x3940/0x3d50; common 0x2c40/0x2e08 -> 0x3920/0x3d54; common 0x2c80/0x2e0c -> 0x3960/0x3d58; common 0x2c40/0x2e10 -> 0x3920/0x3d5c; common 0x2c40/0x2e14 -> 0x3920/0x3d60; common 0x2c60/0x2e18 -> 0x3940/0x3d64; common 0x2a00/0x2e34 -> 0x39a0/0x3d68; common 0x2d20/0x2e2c -> 0x3b60/0x3d6c; effect 10 as 1812 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 11 as 1813 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 12 as 1814 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 13 as 1815 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 14 as 1816 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 15 as 1817 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1818 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1819 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1820 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1821 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1822 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1823 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1824 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1825 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1826 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1827 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1828 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1829 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1830 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1831 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1832 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1833 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1834 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0]); effect 15 as 1835 (offset [0.0, 0.0, 0.0], angles [0, 16384, 0])] [DPD 3: particle datas [0, 1, 2], 1 textures, vram 0x3800..0x39c0 / 0x3d40..0x3d44 (4 TBP, 1 CBP slots); common 0x2a00/0x2e34 -> 0x3800/0x3d40; effect 16 as 1902 (offset [0.0, -51.625214, 0.0], angles [-26910, 0, 32768]); effect 17 as 1903 (offset [0.0, -51.650696, 0.0], angles [-26911, 0, 32768]); effect 18 as 1904 (offset [0.0, -51.44513, 0.0], angles [-26909, 0, 32767])]
+[f63513] KH2 effects (native): p_ex100_btlf's DPX entered in KH1's loaded files (0x2e81255df10): 6 HD images copied (58112 bytes), 12 common textures shared
+[f63513] KH2 effects (native): p_ex100_btlf's DPX at 0x2e7f6354000 relocated by KH1
+[f63513] KH2 effects (native): KH2's MegaBirth plugged into 34 program words, its ribbon (EiDrawShipoly) into 0, its pppColor into 127, its pppVtMime into 15, its pppAngleLoop into 0, its pppKeShpTail3X into 0, its pppSnoMdlDttNorm into 0 (0 left as they were)
+[f63513] KH2 effects (native): p_ex100_magf_a_us's HD textures: DPD 0 common tbp 0x2d40 <- shared; DPD 0 common tbp 0x2d00 <- shared; DPD 1 common tbp 0x2a00 <- shared; DPD 1 common tbp 0x2d20 <- shared; DPD 2 own 0xc350 (tbp 0x3100) <- -1.dds (8320 bytes); DPD 2 own 0xd770 (tbp 0x3000) <- -0.dds (65664 bytes); DPD 2 common tbp 0x2c40 <- shared; DPD 2 common tbp 0x2c60 <- shared; DPD 2 common tbp 0x2c80 <- shared; DPD 2 common tbp 0x2a00 <- shared; DPD 2 common tbp 0x2d20 <- shared; DPD 3 common tbp 0x2a00 <- shared
+[f63513] KH2 effects (native): p_ex100_magf_a_us's DPX built, 636592 bytes, 43 effects in 0.02 s (12 HD textures: 2 own, 73984 bytes until entered; 10 of the common images)
+[f63513] KH2 effects (native): p_ex100_ultf: element 0: effect 0 as 0x700 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa41, wait 0, fade-out 0, offset [0.0, -110.114716, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -88.03506, 0.0] / [32768, 0, 32768]), scale [1.2508053, 1.2508053, 1.2508053]
+[f63513] KH2 effects (native): p_ex100_ultf: element 1: effect 1 as 0x701 on KH1 Bone(70) (KH2 bone 0x43), flags 0xa41, wait 0, fade-out 0, offset [16.823263, 3.3899982, 0.0008362] turned [1.5707616, -1.5707831, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [16.823263, 3.3899982, 0.0008362] / [0, -16384, 16384]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 2: effect 2 as 0x702 on KH1 Bone(2) (KH2 bone 0x2), flags 0xa41, wait 0, fade-out 0, offset [10.154044, 0.0, 0.0005003] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [8.062106, 0.0, 0.0003972281] / [0, 0, 0]), scale [1.2594779, 1.2594779, 1.2594779]
+[f63513] KH2 effects (native): p_ex100_ultf: element 3: effect 3 as 0x703 on KH1 Bone(93) (KH2 bone 0xaa), flags 0xa41, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, -3.1415389, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32768, -1, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 4: effect 3 as 0x704 on KH1 Bone(198) (KH2 bone 0x4e), flags 0xa41, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 3.1415477, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32768, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 5: effect 4 as 0x705 on KH1 Bone(98) (KH2 bone 0xb1), flags 0xa41, wait 0, fade-out 0, offset [-1.3799992, -1.3799992, 0.0] turned [0.0, 3.1415699, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-1.3799992, -1.3799992, 0.0] / [32768, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 6: effect 4 as 0x706 on KH1 Bone(203) (KH2 bone 0x55), flags 0xa41, wait 0, fade-out 0, offset [-1.3799992, -1.3799992, 0.0] turned [0.0, -3.1415234, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-1.3799992, -1.3799992, 0.0] / [32768, -1, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 7: effect 5 as 0x707 on KH1 Bone(17) (KH2 bone 0x28), flags 0xa41, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, -1.5708458, -1.5708011] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, -16384, -16384]), scale [1.1418393, 1.1418393, 1.1418393]
+[f63513] KH2 effects (native): p_ex100_ultf: element 8: effect 5 as 0x708 on KH1 Bone(43) (KH2 bone 0xb), flags 0xa41, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, -1.5707974, -1.5707729] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, -16384, -16384]), scale [1.1448207, 1.1448207, 1.1448207]
+[f63513] KH2 effects (native): p_ex100_ultf: element 9: effect 6 as 0x709 on KH1 Bone(18) (KH2 bone 0x29), flags 0xa41, wait 0, fade-out 0, offset [5.3399835, 3.2099977, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [4.45027, 2.6751688, 0.0] / [0, 0, 0]), scale [1.1999234, 1.1999234, 1.1999234]
+[f63513] KH2 effects (native): p_ex100_ultf: element 10: effect 6 as 0x70a on KH1 Bone(44) (KH2 bone 0xc), flags 0xa41, wait 0, fade-out 0, offset [5.3399835, 3.2099972, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [4.4455523, 2.6723325, 0.0] / [0, 0, 0]), scale [1.2011968, 1.2011968, 1.2011968]
+[f63513] KH2 effects (native): p_ex100_ultf: element 11: effect 7 as 0x70b on KH1 Bone(21) (KH2 bone 0x2c), flags 0xa41, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [3.1415234, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32767, 0, 0]), scale [1.113446, 1.113446, 1.113446]
+[f63513] KH2 effects (native): p_ex100_ultf: element 12: effect 7 as 0x70c on KH1 Bone(47) (KH2 bone 0xf), flags 0xa41, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [3.1415303, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32767, 0, 0]), scale [1.1138238, 1.1138238, 1.1138238]
+[f63513] KH2 effects (native): p_ex100_ultf: element 100: effect 8 as 0x764 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa41, wait 0, fade-out 0, offset [0.0, -123.338684, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -123.338684, 0.0] / [32768, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 101: effect 9 as 0x765 on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0xa41, wait 0, fade-out 0, offset [-28.685673, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-23.932833, 0.0, 0.0] / [0, 0, 0]), scale [1.1985908, 1.1985908, 1.1985908]
+[f63513] KH2 effects (native): p_ex100_ultf: element 102: effect 9 as 0x766 on KH1 LeftBlade(0.0) (KH2 bone 0x4006), flags 0xa41, wait 0, fade-out 0, offset [-28.685682, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-23.888868, 0.0, 0.0] / [0, 0, 0]), scale [1.2007971, 1.2007971, 1.2007971]
+[f63513] KH2 effects (native): p_ex100_ultf: element 20: effect 10 as 0x714 on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0xa61, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [1.5708002, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [16384, 0, 0]), scale [1.2879975, 1.2879975, 1.2879975]
+[f63513] KH2 effects (native): p_ex100_ultf: element 21: effect 11 as 0x715 on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0xa47, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.923046, 1.923046, 1.923046]
+[f63513] KH2 effects (native): p_ex100_ultf: element 22: effect 12 as 0x716 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [0.0, -91.136986, -221.80478] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-0.0, -53.414356, 129.99727] / [32768, 0, 32768]), scale [1.7062265, 1.7062265, 1.7062265]
+[f63513] KH2 effects (native): p_ex100_ultf: element 23: effect 12 as 0x717 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [0.0, -145.37956, -248.35672] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-0.0, -85.32221, 145.75876] / [32768, 0, 32768]), scale [1.7038888, 1.7038888, 1.7038888]
+[f63513] KH2 effects (native): p_ex100_ultf: element 24: effect 12 as 0x718 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [0.0, -107.16292, -185.02548] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-0.0, -62.945683, 108.68084] / [32768, 0, 32768]), scale [1.7024665, 1.7024665, 1.7024665]
+[f63513] KH2 effects (native): p_ex100_ultf: element 25: effect 13 as 0x719 on KH1 Bone(70) (KH2 bone 0x43), flags 0xa65, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.107999, 1.107999, 1.107999]
+[f63513] KH2 effects (native): p_ex100_ultf: element 26: effect 14 as 0x71a on KH1 Bone(98) (KH2 bone 0xb1), flags 0xa65, wait 0, fade-out 0, offset [9.586086, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0972244, 1.0972244, 1.0972244]
+[f63513] KH2 effects (native): p_ex100_ultf: element 27: effect 14 as 0x71b on KH1 Bone(203) (KH2 bone 0x55), flags 0xa61, wait 0, fade-out 0, offset [9.586086, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [8.73667, 0.0, 0.0] / [0, 0, 0]), scale [1.0972244, 1.0972244, 1.0972244]
+[f63513] KH2 effects (native): p_ex100_ultf: element 28: effect 15 as 0x71c on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa65, wait 0, fade-out 0, offset [0.0, -115.03285, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [0.6152955, 0.6152955, 0.6152955]
+[f63513] KH2 effects (native): p_ex100_ultf: element 29: effect 16 as 0x71d on KH1 Bone(70) (KH2 bone 0x43), flags 0xa61, wait 0, fade-out 0, offset [-23.860205, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-23.860205, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 30: effect 17 as 0x71e on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [0.0, -114.87245, 307.45273] turned [0.0, -0.094346054, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -104.301025, -279.15863] / [32768, 984, 32768]), scale [1.101355, 1.101355, 1.101355]
+[f63513] KH2 effects (native): p_ex100_ultf: element 31: effect 17 as 0x71f on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [190.27711, -94.60083, -232.60727] turned [0.0, -1.0815039, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-173.04253, -86.03224, 211.53857] / [32768, 11280, 32768]), scale [1.0995975, 1.0995975, 1.0995975]
+[f63513] KH2 effects (native): p_ex100_ultf: element 32: effect 17 as 0x720 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [-286.34598, -106.67107, 87.148796] turned [0.0, 1.6079317, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [260.40976, -97.00918, -79.255165] / [0, -15997, 0]), scale [1.0995977, 1.0995977, 1.0995977]
+[f63513] KH2 effects (native): p_ex100_ultf: element 33: effect 17 as 0x721 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [283.6017, -105.82355, 106.88756] turned [0.0, 0.9017542, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-257.9141, -96.238434, -97.20607] / [32768, -9406, 32768]), scale [1.0995976, 1.0995976, 1.0995976]
+[f63513] KH2 effects (native): p_ex100_ultf: element 34: effect 17 as 0x722 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x243, wait 0, fade-out 8, offset [-168.0727, -105.82355, -248.99657] turned [0.0, -2.775467, 0.032596037] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [152.84926, -96.23843, 226.44333] / [0, 3819, -340]), scale [1.0995977, 1.0995977, 1.0995977]
+[f63513] KH2 effects (native): p_ex100_ultf: element 35: effect 17 as 0x723 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x241, wait 0, fade-out 8, offset [-49.17984, -90.40451, 294.95953] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [44.65084, -82.0791, -267.79654] / [32768, 0, 32768]), scale [1.1014315, 1.1014315, 1.1014315]
+[f63513] KH2 effects (native): p_ex100_ultf: element 36: effect 18 as 0x724 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa43, wait 0, fade-out 8, offset [66.88203, -121.51528, 18.992966] turned [-1.570724, 2.6949406, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-66.88203, -121.51528, -18.992966] / [-16383, -4659, 0]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 37: effect 18 as 0x725 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa43, wait 0, fade-out 8, offset [4.795465, -121.55144, -18.035763] turned [-1.5707788, -1.1776146, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-4.795465, -121.55144, 18.035763] / [16384, 12283, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 38: effect 18 as 0x726 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa43, wait 0, fade-out 8, offset [-5.7485867, -121.46843, 33.24319] turned [-1.5708351, 1.4099973, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [5.7485867, -121.46843, -33.24319] / [16384, -14707, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 39: effect 18 as 0x727 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa43, wait 0, fade-out 8, offset [17.379276, -121.34914, -82.02193] turned [-1.5707788, -2.1641717, 6.174975e-5] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-17.379276, -121.34914, 82.02193] / [-16384, 10195, -1]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 40: effect 18 as 0x728 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa43, wait 0, fade-out 8, offset [-14.716422, -121.3025, -0.03] turned [-1.5707909, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [14.716422, -121.3025, 0.03] / [16384, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 41: effect 19 as 0x729 on KH1 Bone(0) (KH2 bone 0x0), flags 0x0, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.143999, 1.143999, 1.143999], lookup kinds 0x1 groups 0x1
+[f63513] KH2 effects (native): p_ex100_ultf: element 42: effect 20 as 0x72a on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x261, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [-3.1415462, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [-32768, 0, 0]), scale [1.0743915, 1.0743915, 1.0743915]
+[f63513] KH2 effects (native): p_ex100_ultf: element 43: effect 11 as 0x72b on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x47, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.6038977, 1.6038977, 1.6038977]
+[f63513] KH2 effects (native): p_ex100_ultf: element 44: effect 21 as 0x72c on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x265, wait 0, fade-out 0, offset [-60.00412, 0.0, 0.0] turned [-3.1415265, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [-32767, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 45: effect 21 as 0x72d on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x265, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 46: effect 21 as 0x72e on KH1 LeftBlade(0.0) (KH2 bone 0x4006), flags 0x265, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 47: effect 21 as 0x72f on KH1 LeftBlade(0.0) (KH2 bone 0x4006), flags 0x265, wait 0, fade-out 0, offset [-59.985332, 0.0, 0.0] turned [-3.1415498, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [-32768, 0, 0]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 48: effect 22 as 0x730 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 0, offset [0.0, -115.35729, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -123.06682, 0.0] / [32768, 0, 32768]), scale [0.937355, 0.937355, 0.937355]
+[f63513] KH2 effects (native): p_ex100_ultf: element 49: effect 23 as 0x731 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 0, offset [0.0, 5.0123444, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 5.0123444, 0.0] / [32768, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 50: effect 24 as 0x732 on KH1 Code(32768) (KH2 bone 0x4000), flags 0x261, wait 0, fade-out 0, offset [0.0, -80.7969, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [16384, 0, 0] -> [0.0, -80.7969, 0.0] / [-16384, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 51: effect 25 as 0x733 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 0, offset [0.0, 0.0, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [32768, 0, 32768]), scale [1.0, 1.0, 1.0]
+[f63513] KH2 effects (native): p_ex100_ultf: element 52: effect 26 as 0x734 on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x243, wait 0, fade-out 8, offset [-144.0, 0.0, 0.0] turned [-1.5707756, 1.5707797, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-103.15215, 0.0, 0.0] / [0, 16384, 16384]), scale [1.3959961, 1.3959961, 1.3959961]
+[f63513] KH2 effects (native): p_ex100_ultf: element 53: effect 26 as 0x735 on KH1 LeftBlade(0.0) (KH2 bone 0x4006), flags 0x243, wait 0, fade-out 8, offset [-144.0, 0.0, 0.0] turned [-1.5707775, 1.5707719, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-103.15207, 0.0, 0.0] / [0, 16384, 16384]), scale [1.3959972, 1.3959972, 1.3959972]
+[f63513] KH2 effects (native): p_ex100_ultf: element 54: effect 26 as 0x736 on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x243, wait 0, fade-out 8, offset [-144.0, 0.0, 0.0] turned [-1.5707775, 1.5707793, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-103.15211, 0.0, 0.0] / [0, 16384, 16384]), scale [1.3959967, 1.3959967, 1.3959967]
+[f63513] KH2 effects (native): p_ex100_ultf: element 55: effect 26 as 0x737 on KH1 LeftBlade(0.0) (KH2 bone 0x4006), flags 0x243, wait 0, fade-out 8, offset [-144.0, 0.0, 0.0] turned [-1.5707756, 1.5707797, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-103.15211, 0.0, 0.0] / [0, 16384, 16384]), scale [1.3959967, 1.3959967, 1.3959967]
+[f63513] KH2 effects (native): p_ex100_ultf: element 56: effect 26 as 0x738 on KH1 Blade(0.0) (KH2 bone 0x4005), flags 0x243, wait 0, fade-out 8, offset [-144.00002, 0.0, 0.0] turned [-1.5707763, 1.5707763, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-103.152084, 0.0, 0.0] / [0, 16384, 16384]), scale [1.3959972, 1.3959972, 1.3959972]
+[f63513] KH2 effects (native): p_ex100_ultf: element 57: effect 26 as 0x739 on KH1 LeftBlade(0.0) (KH2 bone 0x4006), flags 0x243, wait 0, fade-out 8, offset [-143.9999, 0.0, 0.0] turned [-1.5707774, 1.5707786, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-103.151985, 0.0, 0.0] / [0, 16384, 16384]), scale [1.3959973, 1.3959973, 1.3959973]
+[f63513] KH2 effects (native): p_ex100_ultf: element 58: effect 27 as 0x73a on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa65, wait 0, fade-out 4, offset [0.0, -124.2957, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [0.9812524, 0.9812524, 0.9812524]
+[f63513] KH2 effects (native): p_ex100_ultf: element 59: effect 27 as 0x73b on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa65, wait 0, fade-out 4, offset [0.0, -83.51069, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, 0.0, 0.0] / [0, 0, 0]), scale [0.8738818, 0.8738818, 0.8738818]
+[f63513] KH2 effects (native): p_ex100_ultf: element 60: effect 28 as 0x73c on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 6, offset [0.0, -156.3107, 0.0] turned [0.0, 2.700515, -0.6154576] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -262.02097, 0.0] / [0, -4601, 6419]), scale [0.596558, 0.596558, 0.596558]
+[f63513] KH2 effects (native): p_ex100_ultf: element 61: effect 28 as 0x73d on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 6, offset [0.0, -156.32243, 0.0] turned [0.0, 2.7042818, -2.4912806] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -262.39194, 0.0] / [0, -4561, 25985]), scale [0.5957593, 0.5957593, 0.5957593]
+[f63513] KH2 effects (native): p_ex100_ultf: element 62: effect 27 as 0x73e on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 4, offset [-22.753061, -137.53514, 12.020105] turned [0.0, 0.0, 1.9561905] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [23.752312, -143.5753, -12.547995] / [-32768, 0, 12364]), scale [0.9579304, 0.9579304, 0.9579304]
+[f63513] KH2 effects (native): p_ex100_ultf: element 63: effect 27 as 0x73f on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa61, wait 0, fade-out 4, offset [33.743423, -119.47583, 12.227259] turned [0.0, 3.1196897, 1.9219095] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [-40.22019, -142.4082, -14.574178] / [0, -228, -20046]), scale [0.8389673, 0.8389673, 0.8389673]
+[f63513] KH2 effects (native): p_ex100_ultf: element 64: effect 0 as 0x740 on KH1 Code(32768) (KH2 bone 0x4000), flags 0xa41, wait 0, fade-out 0, offset [0.0, -110.09915, 0.0] turned [0.0, 0.0, 0.0] (header [0.0, 0.0, 0.0] / [0, 0, 0] -> [0.0, -87.938736, 0.0] / [32768, 0, 32768]), scale [1.2519983, 1.2519983, 1.2519983]
+[f63514] KH2 effects (native): p_ex100_ultf's DPX: [DPD 0: particle datas [0], 2 textures, vram 0x3800..0x3840 / 0x3d40..0x3d48 (1 TBP, 1 CBP slots); common 0x2d40/0x2e28 -> 0x3800/0x3d40; common 0x2d00/0x2e1c -> 0x3820/0x3d44; effect 0 as 1856 (offset [0.0, -87.938736, 0.0], angles [32768, 0, 32768])] [DPD 1: particle datas [0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 8, 8], 3 textures, vram 0x3800..0x3a20 / 0x3d40..0x3d4c (5 TBP, 1 CBP slots); own 0x3020/0x3e04 -> 0x3800/0x3d40; common 0x2c80/0x2e0c -> 0x3820/0x3d44; common 0x2a00/0x2e34 -> 0x3860/0x3d48; effect 1 as 1793 (offset [16.823263, 3.3899982, 0.0008362], angles [0, -16384, 16384]); effect 2 as 1794 (offset [8.062106, 0.0, 0.0003972281], angles [0, 0, 0]); effect 3 as 1795 (offset [0.0, 0.0, 0.0], angles [32768, -1, 32768]); effect 3 as 1796 (offset [0.0, 0.0, 0.0], angles [32768, 0, 32768]); effect 4 as 1797 (offset [-1.3799992, -1.3799992, 0.0], angles [32768, 0, 32768]); effect 4 as 1798 (offset [-1.3799992, -1.3799992, 0.0], angles [32768, -1, 32768]); effect 5 as 1799 (offset [0.0, 0.0, 0.0], angles [0, -16384, -16384]); effect 5 as 1800 (offset [0.0, 0.0, 0.0], angles [0, -16384, -16384]); effect 6 as 1801 (offset [4.45027, 2.6751688, 0.0], angles [0, 0, 0]); effect 6 as 1802 (offset [4.4455523, 2.6723325, 0.0], angles [0, 0, 0]); effect 7 as 1803 (offset [0.0, 0.0, 0.0], angles [32767, 0, 0]); effect 7 as 1804 (offset [0.0, 0.0, 0.0], angles [32767, 0, 0]); effect 8 as 1892 (offset [0.0, -123.338684, 0.0], angles [32768, 0, 32768]); effect 9 as 1893 (offset [-23.932833, 0.0, 0.0], angles [0, 0, 0]); effect 9 as 1894 (offset [-23.888868, 0.0, 0.0], angles [0, 0, 0])] [DPD 2: particle datas [14, 14, 14, 14, 14, 14], 4 textures, vram 0x3800..0x3a40 / 0x3d40..0x3d50 (5 TBP, 1 CBP slots); own 0x3160/0x3e20 -> 0x3800/0x3d40; own 0x3040/0x3e14 -> 0x3820/0x3d44; common 0x2a00/0x2e34 -> 0x3860/0x3d48; common 0x2d00/0x2e1c -> 0x3a20/0x3d4c; effect 26 as 1844 (offset [-103.15215, 0.0, 0.0], angles [0, 16384, 16384]); effect 26 as 1845 (offset [-103.15207, 0.0, 0.0], angles [0, 16384, 16384]); effect 26 as 1846 (offset [-103.15211, 0.0, 0.0], angles [0, 16384, 16384]); effect 26 as 1847 (offset [-103.15211, 0.0, 0.0], angles [0, 16384, 16384]); effect 26 as 1848 (offset [-103.152084, 0.0, 0.0], angles [0, 16384, 16384]); effect 26 as 1849 (offset [-103.151985, 0.0, 0.0], angles [0, 16384, 16384])] [DPD 3: particle datas [0, 1, 2, 2, 2], 11 textures, vram 0x3800..0x3b80 / 0x3d40..0x3d6c (7 TBP, 2 CBP slots); own 0x3080/0x3e1c -> 0x3800/0x3d40; own 0x3000/0x3e10 -> 0x3840/0x3d44; own 0x3140/0x3e08 -> 0x3880/0x3d48; own 0x3040/0x3e14 -> 0x38a0/0x3d4c; common 0x2c60/0x2e04 -> 0x38e0/0x3d50; common 0x2d80/0x2e38 -> 0x3900/0x3d54; common 0x2c80/0x2e0c -> 0x3940/0x3d58; common 0x2c60/0x2e18 -> 0x38e0/0x3d5c; common 0x2d40/0x2e28 -> 0x3980/0x3d60; common 0x2a00/0x2e34 -> 0x39a0/0x3d64; common 0x2d00/0x2e1c -> 0x3b60/0x3d68; effect 10 as 1812 (offset [0.0, 0.0, 0.0], angles [16384, 0, 0]); effect 11 as 1813 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 12 as 1814 (offset [-0.0, -53.414356, 129.99727], angles [32768, 0, 32768]); effect 12 as 1815 (offset [-0.0, -85.32221, 145.75876], angles [32768, 0, 32768]); effect 12 as 1816 (offset [-0.0, -62.945683, 108.68084], angles [32768, 0, 32768])] [DPD 4: particle datas [3, 4, 4, 5, 6, 7, 7, 7, 7, 7, 7], 7 textures, vram 0x3800..0x3b00 / 0x3d40..0x3d5c (6 TBP, 1 CBP slots); own 0x3140/0x3e08 -> 0x3800/0x3d40; own 0x30c0/0x3e04 -> 0x3820/0x3d44; own 0x3040/0x3e14 -> 0x3860/0x3d48; common 0x2d80/0x2e38 -> 0x38a0/0x3d4c; common 0x2c80/0x2e0c -> 0x38e0/0x3d50; common 0x2a00/0x2e34 -> 0x3920/0x3d54; common 0x2d00/0x2e1c -> 0x3ae0/0x3d58; effect 13 as 1817 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 14 as 1818 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 14 as 1819 (offset [8.73667, 0.0, 0.0], angles [0, 0, 0]); effect 15 as 1820 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 16 as 1821 (offset [-23.860205, 0.0, 0.0], angles [0, 0, 0]); effect 17 as 1822 (offset [0.0, -104.301025, -279.15863], angles [32768, 984, 32768]); effect 17 as 1823 (offset [-173.04253, -86.03224, 211.53857], angles [32768, 11280, 32768]); effect 17 as 1824 (offset [260.40976, -97.00918, -79.255165], angles [0, -15997, 0]); effect 17 as 1825 (offset [-257.9141, -96.238434, -97.20607], angles [32768, -9406, 32768]); effect 17 as 1826 (offset [152.84926, -96.23843, 226.44333], angles [0, 3819, -340]); effect 17 as 1827 (offset [44.65084, -82.0791, -267.79654], angles [32768, 0, 32768])] [DPD 5: particle datas [0, 0, 0, 0, 0], 2 textures, vram 0x3800..0x39e0 / 0x3d40..0x3d48 (4 TBP, 1 CBP slots); own 0x3000/0x3e00 -> 0x3800/0x3d40; common 0x2a00/0x2e34 -> 0x3820/0x3d44; effect 18 as 1828 (offset [-66.88203, -121.51528, -18.992966], angles [-16383, -4659, 0]); effect 18 as 1829 (offset [-4.795465, -121.55144, 18.035763], angles [16384, 12283, 32768]); effect 18 as 1830 (offset [5.7485867, -121.46843, -33.24319], angles [16384, -14707, 32768]); effect 18 as 1831 (offset [-17.379276, -121.34914, 82.02193], angles [-16384, 10195, -1]); effect 18 as 1832 (offset [14.716422, -121.3025, 0.03], angles [16384, 0, 32768])] [DPD 6: particle datas [15, 15, 16, 16], 4 textures, vram 0x3800..0x3a40 / 0x3d40..0x3d50 (5 TBP, 1 CBP slots); own 0x3180/0x3e24 -> 0x3800/0x3d40; own 0x3040/0x3e14 -> 0x3820/0x3d44; common 0x2a00/0x2e34 -> 0x3860/0x3d48; common 0x2d00/0x2e1c -> 0x3a20/0x3d4c; effect 27 as 1850 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 27 as 1851 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 28 as 1852 (offset [0.0, -262.02097, 0.0], angles [0, -4601, 6419]); effect 28 as 1853 (offset [0.0, -262.39194, 0.0], angles [0, -4561, 25985])] [DPD 7: particle datas [15, 15], 3 textures, vram 0x3800..0x3a20 / 0x3d40..0x3d4c (5 TBP, 1 CBP slots); own 0x3040/0x3e14 -> 0x3800/0x3d40; common 0x2a00/0x2e34 -> 0x3840/0x3d44; common 0x2d00/0x2e1c -> 0x3a00/0x3d48; effect 27 as 1854 (offset [23.752312, -143.5753, -12.547995], angles [-32768, 0, 12364]); effect 27 as 1855 (offset [-40.22019, -142.4082, -14.574178], angles [0, -228, -20046])] [DPD 8: particle datas [9, 1, 10, 10, 10, 10, 11, 12, 13], 13 textures, vram 0x3800..0x3bc0 / 0x3d40..0x3d74 (8 TBP, 2 CBP slots); own 0x3080/0x3e1c -> 0x3800/0x3d40; own 0x3000/0x3e10 -> 0x3840/0x3d44; own 0x3140/0x3e08 -> 0x3880/0x3d48; own 0x3100/0x3e00 -> 0x38a0/0x3d4c; own 0x30c0/0x3e04 -> 0x38c0/0x3d50; own 0x3160/0x3e20 -> 0x3900/0x3d54; own 0x3040/0x3e14 -> 0x3920/0x3d58; common 0x2c60/0x2e04 -> 0x3960/0x3d5c; common 0x2c80/0x2e0c -> 0x3980/0x3d60; common 0x2c60/0x2e18 -> 0x3960/0x3d64; common 0x2a00/0x2e34 -> 0x39c0/0x3d68; common 0x2d00/0x2e1c -> 0x3b80/0x3d6c; common 0x2d20/0x2e2c -> 0x3ba0/0x3d70; effect 20 as 1834 (offset [0.0, 0.0, 0.0], angles [-32768, 0, 0]); effect 11 as 1835 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 21 as 1836 (offset [0.0, 0.0, 0.0], angles [-32767, 0, 0]); effect 21 as 1837 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 21 as 1838 (offset [0.0, 0.0, 0.0], angles [0, 0, 0]); effect 21 as 1839 (offset [0.0, 0.0, 0.0], angles [-32768, 0, 0]); effect 22 as 1840 (offset [0.0, -123.06682, 0.0], angles [32768, 0, 32768]); effect 23 as 1841 (offset [0.0, 5.0123444, 0.0], angles [32768, 0, 32768]); effect 24 as 1842 (offset [0.0, -80.7969, 0.0], angles [-16384, 0, 32768])] [DPD 9: particle datas [1], 1 textures, vram 0x3800..0x3820 / 0x3d40..0x3d44 (1 TBP, 1 CBP slots); own 0x3000/0x3e00 -> 0x3800/0x3d40; effect 25 as 1843 (offset [0.0, 0.0, 0.0], angles [32768, 0, 32768])] [DPD 10: particle datas [0], 2 textures, vram 0x3800..0x3840 / 0x3d40..0x3d48 (1 TBP, 1 CBP slots); common 0x2d40/0x2e28 -> 0x3800/0x3d40; common 0x2d00/0x2e1c -> 0x3820/0x3d44; effect 0 as 1792 (offset [0.0, -88.03506, 0.0], angles [32768, 0, 32768])] [DPD 11: particle datas [8], 4 textures, vram 0x3800..0x3a60 / 0x3d40..0x3d50 (5 TBP, 1 CBP slots); own 0x30c0/0x3e04 -> 0x3800/0x3d40; common 0x2c80/0x2e0c -> 0x3840/0x3d44; common 0x2a00/0x2e34 -> 0x3880/0x3d48; common 0x2d00/0x2e1c -> 0x3a40/0x3d4c; effect 19 as 1833 (offset [0.0, 0.0, 0.0], angles [0, 0, 0])]
+[f63514] KH2 effects (native): p_ex100_magf_a_us's DPX entered in KH1's loaded files (0x2e812561390): 2 HD images copied (73984 bytes), 10 common textures shared
+[f63514] KH2 effects (native): p_ex100_magf_a_us's DPX at 0x2e7f6451000 relocated by KH1
+[f63514] KH2 effects (native): KH2's MegaBirth plugged into 13 program words, its ribbon (EiDrawShipoly) into 2, its pppColor into 153, its pppVtMime into 0, its pppAngleLoop into 2, its pppKeShpTail3X into 0, its pppSnoMdlDttNorm into 0 (0 left as they were)
+[f63515] KH2 effects (native): p_ex100_ultf's HD textures: DPD 0 common tbp 0x2d40 <- shared; DPD 0 common tbp 0x2d00 <- shared; DPD 1 own 0xb5f0 (tbp 0x3020) <- -0.dds (8320 bytes); DPD 1 common tbp 0x2c80 <- shared; DPD 1 common tbp 0x2a00 <- shared; DPD 2 own 0x35ee0 (tbp 0x3160) <- -7.dds (8320 bytes); DPD 2 own 0x3a720 (tbp 0x3040) <- -2.dds (16512 bytes); DPD 2 common tbp 0x2a00 <- shared; DPD 2 common tbp 0x2d00 <- shared; DPD 3 own 0x25a40 (tbp 0x3080) <- -3.dds (16512 bytes); DPD 3 own 0x29e60 (tbp 0x3000) <- -1.dds (16512 bytes); DPD 3 own 0x2e280 (tbp 0x3140) <- -6.dds (8320 bytes); DPD 3 own 0x3a720 (tbp 0x3040) <- -2.dds (16512 bytes); DPD 3 common tbp 0x2c60 <- shared; DPD 3 common tbp 0x2d80 <- shared; DPD 3 common tbp 0x2c80 <- shared; DPD 3 common tbp 0x2d40 <- shared; DPD 3 common tbp 0x2a00 <- shared; DPD 3 common tbp 0x2d00 <- shared; DPD 4 own 0x2e280 (tbp 0x3140) <- -6.dds (8320 bytes); DPD 4 own 0x31ac0 (tbp 0x30c0) <- -4.dds (16512 bytes); DPD 4 own 0x3a720 (tbp 0x3040) <- -2.dds (16512 bytes); DPD 4 common tbp 0x2d80 <- shared; DPD 4 common tbp 0x2c80 <- shared; DPD 4 common tbp 0x2a00 <- shared; DPD 4 common tbp 0x2d00 <- shared; DPD 5 own 0x797e0 (tbp 0x3000) <- -9.dds (8320 bytes); DPD 5 common tbp 0x2a00 <- shared; DPD 6 own 0x38300 (tbp 0x3180) <- -8.dds (8320 bytes); DPD 6 own 0x3a720 (tbp 0x3040) <- -2.dds (16512 bytes); DPD 6 common tbp 0x2a00 <- shared; DPD 6 common tbp 0x2d00 <- shared; DPD 7 own 0x3a720 (tbp 0x3040) <- -2.dds (16512 bytes); DPD 7 common tbp 0x2a00 <- shared; DPD 7 common tbp 0x2d00 <- shared; DPD 8 own 0x25a40 (tbp 0x3080) <- -3.dds (16512 bytes); DPD 8 own 0x29e60 (tbp 0x3000) <- -1.dds (16512 bytes); DPD 8 own 0x2e280 (tbp 0x3140) <- -6.dds (8320 bytes); DPD 8 own 0x2f6a0 (tbp 0x3100) <- -5.dds (8320 bytes); DPD 8 own 0x31ac0 (tbp 0x30c0) <- -4.dds (16512 bytes); DPD 8 own 0x35ee0 (tbp 0x3160) <- -7.dds (8320 bytes); DPD 8 own 0x3a720 (tbp 0x3040) <- -2.dds (16512 bytes); DPD 8 common tbp 0x2c60 <- shared; DPD 8 common tbp 0x2c80 <- shared; DPD 8 common tbp 0x2a00 <- shared; DPD 8 common tbp 0x2d00 <- shared; DPD 8 common tbp 0x2d20 <- shared; DPD 9 own 0x797e0 (tbp 0x3000) <- -9.dds (8320 bytes); DPD 10 common tbp 0x2d40 <- shared; DPD 10 common tbp 0x2d00 <- shared; DPD 11 own 0x31ac0 (tbp 0x30c0) <- -4.dds (16512 bytes); DPD 11 common tbp 0x2c80 <- shared; DPD 11 common tbp 0x2a00 <- shared; DPD 11 common tbp 0x2d00 <- shared
+[f63515] KH2 effects (native): p_ex100_ultf's DPX built, 3554928 bytes, 61 effects in 0.03 s (54 HD textures: 23 own, 297856 bytes until entered; 31 of the common images)
+[f63516] KH2 effects (native): p_ex100_ultf's DPX entered in KH1's loaded files (0x2e812560d00): 23 HD images copied (297856 bytes), 31 common textures shared
+[f63516] KH2 effects (native): p_ex100_ultf's DPX at 0x2e7f64ed000 relocated by KH1
+[f63516] KH2 effects (native): KH2's MegaBirth plugged into 78 program words, its ribbon (EiDrawShipoly) into 2, its pppColor into 334, its pppVtMime into 34, its pppAngleLoop into 0, its pppKeShpTail3X into 0, its pppSnoMdlDttNorm into 0 (0 left as they were)
+[f63532] draw: kh1_own (KH1 slot 0)
+[f63561] draw: kh1_own (KH1 slot 3)
+[f63701] draw: kh1_own (KH1 slot 0)
+[f64940] event ops at 1470s (Sora can act: true): 8x44 203x180 284x46 285x92 286x46 290x46 291x92 292x46 340x90 419x46 452x45
+[f65747] frame scale 3.00: KH2 steps 3 60 Hz frames a game frame
+[f65748] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f66571] draw: baked (KH1 slot 158)
+[f66582] draw: baked (KH1 slot 156)
+[f66612] draw: baked (KH1 slot 159)
+[f66638] draw: kh1_own (KH1 slot 0)
+[f66657] draw: baked (KH1 slot 158)
+[f66673] draw: baked (KH1 slot 156)
+[f66704] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 0.0/frame
+[f66705] draw: baked (KH1 slot 189)
+[f66706] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f66727] KH2's Aerial Dodge: its apex, 22.0 of 26.7 frames up, KH1's fall (request 6, blend 8)
+[f66727] draw: baked (KH1 slot 156)
+[f66761] draw: baked (KH1 slot 159)
+[f66787] draw: kh1_own (KH1 slot 0)
+[f66881] draw: baked (KH1 slot 158)
+[f66892] draw: baked (KH1 slot 156)
+[f66900] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (air)
+[f66900] KH2 MP cost of spell 0 (Part(12)): 594 of KH1's units paid, MP Some((13, 13, 14)) -> Some((11, 13, 170))
+[f66900] KH2 magic: the cast takes step 1 of KH1's combo
+[f66900] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising false), sideways 0.0/frame kept
+[f66900] KH2 magic Fire (level 3) in KH1's cast state: request 0x83, KH2 motion 58 (air), cost 594 units, KH1's second part 0x8a taken off its queue
+[f66901] draw: baked (KH1 slot 130)
+[f66931] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f66985] draw: baked (KH1 slot 156)
+[f66986] draw: baked (KH1 slot 159)
+[f67012] draw: kh1_own (KH1 slot 0)
+[f68051] draw: baked (KH1 slot 158)
+[f68075] draw: baked (KH1 slot 156)
+[f68080] fourth shortcut: L1 + cancel (cast)
+[f68080] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 0.0/frame
+[f68080] KH2 MP cost of spell 7 (Part(10)): 444 of KH1's units paid, MP Some((11, 13, 170)) -> Some((10, 13, 56))
+[f68080] KH2 magic: the cast takes step 1 of KH1's combo
+[f68080] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising true), sideways 0.0/frame kept
+[f68080] Reflega on KH1's cast state (level 3): request 0x211, KH2 motion 73 (air), step Some((1, false)), MP (11, 13) -> (10, 13) (Some(444) units)
+[f68080] command 0x2 (02000702): KH2's Reflect in KH1's own cast state (air)
+[f68081] draw: baked (KH1 slot 195)
+[f68082] Reflect released at frame 0 of motion 73 (barrier)
+[f68082] KH2 effects (native): Spell(3) element 2 on Code(32768): its origin at the start [0.0, -98.4, 0.0] from Sora's place along his model's x, y, z (KH1's start: place [0.0, 0.0, 0.0], turn [32768, 49479, 32768]); KH2's offset along the same rows: [-0.0, -98.4, -0.0]
+[f68082] Reflect effect: level 3 element 2 (sound 177)
+[f68083] Reflect barrier up (0.03 s after the cast)
+[f68083] Sora untouchable (KH1's dodge-roll flag): KH2's invulnerable frames or Reflect
+[f68137] Reflect barrier down (0.93 s after the cast)
+[f68137] Reflect done: 0 hit(s) blocked, 0 counter hit(s)
+[f68165] draw: baked (KH1 slot 156)
+[f68173] draw: baked (KH1 slot 159)
+[f68199] draw: kh1_own (KH1 slot 0)
+[f68836] draw: baked (KH1 slot 158)
+[f68843] fourth shortcut: L1 + cancel (cast)
+[f68843] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 0.0/frame
+[f68843] KH2 MP cost of spell 7 (Part(10)): 392 of KH1's units paid, MP Some((10, 13, 56)) -> Some((8, 13, 234))
+[f68843] KH2 magic: the cast takes step 1 of KH1's combo
+[f68843] KH2's air cast start (Air Physics KH2): a hop of 40 (14.0 frames up) from where he is (KH1's arc rising true), sideways 0.0/frame kept
+[f68843] Reflega on KH1's cast state (level 3): request 0x211, KH2 motion 73 (air), step Some((1, false)), MP (10, 13) -> (8, 13) (Some(392) units)
+[f68843] command 0x2 (02000702): KH2's Reflect in KH1's own cast state (air)
+[f68844] draw: baked (KH1 slot 195)
+[f68845] Reflect released at frame 0 of motion 73 (barrier)
+[f68845] Reflect effect: level 3 element 2 (sound 177)
+[f68846] Reflect barrier up (0.03 s after the cast)
+[f68846] Sora untouchable (KH1's dodge-roll flag): KH2's invulnerable frames or Reflect
+[f68853] fourth shortcut: L1 + cancel (not usable)
+[f68900] Reflect barrier down (0.93 s after the cast)
+[f68900] Reflect done: 0 hit(s) blocked, 0 counter hit(s)
+[f68926] draw: baked (KH1 slot 159)
+[f68952] draw: kh1_own (KH1 slot 0)
+[f70411] alive 1560s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f70603] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f70604] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f70708] frame scale 4.00: KH2 steps 4 60 Hz frames a game frame
+[f70709] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f70958] frame scale 3.00: KH2 steps 3 60 Hz frames a game frame
+[f70959] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f70963] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f70964] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f70965] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f70966] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f70967] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f70968] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f70969] frame scale 2.00: KH2 steps 2 60 Hz frames a game frame
+[f70970] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f77698] alive 1680s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f84998] alive 1800s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f92299] alive 1920s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f99597] alive 2040s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f106898] alive 2160s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f109314] command menu: page 2 (Attack, Magic, Items, Drive)
+[f109351] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (ground)
+[f109351] KH2 MP cost of spell 0 (Part(12)): 401 of KH1's units paid, MP Some((8, 13, 234)) -> Some((7, 13, 73))
+[f109351] KH2 magic: the cast takes step 1 of KH1's combo
+[f109351] KH2 magic Fire (level 3) in KH1's cast state: request 0x36, KH2 motion 56, cost 401 units, KH1's second part 0x3d taken off its queue
+[f109352] draw: baked (KH1 slot 125)
+[f109376] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f109423] KH1's ground combo, swing 2 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
+[f109423] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
+[f109424] draw: baked (KH1 slot 196)
+[f109452] KH1's ground combo, swing 3 of 4: KH2's row 6 motion 153 (ability 0, finisher false, KH2's length 4) on KH1's row 86 of its own
+[f109452] KH2's 153 (row 255, motion 153) on KH1's row 86 of its own (request 0x214)
+[f109453] draw: baked (KH1 slot 198)
+[f109505] Fire during our swing (request 0x214): KH1's Attack step sees KH1's swing 0xc8 (its Fire out of a swing)
+[f109505] KH2 magic Fire: the combo's finisher, KH2's finisher cast Some(57)
+[f109505] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (ground)
+[f109505] KH2 MP cost of spell 0 (Part(12)): 330 of KH1's units paid, MP Some((7, 13, 73)) -> Some((5, 13, 133))
+[f109505] KH2 magic: the cast takes step 4 of KH1's combo (its finisher; Finishing Plus leaves another)
+[f109505] KH2 magic Fire (level 3) in KH1's cast state: request 0x3d, KH2 motion 57 (the combo's finisher), cost 330 units
+[f109506] draw: baked (KH1 slot 171)
+[f109543] KH2 spell hits: ATKP 502 sub 5 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0080, KH1 spell's, 1 shape(s), spark Some(0))
+[f109568] KH2's ground finisher walk at the KH2 setting (KH1's picker took row 8): KH2's own pick, row 3 motion 155 (KH2's length 4, Finishing Plus)
+[f109568] Attack in KH1's finisher (count 4, finisher 1): KH2's next finisher, row 3 motion 155 (Finishing Plus)
+[f109568] KH2's 155 (row 255, motion 155) on KH1's row 93 of its own (request 0x21b)
+[f109569] draw: baked (KH1 slot 203)
+[f109649] draw: kh1_own (KH1 slot 1)
+[f109672] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (ground)
+[f109672] KH2 MP cost of spell 0 (Part(12)): 257 of KH1's units paid, MP Some((5, 13, 133)) -> Some((4, 13, 26))
+[f109672] KH2 magic: the cast takes step 1 of KH1's combo
+[f109672] KH2 magic Fire (level 3) in KH1's cast state: request 0x36, KH2 motion 56, cost 257 units, KH1's second part 0x3d taken off its queue
+[f109673] draw: baked (KH1 slot 125)
+[f109697] KH2 spell hits: ATKP 502 sub 4 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0000, KH1 spell's, 1 shape(s), spark Some(0))
+[f109733] KH1's ground combo, swing 2 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
+[f109733] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
+[f109734] draw: baked (KH1 slot 196)
+[f109762] KH1's ground combo, swing 3 of 4: KH2's row 6 motion 153 (ability 0, finisher false, KH2's length 4) on KH1's row 86 of its own
+[f109762] KH2's 153 (row 255, motion 153) on KH1's row 86 of its own (request 0x214)
+[f109763] draw: baked (KH1 slot 198)
+[f109818] Fire during our swing (request 0x214): KH1's Attack step sees KH1's swing 0xc8 (its Fire out of a swing)
+[f109818] KH2 magic Fire: the combo's finisher, KH2's finisher cast Some(57)
+[f109818] command 0x2 (02000002): KH2's spell 0 in KH1's own cast state (ground)
+[f109818] KH2 MP cost of spell 0 (Part(12)): 181 of KH1's units paid, MP Some((4, 13, 26)) -> Some((2, 13, 55))
+[f109818] KH2 magic: the cast takes step 4 of KH1's combo (its finisher; Finishing Plus leaves another)
+[f109818] KH2 magic Fire (level 3) in KH1's cast state: request 0x3d, KH2 motion 57 (the combo's finisher), cost 181 units
+[f109819] draw: baked (KH1 slot 171)
+[f109831] KH2 effects (native): p_ex100_btlf's DPX freed (1036288 bytes)
+[f109831] KH2 effects (native): p_ex100_magf_a_us's DPX freed (638976 bytes)
+[f109831] KH2 effects (native): p_ex100_ultf's DPX freed (3555328 bytes)
+[f109856] KH2 spell hits: ATKP 502 sub 5 on KH1 attack object 0x7ff710754710 (data 0x7ff7117c0080, KH1 spell's, 1 shape(s), spark Some(0))
+[f109887] KH2's ground finisher walk at the KH2 setting (KH1's picker took row 8): KH2's own pick, row 3 motion 155 (KH2's length 4, Finishing Plus)
+[f109887] Attack in KH1's finisher (count 4, finisher 1): KH2's next finisher, row 3 motion 155 (Finishing Plus)
+[f109887] KH2's 155 (row 255, motion 155) on KH1's row 93 of its own (request 0x21b)
+[f109888] draw: baked (KH1 slot 203)
+[f109968] draw: kh1_own (KH1 slot 1)
+[f109971] draw: kh1_own (KH1 slot 3)
+[f109975] draw: kh1_own (KH1 slot 0)
+[f110016] KH1's ground combo, swing 1 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
+[f110016] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
+[f110017] draw: baked (KH1 slot 196)
+[f110063] draw: kh1_own (KH1 slot 1)
+[f110071] draw: kh1_own (KH1 slot 3)
+[f110072] draw: kh1_own (KH1 slot 6)
+[f110091] draw: kh1_own (KH1 slot 3)
+[f110092] draw: kh1_own (KH1 slot 0)
+[f110094] draw: kh1_own (KH1 slot 3)
+[f110095] draw: kh1_own (KH1 slot 6)
+[f110121] draw: kh1_own (KH1 slot 3)
+[f110122] draw: kh1_own (KH1 slot 0)
+[f110123] draw: kh1_own (KH1 slot 6)
+[f110128] draw: kh1_own (KH1 slot 3)
+[f110129] draw: kh1_own (KH1 slot 0)
+[f110130] draw: kh1_own (KH1 slot 6)
+[f110135] draw: kh1_own (KH1 slot 3)
+[f110136] draw: kh1_own (KH1 slot 0)
+[f110137] draw: kh1_own (KH1 slot 6)
+[f110140] draw: kh1_own (KH1 slot 3)
+[f110142] draw: kh1_own (KH1 slot 0)
+[f110160] draw: kh1_own (KH1 slot 3)
+[f110161] draw: kh1_own (KH1 slot 6)
+[f110197] draw: kh1_own (KH1 slot 0)
+[f110208] Sora's instance 0x7ff70fd935d0 (bones at 0x7ff70e6cb010)
+[f110208] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f110208] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
+[f110208] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f110208] draw: kh1_own (KH1 slot 2)
+[f110208] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
+[f110209] Sora's instance 0x7ff70fd917d0 (bones at 0x7ff70e6cb010)
+[f110209] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f110209] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
+[f110209] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f110209] draw: kh1_own (KH1 slot 0)
+[f110217] draw: kh1_own (KH1 slot 3)
+[f110218] draw: kh1_own (KH1 slot 6)
+[f110236] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
+[f110268] event ops at 2220s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f110516] draw: baked (KH1 slot 158)
+[f110525] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f110526] draw: baked (KH1 slot 189)
+[f110527] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f110548] KH2's Aerial Dodge: its apex, 22.0 of 26.7 frames up, KH1's fall (request 6, blend 8)
+[f110548] draw: baked (KH1 slot 156)
+[f110588] draw: baked (KH1 slot 159)
+[f110601] draw: kh1_own (KH1 slot 6)
+[f110603] draw: baked (KH1 slot 158)
+[f110611] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f110612] draw: baked (KH1 slot 189)
+[f110613] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f110620] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 186 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f110620] glide (native): the glide (205)
+[f110621] draw: baked (KH1 slot 148)
+[f110621] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (2, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f110621] fourth shortcut in battle: command 0x7d, usable false
+[f110626] draw: baked (KH1 slot 151)
+[f110633] draw: baked (KH1 slot 150)
+[f110641] draw: baked (KH1 slot 148)
+[f110642] draw: baked (KH1 slot 151)
+[f110650] draw: baked (KH1 slot 150)
+[f110657] draw: baked (KH1 slot 151)
+[f110664] draw: baked (KH1 slot 148)
+[f110665] draw: baked (KH1 slot 150)
+[f110673] glide (native): Square let go: KH2's fall at speed 25.8 (133 above the floor; KH1 state now 2)
+[f110674] draw: baked (KH1 slot 156)
+[f110674] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f110674] fourth shortcut in battle: command 0x7d, usable true
+[f110700] draw: baked (KH1 slot 159)
+[f110709] draw: baked (KH1 slot 158)
+[f110716] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f110717] draw: baked (KH1 slot 189)
+[f110718] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f110720] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 150 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f110720] glide (native): the glide (205)
+[f110721] draw: baked (KH1 slot 150)
+[f110721] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (2, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f110721] fourth shortcut in battle: command 0x7d, usable false
+[f110722] draw: baked (KH1 slot 148)
+[f110728] glide (native): Square let go: KH2's fall at speed 19.6 (142 above the floor; KH1 state now 2)
+[f110729] draw: baked (KH1 slot 156)
+[f110729] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f110729] fourth shortcut in battle: command 0x7d, usable true
+[f110756] draw: baked (KH1 slot 159)
+[f110769] draw: kh1_own (KH1 slot 6)
+[f110791] draw: baked (KH1 slot 158)
+[f110796] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f110796] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f110797] draw: baked (KH1 slot 205)
+[f110819] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f110819] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f110820] draw: baked (KH1 slot 206)
+[f110840] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f110840] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f110840] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f110841] draw: baked (KH1 slot 212)
+[f110930] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 8 motion 183 (KH2's length 3, Finishing Plus)
+[f110930] Attack in KH1's finisher (count 3, finisher 1): KH2's next finisher, row 8 motion 183 (Finishing Plus)
+[f110930] KH2's 183 (row 255, motion 183) on KH1's row 100 of its own (request 0x222)
+[f110931] draw: baked (KH1 slot 210)
+[f110952] draw: baked (KH1 slot 159)
+[f110965] draw: kh1_own (KH1 slot 6)
+[f110970] draw: baked (KH1 slot 158)
+[f110976] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f110976] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f110977] draw: baked (KH1 slot 205)
+[f111006] draw: baked (KH1 slot 159)
+[f111019] draw: kh1_own (KH1 slot 6)
+[f111027] draw: baked (KH1 slot 158)
+[f111033] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f111033] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f111034] draw: baked (KH1 slot 205)
+[f111057] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f111057] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f111058] draw: baked (KH1 slot 206)
+[f111081] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f111081] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f111081] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f111082] draw: baked (KH1 slot 212)
+[f111184] draw: baked (KH1 slot 159)
+[f111197] draw: kh1_own (KH1 slot 6)
+[f111198] draw: baked (KH1 slot 158)
+[f111202] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f111202] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f111203] draw: baked (KH1 slot 205)
+[f111226] KH1's ground combo, swing 2 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
+[f111226] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
+[f111227] draw: baked (KH1 slot 196)
+[f111257] KH1's ground combo, swing 3 of 4: KH2's row 6 motion 153 (ability 0, finisher false, KH2's length 4) on KH1's row 86 of its own
+[f111257] KH2's 153 (row 255, motion 153) on KH1's row 86 of its own (request 0x214)
+[f111258] draw: baked (KH1 slot 198)
+[f111305] KH2's ground finisher walk at the KH2 setting (KH1's picker took row 8): KH2's own pick, row 3 motion 155 (KH2's length 4)
+[f111305] KH1's ground combo, swing 4 of 4: KH2's row 3 motion 155 (ability 0, finisher true, KH2's length 4) on KH1's row 93 of its own
+[f111305] KH2's 155 (row 255, motion 155) on KH1's row 93 of its own (request 0x21b)
+[f111306] draw: baked (KH1 slot 203)
+[f111345] KH2's ground finisher walk at the KH2 setting (KH1's picker took row 8): KH2's own pick, row 2 motion 154 (KH2's length 4, Finishing Plus)
+[f111346] draw: baked (KH1 slot 202)
+[f111426] draw: kh1_own (KH1 slot 6)
+[f111435] draw: baked (KH1 slot 158)
+[f111445] draw: baked (KH1 slot 205)
+[f111480] draw: baked (KH1 slot 159)
+[f111493] draw: kh1_own (KH1 slot 6)
+[f111502] draw: baked (KH1 slot 158)
+[f111513] draw: baked (KH1 slot 156)
+[f111514] draw: baked (KH1 slot 205)
+[f111540] draw: baked (KH1 slot 206)
+[f111562] draw: baked (KH1 slot 212)
+[f111653] draw: baked (KH1 slot 210)
+[f111680] KH2 camera: KH1's switch into its lock-on camera, from ours: no blend (KH2's camera goes on)
+[f111684] draw: baked (KH1 slot 159)
+[f111697] draw: kh1_own (KH1 slot 6)
+[f111717] draw: baked (KH1 slot 158)
+[f111724] draw: baked (KH1 slot 205)
+[f111725] KH2's turn to the target (KH2 motion 181 frame 0, up to 0.52 a frame): -2.59 -> -2.06 (the target at -2.02)
+[f111726] KH2's turn to the target (KH2 motion 181 frame 1, up to 0.52 a frame): -2.06 -> -2.02 (the target at -2.02)
+[f111727] KH2's turn to the target (KH2 motion 181 frame 2, up to 0.52 a frame): -2.02 -> -2.02 (the target at -2.02)
+[f111728] KH2's turn to the target (KH2 motion 181 frame 3, up to 0.52 a frame): -2.02 -> -2.02 (the target at -2.02)
+[f111729] KH2's turn to the target (KH2 motion 181 frame 4, up to 0.52 a frame): -2.02 -> -2.02 (the target at -2.02)
+[f111730] KH2's turn to the target (KH2 motion 181 frame 5, up to 0.52 a frame): -2.02 -> -2.02 (the target at -2.02)
+[f111731] KH2's turn to the target (KH2 motion 181 frame 6, up to 0.52 a frame): -2.02 -> -2.02 (the target at -2.02)
+[f111732] KH2's turn to the target (KH2 motion 181 frame 7, up to 0.52 a frame): -2.02 -> -2.03 (the target at -2.03)
+[f111733] KH2's turn to the target (KH2 motion 181 frame 8, up to 0.52 a frame): -2.03 -> -2.03 (the target at -2.03)
+[f111734] KH2's turn to the target (KH2 motion 181 frame 9, up to 0.52 a frame): -2.03 -> -2.03 (the target at -2.03)
+[f111735] KH2's turn to the target (KH2 motion 181 frame 10, up to 0.52 a frame): -2.03 -> -2.03 (the target at -2.03)
+[f111736] KH2's turn to the target (KH2 motion 181 frame 11, up to 0.52 a frame): -2.03 -> -2.03 (the target at -2.03)
+[f111737] KH2's turn to the target (KH2 motion 181 frame 12, up to 0.52 a frame): -2.03 -> -2.04 (the target at -2.04)
+[f111738] KH2's turn to the target (KH2 motion 181 frame 13, up to 0.52 a frame): -2.04 -> -2.04 (the target at -2.04)
+[f111739] KH2's turn to the target (KH2 motion 181 frame 14, up to 0.52 a frame): -2.04 -> -2.04 (the target at -2.04)
+[f111740] KH2's turn to the target (KH2 motion 181 frame 15, up to 0.52 a frame): -2.04 -> -2.05 (the target at -2.05)
+[f111740] KH2 damage: row of ours power 100% on actor 0x7ff7106da630: 1
+[f111740] hit effect: attack 0x7ff710754710 of 0x7ff7106d7750 (object 0) hit 0x7ff7106da630 (object 200), weapon 0x51: source 0x7ff71020b260 (list d061880e8f3c5073), attack data 0x7ff7116c0e80 group (+0x28) 0, kind 0x1 -> KH1 spark id 0; sound byte 0 (0x400000 set)
+[f111740] effect list of source 0x7ff71020b260 (list d061880e8f3c5073, owner 0x7ff7106d7750, object 0, weapon 0x51), 9 entries: 0: kind 0x81 group 0x1 other 0x0 [8420b400 00000000 00000000 00000000]; 1: kind 0x102 group 0x1 other 0x0 [8420b400 00000001 00000001 00000000]; 2: kind 0x41 group 0x1 other 0x0 [8420b400 00000002 00000002 00000000]; 3: kind 0x0 group 0x0 other 0x0 [8420b400 00000003 00000005 00000000]; 4: kind 0x0 group 0x0 other 0x0 [8420b400 00000004 00000006 00000000]; 5: kind 0x0 group 0x0 other 0x0 [8420b400 00000005 00000007 00000000]; 6: kind 0x0 group 0x0 other 0x0 [8420b400 00000006 00000008 00000000]; 7: kind 0x0 group 0x0 other 0x0 [8420b400 00000006 00000009 00000000]; 8: kind 0x0 group 0x0 other 0x0 [8420b400 00000006 0000000a 00000000]
+[f111740] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f111740] Sora's attack 0x7ff710754710 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bf631db1 00000000 beec41c8 3f800000 ffffffff 00000001 00000001 856c0e80 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 44977d90 c36857ae c4c64de0 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42a00000 449b31a1 c333c2f6 c4c448f7 3f800000 00000000 00000001 0000021d 856c0e80 1030b230 00007ff7 0000001e 00000000 449ee3ae c38ee07e c4c1b370 3f800000 449c7b41 c3631918 c4c2e625 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0e80 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f111741] KH2's turn to the target (KH2 motion 181 frame 16, up to 0.52 a frame): -2.05 -> -2.05 (the target at -2.05)
+[f111742] KH2's turn to the target (KH2 motion 181 frame 21, up to 0.52 a frame): -2.05 -> -2.05 (the target at -2.05)
+[f111743] KH2's turn to the target (KH2 motion 181 frame 22, up to 0.52 a frame): -2.05 -> -2.06 (the target at -2.06)
+[f111744] draw: baked (KH1 slot 206)
+[f111745] KH2's turn to the target (KH2 motion 182 frame 0, up to 0.52 a frame): -2.06 -> -2.07 (the target at -2.07)
+[f111746] KH2's turn to the target (KH2 motion 182 frame 1, up to 0.52 a frame): -2.07 -> -2.07 (the target at -2.07)
+[f111747] KH2's turn to the target (KH2 motion 182 frame 2, up to 0.52 a frame): -2.07 -> -2.08 (the target at -2.08)
+[f111748] KH2's turn to the target (KH2 motion 182 frame 3, up to 0.52 a frame): -2.08 -> -2.08 (the target at -2.08)
+[f111749] KH2's turn to the target (KH2 motion 182 frame 4, up to 0.52 a frame): -2.08 -> -2.09 (the target at -2.09)
+[f111750] KH2's turn to the target (KH2 motion 182 frame 5, up to 0.52 a frame): -2.09 -> -2.09 (the target at -2.09)
+[f111751] KH2's turn to the target (KH2 motion 182 frame 6, up to 0.52 a frame): -2.09 -> -2.10 (the target at -2.10)
+[f111752] KH2's turn to the target (KH2 motion 182 frame 7, up to 0.52 a frame): -2.10 -> -2.11 (the target at -2.11)
+[f111753] KH2's turn to the target (KH2 motion 182 frame 8, up to 0.52 a frame): -2.11 -> -2.12 (the target at -2.12)
+[f111754] KH2's turn to the target (KH2 motion 182 frame 9, up to 0.52 a frame): -2.12 -> -2.13 (the target at -2.13)
+[f111755] KH2's turn to the target (KH2 motion 182 frame 10, up to 0.52 a frame): -2.13 -> -2.14 (the target at -2.14)
+[f111756] KH2's turn to the target (KH2 motion 182 frame 11, up to 0.52 a frame): -2.14 -> -2.15 (the target at -2.15)
+[f111756] KH2 damage: row of ours power 100% on actor 0x7ff7106da630: 1
+[f111756] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f111756] Sora's attack 0x7ff7107547d0 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bf336817 00000000 bf369e2a 3f800000 ffffffff 00000002 00000002 856c0f00 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 449cadaa c3182dbc c4c133bc 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42a00000 449c4020 c3553546 c4c2d172 3f800000 00000000 00000002 0000021e 856c0f00 1030b230 00007ff7 0000001e 00000000 44a0f840 c3112574 c4bde814 3f800000 449ee755 c347e8bc c4c10c1c 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0f00 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f111757] KH2's turn to the target (KH2 motion 182 frame 12, up to 0.52 a frame): -2.15 -> -2.16 (the target at -2.16)
+[f111758] KH2's turn to the target (KH2 motion 182 frame 13, up to 0.52 a frame): -2.16 -> -2.17 (the target at -2.17)
+[f111759] KH2's turn to the target (KH2 motion 182 frame 14, up to 0.52 a frame): -2.17 -> -2.19 (the target at -2.19)
+[f111760] KH2's turn to the target (KH2 motion 182 frame 15, up to 0.52 a frame): -2.19 -> -2.20 (the target at -2.20)
+[f111761] KH2's turn to the target (KH2 motion 182 frame 16, up to 0.52 a frame): -2.20 -> -2.22 (the target at -2.22)
+[f111762] KH2's turn to the target (KH2 motion 182 frame 17, up to 0.52 a frame): -2.22 -> -2.24 (the target at -2.24)
+[f111763] KH2's turn to the target (KH2 motion 182 frame 18, up to 0.52 a frame): -2.24 -> -2.26 (the target at -2.26)
+[f111764] KH2's turn to the target (KH2 motion 182 frame 19, up to 0.52 a frame): -2.26 -> -2.28 (the target at -2.28)
+[f111765] KH2's turn to the target (KH2 motion 182 frame 20, up to 0.52 a frame): -2.28 -> -2.30 (the target at -2.30)
+[f111768] draw: baked (KH1 slot 212)
+[f111784] event ops at 2245s (Sora can act: true): 8x54 25x2 26x2 203x220 284x56 285x112 286x56 290x56 291x112 292x56 314x2 335x2 336x2 340x110 419x56 423x2 424x2 452x55 639x2 640x2
+[f111790] KH2 damage: row of ours power 50% on actor 0x7ff7106da630: 5
+[f111790] KH1's row of ours hit: KH2's ATKP 915 (power 50, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f111790] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f111790] Sora's attack 0x7ff710754710 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000005 00000045 bf0b093d 00000000 bf56f413 3f800000 ffffffff 00000003 00000001 856c1200 00000000 00000000 00000000 00000000]; attack [0051d809 00000000 8420b260 42200000 4497f73a c3496c88 c4c75b88 3f800000 00000030 3f4ccccc 00000000 00000006 00000045 846d7750 00000000 42a00000 4493d46d c37d8a2e c4c88f80 3f800000 00000000 00000001 00000224 856c1200 1030b230 00007ff7 00000063 00000000 449baada c3486d6c c4c3832c 3f800000 449611a8 c36128a2 c4c7feaf 3f800000 846d7750 3f19999a 00000004 00000000 00000000 00000000 00060503 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c1200 [00000000 00000001 00000005 00000005 00000030 00000004 00000004 00000004 00000000 00000000 00000000 00000006 00000000 00000000 00010000 00000062 0000006e 00000005 00000004 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f111865] draw: baked (KH1 slot 210)
+[f111906] event ops at 2247s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f111912] draw: baked (KH1 slot 159)
+[f111925] draw: kh1_own (KH1 slot 6)
+[f111930] draw: baked (KH1 slot 196)
+[f111948] KH2 damage: row of ours power 100% on actor 0x7ff7106da630: 1
+[f111948] KH1's row of ours hit: KH2's ATKP 126 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f111948] Sora's attack 0x7ff710754710 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bf7f659e 00000000 3d8c7e21 3f800000 ffffffff 00000004 00000001 856c0900 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 449f72e6 c341356a c4c8a654 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42a00000 44a1bcaa c306aee7 c4ca252f 3f800000 00000000 00000001 00000212 856c0900 1030b230 00007ff7 0000001e 00000000 44a84b94 c35db37c c4ca9534 3f800000 44a5072f c32511de c4cb0962 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0900 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f111957] draw: baked (KH1 slot 198)
+[f111967] event ops at 2248s (Sora can act: true): 8x62 25x1 26x1 203x244 284x60 285x120 286x60 290x60 291x120 292x60 314x1 335x1 336x1 340x122 419x60 423x1 424x1 452x61 639x1 640x1
+[f111979] KH2 damage: row of ours power 65% on actor 0x7ff7106da630: 1
+[f111979] KH1's row of ours hit: KH2's ATKP 128 (power 65, reaction 3, no launch) on record 0x7ff710785e10
+[f111979] Sora's attack 0x7ff7107547d0 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bf61b8ca 00000000 3ef18ad0 3f800000 ffffffff 00000005 00000002 856c0a00 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 449e0dce c28202ea c4cc4f28 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42a00000 44a5d2dd c28e9f8b c4cc57ce 3f800000 00000000 00000002 00000214 856c0a00 1030b230 00007ff7 0000001e 00000000 449f72dc c218fe80 c4ceeef4 3f800000 44a5de77 c28dd5ea c4cd2c9c 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0a00 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f112011] draw: baked (KH1 slot 196)
+[f112029] KH2 damage: row of ours power 100% on actor 0x7ff7106da630: 1
+[f112029] KH1's row of ours hit: KH2's ATKP 126 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f112029] Sora's attack 0x7ff710754710 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bf7fc1b6 00000000 bd328ad6 3f800000 ffffffff 00000006 00000001 856c0900 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 449ef1ce c341356a c4c79c18 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42a00000 44a1a8ed c306aee7 c4c7ecd9 3f800000 00000000 00000001 00000212 856c0900 1030b230 00007ff7 0000001e 00000000 44a78dca c35db37c c4c4e38c 3f800000 44a4d574 c32511de c4c6c137 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0900 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f112036] draw: baked (KH1 slot 203)
+[f112066] KH2 damage: row of ours power 200% on actor 0x7ff7106da630: 5
+[f112066] KH1's row of ours hit: KH2's ATKP 129 (power 200, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f112066] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f112066] Sora's attack 0x7ff7107547d0 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000005 00000045 bf7feb6e 00000000 bccd3c77 3f800000 ffffffff 00000007 00000002 856c0d80 00000000 00000000 00000000 00000000]; attack [0051d809 00000000 8420b260 42200000 44951218 c2d5f94e c4c9e404 3f800000 00000030 3f4ccccc 00000000 00000006 00000045 846d7750 00000000 42a00000 449c9e4f c2b5e29e c4c9d9cc 3f800000 00000000 00000002 0000021b 856c0d80 1030b230 00007ff7 0000001e 00000000 44b03344 c33fc11c c4cab3ec 3f800000 44a87a56 c33673b3 c4cac389 3f800000 846d7750 3f19999a 00000004 00000000 00000000 00000000 00060503 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0d80 [00000000 00000001 00000005 00000005 00000030 00000004 00000004 00000004 00000000 00000000 00000000 00000006 00000000 00000000 00010000 00000000 0000006e 00000005 00000004 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f112112] draw: kh1_own (KH1 slot 1)
+[f112141] event ops at 2251s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f112282] draw: kh1_own (KH1 slot 0)
+[f112535] draw: kh1_own (KH1 slot 3)
+[f112551] event ops at 2264s (Sora can act: true): 8x30 203x116 284x28 285x56 286x28 290x28 291x56 292x28 340x58 419x28 452x29
+[f112592] draw: kh1_own (KH1 slot 6)
+[f112834] draw: baked (KH1 slot 158)
+[f112840] draw: baked (KH1 slot 205)
+[f112856] KH2 damage: row of ours power 100% on actor 0x7ff7106da630: 1
+[f112856] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f112856] Sora's attack 0x7ff710754710 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bf7ef4ee 00000000 bdb8b3ff 3f800000 ffffffff 00000008 00000001 856c0e80 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 449a08c2 c33df9fe c4c6ddb4 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42a00000 449e399a c3096546 c4c66319 3f800000 00000000 00000001 0000021d 856c0e80 1030b230 00007ff7 0000001e 00000000 44a34286 c375d870 c4c547b0 3f800000 44a09432 c33b308c c4c57e94 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0e80 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f112864] draw: baked (KH1 slot 206)
+[f112876] KH2 damage: row of ours power 100% on actor 0x7ff7106da630: 1
+[f112876] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f112876] Sora's attack 0x7ff7107547d0 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bf7b2fcf 00000000 be45a27a 3f800000 ffffffff 00000009 00000002 856c0f00 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 44a16398 c2d2e9b8 c4c5c280 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42a00000 44a0301f c3267c62 c4c6ec31 3f800000 00000000 00000002 0000021e 856c0f00 1030b230 00007ff7 0000001e 00000000 44a6b240 c2c4edf4 c4c4ecd8 3f800000 44a35426 c3193a40 c4c6989a 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0f00 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f112885] draw: baked (KH1 slot 212)
+[f112905] KH2 damage: row of ours power 50% on actor 0x7ff7106da630: 5
+[f112905] KH1's row of ours hit: KH2's ATKP 915 (power 50, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f112905] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f112905] Sora's attack 0x7ff710754710 hit actor 0x7ff7106da630 (kind 4, object 200) -> record [00000005 846d7750 00000005 00000045 bf7cd808 00000000 3e204c75 3f800000 ffffffff 0000000a 00000001 856c1200 00000000 00000000 00000000 00000000]; attack [0051d809 00000000 8420b260 42200000 44a1d24e c3414240 c4c9dfa8 3f800000 00000030 3f4ccccc 00000000 00000006 00000045 846d7750 00000000 42a00000 449a1042 c33a1703 c4c9d337 3f800000 00000000 00000001 00000224 856c1200 1030b230 00007ff7 00000063 00000000 44a45d24 c3601d34 c4c7eacc 3f800000 449e4172 c3438aef c4cb3905 3f800000 846d7750 3f19999a 00000004 00000000 00000000 00000000 00060503 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c1200 [00000000 00000001 00000005 00000005 00000030 00000004 00000004 00000004 00000000 00000000 00000000 00000006 00000000 00000000 00010000 00000062 0000006e 00000005 00000004 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f112916] event ops at 2270s (Sora can act: true): 8x60 25x3 26x3 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x3 335x3 336x3 340x122 419x62 423x3 424x3 452x61 639x3 640x3
+[f112946] KH2 camera: KH1's switch into its follow camera, from ours: no blend (KH2's camera goes on)
+[f112968] event ops at 2271s (Sora can act: true): 8x52 203x208 284x52 285x104 286x52 290x52 291x104 292x52 340x104 419x52 452x52
+[f112968] alive 2280s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 2400s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 2520s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 2640s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 2760s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 2880s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3000s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3120s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3240s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3360s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3480s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3600s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3720s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3840s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 3960s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 4080s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 4200s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 4320s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 4440s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 4560s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 4680s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112968] alive 4800s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f112969] KH2 camera: started (follow, after KH1's: KH2's default), yaw 1.60
+[f112999] event ops at 4831s (Sora can act: true): 8x32 203x124 284x30 285x60 286x30 290x30 291x60 292x30 340x62 419x30 452x31
+[f113001] draw: baked (KH1 slot 156)
+[f113004] draw: baked (KH1 slot 159)
+[f113017] draw: kh1_own (KH1 slot 6)
+[f113018] draw: baked (KH1 slot 158)
+[f113029] draw: baked (KH1 slot 189)
+[f113030] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f113033] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 177 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f113033] glide (native): the glide (205)
+[f113034] draw: baked (KH1 slot 148)
+[f113034] Reflect in the Magic menu: entry 8 of 9 (greyed) (magic allowed false, MP (2, 13) of cost 1 (100), KH2 has Sora false, files loaded true)
+[f113034] fourth shortcut in battle: command 0x7d, usable false
+[f113038] draw: baked (KH1 slot 151)
+[f113045] draw: baked (KH1 slot 150)
+[f113049] draw: baked (KH1 slot 148)
+[f113052] draw: baked (KH1 slot 151)
+[f113059] draw: baked (KH1 slot 150)
+[f113065] draw: baked (KH1 slot 148)
+[f113067] draw: baked (KH1 slot 151)
+[f113091] draw: baked (KH1 slot 148)
+[f113093] draw: baked (KH1 slot 150)
+[f113115] draw: baked (KH1 slot 148)
+[f113116] draw: baked (KH1 slot 151)
+[f113123] draw: baked (KH1 slot 148)
+[f113124] draw: baked (KH1 slot 150)
+[f113187] draw: baked (KH1 slot 148)
+[f113188] draw: baked (KH1 slot 151)
+[f113195] draw: baked (KH1 slot 148)
+[f113197] draw: baked (KH1 slot 150)
+[f113201] draw: baked (KH1 slot 148)
+[f113203] draw: baked (KH1 slot 151)
+[f113208] draw: baked (KH1 slot 148)
+[f113209] draw: baked (KH1 slot 150)
+[f113278] draw: baked (KH1 slot 148)
+[f113278] glide (native): Square let go: KH2's fall at speed 31.7 (44 above the floor; KH1 state now 2)
+[f113279] draw: baked (KH1 slot 156)
+[f113279] Reflect in the Magic menu: entry 8 of 9 (usable)
+[f113279] fourth shortcut in battle: command 0x7d, usable true
+[f113294] draw: baked (KH1 slot 159)
+[f113320] draw: kh1_own (KH1 slot 0)
