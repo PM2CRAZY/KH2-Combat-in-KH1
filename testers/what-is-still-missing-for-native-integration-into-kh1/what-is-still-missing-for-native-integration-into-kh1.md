@@ -541,4 +541,14 @@ go ahead
 > Next I'll keep going on Valor and Wisdom by your answers. Then Wisdom's Aerial Recovery (not built yet) and the shots' flight onto KH1's own script machine.
 
 ^m14
+1. (a)
+2. all three, make it native to kh1 like the base keyblade 
+3. (a)
+4. (a) and can you make it in the debug
+5. (a)
+6. (b)
+7. (a)
+8. if your running another instance of the combo row natively that still isn't align with 100 percent native, so I want you to patch the features kh1's combo row and other related logic are missing (like we've been doing with base kh2 soras abilities) so that valor and wisdom can behave correctly without overwriting kh1's vanilla logic. 
+9. (a) if rumble is on it should work then
 
+go ahead
