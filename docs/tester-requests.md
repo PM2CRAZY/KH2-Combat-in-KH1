@@ -228,6 +228,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](../testers/quick-run-native/quick-run-native.md#^m2)
   - [3. Assistant: Thanks for the trace, it showed it clearly.](../testers/quick-run-native/quick-run-native.md#^m3)
   - [4. Assistant: Thanks! (a) it is, so nothing changes: with Dodge Roll on KH](../testers/quick-run-native/quick-run-native.md#^m4)
+  - [5. Assistant: Yes, it's in, and it's from this branch, not main: t505 adde](../testers/quick-run-native/quick-run-native.md#^m5)
 - [RAM use and what's being optimized](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md)
   - [1. Assistant: I started this thread from the Table of contents(../table-of](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md#^m1)
   - [2. Assistant: Thanks! Seven versions this round, five for RAM and two for ](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md#^m2)

@@ -8,6 +8,7 @@
 - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](#^m2)
 - [3. Assistant: Thanks for the trace, it showed it clearly.](#^m3)
 - [4. Assistant: Thanks! (a) it is, so nothing changes: with Dodge Roll on KH](#^m4)
+- [5. Assistant: Yes, it's in, and it's from this branch, not main: t505 adde](#^m5)
 
 ---
 
@@ -133,4 +134,24 @@ go ahead
 
 ^m4
 
+
 did you implement the quick run double effect? I currently don't see it in my build while the person your using to accesses files can, is that from the main branch?
+> [!tip] Assistant
+> Yes, it's in, and it's from this branch, not main: t505 added it, and main has no Quick Run effect at all. The person whose files I read is on t657 of `testing`, the same line as your build.
+>
+> I think the difference is the Quick Run level, not the build. KH2 only plays that start effect from LV2 up: its Quick Run start (`0x1403A9830` in the Steam KH2 decomp) starts element "level + 0x6C" only when the level is above 1. That's P_EX100's element 110 at LV2, 111 at LV3 and 112 at MAX, and nothing at LV1. We do the same.
+> - In your log in this folder (t544), every Quick Run is **LV1**: "KH2's Quick Run LV1 … invulnerable 0". So no effect plays, the same as in KH2.
+> - In the other logs I can see, the Quick Runs are **LV3 and MAX**, so the effect plays.
+>
+> Quick Run's level follows Sora's level in this mod: LV1 from 12, LV2 from 20, LV3 from 32, MAX from 45. Drive Forms add one level on top.
+>
+> Checked: the Steam KH2 decomp (the level test and the element number), our code (`quickrun.rs`, `kh2fx`'s default list has motion 203), main's effect list (no 203), and both sets of logs. Not checked: how the effect looks in game, since I can't see the screen. If "double effect" means something other than this start effect (two copies of it, or an afterimage on Sora), tell me and I'll look again.
+>
+> Please test:
+> - A Quick Run on a save where Sora is level 20 or higher (LV2+), with `kh2_effects` on its default. The start effect should show as the run begins.
+>
+> Question:
+> 1. Is that the effect you saw on the other build: (a) yes, the burst at the start of a LV2+ Quick Run; or (b) something else (describe it, or send a clip or trace)?
+
+^m5
+
