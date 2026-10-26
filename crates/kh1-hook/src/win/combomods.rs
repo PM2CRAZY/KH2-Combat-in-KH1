@@ -173,6 +173,8 @@ fn ours_run(n: usize, launch: Option<character_core::Launch>, air: bool, count: 
     }
     note(|| format!("KH2's {} (row {}, motion {}) on KH1's row {r} of its own (request {:#x}){}", o.name, o.kh2_row, o.motion, super::kh1rows::request(n), if o.rises && !air { ", out of KH1's air state" } else { "" }));
     if o.rises && !air {
+        // (Its first frames before its no-gravity range held off the floor, `kh2slots::rise_start`.)
+        super::kh2slots::start_rise(o.motion);
         let gravity = pose::kh2().map_or(0.0, |k| k.character.params.gravity);
         return Run::Hop(r, character_core::Launch { height: 0.0, velocity: [0.0; 2], gravity });
     }

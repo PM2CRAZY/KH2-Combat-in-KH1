@@ -968,6 +968,10 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
     root's height too). Its slot is built on KH1's air finisher (104, request 0xCE's kind, no
     travel flag: the root is the air step's, not KH1's H10). **Assumption**: KH1's time in the
     slot when the air step runs is the frame's (at most a frame off, as for the no-gravity hold).
+    The frames before its no-gravity range (frame 0, and the frame its request is only queued)
+    are held too and moved up by the range's first root step (`kh2slots::rise_start`, t675): with
+    a hop of height 0 KH1's air step put him straight down and KH1 played its landing (request 7)
+    the next frame (the user's trace f6071..f6073). **Assumption**: the lift is at most a frame early.
   - Counterguard: now on a row of its own (below, "KH2's guard on KH1's states").
 - **Aerial Recovery and Retaliating Slash on KH1 requests of their own** (the tester, m14
   question 3: "(b)", new KH1 requests for KH2's motions; KH2's rules in

@@ -1472,7 +1472,9 @@ pub mod physics {
         let air_ok = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && rd::<u32>(actor) & AIR_HELD == 0;
         // (KH1's own air cast animation at Air Physics KH2: KH2's hover for it, `kh1_cast_hold`.)
         let kh1_hold = sora && kh1_cast_hold(actor, step_dt);
-        let held = air_ok && (kh1_hold || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
+        // (A rising row's first frames, before its own no-gravity range: `kh2slots::rise_start`.)
+        let rise = if air_ok { super::super::kh2slots::rise_start(actor, step_dt) } else { None };
+        let held = air_ok && (kh1_hold || rise.is_some() || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
         // (Whether the hold was on at his last air step: KH2's fall restart when it ends, below.)
         let was_held = sora && HELD_LAST.swap(held, Ordering::Relaxed);
         if held {
@@ -1484,7 +1486,7 @@ pub mod physics {
         let kh1_held = if held && !phys { Some(kh1_motion(actor)) } else { None };
         // (KH2's root travel where its clip has no gravity, `kh2slots::air_root`: Finishing Leap.)
         let root_dt: f32 = rd(base() + DT_RVA);
-        let root = if held { super::super::kh2slots::air_root(actor, if root_dt.is_finite() && root_dt > 0.0 && root_dt < 4.0 { root_dt } else { 1.0 }) } else { None };
+        let root = if held { super::super::kh2slots::air_root(actor, if root_dt.is_finite() && root_dt > 0.0 && root_dt < 4.0 { root_dt } else { 1.0 }).or(rise) } else { None };
         let ours = sora && rd::<i32>(actor + 0x70) == 2 && !disp.is_null() && phys;
         // KH1 set its fields itself since our last write (an air attack's hop from its command
         // step, a blow's launch): KH2's arc goes on from KH1's from here.

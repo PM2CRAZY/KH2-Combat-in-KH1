@@ -828,6 +828,12 @@ pub unsafe fn air_root(actor: usize, dt: f32) -> Option<[f32; 3]> {
     let m = current(actor)?;
     let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
     let t: f32 = rd(actor + TIME_NOW);
+    root_travel(clip, t, dt, rd(actor + 0x3C))
+}
+
+/// A clip's root travel from its frame `t` over `dt` 60 Hz frames, in the world (KH2's y up),
+/// turned by the yaw as `air_root` turns it. `None` with none.
+fn root_travel(clip: &character_core::Clip, t: f32, dt: f32, yaw: f32) -> Option<[f32; 3]> {
     let at = |f: f32| -> [f32; 3] {
         let n = clip.root.len();
         if n == 0 {
@@ -843,9 +849,46 @@ pub unsafe fn air_root(actor: usize, dt: f32) -> Option<[f32; 3]> {
     if d.iter().all(|v| v.abs() < 1e-4) || !d.iter().all(|v| v.is_finite()) {
         return None;
     }
-    let yaw: f32 = rd(actor + 0x3C);
     let (fw, right) = ([yaw.sin(), yaw.cos()], [yaw.cos(), -yaw.sin()]);
     Some([d[0] * right[0] + d[2] * fw[0], d[1], d[0] * right[1] + d[2] * fw[1]])
+}
+
+/// A row that leaves the ground by its root (`kh1rows::Ours::rises`: Finishing Leap) just started
+/// out of KH1's ground combo into KH1's air state (`combomods::ours_run`): the game frame and its
+/// KH2 motion.
+static RISE: Mutex<Option<(u64, u16)>> = Mutex::new(None);
+/// The longest the start is bridged: the slot is applied and its no-gravity range (from frame 1
+/// for Finishing Leap) reached within a frame or two.
+const RISE_FRAMES: u64 = 4;
+
+pub fn start_rise(motion: u16) {
+    if let Ok(mut g) = RISE.lock() {
+        *g = Some((super::takeover::GAME_FRAME.load(Ordering::Relaxed), motion));
+    }
+}
+
+/// The frames between such a row's start and its clip's own no-gravity range (`no_gravity`):
+/// Finishing Leap's range id 3 starts at frame 1 (Checked (files), `P_EX100.mset` motion 167), and
+/// before it (KH1's request queued, its slot not yet applied, or the slot's frame 0) KH1's air
+/// state had him at an arc of height 0, so KH1's air step put him down at once and KH1 played its
+/// landing (request 7) the next frame (the user's trace f6071..f6073: request 0x201 for one frame,
+/// then 0x7). In KH2 he is on the ground there (`0x1403A9950` starts the row from his ground
+/// action), with no fall. Held here as in the no-gravity range, moved up by the root's first step
+/// of that range (at most a frame early, **Assumption**: KH1 would otherwise put him down with
+/// no rise at all); ends once the range holds him or after `RISE_FRAMES`.
+pub unsafe fn rise_start(actor: usize, dt: f32) -> Option<[f32; 3]> {
+    use character_core::WindowKind as W;
+    let Ok(mut g) = RISE.try_lock() else { return None };
+    let (at, motion) = (*g)?;
+    let now = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    if no_gravity(actor) || now.saturating_sub(at) > RISE_FRAMES || rd::<i32>(actor + 0x70) != 2 {
+        *g = None;
+        return None;
+    }
+    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let from = clip.windows.iter().filter(|w| matches!(w.kind, W::NoGravity)).map(|w| w.start).min()?;
+    let dt = if dt.is_finite() && dt > 0.0 && dt < 4.0 { dt } else { 1.0 };
+    Some(root_travel(clip, from as f32, dt, rd(actor + 0x3C)).unwrap_or([0.0; 3]))
 }
 
 /// KH2's clip of our slot playing on `actor` has its edge stop now (range id 29,
