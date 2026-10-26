@@ -592,3 +592,29 @@ keyblade" (KH1's own weapon object, then the draw, then the trail).
 - Before, the holder's weapon object was a copy of Sora's (0x60 bytes in our block) with the left
   row and effect data written over it.
 - Steam only: on another build the left Keyblade is not installed (logged).
+
+### 10.2 Drawn by KH1's actor draw (Steam, Checked (decomp, exe))
+
+- KH1 draws a party actor with `0x1402A1630 (actor, hidden-mesh mask, p3, colour float[4], p5)`
+  (prologue `40 55 53 56 57`, from the four per-actor draw variants `0x1402A0F90`, `0x1402A14F0`,
+  `0x1402A1B70`, `0x1402A1D50`). Its weapon is the actor's weapon object (`+0x14C`): its mesh
+  model (`+4`) goes into the model queue's params `+0x18` only while the object, its container and
+  the actor's flag `0x4000` are there, its colour `+0x0C..+0x0F` into `+0x24..+0x27`. The rest of
+  the call is the clip test (`+0x410` / `+0x414`), the light from the actor's world matrix
+  (`+0xD0`) and position, the lighting callbacks with the actor, and the model queue
+  `0x1401D4070 (instance = ptr(+0x15C), view 0x14299BB30, params, actor)`. It draws no shadow and
+  writes nothing to the actor (the queue's non-HD path may change `+0x374` bits 30 / 31).
+- The left Keyblade is now drawn by that function: hooked (`leftblade::actor_draw`), after KH1's
+  own draw of Sora it is called again, with KH1's own arguments of that draw, on the left Keyblade's
+  holder (our copy of his actor and model instance, refreshed from his that frame: flags, place,
+  light, `+0x14C` = the left Keyblade's KH1 weapon object, §10.1) and the mask `0xFFFFFFFF` (every
+  body mesh hidden). KH1 then decides by its own test whether a weapon is out (flag `0x4000`, the
+  object) and queues the object's model with its colour on the holder's weapon bones, which hold
+  the left hand's (`note_pose`) for the call and are put back after it.
+- Before, our model-queue hook called KH1's queue a second time for Sora with a copy of KH1's
+  params (body masked, our mesh written in) and the left matrices written over Sora's own
+  instance's bones 280..292 for the call.
+- Still ours (step 4 of the plan): the holder itself (Sora's actor and instance copied each frame,
+  the left hand's weapon bones from KH2's left weapon). KH1 has one weapon per actor and one
+  weapon-bone set per skeleton, so a second Keyblade needs a second holder.
+- The pause menu's copy of Sora (another instance) gets no left Keyblade, as before.

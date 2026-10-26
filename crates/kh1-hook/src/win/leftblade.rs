@@ -12,9 +12,10 @@
 //!    then the file record with its textures, with the `.wpn` release handler kept out of it).
 //! 2. **Pose**: `pose` hands over the left hand's 13 weapon matrices each frame (`note_pose`),
 //!    from KH2's own left Keyblade (the Valor rig's second weapon, `kh2_left` from `takeover`).
-//! 3. **Draw**: after KH1 queues Sora with his Keyblade out, queue him a second time with every
-//!    body mesh hidden, our model as the weapon and the left-hand matrices put in bones
-//!    280..292 for that call only (put back at once).
+//! 3. **Draw**: KH1's own actor draw (`0x1402A1630`, Steam) run, after Sora's, on the left
+//!    Keyblade's holder (our copy of his actor, whose weapon object is the left Keyblade's KH1
+//!    object from KH1's own pool) with every body mesh hidden: KH1 queues its weapon as it does
+//!    his, on the holder's weapon bones, which hold the left hand's for the call.
 //!
 //! 4. **Trail**: KH1's own Keyblade trail, with the left Keyblade's own look: the effect data
 //!    from its own `.wpn` (the file's second section, set up as KH1 sets up its weapon's,
@@ -43,6 +44,9 @@ use std::time::Instant;
 const QUEUE_RVA: Rva = Rva(0x1D1F10);
 /// `push rbp; push rbx; push rsi; push rdi` (both builds).
 const QUEUE_PROLOGUE: [u8; 5] = [0x40, 0x55, 0x53, 0x56, 0x57];
+/// KH1's party actor draw (Steam): `push rbp; push rbx; push rsi; push rdi` (Checked (exe)).
+const ACTOR_DRAW_STEAM: usize = 0x2A1630;
+const ACTOR_DRAW_PROLOGUE: [u8; 5] = [0x40, 0x55, 0x53, 0x56, 0x57];
 /// The file loader `(name, buffer, callback(size, id, buffer), delay)`: queued on KH1's loader
 /// task; the callback runs on the game thread once the file is in.
 const LOAD_RVA: Rva = Rva(0x289A80);
@@ -128,9 +132,7 @@ const REC_BUFFER: usize = 0x658;
 const REC_ROW: usize = 0x64C;
 /// The instance's world matrices (handle).
 const INST_WORLD: usize = 0x1B4;
-/// The draw params: the weapon model, the hidden-mesh mask; their size.
-const P_WEAPON: usize = 0x18;
-const P_MASK: usize = 0x38;
+/// The model queue's draw params' size.
 const P_SIZE: usize = 0x60;
 /// The weapon bones: the first, how many, and Sora's bone count.
 const GRIP: usize = 280;
@@ -149,6 +151,7 @@ const LOAD_TIMEOUT_S: f32 = 15.0;
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_QUEUE: AtomicUsize = AtomicUsize::new(0);
+static ORIG_DRAW: AtomicUsize = AtomicUsize::new(0);
 static IN_SECOND: AtomicBool = AtomicBool::new(false);
 /// Valor's form is out (`show` / `hide`).
 static SHOWN: AtomicBool = AtomicBool::new(false);
@@ -316,6 +319,11 @@ pub unsafe fn install() {
     }
     QUEUE_HOOKED.store(true, Ordering::Relaxed);
     if !patched {
+        return;
+    }
+    // KH1's actor draw: the left Keyblade is drawn by it (`actor_draw`).
+    if super::hook::install(base + ACTOR_DRAW_STEAM, &ACTOR_DRAW_PROLOGUE, actor_draw as *const () as usize, &ORIG_DRAW, "actor draw (left Keyblade)").is_none() {
+        super::hook::patch(slot, &ours, &want, "the .wpn release handler (back)");
         return;
     }
     INSTALLED.store(true, Ordering::Relaxed);
@@ -837,9 +845,6 @@ unsafe extern "system" fn queue(instance: usize, view: usize, params: usize, act
     if let Some((at, saved)) = collapsed {
         std::ptr::copy_nonoverlapping(saved.as_ptr(), at as *mut u8, saved.len());
     }
-    if !IN_SECOND.load(Ordering::Relaxed) && INSTALLED.load(Ordering::Relaxed) {
-        second(f, instance, view, params, actor);
-    }
     r
 }
 
@@ -869,55 +874,62 @@ unsafe fn collapse_weapon(instance: usize) -> Option<(usize, [u8; WEAPON_BONES *
     Some((at, saved))
 }
 
-/// The left Keyblade: Sora queued again, body hidden, our model in the left hand's bones.
-unsafe fn second(f: Queue, instance: usize, view: usize, params: usize, actor: usize) {
-    let mesh = MESH.load(Ordering::Relaxed);
-    if mesh == 0 || !SHOWN.load(Ordering::Relaxed) || !super::form::two_blades() || actor == 0 || actor != super::takeover::sora_actor() {
+/// KH1's party actor draw `(actor, hidden-mesh mask, p3, colour float[4], p5)` (Steam
+/// `0x1402A1630`, Checked (decomp)): its weapon is the actor's weapon object (`+0x14C`) while its
+/// flag `0x4000` is set (the object's mesh model `+4`, its colour `+0x0C`), queued with the body by
+/// KH1's model queue on the instance's weapon bones (`+0x15C`'s world matrices, 280..292).
+type ActorDraw = unsafe extern "system" fn(usize, u32, u32, usize, f32);
+
+/// KH1's actor draw, hooked: after Sora's own draw, the left Keyblade's holder drawn by the same
+/// function with every body mesh hidden (`left_draw`).
+unsafe extern "system" fn actor_draw(actor: usize, mask: u32, p3: u32, colour: usize, p5: f32) {
+    let f: ActorDraw = std::mem::transmute(ORIG_DRAW.load(Ordering::Acquire));
+    f(actor, mask, p3, colour, p5);
+    if !IN_SECOND.load(Ordering::Relaxed) && INSTALLED.load(Ordering::Relaxed) {
+        left_draw(f, actor, p3, colour, p5);
+    }
+}
+
+/// The left Keyblade drawn as KH1 draws Sora's own: KH1's actor draw run on its holder (our copy of
+/// Sora's actor, `fill_owner`: his flags, place and light; `+0x14C` the left Keyblade's KH1 weapon
+/// object, `left_object`) with KH1's own arguments for Sora's draw this frame and every body mesh
+/// hidden (mask `0xFFFFFFFF`), so KH1 queues only its weapon: the object's model and colour, on the
+/// holder's weapon bones, which hold the left hand's for the call (`left_world`). KH1 decides by its
+/// own test whether a weapon is drawn (flag `0x4000`, the object and its model).
+unsafe fn left_draw(f: ActorDraw, actor: usize, p3: u32, colour: usize, p5: f32) {
+    static N: AtomicU32 = AtomicU32::new(0);
+    if MESH.load(Ordering::Relaxed) == 0 || !SHOWN.load(Ordering::Relaxed) || !super::form::two_blades() || actor == 0 || actor != super::takeover::sora_actor() {
         return;
     }
     // (KH2's model of the same Keyblade is drawn in its place.)
     if super::model::left_is_ours() {
         return;
     }
-    if instance != super::pose::SORA_INSTANCE.load(Ordering::Relaxed) || !readable(params, P_SIZE) {
-        return;
-    }
-    // KH1 drew his own Keyblade (out, and its model there).
-    if rd::<u64>(params + P_WEAPON) == 0 {
+    // (Sora's field draw, not the pause menu's copy of him.)
+    if !readable(actor + ACTOR_INSTANCE, 4) || super::pose::ptr(rd::<u32>(actor + ACTOR_INSTANCE)) != super::pose::SORA_INSTANCE.load(Ordering::Relaxed) {
         return;
     }
     let Some(left) = left_world() else { return };
-    if !readable(instance + INST_WORLD, 4) {
+    if !fill_owner() {
         return;
     }
-    let world = super::pose::ptr(rd::<u32>(instance + INST_WORLD));
-    if !readable(world, SORA_BONES * 0x40) {
+    let fake = FAKE.load(Ordering::Relaxed);
+    let Some(obj) = left_object() else { return };
+    if rd::<u32>(fake + ACTOR_WEAPON) != super::pose::handle(obj) {
         return;
     }
-    let at = world + GRIP * 0x40;
+    // The holder's weapon bones: the left hand's for this draw (its others stay the trail's).
+    let at = fake + FAKE_MATS + GRIP * 0x40;
     let mut saved = [0u8; WEAPON_BONES * 0x40];
     std::ptr::copy_nonoverlapping(at as *const u8, saved.as_mut_ptr(), saved.len());
     for (i, m) in left.iter().enumerate() {
         std::ptr::write_unaligned((at + i * 0x40) as *mut [f32; 16], m.to_cols_array());
     }
-    // KH1's own params for this draw, but every body mesh hidden and our model as the weapon.
-    #[repr(C, align(16))]
-    struct Params([u8; 0x100]);
-    let mut p = Params([0; 0x100]);
-    std::ptr::copy_nonoverlapping(params as *const u8, p.0.as_mut_ptr(), P_SIZE);
-    std::ptr::write_unaligned(p.0.as_mut_ptr().add(P_MASK) as *mut u32, 0xFFFF_FFFF);
-    std::ptr::write_unaligned(p.0.as_mut_ptr().add(P_WEAPON) as *mut u64, mesh as u64);
     IN_SECOND.store(true, Ordering::Relaxed);
-    f(instance, view, p.0.as_ptr() as usize, actor);
+    f(fake, 0xFFFF_FFFF, p3, colour, p5);
     IN_SECOND.store(false, Ordering::Relaxed);
     std::ptr::copy_nonoverlapping(saved.as_ptr(), at as *mut u8, saved.len());
-    // The trail's owner from this very frame's matrices (KH1's own trail reads his as drawn; a
-    // step later ours ran a frame behind).
-    if TRAIL_HOOKED.load(Ordering::Relaxed) {
-        fill_owner();
-    }
-    static N: AtomicU32 = AtomicU32::new(0);
-    log_n(&N, 3, || format!("drawn in the left hand (mesh {mesh:#x}, grip at {:.0?})", left[0].w_axis.truncate()));
+    log_n(&N, 3, || format!("drawn in the left hand by KH1's actor draw (object {obj:#x}, mesh {:#x}, grip at {:.0?})", super::pose::ptr(rd::<u32>(obj + OBJ_MESH)), left[0].w_axis.truncate()));
 }
 
 // ---------------------------------------------------------------------------------------------
