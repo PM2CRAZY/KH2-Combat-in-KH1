@@ -105,7 +105,7 @@ decomp".
 - Not checked in game. Log: "KH2 re-hit: ATKP ... again after N frames", "KH2's next attack on the
   Keyblade ... re-armed".
 - (t680) **Valor's left Keyblade**: its own KH1 attack object (`bodyhits`, one per play of the
-  motion, its own hit bit), re-armed by `bodyhits::left_step` on a new KH2 attack of the left
+  motion, its own hit bit), re-armed by `lefthits::step` on a new KH2 attack of the left
   weapon only; the right object's `keyblade_rearm` now looks at weapon 1 windows only (before, a
   left window opening re-armed the right blade). KH2 keeps an attack per (group, shape source
   object), so the two blades' attacks never share hits (Steam KH2 `0x1403D25D0`, Checked (decomp));

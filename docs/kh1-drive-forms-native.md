@@ -403,11 +403,11 @@ window on his body.
 - `kh2slots::keyblade_rearm` re-armed the right object whenever any weapon > 0 window changed, so a
   left window opening let the right blade hit a foe again within the same KH2 attack.
 
-**Now (`bodyhits.rs` "Valor's left Keyblade", `kh2slots::left_channel`):**
+**Now (`lefthits.rs`, `kh2slots::left_channel`):**
 - `kh1_tracks`: group 0 (the right Keyblade's object) only for weapon 1 windows; the weapon 2
   windows play on a KH1 attack group of their own (`left_channel`: the first after the body
   windows', 1 for every Valor move).
-- On each new play of a Valor slot with left windows (`bodyhits::frame`), one KH1 attack object of
+- On each new play of a Valor slot with left windows (`bodyhits::frame` → `lefthits::new_play`), one KH1 attack object of
   Sora's is made with KH1's attack constructor `0x1402B2DC0` (bone `0x30`, so bone-tied and
   motion-tied: KH1's pass `0x1402B47A0` keeps it live only while his request is the one it took and
   his motion events hold its group's bit), on our copy of his KH1 swing row's data per window
@@ -415,7 +415,7 @@ window on his body.
   windows' data). The left Keyblade's own weapon row (from `leftblade`'s owner copy) goes on it as
   KH1's row maker `0x1402B3270` puts the right one's (radius / length factor / priority / critical
   bonuses), its effect data is the spark's source, his "connected" word is linked.
-- Each frame KH1 has him (`bodyhits::left_step`, beside `keyblade_rearm`): the left window open at
+- Each frame KH1 has him (`lefthits::step`, beside `keyblade_rearm`): the left window open at
   KH1's time; a new KH2 attack (ATKP or group differs, or a window after a frame with none)
   re-arms the object with KH1's re-arm (`rehit::new_attack`) and starts KH2's sweep afresh; the
   window's data goes on it. Re-hits within an attack by the window's interval: `rehit` (the one

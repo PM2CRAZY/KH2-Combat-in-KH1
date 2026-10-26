@@ -465,8 +465,8 @@ unsafe extern "system" fn physics(actor: usize) {
         super::kh2slots::turn_to_lock(actor);
         // KH2's next attack on the Keyblade in the same swing hits again (`kh2slots::keyblade_rearm`).
         super::kh2slots::keyblade_rearm(actor);
-        // (t680) The same for Valor's left Keyblade's own KH1 attack object (`bodyhits`).
-        super::bodyhits::left_step(actor);
+        // (t680) The same for Valor's left Keyblade's own KH1 attack object (`lefthits`).
+        super::lefthits::step(actor);
         // KH2's guard repel's push back (`combomods::guard_frame`).
         super::combomods::guard_frame(actor);
         // KH2's Aerial Dodge's fall at its apex (`combomods::dodge_apex`).

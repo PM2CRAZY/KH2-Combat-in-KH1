@@ -38,6 +38,7 @@ mod kh1voice;
 mod knockback;
 mod kh2sound;
 mod leftblade;
+mod lefthits;
 mod loadscreen;
 mod menu;
 mod mpcost;

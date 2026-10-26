@@ -1,3 +1,6 @@
+### 2026-10-26: Stage 682 (testing branch: Valor's left Keyblade hits in their own module)
+- **Valor's left Keyblade hits in their own module.** The tester (what-is-still-missing, after m13): "for 2nd keyblade it should behave 1:1 with how the main keyblade works, make sure its a file as well". t680's left-Keyblade hit code moves out of `bodyhits.rs` into `win/lefthits.rs`, with its own state (object, windows, open window). `bodyhits` keeps the pass hook `0x1402B3800`, the pool helpers and the data copies. It calls `lefthits::new_play` on a new play and delegates `atkp` / `hit` / the entry build; `takeover` calls `lefthits::step`. No behaviour change. docs/kh1-drive-forms-native.md §7.2.
+
 ### 2026-10-26: Stage 681 (testing branch: Base Sora's Square moves by KH2's exe rule)
 - **Base Sora's Square moves by KH2's rule.** The tester (what-is-still-missing, after m13): "3. (a)".
   Upper Slash, Horizontal Slash and Finishing Leap now go through the same path as Valor's Square

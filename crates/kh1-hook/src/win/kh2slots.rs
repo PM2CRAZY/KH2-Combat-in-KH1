@@ -1162,7 +1162,7 @@ pub unsafe fn keyblade_rearm(actor: usize) {
         let f = t as u32;
         let open = clip.windows.iter().filter(|w| w.contains(f)).find_map(|w| match w.kind {
             // (t680) The right Keyblade's (weapon 1); the left one's object re-arms itself
-            // (`bodyhits::left_step`). Before, a left window opening re-armed the right object.
+            // (`lefthits::step`). Before, a left window opening re-armed the right object.
             W::Hitbox { attack, group, weapon: 1, .. } => Some((attack, group)),
             _ => None,
         });
