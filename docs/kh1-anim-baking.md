@@ -254,6 +254,17 @@ lock stays KH1's own); 3 "(b) kh2 voice plays if the toggle for kh2 voices is on
   `+0x288` + the overshoot. The apply (`0x14029FC40`) clears bit 6 with each new request.
   **Checked (decomp)**. `kh2slots::loop_range` sets KH2's loop point there (12..32) once KH1 has
   started our fall (each frame KH1 poses him: one compare), so KH1 loops it as KH2 does.
+- **The range leaked into the next motion (fixed, glide thread after m7).** `loop_range` runs from
+  KH1's pose pass, and KH1's apply (`0x1402A0350`) calls that pass (`0x140391C70`, inside
+  `0x140393B30` / `0x140394080` for a blended start) on the motion coming in before it writes the
+  new slot to `+0x168`, after `0x14029FC40` cleared bit 6. `current` then still named the fall, so the
+  fall's 12..32 went back on with bit 6, and a blended start keeps the range it finds (only the
+  unblended start sets the whole motion). The next motion took the fall's loop: the tester's trace
+  (f113654..f113834, Jump KH2, a neutral glide out of the High Jump's fall) has the hover 208 (100
+  frames) playing 0, 2 .. 32, then 13 .. 32 again and again. **Checked (decomp, trace)**. Now
+  `loop_range` does nothing while `+0x160` bit 0 is set (a request queued or being applied: set by
+  KH1's request `0x14029F7C0`, cleared by its update `0x14029F0A0` after the queue step returns);
+  the fall's range is set on KH1's next plain pose of it, one frame later, long before frame 32.
 - **KH1's apex.** KH1's apex step `0x1402AF630` (from the rise, each frame) asks its apex (base + 5,
   blend 6.0, the float at `0x14042F93C`) when `+0x3B0` + 6 ≥ `+0x3B8`, nothing queued, its takeoff
   (base + 4) playing, and queues its fall (base + 6, blend 0). **Checked (decomp, exe)**. KH2's jump

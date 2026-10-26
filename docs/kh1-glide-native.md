@@ -382,3 +382,11 @@ The tester's t6xx trace (f109997..f110535, every bank change 207 -> 205 -> 206 o
   through KH2's 16-frame blend, as in both games. Logged: "glide (native) motion N asked ... into
   KH1's blend: a fresh blend from the pose on screen" (first 20). Glide motions (205..208) only, for
   Sora at Glide KH2.
+
+### 8.12 The hover after KH2's fall (glide thread, after m7)
+
+"neutral glide resets its animation wrong when setting jump to kh2 and doing a glide out of jump": at
+Jump KH2 the fall before the glide is our baked KH2 fall, whose own loop range (12..32) leaked onto
+the hover (208 looped 13..32 of its 100 frames; the same would have hit 205 started out of that
+fall). Not the glide's code: `kh2slots::loop_range`, fixed there; `docs/kh1-anim-baking.md` §7.2.
+**Checked (decomp, trace)**.

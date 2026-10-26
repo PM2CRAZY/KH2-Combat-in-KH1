@@ -1592,6 +1592,8 @@ pub unsafe fn frame(actor: usize) {
 const MOTION_FLAGS: usize = 0x160;
 const HOLD_AT_END: u32 = 8;
 const OWN_LOOP: u32 = 0x40;
+/// A request queued and not yet applied, or being applied (`+0x160` bit 0). Checked (decomp).
+const APPLYING: u32 = 1;
 const LOOP_START: usize = 0x288;
 const LOOP_END: usize = 0x28C;
 const LOOP_THIRD: usize = 0x290;
@@ -1600,7 +1602,19 @@ const LOOP_THIRD: usize = 0x290;
 /// its 32 frames), not from its start: KH1's own loop range for it (`MOTION_FLAGS`), set once after
 /// KH1 started it (each frame KH1 posed him checks it; KH1's step wraps the time to the loop start
 /// when it passes the end, `0x14029F0A0`, Checked (decomp)). Nothing on a request that holds.
+///
+/// Not while a request is being applied (`+0x160` bit 0, set by KH1's request `0x14029F7C0` and
+/// cleared by its update `0x14029F0A0` only after the queue step `0x14029FC40` returns): this runs
+/// from KH1's pose pass, which KH1's apply `0x1402A0350` calls on the new motion before it writes
+/// the new slot to `+0x168`, after `0x14029FC40` cleared bit 6. `current` then still named the
+/// motion going out (the fall), its loop range went on the motion coming in, and a blended start
+/// keeps the range it finds (only the unblended start sets the whole motion): the hover 208 out of
+/// KH2's fall looped 13..32 of its 100 frames (glide thread, after m7: "neutral glide resets its
+/// animation wrong when setting jump to kh2"). Checked (decomp, trace).
 unsafe fn loop_range(actor: usize) {
+    if rd::<u32>(actor + MOTION_FLAGS) & APPLYING != 0 {
+        return;
+    }
     let Some(m) = current(actor) else { return };
     let Some(from) = m.loop_from else { return };
     let flags = rd::<u32>(actor + MOTION_FLAGS);
