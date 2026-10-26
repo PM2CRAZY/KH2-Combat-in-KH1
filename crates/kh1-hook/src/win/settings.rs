@@ -101,8 +101,12 @@ kh1_slots = on\r\n\
 ;   shows them, nothing drawn over it; KH1's FK, its own leg IK with kh1_leg_ik); off = the\r\n\
 ;   slot is a retimed KH1 motion with KH2's drawn over it\r\n\
 kh1_bake = on\r\n\
-; kh1_leg_ik: on = the baked slots keep KH1's own leg IK and ground lift (KH1's pass bends his\r\n\
-;   legs onto slopes and stairs, aimed at KH2's ankles and feet); off = plain legs (no foot lift)\r\n\
+; foot_ik: on = feet placed on slopes and stairs: the baked slots keep KH1's own leg IK and ground\r\n\
+;   lift (with kh1_leg_ik), and our foot placement runs on the clips drawn over KH1's pass; off\r\n\
+;   (the default, the tester: \"lets actually have the foot iks off\") = plain legs everywhere\r\n\
+foot_ik = off\r\n\
+; kh1_leg_ik: (with foot_ik = on) on = the baked slots keep KH1's own leg IK and ground lift (KH1's\r\n\
+;   pass bends his legs onto slopes and stairs, aimed at KH2's ankles and feet); off = plain legs\r\n\
 kh1_leg_ik = on\r\n\
 ; camera_lower: KH2's camera (look point and eye together) this much lower (0 = as KH2)\r\n\
 camera_lower = 0\r\n\
@@ -340,9 +344,14 @@ pub struct Settings {
     /// Those slots baked into KH1 motions at load (`kh1_bake = on`, the default; `kh1_data::bake`):
     /// KH1 shows them with no pose of ours; off: a retimed KH1 motion drawn over (tier A).
     pub kh1_bake: bool,
-    /// The baked slots keep KH1's own leg IK and ground lift (`kh1_leg_ik = on`, the default;
-    /// `kh1_data::legs`): KH1's pass places his feet on slopes and stairs in them too.
+    /// The baked slots keep KH1's own leg IK and ground lift (`kh1_leg_ik = on` and `foot_ik =
+    /// on`; `kh1_data::legs`): KH1's pass places his feet on slopes and stairs in them too.
     pub kh1_leg_ik: bool,
+    /// Feet placed on uneven ground at all (`foot_ik = on`; off by default, the tester's m3
+    /// ask: "lets actually have the foot iks off we'll work on this later"): KH1's leg IK on the
+    /// baked slots (`kh1_leg_ik`) and our own foot placement on the clips drawn over KH1's pass
+    /// (`feet::place`). Off: plain legs in both.
+    pub foot_ik: bool,
     pub trace: super::trace::Mode,
     /// How many seconds of Sora's frames a trace dump holds (`trace_seconds`, 1..=120, 10 by default).
     pub trace_seconds: u32,
@@ -562,7 +571,8 @@ fn load(first: bool) -> Option<Settings> {
             Some(v) => Some(Some(v.split([',', ' ']).filter_map(|t| t.trim().parse().ok()).collect())),
         },
         kh1_bake: on(&text, "kh1_bake", "on", true),
-        kh1_leg_ik: on(&text, "kh1_leg_ik", "on", true),
+        kh1_leg_ik: on(&text, "kh1_leg_ik", "on", true) && on(&text, "foot_ik", "on", false),
+        foot_ik: on(&text, "foot_ik", "on", false),
         trace: super::trace::Mode::parse(setting(&text, "trace").as_deref()),
         trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
         sound_log: on(&text, "sound_log", "on", true),

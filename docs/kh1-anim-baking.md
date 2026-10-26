@@ -402,3 +402,19 @@ on a drawn clip (idle, landing, glide, the drawn casts) only ours does, as befor
   channel list (travel replaced, the foot helpers' template channels dropped and ours added) but left
   `+0x20` at the template's count, so KH1 read too few (the last leg keys never sampled) or too many (past
   the list) channels. It is now written with the list's length. `bake::tests::bakes_a_chain` checks it.
+
+## 9. Foot IK off (the tester's m3: "lets actually have the foot iks off we'll work on this later when we do soras cloth animations")
+
+- One switch, `foot_ik` in kh1-kh2.ini, **off by default** (a new key, so an ini that already has
+  `kh1_leg_ik = on` turns off too). Off:
+  - the baked slots get plain FK legs (`kh1_leg_ik` is read as off; the `kh1_data::legs` code stays
+    for the cloth work), so KH1's ground lift has no mode-2 bone to act on in our motions;
+  - our foot placement on the clips drawn over KH1's pass (`feet::place`) runs with `active = false`,
+    so any lift or drop it held eases out in a few frames and then it returns without touching the
+    pose.
+- `foot_ik = on` brings both back (KH1's leg IK on the bakes only with `kh1_leg_ik = on` too; read at
+  load, the bake happens then).
+- Nothing else of ours places feet: `feet::place` is the only caller of KH1's floor ray
+  (`0x1401910E0`) in the hook (**Checked (code)**). KH1's own motions (its own slots, when KH1 shows
+  him) keep KH1's own leg IK and ground lift: that is KH1's, not a layer of ours.
+- Cost: none per frame (one bool read; `place` returns at once once eased out).

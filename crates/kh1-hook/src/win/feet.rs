@@ -10,6 +10,8 @@
 //! Changes are eased over a few frames, and fade out when KH2 lets go or he leaves the ground.
 //! (Only on clips we draw over KH1's pass: a baked slot (`kh1_bake`) draws nothing of ours, so
 //! this never runs there; KH1's own leg IK and ground lift do, `kh1_leg_ik`, `kh1_data::legs`.)
+//! Both only with `foot_ik = on` (off by default after the baking thread's m3, the tester: "lets actually have the
+//! foot iks off we'll work on this later"): off, `place` gets `active = false` and fades out.
 
 use super::addr::Rva;
 use glam::{Mat4, Quat, Vec3};

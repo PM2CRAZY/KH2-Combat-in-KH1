@@ -1738,7 +1738,9 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         }
         return;
     };
-    let kh2_feet = MODE.load(Ordering::Relaxed) == 0 && super::takeover::active() && super::takeover::GROUNDED.load(Ordering::Relaxed);
+    // (Our foot placement only with `foot_ik = on`; off, the default, it fades out and leaves the
+    // legs as the clip has them: the tester, "lets actually have the foot iks off".)
+    let kh2_feet = super::settings::get().foot_ik && MODE.load(Ordering::Relaxed) == 0 && super::takeover::active() && super::takeover::GROUNDED.load(Ordering::Relaxed);
     super::feet::place(BASE.load(Ordering::Relaxed), &mut pose, &s.parents, &to_world, kh2_feet);
     kh1_wrist(&mut pose, &s.parents, (!ours).then_some(world));
     keyblade_teeth_up(&mut pose, &s.parents);
