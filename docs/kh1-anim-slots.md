@@ -1672,6 +1672,20 @@ reaction and clash rules); its hits still take the KH2 move's numbers from its h
 (`kh1rows::kh2_atkp`), but a repeated Guard Break there doesn't pierce guards at Recoil KH1 the way
 its own row does.
 
+### 7.z.9 Finishing Plus counted at the KH2 setting too (combo row selection, after m28; t641)
+
+The tester: "if you set combat to kh2 for both settings you can attack out of your finisher
+indefinitely, it needs to behave exact like kh1". KH2 counts its finishers in its Attack and
+command check (Steam KH2 `0x1403D6CA0`: the finisher window is taken only while the finisher
+count `+0xD75` is under the maximum, `[+0x5C0] + 0x202`), not in its row selection (**Checked
+(decomp)**). Our `combomods::finisher_chain_open` returned "always" at the combo style KH2, on the
+reading that KH2's pick counted them; the pick (KH2's table walk on KH1's data, t623) doesn't, so
+with Finishing Plus equipped every KH2 finisher opened KH1's
+combo window again (`kh2slots::finisher_window`) and chained without end. Now both styles count
+the same way (`FINISHERS`, one after the combo's finisher, one more per next finisher, against
+one plus Finishing Plus's copies), and an Attack that still reaches KH1's Attack step in a
+finisher with none left is no attack (`attack_row`), as at the KH1 setting. Not checked in game.
+
 ## 8. KH2's walk and run as slots (t389)
 
 The tester (`docs/tester-requests.md`, "Missing sleeves animation", point 6): "can you also bake

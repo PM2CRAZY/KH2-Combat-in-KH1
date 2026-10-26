@@ -245,16 +245,16 @@ pub fn kh1_length(len: u8) -> u8 {
     len.saturating_sub(negative).max(1)
 }
 
-/// Finishing Plus on KH1's own combo (the combo style KH1, where the finisher playing is one of
-/// KH2's ability finishers on KH1's rows): another finisher is left (KH2's count, `+0xD75`
-/// against one plus Finishing Plus's copies; `FINISHERS`). At the style KH2: always (KH2's own
-/// pick counts them).
+/// Finishing Plus's chain: another finisher is left (KH2's count, `+0xD75` against one plus
+/// Finishing Plus's copies; `FINISHERS`), at both combo styles. KH2 counts it in its Attack and
+/// command check (Steam KH2 `0x1403D6CA0`: the finisher window taken only while `+0xD75` is under
+/// the maximum, Checked (decomp)), not in its row selection, so the KH2 setting needs the same
+/// count as the KH1 setting. Before t641 the KH2 setting returned "always" here (it took KH2's
+/// pick to count them, which it doesn't), so with Finishing Plus every KH2 finisher opened its
+/// window again and Sora could attack out of his finishers forever (the tester, combo row
+/// selection after m28: "if you set combat to kh2 for both settings you can attack out of your
+/// finisher indefinitely, it needs to behave exact like kh1").
 pub fn finisher_chain_open() -> bool {
-    let air = LAST.try_lock().ok().and_then(|l| *l).is_some_and(|l| l.3);
-    let kind = if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo };
-    if super::styles::kh2(kind) {
-        return true;
-    }
     let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
     FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus
 }
@@ -446,6 +446,12 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     let made = if kh2_style { made } else { None };
     if let Some((n, _, true, _)) = last.filter(|l| kh2_style && l.3 == air && l.1 & 0xFFFF == playing) {
         let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
+        // (The last finisher already ran: nothing after it until it ends, as at the KH1 setting
+        // and in KH2, `finisher_chain_open`; not a new combo out of the finisher.)
+        if !finisher_chain_open() {
+            note(format!("Attack in KH1's finisher (count {n}, finisher {finishers}): no next finisher left (Finishing Plus): no attack"));
+            return Run::Nothing;
+        }
         let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
         let chained = match &made {
             Some(p) => p.as_ref().filter(|p| p.chained).map(|p| (p.row.clone(), p.len, p.neg, p.launch)),
