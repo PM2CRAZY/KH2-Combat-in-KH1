@@ -235,6 +235,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: I started this thread from the Table of contents(../table-of](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md#^m1)
   - [2. Assistant: Thanks! Seven versions this round, five for RAM and two for ](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md#^m2)
   - [3. Assistant: That folder is the right place, and kh2-motion-slots.bin is ](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md#^m3)
+  - [4. Assistant: Thanks! All three are in, one version each. Each is built on](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md#^m4)
 - [Reaction commands](../testers/reaction-commands/reaction-commands.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/reaction-commands/reaction-commands.md#^m1)
 - [Sora's hit reactions native](../testers/soras-hit-reactions-native/soras-hit-reactions-native.md)

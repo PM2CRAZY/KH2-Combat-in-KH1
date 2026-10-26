@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from the Table of contents(../table-of](#^m1)
 - [2. Assistant: Thanks! Seven versions this round, five for RAM and two for ](#^m2)
 - [3. Assistant: That folder is the right place, and kh2-motion-slots.bin is ](#^m3)
+- [4. Assistant: Thanks! All three are in, one version each. Each is built on](#^m4)
 
 ---
 
@@ -156,6 +157,38 @@ can you tell me where the files are stored? in my folder (E:\a\KINGDOM HEARTS -H
 
 ^m3
 
+
 do all three 
 
 go ahead
+> [!tip] Assistant
+> Thanks! All three are in, one version each. Each is built once from your own KH1 and KH2 files into `kh1-kh2-cache` (next to `kh2-motion-slots.bin`), loaded from there afterwards, and rebuilt on its own after a mod update or when the files it came from change. Nothing to install, and a damaged file is just rebuilt.
+>
+> - **t666, the KH2 sounds:** one file, `kh2-sounds.bin`. It holds the cut sounds, Sora's battle voice bank, and which move plays which sound.
+>   - Later starts read only that file. They no longer unpack KH2's three sound banks (about 28 MB at start), the effect package, `00battle.bin` or the voice bank.
+>   - It's also rebuilt when `kh2_volume` or the settings that pick which sounds load change (`kh2_sounds`, Reflect, the forms).
+>   - When it's rebuilt, the loading screen shows "Building KH2 sounds (n of N)" before the title. A rebuild now unpacks one KH2 bank at a time.
+> - **t667, the KH2 effects:** one file per package, `kh2-effects-<name>.bin` (Sora's moves, the Keyblade, each form, each spell level).
+>   - A form's or spell's file appears the first time its effects could play, not at the first start.
+>   - Packages are still only loaded when they can play and freed when they can't.
+>   - It's also rebuilt when `kh2_effects` changes.
+>   - It never holds the title, since each package only took 0.01 to 0.08 s to build. The gain is a lower start-up peak, not a shorter start.
+> - **t668, the Drive Form colours:** one file per form and texture, `form-tint-<form>-1c<n>.bin` (Wisdom: 3, Valor: 2).
+>   - Each is made the first time that form needs it. Nothing is read at start, and a save that never uses a form reads nothing.
+>   - The recolouring now runs on a background thread instead of the game's thread. So the first time a form is used each session, KH1's colours may show for a frame or two.
+>
+> Checked: the code, plus unit tests for each file format. Not checked: anything in game, the real timings and RAM, and one assumption: that anything changing a file in a `.pkg` also changes its index entry or the `.pkg`'s size or time. On disk this adds roughly 10 MB for sounds, 5 to 15 MB for effects, and about 16 MB for the form colours once both forms are used.
+>
+> Please test:
+> - Delete `kh1-kh2-cache` and start twice. The first start rebuilds (you may see the sound line on the loading screen); the second should go straight to the title. With the Loading & Cache log on, the second start should say "matches" for the sounds and each effect package.
+> - Every KH2 sound (ability moves, Reflect, the forms, KH2 battle quotes) and effect should look and sound the same as before.
+> - Wisdom and Valor in two separate sessions: the colours look right, and the second session doesn't stutter.
+> - RAM in Task Manager at start compared with t665.
+>
+> Questions (the four from my last message, about crash notes, the trace, the Config row and the leftover texture, are still open too):
+> 1. The form colours' first use each session: (a) accept a frame or two of KH1's colours (the Drive change motion probably hides it); or (b) start reading the form's files when the Drive menu opens, so they're ready by the change?
+> 2. If one KH2 sound bank can't be read when the sound file is built, that sound is left out until a mod update or until the bank shows up. (a) Keep that; or (b) don't write the sound file at all when a read failed, so it tries again next start?
+> 3. The effects check their source every time a package loads by hashing its stored bytes (exact, a few ms). (a) Keep that; or (b) check only the index entry and the `.pkg`'s size and time (faster, but every Mods Manager Build would rebuild all of them)?
+
+^m4
+
