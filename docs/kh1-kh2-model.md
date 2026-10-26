@@ -18,6 +18,15 @@ A form whose model doesn't load falls back to base Sora's. Files come from the s
 the rest of the mod's KH2 data (`pose::load_kh2`): the Mods Manager's backup of the originals
 when there is one, else the live files.
 
+**Loaded only when it can be drawn** (the tester, ram-use m1 answer 2 (a)). `model::load` reads the
+models only when `model::on()` holds; with Player Model off (since s259 `on()` is always false)
+nothing is read or kept: about 3 MB less (four bodies of about 0.8 MB each with their textures, on
+P_EX100.mdlx as measured) and their start-up read gone. Log: "KH2 model: not loaded (Player Model
+off)". Every reader (`hide`, `hide_menu`, `draw`, `is_menu_copy`, `left_is_ours`, the Keyblade
+loader) is behind `on()` and takes the models absent as "not loaded". **Checked (code)**. The
+choice is read once at start: turning the option on later (when its row comes back) needs a
+restart, as it already did for the world-pass hook (`model::install`).
+
 **Keyblades by name.** KH2's Keyblade items (`03system.bin` `item`, type 2) carry a weapon
 number; base Sora's weapon set in `03system.bin` `went` (list 1) gives the object for that
 number, and `00objentry.bin` the object's model. The names come from `msg/us/sys.bar`. KH1's

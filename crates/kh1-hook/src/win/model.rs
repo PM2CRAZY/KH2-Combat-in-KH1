@@ -247,10 +247,17 @@ pub fn on() -> bool {
     false
 }
 
-/// Starts loading the models (a thread).
+/// Starts loading the models (a thread), only when the model can be drawn (`on`): off, nothing is
+/// read or kept (about 3 MB of models and textures, and their start-up read; the tester, ram-use
+/// m1 answer 2 (a)). Every reader copes with them absent (`LIB` unset: "not loaded"), and each is
+/// behind `on` anyway.
 pub fn load() {
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     BASE.store(base, Ordering::Relaxed);
+    if !on() {
+        log("KH2 model: not loaded (Player Model off)");
+        return;
+    }
     std::thread::spawn(|| {
         let t = Instant::now();
         let r = (|| -> Result<Library, String> {
