@@ -82,6 +82,9 @@ pub enum EventKind {
     /// A footstep (frame trigger 2): its kind, the same numbering KH1's material sounds use
     /// (`0x1402939B0`): 0 run, 4 walk, 10 landing.
     Footstep(i16),
+    /// Start the pad's vibration pattern `n` (frame trigger 31: `00battle.bin` vbrt's id; Steam
+    /// KH2 `0x14040DD70` case 0x1F → `0x1403EEFC0` → `0x14019AE60`).
+    Rumble(i16),
     Other(u8),
 }
 

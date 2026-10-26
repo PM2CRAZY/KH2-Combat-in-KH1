@@ -18,6 +18,7 @@ pub mod mset;
 pub mod retarget;
 pub mod secondary;
 pub mod slot;
+pub mod vibe;
 
 use kh2_formats::egs::{Archive, KeyTable};
 use kh2_formats::{Error, Result};

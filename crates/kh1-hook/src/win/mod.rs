@@ -56,6 +56,7 @@ mod stylejump;
 mod styleroll;
 mod probe;
 mod reflect;
+mod rumble;
 mod takeover;
 mod tint;
 mod trace;

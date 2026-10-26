@@ -1386,6 +1386,10 @@ fn bake_one(b: &pose::Baker, src: &pose::Src, template: &[u8], (motion, field): 
 /// past KH1's 8 edges a call (`ks::EDGES_PER_CALL`): one key per frame keeps them all, and the
 /// moveset tag (`form`: Valor's slot) sends them to Valor's own package (`form::effect`), not
 /// Sora's.
+///
+/// KH2's pad vibration (frame trigger 31, the tester's answer 9 (a) after m14) is a key too
+/// (`ks::KH2_RUMBLE`, the pattern's id), every baked slot that carries one: KH1's own vibration
+/// player plays KH2's pattern (`rumble`).
 fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool, form: bool) -> Vec<ks::EventKey> {
     let mut keys: Vec<ks::EventKey> = clip
         .events
@@ -1394,6 +1398,8 @@ fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool, fo
             let (a, c) = match e.kind {
                 EventKind::Sound(id) => (ks::KH2_SOUND, id),
                 EventKind::Voice(v) if !reaction => (ks::KH2_VOICE, v as u16 as u32),
+                // (KH2's pad vibration, frame trigger 31: KH1's own vibration player, `rumble`.)
+                EventKind::Rumble(n) => (ks::KH2_RUMBLE, n as u16 as u32),
                 _ => return None,
             };
             Some(ks::EventKey { time: ks::kh2_trigger_time(e.frame), a, b: motion, c, d: 0 })
@@ -2329,6 +2335,12 @@ static ORIG_SOUND_EVENT: AtomicUsize = AtomicUsize::new(0);
 /// `0x1401A22B0` sets with a stop of every sound and `0x1401A2130` / `0x1401B02C0` clear,
 /// Checked (decomp); Assumption: an event or cutscene. Our triggers are skipped then too.)
 unsafe extern "system" fn sound_event(actor: usize, a: i32, b: i32, c: u32) {
+    if a == ks::KH2_RUMBLE as i32 {
+        if actor == super::takeover::sora_actor() {
+            super::rumble::play(b as u16, c as u16 as i16);
+        }
+        return;
+    }
     if a == ks::KH2_EFFECTS as i32 {
         if actor == super::takeover::sora_actor() {
             effects_at(b as u16, c);

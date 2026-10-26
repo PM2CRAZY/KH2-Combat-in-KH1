@@ -602,7 +602,58 @@ The tester (what-is-still-missing, after m13): "no effects" in Valor on KH1's ow
   `leftblade`'s owner, `kh2dpx::form_anchor`), Sora's through `kh2fx::event` as before. Sounds and
   voices stay one key each (`KH2_SOUND` / `KH2_VOICE`). The slot cache keys on the tracks, so the
   slots whose keys changed rebake once.
-- Not done: KH2's frame trigger 31 on 52 (frame 0 [1], 20 [9]) and Valor's 41 ([5]) (Steam KH2
-  `0x1403EEFC0`: a table lookup then `0x14019AE60`; **Assumption**: the pad's rumble, not a
-  visual). Not checked in game.
+- KH2's frame trigger 31 (52's frame 0 [1] and 20 [9], Valor's 41 [5], ...) is the pad's
+  vibration: §13.6. Not checked in game.
+
+### 13.6 KH2's pad vibration on KH1's vibration player (what-is-still-missing, answer 9 (a))
+
+The tester (after m14): "9. (a) if rumble is on it should work then".
+
+- **What trigger 31 is (Checked (decomp + exe)).** KH2's trigger pass (Steam KH2 `0x14040DD70`
+  case 0x1F) calls `0x1403EEFC0 (param)`: a `bsearch` of the byte id in the `vibr` table of
+  `00battle.bin`'s `vbrt` (a BAR of type 1, loaded by `0x1403F4C30` → `0x1403EEF80`), the entry's
+  index byte naming the index-th pattern entry (type 0x2F, `0x1403A6420`), handed to
+  `0x14019AE60`, which starts it in a task (`0x14019B1D0`) that writes the pad's two motor bytes
+  (`0x140BF3270 + 0x48 / 0x49`, `0x14039B760 (0)`). No other combat code of KH2's calls it (its
+  other callers `0x14020FDC0`, `0x1402DA350` are outside combat).
+- **The patterns (Checked (files), the user's `00battle.bin`; `kh2_formats::battle::Vibration`).**
+  "VIBD", two channels of (time in 30 Hz ticks, level) keys: 1 ch0 (0,255)(12,255); 2 ch0
+  (0,255)(1,255); 3 ch1 (0,128)(4,160); 4 ch1 (0,128)(12,128); 5 ch0 (0,255)(2,255); 6 ch0
+  (0,255)(30,255), ch1 (0,255)(30,160)(60,0); 7 ch0 (0,255)(15,255), ch1 (0,255)(10,255)(15,0);
+  8 ch0 (0,255)(4,255); 9 ch0 (0,255)(12,255).
+- **KH2's curve (Checked (exe), the step's instructions at `0x14019B290..0x14019B30F`).** The
+  clock starts at 0 and adds the raw frame delta (`0x140717484`, 1.0 a 60 Hz frame) × 0.5 each
+  step; a channel whose first key is at or before the clock writes `level(k + 1) × (t − t(k)) /
+  (t(k + 1) − t(k))` for the first key k + 1 at or after it, truncated (so each segment rises from
+  0 to its end key's level), nothing past its last key; the step the clock reaches the last key
+  time plays `max − 1` and ends.
+- **Which moves carry it (Checked (files)).** Every one of Sora's and each form's reactions 10..15
+  (pattern 3), 16 / 18 (4); base Sora's recoils 41 / 43 (5), guard repel 42 (1), Drive 52 (1 at 0, 9
+  at 20), the casts 56..61 / 71..73, Explosion 166 (9), Finishing Leap 167 (8), Counterguard 171 (2),
+  Magnet Burst 197 (8); Valor's 41 / 43 (5), 42 (1); Wisdom's casts and 151 (8), 154 (8, 2, 8), 181
+  (8). (Master, Final, Limit and Anti have their own; not baked yet.) No weapon motion carries one.
+- **KH1's vibration (Checked (decomp)).** `0x14028F8D0 (n)` starts pattern n of `btlvibe.dat`
+  (`0x142D36D60`, loaded by `0x14028B7C0`) on pad 0 through `0x1401E1400 (pattern, pad)`; the task
+  20001 (`0x1401E1900` → `0x1401E1500`) steps pads 0 and 1 by the frame scale `0x14233FBDC`: a
+  pattern is `0x14`, `+4` bit 0 loop, `+8` / `+0xC` the channels' entry offsets, `+0x10` / `+0x14`
+  their counts, entries `u8` frames / `u8` level, each going from the entry before's level to its
+  own over its frames, the first written as it is; at the end the bytes `0x14298C9B0 + pad × 0x70
+  + 2 / 3` and the pattern are cleared. The pad read (`0x14028B0B0`) sends them (`0x1400DB010`:
+  channel 1 as the level, channel 0 on above 0x7F) only while `0x1402FB030` (the config `+0x10`,
+  Config's Vibration row: 0 on) is 0, and clears them every frame.
+- **Now.** Each trigger 31 of a baked slot's clip is a sound event key of ours (`ks::KH2_RUMBLE`
+  0x84, `c` the pattern id, at the trigger's frame as the others, §13.3). The wrapped handler
+  (`kh2slots::sound_event`) sends it to `rumble::play`, which writes KH2's pattern once in KH1's
+  layout for the frame scale it fires at (`kh1_data::vibe::kh1_pattern`: one entry per game frame,
+  each the level KH2 writes on that step) and starts it on pad 0 with KH1's `0x1401E1400`
+  (its first bytes checked). KH1's own task steps it, and KH1's pad read sends it only with
+  Vibration on. A test steps both players (`vibe::tests`): KH1's levels equal KH2's from the
+  second step on, at 60 and 30 fps; KH1's first step shows the second step's level (KH1's player
+  writes its first entry twice). Steam only. One rebake of the slots with a trigger 31.
+- **Assumptions.** KH2's channel 0 / 1 (`+0x48` / `+0x49`) are KH1's 0 / 1 (`+2` / `+3`): KH2's own
+  send to the pad wasn't traced, KH1's turns channel 0 on or off and gives channel 1 its level.
+  KH2's motor bytes read 0 after its pattern ends (its task stops writing them).
+- **Open.** KH1's hit pass (`0x14029BBD0`) still starts its own `btlvibe.dat` pattern on a hit
+  (1 for a flinch, 0 for a knock-back, 6 / 5 for clashes); KH2's from the reaction slot's frame 0
+  replaces it a blend later. KH2 has no hit vibration besides the motion's.
 

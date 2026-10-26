@@ -257,6 +257,9 @@ pub const KH2_VOICE: u16 = 0x82;
 /// (KH2 fires all of a frame's triggers in one update; KH1 reads 8 edges a call): `c` from
 /// [`kh2_effects_value`], the frame and which moveset's package (Sora's, or the form's).
 pub const KH2_EFFECTS: u16 = 0x83;
+/// KH2's pad vibration (frame trigger 31): `c` the pattern's id (`00battle.bin` vbrt), played by
+/// KH1's own vibration player (`crate::vibe`).
+pub const KH2_RUMBLE: u16 = 0x84;
 
 /// `c` of a [`KH2_EFFECTS`] key: the KH2 frame in the low 16 bits, bit 16 set for the form's
 /// moveset (its own effect package).

@@ -373,6 +373,61 @@ impl Ptya {
     }
 }
 
+/// One of KH2's pad vibration patterns (`00battle.bin` `vbrt`): two motor channels of keys
+/// (time in 30 Hz ticks, level 0..255).
+///
+/// The layout (Steam KH2 `0x14019AE60`, Checked (decomp), and the user's `00battle.bin`, Checked
+/// (files)): `vbrt` is a BAR (type 1) of a `vibr` table (`u32` 1, `u32` count, then `count` pairs
+/// `u8` id, `u8` index, sorted by id: the trigger's id is looked up by `bsearch` in
+/// `0x1403EEFC0`) and the patterns, entries of type 0x2F, the index counting those (`0x1403A6420
+/// (bar, 0x2F, index)`). A pattern: `"VIBD"`, `+4` u32, `+8` channel 0's key count, `+0xC` its
+/// keys' offset, `+0x10` channel 1's count, `+0x14` its offset; a key is `i32` time, `i32` level.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Vibration {
+    pub id: u8,
+    pub channels: [Vec<(i32, i32)>; 2],
+}
+
+impl Battle {
+    /// The vibration pattern a frame trigger 31 names.
+    pub fn vibration(&self, id: i16) -> Option<&Vibration> {
+        self.vibration.iter().find(|v| v.id as i16 == id)
+    }
+}
+
+fn parse_vbrt(d: &[u8]) -> Result<Vec<Vibration>> {
+    let bar = Bar::parse(d)?;
+    let Some(table) = bar.entries.iter().find(|e| e.name == "vibr").map(|e| e.data) else {
+        return bad("vbrt: no vibr table");
+    };
+    let patterns: Vec<&[u8]> = bar.entries.iter().filter(|e| e.kind == 0x2F).map(|e| e.data).collect();
+    let mut r = Reader::new(table);
+    r.skip(4)?;
+    let count = r.u32()? as usize;
+    if count > 0x100 {
+        return bad("vbrt: implausible vibr count");
+    }
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        let id = r.u8()?;
+        let index = r.u8()? as usize;
+        let Some(p) = patterns.get(index) else { return bad("vbrt: pattern index out of range") };
+        let mut channels: [Vec<(i32, i32)>; 2] = [Vec::new(), Vec::new()];
+        let mut h = Reader::new(p);
+        if h.u32()? != u32::from_le_bytes(*b"VIBD") {
+            return bad("vbrt: not a VIBD pattern");
+        }
+        h.skip(4)?;
+        let heads = [(h.u32()? as usize, h.u32()? as usize), (h.u32()? as usize, h.u32()? as usize)];
+        for (ch, (n, off)) in heads.into_iter().enumerate() {
+            let Some(keys) = p.get(off..off.saturating_add(n.saturating_mul(8))) else { return bad("vbrt: keys out of bounds") };
+            channels[ch] = keys.chunks_exact(8).map(|k| (i32::from_le_bytes(k[0..4].try_into().unwrap()), i32::from_le_bytes(k[4..8].try_into().unwrap()))).collect();
+        }
+        out.push(Vibration { id, channels });
+    }
+    Ok(out)
+}
+
 /// The combat-relevant tables of `00battle.bin`.
 #[derive(Clone, Debug, Default)]
 pub struct Battle {
@@ -388,6 +443,8 @@ pub struct Battle {
     pub btlv: Vec<Btlv>,
     /// Combo trees (attack selection rules) per moveset id.
     pub ptya: Ptya,
+    /// The pad vibration patterns (`vbrt`), by the id a motion's frame trigger 31 names.
+    pub vibration: Vec<Vibration>,
     /// Names of BAR entries present but not parsed by this crate.
     pub unparsed: Vec<String>,
 }
@@ -405,6 +462,8 @@ impl Battle {
                 "lvpm" => b.lvpm = parse_lvpm(d)?,
                 "lvup" => b.lvup = parse_lvup(d)?,
                 "ptya" => b.ptya = Ptya::parse(d)?,
+                // (A pattern table that doesn't read leaves only the vibration out.)
+                "vbrt" => b.vibration = parse_vbrt(d).unwrap_or_default(),
                 "fmlv" => {
                     b.fmlv = table("fmlv", d, 8, |r| {
                         let b0 = r.u8()?;

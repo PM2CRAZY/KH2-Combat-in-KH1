@@ -347,6 +347,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
                 28 => EventKind::RevengeCheck,
                 34 => EventKind::QuickRunCheck,
                 35 => EventKind::FallCheck,
+                31 => EventKind::Rumble(e.params.first().copied().unwrap_or(0)),
                 other => EventKind::Other(other),
             };
             clip.events.push(Event { frame: e.frame.max(0) as u32, kind });
