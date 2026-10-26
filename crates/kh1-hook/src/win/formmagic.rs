@@ -664,7 +664,138 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     if sora && (1..=6).contains(&spell) && super::kh2slots::CASTS.iter().any(|c| c.2 == request as usize) {
         time_kh1_spell(actor, spell as u8, request, r);
     }
+    // (Magic Combo KH2: KH1's own grounded cast takes its step of the combo, as KH2's casts do,
+    // `kh1_cast_step`; its step was noted at the command, `combat::command`.)
+    if sora && kh1_cast_step(spell) && KH1_WINDOW_REQUESTS.contains(&request) {
+        take_step(actor, request, false, false);
+    }
+    // (Gravity and Stop: the combo's finisher, `finisher_spell`.)
+    if sora && finisher_spell(request) {
+        take_step(actor, request, true, false);
+    }
     r
+}
+
+/// KH1's ground Gravity (0x3A) and Stop (0x3B) cast requests (KH1's request table, Checked (files)).
+pub const FINISHER_SPELL_REQUESTS: [u32; 2] = [0x3A, 0x3B];
+
+/// Gravity or Stop cast on the ground counts as the combo's finisher (the tester, combo row
+/// selection after m29: "for gravity and stop, there's a phenomenon in kh2 where those magics
+/// count as a finisher so the combo row skips straight to the finisher, if you have a finishing
+/// plus equipped you can combo into another finisher ... that would be applied for kh1 gravity
+/// and stop as well if the config is set to can combo"): on KH2's cast animation (their
+/// animation row at KH2: KH2's Thunder cast 62 for Gravity, Cure's 65 for Stop) always, on KH1's
+/// own with the Magic Combo row at KH2. Base Sora on KH1's states, not in a Drive Form.
+pub unsafe fn finisher_spell(request: u32) -> bool {
+    let Some(i) = FINISHER_SPELL_REQUESTS.iter().position(|&r| r == request) else { return false };
+    let spell = 4 + i as u8;
+    !super::form::in_form() && super::shared::active() && (anim_kh2(spell) || super::styles::kh2(super::styles::Kind::MagicCombo))
+}
+
+/// The finisher step of Gravity or Stop (`finisher_spell`), worked out at the command
+/// (`combat::command`), in place of `note_step`'s: the combo's length (KH1's `+0xD4`), so the
+/// combo goes straight to its finisher, or one past the count when taken in a finisher's Finishing
+/// Plus window (KH1's count already at the length or past it: `note_step`'s chained case). The
+/// step, taken at the spell's start (`take_step` with `finisher`): `combomods::cast_step` notes it
+/// as the combo's finisher, KH1's count is 0 after it (the combo ends) unless Finishing Plus leaves
+/// another finisher (`combomods::finisher_left`), which then follows in its Finishing Plus window
+/// (`finisher_spell_window`).
+pub unsafe fn note_finisher_step(actor: usize) -> Option<u8> {
+    let (step, _) = note_step(actor, false)?;
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    let max = if stats >= 0x10000 { rd::<u8>(stats + 0xD4).max(1) } else { step };
+    let step = step.max(max);
+    CAST_STEP.store(step as u32 | 1 << 8 | 1 << 16, Ordering::Relaxed);
+    Some(step)
+}
+
+/// Gravity or Stop playing on the ground as the combo's finisher (`finisher_spell`; KH1's
+/// request `+0x164`): whether an Attack or a spell may follow now. Only in KH2's Finishing Plus
+/// window, placed at the same share of the motion as on KH2's own finisher cast of the cast
+/// animation it plays on (Gravity: Thunder's finisher cast 63, Stop: Cure's 68, both 42..78,
+/// `kh2slots::finisher_share`; an **Assumption**: KH2 has no Gravity or Stop to read it from),
+/// while Finishing Plus leaves another finisher (`combomods::finisher_left`, KH2's count). `None`:
+/// neither plays.
+pub unsafe fn finisher_spell_window(actor: usize) -> Option<bool> {
+    let request = rd::<u32>(actor + 0x164) & 0xFFFF;
+    if rd::<i32>(actor + 0x70) != 0 || !finisher_spell(request) {
+        return None;
+    }
+    if !super::combomods::finisher_left() {
+        return Some(false);
+    }
+    let from = if request == 0x3A { 63 } else { 68 };
+    let Some((a, b)) = super::kh2slots::finisher_share(from) else { return Some(false) };
+    let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
+    Some(t >= 0.0 && len > 0.0 && t / len >= a && t / len < b)
+}
+
+/// KH1's grounded cast requests the Magic Combo row gives KH2 Fire's combo window
+/// (`kh1_cast_window`): Fire's first shot 0x36 and its second part / repeated shot 0x3D, Blizzard
+/// 0x37, Thunder 0x38, Cure 0x39, Aero 0x3C (KH1's request table, `xa_ex_0010.mset`, Checked
+/// (files); Gravity 0x3A and Stop 0x3B are left out).
+const KH1_WINDOW_REQUESTS: [u32; 6] = [0x36, 0x3D, 0x37, 0x38, 0x39, 0x3C];
+
+/// The Magic Combo row at KH2 (`styles::Kind::MagicCombo`; the tester, combo row selection after
+/// m29: "make a config for magic that allows you to combo out of grounded magic like kh2"): a
+/// grounded cast KH1 casts itself (its own spell `spell`, 0 Fire .. 6 Aero; not Gravity 4 or
+/// Stop 5) takes its step of the combo as KH2's casts do (`note_step` at the command,
+/// `take_step` at the spell's start: KH1's count `+0x41` at the step, "connected" `+0x50` set).
+/// Base Sora on KH1's states, not in a Drive Form.
+pub unsafe fn kh1_cast_step(spell: i32) -> bool {
+    matches!(spell, 0..=3 | 6) && super::styles::kh2(super::styles::Kind::MagicCombo) && !super::form::in_form() && super::shared::active()
+}
+
+/// Each frame Sora is posed (`kh2slots::frame`), the Magic Combo row at KH2: KH1's own cast
+/// animation playing on the ground (`KH1_WINDOW_REQUESTS`, KH1's own slot, not one of ours,
+/// whose KH2 cast motions carry KH2's own window, `kh2slots::combo_kind`) gets KH2 Fire's combo
+/// window: KH1's combo window this frame (the instance's `+0x14` bit 22, as
+/// `combomods::kh1_finisher_window` opens it) from the same share of KH1's motion as Fire 56's
+/// window starts in KH2's (60 of its frames, `kh2slots::combo_share`), to its end. KH1's command
+/// menu then takes an Attack or a spell there (`0x1402A2EC0`), and KH1's Attack step counts on
+/// from the cast's step (`0x1402A7510`, Checked (decomp)). KH1's quick Fire (Fire again while
+/// 0x3D plays) is KH1's own rule and still re-fires. KH2's Fire for every KH1 spell is the
+/// tester's rule ("for kh1 magics logic you just apply kh2s fire combo logic on the first shot and
+/// the repeated shot animation"); placing it by share is an **Assumption** (KH1's casts have no
+/// window of their own), and so is that KH1's spell script, a task of its own, casts whatever
+/// motion follows.
+pub unsafe fn kh1_cast_window(actor: usize) {
+    if actor < 0x10000 || actor != super::takeover::sora_actor() {
+        return;
+    }
+    // (Gravity and Stop as the combo's finisher: their Finishing Plus window, `finisher_spell_window`.)
+    if finisher_spell_window(actor) == Some(true) {
+        let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+        if inst >= 0x10000 {
+            wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
+            static F: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            if F.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("Gravity / Stop as the combo's finisher: Finishing Plus window (request {:#x}, time {:.1}): KH1's combo window", rd::<u32>(actor + 0x164) & 0xFFFF, rd::<f32>(actor + 0x16C)));
+            }
+        }
+        return;
+    }
+    if !kh1_cast_step(0) || rd::<i32>(actor + 0x70) != 0 {
+        return;
+    }
+    let request = rd::<u32>(actor + 0x164) & 0xFFFF;
+    if !KH1_WINDOW_REQUESTS.contains(&request) || super::kh2slots::cast_playing(actor) {
+        return;
+    }
+    let Some(share) = super::kh2slots::combo_share(56) else { return };
+    let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
+    if !(t >= 0.0 && len > 0.0) || t / len < share {
+        return;
+    }
+    let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+    if inst < 0x10000 {
+        return;
+    }
+    wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!("Magic Combo: KH2 Fire's combo window on KH1's cast (request {request:#x}, time {t:.1} of {len:.1}, from {:.0}%)", share * 100.0));
+    }
 }
 
 /// KH1's command step starting `spell` for base Sora, the cast request asked for: with KH2's

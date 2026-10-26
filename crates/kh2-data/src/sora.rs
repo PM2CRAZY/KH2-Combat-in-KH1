@@ -315,7 +315,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
                     }
                 }
                 range_id::ALLOW_COMBO => WindowKind::Combo,
-                range_id::ALLOW_COMBO_MAGIC => WindowKind::ComboMagic,
+                range_id::ALLOW_COMBO_MAGIC => WindowKind::ComboMagic(p(0) as u16),
                 range_id::ALLOW_COMBO_FINISHER => WindowKind::Finisher,
                 range_id::TURN_TO_TARGET => WindowKind::TurnToTarget(deg(p(0))),
                 range_id::TURN_TO_LOCK => WindowKind::TurnToLock(deg(p(0))),

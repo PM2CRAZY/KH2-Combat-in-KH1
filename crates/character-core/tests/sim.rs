@@ -1025,7 +1025,7 @@ fn magic_sora(fp: u8) -> Character {
     // (An Attack follows a cast only in its combo window, range id 11, as Blizzard's 59 from 36:
     // `attack_out_of_a_cast_only_in_its_combo_window`.)
     c71.windows.push(Window { start: 20, end: None, kind: WindowKind::Combo });
-    c71.windows.push(Window { start: 25, end: Some(35), kind: WindowKind::ComboMagic });
+    c71.windows.push(Window { start: 25, end: Some(35), kind: WindowKind::ComboMagic(71) });
     ch.moveset.clips.insert(71, c71);
     let mut c72 = Clip::plain(72, 50);
     c72.windows.push(Window { start: 20, end: None, kind: WindowKind::AllowReactionCommand });

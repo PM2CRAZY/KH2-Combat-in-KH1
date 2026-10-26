@@ -271,6 +271,21 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   (Drive Forms, borrows): the Magic action takes an Attack only in range 11 (`cancel_allowed`);
   sim test `attack_out_of_a_cast_only_in_its_combo_window`.
 - The finisher casts' finisher window (Finishing Plus after a finisher cast): §4c.2.
+- **Corrected at t642** (the tester, combo row selection after m29: in KH2 "you can combo out of
+  magic", and ours let spells follow sooner than an Attack). **Checked (decomp)**, Steam KH2's
+  range step `0x14040D810`: range id 35 is not a spells-only window. It sets the same combo
+  window bit as range id 11 (`+0x18C` bit 0x400, through the motion player's flags `+0x34`), but
+  only when its parameter equals the motion player's current motion (`+0x28`, the motion id the
+  queue set, `0x1403C6740`). **Checked (files)** (`P_EX100.mset`): Fire 56 has [71] 34..46 and
+  [56] from 60, Reflect 71 the same two (a copy of Fire's), Thunder 62 [62] from 42, Cure 65 [62]
+  from 42 (a copy of Thunder's). So KH2's combo window on the ground casts is: Fire 56 from 60,
+  Blizzard 59 from 36 (range 11), Thunder 62 from 42, Reflect 71 34..46, Cure 65 none. KH2's
+  Attack (with "connected", `+0x120` bit 0x2000000 set by a hit of any of his attack objects,
+  `0x1403D12C0`, or the ability bit) and its magic command (always with the window test) are
+  taken there alike. Ours (`kh2slots::combo_kind`): KH1's combo window, the Attack and the spell
+  checks all use that window; before, every range 35 was a spells-only window from its first
+  frame (Fire took a spell from 34, Cure from 42, Reflect to its end, Blizzard none) and an Attack
+  only range 11. Drive Forms' controller keeps its old reading (`ComboMagic(_)`).
 - **Kept (ours):** in the air, KH2's controller still carries the combo on after a cast that has
   ended (until the landing), where KH2's free state would start a new one; KH1's cast state
   already starts a new one.
@@ -306,6 +321,53 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
     finisher swing (`combomods::kh2_press` / `attack_row`: KH2's next finisher at the KH2 setting,
     KH1's picker's at the KH1 setting); a spell there is the next finisher cast.
 - Not checked in game. Drive Forms left alone (the tester: they move to the new system later).
+
+### 4c.3 Magic Combo: KH1's own grounded casts in the combo (t643)
+
+- The tester (combo row selection after m29): "make a config for magic that allows you to combo
+  out of grounded magic like kh2, it should work for all grounded magic in the game ... for kh1
+  magics logic you just apply kh2s fire combo logic on the first shot and the repeated shot
+  animation". Config > KH1 in KH2 > Combat > Magic > Magic Combo (KH1 | KH2, ini `magic_combo`,
+  default `kh1`).
+- At KH2, base Sora, on the ground, not in a Drive Form:
+  - a cast of KH1's own spell (Fire, Blizzard, Thunder, Cure, Aero; KH1's script) takes its step
+    of the combo as KH2's casts do: `formmagic::note_step` at the command (`combat::command`),
+    `take_step` at KH1's spell start `0x14028F140` (KH1's count `+0x41` at the step,
+    "connected" `+0x50` set, `combomods::cast_step`);
+  - KH1's own cast animation on the ground (requests 0x36 Fire's first shot, 0x3D its second part
+    and repeated shot, 0x37, 0x38, 0x39, 0x3C; KH1's own slot, not one of our KH2 cast motions,
+    which keep KH2's own window, §4c.1) gets KH2 Fire's combo window: KH1's combo window
+    (instance `+0x14` bit 22, as `combomods::kh1_finisher_window`) from the share of KH1's motion
+    at which Fire 56's opens in KH2 (frame 60, `kh2slots::combo_share`) to its end
+    (`formmagic::kh1_cast_window`). KH1's menu takes an Attack or a spell there and KH1's Attack
+    step counts on from the cast's step (`0x1402A7510`, Checked (decomp)).
+  - KH1's quick Fire (Fire again during 0x3D) is KH1's own rule and still re-fires; each re-fire
+    is a step.
+- **Assumptions:** the window by share (KH1's casts have none); KH1's spell script, a task of its
+  own, casts whatever motion follows the cut. Not checked in game.
+
+### 4c.4 Gravity and Stop as the combo's finisher (t644)
+
+- The tester (same message): "for gravity and stop, there's a phenomenon in kh2 where those
+  magics count as a finisher so the combo row skips straight to the finisher, if you have a
+  finishing plus equipped you can combo into another finisher ... that would be applied for kh1
+  gravity and stop as well if the config is set to can combo". KH2 has no Gravity or Stop of its
+  own (its spells are Fire, Blizzard, Thunder, Cure, Magnet and Reflect); the rule is the
+  tester's.
+- Ground Gravity (0x3A) and Stop (0x3B), base Sora: on KH2's cast animation (their animation row
+  at KH2: Thunder's 62, Cure's 65) always, on KH1's own animation with Magic Combo KH2
+  (`formmagic::finisher_spell`):
+  - the cast is the combo's finisher: its step the combo's length (KH1's `+0xD4`), or one past the
+    count in a finisher's Finishing Plus window (`note_finisher_step`); taken at KH1's spell start
+    (`take_step` as a finisher: `combomods::cast_step`, `FINISHERS`); KH1's count 0 after it (the
+    combo ends) unless Finishing Plus leaves another finisher;
+  - no combo window on their KH2 cast slots (built as finisher casts, `kh2slots`), and the Attack
+    and spell checks take only their Finishing Plus window (`finisher_spell_window`): KH2's
+    Thunder finisher cast 63's (Gravity) or Cure's 68 (Stop) range 50, 42..78, placed by share of
+    the motion playing (**Assumption**), while `combomods::finisher_left`; KH1's combo window
+    there (`kh1_cast_window`), so the next finisher (an Attack: KH2's or KH1's picker's, as after a
+    finisher swing; a spell: a finisher cast) follows.
+- Not checked in game.
 
 ## 4d. KH2's stop at a cast (done: the tester's answer 2 (a), physics KH2; Drive Forms as they are)
 

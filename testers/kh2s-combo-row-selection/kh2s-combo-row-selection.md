@@ -33,6 +33,7 @@
 - [27. Assistant: Here's t637, and a question on your 2.](#^m27)
 - [28. Assistant: One more from the What is still missing(../what-is-still-mis](#^m28)
 - [29. Assistant: t641, the endless finishers. Found it. With Finishing Plus e](#^m29)
+- [30. Assistant: Thanks for checking in KH2, you were right and I was wrong a](#^m30)
 
 ---
 
@@ -830,6 +831,39 @@ go ahead
 
 ^m29
 
+
 just started up kh2 to verify kh2 does let you combo out of magic but there may not be a window like you said, currently if I use reflect for example the move doesn't let you combo and resets your combo queue, you can mix and match in kh2 what spells and attacks take a slot and currently, it seems to me that you can combo kh2 magic into each other faster than going from a magic into attack so I need you to look into it because its not 1:1 once you find out how it works properly apply the same logic to kh1 magic and put it in the config menu like I asked, also kh2 blizzard can't combo into anything at the moment for kh1 magics logic you just apply kh2s fire combo logic on the first shot and the repeated shot animation. for gravity and stop, there's a phenomenon in kh2 where those magics count as a finisher so the combo row skips straight to the finisher, if you have a finishing plus equipped you can combo into another finisher so I would like those magic's to have the same logic, that would be applied for kh1 gravity and stop as well if the config is set to can combo.
 
 go ahead
+
+> [!tip] Assistant
+> Thanks for checking in KH2, you were right and I was wrong about the windows. **t642, t643 and t644**, one each:
+>
+> - **t642, KH2's real combo window on its casts.** I looked again in the KH2 decomp. The "magic window" I'd read in KH2's files is really the same combo window an Attack uses, with a catch: each one names a motion, and it only opens while *that* motion is playing (Steam KH2 `0x14040D810`). Some casts carry copies of another cast's windows that never open on them: Reflect has Fire's, Cure has Thunder's. So in KH2, on the ground:
+>   - Fire: an Attack or a spell from frame 60;
+>   - Blizzard: from 36;
+>   - Thunder: from 42;
+>   - Reflect: 34 to 46;
+>   - Cure: nothing until it ends.
+>
+>   We read every one of those windows as "spells only, from its start". That's why magic came out of magic sooner than an Attack did, why Reflect never let you combo, and why Blizzard took no spell. Now our KH2 casts use exactly these windows for both Attacks and spells, and the combo goes on from the cast.
+> - **t643, Magic Combo (Combat > Magic, KH1 / KH2, default KH1).** At KH2, every grounded KH1 spell takes a slot in the combo, like KH2's casts. On KH1's animation they get KH2 Fire's window: it opens at the same point of KH1's cast as frame 60 is in KH2's Fire. That covers Fire's first shot and its repeated shot, plus Blizzard, Thunder, Cure and Aero. KH1's quick Fire still works as before: Fire again during the shot re-fires, and each re-fire takes a slot. Casts on KH2's animation keep that animation's own KH2 window (from t642).
+> - **t644, Gravity and Stop count as the finisher.** On the ground, on KH2's animation always, and on KH1's animation with Magic Combo at KH2. The cast jumps the combo straight to its finisher and nothing else follows it. With Finishing Plus left, another finisher can follow in a Finishing Plus window. KH2 has no Gravity or Stop to copy that window from, so I took it from the finisher version of the animation each one uses: KH2's Thunder finisher cast for Gravity, Cure's for Stop (42 to 78), at the same point of the cast.
+>
+> **Check:** the KH2 decomp (`0x14040D810` for the windows, `0x1403D6CA0` / `0x1403D6FC0` for what an Attack and a spell need) and your KH2 files for every cast's windows. **Not checked:** nothing tested in game. Assumptions: placing the windows on KH1's casts by the same point of the cast; Gravity's and Stop's Finishing Plus window; that KH1's spell still goes off if an Attack cuts its animation.
+>
+> Something else I found: in KH2, an **Attack** in a cast's window only continues the combo if the spell actually hit something (or with Combo Master); a spell can follow either way. Ours always lets the Attack continue after a cast. Question 1 is about that.
+>
+> Please test:
+> - KH2 Fire, Blizzard, Thunder, Cure and Reflect into an Attack and into another spell, and compare the timing with KH2;
+> - Magic Combo at KH2 with KH1's spells, including quick Fire into an Attack;
+> - Gravity and Stop mid-combo, with and without Finishing Plus.
+>
+> Log lines: "Magic Combo: KH2 Fire's combo window", "the combo's finisher: step", "Gravity / Stop as the combo's finisher: Finishing Plus window", "KH2 magic: the cast takes step".
+>
+> Questions:
+> 1. An Attack after a spell that missed: (a) KH2's rule, the combo only continues if the spell hit (or with Combo Master), otherwise you wait for the cast to end and start a new combo; or (b) keep it as now, always continuing?
+> 2. Gravity and Stop as finishers in the air: they're ground only for now, because KH2 has no air finisher casts. (a) leave it, or (b) make the air ones finishers too?
+
+^m30
+

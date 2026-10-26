@@ -536,7 +536,9 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
     // (KH2's finisher casts end the combo: `cast_follow`.)
     // (Ours too: Reflect's finisher cast, `kh1rows::Kind::CastFinisher`.)
-    let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()));
+    // (KH1's Gravity and Stop on the ground count as the combo's finisher, t644: no combo window,
+    // `formmagic::finisher_spell`.)
+    let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()) || super::formmagic::FINISHER_SPELL_REQUESTS.contains(&(request as u32)));
     // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
     // (A recoil, `RECOILS`, the same: KH1's reaction function asked for it.)
     let reaction = matches!(kind, Kind::HitReactions | Kind::Recoil);
@@ -1020,15 +1022,13 @@ fn roll_free(clip: &character_core::Clip) -> u32 {
 /// `+0x18C` bit 0x400; the combo goes on), the finisher window (range id 50, `+0x194` bit 0x20,
 /// with Finishing Plus left) or a free state (range ids 0 / 1 / 2; a new combo, count 1); the
 /// reaction-command window (range id 14) is read only for reaction-command rows (Checked
-/// (decomp)). Of Sora's casts only Blizzard's (59) has a combo window, from frame 36; none has a
-/// free state (Checked (files), `P_EX100.mset`). A spell follows only in the magic window (range
-/// id 35, `ComboMagic`: Fire 56 34..46 and from 60, Thunder 62 / Cure 65 from 42).
+/// (decomp)). Range id 35 is the combo window too, while the motion playing is the one it names
+/// (`combo_kind`, t642); none of Sora's casts has a free state (Checked (files), `P_EX100.mset`).
+/// A spell is taken in the same window (KH2's magic command, `0x1403D6FC0`).
 /// On KH1's side: the motion's combo window (type 5, `+0x1CC` bit 22, in which KH1's menu takes a
 /// command with the action flag still set, `0x1402A2EC0`, and KH1's Attack step `0x1402A7510`
-/// counts on from `+0x41`, Checked (decomp)) over KH2's combo window and its magic window (so the
-/// menu takes a spell there); `combat::command` refuses an Attack outside the combo window
-/// (`cast_attack_window`) and a spell outside the magic window (`cast_magic_window`). Outside
-/// both, KH1's Attack step waits for the cast's end and then starts a new combo (count 1), as
+/// counts on from `+0x41`, Checked (decomp)) over KH2's combo window; `combat::command` refuses an
+/// Attack (`cast_attack_window`) and a spell (`cast_magic_window`) outside it. Outside it, KH1's Attack step waits for the cast's end and then starts a new combo (count 1), as
 /// KH2's free state does. No "may be left" (type 0 clears the action flags, `0x14029D399`, and
 /// the stick would walk out of the cast, which KH2's doesn't). A fresh jump or Square ends the
 /// action flag for its own move only in a free state (`cast_cut_open`, `formmagic::cast_cut`):
@@ -1042,7 +1042,7 @@ fn cast_follow(clip: &character_core::Clip, finisher: bool) -> Vec<EventTrack> {
     let spans: Vec<(f32, f32)> = clip
         .windows
         .iter()
-        .filter(|w| matches!(w.kind, WindowKind::Combo | WindowKind::ComboMagic))
+        .filter(|w| combo_kind(clip, &w.kind))
         .map(|w| (w.start as f32, w.end.map_or(len, |e| e as f32).min(len)))
         .filter(|(a, b)| b > a)
         .collect();
@@ -1052,14 +1052,56 @@ fn cast_follow(clip: &character_core::Clip, finisher: bool) -> Vec<EventTrack> {
     vec![EventTrack::level(ks::COMBO, 0, &spans)]
 }
 
+/// A cast's window kind that is KH2's combo window on it (Steam KH2's range step `0x14040D810`,
+/// Checked (decomp)): range id 11 (`Combo`), or range id 35 naming this very motion
+/// (`ComboMagic(motion)`; its parameter is compared with the motion playing, so the copies of
+/// another motion's ranges a cast carries are inert: Reflect 71 has Fire's [56] from 60 and its own
+/// [71] 34..46, Cure 65 Thunder's [62] from 42, Checked (files) `P_EX100.mset`). Sora's ground casts
+/// then (60 Hz frames): Fire 56 from 60, Blizzard 59 from 36, Thunder 62 from 42, Reflect 71 34..46,
+/// Cure 65 none; KH2's Attack (with the press's "connected" or Combo Master) and spells
+/// (`0x1403D6FC0`: the magic command always with the window test on) are taken there alike
+/// (`0x1403D6CA0`). Before t642 every range 35 was taken as a spells-only window from its start,
+/// whatever its parameter (the tester, combo row selection after m29: "you can combo kh2 magic
+/// into each other faster than going from a magic into attack ... its not 1:1").
+fn combo_kind(clip: &character_core::Clip, k: &WindowKind) -> bool {
+    match *k {
+        WindowKind::Combo => true,
+        WindowKind::ComboMagic(m) => m == clip.motion,
+        _ => false,
+    }
+}
+
+/// KH2's finisher window (range id 50) on its motion `motion`, as shares of the motion's length
+/// (Thunder's finisher cast 63 and Cure's 68: 42..78, Checked (files)), for Gravity and Stop as
+/// the combo's finisher (`formmagic::finisher_spell_window`).
+pub fn finisher_share(motion: u16) -> Option<(f32, f32)> {
+    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let w = clip.windows.iter().find(|w| matches!(w.kind, WindowKind::Finisher))?;
+    let len = clip.length.max(1) as f32;
+    Some((w.start as f32 / len, w.end.map_or(len, |e| e as f32) / len))
+}
+
+/// Where KH2's combo window on its motion `motion` opens, as a share of the motion's length
+/// (`combo_kind`'s first frame; Fire 56: frame 60, Checked (files)), for KH1's own casts at the
+/// Magic Combo row (`formmagic::kh1_cast_window`).
+pub fn combo_share(motion: u16) -> Option<f32> {
+    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let from = clip.first(|k| combo_kind(clip, k))?;
+    (clip.length > 0).then(|| from as f32 / clip.length as f32)
+}
+
 /// Our cast slot playing on `actor`: whether an Attack may follow it now (KH2's combo window,
-/// range id 11, `WindowKind::Combo`; Steam KH2 `0x1403D6CA0`, Checked (decomp)). `None`: no cast
+/// `combo_kind`: range id 11, or range id 35 naming this motion; Steam KH2 `0x1403D6CA0`, Checked (decomp)). `None`: no cast
 /// of ours plays.
 pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
     let m = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))?;
+    // (Gravity and Stop, the combo's finisher: only their Finishing Plus window, t644.)
+    if let Some(open) = super::formmagic::finisher_spell_window(actor) {
+        return Some(open);
+    }
     let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
     let t: f32 = rd(actor + TIME_NOW);
-    Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| matches!(k, WindowKind::Combo)))
+    Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| combo_kind(clip, k)))
 }
 
 /// Our finisher cast playing on `actor` is in its Finishing Plus window now (the tester,
@@ -1094,15 +1136,18 @@ pub unsafe fn cast_cut_open(actor: usize) -> bool {
     t.is_finite() && t >= 0.0 && clip.free_at(t as u32)
 }
 
-/// Our cast slot playing on `actor`: whether a spell may follow it now (KH2's magic window,
-/// range id 35, `ComboMagic`, from its first frame; none: not during the cast). `None`: no cast
-/// of ours plays.
+/// Our cast slot playing on `actor`: whether a spell may follow it now (KH2's combo window on it,
+/// `combo_kind`: range id 11, or range id 35 naming this motion; none: not during the cast).
+/// `None`: no cast of ours plays.
 pub unsafe fn cast_magic_window(actor: usize) -> Option<bool> {
     let m = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))?;
+    if let Some(open) = super::formmagic::finisher_spell_window(actor) {
+        return Some(open);
+    }
     let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
     let t: f32 = rd(actor + TIME_NOW);
-    let from = clip.first(|k| matches!(k, WindowKind::ComboMagic));
-    Some(t.is_finite() && from.is_some_and(|f| t >= f as f32))
+    // (KH2's magic command takes the same combo window as its Attack, `combo_kind`; t642.)
+    Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| combo_kind(clip, k)))
 }
 
 /// One of Sora's motion sets with ours added (`docs/kh1-anim-slots.md` §2): KH1 binds a set onto
@@ -1510,6 +1555,8 @@ pub unsafe fn frame(actor: usize) {
     finisher_window(actor);
     // The same on KH1's own finishers at the combo style KH1 (`combomods::kh1_finisher_window`).
     super::combomods::kh1_finisher_window(actor);
+    // KH2 Fire's combo window on KH1's own casts at the Magic Combo row (`formmagic`).
+    super::formmagic::kh1_cast_window(actor);
     // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
     super::combomods::counter_window(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`): KH1 attack objects of

@@ -398,10 +398,9 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // A Drive form (page 2's Drive list, `drive`).
     let arg = ((full >> 8) & 0xFF) as u8;
     // During a KH2 cast on KH1's cast state an Attack (or an item) is taken only in the cast's
-    // combo window (range id 11, `kh2slots::cast_attack_window`; Steam KH2's Attack and command
-    // check `0x1403D6CA0`, Checked (decomp); of Sora's casts only Blizzard's has one, from 36): KH1's
-    // combo window there is also open over KH2's magic window (range id 35) for the spells
-    // (`kh2slots::cast_follow`). Refused as KH2 refuses it: nothing happens (the tester,
+    // combo window (range id 11, or range id 35 naming that motion, `kh2slots::cast_attack_window`;
+    // Steam KH2's Attack and command check `0x1403D6CA0`, Checked (decomp); Fire from 60, Blizzard
+    // from 36, Thunder from 42, Reflect 34..46, Cure none, t642). Refused as KH2 refuses it: nothing happens (the tester,
     // kh2-magic-and-reflect-native m9 answer 2 (a)). After the cast KH1's Attack step starts a new
     // combo, as KH2's free state does.
     // An Attack in a finisher cast's Finishing Plus window (range id 50, another finisher left)
@@ -447,9 +446,9 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // specials, summons) are KH1's as unmodded.
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && super::shared::active() {
         let drive = super::drive::on() && arg >= super::drive::FORM_ARG;
-        // During a KH2 cast on KH1's cast state a spell follows only from KH2's magic window
-        // (range id 35, `kh2slots::cast_magic_window`; anything else from its reaction-command
-        // window, `kh2slots::cast_follow`): KH2's rule, as KH1 refuses what it can't take.
+        // During a KH2 cast on KH1's cast state a spell follows only in KH2's combo window on it
+        // (range id 11, or range id 35 naming that motion, `kh2slots::cast_magic_window`, t642):
+        // KH2's rule, as KH1 refuses what it can't take.
         // (A finisher cast's Finishing Plus window takes a spell too, as KH2's `0x1403D6CA0`
         // does for its magic command: the next finisher, a finisher cast, `formmagic::note_step`.)
         if !drive && super::kh2slots::cast_magic_window(actor) == Some(false) && !super::kh2slots::cast_finisher_open(actor) {
@@ -538,6 +537,18 @@ unsafe fn command_step(actor: usize, dir: usize) {
             super::shared::want_kh2();
             cmd_log(format!("command {kind:#x} ({full:08x}) is KH2's: KH2 borrows him for it (shared states)"));
             return;
+        }
+        // KH1's own grounded cast at the Magic Combo row KH2: its step of the combo, worked out
+        // now (KH1's combo window still that of the move it comes out of), taken at the spell's
+        // start (`formmagic::kh1_cast_step`, `note_step` / `take_step`, as KH2's casts).
+        if !native && !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && super::formmagic::kh1_cast_step(arg as i32) {
+            let step = super::formmagic::note_step(actor, false);
+            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg}, Magic Combo KH2: step {:?} of the combo", step.map(|s| s.0)));
+        }
+        // Gravity and Stop on the ground: the combo's finisher (`formmagic::finisher_spell`).
+        if !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && (4..=5).contains(&arg) && super::formmagic::finisher_spell(0x36 + arg as u32) {
+            let step = super::formmagic::note_finisher_step(actor);
+            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}"));
         }
     }
     // An item used in KH1's own states: its use drawn with KH2's motion at Misc Animations KH2
