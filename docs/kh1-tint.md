@@ -155,6 +155,29 @@ once (pixels from KH1's DDS at `+0x68`, else the PKG's `-1c<n>.dds` read at star
 to hue 225°) with `0x1400F9F80`, and writes it into `+0x70`; out of the form KH1's goes back. A
 model loaded again (a new source) is left to KH1 and swapped afresh.
 
+## Memory: pixels on first need, one texture per slot and look (ram-use m1 answer 2 (a))
+
+- **Before**: at every start (with `drive` on) a thread read Sora's three HD textures from the PKG
+  and kept them decoded for the whole session (2 × 1024×1024 and 1 × 1024×512, 4 bytes a pixel:
+  about 10.5 MB), though they are only the fallback for when KH1's own DDS at `+0x68` doesn't fit.
+  **Checked (code)**.
+- **Now**: nothing is read at start. When a form needs a slot's texture and KH1's copy in memory
+  doesn't fit, that one slot is read from the PKG on a thread (`tint::pkg_pixels`; the swap waits
+  for it, KH1's colours meanwhile), recoloured in place (no second copy) and dropped once the GPU
+  texture is made. With KH1's copy in memory the PKG is never read. **Checked (code)**.
+  **Assumption**: how often KH1 still has its copy at `+0x68` in play isn't known (the log says
+  which: "(KH1's copy in memory)" or "(the PKG's)", "read from the PKG ... on first need").
+- **The leak**: our recoloured GPU textures were kept per source address, so every area change
+  (Sora's model loaded again: a new source) made new ones, and none was ever released (the mod has
+  no release call for a GX texture). **Checked (code)**. Now each is kept per slot and look and
+  used again for a later source of the same texture (name at `+0x14` and size): at most one per
+  slot and look for the session (6 here). The one exception stays as before: when the old source
+  goes away while it still holds ours (an area change mid-form), ours isn't used again, because KH1
+  may have released it with its texture, and a new one is made. **Assumption**: whether KH1
+  releases the object in `+0x70` with the source (then KH1's own original leaks instead) isn't
+  checked; releasing ours ourselves needs KH1's GX texture release function, not looked up yet.
+  These are GPU textures (VRAM, 4 MB a 1024² one), not process RAM.
+
 ## Per-form looks (stage 233)
 
 Each form's look recolours its own parts of the textures (`tint::ops`), as a swapped copy per

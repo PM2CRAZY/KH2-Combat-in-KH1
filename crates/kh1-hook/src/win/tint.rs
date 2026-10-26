@@ -16,13 +16,16 @@
 //! (the pause menu's Sora too).
 //!
 //! The pixels: the HD texture file KH1 keeps in memory (`+0x68`, a DDS), else read from the PKG
-//! (the model's remastered assets, `Kh1Install::read_remastered`), recoloured in the background.
+//! (the model's remastered assets, `Kh1Install::read_remastered`) on a thread the first time a
+//! form needs them, and dropped once its texture is made (the tester, ram-use m1 answer 2 (a)).
+//! Each recoloured texture is made once per slot and look and kept for later sources (a model
+//! loaded again), not made again for each.
 
 use super::addr::Rva;
 use super::{log, pose};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Mutex;
 
 /// The render state (per thread) and KH1's texture creator (`(R, &D3D12_RESOURCE_DESC, pixels,
 /// name, 0)` → GPU texture object, synchronous).
@@ -118,16 +121,95 @@ struct Pixels {
     bgra: Vec<u8>,
 }
 
-/// The slots' original pixels from the PKG (`None`: not read).
-static FROM_PKG: [OnceLock<Option<Arc<Pixels>>>; 3] = [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+/// A slot's original pixels from the PKG: read only when a form needs them and KH1's own copy in
+/// memory doesn't fit (`pkg_pixels`), and dropped once used (about 4 MB a 1024x1024 slot).
+enum FromPkg {
+    Idle,
+    Reading,
+    Ready(Pixels),
+    Failed,
+}
+
+static FROM_PKG: Mutex<[FromPkg; 3]> = Mutex::new([FromPkg::Idle, FromPkg::Idle, FromPkg::Idle]);
+
+/// Slot `k`'s PKG pixels if read (taken: the caller keeps them only as long as it needs them);
+/// else a read started on a thread (`None` meanwhile; the caller asks again next frame). `Err`:
+/// they can't be read.
+fn pkg_pixels(k: usize) -> Result<Option<Pixels>, ()> {
+    let Ok(mut g) = FROM_PKG.lock() else { return Ok(None) };
+    match std::mem::replace(&mut g[k], FromPkg::Idle) {
+        FromPkg::Ready(p) => Ok(Some(p)),
+        FromPkg::Failed => {
+            g[k] = FromPkg::Failed;
+            Err(())
+        }
+        FromPkg::Reading => {
+            g[k] = FromPkg::Reading;
+            Ok(None)
+        }
+        FromPkg::Idle => {
+            g[k] = FromPkg::Reading;
+            drop(g);
+            std::thread::spawn(move || {
+                let r = read_pkg(k);
+                if let Ok(mut g) = FROM_PKG.lock() {
+                    g[k] = match r {
+                        Some(p) => FromPkg::Ready(p),
+                        None => FromPkg::Failed,
+                    };
+                }
+            });
+            Ok(None)
+        }
+    }
+}
+
+/// Slot `k`'s HD texture from the PKG (the loader thread).
+fn read_pkg(k: usize) -> Option<Pixels> {
+    let install = match kh1_data::Kh1Install::locate(super::exe_dir()) {
+        Ok(i) => i,
+        Err(e) => {
+            log(&format!("form tint: KH1's files not found ({e})"));
+            return None;
+        }
+    };
+    let asset = format!("-1c{}.dds", SLOTS[k]);
+    match install.read_remastered(kh1_data::Source::Live, MODEL, &asset) {
+        Ok((name, bytes)) => match dds_bgra(&bytes) {
+            Some(p) => {
+                log(&format!("form tint: {MODEL} {name} read from the PKG ({}x{}), on first need", p.w, p.h));
+                Some(p)
+            }
+            None => {
+                log(&format!("form tint: {name} isn't a plain 32-bit DDS"));
+                None
+            }
+        },
+        Err(e) => {
+            log(&format!("form tint: {MODEL} {asset} not read from the PKG ({e})"));
+            None
+        }
+    }
+}
+
+/// One of our recoloured GPU textures: the source it was made from (name, size), and the texture.
+struct Made {
+    name: String,
+    w: u32,
+    h: u32,
+    texture: u64,
+}
 
 struct Swap {
     /// Per slot: the source texture swapped (its address), KH1's GPU texture to put back, and
     /// the look it wears.
     swapped: [Option<(usize, u64, Look)>; 3],
-    /// Our GPU texture for a source texture and a look (made once each).
-    ours: Option<HashMap<(usize, Look), u64>>,
-    /// Those we couldn't make (not tried again).
+    /// Our GPU texture for a slot and a look, made once and used again for every later source of
+    /// the same name and size (Sora's model loaded again by an area change: the same file).
+    /// Before, it was made per source address, so each area change made new ones and the old were
+    /// never released.
+    ours: Option<HashMap<(usize, Look), Made>>,
+    /// Those we couldn't make (not tried again): slot, look.
     failed: Vec<(usize, Look)>,
 }
 
@@ -240,50 +322,18 @@ fn dds_bgra(dds: &[u8]) -> Option<Pixels> {
     Some(Pixels { w, h, bgra })
 }
 
-fn recoloured(p: &Pixels, what: &str, k: usize, look: Look) -> Arc<Pixels> {
-    let mut p = Pixels { w: p.w, h: p.h, bgra: p.bgra.clone() };
+/// `p` recoloured for `look` (in place: the pixels are this one texture's, dropped after).
+fn recoloured(mut p: Pixels, what: &str, k: usize, look: Look) -> Pixels {
     let counts: Vec<usize> = ops(look, k).into_iter().map(|op| apply(&mut p, op)).collect();
     log(&format!("form tint ({look:?}): {what}, {}x{}, texels recoloured per step {counts:?}", p.w, p.h));
-    Arc::new(p)
+    p
 }
 
-/// At start: the HD textures from the PKG, recoloured (for when KH1 no longer keeps the file in
-/// memory).
+/// At start: only where the game is. Nothing is read now: the PKG's pixels are read the first
+/// time a form needs them (`pkg_pixels`), when KH1's own copy doesn't fit.
 pub fn install() {
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     BASE.store(base, Ordering::Relaxed);
-    if !super::settings::get().drive {
-        return;
-    }
-    std::thread::spawn(|| {
-        let install = match kh1_data::Kh1Install::locate(super::exe_dir()) {
-            Ok(i) => i,
-            Err(e) => {
-                log(&format!("Wisdom tint: KH1's files not found ({e})"));
-                return;
-            }
-        };
-        for (k, slot) in SLOTS.iter().enumerate() {
-            let asset = format!("-1c{slot}.dds");
-            let p = match install.read_remastered(kh1_data::Source::Live, MODEL, &asset) {
-                Ok((name, bytes)) => match dds_bgra(&bytes) {
-                    Some(p) => {
-                        log(&format!("form tint: {MODEL} {name} read from the PKG ({}x{})", p.w, p.h));
-                        Some(Arc::new(p))
-                    }
-                    None => {
-                        log(&format!("Wisdom tint: {name} isn't a plain 32-bit DDS"));
-                        None
-                    }
-                },
-                Err(e) => {
-                    log(&format!("Wisdom tint: {MODEL} {asset} not read from the PKG ({e})"));
-                    None
-                }
-            };
-            let _ = FROM_PKG[k].set(p);
-        }
-    });
 }
 
 /// Sora's model's source texture for mesh-table entry `entry` (`docs/kh1-tint.md`), if it is an
@@ -344,31 +394,44 @@ struct Desc {
     flags: u32,
 }
 
-/// Our recoloured GPU texture for `src` in `look` (made on first use).
+/// Our recoloured GPU texture for slot `k`'s `src` in `look` (made on first use; the one made
+/// before for this slot and look when `src` is the same texture, by name and size).
 unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64> {
-    if let Some(&t) = s.ours.as_ref().and_then(|o| o.get(&(src, look))) {
-        return Some(t);
-    }
-    if s.failed.contains(&(src, look)) {
-        return None;
-    }
     let (w, h) = (rd::<u16>(src + TEX_W) as u32, rd::<u16>(src + TEX_H) as u32);
     let name: String = (0..32).map(|i| rd::<u8>(src + 0x14 + i)).take_while(|&b| b != 0).map(|b| b as char).collect();
+    let made = s.ours.as_ref().and_then(|o| o.get(&(k, look)));
+    if let Some(m) = made.filter(|m| m.name == name && m.w == w && m.h == h) {
+        return Some(m.texture);
+    }
+    if s.failed.contains(&(k, look)) {
+        return None;
+    }
+    static OTHER: AtomicU32 = AtomicU32::new(0);
+    if let Some(m) = made.filter(|_| OTHER.fetch_add(1, Ordering::Relaxed) < 10) {
+        // (Another texture in this slot: not ours to reuse; ours made afresh.)
+        log(&format!("form tint ({look:?}): slot {k} is now {name} ({w}x{h}), ours was made for {} ({}x{})", m.name, m.w, m.h));
+    }
     // The pixels: the DDS KH1 keeps (the same file), else the PKG's.
     let dds = rd::<u64>(src + TEX_DDS) as usize;
     let mem = if dds > 0x10000 && super::crash::readable(dds + 128) && rd::<u32>(dds) == 0x2053_4444 {
         let (dh, dw) = (rd::<u32>(dds + 12), rd::<u32>(dds + 16));
         let len = 128 + (dw as usize) * (dh as usize) * 4;
-        (dw == w && dh == h && super::crash::readable(dds + len - 1)).then(|| dds_bgra(std::slice::from_raw_parts(dds as *const u8, len))).flatten().map(|p| recoloured(&p, &format!("{name} (KH1's copy in memory)"), k, look))
+        (dw == w && dh == h && super::crash::readable(dds + len - 1)).then(|| dds_bgra(std::slice::from_raw_parts(dds as *const u8, len))).flatten().map(|p| recoloured(p, &format!("{name} (KH1's copy in memory)"), k, look))
     } else {
         None
     };
-    let pixels = mem.or_else(|| FROM_PKG[k].get().cloned().flatten().filter(|p| p.w == w && p.h == h).map(|p| recoloured(&p, &format!("{name} (the PKG's)"), k, look)));
+    let pixels = match mem {
+        Some(p) => Some(p),
+        // (The PKG's, read on a thread now if not yet: nothing this frame, asked again next.)
+        None => match pkg_pixels(k) {
+            Ok(None) => return None,
+            Ok(Some(p)) if p.w == w && p.h == h => Some(recoloured(p, &format!("{name} (the PKG's)"), k, look)),
+            Ok(Some(_)) | Err(()) => None,
+        },
+    };
     let Some(p) = pixels else {
-        if FROM_PKG[k].get().is_some() {
-            log(&format!("form tint: no pixels for {name} ({w}x{h}; neither KH1's copy nor the PKG's fits)"));
-            s.failed.push((src, look));
-        }
+        log(&format!("form tint: no pixels for {name} ({w}x{h}; neither KH1's copy nor the PKG's fits)"));
+        s.failed.push((k, look));
         return None;
     };
     let desc = Desc { dimension: 3, alignment: 0, width: w as u64, height: h, depth: 1, mips: 1, format: 0x57, samples: 1, quality: 0, layout: 0, flags: 0 };
@@ -386,17 +449,20 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
     let t = create(r, &desc, p.bgra.as_ptr(), label.as_ptr(), 0);
     if t < 0x10000 {
         log(&format!("form tint: KH1 made no texture for {name} ({t:#x})"));
-        s.failed.push((src, look));
+        s.failed.push((k, look));
         return None;
     }
-    log(&format!("form tint ({look:?}): {name} ready ({w}x{h}, texture {t:#x}; KH1's {:#x})", rd::<u64>(src + TEX_GPU)));
-    s.ours.get_or_insert_with(HashMap::new).insert((src, look), t);
+    log(&format!("form tint ({look:?}): {name} ready ({w}x{h}, texture {t:#x}; KH1's {:#x}); its source pixels dropped", rd::<u64>(src + TEX_GPU)));
+    // (A texture made before for this slot and look, for another texture now gone, isn't
+    // released here: KH1's release for one isn't known (`docs/kh1-tint.md`).)
+    s.ours.get_or_insert_with(HashMap::new).insert((k, look), Made { name, w, h, texture: t });
     Some(t)
 }
 
 /// Each KH2 frame (`form`, the game thread): in a form with a look, Sora's textures swapped for
 /// its recoloured copies; out of it (revert, knocked out, another form), KH1's back. A model
-/// loaded again (an area change) is a new source: ours for the old one are left to KH1's freeing.
+/// loaded again (an area change) is a new source: ours are used again for it; only one that was
+/// in the old source when it went is dropped (KH1 may have released it with that source).
 pub unsafe fn refresh(actor: usize, look: Option<Look>) {
     if BASE.load(Ordering::Relaxed) == 0 || !super::settings::get().drive {
         return;
@@ -407,12 +473,14 @@ pub unsafe fn refresh(actor: usize, look: Option<Look>) {
         let want = look.filter(|l| !ops(*l, k).is_empty());
         if let Some((was, orig, l)) = s.swapped[k] {
             if want != Some(l) || src != Some(was) {
-                let ours = s.ours.as_ref().and_then(|o| o.get(&(was, l))).copied().unwrap_or(0);
+                let ours = s.ours.as_ref().and_then(|o| o.get(&(k, l))).map_or(0, |m| m.texture);
                 if src == Some(was) && rd::<u64>(was + TEX_GPU) == ours {
                     wr(was + TEX_GPU, orig);
                 } else if src != Some(was) {
+                    // (The old source went while it held ours: KH1 may have released ours with
+                    // it, so it isn't used again.)
                     if let Some(o) = s.ours.as_mut() {
-                        o.retain(|(t, _), _| *t != was);
+                        o.remove(&(k, l));
                     }
                 }
                 s.swapped[k] = None;
