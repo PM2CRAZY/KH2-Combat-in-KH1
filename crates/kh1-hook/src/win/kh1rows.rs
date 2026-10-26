@@ -157,8 +157,9 @@ pub struct Ours {
     /// that request's slot). 152, KH2's second swing, on KH1's second (row 11, 0xC9, slot 99), as it
     /// stood on that request before.
     pub template: Option<(usize, u32, usize)>,
-    /// A move of Valor Form's only (its arrival, motion 53 of `P_EX100_BTLF`): built from Valor's
-    /// moveset alone (`kh2slots::prepare`), never base Sora's.
+    /// A move of a Drive Form's only (its arrival, motion 53, and its stance, motion 6, of the
+    /// form's moveset: `P_EX100_BTLF`, `P_EX100_MAGF`): built from each form's moveset alone that
+    /// has a clip of it (`kh2slots::prepare`), never base Sora's.
     pub valor: bool,
 }
 
@@ -211,7 +212,7 @@ pub const NO_ROW: u8 = u8::MAX;
 /// his body, `P_EX100.mset`, Checked (files)) and Valor's arrival 53 (6 frames, guard and
 /// invulnerable all through, `P_EX100_BTLF.mset`, Checked (files)), their requests only, on KH1's
 /// ground swing as template (its sounds left out: KH2's own play, `kh2slots::tick`).
-pub const OURS: [Ours; 40] = [
+pub const OURS: [Ours; 41] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
@@ -259,11 +260,19 @@ pub const OURS: [Ours; 40] = [
     combo("Magnet Burst", 197, Kind::AirFinisher),
     Ours { name: "Drive", kh2_row: NO_ROW, motion: DRIVE_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: false },
     Ours { name: "Valor arrival", kh2_row: NO_ROW, motion: ARRIVE_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
+    // (A form's short stance after its arrival on the ground, motion 6 of the form's moveset: KH2's
+    // new form's first think `0x140405630` plays 53, then 6 with an 8-frame blend, then the idle;
+    // Checked (decomp). Built for every form run on KH1's states that has a clip of it:
+    // `P_EX100_BTLF` B010 15 frames at 30 fps, `P_EX100_MAGF` C010 20, both free (range id 2) all
+    // through; Checked (files).)
+    Ours { name: "Form stance", kh2_row: NO_ROW, motion: STANCE_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
 ];
 
 /// Sora's Drive motion and a form's arrival (`OURS`; `form::DRIVE_MOTION` / `ARRIVE_MOTION`).
 pub const DRIVE_MOTION: u16 = 52;
 pub const ARRIVE_MOTION: u16 = 53;
+/// A Drive Form's stance after its arrival on the ground (`OURS` "Form stance"; `form::STANCE_MOTION`).
+pub const STANCE_MOTION: u16 = 6;
 
 /// The Aerial Dodge's slot length (60 Hz frames): longer than any of its rises reaches its apex
 /// (KH2's MAX, 300 high: about 77 frames on KH2's gravity, 35 on KH1's), so the slot is still

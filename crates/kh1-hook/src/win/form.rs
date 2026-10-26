@@ -42,6 +42,12 @@ pub use super::formmagic::{element_sounds, package_spell, shots_step, LAST_PACKA
 
 pub const DRIVE_MOTION: u16 = 52;
 pub const ARRIVE_MOTION: u16 = 53;
+/// The form's short stance after its arrival on the ground (motion 6 of its moveset; `kh1rows`
+/// "Form stance", `native_arrive`).
+pub const STANCE_MOTION: u16 = super::kh1rows::STANCE_MOTION;
+/// KH2's blend into the stance (Steam KH2 `0x140405630`: `0x1403C8310 (motion, 6, 8.0, ...)`,
+/// then the idle queued with 0; Checked (decomp)).
+const STANCE_BLEND: f32 = 8.0;
 // (No revert motion: base Sora's motion 4, which the old revert played, is his fall loop (A004),
 // and left him in KH2's fall on the ground, the user.)
 /// Frames of Sora's Drive motion before the swap (its own runs 160; the user: "it should only
@@ -804,16 +810,38 @@ unsafe fn native_can_change(actor: usize) -> bool {
 /// One of our own requests (`kh1rows`) for `motion` on Sora: asked with KH1's action flag, KH1's
 /// idle (on the ground) or fall (in the air) queued after it, as KH1's own commands queue them.
 unsafe fn ask_own(actor: usize, motion: u16, air: bool) -> bool {
-    let Some(n) = super::kh1rows::by_motion(motion) else { return false };
-    let request = super::kh1rows::request(n);
-    if !super::kh1rows::installed() || !super::kh2slots::has(request as usize, motion) || !super::kh2slots::request_bound(actor, request as usize) {
-        return false;
-    }
+    ask_own_then(actor, motion, None, air)
+}
+
+/// Our request for `motion` when it has a slot bound on `actor` now (`kh1rows`, `kh2slots`).
+unsafe fn own_request(actor: usize, motion: u16) -> Option<u32> {
+    let request = super::kh1rows::request(super::kh1rows::by_motion(motion)?);
+    (super::kh1rows::installed() && super::kh2slots::has(request as usize, motion) && super::kh2slots::request_bound(actor, request as usize)).then_some(request)
+}
+
+/// `ask_own`, with `then` (a motion of ours with no action flag: the form's stance) queued between
+/// it and KH1's idle on the ground, as KH2's arrival queues motion 6 then the idle
+/// (`0x140405630`, Checked (decomp)). `then` is left out when it has no slot bound now. Returns
+/// whether `motion` was asked (and whether `then` was, in the log).
+unsafe fn ask_own_then(actor: usize, motion: u16, then: Option<u16>, air: bool) -> bool {
+    let Some(request) = own_request(actor, motion) else { return false };
     let base = super::takeover::game_base();
     let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
     let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
     set(actor, request | ACTION, 0.0);
-    queue(actor, QUEUED | if air { 6 } else { 0 }, 0.0);
+    match then.filter(|_| !air).and_then(|m| own_request(actor, m)) {
+        Some(next) => {
+            // (The action flag cleared as `motion` ends (bit 30, `0x14029F6E0`): the stance is free
+            // all through, KH2's range id 2, so the stick, a jump or an Attack leave it, as in
+            // KH2; its slot's "may be left" runs from frame 0, `kh2slots::kh1_tracks`. KH1's idle
+            // after it with no blend, as KH2's.)
+            queue(actor, QUEUED | next, STANCE_BLEND);
+            queue(actor, 0, 0.0);
+        }
+        None => {
+            queue(actor, QUEUED | if air { 6 } else { 0 }, 0.0);
+        }
+    }
     true
 }
 
@@ -919,14 +947,17 @@ unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
     // (Valor's slots on his requests from now: before its arrival is asked.)
     super::kh2slots::refresh();
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
-    let arrival = ask_own(actor, ARRIVE_MOTION, air);
+    // (On the ground the form's stance follows its arrival, then the idle: KH2's `0x140405630`
+    // with `+0xE10` 1, every form (`+0xDE0` 1..6), Checked (decomp).)
+    let arrival = ask_own_then(actor, ARRIVE_MOTION, Some(STANCE_MOTION), air);
+    let stance = arrival && !air && own_request(actor, STANCE_MOTION).is_some();
     // (In the air: held through it with no speed, KH2's ACTION_FLY with velocity 0, `arrival_held`.)
     if arrival && air {
         wr(actor + 0x2C, 0.0f32);
         wr(actor + 0x3C0, [0.0f32; 3]);
         ARRIVE_AIR.store(true, Ordering::Relaxed);
     }
-    log!(Forms, "{} (Lv{LEVEL}) on KH1's own states: its moves on his requests, KH2's numbers its own ({}), {} {}{}", kind.name(), kind.model(), kind.growth(), growth, if arrival { "; its arrival" } else { "" });
+    log!(Forms, "{} (Lv{LEVEL}) on KH1's own states: its moves on his requests, KH2's numbers its own ({}), {} {}{}", kind.name(), kind.model(), kind.growth(), growth, if stance { "; its arrival, then its stance (motion 6)" } else if arrival { "; its arrival" } else { "" });
 }
 
 /// The form's growth ability's level, as a name.

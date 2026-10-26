@@ -741,8 +741,34 @@ through its frames.
 plays (or its request waits to be applied); at its end the hold's end restarts the fall from rest,
 as KH2's `0x1403B4780` / hop of 0. KH1's fall request after it was already queued (`ask_own`).
 
-**Open:** on the ground KH2 plays Valor's motion 6 (B010) between the arrival and the idle; ours
-goes to the idle (Valor's 6 isn't baked: a new slot on a request of ours, one rebake).
+**The stance after the arrival on the ground (done, the tester's answer 3 (a) after m14: "On the
+ground, KH2 plays Valor's short stance motion (6) after the arrival, before the idle. Add it").**
+- **KH2 (Steam KH2 `0x140405630`, Checked (decomp)).** With `+0xE10` 1 (the change on the ground)
+  the new form's first think plays the arrival 53 (`0x1403C86A0`), queues motion 6 with a blend of
+  8.0 and then the idle 0 with none (`0x1403C8310`). The same branch runs for **every form**
+  (`+0xDE0` 1..6) and, with `+0xE10` 0, for a form started without the change (the same 53 → 6 →
+  0). In the air (`+0xE10` 2) there is no stance: the fall from rest (above).
+- **The clips (Checked (files)).** Valor `P_EX100_BTLF` motion 6 is B010, 15 frames at 30 fps (30
+  at 60 Hz), Wisdom `P_EX100_MAGF` C010, 20 (40); Master D010 9, Final E010 18, Limit A010 13. Each
+  is range id 2 (free) from 0 to its end (Wisdom's and Final's also 42, keep momentum), so in KH2 the
+  stick, a jump or an Attack leave it at any frame. Valor's carries a footstep trigger (2) at 12,
+  which a baked slot doesn't take (KH1's own foot events stay, §13.4 of `kh1-anim-baking.md`).
+  Anti's motion 6 is its idle (F000).
+- **Ours.** A row of ours, "Form stance" (`kh1rows::STANCE_MOTION`, form-only like the arrival:
+  `Ours::valor`), built for every form on KH1's states whose moveset has a clip of 6 (`kh2slots`
+  `form_ours`: Valor's and Wisdom's now). Its slot's "may be left" runs from frame 0 (KH2's free
+  range, `Leave::Kh2`). `form::native_arrive` on the ground asks the arrival with KH1's action flag,
+  queues the stance with bit 30 (KH1 clears the action flag as the arrival ends) and blend 8.0, then
+  KH1's idle with blend 0 (`ask_own_then`), the order and blends of KH2's. In the air nothing
+  changes. Logged "...; its arrival, then its stance (motion 6)". One rebake (two new slots).
+- **KH1 keeps it playing while he stands (Checked (decomp)).** KH1's ground motion step
+  (`0x1402A9740`, state 0) asks for the idle (`0x14029F7C0 (actor, 0, 10.0)`) only with no speed
+  **and an empty motion queue** (`+0x178` 0); the queue's next entry is taken off as it is applied
+  (`0x14029FC40`), so while the stance plays the idle is still queued and nothing asks over it. With
+  speed it asks for the walk / run, which empties the queue (`0x14029F7C0` sets `+0x178` 0): the
+  stick leaves the stance at once, as in KH2. The queue keeps the blend as given (`0x14029FA30`
+  `+0x184`), and the apply passes it on; 0.0 is a cut.
+- **Assumption.** KH1's blend counts 60 Hz frames as KH2's does (KH1's own reactions queue with 8.0).
 
 #### 7.4.4 Checked unchanged
 
