@@ -465,3 +465,38 @@ on a drawn clip (idle, landing, glide, the drawn casts) only ours does, as befor
 - `pose::play_for`'s landing (slot 11) stays only as the fallback.
 - Cost: none per frame; one more bake at load (26 frames).
 - Not checked: in game.
+
+## 12. Audit: what of base Sora is still drawn over KH1's pass (after §10, §11)
+
+Read from `pose::follow` / `follow_play` / `play_for`, `kh2slots` and `kh1rows` (**Checked
+(code)**). `follow` asks `kh2slots::kh2_motion(slot)` first, so every built slot of ours is
+KH1's own pass (`follow_baked`, nothing drawn) whatever else `follow` would have drawn for it.
+
+| Move | Now |
+|---|---|
+| Idle, walk, run | baked (§10, `CYCLES`) |
+| Jump, High Jump, fall, landing | baked (§7.2, §7.3, §11); KH1's apex slots 9 / 13 are never asked at Jump KH2 (its apex step is KH2's swap, §7.2) |
+| Ground and air combo, KH2's ability rows, Aerial Recovery, Aerial Dodge, Upper Slash / Finishing Leap / Horizontal Slash | baked (`SPECS`, `kh1rows::OURS`) |
+| Glide slow / fast / banks, hover | baked (`GLIDES`, `kh1rows` "Glide hover"): no version needed |
+| Guard press, guard repel, Counterguard, dodge roll, Quick Run and its stop | baked (`kh1rows`, `ROLL`) |
+| Casts (Fire, Blizzard, Thunder, Cure, Gravity, Stop, Aero; ground, air, finishers), Reflect | baked (`CASTS`, `CAST_FINISHERS`, `kh1rows`) |
+| Item use (self, partner) | baked (`ITEMS`, §7.1) |
+| Flinches (ground front / back and their alternates, air), clash recoils (ground, air) | baked (`REACTIONS`, `RECOILS`) |
+
+Still drawn, only as fallbacks: `play_for` (a slot whose bake failed or whose request isn't in a
+world's set), the item and Gravity / Stop / Aero branches of `follow` (a state KH1 casts nothing
+in), and KH2's controller pose (`takeover::POSE`) for the borrows left: a native start that
+didn't take (`shared` falls back to `SQUARE` / `AIR_JUMP` / `QUICK_RUN`), a KH2 command chosen in
+a state KH1 can't cast from (`combat::command` → `shared::want_kh2`), and Drive Forms (not base
+Sora: bakes are base Sora's only).
+
+Not baked, KH1's own animation at every style:
+- **KH1's knock-backs** (ground 0x4C / 0x4D, slots 65 / 66, 72 frames in place; air 0x50 / 0x51):
+  KH2's are two motions (the blow 16 / 18, then its landing 17 / 19 when he touches down), and
+  KH2's launch arc isn't KH1's yet (the hit-reactions thread's plan step 3). A question for the
+  tester.
+- **KH1's big clash recoil** (0x6F, slot 73): the tester's own pick, KH1's (recoil thread, answer 1).
+- **Ledges, vines, ladders, poles, bars, swimming, flight, the carpet and slider, Mermaid Kick,
+  summons, KH1's specials, field actions, cutscenes**: KH1-only moves. KH2 has a counterpart only
+  for the ledge (hang 7, 190 frames, and climb 8, 30 frames; `P_EX100.mset`, **Checked (files)**);
+  KH1's ledge slots aren't identified yet. A question for the tester.
