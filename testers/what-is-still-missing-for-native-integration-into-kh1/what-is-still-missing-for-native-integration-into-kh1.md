@@ -419,4 +419,10 @@ update what is still missing for native
 > 3. Valor next: (a) its Square moves, or (b) the left Keyblade's own hits as a second KH1 attack object?
 
 ^m12
+1. (b)
+2. (a)
+3. do both
 
+make sure when your moving these over to be native that you double check everything, we're unsure if we had a 1:1 implementation on our old systems so check the kh2 c decomp steam
+
+go ahead
