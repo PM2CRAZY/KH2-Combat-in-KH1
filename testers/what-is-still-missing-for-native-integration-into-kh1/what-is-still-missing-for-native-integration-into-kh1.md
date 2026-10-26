@@ -650,3 +650,15 @@ go ahead
 
 ^m15
 
+1. make it a toggle in the config menu under tweaks, you can either have the kh1 rule or the kh2 rule
+2. yes make sure this is part of magic combo in the config menu
+3. (a)
+4. wait on it and depreciate the old kh2 controller, we're not going to touch final form unless I change my mind
+5. kh2's rule
+6. (c)
+7. we'll wait on this one
+8. leave as is but once drive forms are in kh2s rules on drive gauge
+9. for vibration just allow kh1 in those situations, unless that gets rid of vibration on kh2s moves
+10. (b) but make a note of it for later
+
+go ahead
