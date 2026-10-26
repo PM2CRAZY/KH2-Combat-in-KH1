@@ -10,6 +10,7 @@
 - [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](#^m4)
 - [5. Assistant: Here's the list from my last message, updated with this roun](#^m5)
 - [6. Assistant: Here's this round for (b) and the first part of (c). Each on](#^m6)
+- [7. Assistant: Here's this round:](#^m7)
 
 ---
 
@@ -188,9 +189,30 @@ go ahead
 
 ^m6
 
+
 1. (b) if you have magic set to kh2 those magics should be 1:1, the reverse is true regardless of the animation.
 2. (a) if there's a more elegant implementation to let the animations work as flight air attacks e.g if the game has a different animation for sora when attacking in the flight state then we'll just give kh2 more animations, if not then find how it works and give kh2 the ability.
 3. (a) should always be built into the engine; I want to state that the goal for this project is to have as little as running in our code every frame to reduce the amount of bugs, performance issues, etc. So what that entails is having the game build the assets it needs from kh2 and putting it in its mod folder, it won't get destroyed when the game is shut off like it does now but instead is built from a players extracted data from kh1 and kh2. 
 4. not sure if this is updated let me know
    
    go ahead
+
+> [!tip] Assistant
+> Here's this round:
+>
+> - **4, Attack during KH1's own moves:** that one is already done on current testing. For base Sora in KH1's own states, an Attack during a KH1 spell, an item or KH1's roll goes to KH1's Attack step, which plays KH2's picks (t622 / t631); KH2's controller isn't involved. It can still happen in three cases: a KH1 command started while KH2's controller already had him (the borrows that are left: a KH2 spell in a state KH1 can't cast in, and Drive Forms), Aerial Base Combo KH2 if the air slots failed to build, and Epic. My list last time was out of date there, and the same goes for flight: Attack while flying was already KH1's own flight attack, not a borrow.
+> - **t648, flight Attack:** KH1 has no flight attack animation of its own. In flight its Attack step runs three flight rows that use the air combo's own swings and finisher, plus a flight step that keeps him moving at his flight speed and puts him back in flight after. So at Aerial Base Combo KH2, KH2's air combo pick is now made in flight exactly as in a jump, and plays on KH1's flight row with KH2's animation and attack data. KH1's flight case still moves him and returns him to flight. At Aerial Base Combo KH1 it's KH1's own flight attack, unchanged. Checked: the KH1 decomp (Attack step, air picker, row runner) and btltbl's rows. Not checked: in game, and whether our KH2 animations resolve in Neverland's own motion set while flying.
+> - **t649, magic where KH1 casts nothing:** KH1 casts only standing / walking (and in Atlantica), jumping / falling, and flying; anywhere else its cast step does nothing and costs no MP. KH1's Gravity, Stop and Aero with their animation set to KH2 were still borrowed by KH2's controller there. Now they follow KH1's rule whatever the animation, as you said: nothing is cast, same as KH1. Checked in the KH1 decomp.
+> - **KH2 spells there aren't built yet**, because I hit a conflict. Going by our port of KH2's controller, KH2 itself doesn't cast while gliding, during Quick Run, the dodge roll, the guard or the landing, and it has no ladders, poles, bars or slider. So "1:1 with KH2" in those states would be a refusal, not a cast. That rule came from the Epic exe and I haven't re-checked it on the Steam KH2 exe yet.
+> - **3, noted:** missing KH1 systems always get built into KH1's engine, and as little of our code as possible should run every frame, with the assets built once from your KH1 and KH2 files into the mod folder. I've added that to the design instructions (`docs/design-philosophy-instructions.md`). The asset work itself isn't started; I'd plan it with you step by step.
+>
+> Please test:
+> - In Neverland at Aerial Base Combo KH2: attack while flying, a full air combo, and an attack locked on a flying enemy. Look for KH2's swings, damage and finisher, and whether he stays in flight after. Log line: "flight Attack: KH2's … on KH1's flight row …".
+> - Gravity / Stop / Aero with their animation at KH2 while gliding or in Quick Run: nothing should be cast and no MP spent. Log line: "KH1's rule, no borrow".
+>
+> Questions:
+> 1. KH2 spells (Magic KH2, Reflect) in states where KH1 casts nothing: (a) refuse them the way KH2 does in the states KH2 has (glide, Quick Run, roll, guard, landing) and the way KH1 does in KH1-only states (ladders, poles, slider), after I re-check KH2's rule on the Steam exe; (b) let them end the glide / Quick Run into KH1's air or ground cast (not what KH2 does); or (c) something else?
+> 2. First step for the assets: (a) save the KH2 motion slots we bake at every start (our KH1-format copies of KH2's motions) into the mod folder, built from your own KH1 and KH2 files and rebuilt only when those change; or (b) start somewhere else (rows and attack data, or effects)?
+
+^m7
+

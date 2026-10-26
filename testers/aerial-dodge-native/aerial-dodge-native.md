@@ -8,6 +8,7 @@
 - [2. Assistant: Thanks! For question 1 I went with (a), the fall at KH2's ap](#^m2)
 - [3. Assistant: Thanks, and thanks for the traces! They showed exactly what ](#^m3)
 - [4. Assistant: Thanks! Done, (b) it is.](#^m4)
+- [5. Assistant: Thanks, you were right. KH2 does let you glide out of the do](#^m5)
 
 ---
 
@@ -123,6 +124,28 @@ go ahead
 
 ^m4
 
+
 I noticed that air dodge right now you seem to not be able to cancel it into a glide as fast as you can in kh2, can please check and see against the c steam decomp if its letting you? if you see the reason why then implement it.
 
 go ahead
+
+> [!tip] Assistant
+> Thanks, you were right. KH2 does let you glide out of the dodge sooner than we did.
+>
+> - **What KH2 does:** the glide needs the dodge's "air free" point, frame 4 of its animation. KH2 skips frame 1 when the dodge starts (it plays 0, 2, 3, 4), and it reads your buttons right after it steps the animation. So Square glides 3 frames after the dodge press.
+> - **What we did:** KH1 played the dodge 0, 1, 2, 3, 4 and reads your buttons before it steps the animation, so the glide only came 5 frames after the press. Your two earlier traces show exactly that.
+> - **t645:** the dodge now skips frame 1 like KH2, and KH1's "you may leave this move" point on the dodge comes one frame earlier to make up for the order KH1 reads input in. The glide (or anything else out of the dodge) now comes 3 frames after the press, same as KH2. The dodge's sound, guard and height aren't touched.
+>
+> Checked: KH2's glide start `0x1403A81F0`, its free check `0x1403BFB30`, the motion update `0x1403C6740` and the player's frame order `0x1403BFD30` in the Steam decomp (plus the player's vtable in the exe), the dodge's frames in your `P_EX100.mset`, and your traces. Not checked yet: in game. I'm assuming KH2 steps its animations by 1 each 60 fps frame, as for the glide.
+>
+> What I'd like tested (a trace helps):
+> 1. Dodge, then mash Square right away. The glide should come out almost at once, 3 frames after the dodge.
+> 2. Dodge with the stick neutral and with it held, then glide. Both should come out just as fast.
+> 3. Does the dodge still look and sound the same at its start, with no hitch on its first frames?
+>
+> One question: every other KH2 move on KH1's states (Aerial Recovery, the dodge roll, the casts, the combo's free frames) has the same one-frame lag from KH1 reading input before it steps the animation. Should I fix that for all of them too?
+> (a) yes, every KH2 move's free frame, as its own version;
+> (b) no, only the dodge for now.
+
+^m5
+

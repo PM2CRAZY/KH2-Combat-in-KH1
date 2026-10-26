@@ -11,6 +11,7 @@
 - [5. Assistant: Thanks for the trace and the log. They showed exactly what w](#^m5)
 - [6. Assistant: Thanks. (a) it is: after you let go, the fall keeps followin](#^m6)
 - [7. Assistant: Thanks for the trace and the log. I went through them frame ](#^m7)
+- [8. Assistant: Thanks for both traces. They showed two separate bugs, both ](#^m8)
 
 ---
 
@@ -221,6 +222,7 @@ go ahead
 
 ^m7
 
+
 I'm still seeing the same phenomenon, I sent you a trace. 
 
 I also noticed that neutral glide resets its animation wrong when setting jump to kh2 and doing a glide out of jump so I also sent a trace for that 
@@ -228,4 +230,21 @@ I also noticed that neutral glide resets its animation wrong when setting jump t
 if you find a fix for both just go ahead and implement it 
 
 go ahead
+
+> [!tip] Assistant
+> Thanks for both traces. They showed two separate bugs, both on our side:
+>
+> - **t646, the bank reset.** Every time you switch sides the stick passes his facing, so for one frame the pick is the straight glide (206 → 205 → 207). That second change arrives while KH1 is still blending into the first one, and KH1 handles that case differently from a normal change: it starts the new blend from the straight glide's first frame instead of from the pose you're seeing. That's the snap. KH2 never does that; every change blends from the pose on screen. Now, when a glide motion changes mid-blend, KH1 takes its normal path and blends from the pose on screen. The new bank still starts from its own first frame and blends in over 16 frames, as in KH2.
+>   - Checked: the KH1 decomp (which blend buffers each of its two paths uses), the KH2 decomp (it never chains a blend), your trace (the one-frame straight glides). That KH2 blends from the drawn pose comes from the original rewrite's rig, not re-read in the decomp this time.
+> - **t647, the neutral glide after a KH2 jump.** At Jump KH2 the fall before your glide is our KH2 fall, which loops from its frame 12 to 32. That loop setting was leaking onto whatever came next, so the hover (100 frames long) kept jumping back from 32 to 13. That's the wrong reset. Our fall's loop got put back at the exact moment KH1 was switching to the next motion; it now waits until the switch is done. A glide with the stick held, straight out of that fall, had the same problem and is fixed too.
+>   - Checked: the KH1 decomp (the order KH1 does things in when it starts a motion) and your trace (the hover looping 13..32, and the straight glide in your other trace looping cleanly with no KH2 fall before it). I didn't have a log from this session to confirm it line by line.
+>
+> Please test:
+> 1. Glide and rock the stick left and right, through the middle and around the edge. The lean should go from one side to the other without snapping to the straight glide first.
+> 2. With Jump on KH2, jump (and High Jump), start a glide with the stick neutral and hold the hover a few seconds. It should loop smoothly and never jump back mid-animation. Same with the stick held.
+> 3. A Select + Triangle trace plus the log would help. The new log line is "glide (native) motion ... into KH1's blend: a fresh blend from the pose on screen".
+>
+> One question: KH1 chains every animation change that comes in the middle of a blend this way, not just the glide's (attacks, landings, recoils). Should I (a) bring KH2's rule (always blend from the pose on screen) to all of them, as its own version, or (b) keep it to the glide for now?
+
+^m8
 

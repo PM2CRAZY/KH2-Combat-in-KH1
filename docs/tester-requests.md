@@ -17,6 +17,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [2. Assistant: Thanks! For question 1 I went with (a), the fall at KH2's ap](../testers/aerial-dodge-native/aerial-dodge-native.md#^m2)
   - [3. Assistant: Thanks, and thanks for the traces! They showed exactly what ](../testers/aerial-dodge-native/aerial-dodge-native.md#^m3)
   - [4. Assistant: Thanks! Done, (b) it is.](../testers/aerial-dodge-native/aerial-dodge-native.md#^m4)
+  - [5. Assistant: Thanks, you were right. KH2 does let you glide out of the do](../testers/aerial-dodge-native/aerial-dodge-native.md#^m5)
 - [Air physics for KH2 magic, Aerial Finish and Magnet Burst](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md)
   - [1. Assistant: I started this thread from your message in KH2 magic and Ref](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md#^m1)
   - [2. Assistant: Thanks! Going ahead with your answers: (b) for question 1, D](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md#^m2)
@@ -119,6 +120,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [5. Assistant: Thanks for the trace and the log. They showed exactly what w](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m5)
   - [6. Assistant: Thanks. (a) it is: after you let go, the fall keeps followin](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m6)
   - [7. Assistant: Thanks for the trace and the log. I went through them frame ](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m7)
+  - [8. Assistant: Thanks for both traces. They showed two separate bugs, both ](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m8)
 - [KH2 hit effects on enemies](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m1)
   - [2. Assistant: Thanks, built with your answers:](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m2)
@@ -248,6 +250,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m4)
   - [5. Assistant: Here's the list from my last message, updated with this roun](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m5)
   - [6. Assistant: Here's this round for (b) and the first part of (c). Each on](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m6)
+  - [7. Assistant: Here's this round:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m7)
 
 ---
 
