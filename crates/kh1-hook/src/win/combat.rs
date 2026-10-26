@@ -538,6 +538,13 @@ unsafe fn command_step(actor: usize, dir: usize) {
             cmd_log(format!("command {kind:#x} ({full:08x}) is KH2's: KH2 borrows him for it (shared states)"));
             return;
         }
+        // KH1's own grounded cast at the Magic Combo row KH2: its step of the combo, worked out
+        // now (KH1's combo window still that of the move it comes out of), taken at the spell's
+        // start (`formmagic::kh1_cast_step`, `note_step` / `take_step`, as KH2's casts).
+        if !native && !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && super::formmagic::kh1_cast_step(arg as i32) {
+            let step = super::formmagic::note_step(actor, false);
+            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg}, Magic Combo KH2: step {:?} of the combo", step.map(|s| s.0)));
+        }
     }
     // An item used in KH1's own states: its use drawn with KH2's motion at Misc Animations KH2
     // (`takeover::item_use_now`).

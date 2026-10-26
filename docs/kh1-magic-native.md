@@ -322,6 +322,31 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
     KH1's picker's at the KH1 setting); a spell there is the next finisher cast.
 - Not checked in game. Drive Forms left alone (the tester: they move to the new system later).
 
+### 4c.3 Magic Combo: KH1's own grounded casts in the combo (t643)
+
+- The tester (combo row selection after m29): "make a config for magic that allows you to combo
+  out of grounded magic like kh2, it should work for all grounded magic in the game ... for kh1
+  magics logic you just apply kh2s fire combo logic on the first shot and the repeated shot
+  animation". Config > KH1 in KH2 > Combat > Magic > Magic Combo (KH1 | KH2, ini `magic_combo`,
+  default `kh1`).
+- At KH2, base Sora, on the ground, not in a Drive Form:
+  - a cast of KH1's own spell (Fire, Blizzard, Thunder, Cure, Aero; KH1's script) takes its step
+    of the combo as KH2's casts do: `formmagic::note_step` at the command (`combat::command`),
+    `take_step` at KH1's spell start `0x14028F140` (KH1's count `+0x41` at the step,
+    "connected" `+0x50` set, `combomods::cast_step`);
+  - KH1's own cast animation on the ground (requests 0x36 Fire's first shot, 0x3D its second part
+    and repeated shot, 0x37, 0x38, 0x39, 0x3C; KH1's own slot, not one of our KH2 cast motions,
+    which keep KH2's own window, §4c.1) gets KH2 Fire's combo window: KH1's combo window
+    (instance `+0x14` bit 22, as `combomods::kh1_finisher_window`) from the share of KH1's motion
+    at which Fire 56's opens in KH2 (frame 60, `kh2slots::combo_share`) to its end
+    (`formmagic::kh1_cast_window`). KH1's menu takes an Attack or a spell there and KH1's Attack
+    step counts on from the cast's step (`0x1402A7510`, Checked (decomp)).
+  - KH1's quick Fire (Fire again during 0x3D) is KH1's own rule and still re-fires; each re-fire
+    is a step.
+- Gravity and Stop are left out (their rule, as finishers, is the next step).
+- **Assumptions:** the window by share (KH1's casts have none); KH1's spell script, a task of its
+  own, casts whatever motion follows the cut. Not checked in game.
+
 ## 4d. KH2's stop at a cast (done: the tester's answer 2 (a), physics KH2; Drive Forms as they are)
 
 - KH2's cast start (the controller's `cast`, the KH2 source): sideways speed 0, and in the air no

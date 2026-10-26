@@ -325,12 +325,15 @@ const COMBAT: [Item; 12] = [
 // (The tester, thread kh2-effects-in-kh1s-own-effect-system m19: a row per spell for what is
 // cast, "we'll remove ground magic"; each KH1 spell's animation in its own list, so both lists
 // keep KH1's full-size rows on screen.)
-const MAGIC: [Item; 6] = [
+const MAGIC: [Item; 7] = [
     Item::Set(kh(0x7F00_0180, 0x7F00_0181), Row::Style(Kind::Fire)),
     Item::Set(kh(0x7F00_0182, 0x7F00_0183), Row::Style(Kind::Blizzard)),
     Item::Set(kh(0x7F00_0184, 0x7F00_0185), Row::Style(Kind::Thunder)),
     Item::Set(kh(0x7F00_011F, 0x7F00_0120), Row::Style(Kind::Cure)),
     Item::Set(kh(0x7F00_018F, 0x7F00_0190), Row::Style(Kind::AirPhysics)),
+    // (The tester, combo row selection after m29: "make a config for magic that allows you to
+    // combo out of grounded magic like kh2".)
+    Item::Set(kh(0x7F00_0195, 0x7F00_0196), Row::Style(Kind::MagicCombo)),
     Item::Open(0x7F00_020D, 0x7F00_020E, List::MagicAnim),
 ];
 const MAGIC_ANIM: [Item; 6] = [
@@ -362,7 +365,7 @@ const MISC: [Item; 3] = [
 /// user, a version shown in the Config menu, to tell which build a PC runs).
 const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
-const STRINGS: [(u32, &str); 90] = [
+const STRINGS: [(u32, &str); 92] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -384,6 +387,8 @@ const STRINGS: [(u32, &str); 90] = [
     (0x7F00_0188, "Cure's cast animation, KH1's or KH2's.\nIt casts on that animation's cast frame."),
     (0x7F00_018F, "Air Physics"),
     (0x7F00_0190, "KH1's or KH2's physics while Sora casts in the air,\nfor every spell. Drive Forms keep their own."),
+    (0x7F00_0195, "Magic Combo"),
+    (0x7F00_0196, "KH2: KH1's grounded casts are a step of the combo; on KH1's\nanimation an Attack or a spell follows from KH2 Fire's window."),
     (0x7F00_0189, "Gravity"),
     (0x7F00_018A, "KH1's Gravity on KH1's or KH2's cast animation\n(KH2's Thunder cast)."),
     (0x7F00_018B, "Stop"),

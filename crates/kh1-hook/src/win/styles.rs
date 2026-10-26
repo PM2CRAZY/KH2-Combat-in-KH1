@@ -63,6 +63,13 @@ pub enum Kind {
     /// "change air magic to air physics kh1 | kh2 ... remove anything related to the main physics
     /// setting that has magic in it and put it in this new air setting").
     AirPhysics,
+    /// Whether base Sora's grounded casts of KH1's own spells take a step of the combo, and his
+    /// grounded casts on KH1's cast animation (KH1's spell, or KH2's on KH1's animation row) open
+    /// a combo window by KH2's Fire rule (KH2: on; KH1: KH1's casts as they are). The tester, combo row selection after
+    /// m29: "make a config for magic that allows you to combo out of grounded magic like kh2 ...
+    /// for kh1 magics logic you just apply kh2s fire combo logic on the first shot and the repeated
+    /// shot animation" (`formmagic::kh1_cast_window`).
+    MagicCombo,
 }
 
 impl Kind {
@@ -90,6 +97,7 @@ impl Kind {
         Kind::StopAnim,
         Kind::AeroAnim,
         Kind::AirPhysics,
+        Kind::MagicCombo,
     ];
 
     /// Its ini key.
@@ -119,6 +127,7 @@ impl Kind {
             Kind::StopAnim => "anim_stop",
             Kind::AeroAnim => "anim_aero",
             Kind::AirPhysics => "magic_air_physics",
+            Kind::MagicCombo => "magic_combo",
         }
     }
 
@@ -148,6 +157,7 @@ impl Kind {
             Kind::StopAnim => "Stop Animation",
             Kind::AeroAnim => "Aero Animation",
             Kind::AirPhysics => "Air Physics",
+            Kind::MagicCombo => "Magic Combo",
         }
     }
 
@@ -161,7 +171,7 @@ impl Kind {
 static KH2: [AtomicBool; COUNT] = [const { AtomicBool::new(false) }; COUNT];
 
 /// How many kinds there are (`Kind::EVERY`, the ini's `settings::styles`).
-pub const COUNT: usize = 23;
+pub const COUNT: usize = 24;
 static INIT: Once = Once::new();
 
 fn init() {

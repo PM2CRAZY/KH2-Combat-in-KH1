@@ -1069,6 +1069,15 @@ fn combo_kind(clip: &character_core::Clip, k: &WindowKind) -> bool {
     }
 }
 
+/// Where KH2's combo window on its motion `motion` opens, as a share of the motion's length
+/// (`combo_kind`'s first frame; Fire 56: frame 60, Checked (files)), for KH1's own casts at the
+/// Magic Combo row (`formmagic::kh1_cast_window`).
+pub fn combo_share(motion: u16) -> Option<f32> {
+    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let from = clip.first(|k| combo_kind(clip, k))?;
+    (clip.length > 0).then(|| from as f32 / clip.length as f32)
+}
+
 /// Our cast slot playing on `actor`: whether an Attack may follow it now (KH2's combo window,
 /// `combo_kind`: range id 11, or range id 35 naming this motion; Steam KH2 `0x1403D6CA0`, Checked (decomp)). `None`: no cast
 /// of ours plays.
@@ -1527,6 +1536,8 @@ pub unsafe fn frame(actor: usize) {
     finisher_window(actor);
     // The same on KH1's own finishers at the combo style KH1 (`combomods::kh1_finisher_window`).
     super::combomods::kh1_finisher_window(actor);
+    // KH2 Fire's combo window on KH1's own casts at the Magic Combo row (`formmagic`).
+    super::formmagic::kh1_cast_window(actor);
     // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
     super::combomods::counter_window(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`): KH1 attack objects of

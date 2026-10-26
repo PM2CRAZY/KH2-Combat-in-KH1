@@ -664,7 +664,65 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     if sora && (1..=6).contains(&spell) && super::kh2slots::CASTS.iter().any(|c| c.2 == request as usize) {
         time_kh1_spell(actor, spell as u8, request, r);
     }
+    // (Magic Combo KH2: KH1's own grounded cast takes its step of the combo, as KH2's casts do,
+    // `kh1_cast_step`; its step was noted at the command, `combat::command`.)
+    if sora && kh1_cast_step(spell) && KH1_WINDOW_REQUESTS.contains(&request) {
+        take_step(actor, request, false, false);
+    }
     r
+}
+
+/// KH1's grounded cast requests the Magic Combo row gives KH2 Fire's combo window
+/// (`kh1_cast_window`): Fire's first shot 0x36 and its second part / repeated shot 0x3D, Blizzard
+/// 0x37, Thunder 0x38, Cure 0x39, Aero 0x3C (KH1's request table, `xa_ex_0010.mset`, Checked
+/// (files); Gravity 0x3A and Stop 0x3B are left out).
+const KH1_WINDOW_REQUESTS: [u32; 6] = [0x36, 0x3D, 0x37, 0x38, 0x39, 0x3C];
+
+/// The Magic Combo row at KH2 (`styles::Kind::MagicCombo`; the tester, combo row selection after
+/// m29: "make a config for magic that allows you to combo out of grounded magic like kh2"): a
+/// grounded cast KH1 casts itself (its own spell `spell`, 0 Fire .. 6 Aero; not Gravity 4 or
+/// Stop 5) takes its step of the combo as KH2's casts do (`note_step` at the command,
+/// `take_step` at the spell's start: KH1's count `+0x41` at the step, "connected" `+0x50` set).
+/// Base Sora on KH1's states, not in a Drive Form.
+pub unsafe fn kh1_cast_step(spell: i32) -> bool {
+    matches!(spell, 0..=3 | 6) && super::styles::kh2(super::styles::Kind::MagicCombo) && !super::form::in_form() && super::shared::active()
+}
+
+/// Each frame Sora is posed (`kh2slots::frame`), the Magic Combo row at KH2: KH1's own cast
+/// animation playing on the ground (`KH1_WINDOW_REQUESTS`, KH1's own slot, not one of ours,
+/// whose KH2 cast motions carry KH2's own window, `kh2slots::combo_kind`) gets KH2 Fire's combo
+/// window: KH1's combo window this frame (the instance's `+0x14` bit 22, as
+/// `combomods::kh1_finisher_window` opens it) from the same share of KH1's motion as Fire 56's
+/// window starts in KH2's (60 of its frames, `kh2slots::combo_share`), to its end. KH1's command
+/// menu then takes an Attack or a spell there (`0x1402A2EC0`), and KH1's Attack step counts on
+/// from the cast's step (`0x1402A7510`, Checked (decomp)). KH1's quick Fire (Fire again while
+/// 0x3D plays) is KH1's own rule and still re-fires. KH2's Fire for every KH1 spell is the
+/// tester's rule ("for kh1 magics logic you just apply kh2s fire combo logic on the first shot and
+/// the repeated shot animation"); placing it by share is an **Assumption** (KH1's casts have no
+/// window of their own), and so is that KH1's spell script, a task of its own, casts whatever
+/// motion follows.
+pub unsafe fn kh1_cast_window(actor: usize) {
+    if actor < 0x10000 || actor != super::takeover::sora_actor() || !kh1_cast_step(0) || rd::<i32>(actor + 0x70) != 0 {
+        return;
+    }
+    let request = rd::<u32>(actor + 0x164) & 0xFFFF;
+    if !KH1_WINDOW_REQUESTS.contains(&request) || super::kh2slots::cast_playing(actor) {
+        return;
+    }
+    let Some(share) = super::kh2slots::combo_share(56) else { return };
+    let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
+    if !(t >= 0.0 && len > 0.0) || t / len < share {
+        return;
+    }
+    let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+    if inst < 0x10000 {
+        return;
+    }
+    wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!("Magic Combo: KH2 Fire's combo window on KH1's cast (request {request:#x}, time {t:.1} of {len:.1}, from {:.0}%)", share * 100.0));
+    }
 }
 
 /// KH1's command step starting `spell` for base Sora, the cast request asked for: with KH2's

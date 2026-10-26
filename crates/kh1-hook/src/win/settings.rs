@@ -177,6 +177,11 @@ anim_aero = kh1\r\n\
 ;   (KH1's 30 hop, half speed and fall; or KH2's 40 hop, speed kept, KH2's gravity and the cast's\r\n\
 ;   hover), whatever physics says; the Config menu's Magic list switches it\r\n\
 magic_air_physics = kh2\r\n\
+; magic_combo: kh1 or kh2, whether KH1's grounded casts (base Sora, not Gravity or Stop) take a\r\n\
+;   step of the combo and, on KH1's animation, let an Attack or a spell follow from KH2's Fire\r\n\
+;   window (kh2), or play as KH1's\r\n\
+;   (kh1); the Config menu's Magic list switches it\r\n\
+magic_combo = kh1\r\n\
 ; hit_reactions: kh1 or kh2, KH1's or KH2's reaction animations when base Sora is hit (KH1\r\n\
 ;   still runs the reaction: its no-damage time, voices, HUD and MP); the Config menu's Combat\r\n\
 ;   list switches it\r\n\
@@ -559,6 +564,7 @@ fn load(first: bool) -> Option<Settings> {
                 on(&text, "anim_aero", "kh2", magic && !kh1_cast[2]),
                 // (Air casts moved by the Physics row before: its value, KH2's without it.)
                 on(&text, "magic_air_physics", "kh2", crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()) == crate::kh1phys::Rule::Kh2),
+                on(&text, "magic_combo", "kh2", false),
             ]
         },
         knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),
