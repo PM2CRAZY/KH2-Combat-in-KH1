@@ -867,3 +867,7 @@ go ahead
 
 ^m30
 
+1.(a)
+2.(a) make them play the thunder finisher animation, also forgot to add aero to the list so also make it the same as gravity and stop
+
+go ahead
