@@ -57,7 +57,7 @@ impl Kh1Install {
     }
 
     pub fn key_table(&self) -> Result<KeyTable> {
-        KeyTable::from_executable(self.root.join(EXECUTABLE))
+        KeyTable::from_executable_cached(self.root.join(EXECUTABLE))
     }
 
     /// The `.hed` of one package, the backup copy first for [`Source::Original`].
@@ -81,7 +81,7 @@ impl Kh1Install {
             if !hed.is_file() {
                 continue;
             }
-            let archive = Archive::open(&hed)?;
+            let archive = Archive::open_cached(&hed)?;
             if archive.find(name).is_some() {
                 return archive.read_remastered(&keys, name, asset);
             }
@@ -97,7 +97,7 @@ impl Kh1Install {
             if !hed.is_file() {
                 continue;
             }
-            let archive = Archive::open(&hed)?;
+            let archive = Archive::open_cached(&hed)?;
             if archive.find(name).is_some() {
                 return archive.read(&keys, name);
             }

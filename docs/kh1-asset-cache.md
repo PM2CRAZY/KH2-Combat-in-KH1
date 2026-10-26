@@ -154,3 +154,16 @@ rebuilt. Code: `crates/kh1-hook/src/win/loadscreen.rs`. Steam only.
 2. The font texture being ready (if not, the lines would be missing or garbled; the hold itself
    doesn't depend on it).
 3. Epic: the same call sites need their Epic addresses (Steam only for now, as the other new hooks).
+
+## 3. Package reads at start: key and indexes read once (ram-use m1 answer 2 (a))
+
+Every file the mod reads from either game's packages (`kh1_data::Kh1Install::read` /
+`read_remastered`, `kh2_data::Install::read_file` / `read_any` / `read_remastered_any`) used to read
+the whole game executable again (KH2's 8.7 MB, KH1's 7.5 MB) and scan it for the package key, and
+read each package's `.hed` index again. **Checked (code)**. Now `KeyTable::from_executable_cached`
+and `Archive::open_cached` (`kh2_formats::egs`) keep the key per executable and each index per
+`.hed` for the rest of the run (a few hundred KB of index entries in all), read again only if the
+file's size or time changed. The first thread to ask reads it; threads asking meanwhile wait for
+that read instead of each doing their own. Cuts the start-up peak (several loader threads used to
+hold an executable each at once) and the start-up time. **Assumption**: the number of package reads
+at start (about a hundred) is from the code, not counted in game.

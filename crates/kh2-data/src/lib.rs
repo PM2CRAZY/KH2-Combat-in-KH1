@@ -113,13 +113,13 @@ impl Install {
     }
 
     pub fn key_table(&self) -> Result<KeyTable> {
-        KeyTable::from_executable(&self.executable)
+        KeyTable::from_executable_cached(&self.executable)
     }
 
     /// Reads one original-format file (e.g. `00battle.bin`) from `kh2_first`.
     pub fn read_file(&self, source: Source, name: &str) -> Result<Vec<u8>> {
         let keys = self.key_table()?;
-        let archive = Archive::open(self.archive_path(source, "kh2_first.hed"))?;
+        let archive = Archive::open_cached(self.archive_path(source, "kh2_first.hed"))?;
         archive.read(&keys, name)
     }
 
@@ -132,7 +132,7 @@ impl Install {
             if !hed.is_file() {
                 continue;
             }
-            let archive = Archive::open(&hed)?;
+            let archive = Archive::open_cached(&hed)?;
             if archive.find(name).is_some() {
                 return archive.read(&keys, name);
             }
@@ -148,7 +148,7 @@ impl Install {
             if !hed.is_file() {
                 continue;
             }
-            let archive = Archive::open(&hed)?;
+            let archive = Archive::open_cached(&hed)?;
             if archive.find(name).is_some() {
                 return archive.read_remastered_all(&keys, name);
             }

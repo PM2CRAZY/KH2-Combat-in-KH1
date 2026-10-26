@@ -352,8 +352,72 @@ impl Archive {
     }
 }
 
+/// A file's size and modification time: a cached read of it is used again only while these hold.
+type Stamp = (u64, Option<std::time::SystemTime>);
+
+fn stamp(p: &Path) -> Option<Stamp> {
+    let m = std::fs::metadata(p).ok()?;
+    Some((m.len(), m.modified().ok()))
+}
+
+/// Read once per path and process: the key table found in an executable and the opened indexes.
+/// Each read of a package file used to read the whole executable again (8.7 MB for KH2's, 7.5 MB
+/// for KH1's) and scan it for the table, and read the package's index again. The lock is held
+/// while one is worked out, so threads asking at once wait for the one read instead of each doing
+/// it. A file whose size or time changed is read again.
+static KEYS: std::sync::Mutex<Vec<(PathBuf, Stamp, KeyTable)>> = std::sync::Mutex::new(Vec::new());
+static INDEXES: std::sync::Mutex<Vec<(PathBuf, Stamp, std::sync::Arc<Archive>)>> = std::sync::Mutex::new(Vec::new());
+
+impl KeyTable {
+    /// [`KeyTable::from_executable`], read once per executable (see `KEYS`).
+    pub fn from_executable_cached(path: impl AsRef<Path>) -> Result<KeyTable> {
+        let path = path.as_ref();
+        let Some(st) = stamp(path) else { return KeyTable::from_executable(path) };
+        let mut g = KEYS.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, _, k)) = g.iter().find(|(p, s, _)| p == path && *s == st) {
+            return Ok(k.clone());
+        }
+        let k = KeyTable::from_executable(path)?;
+        g.retain(|(p, _, _)| p != path);
+        g.push((path.to_path_buf(), st, k.clone()));
+        Ok(k)
+    }
+}
+
+impl Archive {
+    /// [`Archive::open`], the index read once per `.hed` (see `KEYS`, `INDEXES`).
+    pub fn open_cached(path: impl AsRef<Path>) -> Result<std::sync::Arc<Archive>> {
+        let hed = path.as_ref().with_extension("hed");
+        let Some(st) = stamp(&hed) else { return Archive::open(&hed).map(std::sync::Arc::new) };
+        let mut g = INDEXES.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, _, a)) = g.iter().find(|(p, s, _)| *p == hed && *s == st) {
+            return Ok(a.clone());
+        }
+        let a = std::sync::Arc::new(Archive::open(&hed)?);
+        g.retain(|(p, _, _)| *p != hed);
+        g.push((hed, st, a.clone()));
+        Ok(a)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn index_read_once_until_it_changes() {
+        let dir = std::env::temp_dir().join(format!("egs-cache-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let hed = dir.join("x.hed");
+        std::fs::write(&hed, [0u8; 0x20]).unwrap();
+        let a = super::Archive::open_cached(&hed).unwrap();
+        let b = super::Archive::open_cached(dir.join("x.pkg")).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&a, &b));
+        assert_eq!(a.entries.len(), 1);
+        std::fs::write(&hed, [0u8; 0x40]).unwrap();
+        let c = super::Archive::open_cached(&hed).unwrap();
+        assert_eq!(c.entries.len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
 
     #[test]
