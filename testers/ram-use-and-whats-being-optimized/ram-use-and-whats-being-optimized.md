@@ -156,3 +156,6 @@ can you tell me where the files are stored? in my folder (E:\a\KINGDOM HEARTS -H
 
 ^m3
 
+do all three 
+
+go ahead
