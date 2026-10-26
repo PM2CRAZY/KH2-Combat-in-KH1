@@ -563,6 +563,9 @@ fn affine(m: &Mat4) -> bool {
 /// table as the game loads it.
 pub fn load_kh2() {
     std::thread::spawn(|| {
+        // (KH1's title waits while this builds something, `loadscreen`; released when this
+        // thread ends, however it ends.)
+        let _loading = super::loadscreen::Guard;
         let t = Instant::now();
         let r = (|| -> Result<Kh2, String> {
             let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
@@ -773,6 +776,7 @@ fn save_slot_cache(c: &crate::slotcache::Cache) {
     if !c.needs_write() {
         return;
     }
+    super::loadscreen::saving();
     match crate::slotcache::write(&slot_cache_dir(), &c.encode()) {
         Ok(p) => log(&format!("slot cache: written ({})", p.display())),
         Err(e) => log(&format!("slot cache: not written ({e}); baked again next start")),
