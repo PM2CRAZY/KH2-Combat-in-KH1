@@ -369,6 +369,21 @@ pub fn write(dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
     write_with(dir, |f| f.write_all(bytes))
 }
 
+/// The file's manifest and its blocks, each a part of `b` (kept as their one shared buffer, no
+/// copy per block): for other caches in the same folder and format (`tintcache`).
+#[allow(clippy::type_complexity)]
+pub fn decode_shared(b: Vec<u8>) -> Result<(Manifest, Vec<(u128, Block)>), String> {
+    let (m, ranges) = parse(&b)?;
+    let buf = Arc::new(b);
+    Ok((m, ranges.into_iter().map(|(k, range)| (k, Block { buf: buf.clone(), range })).collect()))
+}
+
+/// `manifest` and `blocks` written as `dir` / `name` (the same file layout, streamed, and the same
+/// temporary-then-rename write as `write`): for other caches in the same folder (`tintcache`).
+pub fn write_named_blocks<B: Deref<Target = [u8]>>(dir: &Path, name: &str, manifest: &Manifest, blocks: &[(u128, B)]) -> std::io::Result<PathBuf> {
+    write_named(dir, name, |f| encode_to(manifest, blocks, f))
+}
+
 use std::io::Write;
 
 fn write_with(dir: &Path, fill: impl FnOnce(&mut std::io::BufWriter<&mut std::fs::File>) -> std::io::Result<()>) -> std::io::Result<PathBuf> {

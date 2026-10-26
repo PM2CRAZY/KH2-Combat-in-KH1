@@ -6,7 +6,8 @@ screen showing what the extraction is doing before continuing into the menu, thi
 engine and be native, and not as a layer like the debug menu."
 
 Parts: the motion slot cache (built), the loading screen (built), package reads once (§3), the
-KH2 sound cache (built, §4) and the effect package cache (built, §5).
+KH2 sound cache (built, §4) the effect package cache (built, §5)
+and the Drive Form recolour cache (built, §6).
 Addresses are the Steam build's. Tags: **Checked (decomp)**, **Checked (exe)**, **Checked (code)**,
 **Assumption**.
 
@@ -318,3 +319,59 @@ in N s".
 
 Disk: about the DPXs' sizes plus their own images: some 5 to 15 MB in all, depending on which
 forms and spells have been played (one file per package, overwritten, never more than one each).
+
+## 6. The Drive Form recolour cache (built)
+
+What it saves: the recoloured copies of Sora's HD textures that `tint` makes for a form's look
+(Wisdom's blue, Valor's red; slots `-1c0`, `-1c1`, `-1c3`, five slot-and-look pairs in all), as
+B8G8R8A8 pixels ready for KH1's texture creator (`0x1400F9F80`). Before, each was recoloured
+again in every session the first time the form came (on the game thread when KH1's copy at `+0x68`
+was there, a 4 MB HSV pass per op; else after a PKG read on a thread). Code:
+`crates/kh1-hook/src/tintcache.rs` (pure, unit tested), used by `win/tint.rs`.
+
+Where: one file per look and slot in the same `kh1-kh2-cache` folder as the motion slots,
+`form-tint-wisdom-1c0.bin`, `form-tint-wisdom-1c1.bin`, `form-tint-wisdom-1c3.bin`,
+`form-tint-valor-1c1.bin`, `form-tint-valor-1c3.bin` (about 4 MB each for a 1024², 2 MB for the
+1024×512 shoes: some 16 MB on disk once both forms have been used). Same file layout as the slot
+cache (`slotcache::write_named` / `decode_shared`: manifest, one block, check hash, temporary file
+renamed).
+
+When it is used: the manifest holds the tint format (`tintcache::TINT_FORMAT`), the mod's version,
+the game build, the look, the slot, the source texture's name and size, the source DDS's content
+hash (its header and pixels), and where it was made from. A file is used when those fixed lines
+match and:
+- KH1 has its copy of the source in memory: its hash is the file's (hashed on the job's thread,
+  off a copy taken on the game thread);
+- KH1 has no copy in memory: the file was made from the PKG and KH1's PKG entry for
+  `xa_ex_0010.mdls` is the same (package, entry offset, stored and real lengths, the `.pkg`'s size
+  and modified time; the `.hed` index is the one `Archive::open_cached` already keeps). The PKG is
+  then not read at all.
+Anything else (no file, damaged, a mod update, a changed texture or package, a file made from
+KH1's copy when only the PKG is there) is rebuilt and the file written again. No ini key changes
+the recolour (`drive` only switches it on), so none is in the manifest. **Checked (code)**, unit
+tests in `tintcache.rs`.
+
+Filled lazily, not in the loader (§2's loading screen), on a thread the first time a form needs a
+slot and look:
+- nothing at start (t660's lean start kept): no PKG read, no hashing, no file read; a player who
+  never drives reads nothing of it;
+- at start the loader couldn't use KH1's own copy (Sora's model isn't loaded before the title), so
+  building there would mean reading the PKG's three textures (about 10.5 MB) on every rebuild,
+  and checking would mean touching the package at every start;
+- the work in a form is small and off the game thread: a cache file read (2-4 MB) and its check
+  hash, plus a hash of KH1's copy when there is one (an FNV pass, some tens of ms on a thread,
+  **Assumption**: not timed in game). KH1's colours show for those frames, as they did on a PKG read.
+  The game thread now only copies KH1's DDS (a memcpy, about 1 ms for 4 MB) and makes the GPU
+  texture; the recolour itself moved to the thread too.
+
+Memory: as t660. One copy of the pixels while a slot is made (the file's buffer, or the recolour's
+own), handed to KH1's texture creator and dropped right after; the file is written from that same
+buffer after the texture is handed out. Briefly also KH1's DDS copy while hashing / decoding (dropped
+before the recolour). **Checked (code)**.
+
+Log lines (Loading): "form tint cache: <name> (<look>, <file>) from <dir> in N ms", "form tint
+cache: <file> (<look>) made now (none yet | unusable (...) | changed: ...)", "recoloured in N ms",
+"written (<path>)" or "not written (<error>); made again next time".
+
+Not checked in game: the times above, and that the cached copy looks the same as before (it is the
+same bytes the recolour gives, stored and read back).

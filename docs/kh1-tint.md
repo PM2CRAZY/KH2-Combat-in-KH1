@@ -178,6 +178,18 @@ model loaded again (a new source) is left to KH1 and swapped afresh.
   checked; releasing ours ourselves needs KH1's GX texture release function, not looked up yet.
   These are GPU textures (VRAM, 4 MB a 1024² one), not process RAM.
 
+## The recolour kept in the mod folder (ram-use / what-is-still-missing: assets built once)
+
+- Each recoloured texture (slot and look) is kept as a file in `kh1-kh2-cache` beside the DLL
+  (`form-tint-<look>-1c<n>.bin`, `tintcache`; `docs/kh1-asset-cache.md` §6) and loaded from there
+  in later sessions instead of being recoloured again. It is checked against the source in hand:
+  KH1's copy in memory by its content hash, or, with none, the PKG entry it would be read from (so
+  the PKG isn't read). A mod update, a changed texture or package rebuilds it. **Checked (code)**.
+- All of a slot's work (cache check, else the PKG read and the recolour, then the file write) now
+  runs on a thread (`tint::start`); the game thread only copies KH1's DDS off its memory and makes
+  the GPU texture. KH1's colours show for the few frames it takes, also when KH1's copy is there
+  (before, that case recoloured at once on the game thread). **Checked (code)**; not timed in game.
+
 ## Per-form looks (stage 233)
 
 Each form's look recolours its own parts of the textures (`tint::ops`), as a swapped copy per

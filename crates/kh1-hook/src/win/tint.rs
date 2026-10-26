@@ -15,11 +15,13 @@
 //! in the form, KH1's put back after. Everything that samples the source follows the pointer
 //! (the pause menu's Sora too).
 //!
-//! The pixels: the HD texture file KH1 keeps in memory (`+0x68`, a DDS), else read from the PKG
-//! (the model's remastered assets, `Kh1Install::read_remastered`) on a thread the first time a
-//! form needs them, and dropped once its texture is made (the tester, ram-use m1 answer 2 (a)).
-//! Each recoloured texture is made once per slot and look and kept for later sources (a model
-//! loaded again), not made again for each.
+//! The pixels: built once into the mod folder (`tintcache`, `kh1-kh2-cache\form-tint-<look>-1c<n>.bin`)
+//! from the HD texture file KH1 keeps in memory (`+0x68`, a DDS), else from the PKG (the model's
+//! remastered assets, `Kh1Install::read_remastered`), and loaded from there afterwards; all of it
+//! on a thread the first time a form needs a slot and look, and dropped once its texture is made
+//! (the tester, ram-use m1 answer 2 (a) and the assets built once). Each recoloured texture is
+//! made once per slot and look and kept for later sources (a model loaded again), not made again
+//! for each.
 
 use super::addr::Rva;
 use super::{log, pose};
@@ -121,75 +123,173 @@ struct Pixels {
     bgra: Vec<u8>,
 }
 
-/// A slot's original pixels from the PKG: read only when a form needs them and KH1's own copy in
-/// memory doesn't fit (`pkg_pixels`), and dropped once used (about 4 MB a 1024x1024 slot).
-enum FromPkg {
-    Idle,
-    Reading,
-    Ready(Pixels),
+/// A recoloured texture for KH1's creator: width, height, B8G8R8A8 rows (the cache file's buffer,
+/// or the recolour's own: one copy either way).
+struct Ready {
+    w: u32,
+    h: u32,
+    bgra: crate::slotcache::Block,
+}
+
+/// The work for one slot and look, on a thread (`start`): the cache file checked, else the source
+/// recoloured and the file written. Its result is taken by the game thread (`ours_for`) to make the
+/// GPU texture, then dropped.
+enum Job {
+    Working,
+    Done(Ready),
     Failed,
 }
 
-static FROM_PKG: Mutex<[FromPkg; 3]> = Mutex::new([FromPkg::Idle, FromPkg::Idle, FromPkg::Idle]);
+static JOBS: Mutex<Vec<((usize, Look), Job)>> = Mutex::new(Vec::new());
 
-/// Slot `k`'s PKG pixels if read (taken: the caller keeps them only as long as it needs them);
-/// else a read started on a thread (`None` meanwhile; the caller asks again next frame). `Err`:
-/// they can't be read.
-fn pkg_pixels(k: usize) -> Result<Option<Pixels>, ()> {
-    let Ok(mut g) = FROM_PKG.lock() else { return Ok(None) };
-    match std::mem::replace(&mut g[k], FromPkg::Idle) {
-        FromPkg::Ready(p) => Ok(Some(p)),
-        FromPkg::Failed => {
-            g[k] = FromPkg::Failed;
-            Err(())
-        }
-        FromPkg::Reading => {
-            g[k] = FromPkg::Reading;
-            Ok(None)
-        }
-        FromPkg::Idle => {
-            g[k] = FromPkg::Reading;
-            drop(g);
-            std::thread::spawn(move || {
-                let r = read_pkg(k);
-                if let Ok(mut g) = FROM_PKG.lock() {
-                    g[k] = match r {
-                        Some(p) => FromPkg::Ready(p),
-                        None => FromPkg::Failed,
-                    };
-                }
-            });
-            Ok(None)
+/// Slot `k`'s job for `look`: `None` when none was started.
+fn take_job(k: usize, look: Look) -> Option<Job> {
+    let mut g = JOBS.lock().ok()?;
+    let i = g.iter().position(|(key, _)| *key == (k, look))?;
+    match &g[i].1 {
+        Job::Working => Some(Job::Working),
+        Job::Failed => Some(Job::Failed),
+        Job::Done(_) => Some(g.swap_remove(i).1),
+    }
+}
+
+fn set_job(k: usize, look: Look, j: Job) {
+    if let Ok(mut g) = JOBS.lock() {
+        match g.iter_mut().find(|(key, _)| *key == (k, look)) {
+            Some(e) => e.1 = j,
+            None => g.push(((k, look), j)),
         }
     }
 }
 
-/// Slot `k`'s HD texture from the PKG (the loader thread).
-fn read_pkg(k: usize) -> Option<Pixels> {
-    let install = match kh1_data::Kh1Install::locate(super::exe_dir()) {
-        Ok(i) => i,
-        Err(e) => {
-            log!(Animation, "form tint: KH1's files not found ({e})");
-            return None;
+fn look_name(look: Look) -> &'static str {
+    match look {
+        Look::Wisdom => "Wisdom",
+        Look::Valor => "Valor",
+    }
+}
+
+/// The cache's folder: beside the DLL (the mod's folder), `kh1-kh2-cache` (as the slot cache's).
+fn cache_dir() -> std::path::PathBuf {
+    std::path::Path::new(&super::dll_dir()).join("kh1-kh2-cache")
+}
+
+/// KH1's live PKG entry for Sora's model, as text (package, entry offset and lengths, the `.pkg`'s
+/// size and time): what a recolour made from the PKG is known by, so a later start needn't read it.
+fn pkg_entry(install: &kh1_data::Kh1Install) -> Option<String> {
+    for part in kh1_data::ARCHIVES {
+        let hed = install.image_dir.join(format!("{part}.hed"));
+        if !hed.is_file() {
+            continue;
         }
-    };
+        let archive = kh2_formats::egs::Archive::open_cached(&hed).ok()?;
+        if let Some(e) = archive.find(MODEL) {
+            let meta = std::fs::metadata(&archive.pkg_path).ok()?;
+            let time = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+            return Some(format!("{part} {:#x} {} {}; pkg {} bytes, time {time}", e.offset, e.stored_len, e.real_len, meta.len()));
+        }
+    }
+    None
+}
+
+/// Slot `k`'s HD texture file (the DDS) from the PKG (the job's thread).
+fn read_pkg(install: &kh1_data::Kh1Install, k: usize) -> Option<Vec<u8>> {
     let asset = format!("-1c{}.dds", SLOTS[k]);
     match install.read_remastered(kh1_data::Source::Live, MODEL, &asset) {
-        Ok((name, bytes)) => match dds_bgra(&bytes) {
-            Some(p) => {
-                log!(Animation, "form tint: {MODEL} {name} read from the PKG ({}x{}), on first need", p.w, p.h);
-                Some(p)
-            }
-            None => {
-                log!(Animation, "form tint: {name} isn't a plain 32-bit DDS");
-                None
-            }
-        },
+        Ok((name, bytes)) => {
+            log!(Animation, "form tint: {MODEL} {name} read from the PKG, on first need");
+            Some(bytes)
+        }
         Err(e) => {
             log!(Animation, "form tint: {MODEL} {asset} not read from the PKG ({e})");
             None
         }
     }
+}
+
+/// Starts slot `k`'s job for `look` on a thread: `mem` is KH1's copy of the source DDS (copied off
+/// the game's memory), if it fits.
+fn start(k: usize, look: Look, name: String, w: u32, h: u32, mem: Option<Vec<u8>>) {
+    set_job(k, look, Job::Working);
+    std::thread::spawn(move || {
+        let t = std::time::Instant::now();
+        let d = crate::tintcache::Desc { look: look_name(look).into(), slot: SLOTS[k], name, w, h, build: format!("{:?}", super::addr::Build::current()) };
+        let Some((ready, store)) = build(k, look, &d, mem, t) else {
+            set_job(k, look, Job::Failed);
+            return;
+        };
+        // (Handed to the game thread first; the file written after, from the same buffer.)
+        let bgra = ready.bgra.clone();
+        set_job(k, look, Job::Done(ready));
+        if let Some((source, origin)) = store {
+            let dir = cache_dir();
+            match crate::tintcache::store(&dir, &d, source, &origin, &bgra) {
+                Ok(p) => log!(Loading, "form tint cache: written ({})", p.display()),
+                Err(e) => log!(Loading, "form tint cache: {} not written ({e}); made again next time", d.file_name()),
+            }
+        }
+    });
+}
+
+/// The job's work: the cached file if it matches, else the recolour (with what to write).
+#[allow(clippy::type_complexity)]
+fn build(k: usize, look: Look, d: &crate::tintcache::Desc, mem: Option<Vec<u8>>, t: std::time::Instant) -> Option<(Ready, Option<(u128, crate::tintcache::Origin)>)> {
+    use crate::tintcache::{Key, Origin};
+    let install = match kh1_data::Kh1Install::locate(super::exe_dir()) {
+        Ok(i) => Some(i),
+        Err(e) => {
+            log!(Animation, "form tint: KH1's files not found ({e})");
+            None
+        }
+    };
+    let key = match &mem {
+        Some(dds) => Some(Key::Content(crate::tintcache::source_hash(dds, d))),
+        None => install.as_ref().and_then(pkg_entry).map(Key::Pkg),
+    };
+    let dir = cache_dir();
+    if let Some(key) = &key {
+        match crate::tintcache::load(&dir, d, key) {
+            Ok(bgra) => {
+                log!(Loading, "form tint cache: {} ({look:?}, {}) from {} in {:.0} ms", d.name, d.file_name(), dir.display(), t.elapsed().as_secs_f32() * 1000.0);
+                return Some((Ready { w: d.w, h: d.h, bgra }, None));
+            }
+            Err(why) => log!(Loading, "form tint cache: {} ({look:?}) made now ({why})", d.file_name()),
+        }
+    }
+    // Not cached: KH1's copy, else the PKG's.
+    let (dds, origin) = match mem {
+        Some(m) => (m, Origin::Memory),
+        None => {
+            let dds = read_pkg(install.as_ref()?, k)?;
+            let origin = match key {
+                Some(Key::Pkg(id)) => Origin::Pkg(id),
+                // (No PKG entry known: made, not cached.)
+                _ => Origin::Pkg(String::new()),
+            };
+            (dds, origin)
+        }
+    };
+    let source = crate::tintcache::source_hash(&dds, d);
+    let what = match origin {
+        Origin::Memory => format!("{} (KH1's copy in memory)", d.name),
+        Origin::Pkg(_) => format!("{} (the PKG's)", d.name),
+    };
+    let Some(p) = dds_bgra(&dds) else {
+        log!(Animation, "form tint: {what} isn't a plain 32-bit DDS");
+        return None;
+    };
+    drop(dds);
+    if p.w != d.w || p.h != d.h {
+        log!(Animation, "form tint: {what} is {}x{}, not {}x{}", p.w, p.h, d.w, d.h);
+        return None;
+    }
+    let p = recoloured(p, &what, k, look);
+    let store = match &origin {
+        Origin::Pkg(id) if id.is_empty() => None,
+        _ => Some((source, origin)),
+    };
+    log!(Loading, "form tint cache: {} ({look:?}) recoloured in {:.0} ms", d.name, t.elapsed().as_secs_f32() * 1000.0);
+    Some((Ready { w: p.w, h: p.h, bgra: crate::slotcache::Block::new(p.bgra) }, store))
 }
 
 /// One of our recoloured GPU textures: the source it was made from (name, size), and the texture.
@@ -411,28 +511,25 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
         // (Another texture in this slot: not ours to reuse; ours made afresh.)
         log!(Animation, "form tint ({look:?}): slot {k} is now {name} ({w}x{h}), ours was made for {} ({}x{})", m.name, m.w, m.h);
     }
-    // The pixels: the DDS KH1 keeps (the same file), else the PKG's.
-    let dds = rd::<u64>(src + TEX_DDS) as usize;
-    let mem = if dds > 0x10000 && super::crash::readable(dds + 128) && rd::<u32>(dds) == 0x2053_4444 {
-        let (dh, dw) = (rd::<u32>(dds + 12), rd::<u32>(dds + 16));
-        let len = 128 + (dw as usize) * (dh as usize) * 4;
-        (dw == w && dh == h && super::crash::readable(dds + len - 1)).then(|| dds_bgra(std::slice::from_raw_parts(dds as *const u8, len))).flatten().map(|p| recoloured(p, &format!("{name} (KH1's copy in memory)"), k, look))
-    } else {
-        None
-    };
-    let pixels = match mem {
-        Some(p) => Some(p),
-        // (The PKG's, read on a thread now if not yet: nothing this frame, asked again next.)
-        None => match pkg_pixels(k) {
-            Ok(None) => return None,
-            Ok(Some(p)) if p.w == w && p.h == h => Some(recoloured(p, &format!("{name} (the PKG's)"), k, look)),
-            Ok(Some(_)) | Err(()) => None,
-        },
-    };
-    let Some(p) = pixels else {
-        log!(Animation, "form tint: no pixels for {name} ({w}x{h}; neither KH1's copy nor the PKG's fits)");
-        s.failed.push((k, look));
-        return None;
+    // The pixels: from the cache, else recoloured from the DDS KH1 keeps (the same file) or the
+    // PKG's, on a thread (`start`; KH1's colours meanwhile, asked again next frame).
+    let p = match take_job(k, look) {
+        None => {
+            let dds = rd::<u64>(src + TEX_DDS) as usize;
+            let len = 128 + (w as usize) * (h as usize) * 4;
+            let fits = dds > 0x10000 && super::crash::readable(dds + 128) && rd::<u32>(dds) == 0x2053_4444 && rd::<u32>(dds + 12) == h && rd::<u32>(dds + 16) == w && super::crash::readable(dds + len - 1);
+            // (Copied off KH1's memory here, on the game thread: KH1 may release it meanwhile.)
+            let mem = fits.then(|| std::slice::from_raw_parts(dds as *const u8, len).to_vec());
+            start(k, look, name, w, h, mem);
+            return None;
+        }
+        Some(Job::Working) => return None,
+        Some(Job::Done(p)) if p.w == w && p.h == h => p,
+        Some(Job::Done(_)) | Some(Job::Failed) => {
+            log!(Animation, "form tint: no pixels for {name} ({w}x{h}; neither KH1's copy nor the PKG's fits)");
+            s.failed.push((k, look));
+            return None;
+        }
     };
     let desc = Desc { dimension: 3, alignment: 0, width: w as u64, height: h, depth: 1, mips: 1, format: 0x57, samples: 1, quality: 0, layout: 0, flags: 0 };
     let base = BASE.load(Ordering::Relaxed);
