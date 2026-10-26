@@ -123,3 +123,6 @@ go ahead
 
 ^m4
 
+I noticed that air dodge right now you seem to not be able to cancel it into a glide as fast as you can in kh2, can please check and see against the c steam decomp if its letting you? if you see the reason why then implement it.
+
+go ahead
