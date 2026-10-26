@@ -204,6 +204,9 @@ static TRAIL_ID: AtomicU32 = AtomicU32::new(u32::MAX);
 /// filled this Valor.
 static FAKE: AtomicUsize = AtomicUsize::new(0);
 static FAKE_INSTANCE_H: AtomicU32 = AtomicU32::new(0);
+/// Our owner copy's own handle (0 when it doesn't resolve): `lefthits` puts it in its attack
+/// object's bone-source actor (`+0x90`) so KH1's builder lays the blade on the left Keyblade.
+static FAKE_ACTOR_H: AtomicU32 = AtomicU32::new(0);
 static FAKE_WEAPON_H: AtomicU32 = AtomicU32::new(0);
 /// The left Keyblade's weapon row (0: unknown; the right one's is used).
 static LEFT_ROW: AtomicUsize = AtomicUsize::new(0);
@@ -403,6 +406,13 @@ pub fn left_owner() -> Option<usize> {
         return None;
     }
     unsafe { fill_owner() }.then(|| FAKE.load(Ordering::Relaxed)).filter(|&f| f != 0)
+}
+
+/// `left_owner`'s handle (KH1's 32-bit handle of our owner copy, filled now), for KH1's own code
+/// that takes the bone-source actor by handle (`lefthits`: an attack object's `+0x90`).
+pub fn left_owner_handle() -> Option<u32> {
+    left_owner()?;
+    Some(FAKE_ACTOR_H.load(Ordering::Relaxed)).filter(|&h| h != 0)
 }
 
 /// KH1's loader is done with our file (game thread, KH1's loader task).
@@ -898,6 +908,8 @@ unsafe fn fill_owner() -> bool {
         }
         let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_RVA);
         let (ih, mh, wh) = (to_handle(fake + FAKE_INSTANCE), to_handle(fake + FAKE_MATS), to_handle(fake + FAKE_WEAPON));
+        let ah = to_handle(fake);
+        FAKE_ACTOR_H.store(if super::pose::ptr(ah) == fake { ah } else { 0 }, Ordering::Relaxed);
         if super::pose::ptr(ih) != fake + FAKE_INSTANCE || super::pose::ptr(mh) != fake + FAKE_MATS || super::pose::ptr(wh) != fake + FAKE_WEAPON {
             log_n(&N, 3, || format!("trail: handles of its owner don't resolve ({ih:#x} {mh:#x} {wh:#x}): no trail"));
             TRAIL_HOOKED.store(false, Ordering::Relaxed);

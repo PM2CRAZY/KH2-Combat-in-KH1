@@ -420,18 +420,109 @@ window on his body.
   re-arms the object with KH1's re-arm (`rehit::new_attack`) and starts KH2's sweep afresh; the
   window's data goes on it. Re-hits within an attack by the window's interval: `rehit` (the one
   path), through `bodyhits::atkp`.
-- KH1's pass builds its entries through t638's hook (`0x1402B3800`): the open window's group of
-  KH2's weapon shapes, laid along the left Keyblade as drawn, from KH1's grip bone (280) toward the
-  blade's tip (KH1's blade point `0x30` at t 1, the left Keyblade's own blade range), both read
-  with KH1's bone point `0x14029EB20` on `leftblade`'s owner copy (Sora's matrices moved onto the
-  left Keyblade); KH2's sweep between frames (`combat_core::AttackVolume`); each entry tested with
-  KH1's `0x1402B3BE0` (bodies, and attack against attack: KH1's clash / guards as for the right
-  blade). Contact, record, damage, reaction, spark and sound are KH1's.
-- **Assumptions:** KH2's distances along bone 2 are laid along KH1's grip-to-tip line in KH1 units
-  unscaled (as the body shapes), whatever the Keyblade's length; with the left Keyblade not drawn
-  (`valor_left_blade = off`, model not loaded) its windows are placed on the right Keyblade.
-  KH1 time in our slot = KH2 frame (as everywhere). The left object has no KH1 wall test (as the
-  body windows; the right blade's walls are `walls`'). Not checked in game.
-- **Still open:** the right Keyblade still hits with KH1's row sphere (its data's radius, KH1's blade
-  range), not KH2's group shapes above (groups 3..7 are far wider: Valor's 155 finisher reaches
-  380). Valor's guard windows on the left Keyblade (42 / 155, ATKP 162) are unchanged.
+- (Until the "fit KH1" change below: KH2's weapon-model group spheres laid along the left blade by
+  our own entries in t638's hook, with our own sweep. Gone.)
+
+**Both Keyblades' shapes are KH1's own (after m13).** The tester (what-is-still-missing, after
+m13): "1. it should fit kingdom hearts 1 in this situation for both keyblades", "2. the keyblade
+should behave exactly like kh1's keyblade so make sure it scales by keyblade", "for 2nd keyblade it
+should behave 1:1 with how the main keyblade works". So KH2's windows, ATKPs and re-hit timing stay
+(which window is open, its damage / reaction / re-hit), and the **shape** each blade hits with is
+KH1's Keyblade's, built by KH1 itself. The right Keyblade already is (Sora's KH1 row object, made by
+KH1's row maker; nothing of ours touches its shape). The left one now gets the same.
+
+How KH1 builds its Keyblade object (Steam KH1, Checked (decomp) unless marked):
+- Data (Sora's swing rows in `btltbl.bin`, 0x70 bytes): bone `+0x10` (`0x30`, the blade), blade
+  range `+0x54` / `+0x58` and radius `+0x5C`, all floats (`+0x5C` read with `mulss` / `movss` at
+  `0x1402B2FD5..0x1402B2FF1`, Checked (exe); the t680 body-window data wrote it as an int, harmless
+  there because our hook gave those objects their shapes).
+- `0x1402B2DC0 (actor, hit bit, data)`, the constructor: with a bone (data `+0x10` >= 0) the object
+  is position kind 1 (`+0` bits `| 9`), bone `+0x20`, range `+0x24` / `+0x28` from the data, radius
+  `+0xC` = data `+0x5C` (times the actor's scale `+0x40` when its `+0x374` has `0x2000`), and both
+  the owner `+0x34` and the **bone-source actor `+0x90`** are the maker's handle.
+- `0x1402B3270 (actor, ...)`, the row maker (KH1's Attack rows), adds the weapon for bone `0x30`
+  from the actor's weapon object (`[+0x14C]`, its row `+0x20` in `btltbl.bin`'s weapon table):
+  radius += scale × row `+0x20`; range × row `+0x2C`; priority `+0x68` + row `+0x33` (kept 1..99);
+  critical chance `+0x94` × row `+0x31` × 0.05; critical bonus `+0x98` + row `+0x32`; the effect
+  data `+8` from the weapon object's `+0x18`; his "connected" word `+0x60`.
+- `0x1402B47A0` (the pass's attack walk) keeps an object only while its `+0x90` actor is alive
+  (`0x140291FF0`: `+0x374` bit 0 set, bit 1 clear; else the object is freed), builds it only with
+  that actor's `+0` bit `0x8000`, and (for most types) not while that actor's `+0x88` bit 0 is set.
+- `0x1402B3800` (the entry build) takes both ends with the bone point `0x14029EB20 ([+0x90], bone,
+  t)`: for `0x30` it maps t through **the `+0x90` actor's weapon row**, `row+0x28 + (row+0x24 −
+  row+0x28) × t`, and takes the point at that fraction along the bone `0x30` names, from its
+  parent's drawn matrix (`0x14029FAB0` → `0x1401D62E0`, `0x1401D6320` on the actor's instance
+  `+0x15C`: matrices `+0x1B4`, local translations `+0x1B0`). Then `0x1402B3D50` lays spheres of
+  radius `+0xC` from the first end (`+0x10`) to the second (`+0x40`), (r + r) / 2 apart (doubled
+  with `+0` bit 27), each tested at once with `0x1402B3BE0`; with `+0` bit 16 (set on the first
+  match) and a non-fixed type its own sweep back to the last place (`+0x70`); then the wall test
+  `0x1402B3A00` unless the object's `+0` bit 20 is set (the constructor sets it from the data's
+  `+0x38` bit 16, "spent").
+
+**Now (`lefthits.rs`):** the left object is that object exactly.
+- Its data per window: a copy of the same KH1 swing row (finisher row for a KH2 blow, ground / air)
+  with its blade bone, blade range and radius **kept as they are** (before: range 0, KH2's radius);
+  KH2's reaction, the left window's KH1 attack group and the Recoil row's clash rules on it as
+  before; the data's own "spent" bit kept, so KH1's wall test runs for it as for the right blade.
+- Made with `0x1402B2DC0`, then the row maker's weapon part with **the left Keyblade's own weapon
+  row** (`leftblade`'s owner copy: its weapon object holds the left Keyblade's row and effect data):
+  so the radius, blade length factor, priority and critical bonuses are the left Keyblade's.
+- Its **bone-source actor `+0x90` is `leftblade`'s owner copy** (a copy of Sora's actor and model
+  instance whose drawn matrices are his moved onto the left grip, and whose weapon object holds the
+  left Keyblade's row): KH1's own builder then lays KH1's Keyblade sphere row along the **left**
+  blade, its ends mapped through the **left Keyblade's own blade range**, so it scales by that
+  Keyblade exactly as the right one does by Sora's. The copy's handle comes from KH1's handle maker
+  (`0x14038B080`); `bodyhits`' entry hook only brings `+0x90` up to date before KH1's builder runs
+  for it (`lefthits::before_build`, which refills the copy) and builds nothing itself.
+- On a window switch the new data's blade fields go on the object as the constructor and row maker
+  would give them (`blade_fields`: radius, range, priority).
+- Contact, record, damage, reaction, spark, sound, clash and wall test are KH1's; KH2's ATKP for the
+  hit comes through `bodyhits::atkp` → `lefthits::atkp`; re-hits through `rehit`.
+- **Assumptions:** the owner copy (alive bits, `+0x8000`, `+0x88` copied from Sora each fill) passes
+  the pass's checks as Sora does; with the left Keyblade not drawn (`valor_left_blade = off`, model
+  not loaded) the object's `+0x90` stays Sora's: its hits come off the right Keyblade (logged). KH1
+  time in our slot = KH2 frame (as everywhere). Not checked in game.
+- Per frame: one fill of the owner copy per build (as t680), no shapes or sweep of ours.
+- **Still open:** Valor's guard windows on the left Keyblade (42 / 155, ATKP 162) are unchanged.
+
+### 7.3 The second Keyblade as KH1's own weapon (research and plan)
+
+The tester (after m13): "for 2nd keyblade it should behave 1:1 with how the main keyblade works, make
+sure its a file as well". The hits are KH1's own now (§7.2), and the code is its own file
+(`lefthits.rs`; the draw and trail are `leftblade.rs`). Where the rest stands:
+
+**How KH1 holds a weapon (Steam KH1, Checked (decomp)):**
+- `.wpn` files: three load slots of 0x30 bytes at `0x14296B540` (one per party member: `+0` flags,
+  `+4` member id, `+8` users, `+0x18` the model, `+0x20` the effect data). Released / swapped by
+  `0x140286720` / `0x1402868E0`.
+- The weapon object: `0x140286D60 (actor)` (from `0x140290D60`) takes a free one of **nine** 0x60-byte
+  objects at `0x14296B1E0` (free bits `0x14296B5D8`), for the member's slot: `+0` the model instance
+  handle (set up with `0x1401D6760`), `+0x18` the effect data, `+0x20` the weapon's row
+  (`btltbl.bin`'s weapon table + (weapon − 1) × 0x58); the actor's `+0x14C` holds its handle and
+  `+0x374` gets bit `0x10`.
+- Who reads it: the bone point (`0x14029EB20`, the blade range), the row maker (`0x1402B3270`, the
+  bonuses and spark effect), the trail (`0x1402C2310`, Steam; request id at combat state `+0x38`),
+  and the model queue (`0x1401D4070` Steam), which draws **one** weapon per actor with the body,
+  skinned to bones 280..292.
+
+**What still runs along (ours beside KH1's):**
+- The left `.wpn` is loaded by KH1's own loader into our buffer (`leftblade`), not into a KH1 slot.
+- Its weapon object is our 0x60-byte copy of Sora's with the left row and effect data, not one from
+  KH1's pool; its bone source is our copy of Sora's actor and instance (moved onto the left grip).
+- Its draw is a second call of KH1's model queue with the body hidden (`leftblade::second`).
+- Its trail: KH1's trail effect on our owner copy, started / ended by us on KH2's left trail windows.
+
+**Plan (one system per version, each KH1-run):**
+1. The left weapon object from KH1's own pool (`0x14296B1E0`, a free bit of `0x14296B5D8`, made as
+   `0x140286D60` makes one, on our `.wpn` buffer), released with KH1's own release order; our copy
+   goes. (Small; no new hook.)
+2. The left trail through KH1's own trail step (`0x1402C2310` path on the owner copy, KH1 deciding
+   start / end from the copy's `+0x1CC` trail bit, which the left windows' KH1 motion events would
+   set, as the right's do): our start / end calls go.
+3. The draw: teach KH1's model queue a second weapon per actor (a wrapper on `0x1401D4070`'s weapon
+   part that queues the second weapon object's model on the left weapon bones) instead of a second
+   queue of the whole body. Needs the left bones in KH1's own pose (a second weapon bone set baked
+   into Valor's slots, or the owner copy's matrices).
+4. The bone source: once 3 exists, the owner copy can become a real second bone set on Sora's own
+   instance; until then it is the one piece of ours KH1 reads every frame.
+

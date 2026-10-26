@@ -1,3 +1,16 @@
+### 2026-10-26: Stage 683 (testing branch: Valor's left Keyblade hits with KH1's own Keyblade sphere)
+- **Valor's left Keyblade hits with KH1's own Keyblade sphere.** The tester (what-is-still-missing, after m13): "1. it should fit kingdom hearts 1 in this situation for both keyblades", "2. the keyblade should behave exactly like kh1's keyblade so make sure it scales by keyblade", "for 2nd keyblade it should behave 1:1 with how the main keyblade works". KH1 builds its Keyblade object as follows (Checked (decomp)):
+  - the constructor `0x1402B2DC0` takes bone `0x30`, blade range `+0x54` / `+0x58` and radius `+0x5C` from the data (floats, Checked (exe));
+  - the row maker `0x1402B3270` adds the weapon row's radius, length factor, priority and critical;
+  - `0x1402B3800` takes the blade's ends with `0x14029EB20` on the object's bone-source actor `+0x90`, through that actor's weapon row's blade range, and `0x1402B3D50` lays its spheres between them.
+
+  The right Keyblade already is that object. The left object is now made the same way:
+  - its data keeps the swing row's bone, range, radius and "spent" bit (KH2's reaction, group and clash as before);
+  - the row bonuses are the left Keyblade's own row;
+  - its `+0x90` is `leftblade`'s owner copy (`leftblade::left_owner_handle`), so KH1's own builder lays KH1's sphere row along the left blade, scaled by that Keyblade. KH1 also runs its own sweep and wall test.
+
+  Our KH2 weapon-group spheres and sweep for it are gone; the entry hook only refreshes `+0x90` (`lefthits::before_build`). KH2's windows, ATKPs and re-hits stay. No new hooks. Assumptions: the owner copy passes the pass's actor checks as Sora does; left hits come off the right Keyblade when the left isn't drawn (logged). Research and plan for the second Keyblade as a real KH1 weapon object (pool `0x14296B1E0`, maker `0x140286D60`, model queue `0x1401D4070`, trail `0x1402C2310`): §7.3. Not checked in game. docs/kh1-drive-forms-native.md §7.2, §7.3.
+
 ### 2026-10-26: Stage 682 (testing branch: Valor's left Keyblade hits in their own module)
 - **Valor's left Keyblade hits in their own module.** The tester (what-is-still-missing, after m13): "for 2nd keyblade it should behave 1:1 with how the main keyblade works, make sure its a file as well". t680's left-Keyblade hit code moves out of `bodyhits.rs` into `win/lefthits.rs`, with its own state (object, windows, open window). `bodyhits` keeps the pass hook `0x1402B3800`, the pool helpers and the data copies. It calls `lefthits::new_play` on a new play and delegates `atkp` / `hit` / the entry build; `takeover` calls `lefthits::step`. No behaviour change. docs/kh1-drive-forms-native.md §7.2.
 

@@ -310,7 +310,7 @@ pub unsafe fn frame(actor: usize) {
     let Some(clip) = super::pose::kh2_moves().and_then(|c| c.moveset.clips.get(&m)) else { return };
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
     // (t680) Valor's left Keyblade's hit windows: a KH1 attack object of their own (`lefthits`,
-    // which takes our data copies through `left_data`, so without this lock).
+    // which takes our data copies through `data_copy`, so without this lock).
     drop(g);
     super::lefthits::new_play(actor, m, req, air, clip);
     let Ok(mut g) = STATE.try_lock() else { return };
@@ -379,7 +379,7 @@ pub unsafe fn frame(actor: usize) {
 
 /// KH1's row of Sora's that KH2's hits on his body are landed with (as `combat::Strikes::strike_as`
 /// takes it: swing, or finisher for a KH2 blow; ground or air by his KH1 state).
-fn template_row(air: bool, throws: bool) -> usize {
+pub(super) fn template_row(air: bool, throws: bool) -> usize {
     use super::kh1rows::Kind;
     match (air, throws) {
         (false, false) => Kind::Swing,
@@ -426,21 +426,17 @@ unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: 
     Some(d)
 }
 
-/// (`lefthits`) Our attack data copy for a left-Keyblade window (`data_for` on its own key).
-#[allow(clippy::too_many_arguments)]
-pub(super) unsafe fn left_data(motion: u16, window: usize, air: bool, channel: u8, a: &kh2_formats::battle::Atkp, radius: f32, bone: u32) -> Option<usize> {
+/// (`lefthits`) Our attack data copy for `key` (`data_slot`, made the first time; its address).
+pub(super) unsafe fn data_copy(key: u64) -> Option<usize> {
     let base = BASE.load(Ordering::Relaxed);
     let mut g = STATE.try_lock().ok()?;
-    data_for(&mut g, base, motion, window, air, 0xF0, channel, a, radius, bone)
+    data_slot(&mut g, base, key)
 }
 
-/// (`lefthits`) KH1's game base as this module read it, and whether its pass hook, entry test and
-/// attack constructor are in.
+/// (`lefthits`) KH1's game base as this module read it, and whether KH1's attack constructor is
+/// the one we know (its first bytes).
 pub(super) fn base() -> usize {
     BASE.load(Ordering::Relaxed)
-}
-pub(super) fn test_ok() -> bool {
-    TEST_OK.load(Ordering::Relaxed)
 }
 pub(super) fn make_ok() -> bool {
     MAKE_OK.load(Ordering::Relaxed)
@@ -756,10 +752,9 @@ type TestF = unsafe extern "system" fn(usize, usize, i32) -> i32;
 /// with KH2's sweep, a spell attack's as its script gave them).
 unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     let f: EntriesF = std::mem::transmute(ORIG.load(Ordering::Acquire));
-    // (Valor's left Keyblade's object: `lefthits`.)
-    if let Some(c) = super::lefthits::entries(obj, list, count) {
-        return c;
-    }
+    // (Valor's left Keyblade's object: its bone-source actor brought up to date, then KH1's own
+    // builder, as for the right Keyblade's, `lefthits`.)
+    super::lefthits::before_build(obj);
     let Some(i) = pool_index(obj) else { return f(obj, list, count) };
     let Ok(mut g) = STATE.try_lock() else { return f(obj, list, count) };
     if !g.live[i].is_some_and(|l| l.obj == obj && still_ours(&l)) {
@@ -835,7 +830,7 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
 /// One entry of KH1's list for our object (`0x1402B3D50`'s layout), tested at once against the
 /// entries already in (KH1's `0x1402B3BE0`). Returns the new count.
 #[allow(clippy::too_many_arguments)]
-pub(super) unsafe fn put_entry(obj: usize, owner: usize, bit: u32, list: usize, count: i32, kind: u32, radius: f32, height: f32, at: [f32; 3]) -> i32 {
+unsafe fn put_entry(obj: usize, owner: usize, bit: u32, list: usize, count: i32, kind: u32, radius: f32, height: f32, at: [f32; 3]) -> i32 {
     let test: TestF = std::mem::transmute(BASE.load(Ordering::Relaxed) + TEST_STEAM);
     let e = list + count.max(0) as usize * 0x40;
     std::ptr::write_bytes(e as *mut u8, 0, 0x40);
