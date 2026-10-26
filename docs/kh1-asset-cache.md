@@ -5,8 +5,8 @@ anything to be installed in order to be converted, when the game starts there sh
 screen showing what the extraction is doing before continuing into the menu, this should render in
 engine and be native, and not as a layer like the debug menu."
 
-Parts: the motion slot cache (built), the loading screen (built), package reads (built) and the
-KH2 sound cache (built, §4).
+Parts: the motion slot cache (built), the loading screen (built), package reads once (§3), the
+KH2 sound cache (built, §4) and the effect package cache (built, §5).
 Addresses are the Steam build's. Tags: **Checked (decomp)**, **Checked (exe)**, **Checked (code)**,
 **Assumption**.
 
@@ -252,3 +252,69 @@ cutting the sounds from KH2's banks", "sound cache: written (<path>; N sound(s) 
 
 Still to check in game: the hit and miss starts, the screen's sound line, and that the sounds
 play the same from the cache as cut.
+
+## 5. The effect package cache (ram-use m3: "do all three", the effect packages)
+
+What it saves: each KH2 effect package made into a KH1 DPX (`kh2dpx::build`, `docs/kh2-effects.md`
+§18): Sora's `p_ex100`, the Keyblade's `w_ex010`, the forms' (`p_ex100_btlf`, `p_ex100_ultf`,
+Wisdom's `p_ex100_magf_a_us`) and the spells' (`reflect_N_mag`, `fire_N_mag`, ...). One file per
+package, `kh1-kh2-cache\kh2-effects-<label>.bin`, in the same folder as `kh2-motion-slots.bin`
+(`pose::slot_cache_dir`). Code: `crates/kh1-hook/src/dpxcache.rs` (the file, pure Rust, unit
+tested) and `kh2dpx::cached_or_built` (the game side). **Checked (code)**; not checked in game.
+
+What a file holds: a manifest (as the slot cache's, readable text), the DPX's bytes as built (before
+KH1 relocates them), its MD5, the package's own HD images (each once, however many texture
+records take it), each texture record's image (one of its own, or KH2's common image of a TBP),
+and what playing it needs (each element's layer: number, KH1 anchor, flags, wait, fade, scale,
+offset, lookup word; each element's program types; where KH2's own programs are; its lookup
+entries; its per-palette DPDs). KH2's common images (`effect/texcommon.dpd`) are not in it: they
+are read once at every start as before (KH1 makes them into textures shared by every package).
+
+When it is used: the file's manifest must equal this time's:
+- the build format (`dpxcache::BUILD_FORMAT`) and the mod's version (`VERSION`): a new build
+  builds once;
+- the game build (Steam / Epic) and which KH2 copy is read (Mods Manager backup or live);
+- what the build is given (`kh2dpx::Source`): the package, what it is built for (Sora's: the
+  `kh2_effects` list), the elements switched on, the element sets (Sora's: the moves `kh2_effects`
+  lets play, the Drive and Revert flashes, Quick Run's start; a form's: its motions), every element
+  or only the sets', the KH2 flags left out, KH2's 0x4009 point from the owner's model;
+- the package's file in KH2's install as stored in its `.pkg` (its PAX and every HD image: one hash
+  of the stored bytes, `Install::read_stored_any`, not decoded), and the bytes the mod holds for it
+  if it holds them (a form's archive, a spell's file);
+- `effect/texcommon.dpd` as stored (its textures are copied into each DPX, and its images decide
+  which records are common).
+
+A file that differs, is missing, damaged (a check over every piece at its end, and lengths checked
+before any memory is taken) or can't be read is built again and rewritten (to a temporary file,
+then renamed over the old one); a file that can't be written only means building again next time.
+Content hashes are `dpxcache::fast_hash` (two 64-bit lanes over 8-byte words; change detection, not
+security), so checking a 3 MB package costs about the read of its stored bytes.
+
+When it is read: exactly when the package would have been built before (§18.12 unchanged: Sora's
+and the Keyblade's once KH2 Sora is loaded, a form's once he could change into it, a spell's at
+the level he has; freed when it can't play). A freed package wanted again is read from its file.
+Sora's file is rebuilt when `kh2_effects` changes (same file name).
+
+Memory (ram-use m1 answer 2 (a), no duplicates): the DPX is read straight into the pages it is
+played from (no buffer in between); the package's own images into one buffer, each image a part
+of it (`slotcache::Block::part`), freed as soon as the package is entered in KH1's loaded files
+(KH1 holds its own copy then, as before). A build (no file yet) is as before plus the file
+written from the same memory. **Checked (code)**.
+
+Time: builds took 0.01 to 0.08 s each in the testers' logs ("DPX built ... in 0.02 s"), so the
+cache saves little start time; it saves the decode of the package and HD images and the conversion
+(and their start-up peak: the decoded PAX, all of the file's HD images and the built bytes held
+together). **Assumption**: a read from the cache is a few ms (a 0.3 to 3.6 MB file and the stored
+package for the check); not measured.
+
+Not tied to the loading screen (§2): the effects builder runs on its own thread and never held
+KH1's title; its builds are short.
+
+Log lines (Loading & Cache): "effect cache: <path> (matches this start's files and settings; read
+in N ms)", "effect cache: <path> (none yet | rebuilt: <what changed> | unusable (<why>), rebuilt;
+checked in N ms)", "effect cache: written (<path>, N images)" or "... not written (<error>); built
+again next time"; (Effects) "KH2 effects (native): <label>'s DPX from the cache, N bytes, N effects
+in N s".
+
+Disk: about the DPXs' sizes plus their own images: some 5 to 15 MB in all, depending on which
+forms and spells have been played (one file per package, overwritten, never more than one each).

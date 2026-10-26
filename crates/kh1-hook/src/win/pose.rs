@@ -720,8 +720,9 @@ pub fn load_kh2() {
 /// The KH2 files read for KH2 Sora (name, hash, size), for the slot cache's manifest.
 static KH2_INPUTS: Mutex<Vec<(String, u128, usize)>> = Mutex::new(Vec::new());
 
-/// The motion slot cache's folder: beside the DLL (the mod's folder), `kh1-kh2-cache`.
-fn slot_cache_dir() -> std::path::PathBuf {
+/// The motion slot cache's folder: beside the DLL (the mod's folder), `kh1-kh2-cache` (the effect
+/// cache's too, `kh2dpx`).
+pub(super) fn slot_cache_dir() -> std::path::PathBuf {
     std::path::Path::new(&super::dll_dir()).join("kh1-kh2-cache")
 }
 

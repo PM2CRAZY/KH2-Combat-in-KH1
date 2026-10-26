@@ -179,6 +179,22 @@ impl Install {
         Err(Error::NotFound(name.to_string()))
     }
 
+    /// A file's stored bytes (as in its `.pkg`, not decoded: `Archive::read_stored`) from whichever
+    /// `kh2_*` archive holds it, for a change check.
+    pub fn read_stored_any(&self, source: Source, name: &str) -> Result<Vec<u8>> {
+        for part in ARCHIVES {
+            let hed = self.resolve(source, &format!("{part}.hed"));
+            if !hed.is_file() {
+                continue;
+            }
+            let archive = Archive::open_cached(&hed)?;
+            if archive.find(name).is_some() {
+                return archive.read_stored(name);
+            }
+        }
+        Err(Error::NotFound(name.to_string()))
+    }
+
     /// Movement parameters from `03system.bin`.
     pub fn load_pref(&self, source: Source) -> Result<kh2_formats::pref::Pref> {
         kh2_formats::pref::Pref::from_03system(&self.read_any(source, "03system.bin")?)

@@ -352,6 +352,20 @@ impl Archive {
     }
 }
 
+impl Archive {
+    /// `name`'s bytes as they are stored in the `.pkg` (its header, the HD assets' headers and
+    /// every stream, still encrypted and compressed), for a change check without decoding it
+    /// (the effect package cache, `kh1-hook`'s `dpxcache`).
+    pub fn read_stored(&self, name: &str) -> Result<Vec<u8>> {
+        let e = *self.find(name).ok_or_else(|| Error::NotFound(name.to_string()))?;
+        let mut f = File::open(&self.pkg_path)?;
+        f.seek(SeekFrom::Start(e.offset))?;
+        let mut data = vec![0u8; e.stored_len as usize];
+        f.read_exact(&mut data)?;
+        Ok(data)
+    }
+}
+
 /// A file's size and modification time: a cached read of it is used again only while these hold.
 type Stamp = (u64, Option<std::time::SystemTime>);
 

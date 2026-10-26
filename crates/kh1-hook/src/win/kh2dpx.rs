@@ -449,7 +449,8 @@ const EL_DPX: usize = 0x38;
 /// until the DPX is entered in KH1's loaded files), or one of KH2's common images (`Shared`: made
 /// into a KH1 texture once, for every package).
 enum HdSrc {
-    Own(std::sync::Arc<Vec<u8>>),
+    /// (A part of the effect cache file's one image buffer when loaded from it, `dpxcache`.)
+    Own(crate::slotcache::Block),
     Common(i32),
 }
 
@@ -815,6 +816,9 @@ fn builder() {
             return;
         }
     };
+    // (`texcommon.dpd` as stored, for the effect cache's manifests: its textures are copied into
+    // the DPXs and its images decide which records are common.)
+    let common_hash = install.read_stored_any(src, "effect/texcommon.dpd").ok().map(|b| (crate::dpxcache::fast_hash(&b), b.len()));
     loop {
         let want = {
             let Ok(g) = WANTED.lock() else { return };
@@ -828,9 +832,18 @@ fn builder() {
                 continue;
             }
             let t = std::time::Instant::now();
-            let made = source(kh2, pkg, &sig).ok_or_else(|| "its files didn't load".to_string()).and_then(|s| build(&install, src, &s));
+            // (From its file in the mod's cache folder when it was built from these same files and
+            // settings, `docs/kh1-asset-cache.md` §5; else built and saved there.)
+            let made = source(kh2, pkg, &sig).ok_or_else(|| "its files didn't load".to_string()).and_then(|s| cached_or_built(&install, src, &s, common_hash));
             match made {
-                Ok(d) => {
+                Ok((d, true)) => {
+                    log!(Effects, "KH2 effects (native): {}'s DPX from the cache, {} bytes, {} effects in {:.3} s", d.label, d.len, d.layers.len(), t.elapsed().as_secs_f32());
+                    if let Ok(mut g) = PACKS.lock() {
+                        g.push(d);
+                    }
+                    NEW_BUILT.store(true, Ordering::Relaxed);
+                }
+                Ok((d, false)) => {
                     let own: usize = d.hd.iter().filter_map(|h| if let HdSrc::Own(x) = &h.src { Some(x.len()) } else { None }).sum();
                     log!(Effects,
                         "KH2 effects (native): {}'s DPX built, {} bytes, {} effects in {:.2} s ({} HD textures: {} own, {} bytes until entered; {} of the common images)",
@@ -1174,7 +1187,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     let mut hd = Vec::new();
     let mut report = Vec::new();
     let mut seen: Vec<(usize, u16)> = Vec::new();
-    let mut kept: Vec<(String, std::sync::Arc<Vec<u8>>)> = Vec::new();
+    let mut kept: Vec<(String, crate::slotcache::Block)> = Vec::new();
     let mut recs_of: Vec<(usize, Vec<(usize, i32)>)> = Vec::new();
     let mut unmatched: Vec<(usize, i32)> = Vec::new();
     for t in &r.textures {
@@ -1207,7 +1220,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
                 let data = match kept.iter().find(|k| k.0 == a.name) {
                     Some(k) => k.1.clone(),
                     None => {
-                        let d = std::sync::Arc::new(a.data.clone());
+                        let d = crate::slotcache::Block::new(a.data.clone());
                         kept.push((a.name.clone(), d.clone()));
                         d
                     }
@@ -1258,7 +1271,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
                 let data = match kept.iter().find(|k| k.0 == a.name) {
                     Some(k) => k.1.clone(),
                     None => {
-                        let d = std::sync::Arc::new(a.data.clone());
+                        let d = crate::slotcache::Block::new(a.data.clone());
                         kept.push((a.name.clone(), d.clone()));
                         d
                     }
@@ -1304,6 +1317,198 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
     unsafe { std::ptr::copy_nonoverlapping(r.bytes.as_ptr(), at as *mut u8, r.bytes.len()) };
     let types = layers.iter().filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|i| (l.el, r.types[i].clone()))).collect();
     Ok(Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: r.bytes.len(), md5: r.md5, hd, layers, types, programs: r.programs.clone(), tagged, palettes, entry: 0, relocated: false })
+}
+
+// ---------------------------------------------------------------- the effect cache (mod folder)
+
+/// A DPX's pages as the memory the effect cache reads it into (`dpxcache::load`).
+struct PagesBuf(Pages);
+
+impl AsMut<[u8]> for PagesBuf {
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.0.at as *mut u8, self.0.len) }
+    }
+}
+
+/// Everything `build` makes package `s` from (`dpxcache`'s manifest): the format and the mod's
+/// version (the build's code), the game build, what the package is given (`Source`: its elements,
+/// sets, anchors' kind, flags ignored, KH2's 0x4009 point), its file in KH2's install as stored
+/// (its PAX and HD images; and the bytes the mod holds for it, if any) and `texcommon.dpd` as
+/// stored (`common`). `None` (no cache for it this time) if its file can't be read.
+fn cache_manifest(install: &kh2_data::Install, src: kh2_data::Source, s: &Source, common: Option<(u128, usize)>) -> Option<crate::slotcache::Manifest> {
+    use crate::dpxcache::fast_hash;
+    let mut m = crate::dpxcache::manifest();
+    m.set("game build", format!("{:?}", super::addr::Build::current()));
+    m.set("package", s.label.clone());
+    m.set("kind", format!("{:?}", s.pkg));
+    m.set("built for", s.sig.clone());
+    m.set("pax name", format!("{:?}", s.pax_name));
+    m.set("elements on", format!("{:?}", s.on));
+    let sets = format!("{:?}", s.sets);
+    m.set("sets", format!("{} sets, {:032x}", s.sets.len(), fast_hash(sets.as_bytes())));
+    m.set("every element", s.rest.to_string());
+    m.set("flags ignored", format!("{:#x}", s.ignore));
+    m.set("effect point", format!("{:?}", s.effect_point));
+    m.set("kh2 source", format!("{src:?}"));
+    let stored = install.read_stored_any(src, &s.path).ok()?;
+    m.set(format!("file kh2 {}", s.path), format!("{:032x} {}", fast_hash(&stored), stored.len()));
+    drop(stored);
+    if let Some(b) = &s.bytes {
+        m.set("bytes held", format!("{:032x} {}", fast_hash(b), b.len()));
+    }
+    let (h, n) = common?;
+    m.set("file kh2 effect/texcommon.dpd", format!("{h:032x} {n}"));
+    Some(m)
+}
+
+/// What `enter` and the plays need of a built package besides its bytes and images.
+fn meta_of(d: &Dpx) -> Vec<u8> {
+    let mut o = crate::dpxcache::Out::default();
+    o.u32(d.layers.len() as u32);
+    for l in &d.layers {
+        o.i32(l.el as i32).u32(l.number);
+        match l.anchor {
+            Anchor::Bone(b) => o.u8(0).u32(b),
+            Anchor::Blade(t) => o.u8(1).f32(t),
+            Anchor::Code(c) => o.u8(2).u32(c),
+            Anchor::LeftBlade(t) => o.u8(3).f32(t),
+        };
+        o.u32(l.flags).f32s(&l.bone_offset).f32(l.wait).f32(l.fadeout).f32s(&l.scale).f32s(&l.local).u64(l.tag).u8(l.at_point as u8);
+    }
+    o.u32(d.types.len() as u32);
+    for (el, t) in &d.types {
+        o.i32(*el as i32).u32(t.len() as u32);
+        for x in t {
+            o.u32(*x);
+        }
+    }
+    o.u32(d.programs.len() as u32);
+    for (at, ty) in &d.programs {
+        o.u64(*at as u64).u32(*ty);
+    }
+    o.u32(d.tagged.len() as u32);
+    for (at, word, el) in &d.tagged {
+        o.u64(*at as u64).u64(*word).i32(*el as i32);
+    }
+    o.u32(d.palettes.len() as u32);
+    for p in &d.palettes {
+        o.u64(*p as u64);
+    }
+    o.0
+}
+
+#[allow(clippy::type_complexity)]
+fn meta_from(b: &[u8], len: usize) -> Result<(Vec<Layer>, Vec<(i16, Vec<u32>)>, Vec<(usize, u32)>, Vec<(usize, u64, i16)>, Vec<usize>), String> {
+    let mut i = crate::dpxcache::In::new(b);
+    let inside = |at: u64| if (at as usize) < len { Ok(at as usize) } else { Err("an offset outside its DPX".to_string()) };
+    let mut layers = Vec::new();
+    for _ in 0..i.count(60)? {
+        let el = i.i32()? as i16;
+        let number = i.u32()?;
+        let anchor = match i.u8()? {
+            0 => Anchor::Bone(i.u32()?),
+            1 => Anchor::Blade(i.f32()?),
+            2 => Anchor::Code(i.u32()?),
+            3 => Anchor::LeftBlade(i.f32()?),
+            _ => return Err("an unknown anchor".into()),
+        };
+        let flags = i.u32()?;
+        let bone_offset = i.f32x3()?;
+        let (wait, fadeout) = (i.f32()?, i.f32()?);
+        let (scale, local) = (i.f32x3()?, i.f32x3()?);
+        let tag = i.u64()?;
+        let at_point = i.u8()? != 0;
+        layers.push(Layer { el, number, anchor, flags, bone_offset, wait, fadeout, scale, local, tag, at_point });
+    }
+    let mut types = Vec::new();
+    for _ in 0..i.count(8)? {
+        let el = i.i32()? as i16;
+        let mut t = Vec::new();
+        for _ in 0..i.count(4)? {
+            t.push(i.u32()?);
+        }
+        types.push((el, t));
+    }
+    let mut programs = Vec::new();
+    for _ in 0..i.count(12)? {
+        programs.push((inside(i.u64()?)?, i.u32()?));
+    }
+    let mut tagged = Vec::new();
+    for _ in 0..i.count(20)? {
+        tagged.push((inside(i.u64()?)?, i.u64()?, i.i32()? as i16));
+    }
+    let mut palettes = Vec::new();
+    for _ in 0..i.count(8)? {
+        palettes.push(inside(i.u64()?)?);
+    }
+    i.done()?;
+    Ok((layers, types, programs, tagged, palettes))
+}
+
+/// Package `s`'s DPX from its file in the mod's cache folder (`kh1-kh2-cache`, beside the DLL) when
+/// that file was made from these same files and settings (`cache_manifest`), else built (`build`)
+/// and saved there for the next time (before KH1 relocates it: the file holds it as built). True:
+/// from the cache. A file that can't be used or written only means building, as before.
+fn cached_or_built(install: &kh2_data::Install, src: kh2_data::Source, s: &Source, common: Option<(u128, usize)>) -> Result<(Dpx, bool), String> {
+    let t = std::time::Instant::now();
+    let Some(manifest) = cache_manifest(install, src, s, common) else {
+        log!(Loading, "effect cache: {}: its source files couldn't be read for the check; built without the cache", s.label);
+        return build(install, src, s).map(|d| (d, false));
+    };
+    let dir = super::pose::slot_cache_dir();
+    let name = crate::dpxcache::file_name(&s.label);
+    let path = dir.join(&name);
+    let why = match crate::dpxcache::load(&path, &manifest, |n| Pages::new(n).map(PagesBuf)) {
+        Ok(l) => match meta_from(&l.meta, l.dpx_len) {
+            Ok((layers, types, programs, tagged, palettes)) => {
+                let hd: Vec<Hd> = l
+                    .hd
+                    .iter()
+                    .map(|&(offset, r)| Hd {
+                        offset,
+                        src: match r {
+                            crate::dpxcache::HdRef::Own(i) => HdSrc::Own(l.images[i as usize].clone()),
+                            crate::dpxcache::HdRef::Common(tbp) => HdSrc::Common(tbp),
+                        },
+                    })
+                    .collect();
+                log!(Loading, "effect cache: {} (matches this start's files and settings; read in {:.0} ms)", path.display(), t.elapsed().as_secs_f32() * 1000.0);
+                let pages = l.dpx.0;
+                let at = pages.at;
+                return Ok((Dpx { pkg: s.pkg, sig: s.sig.clone(), label: s.label.clone(), on: s.on, pages, at, len: l.dpx_len, md5: l.md5, hd, layers, types, programs, tagged, palettes, entry: 0, relocated: false }, true));
+            }
+            Err(e) => format!("unusable ({e}), rebuilt"),
+        },
+        Err(crate::slotcache::Miss::Missing) => "none yet".to_string(),
+        Err(crate::slotcache::Miss::Damaged(e)) => format!("unusable ({e}), rebuilt"),
+        Err(crate::slotcache::Miss::Changed(d)) => format!("rebuilt: {}", d.join(", ")),
+    };
+    log!(Loading, "effect cache: {} ({why}; checked in {:.0} ms)", path.display(), t.elapsed().as_secs_f32() * 1000.0);
+    let d = build(install, src, s)?;
+    // Its own images, each once (several records can take one image), and each record's.
+    let mut images: Vec<&[u8]> = Vec::new();
+    let mut refs = Vec::with_capacity(d.hd.len());
+    for h in &d.hd {
+        let r = match &h.src {
+            HdSrc::Own(b) => {
+                let i = images.iter().position(|x| x.as_ptr() == b.as_ptr() && x.len() == b.len()).unwrap_or_else(|| {
+                    images.push(b);
+                    images.len() - 1
+                });
+                crate::dpxcache::HdRef::Own(i as u32)
+            }
+            HdSrc::Common(tbp) => crate::dpxcache::HdRef::Common(*tbp),
+        };
+        refs.push((h.offset, r));
+    }
+    let meta = meta_of(&d);
+    let dpx = unsafe { std::slice::from_raw_parts(d.at as *const u8, d.len) };
+    let save = crate::dpxcache::Save { manifest: &manifest, md5: d.md5, meta: &meta, hd: &refs, images: &images, dpx };
+    match crate::dpxcache::write(&dir, &name, &save) {
+        Ok(p) => log!(Loading, "effect cache: written ({}, {} images)", p.display(), images.len()),
+        Err(e) => log!(Loading, "effect cache: {} not written ({e}); built again next time", path.display()),
+    }
+    Ok((d, false))
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {

@@ -1830,6 +1830,11 @@ can play.
   thread, the entering is a copy of the package's own images (tens of KB) and KH1's relocation.
   KH1 makes each texture on its first draw as for its own effects.
 
+Since the effect cache (`docs/kh1-asset-cache.md` §5): "built" above means taken from the
+package's file in the mod's `kh1-kh2-cache` folder when that file was made from the same KH2 files
+and settings, read straight into the DPX's pages; otherwise built as here and saved there (before
+KH1 relocates it). When, where and how long each package is kept are as above.
+
 ### 18.13 The second Keyblade's points (Valor's left Keyblade, Final's second)
 
 - KH1 has one weapon per actor; the second Keyblade is ours (`leftblade`: its model drawn in the

@@ -96,6 +96,14 @@ impl Block {
     }
 }
 
+impl Block {
+    /// A part of this block (`range` within it), sharing its buffer (no copy).
+    pub fn part(&self, range: Range<usize>) -> Block {
+        assert!(range.start <= range.end && range.end <= self.range.len());
+        Block { buf: self.buf.clone(), range: self.range.start + range.start..self.range.start + range.end }
+    }
+}
+
 impl Deref for Block {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
@@ -144,7 +152,7 @@ impl Manifest {
     }
 
     /// A manifest from its text (`text`'s form), for other caches in the same folder
-    /// (`soundcache`).
+    /// (`soundcache`, `kh2dpx`).
     pub fn from_text(text: &str) -> Manifest {
         Manifest::parse(text)
     }
