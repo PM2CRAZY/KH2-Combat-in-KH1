@@ -1,3 +1,14 @@
+### 2026-10-26: Stage 686 (testing branch: Valor's arrival held in the air)
+- **Valor's arrival held in the air.** KH2's form think `0x140405630` plays the arrival 53 in the
+  air in ACTION_FLY with velocity 0 (no vertical step, `0x140421C80`). It then falls from rest
+  (motion 4, `0x1403CBC30`'s hop of 0). Checked (decomp).
+  - Our 53 has no no-gravity range, so he fell through it.
+  - Now `form::arrival_held` holds him on KH1's air state with no speed, and the fall restarts from
+    rest after.
+  - Assumption: `+0xE10` 2 means "changed in the air".
+  - Open: on the ground KH2 plays Valor's motion 6 (B010) before the idle; it isn't baked.
+  - docs/kh1-drive-forms-native.md §7.4.3, §7.4.4.
+
 ### 2026-10-26: Stage 685 (testing branch: No KH1 attack row in a Drive Form when KH2 takes nothing)
 - **No KH1 attack row in a Drive Form when KH2 takes nothing.** KH2 refuses a press its rule or
   rows don't take (`0x1403D6CA0`, Checked (decomp)).

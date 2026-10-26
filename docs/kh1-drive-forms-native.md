@@ -636,3 +636,47 @@ with **KH1's own** air numbers, `+0x3C0` = direction × 8 / 12 / 4 and a hop of 
 ability finishers are held back), so now KH2 taking nothing is no attack there
 (`combomods::attack_row`, logged "KH2 takes nothing: no attack"). **Open (base Sora):** at the
 combo style KH2 base Sora has the same fallback onto KH1's row; not changed (asked).
+
+#### 7.4.3 The Drive and the arrival in the air
+
+**KH2 (Steam KH2 decomp, Checked (decomp)):**
+- The change `0x14040CE60 (player, form)`: ACTION_IDLE (`0x1403B4DA0 (p, 0)`), motion 52, velocity
+  `+0x20..+0x2F` zeroed. Motion 52 holds him (no gravity and invulnerable all through,
+  `P_EX100.mset`, Checked (files)): in the air he stays where he is.
+- The swap `0x14040D000` sets the new form's `+0xE10` to 1 or 2 by the change's flag bit 0, and the
+  new form's first think `0x140405630` plays the arrival 53: with 1, motion 6 (B010, a stance motion
+  free all through, 8-frame blend) and then the idle 0 queued; with 2, `0x140421CE0 (p, zero
+  vector, 1.0)` (velocity 0, keep 1.0, ACTION_FLY, whose step `0x140421C80` has no vertical step)
+  and the fall motion 4 queued (8-frame blend) with a start callback calling the action's slot +0x20
+  (`0x140409B00 (p, 0)` -> `0x1403CBC30`: a hop of 0, a fall from rest, ACTION_JUMP). **Assumption**
+  (from what each branch does): 2 is the change made in the air, 1 on the ground.
+- So in the air KH2 holds him, with no speed, through the Drive **and** the arrival, then he falls
+  from rest.
+
+**Ours before:** the Drive held (motion 52's range on KH1's air state, speed zeroed at the start);
+the arrival 53 has no no-gravity range of its own (Checked (files)), so KH1's air step let him fall
+through its frames.
+
+**Now** (`form::arrival_held`, read by `shared::physics::air_step`): an arrival asked in the air
+(`native_arrive`, his speed `+0x2C` and air velocity `+0x3C0` zeroed) holds him while Valor's 53
+plays (or its request waits to be applied); at its end the hold's end restarts the fall from rest,
+as KH2's `0x1403B4780` / hop of 0. KH1's fall request after it was already queued (`ask_own`).
+
+**Open:** on the ground KH2 plays Valor's motion 6 (B010) between the arrival and the idle; ours
+goes to the idle (Valor's 6 isn't baked: a new slot on a request of ours, one rebake).
+
+#### 7.4.4 Checked unchanged
+
+- Valor's jump and High Jump (KH2's jump start `0x140422630` -> `0x1403B59B0` -> `0x1403CBB00`, the
+  same hop function as the rows), gravity 20/49 (`0x1403CBB00`'s 0.40816), fall cap 16, air
+  steering 0.9 / 0.95 per 30 Hz tick (ACTION_JUMP's step, `0x1403B7AD0`), run 12 / walk 2 (prty
+  record 1), landing motion 5 (`+0x11C`): what `takeover::refresh_kh2_numbers` and `air_step` give
+  KH1's states (§7). **Checked (decomp + files)**.
+- The air rows' hop (`character_core::Character::plan_press`, used for KH2's pick on KH1's
+  picker): the height and speed bounds in the exe's order, `speed_max` with no target, the rise
+  time on KH2's constant gravity. **Checked (decomp)**. One difference found, not Valor's: a row whose
+  clip has an allow-movement range keeps his speed instead of the row's (stage 192, the user, for
+  Wisdom); KH2's `0x1403CBB00` always sets it. Valor's clips have no such range (Checked (files)).
+- **Open (ledges):** in KH2 Valor's 154 past its edge stop (frames 63..120, no gravity, 76 of root
+  travel left) can carry him off a ledge held in the air; KH1's physics step ends a swing that
+  leaves the floor (`0x14029A3C0`: action flag off, a fall). Not changed.

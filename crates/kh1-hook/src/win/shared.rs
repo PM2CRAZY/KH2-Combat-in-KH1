@@ -1483,7 +1483,8 @@ pub mod physics {
         let kh1_hold = sora && kh1_cast_hold(actor, step_dt);
         // (A rising row's first frames, before its own no-gravity range: `kh2slots::rise_start`.)
         let rise = if air_ok { super::super::kh2slots::rise_start(actor, step_dt) } else { None };
-        let held = air_ok && (kh1_hold || rise.is_some() || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
+        // (A Drive Form's arrival in the air: KH2's ACTION_FLY holds him, `form::arrival_held`.)
+        let held = air_ok && (kh1_hold || rise.is_some() || super::super::form::arrival_held(actor) || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
         // (Whether the hold was on at his last air step: KH2's fall restart when it ends, below.)
         let was_held = sora && HELD_LAST.swap(held, Ordering::Relaxed);
         if held {

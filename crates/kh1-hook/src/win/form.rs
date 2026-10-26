@@ -674,6 +674,33 @@ unsafe fn yellow(sora: usize) -> u16 {
 
 /// The form arriving or playing runs on KH1's own states (Valor, `native_ok`).
 static NATIVE: AtomicBool = AtomicBool::new(false);
+/// The form's arrival (motion 53) was asked in the air on KH1's own states (`native_arrive`): KH1's
+/// air step holds him through it (`arrival_held`).
+static ARRIVE_AIR: AtomicBool = AtomicBool::new(false);
+
+/// KH2's arrival in the air holds him where he is (Steam KH2: the new form's first think
+/// `0x140405630`, with `+0xE10` 2 (the change made in the air: the form swap `0x14040D000` sets 1 or 2
+/// by its flag bit 0), plays motion 53 in ACTION_FLY (`0x140421CE0 (actor, 0 vector,
+/// 1.0)`: velocity 0, keep 1.0; ACTION_FLY's step `0x140421C80` has no vertical step at all) and
+/// queues the fall motion 4 with an 8-frame blend whose start calls the action's slot +0x20
+/// (`0x140409B00 (actor, 0)`: `0x1403CBC30`'s hop of 0, a fall from rest, ACTION_JUMP);
+/// Checked (decomp)). Arrival 53 has no no-gravity range of its own (`P_EX100_BTLF.mset`, Checked
+/// (files)), so KH1's air step fell through its frames before. Held now while Valor's arrival
+/// plays on KH1's air state, then the fall starts from rest (`shared::physics::air_step`'s end of
+/// a hold, KH2's `0x1403B4780`, at 0 down).
+pub unsafe fn arrival_held(actor: usize) -> bool {
+    if !ARRIVE_AIR.load(Ordering::Relaxed) {
+        return false;
+    }
+    if !native_now() || super::kh2slots::playing_motion(actor) != Some(ARRIVE_MOTION) {
+        // (Asked, not yet applied: KH1 applies the request on its next motion pass; held then too.)
+        if !(native_now() && rd::<u32>(actor + 0x164) & 0xFFFF == super::kh1rows::by_motion(ARRIVE_MOTION).map_or(u32::MAX, |n| super::kh1rows::request(n) & 0xFFFF)) {
+            ARRIVE_AIR.store(false, Ordering::Relaxed);
+            return false;
+        }
+    }
+    true
+}
 
 /// KH1's motion request (fresh queue) and queue, and its movement state setter (Epic RVAs,
 /// mapped for Steam: `0x14029F980`, `0x14029FA30`, `0x1402B1960`).
@@ -863,6 +890,12 @@ unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
     super::kh2slots::refresh();
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
     let arrival = ask_own(actor, ARRIVE_MOTION, air);
+    // (In the air: held through it with no speed, KH2's ACTION_FLY with velocity 0, `arrival_held`.)
+    if arrival && air {
+        wr(actor + 0x2C, 0.0f32);
+        wr(actor + 0x3C0, [0.0f32; 3]);
+        ARRIVE_AIR.store(true, Ordering::Relaxed);
+    }
     log!(Forms, "{} (Lv{LEVEL}) on KH1's own states: Valor's moves on his requests, KH2's numbers Valor's, High Jump MAX{}", kind.name(), if arrival { "; its arrival" } else { "" });
 }
 
