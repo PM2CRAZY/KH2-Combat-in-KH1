@@ -1353,7 +1353,7 @@ fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16)
             // KH2's (the draw itself is still ours, a second queue of the model; after `wanted`,
             // `kh1_left_blade`).
             if two {
-                let trail = src.character.moveset.clips.get(&motion).is_some_and(|c| c.has(at as u32, |k| matches!(k, character_core::WindowKind::WeaponTrail)));
+                let trail = src.character.moveset.clips.get(&motion).is_some_and(|c| c.has(at as u32, |k| matches!(k, character_core::WindowKind::WeaponTrail { .. })));
                 super::leftblade::kh2_left((!left.is_empty()).then_some(left.as_slice()), &pose, motion, at as u32, trail);
                 s.kh2_now = Some((pose, weapon));
             }

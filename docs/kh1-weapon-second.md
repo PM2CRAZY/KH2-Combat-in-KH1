@@ -618,3 +618,39 @@ keyblade" (KH1's own weapon object, then the draw, then the trail).
   the left hand's weapon bones from KH2's left weapon). KH1 has one weapon per actor and one
   weapon-bone set per skeleton, so a second Keyblade needs a second holder.
 - The pause menu's copy of Sora (another instance) gets no left Keyblade, as before.
+
+### 10.3 Its trail by KH1's own trail system (Steam, Checked (decomp, exe))
+
+- KH1's trail lives on the weapon object (`0x1402C2310`, `0x1402C1F20`): `+0x28` the running trail
+  effect, `+0x30` the effect data to make it from, `+0x38` the request (`id | 0x40000000`, −1 none).
+  - The request `0x1402C2310 (actor, id)` (prologue `48 89 5C 24 08`) ends `+0x28`'s trail
+    (`0x1401EC470`), then `+0x30` = the object's `+0x18`, `+0x38` = `id | 0x40000000`.
+  - The step `0x1402C1F20 (actor)` (prologue `40 57 48 83 EC 20`, called from `0x140297FE0`):
+    with no trail running, a fresh request (bit 0x40000000) is only cleared that frame; then, while
+    the actor's `+0x1CC` bit 0x800000 is set and the actor is alive (`0x140291FF0`: `+0x374` bit 0
+    set, bit 1 clear), it makes the trail `0x1402AE290 (actor, +0x30, +0x38)` into `+0x28` (its
+    `+0x14` bit 0x20 cleared) and sets `+0x38` = −1. A running trail (`+0x14 & 3 == 1`) is kept
+    while the actor's flags have `0xC001` and the bit is set, told to end (its end byte, `+0x10`)
+    when the bit goes, ended at once without the flags; `+0x28` is cleared once it has stopped.
+- The left Keyblade's trail is now made, faded and ended by those two functions, on its holder
+  (§10.2) and its KH1 weapon object (§10.1):
+  - every request KH1 gets for Sora is asked for the holder too, right after (hooked request,
+    `leftblade::trail_start`): the left object gets the same id, with its own effect data (the
+    left Keyblade's own trail look);
+  - KH1's step is run for the holder right after Sora's (hooked step, `leftblade::trail_step`),
+    with the holder's `+0x1CC` trail bit set to the left Keyblade's own trail window; out of the
+    form it is still run while a left trail is running, with the bit off, so KH1 fades it.
+- The left trail window, on KH1's own states (Valor's baked motions): a level motion event of ours,
+  **7.1**, baked into each Valor motion from its left weapon's trail windows (range id 12 of
+  `W_EX010_BTLF_L`'s motion; `WindowKind::WeaponTrail { weapon: 2 }`), beside KH1's 7.0 (bit 23,
+  the right one's), and read with KH1's own level reader `0x140394770 (motion, 0x70001, time)` on
+  Sora's motion (`ptr(+0x1D4)[+0x168]`) at his time (`+0x16C`). Vanilla KH1 never asks for 7.1
+  (`kh1-anim-slots.md` §1.4). While KH2's controller has him (Final Form): the left weapon's KH2
+  windows, as before (`TRAIL_WINDOWS`, Valor's left mset).
+- **Assumptions:** `+0x16C` is the time KH1's pass reads its levels at (the pass takes it as an
+  argument); the holder's flags and alive bits (copied from Sora at each draw) stand for his, as
+  before.
+- Before: our code made the left trail itself (`0x1402AE290` on the holder) as KH2's left trail
+  window opened, set its end byte as it closed, and kept up to four of them.
+- The first start after this rebakes Valor's motions that have left trail windows (their event
+  table changed).

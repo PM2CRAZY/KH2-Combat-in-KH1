@@ -131,6 +131,7 @@ to read them:
 | 1.0 .. 1.3 | level | **hit window** of attack group 0..3: `+0x1CC` bit `0x10000 << group`. An attack object tied to a motion is live only while this is set **and** its `+0x58` request equals the owner's `+0x164` (`0x1402B2610`, `combat::shots`). | every swing, 98..116 |
 | 5.0 | level | **combo window**, bit 22 (`combomods::KH1_COMBO_WINDOW`) | the swings |
 | 7.0 | level | **weapon trail**, bit 23 (`0x1402BFD70`) | the swings |
+| 7.1 | level | **ours**: the second Keyblade's trail (Valor's left), baked from its weapon motion's trail windows (`kh2slots::LEFT_TRAIL_ID`). Vanilla KH1 never reads it: its pass asks its level reader `0x140394770` only for 7.0 (exact id), and its edge reader `0x140394900` collects only types 2, 3, 4 and 6 (Steam, Checked (decomp)). `leftblade` asks KH1's reader for it on Sora's motion and time, for the left Keyblade's holder's trail bit (`kh1-weapon-second.md` §10.3). | Valor's swings |
 | 0.0 | level | bit 20: from here the action can be left (`0x14029D399` clears action flags `0x1004`) | item 58 at 74/82, Fire 55 at 68/86, roll 117 at 30/38 |
 | 2.x | edge | `0x1401D9A40 (instance, 0, a)`: a face or texture change, **unconfirmed** | |
 | 4.0 .. 4.3 | edge | **foot effect**: `0x1402C04B0 (actor, kind a, bone b)` puts a dust or splash effect (`0x1402C0230`) at bone `b` (22 / 48 are the feet) when near the floor | idle, walk, run, landing, swings |

@@ -1499,7 +1499,7 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
     // are a KH1 attack object of their own on their own attack group (`left_channel`, `bodyhits`).
     let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon: 1, .. })).map(span).collect();
     let combo: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Combo)).map(span).collect();
-    let mut trail: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::WeaponTrail)).map(span).collect();
+    let mut trail: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::WeaponTrail { .. })).map(span).collect();
     if trail.is_empty() {
         trail = hits.iter().map(|&(a, b)| ((a - 4.0).max(0.0), b)).collect();
     }
@@ -1533,8 +1533,22 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
         let w: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon >= 2)).map(span).collect();
         out.push(EventTrack::level(ks::HIT, ch as u16, &w));
     }
+    // The second Keyblade's own trail windows (its weapon motion's range id 12) as a level event of
+    // ours, 7.1, beside KH1's 7.0 (the right trail, bit 23): KH1's level reader `0x140394770` finds
+    // it by type and id, and vanilla KH1 never asks for 7.1 (its pass reads only 7.0, and its edge
+    // reader `0x140394900` only types 2, 3, 4 and 6; Steam, Checked (decomp)). `leftblade` reads it
+    // with KH1's reader for the left Keyblade's holder's trail bit.
+    let left_trail: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::WeaponTrail { weapon } if weapon >= 2)).map(span).collect();
+    if !left_trail.is_empty() {
+        out.push(EventTrack::level(ks::TRAIL, LEFT_TRAIL_ID, &left_trail));
+    }
     out
 }
+
+/// The id of our left-Keyblade trail level event (type 7, `ks::TRAIL`; KH1's own trail is 7.0).
+pub const LEFT_TRAIL_ID: u16 = 1;
+/// Its type (KH1's trail level, `ks::TRAIL`).
+pub const LEFT_TRAIL_KIND: u16 = ks::TRAIL;
 
 /// (t680) The KH1 attack group the clip's second-Keyblade hit windows (weapon 2, Valor's left
 /// Keyblade) play on: the first after its body windows' (`body_windows`: 1..), if one is left

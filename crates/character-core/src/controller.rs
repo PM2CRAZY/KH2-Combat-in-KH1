@@ -2596,7 +2596,7 @@ impl Character {
                 // moving only part of the way holds there, Final Form's: the KH1 port's user, its air
                 // combos "end after two hits".)
                 WindowKind::NoGravity if self.cast_hold.is_none() && !(self.air_magic_falls && matches!(act.kind, ActionKind::Magic)) && !(matches!(act.kind, ActionKind::Attack { .. }) && clip.windows.iter().any(|w| matches!(w.kind, WindowKind::AllowMovement) && w.start == 0 && w.end.is_none())) => fo.no_gravity = true,
-                WindowKind::WeaponTrail => fo.weapon_trail = true,
+                WindowKind::WeaponTrail { .. } => fo.weapon_trail = true,
                 WindowKind::Guard { attack, group, weapon } => {
                     fo.guarding = true;
                     fo.guard_boxes.push(ActiveHitbox { swing: (act.swing << 8) | wi as u64, attack, group, weapon });

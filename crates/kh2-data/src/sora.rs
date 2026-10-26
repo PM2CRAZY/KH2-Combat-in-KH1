@@ -330,7 +330,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
                 29 => WindowKind::EdgeStop,
                 42 => WindowKind::KeepMomentum,
                 range_id::ALLOW_RC => WindowKind::AllowReactionCommand,
-                range_id::WEAPON_TRAIL => WindowKind::WeaponTrail,
+                range_id::WEAPON_TRAIL => WindowKind::WeaponTrail { weapon: on_weapon },
                 _ => continue,
             };
             let end = if r.end < 0 { None } else { Some(r.end as u32) };

@@ -38,7 +38,9 @@ pub enum WindowKind {
     EdgeStop,
     KeepMomentum,
     AllowReactionCommand,
-    WeaponTrail,
+    /// The weapon trail (range id 12) of the clip's object: 0 the character's own, 1 its first
+    /// weapon, 2 its second (Valor's left Keyblade, from the left weapon's motion).
+    WeaponTrail { weapon: u8 },
     /// Guard is active: incoming non-piercing hits from the front are blocked.
     /// The guard's shapes are the attack-group shapes of `group` (on the
     /// Keyblade if `weapon`), as the game builds them.
