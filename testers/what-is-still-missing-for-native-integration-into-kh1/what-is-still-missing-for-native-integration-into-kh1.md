@@ -14,6 +14,7 @@
 - [8. Assistant: Here's this round.](#^m8)
 - [9. Assistant: Thanks! Two versions this round:](#^m9)
 - [10. Assistant: Thanks! (a) it is, so nothing changes: on starts where the c](#^m10)
+- [11. Assistant: Here's the list brought up to date, from t632 to t675.](#^m11)
 
 ---
 
@@ -304,3 +305,38 @@ for what your working on with glide and the command menu, make it a separate thr
 
 
 update what is still missing for native
+> [!tip] Assistant
+> Here's the list brought up to date, from t632 to t675.
+>
+> **Moved to native since the last list**
+> - Body hits (Vicinity Break, Explosion, Magnet Burst, Counterguard, Finishing Leap) are KH1 attack objects in KH1's own collision pass (t638). Since t674 every KH2 move re-hits through one path, KH1's own re-arm.
+> - Spell hits (Fire, Blizzard, Thunder, Cure, Reflect's counter and burst, Wisdom's shots) are KH1 attack objects made with KH1's own spell constructor (t640).
+> - Base Sora's button fallbacks no longer borrow KH2's controller (t639), and neither do spells in states where KH1 casts nothing (t649, t654). Cast from Glide ends KH2's glide into KH1's air cast (t656).
+> - Flight Attack: KH2's air picks play on KH1's own flight rows (t648).
+> - Idle and landing are baked (t635, t636), so every base-Sora move with a KH1 move to sit on is now a KH1 motion slot.
+> - Assets built once into the mod folder: motion slots (t655), sounds (t666), effects (t667), form recolours (t668), with a loading screen in KH1's own frame and font (t657).
+> - KH2's knock-back on enemies goes through KH1's launch and flinch (t602 to t605), and now KH1's scripted launch too (t676, in the combo row thread).
+>
+> **Still running along KH1 (our KH2 logic beside KH1's)**
+> 1. The spell scripts still run in our own interpreter. Question 1 in the [magic thread](../kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md) is still open.
+> 2. Reflect's barrier meeting enemy attacks is our own check each frame, not a KH1 guard object.
+> 3. Magnet Burst's pull is our own push on the caught enemies.
+> 4. Sora's invulnerable frames (roll, Quick Run, Explosion, Aerial Recovery) and the Keyblade guard's facing are decided in our hit-pass hook, not by KH1's own no-damage timer and guard objects.
+> 5. KH2's motion-range rules run as our per-frame code, not as KH1 motion events: turn to target, edge stop, the no-gravity hold, rise start, the Keyblade re-arm, guard windows, the Aerial Dodge apex and the glide clock.
+> 6. KH2's sounds, voices and effects on baked moves are started by our per-frame tick reading KH2's frame triggers (KH1's engines play them, but KH1's own motion events don't start them).
+> 7. Hood, coat and shorts are on t375's rules, applied at bake time; foot IK is off (t634). Both wait for the cloth work in the [sleeves thread](../missing-sleeves-animation/missing-sleeves-animation.md).
+>
+> **Still on the deprecated KH2 controller or renderer**
+> 8. Drive Forms, all of them, and hits taken in a form ([Drive Forms thread](../drive-forms-native/drive-forms-native.md)).
+> 9. The fallbacks left for base Sora: a KH2 spell or Reflect whose cast slot didn't build, Attack in the air when the air slots didn't build, and everything on Epic.
+> 10. The drawn-over pose, only when a slot fails to bake or a world's motion set lacks the move. Your last log shows it once, for one frame, on a room entry.
+> 11. The KH2 player model: our own renderer, off and not loaded (t659) ([model thread](../kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md)).
+>
+> **Not started:** MP Charge; the Drive gauge, orbs and the other forms; Limits, KH2 summons and reaction commands; KH2's knock-back on Sora himself (KH1's still plays); KH2's ledge hang and climb.
+>
+> Questions:
+> 1. Which next? (a) the spell scripts (1), once you answer the script question in the magic thread; (b) the per-frame rules (5, 6) turned into KH1 motion events that KH1's own motion pass runs, so less of our code runs each frame; (c) Drive Forms (8), starting with the Drive gauge; (d) Sora's own KH2 knock-back as a KH1 state; or (e) MP Charge.
+> 2. Invulnerable frames (4): (a) put them on KH1's own no-damage timer, the way KH1's roll does it, or (b) leave them in our hit hook until the moves around them are done?
+
+^m11
+
