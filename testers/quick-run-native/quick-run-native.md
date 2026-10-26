@@ -10,6 +10,7 @@
 - [4. Assistant: Thanks! (a) it is, so nothing changes: with Dodge Roll on KH](#^m4)
 - [5. Assistant: Yes, it's in, and it's from this branch, not main: t505 adde](#^m5)
 - [6. Assistant: Thanks, that narrowed it down. At MAX there's nothing to see](#^m6)
+- [7. Assistant: t665: Debug Menu > Growth Abilities.](#^m7)
 
 ---
 
@@ -177,9 +178,28 @@ I didn't see it on quick run max, but james saw it on level 3, unsure about leve
 
 ^m6
 
+
 1. the overrides can always be adjusted in the debug, keep it
 2. don't worry about drive forms
 3. (a)
 this is purely for testing, the debug menu should be able to break any rule when we add a feature to figure out situations.
 
 go ahead
+> [!tip] Assistant
+> **t665: Debug Menu > Growth Abilities.**
+> - There's a row each for High Jump, Quick Run, Dodge Roll, Aerial Dodge and Glide. Left and right go through Normal / Off / LV1 / LV2 / LV3 / MAX, and confirm puts a row back to Normal. Each row also shows the level Sora has right now.
+> - A level you pick works even if Sora hasn't learned or equipped the ability (your (a)). Off turns it off even if he has it.
+> - Your choices are saved in the ini (`debug_high_jump`, `debug_quick_run`, `debug_dodge_roll`, `debug_aerial_dodge`, `debug_glide`), so they stay across restarts. They only exist with `debug_menu = on`; with it off, nothing is overridden.
+> - The override replaces the level at the one place the mod hands Sora his growth abilities, so everything reads it: KH2's numbers for the level (Quick Run's speed, brake and timer, its LV2+ start effect, the invulnerable frames, the dodge roll, Aerial Dodge, the glide, the High Jump height) and the menu names. Nothing goes into your save.
+> - Drive Forms are left alone, as you said. A form uses its own growth ability, and your overrides come back when you revert.
+> - One limit: with a style row on KH1 (KH1's own jump, roll or glide), KH1's own move follows KH1's ability list, not this page. Stats > Abilities still controls those.
+>
+> Checked: every reader of these levels in our code. Not checked: in game (how the page looks with its rows, and the feel). The "now" column for Glide may show 0 when the glide style is KH1's, even though the glide uses your forced level.
+>
+> Please test:
+> - Quick Run at LV1, LV2, LV3 and MAX: the start effect should show at LV2 and LV3 only. Base Sora has no MAX effect, as in KH2.
+> - Off on something you've learned, and a level on something you haven't learned yet.
+> - Restart, and check your choices are still set.
+
+^m7
+

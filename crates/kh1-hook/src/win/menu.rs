@@ -452,6 +452,12 @@ pub struct Growth {
     hj_level: Option<u8>,
     ad_level: Option<u8>,
     gl_level: Option<u8>,
+    /// The abilities last given before the debug menu's growth overrides (`debugmenu::
+    /// growth_overrides`), and the overrides' count when they were applied.
+    given: Option<character_core::Abilities>,
+    ov_gen: u32,
+    /// Quick Run's, Glide's and Aerial Dodge's levels last written into their menu names.
+    names: [Option<u8>; 3],
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -460,7 +466,23 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None, hj_level: None, ad_level: None, gl_level: None }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None, hj_level: None, ad_level: None, gl_level: None, given: None, ov_gen: 0, names: [None; 3] }
+    }
+
+    /// Quick Run's (0), Glide's (1) or Aerial Dodge's (2) menu name at level `l` (his own), or at
+    /// the debug menu's forced level (`debugmenu::growth_override`; Off keeps his own name).
+    fn name(&mut self, which: usize, l: u8) {
+        let row = [super::debugmenu::GROWTH_QUICK_RUN, super::debugmenu::GROWTH_GLIDE, super::debugmenu::GROWTH_AERIAL_DODGE][which];
+        let l = super::debugmenu::growth_override(row).filter(|&f| f > 0).unwrap_or(l);
+        if l == 0 || self.names[which] == Some(l) {
+            return;
+        }
+        self.names[which] = Some(l);
+        match which {
+            0 => set_quick_run_name(l),
+            1 => set_glide_name(l),
+            _ => set_aerial_dodge_name(l),
+        }
     }
 
     /// Sora's side of KH1's save block, if it is there.
@@ -473,6 +495,18 @@ impl Growth {
         Some(Kh1Sora { level, abilities, shared, progress })
     }
 
+    /// Gives Sora `a`, with the debug menu's growth overrides on it (the quick-run-native thread,
+    /// m6: `debugmenu::growth_overrides`, all Normal without the debug tools).
+    fn give(&mut self, ch: &mut Character, a: character_core::Abilities) {
+        let (ov, gen) = super::debugmenu::growth_overrides();
+        ch.abilities = growth::with_growth_override(&a, &ov);
+        if ov.iter().any(|o| o.is_some()) {
+            log!(Debug, "debug growth overrides on Sora's abilities: {}", growth::describe(&ch.abilities));
+        }
+        self.given = Some(a);
+        self.ov_gen = gen;
+    }
+
     /// Every second: KH1's menu and level, and Sora's abilities from them (`kh1`), or the
     /// mode's fixed set once.
     pub unsafe fn update(&mut self, base: usize, ch: &mut Character) {
@@ -481,12 +515,18 @@ impl Growth {
         if !self.applied {
             self.applied = true;
             match self.mode {
-                Mode::Test => ch.abilities = growth::test(),
-                Mode::All => ch.abilities = growth::all(),
+                Mode::Test => self.give(ch, growth::test()),
+                Mode::All => self.give(ch, growth::all()),
                 Mode::Kh1 => self.frames = 59,
             }
             if self.mode != Mode::Kh1 {
                 super::styles::note_abilities(&ch.abilities);
+            }
+        }
+        // A debug menu growth override changed: applied at once to what was last given.
+        if super::debugmenu::growth_overrides().1 != self.ov_gen {
+            if let Some(a) = self.given.clone() {
+                self.give(ch, a);
             }
         }
         // Beside the level-up's own box when it comes (the user: KH1 shows several at once): for
@@ -690,10 +730,8 @@ impl Growth {
         // Quick Run's level: its menu name, and a box each time it grows (the user).
         if self.mode == Mode::Kh1 {
             let l = if growth::has(&now.abilities, growth::QUICK_RUN_ID) { growth::quick_run_level(now.level).max(1) } else { 0 };
+            self.name(0, l);
             if self.qr_level != Some(l) {
-                if l > 0 {
-                    set_quick_run_name(l);
-                }
                 if let Some(old) = self.qr_level {
                     if old > 0 && l > old {
                         log!(Menus, "Quick Run grows: {}", growth::quick_run_name(l));
@@ -727,10 +765,8 @@ impl Growth {
             // KH2's own Glide (t323, Glide style KH2): its menu name and a box as it grows, MAX
             // at Chernabog. At KH1 KH1's Glide and Superglide are vanilla: no boxes of ours.
             let l = if growth::has(&now.shared, growth::ours::GLIDE) { growth::kh2_glide_level(now.level, &now.progress) } else { 0 };
+            self.name(1, l);
             if self.gl_level != Some(l) {
-                if l > 0 {
-                    set_glide_name(l);
-                }
                 if let Some(old) = self.gl_level {
                     if old > 0 && l > old {
                         log!(Menus, "Glide grows: {}", growth::glide_name(l));
@@ -740,10 +776,8 @@ impl Growth {
                 self.gl_level = Some(l);
             }
             let l = if growth::has(&now.abilities, AERIAL_DODGE) { growth::aerial_dodge_level(now.level) } else { 0 };
+            self.name(2, l);
             if self.ad_level != Some(l) {
-                if l > 0 {
-                    set_aerial_dodge_name(l);
-                }
                 if let Some(old) = self.ad_level {
                     if old > 0 && l > old {
                         log!(Menus, "Aerial Dodge grows: {}", growth::aerial_dodge_name(l));
@@ -769,7 +803,7 @@ impl Growth {
         if self.mode == Mode::Kh1 {
             // (A combo ability only KH2 has makes the combo KH2's: `styles::kh2`.)
             super::styles::note_abilities(&from_kh1);
-            ch.abilities = from_kh1;
+            self.give(ch, from_kh1);
         }
         self.seen = Some(now);
     }

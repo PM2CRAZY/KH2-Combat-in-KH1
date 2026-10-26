@@ -37,6 +37,10 @@
 //! - **Logs** (the ram-use thread, m1 answer 3): every log category (`win::LogCat`) on or off, and
 //!   an All Logs row; all off by default, kept in the ini (`log_*`). KH1 Sound Calls is the old
 //!   Sound Log row. Without the debug tools (`debug_menu = off` at start) there is no log at all.
+//! - **Growth Abilities** (main page; the quick-run-native thread, m6): High Jump, Quick Run, Dodge
+//!   Roll, Aerial Dodge and Glide each Normal (what his level and story give), Off, or LV1..MAX,
+//!   given whether or not he learned or equipped it; kept in the ini (`debug_high_jump` ..); see
+//!   `docs/kh1-debug-menu.md`.
 //! - **Pages**: Trace Recorder (the trace's mode, seconds (shown as frames, 60 a second, with Game Frames on), its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
@@ -77,7 +81,7 @@
 
 use super::addr::Rva;
 use super::{fx12, hook, log, trace};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -161,6 +165,9 @@ enum Page {
     Spells,
     /// What goes into the log, by category (`win::LogCat`; the ram-use thread, m1 answer 3).
     Logs,
+    /// High Jump, Quick Run, Dodge Roll, Aerial Dodge and Glide at a level of the tester's
+    /// choosing (the quick-run-native thread, m6; `growth_override`).
+    Growth,
 }
 
 impl Page {
@@ -172,7 +179,7 @@ impl Page {
             Page::Group(_) => Some(Page::Categories),
             Page::Weapons | Page::Abilities => Some(Page::Stats),
             Page::HeldTasks => Some(Page::FrameAdvance),
-            Page::Spells | Page::Logs => Some(Page::Main),
+            Page::Spells | Page::Logs | Page::Growth => Some(Page::Main),
         }
     }
 
@@ -190,6 +197,7 @@ impl Page {
             Page::FrameAdvance => 7 + trace::GROUPS.len(),
             Page::Spells => 8 + trace::GROUPS.len(),
             Page::Logs => 9 + trace::GROUPS.len(),
+            Page::Growth => 10 + trace::GROUPS.len(),
         }
     }
 
@@ -206,6 +214,7 @@ impl Page {
             Page::HeldTasks => "FRAME ADVANCE > HELD TASKS".into(),
             Page::Spells => "DEBUG MENU > KH1 SPELLS".into(),
             Page::Logs => "DEBUG MENU > LOGS".into(),
+            Page::Growth => "DEBUG MENU > GROWTH ABILITIES".into(),
         }
     }
 
@@ -223,9 +232,69 @@ impl Page {
             Page::HeldTasks => format!("Left/Right/{ok}: held / runs   {no}: back"),
             Page::Spells => format!("Left/Right/{ok}: KH1 / KH2 cast   {no}: back"),
             Page::Logs => format!("Left/Right/{ok}: on/off   {no}: back"),
+            Page::Growth => format!("Left/Right: level   {ok}: Normal   {no}: back"),
         }
     }
 }
+
+// ---- Growth Abilities (the quick-run-native thread, m6) ----
+
+/// Each Growth Abilities row's setting (`growth::GROWTH_SETTINGS` index; `UNREAD` until the ini's
+/// is read).
+static GROWTH: [AtomicU8; 5] = [const { AtomicU8::new(UNREAD) }; 5];
+const UNREAD: u8 = 0xFF;
+/// Bumped at every change, so `menu::Growth` applies a change at once.
+static GROWTH_GEN: AtomicU32 = AtomicU32::new(0);
+
+/// A row's setting now (the ini's `debug_*` until changed here).
+fn growth_setting(i: usize) -> u8 {
+    let v = GROWTH[i].load(Ordering::Relaxed);
+    if v != UNREAD {
+        return v;
+    }
+    let v = super::settings::get().debug_growth[i].min(5);
+    GROWTH[i].store(v, Ordering::Relaxed);
+    v
+}
+
+fn set_growth_setting(i: usize, v: u8) {
+    GROWTH[i].store(v, Ordering::Relaxed);
+    GROWTH_GEN.fetch_add(1, Ordering::Relaxed);
+    super::settings::save(super::settings::DEBUG_GROWTH_KEYS[i], crate::growth::growth_setting_word(v));
+    log!(Debug, "debug menu: {} set to {}", crate::growth::GROWTH_ROWS[i], crate::growth::GROWTH_SETTINGS[v as usize]);
+}
+
+/// "LV2", "MAX", "Off" for a growth level.
+fn level_text(l: u8) -> String {
+    match l {
+        0 => "Off".into(),
+        4.. => "MAX".into(),
+        l => format!("LV{l}"),
+    }
+}
+
+/// The growth levels the debug menu forces (`growth::GROWTH_ROWS`' order: `None` Normal, `Some(0)`
+/// Off, `Some(1..=4)` LV1..MAX), and a count that changes with every change. All Normal without the
+/// debug tools (`debug_menu = off` at start): then nothing is read and nothing overridden.
+pub fn growth_overrides() -> ([Option<u8>; 5], u32) {
+    if !super::debug_on() {
+        return ([None; 5], 0);
+    }
+    (std::array::from_fn(|i| crate::growth::growth_setting_level(growth_setting(i))), GROWTH_GEN.load(Ordering::Relaxed))
+}
+
+/// One row's forced level (`growth_overrides`).
+pub fn growth_override(i: usize) -> Option<u8> {
+    if !super::debug_on() {
+        return None;
+    }
+    crate::growth::growth_setting_level(growth_setting(i))
+}
+
+/// The rows' places (`growth::GROWTH_ROWS`).
+pub const GROWTH_QUICK_RUN: usize = 1;
+pub const GROWTH_AERIAL_DODGE: usize = 3;
+pub const GROWTH_GLIDE: usize = 4;
 
 /// What a row does.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -238,6 +307,8 @@ enum Action {
     /// The Logs page's All row, and one category (`win::LogCat::ALL` index).
     LogsAll,
     Log(usize),
+    /// A Growth Abilities row (`growth::GROWTH_ROWS` index).
+    Growth(usize),
     GameFrames,
     FrameAdvance,
     HeldSound,
@@ -254,7 +325,7 @@ enum Action {
 
 struct Menu {
     page: Page,
-    cursor: [usize; 10 + trace::GROUPS.len()],
+    cursor: [usize; 11 + trace::GROUPS.len()],
     /// The pad last frame, the directions held and since when, the last repeat.
     last: u16,
     held: u16,
@@ -262,7 +333,7 @@ struct Menu {
     repeat_at: Option<Instant>,
 }
 
-static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 10 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
+static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 11 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
 
 /// One of Sora's stats: its name, its place in a stats block (`None`: only in the save), its byte
 /// in his save record, whether that byte is KH1's base number (equipment added on top), its
@@ -471,6 +542,7 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Stats  >".into(), Action::Enter(Page::Stats)),
             ("Frame Advance  >".into(), Action::Enter(Page::FrameAdvance)),
             ("KH1 Spells  >".into(), Action::Enter(Page::Spells)),
+            ("Growth Abilities  >".into(), Action::Enter(Page::Growth)),
             ("Exit".into(), Action::Exit),
         ],
         // (After t463) Frame Advance's own rows.
@@ -527,6 +599,22 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             let state = if cats & all == all { "All" } else if cats & all == 0 { "None" } else { "Some" };
             let mut v: Vec<(String, Action)> = vec![(format!("{:<20}< {:<4} >", "All Logs", state), Action::LogsAll)];
             v.extend(super::LogCat::ALL.iter().enumerate().map(|(i, c)| (format!("{:<20}< {} >", c.name(), on_off(cats & c.bit() != 0)), Action::Log(i))));
+            v.push(("Back".into(), Action::Back));
+            v
+        }
+        // (The quick-run-native thread, m6: each growth ability at a level of the tester's choosing,
+        // and the level the controller has now.)
+        Page::Growth => {
+            let now = super::takeover::with_abilities(|a| [a.high_jump, a.quick_run, a.dodge_roll, a.aerial_dodge, a.glide]);
+            let mut v: Vec<(String, Action)> = crate::growth::GROWTH_ROWS
+                .iter()
+                .enumerate()
+                .map(|(i, name)| {
+                    let set = crate::growth::GROWTH_SETTINGS[growth_setting(i) as usize];
+                    let has = now.map_or("--".to_string(), |n| level_text(n[i]));
+                    (format!("{:<14}< {:<6} >  now {}", name, set, has), Action::Growth(i))
+                })
+                .collect();
             v.push(("Back".into(), Action::Back));
             v
         }
@@ -689,6 +777,15 @@ unsafe fn step(base: usize) {
             let bit = super::LogCat::ALL[i].bit();
             super::set_log_cats(bit, super::log_cats() & bit == 0);
             sound(1);
+        }
+        Action::Growth(i) => {
+            // (Left / right step through Normal, Off, LV1 .. MAX; confirm puts it back to Normal.)
+            let n = crate::growth::GROWTH_SETTINGS.len() as i32;
+            let v = if delta == 0 { 0 } else { (growth_setting(i) as i32 + delta).rem_euclid(n) as u8 };
+            if v != growth_setting(i) {
+                set_growth_setting(i, v);
+                sound(1);
+            }
         }
         Action::GameFrames => {
             trace::set_game_frames(!trace::game_frames());
