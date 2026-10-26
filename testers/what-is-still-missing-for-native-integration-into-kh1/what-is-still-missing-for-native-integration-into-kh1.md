@@ -188,3 +188,9 @@ go ahead
 
 ^m6
 
+1. (b) if you have magic set to kh2 those magics should be 1:1, the reverse is true regardless of the animation.
+2. (a) if there's a more elegant implementation to let the animations work as flight air attacks e.g if the game has a different animation for sora when attacking in the flight state then we'll just give kh2 more animations, if not then find how it works and give kh2 the ability.
+3. (a) should always be built into the engine; I want to state that the goal for this project is to have as little as running in our code every frame to reduce the amount of bugs, performance issues, etc. So what that entails is having the game build the assets it needs from kh2 and putting it in its mod folder, it won't get destroyed when the game is shut off like it does now but instead is built from a players extracted data from kh1 and kh2. 
+4. not sure if this is updated let me know
+   
+   go ahead
