@@ -47,6 +47,10 @@ const SAME_ROT: f32 = 1e-4;
 const SAME_POS: f32 = 1e-3;
 /// A channel's key count is a byte.
 const MAX_KEYS: usize = 255;
+/// The longest motion baked (frames at 60 Hz). A motion longer than `MAX_KEYS` frames (KH2's
+/// battle idle, 300) is fine: a channel needing more keys than a byte holds is reduced with a
+/// looser tolerance (`reduce`). The key time is `frame × 256 << 8` in an i32: far past this.
+const MAX_FRAMES: u32 = 4096;
 
 /// What a bake made.
 #[derive(Clone, Copy, Debug, Default)]
@@ -102,8 +106,20 @@ fn continuous(e: Vec3, prev: Vec3) -> Vec3 {
 }
 
 /// Keys for one channel's values (one per frame): the first and last, and between them only
-/// those a line between the kept neighbours misses by more than `tol`.
+/// those a line between the kept neighbours misses by more than `tol`; with `tol` doubled until
+/// they fit a channel's byte count (`MAX_KEYS`: only for a motion longer than 254 frames).
 fn reduce(v: &[f32], tol: f32) -> Vec<(u32, f32)> {
+    let mut tol = tol;
+    loop {
+        let k = reduce_at(v, tol);
+        if k.len() <= MAX_KEYS || !tol.is_finite() {
+            return k;
+        }
+        tol *= 2.0;
+    }
+}
+
+fn reduce_at(v: &[f32], tol: f32) -> Vec<(u32, f32)> {
     let n = v.len();
     let mut out = vec![(0u32, v[0])];
     let fits = |a: usize, b: usize| (a + 1..b).all(|i| (v[a] + (v[b] - v[a]) * ((i - a) as f32 / (b - a) as f32) - v[i]).abs() <= tol);
@@ -149,7 +165,7 @@ fn sample(keys: &[(u32, f32)], frame: f32) -> f32 {
 pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bone], poses: &[Vec<Mat4>], travel: &[Vec3], kh1_legs: bool) -> Result<(Vec<u8>, Report)> {
     let bad = |m: String| Error::Format(format!("bake: {m}"));
     let n = skeleton.len();
-    if frames == 0 || frames as usize + 1 > MAX_KEYS {
+    if frames == 0 || frames > MAX_FRAMES {
         return Err(bad(format!("{frames} frames")));
     }
     if poses.len() != frames as usize + 1 || poses.iter().any(|p| p.len() != n) {
@@ -545,5 +561,19 @@ mod tests {
         let k = u32_at(&b, 0x28).unwrap() as usize + u16::from_le_bytes([b[hc + 4], b[hc + 5]]) as usize * 16;
         assert_eq!(u32_at(&b, k + 16).unwrap(), ((frames as i32 * 256) << 8 | 1) as u32);
         assert_eq!(f32::from_bits(u32_at(&b, k + 20).unwrap()), frames as f32 * 3.0);
+    }
+
+    /// A channel over more frames than a channel's byte of keys holds (KH2's battle idle, 300)
+    /// still fits: its tolerance loosened until it does.
+    #[test]
+    fn long_channels_fit_a_byte_of_keys() {
+        let v: Vec<f32> = (0..=300).map(|i| ((i * 7919) % 101) as f32).collect();
+        let k = reduce(&v, POS_TOL);
+        assert!(k.len() <= MAX_KEYS, "{}", k.len());
+        assert_eq!(k.first().unwrap().0, 0);
+        assert_eq!(k.last().unwrap().0, 300);
+        let smooth: Vec<f32> = (0..=300).map(|i| (i as f32 * 0.05).sin()).collect();
+        let k = reduce(&smooth, ROT_TOL);
+        assert!(smooth.iter().enumerate().all(|(i, x)| (sample(&k, i as f32) - x).abs() <= ROT_TOL + 1e-6));
     }
 }

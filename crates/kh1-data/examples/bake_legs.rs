@@ -40,7 +40,7 @@ fn main() {
     };
     for (motion, template) in pairs {
         let Some(m) = rig.motions.get(&motion) else { println!("KH2 {motion}: none"); continue };
-        let frames = (kh2_anim::length_frames(m).round() as u32).clamp(1, 250);
+        let frames = (kh2_anim::length_frames(m).round() as u32).clamp(1, 4096);
         let poses: Vec<Vec<glam::Mat4>> = (0..=frames).map(|f| r.pose(&kh2_anim::evaluate(&rig.skeleton, m, kh2_anim::key_time(m, f as f32, false), kh2_anim::Options::default()).bones)).collect();
         let t = slot::motion_bytes(&file, template).unwrap();
         for on in [true, false] {

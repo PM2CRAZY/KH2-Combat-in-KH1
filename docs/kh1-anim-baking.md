@@ -418,3 +418,30 @@ on a drawn clip (idle, landing, glide, the drawn casts) only ours does, as befor
   (`0x1401910E0`) in the hook (**Checked (code)**). KH1's own motions (its own slots, when KH1 shows
   him) keep KH1's own leg IK and ground lift: that is KH1's, not a layer of ours.
 - Cost: none per frame (one bool read; `place` returns at once once eased out).
+
+## 10. Idle baked (the tester's m3: "just make sure every animation is baked and on the native system")
+
+- KH1's idle is request 0, entry `0x4000`: slot 0, kind 4, which KH1's resolver (`0x1402A01E0`)
+  plays as the slot in the field and slot + 1 in battle (§2; **Checked (files + decomp)**). It is
+  built like walk and run (`kh2slots::CYCLES`, now with a slot count per request: two for kind 4,
+  three for kind 3): KH2's field idle (motion 0's field variant, 180 frames at 60 Hz) on KH1's
+  slot 0 as template, KH2's battle idle (motion 0, 300 frames) on slot 1, the request pointed at the
+  first, KH1 adding 1 in battle itself. Style: Misc Animations (as KH1's slots 0..7 always were,
+  `shared::slot_kind`). **Checked (files)**: `P_EX100.mset` motion 0 300 frames (no loop point, so
+  KH1's whole-motion loop is KH2's), field variant 180.
+- Everything that asks for the idle goes through request 0: KH1's player step when he stands still,
+  the "action over" request `0x40000000` it queues after landings, items, casts and reactions, and
+  scripts that set it. All of those now play KH2's idle (as walk and run already did), and the
+  weapon stays as the request's kind leaves it (kind 4 draws or puts away nothing).
+- **Longer than a byte of keys.** KH2's battle idle is 300 frames; a KH1 channel's key count is a
+  byte. The bake no longer refuses motions over 254 frames (up to 4096): a channel that needs more
+  than 255 keys has its tolerance doubled until it fits (`bake::reduce`; the key time,
+  `frame × 256 << 8`, fits an i32 far past that). On the user's files the battle idle bakes
+  within 0.36 units of the pose, no channel needing a looser tolerance (`examples/bake_legs.rs
+  0:1`).
+- `pose::play_for`'s idle (slots 0 / 1) stays only as the fallback when the slots aren't built.
+- Feet: plain legs (§9).
+- Cost: none per frame (one more redirect, two fewer retargets while he stands); two more bakes at
+  load (180 and 300 frames).
+- Not checked: in game; scripts and cutscenes that ask KH1's idle now show KH2's (Misc Animations
+  KH2), as they already did for walk and run.

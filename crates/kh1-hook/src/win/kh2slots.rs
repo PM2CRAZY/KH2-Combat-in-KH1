@@ -311,20 +311,33 @@ const SPECS: [Spec; 41] = [
 /// row, on KH1's three as templates (walk 2 / 3 / 4, run 5 / 6 / 7), with KH2's field cycle on the
 /// field one and its battle cycle on the other two, as `pose::play_for` draws them; the request is
 /// pointed at the first. All three or none.
+///
+/// KH1's idle, request 0 (the baking thread, m3: "just make sure every animation is baked and on
+/// the native system"), is kind 4 in its table (`0x4000`, Checked (files) `xa_ex_0010.mset`): KH1
+/// plays the entry's slot in the field and slot + 1 in battle (the resolver `0x1402A01E0`, Checked
+/// (decomp), `docs/kh1-anim-baking.md` §2), slots 0 (field idle, 120 frames) and 1 (battle idle,
+/// 170). So two slots in a row: KH2's field idle (`P_EX100.mset` motion 0's field variant, 180
+/// frames at 60 Hz) on 0, its battle idle (300 frames, Checked (files)) on 1, as `pose::play_for`
+/// drew them. Both or none.
 struct Cycle {
     motion: u16,
     request: usize,
-    /// KH1's first slot of the three.
+    /// KH1's first slot of the run.
     slot: usize,
+    /// How many slots in a row (kind 3: three; kind 4: two).
+    count: u8,
 }
 
-const CYCLES: [Cycle; 2] = [
-    Cycle { motion: character_core::motion::WALK, request: 0x1, slot: 2 },
-    Cycle { motion: character_core::motion::RUN, request: 0x2, slot: 5 },
+const CYCLES: [Cycle; 3] = [
+    Cycle { motion: character_core::motion::IDLE, request: 0x0, slot: 0, count: 2 },
+    Cycle { motion: character_core::motion::WALK, request: 0x1, slot: 2, count: 3 },
+    Cycle { motion: character_core::motion::RUN, request: 0x2, slot: 5, count: 3 },
 ];
 
-/// A request table entry's kind (bits 12..14): 3 picks the slot + 0, 1 or 2 by field / battle.
+/// A request table entry's kind (bits 12..14): 3 picks the slot + 0, 1 or 2 by field / battle; 4
+/// the slot, or slot + 1 in battle.
 const KIND_VARIANTS: u32 = 3;
+const KIND_BATTLE: u32 = 4;
 
 pub struct Move {
     pub motion: u16,
@@ -342,7 +355,7 @@ pub struct Move {
     pub default: bool,
     /// KH2's field (out-of-combat) variant of the motion (a `CYCLES` field slot).
     pub field: bool,
-    /// Which of a kind 3 request's three slots this is (`CYCLES`; 0 otherwise): only the first is
+    /// Which of a kind 3 / 4 request's slots this is (`CYCLES`; 0 otherwise): only the first is
     /// pointed at, KH1 adds the rest.
     pub variant: u8,
     /// A request of ours (`kh1rows`: 0x200 + n, none of KH1's), not one KH1's own: its entry is
@@ -387,22 +400,22 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 blocks.push(block);
             }
         }
-        // KH2's walk and run, three slots in a row each (`CYCLES`).
+        // KH2's idle (two slots in a row), walk and run (three each) (`CYCLES`).
         for c in CYCLES.iter().filter(|c| wanted(c.motion)) {
             let mut three = Vec::new();
-            for v in 0..3u8 {
+            for v in 0..c.count {
                 match make(mset, kh2, bake, &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize, false)? {
                     Some(m) => three.push(m),
                     None => break,
                 }
             }
-            if three.len() == 3 {
+            if three.len() == c.count as usize {
                 for (m, block) in three {
                     moves.push(m);
                     blocks.push(block);
                 }
             } else {
-                log(&format!("KH2 slots: KH2 motion {} left out: not all three of KH1's slots {}..{} built", c.motion, c.slot, c.slot + 2));
+                log(&format!("KH2 slots: KH2 motion {} left out: not all {} of KH1's slots {}..{} built", c.motion, c.count, c.slot, c.slot + c.count as usize - 1));
             }
         }
         // (KH2's other swings are no longer built on KH1's own ground and air requests for KH2's
@@ -477,7 +490,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
 /// One of our motions: KH2's `motion` on KH1's slot `stands_for` (its template) for KH1's
 /// `request`, as our slot `slot`; `default`: the request's own (`SPECS`), else one KH2's row
 /// selection can pick (`pick`); `field`: KH2's field variant of the motion; `variant`: which of a
-/// kind 3 request's three slots (`CYCLES`). `None` if it can't be built (logged).
+/// kind 3 / 4 request's slots (`CYCLES`). `None` if it can't be built (logged).
 #[allow(clippy::too_many_arguments)]
 fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, Vec<u8>)>, String> {
     let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
@@ -486,7 +499,8 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     };
     let entry = requests.get(request).copied();
     let base = stands_for.checked_sub(variant as usize);
-    if entry.map(|e| (e & 0xFFF) as usize) != base || (variant > 0 && entry.map(|e| (e >> 12) & 7) != Some(KIND_VARIANTS)) {
+    let kind_ok = |k: u32| (k == KIND_VARIANTS && variant <= 2) || (k == KIND_BATTLE && variant <= 1);
+    if entry.map(|e| (e & 0xFFF) as usize) != base || (variant > 0 && !entry.is_some_and(|e| kind_ok((e >> 12) & 7))) {
         // (Left out, not a failure of the rest: one wrong request shouldn't drop the others.)
         log(&format!("KH2 slots: request {request:#x} is not KH1's slot {stands_for}; KH2 motion {motion} left out"));
         return Ok(None);
