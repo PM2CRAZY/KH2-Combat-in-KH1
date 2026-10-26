@@ -4,7 +4,8 @@
 //! - Sora's Drive motion (52, invulnerable) with base Sora's moveset; when it ends, the swap:
 //!   the form's moveset, motions and combo rows (`P_EX100_MAGF`, moveset 3), his facing and
 //!   lock kept, and its arrival (53). Its abilities: Sora's support abilities, not his action
-//!   or growth ones, and the form's own growth ability, Quick Run, at MAX (the user);
+//!   or growth ones, and the form's own growth ability, Quick Run, at the form's level (KH2's
+//!   form levels kept in KH1's save, `formexp`);
 //! - the form runs on Sora's MP (the user): its yellow part drained bit by bit, a blue bar
 //!   broken into it when it runs out (KH1's own payment; `after_step`); out of MP, or on the
 //!   Revert command (the Drive row itself in the form), back to Sora, at once, in the air too:
@@ -20,12 +21,12 @@
 //!
 //! Valor Form (stage 211, the user: "i want to try to add valor form"): the same change and
 //! revert, `P_EX100_BTLF` (moveset 2, its two Keyblades' swings), its growth ability High Jump
-//! (at MAX, as Wisdom's Quick Run), no magic (KH2's Valor can't cast), and its second Keyblade
+//! (at Valor's form level, `formexp`), no magic (KH2's Valor can't cast), and its second Keyblade
 //! (`valor`): entered only with an eligible one (the user: "If no keyblade is eligible to be in
 //! that slot, dont let players go into valor form").
 //!
 //! Final Form (stage 231, the user: "lets work on implementing final form ... make it a secret"):
-//! the same change and revert, `P_EX100_ULTF` (moveset 5), its growth ability Glide at MAX, its
+//! the same change and revert, `P_EX100_ULTF` (moveset 5), its growth ability Glide at its form level, its
 //! two Keyblades floating where KH2's own weapon motions put them (the second always the Kingdom
 //! Key, no menu slot: the user, "don't add the final form keyblade selection into the menu like we
 //! did for valor, just default it to kingdom key"). Not in the Drive list: a secret button
@@ -64,8 +65,6 @@ pub const REVERT_FX: u16 = u16::MAX - 2;
 /// MP to change (KH1's payment takes hundredths of a bar from 100 up).
 pub const COST_MP: i32 = 3;
 const COST: i32 = COST_MP * 100;
-/// The form's level (KH1 has no form experience): Lv 1, 40 s of battle.
-const LEVEL: u32 = 1;
 /// Frames of battle per unit of yellow MP the form uses up (half as fast out of battle). A blue
 /// bar breaks into its number × 30 units (KH1's own conversion), so the top bar lasts that many
 /// units.
@@ -431,25 +430,34 @@ fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abilities {
         finishing_plus: sora.finishing_plus,
         negative_combo: sora.negative_combo,
         combo_master: sora.combo_master,
-        // (Each form's growth ability at MAX: the user, Wisdom with Quick Run MAX; Valor's High
-        // Jump the same.)
-        high_jump: if kind == Kind::Valor { 4 } else { 0 },
-        // (Wisdom's Quick Run one level above Sora's own, at most MAX: the tester's rule for the
-        // forms' growth, what-is-still-missing after m13. Sora's level here is the one KH1's menu
-        // gives him equipped, `menu::Growth`.)
-        quick_run: if kind == Kind::Wisdom { (sora.quick_run + 1).min(4) } else { 0 },
+        // (Each form's growth ability at the form's own level, KH2's fmlv: `form_growth`.)
+        high_jump: 0,
+        quick_run: 0,
         aerial_dodge: 0,
-        // (Final's growth ability: Glide.)
-        glide: if kind == Kind::Final { 4 } else { 0 },
+        glide: 0,
         dodge_roll: 0,
         ..sora.clone()
     };
+    form_growth(&mut a, kind);
     a.equipped = form.moveset.combo_rows.iter().map(|r| r.ability).filter(|&x| x != 0).collect();
     // (Sora's own moves added to the form, `pose::port_moves`: only while he has them equipped.)
     if kind == Kind::Valor {
         a.equipped.retain(|&x| x != UPPER_SLASH || sora.equipped.contains(&UPPER_SLASH));
     }
     a
+}
+
+/// The form's growth ability at its form level (KH2: fmlv's growth level for the form's level,
+/// Lv1/3/5/7 giving LV1/2/3/MAX; Valor High Jump, Wisdom Quick Run, Final Glide;
+/// `formexp::growth`). It replaces t688's rules (Valor and Final at MAX, Wisdom one above Sora's
+/// own): the tester's answer 6 (b), what-is-still-missing after m14.
+fn form_growth(a: &mut Abilities, kind: Kind) {
+    let g = super::formexp::growth(kind);
+    match kind {
+        Kind::Valor => a.high_jump = g,
+        Kind::Wisdom => a.quick_run = g,
+        Kind::Final => a.glide = g,
+    }
 }
 
 /// Replaces the controller (keeps facing, lock-on, the glide button, and his movement: speed,
@@ -560,13 +568,15 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     if ch.clip_exists(ARRIVE_MOTION) {
         ch.play_held(ARRIVE_MOTION, true);
     }
-    d.form = Some(InForm { kind, left: 0, sora, own, logged_s: 0 });
+    d.form = Some(InForm { kind, left: 0, sora, own: own.clone(), logged_s: 0 });
     CURRENT.store(kind.code(), Ordering::Relaxed);
     IN_FORM.store(true, Ordering::Relaxed);
     if kind.two_blades() {
         super::valor::started();
     }
-    log!(Forms, "{} (Lv{LEVEL}): yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), {} MAX", kind.name(), kind.growth());
+    super::formexp::entered(kind);
+    let rec = super::formexp::record(kind);
+    log!(Forms, "{} (LV{}, {} EXP): yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), {} {}", kind.name(), rec.level, rec.exp, kind.growth(), growth_name(&own, kind));
 }
 
 /// Back to Sora: what played is cut, he is free with his movement (the user: on the ground
@@ -606,12 +616,21 @@ pub fn abilities(d: &mut Drive, ch: &mut Character) {
             own.finishing_plus = f.sora.finishing_plus;
             own.negative_combo = f.sora.negative_combo;
             own.combo_master = f.sora.combo_master;
-            // (Wisdom's Quick Run follows Sora's, one level above, `form_abilities`.)
-            if f.kind == Kind::Wisdom {
-                own.quick_run = (f.sora.quick_run + 1).min(4);
-            }
+            form_growth(&mut own, f.kind);
             f.own = own.clone();
             ch.abilities = own;
+        }
+        // (A form level gained in the form: its growth ability at once, `formexp`; looked at only
+        // when a level was gained.)
+        static SEEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let gen = super::formexp::generation();
+        if SEEN.swap(gen, Ordering::Relaxed) != gen {
+            let mut own = f.own.clone();
+            form_growth(&mut own, f.kind);
+            if own != f.own {
+                f.own = own.clone();
+                ch.abilities = own;
+            }
         }
     }
 }
@@ -696,7 +715,7 @@ unsafe fn yellow(sora: usize) -> u16 {
 //   item use, the ground and air combo on KH1's requests and our own combo rows), KH2's combo pick
 //   in KH1's picker reads Valor's PTYA (KH2's controller's data, only read, `takeover::kh2_rows`), and
 //   KH2's physics numbers on KH1's states are Valor's (`takeover::refresh_kh2_numbers`: run 12,
-//   High Jump at MAX); then Valor's arrival 53 on its request of ours.
+//   High Jump at its form level, `formexp`); then Valor's arrival 53 on its request of ours.
 // - Revert: everything back to base Sora's, what was playing cut into KH1's idle (or fall).
 // The MP cost, drain, out-of-MP revert, KO revert, look and the second Keyblade's stats are the
 // same as on KH2's controller (`drain_step`). Wisdom and Final keep KH2's controller for now.
@@ -944,6 +963,8 @@ unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
     if kind.two_blades() {
         super::valor::started();
     }
+    super::formexp::entered(kind);
+    let rec = super::formexp::record(kind);
     // (Valor's slots on his requests from now: before its arrival is asked.)
     super::kh2slots::refresh();
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
@@ -957,7 +978,7 @@ unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
         wr(actor + 0x3C0, [0.0f32; 3]);
         ARRIVE_AIR.store(true, Ordering::Relaxed);
     }
-    log!(Forms, "{} (Lv{LEVEL}) on KH1's own states: its moves on his requests, KH2's numbers its own ({}), {} {}{}", kind.name(), kind.model(), kind.growth(), growth, if stance { "; its arrival, then its stance (motion 6)" } else if arrival { "; its arrival" } else { "" });
+    log!(Forms, "{} (LV{}, {} EXP) on KH1's own states: its moves on his requests, KH2's numbers its own ({}), {} {}{}", kind.name(), rec.level, rec.exp, kind.model(), kind.growth(), growth, if stance { "; its arrival, then its stance (motion 6)" } else if arrival { "; its arrival" } else { "" });
 }
 
 /// The form's growth ability's level, as a name.

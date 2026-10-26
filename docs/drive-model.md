@@ -85,11 +85,16 @@ Each form is its own object in `00objentry.bin`, with:
   Revert in a form), or on a KO.
   - Sora comes back at once and plays motion 4.
   - There is no refill and no cooldown.
-- **Form EXP** (fmlv table, levels capped at 7):
-  - Valor: +1 per hit
-  - Wisdom: +1 per Heartless defeated (status ids 1000..2011, not 1047..1059)
-  - Final: +1 per Nobody defeated (3000..4014)
-  - Master's rule (drive orbs) and Limit's (limit finishers) aren't modelled.
+- **Form EXP** (fmlv table; Steam KH2 `0x1403E8380`, Checked (decomp); the KH1 port in
+  `docs/kh1-drive-forms-native.md` §9):
+  - Valor: +1 per hit landed on an enemy (`0x1403E86B0`)
+  - Wisdom: +1 per Heartless defeated by Sora (object ids 1000..2011, not 1047..1059;
+    `0x1403E8780`)
+  - Limit: +1 per hit of attacks 0x2AE, 700, 0x2BF, 0x2C2 (its limits' finishers; `0x1403E8730`)
+  - Master: + each Drive orb's value picked up (`0x1403E8760`, from the prize pickup)
+  - Final: +1 per Nobody defeated by Sora (3000..4014)
+  - The level cap is 2 + the forms Sora owns (so 7 with all five); at the cap EXP is dropped.
+  - No EXP while the area's flag 0x400 is up (`0x1403A3C40`; not traced which areas).
 
 ## Wisdom Form's shots (Checked, exe + Data)
 

@@ -365,6 +365,19 @@ unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str, append: boo
     true
 }
 
+/// Boxes asked for from elsewhere (`formexp`'s form level-ups), shown as the "New Ability" ones
+/// are (`Growth::update`).
+static QUEUED: std::sync::Mutex<Vec<(String, String, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// Shows a box in KH1's prompt style (title, one line) when KH1's box is free.
+pub fn queue_prompt(title: &str, line: &str) {
+    if let Ok(mut q) = QUEUED.lock() {
+        if q.len() < 16 {
+            q.push((title.to_string(), line.to_string(), String::new()));
+        }
+    }
+}
+
 /// Sora's save block, if it is there.
 pub unsafe fn save_block(base: usize) -> Option<usize> {
     let mut save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
@@ -528,6 +541,9 @@ impl Growth {
             if let Some(a) = self.given.clone() {
                 self.give(ch, a);
             }
+        }
+        if let Ok(mut q) = QUEUED.try_lock() {
+            self.prompts.extend(q.drain(..));
         }
         // Beside the level-up's own box when it comes (the user: KH1 shows several at once): for
         // up to 3 s after learning, added to KH1's when it is up; then alone if the box is free.

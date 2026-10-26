@@ -598,6 +598,11 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
         super::bodyhits::before_hit(attack, target);
     }
     let r = f(attack, target);
+    // (Drive Form levels: Valor's EXP per hit, each enemy's last attacker for Wisdom's defeats,
+    // `formexp`.)
+    if r > 0x10000 {
+        super::formexp::hit(owner, target, r);
+    }
     // (t338) Which hit effect KH1's contact will start for this hit (any attack on anyone but Sora).
     // (Debug only: the trace's and log's hit-effect notes, `debug_on`.)
     if super::debug_on() && attack > 0x10000 && target > 0x10000 && target != sora() {

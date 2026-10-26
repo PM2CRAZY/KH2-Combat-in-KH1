@@ -1629,7 +1629,7 @@ unsafe fn refresh_kh2_numbers(base: usize) {
     super::form::abilities(&mut d.drive, &mut d.character);
     // (KH2 Sora's own numbers, not the controller's now: with physics KH1 those are KH1's,
     // `shared::physics::kh2_controller`. In a Drive Form on KH1's own states, the form's: Valor's
-    // run 12 and jump, its High Jump at MAX, `prty` moveset 2, Checked (files).)
+    // run 12 and jump, its High Jump at its form level (`formexp`), `prty` moveset 2, Checked (files).)
     let own = match super::form::current().filter(|_| super::form::native_now()).and_then(|k| k.data(kh2)) {
         Some(f) => &f.character,
         None => &kh2.character,

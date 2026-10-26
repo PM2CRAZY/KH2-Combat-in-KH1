@@ -965,3 +965,72 @@ cast motion, KH1's spell start (`0x14028F140`, hooked) starts KH2's `.mag` scrip
 - **Not changed:** the old controller path's rule "Wisdom's Cure is KH1's Cure on KH2's motion"
   (main branch, the user) doesn't apply on KH1's states: KH2's Wisdom casts KH2's Cure. An open
   question in the report.
+
+## 9. Form levels in KH1 (what-is-still-missing after m14, answer 6 (b))
+
+The tester: "build form levels into KH1" (KH2 uses the form's own level for its growth ability).
+
+**KH2's rule (Steam KH2, Checked (decomp)).**
+- **The add** `0x1403E8380 (player, n)`: the player's form (`+0xDE0`) record in the save
+  (`0x1403A1410`: save `+0xE04 + (form − 1) × 0x38`, level byte `+2`, EXP i32 `+4`) gets `n` EXP.
+  Then, while the level is under the cap, the fmlv row (form, level) is found by `bsearch` on
+  `form << 4 | level` (the table pointer `0x142AE5708`, set from 00battle's `fmlv` by
+  `0x1403E8A90`); EXP under the row's EXP is kept; else the level goes up and the row's EXP is
+  taken off. At the cap, or with no row, EXP becomes 0.
+- **The cap**: 2 + the forms 1..5 Sora owns, counted by each form's item (`0x1403C3EF0` reads the
+  form's item id from `0x1405C5D08`, `0x1403C4720` whether it is owned): 7 with all five.
+- **A level-up**: when the new row's growth level (fmlv byte 1, low nibble) is above the old
+  row's, the form's own growth ability in its record's list (`+8`, 0x18 entries) is swapped for the
+  next one, and Sora's own (his record's list `+0x54`, 0x50 entries) goes from the level two under
+  to one under (an empty slot when that is none). The table is at `0x1405C9030` (Checked (exe)): 5
+  u16 per form, none then LV1..MAX: Valor High Jump 94..97, Wisdom Quick Run 98..101, Limit Dodge
+  Roll 564..567, Master Aerial Dodge 102..105, Final Glide 106..109. So Sora gets LV1 / LV2 / LV3
+  at form LV3 / 5 / 7, and the form has LV1 / 2 / 3 / MAX at LV1 / 3 / 5 / 7. The row's ability
+  (fmlv `+2`; the user's 00battle: Valor LV2 Auto Valor 385, LV4 / LV6 Combo Plus 162; Wisdom 386,
+  412, 413; Limit 568, 405, 407; Master 387, 163, 163; Final 388, 398, 398) goes to Sora
+  (`0x1403C3F00`). A message window and the player's effect `0x1403ED390` (`0x1402C6B30 (..,
+  0x10, 1, 1, 0x2715, player)`) show it.
+- **Who adds what** (each checks the player's form `+0xDE0`):
+  - Valor (1): `0x1403E86B0`, from the enemy's damage callbacks `0x1403DB730` / `0x1403DBB90`:
+    +1 when the hit's attack's owner is the player (`0x1403BA720`, and his `+0x6C8` bit 7).
+  - Wisdom (2) / Final (5): `0x1403E8780 (enemy id, killer)`, from the enemy's death callbacks
+    `0x1403DB680` / `0x1403DBAF0` with its last attacker `+0xD38`: +1 for ids 1000..2011 except
+    0x417..0x423 (`0x1403BA050`), or 3000..4014.
+  - Limit (3): `0x1403E8730`, from `0x1403D8B40`: +1 per hit of attacks 0x2AE, 700, 0x2BF, 0x2C2.
+  - Master (4): `0x1403E8760 (n, player)`, from the prize pickup `0x1403DCA50`: + the orb's value.
+  - Nothing is added while `0x1403A3C40` (the current area's flag 0x400) holds.
+- The form gauge's length is `(level + 3) × 600` frames (`0x1403C17C0`, §2). The testing branch
+  has no form gauge (forms drain MP), so the level doesn't lengthen a form here (asked).
+
+**KH1 (t692).**
+- **Storage** (`win/formexp.rs`): `save + 0x882` Valor, `+0x884` Wisdom, `+0x886` Final, a u16 each
+  (`formlevel::Record`: level in the top 3 bits, EXP in the low 13; 0 = never entered, read as LV1).
+  - KH1 describes its save's first block with a field list (`0x1402CF620`, `0x1402CF7E0`:
+    "... 21s 1i 1d 10c" ending at `+0x888`, `0x142DE9BE8`); `+0x880` is a bool (written by the
+    instruction at `0x1402857EC`, read at `0x1402A1D07`), and `+0x881..+0x887` are part of that field list's last "10c".
+  - No instruction in the Steam exe accesses `[reg + 0x881..0x887]` other than a stack local
+    (`0x14039DB25`), and none addresses `0x142DE9BE1..BE7`. Checked (exe, a full disassembly).
+  - The whole `0x16C00` bytes are copied as the save (`0x1402CF7E0`), so the bytes travel with it.
+  - Assumption: nothing reaches them through a computed pointer. Two bytes more (`+0x888`'s
+    neighbourhood, or `+0x489`) would be needed for Limit and Master.
+- **Valor**: KH1's contact `0x1402BF330` (hooked, `probe::hit`) making a record for an attack Sora
+  owns on an actor of kind 3, in Valor: +1. Both Keyblades (`lefthits`) are Sora's attacks.
+- **Wisdom**: the defeat is KH1's enemy scripts' EXP command, `0x1402BC9A0` (EXP shown at the
+  enemy) and `0x1402BCA20` (at a point), `(args)`: `args[0]` the enemy's handle, `args[1]` the
+  EXP; both skip their work with EXP Zero on and give the EXP to the party (`0x140284990`).
+  Hooked at their entry (prologues `40 53 48 83 EC 20 48 8B D9` and `40 53 48 83 EC 50`, Checked
+  (exe)), so EXP Zero doesn't stop it. KH1 keeps no last attacker, so the contact notes the last
+  actor whose attack made a record on each enemy; Sora's last: +1 in Wisdom. Assumptions: every
+  KH1 enemy gives its EXP through one of the two once when defeated; every KH1 enemy counts as a
+  Heartless (KH1's ids aren't KH2's).
+- **Final**: KH1 has no Nobodies: nothing (asked).
+- **The cap**: Valor and Wisdom are always in the Drive list (owned), Final once entered (its
+  record set): cap 4, or 5.
+- **Growth**: the form's growth ability is fmlv's growth level for its form level (`form::
+  form_growth`): Valor High Jump, Wisdom Quick Run, Final Glide. This replaces the old rules
+  (Valor and Final at MAX, Wisdom one above Sora's own). A level gained in the form takes effect at
+  once (`form::abilities`).
+- **Not done (asked)**: Sora's own growth from form levels and the rows' abilities (Auto Valor,
+  Combo Plus, MP Rage, ...): KH1's menu gives Sora his growth (`growth.rs`), so giving it from
+  form levels too would change base Sora's own progression.
+- A level-up shows a "Form Level Up" box in KH1's prompt style (`menu::queue_prompt`) and logs.
