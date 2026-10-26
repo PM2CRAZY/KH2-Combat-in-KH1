@@ -305,6 +305,43 @@ fn whiffed_swings_do_not_advance_the_combo() {
     let (motions, _) = mash(&mut w, false);
     assert!(motions.len() >= 4);
     assert!(motions.iter().all(|&m| m == 100), "{motions:?}");
+    // KH2's step (Steam KH2 `0x1403D6FC0` -> `0x1403D6CA0`): a press in a missed swing's combo
+    // window is refused, so each swing plays to its end (40 frames) before the next one starts.
+    let mut w = World::new(sora());
+    let mut starts = Vec::new();
+    for f in 0..120 {
+        let o = w.step(Pad { attack: f % 2 == 0, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            starts.push(f);
+        }
+    }
+    assert!(starts.len() >= 2 && starts.windows(2).all(|p| p[1] - p[0] >= 40), "{starts:?}");
+}
+
+/// The same rule in the air (KH2's Attack check has no airborne case, Checked (decomp)): swings
+/// that miss never chain, so a whiffed air combo never reaches its finisher; connecting ones do.
+#[test]
+fn whiffed_air_swings_do_not_chain() {
+    let run = |connect: bool| {
+        let mut w = World::new(sora());
+        w.ch.abilities.aerial_dodge = 0;
+        w.run(15, Pad { jump: true, ..IDLE });
+        assert!(w.ch.airborne());
+        let mut most = 0;
+        for f in 0..60 {
+            let o = w.step(Pad { attack: f % 2 == 0, ..IDLE });
+            if connect && !o.hitboxes.is_empty() {
+                w.ch.register_hit();
+            }
+            most = most.max(w.ch.combo_state().count);
+            if !w.ch.airborne() {
+                break;
+            }
+        }
+        most
+    };
+    assert_eq!(run(false), 1, "a whiffed air swing chained");
+    assert!(run(true) >= 2, "connecting air swings should chain");
 }
 
 #[test]

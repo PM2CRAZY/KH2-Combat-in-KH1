@@ -425,7 +425,6 @@ fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abilities {
         finishing_plus: sora.finishing_plus,
         negative_combo: sora.negative_combo,
         combo_master: sora.combo_master,
-        one_swing_on_miss: sora.one_swing_on_miss,
         // (Each form's growth ability at MAX: the user, Wisdom with Quick Run MAX; Valor's High
         // Jump the same.)
         high_jump: if kind == Kind::Valor { 4 } else { 0 },

@@ -338,9 +338,51 @@ own version).
 - Connected (`+0x120` bit 25) is set by a hit (`0x1403D12C0`) or a clash (`0x1403D61D0`), and by
   two object-class callbacks (`0x1403D54B0`, `0x1403D63E0`, which also take one off the count;
   not identified), and cleared by a swing's start (`0x1403D78D0`). No air-whiff setter found:
-  a Square row after an air swing that missed is refused (Combo Master standing for connected,
-  **Assumption**). Note our own Attack walk (`plan_press`) still lets air whiffs chain (an old
-  reading, untraced): not changed here.
+  a Square row after an air swing that missed is refused. Combo Master is `[+0x5C0] + 0x1E4`
+  bit 13: `[+0x5C0] + 0x1D0` is a bit set indexed by the ability number (`0x140402750` tests a
+  row's ability as bit `n & 31` of word `n >> 5`), and Combo Master (item 539) is number 173,
+  Berserk Charge (item 395) number 107, i.e. `+0x1DC` bit 11 (**Checked (decomp + files)**,
+  `03system.bin` item table; both were **Assumptions** before).
+
+### 7.1.2 An Attack after a swing that missed (the tester, what-is-still-missing m14 answer 7 (a))
+
+- **KH2's rule, Checked (decomp)**, Steam KH2. The input step `0x1403D6FC0` runs the Attack
+  command (its command row's kind 1) through `0x1403D6CA0 (p, connected)` with connected = the
+  owner's `+0x120` bit 0x2000000 or Combo Master (above). The magic command (kind 2) always asks
+  with connected = 1. `0x1403D6CA0` (60 Hz range bits from the motion update): the finisher window
+  (range id 50) with connected and a finisher left: the next finisher; else the combo window
+  (range id 11) with connected: the next swing; else a free state (range ids 0 / 1 / 2): a new
+  combo, counts 1 / 1; else refused (nothing, no buffer). There is no airborne case: the air is
+  the ground's rule. None of KH2's swings or finishers has a free range (**Checked (files)**,
+  `P_EX100`, `P_EX100_BTLF`, `P_EX100_MAGF` msets: the only move with both a combo window and a
+  free range is the recoil 41, 16.. and 40..), so after a miss the press is refused until the
+  swing has ended, and the next press is a new combo. A whiffed air combo never reaches its
+  finisher (without Combo Master).
+- **KH1's Attack step already is that rule, Checked (decomp)**, Steam KH1 `0x1402A7510`: in the
+  combo window (`+0x1CC` bit 22) it counts on only when the combat info's `+0x50` is set (a hit
+  of his attack object, whose `+0x60` points there) or Combo Master (KH1's 65, `0x41`, in Sora's
+  list, equipped) is, else it returns with no swing; outside it the count is 1. KH1's menu takes
+  the command only free or in the combo window (`0x1402A2EC0`). The row makers
+  (`0x1402B3150`, `0x1402B3270`) clear `+0x50` as each swing's object is made, as KH2's step
+  clears its bit. Our slots put KH1's combo window on KH2's range 11 (and range 50 while Finishing
+  Plus leaves a finisher, `kh2slots::finisher_window`), and no "may be left" on swings (KH2 has
+  no free range there), so base Sora, Valor and Wisdom on KH1's states follow KH2's rule through
+  KH1's own step, in the air too; KH2's pick in KH1's picker (`combomods::kh2_press`) only runs
+  after that step has let the press through. Nothing of ours sets `+0x50` on a miss (writers:
+  his attack objects' hits, KH2's body hits that landed, Wisdom's shot hits, the Counterguard
+  window's new combo, the old KH2-controller hand-back with KH2's own hit).
+- **Changed:** the KH2 controller's own walk (`Character::plan_press`, still used by the
+  forms not yet on KH1's states: Master, Final, Limit, Anti) took a whiffed air swing as
+  connected (an old reading of the game, never traced) and let a whiffed ground swing restart in
+  its window. Both now follow `0x1403D6CA0`: in a swing's window without connected or Combo
+  Master the press does nothing. `Abilities::one_swing_on_miss` (the KH1 port's own version of
+  this rule) is gone. Tests `whiffed_swings_do_not_advance_the_combo`,
+  `whiffed_air_swings_do_not_chain`.
+- **Not changed (found, asked):** a clash and two object-class callbacks set connected and take
+  one off the count (`0x1403D61D0`, `0x1403D54B0`, `0x1403D63E0`), so in KH2 the next press
+  repeats the step; the recoil 41 has a combo window from 16 and a free range from 40. KH1's own
+  wall / clash handling doesn't do this. The controller's spell step (`swing_counts`) still takes
+  an air spell as counting and a ground one only after a hit; KH2's magic command always counts.
 
 **Sora's rows (Checked (files), `00battle.bin` PTYA moveset 1):**
 

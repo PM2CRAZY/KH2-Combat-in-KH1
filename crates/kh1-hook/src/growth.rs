@@ -822,7 +822,7 @@ impl Kh1Sora {
     /// KH2's controller's abilities from KH1's menu and Sora's level: every equipped ability
     /// whose KH2 side is a KH2 value (`Side::Kh2`), KH1's and ours.
     pub fn kh2(&self) -> Abilities {
-        let mut out = Abilities { guard: false, one_swing_on_miss: true, ..Abilities::default() };
+        let mut out = Abilities { guard: false, ..Abilities::default() };
         for a in KH1_ABILITIES {
             if let Kh2(e) = a.on_kh2 {
                 let n = equipped(self.list(list_of(a.id)), a.id);

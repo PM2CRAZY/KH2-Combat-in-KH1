@@ -254,11 +254,12 @@ If the ray misses, a ray straight down by ATKP `floor_check` is tried.
    - From a non-attack state: count = 1, finishers = 1.
    - From an attack whose swing **connected**: count + 1.
    - From a finisher that connected, if finishers < max: also finishers + 1.
-   - **On the ground, a whiffed swing does not advance the count** (read from the exe).
-     Combo Master makes every swing count as a hit.
-   - **In the air, whiffed swings advance it too**, so a whiffed air combo still ends in its
-     finisher (181 → 182 → 183). This matches the real game as played; the exe path for it
-     hasn't been found yet.
+   - **A swing that missed does not chain, on the ground or in the air** (Steam KH2
+     `0x1403D6FC0` → `0x1403D6CA0`, Checked (decomp)): in its combo / finisher window the press
+     is refused; once the swing has ended (a free state) the press starts a new combo. Combo
+     Master (`[+0x5C0] + 0x1E4` bit 13, ability number 173) makes every swing count as a hit.
+     (Corrected: an older note had whiffed air swings advancing the count; there is no airborne
+     case in the exe. `docs/kh1-drive-forms-native.md` §7.1.2.)
 2. **Row conditions:**
    - The motion must be nonzero.
    - The required ability, if any, must be equipped.

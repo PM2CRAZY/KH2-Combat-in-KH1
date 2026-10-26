@@ -1402,8 +1402,8 @@ impl Character {
     /// (`0x1403D78D0`: facing the primary target, its hop), worked out by `plan_press`.
     /// Whether the swing "connected": the host's hit, or Combo Master (KH2's `+0x120` bit 25 is
     /// set by a hit or a clash, `0x1403D12C0` / `0x1403D61D0`, cleared by the next swing's start
-    /// `0x1403D78D0`, Checked (decomp); Combo Master standing for it is **Assumption**, as
-    /// `plan_press`). Nothing of `self` changes.
+    /// `0x1403D78D0`, Checked (decomp); or Combo Master, `[+0x5C0] + 0x1E4` bit 13, ability number
+    /// 173, Checked (decomp + files), as `plan_press`). Nothing of `self` changes.
     pub fn would_take_square_exe(&mut self, from: ComboState, combo: bool, finisher: bool, free: bool, skip: &[u8], air: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
         let vel = self.vel_h;
         let gravity = self.params.gravity;
@@ -1893,14 +1893,26 @@ impl Character {
         // After a spell that took a finisher slot with Finishing Plus leaving another: the next
         // finisher.
         let in_finisher = s.in_finisher || (carry && carry_finisher);
-        if in_attack && self.abilities.one_swing_on_miss && !self.abilities.combo_master && !s.hit {
+        // KH2's Attack command (Steam KH2's input step `0x1403D6FC0`, command kind 1) asks
+        // `0x1403D6CA0` with "connected" = the owner's `+0x120` bit 0x2000000 or Combo Master
+        // (`[+0x5C0] + 0x1E4` bit 13: the ability bit set `+0x1D0` indexed by the ability number,
+        // `0x140402750`; Combo Master, item 539, is number 173; Checked (decomp + files)). On the
+        // ground and in the air alike: in the finisher window (range id 50) with it and a finisher
+        // left the next finisher, in the combo window (range id 11) with it the next swing, else
+        // only a free state (range ids 0 / 1 / 2) takes the press, as a new combo (counts 1 / 1);
+        // otherwise nothing. The bit is set by a hit (`0x1403D12C0`), a clash (`0x1403D61D0`) and
+        // two object-class callbacks (`0x1403D54B0`, `0x1403D63E0`, which also take one off the
+        // count; not identified), and cleared when a press is taken.
+        // None of KH2's swings has a free range (`P_EX100*.mset`, Checked (files)), so a press in
+        // a swing's window after a miss is refused, in the air too: a missed swing never chains
+        // and an air combo reaches its finisher only by connecting (or with Combo Master). (Before:
+        // whiffed air swings counted as connected, from the user's knowledge of the game, and a
+        // whiffed ground swing restarted itself in its window; `Abilities::one_swing_on_miss`, the
+        // KH1 port's rule for this, is gone: it is KH2's own.)
+        let hit = s.hit || self.abilities.combo_master;
+        if in_attack && !hit {
             return PressOutcome::Kept;
         }
-        // Ground swings only advance the combo when the previous one
-        // connected (read from the exe). In the air, whiffed swings advance
-        // it too, so an air combo always ends in its finisher (matches the
-        // game; the exe path for this hasn't been traced yet).
-        let hit = s.hit || self.abilities.combo_master || (s.airborne && in_attack);
         let (mut count, mut finishers) = (s.count, s.finishers);
         // (Chaining on from a finisher: the exe's `+0x194` bit 5 for the row tests.)
         let mut chained = false;
