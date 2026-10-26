@@ -394,3 +394,11 @@ on a drawn clip (idle, landing, glide, the drawn casts) only ours does, as befor
   slots now meets KH1's own IK list on the legs (the blend pass re-solves the list, `0x140392560`).
 - Idle and the landing: still drawn over (the tester's "(a)").
 - Who sets the instance's lift bits (`+0x14 & 3`).
+
+### 7.5 The helper channel count (t633)
+
+- A KH1 motion's helper channel count is the header's `+0x20` (the pose pass `0x140391C70` samples that
+  many 6-byte helper channel records from `+0x24`). **Checked (decomp)**. The bake rebuilt the helper
+  channel list (travel replaced, the foot helpers' template channels dropped and ours added) but left
+  `+0x20` at the template's count, so KH1 read too few (the last leg keys never sampled) or too many (past
+  the list) channels. It is now written with the list's length. `bake::tests::bakes_a_chain` checks it.

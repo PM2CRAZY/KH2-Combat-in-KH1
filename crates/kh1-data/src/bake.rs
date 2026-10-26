@@ -374,6 +374,8 @@ pub fn baked(template: &[u8], frames: u32, events: &[EventTrack], skeleton: &[Bo
     align(&mut out);
     let at = out.len() as u32;
     put(&mut out, 0x24, at);
+    // The helper channel count: the channels kept and added (it was left at the template's).
+    put(&mut out, 0x20, helper_channels.len() as u32);
     for (s, k) in helper_channels.iter().zip(&helper_keys) {
         out.extend_from_slice(&s[..4]);
         out.extend_from_slice(&(first as u16).to_le_bytes());
