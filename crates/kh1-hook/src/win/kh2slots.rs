@@ -678,9 +678,15 @@ fn swing_rows(rows: &[character_core::ComboRow], clips: &std::collections::HashM
 /// plays the plain swings (its attack object on the Keyblade, timed by the slot's hit windows,
 /// and KH2's root travel baked in): it hits with the Keyblade's shapes only (a `Hitbox` window on
 /// a weapon, none on his own body), and has no invulnerability, no air / ground range of its own
-/// (each of those is KH2 behaviour KH1's swing row doesn't have), and no guard but one on his
-/// body whose ATKP lets the hit go with no effect (`refact_self` 2). Its no-gravity ranges and
-/// those guards are KH1's now (`no_gravity`, `shared::physics`'s air step; `body_guard`, `hurt`).
+/// (each of those is KH2 behaviour KH1's swing row doesn't have), and no guard on his body but
+/// one whose ATKP lets the hit go with no effect (`refact_self` 2). Its no-gravity ranges and
+/// those guards are KH1's now (`no_gravity`, `shared::physics`'s air step; `body_guard`, `hurt`),
+/// and so are its guards on the Keyblade (`keyblade_guard`, `hurt`, at the Recoil row's rule,
+/// `recoil::guard_window_on`). (t-rows) Those Keyblade guards used to keep the move off our rows:
+/// with the Keyblade's own windows read (`W_EX010.mset`, Checked (files)), Flash Step 169 has
+/// ATKP 162 at 17..22 and 161 at 22..30 on the Keyblade and Vicinity Break 170 has 162 at 14..32,
+/// so neither was built and KH2's pick of them was "no attack" (the tester's log, f25752: row 51
+/// motion 170 "has no KH1 row of its own built"; no build since t631 lists 169 or 170).
 /// Sora's (`P_EX100.mset`, `00battle.bin`, Checked (files)): Slapshot 162, Dodge Slash 163, Slide
 /// Dash 164, Flash Step 169 (a guard on his body, ATKP 406, kind 2, `refact_self` 2, frames
 /// 0..19), Aerial Sweep 191, Aerial Dive 196 (no gravity at frames 46..54), Aerial Spiral 192
@@ -694,7 +700,9 @@ fn blade_swing(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle
     let lets_go = |attack: u16| battle.attack_for_level(attack, 0, 0).is_some_and(|a| a.refact_self == 2);
     let other = clip.windows.iter().any(|w| match w.kind {
         W::Guard { attack, weapon: 0, .. } => !lets_go(attack),
-        W::Hitbox { weapon: 0, .. } | W::Guard { .. } | W::Invulnerable | W::Air | W::Grounded => true,
+        // (A guard on the Keyblade is KH1's hit pass's, `keyblade_guard` / `hurt`.)
+        W::Guard { .. } => false,
+        W::Hitbox { weapon: 0, .. } | W::Invulnerable | W::Air | W::Grounded => true,
         _ => false,
     });
     blade && !other
@@ -706,20 +714,23 @@ fn blade_swing(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle
 /// object of ours with KH2's shapes, on a KH1 attack group of its own, that KH1's collision pass
 /// collides (`bodyhits`; KH2's own sweep, `takeover::kh2_hits`, where that isn't in); its invulnerability (range 27) is KH1's hit pass's (`invulnerable`, `hurt`), its
 /// guards on his body that let the hit go are `body_guard`'s, its no-gravity ranges `no_gravity`'s.
-/// Not with a guard of another kind, a guard on the Keyblade, or an air / ground range. Sora's
+/// Not with a body guard of another kind or an air / ground range (a guard on the Keyblade is
+/// `keyblade_guard`'s, as in `blade_swing`). Sora's
 /// (`P_EX100.mset`, `00battle.bin`, Checked (files)): Vicinity Break 170 (1869 on group 21,
 /// frames 20..30; guard 406 14..32), Explosion 166 (911 on group 19 32..57, 912 57..64;
 /// invulnerable and guard 124, kind 3, `refact_self` 2, 32..64), Magnet Burst 197 (1900 on 22
 /// 16..56, 1901 on 23 20..56, 1903 on 3 64..70; guard 406 20..70; no gravity 16..82); Finishing
 /// Leap 167 and Counterguard 171 too, but their rows are Square rows (kind 0), not the selector's.
-/// Their Keyblade windows (the weapon's mset, not staged here) are KH1's swing's as for the others.
+/// Their Keyblade windows (`W_EX010.mset`) are KH1's swing's as for the others: Vicinity Break's
+/// guard 162 at 14..32 among them.
 fn body_strike(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle) -> bool {
     use character_core::WindowKind as W;
     let body = clip.windows.iter().any(|w| matches!(w.kind, W::Hitbox { weapon: 0, .. }));
     let lets_go = |attack: u16| battle.attack_for_level(attack, 0, 0).is_some_and(|a| a.refact_self == 2);
     let other = clip.windows.iter().any(|w| match w.kind {
         W::Guard { attack, weapon: 0, .. } => !lets_go(attack),
-        W::Guard { .. } | W::Air | W::Grounded => true,
+        W::Guard { .. } => false,
+        W::Air | W::Grounded => true,
         _ => false,
     });
     body && !other

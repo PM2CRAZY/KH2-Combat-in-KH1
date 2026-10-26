@@ -766,6 +766,19 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   is still not native (`kh2slots::blade_swing`). Flash Step then plays on KH1's ground swing rows
   as Slapshot does (above). Needs the ini's `hurt` on (as KH2's own guard does). KH2's turn
   toward the target in a swing: below.
+  - **Flash Step and Vicinity Break weren't built (t631 to t668).** The check that lets an
+    ability row onto our rows (`kh2slots::blade_swing` / `body_strike`) counted any guard on the
+    Keyblade as "not native", but the Keyblade's own windows (`W_EX010.mset`, merged into the
+    clip; Checked (files)) give Flash Step 169 ATKP 162 at 17..22 and 161 at 22..30, and
+    Vicinity Break 170 ATKP 162 at 14..32. So neither had a slot or a row of its own, and since
+    t631 (no fallback) KH2's pick of them was no attack at all: the tester's log, f25752 / f25764,
+    "KH2's row 51 motion 170 has no KH1 row of its own built: no attack" (combo row selection
+    after m31: "sometimes you can't attack it just resets you"); no build log since t631 lists
+    169 or 170 among our rows (Checked (log), the kh2-glide thread's t651 log). Guards on the
+    Keyblade are native already (`kh2slots::keyblade_guard` in `hurt`, at the Recoil row's rule
+    `recoil::guard_window_on`, as for Guard Break's 162), so they no longer keep a move off our
+    rows (t-rows). Checked offline on the files: the rule now passes 162, 163, 164, 166, 169,
+    170, 191, 192, 194, 196, 197 (before: the same without 169 and 170).
 - **KH2's turn toward the target in a swing** (the tester: "(a)"; Steam KH2, Checked (decomp)
   and (exe)): KH2's range handler (`0x14040D810`, one case per range id) runs range id 28
   (`TurnToLock`, its parameter in degrees) each motion update while the motion's time is in it
