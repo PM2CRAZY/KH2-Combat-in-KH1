@@ -816,6 +816,16 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
       turn also turns `+0x210` by the same angle (only while `+0x160` bit 4, the travel flag, is
       set), so the next step is the motion's own step along the new facing, as KH2 adds its root
       step along its facing each frame.
+    - *The frame of the turn* (t-turn2; the tester, after m32: "check into the kh2 c decomp and
+      implement the changes from your findings"). KH2's order within a frame (Steam KH2, Checked
+      (decomp)): the object update `0x1403BFD30` runs the motion update `0x1403C6740`, which
+      advances the time, samples the root step into the motion's `+0xFC` (`0x1403C8520`) and only
+      then runs the ranges (`0x14040E740` → `0x14040D810`, the turn `0x1403D4B10`); after the
+      action's handlers the mover `0x1403B89A0` takes that root step through `0x1403B7CA0`, turned
+      by his yaw `+0x68C` as it is then, i.e. after the turn. So the step of the frame a turn
+      happens already goes along the new facing. In KH1 that frame's step (`+0x200`) was made by
+      the last motion pass, before the turn, and KH1's physics step adds it after our turn: it is
+      now turned by the same angle too.
     - *KH1 turned him back.* In an action the think's input is KH1's move vector `+0x20` (no
       stick input: `0x1402A43A0` copies it, the filter `0x1402A5F10` keeps it), the ground input
       step `0x1402CC1A0` sets `+0x150` from it (`0x140297FB0`), and the think (`0x1402A3300`, its

@@ -942,6 +942,15 @@ pub unsafe fn turn_to_lock(actor: usize) {
         // (KH1's world: his facing is (sin yaw, cos yaw) on x / z, so a turn by `turned` takes
         // (x, z) to (x c + z s, -x s + z c).)
         wr(actor + 0x210, [tr[0] * c + tr[2] * s, tr[1], -tr[0] * s + tr[2] * c, tr[3]]);
+        // (t-turn2) This frame's step (`+0x200`, made by the last motion pass along the facing
+        // before this turn, added by KH1's physics step after us) turned too: KH2 lays a frame's
+        // root step along the facing its turn has just set (Steam KH2, Checked (decomp): the
+        // object update `0x1403BFD30` runs the motion update `0x1403C6740`, which samples the
+        // root step into the motion's `+0xFC` and then runs the ranges, the turn `0x1403D4B10`
+        // among them, `0x14040E740`; after the action's handlers its mover `0x1403B89A0` takes
+        // that step through `0x1403B7CA0`, turned by his yaw `+0x68C` as it is then).
+        let st: [f32; 4] = rd(actor + 0x200);
+        wr(actor + 0x200, [st[0] * c + st[2] * s, st[1], -st[0] * s + st[2] * c, st[3]]);
     }
     static N: AtomicU32 = AtomicU32::new(0);
     if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {

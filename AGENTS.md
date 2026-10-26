@@ -1,3 +1,6 @@
+### 2026-10-26: Stage 672 (testing branch: KH2's turn: the turn frame's step follows the new facing)
+- **KH2's turn in a swing: the turn frame's step follows the new facing.** The tester (kh2s-combo-row-selection, after m32): "I want you to check into the kh2 c decomp and implement the changes from your findings". In KH2 (Steam, Checked (decomp)) the motion update `0x1403C6740` samples the frame's root step (`0x1403C8520`, motion `+0xFC`) before its ranges turn him (`0x14040E740` -> `0x1403D4B10`), and the mover `0x1403B89A0` / `0x1403B7CA0` lays the step along his yaw `+0x68C` after that turn. KH1's step for that frame (`+0x200`) was made before our turn, so `kh2slots::turn_to_lock` now turns it by the same angle (travel flag `+0x160` & 4), as it already turned the travel so far (`+0x210`, t669). Not checked in game. Notes: `docs/kh1-anim-slots.md`.
+
 ### 2026-10-26: Stage 671 (testing branch: Trace: the CSV header matches its rows)
 - **Trace: the CSV header matches its rows.** The tester (kh2s-combo-row-selection, after m32, answer 2 (a)). The config columns' header lacked `cfg_magic_combo` (the last move style, `styles::Kind::EVERY`), so from `pos_x` on each value sat under the previous column's name. Added, with a compile-time check that the config header names as many columns as `config_now` writes. Debug only. Checked (code).
 
