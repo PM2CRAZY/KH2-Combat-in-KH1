@@ -262,6 +262,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [7. Assistant: Here's this round:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m7)
   - [8. Assistant: Here's this round.](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m8)
   - [9. Assistant: Thanks! Two versions this round:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m9)
+  - [10. Assistant: Thanks! (a) it is, so nothing changes: on starts where the c](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m10)
 
 ---
 

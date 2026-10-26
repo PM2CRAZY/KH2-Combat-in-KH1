@@ -13,6 +13,7 @@
 - [7. Assistant: Here's this round:](#^m7)
 - [8. Assistant: Here's this round.](#^m8)
 - [9. Assistant: Thanks! Two versions this round:](#^m9)
+- [10. Assistant: Thanks! (a) it is, so nothing changes: on starts where the c](#^m10)
 
 ---
 
@@ -289,3 +290,15 @@ for what your working on with glide and the command menu, make it a separate thr
 
 
 1. its so fast that I couldn't see anything so (a) is fine
+> [!tip] Assistant
+> Thanks! (a) it is, so nothing changes: on starts where the cache matches, the title keeps that short wait. No new version this time.
+>
+> One question passed on from the [RAM use and what's being optimized](../ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md) thread, where you asked me to put it here:
+>
+> Question:
+> 1. After the motion slots (t655), what should be built once into the mod folder next, instead of being built in memory at every start: (a) the KH2 sounds we cut out of KH2's banks (about 9 MB; their cutting is the start-up step that holds KH2's three banks at once, about 28 MB); (b) the KH2 effect packages turned into KH1's format (4 to 12 MB depending on what's unlocked); (c) the Drive Form recoloured textures (this also drops the 10.5 MB of source pixels we keep today); or (d) another order (tell me which)?
+>
+> The quick RAM fixes you gave the go-ahead for in the RAM thread are going in meanwhile, as their own small versions. They don't depend on this answer.
+
+^m10
+
