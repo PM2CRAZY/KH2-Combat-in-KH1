@@ -712,9 +712,11 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
 }
 
 /// KH1's ground Gravity (0x3A) and Stop (0x3B) cast requests (KH1's request table, Checked (files)).
-pub const FINISHER_SPELL_REQUESTS: [u32; 2] = [0x3A, 0x3B];
+pub const FINISHER_SPELL_REQUESTS: [u32; 3] = [0x3A, 0x3B, 0x3C];
 
-/// Gravity or Stop cast on the ground counts as the combo's finisher (the tester, combo row
+/// Gravity, Stop or Aero (Aero since t651, the tester, m30: "also forgot to add aero to the list";
+/// on KH2's animation each plays KH2's Thunder finisher cast 63, `kh2slots::CASTS`) cast on the
+/// ground counts as the combo's finisher (the tester, combo row
 /// selection after m29: "for gravity and stop, there's a phenomenon in kh2 where those magics
 /// count as a finisher so the combo row skips straight to the finisher, if you have a finishing
 /// plus equipped you can combo into another finisher ... that would be applied for kh1 gravity
@@ -759,7 +761,8 @@ pub unsafe fn finisher_spell_window(actor: usize) -> Option<bool> {
     if !super::combomods::finisher_left() {
         return Some(false);
     }
-    let from = if request == 0x3A { 63 } else { 68 };
+    // (All three on KH2's Thunder finisher cast's window, the animation they play at KH2, t651.)
+    let from = 63;
     let Some((a, b)) = super::kh2slots::finisher_share(from) else { return Some(false) };
     let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
     Some(t >= 0.0 && len > 0.0 && t / len >= a && t / len < b)
@@ -769,7 +772,7 @@ pub unsafe fn finisher_spell_window(actor: usize) -> Option<bool> {
 /// (`kh1_cast_window`): Fire's first shot 0x36 and its second part / repeated shot 0x3D, Blizzard
 /// 0x37, Thunder 0x38, Cure 0x39, Aero 0x3C (KH1's request table, `xa_ex_0010.mset`, Checked
 /// (files); Gravity 0x3A and Stop 0x3B are left out).
-const KH1_WINDOW_REQUESTS: [u32; 6] = [0x36, 0x3D, 0x37, 0x38, 0x39, 0x3C];
+const KH1_WINDOW_REQUESTS: [u32; 5] = [0x36, 0x3D, 0x37, 0x38, 0x39];
 
 /// The Magic Combo row at KH2 (`styles::Kind::MagicCombo`; the tester, combo row selection after
 /// m29: "make a config for magic that allows you to combo out of grounded magic like kh2"): a
@@ -778,7 +781,7 @@ const KH1_WINDOW_REQUESTS: [u32; 6] = [0x36, 0x3D, 0x37, 0x38, 0x39, 0x3C];
 /// `take_step` at the spell's start: KH1's count `+0x41` at the step, "connected" `+0x50` set).
 /// Base Sora on KH1's states, not in a Drive Form.
 pub unsafe fn kh1_cast_step(spell: i32) -> bool {
-    matches!(spell, 0..=3 | 6) && super::styles::kh2(super::styles::Kind::MagicCombo) && !super::form::in_form() && super::shared::active()
+    matches!(spell, 0..=3) && super::styles::kh2(super::styles::Kind::MagicCombo) && !super::form::in_form() && super::shared::active()
 }
 
 /// Each frame Sora is posed (`kh2slots::frame`), the Magic Combo row at KH2: KH1's own cast

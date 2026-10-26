@@ -304,6 +304,18 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   the cast's window only after a hit or with Combo Master, else takes no swing; after the cast's
   end it starts a new combo. `note_step` counts a cast on in any window (KH2's magic command).
 
+### 4c.1e Gravity, Stop and Aero: the Thunder finisher cast (t651, the tester, combo row selection m30 answer 2)
+
+- The tester: "make them play the thunder finisher animation, also forgot to add aero to the list
+  so also make it the same as gravity and stop". On the ground with their animation row at KH2,
+  KH1's requests 0x3A (Gravity), 0x3B (Stop) and 0x3C (Aero) now play our slot of KH2's Thunder
+  finisher cast 63 (A365, 94 frames, its finisher window 42..78 and range 14 from 42, Checked
+  (files)) instead of Thunder's 62 / Cure's 65 (`kh2slots::CASTS`); KH1's own script still casts
+  the spell (timed to 63's magic-cast event, `time_kh1_spell`). Aero joins Gravity and Stop as the
+  combo's finisher (`formmagic::FINISHER_SPELL_REQUESTS`; at Magic Combo KH2 on KH1's animation
+  too), its Finishing Plus window Thunder's finisher cast's, as theirs. Air casts unchanged (KH2 has
+  no air finisher cast; the tester's answer 2 (a)).
+
 ### 4c.2 Finishing Plus after a finisher cast (the tester, after m10, question 2 (a))
 
 - **Checked (decomp)**, Steam KH2 `0x1403D6CA0`: in the finisher window (`+0x194` bit 0x20, range

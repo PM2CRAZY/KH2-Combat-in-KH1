@@ -93,9 +93,12 @@ pub const CASTS: [(u16, usize, usize, bool); 16] = [
     (64, 81, 0x85, true),
     (67, 81, 0x86, true),
     (58, 82, 0x8A, true),
-    (62, 55, 0x3A, false),
-    (65, 56, 0x3B, false),
-    (65, 56, 0x3C, false),
+    // (Gravity, Stop and Aero on the ground: KH2's Thunder finisher cast, 63, as the combo's
+    // finisher they are, `formmagic::finisher_spell`; the tester, combo row selection m30: "make
+    // them play the thunder finisher animation, also ... aero ... the same as gravity and stop".)
+    (63, 55, 0x3A, false),
+    (63, 56, 0x3B, false),
+    (63, 56, 0x3C, false),
     (64, 80, 0x87, true),
     (67, 81, 0x88, true),
     (67, 81, 0x89, true),
