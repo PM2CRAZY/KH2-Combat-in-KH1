@@ -37,6 +37,7 @@
 - [31. Assistant: t650 and t651:](#^m31)
 - [32. Assistant: Thanks for the trace and the log, they made both easy to fin](#^m32)
 - [33. Assistant: Thanks! Three versions, one each:](#^m33)
+- [34. Assistant: t674: one re-hit system for every KH2 move. You were right, ](#^m34)
 
 ---
 
@@ -954,7 +955,30 @@ go ahead
 
 ^m33
 
+
 1. (a)
 2. if other moves are multi hits in kh2 and don't have it right now (aerial finish) then yes apply it, I also noticed that explosion was working before this implementation so see if we are not writing two codes for the same thing. check it behind kh2  c decomp 
 
 go ahead
+> [!tip] Assistant
+> **t674: one re-hit system for every KH2 move.** You were right, there were two. Explosion re-hit because the body-hit code had its own per-enemy timer, and t673 added a second, separate re-arm for Keyblade swings. Both now go through one path (`rehit.rs`) that follows KH2's own rule, which I read in the Steam KH2 decomp:
+> - **A fresh attack:** while a hit window is open, KH2 keeps the same attack as long as the window's attack data (ATKP) stays the same. When the ATKP changes, or a window opens after a gap, it ends the old attack and makes a new one, so everything can be hit again (`0x1403D25D0`, `0x1403D0EB0`, `0x14040F1C0`). Ours does this with KH1's own re-arm.
+> - **Within one attack:** an enemy can be hit again after that hit's interval, per enemy. That part comes from our KH2 rewrite; I didn't re-read it in the exe.
+>
+> What this changes:
+> - **Now re-hit, as in KH2:** Aerial Sweep (every 10 frames), Aerial Spiral (every 12), Aerial Dive (every 8) and Retaliating Slash's first slash (every 10). Each only hit once before.
+> - **Aerial Finish:** its four hits (915, 916, 917, 927) each count as a new attack. That was already true from t673, so if it hit only once for you, that was before t673.
+> - **The same for:** 153, Dodge Slash, Slide Dash, Flash Step and Horizontal Slash, each window its own attack.
+> - **Unchanged:** Explosion, Magnet Burst and Vicinity Break work as before, now on the shared path.
+>
+> The full per-move table is in `docs/kh1-rehit.md`.
+>
+> Checked: KH2's attack rule in the Steam KH2 decomp, KH1's re-arm in the KH1 decomp, and each move's windows in your KH2 files. Not checked: in game, and KH2's per-enemy interval in the exe.
+>
+> Please test on a single enemy: Aerial Finish, Aerial Spiral, Aerial Sweep, Aerial Dive, Explosion and the 2nd ground swing. With the Combat log on, look for "KH2 re-hit: ATKP … again after N frames" and "… re-armed".
+>
+> Question:
+> 1. If Aerial Finish still lands only its first hit in this build, please send a log with the Combat category on. If it shows the re-arm lines but no hit lines, something else (the hold that keeps the enemy beside you, or its flinch) is keeping the enemy out of reach, and I'd look there next. If there are no re-arm lines, the window detection is the problem.
+
+^m34
+
