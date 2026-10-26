@@ -121,6 +121,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [6. Assistant: Thanks. (a) it is: after you let go, the fall keeps followin](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m6)
   - [7. Assistant: Thanks for the trace and the log. I went through them frame ](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m7)
   - [8. Assistant: Thanks for both traces. They showed two separate bugs, both ](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m8)
+  - [9. Assistant: Thanks for the trace. That's on me: t646 broke it.](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m9)
 - [KH2 hit effects on enemies](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m1)
   - [2. Assistant: Thanks, built with your answers:](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m2)
