@@ -17,6 +17,7 @@
 - [11. Assistant: Here's the list brought up to date, from t632 to t675.](#^m11)
 - [12. Assistant: Thanks! This is a big list, so I'm doing it one system per v](#^m12)
 - [13. Assistant: Thanks! Here's how I took your answers, then this round's tw](#^m13)
+- [14. Assistant: Thanks! I worked through Valor, then moved Wisdom over too. ](#^m14)
 
 ---
 
@@ -471,6 +472,8 @@ go ahead
 > 3. While checking this I found that base Sora's Upper Slash and Horizontal Slash are refused one swing earlier than KH2 allows. Finishing Leap probably comes one swing early too. Should I (a) fix base Sora to KH2's exact rule as its own version, or (b) leave it?
 
 ^m13
+
+
 1. it should fit kingdom hearts 1 in this situation for both keyblades
 2. the keyblade should behave exactly like kh1's keyblade so make sure it scales by keyblade
 3. (a)
@@ -484,3 +487,58 @@ but don't take my word for it compare to how kh2 does it in the c decomp and mak
 for 2nd keyblade it should behave 1:1 with how the main keyblade works, make sure its a file as well 
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! I worked through Valor, then moved Wisdom over too. I re-checked everything against the KH2 Steam decomp, and that check found a few more things wrong in the old code. Eleven versions, one system each:
+>
+> **Your answers 1–3**
+> - **t681, base Sora's Square moves by KH2's exact rule (answer 3).** Base Sora now uses the same check as Valor (KH2's `0x1403A81F0` / `0x1403A9950`). With a 3-hit combo, Upper Slash and Horizontal Slash come out after swing 1 or 2. Finishing Leap comes from swing 2 on, tried first, and also in a finisher's window when Finishing Plus leaves another finisher. It used to come one swing early.
+> - **t682 and t683, the left Keyblade behaves like the main one (answers 1, 2 and "make sure its a file").** Its hit code is now its own file (`lefthits.rs`). The left hit is now made exactly the way KH1 makes the main Keyblade's (KH1's constructor, row maker and entry build). It uses the same swing data plus the left Keyblade's own weapon stats, and KH1's own code lays its sphere along the left blade. So it scales by Keyblade like the right one, and KH2's bigger spheres are gone. KH2 still decides when each blade's hit is open, its damage and reaction, and its re-hits.
+>
+> **Valor**
+> - **t684, "attack doesn't interrupt the jump's momentum".** KH2 replaces the jump's rise and drift with each air swing's own hop (`0x1403D78D0` → `0x1403CBB00`). Valor was still reading the Base / Aerial Base Combo Config rows: at KH1 the swing played with no hop, so a High Jump kept rising under the attacks. Drive Forms now ignore those rows, as you said.
+> - **t685.** When KH2 refuses an Attack press, KH1's own air row with its own hop and lunge used to run under Valor's motion. Now nothing happens, as in KH2.
+> - **t686.** KH2 holds you in place through the change **and** the arrival in the air, then you drop from rest. Ours used to fall during the arrival.
+> - **t687, "no effects".** The native event path started every effect from base Sora's effect file, and only for the moves in the `kh2_effects` list. Valor's are in its own file, so none played. Also, the Drive and arrival start 13–15 effects on their first frame, and KH1 reads only 8 events at once, so part of the glow was cut. Now each frame's effects are one event, started from the form's own file on its Keyblades, as KH2 does (`0x14040E960`, `0x14040DD70`).
+> - **Grounded finisher.** I checked 154 / 155 against KH2's files and code. KH2 moves you only by each move's own root travel, with no extra lunge in Valor's rows, and that's what ours does on level ground. My guess is t684 / t685 were what made it feel off. If it still looks wrong, please describe it or send a log.
+>
+> **Wisdom**
+> - **t688, one path for every form.** Valor's code from t678 is now a per-form table that Wisdom uses too. Valor behaves the same.
+> - **t689, Wisdom on KH1's own states.**
+>   - Its idle, walk, run, jump, fall, landing, reactions, combo (151 / 154 / 181), arrival and Quick Run are baked slots, with Wisdom's own numbers (run 12, jump 185).
+>   - KH2's ground inertia (0.85 / 0.97, `0x140422350` → `0x1403B7AD0`) is now built into KH1's ground step, so it slides to a stop.
+>   - Square is Quick Run, per KH2's handler.
+> - **t690, its shots.** KH1's own motion events fire them, and they hit as KH1 attack objects in KH1's collision pass. A landed shot chains the combo. **Still running along:** each shot's flight (homing, speed) is our KH2 script runner. The plan to move it onto KH1's own script machine is in the doc.
+> - **t691, its magic.** Fire, Blizzard, Thunder and Cure are KH2's, on KH1's cast state with Wisdom's own cast animations and finisher casts. Gravity, Stop and Aero are KH1's spells, played on Wisdom's motions.
+>
+> Checked: the Steam KH2 and KH1 decomps, and KH2's files (PTYA, prty, msets, effect triggers), as noted per version in AGENTS.md. Not checked: anything in game. The first start bakes once (Valor's effect slots and Wisdom's files).
+>
+> **Please test**
+> - **Valor:**
+>   - jump and High Jump, then attack at once: you should stop rising and get a small hop per swing;
+>   - air and ground combos with 154 / 155, and Drive in mid-air;
+>   - the effects: Drive glow, arrival light, 154, Square moves;
+>   - try it with the combo Config rows on KH1 and on KH2: it should be the same;
+>   - two Keyblades of different lengths: the left should reach like it does in the right hand.
+> - **Base Sora:** Square after swings 1 and 2, on the ground and in the air, with and without Finishing Leap.
+> - **Wisdom:**
+>   - walk and stop (the slide), and Quick Run standing and moving;
+>   - the shot combo on the ground and in the air, and whether hits chain without Combo Master;
+>   - each spell on the ground, in the air and mid-combo;
+>   - arrival and revert.
+>
+> **Questions, now that the code's in**
+> 1. The left blade now runs KH1's own wall test, so a left swing into a wall bounces like a right one. Keep that (a), or turn it off for the left (b)?
+> 2. The second Keyblade's draw and trail are still ours, next to KH1's (a four-step plan is in the doc, §7.3). Next, should I start with (a) KH1's own weapon object, (b) the trail, or (c) the draw?
+> 3. On the ground, KH2 plays Valor's short stance motion (6) after the arrival, before the idle. Add it (a), or leave it (b)?
+> 4. In KH2, the end of Valor's 154 can carry you off a ledge and hold you in the air. KH1 cuts the swing when you leave the floor. Change KH1's rule (a), or leave it (b)?
+> 5. Wisdom's Cure is now KH2's own Cure. The old main branch had KH1's Cure on KH2's animation. Keep KH2's (a), or go back to KH1's (b)?
+> 6. Wisdom's Quick Run is Sora's level + 1. KH2 uses the form's own level, which KH1 doesn't have. Keep it (a), or build form levels into KH1 (b)?
+> 7. In KH2's code a missed swing doesn't count as connected, so Square after a missed air swing is now refused. Our Attack button still lets missed air swings chain. Should I trace that next (a), or leave it (b)?
+> 8. Base Sora, combo rows on KH2: when KH2 refuses an Attack press, KH1's own row still runs. Make that "nothing" too, as in KH2 (a), or leave it (b)?
+> 9. KH2 also has a frame trigger on the Drive and Valor's recoil that looks like pad rumble. Add it (a), or skip it (b)?
+>
+> Next I'll keep going on Valor and Wisdom by your answers. Then Wisdom's Aerial Recovery (not built yet) and the shots' flight onto KH1's own script machine.
+
+^m14
+
