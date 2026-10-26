@@ -413,7 +413,7 @@ pub unsafe fn attack(actor: usize, row: i32, _dir: usize, request_of: &dyn Fn(i3
 unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
     // (KH1's ground state or its jump / fall: not its flight, 8, nor its other states.)
     let state = rd::<i32>(actor + 0x70);
-    if !matches!(state, 0..=2) || super::form::in_form() {
+    if !matches!(state, 0..=2) || super::form::driver_form() {
         return Run::Row(row);
     }
     let air = matches!(state, 1 | 2);

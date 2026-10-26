@@ -168,3 +168,77 @@ at load, a few KB each) and no new per-frame hooks beyond base Sora's.
   float argument (the call passes it in a register the decomp drops).
 - KH1 Steam: free save bytes for the gauge and levels; whether KH1's attack object can be bound to
   a second weapon bone.
+
+## 7. Valor Form on KH1's own states (first step of plan item 5)
+
+The tester (what-is-still-missing, after m11): "I want you to transfer drive forms as well", "go
+ahead". Valor first; Wisdom and Final keep KH2's controller for now. Nothing of the Drive gauge,
+cost or unlocks changed (open questions in the Drive Forms thread): the form still costs 3 MP and
+drains yellow MP as before.
+
+**What runs where now (Valor, Steam, `shared = on`, `kh1_slots` on):**
+
+- **Slots** (`kh2slots::VALOR_SPECS`, the Valor part of `prepare`). Valor's own motions from
+  `P_EX100_BTLF.mset`, baked into KH1 motions like base Sora's (`pose::Baker::poses_of` with Valor's
+  rig, weapons and root travel, `pose::Src`), as slots of their own after base Sora's. On KH1's
+  requests: idle 0 / walk 1 / run 2 (Valor has no field variants, its battle ones on every KH1
+  slot), the jump and High Jump takeoffs 0x4 / 0x9 (both Valor's 201), fall 0x6 (and 0xB), landing
+  0x7 (and 0xC), the reactions 0x48..0x4B / 0x4E / 0x4F (10..15), the recoils 0x6E / 0x70 (41 /
+  43), the item use 0x3E / 0x3F (9), the ground combo 0xC8..0xCB and air combo 0xCC..0xCE; on our
+  own rows (`kh1rows::OURS`) Valor's 151, 152, 153, 154, 155, 181, 182, 183, 184 and Finishing
+  Plus's next finishers, and Valor's arrival 53 (a new row of ours, its request only). Base Sora's
+  Drive motion 52 is a new row of ours too (`kh1rows` "Drive"). Checked (files): every one of those
+  motions is in Valor's file (and 52 only in Sora's). Each Valor motion is a `Move` with `form`
+  set; its key in the slot cache has the moveset in it, and the cache's manifest notes Valor's files
+  (`pose::load_form_noting`), so the first start after this version bakes everything again once.
+- **The request tables** (`kh2slots::redirect`): in Valor (`form::native_now`) every request with a
+  Valor move plays Valor's, whatever the move styles (a Drive Form is KH2's all through, as on KH2's
+  controller); every other request keeps base Sora's. Out of Valor, Valor's are left alone. Clips
+  looked up for the slot playing come from its own moveset (`kh2slots::clip_of`, `pose::kh2_moves`):
+  KH2's turn to the lock, edge stop, no-gravity hold, Finishing Plus window, re-arm, invulnerable
+  and guard windows, and the ATKP of each hit (`kh1rows::kh2_atkp`), are Valor's.
+- **The combo pick**: KH1's own pickers with KH2's pick in them (`kh1picker::at_kh2`), from Valor's
+  PTYA (moveset 2, Checked (files): rows 0..10 the plain combo, 12 / 38 the Square finishers, 11
+  the rising slash, 40 its Aerial Recovery; no ability rows). KH2's controller's data is swapped to
+  Valor's (`form::native_data`), only read (KH2's row checks and lengths), never stepped. In Valor
+  none of KH1's own ability finishers come out (their bits held back, no KH1 walk).
+- **Physics** (`takeover::refresh_kh2_numbers`): KH2's numbers on KH1's states are Valor's (`prty`
+  moveset 2, Checked (files): walk 2, run 12, jump 235, gravity 20/49, fall cap 16, air keep 0.9,
+  drag 0.95), its High Jump at MAX (585, `fmab` growth 4, as KH2's controller gave Valor), for both
+  of KH1's takeoffs (KH2's jump start with High Jump, Steam KH2 `0x140422630` / `0x1403B59B0`,
+  Checked (decomp) at t627). The physics row's KH1 setting doesn't apply in Valor (a Drive Form is
+  KH2's, `shared::physics::source`).
+- **The change** (`form::native_start` / `native_frame` / `native_arrive`, from
+  `takeover::shared_frame` each physics frame of Sora's): the Drive command reaches KH1's command
+  step (`combat::command`, no borrow); KH1's request of ours for Sora's Drive motion 52 with KH1's
+  action flag, KH1's idle (or fall) queued; MP paid, HP refilled, KH1's voice, as before. Motion 52's
+  own ranges (Checked (files): no gravity and invulnerable all through, guard 124 on his body, hit
+  125 at 18..28) work through KH1's states as every KH2 move of ours: held in the air
+  (`kh2slots::no_gravity`), no hit reaches him (`hurt`, `kh2slots::invulnerable`), its hit a KH1
+  attack object (`bodyhits`). After 39 60 Hz frames (the tester's 45-frame change, as before), the
+  swap and Valor's arrival 53 on its request of ours.
+- **Revert** (`form::native_revert`): base Sora's slots and data again; what was playing cut into
+  KH1's idle (ground) or fall (air), action flag off; the revert's light and sound as before. On
+  the Revert command (`form::accept_now`: KH1's can-act or KH1's combo window,
+  `native_can_change`), out of MP, or knocked out.
+- **The second Keyblade**: still drawn by `leftblade` (a second queue of the model; not native),
+  now fed from the baked frame (`pose::follow_baked` evaluates Valor's rig at KH1's time in the slot,
+  `leftblade::kh2_left` / `note_pose`).
+
+**Not native yet / not done in this step:**
+
+- The left Keyblade's hits: Valor's swings' left windows (weapon 2) open KH1's one hit window on the
+  right Keyblade's sphere (`kh2slots::kh1_tracks`, weapon > 0), so they land at the right blade's
+  place with the left window's ATKP. A second KH1 attack object on the left blade is the next step
+  (KH1 has no left weapon bones: it needs `bodyhits`-style shapes placed from the left grip).
+- Valor's Square moves (row 11's rising slash, the Square finishers 12 / 38): KH1 sees no Square in
+  Valor (`shared::control`); nothing comes out yet. KH2's Valor has no dodge roll, guard, Quick Run,
+  glide or Aerial Dodge, so nothing else is lost.
+- Valor's guard windows (arrival 53, 155's left-blade guard 162) are not KH1 guard objects
+  (`takeover::kh2_hits` skips a form's).
+- The arrival 53 isn't held in the air (KH2's `play_held`): it has no no-gravity range of its own,
+  so in the air he falls through its 6 frames. **Assumption** that this is unnoticeable.
+- `native_can_change`: KH1's can-act or combo window stands for KH2's `can_change_form`.
+  **Assumption**.
+- Not checked in game; offline the Valor bakes weren't run (KH1's skeleton and motion table aren't
+  in the extracted files here).

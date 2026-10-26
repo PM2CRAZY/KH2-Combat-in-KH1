@@ -55,6 +55,9 @@ const ABILITY_BITS_STEAM: usize = 0x2D5EC10;
 /// (Holding Zantetsuken back also keeps KH1's row 8 marked, which Blitz's test needs.)
 pub const HELD_GROUND: u32 = 1 << 26 | 1 << 27 | 1 << 28 | 1 << 29;
 pub const HELD_AIR: u32 = 0;
+/// Blitz (bit 3) and Hurricane Blast (25), KH1's two ability finishers its picker tests itself:
+/// held back too in Valor Form (`at_kh2`), where none of KH1's own moves come out.
+const ALL_FINISHER_BITS: u32 = 1 << 3 | 1 << 25;
 /// KH1's random number in 0..1 (`0x14031BA30`: three `rand` bytes x 2^-24; its picker's 30% rolls
 /// use it), `mov [rsp+8], rbx; push rdi; sub rsp, 0x20` (Checked (exe)).
 const RANDOM_STEAM: usize = 0x31BA30;
@@ -165,8 +168,9 @@ unsafe fn ours_kh2(actor: usize, air: bool) -> bool {
         && actor == super::takeover::sora_actor()
         && super::takeover::ON.load(Ordering::Relaxed)
         && super::shared::active()
-        && !super::form::in_form()
-        && kh2(if air { Kind::AirCombo } else { Kind::GroundCombo })
+        // (Valor Form on KH1's own states: KH2's pick from Valor's table whatever the styles; a
+        // Drive Form is KH2's all through, `form::native_now`.)
+        && (super::form::native_now() || !super::form::in_form() && kh2(if air { Kind::AirCombo } else { Kind::GroundCombo }))
 }
 
 /// KH1's picker at the combo style KH2 (the tester, combo row selection m23: "I can't do any kh1
@@ -183,10 +187,15 @@ unsafe fn at_kh2(actor: usize, air: bool, held: u32, dir: usize, f: impl FnOnce(
         return super::combomods::kh2_pick_in_picker(actor, row, dir, air, None);
     }
     let saved = press.as_ref().and_then(|p| super::combomods::kh2_length_for_picker(actor, air, p.len));
-    let (row, bits) = holding(held, f);
+    // (In Valor Form, `form::native_now`, none of KH1's own ability finishers: KH2's Valor has its
+    // own table only. Every one of KH1's bits held back for its picker's call, no walk.)
+    let valor = super::form::native_now();
+    let (row, bits) = holding(if valor { held | HELD_GROUND | ALL_FINISHER_BITS } else { held }, f);
     put_back(saved);
-    if let Some(n) = super::combomods::kh2_finisher_walk(actor, row, air, bits, press.as_ref()) {
-        return n;
+    if !valor {
+        if let Some(n) = super::combomods::kh2_finisher_walk(actor, row, air, bits, press.as_ref()) {
+            return n;
+        }
     }
     super::combomods::kh2_pick_in_picker(actor, row, dir, air, press)
 }

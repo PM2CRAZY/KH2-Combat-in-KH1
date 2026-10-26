@@ -322,6 +322,40 @@ const SPECS: [Spec; 42] = [
     LAND,
 ];
 
+/// Valor Form's motions on KH1's own requests (Valor on KH1's own states, `form::native`; the
+/// tester, what-is-still-missing after m11: "I want you to transfer drive forms as well"), each
+/// the same KH1 request and template as base Sora's move of that kind, from `P_EX100_BTLF.mset`
+/// (Checked (files): its plain combo 151..155 / 181..184, reactions 10..15, recoils 41 / 43, item
+/// use 9, fall 4, landing 5, High Jump 201). Played on their requests only while he is in Valor
+/// (`redirect`), whatever the move styles (a Drive Form is KH2's all through, as on KH2's
+/// controller before). Its jump: KH2's jump start plays 201 with High Jump (Steam KH2
+/// `0x140422630` / `0x1403B59B0`, Checked (decomp), `JUMPS`), which Valor always has (its growth
+/// ability at MAX, `form::form_abilities`), so KH1's jump and High Jump takeoffs (0x4 / 0x9) both
+/// play it.
+const VALOR_SPECS: [Spec; 21] = [
+    Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
+    Spec { motion: 154, stands_for: 101, request: 0xCB, kind: Kind::GroundCombo },
+    Spec { motion: 181, stands_for: 102, request: 0xCC, kind: Kind::AirCombo },
+    Spec { motion: 182, stands_for: 103, request: 0xCD, kind: Kind::AirCombo },
+    Spec { motion: 183, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
+    reaction_spec(0),
+    reaction_spec(1),
+    reaction_spec(2),
+    reaction_spec(3),
+    reaction_spec(4),
+    reaction_spec(5),
+    recoil_spec(0),
+    recoil_spec(1),
+    item_spec(0),
+    item_spec(1),
+    FALL,
+    Spec { motion: character_core::motion::HIGH_JUMP, stands_for: 8, request: 0x4, kind: Kind::Jump },
+    Spec { motion: character_core::motion::HIGH_JUMP, stands_for: 12, request: 0x9, kind: Kind::Jump },
+    LAND,
+];
+
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
 /// and running cycles? its more easy for me to compare"). KH1's walk and run requests (1, 2) are
 /// kind 3 in its request table: KH1 plays the entry's slot + 0, 1 or 2 (field, battle, the third
@@ -386,6 +420,9 @@ pub struct Move {
     /// Where KH2 loops it back to (60 Hz frames from its start), when KH1 loops it on a request
     /// with no hold (`loop_range`; the fall, `FALL`).
     loop_from: Option<f32>,
+    /// Valor Form's motion (`P_EX100_BTLF`), played on its request only while Sora is in Valor on
+    /// KH1's own states (`form::native_now`, `redirect`); else base Sora's.
+    pub form: bool,
 }
 
 struct Built {
@@ -415,6 +452,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         }
         let mut moves = Vec::new();
         let mut blocks = Vec::new();
+        let base = kh2.src();
         let wanted = |motion: u16| which.as_ref().map_or(true, |w| w.contains(&motion));
         // The combo rows' motions KH1's rows can play natively (`swing_rows`: the plain ones, and
         // the ability rows that are a Keyblade swing or hit with his body).
@@ -427,7 +465,8 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         // of ours (the tester, combo row selection after m26, answer 1: no fallback onto KH1's
         // finisher row).)
         let ours_motions = |o: &super::kh1rows::Ours| -> Vec<u16> {
-            if !wanted(o.motion) || (o.combo && !combo_ok.contains(&o.motion)) {
+            // (A Valor-only move, its arrival: built from Valor's moveset only, below.)
+            if o.valor || !wanted(o.motion) || (o.combo && !combo_ok.contains(&o.motion)) {
                 return Vec::new();
             }
             let mut motions = vec![o.motion];
@@ -441,15 +480,47 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
             }
             motions
         };
+        // Valor Form on KH1's own states (`form::native`; the tester, what-is-still-missing after
+        // m11: "I want you to transfer drive forms as well"): Valor's own moveset (`P_EX100_BTLF`)
+        // as slots of their own, on the same KH1 requests and our own requests as base Sora's,
+        // played while he is in Valor (`redirect`).
+        let valor = kh2.valor_src().filter(|_| super::form::native_enabled());
+        let valor_has = |m: u16| valor.as_ref().is_some_and(|v| v.character.moveset.clips.contains_key(&m) && v.rig.motions.contains_key(&m));
+        // (Valor's plain combo rows' motions: its PTYA moveset 2, Checked (files): 151..155 on the
+        // ground, 181..184 in the air, no ability rows of its own.)
+        let valor_combo: Vec<u16> = valor.as_ref().map_or(Vec::new(), |v| v.character.moveset.combo_rows.iter().filter(|r| r.ability == 0).map(|r| r.motion).collect());
+        let valor_ours = |o: &super::kh1rows::Ours| -> Vec<u16> {
+            if valor.is_none() || !wanted(o.motion) {
+                return Vec::new();
+            }
+            if o.valor {
+                return if valor_has(o.motion) { vec![o.motion] } else { Vec::new() };
+            }
+            if o.next_finisher {
+                let air = o.kind.air();
+                let mut motions: Vec<u16> = super::kh1rows::OURS.iter().filter(|f| f.combo && f.kind.finisher() && f.kind.air() == air && valor_combo.contains(&f.motion) && valor_has(f.motion) && wanted(f.motion)).map(|f| f.motion).collect();
+                // (Its first is its own motion, as base Sora's, `ours_motions`.)
+                motions.sort_by_key(|&m| m != o.motion);
+                motions.dedup();
+                return if motions.first() == Some(&o.motion) { motions } else { Vec::new() };
+            }
+            if o.combo && valor_combo.contains(&o.motion) && valor_has(o.motion) {
+                return vec![o.motion];
+            }
+            Vec::new()
+        };
         // (How many motions this makes, for the loading screen's count, `loadscreen`.)
         super::loadscreen::plan(
             SPECS.iter().filter(|s| wanted(s.motion)).count()
                 + CYCLES.iter().filter(|c| wanted(c.motion)).map(|c| c.count as usize).sum::<usize>()
                 + CAST_FINISHERS.iter().filter(|f| wanted(f.0)).count()
-                + super::kh1rows::OURS.iter().map(|o| ours_motions(o).len()).sum::<usize>(),
+                + super::kh1rows::OURS.iter().map(|o| ours_motions(o).len()).sum::<usize>()
+                + VALOR_SPECS.iter().filter(|s| wanted(s.motion) && valor_has(s.motion)).count()
+                + CYCLES.iter().filter(|c| wanted(c.motion) && valor_has(c.motion)).map(|c| c.count as usize).sum::<usize>()
+                + super::kh1rows::OURS.iter().map(|o| valor_ours(o).len()).sum::<usize>(),
         );
         for s in SPECS.iter().filter(|s| wanted(s.motion)) {
-            if let Some((m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
+            if let Some((m, block)) = make(mset, &base, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
                 moves.push(m);
                 blocks.push(block);
             }
@@ -458,7 +529,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         for c in CYCLES.iter().filter(|c| wanted(c.motion)) {
             let mut three = Vec::new();
             for v in 0..c.count {
-                match make(mset, kh2, bake, cache.as_deref_mut(), &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize, false)? {
+                match make(mset, &base, bake, cache.as_deref_mut(), &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize, false)? {
                     Some(m) => three.push(m),
                     None => break,
                 }
@@ -482,7 +553,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
             if !wanted(motion) || !moves.iter().any(|m| m.request == request && m.default) {
                 continue;
             }
-            if let Some((m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (motion, stands_for, request, Kind::Magic), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
+            if let Some((m, block)) = make(mset, &base, bake, cache.as_deref_mut(), &requests, (motion, stands_for, request, Kind::Magic), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
                 moves.push(m);
                 blocks.push(block);
             }
@@ -503,7 +574,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
                 (false, false) => Kind::GroundCombo,
             };
             for (j, &motion) in motions.iter().enumerate() {
-                if let Some((mut m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
+                if let Some((mut m, block)) = make(mset, &base, bake, cache.as_deref_mut(), &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
                     m.own = Some(m.request);
                     m.request = super::kh1rows::request(n) as usize;
                     log!(Animation, "KH2 slots: KH2 motion {motion} ({}) on our request {:#x} (KH1's row {} of ours)", o.name, m.request, super::kh1rows::row(n));
@@ -511,6 +582,50 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
                     blocks.push(block);
                 }
             }
+        }
+        // Valor Form's own (`VALOR_SPECS`, its idle / walk / run, its combo rows and arrival on our
+        // own requests), slots of their own after base Sora's.
+        if let Some(v) = valor.as_ref() {
+            let before = moves.len();
+            for s in VALOR_SPECS.iter().filter(|s| wanted(s.motion) && valor_has(s.motion)) {
+                if let Some((m, block)) = make(mset, v, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
+                    moves.push(m);
+                    blocks.push(block);
+                }
+            }
+            for c in CYCLES.iter().filter(|c| wanted(c.motion) && valor_has(c.motion)) {
+                let mut all = Vec::new();
+                for vr in 0..c.count {
+                    // (Valor has no field variants of its idle, walk or run, Checked (files): its
+                    // battle ones on each of KH1's slots.)
+                    match make(mset, v, bake, cache.as_deref_mut(), &requests, (c.motion, c.slot + vr as usize, c.request, Kind::MiscAnims), true, (false, vr), KH1_SLOTS + moves.len() + vr as usize, false)? {
+                        Some(m) => all.push(m),
+                        None => break,
+                    }
+                }
+                if all.len() == c.count as usize {
+                    for (m, block) in all {
+                        moves.push(m);
+                        blocks.push(block);
+                    }
+                }
+            }
+            for (n, o) in super::kh1rows::OURS.iter().enumerate() {
+                let style = if o.kind.air() { Kind::AirCombo } else { Kind::GroundCombo };
+                for (j, &motion) in valor_ours(o).iter().enumerate() {
+                    if let Some((mut m, block)) = make(mset, v, bake, cache.as_deref_mut(), &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
+                        m.own = Some(m.request);
+                        m.request = super::kh1rows::request(n) as usize;
+                        moves.push(m);
+                        blocks.push(block);
+                    }
+                }
+            }
+            log!(Animation,
+                "KH2 slots: Valor Form's moves on KH1's states: {} slots ({})",
+                moves.len() - before,
+                moves[before..].iter().map(|m| format!("{} on {:#x}", m.motion, m.request)).collect::<Vec<_>>().join(", ")
+            );
         }
         log!(Animation,
             "KH2 slots: KH2's row selection on KH1's ground and air combo: {}",
@@ -534,9 +649,9 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
 /// selection can pick (`pick`); `field`: KH2's field variant of the motion; `variant`: which of a
 /// kind 3 / 4 request's slots (`CYCLES`). `None` if it can't be built (logged).
 #[allow(clippy::too_many_arguments)]
-fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<&mut crate::slotcache::Cache>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, crate::slotcache::Block)>, String> {
+fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<&mut crate::slotcache::Cache>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, crate::slotcache::Block)>, String> {
     super::loadscreen::making(motion);
-    let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
+    let Some(clip) = src.character.moveset.clips.get(&motion) else {
         log!(Animation, "KH2 slots: KH2 motion {motion} has no clip, left out");
         return Ok(None);
     };
@@ -551,7 +666,7 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
     let template = ks::motion_bytes(mset, stands_for).map_err(|e| e.to_string())?;
     let old = u32::from_le_bytes(template[4..8].try_into().unwrap());
     // (A field variant's own length: KH2's field walk and run are their own motions.)
-    let field_len = field.then(|| kh2.rig.field_motions.get(&motion)).flatten().map(|m| kh2_anim::length_frames(m).round() as u32);
+    let field_len = field.then(|| src.rig.field_motions.get(&motion)).flatten().map(|m| kh2_anim::length_frames(m).round() as u32);
     // (A move of ours with a slot longer than its clip, `kh1rows::Ours::frames`: the Aerial
     // Dodge, its clip looped over it as KH2 loops it.)
     let ours = if own { super::kh1rows::by_motion(motion).map(|n| &super::kh1rows::OURS[n]) } else { None };
@@ -622,13 +737,13 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
     // (From the motion slot cache when it has this exact bake, `slot_key`; baked and kept there
     // otherwise.)
     let baking = bake.map(|b| match cache {
-        Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel), || {
+        Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel, src.form), || {
             super::loadscreen::baking();
-            bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel)
+            bake_one(b, src, &template, (motion, field), frames, &tracks, travel)
         }),
         None => {
             super::loadscreen::baking();
-            bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel).map(crate::slotcache::Block::new)
+            bake_one(b, src, &template, (motion, field), frames, &tracks, travel).map(crate::slotcache::Block::new)
         }
     });
     let (block, baked) = match baking {
@@ -646,12 +761,12 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
         tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
     );
     // (KH2's own loop point, for the fall: `loop_range`.)
-    let loop_from = (kind == Kind::Jump && !own).then(|| kh2.rig.motions.get(&motion)).flatten().and_then(|m| {
+    let loop_from = (kind == Kind::Jump && !own).then(|| src.rig.motions.get(&motion)).flatten().and_then(|m| {
         let k = 60.0 / m.fps.max(1e-3);
         let from = (m.frame_return - m.frame_start) * k;
         (from > 0.5 && from < frames as f32 - 0.5).then_some(from)
     });
-    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events, loop_from }, block)))
+    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events, loop_from, form: src.form }, block)))
 }
 
 /// The swings KH2's combo rows can take: on the ground (`air` false) the ground rows with no hop
@@ -762,7 +877,7 @@ pub unsafe fn now_playing(actor: usize) -> Option<(u16, f32)> {
 pub unsafe fn invulnerable(actor: usize) -> bool {
     use character_core::WindowKind as W;
     let Some(m) = current(actor) else { return false };
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
     t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::Invulnerable))
 }
@@ -775,7 +890,7 @@ pub unsafe fn body_guard(actor: usize) -> Option<u16> {
     use character_core::WindowKind as W;
     let m = current(actor)?;
     let kh2 = pose::kh2()?;
-    let clip = kh2.character.moveset.clips.get(&m.motion)?;
+    let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
     if !(t >= 0.0) {
         return None;
@@ -796,7 +911,7 @@ pub unsafe fn keyblade_guard(actor: usize) -> Option<(u16, u8)> {
     use character_core::WindowKind as W;
     let m = current(actor)?;
     let kh2 = pose::kh2()?;
-    let clip = kh2.character.moveset.clips.get(&m.motion)?;
+    let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
     if !(t >= 0.0) {
         return None;
@@ -816,7 +931,7 @@ pub unsafe fn keyblade_guard(actor: usize) -> Option<(u16, u8)> {
 pub unsafe fn no_gravity(actor: usize) -> bool {
     use character_core::WindowKind as W;
     let Some(m) = current(actor) else { return false };
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
     if !(t >= 0.0) || !clip.windows.iter().any(|w| matches!(w.kind, W::NoGravity)) {
         return false;
@@ -837,7 +952,7 @@ pub unsafe fn air_root(actor: usize, dt: f32) -> Option<[f32; 3]> {
         return None;
     }
     let m = current(actor)?;
-    let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+    let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
     root_travel(clip, t, dt, rd(actor + 0x3C))
 }
@@ -896,7 +1011,7 @@ pub unsafe fn rise_start(actor: usize, dt: f32) -> Option<[f32; 3]> {
         *g = None;
         return None;
     }
-    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let clip = pose::kh2_moves()?.moveset.clips.get(&motion)?;
     let from = clip.windows.iter().filter(|w| matches!(w.kind, W::NoGravity)).map(|w| w.start).min()?;
     let dt = if dt.is_finite() && dt > 0.0 && dt < 4.0 { dt } else { 1.0 };
     Some(root_travel(clip, from as f32, dt, rd(actor + 0x3C)).unwrap_or([0.0; 3]))
@@ -910,7 +1025,7 @@ pub unsafe fn rise_start(actor: usize, dt: f32) -> Option<[f32; 3]> {
 pub unsafe fn edge_stop(actor: usize) -> bool {
     use character_core::WindowKind as W;
     let Some(m) = current(actor) else { return false };
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
     t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::EdgeStop))
 }
@@ -932,7 +1047,7 @@ pub unsafe fn edge_stop(actor: usize) -> bool {
 pub unsafe fn turn_to_lock(actor: usize) {
     use character_core::WindowKind as W;
     let Some(m) = current(actor) else { return };
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return };
+    let Some(clip) = clip_of(m) else { return };
     let t: f32 = rd(actor + TIME_NOW);
     if !(t >= 0.0) {
         return;
@@ -1039,7 +1154,7 @@ pub unsafe fn keyblade_rearm(actor: usize) {
     use character_core::WindowKind as W;
     let now = (|| {
         let m = current(actor)?;
-        let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+        let clip = clip_of(m)?;
         let t: f32 = rd(actor + TIME_NOW);
         if !(t >= 0.0) {
             return None;
@@ -1095,16 +1210,20 @@ pub fn has_any(motion: u16) -> bool {
 /// `travel`: the move's request has KH1's travel flag (`travels`): KH2's root travel goes in its H10.
 /// One bake's key in the motion slot cache (`slotcache`): what `bake_one` reads besides the
 /// manifest's files and settings (the KH1 template motion's bytes, the KH2 motion, its variant,
-/// length, KH1 events and travel).
-fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool) -> u128 {
+/// length, KH1 events and travel). A Drive Form's motion (`form`: Valor's, the same motion ids as
+/// Sora's, other animations) has the moveset in its key too; base Sora's keys are as before.
+fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool, form: bool) -> u128 {
     let mut h = crate::slotcache::Hasher::default();
     h.bytes(template).u32(motion as u32).u32(field as u32).u32(frames).u32(travel as u32).str(&format!("{tracks:?}"));
+    if form {
+        h.str("P_EX100_BTLF");
+    }
     h.finish()
 }
 
-fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
+fn bake_one(b: &pose::Baker, src: &pose::Src, template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
     let t = std::time::Instant::now();
-    let (poses, moved) = b.poses(kh2, motion, field, frames, travel).ok_or("KH2 has no animation for it")?;
+    let (poses, moved) = b.poses_of(src, motion, field, frames, travel).ok_or("KH2 has no animation for it")?;
     // (t-legs) KH1's own leg IK and ground lift kept on the baked motion (`kh1_data::legs`, ini
     // `kh1_leg_ik`): the template's leg joint words stay, its foot helpers H8 / H9 keyed to the
     // baked ankles and feet, so KH1's pass puts his feet on slopes and stairs in our motions as in
@@ -1348,7 +1467,7 @@ fn combo_kind(clip: &character_core::Clip, k: &WindowKind) -> bool {
 /// (Thunder's finisher cast 63 and Cure's 68: 42..78, Checked (files)), for Gravity and Stop as
 /// the combo's finisher (`formmagic::finisher_spell_window`).
 pub fn finisher_share(motion: u16) -> Option<(f32, f32)> {
-    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let clip = pose::kh2_moves()?.moveset.clips.get(&motion)?;
     let w = clip.windows.iter().find(|w| matches!(w.kind, WindowKind::Finisher))?;
     let len = clip.length.max(1) as f32;
     Some((w.start as f32 / len, w.end.map_or(len, |e| e as f32) / len))
@@ -1358,7 +1477,7 @@ pub fn finisher_share(motion: u16) -> Option<(f32, f32)> {
 /// (`combo_kind`'s first frame; Fire 56: frame 60, Checked (files)), for KH1's own casts at the
 /// Magic Combo row (`formmagic::kh1_cast_window`).
 pub fn combo_share(motion: u16) -> Option<f32> {
-    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let clip = pose::kh2_moves()?.moveset.clips.get(&motion)?;
     let from = clip.first(|k| combo_kind(clip, k))?;
     (clip.length > 0).then(|| from as f32 / clip.length as f32)
 }
@@ -1372,7 +1491,7 @@ pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
     if let Some(open) = super::formmagic::finisher_spell_window(actor) {
         return Some(open);
     }
-    let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+    let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
     Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| combo_kind(clip, k)))
 }
@@ -1387,7 +1506,7 @@ pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
 /// (Checked (decomp)). `finisher_window` opens KH1's combo window there.
 pub unsafe fn cast_finisher_open(actor: usize) -> bool {
     let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
     t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| matches!(k, WindowKind::Finisher)) && super::shared::active() && super::combomods::finisher_left()
 }
@@ -1404,7 +1523,7 @@ pub unsafe fn cast_playing(actor: usize) -> bool {
 /// cast's end, as in KH2.
 pub unsafe fn cast_cut_open(actor: usize) -> bool {
     let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return false };
+    let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
     t.is_finite() && t >= 0.0 && clip.free_at(t as u32)
 }
@@ -1417,7 +1536,7 @@ pub unsafe fn cast_magic_window(actor: usize) -> Option<bool> {
     if let Some(open) = super::formmagic::finisher_spell_window(actor) {
         return Some(open);
     }
-    let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+    let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
     // (KH2's magic command takes the same combo window as its Attack, `combo_kind`; t642.)
     Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| combo_kind(clip, k)))
@@ -1437,8 +1556,11 @@ struct Set {
     requests_handle: u32,
     requests: &'static mut [u32],
     /// (request, KH1's entry, our slot index in this set, the move's style, the move (its
-    /// `slot`), whether it is the request's own).
-    redirects: Vec<(usize, u32, u32, Kind, usize, bool, bool)>,
+    /// `slot`), whether it is the request's own, whether it is one of ours (a request of ours),
+    /// whether it is Valor Form's).
+    redirects: Vec<(usize, u32, u32, Kind, usize, bool, bool, bool)>,
+    /// The requests with a move of Valor Form's (`redirect`: in Valor those are its).
+    valor_requests: Vec<usize>,
 }
 
 /// Our motions placed in memory (the game thread) and the sets made with them.
@@ -1461,6 +1583,57 @@ fn built() -> Option<&'static Built> {
 
 fn moved(slot: usize) -> Option<&'static Move> {
     built()?.moves.iter().find(|m| m.slot == slot)
+}
+
+/// KH2's clip of our move `m`: Valor Form's moveset for one of Valor's (`Move::form`; the motion
+/// ids are the same as base Sora's), else base Sora's.
+fn clip_of(m: &Move) -> Option<&'static character_core::Clip> {
+    let k = pose::kh2()?;
+    let c = if m.form { &k.valor.as_ref()?.character } else { &k.character };
+    c.moveset.clips.get(&m.motion)
+}
+
+/// `m` belongs to the moveset playing now: in Valor on KH1's own states (`form::native_now`)
+/// Valor's where it has a move for that request, else base Sora's.
+fn live(b: &Built, m: &Move) -> bool {
+    if !super::form::native_now() {
+        return !m.form;
+    }
+    m.form || !b.moves.iter().any(|x| x.form && x.request == m.request)
+}
+
+/// Our slot `slot` is one of Valor Form's (`pose`: Valor's rig for its KH2 pose).
+pub fn is_form(slot: usize) -> bool {
+    moved(slot).is_some_and(|m| m.form)
+}
+
+/// Valor Form's moves are built (Valor on KH1's own states can run: `form::native_ok`): its
+/// combo, idle, walk and run, and its arrival.
+pub fn valor_built() -> bool {
+    built().is_some_and(|b| {
+        let has = |r: usize| b.moves.iter().any(|m| m.form && m.request == r);
+        let arrive = super::kh1rows::by_motion(super::kh1rows::ARRIVE_MOTION).map(|n| super::kh1rows::request(n) as usize);
+        let drive = super::kh1rows::by_motion(super::kh1rows::DRIVE_MOTION).map(|n| super::kh1rows::request(n) as usize);
+        [0x0, 0x1, 0x2, 0x6, 0x7].iter().all(|&r| has(r)) && arrive.is_some_and(has) && drive.is_some_and(|d| b.moves.iter().any(|m| !m.form && m.request == d))
+    })
+}
+
+/// `request` has a slot in the request table bound on `actor` now (its entry not 0xFFF, none):
+/// asked of KH1 only then (`form`'s Drive and arrival).
+pub unsafe fn request_bound(actor: usize, request: usize) -> bool {
+    let t = pose::ptr(rd::<u32>(actor + SET + 8));
+    t >= 0x10000 && super::crash::readable(t + request * 4 + 3) && rd::<u32>(t + request * 4) & 0xFFF != 0xFFF
+}
+
+/// The requests pointed again for the moveset now (a Drive Form's change: `form`), at once rather
+/// than at Sora's next pose.
+pub unsafe fn refresh() {
+    // (A blocking lock: only the game thread takes it, and not around this call.)
+    if let Ok(mut g) = PLACED.lock() {
+        if let Some(p) = g.as_mut() {
+            redirect(p);
+        }
+    }
 }
 
 /// Every slot of this kind of move is built (so KH1's state can own the whole move at KH2's
@@ -1706,8 +1879,9 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
             if held < count && pose::file_slot_of_motion(pose::ptr(slots[held])) == Some(m.stands_for) {
                 // (Each of its motions a redirect too, for KH2's pick on a request with several:
                 // Finishing Plus's, `pick_own`.)
-                redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default, true));
-                if let Some(x) = requests.get_mut(m.request).filter(|_| m.default) {
+                redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default, true, m.form));
+                // (Valor's own entries only by `redirect`, while he is in Valor; base Sora's here.)
+                if let Some(x) = requests.get_mut(m.request).filter(|_| m.default && !m.form) {
                     *x = (e & !0xFFF) | (count + i) as u32;
                     own_requests.push(format!("{:#x}", m.request));
                 }
@@ -1721,7 +1895,7 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         let held = if own < count { pose::file_slot_of_motion(pose::ptr(slots[own])) } else { None };
         let holds = held.is_some() && (held == Some(m.stands_for) || held == also_stands_for(m.request));
         if holds {
-            redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default, false));
+            redirects.push((m.request, e, (count + i) as u32, m.kind, m.slot, m.default, false, m.form));
         } else if m.variant == 0 {
             missing.push(format!("{:#x}", m.request));
         }
@@ -1730,13 +1904,16 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
             let e = requests.get(alias).copied().unwrap_or(0xFFF);
             let own = (e & 0xFFF) as usize;
             if own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(m.stands_for) {
-                redirects.push((alias, e, (count + i) as u32, m.kind, m.slot, true, false));
+                redirects.push((alias, e, (count + i) as u32, m.kind, m.slot, true, false, m.form));
             } else {
                 missing.push(format!("{alias:#x} (as {:#x})", m.request));
             }
         }
     }
-    let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects };
+    let mut valor_requests: Vec<usize> = redirects.iter().filter(|r| r.7).map(|r| r.0).collect();
+    valor_requests.sort_unstable();
+    valor_requests.dedup();
+    let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects, valor_requests };
     log!(Animation,
         "KH2 slots: Sora's set {f:#x} ({why}): {count} slots of its own, ours at {}..{}, {} requests; ours stand in for {}; our own requests {}{}",
         count,
@@ -1912,7 +2089,7 @@ const KH2_FALL_BLEND: f32 = 8.0;
 /// its 6-frame apex motion give way to KH2's swap, KH1's fall request asked 5 frames before the
 /// apex with KH2's blend. True when it is ours to decide (KH1's apex step then doesn't run).
 unsafe fn kh2_apex(actor: usize) -> bool {
-    if !super::shared::on() || !super::styles::kh2(Kind::Jump) || !is_sora(actor) || !has(FALL.request, FALL.motion) {
+    if !super::shared::on() || !(super::styles::kh2(Kind::Jump) || super::form::native_now()) || !is_sora(actor) || !has(FALL.request, FALL.motion) {
         return false;
     }
     let base = rd::<i32>(actor + 0x3D0);
@@ -1974,7 +2151,7 @@ unsafe extern "system" fn apex(actor: usize) {
 /// `shared::physics`), while KH1's takeoff request plays with nothing queued: KH1's fall request
 /// (base + 6) with KH2's blend. Only at Jump KH2 with our fall slot.
 pub unsafe fn fall_now(actor: usize, why: &str) {
-    if !super::shared::on() || !super::styles::kh2(Kind::Jump) || !has(FALL.request, FALL.motion) || super::addr::Build::current() != super::addr::Build::Steam {
+    if !super::shared::on() || !(super::styles::kh2(Kind::Jump) || super::form::native_now()) || !has(FALL.request, FALL.motion) || super::addr::Build::current() != super::addr::Build::Steam {
         return;
     }
     let base = rd::<i32>(actor + 0x3D0);
@@ -2061,7 +2238,7 @@ static OWN_PICKED: [AtomicUsize; super::kh1rows::OURS.len()] = [const { AtomicUs
 /// Whether it does.
 pub unsafe fn pick_own(request: usize, motion: u16) -> bool {
     let Some(i) = request.checked_sub(super::kh1rows::FIRST_REQUEST as usize).filter(|i| *i < OWN_PICKED.len()) else { return false };
-    let m = built().and_then(|b| b.moves.iter().find(|m| m.request == request && m.motion == motion)).map(|m| m.slot);
+    let m = built().and_then(|b| b.moves.iter().find(|m| m.request == request && m.motion == motion && live(b, m))).map(|m| m.slot);
     OWN_PICKED[i].store(m.unwrap_or(usize::MAX), Ordering::Relaxed);
     if let Ok(mut g) = PLACED.try_lock() {
         if let Some(p) = g.as_mut() {
@@ -2085,7 +2262,7 @@ pub unsafe fn pick_own(request: usize, motion: u16) -> bool {
 unsafe fn finisher_window(actor: usize) {
     use character_core::WindowKind as W;
     let Some(m) = current(actor) else { return };
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&m.motion)) else { return };
+    let Some(clip) = clip_of(m) else { return };
     let t: f32 = rd(actor + TIME_NOW);
     if !(t >= 0.0) || !clip.has(t as u32, |k| matches!(k, W::Finisher)) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() || !super::combomods::finisher_chain_open() {
         return;
@@ -2111,10 +2288,18 @@ unsafe fn finisher_window(actor: usize) {
 /// picked for it.
 unsafe fn redirect(p: &mut Placed) {
     let on = super::shared::on();
+    // (Valor Form on KH1's own states, `form::native_now`: a request with a move of Valor's plays
+    // Valor's, whatever the styles (a Drive Form is KH2's all through); every other request base
+    // Sora's as before. Out of Valor, Valor's moves are left alone.)
+    let valor = super::form::native_now();
     for t in p.sets.iter_mut() {
         for i in 0..t.redirects.len() {
-            let (req, kh1, ours, kind, id, default, own) = t.redirects[i];
-            let want = picked(req).filter(|m| t.redirects.iter().any(|r| r.0 == req && r.4 == *m));
+            let (req, kh1, ours, kind, id, default, own, form) = t.redirects[i];
+            let valor_here = valor && t.valor_requests.binary_search(&req).is_ok();
+            if form != valor_here {
+                continue;
+            }
+            let want = picked(req).filter(|m| t.redirects.iter().any(|r| r.0 == req && r.4 == *m && r.7 == valor_here));
             if want.map_or(!default, |m| m != id) {
                 continue;
             }
@@ -2127,7 +2312,7 @@ unsafe fn redirect(p: &mut Placed) {
                     Some(spell) if matches!(kind, Kind::Magic | Kind::AirMagic) => super::formmagic::anim_kh2(spell),
                     _ => super::styles::kh2(kind),
                 };
-                *e = if own || on && (style || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
+                *e = if own || form || on && (style || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
             }
         }
     }
@@ -2147,7 +2332,7 @@ pub unsafe fn pick(request: usize, motion: Option<u16>) -> bool {
 /// the style decides, as before.
 pub unsafe fn pick_ability(request: usize, motion: Option<u16>, force: bool) -> bool {
     let Some(i) = request.checked_sub(0xC8).filter(|i| *i < PICKED.len()) else { return false };
-    let m = motion.and_then(|mo| built()?.moves.iter().find(|m| m.request == request && m.motion == mo)).map(|m| m.slot);
+    let m = motion.and_then(|mo| built().and_then(|b| b.moves.iter().find(|m| m.request == request && m.motion == mo && live(b, m)))).map(|m| m.slot);
     PICKED[i].store(m.unwrap_or(usize::MAX), Ordering::Relaxed);
     for f in &FORCED {
         f.store(0, Ordering::Relaxed);
@@ -2165,7 +2350,7 @@ pub unsafe fn pick_ability(request: usize, motion: Option<u16>, force: bool) -> 
 
 /// A slot of ours plays KH2's `motion` for KH1's `request` (`pick` can point it there).
 pub fn has(request: usize, motion: u16) -> bool {
-    built().is_some_and(|b| b.moves.iter().any(|m| m.request == request && m.motion == motion))
+    built().is_some_and(|b| b.moves.iter().any(|m| m.request == request && m.motion == motion && live(b, m)))
 }
 
 /// The KH2 motion of our slot `actor` plays now (KH2's anti-repeat passes over it, `pick`).
@@ -2230,8 +2415,15 @@ unsafe fn tick(actor: usize) {
     for (f, e) in &m.events {
         let f = *f as f32;
         if f > from && f <= now {
-            super::kh2sound::event(m.motion, *e);
-            super::kh2fx::event(m.motion, *e);
+            // (Valor's own effect elements are its archive's, `form::effect` (`kh2fx::form_event`),
+            // as KH2's controller played them in the form; its sounds by `kh2sound`'s Valor banks.)
+            match e {
+                EventKind::Effect(n) if m.form => super::form::effect(m.motion, *n),
+                _ => {
+                    super::kh2sound::event(m.motion, *e);
+                    super::kh2fx::event(m.motion, *e);
+                }
+            }
         }
     }
 }

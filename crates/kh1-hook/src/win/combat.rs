@@ -548,6 +548,13 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // specials, summons) are KH1's as unmodded.
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && super::shared::active() {
         let drive = super::drive::on() && arg >= super::drive::FORM_ARG;
+        // A Drive Form run on KH1's own states (Valor, `form::native_choice`): its change and its
+        // revert are KH1's states' own (KH1's request and action flag, no borrow; `form::native_frame`).
+        if drive && super::form::native_choice((arg - super::drive::FORM_ARG) as usize) {
+            super::drive::chosen(actor, (arg - super::drive::FORM_ARG) as usize);
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): a Drive Form on KH1's own states (no borrow)"));
+            return;
+        }
         // During a KH2 cast on KH1's cast state a spell follows only in KH2's combo window on it
         // (range id 11, or range id 35 naming that motion, `kh2slots::cast_magic_window`, t642):
         // KH2's rule, as KH1 refuses what it can't take.
@@ -3210,7 +3217,8 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
     // A form from the Drive list: only on a frame Sora can change (`form::accept_now`: KH2's,
     // or a KH1 move's cut frame reached), the same as a spell (the user: no queue).
     if kind == 2 && arg >= super::drive::FORM_ARG && super::drive::on() {
-        if super::form::accept_now() {
+        // (Valor's change on KH1's own states: KH1's rule, `form::native_accept`.)
+        if super::form::accept_now() || super::form::native_accept((arg - super::drive::FORM_ARG) as usize) {
             return false;
         }
         static D: AtomicU32 = AtomicU32::new(0);

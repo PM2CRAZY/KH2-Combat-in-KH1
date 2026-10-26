@@ -276,7 +276,7 @@ pub unsafe fn frame(actor: usize) {
     }
     let live_now: Vec<bool> = g.live.iter().map(|e| e.is_some()).collect();
     g.spells.retain(|(i, _)| live_now[*i]);
-    let playing = if super::shared::active() && !super::form::in_form() { super::kh2slots::now_playing(actor) } else { None };
+    let playing = if super::shared::active() && !super::form::driver_form() { super::kh2slots::now_playing(actor) } else { None };
     let req = rd::<u32>(actor + 0x164);
     let Some((m, t)) = playing else {
         g.playing = None;
@@ -304,7 +304,7 @@ pub unsafe fn frame(actor: usize) {
             }
         }
     }
-    let Some(clip) = kh2.character.moveset.clips.get(&m) else { return };
+    let Some(clip) = super::pose::kh2_moves().and_then(|c| c.moveset.clips.get(&m)) else { return };
     let windows = super::kh2slots::body_windows(clip);
     if windows.is_empty() {
         return;

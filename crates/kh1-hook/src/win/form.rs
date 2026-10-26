@@ -265,9 +265,17 @@ unsafe fn hp(sora: usize) -> i32 {
 /// should only be accepted when you press return on an end frame", no queue): KH2 has Sora and
 /// he can change on this frame.
 pub fn accept_now() -> bool {
+    if busy() {
+        return false;
+    }
+    // (Valor on KH1's own states, `native_now`: KH1's states have him, KH1's rule for its revert,
+    // `native_can_change`. Its change: `native_accept`.)
+    if native_now() {
+        return unsafe { native_can_change(super::takeover::sora_actor()) };
+    }
     // (Or in one of KH1's moves at its cut frame, out of a form: the user, "goes into the drive
     // submenu and selects a drive" from frame 49 of KH1's Fire.)
-    !busy() && (super::takeover::with_kh2(|c, _| c.can_change_form()).unwrap_or(false) || !in_form() && super::takeover::kh1_cut_window())
+    super::takeover::with_kh2(|c, _| c.can_change_form()).unwrap_or(false) || !in_form() && super::takeover::kh1_cut_window()
 }
 
 /// Whether form `kind`'s entry can be chosen now (`drive`'s menu): reverting in a form, else MP
@@ -318,8 +326,13 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
         return Err(format!("{}'s files didn't load", kind.name()));
     }
     own_needs(kind)?;
+    // (Valor on KH1's own states, `native_frame`: KH1 has him, KH1's rule for the change.)
+    let native = native_ok(kind) && super::shared::active();
+    if native && !native_can_change(sora) {
+        return Err("KH1's move has him and he can't change now (no queue)".into());
+    }
     let cut = super::takeover::kh1_cut_window();
-    if !super::takeover::kh2_has() && !cut {
+    if !native && !super::takeover::kh2_has() && !cut {
         return Err("KH1 has Sora".into());
     }
     let have = mp(sora);
@@ -327,7 +340,11 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
         return Err(format!("MP {have}: it costs {COST_MP} and needs some left to run on"));
     }
     WANT.store(kind.code(), Ordering::Relaxed);
+    NATIVE.store(native, Ordering::Relaxed);
     REQUEST.store(1, Ordering::Relaxed);
+    if native {
+        return Ok(kind.name());
+    }
     if cut && !super::takeover::kh2_has() {
         // (KH2 takes him out of KH1's move this frame and changes him.)
         super::takeover::DRIVE_CUT.store(true, Ordering::Relaxed);
@@ -426,6 +443,10 @@ fn swap(ch: &mut Character, anim: &mut RigAnim, data: &Character, rig: &Arc<kh2_
 
 /// Before KH2's step: the menu's request, the change under way, the form's end.
 pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &pose::Kh2, actor: usize) {
+    // (A form on KH1's own states runs from `native_frame`, not KH2's controller's step.)
+    if NATIVE.load(Ordering::Relaxed) {
+        return;
+    }
     // Knocked out in the form: Sora again at once (KH2: a KO reverts).
     let knocked = REQUEST.load(Ordering::Relaxed) == 3 && REQUEST.swap(0, Ordering::Relaxed) == 3;
     if (d.form.is_some() || d.change.is_some()) && (knocked || hp(actor) <= 0) {
@@ -576,6 +597,15 @@ pub fn abilities(d: &mut Drive, ch: &mut Character) {
 /// half as often out of it (KH2's gauge drains so); with none left, back to Sora (on the
 /// ground, `before_step`).
 pub unsafe fn after_step(d: &mut Drive, actor: usize, battle: bool) {
+    // (A form on KH1's own states runs from `native_frame`, not KH2's controller's step.)
+    if NATIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    drain_step(d, actor, battle);
+}
+
+/// `after_step`'s work (KH2's controller's step, or `native_frame` for a form on KH1's states).
+unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
     super::tint::refresh(
         actor,
         d.form.as_ref().and_then(|f| match f.kind {
@@ -620,6 +650,277 @@ unsafe fn yellow(sora: usize) -> u16 {
         return 0;
     }
     rd::<u16>(stats + 0xBE)
+}
+
+// -------------------------------------------------------------------------------------------
+// Valor Form on KH1's own states (the tester, what-is-still-missing after m11: "I want you to
+// transfer drive forms as well", "go ahead"; `docs/kh1-drive-forms-native.md` §7).
+//
+// The form's whole life runs on KH1's own states, as base Sora's moves do: no KH2 controller.
+// - The change: KH1's request of ours for Sora's Drive motion 52 (`kh1rows` "Drive", a baked slot,
+//   `kh2slots`) with KH1's action flag, KH1's idle (or fall) queued after; KH2's clip's no-gravity
+//   and invulnerable ranges (all through) hold him in the air and keep hits off him through
+//   `kh2slots::no_gravity` / `invulnerable` as for any KH2 move on KH1's states; its body hit (ATKP
+//   125, 18..28) is a KH1 attack object of ours (`bodyhits`). After `DRIVE_FRAMES` 60 Hz frames:
+// - the swap: Sora's actor keeps its object; his requests point at Valor's own slots instead of
+//   base Sora's (`kh2slots::redirect`: idle, walk, run, jump, fall, landing, reactions, recoils,
+//   item use, the ground and air combo on KH1's requests and our own combo rows), KH2's combo pick
+//   in KH1's picker reads Valor's PTYA (KH2's controller's data, only read, `takeover::kh2_rows`), and
+//   KH2's physics numbers on KH1's states are Valor's (`takeover::refresh_kh2_numbers`: run 12,
+//   High Jump at MAX); then Valor's arrival 53 on its request of ours.
+// - Revert: everything back to base Sora's, what was playing cut into KH1's idle (or fall).
+// The MP cost, drain, out-of-MP revert, KO revert, look and the second Keyblade's stats are the
+// same as on KH2's controller (`drain_step`). Wisdom and Final keep KH2's controller for now.
+
+/// The form arriving or playing runs on KH1's own states (Valor, `native_ok`).
+static NATIVE: AtomicBool = AtomicBool::new(false);
+
+/// KH1's motion request (fresh queue) and queue, and its movement state setter (Epic RVAs,
+/// mapped for Steam: `0x14029F980`, `0x14029FA30`, `0x1402B1960`).
+const SET_MOTION_RVA: super::addr::Rva = super::addr::Rva(0x29D7F0);
+const QUEUE_MOTION_RVA: super::addr::Rva = super::addr::Rva(0x29D8A0);
+const SET_STATE_RVA: super::addr::Rva = super::addr::Rva(0x2AF7D0);
+/// KH1's can-act test (Steam `0x1402956E0` mapped; the action flag, a reaction, a script hold).
+const CAN_ACT_RVA: super::addr::Rva = super::addr::Rva(0x2956E0);
+/// KH1's motion request's action flag (bit 24: KH1's `+0` bit 4, he can't act until it ends) and
+/// a queued request's "action over" bit (`0x40000000`).
+const ACTION: u32 = 0x0100_0000;
+const QUEUED: u32 = 0x4000_0000;
+
+/// Valor Form can run on KH1's own states in this game (Steam, shared states, the Drive on, our
+/// slots built): its change, its moves and its revert native.
+pub fn native_enabled() -> bool {
+    let s = super::settings::get();
+    s.drive && s.shared && s.kh1_slots.is_some() && super::addr::Build::current() == super::addr::Build::Steam
+}
+
+/// Form `kind` runs on KH1's own states (Valor, its slots built: `kh2slots::valor_built`).
+pub fn native_ok(kind: Kind) -> bool {
+    kind == Kind::Valor && native_enabled() && super::kh2slots::valor_built()
+}
+
+/// In a form on KH1's own states now (Valor).
+pub fn native_now() -> bool {
+    NATIVE.load(Ordering::Relaxed) && in_form()
+}
+
+/// Something of a form on KH1's own states to run each frame (`takeover::form_native_frame`):
+/// its change asked for or under way, or the form itself.
+pub fn native_running() -> bool {
+    NATIVE.load(Ordering::Relaxed) && (in_form() || CHANGING.load(Ordering::Relaxed) || REQUEST.load(Ordering::Relaxed) != 0)
+}
+
+/// In a form on KH2's controller (Wisdom, Final; Valor where it can't run natively): base Sora's
+/// native work stays off (`shared::on`), as before.
+pub fn driver_form() -> bool {
+    in_form() && !NATIVE.load(Ordering::Relaxed)
+}
+
+/// The Drive list's form `k` (or Revert in a form) goes to KH1's own states (`combat::command`):
+/// Revert in a native form, else Valor where it can run natively.
+pub fn native_choice(k: usize) -> bool {
+    if in_form() {
+        return native_now();
+    }
+    Kind::ALL.get(k).is_some_and(|&kind| native_ok(kind)) && super::shared::active()
+}
+
+/// The Drive list's form `k` is taken now (`combat::run_entry`, as `accept_now` for the others):
+/// out of a form, the form run on KH1's own states (`native_choice`), KH1 letting him change.
+pub fn native_accept(k: usize) -> bool {
+    !busy() && !in_form() && native_choice(k) && unsafe { native_can_change(super::takeover::sora_actor()) }
+}
+
+/// KH1 lets him change now (KH2's `Character::can_change_form`: free, jumping, falling, landing,
+/// or in a move's combo or finisher window): KH1's can-act test, or KH1's combo window (`+0x1CC`
+/// bit 22, which our slots carry from KH2's combo and Finishing Plus windows, `kh2slots`).
+/// **Assumption**: KH1's can-act covers KH2's free states (idle, walk, run, jump, fall, a landing
+/// past its lock) as KH2's rule does.
+unsafe fn native_can_change(actor: usize) -> bool {
+    if actor < 0x10000 {
+        return false;
+    }
+    let base = super::takeover::game_base();
+    let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
+    can(actor) != 0 || rd::<u32>(actor + 0x1CC) & super::combomods::KH1_COMBO_WINDOW != 0
+}
+
+/// One of our own requests (`kh1rows`) for `motion` on Sora: asked with KH1's action flag, KH1's
+/// idle (on the ground) or fall (in the air) queued after it, as KH1's own commands queue them.
+unsafe fn ask_own(actor: usize, motion: u16, air: bool) -> bool {
+    let Some(n) = super::kh1rows::by_motion(motion) else { return false };
+    let request = super::kh1rows::request(n);
+    if !super::kh1rows::installed() || !super::kh2slots::has(request as usize, motion) || !super::kh2slots::request_bound(actor, request as usize) {
+        return false;
+    }
+    let base = super::takeover::game_base();
+    let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+    let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
+    set(actor, request | ACTION, 0.0);
+    queue(actor, QUEUED | if air { 6 } else { 0 }, 0.0);
+    true
+}
+
+/// The form's frame on KH1's own states (`takeover::form_native_frame`, each physics frame of
+/// Sora's while KH1's states have him: `steps` 60 Hz frames of it, `battle` KH1's battle flag).
+pub unsafe fn native_frame(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, actor: usize, battle: bool, steps: u32) {
+    if !NATIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let knocked = REQUEST.load(Ordering::Relaxed) == 3 && REQUEST.swap(0, Ordering::Relaxed) == 3;
+    if (d.form.is_some() || d.change.is_some()) && (knocked || hp(actor) <= 0) {
+        native_revert(d, ch, kh2, actor, "knocked out");
+        return;
+    }
+    match REQUEST.swap(0, Ordering::Relaxed) {
+        1 if d.form.is_none() && d.change.is_none() => native_start(d, actor),
+        2 if d.form.is_some() => {
+            native_revert(d, ch, kh2, actor, "the Revert command");
+            return;
+        }
+        _ => {}
+    }
+    if let Some(n) = d.change {
+        let n = n + steps.max(1);
+        d.change = Some(n);
+        if n >= DRIVE_FRAMES {
+            d.change = None;
+            native_arrive(d, ch, kh2, actor);
+        }
+        return;
+    }
+    if d.form.is_none() {
+        // (Nothing under way: the change was refused.)
+        NATIVE.store(false, Ordering::Relaxed);
+        CHANGING.store(false, Ordering::Relaxed);
+        return;
+    }
+    // The MP the form uses up, its look, the second Keyblade's stats: one KH2 step each 60 Hz
+    // frame, as KH2's controller ran them.
+    for _ in 0..steps.max(1) {
+        drain_step(d, actor, battle);
+    }
+    if d.revert && native_can_change(actor) {
+        d.revert = false;
+        native_revert(d, ch, kh2, actor, "out of MP");
+    }
+}
+
+/// The change asked for: Sora's Drive motion on KH1's state he is in (the ground, or held in the
+/// air by its no-gravity range), MP paid, HP refilled, KH1's "Give me strength!".
+unsafe fn native_start(d: &mut Drive, actor: usize) {
+    let Some(kind) = Kind::from_code(WANT.load(Ordering::Relaxed)) else { return };
+    let state = rd::<i32>(actor + 0x70);
+    if !matches!(state, 0..=2) || mp(actor) <= COST_MP {
+        log!(Forms, "Drive ({}, KH1's states): not now (KH1 state {state}, MP {})", kind.name(), mp(actor));
+        return;
+    }
+    let base = super::takeover::game_base();
+    let air = state != 0;
+    if state == 1 {
+        // (KH1's takeoff: into its air state, where the hold runs.)
+        let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+        set(actor, 2);
+    }
+    // KH2 holds him where he is (`Character::play_held`): no speed of his own through it.
+    wr(actor + 0x2C, 0.0f32);
+    if air {
+        wr(actor + 0x3C0, [0.0f32; 3]);
+    }
+    if !ask_own(actor, DRIVE_MOTION, air) {
+        log!(Forms, "Drive ({}, KH1's states): Sora's Drive motion has no slot of ours", kind.name());
+        return;
+    }
+    let before = mp(actor);
+    super::reflect::pay_mp(actor, COST);
+    heal_full(actor);
+    super::kh1voice::give_me_strength(actor);
+    d.change = Some(0);
+    d.changing_to = Some(kind);
+    CHANGING.store(true, Ordering::Relaxed);
+    log!(Forms, "Drive: {} on KH1's own states (MP {before} -> {}), Sora's Drive motion on KH1's request of ours{}", kind.name(), mp(actor), if air { ", held in the air" } else { "" });
+}
+
+/// The swap: Valor's slots on his requests, its data for KH2's pick, its numbers, its arrival.
+unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, actor: usize) {
+    CHANGING.store(false, Ordering::Relaxed);
+    let kind = d.changing_to.take().unwrap_or(Kind::Valor);
+    let Some(f) = kind.data(kh2) else { return };
+    let sora = ch.abilities.clone();
+    let own = form_abilities(&sora, &f.character, kind);
+    native_data(ch, &f.character, own.clone());
+    if kind == Kind::Valor {
+        ch.square_finishers = Some((12, 38));
+    }
+    super::kh2fx::owner_gone();
+    d.form = Some(InForm { kind, left: 0, sora, own, logged_s: 0 });
+    CURRENT.store(kind.code(), Ordering::Relaxed);
+    IN_FORM.store(true, Ordering::Relaxed);
+    if kind.two_blades() {
+        super::valor::started();
+    }
+    // (Valor's slots on his requests from now: before its arrival is asked.)
+    super::kh2slots::refresh();
+    let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
+    let arrival = ask_own(actor, ARRIVE_MOTION, air);
+    log!(Forms, "{} (Lv{LEVEL}) on KH1's own states: Valor's moves on his requests, KH2's numbers Valor's, High Jump MAX{}", kind.name(), if arrival { "; its arrival" } else { "" });
+}
+
+/// KH2's controller's data (only read on KH1's states: KH2's pick, its rows' checks, its growth)
+/// for the moveset `data`, his facing, lock-on and glide button kept.
+fn native_data(ch: &mut Character, data: &Character, abilities: Abilities) {
+    let (facing, lock, glide) = (ch.facing(), ch.lock(), ch.glide_button);
+    let mut c = data.clone();
+    c.abilities = abilities;
+    c.glide_button = glide;
+    c.air_magic_falls = ch.air_magic_falls;
+    c.air_magic_gravity = ch.air_magic_gravity;
+    c.set_facing(facing);
+    c.set_lock(lock);
+    *ch = c;
+}
+
+/// Back to Sora on KH1's own states: base Sora's slots and data again, what played cut into KH1's
+/// idle (or fall), the revert's light and sound.
+unsafe fn native_revert(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, actor: usize, why: &str) {
+    CHANGING.store(false, Ordering::Relaxed);
+    d.change = None;
+    d.revert = false;
+    d.changing_to = None;
+    let Some(f) = d.form.take() else {
+        NATIVE.store(false, Ordering::Relaxed);
+        return;
+    };
+    IN_FORM.store(false, Ordering::Relaxed);
+    CURRENT.store(0, Ordering::Relaxed);
+    NATIVE.store(false, Ordering::Relaxed);
+    if f.kind.two_blades() {
+        super::valor::ended();
+    }
+    native_data(ch, &kh2.character, f.sora);
+    super::kh2slots::refresh();
+    super::formmagic::end_all();
+    super::kh2fx::owner_gone();
+    for el in REVERT_ELEMENTS {
+        super::kh2fx::event(REVERT_FX, EventKind::Effect(el));
+        super::kh2sound::event(REVERT_FX, EventKind::Effect(el));
+    }
+    // (KH2: what was playing is cut, he is free with his movement kept: KH1's idle on the ground,
+    // its fall in the air, his action flag off.)
+    let state = rd::<i32>(actor + 0x70);
+    let air = matches!(state, 1 | 2);
+    if matches!(state, 0..=2) {
+        let base = super::takeover::game_base();
+        let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
+        set(actor, if air { 6 } else { 0 }, 8.0);
+        wr(actor, rd::<u32>(actor) & !4);
+    }
+    super::tint::refresh(actor, None);
+    log!(Forms, "Revert ({why}) on KH1's own states{}", if air { ", falling" } else { "" });
+}
+
+unsafe fn wr<T: Copy>(p: usize, v: T) {
+    std::ptr::write_unaligned(p as *mut T, v)
 }
 
 /// Sora's Drive motion: its effects and sounds play whatever the ini's lists (`kh2fx`,

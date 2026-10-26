@@ -3,7 +3,9 @@
 `shared.rs`, ini `shared = on` (default). This replaces the old model for base Sora. Under the
 old model, KH2's controller had him whenever KH1 showed him standing, walking or running, and
 KH1's own idle, walk, run and jump were drawn back over KH2's when a move style was KH1. Drive
-Forms still use the old model: KH2's controller has them all through.
+Forms still use the old model: KH2's controller has them all through, except Valor Form, which
+runs on KH1's own states with its own slots, rows and numbers (`form::native_now`,
+`docs/kh1-drive-forms-native.md` §7).
 
 Every move's animation (KH1 slot, KH2 motion, owner, setting) is listed in `animations.md`.
 

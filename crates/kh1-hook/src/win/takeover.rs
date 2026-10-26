@@ -1604,6 +1604,19 @@ fn new_driver(kh2: &pose::Kh2) -> Driver {
     Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0, on_top: None, drive: Default::default() }
 }
 
+/// A Drive Form on KH1's own states (`form::native_frame`): each physics frame of Sora's while
+/// KH1's states have him, with KH2's controller's data (only read: the form's rows and growth).
+unsafe fn form_native_frame(base: usize, actor: usize) {
+    if !super::form::native_running() {
+        return;
+    }
+    let Some(kh2) = pose::kh2() else { return };
+    let Ok(mut g) = DRIVER.try_lock() else { return };
+    let d = g.get_or_insert_with(|| new_driver(kh2));
+    let battle = rd::<u32>(base + BATTLE_RVA) & 1 != 0;
+    super::form::native_frame(&mut d.drive, &mut d.character, kh2, actor, battle, steps());
+}
+
 /// KH2's movement numbers with Sora's abilities now (KH1's menu), for KH2's physics on KH1's own
 /// states (`shared::physics`).
 unsafe fn refresh_kh2_numbers(base: usize) {
@@ -1611,12 +1624,20 @@ unsafe fn refresh_kh2_numbers(base: usize) {
     let Ok(mut g) = DRIVER.try_lock() else { return };
     let d = g.get_or_insert_with(|| new_driver(kh2));
     d.growth.update(base, &mut d.character);
+    super::form::abilities(&mut d.drive, &mut d.character);
     // (KH2 Sora's own numbers, not the controller's now: with physics KH1 those are KH1's,
-    // `shared::physics::kh2_controller`.)
-    let own = &kh2.character;
+    // `shared::physics::kh2_controller`. In a Drive Form on KH1's own states, the form's: Valor's
+    // run 12 and jump, its High Jump at MAX, `prty` moveset 2, Checked (files).)
+    let own = match super::form::current().filter(|_| super::form::native_now()).and_then(|k| k.data(kh2)) {
+        Some(f) => &f.character,
+        None => &kh2.character,
+    };
     let p = &own.params;
     let high = d.character.abilities.high_jump;
     let (jump, high_jump) = (p.jump_height, if high == 0 { p.jump_height } else { own.growth_level(high).map_or(p.jump_height, |g| g.high_jump_height) });
+    // (KH2's jump start with High Jump is its High Jump, whichever of KH1's takeoffs asked: Valor
+    // always has it, so KH1's plain takeoff too, `kh2slots::VALOR_SPECS`.)
+    let jump = if super::form::native_now() && high > 0 { high_jump } else { jump };
     super::shared::physics::set_numbers(super::shared::physics::Numbers {
         walk: p.walk_speed,
         run: p.run_speed,
@@ -1692,6 +1713,7 @@ pub unsafe fn kh2_rows<R>(actor: usize, air: bool, f: impl FnOnce(&mut Character
     let mut g = DRIVER.try_lock().ok()?;
     let d = g.get_or_insert_with(|| new_driver(kh2));
     d.growth.update(base, &mut d.character);
+    super::form::abilities(&mut d.drive, &mut d.character);
     let mut targets = d.strikes.look(actor);
     let lock = kh1_lock(base, &mut targets);
     let tilt = move_tilt();
@@ -1716,6 +1738,7 @@ pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::C
     let mut g = DRIVER.try_lock().ok()?;
     let d = g.get_or_insert_with(|| new_driver(kh2));
     d.growth.update(base, &mut d.character);
+    super::form::abilities(&mut d.drive, &mut d.character);
     let mut targets = d.strikes.look(actor);
     let lock = kh1_lock(base, &mut targets);
     let tilt = move_tilt();
@@ -1749,6 +1772,7 @@ pub unsafe fn kh2_would_take_row(actor: usize, id: u8, air: bool) -> Option<(cha
     let mut g = DRIVER.try_lock().ok()?;
     let d = g.get_or_insert_with(|| new_driver(kh2));
     d.growth.update(base, &mut d.character);
+    super::form::abilities(&mut d.drive, &mut d.character);
     let mut targets = d.strikes.look(actor);
     let lock = kh1_lock(base, &mut targets);
     let tilt = move_tilt();
@@ -2040,6 +2064,8 @@ fn to_kh1_states(why: &str) {
 /// the buttons' (`shared::control`: Square, the jump in the air). Only while KH1 lets him act
 /// (no buffer: a press KH1 can't let go for is dropped).
 unsafe fn shared_frame(base: usize, actor: usize) -> bool {
+    // A Drive Form on KH1's own states (Valor, `form::native_frame`): its change, its MP, its end.
+    form_native_frame(base, actor);
     let state = rd::<i32>(actor + 0x70);
     refresh_kh2_numbers(base);
     if state != 2 {

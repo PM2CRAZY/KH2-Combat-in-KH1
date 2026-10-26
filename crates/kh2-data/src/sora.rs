@@ -480,7 +480,13 @@ impl Install {
     /// `load_sora`, with `note` told the name and contents of every file it reads (the motion
     /// slot cache's manifest, `kh1-hook`'s `slotcache`).
     pub fn load_sora_noting(&self, source: Source, note: &dyn Fn(&str, &[u8])) -> Result<SoraData> {
-        load_player_with(source, SORA, &|name| {
+        self.load_player_noting(source, SORA, note)
+    }
+
+    /// `load_player`, with `note` told the name and contents of every file it reads (a Drive
+    /// Form baked into KH1 motion slots: the slot cache's manifest covers its files too).
+    pub fn load_player_noting(&self, source: Source, spec: PlayerSpec, note: &dyn Fn(&str, &[u8])) -> Result<SoraData> {
+        load_player_with(source, spec, &|name| {
             let b = self.read_any(source, name)?;
             note(name, &b);
             Ok(b)

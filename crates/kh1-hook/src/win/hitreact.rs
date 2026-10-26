@@ -132,7 +132,7 @@ fn note(s: impl FnOnce() -> String) {
 
 /// KH2's reactions apply now: base Sora on KH1's states, Hit Reactions KH2.
 fn on() -> bool {
-    super::shared::active() && styles::kh2(Kind::HitReactions) && !super::form::in_form()
+    super::shared::active() && (super::form::native_now() || styles::kh2(Kind::HitReactions) && !super::form::in_form())
 }
 
 /// KH1's queue head and count, before its hit pass (`after_pass` tells a reaction it set).

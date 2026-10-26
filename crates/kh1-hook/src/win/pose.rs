@@ -183,6 +183,44 @@ pub struct Form {
     pub script: Option<Vec<u8>>,
     /// The form's effect archive (`.a.us`: the PAX "p_ex" its script's effects come from).
     pub archive: Option<Arc<Vec<u8>>>,
+    /// Its clips' root travel by motion (as `Kh2::roots` for Sora): taken out of a pose drawn or
+    /// baked for KH1, which moves him (`Baker::poses_of`, `follow_baked`).
+    pub roots: HashMap<u16, Vec<[f32; 3]>>,
+}
+
+/// One moveset's data for KH1's motion slots (`kh2slots`, `Baker::poses_of`): base Sora's, or a
+/// Drive Form's run on KH1's own states (Valor, `form::native_now`).
+pub struct Src<'a> {
+    pub rig: &'a Arc<Rig>,
+    pub character: &'a character_core::Character,
+    pub roots: &'a HashMap<u16, Vec<[f32; 3]>>,
+    /// Valor Form's (else base Sora's).
+    pub form: bool,
+}
+
+impl Kh2 {
+    /// Base Sora's moveset.
+    pub fn src(&self) -> Src<'_> {
+        Src { rig: &self.rig, character: &self.character, roots: &self.roots, form: false }
+    }
+
+    /// Valor Form's, if it loaded.
+    pub fn valor_src(&self) -> Option<Src<'_>> {
+        self.valor.as_ref().map(|f| Src { rig: &f.rig, character: &f.character, roots: &f.roots, form: true })
+    }
+}
+
+/// The KH2 moveset whose moves KH1's motion slots play on Sora now: Valor Form's while he is in it
+/// on KH1's own states (`form::native_now`), else base Sora's. KH2's motion ids are the same in
+/// both (151, 152, ... 184), so a clip looked up by the motion of the slot playing comes from here.
+pub fn kh2_moves() -> Option<&'static character_core::Character> {
+    let k = kh2()?;
+    if super::form::native_now() {
+        if let Some(f) = k.valor.as_ref() {
+            return Some(&f.character);
+        }
+    }
+    Some(&k.character)
 }
 
 /// Sora's moves a form gets from his own tables (the user: "make sure that soras square launch
@@ -220,14 +258,32 @@ fn port_moves(f: &mut Form, sora: &character_core::Character, sora_rig: &Rig, ro
 }
 
 fn load_form(install: &kh2_data::Install, source: kh2_data::Source, spec: kh2_data::sora::PlayerSpec, skeleton: usize) -> Result<Form, String> {
-    let data = install.load_player(source, spec).map_err(|e| e.to_string())?;
+    load_form_noting(install, source, spec, skeleton, false)
+}
+
+/// `load_form`; with `note`, every file read for it noted for the motion slot cache's manifest
+/// (`KH2_INPUTS`: a form baked into KH1 motion slots, Valor's, `kh2slots`).
+fn load_form_noting(install: &kh2_data::Install, source: kh2_data::Source, spec: kh2_data::sora::PlayerSpec, skeleton: usize, note: bool) -> Result<Form, String> {
+    let data = if note {
+        install.load_player_noting(source, spec, &|name, bytes| {
+            if let Ok(mut v) = KH2_INPUTS.lock() {
+                let name = format!("{} {name}", spec.model);
+                v.retain(|(n, _, _)| *n != name);
+                v.push((name, crate::slotcache::hash(bytes), bytes.len()));
+            }
+        })
+    } else {
+        install.load_player(source, spec)
+    }
+    .map_err(|e| e.to_string())?;
     let rig = data.rig.clone().ok_or_else(|| data.rig_error.clone().unwrap_or_else(|| "no rig".into()))?;
     if rig.skeleton.len() != skeleton {
         return Err(format!("{} bones, Sora has {skeleton}", rig.skeleton.len()));
     }
     let script = install.read_any(source, &format!("obj/{}.mdlx", spec.model)).ok().and_then(|b| kh2_magic::SpellFile::bar_entry(&b, 3));
     let archive = install.read_any(source, &format!("obj/{}.a.us", spec.model)).ok().map(Arc::new);
-    Ok(Form { rig, character: data.character.clone(), battle: Arc::new(data.combat.battle.clone()), script, archive })
+    let roots = data.character.moveset.clips.iter().map(|(m, c)| (*m, c.root.clone())).collect();
+    Ok(Form { rig, character: data.character.clone(), battle: Arc::new(data.combat.battle.clone()), script, archive, roots })
 }
 
 /// How fast a looping gait covers ground: each frame, the lower foot's horizontal travel
@@ -622,7 +678,9 @@ pub fn load_kh2() {
             };
             let valor = if super::settings::get().drive {
                 let t = Instant::now();
-                match load_form(&install, source, kh2_data::sora::FORMS[0], rig.skeleton.len()) {
+                // (Its files noted for the slot cache: Valor's moves are baked into KH1 motion
+                // slots, `kh2slots`, Valor Form native.)
+                match load_form_noting(&install, source, kh2_data::sora::FORMS[0], rig.skeleton.len(), true) {
                     Ok(mut f) => {
                         port_moves(&mut f, &sora.character, &rig, &PORTED_TO_VALOR);
                         log!(Animation, "KH2 Valor Form loaded: {} motions, {} combo rows, {} weapons, in {:.1}s", f.rig.motions.len(), f.character.moveset.combo_rows.len(), f.rig.weapons.len(), t.elapsed().as_secs_f32());
@@ -1132,7 +1190,12 @@ fn wanted_inner(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Ve
 /// KH2's Keyblade (the rig's first weapon) in Sora's model space for a body pose: its own motion
 /// of the same id at the same time, on its hand bone, as `kh2_rig::RigAnim` places it.
 fn kh2_weapon(rig: &Rig, motion: u16, frames: f32, looping: bool, body: &[Mat4]) -> Vec<Mat4> {
-    let Some(w) = rig.weapons.first() else { return Vec::new() };
+    kh2_weapon_n(rig, 0, motion, frames, looping, body)
+}
+
+/// The rig's weapon `n` (0 the right hand's, 1 a form's second) posed on its hand bone.
+fn kh2_weapon_n(rig: &Rig, n: usize, motion: u16, frames: f32, looping: bool, body: &[Mat4]) -> Vec<Mat4> {
+    let Some(w) = rig.weapons.get(n) else { return Vec::new() };
     let Some(hand) = w.bone.and_then(|b| body.get(b)).copied() else { return Vec::new() };
     let local = match w.motions.get(&motion).or_else(|| w.motions.get(&0)) {
         Some(m) => kh2_anim::evaluate(&w.skeleton, m, kh2_anim::key_time(m, frames, looping), kh2_anim::Options::default()).bones,
@@ -1177,12 +1240,15 @@ impl Baker {
     ///
     /// `field`: KH2's field (out-of-combat) variant of the motion, where it has one (its walk and
     /// run, `kh2slots::CYCLES`).
+    ///
+    /// `src`: the moveset (Sora's, `Kh2::src`, or a Drive Form's, `Kh2::valor_src`: the same
+    /// skeleton, its own clips, weapons and root travel; Valor's moves baked into KH1 slots).
     #[allow(clippy::type_complexity)]
-    pub fn poses(&self, kh2: &Kh2, motion: u16, field: bool, frames: u32, travel: bool) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>)> {
-        let rig = &kh2.rig;
+    pub fn poses_of(&self, src: &Src, motion: u16, field: bool, frames: u32, travel: bool) -> Option<(Vec<Vec<Mat4>>, Vec<Vec3>)> {
+        let rig = src.rig;
         let clip = field.then(|| rig.field_motions.get(&motion)).flatten().or_else(|| rig.motions.get(&motion))?;
         let set = super::settings::get();
-        let roots = kh2.roots.get(&motion);
+        let roots = src.roots.get(&motion);
         let parents: Vec<i16> = self.skeleton.iter().map(|b| b.parent).collect();
         let mut out = Vec::with_capacity(frames as usize + 1);
         let mut moved = Vec::new();
@@ -1260,20 +1326,32 @@ fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16)
         Some(n) if actor > 0x10000 => unsafe { super::kh2slots::kh1_time(actor, n) },
         _ => None,
     };
-    if let (Some(kh2), Some(at)) = (KH2.get().and_then(|k| k.as_ref().ok()), frames) {
-        let field = slot.is_some_and(super::kh2slots::is_field).then(|| kh2.rig.field_motions.get(&motion)).flatten();
-        if let Some(clip) = field.or_else(|| kh2.rig.motions.get(&motion)) {
-            let mut pose = kh2_anim::evaluate(&kh2.rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
-            let mut weapon = kh2_weapon(&kh2.rig, motion, at, false, &pose);
-            if let Some(root) = kh2.roots.get(&motion).and_then(|r| r.get((at as usize).min(r.len().saturating_sub(1)))) {
+    // (A slot of Valor Form's, `kh2slots::is_form`: Valor's own rig and root travel.)
+    let src = KH2.get().and_then(|k| k.as_ref().ok()).and_then(|k| if slot.is_some_and(super::kh2slots::is_form) { k.valor_src() } else { Some(k.src()) });
+    if let (Some(src), Some(at)) = (src, frames) {
+        let field = slot.is_some_and(super::kh2slots::is_field).then(|| src.rig.field_motions.get(&motion)).flatten();
+        if let Some(clip) = field.or_else(|| src.rig.motions.get(&motion)) {
+            let mut pose = kh2_anim::evaluate(&src.rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
+            let mut weapon = kh2_weapon(src.rig, motion, at, false, &pose);
+            // (Valor's second Keyblade: the rig's second weapon on its hand bone.)
+            let mut left = if src.form { kh2_weapon_n(src.rig, 1, motion, at, false, &pose) } else { Vec::new() };
+            if let Some(root) = src.roots.get(&motion).and_then(|r| r.get((at as usize).min(r.len().saturating_sub(1)))) {
                 let un = Mat4::from_translation(-Vec3::from(*root));
-                for m in pose.iter_mut().chain(weapon.iter_mut()) {
+                for m in pose.iter_mut().chain(weapon.iter_mut()).chain(left.iter_mut()) {
                     *m = un * *m;
                 }
             }
             note_kh2(&pose, to_world);
             s.follow.last = pose.iter().chain(weapon.iter()).copied().collect();
             s.follow.last_at = Some(Instant::now());
+            // Valor on KH1's own states: its left Keyblade drawn by `leftblade` from this frame of
+            // KH2's (the draw itself is still ours, a second queue of the model; after `wanted`,
+            // `kh1_left_blade`).
+            if src.form {
+                let trail = src.character.moveset.clips.get(&motion).is_some_and(|c| c.has(at as u32, |k| matches!(k, character_core::WindowKind::WeaponTrail)));
+                super::leftblade::kh2_left((!left.is_empty()).then_some(left.as_slice()), &pose, motion, at as u32, trail);
+                s.kh2_now = Some((pose, weapon));
+            }
         }
     }
     DRAW_ROUTE.store(3, Ordering::Relaxed);
@@ -1817,6 +1895,13 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             if let Ok(mut h) = HANDS_NOW.lock() {
                 *h = Some(Hands { orig: o, drawn: o, at: Instant::now() });
             }
+        }
+        // Valor Form on KH1's own states (a baked slot of Valor's, `follow_baked` noted its KH2
+        // frame): the left Keyblade from KH1's own drawing of the right one (`leftblade`).
+        if let (true, Some((body, weapon))) = (super::form::native_now() && super::form::two_blades(), s.kh2_now.as_ref()) {
+            let back = to_world.inverse();
+            let kh1: Vec<Mat4> = (0..SORA_BONES as usize).map(|i| back * mat(world + i * 0x40)).collect();
+            super::leftblade::note_pose(&kh1, &s.bind, body, weapon, &to_world, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()));
         }
         // KH2's model (`model`) on KH1's own animation, as drawn.
         if let (true, Some(inv)) = (super::model::on(), s.inverse.as_ref()) {

@@ -38,9 +38,10 @@ use super::takeover;
 use character_core::StateName;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 
-/// Base Sora is KH1's own states' (the ini's `shared`, not in a Drive Form).
+/// Base Sora is KH1's own states' (the ini's `shared`, not in a Drive Form on KH2's controller; Valor Form runs on
+/// them too, `form::native_now`).
 pub fn on() -> bool {
-    super::settings::get().shared && !super::form::in_form()
+    super::settings::get().shared && !super::form::driver_form()
 }
 
 /// The move style a KH1 motion slot of Sora's shows (`pose`'s slot numbers: the user's play
@@ -78,7 +79,7 @@ pub fn kh1_combo(air: bool) -> bool {
 /// KH2's motion is drawn over this KH1 slot: its style is KH2's (base Sora; a Drive Form draws
 /// the form's motions over every slot it has one for, as before).
 pub fn kh2_look(slot: Option<usize>) -> bool {
-    if super::form::in_form() {
+    if super::form::driver_form() {
         return true;
     }
     slot.and_then(slot_kind).is_some_and(styles::kh2)
@@ -227,6 +228,13 @@ pub fn control(s: &Seen) -> u32 {
     let on_square = super::settings::get().glide_on_square || s.superglide;
     if !s.jump {
         DODGE_JUMP_UP.store(true, Ordering::Relaxed);
+    }
+    // Valor Form on KH1's own states (`form::native_now`): KH2's Valor has no dodge roll, guard,
+    // Quick Run, glide or Aerial Dodge (its growth ability is High Jump; its Square moves, row 11's
+    // rising slash and the finishers 12 / 38, aren't on KH1's states yet), so KH1 sees no Square,
+    // and no jump in the air past the rise (KH1's own glide).
+    if super::form::native_now() {
+        return KH1_ACTION_BIT | if air && !s.rising { KH1_JUMP_BITS } else { 0 };
     }
     let roll_kh2 = styles::kh2(Kind::DodgeRoll);
     // KH2's ability moves out of KH1's own moves whatever the styles (`combomods`): a Square move
@@ -553,7 +561,7 @@ pub mod physics {
     /// The one switch point: KH1's own states take KH2's numbers where this is KH2's (the wrappers
     /// below), KH2's controller takes KH1's where it is KH1's (`kh2_controller`).
     pub fn source() -> Rule {
-        rule().source(super::super::form::in_form())
+        rule().source(super::super::form::in_form() || super::super::form::native_running())
     }
 
     const TABLE_RVA: Rva = Rva(0x2DB4240);
@@ -654,7 +662,7 @@ pub mod physics {
     /// KH2's physics apply to KH1's states now (KH1's own states have base Sora, the physics
     /// setting is KH2's).
     fn kh2() -> bool {
-        super::active() && source() == Rule::Kh2 && !super::super::form::in_form()
+        super::active() && source() == Rule::Kh2 && !super::super::form::driver_form()
     }
 
     /// The Air Physics row (Config > Combat > Magic; `styles::Kind::AirPhysics`): whose physics move
@@ -673,7 +681,7 @@ pub mod physics {
 
     /// KH2's air-cast physics apply to KH1's air state now (`cast_rule`, base Sora on KH1's states).
     fn cast_kh2() -> bool {
-        super::active() && cast_rule() == Rule::Kh2 && !super::super::form::in_form()
+        super::active() && cast_rule() == Rule::Kh2 && !super::super::form::driver_form()
     }
 
     /// KH1's request ids of its air casts (`kh2slots::CASTS`: `0x83 + spell`, Fire's second part
@@ -1351,11 +1359,10 @@ pub mod physics {
     /// step forward, its dash at a target) gives way: one owner state (KH1's swing, its hit
     /// objects and timing), KH2's physics on it.
     unsafe fn swing_travel(actor: usize, slot: usize) -> bool {
-        let Some(kh2) = super::super::pose::kh2() else { return false };
         // (Our slot playing for it, KH2's row selection's pick among them: its motion's travel.)
         let ours = super::super::kh2slots::playing().filter(|s| super::super::kh2slots::stands_for(*s) == Some(slot)).and_then(super::super::kh2slots::kh2_motion);
         let Some(motion) = ours.or_else(|| super::super::pose::swing_motion(slot)) else { return false };
-        let Some(clip) = kh2.character.moveset.clips.get(&motion) else { return false };
+        let Some(clip) = super::super::pose::kh2_moves().and_then(|c| c.moveset.clips.get(&motion)) else { return false };
         let kh1_len = super::super::pose::slot_frames(slot).unwrap_or(0) as f32;
         if clip.root.len() < 2 || kh1_len < 1.0 {
             return false;
