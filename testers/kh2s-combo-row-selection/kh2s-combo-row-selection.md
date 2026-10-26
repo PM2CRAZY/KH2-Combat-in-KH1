@@ -794,4 +794,7 @@ go ahead
 > Please test the three moves on one enemy and on groups at different distances (does each hit land where it should?), Explosion's repeated hits, Magnet Burst pulling enemies in then the last blast, the finishers launching, and Counterguard and Finishing Leap still hitting. Log lines: "KH2 body hits: motion …" when a move starts, "KH2 body hit: ATKP …" per hit.
 
 ^m28
+if you set combat to kh2 for both settings you can attack out of your finisher indefinitely, it needs to behave exact like kh1 they shouldn't be different in the logic with the exception of animations, hitbox, damage, knockback etc of course.
 
+
+go ahead
