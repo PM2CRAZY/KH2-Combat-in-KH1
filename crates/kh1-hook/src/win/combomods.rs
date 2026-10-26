@@ -1625,17 +1625,36 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
         }
         return None;
     }
-    // Square in KH1's combo window (a swing of its combo, slots 98..104): KH2's Square move there,
-    // its count KH1's.
+    // Square in a swing of base Sora's combo: KH2's Square move there (Finishing Leap, Upper Slash,
+    // Horizontal Slash), its count KH1's, by the exe's own order and checks (Steam KH2
+    // `0x1403A81F0` / `0x1403A9950`, `Character::would_take_square_exe`, the same path as Valor's
+    // `valor_square`): KH2's combo / finisher window and free state at KH1's time in our KH2 slot
+    // playing (`kh2slots::now_playing`, the Base / Aerial Base Combo KH2 rows); with KH1's own
+    // motion playing (the combo style KH1) KH1's combo window (slots 98..104) stands for KH2's
+    // combo window, no finisher window (**Assumption**: KH1's own swings have no KH2 windows).
     // (Not in KH2's guard repel: KH1's combo window there is Counterguard's, `counter_window`.)
-    if square_fresh && s.combo_window && matches!(pose::sora_slot(), Some(98..=104)) && unsafe { super::kh2slots::playing_motion(actor) } != Some(character_core::motion::GUARD) {
-        let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
-        let master = takeover::with_abilities(|a| a.combo_master) == Some(true);
-        if count == 0 || !(hit || master) {
+    if square_fresh && unsafe { super::kh2slots::playing_motion(actor) } != Some(character_core::motion::GUARD) {
+        let kh2 = unsafe { super::kh2slots::now_playing(actor) }.and_then(|(m, t)| {
+            let clip = pose::kh2_moves()?.moveset.clips.get(&m)?;
+            let f = t as u32;
+            Some((clip.has(f, |k| matches!(k, character_core::WindowKind::Combo)), clip.has(f, |k| matches!(k, character_core::WindowKind::Finisher)), clip.free_at(f)))
+        });
+        let (combo, finisher, free) = match kh2 {
+            Some(w) => w,
+            None => (s.combo_window && matches!(pose::sora_slot(), Some(98..=104)), false, false),
+        };
+        if !(combo || finisher) {
             return None;
         }
-        let from = ComboState { count, finishers: 1, hit: true, finisher_next: false };
-        let (row, _, _, launch) = unsafe { takeover::kh2_would_take_launch(actor, Some(from), None, air, true) }?;
+        let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
+        if count == 0 {
+            return None;
+        }
+        let from = ComboState { count, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit, finisher_next: false };
+        let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, free, &[], air) }) else {
+            note(|| format!("Square in a swing (count {count}, combo window {combo}, finisher window {finisher}, connected {hit}): KH2 takes no Square move here"));
+            return None;
+        };
         // One with a KH1 row of its own (`kh1rows`): KH1's Attack command for it, as KH1's
         // menu gives it, so KH1's control step runs its Attack step now (its count, its target,
         // its press in the combo window), whose row is ours (`attack`, `take_ours`).
@@ -1687,12 +1706,12 @@ pub fn valor_square(s: &super::shared::Seen, square_fresh: bool) -> Option<u32> 
     let windows = unsafe { super::kh2slots::now_playing(actor) }.and_then(|(m, t)| {
         let clip = pose::kh2_moves()?.moveset.clips.get(&m)?;
         let f = t as u32;
-        Some((m, f, clip.has(f, |k| matches!(k, character_core::WindowKind::Combo)), clip.has(f, |k| matches!(k, character_core::WindowKind::Finisher))))
+        Some((m, f, clip.has(f, |k| matches!(k, character_core::WindowKind::Combo)), clip.has(f, |k| matches!(k, character_core::WindowKind::Finisher)), clip.free_at(f)))
     });
-    if let Some((m, f, combo, finisher)) = windows.filter(|w| w.2 || w.3) {
+    if let Some((m, f, combo, finisher, free)) = windows.filter(|w| w.2 || w.3) {
         let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
         let from = ComboState { count, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit, finisher_next: false };
-        let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, &pose::PORTED_TO_VALOR, air) }) else {
+        let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, free, &pose::PORTED_TO_VALOR, air) }) else {
             note(|| format!("Valor: Square in KH2 motion {m} frame {f} (combo window {combo}, finisher window {finisher}, count {count}, connected {hit}): KH2 takes no Square move here"));
             return None;
         };

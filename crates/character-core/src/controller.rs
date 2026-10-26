@@ -1376,61 +1376,91 @@ impl Character {
 
     /// KH2's Square moves in a combo, as the exe reaches them (Steam KH2: the action-button
     /// handler `0x1403A81F0` tries rows 0x25, 0x0C, 0x26 in that order through `0x1403A9950`,
-    /// Checked (decomp)), for a host whose own states run the move (the KH1 port's Valor Form,
-    /// whose rows 12 / 38 are its Square moves). `from`: the combo before the press (its count
-    /// and finishers so far, whether the swing connected); `combo` / `finisher`: KH2's combo
-    /// window (range id 11, `+0x18C` bit 10) and finisher window (range id 50, `+0x194` bit 5) are
-    /// open at the motion's frame; `skip`: row ids the host leaves out. Each row, as the exe:
+    /// Checked (decomp)): base Sora's Finishing Leap (37), Upper Slash (12) and Horizontal Slash
+    /// (38), Valor Form's rows 12 / 38; one path for both (this controller's own action button and
+    /// a host whose own states run the move, the KH1 port). `from`: the combo before the press
+    /// (its count and finishers so far, whether the swing connected); `combo` / `finisher`: KH2's
+    /// combo window (range id 11, `+0x18C` bit 10) and finisher window (range id 50, `+0x194`
+    /// bit 5) are open at the motion's frame; `free`: KH2's free state is (range ids 0 / 1 / 2,
+    /// `+0x18C & 0x1C`, `Clip::free_at`); `skip`: row ids the host leaves out. Each row, as the exe:
     /// - in the moveset (`0x1403D74E0`), its motion set, its ability (if any) equipped, its air
     ///   flag the host's (`0x140402750`);
-    /// - not a finisher: refused when more than one finisher has run, outside the count's room or
-    ///   in the finisher window (`0x1403D7850`), and by `0x1403A9950` itself in the finisher window
-    ///   or once the count (before this press) has reached the combo's length (`0x1403D7780(p,
-    ///   0)`): so only in the combo window with a swing left;
-    /// - a finisher: the finisher window, or the count (before this press) plus its offset at the
-    ///   length (`0x1403D7780(p, offset)`);
-    /// - then the combo or finisher window open and the Attack step's count check
-    ///   (`0x1403D6CA0(p, hit)`): in the finisher window with the swing connected and a finisher
-    ///   left (Finishing Plus), or in the combo window with the swing connected.
+    /// - not a finisher: refused in the finisher window or once the count (before this press) has
+    ///   reached the combo's length (`0x1403A9950`'s own `0x1403D7780(p, 0)`; `0x140402750`'s
+    ///   `0x1403D7850` refuses only a subset of that); so only with a swing left;
+    /// - a finisher (flag bit 2): the finisher window, or the count (before this press) plus its
+    ///   offset at the length (`0x1403D7780(p, offset)`; Finishing Leap's offset is 1, so it is
+    ///   there from the swing before the finisher on);
+    /// - with MP charging and Berserk Charge (`[+0x5C0] + 0x1DC` bit 11 and `0x1403C1D10`, the
+    ///   charge timer `+0x1C0` over 0): finishers refused, steps let through whatever the count;
+    /// - then (one of the two windows open, `0x1403A9950`) the Attack step's count check
+    ///   (`0x1403D6CA0(p, connected)`): in the finisher window with the swing connected and a
+    ///   finisher left (Finishing Plus: count and finishers + 1), or in the combo window with the
+    ///   swing connected (count + 1), or else in a free state (counts back to 1 / 1, a new combo).
     /// The counts are those before the press (the exe checks them before `0x1403D6CA0` moves
-    /// them, unlike its Attack walk, which checks after). The first that passes starts as the exe
-    /// starts it (`0x1403D78D0`: facing the primary target, its hop), worked out by `plan_press`.
-    /// Whether the swing "connected": the host's hit, or Combo Master.
-    pub fn would_take_square_exe(&mut self, from: ComboState, combo: bool, finisher: bool, skip: &[u8], air: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+    /// them; the Attack walk checks after). The first that passes starts as the exe starts it
+    /// (`0x1403D78D0`: facing the primary target, its hop), worked out by `plan_press`.
+    /// Whether the swing "connected": the host's hit, or Combo Master (KH2's `+0x120` bit 25 is
+    /// set by a hit or a clash, `0x1403D12C0` / `0x1403D61D0`, cleared by the next swing's start
+    /// `0x1403D78D0`, Checked (decomp); Combo Master standing for it is **Assumption**, as
+    /// `plan_press`). Nothing of `self` changes.
+    pub fn would_take_square_exe(&mut self, from: ComboState, combo: bool, finisher: bool, free: bool, skip: &[u8], air: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+        let vel = self.vel_h;
+        let gravity = self.params.gravity;
+        self.square_exe_plan(from, combo, finisher, free, skip, air, stick, env)
+            .map(|p| (p.row, p.hop.map(|h| Launch { height: h.height.max(0.0), velocity: h.velocity.unwrap_or(vel), gravity })))
+    }
+
+    /// `would_take_square_exe`'s plan (the row, the counts after the press, facing, hop).
+    fn square_exe_plan(&self, from: ComboState, combo: bool, finisher: bool, free: bool, skip: &[u8], air: bool, stick: [f32; 2], env: &Env) -> Option<AttackPlan> {
         const ORDER: [u8; 3] = [0x25, 0x0C, 0x26];
         if !(combo || finisher) {
             return None;
         }
         let max = self.max_count(air);
         let (count, fin) = (from.count, from.finishers.max(1));
-        // (KH2 reads the swing's "connected" bit, `+0x120` bit 25; Combo Master standing for it is
-        // this controller's reading, **Assumption**, as `plan_press`.)
         let hit = from.hit || self.abilities.combo_master;
+        let berserk = self.mp_charging && self.abilities.equipped.contains(&BERSERK_CHARGE);
+        // `0x1403D6CA0`: which way the step goes (`None`: refused).
+        enum Step {
+            Finisher,
+            Combo,
+            Fresh,
+        }
+        let step = if finisher && hit && fin < self.max_finishers() {
+            Some(Step::Finisher)
+        } else if combo && hit {
+            Some(Step::Combo)
+        } else if free {
+            Some(Step::Fresh)
+        } else {
+            None
+        }?;
         let gate = |r: &ComboRow| -> bool {
             if r.motion == 0 || (r.ability != 0 && !self.abilities.equipped.contains(&r.ability)) || r.is_air() != air {
                 return false;
             }
-            let rows_ok = if r.is_finisher() {
-                finisher || count as i32 + r.combo_offset as i32 >= max as i32
+            if r.is_finisher() {
+                !berserk && (finisher || count as i32 + r.combo_offset as i32 >= max as i32)
             } else {
-                // (`0x1403D7850` refuses with more than one finisher run only outside this room,
-                // so the two together are this.)
-                !finisher && count < max
-            };
-            let step_ok = (finisher && hit && fin < self.max_finishers()) || (combo && hit);
-            rows_ok && step_ok
+                berserk || (!finisher && count < max)
+            }
+        };
+        let from = match step {
+            Step::Finisher => ComboState { count, finishers: fin, hit: true, finisher_next: true },
+            Step::Combo => ComboState { count, finishers: fin, hit: true, finisher_next: false },
+            Step::Fresh => ComboState { count: 0, finishers: 1, hit: false, finisher_next: false },
         };
         for id in ORDER.into_iter().filter(|id| !skip.contains(id)) {
             let Some(r) = self.moveset.combo_rows.iter().find(|r| r.id == id) else { continue };
             if !gate(r) || self.clip(r.motion).is_none() {
                 continue;
             }
-            let mut st = self.press_state_from(ComboState { finisher_next: false, ..from }, air, self.host_motion);
+            let mut st = self.press_state_from(from, air, self.host_motion);
             st.forced = Some(id);
             st.gated = true;
             if let PressOutcome::Taken(plan) = self.plan_press(&st, stick, env) {
-                let launch = plan.hop.map(|h| Launch { height: h.height.max(0.0), velocity: h.velocity.unwrap_or(st.vel_h), gravity: self.params.gravity });
-                return Some((plan.row, launch));
+                return Some(plan);
             }
         }
         None
@@ -2047,6 +2077,17 @@ impl Character {
                 false
             }
             PressOutcome::Taken(p) => {
+                self.start_plan(p);
+                true
+            }
+        }
+    }
+
+    /// An attack press taken (`plan_press`'s plan): the counts, facing, hop or lunge, and the
+    /// row's motion started.
+    fn start_plan(&mut self, p: AttackPlan) {
+        {
+            {
                 self.forced_row = None;
                 self.count = p.count;
                 self.finishers = p.finishers;
@@ -2067,7 +2108,6 @@ impl Character {
                 if let Mode::Action(a) = &mut self.mode {
                     a.lunge = p.lunge;
                 }
-                true
             }
         }
     }
@@ -2840,8 +2880,8 @@ impl Character {
                 // kind 0 (reached only this way; the user: Upper Slash and Horizontal Slash never
                 // came out). KH2's help: Finishing Leap "at the end of a combo with Square",
                 // Upper Slash "knocks a target into the air during a combo", Horizontal Slash
-                // "during a midair combo with Square". The first whose ability is equipped and
-                // whose row's conditions pass (a finisher's: the combo's end) is taken.
+                // "during a midair combo with Square". A form's Square finisher here (Valor on this
+                // controller); base Sora's below.
                 if input.action.pressed && (combo_open || finisher_open) {
                     if let Some((ground, air)) = self.square_finishers {
                         let row = if self.airborne { air } else { ground };
@@ -2854,16 +2894,22 @@ impl Character {
                             self.forced_row = None;
                         }
                     }
-                    for (row, ability, air) in SQUARE_MOVES {
-                        if air != self.airborne || !self.abilities.equipped.contains(&ability) {
-                            continue;
-                        }
+                }
+                // Base Sora's (Finishing Leap 37, Upper Slash 12, Horizontal Slash 38): the exe's
+                // order and checks (`square_exe_plan`, Steam KH2 `0x1403A81F0` / `0x1403A9950`),
+                // the windows as they are at this frame (KH2's finisher window whatever the
+                // finishers so far: `0x1403D6CA0` counts them), the counts before the press.
+                // (Before: stage 177's `count < max` on the count after the press, one swing
+                // early, and Finishing Leap one swing early by the same reading.)
+                if input.action.pressed && self.square_finishers.is_none() {
+                    let from = ComboState { count: self.count, finishers: self.finishers, hit: self.hit, finisher_next: false };
+                    let finisher_raw = clip.has(f, |k| matches!(k, WindowKind::Finisher)) || is_finisher && finisher_window(&clip, f);
+                    if let Some(p) = self.square_exe_plan(from, combo_open, finisher_raw, clip.free_at(f), &[], self.airborne, input.stick, env) {
                         self.mode = Mode::Action(act.clone());
-                        self.forced_row = Some(row);
-                        if self.try_attack(input, env) {
-                            return true;
-                        }
-                        self.forced_row = None;
+                        self.combo_carry = false;
+                        self.carry_finisher = false;
+                        self.start_plan(p);
+                        return true;
                     }
                 }
             }

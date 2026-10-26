@@ -1795,9 +1795,10 @@ pub unsafe fn kh2_would_take_row(actor: usize, id: u8, air: bool) -> Option<(cha
 /// KH2's Square move in a combo for Sora now, KH1's own states having him (`Character::
 /// would_take_square_exe`: the exe's own order and checks, Steam KH2 `0x1403A81F0` /
 /// `0x1403A9950`), from KH1's combo `from`, KH2's combo / finisher window open at the motion's
-/// frame (`combo`, `finisher`), rows `skip` left out; with the targets and KH1's lock as KH2's
-/// step sees them (`kh2_would_take_launch`). Valor Form's Square moves (`combomods::valor_square`).
-pub unsafe fn kh2_would_take_square(actor: usize, from: character_core::ComboState, combo: bool, finisher: bool, skip: &[u8], air: bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
+/// frame (`combo`, `finisher`), KH2's free state there (`free`), rows `skip` left out; with the
+/// targets and KH1's lock as KH2's step sees them (`kh2_would_take_launch`). Base Sora's and Valor
+/// Form's Square moves in a combo (`combomods::control`, `combomods::valor_square`): one path.
+pub unsafe fn kh2_would_take_square(actor: usize, from: character_core::ComboState, combo: bool, finisher: bool, free: bool, skip: &[u8], air: bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
     let base = BASE.load(Ordering::Relaxed);
     let kh2 = pose::kh2()?;
     let mut g = DRIVER.try_lock().ok()?;
@@ -1817,7 +1818,7 @@ pub unsafe fn kh2_would_take_square(actor: usize, from: character_core::ComboSta
     let above = rd::<f32>(actor + 0x3D4);
     let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     d.character.set_drop_ahead(false);
-    d.character.would_take_square_exe(from, combo, finisher, skip, air, stick, &env)
+    d.character.would_take_square_exe(from, combo, finisher, free, skip, air, stick, &env)
 }
 
 /// The stick now as KH2 reads it for base Sora (the world direction times its tilt, KH2's x / z;

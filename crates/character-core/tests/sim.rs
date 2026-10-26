@@ -685,7 +685,9 @@ fn jump_out_of_the_landing_hold() {
 
 /// Horizontal Slash (row 38, ability 99) stands for one swing of an air combo: mashing Square
 /// in the air takes it only while the combo has swings left before its finisher, so it can't
-/// be spammed forever (it hops, so before Sora could stay up for good, the user).
+/// be spammed forever (it hops, so before Sora could stay up for good, the user). The exe's rule
+/// (Steam KH2 `0x1403A9950`): the count *before* the press under the length, so a combo of 3 has
+/// room for two after its first swing (stage 177 read the count after the press: one).
 #[test]
 fn horizontal_slash_is_part_of_the_air_combo() {
     let mut ch = sora();
@@ -696,6 +698,9 @@ fn horizontal_slash_is_part_of_the_air_combo() {
     slash.jump = 14.0;
     ch.moveset.combo_rows.push(slash);
     ch.abilities.equipped.push(99);
+    // (No target to hit: Combo Master stands for KH2's "connected" bit, which the exe's step
+    // `0x1403D6CA0` needs for a Square row.)
+    ch.abilities.combo_master = true;
     let mut w = World::new(ch);
     w.run(3, Pad { jump: true, ..IDLE });
     w.run(12, IDLE);
@@ -708,9 +713,70 @@ fn horizontal_slash_is_part_of_the_air_combo() {
         }
     }
     let slashes = motions.iter().filter(|&&m| m == 193).count();
-    assert!(slashes >= 1, "Horizontal Slash never came out: {motions:?}");
     let max = w.ch.combo_rules.air_base as usize;
-    assert!(slashes <= max - 1, "{slashes} Horizontal Slashes in a combo of {max}: {motions:?}");
+    assert_eq!(slashes, max - 1, "Horizontal Slashes in a combo of {max}: {motions:?}");
+}
+
+/// Base Sora's Square moves by the exe's order and checks (Steam KH2 `0x1403A81F0` tries rows
+/// 0x25, 0x0C, 0x26 through `0x1403A9950`; PTYA moveset 1: Finishing Leap 37 a finisher with
+/// offset 1, ability 95; Upper Slash 12 a step, ability 18; Checked (files, decomp)).
+#[test]
+fn base_square_moves_by_the_exe_rule() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(161, attack_clip(161, 60, (20, 30), 5, 40));
+    ch.moveset.clips.insert(167, attack_clip(167, 60, (20, 30), 6, 40));
+    ch.moveset.combo_rows.push(ComboRow { kind: 0, ability: 18, ..row(12, 161, false, false) });
+    ch.moveset.combo_rows.push(ComboRow { kind: 0, ability: 95, combo_offset: 1, ..row(37, 167, true, false) });
+    ch.abilities.equipped.extend([18, 95]);
+    let env = Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: &[], ledges: &[] };
+    let at = |count: u8, hit: bool| ComboState { count, finishers: 1, hit, finisher_next: false };
+    let pick = |ch: &mut Character, from: ComboState, combo: bool, finisher: bool, free: bool| ch.would_take_square_exe(from, combo, finisher, free, &[], false, [0.0; 2], &env).map(|(r, _)| r.id);
+    // First swing: Upper Slash. Second swing: Finishing Leap comes first (its offset 1 puts it in
+    // the finisher's place), Upper Slash without it (stage 177 refused it there).
+    assert_eq!(pick(&mut ch, at(1, true), true, false, false), Some(12));
+    assert_eq!(pick(&mut ch, at(2, true), true, false, false), Some(37));
+    ch.abilities.equipped.retain(|&a| a != 95);
+    assert_eq!(pick(&mut ch, at(2, true), true, false, false), Some(12));
+    assert_eq!(pick(&mut ch, at(3, true), true, false, false), None);
+    ch.abilities.equipped.push(95);
+    // At the length: Finishing Leap only; not at the first swing.
+    assert_eq!(pick(&mut ch, at(3, true), true, false, false), Some(37));
+    assert_eq!(pick(&mut ch, ComboState { count: 1, finishers: 1, hit: true, finisher_next: false }, true, false, false), Some(12));
+    // In a finisher's finisher window: the next finisher only with Finishing Plus left.
+    assert_eq!(pick(&mut ch, at(3, true), false, true, false), None);
+    ch.abilities.finishing_plus = 1;
+    assert_eq!(pick(&mut ch, at(3, true), false, true, false), Some(37));
+    ch.abilities.finishing_plus = 0;
+    // The window open, not connected, but a free state there: a new combo (`0x1403D6CA0`).
+    assert_eq!(pick(&mut ch, at(3, false), false, true, true), Some(37));
+    assert_eq!(pick(&mut ch, at(1, false), true, false, false), None);
+    // MP charging with Berserk Charge: no finisher, steps whatever the count.
+    ch.abilities.equipped.push(character_core::BERSERK_CHARGE);
+    ch.set_mp_charging(true);
+    assert_eq!(pick(&mut ch, at(3, true), true, false, false), Some(12));
+    assert_eq!(ch.combo_count(), 0);
+}
+
+/// The same rule on the controller's own action button: Attack, Attack, then Square in the
+/// second swing's combo window is Upper Slash (the count before the press, 2, under 3).
+#[test]
+fn upper_slash_from_the_second_swing() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(161, attack_clip(161, 60, (20, 30), 5, 40));
+    ch.moveset.combo_rows.push(ComboRow { kind: 0, ability: 18, ..row(12, 161, false, false) });
+    ch.abilities.equipped.push(18);
+    ch.abilities.combo_master = true;
+    let mut w = World::new(ch);
+    let mut starts = Vec::new();
+    for f in 0..120 {
+        // Attack at 0 and in the first swing's combo window (20..), Square in the second's.
+        let o = w.step(Pad { attack: f == 0 || f == 22, action: f == 50, ..IDLE });
+        if o.state == StateName::Attack && o.clip_frame == 0 {
+            starts.push(o.motion);
+        }
+    }
+    assert_eq!(starts.len(), 3, "{starts:?}");
+    assert_eq!(starts[2], 161, "{starts:?}");
 }
 
 /// An air cast (`air_magic_falls`, as Final Form's air Reflect) falls as it plays (s206 reverts
@@ -1868,7 +1934,7 @@ fn square_moves_as_the_exe_reaches_them() {
     let env = Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: &[], ledges: &[] };
     let max = ch.combo_rules.ground_base;
     let at = |count: u8, hit: bool| ComboState { count, finishers: 1, hit, finisher_next: false };
-    let pick = |ch: &mut Character, from: ComboState, combo: bool, finisher: bool, air: bool| ch.would_take_square_exe(from, combo, finisher, &[37], air, [0.0; 2], &env).map(|(r, l)| (r.id, l.map(|l| l.height)));
+    let pick = |ch: &mut Character, from: ComboState, combo: bool, finisher: bool, air: bool| ch.would_take_square_exe(from, combo, finisher, false, &[37], air, [0.0; 2], &env).map(|(r, l)| (r.id, l.map(|l| l.height)));
     // In the combo window with a swing left (count before the press under the length).
     assert_eq!(pick(&mut ch, at(1, true), true, false, false), Some((12, None)));
     assert_eq!(pick(&mut ch, at(max - 1, true), true, false, false), Some((12, None)));
@@ -1885,8 +1951,8 @@ fn square_moves_as_the_exe_reaches_them() {
     // More than one finisher run: a step is refused outside the room only; with room, taken.
     assert_eq!(pick(&mut ch, ComboState { count: 1, finishers: 2, hit: true, finisher_next: false }, true, false, false), Some((12, None)));
     // The skipped finisher row isn't taken even where it would pass.
-    assert_eq!(ch.would_take_square_exe(at(max, true), true, true, &[37], false, [0.0; 2], &env).map(|(r, _)| r.id), None);
-    assert_eq!(ch.would_take_square_exe(at(max, true), true, true, &[], false, [0.0; 2], &env).map(|(r, _)| r.id), Some(37));
+    assert_eq!(ch.would_take_square_exe(at(max, true), true, true, false, &[37], false, [0.0; 2], &env).map(|(r, _)| r.id), None);
+    assert_eq!(ch.would_take_square_exe(at(max, true), true, true, false, &[], false, [0.0; 2], &env).map(|(r, _)| r.id), Some(37));
     assert_eq!(ch.combo_count(), 0);
     assert_eq!(ch.state_name(), StateName::Idle);
 }

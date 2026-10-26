@@ -1,3 +1,15 @@
+### 2026-10-26: Stage 681 (testing branch: Base Sora's Square moves by KH2's exe rule)
+- **Base Sora's Square moves by KH2's rule.** The tester (what-is-still-missing, after m13): "3. (a)".
+  Upper Slash, Horizontal Slash and Finishing Leap now go through the same path as Valor's Square
+  moves (`Character::would_take_square_exe`, Steam KH2 `0x1403A81F0` / `0x1403A9950`, Checked
+  (decomp)), on KH1's states (`combomods::control`) and on the controller's own action button. The
+  count is the one before the press (stage 177 read it after: Upper Slash / Horizontal Slash were
+  refused one swing early, Finishing Leap, offset 1 per PTYA moveset 1, Checked (files), came one
+  swing early). Added from the decomp: the free-state step of `0x1403D6CA0` (a new combo) and
+  Berserk Charge while MP charges (no Square finisher, steps at any count; bit 11 of `+0x1DC` as
+  Berserk Charge: Assumption). With the combo style KH1, KH1's combo window stands for KH2's
+  (Assumption). docs/kh1-drive-forms-native.md §7.1.1.
+
 ### 2026-10-26: Stage 680 (testing branch: Valor's left Keyblade hits as its own KH1 attack object)
 - **Valor's left Keyblade hits as its own KH1 attack object.** The tester (what-is-still-missing, after m12): "3. do both", "make sure when your moving these over to be native that you double check everything ... check the kh2 c decomp steam". KH2 keeps one attack per (group, shape-source object) (Steam KH2 `0x14040D810` -> `0x1403DAFE0` -> `0x1403D29B0` -> `0x1403D25D0`, a new attack `0x14040F1C0`; Checked (decomp)), so the two Keyblades always run separate attacks and both may hit the same foe in a swing. The old system put the left windows on KH1's group 0 (the right blade's sphere), `window_atkp` took the first weapon > 0 window (left hits lost where the windows overlap, 154 / 184), and `keyblade_rearm` re-armed the right blade on left windows. Now `kh1_tracks` gives group 0 to weapon 1 windows only and the weapon 2 windows play on a KH1 attack group of their own (`kh2slots::left_channel`, 1 for every Valor move; Checked (files)). For each play `bodyhits::make_left` makes one KH1 attack object with KH1's constructor `0x1402B2DC0` (bone 0x30, motion-tied), on copies of his swing row's data per window, with the left Keyblade's weapon row bonuses as `0x1402B3270` adds them (Checked (decomp)); `bodyhits::left_step` re-arms it with KH1's re-arm at each new KH2 attack (`rehit::new_attack`). t638's entry hook (`0x1402B3800`) puts in the open window's group of KH2's weapon spheres (`W_EX010.mdlx` bone 2, Checked (files)) with KH2's sweep, along the left Keyblade as drawn (grip 280 to blade point 0x30, KH1's `0x14029EB20` on `leftblade`'s owner copy); KH1 does the collision, contact, damage, spark and clash. No new hooks. Assumptions: KH2's distances laid unscaled along KH1's blade; the right Keyblade used when the left isn't drawn (logged). Open: the right blade still uses KH1's row sphere, not KH2's group spheres. Not checked in game. docs/kh1-drive-forms-native.md §7.2, docs/kh1-rehit.md.
 

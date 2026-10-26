@@ -286,8 +286,8 @@ Checked (code) against the above):
 - rows 12 / 38 were taken as finishers (`form_finisher`): allowed at the combo's end and in the
   finisher window, both of which KH2 refuses for them;
 - base Sora's Square step rule (stage 177, `sit.count < max` on the count after the press) is one
-  swing stricter than the exe's (count before the press under the length). Left as it is for base
-  Sora (not this change: an open question);
+  swing stricter than the exe's (count before the press under the length). Fixed for base Sora in
+  its own version (§7.1.1, the tester's "3. (a)");
 - Sora's Finishing Leap (row 37) was ported into Valor (`pose::port_moves`, s214, asked when the
   real cause was row 11, found at s216): not in KH2's Valor. Left out on KH1's states;
 - row 11 was right: an attack from Square standing or moving (s216).
@@ -313,6 +313,63 @@ Checked (code) against the above):
   connected, as elsewhere); Valor's combo length (`+0x200` / `+0x201`, set through script-call
   setters `0x1401E72E0` / `0x1401E7320`; our controller's `combo_rules` is used, not re-read for
   Valor).
+
+### 7.1.1 Base Sora's Square moves by the same rule
+
+The tester (what-is-still-missing, after m13): "3. (a)" (fix base Sora to KH2's exact rule, its
+own version).
+
+**KH2 (Steam KH2 decomp, Checked (decomp)), the parts §7.1 left out:**
+- `0x1403A9950` first refuses a non-finisher row through `0x1403D7780(p, 0)`: the finisher window
+  `+0x194` bit 5, or the count `+0xD74` (before the press) at the length; `0x140402750`'s own
+  `0x1403D7850` refuses only a subset of that (the same, and more than one finisher run).
+- `0x1403D7780` / `0x1403D7850` both start with `[+0x5C0] + 0x1DC` bit 11 and `0x1403C1D10`
+  (the MP-charge timer `+0x1C0` over 0): Berserk Charge while MP charges. Then `0x1403D7780` is
+  false (a finisher row refused, a step let through whatever the count) and `0x1403D7850` false
+  (a step passes `0x140402750`). So with MP charging and Berserk Charge no Square finisher, and
+  Upper Slash / Horizontal Slash at any count. (That bit 11 is Berserk Charge's: **Assumption**,
+  the same reading as the controller's `condition`.)
+- `0x1403D6CA0 (p, connected)`, the step: the finisher window, connected and finishers `+0xD75`
+  under `[+0x5C0] + 0x202`: count and finishers + 1; else the combo window `+0x18C` bit 10 and
+  connected: count + 1; else, if a free range is open (`+0x18C & 0x1C`, range ids 0 / 1 / 2),
+  counts back to 1 / 1 (a new combo) and taken; else refused. It clears connected either way.
+- Connected (`+0x120` bit 25) is set by a hit (`0x1403D12C0`) or a clash (`0x1403D61D0`), and by
+  two object-class callbacks (`0x1403D54B0`, `0x1403D63E0`, which also take one off the count;
+  not identified), and cleared by a swing's start (`0x1403D78D0`). No air-whiff setter found:
+  a Square row after an air swing that missed is refused (Combo Master standing for connected,
+  **Assumption**). Note our own Attack walk (`plan_press`) still lets air whiffs chain (an old
+  reading, untraced): not changed here.
+
+**Sora's rows (Checked (files), `00battle.bin` PTYA moveset 1):**
+
+| row | kind | offset | flag | motion | hop | ability |
+|---|---|---|---|---|---|---|
+| 11 | 0 | 0 | 0 | 173 (guard) | | 1 (Guard) |
+| 12 | 0 | 0 | 0 (ground step) | 161 | | 18 (Upper Slash) |
+| 37 | 0 | 1 | 0x4 (ground finisher) | 167 | | 95 (Finishing Leap) |
+| 38 | 0 | 0 | 0x1 (air step) | 193 | 14 (14..114), speed 0..18 | 99 (Horizontal Slash) |
+
+So with a combo of 3 (no Combo Plus): Upper Slash in the first or the second swing's combo window
+(count 1 or 2 before the press); Finishing Leap (offset 1) from the second swing on (count + 1 at
+the length) and in a finisher's finisher window (with Finishing Plus left), and, tried first, it
+takes the second swing's press over Upper Slash when both are equipped; Horizontal Slash after the
+first and second air swings. Stage 177's rule (the count after the press) refused Upper Slash /
+Horizontal Slash at the second swing, and its finisher test (`condition` on the count after the
+press, count + 2 at the length) let Finishing Leap in at the first swing of a combo of 3: each one
+swing off.
+
+**Now** one path, `Character::would_take_square_exe` (`square_exe_plan`), for:
+- base Sora on KH1's own states (`combomods::control`): KH2's combo / finisher window and free
+  state at KH1's time in our KH2 slot playing (`kh2slots::now_playing`, the combo style KH2);
+  with KH1's own swing playing (the combo style KH1) KH1's combo window (slots 98..104) stands for
+  KH2's combo window, no finisher window (**Assumption**: KH1's swings have no KH2 windows). The
+  count is KH1's (`+0x41` of the combat info, read as KH2's count before the press, as Valor's),
+  the finishers so far `combomods::FINISHERS`, connected KH1's `+0x50`;
+- Valor (`combomods::valor_square`), now with the free-state step too;
+- the controller's own action button (base Sora when KH2's controller has him; forms with
+  `square_finishers` keep their path).
+`Character::would_take_launch(.., square: true)` (stage 177's rule) is no longer used for base
+Sora's Square moves. Not checked in game.
 
 ### 7.2 The left Keyblade's hits as a KH1 attack object (t680)
 
