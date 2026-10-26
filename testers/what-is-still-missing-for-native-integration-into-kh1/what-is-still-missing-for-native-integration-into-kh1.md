@@ -471,4 +471,14 @@ go ahead
 > 3. While checking this I found that base Sora's Upper Slash and Horizontal Slash are refused one swing earlier than KH2 allows. Finishing Leap probably comes one swing early too. Should I (a) fix base Sora to KH2's exact rule as its own version, or (b) leave it?
 
 ^m13
+1. it should fit kingdom hearts 1 in this situation for both keyblades
+2. the keyblade should behave exactly like kh1's keyblade so make sure it scales by keyblade
+3. (a)
 
+keep working on valor form until its complete, if you have questions for me just tell me after you've already completed the code and we can adjust after. currently I see:
+
+no effects, no proper physics on grounded finisher, attack doesn't interrupt jumps momentum so you can fly high in the air while attacking 
+
+but don't take my word for it compare to how kh2 does it in the c decomp and make sure everything is right. finish valor and wisdom form then we can go from there. make sure when its in the new system that its 1:1 with kh2, our configs don't adjust anything on drive forms atm as we'll treat them as unique in terms of game design. when implementing assume that everything may be wrong on the old controller so double check to make sure its right. it something we've implemented is the same way for drive forms make it apart of that code e.g how magic might work in the air for kh2. if anything is missing from kh1's engine remember, always add that extra ability so that we can achieve 1:1.
+
+go ahead
