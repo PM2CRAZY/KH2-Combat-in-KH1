@@ -71,3 +71,20 @@ Every agent working on this branch follows this together with the core block abo
   renderer the extra calls KH2's effects need, instead of a second renderer).
 - **Toggles for feel.** When a design choice critically affects how the game feels, it becomes
   a toggle the player can change (a Config row), not a silent change for everyone.
+
+## Little of ours per frame; the game's assets built once (the tester, what-is-still-missing m6, 2026-10-26)
+
+- **Missing KH1 systems are always built into KH1's engine** (answer 3 (a)): when a native
+  version needs something KH1 has no system for (MP Charge, say), build it into KH1's engine
+  without asking each time. Ask only about open design choices.
+- **As little of our code as possible runs every frame.** The tester: "the goal for this project
+  is to have as little as running in our code every frame to reduce the amount of bugs,
+  performance issues, etc." Prefer data KH1's own code reads (rows, requests, motion slots,
+  attack data, effect programs, sound banks) over per-frame hooks that steer it.
+- **The game's assets are built once, kept in the mod folder.** The tester: "having the game
+  build the assets it needs from kh2 and putting it in its mod folder, it won't get destroyed when
+  the game is shut off like it does now but instead is built from a players extracted data from kh1
+  and kh2." Today our KH2 motion slots, rows and effect data are made in memory at every start;
+  the direction is a build step that makes them from the player's own extracted KH1 and KH2 files
+  into the mod folder, for KH1 to load as its own files. Nothing of the games' goes in the repo.
+  Not started: each step is planned with the tester first.
