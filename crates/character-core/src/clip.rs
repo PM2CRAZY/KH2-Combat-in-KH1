@@ -9,8 +9,12 @@ pub enum WindowKind {
     Hitbox { attack: u16, group: u8, combo: Option<i16>, weapon: u8 },
     /// The next combo hit (or another action) may start.
     Combo,
-    /// Like `Combo` but only for magic.
-    ComboMagic,
+    /// KH2's range id 35 with its parameter, a motion id: a combo window (`Combo`) only while the
+    /// motion playing is that one (Steam KH2's range step `0x14040D810`: id 35 sets the combo
+    /// window's bit 0x400 when its parameter equals the motion player's current motion `+0x28`,
+    /// Checked (decomp)). Copies of a motion's ranges in another motion (Reflect 71 carries Fire
+    /// 56's, Cure 65 Thunder 62's, `P_EX100.mset`, Checked (files)) are inert there.
+    ComboMagic(u16),
     /// Another finisher may start (Finishing Plus).
     Finisher,
     /// Rotate toward the locked/auto target, radians per frame.

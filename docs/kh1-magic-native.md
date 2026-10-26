@@ -271,6 +271,21 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   (Drive Forms, borrows): the Magic action takes an Attack only in range 11 (`cancel_allowed`);
   sim test `attack_out_of_a_cast_only_in_its_combo_window`.
 - The finisher casts' finisher window (Finishing Plus after a finisher cast): §4c.2.
+- **Corrected at t642** (the tester, combo row selection after m29: in KH2 "you can combo out of
+  magic", and ours let spells follow sooner than an Attack). **Checked (decomp)**, Steam KH2's
+  range step `0x14040D810`: range id 35 is not a spells-only window. It sets the same combo
+  window bit as range id 11 (`+0x18C` bit 0x400, through the motion player's flags `+0x34`), but
+  only when its parameter equals the motion player's current motion (`+0x28`, the motion id the
+  queue set, `0x1403C6740`). **Checked (files)** (`P_EX100.mset`): Fire 56 has [71] 34..46 and
+  [56] from 60, Reflect 71 the same two (a copy of Fire's), Thunder 62 [62] from 42, Cure 65 [62]
+  from 42 (a copy of Thunder's). So KH2's combo window on the ground casts is: Fire 56 from 60,
+  Blizzard 59 from 36 (range 11), Thunder 62 from 42, Reflect 71 34..46, Cure 65 none. KH2's
+  Attack (with "connected", `+0x120` bit 0x2000000 set by a hit of any of his attack objects,
+  `0x1403D12C0`, or the ability bit) and its magic command (always with the window test) are
+  taken there alike. Ours (`kh2slots::combo_kind`): KH1's combo window, the Attack and the spell
+  checks all use that window; before, every range 35 was a spells-only window from its first
+  frame (Fire took a spell from 34, Cure from 42, Reflect to its end, Blizzard none) and an Attack
+  only range 11. Drive Forms' controller keeps its old reading (`ComboMagic(_)`).
 - **Kept (ours):** in the air, KH2's controller still carries the combo on after a cast that has
   ended (until the landing), where KH2's free state would start a new one; KH1's cast state
   already starts a new one.

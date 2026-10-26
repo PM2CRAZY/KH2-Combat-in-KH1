@@ -742,9 +742,9 @@ impl Character {
         let next_finisher = || self.finishers < self.max_finishers() && self.swing_counts() && self.clip(a.motion).is_some_and(|c| finisher_window(c, f));
         match &a.kind {
             ActionKind::Attack { row } if row.is_finisher() => next_finisher(),
-            ActionKind::Attack { .. } => has(&|k| matches!(k, WindowKind::ComboMagic | WindowKind::Combo)),
+            ActionKind::Attack { .. } => has(&|k| matches!(k, WindowKind::ComboMagic(_) | WindowKind::Combo)),
             ActionKind::Magic if self.cast_finisher => next_finisher(),
-            ActionKind::Magic => has(&|k| matches!(k, WindowKind::ComboMagic)),
+            ActionKind::Magic => has(&|k| matches!(k, WindowKind::ComboMagic(_))),
             // Not in the landing (the user: "reflect can also be used during the landing
             // animation, we need to disable this"); once it is over.
             _ => false,
