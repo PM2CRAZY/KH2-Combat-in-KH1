@@ -145,6 +145,14 @@ starts with "KH2's" so that they can be told apart in the menu.
   (by the world's story progress, `BOSS_GIFTS`), or with its KH1 namesake. It comes off, with a
   "New Ability" box. When Sora's list is full, a KH1 ability that's off makes room (`make_room`,
   as before). KH1's combo modifiers are never given up, because KH1's own combo uses them.
+- **From Drive Form levels** (the tester, what-is-still-missing after m15, answer 6 (c); KH2's
+  `0x1403E8380`, Checked (decomp)). A form's level gives base Sora its growth one under the
+  form's (Valor High Jump, Wisdom Quick Run, Final Glide: LV1 / 2 / 3 at form LV3 / 5 / 7,
+  `Kh1Sora::form_growth`); the higher of that and his own level's counts, and without the
+  ability it is learned (High Jump in the shared list, on; Quick Run off, its AP in the bonus).
+  The fmlv rows' abilities come as KH1's own: Combo Plus, Air Combo Plus, MP Rage (off, "New
+  Ability" box); the Auto forms, MP Haste and Form Boost have none yet. Details in
+  `docs/kh1-drive-forms-native.md` §9. `abilities = kh1` only.
 - **Growth boxes.** KH1's High Jump, Glide and Dodge Roll keep KH1's names in the menu. When KH2's
   level for them grows, an "Ability Up" box still says so ("High Jump LV2"). This is KH2's side
   only.

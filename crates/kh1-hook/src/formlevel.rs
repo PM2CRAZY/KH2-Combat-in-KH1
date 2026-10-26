@@ -15,6 +15,9 @@
 //!   same table, one entry down, replaced in his list, or put in an empty slot when it goes from
 //!   none to LV1); the row's ability (fmlv `+2`, Auto Valor, Combo Plus, ...) goes to Sora
 //!   (`0x1403C3F00`).
+//! - **Base Sora's side** (`sora_growth`, `rewards_due`): his growth level and the rows'
+//!   abilities, given in KH1's own ability lists by `win/menu.rs` (the tester, after m15,
+//!   answer 6: "(c)").
 //!
 //! The rows come from the player's own KH2 `00battle.bin` (`fmlv`), never from the repo.
 
@@ -69,30 +72,36 @@ impl Table {
     }
 }
 
-/// A form's level and EXP as kept in the save.
+/// A form's level and EXP as kept in the save, and the last level whose fmlv ability Sora was
+/// given (`rewarded`, ours: KH2 gives it in the same step as the level, `0x1403E8380`; here
+/// KH1's menu gives it a moment later, `win/menu.rs`, so the save says how far it got).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Record {
     pub level: u8,
     pub exp: u32,
+    pub rewarded: u8,
 }
 
 impl Default for Record {
     /// A form Sora has never been in is at level 1 with no EXP (KH2's records start there).
     fn default() -> Record {
-        Record { level: 1, exp: 0 }
+        Record { level: 1, exp: 0, rewarded: 1 }
     }
 }
 
-/// The bits a packed record keeps its level in (3, levels 1..7) and its EXP in (13, under
-/// 8192: KH2's largest step is 672).
+/// The bits a packed record keeps its level in (3, levels 1..7), the rewarded level in (3) and
+/// its EXP in (10, under 1024: KH2's largest step is 672, Valor LV6, Checked (files)). t700's
+/// saves kept EXP in 13 bits, always under 672, so their rewarded bits read 0: the rewards of
+/// every level they reached are given once.
 const LEVEL_SHIFT: u16 = 13;
-const EXP_MASK: u16 = (1 << LEVEL_SHIFT) - 1;
+const REWARDED_SHIFT: u16 = 10;
+const EXP_MASK: u16 = (1 << REWARDED_SHIFT) - 1;
 
 impl Record {
-    /// Two bytes in the save: level in the top 3 bits, EXP below. 0 (a save from before form
-    /// levels) reads as level 1.
+    /// Two bytes in the save: level in the top 3 bits, the rewarded level, EXP below. 0 (a save
+    /// from before form levels) reads as level 1.
     pub fn pack(self) -> u16 {
-        ((self.level.clamp(1, MAX_LEVEL) as u16) << LEVEL_SHIFT) | (self.exp.min(EXP_MASK as u32) as u16)
+        ((self.level.clamp(1, MAX_LEVEL) as u16) << LEVEL_SHIFT) | ((self.rewarded.min(MAX_LEVEL) as u16) << REWARDED_SHIFT) | (self.exp.min(EXP_MASK as u32) as u16)
     }
 
     pub fn unpack(v: u16) -> Record {
@@ -100,8 +109,24 @@ impl Record {
         if level == 0 {
             return Record::default();
         }
-        Record { level, exp: (v & EXP_MASK) as u32 }
+        Record { level, exp: (v & EXP_MASK) as u32, rewarded: ((v >> REWARDED_SHIFT) & 7) as u8 }
     }
+}
+
+/// Base Sora's own growth ability level from `form`'s level (KH2's `0x1403E8380`, Checked
+/// (decomp + exe)): each time the form's growth level rises (fmlv byte 1) his own entry of the
+/// growth table `0x1405C9030` goes from the level two under the form's new one to one under it
+/// (from an empty slot to LV1), so with fmlv's rows rising one at a time his level is the form's
+/// growth level less one: LV1 / LV2 / LV3 at form LV3 / 5 / 7, never MAX (the table's MAX entry is
+/// only the form's). 0: none from this form.
+pub fn sora_growth(t: &Table, form: u8, level: u8) -> u8 {
+    t.growth(form, level).saturating_sub(1)
+}
+
+/// The fmlv abilities `rec` has reached but not been given (levels after `rewarded` up to its
+/// level, in order): (level, KH2's ability id). Levels with none are left out.
+pub fn rewards_due(t: &Table, form: u8, rec: &Record) -> Vec<(u8, u16)> {
+    (rec.rewarded.max(1) + 1..=rec.level).filter_map(|l| t.row(form, l).filter(|r| r.reward != 0).map(|r| (l, r.reward))).collect()
 }
 
 /// What one level-up gave (KH2's `0x1403E8380`).
@@ -177,14 +202,14 @@ mod tests {
     fn exp_under_the_step_is_kept() {
         let mut r = Record::default();
         assert!(add(&mut r, form::VALOR, 9, 7, &table()).is_empty());
-        assert_eq!(r, Record { level: 1, exp: 9 });
+        assert_eq!(r, Record { level: 1, exp: 9, rewarded: 1 });
     }
 
     #[test]
     fn levels_take_their_step_and_give_growth_and_rewards() {
         let mut r = Record::default();
         let ups = add(&mut r, form::VALOR, 35, 7, &table());
-        assert_eq!(r, Record { level: 3, exp: 5 });
+        assert_eq!(r, Record { level: 3, exp: 5, rewarded: 1 });
         assert_eq!(ups[0], LevelUp { level: 2, form_growth: None, sora_growth: None, reward: 102 });
         assert_eq!(ups[1], LevelUp { level: 3, form_growth: Some(2), sora_growth: Some(1), reward: 0 });
     }
@@ -194,20 +219,39 @@ mod tests {
         let mut r = Record::default();
         let ups = add(&mut r, form::VALOR, 1000, 4, &table());
         assert_eq!(ups.len(), 3);
-        assert_eq!(r, Record { level: 4, exp: 0 });
+        assert_eq!(r, Record { level: 4, exp: 0, rewarded: 1 });
         assert!(add(&mut r, form::VALOR, 5, 4, &table()).is_empty());
         assert_eq!(r.exp, 0, "at the cap EXP is dropped");
         let ups = add(&mut r, form::VALOR, 1000, 7, &table());
-        assert_eq!(r, Record { level: 7, exp: 0 });
+        assert_eq!(r, Record { level: 7, exp: 0, rewarded: 1 });
         assert_eq!(ups.last().unwrap().form_growth, Some(4));
         assert_eq!(ups.last().unwrap().sora_growth, Some(3));
     }
 
     #[test]
     fn packs_into_two_bytes() {
-        let r = Record { level: 5, exp: 671 };
+        let r = Record { level: 5, exp: 671, rewarded: 3 };
         assert_eq!(Record::unpack(r.pack()), r);
         assert_eq!(Record::unpack(0), Record::default());
+        // t700's packing (level << 13 | EXP): its rewards are all still to give.
+        assert_eq!(Record::unpack((4 << 13) | 300), Record { level: 4, exp: 300, rewarded: 0 });
+    }
+
+    #[test]
+    fn sora_grows_one_under_the_form() {
+        let t = table();
+        let got: Vec<u8> = (1..=7).map(|l| sora_growth(&t, form::VALOR, l)).collect();
+        assert_eq!(got, [0, 0, 1, 1, 2, 2, 3]);
+    }
+
+    #[test]
+    fn rewards_due_once() {
+        let t = table();
+        let rec = Record { level: 6, exp: 0, rewarded: 0 };
+        assert_eq!(rewards_due(&t, form::VALOR, &rec), [(2, 102), (4, 104), (6, 106)]);
+        let rec = Record { level: 6, exp: 0, rewarded: 4 };
+        assert_eq!(rewards_due(&t, form::VALOR, &rec), [(6, 106)]);
+        assert!(rewards_due(&t, form::VALOR, &Record::default()).is_empty());
     }
 
     #[test]

@@ -41,6 +41,7 @@ pub mod kh1 {
     pub const BLITZ: u8 = 20;
     pub const GUARD: u8 = 21;
     pub const DODGE_ROLL: u8 = 22;
+    pub const MP_RAGE: u8 = 24;
     pub const SLAPSHOT: u8 = 53;
     pub const SLIDING_DASH: u8 = 54;
     pub const HURRICANE_BLAST: u8 = 55;
@@ -713,6 +714,54 @@ pub fn make_room(list: &[u8]) -> Option<usize> {
 /// modifiers (its own combo uses them) and EXP Zero.
 const KEEP: [u8; 20] = [21, 22, 6, 7, 11, 12, 13, 14, 15, 17, 18, 19, 20, 53, 54, 55, 56, 57, 58, 64];
 
+/// Base Sora's growth levels from the Drive Forms' levels (KH2's form level-up, Steam KH2
+/// `0x1403E8380`, `formlevel::sora_growth`, Checked (decomp)): Valor's High Jump, Wisdom's Quick
+/// Run, Final's Glide (0: none). KH2 has no other source of them; here they join the levels
+/// Sora's own level and bosses give (`Kh1Sora::high_jump_now` ...): the higher counts, as KH2's
+/// swap only ever raises an entry he has.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FormGrowth {
+    pub high_jump: u8,
+    pub quick_run: u8,
+    pub glide: u8,
+}
+
+/// KH2's fmlv abilities (Steam KH2 `00battle.bin` fmlv, Checked (files)) as KH1's own (the
+/// tester, after m15, answer 6 (c)): KH2's Combo Plus (162) and Air Combo Plus (163) are KH1's
+/// Combo Plus / Air Combo Plus (their KH2 side is KH2's, `Effect::ComboPlus`); KH2's MP Rage
+/// (412) is KH1's MP Rage (KH1's own effect: MP when hurt; KH2's MP Rage is the same idea with
+/// other numbers, Assumption that it counts as its counterpart). None yet: the Auto forms (385
+/// Valor, 386 Wisdom, 387 Master, 388 Final, 568 Limit), MP Haste (413: KH2's shortens MP Charge,
+/// which KH1 has no system for; KH1's MP Haste is more MP per hit), Form Boost (398), Draw (405),
+/// Lucky Lucky (407) (asked).
+pub fn kh1_reward(kh2_id: u16) -> Option<u8> {
+    match kh2_id {
+        162 => Some(kh1::COMBO_PLUS),
+        163 => Some(kh1::AIR_COMBO_PLUS),
+        412 => Some(kh1::MP_RAGE),
+        _ => None,
+    }
+}
+
+/// A KH2 fmlv ability's name, for the log (the ones the forms here give).
+pub fn kh2_reward_name(kh2_id: u16) -> &'static str {
+    match kh2_id {
+        162 => "Combo Plus",
+        163 => "Air Combo Plus",
+        385 => "Auto Valor",
+        386 => "Auto Wisdom",
+        387 => "Auto Master",
+        388 => "Auto Final",
+        568 => "Auto Limit",
+        398 => "Form Boost",
+        405 => "Draw",
+        407 => "Lucky Lucky",
+        412 => "MP Rage",
+        413 => "MP Haste",
+        _ => "a KH2 ability",
+    }
+}
+
 /// Sora's side of KH1's save block.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Kh1Sora {
@@ -723,6 +772,8 @@ pub struct Kh1Sora {
     pub shared: Vec<u8>,
     /// The worlds' story progress bytes (save `+0x1504`, 12).
     pub progress: Vec<u8>,
+    /// His growth from the Drive Forms' levels (`win/formexp.rs`).
+    pub form_growth: FormGrowth,
 }
 
 /// Equipped copies of `id` in a KH1 ability list (as `0x140282A70`: up to the first 0).
@@ -798,10 +849,10 @@ impl Kh1Sora {
         match e {
             // (The user: one High Jump, growing with Sora to MAX; Glide growing to LV3, MAX with
             // Superglide; the dodge roll and Quick Run / Aerial Dodge grow too.)
-            Effect::HighJump => out.high_jump = out.high_jump.max(high_jump_level(self.level)),
-            Effect::Glide => out.glide = out.glide.max(glide_level(self.level)),
+            Effect::HighJump => out.high_jump = out.high_jump.max(self.high_jump_now()),
+            Effect::Glide => out.glide = out.glide.max(glide_level(self.level).max(self.form_growth.glide)),
             Effect::GlideMax => out.glide = 4,
-            Effect::Kh2Glide => out.glide = out.glide.max(kh2_glide_level(self.level, &self.progress)),
+            Effect::Kh2Glide => out.glide = out.glide.max(self.kh2_glide_now()),
             Effect::Guard => {
                 out.guard = true;
                 push(out, kh2::GUARD);
@@ -810,13 +861,44 @@ impl Kh1Sora {
             Effect::ComboPlus => out.combo_plus = out.combo_plus.saturating_add(copies),
             Effect::AirComboPlus => out.air_combo_plus = out.air_combo_plus.saturating_add(copies),
             Effect::ComboMaster => out.combo_master = true,
-            Effect::QuickRun => out.quick_run = out.quick_run.max(quick_run_level(self.level).max(1)),
+            Effect::QuickRun => out.quick_run = out.quick_run.max(self.quick_run_now()),
             Effect::AerialDodge => out.aerial_dodge = out.aerial_dodge.max(aerial_dodge_level(self.level)),
             Effect::AerialRecovery => out.aerial_recovery = true,
             Effect::FinishingPlus => out.finishing_plus = 1,
             Effect::NegativeCombo => out.negative_combo = 1,
             Effect::Modifier(n) => push(out, n),
         }
+    }
+
+    /// High Jump's level once he has it: by his level, or the level Valor's form level gives
+    /// (`FormGrowth`), the higher.
+    pub fn high_jump_now(&self) -> u8 {
+        high_jump_level(self.level).max(self.form_growth.high_jump)
+    }
+
+    /// Quick Run's level once he has it: by his level (LV1 when learned), or Wisdom's.
+    pub fn quick_run_now(&self) -> u8 {
+        quick_run_level(self.level).max(1).max(self.form_growth.quick_run)
+    }
+
+    /// KH2's own Glide's level (`ours::GLIDE`): by his level and Chernabog, or Final's.
+    pub fn kh2_glide_now(&self) -> u8 {
+        kh2_glide_level(self.level, &self.progress).max(self.form_growth.glide)
+    }
+
+    /// The shared growth abilities a form's level has given him that his list doesn't hold
+    /// (KH2 puts LV1 in an empty slot, `0x1403E8380`): KH1's High Jump for Valor, KH1's Glide for
+    /// Final (the Glide style swaps it for KH2's own, `glide_swap`). Quick Run is one of ours,
+    /// learned through `earned`. (why, id, its level).
+    pub fn form_grants(&self) -> Vec<(String, u8, u8)> {
+        let mut out = Vec::new();
+        if self.form_growth.high_jump > 0 && !has(&self.shared, kh1::HIGH_JUMP) {
+            out.push(("Valor Form's level".to_string(), kh1::HIGH_JUMP, self.high_jump_now()));
+        }
+        if self.form_growth.glide > 0 && !has(&self.shared, kh1::GLIDE) && !has(&self.shared, kh1::SUPERGLIDE) && !has(&self.shared, ours::GLIDE) {
+            out.push(("Final Form's level".to_string(), kh1::GLIDE, glide_level(self.level).max(self.form_growth.glide)));
+        }
+        out
     }
 
     /// KH2's controller's abilities from KH1's menu and Sora's level: every equipped ability
@@ -863,6 +945,10 @@ impl Kh1Sora {
         }
         if ab.with != 0 && has(&self.abilities, ab.with) {
             return Some(format!("with KH1's {}", name(ab.with)));
+        }
+        // KH2's Wisdom level-up puts Quick Run LV1 in Sora's list (`0x1403E8380`).
+        if ab.effect == Effect::QuickRun && self.form_growth.quick_run > 0 {
+            return Some("Wisdom Form's level".to_string());
         }
         None
     }
@@ -1028,7 +1114,38 @@ mod tests {
         a.resize(48, 0);
         let mut s = shared.to_vec();
         s.resize(10, 0);
-        Kh1Sora { level, abilities: a, shared: s, progress: vec![0; 12] }
+        Kh1Sora { level, abilities: a, shared: s, progress: vec![0; 12], form_growth: FormGrowth::default() }
+    }
+
+    /// Form levels give base Sora growth (KH2's `0x1403E8380`): the higher of it and his own
+    /// level's, and High Jump / Quick Run learned from them.
+    #[test]
+    fn form_levels_give_base_sora_growth() {
+        let mut s = sora(5, &[], &[]);
+        assert!(s.form_grants().is_empty());
+        assert!(s.grants().iter().all(|(_, ab)| ab.id != ours::QUICK_RUN));
+        s.form_growth = FormGrowth { high_jump: 2, quick_run: 1, glide: 0 };
+        assert_eq!(s.form_grants(), vec![("Valor Form's level".to_string(), kh1::HIGH_JUMP, 2)]);
+        assert!(s.grants().iter().any(|(why, ab)| ab.id == ours::QUICK_RUN && why == "Wisdom Form's level"));
+        // Equipped: KH2's controller gets the form's levels.
+        let s2 = Kh1Sora { shared: { let mut v = vec![kh1::HIGH_JUMP]; v.resize(10, 0); v }, abilities: { let mut v = vec![ours::QUICK_RUN]; v.resize(48, 0); v }, ..s.clone() };
+        let a = s2.kh2();
+        assert_eq!((a.high_jump, a.quick_run), (2, 1));
+        assert!(s2.form_grants().is_empty());
+        // His own level's growth wins when it is higher.
+        let s3 = Kh1Sora { level: 60, ..s2 };
+        let a = s3.kh2();
+        assert_eq!((a.high_jump, a.quick_run), (4, 4));
+    }
+
+    #[test]
+    fn kh2_rewards_as_kh1_abilities() {
+        assert_eq!(kh1_reward(162), Some(kh1::COMBO_PLUS));
+        assert_eq!(kh1_reward(163), Some(kh1::AIR_COMBO_PLUS));
+        assert_eq!(kh1_reward(412), Some(kh1::MP_RAGE));
+        assert_eq!(KH1_ABILITIES[kh1::MP_RAGE as usize - 1].name, "MP Rage");
+        assert_eq!(kh1_reward(385), None);
+        assert_eq!(kh1_reward(413), None);
     }
 
     #[test]

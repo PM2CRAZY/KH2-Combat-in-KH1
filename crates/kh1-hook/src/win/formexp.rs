@@ -26,6 +26,9 @@
 //!   when defeated, and counts as a Heartless (KH1's ids aren't KH2's).
 //! - **Final, +1 per Nobody defeated**: KH1 has none, so Final gains nothing (asked).
 //! - Limit (its limits' finishers) and Master (Drive orbs) aren't on the testing branch.
+//! - Base Sora's side (the tester, after m15, answer 6: "(c)"): his growth level from each form's
+//!   level (`base_growth`) and the fmlv rows' abilities (`rewards_due` / `rewarded`), given in
+//!   KH1's own ability lists by `menu::Growth::update`.
 //! - The cap is 2 + the forms Sora owns (KH2), here Valor and Wisdom (the Drive list's, always
 //!   his) and Final once he has entered it (its record set).
 
@@ -103,6 +106,42 @@ pub fn growth(kind: Kind) -> u8 {
     table().map_or(1, |t| t.growth(kh2_form(kind), level).max(1))
 }
 
+/// Base Sora's own growth levels from the forms' levels (KH2's `0x1403E8380`: one under the
+/// form's growth level, `formlevel::sora_growth`), for `growth::Kh1Sora::form_growth`: Valor's
+/// High Jump, Wisdom's Quick Run, Final's Glide. All 0 without the table or the save.
+pub fn base_growth() -> crate::growth::FormGrowth {
+    let Some(t) = table() else { return Default::default() };
+    let g = |kind: Kind| formlevel::sora_growth(t, kh2_form(kind), unsafe { record(kind) }.level);
+    crate::growth::FormGrowth { high_jump: g(Kind::Valor), quick_run: g(Kind::Wisdom), glide: g(Kind::Final) }
+}
+
+/// The fmlv abilities the forms' levels have reached and Sora hasn't been given yet (KH2 gives
+/// each with its level, `0x1403C3F00`): (form, level, KH2's ability id), in order per form.
+pub fn rewards_due() -> Vec<(Kind, u8, u16)> {
+    let Some(t) = table() else { return Vec::new() };
+    let mut out = Vec::new();
+    for kind in [Kind::Valor, Kind::Wisdom, Kind::Final] {
+        let rec = unsafe { record(kind) };
+        out.extend(formlevel::rewards_due(t, kh2_form(kind), &rec).into_iter().map(|(l, id)| (kind, l, id)));
+    }
+    out
+}
+
+/// `kind`'s abilities up to `level` are given (or have no KH1 counterpart yet): the save's
+/// rewarded level.
+pub unsafe fn rewarded(kind: Kind, level: u8) {
+    let Some(s) = save() else { return };
+    let v = raw(s, kind);
+    if v == 0 {
+        return;
+    }
+    let mut rec = Record::unpack(v);
+    if level > rec.rewarded {
+        rec.rewarded = level.min(rec.level);
+        std::ptr::write_unaligned((s + FORM_LEVELS_OFF + slot(kind) * 2) as *mut u16, rec.pack());
+    }
+}
+
 /// The form is Sora's from now (its record set at Lv1 the first time he enters it: KH2's records
 /// start there; what counts toward the cap).
 pub unsafe fn entered(kind: Kind) {
@@ -130,7 +169,7 @@ unsafe fn add(kind: Kind, n: u32, why: &str) {
     }
     for u in &ups {
         let growth = u.form_growth.map(|g| format!(", {} {}", kind.growth(), growth_name(g))).unwrap_or_default();
-        log!(Forms, "{} LV{} ({why}, cap {cap}){growth}; KH2 would also give Sora {}{}", kind.name(), u.level, u.sora_growth.map(|g| format!("{} {} ", kind.growth(), growth_name(g))).unwrap_or_default(), if u.reward != 0 { format!("ability {}", u.reward) } else { "no ability".into() });
+        log!(Forms, "{} LV{} ({why}, cap {cap}){growth}; Sora's own: {}{} (given by KH1's menu, abilities = kh1)", kind.name(), u.level, u.sora_growth.map(|g| format!("{} {}, ", kind.growth(), growth_name(g))).unwrap_or_default(), if u.reward != 0 { format!("KH2 ability {}", u.reward) } else { "no ability".into() });
         super::menu::queue_prompt("Form Level Up", &format!("{} LV{}", kind.name(), u.level));
     }
     static LOGGED: AtomicUsize = AtomicUsize::new(0);

@@ -505,7 +505,7 @@ impl Growth {
         let abilities = std::slice::from_raw_parts((save + 0x44) as *const u8, 48).to_vec();
         let shared = std::slice::from_raw_parts((save + 0x599) as *const u8, 10).to_vec();
         let progress = std::slice::from_raw_parts((save + PROGRESS_OFF) as *const u8, 12).to_vec();
-        Some(Kh1Sora { level, abilities, shared, progress })
+        Some(Kh1Sora { level, abilities, shared, progress, form_growth: super::formexp::base_growth() })
     }
 
     /// Gives Sora `a`, with the debug menu's growth overrides on it (the quick-run-native thread,
@@ -721,7 +721,7 @@ impl Growth {
                         // The user: the game should say so.
                         // Its name only (the user: no description needed).
                         let shown = match ab.effect {
-                            growth::Effect::QuickRun => growth::quick_run_name(growth::quick_run_level(now.level)),
+                            growth::Effect::QuickRun => growth::quick_run_name(now.quick_run_now()),
                             growth::Effect::AerialDodge => growth::aerial_dodge_name(growth::aerial_dodge_level(now.level)),
                             _ => ab.name.to_string(),
                         };
@@ -729,6 +729,66 @@ impl Growth {
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
                         log!(Menus, "{why}, but Sora can't learn {}: his ability list is full (48, KH1's most)", ab.name);
+                    }
+                }
+                // KH2's form level-ups (the tester, after m15, answer 6 (c)): the shared growth a
+                // form's level gives that he doesn't have (KH1's High Jump for Valor, on, as KH1's
+                // shared abilities are given; `growth::Kh1Sora::form_grants`) ...
+                for (why, id, l) in now.form_grants() {
+                    if super::debugmenu::ability_forced(id) == Some(false) {
+                        continue;
+                    }
+                    if add(save + 0x599, 10, id) {
+                        let shown = if id == growth::kh1::HIGH_JUMP { growth::high_jump_name(l) } else { growth::glide_name(l) };
+                        log!(Menus, "{why}: Sora learns {shown} (KH2's form level-up)");
+                        self.prompts.push_back(("New Ability".to_string(), shown, String::new()));
+                    } else if !self.no_room.contains(&id) {
+                        self.no_room.push(id);
+                        log!(Menus, "{why}, but Sora can't learn {}: his shared abilities are full", growth::name(id));
+                    }
+                }
+                // ... and the fmlv rows' abilities (KH2's `0x1403C3F00`, `formexp::rewards_due`):
+                // KH1's own counterpart in his list, off until equipped, with its box. One without
+                // a counterpart yet is noted and passed (asked); a full list stops that form's
+                // until there's room.
+                let mut stopped: Vec<super::form::Kind> = Vec::new();
+                for (kind, level, kh2_id) in super::formexp::rewards_due() {
+                    if stopped.contains(&kind) {
+                        continue;
+                    }
+                    let what = growth::kh2_reward_name(kh2_id);
+                    let Some(id) = growth::kh1_reward(kh2_id) else {
+                        log!(Menus, "{} LV{level}: KH2 gives Sora {what} ({kh2_id}), which has no KH1 counterpart yet: not given", kind.name());
+                        super::formexp::rewarded(kind, level);
+                        continue;
+                    };
+                    let list = save + 0x44;
+                    let mut done = add(list, 48, id | 0x80);
+                    if !done {
+                        let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
+                        if let Some(i) = growth::make_room(&bytes) {
+                            let gone = bytes[i];
+                            let mut kept = bytes.clone();
+                            kept.remove(i);
+                            kept.push(0);
+                            for (k, b) in kept.iter().enumerate() {
+                                std::ptr::write((list + k) as *mut u8, *b);
+                            }
+                            done = add(list, 48, id | 0x80);
+                            log!(Menus, "Sora's list was full: {} (off) made room for {}", growth::name(gone), growth::name(id));
+                            remember(&format!("level {}: removed {} (id {}) for {} ({} LV{level})", now.level, growth::name(gone), gone & 0x7F, growth::name(id), kind.name()));
+                        }
+                    }
+                    if done {
+                        log!(Menus, "{} LV{level}: Sora learns {} (id {id}, KH2's {what}), off", kind.name(), growth::name(id));
+                        self.prompts.push_back(("New Ability".to_string(), growth::name(id), String::new()));
+                        super::formexp::rewarded(kind, level);
+                    } else {
+                        stopped.push(kind);
+                        if !self.no_room.contains(&id) {
+                            self.no_room.push(id);
+                            log!(Menus, "{} LV{level}: Sora can't learn {}: his ability list is full (48, KH1's most)", kind.name(), growth::name(id));
+                        }
                     }
                 }
             } else {
@@ -745,7 +805,7 @@ impl Growth {
         }
         // Quick Run's level: its menu name, and a box each time it grows (the user).
         if self.mode == Mode::Kh1 {
-            let l = if growth::has(&now.abilities, growth::QUICK_RUN_ID) { growth::quick_run_level(now.level).max(1) } else { 0 };
+            let l = if growth::has(&now.abilities, growth::QUICK_RUN_ID) { now.quick_run_now() } else { 0 };
             self.name(0, l);
             if self.qr_level != Some(l) {
                 if let Some(old) = self.qr_level {
@@ -768,7 +828,7 @@ impl Growth {
                 }
                 self.dr_level = Some(l);
             }
-            let l = if growth::has(&now.shared, growth::kh1::HIGH_JUMP) { growth::high_jump_level(now.level) } else { 0 };
+            let l = if growth::has(&now.shared, growth::kh1::HIGH_JUMP) { now.high_jump_now() } else { 0 };
             if self.hj_level != Some(l) {
                 if let Some(old) = self.hj_level {
                     if old > 0 && l > old {
@@ -780,7 +840,7 @@ impl Growth {
             }
             // KH2's own Glide (t323, Glide style KH2): its menu name and a box as it grows, MAX
             // at Chernabog. At KH1 KH1's Glide and Superglide are vanilla: no boxes of ours.
-            let l = if growth::has(&now.shared, growth::ours::GLIDE) { growth::kh2_glide_level(now.level, &now.progress) } else { 0 };
+            let l = if growth::has(&now.shared, growth::ours::GLIDE) { now.kh2_glide_now() } else { 0 };
             self.name(1, l);
             if self.gl_level != Some(l) {
                 if let Some(old) = self.gl_level {

@@ -1033,7 +1033,42 @@ The tester: "build form levels into KH1" (KH2 uses the form's own level for its 
   form_growth`): Valor High Jump, Wisdom Quick Run, Final Glide. This replaces the old rules
   (Valor and Final at MAX, Wisdom one above Sora's own). A level gained in the form takes effect at
   once (`form::abilities`).
-- **Not done (asked)**: Sora's own growth from form levels and the rows' abilities (Auto Valor,
-  Combo Plus, MP Rage, ...): KH1's menu gives Sora his growth (`growth.rs`), so giving it from
-  form levels too would change base Sora's own progression.
+- **The cap, re-checked (after m15, answer 5: "kh2's rule")**: `0x1403E8380` counts, for forms
+  1..5, the form's item id from `0x1405C5D08` (Checked (exe): 0x1A Valor, 0x1B Wisdom, 0x233 Limit,
+  0x1F Master, 0x1D Final; index 6 is Anti's 0x1E, not counted) owned through `0x1403C4720`, and
+  stops raising the level once it is at 2 + that count; the count is taken again at each step of the
+  loop. `formexp::cap` is the same rule: Valor and Wisdom are always in the Drive list here (owned
+  from the start), Final once entered (KH2 gives Final's item on its first change), Limit and
+  Master don't exist on the testing branch. Checked (decomp + exe). Not modelled (not part of the
+  cap): KH2 adds nothing while the area's flag 0x400 holds (`0x1403A3C40`).
+- **Base Sora's growth and the rows' abilities (after m15, answer 6: "(c)")**. KH2's level-up
+  (`0x1403E8380`, Checked (decomp)) swaps Sora's own entry of the growth table from the level two
+  under the form's new growth level to one under it (from an empty slot: a new LV1; nothing if he
+  doesn't have the lower one), and gives the row's ability with `0x1403C3F00`. With the user's
+  fmlv (Checked (files)) that is High Jump / Quick Run / Glide LV1, LV2, LV3 at Valor / Wisdom /
+  Final LV3, 5, 7 (never MAX: the table's MAX entry is only the form's), and the abilities at LV2,
+  4, 6: Valor Auto Valor 385, Combo Plus 162 twice; Wisdom Auto Wisdom 386, MP Rage 412, MP Haste
+  413; Final Auto Final 388, Form Boost 398 twice (Limit 568 / 405 / 407, Master 387 / 163 twice:
+  not on the testing branch).
+  - **Growth** (`formlevel::sora_growth`, `formexp::base_growth`, `growth::FormGrowth`): base
+    Sora's High Jump / Quick Run / Glide level is the higher of the mod's own rule (his level,
+    bosses) and the form's level less one. KH2's swap only raises an entry he has, so a form never
+    lowers it. Without the ability, KH2 puts LV1 in an empty slot: here KH1's High Jump goes into
+    the shared list (on, as KH1's shared abilities come), our Quick Run into Sora's list (off, 2 AP,
+    whose AP joins the bonus AP), KH1's Glide for Final (the Glide style swaps it). Assumption: KH2
+    gives the growth entry equipped or not as its slot was (bit 15 kept); here they follow the
+    mod's own gifts.
+  - **Abilities** (`formlevel::rewards_due`, `growth::kh1_reward`): KH1's own counterparts, off until
+    equipped, each with a "New Ability" box: Combo Plus 162 → KH1's Combo Plus (6), Air Combo Plus
+    163 → KH1's 7, MP Rage 412 → KH1's MP Rage (24: KH1's own effect, MP when hurt; Assumption that
+    it stands for KH2's). Not given yet (asked): Auto Valor / Wisdom / Final (KH2's low-HP Drive
+    reaction command, no system here), MP Haste (KH2's shortens MP Charge, which KH1 lacks; KH1's MP
+    Haste is +150% MP per hit), Form Boost (the form gauge; forms drain MP here).
+  - **The save**: the form's record keeps the last level whose ability was given (`Record::
+    rewarded`, bits 10..12 of the u16; EXP now in bits 0..9, under 1024: KH2's largest step is
+    672). A t700 save reads as nothing given, so the levels it already has give their abilities
+    once. A level's ability is marked given when it is in Sora's list (or has no counterpart); a
+    full list keeps it (and that form's later ones) until there's room.
+  - Only with `abilities = kh1`, in KH1's menu step (`menu::Growth::update`, once a second), as
+    the mod's other gifts; in `test` / `all` nothing is written and the rewards wait.
 - A level-up shows a "Form Level Up" box in KH1's prompt style (`menu::queue_prompt`) and logs.
