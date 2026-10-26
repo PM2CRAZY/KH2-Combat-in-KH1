@@ -472,8 +472,11 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             return Run::Nothing;
         }
         let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
+        // (KH1's picker made KH2's pick at this press, `kh1picker::at_kh2`: no second ask of KH2's
+        // walk here. Only where that picker isn't hooked (not the Steam build) is it asked here.)
         let chained = match &made {
             Some(p) => p.as_ref().filter(|p| p.chained).map(|p| (p.row.clone(), p.len, p.neg, p.launch)),
+            None if super::kh1picker::hooked(air) => None,
             None => takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()),
         };
         if let Some((next, _, _, launch)) = chained {
@@ -505,8 +508,13 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             Some(p) => (Some((p.row.clone(), p.len, p.neg)), p.launch),
             None => (None, None),
         }
+    } else if super::kh1picker::hooked(air) {
+        // (KH1's picker is hooked but made no pick for this row this frame: KH2's walk is not asked
+        // a second time beside it; KH1's own row, as an unasked press.)
+        (None, None)
     } else {
-        // KH2's combo at KH1's count (this press counted: `count` is this swing's).
+        // (Not the Steam build: KH1's picker isn't hooked.) KH2's combo at KH1's count (this press
+        // counted: `count` is this swing's).
         let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
         // (KH2's motion KH1 plays now for its swing: KH2's anti-repeat passes over it, as over its
         // own swing playing.)
@@ -522,6 +530,10 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // each press after Valor's air finisher hopped him higher (the tester: "attack doesn't
     // interrupt jumps momentum so you can fly high in the air while attacking"). Valor has no KH1
     // combo of its own (KH1's ability finishers held back, `kh1picker::at_kh2`).
+    // (KH1's picker itself now answers "no attack" when KH2's walk refuses the press
+    // (`refuse_in_picker`, base Sora at the KH2 setting too), and the row runner never gets here
+    // for it; this stays for a press KH2's walk couldn't be asked about in a Drive Form, which has
+    // no KH1 combo of its own to fall back on.)
     if super::form::native_now() && pick.is_none() {
         note(|| format!("KH1's {} combo in a Drive Form, swing {count} of {kh1_len}: KH2 takes nothing: no attack (KH1's row {row} not run)", if air { "aerial" } else { "ground" }));
         return Run::Nothing;
@@ -1049,24 +1061,77 @@ pub struct Press {
     pub chained: bool,
 }
 
+/// KH2's answer to an Attack press KH1's Attack step let through (`kh2_press`).
+pub enum Ask {
+    /// KH2 takes this row.
+    Took(Press),
+    /// KH2's walk takes no row here (Steam KH2's Attack start after `0x1403D6CA0`: the row walk
+    /// `0x140402D20` found none, Checked (decomp)): no attack, as in KH2.
+    Refused,
+    /// KH2's walk couldn't be asked (no KH2 data, or its tables busy this instant): KH1's own row,
+    /// as unmodded.
+    Unasked,
+}
+
 /// KH2's pick at this press at the combo style KH2, made once, in KH1's picker (`kh1picker`), at
 /// KH1's count (this press counted); Finishing Plus's next finisher when KH1's last row was a
-/// finisher still playing. `None` without KH2's data or a pick.
-pub unsafe fn kh2_press(actor: usize, air: bool) -> Option<Press> {
-    let (count, _, _) = kh1_combo(actor, air)?;
+/// finisher still playing.
+pub unsafe fn kh2_press(actor: usize, air: bool) -> Ask {
+    let Some((count, _, _)) = kh1_combo(actor, air) else { return Ask::Unasked };
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     let kh2_playing = super::kh2slots::playing_motion(actor);
     if let Some((n, _, true, _)) = LAST.try_lock().ok().and_then(|l| *l).filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
         let from = ComboState { count: n, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit: true, finisher_next: true };
         if let Some((row, len, neg, launch)) = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false).filter(|(r, ..)| r.is_finisher()) {
-            return Some(Press { row, len, neg, launch, chained: true });
+            return Ask::Took(Press { row, len, neg, launch, chained: true });
         }
     }
     takeover::test_drop_ahead(!air && rd::<i32>(actor + 0x70) == 0);
     let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
-    let taken = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false);
+    let taken = takeover::kh2_walk(actor, Some(from), kh2_playing, air, false);
     takeover::test_drop_ahead(false);
-    taken.map(|(row, len, neg, launch)| Press { row, len, neg, launch, chained: false })
+    match taken {
+        None => Ask::Unasked,
+        Some(None) => Ask::Refused,
+        Some(Some((row, len, neg, launch))) => Ask::Took(Press { row, len, neg, launch, chained: false }),
+    }
+}
+
+/// The row KH1's picker returns for "no attack" (`kh1picker::at_kh2`, KH2's walk refused the
+/// press): KH1's Attack step (Steam `0x1402A7510`) hands states 0 and 2's picker result straight
+/// to its row runner `0x1402A68F0` (Checked (decomp)), which our wrapper (`combat::exec`) ends
+/// there with no row. Never returned in flight (state 8: the step runs the picker's row + 3).
+pub const NO_ROW: i32 = -1;
+
+/// KH2's walk refused this Attack press in KH1's picker (`kh1picker::at_kh2`): whether KH1's
+/// picker answers "no attack" (`NO_ROW`). Not when the row runner has a move of its own to run on
+/// this press (a Square move given to KH1's Attack step, `take_ours`; Counterguard in KH2's guard
+/// repel, `counterguard`) nor when its wrapper isn't in (`combat::exec_hooked`). As KH2's
+/// `0x1403D6CA0` clears the "connected" bit when it takes a press (Checked (decomp)), KH1's
+/// "connected" word (the combat info's `+0x50`, which only a row's attack object would have
+/// cleared) is cleared too, so the next press in the window is refused as KH2 refuses it.
+pub unsafe fn refuse_in_picker(actor: usize, air: bool) -> bool {
+    if !super::combat::exec_hooked() || !matches!(rd::<i32>(actor + 0x70), 0 | 2) {
+        return false;
+    }
+    let ours_pending = OURS.try_lock().ok().and_then(|g| g.as_ref().map(|o| o.2)).is_some_and(|at| frame().saturating_sub(at) <= 1);
+    if ours_pending || (!air && super::kh2slots::playing_motion(actor) == Some(character_core::motion::GUARD)) {
+        return false;
+    }
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    if info >= 0x10000 {
+        wr(info + 0x50, 0u32);
+    }
+    if let Ok(mut g) = KH2_PICK.lock() {
+        *g = None;
+    }
+    let (count, len, _) = kh1_combo(actor, air).unwrap_or((0, 0, false));
+    note(|| format!(
+        "KH1's {} picker{}, swing {count} of {len}: KH2's walk takes no row: no attack (KH1's picker answers none, its Attack step runs nothing)",
+        if air { "aerial" } else { "ground" },
+        if super::form::native_now() { " in a Drive Form" } else { "" }
+    ));
+    true
 }
 
 /// KH2's pick KH1's picker made at this press (`kh2_pick_in_picker`), for the row runner's

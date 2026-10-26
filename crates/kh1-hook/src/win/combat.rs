@@ -96,7 +96,20 @@ fn note(s: impl FnOnce() -> String) {
 
 type ExecFn = unsafe extern "system" fn(usize, i32, usize);
 
+/// Our wrapper on KH1's row runner is in (`exec`): only then may KH1's picker answer "no attack"
+/// (`combomods::NO_ROW`), which KH1's own runner would take as a row index.
+pub fn exec_hooked() -> bool {
+    EXEC_IN.load(Ordering::Acquire)
+}
+
+static EXEC_IN: AtomicBool = AtomicBool::new(false);
+
 unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
+    // KH1's picker answered "no attack" (KH2's walk refused the press, `kh1picker::at_kh2`): its
+    // Attack step runs no row.
+    if row == super::combomods::NO_ROW {
+        return;
+    }
     let base = BASE.load(Ordering::Relaxed);
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
     let command = rd::<u8>(base + COMMAND_RVA);
@@ -3095,7 +3108,9 @@ pub unsafe fn install() {
     if super::addr::Build::current() == super::addr::Build::Steam {
         hook::install(base + SCRIPT_LAUNCH_STEAM, &SCRIPT_LAUNCH_PROLOGUE, script_launched as *const () as usize, &ORIG_SCRIPT_LAUNCH, "enemy scripted launch (KH2's blows)");
     }
-    hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row");
+    if hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row").is_some() {
+        EXEC_IN.store(true, Ordering::Release);
+    }
     hook::install(base + COMMAND_STEP_RVA, &COMMAND_STEP_PROLOGUE, command as *const () as usize, &ORIG_COMMAND, "command step");
     hook::install(base + RUN_ENTRY_RVA, &RUN_ENTRY_PROLOGUE, run_entry as *const () as usize, &ORIG_RUN_ENTRY, "menu entry run (spells only in KH2's windows)");
 }

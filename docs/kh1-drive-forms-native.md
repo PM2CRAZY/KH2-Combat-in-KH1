@@ -681,6 +681,41 @@ ability finishers are held back), so now KH2 taking nothing is no attack there
 (`combomods::attack_row`, logged "KH2 takes nothing: no attack"). **Open (base Sora):** at the
 combo style KH2 base Sora has the same fallback onto KH1's row; not changed (asked).
 
+**KH1's picker refuses itself (the tester, what-is-still-missing m14 answer 8).** The tester:
+"patch the features kh1's combo row and other related logic are missing ... so that valor and
+wisdom can behave correctly without overwriting kh1's vanilla logic". Step 1:
+- **Checked (decomp)**, Steam KH1's Attack step `0x1402A7510`: in states 0 and 2 the picker's
+  return (`0x1402A6EE0` ground, `0x1402A6C70` air) goes straight to the row runner `0x1402A68F0`;
+  in flight (state 8) the step runs the air picker's return + 3. Each picker has that one caller.
+- KH1's picker now answers "no attack" itself when KH2's walk takes no row (`kh1picker::at_kh2`,
+  `combomods::Ask::Refused`, `refuse_in_picker`): it returns `NO_ROW` (-1) without running KH1's
+  own picker, and our wrapper on the row runner (`combat::exec`, installed on every build) ends
+  there before anything else. One rule for base Sora at the Base / Aerial Base Combo KH2 setting
+  and the Drive Forms on KH1's states (the t685 check at the row runner only remains for a press
+  KH2's walk couldn't be asked about in a form). Not in flight (the step adds 3), not when the row
+  runner has a move of its own for this press (a Square move given to KH1's Attack step,
+  Counterguard in the guard repel), not when the row runner's wrapper isn't in.
+- As KH2's `0x1403D6CA0` clears the "connected" bit on the press it takes (Checked (decomp)),
+  a refused press clears KH1's "connected" word (combat info `+0x50`; KH1 itself only clears it
+  when a row's attack object is made, `0x1402B3150` / `0x1402B3270`), so the next press in the
+  window is refused as KH2 refuses it (without Combo Master).
+- A press KH2's walk couldn't be asked about (no KH2 data, its tables busy that instant:
+  `takeover::kh2_walk` gives `None`) keeps KH1's own row for base Sora, as unmodded.
+- No second ask of KH2's walk at the row runner: `attack_row` asked it again (the plain pick and
+  Finishing Plus's next finisher) when the picker's pick for that row wasn't found; with the
+  picker hooked (`kh1picker::hooked`) it no longer does (KH1's own row, as unasked).
+- Combo style KH1, vanilla KH1 and flight: unchanged.
+- **Still running along (what's left, one working step each):**
+  1. KH2's walk still runs on our KH2 controller object (`takeover::DRIVER`'s `Character`): its
+     row table and numbers, with KH1's count, facing, lock and targets set on it each press, and
+     its own last speed for the hop of a row that keeps his speed (Wisdom's moving air shots).
+     Next: the walk as a function of KH1's state alone (no controller object), its targets from
+     KH1's actor list.
+  2. Finishing Plus's finisher count (`combomods::FINISHERS`, `LAST`) is ours: KH1 has no
+     finisher counter. Next: a field of KH1's combat info its Attack step reads.
+  3. The Square moves, Counterguard and the KH1-style ability rows ask the same controller
+     object (`kh2_would_take_square`, `kh2_would_take_row`, `kh2_ability_row`): moved with 1.
+
 #### 7.4.3 The Drive and the arrival in the air
 
 **KH2 (Steam KH2 decomp, Checked (decomp)):**

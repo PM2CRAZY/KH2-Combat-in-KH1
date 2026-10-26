@@ -1737,6 +1737,14 @@ pub unsafe fn kh2_rows<R>(actor: usize, air: bool, f: impl FnOnce(&mut Character
 /// `kh2_would_take`, with the hop KH2's row starts there (`Character::would_take_launch`: a row
 /// with `jump`, its height and sideways velocity for that target).
 pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::ComboState>, playing: Option<u16>, air: bool, square: bool) -> Option<(character_core::ComboRow, u8, u8, Option<character_core::Launch>)> {
+    kh2_walk(actor, from, playing, air, square).flatten()
+}
+
+/// `kh2_would_take_launch`, telling "KH2's walk takes nothing" (`Some(None)`) from "KH2's walk
+/// couldn't be asked" (`None`: no KH2 data loaded, or its tables busy this instant), which KH1's
+/// picker treats apart (`kh1picker::at_kh2`: a refusal is no attack, as KH2's; an unasked press
+/// keeps KH1's own row).
+pub unsafe fn kh2_walk(actor: usize, from: Option<character_core::ComboState>, playing: Option<u16>, air: bool, square: bool) -> Option<Option<(character_core::ComboRow, u8, u8, Option<character_core::Launch>)>> {
     let base = BASE.load(Ordering::Relaxed);
     let kh2 = pose::kh2()?;
     let mut g = DRIVER.try_lock().ok()?;
@@ -1762,8 +1770,8 @@ pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::C
     // (KH2's selector's direction, to the primary target or along his facing, `0x1404028D0`.)
     let drop = DROP_TEST.swap(false, Ordering::Relaxed) && !air && super::combomods::drop_ahead(actor, d.character.selector_aim(&env));
     d.character.set_drop_ahead(drop);
-    let (row, launch) = d.character.would_take_launch(from, playing, air, square, stick, &env)?;
-    Some((row, d.character.combo_length(air), d.character.abilities.negative_combo, launch))
+    let Some((row, launch)) = d.character.would_take_launch(from, playing, air, square, stick, &env) else { return Some(None) };
+    Some(Some((row, d.character.combo_length(air), d.character.abilities.negative_combo, launch)))
 }
 
 /// KH2's forced row `id` for base Sora now, KH1's own states having him (`Character::

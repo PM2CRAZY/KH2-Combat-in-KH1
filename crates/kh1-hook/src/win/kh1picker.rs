@@ -33,7 +33,7 @@
 
 use super::addr::Build;
 use super::sys::GetModuleHandleA;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 const GROUND_STEAM: usize = 0x2A6EE0;
 /// `mov r11, rsp; push rbp; push rsi; push rdi; lea rbp, [r11 - 0xB8]` (Checked (exe)).
@@ -113,6 +113,15 @@ unsafe fn holding<R>(held: u32, f: impl FnOnce() -> R) -> (R, u32) {
 /// KH1's air picker's plain swing (flight row 21 once the Attack step adds 3).
 const FLIGHT_SWING: i32 = 18;
 
+/// Whether our wrapper on KH1's ground / air picker is in (`at_kh2` makes KH2's pick there, so the
+/// row runner doesn't ask KH2's walk again, `combomods::attack`).
+pub fn hooked(air: bool) -> bool {
+    if air { AIR_IN.load(Ordering::Relaxed) } else { GROUND_IN.load(Ordering::Relaxed) }
+}
+
+static GROUND_IN: AtomicBool = AtomicBool::new(false);
+static AIR_IN: AtomicBool = AtomicBool::new(false);
+
 static ORIG_GROUND: AtomicUsize = AtomicUsize::new(0);
 static ORIG_AIR: AtomicUsize = AtomicUsize::new(0);
 
@@ -179,10 +188,21 @@ unsafe fn ours_kh2(actor: usize, air: bool) -> bool {
 /// picker with KH2's combo length on the length it reads (`kh2_length_for_picker`) and its
 /// ability finisher bits held back (`held`), then the walk (`combomods::kh2_finisher_walk`), and,
 /// where KH2's pick stands, the KH1 row that plays it (`combomods::kh2_pick_in_picker`).
-unsafe fn at_kh2(actor: usize, air: bool, held: u32, dir: usize, f: impl FnOnce() -> i32) -> i32 {
-    let press = super::combomods::kh2_press(actor, air);
+unsafe fn at_kh2(actor: usize, air: bool, held: u32, dir: usize, flight: bool, f: impl FnOnce() -> i32) -> i32 {
+    use super::combomods::Ask;
+    let press = match super::combomods::kh2_press(actor, air) {
+        Ask::Took(p) => Some(p),
+        // KH2's walk takes no row (the tester, what-is-still-missing m14 answer 8: KH1's own combo
+        // logic refusing as KH2's does, for base Sora at the KH2 setting and the Drive Forms
+        // alike): KH1's picker itself answers "no attack" (`combomods::NO_ROW`), so its Attack
+        // step runs no row, instead of KH1's own row playing under KH2's setting (base Sora) or a
+        // second check at the row runner (t685, the Drive Forms). Not in flight (its step adds 3).
+        Ask::Refused if !flight && super::combomods::refuse_in_picker(actor, air) => return super::combomods::NO_ROW,
+        Ask::Refused | Ask::Unasked => None,
+    };
     if press.is_none() {
-        // (No KH2 pick: KH1's picker as it is; the row runner is told KH2 takes nothing.)
+        // (Not asked, or a refusal the row runner overrides: KH1's picker as it is; the row runner
+        // is told KH2 takes nothing.)
         let row = f();
         return super::combomods::kh2_pick_in_picker(actor, row, dir, air, None);
     }
@@ -203,7 +223,7 @@ unsafe fn at_kh2(actor: usize, air: bool, held: u32, dir: usize, f: impl FnOnce(
 unsafe extern "system" fn ground(actor: usize, target: usize, dir: usize) -> u64 {
     let f: GroundFn = std::mem::transmute(ORIG_GROUND.load(Ordering::Acquire));
     if rd::<i32>(actor + 0x70) == 0 && ours_kh2(actor, false) {
-        return at_kh2(actor, false, HELD_GROUND, dir, || f(actor, target, dir) as i32) as u32 as u64;
+        return at_kh2(actor, false, HELD_GROUND, dir, false, || f(actor, target, dir) as i32) as u32 as u64;
     }
     if rd::<i32>(actor + 0x70) != 0 || !ours(actor, false) {
         return f(actor, target, dir);
@@ -221,14 +241,14 @@ unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
     // (`combomods::flight_pick`; the tester, what-is-still-missing m6 answer 2 (a)).
     if rd::<i32>(actor + 0x70) == 8 && ours_kh2(actor, true) {
         let mut own = FLIGHT_SWING;
-        let run = at_kh2(actor, true, HELD_AIR, dir, || {
+        let run = at_kh2(actor, true, HELD_AIR, dir, true, || {
             own = f(actor, target, dir);
             own
         });
         return super::combomods::flight_pick(own, run);
     }
     if rd::<i32>(actor + 0x70) == 2 && ours_kh2(actor, true) {
-        return at_kh2(actor, true, HELD_AIR, dir, || f(actor, target, dir));
+        return at_kh2(actor, true, HELD_AIR, dir, false, || f(actor, target, dir));
     }
     if rd::<i32>(actor + 0x70) != 2 || !ours(actor, true) {
         return f(actor, target, dir);
@@ -249,6 +269,8 @@ pub unsafe fn install() {
     } else {
         super::log!(Combat, "KH1's random number (0x14031BA30) isn't the expected code here: KH1 Ability Chance rolls never pass");
     }
-    super::hook::install(base + GROUND_STEAM, &GROUND_PROLOGUE, ground as *const () as usize, &ORIG_GROUND, "KH1's ground combo row picker (KH2's ability rows)");
-    super::hook::install(base + AIR_STEAM, &AIR_PROLOGUE, air as *const () as usize, &ORIG_AIR, "KH1's air combo row picker (KH2's ability rows)");
+    let g = super::hook::install(base + GROUND_STEAM, &GROUND_PROLOGUE, ground as *const () as usize, &ORIG_GROUND, "KH1's ground combo row picker (KH2's ability rows)");
+    GROUND_IN.store(g.is_some(), Ordering::Relaxed);
+    let a = super::hook::install(base + AIR_STEAM, &AIR_PROLOGUE, air as *const () as usize, &ORIG_AIR, "KH1's air combo row picker (KH2's ability rows)");
+    AIR_IN.store(a.is_some(), Ordering::Relaxed);
 }
