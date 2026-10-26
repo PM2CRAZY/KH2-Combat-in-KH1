@@ -1232,6 +1232,76 @@ pub mod physics {
                 super::super::log!(Takeover, "shared states: KH1's state step at {slot:#x} wrapped ({now:#x})");
             }
         }
+        // State 0's transition (`+0x28`), Steam only, checked against KH1's own function and its
+        // first bytes (`ground_next`).
+        if super::super::addr::Build::current() == super::super::addr::Build::Steam {
+            let slot = table + NEXT;
+            let now: usize = rd(slot);
+            let ours = ground_next as *const () as usize;
+            if now != ours && now == base + GROUND_NEXT_STEAM && super::super::crash::readable(now + GROUND_NEXT_PROLOGUE.len() - 1) && std::slice::from_raw_parts(now as *const u8, GROUND_NEXT_PROLOGUE.len()) == GROUND_NEXT_PROLOGUE {
+                ORIG_GROUND_NEXT.store(now, Ordering::Release);
+                wr(slot, ours);
+                super::super::log!(Takeover, "shared states: KH1's ground state's transition at {slot:#x} wrapped ({now:#x})");
+            }
+        }
+    }
+
+    /// A state's transition in KH1's state table (`0x1402B1B80`'s seventh argument, Steam
+    /// `0x142DB3868 + state * 0x40`): `(actor, in the air) -> the state`, called by the physics
+    /// step `0x14029A3C0` after the move (in the air: collision flags `+0x2D0` bit 0 and no
+    /// object under him `+0x398`). Checked (decomp).
+    const NEXT: usize = 0x28;
+    /// State 0's (Steam `0x1402CC470`, registered by `0x1402CC410` through `0x1402B1B80(0, 0xFC, ...)`):
+    /// in the air (or with flag `0x1000`) and without flag `0x100` it returns 2; else his state.
+    /// Its first instructions `push rbx; sub rsp, 0x20; mov rbx, rcx` (Checked (exe)).
+    const GROUND_NEXT_STEAM: usize = 0x2CC470;
+    const GROUND_NEXT_PROLOGUE: [u8; 9] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9];
+    static ORIG_GROUND_NEXT: AtomicUsize = AtomicUsize::new(0);
+    /// KH1's dodge roll's request (`+0x164`): state 0's transition ends it on the way to state 2.
+    const KH1_ROLL: u32 = 0xDC;
+
+    type NextFn = unsafe extern "system" fn(usize, i32) -> u32;
+
+    /// State 0's transition: KH2's ground action carried off a ledge (the tester, what-is-still-
+    /// missing after m14, answer 4: "(a) and can you make it in the debug"). KH1's physics step
+    /// (Steam `0x14029A3C0`, Checked (decomp)) takes Sora to state 2 the frame his ground step
+    /// leaves the floor (this function returning 2), then clears the action flag 4 (the swing
+    /// ends), starts a fall from rest (`0x1402AF8F0 (actor, 0)`) and sets `+0x3C0` to the frame's
+    /// step per 60 Hz frame capped at 8; the player step asks for the fall (request 6). KH2 does the
+    /// same (`0x1403B9090`: velocity the step over the frame capped at 8, fall motion 4) except while
+    /// the motion holds him on the ground (`kh2slots::ground_hold`: no gravity or the edge stop):
+    /// then the move goes on where he is. So here, for Sora in his ground action (flag 4) on one of
+    /// our slots with such a range open, the state stays 0: KH1's ground step and its root travel
+    /// (`+0x200`) go on moving him, KH1's ground mover keeps his height where there is no floor (as
+    /// on KH1's own walk-off frame) and steps him down onto one it finds, and KH1's own fall comes
+    /// the first frame the range is shut (or the move ended), by KH1's own code above, KH2's rule.
+    /// KH1's own moves (none of our slots) and flags `0x1000` / `0x100` are KH1's as before; the
+    /// debug menu's Ledge Carry row (`debugmenu::ledge_carry`) turns it off.
+    /// **Assumption**: KH1's ground pre-step (`0x1402CC500`: its pushes, grabs and climbs) does
+    /// nothing odd with no floor under him for those frames.
+    unsafe extern "system" fn ground_next(actor: usize, in_air: i32) -> u32 {
+        let f: NextFn = std::mem::transmute(ORIG_GROUND_NEXT.load(Ordering::Acquire));
+        let state = rd::<u32>(actor + 0x70);
+        let carry = in_air != 0
+            && state == 0
+            && is_sora(actor)
+            && super::active()
+            && rd::<u32>(actor) & (4 | 0x1000 | 0x100) == 4
+            && rd::<u32>(actor + 0x164) != KH1_ROLL
+            && super::super::debugmenu::ledge_carry();
+        let held = if carry { super::super::kh2slots::ground_hold(actor) } else { None };
+        if let Some(motion) = held {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+                super::super::log!(Takeover,
+                    "KH2's ledge carry (KH2 motion {motion}, KH1 time {:.1}): no floor under him, his ground move goes on at {:.0} (KH2's 0x1403B9090)",
+                    rd::<f32>(actor + 0x16C),
+                    rd::<f32>(actor + 0x14)
+                );
+            }
+            return state;
+        }
+        f(actor, in_air)
     }
 
     type StepFn = unsafe extern "system" fn(usize, *mut [f32; 4]) -> usize;

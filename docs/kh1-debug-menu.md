@@ -125,3 +125,15 @@ The tester: "can you make it a setting in the debug where I can adjust the growt
 - Drive Forms (left as they are, the tester): a form gives its own growth ability and none of the
   others (`form::form_abilities`), so an override doesn't show in a form; Sora's own (with the
   overrides) come back on revert. A change made during a form is kept for after it.
+
+## Ledge Carry row (the what-is-still-missing thread, m14 answer 4)
+
+The tester: "(a) and can you make it in the debug" (KH2's ledge rule for its ground moves, in the
+debug menu).
+
+- Main page > **Ledge Carry** `< On / Off >`. On (the default): a KH2 ground move whose motion
+  holds Sora on the ground (no gravity or the edge stop open: Valor's 154, base Sora's 154 / 155 /
+  161 / 165 / 169) goes on off a ledge as KH2's does; Off: KH1 cuts it into its fall, as before
+  (`shared::physics::ground_next`, `docs/kh1-drive-forms-native.md` §7.4.5).
+- Kept in the ini as `debug_ledge_carry = on | off`, read at start and written at every change.
+  Only read with the debug tools (`debug_menu = on` at start); without them it is on.

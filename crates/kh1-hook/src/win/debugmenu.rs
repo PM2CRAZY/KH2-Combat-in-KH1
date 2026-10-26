@@ -41,6 +41,10 @@
 //!   Roll, Aerial Dodge and Glide each Normal (what his level and story give), Off, or LV1..MAX,
 //!   given whether or not he learned or equipped it; kept in the ini (`debug_high_jump` ..); see
 //!   `docs/kh1-debug-menu.md`.
+//! - **Ledge Carry** (main page; the what-is-still-missing thread, m14 answer 4): KH2's ground moves
+//!   whose motion holds him on the ground (no gravity or the edge stop) go on off a ledge, as KH2's
+//!   (`shared::physics::ground_next`), or are cut into KH1's fall, as KH1's. On by default; kept in
+//!   the ini (`debug_ledge_carry`).
 //! - **Pages**: Trace Recorder (the trace's mode, seconds (shown as frames, 60 a second, with Game Frames on), its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
@@ -291,6 +295,34 @@ pub fn growth_override(i: usize) -> Option<u8> {
     crate::growth::growth_setting_level(growth_setting(i))
 }
 
+// ---- Ledge Carry (the what-is-still-missing thread, m14 answer 4) ----
+
+/// The Ledge Carry row: 1 on, 0 off, `UNREAD` until the ini's is read.
+static LEDGE_CARRY: AtomicU8 = AtomicU8::new(UNREAD);
+
+/// KH2's ground moves carried off a ledge on KH1's ground state (`shared::physics::ground_next`):
+/// the main page's Ledge Carry row, kept in the ini (`debug_ledge_carry`), on by default; always on
+/// without the debug tools (`debug_menu = off` at start).
+pub fn ledge_carry() -> bool {
+    if !super::debug_on() {
+        return true;
+    }
+    match LEDGE_CARRY.load(Ordering::Relaxed) {
+        UNREAD => {
+            let v = super::settings::get().debug_ledge_carry;
+            LEDGE_CARRY.store(v as u8, Ordering::Relaxed);
+            v
+        }
+        v => v != 0,
+    }
+}
+
+fn set_ledge_carry(on: bool) {
+    LEDGE_CARRY.store(on as u8, Ordering::Relaxed);
+    super::settings::save("debug_ledge_carry", if on { "on" } else { "off" });
+    log!(Debug, "debug menu: Ledge Carry {}", if on { "on" } else { "off" });
+}
+
 /// The rows' places (`growth::GROWTH_ROWS`).
 pub const GROWTH_QUICK_RUN: usize = 1;
 pub const GROWTH_AERIAL_DODGE: usize = 3;
@@ -316,6 +348,8 @@ enum Action {
     HeldTask(usize),
     /// Gravity 4, Stop 5, Aero 6.
     Kh1Cast(u8),
+    /// KH2's ground moves carried off a ledge (`ledge_carry`).
+    LedgeCarry,
     GroupRow(usize),
     Item(usize),
     Stat(usize),
@@ -543,6 +577,7 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Frame Advance  >".into(), Action::Enter(Page::FrameAdvance)),
             ("KH1 Spells  >".into(), Action::Enter(Page::Spells)),
             ("Growth Abilities  >".into(), Action::Enter(Page::Growth)),
+            (format!("{:<16}< {} >", "Ledge Carry", on_off(ledge_carry())), Action::LedgeCarry),
             ("Exit".into(), Action::Exit),
         ],
         // (After t463) Frame Advance's own rows.
@@ -811,6 +846,10 @@ unsafe fn step(base: usize) {
         }
         Action::Kh1Cast(sp) => {
             super::formmagic::set_kh1_cast(sp, !super::formmagic::kh1_cast(sp));
+            sound(1);
+        }
+        Action::LedgeCarry => {
+            set_ledge_carry(!ledge_carry());
             sound(1);
         }
         Action::GroupRow(i) if cross => {

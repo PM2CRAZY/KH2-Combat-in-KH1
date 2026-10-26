@@ -279,7 +279,11 @@ debug_high_jump = normal\r\n\
 debug_quick_run = normal\r\n\
 debug_dodge_roll = normal\r\n\
 debug_aerial_dodge = normal\r\n\
-debug_glide = normal\r\n";
+debug_glide = normal\r\n\
+; debug_ledge_carry: the debug menu's Ledge Carry row (only with debug_menu = on): on, KH2's\r\n\
+; ground moves that hold Sora on the ground (Valor's 154) go on off a ledge as in KH2; off, KH1\r\n\
+; cuts them into its fall\r\n\
+debug_ledge_carry = on\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -408,6 +412,8 @@ pub struct Settings {
     /// The debug menu's Growth Abilities rows (`growth::GROWTH_ROWS`' order; 0 Normal, 1 Off, 2..5
     /// LV1..MAX, `growth::GROWTH_SETTINGS`): used only with the debug tools loaded.
     pub debug_growth: [u8; 5],
+    /// The debug menu's Ledge Carry row (`debugmenu::ledge_carry`): used only with the debug tools.
+    pub debug_ledge_carry: bool,
 }
 
 /// The ini keys of the debug menu's Growth Abilities rows (`growth::GROWTH_ROWS`' order).
@@ -629,6 +635,7 @@ fn load(first: bool) -> Option<Settings> {
         debug_menu: on(&text, "debug_menu", "on", false),
         log_cats: super::LogCat::ALL.iter().filter(|c| on(&text, c.key(), "on", false)).fold(0, |m, c| m | c.bit()),
         debug_growth: DEBUG_GROWTH_KEYS.map(|k| setting(&text, k).map_or(0, |v| crate::growth::growth_setting_parse(&v))),
+        debug_ledge_carry: on(&text, "debug_ledge_carry", "on", true),
     };
     log!(General, "settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" });
     Some(s)

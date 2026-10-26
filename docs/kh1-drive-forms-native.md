@@ -782,9 +782,49 @@ ground, KH2 plays Valor's short stance motion (6) after the arrival, before the 
   time on KH2's constant gravity. **Checked (decomp)**. One difference found, not Valor's: a row whose
   clip has an allow-movement range keeps his speed instead of the row's (stage 192, the user, for
   Wisdom); KH2's `0x1403CBB00` always sets it. Valor's clips have no such range (Checked (files)).
-- **Open (ledges):** in KH2 Valor's 154 past its edge stop (frames 63..120, no gravity, 76 of root
-  travel left) can carry him off a ledge held in the air; KH1's physics step ends a swing that
-  leaves the floor (`0x14029A3C0`: action flag off, a fall). Not changed.
+- **Ledges:** see §7.4.5 (changed after m14).
+
+#### 7.4.5 Ground moves carried off a ledge (m14 answer 4)
+
+The tester: "(a) and can you make it in the debug".
+
+**KH2 (Steam KH2 decomp, Checked (decomp)):** the mover `0x1403B9090` cuts a ground move into the
+fall (velocity the frame's step over the frame delta capped at 8, the player's "left the ground"
+method, vtable `+0x50`: the fall motion 4, 16-frame blend, the fall action) only with no floor
+under him and none of: `0x1403BA9A0` (object entry `+0xC` bit 0, motion state word `+0x18C` bits 5 /
+24, `+0x120` bit 23), the entry's bit 1, `+0x18C` bit 6, `+0x18C` bit 23. The motion's bits are its
+ranges: no gravity (ids 3 / 24, and 30) and the edge stop (29). While one is open he goes on with
+the move where he is (no vertical step: no gravity on the ground action), the root carrying him;
+the first frame none is open, the cut.
+
+**Which moves (Checked (files), `P_EX100*.mset.txt`, `W_EX010*.mset.txt`):** base Sora 154 (edge
+stop 0..38), 155 (0..39), 161 (0..28), Guard Break 165 (0..40), Flash Step 169 (0..17), the Drive
+52 (no gravity all through); Valor 154 (edge stop 0..63, no gravity 63 to its end: the whole move)
+and 155 (edge stop 0..64). Final's and Master's no-gravity motions (casts, air rows) follow the same
+rule once they run on KH1's states. Range 30 is in none of them. Wisdom has none.
+
+**KH1 (Steam KH1 decomp, Checked (decomp)):** the physics step `0x14029A3C0`, after the move, calls
+the state's transition from KH1's state table (`0x142DB3840 + state * 0x40`, `+0x28`, set by
+`0x1402B1B80`'s seventh argument) with "in the air" (collision `+0x2D0` bit 0, no object under him
+`+0x398`); state 0's is `0x1402CC470` (registered by `0x1402CC410`): in the air (or flag `0x1000`)
+without flag `0x100` it returns 2. On a change to 2 the step clears the action flag 4, starts a fall
+from rest (`0x1402AF8F0 (actor, 0)`) and puts the frame's step per 60 Hz frame, capped at 8, in
+`+0x3C0`: KH2's cut, number for number.
+
+**Now:** state 0's transition is wrapped in the table (`shared::physics::ground_next`, Steam only,
+the slot checked to hold `0x1402CC470` and its first bytes `40 53 48 83 EC 20 48 8B D9`, Checked
+(exe)). For Sora in his ground action (flag 4, not `0x1000` / `0x100`, not KH1's roll request 0xDC)
+on one of our slots whose KH2 clip has no gravity or the edge stop open at KH1's time
+(`kh2slots::ground_hold`), it returns 0: the ground step and the motion's root travel (`+0x200`)
+go on moving him, and KH1's ground mover keeps his height with no floor (as on its own walk-off
+frame) or steps him down onto one. The first frame the ranges are shut (or the move has ended),
+KH1's own transition and cut run: the fall from rest and the speed capped at 8. KH1's own moves
+are unchanged (none of our slots). No new per-frame hook: one table slot, KH1's step calls it.
+The debug menu's Ledge Carry row turns it off (`docs/kh1-debug-menu.md`).
+
+**Assumptions:** the entry / `+0x120` bits are clear for Sora; KH1's ground pre-step (`0x1402CC500`:
+pushes, grabs, climbs) does nothing odd with no floor under him for those frames; KH1's ground
+mover's step-down onto a near floor stands for KH2's. **Not checked:** in game.
 ### 7.5 One path for every form on KH1's states
 
 The tester (what-is-still-missing, after m13): "if something we've implemented is the same way for

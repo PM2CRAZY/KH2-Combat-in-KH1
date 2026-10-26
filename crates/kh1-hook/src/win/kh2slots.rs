@@ -1146,6 +1146,29 @@ pub unsafe fn edge_stop(actor: usize) -> bool {
     t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::EdgeStop))
 }
 
+/// KH2's ground action keeps going off a ledge now (the tester, what-is-still-missing after m14,
+/// answer 4 "(a)"): KH2's clip of our slot playing on `actor` has, at KH1's time in the slot (the
+/// clip's 60 Hz frame), a range KH2's mover reads as "don't leave the ground": no gravity (range
+/// id 3 / 24, `WindowKind::NoGravity`) or the edge stop (id 29, `WindowKind::EdgeStop`). KH2's
+/// mover (Steam KH2 `0x1403B9090`, Checked (decomp)) calls the player's "left the ground" method
+/// (vtable `+0x50`: the fall motion 4 and the fall action) only with no floor under him and none
+/// of them: not `0x1403BA9A0` (the object entry's `+0xC` bit 0, the motion state word `+0x18C`
+/// bits 5 / 24 (range ids 3 / 30), `+0x120` bit 23), not the entry's bit 1, not `+0x18C` bit 6
+/// (range 24) nor bit 23 (range 29). So he goes on with the move where he is, the clip's root
+/// carrying him and no gravity; the first frame without them he is cut into the fall. Range 30 is
+/// in none of Sora's or the forms' motions (Checked (files): `P_EX100*.mset`, `W_EX010*.mset`);
+/// the entry and `+0x120` bits aren't motion data (**Assumption**: clear for Sora). The moves
+/// (Checked (files)): base Sora's 154 (edge stop 0..38), 155 (0..39), 161 (0..28), Guard Break
+/// 165 (0..40), Flash Step 169 (0..17); Valor's 154 (edge stop 0..63, then no gravity from 63 to
+/// its end) and 155 (0..64); the Drive 52 (no gravity all through). Returns the KH2 motion.
+pub unsafe fn ground_hold(actor: usize) -> Option<u16> {
+    use character_core::WindowKind as W;
+    let m = current(actor)?;
+    let clip = clip_of(m)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    (t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::NoGravity | W::EdgeStop))).then_some(m.motion)
+}
+
 /// KH2's turn toward the target in our slot playing on `actor` (the tester: "(a)", KH2's turn
 /// during swings on KH1's rows; Steam KH2, Checked (decomp)): KH2's range handler (`0x14040D810`)
 /// runs range id 28 (`TurnToLock`, `WindowKind::TurnToLock`, its parameter in degrees) each motion
