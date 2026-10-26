@@ -568,7 +568,19 @@ pub fn load_kh2() {
             let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
             let install = kh2_data::Install::locate(&exe).map_err(|e| format!("KH2 install: {e}"))?;
             let source = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
-            let sora = install.load_sora(source).map_err(|e| format!("KH2 Sora: {e}"))?;
+            // (Every file read for him noted with its hash: the motion slot cache's manifest,
+            // `slot_cache_manifest`.)
+            let sora = install
+                .load_sora_noting(source, &|name, bytes| {
+                    if let Ok(mut v) = KH2_INPUTS.lock() {
+                        v.retain(|(n, _, _)| n != name);
+                        v.push((name.to_string(), crate::slotcache::hash(bytes), bytes.len()));
+                    }
+                })
+                .map_err(|e| format!("KH2 Sora: {e}"))?;
+            if let Ok(mut v) = KH2_INPUTS.lock() {
+                v.push((format!("(KH2 files: {source:?})"), 0, 0));
+            }
             let rig = sora.rig.clone().ok_or_else(|| sora.rig_error.clone().unwrap_or_else(|| "no rig".into()))?;
             let roots = sora.character.moveset.clips.iter().map(|(m, c)| (*m, c.root.clone())).collect();
             let mut ground = HashMap::new();
@@ -677,7 +689,13 @@ pub fn load_kh2() {
                 } else {
                     None
                 };
-                super::kh2slots::prepare(&bytes, k, bake.as_ref());
+                // The motion slot cache (`slotcache`, `docs/kh1-asset-cache.md`): the baked blocks
+                // from the mod's folder when everything they were baked from is unchanged.
+                let mut cache = bake.as_ref().and_then(|_| open_slot_cache(&install, &bytes));
+                super::kh2slots::prepare(&bytes, k, bake.as_ref(), cache.as_mut());
+                if let Some(c) = cache {
+                    save_slot_cache(&c);
+                }
             }
             let _ = REST.set(motions.get(REST_SLOT).cloned().flatten());
             let _ = REST_OPEN.set(motions.first().cloned().flatten());
@@ -694,6 +712,71 @@ pub fn load_kh2() {
             }
         }
     });
+}
+
+/// The KH2 files read for KH2 Sora (name, hash, size), for the slot cache's manifest.
+static KH2_INPUTS: Mutex<Vec<(String, u128, usize)>> = Mutex::new(Vec::new());
+
+/// The motion slot cache's folder: beside the DLL (the mod's folder), `kh1-kh2-cache`.
+fn slot_cache_dir() -> std::path::PathBuf {
+    std::path::Path::new(&super::dll_dir()).join("kh1-kh2-cache")
+}
+
+/// Everything the bake reads (`slotcache::Manifest`): the game build, KH1 Sora's motion table
+/// (`mset`, also his idles for the retarget's rest) and skeleton, every KH2 file read for KH2
+/// Sora, and the ini keys the bake reads. `None` (no cache this start) if any can't be read.
+fn slot_cache_manifest(install: &kh1_data::Kh1Install, mset: &[u8]) -> Option<crate::slotcache::Manifest> {
+    let mut m = crate::slotcache::Manifest::new();
+    m.set("game build", format!("{:?}", super::addr::Build::current()));
+    m.file("kh1 xa_ex_0010.mset", mset);
+    let mdls = install.read(kh1_data::Source::Live, "xa_ex_0010.mdls").ok()?;
+    m.file("kh1 xa_ex_0010.mdls", &mdls);
+    let inputs = KH2_INPUTS.lock().ok()?;
+    if inputs.iter().all(|(_, h, _)| *h == 0) {
+        return None;
+    }
+    for (name, h, len) in inputs.iter() {
+        if *h == 0 {
+            m.set(name.clone(), "");
+        } else {
+            m.set(format!("file kh2 {name}"), format!("{h:032x} {len}"));
+        }
+    }
+    let set = super::settings::get();
+    m.set("ini kh1_slots", format!("{:?}", set.kh1_slots));
+    m.set("ini kh1_leg_ik", set.kh1_leg_ik.to_string());
+    m.set("ini keyblade_turn", set.keyblade_turn.to_string());
+    Some(m)
+}
+
+fn open_slot_cache(install: &kh1_data::Kh1Install, mset: &[u8]) -> Option<crate::slotcache::Cache> {
+    let t = Instant::now();
+    let Some(manifest) = slot_cache_manifest(install, mset) else {
+        log("slot cache: its inputs couldn't all be read; baking without it");
+        return None;
+    };
+    let dir = slot_cache_dir();
+    let bytes = crate::slotcache::read(&dir);
+    let (c, miss) = crate::slotcache::Cache::open(manifest, bytes.as_deref());
+    let why = match miss {
+        None => "matches this start's files and settings".to_string(),
+        Some(crate::slotcache::Miss::Missing) => "none yet".to_string(),
+        Some(crate::slotcache::Miss::Damaged(e)) => format!("unusable ({e}), rebuilt"),
+        Some(crate::slotcache::Miss::Changed(d)) => format!("rebuilt: {}", d.join(", ")),
+    };
+    log(&format!("slot cache: {} ({why}; checked in {:.0} ms)", dir.join(crate::slotcache::FILE_NAME).display(), t.elapsed().as_secs_f32() * 1000.0));
+    Some(c)
+}
+
+fn save_slot_cache(c: &crate::slotcache::Cache) {
+    log(&format!("slot cache: {} block(s) from the cache, {} baked", c.hits, c.misses));
+    if !c.needs_write() {
+        return;
+    }
+    match crate::slotcache::write(&slot_cache_dir(), &c.encode()) {
+        Ok(p) => log(&format!("slot cache: written ({})", p.display())),
+        Err(e) => log(&format!("slot cache: not written ({e}); baked again next start")),
+    }
 }
 
 /// Every model size posed (the first 40 kinds), logged once each.

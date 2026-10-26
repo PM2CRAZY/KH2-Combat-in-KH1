@@ -399,7 +399,7 @@ static BUILT: OnceLock<Option<Built>> = OnceLock::new();
 
 /// Builds our motions (the loader thread, `pose::load_kh2`): `mset` is KH1 Sora's file; with
 /// `bake` (`kh1_bake`), each KH2 motion baked into its KH1 motion, else the template retimed.
-pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
+pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cache: Option<&mut crate::slotcache::Cache>) {
     let Some(which) = super::settings::get().kh1_slots.clone() else {
         let _ = BUILT.set(None);
         return;
@@ -413,7 +413,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
         let mut blocks = Vec::new();
         let wanted = |motion: u16| which.as_ref().map_or(true, |w| w.contains(&motion));
         for s in SPECS.iter().filter(|s| wanted(s.motion)) {
-            if let Some((m, block)) = make(mset, kh2, bake, &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
+            if let Some((m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
                 moves.push(m);
                 blocks.push(block);
             }
@@ -422,7 +422,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
         for c in CYCLES.iter().filter(|c| wanted(c.motion)) {
             let mut three = Vec::new();
             for v in 0..c.count {
-                match make(mset, kh2, bake, &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize, false)? {
+                match make(mset, kh2, bake, cache.as_deref_mut(), &requests, (c.motion, c.slot + v as usize, c.request, Kind::MiscAnims), true, (v == 0, v), KH1_SLOTS + moves.len() + v as usize, false)? {
                     Some(m) => three.push(m),
                     None => break,
                 }
@@ -449,7 +449,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
             if !wanted(motion) || !moves.iter().any(|m| m.request == request && m.default) {
                 continue;
             }
-            if let Some((m, block)) = make(mset, kh2, bake, &requests, (motion, stands_for, request, Kind::Magic), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
+            if let Some((m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (motion, stands_for, request, Kind::Magic), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
                 moves.push(m);
                 blocks.push(block);
             }
@@ -484,7 +484,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 }
             }
             for (j, &motion) in motions.iter().enumerate() {
-                if let Some((mut m, block)) = make(mset, kh2, bake, &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
+                if let Some((mut m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
                     m.own = Some(m.request);
                     m.request = super::kh1rows::request(n) as usize;
                     log(&format!("KH2 slots: KH2 motion {motion} ({}) on our request {:#x} (KH1's row {} of ours)", o.name, m.request, super::kh1rows::row(n)));
@@ -515,7 +515,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
 /// selection can pick (`pick`); `field`: KH2's field variant of the motion; `variant`: which of a
 /// kind 3 / 4 request's slots (`CYCLES`). `None` if it can't be built (logged).
 #[allow(clippy::too_many_arguments)]
-fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, Vec<u8>)>, String> {
+fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<&mut crate::slotcache::Cache>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, Vec<u8>)>, String> {
     let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
         log(&format!("KH2 slots: KH2 motion {motion} has no clip, left out"));
         return Ok(None);
@@ -586,7 +586,13 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     // (KH1's roll request has it too: KH2's roll moves him by its root, `ROLL`.)
     let travel = matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request]);
-    let (block, baked) = match bake.map(|b| bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel)) {
+    // (From the motion slot cache when it has this exact bake, `slot_key`; baked and kept there
+    // otherwise.)
+    let baking = bake.map(|b| match cache {
+        Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel), || bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel)),
+        None => bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel),
+    });
+    let (block, baked) = match baking {
         Some(Ok(block)) => (block, true),
         Some(Err(e)) => {
             log(&format!("KH2 slots: KH2 motion {motion} not baked ({e}); drawn over its template"));
@@ -884,6 +890,15 @@ pub fn has_any(motion: u16) -> bool {
 
 /// KH2's `motion` baked into a KH1 motion on `template` (`kh1_data::bake`), with its report logged.
 /// `travel`: the move's request has KH1's travel flag (`travels`): KH2's root travel goes in its H10.
+/// One bake's key in the motion slot cache (`slotcache`): what `bake_one` reads besides the
+/// manifest's files and settings (the KH1 template motion's bytes, the KH2 motion, its variant,
+/// length, KH1 events and travel).
+fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool) -> u128 {
+    let mut h = crate::slotcache::Hasher::default();
+    h.bytes(template).u32(motion as u32).u32(field as u32).u32(frames).u32(travel as u32).str(&format!("{tracks:?}"));
+    h.finish()
+}
+
 fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool) -> Result<Vec<u8>, String> {
     let t = std::time::Instant::now();
     let (poses, moved) = b.poses(kh2, motion, field, frames, travel).ok_or("KH2 has no animation for it")?;

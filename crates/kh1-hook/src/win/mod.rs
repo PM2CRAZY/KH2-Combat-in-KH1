@@ -109,6 +109,26 @@ pub fn exe_dir() -> String {
     p.rsplit_once('\\').map_or(".".to_string(), |(d, _)| d.to_string())
 }
 
+/// The folder this DLL was loaded from (the mod's own folder when Panacea loads it from
+/// `<mods>\\kh1\\dll\\`), else the game's folder.
+pub fn dll_dir() -> String {
+    let mut module: *mut c_void = std::ptr::null_mut();
+    // (GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS 4 | _UNCHANGED_REFCOUNT 2: the module holding this
+    // function's code.)
+    let ok = unsafe { GetModuleHandleExW(6, dll_dir as *const () as *const u16, &mut module) };
+    if ok != 0 && !module.is_null() {
+        let mut buf = [0u16; 1024];
+        let n = unsafe { GetModuleFileNameW(module, buf.as_mut_ptr(), buf.len() as u32) } as usize;
+        if n > 0 && n < buf.len() {
+            let p = String::from_utf16_lossy(&buf[..n]);
+            if let Some((d, _)) = p.rsplit_once('\\') {
+                return d.to_string();
+            }
+        }
+    }
+    exe_dir()
+}
+
 fn real_create() -> Option<DInputCreate> {
     let p = REAL_CREATE.load(Ordering::Acquire);
     if p != 0 {

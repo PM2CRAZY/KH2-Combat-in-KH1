@@ -476,6 +476,16 @@ impl Install {
     pub fn load_player(&self, source: Source, spec: PlayerSpec) -> Result<SoraData> {
         load_player_with(source, spec, &|name| self.read_any(source, name))
     }
+
+    /// `load_sora`, with `note` told the name and contents of every file it reads (the motion
+    /// slot cache's manifest, `kh1-hook`'s `slotcache`).
+    pub fn load_sora_noting(&self, source: Source, note: &dyn Fn(&str, &[u8])) -> Result<SoraData> {
+        load_player_with(source, SORA, &|name| {
+            let b = self.read_any(source, name)?;
+            note(name, &b);
+            Ok(b)
+        })
+    }
 }
 
 /// Loads Sora from files already extracted into `dir` (by their base names,

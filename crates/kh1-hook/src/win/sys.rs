@@ -9,6 +9,7 @@ extern "system" {
     pub fn GetSystemDirectoryA(buf: *mut u8, size: u32) -> u32;
     pub fn GetModuleFileNameW(module: *mut c_void, buf: *mut u16, size: u32) -> u32;
     pub fn GetModuleHandleA(name: *const u8) -> *mut c_void;
+    pub fn GetModuleHandleExW(flags: u32, name: *const u16, module: *mut *mut c_void) -> i32;
     pub fn CreateThread(attrs: *mut c_void, stack: usize, start: unsafe extern "system" fn(*mut c_void) -> u32, param: *mut c_void, flags: u32, id: *mut u32) -> *mut c_void;
     pub fn Sleep(ms: u32);
     pub fn VirtualAlloc(addr: *mut c_void, size: usize, kind: u32, prot: u32) -> *mut c_void;
