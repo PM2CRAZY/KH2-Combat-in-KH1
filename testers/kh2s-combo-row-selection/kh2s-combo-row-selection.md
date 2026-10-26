@@ -982,3 +982,6 @@ go ahead
 
 ^m34
 
+1. aerial finish is working how it should hit wise, just need to fix the knock back so the enemy doesn't get sent so far off of the first hit, please look into how kh2 does it in the c decomp if you don't already have the notes. 
+
+go ahead

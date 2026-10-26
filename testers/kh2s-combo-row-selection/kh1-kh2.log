@@ -1,346 +1,1011 @@
-[f20496] debug menu: log categories 0x3fff
-[f20496] KH1 sound: menu sound 1 (from the mod)
-[f20496] KH1 sound: bank list node 0: +0x10 0 +0x14 -1 +0x18 310380824 +0x30 [music103.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 1: +0x10 -6 +0x14 5108 +0x18 430967062 +0x30 [se005108.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 2: +0x10 -6 +0x14 5107 +0x18 429918485 +0x30 [se005107.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 3: +0x10 -6 +0x14 5106 +0x18 428869908 +0x30 [se005106.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 4: +0x10 -6 +0x14 5105 +0x18 427821331 +0x30 [se005105.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 5: +0x10 -6 +0x14 3054 +0x18 426772754 +0x30 [se003054.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 6: +0x10 -6 +0x14 3035 +0x18 425724177 +0x30 [se003035.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 7: +0x10 -6 +0x14 3032 +0x18 424675600 +0x30 [se003032.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 8: +0x10 -6 +0x14 1381 +0x18 423627023 +0x30 [se001381.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 9: +0x10 -6 +0x14 1142 +0x18 422578446 +0x30 [se001142.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 10: +0x10 -6 +0x14 1141 +0x18 421529869 +0x30 [se001141.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: bank list node 11: +0x10 -6 +0x14 1140 +0x18 420481292 +0x30 [se001140.win32.scd] +0x3C 1932407347
-[f20496] KH1 sound: effect create bank 2 no 1 id 0, bank list: [se000.win32.scd] (+0x10 2, +0x14 0) (from game +0x17a056)
-[f20496] KH1 sound: effect play bank 2 no 1 id 0, bank list: [se000.win32.scd] (+0x10 2, +0x14 0) (from game +0x17a072)
-[f20497] frame scale 4.00: KH2 steps 4 60 Hz frames a game frame
-[f20498] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
-[f20510] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, kh2_damage: true, criticals: true, party_criticals: true, kh1_ability_chance: true, enemy_weight: true, glide_cast: true, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_hit_sparks: true, kh2_camera: true, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, r2_camera_hold: false, l2_stick_menu: false, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40, 203])), hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh2, drive: true, valor_left_blade: true, styles: [true, true, false, false, true, true, true, true, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true], knockback_numbers: Kh2, medium_hits_flinch: true, gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, kh1_leg_ik: false, foot_ik: false, trace: On, trace_seconds: 1, trace_game_frames: true, trace_cats: 8191, debug_menu: true, log_cats: 16383, debug_growth: [3, 3, 0, 0, 0] }
-[f21086] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f21266] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f21380] KH1 sound: menu sound 1 (from the mod)
-[f21380] KH1 sound: effect create bank 2 no 1 id 0, bank list: [se000.win32.scd] (+0x10 2, +0x14 0) (from game +0x17a056)
-[f21380] KH1 sound: effect play bank 2 no 1 id 0, bank list: [se000.win32.scd] (+0x10 2, +0x14 0) (from game +0x17a072)
-[f21446] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f21626] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f21738] draw: baked (KH1 slot 163)
-[f21739] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
-[f21745] draw: baked (KH1 slot 166)
-[f21746] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 136 in the set; Sora's request 0x2)
-[f21780] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 136 in the set; Sora's request 0x2)
-[f21800] draw: baked (KH1 slot 160)
-[f21801] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f21817] event ops at 867s (Sora can act: false): 8x60 9x2 57x1 98x16 108x1 113x1 115x1 151x1 175x1 203x63 284x31 285x62 286x31 290x62 291x93 292x62 419x62 511x1
-[f21877] event ops at 868s (Sora can act: false): 1x1 4x2 5x2 6x2 8x60 9x4 13x1 83x2 98x35 107x26 109x2 177x1 179x1 203x60 284x30 285x60 286x30 290x60 291x90 292x60 419x60
-[f21938] event ops at 869s (Sora can act: false): 0x1 1x2 3x1 4x1 8x62 88x1 89x50 107x12 203x61 284x30 285x60 286x30 290x60 291x90 292x60 419x60 753x1 754x1
-[f21996] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f21999] event ops at 870s (Sora can act: false): 8x60 89x61 203x61 284x31 285x62 286x31 290x62 291x93 292x62 419x62
-[f22176] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f22181] event ops at 873s (Sora can act: false): 0x1 1x2 4x1 8x60 88x1 89x53 107x10 203x61 284x31 285x62 286x31 290x62 291x93 292x62 419x62
-[f22231] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
-[f22232] draw: kh1_own (KH1 slot 160)
-[f22242] event ops at 874s (Sora can act: false): 2x2 8x64 28x1 33x10 89x33 107x10 113x1 115x1 127x1 128x1 129x1 203x61 270x2 284x30 285x60 286x30 290x60 291x90 292x60 378x1 389x1 394x1 418x1 419x60 511x2 593x1
-[f22292] room: world 0xb room 0x5 entered; KH1 has Sora (KH1's script moves him, actions [], flags 0100c043) (KH1 state 0, flags 0100c043, script false)
-[f22292] event ops at 875s (Sora can act: false): 8x48 60x1 203x49 284x25 285x50 286x25 290x50 291x75 292x50 419x50 514x1
-[f22292] Sora's instance 0x7ff70fd915d0 (bones at 0x7ff70e6cb010)
-[f22292] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
-[f22292] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
-[f22292] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
-[f22292] draw: kh1_own (KH1 slot 0)
-[f22292] KH1 has Sora (KH1's own states (base Sora, shared))
-[f22293] draw: baked (KH1 slot 160)
-[f22293] Sora's actor at 0x7ff7106d72a0 (dt 1.000)
-[f22293] Sora's actor first seen: 0000c003 00030000 00000000 00000000 00000000 c1a00000 c3c80000 40000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 c1a00000 c3c80000 00000000 3f800000 00000000 8274eda0 846fcc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 bf800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 82301084 827710a0 00000000 00000000 8276dc20 00000000 846f34a0 8430b1e0 00000000 826cae20 826cae60 83d915d0 00000102 00000000 00000082 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 827717a0 8bd41b80 98cc4680 8292c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 bf800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 00000000 43340000 3f800000 00000000 43340000 00000000 00000000 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff0142 00000000 c1a00000 c3c80000 40000000 00000000 00000000 00000000 00000000 00000000 00000000 c1a00000 ffffffff 0000ffff ffffffff 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 0000004e 00000048 00000049 0000002d 00000004 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00040000 00000000 00000000 00000000 00000000 00000000 c1a00000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 42280000 00008003 00040000 00000000 00000000 00000000 00000000 44ff5000 c11199a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 44ff5000 3f800000 3f800000 00000000 00000000 846fcb10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 44ff5000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 82302c2c 8214b000 00000000 00000000 00000000 00000000 00000000 00000000
-[f22294] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f22321] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
-[f22342] event ops at 876s (Sora can act: false): 3x1 4x1 5x1 6x1 8x5 10x1 27x1 34x1 55x1 62x2 69x1 80x1 83x1 106x14 113x1 115x1 127x1 128x1 129x1 132x2 133x2 141x1 151x1 163x4 167x4 306x1 362x4 417x1 461x1 462x33 511x2 513x1 580x1 643x1 719x1
-[f22403] event ops at 877s (Sora can act: false): 106x61
-[f22451] room 0xb-0x5, first 3 s: KH2 had Sora 0 of 160 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
-[f22474] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f22585] event ops at 880s (Sora can act: false): 8x1 106x44 163x1
-[f22644] event ops at 881s (Sora can act: false): 3x2 4x2 5x2 6x2 7x2 8x1 10x1 55x1 69x1 80x2 83x2 113x1 115x1 126x1 141x1 151x1 154x1 306x1 427x2 511x1 513x1 514x1
-[f22654] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f22669] posed: a 110-bone model (instance 0x7ff70fd91bd0) by the plain pass
-[f22669] posed: a 138-bone model (instance 0x7ff70fd91fd0) by the plain pass
-[f22669] posed: a 134-bone model (instance 0x7ff70fd921d0) by the plain pass
-[f22705] event ops at 882s (Sora can act: false): 0x1 1x1 8x1 33x36 34x1 69x1 141x1 250x3 251x1 306x1 347x1 361x1 406x1 415x1 566x1 567x1 693x1 710x1
-[f22715] draw: baked (KH1 slot 161)
-[f22716] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 1 / request 0x0; its slot 131 in the set; Sora's request 0x0)
-[f22766] event ops at 883s (Sora can act: false): 33x61
-[f22887] event ops at 885s (Sora can act: false): 8x1 33x25 106x1
-[f22972] draw: baked (KH1 slot 167)
-[f22973] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 7 / request 0x2; its slot 137 in the set; Sora's request 0x2)
-[f22973] posed: a 138-bone model (instance 0x7ff70fd91fd0) by the ground-IK pass
-[f22973] posed: a 134-bone model (instance 0x7ff70fd921d0) by the ground-IK pass
-[f22974] posed: a 110-bone model (instance 0x7ff70fd91bd0) by the ground-IK pass
-[f22992] KH1's ground combo, swing 1 of 4: KH2's row 6 motion 153 (ability 0, finisher false, KH2's length 4) on KH1's row 86 of its own
-[f22992] KH2's 153 (row 255, motion 153) on KH1's row 86 of its own (request 0x214)
-[f22993] draw: baked (KH1 slot 198)
-[f22994] KH2's turn to the target (KH2 motion 153 frame 0, up to 0.52 a frame): 0.45 -> 0.66 (the target at 0.66)
-[f22994] KH2 slots: KH1 plays ours, KH2 motion 153 (for KH1's 98 / request 0x214; its slot 168 in the set; Sora's request 0x214)
-[f22995] KH2's turn to the target (KH2 motion 153 frame 1, up to 0.52 a frame): 0.63 -> 0.70 (the target at 0.70)
-[f22996] KH2's turn to the target (KH2 motion 153 frame 2, up to 0.52 a frame): 0.63 -> 0.74 (the target at 0.74)
-[f22997] KH2's turn to the target (KH2 motion 153 frame 3, up to 0.52 a frame): 0.63 -> 0.77 (the target at 0.77)
-[f22998] KH2's turn to the target (KH2 motion 153 frame 4, up to 0.52 a frame): 0.63 -> 0.81 (the target at 0.81)
-[f22999] KH2's turn to the target (KH2 motion 153 frame 5, up to 0.52 a frame): 0.63 -> 0.85 (the target at 0.85)
-[f23000] KH2's turn to the target (KH2 motion 153 frame 6, up to 0.52 a frame): 0.65 -> 0.88 (the target at 0.88)
-[f23001] KH2's turn to the target (KH2 motion 153 frame 7, up to 0.52 a frame): 0.69 -> 0.92 (the target at 0.92)
-[f23002] KH2's turn to the target (KH2 motion 153 frame 8, up to 0.52 a frame): 0.72 -> 0.95 (the target at 0.95)
-[f23003] KH2's turn to the target (KH2 motion 153 frame 9, up to 0.52 a frame): 0.75 -> 0.98 (the target at 0.98)
-[f23004] KH2's turn to the target (KH2 motion 153 frame 10, up to 0.52 a frame): 0.78 -> 1.01 (the target at 1.01)
-[f23005] KH2's turn to the target (KH2 motion 153 frame 11, up to 0.52 a frame): 0.81 -> 1.03 (the target at 1.03)
-[f23008] event ops at 887s (Sora can act: true): 112x1 114x1 150x1 154x1 160x1 187x4 238x1 301x1 331x1 346x1 368x1 457x38 512x1 514x1 592x1 601x12 678x1 711x1
-[f23026] KH2's turn to the target (KH2 motion 153 frame 32, up to 0.52 a frame): 0.63 -> 1.15 (the target at 2.12)
-[f23027] KH2's turn to the target (KH2 motion 153 frame 33, up to 0.52 a frame): 0.95 -> 1.48 (the target at 2.19)
-[f23028] KH2's turn to the target (KH2 motion 153 frame 34, up to 0.52 a frame): 1.28 -> 1.80 (the target at 1.82)
-[f23029] KH2's turn to the target (KH2 motion 153 frame 35, up to 0.52 a frame): 1.61 -> 1.08 (the target at 1.05)
-[f23030] KH2's turn to the target (KH2 motion 153 frame 36, up to 0.52 a frame): 0.89 -> 0.62 (the target at 0.62)
-[f23031] KH2's turn to the target (KH2 motion 153 frame 37, up to 0.52 a frame): 0.63 -> 1.15 (the target at 1.96)
-[f23032] KH2's turn to the target (KH2 motion 153 frame 38, up to 0.52 a frame): 0.95 -> 1.48 (the target at 2.21)
-[f23032] KH1's row of ours hit: KH2's ATKP 147 (power 33, reaction 3, no launch) on record 0x7ff710785e10
-[f23033] KH2's turn to the target (KH2 motion 153 frame 39, up to 0.52 a frame): 1.28 -> 1.80 (the target at 1.98)
-[f23033] enemy weight: actor 0x7ff7106d8a10 (object 0x82301a5c) KH1 stat +0xC4 = Some(1.0)
-[f23033] KH2's push on 0x7ff7106d8a10 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f23034] KH2's turn to the target (KH2 motion 153 frame 40, up to 0.52 a frame): 1.61 -> 1.08 (the target at 0.91)
-[f23035] KH2's turn to the target (KH2 motion 153 frame 41, up to 0.52 a frame): 0.89 -> 0.57 (the target at 0.57)
-[f23036] KH2's turn to the target (KH2 motion 153 frame 42, up to 0.52 a frame): 0.63 -> 1.15 (the target at 2.10)
-[f23037] KH2's turn to the target (KH2 motion 153 frame 43, up to 0.52 a frame): 0.95 -> 1.48 (the target at 2.26)
-[f23037] stick direction Vec2(0.9796179, -0.20087016) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.58573055, 0.8105059), tilt 1.00
-[f23037] KH1's ground combo, swing 2 of 4: KH2's row 35 motion 162 (ability 90, finisher false, KH2's length 4) on KH1's row 87 of its own
-[f23037] KH2's Slapshot (row 255, motion 162) on KH1's row 87 of its own (request 0x215)
-[f23038] draw: baked (KH1 slot 199)
-[f23039] KH2's turn to the target (KH2 motion 162 frame 0, up to 0.77 a frame): 1.87 -> 1.37 (the target at 1.37)
-[f23039] KH2 slots: KH1 plays ours, KH2 motion 162 (for KH1's 98 / request 0x215; its slot 169 in the set; Sora's request 0x215)
-[f23040] KH2's turn to the target (KH2 motion 162 frame 1, up to 0.77 a frame): 1.56 -> 1.37 (the target at 1.37)
-[f23041] KH2's turn to the target (KH2 motion 162 frame 2, up to 0.77 a frame): 1.56 -> 1.36 (the target at 1.36)
-[f23042] KH2's turn to the target (KH2 motion 162 frame 3, up to 0.77 a frame): 1.55 -> 1.35 (the target at 1.35)
-[f23043] KH2's turn to the target (KH2 motion 162 frame 4, up to 0.77 a frame): 1.55 -> 1.35 (the target at 1.35)
-[f23044] KH2's turn to the target (KH2 motion 162 frame 5, up to 0.77 a frame): 1.54 -> 1.34 (the target at 1.34)
-[f23045] KH2's turn to the target (KH2 motion 162 frame 6, up to 0.77 a frame): 1.54 -> 1.34 (the target at 1.34)
-[f23046] KH2's turn to the target (KH2 motion 162 frame 7, up to 0.77 a frame): 1.54 -> 1.34 (the target at 1.34)
-[f23065] KH1 has Sora (KH1's script moves him, actions [], flags 0130c087)
-[f23066] draw: kh1_own (KH1 slot -)
-[f23069] event ops at 888s (Sora can act: true): 457x61
-[f23123] event ops at 963s (Sora can act: true): 305x1 457x24
-[f23184] event ops at 964s (Sora can act: true): 457x61
-[f23186] hit effect: attack 0x7ff7107547d0 of 0x7ff7106d72a0 (object 0) hit 0x7ff7106d8a10 (object 308), weapon 0x51: source 0x260913453d0 (list cc88dbbb2d612f71), attack data 0x7ff7106c8878 group (+0x28) 1, kind 0x40 -> KH1 spark id 1; sound byte 19 (0x400000 set)
-[f23186] effect list of source 0x260913453d0 (list cc88dbbb2d612f71, owner 0x7ff7106d72a0, object 0, weapon 0x51), 6 entries: 0: kind 0x0 group 0x0 other 0x0 [ab345510 00000000 00000000 00000000]; 1: kind 0xc1 group 0x2 other 0x0 [ab34db60 00000000 00000001 00000000]; 2: kind 0xc1 group 0x4 other 0x0 [ab34db60 00000001 00000002 00000000]; 3: kind 0x0 group 0x0 other 0x0 [ab36aa00 00000000 00000003 00000000]; 4: kind 0x0 group 0x0 other 0x0 [ab36aa00 00000001 00000004 00000000]; 5: kind 0x0 group 0x0 other 0x0 [ab36aa00 00000002 00000005 00000000]
-[f23196] KH1 has Sora (KH1's script moves him, actions [], flags 0130c0c3)
-[f23229] draw: kh1_own (KH1 slot 161)
-[f23230] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 1 / request 0x0; its slot 131 in the set; Sora's request 0x0)
-[f23242] event ops at 966s (Sora can act: false): 2x1 8x2 28x1 32x1 113x1 115x1 127x1 128x1 129x1 151x1 305x1 347x1 352x1 378x1 394x1 427x1 511x2 593x2 749x1
-[f23256] KH1 has Sora (KH1's own states (base Sora, shared))
-[f23257] draw: baked (KH1 slot 161)
-[f23258] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 1 / request 0x0; its slot 131 in the set; Sora's request 0x0)
-[f23260] room: world 0xb room 0x1 entered; KH1 has Sora (KH1's own states (base Sora, shared)) (KH1 state 0, flags 0000c003, script false)
-[f23260] Sora's instance 0x7ff70fd919d0 (bones at 0x7ff70e6cb010)
-[f23260] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
-[f23260] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
-[f23260] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
-[f23260] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
-[f23260] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
-[f23260] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
-[f23261] draw: kh1_own (KH1 slot 160)
-[f23261] Sora's actor at 0x7ff7106d7c00 (dt 1.000)
-[f23261] Sora's actor first seen: 0100c043 00030000 00000000 00000000 4180a1c9 00000000 454ec88f 40000000 3d7dd97c 00000000 bf7f8205 00000000 3d7dd97c 00000000 bf7f8205 404517ce 3f800000 3f800000 3f800000 3f800000 4180a1c9 00000000 454ec88f 00000000 3f800000 00000000 8274eda0 846fcc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f7f8205 80000000 3d7dd97c 00000000 00000000 3f800000 00000000 00000000 bd7dd97c 00000000 3f7f8205 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8229bf74 827710a0 00000000 00000000 8276dc20 00000000 846f34a0 8430b1e0 404517ce 826cae20 826cae60 83d919d0 00000102 00000000 00000082 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 827717a0 8bd41b80 98cc4680 8292c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 3f7f8205 80000000 3d7dd97c 00000000 00000000 3f800000 00000000 00000000 bd7dd97c 00000000 3f7f8205 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 00000000 43340000 3f800000 00000000 43340000 00000000 00000000 00000000 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff076d 4180a1c9 80000000 454ec88f 40000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 ffffffff 0000ffff ffffffff 00000000 00000000 4180a1c9 80000000 454ec88f 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000070 00000062 00000053 00000032 00000004 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00040000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 42280000 01008043 00030001 00000000 00000000 42e467aa 00000000 45524bcc 40000000 bf5dd8ac 00000000 beff8041 00000000 bf5dd8ac 00000000 beff8041 c005f823 3f800000 3f800000 3f800000 3f800000 42e467aa 00000000 45524bcc 3f800000 3f800000 00000000 00000000 846fcd10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3eff8041 00000000 bf5dd8ac 00000000 80000000 3f800000 00000000 00000000 3f5dd8ac 00000000 3eff8041 00000000 42e467aa 00000000 45524bcc 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8229bfec 829c1120 00000000 00000000 829c03a0 84365ee0 846f3630 8430b240
-[f23262] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f23280] event ops at 967s (Sora can act: false): 3x4 4x4 5x4 6x4 8x5 9x5 10x13 19x1 22x1 27x1 60x1 62x1 63x1 69x1 80x4 81x2 82x2 83x4 90x1 127x1 128x1 129x1 151x1 183x1 199x1 203x20 269x2 321x1 330x1 338x1 362x1 395x1 410x3 417x1 418x2 452x1 471x1 511x1 514x1 571x1 592x1 593x1 606x1 625x1 626x7 719x2 725x1
-[f23281] KH1 has Sora (KH1's own states (base Sora, shared))
-[f23282] draw: baked (KH1 slot 160)
-[f23289] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
-[f23341] event ops at 968s (Sora can act: true): 8x60 9x1 112x1 114x1 128x1 129x1 132x1 133x2 150x1 203x61 284x30 285x60 286x30 290x60 291x90 292x60 363x1 417x1 419x60 512x1 592x1
-[f23350] draw: baked (KH1 slot 163)
-[f23351] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x2)
-[f23351] draw: baked (KH1 slot 166)
-[f23352] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 136 in the set; Sora's request 0x2)
-[f23357] draw: baked (KH1 slot 163)
-[f23358] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
-[f23359] draw: baked (KH1 slot 160)
-[f23360] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f23362] draw: baked (KH1 slot 163)
-[f23363] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
-[f23365] draw: baked (KH1 slot 166)
-[f23366] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 136 in the set; Sora's request 0x2)
-[f23395] draw: baked (KH1 slot 160)
-[f23396] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f23402] event ops at 969s (Sora can act: false): 8x62 9x2 57x1 98x1 108x1 113x1 115x1 151x1 175x1 203x63 284x30 285x60 286x30 290x60 291x90 292x60 419x60 511x1
-[f23417] room 0xb-0x1, first 3 s: KH2 had Sora 0 of 158 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
-[f23462] event ops at 970s (Sora can act: false): 1x1 4x2 5x2 6x2 8x60 9x4 13x1 83x2 98x51 107x10 109x2 177x1 179x1 203x60 284x30 285x60 286x30 290x60 291x90 292x60 419x60
-[f23523] event ops at 971s (Sora can act: false): 0x1 1x2 3x1 4x1 8x60 88x1 89x28 107x34 203x61 284x31 285x62 286x31 290x62 291x93 292x62 419x62 753x1 754x1
-[f23583] event ops at 972s (Sora can act: false): 8x60 89x60 203x60 284x30 285x60 286x30 290x60 291x90 292x60 419x60
-[f23585] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f23765] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f23945] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f24125] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f24190] event ops at 982s (Sora can act: false): 0x1 1x2 4x1 8x62 88x1 89x53 107x10 203x61 284x30 285x60 286x30 290x60 291x90 292x60 419x60
-[f24250] event ops at 983s (Sora can act: false): 1x1 8x60 89x43 107x19 203x60 284x30 285x60 286x30 290x60 291x90 292x60 419x60
-[f24290] posed: a 161-bone model (instance 0x7ff70fd917d0) by the ground-IK pass
-[f24305] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f24311] event ops at 984s (Sora can act: false): 1x1 2x1 4x2 5x2 6x2 8x60 9x6 33x10 56x1 57x1 58x1 83x2 107x35 109x3 112x1 113x1 114x1 115x1 150x1 151x1 177x1 179x1 180x1 203x63 221x1 281x1 284x31 285x62 286x31 290x62 291x93 292x62 419x62 511x1 512x1
-[f24372] event ops at 985s (Sora can act: false): 0x1 1x2 3x1 4x1 8x62 88x1 89x27 107x35 203x61 284x30 285x60 286x30 290x60 291x90 292x60 419x60 753x1 754x1
-[f24432] event ops at 986s (Sora can act: false): 0x1 1x2 4x1 8x60 88x1 89x52 107x10 203x60 284x30 285x60 286x30 290x60 291x90 292x60 419x60
-[f24462] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
-[f24463] draw: kh1_own (KH1 slot 160)
-[f24485] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f24493] event ops at 987s (Sora can act: false): 2x2 8x62 28x1 33x10 89x13 107x10 113x1 115x1 127x1 128x1 129x1 203x61 270x2 284x31 285x62 286x31 290x62 291x93 292x62 378x1 389x1 394x1 418x1 419x62 511x2 593x1
-[f24523] room: world 0xb room 0x2 entered; KH1 has Sora (KH1's script moves him, actions [], flags 0100c043) (KH1 state 0, flags 0100c043, script false)
-[f24523] Sora's instance 0x7ff70fd915d0 (bones at 0x7ff70e6cb010)
-[f24523] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
-[f24523] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
-[f24523] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
-[f24523] draw: kh1_own (KH1 slot 0)
-[f24523] KH1 has Sora (KH1's own states (base Sora, shared))
-[f24524] draw: baked (KH1 slot 160)
-[f24524] Sora's actor at 0x7ff7106d72a0 (dt 1.000)
-[f24524] Sora's actor first seen: 0000c003 00030000 00000000 00000000 00000000 c1a00000 c3c80000 40000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 c1a00000 c3c80000 00000000 3f800000 00000000 8274eda0 846fcc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 bf800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 824df804 827710a0 00000000 00000000 8276dc20 00000000 846f34a0 8430b1e0 00000000 826cae20 826cae60 83d915d0 00000102 00000000 00000082 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 827717a0 8bd41b80 98cc4680 8292c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 bf800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 00000000 43340000 3f800000 00000000 43340000 00000000 00000000 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff015e 00000000 c1a00000 c3c80000 40000000 00000000 00000000 00000000 00000000 00000000 00000000 c1a00000 ffffffff 0000ffff ffffffff 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000082 00000080 0000007e 00000046 00000004 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00040000 00000000 00000000 00000000 00000000 00000000 c1a00000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 42280000 00008003 00040000 00000000 00000000 00000000 00000000 44ff5000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 44ff5000 3f800000 3f800000 00000000 00000000 846fcb10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 3f800000 3f800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 44ff5000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 824e19c4 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[f24525] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f24532] event ops at 988s (Sora can act: false): 3x1 4x1 5x1 6x1 8x35 10x2 27x1 34x1 55x1 60x1 62x2 69x1 80x1 83x1 113x1 115x1 127x1 128x1 129x1 132x3 133x2 141x1 151x1 163x4 167x4 199x1 203x29 284x14 285x28 286x14 290x28 291x42 292x28 306x1 321x1 362x4 417x1 419x28 461x1 462x5 511x2 513x1 514x1 580x1 643x1 719x1
-[f24552] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
-[f24592] event ops at 989s (Sora can act: false): 106x37 462x24
-[f24653] event ops at 990s (Sora can act: false): 106x61
-[f24681] room 0xb-0x2, first 3 s: KH2 had Sora 0 of 159 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
-[f24705] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f24775] event ops at 992s (Sora can act: false): 106x61 163x1
-[f24835] event ops at 993s (Sora can act: false): 3x2 4x2 5x2 6x2 7x2 8x2 10x1 55x1 69x1 80x2 83x2 106x24 113x1 115x1 126x1 141x1 151x1 154x1 306x1 427x2 511x1 513x1 514x1
-[f24885] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
-[f24900] posed: a 126-bone model (instance 0x7ff70fd925d0) by the plain pass
-[f24946] draw: baked (KH1 slot 161)
-[f24947] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 1 / request 0x0; its slot 131 in the set; Sora's request 0x0)
-[f24956] event ops at 995s (Sora can act: false): 0x1 1x1 8x1 33x56 34x1 69x1 141x1 250x3 251x1 306x1 347x1 361x1 406x1 415x1 566x1 567x1 693x1 710x1
-[f25016] event ops at 996s (Sora can act: false): 33x60
-[f25077] event ops at 997s (Sora can act: false): 8x1 33x6 106x1
-[f25143] draw: baked (KH1 slot 167)
-[f25144] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 7 / request 0x2; its slot 137 in the set; Sora's request 0x2)
-[f25148] posed: a 126-bone model (instance 0x7ff70fd929d0) by the ground-IK pass
-[f25183] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 7 / request 0x2; its slot 137 in the set; Sora's request 0x2)
-[f25188] KH1's ground combo, swing 1 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
-[f25188] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
-[f25189] draw: baked (KH1 slot 196)
-[f25190] KH2's turn to the target (KH2 motion 151 frame 0, up to 0.52 a frame): 0.09 -> -0.05 (the target at -0.05)
-[f25190] KH2 slots: KH1 plays ours, KH2 motion 151 (for KH1's 98 / request 0x212; its slot 166 in the set; Sora's request 0x212)
-[f25191] KH2's turn to the target (KH2 motion 151 frame 1, up to 0.52 a frame): -0.08 -> -0.02 (the target at -0.02)
-[f25192] KH2's turn to the target (KH2 motion 151 frame 2, up to 0.52 a frame): -0.08 -> 0.00 (the target at 0.00)
-[f25193] KH2's turn to the target (KH2 motion 151 frame 3, up to 0.52 a frame): -0.08 -> 0.01 (the target at 0.01)
-[f25194] KH2's turn to the target (KH2 motion 151 frame 4, up to 0.52 a frame): -0.08 -> 0.01 (the target at 0.01)
-[f25195] KH2's turn to the target (KH2 motion 151 frame 5, up to 0.52 a frame): -0.08 -> 0.01 (the target at 0.01)
-[f25196] KH2's turn to the target (KH2 motion 151 frame 6, up to 0.52 a frame): -0.08 -> 0.01 (the target at 0.01)
-[f25197] KH2's turn to the target (KH2 motion 151 frame 7, up to 0.52 a frame): -0.08 -> 0.01 (the target at 0.01)
-[f25198] event ops at 999s (Sora can act: true): 112x1 114x1 150x1 154x1 160x1 187x4 238x1 301x1 331x1 346x1 368x1 457x58 512x1 514x1 592x1 678x1 711x1
-[f25208] KH1's row of ours hit: KH2's ATKP 126 (power 100, reaction 3, no launch) on record 0x7ff710785e10
-[f25209] enemy weight: actor 0x7ff7106d9820 (object 0x824df96c) KH1 stat +0xC4 = Some(1.0)
-[f25209] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f25215] stick direction Vec2(0.57744235, 0.81643146) from the raw stick (0.71, -0.71) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(-0.08105215, 0.99670994), tilt 1.00
-[f25215] KH1's ground combo, swing 2 of 4: KH2's row 4 motion 152 (ability 0, finisher false, KH2's length 4) on KH1's row 85 of its own
-[f25215] KH2's 152 (row 255, motion 152) on KH1's row 85 of its own (request 0x213)
-[f25216] draw: baked (KH1 slot 197)
-[f25242] KH1's row of ours hit: KH2's ATKP 127 (power 65, reaction 3, no launch) on record 0x7ff710785e10
-[f25243] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f25244] KH1's row of ours hit: KH2's ATKP 127 (power 65, reaction 3, no launch) on record 0x7ff710785e10
-[f25245] enemy weight: actor 0x7ff7106d9cd0 (object 0x824df9e4) KH1 stat +0xC4 = Some(1.0)
-[f25245] KH2's push on 0x7ff7106d9cd0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f25259] event ops at 1000s (Sora can act: true): 457x60
-[f25261] stick direction Vec2(0.9578343, 0.28732124) from the raw stick (0.99, -0.11) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(-0.023917306, 0.99971396), tilt 1.00
-[f25261] KH1's ground combo, swing 3 of 4: KH2's row 6 motion 153 (ability 0, finisher false, KH2's length 4) on KH1's row 86 of its own
-[f25261] KH2's 153 (row 255, motion 153) on KH1's row 86 of its own (request 0x214)
-[f25262] draw: baked (KH1 slot 198)
-[f25285] recoil (KH2): KH1's big recoil (request 0x6f, its own animation, answer 1), no protection
-[f25286] draw: kh1_own (KH1 slot 73)
-[f25327] draw: baked (KH1 slot 167)
-[f25331] Medium Hits Flinch: a kind 4 hit (8 damage) taken as KH1's flinch (kind 3)
-[f25331] KH2's push on KH1's (request 0x48, Kh2): 200 (KH1's own 59), 20.0 a frame, x 0.9 a frame
-[f25332] draw: baked (KH1 slot 141)
-[f25383] draw: baked (KH1 slot 167)
-[f25405] enemy attack near Sora: slot 6 flags 0001e809 +4 00000000 +0x30 00000001 owner 0x7ff7106d9370 priority 50 radius 70 at [51, -28, -256] (was [51, -28, -256])
-[f25405] KH1's ground combo, swing 1 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
-[f25405] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
-[f25406] draw: baked (KH1 slot 196)
-[f25423] KH1's row of ours hit: KH2's ATKP 126 (power 100, reaction 3, no launch) on record 0x7ff710785e10
-[f25424] enemy weight: actor 0x7ff7106d8ec0 (object 0x824e0434) KH1 stat +0xC4 = Some(1.0)
-[f25424] KH2's air flinch on 0x7ff7106d8ec0 (reaction 3, knock-back 125 / 0): hop 50, drift 6.0 a frame (push 125, weight Some(1.0))
-[f25424] KH2 flight on 0x7ff7106d8ec0: frame 1, moved 6.0 sideways, 7.8 up
-[f25425] KH1's row of ours hit: KH2's ATKP 126 (power 100, reaction 3, no launch) on record 0x7ff710785e10
-[f25426] enemy weight: actor 0x7ff7106d9370 (object 0x824e04ac) KH1 stat +0xC4 = Some(1.0)
-[f25426] KH2's push on 0x7ff7106d9370 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f25433] KH2 flight on 0x7ff7106d8ec0: frame 10, moved 6.0 sideways, 1.3 up
-[f25433] stick direction Vec2(-0.9769947, 0.21326415) from the raw stick (-0.95, -0.30) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.81291354, 0.58238447), tilt 1.00
-[f25433] KH1's ground combo, swing 2 of 4: KH2's row 33 motion 191 (ability 97, finisher false, KH2's length 4) on KH1's row 98 of its own
-[f25433] KH2's hop Aerial Sweep (motion 191) on KH1's air row 98 of its own (request 0x220) out of KH1's air state, 171 high, 2.9/frame sideways
-[f25433] KH2's hop on KH1's air state: 171 high, 2.9/frame sideways, KH2's arc, 29.0 frames up
-[f25434] KH2's hop out of KH1's ground combo: its 2.9/frame sideways put back after KH1's carry into the air (which left 0.0)
-[f25434] draw: baked (KH1 slot 208)
-[f25441] KH1's row of ours hit: KH2's ATKP 909 (power 65, reaction 4, KH2's launch) on record 0x7ff710785e10
-[f25441] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
-[f25442] enemy weight on a KH2 launch: stat 1.00, KH1's launch 35.0 of 35: x1.00
-[f25442] KH2 launch on 0x7ff7106d9820: up 10 / sideways 1.0 a frame (weight x1.00): up 48 in 14 frames
-[f25442] KH2 flight on 0x7ff7106d9820: frame 1, moved 0.8 sideways, 7.6 up
-[f25442] KH1's row of ours hit: KH2's ATKP 909 (power 65, reaction 4, KH2's launch) on record 0x7ff710785e10
-[f25442] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
-[f25443] KH1's own air move set its arc: on KH2's numbers from here (a rise of 56 over 20.0 frames)
-[f25443] KH2 flight on 0x7ff7106d8ec0 ended after 19 frames (state 2, KH1's arc its own)
-[f25451] KH2 flight on 0x7ff7106d9820: frame 10, moved 0.3 sideways, 1.9 up
-[f25452] KH1's own air move set its arc: on KH2's numbers from here (a rise of 6 over 11.0 frames)
-[f25455] KH2 flight on 0x7ff7106da180 ended after 30 frames (state 2, KH1's arc its own)
-[f25456] KH1's own air move set its arc: on KH2's numbers from here (a rise of 1 over 7.0 frames)
-[f25457] KH1's own air move set its arc: on KH2's numbers from here (a rise of 1 over 6.0 frames)
-[f25460] KH1's own air move set its arc: on KH2's numbers from here (a rise of 0 over 3.0 frames)
-[f25461] KH2 flight on 0x7ff7106d9820: frame 20, moved 0.1 sideways, -0.8 up
-[f25464] KH1's own air move set its arc: on KH2's numbers from here (falling at 0.4/frame)
-[f25468] KH1's own air move set its arc: on KH2's numbers from here (falling at 2.1/frame)
-[f25471] KH1's own air move set its arc: on KH2's numbers from here (falling at 3.3/frame)
-[f25471] KH2 flight on 0x7ff7106d9820: frame 30, moved 0.1 sideways, -2.9 up
-[f25492] draw: baked (KH1 slot 159)
-[f25493] KH2's push on KH1's (request 0x49, Kh2): 200 (KH1's own 44), 20.0 a frame, x 0.9 a frame
-[f25494] draw: baked (KH1 slot 142)
-[f25545] draw: baked (KH1 slot 167)
-[f25575] KH1's ground combo, swing 1 of 4: KH2's row 6 motion 153 (ability 0, finisher false, KH2's length 4) on KH1's row 86 of its own
-[f25575] KH2's 153 (row 255, motion 153) on KH1's row 86 of its own (request 0x214)
-[f25576] draw: baked (KH1 slot 198)
-[f25580] enemy attack near Sora: slot 5 flags 0001e809 +4 00000000 +0x30 00000001 owner 0x7ff7106d8560 priority 50 radius 70 at [-95, -28, -120] (was [-95, -28, -120])
-[f25601] KH1's row of ours hit: KH2's ATKP 128 (power 65, reaction 3, no launch) on record 0x7ff710785e10
-[f25602] KH2's push on 0x7ff7106d9cd0 (reaction 3, knock-back 75 / 0): 75 (weight Some(1.0)), 7.5 a frame, x0.9 a frame
-[f25604] KH1's row of ours hit: KH2's ATKP 128 (power 65, reaction 3, no launch) on record 0x7ff710785e10
-[f25605] enemy weight: actor 0x7ff7106da180 (object 0x824dfa5c) KH1 stat +0xC4 = Some(1.0)
-[f25605] KH2's push on 0x7ff7106da180 (reaction 3, knock-back 75 / 0): 75 (weight Some(1.0)), 7.5 a frame, x0.9 a frame
-[f25615] KH1's row of ours hit: KH2's ATKP 147 (power 33, reaction 3, no launch) on record 0x7ff710785e10
-[f25616] enemy weight: actor 0x7ff7106d8560 (object 0x824e0344) KH1 stat +0xC4 = Some(1.0)
-[f25616] KH2's push on 0x7ff7106d8560 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f25626] stick direction Vec2(0.7199581, -0.6940176) from the raw stick (0.67, 0.74) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.9800531, 0.19873574), tilt 1.00
-[f25626] KH1's ground combo, swing 2 of 4: KH2's row 35 motion 162 (ability 90, finisher false, KH2's length 4) on KH1's row 87 of its own
-[f25626] KH2's Slapshot (row 255, motion 162) on KH1's row 87 of its own (request 0x215)
-[f25627] draw: baked (KH1 slot 199)
-[f25633] KH1's row of ours hit: KH2's ATKP 890 (power 125, reaction 3, no launch) on record 0x7ff710785e10
-[f25634] KH2's push on 0x7ff7106d9cd0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f25649] guard seen: actor 0x7ff7106da180 (object 300), radius 50, flags 00106809
-[f25649] stick direction Vec2(0.75520873, -0.6554845) from the raw stick (0.71, 0.71) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.9924694, 0.12249342), tilt 1.00
-[f25649] KH1's ground combo, swing 3 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
-[f25649] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
-[f25650] draw: baked (KH1 slot 196)
-[f25665] recoil (KH2): KH1's big recoil (request 0x6f, its own animation, answer 1), no protection
-[f25666] draw: kh1_own (KH1 slot 73)
-[f25685] Medium Hits Flinch: a kind 4 hit (8 damage) taken as KH1's flinch (kind 3)
-[f25685] KH2's push on KH1's (request 0x49, Kh2): 200 (KH1's own 59), 20.0 a frame, x 0.9 a frame
-[f25686] draw: baked (KH1 slot 142)
-[f25737] draw: baked (KH1 slot 167)
-[f25752] enemy attack near Sora: slot 4 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106d8560 priority 10 radius 45 at [-432, -235, -399] (was [-432, -235, -399])
-[f25752] enemy attack near Sora: slot 5 flags 0011e819 +4 00000000 +0x30 00000001 owner 0x7ff7106d8560 priority 10 radius 45 at [-423, -310, -450] (was [-423, -310, -450])
-[f25752] KH1's ground combo, swing 1 of 4: KH2 would take row 51 motion 170 (ability 180, finisher false, KH2's length 4): an action ability's move
-[f25752] KH1's ground combo, swing 1: KH2's row 51 motion 170 has no KH1 row of its own built: no attack
-[f25753] draw: baked (KH1 slot 161)
-[f25754] draw: baked (KH1 slot 167)
-[f25764] KH1's ground combo, swing 1 of 4: KH2 would take row 51 motion 170 (ability 180, finisher false, KH2's length 4): an action ability's move
-[f25764] KH1's ground combo, swing 1: KH2's row 51 motion 170 has no KH1 row of its own built: no attack
-[f25765] draw: baked (KH1 slot 161)
-[f25766] draw: baked (KH1 slot 167)
-[f25775] KH1's ground combo, swing 1 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
-[f25775] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
-[f25776] draw: baked (KH1 slot 196)
-[f25782] KH2 flight on 0x7ff7106d9820 ended after 37 frames (state 2, KH1's arc its own)
-[f25783] guard seen: actor 0x7ff7106d9820 (object 300), radius 65, flags 00106809
-[f25796] KH1's row of ours hit: KH2's ATKP 126 (power 100, reaction 3, no launch) on record 0x7ff710785e10
-[f25797] KH2's push on 0x7ff7106d8560 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
-[f25815] KH2's push on KH1's (request 0x48, Kh2): 200 (KH1's own 29), 20.0 a frame, x 0.9 a frame
-[f25816] draw: baked (KH1 slot 141)
-[f25830] frame scale 4.00: KH2 steps 4 60 Hz frames a game frame
-[f25831] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
-[f25863] draw: baked (KH1 slot 167)
+[f5371] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
+[f5542] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, kh2_damage: true, criticals: false, party_criticals: false, kh1_ability_chance: false, enemy_weight: true, glide_cast: true, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_hit_sparks: true, kh2_camera: true, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, r2_camera_hold: false, l2_stick_menu: false, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40, 203])), hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh2, drive: true, valor_left_blade: true, styles: [true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false], knockback_numbers: Kh2, medium_hits_flinch: false, gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, kh1_leg_ik: false, foot_ik: false, trace: On, trace_seconds: 3, trace_game_frames: false, trace_cats: 8191, debug_menu: true, log_cats: 31, debug_growth: [0, 0, 0, 0, 0] }
+[f5551] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
+[f5568] draw: baked (KH1 slot 158)
+[f5569] KH2 slots: KH1 plays ours, KH2 motion 201 (for KH1's 12 / request 0x9; its slot 128 in the set; Sora's request 0x9)
+[f5574] KH1 rewrote its arc in a plain jump's rise: KH2's arc kept (its early release still open)
+[f5576] KH1 rewrote its arc in a plain jump's rise: KH2's arc kept (its early release still open)
+[f5578] KH1 rewrote its arc in a plain jump's rise: KH2's arc kept (its early release still open)
+[f5579] KH2's jump: into the fall (the jump let go): KH1's request 0xb, blend 8
+[f5579] draw: baked (KH1 slot 156)
+[f5580] KH2 slots: KH1 plays ours, KH2 motion 4 (for KH1's 10 / request 0x6; its slot 126 in the set; Sora's request 0xb)
+[f5580] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f5587] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 1.2/frame)
+[f5592] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 3.3/frame)
+[f5595] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 4.5/frame)
+[f5597] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 5.3/frame)
+[f5600] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 6.5/frame)
+[f5602] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 7.3/frame)
+[f5609] draw: baked (KH1 slot 159)
+[f5610] KH2 slots: KH1 plays ours, KH2 motion 5 (for KH1's 11 / request 0x7; its slot 129 in the set; Sora's request 0xc)
+[f5622] draw: baked (KH1 slot 163)
+[f5623] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
+[f5625] draw: baked (KH1 slot 166)
+[f5626] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 136 in the set; Sora's request 0x2)
+[f5655] draw: baked (KH1 slot 163)
+[f5656] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x0)
+[f5656] draw: baked (KH1 slot 160)
+[f5657] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
+[f5694] draw: baked (KH1 slot 163)
+[f5695] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
+[f5715] draw: baked (KH1 slot 160)
+[f5716] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
+[f5795] draw: baked (KH1 slot 163)
+[f5796] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
+[f5799] draw: baked (KH1 slot 166)
+[f5800] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 136 in the set; Sora's request 0x2)
+[f5818] draw: baked (KH1 slot 163)
+[f5819] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x0)
+[f5819] draw: baked (KH1 slot 160)
+[f5820] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
+[f5826] posed: a 149-bone model (instance 0x7ff70fd93bd0) by the plain pass
+[f5827] draw: baked (KH1 slot 163)
+[f5828] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
+[f5833] draw: baked (KH1 slot 160)
+[f5834] KH2 slots: KH1 plays ours, KH2 motion 0 (for KH1's 0 / request 0x0; its slot 130 in the set; Sora's request 0x0)
+[f5849] event ops at 147s (Sora can act: true): 8x24 203x92 284x22 285x44 286x22 290x22 291x44 292x22 340x46 419x22 452x23
+[f5850] draw: baked (KH1 slot 163)
+[f5851] KH2 slots: KH1 plays ours, KH2 motion 1 (for KH1's 3 / request 0x1; its slot 133 in the set; Sora's request 0x1)
+[f5852] draw: baked (KH1 slot 166)
+[f5853] KH2 slots: KH1 plays ours, KH2 motion 2 (for KH1's 6 / request 0x2; its slot 136 in the set; Sora's request 0x2)
+[f5857] draw: baked (KH1 slot 158)
+[f5858] KH2 slots: KH1 plays ours, KH2 motion 201 (for KH1's 12 / request 0x9; its slot 128 in the set; Sora's request 0x9)
+[f5862] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f5862] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f5862] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH2's arc, 10.1 frames up
+[f5862] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 8.0/frame and rise 201 left; kept 8.0/frame and KH1's hop
+[f5863] draw: baked (KH1 slot 207)
+[f5864] KH2's turn to the target (KH2 motion 181 frame 0, up to 0.52 a frame): 1.79 -> 1.26 (the target at -0.16); travel so far turned with him
+[f5864] KH2 slots: KH1 plays ours, KH2 motion 181 (for KH1's 102 / request 0x21d; its slot 177 in the set; Sora's request 0x21d)
+[f5865] KH2's turn to the target (KH2 motion 181 frame 1, up to 0.52 a frame): 1.26 -> 0.74 (the target at -0.16); travel so far turned with him
+[f5866] KH2's turn to the target (KH2 motion 181 frame 2, up to 0.52 a frame): 0.74 -> 0.22 (the target at -0.16); travel so far turned with him
+[f5866] KH1's own air move set its arc: on KH2's numbers from here (a rise of 7 over 7.1 frames)
+[f5867] KH2's turn to the target (KH2 motion 181 frame 3, up to 0.52 a frame): 0.22 -> -0.16 (the target at -0.16); travel so far turned with him
+[f5868] KH2's turn to the target (KH2 motion 181 frame 4, up to 0.52 a frame): -0.16 -> -0.15 (the target at -0.15); travel so far turned with him
+[f5869] KH2's turn to the target (KH2 motion 181 frame 5, up to 0.52 a frame): -0.15 -> -0.14 (the target at -0.14); travel so far turned with him
+[f5870] KH2's turn to the target (KH2 motion 181 frame 6, up to 0.52 a frame): -0.14 -> -0.13 (the target at -0.13); travel so far turned with him
+[f5871] KH2's turn to the target (KH2 motion 181 frame 7, up to 0.52 a frame): -0.13 -> -0.12 (the target at -0.12); travel so far turned with him
+[f5872] KH2's turn to the target (KH2 motion 181 frame 8, up to 0.52 a frame): -0.12 -> -0.11 (the target at -0.11); travel so far turned with him
+[f5873] KH2's turn to the target (KH2 motion 181 frame 9, up to 0.52 a frame): -0.11 -> -0.10 (the target at -0.10); travel so far turned with him
+[f5874] KH2's turn to the target (KH2 motion 181 frame 10, up to 0.52 a frame): -0.10 -> -0.09 (the target at -0.09); travel so far turned with him
+[f5875] KH2's turn to the target (KH2 motion 181 frame 11, up to 0.52 a frame): -0.09 -> -0.07 (the target at -0.07); travel so far turned with him
+[f5876] KH2's turn to the target (KH2 motion 181 frame 12, up to 0.52 a frame): -0.07 -> -0.06 (the target at -0.06); travel so far turned with him
+[f5877] KH2's turn to the target (KH2 motion 181 frame 13, up to 0.52 a frame): -0.06 -> -0.04 (the target at -0.04); travel so far turned with him
+[f5878] KH2's turn to the target (KH2 motion 181 frame 14, up to 0.52 a frame): -0.04 -> -0.03 (the target at -0.03); travel so far turned with him
+[f5879] KH2's turn to the target (KH2 motion 181 frame 15, up to 0.52 a frame): -0.03 -> -0.01 (the target at -0.01); travel so far turned with him
+[f5879] KH2 damage: row of ours power 100% on actor 0x7ff7106db8f0: 1
+[f5879] hit effect: attack 0x7ff710754710 of 0x7ff7106d7750 (object 0) hit 0x7ff7106db8f0 (object 200), weapon 0x51: source 0x7ff71020b260 (list d061880e8f3c5073), attack data 0x7ff7116c0e80 group (+0x28) 0, kind 0x1 -> KH1 spark id 0; sound byte 0 (0x400000 set)
+[f5879] effect list of source 0x7ff71020b260 (list d061880e8f3c5073, owner 0x7ff7106d7750, object 0, weapon 0x51), 9 entries: 0: kind 0x81 group 0x1 other 0x0 [8420b400 00000000 00000000 00000000]; 1: kind 0x102 group 0x1 other 0x0 [8420b400 00000001 00000001 00000000]; 2: kind 0x41 group 0x1 other 0x0 [8420b400 00000002 00000002 00000000]; 3: kind 0x0 group 0x0 other 0x0 [8420b400 00000003 00000005 00000000]; 4: kind 0x0 group 0x0 other 0x0 [8420b400 00000004 00000006 00000000]; 5: kind 0x0 group 0x0 other 0x0 [8420b400 00000005 00000007 00000000]; 6: kind 0x0 group 0x0 other 0x0 [8420b400 00000006 00000008 00000000]; 7: kind 0x0 group 0x0 other 0x0 [8420b400 00000006 00000009 00000000]; 8: kind 0x0 group 0x0 other 0x0 [8420b400 00000006 0000000a 00000000]
+[f5879] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f5879] Sora's attack 0x7ff710754710 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 3bb14e8a 00000000 3f7fff0c 3f800000 ffffffff 0000000f 00000001 856c0e80 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 44621684 c35a8e80 442b2406 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42480000 44626051 c325f9c6 4422b59f 3f800000 00000000 00000001 0000021d 856c0e80 1030b230 00007ff7 0000001e 00000000 44641c70 c388329c 4419c84e 3f800000 446405f6 c355bd53 441f2929 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0e80 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f5880] KH2's turn to the target (KH2 motion 181 frame 16, up to 0.52 a frame): -0.01 -> 0.01 (the target at 0.01); travel so far turned with him
+[f5881] KH2's turn to the target (KH2 motion 181 frame 17, up to 0.52 a frame): 0.01 -> 0.02 (the target at 0.02); travel so far turned with him
+[f5882] KH2's turn to the target (KH2 motion 181 frame 18, up to 0.52 a frame): 0.02 -> 0.04 (the target at 0.04); travel so far turned with him
+[f5883] KH2's turn to the target (KH2 motion 181 frame 19, up to 0.52 a frame): 0.04 -> 0.05 (the target at 0.05); travel so far turned with him
+[f5884] KH2's turn to the target (KH2 motion 181 frame 20, up to 0.52 a frame): 0.05 -> 0.07 (the target at 0.07); travel so far turned with him
+[f5885] KH2's turn to the target (KH2 motion 181 frame 21, up to 0.52 a frame): 0.07 -> 0.08 (the target at 0.08); travel so far turned with him
+[f5886] KH2's turn to the target (KH2 motion 181 frame 22, up to 0.52 a frame): 0.08 -> 0.10 (the target at 0.10); travel so far turned with him
+[f5888] stick direction Vec2(-0.73300815, 0.6802198) from the raw stick (-1.00, 0.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(-0.15889896, 0.98729485), tilt 1.00
+[f5888] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f5888] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f5888] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH2's arc, 9.1 frames up
+[f5888] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.1/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f5889] draw: baked (KH1 slot 208)
+[f5890] KH2's turn to the target (KH2 motion 182 frame 0, up to 0.52 a frame): 0.14 -> 0.14 (the target at 0.14); travel so far turned with him
+[f5890] KH2 slots: KH1 plays ours, KH2 motion 182 (for KH1's 102 / request 0x21e; its slot 178 in the set; Sora's request 0x21e)
+[f5891] KH2's turn to the target (KH2 motion 182 frame 1, up to 0.52 a frame): 0.14 -> 0.15 (the target at 0.15); travel so far turned with him
+[f5892] KH2's turn to the target (KH2 motion 182 frame 2, up to 0.52 a frame): 0.15 -> 0.15 (the target at 0.15); travel so far turned with him
+[f5893] KH2's turn to the target (KH2 motion 182 frame 3, up to 0.52 a frame): 0.15 -> 0.15 (the target at 0.15); travel so far turned with him
+[f5894] KH2's turn to the target (KH2 motion 182 frame 4, up to 0.52 a frame): 0.15 -> 0.16 (the target at 0.16); travel so far turned with him
+[f5895] KH2's turn to the target (KH2 motion 182 frame 5, up to 0.52 a frame): 0.16 -> 0.16 (the target at 0.16); travel so far turned with him
+[f5896] KH2's turn to the target (KH2 motion 182 frame 6, up to 0.52 a frame): 0.16 -> 0.17 (the target at 0.17); travel so far turned with him
+[f5897] KH2's turn to the target (KH2 motion 182 frame 7, up to 0.52 a frame): 0.17 -> 0.17 (the target at 0.17); travel so far turned with him
+[f5898] KH2's turn to the target (KH2 motion 182 frame 8, up to 0.52 a frame): 0.17 -> 0.18 (the target at 0.18); travel so far turned with him
+[f5899] KH2's turn to the target (KH2 motion 182 frame 9, up to 0.52 a frame): 0.18 -> 0.18 (the target at 0.18); travel so far turned with him
+[f5900] KH2's turn to the target (KH2 motion 182 frame 10, up to 0.52 a frame): 0.18 -> 0.19 (the target at 0.19); travel so far turned with him
+[f5900] KH2 damage: row of ours power 100% on actor 0x7ff7106db8f0: 1
+[f5900] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f5900] Sora's attack 0x7ff7107547d0 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 3cf4d680 00000000 3f7fe2b9 3f800000 ffffffff 00000010 00000002 856c0f00 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 44600c98 c2dad580 440f338a 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42f00000 445e441f c3242e08 44168168 3f800000 00000000 00000002 0000021e 856c0f00 1030b230 00007ff7 0000001e 00000000 445bcfc0 c2f2bc88 4403a2da 3f800000 445d970e c31ac90a 4410b692 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0f00 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f5901] KH2's turn to the target (KH2 motion 182 frame 11, up to 0.52 a frame): 0.19 -> 0.19 (the target at 0.19); travel so far turned with him
+[f5901] event ops at 152s (Sora can act: true): 8x52 25x1 26x1 203x208 284x52 285x104 286x52 290x52 291x104 292x52 314x1 335x1 336x1 340x104 419x52 423x1 424x1 452x52 639x1 640x1
+[f5902] KH2's turn to the target (KH2 motion 182 frame 12, up to 0.52 a frame): 0.19 -> 0.19 (the target at 0.19); travel so far turned with him
+[f5903] KH2's turn to the target (KH2 motion 182 frame 13, up to 0.52 a frame): 0.19 -> 0.20 (the target at 0.20); travel so far turned with him
+[f5904] KH2's turn to the target (KH2 motion 182 frame 14, up to 0.52 a frame): 0.20 -> 0.20 (the target at 0.20); travel so far turned with him
+[f5905] KH2's turn to the target (KH2 motion 182 frame 15, up to 0.52 a frame): 0.20 -> 0.21 (the target at 0.21); travel so far turned with him
+[f5906] KH2's turn to the target (KH2 motion 182 frame 16, up to 0.52 a frame): 0.21 -> 0.21 (the target at 0.21); travel so far turned with him
+[f5911] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 8 motion 183 (KH2's length 3)
+[f5911] KH1's aerial combo, swing 3 of 3: KH2's row 8 motion 183 (ability 0, finisher true, KH2's length 3) on KH1's row 100 of its own
+[f5911] KH2's 183 (row 255, motion 183) on KH1's row 100 of its own (request 0x222)
+[f5911] KH2's hop on KH1's air state: 21 high, 12.3/frame sideways, KH2's arc, 10.1 frames up
+[f5911] KH1's air attack out of KH2's motion: its own lunge 12.3/frame and hop 21; KH2's speed 4.4/frame and rise 0 left; kept 12.3/frame and KH1's hop
+[f5912] draw: baked (KH1 slot 212)
+[f5913] KH2 slots: KH1 plays ours, KH2 motion 183 (for KH1's 104 / request 0x222; its slot 182 in the set; Sora's request 0x222)
+[f5931] KH2 damage: row of ours power 200% on actor 0x7ff7106db8f0: 5
+[f5931] KH1's row of ours hit: KH2's ATKP 133 (power 200, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f5931] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f5931] Sora's attack 0x7ff710754710 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000005 00000045 3e5d885d 00000000 3f79eff8 3f800000 ffffffff 00000011 00000001 856c1100 00000000 00000000 00000000 00000000]; attack [0051d809 00000000 8420b260 42200000 4462bc08 c33f2b5c 442fa958 3f800000 00000030 3f4ccccc 00000000 00000006 00000045 846d7750 00000000 42480000 445d75ad c3568742 44222b54 3f800000 00000000 00000001 00000222 856c1100 1030b230 00007ff7 0000001e 00000000 4462c78c c3671a90 443281f8 3f800000 445dca0c c369fe3a 4423b97c 3f800000 846d7750 3f19999a 00000004 00000000 00000000 00000000 00060503 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c1100 [00000000 00000001 00000005 00000005 00000030 00000004 00000004 00000004 00000000 00000000 00000000 00000006 00000000 00000000 00010000 00000000 0000006e 00000005 00000004 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f5933] KH2's Finishing Plus window on KH2 motion 183 (frame 21): KH1's combo window
+[f5934] KH2's Finishing Plus window on KH2 motion 183 (frame 22): KH1's combo window
+[f5935] KH2's Finishing Plus window on KH2 motion 183 (frame 23): KH1's combo window
+[f5936] KH2's Finishing Plus window on KH2 motion 183 (frame 24): KH1's combo window
+[f5937] KH2's Finishing Plus window on KH2 motion 183 (frame 25): KH1's combo window
+[f5938] KH2's Finishing Plus window on KH2 motion 183 (frame 26): KH1's combo window
+[f5939] KH2's Finishing Plus window on KH2 motion 183 (frame 27): KH1's combo window
+[f5940] KH2's Finishing Plus window on KH2 motion 183 (frame 28): KH1's combo window
+[f5941] KH2's Finishing Plus window on KH2 motion 183 (frame 29): KH1's combo window
+[f5942] KH2's Finishing Plus window on KH2 motion 183 (frame 30): KH1's combo window
+[f5943] KH2's Finishing Plus window on KH2 motion 183 (frame 31): KH1's combo window
+[f5944] KH2's Finishing Plus window on KH2 motion 183 (frame 32): KH1's combo window
+[f5945] KH2's Finishing Plus window on KH2 motion 183 (frame 33): KH1's combo window
+[f5946] KH2's Finishing Plus window on KH2 motion 183 (frame 34): KH1's combo window
+[f5947] KH2's Finishing Plus window on KH2 motion 183 (frame 35): KH1's combo window
+[f5948] KH2's Finishing Plus window on KH2 motion 183 (frame 36): KH1's combo window
+[f5949] KH2's Finishing Plus window on KH2 motion 183 (frame 37): KH1's combo window
+[f5950] KH2's Finishing Plus window on KH2 motion 183 (frame 38): KH1's combo window
+[f5951] KH2's Finishing Plus window on KH2 motion 183 (frame 39): KH1's combo window
+[f5952] KH2's Finishing Plus window on KH2 motion 183 (frame 40): KH1's combo window
+[f5956] KH1's own air move set its arc: on KH2's numbers from here (falling at 13.8/frame)
+[f5957] draw: baked (KH1 slot 159)
+[f5958] KH2 slots: KH1 plays ours, KH2 motion 5 (for KH1's 11 / request 0x7; its slot 129 in the set; Sora's request 0xc)
+[f5969] draw: baked (KH1 slot 158)
+[f5970] KH2 slots: KH1 plays ours, KH2 motion 201 (for KH1's 12 / request 0x9; its slot 128 in the set; Sora's request 0x9)
+[f5975] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f5975] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f5975] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH2's arc, 10.1 frames up
+[f5975] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 7.4/frame and rise 152 left; kept 8.0/frame and KH1's hop
+[f5976] draw: baked (KH1 slot 207)
+[f5977] KH2 slots: KH1 plays ours, KH2 motion 181 (for KH1's 102 / request 0x21d; its slot 177 in the set; Sora's request 0x21d)
+[f5993] KH2 damage: row of ours power 100% on actor 0x7ff7106db8f0: 1
+[f5993] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f5993] Sora's attack 0x7ff710754710 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 3e636f99 00000000 3f799b17 3f800000 ffffffff 00000012 00000001 856c0e80 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 446372e4 c34f0214 44349e8e 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42480000 44607a44 c3402d61 4425bd7b 3f800000 00000000 00000001 0000021d 856c0e80 1030b230 00007ff7 0000001e 00000000 4463346c c38ab5c6 44315962 3f800000 44617853 c360d6d0 442917e2 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0e80 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f5999] event ops at 157s (Sora can act: true): 8x42 25x1 26x1 203x168 284x42 285x84 286x42 290x42 291x84 292x42 314x1 335x1 336x1 340x84 419x42 423x1 424x1 452x42 639x1 640x1
+[f6001] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f6001] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f6001] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH2's arc, 9.1 frames up
+[f6001] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 4.1/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f6002] draw: baked (KH1 slot 208)
+[f6003] KH2 slots: KH1 plays ours, KH2 motion 182 (for KH1's 102 / request 0x21e; its slot 178 in the set; Sora's request 0x21e)
+[f6014] KH2 damage: row of ours power 100% on actor 0x7ff7106db8f0: 1
+[f6014] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6014] Sora's attack 0x7ff7107547d0 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 bd094cb5 00000000 3f7fdb2c 3f800000 ffffffff 00000013 00000002 856c0f00 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 44618240 c330449c 441fd47e 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42f00000 445fdafb c36d4c24 4422bc79 3f800000 00000000 00000002 0000021e 856c0f00 1030b230 00007ff7 0000001e 00000000 4460695c c3296374 4415295c 3f800000 445ede1f c36026ba 441c851e 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0f00 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f6031] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f6031] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f6031] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f6031] KH2's hop on KH1's air state: 14 high, 10.2/frame sideways, KH2's arc, 8.3 frames up
+[f6031] KH1's air attack out of KH2's motion: its own lunge 10.2/frame and hop 14; KH2's speed 3.7/frame and rise 0 left; kept 10.2/frame and KH1's hop
+[f6032] draw: baked (KH1 slot 214)
+[f6033] KH2 slots: KH1 plays ours, KH2 motion 194 (for KH1's 104 / request 0x224; its slot 184 in the set; Sora's request 0x224)
+[f6049] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6050] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6051] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6052] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6053] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6053] KH2 damage: row of ours power 50% on actor 0x7ff7106db8f0: 5
+[f6053] KH1's row of ours hit: KH2's ATKP 915 (power 50, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f6053] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f6053] Sora's attack 0x7ff710754710 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000005 00000045 3f008e84 00000000 3f5d6153 3f800000 ffffffff 00000014 00000001 856c1200 00000000 00000000 00000000 00000000]; attack [0051d809 00000000 8420b260 42200000 4459870c c340cc34 442221d0 3f800000 00000030 3f4ccccc 00000000 00000006 00000045 846d7750 00000000 42480000 4460a323 c3598768 442e96f2 3f800000 00000000 00000001 00000224 856c1200 1030b230 00007ff7 0000001e 00000000 4458e17c c3519900 441ae24c 3f800000 445c3d7c c34a6dc4 442a0842 3f800000 846d7750 3f19999a 00000004 00000000 00000000 00000000 00060503 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c1200 [00000000 00000001 00000005 00000005 00000030 00000004 00000004 00000004 00000000 00000000 00000000 00000006 00000000 00000000 00010000 00000000 0000006e 00000005 00000004 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f6054] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6055] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6056] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6057] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6058] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6059] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6060] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6061] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6062] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6063] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6064] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6064] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6065] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6066] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6067] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6068] KH2's no-gravity range on KH1's air state (KH2 motion Some(194)): his height held (KH2's arc)
+[f6083] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6114] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6121] event ops at 159s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f6133] KH2's hold ended on KH1's air state (KH2 motion Some(194)): his fall starts over at 0.0/frame (KH2's 0x1403B4780)
+[f6148] draw: baked (KH1 slot 156)
+[f6149] KH2 slots: KH1 plays ours, KH2 motion 4 (for KH1's 10 / request 0x6; its slot 126 in the set; Sora's request 0x6)
+[f6149] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f6169] draw: baked (KH1 slot 159)
+[f6170] KH2 slots: KH1 plays ours, KH2 motion 5 (for KH1's 11 / request 0x7; its slot 129 in the set; Sora's request 0xc)
+[f6176] draw: baked (KH1 slot 158)
+[f6177] KH2 slots: KH1 plays ours, KH2 motion 201 (for KH1's 12 / request 0x9; its slot 128 in the set; Sora's request 0x9)
+[f6180] KH1 rewrote its arc in a plain jump's rise: KH2's arc kept (its early release still open)
+[f6182] KH1 rewrote its arc in a plain jump's rise: KH2's arc kept (its early release still open)
+[f6185] KH2's jump: into the fall (the jump let go): KH1's request 0xb, blend 8
+[f6185] draw: baked (KH1 slot 156)
+[f6186] KH2 slots: KH1 plays ours, KH2 motion 4 (for KH1's 10 / request 0x6; its slot 126 in the set; Sora's request 0xb)
+[f6186] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f6193] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 1.2/frame)
+[f6198] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 3.3/frame)
+[f6201] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 4.5/frame)
+[f6203] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 5.3/frame)
+[f6206] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (falling at 6.5/frame)
+[f6207] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f6207] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f6207] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH2's arc, 10.1 frames up
+[f6207] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 5.1/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f6208] draw: baked (KH1 slot 207)
+[f6209] KH2 slots: KH1 plays ours, KH2 motion 181 (for KH1's 102 / request 0x21d; its slot 177 in the set; Sora's request 0x21d)
+[f6210] KH1's own air move set its arc: on KH2's numbers from here (a rise of 11 over 8.1 frames)
+[f6213] KH1's own air move set its arc: on KH2's numbers from here (a rise of 2 over 5.1 frames)
+[f6214] KH1's own air move set its arc: on KH2's numbers from here (a rise of 1 over 4.1 frames)
+[f6215] KH1's own air move set its arc: on KH2's numbers from here (a rise of 0 over 3.1 frames)
+[f6218] KH1's own air move set its arc: on KH2's numbers from here (a rise of 0 over 0.1 frames)
+[f6224] KH2 damage: row of ours power 100% on actor 0x7ff7106db8f0: 1
+[f6224] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6224] Sora's attack 0x7ff710754710 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 3f72cbbe 00000000 3ea24f77 3f800000 ffffffff 00000015 00000001 856c0e80 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 445edab4 c35a518e 442c7654 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42480000 4456e5ab c325bcd5 4429a904 3f800000 00000000 00000001 0000021d 856c0e80 1030b230 00007ff7 0000001e 00000000 444ec1d8 c3880fcc 4425cd26 3f800000 4453e68b c35577b5 44276050 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0e80 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f6236] stick direction Vec2(0.78990686, 0.61322683) from the raw stick (0.00, -1.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.9599946, 0.28001875), tilt 1.00
+[f6236] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f6236] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f6236] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH2's arc, 9.1 frames up
+[f6236] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 3.8/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f6237] draw: baked (KH1 slot 208)
+[f6238] KH2 slots: KH1 plays ours, KH2 motion 182 (for KH1's 102 / request 0x21e; its slot 178 in the set; Sora's request 0x21e)
+[f6242] event ops at 161s (Sora can act: true): 8x60 25x1 26x1 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x1 335x1 336x1 340x122 419x62 423x1 424x1 452x61 639x1 640x1
+[f6248] KH2 damage: row of ours power 100% on actor 0x7ff7106db8f0: 1
+[f6248] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6248] Sora's attack 0x7ff7107547d0 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000001 00000043 3f55ac34 00000000 3f0cff13 3f800000 ffffffff 00000016 00000002 856c0f00 00000000 00000000 00000000 00000000]; attack [0041d809 00000000 8420b260 42200000 4445b6f8 c2be7374 441cfec8 3f800000 00000030 3f4ccccc 00000000 00000006 00000043 846d7750 00000000 42f00000 444aabad c315fcfe 4422a641 3f800000 00000000 00000002 0000021e 856c0f00 1030b230 00007ff7 0000001e 00000000 4439b048 c2d6794c 441a15d2 3f800000 444574ad c30ca76d 44200f89 3f800000 846d7750 00000000 00000000 00000000 00000000 00000000 00060500 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c0f00 [00000000 00000001 00000003 00000003 00000030 00000000 00000000 00000000 00000000 00000000 00000000 00000003 00000000 00000000 00000000 00000000 0000006e 00000001 00000000 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f6268] stick direction Vec2(0.7831852, 0.6217885) from the raw stick (0.00, -1.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.91988677, 0.39218414), tilt 1.00
+[f6268] stick direction Vec2(0.7831852, 0.6217885) from the raw stick (0.00, -1.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.91988677, 0.39218414), tilt 1.00
+[f6268] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f6268] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f6268] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f6268] KH2's hop on KH1's air state: 14 high, 14.1/frame sideways, KH2's arc, 8.3 frames up
+[f6268] KH1's air attack out of KH2's motion: its own lunge 14.1/frame and hop 14; KH2's speed 3.5/frame and rise 0 left; kept 14.1/frame and KH1's hop
+[f6269] draw: baked (KH1 slot 214)
+[f6270] KH2 slots: KH1 plays ours, KH2 motion 194 (for KH1's 104 / request 0x224; its slot 184 in the set; Sora's request 0x224)
+[f6288] KH2 damage: row of ours power 50% on actor 0x7ff7106db8f0: 5
+[f6288] KH1's row of ours hit: KH2's ATKP 915 (power 50, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f6288] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f6288] Sora's attack 0x7ff710754710 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000005 00000045 3f66c07c 00000000 3eddb770 3f800000 ffffffff 00000017 00000001 856c1200 00000000 00000000 00000000 00000000]; attack [0051d809 00000000 8420b260 42200000 4443ab98 c32f1d50 4420e8cc 3f800000 00000030 3f4ccccc 00000000 00000006 00000045 846d7750 00000000 42480000 444be297 c3128b0e 442c1c40 3f800000 00000000 00000001 00000224 856c1200 1030b230 00007ff7 0000001e 00000000 4444f5f8 c3425bc2 4418905a 3f800000 444317be c327821a 44268b08 3f800000 846d7750 3f19999a 00000004 00000000 00000000 00000000 00060503 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c1200 [00000000 00000001 00000005 00000005 00000030 00000004 00000004 00000004 00000000 00000000 00000000 00000006 00000000 00000000 00010000 00000000 0000006e 00000005 00000004 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f6301] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6307] KH2 damage: row of ours power 25% on actor 0x7ff7106db8f0: 5
+[f6307] KH1's row of ours hit: KH2's ATKP 916 (power 25, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f6307] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 1 a frame)
+[f6307] Sora's attack 0x7ff710754710 hit actor 0x7ff7106db8f0 (kind 4, object 200) -> record [00000005 846d7750 00000005 00000045 3f659605 00000000 3ee28198 3f800000 ffffffff 00000018 00000001 856c1200 00000000 00000000 00000000 00000000]; attack [0051d809 00000000 8420b260 42200000 445f3210 c34adb90 4438d4a4 3f800000 00000030 3f4ccccc 00000000 00000006 00000045 846d7750 00000000 42480000 44531aa6 c34bb612 442ef208 3f800000 00000000 00000001 00000224 856c1200 1030b230 00007ff7 0000001e 00000000 44620e50 c356e110 44363aee 3f800000 4454a447 c34bc4fc 442eb9df 3f800000 846d7750 3f19999a 00000004 00000000 00000000 00000000 00060503 3f800000 00000000 00000000 00000000 00000000]; attack data 0x7ff7116c1200 [00000000 00000001 00000005 00000005 00000030 00000004 00000004 00000004 00000000 00000000 00000000 00000006 00000000 00000000 00010000 00000000 0000006e 00000005 00000004 00000000 00000000 3f800000 00000000 00000000]; target stats 0x7ff7106fcb10 [00000000 40000000 41000000 00000000 433e0000 3dcccccd 3f733333 3f860a92 3f9c61ab 3d0efa36 3f060a92 40490fdb 40490fdb 40490fdb 40490fdb 00000012 00000012 00000003 00000003 00000000 00000000 00000000 3f000000 00000000 3f800000 3f800000 00000000 00001000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 3f800000 00000000 00000300 00000000 3f800000 00000000 00000000]
+[f6320] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6351] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6370] KH2's hold ended on KH1's air state (KH2 motion Some(194)): his fall starts over at 0.0/frame (KH2's 0x1403B4780)
+[f6385] draw: baked (KH1 slot 156)
+[f6386] KH2 slots: KH1 plays ours, KH2 motion 4 (for KH1's 10 / request 0x6; its slot 126 in the set; Sora's request 0x6)
+[f6386] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f6404] draw: baked (KH1 slot 159)
+[f6405] KH2 slots: KH1 plays ours, KH2 motion 5 (for KH1's 11 / request 0x7; its slot 129 in the set; Sora's request 0xc)
+[f6406] draw: baked (KH1 slot 158)
+[f6407] KH2 slots: KH1 plays ours, KH2 motion 201 (for KH1's 12 / request 0x9; its slot 128 in the set; Sora's request 0x9)
+[f6415] KH2's jump: into the fall (the jump let go): KH1's request 0xb, blend 8
+[f6415] draw: baked (KH1 slot 156)
+[f6415] stick direction Vec2(0.9998811, -0.015426459) from the raw stick (0.29, -0.96) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.99759513, 0.069310516), tilt 1.00
+[f6415] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH2's arc, 26.7 frames up
+[f6415] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f6416] KH2 slots: KH1 plays ours, KH2 motion 4 (for KH1's 10 / request 0x6; its slot 126 in the set; Sora's request 0x20b)
+[f6416] draw: baked (KH1 slot 189)
+[f6417] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f6417] KH2 slots: KH1 plays ours, KH2 motion 202 (for KH1's 102 / request 0x20b; its slot 159 in the set; Sora's request 0x20b)
+[f6417] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f6418] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (a rise of 118 over 24.7 frames)
+[f6419] KH1's own air move (no action flag) set its arc: on KH2's numbers from here (a rise of 105 over 23.7 frames)
+[f6419] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 168 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f6419] glide (native): the glide (205)
+[f6419] glide (native) motion: 0 -> 205 (KH1 request 0x71); KH1 before it: slot 159, time 4.0, blend 0.0 (step 1.0); stick tilt 1.00
+[f6420] draw: baked (KH1 slot 148)
+[f6420] glide (native) motion 205: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f6424] event ops at 164s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f6434] glide (native) motion 205: blend over at time 0, KH2's skip of frame 1 (KH1's update makes it 2)
+[f6434] glide (native) motion: 205 -> 207 (KH1 request 0x74); KH1 before it: slot 118, time 1.0, blend 0.0 (step 16.0); stick tilt 1.00
+[f6435] draw: baked (KH1 slot 151)
+[f6435] glide (native) motion 207: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f6449] glide (native): Square let go: KH2's fall at speed 23.1 (138 above the floor; KH1 state now 2)
+[f6450] glide (native): KH2's glide velocity 23.1/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f6450] KH2's arc on KH1's air state from KH1's own: falling at 0.0/frame
+[f6450] draw: baked (KH1 slot 156)
+[f6451] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f6477] draw: baked (KH1 slot 159)
+[f6490] draw: baked (KH1 slot 166)
+[f6529] draw: baked (KH1 slot 158)
+[f6540] KH2's jump: into the fall (the jump let go): KH1's request 0xb, blend 8
+[f6540] draw: baked (KH1 slot 156)
+[f6541] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f6563] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f6563] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f6563] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH2's arc, 10.1 frames up
+[f6563] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 21; KH2's speed 2.0/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f6564] draw: baked (KH1 slot 207)
+[f6581] KH2 damage: row of ours power 100% on actor 0x7ff7106db440: 1
+[f6581] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6598] stick direction Vec2(0.9038242, -0.42790398) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.8094559, 0.5871808), tilt 1.00
+[f6598] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f6598] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f6598] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH2's arc, 9.1 frames up
+[f6598] KH1's air attack out of KH2's motion: its own lunge 8.0/frame and hop 17; KH2's speed 3.3/frame and rise 0 left; kept 8.0/frame and KH1's hop
+[f6599] draw: baked (KH1 slot 208)
+[f6606] event ops at 167s (Sora can act: true): 8x60 25x1 26x1 203x244 284x62 285x124 286x62 290x62 291x124 292x62 314x1 335x1 336x1 340x122 419x62 423x1 424x1 452x61 639x1 640x1
+[f6610] KH2 damage: row of ours power 100% on actor 0x7ff7106db440: 1
+[f6610] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6634] draw: baked (KH1 slot 159)
+[f6660] draw: baked (KH1 slot 160)
+[f6713] event ops at 169s (Sora can act: true): 8x48 203x188 284x46 285x92 286x46 290x46 291x92 292x46 340x94 419x46 452x47
+[f6713] Config menu: physics KH1 (was KH2): KH1's numbers for every move of base Sora's, KH2's borrowed moves too (KH2's controller given KH1's gravity, fall, jump, speeds and air steering)
+[f6713] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, kh2_damage: true, criticals: false, party_criticals: false, kh1_ability_chance: false, enemy_weight: true, glide_cast: true, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_hit_sparks: true, kh2_camera: true, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, r2_camera_hold: false, l2_stick_menu: false, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40, 203])), hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false], knockback_numbers: Kh2, medium_hits_flinch: false, gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, kh1_leg_ik: false, foot_ik: false, trace: On, trace_seconds: 3, trace_game_frames: false, trace_cats: 8191, debug_menu: true, log_cats: 31, debug_growth: [0, 0, 0, 0, 0] }
+[f6715] draw: baked (KH1 slot 163)
+[f6718] draw: baked (KH1 slot 166)
+[f6728] draw: baked (KH1 slot 158)
+[f6735] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f6735] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f6735] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f6736] draw: baked (KH1 slot 207)
+[f6752] KH2 damage: row of ours power 100% on actor 0x7ff7106db440: 1
+[f6752] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6761] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f6761] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f6761] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f6762] draw: baked (KH1 slot 208)
+[f6763] event ops at 176s (Sora can act: true): 8x50 25x1 26x1 203x200 284x50 285x100 286x50 290x50 291x100 292x50 314x1 335x1 336x1 340x100 419x50 423x1 424x1 452x50 639x1 640x1
+[f6774] KH2 damage: row of ours power 100% on actor 0x7ff7106db440: 1
+[f6774] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6785] stick direction Vec2(0.89825326, -0.43947822) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.9358335, 0.3524426), tilt 1.00
+[f6785] KH1's ground combo, swing 3 of 4: KH2's row 35 motion 162 (ability 90, finisher false, KH2's length 4) on KH1's row 87 of its own
+[f6785] KH2's Slapshot (row 255, motion 162) on KH1's row 87 of its own (request 0x215)
+[f6786] draw: baked (KH1 slot 199)
+[f6793] KH2 damage: row of ours power 125% on actor 0x7ff7106db440: 1
+[f6793] KH1's row of ours hit: KH2's ATKP 890 (power 125, reaction 3, no launch) on record 0x7ff710785e10
+[f6842] draw: baked (KH1 slot 166)
+[f6845] draw: baked (KH1 slot 158)
+[f6852] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f6852] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f6852] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f6853] draw: baked (KH1 slot 207)
+[f6869] KH2 damage: row of ours power 100% on actor 0x7ff7106db440: 1
+[f6869] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6877] stick direction Vec2(0.999926, 0.012167275) from the raw stick (0.90, -0.43) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.6969041, 0.7171644), tilt 1.00
+[f6877] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f6877] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f6877] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f6878] draw: baked (KH1 slot 208)
+[f6889] KH2 damage: row of ours power 100% on actor 0x7ff7106db440: 1
+[f6889] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f6899] stick direction Vec2(0.90048414, -0.43488887) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.9009095, 0.43400705), tilt 1.00
+[f6899] stick direction Vec2(0.90048414, -0.43488887) from the raw stick (1.00, 0.00) through KH1's camera (convention 0, mode 3); his +0x20 Vec2(0.9009095, 0.43400705), tilt 1.00
+[f6899] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f6899] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f6899] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f6899] KH2's hop on KH1's air state: 14 high, 14.2/frame sideways, KH1's gravity (physics KH1)
+[f6900] draw: baked (KH1 slot 214)
+[f6921] KH2 damage: row of ours power 50% on actor 0x7ff7106db440: 5
+[f6921] KH1's row of ours hit: KH2's ATKP 915 (power 50, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f6921] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f6932] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6935] KH2 damage: row of ours power 25% on actor 0x7ff7106db440: 5
+[f6935] KH1's row of ours hit: KH2's ATKP 916 (power 25, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f6935] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 1 a frame)
+[f6951] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6952] KH2 damage: row of ours power 25% on actor 0x7ff7106db440: 5
+[f6952] KH1's row of ours hit: KH2's ATKP 917 (power 25, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f6952] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 12, sideways 10 a frame)
+[f6982] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f6985] KH2 damage: row of ours power 200% on actor 0x7ff7106db440: 5
+[f6985] KH1's row of ours hit: KH2's ATKP 927 (power 200, reaction 11, KH2's launch) on record 0x7ff710785e10
+[f6985] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f7007] draw: baked (KH1 slot 159)
+[f7020] draw: baked (KH1 slot 163)
+[f7031] draw: baked (KH1 slot 166)
+[f7067] event ops at 181s (Sora can act: true): 8x62 203x244 284x60 285x120 286x60 290x60 291x120 292x60 340x122 419x60 452x61
+[f7098] draw: baked (KH1 slot 158)
+[f7106] stick direction Vec2(-0.99569273, -0.09271561) from the raw stick (-0.02, -1.00) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.97689545, -0.21371809), tilt 1.00
+[f7106] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH1's gravity (physics KH1)
+[f7106] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f7106] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f7107] draw: baked (KH1 slot 189)
+[f7108] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f7108] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f7110] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 157 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f7110] glide (native): the glide (205)
+[f7110] glide (native) motion: 0 -> 205 (KH1 request 0x71); KH1 before it: slot 159, time 4.0, blend 0.0 (step 8.0); stick tilt 1.00
+[f7111] draw: baked (KH1 slot 148)
+[f7111] glide (native) motion 205: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f7121] glide (native): Square let go: KH2's fall at speed 20.3 (146 above the floor; KH1 state now 2)
+[f7122] glide (native): KH2's glide velocity 20.3/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f7122] draw: baked (KH1 slot 156)
+[f7123] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f7147] draw: baked (KH1 slot 159)
+[f7173] draw: baked (KH1 slot 160)
+[f9242] draw: baked (KH1 slot 163)
+[f9244] draw: baked (KH1 slot 166)
+[f9250] draw: baked (KH1 slot 158)
+[f9258] stick direction Vec2(-0.9250202, 0.37991798) from the raw stick (-0.71, -0.71) through KH1's camera (convention 0, mode 1); his +0x20 Vec2(-0.9245788, 0.38099077), tilt 1.00
+[f9258] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH1's gravity (physics KH1)
+[f9258] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f9258] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f9259] draw: baked (KH1 slot 189)
+[f9260] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f9260] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f9266] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 202 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f9266] glide (native): the glide (205)
+[f9266] glide (native) motion: 0 -> 205 (KH1 request 0x71); KH1 before it: slot 159, time 8.0, blend 0.0 (step 6.0); stick tilt 1.00
+[f9267] draw: baked (KH1 slot 148)
+[f9267] glide (native) motion 205: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f9268] glide (native) motion: 205 -> 206 (KH1 request 0x73); KH1 before it: slot 118, time 0.0, blend 16.0 (step 3.0); stick tilt 1.00
+[f9269] draw: baked (KH1 slot 150)
+[f9269] glide (native) motion 206 chained into KH1's blend at 0.19 of it: its source is the pose on screen (293 bones, 0 IK goals), not the last motion's frame 0
+[f9269] glide (native) motion 206: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f9275] glide (native) motion: 206 -> 205 (KH1 request 0x71); KH1 before it: slot 120, time 0.0, blend 16.0 (step 8.0); stick tilt 1.00
+[f9276] draw: baked (KH1 slot 148)
+[f9276] glide (native) motion 205 chained into KH1's blend at 0.50 of it: its source is the pose on screen (293 bones, 0 IK goals), not the last motion's frame 0
+[f9276] glide (native) motion 205: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f9290] glide (native) motion 205: blend over at time 0, KH2's skip of frame 1 (KH1's update makes it 2)
+[f9291] glide (native) motion: 205 -> 207 (KH1 request 0x74); KH1 before it: slot 118, time 2.0, blend 0.0 (step 16.0); stick tilt 1.00
+[f9292] draw: baked (KH1 slot 151)
+[f9292] glide (native) motion 207: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f9297] glide (native) motion: 207 -> 205 (KH1 request 0x71); KH1 before it: slot 121, time 0.0, blend 16.0 (step 7.0); stick tilt 1.00
+[f9298] draw: baked (KH1 slot 148)
+[f9298] glide (native) motion 205 chained into KH1's blend at 0.44 of it: its source is the pose on screen (293 bones, 0 IK goals), not the last motion's frame 0
+[f9298] glide (native) motion 205: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f9298] glide (native) motion: 205 -> 206 (KH1 request 0x73); KH1 before it: slot 118, time 0.0, blend 16.0 (step 2.0); stick tilt 1.00
+[f9299] draw: baked (KH1 slot 150)
+[f9299] glide (native) motion 206 chained into KH1's blend at 0.06 of it: its source is the pose on screen (293 bones, 0 IK goals), not the last motion's frame 0
+[f9299] glide (native) motion 206: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f9301] glide (native) motion: 206 -> 205 (KH1 request 0x71); KH1 before it: slot 120, time 0.0, blend 16.0 (step 4.0); stick tilt 1.00
+[f9302] draw: baked (KH1 slot 148)
+[f9302] glide (native) motion 205 chained into KH1's blend at 0.25 of it: its source is the pose on screen (293 bones, 0 IK goals), not the last motion's frame 0
+[f9302] glide (native) motion 205: KH1's blend clock 1.0 -> KH2's 2.0 (blend 16)
+[f9311] glide (native): Square let go: KH2's fall at speed 25.1 (117 above the floor; KH1 state now 2)
+[f9312] glide (native): KH2's glide velocity 25.1/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f9312] draw: baked (KH1 slot 156)
+[f9313] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f9323] KH1 has Sora (KH1's script moves him, actions [], flags 0100c047)
+[f9324] draw: kh1_own (KH1 slot 159)
+[f9324] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
+[f9326] KH1 has Sora (KH1's script moves him, actions [], flags 0100c003)
+[f9327] KH1 has Sora (KH1's script moves him, actions [4], flags 0100c003)
+[f9328] KH1 has Sora (KH1's script moves him, actions [], flags 01008003)
+[f9330] draw: kh1_own (KH1 slot 95)
+[f9370] event ops at 219s (Sora can act: false): 1x1 2x2 3x1 4x1 5x1 6x1 8x18 9x4 10x6 26x1 28x1 35x1 36x1 55x1 57x2 68x1 69x1 80x1 83x1 87x1 100x1 101x1 103x40 108x2 113x1 115x1 127x1 128x1 129x1 133x1 142x1 177x1 203x44 267x2 284x10 285x20 286x10 290x10 291x20 292x10 306x1 307x2 308x2 315x1 336x1 340x22 353x1 362x1 376x1 378x1 394x1 418x1 419x10 438x3 445x1 452x11 511x2 513x1 517x3
+[f9389] room: world 0xb room 0x1 entered; KH1 has Sora (KH1's script moves him, actions [], flags 01008003) (KH1 state 0, flags 01008003, script false)
+[f9389] Sora's instance 0x7ff70fd919d0 (bones at 0x7ff70e6cb010)
+[f9389] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f9389] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
+[f9389] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f9389] draw: kh1_own (KH1 slot 0)
+[f9389] KH1 has Sora (KH1's script moves him, actions [], flags 01008043)
+[f9390] draw: kh1_own (KH1 slot 160)
+[f9390] Sora's actor at 0x7ff7106d7c00 (dt 1.000)
+[f9390] Sora's actor first seen: 01008043 00030000 00000000 00000000 41378c0a 00000000 452fed5c 40000000 3ccba3ed 00000000 3f7febc0 00000000 3ccba3ec 00000000 3f7febc0 3ccba94b 3f800000 3f800000 3f800000 3f800000 41378c0a 00000000 452fed5c 00000000 3f800000 00000000 8274eda0 846fcc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 bf7febc0 00000000 3ccba3ec 00000000 00000000 3f800000 00000000 00000000 bccba3ec 00000000 bf7febc0 00000000 41378c0a 00000000 452fed5c 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8229bf74 827710a0 00000000 00000000 8276dc20 00000000 846f34a0 8430b1e0 3ccba94b 826cae20 826cae60 83d919d0 00000102 00000000 00000082 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 827717a0 8953ed70 9529f060 8292c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 bf7febc0 00000000 3ccba3ec 00000000 00000000 3f800000 00000000 00000000 bccba3ec 00000000 bf7febc0 00000000 41378c0a 00000000 452fed5c 3f800000 00000000 00000000 00000000 00000000 43340000 3f800000 00000000 43340000 00000000 00000000 00000000 00000000 41378c0a 00000000 452fed5c 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff0753 41378c0a 80000000 452fed5c 40000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 ffffffff 0000ffff ffffffff 00000000 00000000 41378c0a 80000000 452fed5c 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000070 00000062 00000053 00000032 00000004 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00040000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 41378c0a 00000000 452fed5c 3f800000 00000000 00000000 00000000 42280000 01008043 00030001 00000000 00000000 c2b72405 00000000 452cccbe 40000000 3f66473e 00000000 3edfad73 00000000 3f66473e 00000000 3edfad73 3f8f30e8 3f800000 3f800000 3f800000 3f800000 c2b72405 00000000 452cccbe 3f800000 3f800000 00000000 00000000 846fcd10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 bedfad73 00000000 3f66473e 00000000 00000000 3f800000 00000000 00000000 bf66473e 00000000 bedfad73 00000000 c2b72405 00000000 452cccbe 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8229bfec 829c1120 00000000 00000000 829c03a0 84365e60 846f3630 8430b240
+[f9408] KH1 has Sora (KH1's own states (base Sora, shared))
+[f9409] draw: baked (KH1 slot 165)
+[f9409] event ops at 220s (Sora can act: true): 3x4 4x4 5x4 6x4 8x4 9x6 10x13 19x1 22x1 27x1 60x1 62x1 63x1 69x1 80x4 81x2 82x2 83x4 90x1 103x18 112x1 114x1 127x1 128x2 129x2 132x2 133x2 150x1 151x1 183x1 199x1 203x20 321x1 338x1 362x1 363x1 395x1 417x2 452x1 511x1 512x1 514x1 592x1 593x1 606x1 625x1 626x7 719x1
+[f9416] draw: baked (KH1 slot 158)
+[f9417] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
+[f9425] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH1's gravity (physics KH1)
+[f9425] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f9425] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f9426] draw: baked (KH1 slot 189)
+[f9427] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f9427] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f9430] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 188 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f9430] glide (native): the glide (205)
+[f9430] glide (native) motion: 0 -> 205 (KH1 request 0x71); KH1 before it: slot 159, time 5.0, blend 0.0 (step 7.0); stick tilt 1.00
+[f9431] draw: baked (KH1 slot 148)
+[f9438] glide (native): Square let go: KH2's fall at speed 19.6 (180 above the floor; KH1 state now 2)
+[f9439] glide (native): KH2's glide velocity 19.6/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f9439] draw: baked (KH1 slot 156)
+[f9440] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f9467] draw: baked (KH1 slot 159)
+[f9470] event ops at 221s (Sora can act: true): 8x60 203x61 284x31 285x62 286x31 290x62 291x93 292x62 419x62
+[f9480] draw: baked (KH1 slot 166)
+[f9481] draw: baked (KH1 slot 163)
+[f9482] draw: baked (KH1 slot 160)
+[f9530] event ops at 222s (Sora can act: false): 8x60 9x2 57x1 98x43 108x1 113x1 115x1 151x1 175x1 203x62 284x30 285x60 286x30 290x60 291x90 292x60 419x60 511x1
+[f9547] room 0xb-0x1, first 3 s: KH2 had Sora 0 of 159 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
+[f9591] event ops at 223s (Sora can act: false): 0x1 1x3 3x1 4x3 5x2 6x2 8x62 9x4 13x1 83x2 88x1 89x27 98x8 107x28 109x2 177x1 179x1 203x61 284x30 285x60 286x30 290x60 291x90 292x60 419x60 753x1 754x1
+[f9652] event ops at 224s (Sora can act: false): 0x1 1x2 4x1 8x60 88x1 89x53 107x10 203x61 284x31 285x62 286x31 290x62 291x93 292x62 419x62
+[f9712] event ops at 225s (Sora can act: false): 8x60 89x53 107x8 203x60 284x30 285x60 286x30 290x60 291x90 292x60 419x60
+[f9722] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
+[f9723] draw: kh1_own (KH1 slot 160)
+[f9773] event ops at 226s (Sora can act: false): 2x2 8x64 28x1 33x10 107x2 113x1 115x1 127x1 128x1 129x1 203x61 270x2 284x30 285x60 286x30 290x60 291x90 292x60 378x1 389x1 394x1 418x1 419x60 511x2 593x1
+[f9783] room: world 0xb room 0x2 entered; KH1 has Sora (KH1's script moves him, actions [], flags 0100c043) (KH1 state 0, flags 0100c043, script false)
+[f9783] Sora's instance 0x7ff70fd915d0 (bones at 0x7ff70e6cb010)
+[f9783] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f9783] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
+[f9783] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f9783] draw: kh1_own (KH1 slot 0)
+[f9783] KH1 has Sora (KH1's own states (base Sora, shared))
+[f9784] draw: baked (KH1 slot 160)
+[f9784] Sora's actor at 0x7ff7106d72a0 (dt 1.000)
+[f9784] Sora's actor first seen: 0000c003 00030000 00000000 00000000 00000000 c1a00000 c3c80000 40000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 c1a00000 c3c80000 00000000 3f800000 00000000 8274eda0 846fcc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 bf800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 82504b04 827710a0 00000000 00000000 8276dc20 00000000 846f34a0 8430b1e0 00000000 826cae20 826cae60 83d915d0 00000102 00000000 00000082 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 827717a0 8953ed70 9529f060 8292c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 bf800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 00000000 43340000 3f800000 00000000 43340000 00000000 00000000 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff015e 00000000 c1a00000 c3c80000 40000000 00000000 00000000 00000000 00000000 00000000 00000000 c1a00000 ffffffff 0000ffff ffffffff 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000082 00000080 0000007e 00000046 00000004 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00040000 00000000 00000000 00000000 00000000 00000000 c1a00000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 c1a00000 c3c80000 3f800000 00000000 00000000 00000000 42280000 00008003 00040000 00000000 00000000 00000000 00000000 44ff5000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 44ff5000 3f800000 3f800000 00000000 00000000 846fcb10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 3f800000 3f800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 44ff5000 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8250601c 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[f9812] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
+[f9814] event ops at 227s (Sora can act: false): 3x1 4x1 5x1 6x1 8x13 10x2 27x1 34x1 55x1 60x1 62x2 69x1 80x1 83x1 106x3 113x1 115x1 127x1 128x1 129x1 132x3 133x2 141x1 151x1 163x4 167x4 199x1 203x9 284x5 285x10 286x5 290x10 291x15 292x10 306x1 321x1 362x4 417x1 419x10 461x1 462x25 511x2 513x1 514x1 580x1 643x1 719x1
+[f9874] event ops at 228s (Sora can act: false): 106x60
+[f9943] room 0xb-0x2, first 3 s: KH2 had Sora 0 of 161 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
+[f10056] event ops at 231s (Sora can act: false): 106x60 163x1
+[f10117] event ops at 232s (Sora can act: false): 3x2 4x2 5x2 6x2 7x2 8x2 10x1 55x1 69x1 80x2 83x2 106x3 113x1 115x1 126x1 141x1 151x1 154x1 306x1 427x2 511x1 513x1 514x1
+[f10160] posed: a 175-bone model (instance 0x7ff70fd91dd0) by the plain pass
+[f10160] posed: a 84-bone model (instance 0x7ff70fd927d0) by the plain pass
+[f10178] event ops at 233s (Sora can act: false): 0x1 1x1 8x1 33x18 34x1 69x1 141x1 250x3 251x1 306x1 347x1 361x1 406x1 415x1 566x1 567x1 693x1 710x1
+[f10206] draw: baked (KH1 slot 161)
+[f10237] event ops at 234s (Sora can act: false): 33x59
+[f10358] event ops at 236s (Sora can act: false): 8x1 33x44 106x1
+[f10463] draw: baked (KH1 slot 167)
+[f10463] posed: a 84-bone model (instance 0x7ff70fd927d0) by the ground-IK pass
+[f10464] posed: a 175-bone model (instance 0x7ff70fd91dd0) by the ground-IK pass
+[f10479] draw: baked (KH1 slot 158)
+[f10480] event ops at 238s (Sora can act: true): 112x1 114x1 150x1 154x1 160x1 187x4 238x1 301x1 331x1 346x1 368x1 457x19 512x1 514x1 592x1 678x1 711x1
+[f10486] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH1's gravity (physics KH1)
+[f10486] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f10486] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f10487] draw: baked (KH1 slot 189)
+[f10488] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f10488] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f10492] glide (native): Square in the air: KH2's Glide LV4 in KH1's state 0x15, 162 above the floor (start height 60), speed 18.0 (KH2's stored launch speed)
+[f10492] glide (native): the glide (205)
+[f10492] glide (native) motion: 0 -> 205 (KH1 request 0x71); KH1 before it: slot 159, time 6.0, blend 0.0 (step 8.0); stick tilt 1.00
+[f10493] draw: baked (KH1 slot 148)
+[f10497] glide (native): Square let go: KH2's fall at speed 19.2 (157 above the floor; KH1 state now 2)
+[f10498] glide (native): KH2's glide velocity 19.2/frame kept into the fall (KH1's carry from the stick had left 1.0)
+[f10498] draw: baked (KH1 slot 156)
+[f10499] KH2 slots: KH2 motion 4 loops from frame 12 of 32 (KH1's loop range)
+[f10517] KH1's aerial combo, swing 1 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f10517] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f10517] KH2's hop on KH1's air state: 56 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f10518] draw: baked (KH1 slot 208)
+[f10529] KH2 damage: row of ours power 100% on actor 0x7ff7106d8560: 8
+[f10529] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f10530] enemy weight: actor 0x7ff7106d8560 (object 0x82505b6c) KH1 stat +0xC4 = Some(1.0)
+[f10530] KH2's push on 0x7ff7106d8560 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f10532] enemy attack near Sora: slot 0 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da630 priority 40 radius 35 at [-186, -215, -212] (was [-186, -215, -212])
+[f10532] enemy attack near Sora: slot 1 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da630 priority 40 radius 35 at [-191, -208, -133] (was [-191, -208, -133])
+[f10540] event ops at 239s (Sora can act: true): 457x60
+[f10540] KH1's aerial combo, swing 2 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f10540] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f10540] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f10541] draw: baked (KH1 slot 207)
+[f10557] KH2 damage: row of ours power 100% on actor 0x7ff7106d8560: 8
+[f10557] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f10558] KH2's push on 0x7ff7106d8560 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f10561] KH2 damage: row of ours power 100% on actor 0x7ff7106d9cd0: 10
+[f10561] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f10562] enemy weight: actor 0x7ff7106d9cd0 (object 0x82504ce4) KH1 stat +0xC4 = Some(1.0)
+[f10562] KH2's push on 0x7ff7106d9cd0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f10564] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 7 motion 184 (KH2's length 3)
+[f10564] KH1's aerial combo, swing 3 of 3: KH2's row 7 motion 184 (ability 0, finisher true, KH2's length 3) on KH1's row 101 of its own
+[f10564] KH2's 184 (row 255, motion 184) on KH1's row 101 of its own (request 0x223)
+[f10564] KH2's hop on KH1's air state: 37 high, 12.0/frame sideways, KH1's gravity (physics KH1)
+[f10565] draw: baked (KH1 slot 213)
+[f10581] KH2 damage: row of ours power 150% on actor 0x7ff7106d8560: 8
+[f10581] KH1's row of ours hit: KH2's ATKP 134 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f10581] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f10599] draw: baked (KH1 slot 159)
+[f10601] alive 240s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f10612] draw: baked (KH1 slot 167)
+[f10615] draw: baked (KH1 slot 158)
+[f10625] KH2's jump: into the fall (1.0 of 5.0 frames up): KH1's request 0xb, blend 8
+[f10625] draw: baked (KH1 slot 156)
+[f10625] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH1's gravity (physics KH1)
+[f10625] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f10625] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f10626] draw: baked (KH1 slot 189)
+[f10627] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f10627] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754d10, radius 80
+[f10631] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f10631] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f10631] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f10632] draw: baked (KH1 slot 207)
+[f10650] KH2 damage: row of ours power 100% on actor 0x7ff7106d8560: 8
+[f10650] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f10651] KH2's push on 0x7ff7106d8560 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f10659] enemy attack near Sora: slot 8 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da180 priority 40 radius 35 at [77, -194, -30] (was [77, -194, -30])
+[f10659] enemy attack near Sora: slot 10 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da180 priority 40 radius 35 at [97, -187, -84] (was [97, -187, -84])
+[f10659] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f10659] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f10659] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f10660] draw: baked (KH1 slot 208)
+[f10665] enemy attack near Sora: slot 1 flags 0011e809 +4 00000000 +0x30 00000003 owner 0x7ff7106d9370 priority 30 radius 50 at [-57, -262, 58] (was [-57, -262, 58])
+[f10665] enemy attack near Sora: slot 2 flags 0011e819 +4 00000000 +0x30 00000003 owner 0x7ff7106d9370 priority 30 radius 50 at [40, -261, -12] (was [40, -261, -12])
+[f10665] enemy attack near Sora: slot 3 flags 0015e829 +4 00000000 +0x30 00000000 owner 0x7ff7106d9370 priority 30 radius 50 at [-0, -254, 33] (was [-0, -254, 33])
+[f10680] enemy attack near Sora: slot 4 flags 0011e809 +4 00000000 +0x30 00000003 owner 0x7ff7106d8a10 priority 30 radius 50 at [51, -248, -1] (was [51, -248, -1])
+[f10680] enemy attack near Sora: slot 5 flags 0011e819 +4 00000000 +0x30 00000003 owner 0x7ff7106d8a10 priority 30 radius 50 at [82, -247, -117] (was [82, -247, -117])
+[f10680] enemy attack near Sora: slot 6 flags 0015e829 +4 00000000 +0x30 00000000 owner 0x7ff7106d8a10 priority 30 radius 50 at [79, -240, -57] (was [79, -240, -57])
+[f10682] enemy attack near Sora: slot 7 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da630 priority 40 radius 35 at [1, -57, -123] (was [1, -57, -123])
+[f10682] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f10682] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f10682] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f10682] KH2's hop on KH1's air state: 14 high, 11.2/frame sideways, KH1's gravity (physics KH1)
+[f10683] draw: baked (KH1 slot 214)
+[f10701] KH2 damage: row of ours power 50% on actor 0x7ff7106d8560: 8
+[f10701] KH1's row of ours hit: KH2's ATKP 915 (power 50, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f10701] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f10702] guard seen: actor 0x7ff7106d8560 (object 321), radius 50, flags 00106809
+[f10715] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f10723] enemy attack near Sora: slot 9 flags 0015e819 +4 00000000 +0x30 00000000 owner 0x7ff7106d9370 priority 30 radius 50 at [-220, -203, -114] (was [-220, -203, -114])
+[f10727] enemy attack near Sora: slot 8 flags 0011e809 +4 00000000 +0x30 00000003 owner 0x7ff7106d9370 priority 30 radius 50 at [-261, -195, -138] (was [-261, -195, -138])
+[f10734] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f10765] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f10786] enemy attack near Sora: slot 6 flags 00016884 +4 00000000 +0x30 00000483 owner 0x7ff7106d8ec0 priority 0 radius 30 at [-151, -345, 216] (was [-200, -302, 200])
+[f10786] enemy attack near Sora: slot 7 flags 00016884 +4 00000000 +0x30 00000483 owner 0x7ff7106d9820 priority 0 radius 30 at [52, -345, 401] (was [0, -302, 400])
+[f10786] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 8 motion 183 (KH2's length 3, Finishing Plus)
+[f10786] Attack in KH1's finisher (count 3, finisher 1): KH2's next finisher, row 8 motion 183 (Finishing Plus)
+[f10786] KH2's 183 (row 255, motion 183) on KH1's row 100 of its own (request 0x222)
+[f10786] KH2's hop on KH1's air state: 31 high, 18.0/frame sideways, KH1's gravity (physics KH1)
+[f10787] draw: baked (KH1 slot 212)
+[f10804] KH2 damage: row of ours power 200% on actor 0x7ff7106d8560: 8
+[f10804] KH1's row of ours hit: KH2's ATKP 133 (power 200, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f10804] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f10820] draw: baked (KH1 slot 159)
+[f10829] draw: baked (KH1 slot 158)
+[f10837] KH2's jump: into the fall (1.0 of 5.0 frames up): KH1's request 0xb, blend 8
+[f10837] draw: baked (KH1 slot 156)
+[f10837] KH2's hop on KH1's air state: 145 high, 18.0/frame sideways, KH1's gravity (physics KH1)
+[f10837] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f10837] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f10838] draw: baked (KH1 slot 189)
+[f10839] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f10839] enemy attack near Sora: slot 6 flags 0001e884 +4 00000000 +0x30 00000483 owner 0x7ff7106d8ec0 priority 0 radius 30 at [247, -48, 114] (was [237, -37, 112])
+[f10839] enemy attack near Sora: slot 7 flags 0001e884 +4 00000000 +0x30 00000483 owner 0x7ff7106d9820 priority 0 radius 30 at [400, -45, 194] (was [391, -35, 194])
+[f10839] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f10849] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f10849] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f10849] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f10850] draw: baked (KH1 slot 207)
+[f10870] KH2 damage: row of ours power 100% on actor 0x7ff7106d8560: 8
+[f10870] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f10871] KH2's push on 0x7ff7106d8560 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f10881] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f10881] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f10881] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f10882] draw: baked (KH1 slot 208)
+[f10885] big target 0x7ff7106d9cd0 (object 301, not pulled): 2 of 2 parts hittable, 87 tall, radius 35, root 1502 away
+[f10894] KH2 damage: row of ours power 100% on actor 0x7ff7106d8560: 8
+[f10894] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f10895] KH2's push on 0x7ff7106d8560 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f10905] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f10905] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f10905] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f10905] KH2's hop on KH1's air state: 14 high, 7.9/frame sideways, KH1's gravity (physics KH1)
+[f10906] draw: baked (KH1 slot 214)
+[f10926] KH2 damage: row of ours power 50% on actor 0x7ff7106d8560: 8
+[f10926] KH1's row of ours hit: KH2's ATKP 915 (power 50, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f10926] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f10938] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f10941] KH2 damage: row of ours power 25% on actor 0x7ff7106d8560: 8
+[f10941] KH1's row of ours hit: KH2's ATKP 916 (power 25, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f10941] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 1 a frame)
+[f10957] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f10957] KH2 damage: row of ours power 25% on actor 0x7ff7106d8560: 8
+[f10957] KH1's row of ours hit: KH2's ATKP 917 (power 25, reaction 9, KH2's launch) on record 0x7ff710785e10
+[f10957] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 12, sideways 10 a frame)
+[f10988] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f10991] KH2 damage: row of ours power 200% on actor 0x7ff7106d8560: 8
+[f10991] KH1's row of ours hit: KH2's ATKP 927 (power 200, reaction 11, KH2's launch) on record 0x7ff710785e10
+[f10991] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f11001] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 8 motion 183 (KH2's length 3, Finishing Plus)
+[f11001] Attack in KH1's finisher (count 3, finisher 1): KH2's next finisher, row 8 motion 183 (Finishing Plus)
+[f11001] KH2's 183 (row 255, motion 183) on KH1's row 100 of its own (request 0x222)
+[f11001] KH2's hop on KH1's air state: 21 high, 12.0/frame sideways, KH1's gravity (physics KH1)
+[f11002] draw: baked (KH1 slot 212)
+[f11020] KH2 damage: row of ours power 200% on actor 0x7ff7106d8560: 8
+[f11020] KH1's row of ours hit: KH2's ATKP 133 (power 200, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f11020] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f11035] draw: baked (KH1 slot 159)
+[f11061] draw: baked (KH1 slot 161)
+[f11061] enemy attack near Sora: slot 0 flags 0001e884 +4 00000000 +0x30 00000483 owner 0x7ff7106d8a10 priority 0 radius 30 at [206, -428, 91] (was [201, -430, 85])
+[f11061] enemy attack near Sora: slot 1 flags 0001e884 +4 00000000 +0x30 00000483 owner 0x7ff7106d9370 priority 0 radius 30 at [196, -347, 105] (was [190, -357, 99])
+[f11061] KH1's ground combo, swing 1 of 4: KH2's row 33 motion 191 (ability 97, finisher false, KH2's length 4) on KH1's row 98 of its own
+[f11061] KH2's hop Aerial Sweep (motion 191) on KH1's air row 98 of its own (request 0x220) out of KH1's air state, 103 high, 0.8/frame sideways
+[f11061] KH2's hop on KH1's air state: 103 high, 0.8/frame sideways, KH1's gravity (physics KH1)
+[f11062] KH2's hop out of KH1's ground combo: its 0.8/frame sideways put back after KH1's carry into the air (which left 0.0)
+[f11062] draw: baked (KH1 slot 210)
+[f11066] KH2 damage: row of ours power 65% on actor 0x7ff7106d8560: 8
+[f11066] KH1's row of ours hit: KH2's ATKP 909 (power 65, reaction 4, KH2's launch) on record 0x7ff710785e10
+[f11066] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f11066] KH2 re-hit: ATKP 909 on 0x7ff7106d8560 again after 10 frames
+[f11076] KH2 damage: row of ours power 65% on actor 0x7ff7106d8560: 8
+[f11076] KH1's row of ours hit: KH2's ATKP 909 (power 65, reaction 4, KH2's launch) on record 0x7ff710785e10
+[f11076] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f11076] KH2 re-hit: ATKP 909 on 0x7ff7106d8560 again after 10 frames
+[f11090] KH2 damage: row of ours power 65% on actor 0x7ff7106d8560: 8
+[f11090] KH1's row of ours hit: KH2's ATKP 909 (power 65, reaction 4, KH2's launch) on record 0x7ff710785e10
+[f11090] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f11090] KH2 re-hit: ATKP 909 on 0x7ff7106d8560 again after 10 frames
+[f11104] draw: baked (KH1 slot 159)
+[f11117] draw: baked (KH1 slot 167)
+[f11131] draw: baked (KH1 slot 158)
+[f11137] enemy attack near Sora: slot 2 flags 0001e884 +4 00000000 +0x30 00000483 owner 0x7ff7106d8ec0 priority 0 radius 30 at [-10, -404, 346] (was [-17, -410, 342])
+[f11137] enemy attack near Sora: slot 3 flags 0001e884 +4 00000000 +0x30 00000483 owner 0x7ff7106d9820 priority 0 radius 30 at [199, -404, 533] (was [192, -410, 529])
+[f11137] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f11137] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f11137] KH2's hop on KH1's air state: 64 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f11138] draw: baked (KH1 slot 207)
+[f11161] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f11161] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f11161] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f11162] draw: baked (KH1 slot 208)
+[f11165] enemy attack near Sora: slot 5 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da180 priority 40 radius 35 at [753, -215, 711] (was [753, -215, 711])
+[f11165] enemy attack near Sora: slot 6 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da180 priority 40 radius 35 at [828, -208, 735] (was [828, -208, 735])
+[f11175] KH2 damage: row of ours power 100% on actor 0x7ff7106d8560: 8
+[f11175] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11194] draw: baked (KH1 slot 159)
+[f11207] draw: baked (KH1 slot 167)
+[f11217] draw: baked (KH1 slot 164)
+[f11220] draw: kh1_own (KH1 slot 62)
+[f11266] event ops at 279s (Sora can act: true): 305x1 457x58
+[f11290] draw: baked (KH1 slot 161)
+[f11307] draw: kh1_own (KH1 slot 61)
+[f11327] event ops at 280s (Sora can act: true): 457x61
+[f11377] draw: baked (KH1 slot 161)
+[f11393] draw: baked (KH1 slot 167)
+[f11406] draw: kh1_own (KH1 slot 63)
+[f11453] draw: baked (KH1 slot 167)
+[f11459] draw: baked (KH1 slot 158)
+[f11468] guard seen: actor 0x7ff7106d8ec0 (object 321), radius 50, flags 00106809
+[f11468] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f11468] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f11468] KH2's hop on KH1's air state: 21 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f11469] draw: baked (KH1 slot 207)
+[f11485] KH2 damage: row of ours power 100% on actor 0x7ff7106d9820: 8
+[f11485] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11486] enemy weight: actor 0x7ff7106d9820 (object 0x82505d4c) KH1 stat +0xC4 = Some(1.0)
+[f11486] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11486] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11486] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e50
+[f11487] enemy weight: actor 0x7ff7106d8a10 (object 0x82505be4) KH1 stat +0xC4 = Some(1.0)
+[f11487] KH2's push on 0x7ff7106d8a10 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11487] enemy weight: actor 0x7ff7106d8ec0 (object 0x82505c5c) KH1 stat +0xC4 = Some(1.0)
+[f11487] KH2's push on 0x7ff7106d8ec0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11493] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f11493] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f11493] KH2's hop on KH1's air state: 17 high, 8.0/frame sideways, KH1's gravity (physics KH1)
+[f11494] draw: baked (KH1 slot 208)
+[f11505] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11505] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e50
+[f11506] KH2's push on 0x7ff7106d8ec0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11506] KH2's push on 0x7ff7106d9cd0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11507] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11508] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11515] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 7 motion 184 (KH2's length 3)
+[f11515] KH1's aerial combo, swing 3 of 3: KH2's row 7 motion 184 (ability 0, finisher true, KH2's length 3) on KH1's row 101 of its own
+[f11515] KH2's 184 (row 255, motion 184) on KH1's row 101 of its own (request 0x223)
+[f11515] KH2's hop on KH1's air state: 31 high, 12.0/frame sideways, KH1's gravity (physics KH1)
+[f11516] draw: baked (KH1 slot 213)
+[f11531] KH1's row of ours hit: KH2's ATKP 134 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f11531] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11534] KH1's row of ours hit: KH2's ATKP 134 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f11534] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11534] KH1's row of ours hit: KH2's ATKP 134 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e50
+[f11534] KH2 launch asked: record 0x7ff710785e50 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11546] draw: baked (KH1 slot 159)
+[f11559] draw: baked (KH1 slot 167)
+[f11565] draw: baked (KH1 slot 158)
+[f11575] KH2's jump: into the fall (1.0 of 5.0 frames up): KH1's request 0xb, blend 8
+[f11575] draw: baked (KH1 slot 156)
+[f11577] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f11577] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f11578] draw: baked (KH1 slot 207)
+[f11595] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11596] KH2's push on 0x7ff7106d8ec0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11605] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f11605] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f11606] draw: baked (KH1 slot 208)
+[f11618] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11619] KH2's push on 0x7ff7106d8ec0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11620] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11621] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11634] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 7 motion 184 (KH2's length 3)
+[f11634] KH1's aerial combo, swing 3 of 3: KH2's row 7 motion 184 (ability 0, finisher true, KH2's length 3) on KH1's row 101 of its own
+[f11634] KH2's 184 (row 255, motion 184) on KH1's row 101 of its own (request 0x223)
+[f11635] draw: baked (KH1 slot 213)
+[f11647] KH1's row of ours hit: KH2's ATKP 134 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f11647] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11653] KH1's row of ours hit: KH2's ATKP 134 (power 150, reaction 7, KH2's launch) on record 0x7ff710785e10
+[f11653] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11667] draw: baked (KH1 slot 159)
+[f11674] draw: baked (KH1 slot 158)
+[f11680] enemy attack near Sora: slot 6 flags 0011e819 +4 00000000 +0x30 00000003 owner 0x7ff7106d8a10 priority 30 radius 50 at [770, -209, 672] (was [770, -209, 672])
+[f11680] enemy attack near Sora: slot 7 flags 0015e829 +4 00000000 +0x30 00000000 owner 0x7ff7106d8a10 priority 30 radius 50 at [821, -202, 704] (was [821, -202, 704])
+[f11680] enemy attack near Sora: slot 11 flags 0011e809 +4 00000000 +0x30 00000001 owner 0x7ff7106da180 priority 40 radius 35 at [744, -43, 956] (was [744, -43, 956])
+[f11680] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f11680] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f11681] draw: baked (KH1 slot 207)
+[f11697] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11698] KH2's push on 0x7ff7106d8ec0 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11699] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11700] enemy attack near Sora: slot 10 flags 0015e819 +4 00000000 +0x30 00000000 owner 0x7ff7106d9370 priority 30 radius 50 at [395, -186, 691] (was [395, -186, 691])
+[f11700] KH2's push on 0x7ff7106d8a10 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11704] enemy attack near Sora: slot 9 flags 0011e809 +4 00000000 +0x30 00000003 owner 0x7ff7106d9370 priority 30 radius 50 at [374, -177, 671] (was [374, -177, 671])
+[f11709] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f11709] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f11710] draw: baked (KH1 slot 208)
+[f11720] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11721] enemy weight: actor 0x7ff7106da180 (object 0x82504d5c) KH1 stat +0xC4 = Some(1.0)
+[f11721] KH2's push on 0x7ff7106da180 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11723] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11724] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11732] draw: baked (KH1 slot 159)
+[f11745] draw: baked (KH1 slot 167)
+[f11758] draw: baked (KH1 slot 158)
+[f11766] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f11766] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f11767] draw: baked (KH1 slot 207)
+[f11783] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11784] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11787] KH1's row of ours hit: KH2's ATKP 131 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11788] KH2's push on 0x7ff7106da180 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11790] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f11790] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f11791] draw: baked (KH1 slot 208)
+[f11802] KH1's row of ours hit: KH2's ATKP 132 (power 100, reaction 3, no launch) on record 0x7ff710785e10
+[f11803] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11804] KH2's push on 0x7ff7106da180 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11812] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 7 motion 184 (KH2's length 3)
+[f11812] KH1's aerial combo, swing 3 of 3: KH2's row 7 motion 184 (ability 0, finisher true, KH2's length 3) on KH1's row 101 of its own
+[f11812] KH2's 184 (row 255, motion 184) on KH1's row 101 of its own (request 0x223)
+[f11813] draw: baked (KH1 slot 213)
+[f11816] enemy attack near Sora: slot 0 flags 0011e809 +4 00000000 +0x30 00000003 owner 0x7ff7106d8ec0 priority 30 radius 50 at [605, -209, 841] (was [605, -209, 841])
+[f11816] enemy attack near Sora: slot 2 flags 0015e829 +4 00000000 +0x30 00000000 owner 0x7ff7106d8ec0 priority 30 radius 50 at [593, -201, 902] (was [593, -201, 902])
+[f11818] enemy attack near Sora: slot 3 flags 0011e809 +4 00000000 +0x30 00000003 owner 0x7ff7106d8a10 priority 30 radius 50 at [702, -201, 775] (was [702, -201, 775])
+[f11818] enemy attack near Sora: slot 5 flags 0015e829 +4 00000000 +0x30 00000000 owner 0x7ff7106d8a10 priority 30 radius 50 at [659, -193, 820] (was [659, -193, 820])
+[f11825] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11833] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11837] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f11839] draw: baked (KH1 slot 159)
+[f11852] draw: baked (KH1 slot 164)
+[f11854] draw: baked (KH1 slot 167)
+[f11883] draw: baked (KH1 slot 164)
+[f11884] draw: baked (KH1 slot 161)
+[f11885] draw: baked (KH1 slot 164)
+[f11886] draw: baked (KH1 slot 167)
+[f11898] draw: baked (KH1 slot 158)
+[f11908] KH2's jump: into the fall (1.0 of 5.0 frames up): KH1's request 0xb, blend 8
+[f11908] draw: baked (KH1 slot 156)
+[f11926] guard seen: actor 0x7ff7106d9820 (object 321), radius 50, flags 00106809
+[f11926] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f11926] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f11927] draw: baked (KH1 slot 207)
+[f11940] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11948] enemy weight: actor 0x7ff7106da630 (object 0x82504dd4) KH1 stat +0xC4 = Some(1.0)
+[f11948] KH2's push on 0x7ff7106da630 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11949] KH2's push on 0x7ff7106d8a10 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11953] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f11953] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f11954] draw: baked (KH1 slot 208)
+[f11966] KH2's push on 0x7ff7106da180 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11969] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f11976] draw: baked (KH1 slot 159)
+[f11989] draw: baked (KH1 slot 167)
+[f12046] draw: baked (KH1 slot 164)
+[f12048] draw: baked (KH1 slot 167)
+[f12063] draw: baked (KH1 slot 158)
+[f12072] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f12072] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f12073] draw: baked (KH1 slot 207)
+[f12087] enemy attack near Sora: slot 4 flags 0015e829 +4 00000000 +0x30 00000000 owner 0x7ff7106d9820 priority 30 radius 50 at [800, -198, 725] (was [800, -198, 725])
+[f12087] draw: kh1_own (KH1 slot 67)
+[f12117] draw: baked (KH1 slot 156)
+[f12122] draw: baked (KH1 slot 159)
+[f12128] draw: baked (KH1 slot 158)
+[f12133] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f12133] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f12134] draw: baked (KH1 slot 207)
+[f12151] draw: kh1_own (KH1 slot 74)
+[f12182] draw: baked (KH1 slot 159)
+[f12187] draw: baked (KH1 slot 158)
+[f12188] draw: kh1_own (KH1 slot 63)
+[f12235] draw: baked (KH1 slot 167)
+[f12241] draw: baked (KH1 slot 158)
+[f12249] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f12249] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f12250] draw: baked (KH1 slot 207)
+[f12252] enemy attack near Sora: slot 2 flags 00016884 +4 00000000 +0x30 00000483 owner 0x7ff7106d9370 priority 0 radius 30 at [242, -402, 506] (was [218, -359, 461])
+[f12275] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f12275] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f12276] draw: baked (KH1 slot 208)
+[f12287] KH2's push on 0x7ff7106da630 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f12302] draw: baked (KH1 slot 159)
+[f12315] draw: baked (KH1 slot 167)
+[f12369] hit effect: attack 0x7ff7107547d0 of 0x7ff7106d72a0 (object 0) hit 0x7ff7106da630 (object 301), weapon 0x51: source 0x7ff70ed19120 (list ad5ec94eae5b846d), attack data 0x7ff70ed3c90c group (+0x28) 2, kind 0x1 -> KH1 spark id 9; sound byte 0 (0x400000 clear)
+[f12369] effect list of source 0x7ff70ed19120 (list ad5ec94eae5b846d, owner 0x7ff7106d72a0, object 0, weapon 0x51), 12 entries: 0: kind 0x0 group 0x0 other 0x0 [82d19330 00000000 00000000 00000000]; 1: kind 0x0 group 0x0 other 0x0 [82d19330 00000001 00000001 00000000]; 2: kind 0x0 group 0x0 other 0x0 [82d19330 00000002 00000002 00000000]; 3: kind 0x0 group 0x0 other 0x0 [82d19330 00000003 0000000b 00000000]; 4: kind 0x1 group 0x1 other 0x0 [82d20080 00000000 00000003 00000000]; 5: kind 0x1 group 0x2 other 0x0 [82d20080 00000001 00000004 00000000]; 6: kind 0x0 group 0x0 other 0x0 [82d28a20 00000000 00000005 00000000]; 7: kind 0x0 group 0x0 other 0x0 [82d29f10 00000000 00000006 00000000]; 8: kind 0x0 group 0x0 other 0x0 [82d2c330 00000000 00000007 00000000]; 9: kind 0x1 group 0x4 other 0x0 [82d2c330 00000001 00000008 00000000]; 10: kind 0x0 group 0x4 other 0x0 [82d2c330 00000002 00000009 00000000]; 11: kind 0x30 group 0x4 other 0x0 [82d2c330 00000003 0000000a 00000000]
+[f12378] command 0x2 (02000702): KH2's Reflect in KH1's own cast state (ground)
+[f12379] draw: baked (KH1 slot 193)
+[f12421] command 0x2 (02000702): KH2's Reflect in KH1's own cast state (ground)
+[f12459] command 0x2 (02000702): KH2's Reflect in KH1's own cast state (ground)
+[f12489] enemy attack near Sora: slot 0 flags 00016884 +4 00000000 +0x30 00000483 owner 0x7ff7106d8a10 priority 0 radius 30 at [855, -342, 146] (was [900, -300, 171])
+[f12489] enemy attack near Sora: slot 1 flags 00016884 +4 00000000 +0x30 00000483 owner 0x7ff7106d8ec0 priority 0 radius 30 at [892, -327, 613] (was [890, -282, 665])
+[f12540] draw: baked (KH1 slot 167)
+[f12546] draw: kh1_own (KH1 slot 62)
+[f12568] guard seen: actor 0x7ff7106d9370 (object 321), radius 50, flags 00106809
+[f12593] draw: baked (KH1 slot 167)
+[f12604] enemy attack near Sora: slot 2 flags 0011e809 +4 00000004 +0x30 00000001 owner 0x7ff7106d9cd0 priority 40 radius 35 at [607, -57, 188] (was [607, -57, 188])
+[f12606] draw: baked (KH1 slot 158)
+[f12613] KH1's aerial combo, swing 1 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f12613] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f12614] draw: baked (KH1 slot 208)
+[f12628] enemy weight: actor 0x7ff7106d9370 (object 0x82505cd4) KH1 stat +0xC4 = Some(1.0)
+[f12628] KH2's push on 0x7ff7106d9370 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f12638] KH1's aerial combo, swing 2 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f12638] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f12639] draw: baked (KH1 slot 207)
+[f12656] KH2's push on 0x7ff7106d9370 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f12664] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 7 motion 184 (KH2's length 3)
+[f12664] KH1's aerial combo, swing 3 of 3: KH2's row 7 motion 184 (ability 0, finisher true, KH2's length 3) on KH1's row 101 of its own
+[f12664] KH2's 184 (row 255, motion 184) on KH1's row 101 of its own (request 0x223)
+[f12665] draw: baked (KH1 slot 213)
+[f12670] enemy attack near Sora: slot 7 flags 0011e819 +4 00000000 +0x30 00000003 owner 0x7ff7106d8a10 priority 30 radius 50 at [720, -266, 108] (was [720, -266, 108])
+[f12670] enemy attack near Sora: slot 8 flags 0015e829 +4 00000000 +0x30 00000000 owner 0x7ff7106d8a10 priority 30 radius 50 at [726, -258, 169] (was [726, -258, 169])
+[f12681] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f12689] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3, Finishing Plus) (KH2's row 29 motion 194 first)
+[f12689] Attack in KH1's finisher (count 3, finisher 1): KH2's next finisher, row 29 motion 194 (Finishing Plus)
+[f12689] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f12690] draw: baked (KH1 slot 214)
+[f12691] effect cache: E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache\kh2-effects-p_ex100_btlf.bin (matches this start's files and settings; read in 1 ms)
+[f12691] effect cache: E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache\kh2-effects-p_ex100_magf_a_us.bin (matches this start's files and settings; read in 1 ms)
+[f12691] effect cache: E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache\kh2-effects-p_ex100_ultf.bin (matches this start's files and settings; read in 3 ms)
+[f12691] effect cache: E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache\kh2-effects-fire_3_mag.bin (matches this start's files and settings; read in 0 ms)
+[f12691] effect cache: E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache\kh2-effects-blizzard_3_mag.bin (matches this start's files and settings; read in 0 ms)
+[f12691] effect cache: E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache\kh2-effects-thunder_3_mag.bin (matches this start's files and settings; read in 1 ms)
+[f12714] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f12722] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f12741] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f12772] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f12775] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f12806] draw: kh1_own (KH1 slot 68)
+[f12832] draw: baked (KH1 slot 159)
+[f12835] draw: baked (KH1 slot 158)
+[f12842] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f12842] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f12843] draw: baked (KH1 slot 207)
+[f12860] KH2's push on 0x7ff7106d9370 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f12864] KH2's push on 0x7ff7106da630 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f12867] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f12867] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f12868] draw: baked (KH1 slot 208)
+[f12880] KH2's push on 0x7ff7106d9370 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f12889] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f12889] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f12889] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f12890] draw: baked (KH1 slot 214)
+[f12909] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f12922] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f12926] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 1 a frame)
+[f12941] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f12972] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f13005] draw: baked (KH1 slot 159)
+[f13018] draw: baked (KH1 slot 167)
+[f13070] Square while moving: KH2's dodge roll LV1 on KH1's roll (request 0xDC, KH2 motion 209), invulnerable 10 frames
+[f13071] draw: baked (KH1 slot 147)
+[f13108] draw: baked (KH1 slot 167)
+[f13111] draw: baked (KH1 slot 164)
+[f13112] draw: baked (KH1 slot 158)
+[f13121] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f13121] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f13122] draw: baked (KH1 slot 189)
+[f13123] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f13123] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f13128] KH1's aerial combo, swing 1 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f13128] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f13129] draw: baked (KH1 slot 208)
+[f13141] KH2's push on 0x7ff7106d8a10 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f13142] KH2's push on 0x7ff7106d9820 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f13151] KH1's aerial combo, swing 2 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f13151] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f13152] draw: baked (KH1 slot 207)
+[f13169] KH2's push on 0x7ff7106d8a10 (reaction 3, knock-back 125 / 0): 125 (weight Some(1.0)), 12.5 a frame, x0.9 a frame
+[f13175] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 7 motion 184 (KH2's length 3)
+[f13175] KH1's aerial combo, swing 3 of 3: KH2's row 7 motion 184 (ability 0, finisher true, KH2's length 3) on KH1's row 101 of its own
+[f13175] KH2's 184 (row 255, motion 184) on KH1's row 101 of its own (request 0x223)
+[f13176] draw: baked (KH1 slot 213)
+[f13192] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 45 a frame)
+[f13200] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3, Finishing Plus) (KH2's row 29 motion 194 first)
+[f13200] Attack in KH1's finisher (count 3, finisher 1): KH2's next finisher, row 29 motion 194 (Finishing Plus)
+[f13200] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f13201] draw: baked (KH1 slot 214)
+[f13222] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 10, sideways 1 a frame)
+[f13233] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f13235] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 5, sideways 1 a frame)
+[f13252] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f13252] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 12, sideways 10 a frame)
+[f13283] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f13283] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f13286] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f13317] draw: baked (KH1 slot 156)
+[f13326] draw: baked (KH1 slot 159)
+[f13351] alive 360s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
