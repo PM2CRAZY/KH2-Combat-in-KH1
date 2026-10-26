@@ -27,6 +27,10 @@ Our reading, Checked against the files unless marked.
   it through KH1's own sound engine when the element starts (`docs/kh1-sound-native.md`; the
   mod's own `waveOut` player and its decoded copies are gone since the "gut the old system"
   round).
+  The cut sounds (and Sora's battle voice bank) are kept in the mod folder's
+  `kh1-kh2-cache\kh2-sounds.bin` and read from there on later starts; they are cut again only
+  when a KH2 file they come from, the mod's version, `kh2_volume` or the list of sounds wanted
+  changes (`docs/kh1-asset-cache.md` §4).
 
 ## Sound ids are id records, not streams (KH1 stage 41)
 

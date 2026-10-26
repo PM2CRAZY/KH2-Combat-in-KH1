@@ -5,7 +5,8 @@ anything to be installed in order to be converted, when the game starts there sh
 screen showing what the extraction is doing before continuing into the menu, this should render in
 engine and be native, and not as a layer like the debug menu."
 
-Two parts: the motion slot cache (built), and the loading screen (built).
+Parts: the motion slot cache (built), the loading screen (built), package reads (built) and the
+KH2 sound cache (built, §4).
 Addresses are the Steam build's. Tags: **Checked (decomp)**, **Checked (exe)**, **Checked (code)**,
 **Assumption**.
 
@@ -186,3 +187,68 @@ file's size or time changed. The first thread to ask reads it; threads asking me
 that read instead of each doing their own. Cuts the start-up peak (several loader threads used to
 hold an executable each at once) and the start-up time. **Assumption**: the number of package reads
 at start (about a hundred) is from the code, not counted in game.
+
+## 4. The KH2 sound cache (built; ram-use m1, "do all three ... go ahead")
+
+What it saves: the cutting `kh2sound` did at every start. Each KH2 sound the mod plays through
+KH1's engine is a one-sound bank cut out of one of KH2's sound banks (`kh2_formats::scd_cut`, at
+`kh2_volume`, its bus moved to KH1's effects bus), plus Sora's battle voice bank as it is
+(`docs/kh1-sound-native.md`). Cutting them read Sora's effect package `obj/P_EX100.a.us` (which
+sound each effect element names), the KH2 sound banks the sounds come from (three, about 28 MB
+decompressed, held at once), `00battle.bin` (the voices' table) and
+`voice/us/battle/tt0_sora.win32.scd`. **Checked (code)**; the 28 MB was measured on the PC
+(ram-use thread).
+
+Where: `kh1-kh2-cache\kh2-sounds.bin`, beside `kh2-motion-slots.bin` (the DLL's folder). Code:
+`crates/kh1-hook/src/soundcache.rs` (the file, unit tested), `win/kh2sound.rs` (`load`, `cut_all`,
+`hand_to_kh1`).
+
+When it is used: the file starts with a manifest (readable text):
+- the cache's format (`soundcache::FORMAT`) and the mod's version (`VERSION`: every new build cuts
+  once);
+- `ini kh2_volume` (it is in the cut banks' records);
+- `wants`: a hash of what is asked for (Sora's effect elements, sound ids, the spell packages'
+  elements and their sounds, the voices), sorted. It follows `kh2_sounds`, `reflect`, `drive`,
+  the forms and spells loaded, so any setting that changes what's loaded changes it;
+- `file <name>` for every KH2 file the cutting read, with a stamp of where it is in KH2's
+  packages (`kh2_data::Install::stamp_any`): the archive (and whether it is the Mods Manager's
+  backup), the file's index entry (offset, stored and real size) and the `.pkg`'s size and
+  modification time; "missing" when no archive has it. So a changed or moved file is noticed from
+  the indexes alone, without reading or decompressing it. **Assumption**: anything that changes a
+  file in a `.pkg` (a patcher, a Steam repair) changes its index entry or the `.pkg`'s size or
+  time; if it didn't, the old sounds would be kept until the next mod version.
+
+The files listed are the ones the file itself names, so the check needs no file read: each listed
+file's stamp is worked out now and compared, with the request lines. Anything different, or a
+damaged file (the end hash, lengths past the file's end): the sounds are cut again and the file
+written again (temporary file renamed over it, as the slot cache). A failure to write only means
+cutting again next start.
+
+Memory (one copy):
+- From the file: read piece by piece (8 KB buffered) straight into each sound's own buffer, no
+  whole-file buffer; those buffers are moved into `kh1bank::add` / `set_voice_bank`, as the cut
+  ones were. **Checked (code)**.
+- Cutting again: one KH2 bank in memory at a time (the sounds are cut bank by bank, each bank
+  freed before the next is read; before, all three stayed until the end, about 28 MB); the effect
+  package is freed once the elements' sound ids are known; the cut sounds are written to the file
+  and then moved to KH1's engine (no copy). **Checked (code)**.
+- So a start with a matching cache reads about 9.3 MB (the sounds, measured in the ram-use thread)
+  instead of the effect package, three banks (about 28 MB), `00battle.bin` and the voice bank, and
+  decompresses and decrypts nothing for the sounds. **Assumption**: the start-time saving (the
+  package reads and inflates, likely a few hundred ms on the sound thread) is estimated, not
+  measured.
+
+The loading screen (§2): `kh2sound::start` takes a `loadscreen::job()` before its thread starts,
+so KH1's title waits for it too. It is let go as soon as the cache is found to match (the title
+then waits only for the motion loader, as before); when the sounds are cut again, the screen
+shows "Building KH2 sounds (n of N)" (after the motions' line, if both are rebuilt) until the file
+is written. If KH2 Sora doesn't load, the job ends with the loader. The 90 s longest hold still
+applies.
+
+Log lines (Loading & Cache): "sound cache: <path> (matches this start's files and settings; N
+sound(s) read in M ms)", "sound cache: <path> (none yet | unusable (<why>) | changed: <keys>);
+cutting the sounds from KH2's banks", "sound cache: written (<path>; N sound(s) cut in T s)" or
+"not written (<error>); cut again next start". The KH1 bank lines (KH2 Sounds) are as before.
+
+Still to check in game: the hit and miss starts, the screen's sound line, and that the sounds
+play the same from the cache as cut.

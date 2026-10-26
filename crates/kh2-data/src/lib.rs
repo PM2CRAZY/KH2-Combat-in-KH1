@@ -140,6 +140,29 @@ impl Install {
         Err(Error::NotFound(name.to_string()))
     }
 
+    /// Where [`Install::read_any`] reads `name` from, as a short text that changes whenever what it
+    /// reads can have: the archive (and whether it is the backup's), the file's index entry (its
+    /// place, stored and real sizes) and the `.pkg`'s size and modification time; `"missing"`
+    /// when no archive has it. For caches built from the file (`kh1-hook`'s sound cache): telling
+    /// whether it changed without reading (and decompressing) it.
+    pub fn stamp_any(&self, source: Source, name: &str) -> String {
+        for part in ARCHIVES {
+            let hed = self.resolve(source, &format!("{part}.hed"));
+            if !hed.is_file() {
+                continue;
+            }
+            let Ok(archive) = Archive::open_cached(&hed) else { continue };
+            if let Some(e) = archive.find(name) {
+                let backup = hed.parent().and_then(|d| d.file_name()).map_or(false, |d| d.eq_ignore_ascii_case("backup"));
+                let (len, time) = std::fs::metadata(&archive.pkg_path).map_or((0, 0), |m| {
+                    (m.len(), m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos()))
+                });
+                return format!("{part}{} @{:x} {}/{} pkg {len} {time}", if backup { " (backup)" } else { "" }, e.offset, e.stored_len, e.real_len);
+            }
+        }
+        "missing".to_string()
+    }
+
     /// The remastered (HD) assets of a file in whichever `kh2_*` archive holds it.
     pub fn read_remastered_any(&self, source: Source, name: &str) -> Result<Vec<kh2_formats::egs::HdAsset>> {
         let keys = self.key_table()?;

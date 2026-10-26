@@ -95,6 +95,48 @@ pub fn finished() {
     PHASE.store(DONE, Ordering::Release);
 }
 
+// --- Other loaders holding the title (the sound cache, `kh2sound`; any build; only atomics) ---
+
+/// Other jobs the title waits for besides the loader (each a `Job`).
+static JOBS: AtomicU32 = AtomicU32::new(0);
+/// The KH2 sounds are being cut again (the sound cache missed): the screen shows their line.
+static SOUNDS_BUILDING: AtomicBool = AtomicBool::new(false);
+/// They were shown at some point (the release log's "shown").
+static SOUNDS_SHOWN: AtomicBool = AtomicBool::new(false);
+static SOUND_N: AtomicU32 = AtomicU32::new(0);
+static SOUND_TOTAL: AtomicU32 = AtomicU32::new(0);
+
+/// A job the title waits for while it's held (dropped: done, a failure or a panic too). Taken
+/// before the job knows whether it builds anything; dropped as soon as it knows it doesn't (a
+/// cache hit), so the hold covers it only while something is rebuilt.
+pub struct Job;
+
+impl Drop for Job {
+    fn drop(&mut self) {
+        SOUNDS_BUILDING.store(false, Ordering::Relaxed);
+        JOBS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// Another job starts (`Job`): the title waits for it too.
+pub fn job() -> Job {
+    JOBS.fetch_add(1, Ordering::AcqRel);
+    Job
+}
+
+/// The KH2 sounds are being cut again: `n` of `total` done (the screen shows from now on).
+pub fn sounds(n: usize, total: usize) {
+    SOUND_N.store(n as u32, Ordering::Relaxed);
+    SOUND_TOTAL.store(total as u32, Ordering::Relaxed);
+    SOUNDS_SHOWN.store(true, Ordering::Relaxed);
+    SOUNDS_BUILDING.store(true, Ordering::Relaxed);
+}
+
+/// The mod's loader thread is done (KH2 Sora loaded or not).
+pub fn loader_done() -> bool {
+    PHASE.load(Ordering::Acquire) == DONE
+}
+
 /// Calls `finished` when dropped: the loader thread holds one, so a failure or a panic in it
 /// releases the hold too.
 pub struct Guard;
@@ -153,7 +195,8 @@ unsafe fn release(why: &str) {
     let held = HELD_SINCE.lock().ok().and_then(|h| *h).map_or(0.0, |t| t.elapsed().as_secs_f32() * 1000.0);
     let frames = HELD_FRAMES.load(Ordering::Relaxed);
     if frames > 0 {
-        log!(Loading, "loading screen: title held {held:.0} ms ({frames} frames, {}); released: {why}", if PHASE.load(Ordering::Relaxed) == WORKING { "nothing shown" } else { "shown" });
+        let shown = PHASE.load(Ordering::Relaxed) != WORKING || SOUNDS_SHOWN.load(Ordering::Relaxed);
+        log!(Loading, "loading screen: title held {held:.0} ms ({frames} frames, {}); released: {why}", if shown { "shown" } else { "nothing shown" });
     } else {
         log!(Loading, "loading screen: not needed ({why})");
     }
@@ -168,7 +211,8 @@ unsafe extern "system" fn mode_machine() {
     }
     let state = std::ptr::read_volatile((base + MODE_STATE_STEAM) as *const i32);
     let phase = PHASE.load(Ordering::Acquire);
-    if phase == DONE {
+    // (And the other jobs: the sound cache's cutting, `job`.)
+    if phase == DONE && JOBS.load(Ordering::Acquire) == 0 {
         release(if state == LOADS_TITLE { "the build is done" } else { "the loader finished before the title" });
         return machine();
     }
@@ -200,20 +244,30 @@ struct Lines {
     text: [Vec<u8>; 3],
 }
 static LINES: Mutex<Option<Lines>> = Mutex::new(None);
+/// The lines' step for the sounds' line (`sounds`).
+const SOUND_STEP: u8 = 2;
 
 /// KH1's 2D work, then our lines while held and building.
 unsafe extern "system" fn work_2d(mode: i32) {
     let base = BASE.load(Ordering::Relaxed);
     let work: unsafe extern "system" fn(i32) = std::mem::transmute(base + WORK_2D_STEAM);
     work(mode);
-    if !ON.load(Ordering::Relaxed) || PHASE.load(Ordering::Relaxed) != BUILDING || HELD_FRAMES.load(Ordering::Relaxed) == 0 {
+    // (The motions' line while they bake, else the sounds' while they're cut, `sounds`.)
+    let motions = PHASE.load(Ordering::Relaxed) == BUILDING;
+    if !ON.load(Ordering::Relaxed) || !(motions || SOUNDS_BUILDING.load(Ordering::Relaxed)) || HELD_FRAMES.load(Ordering::Relaxed) == 0 {
         return;
     }
-    let key = (STEP.load(Ordering::Relaxed), MOTION.load(Ordering::Relaxed), COUNT.load(Ordering::Relaxed), TOTAL.load(Ordering::Relaxed));
+    let key = if motions {
+        (STEP.load(Ordering::Relaxed), MOTION.load(Ordering::Relaxed), COUNT.load(Ordering::Relaxed), TOTAL.load(Ordering::Relaxed))
+    } else {
+        (SOUND_STEP, 0, SOUND_N.load(Ordering::Relaxed), SOUND_TOTAL.load(Ordering::Relaxed))
+    };
     let Ok(mut g) = LINES.try_lock() else { return };
     if g.as_ref().map_or(true, |l| l.key != key) {
         let (step, motion, n, total) = key;
-        let doing = if step == 1 { "Saving the built moves".to_string() } else if total > 0 { format!("Building KH2 move {motion} ({} of {total})", n.min(total)) } else { format!("Building KH2 move {motion}") };
+        let doing = if step == SOUND_STEP {
+            format!("Building KH2 sounds ({} of {total})", n.min(total))
+        } else if step == 1 { "Saving the built moves".to_string() } else if total > 0 { format!("Building KH2 move {motion} ({} of {total})", n.min(total)) } else { format!("Building KH2 move {motion}") };
         *g = Some(Lines {
             key,
             text: [

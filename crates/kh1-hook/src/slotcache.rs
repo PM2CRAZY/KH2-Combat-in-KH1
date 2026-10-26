@@ -45,7 +45,7 @@ impl Hasher {
     const PRIME: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013B;
 
     /// Bytes as they are, without the length first (for a hash fed piece by piece).
-    fn raw(&mut self, b: &[u8]) {
+    pub fn raw(&mut self, b: &[u8]) {
         for x in b {
             self.0 ^= *x as u128;
             self.0 = self.0.wrapping_mul(Self::PRIME);
@@ -141,6 +141,12 @@ impl Manifest {
 
     pub fn text(&self) -> String {
         self.lines.iter().map(|(k, v)| format!("{k} = {v}\n")).collect()
+    }
+
+    /// A manifest from its text (`text`'s form), for other caches in the same folder
+    /// (`soundcache`).
+    pub fn from_text(text: &str) -> Manifest {
+        Manifest::parse(text)
     }
 
     fn parse(text: &str) -> Manifest {
@@ -358,9 +364,15 @@ pub fn write(dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
 use std::io::Write;
 
 fn write_with(dir: &Path, fill: impl FnOnce(&mut std::io::BufWriter<&mut std::fs::File>) -> std::io::Result<()>) -> std::io::Result<PathBuf> {
+    write_named(dir, FILE_NAME, fill)
+}
+
+/// `write`'s atomic write (a temporary file renamed over the old one) for any file `name` in
+/// `dir`, filled by `fill` (other caches in the same folder: `soundcache`).
+pub fn write_named(dir: &Path, name: &str, fill: impl FnOnce(&mut std::io::BufWriter<&mut std::fs::File>) -> std::io::Result<()>) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
-    let path = dir.join(FILE_NAME);
-    let tmp = dir.join(format!("{FILE_NAME}.{}.tmp", std::process::id()));
+    let path = dir.join(name);
+    let tmp = dir.join(format!("{name}.{}.tmp", std::process::id()));
     let r = (|| {
         let mut f = std::fs::File::create(&tmp)?;
         let mut w = std::io::BufWriter::new(&mut f);

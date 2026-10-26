@@ -15,6 +15,8 @@
 //! in KH1's file form (`kh2_formats::scd_cut`, still compressed: KH1's engine decodes it as it
 //! plays, as it does its own) and hands it to `kh1bank`, which keeps it in KH1's bank list;
 //! effects go through KH1's effect queue at Sora, battle quotes through KH1's voice channel.
+//! What the cutting makes is kept in the mod folder (`soundcache`, `docs/kh1-asset-cache.md` §4)
+//! and read from there on later starts, cut again only when its KH2 files or settings change.
 //! Nothing is decoded on our side and no sound of ours has a player of its own: what KH1's
 //! engine can't take (off Steam, the queue full) isn't heard, as KH1 drops its own. Ini:
 //! `kh2_sounds` (`abilities` the default, `all`, `off`) and `kh2_volume` (in the cut banks'
@@ -35,6 +37,7 @@ pub const DEFAULT_MOTIONS: [u16; 20] = [161, 162, 163, 164, 165, 166, 167, 169, 
 
 /// A KH2 sound as KH1 knows it: its one-sound bank's file number in KH1's engine (`kh1bank`)
 /// and its length (ms; `None` when it can't be told without decoding: a Vorbis effect).
+#[derive(Clone, Copy)]
 struct Sound {
     kh1: i32,
     ms: Option<u32>,
@@ -148,17 +151,22 @@ pub fn start() {
     if !moves {
         log!(Sound, "KH2 sounds: Sora's moves keep KH1's (kh2_sounds = off); Reflect's and the forms' still load");
     }
+    // (The title waits for the sounds while they're cut again before it, `loadscreen::job`; the
+    // job is let go as soon as the sound cache is found to match, `load`.)
+    let job = super::loadscreen::job();
     std::thread::spawn(move || {
+        let mut job = Some(job);
         let t = std::time::Instant::now();
         let kh2 = loop {
             if let Some(k) = super::pose::kh2() {
                 break k;
             }
-            if t.elapsed().as_secs() > 300 {
+            // (The loader ended without KH2 Sora: nothing to wait for, nor to hold the title for.)
+            if t.elapsed().as_secs() > 300 || super::loadscreen::loader_done() && super::pose::kh2().is_none() {
                 log!(Sound, "KH2 sounds: KH2 Sora never loaded");
                 return;
             }
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_millis(50));
         };
         let mut events: Vec<character_core::EventKind> = kh2
             .character
@@ -190,7 +198,7 @@ pub fn start() {
         // Wisdom Form's (its shots', `form`), and the revert's (Sora's elements, `form::revert_fx`).
         spell.extend(super::form::element_sounds(kh2));
         events.extend(super::form::REVERT_ELEMENTS.map(character_core::EventKind::Effect));
-        match load(&events, &spell) {
+        match load(&events, &spell, &mut job) {
             Ok(map) => {
                 log!(Sound,
                     "KH2 sounds: {} effect, {} other, {} voices, {} of Reflect's loaded in {:.1} s",
@@ -209,59 +217,160 @@ pub fn start() {
     });
 }
 
-fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Result<Loaded, String> {
+/// The sound cache's folder: beside the DLL, with the motion slot cache (`pose`).
+fn cache_dir() -> std::path::PathBuf {
+    std::path::Path::new(&super::dll_dir()).join("kh1-kh2-cache")
+}
+
+/// What is asked for, before anything is read: Sora's effect elements, sound ids (the weapon
+/// bank's as KH2 maps them), spell elements' sounds and battle voices. Sorted (the motions come
+/// from a map: the cache's manifest mustn't depend on their order).
+struct Asked {
+    elements: Vec<i16>,
+    sounds: Vec<u32>,
+    spells: Vec<(u8, u16, u32)>,
+    voices: Vec<i16>,
+}
+
+fn asked(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Asked {
     use character_core::EventKind;
-    let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
-    let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
-    let src = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
-    // (Sora's effect package names his elements' sounds; without it the rest still loads.)
-    let pack = install.read_any(src, "obj/P_EX100.a.us");
-    if let Err(e) = &pack {
-        log!(Sound, "KH2 sounds: Sora's effect package not read ({e}): his elements have no sounds");
-    }
-    let pack = pack.unwrap_or_default();
-    let bar = kh2_formats::bar::Bar::parse(&pack).ok();
-    let pax = bar.as_ref().and_then(|b| b.entries.iter().find(|e| e.data.starts_with(b"PAX_"))).and_then(|p| kh2_formats::pax::Pax::parse(p.data).ok());
-    let volume = super::settings::get().kh2_volume.clamp(0.0, 4.0);
-    // Every sound id wanted, and who wants it.
-    enum Want {
-        Element(i16),
-        Sound(u32),
-        Spell(u8, u16),
-    }
-    let mut wants: Vec<(u32, Want)> = Vec::new();
-    let mut voice_ids: Vec<i16> = Vec::new();
+    let mut a = Asked { elements: Vec::new(), sounds: Vec::new(), spells: Vec::new(), voices: Vec::new() };
     for e in events {
         match *e {
-            EventKind::Effect(el) => match pax.as_ref().and_then(|p| p.element(el as u16)) {
-                Some(p) if p.sound >= 0 => wants.push((p.sound as u32, Want::Element(el))),
-                _ => log!(Sound, "KH2 sounds: effect element {el} has no sound"),
-            },
-            EventKind::Sound(id) => {
-                let id = if (500_000..501_000).contains(&id) { id - 500_000 + WEAPON_BANK * 1000 } else { id };
-                wants.push((id, Want::Sound(id)));
-            }
+            EventKind::Effect(el) => a.elements.push(el),
+            EventKind::Sound(id) => a.sounds.push(if (500_000..501_000).contains(&id) { id - 500_000 + WEAPON_BANK * 1000 } else { id }),
             // (The user: KH1's voice, not KH2's, unless `kh2_voice = on`.)
             // (Reflect's, `REFLECT_VOICES`, whatever `kh2_voice` says.)
-            EventKind::Voice(v) if v >= 0 && !voice_ids.contains(&v) => voice_ids.push(v),
+            EventKind::Voice(v) if v >= 0 => a.voices.push(v),
             _ => {}
         }
     }
     for &(level, el, sound) in spell {
-        if sound >= 0 && !wants.iter().any(|(_, w)| matches!(w, Want::Spell(l, e) if *l == level && *e == el)) {
-            wants.push((sound as u32, Want::Spell(level, el)));
+        // (A spell element's first sound, as before.)
+        if sound >= 0 && !a.spells.iter().any(|(l, e, _)| *l == level && *e == el) {
+            a.spells.push((level, el, sound as u32));
         }
     }
-    let mut out = Loaded::default();
-    // Each sound as a one-sound bank for KH1's own engine (`kh1bank`), at the id's own volume (in
-    // the bank's record) times `kh2_volume`. One bank a sound: a sound several moves use is cut
-    // once. Nothing is decoded: KH1's engine plays the cut bank's compressed audio as it is.
-    let mut made: HashMap<(u32, usize), Option<Sound>> = HashMap::new();
-    let mut native = |key: u32, bank: &[u8], index: usize, what: String| -> Option<Sound> {
-        if let Some(s) = made.get(&(key, index)) {
-            return s.as_ref().map(|s| Sound { kh1: s.kh1, ms: s.ms });
+    a.elements.sort_unstable();
+    a.elements.dedup();
+    a.sounds.sort_unstable();
+    a.sounds.dedup();
+    a.spells.sort_unstable();
+    a.voices.sort_unstable();
+    a.voices.dedup();
+    a
+}
+
+/// The sounds asked for, from the sound cache (`soundcache`, `docs/kh1-asset-cache.md` §4) when
+/// it matches this start's files and settings, else cut from KH2's banks (and the cache written
+/// again); then handed to KH1's engine. `job` (the title's hold) is let go as soon as nothing is
+/// to be cut.
+fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)], job: &mut Option<super::loadscreen::Job>) -> Result<Loaded, String> {
+    let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
+    let install = kh2_data::Install::locate(&exe).map_err(|e| e.to_string())?;
+    let src = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
+    let volume = super::settings::get().kh2_volume.clamp(0.0, 4.0);
+    let a = asked(events, spell);
+    let mut request = crate::soundcache::manifest();
+    request.set("ini kh2_volume", format!("{volume}"));
+    request.set("wants", crate::soundcache::wants_hash(&format!("{:?} {:?} {:?} {:?}", a.elements, a.sounds, a.spells, a.voices)));
+    let dir = cache_dir();
+    let t = std::time::Instant::now();
+    let sounds = match crate::soundcache::open(&dir, &request, |name| install.stamp_any(src, name)) {
+        Ok(s) => {
+            *job = None;
+            log!(Loading, "sound cache: {} (matches this start's files and settings; {} sound(s) read in {:.0} ms)", dir.join(crate::soundcache::FILE_NAME).display(), s.cuts.len(), t.elapsed().as_secs_f32() * 1000.0);
+            s
         }
-        let snd = match kh2_formats::scd_cut::cut(bank, index, (super::kh1bank::FIRST_NO / 1000) as u16) {
+        Err(miss) => {
+            let why = match miss {
+                crate::soundcache::Miss::Missing => "none yet".to_string(),
+                crate::soundcache::Miss::Damaged(e) => format!("unusable ({e})"),
+                crate::soundcache::Miss::Changed(d) => format!("changed: {}", d.join(", ")),
+            };
+            log!(Loading, "sound cache: {} ({why}); cutting the sounds from KH2's banks", dir.join(crate::soundcache::FILE_NAME).display());
+            let (s, files) = cut_all(&install, src, &a, volume)?;
+            let mut manifest = request;
+            for f in &files {
+                manifest.set(format!("{}{f}", crate::soundcache::FILE_KEY), install.stamp_any(src, f));
+            }
+            match crate::soundcache::write(&dir, &manifest, &s) {
+                Ok(p) => log!(Loading, "sound cache: written ({}; {} sound(s) cut in {:.1} s)", p.display(), s.cuts.len(), t.elapsed().as_secs_f32()),
+                Err(e) => log!(Loading, "sound cache: not written ({e}); cut again next start"),
+            }
+            *job = None;
+            s
+        }
+    };
+    Ok(hand_to_kh1(sounds))
+}
+
+/// Cuts every sound asked for out of KH2's banks, one bank at a time (each bank freed before the
+/// next is read), and reads Sora's battle voices: what the cache keeps, and the files read for it.
+fn cut_all(install: &kh2_data::Install, src: kh2_data::Source, a: &Asked, volume: f32) -> Result<(crate::soundcache::Sounds, Vec<String>), String> {
+    use crate::soundcache::{Cut, Voice, Want};
+    let mut files: Vec<String> = Vec::new();
+    // (Sora's effect package names his elements' sounds; without it the rest still loads.)
+    let pack = if a.elements.is_empty() {
+        Vec::new()
+    } else {
+        files.push("obj/P_EX100.a.us".into());
+        let pack = install.read_any(src, "obj/P_EX100.a.us");
+        if let Err(e) = &pack {
+            log!(Sound, "KH2 sounds: Sora's effect package not read ({e}): his elements have no sounds");
+        }
+        pack.unwrap_or_default()
+    };
+    let bar = kh2_formats::bar::Bar::parse(&pack).ok();
+    let pax = bar.as_ref().and_then(|b| b.entries.iter().find(|e| e.data.starts_with(b"PAX_"))).and_then(|p| kh2_formats::pax::Pax::parse(p.data).ok());
+    // Every sound id wanted, and who wants it.
+    let mut wants: Vec<(u32, Want)> = Vec::new();
+    for &el in &a.elements {
+        match pax.as_ref().and_then(|p| p.element(el as u16)) {
+            Some(p) if p.sound >= 0 => wants.push((p.sound as u32, Want::Element(el))),
+            _ => log!(Sound, "KH2 sounds: effect element {el} has no sound"),
+        }
+    }
+    wants.extend(a.sounds.iter().map(|&id| (id, Want::Sound(id))));
+    wants.extend(a.spells.iter().map(|&(level, el, sound)| (sound, Want::Spell(level, el))));
+    drop(pax);
+    drop(bar);
+    drop(pack);
+    // (By bank: one KH2 bank in memory at a time; before, every bank read stayed until the end.)
+    wants.sort_by_key(|(id, _)| kh2_formats::scd::split_id(*id));
+    let total = wants.len() + usize::from(!a.voices.is_empty());
+    let mut out = crate::soundcache::Sounds::default();
+    let mut bank_now: Option<(u32, Option<Vec<u8>>)> = None;
+    for (n, (id, want)) in wants.into_iter().enumerate() {
+        super::loadscreen::sounds(n, total);
+        let (bank, index) = kh2_formats::scd::split_id(id);
+        if bank_now.as_ref().map_or(true, |(b, _)| *b != bank) {
+            // (The last bank freed before this one is read.)
+            drop(bank_now.take());
+            let name = kh2_formats::scd::bank_file(bank);
+            files.push(name.clone());
+            let read = install.read_any(src, &name);
+            if let Err(e) = &read {
+                log!(Sound, "KH2 sounds: bank {bank}: {e}");
+            }
+            bank_now = Some((bank, read.ok()));
+        }
+        let Some((_, Some(data))) = bank_now.as_ref() else { continue };
+        let of = match want {
+            Want::Element(el) => format!(" (effect element {el})"),
+            Want::Sound(_) => String::new(),
+            Want::Spell(level, el) => format!(" (package {level}'s element {el})"),
+        };
+        let what = format!("KH2 sound {id}{of}");
+        // One bank a sound: a sound several moves use is cut once.
+        if let Some(k) = out.cuts.iter().position(|c| c.bank == bank && c.index == index as u32) {
+            out.wants.push((want, k as u32));
+            continue;
+        }
+        // Each sound as a one-sound bank for KH1's own engine (`kh1bank`), at the id's own volume
+        // (in the bank's record) times `kh2_volume`. Nothing is decoded: KH1's engine plays the cut
+        // bank's compressed audio as it is.
+        match kh2_formats::scd_cut::cut(data, index, (super::kh1bank::FIRST_NO / 1000) as u16) {
             Ok(mut c) => {
                 let _ = kh2_formats::scd_cut::scale_volume(&mut c.bytes, volume);
                 // (KH2's sound-effect slider sets buses 2 and 4..8 alike, KH2 `0x140138290`;
@@ -273,78 +382,81 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
                     let _ = kh2_formats::scd_cut::set_bus(&mut c.bytes, EFFECTS_BUS);
                 }
                 let ms = kh2_formats::scd_cut::length_ms(&c.bytes);
-                let (bus, tracks, size) = (if (4..=8).contains(&kh2_bus) { format!("{kh2_bus} -> {EFFECTS_BUS}") } else { kh2_bus.to_string() }, c.tracks, c.bytes.len());
-                let no = super::kh1bank::add(c.bytes, what.clone());
-                match no {
-                    Some(no) => log!(Sound, "KH1 banks: {what} -> se{no} ({size} bytes, bus {bus}, {tracks} track(s), {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms"))),
-                    None => log!(Sound, "KH1 banks: {what} not added (KH1's sound engine is used on the Steam build only)"),
-                }
-                no.map(|kh1| Sound { kh1, ms })
+                let bus = if (4..=8).contains(&kh2_bus) { format!("{kh2_bus} -> {EFFECTS_BUS}") } else { kh2_bus.to_string() };
+                out.wants.push((want, out.cuts.len() as u32));
+                out.cuts.push(Cut { bank, index: index as u32, ms, info: format!("{what}; bus {bus}, {} track(s)", c.tracks), bytes: c.bytes });
             }
-            Err(e) => {
-                log!(Sound, "KH1 banks: {what} not cut ({e})");
-                None
-            }
-        };
-        let back = snd.as_ref().map(|s| Sound { kh1: s.kh1, ms: s.ms });
-        made.insert((key, index), snd);
-        back
-    };
-    let mut banks: HashMap<u32, Vec<u8>> = HashMap::new();
-    for (id, want) in wants {
-        let (bank, index) = kh2_formats::scd::split_id(id);
-        if !banks.contains_key(&bank) {
-            match install.read_any(src, &kh2_formats::scd::bank_file(bank)) {
-                Ok(b) => {
-                    banks.insert(bank, b);
-                }
-                Err(e) => {
-                    log!(Sound, "KH2 sounds: bank {bank}: {e}");
-                    continue;
-                }
-            }
-        }
-        let of = match want {
-            Want::Element(el) => format!(" (effect element {el})"),
-            Want::Sound(_) => String::new(),
-            Want::Spell(level, el) => format!(" (package {level}'s element {el})"),
-        };
-        let Some(snd) = native(bank, &banks[&bank], index, format!("KH2 sound {id}{of}")) else { continue };
-        match want {
-            Want::Element(el) => {
-                out.elements.insert(el, snd);
-            }
-            Want::Sound(s) => {
-                out.sounds.insert(s, snd);
-            }
-            Want::Spell(level, el) => {
-                out.spell_elements.insert((level, el), snd);
-            }
+            Err(e) => log!(Sound, "KH1 banks: {what} not cut ({e})"),
         }
     }
     // (The whole KH2 banks were only read to cut the sounds out: freed here.)
-    drop(banks);
+    drop(bank_now);
     // Voices: `00battle`'s VTBL (character 1 = Sora: id, priority, five (voice, chance)).
-    if !voice_ids.is_empty() {
+    if !a.voices.is_empty() {
+        super::loadscreen::sounds(total - 1, total);
+        files.push("00battle.bin".into());
+        files.push(VOICE_FILE.into());
         let battle = install.read_any(src, "00battle.bin").map_err(|e| e.to_string())?;
         let voice = install.read_any(src, VOICE_FILE).map_err(|e| e.to_string())?;
         let table = vtbl(&battle);
-        for v in voice_ids {
+        for &v in &a.voices {
             let Some((priority, choices)) = table.iter().find(|(c, id, _, _)| *c == 1 && *id as i16 == v).map(|e| (e.2, e.3.clone())) else { continue };
             // (A clip KH1's voice create could play: its sound record has audio, the same test
             // the cut makes.)
             let clips: Vec<u8> = choices.iter().filter(|(c, _)| *c >= 0).map(|&(c, _)| c as u8).filter(|&c| kh2_formats::scd_cut::cut(&voice, c as usize, 0).is_ok()).collect();
             log!(Sound, "KH2 voice {v}: priority {priority}, (clip, chance) {choices:?} ({} playable)", clips.len());
             if !clips.is_empty() {
-                out.voices.insert(v, VoiceSet { priority: priority as i32, choices, clips });
+                out.voices.push(Voice { id: v, priority, choices, clips });
             }
         }
         // The whole bank for KH1's voice list (as KH1 keeps a character's voices: `kh1bank`).
         if !out.voices.is_empty() {
-            super::kh1bank::set_voice_bank(voice);
+            out.voice_bank = Some(voice);
         }
     }
-    Ok(out)
+    super::loadscreen::sounds(total, total);
+    Ok((out, files))
+}
+
+/// Hands what was cut (or read from the cache) to KH1's engine (`kh1bank`), each sound's buffer
+/// moved, not copied: one copy of each.
+fn hand_to_kh1(s: crate::soundcache::Sounds) -> Loaded {
+    use crate::soundcache::Want;
+    let mut out = Loaded::default();
+    let mut kh1: Vec<Option<Sound>> = Vec::with_capacity(s.cuts.len());
+    for c in s.cuts {
+        let (what, rest) = c.info.split_once("; ").map_or((c.info.as_str(), ""), |(a, b)| (a, b));
+        let size = c.bytes.len();
+        let ms = c.ms;
+        let len = ms.map_or("length unknown".to_string(), |m| format!("{m} ms"));
+        let no = super::kh1bank::add(c.bytes, what.to_string());
+        match no {
+            Some(no) => log!(Sound, "KH1 banks: {what} -> se{no} ({size} bytes, {rest}, {len})"),
+            None => log!(Sound, "KH1 banks: {what} not added (KH1's sound engine is used on the Steam build only)"),
+        }
+        kh1.push(no.map(|kh1| Sound { kh1, ms }));
+    }
+    for (want, k) in s.wants {
+        let Some(Some(snd)) = kh1.get(k as usize).copied() else { continue };
+        match want {
+            Want::Element(el) => {
+                out.elements.insert(el, snd);
+            }
+            Want::Sound(id) => {
+                out.sounds.insert(id, snd);
+            }
+            Want::Spell(level, el) => {
+                out.spell_elements.insert((level, el), snd);
+            }
+        }
+    }
+    for v in s.voices {
+        out.voices.insert(v.id, VoiceSet { priority: v.priority as i32, choices: v.choices, clips: v.clips });
+    }
+    if let Some(b) = s.voice_bank.filter(|_| !out.voices.is_empty()) {
+        super::kh1bank::set_voice_bank(b);
+    }
+    out
 }
 
 /// `00battle.bin`'s VTBL entries (14 bytes, as KH2's pick `0x1403CDB60` reads them): (character,
