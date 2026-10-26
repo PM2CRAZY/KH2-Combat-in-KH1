@@ -6,6 +6,7 @@
 
 - [1. Assistant: I started this thread from the Table of contents(../table-of](#^m1)
 - [2. Assistant: Thanks! Seven versions this round, five for RAM and two for ](#^m2)
+- [3. Assistant: That folder is the right place, and kh2-motion-slots.bin is ](#^m3)
 
 ---
 
@@ -138,4 +139,20 @@ go ahead
 
 ^m2
 
+
 can you tell me where the files are stored? in my folder (E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache) I don't see the other files I only see kh2-motion-slots.bin when the game is created 
+
+> [!tip] Assistant
+> That folder is the right place, and `kh2-motion-slots.bin` is the only file there right now. Nothing is missing.
+>
+> So far only the baked KH2 motion slots are built once and saved (t655). Everything else is still made in memory at every start and never written to disk:
+> - the KH2 sounds cut from KH2's banks;
+> - the KH2 effect packages in KH1's format;
+> - the Drive Form recolours (since t660 these are made the first time a form needs them, not at start).
+>
+> Which of those goes into `kh1-kh2-cache` next is the question waiting for you in [What is still missing](../what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md). Once you pick, each one gets its own file in that same folder (next to the DLL), built from your KH1 and KH2 files the same way.
+>
+> Checked: the code. `kh1-kh2-cache` is only used for the motion slots (`pose.rs`).
+
+^m3
+
