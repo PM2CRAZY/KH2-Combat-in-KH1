@@ -1094,6 +1094,65 @@ pub unsafe fn kh2_pick_in_picker(actor: usize, row: i32, dir: usize, air: bool, 
     run
 }
 
+/// KH1's flight attack rows (Steam KH1's Attack step `0x1402A7510`, Checked (decomp)): in flight
+/// (state 8) it asks the air picker `0x1402A6C70` and runs its row + 3, so its plain swing 18, its
+/// swing at a target above 17 and its finisher 16 become rows 21, 20 and 19 (15, a finisher with
+/// ability bit 25, is marked only in state 2). The row runner `0x1402A68F0` has one case for 19..21:
+/// the direction made level and the row's lunge (8 in all three) as his speed along it
+/// (`0x1402B1E20`), `0x1402A6DF0 (actor, 0.5, 8.0)`, and KH1's flight motion 0x75 queued (blend
+/// 16). Their requests are the air combo's own 0xCE, 0xCD, 0xCC (btltbl `+0xA9F0`, Checked (files)):
+/// KH1 has no flight attack animation of its own.
+pub const FLIGHT_FINISHER_PICK: i32 = 16;
+pub const FLIGHT_SWING_PICK: i32 = 18;
+
+/// KH2's air pick for a flight Attack (`flight_pick`): our row and the game frame.
+static FLIGHT: Mutex<Option<(usize, u64)>> = Mutex::new(None);
+
+/// A flight Attack at the Aerial Base Combo KH2 (the tester, what-is-still-missing m6, answer 2
+/// (a): "KH1's own flying Attack, with KH2's air combo picks on KH1's air rows"). Called by our air
+/// picker hook in state 8 with `run`, the row KH2's pick plays (`kh2_pick_in_picker` /
+/// `kh2_finisher_walk`, as in state 2), and `own`, the row KH1's picker took. A KH2 air move on a
+/// row of ours: KH1's flight row of its kind runs (`FLIGHT_FINISHER_PICK` / `FLIGHT_SWING_PICK`,
+/// the Attack step adds the 3) with our row's request, attack data and bytes in it for that call
+/// (`take_flight`, `kh1rows::run_as`), so KH1's flight case moves him and puts him back in flight
+/// after it. Anything else (no KH2 pick, one of KH1's own rows): KH1's own flight row, as unmodded.
+pub fn flight_pick(own: i32, run: i32) -> i32 {
+    let Some(n) = usize::try_from(run).ok().and_then(|r| r.checked_sub(super::kh1rows::KH1_ROWS)).filter(|&n| n < super::kh1rows::OURS.len()) else {
+        return own;
+    };
+    let o = &super::kh1rows::OURS[n];
+    if !o.attack || o.kind.cast() || !o.kind.air() {
+        note(format!("flight Attack: KH2's pick {} (motion {}) isn't an air move: KH1's own flight row {}", o.name, o.motion, own + 3));
+        return own;
+    }
+    if let Ok(mut g) = FLIGHT.lock() {
+        *g = Some((n, frame()));
+    }
+    if o.kind.finisher() {
+        FLIGHT_FINISHER_PICK
+    } else {
+        FLIGHT_SWING_PICK
+    }
+}
+
+/// The KH2 move `flight_pick` put on this flight row (`row`: 19 or 21) this frame, for
+/// `combat::exec`; its bookkeeping for the next press (`LAST`, `FINISHERS`, as `ours_run` keeps it).
+pub unsafe fn take_flight(actor: usize, row: i32) -> Option<usize> {
+    if !matches!(row, 19 | 21) {
+        return None;
+    }
+    let (n, at) = FLIGHT.try_lock().ok().and_then(|mut g| g.take())?;
+    let o = &super::kh1rows::OURS[n];
+    if frame().saturating_sub(at) > 1 || (row == 19) != o.kind.finisher() {
+        return None;
+    }
+    let count = kh1_combo(actor, true).map_or(1, |c| c.0);
+    let request_of = |r: i32| super::combat::row_motion(actor, r);
+    let _ = ours_run(n, None, true, count, &request_of);
+    note(format!("flight Attack: KH2's {} (motion {}) on KH1's flight row {row}", o.name, o.motion));
+    Some(n)
+}
+
 /// KH1's own ability finishers at the combo style KH2 (the tester, combo row selection m23: "I
 /// can't do any kh1 finisher on kh2 combat settings", "the goal is to patch features into kh1's
 /// engine"). Called from our hook on KH1's picker (`kh1picker`) after KH1's picker ran with its

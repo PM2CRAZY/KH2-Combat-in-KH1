@@ -114,6 +114,16 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
             wr(dir + 4, 0.0f32);
         }
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
+        // Flight (state 8): KH2's air pick on KH1's flight row (`combomods::flight_pick`), our row
+        // in its place for this call, so KH1's flight case runs it (his flight speed, its flight
+        // motion queued after) with KH2's motion and attack data.
+        if rd::<i32>(actor + 0x70) == 8 {
+            if let Some(n) = super::combomods::take_flight(actor, run) {
+                if super::kh1rows::run_as(run, n, || f(actor, run, dir)) {
+                    return;
+                }
+            }
+        }
         // A row of ours (`kh1rows`) in the air: KH1's fall after it, as KH1's own air rows queue.
         let air_row = super::kh1rows::by_row(run).is_some_and(|o| o.kind.air());
         let Some((l, from_ground)) = hop else {

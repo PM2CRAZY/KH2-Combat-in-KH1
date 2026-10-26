@@ -1800,3 +1800,42 @@ Ours (`bodyhits`):
   numbers as every row of ours does (KH1 has no launch motion for them anyway). **Assumption**: KH2
   bone shapes with an offset take it in KH1's bone frame (none of Sora's body attack shapes has
   one). Not checked in game.
+
+### 7.z.10 KH2's air combo picks on KH1's flight attack (what-is-still-missing m6, answer 2 (a))
+
+The tester: "(a) if there's a more elegant implementation to let the animations work as flight air
+attacks e.g if the game has a different animation for sora when attacking in the flight state then
+we'll just give kh2 more animations, if not then find how it works and give kh2 the ability".
+
+How KH1 attacks in flight (Steam, **Checked (decomp)** unless marked):
+- KH1's Attack step `0x1402A7510` counts the press as everywhere, then in state 8 asks the air
+  picker `0x1402A6C70` (the same as in state 2) and runs the row it returns **plus 3**. The air
+  picker marks 18 (plain swing), 17 (a target more than 100 above), 16 (the finisher, the stats'
+  `+0xD5`); 15 (a finisher with ability bit 25) only in state 2. So flight runs rows 21, 20, 19.
+- The row runner `0x1402A68F0` has one case for rows 19..21: the stats' `+0xD0` set to π/16, the
+  direction made level and normalised, the row's lunge as his speed along it (`0x1402B1E20`),
+  `0x1402A6DF0 (actor, 0.5, 8.0)`, and the follow-up request `0x40000075` (KH1's flight motion,
+  blend 16) queued. Row 18 is the air case (it queues the fall, 6), never reached in flight.
+- Rows 19 / 20 / 21 (btltbl `+0xA9F0`, **Checked (files)**): requests 0xCE (finisher), 0xCD,
+  0xCC, the air combo's own, lunge 8; attack data `0x4C58` (reaction 5), `0x4B78`, `0x4B78`.
+  **KH1 has no flight attack animation of its own**: flight swings are the air combo's motions.
+
+What we add (`kh1picker::air`, `combomods::flight_pick` / `take_flight`, `kh1rows::run_as`):
+- In state 8 at the Aerial Base Combo KH2 (base Sora, KH1's own states, not a Drive Form), the air
+  picker hook makes KH2's air pick as in state 2 (`at_kh2`: KH2's selector at KH1's count, KH1's
+  ability finisher walk). A KH2 air move on a row of ours (`kh1rows::OURS`, an air swing or air
+  finisher) returns 18 or 16, so KH1 runs its flight row 21 (swing) or 19 (finisher).
+- `combat::exec` then runs that flight row with our row copied into its place for the call
+  (request `0x200 + n` with our slot of KH2's motion, its attack data with KH2's reaction and
+  clash rules, its trail / effect / voice bytes), KH1's lunge 8 kept, put back after. So KH1's
+  flight case moves him and returns him to flight after the swing, and the swing is KH2's motion,
+  KH2's hit numbers (`kh2_atkp`) and KH2's next pick (`LAST` / `FINISHERS` kept as for our air rows).
+- Anything else (no KH2 pick, one of KH1's own ability rows, a non-air pick): KH1's own flight
+  row, unmodded. At the Aerial Base Combo KH1: KH1's own flight attack, unmodded.
+- KH2's hop numbers are not used in flight (KH1's flight speed moves him); KH2 itself has no flight.
+- The old borrow (`FLY_ATTACK`, KH2's controller's aerial combo out of flight) is reached only
+  outside KH1's own states (Epic, `shared = off`): with shared states on, the Attack step already
+  ran KH1's own flight rows before this (Checked (code)).
+- **Assumptions**: our requests resolve in Neverland's own motion set while flying (our set copies
+  are made for every set KH1 binds, §2, but not seen in flight); KH1's flight case reads the row
+  only through `0x1402A3980` at the runner's start. Not checked in game.

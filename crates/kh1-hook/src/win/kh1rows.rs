@@ -588,6 +588,31 @@ pub unsafe fn kh1_row(row: usize) -> Option<(usize, [u8; 3])> {
     (data > 0x10000).then(|| (data, rd::<[u8; 3]>(at + 0xC)))
 }
 
+/// KH1's row `row` of our table run (`f`, the row runner) with our row `n` in its place for that
+/// call: its request, trail / effect / voice bytes and attack data, KH1's own lunge (`+8`) kept,
+/// put back after (KH1's row start `0x1402A3980` reads the row once, at the start of the runner:
+/// the attack object holds the data from then on). For KH1's flight rows 19..21
+/// (`combomods::flight_pick`), whose runner case only exists for those indices. False (nothing
+/// run) when our table isn't the one on Sora's character now.
+pub unsafe fn run_as(row: i32, n: usize, f: impl FnOnce()) -> bool {
+    let Some((index, ours)) = TABLE.try_lock().ok().and_then(|g| g.as_ref().filter(|t| t.ours != t.kh1).map(|t| (t.index, t.ours))) else {
+        return false;
+    };
+    let base = super::takeover::game_base();
+    if base == 0 || n >= OURS.len() || !(0..KH1_ROWS as i32).contains(&row) || rd::<u64>(base + ROWS_RVA + index as usize * 8) as usize != ours {
+        return false;
+    }
+    let at = ours + row as usize * ROW;
+    let from = ours + (KH1_ROWS + n) * ROW;
+    let was = rd::<[u8; ROW]>(at);
+    let mut now = rd::<[u8; ROW]>(from);
+    now[8..12].copy_from_slice(&was[8..12]);
+    wr(at, now);
+    f();
+    wr(at, was);
+    true
+}
+
 /// Our rows are on Sora's character now.
 pub fn installed() -> bool {
     TABLE.try_lock().ok().and_then(|g| g.as_ref().map(|t| t.ours != t.kh1)).unwrap_or(false)

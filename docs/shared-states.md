@@ -301,5 +301,8 @@ Still borrowing base Sora (plan in the what-is-still-missing thread, m6):
 - a KH2 command in a state KH1 casts nothing in (KH1's `0x1402A3600` casts in states 0, 6, 0x18,
   2 and 8 only), and a command chosen in KH1's jump, glide or roll (`stylejump::want_kh2`,
   `styleroll::want_kh2`);
-- an Attack while flying (KH1 state 8): KH2's air combo (`FLY_ATTACK`);
+- ~~an Attack while flying (KH1 state 8): KH2's air combo (`FLY_ATTACK`)~~: not a borrow with shared
+  states on (KH1's Attack step runs its own flight rows; `FLY_ATTACK` is reached only outside
+  KH1's own states). At the Aerial Base Combo KH2 KH2's air pick now plays on KH1's flight rows
+  (`docs/kh1-anim-slots.md` §7.z.10);
 - the Drive (a form's entry) and everything in a form (the Drive Forms thread).

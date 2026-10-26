@@ -11,8 +11,9 @@
 //! distance and height) and walks it in table order, the first marked row whose request isn't the
 //! one playing winning. Ours wrap both: KH1's picker runs whole, then, with base Sora at the combo
 //! style KH1 where he is, KH2's ability rows join its choice (`combomods::picker`), and Negative
-//! Combo shortens the length KH1's picker reads (`shorten`). Flight and every other case: KH1's
-//! row as it picked it. Steam only; the prologues are checked.
+//! Combo shortens the length KH1's picker reads (`shorten`). Flight at the Aerial Base Combo KH2:
+//! KH2's air pick on KH1's flight rows (`combomods::flight_pick`). Every other case: KH1's row as
+//! it picked it. Steam only; the prologues are checked.
 //!
 //! The finisher walk (the tester, m21: "do 1", one walk in KH1's picker with KH1's rule set): at
 //! a finisher KH1's own ability finishers are walked with KH2's (`combomods::finisher_walk`), so
@@ -105,6 +106,9 @@ unsafe fn holding<R>(held: u32, f: impl FnOnce() -> R) -> (R, u32) {
     std::ptr::write_unaligned(at as *mut u32, bits);
     (r, bits)
 }
+
+/// KH1's air picker's plain swing (flight row 21 once the Attack step adds 3).
+const FLIGHT_SWING: i32 = 18;
 
 static ORIG_GROUND: AtomicUsize = AtomicUsize::new(0);
 static ORIG_AIR: AtomicUsize = AtomicUsize::new(0);
@@ -203,7 +207,17 @@ unsafe extern "system" fn ground(actor: usize, target: usize, dir: usize) -> u64
 
 unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
     let f: AirFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
-    // (State 8, flight, runs KH1's picker too: KH1's own there.)
+    // State 8, flight, runs KH1's picker too (the Attack step runs its row + 3): at the Aerial
+    // Base Combo KH2, KH2's air pick made as in state 2, played on KH1's flight row of its kind
+    // (`combomods::flight_pick`; the tester, what-is-still-missing m6 answer 2 (a)).
+    if rd::<i32>(actor + 0x70) == 8 && ours_kh2(actor, true) {
+        let mut own = FLIGHT_SWING;
+        let run = at_kh2(actor, true, HELD_AIR, dir, || {
+            own = f(actor, target, dir);
+            own
+        });
+        return super::combomods::flight_pick(own, run);
+    }
     if rd::<i32>(actor + 0x70) == 2 && ours_kh2(actor, true) {
         return at_kh2(actor, true, HELD_AIR, dir, || f(actor, target, dir));
     }
