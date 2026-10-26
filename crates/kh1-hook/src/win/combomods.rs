@@ -223,6 +223,17 @@ unsafe fn sora() -> usize {
     rd::<u64>(takeover::game_base() + PARTY_RVA) as usize
 }
 
+/// The Base / Aerial Base Combo style for KH1's own combo where he is: the Config row's, but always
+/// KH2's in a Drive Form on KH1's own states (`form::native_now`: a Drive Form is KH2's all through
+/// and the move styles don't apply to it; the tester, what-is-still-missing after m13: "our
+/// configs don't adjust anything on drive forms"). Before, the raw setting was read here, so with
+/// a combo style at KH1 Valor's pick from KH1's picker (KH2's, `kh1picker::at_kh2`) was dropped
+/// at the Attack step: its air rows ran with no hop (the jump's rise went on under the swing) and
+/// its ground rows lost KH2's length and finisher rule.
+fn style_kh2(kind: super::styles::Kind) -> bool {
+    super::styles::kh2(kind) || super::form::native_now()
+}
+
 /// KH1's combo now: its count, its length here (ground or air), and whether its swing connected.
 /// At the combo style KH1 the length is KH1's less Negative Combo's copies (`kh1_length`), as its
 /// row picker sees it (`kh1picker`).
@@ -234,7 +245,7 @@ unsafe fn kh1_combo(actor: usize, air: bool) -> Option<(u8, u8, bool)> {
     }
     let len = rd::<u8>(stats + if air { 0xD5 } else { 0xD4 });
     let kind = if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo };
-    let len = if super::styles::kh2(kind) { len } else { kh1_length(len) };
+    let len = if style_kh2(kind) { len } else { kh1_length(len) };
     Some((rd::<u8>(info + 0x41), len, rd::<u32>(info + 0x50) != 0))
 }
 
@@ -404,7 +415,7 @@ pub enum Run {
 pub unsafe fn attack(actor: usize, row: i32, _dir: usize, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
     // (On the ground: KH2's line ahead, for its row 1, tested in KH2's trial along the
     // selector's direction, `drop_ahead`.)
-    takeover::test_drop_ahead(rd::<i32>(actor + 0x70) == 0 && super::styles::kh2(super::styles::Kind::GroundCombo));
+    takeover::test_drop_ahead(rd::<i32>(actor + 0x70) == 0 && style_kh2(super::styles::Kind::GroundCombo));
     let run = attack_row(actor, row, request_of);
     takeover::test_drop_ahead(false);
     run
@@ -446,7 +457,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
     // (At the combo style KH1 KH1's own picker picks it: below.)
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
-    let kh2_style = super::styles::kh2(if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo });
+    let kh2_style = style_kh2(if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo });
     // At the combo style KH2, KH2's pick KH1's picker made at this press (`kh2_pick_in_picker`;
     // the tester, m24: "(a)"): KH2's selector isn't run again here, and the row KH1's picker
     // returned already plays it. Without one (KH1's picker didn't make it), KH2's selector is asked
@@ -482,7 +493,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // At the combo style KH1: KH1's own row picker chose (`picker`, KH2's ability rows among its
     // choices by KH2's own row checks at KH1's count); KH2's selector isn't asked. Its pick, if it
     // took one of KH2's ability moves at this press.
-    let kh1_style = !super::styles::kh2(combo.style);
+    let kh1_style = !style_kh2(combo.style);
     let (pick, launch) = if kh1_style {
         match take_pick() {
             Some((p, l)) => (Some((p, kh1_len, 0)), l),
@@ -1418,7 +1429,8 @@ pub unsafe fn floor_gone(actor: usize, aim: [f32; 2], length: f32) -> Option<Gon
 /// to run, if so; `None` (KH1's row as before) with the Aerial Combo at KH1 (the slot plays KH1's
 /// air swing there) or no slot for the motion.
 unsafe fn kh2_hop(actor: usize, row: i32, pick: &ComboRow, launch: character_core::Launch, request_of: &dyn Fn(i32) -> Option<u32>) -> Option<(i32, character_core::Launch)> {
-    use super::styles::{kh2, Kind};
+    use super::styles::Kind;
+    let kh2 = style_kh2;
     // (An ability's hop is KH2's at either style, `native_ability`; KH2's plain hops are KH2's
     // row selection, with both combo styles at KH2.)
     let ability = pick.ability != 0;
@@ -1473,7 +1485,7 @@ impl Kh1Combo {
     /// KH1's, only an ability's move (`native_ability`: KH2's at either style), KH1's own combo
     /// and its own picks playing around it.
     fn here(&self, row: &ComboRow) -> bool {
-        super::styles::kh2(self.style) || (row.ability != 0 && native_ability(row))
+        style_kh2(self.style) || (row.ability != 0 && native_ability(row))
     }
 
     /// KH1's own plain rows of this combo play KH2's `row` natively (`kh2_row`, `select_swing`):
@@ -1548,7 +1560,7 @@ unsafe fn kh2_row(actor: usize, combo: &Kh1Combo, row: i32, pick: Option<&ComboR
 fn select_swing(combo: &Kh1Combo, request: Option<u32>, pick: Option<&ComboRow>) -> bool {
     let Some(q) = request.filter(|q| combo.swings.contains(q) || *q == combo.finisher) else { return false };
     let req = q as usize;
-    let kh2 = super::styles::kh2(combo.style);
+    let kh2 = style_kh2(combo.style);
     let fits = pick.filter(|r| combo.plain(r) && combo.here(r) && combo.fits(q, r));
     // (At KH1's style only an ability's move plays ours there, KH1's request pointed at it for
     // that swing, `kh2slots::pick_ability`.)

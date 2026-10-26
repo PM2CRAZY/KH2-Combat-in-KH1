@@ -526,3 +526,101 @@ sure its a file as well". The hits are KH1's own now (§7.2), and the code is it
 4. The bone source: once 3 exists, the owner copy can become a real second bone set on Sora's own
    instance; until then it is the one piece of ours KH1 reads every frame.
 
+- KH1's pass builds its entries through t638's hook (`0x1402B3800`): the open window's group of
+  KH2's weapon shapes, laid along the left Keyblade as drawn, from KH1's grip bone (280) toward the
+  blade's tip (KH1's blade point `0x30` at t 1, the left Keyblade's own blade range), both read
+  with KH1's bone point `0x14029EB20` on `leftblade`'s owner copy (Sora's matrices moved onto the
+  left Keyblade); KH2's sweep between frames (`combat_core::AttackVolume`); each entry tested with
+  KH1's `0x1402B3BE0` (bodies, and attack against attack: KH1's clash / guards as for the right
+  blade). Contact, record, damage, reaction, spark and sound are KH1's.
+- **Assumptions:** KH2's distances along bone 2 are laid along KH1's grip-to-tip line in KH1 units
+  unscaled (as the body shapes), whatever the Keyblade's length; with the left Keyblade not drawn
+  (`valor_left_blade = off`, model not loaded) its windows are placed on the right Keyblade.
+  KH1 time in our slot = KH2 frame (as everywhere). The left object has no KH1 wall test (as the
+  body windows; the right blade's walls are `walls`'). Not checked in game.
+- **Still open:** the right Keyblade still hits with KH1's row sphere (its data's radius, KH1's blade
+  range), not KH2's group shapes above (groups 3..7 are far wider: Valor's 155 finisher reaches
+  380). Valor's guard windows on the left Keyblade (42 / 155, ATKP 162) are unchanged.
+
+### 7.4 Valor's movement and attack physics on KH1's states (vphys)
+
+The tester (what-is-still-missing, after m13): "no proper physics on grounded finisher, attack
+doesn't interrupt jumps momentum so you can fly high in the air while attacking ... compare to how
+kh2 does it in the c decomp". Checked against the Steam KH2 decomp, KH2's files and our KH1-side
+code; not checked in game.
+
+**How KH2 starts an attack row** (`0x1403D78D0 (player, row, target)`, from the Attack step
+`0x1403D6FC0` and the Square paths `0x1403A9950` / `0x1403A9C70`; **Checked (decomp)**):
+- A row with a hop (`jump` +0xC above 0): if not airborne (`0x1403BA9A0`) the counts restart
+  (`+0xD74` = 0x101). Height: with a target, his height below it (`0x1403D7520`) held between
+  `jump_min` (+0x14) and `jump_max` (+0x10, plus his jump height `0x1403B5A40` with row flag 2);
+  without, `jump`. Sideways speed: with a target, (gap + `distance_adjust` +0x3C) over KH2's rise
+  time for that height (`0x1403B73F0`: `sqrt(2h / 0.40816)`) held between `speed_min` (+0x18) and
+  `speed_max` (+0x1C); without, `speed_max`, along his facing. Then the current action's slot
+  +0x18 (`0x140409AD0`: `0x1403CBB00` then ACTION_JUMP): the arc **replaced** (time 0, height h,
+  base his height, rise time from h), the velocity **set** to the direction times the speed, the
+  landing motion 5. So an air swing ends the jump's (or High Jump's) rise and drift, every time.
+- A row without a hop: no velocity set, except a lunge toward a target (motion entry `+0xC` bit 1 or
+  `+0x18C` bit 6): `+0x20` = direction × the gap × `0x142AE5760[+0xA8]` held between the row's
+  speeds. Valor's ground rows have speed 0..0, so none (**Checked (files)**, below).
+- The motion then plays (`0x1403C8310`, the row's blend `+0x38`).
+- While it plays: KH2's move adds the clip's root travel every frame in every action
+  (`0x1403B7CA0`, `docs/kh1-magic-native.md`); in ACTION_JUMP (the air rows) the arc goes on,
+  except where range id 3 / 24 holds him (`0x1403CB360`), with the drift `0x1403B7AD0 (dt, 0.9,
+  0.95)`; on the ground ACTION_IDLE's step (`0x140422350`) sets the velocity from the stick target
+  (empty during a swing: **Assumption**, as in `docs/kh1-magic-native.md`), so only the root moves
+  him. After a hold, the fall restarts from his actual speed (`0x1403B4780`).
+- The Attack press (`0x1403D6CA0`): in the combo window with the swing connected the count goes on;
+  outside it, only in a free state (`+0x18C & 0x1C`: range ids 0 / 1 / 2) a new combo (counts 1 / 1),
+  else refused. The fall (motion 4) has range id 1 all through (`P_EX100.mset`, **Checked (files)**),
+  so after an air finisher ends a new air combo may start in the fall, as in KH2.
+
+**Valor's data** (`00battle.bin` PTYA moveset 2, `P_EX100_BTLF.mset`, `03system.bin` prty record 1;
+**Checked (files)**):
+
+| row | kind | flag | motion | jump / max / min | speed min..max | dist adj |
+|---|---|---|---|---|---|---|
+| 0 | 1 | 0xA (jump adjust; ground, at a target above) | 182 | 35 / 85 / 35 | -12..12 | 85 |
+| 1 | 0 | 0 (ground hop) | 181 | 40 / 90 / 40 | -12..12 | 85 |
+| 2 | 2 | 0x4 (finisher) | 154 | none | 0..0 | 0 |
+| 3 | 3 | 0x4 (finisher) | 155 | none | 0..0 | 0 |
+| 4, 5, 6 | 2, 3, 1 | 0 | 152, 151, 153 | none | 0..0 | 0 |
+| 7, 8 | 2, 3 | 0x5 (air finisher) | 184, 183 | 14 / 64 / 14 | 0..0 | 85 |
+| 10, 9 | 1, 3 | 0x9 / 0x1 (air) | 182, 181 | 35 / 85 / 35, 40 / 90 / 40 | -12..12 | 85 |
+| 11 | 0 | 0x2 | 181 | 90 / 90 / 90 | 16..24 | 85 |
+| 12, 38 | 0 | 0 / 0x1 | 155, 183 | none / 14..64 | 0..0 | 85 |
+| 40 | 0 | 0x1 | 182 | 100 / 200 / 100 | 0..18 | 55 |
+
+Every air row hops, so in KH2 each of Valor's air swings replaces the jump's arc with a hop of 35
+(40, 14) with no target. Ranges (60 Hz frames) and root travel (forward):
+- 151: turn 0..8, 22..30; combo from 38; root 187 by its end. 152: combo from 46; 148. 153:
+  turn 0..8, 8..19, 19..66; combo from 36; 513.
+- 154 (finisher): turn 0..8, 53..61; **edge stop 0..63**; **no gravity 63..end**; Finishing
+  Plus 73..85, 97..120; root 0 to frame ~54, then 220 by 120.
+- 155: edge stop 0..64; Finishing Plus 65..96; root 180 (frames ~48..96).
+- 181 / 182 (air swings): turn; combo from 26 / 24; no root travel.
+- 183 / 184 (air finishers): **no gravity 16..end**; Finishing Plus 46..90 / 63..75, 89..112;
+  root 437 / 137 forward inside the hold.
+- prty record 1 (Valor): walk 2, run 12, jump 235, no ground inertia (acceleration 0, brake 0).
+
+**What KH1's states did** (our code, against the above):
+- Ground swings and finishers: our rows (`kh1rows`) have no KH1 lunge (`+8` 0) and KH2's root travel
+  baked into the slot's H10 (template requests 0xC8..0xCB carry KH1's travel flag), the edge stop
+  (`shared::physics::edge_stop`), the turn windows (`kh2slots`): the same as KH2 on level floor.
+- Air swings: our air rows run with KH2's hop for the row (`combomods::Run::AirHop` ->
+  `shared::physics::kh2_hop`: the arc and velocity replaced, as `0x1403CBB00`), the no-gravity
+  holds and their root travel (`kh2slots::no_gravity`, `air_root`), the fall from rest after.
+  The same as KH2 **when the press reaches that path**; two paths didn't (§7.4.1, §7.4.2).
+
+#### 7.4.1 The combo styles reached into Valor (fixed)
+
+`combomods` read the Base / Aerial Base Combo rows' setting itself (`styles::kh2`), not the form:
+with a combo style at KH1 the Attack step dropped KH2's pick that KH1's picker had made in Valor
+(`kh1picker::at_kh2`, which does ignore the styles) and ran the picker's row with no hop. In the air
+that is our air row with **no hop at all**: the jump's (High Jump's, 585) rise went on under every
+swing, the tester's "fly high in the air while attacking". On the ground, KH1's length rule and its
+Finishing Plus path replaced KH2's. Now `combomods::style_kh2` is the style there: KH2's in a Drive
+Form on KH1's states (`form::native_now`), the setting otherwise (base Sora unchanged). Every
+combo-style read on the Attack path (`kh1_combo`'s length, the Attack step's pick, KH2's row
+selection on KH1's rows, the line ahead, the ground hop) goes through it; `kh1_finisher_window`
+and the Dodge Roll reads stay out of forms as before.

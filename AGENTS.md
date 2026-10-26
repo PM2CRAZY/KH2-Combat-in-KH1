@@ -1,3 +1,17 @@
+### 2026-10-26: Stage 684 (testing branch: Drive Forms ignore the combo styles on KH1's states)
+- **Drive Forms ignore the combo styles on KH1's states.** The tester (what-is-still-missing,
+  after m13): "attack doesn't interrupt jumps momentum so you can fly high in the air while
+  attacking", and "our configs don't adjust anything on drive forms".
+  - KH2 replaces the jump's arc and velocity with each air row's hop (Steam KH2 `0x1403D78D0` ->
+    `0x1403CBB00`, Checked (decomp)). Every one of Valor's air rows hops (PTYA moveset 2: 182/181
+    35/40, 184/183 14; Checked (files)).
+  - `combomods` read the Base / Aerial Base Combo rows itself. At KH1 it dropped the KH2 pick that
+    KH1's picker had made for Valor, and ran the row with no hop: the High Jump's rise went on
+    under the swings.
+  - Now `combomods::style_kh2` is KH2's in a Drive Form on KH1's states (length, pick, row
+    selection, line ahead, ground hop). Base Sora is unchanged.
+  - Not checked in game. docs/kh1-drive-forms-native.md §7.4.1.
+
 ### 2026-10-26: Stage 683 (testing branch: Valor's left Keyblade hits with KH1's own Keyblade sphere)
 - **Valor's left Keyblade hits with KH1's own Keyblade sphere.** The tester (what-is-still-missing, after m13): "1. it should fit kingdom hearts 1 in this situation for both keyblades", "2. the keyblade should behave exactly like kh1's keyblade so make sure it scales by keyblade", "for 2nd keyblade it should behave 1:1 with how the main keyblade works". KH1 builds its Keyblade object as follows (Checked (decomp)):
   - the constructor `0x1402B2DC0` takes bone `0x30`, blade range `+0x54` / `+0x58` and radius `+0x5C` from the data (floats, Checked (exe));
