@@ -30,6 +30,7 @@
 - [24. Assistant: t611 and t612.](#^m24)
 - [25. Assistant: t622 and t623: the first two steps of the native plan. Neith](#^m25)
 - [26. Assistant: t629, t630 and t631, one each:](#^m26)
+- [27. Assistant: Here's t637, and a question on your 2.](#^m27)
 
 ---
 
@@ -740,7 +741,41 @@ go ahead
 
 ^m26
 
+
 1. remove the fall back, and make them their own animations if they aren't already
 2. (b) the enemy knock back setting in the config should change this
    
    go ahead
+> [!tip] Assistant
+> Here's t637, and a question on your 2.
+>
+> **t637, no fallback.** Every KH2 combo move already had its own KH1 row (t631), so the fallback only came in three places. Each now has its own row:
+> - **Finishing Plus repeating a finisher.** KH2 can pick the finisher that's already playing again (its table lets a row repeat itself). Our spare "next finisher" row only had 154 / 183, so this used to land on KH1's finisher row or KH1's own row. That spare row now has every KH2 finisher of its kind: 154, 155, Explosion and Guard Break on the ground, and 183, 184, Aerial Finish and Magnet Burst in the air. Whichever of the two rows is playing, the other is free, so the next finisher always plays as itself.
+> - **Base Combo KH2 with Aerial Base Combo KH1.** KH2's plain hops (at an enemy well above you, or off a drop ahead) used to give KH1's row with its default 151. Now they play as KH2's hop on their own rows, and the air combo after the hop is KH1's, since your Aerial setting is KH1. That's a change in play for that mix.
+> - **A move whose animation slot didn't build when the game loaded** (a missing or broken file). That press now does nothing and the log says so ("has no KH1 row of its own built"), instead of KH1's row or KH1's roll, guard or jump. With your files this shouldn't happen.
+>
+> Still the same: Square in KH1's combo window with no Square move passing KH2's checks is your normal roll or guard (your m20 answer 5 (a)). Your KH1 ability finishers are untouched.
+>
+> Check: KH2's table walk in the Steam decomp (`0x140402C50`, the repeat rule), and every place in the code that could still fall back. Not checked in game. One assumption: a finisher played on the spare row uses that row's attack data (154's or 183's), with KH2's hit numbers for the move. So if Guard Break ever repeats itself back to back, the second one wouldn't pierce guards at Recoil KH1.
+>
+> **Your 2:** I couldn't find a setting that switches enemy knock-back between KH1 and KH2. What we have:
+> - **Knock-back Numbers** (Combat): only how far KH2's hit reactions push *Sora*.
+> - **Enemy Weight** (Tweaks): KH2's knock-back on enemies scaled by each enemy's KH1 weight. Off gives KH2's own numbers, not KH1's reactions.
+>
+> Which did you mean?
+> - (a) A new Combat row, "Enemy Knock-back: KH1 / KH2". At KH1 the plain swings and finishers (151–155, 181–184) get KH1's own reactions back, as before t631; at KH2 they keep KH2's.
+> - (b) The same row, but covering every KH2 move (Guard Break, Upper Slash, Explosion and the rest too), not only the plain ones.
+> - (c) Make Knock-back Numbers cover enemies as well (its "Scaled" option doesn't mean anything for enemies yet).
+> - (d) Something else.
+>
+> And for (a) / (b), should it default to KH1 (your (b) answer) or KH2?
+>
+> Please test t637, with the log and a Select + Triangle trace:
+> - Finishing Plus (one and two) at the KH2 setting, against one enemy and a group, so a finisher can come twice;
+> - Base Combo KH2 with Aerial Base Combo KH1: attack an enemy well above you, and swing toward a drop;
+> - the usual ground and air combos, to check nothing went missing.
+>
+> Log lines: "on KH1's row ... of its own", "no attack", "Finishing Plus".
+
+^m27
+
