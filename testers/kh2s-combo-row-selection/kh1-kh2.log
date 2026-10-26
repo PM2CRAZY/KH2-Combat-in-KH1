@@ -1009,3 +1009,192 @@
 [f13317] draw: baked (KH1 slot 156)
 [f13326] draw: baked (KH1 slot 159)
 [f13351] alive 360s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f13351] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
+[f13352] draw: kh1_own (KH1 slot 161)
+[f13402] event ops at 414s (Sora can act: false): 2x1 8x2 28x1 32x1 113x1 115x1 127x1 128x1 129x1 151x1 305x1 347x1 352x1 378x1 394x1 427x1 511x2 593x2 749x1
+[f13411] KH1 has Sora (KH1's script moves him, actions [], flags 0100c003)
+[f13412] KH1 has Sora (KH1's own states (base Sora, shared))
+[f13413] draw: baked (KH1 slot 161)
+[f13415] room: world 0xb room 0x1 entered; KH1 has Sora (KH1's own states (base Sora, shared)) (KH1 state 0, flags 0000c003, script false)
+[f13415] Sora's instance 0x7ff70fd919d0 (bones at 0x7ff70e6cb010)
+[f13415] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f13415] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
+[f13415] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f13415] KH1 slot 0 (Motion { motion: 0, field: true, looping: true, group: 0 }) at speed 0/s, climb 0/s
+[f13415] draw: follow (KH1 slot 0): KH2 motion 0 Motion { motion: 0, field: true, looping: true, group: 0 }, 0 frames in, blend -1.00, restarted
+[f13415] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
+[f13416] draw: kh1_own (KH1 slot 160)
+[f13416] Sora's actor at 0x7ff7106d7c00 (dt 1.000)
+[f13416] Sora's actor first seen: 0100c043 00030000 00000000 00000000 4180a1c9 00000000 454ec88f 40000000 3d7dd97c 00000000 bf7f8205 00000000 3d7dd97c 00000000 bf7f8205 404517ce 3f800000 3f800000 3f800000 3f800000 4180a1c9 00000000 454ec88f 00000000 3f800000 00000000 8274eda0 846fcc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f7f8205 80000000 3d7dd97c 00000000 00000000 3f800000 00000000 00000000 bd7dd97c 00000000 3f7f8205 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8229bf74 827710a0 00000000 00000000 8276dc20 00000000 846f34a0 8430b1e0 404517ce 826cae20 826cae60 83d919d0 00000102 00000000 00000082 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 827717a0 8953ed70 9529f060 8292c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 3f7f8205 80000000 3d7dd97c 00000000 00000000 3f800000 00000000 00000000 bd7dd97c 00000000 3f7f8205 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 00000000 43340000 3f800000 00000000 43340000 00000000 00000000 00000000 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff076d 4180a1c9 80000000 454ec88f 40000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 ffffffff 0000ffff ffffffff 00000000 00000000 4180a1c9 80000000 454ec88f 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000070 00000062 00000053 00000032 00000004 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00040000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 4180a1c9 00000000 454ec88f 3f800000 00000000 00000000 00000000 42280000 01008043 00030001 00000000 00000000 42e467aa 00000000 45524bcc 40000000 bf5dd8ac 00000000 beff8041 00000000 bf5dd8ac 00000000 beff8041 c005f823 3f800000 3f800000 3f800000 3f800000 42e467aa 00000000 45524bcc 3f800000 3f800000 00000000 00000000 846fcd10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3eff8041 00000000 bf5dd8ac 00000000 80000000 3f800000 00000000 00000000 3f5dd8ac 00000000 3eff8041 00000000 42e467aa 00000000 45524bcc 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8229bfec 829c1120 00000000 00000000 829c03a0 84365ee0 846f3630 8430b240
+[f13436] KH1 has Sora (KH1's own states (base Sora, shared))
+[f13437] draw: baked (KH1 slot 160)
+[f13439] event ops at 415s (Sora can act: true): 3x4 4x4 5x4 6x4 8x9 9x6 10x13 19x1 22x1 27x1 60x1 62x1 63x1 69x1 80x4 81x2 82x2 83x4 90x1 112x1 114x1 127x1 128x2 129x2 132x1 133x2 150x1 151x1 183x1 199x1 203x24 269x2 284x1 285x2 286x1 290x2 291x3 292x2 321x1 330x1 338x1 362x1 363x1 395x1 410x3 417x2 418x2 419x2 452x1 471x1 511x1 512x1 514x1 571x1 592x2 593x1 606x1 625x1 626x7 719x2 725x1
+[f13444] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
+[f13444] draw: baked (KH1 slot 163)
+[f13453] draw: baked (KH1 slot 166)
+[f13481] Square while moving: KH2's dodge roll LV1 on KH1's roll (request 0xDC, KH2 motion 209), invulnerable 10 frames
+[f13482] draw: baked (KH1 slot 147)
+[f13499] event ops at 416s (Sora can act: true): 1x1 2x1 3x1 4x1 5x1 6x1 8x60 80x1 83x1 177x1 203x60 284x30 285x60 286x30 290x60 291x90 292x60 419x60
+[f13519] draw: baked (KH1 slot 166)
+[f13527] KH1 has Sora (KH1's script moves him, actions [], flags 0100c043)
+[f13528] draw: kh1_own (KH1 slot 166)
+[f13530] KH1 has Sora (KH1's script moves him, actions [], flags 0100c003)
+[f13531] KH1 has Sora (KH1's script moves him, actions [4], flags 0100c003)
+[f13532] KH1 has Sora (KH1's script moves him, actions [], flags 01008003)
+[f13534] draw: kh1_own (KH1 slot 95)
+[f13560] event ops at 417s (Sora can act: false): 2x1 8x34 9x4 10x2 26x1 28x1 35x1 36x1 55x1 57x2 69x1 87x1 100x1 101x1 103x26 108x2 113x1 115x1 127x1 128x1 129x1 133x1 142x1 203x28 267x2 284x14 285x28 286x14 290x28 291x42 292x28 306x1 307x2 308x2 315x1 336x1 353x1 362x1 376x1 378x1 394x1 418x1 419x28 438x1 445x1 511x2 513x1 517x1
+[f13571] room 0xb-0x1, first 3 s: KH2 had Sora 0 of 157 frames; now KH1 has him: KH1's script moves him, actions [], flags 01008003 (KH1 state 0, body seen true)
+[f13593] room: world 0xb room 0x0 entered; KH1 has Sora (KH1's script moves him, actions [], flags 01008003) (KH1 state 0, flags 01008003, script false)
+[f13593] Sora's instance 0x7ff70fd917d0 (bones at 0x7ff70e6cb010)
+[f13593] retarget ready: 122 of 293 KH1 bones follow KH2 (the rest hang as in KH1's battle idle: true)
+[f13593] KH2's own hair, hood, sleeves and keychain: 14 spikes (153<-163 156<-155 159<-153 162<-153 165<-149 168<-151 171<-159 174<-147 177<-147 180<-143 183<-145 186<-159 189<-159 192<-161), 4 hood joints, 8 sleeve chains, 9 chain links
+[f13593] KH1's poses on KH2's skeleton: 47 of 228 KH2 bones turn with a measured part
+[f13593] draw: kh1_own (KH1 slot 0)
+[f13593] KH1 has Sora (KH1's script moves him, actions [], flags 01008043)
+[f13594] draw: kh1_own (KH1 slot 160)
+[f13594] Sora's actor at 0x7ff7106d7750 (dt 1.000)
+[f13594] Sora's actor first seen: 01008043 00030000 00000000 00000000 4190d946 00000000 4483a61a 40000000 3dc46b6c 00000000 bf7ed1e4 00000000 3dc46b6c 00000000 bf7ed1e4 4042ea14 3f800000 3f800000 3f800000 3f800000 4190d946 00000000 4483a61a 00000000 3f800000 00000000 8274eda0 846fcc10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f7ed1e4 80000000 3dc46b6c 00000000 00000000 3f800000 00000000 00000000 bdc46b6c 00000000 3f7ed1e4 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8234c07c 827710a0 00000000 00000000 8276dc20 00000000 846f34a0 8430b1e0 4042ea14 826cae20 826cae60 83d917d0 00000102 00000000 00000082 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 827717a0 8953ed70 9529f060 8292c0a0 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 3f800000 3f7ed1e4 80000000 3dc46b6c 00000000 00000000 3f800000 00000000 00000000 bdc46b6c 00000000 3f7ed1e4 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 00000000 43340000 3f800000 00000000 43340000 00000000 00000000 00000000 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 3f800000 42700000 42a00000 00000000 ffffffff 00000000 47f12000 ffff0000 ffff0021 4190d946 80000000 4483a61a 40000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 ffffffff 0000ffff ffffffff 00000000 00000000 4190d946 80000000 4483a61a 3f800000 00000000 bf800000 00000000 3f800000 80000000 3f800000 80000000 3f800000 00000082 00000080 0000007e 00000046 00000001 00000000 00000000 00000000 80808080 c1200535 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00010000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 80000000 00000000 00000000 00000000 00000000 00520000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 43160000 43480000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000 00000000 bf800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 00000000 00000000 00000000 4190d946 00000000 4483a61a 3f800000 00000000 00000000 00000000 42280000 01008043 00030001 00000000 00000000 42dfea41 00000000 448c5d48 40000000 bf4d7ed7 00000000 bf18ab17 00000000 bf4d7ed7 00000000 bf18ab17 c00d6ca4 3f800000 3f800000 3f800000 3f800000 42dfea41 00000000 448c5d48 3f800000 3f800000 00000000 00000000 846fcd10 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 3f800000 3f800000 3f800000 3f800000 00000000 00000000 00000000 00000000 80000000 3f800000 80000000 3f800000 3f18ab17 00000000 bf4d7ed7 00000000 80000000 3f800000 00000000 00000000 3f4d7ed7 00000000 3f18ab17 00000000 42dfea41 00000000 448c5d48 3f800000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 8234c0f4 829c1120 00000000 00000000 829c03a0 8435e5e0 846f3630 8430b240
+[f13603] event ops at 418s (Sora can act: false): 3x2 4x3 5x3 6x3 8x2 10x24 19x1 22x4 27x1 60x1 69x1 80x3 81x1 82x1 83x3 96x1 103x32 105x1 127x1 132x9 133x2 151x1 163x8 199x4 203x40 267x1 321x4 336x1 340x23 362x1 389x1 395x1 417x1 452x10 511x1 514x1 593x1 625x4 626x25 719x1
+[f13611] KH1 has Sora (KH1's own states (base Sora, shared))
+[f13612] draw: baked (KH1 slot 160)
+[f13622] check: bone 3 from the locals is 0.000 units from the game's (should be ~0)
+[f13630] draw: baked (KH1 slot 162)
+[f13631] draw: baked (KH1 slot 165)
+[f13664] event ops at 419s (Sora can act: true): 8x54 112x1 114x1 132x1 133x3 150x1 203x244 284x52 285x104 286x52 290x52 291x104 292x52 340x124 363x1 417x1 419x52 452x61 512x1 592x1
+[f13675] draw: baked (KH1 slot 158)
+[f13682] jump in the air: KH2's Aerial Dodge on KH1's request 0x20b of its own (KH1 state 2), 145 high, 18.0/frame
+[f13682] held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise
+[f13683] draw: baked (KH1 slot 189)
+[f13684] KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)
+[f13684] guard: motion 202's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754710, radius 80
+[f13695] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f13695] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f13696] draw: baked (KH1 slot 207)
+[f13725] event ops at 420s (Sora can act: true): 8x60 203x244 284x62 285x124 286x62 290x62 291x124 292x62 340x122 419x62 452x61
+[f13737] draw: baked (KH1 slot 159)
+[f13750] draw: baked (KH1 slot 166)
+[f13756] room 0xb-0x0, first 3 s: KH2 had Sora 0 of 164 frames; now KH1 has him: KH1's own states (base Sora, shared) (KH1 state 0, body seen true)
+[f13819] draw: baked (KH1 slot 158)
+[f13829] KH1's aerial combo, swing 1 of 3: KH2's row 9 motion 181 (ability 0, finisher false, KH2's length 3) on KH1's row 95 of its own
+[f13829] KH2's 181 (row 255, motion 181) on KH1's row 95 of its own (request 0x21d)
+[f13830] draw: baked (KH1 slot 207)
+[f13855] KH1's aerial combo, swing 2 of 3: KH2's row 10 motion 182 (ability 0, finisher false, KH2's length 3) on KH1's row 96 of its own
+[f13855] KH2's 182 (row 255, motion 182) on KH1's row 96 of its own (request 0x21e)
+[f13856] draw: baked (KH1 slot 208)
+[f13883] KH2's aerial finisher walk at the KH2 setting (KH1's picker took row 16): KH2's own pick, row 29 motion 194 (KH2's length 3) (KH2's row 29 motion 194 first)
+[f13883] KH1's aerial combo, swing 3 of 3: KH2's row 29 motion 194 (ability 100, finisher true, KH2's length 3) on KH1's row 102 of its own
+[f13883] KH2's Aerial Finish (row 255, motion 194) on KH1's row 102 of its own (request 0x224)
+[f13884] draw: baked (KH1 slot 214)
+[f13916] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 916 group 6, frame 31): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f13935] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 917 group 6, frame 50): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f13936] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 12, sideways 10 a frame)
+[f13966] KH2's next attack on the Keyblade (KH2 motion 194, ATKP 927 group 6, frame 81): 1 attack object(s) of ours re-armed with KH1's re-arm
+[f13967] event ops at 424s (Sora can act: true): 8x60 25x1 26x1 203x240 284x60 285x120 286x60 290x60 291x120 292x60 314x1 335x1 336x1 340x120 419x60 423x1 424x1 452x60 639x1 640x1
+[f13968] KH2 launch asked: record 0x7ff710785e10 made a launch (KH2's start: up 3, sideways 45 a frame)
+[f13988] draw: baked (KH1 slot 159)
+[f14001] draw: baked (KH1 slot 166)
+[f14024] KH1's ground combo, swing 1 of 4: KH2's row 51 motion 170 (ability 180, finisher false, KH2's length 4) on KH1's row 91 of its own
+[f14024] KH2's Vicinity Break (row 255, motion 170) on KH1's row 91 of its own (request 0x219)
+[f14025] draw: baked (KH1 slot 203)
+[f14026] KH2 body / spell hits: attack data copies at 0x7ff7117c0000
+[f14026] KH2 body hits: motion 170 (request 0x219, ground): KH1 attack objects ATKP 1869 group 21 on KH1 group 1 (None r 450 h 150 lift 60, interval 0)
+[f14039] guard: motion 170's window (ATKP 406, on his body, reflect range 0) as KH1 guard object 0x7ff710754890, radius 80
+[f14045] KH2 body hit: ATKP 1869 (motion 170) from KH1's pass on actor 0x7ff7106dbda0
+[f14065] KH1's ground combo, swing 2 of 4: KH2's row 5 motion 151 (ability 0, finisher false, KH2's length 4) on KH1's row 84 of its own
+[f14065] KH2's 151 (row 255, motion 151) on KH1's row 84 of its own (request 0x212)
+[f14066] KH2 body hits: motion 170 (request 0x212, ground): KH1 attack objects ATKP 1869 group 21 on KH1 group 1 (None r 450 h 150 lift 60, interval 0)
+[f14066] draw: baked (KH1 slot 196)
+[f14114] draw: baked (KH1 slot 166)
+[f14149] event ops at 427s (Sora can act: true): 8x60 203x240 284x60 285x120 286x60 290x60 291x120 292x60 340x120 419x60 452x60
+[f14160] settings reloaded (the ini was saved) (E:\SteamLibrary\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\kh1-kh2.ini): Settings { abilities: Kh1, hurt: true, carry: true, ceilings: true, grabs: true, commands: true, swing_fx: true, kh2_sounds: Some(Some([161, 162, 163, 164, 165, 166, 167, 169, 170, 171, 172, 191, 192, 193, 194, 196, 197, 40, 173, 202])), kh2_volume: 1.0, damage_scale: 1.0, magic_scale: 1.0, kh2_damage: true, criticals: false, party_criticals: false, kh1_ability_chance: false, enemy_weight: true, glide_cast: true, glide_on_square: false, air_cast_fall: 1.0, kh2_voice: false, bonus_ap: true, auto_aim: false, wall_clink: true, kh2_hit_sparks: true, kh2_camera: true, camera_scale: 0.89, camera_lower: 0.0, camera_calls_kh2: true, r2_camera_hold: false, l2_stick_menu: false, config_row: true, four_shortcuts: true, kh2_effects: Some(Some([166, 170, 197, 194, 165, 167, 40, 203])), hit_fx_test: [], hit_fx_byte: 0, hit_effect_test: [], hit_effect_on_sora: false, flip_weapons: [83], reflect: true, keyblade_turn: true, physics_rule: Kh1, drive: true, valor_left_blade: true, styles: [false, false, false, false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false], knockback_numbers: Kh2, medium_hits_flinch: false, gummi_skip: false, shared: true, kh1_slots: Some(None), kh1_bake: true, kh1_leg_ik: false, foot_ik: false, trace: On, trace_seconds: 3, trace_game_frames: false, trace_cats: 8191, debug_menu: true, log_cats: 31, debug_growth: [0, 0, 0, 0, 0] }
+[f14165] Square while moving: KH2's dodge roll LV1 on KH1's roll (request 0xDC, KH2 motion 209), invulnerable 10 frames
+[f14166] draw: baked (KH1 slot 147)
+[f14186] event ops at 452s (Sora can act: true): 8x26 203x104 284x26 285x52 286x26 290x26 291x52 292x26 340x52 419x26 452x26
+[f14218] draw: baked (KH1 slot 160)
+[f14251] alive 480s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14251] alive 600s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14251] alive 720s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14251] alive 840s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14251] alive 960s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14251] alive 1080s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14253] draw: baked (KH1 slot 163)
+[f14254] draw: baked (KH1 slot 166)
+[f14255] event ops at 1185s (Sora can act: true): 8x4 203x16 284x4 285x8 286x4 290x4 291x8 292x4 340x8 419x4 452x4
+[f14267] KH1's ground row picker, swing 1 of 4: KH1's row 13; no KH2 ability swing passes KH2's checks
+[f14268] draw: kh1_own (KH1 slot 98)
+[f14268] frame scale 4.00: KH2 steps 4 60 Hz frames a game frame
+[f14269] frame scale 1.00: KH2 steps 1 60 Hz frame a game frame
+[f14312] draw: baked (KH1 slot 166)
+[f14323] KH1's ground row picker, swing 1 of 4: KH1's row 13; no KH2 ability swing passes KH2's checks
+[f14324] draw: kh1_own (KH1 slot 98)
+[f14346] KH1's ground row picker, swing 2 of 4: KH1's row 11; no KH2 ability swing passes KH2's checks
+[f14347] draw: kh1_own (KH1 slot 99)
+[f14377] KH1's ground row picker, swing 3 of 4: KH1's row 13; no KH2 ability swing passes KH2's checks
+[f14378] draw: kh1_own (KH1 slot 98)
+[f14426] draw: baked (KH1 slot 166)
+[f14436] draw: baked (KH1 slot 163)
+[f14439] draw: baked (KH1 slot 166)
+[f14443] draw: baked (KH1 slot 163)
+[f14444] draw: baked (KH1 slot 160)
+[f14444] alive 1200s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14446] draw: baked (KH1 slot 163)
+[f14448] draw: baked (KH1 slot 166)
+[f14455] KH1's ground row picker, swing 1 of 4: KH1's row 13; no KH2 ability swing passes KH2's checks
+[f14456] draw: kh1_own (KH1 slot 98)
+[f14479] KH1's ground row picker, swing 2 of 4: KH1's row 11; no KH2 ability swing passes KH2's checks
+[f14480] draw: kh1_own (KH1 slot 99)
+[f14499] event ops at 1228s (Sora can act: true): 8x54 203x220 284x56 285x112 286x56 290x56 291x112 292x56 340x110 419x56 452x55
+[f14509] KH1's ground row picker, swing 3 of 4: KH1's row 13; no KH2 ability swing passes KH2's checks
+[f14510] draw: kh1_own (KH1 slot 98)
+[f14536] KH1's ground finisher walk, swing 4 of 4 (KH1's picker took row 8, KH1 Ability Chance off): KH1's own finisher row 8
+[f14537] Finishing Plus window on KH1's own finisher (request 0xcb, time 26.0 of 48.0, KH2 155's frame 43): KH1's combo window
+[f14537] draw: kh1_own (KH1 slot 101)
+[f14572] Finishing Plus window on KH1's own finisher (request 0xcb, time 35.0 of 80.0, KH2 155's frame 35): KH1's combo window
+[f14573] Finishing Plus window on KH1's own finisher (request 0xcb, time 36.0 of 80.0, KH2 155's frame 36): KH1's combo window
+[f14574] Finishing Plus window on KH1's own finisher (request 0xcb, time 37.0 of 80.0, KH2 155's frame 37): KH1's combo window
+[f14575] Finishing Plus window on KH1's own finisher (request 0xcb, time 38.0 of 80.0, KH2 155's frame 38): KH1's combo window
+[f14576] Finishing Plus window on KH1's own finisher (request 0xcb, time 39.0 of 80.0, KH2 155's frame 39): KH1's combo window
+[f14577] Finishing Plus window on KH1's own finisher (request 0xcb, time 40.0 of 80.0, KH2 155's frame 40): KH1's combo window
+[f14578] Finishing Plus window on KH1's own finisher (request 0xcb, time 41.0 of 80.0, KH2 155's frame 41): KH1's combo window
+[f14579] Finishing Plus window on KH1's own finisher (request 0xcb, time 42.0 of 80.0, KH2 155's frame 42): KH1's combo window
+[f14580] Finishing Plus window on KH1's own finisher (request 0xcb, time 43.0 of 80.0, KH2 155's frame 43): KH1's combo window
+[f14581] Finishing Plus window on KH1's own finisher (request 0xcb, time 44.0 of 80.0, KH2 155's frame 44): KH1's combo window
+[f14582] Finishing Plus window on KH1's own finisher (request 0xcb, time 45.0 of 80.0, KH2 155's frame 45): KH1's combo window
+[f14583] Finishing Plus window on KH1's own finisher (request 0xcb, time 46.0 of 80.0, KH2 155's frame 46): KH1's combo window
+[f14584] Finishing Plus window on KH1's own finisher (request 0xcb, time 47.0 of 80.0, KH2 155's frame 47): KH1's combo window
+[f14585] Finishing Plus window on KH1's own finisher (request 0xcb, time 48.0 of 80.0, KH2 155's frame 48): KH1's combo window
+[f14586] Finishing Plus window on KH1's own finisher (request 0xcb, time 49.0 of 80.0, KH2 155's frame 49): KH1's combo window
+[f14586] Square in KH1's combo window (swing 4): KH2's Square move, row 37 motion 167, on KH1's row 67 of its own
+[f14586] KH1's ground finisher walk, swing 5 of 4 (KH1's picker took row 11, KH1 Ability Chance off): KH2's row 3 motion 155 (ability 0): KH1's row 93 runs it
+[f14586] KH2's Finishing Leap (row 37, motion 167) on KH1's row 67 of its own (request 0x201), out of KH1's air state
+[f14587] KH2's hop out of KH1's ground combo: its 0.0/frame sideways put back after KH1's carry into the air (which left 0.0)
+[f14587] Finishing Plus window on KH1's own finisher (request 0x201, time 49.0 of 80.0, KH2 183's frame 40): KH1's combo window
+[f14587] draw: baked (KH1 slot 173)
+[f14588] KH2 body hits: motion 167 (request 0x7, ground): KH1 attack objects ATKP 854 group 18 on KH1 group 1 (None r 350 h 180 lift 120, interval 0)
+[f14588] draw: baked (KH1 slot 159)
+[f14601] draw: baked (KH1 slot 166)
+[f14636] KH1's ground row picker, swing 1 of 4: KH1's row 13; no KH2 ability swing passes KH2's checks
+[f14637] draw: kh1_own (KH1 slot 98)
+[f14662] KH1's ground row picker, swing 2 of 4: KH1's row 11; no KH2 ability swing passes KH2's checks
+[f14663] draw: kh1_own (KH1 slot 99)
+[f14691] KH1's ground row picker, swing 3 of 4: KH1's row 13; no KH2 ability swing passes KH2's checks
+[f14692] draw: kh1_own (KH1 slot 98)
+[f14716] KH1's ground finisher walk, swing 4 of 4 (KH1's picker took row 8, KH1 Ability Chance off): KH1's own finisher row 8
+[f14717] Finishing Plus window on KH1's own finisher (request 0xcb, time 24.0 of 48.0, KH2 155's frame 40): KH1's combo window
+[f14717] draw: kh1_own (KH1 slot 101)
+[f14752] Finishing Plus window on KH1's own finisher (request 0xcb, time 35.0 of 80.0, KH2 155's frame 35): KH1's combo window
+[f14753] Finishing Plus window on KH1's own finisher (request 0xcb, time 36.0 of 80.0, KH2 155's frame 36): KH1's combo window
+[f14768] Square in KH1's combo window (swing 4): KH2's Square move, row 37 motion 167, on KH1's row 67 of its own
+[f14768] KH1's ground finisher walk, swing 5 of 4 (KH1's picker took row 11, KH1 Ability Chance off): KH2's row 3 motion 155 (ability 0): KH1's row 93 runs it
+[f14768] KH2's Finishing Leap (row 37, motion 167) on KH1's row 67 of its own (request 0x201), out of KH1's air state
+[f14769] KH2's hop out of KH1's ground combo: its 0.0/frame sideways put back after KH1's carry into the air (which left 0.0)
+[f14769] draw: baked (KH1 slot 173)
+[f14770] KH2 body hits: motion 167 (request 0x7, ground): KH1 attack objects ATKP 854 group 18 on KH1 group 1 (None r 350 h 180 lift 120, interval 0)
+[f14770] draw: baked (KH1 slot 159)
+[f14783] draw: baked (KH1 slot 166)
+[f14802] draw: baked (KH1 slot 163)
+[f14803] draw: baked (KH1 slot 160)
+[f14807] alive 1320s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14807] alive 1440s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14807] alive 1560s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]
+[f14807] alive 1680s; KH1 at 0x7ff70d9a0000; other mods loaded: ["DBGHELP.dll", "LuaBackend.dll"]

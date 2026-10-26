@@ -302,3 +302,4 @@ for what your working on with glide and the command menu, make it a separate thr
 
 ^m10
 
+update what is still missing for native
