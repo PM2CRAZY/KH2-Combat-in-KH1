@@ -38,6 +38,7 @@
 - [32. Assistant: Thanks for the trace and the log, they made both easy to fin](#^m32)
 - [33. Assistant: Thanks! Three versions, one each:](#^m33)
 - [34. Assistant: t674: one re-hit system for every KH2 move. You were right, ](#^m34)
+- [35. Assistant: t676, Aerial Finish's knock-back. There were two problems be](#^m35)
 
 ---
 
@@ -982,6 +983,26 @@ go ahead
 
 ^m34
 
+
 1. aerial finish is working how it should hit wise, just need to fix the knock back so the enemy doesn't get sent so far off of the first hit, please look into how kh2 does it in the c decomp if you don't already have the notes. 
 
 go ahead
+> [!tip] Assistant
+> **t676, Aerial Finish's knock-back.** There were two problems behind it:
+>
+> 1. **The direction was flipped.** In KH2, Aerial Finish's three spins (915, 916, 917) are small blows with a *negative* sideways number: -1, -1 and -10. KH2's reaction code (Steam KH2 `0x1403D2FE0`, speeds from `0x1403CEA00`) lays that number along the hit direction with its sign, so the spins lift the enemy a little and pull it back toward you. Only the last hit (927, 45) throws it away. Ours dropped the sign, so the third spin pushed the enemy 10 a frame away. The sign is kept now. Explosion's small ticks (911) also pull very slightly now, which is what KH2 does.
+> 2. **Most enemies never got KH2's numbers at all.** Many of KH1's enemies don't use KH1's plain enemy reaction code: every hit is handed to the enemy's own script, and the script launches it through a separate KH1 launch function (`0x1402B79F0`, from the script call `0x1402BBC80`) with its own height and speed. That one wasn't hooked. Your log shows it: 16 "KH2 launch asked" lines and not one line from our launch hook. Now it's hooked too: KH1's launch runs, and if it was one of KH2's blows, the arc and the flight become KH2's, the same as the normal launch.
+>
+> Checked: KH2's blow in the Steam KH2 decomp, the ATKP values in your `00battle.bin`, KH1's script-launch path in the Steam KH1 decomp and its first bytes in the exe, and your log. Not checked: in game, and that your enemies' scripts really use that launch for a KH2 blow (I inferred it from the log; the new lines will confirm it).
+>
+> Please test Aerial Finish on a single enemy, ideally after a jump and a couple of air swings: the spins should keep the enemy beside you, slightly lifted and pulled in, and only the last hit should send it away. Also try Explosion and a plain air combo finisher. With the Combat log on, look for:
+> - "KH1's scripted launch on ... : KH2's numbers in it"
+> - "KH2 launch on ... (KH1's scripted launch): up 12 / sideways -10.0 a frame, toward Sora"
+>
+> If you see "KH2 launch on ... didn't launch it" instead, please send the log: it means that enemy's script uses another reaction, and I'd look there next.
+>
+> Question:
+> 1. KH2 lets every blow coast at a tenth of its starting sideways speed until the enemy lands. So if the air combo's finisher throws an enemy at 45 just before a Finishing Plus Aerial Finish, it keeps drifting at 4.5 a frame until the first spin catches it. That's KH2's own behaviour. Should it (a) stay exactly like KH2, or (b) be a separate tweak?
+
+^m35
+
