@@ -19,6 +19,7 @@
 - [13. Assistant: Thanks! Here's how I took your answers, then this round's tw](#^m13)
 - [14. Assistant: Thanks! I worked through Valor, then moved Wisdom over too. ](#^m14)
 - [15. Assistant: Thanks! All nine are in. 1 (a) and 5 (a) need no change: the](#^m15)
+- [16. Assistant: Thanks! Three versions this round. Two of your answers neede](#^m16)
 
 ---
 
@@ -650,6 +651,7 @@ go ahead
 
 ^m15
 
+
 1. make it a toggle in the config menu under tweaks, you can either have the kh1 rule or the kh2 rule
 2. yes make sure this is part of magic combo in the config menu
 3. (a)
@@ -662,3 +664,81 @@ go ahead
 10. (b) but make a note of it for later
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! Three versions this round. Two of your answers needed no change once I checked them, and the rest went into the docs as notes. I re-checked everything against the KH2 Steam decomp first.
+>
+> **1, clashes: t701, a Clash Combo row in Combat > Tweaks** (KH1 | KH2, on KH2 by default like the other Tweaks rows)
+> - KH2 has three spots that count a swing as connected and take one off the combo count, so the next press repeats that step. One is the clash itself (`0x1403D61D0`). The other two are the same wall-bounce code in two copies (`0x1403D54B0` / `0x1403D63E0`), so it's really "clash or wall".
+> - KH1 already does most of this: a ground clash or wall bounce counts as connected, takes one swing off, and KH1's recoil has a combo window. That's with Recoil at KH1 and at KH2.
+> - At KH2 the row adds what KH1 doesn't do:
+>   - every clash that passes KH1's facing tests counts as connected, even ones KH1 doesn't stop (Guard Break, refact-2 swings);
+>   - the air recoil takes one off too;
+>   - the count never goes below 0.
+> - At KH1 nothing changes.
+>
+> **2, magic after a miss: no change needed**
+> - KH2's magic command (`0x1403D6FC0` → `0x1403D6CA0`) always counts as the next step, or the next finisher in a Finishing Plus window, whether the last swing hit or not. Only Attack needs the hit (or Combo Master).
+> - Our native magic already does exactly this with Magic Combo at KH2: KH1's own ground spells, KH2's spells on KH1's cast state (base Sora and Wisdom), and Reflect. With Magic Combo at KH1 nothing changes.
+> - The old controller (Master, Final, Limit, Anti) still repeats the step after a ground miss. I left it alone because of your answer 4.
+>
+> **3, the left Keyblade's holder: t702**
+> - Each Valor move now has a second baked KH1 motion that holds the left Keyblade, made once from KH2's left Keyblade animation. KH1's own pose pass plays it right after Sora's every frame, at his motion's time.
+> - It's a second motion because a KH1 motion has exactly one channel per bone of the model, and Sora's skeleton has only one set of weapon bones. So the left bones can't go into his own motion.
+> - The blade is carried on Sora's left hand as KH1 draws it, so it stays in his grip through KH1's blends. KH2's left Keyblade is no longer worked out every frame.
+> - **Still ours:** the copy of Sora that KH1's draw and trail run on.
+> - Final is unchanged.
+>
+> **4: the old KH2 controller is deprecated.** It gets no new work or fixes, and Final stays as it is. Written up in docs/kh1-drive-forms-native.md §10.
+>
+> **5: the cap was already KH2's rule.** KH2 counts the forms you own by their items (`0x1403C3EF0` / `0x1403C4720`, table `0x1405C5D08`). That's Valor and Wisdom here, plus Final once used, which is what t700 does.
+>
+> **6, base Sora from form levels: t703**
+> - **KH2's rule** (`0x1403E8380`, your own fmlv): at form LV3, LV5 and LV7, base Sora's High Jump (Valor), Quick Run (Wisdom) or Glide (Final) goes to LV1, LV2 and LV3. Base Sora never gets MAX this way, as in KH2. If his own level or a boss already gives more, the higher level stays. If he doesn't have the ability yet, he learns it.
+> - **The rows' rewards** come as KH1's own abilities, off, each with a box: Valor LV4 and LV6 give Combo Plus, and Wisdom LV4 gives MP Rage.
+> - **Not given yet** (see the questions): Auto Valor, Auto Wisdom, Auto Final, MP Haste and Form Boost.
+> - Saves from t700 get any rewards they've already earned, once.
+>
+> **7:** waiting, as you said.
+>
+> **8:** left as it is, noted in the doc: once forms are on KH2's Drive gauge, the form gauge's length follows KH2's form-level rule.
+>
+> **9, rumble: no change needed.** KH1's hit vibration stays, and it can't take away a KH2 move's vibration.
+> - Only one pattern plays at a time, and the newest wins.
+> - KH1 only vibrates when it actually plays a reaction on Sora. When a hit knocks you out of a move, KH2's reaction pattern starts right after and replaces KH1's.
+> - Hits that don't interrupt you don't vibrate on KH1's side at all: the Drive, rolls, guards and other invulnerable frames.
+> - One assumption: that KH1 runs the motion pass after the think on Steam. I traced that order on Epic only.
+>
+> **10:** left as (b), with a note in the doc for later.
+>
+> Checked: the Steam KH2 and KH1 decomps, KH2's files (fmlv, the msets) and KH1's motion file, as noted per version in AGENTS.md. Not checked: anything in game. The first start bakes once (Valor's holder motions).
+>
+> **Please test**
+> - **Clash Combo (t701):**
+>   - clash a ground combo with an enemy attack, then press Attack during the recoil: the same step should come again;
+>   - with Combo Master off, try Guard Break or Horizontal Slash meeting an enemy attack without hitting the body: at KH2 the next press should chain, at KH1 it shouldn't;
+>   - swing into a wall, and flip the row between KH1 and KH2;
+>   - log lines "Clash Combo (KH2)".
+> - **Left Keyblade (t702):**
+>   - Valor's ground and air combos, 154 / 155, idle into walk and run, and jumps;
+>   - the left Keyblade should stay in his left hand and line up with its trail and hits;
+>   - log lines "left Keyblade holder motion baked" and "posed by KH1's pass". A line "no holder motion (...)" means that move fell back to the old way.
+> - **Form growth (t703):**
+>   - Valor to LV3 (High Jump up, with a box) and LV4 (a Combo Plus, off);
+>   - Wisdom to LV3 (Quick Run);
+>   - save and reload: nothing should be given twice;
+>   - load a t700 save that already has form levels: its rewards should come once.
+> - **Rumble:** get hit during Explosion or a cast. You should feel a short KH1 buzz, then KH2's reaction pattern.
+>
+> **Questions**
+> 1. KH1's big recoil (its own kind 7, with no KH2 equivalent) still takes a swing off with Clash Combo at KH2. Should it (a) keep doing that, as KH1 does, or (b) not take one off?
+> 2. During KH1's short blends between two Valor moves, Sora's hand blends but the way the left Keyblade sits in it switches to the new move at once. If that looks off, should I (a) leave it, or (b) also blend the holder through KH1's own blend pass (one more hook)?
+> 3. Auto Valor / Auto Wisdom / Auto Final (KH2's low-HP Drive reaction command). Should I (a) build them natively later, or (b) leave them out?
+> 4. Wisdom LV6's MP Haste in KH2 speeds up MP Charge, which KH1 doesn't have yet. Should I (a) give KH1's own MP Haste instead, (b) wait for MP Charge, or (c) leave it out?
+> 5. Final's Form Boost lengthens the form gauge. Should I (a) wait for the Drive gauge, or (b) leave it out?
+> 6. Base Sora's growth now comes from both his own level and bosses (the mod's rule) and from form levels, whichever is higher. Should it (a) stay that way, or (b) come only from form levels, as in KH2?
+> 7. Should the abilities forms give (Combo Plus, MP Rage) (a) add their AP to the bonus AP like the mod's other gifts, or (b) not?
+> 8. With Magic Combo at KH2, Wisdom's KH1 spells (Gravity, Stop, Aero) and KH1's own air casts don't take a combo step yet. Should (a) all of them take a step like the other spells, (b) none, or (c) only Wisdom's?
+
+^m16
+
