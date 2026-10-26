@@ -465,13 +465,18 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>) {
                 (false, true) => Kind::AirCombo,
                 (false, false) => Kind::GroundCombo,
             };
-            // (Finishing Plus's next finisher: every finisher KH1's finisher request of its kind
-            // plays, its first the request's own.)
+            // (Finishing Plus's next finisher: every KH2 finisher of its kind that has a row of
+            // its own (the ground 154, 155, Explosion, Guard Break; the air 183, 184, Aerial
+            // Finish, Magnet Burst), its first its own motion. KH2 may pick the finisher playing
+            // again (a row whose `sub` is its own id), and its own row's request is then the one
+            // playing: this row plays it, so a next finisher always has a row of ours (the tester,
+            // combo row selection after m26, answer 1: no fallback onto KH1's finisher row).)
             let mut motions = vec![o.motion];
             if o.next_finisher {
-                for m in moves.iter().filter(|m| m.request == o.template_request() as usize && m.own.is_none()) {
-                    if !motions.contains(&m.motion) {
-                        motions.push(m.motion);
+                let air = k.air();
+                for f in super::kh1rows::OURS.iter().filter(|f| f.attack && f.kind.finisher() && !f.kind.cast() && f.kind.air() == air && !f.next_finisher && !f.rises) {
+                    if wanted(f.motion) && (!f.combo || combo_ok.contains(&f.motion)) && !motions.contains(&f.motion) {
+                        motions.push(f.motion);
                     }
                 }
             }

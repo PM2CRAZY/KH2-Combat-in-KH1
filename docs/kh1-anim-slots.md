@@ -1599,6 +1599,9 @@ thread: what that would mean).
 
 ### 7.z.5 No more borrows: KH1's own row where no KH1 row can play KH2's move (combo row selection, after m25)
 
+(Superseded by §7.z.7: the tester, after m26, answer 1, "remove the fall back". The table below is
+what t630 did.)
+
 The tester, answer 2 to m25's question ("When no KH1 row can play a KH2 move ... (b) KH1's own row
 that its picker chose"). Before, a few presses still handed Sora to KH2's controller for one move
 (`combomods::want`, taken by `takeover::shared_frame`, set on KH2's first step by `before_step`).
@@ -1620,6 +1623,54 @@ lock read in `shared_frame`). How often these come in play isn't measured (Assum
 or a third finisher in a row); the log lines say when.
 Assumption: at the KH2 setting the "KH1 row its picker chose" is the one it picks with KH2's combo
 length on its length byte (t612), not KH1's own length.
+
+### 7.z.6 Every KH2 combo row on a KH1 row of its own (combo row selection, after m25, answer 3 (a); t631)
+
+`kh1rows::OURS` has one KH1 row per KH2 combo motion of Sora's (`Ours::combo`): the ground swings
+151, 152, 153, Slapshot 162, Dodge Slash 163, Slide Dash 164, Flash Step 169, Vicinity Break 170; the
+ground finishers 154, 155, Explosion 166 (Guard Break 165 had its own row already); the air swings
+181, 182, Aerial Spiral 192 and the ground-to-air hops Aerial Sweep 191 / Aerial Dive 196; the air
+finishers 183, 184, Aerial Finish 194, Magnet Burst 197. Several PTYA rows share a motion and so one
+KH1 row (they differ only in when KH2's walk picks them). Each row: its own request (0x200 + n), its
+slot of the KH2 motion (`kh2slots`, built on the template's KH1 motion and request kind), the
+template row's trail / effect / sound / voice bytes (plain swing 13, or 11 for 152; finisher 8; air
+swing 18; air finisher 16), no lunge, and its own attack data (a copy of the template's) with KH2's
+ATKP reaction for the move (kind 5 for a KH2 blow, 3 for a flinch, else the template's) and the
+Recoil row's clash rules. KH1's picker returns the row itself (`combomods::combo_row`); KH1's Attack
+step runs the picker's return in states 0 / 2 (Steam `0x1402A7510`, Checked (decomp)). KH1's own
+requests 0xC8..0xCE keep their default KH2 motion and are no longer re-pointed per press. What KH1
+reads from `+0x164` (the request playing) sees the template's request where it matters: the Attack
+step's Fire out of a 1st / 3rd swing (`combat::command`) and event opcode 322 (Dive to the Heart's
+"Press to attack" window, `probe::event_op`), both Checked (decomp).
+
+### 7.z.7 No fallback: every KH2 pick on a KH1 row of its own (combo row selection, after m26, answer 1)
+
+The tester: "remove the fall back, and make them their own animations if they aren't already". With
+t631 every KH2 combo move already has its own row; what was left of t630's fallback (KH1's row its
+picker chose, showing its request's default KH2 swing, or KH1's own button) came from these cases:
+
+| Case | Before (t630) | Now |
+| --- | --- | --- |
+| Finishing Plus's next finisher when KH2 picks the finisher playing again (a PTYA row whose `sub` is its own id passes the walk's anti-repeat, Steam KH2 `0x140402C50`, §7) and its own row's request is the one playing | our next-finisher row, which only had 154 / 183; else KH1's finisher row 8 / 16 with KH2's motion if that request had a slot (only 154 / 183 since t631); else KH1's own row | our next-finisher row now has a slot of every KH2 finisher of its kind with a row of its own (`kh2slots::prepare`: ground 154, 155, Explosion, Guard Break; air 183, 184, Aerial Finish, Magnet Burst). With the pick's own row playing the next-finisher row is free, and with the next-finisher row playing the pick's own row is free, so a row of ours is always free. KH1's finisher row is no longer used for KH2's motion. |
+| Ground KH2 with Aerial Base Combo KH1: KH2's plain hops (row 0, 182, a target well above; row 1, 181, the drop ahead) | KH1's row its picker chose (its dash / drop-ahead walk / a swing), showing its default slot | the hop on its own row (182's / 181's) with KH2's hop out of KH1's air state, as at Aerial KH2. It is a move of KH2's ground combo; the air combo after it is KH1's (the Aerial Base Combo style). |
+| A KH2 pick whose slot didn't build at load (a missing or unreadable file: `kh2slots::make` logs "left out") | KH1's row its picker chose, or KH1's own Square / jump | no attack on that press ("... has no KH1 row of its own built: no attack" / ": nothing"); Square and the jump (Square moves, Retaliating Slash, Aerial Recovery) are taken and do nothing. |
+| At the KH1 setting, Finishing Plus: KH2's finisher KH1's picker took has no row free | KH1's own finisher its picker took | as the first row: always a row of ours (no attack only with a slot missing). KH1's own finishers (its picker's own pick, no KH2 pick) are unchanged. |
+
+Unchanged: KH2's Square moves with none passing KH2's checks leave Square to KH1's roll or guard
+(m20 answer 5 (a)); KH1's own ability finishers at either setting play KH1's own rows (§7.z.1,
+§7.z.2); Retaliating Slash and Aerial Recovery only out of KH1's air state (state 2), else the
+button is KH1's. With `kh1_slots = off` in the ini (a debug setting: no slots or rows built) KH2's
+plain picks still use the old path on KH1's plain rows (`kh2_row`, `select_swing`); KH2's ability
+moves are no attack there. If KH2's selector couldn't run at a press (its data busy: `kh2_press`
+returns nothing), KH1's own row runs as before; Assumption: rare (one lock taken on the game
+thread).
+
+Cost: four more ground and three more air slots built and baked at load for the next-finisher rows
+(each about the size of one KH2 finisher's); nothing per frame. Not checked in game.
+Assumption: a finisher on the next-finisher row uses that row's attack data (154's or 183's
+reaction and clash rules); its hits still take the KH2 move's numbers from its hit window
+(`kh1rows::kh2_atkp`), but a repeated Guard Break there doesn't pierce guards at Recoil KH1 the way
+its own row does.
 
 ## 8. KH2's walk and run as slots (t389)
 
