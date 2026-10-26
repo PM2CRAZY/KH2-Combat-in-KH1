@@ -91,3 +91,37 @@ the game".
 Not changed: `kh1-kh2-other.log` (one line when another game in the folder loads the DLL; that
 process never reads the ini), the trace's own CSV files (debug tools), and
 `kh1-kh2-removed.txt` (the record of abilities taken out of a save: gameplay, not a log).
+
+## Growth Abilities page (the quick-run-native thread, m6)
+
+The tester: "can you make it a setting in the debug where I can adjust the growth abilities", then
+"the overrides can always be adjusted in the debug, keep it", "don't worry about drive forms", "(a)"
+(given even when not learned or equipped), and "the debug menu should be able to break any rule".
+
+- Main page > **Growth Abilities**: one row each for High Jump, Quick Run, Dodge Roll, Aerial Dodge
+  and Glide. Left / right step through Normal, Off, LV1, LV2, LV3, MAX; confirm puts the row back
+  to Normal. Each row also shows the level KH2's controller has now ("now LV2").
+- Kept in the ini as `debug_high_jump`, `debug_quick_run`, `debug_dodge_roll`,
+  `debug_aerial_dodge`, `debug_glide` (`normal` / `off` / `lv1` .. `max`), read at start and
+  written at every change. Only with the debug tools (`debug_menu = on` at start): without them the
+  keys aren't read and nothing is overridden (`debugmenu::growth_overrides` returns all Normal).
+- How (Checked (code)): the level the mod works out from KH1's menu, Sora's level and the story
+  (`growth::Kh1Sora::kh2`, or the `abilities = test / all` sets) is what `menu::Growth` gives KH2's
+  controller (`character.abilities`); the overrides replace those five levels as they are given
+  (`growth::with_growth_override`), and a change on the page is applied at once. Every reader
+  goes through `character.abilities`, so they all follow: KH2's own moves and their fmab numbers
+  (`Character::growth`), the native Quick Run state and its LV2+ start effect and invulnerable
+  frames (`takeover::kh2_quick_run_growth`, `quickrun.rs`), the native dodge roll's invulnerable
+  frames (`kh2_dodge_roll_growth`), the Aerial Dodge height / speed (`kh2_air_dodge_growth`) and
+  whether it's there (`kh2_air_dodge`), KH2's glide in KH1's glide state (`kh2_glide_growth`, the
+  level kept aside `KH2_GLIDE_KEPT` set to the forced one for base Sora), Square's KH2 order
+  (`kh2_square`, `with_abilities`), and High Jump's height for KH2's physics on KH1's states
+  (`refresh_kh2_numbers`). The menu names "Quick Run LVn", "Glide LVn", "Aerial Dodge LVn" show
+  the forced level (Off keeps his own name). The "Ability Up" boxes still follow his real level.
+  Nothing is written to the save.
+- Not covered (Checked (code)): KH1's own moves at a KH1 style row (Jump KH1, Dodge Roll KH1's own
+  roll, Glide KH1) read KH1's own ability list (`0x140282A70`, the bits at `0x142D5F610`), not
+  these levels; Off doesn't take those away (Stats > Abilities can take the KH1 ability out).
+- Drive Forms (left as they are, the tester): a form gives its own growth ability and none of the
+  others (`form::form_abilities`), so an override doesn't show in a form; Sora's own (with the
+  overrides) come back on revert. A change made during a form is kept for after it.

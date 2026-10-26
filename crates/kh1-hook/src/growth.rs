@@ -556,6 +556,53 @@ pub fn aerial_dodge_name(l: u8) -> String {
     level_name("Aerial Dodge", l)
 }
 
+/// The debug menu's Growth Abilities rows (the quick-run-native thread, m6: "can you make it a
+/// setting in the debug where I can adjust the growth abilities"), in its order.
+pub const GROWTH_ROWS: [&str; 5] = ["High Jump", "Quick Run", "Dodge Roll", "Aerial Dodge", "Glide"];
+
+/// One row's setting: Normal (what Sora's level and story give, `None` in `with_growth_override`),
+/// Off, LV1 .. MAX. Stored as 0 Normal, 1 Off, 2..5 LV1..MAX.
+pub const GROWTH_SETTINGS: [&str; 6] = ["Normal", "Off", "LV1", "LV2", "LV3", "MAX"];
+
+/// The ini word for a row's setting (`GROWTH_SETTINGS`' index), and back.
+pub fn growth_setting_word(v: u8) -> &'static str {
+    ["normal", "off", "lv1", "lv2", "lv3", "max"].get(v as usize).copied().unwrap_or("normal")
+}
+
+pub fn growth_setting_parse(w: &str) -> u8 {
+    match w.trim().to_ascii_lowercase().as_str() {
+        "off" | "0" => 1,
+        "lv1" | "1" => 2,
+        "lv2" | "2" => 3,
+        "lv3" | "3" => 4,
+        "max" | "4" => 5,
+        _ => 0,
+    }
+}
+
+/// The level a row's setting gives (`None`: Normal, `Some(0)`: Off, `Some(1..=4)`: LV1..MAX).
+pub fn growth_setting_level(v: u8) -> Option<u8> {
+    match v {
+        1 => Some(0),
+        2..=5 => Some(v - 1),
+        _ => None,
+    }
+}
+
+/// KH2's controller's abilities with the debug menu's growth overrides (`GROWTH_ROWS`' order):
+/// a row set to a level gives that level whether or not Sora learned or equipped it (the tester's
+/// answer 3 (a)); Off takes it away; Normal leaves what KH1's menu and his level gave.
+pub fn with_growth_override(a: &Abilities, ov: &[Option<u8>; 5]) -> Abilities {
+    let mut out = a.clone();
+    let fields: [&mut u8; 5] = [&mut out.high_jump, &mut out.quick_run, &mut out.dodge_roll, &mut out.aerial_dodge, &mut out.glide];
+    for (f, o) in fields.into_iter().zip(ov.iter()) {
+        if let Some(l) = o {
+            *f = (*l).min(4);
+        }
+    }
+    out
+}
+
 /// Growth levels past the first, by Sora's level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Growth {
@@ -948,6 +995,22 @@ pub fn describe(a: &Abilities) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// The debug menu's growth overrides: a level is given even without the ability, Off takes
+    /// it away, Normal leaves it.
+    #[test]
+    fn growth_override_replaces_levels() {
+        let a = Abilities { high_jump: 2, quick_run: 0, dodge_roll: 3, aerial_dodge: 1, glide: 2, ..Abilities::default() };
+        let o = with_growth_override(&a, &[None, Some(4), Some(0), None, Some(1)]);
+        assert_eq!((o.high_jump, o.quick_run, o.dodge_roll, o.aerial_dodge, o.glide), (2, 4, 0, 1, 1));
+        assert_eq!(with_growth_override(&a, &[None; 5]), a);
+        for v in 0..6u8 {
+            assert_eq!(growth_setting_parse(growth_setting_word(v)), v);
+        }
+        assert_eq!(growth_setting_level(0), None);
+        assert_eq!(growth_setting_level(1), Some(0));
+        assert_eq!(growth_setting_level(5), Some(4));
+    }
+
     /// A tester's finished level 100 save (its log): 48 abilities, every one that's off is kept
     /// (Combo Plus, the specials, the modifiers, ours), so room comes from the least missed even
     /// though on (EXP Zero kept, the user): Cheer.

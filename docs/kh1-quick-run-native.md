@@ -273,3 +273,10 @@ puts him back in state 0 the frame after another motion lands on him).
   220.8 by frame 10 (23.1, 22.8, ... 22.1 a frame; 438.4 at its end, frame 24), KH1's roll ~160 by
   its frame 10 (17.8 a frame, its first frame still). **Checked (files)** (motion 209's root),
   **Checked (trace)** (KH1's roll). That is KH1's own roll speed, which the KH1 row keeps.
+
+## Testing a level (debug menu)
+
+With `debug_menu = on`, Debug Menu > Growth Abilities > Quick Run forces LV1..MAX (or Off) whatever
+Sora's level, given even when not learned or equipped (`docs/kh1-debug-menu.md`, "Growth Abilities
+page"). The native state reads the forced level (`takeover::kh2_quick_run_growth`), so its fmab
+record, the LV2+ start effect and the invulnerable frames follow it. **Checked (code).**

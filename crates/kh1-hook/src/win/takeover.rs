@@ -2862,6 +2862,11 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH2's glide in it (the tester, kh2-glide-in-kh1s-glide-state, `glide`), at Glide KH1 KH1's own;
     // KH2's controller glides only a Drive Form (its moveset's), so none of its glide in a borrow.)
     if super::stylejump::kh1_glide() || super::shared::on() {
+        // (The debug menu's Glide row, base Sora: the level kept aside is the forced one, Off
+        // included, so KH2's glide in KH1's state follows it too, `kh2_glide_growth`.)
+        if let Some(l) = super::debugmenu::growth_override(super::debugmenu::GROWTH_GLIDE).filter(|_| !super::form::in_form()) {
+            KH2_GLIDE_KEPT.store(l as u32, Ordering::Relaxed);
+        }
         if d.character.abilities.glide != 0 {
             KH2_GLIDE_KEPT.store(d.character.abilities.glide as u32, Ordering::Relaxed);
             d.character.abilities.glide = 0;

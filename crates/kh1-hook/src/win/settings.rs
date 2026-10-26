@@ -271,7 +271,15 @@ log_effects = off\r\n\
 log_camera = off\r\n\
 log_menus = off\r\n\
 log_debug = off\r\n\
-log_crash = off\r\n";
+log_crash = off\r\n\
+; debug_high_jump, debug_quick_run, debug_dodge_roll, debug_aerial_dodge, debug_glide: the debug\r\n\
+; menu's Growth Abilities page (only with debug_menu = on): normal (what Sora's level and story\r\n\
+; give), off, lv1, lv2, lv3 or max, given whether or not he learned or equipped it\r\n\
+debug_high_jump = normal\r\n\
+debug_quick_run = normal\r\n\
+debug_dodge_roll = normal\r\n\
+debug_aerial_dodge = normal\r\n\
+debug_glide = normal\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -397,7 +405,13 @@ pub struct Settings {
     /// The log's categories on (`log_*` = on / off, `win::LogCat`; all off by default): used only
     /// with the debug tools loaded.
     pub log_cats: u32,
+    /// The debug menu's Growth Abilities rows (`growth::GROWTH_ROWS`' order; 0 Normal, 1 Off, 2..5
+    /// LV1..MAX, `growth::GROWTH_SETTINGS`): used only with the debug tools loaded.
+    pub debug_growth: [u8; 5],
 }
+
+/// The ini keys of the debug menu's Growth Abilities rows (`growth::GROWTH_ROWS`' order).
+pub const DEBUG_GROWTH_KEYS: [&str; 5] = ["debug_high_jump", "debug_quick_run", "debug_dodge_roll", "debug_aerial_dodge", "debug_glide"];
 
 static SETTINGS: AtomicPtr<Settings> = AtomicPtr::new(std::ptr::null_mut());
 static RELOAD: Mutex<()> = Mutex::new(());
@@ -614,6 +628,7 @@ fn load(first: bool) -> Option<Settings> {
         trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
         debug_menu: on(&text, "debug_menu", "on", false),
         log_cats: super::LogCat::ALL.iter().filter(|c| on(&text, c.key(), "on", false)).fold(0, |m, c| m | c.bit()),
+        debug_growth: DEBUG_GROWTH_KEYS.map(|k| setting(&text, k).map_or(0, |v| crate::growth::growth_setting_parse(&v))),
     };
     log!(General, "settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" });
     Some(s)
