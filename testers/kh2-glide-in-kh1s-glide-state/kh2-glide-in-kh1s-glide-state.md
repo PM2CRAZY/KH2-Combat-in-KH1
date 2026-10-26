@@ -247,4 +247,6 @@ go ahead
 > One question: KH1 chains every animation change that comes in the middle of a blend this way, not just the glide's (attacks, landings, recoils). Should I (a) bring KH2's rule (always blend from the pose on screen) to all of them, as its own version, or (b) keep it to the glide for now?
 
 ^m8
+sora now disappears and gets all garbled when turning in glide. recorded a trace please look
+
 
