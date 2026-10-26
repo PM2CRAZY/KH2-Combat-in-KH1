@@ -925,4 +925,9 @@ go ahead
 > 2. The trace's shifted columns: (a) fix the trace's header (a debug-only change); or (b) leave it?
 
 ^m32
+1. I want you to check into the kh2 c decomp and implement the changes from your findings
+2. (a)
 
+the 2nd hit is also missing its 2nd hitbox, its just one for now so please find a fix and implement it
+
+go ahead
