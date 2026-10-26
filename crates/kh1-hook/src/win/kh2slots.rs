@@ -2307,6 +2307,8 @@ unsafe extern "system" fn sound_event(actor: usize, a: i32, b: i32, c: u32) {
     if let Some(e) = kh2_trigger(a, c) {
         if actor == super::takeover::sora_actor() {
             let motion = b as u16;
+            // (Wisdom's frame triggers 1, its `wisd` shots, come as `KH2_EFFECTS` keys: `effects_at` →
+            // `form::effect` → `formmagic::effect`.)
             super::kh2sound::event(motion, e);
             super::kh2fx::event(motion, e);
             static N: AtomicU32 = AtomicU32::new(0);

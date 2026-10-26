@@ -762,3 +762,31 @@ has no form levels for.
 reached in a form, as in Valor). The no-gravity range of 181 is skipped because the clip allows
 movement all through (`kh2slots::no_gravity`, a main-branch rule from the user's s194, **not
 checked in KH2's decomp**).
+
+### 8.2 Wisdom's shots
+
+**KH2 (Checked (files)):** Wisdom's 151 carries frame trigger 1 with 25 / 26 / 27 at frames 10 /
+20 / 30, its 154 with 28..40 between 16 and 88, the arrival 53 with 1..12 and 100..102 at 0. KH2
+runs each through the form model's object script (`wisd`, BAR entry 3 of `P_EX100_MAGF.mdlx`): a
+homing shot (ATKP 859) with its effect from the form's archive.
+
+**On KH1's states now:** the triggers are KH1 motion events of the baked slots (t677) and KH1's
+motion pass fires them (`kh2slots::sound_event`, the wrapped `0x140295420`); in Wisdom on KH1's
+states a trigger 1 of one of its slots goes to the form's script (`form::effect` →
+`formmagic::effect`), not to Sora's effect package. The script's frame runs on KH1's frames
+(`takeover::native_spells`, now also in a native form, with the form's clips and ATKP rows). Each
+shot's attack is a free-standing KH1 attack object that KH1's own collision pass collides
+(`bodyhits::spell_attacks`, since t-spell-hits): KH1 does contact, damage, reaction and spark, and
+a hit sets Sora's KH1 "connected" word (the object's `+0x60`), so KH1's Attack step chains the
+combo on a hit without Combo Master, as KH2 does (s305). The effects play in KH1's effect engine
+(`kh2fx::spell_start` → `kh2dpx`, package `kh2fx::WISDOM`).
+
+**Running along (not native yet):** the shot's flight (its homing, speed, lifetime and when its
+effect ends) is KH2's script run by our interpreter (`kh2-magic`'s `Magic::object_effect`), whose
+results are copied into the KH1 attack object's shapes and the effect's place each frame. The plan
+to move it into KH1: KH1's own free-standing shots (Wakka's ball, KH1's spell projectiles) are
+attack objects moved by KH1's script machine (`0x14028F5E0` list, syscall 23 `0x1402B2DC0`), so
+the shot becomes a KH1 spell script of ours (a `.mag`-like KH1 script made at build time from
+`wisd`'s numbers: speed 20 → 80, turn 1.8° a frame, life) started from the trigger with KH1's spell
+start (`0x14028F140`), KH1 then stepping, colliding and freeing it. Not done this round: it needs
+KH1's script format for a homing shot worked out first (an open question in the report).

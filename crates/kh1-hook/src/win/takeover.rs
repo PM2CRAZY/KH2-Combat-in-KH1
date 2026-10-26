@@ -1874,7 +1874,10 @@ pub unsafe fn native_spells(actor: usize) {
     static LAST: Mutex<Option<(u16, f32)>> = Mutex::new(None);
     // (Reflect's on KH1's cast state too, `reflect::native_step`.)
     let reflect = super::reflect::busy();
-    if !super::shared::active() || super::form::in_form() || !(super::formmagic::busy() || reflect) {
+    // (Wisdom Form on KH1's own states too: its shots' script, `formmagic`, from its motions' frame
+    // trigger 1 that KH1's motion pass fires, `kh2slots::sound_event`. Forms still on KH2's
+    // controller run theirs from its step.)
+    if !super::shared::active() || super::form::driver_form() || !(super::formmagic::busy() || reflect) {
         if let Ok(mut l) = LAST.try_lock() {
             *l = None;
         }
@@ -1888,7 +1891,8 @@ pub unsafe fn native_spells(actor: usize) {
             Some((lm, lt)) if lm == m && lt <= t => lt,
             _ => -1.0,
         };
-        if let Some(c) = kh2.character.moveset.clips.get(&m) {
+        // (The clip of the moveset playing: a native Drive Form's, `pose::kh2_moves`.)
+        if let Some(c) = pose::kh2_moves().unwrap_or(&kh2.character).moveset.clips.get(&m) {
             events.extend(c.events.iter().filter(|e| (e.frame as f32) > from && (e.frame as f32) <= t).map(|e| e.kind));
         }
         *l = Some((m, t));
