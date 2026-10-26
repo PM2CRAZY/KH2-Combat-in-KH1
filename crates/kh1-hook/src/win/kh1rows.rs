@@ -389,9 +389,11 @@ pub(super) unsafe fn near(block: usize, size: usize) -> Option<usize> {
 fn window_atkp(motion: u16, frame: Option<u32>) -> Option<u16> {
     use character_core::WindowKind as W;
     let clip = pose::kh2_moves()?.moveset.clips.get(&motion)?;
+    // (t680) The right Keyblade's windows (weapon 1), else his body's (0); the second Keyblade's
+    // (weapon 2) belong to its own attack object (`bodyhits::atkp`), not to the row's.
     let hits = |weapon_side: bool| {
         clip.windows.iter().filter(move |w| frame.map_or(true, |f| w.contains(f))).find_map(move |w| match w.kind {
-            W::Hitbox { attack, weapon, .. } if (weapon > 0) == weapon_side => Some(attack),
+            W::Hitbox { attack, weapon, .. } if weapon == weapon_side as u8 => Some(attack),
             _ => None,
         })
     };

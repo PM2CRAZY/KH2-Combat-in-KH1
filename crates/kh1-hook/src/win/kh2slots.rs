@@ -1161,7 +1161,9 @@ pub unsafe fn keyblade_rearm(actor: usize) {
         }
         let f = t as u32;
         let open = clip.windows.iter().filter(|w| w.contains(f)).find_map(|w| match w.kind {
-            W::Hitbox { attack, group, weapon, .. } if weapon > 0 => Some((attack, group)),
+            // (t680) The right Keyblade's (weapon 1); the left one's object re-arms itself
+            // (`bodyhits::left_step`). Before, a left window opening re-armed the right object.
+            W::Hitbox { attack, group, weapon: 1, .. } => Some((attack, group)),
             _ => None,
         });
         Some((m.motion, open, t))
@@ -1297,7 +1299,9 @@ fn kh2_trigger(a: i32, c: u32) -> Option<EventKind> {
 fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leave: Leave) -> Vec<EventTrack> {
     let len = clip.length as f32;
     let span = |w: &character_core::Window| (w.start as f32, w.end.map_or(len, |e| e as f32));
-    let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon > 0)).map(span).collect();
+    // (t680) The right Keyblade's windows (weapon 1) only: Valor's left Keyblade's (weapon 2)
+    // are a KH1 attack object of their own on their own attack group (`left_channel`, `bodyhits`).
+    let hits: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon: 1, .. })).map(span).collect();
     let combo: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Combo)).map(span).collect();
     let mut trail: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::WeaponTrail)).map(span).collect();
     if trail.is_empty() {
@@ -1326,7 +1330,35 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
         let end = b.end.map_or(len, |e| e as f32);
         out.push(EventTrack::level(ks::HIT, b.channel as u16, &[(b.start as f32, end)]));
     }
+    // (t680) The second Keyblade's hit windows (weapon 2: Valor's left), all on one KH1 attack
+    // group after the body windows' (`left_channel`): the KH1 attack object `bodyhits` makes for
+    // the left Keyblade is tied to it, as KH1's own Keyblade object is to group 0.
+    if let Some(ch) = left_channel(clip) {
+        let w: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon >= 2)).map(span).collect();
+        out.push(EventTrack::level(ks::HIT, ch as u16, &w));
+    }
     out
+}
+
+/// (t680) The KH1 attack group the clip's second-Keyblade hit windows (weapon 2, Valor's left
+/// Keyblade) play on: the first after its body windows' (`body_windows`: 1..), if one is left
+/// (KH1 has groups 1..3 besides the Keyblade's 0). None when the clip has no such window, or no
+/// group is free (none of Valor's moves has body windows, `P_EX100_BTLF.mset`, Checked (files)).
+pub fn left_channel(clip: &character_core::Clip) -> Option<u8> {
+    if !clip.windows.iter().any(|w| matches!(w.kind, WindowKind::Hitbox { weapon, .. } if weapon >= 2)) {
+        return None;
+    }
+    let ch = body_windows(clip).len() + 1;
+    (ch <= BODY_CHANNELS).then_some(ch as u8)
+}
+
+/// (t680) The KH2 motion our slot plays on `actor` now, its clip (Valor's in Valor on KH1's own
+/// states, `clip_of`) and KH1's time in it (frames).
+pub unsafe fn playing_clip(actor: usize) -> Option<(u16, &'static character_core::Clip, f32)> {
+    let m = current(actor)?;
+    let clip = clip_of(m)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    (t.is_finite() && t >= 0.0).then_some((m.motion, clip, t))
 }
 
 /// One of KH2's hit windows on Sora's own body (a `Hitbox` window with weapon 0) and the KH1 attack

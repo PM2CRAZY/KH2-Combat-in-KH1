@@ -66,6 +66,10 @@
 //! The Magnet pull (ATKP reaction 5, Magnet Burst's 1900) stays ours, as before (KH1 has no such
 //! reaction; `combat::Strikes::native_pull` from `kh2_hits`), now for the enemies KH1's pass caught.
 //!
+//! (t680) Valor's left Keyblade's hit windows (weapon 2) too: one KH1 attack object per play of
+//! the motion on its own KH1 attack group, KH2's weapon shapes laid along the left Keyblade as
+//! drawn (`make_left`, `left_step`, `left_shapes`; `docs/kh1-drive-forms-native.md` §7.1).
+//!
 //! Steam only (new addresses); elsewhere `kh2_hits` sweeps as before. Cost: one hook on the pass's
 //! per-attack builder (a lookup in a 64-entry table per live attack object); a few entries per live
 //! window; at most one data copy per (move, window, air) for the session.
@@ -168,6 +172,45 @@ struct Live {
     prev: Option<([f32; 3], u64)>,
     /// Enemies its Magnet caught (actor, orbit radius, swirl).
     caught: [(usize, f32, f32); 8],
+    /// (t680) The second Keyblade's object (`State::left`): its shapes are the open window's.
+    left: bool,
+}
+
+/// (t680) Valor's left Keyblade's KH1 attack object for the motion playing: one object for all
+/// its hit windows (weapon 2), tied to their KH1 attack group (`kh2slots::left_channel`), re-armed
+/// at each new KH2 attack (`left_step`), as KH1's own Keyblade object is for the right one.
+struct Left {
+    /// Its pool index.
+    idx: usize,
+    motion: u16,
+    windows: Vec<LeftWin>,
+    /// The window open at the last step, and whether one was.
+    cur: Option<usize>,
+    was_open: bool,
+    /// The left Keyblade's weapon bonuses on the priority (`0x1402B3270`'s): the row's `+0x33`.
+    priority_bonus: i32,
+    /// KH2's sweep of its shapes between frames (`combat_core::AttackVolume`, one per attack), the
+    /// game frame it was last run on and that frame's shapes (the pass may build it twice).
+    vol: combat_core::AttackVolume,
+    vol_frame: u64,
+    shapes: Vec<combat_core::Shape>,
+}
+
+/// One left-Keyblade hit window: its ATKP, its weapon-model collision group, KH1 time span, our
+/// attack data for it.
+#[derive(Clone, Copy)]
+struct LeftWin {
+    attack: u16,
+    group: u8,
+    start: u32,
+    end: Option<u32>,
+    data: usize,
+}
+
+impl LeftWin {
+    fn contains(&self, f: u32) -> bool {
+        f >= self.start && self.end.map_or(true, |e| f < e)
+    }
 }
 
 struct State {
@@ -188,9 +231,11 @@ struct State {
     page: usize,
     /// The move playing: (motion, KH1 time, request).
     playing: Option<(u16, f32, u32)>,
+    /// (t680) Valor's left Keyblade's object for the move playing.
+    left: Option<Left>,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { live: [None; POOL_COUNT], spells: Vec::new(), counts: Vec::new(), results: Vec::new(), current: None, data: Vec::new(), page: 0, playing: None });
+static STATE: Mutex<State> = Mutex::new(State { live: [None; POOL_COUNT], spells: Vec::new(), counts: Vec::new(), results: Vec::new(), current: None, data: Vec::new(), page: 0, playing: None, left: None });
 
 /// A KH2 spell attack on a KH1 object of ours: its key in the spell runtime, ATKP rows by hits in
 /// a row (0.., the last repeated), its hit group, its shapes this frame (KH1 world centre, KH1 type,
@@ -304,12 +349,17 @@ pub unsafe fn frame(actor: usize) {
             }
         }
     }
+    g.left = None;
     let Some(clip) = super::pose::kh2_moves().and_then(|c| c.moveset.clips.get(&m)) else { return };
+    let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
+    // (t680) Valor's left Keyblade's hit windows: a KH1 attack object of their own.
+    if super::form::native_now() && super::form::two_blades() {
+        make_left(&mut g, actor, m, req, air, clip);
+    }
     let windows = super::kh2slots::body_windows(clip);
     if windows.is_empty() {
         return;
     }
-    let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
@@ -335,7 +385,7 @@ pub unsafe fn frame(actor: usize) {
                 },
             };
             let shape = BodyShape { kh1_type, radius: s.radius, height: s.height, bone, offset: s.offset, lift: s.lift };
-            let Some(data) = data_for(&mut g, base, m, w.index, air, si, w.channel, &a, s.radius) else { continue };
+            let Some(data) = data_for(&mut g, base, m, w.index, air, si, w.channel, &a, s.radius, BODY_BONE) else { continue };
             let fx = template_fx(air, super::kh1rows::throws(&a));
             let bit = free_bit();
             if bit == 0 {
@@ -360,7 +410,7 @@ pub unsafe fn frame(actor: usize) {
             // late for a window from frame 0).
             wr(obj + 0x58, req);
             let magnet = (character_core::reaction::category(a.enemy_reaction) == 5).then_some((a.knockback_1, a.knockback_2, a.unknown_16));
-            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, magnet, prev: None, caught: [(0, 0.0, 0.0); 8] });
+            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, magnet, prev: None, caught: [(0, 0.0, 0.0); 8], left: false });
             made.push(format!("ATKP {} group {} on KH1 group {} ({:?} r {} h {} lift {}, interval {})", w.attack, w.group, w.channel, bone, s.radius, s.height, s.lift, a.interval));
         }
     }
@@ -389,7 +439,7 @@ unsafe fn template_fx(air: bool, throws: bool) -> Option<[u8; 3]> {
 /// Our attack data for one body shape of a window (made the first time, refreshed each time: the
 /// Recoil row's clash rules can change).
 #[allow(clippy::too_many_arguments)]
-unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: bool, shape: usize, channel: u8, a: &kh2_formats::battle::Atkp, radius: f32) -> Option<usize> {
+unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: bool, shape: usize, channel: u8, a: &kh2_formats::battle::Atkp, radius: f32, bone: u32) -> Option<usize> {
     let key = (motion as u64) << 32 | (window as u64 & 0xFF) << 16 | (air as u64) << 8 | (shape as u64 & 0xFF);
     let d = data_slot(g, base, key)?;
     let throws = super::kh1rows::throws(a);
@@ -405,7 +455,7 @@ unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: 
     };
     wr(d + 8, kind);
     wr(d + 0xC, kind);
-    wr(d + 0x10, BODY_BONE);
+    wr(d + 0x10, bone);
     wr(d + 0x34, (rd::<u32>(d + 0x34) & !3) | channel as u32);
     wr(d + 0x54, 0.0f32);
     wr(d + 0x58, 0.0f32);
@@ -530,7 +580,7 @@ pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack],
             wr(obj + 8, h);
         }
         let dummy = BodyShape { kh1_type: 1, radius: 0.0, height: 0.0, bone: None, offset: [0.0; 3], lift: 0.0 };
-        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None, caught: [(0, 0.0, 0.0); 8] });
+        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None, caught: [(0, 0.0, 0.0); 8], left: false });
         let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some() };
         for s in a.shapes.iter() {
             let t = match s.kind {
@@ -582,9 +632,15 @@ pub unsafe fn atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
         }
         return Some(a);
     }
-    let id = l.atkp;
+    let id = if l.left { left_attack(&g)? } else { l.atkp };
     drop(g);
     pose::kh2()?.battle.attack_for_level(id, 0, 0).cloned()
+}
+
+/// (t680) The left Keyblade's KH2 attack now: the window open at the last step, else the first.
+fn left_attack(g: &State) -> Option<u16> {
+    let l = g.left.as_ref()?;
+    l.windows.get(l.cur.unwrap_or(0)).map(|w| w.attack)
 }
 
 /// `probe::hit`, before KH1's record builder runs for `attack` on `target`: for a spell object of
@@ -639,6 +695,7 @@ pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
             g.results.push((key, atk, target, dealt));
         }
     }
+    let left_atk = left_attack(&g).unwrap_or(0);
     let Some(l) = g.live[i].as_mut().filter(|l| l.obj == attack && still_ours(l)) else { return };
     if let Some((k1, k2, swirl)) = l.magnet {
         if !l.caught.iter().any(|c| c.0 == target) {
@@ -650,7 +707,15 @@ pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
             }
         }
     }
-    note(|| format!("KH2 {} hit: ATKP {} (motion {}) from KH1's pass on actor {target:#x}", if spell.is_some() { "spell" } else { "body" }, l.atkp, l.motion));
+    let (kind, atk) = if spell.is_some() {
+        ("spell", l.atkp)
+    } else if l.left {
+        ("left Keyblade", left_atk)
+    } else {
+        ("body", l.atkp)
+    };
+    let motion = l.motion;
+    note(|| format!("KH2 {kind} hit: ATKP {atk} (motion {motion}) from KH1's pass on actor {target:#x}"));
 }
 
 /// Enemies a live Magnet window of ours holds: (actor, its centre (KH2 y-up), orbit radius, swirl)
@@ -750,6 +815,21 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
         }
         return count;
     }
+    if g.live[i].is_some_and(|l| l.left) {
+        let Some(shapes) = left_shapes(&mut g, owner, frame) else { return count };
+        drop(g);
+        let (Some(a), Some(b)) = (shapes.first(), shapes.last()) else { return count };
+        // The object's own place, as KH1's blade object has it (`0x1402B3800`, position kind 1):
+        // `+0x10` the blade's first point, `+0x40` its last (the spark, knock-back, clash).
+        wr(obj + 0x10, [a.center[0], a.center[1], a.center[2], 1.0f32]);
+        wr(obj + 0x40, [b.center[0], b.center[1], b.center[2], 1.0f32]);
+        let mut count = count;
+        for s in &shapes {
+            let t = if s.kind == combat_core::ShapeKind::Column { 2 } else { 1 };
+            count = put_entry(obj, owner, bit, list, count, t, s.radius, s.height, s.center);
+        }
+        return count;
+    }
     let Some(l) = g.live[i].as_mut() else { return count };
     let Some(c) = centre(owner, &l.shape) else { return count };
     // The object's own place (KH1's spark, its knock-back direction, its clash).
@@ -810,4 +890,209 @@ unsafe fn put_entry(obj: usize, owner: usize, bit: u32, list: usize, count: i32,
     } else {
         count
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// (t680) Valor's left Keyblade
+
+/// KH1's Keyblade bone id (data `+0x10`): the object is bone-tied (position kind 1, activity 2,
+/// tied to the motion and its attack group, `0x1402B2DC0`), as KH1's own swing object is.
+const BLADE_BONE: u32 = 0x30;
+/// KH1 Sora's grip bone (the weapon's root under the hand, 280) as a raw bone point id.
+const GRIP_POINT: u32 = 0x4000 | 280;
+/// KH2's weapon-model shape kinds an attack window switches on (`kh2_rig::attack_shapes`).
+fn attack_kind(k: u8) -> bool {
+    k == ATTACK_KIND || k == GUARD_KIND
+}
+
+/// The KH2 weapon rig whose shapes the left Keyblade hits with (Valor's second weapon; both of
+/// KH2's weapons are `W_EX010.mdlx`, so the same shapes).
+fn left_rig_shapes() -> Option<&'static [kh2_data::sora::BoneShape]> {
+    let rig = &pose::kh2()?.valor.as_ref()?.rig;
+    Some(rig.weapons.get(1).or_else(|| rig.weapons.first())?.shapes.as_slice())
+}
+
+/// The left Keyblade's object for a new play of motion `m` (`frame`, Valor on KH1's own states):
+/// one KH1 attack object of Sora's, made with KH1's attack constructor (`0x1402B2DC0`) on our
+/// copy of his KH1 swing row's data (finisher row's for a KH2 blow), bone `0x30`, on the clip's
+/// left attack group (`kh2slots::left_channel`), with the left Keyblade's own weapon bonuses on
+/// it as KH1's row maker puts the right one's (`0x1402B3270`), its effect data as the spark's
+/// source and his "connected" word.
+unsafe fn make_left(g: &mut State, actor: usize, m: u16, req: u32, air: bool, clip: &character_core::Clip) {
+    if !MAKE_OK.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(ch) = super::kh2slots::left_channel(clip) else {
+        if clip.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::Hitbox { weapon, .. } if weapon >= 2)) {
+            note(|| format!("left Keyblade hits: motion {m} has no free KH1 attack group: left out"));
+        }
+        return;
+    };
+    let (Some(kh2), Some(shapes)) = (pose::kh2(), left_rig_shapes()) else { return };
+    let base = BASE.load(Ordering::Relaxed);
+    let mut windows = Vec::new();
+    for (idx, w) in clip.windows.iter().enumerate() {
+        let character_core::WindowKind::Hitbox { attack, group, weapon, .. } = w.kind else { continue };
+        if weapon < 2 {
+            continue;
+        }
+        let Some(a) = kh2.battle.attack_for_level(attack, 0, 0).cloned() else { continue };
+        let r = shapes.iter().find(|s| s.group == group && attack_kind(s.kind)).map_or(40.0, |s| s.radius);
+        let Some(data) = data_for(g, base, m, idx, air, 0xF0, ch, &a, r, BLADE_BONE) else { continue };
+        windows.push(LeftWin { attack, group, start: w.start, end: w.end, data });
+    }
+    let Some(first) = windows.first().copied() else { return };
+    let make: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + MAKE_STEAM);
+    let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
+    // The left Keyblade's weapon object (`leftblade`'s owner copy: the left Keyblade's row and
+    // effect data), else Sora's own.
+    let owner = super::leftblade::left_owner();
+    let wobj = pose::ptr(rd::<u32>(owner.unwrap_or(actor) + 0x14C));
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    let bit = free_bit();
+    if bit == 0 {
+        note(|| format!("left Keyblade hits: no free hit bit (motion {m})"));
+        return;
+    }
+    let obj = make(actor, bit, first.data);
+    let Some(i) = pool_index(obj) else {
+        note(|| format!("left Keyblade hits: KH1's constructor gave {obj:#x} (pool full?)"));
+        return;
+    };
+    // `0x1402B3270`'s weapon part, with the left Keyblade's row (Checked (decomp)).
+    let mut priority_bonus = 0;
+    if wobj > 0x10000 {
+        let row = rd::<u64>(wobj + 0x20) as usize;
+        if rd::<u32>(obj + 0x20) == BLADE_BONE && row > 0x10000 {
+            wr(obj + 0xC, rd::<f32>(actor + 0x40) * rd::<f32>(row + 0x20) + rd::<f32>(obj + 0xC));
+            wr(obj + 0x24, rd::<f32>(obj + 0x24) * rd::<f32>(row + 0x2C));
+            wr(obj + 0x28, rd::<f32>(obj + 0x28) * rd::<f32>(row + 0x2C));
+            priority_bonus = rd::<u8>(row + 0x33) as i32;
+            wr(obj + 0x68, (rd::<i32>(obj + 0x68) + priority_bonus).clamp(1, 99));
+            wr(obj + 0x94, rd::<u8>(row + 0x31) as f32 * 0.05 * rd::<f32>(obj + 0x94));
+            wr(obj + 0x98, rd::<i32>(obj + 0x98) + rd::<i8>(row + 0x32) as i32);
+        }
+        wr(obj + 8, pose::handle(rd::<u64>(wobj + 0x18) as usize));
+    }
+    // His "connected" word (KH1's Attack step reads it; a hit sets it), not cleared: not a new swing.
+    if info > 0x10000 {
+        wr(obj + 0x60, (info + 0x50) as u64);
+    }
+    if let Some(fx) = template_fx(air, false) {
+        wr(obj, rd::<u32>(obj) | 0x40_0000);
+        wr(obj + 0xA8, fx);
+    }
+    wr(obj + 0x58, req);
+    let dummy = BodyShape { kh1_type: 1, radius: 0.0, height: 0.0, bone: None, offset: [0.0; 3], lift: 0.0 };
+    g.live[i] = Some(Live { obj, data: first.data, motion: m, atkp: first.attack, shape: dummy, magnet: None, prev: None, caught: [(0, 0.0, 0.0); 8], left: true });
+    let list: Vec<String> = windows.iter().map(|w| format!("ATKP {} group {} at {}..{:?}", w.attack, w.group, w.start, w.end)).collect();
+    note(|| format!("left Keyblade hits: motion {m} (request {req:#x}, {}): KH1 attack object {obj:#x} on KH1 group {ch}{}: {}", if air { "air" } else { "ground" }, if owner.is_some() { "" } else { " (left Keyblade not drawn: placed on the right one)" }, list.join("; ")));
+    g.left = Some(Left { idx: i, motion: m, windows, cur: None, was_open: false, priority_bonus, vol: combat_core::AttackVolume::new(), vol_frame: u64::MAX, shapes: Vec::new() });
+}
+
+/// Each frame KH1 has Sora (`takeover::physics`, beside `kh2slots::keyblade_rearm`, before KH1's
+/// collision pass): the left window open at KH1's time in our slot. A new KH2 attack there (its
+/// ATKP or group differs from the last window's, or a window opens after a frame with none:
+/// Steam KH2 `0x1403D25D0` keeps an attack per (group, weapon object), Checked (decomp)) re-arms
+/// the object with KH1's own re-arm (`rehit::new_attack`) and starts KH2's sweep afresh; each
+/// window's data (its reaction, clash rules) goes on the object.
+pub unsafe fn left_step(actor: usize) {
+    if !native() || actor < 0x10000 {
+        return;
+    }
+    let Ok(mut g) = STATE.try_lock() else { return };
+    let Some(idx) = g.left.as_ref().map(|l| l.idx) else { return };
+    let ours = g.live[idx].filter(|l| l.left && still_ours(l));
+    let Some(live) = ours else {
+        g.left = None;
+        return;
+    };
+    let Some((m, _, t)) = super::kh2slots::playing_clip(actor) else { return };
+    let Some(l) = g.left.as_mut() else { return };
+    if m != l.motion {
+        return;
+    }
+    let f = t as u32;
+    let Some(o) = l.windows.iter().position(|w| w.contains(f)) else {
+        l.was_open = false;
+        return;
+    };
+    let w = l.windows[o];
+    let new = match l.cur {
+        Some(c) => !l.was_open || l.windows[c].attack != w.attack || l.windows[c].group != w.group,
+        None => false,
+    };
+    let switch = l.cur != Some(o);
+    l.cur = Some(o);
+    l.was_open = true;
+    if new {
+        l.vol = combat_core::AttackVolume::new();
+        l.vol_frame = u64::MAX;
+    }
+    let bonus = l.priority_bonus;
+    if switch {
+        wr(live.obj + 0x5C, pose::handle(w.data));
+        wr(live.obj + 0x68, (rd::<i32>(w.data + 0x3C) + bonus).clamp(1, 99));
+        if let Some(e) = g.live[idx].as_mut() {
+            e.data = w.data;
+            e.atkp = w.attack;
+        }
+    }
+    drop(g);
+    if new {
+        super::rehit::new_attack(live.obj);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log!(Combat, "left Keyblade hits: KH2's next attack (motion {m}, ATKP {} group {}, frame {t:.0}): its KH1 object re-armed", w.attack, w.group);
+        }
+    }
+}
+
+/// The left Keyblade's shapes this frame (KH1 world), with KH2's sweep: the open window's group of
+/// KH2's weapon-model shapes (`W_EX010.mdlx`, spheres along its bone 2's -x from the grip, Checked
+/// (files)), laid along the left Keyblade as drawn: from KH1's grip bone (280) toward its blade's
+/// tip (KH1's blade point `0x30`, t 1, through its own row's blade range), both read with KH1's
+/// bone point (`0x14029EB20`) on `leftblade`'s owner copy (Sora's matrices moved onto the left
+/// Keyblade). KH2's distances and radii as they are (KH1 units, as `bodyhits`' body shapes).
+unsafe fn left_shapes(g: &mut State, sora: usize, frame: u64) -> Option<Vec<combat_core::Shape>> {
+    use combat_core::{Shape, ShapeKind};
+    let l = g.left.as_mut()?;
+    if l.vol_frame == frame {
+        return Some(l.shapes.clone());
+    }
+    let group = l.windows.get(l.cur.unwrap_or(0))?.group;
+    let owner = super::leftblade::left_owner().unwrap_or_else(|| {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 3 {
+            log!(Combat, "left Keyblade hits: the left Keyblade isn't drawn: its windows on the right Keyblade");
+        }
+        sora
+    });
+    let point: unsafe extern "system" fn(usize, u32, f32, *mut [f32; 4]) = std::mem::transmute(BASE.load(Ordering::Relaxed) + BONE_POINT_RVA);
+    let (mut grip, mut tip) = ([0.0f32; 4], [0.0f32; 4]);
+    point(owner, GRIP_POINT, 1.0, &mut grip);
+    point(owner, BLADE_BONE, 1.0, &mut tip);
+    let d = [tip[0] - grip[0], tip[1] - grip[1], tip[2] - grip[2]];
+    let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    if !(len > 1.0) || !len.is_finite() {
+        return None;
+    }
+    let dir = [d[0] / len, d[1] / len, d[2] / len];
+    let mut now = Vec::new();
+    for s in left_rig_shapes()?.iter().filter(|s| s.group == group && attack_kind(s.kind)) {
+        let kind = match ShapeKind::from_u8(s.shape) {
+            Some(ShapeKind::Cube) | None => continue,
+            Some(k) => k,
+        };
+        // (KH2's weapon shapes lie on its bone 2's x axis, the blade along -x; their y / z offsets
+        // and lifts are all 0, Checked (files).)
+        let along = -s.offset[0];
+        now.push(Shape::new(kind, [grip[0] + dir[0] * along, grip[1] + dir[1] * along, grip[2] + dir[2] * along], s.radius, s.height));
+    }
+    if now.is_empty() {
+        return None;
+    }
+    l.shapes = l.vol.update(&now);
+    l.vol_frame = frame;
+    Some(l.shapes.clone())
 }

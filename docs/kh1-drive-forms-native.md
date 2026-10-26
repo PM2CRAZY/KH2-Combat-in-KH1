@@ -227,11 +227,8 @@ drains yellow MP as before.
 
 **Not native yet / not done in this step:**
 
-- The left Keyblade's hits: Valor's swings' left windows (weapon 2) open KH1's one hit window on the
-  right Keyblade's sphere (`kh2slots::kh1_tracks`, weapon > 0), so they land at the right blade's
-  place with the left window's ATKP. A second KH1 attack object on the left blade is the next step
-  (KH1 has no left weapon bones: it needs `bodyhits`-style shapes placed from the left grip).
-- (Valor's Square moves: done on KH1's rows, §7.1.)
+- (The left Keyblade's hits: done in t680, a KH1 attack object of their own, §7.2.)
+- (Valor's Square moves: done on KH1's rows in t679, §7.1.)
 - Valor's guard windows (arrival 53, 155's left-blade guard 162) are not KH1 guard objects
   (`takeover::kh2_hits` skips a form's).
 - The arrival 53 isn't held in the air (KH2's `play_held`): it has no no-gravity range of its own,
@@ -316,3 +313,68 @@ Checked (code) against the above):
   connected, as elsewhere); Valor's combo length (`+0x200` / `+0x201`, set through script-call
   setters `0x1401E72E0` / `0x1401E7320`; our controller's `combo_rules` is used, not re-read for
   Valor).
+
+### 7.2 The left Keyblade's hits as a KH1 attack object (t680)
+
+**KH2 (Steam KH2 decomp, Checked (decomp)):** each of Sora's weapons is its own object with its own
+motion (Valor: `W_EX010_BTLF_R` / `_L`). A weapon motion's attack range (id 10) runs the range step
+`0x14040D810` on the object whose motion it is, which asserts the ATKP through `0x1403DAFE0` → the
+`+0x98` call (`0x1403D29B0`) → `0x1403D25D0` (the 8 attack slots at `+0xC10`). A slot is kept only
+for the same **group and the same shape source object** (`attack+0xC8 == group` and the attack's
+`+0x14` handle resolving to that object); any other makes a new attack (`0x14040F1C0`) with a new id.
+So the right and left Keyblades always run **separate attacks**: each blade may hit the same foe in
+the same swing, each with its own re-hit interval, and a left window never ends or renews the right
+blade's attack.
+
+**KH2's data (Checked (files): `P_EX100_BTLF.mset`, `W_EX010_BTLF_R/L.mset`, `W_EX010.mdlx`,
+`00battle.bin`):** Valor's left windows (weapon 2) are their own ATKPs, e.g. 151: right 178 at
+32..40, left 177 at 9..20; 152: left 172 2..11, 176 38..49; 153: left 180 28..66; 154: left 190
+41..53, 192 64..85, 527 85..97 (right 189 / 191 / 526 at overlapping frames); 155: left 198 44..65;
+181: left 227 21..30; 182: left 202 19..32; 183: left 199 21..29; 184: left 204 29..41, 238 54..63,
+529 77..89. Both weapons are `W_EX010.mdlx`, whose attack shapes are spheres on weapon bone 2
+(at the grip, the blade along its -x, tip point 78), by group: 1 four of r 40 at 0 / 34 / 40 / 68;
+2 three of r 60 at 0 / 34 / 68; 3 three of r 140 at 100 / 240 / 380; 4 r 140 at -50 and r 100 at
+90; 5 r 120 at 80 and r 80 at 190; 6 r 120 at 80; 7 r 130 at 42. None of Valor's moves has a hit
+window on his body.
+
+**What the old system did wrong (Checked (code) against the above):**
+- `kh2slots::kh1_tracks` put the left windows on KH1's group 0 with the right ones, so they hit with
+  KH1's one sphere on the **right** blade.
+- `kh1rows::window_atkp` took the first weapon > 0 window open: where both blades' windows overlap
+  (154 at 41..47 and 64..97, 184 at 77..89) the right object took the right ATKP and the left hit
+  never happened; where only a left one was open, the right blade hit with the left's ATKP.
+- `kh2slots::keyblade_rearm` re-armed the right object whenever any weapon > 0 window changed, so a
+  left window opening let the right blade hit a foe again within the same KH2 attack.
+
+**Now (`bodyhits.rs` "Valor's left Keyblade", `kh2slots::left_channel`):**
+- `kh1_tracks`: group 0 (the right Keyblade's object) only for weapon 1 windows; the weapon 2
+  windows play on a KH1 attack group of their own (`left_channel`: the first after the body
+  windows', 1 for every Valor move).
+- On each new play of a Valor slot with left windows (`bodyhits::frame`), one KH1 attack object of
+  Sora's is made with KH1's attack constructor `0x1402B2DC0` (bone `0x30`, so bone-tied and
+  motion-tied: KH1's pass `0x1402B47A0` keeps it live only while his request is the one it took and
+  his motion events hold its group's bit), on our copy of his KH1 swing row's data per window
+  (finisher row's for a KH2 blow; KH2's reaction and the Recoil row's clash rules, as the body
+  windows' data). The left Keyblade's own weapon row (from `leftblade`'s owner copy) goes on it as
+  KH1's row maker `0x1402B3270` puts the right one's (radius / length factor / priority / critical
+  bonuses), its effect data is the spark's source, his "connected" word is linked.
+- Each frame KH1 has him (`bodyhits::left_step`, beside `keyblade_rearm`): the left window open at
+  KH1's time; a new KH2 attack (ATKP or group differs, or a window after a frame with none)
+  re-arms the object with KH1's re-arm (`rehit::new_attack`) and starts KH2's sweep afresh; the
+  window's data goes on it. Re-hits within an attack by the window's interval: `rehit` (the one
+  path), through `bodyhits::atkp`.
+- KH1's pass builds its entries through t638's hook (`0x1402B3800`): the open window's group of
+  KH2's weapon shapes, laid along the left Keyblade as drawn, from KH1's grip bone (280) toward the
+  blade's tip (KH1's blade point `0x30` at t 1, the left Keyblade's own blade range), both read
+  with KH1's bone point `0x14029EB20` on `leftblade`'s owner copy (Sora's matrices moved onto the
+  left Keyblade); KH2's sweep between frames (`combat_core::AttackVolume`); each entry tested with
+  KH1's `0x1402B3BE0` (bodies, and attack against attack: KH1's clash / guards as for the right
+  blade). Contact, record, damage, reaction, spark and sound are KH1's.
+- **Assumptions:** KH2's distances along bone 2 are laid along KH1's grip-to-tip line in KH1 units
+  unscaled (as the body shapes), whatever the Keyblade's length; with the left Keyblade not drawn
+  (`valor_left_blade = off`, model not loaded) its windows are placed on the right Keyblade.
+  KH1 time in our slot = KH2 frame (as everywhere). The left object has no KH1 wall test (as the
+  body windows; the right blade's walls are `walls`'). Not checked in game.
+- **Still open:** the right Keyblade still hits with KH1's row sphere (its data's radius, KH1's blade
+  range), not KH2's group shapes above (groups 3..7 are far wider: Valor's 155 finisher reaches
+  380). Valor's guard windows on the left Keyblade (42 / 155, ATKP 162) are unchanged.
