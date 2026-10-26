@@ -65,6 +65,9 @@ kh1_ability_chance = off\r\n\
 ;   KH1's own weight for each enemy (how far KH1 pushes and launches it); off = KH2's numbers for\r\n\
 ;   every enemy (the Config menu's Combat > Tweaks list switches it)\r\n\
 enemy_weight = on\r\n\
+; glide_cast: on = a KH2 spell chosen in KH2's glide ends the glide and is cast in the air, as\r\n\
+;   KH2 does; off = refused with KH1's can't sound (the Config menu's Combat > Tweaks list switches it)\r\n\
+glide_cast = on\r\n\
 ; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
 glide = square\r\n\
 ; air_cast_fall: how fast Sora falls while Reflect plays in the air, a share of KH1's own\r\n\
@@ -282,6 +285,9 @@ pub struct Settings {
     /// KH2's knock-back on enemies times KH1's own weight for each enemy (`enemy_weight = on`, the
     /// default; the tester, kh2-knockback-on-enemies question 1 (b); `knockback::weight`).
     pub enemy_weight: bool,
+    /// A KH2 spell in KH2's glide ends the glide into KH1's air cast (`glide_cast = on`, the default;
+    /// the tester, what-is-still-missing m8 answer 1 (a); `glide::cast_out`).
+    pub glide_cast: bool,
     /// Glide on Square (`glide = square`, default) or held jump (`glide = jump`).
     pub glide_on_square: bool,
     /// Gravity's share while a KH2 cast (Reflect) plays in the air, after its fall speed was
@@ -470,6 +476,7 @@ fn load(first: bool) -> Option<Settings> {
         party_criticals: on(&text, "party_criticals", "on", false),
         kh1_ability_chance: on(&text, "kh1_ability_chance", "on", false),
         enemy_weight: on(&text, "enemy_weight", "on", true),
+        glide_cast: on(&text, "glide_cast", "on", true),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         bonus_ap: on(&text, "bonus_ap", "on", true),
         auto_aim: on(&text, "auto_aim", "on", false),

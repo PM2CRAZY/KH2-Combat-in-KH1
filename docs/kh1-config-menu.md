@@ -402,6 +402,11 @@ KH2's knock-back on enemies (launch speeds, flinch pushes, air flinch drifts) is
 KH1's own weight for each enemy (stats `+0xC4`); Off, KH2's numbers for every enemy
 (`docs/kh1-launch.md` §4). Live, kept in the ini.
 
+Third row, "Cast from Glide" (Off | On, `glide::cast_out`, ini `glide_cast`, default on; the tester,
+what-is-still-missing m8: "1. (a) then make it a config in the tweaks config menu"): On, a KH2 spell
+chosen in KH2's glide ends the glide and is cast in the air, as KH2 does (`docs/kh1-glide-native.md`
+§8.14); Off, refused with KH1's "can't" (t654). Live, kept in the ini.
+
 Moved inside Combat (the tester, m22 answer 1 (b)): Tweaks is Combat's tenth row, after Magic, a
 button opening the same list; backing out of Tweaks returns to Combat on that row. KH1 in KH2 has
 its four buttons again. Ten rows at KH1's size would reach y 349, inside the help box (y 300), so a

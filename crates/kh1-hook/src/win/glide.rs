@@ -23,7 +23,7 @@
 use super::addr::{Build, Rva};
 use super::styles::{self, Kind};
 use super::{log, takeover};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 /// KH1's glide state.
@@ -766,6 +766,50 @@ pub unsafe fn end(actor: usize, why: &str) -> bool {
     takeover::launch_used();
     note(format!("{why}: KH2's fall at speed {speed:.1} ({:.0} above the floor; KH1 state now {})", rd::<f32>(actor + 0x3D4), rd::<i32>(actor + 0x70)));
     true
+}
+
+/// The Tweaks row "Cast from Glide" (0 not read yet, 1 off, 2 on).
+static CAST_OUT: AtomicU8 = AtomicU8::new(0);
+
+/// A KH2 spell chosen in KH2's glide ends the glide into KH1's air state and is cast there (the
+/// tester, what-is-still-missing m8 answer 1 (a), "then make it a config in the tweaks config
+/// menu"). Steam KH2: the glide motions 205..208 carry free range id 1 all through, so the input
+/// step `0x1403D6FC0` takes the magic command there (`0x1403D6CA0`), and the cast start
+/// `0x1403C5170`, airborne, replaces the glide action with the air cast (the glide's exit
+/// `0x140423B70` only puts the fall gravity `+0x134` back and clears `+0x120` bits 0x70000: no
+/// velocity change), Checked (decomp). On (the default): KH2's. Off: t654's refusal (KH1's
+/// "can't", nothing cast).
+pub fn cast_out() -> bool {
+    match CAST_OUT.load(Ordering::Relaxed) {
+        0 => {
+            let c = super::settings::get().glide_cast;
+            CAST_OUT.store(1 + c as u8, Ordering::Relaxed);
+            c
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config row (Combat > Tweaks > Cast from Glide): live, kept in the ini.
+pub fn set_cast_out(on: bool) {
+    CAST_OUT.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("glide_cast", if on { "on" } else { "off" });
+    log(&format!("Config menu: Cast from Glide {}", if on { "On" } else { "Off" }));
+}
+
+/// After KH1's command step cast a spell out of KH2's glide (`combat::command_step`, the glide ended
+/// in that same control step, `end`): the sideways velocity the cast left in `+0x3C0` (KH2's kept
+/// one at Air Physics KH2, `shared::physics::cast_after_command`; KH1's halved one at KH1) is kept
+/// over KH1's think, which right after the control step sets `+0x3C0` from the stick when the state
+/// changed this frame (flag `0x400`, state 2: Steam `0x1402A3300`, Checked (decomp)); `carry` puts
+/// it back before the physics step, as for a glide let go.
+pub unsafe fn keep_cast_velocity(actor: usize) {
+    if actor != takeover::sora_actor() || rd::<i32>(actor + 0x70) != FALL_STATE {
+        return;
+    }
+    if let Ok(mut c) = CARRY.lock() {
+        *c = Some((takeover::GAME_FRAME.load(Ordering::Relaxed), rd(actor + 0x3C0)));
+    }
 }
 
 /// KH2's velocity at a glide's end in KH1's control step (`buttons`: Square let go), with the game
