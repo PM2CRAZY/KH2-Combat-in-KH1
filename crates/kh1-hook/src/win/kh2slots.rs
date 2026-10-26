@@ -251,16 +251,30 @@ const FALL: Spec = Spec { motion: character_core::motion::FALL, stands_for: 10, 
 /// both), as KH1 played them under the drawn KH2 jump before.
 const JUMPS: [(u16, usize, usize); 2] = [(character_core::motion::JUMP, 8, 0x4), (character_core::motion::HIGH_JUMP, 12, 0x9)];
 
+/// KH2's landing on KH1's landing requests (the tester, same thread, m3: "just make sure every
+/// animation is baked and on the native system"; its m1 answer 2 on the landing lock: "same as kh1
+/// for now"). KH1's player step asks its jump set's base + 7 with bit 24 (action flag 4: he can't
+/// act) on the frame his state goes from the air to the ground, and queues the idle (`0x40000000`,
+/// blend 8) (Checked (decomp), `docs/kh1-anim-baking.md` §3): request 7 (plain jump) or 0xC (High
+/// Jump), both slot 11 in its request table (`0x200B`, kind 2, no hold bit; 28 frames, "may be
+/// left" (type 0) at 12, the landing's foot effect and sound 6 at 0; Checked (files)). KH2's
+/// landing is motion 5 (`P_EX100.mset`, Checked (files): 26 frames at 60 Hz, its reaction window
+/// from 8, free from 12). KH1's events stay at KH1's own frames (`make`: style Jump, not stretched),
+/// so KH1's landing lock is its own "may be left" at 12, KH2's free frame too. 0xC is pointed at the
+/// same slot (`ALIASES`).
+const LAND: Spec = Spec { motion: character_core::motion::LAND, stands_for: 11, request: 0x7, kind: Kind::Jump };
+
 const fn jump_spec(i: usize) -> Spec {
     let (motion, stands_for, request) = JUMPS[i];
     Spec { motion, stands_for, request, kind: Kind::Jump }
 }
 
 /// KH1 requests pointed at another request's slot of ours (alias, request): the High Jump's fall
-/// 0xB plays the plain jump's (KH1's table has both on slot 10).
-const ALIASES: [(usize, usize); 1] = [(0xB, 0x6)];
+/// 0xB plays the plain jump's (KH1's table has both on slot 10), its landing 0xC the plain jump's
+/// landing 0x7 (both slot 11).
+const ALIASES: [(usize, usize); 2] = [(0xB, 0x6), (0xC, 0x7)];
 
-const SPECS: [Spec; 41] = [
+const SPECS: [Spec; 42] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -302,6 +316,7 @@ const SPECS: [Spec; 41] = [
     FALL,
     jump_spec(0),
     jump_spec(1),
+    LAND,
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking

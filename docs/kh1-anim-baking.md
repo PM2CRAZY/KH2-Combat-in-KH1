@@ -445,3 +445,23 @@ on a drawn clip (idle, landing, glide, the drawn casts) only ours does, as befor
   load (180 and 300 frames).
 - Not checked: in game; scripts and cutscenes that ask KH1's idle now show KH2's (Misc Animations
   KH2), as they already did for walk and run.
+
+## 11. The landing baked (m3)
+
+- `kh2slots::LAND`: KH2's landing (motion 5, 26 frames at 60 Hz, reaction window from 8, free from
+  12; **Checked (files)**) on KH1's landing request 7, slot 11 as template (28 frames); the High
+  Jump's landing 0xC (also slot 11, `0x200B`) points at the same slot (`ALIASES`). Style: Jump (as
+  KH1's slots 8..13, `shared::slot_kind`).
+- KH1's player step asks the landing (base + 7, bit 24: action flag 4) when his state goes from
+  the air to the ground and queues the idle (`0x40000000`) (§3, **Checked (decomp)**). The lock is
+  KH1's own, as the tester asked in m1 ("same as kh1 for now"): the template's events stay at
+  KH1's own frames (style Jump, not stretched: `make`'s `r = 1`), so its "may be left" (type 0) at
+  frame 12 clears action flag 4 there, and its foot effect and sound 6 play at 0. KH2's own free
+  frame is 12 too, its reaction window 8 (not used: KH1's lock).
+- KH2's own landing sounds play only where `kh2_sounds` lists the motion (`kh2sound::allowed`), as
+  for the jump.
+- No loop point is set (KH2's `frame_return` lies past the motion's end), so KH1 plays it once and
+  goes on to its queued idle (now ours too, §10).
+- `pose::play_for`'s landing (slot 11) stays only as the fallback.
+- Cost: none per frame; one more bake at load (26 frames).
+- Not checked: in game.
