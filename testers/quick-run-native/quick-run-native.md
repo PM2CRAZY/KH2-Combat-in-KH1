@@ -177,3 +177,8 @@ I didn't see it on quick run max, but james saw it on level 3, unsure about leve
 
 ^m6
 
+1. the overrides can always be adjusted in the debug, keep it
+2. don't worry about drive forms
+3. (a)
+this is purely for testing, the debug menu should be able to break any rule when we add a feature to figure out situations.
+
