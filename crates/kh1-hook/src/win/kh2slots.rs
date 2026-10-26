@@ -958,6 +958,58 @@ pub unsafe fn turn_to_lock(actor: usize) {
     }
 }
 
+/// The KH2 hit window on the Keyblade last seen open in our slot on Sora: (KH2 motion, its index
+/// in the clip's windows, KH1's time then).
+static BLADE_WINDOW: Mutex<Option<(u16, usize, f32)>> = Mutex::new(None);
+
+/// (t-rehit) KH2's next hit window on the Keyblade in the same swing hits again what the last one
+/// hit (the tester, combo row selection after m32: "the 2nd hit is also missing its 2nd hitbox, its
+/// just one for now"). KH2's 153 has two (`P_EX100.mset` / `W_EX010.mset`, Checked (files)):
+/// ATKP 128 at frames 20..32 and 147 at 38..47 (152 one, 127 at 20..32; 151 one, 126 at 15..23).
+/// Each KH2 window is a swing of its own for KH2's hit records (the OG rewrite: a window's hitbox is
+/// `(swing << 8) | window`, and a target's hit-once is kept per that), so the second slash hits a
+/// foe the first one hit. KH1's row makes one attack object for the whole motion, whose hit bit a
+/// target keeps once hit (`0x1402BD480`, `docs/kh1-rehit.md`), so on the same foe only the first
+/// window landed (the tester's log: 153 on one foe hit with 147 only, or with 128 only). When a new
+/// Keyblade window opens after another in the same play, KH1's own re-arm runs on the row's attack
+/// objects (`kh1rows::rearm_rows`). Each frame KH1 has him (`takeover::physics`), before KH1's
+/// physics and collision passes of the frame: a few reads unless a window changes.
+pub unsafe fn keyblade_rearm(actor: usize) {
+    use character_core::WindowKind as W;
+    let now = (|| {
+        let m = current(actor)?;
+        let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
+        let t: f32 = rd(actor + TIME_NOW);
+        if !(t >= 0.0) {
+            return None;
+        }
+        let f = t as u32;
+        let i = clip.windows.iter().position(|w| matches!(w.kind, W::Hitbox { weapon, .. } if weapon > 0) && w.contains(f));
+        Some((m.motion, i, t))
+    })();
+    let Ok(mut g) = BLADE_WINDOW.lock() else { return };
+    let Some((motion, Some(i), t)) = now else {
+        // (Out of our slots, or between windows: the last window is kept for the same play; a
+        // new play (another motion, or the time gone back) forgets it.)
+        if !matches!((now, *g), (Some((m, None, t)), Some((lm, _, lt))) if m == lm && t >= lt) {
+            *g = None;
+        }
+        return;
+    };
+    let new = match *g {
+        Some((lm, li, lt)) if lm == motion && t >= lt => li != i,
+        _ => false,
+    };
+    *g = Some((motion, i, t));
+    if new {
+        let n = super::kh1rows::rearm_rows(actor);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log!(Combat, "KH2's next hit window on the Keyblade (KH2 motion {motion} window {i}, frame {t:.0}): {n} attack object(s) of ours re-armed with KH1's re-arm");
+        }
+    }
+}
+
 /// KH2's cast motion our slot plays for KH1's spell request `request` (`CASTS`), if built.
 pub fn cast_motion(request: usize) -> Option<u16> {
     built()?.moves.iter().find(|m| m.request == request && m.default && matches!(m.kind, Kind::Magic | Kind::AirMagic)).map(|m| m.motion)
