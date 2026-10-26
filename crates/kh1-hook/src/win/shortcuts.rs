@@ -187,14 +187,14 @@ pub unsafe fn install() {
     BASE.store(base, Ordering::Relaxed);
     let (four, reflect) = (super::settings::get().four_shortcuts, super::settings::get().reflect);
     if !four && !reflect {
-        log("shortcuts: KH1's three (shortcuts = 3)");
+        log!(Menus, "shortcuts: KH1's three (shortcuts = 3)");
         return;
     }
     // The slots first: everything else reads the fourth and Reflect through them.
     if hook::install(base + GET_RVA, &get_prologue(), get as *const () as usize, &ORIG_GET, "shortcut get").is_none()
         || hook::install(base + SET_RVA, &set_prologue(), set as *const () as usize, &ORIG_SET, "shortcut set").is_none()
     {
-        log("shortcuts: KH1's three (the slot functions weren't as expected)");
+        log!(Menus, "shortcuts: KH1's three (the slot functions weren't as expected)");
         return;
     }
     hook::install(base + LEARN_RVA, &LEARN_PROLOGUE, learn as *const () as usize, &ORIG_LEARN, "magic learned");
@@ -207,7 +207,7 @@ pub unsafe fn install() {
         install_reflect(base);
     }
     if !four {
-        log("shortcuts: KH1's three (shortcuts = 3), Reflect can go in them");
+        log!(Menus, "shortcuts: KH1's three (shortcuts = 3), Reflect can go in them");
         return;
     }
     if hook::install(base + STEP_RVA, &STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step").is_none() {
@@ -226,9 +226,9 @@ pub unsafe fn install() {
     install_customize(base);
     let s = save();
     if s > 0x10000 {
-        log(&format!("shortcuts: four (save bytes {:02x?})", std::slice::from_raw_parts((s + SLOTS_OFF) as *const u8, 4)));
+        log!(Menus, "shortcuts: four (save bytes {:02x?})", std::slice::from_raw_parts((s + SLOTS_OFF) as *const u8, 4));
     } else {
-        log("shortcuts: four");
+        log!(Menus, "shortcuts: four");
     }
 }
 
@@ -246,12 +246,12 @@ unsafe fn install_draw(base: usize) {
         ok &= hook::redirect_call(base + at, base + PANEL_FN_RVA, panel as *const () as usize, "shortcut panel");
     }
     ok &= hook::redirect_call(base + ICON_X_CALL, base + ICON_FN_RVA, icon as *const () as usize, "shortcut icons");
-    log(if ok { "shortcut menu: four rows" } else { "shortcut menu: some drawing patches failed (see above)" });
+    log!(Menus, "{}", if ok { "shortcut menu: four rows" } else { "shortcut menu: some drawing patches failed (see above)" });
 }
 
 unsafe fn install_customize(base: usize) {
     if !config::TEXT_HOOKED.load(Ordering::Acquire) {
-        log("Customize: three shortcut rows (no text lookup for the fourth's label)");
+        log!(Menus, "Customize: three shortcut rows (no text lookup for the fourth's label)");
         return;
     }
     let id = ID_LABEL4.to_le_bytes();
@@ -261,7 +261,7 @@ unsafe fn install_customize(base: usize) {
         && hook::patch(base + LIST_LOOP, &[0x83, 0xFD, 0x03], &[0x83, 0xFD, 0x04], "Customize shortcut list")
         && hook::patch(base + OVERVIEW_LOOP, &[0x83, 0xFF, 0x03], &[0x83, 0xFF, 0x04], "Customize overview");
     debug_assert_eq!(WINDOW_VISIBLE_RVA.0, WINDOW_ROWS_RVA.0 + 2);
-    log(if ok { "Customize: four shortcut rows" } else { "Customize: shortcut rows only partly patched (see above)" });
+    log!(Menus, "{}", if ok { "Customize: four shortcut rows" } else { "Customize: shortcut rows only partly patched (see above)" });
 }
 
 /// `lea reg, [rip -> target]` at `at` (7 bytes; `op` its first three) as the running build has it.
@@ -273,7 +273,7 @@ fn lea_rip(op: [u8; 3], at: usize, target: usize) -> Option<[u8; 7]> {
 /// Reflect in Customize: its own spell list (room for Reflect), names, help line and row pitch.
 unsafe fn install_reflect(base: usize) {
     if !config::TEXT_HOOKED.load(Ordering::Acquire) {
-        log("Customize: no Reflect in the spell list (no text lookup for its help)");
+        log!(Menus, "Customize: no Reflect in the spell list (no text lookup for its help)");
         return;
     }
     // Every instruction that addresses KH1's list, checked before any is changed.
@@ -284,11 +284,11 @@ unsafe fn install_reflect(base: usize) {
     }) && PICK_FILLS.iter().all(|f| std::slice::from_raw_parts((base + *f) as *const u8, PICK_FILL_PROLOGUE.len()) == PICK_FILL_PROLOGUE)
         && std::slice::from_raw_parts((base + PICK_UPDATE_RVA) as *const u8, PICK_UPDATE_PROLOGUE.len()) == PICK_UPDATE_PROLOGUE;
     if !ok {
-        log("Customize: KH1's spell list code wasn't as expected: no Reflect in it (battle shortcuts that hold it still work)");
+        log!(Menus, "Customize: KH1's spell list code wasn't as expected: no Reflect in it (battle shortcuts that hold it still work)");
         return;
     }
     let Some(buf) = hook::alloc_near(base + PICK_LEAS[0].0, 0x1000) else {
-        log("Customize: no memory near the game for the spell list: no Reflect in it");
+        log!(Menus, "Customize: no memory near the game for the spell list: no Reflect in it");
         return;
     };
     // KH1's list and count as they are (empty before the pause menu first opens).
@@ -315,7 +315,7 @@ unsafe fn install_reflect(base: usize) {
     for at in SPELL_NAME_CALLS {
         all &= hook::redirect_call(base + at, base + SPELL_NAME_RVA, spell_name as *const () as usize, "Customize spell name");
     }
-    log(&format!("Customize: Reflect can go in the shortcuts{} (spell list moved to {buf:#x})", if all { "" } else { ", some patches failed (see above)" }));
+    log!(Menus, "Customize: Reflect can go in the shortcuts{} (spell list moved to {buf:#x})", if all { "" } else { ", some patches failed (see above)" });
 }
 
 /// KH1's Customize spell list (now ours) and its count.
@@ -335,8 +335,8 @@ unsafe fn pick_fill_after() {
     wr(buf + n * 4, last);
     wr(base() + PICK_COUNT_RVA, n as i32 + 1);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 5 {
-        log(&format!("Customize: spell list {:?} (Reflect = 7 before none)", (0..=n).map(|k| rd::<i32>(buf + k * 4)).collect::<Vec<_>>()));
+    if super::log_on(super::LogCat::Menus) && N.fetch_add(1, Ordering::Relaxed) < 5 {
+        log!(Menus, "Customize: spell list {:?} (Reflect = 7 before none)", (0..=n).map(|k| rd::<i32>(buf + k * 4)).collect::<Vec<_>>());
     }
 }
 
@@ -419,7 +419,7 @@ pub unsafe fn label4(kh1: impl Fn(u32) -> usize) -> usize {
         if !b.windows(2).any(|w| w == [0x0F, 0x42]) {
             b.extend_from_slice(&[0x0F, 0x42]);
         }
-        log(&format!("Customize: fourth shortcut label from {LABEL3:#x}: {b:02x?}"));
+        log!(Menus, "Customize: fourth shortcut label from {LABEL3:#x}: {b:02x?}");
         b.push(0);
         Box::leak(b.into_boxed_slice()).as_ptr() as usize
     })
@@ -454,7 +454,7 @@ unsafe extern "system" fn set(slot: i32, spell: u8) {
     };
     if slot == 3 {
         wr(s + SLOT4_OFF, ours & 0xF0 | if spell <= REFLECT as u8 { spell + 1 } else { 0 });
-        log(&format!("fourth shortcut: {}", name(spell)));
+        log!(Menus, "fourth shortcut: {}", name(spell));
         return;
     }
     if !(0..3).contains(&slot) {
@@ -470,7 +470,7 @@ unsafe extern "system" fn set(slot: i32, spell: u8) {
         wr(s + SLOT4_OFF, ours & !bit);
     }
     if spell == REFLECT as u8 || ours & bit != 0 {
-        log(&format!("shortcut {}: {}", slot + 1, name(spell)));
+        log!(Menus, "shortcut {}: {}", slot + 1, name(spell));
     }
 }
 
@@ -540,7 +540,7 @@ unsafe extern "system" fn fill(a: usize, b: usize) {
         static LOGGED: AtomicU32 = AtomicU32::new(u32::MAX);
         let key = reflect_slots | (reflect == Some(true)) as u32 * 8;
         if LOGGED.swap(key, Ordering::Relaxed) != key {
-            log(&format!("Reflect in shortcut(s) {:?} in battle: command {:#x}, usable {}", (0..3).filter(|k| reflect_slots >> k & 1 != 0).map(|k| k + 1).collect::<Vec<_>>(), super::reflect::COMMAND, reflect == Some(true)));
+            log!(Menus, "Reflect in shortcut(s) {:?} in battle: command {:#x}, usable {}", (0..3).filter(|k| reflect_slots >> k & 1 != 0).map(|k| k + 1).collect::<Vec<_>>(), super::reflect::COMMAND, reflect == Some(true));
         }
     }
     if !ON.load(Ordering::Acquire) {
@@ -570,7 +570,7 @@ unsafe extern "system" fn fill(a: usize, b: usize) {
     static LOGGED: AtomicU32 = AtomicU32::new(u32::MAX);
     let key = entry as u32 | (usable as u32) << 8;
     if LOGGED.swap(key, Ordering::Relaxed) != key {
-        log(&format!("fourth shortcut in battle: command {entry:#x}, usable {usable}"));
+        log!(Menus, "fourth shortcut in battle: command {entry:#x}, usable {usable}");
     }
 }
 
@@ -598,7 +598,7 @@ unsafe extern "system" fn step() -> u64 {
     }
     let run: unsafe extern "system" fn(usize, u32) -> u64 = std::mem::transmute(base + RUN_ENTRY_RVA);
     let done = run(base + MENU_RVA, 3);
-    log(&format!("fourth shortcut: L1 + cancel ({})", if done != 0 { "cast" } else { "not usable" }));
+    log!(Menus, "fourth shortcut: L1 + cancel ({})", if done != 0 { "cast" } else { "not usable" });
     r
 }
 
@@ -636,8 +636,8 @@ unsafe extern "system" fn panel(inst: usize, def: usize, x: i32, y: i32, scale: 
     let (top, bottom) = (rd::<i32>(q + 0xA4), rd::<i32>(q + 0xB4));
     let e = ROW * 16;
     static SEEN: AtomicU32 = AtomicU32::new(0);
-    if SEEN.fetch_add(1, Ordering::Relaxed) < 2 {
-        log(&format!(
+    if super::log_on(super::LogCat::Menus) && SEEN.fetch_add(1, Ordering::Relaxed) < 2 {
+        log!(Menus,
             "shortcut panel {def:#x}: x {} y {}..{} (uv {}..{} / {}..{}), menu y {y}",
             rd::<i32>(q + 0xA0) / 16,
             top / 16,
@@ -646,7 +646,7 @@ unsafe extern "system" fn panel(inst: usize, def: usize, x: i32, y: i32, scale: 
             rd::<i32>(q + 0x40) / 16,
             rd::<i32>(q + 0x24) / 16,
             rd::<i32>(q + 0x34) / 16
-        ));
+        );
     }
     if bottom - top >= 48 * 16 {
         // Header, then four rows from KH1's three (22 px each, from the bottom up). Its

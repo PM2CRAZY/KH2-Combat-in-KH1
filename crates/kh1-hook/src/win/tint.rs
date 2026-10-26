@@ -169,7 +169,7 @@ fn read_pkg(k: usize) -> Option<Pixels> {
     let install = match kh1_data::Kh1Install::locate(super::exe_dir()) {
         Ok(i) => i,
         Err(e) => {
-            log(&format!("form tint: KH1's files not found ({e})"));
+            log!(Animation, "form tint: KH1's files not found ({e})");
             return None;
         }
     };
@@ -177,16 +177,16 @@ fn read_pkg(k: usize) -> Option<Pixels> {
     match install.read_remastered(kh1_data::Source::Live, MODEL, &asset) {
         Ok((name, bytes)) => match dds_bgra(&bytes) {
             Some(p) => {
-                log(&format!("form tint: {MODEL} {name} read from the PKG ({}x{}), on first need", p.w, p.h));
+                log!(Animation, "form tint: {MODEL} {name} read from the PKG ({}x{}), on first need", p.w, p.h);
                 Some(p)
             }
             None => {
-                log(&format!("form tint: {name} isn't a plain 32-bit DDS"));
+                log!(Animation, "form tint: {name} isn't a plain 32-bit DDS");
                 None
             }
         },
         Err(e) => {
-            log(&format!("form tint: {MODEL} {asset} not read from the PKG ({e})"));
+            log!(Animation, "form tint: {MODEL} {asset} not read from the PKG ({e})");
             None
         }
     }
@@ -325,7 +325,7 @@ fn dds_bgra(dds: &[u8]) -> Option<Pixels> {
 /// `p` recoloured for `look` (in place: the pixels are this one texture's, dropped after).
 fn recoloured(mut p: Pixels, what: &str, k: usize, look: Look) -> Pixels {
     let counts: Vec<usize> = ops(look, k).into_iter().map(|op| apply(&mut p, op)).collect();
-    log(&format!("form tint ({look:?}): {what}, {}x{}, texels recoloured per step {counts:?}", p.w, p.h));
+    log!(Animation, "form tint ({look:?}): {what}, {}x{}, texels recoloured per step {counts:?}", p.w, p.h);
     p
 }
 
@@ -409,7 +409,7 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
     static OTHER: AtomicU32 = AtomicU32::new(0);
     if let Some(m) = made.filter(|_| OTHER.fetch_add(1, Ordering::Relaxed) < 10) {
         // (Another texture in this slot: not ours to reuse; ours made afresh.)
-        log(&format!("form tint ({look:?}): slot {k} is now {name} ({w}x{h}), ours was made for {} ({}x{})", m.name, m.w, m.h));
+        log!(Animation, "form tint ({look:?}): slot {k} is now {name} ({w}x{h}), ours was made for {} ({}x{})", m.name, m.w, m.h);
     }
     // The pixels: the DDS KH1 keeps (the same file), else the PKG's.
     let dds = rd::<u64>(src + TEX_DDS) as usize;
@@ -430,7 +430,7 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
         },
     };
     let Some(p) = pixels else {
-        log(&format!("form tint: no pixels for {name} ({w}x{h}; neither KH1's copy nor the PKG's fits)"));
+        log!(Animation, "form tint: no pixels for {name} ({w}x{h}; neither KH1's copy nor the PKG's fits)");
         s.failed.push((k, look));
         return None;
     };
@@ -448,11 +448,11 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
     };
     let t = create(r, &desc, p.bgra.as_ptr(), label.as_ptr(), 0);
     if t < 0x10000 {
-        log(&format!("form tint: KH1 made no texture for {name} ({t:#x})"));
+        log!(Animation, "form tint: KH1 made no texture for {name} ({t:#x})");
         s.failed.push((k, look));
         return None;
     }
-    log(&format!("form tint ({look:?}): {name} ready ({w}x{h}, texture {t:#x}; KH1's {:#x}); its source pixels dropped", rd::<u64>(src + TEX_GPU)));
+    log!(Animation, "form tint ({look:?}): {name} ready ({w}x{h}, texture {t:#x}; KH1's {:#x}); its source pixels dropped", rd::<u64>(src + TEX_GPU));
     // (A texture made before for this slot and look, for another texture now gone, isn't
     // released here: KH1's release for one isn't known (`docs/kh1-tint.md`).)
     s.ours.get_or_insert_with(HashMap::new).insert((k, look), Made { name, w, h, texture: t });
@@ -496,6 +496,6 @@ pub unsafe fn refresh(actor: usize, look: Option<Look>) {
     }
     static N: AtomicU32 = AtomicU32::new(0);
     if look.is_some() && s.swapped.iter().all(|x| x.is_none()) && N.fetch_add(1, Ordering::Relaxed) == 600 {
-        log("form tint: still nothing swapped after 10 s in the form");
+        log!(Animation, "form tint: still nothing swapped after 10 s in the form");
     }
 }

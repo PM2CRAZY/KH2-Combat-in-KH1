@@ -124,9 +124,12 @@ static TEST_OK: AtomicBool = AtomicBool::new(false);
 static MAKE_OK: AtomicBool = AtomicBool::new(false);
 static LOGGED: AtomicU32 = AtomicU32::new(0);
 
-fn note(s: String) {
-    if LOGGED.fetch_add(1, Ordering::Relaxed) < 80 {
-        log(&s);
+fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    if super::log_on(super::LogCat::Combat) && LOGGED.fetch_add(1, Ordering::Relaxed) < 80 {
+        log!(Combat, "{}", s());
     }
 }
 
@@ -229,14 +232,14 @@ pub unsafe fn install() {
     BASE.store(base, Ordering::Relaxed);
     let have = std::slice::from_raw_parts((base + TEST_STEAM) as *const u8, TEST_BYTES.len());
     if have != TEST_BYTES {
-        log(&format!("KH2 body hits: KH1's entry test has unexpected bytes {have:02x?}: KH2's own sweep stays"));
+        log!(Combat, "KH2 body hits: KH1's entry test has unexpected bytes {have:02x?}: KH2's own sweep stays");
         return;
     }
     TEST_OK.store(true, Ordering::Relaxed);
     let have = std::slice::from_raw_parts((base + MAKE_STEAM) as *const u8, MAKE_BYTES.len());
     MAKE_OK.store(have == MAKE_BYTES, Ordering::Relaxed);
     if have != MAKE_BYTES {
-        log(&format!("KH2 spell hits: KH1's attack constructor has unexpected bytes {have:02x?}: spells keep our own sweep"));
+        log!(Combat, "KH2 spell hits: KH1's attack constructor has unexpected bytes {have:02x?}: spells keep our own sweep");
     }
     if super::hook::install(base + ENTRIES_STEAM, &ENTRIES_PROLOGUE, entries as *const () as usize, &ORIG, "KH1's attack entries (KH2's body hits)").is_some() {
         ON.store(true, Ordering::Relaxed);
@@ -265,7 +268,7 @@ pub unsafe fn frame(actor: usize) {
             return;
         }
         READY.store(true, Ordering::Relaxed);
-        log("KH2 body hits: through KH1's collision pass (KH1 attack objects with KH2's shapes)");
+        log!(Combat, "KH2 body hits: through KH1's collision pass (KH1 attack objects with KH2's shapes)");
     }
     let Some(kh2) = pose::kh2() else { return };
     let Ok(mut g) = STATE.try_lock() else { return };
@@ -330,7 +333,7 @@ pub unsafe fn frame(actor: usize) {
                 Some(b) => match BONES.iter().find(|x| x.0 == b) {
                     Some(&(_, k)) => Some(k),
                     None => {
-                        note(format!("KH2 body hits: KH2 bone {b} (ATKP {}) has no KH1 bone: left out", w.attack));
+                        note(|| format!("KH2 body hits: KH2 bone {b} (ATKP {}) has no KH1 bone: left out", w.attack));
                         continue;
                     }
                 },
@@ -340,7 +343,7 @@ pub unsafe fn frame(actor: usize) {
             let fx = template_fx(air, super::kh1rows::throws(&a));
             let bit = free_bit();
             if bit == 0 {
-                note(format!("KH2 body hits: no free hit bit for ATKP {} (motion {m})", w.attack));
+                note(|| format!("KH2 body hits: no free hit bit for ATKP {} (motion {m})", w.attack));
                 continue;
             }
             // (KH1's maker clears his combat info's "connected" flag for a new swing: this isn't one.)
@@ -350,7 +353,7 @@ pub unsafe fn frame(actor: usize) {
                 wr(info + 0x50, rd::<u32>(info + 0x50) | connected);
             }
             let Some(i) = pool_index(obj) else {
-                note(format!("KH2 body hits: KH1's maker gave {obj:#x} for ATKP {} (pool full?)", w.attack));
+                note(|| format!("KH2 body hits: KH1's maker gave {obj:#x} for ATKP {} (pool full?)", w.attack));
                 continue;
             };
             if let Some(fx) = fx {
@@ -366,7 +369,7 @@ pub unsafe fn frame(actor: usize) {
         }
     }
     if !made.is_empty() {
-        note(format!("KH2 body hits: motion {m} (request {req:#x}, {}): KH1 attack objects {}", if air { "air" } else { "ground" }, made.join("; ")));
+        note(|| format!("KH2 body hits: motion {m} (request {req:#x}, {}): KH1 attack objects {}", if air { "air" } else { "ground" }, made.join("; ")));
     }
 }
 
@@ -426,10 +429,10 @@ unsafe fn data_slot(g: &mut State, base: usize, key: u64) -> Option<usize> {
     }
     if g.page == 0 {
         g.page = super::kh1rows::near(base + BLOCK_RVA, DATA_PAGE).unwrap_or(usize::MAX);
-        note(format!("KH2 body / spell hits: attack data copies at {:#x}", g.page));
+        note(|| format!("KH2 body / spell hits: attack data copies at {:#x}", g.page));
     }
     if g.page == usize::MAX || (g.data.len() + 1) * DATA_SLOT > DATA_PAGE {
-        note("KH2 body / spell hits: no room for another attack data copy".to_string());
+        note(|| "KH2 body / spell hits: no room for another attack data copy".to_string());
         return None;
     }
     let d = g.page + g.data.len() * DATA_SLOT;
@@ -509,12 +512,12 @@ pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack],
         }
         let bit = free_bit();
         if bit == 0 {
-            note(format!("KH2 spell hits: no free hit bit for ATKP {}", a.atk));
+            note(|| format!("KH2 spell hits: no free hit bit for ATKP {}", a.atk));
             continue;
         }
         let obj = make(sora, bit, d);
         let Some(i) = pool_index(obj) else {
-            note(format!("KH2 spell hits: KH1's constructor gave {obj:#x} for ATKP {} (pool full?)", a.atk));
+            note(|| format!("KH2 spell hits: KH1's constructor gave {obj:#x} for ATKP {} (pool full?)", a.atk));
             continue;
         };
         // What the row maker adds for any data (`0x1402B3270`, Checked (decomp)), as the old sweep's
@@ -545,7 +548,7 @@ pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack],
             }
         }
         g.spells.push((i, sp));
-        note(format!("KH2 spell hits: ATKP {} sub {} on KH1 attack object {obj:#x} (data {d:#x}{}, {} shape(s), spark {:?})", a.atk, a.sub, if a.kh1_data.is_some() { ", KH1 spell's" } else { "" }, a.shapes.len(), spark.map(|s| s.1)));
+        note(|| format!("KH2 spell hits: ATKP {} sub {} on KH1 attack object {obj:#x} (data {d:#x}{}, {} shape(s), spark {:?})", a.atk, a.sub, if a.kh1_data.is_some() { ", KH1 spell's" } else { "" }, a.shapes.len(), spark.map(|s| s.1)));
     }
     std::mem::take(&mut g.results)
 }
@@ -657,7 +660,7 @@ pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
             }
         }
     }
-    note(format!("KH2 {} hit: ATKP {} (motion {}) from KH1's pass on actor {target:#x}", if spell.is_some() { "spell" } else { "body" }, l.atkp, l.motion));
+    note(|| format!("KH2 {} hit: ATKP {} (motion {}) from KH1's pass on actor {target:#x}", if spell.is_some() { "spell" } else { "body" }, l.atkp, l.motion));
 }
 
 /// Enemies a live Magnet window of ours holds: (actor, its centre (KH2 y-up), orbit radius, swirl)

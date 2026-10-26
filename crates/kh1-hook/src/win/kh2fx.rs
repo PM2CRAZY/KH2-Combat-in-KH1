@@ -46,7 +46,7 @@ pub fn weapon_vanish() {
     if super::kh2dpx::weapon_vanish() {
         static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 10 {
-            super::log("KH2 effect: the Keyblade's vanish");
+            super::log!(Effects, "KH2 effect: the Keyblade's vanish");
         }
     }
 }

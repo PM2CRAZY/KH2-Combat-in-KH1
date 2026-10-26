@@ -759,7 +759,7 @@ pub fn manage() {
         match unsafe { release(base, &g[i]) } {
             Ok(()) => {
                 let d = g.remove(i);
-                log(&format!("KH2 effects (native): {}'s DPX freed ({} bytes)", d.label, d.pages.len));
+                log!(Effects, "KH2 effects (native): {}'s DPX freed ({} bytes)", d.label, d.pages.len);
             }
             Err(_) => i += 1,
         }
@@ -786,7 +786,7 @@ fn builder() {
             break k;
         }
         if t.elapsed().as_secs() > 300 {
-            log("KH2 effects (native): KH2 Sora never loaded; no KH2 effects");
+            log!(Effects, "KH2 effects (native): KH2 Sora never loaded; no KH2 effects");
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -798,11 +798,11 @@ fn builder() {
         let common = install.read_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon.dpd: {e}"))?;
         let assets = install.read_remastered_any(src, "effect/texcommon.dpd").map_err(|e| format!("texcommon HD textures: {e}"))?;
         let images = common_images(&common, &assets)?;
-        log(&format!(
+        log!(Effects,
             "KH2 effects (native): KH2's common textures: {} images ({} bytes of HD images, made into KH1 textures once, as packages need them)",
             images.len(),
             images.iter().filter_map(|i| i.dds.as_ref().map(|d| d.len())).sum::<usize>()
-        ));
+        );
         if let Ok(mut g) = SHARED.lock() {
             *g = Some(Shared { dpd: std::sync::Arc::new(common), images, file: None });
         }
@@ -811,7 +811,7 @@ fn builder() {
     let (install, src) = match opened {
         Ok(c) => c,
         Err(e) => {
-            log(&format!("KH2 effects (native): no DPX built ({e}); no KH2 effects"));
+            log!(Effects, "KH2 effects (native): no DPX built ({e}); no KH2 effects");
             return;
         }
     };
@@ -832,7 +832,7 @@ fn builder() {
             match made {
                 Ok(d) => {
                     let own: usize = d.hd.iter().filter_map(|h| if let HdSrc::Own(x) = &h.src { Some(x.len()) } else { None }).sum();
-                    log(&format!(
+                    log!(Effects,
                         "KH2 effects (native): {}'s DPX built, {} bytes, {} effects in {:.2} s ({} HD textures: {} own, {} bytes until entered; {} of the common images)",
                         d.label,
                         d.len,
@@ -842,14 +842,14 @@ fn builder() {
                         d.hd.iter().filter(|h| matches!(h.src, HdSrc::Own(_))).count(),
                         own,
                         d.hd.iter().filter(|h| matches!(h.src, HdSrc::Common(_))).count()
-                    ));
+                    );
                     if let Ok(mut g) = PACKS.lock() {
                         g.push(d);
                     }
                     NEW_BUILT.store(true, Ordering::Relaxed);
                 }
                 Err(e) => {
-                    log(&format!("KH2 effects (native): {pkg:?}'s DPX not built ({e}); its effects don't play"));
+                    log!(Effects, "KH2 effects (native): {pkg:?}'s DPX not built ({e}); its effects don't play");
                     if let Ok(mut g) = FAILED.lock() {
                         g.push((pkg, sig));
                     }
@@ -1071,7 +1071,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         }
         match layer(pax_data, &parsed, el, s.anchor, s.ignore, s.effect_point) {
             Ok((l, v, note)) => {
-                log(&format!("KH2 effects (native): {}: {note}", s.label));
+                log!(Effects, "KH2 effects (native): {}: {note}", s.label);
                 layers.push(l);
                 variants.push(v);
             }
@@ -1079,7 +1079,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         }
     }
     if !left.is_empty() {
-        log(&format!("KH2 effects (native): {}: not built (they don't play): {}", s.label, left.join("; ")));
+        log!(Effects, "KH2 effects (native): {}: not built (they don't play): {}", s.label, left.join("; "));
     }
     if layers.is_empty() {
         return Err("no element of it can be KH1's".into());
@@ -1136,7 +1136,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
                 split.push(g.clone());
                 continue;
             };
-            log(&format!("KH2 effects (native): {}: a DPD of all its pieces of one file isn't possible ({why}); one per effect", s.label));
+            log!(Effects, "KH2 effects (native): {}: a DPD of all its pieces of one file isn't possible ({why}); one per effect", s.label);
             let mut effects: Vec<u32> = Vec::new();
             for v in g {
                 if !effects.contains(&v.effect) {
@@ -1150,11 +1150,11 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         groups = split;
         r = kh2_formats::kh1dpx::build_groups(pax_data, &common, &groups).map_err(|e| e.to_string())?;
     }
-    log(&format!("KH2 effects (native): {}'s DPX: {}", s.label, r.report));
+    log!(Effects, "KH2 effects (native): {}'s DPX: {}", s.label, r.report);
     // Elements of groups left out (too many texture slots, a texture missing) aren't KH1's.
     for (gi, why) in &r.skipped {
         let els: Vec<i16> = groups[*gi].iter().filter_map(|v| layers.iter().find(|l| l.number == v.number).map(|l| l.el)).collect();
-        log(&format!("KH2 effects (native): {}: elements {els:?} not built ({why}); they don't play", s.label));
+        log!(Effects, "KH2 effects (native): {}: elements {els:?} not built ({why}); they don't play", s.label);
     }
     layers.retain(|l| r.effects.contains(&l.number));
     let tagged: Vec<(usize, u64, i16)> = layers.iter().filter(|l| l.tag != 0).filter_map(|l| r.effects.iter().position(|&n| n == l.number).map(|k| (16 + k * 32, l.tag, l.el))).collect();
@@ -1275,7 +1275,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         }
     }
     unmatched.retain(|u| !by_palette.contains(u));
-    log(&format!("KH2 effects (native): {}'s HD textures: {}", s.label, report.join("; ")));
+    log!(Effects, "KH2 effects (native): {}'s HD textures: {}", s.label, report.join("; "));
     // (The t430 log: Thunder 3's TBPs 0x3000 and 0x3020 found no HD image, its others did.) For
     // the next log: every record of each such TBP (its pixels' offset in the file, CBP, size) and
     // every HD image of the file no record took (its key, `+0x24`), to see how KH2 keys them.
@@ -1296,7 +1296,7 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
             }
         }
         let free: Vec<String> = own_hd.iter().filter(|a| !kept.iter().any(|k| k.0 == a.name)).map(|a| format!("{} key {:#x} ({} bytes)", a.name, a.offset, a.data.len())).collect();
-        log(&format!("KH2 effects (native): {}: no HD image for {}; HD images no record took: {}", s.label, lines.join("; "), if free.is_empty() { "none".to_string() } else { free.join(", ") }));
+        log!(Effects, "KH2 effects (native): {}: no HD image for {}; HD images no record took: {}", s.label, lines.join("; "), if free.is_empty() { "none".to_string() } else { free.join(", ") });
     }
     // The DPX in its own pages (inside our one handle region).
     let pages = Pages::new(r.bytes.len()).ok_or("no memory for it")?;
@@ -1472,11 +1472,11 @@ unsafe fn shared_texture(base: usize, k: &Kh1Files, tbp: i32) -> usize {
         let bytes = std::slice::from_raw_parts(pages.at as *const u8, len);
         match new_file(k, "kh2fx_texcommon_dpx", pages.at, len, kh2_formats::kh1dpx::md5(bytes)) {
             Ok(rec) => {
-                log(&format!("KH2 effects (native): KH2's common textures entered in KH1's loaded files ({rec:#x}, {} images)", sh.images.len()));
+                log!(Effects, "KH2 effects (native): KH2's common textures entered in KH1's loaded files ({rec:#x}, {} images)", sh.images.len());
                 sh.file = Some((pages, rec));
             }
             Err(e) => {
-                log(&format!("KH2 effects (native): KH2's common textures not entered ({e}); each package gets its own"));
+                log!(Effects, "KH2 effects (native): KH2's common textures not entered ({e}); each package gets its own");
                 return 0;
             }
         }
@@ -1492,7 +1492,7 @@ unsafe fn shared_texture(base: usize, k: &Kh1Files, tbp: i32) -> usize {
     let (w, ht) = (i16::from_le_bytes([h[0xC], h[0xD]]) as i32, i16::from_le_bytes([h[0xE], h[0xF]]) as i32);
     let make: unsafe extern "system" fn(usize, usize, usize, usize, i32, i32) -> usize = std::mem::transmute(base + TEXTURE_OF_STEAM);
     let tex = make(rd::<usize>(base + TEXTURES_STEAM), at + key as usize, 0, 0, w, ht);
-    log(&format!("KH2 effects (native): common image tbp {tbp:#x} made into KH1 texture {tex:#x} ({} bytes)", dds.len()));
+    log!(Effects, "KH2 effects (native): common image tbp {tbp:#x} made into KH1 texture {tex:#x} ({} bytes)", dds.len());
     if tex != 0 {
         sh.images[i].texture = tex;
         // (KH1 holds the image now.)
@@ -1538,20 +1538,20 @@ unsafe fn enter(base: usize, d: &mut Dpx) {
     match entered {
         Ok((rec, copied, bytes, shared)) => {
             d.entry = rec;
-            log(&format!("KH2 effects (native): {}'s DPX entered in KH1's loaded files ({rec:#x}): {copied} HD images copied ({bytes} bytes), {shared} common textures shared", d.label));
+            log!(Effects, "KH2 effects (native): {}'s DPX entered in KH1's loaded files ({rec:#x}): {copied} HD images copied ({bytes} bytes), {shared} common textures shared", d.label);
         }
-        Err(e) => log(&format!("KH2 effects (native): {}'s DPX not entered in KH1's loaded files ({e}); its textures won't draw", d.label)),
+        Err(e) => log!(Effects, "KH2 effects (native): {}'s DPX not entered in KH1's loaded files ({e}); its textures won't draw", d.label),
     }
     d.hd = Vec::new();
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(base + RELOCATE_RVA);
     f(d.at);
     d.relocated = true;
-    log(&format!("KH2 effects (native): {}'s DPX at {:#x} relocated by KH1", d.label, d.at));
+    log!(Effects, "KH2 effects (native): {}'s DPX at {:#x} relocated by KH1", d.label, d.at);
     // (Its HD entries are in; KH1's draw would set the textures up on the first draw, without KH2's
     // per-palette case.)
     if d.entry != 0 && !d.palettes.is_empty() && super::addr::Build::current() == super::addr::Build::Steam {
         let n = palette_textures(base, d);
-        log(&format!("KH2 effects (native): {}'s DPDs at {:#x?} textured as KH2's (an HD image per palette): {n} records got their own", d.label, d.palettes));
+        log!(Effects, "KH2 effects (native): {}'s DPDs at {:#x?} textured as KH2's (an HD image per palette): {n} records got their own", d.label, d.palettes);
     }
     // KH2's own programs, as entries of ours in KH1's format (`kh2ppp`).
     super::kh2ppp::plug(d.at, &d.programs);
@@ -1663,7 +1663,7 @@ fn not_played(pkg: Pkg, label: &str, el: i16, why: &str) {
     let Ok(mut g) = SEEN.lock() else { return };
     if g.len() < 64 && !g.contains(&(pkg, el)) {
         g.push((pkg, el));
-        log(&format!("KH2 effects (native): {label} element {el} doesn't play: {why}"));
+        log!(Effects, "KH2 effects (native): {label} element {el} doesn't play: {why}");
     }
 }
 
@@ -1782,11 +1782,11 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     if element != 0 && steam && matches!(pkg, Pkg::Spell(_)) && !position_only {
         unsafe { note_place(base, pkg, el, element, actor, &layer) };
     }
-    if STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!(
+    if super::log_on(super::LogCat::Effects) && STARTED.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Effects,
             "KH2 effect (native): {pkg:?} element {el} of motion {motion} -> KH1 effect {number:#x} on {bone:?}: {}",
             if element == 0 { "not started (no free element or effect slot)".to_string() } else { format!("element {element:#x}{}", if set { "" } else { " (its instance not found: no wait, scale or ending)" }) }
-        ));
+        );
     }
     if element != 0 {
         Started::Kh1(element, layer)
@@ -1811,7 +1811,7 @@ fn kh1_sized(pkg: Pkg, mut l: Layer) -> Layer {
     let Some(k) = super::pose::kh1_size() else {
         static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if !ONCE.swap(true, Ordering::Relaxed) {
-            log("KH2 effects (native): Reflect or Fire started before KH1 Sora's size was known: at KH2's size");
+            log!(Effects, "KH2 effects (native): Reflect or Fire started before KH1 Sora's size was known: at KH2's size");
         }
         return l;
     };
@@ -1836,7 +1836,7 @@ fn kh1_point(pkg: Pkg, mut l: Layer) -> Layer {
     if l.flags & POSITION_ONLY == 0 {
         static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if !ONCE.swap(true, Ordering::Relaxed) {
-            log(&format!("KH2 effects (native): {pkg:?} element {} is bound to KH2's 0x4009 point (not by position): at KH2's size", l.el));
+            log!(Effects, "KH2 effects (native): {pkg:?} element {} is bound to KH2's 0x4009 point (not by position): at KH2's size", l.el);
         }
         return l;
     }
@@ -1847,8 +1847,8 @@ fn kh1_point(pkg: Pkg, mut l: Layer) -> Layer {
         }
     }
     static SEEN: AtomicU32 = AtomicU32::new(0);
-    if SEEN.fetch_add(1, Ordering::Relaxed) < 6 {
-        log(&format!("KH2 effects (native): {pkg:?} element {} on KH2's 0x4009 point: KH1's object root, offset {:.1?} in KH2's object frame (y down; KH1's size {k:?})", l.el, l.bone_offset));
+    if super::log_on(super::LogCat::Effects) && SEEN.fetch_add(1, Ordering::Relaxed) < 6 {
+        log!(Effects, "KH2 effects (native): {pkg:?} element {} on KH2's 0x4009 point: KH1's object root, offset {:.1?} in KH2's object frame (y down; KH1's size {k:?})", l.el, l.bone_offset);
     }
     l
 }
@@ -1924,12 +1924,12 @@ unsafe fn note_body_centre(base: usize, actor: usize) {
     point(actor, KH1_BODY_CENTRE, 0.0, p.as_mut_ptr() as usize);
     let at = rd::<[f32; 3]>(actor + 0x10);
     let kh2 = super::pose::kh2().and_then(|k| k.rig.body_shapes.iter().find(|s| s.kind == 1 && s.group == 0).map(|s| (s.lift, s.offset, s.bone)));
-    log(&format!(
+    log!(Effects,
         "KH2 effects (native): body centre: KH1's {:.1} above Sora's place (offset {:.1?}); KH2's (his model's first body shape) {}",
         at[1] - p[1],
         [p[0] - at[0], p[1] - at[1], p[2] - at[2]],
         kh2.map_or("not found".to_string(), |(lift, off, bone)| format!("{lift:.1} up, at {off:.1?} on {}", bone.map_or("the object root".to_string(), |b| format!("bone {b}"))))
-    ));
+    );
 }
 
 /// Once per spell package and element, for the log (the tester: "reflect still is misplaced"):
@@ -1963,13 +1963,13 @@ unsafe fn note_place(base: usize, pkg: Pkg, el: i16, element: usize, actor: usiz
     // offset is KH2's turned half round about y (`HALF_TURN_Y`), so (−x, y, −z) of it is KH2's own
     // offset along those rows, which the measured origin should equal.)
     let kh2 = glam::Vec3::from(l.local);
-    log(&format!(
+    log!(Effects,
         "KH2 effects (native): {pkg:?} element {el} on {:?}: its origin at the start {:.1?} from Sora's place along his model's x, y, z (KH1's start: place {:.1?}, turn {a:?}); {}",
         l.anchor,
         m,
         (p - at).to_array(),
         if object_framed(l.anchor) { format!("KH2's offset along the same rows: {:.1?}", [-kh2.x * s.x, kh2.y * s.y, -kh2.z * s.z]) } else { "on a bone or the Keyblade".to_string() }
-    ));
+    );
 }
 
 /// The binding KH1's start just made for `element` (the binding list's last node), noted for
@@ -1980,8 +1980,8 @@ unsafe fn note_binding(base: usize, element: usize, actor: usize, pos: Option<Po
     let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
     if record == 0 || !matches!(rd::<u8>(record + 4), 1 | 2 | 3) || pos.is_some() != (rd::<u8>(record + 4) == 1) {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 5 {
-            log(&format!("KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it keeps KH1's first placement"));
+        if super::log_on(super::LogCat::Effects) && N.fetch_add(1, Ordering::Relaxed) < 5 {
+            log!(Effects, "KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it keeps KH1's first placement");
         }
         return;
     }
@@ -2016,8 +2016,8 @@ unsafe fn disarm(base: usize, element: usize) {
     let record = if ok { super::pose::ptr(rd::<u32>(node + 0x30)) } else { 0 };
     if record == 0 || !matches!(rd::<u8>(record + 4), 1 | 2 | 3) {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 5 {
-            log(&format!("KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it stays bound"));
+        if super::log_on(super::LogCat::Effects) && N.fetch_add(1, Ordering::Relaxed) < 5 {
+            log!(Effects, "KH2 effects (native): element {element:#x}'s binding not found (node {node:#x}); it stays bound");
         }
         return;
     }
@@ -2095,7 +2095,7 @@ fn left_refresh() {
                 unsafe { stop(e, inst) };
             }
         }
-        log(&format!("KH2 effects (native): {} effects on the second Keyblade stopped (it is gone)", g.len()));
+        log!(Effects, "KH2 effects (native): {} effects on the second Keyblade stopped (it is gone)", g.len());
         g.clear();
     }
     LEFT_ANY.store(!g.is_empty(), Ordering::Relaxed);

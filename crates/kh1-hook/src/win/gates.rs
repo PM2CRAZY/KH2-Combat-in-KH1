@@ -97,7 +97,7 @@ unsafe extern "system" fn push_check(object: usize) {
         std::ptr::write_unaligned((object + 8) as *mut u32, 0);
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) % 120 == 0 {
-            log(&format!("a KH2 attack touched pushable {object:#x}: no push"));
+            log!(Takeover, "a KH2 attack touched pushable {object:#x}: no push");
         }
     }
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + PUSH_CHECK_RVA);
@@ -110,5 +110,5 @@ pub unsafe fn install() {
     let exits = hook::redirect_call(base + EXIT_CALL_RVA, base + QUEUE_RVA, queue as *const () as usize, "map face events (KH2 lunges)");
     let push = hook::redirect_call(base + PUSH_CALL_RVA, base + PUSH_CHECK_RVA, push_check as *const () as usize, "crate push check (KH2 attacks)");
     ON.store(exits, Ordering::Relaxed);
-    log(&format!("KH2 attacks: room exits {}, crate pushes {}", if exits { "kept out" } else { "not gated" }, if push { "kept out" } else { "not gated" }));
+    log!(Takeover, "KH2 attacks: room exits {}, crate pushes {}", if exits { "kept out" } else { "not gated" }, if push { "kept out" } else { "not gated" });
 }

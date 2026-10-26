@@ -188,7 +188,7 @@ pub fn spell_file(spell: u8, level: u8) -> Option<Arc<Vec<u8>>> {
             match r {
                 Ok(b) => Some(Arc::new(b)),
                 Err(e) => {
-                    log(&format!("KH2 spells: {name} not read ({e})"));
+                    log!(Magic, "KH2 spells: {name} not read ({e})");
                     None
                 }
             }
@@ -283,12 +283,12 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
                 Ok(file) => {
                     let i = magic.add_spell(file);
                     package.insert(i, super::kh2fx::WISDOM);
-                    log("Wisdom Form's script ready (its shots)");
+                    log!(Magic, "Wisdom Form's script ready (its shots)");
                     Some(i)
                 }
                 Err(e) => {
                     if !NO_WISD.swap(true, Ordering::Relaxed) {
-                        log(&format!("Wisdom Form fires no shots: {e}"));
+                        log!(Magic, "Wisdom Form fires no shots: {e}");
                     }
                     None
                 }
@@ -311,7 +311,7 @@ fn spell_index(rt: &mut Runtime, spell: u8, level: u8) -> Option<usize> {
             Some(i)
         }
         Err(e) => {
-            log(&format!("KH2 spells: {name} not usable ({e})"));
+            log!(Magic, "KH2 spells: {name} not usable ({e})");
             None
         }
     });
@@ -370,13 +370,13 @@ pub unsafe fn spell_chosen(actor: usize, spell: u8) -> bool {
     let cost = super::reflect::kh1_spell_cost(spell);
     if !affordable(actor, spell, cost) {
         super::reflect::menu_sound(4);
-        log(&format!("{} {} refused: can't pay {cost}", who(), SPELL_NAMES[spell as usize]));
+        log!(Magic, "{} {} refused: can't pay {cost}", who(), SPELL_NAMES[spell as usize]);
         return true;
     }
     if let Ok(mut w) = WAITING.lock() {
         *w = Some((spell, Instant::now(), super::takeover::KH2_MOTION.load(Ordering::Relaxed)));
     }
-    log(&format!("{} {} chosen (level {level}, cost {cost})", who(), SPELL_NAMES[spell as usize]));
+    log!(Magic, "{} {} chosen (level {level}, cost {cost})", who(), SPELL_NAMES[spell as usize]);
     true
 }
 
@@ -426,7 +426,7 @@ pub unsafe fn install() {
     let was = ((base + SCRIPT_STEP_STEAM) as u64).to_le_bytes();
     let ours = (script_step as *const () as usize as u64).to_le_bytes();
     if super::hook::patch(entry, &was, &ours, "KH1's script call 5 (KH1's spells timed to KH2's cast animation)") {
-        log(&format!("KH1's script call 5 at {entry:#x} is ours (KH1's spells on KH2's cast animation cast on its cast frame)"));
+        log!(Magic, "KH1's script call 5 at {entry:#x} is ours (KH1's spells on KH2's cast animation cast on its cast frame)");
     }
 }
 
@@ -479,7 +479,7 @@ unsafe extern "system" fn script_step(out: *mut f32) {
         t.frame = frame;
     }
     if t.run >= t.upto {
-        log(&format!("KH1's spell on KH2's cast animation: its script's clock back to KH1's after {:.0} frames", t.run));
+        log!(Magic, "KH1's spell on KH2's cast animation: its script's clock back to KH1's after {:.0} frames", t.run);
         *g = None;
         return;
     }
@@ -512,7 +512,7 @@ unsafe fn time_kh1_spell(actor: usize, spell: u8, request: u32, started: u64) {
         *g = Some(Timed { process, rate, run: 0.0, upto, frame: 0 });
     }
     let _ = actor;
-    log(&format!("KH1's spell {spell} on KH2's cast motion {motion} (request {request:#x}): KH1's script casts on KH2's cast frame {upto:.0} (its own {own:.0}; its clock x{rate:.3} until then)"));
+    log!(Magic, "KH1's spell {spell} on KH2's cast motion {motion} (request {request:#x}): KH1's script casts on KH2's cast frame {upto:.0} (its own {own:.0}; its clock x{rate:.3} until then)");
 }
 
 /// KH2's `spell` (Fire 0 .. Cure 3) is cast in KH1's own cast state now (`air`: KH1's air cast):
@@ -547,7 +547,7 @@ pub unsafe fn pick_cast(actor: usize, spell: u8, air: bool) {
         super::kh2slots::pick_cast(0x3D, finisher);
     }
     if finisher {
-        log(&format!("KH2 magic {}: the combo's finisher, KH2's finisher cast {m:?}", SPELL_NAMES[spell as usize]));
+        log!(Magic, "KH2 magic {}: the combo's finisher, KH2's finisher cast {m:?}", SPELL_NAMES[spell as usize]);
     }
 }
 
@@ -622,7 +622,7 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
     // set by the spell's hit, `spell_hit`. The tester, combo row selection m30 answer 1 (a).)
     wr(info + 0x50, 0u32);
     SPELL_HITS.store(true, Ordering::Relaxed);
-    log(&format!(
+    log!(Magic,
         "KH2 magic: the cast takes step {step} of KH1's combo{}",
         if plus {
             if chained { " (Finishing Plus's next finisher; another left)" } else { " (its finisher; Finishing Plus leaves another)" }
@@ -631,7 +631,7 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
         } else {
             ""
         }
-    ));
+    );
 }
 
 /// A cast took its step (`take_step`) and its hits now count as its "connected".
@@ -656,7 +656,7 @@ pub unsafe fn spell_hit(actor: usize, attack: usize) {
         return;
     }
     wr(info + 0x50, 1u32);
-    log(&format!("KH2 magic: the cast's spell connected (request {request:#x}): an Attack in its window goes on with the combo"));
+    log!(Magic, "KH2 magic: the cast's spell connected (request {request:#x}): an Attack in its window goes on with the combo");
 }
 
 /// KH1's control step with base Sora in its own states (`takeover::shared_control`, before it
@@ -674,7 +674,7 @@ pub unsafe fn cast_cut(actor: usize, jump: bool, square: bool) -> bool {
         return false;
     }
     wr(actor, rd::<u32>(actor) & !4);
-    log(&format!("KH2 cast cut by {} in its free state (KH2 motion {:?})", if jump { "the jump" } else { "Square" }, super::kh2slots::playing_motion(actor)));
+    log!(Magic, "KH2 cast cut by {} in its free state (KH2 motion {:?})", if jump { "the jump" } else { "Square" }, super::kh2slots::playing_motion(actor));
     true
 }
 
@@ -807,8 +807,8 @@ pub unsafe fn kh1_cast_window(actor: usize) {
         if inst >= 0x10000 {
             wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
             static F: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            if F.fetch_add(1, Ordering::Relaxed) < 20 {
-                log(&format!("Gravity / Stop as the combo's finisher: Finishing Plus window (request {:#x}, time {:.1}): KH1's combo window", rd::<u32>(actor + 0x164) & 0xFFFF, rd::<f32>(actor + 0x16C)));
+            if super::log_on(super::LogCat::Magic) && F.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Magic, "Gravity / Stop as the combo's finisher: Finishing Plus window (request {:#x}, time {:.1}): KH1's combo window", rd::<u32>(actor + 0x164) & 0xFFFF, rd::<f32>(actor + 0x16C));
             }
         }
         return;
@@ -831,8 +831,8 @@ pub unsafe fn kh1_cast_window(actor: usize) {
     }
     wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
     static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!("Magic Combo: KH2 Fire's combo window on KH1's cast (request {request:#x}, time {t:.1} of {len:.1}, from {:.0}%)", share * 100.0));
+    if super::log_on(super::LogCat::Magic) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Magic, "Magic Combo: KH2 Fire's combo window on KH1's cast (request {request:#x}, time {t:.1} of {len:.1}, from {:.0}%)", share * 100.0);
     }
 }
 
@@ -892,13 +892,13 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
     if v != 255 {
         super::kh2sound::voice(v as i16);
     }
-    log(&format!(
+    log!(Magic,
         "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}{}, cost {cost} units{}",
         SPELL_NAMES[spell as usize],
         if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
         kh1_anim.map_or(String::new(), |(_, f)| format!(", on KH1's cast animation: released at KH1's cast frame {f:.0}")),
         dropped.map_or(String::new(), |r| format!(", KH1's second part {r:#x} taken off its queue"))
-    ));
+    );
     true
 }
 
@@ -929,7 +929,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
         let _ = (when, WAIT_S, super::takeover::same_move(motion) && ch.magic_later());
         {
             *w = None;
-            log(&format!("{} {}: dropped, the move it was chosen in (motion {motion}) ended without a window for it", who(), SPELL_NAMES[spell as usize]));
+            log!(Magic, "{} {}: dropped, the move it was chosen in (motion {motion}) ended without a window for it", who(), SPELL_NAMES[spell as usize]);
         }
         return;
     }
@@ -944,7 +944,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     let pick = |v: i16| (v >= 0).then_some(v as u16);
     let motions = CastMotions { ground: pick(m.ground_motion).unwrap_or(56), air: pick(m.air_motion).unwrap_or(58), finisher: pick(m.finish_motion) };
     let Some(motion) = ch.cast(motions) else {
-        log(&format!("{} {}: no cast motion ({motions:?})", who(), SPELL_NAMES[spell as usize]));
+        log!(Magic, "{} {}: no cast motion ({motions:?})", who(), SPELL_NAMES[spell as usize]);
         return;
     };
     if super::form::in_form() {
@@ -960,7 +960,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     if v != 255 {
         super::kh2sound::voice(v as i16);
     }
-    log(&format!("{} {} (level {level}) cast: motion {motion}{}", who(), SPELL_NAMES[spell as usize], if finisher { " (combo finisher)" } else { "" }));
+    log!(Magic, "{} {} (level {level}) cast: motion {motion}{}", who(), SPELL_NAMES[spell as usize], if finisher { " (combo finisher)" } else { "" });
 }
 
 /// The form's own cast motion for a KH1 spell it has no KH2 version of (Gravity, Stop, Aero):
@@ -1060,7 +1060,7 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                     rt.casting = Some((f.motion, 0));
                     rt.kh1_clock = f.kh1_anim.map(|(request, at)| (request, 0.0, at, false));
                 }
-                Err(e) => log(&format!("{} {}'s script didn't start ({e})", who(), SPELL_NAMES[f.spell as usize])),
+                Err(e) => log!(Magic, "{} {}'s script didn't start ({e})", who(), SPELL_NAMES[f.spell as usize]),
             }
         }
     }
@@ -1076,7 +1076,7 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             rt.casting = None;
             rt.kh1_clock = None;
             rt.magic.release(SORA, &mut world);
-            log(&format!("KH2 magic on KH1's cast animation: released at frame {t:.0} ({})", if t >= at { format!("KH1's cast frame {at:.0}") } else { format!("its cast cut, request now {now:#x}") }));
+            log!(Magic, "KH2 magic on KH1's cast animation: released at frame {t:.0} ({})", if t >= at { format!("KH1's cast frame {at:.0}") } else { format!("its cast cut, request now {now:#x}") });
         } else {
             rt.kh1_clock = Some((request, t + frame_scale(), at, seen));
             let _ = m;
@@ -1105,11 +1105,11 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                     } else {
                         rt.fired += 1;
                         if rt.fired <= 30 {
-                            log(&format!("Wisdom shot (trigger {n}, motion {}), target {:?}", out.motion, world.target));
+                            log!(Magic, "Wisdom shot (trigger {n}, motion {}), target {:?}", out.motion, world.target);
                         }
                     }
                 }
-                Err(e) => log(&format!("Wisdom's script didn't take trigger {n}: {e}")),
+                Err(e) => log!(Magic, "Wisdom's script didn't take trigger {n}: {e}"),
             }
         }
     } else {
@@ -1128,18 +1128,18 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         match e {
             Event::Missing(n) => {
                 static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-                if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                    log(&format!("Wisdom's scripts used {n} (not modelled)"));
+                if super::log_on(super::LogCat::Magic) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log!(Magic, "Wisdom's scripts used {n} (not modelled)");
                 }
             }
-            Event::Error(e) => log(&format!("Wisdom's script error: {e}")),
+            Event::Error(e) => log!(Magic, "Wisdom's script error: {e}"),
             Event::Strike { attack, target } if target == SORA => {
                 let Some(a) = rt.magic.attack_mut(attack) else { continue };
                 let (atk, sub) = (a.atk, a.sub);
                 let Some(r) = row(battle, atk, sub, 0) else { continue };
                 if matches!(combat_core::AttackKind::from_id(r.kind), combat_core::AttackKind::Cure | combat_core::AttackKind::CureStrong) {
                     if let Some((from, to)) = heal(actor, r.power) {
-                        log(&format!("{} Cure: ATKP {atk} sub {sub} (power {}): HP {from} -> {to}", who(), r.power));
+                        log!(Magic, "{} Cure: ATKP {atk} sub {sub} (power {}): HP {from} -> {to}", who(), r.power);
                     }
                 }
             }
@@ -1222,7 +1222,7 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                 a.hit = true;
             }
             if rt.hits <= 60 {
-                log(&format!("{}: ATKP {atk} hit {foe:#x} -> damage {dealt:?}", who()));
+                log!(Magic, "{}: ATKP {atk} hit {foe:#x} -> damage {dealt:?}", who());
             }
         }
     }

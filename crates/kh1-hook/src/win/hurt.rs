@@ -71,9 +71,12 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-fn note(s: String) {
-    if LOGGED.fetch_add(1, Ordering::Relaxed) < 300 {
-        log(&s);
+fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    if super::log_on(super::LogCat::Combat) && LOGGED.fetch_add(1, Ordering::Relaxed) < 300 {
+        log!(Combat, "{}", s());
     }
 }
 
@@ -202,7 +205,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                     continue;
                 }
                 wr(r, rd::<u8>(r) | NO_EFFECT);
-                note(format!("Sora hit by {:#x} in KH1's states: KH2's invulnerability (the KH2 move KH1 plays), no effect (frame {frame})", pose::ptr(rd::<u32>(r + 4))));
+                note(|| format!("Sora hit by {:#x} in KH1's states: KH2's invulnerability (the KH2 move KH1 plays), no effect (frame {frame})", pose::ptr(rd::<u32>(r + 4))));
             }
         }
         // KH2's guard on the Keyblade in the KH2 move KH1 plays now (our guard slots,
@@ -237,7 +240,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                     // `+0x3C`, the record's `+0x2C` handle.)
                     let data = pose::ptr(rd::<u32>(r + 0x2C));
                     repel.get_or_insert((toward, (data > 0x10000).then(|| rd::<i32>(data + 0x3C))));
-                    note(format!("Sora hit by {from:#x} in KH1's states: KH2's guard on the Keyblade (ATKP {atk}, refact self {refact}), no effect (frame {frame})"));
+                    note(|| format!("Sora hit by {from:#x} in KH1's states: KH2's guard on the Keyblade (ATKP {atk}, refact self {refact}), no effect (frame {frame})"));
                 }
                 if let Some((t, priority)) = repel {
                     super::combomods::guard_repel(actor, t.to_array(), refact, priority);
@@ -259,7 +262,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
                     };
                     wr(r, rd::<u8>(r) | NO_EFFECT);
                     combat::clang([me[0] + toward.x * 40.0, me[1] - 60.0, me[2] + toward.y * 40.0]);
-                    note(format!("Sora hit by {from:#x} in KH1's states: KH2's guard on his body (ATKP {atk}, the KH2 move KH1 plays), no effect (frame {frame})"));
+                    note(|| format!("Sora hit by {from:#x} in KH1's states: KH2's guard on his body (ATKP {atk}, the KH2 move KH1 plays), no effect (frame {frame})"));
                 }
             }
         }
@@ -286,7 +289,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     let mut react: Option<(u32, glam::Vec2)> = None;
     for (&r, fate) in ready.iter().zip(&fates) {
         let Some((fate, toward)) = *fate else { continue };
-        note(format!(
+        note(|| format!(
             "Sora hit by {:#x}: damage {}, record kind {}, {fate:?} (frame {frame}, {reacting:?})",
             pose::ptr(rd::<u32>(r + 4)),
             rd::<i32>(r + 8),
@@ -318,7 +321,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     let down = stats > 0x10000 && (rd::<u8>(stats) & 4 != 0 || rd::<i32>(stats + 0x3C) < 1);
     let Some((kind, toward)) = react else { return r };
     if down {
-        note(format!("Sora is down (HP {})", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
+        note(|| format!("Sora is down (HP {})", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
         // (Out of a Drive Form at once, as KH2's KO: `form`.)
         super::form::knocked_out();
         return r;
@@ -327,7 +330,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     // doesn't restart KH2's reaction (nor anything restart a blow), so a crowd can't lock him in
     // place.
     if matches!(reacting, StateName::Blown) || (matches!(reacting, StateName::Hurt) && kind < 5) {
-        note(format!("KH2 reaction skipped (already {reacting:?}), HP {}", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
+        note(|| format!("KH2 reaction skipped (already {reacting:?}), HP {}", if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
         return r;
     }
     // KH1's knock-backs (4) and launches (5) knock him away as KH2's blows do (so Aerial
@@ -352,7 +355,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
     if !super::kh2sound::covers(0) {
         voice(actor, if big { 1 } else { 0 }, 0);
     }
-    note(format!("KH2 reaction: {} toward {:.2?}, HP {}", if blow { "blow" } else { "flinch" }, dir, if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
+    note(|| format!("KH2 reaction: {} toward {:.2?}, HP {}", if blow { "blow" } else { "flinch" }, dir, if stats > 0x10000 { rd::<i32>(stats + 0x3C) } else { 0 }));
     r
 }
 

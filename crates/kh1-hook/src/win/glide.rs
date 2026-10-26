@@ -123,10 +123,13 @@ pub(crate) unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-pub(crate) fn note(s: String) {
+pub(crate) fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Takeover) {
+        return;
+    }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 300 {
-        log(&format!("glide (native): {s}"));
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 300 {
+        log!(Takeover, "glide (native): {}", s());
     }
 }
 
@@ -192,12 +195,12 @@ unsafe fn party(base: usize) {
         if v & (KH1_GLIDE_BIT | KH1_SUPERGLIDE_BIT) == 0 {
             wr(p, v | KH1_GLIDE_BIT);
             if !PARTY_BIT.swap(true, Ordering::Relaxed) {
-                note("Donald and Goofy glide after him (KH1's Glide bit set for their AI: Sora has KH2's Glide)".to_string());
+                note(|| "Donald and Goofy glide after him (KH1's Glide bit set for their AI: Sora has KH2's Glide)".to_string());
             }
         }
     } else if PARTY_BIT.swap(false, Ordering::Relaxed) && v & KH1_GLIDE_BIT != 0 && !takeover::kh1_has_glide(base) {
         wr(p, v & !KH1_GLIDE_BIT);
-        note("Donald and Goofy's glide back to KH1's rule (Sora has no glide of KH2's here)".to_string());
+        note(|| "Donald and Goofy's glide back to KH1's rule (Sora has no glide of KH2's here)".to_string());
     }
 }
 
@@ -207,7 +210,7 @@ pub(crate) unsafe fn wrap(slots: &[(usize, &AtomicUsize, usize)]) {
         if now != mine && now > 0x10000 {
             orig.store(now, Ordering::Release);
             wr(slot, mine);
-            note(format!("KH1's state handler at {slot:#x} wrapped ({now:#x})"));
+            note(|| format!("KH1's state handler at {slot:#x} wrapped ({now:#x})"));
         }
     }
 }
@@ -237,7 +240,7 @@ unsafe extern "system" fn enter(actor: usize) -> usize {
     if let Ok(mut g) = RUN.lock() {
         if g.is_none() {
             *g = Some(begin(actor));
-            note("KH1 started its glide on him itself: KH2's glide from here".to_string());
+            note(|| "KH1 started its glide on him itself: KH2's glide from here".to_string());
         }
     }
     0
@@ -255,7 +258,7 @@ unsafe extern "system" fn exit(actor: usize) -> usize {
     wr(actor + LEVEL_FLAGS, rd::<u32>(actor + LEVEL_FLAGS) | 1);
     if let Ok(mut g) = RUN.lock() {
         if g.take().is_some() {
-            note(format!("out of KH1's glide state (now state {})", rd::<i32>(actor + 0x70)));
+            note(|| format!("out of KH1's glide state (now state {})", rd::<i32>(actor + 0x70)));
         }
     }
     0
@@ -314,7 +317,7 @@ pub unsafe fn start(actor: usize, why: &str) -> bool {
     }
     let request: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_RVA);
     request(actor, GLIDE_REQUEST, BLEND);
-    note(format!(
+    note(|| format!(
         "{why}: KH2's Glide LV{level} in KH1's state {STATE:#x}, {above:.0} above the floor (start height {:.0}), speed {speed:.1} ({})",
         g.glide_start_height,
         if launched { "KH2's stored launch speed" } else { "his speed as it was" }
@@ -414,11 +417,11 @@ fn note_bank(motion: u16, asked: u32, before: (u32, f32, f32, f32), tilt: f32) {
         return;
     }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 80 {
-        log(&format!(
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 80 {
+        log!(Takeover,
             "glide (native) motion: {was} -> {motion} (KH1 request {asked:#x}); KH1 before it: slot {}, time {:.1}, blend {:.1} (step {:.1}); stick tilt {tilt:.2}",
             before.0, before.1, before.2, before.3
-        ));
+        );
     }
 }
 
@@ -465,14 +468,14 @@ unsafe fn kh2_clock(actor: usize, dt: f32) {
         SKIP_ARMED.store(true, Ordering::Relaxed);
         if clock.is_finite() && clock < KH2_BLEND_START && (clock - step).abs() < 1e-3 && KH2_BLEND_START < len {
             wr(actor + BLEND_CLOCK, KH2_BLEND_START);
-            if N.fetch_add(1, Ordering::Relaxed) < 12 {
-                log(&format!("glide (native) motion {m}: KH1's blend clock {clock:.1} -> KH2's {KH2_BLEND_START:.1} (blend {len:.0})"));
+            if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 12 {
+                log!(Takeover, "glide (native) motion {m}: KH1's blend clock {clock:.1} -> KH2's {KH2_BLEND_START:.1} (blend {len:.0})");
             }
         }
     } else if SKIP_ARMED.swap(false, Ordering::Relaxed) && t == 0.0 && (step - 1.0).abs() < 1e-4 {
         wr(actor + SLOT_TIME, 1.0f32);
-        if N.fetch_add(1, Ordering::Relaxed) < 12 {
-            log(&format!("glide (native) motion {m}: blend over at time 0, KH2's skip of frame 1 (KH1's update makes it 2)"));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 12 {
+            log!(Takeover, "glide (native) motion {m}: blend over at time 0, KH2's skip of frame 1 (KH1's update makes it 2)");
         }
     }
 }
@@ -624,8 +627,8 @@ pub unsafe fn chain_source(inst: usize) {
     let chained = src == snap.old_tgt && tgt != snap.old_tgt && src_ch == snap.old_tgt_ch
         && super::pose::bone_count(inst).is_some_and(|n| n as usize == snap.bones);
     if !chained {
-        if N.fetch_add(1, Ordering::Relaxed) < 20 {
-            log(&format!("glide (native) motion {}: KH1 didn't chain its blend (its fresh path or no blend): its own start kept", snap.motion));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            log!(Takeover, "glide (native) motion {}: KH1 didn't chain its blend (its fresh path or no blend): its own start kept", snap.motion);
         }
         return;
     }
@@ -651,11 +654,11 @@ pub unsafe fn chain_source(inst: usize) {
             }
         }
     }
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!(
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Takeover,
             "glide (native) motion {} chained into KH1's blend at {:.2} of it: its source is the pose on screen ({} bones, {goals} IK goals), not the last motion's frame 0",
             snap.motion, snap.w, snap.bones
-        ));
+        );
     }
 }
 
@@ -692,9 +695,9 @@ unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
             if let Some(v) = r.launch {
                 r.vel = v;
             }
-            note("the stick takes the hover into the glide".to_string());
+            note(|| "the stick takes the hover into the glide".to_string());
         } else if was.is_none() {
-            note(if hover { "the stick neutral: the hover (208)".to_string() } else { "the glide (205)".to_string() });
+            note(|| if hover { "the stick neutral: the hover (208)".to_string() } else { "the glide (205)".to_string() });
         }
         r.hover = Some(hover);
         hover
@@ -764,7 +767,7 @@ pub unsafe fn end(actor: usize, why: &str) -> bool {
     let request: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_RVA);
     request(actor, FALL_REQUEST, BLEND);
     takeover::launch_used();
-    note(format!("{why}: KH2's fall at speed {speed:.1} ({:.0} above the floor; KH1 state now {})", rd::<f32>(actor + 0x3D4), rd::<i32>(actor + 0x70)));
+    note(|| format!("{why}: KH2's fall at speed {speed:.1} ({:.0} above the floor; KH1 state now {})", rd::<f32>(actor + 0x3D4), rd::<i32>(actor + 0x70)));
     true
 }
 
@@ -794,7 +797,7 @@ pub fn cast_out() -> bool {
 pub fn set_cast_out(on: bool) {
     CAST_OUT.store(1 + on as u8, Ordering::Relaxed);
     super::settings::save("glide_cast", if on { "on" } else { "off" });
-    log(&format!("Config menu: Cast from Glide {}", if on { "On" } else { "Off" }));
+    log!(Takeover, "Config menu: Cast from Glide {}", if on { "On" } else { "Off" });
 }
 
 /// After KH1's command step cast a spell out of KH2's glide (`combat::command_step`, the glide ended
@@ -837,7 +840,7 @@ pub unsafe fn carry(actor: usize) {
     wr(actor + 0x3C0, vel);
     static N: AtomicU32 = AtomicU32::new(0);
     if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        note(format!("KH2's glide velocity {:.1}/frame kept into the fall (KH1's carry from the stick had left {:.1})", vel[3], was[0].hypot(was[2])));
+        note(|| format!("KH2's glide velocity {:.1}/frame kept into the fall (KH1's carry from the stick had left {:.1})", vel[3], was[0].hypot(was[2])));
     }
 }
 
@@ -882,7 +885,7 @@ unsafe extern "system" fn transition(actor: usize, airborne: i32) -> u32 {
     let flight_room: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(base + FLIGHT_ROOM_STEAM);
     if rd::<u32>(base + WORLD_FLAGS_RVA) & NEVERLAND != 0 && flight_room(actor) as u32 != 0 {
         wr(actor, rd::<u32>(actor) & !ACTION_FLAG);
-        note("Neverland: KH1's flight from the glide".to_string());
+        note(|| "Neverland: KH1's flight from the glide".to_string());
         return FLIGHT_STATE;
     }
     let above = rd::<f32>(actor + 0x3D4);

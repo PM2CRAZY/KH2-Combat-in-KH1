@@ -155,10 +155,10 @@ fn report() {
         return;
     }
     if s.queues + s.passes + s.menu_hidden > 0 {
-        log(&format!(
+        log!(Animation,
             "KH2 model, last {REPORT_S:.0}s: Sora queued {}, held back {} (refused {:?}); world passes {}, ours drawn {}, held back but not drawn {}; pause menu copy held back {}, drawn {}; frame buffers {:?}; KH1 interpolated replays {}",
             s.queues, s.hidden, s.refused, s.passes, s.drawn, s.missed, s.menu_hidden, s.menu_drawn, s.frame_buffers, s.replays
-        ));
+        );
     }
     *s = Stats::default();
     *t = Instant::now();
@@ -190,7 +190,7 @@ fn replaying() -> bool {
 unsafe extern "system" fn replay(r: usize, n: i32, t: f32) {
     note_replay();
     if LAST_REPLAY_MS.swap(now_ms(), Ordering::Relaxed) == 0 {
-        log("KH2 model: KH1 replays frames with an interpolated camera here; KH1's model is drawn while it does");
+        log!(Animation, "KH2 model: KH1 replays frames with an interpolated camera here; KH1's model is drawn while it does");
     }
     let f: unsafe extern "system" fn(usize, i32, f32) = std::mem::transmute(ORIG_REPLAY.load(Ordering::Acquire));
     f(r, n, t)
@@ -255,7 +255,7 @@ pub fn load() {
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     BASE.store(base, Ordering::Relaxed);
     if !on() {
-        log("KH2 model: not loaded (Player Model off)");
+        log!(Animation, "KH2 model: not loaded (Player Model off)");
         return;
     }
     std::thread::spawn(|| {
@@ -269,30 +269,30 @@ pub fn load() {
             for (i, name) in ["P_EX100", "P_EX100_BTLF", "P_EX100_MAGF", "P_EX100_ULTF"].iter().enumerate() {
                 match read(&format!("obj/{name}.mdlx")).and_then(|b| Loaded::new(name, &b)) {
                     Ok(l) => {
-                        log(&format!(
+                        log!(Animation,
                             "KH2 model: {name}: {} bones, {} triangles in {} groups, {} textures",
                             l.model.bones.len(),
                             l.model.triangle_count(),
                             l.model.groups.len(),
                             l.model.textures.len()
-                        ));
+                        );
                         bodies[i] = Some(Arc::new(l));
                     }
-                    Err(e) => log(&format!("KH2 model: {e}")),
+                    Err(e) => log!(Animation, "KH2 model: {e}"),
                 }
             }
             if bodies[0].is_none() {
                 return Err("base Sora's model did not load".into());
             }
             let keyblades = keyblade_models(&read).unwrap_or_else(|e| {
-                log(&format!("KH2 model: Keyblade models not found ({e}); KH1's Keyblades kept"));
+                log!(Animation, "KH2 model: Keyblade models not found ({e}); KH1's Keyblades kept");
                 Vec::new()
             });
-            log(&format!("KH2 model: {} KH2 Keyblades named ({}), {source:?} files, in {:.1}s", keyblades.len(), keyblades.iter().map(|(n, m)| format!("{n} {m}")).collect::<Vec<_>>().join(", "), t.elapsed().as_secs_f32()));
+            log!(Animation, "KH2 model: {} KH2 Keyblades named ({}), {source:?} files, in {:.1}s", keyblades.len(), keyblades.iter().map(|(n, m)| format!("{n} {m}")).collect::<Vec<_>>().join(", "), t.elapsed().as_secs_f32());
             Ok(Library { install, source, bodies, keyblades, weapons: HashMap::new() })
         })();
         if let Err(e) = &r {
-            log(&format!("KH2 model: off ({e})"));
+            log!(Animation, "KH2 model: off ({e})");
         }
         let _ = LIB.set(r.map(Mutex::new));
     });
@@ -344,7 +344,7 @@ unsafe fn weapon_model(lib: &mut Library, item: u8) -> Option<Arc<Loaded>> {
             None => {
                 let name = super::equip::item_name(base, item)?;
                 let m = lib.keyblades.iter().find(|(n, _)| *n == name.to_lowercase()).map(|(_, m)| m.clone());
-                log(&format!("KH2 model: KH1's {name} ({item:#x}): {}", m.as_deref().map_or("no KH2 Keyblade of that name, KH1's drawn".to_string(), |m| format!("KH2's {m}"))));
+                log!(Animation, "KH2 model: KH1's {name} ({item:#x}): {}", m.as_deref().map_or("no KH2 Keyblade of that name, KH1's drawn".to_string(), |m| format!("KH2's {m}")));
                 names.push((item, m.clone()));
                 m
             }
@@ -361,11 +361,11 @@ unsafe fn weapon_model(lib: &mut Library, item: u8) -> Option<Arc<Loaded>> {
         let r = install.read_any(source, &format!("obj/{model}.mdlx")).map_err(|e| format!("{model}: {e}")).and_then(|b| Loaded::new(&model, &b));
         let w = match r {
             Ok(l) => {
-                log(&format!("KH2 model: {model}: {} bones, {} triangles, {} textures", l.model.bones.len(), l.model.triangle_count(), l.model.textures.len()));
+                log!(Animation, "KH2 model: {model}: {} bones, {} triangles, {} textures", l.model.bones.len(), l.model.triangle_count(), l.model.textures.len());
                 Weapon::Ready(Arc::new(l))
             }
             Err(e) => {
-                log(&format!("KH2 model: {e}; KH1's Keyblade drawn"));
+                log!(Animation, "KH2 model: {e}; KH1's Keyblade drawn");
                 Weapon::Failed
             }
         };
@@ -509,8 +509,8 @@ pub unsafe fn hide(params: usize) -> Option<Hide> {
     }
     stat(|s| s.hidden += 1);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 3 {
-        log(&format!("KH2 model: KH1's Sora held back (Keyblades ours {ours:#b})"));
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 3 {
+        log!(Animation, "KH2 model: KH1's Sora held back (Keyblades ours {ours:#b})");
     }
     Some(masked(params, ours & 1 != 0))
 }
@@ -551,8 +551,8 @@ pub unsafe fn hide_menu(instance: usize, params: usize) -> Option<Hide> {
     }
     stat(|s| s.menu_hidden += 1);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 3 {
-        log(&format!("KH2 model: the pause menu's Sora ({instance:#x}) held back"));
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 3 {
+        log!(Animation, "KH2 model: the pause menu's Sora ({instance:#x}) held back");
     }
     Some(masked(params, false))
 }
@@ -600,8 +600,8 @@ pub fn draw() {
         });
         if ok {
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 3 {
-                log(&format!("KH2 model: drew {}{}", if menu { "the pause menu's Sora " } else { "" }, prepared_names(track)));
+            if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 3 {
+                log!(Animation, "KH2 model: drew {}{}", if menu { "the pause menu's Sora " } else { "" }, prepared_names(track));
             }
         }
     }

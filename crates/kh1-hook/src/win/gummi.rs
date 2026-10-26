@@ -58,27 +58,27 @@ pub unsafe fn install() {
     SKIP.store(on, Ordering::Relaxed);
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let _ = hook::install(base + ROUTE_START_RVA, &ROUTE_START_PROLOGUE, route_start as *const () as usize, &ORIG_ROUTE_START, "Gummi route start (skip)");
-    log(&format!("Gummi routes: {}", if on { "skipped (gummi = skip)" } else { "flown (gummi = vanilla)" }));
+    log!(Menus, "Gummi routes: {}", if on { "skipped (gummi = skip)" } else { "flown (gummi = vanilla)" });
 }
 
 /// The Config menu's Gummi Routes row: skip (true) or fly them, kept in the ini.
 pub fn set(skip: bool) {
     SKIP.store(skip, Ordering::Relaxed);
     super::settings::save("gummi", if skip { "skip" } else { "vanilla" });
-    log(&format!("Config menu: Gummi routes {}", if skip { "skipped" } else { "flown" }));
+    log!(Menus, "Config menu: Gummi routes {}", if skip { "skipped" } else { "flown" });
 }
 
 unsafe extern "system" fn route_start(kind: i32, stage: i32) {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let dest = rd::<i32>(base + MAP_CHOICE_RVA);
     if SKIP.load(Ordering::Relaxed) && (0..WORLDS).contains(&dest) {
-        log(&format!("Gummi route (kind {kind}, stage {stage}) to world {dest:#x} skipped: its landing at once"));
+        log!(Menus, "Gummi route (kind {kind}, stage {stage}) to world {dest:#x} skipped: its landing at once");
         let landing: unsafe extern "system" fn(i32) -> i32 = std::mem::transmute(base + LANDING_RVA);
         let at = landing(dest);
         if at < 0 {
             // (No landing, or backed out of it: the world map again, at the destination, as
             // after a flight.)
-            log(&format!("Gummi skip: no landing in world {dest:#x} ({at}): the world map"));
+            log!(Menus, "Gummi skip: no landing in world {dest:#x} ({at}): the world map");
             wr(base + MAP_WORLD_RVA, dest);
             let map: unsafe extern "system" fn() = std::mem::transmute(base + WORLD_MAP_RVA);
             map();

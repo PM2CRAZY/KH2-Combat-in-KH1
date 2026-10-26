@@ -35,11 +35,11 @@ pub unsafe fn alloc_near(near: usize, size: usize) -> Option<usize> {
 pub unsafe fn install(target: usize, expect: &[u8], ours: usize, original: &std::sync::atomic::AtomicUsize, what: &str) -> Option<usize> {
     let have = std::slice::from_raw_parts(target as *const u8, expect.len());
     if have != expect {
-        log(&format!("hook {what} at {target:#x}: unexpected bytes {have:02x?}, not hooked"));
+        log!(General, "hook {what} at {target:#x}: unexpected bytes {have:02x?}, not hooked");
         return None;
     }
     let Some(mem) = alloc_near(target, 64) else {
-        log(&format!("hook {what}: no memory near {target:#x}"));
+        log!(General, "hook {what}: no memory near {target:#x}");
         return None;
     };
     // Trampoline: the moved bytes, then back to the rest of the function.
@@ -55,7 +55,7 @@ pub unsafe fn install(target: usize, expect: &[u8], ours: usize, original: &std:
     original.store(tramp, std::sync::atomic::Ordering::Release);
     let mut old = 0u32;
     if VirtualProtect(target as *mut c_void, expect.len(), 0x40, &mut old) == 0 {
-        log(&format!("hook {what}: VirtualProtect failed"));
+        log!(General, "hook {what}: VirtualProtect failed");
         return None;
     }
     let rel = (stub as i64 - (target as i64 + 5)) as i32;
@@ -68,7 +68,7 @@ pub unsafe fn install(target: usize, expect: &[u8], ours: usize, original: &std:
     let mut tmp = 0u32;
     VirtualProtect(target as *mut c_void, expect.len(), old, &mut tmp);
     FlushInstructionCache(GetCurrentProcess(), target as *const c_void, expect.len());
-    log(&format!("hooked {what} at {target:#x}"));
+    log!(General, "hooked {what} at {target:#x}");
     Some(tramp)
 }
 
@@ -76,12 +76,12 @@ pub unsafe fn install(target: usize, expect: &[u8], ours: usize, original: &std:
 pub unsafe fn patch(at: usize, expect: &[u8], new: &[u8], what: &str) -> bool {
     let have = std::slice::from_raw_parts(at as *const u8, expect.len());
     if have != expect {
-        log(&format!("patch {what} at {at:#x}: unexpected bytes {have:02x?}, not patched"));
+        log!(General, "patch {what} at {at:#x}: unexpected bytes {have:02x?}, not patched");
         return false;
     }
     let mut old = 0u32;
     if VirtualProtect(at as *mut c_void, new.len(), 0x40, &mut old) == 0 {
-        log(&format!("patch {what}: VirtualProtect failed"));
+        log!(General, "patch {what}: VirtualProtect failed");
         return false;
     }
     std::ptr::copy_nonoverlapping(new.as_ptr(), at as *mut u8, new.len());
@@ -95,17 +95,17 @@ pub unsafe fn patch(at: usize, expect: &[u8], new: &[u8], what: &str) -> bool {
 /// the executable. `ours` takes the same arguments; it calls `callee` itself for the original.
 pub unsafe fn redirect_call(site: usize, callee: usize, ours: usize, what: &str) -> bool {
     if *(site as *const u8) != 0xE8 {
-        log(&format!("redirect {what} at {site:#x}: not a call"));
+        log!(General, "redirect {what} at {site:#x}: not a call");
         return false;
     }
     let rel = std::ptr::read_unaligned((site + 1) as *const i32);
     let to = (site as i64 + 5 + rel as i64) as usize;
     if to != callee {
-        log(&format!("redirect {what} at {site:#x}: calls {to:#x}, not {callee:#x}"));
+        log!(General, "redirect {what} at {site:#x}: calls {to:#x}, not {callee:#x}");
         return false;
     }
     let Some(stub) = alloc_near(site, 16) else {
-        log(&format!("redirect {what}: no memory near {site:#x}"));
+        log!(General, "redirect {what}: no memory near {site:#x}");
         return false;
     };
     let go = abs_jmp(ours);

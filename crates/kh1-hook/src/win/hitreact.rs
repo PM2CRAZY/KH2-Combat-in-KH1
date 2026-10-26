@@ -85,7 +85,7 @@ pub fn numbers() -> Numbers {
 pub fn set_numbers(n: Numbers) {
     NUMBERS.store(1 + n as u8, Ordering::Relaxed);
     super::settings::save("knockback_numbers", n.key());
-    log(&format!("Config menu: Knock-back Numbers {:?}", n));
+    log!(Combat, "Config menu: Knock-back Numbers {:?}", n);
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -122,8 +122,11 @@ static PUSH: Mutex<Option<(f32, f32)>> = Mutex::new(None);
 static LOGGED: AtomicU32 = AtomicU32::new(0);
 
 fn note(s: impl FnOnce() -> String) {
-    if LOGGED.fetch_add(1, Ordering::Relaxed) < 60 {
-        log(&s());
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    if super::log_on(super::LogCat::Combat) && LOGGED.fetch_add(1, Ordering::Relaxed) < 60 {
+        log!(Combat, "{}", s());
     }
 }
 
@@ -298,7 +301,7 @@ pub fn medium_flinch() -> bool {
 pub fn set_medium_flinch(f: bool) {
     MEDIUM.store(1 + f as u8, Ordering::Relaxed);
     super::settings::save("medium_hits", if f { "flinch" } else { "blow" });
-    log(&format!("Config menu: Medium Hits {}", if f { "Flinch" } else { "Blow" }));
+    log!(Combat, "Config menu: Medium Hits {}", if f { "Flinch" } else { "Blow" });
 }
 
 /// Where the Medium Hits row applies (the tester, m3 question 3: "(b)", only on the ground and in

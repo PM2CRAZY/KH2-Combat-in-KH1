@@ -204,7 +204,7 @@ pub fn pad(buttons: u16) {
         if *at == CODE.len() {
             *at = 0;
             CODE_DONE.store(true, Ordering::Relaxed);
-            log("Final Form: the secret code entered");
+            log!(Forms, "Final Form: the secret code entered");
         }
     }
 }
@@ -249,7 +249,7 @@ unsafe fn heal_full(sora: usize) {
         let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
         let add: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + HP_ADD_RVA);
         add(sora, max - now);
-        log(&format!("Drive: HP {now} -> {} of {max}", rd::<i32>(stats + 0x3C)));
+        log!(Forms, "Drive: HP {now} -> {} of {max}", rd::<i32>(stats + 0x3C));
     }
 }
 
@@ -436,11 +436,11 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
     // change him now, as for the list: `accept_now`).
     if CODE_DONE.swap(false, Ordering::Relaxed) {
         if d.form.is_some() || d.change.is_some() || !ch.can_change_form() {
-            log("Final Form: not now (in a form, changing, or mid-move)");
+            log!(Forms, "Final Form: not now (in a form, changing, or mid-move)");
         } else {
             match choose(actor, Kind::Final) {
-                Ok(_) => log("Final Form: asked for by the secret code"),
-                Err(e) => log(&format!("Final Form: refused ({e})")),
+                Ok(_) => log!(Forms, "Final Form: asked for by the secret code"),
+                Err(e) => log!(Forms, "Final Form: refused ({e})"),
             }
         }
     }
@@ -449,12 +449,12 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
             let Some(kind) = Kind::from_code(WANT.load(Ordering::Relaxed)) else { return };
             // (Taken on the frame it was pressed in, `accept_now`; in the air too, held there.)
             if mp(actor) <= COST_MP {
-                log(&format!("Drive: MP {} short of {COST_MP} by now", mp(actor)));
+                log!(Forms, "Drive: MP {} short of {COST_MP} by now", mp(actor));
                 return;
             }
             let air = ch.airborne();
             if !ch.play_held(DRIVE_MOTION, true) {
-                log("Drive: Sora has no Drive motion (52)");
+                log!(Forms, "Drive: Sora has no Drive motion (52)");
                 return;
             }
             let before = mp(actor);
@@ -466,7 +466,7 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
             d.change = Some(0);
             d.changing_to = Some(kind);
             CHANGING.store(true, Ordering::Relaxed);
-            log(&format!("Drive: {} (MP {before} -> {}), Sora's Drive motion{}", kind.name(), mp(actor), if air { ", held in the air" } else { "" }));
+            log!(Forms, "Drive: {} (MP {before} -> {}), Sora's Drive motion{}", kind.name(), mp(actor), if air { ", held in the air" } else { "" });
         }
         2 if d.form.is_some() => {
             revert(d, ch, anim, kh2, "the Revert command");
@@ -520,7 +520,7 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
         Kind::Wisdom => "Quick Run",
         Kind::Final => "Glide",
     };
-    log(&format!("{} (Lv{LEVEL}): yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), {growth} MAX", kind.name()));
+    log!(Forms, "{} (Lv{LEVEL}): yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), {growth} MAX", kind.name());
 }
 
 /// Back to Sora: what played is cut, he is free with his movement (the user: on the ground
@@ -544,7 +544,7 @@ unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
         super::kh2fx::event(REVERT_FX, EventKind::Effect(el));
         super::kh2sound::event(REVERT_FX, EventKind::Effect(el));
     }
-    log(&format!("Revert ({why}){}", if ch.airborne() { ", falling" } else { "" }));
+    log!(Forms, "Revert ({why}){}", if ch.airborne() { ", falling" } else { "" });
 }
 
 /// After KH1's menu set Sora's abilities (`menu::Growth`): in the form, they are his own for
@@ -603,13 +603,13 @@ pub unsafe fn after_step(d: &mut Drive, actor: usize, battle: bool) {
             super::reflect::pay_mp(actor, 1);
             if mp(actor) != before.0 && f.logged_s < 40 {
                 f.logged_s += 1;
-                log(&format!("{}: a blue bar broken into yellow: MP {} -> {} (yellow {} -> {})", f.kind.name(), before.0, mp(actor), before.1, yellow(actor)));
+                log!(Forms, "{}: a blue bar broken into yellow: MP {} -> {} (yellow {} -> {})", f.kind.name(), before.0, mp(actor), before.1, yellow(actor));
             }
         }
     }
     if !super::reflect::has_mp(actor, 1) && !d.revert {
         d.revert = true;
-        log(&format!("{}: out of MP", f.kind.name()));
+        log!(Forms, "{}: out of MP", f.kind.name());
     }
 }
 

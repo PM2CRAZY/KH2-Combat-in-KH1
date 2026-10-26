@@ -146,7 +146,7 @@ pub fn start() {
     // working for some people".)
     let moves = super::settings::get().kh2_sounds.is_some();
     if !moves {
-        log("KH2 sounds: Sora's moves keep KH1's (kh2_sounds = off); Reflect's and the forms' still load");
+        log!(Sound, "KH2 sounds: Sora's moves keep KH1's (kh2_sounds = off); Reflect's and the forms' still load");
     }
     std::thread::spawn(move || {
         let t = std::time::Instant::now();
@@ -155,7 +155,7 @@ pub fn start() {
                 break k;
             }
             if t.elapsed().as_secs() > 300 {
-                log("KH2 sounds: KH2 Sora never loaded");
+                log!(Sound, "KH2 sounds: KH2 Sora never loaded");
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
@@ -192,19 +192,19 @@ pub fn start() {
         events.extend(super::form::REVERT_ELEMENTS.map(character_core::EventKind::Effect));
         match load(&events, &spell) {
             Ok(map) => {
-                log(&format!(
+                log!(Sound,
                     "KH2 sounds: {} effect, {} other, {} voices, {} of Reflect's loaded in {:.1} s",
                     map.elements.len(),
                     map.sounds.len(),
                     map.voices.len(),
                     map.spell_elements.len(),
                     t.elapsed().as_secs_f32()
-                ));
+                );
                 if let Ok(mut g) = LOADED.lock() {
                     *g = Some(map);
                 }
             }
-            Err(e) => log(&format!("KH2 sounds: not loaded ({e})")),
+            Err(e) => log!(Sound, "KH2 sounds: not loaded ({e})"),
         }
     });
 }
@@ -217,7 +217,7 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
     // (Sora's effect package names his elements' sounds; without it the rest still loads.)
     let pack = install.read_any(src, "obj/P_EX100.a.us");
     if let Err(e) = &pack {
-        log(&format!("KH2 sounds: Sora's effect package not read ({e}): his elements have no sounds"));
+        log!(Sound, "KH2 sounds: Sora's effect package not read ({e}): his elements have no sounds");
     }
     let pack = pack.unwrap_or_default();
     let bar = kh2_formats::bar::Bar::parse(&pack).ok();
@@ -235,7 +235,7 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
         match *e {
             EventKind::Effect(el) => match pax.as_ref().and_then(|p| p.element(el as u16)) {
                 Some(p) if p.sound >= 0 => wants.push((p.sound as u32, Want::Element(el))),
-                _ => log(&format!("KH2 sounds: effect element {el} has no sound")),
+                _ => log!(Sound, "KH2 sounds: effect element {el} has no sound"),
             },
             EventKind::Sound(id) => {
                 let id = if (500_000..501_000).contains(&id) { id - 500_000 + WEAPON_BANK * 1000 } else { id };
@@ -276,13 +276,13 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
                 let (bus, tracks, size) = (if (4..=8).contains(&kh2_bus) { format!("{kh2_bus} -> {EFFECTS_BUS}") } else { kh2_bus.to_string() }, c.tracks, c.bytes.len());
                 let no = super::kh1bank::add(c.bytes, what.clone());
                 match no {
-                    Some(no) => log(&format!("KH1 banks: {what} -> se{no} ({size} bytes, bus {bus}, {tracks} track(s), {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms")))),
-                    None => log(&format!("KH1 banks: {what} not added (KH1's sound engine is used on the Steam build only)")),
+                    Some(no) => log!(Sound, "KH1 banks: {what} -> se{no} ({size} bytes, bus {bus}, {tracks} track(s), {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms"))),
+                    None => log!(Sound, "KH1 banks: {what} not added (KH1's sound engine is used on the Steam build only)"),
                 }
                 no.map(|kh1| Sound { kh1, ms })
             }
             Err(e) => {
-                log(&format!("KH1 banks: {what} not cut ({e})"));
+                log!(Sound, "KH1 banks: {what} not cut ({e})");
                 None
             }
         };
@@ -299,7 +299,7 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
                     banks.insert(bank, b);
                 }
                 Err(e) => {
-                    log(&format!("KH2 sounds: bank {bank}: {e}"));
+                    log!(Sound, "KH2 sounds: bank {bank}: {e}");
                     continue;
                 }
             }
@@ -334,7 +334,7 @@ fn load(events: &[character_core::EventKind], spell: &[(u8, u16, i32)]) -> Resul
             // (A clip KH1's voice create could play: its sound record has audio, the same test
             // the cut makes.)
             let clips: Vec<u8> = choices.iter().filter(|(c, _)| *c >= 0).map(|&(c, _)| c as u8).filter(|&c| kh2_formats::scd_cut::cut(&voice, c as usize, 0).is_ok()).collect();
-            log(&format!("KH2 voice {v}: priority {priority}, (clip, chance) {choices:?} ({} playable)", clips.len()));
+            log!(Sound, "KH2 voice {v}: priority {priority}, (clip, chance) {choices:?} ({} playable)", clips.len());
             if !clips.is_empty() {
                 out.voices.insert(v, VoiceSet { priority: priority as i32, choices, clips });
             }
@@ -401,7 +401,7 @@ pub unsafe fn holds_back(actor: usize, from: usize) -> bool {
     let held = super::kh2slots::plays_kh2(request as usize);
     static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if held && N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
-        log(&format!("KH2 quotes: KH1's swing voice of row {row} (request {request:#x}) left out; the KH2 motion's quote takes its place"));
+        log!(Sound, "KH2 quotes: KH1's swing voice of row {row} (request {request:#x}) left out; the KH2 motion's quote takes its place");
     }
     held
 }
@@ -464,7 +464,7 @@ pub unsafe fn spell_element(level: u8, el: u16) {
 fn note_play(what: impl FnOnce() -> String) {
     static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 40 {
-        log(&format!("KH2 sound played: {}", what()));
+        log!(Sound, "KH2 sound played: {}", what());
     }
 }
 
@@ -518,7 +518,7 @@ unsafe fn play(s: &Sound) {
 fn dropped(what: impl FnOnce() -> String) {
     static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
-        log(&format!("KH2 sound not played: {}", what()));
+        log!(Sound, "KH2 sound not played: {}", what());
     }
 }
 

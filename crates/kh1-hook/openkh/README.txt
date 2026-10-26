@@ -37,14 +37,16 @@ INSTALL
 6. Load a save. That's it.
 
 The first launch makes a settings file, kh1-kh2.ini, in your game folder (the
-one with "KINGDOM HEARTS FINAL MIX.exe"), and a log, kh1-kh2.log. Settings are
-read when the game starts.
+one with "KINGDOM HEARTS FINAL MIX.exe"). Settings are read when the game starts.
+The log, kh1-kh2.log, is only written with debug_menu = on in the ini (read at
+start), and then only for the log categories turned on in the debug menu's
+Logs page (or the ini's log_* lines); all are off by default.
 
 UPDATING: install the new zip the same way, then Build again (an old build
 left in OpenKH's output folder keeps loading otherwise). To check which
 version is running, open Config in the game and move to the "Camera Style"
 row: its help box says "KH2 Combat version s154" (or whichever you have). The
-first line of kh1-kh2.log says it too.
+first line of kh1-kh2.log says it too (with the Crash & Version log on).
 
 
 CONTROLS (what changes)
@@ -106,8 +108,10 @@ the mod, take them back out so the save is plain KH1 again:
 
 KNOWN LIMITS
 ------------
-- Work in progress: if something looks wrong, the game folder's kh1-kh2.log
-  says what the mod was doing; please include it with any bug report.
+- Work in progress: if something looks wrong, set debug_menu = on in
+  kh1-kh2.ini, turn on the logs you need in the debug menu's Logs page (L1 + R1
+  + Triangle), and the game folder's kh1-kh2.log says what the mod was doing;
+  please include it with any bug report.
 - Other mods that change KH1's own code (not just its files) may conflict.
 
 

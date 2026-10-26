@@ -37,11 +37,11 @@ pub unsafe fn keyblade() -> Option<u8> {
     }
     if CHOSEN.swap(want as u32, Ordering::Relaxed) != want as u32 {
         let name = pick.and_then(|k| super::equip::item_name(base, k)).unwrap_or_else(|| "none".into());
-        log(&format!(
+        log!(Forms,
             "Valor's Keyblade: {name} ({want:#x}; Sora's {:?}, Keyblades owned {:02x?})",
             super::equip::sora_weapon(base),
             super::equip::owned_keyblades(base)
-        ));
+        );
     }
     pick
 }
@@ -52,12 +52,12 @@ pub const FINAL_KEYBLADE: u8 = 0x51;
 /// Sora became Valor (or Final): his second Keyblade comes out.
 pub unsafe fn started() {
     if super::form::in_final() {
-        log("Final Form: second Keyblade the Kingdom Key (0x51)");
+        log!(Forms, "Final Form: second Keyblade the Kingdom Key (0x51)");
         super::leftblade::show(Some(FINAL_KEYBLADE));
         return;
     }
     let k = keyblade();
-    log(&format!("Valor Form: second Keyblade {:?}", k.map(|k| format!("{k:#x}"))));
+    log!(Forms, "Valor Form: second Keyblade {:?}", k.map(|k| format!("{k:#x}")));
     super::leftblade::show(k);
 }
 

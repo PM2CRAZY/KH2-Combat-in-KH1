@@ -110,9 +110,12 @@ static LOGS: AtomicU32 = AtomicU32::new(0);
 /// Ours have been put in once (a later shortfall is KH1's reset).
 static SEEN: AtomicBool = AtomicBool::new(false);
 
-fn note(line: String) {
-    if LOGS.fetch_add(1, Ordering::Relaxed) < 200 {
-        log(&line);
+fn note(line: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Sound) {
+        return;
+    }
+    if super::log_on(super::LogCat::Sound) && LOGS.fetch_add(1, Ordering::Relaxed) < 200 {
+        log!(Sound, "{}", line());
     }
 }
 
@@ -159,7 +162,7 @@ unsafe fn ready(base: usize) -> bool {
                 && [STOP_STEAM, PLAYING_STEAM].iter().all(|&f| starts_with(base + f, &[0x44, 0x8B, 0x0D]) && starts_with(base + f + 7, &[0x45, 0x33, 0xC0]))
                 && rd::<usize>(base + ALIGNED_MALLOC_IAT_STEAM) > 0x10000;
             if !ok {
-                log("KH1 banks: KH1's bank registration isn't where the Steam build has it; KH2's sounds won't play");
+                log!(Sound, "KH1 banks: KH1's bank registration isn't where the Steam build has it; KH2's sounds won't play");
             }
             CHECKED.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
             ok
@@ -227,7 +230,7 @@ unsafe fn register(base: usize, b: &mut Bank) -> bool {
     } {
         // (KH1's engine changed more in it than its load writes: not given to it again.)
         b.refused = true;
-        note(format!("KH1 banks: se{} ({}) changed while KH1 had it (not only what its load writes); left out", b.no, b.what));
+        note(|| format!("KH1 banks: se{} ({}) changed while KH1 had it (not only what its load writes); left out", b.no, b.what));
         return false;
     }
     let data = b.data as *mut u8;
@@ -245,12 +248,12 @@ unsafe fn register(base: usize, b: &mut Bank) -> bool {
     if !took {
         // (Not taken: KH1's sound system not up, or the same entry already there. The buffer
         // is still ours.)
-        note(format!("KH1 banks: se{} ({}) not taken (handle {handle:#x})", b.no, b.what));
+        note(|| format!("KH1 banks: se{} ({}) not taken (handle {handle:#x})", b.no, b.what));
     } else if handle == 0 {
         // (In the list, but KH1's engine didn't load it: KH1 releases the entry with the rest;
         // it isn't played.)
         b.refused = true;
-        note(format!("KH1 banks: se{} ({}): KH1's engine didn't load it (handle 0); it won't play", b.no, b.what));
+        note(|| format!("KH1 banks: se{} ({}): KH1's engine didn't load it (handle 0); it won't play", b.no, b.what));
     }
     took
 }
@@ -313,7 +316,7 @@ unsafe fn put_in(base: usize, banks: &mut [Bank]) {
     }
     let now = banks.iter().filter(|b| b.present).count();
     if now < was || was == 0 && now < banks.len() && SEEN.load(Ordering::Relaxed) {
-        note(format!("KH1 banks: KH1 released banks ({now} of our {} still in its list); putting the rest back", banks.len()));
+        note(|| format!("KH1 banks: KH1 released banks ({now} of our {} still in its list); putting the rest back", banks.len()));
     }
     let mut put = 0;
     let mut full = false;
@@ -336,7 +339,7 @@ unsafe fn put_in(base: usize, banks: &mut [Bank]) {
     }
     let missing = banks.iter().filter(|b| !b.present && !b.refused).count();
     if put > 0 && (missing == 0 || full) || full && put == 0 {
-        note(format!(
+        note(|| format!(
             "KH1 banks: {} of {} KH2 sound banks in KH1's engine ({} bank slots left, {} in use{})",
             banks.len() - missing,
             banks.len(),
@@ -408,8 +411,8 @@ pub unsafe fn play(no: i32, ms: Option<u32>) -> bool {
     queue(no, id, sora + 0x10, 0);
     if !queue_has(base, no, id) {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH1 banks: KH1's effect queue is full; se{no} isn't played"));
+        if super::log_on(super::LogCat::Sound) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log!(Sound, "KH1 banks: KH1's effect queue is full; se{no} isn't played");
         }
         return false;
     }
@@ -421,7 +424,7 @@ pub unsafe fn play(no: i32, ms: Option<u32>) -> bool {
     }
     static N: AtomicU32 = AtomicU32::new(0);
     if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        note(format!("KH1 banks: se{no} queued in KH1's effect queue (id {id:#x}, {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms"))));
+        note(|| format!("KH1 banks: se{no} queued in KH1's effect queue (id {id:#x}, {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms"))));
     }
     true
 }
@@ -588,7 +591,7 @@ unsafe fn tend_voice(base: usize) {
     let Some(bytes) = v.as_ref() else { return };
     // A bank number no voice bank of KH1's has now (the channel keeps it as an i8).
     let Some(pick) = (104..=127).rev().find(|b| !used.contains(b)) else {
-        note("KH1 banks: no free voice bank number; KH2's battle quotes won't play".into());
+        note(|| "KH1 banks: no free voice bank number; KH2's battle quotes won't play".into());
         return;
     };
     // (Its fourth argument, r9, is the entry's name: KH1 keeps it in r15 and passes it as the
@@ -605,10 +608,10 @@ unsafe fn tend_voice(base: usize) {
     if head >= 0x10000 && rd::<i32>(head + 0x10) == pick && rd::<u32>(head + 0x18) != 0 {
         VOICE_NO.store(pick, Ordering::Relaxed);
         VOICE_DATA.store(rd(head + 0x20), Ordering::Relaxed);
-        note(format!("KH1 banks: KH2's battle voice bank in KH1's voice list as bank {pick} ({} bytes)", bytes.len()));
+        note(|| format!("KH1 banks: KH2's battle voice bank in KH1's voice list as bank {pick} ({} bytes)", bytes.len()));
     } else {
         VOICE_NO.store(-1, Ordering::Relaxed);
-        note(format!("KH1 banks: KH2's battle voice bank not taken as bank {pick}; quotes won't play"));
+        note(|| format!("KH1 banks: KH2's battle voice bank not taken as bank {pick}; quotes won't play"));
     }
     VOICE_COUNT.store(rd(base + VOICE_COUNT_STEAM), Ordering::Relaxed);
 }
@@ -665,7 +668,7 @@ pub unsafe fn voice(clip: u8, priority: i32) -> bool {
         let (last, playing) = (LAST_PRIORITY.load(Ordering::Relaxed), rd::<i8>(c + 3));
         if priority < last {
             if CUTS.fetch_add(1, Ordering::Relaxed) < 40 {
-                note(format!("KH2 quotes: clip {clip} (priority {priority}) dropped: KH2's rule keeps clip {playing} (priority {last}) playing"));
+                note(|| format!("KH2 quotes: clip {clip} (priority {priority}) dropped: KH2's rule keeps clip {playing} (priority {last}) playing"));
             }
             return true;
         }
@@ -673,12 +676,12 @@ pub unsafe fn voice(clip: u8, priority: i32) -> bool {
             Some(n) => {
                 std::ptr::write_unaligned(c as *mut u8, 0);
                 if CUTS.fetch_add(1, Ordering::Relaxed) < 40 {
-                    note(format!("KH2 quotes: clip {playing} (priority {last}, channel state {state}) cut for clip {clip} (priority {priority}), {n} KH1 voice record(s) stopped"));
+                    note(|| format!("KH2 quotes: clip {playing} (priority {last}, channel state {state}) cut for clip {clip} (priority {priority}), {n} KH1 voice record(s) stopped"));
                 }
             }
             None => {
                 if CUTS.fetch_add(1, Ordering::Relaxed) < 40 {
-                    note("KH2 quotes: KH1's sound stop isn't the one expected; KH1's rule keeps the line".into());
+                    note(|| "KH2 quotes: KH1's sound stop isn't the one expected; KH1's rule keeps the line".into());
                 }
             }
         }
@@ -692,7 +695,7 @@ pub unsafe fn voice(clip: u8, priority: i32) -> bool {
     }
     static N: AtomicU32 = AtomicU32::new(0);
     if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        note(format!("KH1 banks: KH2 quote clip {clip} asked of KH1's voice channel {ch} at priority {priority}: {}", if took { "taken" } else { "KH1 kept the line playing" }));
+        note(|| format!("KH1 banks: KH2 quote clip {clip} asked of KH1's voice channel {ch} at priority {priority}: {}", if took { "taken" } else { "KH1 kept the line playing" }));
     }
     true
 }

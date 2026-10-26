@@ -71,10 +71,13 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-fn note(s: String) {
+fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 300 {
-        log(&s);
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 300 {
+        log!(Combat, "{}", s());
     }
 }
 
@@ -147,7 +150,7 @@ unsafe fn ours_combo_run(actor: usize, n: usize, launch: Option<character_core::
             *g = request_of(r).map(|m| (1, m, false, true));
         }
         FINISHERS.store(0, Ordering::Relaxed);
-        note(format!("KH2's hop {} (motion {}) on KH1's air row {r} of its own (request {:#x}) out of KH1's air state, {:.0} high, {:.1}/frame sideways", o.name, o.motion, k::request(n), l.height, l.velocity[0].hypot(l.velocity[1])));
+        note(|| format!("KH2's hop {} (motion {}) on KH1's air row {r} of its own (request {:#x}) out of KH1's air state, {:.0} high, {:.1}/frame sideways", o.name, o.motion, k::request(n), l.height, l.velocity[0].hypot(l.velocity[1])));
         return Run::Hop(r, l);
     }
     ours_run(n, launch, air, count, request_of)
@@ -168,7 +171,7 @@ fn ours_run(n: usize, launch: Option<character_core::Launch>, air: bool, count: 
     if !o.next_finisher {
         FINISHERS.store(o.kind.finisher() as u8, Ordering::Relaxed);
     }
-    note(format!("KH2's {} (row {}, motion {}) on KH1's row {r} of its own (request {:#x}){}", o.name, o.kh2_row, o.motion, super::kh1rows::request(n), if o.rises && !air { ", out of KH1's air state" } else { "" }));
+    note(|| format!("KH2's {} (row {}, motion {}) on KH1's row {r} of its own (request {:#x}){}", o.name, o.kh2_row, o.motion, super::kh1rows::request(n), if o.rises && !air { ", out of KH1's air state" } else { "" }));
     if o.rises && !air {
         let gravity = pose::kh2().map_or(0.0, |k| k.character.params.gravity);
         return Run::Hop(r, character_core::Launch { height: 0.0, velocity: [0.0; 2], gravity });
@@ -334,8 +337,8 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
     }
     wr(inst + 0x14, rd::<u32>(inst + 0x14) | KH1_COMBO_WINDOW);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!("Finishing Plus window on KH1's own finisher (request {:#x}, time {t:.1} of {len:.1}, KH2 {from}'s frame {at}): KH1's combo window", request & 0xFFFF));
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Combat, "Finishing Plus window on KH1's own finisher (request {:#x}, time {t:.1} of {len:.1}, KH2 {from}'s frame {at}): KH1's combo window", request & 0xFFFF);
     }
 }
 
@@ -449,7 +452,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         // (The last finisher already ran: nothing after it until it ends, as at the KH1 setting
         // and in KH2, `finisher_chain_open`; not a new combo out of the finisher.)
         if !finisher_chain_open() {
-            note(format!("Attack in KH1's finisher (count {n}, finisher {finishers}): no next finisher left (Finishing Plus): no attack"));
+            note(|| format!("Attack in KH1's finisher (count {n}, finisher {finishers}): no next finisher left (Finishing Plus): no attack"));
             return Run::Nothing;
         }
         let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
@@ -458,7 +461,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             None => takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()),
         };
         if let Some((next, _, _, launch)) = chained {
-            note(format!("Attack in KH1's finisher (count {n}, finisher {finishers}): KH2's next finisher, row {} motion {} (Finishing Plus)", next.id, next.motion));
+            note(|| format!("Attack in KH1's finisher (count {n}, finisher {finishers}): KH2's next finisher, row {} motion {} (Finishing Plus)", next.id, next.motion));
             if let Some(run) = next_finisher(actor, &next, launch, air, n, playing, request_of) {
                 FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
                 return run;
@@ -466,7 +469,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             // Its slot didn't build at load (a row of ours is always free for it otherwise,
             // `next_finisher`): no attack, no fallback (the tester, combo row selection after m26,
             // answer 1: "remove the fall back").
-            note(format!("KH2's next finisher row {} motion {}: its KH1 row of its own isn't built: no attack", next.id, next.motion));
+            note(|| format!("KH2's next finisher row {} motion {}: its KH1 row of its own isn't built: no attack", next.id, next.motion));
             return Run::Nothing;
         }
     }
@@ -532,7 +535,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
             } else {
                 own()
             };
-            note(format!(
+            note(|| format!(
                 "Attack in KH1's finisher at the KH1 setting (count {count}, finisher {finishers}, Finishing Plus): {}",
                 match (&run, kh2_next) {
                     (None, Some((r, ..))) if finisher_chain_open() => format!("KH2's finisher row {} motion {}: its KH1 row of its own isn't built: no attack", r.id, r.motion),
@@ -555,7 +558,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         // (KH1's picker offers only KH2's rows that have a KH1 row, `kh1_plays`: a pick here with
         // none is a hop whose KH2 launch didn't work out, or a row lost since.)
         if let Some((r, ..)) = pick.as_ref() {
-            note(format!("KH1's {} row picker took KH2's row {} motion {}, but no KH1 row of its own plays it now: no attack", if air { "aerial" } else { "ground" }, r.id, r.motion));
+            note(|| format!("KH1's {} row picker took KH2's row {} motion {}, but no KH1 row of its own plays it now: no attack", if air { "aerial" } else { "ground" }, r.id, r.motion));
             return Run::Nothing;
         }
     } else if let Some(n) = pick.as_ref().and_then(|(r, ..)| combo_row(r, air, launch)) {
@@ -563,7 +566,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         // after m25, answer 3 (a)), the row KH1's picker returned for it (`kh2_pick_in_picker`):
         // KH1's row runner runs it, KH1's plain rows not re-pointed at it.
         let (r, len, _) = pick.as_ref().unwrap();
-        note(format!(
+        note(|| format!(
             "KH1's {} combo, swing {count} of {kh1_len}: KH2's row {} motion {} (ability {}, finisher {}, KH2's length {len}) on KH1's row {} of its own",
             if air { "aerial" } else { "ground" },
             r.id,
@@ -576,7 +579,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     }
     let why = if kh1_style { None } else { pick.as_ref().filter(|(r, ..)| !combo.serves(r)).and_then(|(r, len, neg)| ability_move(r, *len, *neg, count, kh1_len)) };
     if !kh1_style {
-        note(format!(
+        note(|| format!(
             "KH1's {} combo, swing {count} of {kh1_len}: KH2 would take {}{}",
             if air { "aerial" } else { "ground" },
             pick.as_ref().map_or("nothing".to_string(), |(r, len, _)| format!("row {} motion {} (ability {}, finisher {}, KH2's length {len})", r.id, r.motion, r.ability, r.is_finisher())),
@@ -589,7 +592,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // request's default KH2 swing). With our rows not built at all (`kh1_slots = off`) KH2's plain
     // picks keep the old path below; an ability's move none.
     if let Some((r, ..)) = pick.as_ref().filter(|_| !kh1_style && (own_rows() || why.is_some())) {
-        note(format!("KH1's {} combo, swing {count}: KH2's row {} motion {} has no KH1 row of its own built: no attack", if air { "aerial" } else { "ground" }, r.id, r.motion));
+        note(|| format!("KH1's {} combo, swing {count}: KH2's row {} motion {} has no KH1 row of its own built: no attack", if air { "aerial" } else { "ground" }, r.id, r.motion));
         return Run::Nothing;
     }
     if !air {
@@ -686,12 +689,12 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -
         return finisher_walk(actor, row, dir, air, bits, count, kh1_len);
     }
     if !plain {
-        note(format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's own row {row} (one of its own abilities' or its drop ahead), kept"));
+        note(|| format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's own row {row} (one of its own abilities' or its drop ahead), kept"));
         return row;
     }
     let playing = super::kh2slots::playing_motion(actor);
     let Some((pick, launch)) = takeover::kh2_ability_row(actor, finisher, air, playing, &kh1_plays) else {
-        note(format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's row {row}; no KH2 ability {} passes KH2's checks", if finisher { "finisher" } else { "swing" }));
+        note(|| format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's row {row}; no KH2 ability {} passes KH2's checks", if finisher { "finisher" } else { "swing" }));
         return row;
     };
     let request_of = |r: i32| super::combat::row_motion(actor, r);
@@ -708,7 +711,7 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -
     if run != row && row == 1 && dir >= 0x10000 {
         wr(dir + 4, 0.0f32);
     }
-    note(format!(
+    note(|| format!(
         "KH1's {what} row picker, swing {count} of {kh1_len}: KH2's {} row {} motion {} (ability {}) in place of KH1's row {row}: KH1's row {run} runs it{}",
         if finisher { "finisher" } else { "swing" },
         pick.id,
@@ -989,7 +992,7 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
     if run != row && row == 1 && dir >= 0x10000 {
         wr(dir + 4, 0.0f32);
     }
-    note(format!(
+    note(|| format!(
         "KH1's {what} finisher walk, swing {count} of {kh1_len} (KH1's picker took row {row}{}, KH1 Ability Chance {}): {line}{tried}",
         if no_kh2 { "; no KH2 data: KH1's own order" } else { "" },
         if chance { "on" } else { "off" }
@@ -1122,7 +1125,7 @@ pub fn flight_pick(own: i32, run: i32) -> i32 {
     };
     let o = &super::kh1rows::OURS[n];
     if !o.attack || o.kind.cast() || !o.kind.air() {
-        note(format!("flight Attack: KH2's pick {} (motion {}) isn't an air move: KH1's own flight row {}", o.name, o.motion, own + 3));
+        note(|| format!("flight Attack: KH2's pick {} (motion {}) isn't an air move: KH1's own flight row {}", o.name, o.motion, own + 3));
         return own;
     }
     if let Ok(mut g) = FLIGHT.lock() {
@@ -1149,7 +1152,7 @@ pub unsafe fn take_flight(actor: usize, row: i32) -> Option<usize> {
     let count = kh1_combo(actor, true).map_or(1, |c| c.0);
     let request_of = |r: i32| super::combat::row_motion(actor, r);
     let _ = ours_run(n, None, true, count, &request_of);
-    note(format!("flight Attack: KH2's {} (motion {}) on KH1's flight row {row}", o.name, o.motion));
+    note(|| format!("flight Attack: KH2's {} (motion {}) on KH1's flight row {row}", o.name, o.motion));
     Some(n)
 }
 
@@ -1206,10 +1209,10 @@ pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, pr
     .flatten();
     let tried = if trail.is_empty() { String::new() } else { format!(" ({})", trail.join("; ")) };
     let Some((n, name)) = walked.filter(|&(n, _)| request_of(n).is_some()) else {
-        note(format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}): KH2's own pick, row {} motion {} (KH2's length {kh2_len}{}){tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
+        note(|| format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}): KH2's own pick, row {} motion {} (KH2's length {kh2_len}{}){tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
         return None;
     };
-    note(format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}, KH2 would take row {} motion {}): KH1's {name} (row {n}){}{tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
+    note(|| format!("KH2's {what} finisher walk at the KH2 setting (KH1's picker took row {row}, KH2 would take row {} motion {}): KH1's {name} (row {n}){}{tried}", pick.id, pick.motion, if chained { ", Finishing Plus" } else { "" }));
     if let Ok(mut g) = KH1_TAKE.lock() {
         *g = Some((n, chained, frame()));
     }
@@ -1248,7 +1251,7 @@ fn air_hop(row: i32, pick: &ComboRow, launch: character_core::Launch) -> Option<
     if !AIR_COMBO.plain(pick) || !pick.is_jump() || !launch.height.is_finite() || !launch.velocity.iter().all(|v| v.is_finite()) {
         return None;
     }
-    note(format!(
+    note(|| format!(
         "KH2's row selection: KH2's air row {} motion {} on KH1's air row {row}: KH2's hop, {:.0} high, {:.1}/frame sideways, for KH1's row's own",
         pick.id,
         pick.motion,
@@ -1302,11 +1305,11 @@ pub unsafe fn drop_ahead(actor: usize, aim: [f32; 2]) -> bool {
     let length = kh2.character.attack.jump_front + shape.radius;
     match floor_gone(actor, aim, length) {
         Some(Gone { found: true, below, reach }) => {
-            note(format!("KH2's line ahead: the floor {below:.0} below at {length:.0} ahead (more than {reach:.0}: none), KH2's row 1 marked"));
+            note(|| format!("KH2's line ahead: the floor {below:.0} below at {length:.0} ahead (more than {reach:.0}: none), KH2's row 1 marked"));
             true
         }
         Some(_) => {
-            note(format!("KH2's line ahead: no floor under the point {length:.0} ahead, KH2's row 1 marked"));
+            note(|| format!("KH2's line ahead: no floor under the point {length:.0} ahead, KH2's row 1 marked"));
             true
         }
         None => false,
@@ -1333,7 +1336,7 @@ pub unsafe fn floor_gone(actor: usize, aim: [f32; 2], length: f32) -> Option<Gon
     }
     let base = takeover::game_base();
     if rd::<[u8; 10]>(base + SETUP_STEAM) != SETUP_BYTES || rd::<[u8; 10]>(base + MOVER_STEAM) != MOVER_BYTES || rd::<[u8; 11]>(base + NORMAL_STEAM) != NORMAL_BYTES {
-        note("KH2's floor sweep: KH1's collision calls (0x14029A0B0 / 0x140195180 / 0x1401907F0) aren't the expected code here; not tested".to_string());
+        note(|| "KH2's floor sweep: KH1's collision calls (0x14029A0B0 / 0x140195180 / 0x1401907F0) aren't the expected code here; not tested".to_string());
         return None;
     }
     let kh2 = pose::kh2()?;
@@ -1418,12 +1421,12 @@ unsafe fn kh2_hop(actor: usize, row: i32, pick: &ComboRow, launch: character_cor
         return None;
     }
     if !ability && !kh2(Kind::AirCombo) {
-        note(format!("KH2's row selection: KH2's hop, row {} motion {}, not played: the Aerial Combo style is KH1's (KH1's row {row} kept)", pick.id, pick.motion));
+        note(|| format!("KH2's row selection: KH2's hop, row {} motion {}, not played: the Aerial Combo style is KH1's (KH1's row {row} kept)", pick.id, pick.motion));
         return None;
     }
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     let Some((r, q)) = AIR_COMBO.swing_rows.iter().filter_map(|&r| Some((r, request_of(r)?))).find(|&(_, q)| AIR_COMBO.swings.contains(&q) && q != playing && super::kh2slots::has(q as usize, pick.motion)) else {
-        note(format!("KH2's row selection: KH2's hop, row {} motion {}, not played: no air swing row of KH1's free with a slot for it (KH1's row {row} kept)", pick.id, pick.motion));
+        note(|| format!("KH2's row selection: KH2's hop, row {} motion {}, not played: no air swing row of KH1's free with a slot for it (KH1's row {row} kept)", pick.id, pick.motion));
         return None;
     };
     super::kh2slots::pick_ability(q as usize, Some(pick.motion), ability && !kh2(Kind::AirCombo));
@@ -1431,7 +1434,7 @@ unsafe fn kh2_hop(actor: usize, row: i32, pick: &ComboRow, launch: character_cor
     if info >= 0x10000 {
         wr(info + 0x41, 1u8);
     }
-    note(format!(
+    note(|| format!(
         "KH2's row selection: KH2's hop, row {} motion {}: KH1's row {row} replaced by its air row {r} (request {q:#x}) in its air state, {:.0} high, {:.1}/frame sideways",
         pick.id,
         pick.motion,
@@ -1520,10 +1523,10 @@ unsafe fn kh2_row(actor: usize, combo: &Kh1Combo, row: i32, pick: Option<&ComboR
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     let rows = if p.is_finisher() { combo.finisher_rows } else { combo.swing_rows };
     let Some((r, q)) = rows.iter().filter_map(|&r| Some((r, request_of(r)?))).find(|&(_, q)| fits(q) && q != playing && super::kh2slots::has(q as usize, p.motion)) else {
-        note(format!("KH2's row selection: KH1's row {row} (request {}) kept: no plain row of KH1's free for KH2's row {} motion {}", own.map_or("none".to_string(), |q| format!("{q:#x}")), p.id, p.motion));
+        note(|| format!("KH2's row selection: KH1's row {row} (request {}) kept: no plain row of KH1's free for KH2's row {} motion {}", own.map_or("none".to_string(), |q| format!("{q:#x}")), p.id, p.motion));
         return row;
     };
-    note(format!("KH2's row selection: KH1's row {row} (request {}) replaced by its row {r} (request {q:#x}) for KH2's row {} motion {}", own.map_or("none".to_string(), |q| format!("{q:#x}")), p.id, p.motion));
+    note(|| format!("KH2's row selection: KH1's row {row} (request {}) replaced by its row {r} (request {q:#x}) for KH2's row {} motion {}", own.map_or("none".to_string(), |q| format!("{q:#x}")), p.id, p.motion));
     r
 }
 
@@ -1548,7 +1551,7 @@ fn select_swing(combo: &Kh1Combo, request: Option<u32>, pick: Option<&ComboRow>)
     if !kh2 && !plays {
         return false;
     }
-    note(format!(
+    note(|| format!(
         "KH2's row selection: KH1's request {req:#x} plays {}",
         match (pick, plays) {
             (Some(r), true) => format!("KH2's row {} motion {}", r.id, r.motion),
@@ -1583,7 +1586,7 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
             // place (no fallback, the tester, combo row selection after m26, answer 1). Out of
             // KH1's air state KH2 has no Aerial Recovery either: the jump stays KH1's.)
             if !recovery_built() {
-                note("jump while KH1 has him knocked away: KH2's Aerial Recovery has no KH1 request of its own built: nothing".to_string());
+                note(|| "jump while KH1 has him knocked away: KH2's Aerial Recovery has no KH1 request of its own built: nothing".to_string());
                 return Some(all);
             }
             return None;
@@ -1601,7 +1604,7 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
                             *g = Some((n, launch, frame()));
                         }
                         unsafe { super::kh1rows::command_attack() };
-                        note(format!("Square while KH1 has him knocked away: KH2's Retaliating Slash (row {} motion {}) on KH1's row {} of its own, {}", r.id, r.motion, super::kh1rows::row(n), launch.map_or("no hop".to_string(), |l| format!("{:.0} high, {:.1}/frame", l.height, l.velocity[0].hypot(l.velocity[1])))));
+                        note(|| format!("Square while KH1 has him knocked away: KH2's Retaliating Slash (row {} motion {}) on KH1's row {} of its own, {}", r.id, r.motion, super::kh1rows::row(n), launch.map_or("no hop".to_string(), |l| format!("{:.0} high, {:.1}/frame", l.height, l.velocity[0].hypot(l.velocity[1])))));
                         return Some(all);
                     }
                 }
@@ -1609,7 +1612,7 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
                 // place (no fallback, the tester, after m26, answer 1). Out of KH1's air state, or
                 // KH2's row checks refusing it, KH2 has no Retaliating Slash: Square stays KH1's.)
                 if n.is_none() {
-                    note(format!("Square while KH1 has him knocked away: KH2's Retaliating Slash (row {id}) has no KH1 row of its own built: nothing"));
+                    note(|| format!("Square while KH1 has him knocked away: KH2's Retaliating Slash (row {id}) has no KH1 row of its own built: nothing"));
                     return Some(all);
                 }
                 return None;
@@ -1636,14 +1639,14 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
                 *g = Some((n, launch, frame()));
             }
             unsafe { super::kh1rows::command_attack() };
-            note(format!("Square in KH1's combo window (swing {count}): KH2's Square move, row {} motion {}, on KH1's row {} of its own", row.id, row.motion, super::kh1rows::row(n)));
+            note(|| format!("Square in KH1's combo window (swing {count}): KH2's Square move, row {} motion {}, on KH1's row {} of its own", row.id, row.motion, super::kh1rows::row(n)));
             return Some(super::shared::KH1_ACTION_BIT);
         }
         // (No KH1 row of its own built for it (its slot didn't build at load): Square does nothing,
         // not KH1's roll or guard in its place (no fallback, the tester, combo row selection after
         // m26, answer 1). With no Square move passing KH2's checks Square is the roll or guard, as
         // above, m20 answer 5 (a).)
-        note(format!("Square in KH1's combo window (swing {count}): KH2's Square move row {} motion {} has no KH1 row of its own built: nothing", row.id, row.motion));
+        note(|| format!("Square in KH1's combo window (swing {count}): KH2's Square move row {} motion {} has no KH1 row of its own built: nothing", row.id, row.motion));
         return Some(super::shared::KH1_ACTION_BIT);
     }
     None
@@ -1707,7 +1710,7 @@ unsafe fn recover(actor: usize) -> bool {
     if let Ok(mut l) = LAST.lock() {
         *l = None;
     }
-    note(format!("jump while KH1 has him knocked away: KH2's Aerial Recovery on KH1's request {request:#x} of its own, {:.0} high, {:.1}/frame", character_core::AIR_RECOVERY_HOP, vel[0].hypot(vel[1])));
+    note(|| format!("jump while KH1 has him knocked away: KH2's Aerial Recovery on KH1's request {request:#x} of its own, {:.0} high, {:.1}/frame", character_core::AIR_RECOVERY_HOP, vel[0].hypot(vel[1])));
     true
 }
 
@@ -1770,7 +1773,7 @@ pub unsafe fn aerial_dodge_with(actor: usize, (height, speed): (f32, f32)) -> bo
     super::shared::mark_air_dodged();
     takeover::note_launch(vel);
     DODGE_SKIP_AT.store(frame().max(1), Ordering::Relaxed);
-    note(format!("jump in the air: KH2's Aerial Dodge on KH1's request {request:#x} of its own (KH1 state {state}), {height:.0} high, {:.1}/frame", vel[0].hypot(vel[1])));
+    note(|| format!("jump in the air: KH2's Aerial Dodge on KH1's request {request:#x} of its own (KH1 state {state}), {height:.0} high, {:.1}/frame", vel[0].hypot(vel[1])));
     true
 }
 
@@ -1844,8 +1847,8 @@ unsafe fn dodge_clock(actor: usize) {
         wr(actor + SLOT_TIME, 1.0f32);
     }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 12 {
-        log(&if skip {
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 12 {
+        log!(Combat, "{}", if skip {
             "KH2's Aerial Dodge: KH2's skip of frame 1 (KH1's update makes its time 2)".to_string()
         } else {
             format!("KH2's Aerial Dodge: no skip of frame 1 (time {t:.2}, blend {len:.1}, step {step:.2})")
@@ -1864,7 +1867,7 @@ pub unsafe fn dodge_fall(actor: usize, why: &str) {
     let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(takeover::game_base() + SET_MOTION_RVA);
     set(actor, 0x06, DODGE_FALL_BLEND);
     wr(actor, rd::<u32>(actor) & !4);
-    note(format!("KH2's Aerial Dodge: {why}, KH1's fall (request 6, blend {DODGE_FALL_BLEND})"));
+    note(|| format!("KH2's Aerial Dodge: {why}, KH1's fall (request 6, blend {DODGE_FALL_BLEND})"));
 }
 
 /// KH1 knocked him away itself (`hurt`: a knock-back or launch while KH1's states have him).
@@ -1904,7 +1907,7 @@ pub unsafe fn next_from_kh2(actor: usize, air: bool) -> Next {
     if in_finisher {
         let pick = takeover::kh2_would_take(actor, None, None, air, false).filter(|(r, ..)| r.is_finisher());
         if let Some((r, ..)) = pick {
-            note(format!("Attack in KH2's finisher with the combo style KH1's: KH2's next finisher, row {} motion {} (Finishing Plus)", r.id, r.motion));
+            note(|| format!("Attack in KH2's finisher with the combo style KH1's: KH2's next finisher, row {} motion {} (Finishing Plus)", r.id, r.motion));
             return Next::Kh2;
         }
         return Next::Fresh;
@@ -1917,7 +1920,7 @@ pub unsafe fn next_from_kh2(actor: usize, air: bool) -> Next {
     let next = state.count.saturating_add(1);
     let why = pick.as_ref().and_then(|(r, len, neg)| ability_move(r, *len, *neg, next, kh1_len));
     let out = if why.is_some() { Next::Kh2 } else { Next::Kh1 { count: state.count, hit: state.hit || master } };
-    note(format!(
+    note(|| format!(
         "Attack in KH2's combo (count {}) with the combo style KH1's: KH2 would take {}: {out:?}{}",
         state.count,
         pick.as_ref().map_or("nothing".to_string(), |(r, ..)| format!("row {} motion {}", r.id, r.motion)),
@@ -1961,7 +1964,7 @@ pub unsafe fn restore(actor: usize, s: Saved) {
     if !s.window {
         wr(actor + 0x1CC, rd::<u32>(actor + 0x1CC) & !KH1_COMBO_WINDOW);
     }
-    note(format!("KH1's combo goes on from KH2's: count now {}", rd::<u8>(s.info + 0x41)));
+    note(|| format!("KH1's combo goes on from KH2's: count now {}", rd::<u8>(s.info + 0x41)));
 }
 
 /// KH2's guard press, its repel and Counterguard on KH1's states (the tester, combo row selection
@@ -2044,7 +2047,7 @@ pub fn guard_press() -> bool {
         if let Ok(mut p) = PUSH.lock() {
             *p = None;
         }
-        note(format!("Square standing: KH2's guard (motion 173) on KH1's request {:#x} of its own{}", super::kh1rows::by_motion(character_core::motion::GUARD_PRESS).map_or(0, super::kh1rows::request), if face.is_some() { ", facing KH1's lock" } else { "" }));
+        note(|| format!("Square standing: KH2's guard (motion 173) on KH1's request {:#x} of its own{}", super::kh1rows::by_motion(character_core::motion::GUARD_PRESS).map_or(0, super::kh1rows::request), if face.is_some() { ", facing KH1's lock" } else { "" }));
         true
     }
 }
@@ -2110,7 +2113,7 @@ pub fn roll_press() -> bool {
         wr(actor, (rd::<u32>(actor) & !KH1_TIMER_FLAGS) | flags);
         wr(actor + 0xC, timer);
         ROLL_STAR.store(star.to_bits(), Ordering::Relaxed);
-        note(format!("Square while moving: KH2's dodge roll LV{level} on KH1's roll (request 0xDC, KH2 motion {DODGE_ROLL}), invulnerable {star:.0} frames"));
+        note(|| format!("Square while moving: KH2's dodge roll LV{level} on KH1's roll (request 0xDC, KH2 motion {DODGE_ROLL}), invulnerable {star:.0} frames"));
         true
     }
 }
@@ -2157,7 +2160,7 @@ pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8, attacker_p
     }
     let face = yaw_to(toward);
     if !start_own(actor, character_core::motion::GUARD, face) {
-        note("KH2's guard repel: not started (not on the ground, or no request of ours for motion 42)".to_string());
+        note(|| "KH2's guard repel: not started (not on the ground, or no request of ours for motion 42)".to_string());
         return;
     }
     let len = toward[0].hypot(toward[1]);
@@ -2176,7 +2179,7 @@ pub unsafe fn guard_repel(actor: usize, toward: [f32; 2], refact: u8, attacker_p
         wr(actor + 0xC, REPEL_PROTECTION);
         wr(actor, (rd::<u32>(actor) & !0x10_0000) | 0x80);
     }
-    note(format!("KH2's guard stopped a hit: its repel (motion 42), pushed back {REPEL_BACK:.0}{}", if super::recoil::kh2() { ", 80 frames without damage (Recoil KH2)" } else { "" }));
+    note(|| format!("KH2's guard stopped a hit: its repel (motion 42), pushed back {REPEL_BACK:.0}{}", if super::recoil::kh2() { ", 80 frames without damage (Recoil KH2)" } else { "" }));
 }
 
 /// What a block of base Sora's KH2 guard does: KH2's repel (motion 42, pushed back 200, its 80
@@ -2215,12 +2218,12 @@ const BIG_RECOIL_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x
 /// unknown, a gap of 0 (the small recoil, no push).
 unsafe fn kh1_block(actor: usize, attacker: Option<i32>) {
     if Build::current() != Build::Steam || rd::<i32>(actor + 0x70) != 0 || super::form::in_form() {
-        note("KH1's block: not run (not the Steam build, not on the ground, or a Drive Form)".to_string());
+        note(|| "KH1's block: not run (not the Steam build, not on the ground, or a Drive Form)".to_string());
         return;
     }
     let base = takeover::game_base();
     if rd::<[u8; 15]>(base + CLASH_RECOIL_STEAM) != CLASH_RECOIL_BYTES || rd::<[u8; 10]>(base + BIG_RECOIL_STEAM) != BIG_RECOIL_BYTES {
-        note("KH1's block: KH1's clash recoils (0x14029D720 / 0x14029D5F0) aren't the expected code here; not run".to_string());
+        note(|| "KH1's block: KH1's clash recoils (0x14029D720 / 0x14029D5F0) aren't the expected code here; not run".to_string());
         return;
     }
     let combat = pose::ptr(rd::<u32>(actor + 0x14C));
@@ -2240,7 +2243,7 @@ unsafe fn kh1_block(actor: usize, attacker: Option<i32>) {
     if let Ok(mut p) = PUSH.lock() {
         *p = None;
     }
-    note(format!(
+    note(|| format!(
         "KH2's guard stopped a hit, Recoil KH1: KH1's block, its {} (request {:#x}), guard priority {guard} against {} (gap {gap}){}",
         if big { "big recoil" } else { "clash recoil" },
         if big { 0x6F } else { 0x6E },
@@ -2341,7 +2344,7 @@ pub unsafe fn counter_entry(actor: usize) {
         wr(e, KH1_COUNTERATTACK);
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            note("KH2's guard repel: the command menu's Attack shows KH1's Counterattack (KH2's Counterguard)".to_string());
+            note(|| "KH2's guard repel: the command menu's Attack shows KH1's Counterattack (KH2's Counterguard)".to_string());
         }
     }
 }
@@ -2355,12 +2358,12 @@ unsafe fn counterguard(actor: usize, air: bool, count: u8, request_of: &dyn Fn(i
     }
     let n = k::by_kh2_row(k::COUNTERGUARD_ROW).filter(|&n| k::installed() && super::kh2slots::has(k::request(n) as usize, k::OURS[n].motion))?;
     let Some((row, launch)) = takeover::kh2_would_take_row(actor, k::COUNTERGUARD_ROW, false) else {
-        note("Attack in KH2's guard repel: KH2 wouldn't take Counterguard (row 39) now".to_string());
+        note(|| "Attack in KH2's guard repel: KH2 wouldn't take Counterguard (row 39) now".to_string());
         return None;
     };
     if let Ok(mut p) = PUSH.lock() {
         *p = None;
     }
-    note(format!("Attack in KH2's guard repel: KH2's Counterguard (row {} motion {})", row.id, row.motion));
+    note(|| format!("Attack in KH2's guard repel: KH2's Counterguard (row {} motion {})", row.id, row.motion));
     Some(ours_run(n, launch, false, count, request_of))
 }

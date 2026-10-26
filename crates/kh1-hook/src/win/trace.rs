@@ -118,12 +118,11 @@ pub const GROUPS: [Group; 6] = [
 ];
 
 /// The live settings (from the ini, or the debug menu's since): the mode (0 off, 1 on, 2
-/// always), the seconds, the categories, the sound log; and the settings they were read from.
+/// always), the seconds, the categories; and the settings they were read from.
 /// (Off until the ini is read, and always off without the debug tools, `refresh`.)
 static LIVE_MODE: AtomicU32 = AtomicU32::new(0);
 static LIVE_SECONDS: AtomicU32 = AtomicU32::new(DEFAULT_SECONDS);
 static LIVE_CATS: AtomicU32 = AtomicU32::new(cat::ALL);
-static LIVE_SOUND: AtomicBool = AtomicBool::new(true);
 /// (t371) The seconds count game frames (`game_frames`), not real time.
 static LIVE_GAME_FRAMES: AtomicBool = AtomicBool::new(false);
 static LIVE_FROM: AtomicUsize = AtomicUsize::new(0);
@@ -140,7 +139,6 @@ pub fn refresh() {
         LIVE_MODE.store(match mode { Mode::Off => 0, Mode::On => 1, Mode::Always => 2 }, Ordering::Relaxed);
         LIVE_SECONDS.store(s.trace_seconds, Ordering::Relaxed);
         LIVE_CATS.store(s.trace_cats, Ordering::Relaxed);
-        LIVE_SOUND.store(s.sound_log, Ordering::Relaxed);
         LIVE_GAME_FRAMES.store(s.trace_game_frames, Ordering::Relaxed);
     }
 }
@@ -162,11 +160,6 @@ pub fn seconds() -> u32 {
 /// The categories recorded now.
 pub fn cats() -> u32 {
     LIVE_CATS.load(Ordering::Relaxed)
-}
-
-/// KH1's sounds go to the log now (`soundlog`).
-pub fn sound_log() -> bool {
-    LIVE_SOUND.load(Ordering::Relaxed)
 }
 
 /// (t371) The clip's seconds count game frames (the ini's `trace_game_frames`, the Trace Recorder
@@ -191,7 +184,7 @@ pub fn set_mode(m: Mode) {
     LIVE_MODE.store(match m { Mode::Off => 0, Mode::On => 1, Mode::Always => 2 }, Ordering::Relaxed);
     ENABLED.store(m != Mode::Off, Ordering::Relaxed);
     super::settings::save("trace", match m { Mode::Off => "off", Mode::On => "on", Mode::Always => "always" });
-    log(&format!("debug menu: trace {m:?}"));
+    log!(Debug, "debug menu: trace {m:?}");
 }
 
 pub fn set_seconds(n: u32) {
@@ -200,16 +193,10 @@ pub fn set_seconds(n: u32) {
     super::settings::save("trace_seconds", &n.to_string());
 }
 
-pub fn set_sound_log(on: bool) {
-    LIVE_SOUND.store(on, Ordering::Relaxed);
-    super::settings::save("sound_log", if on { "on" } else { "off" });
-    log(&format!("debug menu: sound log {}", if on { "on" } else { "off" }));
-}
-
 pub fn set_game_frames(on: bool) {
     if LIVE_GAME_FRAMES.swap(on, Ordering::Relaxed) != on {
         super::settings::save("trace_game_frames", if on { "on" } else { "off" });
-        log(&format!("trace: seconds count {}", if on { "game frames" } else { "real time" }));
+        log!(Debug, "trace: seconds count {}", if on { "game frames" } else { "real time" });
     }
 }
 
@@ -220,7 +207,7 @@ pub fn set_cats(bits: u32, on: bool) {
     for it in ITEMS.iter().filter(|it| it.bit & bits != 0) {
         super::settings::save(it.key, if on { "on" } else { "off" });
     }
-    log(&format!("debug menu: trace categories {now:#06x}"));
+    log!(Debug, "debug menu: trace categories {now:#06x}");
 }
 /// An anomaly's dump waits this many game frames (what followed it goes in too).
 const AUTO_DELAY: u32 = 60;
@@ -504,7 +491,7 @@ pub fn frame(mut row: Row) {
         if let Ok(mut p) = PENDING.lock() {
             if free && p.is_none() {
                 last.store(now.max(1), Ordering::Relaxed);
-                log(&format!("trace: {why}; the last {}s go to a file in {} frames", keep / 1000, AUTO_DELAY));
+                log!(Debug, "trace: {why}; the last {}s go to a file in {} frames", keep / 1000, AUTO_DELAY);
                 *p = Some((AUTO_DELAY, why));
             }
         }
@@ -597,7 +584,7 @@ fn dump(ring: &VecDeque<Row>, why: &str) -> bool {
     let n = DUMPS.fetch_add(1, Ordering::Relaxed);
     if n >= MAX_DUMPS {
         if n == MAX_DUMPS {
-            log(&format!("trace: {MAX_DUMPS} dumps this session; no more until the game restarts"));
+            log!(Debug, "trace: {MAX_DUMPS} dumps this session; no more until the game restarts");
         }
         return false;
     }
@@ -616,11 +603,11 @@ fn dump(ring: &VecDeque<Row>, why: &str) -> bool {
     }
     match std::fs::write(&path, text) {
         Ok(()) => {
-            log(&format!("trace: {} frames ({:.1}s) written to {path} ({why})", ring.len(), ring.back().zip(ring.front()).map_or(0.0, |(b, f)| b.ms.saturating_sub(f.ms) as f32 / 1000.0)));
+            log!(Debug, "trace: {} frames ({:.1}s) written to {path} ({why})", ring.len(), ring.back().zip(ring.front()).map_or(0.0, |(b, f)| b.ms.saturating_sub(f.ms) as f32 / 1000.0));
             true
         }
         Err(e) => {
-            log(&format!("trace: couldn't write {path}: {e}"));
+            log!(Debug, "trace: couldn't write {path}: {e}");
             false
         }
     }
@@ -637,11 +624,11 @@ fn stream(row: &Row) {
         match std::fs::File::create(&path) {
             Ok(mut f) => {
                 let _ = write!(f, "{}\r\n", header(row.cats));
-                log(&format!("trace: every frame also goes to {path} (trace = always)"));
+                log!(Debug, "trace: every frame also goes to {path} (trace = always)");
                 *s = Some((f, row.cats));
             }
             Err(e) => {
-                log(&format!("trace: couldn't open {path}: {e}"));
+                log!(Debug, "trace: couldn't open {path}: {e}");
                 return;
             }
         }

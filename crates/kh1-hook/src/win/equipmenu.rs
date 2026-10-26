@@ -208,7 +208,7 @@ pub unsafe fn install() {
     for (def, f) in defs {
         let have = rd::<u64>(base + def) as usize;
         if have != base + f {
-            log(&format!("Equipment: window definition {:#x} holds {have:#x}, not {:#x}: no Valor row", base + def, base + f));
+            log!(Menus, "Equipment: window definition {:#x} holds {have:#x}, not {:#x}: no Valor row", base + def, base + f);
             return;
         }
     }
@@ -223,17 +223,17 @@ pub unsafe fn install() {
     for (at, want, what) in checks {
         let have = std::slice::from_raw_parts(at as *const u8, want.len());
         if have != want {
-            log(&format!("Equipment: {what} at {at:#x} is {have:02x?}, not {want:02x?}: no Valor row"));
+            log!(Menus, "Equipment: {what} at {at:#x} is {have:02x?}, not {want:02x?}: no Valor row");
             return;
         }
     }
     let call = base + NAME_CALL;
     if rd::<u8>(call) != 0xE8 || (call as i64 + 5 + rd::<i32>(call + 1) as i64) as usize != base + NAME_FN {
-        log(&format!("Equipment: no call to the item name at {call:#x}: no Valor row"));
+        log!(Menus, "Equipment: no call to the item name at {call:#x}: no Valor row");
         return;
     }
     let Some(m) = hook::alloc_near(base + R12_SITE, MEM_SIZE) else {
-        log("Equipment: no memory near the game: no Valor row");
+        log!(Menus, "Equipment: no memory near the game: no Valor row");
         return;
     };
     std::ptr::write_bytes(m as *mut u8, 0, MEM_SIZE);
@@ -275,7 +275,7 @@ pub unsafe fn install() {
     j.extend_from_slice(&rel32(row_site + 5, m + STUB_ROW));
     j.extend_from_slice(&[0x90, 0x90, 0x90]);
     ok &= hook::patch(row_site, &row_old, &j, "Equipment slot row test");
-    log(&format!("Equipment: Valor row for Sora{} (stubs at {m:#x})", if ok { "" } else { ", some patches failed (see above)" }));
+    log!(Menus, "Equipment: Valor row for Sora{} (stubs at {m:#x})", if ok { "" } else { ", some patches failed (see above)" });
 }
 
 /// The save block.
@@ -316,7 +316,7 @@ unsafe fn pick_guard(save: usize) -> Option<u8> {
     }
     if g::<i32>(STATE) != 2 && rd::<u8>(save + WEAPON) as u32 == w {
         PICK_WEAPON.store(0, Ordering::Relaxed);
-        log(&format!("Equipment: Sora's own weapon {w:#04x} back after the Valor pick"));
+        log!(Menus, "Equipment: Sora's own weapon {w:#04x} back after the Valor pick");
         return None;
     }
     Some(w as u8)
@@ -342,7 +342,7 @@ unsafe fn valor_id(save: usize) -> u8 {
         super::valor::keyblade().unwrap_or(0)
     };
     if LOGGED_ID.swap(id as u32, Ordering::Relaxed) != id as u32 {
-        log(&format!("Equipment: Valor row shows {id:#04x} (candidates {:02x?})", equip::valor_candidates(base())));
+        log!(Menus, "Equipment: Valor row shows {id:#04x} (candidates {:02x?})", equip::valor_candidates(base()));
     }
     id
 }
@@ -364,7 +364,7 @@ unsafe fn fix_rows(win: usize, acc: u16) {
     wr(win + 0xFA, vis);
     wr(win + 0xE6, ((h + gap) * vis as i16 - gap) * 16);
     if LOGGED_ROWS.swap(want as u32, Ordering::Relaxed) != want as u32 {
-        log(&format!("Equipment: Sora's slots {} rows (weapon, Valor, {acc} accessories)", want));
+        log!(Menus, "Equipment: Sora's slots {} rows (weapon, Valor, {acc} accessories)", want);
     }
 }
 
@@ -410,7 +410,7 @@ unsafe fn after(save: usize) {
         let id = rd::<u8>(m + SHADOW + ACC_FIRST);
         if g::<i32>(CURRENT) != id as i32 {
             s(CURRENT, id as i32);
-            log(&format!("Equipment: Valor row picked (Keyblade {id:#04x}): KH1's weapon list for Valor"));
+            log!(Menus, "Equipment: Valor row picked (Keyblade {id:#04x}): KH1's weapon list for Valor");
         }
         return;
     }
@@ -419,7 +419,7 @@ unsafe fn after(save: usize) {
         let k = row - 2;
         s(ACC_INDEX, k);
         s(CURRENT, rd::<u8>(save + ACC_FIRST + k as usize) as i32);
-        log(&format!("Equipment: Sora's row {row} is accessory slot {k}"));
+        log!(Menus, "Equipment: Sora's row {row} is accessory slot {k}");
     }
 }
 
@@ -538,7 +538,7 @@ unsafe extern "system" fn fill() {
     let (top, cur) = if (k as i32) < 7 { (0, at) } else { let t = at.min(k as i32 - 7); (t, at - t) };
     s(LIST_SCROLL, top);
     s(LIST_CURSOR, cur);
-    log(&format!("Equipment: weapon list for Valor: {before:02x?} -> {:02x?}", (0..k).map(|i| rd::<i32>(list + i * 4)).collect::<Vec<_>>()));
+    log!(Menus, "Equipment: weapon list for Valor: {before:02x?} -> {:02x?}", (0..k).map(|i| rd::<i32>(list + i * 4)).collect::<Vec<_>>());
 }
 
 /// The weapon list during a Valor pick: KH1's live preview shows the hovered Keyblade in
@@ -563,11 +563,11 @@ unsafe extern "system" fn list_update(win: usize) {
     let hovered = if (0..n.min(256)).contains(&at) { rd::<i32>(base() + LIST + at as usize * 4) } else { 0 };
     if LOGGED_HOVER.swap(hovered as u32, Ordering::Relaxed) != hovered as u32 && HOVER_LOGS.fetch_add(1, Ordering::Relaxed) < 24 {
         let name = if (1..=255).contains(&hovered) { equip::item_name(base(), hovered as u8).unwrap_or_default() } else { String::new() };
-        log(&format!(
+        log!(Menus,
             "Equipment: Valor pick hovers {hovered:#04x} {name} (row {at} of {n}; preview loads {:#04x}, Sora's byte {:#04x}, his own {weapon:#04x})",
             rd::<i32>(loaded_at),
             rd::<u8>(save + WEAPON)
-        ));
+        );
     }
     if g::<i32>(STATE) == 3 {
         let picked = g::<i32>(NEW_ITEM);
@@ -581,12 +581,12 @@ unsafe extern "system" fn list_update(win: usize) {
         if (1..=255).contains(&picked) && equip::valor_candidates(base()).contains(&(picked as u8)) {
             wr(save + equip::VALOR_OFF, picked as u8);
             let name = equip::item_name(base(), picked as u8).unwrap_or_default();
-            log(&format!(
+            log!(Menus,
                 "Equipment: Valor's Keyblade stored: {picked:#04x} {name} (Sora keeps {weapon:#04x}; model loaded {:#04x}, put back by KH1)",
                 rd::<i32>(loaded_at)
-            ));
+            );
         } else {
-            log(&format!("Equipment: Valor pick {picked:#x} isn't a free Keyblade: not stored (Sora keeps {weapon:#04x})"));
+            log!(Menus, "Equipment: Valor pick {picked:#x} isn't a free Keyblade: not stored (Sora keeps {weapon:#04x})");
         }
         pick_guard(save);
     }

@@ -141,7 +141,7 @@ pub static L2_DPAD: AtomicBool = AtomicBool::new(false);
 pub fn set_l2_dpad(on: bool) {
     L2_DPAD.store(on, Ordering::Relaxed);
     super::settings::save("l2_stick_menu", if on { "on" } else { "off" });
-    log(&format!("Config menu: L2 stick menu {}", if on { "on" } else { "off" }));
+    log!(Camera, "Config menu: L2 stick menu {}", if on { "on" } else { "off" });
 }
 
 /// The right stick as KH2's d-pad under L2 (L2 Stick Menu). KH2's pad (Steam KH2 `0x14039c180`)
@@ -178,7 +178,7 @@ pub fn dpad_from_stick(buttons_all: u16, rx: u8, ry: u8) -> Option<u16> {
 pub fn set_r2_hold(on: bool) {
     R2_HOLD.store(on, Ordering::Relaxed);
     super::settings::save("r2_camera_hold", if on { "on" } else { "off" });
-    log(&format!("Config menu: R2 camera hold {}", if on { "on" } else { "off" }));
+    log!(Camera, "Config menu: R2 camera hold {}", if on { "on" } else { "off" });
 }
 static ORIG_FOLLOW: AtomicUsize = AtomicUsize::new(0);
 static ORIG_LOCK: AtomicUsize = AtomicUsize::new(0);
@@ -213,7 +213,7 @@ pub unsafe fn install() {
     let (f, l) = (rd::<u64>(follow) as usize, rd::<u64>(lock) as usize);
     // The entries should point at KH1's own mode 1 / mode 3 (`0x1401DF7C0` / `0x1401E04F0`).
     if f != base + Rva(0x1DF7C0) || l != base + Rva(0x1E04F0) {
-        log(&format!("KH2 camera: KH1's camera modes aren't where expected ({f:#x}, {l:#x}): not installed"));
+        log!(Camera, "KH2 camera: KH1's camera modes aren't where expected ({f:#x}, {l:#x}): not installed");
         return;
     }
     ORIG_FOLLOW.store(f, Ordering::Release);
@@ -231,7 +231,7 @@ pub unsafe fn install() {
         let slot = base + MODES_RVA + mode * 0x10;
         let cur = rd::<u64>(slot) as usize;
         if cur != base + *orig {
-            log(&format!("KH2 camera: KH1's camera mode {mode} isn't where expected ({cur:#x}): left to KH1"));
+            log!(Camera, "KH2 camera: KH1's camera mode {mode} isn't where expected ({cur:#x}): left to KH1");
             continue;
         }
         ORIG_STATE[i].store(cur, Ordering::Release);
@@ -249,13 +249,13 @@ pub unsafe fn install() {
         wr(fp + 8, first_person_exit as *const () as u64);
         swapped.push(2);
     } else {
-        log(&format!("KH2 camera: KH1's first-person mode isn't where expected ({u:#x}, {x:#x}): KH1's own first person"));
+        log!(Camera, "KH2 camera: KH1's first-person mode isn't where expected ({u:#x}, {x:#x}): KH1's own first person");
     }
-    log(&format!(
+    log!(Camera,
         "KH2 camera: KH1's follow, lock-on and movement-state cameras ({swapped:?}) swapped for KH2's ({}; KH1's camera calls: {})",
         if KH2.load(Ordering::Relaxed) { "on" } else { "KH1's chosen" },
         if calls_kh2() { "KH2's camera" } else { "KH1's camera" }
-    ));
+    );
 }
 
 /// KH1's gameplay camera calls drive KH2's camera (`camera_calls = kh2`); off, the older way:
@@ -312,7 +312,7 @@ unsafe extern "system" fn state_mode<const I: usize>() {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 20 {
             let state = rd::<i32>(sora + 0x70);
-            log(&format!("KH2 camera: KH1's movement-state camera (mode {}, Sora state {state}) taken by KH2's follow camera", STATE_MODES[I].0));
+            log!(Camera, "KH2 camera: KH1's movement-state camera (mode {}, Sora state {state}) taken by KH2's follow camera", STATE_MODES[I].0);
         }
         let set: unsafe extern "system" fn(i32, f32) = std::mem::transmute(base + SET_MODE_RVA);
         set(1, 0.0);
@@ -372,8 +372,8 @@ unsafe fn note_entry(lock: bool) {
             if moved > 3.0 && RESET_OWNS.load(Ordering::Relaxed) && scene() {
                 RESET_OWNS.store(false, Ordering::Relaxed);
                 static N: AtomicU32 = AtomicU32::new(0);
-                if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                    log("KH2 camera: KH1 moves Sora in the scene after its camera reset: KH1's camera");
+                if super::log_on(super::LogCat::Camera) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log!(Camera, "KH2 camera: KH1 moves Sora in the scene after its camera reset: KH1's camera");
                 }
             }
             *last = feet;
@@ -397,7 +397,7 @@ unsafe fn note_entry(lock: bool) {
     static N: AtomicU32 = AtomicU32::new(0);
     if N.fetch_add(1, Ordering::Relaxed) < 60 {
         let state = if sora > 0x10000 { rd::<i32>(sora + 0x70) } else { -1 };
-        log(&format!(
+        log!(Camera,
             "KH2 camera: KH1 reset its camera ({}, back from its hold / release; event {}, Sora state {state}): KH2's default position{}",
             if lock { "lock-on" } else { "follow" },
             rd::<u32>(base + EVENT_RVA) != 0,
@@ -408,7 +408,7 @@ unsafe fn note_entry(lock: bool) {
             } else {
                 ""
             }
-        ));
+        );
     }
 }
 
@@ -436,7 +436,7 @@ fn ours() -> bool {
         } else {
             "a KH1-only state"
         };
-        log(&if on { "KH2 camera: back from KH1's".to_string() } else { format!("KH2 camera: KH1's for a scene ({why})") });
+        log!(Camera, "{}", if on { "KH2 camera: back from KH1's".to_string() } else { format!("KH2 camera: KH1's for a scene ({why})") });
     }
     if !on && FOV_SET.swap(false, Ordering::Relaxed) {
         // KH1's own field of view back for KH1's camera.
@@ -689,18 +689,18 @@ fn jerk_note(eye: Vec3, at: Vec3, feet: Vec3, dt: f32, yaw: f32) {
         st.acc = (st.acc.0.max(je), st.acc.1.max(ja), st.acc.2.max(jf));
         st.dts = (st.dts.0.min(dt), st.dts.1.max(dt));
         if (je > 12.0 || ja > 12.0) && LINES.fetch_add(1, Ordering::Relaxed) < 120 {
-            log(&format!(
+            log!(Camera,
                 "KH2 camera jerk: eye {:.0} -> {:.0}, look {:.0} -> {:.0}, Sora {:.0} -> {:.0} per frame; dt {dt:.2}, {gap}ms; eye {:.0?} feet {:.0?} yaw {yaw:.2}",
                 ve.length(), ve2.length(), va.length(), va2.length(), vf.length(), vf2.length(), eye.to_array(), feet.to_array()
-            ));
+            );
         }
         st.last = Some((eye, at, feet, ve2, va2, vf2, now));
         if now.saturating_sub(st.since) >= 5000 {
             if st.n > 10 && LINES.fetch_add(1, Ordering::Relaxed) < 120 {
-                log(&format!(
+                log!(Camera,
                     "KH2 camera, last {:.1}s: {:.0} updates/s, {}..{}ms apart, dt {:.2}..{:.2}; biggest change per frame: eye {:.1}, look {:.1}, Sora {:.1}",
                     (now - st.since) as f32 / 1000.0, st.n as f32 * 1000.0 / (now - st.since) as f32, st.gap.0, st.gap.1, st.dts.0, st.dts.1, st.acc.0, st.acc.1, st.acc.2
-                ));
+                );
             }
             st.since = now;
             st.n = 0;
@@ -729,8 +729,8 @@ unsafe fn run(lock: bool) -> Option<()> {
     let sora = rd::<u64>(base + SORA_RVA) as usize;
     if sora < 0x10000 || rd::<u64>(base + SUBJECT_RVA) as usize != sora {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH2 camera: KH1's own this frame (its subject isn't Sora, {})", if lock { "lock-on" } else { "follow" }));
+        if super::log_on(super::LogCat::Camera) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log!(Camera, "KH2 camera: KH1's own this frame (its subject isn't Sora, {})", if lock { "lock-on" } else { "follow" });
         }
         return decline("subject_not_sora");
     }
@@ -748,8 +748,8 @@ unsafe fn run(lock: bool) -> Option<()> {
         let ok = actor > 0x10000 && v[..3].iter().all(|x| x.is_finite() && x.abs() < 1.0e6);
         if !ok {
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 10 {
-                log(&format!("KH2 camera: lock-on target {actor:#x} has no point this frame: following"));
+            if super::log_on(super::LogCat::Camera) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+                log!(Camera, "KH2 camera: lock-on target {actor:#x} has no point this frame: following");
             }
         }
         ok.then(|| to_cam([v[0], v[1], v[2]], s))
@@ -863,8 +863,8 @@ unsafe fn run(lock: bool) -> Option<()> {
     if our_switch && rd::<f32>(base + BLEND_LEFT_RVA) > 0.0 {
         wr(base + BLEND_LEFT_RVA, 0.0f32);
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 20 {
-            log(&format!("KH2 camera: KH1's switch into its {} camera, from ours: no blend (KH2's camera goes on)", if lock { "lock-on" } else { "follow" }));
+        if super::log_on(super::LogCat::Camera) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            log!(Camera, "KH2 camera: KH1's switch into its {} camera, from ours: no blend (KH2's camera goes on)", if lock { "lock-on" } else { "follow" });
         }
     }
     // KH2's field of view, every frame (KH1's area cameras, first person and event cameras set
@@ -931,7 +931,7 @@ unsafe fn run(lock: bool) -> Option<()> {
             } else {
                 "first"
             };
-            log(&format!("KH2 camera: started ({}, {why}), yaw {:.2}", if lock { "lock-on" } else { "follow" }, g.as_ref().map_or(0.0, |c| c.yaw)));
+            log!(Camera, "KH2 camera: started ({}, {why}), yaw {:.2}", if lock { "lock-on" } else { "follow" }, g.as_ref().map_or(0.0, |c| c.yaw));
         }
     }
     let Some(cam) = g.as_mut() else { return decline("no_camera") };
@@ -985,7 +985,7 @@ unsafe fn run(lock: bool) -> Option<()> {
             let states: unsafe extern "system" fn() = std::mem::transmute(base + STATE_CAMERAS_RVA);
             states();
         } else if MODE_LOGGED.swap(false, Ordering::Relaxed) {
-            log("KH2 camera: KH1's movement-state cameras (ledges, climbing, poles) are KH2's follow camera");
+            log!(Camera, "KH2 camera: KH1's movement-state cameras (ledges, climbing, poles) are KH2's follow camera");
         }
     }
     Some(())
@@ -1015,7 +1015,7 @@ unsafe fn mouse(base: usize) -> Mouse {
     if MOUSE_OK.load(Ordering::Relaxed) == 0 {
         let ok = rd::<[u8; 10]>(base + MOUSE_STEAM) == MOUSE_PROLOGUE;
         MOUSE_OK.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
-        log(&format!("KH2 camera: KH1's mouse (0x140138b30) {}", if ok { "found: KH2's mouse camera" } else { "isn't where expected: the mouse as a tilted stick only" }));
+        log!(Camera, "KH2 camera: KH1's mouse (0x140138b30) {}", if ok { "found: KH2's mouse camera" } else { "isn't where expected: the mouse as a tilted stick only" });
     }
     if MOUSE_OK.load(Ordering::Relaxed) != 1 {
         return Mouse { kbm, ..none };
@@ -1175,8 +1175,8 @@ unsafe fn enter_first_person(sora: usize) {
     FP.store(true, Ordering::Relaxed);
     fade(sora, true);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!("KH2 camera: KH2's first person (Sora state {})", rd::<i32>(sora + 0x70)));
+    if super::log_on(super::LogCat::Camera) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Camera, "KH2 camera: KH2's first person (Sora state {})", rd::<i32>(sora + 0x70));
     }
 }
 

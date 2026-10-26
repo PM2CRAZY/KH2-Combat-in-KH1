@@ -226,9 +226,6 @@ gummi = vanilla\r\n\
 trace = on\r\n\
 ; trace_seconds: how many seconds before the dump the trace clip holds (1 to 120, default 10)\r\n\
 trace_seconds = 10\r\n\
-; sound_log: (debug tools: only with debug_menu = on) on = every KH1 menu sound, voice group and voice clip played is a line in the log\r\n\
-; (the id and where it was called from, docs/kh1-sounds.md); off = none (the debug menu switches it)\r\n\
-sound_log = on\r\n\
 ; trace_game_frames: on = trace_seconds counts game frames (60 a second, at any frame rate), so\r\n\
 ; a frame-advanced clip holds as many frames as one played at full speed; off = real time\r\n\
 ; (the debug menu's Trace Recorder page switches it; turning Frame Advance on turns it on)\r\n\
@@ -254,7 +251,27 @@ trace_sounds = on\r\n\
 ; Advance, the trace recorder and the sound log, and the Config menu's Misc list has a Debug\r\n\
 ; Menu row (it switches the menu for that session only); off = none of it is loaded or hooked\r\n\
 ; and the row isn't there. Read once when the game starts: a change needs a restart.\r\n\
-debug_menu = off\r\n";
+debug_menu = off\r\n\
+; log_*: what goes into kh1-kh2.log, by system (on / off each; the debug menu's Logs page\r\n\
+; switches them in game). All off by default, and none of it (no log file at all) unless\r\n\
+; debug_menu = on at start: general, loading (loading screen, cache), takeover (who has Sora,\r\n\
+; input), animation, combat, magic, forms, kh2_sounds, kh1_sounds (every KH1 sound call, the\r\n\
+; old sound_log), effects, camera, menus, debug (debug menu, frame advance, trace), crash\r\n\
+; (crash notes, the version and game build lines)\r\n\
+log_general = off\r\n\
+log_loading = off\r\n\
+log_takeover = off\r\n\
+log_animation = off\r\n\
+log_combat = off\r\n\
+log_magic = off\r\n\
+log_forms = off\r\n\
+log_kh2_sounds = off\r\n\
+log_kh1_sounds = off\r\n\
+log_effects = off\r\n\
+log_camera = off\r\n\
+log_menus = off\r\n\
+log_debug = off\r\n\
+log_crash = off\r\n";
 
 #[derive(Debug)]
 pub struct Settings {
@@ -369,8 +386,6 @@ pub struct Settings {
     pub trace: super::trace::Mode,
     /// How many seconds of Sora's frames a trace dump holds (`trace_seconds`, 1..=120, 10 by default).
     pub trace_seconds: u32,
-    /// KH1's sounds written to the log (`sound_log = on`, `soundlog.rs`).
-    pub sound_log: bool,
     /// The trace's seconds count game frames, not real time (`trace_game_frames = on`; off by
     /// default; Frame Advance turns it on, `frameadv`).
     pub trace_game_frames: bool,
@@ -379,6 +394,9 @@ pub struct Settings {
     /// The debug tools are loaded (`debug_menu = on`, read once at start: `win::debug_on`), and
     /// L1 + R1 + Triangle opens the debug menu (`debugmenu.rs`).
     pub debug_menu: bool,
+    /// The log's categories on (`log_*` = on / off, `win::LogCat`; all off by default): used only
+    /// with the debug tools loaded.
+    pub log_cats: u32,
 }
 
 static SETTINGS: AtomicPtr<Settings> = AtomicPtr::new(std::ptr::null_mut());
@@ -592,12 +610,12 @@ fn load(first: bool) -> Option<Settings> {
         foot_ik: on(&text, "foot_ik", "on", false),
         trace: super::trace::Mode::parse(setting(&text, "trace").as_deref()),
         trace_seconds: setting(&text, "trace_seconds").and_then(|v| v.trim_end_matches('s').trim().parse::<f32>().ok()).map_or(super::trace::DEFAULT_SECONDS, |v| (v.round() as u32).clamp(1, super::trace::MAX_SECONDS)),
-        sound_log: on(&text, "sound_log", "on", true),
         trace_game_frames: on(&text, "trace_game_frames", "on", false),
         trace_cats: super::trace::ITEMS.iter().filter(|it| on(&text, it.key, "on", true)).fold(0, |m, it| m | it.bit),
         debug_menu: on(&text, "debug_menu", "on", false),
+        log_cats: super::LogCat::ALL.iter().filter(|c| on(&text, c.key(), "on", false)).fold(0, |m, c| m | c.bit()),
     };
-    log(&format!("settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" }));
+    log!(General, "settings {} ({path}): {s:?}", if first { "loaded" } else { "reloaded (the ini was saved)" });
     Some(s)
 }
 

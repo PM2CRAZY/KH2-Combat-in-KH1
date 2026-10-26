@@ -386,7 +386,7 @@ pub fn toggle_task(i: usize) {
         }
     }
     let list = RUNS.lock().map(|r| r.iter().map(|x| format!("{:#x} {}", x.0, if x.1 { "runs" } else { "held" })).collect::<Vec<_>>().join(", ")).unwrap_or_default();
-    log(&format!("frame advance: task {} {:#x} {} while held (switched: [{list}])", row.priority, row.rva, if runs { "runs" } else { "held" }));
+    log!(Debug, "frame advance: task {} {:#x} {} while held (switched: [{list}])", row.priority, row.rva, if runs { "runs" } else { "held" });
 }
 
 /// A held task's function: does nothing, keeps the task.
@@ -442,7 +442,7 @@ pub fn free_camera() -> bool {
 /// Switches the Camera row (applied at this frame's end, `hold_tasks`).
 pub fn set_free_camera(on: bool) {
     if FREE_CAMERA.swap(on, Ordering::Relaxed) != on {
-        log(&format!("debug menu: frame advance camera {}", if on { "free (100000 0x1401e5d90 runs while held, the frame's scale; no Select)" } else { "held" }));
+        log!(Debug, "debug menu: frame advance camera {}", if on { "free (100000 0x1401e5d90 runs while held, the frame's scale; no Select)" } else { "held" });
     }
 }
 
@@ -606,7 +606,7 @@ unsafe fn hold_tasks(base: usize) {
                 }
             })
             .collect();
-        log(&format!("frame advance: holding {} tasks (priority, function RVA): {}", held.len(), list.join(", ")));
+        log!(Debug, "frame advance: holding {} tasks (priority, function RVA): {}", held.len(), list.join(", "));
     }
 }
 
@@ -677,7 +677,7 @@ pub fn set_on(on: bool) {
         if on {
             super::trace::set_game_frames(true);
         }
-        log(&format!("debug menu: frame advance {}", if on { "on (R2 / period: one frame, held 1 s: full speed)" } else { "off" }));
+        log!(Debug, "debug menu: frame advance {}", if on { "on (R2 / period: one frame, held 1 s: full speed)" } else { "off" });
     }
 }
 
@@ -749,7 +749,7 @@ pub fn hold_sound() -> bool {
 /// Switches the Held Sound row (applied at the next frame end).
 pub fn set_hold_sound(on: bool) {
     if HOLD_SOUND.swap(on, Ordering::Relaxed) != on {
-        log(&format!("debug menu: frame advance held sound {}", if on { "paused (KH1's pause: 0x1400D2F80 (1), music at half volume)" } else { "plays" }));
+        log!(Debug, "debug menu: frame advance held sound {}", if on { "paused (KH1's pause: 0x1400D2F80 (1), music at half volume)" } else { "plays" });
     }
 }
 

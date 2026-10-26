@@ -507,7 +507,7 @@ fn set(what: Row, v: bool) {
         Row::Camera => {
             camera::KH2.store(v, Ordering::Relaxed);
             super::settings::save("camera", if v { "kh2" } else { "kh1" });
-            log(&format!("Config menu: camera style {}", if v { "KH2" } else { "KH1" }));
+            log!(Menus, "Config menu: camera style {}", if v { "KH2" } else { "KH1" });
         }
         Row::R2Hold => camera::set_r2_hold(v),
         Row::L2Dpad => camera::set_l2_dpad(v),
@@ -602,15 +602,15 @@ pub unsafe fn install() {
     }
     TEXT_HOOKED.store(true, Ordering::Release);
     if !super::settings::get().config_row {
-        log("Config menu: no rows of ours (config_row = off)");
+        log!(Menus, "Config menu: no rows of ours (config_row = off)");
         return;
     }
     if Build::current() != Build::Steam {
-        log("Config menu: the KH1 in KH2 menu is Steam only: no rows of ours (the ini switches)");
+        log!(Menus, "Config menu: the KH1 in KH2 menu is Steam only: no rows of ours (the ini switches)");
         return;
     }
     if rd::<u16>(base + ROWS_RVA) != 8 || rd::<u16>(base + VISIBLE_RVA) != 8 {
-        log(&format!("Config menu: unexpected row counts {} / {}: no rows of ours", rd::<u16>(base + ROWS_RVA), rd::<u16>(base + VISIBLE_RVA)));
+        log!(Menus, "Config menu: unexpected row counts {} / {}: no rows of ours", rd::<u16>(base + ROWS_RVA), rd::<u16>(base + VISIBLE_RVA));
         return;
     }
     DEFAULT_LABEL.store(rd::<u32>(base + LABELS_STEAM + KH1_DEFAULT_ROW as usize * 4), Ordering::Relaxed);
@@ -644,7 +644,7 @@ pub unsafe fn install() {
     super::sys::VirtualProtect((base + ROWS_RVA) as *mut _, 4, 0x04, &mut old);
     wr(base + ROWS_RVA, PAGE_ROWS);
     wr(base + VISIBLE_RVA, PAGE_ROWS);
-    log("Config menu: the KH1 in KH2 button added (Camera, Combat, Movement, Misc)");
+    log!(Menus, "Config menu: the KH1 in KH2 button added (Camera, Combat, Movement, Misc)");
 }
 
 /// KH1's sysmsg lookup (its own instructions, re-done here: its first one is RIP-relative, so
@@ -756,7 +756,7 @@ unsafe fn create_list(list: List, row: i32, after: usize) -> usize {
     let base = BASE.load(Ordering::Relaxed);
     let w = call2(CREATE_STEAM, def_of(list), OPEN_TYPE as usize);
     if w == 0 {
-        log("Config menu: no free window for our list");
+        log!(Menus, "Config menu: no free window for our list");
         return 0;
     }
     call2(LINK_NEXT_STEAM, after, w);

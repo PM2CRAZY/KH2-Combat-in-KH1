@@ -108,10 +108,13 @@ fn base() -> usize {
     BASE.load(Ordering::Relaxed)
 }
 
-fn note(s: String) {
+fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Magic) {
+        return;
+    }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 300 {
-        log(&s);
+    if super::log_on(super::LogCat::Magic) && N.fetch_add(1, Ordering::Relaxed) < 300 {
+        log!(Magic, "{}", s());
     }
 }
 
@@ -207,11 +210,11 @@ pub fn spell_file(level: u8) -> Option<Arc<Vec<u8>>> {
         })();
         match r {
             Ok(b) => {
-                log(&format!("Reflect: {name} read ({} bytes)", b.len()));
+                log!(Magic, "Reflect: {name} read ({} bytes)", b.len());
                 Some(Arc::new(b))
             }
             Err(e) => {
-                log(&format!("Reflect: {name} not read ({e}): no Reflect at level {level}"));
+                log!(Magic, "Reflect: {name} not read ({e}): no Reflect at level {level}");
                 None
             }
         }
@@ -366,14 +369,14 @@ unsafe fn ensure_record(base: usize) -> bool {
         if have != [0u8; 16] && have[4..8] != RECORD[4..8] {
             static ONCE: AtomicBool = AtomicBool::new(false);
             if !ONCE.swap(true, Ordering::Relaxed) {
-                log(&format!("Reflect: command record {COMMAND:#x} is in use ({have:02x?}): no Reflect"));
+                log!(Magic, "Reflect: command record {COMMAND:#x} is in use ({have:02x?}): no Reflect");
             }
             return false;
         }
         wr(r, RECORD);
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 5 {
-            log(&format!("Reflect: command record {COMMAND:#x} written at {r:#x}"));
+        if super::log_on(super::LogCat::Magic) && N.fetch_add(1, Ordering::Relaxed) < 5 {
+            log!(Magic, "Reflect: command record {COMMAND:#x} written at {r:#x}");
         }
     }
     true
@@ -396,7 +399,7 @@ unsafe fn eight_rows(base: usize) -> bool {
     if rows < 0x10000 || n != 7 {
         static ONCE: AtomicBool = AtomicBool::new(false);
         if !ONCE.swap(true, Ordering::Relaxed) {
-            log(&format!("Reflect: magic list layout not as expected (rows {rows:#x}, {n}): Reflect only while the list has room"));
+            log!(Magic, "Reflect: magic list layout not as expected (rows {rows:#x}, {n}): Reflect only while the list has room");
         }
         return false;
     }
@@ -405,8 +408,8 @@ unsafe fn eight_rows(base: usize) -> bool {
     wr(layout + 0x28, buf as u64);
     wr(layout + 0x10, ROWS as i32);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 5 {
-        log(&format!("Reflect: magic list rows: 8 (KH1's 7 at {rows:#x} copied to {buf:#x})"));
+    if super::log_on(super::LogCat::Magic) && N.fetch_add(1, Ordering::Relaxed) < 5 {
+        log!(Magic, "Reflect: magic list rows: 8 (KH1's 7 at {rows:#x} copied to {buf:#x})");
     }
     true
 }
@@ -424,7 +427,7 @@ unsafe fn in_menus(base: usize) -> bool {
     static LEVEL_LOGGED: AtomicU32 = AtomicU32::new(0);
     let l = level(save);
     if LEVEL_LOGGED.swap(l as u32, Ordering::Relaxed) != l as u32 {
-        log(&format!(
+        log!(Magic,
             "Reflect: level {l}, {} (KH1's Aero level: loaded {}, saved {}){}",
             NAMES[(l - 1) as usize],
             rd::<i32>(base + SPELLS_RVA + 6 * 0x38),
@@ -435,7 +438,7 @@ unsafe fn in_menus(base: usize) -> bool {
                 (true, Some(_)) => String::new(),
                 (true, None) => "; no level's files loaded".to_string(),
             }
-        ));
+        );
     }
     true
 }
@@ -500,7 +503,7 @@ pub unsafe fn magic_menu(actor: usize, flags: usize) {
     static LOGGED: AtomicU32 = AtomicU32::new(u32::MAX);
     let key = (n as u32) << 8 | (at as u32) << 1 | usable as u32;
     if LOGGED.swap(key, Ordering::Relaxed) != key {
-        log(&format!("Reflect in the Magic menu: entry {} of {} ({}){}", at + 1, n + 1, if usable { "usable" } else { "greyed" }, if usable { String::new() } else { format!(" ({})", greyed_why(actor, flags)) }));
+        log!(Magic, "Reflect in the Magic menu: entry {} of {} ({}){}", at + 1, n + 1, if usable { "usable" } else { "greyed" }, if usable { String::new() } else { format!(" ({})", greyed_why(actor, flags)) });
     }
 }
 
@@ -532,11 +535,11 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     if !super::settings::get().reflect {
-        log("Reflect: off (reflect = off)");
+        log!(Magic, "Reflect: off (reflect = off)");
         return;
     }
     if !hook::redirect_call(base + NAME_CALL_RVA, base + WORD_RVA, word as *const () as usize, "command name word") {
-        log("Reflect: the command name call wasn't as expected: no Reflect in the menu");
+        log!(Magic, "Reflect: the command name call wasn't as expected: no Reflect in the menu");
         return;
     }
     WORD_HOOKED.store(true, Ordering::Release);
@@ -545,13 +548,13 @@ pub unsafe fn install() {
     }
     let _ = HELP_TEXT.set(Box::leak(super::menu::encode(HELP).into_boxed_slice()).as_ptr() as usize);
     let _ = NAME.set(NAMES.map(|n| Box::leak(super::menu::encode(n).into_boxed_slice()).as_ptr() as usize));
-    log(&format!("Reflect: menu entry ready (command {COMMAND:#x}, learned with Aero, its level Aero's, 1 MP = KH1 cost {COST})"));
+    log!(Magic, "Reflect: menu entry ready (command {COMMAND:#x}, learned with Aero, its level Aero's, 1 MP = KH1 cost {COST})");
     // The spell files, once KH2 Sora is there (their MAGC rows name them).
     std::thread::spawn(|| {
         let t = Instant::now();
         while pose::kh2().is_none() {
             if t.elapsed().as_secs() > 300 {
-                log("Reflect: KH2 Sora never loaded");
+                log!(Magic, "Reflect: KH2 Sora never loaded");
                 let _ = PARSED.set(Vec::new());
                 return;
             }
@@ -563,7 +566,7 @@ pub unsafe fn install() {
             let parsed = spell_file(level).and_then(|b| match SpellFile::parse(&name, &b) {
                 Ok(f) => Some(f),
                 Err(e) => {
-                    log(&format!("Reflect: {name} not usable ({e})"));
+                    log!(Magic, "Reflect: {name} not usable ({e})");
                     None
                 }
             });
@@ -572,14 +575,14 @@ pub unsafe fn install() {
                 let sub = level as i32 * 2 - 2;
                 let barrier = pose::kh2().and_then(|k| k.battle.attack_for_level(573, sub as u8, 0)).map(|a| a.kind);
                 let counter = pose::kh2().and_then(|k| k.battle.attack_for_level(574, sub as u8, 0)).map(|a| (a.power, a.interval));
-                log(&format!(
+                log!(Magic,
                     "Reflect level {level} ({}): script and {} effect elements ready; cast motions {} / finisher {:?} / air {}; sub {sub}: barrier ATKP 573 kind {barrier:?}, counter 574 (power, re-hit frames) {counter:?}",
                     NAMES[(level - 1) as usize],
                     f.pax.elements.len(),
                     m.ground,
                     m.finisher,
                     m.air
-                ));
+                );
             }
             all.push(parsed);
         }
@@ -601,7 +604,7 @@ pub fn waiting() -> bool {
 unsafe fn refuse(base: usize, why: &str) {
     let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
     sound(4);
-    note(format!("Reflect refused: {why}"));
+    note(|| format!("Reflect refused: {why}"));
 }
 
 /// KH1's command step got our command (`combat::command`: from the Magic menu or a shortcut, the
@@ -624,7 +627,7 @@ pub unsafe fn chosen(actor: usize) {
     if let Ok(mut w) = WAITING.lock() {
         *w = Some((Instant::now(), takeover::KH2_MOTION.load(Ordering::Relaxed)));
     }
-    note(format!(
+    note(|| format!(
         "Reflect chosen (level {}, MP {:?}, cost 1; Fire's own cost field {:?}; KH2 can cast now: {:?})",
         level(save),
         mp(actor),
@@ -795,7 +798,7 @@ pub unsafe fn cast_native(actor: usize, dir: usize) {
         wr(dir + 0xC, 0.0f32);
     }
     cast_voice(actor, level, finisher);
-    note(format!(
+    note(|| format!(
         "{} on KH1's cast state (level {level}): request {request:#x}, KH2 motion {motion}{}, step {step:?}, MP {before:?} -> {:?} ({cost:?} units)",
         NAMES[(level - 1) as usize],
         if flying { " (flight)" } else if air { " (air)" } else if finisher { " (the combo's finisher)" } else { "" },
@@ -934,7 +937,7 @@ pub fn barrier_up() -> bool {
 /// `hurt`: the barrier stopped an enemy hit (counted for the counter).
 pub fn blocked(from: usize) {
     let n = BLOCKS.fetch_add(1, Ordering::Relaxed) + 1;
-    note(format!("Reflect blocked a hit from {from:#x} ({n} this frame)"));
+    note(|| format!("Reflect blocked a hit from {from:#x} ({n} this frame)"));
 }
 
 /// The ATKP row a spell attack uses (its finisher sub falls back to the plain one when the data
@@ -955,7 +958,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
         let _ = (t, WAIT_S, takeover::same_move(motion) && ch.magic_later());
         {
             *w = None;
-            note(format!("Reflect dropped: the move it was chosen in (motion {motion}) ended without a window for it"));
+            note(|| format!("Reflect dropped: the move it was chosen in (motion {motion}) ended without a window for it"));
         }
         return;
     }
@@ -970,13 +973,13 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     };
     let m = motions(level);
     let Some(motion) = ch.cast(m) else {
-        note(format!("Reflect: KH2 couldn't start its cast motion ({m:?})"));
+        note(|| format!("Reflect: KH2 couldn't start its cast motion ({m:?})"));
         return;
     };
     // In the air: his fall stops as the cast starts, then he falls through it from rest (s177's;
     // the user, s229: "roll back the physics of reflect to version s177"), into KH2's landing.
     if ch.airborne() {
-        note(format!("Reflect in the air: stopped, then falling through the cast (motion {motion})"));
+        note(|| format!("Reflect in the air: stopped, then falling through the cast (motion {motion})"));
     }
     // KH1's own payment of a spell's cost: 1 MP at every level in a Drive Form; base Sora KH2's
     // cost scaled onto KH1's MP (`mpcost`).
@@ -995,7 +998,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
         }
     }
     cast_voice(actor, level, finisher);
-    note(format!(
+    note(|| format!(
         "{} cast (level {level}): motion {motion}{}, MP {before:?} -> {:?} (its effects loaded: {})",
         NAMES[(level - 1) as usize],
         if finisher { " (combo finisher)" } else if motion == m.air { " (air)" } else { "" },
@@ -1146,7 +1149,7 @@ impl World for KhWorld {
         false
     }
     fn hitback(&mut self, o: ObjId, _: Vec3, dist: f32) {
-        note(format!("Reflect: script pushed object {o} by {dist:.0} (not applied)"));
+        note(|| format!("Reflect: script pushed object {o} by {dist:.0} (not applied)"));
     }
     fn random(&mut self) -> f32 {
         self.rng ^= self.rng << 13;
@@ -1186,8 +1189,8 @@ pub unsafe fn intangible(actor: usize, on: bool) {
             wr(actor, flags | UNTOUCHABLE);
             if !OURS.swap(true, Ordering::Relaxed) {
                 static N: AtomicU32 = AtomicU32::new(0);
-                if N.fetch_add(1, Ordering::Relaxed) < 40 {
-                    log("Sora untouchable (KH1's dodge-roll flag): KH2's invulnerable frames or Reflect");
+                if super::log_on(super::LogCat::Magic) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+                    log!(Magic, "Sora untouchable (KH1's dodge-roll flag): KH2's invulnerable frames or Reflect");
                 }
             }
         }
@@ -1203,7 +1206,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         return;
     };
     if rt.paused.take().is_some() {
-        note("Reflect goes on: KH2 has Sora again".to_string());
+        note(|| "Reflect goes on: KH2 has Sora again".to_string());
     }
     if rt.fresh.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
         BARRIER.store(false, Ordering::Relaxed);
@@ -1230,7 +1233,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         let carry = 0;
         let chained = rt.magic.busy(SORA);
         if chained {
-            note("Reflect cast again in flight: the new one ends the last one's barrier and counts its hits (KH2's teamwork block)".to_string());
+            note(|| "Reflect cast again in flight: the new one ends the last one's barrier and counts its hits (KH2's teamwork block)".to_string());
         }
         match rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) {
             Ok(_) => {
@@ -1242,7 +1245,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
                 }
                 rt.carry = carry;
             }
-            Err(e) => note(format!("Reflect: the script didn't start ({e})")),
+            Err(e) => note(|| format!("Reflect: the script didn't start ({e})")),
         }
     }
     if let Some((m, waited)) = rt.casting {
@@ -1252,10 +1255,10 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         if fired {
             rt.casting = None;
             let ok = rt.magic.release(SORA, &mut world);
-            note(format!("Reflect released at frame {} of motion {m} ({})", out.clip_frame, if ok { "barrier" } else { "the script didn't take it" }));
+            note(|| format!("Reflect released at frame {} of motion {m} ({})", out.clip_frame, if ok { "barrier" } else { "the script didn't take it" }));
         } else if (out.motion != m && (waited == SEEN || waited > NOT_SEEN_FRAMES)) || out.state != StateName::Magic {
             rt.casting = None;
-            note(format!("Reflect's cast motion {m} was cut off before its release (now {:?} motion {})", out.state, out.motion));
+            note(|| format!("Reflect's cast motion {m} was cut off before its release (now {:?} motion {})", out.state, out.motion));
         }
     }
     // The hits the barrier stopped since last frame: its reflect count (the script's counter).
@@ -1264,7 +1267,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     if rt.carry > 0 {
         if let Some(a) = rt.magic.attacks.iter_mut().find(|a| !a.freed && row(battle, a.atk, a.sub, 0).is_some_and(|r| r.kind == 3)) {
             a.reflect_count = a.reflect_count.saturating_add(rt.carry.min(255) as u8);
-            note(format!("Reflect: {} carried hit(s) counted on the new barrier (count {})", rt.carry, a.reflect_count));
+            note(|| format!("Reflect: {} carried hit(s) counted on the new barrier (count {})", rt.carry, a.reflect_count));
             rt.carry = 0;
         }
     }
@@ -1275,9 +1278,9 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
             Some(a) => {
                 a.reflect_count = a.reflect_count.saturating_add(blocks.min(255) as u8);
                 rt.blocks += blocks;
-                note(format!("Reflect: {} hit(s) counted (barrier ATKP {}, count {})", blocks, a.atk, a.reflect_count));
+                note(|| format!("Reflect: {} hit(s) counted (barrier ATKP {}, count {})", blocks, a.atk, a.reflect_count));
             }
-            None => note(format!("Reflect: {blocks} hit(s) stopped with no barrier left to count them")),
+            None => note(|| format!("Reflect: {blocks} hit(s) stopped with no barrier left to count them")),
         }
     }
     // (Waiting for the combo only with something else in it: a Reflect is now a combo's first
@@ -1289,8 +1292,8 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     let combo_wait = rt.hold.combo;
     for e in rt.magic.update(&mut world).into_iter().chain(rt.magic.take_events()) {
         match e {
-            Event::Missing(n) => note(format!("Reflect's script used {n} (not modelled)")),
-            Event::Error(s) => note(format!("Reflect's script error: {s}")),
+            Event::Missing(n) => note(|| format!("Reflect's script used {n} (not modelled)")),
+            Event::Error(s) => note(|| format!("Reflect's script error: {s}")),
             Event::Strike { .. } => {}
         }
     }
@@ -1306,7 +1309,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
                 if e.alive() {
                     super::kh2sound::spell_element(level, e.element.id);
                 }
-                note(format!("Reflect effect: level {level} element {} (sound {}){}", e.element.id, e.element.sound, if h.is_some() { "" } else { ", not drawn" }));
+                note(|| format!("Reflect effect: level {level} element {} (sound {}){}", e.element.id, e.element.sound, if h.is_some() { "" } else { ", not drawn" }));
                 rt.fx.insert(e.id, (h, false));
             }
             Some((Some(h), ended)) => {
@@ -1332,7 +1335,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
                     let level = rt.levels.get(e.spell).copied().unwrap_or(1);
                     if let Some(n) = super::kh2fx::spell_start(level, e.element.id) {
                         rt.fx.insert(e.id, (Some(n), false));
-                        note(format!("Reflect: barrier effect (element {}) started again for the hold", e.element.id));
+                        note(|| format!("Reflect: barrier effect (element {}) started again for the hold", e.element.id));
                     }
                 }
             }
@@ -1369,7 +1372,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         if rt.burst_heard.insert(a.key) {
             let level = rt.levels.get(a.spell).copied().unwrap_or(1);
             super::kh2sound::spell_element(level, BURST_ELEMENT);
-            log(&format!("Reflect burst (ATKP {}): {} hit(s) blocked", a.atk, rt.blocks));
+            log!(Magic, "Reflect burst (ATKP {}): {} hit(s) blocked", a.atk, rt.blocks);
         }
     }
     // The barrier as a guard: enemy shots it touches turned back (counted, they never reach
@@ -1388,7 +1391,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
                 if let Some(a) = rt.magic.attacks.iter_mut().find(|a| !a.freed && a.id | SPELL_KEY == *key) {
                     a.reflect_count = a.reflect_count.saturating_add(1);
                     rt.blocks += 1;
-                    note(format!("Reflect: an attack met barrier ATKP {} (count {})", a.atk, a.reflect_count));
+                    note(|| format!("Reflect: an attack met barrier ATKP {} (count {})", a.atk, a.reflect_count));
                 } else {
                     blocked(0);
                 }
@@ -1396,7 +1399,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
                     super::kh2fx::spell_place(h, Mat4::from_translation(Vec3::from(at)));
                 }
                 super::kh2sound::spell_element(level, CONTACT_SOUND_ELEMENT);
-                note(format!("Reflect: contact effect at {at:.0?}"));
+                note(|| format!("Reflect: contact effect at {at:.0?}"));
             }
         }
     }
@@ -1410,7 +1413,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         };
         for (_, atk, foe, dealt) in hits {
             rt.counter_hits += 1;
-            log(&format!("Reflect counter: ATKP {atk} hit {foe:#x} -> damage {dealt:?} ({} blocked)", rt.blocks));
+            log!(Magic, "Reflect counter: ATKP {atk} hit {foe:#x} -> damage {dealt:?} ({} blocked)", rt.blocks);
         }
     }
     for a in rt.magic.freed().filter(|a| a.owns_id) {
@@ -1422,12 +1425,12 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     }
     if barrier != rt.barrier {
         rt.barrier = barrier;
-        note(format!("Reflect barrier {} ({:.2} s after the cast)", if barrier { "up" } else { "down" }, rt.started.map_or(0.0, |t| t.elapsed().as_secs_f32())));
+        note(|| format!("Reflect barrier {} ({:.2} s after the cast)", if barrier { "up" } else { "down" }, rt.started.map_or(0.0, |t| t.elapsed().as_secs_f32())));
     }
     // (Waiting for the combo, the barrier stops nothing: Sora is attacking.)
     BARRIER.store(barrier && !combo_wait, Ordering::Relaxed);
     if rt.magic.casts.is_empty() && rt.casting.is_none() && rt.fresh.is_none() && rt.started.is_some() {
-        note(format!("Reflect done: {} hit(s) blocked, {} counter hit(s)", rt.blocks, rt.counter_hits));
+        note(|| format!("Reflect done: {} hit(s) blocked, {} counter hit(s)", rt.blocks, rt.counter_hits));
         rt.started = None;
     }
 }
@@ -1455,22 +1458,22 @@ fn hold(rt: &mut Runtime, blocks: u32, combo: bool) -> bool {
     let for_combo = rt.barrier && !h.spent && !over && h.age >= HOLD_AT && !hits && combo && rt.blocks > 0;
     if for_combo != h.combo {
         h.combo = for_combo;
-        note(format!("Reflect {}: {} blocked", if for_combo { "waits for the combo (the chain's last Reflect bursts)" } else { "no longer waiting for the combo" }, rt.blocks));
+        note(|| format!("Reflect {}: {} blocked", if for_combo { "waits for the combo (the chain's last Reflect bursts)" } else { "no longer waiting for the combo" }, rt.blocks));
     }
     let want = hits || for_combo;
     if want {
         if !was {
             h.since = Some(Instant::now());
             h.frames = 0;
-            note(format!("Reflect barrier held: last hit {} frames ago ({} blocked so far)", h.since_hit.unwrap_or(0), rt.blocks));
+            note(|| format!("Reflect barrier held: last hit {} frames ago ({} blocked so far)", h.since_hit.unwrap_or(0), rt.blocks));
         } else if blocks > 0 {
-            note(format!("Reflect barrier held: last hit 0 frames ago ({} blocked so far, held {} frames)", rt.blocks, h.frames));
+            note(|| format!("Reflect barrier held: last hit 0 frames ago ({} blocked so far, held {} frames)", rt.blocks, h.frames));
         }
         h.frames += 1;
     } else if was {
         h.spent = true;
         let held = h.since.take().map_or(0.0, |t| t.elapsed().as_secs_f32());
-        note(format!(
+        note(|| format!(
             "Reflect barrier let go: last hit {} frames ago, held {} frames ({held:.2} s{}), {} blocked: the counter follows",
             h.since_hit.unwrap_or(0),
             h.frames,
@@ -1523,6 +1526,6 @@ pub fn kh1_frame() {
     rt.casting = None;
     rt.barrier = false;
     if rt.started.take().is_some() {
-        note("Reflect ended: KH1 has Sora".to_string());
+        note(|| "Reflect ended: KH1 has Sora".to_string());
     }
 }

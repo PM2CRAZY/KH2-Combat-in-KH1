@@ -468,7 +468,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
                     blocks.push(block);
                 }
             } else {
-                log(&format!("KH2 slots: KH2 motion {} left out: not all {} of KH1's slots {}..{} built", c.motion, c.count, c.slot, c.slot + c.count as usize - 1));
+                log!(Animation, "KH2 slots: KH2 motion {} left out: not all {} of KH1's slots {}..{} built", c.motion, c.count, c.slot, c.slot + c.count as usize - 1);
             }
         }
         // (KH2's other swings are no longer built on KH1's own ground and air requests for KH2's
@@ -505,16 +505,16 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
                 if let Some((mut m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
                     m.own = Some(m.request);
                     m.request = super::kh1rows::request(n) as usize;
-                    log(&format!("KH2 slots: KH2 motion {motion} ({}) on our request {:#x} (KH1's row {} of ours)", o.name, m.request, super::kh1rows::row(n)));
+                    log!(Animation, "KH2 slots: KH2 motion {motion} ({}) on our request {:#x} (KH1's row {} of ours)", o.name, m.request, super::kh1rows::row(n));
                     moves.push(m);
                     blocks.push(block);
                 }
             }
         }
-        log(&format!(
+        log!(Animation,
             "KH2 slots: KH2's row selection on KH1's ground and air combo: {}",
             [0xC8usize, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE].iter().map(|r| format!("{r:#x} -> {:?}", moves.iter().filter(|m| m.request == *r).map(|m| m.motion).collect::<Vec<_>>())).collect::<Vec<_>>().join(", ")
-        ));
+        );
         Ok(Built { moves, blocks: Mutex::new(blocks), requests })
     })();
     match r {
@@ -522,7 +522,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
             let _ = BUILT.set(Some(b));
         }
         Err(e) => {
-            log(&format!("KH2 slots: not built ({e}); KH2's moves are drawn as before"));
+            log!(Animation, "KH2 slots: not built ({e}); KH2's moves are drawn as before");
             let _ = BUILT.set(None);
         }
     }
@@ -536,7 +536,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
 fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<&mut crate::slotcache::Cache>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, crate::slotcache::Block)>, String> {
     super::loadscreen::making(motion);
     let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
-        log(&format!("KH2 slots: KH2 motion {motion} has no clip, left out"));
+        log!(Animation, "KH2 slots: KH2 motion {motion} has no clip, left out");
         return Ok(None);
     };
     let entry = requests.get(request).copied();
@@ -544,7 +544,7 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
     let kind_ok = |k: u32| (k == KIND_VARIANTS && variant <= 2) || (k == KIND_BATTLE && variant <= 1);
     if entry.map(|e| (e & 0xFFF) as usize) != base || (variant > 0 && !entry.is_some_and(|e| kind_ok((e >> 12) & 7))) {
         // (Left out, not a failure of the rest: one wrong request shouldn't drop the others.)
-        log(&format!("KH2 slots: request {request:#x} is not KH1's slot {stands_for}; KH2 motion {motion} left out"));
+        log!(Animation, "KH2 slots: request {request:#x} is not KH1's slot {stands_for}; KH2 motion {motion} left out");
         return Ok(None);
     }
     let template = ks::motion_bytes(mset, stands_for).map_err(|e| e.to_string())?;
@@ -620,17 +620,17 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
     let (block, baked) = match baking {
         Some(Ok(block)) => (block, true),
         Some(Err(e)) => {
-            log(&format!("KH2 slots: KH2 motion {motion} not baked ({e}); drawn over its template"));
+            log!(Animation, "KH2 slots: KH2 motion {motion} not baked ({e}); drawn over its template");
             (crate::slotcache::Block::new(ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?), false)
         }
         None => (crate::slotcache::Block::new(ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?), false),
     };
-    log(&format!(
+    log!(Animation,
         "KH2 slots: KH2 motion {motion}{} as KH1 slot {slot} (for KH1's slot {stands_for} / request {request:#x}{}, {old} -> {frames} frames): {}",
         if field { " (field)" } else { "" },
         if default { "" } else { ", by KH2's row selection" },
         tracks.iter().map(|t| format!("{}.{} {:?}", t.kind, t.id, t.keys.iter().map(|k| (k.time, k.a)).collect::<Vec<_>>())).collect::<Vec<_>>().join("; ")
-    ));
+    );
     // (A hit reaction's KH2 voice, 29 / 30 at frame 0, Checked (files), left out: KH1's hit pass plays
     // its own hurt voice for it, `0x1402901F0 (actor, 0 | 1, 0)`, Checked (decomp).)
     let events = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Sound(_) | EventKind::Effect(_)) || (!reaction && matches!(e.kind, EventKind::Voice(_)))).map(|e| (e.frame, e.kind)).collect();
@@ -897,8 +897,8 @@ pub unsafe fn turn_to_lock(actor: usize) {
     wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
     wr(actor + 0x150, f);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log(&format!("KH2's turn to the target (KH2 motion {} frame {:.0}, up to {:.2} a frame): {:.2} -> {f:.2} (the target at {:.2})", m.motion, t, max, yaw, want));
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Animation, "KH2's turn to the target (KH2 motion {} frame {:.0}, up to {:.2} a frame): {:.2} -> {f:.2} (the target at {:.2})", m.motion, t, max, yaw, want);
     }
 }
 
@@ -933,7 +933,7 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): 
     // its own (`docs/kh1-anim-baking.md` §8).
     let legs = super::settings::get().kh1_leg_ik;
     let (block, r) = kh1_data::bake::baked(template, frames, tracks, &b.skeleton, &poses, &moved, legs).map_err(|e| e.to_string())?;
-    log(&format!(
+    log!(Animation,
         "KH2 slots: KH2 motion {motion} baked ({frames} frames, {} bytes, in {:.0} ms): {} keyed channels, {} keys, {} constants, {} bones built once; travel {} ({} H10 keys); KH1's legs {} ({} helper keys; KH1's hip aim {:.0} deg off the retarget's hip, thigh / shin within {:.2} deg); KH1's pass from it within {:.3} units of the pose (worst bone {})",
         block.len(),
         t.elapsed().as_secs_f32() * 1000.0,
@@ -949,7 +949,7 @@ fn bake_one(b: &pose::Baker, kh2: &pose::Kh2, template: &[u8], (motion, field): 
         r.leg_turn.to_degrees(),
         r.max_error,
         r.worst_bone
-    ));
+    );
     Ok(block)
 }
 
@@ -1380,7 +1380,7 @@ unsafe fn place(b: &Built) -> Placed {
     if let Ok(mut v) = MOTION_AT.lock() {
         *v = at;
     }
-    log(&format!("KH2 slots: {} motions placed ({bytes} bytes; the build's copy freed) (handles {:08x?})", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>()));
+    log!(Animation, "KH2 slots: {} motions placed ({bytes} bytes; the build's copy freed) (handles {:08x?})", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>());
     Placed { motions, sets: Vec::new() }
 }
 
@@ -1463,8 +1463,8 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         Ok(v) => v,
         Err(e) => {
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                log(&format!("KH2 slots: set at {at:#x} ({why}) not extended: {e}"));
+            if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Animation, "KH2 slots: set at {at:#x} ({why}) not extended: {e}");
             }
             return false;
         }
@@ -1527,7 +1527,7 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         }
     }
     let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects };
-    log(&format!(
+    log!(Animation,
         "KH2 slots: Sora's set {f:#x} ({why}): {count} slots of its own, ours at {}..{}, {} requests; ours stand in for {}; our own requests {}{}",
         count,
         count + p.motions.len() - 1,
@@ -1535,7 +1535,7 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
         t.redirects.iter().filter(|r| r.5).map(|r| format!("{:#x} (its slot {})", r.0, r.1 & 0xFFF)).collect::<Vec<_>>().join(", "),
         if own_requests.is_empty() { "none".to_string() } else { own_requests.join(", ") },
         if missing.is_empty() { String::new() } else { format!("; not in this set: {}", missing.join(", ")) }
-    ));
+    );
     wr(at + 4, t.slots_handle);
     wr(at + 8, t.requests_handle);
     p.sets.push(t);
@@ -1673,8 +1673,8 @@ unsafe fn loop_range(actor: usize) {
     wr(actor + LOOP_THIRD, 0.0f32);
     wr(actor + MOTION_FLAGS, flags | OWN_LOOP);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 10 {
-        log(&format!("KH2 slots: KH2 motion {} loops from frame {from:.0} of {} (KH1's loop range)", m.motion, m.frames));
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+        log!(Animation, "KH2 slots: KH2 motion {} loops from frame {from:.0} of {} (KH1's loop range)", m.motion, m.frames);
     }
 }
 
@@ -1737,8 +1737,8 @@ pub unsafe fn fall_now(actor: usize, why: &str) {
     let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(super::takeover::game_base() + SET_MOTION_STEAM);
     set(actor, (base + 6) as u32, KH2_FALL_BLEND);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!("KH2's jump: into the fall ({why}): KH1's request {:#x}, blend {KH2_FALL_BLEND}", base + 6));
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Animation, "KH2's jump: into the fall ({why}): KH1's request {:#x}, blend {KH2_FALL_BLEND}", base + 6);
     }
 }
 
@@ -1854,8 +1854,8 @@ unsafe fn finisher_window(actor: usize) {
     }
     wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!("KH2's Finishing Plus window on KH2 motion {} (frame {t:.0}): KH1's combo window", m.motion));
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Animation, "KH2's Finishing Plus window on KH2 motion {} (frame {t:.0}): KH1's combo window", m.motion);
     }
 }
 
@@ -1964,15 +1964,15 @@ unsafe fn tick(actor: usize) {
     };
     if from == -1.0 {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log(&format!(
+        if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log!(Animation,
                 "KH2 slots: KH1 plays ours, KH2 motion {} (for KH1's {} / request {:#x}; its slot {} in the set; Sora's request {:#x})",
                 m.motion,
                 m.stands_for,
                 m.request,
                 rd::<u32>(actor + SLOT_NOW),
                 rd::<u32>(actor + 0x164)
-            ));
+            );
         }
     }
     *l = Some((slot, now));

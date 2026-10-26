@@ -128,7 +128,7 @@ pub unsafe fn install() {
         return;
     }
     ON.store(true, Ordering::Relaxed);
-    log("loading screen: ready (KH1 waits before its title while the mod builds from your files)");
+    log!(Loading, "loading screen: ready (KH1 waits before its title while the mod builds from your files)");
 }
 
 /// Puts call site `i`'s original bytes back.
@@ -153,9 +153,9 @@ unsafe fn release(why: &str) {
     let held = HELD_SINCE.lock().ok().and_then(|h| *h).map_or(0.0, |t| t.elapsed().as_secs_f32() * 1000.0);
     let frames = HELD_FRAMES.load(Ordering::Relaxed);
     if frames > 0 {
-        log(&format!("loading screen: title held {held:.0} ms ({frames} frames, {}); released: {why}", if PHASE.load(Ordering::Relaxed) == WORKING { "nothing shown" } else { "shown" }));
+        log!(Loading, "loading screen: title held {held:.0} ms ({frames} frames, {}); released: {why}", if PHASE.load(Ordering::Relaxed) == WORKING { "nothing shown" } else { "shown" });
     } else {
-        log(&format!("loading screen: not needed ({why})"));
+        log!(Loading, "loading screen: not needed ({why})");
     }
 }
 
@@ -187,7 +187,7 @@ unsafe extern "system" fn mode_machine() {
             return machine();
         }
         if HELD_FRAMES.fetch_add(1, Ordering::Relaxed) == 0 {
-            log("loading screen: KH1's title waits for the mod's loader");
+            log!(Loading, "loading screen: KH1's title waits for the mod's loader");
         }
         return;
     }

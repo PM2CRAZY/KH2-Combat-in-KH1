@@ -94,7 +94,7 @@ pub fn kh2_damage() -> bool {
 pub fn set_kh2_damage(on: bool) {
     KH2.store(1 + on as u8, Ordering::Relaxed);
     super::settings::save("kh2_damage", if on { "on" } else { "off" });
-    log(&format!("Config menu: KH2 Damage {}", if on { "On" } else { "Off" }));
+    log!(Combat, "Config menu: KH2 Damage {}", if on { "On" } else { "Off" });
 }
 
 /// The Config menu's Criticals row (every attack KH1's damage function sees).
@@ -113,7 +113,7 @@ pub fn criticals() -> bool {
 pub fn set_criticals(on: bool) {
     CRITS.store(1 + on as u8, Ordering::Relaxed);
     super::settings::save("criticals", if on { "on" } else { "off" });
-    log(&format!("Config menu: Criticals {}", if on { "On" } else { "Off" }));
+    log!(Combat, "Config menu: Criticals {}", if on { "On" } else { "Off" });
 }
 
 /// The Config menu's Party Criticals row (attacks of Sora's party members, `party_member`).
@@ -132,7 +132,7 @@ pub fn party_criticals() -> bool {
 pub fn set_party_criticals(on: bool) {
     PARTY_CRITS.store(1 + on as u8, Ordering::Relaxed);
     super::settings::save("party_criticals", if on { "on" } else { "off" });
-    log(&format!("Config menu: Party Criticals {}", if on { "On" } else { "Off" }));
+    log!(Combat, "Config menu: Party Criticals {}", if on { "On" } else { "Off" });
 }
 
 /// An attack's owner is one of Sora's party (Donald, Goofy, a guest): an actor on Sora's side
@@ -236,12 +236,12 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
     if let Some((power, magic, from)) = kh2 {
         if LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
             let crit_hit = kind > 0x10000 && rd::<u32>(kind) & 0x20 != 0;
-            log(&format!(
+            log!(Combat,
                 "KH2 damage: {from} power {power}%{} on actor {target:#x}: {d}{}{}",
                 if magic { " (Magic)" } else { "" },
                 if crit_hit { " (critical)" } else { "" },
                 if swapped { "" } else { " (KH1's curve not found: KH1's damage)" }
-            ));
+            );
         }
     }
     d

@@ -82,7 +82,7 @@ pub fn chance() -> bool {
 pub fn set_chance(on: bool) {
     CHANCE.store(1 + on as u8, Ordering::Relaxed);
     super::settings::save("kh1_ability_chance", if on { "on" } else { "off" });
-    super::log(&format!("Config menu: KH1 Ability Chance {}", if on { "On" } else { "Off" }));
+    super::log!(Combat, "Config menu: KH1 Ability Chance {}", if on { "On" } else { "Off" });
 }
 
 /// KH1's random number (0..1), as its picker draws it; `None` if the function isn't the
@@ -238,7 +238,7 @@ pub unsafe fn install() {
     if rd::<[u8; 10]>(base + RANDOM_STEAM) == RANDOM_PROLOGUE {
         RANDOM.store(base + RANDOM_STEAM, Ordering::Relaxed);
     } else {
-        super::log("KH1's random number (0x14031BA30) isn't the expected code here: KH1 Ability Chance rolls never pass");
+        super::log!(Combat, "KH1's random number (0x14031BA30) isn't the expected code here: KH1 Ability Chance rolls never pass");
     }
     super::hook::install(base + GROUND_STEAM, &GROUND_PROLOGUE, ground as *const () as usize, &ORIG_GROUND, "KH1's ground combo row picker (KH2's ability rows)");
     super::hook::install(base + AIR_STEAM, &AIR_PROLOGUE, air as *const () as usize, &ORIG_AIR, "KH1's air combo row picker (KH2's ability rows)");

@@ -34,7 +34,10 @@
 //! - **KH1 Spells** (main page): Gravity, Stop and Aero each "KH1 cast" (KH1's whole cast, its
 //!   own motion, clock and effects) or "KH2 cast" (KH1's spell on KH2's cast motion): the Config
 //!   menu's Magic > Animations rows for them (`formmagic::kh1_cast`; ini `anim_gravity` ..).
-//! - **Pages**: Trace Recorder (the trace's mode, seconds (shown as frames, 60 a second, with Game Frames on), the sound log and its categories,
+//! - **Logs** (the ram-use thread, m1 answer 3): every log category (`win::LogCat`) on or off, and
+//!   an All Logs row; all off by default, kept in the ini (`log_*`). KH1 Sound Calls is the old
+//!   Sound Log row. Without the debug tools (`debug_menu = off` at start) there is no log at all.
+//! - **Pages**: Trace Recorder (the trace's mode, seconds (shown as frames, 60 a second, with Game Frames on), its categories,
 //!   `trace::ITEMS` / `GROUPS`: each group's row turns all of it on or off with left / right,
 //!   Cross opens it to set each item; every change is written to the ini) and Stats (Sora's Level,
 //!   HP, max HP, MP, max MP, Strength, Defense and AP: left / right change it, Cross locks it).
@@ -156,6 +159,8 @@ enum Page {
     /// Gravity, Stop and Aero: KH1's whole cast or KH2's cast motion at the Magic styles KH2
     /// (`formmagic::kh1_cast`).
     Spells,
+    /// What goes into the log, by category (`win::LogCat`; the ram-use thread, m1 answer 3).
+    Logs,
 }
 
 impl Page {
@@ -167,7 +172,7 @@ impl Page {
             Page::Group(_) => Some(Page::Categories),
             Page::Weapons | Page::Abilities => Some(Page::Stats),
             Page::HeldTasks => Some(Page::FrameAdvance),
-            Page::Spells => Some(Page::Main),
+            Page::Spells | Page::Logs => Some(Page::Main),
         }
     }
 
@@ -184,6 +189,7 @@ impl Page {
             Page::HeldTasks => 6 + trace::GROUPS.len(),
             Page::FrameAdvance => 7 + trace::GROUPS.len(),
             Page::Spells => 8 + trace::GROUPS.len(),
+            Page::Logs => 9 + trace::GROUPS.len(),
         }
     }
 
@@ -199,6 +205,7 @@ impl Page {
             Page::FrameAdvance => "DEBUG MENU > FRAME ADVANCE".into(),
             Page::HeldTasks => "FRAME ADVANCE > HELD TASKS".into(),
             Page::Spells => "DEBUG MENU > KH1 SPELLS".into(),
+            Page::Logs => "DEBUG MENU > LOGS".into(),
         }
     }
 
@@ -215,6 +222,7 @@ impl Page {
             Page::FrameAdvance => format!("Left/Right: change   {ok}: select   {no}: back"),
             Page::HeldTasks => format!("Left/Right/{ok}: held / runs   {no}: back"),
             Page::Spells => format!("Left/Right/{ok}: KH1 / KH2 cast   {no}: back"),
+            Page::Logs => format!("Left/Right/{ok}: on/off   {no}: back"),
         }
     }
 }
@@ -227,7 +235,9 @@ enum Action {
     Exit,
     TraceMode,
     Seconds,
-    SoundLog,
+    /// The Logs page's All row, and one category (`win::LogCat::ALL` index).
+    LogsAll,
+    Log(usize),
     GameFrames,
     FrameAdvance,
     HeldSound,
@@ -244,7 +254,7 @@ enum Action {
 
 struct Menu {
     page: Page,
-    cursor: [usize; 9 + trace::GROUPS.len()],
+    cursor: [usize; 10 + trace::GROUPS.len()],
     /// The pad last frame, the directions held and since when, the last repeat.
     last: u16,
     held: u16,
@@ -252,7 +262,7 @@ struct Menu {
     repeat_at: Option<Instant>,
 }
 
-static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 9 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
+static MENU: Mutex<Menu> = Mutex::new(Menu { page: Page::Main, cursor: [0; 10 + trace::GROUPS.len()], last: 0, held: 0, held_at: None, repeat_at: None });
 
 /// One of Sora's stats: its name, its place in a stats block (`None`: only in the save), its byte
 /// in his save record, whether that byte is KH1's base number (equipment added on top), its
@@ -325,7 +335,7 @@ pub fn set_enabled(on: bool) {
     if !on {
         super::frameadv::set_on(false);
     }
-    log(&format!("Config menu: debug menu {} (this session)", if on { "on (L1 + R1 + Triangle)" } else { "off" }));
+    log!(Debug, "Config menu: debug menu {} (this session)", if on { "on (L1 + R1 + Triangle)" } else { "off" });
 }
 
 /// Each pad read (`probe::pad`), with KH1's records merged: opens or closes the menu on L1 + R1 +
@@ -368,7 +378,7 @@ fn open() {
         m.held_at = None;
         m.page
     });
-    log(&format!("debug menu: opened ({:?})", page.unwrap_or(Page::Main)));
+    log!(Debug, "debug menu: opened ({:?})", page.unwrap_or(Page::Main));
 }
 
 /// Closes the menu; `to_main`: the next open starts on the main page (Exit), else on this one.
@@ -380,7 +390,7 @@ fn close(to_main: bool) {
             m.page = Page::Main;
         }
     }
-    log(&format!("debug menu: closed{}", if to_main { "" } else { " (opens on the same page)" }));
+    log!(Debug, "debug menu: closed{}", if to_main { "" } else { " (opens on the same page)" });
 }
 
 fn sound(n: i32) {
@@ -457,6 +467,7 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
     match page {
         Page::Main => vec![
             ("Trace Recorder  >".into(), Action::Enter(Page::Trace)),
+            ("Logs  >".into(), Action::Enter(Page::Logs)),
             ("Stats  >".into(), Action::Enter(Page::Stats)),
             ("Frame Advance  >".into(), Action::Enter(Page::FrameAdvance)),
             ("KH1 Spells  >".into(), Action::Enter(Page::Spells)),
@@ -505,10 +516,20 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             if trace::game_frames() { (format!("{:<16}< {} >", "Frames", trace::seconds() * 60), Action::Seconds) } else { (format!("{:<16}< {} >", "Seconds", trace::seconds()), Action::Seconds) },
             // (t371) On: the seconds count game frames (`trace::game_frames`); Off: real time.
             (format!("{:<16}< {} >", "Game Frames", on_off(trace::game_frames())), Action::GameFrames),
-            (format!("{:<16}< {} >", "Sound Log", on_off(trace::sound_log())), Action::SoundLog),
             ("Categories  >".into(), Action::Enter(Page::Categories)),
             ("Back".into(), Action::Back),
         ],
+        // (The ram-use thread, m1 answer 3: each log's switch, all off by default; KH1 Sound Calls
+        // is the old Sound Log row.)
+        Page::Logs => {
+            let cats = super::log_cats();
+            let all = super::LogCat::ALL.iter().fold(0, |m, c| m | c.bit());
+            let state = if cats & all == all { "All" } else if cats & all == 0 { "None" } else { "Some" };
+            let mut v: Vec<(String, Action)> = vec![(format!("{:<20}< {:<4} >", "All Logs", state), Action::LogsAll)];
+            v.extend(super::LogCat::ALL.iter().enumerate().map(|(i, c)| (format!("{:<20}< {} >", c.name(), on_off(cats & c.bit() != 0)), Action::Log(i))));
+            v.push(("Back".into(), Action::Back));
+            v
+        }
         Page::Categories => {
             let cats = trace::cats();
             let mut v: Vec<(String, Action)> = trace::GROUPS
@@ -659,8 +680,14 @@ unsafe fn step(base: usize) {
                 sound(1);
             }
         }
-        Action::SoundLog => {
-            trace::set_sound_log(!trace::sound_log());
+        Action::LogsAll => {
+            let all = super::LogCat::ALL.iter().fold(0, |m, c| m | c.bit());
+            super::set_log_cats(all, super::log_cats() & all != all);
+            sound(1);
+        }
+        Action::Log(i) => {
+            let bit = super::LogCat::ALL[i].bit();
+            super::set_log_cats(bit, super::log_cats() & bit == 0);
             sound(1);
         }
         Action::GameFrames => {
@@ -856,7 +883,7 @@ unsafe fn toggle_lock(base: usize, i: usize) {
         Some(_) => None,
         None => stat_now(base, i),
     };
-    log(&format!("debug menu: {} {}", STATS[i].name, locks[i].map_or("unlocked".to_string(), |v| format!("locked at {v}"))));
+    log!(Debug, "debug menu: {} {}", STATS[i].name, locks[i].map_or("unlocked".to_string(), |v| format!("locked at {v}")));
 }
 
 /// The locked stats into every copy (every frame).
@@ -930,7 +957,7 @@ unsafe fn equip_weapon(base: usize, id: u8) -> bool {
     let refresh: unsafe extern "system" fn() = std::mem::transmute(base + STATS_REFRESH_RVA);
     refresh();
     let name = |i: Option<u8>| i.map_or("none".to_string(), |i| super::equip::item_name(base, i).unwrap_or_else(|| format!("item {i:#x}")));
-    log(&format!("debug menu: Sora's weapon {} ({:#04x}) -> {} ({id:#04x})", name(was), was.unwrap_or(0), name(Some(id))));
+    log!(Debug, "debug menu: Sora's weapon {} ({:#04x}) -> {} ({id:#04x})", name(was), was.unwrap_or(0), name(Some(id)));
     true
 }
 
@@ -946,7 +973,7 @@ unsafe fn change_weapon(base: usize, id: u8, delta: i32) -> bool {
         return false;
     }
     wr(save + STOCK_OFF + id as usize, v as u8);
-    log(&format!("debug menu: {} owned {now} -> {v}", super::equip::item_name(base, id).unwrap_or_else(|| format!("item {id:#x}"))));
+    log!(Debug, "debug menu: {} owned {now} -> {v}", super::equip::item_name(base, id).unwrap_or_else(|| format!("item {id:#x}")));
     true
 }
 
@@ -1013,7 +1040,7 @@ unsafe fn change_ability(base: usize, id: u8, delta: i32) -> bool {
     let add = delta > 0 || (delta == 0 && have == 0);
     if add {
         if bytes.len() >= len {
-            log(&format!("debug menu: no room for {} (the list is full)", crate::growth::name(id)));
+            log!(Debug, "debug menu: no room for {} (the list is full)", crate::growth::name(id));
             return false;
         }
         // (Off in Sora's list, as KH1's own learning puts it; the shared list has no off.)
@@ -1039,7 +1066,7 @@ unsafe fn change_ability(base: usize, id: u8, delta: i32) -> bool {
         wr(at + k, bytes.get(k).copied().unwrap_or(0));
     }
     let (n, on) = copies(save, id);
-    log(&format!("debug menu: {} copies {have} -> {n} ({on} on)", crate::growth::name(id)));
+    log!(Debug, "debug menu: {} copies {have} -> {n} ({on} on)", crate::growth::name(id));
     true
 }
 

@@ -48,3 +48,46 @@ its off in the ini then its gone from that menu."
 - **On**: everything as before. The Config menu's Debug Menu row switches the menu (L1 + R1 +
   Triangle) for that session only; it no longer writes `debug_menu` (which would take the row
   and the tools away at the next start). The menu starts switched on.
+
+## The log, by category (the ram-use thread, m1 answer 3)
+
+The tester: "I also want to have our logs attached to the debug menu where you can turn on and
+off each log and all should be off, if debug menu is off then none of the logs are injected into
+the game".
+
+- Every log line is written with `log!(Category, "...", args)` (`win/mod.rs`). The macro asks
+  `log_on(Category)` (one atomic load) before it formats anything, so a category that is off
+  costs no string building. The helpers that gather a module's lines (`note`, `cmd_log`) take a
+  closure and return at once when their category is off, and the "first N lines" counters only
+  count lines actually written (so turning a category on mid-session still shows its first lines).
+- **Without the debug tools** (`debug_menu = off` at start): no category can be on, no
+  `kh1-kh2.log` is created and the old logs (`kh1-kh2.prev*.log`) aren't rotated, and the crash
+  note's exception handler isn't installed (it only wrote to the log). (`CRASH_NOTES_ALWAYS` in
+  `win/mod.rs`: true would keep the crash notes and the version lines, and the log file, whatever
+  the ini says; false is the tester's rule as written.)
+- **With the debug tools**: the log file is opened at start as before (the last five runs kept),
+  and the debug menu's **Logs** page switches each category (and All Logs); each is kept in the
+  ini as `log_<key> = on / off`, all off by default. KH1 Sound Calls replaces the old
+  `sound_log` key and the Trace Recorder's Sound Log row.
+- The trace's Log Lines / Sounds categories only see lines whose log category is on.
+
+| Debug menu name | ini key | What logs under it |
+|---|---|---|
+| General | `log_general` | `mod.rs` (Panacea, heartbeat, Insert key, the settings), `addr`, `hook` (hooks in / refused), `settings` |
+| Loading & Cache | `log_loading` | `loadscreen`, the motion slot cache lines in `pose` |
+| Takeover & Input | `log_takeover` | `takeover`, `shared`, `probe`, `quickrun`, `glide`, `gates`, `feet`, the style modules |
+| Animation & Pose | `log_animation` | `pose`, `kh2slots`, `model`, `tint`, `leftblade` |
+| Combat & Hits | `log_combat` | `combat`, `kh1picker`, `combomods`, `bodyhits`, `hurt`, `knockback`, `kh2damage`, `recoil`, `hitreact`, `kh1rows` |
+| Magic | `log_magic` | `reflect`, `formmagic`, `mpcost` |
+| Drive Forms | `log_forms` | `form`, `drive`, `valor`, `valorstats`, `equip` |
+| KH2 Sounds | `log_kh2_sounds` | `kh2sound`, `kh1bank`, `kh1voice` |
+| KH1 Sound Calls | `log_kh1_sounds` | `soundlog` (every KH1 menu sound, voice and sound effect call) |
+| Effects | `log_effects` | `kh2fx`, `kh2dpx`, `kh2ppp`, `fx12` |
+| Camera | `log_camera` | `camera` |
+| Menus & Config | `log_menus` | `menu`, `config`, `shortcuts`, `equipmenu`, `gummi`, `styles` |
+| Debug Tools | `log_debug` | `debugmenu`, `frameadv`, `trace` |
+| Crash & Version | `log_crash` | `crash` (crash notes), panics, the version and game-build lines at start |
+
+Not changed: `kh1-kh2-other.log` (one line when another game in the folder loads the DLL; that
+process never reads the ini), the trace's own CSV files (debug tools), and
+`kh1-kh2-removed.txt` (the record of abilities taken out of a save: gameplay, not a log).

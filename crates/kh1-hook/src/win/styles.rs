@@ -219,13 +219,13 @@ pub fn note_abilities(a: &character_core::Abilities) {
             .map(|w| w.1)
             .collect::<Vec<_>>()
             .join(", ");
-        super::log(&format!(
+        super::log!(Menus,
             "move style: a combo ability only KH2 has is {} ({}): it follows the settings (Base Combo {}, Aerial Base Combo {}; at KH1 on KH1's own combo)",
             if on { "equipped" } else { "no longer equipped" },
             if on { which.as_str() } else { "none" },
             if setting(Kind::GroundCombo) { "KH2" } else { "KH1" },
             if setting(Kind::AirCombo) { "KH2" } else { "KH1" }
-        ));
+        );
     }
 }
 
@@ -239,5 +239,5 @@ pub fn set(kind: Kind, kh2: bool) {
     init();
     kind.cell().store(kh2, Ordering::Relaxed);
     super::settings::save(kind.key(), if kh2 { "kh2" } else { "kh1" });
-    super::log(&format!("move style: {} {}", kind.label(), if kh2 { "KH2" } else { "KH1" }));
+    super::log!(Menus, "move style: {} {}", kind.label(), if kh2 { "KH2" } else { "KH1" });
 }

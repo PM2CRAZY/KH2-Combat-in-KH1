@@ -109,8 +109,8 @@ unsafe fn stick_dir(actor: usize, tilt: f32) -> glam::Vec2 {
     };
     if tilt > 0.0 && !have_mv {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 12 {
-            log(&format!("stick direction {dir:?} from the raw stick ({lx:.2}, {ly:.2}) through KH1's camera (convention {best}, mode {mode}); his +0x20 {old:?}, tilt {tilt:.2}"));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 12 {
+            log!(Takeover, "stick direction {dir:?} from the raw stick ({lx:.2}, {ly:.2}) through KH1's camera (convention {best}, mode {mode}); his +0x20 {old:?}, tilt {tilt:.2}");
         }
     }
     dir
@@ -395,8 +395,8 @@ unsafe fn count_steps(base: usize) -> u32 {
     STEP_REST.store((acc - n as f32).clamp(0.0, 0.99).to_bits(), Ordering::Relaxed);
     if n != STEPS.swap(n, Ordering::Relaxed) {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 20 {
-            log(&format!("frame scale {dt:.2}: KH2 steps {n} 60 Hz frame{} a game frame", if n == 1 { "" } else { "s" }));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            log!(Takeover, "frame scale {dt:.2}: KH2 steps {n} 60 Hz frame{} a game frame", if n == 1 { "" } else { "s" });
         }
     }
     n
@@ -665,8 +665,8 @@ unsafe fn kh1_glide_start(base: usize, actor: usize) -> Option<&'static str> {
     start(actor);
     if rd::<i32>(actor + 0x70) != KH1_GLIDE_STATE {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH1's glide didn't start ({:.0} above the floor, KH1 state {}): KH2 keeps him", rd::<f32>(actor + 0x3D4), rd::<i32>(actor + 0x70)));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log!(Takeover, "KH1's glide didn't start ({:.0} above the floor, KH1 state {}): KH2 keeps him", rd::<f32>(actor + 0x3D4), rd::<i32>(actor + 0x70));
         }
         return None;
     }
@@ -698,8 +698,8 @@ unsafe fn style_roll_start(base: usize, actor: usize, d: &Driver, dir: glam::Vec
     let deep: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + DEEP_WATER_RVA);
     if rd::<u32>(base + ROLL_ABILITY_RVA) & ROLL_ABILITY == 0 || deep(actor) != 0 {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH1's roll not open (ability bits {:#x}): KH2's Square", rd::<u32>(base + ROLL_ABILITY_RVA)));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log!(Takeover, "KH1's roll not open (ability bits {:#x}): KH2's Square", rd::<u32>(base + ROLL_ABILITY_RVA));
         }
         return false;
     }
@@ -754,12 +754,12 @@ unsafe extern "system" fn player_step(actor: usize) {
     wr(actor + 0x378, 2i32);
     AIR_SPELL_LANDED.store(true, Ordering::Relaxed);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!(
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Takeover,
             "KH1's air spell landed: KH1's landing motion not asked for, KH2's landing next (KH1 motion {:#x}, {:.0} above the floor)",
             rd::<u32>(actor + 0x164),
             rd::<f32>(actor + 0x3D4)
-        ));
+        );
     }
 }
 
@@ -1151,14 +1151,14 @@ unsafe fn shared_control(base: usize, actor: usize, dir: usize, f: unsafe extern
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 60 {
             let (dodged, up) = super::shared::dodge_flags();
-            log(&format!(
+            log!(Takeover,
                 "glide asked in shared_control: KH1 state {state} -> {}, request {req_before:#x} -> {req_after:#x}, hide {hide:#x}, KH1 saw buttons {words_masked:08x?} (real {saved:08x?}), AIR_DODGED {dodged}, DODGE_JUMP_UP {up}, air_dodge {}, superglide {}, rising {}, can_act {}",
                 rd::<i32>(actor + 0x70),
                 seen.air_dodge,
                 seen.superglide,
                 seen.rising,
                 seen.can_act,
-            ));
+            );
         }
     }
     wr(st + 4, rd::<u32>(st + 4) & !inject);
@@ -1344,7 +1344,7 @@ pub fn command_started(shots: usize, spell: Option<u8>) {
         let react = clip.first(|k| matches!(k, character_core::WindowKind::AllowReactionCommand)).unwrap_or(clip.length);
         let allow = clip.windows.iter().find(|w| matches!(w.kind, character_core::WindowKind::AllowMovement)).map(|w| (w.start, w.end.unwrap_or(clip.length)));
         let p = &form.params;
-        log(&format!("{}: KH1 spell {sp} on the cast motion {motion}'s clock: {} frames, input from {react}, moving {allow:?}", if base_look { "KH2 magic style" } else { "Drive Form" }, clip.length));
+        log!(Takeover, "{}: KH1 spell {sp} on the cast motion {motion}'s clock: {} frames, input from {react}, moving {allow:?}", if base_look { "KH2 magic style" } else { "Drive Form" }, clip.length);
         // (His speed going in, KH2's last frame: no halt at the cast's start, the user.)
         let v = with_kh2(|_, o| [o.displacement[0], o.displacement[2]]).unwrap_or([0.0; 2]);
         let v = if v[0].is_finite() && v[1].is_finite() && v[0].hypot(v[1]) < 40.0 { v } else { [0.0; 2] };
@@ -1434,7 +1434,7 @@ unsafe fn spell_out(actor: usize) -> bool {
     let out = shot || secs >= wait;
     if out && !c.logged {
         c.logged = true;
-        log(&format!("command's spell {:?} out after {secs:.2} s ({})", c.spell, if shot { "its shot" } else { "KH1's cast motion's time" }));
+        log!(Takeover, "command's spell {:?} out after {secs:.2} s ({})", c.spell, if shot { "its shot" } else { "KH1's cast motion's time" });
     }
     out
 }
@@ -1481,7 +1481,7 @@ fn release(why: &str) {
                 let now = now_ms();
                 if changed && now.saturating_sub(LAST_MS.swap(now, Ordering::Relaxed)) >= 250 || dr.logged < 400 {
                     dr.logged = dr.logged.saturating_add(1);
-                    log(&format!("KH1 has Sora ({why})"));
+                    log!(Takeover, "KH1 has Sora ({why})");
                 }
             }
             if dr.last_state.is_some() {
@@ -1532,7 +1532,7 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
             LAST.store(now, Ordering::Relaxed);
             let base = BASE.load(Ordering::Relaxed);
             let why = LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default();
-            log(&format!(
+            log!(Takeover,
                 "KH1 has had Sora {:.0} s: {why}; KH1 state {}, slot {:?}, flags {:08x}, event {:#x}, script {:#x}, body seen {}, ON {}",
                 now.saturating_sub(SINCE.load(Ordering::Relaxed)) as f32 / 1000.0,
                 rd::<i32>(actor + 0x70),
@@ -1542,7 +1542,7 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
                 rd::<u32>(actor + 0x440),
                 pose::sora_body_seen(500),
                 ON.load(Ordering::Relaxed)
-            ));
+            );
         }
     }
     let base = BASE.load(Ordering::Relaxed);
@@ -1550,13 +1550,13 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
     let Ok(mut seen) = ROOM.try_lock() else { return };
     let now = now_ms();
     if seen.as_ref().is_none_or(|s| s.world != world || s.room != room) {
-        log(&format!(
+        log!(Takeover,
             "room: world {world:#x} room {room:#x} entered; {} (KH1 state {}, flags {:08x}, script {})",
             if kh2 { "KH2 has Sora".to_string() } else { format!("KH1 has Sora ({})", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
             rd::<i32>(actor + 0x70),
             rd::<u32>(actor),
             pose::ptr(rd::<u32>(actor + 0x440)) != 0,
-        ));
+        );
         *seen = Some(RoomSeen { world, room, at_ms: now, frames: 0, kh2_frames: 0, reported: false });
     }
     let Some(s) = seen.as_mut() else { return };
@@ -1566,7 +1566,7 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
     }
     if !s.reported && now.saturating_sub(s.at_ms) >= 3000 {
         s.reported = true;
-        log(&format!(
+        log!(Takeover,
             "room {:#x}-{:#x}, first 3 s: KH2 had Sora {} of {} frames; now {} (KH1 state {}, body seen {})",
             s.world,
             s.room,
@@ -1575,7 +1575,7 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
             if kh2 { "KH2 has him".to_string() } else { format!("KH1 has him: {}", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
             rd::<i32>(actor + 0x70),
             pose::sora_body_seen(500),
-        ));
+        );
     }
 }
 
@@ -1590,7 +1590,7 @@ static LAST_FROZEN: AtomicBool = AtomicBool::new(false);
 /// menu and level).
 fn new_driver(kh2: &pose::Kh2) -> Driver {
     let character = kh2.character.clone();
-    log("KH2's controller ready for Sora");
+    log!(Takeover, "KH2's controller ready for Sora");
     let mut anim = RigAnim::new(kh2.rig.clone());
     // KH2 snaps a finished action straight into idle; softened (the user: smoother out of a
     // combo).
@@ -1983,8 +1983,8 @@ pub unsafe fn kh2_hits(actor: usize) {
             wr(info + 0x50, rd::<u32>(info + 0x50) | 1);
         }
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 60 {
-            log(&format!("KH2's hits on his body in KH1's states: KH2 motion {motion} frame {t:.0}, {landed} landed (ATKP {:?})", open.iter().map(|o| o.1).collect::<Vec<_>>()));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log!(Takeover, "KH2's hits on his body in KH1's states: KH2 motion {motion} frame {t:.0}, {landed} landed (ATKP {:?})", open.iter().map(|o| o.1).collect::<Vec<_>>());
         }
     }
 }
@@ -2075,7 +2075,7 @@ unsafe fn shared_frame(base: usize, actor: usize) -> bool {
     // (Glide at KH1 only, t321: at KH2 Square is KH2's glide in KH1's glide state, `glide`.)
     if state == 2 && free && square_fresh && falling && super::stylejump::kh1_glide() && glide_on_square_now(base) && kh1_glide_open(base) && !GLIDE_TRIED.swap(true, Ordering::Relaxed) {
         if let Some(what) = kh1_glide_start(base, actor) {
-            log(&format!("{what}, on Square (shared states)"));
+            log!(Takeover, "{what}, on Square (shared states)");
         }
     }
     let attack = ATTACK_AFTER.swap(false, Ordering::Relaxed);
@@ -2155,7 +2155,7 @@ unsafe fn shared_frame(base: usize, actor: usize) -> bool {
     HANDOFF_POS.lock().unwrap().take();
     super::shared::lent();
     super::shared::physics::off_air();
-    log(&format!("KH2 borrows him: {what} (KH1 state {state}, {above:.0} above the floor)"));
+    log!(Takeover, "KH2 borrows him: {what} (KH1 state {state}, {above:.0} above the floor)");
     true
 }
 
@@ -2176,8 +2176,8 @@ unsafe fn kh1_fall_speed(actor: usize, vel: Option<([f32; 2], f32)>) -> ([f32; 2
     let n = h[0].hypot(h[1]);
     let k = if n > 20.0 { 20.0 / n } else { 1.0 };
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 30 {
-        log(&format!("KH2 takes him in the air at {from}: sideways {:.1}/frame, up {up:.1}/frame (KH1 state {})", n * k, rd::<i32>(actor + 0x70)));
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+        log!(Takeover, "KH2 takes him in the air at {from}: sideways {:.1}/frame, up {up:.1}/frame (KH1 state {})", n * k, rd::<i32>(actor + 0x70));
     }
     ([h[0] * k, h[1] * k], up.clamp(-30.0, 30.0))
 }
@@ -2287,8 +2287,8 @@ unsafe fn takeover(actor: usize) -> bool {
             let set: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
             set(actor, 0);
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                log(&format!("KH1 jumped him under KH2 (state {state}, slot {:?}): taken back", pose::sora_slot()));
+            if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Takeover, "KH1 jumped him under KH2 (state {state}, slot {:?}): taken back", pose::sora_slot());
             }
         }
     }
@@ -2306,7 +2306,7 @@ unsafe fn takeover(actor: usize) -> bool {
             super::stylejump::clear();
             super::styleroll::clear();
             super::shared::started();
-            log(&format!("KH1's move (state {}) goes on in KH1's own states (shared)", rd::<i32>(actor + 0x70)));
+            log!(Takeover, "KH1's move (state {}) goes on in KH1's own states (shared)", rd::<i32>(actor + 0x70));
         }
     }
     if HANDOFF.load(Ordering::Relaxed) && super::shared::active() {
@@ -2346,7 +2346,7 @@ unsafe fn takeover(actor: usize) -> bool {
             LAST_STATE.store(u32::MAX, Ordering::Relaxed);
         }
         if LAST_STATE.swap(state as u32, Ordering::Relaxed) != state as u32 {
-            log(&format!("KH1's move: state {state} at {:.0} above the floor (can act {})", rd::<f32>(actor + 0x3D4), can_act(actor) != 0));
+            log!(Takeover, "KH1's move: state {state} at {:.0} above the floor (can act {})", rd::<f32>(actor + 0x3D4), can_act(actor) != 0);
         }
         // His speed while KH1 moves him (per frame, KH2's way up), for a fall handed over.
         let p = rd::<[f32; 3]>(actor + 0x10);
@@ -2417,8 +2417,8 @@ unsafe fn takeover(actor: usize) -> bool {
         let kh1_took_off = command && state == 1 && super::stylejump::mode() != super::stylejump::JUMP && above < STEP_DOWN && vel.map_or(true, |(_, up)| up >= -0.5);
         if kh1_took_off {
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                log(&format!("KH1 jumped him out of its move ({above:.1} above the floor): KH2's jump instead"));
+            if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Takeover, "KH1 jumped him out of its move ({above:.1} above the floor): KH2's jump instead");
             }
         }
         let jump = ground_jump && kh1_move_done(base, actor) || kh1_took_off;
@@ -2454,7 +2454,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // KH1's glide out of KH2's jump, down on the ground: KH2's landing, as an air spell's.
         let glide_landed = style_air == super::stylejump::GLIDE && state == 0;
         if glide_landed {
-            log("KH1's glide landed: KH2's landing");
+            log!(Takeover, "KH1's glide landed: KH2's landing");
         }
         let cast_landed = cast_landed || glide_landed;
         // An Attack during a spell: KH2's once the spell is out (its end frames; the user: KH2's
@@ -2513,7 +2513,7 @@ unsafe fn takeover(actor: usize) -> bool {
         // (In the air too: KH2's fall from there.)
         let form_end = form_clock && air_cast().is_none();
         if form_end && !out_any {
-            log("form's cast motion ended before a shot of the KH1 spell was counted: KH2 takes him anyway");
+            log!(Takeover, "form's cast motion ended before a shot of the KH1 spell was counted: KH2 takes him anyway");
         }
         // (A form's KH1 spell takes an Attack at its cast motion's input frame, as the form's
         // Thunder does in a combo, whether or not KH1 has counted the spell's shot yet: the user,
@@ -2539,10 +2539,10 @@ unsafe fn takeover(actor: usize) -> bool {
             if slot == 0 {
                 COMBO_ON.store(attack_cut, Ordering::Relaxed);
             }
-            log(&format!(
+            log!(Takeover,
                 "spell's end frames cut by {} (combo slot {slot})",
                 if attack_cut { "an Attack: the combo's next swing" } else if magic_cut { "a spell: the combo's next step" } else if drive_cut { "a Drive" } else if item_end { "the item's end frame" } else { "the form's cast motion ending" }
-            ));
+            );
         }
         // (A spell chosen during the cast, which is now over: it runs at once from the queue.)
         let magic_waits = magic_after && done;
@@ -2562,7 +2562,7 @@ unsafe fn takeover(actor: usize) -> bool {
         if kh1_glide_here {
             if let Some(what) = kh1_glide_start(base, actor) {
                 super::stylejump::started(super::stylejump::GLIDE, true, buttons() & jump_button() != 0);
-                log(&format!("{what}, out of KH1's jump"));
+                log!(Takeover, "{what}, out of KH1's jump");
             }
         }
         let square_pressed = square_pressed && !super::stylejump::kh1_glide();
@@ -2574,8 +2574,8 @@ unsafe fn takeover(actor: usize) -> bool {
         let ground_states = if in_jump { state == 0 } else { matches!(state, 0 | 1) };
         if in_jump && kh2_air && !air_free && matches!(state, 1 | 2) {
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                log(&format!("KH1's jump: KH2's move asked, but KH1 doesn't let him act yet (state {state}, {above:.0} above the floor)"));
+            if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Takeover, "KH1's jump: KH2's move asked, but KH1 doesn't let him act yet (state {state}, {above:.0} above the floor)");
             }
         }
         // KH1's roll (`styleroll`): KH1 keeps him while its motion plays (its request still
@@ -2585,7 +2585,7 @@ unsafe fn takeover(actor: usize) -> bool {
         let roll_attack = in_roll && super::styleroll::take_attack();
         let rolling = in_roll && state == 0 && (rd::<u32>(actor + 0x164) == super::styleroll::ROLL_MOTION || frames < 3 && rd::<u32>(actor + 0x178) != 0);
         if in_roll && frames < 4 {
-            log(&format!("KH1's roll: frame {frames}, motion {:#x}, flags {:08x}", rd::<u32>(actor + 0x164), rd::<u32>(actor)));
+            log!(Takeover, "KH1's roll: frame {frames}, motion {:#x}, flags {:08x}", rd::<u32>(actor + 0x164), rd::<u32>(actor));
         }
         let hold_roll = rolling && !roll_attack;
         if !hold_roll && (frames >= 1 && (cast_landed || roll_attack || kh1_took_off) || frames >= 2 && air_free || last_tick >= 10 && (falling || jump || cancel || magic_waits || ground_states && (kh1_moving() || free || square || attack || in_jump && super::stylejump::wanted() && can_act(actor) != 0 || in_roll && super::styleroll::wanted() && can_act(actor) != 0))) {
@@ -2662,11 +2662,11 @@ unsafe fn takeover(actor: usize) -> bool {
                 let before = (rd::<u32>(actor + 0x164), rd::<u32>(actor + 0x178), rd::<u32>(actor + 0x17C));
                 setm(actor, 0, 0.0);
                 static N: AtomicU32 = AtomicU32::new(0);
-                if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                    log(&format!(
+                if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log!(Takeover,
                         "KH1's motion {:#x} of the cut move set to its idle (queued before: {} {:#x}; KH1 state {})",
                         before.0, before.1, before.2, rd::<i32>(actor + 0x70)
-                    ));
+                    );
                 }
                 AFTER_CUT_LOG.store(12, Ordering::Relaxed);
             }
@@ -2677,15 +2677,15 @@ unsafe fn takeover(actor: usize) -> bool {
             FRESH.store(true, Ordering::Relaxed);
             HANDOFF_POS.lock().unwrap().take();
             if cast_landed {
-                log("KH1's air cast landed: KH2's landing");
+                log!(Takeover, "KH1's air cast landed: KH2's landing");
             } else if falling {
                 NO_GRAB.store(NO_GRAB_FRAMES, Ordering::Relaxed);
                 if air_free {
                     AIR_MOVES.store(true, Ordering::Relaxed);
                 }
-                log(&format!("KH1's move ended in its {} ({above:.0} above the floor): KH2's fall", if state == 1 { "jump" } else { "fall" }));
+                log!(Takeover, "KH1's move ended in its {} ({above:.0} above the floor): KH2's fall", if state == 1 { "jump" } else { "fall" });
             } else {
-                log(&format!("KH1's move ended (state {state}): KH2 again"));
+                log!(Takeover, "KH1's move ended (state {state}): KH2 again");
             }
         } else {
             // An Attack pressed during KH1's move counts only on the frame it was pressed: if it
@@ -2722,7 +2722,7 @@ unsafe fn takeover(actor: usize) -> bool {
         set_state(actor, 0);
         FLEW.store(true, Ordering::Relaxed);
         FLY_PRESS.store(true, Ordering::Relaxed);
-        log(&format!("flight: Attack, KH2 takes him for an aerial combo ({:.0} above the floor)", rd::<f32>(actor + 0x3D4)));
+        log!(Takeover, "flight: Attack, KH2 takes him for an aerial combo ({:.0} above the floor)", rd::<f32>(actor + 0x3D4));
     }
     if KH2_AIR.load(Ordering::Relaxed) && rd::<u32>(base + BATTLE_RVA) & FLIGHT_FLAG != 0 && matches!(rd::<i32>(actor + 0x70), 0 | 1) {
         // Coming down out of a jump or a finished air move (not mid-combo: KH2's aerial
@@ -2740,12 +2740,12 @@ unsafe fn takeover(actor: usize) -> bool {
             } else {
                 set_state(actor, FLIGHT_STATE);
             }
-            log(&format!("flight: KH1 flies him ({:.0} above the floor; state now {})", above, rd::<i32>(actor + 0x70)));
+            log!(Takeover, "flight: KH1 flies him ({:.0} above the floor; state now {})", above, rd::<i32>(actor + 0x70));
         }
     }
     if !HANDOFF.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == KH1_GLIDE_STATE && KH2_AIR.load(Ordering::Relaxed) {
         set_state(actor, 0);
-        log("KH1 started its glide under KH2: back to KH2's");
+        log!(Takeover, "KH1 started its glide under KH2: back to KH2's");
     }
     let state = rd::<i32>(actor + 0x70);
     let own_mode = kh1_mode(state);
@@ -2877,7 +2877,7 @@ unsafe fn takeover(actor: usize) -> bool {
     if QUICK_RUN_NOW.swap(false, Ordering::Relaxed) {
         d.character.set_facing(rd::<f32>(actor + 0x3C));
         let ok = d.character.quick_run_now();
-        log(&format!("KH2's Quick Run out of KH1's roll: {}", if ok { "started" } else { "not started (no Quick Run, or in the air)" }));
+        log!(Takeover, "KH2's Quick Run out of KH1's roll: {}", if ok { "started" } else { "not started (no Quick Run, or in the air)" });
     }
     // Glide on Square, as KH1's Superglide was (the user), or on the jump button (ini `glide`).
     // (Not out of a flight: there Square is flight's descend.)
@@ -2955,7 +2955,7 @@ unsafe fn takeover(actor: usize) -> bool {
             if q.len() >= 10 {
                 q.clear();
                 RIDE_UNTIL.store(now + 5000, Ordering::Relaxed);
-                log(&format!("KH1's control comes and goes (10 times in 3 s): KH1 has him for 5 s (KH1 state {}, flags {:08x})", rd::<i32>(actor + 0x70), rd::<u32>(actor)));
+                log!(Takeover, "KH1's control comes and goes (10 times in 3 s): KH1 has him for 5 s (KH1 state {}, flags {:08x})", rd::<i32>(actor + 0x70), rd::<u32>(actor));
             }
         }
     }
@@ -2976,7 +2976,7 @@ unsafe fn takeover(actor: usize) -> bool {
                 on,
                 if on > 0x10000 { super::probe::object_id(on) as i64 } else { -1 }
             );
-            log(&format!("{}; {detail}", if frozen { "KH1 holds Sora still: no input for KH2" } else { "KH1 lets Sora act again" }));
+            log!(Takeover, "{}; {detail}", if frozen { "KH1 holds Sora still: no input for KH2" } else { "KH1 lets Sora act again" });
         }
     }
     // Held still on the ground for more than a frame (a cutscene starting, the user: he slid
@@ -2986,7 +2986,7 @@ unsafe fn takeover(actor: usize) -> bool {
         if d.last_state.is_some() {
             if d.logged < 400 {
                 d.logged += 1;
-                log("KH1 has Sora (KH1 holds him still)");
+                log!(Takeover, "KH1 has Sora (KH1 holds him still)");
             }
             FRESH.store(true, Ordering::Relaxed);
         }
@@ -3007,7 +3007,7 @@ unsafe fn takeover(actor: usize) -> bool {
             // `CARRY_MAX` frames:)
             // if CARRY_FRAMES.fetch_sub(1, Ordering::Relaxed) <= 1 {
             FLY_PRESS_GROUND.store(false, Ordering::Relaxed);
-            log("an Attack carried out of KH1's move: dropped (KH1 holds him still, no buffer)");
+            log!(Takeover, "an Attack carried out of KH1's move: dropped (KH1 holds him still, no buffer)");
             // }
             false
         } else {
@@ -3028,13 +3028,13 @@ unsafe fn takeover(actor: usize) -> bool {
     // };
     let forced_jump = false;
     if forced_jump {
-        log("a jump pressed in KH1's move: KH2's jump now");
+        log!(Takeover, "a jump pressed in KH1's move: KH2's jump now");
     }
     let (stick, jump, action, attack) = if frozen { ([0.0, 0.0], false, false, false) } else { (stick, jump, action, attack || carried_attack) };
     if carried_attack {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 30 {
-            log(&format!("an Attack carried out of KH1's move: KH2's now ({:?})", d.character.state_name()));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+            log!(Takeover, "an Attack carried out of KH1's move: KH2's now ({:?})", d.character.state_name());
         }
     }
     let input = Input {
@@ -3086,7 +3086,7 @@ unsafe fn takeover(actor: usize) -> bool {
     // KH1's own motion on KH2's first steps after a cut of a KH1 move (what KH1 still plays).
     if AFTER_CUT_LOG.load(Ordering::Relaxed) > 0 {
         let n = AFTER_CUT_LOG.fetch_sub(1, Ordering::Relaxed);
-        log(&format!(
+        log!(Takeover,
             "after the cut, step {}: KH1 motion {:#x} (+0x168 {:#x}, time {:.1}, queued {} {:#x}), KH1 state {}, {:.0} above the floor, KH2 {:?} grounded {}",
             13 - n,
             rd::<u32>(actor + 0x164),
@@ -3098,13 +3098,13 @@ unsafe fn takeover(actor: usize) -> bool {
             above,
             d.character.state_name(),
             d.grounded
-        ));
+        );
     }
     let mut targets = d.strikes.look(actor);
     let lock = kh1_lock(base, &mut targets);
     if lock != d.character.lock() && d.logged < 400 {
         d.logged += 1;
-        log(&format!("lock-on: {lock:?}"));
+        log!(Takeover, "lock-on: {lock:?}");
     }
     d.character.set_lock(lock);
     // KH2 aims a swing at any enemy in reach; here only at KH1's own target, the R1 lock or the
@@ -3201,8 +3201,8 @@ unsafe fn takeover(actor: usize) -> bool {
         if fresh_frame {
             NO_CARRY.fetch_sub(1, Ordering::Relaxed);
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 30 {
-                log(&format!("KH2's first frames after KH1's move: {:?} (motion {}, frame {}), move {:.1?}, KH1's push {:.1?} not carried", out.state, out.motion, out.clip_frame, out.displacement, rd::<[f32; 3]>(actor + 0x120)));
+            if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+                log!(Takeover, "KH2's first frames after KH1's move: {:?} (motion {}, frame {}), move {:.1?}, KH1's push {:.1?} not carried", out.state, out.motion, out.clip_frame, out.displacement, rd::<[f32; 3]>(actor + 0x120));
             }
         }
         let mut carry = if settings.carry && !fresh_frame && step == 0 { carried(actor, &mut d.logged) } else { [0.0; 3] };
@@ -3215,10 +3215,10 @@ unsafe fn takeover(actor: usize) -> bool {
         // out of KH1's landing after a KH1 air attack went "way higher than it should".)
         if JUMP_WATCH.load(Ordering::Relaxed) > 0 {
             if JUMP_WATCH.fetch_sub(1, Ordering::Relaxed) > 0 && d.character.airborne() {
-                log(&format!(
+                log!(Takeover,
                     "after KH1's move: {:?} up {:.2} carried {:.2?} push {:.2?} above floor {:.1} y {:.1}",
                     out.state, out.displacement[1], carry, rd::<[f32; 3]>(actor + 0x120), rd::<f32>(actor + 0x3D4), -rd::<f32>(actor + 0x14)
-                ));
+                );
             }
         }
         if settings.carry && step == 0 {
@@ -3252,8 +3252,8 @@ unsafe fn takeover(actor: usize) -> bool {
         if let Some(e) = super::gates::post_move() {
             wr(actor + 0x10, before_move);
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 40 {
-                log(&format!("an attack's lunge touched map event {e}: kept out of it (the move undone)"));
+            if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Takeover, "an attack's lunge touched map event {e}: kept out of it (the move undone)");
             }
         }
         if settings.carry {
@@ -3304,8 +3304,8 @@ unsafe fn takeover(actor: usize) -> bool {
                 let got = (-rd::<f32>(actor + 0x14)).min(up_before + out.displacement[1]);
                 if got < -rd::<f32>(actor + 0x14) - 0.5 {
                     static RODE: AtomicU32 = AtomicU32::new(0);
-                    if RODE.fetch_add(1, Ordering::Relaxed) < 20 {
-                        log(&format!("rise: KH1's mover lifted him {:.1} past KH2's rise {:.1} (an actor's body): kept to KH2's", -rd::<f32>(actor + 0x14) - got, out.displacement[1]));
+                    if super::log_on(super::LogCat::Takeover) && RODE.fetch_add(1, Ordering::Relaxed) < 20 {
+                        log!(Takeover, "rise: KH1's mover lifted him {:.1} past KH2's rise {:.1} (an actor's body): kept to KH2's", -rd::<f32>(actor + 0x14) - got, out.displacement[1]);
                     }
                 }
                 y = got;
@@ -3325,14 +3325,14 @@ unsafe fn takeover(actor: usize) -> bool {
                 if slope && out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
                     y = up_before + out.displacement[1];
                     static SLOPES: AtomicU32 = AtomicU32::new(0);
-                    if SLOPES.fetch_add(1, Ordering::Relaxed) < 20 {
-                        log(&format!("rise on a slope's contact (flags {:08x}): KH2's own rise {:.1}, not a ceiling", rd::<u32>(actor + 0x2D0), out.displacement[1]));
+                    if super::log_on(super::LogCat::Takeover) && SLOPES.fetch_add(1, Ordering::Relaxed) < 20 {
+                        log!(Takeover, "rise on a slope's contact (flags {:08x}): KH2's own rise {:.1}, not a ceiling", rd::<u32>(actor + 0x2D0), out.displacement[1]);
                     }
                 } else if out.displacement[1] > 0.5 && got - up_before < out.displacement[1] * 0.49 {
                     d.character.hit_ceiling();
                     static BONKS: AtomicU32 = AtomicU32::new(0);
-                    if BONKS.fetch_add(1, Ordering::Relaxed) < 40 {
-                        log(&format!("ceiling: rose {:.1} of {:.1} at height {:.1} (collision flags {:08x})", got - up_before, out.displacement[1], up_before - floor_up, rd::<u32>(actor + 0x2D0)));
+                    if super::log_on(super::LogCat::Takeover) && BONKS.fetch_add(1, Ordering::Relaxed) < 40 {
+                        log!(Takeover, "ceiling: rose {:.1} of {:.1} at height {:.1} (collision flags {:08x})", got - up_before, out.displacement[1], up_before - floor_up, rd::<u32>(actor + 0x2D0));
                     }
                 }
             }
@@ -3345,8 +3345,8 @@ unsafe fn takeover(actor: usize) -> bool {
                     stand(actor, obj);
                 }
                 static ON_TOP: AtomicU32 = AtomicU32::new(0);
-                if ON_TOP.fetch_add(1, Ordering::Relaxed) < 40 {
-                    log(&format!("landed on something {:.1} above the floor (object {:?}, standing on {:#x})", y - floor_up, on, pose::ptr(rd::<u32>(actor + 0x398))));
+                if super::log_on(super::LogCat::Takeover) && ON_TOP.fetch_add(1, Ordering::Relaxed) < 40 {
+                    log!(Takeover, "landed on something {:.1} above the floor (object {:?}, standing on {:#x})", y - floor_up, on, pose::ptr(rd::<u32>(actor + 0x398)));
                 }
             } else if y <= floor_up && !rising {
                 wr(actor + 0x14, -floor_up);
@@ -3378,8 +3378,8 @@ unsafe fn takeover(actor: usize) -> bool {
             } else if let Some((t, obj)) = top {
                 if d.on_top.is_none() {
                     static STOOD: AtomicU32 = AtomicU32::new(0);
-                    if STOOD.fetch_add(1, Ordering::Relaxed) < 40 {
-                        log(&format!("standing on object {obj:#x}, {:.1} above the floor", t - floor_up));
+                    if super::log_on(super::LogCat::Takeover) && STOOD.fetch_add(1, Ordering::Relaxed) < 40 {
+                        log!(Takeover, "standing on object {obj:#x}, {:.1} above the floor", t - floor_up);
                     }
                 }
                 d.on_top = Some(t);
@@ -3448,7 +3448,7 @@ unsafe fn takeover(actor: usize) -> bool {
                 HANDOFF_FRAMES.store(0, Ordering::Relaxed);
                 HANDOFF.store(true, Ordering::Relaxed);
                 set_air_cast(None);
-                log(&format!("KH1 takes him: {what} (KH1 state {}, slot {:?})", rd::<i32>(actor + 0x70), pose::sora_slot()));
+                log!(Takeover, "KH1 takes him: {what} (KH1 state {}, slot {:?})", rd::<i32>(actor + 0x70), pose::sora_slot());
             }
         }
 
@@ -3556,7 +3556,7 @@ unsafe fn takeover(actor: usize) -> bool {
             }
             if d.logged < 400 {
                 d.logged += 1;
-                log(&format!("KH2 has Sora: {:?} (motion {}), height above floor {above:.1}, KH1 slot {:?}, KH1 state {}, flags {:08x}; {}", out.state, out.motion, slot, rd::<i32>(actor + 0x70), rd::<u32>(actor), pose::weapon_report()));
+                log!(Takeover, "KH2 has Sora: {:?} (motion {}), height above floor {above:.1}, KH1 slot {:?}, KH1 state {}, flags {:08x}; {}", out.state, out.motion, slot, rd::<i32>(actor + 0x70), rd::<u32>(actor), pose::weapon_report());
             }
             d.last_state = Some(out.state);
         }
@@ -3592,7 +3592,7 @@ unsafe fn takeover(actor: usize) -> bool {
     if matches!(out.state, StateName::Attack) {
         let n = ATTACK_FRAMES.fetch_add(1, Ordering::Relaxed);
         if n % 15 == 7 && n < 15 * 40 {
-            log(&format!("attacking (motion {}, frame {}): {}", out.motion, out.clip_frame, pose::weapon_report()));
+            log!(Takeover, "attacking (motion {}, frame {}): {}", out.motion, out.clip_frame, pose::weapon_report());
         }
     }
     ACTIVE_MS.store(now_ms().max(1), Ordering::Relaxed);
@@ -3620,8 +3620,8 @@ unsafe extern "system" fn footstep(actor: usize, kind: i32) -> usize {
     let base = BASE.load(Ordering::Relaxed);
     if actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize && FRAME_KIND.load(Ordering::Relaxed) == 1 && !KH2_STEPS.load(Ordering::Relaxed) {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log("KH1's footstep held back (KH2 isn't walking him)");
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log!(Takeover, "KH1's footstep held back (KH2 isn't walking him)");
         }
         return 0;
     }
@@ -3648,8 +3648,8 @@ unsafe extern "system" fn step_sound(actor: usize, kind: i32) {
     let base = BASE.load(Ordering::Relaxed);
     if !OUR_STEP.load(Ordering::Relaxed) && actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize && FRAME_KIND.load(Ordering::Relaxed) == 1 {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH1's step sound (kind {kind}) dropped: KH2 has Sora, KH2's own steps sound"));
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+            log!(Takeover, "KH1's step sound (kind {kind}) dropped: KH2 has Sora, KH2's own steps sound");
         }
         return;
     }
@@ -3667,8 +3667,8 @@ unsafe fn play_step(actor: usize, kind: i16) {
     f(actor, kind as i32);
     OUR_STEP.store(false, Ordering::Relaxed);
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 12 {
-        log(&format!("KH2 footstep (kind {kind})"));
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 12 {
+        log!(Takeover, "KH2 footstep (kind {kind})");
     }
 }
 
@@ -3766,13 +3766,13 @@ unsafe fn carried(actor: usize, logged: &mut u32) -> [f32; 3] {
     static SEEN: AtomicU32 = AtomicU32::new(0);
     if c.length_squared() > 1e-4 && *logged < 400 && SEEN.fetch_add(1, Ordering::Relaxed) < 40 {
         *logged += 1;
-        log(&format!(
+        log!(Takeover,
             "carried {c:.2?} (push {:.2?}, platform {:?}, standing on {:#x}, object {})",
             rd::<[f32; 3]>(actor + 0x120),
             riding.then(|| rd::<[f32; 3]>(actor + 0x200)),
             pose::ptr(rd::<u32>(actor + 0x398)),
             rd::<i32>(actor + 0x2CC)
-        ));
+        );
     }
     c.to_array()
 }
@@ -3995,8 +3995,8 @@ pub static ATTACK_AFTER: AtomicBool = AtomicBool::new(false);
 
 fn note_dropped_attack(state: i32) {
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 30 {
-        log(&format!("Attack during KH1's move (state {state}) dropped: it couldn't cut the move on that frame (no buffer)"));
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+        log!(Takeover, "Attack during KH1's move (state {state}) dropped: it couldn't cut the move on that frame (no buffer)");
     }
 }
 
@@ -4084,7 +4084,7 @@ pub fn hand_to_kh1(why: &str) {
     ATTACK_AFTER.store(false, Ordering::Relaxed);
     HANDOFF_FRAMES.store(0, Ordering::Relaxed);
     HANDOFF.store(true, Ordering::Relaxed);
-    log(&format!("KH1 takes him: {why}"));
+    log!(Takeover, "KH1 takes him: {why}");
 }
 
 /// While KH2 has Sora: his controller and its last frame (for `hurt`).
@@ -4125,7 +4125,7 @@ unsafe fn keyblade(base: usize, actor: usize, out: bool, logged: &mut u32) {
     if *logged < 400 {
         *logged += 1;
         let colour = if cs > 0x10000 { rd::<[u8; 4]>(cs + 0xC) } else { [0; 4] };
-        log(&format!("Keyblade {}: actor flags {flags:08x} -> {:08x}, colour {colour:02x?}", if out { "out" } else { "put away" }, rd::<u32>(actor)));
+        log!(Takeover, "Keyblade {}: actor flags {flags:08x} -> {:08x}, colour {colour:02x?}", if out { "out" } else { "put away" }, rd::<u32>(actor));
     }
 }
 
@@ -4142,7 +4142,7 @@ unsafe fn set_sparkle(on: bool) {
 unsafe fn sparkle_stub(base: usize) {
     let site = base + SPARKLE_RVA;
     let Some(stub) = hook::alloc_near(site, 32) else {
-        log("flight sparkle: no memory near its test");
+        log!(Takeover, "flight sparkle: no memory near its test");
         return;
     };
     let code: [u8; 17] = [0x83, 0x7F, 0x70, 0x08, 0x74, 0x07, 0x80, 0x3D, 0x03, 0x00, 0x00, 0x00, 0x01, 0x8B, 0x07, 0xC3, 0x00];

@@ -107,7 +107,7 @@ fn steam(epic: usize) -> usize {
         Ok(i) => STEAM[i].1 as usize,
         Err(_) => {
             // Every `Rva` in the source is in the table (a test checks it): this is a bug.
-            super::log(&format!("no Steam address for Epic RVA {epic:#x}"));
+            super::log!(General, "no Steam address for Epic RVA {epic:#x}");
             epic
         }
     }

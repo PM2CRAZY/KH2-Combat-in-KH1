@@ -404,7 +404,7 @@ pub unsafe fn crash_note(base: usize) -> String {
 
 fn fail(what: String) {
     if !OFF.swap(true, Ordering::Relaxed) {
-        log(&format!("fx: renderer off: {what}"));
+        log!(Effects, "fx: renderer off: {what}");
     }
 }
 
@@ -508,7 +508,7 @@ unsafe fn init(device: usize) -> Result<Gpu, String> {
     }
     // (The ring stays for the session: KH1's frames in flight may name it.)
     let (_ring, ring_map, ring_va) = buffer(device, RING_SLOTS * SLOT_BYTES)?;
-    log(&format!("fx: renderer ready (shaders {} + {} bytes)", vs.len(), ps.len()));
+    log!(Effects, "fx: renderer ready (shaders {} + {} bytes)", vs.len(), ps.len());
     Ok(Gpu { device, root: root as usize, vs, ps, psos: Vec::new(), ring_map, ring_va, frame: 0, mesh: None, font: None })
 }
 
@@ -863,8 +863,8 @@ pub unsafe fn draw_mesh(base: usize, vertices: &[kh2_fx::Vertex], batches: &[Mes
     }
     hand_back(base, r);
     static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    if LOGGED.fetch_add(1, Ordering::Relaxed) < 3 {
-        log(&format!(
+    if super::log_on(super::LogCat::Effects) && LOGGED.fetch_add(1, Ordering::Relaxed) < 3 {
+        log!(Effects,
             "fx: drew a model: {} runs, {n} vertices, {} textures ({} KB of model textures) into a {} list, frame buffer {} ({}x MSAA, depth {})",
             batches.len(),
             textures.len(),
@@ -873,7 +873,7 @@ pub unsafe fn draw_mesh(base: usize, vertices: &[kh2_fx::Vertex], batches: &[Mes
             t.fbi,
             t.samples,
             t.has_dsv
-        ));
+        );
     }
     let _ = arena_buf;
     Some(t.fbi)
@@ -969,7 +969,7 @@ pub unsafe fn draw_overlay(base: usize, quads: &[OverlayQuad], font: &MeshTextur
     hand_back(base, r);
     static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if !LOGGED.swap(true, Ordering::Relaxed) {
-        log(&format!("debug menu: overlay drawn ({} quads, {}x{} frame buffer {}, {}x MSAA)", quads.len(), size.0, size.1, t.fbi, t.samples));
+        log!(Effects, "debug menu: overlay drawn ({} quads, {}x{} frame buffer {}, {}x MSAA)", quads.len(), size.0, size.1, t.fbi, t.samples);
     }
     true
 }

@@ -51,8 +51,11 @@ const KH2_HOP: f32 = 50.0;
 static LOGGED: AtomicU32 = AtomicU32::new(0);
 
 fn note(s: impl FnOnce() -> String) {
-    if LOGGED.fetch_add(1, Ordering::Relaxed) < 60 {
-        log(&s());
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    if super::log_on(super::LogCat::Combat) && LOGGED.fetch_add(1, Ordering::Relaxed) < 60 {
+        log!(Combat, "{}", s());
     }
 }
 

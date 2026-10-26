@@ -94,8 +94,8 @@ pub unsafe fn add(member: i32, out: usize) {
         wr(out + MAX_MP, max);
         clamp_mp(out, max);
         static P: AtomicU32 = AtomicU32::new(0);
-        if P.fetch_add(1, Ordering::Relaxed) < 30 {
-            log(&format!("Valor pick: stats shown with {hovered:#x} in the left hand and his own {own:#x}: Strength {before} + {s} = {}, max MP {max}", rd::<i32>(out + STRENGTH)));
+        if super::log_on(super::LogCat::Forms) && P.fetch_add(1, Ordering::Relaxed) < 30 {
+            log!(Forms, "Valor pick: stats shown with {hovered:#x} in the left hand and his own {own:#x}: Strength {before} + {s} = {}, max MP {max}", rd::<i32>(out + STRENGTH));
         }
         return;
     }
@@ -161,7 +161,7 @@ pub unsafe fn step(sora: usize) {
     if let Ok(mut last) = LAST.try_lock() {
         if *last != Some((key, s, m)) {
             *last = Some((key, s, m));
-            if LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
+            if super::log_on(super::LogCat::Forms) && LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
                 let line = match want {
                     Some((k, ds, dm)) => {
                         let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
@@ -170,7 +170,7 @@ pub unsafe fn step(sora: usize) {
                     }
                     None => format!("Valor Keyblade stats: none (out of Valor): Strength {was_s} -> {s}, max MP {was_m} -> {m}"),
                 };
-                log(&line);
+                log!(Forms, "{}", line);
             }
         }
     }

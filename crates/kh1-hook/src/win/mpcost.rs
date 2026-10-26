@@ -149,7 +149,7 @@ pub unsafe fn pay(sora: usize, spell: u8) -> Option<i32> {
     } else {
         pay_units(sora, u);
     }
-    super::log(&format!("KH2 MP cost of spell {spell} ({cost:?}): {u} of KH1's units paid, MP {before:?} -> {:?}", mp(sora)));
+    super::log!(Magic, "KH2 MP cost of spell {spell} ({cost:?}): {u} of KH1's units paid, MP {before:?} -> {:?}", mp(sora));
     Some(u)
 }
 

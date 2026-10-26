@@ -213,7 +213,7 @@ fn port_moves(f: &mut Form, sora: &character_core::Character, sora_rig: &Rig, ro
                 w.motions.entry(m).or_insert_with(|| a.clone());
             }
         }
-        log(&format!("form: Sora's combo row {id} (motion {m}, ability {}) added", row.ability));
+        log!(Animation, "form: Sora's combo row {id} (motion {m}, ability {}) added", row.ability);
         f.character.moveset.combo_rows.push(row);
     }
     f.rig = Arc::new(rig);
@@ -356,8 +356,8 @@ unsafe fn on_actor(m: Mat4) -> Mat4 {
         return m;
     }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 30 {
-        log(&format!("placement {gap:.1} off Sora's position (KH1 slot {:?}): drawn at his position", SLOT_NOW.load(Ordering::Relaxed)));
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+        log!(Animation, "placement {gap:.1} off Sora's position (KH1 slot {:?}): drawn at his position", SLOT_NOW.load(Ordering::Relaxed));
     }
     let mut m = m;
     m.w_axis = p.extend(1.0);
@@ -592,28 +592,28 @@ pub fn load_kh2() {
                     let clip = if field { rig.field_motions.get(&m) } else { rig.motions.get(&m) };
                     if let Some(c) = clip {
                         let g = ground_speed(&rig, c);
-                        log(&format!("KH2 {} {}: ground speed {g:.0} units/s", if field { "field" } else { "battle" }, if m == character_core::motion::WALK { "walk" } else { "run" }));
+                        log!(Animation, "KH2 {} {}: ground speed {g:.0} units/s", if field { "field" } else { "battle" }, if m == character_core::motion::WALK { "walk" } else { "run" });
                         ground.insert((m, field), g);
                     }
                 }
             }
-            log(&format!("KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32()));
+            log!(Animation, "KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32());
             let wisdom = if super::settings::get().drive {
                 let t = Instant::now();
                 match load_form(&install, source, kh2_data::sora::FORMS[1], rig.skeleton.len()) {
                     Ok(f) => {
-                        log(&format!(
+                        log!(Animation,
                             "KH2 Wisdom Form loaded: {} motions, {} combo rows, script {}, effects {}, in {:.1}s",
                             f.rig.motions.len(),
                             f.character.moveset.combo_rows.len(),
                             f.script.as_ref().map_or("missing".into(), |s| format!("{} bytes", s.len())),
                             if f.archive.is_some() { "read" } else { "missing" },
                             t.elapsed().as_secs_f32()
-                        ));
+                        );
                         Some(f)
                     }
                     Err(e) => {
-                        log(&format!("KH2 Wisdom Form did not load: {e}"));
+                        log!(Animation, "KH2 Wisdom Form did not load: {e}");
                         None
                     }
                 }
@@ -625,11 +625,11 @@ pub fn load_kh2() {
                 match load_form(&install, source, kh2_data::sora::FORMS[0], rig.skeleton.len()) {
                     Ok(mut f) => {
                         port_moves(&mut f, &sora.character, &rig, &PORTED_TO_VALOR);
-                        log(&format!("KH2 Valor Form loaded: {} motions, {} combo rows, {} weapons, in {:.1}s", f.rig.motions.len(), f.character.moveset.combo_rows.len(), f.rig.weapons.len(), t.elapsed().as_secs_f32()));
+                        log!(Animation, "KH2 Valor Form loaded: {} motions, {} combo rows, {} weapons, in {:.1}s", f.rig.motions.len(), f.character.moveset.combo_rows.len(), f.rig.weapons.len(), t.elapsed().as_secs_f32());
                         Some(f)
                     }
                     Err(e) => {
-                        log(&format!("KH2 Valor Form did not load: {e}"));
+                        log!(Animation, "KH2 Valor Form did not load: {e}");
                         None
                     }
                 }
@@ -640,7 +640,7 @@ pub fn load_kh2() {
                 let t = Instant::now();
                 match load_form(&install, source, kh2_data::sora::FORMS[4], rig.skeleton.len()) {
                     Ok(f) => {
-                        log(&format!(
+                        log!(Animation,
                             "KH2 Final Form loaded: {} motions, {} combo rows, {} weapons (on bones {:?}), effects {}, in {:.1}s",
                             f.rig.motions.len(),
                             f.character.moveset.combo_rows.len(),
@@ -648,11 +648,11 @@ pub fn load_kh2() {
                             f.rig.weapons.iter().map(|w| w.bone).collect::<Vec<_>>(),
                             if f.archive.is_some() { "read" } else { "missing" },
                             t.elapsed().as_secs_f32()
-                        ));
+                        );
                         Some(f)
                     }
                     Err(e) => {
-                        log(&format!("KH2 Final Form did not load: {e}"));
+                        log!(Animation, "KH2 Final Form did not load: {e}");
                         None
                     }
                 }
@@ -662,7 +662,7 @@ pub fn load_kh2() {
             Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), magi: sora.magi.clone(), wisdom, valor, final_form, roots, ground })
         })();
         if let Err(e) = &r {
-            log(&format!("KH2 Sora did not load: {e}"));
+            log!(Animation, "KH2 Sora did not load: {e}");
         }
         let _ = KH2.set(r);
         let slots = (|| -> Result<(HashMap<Signature, usize>, Vec<u32>), String> {
@@ -677,7 +677,7 @@ pub fn load_kh2() {
                     map.entry((m.frames, m.channels.len() as u32, m.helper_channels, m.helpers)).or_insert(i);
                 }
             }
-            log(&format!("KH1 Sora's motion table: {} slots", motions.len()));
+            log!(Animation, "KH1 Sora's motion table: {} slots", motions.len());
             // KH2's moves as new slots of that table (`kh2slots`, ini `kh1_slots`).
             if let Some(Ok(k)) = KH2.get() {
                 // Baked into KH1 motions (`kh1_bake`): KH1's skeleton and the retarget for it.
@@ -685,7 +685,7 @@ pub fn load_kh2() {
                     match baker(&install, k, &motions) {
                         Ok(b) => Some(b),
                         Err(e) => {
-                            log(&format!("KH2 slots: not baked ({e}); drawn over KH1's as before"));
+                            log!(Animation, "KH2 slots: not baked ({e}); drawn over KH1's as before");
                             None
                         }
                     }
@@ -711,7 +711,7 @@ pub fn load_kh2() {
             Err(e) => {
                 let _ = REST.set(None);
                 let _ = REST_OPEN.set(None);
-                log(&format!("KH1 Sora's motion table did not load: {e}"))
+                log!(Animation, "KH1 Sora's motion table did not load: {e}")
             }
         }
     });
@@ -755,7 +755,7 @@ fn slot_cache_manifest(install: &kh1_data::Kh1Install, mset: &[u8]) -> Option<cr
 fn open_slot_cache(install: &kh1_data::Kh1Install, mset: &[u8]) -> Option<crate::slotcache::Cache> {
     let t = Instant::now();
     let Some(manifest) = slot_cache_manifest(install, mset) else {
-        log("slot cache: its inputs couldn't all be read; baking without it");
+        log!(Loading, "slot cache: its inputs couldn't all be read; baking without it");
         return None;
     };
     let dir = slot_cache_dir();
@@ -767,19 +767,19 @@ fn open_slot_cache(install: &kh1_data::Kh1Install, mset: &[u8]) -> Option<crate:
         Some(crate::slotcache::Miss::Damaged(e)) => format!("unusable ({e}), rebuilt"),
         Some(crate::slotcache::Miss::Changed(d)) => format!("rebuilt: {}", d.join(", ")),
     };
-    log(&format!("slot cache: {} ({why}; checked in {:.0} ms)", dir.join(crate::slotcache::FILE_NAME).display(), t.elapsed().as_secs_f32() * 1000.0));
+    log!(Loading, "slot cache: {} ({why}; checked in {:.0} ms)", dir.join(crate::slotcache::FILE_NAME).display(), t.elapsed().as_secs_f32() * 1000.0);
     Some(c)
 }
 
 fn save_slot_cache(c: &crate::slotcache::Cache) {
-    log(&format!("slot cache: {} block(s) from the cache, {} baked, {} the same bake again (shared)", c.hits, c.misses, c.shared));
+    log!(Loading, "slot cache: {} block(s) from the cache, {} baked, {} the same bake again (shared)", c.hits, c.misses, c.shared);
     if !c.needs_write() {
         return;
     }
     super::loadscreen::saving();
     match c.write(&slot_cache_dir()) {
-        Ok(p) => log(&format!("slot cache: written ({})", p.display())),
-        Err(e) => log(&format!("slot cache: not written ({e}); baked again next start")),
+        Ok(p) => log!(Loading, "slot cache: written ({})", p.display()),
+        Err(e) => log!(Loading, "slot cache: not written ({e}); baked again next start"),
     }
 }
 
@@ -789,7 +789,7 @@ fn note_model(bones: u32, instance: usize, via_ik: bool) {
     let Ok(mut v) = SEEN.try_lock() else { return };
     if v.len() < 40 && !v.contains(&(bones, via_ik)) {
         v.push((bones, via_ik));
-        log(&format!("posed: a {bones}-bone model (instance {instance:#x}) by {}", if via_ik { "the ground-IK pass" } else { "the plain pass" }));
+        log!(Animation, "posed: a {bones}-bone model (instance {instance:#x}) by {}", if via_ik { "the ground-IK pass" } else { "the plain pass" });
     }
 }
 
@@ -917,7 +917,7 @@ unsafe fn dream_hold(pose: &mut [Mat4], parents: &[i16], kh1_world: Option<usize
             static N: AtomicU32 = AtomicU32::new(0);
             if N.fetch_add(1, Ordering::Relaxed) < 10 {
                 let far = rel.iter().map(|m| m.w_axis.truncate().length()).fold(0.0f32, f32::max);
-                log(&format!("weapon {w:#x}: KH1's hold this frame not noted (a bone {far:.0} from the grip)"));
+                log!(Animation, "weapon {w:#x}: KH1's hold this frame not noted (a bone {far:.0} from the grip)");
             }
         }
         if near && rel.iter().all(|m| m.is_finite()) {
@@ -925,7 +925,7 @@ unsafe fn dream_hold(pose: &mut [Mat4], parents: &[i16], kh1_world: Option<usize
                 let new = h.as_ref().map_or(true, |(id, _)| *id != w);
                 *h = Some((w, rel));
                 if new {
-                    log(&format!("weapon {w:#x}: held rigidly as KH1 holds it (its hold noted from KH1's pose)"));
+                    log!(Animation, "weapon {w:#x}: held rigidly as KH1 holds it (its hold noted from KH1's pose)");
                 }
             }
         }
@@ -1060,12 +1060,12 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
         static N: AtomicU32 = AtomicU32::new(0);
         let changed = last.as_ref().map_or(true, |l| l.route != d.route || l.slot != d.slot || l.motion != d.motion || l.restart != d.restart && d.restart);
         if changed && N.fetch_add(1, Ordering::Relaxed) < 1500 {
-            log(&format!(
+            log!(Animation,
                 "draw: {} (KH1 slot {}){}",
                 d.route,
                 slot.map_or("-".into(), |n| n.to_string()),
                 if d.route == "follow" { format!(": KH2 motion {} {}, {:.0} frames in, blend {:.2}{}", d.motion, d.play, d.frames, d.blend, if d.restart { ", restarted" } else { "" }) } else { String::new() }
-            ));
+            );
         }
         *last = Some(d);
     }
@@ -1393,13 +1393,13 @@ fn follow_play(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, forced: Optio
     if new_slot {
         if f.logged < 800 {
             f.logged += 1;
-            log(&format!(
+            log!(Animation,
                 "KH1 slot {} ({}) at speed {:.0}/s, climb {:.0}/s",
                 slot.map_or("?".into(), |n| n.to_string()),
                 play.map_or("KH1's own animation".into(), |p| format!("{p:?}")),
                 f.speed,
                 f.climb
-            ));
+            );
         }
         f.slot = slot;
     }
@@ -1615,7 +1615,7 @@ unsafe fn at_sora(instance: usize, param_world: usize) -> bool {
     let d = Vec3::new(p.x - a[0], p.y - a[1], p.z - a[2]).length();
     static N: AtomicU32 = AtomicU32::new(0);
     if d > 150.0 && N.fetch_add(1, Ordering::Relaxed) < 10 {
-        log(&format!("Sora's model {instance:#x} drawn {d:.0} away from his actor: another copy (the pause menu's), left to KH1"));
+        log!(Animation, "Sora's model {instance:#x} drawn {d:.0} away from his actor: another copy (the pause menu's), left to KH1");
     }
     d <= 150.0
 }
@@ -1656,11 +1656,11 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         let kh1 = match kh1_data::mdls::parse_bones(bytes, 0, SORA_BONES as usize) {
             Ok(b) => b,
             Err(e) => {
-                log(&format!("Sora's bone table at {table:#x} did not read: {e}"));
+                log!(Animation, "Sora's bone table at {table:#x} did not read: {e}");
                 return;
             }
         };
-        log(&format!("Sora's instance {instance:#x} (bones at {table:#x})"));
+        log!(Animation, "Sora's instance {instance:#x} (bones at {table:#x})");
         let bind = kh2_anim::Pose::bind(&kh1).bones;
         *g = Some(Sora { instance, retarget: None, bind, calls: 0, checked: false, follow: Follow::default(), to_world: None, wrote_root: None, last_drawn: None, param_agree: 0, param_ok: PARAM_OK.load(Ordering::Relaxed), jumps: 0, parents: kh1.iter().map(|b| b.parent).collect(), jiggle: None, secondary: None, inverse: None, kh2_now: None });
         KH1_BONES.lock().map(|mut b| *b = kh1).ok();
@@ -1678,23 +1678,23 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 if let Some(Some(m)) = REST_OPEN.get() {
                     r.set_rest_open(&m.apply(&b, 0.0));
                 }
-                log(&format!("retarget ready: {} of {} KH1 bones follow KH2 (the rest hang as in KH1's battle idle: {})", r.mapped(), b.len(), rest.is_some()));
+                log!(Animation, "retarget ready: {} of {} KH1 bones follow KH2 (the rest hang as in KH1's battle idle: {})", r.mapped(), b.len(), rest.is_some());
                 KH1_SIZE.store(r.hip_ratio().to_bits(), Ordering::Relaxed);
                 s.retarget = Some(r);
                 let sec = kh1_data::secondary::Secondary::new(&b, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
-                log(&format!(
+                log!(Animation,
                     "KH2's own hair, hood, sleeves and keychain: {} spikes ({}), {} hood joints, {} sleeve chains, {} chain links",
                     sec.hair().len(),
                     sec.hair().iter().map(|l| format!("{}<-{}", l.kh1, l.kh2)).collect::<Vec<_>>().join(" "),
                     sec.hood().len(),
                     sec.sleeves().len(),
                     sec.chain().len()
-                ));
+                );
                 s.secondary = Some(sec);
                 let grip = kh1_data::retarget::GRIP_BONE;
                 if let Some(r) = s.retarget.as_ref() {
                     let inv = kh1_data::inverse::Inverse::new(&b, &kh2.rig.skeleton, r, |i| i < grip && r.follows_one_part(i));
-                    log(&format!("KH1's poses on KH2's skeleton: {} of {} KH2 bones turn with a measured part", inv.mapped(), kh2.rig.skeleton.len()));
+                    log!(Animation, "KH1's poses on KH2's skeleton: {} of {} KH2 bones turn with a measured part", inv.mapped(), kh2.rig.skeleton.len());
                     s.inverse = Some(inv);
                 }
             }
@@ -1721,11 +1721,11 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             if s.param_agree >= 30 {
                 s.param_ok = true;
                 PARAM_OK.store(true, Ordering::Relaxed);
-                log("placement: the skeleton pass's own world matrix matches; using it from now on");
+                log!(Animation, "placement: the skeleton pass's own world matrix matches; using it from now on");
             }
         } else {
             if s.param_agree > 0 || s.calls == 30 {
-                log(&format!("placement: pass matrix {:?} vs from the bones {:?}", p.to_cols_array().map(|v| (v * 100.0).round() / 100.0), d.to_cols_array().map(|v| (v * 100.0).round() / 100.0)));
+                log!(Animation, "placement: pass matrix {:?} vs from the bones {:?}", p.to_cols_array().map(|v| (v * 100.0).round() / 100.0), d.to_cols_array().map(|v| (v * 100.0).round() / 100.0));
             }
             s.param_agree = 0;
         }
@@ -1757,7 +1757,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
         s.checked = true;
         let chain = mat(world) * mat(local + 0x40) * mat(local + 0x80) * mat(local + 0xC0);
         let err = (chain.w_axis - mat(world + 0xC0).w_axis).length();
-        log(&format!("check: bone 3 from the locals is {err:.3} units from the game's (should be ~0)"));
+        log!(Animation, "check: bone 3 from the locals is {err:.3} units from the game's (should be ~0)");
     }
     if let Ok(mut at) = SORA_AT.try_lock() {
         *at = Some(to_world.w_axis.truncate().to_array());
@@ -1783,7 +1783,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             if WEAPON.swap(w, Ordering::Relaxed) != w {
                 let (_, q, t) = live.to_scale_rotation_translation();
                 let (ax, ang) = q.to_axis_angle();
-                log(&format!("weapon {w:#x}: KH1's grip turned {:.2} rad from the Keyblade's rest (KH1's grip: axis {ax:.2?} angle {ang:.2}, offset {t:.1?})", r.grip_turn(&live).unwrap_or(-1.0)));
+                log!(Animation, "weapon {w:#x}: KH1's grip turned {:.2} rad from the Keyblade's rest (KH1's grip: axis {ax:.2?} angle {ang:.2}, offset {t:.1?})", r.grip_turn(&live).unwrap_or(-1.0));
             }
         }
     }
@@ -1843,7 +1843,7 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             driven = rep.parts;
             static LOGGED: AtomicU32 = AtomicU32::new(0);
             if LOGGED.fetch_add(1, Ordering::Relaxed) == 0 {
-                log(&format!("hair, hood, sleeves and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts));
+                log!(Animation, "hair, hood, sleeves and keychain from KH2's own animation: {:?} (asked {want:?})", rep.parts);
             }
         }
         // The swing (`kh1_data::jiggle`) for any chain KH2 didn't pose. One step per 60 Hz frame
@@ -1949,7 +1949,7 @@ unsafe fn held(instance: usize, world: usize) -> Option<Mat4> {
         if (now_rel.w_axis - rel.w_axis).length() > 8.0 {
             v.held = None;
             v.steady = 0;
-            log(&format!("the {bones}-bone model at {instance:#x} let go of the {} hand", HANDS[hand].1));
+            log!(Animation, "the {bones}-bone model at {instance:#x} let go of the {} hand", HANDS[hand].1);
             return None;
         }
         return Some(hands.drawn[hand] * rel);
@@ -1986,7 +1986,7 @@ unsafe fn held(instance: usize, world: usize) -> Option<Mat4> {
         v.held = Some(hand);
         if !v.logged {
             v.logged = true;
-            log(&format!("the {bones}-bone model at {instance:#x} is held in Sora's {} hand ({dist:.1} units from it); it now follows the hand drawn", HANDS[hand].1));
+            log!(Animation, "the {bones}-bone model at {instance:#x} is held in Sora's {} hand ({dist:.1} units from it); it now follows the hand drawn", HANDS[hand].1);
         }
     }
     None

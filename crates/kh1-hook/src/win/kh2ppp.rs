@@ -293,7 +293,7 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         // KH1's MegaBirth entry, as its relocation hands it out.
         let kh1_mb = b + TABLE_STEAM + MEGA_BIRTH as usize * 0x50;
         if rd::<usize>(kh1_mb + 8) != b + KH1_MB_CALC_STEAM {
-            log("KH2 effects (native): KH1's program table isn't as expected; KH2's MegaBirth not plugged in");
+            log!(Effects, "KH2 effects (native): KH1's program table isn't as expected; KH2's MegaBirth not plugged in");
             return;
         }
         // The words of KH2-only programs were relocated to KH1's dummy entry (1).
@@ -302,13 +302,13 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         let kh1_col = b + TABLE_STEAM + COLOR as usize * 0x50;
         let col_ok = rd::<usize>(kh1_col + 8) == b + KH1_COLOR_CALC_STEAM;
         if !col_ok {
-            log("KH2 effects (native): KH1's pppColor entry isn't as expected; KH2's pppColor not plugged in (KH1's runs)");
+            log!(Effects, "KH2 effects (native): KH1's pppColor entry isn't as expected; KH2's pppColor not plugged in (KH1's runs)");
         }
         // KH1's pppVtMime entry: only our DPX's words of it are pointed at KH2's calc.
         let kh1_vt = b + TABLE_STEAM + VT_MIME as usize * 0x50;
         let vt_ok = rd::<usize>(kh1_vt + 8) == b + KH1_VT_MIME_CALC_STEAM && rd::<usize>(kh1_vt + 0x18) == b + VT_MIME_DRAW_STEAM;
         if !vt_ok {
-            log("KH2 effects (native): KH1's pppVtMime entry isn't as expected; KH2's pppVtMime not plugged in");
+            log!(Effects, "KH2 effects (native): KH1's pppVtMime entry isn't as expected; KH2's pppVtMime not plugged in");
         }
         // KH1's pppAngleLoop and pppKeShpTail3X entries, each checked as all its slots are.
         let kh1_al = b + TABLE_STEAM + ANGLE_LOOP as usize * 0x50;
@@ -316,7 +316,7 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         let kh1_t3 = b + TABLE_STEAM + TAIL_3X as usize * 0x50;
         let t3_ok = rd::<[usize; 9]>(kh1_t3 + 8) == [b + TAIL_3X_CALC_STEAM, 0, b + KH1_TAIL_3X_DRAW_STEAM, 0, 0, 0, b + TAIL_3X_CONSTRUCT_STEAM, b + TAIL_3X_RESET_STEAM, 0];
         if !al_ok || !t3_ok {
-            log(&format!("KH2 effects (native): KH1's pppAngleLoop ({al_ok}) / pppKeShpTail3X ({t3_ok}) entry as expected; KH2's not plugged in where not"));
+            log!(Effects, "KH2 effects (native): KH1's pppAngleLoop ({al_ok}) / pppKeShpTail3X ({t3_ok}) entry as expected; KH2's not plugged in where not");
         }
         let (ours_mb, ours_sp, ours_col, ours_vt) = (to_handle(table(0)), to_handle(table(1)), to_handle(table(2)), to_handle(table(3)));
         let (ours_al, ours_t3, ours_dn) = (to_handle(table(4)), to_handle(table(5)), to_handle(table(6)));
@@ -324,10 +324,10 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         let kh1_md = b + TABLE_STEAM + KE_MDL_DTT as usize * 0x50;
         let md_ok = rd::<[usize; 9]>(kh1_md + 8) == [0, 0, b + KE_MDL_DTT_DRAW_STEAM, 0, 0, 0, b + KE_MDL_DTT_CONSTRUCT_STEAM, b + KE_MDL_DTT_RESET_STEAM, 0];
         if !md_ok {
-            log("KH2 effects (native): KH1's pppKeMdlDtt entry isn't as expected; KH2's pppSnoMdlDttNorm not plugged in");
+            log!(Effects, "KH2 effects (native): KH1's pppKeMdlDtt entry isn't as expected; KH2's pppSnoMdlDttNorm not plugged in");
         }
         if ours_mb == 0 || ours_sp == 0 || ours_col == 0 || ours_vt == 0 || ours_al == 0 || ours_t3 == 0 || ours_dn == 0 {
-            log("KH2 effects (native): no handle for our program table; KH2's programs not plugged in");
+            log!(Effects, "KH2 effects (native): no handle for our program table; KH2's programs not plugged in");
             return;
         }
         let (mut mb, mut sp, mut col, mut vt, mut al, mut t3, mut dn, mut other) = (0, 0, 0, 0, 0, 0, 0, 0);
@@ -367,9 +367,9 @@ pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
         PLUGGED_ANGLE_LOOP.fetch_or(al > 0, Ordering::Relaxed);
         PLUGGED_TAIL_3X.fetch_or(t3 > 0, Ordering::Relaxed);
         PLUGGED_DTT_NORM.fetch_or(dn > 0, Ordering::Relaxed);
-        log(&format!(
+        log!(Effects,
             "KH2 effects (native): KH2's MegaBirth plugged into {mb} program words, its ribbon (EiDrawShipoly) into {sp}, its pppColor into {col}, its pppVtMime into {vt}, its pppAngleLoop into {al}, its pppKeShpTail3X into {t3}, its pppSnoMdlDttNorm into {dn} ({other} left as they were)"
-        ));
+        );
     }
 }
 
@@ -1497,7 +1497,7 @@ unsafe extern "system" fn sp_draw(obj: usize, key: usize, prog: usize) {
     let s = work(obj, prog, 3);
     if rd::<u8>(key + 8) != 0 {
         if !LOGGED_VARIANT.swap(true, Ordering::Relaxed) {
-            log("KH2 effects (native): a ribbon with KH2's scroll-draw variant (key +8) isn't drawn (not ported)");
+            log!(Effects, "KH2 effects (native): a ribbon with KH2's scroll-draw variant (key +8) isn't drawn (not ported)");
         }
         return;
     }

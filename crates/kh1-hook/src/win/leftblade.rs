@@ -237,8 +237,8 @@ fn readable(at: usize, len: usize) -> bool {
 
 /// Logs `line` the first `max` times its counter is bumped.
 fn log_n(counter: &AtomicU32, max: u32, line: impl FnOnce() -> String) {
-    if counter.fetch_add(1, Ordering::Relaxed) < max {
-        log(&format!("left Keyblade: {}", line()));
+    if super::log_on(super::LogCat::Animation) && counter.fetch_add(1, Ordering::Relaxed) < max {
+        log!(Animation, "left Keyblade: {}", line());
     }
 }
 
@@ -254,10 +254,10 @@ pub unsafe fn install() {
     let ours = (wpn_release as *const () as usize as u64).to_le_bytes();
     let left = super::settings::get().valor_left_blade;
     let patched = if !left {
-        log("left Keyblade: off (valor_left_blade = off)");
+        log!(Animation, "left Keyblade: off (valor_left_blade = off)");
         false
     } else if !super::crash::readable(slot) || !super::hook::patch(slot, &want, &ours, "the .wpn release handler (left Keyblade)") {
-        log("left Keyblade: KH1's .wpn release handler not where expected: not installed");
+        log!(Animation, "left Keyblade: KH1's .wpn release handler not where expected: not installed");
         false
     } else {
         true
@@ -280,7 +280,7 @@ pub unsafe fn install() {
         TRAIL_HOOKED.store(true, Ordering::Relaxed);
         std::thread::spawn(load_trail_windows);
     } else {
-        log("left Keyblade: trail off (KH1's trail request not where expected)");
+        log!(Animation, "left Keyblade: trail off (KH1's trail request not where expected)");
     }
 }
 
@@ -337,7 +337,7 @@ pub unsafe fn show(item: Option<u8>) {
     // A load that never answered: given up (its buffer is kept, never reused).
     if let Some((it, buf, since)) = st.pending {
         if since.elapsed().as_secs_f32() > LOAD_TIMEOUT_S {
-            log(&format!("left Keyblade: the load of {it:#x} never answered ({:.0} s): given up", since.elapsed().as_secs_f32()));
+            log!(Animation, "left Keyblade: the load of {it:#x} never answered ({:.0} s): given up", since.elapsed().as_secs_f32());
             st.pending = None;
             st.failed.push(it);
             if PENDING_BUF.load(Ordering::Relaxed) == buf {
@@ -367,13 +367,13 @@ pub unsafe fn show(item: Option<u8>) {
         release(&old);
     }
     let Some(name) = file_name(base, item) else {
-        log(&format!("left Keyblade: no weapon file for item {item:#x}"));
+        log!(Animation, "left Keyblade: no weapon file for item {item:#x}");
         st.failed.push(item);
         return;
     };
     let buf = super::sys::VirtualAlloc(std::ptr::null_mut(), BUF_SIZE, 0x3000, 0x04) as usize;
     if buf == 0 {
-        log("left Keyblade: no memory for the model");
+        log!(Animation, "left Keyblade: no memory for the model");
         st.failed.push(item);
         return;
     }
@@ -385,7 +385,7 @@ pub unsafe fn show(item: Option<u8>) {
     cname.push(0);
     let load: unsafe extern "system" fn(*const u8, usize, usize, u32) -> u32 = std::mem::transmute(base + LOAD_RVA);
     let id = load(cname.as_ptr(), buf, loaded as *const () as usize, 0);
-    log(&format!("left Keyblade: load of {name} (item {item:#x}) requested into {buf:#x} (request {id})"));
+    log!(Animation, "left Keyblade: load of {name} (item {item:#x}) requested into {buf:#x} (request {id})");
 }
 
 /// Back from Valor (`valor::ended`): not drawn; the model stays loaded.
@@ -415,7 +415,7 @@ unsafe extern "system" fn loaded(size: i32, id: u32, buf: usize) {
     }
     PENDING_BUF.store(0, Ordering::Relaxed);
     let Ok(mut st) = STATE.try_lock() else {
-        log("left Keyblade: busy when the load answered: model not used");
+        log!(Animation, "left Keyblade: busy when the load answered: model not used");
         return;
     };
     let Some((item, _, _)) = st.pending.take() else { return };
@@ -428,7 +428,7 @@ unsafe extern "system" fn loaded(size: i32, id: u32, buf: usize) {
             }
         }
         Err(e) => {
-            log(&format!("left Keyblade: item {item:#x}'s model not used: {e}"));
+            log!(Animation, "left Keyblade: item {item:#x}'s model not used: {e}");
             st.failed.push(item);
         }
     }
@@ -464,11 +464,11 @@ unsafe fn set_up(size: i32, buf: usize) -> Result<(usize, usize, usize), String>
         return Err(format!("{bones} bones (at most {WEAPON_BONES} fit Sora's weapon bones)"));
     }
     let hd = rd::<u32>(mesh + 0x10) == HD_MARK && rd::<u32>(mesh + 0x14) != 0;
-    log(&format!(
+    log!(Animation,
         "left Keyblade: model set up: container {container:#x}, mesh {mesh:#x}, {bones} bones, {} meshes, {}",
         rd::<i32>(mesh + 0xC),
         if hd { "remastered (HD) table hooked up" } else { "no remastered table (PS2 mesh)" }
-    ));
+    );
     // Its effect data (`+4` up to the model), as KH1's handler sets up its weapon's: the trail's
     // look is the Keyblade's own (the user: "it doesnt play keyblade specific trails for the
     // second keyblade").
@@ -478,10 +478,10 @@ unsafe fn set_up(size: i32, buf: usize) -> Result<(usize, usize, usize), String>
         if (0..=256).contains(&n) && o4 + 0x10 + n as usize * 0x20 <= o8 {
             let setup: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + EFFECTS_SETUP_RVA);
             setup(at);
-            log(&format!("left Keyblade: its effect data set up at {at:#x} ({n} entries)"));
+            log!(Animation, "left Keyblade: its effect data set up at {at:#x} ({n} entries)");
             at
         } else {
-            log(&format!("left Keyblade: effect data at {o4:#x} looks wrong ({n} entries): the right Keyblade's trail look used"));
+            log!(Animation, "left Keyblade: effect data at {o4:#x} looks wrong ({n} entries): the right Keyblade's trail look used");
             0
         }
     } else {
@@ -507,9 +507,9 @@ unsafe fn release(old: &Loaded) {
         free_model(old.container);
         let drop_record: unsafe extern "system" fn(usize, u8) = std::mem::transmute(base + DROP_RECORD_RVA);
         drop_record(record, 1);
-        log(&format!("left Keyblade: item {:#x}'s model released (record {record:#x})", old.item));
+        log!(Animation, "left Keyblade: item {:#x}'s model released (record {record:#x})", old.item);
     } else {
-        log(&format!("left Keyblade: item {:#x}'s file record not found ({record:#x}): left loaded", old.item));
+        log!(Animation, "left Keyblade: item {:#x}'s file record not found ({record:#x}): left loaded", old.item);
     }
 }
 
@@ -581,7 +581,7 @@ pub fn final_float(kh1: &mut [Mat4], kh1_bind: &[Mat4], kh2_body: &[Mat4], kh2_r
         let w = kh2.rig.weapons.first()?;
         let m = w.motions.get(&character_core::motion::IDLE).or_else(|| w.motions.get(&0))?;
         let root = kh2_anim::evaluate(&w.skeleton, m, 0.0, kh2_anim::Options::default()).bones.first().copied()?;
-        log(&format!("Final Form: base Sora's held Keyblade root at {:.1?} from his hand bone", root.w_axis.truncate()));
+        log!(Animation, "Final Form: base Sora's held Keyblade root at {:.1?} from his hand bone", root.w_axis.truncate());
         Some(root)
     });
     let Some(held) = held else { return };
@@ -827,10 +827,10 @@ fn load_trail_windows() {
     })();
     match r {
         Ok((name, w)) => {
-            log(&format!("left Keyblade: trail windows of {name} for {} motions", w.len()));
+            log!(Animation, "left Keyblade: trail windows of {name} for {} motions", w.len());
             let _ = TRAIL_WINDOWS.set(w);
         }
-        Err(e) => log(&format!("left Keyblade: trail windows not read ({e}); KH2's trail windows of either hand used")),
+        Err(e) => log!(Animation, "left Keyblade: trail windows not read ({e}); KH2's trail windows of either hand used"),
     }
 }
 
@@ -1002,7 +1002,7 @@ unsafe fn trail_step(valor: bool, motion: u16, frame: u32, either: bool) {
     trails.retain_mut(|t| {
         if t.logged < 6 && R.fetch_add(1, Ordering::Relaxed) < 60 {
             t.logged += 1;
-            log(&format!("left Keyblade: trail {:#x} step {}: {}", t.effect, t.logged, trail_report(t.effect)));
+            log!(Animation, "left Keyblade: trail {:#x} step {}: {}", t.effect, t.logged, trail_report(t.effect));
         }
         if !trail_alive(t.effect, fake) {
             log_n(&N, 12, || format!("trail {:#x} ended", t.effect));

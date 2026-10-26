@@ -27,7 +27,9 @@
 //! log is on (`trace::sound_log`: the ini's, or the debug menu's since), so it switches in game.
 //! (The ram-use thread, m1 answer 3) Only with the debug tools loaded (the ini's `debug_menu = on`
 //! at start, `debug_on`): otherwise only the voice group hook goes in, for the gameplay it carries.
-//! Its lines are the trace's Sounds category (`log_as`).
+//! Its lines are the trace's Sounds category (`log_line`). (The ram-use thread) The switch is now
+//! the debug menu's Logs page, KH1 Sound Calls (`LogCat::Kh1Sounds`, ini `log_kh1_sounds`, off by
+//! default); the old `sound_log` key and the Trace Recorder's Sound Log row are gone.
 
 use super::addr::{Build, Rva};
 use super::hook;
@@ -136,15 +138,15 @@ fn who(actor: usize) -> String {
 fn emit(line: String) {
     let n = LINES.fetch_add(1, Ordering::Relaxed);
     if n < MAX_LINES {
-        super::log_as(super::trace::cat::SOUNDS, &line);
+        super::log!(Kh1Sounds, "{}", line);
     } else if n == MAX_LINES {
-        log(&format!("KH1 sound log: {MAX_LINES} lines this session; no more until the game restarts"));
+        log!(Kh1Sounds, "KH1 sound log: {MAX_LINES} lines this session; no more until the game restarts");
     }
 }
 
-/// The sound log is on now (never without the debug tools).
+/// The sound log is on now: the Logs page's KH1 Sound Calls (never without the debug tools).
 fn live() -> bool {
-    super::debug_on() && super::trace::sound_log()
+    super::log_on(super::LogCat::Kh1Sounds)
 }
 
 unsafe extern "system" fn menu_sound(id: i32) -> usize {
@@ -239,14 +241,14 @@ unsafe fn show_list() {
     let mut node = rd::<u64>(base + STEAM_BANK_LIST) as usize;
     let mut n = 0;
     while node >= 0x10000 && super::crash::readable(node) && super::crash::readable(node + 0x40) && n < 12 {
-        log(&format!(
+        log!(Kh1Sounds,
             "KH1 sound: bank list node {n}: +0x10 {} +0x14 {} +0x18 {} +0x30 [{}] +0x3C {}",
             rd::<i32>(node + 0x10),
             rd::<i32>(node + 0x14),
             rd::<i32>(node + 0x18),
             text(node + 0x30),
             rd::<i32>(node + 0x3C)
-        ));
+        );
         node = rd::<u64>(node + 8) as usize;
         n += 1;
     }
@@ -314,6 +316,6 @@ pub unsafe fn install() {
         hook::install(base + STEAM_SE_CREATE, &SE_CREATE_PROLOGUE, se_create as *const () as usize, &ORIG_SE_CREATE, "sound effect create log");
         hook::install(base + STEAM_SE_PLAY, &SE_PLAY_PROLOGUE, se_play as *const () as usize, &ORIG_SE_PLAY, "sound effect play log");
     } else {
-        log("KH1 sound log: the bank-level hooks (voice call, sound effects) are for the Steam build only");
+        log!(Kh1Sounds, "KH1 sound log: the bank-level hooks (voice call, sound effects) are for the Steam build only");
     }
 }

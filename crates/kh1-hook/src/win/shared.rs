@@ -318,8 +318,8 @@ pub fn control(s: &Seen) -> u32 {
                 borrow = SQUARE;
             } else {
                 static N: AtomicU32 = AtomicU32::new(0);
-                if N.fetch_add(1, Ordering::Relaxed) < 10 {
-                    super::log("Square with the Dodge Roll style KH2: KH2 has no dodge roll, guard or Quick Run (none of Dodge Roll, Guard, Quick Run is equipped in KH1's menu), so it doesn't take him");
+                if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+                    super::log!(Takeover, "Square with the Dodge Roll style KH2: KH2 has no dodge roll, guard or Quick Run (none of Dodge Roll, Guard, Quick Run is equipped in KH1's menu), so it doesn't take him");
                 }
             }
         } else if air && jump_fresh && s.air_dodge && !AIR_DODGED.load(Ordering::Relaxed) {
@@ -360,8 +360,8 @@ pub fn control(s: &Seen) -> u32 {
     // KH1's as unmodded, as t630 left KH1 its Square and jump where no KH1 row plays KH2's move.
     if borrow != NONE && super::addr::Build::current() == super::addr::Build::Steam {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 20 {
-            super::log(&format!(
+        if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::log!(Takeover,
                 "{}: no KH1 state of ours could take it here (KH1 state {}): the press is KH1's (no KH2-controller borrow)",
                 match borrow {
                     SQUARE => "Square (KH2's dodge roll / guard / Quick Run)",
@@ -369,7 +369,7 @@ pub fn control(s: &Seen) -> u32 {
                     _ => "Square held through KH1's roll (KH2's Quick Run)",
                 },
                 s.state
-            ));
+            );
         }
         borrow = NONE;
     }
@@ -529,7 +529,7 @@ pub mod physics {
             0 => {
                 let r = super::super::settings::get().physics_rule;
                 store(r);
-                super::super::log(&format!("physics: {} for every move of base Sora's (the ini's `physics`; Drive Forms KH2's)", r.key().to_uppercase()));
+                super::super::log!(Takeover, "physics: {} for every move of base Sora's (the ini's `physics`; Drive Forms KH2's)", r.key().to_uppercase());
                 r
             }
             1 => Rule::Kh1,
@@ -542,10 +542,10 @@ pub mod physics {
         let was = rule();
         store(r);
         super::super::settings::save_physics(r);
-        super::super::log(&format!("Config menu: physics {} (was {}): {}", r.key().to_uppercase(), was.key().to_uppercase(), match r {
+        super::super::log!(Takeover, "Config menu: physics {} (was {}): {}", r.key().to_uppercase(), was.key().to_uppercase(), match r {
             Rule::Kh1 => "KH1's numbers for every move of base Sora's, KH2's borrowed moves too (KH2's controller given KH1's gravity, fall, jump, speeds and air steering)",
             Rule::Kh2 => "KH2's numbers for every move of base Sora's, KH1's own moves on its states too",
-        }));
+        });
     }
 
     /// Whose physics numbers move base Sora now, whatever the move and its style (the styles choose
@@ -723,7 +723,7 @@ pub mod physics {
         static N: AtomicU32 = AtomicU32::new(0);
         if hold && N.load(Ordering::Relaxed) < 20 && clip.first(|k| matches!(k, W::NoGravity)).is_some_and(|s| (t as u32) == s) {
             N.fetch_add(1, Ordering::Relaxed);
-            super::super::log(&format!("Air Physics KH2 on KH1's air cast animation (request {request:#x}): KH2's hover of motion {motion} from frame {t:.0}"));
+            super::super::log!(Takeover, "Air Physics KH2 on KH1's air cast animation (request {request:#x}): KH2's hover of motion {motion} from frame {t:.0}");
         }
         hold
     }
@@ -798,7 +798,7 @@ pub mod physics {
         if let Ok(mut k) = CAST_KEEP.lock() {
             *k = Some((game_frame(), v));
         }
-        super::super::log(&format!("KH2's air cast start (Air Physics KH2): a hop of {MAGIC_JUMP:.0} ({:.1} frames up) from where he is (KH1's arc rising {}), sideways {:.1}/frame kept", arc.uptime, was.arc.up_speed() > 0.0, v[0].hypot(v[2])));
+        super::super::log!(Takeover, "KH2's air cast start (Air Physics KH2): a hop of {MAGIC_JUMP:.0} ({:.1} frames up) from where he is (KH1's arc rising {}), sideways {:.1}/frame kept", arc.uptime, was.arc.up_speed() > 0.0, v[0].hypot(v[2]));
     }
 
     /// After KH1's command step ran a KH2 air cast (`combat::command`, `reflect::cast_native`):
@@ -867,14 +867,14 @@ pub mod physics {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
             let (h, up) = m.velocity();
-            super::super::log(&format!(
+            super::super::log!(Takeover,
                 "KH1's air state takes him with KH2's momentum{}: sideways {:.1}/frame, up {up:.1}/frame (KH1's arc: time {:.1}, apex at {:.1}, {:.0} higher)",
                 if fresh { "" } else { " (no KH2 step written lately: from rest, KH2's sideways speed)" },
                 h[0].hypot(h[1]),
                 m.arc.t,
                 m.arc.up_t,
                 m.arc.rise_left()
-            ));
+            );
         }
         m
     }
@@ -932,8 +932,8 @@ pub mod physics {
             }
         };
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            super::super::log(&format!("KH2's hop on KH1's air state: {height:.0} high, {:.1}/frame sideways, {how}", vel[0].hypot(vel[1])));
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            super::super::log!(Takeover, "KH2's hop on KH1's air state: {height:.0} high, {:.1}/frame sideways, {how}", vel[0].hypot(vel[1]));
         }
     }
 
@@ -961,8 +961,8 @@ pub mod physics {
         }
         wr(actor, rd::<u32>(actor) & !CUT_OPEN);
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 20 {
-            super::super::log("held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise");
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::super::log!(Takeover, "held hop at physics KH1: KH1's early-release cut closed (flag 0x40000 off), the full rise");
         }
     }
 
@@ -998,12 +998,12 @@ pub mod physics {
         let was: [f32; 4] = rd(actor + VEL);
         wr(actor + VEL, vel);
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            super::super::log(&format!(
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            super::super::log!(Takeover,
                 "KH2's hop out of KH1's ground combo: its {:.1}/frame sideways put back after KH1's carry into the air (which left {:.1})",
                 vel[0].hypot(vel[2]),
                 was[0].hypot(was[2])
-            ));
+            );
         }
     }
 
@@ -1064,11 +1064,11 @@ pub mod physics {
             wr(actor + VEL, [yaw.sin() * s, v[1], yaw.cos() * s, s]);
         }
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            super::super::log(&format!(
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            super::super::log!(Takeover,
                 "KH1's air attack (motion {motion:#x}) out of KH2's move: {}",
                 if set { format!("its own lunge {s:.1}/frame given (KH1 left it {had:.1}; {speed:.1} at its start, frame {t:.0})") } else { format!("it has {had:.1}/frame already, left as it is") }
-            ));
+            );
         }
     }
 
@@ -1101,7 +1101,7 @@ pub mod physics {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
             let s = |v: [f32; 2]| v[0].hypot(v[1]);
-            super::super::log(&format!(
+            super::super::log!(Takeover,
                 "KH1's air attack out of KH2's motion: its own lunge {:.1}/frame and hop {:.0}; KH2's speed {:.1}/frame and rise {:.0} left; kept {:.1}/frame and {}",
                 s(now.h),
                 now.arc.rise_left(),
@@ -1109,7 +1109,7 @@ pub mod physics {
                 before.arc.rise_left(),
                 s(kept.h),
                 if kept.arc == now.arc { "KH1's hop" } else { "KH2's rise" }
-            ));
+            );
         }
     }
 
@@ -1157,8 +1157,8 @@ pub mod physics {
         };
         if ch.params != p {
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                super::super::log(&format!(
+            if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                super::super::log!(Takeover,
                     "KH2's controller on {} numbers: gravity {:.3}, fall {:.0}, jump {:.0}, walk {:.1}, run {:.1} (past {:.2} tilt), air {}",
                     if stats.is_some() { "KH1's" } else { "its own (KH2's)" },
                     p.gravity,
@@ -1168,10 +1168,10 @@ pub mod physics {
                     p.run_speed,
                     p.run_threshold,
                     if p.air_accel > 0.0 { format!("steering +{:.3} x speed a frame, drag {:.3} a tick", p.air_accel, p.air_drag) } else { format!("keep {:.3}, drag {:.3} a tick", p.air_keep, p.air_drag) }
-                ));
+                );
                 if let Some(s) = &stats {
                     if s.air_accel.is_none() || s.air_drag.is_none() || s.jump.is_none() {
-                        super::super::log(&format!("(KH1's stats not all read: {s:?}; those stay KH2's)"));
+                        super::super::log!(Takeover, "(KH1's stats not all read: {s:?}; those stay KH2's)");
                     }
                 }
             }
@@ -1199,7 +1199,7 @@ pub mod physics {
             if now != ours && now > 0x10000 {
                 orig.store(now, Ordering::Release);
                 wr(slot, ours);
-                super::super::log(&format!("shared states: KH1's state step at {slot:#x} wrapped ({now:#x})"));
+                super::super::log!(Takeover, "shared states: KH1's state step at {slot:#x} wrapped ({now:#x})");
             }
         }
     }
@@ -1305,12 +1305,12 @@ pub mod physics {
             wr(actor + TRAVEL, [0.0f32, t[1], 0.0, t[3]]);
         }
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            super::super::log(&format!(
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            super::super::log!(Takeover,
                 "KH2's edge stop (KH2 motion {:?}): no floor {:.0} ahead, his {len:.1} step this frame kept on the ledge",
                 super::super::kh2slots::playing_motion(actor),
                 len + EDGE_REACH * radius
-            ));
+            );
         }
     }
 
@@ -1423,14 +1423,14 @@ pub mod physics {
             // (KH1's own air numbers too, its stats `+0x10` jump height, `+0x14` air acceleration,
             // `+0x18` air drag a 30 Hz frame: `docs/kh1-physics.md`.)
             let s = |o: usize| if stats > 0x10000 { rd::<f32>(stats + o) } else { 0.0 };
-            super::super::log(&format!(
+            super::super::log!(Takeover,
                 "KH1's {} with KH2's arc: {h:.0} high, {:.1} frames up (KH1's own: {:.0}; its air acceleration {:.3}, drag {:.3})",
                 if high { "High Jump" } else { "jump" },
                 arc.uptime,
                 s(0x10),
                 s(0x14),
                 s(0x18)
-            ));
+            );
         }
         r
     }
@@ -1477,8 +1477,8 @@ pub mod physics {
         let was_held = sora && HELD_LAST.swap(held, Ordering::Relaxed);
         if held {
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                super::super::log(&format!("KH2's no-gravity range on KH1's air state (KH2 motion {:?}): his height held ({})", super::super::kh2slots::playing_motion(actor), if phys { "KH2's arc" } else { "KH1's arc" }));
+            if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                super::super::log!(Takeover, "KH2's no-gravity range on KH1's air state (KH2 motion {:?}): his height held ({})", super::super::kh2slots::playing_motion(actor), if phys { "KH2's arc" } else { "KH1's arc" });
             }
         }
         let kh1_held = if held && !phys { Some(kh1_motion(actor)) } else { None };
@@ -1555,15 +1555,15 @@ pub mod physics {
                 // its full 235 with the button let go 9 frames in.
                 if !action && a.arc.holdable && a.arc.rising() {
                     static KEPT: AtomicU32 = AtomicU32::new(0);
-                    if KEPT.fetch_add(1, Ordering::Relaxed) < 5 {
-                        super::super::log("KH1 rewrote its arc in a plain jump's rise: KH2's arc kept (its early release still open)");
+                    if super::super::log_on(super::super::LogCat::Takeover) && KEPT.fetch_add(1, Ordering::Relaxed) < 5 {
+                        super::super::log!(Takeover, "KH1 rewrote its arc in a plain jump's rise: KH2's arc kept (its early release still open)");
                     }
                 } else {
                     a.arc = kh1phys::kh1_arc_on_kh2(&b.arc, n.gravity);
                     a.asked_up = 0.0;
                     static N: AtomicU32 = AtomicU32::new(0);
-                    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                        super::super::log(&format!("KH1's own air move{} set its arc: on KH2's numbers from here ({})", if action { "" } else { " (no action flag)" }, if a.arc.rising() { format!("a rise of {:.0} over {:.1} frames", a.arc.height - a.arc.y(a.arc.t, n.gravity), a.arc.uptime - a.arc.t) } else { format!("falling at {:.1}/frame", n.gravity * a.arc.t) }));
+                    if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                        super::super::log!(Takeover, "KH1's own air move{} set its arc: on KH2's numbers from here ({})", if action { "" } else { " (no action flag)" }, if a.arc.rising() { format!("a rise of {:.0} over {:.1} frames", a.arc.height - a.arc.y(a.arc.t, n.gravity), a.arc.uptime - a.arc.t) } else { format!("falling at {:.1}/frame", n.gravity * a.arc.t) });
                     }
                 }
             }
@@ -1574,8 +1574,8 @@ pub mod physics {
         let air = g.get_or_insert_with(|| {
             let arc = before.map_or_else(Arc::fall, |m| kh1phys::kh1_arc_on_kh2(&m.arc, n.gravity));
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                super::super::log(&format!("KH2's arc on KH1's air state from KH1's own: {}", if arc.rising() { format!("rising, {:.0} to go", arc.height - arc.y(arc.t, n.gravity)) } else { format!("falling at {:.1}/frame", n.gravity * arc.t) }));
+            if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                super::super::log!(Takeover, "KH2's arc on KH1's air state from KH1's own: {}", if arc.rising() { format!("rising, {:.0} to go", arc.height - arc.y(arc.t, n.gravity)) } else { format!("falling at {:.1}/frame", n.gravity * arc.t) });
             }
             Air { arc, last_y: y, asked_up: 0.0, written: None }
         });
@@ -1621,8 +1621,8 @@ pub mod physics {
             let down = if dt > 0.0 { (y - air.last_y) / dt } else { 0.0 };
             air.arc = kh2_fall_at(down.max(0.0), n.gravity);
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                super::super::log(&format!("KH2's hold ended on KH1's air state (KH2 motion {:?}): his fall starts over at {:.1}/frame (KH2's 0x1403B4780)", super::super::kh2slots::playing_motion(actor), down.max(0.0)));
+            if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                super::super::log!(Takeover, "KH2's hold ended on KH1's air state (KH2 motion {:?}): his fall starts over at {:.1}/frame (KH2's 0x1403B4780)", super::super::kh2slots::playing_motion(actor), down.max(0.0));
             }
         }
         let up = if held {
@@ -1683,8 +1683,8 @@ pub mod physics {
         m[1] -= d[1];
         m[2] += d[2];
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 20 {
-            super::super::log(&format!("KH2's root travel with no gravity on KH1's air state (KH2 motion {:?}): {:.1} up, {:.1} along", super::super::kh2slots::playing_motion(actor), d[1], d[0].hypot(d[2])));
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::super::log!(Takeover, "KH2's root travel with no gravity on KH1's air state (KH2 motion {:?}): {:.1} up, {:.1} along", super::super::kh2slots::playing_motion(actor), d[1], d[0].hypot(d[2]));
         }
     }
 }

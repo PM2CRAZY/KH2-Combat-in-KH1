@@ -133,7 +133,7 @@ unsafe fn glide_style_list(save: usize, now: &Kh1Sora, kh2: bool) -> bool {
         std::ptr::write((save + 0x599 + k) as *mut u8, *b);
     }
     for line in &lines {
-        log(&format!("abilities: {line}"));
+        log!(Menus, "abilities: {line}");
     }
     true
 }
@@ -156,12 +156,12 @@ pub unsafe fn glide_style_now(base: usize) {
         if kh2 && growth::has(&after.shared, growth::ours::GLIDE) {
             set_glide_name(growth::kh2_glide_level(after.level, &after.progress));
         }
-        log(&format!(
+        log!(Menus,
             "abilities: Glide style {} set in the Config menu: shared list {} now ({:?})",
             if kh2 { "KH2" } else { "KH1" },
             if changed { "swapped" } else { "already right" },
             after.shared.iter().take_while(|b| **b != 0).collect::<Vec<_>>()
-        ));
+        );
     }
 }
 
@@ -233,7 +233,7 @@ pub unsafe fn ensure_table(base: usize) {
             let e = ours + (id - 1) * 12;
             format!("{id}: AP {} kind {} order {} \"{}\" / \"{}\"", rd::<u8>(e), rd::<u8>(e + 1), rd::<u16>(e + 2), decode(super::pose::ptr(rd::<u32>(e + 4))), decode(super::pose::ptr(rd::<u32>(e + 8))))
         };
-        log(&format!(
+        log!(Menus,
             "KH1's ability table {cur:#x} -> ours {ours:#x} ({} KH2 abilities added, ids {}..={}); {} | {} | {} | {} | {}",
             growth::MENU.len(),
             growth::FIRST_ID,
@@ -243,7 +243,7 @@ pub unsafe fn ensure_table(base: usize) {
             sample(65),
             sample(68),
             sample(growth::ours::EXPLOSION as usize)
-        ));
+        );
     }
 }
 
@@ -285,7 +285,7 @@ unsafe fn stats_inner(member: i32, out: usize) {
     std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
     static LAST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
     if LAST.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
-        log(&format!("Sora's AP: {ap} (KH1's) + {bonus} (KH2 abilities learned) = {now}"));
+        log!(Menus, "Sora's AP: {ap} (KH1's) + {bonus} (KH2 abilities learned) = {now}");
     }
 }
 
@@ -361,7 +361,7 @@ unsafe fn prompt(base: usize, title: &str, line1: &str, line2: &str, append: boo
     w(bx + 0xB90, (base + PROMPT_TEXT_COLOUR_RVA) as u64);
     wi(bx, 1);
     wi(count_at, index as i32 + 1);
-    log(&format!("prompt shown: {title} / {line1} / {line2} (box {index}, KH1's count was {n})"));
+    log!(Menus, "prompt shown: {title} / {line1} / {line2} (box {index}, KH1's count was {n})");
     true
 }
 
@@ -529,11 +529,11 @@ impl Growth {
                                     std::ptr::write((list + k) as *mut u8, *b);
                                 }
                                 remember(&format!("level {}: removed {} (id {}) to give back {}", now.level, growth::name(gone), gone & 0x7F, growth::name(id)));
-                                log(&format!("{} (off) made room to give back {}", growth::name(gone), growth::name(id)));
+                                log!(Menus, "{} (off) made room to give back {}", growth::name(gone), growth::name(id));
                                 done = add(list, 48, id | 0x80);
                             }
                         }
-                        log(&format!("{} given back to Sora{}", growth::name(id), if done { " (off)" } else { ": no room" }));
+                        log!(Menus, "{} given back to Sora{}", growth::name(id), if done { " (off)" } else { ": no room" });
                     }
                     if let Some(again) = Self::kh1(base) {
                         now = again;
@@ -553,7 +553,7 @@ impl Growth {
                         std::ptr::write((save + 0x599 + k) as *mut u8, *b);
                     }
                     let names: Vec<String> = spare.iter().map(|id| growth::name(*id)).collect();
-                    log(&format!("spare shared abilities taken out (one of each counts): {}", names.join(", ")));
+                    log!(Menus, "spare shared abilities taken out (one of each counts): {}", names.join(", "));
                     remember(&format!("level {}: spare shared abilities taken out (one of each counts): {}", now.level, names.join(", ")));
                     now.shared = kept;
                 }
@@ -576,17 +576,17 @@ impl Growth {
                         for (k, b) in m.shared.iter().enumerate().take(10) {
                             std::ptr::write((save + 0x599 + k) as *mut u8, *b);
                         }
-                        log(&format!("abilities: a save from before the split, moved over ({} changes)", m.lines.len() + m.removed.len()));
+                        log!(Menus, "abilities: a save from before the split, moved over ({} changes)", m.lines.len() + m.removed.len());
                         for line in &m.lines {
-                            log(&format!("abilities: {line}"));
+                            log!(Menus, "abilities: {line}");
                             remember(&format!("level {}: split: {line}", now.level));
                         }
                         for line in &m.removed {
-                            log(&format!("abilities: {line}"));
+                            log!(Menus, "abilities: {line}");
                             remember(&format!("level {}: {line}", now.level));
                         }
                     } else {
-                        log("abilities: the save has the split ids (nothing from before it to move over)");
+                        log!(Menus, "abilities: the save has the split ids (nothing from before it to move over)");
                     }
                     std::ptr::write_unaligned((save + growth::LAYOUT_OFF) as *mut u16, growth::LAYOUT_SPLIT);
                     if let Some(again) = Self::kh1(base) {
@@ -607,7 +607,7 @@ impl Growth {
                         std::ptr::write((shared + k) as *mut u8, *b);
                     }
                     let moved = growth::has(&now.abilities, ab.id) || add(save + 0x44, 48, if on { ab.id } else { ab.id | 0x80 });
-                    log(&format!("{} moved from the shared abilities to Sora's ({}){}", ab.name, if on { "on" } else { "off" }, if moved { "" } else { ": his list is full, learned again when there's room" }));
+                    log!(Menus, "{} moved from the shared abilities to Sora's ({}){}", ab.name, if on { "on" } else { "off" }, if moved { "" } else { ": his list is full, learned again when there's room" });
                     if let Some(again) = Self::kh1(base) {
                         now = again;
                     }
@@ -625,7 +625,7 @@ impl Growth {
                         for (k, b) in kept.iter().enumerate() {
                             std::ptr::write((list + k) as *mut u8, *b);
                         }
-                        log("Aerial Dodge taken back until Genie Jafar is beaten (Agrabah)");
+                        log!(Menus, "Aerial Dodge taken back until Genie Jafar is beaten (Agrabah)");
                         if let Some(again) = Self::kh1(base) {
                             now = again;
                         }
@@ -656,12 +656,12 @@ impl Growth {
                             }
                             done = add(list, len, byte);
                             let line = format!("Sora's list was full: {} (off) made room for {}", growth::name(gone), ab.name);
-                            log(&line);
+                            log!(Menus, "{}", line);
                             remember(&format!("level {}: removed {} (id {}) for {}", now.level, growth::name(gone), gone & 0x7F, ab.name));
                         }
                     }
                     if done {
-                        log(&format!("{why}: Sora learns {} (id {}, {} AP)", ab.name, ab.id, ab.ap));
+                        log!(Menus, "{why}: Sora learns {} (id {}, {} AP)", ab.name, ab.id, ab.ap);
                         // The user: the game should say so.
                         // Its name only (the user: no description needed).
                         let shown = match ab.effect {
@@ -672,7 +672,7 @@ impl Growth {
                         self.prompts.push_back(("New Ability".to_string(), shown, String::new()));
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
-                        log(&format!("{why}, but Sora can't learn {}: his ability list is full (48, KH1's most)", ab.name));
+                        log!(Menus, "{why}, but Sora can't learn {}: his ability list is full (48, KH1's most)", ab.name);
                     }
                 }
             } else {
@@ -680,7 +680,7 @@ impl Growth {
                 glide_style_list(save, &now, false);
                 let n = strip(save + 0x44, 48) + strip(save + 0x599, 10);
                 if n > 0 {
-                    log(&format!("took {n} KH2 abilities back out of Sora's lists (abilities = {:?})", self.mode));
+                    log!(Menus, "took {n} KH2 abilities back out of Sora's lists (abilities = {:?})", self.mode);
                 }
             }
             if let Some(again) = Self::kh1(base) {
@@ -696,7 +696,7 @@ impl Growth {
                 }
                 if let Some(old) = self.qr_level {
                     if old > 0 && l > old {
-                        log(&format!("Quick Run grows: {}", growth::quick_run_name(l)));
+                        log!(Menus, "Quick Run grows: {}", growth::quick_run_name(l));
                         self.prompts.push_back(("Ability Up".to_string(), growth::quick_run_name(l), String::new()));
                     }
                 }
@@ -708,7 +708,7 @@ impl Growth {
             if self.dr_level != Some(l) {
                 if let Some(old) = self.dr_level {
                     if old > 0 && l > old {
-                        log(&format!("Dodge Roll grows: {}", growth::dodge_roll_name(l)));
+                        log!(Menus, "Dodge Roll grows: {}", growth::dodge_roll_name(l));
                         self.prompts.push_back(("Ability Up".to_string(), growth::dodge_roll_name(l), String::new()));
                     }
                 }
@@ -718,7 +718,7 @@ impl Growth {
             if self.hj_level != Some(l) {
                 if let Some(old) = self.hj_level {
                     if old > 0 && l > old {
-                        log(&format!("High Jump grows: {}", growth::high_jump_name(l)));
+                        log!(Menus, "High Jump grows: {}", growth::high_jump_name(l));
                         self.prompts.push_back(("Ability Up".to_string(), growth::high_jump_name(l), String::new()));
                     }
                 }
@@ -733,7 +733,7 @@ impl Growth {
                 }
                 if let Some(old) = self.gl_level {
                     if old > 0 && l > old {
-                        log(&format!("Glide grows: {}", growth::glide_name(l)));
+                        log!(Menus, "Glide grows: {}", growth::glide_name(l));
                         self.prompts.push_back(("Ability Up".to_string(), growth::glide_name(l), String::new()));
                     }
                 }
@@ -746,7 +746,7 @@ impl Growth {
                 }
                 if let Some(old) = self.ad_level {
                     if old > 0 && l > old {
-                        log(&format!("Aerial Dodge grows: {}", growth::aerial_dodge_name(l)));
+                        log!(Menus, "Aerial Dodge grows: {}", growth::aerial_dodge_name(l));
                         self.prompts.push_back(("Ability Up".to_string(), growth::aerial_dodge_name(l), String::new()));
                     }
                 }
@@ -758,13 +758,13 @@ impl Growth {
         }
         let from_kh1 = now.kh2();
         let list = |l: &[u8]| l.iter().take_while(|b| **b != 0).map(|b| if b & 0x80 != 0 { format!("({})", b & 0x7F) } else { b.to_string() }).collect::<Vec<_>>().join(" ");
-        log(&format!("KH1 Sora: level {}, abilities [{}], shared [{}] (in brackets: not equipped)", now.level, list(&now.abilities), list(&now.shared)));
-        log(&format!("KH1's menu gives KH2: {}", growth::describe(&from_kh1)));
+        log!(Menus, "KH1 Sora: level {}, abilities [{}], shared [{}] (in brackets: not equipped)", now.level, list(&now.abilities), list(&now.shared));
+        log!(Menus, "KH1's menu gives KH2: {}", growth::describe(&from_kh1));
         // The table's hooks (`growth::Side::Hook`): on, but no meaning on the other side yet.
         let names = |ids: Vec<u8>| ids.iter().map(|id| growth::name(*id)).collect::<Vec<_>>().join(", ");
         let (k1, k2) = (now.kh1_hooks(), now.kh2_hooks());
         if !k1.is_empty() || !k2.is_empty() {
-            log(&format!("abilities on with nothing on the other side yet: KH1's [{}] while KH2 has him; KH2's [{}] while KH1's states have him", names(k1), names(k2)));
+            log!(Menus, "abilities on with nothing on the other side yet: KH1's [{}] while KH2 has him; KH2's [{}] while KH1's states have him", names(k1), names(k2));
         }
         if self.mode == Mode::Kh1 {
             // (A combo ability only KH2 has makes the combo KH2's: `styles::kh2`.)

@@ -85,7 +85,7 @@ pub unsafe fn revert_row(actor: usize) -> bool {
     if !super::form::accept_now() {
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
-            log("Revert not taken: Sora's move isn't at its end yet (no queue)");
+            log!(Forms, "Revert not taken: Sora's move isn't at its end yet (no queue)");
         }
         return true;
     }
@@ -134,7 +134,7 @@ pub unsafe fn pre_step() {
     wr(base + SUMMON_MENU_RVA + 0xC, 0i32);
     let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
     sound(1);
-    log(&format!("command menu: page {}", if now { "2 (Attack, Magic, Items, Drive)" } else { "1" }));
+    log!(Forms, "command menu: page {}", if now { "2 (Attack, Magic, Items, Drive)" } else { "1" });
 }
 
 /// Our records for the forms (a self-cast spell record, as Reflect's), written over empty ones.
@@ -151,7 +151,7 @@ unsafe fn ensure_records(base: usize) -> bool {
             if have != [0u8; 16] && have[4..8] != want[4..8] {
                 static ONCE: AtomicBool = AtomicBool::new(false);
                 if !ONCE.swap(true, Ordering::Relaxed) {
-                    log(&format!("Drive: command record {id:#x} is in use ({have:02x?}): no Drive"));
+                    log!(Forms, "Drive: command record {id:#x} is in use ({have:02x?}): no Drive");
                 }
                 return false;
             }
@@ -265,10 +265,10 @@ pub unsafe fn chosen(actor: usize, k: usize) {
     match super::form::choose(actor, kind) {
         Ok(what) => {
             SWALLOW_CONFIRM.store(true, Ordering::Relaxed);
-            log(&format!("Drive: {what} chosen"));
+            log!(Forms, "Drive: {what} chosen");
         }
         Err(why) => {
-            log(&format!("Drive: {name} refused ({why})"));
+            log!(Forms, "Drive: {name} refused ({why})");
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base() + SOUND_RVA);
             sound(4);
         }
@@ -362,7 +362,7 @@ unsafe extern "system" fn list_draw(kind: i32, menu: usize, a3: i32, a4: i32, la
     if header < 0x10000 || rows < 0x10000 || !(1..=16).contains(&n) {
         static BAD: AtomicBool = AtomicBool::new(false);
         if !BAD.swap(true, Ordering::Relaxed) {
-            log(&format!("Drive list: summon layout not as expected (header {header:#x}, rows {rows:#x}, {n}): drawn as KH1's"));
+            log!(Forms, "Drive list: summon layout not as expected (header {header:#x}, rows {rows:#x}, {n}): drawn as KH1's");
         }
         return f(kind, menu, a3, a4, layout, x, y, alpha);
     }
@@ -420,12 +420,12 @@ unsafe extern "system" fn list_draw(kind: i32, menu: usize, a3: i32, a4: i32, la
     }
     static LOGGED: AtomicBool = AtomicBool::new(false);
     if !LOGGED.swap(true, Ordering::Relaxed) {
-        log(&format!(
+        log!(Forms,
             "Drive list: title \"{TITLE}\" at header rect {rect:?} + list ({}, {y}); header tab hidden; {} panels whitened, {animated} animated (kept); colours before: {:?}",
             x.wrapping_add(rd::<i32>(base + LIST_X_RVA)),
             saved.len(),
             saved.iter().take(4).map(|(_, c)| [c[0], c[1], c[2], c[3]]).collect::<Vec<_>>()
-        ));
+        );
     }
     r
 }
@@ -453,7 +453,7 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     if !super::settings::get().drive {
-        log("Drive: off (drive = off)");
+        log!(Forms, "Drive: off (drive = off)");
         return;
     }
     let _ = NAMES.set((
@@ -464,18 +464,18 @@ pub unsafe fn install() {
     if !super::shortcuts::step_hooked()
         && hook::install(base + super::shortcuts::STEP_RVA, &super::shortcuts::STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step (Drive)").is_none()
     {
-        log("Drive: the command step wasn't as expected: no second page");
+        log!(Forms, "Drive: the command step wasn't as expected: no second page");
         return;
     }
     if !super::shortcuts::fill_hooked()
         && !super::reflect::fill_hooked()
         && hook::install(base + super::shortcuts::FILL_RVA, &super::shortcuts::FILL_PROLOGUE, fill_hook as *const () as usize, &ORIG_FILL, "battle menus fill (Drive)").is_none()
     {
-        log("Drive: the battle menu fill wasn't as expected: no second page");
+        log!(Forms, "Drive: the battle menu fill wasn't as expected: no second page");
         return;
     }
     if !super::reflect::word_hooked() && !hook::redirect_call(base + super::reflect::NAME_CALL_RVA, base + super::reflect::WORD_RVA, word_hook as *const () as usize, "command name word (Drive)") {
-        log("Drive: the command name call wasn't as expected: no second page");
+        log!(Forms, "Drive: the command name call wasn't as expected: no second page");
         return;
     }
     if super::reflect::word_hooked() {
@@ -486,10 +486,10 @@ pub unsafe fn install() {
     // The Drive list's title and colour (only a look: without it the list reads "SUMMON").
     let _ = TITLE_TEXT.set(Box::leak(super::menu::encode(TITLE).into_boxed_slice()).as_ptr() as usize);
     if hook::install(base + LIST_DRAW_RVA, &LIST_DRAW_PROLOGUE, list_draw as *const () as usize, &ORIG_LIST_DRAW, "list draw (Drive title)").is_none() {
-        log("Drive: the list draw wasn't as expected: the Drive list keeps KH1's summon title");
+        log!(Forms, "Drive: the list draw wasn't as expected: the Drive list keeps KH1's summon title");
     }
     ON.store(true, Ordering::Release);
     static N: AtomicU32 = AtomicU32::new(0);
     N.fetch_add(1, Ordering::Relaxed);
-    log(&format!("Drive: D-pad left at the battle menu's top flips to page 2 (Attack, Magic, Items, Drive: {})", FORMS.iter().map(|f| f.2).collect::<Vec<_>>().join(", ")));
+    log!(Forms, "Drive: D-pad left at the battle menu's top flips to page 2 (Attack, Magic, Items, Drive: {})", FORMS.iter().map(|f| f.2).collect::<Vec<_>>().join(", "));
 }

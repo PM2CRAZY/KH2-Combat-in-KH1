@@ -69,7 +69,7 @@ unsafe extern "system" fn event_op(ctx: usize, op: i32, c: usize, d: usize) -> u
             let key = (actor as u64) << 16 ^ v as u64;
             if LAST.swap(key, Ordering::Relaxed) != key && N.fetch_add(1, Ordering::Relaxed) < 200 {
                 let sora = rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize;
-                log(&format!("event op 322: actor {actor:#x}{} motion request {v:#x} (state {}, takeover {})", if actor == sora { " (Sora)" } else { "" }, rd::<i32>(actor + 0x70), super::takeover::ON.load(Ordering::Relaxed)));
+                log!(Takeover, "event op 322: actor {actor:#x}{} motion request {v:#x} (state {}, takeover {})", if actor == sora { " (Sora)" } else { "" }, rd::<i32>(actor + 0x70), super::takeover::ON.load(Ordering::Relaxed));
             }
         }
     }
@@ -93,8 +93,8 @@ unsafe extern "system" fn event_op(ctx: usize, op: i32, c: usize, d: usize) -> u
             if let Some(m) = super::combat::attack_seen() {
                 std::ptr::write_unaligned((ctx + 0x198 + top as usize * 4) as *mut u32, m);
                 static N: AtomicU32 = AtomicU32::new(0);
-                if N.fetch_add(1, Ordering::Relaxed) < 20 {
-                    log(&format!("event op 322: Sora's motion shown to the script as {m:#x} (KH2 attacked; stack count {top})"));
+                if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+                    log!(Takeover, "event op 322: Sora's motion shown to the script as {m:#x} (KH2 attacked; stack count {top})");
                 }
             }
         }
@@ -127,7 +127,7 @@ fn event_trace(t: f32) {
         let base = BASE.load(Ordering::Relaxed);
         let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
         let free = sora > 0x10000 && unsafe { rd::<u32>(sora + 0x444) } & 1 == 0;
-        log(&format!("event ops at {t:.0}s (Sora can act: {free}):{text}"));
+        log!(Takeover, "event ops at {t:.0}s (Sora can act: {free}):{text}");
     }
     *last = ops;
 }
@@ -155,7 +155,7 @@ unsafe extern "system" fn actor(a: usize, dt: f32) {
         return;
     }
     if SORA_ACTOR.swap(a, Ordering::Relaxed) != a {
-        log(&format!("Sora's actor at {a:#x} (dt {dt:.3})"));
+        log!(Takeover, "Sora's actor at {a:#x} (dt {dt:.3})");
         if super::debug_on() {
             dump(a, "first seen");
         }
@@ -179,7 +179,7 @@ unsafe extern "system" fn actor(a: usize, dt: f32) {
 /// The actor's first 0x600 bytes as u32 words (for comparing two moments).
 unsafe fn dump(a: usize, when: &str) {
     let words: Vec<String> = (0..0x180).map(|i| format!("{:08x}", rd::<u32>(a + i * 4))).collect();
-    log(&format!("Sora's actor {when}: {}", words.join(" ")));
+    log!(Takeover, "Sora's actor {when}: {}", words.join(" "));
 }
 
 /// Offsets in the actor holding the placement the skeleton pass draws him at.
@@ -200,7 +200,7 @@ unsafe fn find_position(a: usize) {
             flat.push((off, v[1]));
         }
     }
-    log(&format!("drawn at {w:.1?}: exact at actor+{:x?}; same x/z at {:x?}", hits, flat.iter().map(|(o, y)| format!("{o:x} (y {y:.1})")).collect::<Vec<_>>()));
+    log!(Takeover, "drawn at {w:.1?}: exact at actor+{:x?}; same x/z at {:x?}", hits, flat.iter().map(|(o, y)| format!("{o:x} (y {y:.1})")).collect::<Vec<_>>());
     if POS_OFF.load(Ordering::Relaxed) == 0 {
         if let Some(&o) = hits.first().or(flat.first().map(|(o, _)| o)) {
             POS_OFF.store(o, Ordering::Relaxed);
@@ -235,7 +235,7 @@ fn merge_pads(out: usize, b: u16, st: [u8; 4]) -> (u16, [u8; 4]) {
                     let n = ever.len();
                     let _ = SEEN.fetch_add(1, Ordering::Relaxed);
                     if n > 1 && n <= 8 {
-                        log(&format!("pad records: {n} seen ({out:#x} new): merged for KH2, as KH1 merges them"));
+                        log!(Takeover, "pad records: {n} seen ({out:#x} new): merged for KH2, as KH1 merges them");
                     }
                 }
             }
@@ -358,7 +358,7 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     if PAD_LAST.swap(key, Ordering::Relaxed) != key && PAD_LOGGED.fetch_add(1, Ordering::Relaxed) < 120 {
         const NAMES: [&str; 16] = ["Select", "L3", "R3", "Start", "Up", "Right", "Down", "Left", "L2", "R2", "L1", "R1", "Triangle", "Circle", "Cross", "Square"];
         let held: Vec<&str> = (0..16).filter(|i| b & (1 << i) != 0).map(|i| NAMES[i]).collect();
-        log(&format!("pad {out:#x}: buttons {b:04x} {held:?}, sticks {:02x} {:02x} {:02x} {:02x}", st[0], st[1], st[2], st[3]));
+        log!(Takeover, "pad {out:#x}: buttons {b:04x} {held:?}, sticks {:02x} {:02x} {:02x} {:02x}", st[0], st[1], st[2], st[3]);
     }
 }
 
@@ -477,7 +477,7 @@ fn report(label: &str) {
         let what = format!("{}{}{}", if w & 1 != 0 { "x" } else { "" }, if w & 2 != 0 { "y" } else { "" }, if w & 4 != 0 { "z" } else { "" });
         if *r >= base && *r < base + 0x400_0000 { format!("exe+{:x} ({what}) x{n}", r - base) } else { format!("{r:#x} ({what}) x{n}") }
     }).collect();
-    log(&format!("writers of Sora's position ({label}): {}", s.join(", ")));
+    log!(Takeover, "writers of Sora's position ({label}): {}", s.join(", "));
 }
 
 /// The monitor thread's part: arm the watchpoints once the position is known, report, disarm.
@@ -495,7 +495,7 @@ pub unsafe fn tick(seconds: f32) {
         AddVectoredExceptionHandler(1, on_exception);
         let n = watch(a + off);
         ARMED_AT.store(seconds as u32, Ordering::Relaxed);
-        log(&format!("watching actor+{off:x} (Sora's position) for writes on {n} threads, 25 s: walk, run, jump, fall off something, attack"));
+        log!(Takeover, "watching actor+{off:x} (Sora's position) for writes on {n} threads, 25 s: walk, run, jump, fall off something, attack");
     } else if armed != 0 {
         let t = seconds as u32 - armed;
         if t > 0 && t % 5 == 0 && t <= 25 {
@@ -507,7 +507,7 @@ pub unsafe fn tick(seconds: f32) {
         if t >= 25 {
             watch(0);
             DONE.store(1, Ordering::Relaxed);
-            log("position watch removed");
+            log!(Takeover, "position watch removed");
         }
     }
 }
@@ -557,7 +557,7 @@ unsafe fn setm_note(which: usize, actor: usize, req: u32, here: usize) {
         return;
     }
     SETM_LOGGED.fetch_add(1, Ordering::Relaxed);
-    log(&format!("set motion #{which} slot {slot} (flags {:#x}) on Sora, from {}", req & 0xFFFF_0000, callers(here)));
+    log!(Takeover, "set motion #{which} slot {slot} (flags {:#x}) on Sora, from {}", req & 0xFFFF_0000, callers(here));
 }
 
 /// `0x14029D7F0` / `0x14029D8A0` take a float third too (XMM2, stored at the actor's `+0x184`),
@@ -620,14 +620,14 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
             let stats = pose::ptr(rd::<u32>(target + 0x6C));
             let data = pose::ptr(rd::<u32>(attack + 0x5C));
             let rec = if r > 0x10000 { words(r, 16) } else { "none".into() };
-            log(&format!(
+            log!(Takeover,
                 "Sora's attack {attack:#x} hit actor {target:#x} (kind {}, object {}) -> record [{rec}]; attack [{}]; attack data {data:#x} [{}]; target stats {stats:#x} [{}]",
                 rd::<u8>(target + 6),
                 object_id(target),
                 words(attack, 0x30),
                 if data > 0x10000 { words(data, 0x18) } else { "-".into() },
                 if stats > 0x10000 { words(stats, 0x34) } else { "-".into() }
-            ));
+            );
         }
     }
     r
@@ -691,7 +691,7 @@ unsafe fn hit_effect_note(attack: usize, target: usize, owner: usize, rec: usize
         fresh
     });
     if new_pair {
-        log(&line);
+        log!(Takeover, "{}", line);
     }
     let new_src = src > 0x10000
         && SOURCES.lock().is_ok_and(|mut v| {
@@ -704,7 +704,7 @@ unsafe fn hit_effect_note(attack: usize, target: usize, owner: usize, rec: usize
     if new_src {
         let n = rd::<i32>(src + 0xC);
         if !(0..=256).contains(&n) {
-            log(&format!("effect list of source {src:#x} (owner {owner:#x}, object {}): count {n} out of range", oid(owner)));
+            log!(Takeover, "effect list of source {src:#x} (owner {owner:#x}, object {}): count {n} out of range", oid(owner));
             return;
         }
         let entries: Vec<String> = (0..n as usize)
@@ -714,7 +714,7 @@ unsafe fn hit_effect_note(attack: usize, target: usize, owner: usize, rec: usize
                 format!("{i}: kind {:#x} group {:#x} other {:#x} [{} {} {} {}]", rd::<u32>(e + 0x10), rd::<u32>(e + 0x14), rd::<u64>(e + 0x18), w(0), w(4), w(8), w(0xC))
             })
             .collect();
-        log(&format!("effect list of source {src:#x} (list {sig:016x}, owner {owner:#x}, object {}, weapon {weapon:#x}), {n} entries: {}", oid(owner), entries.join("; ")));
+        log!(Takeover, "effect list of source {src:#x} (list {sig:016x}, owner {owner:#x}, object {}, weapon {weapon:#x}), {n} entries: {}", oid(owner), entries.join("; "));
     }
 }
 
@@ -757,7 +757,7 @@ unsafe fn list_actors() {
         lines.push(format!("{a:#x} kind {} obj {} at ({:.0},{:.0},{:.0}) r {radius:.0} hp? {hp} flags {:08x}/{:08x}", rd::<u8>(a + 6), object_id(a), p[0], p[1], p[2], rd::<u32>(a), rd::<u32>(a + 0x374)));
         a = next(a);
     }
-    log(&format!("actors ({n}): {}", lines.join(" | ")));
+    log!(Takeover, "actors ({n}): {}", lines.join(" | "));
 }
 
 pub unsafe fn install() {

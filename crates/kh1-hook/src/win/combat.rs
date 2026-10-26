@@ -75,16 +75,22 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 }
 
 /// Waiting commands' log, on its own count (the shared one runs out in a long session).
-fn cmd_log(s: String) {
+fn cmd_log(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 200 {
-        log(&s);
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 200 {
+        log!(Combat, "{}", s());
     }
 }
 
-fn note(s: String) {
-    if LOGGED.fetch_add(1, Ordering::Relaxed) < 300 {
-        log(&s);
+fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    if super::log_on(super::LogCat::Combat) && LOGGED.fetch_add(1, Ordering::Relaxed) < 300 {
+        log!(Combat, "{}", s());
     }
 }
 
@@ -162,7 +168,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // Flying (KH1 has him, state 8): KH2's aerial combo instead of KH1's flying attack.
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == 8 {
         takeover::FLY_ATTACK.store(true, Ordering::Relaxed);
-        note(format!("Attack command while flying (KH1 row {row}): KH2's aerial combo"));
+        note(|| format!("Attack command while flying (KH1 row {row}): KH2's aerial combo"));
         return;
     }
     // KH1's jump or glide (`stylejump`) with KH1's combo where he is: KH1's own row, and the
@@ -171,7 +177,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         super::stylejump::clear();
         super::stylecombo::started();
         takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
-        note(format!("Attack command in KH1's jump (KH1 row {row}): KH1's combo"));
+        note(|| format!("Attack command in KH1's jump (KH1 row {row}): KH1's combo"));
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
         return f(actor, row, dir);
     }
@@ -182,13 +188,13 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
             super::styleroll::clear();
             super::stylecombo::started();
             takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
-            note(format!("Attack command in KH1's roll (KH1 row {row}): KH1's combo"));
+            note(|| format!("Attack command in KH1's roll (KH1 row {row}): KH1's combo"));
             let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
             return f(actor, row, dir);
         }
         super::styleroll::attack();
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        note(format!("Attack command in KH1's roll (KH1 row {row}): KH2's combo, KH2 takes him"));
+        note(|| format!("Attack command in KH1's roll (KH1 row {row}): KH2's combo, KH2 takes him"));
         return;
     }
     // KH1 still has him for one of its own moves (a spell's cast, an item): the press is KH2's
@@ -196,7 +202,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // twice, finishing Riku).
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_move() {
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        note(format!("Attack command during KH1's own move (KH1 row {row}): KH2's once it ends"));
+        note(|| format!("Attack command during KH1's own move (KH1 row {row}): KH2's once it ends"));
         return;
     }
     if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
@@ -204,7 +210,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         if let Some(r) = row_info(actor, row) {
             attack_shown(r.motion as u16 as u32);
         }
-        note(format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));
+        note(|| format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));
         return;
     }
     // KH1 is playing one of its own motions on him (a reaction, the end of a spell), or KH2 lost
@@ -215,7 +221,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         takeover::set_air_cast(None);
         takeover::hand_to_kh1(&format!("Attack pressed during KH1's own motion (KH1 row {row})"));
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        note(format!("Attack command during KH1's own motion (KH1 row {row}): KH2's once it ends"));
+        note(|| format!("Attack command during KH1's own motion (KH1 row {row}): KH2's once it ends"));
         return;
     }
     // Valor Form: no KH1 attack row run for a command other than Attack (its specials, which the
@@ -223,8 +229,8 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // way).
     if actor == sora && command != 1 && super::form::two_blades() {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 30 {
-            log(&format!("KH1 attack row {row} for command {command:#x} refused: not in Valor Form"));
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+            log!(Combat, "KH1 attack row {row} for command {command:#x} refused: not in Valor Form");
         }
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
@@ -284,14 +290,14 @@ pub unsafe fn resume_command() {
         // (A frame or two at most now: it is only stored while the cut is open, s249.)
         if t.elapsed().as_secs_f32() > 0.2 {
             *p = None;
-            cmd_log(format!("command {kind:#x} dropped: KH1's cast wasn't cut"));
+            cmd_log(|| format!("command {kind:#x} dropped: KH1's cast wasn't cut"));
         }
         return;
     }
     // Chosen during a KH2 move: only while that move plays.
     if motion != u32::MAX && !takeover::same_move(motion) {
         *p = None;
-        cmd_log(format!("command {kind:#x} dropped: the move it was chosen in (motion {motion}) ended without a window for it"));
+        cmd_log(|| format!("command {kind:#x} dropped: the move it was chosen in (motion {motion}) ended without a window for it"));
         return;
     }
     // (Chosen in KH1's jump or glide, `stylejump`, or its own states, `shared`: KH2 is taking him
@@ -299,26 +305,26 @@ pub unsafe fn resume_command() {
     if super::stylejump::active() || super::styleroll::active() || super::shared::active() {
         if t.elapsed().as_secs_f32() > 0.2 {
             *p = None;
-            cmd_log(format!("command {kind:#x} dropped: KH1's jump, glide or roll didn't let him go"));
+            cmd_log(|| format!("command {kind:#x} dropped: KH1's jump, glide or roll didn't let him go"));
         }
         return;
     }
     if !takeover::kh2_has() {
         *p = None;
-        cmd_log(format!("command {kind:#x} dropped: KH2 no longer has Sora"));
+        cmd_log(|| format!("command {kind:#x} dropped: KH2 no longer has Sora"));
         return;
     }
     let base = BASE.load(Ordering::Relaxed);
     if rd::<u8>(base + COMMAND_RVA) != 0 {
         // A new choice replaces it.
         *p = None;
-        cmd_log(format!("command {kind:#x} dropped: another command was chosen"));
+        cmd_log(|| format!("command {kind:#x} dropped: another command was chosen"));
         return;
     }
     let ready = takeover::with_kh2(|c, _| if kind == 2 { c.can_cast() } else { c.can_take_command() });
     if kind == 2 && ready == Some(false) && takeover::with_kh2(|c, _| c.magic_later()) == Some(false) {
         *p = None;
-        cmd_log(format!("command {kind:#x} dropped: the move playing has no window left for it"));
+        cmd_log(|| format!("command {kind:#x} dropped: the move playing has no window left for it"));
         return;
     }
     if ready == Some(true) {
@@ -329,7 +335,7 @@ pub unsafe fn resume_command() {
         let v = u32::from_le_bytes([r[0], r[1], r[2], r[3]]) | flags;
         r[..4].copy_from_slice(&v.to_le_bytes());
         wr(base + COMMAND_RVA, r);
-        cmd_log(format!("command {kind:#x}: KH2's move allows it now ({:.2} s after it was chosen)", t.elapsed().as_secs_f32()));
+        cmd_log(|| format!("command {kind:#x}: KH2's move allows it now ({:.2} s after it was chosen)", t.elapsed().as_secs_f32()));
     }
 }
 
@@ -375,7 +381,7 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     };
     if let Some((q, k)) = shown {
         wr(actor + 0x164, k);
-        cmd_log(format!("Fire during our swing (request {q:#x}): KH1's Attack step sees KH1's swing {k:#x} (its Fire out of a swing)"));
+        cmd_log(|| format!("Fire during our swing (request {q:#x}): KH1's Attack step sees KH1's swing {k:#x} (its Fire out of a swing)"));
     }
     command_step(actor, dir);
     if let Some((q, k)) = shown {
@@ -465,7 +471,7 @@ unsafe fn glide_cast(actor: usize, arg: u8, kind: u8, full: u32) -> bool {
     if !super::glide::end(actor, "a KH2 spell (Cast from Glide)") {
         return false;
     }
-    cmd_log(format!("command {kind:#x} ({full:08x}): KH2's spell {arg} out of KH2's glide (its free range, Cast from Glide on): the glide ends, KH1's air cast, KH1 state now {}", rd::<i32>(actor + 0x70)));
+    cmd_log(|| format!("command {kind:#x} ({full:08x}): KH2's spell {arg} out of KH2's glide (its free range, Cast from Glide on): the glide ends, KH1's air cast, KH1 state now {}", rd::<i32>(actor + 0x70)));
     true
 }
 
@@ -479,7 +485,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // (`combomods::counter_window` / `counterguard`), not KH1's own counterattack row 0x3E.
     if actor == sora && rd::<u8>(base + COMMAND_RVA) == 99 && super::combomods::counter_open(actor) {
         wr(base + COMMAND_RVA, 1u8);
-        cmd_log("command 0x63 (KH1's Counterattack) during KH2's guard repel: KH2's Counterguard, as KH1's Attack".to_string());
+        cmd_log(|| "command 0x63 (KH1's Counterattack) during KH2's guard repel: KH2's Counterguard, as KH1's Attack".to_string());
     }
     let kind = rd::<u8>(base + COMMAND_RVA);
     // In the air KH1 allows only magic, kind 99 and kind 0x47 (`0x1402912F0`); KH1 judges the
@@ -505,7 +511,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
         }
-        cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, outside its combo window"));
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, outside its combo window"));
         return;
     }
     // KH1 has him for its jump or glide (`stylejump`): a command (magic, an item, a Drive) is
@@ -518,7 +524,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
         if can(actor) == 0 {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
-            cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH1's jump, glide or roll has him and he can't act now (no queue)"));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's jump, glide or roll has him and he can't act now (no queue)"));
             return;
         }
         if let Ok(mut p) = PENDING_COMMAND.lock() {
@@ -529,7 +535,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
         } else {
             super::stylejump::want_kh2();
         }
-        cmd_log(format!("command {kind:#x} ({full:08x}) waits: KH1's jump or glide has him, KH2 takes him for it"));
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) waits: KH1's jump or glide has him, KH2 takes him for it"));
         return;
     }
     // KH1's usable check reading KH2's cost for a native cast (below), put back after the step.
@@ -550,7 +556,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
         if !drive && super::kh2slots::cast_magic_window(actor) == Some(false) && !super::kh2slots::cast_finisher_open(actor) {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
-            cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, its magic window not open yet"));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, its magic window not open yet"));
             return;
         }
         // KH2's Fire, Blizzard, Thunder and Cure in KH1's own cast state (`formmagic::native`):
@@ -579,7 +585,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
             && super::kh2slots::cast_motion(if kh1_air { 0x83 } else { 0x36 } + arg as usize).is_some();
         if kh1_on_kh2 {
             super::formmagic::BASE_KH1_CAST.store(false, Ordering::Relaxed);
-            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in KH1's own cast state on KH2's cast motion {:?} ({})", super::kh2slots::cast_motion(if kh1_air { 0x83 } else { 0x36 } + arg as usize), if kh1_air { "air" } else { "ground" }));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in KH1's own cast state on KH2's cast motion {:?} ({})", super::kh2slots::cast_motion(if kh1_air { 0x83 } else { 0x36 } + arg as usize), if kh1_air { "air" } else { "ground" }));
         }
         if native {
             // KH2's cost scaled onto KH1's MP (`mpcost`, the tester's answer 6 (b)): refused as KH1
@@ -591,7 +597,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
             let Some(units) = super::mpcost::units(actor, arg) else {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
                 sound(4);
-                cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's MP cost of spell {arg} can't be paid"));
+                cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH2's MP cost of spell {arg} can't be paid"));
                 return;
             };
             // (With KH2's cost kinds in KH1's engine, `mpcost::install`, the usable check itself
@@ -609,7 +615,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
             }
             // KH2's finisher cast when this cast is the combo's finisher (`formmagic::pick_cast`).
             super::formmagic::pick_cast(actor, arg, kh1_air);
-            cmd_log(format!("command {kind:#x} ({full:08x}): KH2's spell {arg} in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH2's spell {arg} in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
         } else if !drive && arg == super::reflect::SPELL && super::reflect::native_ok(actor) {
             // KH2's Reflect on KH1's own cast state (`reflect::cast_native`): KH1's command step's
             // cast with our request, no borrow; KH1 has no spell 7 of its own to run.
@@ -617,7 +623,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
             if from_glide {
                 super::glide::keep_cast_velocity(actor);
             }
-            cmd_log(format!("command {kind:#x} ({full:08x}): KH2's Reflect in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH2's Reflect in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
             return;
         } else if !drive && (4..=6).contains(&arg) && super::formmagic::anim_kh2(arg) && !matches!(state, 0 | 6 | 0x18 | 2 | 8) {
             // KH1's Gravity, Stop or Aero (KH1's spells at every setting) in a state KH1 casts
@@ -625,7 +631,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
             // KH1's rule whatever its animation row (the tester, what-is-still-missing m6 answer 1:
             // "the reverse is true regardless of the animation"), so no borrow: KH1's command step
             // runs it as unmodded (below), casting nothing, as KH1 does.
-            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in KH1 state {state}, where KH1 casts nothing: KH1's rule, no borrow"));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in KH1 state {state}, where KH1 casts nothing: KH1's rule, no borrow"));
         } else if let Some(why) = kh2_spell_refused(arg, state, drive) {
             // A KH2 spell (Magic KH2's Fire / Blizzard / Thunder / Cure, Reflect) in a state KH1
             // casts nothing in: refused, no borrow (the tester, what-is-still-missing m7 answer 1
@@ -634,7 +640,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
                 sound(4);
             }
-            cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's spell {arg} in KH1 state {state:#x}: {}, no borrow", why.what));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH2's spell {arg} in KH1 state {state:#x}: {}, no borrow", why.what));
             if why.kh1_step {
                 f(actor, dir);
             }
@@ -649,14 +655,14 @@ unsafe fn command_step(actor: usize, dir: usize) {
             if can(actor) == 0 {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
                 sound(4);
-                cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH1's move has him and he can't act now (no queue)"));
+                cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's move has him and he can't act now (no queue)"));
                 return;
             }
             if let Ok(mut p) = PENDING_COMMAND.lock() {
                 *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
             }
             super::shared::want_kh2();
-            cmd_log(format!("command {kind:#x} ({full:08x}) is KH2's: KH2 borrows him for it (shared states)"));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}) is KH2's: KH2 borrows him for it (shared states)"));
             return;
         }
         // KH1's own grounded cast at the Magic Combo row KH2: its step of the combo, worked out
@@ -664,12 +670,12 @@ unsafe fn command_step(actor: usize, dir: usize) {
         // start (`formmagic::kh1_cast_step`, `note_step` / `take_step`, as KH2's casts).
         if !native && !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && super::formmagic::kh1_cast_step(arg as i32) {
             let step = super::formmagic::note_step(actor, false);
-            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg}, Magic Combo KH2: step {:?} of the combo", step.map(|s| s.0)));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg}, Magic Combo KH2: step {:?} of the combo", step.map(|s| s.0)));
         }
         // Gravity, Stop and Aero on the ground: the combo's finisher (`formmagic::finisher_spell`).
         if !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && (4..=6).contains(&arg) && super::formmagic::finisher_spell(0x36 + arg as u32) {
             let step = super::formmagic::note_finisher_step(actor);
-            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}"));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}"));
         }
     }
     // An item used in KH1's own states: its use drawn with KH2's motion at Misc Animations KH2
@@ -697,14 +703,14 @@ unsafe fn command_step(actor: usize, dir: usize) {
         if !takeover::SPELL_CUT_OPEN.load(Ordering::Relaxed) {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
-            cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH1's spell can't be cut yet (no queue)"));
+            cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's spell can't be cut yet (no queue)"));
             return;
         }
         if let Ok(mut p) = PENDING_COMMAND.lock() {
             *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
         }
         takeover::MAGIC_AFTER.store(true, Ordering::Relaxed);
-        cmd_log(format!("command {kind:#x} ({full:08x}) waits: KH1's spell is still being cast"));
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) waits: KH1's spell is still being cast"));
         return;
     }
     // Valor Form: none of KH1's specials (Sonic Blade, Strike Raid, ...: the user, "dont let
@@ -715,8 +721,8 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // still use strike raid, ragnarok".)
     if actor == sora && super::form::two_blades() && !matches!(kind, 0 | 1 | 2 | ITEM_COMMAND_TYPE) && !NOT_SORAS.contains(&kind) {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 30 {
-            log(&format!("command {kind:#x} ({full:08x}) refused: not in Valor Form"));
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+            log!(Combat, "command {kind:#x} ({full:08x}) refused: not in Valor Form");
         }
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
@@ -726,8 +732,8 @@ unsafe fn command_step(actor: usize, dir: usize) {
     let air = takeover::kh2_airborne();
     if ours && !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && (air || rd::<i32>(actor + 0x70) == 2) {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 20 {
-            log(&format!("command {kind:#x} ({full:08x}) refused in the air, as KH1 would"));
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            log!(Combat, "command {kind:#x} ({full:08x}) refused in the air, as KH1 would");
         }
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
@@ -773,7 +779,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // should not be allowed to execute ... there shouldn't be any buffer system like that for
     // magic").
     if !ready && kind == 2 && takeover::with_kh2(|c, _| c.magic_later()) == Some(false) {
-        cmd_log(format!("command {kind:#x} ({full:08x}) refused: the move playing has no window for a spell"));
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: the move playing has no window for a spell"));
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
         return;
@@ -787,12 +793,12 @@ unsafe fn command_step(actor: usize, dir: usize) {
         // }
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
-        cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's move (motion {motion}) can't be cancelled now (no queue)"));
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH2's move (motion {motion}) can't be cancelled now (no queue)"));
         return;
     }
     static AIR_LOG: AtomicU32 = AtomicU32::new(0);
-    if AIR_LOG.fetch_add(1, Ordering::Relaxed) < 40 {
-        log(&format!("command {kind:#x}: KH2 has him {}", if air { "in the air" } else { "on the ground" }));
+    if super::log_on(super::LogCat::Combat) && AIR_LOG.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Combat, "command {kind:#x}: KH2 has him {}", if air { "in the air" } else { "on the ground" });
     }
     trail_off(actor);
     let before = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
@@ -806,7 +812,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
         let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
         set_state(actor, 2);
         let m = super::shared::physics::kh1_takes_air(actor);
-        cmd_log(format!("air command: KH2's speed {:.1}/frame sideways, {:.1}/frame up carried into KH1's air state", m.h[0].hypot(m.h[1]), m.arc.up_speed()));
+        cmd_log(|| format!("air command: KH2's speed {:.1}/frame sideways, {:.1}/frame up carried into KH1's air state", m.h[0].hypot(m.h[1]), m.arc.up_speed()));
         wr(actor + 0x3D0, 0u32);
         wr(actor, rd::<u32>(actor) & !0x1_0000);
         Some(m)
@@ -852,7 +858,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
                 Some(Some(character_core::SpellSlot::Finisher { more: true })) => 2,
                 _ => 3,
             };
-            log(&format!("spell cast: combo slot {code} ({:?}; 1 a step, 2 a finisher with another to come, 3 the combo's last)", s));
+            log!(Combat, "spell cast: combo slot {code} ({:?}; 1 a step, 2 a finisher with another to come, 3 the combo's last)", s);
             code
         } else {
             0
@@ -867,7 +873,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
         takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}, KH1 motion {:#x}", if air { " in the air" } else { "" }, super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed)));
         if kh1_combo {
             super::stylecombo::started();
-            log(&format!("KH1's own {} combo (move style KH1)", if air { "aerial" } else { "ground" }));
+            log!(Combat, "KH1's own {} combo (move style KH1)", if air { "aerial" } else { "ground" });
             // Base Sora (`shared`): KH1's own states have him for it from its first swing, so
             // KH2's abilities still apply at its next presses (`combomods`).
             if super::shared::on() {
@@ -878,7 +884,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
         if air {
             wr(actor + 0x70, before.0);
         }
-        note(format!("command {kind:#x} ({full:08x}){}: KH1 did nothing with Sora, KH2 keeps him", if air { " in the air" } else { "" }));
+        note(|| format!("command {kind:#x} ({full:08x}){}: KH1 did nothing with Sora, KH2 keeps him", if air { " in the air" } else { "" }));
     }
 }
 
@@ -893,7 +899,7 @@ pub unsafe fn take_chosen_command() -> Option<u8> {
         1 if super::stylecombo::active() => None,
         1 => {
             wr(base + COMMAND_RVA, 0u8);
-            cmd_log("Attack chosen during KH1's cast: KH2's once the spell is out".to_string());
+            cmd_log(|| "Attack chosen during KH1's cast: KH2's once the spell is out".to_string());
             Some(1)
         }
         2 if ((rd::<u32>(base + COMMAND_RVA) >> 8) & 0xFF) as u8 >= super::drive::FORM_ARG && super::drive::on() => {
@@ -903,7 +909,7 @@ pub unsafe fn take_chosen_command() -> Option<u8> {
             wr(base + COMMAND_RVA, 0u8);
             let sora = rd::<u64>(base + PARTY_RVA) as usize;
             super::drive::chosen(sora, (arg - super::drive::FORM_ARG) as usize);
-            cmd_log("Drive chosen during KH1's move".to_string());
+            cmd_log(|| "Drive chosen during KH1's move".to_string());
             None
         }
         2 if takeover::SPELL_CUT_OPEN.load(Ordering::Relaxed) => {
@@ -911,13 +917,13 @@ pub unsafe fn take_chosen_command() -> Option<u8> {
                 *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
             }
             wr(base + COMMAND_RVA, 0u8);
-            cmd_log("spell chosen during KH1's cast while it can be cut: cuts it now".to_string());
+            cmd_log(|| "spell chosen during KH1's cast while it can be cut: cuts it now".to_string());
             Some(2)
         }
         // (No queue, s249: before KH1's spell can be cut, dropped.)
         2 => {
             wr(base + COMMAND_RVA, 0u8);
-            cmd_log("spell chosen during KH1's cast before it can be cut: dropped (no queue)".to_string());
+            cmd_log(|| "spell chosen during KH1's cast before it can be cut: dropped (no queue)".to_string());
             None
         }
         _ => None,
@@ -974,7 +980,7 @@ unsafe fn sora_rows(sora: usize) -> Option<[Row; 4]> {
             rows.push(r);
         }
     }
-    log(&format!("Sora's KH1 attack rows (row:motion/data/fx): {}", all.join(" ")));
+    log!(Combat, "Sora's KH1 attack rows (row:motion/data/fx): {}", all.join(" "));
     // The attack data the rows use (first words: strength source, element, reaction, ...).
     let base = BASE.load(Ordering::Relaxed);
     let mut seen = HashSet::new();
@@ -983,7 +989,7 @@ unsafe fn sora_rows(sora: usize) -> Option<[Row; 4]> {
         .filter(|r| seen.insert(r.data))
         .map(|r| format!("{:#x}: [{}]", r.data, (0..12).map(|k| format!("{:x}", rd::<u32>(base + ATTACK_DATA_RVA + r.data as usize + k * 4))).collect::<Vec<_>>().join(" ")))
         .collect();
-    log(&format!("their attack data: {}", datas.join(" | ")));
+    log!(Combat, "their attack data: {}", datas.join(" | "));
     let first = |m: i16| rows.iter().find(|r| r.motion == m).copied();
     // The attack data's third word is KH1's reaction kind (into the attack's `+0x30` low bits;
     // 3 a flinch, 5 the finishers' knock-back, the user's stage 26 log). KH1's combo finishers
@@ -1105,7 +1111,7 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
             if let Ok(mut v) = SEEN.lock() {
                 if !v.contains(&this) && v.len() < 20 {
                     v.push(this);
-                    log(&format!("big target {this:#x} (object {}, not pulled): {} of {count} parts hittable, {tall:.0} tall, radius {radius:.0}, root {:.0} away", super::probe::object_id(this), parts.len(), ((p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2)).sqrt()));
+                    log!(Combat, "big target {this:#x} (object {}, not pulled): {} of {count} parts hittable, {tall:.0} tall, radius {radius:.0}, root {:.0} away", super::probe::object_id(this), parts.len(), ((p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2)).sqrt());
                 }
             }
         }
@@ -1208,12 +1214,12 @@ unsafe fn blade_points(sora: usize, data: usize) -> Option<(Vec<[f32; 3]>, f32)>
         if *l != Some(ws) {
             *l = Some(ws);
             let len = ((pts[BLADE_POINTS - 1][0] - pts[0][0]).powi(2) + (pts[BLADE_POINTS - 1][1] - pts[0][1]).powi(2) + (pts[BLADE_POINTS - 1][2] - pts[0][2]).powi(2)).sqrt();
-            log(&format!(
+            log!(Combat,
                 "clash blade: KH1's Keyblade from its start to its tip {len:.0} long (weapon blade range {:.2}..{:.2}, length factor {:.2}), radius {radius:.0}",
                 rd::<f32>(ws + 0x28),
                 rd::<f32>(ws + 0x24),
                 rd::<f32>(ws + 0x2C)
-            ));
+            );
         }
     }
     Some((pts, radius))
@@ -1331,11 +1337,11 @@ unsafe fn shots(sora: usize) -> Vec<Shot> {
             let key = (g, flags & 0xFFFF_F000, rd::<u32>(g + 0x30));
             if seen.len() < 200 && !seen.contains(&key) {
                 seen.push(key);
-                log(&format!(
+                log!(Combat,
                     "enemy attack near Sora: slot {k} flags {flags:08x} +4 {:08x} +0x30 {:08x} owner {owner:#x} priority {prio} radius {r:.0} at {c:.0?} (was {prev:.0?})",
                     rd::<u32>(g + 4),
                     rd::<u32>(g + 0x30)
-                ));
+                );
             }
         }
         out.push(Shot { obj: g, shapes, owner, free });
@@ -1578,7 +1584,7 @@ unsafe fn guards(sora: usize) -> Vec<Guard> {
                 v.push(owner);
                 let obj = pose::ptr(rd::<u32>(owner + 0x130));
                 let id = if obj > 0x10000 { rd::<u16>(obj + 0x4C) } else { 0xFFFF };
-                log(&format!("guard seen: actor {owner:#x} (object {id}), radius {r:.0}, flags {flags:08x}"));
+                log!(Combat, "guard seen: actor {owner:#x} (object {id}), radius {r:.0}, flags {flags:08x}");
             }
         }
         out.push(Guard { obj: g, shape: Shape::sphere([c[0], -c[1], c[2]], r), at: c, owner, kind: (flags >> 17) & 7, motion: ((flags >> 2) & 3 == 2).then(|| rd::<u32>(g + 0x58)) });
@@ -1629,11 +1635,11 @@ impl Strikes {
                     m.entry(r.motion).or_insert(r);
                 }
             }
-            log(&format!("KH1 swing rows (motion: trail / effect / voice): {}", {
+            log!(Combat, "KH1 swing rows (motion: trail / effect / voice): {}", {
                 let mut v: Vec<_> = m.values().map(|r| format!("{}: {} / {} / {}", r.motion, r.trail, r.effect, r.voice)).collect();
                 v.sort();
                 v.join(", ")
-            }));
+            });
             if m.is_empty() {
                 return;
             }
@@ -1696,7 +1702,7 @@ impl Strikes {
         }
         static SEEN: AtomicU32 = AtomicU32::new(0);
         if SEEN.fetch_add(1, Ordering::Relaxed) % 60 == 0 {
-            note(format!("Magnet: {} enemies held around {} centre(s)", self.pulled.len(), centres.len()));
+            note(|| format!("Magnet: {} enemies held around {} centre(s)", self.pulled.len(), centres.len()));
         }
     }
 
@@ -1711,7 +1717,7 @@ impl Strikes {
         }
         static SEEN: AtomicU32 = AtomicU32::new(0);
         if !catches.is_empty() && SEEN.fetch_add(1, Ordering::Relaxed) % 60 == 0 {
-            note(format!("Magnet (KH1's pass): {} enemies held", catches.len()));
+            note(|| format!("Magnet (KH1's pass): {} enemies held", catches.len()));
         }
     }
 
@@ -1752,8 +1758,8 @@ impl Strikes {
                     f(sora, id);
                     self.trail_asked = Some(0);
                     static N: AtomicU32 = AtomicU32::new(0);
-                    if N.fetch_add(1, Ordering::Relaxed) < 12 {
-                        log("Keyblade trail asked again as the hit window opened (KH1 had dropped it)");
+                    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 12 {
+                        log!(Combat, "Keyblade trail asked again as the hit window opened (KH1 had dropped it)");
                     }
                 }
             }
@@ -1771,8 +1777,8 @@ impl Strikes {
             let made = cs > 0x10000 && rd::<u64>(cs + 0x28) != 0;
             if made || n >= 30 {
                 static SEEN: AtomicU32 = AtomicU32::new(0);
-                if SEEN.fetch_add(1, Ordering::Relaxed) < 12 {
-                    log(&format!("Keyblade trail {} ({n} frames after asking, trail flag {})", if made { "drawn" } else { "not drawn" }, flags & TRAIL_FLAG != 0));
+                if super::log_on(super::LogCat::Combat) && SEEN.fetch_add(1, Ordering::Relaxed) < 12 {
+                    log!(Combat, "Keyblade trail {} ({n} frames after asking, trail flag {})", if made { "drawn" } else { "not drawn" }, flags & TRAIL_FLAG != 0);
                 }
                 self.trail_asked = None;
             } else {
@@ -1832,11 +1838,11 @@ impl Strikes {
         let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_RVA);
         let h = to_handle(d);
         if pose::ptr(h) != d {
-            log(&format!("guards: our attack data's handle doesn't resolve ({h:#x}): no guard object for range {range}"));
+            log!(Combat, "guards: our attack data's handle doesn't resolve ({h:#x}): no guard object for range {range}");
             return None;
         }
         made.push((range, angle, h));
-        log(&format!("guards: KH1 guard data for KH2's reflect range {range} / angle {angle} (arc cosine {cos:.3})"));
+        log!(Combat, "guards: KH1 guard data for KH2's reflect range {range} / angle {angle} (arc cosine {cos:.3})");
         Some(h)
     }
 
@@ -1915,8 +1921,8 @@ impl Strikes {
                     wr(o + 0x40, c);
                     wr(o + 0x70, c);
                     wr(o + 0x80, c);
-                    if N.fetch_add(1, Ordering::Relaxed) < 60 {
-                        log(&format!("guard: motion {}'s window (ATKP {attack}, {}, reflect range {range}) as KH1 guard object {o:#x}, radius {r:.0}", out.motion, if weapon == 0 { "on his body" } else { "on the Keyblade" }));
+                    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+                        log!(Combat, "guard: motion {}'s window (ATKP {attack}, {}, reflect range {range}) as KH1 guard object {o:#x}, radius {r:.0}", out.motion, if weapon == 0 { "on his body" } else { "on the Keyblade" });
                     }
                     self.guard_objs.insert(key, (o, 0));
                     (o, 0)
@@ -1954,8 +1960,8 @@ impl Strikes {
             } else if refact != 2 {
                 character.clash(refact, 0, toward.to_array());
             }
-            if N.fetch_add(1, Ordering::Relaxed) < 60 {
-                log(&format!("guard: motion {}'s guard (ATKP {attack}) stopped an attack of {:#x?} (refact self {refact})", out.motion, from.map(|f| f.0)));
+            if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+                log!(Combat, "guard: motion {}'s guard (ATKP {attack}) stopped an attack of {:#x?} (refact self {refact})", out.motion, from.map(|f| f.0));
             }
         }
     }
@@ -1980,7 +1986,7 @@ impl Strikes {
             self.rows_tried = true;
             self.rows = sora_rows(sora);
             if self.rows.is_none() {
-                log("Sora's KH1 combo rows not found: KH2's hits cannot be landed");
+                log!(Combat, "Sora's KH1 combo rows not found: KH2's hits cannot be landed");
             }
         }
         let keys: HashSet<(u64, u8)> = out.hitboxes.iter().map(|h| (h.swing, h.weapon)).collect();
@@ -2034,7 +2040,7 @@ impl Strikes {
                 self.repelled.insert(h.swing);
                 let bounced = character.register_wall_hit();
                 clang(at);
-                note(format!("KH2 attack {} struck a wall at {at:.0?} (bounced: {bounced})", h.attack));
+                note(|| format!("KH2 attack {} struck a wall at {at:.0?} (bounced: {bounced})", h.attack));
                 continue;
             }
             // Only guards KH1's clash table lets meet Sora's swing (its row data's `+0x38` type;
@@ -2067,7 +2073,7 @@ impl Strikes {
                 .collect();
             static TYPES: AtomicU32 = AtomicU32::new(0);
             if !self.guards.is_empty() && TYPES.fetch_add(1, Ordering::Relaxed) < 6 {
-                log(&format!("guards near: clash types {:?} against Sora's swing type {swing_type:?} (blade radius {blade}): {} can repel", self.guards.iter().map(|g| g.kind).collect::<Vec<_>>(), guards.len()));
+                log!(Combat, "guards near: clash types {:?} against Sora's swing type {swing_type:?} (blade radius {blade}): {} can repel", self.guards.iter().map(|g| g.kind).collect::<Vec<_>>(), guards.len());
             }
             let guard_shapes: Vec<Shape> = guards.iter().map(|g| g.shape).collect();
             // Only a guard met before any body part along this frame's sweep (KH1 tests a swing's
@@ -2095,7 +2101,7 @@ impl Strikes {
                     // `0x1403D2140`): its record marks the swing, the swing goes on to others.
                     let owner = guards[gi].owner;
                     self.records.entry(owner).or_default().mark(h.swing, 0);
-                    note(format!("KH2 attack {} (refact self 2) met the guard of actor {owner:#x}: not stopped, that actor immune to this swing (KH2's rules)", h.attack));
+                    note(|| format!("KH2 attack {} (refact self 2) met the guard of actor {owner:#x}: not stopped, that actor immune to this swing (KH2's rules)", h.attack));
                 } else {
                     self.repelled.insert(h.swing);
                     let bounced = character.register_wall_hit();
@@ -2111,7 +2117,7 @@ impl Strikes {
                         if let Some(rows) = self.rows {
                             let as_attack = Shot { obj: g.obj, shapes: vec![g.shape], owner: g.owner, free: false };
                             let (_, ours) = meet_shot(sora, &as_attack, &thin[gai], rows[(air as usize) * 2], false);
-                            note(format!("KH2 attack {} met the guard of actor {:#x} on KH1's states: KH1's clash, the swing stopped {ours} (his recoil from KH1's hit pass)", h.attack, g.owner));
+                            note(|| format!("KH2 attack {} met the guard of actor {:#x} on KH1's states: KH1's clash, the swing stopped {ours} (his recoil from KH1's hit pass)", h.attack, g.owner));
                         }
                     }
                     let near_part = self
@@ -2119,7 +2125,7 @@ impl Strikes {
                         .iter()
                         .find(|b| b.actor == g.owner)
                         .and_then(|b| b.parts.iter().map(|p| ((p.shape.center[0] - g.at[0]).hypot(p.shape.center[2] - g.at[2]).hypot(p.shape.center[1] + g.at[1]), p.shape.radius)).min_by(|a, b| a.0.total_cmp(&b.0)));
-                    note(format!(
+                    note(|| format!(
                         "KH2 attack {} repelled by the guard of actor {:#x}, clash type {} radius {:.0}, motion-bound {:?} (owner motion {}), nearest hittable part {:?} (centre distance, radius) (bounced: {bounced}){}",
                         h.attack, g.owner, g.kind, g.shape.radius, g.motion, rd::<u32>(g.owner + 0x164), near_part,
                         on_blade.map_or(" (KH2's shapes)".into(), |(_, along)| format!(" at {:.0}% along KH1's blade", along.get(gai).copied().unwrap_or(0.0) * 100.0))
@@ -2146,15 +2152,15 @@ impl Strikes {
                         character.register_hit();
                     }
                     static MET: AtomicU32 = AtomicU32::new(0);
-                    if MET.fetch_add(1, Ordering::Relaxed) < 200 {
-                        log(&format!(
+                    if super::log_on(super::LogCat::Combat) && MET.fetch_add(1, Ordering::Relaxed) < 200 {
+                        log!(Combat,
                             "KH2 swing met enemy attack {:#x} of {:#x} ({}; flags now {:08x}): turned back {back}, the swing clashed {ours}{}",
                             shot.obj,
                             shot.owner,
                             if shot.free { "a shot" } else { "a melee attack" },
                             rd::<u32>(shot.obj),
                             on_blade.map_or(String::new(), |(_, along)| format!(", at {:.0}% along KH1's blade", along.get(ai).copied().unwrap_or(0.0) * 100.0))
-                        ));
+                        );
                     }
                     if ours {
                         stopped = true;
@@ -2225,7 +2231,7 @@ impl Strikes {
                     let t = ((b.actor >> 4) % 97) as f32 / 96.0;
                     self.pulled.insert(b.actor, (h.swing, a + (c - a) * t, row.unknown_16 as f32));
                 }
-                note(format!(
+                note(|| format!(
                     "KH2 attack {} (power {}, reaction {}) hit actor {:#x} part {ti} at {:?}: landed with KH1 row motion {} -> {dealt:?}",
                     h.attack, row.power, row.enemy_reaction, b.actor, swept[ai].center, kh1.motion
                 ));
@@ -2345,7 +2351,7 @@ impl Strikes {
                 let fx = a.package.map(|package| Kh2Spark { pkg: super::kh2dpx::Pkg::Spell(package), effect_on_hit: r.effect_on_hit, random_effect: r.random_effect });
                 let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data, fx, info);
                 MAGIC.store(false, Ordering::Relaxed);
-                note(format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
+                note(|| format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
                 out.push((a.key, a.atk, b.actor, dealt));
             }
         }
@@ -2409,8 +2415,8 @@ impl Strikes {
             // KH1's clash with a guard, the owner's recoil (main's s226 only counted them).
             if rd::<u32>(shot.obj + 4) & 0x30 != 0 {
                 static MELEE: AtomicU32 = AtomicU32::new(0);
-                if MELEE.fetch_add(1, Ordering::Relaxed) < 100 {
-                    log(&format!("Reflect barrier met enemy {} {:#x} of {:#x}: counted", if shot.free { "shot" } else { "attack" }, shot.obj, shot.owner));
+                if super::log_on(super::LogCat::Combat) && MELEE.fetch_add(1, Ordering::Relaxed) < 100 {
+                    log!(Combat, "Reflect barrier met enemy {} {:#x} of {:#x}: counted", if shot.free { "shot" } else { "attack" }, shot.obj, shot.owner);
                 }
                 continue;
             }
@@ -2423,14 +2429,14 @@ impl Strikes {
                 self.stopped.retain(|s| s.0 != shot.obj);
                 self.stopped.push((shot.obj, h_owner, h_data, 0));
                 static STOP: AtomicU32 = AtomicU32::new(0);
-                if STOP.fetch_add(1, Ordering::Relaxed) < 200 {
-                    log(&format!(
+                if super::log_on(super::LogCat::Combat) && STOP.fetch_add(1, Ordering::Relaxed) < 200 {
+                    log!(Combat,
                         "Reflect barrier stopped enemy shot {:#x} of {:#x}: result 4 (struck, no damage), its hit script {}, attack {}",
                         shot.obj,
                         shot.owner,
                         if told { "told" } else { "none (no hit label)" },
                         if ended { if kept { "switched off (its owner keeps the object)" } else { "switched off (KH1's pass frees it)" } } else { "already gone" }
-                    ));
+                    );
                 }
                 continue;
             }
@@ -2449,14 +2455,14 @@ impl Strikes {
             free(obj);
             let back = rd::<u32>(shot.obj) & 0x0100_0000 != 0;
             static MET: AtomicU32 = AtomicU32::new(0);
-            if MET.fetch_add(1, Ordering::Relaxed) < 200 {
-                log(&format!(
+            if super::log_on(super::LogCat::Combat) && MET.fetch_add(1, Ordering::Relaxed) < 200 {
+                log!(Combat,
                     "Reflect barrier met enemy {} {:#x} of {:#x}: result {res:#x}, {}",
                     if shot.free { "shot" } else { "attack" },
                     shot.obj,
                     shot.owner,
                     if back { "turned back" } else { "not turned back" }
-                ));
+                );
             }
         }
         met
@@ -2477,8 +2483,8 @@ impl Strikes {
                 let same = unsafe { rd::<u32>(s.0 + 0x34) == s.1 && rd::<u32>(s.0 + 0x5C) == s.2 };
                 if flags & 0x800 != 0 && same && flags & 0xC != 0 {
                     static STILL: AtomicU32 = AtomicU32::new(0);
-                    if STILL.fetch_add(1, Ordering::Relaxed) < 100 {
-                        log(&format!("Reflect: enemy shot {:#x} still flying 10 frames after meeting the barrier (word {flags:#x})", s.0));
+                    if super::log_on(super::LogCat::Combat) && STILL.fetch_add(1, Ordering::Relaxed) < 100 {
+                        log!(Combat, "Reflect: enemy shot {:#x} still flying 10 frames after meeting the barrier (word {flags:#x})", s.0);
                     }
                 }
             }
@@ -2620,7 +2626,7 @@ unsafe fn hit_data(base: usize, data: i32, group: i32) -> Option<usize> {
     let mut g = HIT_DATA.lock().ok()?;
     if g.0 == 0 {
         g.0 = super::kh1rows::near(block, 0x1000).unwrap_or(usize::MAX);
-        log(&format!("KH2 spell hit sparks: attack data copies at {:#x}", g.0));
+        log!(Combat, "KH2 spell hit sparks: attack data copies at {:#x}", g.0);
     }
     if g.0 == usize::MAX {
         return None;
@@ -2634,7 +2640,7 @@ unsafe fn hit_data(base: usize, data: i32, group: i32) -> Option<usize> {
         None => {
             static FULL: AtomicBool = AtomicBool::new(false);
             if !FULL.swap(true, Ordering::Relaxed) {
-                log(&format!("KH2 spell hit sparks: no room for another attack data copy (data {data:#x}, group {group}): KH1's spark"));
+                log!(Combat, "KH2 spell hit sparks: no room for another attack data copy (data {data:#x}, group {group}): KH1's spark");
             }
             return None;
         }
@@ -2678,7 +2684,7 @@ pub fn kh1_spell_data(spell: u8, level: u8) -> Option<i32> {
     if !LOGGED.swap(true, Ordering::Relaxed) {
         let base = BASE.load(Ordering::Relaxed);
         let words = |o: i32| (0..12).map(|k| format!("{:x}", unsafe { rd::<u32>(base + ATTACK_DATA_RVA + o as usize + k * 4) })).collect::<Vec<_>>().join(" ");
-        log(&format!("KH1 spell attack data (level 1): Fire [{}] | Blizzard [{}] | Thunder [{}]", words(0x5F28), words(0x6078), words(0x61C8)));
+        log!(Combat, "KH1 spell attack data (level 1): Fire [{}] | Blizzard [{}] | Thunder [{}]", words(0x5F28), words(0x6078), words(0x61C8));
     }
     Some(off)
 }
@@ -2699,18 +2705,18 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
         let h = pose::handle(list);
         let data = if h != 0 { hit_data(base, row.data, group) } else { None };
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log(&format!(
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log!(Combat,
                 "KH2 hit spark: package {:?} effect_on_hit {} random {} -> group {group}, list {list:#x} (handle {h:#010x}), data copy {data:#x?} | {note}",
                 f.pkg, f.effect_on_hit, f.random_effect
-            ));
+            );
         }
         Some((h, data?)).filter(|x| x.0 != 0)
     });
     if fx.is_some() && kh2_spark.is_none() {
         static M: AtomicU32 = AtomicU32::new(0);
-        if M.fetch_add(1, Ordering::Relaxed) < 10 {
-            log(&format!("KH2 hit spark: package {:?} not ready, or its element for this hit can't play through KH1 yet (see its load line): KH1's spark", fx.map(|f| f.pkg)));
+        if super::log_on(super::LogCat::Combat) && M.fetch_add(1, Ordering::Relaxed) < 10 {
+            log!(Combat, "KH2 hit spark: package {:?} not ready, or its element for this hit can't play through KH1 yet (see its load line): KH1's spark", fx.map(|f| f.pkg));
         }
     }
     let bit = free_bit();
@@ -2751,8 +2757,8 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
             }
             spell_fx = format!(" | KH1 spell {k}'s list: slot level {level}, file {file:#x}, list {list:#x} (handle {h:#010x}){}", if h != 0 { "" } else { ": not used (Keyblade's)" });
             static N: AtomicU32 = AtomicU32::new(0);
-            if N.fetch_add(1, Ordering::Relaxed) < 40 {
-                log(&format!("KH2 spell hit (KH1 data {:#x}){spell_fx}", row.data));
+            if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Combat, "KH2 spell hit (KH1 data {:#x}){spell_fx}", row.data);
             }
         }
     }
@@ -2764,7 +2770,7 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
         fx[set.hit_fx_byte] = v;
         wr(obj + 0xA8, fx);
         forced = format!(" | hit_fx_test: byte {} = {v} ({v:#04x})", set.hit_fx_byte);
-        log(&format!("hit_fx_test: byte {} = {v} ({v:#04x}) on {}", set.hit_fx_byte, if spell { "a spell hit" } else { "a swing hit" }));
+        log!(Combat, "hit_fx_test: byte {} = {v} ({v:#04x}) on {}", set.hit_fx_byte, if spell { "a spell hit" } else { "a swing hit" });
     }
     // (t333, trace) The effect / sound bytes and KH1's attack data the contact code will read.
     // (t334) And the object's flag word: is bit 0x400000 (set for swings, not spells) what makes
@@ -2817,7 +2823,7 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
         };
         let who = if set.hit_effect_on_sora { "Sora" } else { "the foe" };
         forced.push_str(&format!(" | hit_effect_test: effect {id} on {who} {on:#x} (source {source:#x}) -> {h:#x}"));
-        log(&format!("hit_effect_test: effect {id} on {who} {on:#x} (source {source:#x}) -> {h:#x}"));
+        log!(Combat, "hit_effect_test: effect {id} on {who} {on:#x} (source {source:#x}) -> {h:#x}");
     }
     if hit_fx {
         super::trace::note_as(super::trace::cat::HIT_FX, &format!(
@@ -2851,8 +2857,8 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     });
     if let Some(a) = own.as_ref() {
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 60 {
-            log(&format!("KH1's row of ours hit: KH2's ATKP {} (power {}, reaction {}, {}) on record {rec:#x}", a.id, a.power, a.enemy_reaction, if own_launch.is_some() { "KH2's launch" } else { "no launch" }));
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log!(Combat, "KH1's row of ours hit: KH2's ATKP {} (power {}, reaction {}, {}) on record {rec:#x}", a.id, a.power, a.enemy_reaction, if own_launch.is_some() { "KH2's launch" } else { "no launch" });
         }
     }
     // A KH2 launch: KH1's launch reaction (kind 5) with KH2's numbers once it runs.
@@ -2864,8 +2870,8 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
             v.push((rec, l, now));
         }
         static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log(&format!("KH2 launch asked: record {rec:#x} made a launch (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed));
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log!(Combat, "KH2 launch asked: record {rec:#x} made a launch (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
         }
     } else if let Some(a) = own.as_ref().filter(|a| character_core::reaction::category(a.enemy_reaction) == 3) {
         // A KH2 flinch on one of our rows whose data is a launch (the move's first hit window
@@ -2873,8 +2879,8 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
         if rd::<u32>(rec + 0xC) & 0x1F == 5 {
             wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 3);
             static F: AtomicU32 = AtomicU32::new(0);
-            if F.fetch_add(1, Ordering::Relaxed) < 20 {
-                log(&format!("KH2's flinch (ATKP {}, reaction {}) on a launching row of ours: KH1's flinch (kind 3)", a.id, a.enemy_reaction));
+            if super::log_on(super::LogCat::Combat) && F.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Combat, "KH2's flinch (ATKP {}, reaction {}) on a launching row of ours: KH1's flinch (kind 3)", a.id, a.enemy_reaction);
             }
         }
     }
@@ -2982,8 +2988,8 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
     });
     let Some(l) = ours else {
         static M: AtomicU32 = AtomicU32::new(0);
-        if M.fetch_add(1, Ordering::Relaxed) < 20 {
-            log(&format!("KH1 launch reaction on {actor:#x} for record {rec:#x} (not a KH2 launch)"));
+        if super::log_on(super::LogCat::Combat) && M.fetch_add(1, Ordering::Relaxed) < 20 {
+            log!(Combat, "KH1 launch reaction on {actor:#x} for record {rec:#x} (not a KH2 launch)");
         }
         super::knockback::land_kh1(actor);
         return;
@@ -2992,8 +2998,8 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
     let state = rd::<i32>(actor + 0x70);
     static N: AtomicU32 = AtomicU32::new(0);
     if !matches!(motion, 0x52 | 0x5C) || state != 2 {
-        if N.fetch_add(1, Ordering::Relaxed) < 30 {
-            log(&format!("KH2 launch on {actor:#x}: KH1 didn't launch it (motion {motion:#x}, state {state})"));
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+            log!(Combat, "KH2 launch on {actor:#x}: KH1 didn't launch it (motion {motion:#x}, state {state})");
         }
         return;
     }
@@ -3012,8 +3018,8 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
     wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed]);
     // Its flight is KH2's blow (`knockback::air_step`).
     super::knockback::fly_blow(actor, [dx * l.speed, dz * l.speed], l.up, t, h);
-    if N.fetch_add(1, Ordering::Relaxed) < 30 {
-        log(&format!("KH2 launch on {actor:#x}: up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed));
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+        log!(Combat, "KH2 launch on {actor:#x}: up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed);
     }
 }
 
@@ -3098,7 +3104,7 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
     // frames after the form's KH1 spell.)
     if kind == 1 && takeover::cut_left() {
         PRESSED.store(true, Ordering::Relaxed);
-        cmd_log("Attack while KH1's cut cast plays on: KH2's attack".to_string());
+        cmd_log(|| "Attack while KH1's cut cast plays on: KH2's attack".to_string());
         return true;
     }
     // During one of KH1's spells (any, in a form too): Attack is taken here as KH2's, its cut
@@ -3110,14 +3116,14 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
     // (no buffer).
     if kind == 1 && takeover::kh1_casting() && takeover::kh1_spell_now().is_some() {
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        cmd_log("Attack during KH1's spell: KH2's, to cut it once it may be".to_string());
+        cmd_log(|| "Attack during KH1's spell: KH2's, to cut it once it may be".to_string());
         return true;
     }
     if takeover::kh1_cut_window() {
         // (Not in KH1's own combo, whose window is open for a Drive only: its Attack is KH1's.)
         if kind == 1 && !super::stylecombo::active() {
             takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-            cmd_log("Attack in KH1's move's cut window: KH2 takes him for the combo".to_string());
+            cmd_log(|| "Attack in KH1's move's cut window: KH2 takes him for the combo".to_string());
             return true;
         }
         if kind == 2 && arg >= super::drive::FORM_ARG && super::drive::on() && super::form::accept_now() {
@@ -3125,7 +3131,7 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
             super::drive::chosen(sora, (arg - super::drive::FORM_ARG) as usize);
             // The menu back to its top, as KH1 leaves it after a command.
             wr(base + CHAIN_RVA, (base + MENU_ROOT_RVA) as u64);
-            cmd_log("Drive in KH1's move's cut window: KH2 takes him to change".to_string());
+            cmd_log(|| "Drive in KH1's move's cut window: KH2 takes him to change".to_string());
             return true;
         }
     }
@@ -3137,7 +3143,7 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
     if kind == 2 && arg < super::drive::FORM_ARG && super::form::in_valor() {
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
-        cmd_log(format!("spell {arg} refused: no magic in Valor Form"));
+        cmd_log(|| format!("spell {arg} refused: no magic in Valor Form"));
         return true;
     }
     // A form from the Drive list: only on a frame Sora can change (`form::accept_now`: KH2's,
@@ -3148,7 +3154,7 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
         }
         static D: AtomicU32 = AtomicU32::new(0);
         if D.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
-            cmd_log("Drive not taken yet: Sora can't change on this frame; the menu stays open".to_string());
+            cmd_log(|| "Drive not taken yet: Sora can't change on this frame; the menu stays open".to_string());
         }
         return true;
     }
@@ -3170,13 +3176,13 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
         if !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && (takeover::kh2_airborne() || (sora > 0x10000 && rd::<i32>(sora + 0x70) == 2)) {
             let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
             sound(4);
-            cmd_log(format!("{what} (command {kind:#x}) refused in the air; the list stays open"));
+            cmd_log(|| format!("{what} (command {kind:#x}) refused in the air; the list stays open"));
             return true;
         }
         if takeover::with_kh2(|c, _| c.can_take_command()) == Some(false) {
             static M: AtomicU32 = AtomicU32::new(0);
             if M.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
-                cmd_log(format!("{what} (command {kind:#x}) not taken yet: KH2's move (motion {}) can't be cut by a command now; the list stays open", takeover::KH2_MOTION.load(Ordering::Relaxed)));
+                cmd_log(|| format!("{what} (command {kind:#x}) not taken yet: KH2's move (motion {}) can't be cut by a command now; the list stays open", takeover::KH2_MOTION.load(Ordering::Relaxed)));
             }
             return true;
         }
@@ -3192,7 +3198,7 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
     }
     static N: AtomicU32 = AtomicU32::new(0);
     if N.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
-        cmd_log(format!("spell {arg} not taken yet: KH2's move (motion {}) can't be cut by magic now; the menu stays open", takeover::KH2_MOTION.load(Ordering::Relaxed)));
+        cmd_log(|| format!("spell {arg} not taken yet: KH2's move (motion {}) can't be cut by magic now; the menu stays open", takeover::KH2_MOTION.load(Ordering::Relaxed)));
     }
     true
 }

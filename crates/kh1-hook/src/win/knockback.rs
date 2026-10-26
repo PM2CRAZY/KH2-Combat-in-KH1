@@ -51,7 +51,7 @@ pub fn weight() -> bool {
 pub fn set_weight(on: bool) {
     WEIGHT_ON.store(1 + on as u8, Ordering::Relaxed);
     super::settings::save("enemy_weight", if on { "on" } else { "off" });
-    log(&format!("Config menu: Enemy Weight {}", if on { "On" } else { "Off" }));
+    log!(Combat, "Config menu: Enemy Weight {}", if on { "On" } else { "Off" });
 }
 
 /// KH1's weight stat of this enemy (stats `+0xC4`), if it reads as a number.
@@ -79,7 +79,7 @@ unsafe fn note_weight(actor: usize, w: Option<f32>) {
         return;
     }
     seen.push(obj);
-    log(&format!("enemy weight: actor {actor:#x} (object {obj:#x}) KH1 stat +0xC4 = {w:?}"));
+    log!(Combat, "enemy weight: actor {actor:#x} (object {obj:#x}) KH1 stat +0xC4 = {w:?}");
 }
 
 /// KH1's launch speed ends (btltbl, read from the game; 20 / 35 if it can't be).
@@ -105,8 +105,8 @@ pub unsafe fn launch_factor(actor: usize) -> f32 {
     let (lo, hi) = launch_ends();
     let k = (lo + (hi - lo) * w) / hi;
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log(&format!("enemy weight on a KH2 launch: stat {w:.2}, KH1's launch {:.1} of {hi:.0}: x{k:.2}", lo + (hi - lo) * w));
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log!(Combat, "enemy weight on a KH2 launch: stat {w:.2}, KH1's launch {:.1} of {hi:.0}: x{k:.2}", lo + (hi - lo) * w);
     }
     k
 }
@@ -186,8 +186,8 @@ pub unsafe fn air_step(actor: usize, disp: *mut [f32; 4]) {
     let ours = rd::<i32>(actor + STATE) == 2 && rd::<f32>(actor + ARC_UP_T) == g.up_t && rd::<f32>(actor + ARC_H) == -g.h && g.frames < MAX_FRAMES;
     if !ours {
         static E: AtomicU32 = AtomicU32::new(0);
-        if E.fetch_add(1, Ordering::Relaxed) < 30 {
-            log(&format!("KH2 flight on {actor:#x} ended after {} frames (state {}, KH1's arc {})", g.frames, rd::<i32>(actor + STATE), if rd::<f32>(actor + ARC_UP_T) == g.up_t { "ours" } else { "its own" }));
+        if super::log_on(super::LogCat::Combat) && E.fetch_add(1, Ordering::Relaxed) < 30 {
+            log!(Combat, "KH2 flight on {actor:#x} ended after {} frames (state {}, KH1's arc {})", g.frames, rd::<i32>(actor + STATE), if rd::<f32>(actor + ARC_UP_T) == g.up_t { "ours" } else { "its own" });
         }
         v.remove(i);
         return;
@@ -230,8 +230,8 @@ pub unsafe fn air_step(actor: usize, disp: *mut [f32; 4]) {
     std::ptr::write_unaligned((actor + DROP) as *mut f32, -total[1]);
     static N: AtomicU32 = AtomicU32::new(0);
     if g.frames <= n || g.frames % 10 == 0 {
-        if N.fetch_add(1, Ordering::Relaxed) < 60 {
-            log(&format!("KH2 flight on {actor:#x}: frame {}, moved {:.1} sideways, {:.1} up", g.frames, total[0].hypot(total[2]), total[1]));
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log!(Combat, "KH2 flight on {actor:#x}: frame {}, moved {:.1} sideways, {:.1} up", g.frames, total[0].hypot(total[2]), total[1]);
         }
     }
 }
@@ -355,8 +355,8 @@ unsafe extern "system" fn flinch_push(actor: usize, rec: usize) {
         }
     }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log(&format!("KH2's push on {actor:#x} (reaction {}, knock-back {} / {}): {d:.0} (weight {:?}{}), {v:.1} a frame, x{KH2_DECAY} a frame", hit.reaction, hit.k1, hit.k2, w, if weight() { "" } else { ", off" }));
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Combat, "KH2's push on {actor:#x} (reaction {}, knock-back {} / {}): {d:.0} (weight {:?}{}), {v:.1} a frame, x{KH2_DECAY} a frame", hit.reaction, hit.k1, hit.k2, w, if weight() { "" } else { ", off" });
     }
 }
 
@@ -443,8 +443,8 @@ unsafe extern "system" fn air_flinch(actor: usize, rec: usize, front: f32) {
     wr(actor + VEL, [vel[0], 0.0, vel[1], speed]);
     start(Flight { actor, fly: Fly::Hop { arc, vel }, up_t: arc.uptime, h: KH2_AIR_HOP, frames: 0 });
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log(&format!("KH2's air flinch on {actor:#x} (reaction {}, knock-back {} / {}): hop {KH2_AIR_HOP:.0}, drift {speed:.1} a frame (push {d:.0}, weight {w:?}{})", hit.reaction, hit.k1, hit.k2, if weight() { "" } else { ", off" }));
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Combat, "KH2's air flinch on {actor:#x} (reaction {}, knock-back {} / {}): hop {KH2_AIR_HOP:.0}, drift {speed:.1} a frame (push {d:.0}, weight {w:?}{})", hit.reaction, hit.k1, hit.k2, if weight() { "" } else { ", off" });
     }
 }
 

@@ -54,8 +54,8 @@ unsafe fn speaker(actor: usize) -> bool {
 
 /// Logs the first few calls of each kind.
 fn note(n: &AtomicU32, line: impl FnOnce() -> String) {
-    if n.fetch_add(1, Ordering::Relaxed) < 6 {
-        log(&format!("KH1 voice: {}", line()));
+    if super::log_on(super::LogCat::Sound) && n.fetch_add(1, Ordering::Relaxed) < 6 {
+        log!(Sound, "KH1 voice: {}", line());
     }
 }
 
@@ -103,8 +103,8 @@ pub unsafe fn dodge_roll(actor: usize) {
 /// one of the lines he picks when casting aero"): KH1's Aero clip, through KH1's clip play.
 pub unsafe fn defense(actor: usize) {
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log(&format!("KH1 voice: Reflect finisher, KH1's Aero line \"Defense!\" (clip {DEFENSE_CLIP}, priority {SPELL_PRIORITY}; if it isn't \"Defense!\" it is the other Aero clip, 47)"));
+    if super::log_on(super::LogCat::Sound) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Sound, "KH1 voice: Reflect finisher, KH1's Aero line \"Defense!\" (clip {DEFENSE_CLIP}, priority {SPELL_PRIORITY}; if it isn't \"Defense!\" it is the other Aero clip, 47)");
     }
     clip(actor, DEFENSE_CLIP, SPELL_PRIORITY);
 }

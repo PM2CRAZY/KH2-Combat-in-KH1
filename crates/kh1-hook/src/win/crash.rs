@@ -74,8 +74,8 @@ unsafe extern "system" fn on_exception(p: *mut c_void) -> i32 {
         }
         i += 1;
     }
-    log(&format!("CRASH {code:#x} at {}{info}; {}; stack: {}", name(at), r.join(" "), stack.join(" ")));
-    log(&format!("at the crash: {}", super::fx12::crash_note(EXE.load(Ordering::Relaxed))));
+    log!(Crash, "CRASH {code:#x} at {}{info}; {}; stack: {}", name(at), r.join(" "), stack.join(" "));
+    log!(Crash, "at the crash: {}", super::fx12::crash_note(EXE.load(Ordering::Relaxed)));
     0
 }
 
@@ -83,5 +83,5 @@ pub unsafe fn install() {
     EXE.store(GetModuleHandleA(std::ptr::null()) as usize, Ordering::Relaxed);
     OURS.store(module_of(install as *const () as usize), Ordering::Relaxed);
     AddVectoredExceptionHandler(0, on_exception);
-    log(&format!("crash notes on (our code at {:#x})", OURS.load(Ordering::Relaxed)));
+    log!(Crash, "crash notes on (our code at {:#x})", OURS.load(Ordering::Relaxed));
 }

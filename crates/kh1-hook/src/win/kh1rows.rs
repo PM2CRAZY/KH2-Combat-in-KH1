@@ -343,10 +343,13 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-fn note(s: String) {
+fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 60 {
-        log(&s);
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+        log!(Combat, "{}", s());
     }
 }
 
@@ -436,7 +439,7 @@ pub unsafe fn install(actor: usize) {
         }
         if t.index == index && now == t.kh1 {
             wr(at, t.ours as u64);
-            note(format!("KH1's attack rows: Sora's table ours again (KH1 set its own, {now:#x})"));
+            note(|| format!("KH1's attack rows: Sora's table ours again (KH1 set its own, {now:#x})"));
             return;
         }
     }
@@ -458,14 +461,14 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
     for o in OURS.iter().filter(|o| !o.kind.cast()) {
         let q = rd::<i16>(kh1 + o.template_row() * ROW);
         if q as i32 as u32 != o.template_request() {
-            log(&format!("KH1's attack rows: Sora's row {} asks for {q:#x}, not {:#x}: no rows of ours", o.template_row(), o.template_request()));
+            log!(Combat, "KH1's attack rows: Sora's row {} asks for {q:#x}, not {:#x}: no rows of ours", o.template_row(), o.template_request());
             return None;
         }
     }
     let Some(kh2) = pose::kh2() else { return None };
     // (0x80 a row's data: 38 rows take 0x1300.)
     let Some(mem) = near(block, (OURS.len() * 0x80 + 0xFFF) & !0xFFF) else {
-        log("KH1's attack rows: no memory within reach of KH1's battle data for our attack data: no rows of ours");
+        log!(Combat, "KH1's attack rows: no memory within reach of KH1's battle data for our attack data: no rows of ours");
         return None;
     };
     let rows: &'static mut [u8] = Box::leak(vec![0u8; (KH1_ROWS + OURS.len()) * ROW].into_boxed_slice());
@@ -500,11 +503,11 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
         CLASH_KH1[n].store(t1 << 16 | (p1 as u32 & 0xFFFF), Ordering::Relaxed);
         CLASH_KH2[n].store(t2 << 16 | (p2 as u32 & 0xFFFF), Ordering::Relaxed);
         if o.guard_break && t2 != PIERCE_TYPE {
-            log(&format!("KH1's attack rows: Guard Break's ATKP {atkp:?} is no pierce armor: it keeps its template's clash type under KH2's rules"));
+            log!(Combat, "KH1's attack rows: Guard Break's ATKP {atkp:?} is no pierce armor: it keeps its template's clash type under KH2's rules");
         }
         let off = d as isize - block as isize;
         if off < i32::MIN as isize || off > i32::MAX as isize {
-            log("KH1's attack rows: our attack data is out of an offset's reach: no rows of ours");
+            log!(Combat, "KH1's attack rows: our attack data is out of an offset's reach: no rows of ours");
             return None;
         }
         // (A move started by its request alone has a row that asks for nothing, should it run.)
@@ -525,7 +528,7 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
             atkp
         ));
     }
-    log(&format!("KH1's attack rows: Sora's table (character {index}, KH1's at {kh1:#x}) ours with {}", made.join("; ")));
+    log!(Combat, "KH1's attack rows: Sora's table (character {index}, KH1's at {kh1:#x}) ours with {}", made.join("; "));
     RULES.store(0, Ordering::Relaxed);
     Some(Table { index, kh1, ours: rows.as_ptr() as usize })
 }
@@ -571,7 +574,7 @@ unsafe fn rules() {
         }
     }
     RULES.store(want, Ordering::Relaxed);
-    log(&format!("KH1's attack rows: {}'s clash rules: {}", if want == 2 { "KH2" } else { "KH1" }, said.join(", ")));
+    log!(Combat, "KH1's attack rows: {}'s clash rules: {}", if want == 2 { "KH2" } else { "KH1" }, said.join(", "));
 }
 
 /// Sora's own KH1 row `row` (KH1's table, not ours): its attack data's address and its effect and

@@ -109,10 +109,13 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-fn note(s: String) {
+fn note(s: impl FnOnce() -> String) {
+    if !super::log_on(super::LogCat::Takeover) {
+        return;
+    }
     static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) < 200 {
-        log(&format!("Quick Run (native): {s}"));
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 200 {
+        log!(Takeover, "Quick Run (native): {}", s());
     }
 }
 
@@ -138,7 +141,7 @@ pub unsafe fn install(base: usize) {
     let empty = words.iter().all(|&w| w == 0);
     if !(ours || empty) {
         if !REFUSED.swap(true, Ordering::Relaxed) {
-            note(format!("KH1's state {STATE:#x} is in use ({:#x?}): not installed", words));
+            note(|| format!("KH1's state {STATE:#x} is in use ({:#x?}): not installed", words));
         }
         return;
     }
@@ -146,7 +149,7 @@ pub unsafe fn install(base: usize) {
         return;
     }
     wr(e, [FLAGS as usize, 0, 0, 0, step_fn, trans_fn, 0, 0]);
-    note(format!("KH1's state {STATE:#x} is ours (flags {FLAGS:#x}, step {step_fn:#x}, transition {trans_fn:#x})"));
+    note(|| format!("KH1's state {STATE:#x} is ours (flags {FLAGS:#x}, step {step_fn:#x}, transition {trans_fn:#x})"));
 }
 
 /// He is in our state now.
@@ -200,7 +203,7 @@ pub unsafe fn start(actor: usize, dir: [f32; 2], why: &str) -> bool {
         star: g.quick_run_star_time.max(0.0),
         stopping: false,
     };
-    note(format!(
+    note(|| format!(
         "{why}: KH2's Quick Run LV{level} on KH1's state {STATE:#x} (request {request:#x}): speed {:.0}, brake {:.2}, time {:.0}, stop brake {:.2}, invulnerable {:.0}",
         g.quick_run_speed, run.brake, run.timer, run.stop_brake, run.star
     ));
@@ -263,7 +266,7 @@ unsafe extern "system" fn step(actor: usize, disp: *mut [f32; 4]) -> usize {
                 let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(takeover::game_base() + SET_MOTION_RVA);
                 set(actor, super::kh1rows::request(n) | 0x0100_0000, STOP_BLEND);
             }
-            note(format!("the stop (motion 204) after {:.0} frames, speed {:.1}", r.age, r.vel[0].hypot(r.vel[1])));
+            note(|| format!("the stop (motion 204) after {:.0} frames, speed {:.1}", r.age, r.vel[0].hypot(r.vel[1])));
         }
     }
     // KH2's velocity step on its physics tick (`0x1403B89A0` → `0x140423480`).
@@ -296,7 +299,7 @@ unsafe extern "system" fn transition(actor: usize, airborne: i32) -> u32 {
         if let Ok(mut g) = RUN.lock() {
             *g = None;
         }
-        note(format!("KH1 put another motion on him ({playing:?}): KH1's {}", if airborne != 0 { "fall" } else { "ground state" }));
+        note(|| format!("KH1 put another motion on him ({playing:?}): KH1's {}", if airborne != 0 { "fall" } else { "ground state" }));
         return if airborne != 0 { 2 } else { 0 };
     }
     if airborne != 0 {
@@ -323,7 +326,7 @@ unsafe extern "system" fn transition(actor: usize, airborne: i32) -> u32 {
     wr(actor + 0x2C, 0.0f32);
     set(actor, LANDING | 0x0100_0000, AFTER_BLEND);
     queue(actor, 0x4000_0000, 0.0);
-    note("the stop played out: KH1's landing (request 7)".to_string());
+    note(|| "the stop played out: KH1's landing (request 7)".to_string());
     0
 }
 
@@ -358,5 +361,5 @@ unsafe fn off_ledge(actor: usize, vel: [f32; 2]) {
     let speed = vel[0].hypot(vel[1]);
     wr(actor + 0x3C0, [vel[0], 0.0, vel[1], speed]);
     set(actor, FALL, AFTER_BLEND);
-    note(format!("off the ground: KH1's fall at the slide's speed {speed:.1} (KH2's fall from rest, the Aerial Dodge left)"));
+    note(|| format!("off the ground: KH1's fall at the slide's speed {speed:.1} (KH2's fall from rest, the Aerial Dodge left)"));
 }
