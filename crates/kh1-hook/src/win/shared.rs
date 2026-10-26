@@ -614,11 +614,25 @@ pub mod physics {
     }
     static AIR: Mutex<Option<Air>> = Mutex::new(None);
 
+    /// KH2's hold (a no-gravity range) was on at Sora's last air step: KH2's `+0x120` bit
+    /// 0x800000 ("held at the last think", set by `0x1403B4980`), for the fall's restart when
+    /// the hold ends (`kh2_fall_at`).
+    static HELD_LAST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    /// KH2's fall started over at `down` per frame (downward, y-down positive) from the height he
+    /// is at: `0x1403B4780`, Checked (decomp) KH2 Steam: the arc's time `+0xF0` = speed / g, its
+    /// rise time `+0xF4` and height `+0xFC` 0, its base `+0xF8` his height less g t² / 2.
+    fn kh2_fall_at(down: f32, gravity: f32) -> Arc {
+        let t = if gravity > 0.0 && down.is_finite() && down > 0.0 { down / gravity } else { 0.0 };
+        Arc { t, ..Arc::fall() }
+    }
+
     /// Not in KH1's air state (or KH2 has him): no arc of ours.
     pub fn off_air() {
         if let Ok(mut a) = AIR.try_lock() {
             *a = None;
         }
+        HELD_LAST.store(false, Ordering::Relaxed);
     }
 
     unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -683,8 +697,8 @@ pub mod physics {
     /// KH2's hover for that cast, timed from the cast's start: the no-gravity range (id 3) of KH2's
     /// air cast clip for the spell (`kh2slots::CASTS`: Fire 58 16..74, Blizzard 61 16..66, Thunder
     /// 64 / Cure 67 16..58; Gravity on Thunder's, Stop and Aero on Cure's; Checked (files)
-    /// `P_EX100.mset`) at the frames KH1's cast motion has played, KH2's arc clock running through it
-    /// as for our slots (§4h). KH1's air cast motions outlast those ranges (slots 80 / 81: 78 / 68
+    /// `P_EX100.mset`) at the frames KH1's cast motion has played, as for our slots (§4h; the fall
+    /// after it starts over from rest, KH2's `0x1403B4780`, §4n). KH1's air cast motions outlast those ranges (slots 80 / 81: 78 / 68
     /// frames, Checked (files) `xa_ex_0010.mset`), so the hold ends inside KH1's cast as KH2's
     /// does. Nothing at Air Physics KH1 (KH1's own air cast has no hover).
     unsafe fn kh1_cast_hold(actor: usize, dt: f32) -> bool {
@@ -1434,7 +1448,8 @@ pub mod physics {
     ///
     /// KH2's no-gravity range on our slot playing (`kh2slots::no_gravity`: KH2's ability moves'
     /// motions, Aerial Dive's frames 46..54), either physics: his rise or fall held where it is,
-    /// at physics KH2 the arc's time going on (KH2's ACTION_JUMP step, `0x1403CB360`), at physics KH1
+    /// at physics KH2 the arc's time going on (KH2's ACTION_JUMP step, `0x1403CB360`) and the fall
+    /// started over from his actual speed when the hold ends (`0x1403B4780`), at physics KH1
     /// not (the arc kept and gone on with after it; never for a cast slot there, KH1's own cast has
     /// no hold), the sideways speed KH1's (or KH2's) air drift as before.
     unsafe extern "system" fn air_step(actor: usize, disp: *mut [f32; 4]) -> usize {
@@ -1458,6 +1473,8 @@ pub mod physics {
         // (KH1's own air cast animation at Air Physics KH2: KH2's hover for it, `kh1_cast_hold`.)
         let kh1_hold = sora && kh1_cast_hold(actor, step_dt);
         let held = air_ok && (kh1_hold || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
+        // (Whether the hold was on at his last air step: KH2's fall restart when it ends, below.)
+        let was_held = sora && HELD_LAST.swap(held, Ordering::Relaxed);
         if held {
             static N: AtomicU32 = AtomicU32::new(0);
             if N.fetch_add(1, Ordering::Relaxed) < 20 {
@@ -1588,13 +1605,26 @@ pub mod physics {
                 air.arc.holdable = false;
             }
         }
-        // KH2's hold runs the arc's clock on (the tester, m5 answer 1: "(b) unless you have kh1
-        // physics on": casts and KH2's moves with the same hold, Aerial Dive, Finishing Leap; this
-        // is the physics KH2 path only). ACTION_JUMP's step `0x1403CB360` (Checked (decomp) KH2
-        // Steam) adds the step to the arc's time `+0xF0` before its hold test (motion flag 0x20,
-        // range id 3, or 0x40, range 24), then moves him by 0 while held; after the hold the arc is
-        // past its apex and he falls at once at the step's cap. Before, the clock stopped and the
-        // fall after the hold began gently again from where the arc was.
+        // KH2's hold (the physics KH2 path: casts, and KH2's moves with the same hold, Aerial
+        // Finish, Magnet Burst, Aerial Dive, Finishing Leap). ACTION_JUMP's step `0x1403CB360`
+        // (Checked (decomp) KH2 Steam) adds the step to the arc's time `+0xF0` before its hold
+        // test (motion flag 0x20, range id 3, or 0x40, range 24) and moves him by 0 while held.
+        // But on the frame the hold ends, before that step, SORA's think starts his fall over:
+        // vtable slot +0x28 `0x140404B60` -> `0x1403A9250` -> `0x1403D6870` -> `0x1403DAD10` ->
+        // `0x1403B4780` finds the hold gone with `+0x120` bit 0x800000 (held at the last think,
+        // `0x1403B4980` from slot +0x10) and sets the arc to a fall at his actual vertical speed
+        // (`+0xA3C`, 0 after a hold): time = speed / g, rise time and height 0, base where he is.
+        // So he drops from rest at KH2's gravity (Checked (decomp); Checked (video): the tester's
+        // kh2.mp4, an air Reflega falling from rest at its hold's end, landing ~31 frames later).
+        // t621 and before ran the clock on through the hold and dropped him at the 16 cap at once.
+        if was_held && !held {
+            let down = if dt > 0.0 { (y - air.last_y) / dt } else { 0.0 };
+            air.arc = kh2_fall_at(down.max(0.0), n.gravity);
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) < 20 {
+                super::super::log(&format!("KH2's hold ended on KH1's air state (KH2 motion {:?}): his fall starts over at {:.1}/frame (KH2's 0x1403B4780)", super::super::kh2slots::playing_motion(actor), down.max(0.0)));
+            }
+        }
         let up = if held {
             let _ = air.arc.advance(dt, n.gravity, n.fall_max);
             0.0

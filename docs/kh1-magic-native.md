@@ -842,6 +842,48 @@ was found against `air_step`. What differs in the trace is what is drawn after f
 slot 10 and landing 11 with the Jump row at KH1; KH2's fall loop 4, blended in over 8 frames, and
 its landing 5). Asked the tester for a KH2-side recording.
 
+**Correction (m4, the tester's recordings `kh1.mp4` / `kh2.mp4` in the thread's folder).** The
+"nothing resets the time at the hold's end" above was wrong: the reset is in the player's think, not
+in the jump step or the magic code.
+
+- **What the recordings show** (60 fps, Sora's feet against his shadow, frame by frame; both an air
+  Reflega cast about 10 frames into a jump). **Checked (video)**.
+  - KH2: the cast starts at video frame 170; the feet-to-shadow gap holds (~68 px) to frame ~250,
+    then closes 5, 13, 18, 24, 30 px at frames 252, 256, 258, 260, 262: a fall from rest, `d ∝ (f −
+    244)²` (244 = the cast's frame 74, the hold's end), landing at ~275, about 31 frames after the
+    hold. The cast pose turns into the fall loop around 254..258 (frame 84 + the 8-frame blend).
+  - Ours (t621): the cast starts at video frame 133, the hold ends at ~206 (frame 73), and he is on
+    the ground by ~214: about 8 frames, the 16-a-frame drop of the paragraph above.
+- **The reset** (KH2 Steam decomp and exe; **Checked (decomp)**, **Checked (exe)** for the vtable).
+  SORA's class vtable (`VTABLE<SORA>@PLAYER`, `0x1405CBA28`, by its RTTI) runs, from the actor
+  update `0x1403BFD30`:
+  - slot +0x10 `0x140404A20` → `0x1403A92C0` → `0x1403D68B0` → `0x1403D3730` → `0x1403B4980`,
+    before the motion update: while the motion flags (`+0x18C`) hold him (`0x1000020`), it sets
+    `+0x120` bit `0x800000` ("held at the last think"); with range 24's `0x40` it sets `0x1000000`
+    and zeroes the velocity `+0x20`; otherwise it clears both bits;
+  - the motion update `0x1403C6740` (this frame's ranges);
+  - slot +0x28 `0x140404B60` → `0x1403A9250` → `0x1403D6870` → `0x1403DAD10` → `0x1403B4780`:
+    when `+0x120 & 0x1800000` is set but the motion no longer holds him (and the action's flags
+    `+0xC` don't have bit 1 without bit 5: the jump action's are `0x181`, **Checked (exe)**
+    `0x140750960`), it calls the action's slot +0x28 (the jump's `0x1403CB8B0`: its fall motion
+    `+0x118` if one is set, none after a cast's hop), zeroes `+0x254..+0x260`, and starts the arc
+    over as a fall at his actual vertical speed `+0xA3C` (the move's last displacement, `+0xA38`,
+    written by `0x1403B89A0`): time `+0xF0` = speed / g (0 if he wasn't moving down), rise time
+    `+0xF4` and height `+0xFC` 0, base `+0xF8` = his height − g·t²/2; his velocity `+0x20` =
+    `+0xA38`;
+  - then the move `0x1403B89A0` and its jump step `0x1403CB360`.
+  After a hold his actual vertical speed is 0, so KH2's fall after an air cast (and after any
+  no-gravity range: Aerial Finish 16..100, Magnet Burst 16..82, Aerial Dive, Finishing Leap) starts
+  from rest at KH2's gravity, 0.408 a frame², reaching the 16 cap only after ~39 frames. That matches
+  the video.
+- **Ours now** (`shared::physics::air_step`, physics KH2 path): the hold still runs the arc's clock
+  as KH2's step does, and on the first air step without the hold after one with it the arc is set to
+  KH2's fall at his last frame's downward speed (`kh2_fall_at`, 0 after a hold), from where he is.
+  Logged as "KH2's hold ended on KH1's air state". Sideways nothing changes (KH2 copies the actual
+  velocity, which is the speed he already has). **Assumption**: the speed is ours from his last
+  frame's move (KH1's `+0x14` change), KH2's from the move's displacement; the same unless a wall or
+  a floor cut the move.
+
 ## 4o. KH2 spells' hits in KH1's own collision pass (what-is-still-missing m5 "(c)", first step)
 
 Before: each KH2 spell attack the script makes (Fire's shot, Blizzard's shard, Thunder's bolts,
