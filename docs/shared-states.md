@@ -299,7 +299,8 @@ Still borrowing base Sora (plan in the what-is-still-missing thread, m6):
   Base Combo KH2): KH2's controller starts the next swing (`takeover`'s hand-back with
   `ATTACK_AFTER`, `FLY_PRESS_GROUND`);
 - a KH2 command in a state KH1 casts nothing in (KH1's `0x1402A3600` casts in states 0, 6, 0x18,
-  2 and 8 only), and a command chosen in KH1's jump, glide or roll (`stylejump::want_kh2`,
+  2 and 8 only; KH1's own Gravity / Stop / Aero there are KH1's as unmodded since this round,
+  `docs/kh1-magic-native.md` §4p), and a command chosen in KH1's jump, glide or roll (`stylejump::want_kh2`,
   `styleroll::want_kh2`);
 - ~~an Attack while flying (KH1 state 8): KH2's air combo (`FLY_ATTACK`)~~: not a borrow with shared
   states on (KH1's Attack step runs its own flight rows; `FLY_ATTACK` is reached only outside

@@ -528,6 +528,13 @@ unsafe fn command_step(actor: usize, dir: usize) {
             super::reflect::cast_native(actor, dir);
             cmd_log(format!("command {kind:#x} ({full:08x}): KH2's Reflect in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
             return;
+        } else if !drive && (4..=6).contains(&arg) && super::formmagic::anim_kh2(arg) && !matches!(state, 0 | 6 | 0x18 | 2 | 8) {
+            // KH1's Gravity, Stop or Aero (KH1's spells at every setting) in a state KH1 casts
+            // nothing in (`0x1402A3600`, Steam, Checked (decomp): only 0, 6, 0x18, 2 and 8 cast):
+            // KH1's rule whatever its animation row (the tester, what-is-still-missing m6 answer 1:
+            // "the reverse is true regardless of the animation"), so no borrow: KH1's command step
+            // runs it as unmodded (below), casting nothing, as KH1 does.
+            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in KH1 state {state}, where KH1 casts nothing: KH1's rule, no borrow"));
         } else if drive || arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg)) || ((4..=6).contains(&arg) && super::formmagic::anim_kh2(arg) && !kh1_on_kh2) {
             // (A spell whose row is KH1's is KH1's command step's, as unmodded: below; with its
             // animation row at KH2, KH1's Blizzard, Thunder and Cure play our slot of KH2's cast

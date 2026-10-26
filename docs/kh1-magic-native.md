@@ -850,3 +850,39 @@ launches through `combat::scale_record` (`kh1rows::kh2_atkp` finds their row), w
 landed them with KH1's row reactions only; the spark group is picked once per attack (KH2's
 `random_effect` was picked per hit). Still ours: the scripts themselves (`kh2-magic`), Reflect's
 barrier meeting enemy attacks (`Strikes::barrier_meet`). Not checked in game.
+
+## 4p. Spells in the states KH1 casts nothing in (what-is-still-missing m6, answer 1)
+
+The tester: "(b) if you have magic set to kh2 those magics should be 1:1, the reverse is true
+regardless of the animation."
+
+KH1's rules (Steam, **Checked (decomp)**):
+- The menu's run of an entry `0x140293480` refuses a command (no record written) when he is in
+  state 1 (KH1's jump take-off), in deep water (`0x1402C16E0`, except kind 100), or when KH1's
+  "may act" test `0x1402A2EC0` fails: `0x140297870` (no action flag 4 on `+0`, no `+0x88` bit
+  0x20, no `+0x444` bit 1) or the combo window `0x14029EFB0`; with that test failing only Fire is
+  still taken, during Fire's second part / repeat (requests 0x3D / 0x8A, from motion time 14), and
+  kind 99 from time 12.
+- The command step's cast `0x1402A3600` casts only in states 0, 6, 0x18 (the ground cast
+  `0x1402A3DB0`), 2 (the air cast: request `0x83 + spell`, the fall 6 queued, its spell start
+  `0x14028F140`) and 8 (flight, `0x1402A4150`). In any other state it returns: no cast, no MP, the
+  menu already played its confirm.
+- So a spell can be chosen, and does nothing, in any state he can act in other than those (which
+  ones he can act in is each state's own flags: not listed here; candidates are KH1's glide 0x15,
+  our Quick Run 0x2A, ladders / vines 10, ledges 13, poles and bars, the slider and the carpet).
+
+KH1's spells (Gravity, Stop, Aero; Fire..Cure at the Magic row KH1) follow KH1's rule whatever
+their animation row (this round): with the animation row KH2 they were borrowed by KH2's controller in
+those states (KH1's spell drawn on KH2's motion there); now KH1's command step runs them unmodded,
+casting nothing, as KH1 does (`combat::command`, logged "KH1's rule, no borrow"). **Checked
+(decomp + code)**; not checked in game.
+
+KH2's spells (Fire..Cure at Magic KH2, Reflect) in those states: still KH2's controller's borrow.
+KH2's own rule for the matching states, from our port of KH2's controller (`character-core`
+`Character::can_cast`, ported from the Epic exe, **not re-checked against the Steam KH2 exe this
+round: Assumption**): no spell in KH2's glide (`Mode::Glide`), none in an action without a
+range-35 magic window (Quick Run, the dodge roll, the guard, the landing); KH2 has no ladders,
+poles, bars, slider or carpet. Steam KH2's Attack / command check `0x1403D6CA0` reads the action's
+free bits (`+0x18C & 0x1C`) and its combo / finisher windows (**Checked (decomp)**); which actions
+set those bits wasn't traced. Open question to the tester (KH2's 1:1 there is a refusal, not a
+cast).
