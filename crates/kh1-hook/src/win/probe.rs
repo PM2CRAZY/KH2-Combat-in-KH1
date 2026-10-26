@@ -586,6 +586,10 @@ type HitF = unsafe extern "system" fn(usize, usize) -> usize;
 unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     let f: HitF = std::mem::transmute(ORIG_HIT.load(Ordering::Acquire));
     let owner = if attack > 0x10000 { pose::ptr(rd::<u32>(attack + 0x34)) } else { 0 };
+    // (A KH2 spell's hit on a KH1 object of ours: its row by KH2's hit count, `bodyhits`.)
+    if owner != 0 && owner == sora() {
+        super::bodyhits::before_hit(attack, target);
+    }
     let r = f(attack, target);
     // (t338) Which hit effect KH1's contact will start for this hit (any attack on anyone but Sora).
     if attack > 0x10000 && target > 0x10000 && target != sora() {
@@ -594,7 +598,7 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     if owner != 0 && owner == sora() && r > 0x10000 {
         super::combat::scale_record(r, attack, target);
         // (KH2's re-hit interval and the Magnet catch for KH2's hits on his body, `bodyhits`.)
-        super::bodyhits::hit(attack, target);
+        super::bodyhits::hit(attack, target, r);
     }
     if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");

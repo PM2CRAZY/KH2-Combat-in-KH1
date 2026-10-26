@@ -2514,7 +2514,7 @@ unsafe fn hit_data(base: usize, data: i32, group: i32) -> Option<usize> {
 /// random step 0..random_effect-1 when the row has one (KH2's own generator, `x *= 0x10DCD`; ours
 /// is seeded apart, Assumption: only which of the row's sparks plays differs); -1 with no
 /// effect_on_hit (no spark, as KH2).
-fn kh2_group(fx: Kh2Spark) -> i32 {
+pub(super) fn kh2_group(fx: Kh2Spark) -> i32 {
     if fx.effect_on_hit == 0 {
         return -1;
     }

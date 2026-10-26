@@ -753,3 +753,38 @@ tester's trace does; with the stick held, KH2 steers him only from frame 84. No 
 was found against `air_step`. What differs in the trace is what is drawn after frame 84 (KH1's fall
 slot 10 and landing 11 with the Jump row at KH1; KH2's fall loop 4, blended in over 8 frames, and
 its landing 5). Asked the tester for a KH2-side recording.
+
+## 4o. KH2 spells' hits in KH1's own collision pass (what-is-still-missing m5 "(c)", first step)
+
+Before: each KH2 spell attack the script makes (Fire's shot, Blizzard's shard, Thunder's bolts,
+Reflect's counter and burst, Wisdom's shots) was tested by our own sweep against KH1's enemies
+(`combat::Strikes::spell_strike`) and each hit landed by calling KH1's contact with a temporary
+object. Now (Steam, `bodyhits::spell_attacks`):
+- each attack is a **KH1 attack object of Sora's**, made the first frame its script has it with
+  KH1's own constructor `0x1402B2DC0 (owner, hit bit, data)`, as KH1's spell scripts make theirs
+  (their script call 23, §2; first bytes checked, **Checked (exe)**), with a hit bit of its own
+  (`0x1402B3760`); free-standing (the data's bone −1: KH1's attribute `0x400`, as KH1's shots),
+  activity 3 (always live, no KH1 re-arm since its `+0x50` is 0), its place ours; freed when the
+  script frees the attack (`spell_forget`, KH1's `0x1402B3560`);
+- KH1's collision pass collides it with every body itself: its entries are the shapes the script
+  gave this frame (KH2's own sweep already in them), put in by our hook on `0x1402B3800` and tested
+  with KH1's `0x1402B3BE0` (§7.z.7 of `docs/kh1-anim-slots.md`), KH2's ellipsoids as KH1's
+  ellipsoid entries (type 1, radius and half height), columns as KH1's columns;
+- its data: a copy of the KH1 spell's own entry where the old path used it (Fire, Blizzard, Thunder:
+  its element and max-MP stat source), else of Sora's ground swing row (his finisher's for a hit that
+  knocks away), as `spell_strike` took them; the clash type that meets nothing (6, as the old sweep
+  met no attack or guard); the KH2 spark group in `+0x28` and the spell package's effect list on the
+  object (`kh2dpx::hit_list`), so KH1's contact plays KH2's spark as `combat::land_hit` did; Sora's
+  "connected" word on `+0x60` as KH1's row maker sets it;
+- KH2's hit record kept on it: each target's hits in a row from the attack's group pick the ATKP row
+  (`before_hit`, KH2's `HitRecord::admit`; damage and reaction read it through
+  `kh1rows::kh2_atkp`), and each target is re-armed that row's interval after its own hit;
+- the hits come back to the script runtime from KH1's contact (`probe::hit` → `bodyhits::hit`), on
+  the next step of the runtime: (key, ATKP, actor, damage), as `spell_strike` returned them.
+
+Differences: KH1's overlap test instead of ours (the same maths for ellipsoids and columns); a hit
+now reaches the script a step later at most; spell hits now carry KH2's knock-back numbers and
+launches through `combat::scale_record` (`kh1rows::kh2_atkp` finds their row), where the old path
+landed them with KH1's row reactions only; the spark group is picked once per attack (KH2's
+`random_effect` was picked per hit). Still ours: the scripts themselves (`kh2-magic`), Reflect's
+barrier meeting enemy attacks (`Strikes::barrier_meet`). Not checked in game.

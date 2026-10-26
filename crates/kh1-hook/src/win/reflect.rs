@@ -1389,7 +1389,13 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         }
     }
     if !attacks.is_empty() {
-        let hits = strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned());
+        // (KH1 attack objects of ours that KH1's own collision pass collides, `bodyhits`; else our
+        // own sweep, as before.)
+        let hits = if super::bodyhits::spells_native() {
+            super::bodyhits::spell_attacks(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
+        } else {
+            strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
+        };
         for (_, atk, foe, dealt) in hits {
             rt.counter_hits += 1;
             log(&format!("Reflect counter: ATKP {atk} hit {foe:#x} -> damage {dealt:?} ({} blocked)", rt.blocks));
@@ -1397,6 +1403,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     }
     for a in rt.magic.freed().filter(|a| a.owns_id) {
         strikes.spell_forget(a.id | SPELL_KEY);
+        super::bodyhits::spell_forget(a.id | SPELL_KEY);
     }
     if barrier && !held {
         rt.hold.age += 1;

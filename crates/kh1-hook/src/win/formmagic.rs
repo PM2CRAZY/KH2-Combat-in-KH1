@@ -1040,7 +1040,13 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         })
         .collect();
     if !attacks.is_empty() {
-        let hits = strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned());
+        // (KH1 attack objects of ours that KH1's own collision pass collides, `bodyhits`; else our
+        // own sweep, as before.)
+        let hits = if super::bodyhits::spells_native() {
+            super::bodyhits::spell_attacks(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
+        } else {
+            strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
+        };
         for (key, atk, foe, dealt) in hits {
             rt.hits += 1;
             if let Some(a) = rt.magic.attacks.iter_mut().find(|a| a.id | KEY == key) {
@@ -1053,5 +1059,6 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     }
     for a in rt.magic.freed().filter(|a| a.owns_id) {
         strikes.spell_forget(a.id | KEY);
+        super::bodyhits::spell_forget(a.id | KEY);
     }
 }

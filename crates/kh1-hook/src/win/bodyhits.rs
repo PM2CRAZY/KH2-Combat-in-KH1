@@ -82,6 +82,13 @@ const ENTRIES_PROLOGUE: [u8; 11] = [0x40, 0x55, 0x56, 0x57, 0x48, 0x81, 0xEC, 0x
 /// the first call (Checked (exe)).
 const TEST_STEAM: usize = 0x2B3BE0;
 const TEST_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18];
+/// KH1's attack constructor `(actor, hit bit, data) -> object` (Steam), which KH1's spell scripts
+/// call for their shots (through syscall `0x1402B9870`): unlike the row maker `0x1402B3270` it
+/// reads no field it doesn't write for a free-standing object (the row maker tests the bone at
+/// `+0x20`, which the constructor leaves as the pool slot's last user had it for a free-standing
+/// one, and would add the Keyblade's bonuses on a 0x30). First bytes checked (Checked (exe)).
+const MAKE_STEAM: usize = 0x2B2DC0;
+const MAKE_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 /// KH1's attack pool (Steam), 64 objects of 0xC0.
 const POOL_STEAM: usize = 0x2DB4710;
 const POOL_COUNT: usize = 64;
@@ -114,6 +121,7 @@ static ON: AtomicBool = AtomicBool::new(false);
 /// Sora's KH1 rows are readable (the template rows of our data, `kh1rows::kh1_row`).
 static READY: AtomicBool = AtomicBool::new(false);
 static TEST_OK: AtomicBool = AtomicBool::new(false);
+static MAKE_OK: AtomicBool = AtomicBool::new(false);
 static LOGGED: AtomicU32 = AtomicU32::new(0);
 
 fn note(s: String) {
@@ -156,22 +164,57 @@ struct Live {
     magnet: Option<(i16, i16, i16)>,
     /// Last game frame's centre (KH1 world) and that frame's number.
     prev: Option<([f32; 3], u64)>,
-    /// Hits: (actor, `takeover::TICKS` at the hit); 0 actor free.
-    hits: [(usize, u64); 8],
+    /// Hits: (actor, `takeover::TICKS` at the hit, the re-hit interval of the row that hit); 0
+    /// actor free.
+    hits: [(usize, u64, u64); 8],
     /// Enemies its Magnet caught (actor, orbit radius, swirl).
     caught: [(usize, f32, f32); 8],
 }
 
 struct State {
     live: [Option<Live>; POOL_COUNT],
-    /// Our data copies: (motion, window index, air, shape index) → address.
-    data: Vec<((u16, usize, bool, usize), usize)>,
+    /// A KH2 spell's attack on one of our objects (`spell_attacks`), by pool index.
+    spells: Vec<(usize, SpellObj)>,
+    /// Each enemy's last hit group of a KH2 spell and the hits in a row from it (KH2's hit record:
+    /// the ATKP row by that count, `HitRecord::admit`).
+    counts: Vec<(usize, i64, u32)>,
+    /// Hits KH1's pass made with spell objects since `spell_attacks` last asked: (key, ATKP,
+    /// actor, damage).
+    results: Vec<(u64, u16, usize, Option<u32>)>,
+    /// The row a spell hit is being made with now (`before_hit` → `atkp`): (attack, row).
+    current: Option<(usize, kh2_formats::battle::Atkp)>,
+    /// Our data copies: their key (`body_key`, `spell_key`) → address. Never freed: KH1's hit
+    /// records keep an attack's data after the attack (`docs/kh1-attack-elements.md` §4).
+    data: Vec<(u64, usize)>,
     page: usize,
     /// The move playing: (motion, KH1 time, request).
     playing: Option<(u16, f32, u32)>,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { live: [None; POOL_COUNT], data: Vec::new(), page: 0, playing: None });
+static STATE: Mutex<State> = Mutex::new(State { live: [None; POOL_COUNT], spells: Vec::new(), counts: Vec::new(), results: Vec::new(), current: None, data: Vec::new(), page: 0, playing: None });
+
+/// A KH2 spell attack on a KH1 object of ours: its key in the spell runtime, ATKP rows by hits in
+/// a row (0.., the last repeated), its hit group, its shapes this frame (KH1 world centre, KH1 type,
+/// radius, half height) and the game frame they are from, and whether its data is a KH1 spell's
+/// own (its stat source is then KH1's: max MP, not KH2's Magic again).
+struct SpellObj {
+    key: u64,
+    atk: u16,
+    rows: Vec<kh2_formats::battle::Atkp>,
+    group: i64,
+    shapes: [([f32; 3], u32, f32, f32); SPELL_SHAPES],
+    n: usize,
+    seen: u64,
+    kh1_spell: bool,
+}
+
+/// Shapes a spell attack tests at most (`combat_core::MAX_SWEPT_SHAPES` plus its own).
+const SPELL_SHAPES: usize = 33;
+/// ATKP rows kept per spell attack (hits in a row; the last one repeats).
+const SPELL_ROWS: u8 = 16;
+/// KH1's clash type that meets no attack or guard but hits bodies (`kh1rows::PIERCE_TYPE`): spell
+/// attacks met nothing on our own sweep before; kept so.
+const NO_CLASH_TYPE: u32 = 6;
 
 /// KH2's body hits run through KH1's pass (Steam, the hook in, Sora's KH1 rows read).
 pub fn native() -> bool {
@@ -190,6 +233,11 @@ pub unsafe fn install() {
         return;
     }
     TEST_OK.store(true, Ordering::Relaxed);
+    let have = std::slice::from_raw_parts((base + MAKE_STEAM) as *const u8, MAKE_BYTES.len());
+    MAKE_OK.store(have == MAKE_BYTES, Ordering::Relaxed);
+    if have != MAKE_BYTES {
+        log(&format!("KH2 spell hits: KH1's attack constructor has unexpected bytes {have:02x?}: spells keep our own sweep"));
+    }
     if super::hook::install(base + ENTRIES_STEAM, &ENTRIES_PROLOGUE, entries as *const () as usize, &ORIG, "KH1's attack entries (KH2's body hits)").is_some() {
         ON.store(true, Ordering::Relaxed);
     }
@@ -227,6 +275,8 @@ pub unsafe fn frame(actor: usize) {
             *e = None;
         }
     }
+    let live_now: Vec<bool> = g.live.iter().map(|e| e.is_some()).collect();
+    g.spells.retain(|(i, _)| live_now[*i]);
     let playing = if super::shared::active() && !super::form::in_form() { super::kh2slots::now_playing(actor) } else { None };
     let req = rd::<u32>(actor + 0x164);
     let Some((m, t)) = playing else {
@@ -244,7 +294,11 @@ pub unsafe fn frame(actor: usize) {
     // A new play: the last one's objects go (KH2: a new swing, its hits counted afresh).
     let base = BASE.load(Ordering::Relaxed);
     let free: unsafe extern "system" fn(usize) = std::mem::transmute(base + FREE_ATTACK_RVA);
-    for e in g.live.iter_mut() {
+    let spell_slots: Vec<usize> = g.spells.iter().map(|(i, _)| *i).collect();
+    for (i, e) in g.live.iter_mut().enumerate() {
+        if spell_slots.contains(&i) {
+            continue;
+        }
         if let Some(l) = e.take() {
             if still_ours(&l) {
                 free(l.obj);
@@ -307,7 +361,7 @@ pub unsafe fn frame(actor: usize) {
             // late for a window from frame 0).
             wr(obj + 0x58, req);
             let magnet = (character_core::reaction::category(a.enemy_reaction) == 5).then_some((a.knockback_1, a.knockback_2, a.unknown_16));
-            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, interval: a.interval as u64, magnet, prev: None, hits: [(0, 0); 8], caught: [(0, 0.0, 0.0); 8] });
+            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, interval: a.interval as u64, magnet, prev: None, hits: [(0, 0, 0); 8], caught: [(0, 0.0, 0.0); 8] });
             made.push(format!("ATKP {} group {} on KH1 group {} ({:?} r {} h {} lift {}, interval {})", w.attack, w.group, w.channel, bone, s.radius, s.height, s.lift, a.interval));
         }
     }
@@ -337,22 +391,8 @@ unsafe fn template_fx(air: bool, throws: bool) -> Option<[u8; 3]> {
 /// Recoil row's clash rules can change).
 #[allow(clippy::too_many_arguments)]
 unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: bool, shape: usize, channel: u8, a: &kh2_formats::battle::Atkp, radius: f32) -> Option<usize> {
-    let key = (motion, window, air, shape);
-    let d = match g.data.iter().find(|e| e.0 == key) {
-        Some(e) => e.1,
-        None => {
-            if g.page == 0 {
-                g.page = super::kh1rows::near(base + BLOCK_RVA, DATA_PAGE).unwrap_or(usize::MAX);
-                note(format!("KH2 body hits: attack data copies at {:#x}", g.page));
-            }
-            if g.page == usize::MAX || (g.data.len() + 1) * DATA_SLOT > DATA_PAGE {
-                return None;
-            }
-            let d = g.page + g.data.len() * DATA_SLOT;
-            g.data.push((key, d));
-            d
-        }
-    };
+    let key = (motion as u64) << 32 | (window as u64 & 0xFF) << 16 | (air as u64) << 8 | (shape as u64 & 0xFF);
+    let d = data_slot(g, base, key)?;
     let throws = super::kh1rows::throws(a);
     let (src, _) = super::kh1rows::kh1_row(template_row(air, throws))?;
     std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, DATA);
@@ -379,29 +419,232 @@ unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: 
     Some(d)
 }
 
+/// Our data copy for `key` (made the first time; its address).
+unsafe fn data_slot(g: &mut State, base: usize, key: u64) -> Option<usize> {
+    if let Some(e) = g.data.iter().find(|e| e.0 == key) {
+        return Some(e.1);
+    }
+    if g.page == 0 {
+        g.page = super::kh1rows::near(base + BLOCK_RVA, DATA_PAGE).unwrap_or(usize::MAX);
+        note(format!("KH2 body / spell hits: attack data copies at {:#x}", g.page));
+    }
+    if g.page == usize::MAX || (g.data.len() + 1) * DATA_SLOT > DATA_PAGE {
+        note("KH2 body / spell hits: no room for another attack data copy".to_string());
+        return None;
+    }
+    let d = g.page + g.data.len() * DATA_SLOT;
+    g.data.push((key, d));
+    Some(d)
+}
+
+/// A KH2 spell's attacks this frame (`formmagic`, `reflect`, in place of `combat::Strikes::
+/// spell_strike`): each a free-standing KH1 attack object of ours (made the first time its key is
+/// seen, with KH1's attack constructor, as KH1's spell scripts make theirs), its shapes this frame for KH1's pass (`entries`), which collides it with
+/// every body itself. Returns the hits KH1's pass made with them since the last call: (key, ATKP,
+/// actor, damage). The objects: free-standing (data bone < 0: KH1's attribute `0x400`, as KH1's own
+/// spell shots), active always (activity 3), no KH1 re-arm; the data a copy of the KH1 spell's own
+/// entry (`kh1_data`: its element and stat source) or of Sora's ground swing row's (his finisher's
+/// for a hit that knocks away, as `spell_strike` took them), the clash type that meets nothing (the
+/// old sweep met no attack or guard either), the KH2 spark group in `+0x28` with the spell
+/// package's effect list on the object (`kh2dpx::hit_list`, as `combat::land_hit` set it per hit).
+pub fn spells_native() -> bool {
+    native() && MAKE_OK.load(Ordering::Relaxed)
+}
+
+pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn Fn(u16, u8, u8) -> Option<kh2_formats::battle::Atkp>) -> Vec<(u64, u16, usize, Option<u32>)> {
+    use combat_core::ShapeKind;
+    let base = BASE.load(Ordering::Relaxed);
+    let Ok(mut g) = STATE.try_lock() else { return Vec::new() };
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let make: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + MAKE_STEAM);
+    let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
+    for a in attacks {
+        // (Ours KH1 freed meanwhile: made again.)
+        if let Some(p) = g.spells.iter().position(|(i, sp)| sp.key == a.key && g.live[*i].is_some_and(|l| still_ours(&l))) {
+            let sp = &mut g.spells[p].1;
+            let mut n = 0;
+            for s in a.shapes.iter() {
+                let t = match s.kind {
+                    ShapeKind::Ellipsoid | ShapeKind::Sphere => 1u32,
+                    ShapeKind::Column => 2,
+                    ShapeKind::Cube => continue,
+                };
+                if n < SPELL_SHAPES {
+                    sp.shapes[n] = ([s.center[0], -s.center[1], s.center[2]], t, s.radius, s.height);
+                    n += 1;
+                }
+            }
+            sp.n = n;
+            sp.seen = frame;
+            continue;
+        }
+        g.spells.retain(|(_, sp)| sp.key != a.key);
+        let rows: Vec<kh2_formats::battle::Atkp> = (0..SPELL_ROWS).map_while(|c| row(a.atk, a.sub, c)).collect();
+        let Some(first) = rows.first().cloned() else { continue };
+        let k1 = if first.knockback_1 == i16::MAX { 0 } else { first.knockback_1 };
+        let knock = character_core::reaction::category(first.enemy_reaction) == 4 || k1 >= 100;
+        // The spark: the spell package's effect list and KH2's group for the row.
+        let spark = a.package.and_then(|p| {
+            let group = super::combat::kh2_group(super::combat::Kh2Spark { pkg: super::kh2dpx::Pkg::Spell(p), effect_on_hit: first.effect_on_hit, random_effect: first.random_effect });
+            let (list, _) = super::kh2dpx::hit_list(super::kh2dpx::Pkg::Spell(p), group)?;
+            let h = pose::handle(list);
+            (h != 0).then_some((h, group))
+        });
+        let src = match a.kh1_data {
+            Some(off) => (base + BLOCK_RVA).wrapping_add(off as isize as usize),
+            None => match super::kh1rows::kh1_row(template_row(false, knock)) {
+                Some((d, _)) => d,
+                None => continue,
+            },
+        };
+        let key = 1u64 << 63 | (a.atk as u64) << 32 | (a.sub as u64) << 24 | ((spark.map_or(-1, |s| s.1) + 1) as u64 & 0xFF) << 16 | (a.kh1_data.map_or(0xFFFF, |o| (o as u64 >> 3) & 0xFFFF)) | (knock as u64) << 40;
+        let Some(d) = data_slot(&mut g, base, key) else { continue };
+        std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, DATA);
+        wr(d + 0x10, -1i32);
+        let r0 = a.shapes.first().map_or(10.0, |s| s.radius);
+        wr(d + 0x5C, r0.round() as i32);
+        wr(d + 0x38, (rd::<u32>(d + 0x38) & !7) | NO_CLASH_TYPE | 0x1_0000);
+        if let Some((_, group)) = spark {
+            wr(d + 0x28, group);
+        }
+        let bit = free_bit();
+        if bit == 0 {
+            note(format!("KH2 spell hits: no free hit bit for ATKP {}", a.atk));
+            continue;
+        }
+        let obj = make(sora, bit, d);
+        let Some(i) = pool_index(obj) else {
+            note(format!("KH2 spell hits: KH1's constructor gave {obj:#x} for ATKP {} (pool full?)", a.atk));
+            continue;
+        };
+        // What the row maker adds for any data (`0x1402B3270`, Checked (decomp)), as the old sweep's
+        // objects had it: Sora's effect source (`+8`, his combat info's `+0x18`) and his "connected"
+        // word (`+0x60` → combat info `+0x50`), which a hit sets.
+        let info = pose::ptr(rd::<u32>(sora + 0x14C));
+        if info > 0x10000 {
+            wr(obj + 8, pose::handle(rd::<u64>(info + 0x18) as usize));
+            wr(obj + 0x60, (info + 0x50) as u64);
+        }
+        // Active from now (activity 3), its place written by us (position kind 0).
+        wr(obj, (rd::<u32>(obj) & !0xF) | 0xC);
+        if let Some((h, _)) = spark {
+            wr(obj + 8, h);
+        }
+        let dummy = BodyShape { kh1_type: 1, radius: 0.0, height: 0.0, bone: None, offset: [0.0; 3], lift: 0.0 };
+        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, interval: first.interval as u64, magnet: None, prev: None, hits: [(0, 0, 0); 8], caught: [(0, 0.0, 0.0); 8] });
+        let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some() };
+        for s in a.shapes.iter() {
+            let t = match s.kind {
+                ShapeKind::Ellipsoid | ShapeKind::Sphere => 1u32,
+                ShapeKind::Column => 2,
+                ShapeKind::Cube => continue,
+            };
+            if sp.n < SPELL_SHAPES {
+                sp.shapes[sp.n] = ([s.center[0], -s.center[1], s.center[2]], t, s.radius, s.height);
+                sp.n += 1;
+            }
+        }
+        g.spells.push((i, sp));
+        note(format!("KH2 spell hits: ATKP {} sub {} on KH1 attack object {obj:#x} (data {d:#x}{}, {} shape(s), spark {:?})", a.atk, a.sub, if a.kh1_data.is_some() { ", KH1 spell's" } else { "" }, a.shapes.len(), spark.map(|s| s.1)));
+    }
+    std::mem::take(&mut g.results)
+}
+
+/// A spell attack ended (`formmagic`, `reflect`): its object freed.
+pub unsafe fn spell_forget(key: u64) {
+    let Ok(mut g) = STATE.try_lock() else { return };
+    let Some(p) = g.spells.iter().position(|(_, sp)| sp.key == key) else { return };
+    let (i, _) = g.spells.remove(p);
+    if let Some(l) = g.live[i].take() {
+        if still_ours(&l) {
+            let free: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + FREE_ATTACK_RVA);
+            free(l.obj);
+        }
+    }
+}
+
 /// The window's ATKP for an attack object of ours (`kh1rows::kh2_atkp`).
 pub unsafe fn atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     if !native() {
         return None;
     }
     let i = pool_index(attack)?;
-    let id = STATE.try_lock().ok()?.live[i].filter(|l| l.obj == attack && still_ours(l))?.atkp;
+    let g = STATE.try_lock().ok()?;
+    let l = g.live[i].filter(|l| l.obj == attack && still_ours(l))?;
+    // A spell's: the row by the hits in a row KH2's hit record counts (`before_hit`), its stat
+    // source left to KH1's spell data where the data is a KH1 spell's (max MP, as KH1's spells).
+    if let Some((_, sp)) = g.spells.iter().find(|(k, _)| *k == i) {
+        let mut a = match &g.current {
+            Some((at, a)) if *at == attack => a.clone(),
+            _ => sp.rows.first()?.clone(),
+        };
+        if sp.kh1_spell {
+            a.stat_source = 0xFF;
+        }
+        return Some(a);
+    }
+    let id = l.atkp;
+    drop(g);
     pose::kh2()?.battle.attack_for_level(id, 0, 0).cloned()
 }
 
-/// `probe::hit`: KH1's contact made a hit record with `attack` on `target`: its time (KH2's re-hit
-/// interval) and a Magnet's catch.
-pub unsafe fn hit(attack: usize, target: usize) {
+/// `probe::hit`, before KH1's record builder runs for `attack` on `target`: for a spell object of
+/// ours, KH2's hit record's count (hits in a row from its group; KH2's `HitRecord::admit`) picks
+/// the ATKP row its damage and reactions take (`atkp`).
+pub unsafe fn before_hit(attack: usize, target: usize) {
     if !native() || target < 0x10000 {
         return;
     }
     let Some(i) = pool_index(attack) else { return };
     let Ok(mut g) = STATE.try_lock() else { return };
+    g.current = None;
+    if !g.live[i].is_some_and(|l| l.obj == attack) {
+        return;
+    }
+    let Some(group) = g.spells.iter().find(|(k, _)| *k == i).map(|(_, sp)| sp.group) else { return };
+    let count = match g.counts.iter_mut().find(|c| c.0 == target) {
+        Some(c) if c.1 == group => {
+            c.2 += 1;
+            c.2
+        }
+        Some(c) => {
+            *c = (target, group, 0);
+            0
+        }
+        None => {
+            if g.counts.len() > 64 {
+                g.counts.clear();
+            }
+            g.counts.push((target, group, 0));
+            0
+        }
+    };
+    let row = g.spells.iter().find(|(k, _)| *k == i).and_then(|(_, sp)| sp.rows.get((count as usize).min(sp.rows.len().saturating_sub(1))).cloned());
+    g.current = row.map(|r| (attack, r));
+}
+
+/// `probe::hit`: KH1's contact made a hit record with `attack` on `target`: its time (KH2's re-hit
+/// interval) and a Magnet's catch.
+pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
+    if !native() || target < 0x10000 {
+        return;
+    }
+    let Some(i) = pool_index(attack) else { return };
+    let Ok(mut g) = STATE.try_lock() else { return };
+    let current = g.current.take().filter(|(a, _)| *a == attack).map(|(_, r)| r);
+    let spell = g.spells.iter().find(|(k, _)| *k == i).map(|(_, sp)| (sp.key, sp.atk));
+    if let Some((key, atk)) = spell {
+        let dealt = (rec > 0x10000).then(|| rd::<i32>(rec + 8).max(0) as u32);
+        if g.results.len() < 256 {
+            g.results.push((key, atk, target, dealt));
+        }
+    }
     let Some(l) = g.live[i].as_mut().filter(|l| l.obj == attack && still_ours(l)) else { return };
     let now = super::takeover::TICKS.load(Ordering::Relaxed);
-    if l.interval > 0 {
+    let interval = current.map_or(l.interval, |r| r.interval as u64);
+    if interval > 0 {
         if let Some(h) = l.hits.iter_mut().find(|h| h.0 == target || h.0 == 0) {
-            *h = (target, now);
+            *h = (target, now, interval);
         }
     }
     if let Some((k1, k2, swirl)) = l.magnet {
@@ -414,7 +657,7 @@ pub unsafe fn hit(attack: usize, target: usize) {
             }
         }
     }
-    note(format!("KH2 body hit: ATKP {} (motion {}) from KH1's pass on actor {target:#x}", l.atkp, l.motion));
+    note(format!("KH2 {} hit: ATKP {} (motion {}) from KH1's pass on actor {target:#x}", if spell.is_some() { "spell" } else { "body" }, l.atkp, l.motion));
 }
 
 /// Enemies a live Magnet window of ours holds: (actor, its centre (KH2 y-up), orbit radius, swirl)
@@ -477,37 +720,61 @@ unsafe fn centre(owner: usize, s: &BodyShape) -> Option<[f32; 3]> {
 type EntriesF = unsafe extern "system" fn(usize, usize, i32) -> i32;
 type TestF = unsafe extern "system" fn(usize, usize, i32) -> i32;
 
-/// KH1's `0x1402B3800 (object, entries, count) -> count`: ours get KH2's shape and sweep.
+/// KH1's `0x1402B3800 (object, entries, count) -> count`: ours get KH2's shapes (a body window's
+/// with KH2's sweep, a spell attack's as its script gave them).
 unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     let f: EntriesF = std::mem::transmute(ORIG.load(Ordering::Acquire));
     let Some(i) = pool_index(obj) else { return f(obj, list, count) };
     let Ok(mut g) = STATE.try_lock() else { return f(obj, list, count) };
-    let Some(l) = g.live[i].as_mut().filter(|l| l.obj == obj && still_ours(l)) else {
+    if !g.live[i].is_some_and(|l| l.obj == obj && still_ours(&l)) {
         drop(g);
         return f(obj, list, count);
-    };
+    }
     if !TEST_OK.load(Ordering::Relaxed) || list < 0x10000 {
         return count;
     }
     let owner = pose::ptr(rd::<u32>(obj + 0x34));
-    let Some(c) = (if owner > 0x10000 { centre(owner, &l.shape) } else { None }) else { return count };
+    if owner < 0x10000 {
+        return count;
+    }
     let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
-    // KH2's re-hit interval: each target's bit off `interval` frames after its own hit.
     let bit = rd::<u32>(obj + 0x54);
+    // KH2's re-hit interval: each target's bit off `interval` frames after its own hit.
     let now = super::takeover::TICKS.load(Ordering::Relaxed);
-    for h in l.hits.iter_mut().filter(|h| h.0 != 0) {
-        if now.saturating_sub(h.1) >= l.interval {
-            wr(h.0 + 0x3E0, rd::<u32>(h.0 + 0x3E0) & !bit);
-            *h = (0, 0);
+    if let Some(l) = g.live[i].as_mut() {
+        for h in l.hits.iter_mut().filter(|h| h.0 != 0) {
+            if now.saturating_sub(h.1) >= h.2 {
+                wr(h.0 + 0x3E0, rd::<u32>(h.0 + 0x3E0) & !bit);
+                *h = (0, 0, 0);
+            }
         }
     }
+    // A spell's attack: the shapes its script gave this frame (KH2's own sweep already in them).
+    if let Some((_, sp)) = g.spells.iter().find(|(k, _)| *k == i) {
+        if sp.n == 0 || frame.saturating_sub(sp.seen) > 1 {
+            return count;
+        }
+        let (shapes, n) = (sp.shapes, sp.n);
+        drop(g);
+        let c = shapes[0].0;
+        let c4 = [c[0], c[1], c[2], 1.0f32];
+        wr(obj + 0x10, c4);
+        wr(obj + 0x40, c4);
+        let mut count = count;
+        for &(q, t, r, h) in &shapes[..n] {
+            count = put_entry(obj, owner, bit, list, count, t, r, h, q);
+        }
+        return count;
+    }
+    let Some(l) = g.live[i].as_mut() else { return count };
+    let Some(c) = centre(owner, &l.shape) else { return count };
     // The object's own place (KH1's spark, its knock-back direction, its clash).
     let c4 = [c[0], c[1], c[2], 1.0f32];
     wr(obj + 0x10, c4);
     wr(obj + 0x40, c4);
     // This frame's shape, then KH2's sweep back toward last frame's (none on the window's first).
     let r = l.shape.radius;
-    let mut centres: [[f32; 3]; 33] = [[0.0; 3]; 33];
+    let mut centres: [[f32; 3]; SPELL_SHAPES] = [[0.0; 3]; SPELL_SHAPES];
     let mut n = 1usize;
     centres[0] = c;
     if let Some((p, pf)) = l.prev {
@@ -531,24 +798,32 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     }
     let shape = l.shape;
     drop(g);
-    let test: TestF = std::mem::transmute(BASE.load(Ordering::Relaxed) + TEST_STEAM);
-    let team = (rd::<u32>(obj) >> 12) & 3;
     let mut count = count;
     for q in &centres[..n] {
-        let e = list + count.max(0) as usize * 0x40;
-        std::ptr::write_bytes(e as *mut u8, 0, 0x40);
-        wr(e, team);
-        wr(e + 8, owner as u64);
-        wr(e + 0x10, bit);
-        wr(e + 0x18, obj as u64);
-        wr(e + 0x20, shape.kh1_type);
-        wr(e + 0x24, shape.radius);
-        wr(e + 0x28, shape.height);
-        wr(e + 0x30, [q[0], q[1], q[2], 1.0f32]);
-        test(e, list, count);
-        if count < LIST_CAP {
-            count += 1;
-        }
+        count = put_entry(obj, owner, bit, list, count, shape.kh1_type, shape.radius, shape.height, *q);
     }
     count
+}
+
+/// One entry of KH1's list for our object (`0x1402B3D50`'s layout), tested at once against the
+/// entries already in (KH1's `0x1402B3BE0`). Returns the new count.
+#[allow(clippy::too_many_arguments)]
+unsafe fn put_entry(obj: usize, owner: usize, bit: u32, list: usize, count: i32, kind: u32, radius: f32, height: f32, at: [f32; 3]) -> i32 {
+    let test: TestF = std::mem::transmute(BASE.load(Ordering::Relaxed) + TEST_STEAM);
+    let e = list + count.max(0) as usize * 0x40;
+    std::ptr::write_bytes(e as *mut u8, 0, 0x40);
+    wr(e, (rd::<u32>(obj) >> 12) & 3);
+    wr(e + 8, owner as u64);
+    wr(e + 0x10, bit);
+    wr(e + 0x18, obj as u64);
+    wr(e + 0x20, kind);
+    wr(e + 0x24, radius);
+    wr(e + 0x28, height);
+    wr(e + 0x30, [at[0], at[1], at[2], 1.0f32]);
+    test(e, list, count);
+    if count < LIST_CAP {
+        count + 1
+    } else {
+        count
+    }
 }
