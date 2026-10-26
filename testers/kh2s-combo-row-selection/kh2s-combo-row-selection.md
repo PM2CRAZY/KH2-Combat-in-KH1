@@ -797,4 +797,8 @@ go ahead
 if you set combat to kh2 for both settings you can attack out of your finisher indefinitely, it needs to behave exact like kh1 they shouldn't be different in the logic with the exception of animations, hitbox, damage, knockback etc of course.
 
 
+UPDATE:
+
+I also need to make a config for magic that allows you to combo out of grounded magic like kh2, it should work for all grounded magic in the game, kh1 fire has a special logic where you can keep firing so for that edge case let it do its logic, don't reset the move but let it combo into an attack.
+
 go ahead
