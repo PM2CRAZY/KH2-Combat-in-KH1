@@ -71,3 +71,6 @@
 ^m7
 
 
+make another thread detailing why ram usage is so high for our mod, what else needs to be optimized and is currently being optimized etc
+
+go ahead
