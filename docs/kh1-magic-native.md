@@ -954,3 +954,50 @@ poles, bars, slider or carpet. Steam KH2's Attack / command check `0x1403D6CA0` 
 free bits (`+0x18C & 0x1C`) and its combo / finisher windows (**Checked (decomp)**); which actions
 set those bits wasn't traced. Open question to the tester (KH2's 1:1 there is a refusal, not a
 cast).
+
+### 4p.1 KH2's spells there, re-checked on Steam KH2 (what-is-still-missing m7, answer 1 (a))
+
+The tester: "1. (a)": refuse them the way KH2 does in the states KH2 has and the way KH1 does in
+KH1-only states, after re-checking KH2's rule on the Steam exe.
+
+KH2's rule (Steam KH2, **Checked (decomp)**):
+- The input step `0x1403D6FC0` runs every frame whatever the action (from `0x1403A89A0`, the
+  PLAYER's input slot; only `+0x9B8` bit 2 skips it). A magic command (command kind 2) is taken
+  only when `0x1403D6CA0 (player, 1)` says so; then `0x1403A9DD0` casts it.
+- `0x1403D6CA0` accepts in the Finishing Plus window (`+0x194` bit 5 with finishers left, `+0xD75`
+  against the ability's count), in the combo window (`+0x18C` bit 0x400), and otherwise only with
+  a free bit (`+0x18C & 0x1C`).
+- The free bits are the motion's range ids 0, 1, 2 (the range step `0x14040D810`: 0 → 4, 1 → 8,
+  2 → 0x10).
+
+Sora's motions (`P_EX100.mset`, ranges 0 / 1 / 2, **Checked (files)**):
+
+| Motion | Free range | KH2 takes a spell |
+|---|---|---|
+| Quick Run 203 / 204 | none | never |
+| Glide 205 / 206 / 207 / 208 | id 1, all through | always (the glide ends into the air cast) |
+| Dodge roll 209 | id 2 from 36 | from frame 36 |
+| Guard 173 | id 2 from 52 | from frame 52 |
+| Landing 5 | id 2 from 12 | from frame 12 |
+| Aerial Dodge 202 | id 1 from 4 | from frame 4 |
+| Jump take-off 3 / fall 4 | id 1 from 8 / all through | yes |
+
+So the Epic port's rule (no spell while gliding) was wrong for the glide: KH2 does cast out of a
+glide. It was right for Quick Run.
+
+What runs now (`combat::kh2_spell_refused`, from `combat::command`):
+- Quick Run (KH1 state `0x2A`): refused with KH1's "can't" sound, as KH2 takes nothing there.
+- KH2's glide in KH1's glide state `0x15`: refused with the "can't" sound for now. KH1's glide
+  state casts nothing, and the 1:1 cast out of the glide (KH1's glide ended into its air state 2,
+  then KH1's native air cast) is a new piece of engine work: open question to the tester.
+- The dodge roll, guard and landing play in KH1's ground state 0 and the Aerial Dodge in its air
+  state 2, where KH1 casts. Our slots put KH1's "may be left" at KH2's free frame (`kh2slots`), so
+  KH1's own may-act test (`0x1402A2EC0`) refuses the spell before it and takes it after, as KH2.
+  Not touched. **Checked (code)**; the may-act path for these slots is not checked in game.
+- KH1-only states (ladders and vines, ledges, bars and poles, swimming, the slider, the carpet):
+  Fire / Blizzard / Thunder / Cure go to KH1's own command step unmodded, which plays the spell's
+  voice if the record asks and casts nothing (KH1's rule, `0x1402A3600`, **Checked (decomp)**).
+  Reflect (spell 7, which KH1 has no spell for) does nothing.
+
+None of these is borrowed by KH2's controller any more. A spell at Magic KH2 can still be borrowed
+in a state KH1 casts in when its slot didn't build (the fallback). Not checked in game.

@@ -385,6 +385,59 @@ unsafe extern "system" fn command(actor: usize, dir: usize) {
     }
 }
 
+/// Why a KH2 spell is refused in a KH1 movement state (`kh2_spell_refused`).
+struct Refusal {
+    what: &'static str,
+    /// KH1's "can't" sound (`SOUND_RVA (4)`), as for the other refusals of a KH2 spell here.
+    sound: bool,
+    /// KH1's own command step runs the command unmodded (it casts nothing in this state).
+    kh1_step: bool,
+}
+
+/// A KH2 spell (Magic KH2's Fire, Blizzard, Thunder, Cure; Reflect) chosen in a KH1 movement state
+/// KH1's cast step casts nothing in (it casts only in 0, 6, 0x18 on the ground and 2, 8 in the air:
+/// `0x1402A3600`, Steam, Checked (decomp)). None of these is borrowed by KH2's controller any more
+/// (the tester, what-is-still-missing m7 answer 1 (a): refuse them the way KH2 does in the states
+/// KH2 has and the way KH1 does in KH1-only states). `None`: not a KH2 spell, or a state KH1 casts
+/// in (the native cast or the fallback below decides).
+///
+/// KH2's rule, re-checked on Steam KH2: the input step `0x1403D6FC0` takes a magic command (command
+/// kind 2) only through `0x1403D6CA0 (player, 1)`, which accepts in the combo window (`+0x18C` bit
+/// 0x400) or the Finishing Plus window (`+0x194` bit 5 with finishers left), else only with a free
+/// bit `+0x18C & 0x1C`; those bits are the motion's range ids 0 / 1 / 2 (`0x14040D810`: 0 → 4,
+/// 1 → 8, 2 → 0x10), and the input step runs every frame whatever the action (`0x1403A89A0`, only
+/// `+0x9B8` bit 2 skips it). Checked (decomp). Sora's motions (`P_EX100.mset`, Checked (files)):
+/// - Quick Run 203 / 204: no range 0 / 1 / 2 → KH2 never casts during a Quick Run. Refused, with
+///   the "can't" sound (KH1's Quick Run state `quickrun::STATE`).
+/// - Glide 205..208: range id 1 all through → KH2 DOES take a spell during a glide (ending it into
+///   the air cast). KH1's glide state (`glide::STATE`) casts nothing, so this is refused for now
+///   (the tester's (a)); casting out of the glide 1:1 is an open question in the thread.
+/// - Dodge roll 209 (free from 36), guard 173 (from 52), landing 5 (from 12), Aerial Dodge 202
+///   (from 4): these play in KH1 states that cast (the roll and guard in ground state 0, the dodge
+///   in air state 2), and our slots give KH1's "may be left" at KH2's free frame (`kh2slots`), so
+///   KH1's own may-act test refuses the spell before it and lets it through after, as KH2. They
+///   never reach this.
+/// - KH1-only states (ladders and vines 10, ledges 13, bars and poles 15 / 16, swimming 17, the
+///   Jungle Slider 30 / 31, ...): KH1's command step `0x1402A3600` plays the spell's voice when the
+///   command asks for it (record bit 25, `0x1402901F0`) and then, in a state other than 0 / 2 / 6 /
+///   8 / 0x18, returns: no cast, no MP, no "can't" sound (Checked (decomp)). Fire / Blizzard /
+///   Thunder / Cure are handed to KH1's own step unmodded there, so it does exactly that. Reflect
+///   (spell 7, which KH1 has no spell for) is not: nothing happens.
+fn kh2_spell_refused(arg: u8, state: i32, drive: bool) -> Option<Refusal> {
+    if drive || matches!(state, 0 | 6 | 0x18 | 2 | 8) {
+        return None;
+    }
+    let kh2_spell = arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg));
+    if !kh2_spell {
+        return None;
+    }
+    Some(match state {
+        s if s == super::quickrun::STATE => Refusal { what: "KH2 takes no command during a Quick Run (203 / 204 have no free range)", sound: true, kh1_step: false },
+        s if s == super::glide::STATE => Refusal { what: "KH1's glide state casts nothing (KH2 would cast out of its glide: open question)", sound: true, kh1_step: false },
+        _ => Refusal { what: "KH1 casts nothing in this state (KH1's rule)", sound: false, kh1_step: arg <= 3 },
+    })
+}
+
 unsafe fn command_step(actor: usize, dir: usize) {
     let base = BASE.load(Ordering::Relaxed);
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_COMMAND.load(Ordering::Acquire));
@@ -535,6 +588,19 @@ unsafe fn command_step(actor: usize, dir: usize) {
             // "the reverse is true regardless of the animation"), so no borrow: KH1's command step
             // runs it as unmodded (below), casting nothing, as KH1 does.
             cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in KH1 state {state}, where KH1 casts nothing: KH1's rule, no borrow"));
+        } else if let Some(why) = kh2_spell_refused(arg, state, drive) {
+            // A KH2 spell (Magic KH2's Fire / Blizzard / Thunder / Cure, Reflect) in a state KH1
+            // casts nothing in: refused, no borrow (the tester, what-is-still-missing m7 answer 1
+            // (a)). `kh2_spell_refused` has the rule.
+            if why.sound {
+                let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+                sound(4);
+            }
+            cmd_log(format!("command {kind:#x} ({full:08x}) refused: KH2's spell {arg} in KH1 state {state:#x}: {}, no borrow", why.what));
+            if why.kh1_step {
+                f(actor, dir);
+            }
+            return;
         } else if drive || arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg)) || ((4..=6).contains(&arg) && super::formmagic::anim_kh2(arg) && !kh1_on_kh2) {
             // (A spell whose row is KH1's is KH1's command step's, as unmodded: below; with its
             // animation row at KH2, KH1's Blizzard, Thunder and Cure play our slot of KH2's cast
