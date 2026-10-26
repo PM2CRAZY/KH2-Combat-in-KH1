@@ -682,3 +682,23 @@ goes to the idle (Valor's 6 isn't baked: a new slot on a request of ours, one re
 - **Open (ledges):** in KH2 Valor's 154 past its edge stop (frames 63..120, no gravity, 76 of root
   travel left) can carry him off a ledge held in the air; KH1's physics step ends a swing that
   leaves the floor (`0x14029A3C0`: action flag off, a fall). Not changed.
+### 7.5 One path for every form on KH1's states
+
+The tester (what-is-still-missing, after m13): "if something we've implemented is the same way for
+drive forms make it a part of that code". The Valor-only pieces of §7 are one table now, used by
+every form run on KH1's states (Checked (code)):
+
+- `form::Kind::native_capable` names the forms that run on KH1's states; `form::native_ok(kind)`
+  needs its slots built (`kh2slots::form_built(kind)`); `form::native_form()` is the form he is in
+  on KH1's states now.
+- `kh2slots::FORM_SLOTS`: per form its specs (KH1 requests and templates, as base Sora's moves of
+  that kind), and its extra rows of ours. `prepare` builds every form's slots with the same code:
+  its specs, its idle / walk / run cycles, its plain combo rows and form-only rows on our requests
+  (`kh1rows::Ours::valor` now means "a Drive Form's own row": the arrival), and the extra rows.
+- `Move::form` is the form a slot belongs to; `clip_of`, `live`, `form_of`, `redirect` and the
+  request tables' per-form lists (`Set::form_requests`) read it. The slot cache's key carries the
+  form's model name (`form::Kind::model`), so Valor's keys are as before (no rebake for Valor).
+- `pose::Kh2::form_src(kind)` and `pose::kh2_moves` give the form's moveset; the left Keyblade is
+  drawn for a two-bladed form's slot (`Kind::two_blades`).
+- The change, the swap (`native_data`), the arrival, the revert, MP and look are already one path
+  for every form (`form::native_start` / `native_arrive` / `native_revert` / `drain_step`).

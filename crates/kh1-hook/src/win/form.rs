@@ -107,6 +107,28 @@ impl Kind {
     pub fn two_blades(self) -> bool {
         matches!(self, Kind::Valor | Kind::Final)
     }
+    /// Its KH2 model (`kh2_data::sora::FORMS`: its moveset's files), also the slot cache's key for
+    /// its baked moves (`kh2slots::slot_key`).
+    pub fn model(self) -> &'static str {
+        match self {
+            Kind::Valor => "P_EX100_BTLF",
+            Kind::Wisdom => "P_EX100_MAGF",
+            Kind::Final => "P_EX100_ULTF",
+        }
+    }
+    /// Runs on KH1's own states where it can (`native_ok`): its moves baked into KH1 slots
+    /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others keep KH2's controller.
+    pub fn native_capable(self) -> bool {
+        matches!(self, Kind::Valor)
+    }
+    /// Its growth ability (KH2's form growth: Valor High Jump, Wisdom Quick Run, Final Glide).
+    pub fn growth(self) -> &'static str {
+        match self {
+            Kind::Valor => "High Jump",
+            Kind::Wisdom => "Quick Run",
+            Kind::Final => "Glide",
+        }
+    }
 }
 
 /// A request: 1 a form (`WANT`), 2 revert (the menu), 3 knocked out (`hurt`).
@@ -536,12 +558,7 @@ unsafe fn arrive(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &po
     if kind.two_blades() {
         super::valor::started();
     }
-    let growth = match kind {
-        Kind::Valor => "High Jump",
-        Kind::Wisdom => "Quick Run",
-        Kind::Final => "Glide",
-    };
-    log!(Forms, "{} (Lv{LEVEL}): yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), {growth} MAX", kind.name());
+    log!(Forms, "{} (Lv{LEVEL}): yellow MP drained 1 every {DRAIN_FRAMES} frames of battle (half as fast out of it), {} MAX", kind.name(), kind.growth());
 }
 
 /// Back to Sora: what played is cut, he is free with his movement (the user: on the ground
@@ -721,14 +738,20 @@ pub fn native_enabled() -> bool {
     s.drive && s.shared && s.kh1_slots.is_some() && super::addr::Build::current() == super::addr::Build::Steam
 }
 
-/// Form `kind` runs on KH1's own states (Valor, its slots built: `kh2slots::valor_built`).
+/// Form `kind` runs on KH1's own states (`Kind::native_capable`, its slots built:
+/// `kh2slots::form_built`).
 pub fn native_ok(kind: Kind) -> bool {
-    kind == Kind::Valor && native_enabled() && super::kh2slots::valor_built()
+    kind.native_capable() && native_enabled() && super::kh2slots::form_built(kind)
 }
 
-/// In a form on KH1's own states now (Valor).
+/// In a form on KH1's own states now.
 pub fn native_now() -> bool {
     NATIVE.load(Ordering::Relaxed) && in_form()
+}
+
+/// The form he is in on KH1's own states now (its moveset's slots on his requests, `kh2slots`).
+pub fn native_form() -> Option<Kind> {
+    current().filter(|_| native_now())
 }
 
 /// Something of a form on KH1's own states to run each frame (`takeover::form_native_frame`):
@@ -875,6 +898,7 @@ unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
     let Some(f) = kind.data(kh2) else { return };
     let sora = ch.abilities.clone();
     let own = form_abilities(&sora, &f.character, kind);
+    let growth = growth_name(&own, kind);
     // (Valor's Square moves on KH1's states are KH2's own Square rows as the exe reaches them,
     // `combomods::valor_square`: the controller's `square_finishers`, which took 12 / 38 for
     // finishers, isn't used here.)
@@ -896,7 +920,17 @@ unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
         wr(actor + 0x3C0, [0.0f32; 3]);
         ARRIVE_AIR.store(true, Ordering::Relaxed);
     }
-    log!(Forms, "{} (Lv{LEVEL}) on KH1's own states: Valor's moves on his requests, KH2's numbers Valor's, High Jump MAX{}", kind.name(), if arrival { "; its arrival" } else { "" });
+    log!(Forms, "{} (Lv{LEVEL}) on KH1's own states: its moves on his requests, KH2's numbers its own ({}), {} {}{}", kind.name(), kind.model(), kind.growth(), growth, if arrival { "; its arrival" } else { "" });
+}
+
+/// The form's growth ability's level, as a name.
+fn growth_name(a: &Abilities, kind: Kind) -> &'static str {
+    let level = match kind {
+        Kind::Valor => a.high_jump,
+        Kind::Wisdom => a.quick_run,
+        Kind::Final => a.glide,
+    };
+    ["none", "LV1", "LV2", "LV3", "MAX"][(level as usize).min(4)]
 }
 
 /// KH2's controller's data (only read on KH1's states: KH2's pick, its rows' checks, its growth)
