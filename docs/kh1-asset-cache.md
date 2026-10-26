@@ -54,6 +54,19 @@ Cost: one file read and the hashes at start (a few MB of KH2 files hashed: tens 
 frame. The file holds the baked blocks (about 100-200 KB a motion in the logs: some MB in all).
 **Checked (code)**; not checked in game.
 
+Memory (the tester, ram-use m1 answer 2 (a): no duplicates). The baked blocks are held once:
+- loaded from the file, every block is a part of the file's one buffer (`slotcache::Block`), not a
+  copy of its own; baked this start, the bake's own buffer. The cache's write-back list and
+  `kh2slots`' build share those buffers (before: the file, the blocks copied out of it, the list's
+  clone of each and the build's each, up to four copies while loading);
+- the file is written streamed from those blocks (`Cache::write`), not assembled in one more buffer;
+- `kh2slots::place` (once, on the game thread, when Sora's motion set is first bound) copies each
+  block where KH1 plays it from (16-aligned, never freed: KH1 holds handles to it) and frees the
+  build's copy as it goes. Nothing reads the build's blocks after that (`place` is their only
+  reader; `PLACED` is never reset, so it never places again, room changes included). **Checked
+  (code)**. In the testers' logs the blocks are 16.3 MB for 96 motions, so about 16 MB less after
+  placing, and about 16-48 MB less at the start-up peak. **Assumption**: not measured in game.
+
 Still done every start, not cached (cheap, or used elsewhere): loading KH2 Sora (also used by the
 combo rows, effects and sounds), the baker's retarget set-up, the tables `prepare` makes.
 

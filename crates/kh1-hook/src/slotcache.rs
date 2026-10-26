@@ -17,7 +17,9 @@
 //! `win::kh2slots` / `win::pose`.
 
 use std::collections::HashMap;
+use std::ops::{Deref, Range};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Bump when the bake's output changes for the same inputs without the mod's version changing
 /// (the version is in the manifest too, so every release rebuilds once anyway).
@@ -41,6 +43,14 @@ impl Default for Hasher {
 
 impl Hasher {
     const PRIME: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013B;
+
+    /// Bytes as they are, without the length first (for a hash fed piece by piece).
+    fn raw(&mut self, b: &[u8]) {
+        for x in b {
+            self.0 ^= *x as u128;
+            self.0 = self.0.wrapping_mul(Self::PRIME);
+        }
+    }
 
     pub fn bytes(&mut self, b: &[u8]) -> &mut Self {
         // (The length first, so ("ab", "c") and ("a", "bc") differ.)
@@ -66,6 +76,37 @@ impl Hasher {
 
 pub fn hash(b: &[u8]) -> u128 {
     Hasher::default().bytes(b).finish()
+}
+
+/// One baked block, without a copy of its own: either baked this start (its own buffer) or a part
+/// of the cache file read at start (that file's one buffer, shared by every block taken from it).
+/// The cache's list of blocks to write back and `kh2slots`' build share the same buffers, so the
+/// baked motions are in memory once while loading, and not at all once `kh2slots::place` has copied
+/// them where KH1 plays them from and dropped its own (the tester, ram-use m1 answer 2 (a)).
+#[derive(Clone)]
+pub struct Block {
+    buf: Arc<Vec<u8>>,
+    range: Range<usize>,
+}
+
+impl Block {
+    pub fn new(v: Vec<u8>) -> Block {
+        let range = 0..v.len();
+        Block { buf: Arc::new(v), range }
+    }
+}
+
+impl Deref for Block {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        &self.buf[self.range.clone()]
+    }
+}
+
+impl std::fmt::Debug for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Block({} bytes)", self.len())
+    }
 }
 
 /// Everything the bake depends on, as `name = value` lines (readable in the file, logged on a
@@ -137,9 +178,11 @@ impl Manifest {
 #[derive(Default)]
 pub struct Cache {
     manifest: Manifest,
-    loaded: HashMap<u128, Vec<u8>>,
-    /// Every block this start used (cached or baked), in order, to write back.
-    used: Vec<(u128, Vec<u8>)>,
+    /// The blocks of the file on disk (parts of its one buffer), by key.
+    loaded: HashMap<u128, Block>,
+    /// Every block this start used (cached or baked), in order, to write back (shared with the
+    /// caller's, not copies).
+    used: Vec<(u128, Block)>,
     /// A block was baked (not found), or the file on disk didn't match: write it again.
     dirty: bool,
     pub hits: usize,
@@ -158,17 +201,19 @@ pub enum Miss {
 }
 
 impl Cache {
-    /// The cache for `manifest`, from `bytes` (the file's contents, if any). The `Miss` says why
-    /// nothing on disk could be used (`None`: the file matched).
-    pub fn open(manifest: Manifest, bytes: Option<&[u8]>) -> (Cache, Option<Miss>) {
+    /// The cache for `manifest`, from `bytes` (the file's contents, if any; kept as the one buffer
+    /// its blocks are taken from, no copy per block). The `Miss` says why nothing on disk could be
+    /// used (`None`: the file matched).
+    pub fn open(manifest: Manifest, bytes: Option<Vec<u8>>) -> (Cache, Option<Miss>) {
         let mut c = Cache { manifest, ..Cache::default() };
         let miss = match bytes {
             None => Some(Miss::Missing),
-            Some(b) => match decode(b) {
+            Some(b) => match parse(&b) {
                 Err(e) => Some(Miss::Damaged(e)),
                 Ok((m, blocks)) => {
                     if m == c.manifest {
-                        c.loaded = blocks.into_iter().collect();
+                        let buf = Arc::new(b);
+                        c.loaded = blocks.into_iter().map(|(k, range)| (k, Block { buf: buf.clone(), range })).collect();
                         None
                     } else {
                         Some(Miss::Changed(c.manifest.differences(&m)))
@@ -182,13 +227,13 @@ impl Cache {
 
     /// The block for `key`, baking it with `bake` when the cache doesn't have it. A bake that
     /// fails is not cached (the caller falls back as before).
-    pub fn get_or_bake<E>(&mut self, key: u128, bake: impl FnOnce() -> Result<Vec<u8>, E>) -> Result<Vec<u8>, E> {
+    pub fn get_or_bake<E>(&mut self, key: u128, bake: impl FnOnce() -> Result<Vec<u8>, E>) -> Result<Block, E> {
         if let Some(b) = self.loaded.remove(&key) {
             self.hits += 1;
             self.used.push((key, b.clone()));
             return Ok(b);
         }
-        let b = bake()?;
+        let b = Block::new(bake()?);
         self.misses += 1;
         self.dirty = true;
         self.used.push((key, b.clone()));
@@ -205,30 +250,57 @@ impl Cache {
     pub fn encode(&self) -> Vec<u8> {
         encode(&self.manifest, &self.used)
     }
+
+    /// Writes the file for this start into `dir` (as `write`), streamed from the blocks in memory
+    /// rather than put together in one more buffer first.
+    pub fn write(&self, dir: &Path) -> std::io::Result<PathBuf> {
+        write_with(dir, |f| encode_to(&self.manifest, &self.used, f))
+    }
 }
 
 /// The file: `MAGIC`, `FILE_FORMAT` (u32), the manifest's length (u32) and text, the block count
 /// (u32), each block's key (u128) length (u32) and bytes, then the hash of everything before it.
-pub fn encode(manifest: &Manifest, blocks: &[(u128, Vec<u8>)]) -> Vec<u8> {
-    let text = manifest.text();
-    let mut out = Vec::with_capacity(32 + text.len() + blocks.iter().map(|b| b.1.len() + 20).sum::<usize>());
-    out.extend_from_slice(MAGIC);
-    out.extend_from_slice(&FILE_FORMAT.to_le_bytes());
-    out.extend_from_slice(&(text.len() as u32).to_le_bytes());
-    out.extend_from_slice(text.as_bytes());
-    out.extend_from_slice(&(blocks.len() as u32).to_le_bytes());
-    for (k, b) in blocks {
-        out.extend_from_slice(&k.to_le_bytes());
-        out.extend_from_slice(&(b.len() as u32).to_le_bytes());
-        out.extend_from_slice(b);
-    }
-    let check = hash(&out);
-    out.extend_from_slice(&check.to_le_bytes());
+pub fn encode<B: Deref<Target = [u8]>>(manifest: &Manifest, blocks: &[(u128, B)]) -> Vec<u8> {
+    let mut out = Vec::new();
+    encode_to(manifest, blocks, &mut out).expect("writing to a Vec");
     out
 }
 
+/// `encode`, written out piece by piece to `w`, the check hashed as it goes (the same bytes).
+fn encode_to<B: Deref<Target = [u8]>>(manifest: &Manifest, blocks: &[(u128, B)], w: &mut impl std::io::Write) -> std::io::Result<()> {
+    let text = manifest.text();
+    let body_len = 8 + 4 + 4 + text.len() + 4 + blocks.iter().map(|b| 20 + b.1.len()).sum::<usize>();
+    // (`hash(body)`: the body's length first, as `Hasher::bytes` does, then its bytes.)
+    let mut h = Hasher::default();
+    h.raw(&(body_len as u64).to_le_bytes());
+    let mut put = |b: &[u8]| -> std::io::Result<()> {
+        h.raw(b);
+        w.write_all(b)
+    };
+    put(MAGIC)?;
+    put(&FILE_FORMAT.to_le_bytes())?;
+    put(&(text.len() as u32).to_le_bytes())?;
+    put(text.as_bytes())?;
+    put(&(blocks.len() as u32).to_le_bytes())?;
+    for (k, b) in blocks {
+        put(&k.to_le_bytes())?;
+        put(&(b.len() as u32).to_le_bytes())?;
+        put(b)?;
+    }
+    let check = h.finish();
+    w.write_all(&check.to_le_bytes())
+}
+
+/// The file's manifest and its blocks (copied out; `parse` gives where they are instead).
 #[allow(clippy::type_complexity)]
 pub fn decode(b: &[u8]) -> Result<(Manifest, Vec<(u128, Vec<u8>)>), String> {
+    let (m, blocks) = parse(b)?;
+    Ok((m, blocks.into_iter().map(|(k, r)| (k, b[r].to_vec())).collect()))
+}
+
+/// The file's manifest and where each block is in it.
+#[allow(clippy::type_complexity)]
+fn parse(b: &[u8]) -> Result<(Manifest, Vec<(u128, Range<usize>)>), String> {
     if b.len() < MAGIC.len() + 16 + 12 || &b[..8] != MAGIC {
         return Err("not a slot cache".into());
     }
@@ -236,12 +308,14 @@ pub fn decode(b: &[u8]) -> Result<(Manifest, Vec<(u128, Vec<u8>)>), String> {
     if hash(body) != u128::from_le_bytes(tail.try_into().unwrap()) {
         return Err("check failed (cut short or damaged)".into());
     }
-    let mut at = 8usize;
-    let mut take = |n: usize| -> Result<&[u8], String> {
-        let s = body.get(at..at + n).ok_or("cut short")?;
-        at += n;
-        Ok(s)
+    let at = std::cell::Cell::new(8usize);
+    let take_at = |n: usize| -> Result<Range<usize>, String> {
+        let from = at.get();
+        body.get(from..from + n).ok_or("cut short")?;
+        at.set(from + n);
+        Ok(from..from + n)
     };
+    let take = |n: usize| -> Result<&[u8], String> { take_at(n).map(|r| &body[r]) };
     let format = u32::from_le_bytes(take(4)?.try_into().unwrap());
     if format != FILE_FORMAT {
         return Err(format!("file format {format}"));
@@ -254,7 +328,7 @@ pub fn decode(b: &[u8]) -> Result<(Manifest, Vec<(u128, Vec<u8>)>), String> {
     for _ in 0..count {
         let key = u128::from_le_bytes(take(16)?.try_into().unwrap());
         let n = u32::from_le_bytes(take(4)?.try_into().unwrap()) as usize;
-        blocks.push((key, take(n)?.to_vec()));
+        blocks.push((key, take_at(n)?));
     }
     Ok((manifest, blocks))
 }
@@ -268,13 +342,21 @@ pub fn read(dir: &Path) -> Option<Vec<u8>> {
 /// (replacing it), so a crash or a full disk mid-write never leaves a half file under the real
 /// name. The temporary is removed on failure.
 pub fn write(dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
+    write_with(dir, |f| f.write_all(bytes))
+}
+
+use std::io::Write;
+
+fn write_with(dir: &Path, fill: impl FnOnce(&mut std::io::BufWriter<&mut std::fs::File>) -> std::io::Result<()>) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
     let path = dir.join(FILE_NAME);
     let tmp = dir.join(format!("{FILE_NAME}.{}.tmp", std::process::id()));
     let r = (|| {
-        use std::io::Write;
         let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(bytes)?;
+        let mut w = std::io::BufWriter::new(&mut f);
+        fill(&mut w)?;
+        w.flush()?;
+        drop(w);
         f.sync_all()?;
         drop(f);
         std::fs::rename(&tmp, &path)
@@ -302,15 +384,15 @@ mod tests {
         let (mut c, miss) = Cache::open(m.clone(), None);
         assert_eq!(miss, Some(Miss::Missing));
         let b = c.get_or_bake::<()>(7, || Ok(vec![1, 2, 3])).unwrap();
-        assert_eq!(b, vec![1, 2, 3]);
+        assert_eq!(&*b, &[1, 2, 3][..]);
         assert_eq!((c.hits, c.misses), (0, 1));
         assert!(c.needs_write());
         let file = c.encode();
 
-        let (mut c2, miss) = Cache::open(m, Some(&file));
+        let (mut c2, miss) = Cache::open(m, Some(file.clone()));
         assert_eq!(miss, None);
         let b = c2.get_or_bake::<()>(7, || panic!("baked again")).unwrap();
-        assert_eq!(b, vec![1, 2, 3]);
+        assert_eq!(&*b, &[1, 2, 3][..]);
         assert_eq!((c2.hits, c2.misses), (1, 0));
         assert!(!c2.needs_write());
     }
@@ -320,7 +402,7 @@ mod tests {
         let (mut c, _) = Cache::open(manifest("a"), None);
         c.get_or_bake::<()>(7, || Ok(vec![9])).unwrap();
         let file = c.encode();
-        let (mut c2, miss) = Cache::open(manifest("b"), Some(&file));
+        let (mut c2, miss) = Cache::open(manifest("b"), Some(file.clone()));
         assert_eq!(miss, Some(Miss::Changed(vec!["file xa_ex_0010.mset changed".into()])));
         let mut baked = false;
         c2.get_or_bake::<()>(7, || {
@@ -338,9 +420,9 @@ mod tests {
         let mut file = c.encode();
         let n = file.len();
         file[n / 2] ^= 0xFF;
-        assert!(matches!(Cache::open(manifest("a"), Some(&file)).1, Some(Miss::Damaged(_))));
-        assert!(matches!(Cache::open(manifest("a"), Some(&file[..n - 5])).1, Some(Miss::Damaged(_))));
-        assert!(matches!(Cache::open(manifest("a"), Some(b"nonsense")).1, Some(Miss::Damaged(_))));
+        assert!(matches!(Cache::open(manifest("a"), Some(file.clone())).1, Some(Miss::Damaged(_))));
+        assert!(matches!(Cache::open(manifest("a"), Some(file[..n - 5].to_vec())).1, Some(Miss::Damaged(_))));
+        assert!(matches!(Cache::open(manifest("a"), Some(b"nonsense".to_vec())).1, Some(Miss::Damaged(_))));
     }
 
     #[test]
@@ -349,7 +431,7 @@ mod tests {
         c.get_or_bake::<()>(1, || Ok(vec![1])).unwrap();
         c.get_or_bake::<()>(2, || Ok(vec![2])).unwrap();
         let file = c.encode();
-        let (mut c2, _) = Cache::open(manifest("a"), Some(&file));
+        let (mut c2, _) = Cache::open(manifest("a"), Some(file.clone()));
         c2.get_or_bake::<()>(1, || panic!()).unwrap();
         assert!(c2.needs_write());
         let (_, blocks) = decode(&c2.encode()).unwrap();
@@ -364,14 +446,31 @@ mod tests {
     }
 
     #[test]
+    fn streamed_write_is_the_encoding() {
+        let (mut c, _) = Cache::open(manifest("a"), None);
+        c.get_or_bake::<()>(1, || Ok(vec![1, 2, 3])).unwrap();
+        c.get_or_bake::<()>(2, || Ok(vec![7; 300])).unwrap();
+        let mut streamed = Vec::new();
+        encode_to(&c.manifest, &c.used, &mut streamed).unwrap();
+        assert_eq!(streamed, c.encode());
+        // (A block taken from the file shares the file's buffer.)
+        let (mut c2, miss) = Cache::open(manifest("a"), Some(streamed));
+        assert_eq!(miss, None);
+        let a = c2.get_or_bake::<()>(1, || panic!()).unwrap();
+        let b = c2.get_or_bake::<()>(2, || panic!()).unwrap();
+        assert!(Arc::ptr_eq(&a.buf, &b.buf));
+        assert_eq!((&*a, &*b), (&[1u8, 2, 3][..], &[7u8; 300][..]));
+    }
+
+    #[test]
     fn atomic_write() {
         let dir = std::env::temp_dir().join(format!("slotcache-test-{}", std::process::id()));
         let (mut c, _) = Cache::open(manifest("a"), None);
         c.get_or_bake::<()>(1, || Ok(vec![1, 2])).unwrap();
         write(&dir, &c.encode()).unwrap();
-        write(&dir, &c.encode()).unwrap();
+        c.write(&dir).unwrap();
         let back = read(&dir).unwrap();
-        assert_eq!(Cache::open(manifest("a"), Some(&back)).1, None);
+        assert_eq!(Cache::open(manifest("a"), Some(back)).1, None);
         let left: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().ends_with(".tmp")).collect();
         assert!(left.is_empty());
         let _ = std::fs::remove_dir_all(&dir);

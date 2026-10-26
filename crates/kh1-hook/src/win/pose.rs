@@ -760,7 +760,7 @@ fn open_slot_cache(install: &kh1_data::Kh1Install, mset: &[u8]) -> Option<crate:
     };
     let dir = slot_cache_dir();
     let bytes = crate::slotcache::read(&dir);
-    let (c, miss) = crate::slotcache::Cache::open(manifest, bytes.as_deref());
+    let (c, miss) = crate::slotcache::Cache::open(manifest, bytes);
     let why = match miss {
         None => "matches this start's files and settings".to_string(),
         Some(crate::slotcache::Miss::Missing) => "none yet".to_string(),
@@ -777,7 +777,7 @@ fn save_slot_cache(c: &crate::slotcache::Cache) {
         return;
     }
     super::loadscreen::saving();
-    match crate::slotcache::write(&slot_cache_dir(), &c.encode()) {
+    match c.write(&slot_cache_dir()) {
         Ok(p) => log(&format!("slot cache: written ({})", p.display())),
         Err(e) => log(&format!("slot cache: not written ({e}); baked again next start")),
     }

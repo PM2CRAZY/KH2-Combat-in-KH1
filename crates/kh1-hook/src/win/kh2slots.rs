@@ -389,8 +389,11 @@ pub struct Move {
 
 struct Built {
     moves: Vec<Move>,
-    /// Our motions (file layout), one after another, 16-aligned.
-    blocks: Vec<Vec<u8>>,
+    /// Our motions (file layout), one per move, until `place` has copied them where KH1 plays
+    /// them from: it takes them then (and they are freed), so the baked motions aren't kept twice
+    /// (the tester, ram-use m1 answer 2 (a)). Shared with the slot cache's list while loading
+    /// (`slotcache::Block`), not copied.
+    blocks: Mutex<Vec<crate::slotcache::Block>>,
     /// KH1's request table as in the file (to know KH1's own when the actor shows it).
     requests: Vec<u32>,
 }
@@ -512,7 +515,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
             "KH2 slots: KH2's row selection on KH1's ground and air combo: {}",
             [0xC8usize, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE].iter().map(|r| format!("{r:#x} -> {:?}", moves.iter().filter(|m| m.request == *r).map(|m| m.motion).collect::<Vec<_>>())).collect::<Vec<_>>().join(", ")
         ));
-        Ok(Built { moves, blocks, requests })
+        Ok(Built { moves, blocks: Mutex::new(blocks), requests })
     })();
     match r {
         Ok(b) => {
@@ -530,7 +533,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
 /// selection can pick (`pick`); `field`: KH2's field variant of the motion; `variant`: which of a
 /// kind 3 / 4 request's slots (`CYCLES`). `None` if it can't be built (logged).
 #[allow(clippy::too_many_arguments)]
-fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<&mut crate::slotcache::Cache>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, Vec<u8>)>, String> {
+fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<&mut crate::slotcache::Cache>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, crate::slotcache::Block)>, String> {
     super::loadscreen::making(motion);
     let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
         log(&format!("KH2 slots: KH2 motion {motion} has no clip, left out"));
@@ -611,16 +614,16 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
         }),
         None => {
             super::loadscreen::baking();
-            bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel)
+            bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel).map(crate::slotcache::Block::new)
         }
     });
     let (block, baked) = match baking {
         Some(Ok(block)) => (block, true),
         Some(Err(e)) => {
             log(&format!("KH2 slots: KH2 motion {motion} not baked ({e}); drawn over its template"));
-            (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false)
+            (crate::slotcache::Block::new(ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?), false)
         }
-        None => (ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?, false),
+        None => (crate::slotcache::Block::new(ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string())?), false),
     };
     log(&format!(
         "KH2 slots: KH2 motion {motion}{} as KH1 slot {slot} (for KH1's slot {stands_for} / request {request:#x}{}, {old} -> {frames} frames): {}",
@@ -1350,10 +1353,14 @@ unsafe fn handle(p: usize) -> u32 {
 }
 
 /// Our motions in memory, their offsets turned into handles as KH1's loader does (`0x1401D5CE0`).
+/// Runs once (`PLACED` is never emptied again): the built blocks are taken and each freed once
+/// copied (nothing reads them after this).
 unsafe fn place(b: &Built) -> Placed {
     let mut motions = Vec::new();
     let mut at = Vec::new();
-    for (m, block) in b.moves.iter().zip(&b.blocks) {
+    let blocks = b.blocks.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
+    let bytes: usize = blocks.iter().map(|b| b.len()).sum();
+    for (m, block) in b.moves.iter().zip(blocks) {
         // (16-aligned, never freed.)
         let words: &'static mut [u128] = Box::leak(vec![0u128; block.len().div_ceil(16)].into_boxed_slice());
         let p = words.as_mut_ptr() as usize;
@@ -1373,7 +1380,7 @@ unsafe fn place(b: &Built) -> Placed {
     if let Ok(mut v) = MOTION_AT.lock() {
         *v = at;
     }
-    log(&format!("KH2 slots: {} motions placed (handles {:08x?})", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>()));
+    log(&format!("KH2 slots: {} motions placed ({bytes} bytes; the build's copy freed) (handles {:08x?})", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>()));
     Placed { motions, sets: Vec::new() }
 }
 
