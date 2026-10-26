@@ -388,7 +388,7 @@ const STRINGS: [(u32, &str); 92] = [
     (0x7F00_018F, "Air Physics"),
     (0x7F00_0190, "KH1's or KH2's physics while Sora casts in the air,\nfor every spell. Drive Forms keep their own."),
     (0x7F00_0195, "Magic Combo"),
-    (0x7F00_0196, "KH2: KH1's grounded casts are a step of the combo; on KH1's\nanimation an Attack or a spell follows from KH2 Fire's window."),
+    (0x7F00_0196, "KH2: KH1's grounded casts are a step of the combo, Gravity and\nStop its finisher; an Attack or spell follows by KH2 Fire's rule."),
     (0x7F00_0189, "Gravity"),
     (0x7F00_018A, "KH1's Gravity on KH1's or KH2's cast animation\n(KH2's Thunder cast)."),
     (0x7F00_018B, "Stop"),

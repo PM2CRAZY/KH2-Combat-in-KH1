@@ -177,9 +177,10 @@ anim_aero = kh1\r\n\
 ;   (KH1's 30 hop, half speed and fall; or KH2's 40 hop, speed kept, KH2's gravity and the cast's\r\n\
 ;   hover), whatever physics says; the Config menu's Magic list switches it\r\n\
 magic_air_physics = kh2\r\n\
-; magic_combo: kh1 or kh2, whether KH1's grounded casts (base Sora, not Gravity or Stop) take a\r\n\
-;   step of the combo and, on KH1's animation, let an Attack or a spell follow from KH2's Fire\r\n\
-;   window (kh2), or play as KH1's\r\n\
+; magic_combo: kh1 or kh2, whether KH1's grounded casts (base Sora) take a step of the combo\r\n\
+;   (Gravity and Stop its finisher) and, on KH1's animation, let an Attack or a spell follow from\r\n\
+;   KH2's Fire window (kh2), or play as KH1's; on KH2's animation Gravity and Stop are finishers\r\n\
+;   either way\r\n\
 ;   (kh1); the Config menu's Magic list switches it\r\n\
 magic_combo = kh1\r\n\
 ; hit_reactions: kh1 or kh2, KH1's or KH2's reaction animations when base Sora is hit (KH1\r\n\

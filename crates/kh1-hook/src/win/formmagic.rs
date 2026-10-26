@@ -669,7 +669,65 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     if sora && kh1_cast_step(spell) && KH1_WINDOW_REQUESTS.contains(&request) {
         take_step(actor, request, false, false);
     }
+    // (Gravity and Stop: the combo's finisher, `finisher_spell`.)
+    if sora && finisher_spell(request) {
+        take_step(actor, request, true, false);
+    }
     r
+}
+
+/// KH1's ground Gravity (0x3A) and Stop (0x3B) cast requests (KH1's request table, Checked (files)).
+pub const FINISHER_SPELL_REQUESTS: [u32; 2] = [0x3A, 0x3B];
+
+/// Gravity or Stop cast on the ground counts as the combo's finisher (the tester, combo row
+/// selection after m29: "for gravity and stop, there's a phenomenon in kh2 where those magics
+/// count as a finisher so the combo row skips straight to the finisher, if you have a finishing
+/// plus equipped you can combo into another finisher ... that would be applied for kh1 gravity
+/// and stop as well if the config is set to can combo"): on KH2's cast animation (their
+/// animation row at KH2: KH2's Thunder cast 62 for Gravity, Cure's 65 for Stop) always, on KH1's
+/// own with the Magic Combo row at KH2. Base Sora on KH1's states, not in a Drive Form.
+pub unsafe fn finisher_spell(request: u32) -> bool {
+    let Some(i) = FINISHER_SPELL_REQUESTS.iter().position(|&r| r == request) else { return false };
+    let spell = 4 + i as u8;
+    !super::form::in_form() && super::shared::active() && (anim_kh2(spell) || super::styles::kh2(super::styles::Kind::MagicCombo))
+}
+
+/// The finisher step of Gravity or Stop (`finisher_spell`), worked out at the command
+/// (`combat::command`), in place of `note_step`'s: the combo's length (KH1's `+0xD4`), so the
+/// combo goes straight to its finisher, or one past the count when taken in a finisher's Finishing
+/// Plus window (KH1's count already at the length or past it: `note_step`'s chained case). The
+/// step, taken at the spell's start (`take_step` with `finisher`): `combomods::cast_step` notes it
+/// as the combo's finisher, KH1's count is 0 after it (the combo ends) unless Finishing Plus leaves
+/// another finisher (`combomods::finisher_left`), which then follows in its Finishing Plus window
+/// (`finisher_spell_window`).
+pub unsafe fn note_finisher_step(actor: usize) -> Option<u8> {
+    let (step, _) = note_step(actor, false)?;
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    let max = if stats >= 0x10000 { rd::<u8>(stats + 0xD4).max(1) } else { step };
+    let step = step.max(max);
+    CAST_STEP.store(step as u32 | 1 << 8 | 1 << 16, Ordering::Relaxed);
+    Some(step)
+}
+
+/// Gravity or Stop playing on the ground as the combo's finisher (`finisher_spell`; KH1's
+/// request `+0x164`): whether an Attack or a spell may follow now. Only in KH2's Finishing Plus
+/// window, placed at the same share of the motion as on KH2's own finisher cast of the cast
+/// animation it plays on (Gravity: Thunder's finisher cast 63, Stop: Cure's 68, both 42..78,
+/// `kh2slots::finisher_share`; an **Assumption**: KH2 has no Gravity or Stop to read it from),
+/// while Finishing Plus leaves another finisher (`combomods::finisher_left`, KH2's count). `None`:
+/// neither plays.
+pub unsafe fn finisher_spell_window(actor: usize) -> Option<bool> {
+    let request = rd::<u32>(actor + 0x164) & 0xFFFF;
+    if rd::<i32>(actor + 0x70) != 0 || !finisher_spell(request) {
+        return None;
+    }
+    if !super::combomods::finisher_left() {
+        return Some(false);
+    }
+    let from = if request == 0x3A { 63 } else { 68 };
+    let Some((a, b)) = super::kh2slots::finisher_share(from) else { return Some(false) };
+    let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
+    Some(t >= 0.0 && len > 0.0 && t / len >= a && t / len < b)
 }
 
 /// KH1's grounded cast requests the Magic Combo row gives KH2 Fire's combo window
@@ -702,7 +760,22 @@ pub unsafe fn kh1_cast_step(spell: i32) -> bool {
 /// window of their own), and so is that KH1's spell script, a task of its own, casts whatever
 /// motion follows.
 pub unsafe fn kh1_cast_window(actor: usize) {
-    if actor < 0x10000 || actor != super::takeover::sora_actor() || !kh1_cast_step(0) || rd::<i32>(actor + 0x70) != 0 {
+    if actor < 0x10000 || actor != super::takeover::sora_actor() {
+        return;
+    }
+    // (Gravity and Stop as the combo's finisher: their Finishing Plus window, `finisher_spell_window`.)
+    if finisher_spell_window(actor) == Some(true) {
+        let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+        if inst >= 0x10000 {
+            wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
+            static F: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            if F.fetch_add(1, Ordering::Relaxed) < 20 {
+                log(&format!("Gravity / Stop as the combo's finisher: Finishing Plus window (request {:#x}, time {:.1}): KH1's combo window", rd::<u32>(actor + 0x164) & 0xFFFF, rd::<f32>(actor + 0x16C)));
+            }
+        }
+        return;
+    }
+    if !kh1_cast_step(0) || rd::<i32>(actor + 0x70) != 0 {
         return;
     }
     let request = rd::<u32>(actor + 0x164) & 0xFFFF;

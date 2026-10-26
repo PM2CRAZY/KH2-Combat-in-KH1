@@ -343,9 +343,31 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
     step counts on from the cast's step (`0x1402A7510`, Checked (decomp)).
   - KH1's quick Fire (Fire again during 0x3D) is KH1's own rule and still re-fires; each re-fire
     is a step.
-- Gravity and Stop are left out (their rule, as finishers, is the next step).
 - **Assumptions:** the window by share (KH1's casts have none); KH1's spell script, a task of its
   own, casts whatever motion follows the cut. Not checked in game.
+
+### 4c.4 Gravity and Stop as the combo's finisher (t644)
+
+- The tester (same message): "for gravity and stop, there's a phenomenon in kh2 where those
+  magics count as a finisher so the combo row skips straight to the finisher, if you have a
+  finishing plus equipped you can combo into another finisher ... that would be applied for kh1
+  gravity and stop as well if the config is set to can combo". KH2 has no Gravity or Stop of its
+  own (its spells are Fire, Blizzard, Thunder, Cure, Magnet and Reflect); the rule is the
+  tester's.
+- Ground Gravity (0x3A) and Stop (0x3B), base Sora: on KH2's cast animation (their animation row
+  at KH2: Thunder's 62, Cure's 65) always, on KH1's own animation with Magic Combo KH2
+  (`formmagic::finisher_spell`):
+  - the cast is the combo's finisher: its step the combo's length (KH1's `+0xD4`), or one past the
+    count in a finisher's Finishing Plus window (`note_finisher_step`); taken at KH1's spell start
+    (`take_step` as a finisher: `combomods::cast_step`, `FINISHERS`); KH1's count 0 after it (the
+    combo ends) unless Finishing Plus leaves another finisher;
+  - no combo window on their KH2 cast slots (built as finisher casts, `kh2slots`), and the Attack
+    and spell checks take only their Finishing Plus window (`finisher_spell_window`): KH2's
+    Thunder finisher cast 63's (Gravity) or Cure's 68 (Stop) range 50, 42..78, placed by share of
+    the motion playing (**Assumption**), while `combomods::finisher_left`; KH1's combo window
+    there (`kh1_cast_window`), so the next finisher (an Attack: KH2's or KH1's picker's, as after a
+    finisher swing; a spell: a finisher cast) follows.
+- Not checked in game.
 
 ## 4d. KH2's stop at a cast (done: the tester's answer 2 (a), physics KH2; Drive Forms as they are)
 

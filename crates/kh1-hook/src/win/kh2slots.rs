@@ -536,7 +536,9 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, requests: &[u3
     let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
     // (KH2's finisher casts end the combo: `cast_follow`.)
     // (Ours too: Reflect's finisher cast, `kh1rows::Kind::CastFinisher`.)
-    let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()));
+    // (KH1's Gravity and Stop on the ground count as the combo's finisher, t644: no combo window,
+    // `formmagic::finisher_spell`.)
+    let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()) || super::formmagic::FINISHER_SPELL_REQUESTS.contains(&(request as u32)));
     // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
     // (A recoil, `RECOILS`, the same: KH1's reaction function asked for it.)
     let reaction = matches!(kind, Kind::HitReactions | Kind::Recoil);
@@ -1069,6 +1071,16 @@ fn combo_kind(clip: &character_core::Clip, k: &WindowKind) -> bool {
     }
 }
 
+/// KH2's finisher window (range id 50) on its motion `motion`, as shares of the motion's length
+/// (Thunder's finisher cast 63 and Cure's 68: 42..78, Checked (files)), for Gravity and Stop as
+/// the combo's finisher (`formmagic::finisher_spell_window`).
+pub fn finisher_share(motion: u16) -> Option<(f32, f32)> {
+    let clip = pose::kh2()?.character.moveset.clips.get(&motion)?;
+    let w = clip.windows.iter().find(|w| matches!(w.kind, WindowKind::Finisher))?;
+    let len = clip.length.max(1) as f32;
+    Some((w.start as f32 / len, w.end.map_or(len, |e| e as f32) / len))
+}
+
 /// Where KH2's combo window on its motion `motion` opens, as a share of the motion's length
 /// (`combo_kind`'s first frame; Fire 56: frame 60, Checked (files)), for KH1's own casts at the
 /// Magic Combo row (`formmagic::kh1_cast_window`).
@@ -1083,6 +1095,10 @@ pub fn combo_share(motion: u16) -> Option<f32> {
 /// of ours plays.
 pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
     let m = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))?;
+    // (Gravity and Stop, the combo's finisher: only their Finishing Plus window, t644.)
+    if let Some(open) = super::formmagic::finisher_spell_window(actor) {
+        return Some(open);
+    }
     let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
     let t: f32 = rd(actor + TIME_NOW);
     Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| combo_kind(clip, k)))
@@ -1125,6 +1141,9 @@ pub unsafe fn cast_cut_open(actor: usize) -> bool {
 /// `None`: no cast of ours plays.
 pub unsafe fn cast_magic_window(actor: usize) -> Option<bool> {
     let m = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic))?;
+    if let Some(open) = super::formmagic::finisher_spell_window(actor) {
+        return Some(open);
+    }
     let clip = pose::kh2()?.character.moveset.clips.get(&m.motion)?;
     let t: f32 = rd(actor + TIME_NOW);
     // (KH2's magic command takes the same combo window as its Attack, `combo_kind`; t642.)

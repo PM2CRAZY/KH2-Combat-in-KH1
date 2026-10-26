@@ -545,6 +545,11 @@ unsafe fn command_step(actor: usize, dir: usize) {
             let step = super::formmagic::note_step(actor, false);
             cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg}, Magic Combo KH2: step {:?} of the combo", step.map(|s| s.0)));
         }
+        // Gravity and Stop on the ground: the combo's finisher (`formmagic::finisher_spell`).
+        if !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && (4..=5).contains(&arg) && super::formmagic::finisher_spell(0x36 + arg as u32) {
+            let step = super::formmagic::note_finisher_step(actor);
+            cmd_log(format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}"));
+        }
     }
     // An item used in KH1's own states: its use drawn with KH2's motion at Misc Animations KH2
     // (`takeover::item_use_now`).
