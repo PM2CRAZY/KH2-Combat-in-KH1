@@ -689,6 +689,18 @@ pub unsafe fn native_ok(actor: usize) -> bool {
     }
 }
 
+/// Our Reflect would be cast in KH1's air state now (`native_ok` there, its level loaded, its cost
+/// payable): KH2's glide is ended for it only then (`combat::command_step`, Cast from Glide), so a
+/// refused cast doesn't cut the glide.
+pub unsafe fn air_ready(actor: usize) -> bool {
+    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || super::form::in_form() || !super::shared::active() || actor < 0x10000 {
+        return false;
+    }
+    let base = base();
+    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
+    request_of(AIR_MOTION).is_some() && cast_level(save).is_some() && affordable(base, actor)
+}
+
 /// KH1's command step got our Reflect with `native_ok` (`combat::command`): cast as KH1's command
 /// step casts a spell (`0x1402A3600`, Checked (decomp)), our request in place of KH1's `0x36 +
 /// spell` / `0x83 + spell` (KH1 has no spell 7 to ask for, its request ids for 7 are Fire's

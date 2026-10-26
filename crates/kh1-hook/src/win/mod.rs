@@ -37,6 +37,7 @@ mod kh1voice;
 mod knockback;
 mod kh2sound;
 mod leftblade;
+mod loadscreen;
 mod menu;
 mod mpcost;
 mod model;
@@ -264,6 +265,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         soundlog::install();
         debugmenu::install();
         frameadv::install();
+        loadscreen::install();
         kh2sound::start();
         kh2dpx::start();
         pose::load_kh2();

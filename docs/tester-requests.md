@@ -30,6 +30,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [4. Assistant: Done, three versions:](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m4)
 - [Body guards on KH2 moves](../testers/body-guards-on-kh2-moves/body-guards-on-kh2-moves.md)
   - [1. Assistant: I started this thread from Aerial Dodge native's question 7,](../testers/body-guards-on-kh2-moves/body-guards-on-kh2-moves.md#^m1)
+- [Cast from Glide](../testers/cast-from-glide/cast-from-glide.md)
+  - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/cast-from-glide/cast-from-glide.md#^m1)
 - [Config menu rework](../testers/config-menu-rework/config-menu-rework.md)
   - [1. Mr Bugs: the scope of the config menu currently can't scale to what w](../testers/config-menu-rework/config-menu-rework.md#^m1)
   - [2. Assistant: Here's the plan. KH1 already has a sub-menu system: it's how](../testers/config-menu-rework/config-menu-rework.md#^m2)
@@ -259,6 +261,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [6. Assistant: Here's this round for (b) and the first part of (c). Each on](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m6)
   - [7. Assistant: Here's this round:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m7)
   - [8. Assistant: Here's this round.](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m8)
+  - [9. Assistant: Thanks! Two versions this round:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m9)
 
 ---
 

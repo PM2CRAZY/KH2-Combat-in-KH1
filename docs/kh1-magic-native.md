@@ -987,9 +987,10 @@ glide. It was right for Quick Run.
 
 What runs now (`combat::kh2_spell_refused`, from `combat::command`):
 - Quick Run (KH1 state `0x2A`): refused with KH1's "can't" sound, as KH2 takes nothing there.
-- KH2's glide in KH1's glide state `0x15`: refused with the "can't" sound for now. KH1's glide
-  state casts nothing, and the 1:1 cast out of the glide (KH1's glide ended into its air state 2,
-  then KH1's native air cast) is a new piece of engine work: open question to the tester.
+- KH2's glide in KH1's glide state `0x15`: refused with the "can't" sound (t654). Since the thread
+  cast-from-glide (what-is-still-missing m8 answer 1 (a)), with the Tweaks row Cast from Glide on (the
+  default) the glide ends into KH1's air state 2 and the spell is KH1's native air cast, 1:1 with
+  KH2's cast out of its glide: `docs/kh1-glide-native.md` §8.14. Off: the refusal.
 - The dodge roll, guard and landing play in KH1's ground state 0 and the Aerial Dodge in its air
   state 2, where KH1 casts. Our slots put KH1's "may be left" at KH2's free frame (`kh2slots`), so
   KH1's own may-act test (`0x1402A2EC0`) refuses the spell before it and takes it after, as KH2.

@@ -5,7 +5,7 @@ anything to be installed in order to be converted, when the game starts there sh
 screen showing what the extraction is doing before continuing into the menu, this should render in
 engine and be native, and not as a layer like the debug menu."
 
-Two parts: the motion slot cache (built), and the loading screen (planned below, not built).
+Two parts: the motion slot cache (built), and the loading screen (built).
 Addresses are the Steam build's. Tags: **Checked (decomp)**, **Checked (exe)**, **Checked (code)**,
 **Assumption**.
 
@@ -57,70 +57,87 @@ frame. The file holds the baked blocks (about 100-200 KB a motion in the logs: s
 Still done every start, not cached (cheap, or used elsewhere): loading KH2 Sora (also used by the
 combo rows, effects and sounds), the baker's retarget set-up, the tables `prepare` makes.
 
-## 2. The loading screen (plan; not built)
+## 2. The loading screen (built)
 
 What the tester asked: at game start, before the title menu, KH1 shows a screen saying what the
 building is doing, drawn by KH1 itself (not our overlay renderer like the debug menu), and only then
-goes on to the title.
+goes on to the title. The tester's pick (m8, answer 2 (a)): shown only when something is being
+rebuilt. Code: `crates/kh1-hook/src/win/loadscreen.rs`. Steam only.
 
-### 2.1 Where KH1 can be held (Checked (decomp), Checked (exe))
+### 2.1 Where KH1 is held (Checked (decomp), Checked (exe))
 
 - KH1's frame (`0x140170D50`, the field mode's per-frame call) runs the game mode's state machine
-  `0x140170870` first (its only call site: `0x140170E1A`, `E8 rel32`), then the pause machine, the
-  task list, the 2D work `0x14017B190` (call site `0x140170FF0`), the frame end and the present.
-- The state machine's state is the i32 at `0x14233FBC0`:
-  - 0: sets a counter, goes to 1;
-  - 1: counts the counter down, then `0x140170630` initialises the systems (sound, pad, text
+  `0x140170870` first (its only call site: `0x140170E1A`, bytes `E8 51 FA FF FF`, Checked (exe)),
+  then the quit check, the pause machine, the task list, the 2D work `0x14017B190` (call site
+  `0x140170FF0`, bytes `E8 9B A1 00 00`, its argument `mov ecx, [0x14233FBE8]` just before it,
+  Checked (exe)), the frame end, the pacing and the present.
+- The state machine's state is the i32 at `0x14233FBC0` (the machine's own `movsxd rax, [rip+..]`
+  at `0x140170874` reads it, Checked (exe)):
+  - 0: clears a counter, goes to 1;
+  - 1: counts down, then `0x140170630` sets up the systems (sound, pad, the text system
     `0x1402CFA20`, menus, the task list `0x14028A890`, ...) and sets state 2;
   - 2: loads the title program (`host0:/khhd/kingdom1/dktitle.rel`, `0x1403869F0`) and goes to 3;
-  - 3 / 5 / 7 / 9: the title / the game run; the rest are mode changes (load, new game, movies at
-    0xD..0xF).
-  The title's own code is in `dktitle.rel`, not the exe, so the exe's last point before the title
-  is state 2.
-- The plan: redirect the call at `0x140170E1A` (`hook::redirect_call`, exact bytes `E8` + the
-  rel32 to `0x140170870`, refusing on a mismatch) to a wrapper that, while state is 2 and our
-  building isn't finished, returns without calling the state machine: KH1 keeps running its frames
-  (task list, 2D work, present) with the systems `0x140170630` set up, and the title isn't loaded
-  yet. When the building is done (or failed: it then falls back to baking in the field as now), the
-  wrapper calls the state machine again and state 2 loads the title as usual. KH1's own frame pacing
-  and present carry on all along (no frozen window). **Assumption**: nothing else in KH1 needs
-  state 2 to pass within a time limit (to check in the decomp: the sound and movie start-up).
+  - 3 / 5 / 7 / 9: the title / the game run; the rest are mode changes. States 0xF (a movie's end)
+    and 0x10 come back to 2 later (the title again); the hold is only ever the first one.
+- Skipping the machine's call in state 2 is safe (Checked (decomp)):
+  - nothing else in KH1 reads state 2 or waits for it to pass (every other reader of
+    `0x14233FBC0` tests 3, 5, 7 or 9);
+  - the field frame's other work doesn't depend on it: the window messages and the quit check
+    (`0x1422EC090`, which can still close the game while held), the pad, the sound step, the task
+    list, the 2D work (its `state > 1` part runs from state 2 already), the pacing and the present
+    all run as in KH1's own one state-2 frame;
+  - the movie states 0xD..0xF are entered from the title, after state 3: no movie runs before;
+  - the systems the title needs are all set up by state 1 before state 2 is set.
+- **Assumption**: the window keeps presenting KH1's cleared (black) frame while held (every part of
+  the frame that presents runs; not watched in game yet).
 - The state machine itself can't be hooked at its start: its first instruction is 4 bytes
-  (`48 83 EC 28`) and the next one is RIP-relative (`48 63 05 rel32`, the state), **Checked
-  (exe)**; the call site redirect avoids that.
+  (`48 83 EC 28`) and the next is RIP-relative; the call site redirect avoids that.
 
-### 2.2 How KH1 draws text itself (Checked (decomp))
+### 2.2 How the lines are drawn (Checked (decomp))
 
-- `0x1402D02F0 (colour, x, y, text, scale)` draws a string of KH1's text codes (thunk of
-  `0x1402CFBF0 (0, x, y, colour, text, scale)`): it measures with `0x1402D0E10 (text, scale)`,
-  builds a 2D packet in KH1's per-frame packet list (`0x14028DCF0 (size, align)`) and draws it with
-  KH1's font (glyph table `0x142E16BE0`). Exact first bytes `48 83 EC 38 8B 44 24 60 89 44 24 28 4C
-  89 4C 24` (Checked (exe)).
-- KH1 itself uses it for its own loading message: the 2D work `0x14017B190` draws sysmsg `0xF`
-  (`0x1402D1510 (0xF)`, the system message table at `0x142E1F460` / `0x142E1F468`) with colour
-  `0x80C0612C` at x 320, y 404 (the bottom middle of KH1's 640 × 448 screen), scale `0xF`; also
-  through `0x14017AD60` (call site `0x14017B323`). **Assumption**: sysmsg `0xF` is KH1's "Now
-  loading" line (not read from `sysmsg.bin`).
-- Our text would be written in KH1's text codes (`menu.rs`'s plain-string encoder, as the "New
-  Ability" boxes are) and drawn with that same call, each frame, from the 2D work's time (a wrapper
-  on the call at `0x140170FF0`, after KH1's own 2D work), so it lands in KH1's packet list for that
-  frame. **Assumption**: drawing it from the state machine's time (step 1 of the frame) instead
-  could be lost to a packet list reset later in the frame; not checked, hence the 2D work's call.
+- `0x1402CFBF0 (align, colour, x, y, text, scale)` is KH1's text routine; `0x1402D02F0 (colour, x,
+  y, text, scale)` is its left-aligned thunk (align 0). (The plan had the arguments in another
+  order; this is the decomp's.) Align 1 is right-aligned and 2 centred on x: the routine measures
+  the line itself with `0x1402D0E10 (text, scale)`. It builds each glyph's packet on KH1's scratch
+  stack (`0x14028DCF0` / `0x14028DD40`, push and pop) and sends it at once (`0x140304BD0`), with
+  KH1's font (glyph table `0x142E16BE0`). Codes below 0x15 are controls (1 space, 2 new line, 4 / 5
+  / 6 the alignment, 8 a colour, 0x0C the scale, ...); others are glyphs.
+- The font is ready in state 2: `0x1402CFA20` (state 1) runs `0x1402D1570`, which reads the font
+  table (`exchange/US_font_data_tbl.bin` / `FM_font_data_tbl.bin`) with KH1's blocking read
+  `0x14028BB60` and sets the glyph table pointer (Checked (decomp)). **Assumption**: its font
+  texture is resident by then too (set up in the same call, `0x1402E9800`; not traced to the GPU).
+- KH1's own loading line: the 2D work draws sysmsg `0xF` (`0x1402D1510 (0xF)`) with `0x1402D02F0`,
+  colour `0x80C0612C`, x 320, y 404 (the bottom middle of KH1's 640 x 448 screen), scale 15, while
+  KH1 loads. KH1's own debug lines are drawn at the 2D work's end with the same text system. Ours
+  are drawn right after the 2D work returns (the call at `0x140170FF0` redirected), before the frame
+  end and the present: the same place in the frame as those debug lines.
+- Text in KH1's codes (`menu::encode`, as the "New Ability" boxes).
 
-### 2.3 What the screen would show
+### 2.3 What it shows, and when
 
-KH1's black screen (nothing else is drawn before the title), with a few lines in KH1's font, e.g.:
-"KH2 Combat: building from your KH1 and KH2 files", then the step ("Loading KH2 Sora", "Checking the
-motion cache", "Baking KH2 motion 151 (12 of 96)", "Saving"), from a progress value the loader
-thread writes (an atomic step and count; no lock on KH1's thread). With a matching cache the hold
-is a frame or two (the loader thread starts at DLL load, before state 2: `win::mod.rs` calls
-`pose::load_kh2`), so most starts show nothing.
+- Held: from the first frame in state 2 until our loader thread (`pose::load_kh2`, started at DLL
+  load) ends, however it ends (a guard is dropped on a failure or a panic too), or 90 s at most
+  (the rest then builds behind the title, as before). If the DLL comes in after the title started,
+  nothing is held.
+- Shown: only once a bake actually runs (the motion slot cache didn't have a motion: a first start,
+  a changed file, a mod update, a changed ini key). With a matching cache the title waits, on a
+  black screen, only for the loader to load KH2 Sora and check the cache (a fraction of a second in
+  the testers' logs: "KH2 Sora loaded ... in 0.2-0.7 s"). Not installed KH2, a missing file, a
+  failed bake: the loader ends, the title comes.
+- Lines, centred, KH1's font: "KH2 Combat: building from your KH1 and KH2 files" (y 196, white,
+  scale 16); "Building KH2 move 151 (12 of 96)" or "Saving the built moves" (y 224, KH1's loading
+  blue, scale 15); "This happens once, after an update or a change to your files" (y 404, scale 13).
+  n of N counts every motion the slot build makes (from the cache or baked); N is counted from
+  the same lists before it starts (`kh2slots::prepare`).
+- Released: both call sites get KH1's own bytes back (no code of ours in KH1's frame afterwards).
+- Log lines: "loading screen: ready ...", "loading screen: KH1's title waits for the mod's
+  loader", "loading screen: title held N ms (F frames, shown | nothing shown); released: <why>",
+  or "loading screen: not needed (<why>)".
 
-### 2.4 What's left to check before building it
+### 2.4 Still to check in game
 
-1. That the frame runs its present and 2D work every frame while state 2 is held (the task list is
-   created in `0x140170630`, so it should; to watch in game).
-2. Sysmsg `0xF`'s text, and the colour word's layout (KH1's own call is the safe copy).
-3. That nothing is timed against the start-up while state 2 is held (the movie states 0xD..0xF are
-   entered from elsewhere, not read here: **Assumption** that they come after the title).
-4. Epic: the same calls need their Epic addresses (Steam only for now, as the other new hooks).
+1. That the held frames present (a black screen, not a frozen or white window) and the lines show
+   in KH1's font where expected.
+2. The font texture being ready (if not, the lines would be missing or garbled; the hold itself
+   doesn't depend on it).
+3. Epic: the same call sites need their Epic addresses (Steam only for now, as the other new hooks).

@@ -410,8 +410,10 @@ struct Refusal {
 /// - Quick Run 203 / 204: no range 0 / 1 / 2 → KH2 never casts during a Quick Run. Refused, with
 ///   the "can't" sound (KH1's Quick Run state `quickrun::STATE`).
 /// - Glide 205..208: range id 1 all through → KH2 DOES take a spell during a glide (ending it into
-///   the air cast). KH1's glide state (`glide::STATE`) casts nothing, so this is refused for now
-///   (the tester's (a)); casting out of the glide 1:1 is an open question in the thread.
+///   the air cast). With the Tweaks row Cast from Glide on (`glide::cast_out`, the default; the
+///   tester, what-is-still-missing m8 answer 1 (a)) `command_step` ends KH2's glide into KH1's air
+///   state first (`glide_cast`), so this never sees it; off, or KH1's own glide (Glide KH1), or a
+///   cast that couldn't go ahead: refused with the "can't" sound (t654).
 /// - Dodge roll 209 (free from 36), guard 173 (from 52), landing 5 (from 12), Aerial Dodge 202
 ///   (from 4): these play in KH1 states that cast (the roll and guard in ground state 0, the dodge
 ///   in air state 2), and our slots give KH1's "may be left" at KH2's free frame (`kh2slots`), so
@@ -433,9 +435,38 @@ fn kh2_spell_refused(arg: u8, state: i32, drive: bool) -> Option<Refusal> {
     }
     Some(match state {
         s if s == super::quickrun::STATE => Refusal { what: "KH2 takes no command during a Quick Run (203 / 204 have no free range)", sound: true, kh1_step: false },
-        s if s == super::glide::STATE => Refusal { what: "KH1's glide state casts nothing (KH2 would cast out of its glide: open question)", sound: true, kh1_step: false },
+        s if s == super::glide::STATE => Refusal { what: "KH1's glide state casts nothing (Cast from Glide off, KH1's own glide, or the cast can't go ahead)", sound: true, kh1_step: false },
         _ => Refusal { what: "KH1 casts nothing in this state (KH1's rule)", sound: false, kh1_step: arg <= 3 },
     })
+}
+
+/// A KH2 spell (Magic KH2's Fire..Cure, Reflect) chosen in KH2's glide on KH1's glide state, with
+/// the Tweaks row Cast from Glide on: KH2's glide ends into KH1's air state 2 (`glide::end`, KH2's
+/// end with its velocity kept), so KH1's command step casts KH1's air cast with the KH2 spell on it,
+/// as in any fall (the tester, what-is-still-missing m8 answer 1 (a)). Steam KH2 (Checked (decomp)):
+/// the glide motions' free range takes the magic command (`0x1403D6CA0`), and the cast start
+/// `0x1403C5170`, airborne, replaces the glide action with the air cast (motion `+0x30`, the fall
+/// queued after); the glide's exit `0x140423B70` leaves the velocity as it is, and the cast's own air
+/// start follows (`shared::physics::cast_stops`: KH2's 40 hop at Air Physics KH2, KH1's 30 hop and
+/// half speed at KH1). Only when the cast will go ahead (its slot and files built, its cost payable),
+/// so a refusal doesn't cut the glide. True: the glide ended.
+unsafe fn glide_cast(actor: usize, arg: u8, kind: u8, full: u32) -> bool {
+    if !super::glide::cast_out() || rd::<i32>(actor + 0x70) != super::glide::STATE || !super::glide::running(actor) {
+        return false;
+    }
+    let ready = if arg == super::reflect::SPELL {
+        super::reflect::air_ready(actor)
+    } else {
+        arg <= 3 && super::formmagic::base_kh2_spell(arg) && super::formmagic::native(arg, true) && super::mpcost::units(actor, arg).is_some()
+    };
+    if !ready {
+        return false;
+    }
+    if !super::glide::end(actor, "a KH2 spell (Cast from Glide)") {
+        return false;
+    }
+    cmd_log(format!("command {kind:#x} ({full:08x}): KH2's spell {arg} out of KH2's glide (its free range, Cast from Glide on): the glide ends, KH1's air cast, KH1 state now {}", rd::<i32>(actor + 0x70)));
+    true
 }
 
 unsafe fn command_step(actor: usize, dir: usize) {
@@ -503,6 +534,8 @@ unsafe fn command_step(actor: usize, dir: usize) {
     }
     // KH1's usable check reading KH2's cost for a native cast (below), put back after the step.
     let mut _cost_patch: Option<CostPatch> = None;
+    // The spell is cast out of KH2's glide (`glide_cast`): its velocity kept over KH1's think after.
+    let mut from_glide = false;
     // Base Sora in KH1's own states (`shared`): a command of KH2's (a spell where the Magic style
     // is KH2's, Reflect, a Drive) waits for KH2 to borrow him (`takeover::shared_frame`), then runs
     // as KH2's (`resume_command`); KH1's own commands (its spells at the KH1 style, items,
@@ -524,7 +557,9 @@ unsafe fn command_step(actor: usize, dir: usize) {
         // KH1's command step casts it, on KH2's cast motion in our slot, with KH2's script
         // (`formmagic::kh1_spell_start`). KH1 picks its ground or air cast by its own state
         // (`0x1402A3600`: 0, 6 and 0x18 the ground's, 2 and 8 the air's; in any other state it
-        // casts nothing, so KH2's controller still has those).
+        // casts nothing: `kh2_spell_refused`). Out of KH2's glide, the glide ends into the air state
+        // first (`glide_cast`).
+        from_glide = !drive && glide_cast(actor, arg, kind, full);
         let state = rd::<i32>(actor + 0x70);
         let kh1_air = matches!(state, 2 | 8);
         let native = !drive && arg <= 3 && matches!(state, 0 | 6 | 0x18 | 2 | 8) && super::formmagic::native(arg, kh1_air);
@@ -579,6 +614,9 @@ unsafe fn command_step(actor: usize, dir: usize) {
             // KH2's Reflect on KH1's own cast state (`reflect::cast_native`): KH1's command step's
             // cast with our request, no borrow; KH1 has no spell 7 of its own to run.
             super::reflect::cast_native(actor, dir);
+            if from_glide {
+                super::glide::keep_cast_velocity(actor);
+            }
             cmd_log(format!("command {kind:#x} ({full:08x}): KH2's Reflect in KH1's own cast state ({})", if kh1_air { "air" } else { "ground" }));
             return;
         } else if !drive && (4..=6).contains(&arg) && super::formmagic::anim_kh2(arg) && !matches!(state, 0 | 6 | 0x18 | 2 | 8) {
@@ -716,6 +754,9 @@ unsafe fn command_step(actor: usize, dir: usize) {
         // and 30 hop, `shared::physics::cast_after_command`.)
         if actor == sora && kind == 2 {
             super::shared::physics::cast_after_command(actor);
+            if from_glide {
+                super::glide::keep_cast_velocity(actor);
+            }
         }
         if let Some(m) = on_kh2 {
             super::shared::physics::kh1_air_attack_started(actor, &m, false);

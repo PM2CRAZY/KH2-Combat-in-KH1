@@ -412,6 +412,38 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         let mut moves = Vec::new();
         let mut blocks = Vec::new();
         let wanted = |motion: u16| which.as_ref().map_or(true, |w| w.contains(&motion));
+        // The combo rows' motions KH1's rows can play natively (`swing_rows`: the plain ones, and
+        // the ability rows that are a Keyblade swing or hit with his body).
+        let combo_ok: Vec<u16> = [false, true].iter().flat_map(|&air| swing_rows(&kh2.character.moveset.combo_rows, &kh2.character.moveset.clips, &kh2.battle, air)).map(|(m, _)| m).collect();
+        // (Each row of ours' motions: its own, and with Finishing Plus's next finisher every KH2
+        // finisher of its kind that has a row of its own (the ground 154, 155, Explosion, Guard
+        // Break; the air 183, 184, Aerial Finish, Magnet Burst), its first its own motion. KH2 may
+        // pick the finisher playing again (a row whose `sub` is its own id), and its own row's
+        // request is then the one playing: this row plays it, so a next finisher always has a row
+        // of ours (the tester, combo row selection after m26, answer 1: no fallback onto KH1's
+        // finisher row).)
+        let ours_motions = |o: &super::kh1rows::Ours| -> Vec<u16> {
+            if !wanted(o.motion) || (o.combo && !combo_ok.contains(&o.motion)) {
+                return Vec::new();
+            }
+            let mut motions = vec![o.motion];
+            if o.next_finisher {
+                let air = o.kind.air();
+                for f in super::kh1rows::OURS.iter().filter(|f| f.attack && f.kind.finisher() && !f.kind.cast() && f.kind.air() == air && !f.next_finisher && !f.rises) {
+                    if wanted(f.motion) && (!f.combo || combo_ok.contains(&f.motion)) && !motions.contains(&f.motion) {
+                        motions.push(f.motion);
+                    }
+                }
+            }
+            motions
+        };
+        // (How many motions this makes, for the loading screen's count, `loadscreen`.)
+        super::loadscreen::plan(
+            SPECS.iter().filter(|s| wanted(s.motion)).count()
+                + CYCLES.iter().filter(|c| wanted(c.motion)).map(|c| c.count as usize).sum::<usize>()
+                + CAST_FINISHERS.iter().filter(|f| wanted(f.0)).count()
+                + super::kh1rows::OURS.iter().map(|o| ours_motions(o).len()).sum::<usize>(),
+        );
         for s in SPECS.iter().filter(|s| wanted(s.motion)) {
             if let Some((m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
                 moves.push(m);
@@ -440,9 +472,6 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         // row selection to point them at: every KH2 combo row has a KH1 row and request of its
         // own, below (`kh1rows::Ours::combo`; the tester, combo row selection after m25, answer
         // 3 (a)). KH1's requests keep only their own move above, `SPECS`.)
-        // The combo rows' motions KH1's rows can play natively (`swing_rows`: the plain ones, and
-        // the ability rows that are a Keyblade swing or hit with his body).
-        let combo_ok: Vec<u16> = [false, true].iter().flat_map(|&air| swing_rows(&kh2.character.moveset.combo_rows, &kh2.character.moveset.clips, &kh2.battle, air)).map(|(m, _)| m).collect();
         // KH2's finisher casts (`CAST_FINISHERS`) on KH1's ground cast requests, picked at a cast
         // that is the combo's finisher (`pick_cast`).
         for &(motion, stands_for, request) in CAST_FINISHERS.iter() {
@@ -457,7 +486,8 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         // KH2's moves on KH1 rows of their own (`kh1rows`): each on its own request (0x200 + n),
         // built on the KH1 motion and request of its row's kind (the template's travel flag too).
         for (n, o) in super::kh1rows::OURS.iter().enumerate() {
-            if !wanted(o.motion) || (o.combo && !combo_ok.contains(&o.motion)) {
+            let motions = ours_motions(o);
+            if motions.is_empty() {
                 continue;
             }
             let k = o.kind;
@@ -468,21 +498,6 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
                 (false, true) => Kind::AirCombo,
                 (false, false) => Kind::GroundCombo,
             };
-            // (Finishing Plus's next finisher: every KH2 finisher of its kind that has a row of
-            // its own (the ground 154, 155, Explosion, Guard Break; the air 183, 184, Aerial
-            // Finish, Magnet Burst), its first its own motion. KH2 may pick the finisher playing
-            // again (a row whose `sub` is its own id), and its own row's request is then the one
-            // playing: this row plays it, so a next finisher always has a row of ours (the tester,
-            // combo row selection after m26, answer 1: no fallback onto KH1's finisher row).)
-            let mut motions = vec![o.motion];
-            if o.next_finisher {
-                let air = k.air();
-                for f in super::kh1rows::OURS.iter().filter(|f| f.attack && f.kind.finisher() && !f.kind.cast() && f.kind.air() == air && !f.next_finisher && !f.rises) {
-                    if wanted(f.motion) && (!f.combo || combo_ok.contains(&f.motion)) && !motions.contains(&f.motion) {
-                        motions.push(f.motion);
-                    }
-                }
-            }
             for (j, &motion) in motions.iter().enumerate() {
                 if let Some((mut m, block)) = make(mset, kh2, bake, cache.as_deref_mut(), &requests, (motion, o.template_slot(), o.template_request() as usize, style), j == 0, (false, 0), KH1_SLOTS + moves.len(), true)? {
                     m.own = Some(m.request);
@@ -516,6 +531,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
 /// kind 3 / 4 request's slots (`CYCLES`). `None` if it can't be built (logged).
 #[allow(clippy::too_many_arguments)]
 fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<&mut crate::slotcache::Cache>, requests: &[u32], (motion, stands_for, request, kind): (u16, usize, usize, Kind), default: bool, (field, variant): (bool, u8), slot: usize, own: bool) -> Result<Option<(Move, Vec<u8>)>, String> {
+    super::loadscreen::making(motion);
     let Some(clip) = kh2.character.moveset.clips.get(&motion) else {
         log(&format!("KH2 slots: KH2 motion {motion} has no clip, left out"));
         return Ok(None);
@@ -589,8 +605,14 @@ fn make(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, cache: Option<
     // (From the motion slot cache when it has this exact bake, `slot_key`; baked and kept there
     // otherwise.)
     let baking = bake.map(|b| match cache {
-        Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel), || bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel)),
-        None => bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel),
+        Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel), || {
+            super::loadscreen::baking();
+            bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel)
+        }),
+        None => {
+            super::loadscreen::baking();
+            bake_one(b, kh2, &template, (motion, field), frames, &tracks, travel)
+        }
     });
     let (block, baked) = match baking {
         Some(Ok(block)) => (block, true),

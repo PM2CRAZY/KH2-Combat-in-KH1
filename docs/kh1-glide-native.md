@@ -441,3 +441,35 @@ f2019..f2265: 13 "asked N of 16 frames into KH1's blend: a fresh blend" lines, e
   lerp of the products the pass drew: equal when the other links match, otherwise a second-order
   difference (small for one-frame bank changes). That KH2 blends from the drawn pose: as §8.11.
 
+
+### 8.14 A spell out of the glide (thread cast-from-glide; what-is-still-missing m8 answer 1 (a))
+
+KH2 casts out of its glide: Sora's glide motions 205..208 carry free range id 1 all through
+(`P_EX100.mset`, **Checked (files)**), so Steam KH2's input step `0x1403D6FC0` takes the magic command
+there through `0x1403D6CA0`, and the cast start `0x1403C5170`, airborne (`0x1403BA9A0`), runs the
+current action's slot 4 (the 40 hop) and plays the air cast motion (MAGC `+0x30`, the fall queued
+after). The glide action is replaced; its exit `0x140423B70` only puts the fall gravity `+0x134` back
+from the growth record and clears `+0x120` bits `0x70000` (`0x1403CB8A0`): the velocity is left as it
+was (**Checked (decomp)**). KH1's glide state 0x15 has no cast (`0x1402A3600` casts only in 0, 6, 0x18,
+2 and 8, **Checked (decomp)**).
+
+Ours (`combat::glide_cast`, with the Tweaks row Cast from Glide on, the default; ini `glide_cast`):
+- A KH2 spell (Fire..Cure at Magic KH2, Reflect) chosen in KH2's glide on KH1's state 0x15, base Sora,
+  whose cast will go ahead (its slot and spell files built, its KH2 cost payable): KH2's glide ends
+  into KH1's fall state 2 (`glide::end`: KH1's fall from rest `0x1402AF8F0`, `+0x3C0` the glide's
+  velocity, the fall request), then KH1's command step casts its air cast with the KH2 spell on it,
+  exactly as in a fall (`0x1402A3600`'s state-2 branch: the cast request, the fall queued, the spell
+  start, KH1's hop 30 and half speed; at Air Physics KH2 `shared::physics::cast_stops` /
+  `cast_after_command` put KH2's 40 hop and kept velocity back). Logged "out of KH2's glide (its
+  free range, Cast from Glide on)".
+- KH1's think (Steam `0x1402A3300`) sets `+0x3C0` from the stick right after the control step when
+  the state changed that frame (flag `0x400`, state 2) (**Checked (decomp)**): the velocity the cast
+  left is kept over it (`glide::keep_cast_velocity` → `glide::carry`, as for a glide let go).
+- The fall request `glide::end` makes is applied at once (`0x14029F7C0`) and the cast's request
+  (`0x14029F980`, pending) replaces it in the same frame (**Checked (decomp)**); **Assumption:** no
+  frame of the fall motion shows (not seen in game).
+- Off, KH1's own glide (Glide KH1), or a cast that can't go ahead: t654's refusal (KH1's "can't",
+  nothing cast, the glide goes on).
+- **Assumption:** KH1's menu takes the command during the glide state (its may-act test
+  `0x1402A2EC0` on the action flag 4, `+0x88` bit 0x20, `+0x444` bit 1; KH1's glide enter
+  `0x1402B2D00` sets none of them, **Checked (decomp)**, but the state table's flags weren't traced).
