@@ -15,6 +15,7 @@
 - [9. Assistant: Thanks! Two versions this round:](#^m9)
 - [10. Assistant: Thanks! (a) it is, so nothing changes: on starts where the c](#^m10)
 - [11. Assistant: Here's the list brought up to date, from t632 to t675.](#^m11)
+- [12. Assistant: Thanks! This is a big list, so I'm doing it one system per v](#^m12)
 
 ---
 
@@ -340,6 +341,7 @@ update what is still missing for native
 
 ^m11
 
+
 1. I want you to implement everything thats not native into being native inside of kh1's engine, if the feature is not in the engine add it to kh1's base engine so that anything from kh2 can work 1:1
    note:  leave out "9. The fallbacks left for base Sora: a KH2 spell or Reflect whose cast slot didn't build, Attack in the air when the air slots didn't build, and everything on Epic.  
 2. The drawn-over pose, only when a slot fails to bake or a world's motion set lacks the move. Your last log shows it once, for one frame, on a room entry.  
@@ -354,3 +356,67 @@ update what is still missing for native
    go ahead
    
    
+> [!tip] Assistant
+> Thanks! This is a big list, so I'm doing it one system per version over the next rounds. Here's how I read your message, then the two versions made this round.
+>
+> **Leaving out:** 9 (the base-Sora fallbacks and Epic), 10 (the drawn-over pose) and 11 (the KH2 player model).
+>
+> **Doing, in this order:** 6 (the KH2 sounds and effects on baked moves), 8 (Drive Forms, starting with Valor), 5 (KH2's motion-range rules as KH1 motion events), then 1 (the spell scripts). For the scripts I'm taking your "everything native" as answer (a) to the open question in the magic thread: KH1's own script machine learns KH2's instruction set, and KH2's script calls are added to KH1's table. That's the biggest job, so it comes last. See question 1 about 2, 3, 4 and 7.
+>
+> **t677, KH2's sound, voice and effect triggers as KH1 motion events (item 6).**
+> - When a move is baked, each of its KH2 sound, voice and effect triggers is now written into the KH1 motion's own event list. They sit next to KH1's own "may be left", combo, hit and sound events.
+> - KH1's own motion pass fires them as it plays the move. Its sound-event step, `0x140295420`, now knows three new event types and hands them to the KH2 sound and effect players.
+> - Our per-frame code no longer reads KH2's trigger list for these moves.
+> - **Timing:** each trigger lands on the same frame as in KH2. I checked both games' event passes in the decomps: KH1's fires with `from <= t < to`, KH2's with `from < F <= to`, so ours sit a hair before KH2's frame.
+> - **One change you may notice:** a trigger on a move's very first frame now waits until KH1 finishes blending into the move. KH2 does that too.
+> - During KH1's own sound-off state these are skipped along with KH1's sounds. I think that state is events and cutscenes, but that's an assumption.
+>
+> **t678, Valor Form on KH1's own states (item 8, first step).**
+> - **The change:** KH1 plays Sora's Drive motion as one of its own requests. It holds him in the air and keeps hits off him with the motion's own frames.
+> - **Valor's moves:** after the change, his motion tables switch to Valor's own baked moves: idle, walk, run, jump (High Jump height every time, as KH2 does in Valor), fall, landing, flinches, recoils, item use, and the ground and air combo with Finishing Plus. They carry t677's events.
+> - **Combo and physics:** KH1's picker picks from Valor's own combo table. Valor's KH2 numbers run on KH1's states: run 12, jump 235, High Jump MAX 585.
+> - **Revert:** switches everything back and drops him into KH1's idle or fall. That covers the menu, running out of MP, and a KO. KH2's controller never takes him.
+> - **Not native yet:**
+>   - the left Keyblade's hits, which still land from the right blade's position;
+>   - the left Keyblade's own drawing, still our extra draw;
+>   - Valor's Square moves (the rising slash and the Square finishers): Square does nothing in Valor for now;
+>   - Valor's guard windows.
+> - **Unchanged:** Wisdom and Final, and the MP cost and drain. The Drive gauge, unlocks and Anti are still waiting on your answers in the [Drive Forms thread](../drive-forms-native/drive-forms-native.md).
+>
+> **What I checked.**
+> - Decomps: KH1's and KH2's event passes and KH1's sound-event step (Steam). KH2's jump start playing 201 with High Jump.
+> - Exe: the hooked function's bytes.
+> - Files: Valor's combo table, its numbers, its motion list and its ranges, and the Drive and arrival motions.
+>
+> **What I couldn't check.**
+> - Anything in game.
+> - Valor's right-hand Keyblade motions file (`W_EX010_BTLF_R` isn't in our extracted files).
+> - Whether KH1's "can act" test matches KH2's own rule for when you can change form.
+> - The change length: it's 39 frames, the length you asked for earlier, not KH2's full Drive motion.
+>
+> The first start after this update rebuilds the baked moves once, so you'll see the loading lines.
+>
+> Please test:
+> - **Sounds and effects:**
+>   - Explosion, Magnet Burst, Vicinity Break, Aerial Finish and Guard Break;
+>   - swing swishes, the Aerial Dodge sound and KH2 casts;
+>   - battle quotes at Battle Quotes KH2;
+>   - at 30 and at 60 fps.
+>
+>   Each should start on the right frame, with nothing doubled or missing. Log: "KH1's motion pass fired KH2 motion …".
+> - **Valor:**
+>   - change on the ground and in the air;
+>   - walk, run, jump and fall;
+>   - the ground and air combos with finishers and Finishing Plus;
+>   - getting hit;
+>   - revert from the menu, by running out of MP and by a KO.
+>
+>   Tell me if a base Sora animation shows anywhere in Valor. Log: "Drive: Valor Form on KH1's own states", "Valor Form's moves on KH1's states: N slots", "Revert (...) on KH1's own states".
+>
+> Questions:
+> 1. Your second quoted block (Reflect's barrier, Magnet Burst's pull, the invulnerable frames) and the hood / coat / shorts line: are those (a) also left out, (b) to be done (I'd put them after the spell scripts), or (c) the hood / coat / shorts left for the sleeves thread and the other three done?
+> 2. Footsteps on the baked walk, run and landing still come from KH1's own footstep events, at KH1's step frames scaled onto the KH2 motion. Should they be (a) kept like that, or (b) moved to KH2's own footstep frames, played with KH1's floor sounds?
+> 3. Valor next: (a) its Square moves, or (b) the left Keyblade's own hits as a second KH1 attack object?
+
+^m12
+
