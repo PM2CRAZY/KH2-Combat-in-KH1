@@ -106,3 +106,6 @@ go ahead
 
 ^m3
 
+lets actually have the foot iks off we'll work on this later when we do soras cloth animations, just make sure every animation is baked and on the native system
+
+go ahead
