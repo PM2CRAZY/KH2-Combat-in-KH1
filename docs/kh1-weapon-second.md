@@ -554,3 +554,41 @@ hand would be wrong.
   in front of the keyblades and its direction its sent should be the same as where sora is
   facing"). Every form element's anchor, flags and offset are logged once: if Valor's finisher
   elements (154's 16, 155's 13..15) turn out to use another anchor, the log says which.
+
+## 10. The left Keyblade as KH1's own weapon (the plan of `kh1-drive-forms-native.md` §7.3)
+
+The tester (what-is-still-missing, after m14): "all three, make it native to kh1 like the base
+keyblade" (KH1's own weapon object, then the draw, then the trail).
+
+### 10.1 Its weapon object from KH1's pool (Steam, Checked (decomp, exe))
+
+- KH1 makes a party member's weapon object with `0x140286D60 (actor)` (from `0x140290D60`) or
+  `0x140286EC0 (member)` (after an equip): the member's load slot (three of 0x30 bytes at
+  `0x14296B540`, found by member id), then the first free bit of the in-use mask `0x14296B5D8`
+  (nine objects of 0x60 bytes at `0x14296B1E0`). It fills `+0x18` = the slot's effect data, `+0x20`
+  = the weapon row (`btltbl.bin`'s weapon table + (model − 1) × 0x58, by the member's equipped
+  item), `+0x40` (u16) = 0, `+0x48` = 0, `+0` = the handle of the slot's model container, and
+  `+4` through `0x1401D6760 (container, &obj+4, &x, &y)` (for an `MENV` it only copies the
+  container's `+0x20`, the mesh model). The actor's `+0x14C` gets the object's handle and its
+  `+0x374` bit `0x10`.
+- KH1 gives it back with `0x1402868E0 (actor)`: `0x1401D5E40` on the container (nothing for an
+  `MENV`), the slot's user count down, `+0x14C` = 0, the object's bit cleared. Its area start
+  `0x140286B40` clears every bit (and the slots' in-use bits).
+- KH1 can't make a second object for one member (both makers take the member's own slot), so the
+  left `.wpn` stays loaded by KH1's loader into our buffer (§3.1). Its **weapon object** is now one
+  of KH1's own pool (`leftblade::left_object`): a free bit taken, the object filled exactly as
+  `0x140286D60` fills one (`+0x18`, `+0x20`, `+0x40`, `+0x48`, `+0`, `+4` by KH1's `0x1401D6760`),
+  plus `+0x38` = −1 (no trail asked for; KH1's own objects start from zeroed memory or a reused
+  object, Assumption: −1 is what its trail step reads as none). Each use it is checked to be
+  still ours (bit set, our container's handle, our row) and made again otherwise (KH1's area
+  start took it back). `+0x0C..+0x0F` (the draw colour, set to `ff ff ff 80` by KH1's draw-weapon
+  step `0x1402A2E30` for the right one) follows the right object's each use, and `+0x18` is the
+  right object's effect data while the left file has none. It is given back (bit cleared) when the
+  left Keyblade's model is released.
+- The left Keyblade's holder (our copy of Sora's actor, the bone source: the step 4 of the plan,
+  still ours) has `+0x14C` = this object, so everything that reads a weapon object through its
+  holder reads KH1's own: KH1's bone point `0x14029EB20` (the blade's range, row `+0x24` / `+0x28`)
+  for the left hits (`lefthits`) and the trail, KH2's weapon-point effects (`kh2dpx`).
+- Before, the holder's weapon object was a copy of Sora's (0x60 bytes in our block) with the left
+  row and effect data written over it.
+- Steam only: on another build the left Keyblade is not installed (logged).

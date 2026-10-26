@@ -94,14 +94,27 @@ const FX_STATE: usize = 0x14;
 const FX_OWNER: usize = 0x18;
 /// Our owner block: the actor copy, the instance copy, the matrices.
 const FAKE_SIZE: usize = 0x8000;
-/// Its weapon object (a copy of Sora's, `0x140284D40` builds his: 0x60 bytes, `+0x18` the
-/// weapon's effect data, `+0x20` its row in `btltbl.bin`'s weapon table, whose `+0x24` / `+0x28`
-/// are the blade's range along bone 0x30, `0x14029C990`): the left Keyblade's own row, so its
-/// trail spans its own blade, not the right one's (the user: "valor forms 2nd keyblade trail is
-/// not aligned with the keyblades length").
-const FAKE_WEAPON: usize = 0x700;
+/// A weapon object's size and fields (KH1's, Steam `0x140286D60`, Checked (decomp)): `+0x00` the
+/// model container's handle, `+0x04` its mesh model's (`0x1401D6760`), `+0x0C..+0x0F` its draw
+/// colour (the draw-weapon step `0x1402A2E30` sets `ff ff ff 80`), `+0x18` the `.wpn`'s effect
+/// data, `+0x20` its row in `btltbl.bin`'s weapon table (whose `+0x24` / `+0x28` are the blade's
+/// range along bone 0x30, `0x14029EB20`), `+0x28` / `+0x30` / `+0x38` the trail (`0x1402C2310`,
+/// `0x1402C1F20`), `+0x40` (u16) and `+0x48` cleared at creation.
 const WEAPON_OBJ_SIZE: usize = 0x60;
+const OBJ_CONTAINER: usize = 0x00;
+const OBJ_MESH: usize = 0x04;
+const OBJ_COLOUR: usize = 0x0C;
 const OBJ_ROW: usize = 0x20;
+const OBJ_TRAIL_ID: usize = 0x38;
+/// KH1's weapon object pool (Steam): nine objects of 0x60 bytes, their in-use bits (a u32; KH1's
+/// area start `0x140286B40` clears them all), and the call that fills an object's mesh model from
+/// its container (`0x1401D6760 (container, &obj+4, &out, &out)`; a `.wpn`'s container is an `MENV`,
+/// for which it only copies the container's `+0x20`). Checked (decomp, exe).
+const POOL_STEAM: usize = 0x296B1E0;
+const POOL_BITS_STEAM: usize = 0x296B5D8;
+const POOL_COUNT: usize = 9;
+const OBJ_MODEL_STEAM: usize = 0x1D6760;
+const OBJ_MODEL_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 /// A weapon row's blade range (start, end) along bone 0x30, and the rows' size.
 const ROW_BLADE: usize = 0x24;
 const WEAPON_ROW_SIZE: usize = 0x58;
@@ -153,6 +166,27 @@ struct Loaded {
     mesh: usize,
     /// Its effect data (the trail's look), 0 if the file has none.
     effects: usize,
+    /// Its row in `btltbl.bin`'s weapon table (its weapon object's `+0x20`).
+    row: usize,
+}
+
+/// `l` is the Keyblade drawn in the left hand from now on (its weapon object is made from it at
+/// its first use, `left_object`).
+fn make_current(l: &Loaded) {
+    MESH.store(l.mesh, Ordering::Relaxed);
+    EFFECTS.store(l.effects, Ordering::Relaxed);
+    OBJ_ROW_NOW.store(l.row, Ordering::Relaxed);
+    OBJ_FROM.store(l.container, Ordering::Relaxed);
+}
+
+/// No Keyblade in the left hand any more (its model is about to go): not drawn, and its weapon
+/// object given back to KH1's pool.
+unsafe fn clear_current() {
+    MESH.store(0, Ordering::Relaxed);
+    EFFECTS.store(0, Ordering::Relaxed);
+    free_object();
+    OBJ_FROM.store(0, Ordering::Relaxed);
+    OBJ_ROW_NOW.store(0, Ordering::Relaxed);
 }
 
 struct State {
@@ -207,9 +241,11 @@ static FAKE_INSTANCE_H: AtomicU32 = AtomicU32::new(0);
 /// Our owner copy's own handle (0 when it doesn't resolve): `lefthits` puts it in its attack
 /// object's bone-source actor (`+0x90`) so KH1's builder lays the blade on the left Keyblade.
 static FAKE_ACTOR_H: AtomicU32 = AtomicU32::new(0);
-static FAKE_WEAPON_H: AtomicU32 = AtomicU32::new(0);
-/// The left Keyblade's weapon row (0: unknown; the right one's is used).
-static LEFT_ROW: AtomicUsize = AtomicUsize::new(0);
+/// The left Keyblade's weapon object: one of KH1's own pool (0: none taken), and what it is made
+/// of (the loaded model's container and weapon row; 0 while none is loaded).
+static LEFT_OBJ: AtomicUsize = AtomicUsize::new(0);
+static OBJ_FROM: AtomicUsize = AtomicUsize::new(0);
+static OBJ_ROW_NOW: AtomicUsize = AtomicUsize::new(0);
 static FAKE_MATS_H: AtomicU32 = AtomicU32::new(0);
 static FAKE_FILLED: AtomicBool = AtomicBool::new(false);
 /// The left weapon's trail window is open (last KH2 step).
@@ -256,8 +292,13 @@ pub unsafe fn install() {
     let want = ((base + WPN_RELEASE_RVA) as u64).to_le_bytes();
     let ours = (wpn_release as *const () as usize as u64).to_le_bytes();
     let left = super::settings::get().valor_left_blade;
+    // (Its weapon object comes from KH1's own pool, at Steam addresses: Steam only.)
+    let steam = super::addr::Build::current() == super::addr::Build::Steam;
     let patched = if !left {
         log!(Animation, "left Keyblade: off (valor_left_blade = off)");
+        false
+    } else if !steam || std::slice::from_raw_parts((base + OBJ_MODEL_STEAM) as *const u8, OBJ_MODEL_PROLOGUE.len()) != OBJ_MODEL_PROLOGUE {
+        log!(Animation, "left Keyblade: not installed (KH1's weapon object code is where the Steam build has it only)");
         false
     } else if !super::crash::readable(slot) || !super::hook::patch(slot, &want, &ours, "the .wpn release handler (left Keyblade)") {
         log!(Animation, "left Keyblade: KH1's .wpn release handler not where expected: not installed");
@@ -335,7 +376,6 @@ pub unsafe fn show(item: Option<u8>) {
         return;
     };
     let base = BASE.load(Ordering::Relaxed);
-    LEFT_ROW.store(weapon_row(base, item).unwrap_or(0), Ordering::Relaxed);
     let Ok(mut st) = STATE.try_lock() else { return };
     // A load that never answered: given up (its buffer is kept, never reused).
     if let Some((it, buf, since)) = st.pending {
@@ -350,8 +390,7 @@ pub unsafe fn show(item: Option<u8>) {
     }
     if let Some(l) = st.loaded.as_ref() {
         if l.item == item {
-            MESH.store(l.mesh, Ordering::Relaxed);
-            EFFECTS.store(l.effects, Ordering::Relaxed);
+            make_current(l);
             return;
         }
     }
@@ -364,9 +403,8 @@ pub unsafe fn show(item: Option<u8>) {
     }
     // Another Keyblade was loaded: released (not drawn from now on).
     if let Some(old) = st.loaded.take() {
-        MESH.store(0, Ordering::Relaxed);
-        EFFECTS.store(0, Ordering::Relaxed);
         end_trails();
+        clear_current();
         release(&old);
     }
     let Some(name) = file_name(base, item) else {
@@ -429,13 +467,14 @@ unsafe extern "system" fn loaded(size: i32, id: u32, buf: usize) {
         return;
     };
     let Some((item, _, _)) = st.pending.take() else { return };
+    let row = weapon_row(BASE.load(Ordering::Relaxed), item).unwrap_or(0);
     match set_up(size, buf) {
         Ok((container, mesh, effects)) => {
-            st.loaded = Some(Loaded { item, buf, container, mesh, effects });
+            let l = Loaded { item, buf, container, mesh, effects, row };
             if SHOWN.load(Ordering::Relaxed) {
-                MESH.store(mesh, Ordering::Relaxed);
-                EFFECTS.store(effects, Ordering::Relaxed);
+                make_current(&l);
             }
+            st.loaded = Some(l);
         }
         Err(e) => {
             log!(Animation, "left Keyblade: item {item:#x}'s model not used: {e}");
@@ -531,9 +570,8 @@ unsafe extern "system" fn wpn_release(record: usize) -> u64 {
     if ours {
         static N: AtomicU32 = AtomicU32::new(0);
         log_n(&N, 10, || format!("KH1 released our file record {record:#x} (buffer {buf:#x}): not drawn from now on"));
-        MESH.store(0, Ordering::Relaxed);
-        EFFECTS.store(0, Ordering::Relaxed);
         end_trails();
+        clear_current();
         if let Ok(mut st) = STATE.try_lock() {
             if st.loaded.as_ref().is_some_and(|l| l.buf == buf) {
                 st.loaded = None;
@@ -543,6 +581,96 @@ unsafe extern "system" fn wpn_release(record: usize) -> u64 {
     }
     let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(BASE.load(Ordering::Relaxed) + WPN_RELEASE_RVA);
     f(record)
+}
+
+// ---------------------------------------------------------------------------------------------
+// The weapon object (KH1's own)
+
+/// The pool's object `i` and its in-use bit.
+fn pool_obj(i: usize) -> usize {
+    BASE.load(Ordering::Relaxed) + POOL_STEAM + i * WEAPON_OBJ_SIZE
+}
+fn pool_index(obj: usize) -> Option<usize> {
+    let first = pool_obj(0);
+    (obj >= first && obj < first + POOL_COUNT * WEAPON_OBJ_SIZE && (obj - first) % WEAPON_OBJ_SIZE == 0).then(|| (obj - first) / WEAPON_OBJ_SIZE)
+}
+unsafe fn pool_bits() -> u32 {
+    rd::<u32>(BASE.load(Ordering::Relaxed) + POOL_BITS_STEAM)
+}
+unsafe fn set_pool_bits(v: u32) {
+    std::ptr::write_unaligned((BASE.load(Ordering::Relaxed) + POOL_BITS_STEAM) as *mut u32, v);
+}
+
+/// `obj` is still ours: its pool bit is set and it still holds our model and row (KH1's area start
+/// clears every bit, `0x140286B40`, and a party member's weapon may take the place after it).
+unsafe fn object_ours(obj: usize, container: usize, row: usize) -> bool {
+    let Some(i) = pool_index(obj) else { return false };
+    pool_bits() & (1 << i) != 0 && rd::<u32>(obj + OBJ_CONTAINER) == super::pose::handle(container) && rd::<u64>(obj + OBJ_ROW) as usize == row
+}
+
+/// The left Keyblade's weapon object: one of KH1's own pool, made as KH1 makes a party member's
+/// (`0x140286D60`, Steam, Checked (decomp)) on the left `.wpn`'s model: a free bit of the pool's
+/// mask taken, `+0x18` its effect data (the right Keyblade's while its own file has none: the
+/// trail's look), `+0x20` its weapon row, `+0x40` / `+0x48` cleared, `+0` its container's handle and
+/// `+4` its mesh model through KH1's `0x1401D6760`. The draw colour (`+0x0C..`) and effect data are
+/// brought up to date each call (the right object's colour: KH1's fade follows). Made again when
+/// KH1 took it back (area start). None while no model is loaded or the pool is full (logged).
+unsafe fn left_object() -> Option<usize> {
+    static N: AtomicU32 = AtomicU32::new(0);
+    let (container, row) = (OBJ_FROM.load(Ordering::Relaxed), OBJ_ROW_NOW.load(Ordering::Relaxed));
+    if container == 0 || row == 0 || MESH.load(Ordering::Relaxed) == 0 {
+        return None;
+    }
+    let mut obj = LEFT_OBJ.load(Ordering::Relaxed);
+    if obj == 0 || !object_ours(obj, container, row) {
+        obj = 0;
+        let bits = pool_bits();
+        if let Some(i) = (0..POOL_COUNT).find(|i| bits & (1 << i) == 0) {
+            set_pool_bits(bits | 1 << i);
+            obj = pool_obj(i);
+            std::ptr::write_bytes(obj as *mut u8, 0, WEAPON_OBJ_SIZE);
+            std::ptr::write_unaligned((obj + OBJ_ROW) as *mut u64, row as u64);
+            // (No trail asked for yet: `0x1402C1F20` reads -1 as none.)
+            std::ptr::write_unaligned((obj + OBJ_TRAIL_ID) as *mut i32, -1);
+            std::ptr::write_unaligned((obj + OBJ_CONTAINER) as *mut u32, super::pose::handle(container));
+            let model: unsafe extern "system" fn(usize, usize, usize, usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + OBJ_MODEL_STEAM);
+            let (mut a, mut b) = (0u32, 0u32);
+            model(container, obj + OBJ_MESH, &mut a as *mut u32 as usize, &mut b as *mut u32 as usize);
+            log_n(&N, 6, || format!("its KH1 weapon object made: pool object {i} at {obj:#x}, mesh {:#x}, row {row:#x}", super::pose::ptr(rd::<u32>(obj + OBJ_MESH))));
+        } else {
+            log_n(&N, 6, || format!("KH1's weapon object pool is full ({bits:#x}): no object for it"));
+        }
+        LEFT_OBJ.store(obj, Ordering::Relaxed);
+        if obj == 0 {
+            return None;
+        }
+    }
+    // Its look and colour, from the right Keyblade's object where it has none of its own.
+    let sora = super::takeover::sora_actor();
+    let right = if readable(sora + ACTOR_WEAPON, 4) { super::pose::ptr(rd::<u32>(sora + ACTOR_WEAPON)) } else { 0 };
+    let fx = match EFFECTS.load(Ordering::Relaxed) {
+        0 if readable(right + OBJ_EFFECTS, 8) => rd::<u64>(right + OBJ_EFFECTS),
+        fx => fx as u64,
+    };
+    std::ptr::write_unaligned((obj + OBJ_EFFECTS) as *mut u64, fx);
+    if right != 0 && readable(right + OBJ_COLOUR, 4) {
+        std::ptr::write_unaligned((obj + OBJ_COLOUR) as *mut u32, rd::<u32>(right + OBJ_COLOUR));
+    }
+    Some(obj)
+}
+
+/// Our weapon object back to KH1's pool (KH1's own release order, `0x1402868E0`: its pool bit
+/// cleared; the model's `0x1401D5E40` does nothing for an `MENV`), if it is still ours.
+unsafe fn free_object() {
+    let obj = LEFT_OBJ.swap(0, Ordering::Relaxed);
+    let (container, row) = (OBJ_FROM.load(Ordering::Relaxed), OBJ_ROW_NOW.load(Ordering::Relaxed));
+    if obj != 0 && object_ours(obj, container, row) {
+        if let Some(i) = pool_index(obj) {
+            set_pool_bits(pool_bits() & !(1 << i));
+            static N: AtomicU32 = AtomicU32::new(0);
+            log_n(&N, 6, || format!("its KH1 weapon object {i} given back"));
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -907,16 +1035,15 @@ unsafe fn fill_owner() -> bool {
             return false;
         }
         let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_RVA);
-        let (ih, mh, wh) = (to_handle(fake + FAKE_INSTANCE), to_handle(fake + FAKE_MATS), to_handle(fake + FAKE_WEAPON));
+        let (ih, mh) = (to_handle(fake + FAKE_INSTANCE), to_handle(fake + FAKE_MATS));
         let ah = to_handle(fake);
         FAKE_ACTOR_H.store(if super::pose::ptr(ah) == fake { ah } else { 0 }, Ordering::Relaxed);
-        if super::pose::ptr(ih) != fake + FAKE_INSTANCE || super::pose::ptr(mh) != fake + FAKE_MATS || super::pose::ptr(wh) != fake + FAKE_WEAPON {
-            log_n(&N, 3, || format!("trail: handles of its owner don't resolve ({ih:#x} {mh:#x} {wh:#x}): no trail"));
+        if super::pose::ptr(ih) != fake + FAKE_INSTANCE || super::pose::ptr(mh) != fake + FAKE_MATS {
+            log_n(&N, 3, || format!("trail: handles of its owner don't resolve ({ih:#x} {mh:#x}): no trail"));
             TRAIL_HOOKED.store(false, Ordering::Relaxed);
             return false;
         }
         FAKE_INSTANCE_H.store(ih, Ordering::Relaxed);
-        FAKE_WEAPON_H.store(wh, Ordering::Relaxed);
         FAKE_MATS_H.store(mh, Ordering::Relaxed);
         FAKE.store(fake, Ordering::Relaxed);
         log_n(&N, 3, || format!("trail: its owner made at {fake:#x}"));
@@ -925,17 +1052,10 @@ unsafe fn fill_owner() -> bool {
     std::ptr::copy_nonoverlapping(inst as *const u8, (fake + FAKE_INSTANCE) as *mut u8, INSTANCE_SIZE);
     std::ptr::write_unaligned((fake + ACTOR_INSTANCE) as *mut u32, FAKE_INSTANCE_H.load(Ordering::Relaxed));
     std::ptr::write_unaligned((fake + FAKE_INSTANCE + INST_WORLD) as *mut u32, FAKE_MATS_H.load(Ordering::Relaxed));
-    // Its weapon object: Sora's, with the left Keyblade's row (its blade's range) and effect data.
-    let obj = super::pose::ptr(rd::<u32>(sora + ACTOR_WEAPON));
-    let row = LEFT_ROW.load(Ordering::Relaxed);
-    if row != 0 && readable(obj, WEAPON_OBJ_SIZE) {
-        std::ptr::copy_nonoverlapping(obj as *const u8, (fake + FAKE_WEAPON) as *mut u8, WEAPON_OBJ_SIZE);
-        std::ptr::write_unaligned((fake + FAKE_WEAPON + OBJ_ROW) as *mut u64, row as u64);
-        let fx = EFFECTS.load(Ordering::Relaxed);
-        if fx != 0 {
-            std::ptr::write_unaligned((fake + FAKE_WEAPON + OBJ_EFFECTS) as *mut u64, fx as u64);
-        }
-        std::ptr::write_unaligned((fake + ACTOR_WEAPON) as *mut u32, FAKE_WEAPON_H.load(Ordering::Relaxed));
+    // Its weapon object: the left Keyblade's own, from KH1's pool (`left_object`: its row, so its
+    // blade's range, and its effect data); while none can be had, Sora's (his right Keyblade).
+    if let Some(obj) = left_object() {
+        std::ptr::write_unaligned((fake + ACTOR_WEAPON) as *mut u32, super::pose::handle(obj));
     }
     // (The weapon bones too: a rigid copy of his right hand's Keyblade, so the trail is KH1's
     // right one exactly, on the left grip.)
