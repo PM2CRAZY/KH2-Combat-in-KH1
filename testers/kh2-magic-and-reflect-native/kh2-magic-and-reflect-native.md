@@ -15,6 +15,7 @@
 - [9. Assistant: t582 to t585. (a) it is for question 1: Fire / Blizzard / Th](#^m9)
 - [10. Assistant: t607 to t610. Your two answers are in, and I found what was ](#^m10)
 - [11. Assistant: t624: Finishing Plus now works after a finisher cast. Drive ](#^m11)
+- [12. Assistant: From the What is still missing(../what-is-still-missing-for-](#^m12)
 
 ---
 
@@ -333,4 +334,26 @@ go ahead
 > Question: after a finisher *swing* at Base Combo KH2, the Finishing Plus window still opens when you have no finishers left, so a spell picked there becomes a finisher cast. KH2 would refuse it. (a) close the window when no finisher is left, as KH2 does, or (b) leave it?
 
 ^m11
+
+
+> [!tip] Assistant
+> From the [What is still missing](../what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md) thread, your (c), the spells. First step:
+>
+> **t640, spell hits through KH1's own collision pass.**
+> - Every attack a KH2 spell makes (Fire's shot, Blizzard's shard, Thunder's bolts, Cure, Reflect's counter and burst, Wisdom's shots) is now a KH1 attack object, made with the same KH1 function KH1's own spell scripts use for their shots. KH1's collision pass hits enemies with it; our own hit sweep for spells is off.
+> - It keeps what the old path had: KH1's own spell data for the element where it used it, KH2's power, the KH2 spark, and KH2's rule that a spell's later hits on the same enemy pick the next damage row, re-hitting at each row's interval.
+> - Two things change: spell hits now carry KH2's knock-back and launch numbers (before, KH1's row reactions), and a hit reaches the spell's script at most one frame later.
+> - Checked: KH1's constructor (`0x1402B2DC0`) and collision pass in the Steam KH1 decomp, its bytes in the exe. Not checked: in game.
+>
+> What's still ours for spells:
+> - **The scripts themselves.** KH2's spell scripts still run in our own interpreter. KH1's script machine can't run them as they are: the two games encode their instructions differently (KH1 puts the instruction class in the low 4 bits, with push 2 and script call 11; KH2 has push 0 and syscall 10).
+> - **Reflect's barrier meeting enemy attacks.** Still our own check. The next native step there would be making the barrier a KH1 guard object that KH1's own clash meets, counted through the meeting hook we already have.
+>
+> Please test each spell on single enemies and on groups, including the multi-hit ones (Thunder, Reflect's counter): damage, sparks, enemies knocked back or launched; and Wisdom's shots. Log lines: "KH2 spell hits: ATKP … on KH1 attack object …" and "KH2 spell hit: ATKP …".
+>
+> Questions (the one in my last message, about the Finishing Plus window, still stands too):
+> 1. The scripts, which way? (a) Teach KH1's script machine KH2's instruction set, so a KH2 spell runs as a KH1 script process with KH2's script calls added to KH1's table: most native, the biggest job. (b) Translate KH2's spell scripts into KH1's own script code when the game loads, with KH2's calls added to KH1's table. (c) Keep our interpreter for the scripts only, with everything they touch on KH1's systems; that still runs along KH1, so I'd want your OK before leaving it that way.
+> 2. Next: (a) Reflect's barrier as a KH1 guard object, or (b) wait until the scripts are decided?
+
+^m12
 

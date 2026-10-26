@@ -9,6 +9,7 @@
 - [3. Assistant: Done: every item that isn't native yet has its own thread no](#^m3)
 - [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](#^m4)
 - [5. Assistant: Here's the list from my last message, updated with this roun](#^m5)
+- [6. Assistant: Here's this round for (b) and the first part of (c). Each on](#^m6)
 
 ---
 
@@ -155,6 +156,35 @@ give me an update
 
 ^m5
 
+
 (b), (c), make sure its the responses are updated in the threads
 
 go ahead
+> [!tip] Assistant
+> Here's this round for (b) and the first part of (c). Each one also has its own reply in its topic thread.
+>
+> - **t638, body hits.** Vicinity Break, Explosion and Magnet Burst's hits on Sora's body are now KH1 attack objects that KH1's own collision pass collides, with KH2's shapes and hit numbers. Counterguard's and Finishing Leap's body hits too. Our own sweep for them is gone. More in the [combo rows thread](../kh2s-combo-row-selection/kh2s-combo-row-selection.md).
+> - **t639, button fallbacks.** When KH1's states of ours can't take a Square (dodge roll / guard / Quick Run) or an air jump (Aerial Dodge), KH2's controller no longer borrows Sora. The press is KH1's, the way t630 did it for the combo.
+> - **t640, spell hits.** Every KH2 spell's attacks are now KH1 attack objects made with KH1's own constructor (the one KH1's spell scripts use), and KH1's collision pass collides them. More in the [magic thread](../kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md).
+>
+> Checked: KH1's collision pass, the attack constructor and the row maker in the Steam KH1 decomp; the hooked bytes in the exe; the shapes, windows and re-hit intervals in KH2's files. Not checked: in game.
+>
+> Still borrowing base Sora:
+> 1. An Attack pressed during one of KH1's own moves (a KH1 spell, an item, KH1's roll at Base Combo KH2): KH2's controller still plays that next swing. My plan is to give the Attack to KH1's own Attack step (KH1 already plays KH2's picks since t622 / t631), with the spell counted as a combo step the way KH2 casts already are. It touches the spell-cut rules from the magic thread, so I'd do it as its own version next unless you say otherwise.
+> 2. A KH2 spell (Magic KH2, Reflect, Gravity / Stop / Aero on KH2's animation) chosen in a state where KH1 casts nothing: KH1 only casts standing, walking, jumping, falling or flying. Also a spell picked during KH1's own jump, glide or roll.
+> 3. Attack while flying in Neverland still uses KH2's flight combo.
+> 4. The Drive and everything in a form (the Drive Forms thread).
+>
+> Please test:
+> - Vicinity Break, Explosion and Magnet Burst on groups of enemies: damage, Explosion's re-hits, the Magnet pull, the finisher launches. Log: "KH2 body hits: motion …", "KH2 body hit: ATKP …".
+> - Fire / Blizzard / Thunder / Cure / Reflect's counter hitting enemies. Log: "KH2 spell hits: ATKP … on KH1 attack object …".
+> - Square in deep water, and Square / air jump with Dodge Roll, Guard, Quick Run or Aerial Dodge not equipped. Log: "no KH1 state of ours could take it here".
+>
+> Questions:
+> 1. A spell chosen in a state KH1 can't cast in (2 above): (a) refuse it with KH1's "can't" sound, as KH1 would; (b) teach KH1's cast step to cast in those states too (tell me which: swimming, ladders, the slider…); or (c) something else?
+> 2. Attack while flying: (a) KH1's own flying Attack, with KH2's air combo picks on KH1's air rows (KH1 keeps its flight physics); or (b) the same, but with KH2's flight-combo rules (no sinking, homing at the target) built into KH1's flight state?
+> 3. Still open from last time: when a native version needs something KH1 has no system for at all (MP Charge, for example), (a) build it into KH1's engine, or (b) ask you each time?
+> 4. Should I go ahead with 1 (an Attack during KH1's own moves going to KH1's Attack step) as the next version?
+
+^m6
+

@@ -31,6 +31,7 @@
 - [25. Assistant: t622 and t623: the first two steps of the native plan. Neith](#^m25)
 - [26. Assistant: t629, t630 and t631, one each:](#^m26)
 - [27. Assistant: Here's t637, and a question on your 2.](#^m27)
+- [28. Assistant: One more from the What is still missing(../what-is-still-mis](#^m28)
 
 ---
 
@@ -778,4 +779,19 @@ go ahead
 > Log lines: "on KH1's row ... of its own", "no attack", "Finishing Plus".
 
 ^m27
+
+
+> [!tip] Assistant
+> One more from the [What is still missing](../what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md) thread, your (b):
+>
+> **t638, body hits through KH1's own collision pass.**
+> - Vicinity Break, Explosion and Magnet Burst hit with shapes on Sora's own body, not the Keyblade. Each of those hit windows is now a KH1 attack object tied to Sora's animation, on its own KH1 hit window, and KH1's collision pass hits enemies with it. Before, we swept KH2's shapes against enemies ourselves.
+> - The shapes are KH2's: Explosion a 350-wide ellipsoid 120 up; Vicinity Break 450 wide, 60 up; Magnet Burst 750, 130, and a 400 sphere at the spine.
+> - Each target can be hit again at KH2's own interval from its own hit (Explosion's spinning hits every 8 frames). Damage, knock-back, launches and Magic scaling are KH2's numbers through KH1's own damage and reactions, as on your other KH2 rows.
+> - Counterguard's and Finishing Leap's body hits work the same way. Magnet Burst's pull and the body guards (Explosion's, Magnet Burst's) work as before.
+> - Checked: KH1's collision pass in the Steam KH1 decomp (`0x1402B4460` → `0x1402B3800`, the overlap test `0x1402B3BE0`), the hooked bytes in the exe, the shapes and windows in `P_EX100.mdlx` / `P_EX100.mset`, the intervals in `00battle.bin`. Not checked: in game.
+>
+> Please test the three moves on one enemy and on groups at different distances (does each hit land where it should?), Explosion's repeated hits, Magnet Burst pulling enemies in then the last blast, the finishers launching, and Counterguard and Finishing Leap still hitting. Log lines: "KH2 body hits: motion …" when a move starts, "KH2 body hit: ATKP …" per hit.
+
+^m28
 

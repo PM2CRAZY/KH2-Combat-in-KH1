@@ -140,6 +140,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [9. Assistant: t582 to t585. (a) it is for question 1: Fire / Blizzard / Th](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m9)
   - [10. Assistant: t607 to t610. Your two answers are in, and I found what was ](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m10)
   - [11. Assistant: t624: Finishing Plus now works after a finisher cast. Drive ](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m11)
+  - [12. Assistant: From the What is still missing(../what-is-still-missing-for-](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m12)
 - [KH2 MP and MP Charge](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md)
   - [1. Assistant: Started from What is still missing(../what-is-still-missing-](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md#^m1)
 - [KH2 player model through KH1's model system](../testers/kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md)
@@ -188,6 +189,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [25. Assistant: t622 and t623: the first two steps of the native plan. Neith](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m25)
   - [26. Assistant: t629, t630 and t631, one each:](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m26)
   - [27. Assistant: Here's t637, and a question on your 2.](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m27)
+  - [28. Assistant: One more from the What is still missing(../what-is-still-mis](../testers/kh2s-combo-row-selection/kh2s-combo-row-selection.md#^m28)
 - [Missing sleeves animation](../testers/missing-sleeves-animation/missing-sleeves-animation.md)
   - [1. Mr Bugs: I'm in the process of getting ready to transfer all the kh2 ](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m1)
   - [2. Assistant: t375](../testers/missing-sleeves-animation/missing-sleeves-animation.md#^m2)
@@ -243,6 +245,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [3. Assistant: Done: every item that isn't native yet has its own thread no](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m3)
   - [4. Assistant: Got it, thanks for spelling it out. I've added your definiti](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m4)
   - [5. Assistant: Here's the list from my last message, updated with this roun](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m5)
+  - [6. Assistant: Here's this round for (b) and the first part of (c). Each on](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m6)
 
 ---
 
