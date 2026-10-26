@@ -288,3 +288,4 @@ for what your working on with glide and the command menu, make it a separate thr
 ^m9
 
 
+1. its so fast that I couldn't see anything so (a) is fine
