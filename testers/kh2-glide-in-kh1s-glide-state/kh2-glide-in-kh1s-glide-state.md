@@ -12,6 +12,7 @@
 - [6. Assistant: Thanks. (a) it is: after you let go, the fall keeps followin](#^m6)
 - [7. Assistant: Thanks for the trace and the log. I went through them frame ](#^m7)
 - [8. Assistant: Thanks for both traces. They showed two separate bugs, both ](#^m8)
+- [9. Assistant: Thanks for the trace. That's on me: t646 broke it.](#^m9)
 
 ---
 
@@ -247,6 +248,24 @@ go ahead
 > One question: KH1 chains every animation change that comes in the middle of a blend this way, not just the glide's (attacks, landings, recoils). Should I (a) bring KH2's rule (always blend from the pose on screen) to all of them, as its own version, or (b) keep it to the glide for now?
 
 ^m8
+
+
 sora now disappears and gets all garbled when turning in glide. recorded a trace please look
 
+
+> [!tip] Assistant
+> Thanks for the trace. That's on me: t646 broke it.
+>
+> The trace doesn't capture the drawn pose itself, but the timing lines up with t646. Every garbled moment would be a bank change mid-blend (206 → 205 → 207, frames 13721/22, 13795/96, 13801/02 and so on), which is exactly where t646 steps in. What t646 does there: it tells KH1 "no blend is running" right before KH1 applies the new glide motion, so KH1 takes its fresh-blend path instead of its chained one. That isn't safe. In the Steam KH1 decomp, KH1's apply (`0x1402A0350`) and its two blend starts (`0x140394080` fresh, `0x140393B30` chained) share a set of pose buffers on Sora's skeleton (`+0x1B8` the pose being drawn, `+0x1BC`..`+0x1CC` the blend's from / to poses and its IK list). The chained path leaves those buffers set up for a blend that's still running. Faking "no blend" while they're still in use can leave KH1 drawing from a pose buffer that's half set up or freed. That's what disappearing and garbled limbs look like. I haven't pinned down which exact buffer it is from the trace alone.
+>
+> KH2's rule itself (blend from the pose on screen) is still right; my way of getting KH1 to do it isn't. The safe way is to teach KH1's chained blend start to take its "from" pose from the pose being drawn (`+0x1B8`), instead of from the last blend's target (`+0x1C0`), without touching which path KH1 picks. That's a hook in `0x140393B30` that I'd want to check line by line before shipping.
+>
+> Questions:
+> 1. What do you want in the meantime? (a) I undo t646 straight away, so the glide is stable again (back to the old snap at bank changes), and do the proper fix as its own version after; or (b) leave t646 as it is and go straight to the proper fix.
+> 2. Can you send `kh1-kh2.log` from that session (it sits next to the game exe)? The "asked mid-blend ... a fresh blend from the pose on screen" lines show exactly which bank changes went through t646.
+> 3. Did the neutral glide out of a KH2 jump (t647) loop properly in your other tries: (a) yes, fixed, or (b) still jumps back partway?
+>
+> Still open from before: should KH2's "blend from what's drawn" rule go to all of KH1's mid-blend changes (attacks, landings), (a) yes as its own version, or (b) glide only? I'd hold that until the glide version is solid.
+
+^m9
 
