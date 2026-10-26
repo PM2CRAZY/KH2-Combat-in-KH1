@@ -352,3 +352,33 @@ The tester's t596 trace (f60998..f61178) and log, read against both decomps:
   and 1 of these loops aren't fired on that frame (KH2 fires 0..2; none known on 205..208).
   Logged: "glide (native) motion ...: KH1's blend clock ... -> KH2's 2.0", "... KH2's skip of
   frame 1" (first 12).
+
+### 8.11 Bank to bank: a fresh blend from the pose on screen (glide thread, after m7)
+
+The tester's t6xx trace (f109997..f110535, every bank change 207 -> 205 -> 206 or 206 -> 205 -> 207, the
+205 lasting one frame as the stick crosses his facing) and "I'm still seeing the same phenomenon":
+- **KH1 chains a request that comes during a blend.** KH1's request `0x14029F7C0` empties the queue
+  (`+0x178`) and queues the request only when its slot isn't the one playing (`+0x168`); the queue is
+  applied in KH1's animation update `0x14029F0A0` by `0x14029FC40` -> `0x1402A0350`. With a blend under
+  way (`+0x170 > 0`) the apply goes to `0x140393B30`, which moves the last blend's *target* buffers
+  (`+0x1C0` local matrices, `+0x1C8` channels: the interrupted motion's start frame) into the new
+  blend's *source* (`+0x1BC`, `+0x1C4`). With no blend (`+0x170` 0) it goes to `0x140394080`, which
+  frees all five blend buffers and takes the source from `+0x1B8` / `+0x1B0`. KH1's blend pass
+  (`0x1402A0620` -> `0x140392560`) writes the blended pose into `+0x1B0` (channels, lerped from
+  `+0x1C4` to `+0x1C8`) and `+0x1B8` each frame, so the fresh blend starts from the pose on screen.
+  **Checked (decomp)**, Steam KH1.
+- So the second change of a bank switch (205 -> 207, one frame after 206 -> 205) blended from 205's
+  frame 0, not from the 206 lean on screen: he snapped to the straight glide's first frame, then
+  blended into the new bank. That is the "reset".
+- **KH2** asks its glide motion through `0x1403C6DC0` -> `0x1403C86A0`, which ends every layer of the
+  holder (`0x1403C70D0`) and starts one new blend (`0x1403C88C0` -> `0x1403C8CD0`); nothing is
+  chained. Its blend source is the pose on screen in the OG rewrite's rig (`kh2-rig`,
+  `decompose(&self.bones)`, matched to the exe for the Phase 2 blending notes). **Checked (decomp)**
+  that nothing chains; that the source is the drawn pose: **Checked (code)** (the rig port), not
+  re-traced in the decomp.
+- **Now** (`glide::fresh_blend`, in the pre-step right after its request): when KH1 queued the glide
+  motion (`+0x178` >= 1 after the call) while a blend was under way (`+0x170` > 0), `+0x170` is put at
+  0, so KH1's apply takes its fresh path. The new motion still starts at frame 0 and is held there
+  through KH2's 16-frame blend, as in both games. Logged: "glide (native) motion N asked ... into
+  KH1's blend: a fresh blend from the pose on screen" (first 20). Glide motions (205..208) only, for
+  Sora at Glide KH2.

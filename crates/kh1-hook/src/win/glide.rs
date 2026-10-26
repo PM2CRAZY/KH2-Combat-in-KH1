@@ -477,6 +477,36 @@ unsafe fn kh2_clock(actor: usize, dt: f32) {
     }
 }
 
+/// KH1's motion queue (`+0x178` count; KH1's request `0x14029F7C0` empties it first, and adds
+/// the request only when its slot isn't the one playing, `+0x168`). Checked (decomp).
+const QUEUED: usize = 0x178;
+
+/// A glide motion change asked while KH1's blend into the last one still runs, made a fresh
+/// blend from the pose on screen, as KH2 blends (glide thread, after m7: "I'm still seeing the
+/// same phenomenon"). KH1's apply (`0x1402A0350`, from its queue step `0x14029FC40`) chains a
+/// request that comes during a blend (`+0x170 > 0` -> `0x140393B30`): the new blend's source
+/// buffers (`+0x1BC` local matrices, `+0x1C4` channels) take the last blend's target buffers
+/// (`+0x1C0` / `+0x1C8`, the interrupted motion's start frame), not the pose drawn. Its fresh
+/// blend (`+0x170` 0 -> `0x140394080`) takes `+0x1B8` / `+0x1B0`, which KH1's blend pass
+/// (`0x1402A0620` -> `0x140392560`) writes with the blended pose each frame: the pose on screen.
+/// Checked (decomp). A bank to the other side passes his facing (206 -> 205 for a frame -> 207),
+/// so the second change was always chained and he snapped to 205's first frame. With `+0x170`
+/// cleared after our request is queued (the queue is applied in KH1's animation update, after
+/// this pre-step), KH1 takes the fresh path; the fresh path frees all five blend buffers itself.
+/// The new motion still starts at its frame 0, held through the 16-frame blend, as in both games.
+unsafe fn fresh_blend(actor: usize, motion: u16, blend_before: f32, clock: f32) {
+    if !(blend_before > 0.0) || rd::<i32>(actor + QUEUED) < 1 || !(rd::<f32>(actor + BLEND_LEN) > 0.0) {
+        return;
+    }
+    wr(actor + BLEND_LEN, 0.0f32);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 20 {
+        log(&format!(
+            "glide (native) motion {motion} asked {clock:.1} of {blend_before:.0} frames into KH1's blend: a fresh blend from the pose on screen (KH2's), not KH1's chained one"
+        ));
+    }
+}
+
 /// State 0x15's pre-step (`(actor, input)`, KH1's think, before the step): KH1's (`0x1402B2880`:
 /// its turn of 2° / 1° a frame, its motion picks at 30°) for Donald and Goofy; for Sora KH2's:
 /// - the hover (`0x140423840`): the stick takes it into the glide, KH2's stored launch speed put
@@ -545,6 +575,7 @@ unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
     kh2_clock(actor, dt);
     let before = bank_fields(actor);
     request(actor, asked, BLEND);
+    fresh_blend(actor, motion, before.2, before.3);
     note_bank(motion, asked, before, tilt);
     // (The hover's slot is made on an air swing of KH1's, which holds at its end: kept going round
     // as KH2 loops it. KH1's glide slots loop as KH1's own glide has them.)
