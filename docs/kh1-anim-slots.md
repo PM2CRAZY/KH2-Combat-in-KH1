@@ -788,6 +788,29 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   by at most twice the parameter a game frame. KH1's row still faces the target as it starts.
   Cost: his targets looked up on the frames inside such a range only. Not checked in game;
   **assumption**: `+0x690` is 0 in a swing (it is cleared outside `+0x120` bit 4).
+  - **The turn on a slot with root travel** (the tester, combo row selection after m31: "the 2nd
+    attack on kh2 soras ground combos has really crazy tracking and he teleports everywhere"; his
+    trace f23068 and log, motion 153). Two things of KH1's fought the turn (Checked (trace),
+    Checked (decomp), Steam):
+    - *The travel so far swung round.* KH1's motion pass (`0x14029F0A0`, its end) takes his place
+      less the travel so far (`+0x210`) as the origin, puts the motion's whole travel so far (H10)
+      on it with his facing as it is now, and keeps the difference as next frame's step (`+0x200`)
+      and the new total in `+0x210`. A turn mid-motion therefore swung all the travel made so far
+      round the origin. 153 has about 220 of travel by its second turn window (frames 32..44), so
+      each turn of up to 0.52 threw him 70..160 sideways (trace frame 23027: moved (71, -92) on a
+      0.52 turn, which is that rotation of (129, 178)). KH1's own swings don't turn mid-motion
+      (their start direction stays in `+0x20`, below), so KH1 never shows it. Fix (t-turn): our
+      turn also turns `+0x210` by the same angle (only while `+0x160` bit 4, the travel flag, is
+      set), so the next step is the motion's own step along the new facing, as KH2 adds its root
+      step along its facing each frame.
+    - *KH1 turned him back.* In an action the think's input is KH1's move vector `+0x20` (no
+      stick input: `0x1402A43A0` copies it, the filter `0x1402A5F10` keeps it), the ground input
+      step `0x1402CC1A0` sets `+0x150` from it (`0x140297FB0`), and the think (`0x1402A3300`, its
+      end, `0x1402A8300`) turns him toward `+0x150` (pi/16 a frame, `shared.rs`'s note). `+0x20`
+      stays the swing's start direction, so each frame began 0.2 short of the last turn (the log:
+      0.63 -> 1.15, then 0.95 -> 1.48, 1.28 -> 1.80) and after the window he turned back to the
+      start direction. Fix (t-turn): the turn sets `+0x20`'s direction too (its y and the speed
+      `+0x2C` kept).
 - **Combo Plus and Negative Combo on KH1's rows** (the tester: "transfer everything that is not
   on the new system yet"; Base / Aerial Combo KH2): KH2's selector is asked at KH1's count with
   KH2's combo length (its Combo Plus / Negative Combo, `0x1403D7780`, Checked (decomp)), so its

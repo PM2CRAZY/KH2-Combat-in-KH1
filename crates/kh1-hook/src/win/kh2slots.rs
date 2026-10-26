@@ -896,9 +896,45 @@ pub unsafe fn turn_to_lock(actor: usize) {
     }
     wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
     wr(actor + 0x150, f);
+    // (t-turn) KH1's move vector (`+0x20`: its x / z; its y and the speed `+0x2C` kept) turned with
+    // him. During an action KH1's control step gives no stick input, so its input filter
+    // (`0x1402A5F10`) hands the ground state's input step (`0x1402CC1A0`) this vector, and that sets
+    // the yaw he turns toward (`+0x150`, `0x140297FB0`) from it every frame; the player's think
+    // (`0x1402A3300`, at its end through `0x1402A8300`) then turns him toward it at pi/16 a frame
+    // (Checked (decomp), Steam). Left at the swing's start direction, it pulled him back 0.2 a frame
+    // against KH2's turn (the tester's log, motion 153 frames 32..43: each turn starting about 0.2
+    // short of the last one's result), and after the window turned him back to the start
+    // direction, which KH2 never does (its facing changes only in this window).
+    // (On the ground only, state 0: the air state's input step (`0x1402AFC20`) sets `+0x150` only
+    // from a tilted stick (Checked (decomp)); whether its air moves read `+0x20` is not checked,
+    // so it is left alone there. **Assumption**.)
+    let mv: [f32; 3] = rd(actor + 0x20);
+    if rd::<i32>(actor + 0x70) == 0 && mv[0].hypot(mv[2]) > 1e-4 {
+        wr(actor + 0x20, [f.sin(), mv[1], f.cos()]);
+    }
+    // (t-turn) The motion's travel so far (`+0x210`) turned by the same angle, while KH1 moves him
+    // by our slot's root travel (the request's travel flag, `+0x160` bit 4). KH1's motion pass
+    // (`0x14029F0A0`, its end; Checked (decomp), Steam) takes his place less `+0x210` as the travel
+    // origin, puts the motion's whole travel so far (helper H10) on it with his facing as it is
+    // now, and moves him next frame by that less `+0x210` (`+0x200`), keeping it in `+0x210`. So a
+    // turn mid-motion swung all the travel made so far round that origin: KH2's 153 has about 220
+    // of travel by its turn window (frames 32..43), and each turn threw him 70..160 sideways (the
+    // tester's trace f23068, frame 23027: moved (71, -92) on a 0.52 turn, what that rotation of
+    // the travel gives). KH2 adds each frame's root step along the facing it has then (the OG
+    // rewrite's action step, `fo.root`), so the travel already made stays put: with `+0x210`
+    // turned too, KH1's next step is the motion's own step along the new facing, and the model
+    // (drawn pulled back by `+0x210`, its body on the same travel) stays on him.
+    let turned = f - yaw;
+    if rd::<u32>(actor + 0x160) & 4 != 0 && turned.abs() > 1e-6 {
+        let tr: [f32; 4] = rd(actor + 0x210);
+        let (s, c) = turned.sin_cos();
+        // (KH1's world: his facing is (sin yaw, cos yaw) on x / z, so a turn by `turned` takes
+        // (x, z) to (x c + z s, -x s + z c).)
+        wr(actor + 0x210, [tr[0] * c + tr[2] * s, tr[1], -tr[0] * s + tr[2] * c, tr[3]]);
+    }
     static N: AtomicU32 = AtomicU32::new(0);
     if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log!(Animation, "KH2's turn to the target (KH2 motion {} frame {:.0}, up to {:.2} a frame): {:.2} -> {f:.2} (the target at {:.2})", m.motion, t, max, yaw, want);
+        log!(Animation, "KH2's turn to the target (KH2 motion {} frame {:.0}, up to {:.2} a frame): {:.2} -> {f:.2} (the target at {:.2}); travel so far turned with him", m.motion, t, max, yaw, want);
     }
 }
 
