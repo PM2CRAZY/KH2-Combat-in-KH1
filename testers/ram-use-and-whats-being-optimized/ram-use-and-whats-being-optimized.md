@@ -5,6 +5,7 @@
 ## Messages
 
 - [1. Assistant: I started this thread from the Table of contents(../table-of](#^m1)
+- [2. Assistant: Thanks! Seven versions this round, five for RAM and two for ](#^m2)
 
 ---
 
@@ -100,9 +101,40 @@
 
 ^m1
 
+
 1. (b) I can measure the ram in my task manager
 2. (a) if the agent isn't removing the duplicates in the asset work then tell it too. 
 3. in the ini I want to make it where if debug menu is off then we don't inject or load anything related to the debug, if its on then we do. keep debug menu in the config menu but if its off in the ini then its gone from that menu. I also want to have our logs attached to the debug menu where you can turn on and off each log and all should be off, if debug menu is off then none of the logs are injected into the game
 4. give the question to the agent working on what is still missing native thread and I'll answer it after its done. 
 
 go ahead
+> [!tip] Assistant
+> Thanks! Seven versions this round, five for RAM and two for the debug menu and logs. Question 4 (what goes to the mod folder next) is waiting for you in the [What is still missing](../what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md) thread, as you asked. No memory line, since you're measuring in Task Manager.
+>
+> **RAM (answer 2):**
+> - **t658, the baked KH2 moves are kept once.** It was worse than the audit said: while loading, up to four copies were held (the cache file, each move copied out of it, the cache's own copy for writing back, and the build's), and the build's copy stayed for good. Now they share one buffer, and the build's copy is freed as soon as KH1 has its own. That's about 16 to 18 MB less in game, and a lower peak at start. This covers the cache from t655 too, so the asset work has no duplicate left.
+> - **t659, the KH2 player model isn't loaded while Player Model is off.** About 3 MB less, and one loader thread fewer at start.
+> - **t660, the Drive Form recolours.** Sora's three textures (about 10.5 MB) are no longer kept all game. A slot is read the first time a form needs it, only when KH1's own copy isn't in memory, and dropped once the recoloured texture is made. This also fixed a real leak: every area change made new recoloured textures and never freed the old ones. Now each slot and look is made once and reused.
+> - **t661, start-up.** The package key and file indexes are read once per start, not once per file read. Before, each read re-read the whole exe (8.7 MB for KH2, 7.5 MB for KH1). This gives a smaller, shorter peak at start, but no lasting saving.
+> - **t662, repeat bakes.** 7 of the baked moves were the exact same bake twice (Finishing Plus's next finishers). Because of a t655 bug, they were re-baked, and the cache file rewritten, on every start. Now each is baked once and shared. I also checked whether KH1 could play two slots from one copy: it can't safely, because KH1's pose pass writes into the motion it's playing (`0x140391C70`, the motion's helper records), and KH1's own motion file never shares one either. So that part stays as it is.
+>
+> **Debug menu and logs (answer 3):**
+> - **t663, the debug tools load only with `debug_menu = on` in the ini.** The ini is read once at start, so a change needs a restart. With it off (the default), none of these are hooked in or loaded: the debug menu and its overlay (its 4 MB buffer and font), Frame Advance, the trace recorder, the sound log, and the background key-polling thread. The probes' debug-only work is off too. Config > Misc has no Debug Menu row then. A few hooks stay either way because gameplay runs through them: KH2's sound banks at the frame's end, KH2's voice lines, the hit and set-motion hooks, and the attack tutorial's fix.
+> - **t664, the logs are switches on a new Logs page in the debug menu, all off.** The 14 categories are General, Loading & Cache, Takeover & Input, Animation & Pose, Combat & Hits, Magic, Drive Forms, KH2 Sounds, KH1 Sound Calls, Effects, Camera, Menus & Config, Debug Tools, and Crash & Version, plus an All Logs row. They're saved in the ini as `log_...` lines. A category that's off doesn't even build its text. With the debug menu off there's no `kh1-kh2.log` at all. To send me a log: set `debug_menu = on`, restart, and turn on the categories (or All Logs).
+>
+> Checked: the code, KH1's pose pass in the Steam KH1 decomp, KH1's motion file, and the bake sizes in your logs. Not checked: anything in game, or the real numbers in Task Manager.
+>
+> Please test:
+> - RAM in Task Manager compared with t657, with the debug menu off.
+> - Wisdom and Valor: the colours show (they may be a few frames late the first time). Then an area change while in a form, then another form: the colours should still be right.
+> - Start the game twice. With Loading & Cache on, the second start should log "0 baked" and "N the same bake again (shared)", and no "written".
+> - With `debug_menu = off`: no `kh1-kh2.log` appears, and Config > Misc has no Debug Menu row. Then turn it on, restart, open the Logs page, switch on a category, and check that its lines show up.
+>
+> Questions:
+> 1. Crash notes and the version line: right now they're off along with everything else when the debug menu is off, so a crash leaves no note. Should they (a) stay as they are, (b) always be written whatever the ini says, or (c) be written whenever the debug menu is on, even with their category off?
+> 2. The trace recorder with the debug menu on: (a) on by default (last 10 s), as now; or (b) off until you turn it on from Trace Recorder, like the logs?
+> 3. The Config menu's Debug Menu row (shown only with the ini on): (a) it switches the debug menu for that session only, as now; or (b) it writes `debug_menu` to the ini, so turning it off removes the tools and the row from the next start until you edit the ini?
+> 4. One leftover from the recolour fix. If you change area mid-form, its recoloured texture isn't reused (KH1 may have released it along with the model), so it stays in video memory until the game closes. (a) Leave it, it's rare; or (b) should I find KH1's own texture release in the decomp so the mod can free it?
+
+^m2
+
