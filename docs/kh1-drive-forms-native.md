@@ -624,3 +624,15 @@ Form on KH1's states (`form::native_now`), the setting otherwise (base Sora unch
 combo-style read on the Attack path (`kh1_combo`'s length, the Attack step's pick, KH2's row
 selection on KH1's rows, the line ahead, the ground hop) goes through it; `kh1_finisher_window`
 and the Dodge Roll reads stay out of forms as before.
+
+#### 7.4.2 No KH1 row when KH2 takes nothing (fixed)
+
+KH2 refuses an Attack its press rule or rows don't take (`0x1403D6CA0`, the row walk
+`0x140402D20`): nothing happens. On KH1's states, when KH2's pick in KH1's picker came back empty
+(`kh2_pick_in_picker` with no press), the Attack step still ran the row KH1's own picker took: in
+the air one of KH1's air rows (requests 0xCC..0xCE, which play Valor's 181 / 182 / 183 in Valor)
+with **KH1's own** air numbers, `+0x3C0` = direction × 8 / 12 / 4 and a hop of 40 / 40 / 20
+(`docs/kh1-physics.md` §4), not Valor's. In a Drive Form there is no KH1 combo of its own (its
+ability finishers are held back), so now KH2 taking nothing is no attack there
+(`combomods::attack_row`, logged "KH2 takes nothing: no attack"). **Open (base Sora):** at the
+combo style KH2 base Sora has the same fallback onto KH1's row; not changed (asked).

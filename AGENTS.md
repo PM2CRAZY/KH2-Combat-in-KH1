@@ -1,3 +1,13 @@
+### 2026-10-26: Stage 685 (testing branch: No KH1 attack row in a Drive Form when KH2 takes nothing)
+- **No KH1 attack row in a Drive Form when KH2 takes nothing.** KH2 refuses a press its rule or
+  rows don't take (`0x1403D6CA0`, Checked (decomp)).
+  - Before, KH1's own picker row ran instead: in the air, KH1's own hop of 40 / 20 and lunge of
+    8 / 12 / 4, with Valor's motion on it.
+  - Now it is no attack (logged).
+  - Assumption: KH1's count stands for KH2's free-state reset. Base Sora's same fallback at KH2 is
+    left as it is (asked).
+  - docs/kh1-drive-forms-native.md §7.4.2.
+
 ### 2026-10-26: Stage 684 (testing branch: Drive Forms ignore the combo styles on KH1's states)
 - **Drive Forms ignore the combo styles on KH1's states.** The tester (what-is-still-missing,
   after m13): "attack doesn't interrupt jumps momentum so you can fly high in the air while

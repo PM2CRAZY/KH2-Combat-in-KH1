@@ -514,6 +514,18 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         let launch = taken.as_ref().and_then(|t| t.3);
         (taken.map(|(r, len, neg, _)| (r, len, neg)), launch)
     };
+    // A Drive Form on KH1's own states (`form::native_now`): KH2's pick or no attack. KH2 refuses a
+    // press its rows don't take (Steam KH2's Attack step `0x1403D6CA0` / row walk `0x140402D20`,
+    // Checked (decomp)): after the air combo's last swing or finisher nothing more until he lands
+    // (the count stays at the length in the air). KH1's own row ran in its place here (the row its
+    // picker took, with KH1's own air hop of 40 / 20 and lunge 8 / 12 / 4 under Valor's motion), so
+    // each press after Valor's air finisher hopped him higher (the tester: "attack doesn't
+    // interrupt jumps momentum so you can fly high in the air while attacking"). Valor has no KH1
+    // combo of its own (KH1's ability finishers held back, `kh1picker::at_kh2`).
+    if super::form::native_now() && pick.is_none() {
+        note(|| format!("KH1's {} combo in a Drive Form, swing {count} of {kh1_len}: KH2 takes nothing: no attack (KH1's row {row} not run)", if air { "aerial" } else { "ground" }));
+        return Run::Nothing;
+    }
     // (Where KH1's own plain rows play KH2's pick, at the combo style KH2, a pick past KH1's
     // length (Combo Plus) or a finisher before it (Negative Combo) is KH2's row selection on
     // KH1's rows, `kh2_row`, not a borrow.)
