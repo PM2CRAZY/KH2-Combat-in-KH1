@@ -9,6 +9,7 @@
 - [3. Assistant: Thanks for the trace, it showed it clearly.](#^m3)
 - [4. Assistant: Thanks! (a) it is, so nothing changes: with Dodge Roll on KH](#^m4)
 - [5. Assistant: Yes, it's in, and it's from this branch, not main: t505 adde](#^m5)
+- [6. Assistant: Thanks, that narrowed it down. At MAX there's nothing to see](#^m6)
 
 ---
 
@@ -155,4 +156,24 @@ did you implement the quick run double effect? I currently don't see it in my bu
 
 ^m5
 
+
 I didn't see it on quick run max, but james saw it on level 3, unsure about level two can you make it a setting in the debug where I can adjust the growth abilities 
+> [!tip] Assistant
+> Thanks, that narrowed it down. At MAX there's nothing to see, and that's KH2's behaviour, not a bug of ours:
+> - KH2's Quick Run start (`0x1403A9830`) asks for element "level + 0x6C": 110 at LV2, 111 at LV3, 112 at MAX. The function that starts it (`0x1402C6B30`, through `0x1403B6670`) looks through Sora's element list for that id, and if none matches it plays nothing. That's from the Steam KH2 decomp.
+> - Base Sora's effect file (`P_EX100.a.us`, its `p_ex` list) has 110 and 111, but no 112. I parsed the file to check, and James's in-game log agrees: "p_ex100 element 112 doesn't play" on his MAX runs.
+> - So in KH2 too, base Sora's Quick Run shows the start effect at LV2 and LV3 only. James saw it at LV3; you ran MAX, so you didn't.
+>
+> **A debug setting for growth abilities:** yes, that fits the debug menu. Here's the plan, then a couple of questions before I build it.
+> - A new "Growth Abilities" page in the debug menu, with one row each for High Jump, Quick Run, Dodge Roll, Aerial Dodge and Glide.
+> - Each row reads: Normal (what your level and story give you now) | Off | LV1 | LV2 | LV3 | MAX.
+> - The override replaces the level the mod works out from your level (`growth.rs`), so the moves themselves, their numbers (KH2's fmab records), the Quick Run start effect, the invulnerable frames and the menu name all follow it. Nothing is written into your save.
+> - Like the rest of the debug menu, it only loads with `debug_menu = on` in the ini (t663).
+>
+> Questions:
+> 1. Should the overrides (a) last for this session only (back to Normal on the next start), or (b) be saved in the ini like the other debug settings?
+> 2. In Drive Forms, the form's own growth ability is one level above base Sora's. With an override set, should the form (a) still add its +1 on top of the override, or (b) use the override as it is?
+> 3. With a row set to a level, should Sora (a) have the ability even if he hasn't learned it or doesn't have it equipped (simplest for testing), or (b) only when he has it equipped, with the level replaced?
+
+^m6
+
