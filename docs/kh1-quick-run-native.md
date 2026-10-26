@@ -239,6 +239,10 @@ real invulnerable frames (LV1 none). The §5 open points, from the Steam KH2 exe
    (forms and the borrow fallback get KH2's too).
 5. **The start effect above LV1**: elements 110 / 111 / 112 started through `kh2fx` (Sora's package
    built with them; 203 in `kh2_effects`' default list).
+   MAX shows nothing, as in KH2: `0x1402C6B30` (through `0x1403B6670`) plays every element of
+   the owner's list whose id matches and nothing when none does, and base Sora's `P_EX100.a.us`
+   (`p_ex`) has 110 and 111 but no 112 (**Checked (decomp)**, **Checked (files)**: parsed; the
+   owner's log "p_ex100 element 112 doesn't play" on MAX runs, **Checked (log)**).
 
 Cost: one state step and transition a frame while he runs (no controller step, no hand-back);
 one table write a frame (a compare when it is already ours).
