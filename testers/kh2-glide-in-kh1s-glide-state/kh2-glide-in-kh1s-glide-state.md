@@ -13,6 +13,7 @@
 - [7. Assistant: Thanks for the trace and the log. I went through them frame ](#^m7)
 - [8. Assistant: Thanks for both traces. They showed two separate bugs, both ](#^m8)
 - [9. Assistant: Thanks for the trace. That's on me: t646 broke it.](#^m9)
+- [10. Assistant: Thanks for the log, it confirmed it. Every garbled moment in](#^m10)
 
 ---
 
@@ -268,8 +269,29 @@ sora now disappears and gets all garbled when turning in glide. recorded a trace
 > Still open from before: should KH2's "blend from what's drawn" rule go to all of KH1's mid-blend changes (attacks, landings), (a) yes as its own version, or (b) glide only? I'd hold that until the glide version is solid.
 
 ^m9
+
+
 1. (b)
 2. will send
 3. yes it did
 
 once we get glide done I'll consider it. 
+
+> [!tip] Assistant
+> Thanks for the log, it confirmed it. Every garbled moment in it (13 of them) is a bank change made while the previous lean was still blending in, which is exactly where t646 stepped in.
+>
+> Here's what was going on. While KH1 is in the middle of a blend, the pose buffer t646 handed to KH1's "fresh start" doesn't hold a normal pose. About half of Sora's bones are stored in a different form there, and the other half (151 of 293) aren't filled in at all; it's leftover memory. KH1's fresh start read all of that as an ordinary pose, so his skeleton fell apart or flew off-screen.
+>
+> **t652** takes t646 out and does it properly. KH1 keeps its own way of switching animations mid-blend, but right as it starts the new blend, the pose that was actually on screen the frame before is put in as the blend's starting pose. So the new bank blends in from what you were seeing, like KH2, instead of snapping back to the straight glide's first frame. It uses the hook we already had on KH1's blend, so nothing new is hooked into the game. If KH1 ever takes a different path, it does its own thing and the log says so.
+> - Checked: the KH1 decomp (both blend starts `0x140394080` / `0x140393B30`, the blend pass `0x140392560`, and how KH1 hands those buffers around), Sora's model file (which bones the blend treats which way), and your log and trace (where t646 fired).
+> - One small approximation: for some bones the starting pose is built in a slightly different order from how KH1 builds its blend. The difference should be tiny and only lasts for the first frames of the new blend. Not checked in game.
+>
+> Please test:
+> 1. Glide and rock the stick left and right quickly, through the middle and around the edge. He should never vanish or garble, and each new lean should blend in from where he was, with no snap to the straight glide.
+> 2. Hold one bank, then let go into the hover and back, to check it's still smooth.
+> 3. A Select + Triangle trace plus the log if anything looks off. The new log line is "glide (native) motion N chained into KH1's blend at W of it: its source is the pose on screen".
+>
+> Question: if a bank change still looks a little different from KH2, is it (a) a small hitch on the first frame or two, or (b) the lean visibly starting over?
+
+^m10
+

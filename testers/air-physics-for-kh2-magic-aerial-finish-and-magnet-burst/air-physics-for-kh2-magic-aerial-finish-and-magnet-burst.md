@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from your message in KH2 magic and Ref](#^m1)
 - [2. Assistant: Thanks! Going ahead with your answers: (b) for question 1, D](#^m2)
 - [3. Assistant: Sorry for the confusion, and thanks for sticking with it.](#^m3)
+- [4. Assistant: Thanks for the videos, they settled it, and you were right a](#^m4)
 
 ---
 
@@ -118,4 +119,26 @@ go ahead
 
 ^m3
 
+
 I sent you the videos, both are titled by their games abbreviation kh1 and kh2 and are in the same folder as this thread. if your narrowing your search to just how magic is handled and can't find anything feel free to step outside and look for more answers in the kh2 c steam decomp. 
+
+> [!tip] Assistant
+> Thanks for the videos, they settled it, and you were right all along. I went through both frame by frame, measuring Sora's feet against his shadow. In KH2, after the hover ends (cast frame 74), Sora starts falling from a standstill and speeds up, landing about half a second later (around 31 frames). Ours dropped at full speed the moment the hover ended and hit the ground in about 8 frames. That's the "falls straight down".
+>
+> I'd been looking in the wrong place. The jump code does keep its clock running during the hover, but KH2's player update has a separate check: on the first frame after a hover ends, it restarts the fall from his current falling speed. After a hover that speed is zero, so he falls from rest. It's `0x1403B4780` in the Steam KH2 decomp, reached through Sora's own update (`0x1403DAD10`, his class's vtable `0x1405CBA28`, confirmed in the exe).
+>
+> **t653** does the same: when a KH2 hover ends in the air, his fall restarts from rest with KH2's gravity, and his sideways speed carries on as before. It applies to every move with that hover at Physics KH2: air casts, and also Aerial Finish, Magnet Burst, Aerial Dive and Finishing Leap.
+> - Checked: the KH2 decomp (the whole call chain), the exe (Sora's vtable, the jump action's flags), and your KH2 video (the fall's curve).
+> - Not checked: in game. Drive Forms aren't covered yet, since they still run on KH2's controller. I'm also taking the restart speed from his last frame's actual move, where KH2 takes the move it made; they only differ if a wall or floor cut that move.
+>
+> Please test:
+> - An air Fire and an air Reflect from the top of a jump with Air Physics on KH2: the fall after the hover should feel like your KH2 clip.
+> - Aerial Finish and Magnet Burst with Physics on KH2.
+> - If you can, a trace with Movement & Physics and Log Lines on. The log says "KH2's hold ended on KH1's air state" when the hover ends.
+>
+> Questions:
+> 1. Does the fall feel right now? (a) yes, or (b) something's still off (the speed, the landing, or the animation: KH1's fall pose plays if Jump is set to KH1).
+> 2. Air Physics on KH1: (a) keep KH1's own way (no hover, KH1's fall), or (b) change something there too?
+
+^m4
+

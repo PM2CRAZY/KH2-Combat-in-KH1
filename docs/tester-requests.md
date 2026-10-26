@@ -22,6 +22,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: I started this thread from your message in KH2 magic and Ref](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md#^m1)
   - [2. Assistant: Thanks! Going ahead with your answers: (b) for question 1, D](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md#^m2)
   - [3. Assistant: Sorry for the confusion, and thanks for sticking with it.](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md#^m3)
+  - [4. Assistant: Thanks for the videos, they settled it, and you were right a](../testers/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst/air-physics-for-kh2-magic-aerial-finish-and-magnet-burst.md#^m4)
 - [Baking the rest of the base animations](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m1)
   - [2. Assistant: Thanks! Three versions, one step of the plan each:](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m2)
@@ -122,6 +123,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [7. Assistant: Thanks for the trace and the log. I went through them frame ](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m7)
   - [8. Assistant: Thanks for both traces. They showed two separate bugs, both ](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m8)
   - [9. Assistant: Thanks for the trace. That's on me: t646 broke it.](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m9)
+  - [10. Assistant: Thanks for the log, it confirmed it. Every garbled moment in](../testers/kh2-glide-in-kh1s-glide-state/kh2-glide-in-kh1s-glide-state.md#^m10)
 - [KH2 hit effects on enemies](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m1)
   - [2. Assistant: Thanks, built with your answers:](../testers/kh2-hit-effects-on-enemies/kh2-hit-effects-on-enemies.md#^m2)
@@ -224,6 +226,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [2. Assistant: t501 to t505. Quick Run is its own KH1 movement state now (s](../testers/quick-run-native/quick-run-native.md#^m2)
   - [3. Assistant: Thanks for the trace, it showed it clearly.](../testers/quick-run-native/quick-run-native.md#^m3)
   - [4. Assistant: Thanks! (a) it is, so nothing changes: with Dodge Roll on KH](../testers/quick-run-native/quick-run-native.md#^m4)
+- [RAM use and what's being optimized](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md)
+  - [1. Assistant: I started this thread from the Table of contents(../table-of](../testers/ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md#^m1)
 - [Reaction commands](../testers/reaction-commands/reaction-commands.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/reaction-commands/reaction-commands.md#^m1)
 - [Sora's hit reactions native](../testers/soras-hit-reactions-native/soras-hit-reactions-native.md)
@@ -245,6 +249,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [5. Mr Bugs: response to notes](../testers/table-of-contents/table-of-contents.md#^m5)
   - [6. Mr Bugs: I can't seem to click on them in obsidian, can you fix it fo](../testers/table-of-contents/table-of-contents.md#^m6)
   - [7. Assistant: Fixed. The old links used HTML anchors, which GitHub underst](../testers/table-of-contents/table-of-contents.md#^m7)
+  - [8. Assistant: Done: it's its own thread now, RAM use and what's being opti](../testers/table-of-contents/table-of-contents.md#^m8)
 - [What is still missing for native integration into KH1](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md)
   - [1. Mr Bugs: what else currently are we missing for native integration in](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m1)
   - [2. Assistant: Here's what isn't native yet, grouped. Anything already bein](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m2)
@@ -253,6 +258,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [5. Assistant: Here's the list from my last message, updated with this roun](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m5)
   - [6. Assistant: Here's this round for (b) and the first part of (c). Each on](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m6)
   - [7. Assistant: Here's this round:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m7)
+  - [8. Assistant: Here's this round.](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m8)
 
 ---
 

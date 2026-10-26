@@ -11,6 +11,7 @@
 - [5. Mr Bugs: response to notes](#^m5)
 - [6. Mr Bugs: I can't seem to click on them in obsidian, can you fix it fo](#^m6)
 - [7. Assistant: Fixed. The old links used HTML anchors, which GitHub underst](#^m7)
+- [8. Assistant: Done: it's its own thread now, RAM use and what's being opti](#^m8)
 
 ---
 
@@ -74,3 +75,9 @@
 make another thread detailing why ram usage is so high for our mod, what else needs to be optimized and is currently being optimized etc
 
 go ahead
+
+> [!tip] Assistant
+> Done: it's its own thread now, [RAM use and what's being optimized](../ram-use-and-whats-being-optimized/ram-use-and-whats-being-optimized.md). In short, the mod keeps roughly 80 to 90 MB of its own, about 30 MB of which is duplicates or things nothing uses (the biggest: the baked animations kept twice). It lists what still runs every frame, what's being optimized now and what's next, plus a few questions for you there.
+
+^m8
+
