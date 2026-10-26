@@ -383,6 +383,8 @@ own version).
   repeats the step; the recoil 41 has a combo window from 16 and a free range from 40. KH1's own
   wall / clash handling doesn't do this. The controller's spell step (`swing_counts`) still takes
   an air spell as counting and a ground one only after a hit; KH2's magic command always counts.
+  The native cast paths already count a cast after a miss (kh1-magic-native.md §4c.3.1); the
+  controller's is left (deprecated, the tester's m15 answer 4).
 
 **Sora's rows (Checked (files), `00battle.bin` PTYA moveset 1):**
 
@@ -1072,3 +1074,19 @@ The tester: "build form levels into KH1" (KH2 uses the form's own level for its 
   - Only with `abilities = kh1`, in KH1's menu step (`menu::Growth::update`, once a second), as
     the mod's other gifts; in `test` / `all` nothing is written and the rewards wait.
 - A level-up shows a "Form Level Up" box in KH1's prompt style (`menu::queue_prompt`) and logs.
+
+## 10. Decisions from the tester (what-is-still-missing, after m15)
+
+- **The old KH2 controller is deprecated (answer 4).** The tester: "depreciate the old kh2 controller, we're
+  not going to touch final form unless I change my mind". `character-core`'s controller taking Sora (still
+  what Master, Final, Limit and Anti run on) gets no new work and no fixes: new behaviour goes only into KH1's
+  own states. Final Form stays as it is. Final's left trail (KH2's data) waits with it. Limit and Master move
+  to KH1's states when the tester asks; the controller is removed once nothing runs on it.
+- **Form level and the MP drain (answer 8).** Left as it is: a higher form level doesn't change the MP drain.
+  To do later: once Drive Forms run on KH2's Drive gauge, the form gauge's length follows KH2's form-level
+  rule (fmlv), not MP.
+- **Final's EXP (answer 7).** Waiting on the tester: Final gains no EXP (KH2 counts Nobodies; KH1 has none).
+- **Ledge carry and KH1's grabs (answer 10 (b), note for later).** While Ledge Carry (t696) holds Sora off a
+  ledge, KH1's ground checks still run, so a ladder or ledge grab can take him mid-carry. Left as is (b).
+  Later: decide whether the carry should block KH1's grab checks until the move's hold ends, as KH2 has no
+  grab during these moves (Assumption: not traced in KH2).

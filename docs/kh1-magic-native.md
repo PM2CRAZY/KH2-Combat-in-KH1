@@ -372,6 +372,33 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
 - **Assumptions:** the window by share (KH1's casts have none); KH1's spell script, a task of its
   own, casts whatever motion follows the cut. Not checked in game.
 
+#### 4c.3.1 A cast after a swing that missed (what-is-still-missing m15, answer 2)
+
+- The tester: "yes make sure this is part of magic combo in the config menu" (to m15's question 2:
+  KH2's magic counts as a combo step even after a missed swing).
+- **KH2's rule, Checked (decomp)**, Steam KH2 `0x1403D6FC0`: the Attack command (row kind 1) asks
+  `0x1403D6CA0 (p, connected)` with connected = `+0x120` bit 0x2000000 or Combo Master; the magic
+  command (kind 2) always asks `0x1403D6CA0 (p, 1)`. So a cast in a swing's combo window (range id
+  11, `+0x18C` bit 10) always takes the next step (`+0xD74` + 1), and in a finisher's Finishing
+  Plus window (range id 50, `+0x194` bit 5, while `+0xD75` is under `[+0x5C0] + 0x202`) the next
+  finisher, whether the swing connected or not; free (range ids 0 / 1 / 2) a new combo (`0x101`);
+  else refused. The connected bit is cleared as the cast is taken.
+- **The native paths already follow it, Checked (code), no change:** `formmagic::note_step` (used
+  at the command for KH1's own grounded casts at Magic Combo KH2, `combat::command`; for KH2's
+  spells on KH1's cast state, `pick_cast`, base Sora and Wisdom; and for Reflect, `reflect.rs`)
+  counts on from KH1's count whenever KH1's combo window (`+0x1CC` bit 22) is open, with no test
+  of `+0x50` (connected) or Combo Master. KH1's combo window on our slots is KH2's range 11 / 50
+  (`kh2slots::finisher_window`, `combomods::kh1_finisher_window`), which the clip opens whether
+  the swing hit; neither window opener reads `+0x50`. `take_step` clears `+0x50` and the spell's
+  own hit sets it (`spell_hit`), as KH2's hit routine `0x1403D12C0` does. At Magic Combo KH1
+  KH1's own casts take no step (KH1's rule), unchanged. Valor has no magic.
+- **Not changed (deprecated, the tester's m15 answer 4):** KH2's controller walk in character-core
+  (`Character::spell_slot`, still used by Master, Final, Limit and Anti) takes a step after a miss
+  only in the air (`swing_counts`); on the ground it repeats the step (`count.max(1)`), and in a
+  finisher window it needs the finisher to have counted. Left as it is.
+- **Open:** KH1's own spells in Wisdom (Gravity, Stop, Aero) and KH1's own air casts take no
+  combo step at Magic Combo KH2 (`kh1_cast_step` is base Sora, ground only), not what was asked.
+
 ### 4c.4 Gravity and Stop as the combo's finisher (t644)
 
 - The tester (same message): "for gravity and stop, there's a phenomenon in kh2 where those

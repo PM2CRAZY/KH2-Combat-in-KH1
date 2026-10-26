@@ -653,7 +653,27 @@ The tester (after m14): "9. (a) if rumble is on it should work then".
 - **Assumptions.** KH2's channel 0 / 1 (`+0x48` / `+0x49`) are KH1's 0 / 1 (`+2` / `+3`): KH2's own
   send to the pad wasn't traced, KH1's turns channel 0 on or off and gives channel 1 its level.
   KH2's motor bytes read 0 after its pattern ends (its task stops writing them).
-- **Open.** KH1's hit pass (`0x14029BBD0`) still starts its own `btlvibe.dat` pattern on a hit
-  (1 for a flinch, 0 for a knock-back, 6 / 5 for clashes); KH2's from the reaction slot's frame 0
-  replaces it a blend later. KH2 has no hit vibration besides the motion's.
+- **KH1's hit vibration stays (what-is-still-missing m15, answer 9: "for vibration just allow kh1
+  in those situations, unless that gets rid of vibration on kh2s moves").** KH1's hit pass
+  (`0x14029BBD0`, called from the player's think `0x1402A43A0`) starts its own `btlvibe.dat` pattern
+  through `0x14028F8D0` only for Sora (member id 0) and only when it ran a reaction handler this
+  pass: 1 for a flinch (3), 0 for a knock-back / blow (4 / 5), 6 / 5 for the clashes 6 / 7
+  (**Checked (decomp)**). `0x1401E1400` keeps one pattern per pad and a start always replaces the
+  one playing (it clears the pad's slot and sets the new pattern, no priority test; **Checked
+  (decomp)**), so whichever starts last plays. KH1's other starters are event / script commands
+  (`0x1401AC890`, `0x14039F330`, `0x1402BCAD0`) and `0x1402352A0`; nothing of KH1's vibrates on
+  Sora's own hits on enemies (**Checked (decomp)**, every caller of `0x1401E1400` and
+  `0x14028F8D0`). So:
+  - a hit with a reaction: KH1's pattern starts in the think, the reaction slot's KH2 pattern
+    (trigger 31 at its frame 0) after it in the motion pass, and replaces it: KH2's plays whole;
+  - a hit during one of KH2's own moves (Explosion, a cast, ...) wipes that move's pattern only
+    when KH1 runs a reaction for it, that is when the hit cuts the move into a reaction or recoil,
+    whose own KH2 pattern then starts; hits KH2 doesn't react to (Drive, Reflect, dodge
+    invulnerability, guards) are no-effect records (`hurt.rs`), which run no handler and start no
+    KH1 vibration;
+  - a second hit while a reaction plays starts KH1's pattern again; KH2's comes back only if
+    KH1's reaction restarts the motion.
+  No code change. **Assumption:** the motion pass runs after the think in Steam KH1's actor frame
+  (the order traced on Epic, `0x140295E50`: think, physics, matrix, animation; not re-traced on
+  Steam). Not checked in game.
 
