@@ -216,3 +216,7 @@ go ahead
 
 ^m7
 
+1. (a)
+2. (a) for the transition to real files we need to make sure that the player doesn't need anything to be installed in order to be converted, when the game starts there should be a loading screen showing what the extraction is doing before continuing into the menu, this should render in engine and be native, and not as a layer like the debug menu.
+
+go ahead
