@@ -717,27 +717,20 @@ pub unsafe fn lock_actor() -> Option<usize> {
     (a >= 0x10000 && super::crash::readable(a + 0x1F)).then_some(a)
 }
 
-/// KH1's re-arm of an attack (`0x1402B3380 (attack)`, Steam; Checked (decomp)): with its interval
-/// `+0x50` (a float, > 0) reached by its clock `+0xA4`, it takes the attack's hit bit (`+0x54`) off
-/// every actor's hit-once bits (`+0x3E0`, actor iterator `0x140291B20`) and off every attack's
-/// met mask in the pool (`+0x9C`, pool `0x142DB4710`, 0xC0 each, in use `0x800`), so it can hit
-/// again. KH1 runs it each frame for motion-tied attacks (`0x1402B47A0`).
-const REARM_STEAM: usize = 0x2B3380;
 /// KH1's attack pool (Steam `0x142DB4710`, 64 entries of 0xC0; in use `+0` bit `0x800`, owner
 /// handle `+0x34`, attack data handle `+0x5C`).
 const POOL_STEAM: usize = 0x2DB4710;
 const POOL_SLOTS: usize = 0x40;
 
-/// (t-rehit) A new KH2 hit window on the Keyblade in our slot (`kh2slots::keyblade_rearm`): the
+/// (t-rehit) A new KH2 attack on the Keyblade in our slot (`kh2slots::keyblade_rearm`): the
 /// Keyblade attack objects of Sora's rows of ours (their data one of ours, not a body window's,
-/// `bodyhits`) re-armed with KH1's own re-arm (its interval made due for the one call, then put
-/// back), so the window can hit what the last one hit, as KH2's does. Returns how many.
+/// `bodyhits`) re-armed as a new attack (`rehit::new_attack`: KH1's own re-arm), so it can hit
+/// what the last one hit, as KH2's new attack does. Returns how many.
 pub unsafe fn rearm_rows(sora: usize) -> usize {
     if super::addr::Build::current() != super::addr::Build::Steam || sora < 0x10000 {
         return 0;
     }
     let base = super::takeover::game_base();
-    let rearm: unsafe extern "system" fn(usize) = std::mem::transmute(base + REARM_STEAM);
     let mut n = 0;
     for k in 0..POOL_SLOTS {
         let a = base + POOL_STEAM + k * 0xC0;
@@ -748,12 +741,7 @@ pub unsafe fn rearm_rows(sora: usize) -> usize {
         if data == 0 || !DATA_AT.iter().any(|d| d.load(Ordering::Relaxed) == data) || rd::<u32>(a + 0x54) == 0 {
             continue;
         }
-        let (interval, clock) = (rd::<f32>(a + 0x50), rd::<f32>(a + 0xA4));
-        wr(a + 0x50, f32::MIN_POSITIVE);
-        wr(a + 0xA4, 1.0f32);
-        rearm(a);
-        wr(a + 0x50, interval);
-        wr(a + 0xA4, clock);
+        super::rehit::new_attack(a);
         n += 1;
     }
     n

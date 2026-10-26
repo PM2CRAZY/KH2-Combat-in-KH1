@@ -45,8 +45,9 @@
 //! - KH2's re-hit interval (ATKP `+0x26`, 60 Hz frames: Explosion's 911 every 8): KH1's own re-arm
 //!   (`0x1402B3380`, attack `+0x50`) runs one clock for the whole object and takes the bit off
 //!   every actor at once; KH2's runs per target from its hit (`HitRecord::mark` / `tick`). So the
-//!   bit is taken off each actor `interval` frames after its own hit (`hit`, `rearm`), and KH1's own
-//!   re-arm is left off (`+0x50` 0).
+//!   bit is taken off each actor `interval` frames after its own hit, and KH1's own re-arm is left
+//!   off (`+0x50` 0). (t-rehit2) That is `rehit`'s now, shared with the Keyblade windows; this
+//!   module kept its own copy of it before.
 //!
 //! The objects: one per shape of each body window, made when our slot of the move starts playing
 //! (`frame`, from `kh2slots::frame`), through KH1's row object maker `0x1402B3270 (actor, hit bit,
@@ -161,15 +162,10 @@ struct Live {
     motion: u16,
     atkp: u16,
     shape: BodyShape,
-    /// KH2's re-hit interval (60 Hz frames; 0 once).
-    interval: u64,
     /// The Magnet catch (orbit radius from the ATKP's knock-back values, swirl), reaction 5.
     magnet: Option<(i16, i16, i16)>,
     /// Last game frame's centre (KH1 world) and that frame's number.
     prev: Option<([f32; 3], u64)>,
-    /// Hits: (actor, `takeover::TICKS` at the hit, the re-hit interval of the row that hit); 0
-    /// actor free.
-    hits: [(usize, u64, u64); 8],
     /// Enemies its Magnet caught (actor, orbit radius, swirl).
     caught: [(usize, f32, f32); 8],
 }
@@ -364,7 +360,7 @@ pub unsafe fn frame(actor: usize) {
             // late for a window from frame 0).
             wr(obj + 0x58, req);
             let magnet = (character_core::reaction::category(a.enemy_reaction) == 5).then_some((a.knockback_1, a.knockback_2, a.unknown_16));
-            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, interval: a.interval as u64, magnet, prev: None, hits: [(0, 0, 0); 8], caught: [(0, 0.0, 0.0); 8] });
+            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, magnet, prev: None, caught: [(0, 0.0, 0.0); 8] });
             made.push(format!("ATKP {} group {} on KH1 group {} ({:?} r {} h {} lift {}, interval {})", w.attack, w.group, w.channel, bone, s.radius, s.height, s.lift, a.interval));
         }
     }
@@ -534,7 +530,7 @@ pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack],
             wr(obj + 8, h);
         }
         let dummy = BodyShape { kh1_type: 1, radius: 0.0, height: 0.0, bone: None, offset: [0.0; 3], lift: 0.0 };
-        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, interval: first.interval as u64, magnet: None, prev: None, hits: [(0, 0, 0); 8], caught: [(0, 0.0, 0.0); 8] });
+        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None, caught: [(0, 0.0, 0.0); 8] });
         let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some() };
         for s in a.shapes.iter() {
             let t = match s.kind {
@@ -626,15 +622,16 @@ pub unsafe fn before_hit(attack: usize, target: usize) {
     g.current = row.map(|r| (attack, r));
 }
 
-/// `probe::hit`: KH1's contact made a hit record with `attack` on `target`: its time (KH2's re-hit
-/// interval) and a Magnet's catch.
+/// `probe::hit`: KH1's contact made a hit record with `attack` on `target`: a spell's result and a
+/// Magnet's catch. (Its re-hit interval: `rehit::on_hit`, called before this while `current`
+/// still holds a spell's row.)
 pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
     if !native() || target < 0x10000 {
         return;
     }
     let Some(i) = pool_index(attack) else { return };
     let Ok(mut g) = STATE.try_lock() else { return };
-    let current = g.current.take().filter(|(a, _)| *a == attack).map(|(_, r)| r);
+    g.current = None;
     let spell = g.spells.iter().find(|(k, _)| *k == i).map(|(_, sp)| (sp.key, sp.atk));
     if let Some((key, atk)) = spell {
         let dealt = (rec > 0x10000).then(|| rd::<i32>(rec + 8).max(0) as u32);
@@ -643,13 +640,6 @@ pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
         }
     }
     let Some(l) = g.live[i].as_mut().filter(|l| l.obj == attack && still_ours(l)) else { return };
-    let now = super::takeover::TICKS.load(Ordering::Relaxed);
-    let interval = current.map_or(l.interval, |r| r.interval as u64);
-    if interval > 0 {
-        if let Some(h) = l.hits.iter_mut().find(|h| h.0 == target || h.0 == 0) {
-            *h = (target, now, interval);
-        }
-    }
     if let Some((k1, k2, swirl)) = l.magnet {
         if !l.caught.iter().any(|c| c.0 == target) {
             // KH2 picks the orbit radius between the two knock-back values (as `strike_as`).
@@ -742,16 +732,7 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     }
     let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
     let bit = rd::<u32>(obj + 0x54);
-    // KH2's re-hit interval: each target's bit off `interval` frames after its own hit.
-    let now = super::takeover::TICKS.load(Ordering::Relaxed);
-    if let Some(l) = g.live[i].as_mut() {
-        for h in l.hits.iter_mut().filter(|h| h.0 != 0) {
-            if now.saturating_sub(h.1) >= h.2 {
-                wr(h.0 + 0x3E0, rd::<u32>(h.0 + 0x3E0) & !bit);
-                *h = (0, 0, 0);
-            }
-        }
-    }
+    // (KH2's re-hit interval: `rehit`, for every KH2 attack of Sora's.)
     // A spell's attack: the shapes its script gave this frame (KH2's own sweep already in them).
     if let Some((_, sp)) = g.spells.iter().find(|(k, _)| *k == i) {
         if sp.n == 0 || frame.saturating_sub(sp.seen) > 1 {

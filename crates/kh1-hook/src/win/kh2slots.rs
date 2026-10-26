@@ -958,22 +958,29 @@ pub unsafe fn turn_to_lock(actor: usize) {
     }
 }
 
-/// The KH2 hit window on the Keyblade last seen open in our slot on Sora: (KH2 motion, its index
-/// in the clip's windows, KH1's time then).
-static BLADE_WINDOW: Mutex<Option<(u16, usize, f32)>> = Mutex::new(None);
+/// KH2's attack on the Keyblade last seen in our slot on Sora: (KH2 motion, its ATKP, its
+/// collision group, KH1's time then, whether a window of it was open on the last frame seen).
+static BLADE_ATTACK: Mutex<Option<(u16, u16, u8, f32, bool)>> = Mutex::new(None);
 
-/// (t-rehit) KH2's next hit window on the Keyblade in the same swing hits again what the last one
-/// hit (the tester, combo row selection after m32: "the 2nd hit is also missing its 2nd hitbox, its
-/// just one for now"). KH2's 153 has two (`P_EX100.mset` / `W_EX010.mset`, Checked (files)):
-/// ATKP 128 at frames 20..32 and 147 at 38..47 (152 one, 127 at 20..32; 151 one, 126 at 15..23).
-/// Each KH2 window is a swing of its own for KH2's hit records (the OG rewrite: a window's hitbox is
-/// `(swing << 8) | window`, and a target's hit-once is kept per that), so the second slash hits a
-/// foe the first one hit. KH1's row makes one attack object for the whole motion, whose hit bit a
-/// target keeps once hit (`0x1402BD480`, `docs/kh1-rehit.md`), so on the same foe only the first
-/// window landed (the tester's log: 153 on one foe hit with 147 only, or with 128 only). When a new
-/// Keyblade window opens after another in the same play, KH1's own re-arm runs on the row's attack
-/// objects (`kh1rows::rearm_rows`). Each frame KH1 has him (`takeover::physics`), before KH1's
-/// physics and collision passes of the frame: a few reads unless a window changes.
+/// (t-rehit, t-rehit2) KH2's next attack on the Keyblade in the same swing hits again what the last
+/// one hit (the tester, combo row selection after m32: "the 2nd hit is also missing its 2nd
+/// hitbox"; after m33: "if other moves are multi hits in kh2 ... (aerial finish) then yes apply
+/// it ... check it behind kh2 c decomp"). KH2 (Steam, Checked (decomp)): each frame an attack range
+/// is open its ATKP is asserted for its group (`0x14040D810` case 10 → `0x1403DAFE0` →
+/// `0x1403D25D0`); the same ATKP keeps the group's attack, another one ends it and makes a new
+/// attack (new id, nothing hit yet), and an attack whose group is no longer asserted ends
+/// (`0x14040F610` → `0x1403D0EB0`). So a new attack starts when the open window's ATKP or group
+/// differs from the last frame's, or a window opens after a frame with none. Sora's Keyblade
+/// windows (`P_EX100.mset` / `W_EX010.mset`, Checked (files)): 153 128 at 20..32, 147 at 38..47;
+/// Dodge Slash 1007 / 1898 / 1899; Slide Dash 968 then 975 (back to back); Flash Step 1896 then 1897
+/// (group 6); Horizontal Slash 963 at 12..22 and 23..30 (a frame apart: two attacks), 967;
+/// Retaliating Slash 1582, 1583; Aerial Finish 915 at 18..31, 916 at 31..40 (back to back), 917,
+/// 927. KH1's row makes one attack object for the whole motion, whose hit bit a target keeps once
+/// hit (`0x1402BD480`), so before t673 only a foe's first hit of the motion landed. On a new attack
+/// the row's attack objects are re-armed (`kh1rows::rearm_rows` → `rehit::new_attack`, KH1's own
+/// re-arm); hits within one attack again after its row's interval (`rehit`). Each frame KH1 has
+/// him (`takeover::physics`), before KH1's physics and collision passes: a few reads unless an
+/// attack changes.
 pub unsafe fn keyblade_rearm(actor: usize) {
     use character_core::WindowKind as W;
     let now = (|| {
@@ -984,28 +991,37 @@ pub unsafe fn keyblade_rearm(actor: usize) {
             return None;
         }
         let f = t as u32;
-        let i = clip.windows.iter().position(|w| matches!(w.kind, W::Hitbox { weapon, .. } if weapon > 0) && w.contains(f));
-        Some((m.motion, i, t))
+        let open = clip.windows.iter().filter(|w| w.contains(f)).find_map(|w| match w.kind {
+            W::Hitbox { attack, group, weapon, .. } if weapon > 0 => Some((attack, group)),
+            _ => None,
+        });
+        Some((m.motion, open, t))
     })();
-    let Ok(mut g) = BLADE_WINDOW.lock() else { return };
-    let Some((motion, Some(i), t)) = now else {
-        // (Out of our slots, or between windows: the last window is kept for the same play; a
-        // new play (another motion, or the time gone back) forgets it.)
-        if !matches!((now, *g), (Some((m, None, t)), Some((lm, _, lt))) if m == lm && t >= lt) {
-            *g = None;
-        }
+    let Ok(mut g) = BLADE_ATTACK.lock() else { return };
+    let Some((motion, open, t)) = now else {
+        *g = None;
+        return;
+    };
+    let same_play = |lm: u16, lt: f32| lm == motion && t >= lt;
+    let Some((atk, group)) = open else {
+        // (Between windows: the last attack is kept for the same play, marked closed; a new play
+        // (another motion, or the time gone back) forgets it.)
+        *g = match *g {
+            Some((lm, la, lg, lt, _)) if same_play(lm, lt) => Some((lm, la, lg, t, false)),
+            _ => None,
+        };
         return;
     };
     let new = match *g {
-        Some((lm, li, lt)) if lm == motion && t >= lt => li != i,
+        Some((lm, la, lg, lt, was_open)) if same_play(lm, lt) => !was_open || la != atk || lg != group,
         _ => false,
     };
-    *g = Some((motion, i, t));
+    *g = Some((motion, atk, group, t, true));
     if new {
         let n = super::kh1rows::rearm_rows(actor);
         static N: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log!(Combat, "KH2's next hit window on the Keyblade (KH2 motion {motion} window {i}, frame {t:.0}): {n} attack object(s) of ours re-armed with KH1's re-arm");
+            log!(Combat, "KH2's next attack on the Keyblade (KH2 motion {motion}, ATKP {atk} group {group}, frame {t:.0}): {n} attack object(s) of ours re-armed with KH1's re-arm");
         }
     }
 }

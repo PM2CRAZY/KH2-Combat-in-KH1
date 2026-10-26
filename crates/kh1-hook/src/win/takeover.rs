@@ -423,6 +423,10 @@ unsafe extern "system" fn physics(actor: usize) {
         // (KH2's glide in KH1's glide state, `glide`.)
         super::glide::install(BASE.load(Ordering::Relaxed));
     }
+    // KH2's re-hit intervals on Sora's attacks run out (`rehit`), before KH1's collision pass.
+    if sora {
+        super::rehit::tick();
+    }
     let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
     if sora {
         GAME_FRAME.fetch_add(1, Ordering::Relaxed);
@@ -459,7 +463,7 @@ unsafe extern "system" fn physics(actor: usize) {
         super::glide::carry(actor);
         // KH2's turn toward the target in our slot's KH2 motion (`kh2slots::turn_to_lock`).
         super::kh2slots::turn_to_lock(actor);
-        // KH2's next Keyblade hit window in the same swing hits again (`kh2slots::keyblade_rearm`).
+        // KH2's next attack on the Keyblade in the same swing hits again (`kh2slots::keyblade_rearm`).
         super::kh2slots::keyblade_rearm(actor);
         // KH2's guard repel's push back (`combomods::guard_frame`).
         super::combomods::guard_frame(actor);

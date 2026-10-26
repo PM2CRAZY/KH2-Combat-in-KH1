@@ -55,5 +55,52 @@ KH2's engine protects a downed Sora, and `hurt.rs` now does the same:
   attack objects (owner Sora, attack data one of our rows', not a body window's) are re-armed by
   calling KH1's `0x1402B3380` with their interval made due for that call, then put back
   (`kh1rows::rearm_rows`). Log: "KH2's next hit window on the Keyblade ... re-armed".
-- **Assumption**: KH2's exe keeps hits per window as the OG rewrite does (not re-checked in the
-  Steam KH2 decomp). Not checked in game.
+- **Assumption** (t673): KH2's exe keeps hits per window as the OG rewrite does. Superseded by
+  the decomp reading below (t-rehit2): per attack, which changes with the ATKP or a closed window.
+
+## KH2's rule from the decomp, one path for every KH2 move (t-rehit2)
+
+The tester (combo row selection after m33): "if other moves are multi hits in kh2 and don't have it
+right now (aerial finish) then yes apply it, I also noticed that explosion was working before this
+implementation so see if we are not writing two codes for the same thing. check it behind kh2 c
+decomp".
+
+- **KH2's attacks** (Steam KH2, Checked (decomp)): each frame an attack range (id 10) of the
+  motion is open, the range handler `0x14040D810` calls `0x1403DAFE0 (object, ATKP, group)`, which
+  marks the group asserted this frame (`+0x5A0`, cleared each motion update by `0x14040E5C0`) and
+  calls the object's `+0x98` method into `0x1403D25D0 (object + 0xC10, ATKP, group, owner, flag)`:
+  8 attack slots, one per (group, owner). A slot already holding the same ATKP is kept (the attack
+  and what it has hit go on); another ATKP ends the old attack (`0x1403D0EB0`) and makes a new one
+  (`0x14040F1C0`, a new id). An attack whose group is no longer asserted ends in its own update
+  (`0x14040F610` → `0x1403D0EB0`). Ending an attack clears its bit in every hit record
+  (`docs/combat-model.md`, Hit records). So: a **new attack** (everything hittable again) when
+  the window's ATKP or group changes, or a window opens after a frame with none; within one
+  attack, a target again after the hit row's **interval** (KH2's re-hit slots; the OG rewrite's
+  `HitRecord::mark` / `tick`, Checked (code); the slot code itself not re-read in the exe).
+- **Sora's multi-hit moves** (`P_EX100.mset` / `W_EX010.mset`, `00battle.bin`, Checked (files);
+  ATKP, frames, interval):
+  - Keyblade, new attacks: 153 (128 20..32, 147 38..47), Dodge Slash 163 (1007, 1898, 1899),
+    Slide Dash 164 (968 9..20, 975 20..33), Flash Step 169 (1896, 1897 on group 6), Horizontal
+    Slash 193 (963 12..22, 963 23..30, 967 36..44), Retaliating Slash 172 (1582 2..22 every 10,
+    1583 36..50), Aerial Finish 194 (915 18..31, 916 31..40, 917 50..60, 927 81..89).
+  - Keyblade, re-hits by interval within one window: Aerial Sweep 191 (909 every 10), Aerial
+    Spiral 192 (1131 every 12), Aerial Dive 196 (1882 every 8), Retaliating Slash's 1582.
+  - Body (`bodyhits`, one KH1 object per window): Explosion 166 (911 32..57 every 8, then 912),
+    Magnet Burst 197 (1900, 1901, 1903), Vicinity Break 170 (1869).
+- **What ran before**: two copies of KH2's re-hit and nothing for the rest. `bodyhits` kept its
+  own per-target interval for its body objects (that is why Explosion re-hit before t673). t673's
+  `keyblade_rearm` re-armed the Keyblade object on a window index change. The Keyblade intervals
+  ran nowhere: Aerial Sweep, Aerial Spiral, Aerial Dive and Retaliating Slash's first slash hit a
+  foe once.
+- **Now, one path** (`rehit.rs`):
+  - `rehit::on_hit` (from `probe::hit`, every hit of Sora's) notes the hit's row's interval: the
+    window's ATKP through `kh1rows::kh2_atkp`, a body or spell object's through `bodyhits::atkp`.
+  - `rehit::tick` (each of Sora's frames, at the top of `takeover::physics`, before KH1's
+    collision pass) takes the attack's bit off a target whose interval has run.
+  - `rehit::new_attack` is KH1's own re-arm (`0x1402B3380`) on an object for a new KH2 attack;
+    `kh2slots::keyblade_rearm` asks for it by KH2's rule above (ATKP or group change, or a window
+    after none), through `kh1rows::rearm_rows`. Body windows are new KH1 objects already.
+  - `bodyhits` no longer keeps its own hits and intervals. KH1's own whole-object interval
+    (`+0x50`) stays off.
+- Not checked in game. Log: "KH2 re-hit: ATKP ... again after N frames", "KH2's next attack on the
+  Keyblade ... re-armed".

@@ -605,7 +605,9 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     }
     if owner != 0 && owner == sora() && r > 0x10000 {
         super::combat::scale_record(r, attack, target);
-        // (KH2's re-hit interval and the Magnet catch for KH2's hits on his body, `bodyhits`.)
+        // (KH2's re-hit interval of the hit's row, for every KH2 attack of Sora's, `rehit`.)
+        super::rehit::on_hit(attack, target);
+        // (The Magnet catch for KH2's hits on his body and a spell's results, `bodyhits`.)
         super::bodyhits::hit(attack, target, r);
         // (A spell's hit: the cast's "connected", for the Attack after it, `formmagic::spell_hit`.)
         super::formmagic::spell_hit(owner, attack);

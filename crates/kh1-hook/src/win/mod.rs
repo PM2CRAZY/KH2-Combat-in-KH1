@@ -25,6 +25,7 @@ mod hook;
 mod hitreact;
 mod hurt;
 mod recoil;
+mod rehit;
 mod kh2fx;
 mod kh2dpx;
 mod kh2ppp;
