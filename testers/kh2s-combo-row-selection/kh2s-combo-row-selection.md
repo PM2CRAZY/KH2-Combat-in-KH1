@@ -954,3 +954,7 @@ go ahead
 
 ^m33
 
+1. (a)
+2. if other moves are multi hits in kh2 and don't have it right now (aerial finish) then yes apply it, I also noticed that explosion was working before this implementation so see if we are not writing two codes for the same thing. check it behind kh2  c decomp 
+
+go ahead
