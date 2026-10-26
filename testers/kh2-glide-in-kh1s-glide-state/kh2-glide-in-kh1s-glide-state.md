@@ -221,3 +221,11 @@ go ahead
 
 ^m7
 
+I'm still seeing the same phenomenon, I sent you a trace. 
+
+I also noticed that neutral glide resets its animation wrong when setting jump to kh2 and doing a glide out of jump so I also sent a trace for that 
+
+if you find a fix for both just go ahead and implement it 
+
+go ahead
+
