@@ -1297,6 +1297,53 @@ impl Baker {
     }
 }
 
+impl Baker {
+    /// The holder motion's pose at each frame `0..=frames` of a two-Keyblade form's `motion`
+    /// (Valor's; `kh2slots`, plan step 4 of `docs/kh1-weapon-second.md` §7.3): KH1 Sora's bind for
+    /// every body bone, and the left hand's 13 weapon bones (`leftblade::left_bones`, from KH2's
+    /// left Keyblade weapon motion, the form rig's second weapon, on KH1's pose `poses[f]` as the
+    /// main bake gives it) where they sit from the left hand, put on the bind's left hand. KH1's
+    /// pass poses it on an instance of ours (`leftblade::pose_holder`), and the bones are carried
+    /// from that hand onto Sora's drawn one. `Err` names why it can't be made (no second weapon, a
+    /// mirrored grip, which KH1's channels can't hold).
+    pub fn holder_poses(&self, src: &Src, motion: u16, field: bool, poses: &[Vec<Mat4>]) -> Result<(Vec<Vec<Mat4>>, f32), String> {
+        let rig = src.rig;
+        let clip = field.then(|| rig.field_motions.get(&motion)).flatten().or_else(|| rig.motions.get(&motion)).ok_or("KH2 has no animation for it")?;
+        let (Some(sr), Some(sl)) = (rig.weapons.first().and_then(|w| w.bone), rig.weapons.get(1).and_then(|w| w.bone)) else {
+            return Err("the form's rig has no second weapon".into());
+        };
+        let frames = poses.len().saturating_sub(1) as u32;
+        let looping = frames as f32 > kh2_anim::length_frames(clip) + 1.0;
+        let kh1_bind = kh2_anim::Pose::bind(&self.skeleton).bones;
+        let b2 = kh2_anim::Pose::bind(&rig.skeleton).bones;
+        let (hand, grip, n) = (super::leftblade::LEFT_HAND_BONE, super::leftblade::GRIP_BONE, super::leftblade::WEAPON_BONE_COUNT);
+        let ratio = self.retarget.hip_ratio();
+        let mut out = Vec::with_capacity(poses.len());
+        let mut reach = 0f32;
+        for (f, kh1) in poses.iter().enumerate() {
+            let at = f as f32;
+            let body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, looping), kh2_anim::Options::default()).bones;
+            let right = kh2_weapon(rig, motion, at, looping, &body);
+            let left = kh2_weapon_n(rig, 1, motion, at, looping, &body);
+            let (Some(&r0), Some(&l0)) = (right.first(), left.first()) else {
+                return Err("no Keyblade pose".into());
+            };
+            let (bones, from_hand) = super::leftblade::left_bones(kh1, &kh1_bind, &b2, (sr, sl), &body, r0, l0, ratio).ok_or("the left grip isn't finite")?;
+            if glam::Mat3::from_mat4(bones[0]).determinant() < 0.0 {
+                return Err(format!("the left grip is mirrored at frame {f}"));
+            }
+            reach = reach.max(from_hand);
+            let mut p = kh1_bind.clone();
+            let from = kh1_bind[hand] * kh1[hand].inverse();
+            for i in 0..n {
+                p[grip + i] = from * bones[i];
+            }
+            out.push(p);
+        }
+        Ok((out, reach))
+    }
+}
+
 /// The baker for `kh2slots::prepare` (the loader thread): KH1 Sora's skeleton from
 /// `xa_ex_0010.mdls`, his battle idle (slot 1) and field idle (slot 0) as the retarget's rest.
 fn baker(install: &kh1_data::Kh1Install, kh2: &Kh2, motions: &[Option<kh1_data::mset::Motion>]) -> Result<Baker, String> {
@@ -1337,8 +1384,9 @@ fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16)
         if let Some(clip) = field.or_else(|| src.rig.motions.get(&motion)) {
             let mut pose = kh2_anim::evaluate(&src.rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
             let mut weapon = kh2_weapon(src.rig, motion, at, false, &pose);
-            // (Valor's second Keyblade: the rig's second weapon on its hand bone.)
-            let two = src.form.is_some_and(|k| k.two_blades());
+            // (Valor's second Keyblade: the rig's second weapon on its hand bone; not on a slot with
+            // a holder motion, whose left weapon bones KH1's own pass poses, `leftblade::pose_holder`.)
+            let two = src.form.is_some_and(|k| k.two_blades()) && !slot.is_some_and(super::kh2slots::has_holder);
             let mut left = if two { kh2_weapon_n(src.rig, 1, motion, at, false, &pose) } else { Vec::new() };
             if let Some(root) = src.roots.get(&motion).and_then(|r| r.get((at as usize).min(r.len().saturating_sub(1)))) {
                 let un = Mat4::from_translation(-Vec3::from(*root));
@@ -2151,13 +2199,9 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
         super::kh2dpx::posed(false);
     }
     let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
-    match moved {
-        Some(m) => {
-            let a = m.to_cols_array();
-            f(a.as_ptr() as usize, instance, t, motion);
-        }
-        None => f(world, instance, t, motion),
-    }
+    let a = moved.map(|m| m.to_cols_array());
+    let used = a.as_ref().map_or(world, |a| a.as_ptr() as usize);
+    f(used, instance, t, motion);
     note_feet(instance, false);
     if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
         note_small(instance, world);
@@ -2167,7 +2211,16 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
     }
     if is_sora(instance) {
         super::kh2dpx::posed(true);
+        // Valor's left Keyblade: its holder motion posed by this same pass (`leftblade`).
+        super::leftblade::pose_holder(plain_pass, used, Some((motion, t)));
     }
+}
+
+/// KH1's own plain pose pass (the original, past our hook): `leftblade` poses its holder motion
+/// with it.
+unsafe fn plain_pass(world: usize, instance: usize, t: f32, motion: usize) {
+    let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
+    f(world, instance, t, motion);
 }
 
 unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
@@ -2178,13 +2231,9 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
         super::kh2dpx::posed(false);
     }
     let moved = if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 { held(instance, world) } else { None };
-    match moved {
-        Some(m) => {
-            let a = m.to_cols_array();
-            f(a.as_ptr() as usize, instance, flags);
-        }
-        None => f(world, instance, flags),
-    }
+    let a = moved.map(|m| m.to_cols_array());
+    let used = a.as_ref().map_or(world, |a| a.as_ptr() as usize);
+    f(used, instance, flags);
     note_feet(instance, true);
     if instance != 0 && MODE.load(Ordering::Relaxed) <= 1 {
         note_small(instance, world);
@@ -2194,6 +2243,8 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
     }
     if is_sora(instance) {
         super::kh2dpx::posed(true);
+        // (KH1's blend pass: the holder motion at his actor's motion and time.)
+        super::leftblade::pose_holder(plain_pass, used, None);
     }
 }
 

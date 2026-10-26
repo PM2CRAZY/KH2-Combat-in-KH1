@@ -494,6 +494,11 @@ pub struct Move {
     /// A Drive Form's motion (Valor's `P_EX100_BTLF`, ...), played on its request only while Sora
     /// is in that form on KH1's own states (`form::native_form`, `redirect`); `None`: base Sora's.
     pub form: Option<super::form::Kind>,
+    /// A two-Keyblade form's move (Valor's): its holder motion was baked (`holder_one`), the left
+    /// hand's weapon bones for KH1's own pass to pose (`leftblade::pose_holder`).
+    pub holder: bool,
+    /// That holder motion's block until `place` copies it into KH1's memory.
+    holder_block: Mutex<Option<crate::slotcache::Block>>,
 }
 
 struct Built {
@@ -841,7 +846,8 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     let travel = matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request]);
     // (From the motion slot cache when it has this exact bake, `slot_key`; baked and kept there
     // otherwise.)
-    let baking = bake.map(|b| match cache {
+    let mut cache = cache;
+    let baking = bake.map(|b| match cache.as_deref_mut() {
         Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel, src.form), || {
             super::loadscreen::baking();
             bake_one(b, src, &template, (motion, field), frames, &tracks, travel)
@@ -871,7 +877,63 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
         let from = (m.frame_return - m.frame_start) * k;
         (from > 0.5 && from < frames as f32 - 0.5).then_some(from)
     });
-    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events, loop_from, form: src.form }, block)))
+    // (Valor's moves: the left Keyblade's holder motion too, from the slot cache when it has this
+    // exact bake, `holder_key`; plan step 4 of `docs/kh1-weapon-second.md` §7.3.)
+    let two = src.form.is_some_and(|k| k.two_blades() && k.native_capable());
+    let holder_block = match (bake, baked && two) {
+        (Some(b), true) => {
+            let r = match cache {
+                Some(c) => c.get_or_bake(holder_key(&template, (motion, field), frames, src.form), || {
+                    super::loadscreen::baking();
+                    holder_one(b, src, &template, (motion, field), frames)
+                }),
+                None => holder_one(b, src, &template, (motion, field), frames).map(crate::slotcache::Block::new),
+            };
+            match r {
+                Ok(block) => Some(block),
+                Err(e) => {
+                    log!(Animation, "KH2 slots: KH2 motion {motion}: no holder motion ({e}); the left Keyblade follows KH2's pose there");
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+    let holder = holder_block.is_some();
+    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events, loop_from, form: src.form, holder, holder_block: Mutex::new(holder_block) }, block)))
+}
+
+/// One holder motion's key in the motion slot cache: the main bake's inputs it reads (the template,
+/// the motion, its variant and length, the moveset) and that it is a holder motion.
+fn holder_key(template: &[u8], (motion, field): (u16, bool), frames: u32, form: Option<super::form::Kind>) -> u128 {
+    let mut h = crate::slotcache::Hasher::default();
+    h.str("left Keyblade holder motion").bytes(template).u32(motion as u32).u32(field as u32).u32(frames);
+    if let Some(k) = form {
+        h.str(k.model());
+    }
+    h.finish()
+}
+
+/// The left Keyblade's holder motion for a two-Keyblade form's `motion` (Valor's; plan step 4 of
+/// `docs/kh1-weapon-second.md` §7.3): a KH1 motion on the same template and length as the move's
+/// own bake, its body at KH1 Sora's bind and its weapon bones (280..292) the left hand's Keyblade
+/// from KH2's left weapon motion, as they sit from the left hand (`pose::Baker::holder_poses`),
+/// with no events. KH1's own pose pass poses it on an instance of ours each frame Sora's slot is
+/// the move (`leftblade::pose_holder`), at his motion's time.
+fn holder_one(b: &pose::Baker, src: &pose::Src, template: &[u8], (motion, field): (u16, bool), frames: u32) -> Result<Vec<u8>, String> {
+    let (poses, _) = b.poses_of(src, motion, field, frames, false).ok_or("KH2 has no animation for it")?;
+    let (held, reach) = b.holder_poses(src, motion, field, &poses)?;
+    let (block, r) = kh1_data::bake::baked(template, frames, &[], &b.skeleton, &held, &[], false).map_err(|e| e.to_string())?;
+    log!(Animation,
+        "KH2 slots: KH2 motion {motion}'s left Keyblade holder motion baked ({frames} frames, {} bytes): {} keyed channels, {} keys, {} constants; the left grip at most {reach:.1} units from the left hand; KH1's pass from it within {:.3} units (worst bone {})",
+        block.len(),
+        r.keyed_channels,
+        r.keys,
+        r.constant_channels,
+        r.max_error,
+        r.worst_bone
+    );
+    Ok(block)
 }
 
 /// The swings KH2's combo rows can take: on the ground (`air` false) the ground rows with no hop
@@ -1815,6 +1877,23 @@ struct Placed {
 static PLACED: Mutex<Option<Placed>> = Mutex::new(None);
 /// Our motions' addresses, for `pose::slot_of` (slot by the instance's motion pointer).
 static MOTION_AT: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+/// Each placed motion with a holder motion (Valor's left Keyblade, `holder_one`): (the motion, its
+/// holder motion), as KH1 has them in memory.
+static HOLDER_AT: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+
+/// The holder motion placed for our motion at `motion` (KH1's address of the motion Sora plays),
+/// if it has one (`leftblade::pose_holder`).
+pub fn holder_motion(motion: usize) -> Option<usize> {
+    if motion == 0 {
+        return None;
+    }
+    HOLDER_AT.try_lock().ok()?.iter().find(|h| h.0 == motion).map(|h| h.1)
+}
+
+/// Our slot `slot` has a holder motion (its left Keyblade posed by KH1's pass, not from KH2's pose).
+pub fn has_holder(slot: usize) -> bool {
+    moved(slot).is_some_and(|m| m.holder)
+}
 /// Our slot playing on Sora (`usize::MAX` none), and its KH2 motion (for `kh2fx::tick`).
 static PLAYING: AtomicUsize = AtomicUsize::new(usize::MAX);
 static PLAYING_MOTION: AtomicU32 = AtomicU32::new(u32::MAX);
@@ -1984,6 +2063,7 @@ unsafe fn handle(p: usize) -> u32 {
 unsafe fn place(b: &Built) -> Placed {
     let mut motions = Vec::new();
     let mut at = Vec::new();
+    let mut holders = Vec::new();
     let blocks = b.blocks.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
     let bytes: usize = blocks.iter().map(|b| b.len()).sum();
     for (m, block) in b.moves.iter().zip(blocks) {
@@ -2002,11 +2082,29 @@ unsafe fn place(b: &Built) -> Placed {
         }
         motions.push((p, handle(p)));
         at.push((p, m.slot));
+        // Its holder motion (Valor's left Keyblade), placed the same way, found by this motion.
+        if let Some(hb) = m.holder_block.lock().ok().and_then(|mut g| g.take()) {
+            let words: &'static mut [u128] = Box::leak(vec![0u128; hb.len().div_ceil(16)].into_boxed_slice());
+            let q = words.as_mut_ptr() as usize;
+            std::ptr::copy_nonoverlapping(hb.as_ptr(), q as *mut u8, hb.len());
+            let mut g = q + rd::<u32>(q + ks::EVENTS) as usize;
+            while rd::<u32>(g) != ks::END {
+                wr(g + 8, handle(q + rd::<u32>(g + 8) as usize));
+                g += 12;
+            }
+            for f in ks::OFFSET_FIELDS {
+                wr(q + f, handle(q + rd::<u32>(q + f) as usize));
+            }
+            holders.push((p, q));
+        }
     }
     if let Ok(mut v) = MOTION_AT.lock() {
         *v = at;
     }
-    log!(Animation, "KH2 slots: {} motions placed ({bytes} bytes; the build's copy freed) (handles {:08x?})", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>());
+    if let Ok(mut v) = HOLDER_AT.lock() {
+        *v = holders;
+    }
+    log!(Animation, "KH2 slots: {} motions placed ({bytes} bytes; the build's copy freed) (handles {:08x?}); {} left Keyblade holder motions", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>(), HOLDER_AT.lock().map_or(0, |v| v.len()));
     Placed { motions, sets: Vec::new() }
 }
 

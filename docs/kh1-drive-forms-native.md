@@ -559,8 +559,11 @@ sure its a file as well". The hits are KH1's own now (§7.2), and the code is it
 **Done (the tester after m14: "all three, make it native to kh1 like the base keyblade"):** steps 1-3
 below, `kh1-weapon-second.md` §10: the left weapon object is one of KH1's pool, it is drawn by KH1's
 actor draw `0x1402A1630` on its holder, and its trail is KH1's request and step on that holder (its
-window a baked motion event 7.1 read by KH1's reader). Step 4 (the holder, the bone source) is still
-ours.
+window a baked motion event 7.1 read by KH1's reader). Step 4 (the tester after m15, answer 3
+(a): "bake the left hand's weapon bones into Valor's moves"): each Valor move has a holder motion
+baked beside it, and KH1's own pose pass poses its weapon bones each frame
+(`kh1-weapon-second.md` §10.4). Still ours: the holder actor copy KH1's draw and trail run on, and
+the one carry from the holder's left hand onto Sora's.
 
 **Plan (one system per version, each KH1-run):**
 1. The left weapon object from KH1's own pool (`0x14296B1E0`, a free bit of `0x14296B5D8`, made as

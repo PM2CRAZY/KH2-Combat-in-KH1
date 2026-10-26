@@ -10,8 +10,12 @@
 //!    for KH1's own Keyblade. It stays loaded for the session; a different Keyblade chosen
 //!    later is loaded in a new buffer and the old one released (KH1's own order: the model,
 //!    then the file record with its textures, with the `.wpn` release handler kept out of it).
-//! 2. **Pose**: `pose` hands over the left hand's 13 weapon matrices each frame (`note_pose`),
-//!    from KH2's own left Keyblade (the Valor rig's second weapon, `kh2_left` from `takeover`).
+//! 2. **Pose**: on Valor's baked slots, KH1's own pose pass poses the move's holder motion (the
+//!    left hand's weapon bones baked from KH2's left Keyblade, `kh2slots::holder_one`) on an
+//!    instance of ours right after Sora's pass (`pose_holder`), and the bones are carried onto his
+//!    drawn left hand (`posed_left`). Elsewhere (Final Form, a move without one) `pose` hands over
+//!    the left hand's 13 weapon matrices each frame (`note_pose`), from KH2's own left Keyblade (the
+//!    rig's second weapon, `kh2_left` from `takeover`).
 //! 3. **Draw**: KH1's own actor draw (`0x1402A1630`, Steam) run, after Sora's, on the left
 //!    Keyblade's holder (our copy of his actor, whose weapon object is the left Keyblade's KH1
 //!    object from KH1's own pool) with every body mesh hidden: KH1 queues its weapon as it does
@@ -228,9 +232,13 @@ static TO_WORLD: Mutex<Option<Mat4>> = Mutex::new(None);
 /// The left hand's weapon bones in KH1's world, and the game frame they were made on.
 static LEFT: Mutex<Option<([Mat4; WEAPON_BONES], u64)>> = Mutex::new(None);
 
-/// The left hand's weapon bones in KH1's world now (`LEFT`, model space, by this frame's
-/// placement), if posed within 2 game frames.
+/// The left hand's weapon bones in KH1's world now: on Valor's baked slots KH1's own pose of the
+/// holder motion (`posed_left`); else (Final Form, a move with no holder motion) `LEFT`, model
+/// space, by this frame's placement, if posed within 2 game frames.
 fn left_world() -> Option<[Mat4; WEAPON_BONES]> {
+    if let Some(m) = unsafe { posed_left() } {
+        return Some(m);
+    }
     let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
     let m = LEFT.try_lock().ok().and_then(|g| g.as_ref().filter(|(_, at)| frame.saturating_sub(*at) <= 2).map(|(m, _)| *m))?;
     let w = TO_WORLD.try_lock().ok().and_then(|g| *g)?;
@@ -802,30 +810,177 @@ pub fn note_pose(kh1: &[Mat4], kh1_bind: &[Mat4], kh2_body: &[Mat4], kh2_right: 
     if b2.len() <= sr.max(sl) {
         return;
     }
-    let k = if ratio.is_finite() && ratio > 0.1 { ratio } else { 1.0 };
-    // KH2's hand bone in KH1's hand frame (bind poses).
-    let offset = |kh1_hand: usize, kh2_hand: usize| kh1_bind[kh1_hand].inverse() * scaled(b2[kh2_hand], k);
-    // Weapon root relative to its KH2 hand bone now.
-    let rel = |kh2_hand: usize, root: Mat4| scaled(kh2_body[kh2_hand].inverse() * root, k);
-    let right_root = kh1[RIGHT_HAND] * offset(RIGHT_HAND, sr) * rel(sr, kh2_right[0]);
-    let turn = right_root.inverse() * kh1[GRIP];
-    let grip = kh1[LEFT_HAND] * offset(LEFT_HAND, sl) * rel(sl, left) * turn;
-    let from_hand = (grip.w_axis - kh1[LEFT_HAND].w_axis).truncate().length();
+    let Some((out, from_hand)) = left_bones(kh1, kh1_bind, b2, (sr, sl), kh2_body, kh2_right[0], left, ratio) else { return };
     // (Final Form's floats away from his hand.)
     let reach = if super::form::in_final() { 400.0 } else { 40.0 };
-    if !grip.is_finite() || from_hand > reach {
+    if from_hand > reach {
         log_n(&N, 5, || format!("left grip {from_hand:.0} units from the left hand: not drawn this frame"));
         return;
-    }
-    let inv_grip = kh1[GRIP].inverse();
-    let mut out = [Mat4::IDENTITY; WEAPON_BONES];
-    for (i, m) in out.iter_mut().enumerate() {
-        *m = grip * inv_grip * kh1[GRIP + i];
     }
     log_n(&N, 3, || format!("left grip posed, {from_hand:.1} units from the left hand"));
     if let Ok(mut g) = LEFT.try_lock() {
         *g = Some((out, super::takeover::GAME_FRAME.load(Ordering::Relaxed)));
     }
+}
+
+/// The left hand's 13 weapon bones (KH1 model space) for one frame, and the grip's distance from
+/// the left hand: `note_pose`'s rule, also used at load to bake them into Valor's holder motions
+/// (`pose::Baker::holder_poses`, `kh2slots`). `kh1` / `kh1_bind`: KH1's pose and bind (model
+/// space); `b2`: KH2's bind of the form's skeleton; `(sr, sl)`: KH2's right / left weapon hand
+/// bones; `kh2_body`, `right_root`, `left_root`: KH2's body and both weapon roots (KH2 model
+/// space); `ratio`: KH1's size against KH2's. `None` when it isn't finite.
+#[allow(clippy::too_many_arguments)]
+pub fn left_bones(kh1: &[Mat4], kh1_bind: &[Mat4], b2: &[Mat4], (sr, sl): (usize, usize), kh2_body: &[Mat4], right_root: Mat4, left_root: Mat4, ratio: f32) -> Option<([Mat4; WEAPON_BONES], f32)> {
+    if kh1.len() < SORA_BONES || kh1_bind.len() < SORA_BONES || kh2_body.len() <= sr.max(sl) || b2.len() <= sr.max(sl) {
+        return None;
+    }
+    let k = if ratio.is_finite() && ratio > 0.1 { ratio } else { 1.0 };
+    // KH2's hand bone in KH1's hand frame (bind poses).
+    let offset = |kh1_hand: usize, kh2_hand: usize| kh1_bind[kh1_hand].inverse() * scaled(b2[kh2_hand], k);
+    // Weapon root relative to its KH2 hand bone now.
+    let rel = |kh2_hand: usize, root: Mat4| scaled(kh2_body[kh2_hand].inverse() * root, k);
+    let right = kh1[RIGHT_HAND] * offset(RIGHT_HAND, sr) * rel(sr, right_root);
+    let turn = right.inverse() * kh1[GRIP];
+    let grip = kh1[LEFT_HAND] * offset(LEFT_HAND, sl) * rel(sl, left_root) * turn;
+    if !grip.is_finite() {
+        return None;
+    }
+    let from_hand = (grip.w_axis - kh1[LEFT_HAND].w_axis).truncate().length();
+    let inv_grip = kh1[GRIP].inverse();
+    let mut out = [Mat4::IDENTITY; WEAPON_BONES];
+    for (i, m) in out.iter_mut().enumerate() {
+        *m = grip * inv_grip * kh1[GRIP + i];
+    }
+    Some((out, from_hand))
+}
+
+/// KH1 Sora's left hand bone and the first weapon bone (the bake's holder motions).
+pub const LEFT_HAND_BONE: usize = LEFT_HAND;
+pub const GRIP_BONE: usize = GRIP;
+pub const WEAPON_BONE_COUNT: usize = WEAPON_BONES;
+
+// ---------------------------------------------------------------------------------------------
+// The holder motion (plan step 4): the left hand's weapon bones posed by KH1's own pose pass
+
+/// Our model instance the holder motions are posed on (KH1's instance layout, Steam `0x140391C70`
+/// and its bone pass `0x1403900B0`, Checked (decomp)): `+0` Sora's model slot (bone count, bone
+/// table), `+8` the motion it last posed (a new one resets its channels to the bind, `0x14038F550`),
+/// `+0x10` time, `+0x14` flags (0: no ground lift `& 3`, no look-at `& 0xC`), `+0x1B0` the sampled
+/// channels, `+0x1B4` the world matrices, `+0x1B8` the local ones (0x40 bytes a bone, handles).
+/// The pass also writes `+0x130` and `+0xF0..+0x108`, read by nothing for this instance.
+const HOLD_SIZE: usize = 0x10000;
+const HOLD_CHANNELS: usize = 0x1000;
+const HOLD_WORLD: usize = 0x6000;
+const HOLD_LOCAL: usize = 0xB000;
+const INST_CHANNELS: usize = 0x1B0;
+const INST_LOCAL: usize = 0x1B8;
+const INST_MOTION: usize = 0x08;
+const INST_FLAGS: usize = 0x14;
+/// Our pose instance (0: not made) and the game frame it was last posed on (`u64::MAX`: never).
+static HOLD: AtomicUsize = AtomicUsize::new(0);
+static HOLD_FRAME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
+
+/// Our pose instance, made the first time (its three arrays registered as KH1 handles).
+unsafe fn hold_instance() -> Option<usize> {
+    let h = HOLD.load(Ordering::Relaxed);
+    if h != 0 {
+        return Some(h);
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    let p = super::sys::VirtualAlloc(std::ptr::null_mut(), HOLD_SIZE, 0x3000, 0x04) as usize;
+    if p == 0 {
+        log_n(&N, 3, || "holder motion: no memory for its instance".into());
+        return None;
+    }
+    let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(BASE.load(Ordering::Relaxed) + TO_HANDLE_RVA);
+    for (field, at) in [(INST_CHANNELS, HOLD_CHANNELS), (INST_WORLD, HOLD_WORLD), (INST_LOCAL, HOLD_LOCAL)] {
+        let handle = to_handle(p + at);
+        if super::pose::ptr(handle) != p + at {
+            log_n(&N, 3, || format!("holder motion: its arrays' handles don't resolve ({handle:#x}): not posed"));
+            return None;
+        }
+        std::ptr::write_unaligned((p + field) as *mut u32, handle);
+    }
+    HOLD.store(p, Ordering::Relaxed);
+    log_n(&N, 3, || format!("holder motion: its instance made at {p:#x}"));
+    Some(p)
+}
+
+/// `pose`, right after KH1 posed Sora (its plain pass `0x140391C70` with `motion` at `time`, or
+/// its blend pass, `None`: then his actor's motion `ptr(+0x1D4)[+0x168]` at `+0x16C`): on Valor's
+/// baked slots, the holder motion KH1's slot plays (`kh2slots::holder_motion`, the left hand's
+/// weapon bones baked from KH2's left Keyblade) posed by KH1's own pass on our instance with
+/// Sora's own world matrix `world`. Nothing else of ours: `posed_left` reads the result.
+pub unsafe fn pose_holder(call: unsafe fn(usize, usize, f32, usize), world: usize, motion_time: Option<(usize, f32)>) {
+    if !INSTALLED.load(Ordering::Relaxed) || !left_shown() || !super::form::native_now() || world < 0x10000 {
+        return;
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    let sora = super::takeover::sora_actor();
+    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
+    if !readable(sora, ACTOR_SIZE) || !readable(inst, INSTANCE_SIZE) {
+        return;
+    }
+    let (motion, time) = match motion_time {
+        Some(v) => v,
+        None => {
+            let table = super::pose::ptr(rd::<u32>(sora + ACTOR_MOTIONS));
+            let slot = rd::<u16>(sora + ACTOR_SLOT) as usize;
+            if !readable(table + slot * 4, 4) {
+                return;
+            }
+            (super::pose::ptr(rd::<u32>(table + slot * 4)), rd::<f32>(sora + ACTOR_TIME))
+        }
+    };
+    if !time.is_finite() {
+        return;
+    }
+    let Some(holder) = super::kh2slots::holder_motion(motion) else {
+        // (A slot with none: the left Keyblade from KH2's pose there, `LEFT`.)
+        HOLD_FRAME.store(u64::MAX, Ordering::Relaxed);
+        return;
+    };
+    let Some(h) = hold_instance() else { return };
+    // Sora's model slot (his bone count and bone table); the flags clear (no ground lift, no
+    // look-at: only the weapon bones matter here).
+    std::ptr::write_unaligned(h as *mut u64, rd::<u64>(inst));
+    std::ptr::write_unaligned((h + INST_FLAGS) as *mut u32, 0);
+    call(world, h, time, holder);
+    HOLD_FRAME.store(super::takeover::GAME_FRAME.load(Ordering::Relaxed), Ordering::Relaxed);
+    log_n(&N, 3, || format!("holder motion {holder:#x} (for Sora's {motion:#x}) posed by KH1's pass at {time:.1} (its instance's motion {:#x})", rd::<u64>(h + INST_MOTION)));
+}
+
+/// The left Keyblade's bones in KH1's world from KH1's pose of the holder motion, if it was posed
+/// within 2 game frames: the holder motion keeps the body at the bind and the weapon bones where
+/// they sit from the left hand, so each is put on Sora's left hand as drawn (his `+0x1B4`): his
+/// hand × the holder's hand⁻¹ × the holder's bone. (Through KH1's motion blends Sora's hand blends;
+/// the grip's hold on it is the new motion's from the blend's first frame.)
+unsafe fn posed_left() -> Option<[Mat4; WEAPON_BONES]> {
+    let h = HOLD.load(Ordering::Relaxed);
+    if h == 0 || !super::form::native_now() {
+        return None;
+    }
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let at = HOLD_FRAME.load(Ordering::Relaxed);
+    if at == u64::MAX || frame.saturating_sub(at) > 2 {
+        return None;
+    }
+    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
+    if !readable(inst + INST_WORLD, 4) {
+        return None;
+    }
+    let world = super::pose::ptr(rd::<u32>(inst + INST_WORLD));
+    if !readable(world, SORA_BONES * 0x40) {
+        return None;
+    }
+    let mat = |base: usize, i: usize| Mat4::from_cols_array(&rd::<[f32; 16]>(base + i * 0x40));
+    let held = h + HOLD_WORLD;
+    let to_hand = mat(world, LEFT_HAND) * mat(held, LEFT_HAND).inverse();
+    let mut out = [Mat4::IDENTITY; WEAPON_BONES];
+    for (i, m) in out.iter_mut().enumerate() {
+        *m = to_hand * mat(held, GRIP + i);
+    }
+    out.iter().all(|m| m.is_finite()).then_some(out)
 }
 
 // ---------------------------------------------------------------------------------------------

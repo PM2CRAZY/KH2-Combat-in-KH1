@@ -654,3 +654,71 @@ keyblade" (KH1's own weapon object, then the draw, then the trail).
   window opened, set its end byte as it closed, and kept up to four of them.
 - The first start after this rebakes Valor's motions that have left trail windows (their event
   table changed).
+
+### 10.4 Its bones posed by KH1's own pose pass (Steam, Checked (decomp); not checked in game)
+
+The tester (what-is-still-missing, after m15, answer 3): "(a)", bake the left hand's weapon bones
+into Valor's moves so KH1's own animation drives them.
+
+- **Why a second motion.** KH1 Sora's skeleton has one weapon-bone set (280..292, the grip under the
+  right hand, §1.4) and a motion has one channel set per bone of the model (the pass samples into the
+  instance's `+0x1B0`, one 0x40-byte record per bone, by the model header's bone count). So the left
+  hand's weapon bones can't be extra bones of Sora's own motion. Each Valor move gets a second KH1
+  motion of the same length, its **holder motion**, posed on a model instance of ours. Checked
+  (decomp, `0x140391C70`, `0x14038F550`, `0x1403900B0`).
+- **What KH1's pose pass needs of an instance** (`0x140391C70 (world, instance, time, motion)` and
+  its bone pass `0x1403900B0`, Checked (decomp)):
+  - `+0` the model slot (bone count `**`, bone table at header `+4`, the head bones at header `+8`);
+  - `+8` the motion last posed (a new one resets the channels to the bind and writes constant
+    channels and the static bones' locals, `0x14038F550`);
+  - `+0x10` the time and `+0x14` the flags: bits 0..1 ground lift (mode 2 bones only), bits 2..3
+    head look-at (`0x140391860`), bit 4 the lift's cast; the pass clears the upper half (`+0x16`)
+    and ORs the level events in;
+  - `+0x1B0` / `+0x1B4` / `+0x1B8` the channels, world and local matrices (handles).
+  - It also writes `+0x130` and `+0xF0..+0x108` (the root travel), and its scratch globals
+    (`0x142EF1F50` helpers, `0x142EE8F50` the per-bone temporaries), which every actor's pass
+    rewrites in turn.
+  - Ours (`leftblade::hold_instance`): our own three arrays, `+0` Sora's model slot copied in each
+    call, `+0x14` = 0 (no ground lift, no look-at), `+8` kept between calls (KH1 resets it on a new
+    motion).
+- **The holder motion** (`kh2slots::holder_one`, baked once into the motion slot cache with its own
+  key, `holder_key`; the main bake's keys are unchanged):
+  - Built on the move's own template and length with `kh1_data::bake` (plain FK words, no events,
+    KH1's legs off).
+  - Every body bone at KH1 Sora's bind (no channels: built once, joint-word bit 25).
+  - The 13 weapon bones are the left Keyblade (`pose::Baker::holder_poses`): at each frame of KH2's
+    move, `leftblade::left_bones` (the rule `note_pose` used each frame, now shared): KH2's left
+    weapon motion (the Valor rig's second weapon, `W_EX010_BTLF_L` as `pose::load_kh2` reads it) on
+    KH1's pose of the frame as the main bake makes it. They are then taken from KH1's left hand
+    (206) and set on the bind's left hand: the motion holds where the Keyblade sits **from the
+    hand**, not from the model.
+  - A frame whose left grip is mirrored (a determinant below 0, which KH1's channels can't hold:
+    rotation and translation only) gives no holder motion for that move. It is logged, and the old
+    path (KH2's left pose each frame) is kept for it. **Assumption:** KH2's left weapon root isn't
+    mirrored; no log has the determinant yet.
+- **Each frame** (`pose.rs`'s two pass hooks, right after Sora's pass, `leftblade::pose_holder`): on
+  Valor's baked slots, the holder motion of the motion Sora plays is posed by KH1's own plain pass
+  (the original function, past our hook) on our instance, with Sora's own world matrix:
+  - after his plain pass, at that pass's motion and time;
+  - after his blend pass, at his actor's motion and time (`ptr(+0x1D4)[+0x168]`, `+0x16C`).
+- **Where the drawn bones come from** (`leftblade::posed_left`, read by `left_world`, so by KH1's
+  actor draw on the holder, its trail owner and the left hits):
+  - Sora's drawn left hand (his `+0x1B4[206]`) times the holder's left hand inverted, times each of
+    the holder's weapon bones.
+  - So the left Keyblade stays in his hand through KH1's motion blends. Sora's hand blends there,
+    while the grip's hold on the hand is the new motion's from the blend's first frame.
+    **Assumption:** that shows less than a model-space hold, which would leave the blade behind the
+    blending hand.
+- **What goes:** on those slots KH2's left weapon is no longer evaluated each frame
+  (`pose::follow_baked`), and neither is the retarget rule (`note_pose`).
+- **Unchanged:**
+  - Final Form (KH2's controller) and any Valor slot without a holder motion still use `note_pose`
+    and `LEFT`.
+  - The holder actor copy (`fill_owner`), KH1's actor draw and trail on it (§10.2, §10.3), and the
+    left hits (`lefthits`).
+- **Still ours each frame:** one call of KH1's pose pass on our instance (another actor's worth), and
+  the hand carry (13 matrix products).
+- **Assumptions:** KH1 writes Sora's bone 206 every frame on Valor's slots (as `note_pose` already
+  relied on); nothing reads the pass's scratch globals between Sora's pass and the next actor's.
+- The first start after this version bakes the holder motions once (new cache keys).
+
