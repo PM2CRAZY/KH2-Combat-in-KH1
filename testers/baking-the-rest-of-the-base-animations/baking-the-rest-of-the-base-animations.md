@@ -7,6 +7,7 @@
 - [1. Assistant: I started this thread from What is still missing(../what-is-](#^m1)
 - [2. Assistant: Thanks! Three versions, one step of the plan each:](#^m2)
 - [3. Assistant: Thanks! Built as you picked, in t632: KH1's own leg IK on th](#^m3)
+- [4. Assistant: Done, three versions:](#^m4)
 
 ---
 
@@ -106,6 +107,29 @@ go ahead
 
 ^m3
 
+
 lets actually have the foot iks off we'll work on this later when we do soras cloth animations, just make sure every animation is baked and on the native system
 
 go ahead
+> [!tip] Assistant
+> Done, three versions:
+>
+> - **t634, foot IK off.** Both kinds of foot placement are off now: the baked animations get plain legs again instead of KH1's leg IK, and our own foot fix on the drawn-over clips is off too. The code is kept for when we do the cloth. `foot_ik = on` in kh1-kh2.ini turns both back on if you want to compare. Nothing else of ours moves the feet; KH1's own animations still use KH1's own lift, since that's KH1's.
+> - **t635, idle baked.** KH2's idle is now two real KH1 slots: KH1 picks field or battle idle by itself, so KH2's field idle (no Keyblade) is on KH1's field idle and KH2's battle idle on its battle one. Everything that asks KH1 for its idle now gets KH2's, played by KH1's own animation system: standing still, the end of landings, items, casts and hits, and scripts. KH2's battle idle is longer than anything we'd baked before (300 frames), so the bake now handles long animations too. Checked against KH1's idle request in Sora's motion file and KH1's code (`0x1402A01E0`), and rebuilt offline from your files (within about a third of a unit of KH2's pose).
+> - **t636, landing baked.** KH2's landing is now KH1's landing slot, for the normal jump and the High Jump. As you asked earlier, the landing lock is KH1's own: you can act again at KH1's frame 12, and KH1's landing sound and dust stay where they were. Checked against KH1's landing request in Sora's motion file and KH1's player step.
+> - **Glide** was already fully baked (slow, fast, both banks and the hover), so nothing changed there.
+>
+> With these, every base-Sora animation that has a KH1 move to sit on is baked: idle, walk, run, jump, High Jump, fall, landing, combos, ability moves, Aerial Dodge, Aerial Recovery, guard, Counterguard, dodge roll, Quick Run, glide, every cast (Gravity, Stop, Aero and Reflect too), items, flinches and recoils. The drawn-over code is only a fallback now, for a slot that fails to build or a world whose motion set lacks the move. The audit is in `docs/kh1-anim-baking.md` §12.
+>
+> None of it is checked in game yet. Please test:
+> - standing still in and out of battle (field idle without the Keyblade, battle idle with it), and going into walk and run;
+> - landing from jumps, High Jumps and long falls: when you can move again, the sound and dust;
+> - slopes and stairs: the feet won't adjust now, that's expected;
+> - cutscenes and talks: KH1's idle requests there now show KH2's idle too.
+>
+> Two I couldn't bake without your call:
+> 1. **Getting knocked back** (the big hits that send Sora flying). KH1 plays one 72-frame motion; KH2 plays a flying motion, then a separate landing motion when he touches down, and KH2's launch arc isn't on KH1's system yet. (a) leave KH1's knock-back animation for now; (b) bake KH2's flying motion onto KH1's knock-back now (the landing part later, with KH2's launch); (c) do the whole KH2 knock-back (arc, flying, landing) as its own job next.
+> 2. **Ledge grabs.** KH1-only right now, but KH2 has its own ledge hang and climb. (a) keep KH1's; (b) find KH1's ledge slots and bake KH2's hang and climb onto them.
+
+^m4
+
