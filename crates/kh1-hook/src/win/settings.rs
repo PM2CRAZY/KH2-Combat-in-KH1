@@ -68,6 +68,11 @@ enemy_weight = on\r\n\
 ; glide_cast: on = a KH2 spell chosen in KH2's glide ends the glide and is cast in the air, as\r\n\
 ;   KH2 does; off = refused with KH1's can't sound (the Config menu's Combat > Tweaks list switches it)\r\n\
 glide_cast = on\r\n\
+; clash_count: kh1 or kh2, how a clash or a wall bounce counts for the combo: KH2's (every\r\n\
+;   meeting of his attack counts as a connected swing, and every recoil, in the air too, takes one\r\n\
+;   swing off the count, so the next press repeats it) or KH1's own (the Config menu's Combat >\r\n\
+;   Tweaks list switches it)\r\n\
+clash_count = kh2\r\n\
 ; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
 glide = square\r\n\
 ; air_cast_fall: how fast Sora falls while Reflect plays in the air, a share of KH1's own\r\n\
@@ -319,6 +324,9 @@ pub struct Settings {
     /// A KH2 spell in KH2's glide ends the glide into KH1's air cast (`glide_cast = on`, the default;
     /// the tester, what-is-still-missing m8 answer 1 (a); `glide::cast_out`).
     pub glide_cast: bool,
+    /// KH2's rule for a clash or a wall bounce in the combo count (`clash_count = kh2`, the default;
+    /// the tester, what-is-still-missing m15 answer 1; `recoil::clash_count`).
+    pub clash_count: bool,
     /// Glide on Square (`glide = square`, default) or held jump (`glide = jump`).
     pub glide_on_square: bool,
     /// Gravity's share while a KH2 cast (Reflect) plays in the air, after its fall speed was
@@ -518,6 +526,7 @@ fn load(first: bool) -> Option<Settings> {
         kh1_ability_chance: on(&text, "kh1_ability_chance", "on", false),
         enemy_weight: on(&text, "enemy_weight", "on", true),
         glide_cast: on(&text, "glide_cast", "on", true),
+        clash_count: on(&text, "clash_count", "kh2", true),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         bonus_ap: on(&text, "bonus_ap", "on", true),
         auto_aim: on(&text, "auto_aim", "on", false),

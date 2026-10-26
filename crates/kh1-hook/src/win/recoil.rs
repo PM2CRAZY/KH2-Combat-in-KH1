@@ -28,7 +28,7 @@ use super::addr::Build;
 use super::styles::{self, Kind};
 use super::sys::*;
 use super::{log, pose};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 /// KH1's motion queue: count `+0x178`, first entry's request `+0x17C` (`0x14029F980`).
 const QUEUE: usize = 0x178;
@@ -92,20 +92,24 @@ fn on() -> bool {
     super::shared::active() && !super::form::in_form()
 }
 
-/// What KH1's hit pass may change: its queue head, the no-damage timer and its flags.
+/// What KH1's hit pass may change: its queue head, the no-damage timer and its flags, and his
+/// combo count (combat info `+0x41`).
 pub struct Before {
     queue: (u32, u32),
     timer: f32,
     flags: u32,
+    count: Option<u8>,
 }
 
 pub unsafe fn before_pass(actor: usize) -> Before {
-    Before { queue: (rd(actor + QUEUE), rd(actor + QUEUE + 4)), timer: rd(actor + TIMER), flags: rd(actor) }
+    let info = combat_info(actor);
+    Before { queue: (rd(actor + QUEUE), rd(actor + QUEUE + 4)), timer: rd(actor + TIMER), flags: rd(actor), count: (info > 0x10000).then(|| rd(info + COUNT)) }
 }
 
 /// After KH1's hit pass on Sora (`hurt`): a recoil it started, given KH2's push, hop and no
-/// protection.
+/// protection (Recoil KH2), and KH2's count rule (Clash Combo KH2, `count_after_pass`).
 pub unsafe fn after_pass(actor: usize, b: Before) {
+    count_after_pass(actor, &b);
     if !on() || !kh2() {
         return;
     }
@@ -203,7 +207,9 @@ pub unsafe fn install() {
 unsafe extern "system" fn meet(a: usize, b: usize) {
     let orig: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_MEET.load(Ordering::Relaxed));
     orig(a, b);
-    if !kh2() || !on() {
+    let counts = clash_count();
+    let refact = kh2() && on();
+    if !counts && !refact {
         return;
     }
     let (oa, ob) = (rd::<usize>(a + 0x18), rd::<usize>(b + 0x18));
@@ -215,6 +221,12 @@ unsafe extern "system" fn meet(a: usize, b: usize) {
         return;
     }
     let owner = |o: usize| pose::ptr(rd::<u32>(o + 0x34));
+    if counts {
+        count_meeting(oa, ob, sora, owner(oa), owner(ob));
+    }
+    if !refact {
+        return;
+    }
     let mine = |o: usize| owner(o) == sora && super::kh1rows::unstoppable(o);
     let guard = |o: usize| rd::<i32>(o + 0x68) == GUARD_PRIORITY && { let w = owner(o); w > 0x10000 && w != sora };
     let (swing, g, ge, se) = if mine(oa) && guard(ob) {
@@ -224,12 +236,7 @@ unsafe extern "system" fn meet(a: usize, b: usize) {
     } else {
         return;
     };
-    let base = BASE.load(Ordering::Relaxed);
-    let faces_at = base + FACES_STEAM;
-    if std::slice::from_raw_parts(faces_at as *const u8, FACES_BYTES.len()) != FACES_BYTES {
-        return;
-    }
-    let faces: unsafe extern "system" fn(usize, usize) -> i32 = std::mem::transmute(faces_at);
+    let Some(faces) = faces() else { return };
     if faces(g, swing) == 0 || faces(swing, g) == 0 {
         return;
     }
@@ -246,4 +253,141 @@ unsafe extern "system" fn meet(a: usize, b: usize) {
     let q: [f32; 4] = rd(se + 0x30);
     super::combat::clang([(p[0] + q[0]) * 0.5, (p[1] + q[1]) * 0.5, (p[2] + q[2]) * 0.5]);
     note(|| format!("recoil (KH2): Sora's refact-self-2 swing {swing:#x} met the guard {g:#x} of actor {target:#x}: not stopped, that actor immune to it (hit-once bit {bit:#x})"));
+}
+
+/// KH1's directional test (`FACES_STEAM`), when its first bytes are KH1's.
+unsafe fn faces() -> Option<unsafe extern "system" fn(usize, usize) -> i32> {
+    let at = BASE.load(Ordering::Relaxed) + FACES_STEAM;
+    if std::slice::from_raw_parts(at as *const u8, FACES_BYTES.len()) != FACES_BYTES {
+        return None;
+    }
+    Some(std::mem::transmute::<usize, unsafe extern "system" fn(usize, usize) -> i32>(at))
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Tweaks row Clash Combo (the tester, what-is-still-missing m15 answer 1: "make it a toggle in
+// the config menu under tweaks, you can either have the kh1 rule or the kh2 rule";
+// `docs/kh1-kh2-recoil.md` §6.10).
+//
+// KH2 (Steam KH2, Checked (decomp)): the combo count is the player's byte `+0xD74`, and the Attack
+// check `0x1403D6CA0` takes a press in the combo window (range id 11) only with "connected"
+// (`+0x120` bit 0x2000000) or Combo Master, adding one. Three functions set "connected" and take
+// one off the count (if above 0):
+// - `0x1403D61D0`, Sora's clash reaction (vtable `+0xD0`, run for every meeting of his attack that
+//   passes KH2's table, overlap and angle tests, `0x1403D2140`): "connected" in every case, the
+//   count less one only on its recoil branch (motion 41 / 43; not the guard repel 42 on the ground,
+//   not the "refact 2" case that plays nothing);
+// - `0x1403D54B0` and `0x1403D63E0`, the background hit (vtable `+0xD8`, called by the attack's
+//   wall contact `0x1403D1960`) of the player classes: the recoil (41 / 43) through `0x1403D4650`.
+// So the two other cases are one: a swing bouncing off a wall. KH2's 41 has its combo window from
+// frame 16 (`P_EX100.mset`, Checked (files)); 43 has none.
+//
+// KH1 (Steam KH1, Checked (decomp)): the count is the combat info's byte `+0x41`, "connected" its
+// word `+0x50`, which a swing's attack object points at (`+0x60`, set and cleared where the row
+// object is made). KH1's clash half `0x1402B4BC0` already sets it (0x10 / 0x20) when it stops his
+// attack, its wall contact `0x1402B3A00` too (0x100 / 8 / 2); the clash / wall record (kind 6 / 7)
+// then runs his recoil: the ground ones (`0x14029D720` 0x6E, `0x14029D5F0` 0x6F) take one off the
+// count (with no floor at 0), the air one (`0x14029D510` 0x70) doesn't. KH1's own ground recoil
+// (slot 72) has a combo window from frame 28 (`xa_ex_0010.mset`, Checked (files)). So KH1 already
+// repeats the step after a ground clash or wall bounce; what KH2's rule adds:
+// - "connected" for every meeting of his attack KH1's meeting lets through its two directional tests
+//   (`0x1402B4640`), also when KH1 doesn't stop it (priority 0x62 or more: Guard Break, the Recoil
+//   row's refact-2 rows) or he hits an enemy guard;
+// - one off the count on the air recoil too;
+// - the count never below 0.
+// At KH1 nothing is touched.
+// ---------------------------------------------------------------------------------------------
+
+/// The combat info's count and "connected" word (`0x1402A7510`, Checked (decomp)).
+const COUNT: usize = 0x41;
+const CONNECTED: usize = 0x50;
+/// The bit KH1's clash half sets in a stopped attack's "connected" word (`0x1402B4BC0`).
+const CLASHED: u32 = 0x10;
+
+/// The Tweaks row Clash Combo (0 not read yet, 1 KH1, 2 KH2).
+static CLASH_COUNT: AtomicU8 = AtomicU8::new(0);
+
+/// KH2's rule for clashes and wall bounces in the combo count (the default, as the Tweaks rows'
+/// KH2 sides: KH1 Ability Chance off, Cast from Glide on).
+pub fn clash_count() -> bool {
+    match CLASH_COUNT.load(Ordering::Relaxed) {
+        0 => {
+            let c = super::settings::get().clash_count;
+            CLASH_COUNT.store(1 + c as u8, Ordering::Relaxed);
+            c
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config row (Combat > Tweaks > Clash Combo): live, kept in the ini.
+pub fn set_clash_count(kh2: bool) {
+    CLASH_COUNT.store(1 + kh2 as u8, Ordering::Relaxed);
+    super::settings::save("clash_count", if kh2 { "kh2" } else { "kh1" });
+    log!(Combat, "Config menu: Clash Combo {}", if kh2 { "KH2" } else { "KH1" });
+}
+
+unsafe fn combat_info(actor: usize) -> usize {
+    if actor < 0x10000 {
+        return 0;
+    }
+    pose::ptr(rd::<u32>(actor + 0x14C))
+}
+
+/// After KH1's meeting of two attacks (`meet`), Clash Combo KH2: Sora's attack in it counts as
+/// connected (KH2's `0x1403D61D0` sets "connected" first thing, whatever it then plays), once both of
+/// KH1's directional tests pass (KH1's meeting runs nothing before them).
+unsafe fn count_meeting(oa: usize, ob: usize, sora: usize, wa: usize, wb: usize) {
+    if wa != sora && wb != sora {
+        return;
+    }
+    let Some(faces) = faces() else { return };
+    if faces(oa, ob) == 0 || faces(ob, oa) == 0 {
+        return;
+    }
+    let info = combat_info(sora);
+    if info < 0x10000 {
+        return;
+    }
+    for (o, w) in [(oa, wa), (ob, wb)] {
+        if w != sora {
+            continue;
+        }
+        // (Only an attack whose word is his combat info's `+0x50`, as KH1's row object maker sets
+        // it for his swings; any other attack he owns is left alone.)
+        let word = rd::<usize>(o + 0x60);
+        if word != info + CONNECTED {
+            continue;
+        }
+        let was: u32 = rd(word);
+        if was == 0 {
+            wr(word, was | CLASHED);
+            note(|| format!("Clash Combo (KH2): Sora's attack {o:#x} met another: counted as connected (KH1 hadn't)"));
+        }
+    }
+}
+
+/// After KH1's hit pass on Sora (`after_pass`), Clash Combo KH2: a recoil KH1 started (its requests
+/// 0x6E / 0x6F / 0x70) leaves the count one less than before the pass, never below 0, as KH2's
+/// `0x1403D61D0` / `0x1403D4650` callers (KH1's air recoil takes none off; its ground ones go from 0
+/// to 255).
+unsafe fn count_after_pass(actor: usize, b: &Before) {
+    if !clash_count() {
+        return;
+    }
+    let Some(before) = b.count else { return };
+    let now: (u32, u32) = (rd(actor + QUEUE), rd(actor + QUEUE + 4));
+    if now == b.queue || now.0 == 0 || !matches!(now.1 & 0xFFFF, GROUND | BIG | AIR) {
+        return;
+    }
+    let info = combat_info(actor);
+    if info < 0x10000 {
+        return;
+    }
+    let want = before.saturating_sub(1);
+    let got: u8 = rd(info + COUNT);
+    if got != want && (got == before || got == before.wrapping_sub(1)) {
+        wr(info + COUNT, want);
+        note(|| format!("Clash Combo (KH2): recoil request {:#x}: combo count {before} -> {want} (KH1 left {got})", now.1 & 0xFFFF));
+    }
 }

@@ -70,8 +70,10 @@ For each side, `0x1403D2140 (own, other)`:
   distance x `sstm` hit_back_to_jump (`[0x142AE5760] + 0x38`) sideways, back from his facing.
 - His attack marked `+8 | 0x40`.
 
-The wall hit `0x1403D54B0` (vtable `+0xD8`) is the same recoil with motion 0, and also takes one
-off the combo counter.
+The wall hit `0x1403D54B0` (vtable `+0xD8`; `0x1403D63E0` in the other player classes) is the
+same recoil with no other attack (0) and motion / distance -1 (41 / 43, 50), and also sets
+"connected" and takes one off the combo counter (§6.10; it said "motion 0" before, **Checked
+(decomp)**).
 
 `+0xD74` is the combo counter: `0x1403D6CA0` raises it in the combo window, and `0x1403D7480`
 reads it capped by the moveset's maximum. So **a recoil takes one swing off the combo, as KH1's
@@ -161,8 +163,9 @@ So KH1 is **by priority**, and both sides recoil whenever both are under 0x62.
 | kind 6 | `0x14029D720`: request 0x6E (slot 72), pushed back by the gap (btltbl `+0x1C`) | `0x14029D510`: request 0x70 then the fall, a hop of 20, pushed back by the gap (btltbl `+0x30`, capped `+0x34`) |
 | kind 7 | `0x14029D5F0`: request 0x6F (KH1's big recoil), no push | as kind 6 |
 
-- Each one takes one off KH1's combo count (combat state `+0x41`), the same as KH2's `+0xD74`
-  (§1.3).
+- The two ground ones take one off KH1's combo count (combat state `+0x41`), the same as KH2's
+  `+0xD74` (§1.3), with no floor at 0. The air one (`0x14029D510`) takes none off. (Corrected in
+  t-clash: this said "each one"; **Checked (decomp)**, §6.10.)
 - Each one starts KH1's no-damage timer with **8 frames** (`0x140297F30 (actor, 8.0)`). KH1's
   flinches use 30. KH2's recoil gives none.
 
@@ -461,3 +464,71 @@ would only stop KH2's shapes (`strike_as`) until the pass learns it too.
   pass tests the meeting before the body (the pass's entry order is not read). If not, the first
   frame's body hit lands and the immunity starts the frame after.
 - Cost: one hook on a function KH1 calls only for overlapping attack pairs; a few reads per call.
+
+### 6.10 Clash Combo: KH2's count rule for clashes and wall bounces (Tweaks row)
+
+The tester (what-is-still-missing m15 answer 1, to "a clash (and two other cases, probably wall
+bounces) counts as a connected swing but takes one off the combo count ... add that to KH1's clash /
+wall handling?"): "make it a toggle in the config menu under tweaks, you can either have the kh1
+rule or the kh2 rule".
+
+**KH2** (Steam KH2, **Checked (decomp)**): the count is `+0xD74`; the Attack check `0x1403D6CA0`
+counts a press on in the combo window (range id 11) only with "connected" (`+0x120` bit 0x2000000)
+or Combo Master. Exactly three functions set "connected" *and* take one off the count (only when it
+is above 0):
+- `0x1403D61D0`, the player's clash reaction (vtable `+0xD0`, from `0x1403D2140` for every meeting
+  that passes the table, the overlap and the angle checks). "Connected" in every case; the count less
+  one only on its recoil branch (41 / 43). The ground guard repel branch (42) and the refact-2 branch
+  (nothing played) set "connected" but keep the count.
+- `0x1403D54B0` and `0x1403D63E0`: the same background-hit handler (vtable `+0xD8`) in two player
+  class families (`0x1403D63E0` sits behind 14 class wrappers such as `0x1403A7470`). The attack's
+  wall contact `0x1403D1960` calls it unless the attack's flag 0x100 is set: recoil 41 / 43 through
+  `0x1403D4650`, distance 50.
+
+So "the two other cases" are one case, the wall bounce, in two copies. **Checked (decomp).**
+KH2's 41 has its combo window (range id 11) from frame 16 to its end, and is free from frame 40; 43
+has none (`P_EX100.mset`, **Checked (files)**). So the step repeats only after a ground recoil; in
+the air the next press after 43 starts a new combo.
+
+**KH1** (Steam KH1, **Checked (decomp)**):
+- The count is combat info `+0x41`, "connected" its word `+0x50` (KH1's Attack step `0x1402A7510`
+  tests it for 0). The row object maker stores `&info + 0x50` at the attack's `+0x60` and clears the
+  word.
+- The clash half `0x1402B4BC0` ORs 0x10 / 0x20 into that word when it stops Sora's attack, and the
+  meeting `0x1402B4A20` does the same for a side whose half returned 0 while the other's didn't.
+- The wall contact `0x1402B3A00` ORs its surface bits (0x100 / 8 / 2) into it. Unless the surface
+  is class 5, it gives him a kind 6 record with gap -20.
+- Kind 6 / 7 run the recoils of §2.3: ground ones take one off the count, the air one doesn't.
+- KH1's own ground recoil (slot 72) has a combo window (event type 5) from frame 28, and so does
+  its "may be left" point. The big recoil (73) and the air one (74) have none (`xa_ex_0010.mset`,
+  **Checked (files)**).
+- So KH1 already repeats the step after a ground clash or wall bounce. That holds at Recoil KH2 as
+  well (KH2's 41 on slot 72 carries its window from 16, `kh2slots::kh1_tracks`).
+
+What KH2's rule adds (`recoil::clash_count`, Config > KH1 in KH2 > Combat > Tweaks > Clash Combo,
+ini `clash_count = kh1 | kh2`, **KH2 by default**, as the other Tweaks rows default to KH2's side):
+- **Connected on every meeting.** This is done in the hook already on KH1's meeting (`recoil::meet`,
+  Steam `0x1402B4A20`, prologue checked). After KH1's own meeting, when Sora owns one of the two
+  attacks and both of KH1's directional tests `0x1402B4640` pass, his attack's "connected" word gets
+  0x10, KH1's own clash bit. This covers meetings KH1 doesn't stop: his attack at priority 0x62 or
+  more (Guard Break, the Recoil row's refact-2 rows) against an enemy attack or guard. Only an
+  attack whose `+0x60` is his combat info's `+0x50` is touched.
+- **One off on the air recoil, never below 0.** This is in `recoil::after_pass` (the hit pass,
+  `hurt`). When the pass queued 0x6E / 0x6F / 0x70, the count is put at its value before the pass
+  less one, floored at 0. In practice only the air recoil and a count already at 0 change.
+- At KH1 nothing is touched. The meeting hook does its old work only (Recoil KH2's refact-2
+  immunity), and KH1's events get the same fields.
+
+**Not KH2's (Assumptions / limits):**
+- KH1's pairing table, overlap and directional tests stand in for KH2's clash table, overlap and
+  angle checks. KH2's "unless the attack has flag 0x100" has no KH1 equivalent, so every meeting
+  counts. **Assumption.**
+- KH1's big recoil (kind 7, 0x6F) is KH1's own case. It keeps KH1's decrement.
+- KH1's clash records come from its priority rule, not KH2's refact values. So KH2's ground guard
+  repel branch (42, no decrement) never comes from an attack clash here (not ported, §3.1).
+- KH1's wall surface class 5 gives "connected" but no recoil and no decrement. KH2's wall hit
+  always recoils (except for the attack flag 0x100). Left as KH1's.
+- Not checked in game.
+- Cost: no new hook. The meeting hook (called only for overlapping attack pairs) does two
+  directional tests when one side is Sora's. The hit pass does a few reads.
+

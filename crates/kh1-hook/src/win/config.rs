@@ -15,7 +15,7 @@
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
-//!   (combo row selection m21, inside Combat m22), Enemy Weight, Cast from Glide.
+//!   (combo row selection m21, inside Combat m22), Enemy Weight, Cast from Glide, Clash Combo.
 //!
 //! Only the settings that were in the Config menu (answer 2a); "Default settings" leaves ours alone
 //! (answer 6b). Backing out of a list re-creates its parent with the cursor on the row it came
@@ -214,6 +214,8 @@ enum Row {
     EnemyWeight,
     /// Tweaks > Cast from Glide (Off | On, `glide::cast_out`).
     GlideCast,
+    /// Tweaks > Clash Combo (KH1 | KH2, `recoil::clash_count`).
+    ClashCount,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -312,10 +314,13 @@ const TOP: [Item; 4] = [
 // config menu".)
 // (Cast from Glide: the tester, what-is-still-missing m8: "1. (a) then make it a config in the
 // tweaks config menu".)
-const TWEAKS: [Item; 3] = [
+// (Clash Combo: the tester, what-is-still-missing m15 answer 1: "make it a toggle in the config
+// menu under tweaks, you can either have the kh1 rule or the kh2 rule".)
+const TWEAKS: [Item; 4] = [
     Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
     Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
     Item::Set([0x7F00_0197, 0x7F00_011D, 0x7F00_011E, 0x7F00_0198], Row::GlideCast),
+    Item::Set(kh(0x7F00_0199, 0x7F00_019A), Row::ClashCount),
 ];
 const CAMERA: [Item; 3] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
@@ -383,7 +388,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes and Gummi routes.";
-const STRINGS: [(u32, &str); 94] = [
+const STRINGS: [(u32, &str); 96] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -425,6 +430,8 @@ const STRINGS: [(u32, &str); 94] = [
     (0x7F00_0194, "On: KH2's knock-back on enemies times KH1's weight for each\nenemy. Off: KH2's own numbers for every enemy."),
     (0x7F00_0197, "Cast from Glide"),
     (0x7F00_0198, "On: a KH2 spell ends the glide and is cast in the air, as in\nKH2. Off: no spell while gliding."),
+    (0x7F00_0199, "Clash Combo"),
+    (0x7F00_019A, "KH2: every clash counts as a hit for the combo, and each recoil\n(in the air too) takes one swing off it, as in KH2. KH1: KH1's."),
     (0x7F00_0001, "Camera Style"),
     (0x7F00_0002, "KH1"),
     (0x7F00_0003, "KH2"),
@@ -498,6 +505,7 @@ fn value(what: Row) -> bool {
         Row::AbilityChance => super::kh1picker::chance(),
         Row::EnemyWeight => super::knockback::weight(),
         Row::GlideCast => super::glide::cast_out(),
+        Row::ClashCount => super::recoil::clash_count(),
     }
 }
 
@@ -529,6 +537,7 @@ fn set(what: Row, v: bool) {
         Row::AbilityChance => super::kh1picker::set_chance(v),
         Row::EnemyWeight => super::knockback::set_weight(v),
         Row::GlideCast => super::glide::set_cast_out(v),
+        Row::ClashCount => super::recoil::set_clash_count(v),
     }
 }
 
