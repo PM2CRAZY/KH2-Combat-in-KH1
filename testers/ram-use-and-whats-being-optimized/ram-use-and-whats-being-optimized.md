@@ -138,3 +138,4 @@ go ahead
 
 ^m2
 
+can you tell me where the files are stored? in my folder (E:\a\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-\new openkh\mod\kh1\dll\kh1-kh2-cache) I don't see the other files I only see kh2-motion-slots.bin when the game is created 
