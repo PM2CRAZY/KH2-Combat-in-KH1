@@ -848,10 +848,10 @@ unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
     let Some(f) = kind.data(kh2) else { return };
     let sora = ch.abilities.clone();
     let own = form_abilities(&sora, &f.character, kind);
+    // (Valor's Square moves on KH1's states are KH2's own Square rows as the exe reaches them,
+    // `combomods::valor_square`: the controller's `square_finishers`, which took 12 / 38 for
+    // finishers, isn't used here.)
     native_data(ch, &f.character, own.clone());
-    if kind == Kind::Valor {
-        ch.square_finishers = Some((12, 38));
-    }
     super::kh2fx::owner_gone();
     d.form = Some(InForm { kind, left: 0, sora, own, logged_s: 0 });
     CURRENT.store(kind.code(), Ordering::Relaxed);

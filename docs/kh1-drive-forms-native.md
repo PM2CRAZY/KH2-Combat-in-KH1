@@ -231,9 +231,7 @@ drains yellow MP as before.
   right Keyblade's sphere (`kh2slots::kh1_tracks`, weapon > 0), so they land at the right blade's
   place with the left window's ATKP. A second KH1 attack object on the left blade is the next step
   (KH1 has no left weapon bones: it needs `bodyhits`-style shapes placed from the left grip).
-- Valor's Square moves (row 11's rising slash, the Square finishers 12 / 38): KH1 sees no Square in
-  Valor (`shared::control`); nothing comes out yet. KH2's Valor has no dodge roll, guard, Quick Run,
-  glide or Aerial Dodge, so nothing else is lost.
+- (Valor's Square moves: done on KH1's rows, §7.1.)
 - Valor's guard windows (arrival 53, 155's left-blade guard 162) are not KH1 guard objects
   (`takeover::kh2_hits` skips a form's).
 - The arrival 53 isn't held in the air (KH2's `play_held`): it has no no-gravity range of its own,
@@ -242,3 +240,79 @@ drains yellow MP as before.
   **Assumption**.
 - Not checked in game; offline the Valor bakes weren't run (KH1's skeleton and motion table aren't
   in the extracted files here).
+
+### 7.1 Valor's Square moves on KH1's rows
+
+The tester (what-is-still-missing, after m12): "3. do both", "make sure when your moving these over
+to be native that you double check everything ... check the kh2 c decomp steam".
+
+**KH2 (Steam KH2 decomp, Checked (decomp)).** The player's action-button handler `0x1403A81F0`
+(the Square press) tries, in this order:
+
+1. a state-7 case (`+0xDE0 == 7`, action 0x16; not identified, **Assumption**: not Valor's);
+2. the glide (growth kind 3, airborne): Valor has none;
+3. the Square combo rows 0x25, 0x0C, 0x26 through `0x1403A9950 (player, id)`;
+4. with the stick at rest (`+0x1C == 0`), row 11 through `0x1403A9C70`;
+5. the dodge roll (growth kind 4, motion 0xD1), else Quick Run (growth kind 1, motion 0xCB), else
+   row 11 through `0x1403A9C70` again. So with no roll or Quick Run, row 11 is tried moving too.
+
+`0x1403A9950`: the row by id in the moveset's PTYA (`0x1403D74E0`, 0x44-byte rows); its check
+`0x140402750` (motion set, ability `+0x40` equipped if any, air flag `+4` bit 0 equal to airborne,
+then a non-finisher `0x1403D7850` / a finisher `0x1403D7780(p, offset)`); a non-finisher (`+4`
+bit 2 clear) refused by `0x1403D7780(p, 0)` (the finisher window `+0x194` bit 5, or the count
+`+0xD74` at the length `[+0x5C0] + 0x200` ground / `+0x201` air); then the combo window
+(`+0x18C` bit 10, range id 11) or the finisher window, and the Attack step's count check
+`0x1403D6CA0 (p, connected)` (connected: `+0x120` bit 25). Note these checks read the count
+before `0x1403D6CA0` moves it (the Attack walk checks after), so a non-finisher Square row is taken
+while the count so far is under the length. Started by `0x1403D78D0` (facing the primary target
+`+0xDC8`, its hop).
+
+`0x1403A9C70`: row 11 by id, its check `0x140402750`, the free state `0x1403BFB30` (vtable `+0x78`
+and `+0x18C & 0x1C`, range ids 0 / 1 / 2), started by `0x1403D78D0`, then the stick input
+(`+0x10..+0x1F`) cleared. No combo window: only from a free state, where the handler's top has
+reset the counts (`0x1403D7C60`: 1 / 1).
+
+**Valor's rows (Checked (files), `00battle.bin` PTYA moveset 2):**
+
+| row | kind | flag | motion | hop | speed | ability |
+|---|---|---|---|---|---|---|
+| 11 | 0 | 0x2 (ground, jump adjust) | 181 | 90 (90..90) | 16..24 | 0 |
+| 12 | 0 | 0 (ground, not a finisher) | 155 | none | | 0 |
+| 38 | 0 | 0x1 (air, not a finisher) | 183 | 14 (14..64) | 0 | 0 |
+
+No row 0x25 (37) of its own. So in KH2's Valor, Square free on the ground (standing or moving) is
+181 with a hop of 90; Square in a ground combo window with a swing left is 155 as a step (its
+finisher motion, not counted a finisher); in an air combo window 183 the same.
+
+**What the old controller path had wrong** (`Character::square_finishers`, `try_action_button`,
+Checked (code) against the above):
+- rows 12 / 38 were taken as finishers (`form_finisher`): allowed at the combo's end and in the
+  finisher window, both of which KH2 refuses for them;
+- base Sora's Square step rule (stage 177, `sit.count < max` on the count after the press) is one
+  swing stricter than the exe's (count before the press under the length). Left as it is for base
+  Sora (not this change: an open question);
+- Sora's Finishing Leap (row 37) was ported into Valor (`pose::port_moves`, s214, asked when the
+  real cause was row 11, found at s216): not in KH2's Valor. Left out on KH1's states;
+- row 11 was right: an attack from Square standing or moving (s216).
+
+**On KH1's states now** (`combomods::valor_square`, from `shared::control` while
+`form::native_now`; KH1 still sees no Square in Valor):
+- In one of Valor's slots with KH2's combo or finisher window at KH1's time in it
+  (`kh2slots::now_playing`, the clip of Valor's moveset): `Character::would_take_square_exe`
+  (the exe's order and checks above, row 37 skipped) from KH1's count (`+0x41` of the combat
+  info), KH1's connected flag (`+0x50`) or Combo Master, and the finishers so far
+  (`combomods::FINISHERS`). The row found plays on our KH1 row of its motion (`ours_for`: the
+  combo rows "155" and "183", which play Valor's slots in Valor) through KH1's own Attack step
+  (`kh1rows::command_attack`), as base Sora's Square moves; 183 with KH2's hop for row 38
+  (`Run::AirHop`).
+- Free on the ground (KH1's state 0 and its can-act test, **Assumption** standing for KH2's free
+  state): row 11 (`takeover::kh2_would_take_row`, a new combo), on our combo row "181" (Valor's
+  181) entered from the ground with KH2's hop for the row (`combomods::ours_combo_run`:
+  `Run::Hop`, KH1's air state, count 1), as KH2's plain ground hops (rows 0 / 1).
+- After 155 (no combo window, a finisher window 65..96): Attack there only with Finishing Plus
+  (KH2's `0x1403D6CA0` finisher path, finishers so far under one plus Finishing Plus), which is
+  what our row (a finisher row of ours) already gives; without it nothing until it ends.
+- Not checked in game. Not checked: whether Combo Master sets KH2's connected bit (taken as
+  connected, as elsewhere); Valor's combo length (`+0x200` / `+0x201`, set through script-call
+  setters `0x1401E72E0` / `0x1401E7320`; our controller's `combo_rules` is used, not re-read for
+  Valor).

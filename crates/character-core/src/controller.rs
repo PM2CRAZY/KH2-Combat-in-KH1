@@ -225,6 +225,9 @@ struct PressState {
     forced: Option<u8>,
     host_motion: Option<u16>,
     vel_h: [f32; 2],
+    /// The forced row was already let through by the exe's own checks for how it is reached
+    /// (`would_take_square_exe`): `plan_press` only works out its facing and hop.
+    gated: bool,
 }
 
 /// A row's hop: its height, and the sideways velocity it sets (`None`: the speed he has is kept).
@@ -1371,6 +1374,68 @@ impl Character {
         Some((plan.row, launch))
     }
 
+    /// KH2's Square moves in a combo, as the exe reaches them (Steam KH2: the action-button
+    /// handler `0x1403A81F0` tries rows 0x25, 0x0C, 0x26 in that order through `0x1403A9950`,
+    /// Checked (decomp)), for a host whose own states run the move (the KH1 port's Valor Form,
+    /// whose rows 12 / 38 are its Square moves). `from`: the combo before the press (its count
+    /// and finishers so far, whether the swing connected); `combo` / `finisher`: KH2's combo
+    /// window (range id 11, `+0x18C` bit 10) and finisher window (range id 50, `+0x194` bit 5) are
+    /// open at the motion's frame; `skip`: row ids the host leaves out. Each row, as the exe:
+    /// - in the moveset (`0x1403D74E0`), its motion set, its ability (if any) equipped, its air
+    ///   flag the host's (`0x140402750`);
+    /// - not a finisher: refused when more than one finisher has run, outside the count's room or
+    ///   in the finisher window (`0x1403D7850`), and by `0x1403A9950` itself in the finisher window
+    ///   or once the count (before this press) has reached the combo's length (`0x1403D7780(p,
+    ///   0)`): so only in the combo window with a swing left;
+    /// - a finisher: the finisher window, or the count (before this press) plus its offset at the
+    ///   length (`0x1403D7780(p, offset)`);
+    /// - then the combo or finisher window open and the Attack step's count check
+    ///   (`0x1403D6CA0(p, hit)`): in the finisher window with the swing connected and a finisher
+    ///   left (Finishing Plus), or in the combo window with the swing connected.
+    /// The counts are those before the press (the exe checks them before `0x1403D6CA0` moves
+    /// them, unlike its Attack walk, which checks after). The first that passes starts as the exe
+    /// starts it (`0x1403D78D0`: facing the primary target, its hop), worked out by `plan_press`.
+    /// Whether the swing "connected": the host's hit, or Combo Master.
+    pub fn would_take_square_exe(&mut self, from: ComboState, combo: bool, finisher: bool, skip: &[u8], air: bool, stick: [f32; 2], env: &Env) -> Option<(ComboRow, Option<Launch>)> {
+        const ORDER: [u8; 3] = [0x25, 0x0C, 0x26];
+        if !(combo || finisher) {
+            return None;
+        }
+        let max = self.max_count(air);
+        let (count, fin) = (from.count, from.finishers.max(1));
+        // (KH2 reads the swing's "connected" bit, `+0x120` bit 25; Combo Master standing for it is
+        // this controller's reading, **Assumption**, as `plan_press`.)
+        let hit = from.hit || self.abilities.combo_master;
+        let gate = |r: &ComboRow| -> bool {
+            if r.motion == 0 || (r.ability != 0 && !self.abilities.equipped.contains(&r.ability)) || r.is_air() != air {
+                return false;
+            }
+            let rows_ok = if r.is_finisher() {
+                finisher || count as i32 + r.combo_offset as i32 >= max as i32
+            } else {
+                // (`0x1403D7850` refuses with more than one finisher run only outside this room,
+                // so the two together are this.)
+                !finisher && count < max
+            };
+            let step_ok = (finisher && hit && fin < self.max_finishers()) || (combo && hit);
+            rows_ok && step_ok
+        };
+        for id in ORDER.into_iter().filter(|id| !skip.contains(id)) {
+            let Some(r) = self.moveset.combo_rows.iter().find(|r| r.id == id) else { continue };
+            if !gate(r) || self.clip(r.motion).is_none() {
+                continue;
+            }
+            let mut st = self.press_state_from(ComboState { finisher_next: false, ..from }, air, self.host_motion);
+            st.forced = Some(id);
+            st.gated = true;
+            if let PressOutcome::Taken(plan) = self.plan_press(&st, stick, env) {
+                let launch = plan.hop.map(|h| Launch { height: h.height.max(0.0), velocity: h.velocity.unwrap_or(st.vel_h), gravity: self.params.gravity });
+                return Some((plan.row, launch));
+            }
+        }
+        None
+    }
+
     /// KH2's ability rows as extra candidates of a host's own combo picker (the KH1 port's Base /
     /// Aerial Base Combo KH1: KH1's picker runs, and KH2's ability moves join its choices with
     /// KH2's own row checks). The host's own count says whether this press is a swing or a
@@ -1762,6 +1827,7 @@ impl Character {
             forced: self.forced_row,
             host_motion: self.host_motion,
             vel_h: self.vel_h,
+            gated: false,
         }
     }
 
@@ -1781,6 +1847,7 @@ impl Character {
             forced: self.forced_row,
             host_motion: playing,
             vel_h: self.vel_h,
+            gated: false,
         }
     }
 
@@ -1885,8 +1952,8 @@ impl Character {
         let square = SQUARE_MOVES.iter().any(|m| Some(m.0) == wanted) && !form_finisher;
         let forced = wanted
             .and_then(|id| self.moveset.combo_rows.iter().find(|r| r.id == id))
-            .filter(|r| condition(r, &sit))
-            .filter(|r| !square || r.is_finisher() || sit.count < sit.max_count);
+            .filter(|r| s.gated || condition(r, &sit))
+            .filter(|r| s.gated || !square || r.is_finisher() || sit.count < sit.max_count);
         let picked = match (wanted, forced) {
             (_, Some(r)) => Some(Choice { row: r, target: sit.primary }),
             (Some(_), None) => None,

@@ -1790,6 +1790,34 @@ pub unsafe fn kh2_would_take_row(actor: usize, id: u8, air: bool) -> Option<(cha
     d.character.would_take_row(id, Some(from), air, stick, &env)
 }
 
+/// KH2's Square move in a combo for Sora now, KH1's own states having him (`Character::
+/// would_take_square_exe`: the exe's own order and checks, Steam KH2 `0x1403A81F0` /
+/// `0x1403A9950`), from KH1's combo `from`, KH2's combo / finisher window open at the motion's
+/// frame (`combo`, `finisher`), rows `skip` left out; with the targets and KH1's lock as KH2's
+/// step sees them (`kh2_would_take_launch`). Valor Form's Square moves (`combomods::valor_square`).
+pub unsafe fn kh2_would_take_square(actor: usize, from: character_core::ComboState, combo: bool, finisher: bool, skip: &[u8], air: bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
+    let base = BASE.load(Ordering::Relaxed);
+    let kh2 = pose::kh2()?;
+    let mut g = DRIVER.try_lock().ok()?;
+    let d = g.get_or_insert_with(|| new_driver(kh2));
+    d.growth.update(base, &mut d.character);
+    super::form::abilities(&mut d.drive, &mut d.character);
+    let mut targets = d.strikes.look(actor);
+    let lock = kh1_lock(base, &mut targets);
+    let tilt = move_tilt();
+    let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
+    d.character.set_facing(rd::<f32>(actor + 0x3C));
+    d.character.set_lock(lock);
+    d.character.set_auto_target(super::settings::get().auto_aim);
+    d.character.set_face_lock(true);
+    d.character.set_combo_direction_lock(true);
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    let above = rd::<f32>(actor + 0x3D4);
+    let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
+    d.character.set_drop_ahead(false);
+    d.character.would_take_square_exe(from, combo, finisher, skip, air, stick, &env)
+}
+
 /// The stick now as KH2 reads it for base Sora (the world direction times its tilt, KH2's x / z;
 /// 0 below KH1's dead zone): Aerial Recovery's direction (`combomods`).
 pub unsafe fn stick_now(actor: usize) -> [f32; 2] {

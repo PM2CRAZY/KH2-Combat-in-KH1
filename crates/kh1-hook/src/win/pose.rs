@@ -227,7 +227,7 @@ pub fn kh2_moves() -> Option<&'static character_core::Character> {
 /// attack works in valor"): Upper Slash (combo row 37, kind 0, Square in a combo, motion 167,
 /// ability 95). KH2's Valor has none of Sora's Square moves; its own kind-0 rows (12, 38, 40, 11)
 /// are its finishers and guard, so their ids aren't taken.
-const PORTED_TO_VALOR: [u8; 1] = [37];
+pub const PORTED_TO_VALOR: [u8; 1] = [37];
 
 /// Copies Sora's combo rows `rows` (and their motions: the clip, the body's and the first
 /// Keyblade's animation) into a form's data, where the form has no row of that id (the same

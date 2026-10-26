@@ -1848,3 +1848,45 @@ fn normal_finisher_by_kh2s_walk() {
     assert!(ch.normal_finisher(true, None, [0.0; 2], &env(&one)).is_none());
     assert_eq!(ch.state_name(), StateName::Idle);
 }
+
+/// KH2's Square moves in a combo as the exe reaches them (`would_take_square_exe`, Steam KH2
+/// `0x1403A9950`): Valor Form's rows 12 (ground) / 38 (air), not finishers. Taken in the combo
+/// window with a swing left by the count *before* the press, the swing connected (or Combo
+/// Master), never in the finisher window; skipped rows left out; nothing of the controller
+/// changes.
+#[test]
+fn square_moves_as_the_exe_reaches_them() {
+    let mut ch = sora();
+    ch.moveset.clips.insert(155, attack_clip(155, 60, (20, 30), 3, 40));
+    ch.moveset.clips.insert(183, attack_clip(183, 60, (20, 30), 4, 40));
+    ch.moveset.combo_rows.retain(|r| ![12, 37, 38].contains(&r.id));
+    ch.moveset.combo_rows.push(ComboRow { kind: 0, ..row(12, 155, false, false) });
+    ch.moveset.combo_rows.push(ComboRow { kind: 0, jump: 14.0, jump_min: 14.0, jump_max: 64.0, ..row(38, 183, false, true) });
+    // A finisher Square row (as Sora's Finishing Leap), to be skipped.
+    ch.moveset.clips.insert(167, attack_clip(167, 60, (20, 30), 5, 40));
+    ch.moveset.combo_rows.push(ComboRow { kind: 0, combo_offset: 1, ..row(37, 167, true, false) });
+    let env = Env { pos: [0.0; 3], grounded: true, height_above_ground: 0.0, targets: &[], ledges: &[] };
+    let max = ch.combo_rules.ground_base;
+    let at = |count: u8, hit: bool| ComboState { count, finishers: 1, hit, finisher_next: false };
+    let pick = |ch: &mut Character, from: ComboState, combo: bool, finisher: bool, air: bool| ch.would_take_square_exe(from, combo, finisher, &[37], air, [0.0; 2], &env).map(|(r, l)| (r.id, l.map(|l| l.height)));
+    // In the combo window with a swing left (count before the press under the length).
+    assert_eq!(pick(&mut ch, at(1, true), true, false, false), Some((12, None)));
+    assert_eq!(pick(&mut ch, at(max - 1, true), true, false, false), Some((12, None)));
+    // At the length: refused (the finisher is Attack's).
+    assert_eq!(pick(&mut ch, at(max, true), true, false, false), None);
+    // The finisher window, no window, a swing that didn't connect: refused.
+    assert_eq!(pick(&mut ch, at(1, true), true, true, false), None);
+    assert_eq!(pick(&mut ch, at(1, true), false, false, false), None);
+    assert_eq!(pick(&mut ch, at(1, false), true, false, false), None);
+    ch.abilities.combo_master = true;
+    assert_eq!(pick(&mut ch, at(1, false), true, false, false), Some((12, None)));
+    // In the air: row 38 with its hop (no target: the row's own jump).
+    assert_eq!(pick(&mut ch, at(1, true), true, false, true), Some((38, Some(14.0))));
+    // More than one finisher run: a step is refused outside the room only; with room, taken.
+    assert_eq!(pick(&mut ch, ComboState { count: 1, finishers: 2, hit: true, finisher_next: false }, true, false, false), Some((12, None)));
+    // The skipped finisher row isn't taken even where it would pass.
+    assert_eq!(ch.would_take_square_exe(at(max, true), true, true, &[37], false, [0.0; 2], &env).map(|(r, _)| r.id), None);
+    assert_eq!(ch.would_take_square_exe(at(max, true), true, true, &[], false, [0.0; 2], &env).map(|(r, _)| r.id), Some(37));
+    assert_eq!(ch.combo_count(), 0);
+    assert_eq!(ch.state_name(), StateName::Idle);
+}

@@ -420,9 +420,12 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // (KH2's pick KH1's picker made for this row, taken here so none is left for a later press.)
     let made = take_kh2_pick(row, air);
     let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Run::Row(row) };
-    // A Square move of KH2's on its own KH1 row (`control` gave KH1 this Attack for it).
+    // A Square move of KH2's on its own KH1 row (`control` / `valor_square` gave KH1 this Attack
+    // for it). An air row's hop from the ground (Valor's row 11, motion 181 with its hop of 90:
+    // `valor_square`) is entered as KH2's plain hops are (`ours_combo_run`); every other row as
+    // before (`ours_run`).
     if let Some((n, launch)) = take_ours() {
-        return ours_run(n, launch, air, count, request_of);
+        return ours_combo_run(actor, n, launch, air, count, request_of);
     }
     // Counterguard: Attack during KH2's guard's repel (KH2's own rule, Steam KH2's Hurt step on
     // motion 42; `counter_window` opened KH1's combo window for it), on its own KH1 row.
@@ -1652,6 +1655,78 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
         return Some(super::shared::KH1_ACTION_BIT);
     }
     None
+}
+
+/// Valor Form's Square on KH1's own states (`form::native_now`; the tester, what-is-still-missing
+/// after m12: "3. do both", "check the kh2 c decomp steam"). KH2's action-button handler (Steam
+/// KH2 `0x1403A81F0`, Checked (decomp)) in the order it tries them, for Valor (no glide, dodge
+/// roll or Quick Run of its own: `form::form_abilities`, Checked (files) its growth is High Jump):
+/// 1. its Square combo rows 0x25, 0x0C, 0x26 (`0x1403A9950`): Valor's PTYA (moveset 2, Checked
+///    (files)) has 12 (ground, motion 155) and 38 (air, motion 183, a hop of 14), neither flagged
+///    a finisher, and no 37 of its own (Sora's Finishing Leap ported by `pose::port_moves` is left
+///    out: not in KH2's table). Taken in KH2's combo window (range id 11) with a swing left and
+///    the swing connected, never in the finisher window (`Character::would_take_square_exe`).
+/// 2. row 11 (`0x1403A9C70`, with the stick at rest and again after the roll / Quick Run checks
+///    with it pushed: so standing or moving): Valor's is motion 181 with a hop of 90 (16..24
+///    sideways, flag 2), ability 0, from a free state on the ground (`0x1403BFB30`: range id 0 / 1
+///    / 2; here KH1's ground state and can-act test). A new combo (`0x1403D7C60` at the handler's
+///    top: counts 1 / 1).
+/// Each on its KH1 row of ours with Valor's slot (`ours_for`: 155, 183 and 181 are on our combo
+/// rows of those motions in Valor, `kh2slots::VALOR_SPECS` / `valor_ours`), through KH1's own
+/// Attack step (`kh1rows::command_attack`), as base Sora's Square moves. The bits KH1 doesn't see.
+pub fn valor_square(s: &super::shared::Seen, square_fresh: bool) -> Option<u32> {
+    if !square_fresh || !super::form::native_now() || !super::kh1rows::installed() {
+        return None;
+    }
+    let actor = unsafe { sora() };
+    if actor < 0x10000 || s.launched {
+        return None;
+    }
+    let air = matches!(s.state, 1 | 2);
+    // 1. In a swing of Valor's: KH2's combo / finisher window at the motion's frame.
+    let windows = unsafe { super::kh2slots::now_playing(actor) }.and_then(|(m, t)| {
+        let clip = pose::kh2_moves()?.moveset.clips.get(&m)?;
+        let f = t as u32;
+        Some((m, f, clip.has(f, |k| matches!(k, character_core::WindowKind::Combo)), clip.has(f, |k| matches!(k, character_core::WindowKind::Finisher))))
+    });
+    if let Some((m, f, combo, finisher)) = windows.filter(|w| w.2 || w.3) {
+        let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
+        let from = ComboState { count, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit, finisher_next: false };
+        let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, &pose::PORTED_TO_VALOR, air) }) else {
+            note(|| format!("Valor: Square in KH2 motion {m} frame {f} (combo window {combo}, finisher window {finisher}, count {count}, connected {hit}): KH2 takes no Square move here"));
+            return None;
+        };
+        let Some(n) = ours_for(&row) else {
+            note(|| format!("Valor: Square: KH2's row {} motion {} has no KH1 row of its own built: nothing", row.id, row.motion));
+            return None;
+        };
+        if let Ok(mut g) = OURS.lock() {
+            *g = Some((n, launch, frame()));
+        }
+        unsafe { super::kh1rows::command_attack() };
+        note(|| format!("Valor: Square in KH2 motion {m} frame {f} (count {count}): KH2's row {} motion {} on KH1's row {} of ours{}", row.id, row.motion, super::kh1rows::row(n), launch.map_or(String::new(), |l| format!(", hop {:.0} high", l.height))));
+        return Some(super::shared::KH1_ACTION_BIT);
+    }
+    // 2. Free on the ground: row 11.
+    if s.state != 0 || !s.can_act {
+        return None;
+    }
+    let (row, launch) = unsafe { takeover::kh2_would_take_row(actor, 11, false) }?;
+    let Some(n) = ours_for(&row) else {
+        note(|| format!("Valor: Square: KH2's row 11 motion {} has no KH1 row of its own built: nothing", row.motion));
+        return None;
+    };
+    // (An air row from the ground needs its hop: KH2's, finite.)
+    let o = &super::kh1rows::OURS[n];
+    if o.kind.air() && !launch.is_some_and(|l| l.height.is_finite() && l.velocity.iter().all(|v| v.is_finite())) {
+        return None;
+    }
+    if let Ok(mut g) = OURS.lock() {
+        *g = Some((n, launch, frame()));
+    }
+    unsafe { super::kh1rows::command_attack() };
+    note(|| format!("Valor: Square free on the ground: KH2's row 11 (motion {}) on KH1's row {} of ours{}", row.motion, super::kh1rows::row(n), launch.map_or(String::new(), |l| format!(", hop {:.0} high, {:.1}/frame", l.height, l.velocity[0].hypot(l.velocity[1])))));
+    Some(super::shared::KH1_ACTION_BIT)
 }
 
 /// KH1's knock-away ends here for a move of KH2's out of it (as a spell's end frames cut KH1's

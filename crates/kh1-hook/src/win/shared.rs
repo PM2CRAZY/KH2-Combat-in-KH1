@@ -230,10 +230,12 @@ pub fn control(s: &Seen) -> u32 {
         DODGE_JUMP_UP.store(true, Ordering::Relaxed);
     }
     // Valor Form on KH1's own states (`form::native_now`): KH2's Valor has no dodge roll, guard,
-    // Quick Run, glide or Aerial Dodge (its growth ability is High Jump; its Square moves, row 11's
-    // rising slash and the finishers 12 / 38, aren't on KH1's states yet), so KH1 sees no Square,
-    // and no jump in the air past the rise (KH1's own glide).
+    // Quick Run, glide or Aerial Dodge (its growth ability is High Jump), so KH1 sees no Square,
+    // and no jump in the air past the rise (KH1's own glide). Square is Valor's own Square moves
+    // (`combomods::valor_square`: its row 11 free on the ground, rows 12 / 38 in a combo), on
+    // KH1's rows of ours.
     if super::form::native_now() {
+        let _ = super::combomods::valor_square(s, square_fresh);
         return KH1_ACTION_BIT | if air && !s.rising { KH1_JUMP_BITS } else { 0 };
     }
     let roll_kh2 = styles::kh2(Kind::DodgeRoll);
