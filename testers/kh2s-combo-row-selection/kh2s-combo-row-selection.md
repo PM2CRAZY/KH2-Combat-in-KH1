@@ -36,6 +36,7 @@
 - [30. Assistant: Thanks for checking in KH2, you were right and I was wrong a](#^m30)
 - [31. Assistant: t650 and t651:](#^m31)
 - [32. Assistant: Thanks for the trace and the log, they made both easy to fin](#^m32)
+- [33. Assistant: Thanks! Three versions, one each:](#^m33)
 
 ---
 
@@ -925,9 +926,31 @@ go ahead
 > 2. The trace's shifted columns: (a) fix the trace's header (a debug-only change); or (b) leave it?
 
 ^m32
+
+
 1. I want you to check into the kh2 c decomp and implement the changes from your findings
 2. (a)
 
 the 2nd hit is also missing its 2nd hitbox, its just one for now so please find a fix and implement it
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! Three versions, one each:
+>
+> - **t672, the turn frame (your 1).** I checked the Steam KH2 decomp, and within a frame KH2 takes the swing's step *after* turning him. Its motion update `0x1403C6740` samples the step before its ranges run the turn, and the mover `0x1403B89A0` then lays the step along his new yaw. Ours laid that frame's step along the old facing, so the turn frame is now turned too (KH1's `+0x200`, as t669 did for `+0x210`). No more one-frame drift on a turn.
+> - **t671, trace header (your 2 (a)).** The header was missing the Magic Combo column, which shifted everything from `pos_x` on. It's added, and the build now refuses a header that doesn't match its rows.
+> - **t673, 153's second slash.** KH2's 153 has two hits on the Keyblade: frames 20 to 32 (ATKP 128) and 38 to 47 (ATKP 147). KH2 lets each one hit the same enemy. KH1 uses one attack object for the whole swing, and an enemy that's been hit once is immune to it for the rest of that swing, so the second slash went through whatever the first had hit. Your log shows only one of 128 / 147 landing per enemy. Now, when the second window opens, KH1's own "hit again" step (`0x1402B3380`) re-arms the swing.
+>
+> Checked: KH2's in-frame order in the Steam KH2 decomp, KH1's re-arm in the Steam KH1 decomp, 153's windows in your KH2 files, and your log. Not checked: in game; and that KH2's exe keeps "already hit" per window (that's from our KH2 rewrite, not re-read in the decomp).
+>
+> Please test:
+> - A few ground combos on one enemy: 153 should land both slashes. Log: "KH2's next hit window on the Keyblade … re-armed".
+> - The 2nd swing with the enemy off to the side: a smooth curve, no drift.
+> - A new trace: the columns should now line up with their names.
+>
+> Question:
+> 1. The re-arm applies to every move with more than one Keyblade hit window, not just 153: Dodge Slash has three and Slide Dash two, so they now hit the same enemy once per window, which is KH2's rule. (a) Keep it for all moves, or (b) limit it to the plain combo swings?
+
+^m33
+
