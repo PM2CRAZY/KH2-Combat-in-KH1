@@ -117,6 +117,45 @@ Chain: the actor task `0x140295E50` (zeroes the move speed `+0x2C` each frame, t
   velocity, units per frame.
 - Down time `+0x3E4` = random 0..30 frames (unless `+0x88` bit 1). Record marked done (`|2`).
 
+### The blow's sideways sign (Aerial Finish)
+
+**Checked (decomp).** KH2's reaction routine's blow case (Steam KH2 `0x1403D2FE0`, group 4 from
+`0x1403CE980`) takes its two starting speeds from `0x1403CEA00` (the ATKP's `+0xC` up and `+0xE`
+sideways, sstm's 24 / 40 only when both are 0), then lays the sideways one along the hit's direction,
+flattened and normalised, **as a signed number**: `+0x20` = direction × it, `+0x24` = −up. The facing
+and the front / back motion (0x10 / 0x12) come from the direction alone. So a negative sideways
+number sends the foe back toward the attacker. **Checked (files)** (`00battle.bin` ATKP): Aerial
+Finish's spins 915 / 916 / 917 are reaction 9 (group 4) with up 10 / 5 / 12 and sideways −1 / −1 /
+−10, its last hit 927 reaction 11, up 3, sideways 45; Explosion's ticks 911 are 3 / −1. So in KH2 the
+spins lift the foe a little and pull it in by 1 / 1 / 10 a frame (braked as every blow, floored at a
+tenth), and only the last hit throws it. Ours took the number's size (`Launch::kh2` had `abs()`), so
+917 threw the foe 10 a frame away; now the sign is kept (`+0x3C0`'s w stays the size).
+
+### KH1's scripted launch
+
+**Checked (decomp + exe).** Actors of kinds 4 / 5 / 9 / 10 (the enemies in the t515 hit dumps of thread
+kh2-effects-in-kh1s-own-effect-system are kind 4, object 200; the kind of this tester's object 321
+isn't in his log: Assumption that it is one too) don't run KH1's enemy hit pass (`0x1402B8E10`, from
+the kind-3 think `0x1402B7260`): their think is `0x1402C2C90`, which hands each hit record to the
+actor's script (event 0, `0x1402BCD60`; without a script `0x1401A1A10`). The script picks the
+reaction through KH1's script calls, whose table entries point at small wrappers: `0x1402BBD10`
+flinch (`0x1402B8460`), `0x1402BBD80` push (`0x1402B7E60`), `0x1402BBF40` knock-back
+(`0x1402B77D0`), `0x1402BBEC0` launch (`0x1402B8530`) and `0x1402BBC80`, **the scripted launch
+`0x1402B79F0 (actor, record, motion base, height, speed, down time)`** (height in XMM3, speed and
+down time on the stack; pointer at `0x1405293E0` in the script-call table, Checked (exe)). That is
+KH1's launch with the script's own numbers: motion base (0x52 / 0x5C when 0), `+0x3EA`, facing as
+`0x1402B8530`, the height through `0x1402AF960`, `+0x3C0` = direction × speed, `+0x3E4` = down time;
+without the motion, KH1's knock-back `0x1402B77D0`. It wasn't hooked, so a KH2 blow on such an enemy
+flew by its script's height and speed: the tester's log has 16 "KH2 launch asked" lines and no line
+at all from the launch hook (`0x1402B8530`), the same in the t515 log of another thread (17 / 0).
+Now hooked (Steam only, prologue `48 89 5C 24 10 48 89 74 24 18 57 48 83 EC 40`, Checked (exe)): KH1's
+runs, then for a fresh KH2 launch's record that did launch (its `+0x3EA` the base it used, state 2)
+the arc and flight are KH2's blow, as after `0x1402B8530`. **Assumption:** these scripts pick the
+scripted launch for a kind-5 record (inferred from the missing lines and the flinch pushes, which
+do reach `0x1402B7E60`, logged); the next log says ("KH1's scripted launch on ...").
+**Assumption:** such an enemy's air state step is KH1's state 2 like the others' (so
+`knockback::air_step` flies it).
+
 ### The flight (movement state 2's update `0x1402AD510`, registered by `0x1402AD150`) [high]
 
 - Vertical: while `t < T`, `y = start + peak * sin(pi/2 * sin(pi/2 * t/T))` (an ease-out to the

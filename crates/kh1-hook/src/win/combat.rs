@@ -2934,8 +2934,12 @@ pub struct Launch {
 
 impl Launch {
     fn kh2(k1: i16, k2: i16, p: &character_core::reaction::ReactionParams) -> Launch {
+        // (Signed, as KH2 keeps it: `0x1403D2FE0`'s group-4 case lays the speed along the hit's
+        // direction flattened and normalised, times the ATKP's second number as it is, so a
+        // negative one (Aerial Finish's spins 915 / 916 / 917: -1 / -1 / -10) sends the foe back
+        // toward the attacker. Checked (decomp).)
         let (up, speed) = if k1 == 0 && k2 == 0 { (p.blow_up, p.blow_speed) } else { (k1 as f32, k2 as f32) };
-        Launch { up, speed: speed.abs() }
+        Launch { up, speed }
     }
 
     /// KH2's blow flown to its apex (`character_core::reaction::Blow`, a 30 Hz tick): its height
@@ -2974,19 +2978,30 @@ fn takeover_ms() -> u64 {
     T0.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
 }
 
-/// KH1's launch, then KH2's height, rise time and horizontal speed for our records, when the
-/// enemy did launch (its launch motion 0x52 / 0x5C, air state 2).
+/// A fresh KH2 launch for `rec` (`scale_record`), taken off the list.
+fn take_launch(rec: usize) -> Option<Launch> {
+    let now = takeover_ms();
+    LAUNCHES.lock().ok().and_then(|mut v| {
+        v.retain(|(_, _, t)| now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+        v.iter().position(|(r, _, _)| *r == rec).map(|i| v.remove(i).1)
+    })
+}
+
+/// Whether `rec` has a fresh KH2 launch waiting (left on the list).
+fn has_launch(rec: usize) -> bool {
+    let now = takeover_ms();
+    LAUNCHES.lock().ok().is_some_and(|v| v.iter().any(|(r, _, t)| *r == rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS))
+}
+
+/// KH1's launch reaction `0x1402B8530 (actor, record)` (Steam): KH1's, then KH2's height, rise
+/// time and horizontal speed for our records, when the enemy did launch (its launch motion 0x52 /
+/// 0x5C, air state 2).
 unsafe extern "system" fn launched(actor: usize, rec: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_LAUNCH.load(Ordering::Acquire));
     f(actor, rec);
     // Only a launch asked just now: KH1 reuses its hit records, so one left over (a boss that
     // can't be launched) would otherwise land on a later hit's enemy.
-    let now = takeover_ms();
-    let ours = LAUNCHES.lock().ok().and_then(|mut v| {
-        v.retain(|(_, _, t)| now.saturating_sub(*t) < LAUNCH_FRESH_MS);
-        v.iter().position(|(r, _, _)| *r == rec).map(|i| v.remove(i).1)
-    });
-    let Some(l) = ours else {
+    let Some(l) = take_launch(rec) else {
         static M: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Combat) && M.fetch_add(1, Ordering::Relaxed) < 20 {
             log!(Combat, "KH1 launch reaction on {actor:#x} for record {rec:#x} (not a KH2 launch)");
@@ -2994,12 +3009,47 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
         super::knockback::land_kh1(actor);
         return;
     };
+    kh2_launch(actor, l, &[0x52, 0x5C], "KH1's launch");
+}
+
+/// KH1's scripted launch `0x1402B79F0 (actor, record, motion base, height, speed, down time)`
+/// (Steam; the height in XMM3, speed and down time on the stack; Checked (exe)): the launch the
+/// enemies whose think is KH1's object think (`0x1402C2C90`: actor kinds 4 / 5 / 9 / 10, records
+/// handed to their script, event 0) run from their scripts, through the script call
+/// `0x1402BBC80` (Checked (decomp)). It is KH1's launch with the script's own numbers (motion
+/// base 0x52 / 0x5C when 0, the height through `0x1402AF960`, `+0x3C0` = the record's direction ×
+/// speed), so a KH2 blow on such an enemy flew by its script's numbers, not KH2's (the tester,
+/// thread kh2s-combo-row-selection m34: Aerial Finish's first hit sent the foe far). KH1's runs;
+/// for a KH2 launch's record its flight is then KH2's, as `launched`.
+unsafe extern "system" fn script_launched(actor: usize, rec: usize, base: i32, height: f32, speed: f32, down: f32) {
+    let f: unsafe extern "system" fn(usize, usize, i32, f32, f32, f32) = std::mem::transmute(ORIG_SCRIPT_LAUNCH.load(Ordering::Acquire));
+    let ours_before = has_launch(rec);
+    f(actor, rec, base, height, speed, down);
+    let Some(l) = take_launch(rec) else {
+        // (KH1's fallback inside, `0x1402B77D0`, can reach `launched` itself, which then took it.)
+        if !ours_before {
+            super::knockback::land_kh1(actor);
+        }
+        return;
+    };
+    let bases: &[u16] = if base > 0 && base < 0x10000 { &[base as u16] } else { &[0x52, 0x5C] };
+    static N: AtomicU32 = AtomicU32::new(0);
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
+        log!(Combat, "KH1's scripted launch on {actor:#x} (motion base {base:#x}, the script's height {height:.0}, speed {speed:.1}): KH2's numbers in it");
+    }
+    kh2_launch(actor, l, bases, "KH1's scripted launch");
+}
+
+/// After one of KH1's launches ran on `actor` for a KH2 launch `l`: if it did launch (its motion
+/// base `+0x3EA` one of `bases`, air state 2), KH2's arc (its blow flown to its apex) and
+/// sideways speed, and its flight is KH2's blow (`knockback::fly_blow`).
+unsafe fn kh2_launch(actor: usize, l: Launch, bases: &[u16], via: &str) {
     let motion = rd::<u16>(actor + 0x3EA);
     let state = rd::<i32>(actor + 0x70);
     static N: AtomicU32 = AtomicU32::new(0);
-    if !matches!(motion, 0x52 | 0x5C) || state != 2 {
+    if !bases.contains(&motion) || state != 2 {
         if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
-            log!(Combat, "KH2 launch on {actor:#x}: KH1 didn't launch it (motion {motion:#x}, state {state})");
+            log!(Combat, "KH2 launch on {actor:#x}: {via} didn't launch it (motion {motion:#x}, state {state})");
         }
         return;
     }
@@ -3009,24 +3059,35 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
     let k = super::knockback::launch_factor(actor);
     let l = Launch { up: l.up * k, speed: l.speed * k };
     let (h, t) = l.apex(&p);
+    // KH1's launch direction (the record's, flattened); KH2's speed along it keeps its sign
+    // (negative: back toward the attacker).
     let dir = rd::<[f32; 3]>(actor + 0x20);
     let n = (dir[0] * dir[0] + dir[2] * dir[2]).sqrt();
     let (dx, dz) = if n > 1e-3 { (dir[0] / n, dir[2] / n) } else { (0.0, 0.0) };
     wr(actor + 0x3B0, 0.0f32);
     wr(actor + 0x3B8, t);
     wr(actor + 0x3BC, -h);
-    wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed]);
+    wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed.abs()]);
     // Its flight is KH2's blow (`knockback::air_step`).
     super::knockback::fly_blow(actor, [dx * l.speed, dz * l.speed], l.up, t, h);
     if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
-        log!(Combat, "KH2 launch on {actor:#x}: up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed);
+        log!(Combat, "KH2 launch on {actor:#x} ({via}): up {:.0} / sideways {:.1} a frame{} (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed, if l.speed < 0.0 { ", toward Sora" } else { "" });
     }
 }
+
+/// KH1's scripted launch (Steam only): `mov [rsp+0x10], rbx; mov [rsp+0x18], rsi; push rdi;
+/// sub rsp, 0x40` (Checked (exe)).
+const SCRIPT_LAUNCH_STEAM: usize = 0x2B79F0;
+const SCRIPT_LAUNCH_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40];
+static ORIG_SCRIPT_LAUNCH: AtomicUsize = AtomicUsize::new(0);
 
 pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     hook::install(base + LAUNCH_RVA, &LAUNCH_PROLOGUE, launched as *const () as usize, &ORIG_LAUNCH, "enemy launch reaction");
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        hook::install(base + SCRIPT_LAUNCH_STEAM, &SCRIPT_LAUNCH_PROLOGUE, script_launched as *const () as usize, &ORIG_SCRIPT_LAUNCH, "enemy scripted launch (KH2's blows)");
+    }
     hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row");
     hook::install(base + COMMAND_STEP_RVA, &COMMAND_STEP_PROLOGUE, command as *const () as usize, &ORIG_COMMAND, "command step");
     hook::install(base + RUN_ENTRY_RVA, &RUN_ENTRY_PROLOGUE, run_entry as *const () as usize, &ORIG_RUN_ENTRY, "menu entry run (spells only in KH2's windows)");
