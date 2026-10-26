@@ -353,7 +353,10 @@ The tester's t596 trace (f60998..f61178) and log, read against both decomps:
   Logged: "glide (native) motion ...: KH1's blend clock ... -> KH2's 2.0", "... KH2's skip of
   frame 1" (first 12).
 
-### 8.11 Bank to bank: a fresh blend from the pose on screen (glide thread, after m7)
+### 8.11 Bank to bank: a fresh blend from the pose on screen (glide thread, after m7) — replaced by §8.13
+
+**Replaced (t646 removed):** forcing KH1's fresh path mid-blend garbled Sora (glide thread m8); see §8.13 for
+why and for the fix that replaced it. The findings below on the two paths still hold.
 
 The tester's t6xx trace (f109997..f110535, every bank change 207 -> 205 -> 206 or 206 -> 205 -> 207, the
 205 lasting one frame as the stick crosses his facing) and "I'm still seeing the same phenomenon":
@@ -390,3 +393,51 @@ Jump KH2 the fall before the glide is our baked KH2 fall, whose own loop range (
 the hover (208 looped 13..32 of its 100 frames; the same would have hit 205 started out of that
 fall). Not the glide's code: `kh2slots::loop_range`, fixed there; `docs/kh1-anim-baking.md` §7.2.
 **Checked (decomp, trace)**.
+
+### 8.13 Bank to bank: KH1's chained start, its source the pose on screen (glide thread m9)
+
+"sora now disappears and gets all garbled when turning in glide" (t646). The tester's log (t651 build,
+f2019..f2265: 13 "asked N of 16 frames into KH1's blend: a fresh blend" lines, every rocking bank change
+206 -> 205 -> 206 four to fifteen frames into the last blend) and trace (f13715..f13812: the 205 / 206 /
+207 changes one to nine frames apart, the pose path "pass x1 + ik x1" on each change, "ik" between).
+
+- **Why t646 garbled him.** KH1's blend pass (Steam `0x140392560`, from `0x1402A0620`) does not leave local
+  bone matrices in `+0x1B8`. For each bone with flag bit 30 (bone table `+0x2C`; 142 of Sora's 293, in
+  `xa_ex_0010.mdls` the animated joints; the pass also flags the parents of the IK list's bones for its
+  call), it lerps the source and target *products* of the bone's chain up to the next flagged bone
+  (`+0x1BC` / `+0x1C0`), orthonormalises, and writes `+0x1B8[bone]` as that times the flagged ancestor's
+  `+0x1B8` (and the scaled world `+0x1B4`); IK bones get their solved matrix. The 151 unflagged bones are
+  not written, and both blend starts end by allocating a new `+0x1B8` (`0x14028DA20`, not cleared). The
+  fresh start `0x140394080` moves `+0x1B8` into the source `+0x1BC` and reads it as local matrices, which
+  is right after a plain pass (`0x140391C70`) but not during a blend: accumulated matrices and
+  uninitialised blocks chained together. **Checked (decomp)**; that this is what the tester saw is
+  inferred (every garbled moment is a mid-blend change in the log, and nothing else changed in t646).
+- **The buffers** (Checked (decomp)): `0x14028DA20 (size, &slot)` allocates from KH1's movable heap and
+  records the slot as the block's owner; `0x14028DB20 (block, &slot)` re-owns a block to another slot;
+  `0x14028DB70 (block)` clears the owner slot (the block is reclaimed later). `0x140393F60` frees all
+  five blend buffers (the apply's no-blend branch). The chained start `0x140393B30`: frees the old
+  source, re-owns the old target (`+0x1C0` -> `+0x1BC`, `+0x1C8` -> `+0x1C4`), the root offset's source
+  `+0x110` = the old target `+0x120`, keeps the IK list entries whose type the new motion shares with
+  their goal's source = the old target (`+0x10 = +0x20`), poses the new motion (`+0x1B8` / `+0x1B0` ->
+  the new target `+0x1C0` / `+0x1C8`, IK goals' targets from `+0x1B4`), and allocates a new `+0x1B8`.
+  KH1's apply `0x1402A0350` then sets `+0x170` / `+0x174` and runs the pass at once (the request frame).
+- **The lerp** (Checked (decomp)): `0x1400E64D0` / `0x1400E7CB0` are `out = a * t + b * (1 - t)` with
+  `a` the target (the vec3 one keeps `a.w`); the pass's weight is `+0x174 / +0x170`.
+- **Now** (`glide::chain_snapshot` / `chain_source`; t646's `+0x170` clearing removed; KH1 keeps its
+  chained path): in the glide pre-step, when the glide motion just asked was queued while a blend runs
+  (`+0x178` >= 1, `+0x170` > 0), the pose drawn last frame is kept in the source buffers' own formats:
+  each bone's last target and source matrices lerped at the drawn weight (KH1's clock read before
+  `kh2_clock` moves it), the first vec4 of each `+0x1B0` channel record (what the fresh path takes),
+  the root offset `+0x100` (the fresh path's `+0x110 = +0x100`), and each IK goal lerped as the pass
+  does. The first blend pass on Sora's instance after that (KH1's apply calls it right after the chained
+  start; our `pose::pose_ik` hook, before KH1's pass) checks the start happened (`+0x1BC` is the old
+  target's block, `+0x1C4` the old target channels', `+0x1C0` a new block, same bone count) and writes
+  them over `+0x1BC`, `+0x1C4`, `+0x110` and the IK goals' sources. Otherwise (KH1 took another path, or
+  its heap moved the blocks) nothing is written and KH1's own start stands (logged). Logged: "glide
+  (native) motion N chained into KH1's blend at W of it: its source is the pose on screen" (first 20).
+  Glide motions (205..208) for Sora at Glide KH2 only; no new hook (the blend pass was already hooked).
+- **Assumption:** a flagged bone whose chain has more than one link that changes between the two
+  motions (an unflagged link animated too) gets the product of the lerped links as its source, not the
+  lerp of the products the pass drew: equal when the other links match, otherwise a second-order
+  difference (small for one-frame bank changes). That KH2 blends from the drawn pose: as §8.11.
+

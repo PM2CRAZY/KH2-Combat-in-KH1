@@ -481,28 +481,180 @@ unsafe fn kh2_clock(actor: usize, dt: f32) {
 /// the request only when its slot isn't the one playing, `+0x168`). Checked (decomp).
 const QUEUED: usize = 0x178;
 
-/// A glide motion change asked while KH1's blend into the last one still runs, made a fresh
-/// blend from the pose on screen, as KH2 blends (glide thread, after m7: "I'm still seeing the
-/// same phenomenon"). KH1's apply (`0x1402A0350`, from its queue step `0x14029FC40`) chains a
-/// request that comes during a blend (`+0x170 > 0` -> `0x140393B30`): the new blend's source
-/// buffers (`+0x1BC` local matrices, `+0x1C4` channels) take the last blend's target buffers
-/// (`+0x1C0` / `+0x1C8`, the interrupted motion's start frame), not the pose drawn. Its fresh
-/// blend (`+0x170` 0 -> `0x140394080`) takes `+0x1B8` / `+0x1B0`, which KH1's blend pass
-/// (`0x1402A0620` -> `0x140392560`) writes with the blended pose each frame: the pose on screen.
-/// Checked (decomp). A bank to the other side passes his facing (206 -> 205 for a frame -> 207),
-/// so the second change was always chained and he snapped to 205's first frame. With `+0x170`
-/// cleared after our request is queued (the queue is applied in KH1's animation update, after
-/// this pre-step), KH1 takes the fresh path; the fresh path frees all five blend buffers itself.
-/// The new motion still starts at its frame 0, held through the 16-frame blend, as in both games.
-unsafe fn fresh_blend(actor: usize, motion: u16, blend_before: f32, clock: f32) {
-    if !(blend_before > 0.0) || rd::<i32>(actor + QUEUED) < 1 || !(rd::<f32>(actor + BLEND_LEN) > 0.0) {
+/// KH1's blend buffers on a model instance (`+0x15C` handle), as KH1's apply (Steam `0x1402A0350`)
+/// and its two blend starts (`0x140394080` fresh, `0x140393B30` chained) and the blend pass
+/// (`0x140392560`, from `0x1402A0620`) use them (Checked (decomp)): `+0x1B0` the sampled channels
+/// (0x40 a bone; the blend writes the first vec4 of each), `+0x1BC` / `+0x1C0` the blend's source /
+/// target bone matrices (0x40 a bone), `+0x1C4` / `+0x1C8` its source / target channels (0x10 a
+/// bone), `+0x1CC` the IK list (0x30 an entry: bone i16 at +0, its goal's source at +0x10 and target
+/// at +0x20; bone -1 ends it), `+0x100` the root offset the pass draws (lerped from the target
+/// `+0x120` and the source `+0x110`). Each is a 32-bit handle (`pose::ptr`).
+const INST_CHANNELS: usize = 0x1B0;
+const INST_SRC_MATS: usize = 0x1BC;
+const INST_TGT_MATS: usize = 0x1C0;
+const INST_SRC_CHANNELS: usize = 0x1C4;
+const INST_TGT_CHANNELS: usize = 0x1C8;
+const INST_IK: usize = 0x1CC;
+const INST_ROOT: usize = 0x100;
+const INST_ROOT_SRC: usize = 0x110;
+
+/// The pose on screen while KH1's blend into a glide motion runs, taken in the pre-step when the
+/// next glide motion is queued mid-blend (`chain_snapshot`), for `chain_source`.
+struct ChainSnap {
+    inst: usize,
+    bones: usize,
+    motion: u16,
+    /// The weight of the target in the blend last drawn (KH1's clock / length).
+    w: f32,
+    /// The blocks KH1's chained start moves into the source (`+0x1C0` -> `+0x1BC`, `+0x1C8` ->
+    /// `+0x1C4`): how its call is recognised.
+    old_tgt: usize,
+    old_tgt_ch: usize,
+    mats: Vec<[f32; 16]>,
+    chans: Vec<[f32; 4]>,
+    root: [f32; 4],
+    ik: Vec<(i16, [f32; 4])>,
+}
+
+static CHAIN: Mutex<Option<ChainSnap>> = Mutex::new(None);
+static CHAIN_ARMED: AtomicBool = AtomicBool::new(false);
+
+fn lerp4(tgt: [f32; 4], src: [f32; 4], w: f32) -> [f32; 4] {
+    std::array::from_fn(|k| tgt[k] * w + src[k] * (1.0 - w))
+}
+
+/// A glide motion change asked while KH1's blend into the last one still runs blends from the pose
+/// on screen, as KH2's does (glide thread m9: t646's fresh path garbled him). KH1's apply chains
+/// such a request (`0x140393B30`): the new blend's source becomes the last blend's target (the
+/// interrupted motion's start frame: the snap). KH1 keeps its chained path (t646 cleared `+0x170`
+/// to force the fresh one, whose source `+0x1B8` holds, during a blend, the pass's accumulated
+/// matrices for the flagged bones and nothing written for the others, read as local matrices: the
+/// garbled, vanishing Sora). Here, in the pre-step after the request is queued (KH1 applies it in
+/// its animation update after), the pose drawn last frame is kept in the formats of the source
+/// buffers the chained start fills, and `chain_source` writes it over them right after that start,
+/// before the blend pass that draws its first frame:
+/// - bone matrices: the last blend's target and source lerped at its drawn weight, row by row, as
+///   the pass lerps them (`0x1400E64D0` / `0x1400E7CB0`: `target * w + source * (1 - w)`);
+/// - channels: the first vec4 of each `+0x1B0` record, which the pass wrote this way (the fresh
+///   path's own choice, `0x140394080`);
+/// - the root offset `+0x100` (the fresh path's `+0x110 = +0x100`);
+/// - each IK goal: its target and source lerped as the pass does.
+/// Checked (decomp). The pass then lerps that source toward the new motion's frame 0 over KH2's 16
+/// frames. Assumption: a flagged bone with more than one animated link above it (bone flag bit 30
+/// unset on the links) gets the product of the lerped links, not the lerp of their product the pass
+/// drew last frame: equal for links that don't change between the two motions, otherwise a
+/// second-order difference.
+unsafe fn chain_snapshot(actor: usize, motion: u16, w: f32) {
+    CHAIN_ARMED.store(false, Ordering::Relaxed);
+    let Ok(mut lock) = CHAIN.lock() else { return };
+    *lock = None;
+    let inst = super::pose::ptr(rd::<u32>(actor + 0x15C));
+    if inst == 0 || !w.is_finite() {
         return;
     }
-    wr(actor + BLEND_LEN, 0.0f32);
+    let Some(n) = super::pose::bone_count(inst).map(|n| n as usize).filter(|n| (1..=1024).contains(n)) else { return };
+    let h = |o: usize| super::pose::ptr(rd::<u32>(inst + o));
+    let (src, tgt, ch, tgt_ch, ik) = (h(INST_SRC_MATS), h(INST_TGT_MATS), h(INST_CHANNELS), h(INST_TGT_CHANNELS), h(INST_IK));
+    if src == 0 || tgt == 0 || ch == 0 || tgt_ch == 0 || h(INST_SRC_CHANNELS) == 0 {
+        return;
+    }
+    let w = w.clamp(0.0, 1.0);
+    let mats = (0..n)
+        .map(|i| {
+            let (t, s) = (rd::<[f32; 16]>(tgt + i * 0x40), rd::<[f32; 16]>(src + i * 0x40));
+            std::array::from_fn(|k| t[k] * w + s[k] * (1.0 - w))
+        })
+        .collect::<Vec<[f32; 16]>>();
+    if mats.iter().flatten().any(|v| !v.is_finite()) {
+        return;
+    }
+    let chans = (0..n).map(|i| rd::<[f32; 4]>(ch + i * 0x40)).collect();
+    let mut goals = Vec::new();
+    if ik != 0 {
+        for e in 0..64 {
+            let at = ik + e * 0x30;
+            let bone = rd::<i16>(at);
+            if bone < 0 {
+                break;
+            }
+            let (s, t) = (rd::<[f32; 4]>(at + 0x10), rd::<[f32; 4]>(at + 0x20));
+            let mut g = lerp4(t, s, w);
+            g[3] = t[3];
+            goals.push((bone, g));
+        }
+    }
+    *lock = Some(ChainSnap {
+        inst,
+        bones: n,
+        motion,
+        w,
+        old_tgt: tgt,
+        old_tgt_ch: tgt_ch,
+        mats,
+        chans,
+        root: rd(inst + INST_ROOT),
+        ik: goals,
+    });
+    CHAIN_ARMED.store(true, Ordering::Release);
+}
+
+/// From the blend pass hook (`pose::pose_ik`, Steam `0x140392560`, before KH1's pass): the first pass
+/// on Sora's instance after KH1's chained start of the glide motion queued in the pre-step (KH1's
+/// apply calls it straight after `0x140393B30`) gets the pose on screen as its source
+/// (`chain_snapshot`). Recognised by the blocks the chained start moved (`+0x1BC` now the last
+/// target's block, `+0x1C4` the last target channels', `+0x1C0` a new one); the first pass on his
+/// instance decides: anything else drops it (KH1's own start then, logged).
+pub unsafe fn chain_source(inst: usize) {
+    if !CHAIN_ARMED.load(Ordering::Acquire) || inst == 0 {
+        return;
+    }
+    let Ok(mut lock) = CHAIN.lock() else { return };
+    let Some(snap) = lock.as_ref() else {
+        CHAIN_ARMED.store(false, Ordering::Relaxed);
+        return;
+    };
+    if snap.inst != inst {
+        return;
+    }
+    let h = |o: usize| super::pose::ptr(rd::<u32>(inst + o));
+    let (src, tgt, src_ch) = (h(INST_SRC_MATS), h(INST_TGT_MATS), h(INST_SRC_CHANNELS));
+    let snap = lock.take().expect("checked");
+    CHAIN_ARMED.store(false, Ordering::Relaxed);
     static N: AtomicU32 = AtomicU32::new(0);
+    let chained = src == snap.old_tgt && tgt != snap.old_tgt && src_ch == snap.old_tgt_ch
+        && super::pose::bone_count(inst).is_some_and(|n| n as usize == snap.bones);
+    if !chained {
+        if N.fetch_add(1, Ordering::Relaxed) < 20 {
+            log(&format!("glide (native) motion {}: KH1 didn't chain its blend (its fresh path or no blend): its own start kept", snap.motion));
+        }
+        return;
+    }
+    for (i, m) in snap.mats.iter().enumerate() {
+        wr(src + i * 0x40, *m);
+    }
+    for (i, c) in snap.chans.iter().enumerate() {
+        wr(src_ch + i * 0x10, *c);
+    }
+    wr(inst + INST_ROOT_SRC, snap.root);
+    let ik = h(INST_IK);
+    let mut goals = 0;
+    if ik != 0 {
+        for e in 0..64 {
+            let at = ik + e * 0x30;
+            let bone = rd::<i16>(at);
+            if bone < 0 {
+                break;
+            }
+            if let Some((_, g)) = snap.ik.iter().find(|(b, _)| *b == bone) {
+                wr(at + 0x10, *g);
+                goals += 1;
+            }
+        }
+    }
     if N.fetch_add(1, Ordering::Relaxed) < 20 {
         log(&format!(
-            "glide (native) motion {motion} asked {clock:.1} of {blend_before:.0} frames into KH1's blend: a fresh blend from the pose on screen (KH2's), not KH1's chained one"
+            "glide (native) motion {} chained into KH1's blend at {:.2} of it: its source is the pose on screen ({} bones, {goals} IK goals), not the last motion's frame 0",
+            snap.motion, snap.w, snap.bones
         ));
     }
 }
@@ -572,10 +724,14 @@ unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
     };
     let request: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_RVA);
     let asked = request_for(motion);
+    // The weight the blend was drawn at last frame, before `kh2_clock` moves its clock.
+    let drawn = (rd::<f32>(actor + BLEND_LEN), rd::<f32>(actor + BLEND_CLOCK));
     kh2_clock(actor, dt);
     let before = bank_fields(actor);
     request(actor, asked, BLEND);
-    fresh_blend(actor, motion, before.2, before.3);
+    if drawn.0 > 0.0 && rd::<i32>(actor + QUEUED) >= 1 && rd::<f32>(actor + BLEND_LEN) > 0.0 {
+        chain_snapshot(actor, motion, drawn.1 / drawn.0);
+    }
     note_bank(motion, asked, before, tilt);
     // (The hover's slot is made on an air swing of KH1's, which holds at its end: kept going round
     // as KH2 loops it. KH1's glide slots loop as KH1's own glide has them.)

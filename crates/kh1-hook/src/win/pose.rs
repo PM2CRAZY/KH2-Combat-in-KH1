@@ -1489,7 +1489,7 @@ unsafe fn slot_of(instance: usize) -> Option<usize> {
 }
 
 /// The model's bone count (`**instance`), if it reads.
-unsafe fn bone_count(instance: usize) -> Option<u32> {
+pub(crate) unsafe fn bone_count(instance: usize) -> Option<u32> {
     let slot = rd::<u64>(instance) as usize;
     if slot < 0x10000 {
         return None;
@@ -1995,6 +1995,7 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
 unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
     LAST_T.store(flags.to_bits(), Ordering::Relaxed);
     let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
+    super::glide::chain_source(instance);
     if is_sora(instance) {
         super::kh2dpx::posed(false);
     }
