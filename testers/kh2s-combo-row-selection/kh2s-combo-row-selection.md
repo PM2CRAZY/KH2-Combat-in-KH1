@@ -830,3 +830,6 @@ go ahead
 
 ^m29
 
+just started up kh2 to verify kh2 does let you combo out of magic but there may not be a window like you said, currently if I use reflect for example the move doesn't let you combo and resets your combo queue, you can mix and match in kh2 what spells and attacks take a slot and currently, it seems to me that you can combo kh2 magic into each other faster than going from a magic into attack so I need you to look into it because its not 1:1 once you find out how it works properly apply the same logic to kh1 magic and put it in the config menu like I asked, also kh2 blizzard can't combo into anything at the moment for kh1 magics logic you just apply kh2s fire combo logic on the first shot and the repeated shot animation. for gravity and stop, there's a phenomenon in kh2 where those magics count as a finisher so the combo row skips straight to the finisher, if you have a finishing plus equipped you can combo into another finisher so I would like those magic's to have the same logic, that would be applied for kh1 gravity and stop as well if the config is set to can combo.
+
+go ahead
