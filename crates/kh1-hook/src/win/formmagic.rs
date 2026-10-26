@@ -71,12 +71,25 @@ pub fn base_kh2_spell(spell: u8) -> bool {
     !super::form::in_form() && kh2_spell(spell)
 }
 
+/// Wisdom Form on KH1's own states casts KH2's `spell` (Fire 0 .. Cure 3) now: all four are KH2's
+/// in Wisdom (KH2's Wisdom casts KH2's Fire, Blizzard, Thunder and Cure, its own cast motions; a
+/// Drive Form ignores the Config rows, the tester, what-is-still-missing after m13), on KH1's own
+/// cast state as base Sora's KH2 spells are (`native`), at Wisdom's magic sub (`form::magic_sub`).
+pub fn wisdom_kh2_spell(spell: u8) -> bool {
+    spell <= 3 && super::form::native_form() == Some(super::form::Kind::Wisdom)
+}
+
 /// Base Sora's cast of `spell` (Fire 0 .. Aero 6) plays KH2's cast motion now: by the spell's
 /// animation row, KH1's spell or KH2's (the tester, kh2-effects-in-kh1s-own-effect-system m20:
 /// "if a kh2 spell is casted on a kh1 animation then it should cast on the frame that the kh1
 /// animation casts it and vice versa": a KH2 spell on KH1's animation releases at KH1's cast
 /// frame, `KH1_CAST_FRAME`); Fire has no row, its animation its spell's. Not in a Drive Form.
 pub fn anim_kh2(spell: u8) -> bool {
+    // (A Drive Form on KH1's own states: its own cast motions for every spell, KH2's all through,
+    // whatever the rows: KH1's Gravity, Stop and Aero on them as for base Sora at KH2.)
+    if super::form::native_form().is_some() {
+        return true;
+    }
     !super::form::in_form() && anim_row(spell).map_or(spell == 0 && kh2_spell(0), super::styles::setting)
 }
 
@@ -520,7 +533,7 @@ unsafe fn time_kh1_spell(actor: usize, spell: u8, request: u32, started: u64) {
 /// start hooked, our slot of KH2's cast motion built for KH1's request (`kh2slots::CASTS`), and
 /// the spell's KH2 file and MAGC row there. Else KH2's controller borrows him for it, as before.
 pub unsafe fn native(spell: u8, air: bool) -> bool {
-    if !base_kh2_spell(spell) || !NATIVE_HOOKED.load(Ordering::Relaxed) || !super::shared::active() {
+    if !(base_kh2_spell(spell) || wisdom_kh2_spell(spell)) || !NATIVE_HOOKED.load(Ordering::Relaxed) || !super::shared::active() {
         return false;
     }
     let request = if air { 0x83 } else { 0x36 } + spell as usize;
@@ -844,7 +857,9 @@ pub unsafe fn kh1_cast_window(actor: usize) {
 /// queues after its first, is taken off the queue (KH2's one motion is the whole cast). Whether
 /// it was taken (else KH1's own script runs).
 unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
-    if actor < 0x10000 || actor != super::takeover::sora_actor() || super::form::in_form() || !super::shared::active() {
+    // (Wisdom on KH1's own states too, `wisdom_kh2_spell`; forms on KH2's controller cast theirs
+    // from its step.)
+    if actor < 0x10000 || actor != super::takeover::sora_actor() || super::form::driver_form() || !super::shared::active() {
         return false;
     }
     let count = rd::<u32>(actor + QUEUE_COUNT);

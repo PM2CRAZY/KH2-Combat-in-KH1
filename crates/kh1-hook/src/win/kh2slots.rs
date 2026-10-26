@@ -386,7 +386,7 @@ pub const FORM_SLOTS: [FormSlots; 2] = [
 /// 201 in its file: KH2's jump start plays 3 without High Jump (Steam KH2 `0x140422630` /
 /// `0x1403B59B0`, Checked (decomp) at t627), and Wisdom's growth is Quick Run, so both of KH1's
 /// takeoffs (0x4 / 0x9) play 3.
-const WISDOM_SPECS: [Spec; 19] = [
+const WISDOM_SPECS: [Spec; 35] = [
     Spec { motion: 151, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -406,6 +406,25 @@ const WISDOM_SPECS: [Spec; 19] = [
     jump_spec(0),
     Spec { motion: character_core::motion::JUMP, stands_for: 12, request: 0x9, kind: Kind::Jump },
     LAND,
+    // (Its casts on KH1's cast requests, as base Sora's `CASTS`: its own clips of the same MAGC
+    // motions, Checked (files): 56..73 in `P_EX100_MAGF.mset`; its finisher casts 57 / 60 / 63
+    // are built after, `CAST_FINISHERS`.)
+    cast_spec(0),
+    cast_spec(1),
+    cast_spec(2),
+    cast_spec(3),
+    cast_spec(4),
+    cast_spec(5),
+    cast_spec(6),
+    cast_spec(7),
+    cast_spec(8),
+    cast_spec(9),
+    cast_spec(10),
+    cast_spec(11),
+    cast_spec(12),
+    cast_spec(13),
+    cast_spec(14),
+    cast_spec(15),
 ];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
@@ -653,6 +672,17 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
             let before = moves.len();
             for s in f.specs.iter().filter(|s| wanted(s.motion) && form_has(v, s.motion)) {
                 if let Some((m, block)) = make(mset, v, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
+                    moves.push(m);
+                    blocks.push(block);
+                }
+            }
+            // (Its finisher casts on its cast requests, as base Sora's below, where it built the
+            // request's own cast.)
+            for &(motion, stands_for, request) in CAST_FINISHERS.iter() {
+                if !wanted(motion) || !form_has(v, motion) || !moves[before..].iter().any(|m| m.request == request && m.default) {
+                    continue;
+                }
+                if let Some((m, block)) = make(mset, v, bake, cache.as_deref_mut(), &requests, (motion, stands_for, request, Kind::Magic), false, (false, 0), KH1_SLOTS + moves.len(), false)? {
                     moves.push(m);
                     blocks.push(block);
                 }
@@ -1285,7 +1315,8 @@ pub unsafe fn keyblade_rearm(actor: usize) {
 
 /// KH2's cast motion our slot plays for KH1's spell request `request` (`CASTS`), if built.
 pub fn cast_motion(request: usize) -> Option<u16> {
-    built()?.moves.iter().find(|m| m.request == request && m.default && matches!(m.kind, Kind::Magic | Kind::AirMagic)).map(|m| m.motion)
+    let b = built()?;
+    b.moves.iter().find(|m| m.request == request && m.default && matches!(m.kind, Kind::Magic | Kind::AirMagic) && live(b, m)).map(|m| m.motion)
 }
 
 /// KH2's `motion` has a slot of ours on one of KH1's requests (built: an ability row's only when
@@ -2392,7 +2423,11 @@ static CAST_PICKED: [AtomicUsize; CASTS.len()] = [const { AtomicUsize::new(usize
 /// asks for it; `formmagic::pick_cast`). Returns the KH2 motion it plays.
 pub unsafe fn pick_cast(request: usize, finisher: bool) -> Option<u16> {
     let i = CASTS.iter().position(|c| c.2 == request)?;
-    let fin = CAST_FINISHERS.iter().find(|f| f.2 == request).and_then(|f| built()?.moves.iter().find(|m| m.request == request && m.motion == f.0 && !m.default)).filter(|_| finisher);
+    // (The moveset playing's: a native Drive Form's own finisher cast, `live`.)
+    let fin = CAST_FINISHERS.iter().find(|f| f.2 == request).and_then(|f| {
+        let b = built()?;
+        b.moves.iter().find(|m| m.request == request && m.motion == f.0 && !m.default && live(b, m))
+    }).filter(|_| finisher);
     CAST_PICKED[i].store(fin.map_or(usize::MAX, |m| m.slot), Ordering::Relaxed);
     if let Ok(mut g) = PLACED.try_lock() {
         if let Some(p) = g.as_mut() {

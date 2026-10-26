@@ -435,7 +435,7 @@ fn kh2_spell_refused(arg: u8, state: i32, drive: bool) -> Option<Refusal> {
     if drive || matches!(state, 0 | 6 | 0x18 | 2 | 8) {
         return None;
     }
-    let kh2_spell = arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg));
+    let kh2_spell = arg == super::reflect::SPELL || (arg <= 3 && (super::formmagic::base_kh2_spell(arg) || super::formmagic::wisdom_kh2_spell(arg)));
     if !kh2_spell {
         return None;
     }

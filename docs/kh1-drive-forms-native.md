@@ -790,3 +790,29 @@ the shot becomes a KH1 spell script of ours (a `.mag`-like KH1 script made at bu
 `wisd`'s numbers: speed 20 → 80, turn 1.8° a frame, life) started from the trigger with KH1's spell
 start (`0x14028F140`), KH1 then stepping, colliding and freeing it. Not done this round: it needs
 KH1's script format for a homing shot worked out first (an open question in the report).
+
+### 8.3 Wisdom's magic on KH1's cast state
+
+The same path as base Sora's KH2 magic on KH1's own cast state (`docs/kh1-magic-native.md`), with
+the form's own clips: KH1's command step casts it (no borrow), KH1's request plays our slot of the
+cast motion, KH1's spell start (`0x14028F140`, hooked) starts KH2's `.mag` script instead of KH1's
+(`formmagic::kh1_spell_start`), released at the motion's magic-cast event.
+
+- **Which spells are KH2's:** in Wisdom on KH1's states Fire, Blizzard, Thunder and Cure all are
+  (`formmagic::wisdom_kh2_spell`), whatever the Config rows (a Drive Form is KH2's all through).
+  KH1's Gravity, Stop and Aero (no KH2 spell) are KH1's own on Wisdom's cast motions for them
+  (`anim_kh2` is true in a native form), as base Sora's at KH2: ground 63, air 64 / 67 (`CASTS`).
+- **The motions:** `WISDOM_SPECS` puts Wisdom's own clips of the MAGC motions on KH1's cast
+  requests (Checked (files): 56 / 58, 59 / 61, 62 / 64, 65 / 67, 63; its finisher casts 57 / 60 /
+  63 on the ground requests, built per form now). `pick_cast` and `cast_motion` take the moveset
+  playing's (`live`). Wisdom's clips carry their own allow-movement ranges (56: from 24; 59: from
+  10; ...), steered by the form's ground inertia (§8.1).
+- **The sub:** level × 2 − 2, + 1 for a finisher cast, + 10 in Wisdom (`form::magic_sub`). Checked
+  (files): the spells' ATKP rows exist at those subs (Fire ATKP 502 at sub 10, Reflect's at 10 /
+  14); the rule itself is from the Epic-era research (s192), not re-traced in the Steam decomp.
+- **The cost:** KH2's MP cost scaled onto KH1's MP (`mpcost`), as base Sora's KH2 spells (KH2's
+  costs are the same in Wisdom).
+- **Air casts:** KH2's air-cast physics (`shared::physics::cast_rule` is KH2's in a form).
+- **Not changed:** the old controller path's rule "Wisdom's Cure is KH1's Cure on KH2's motion"
+  (main branch, the user) doesn't apply on KH1's states: KH2's Wisdom casts KH2's Cure. An open
+  question in the report.
