@@ -353,6 +353,26 @@ pub fn control(s: &Seen) -> u32 {
             }
         }
     }
+    // On Steam no borrow of KH2's controller is left for these (the tester, what-is-still-missing
+    // m5: "(b)", base Sora never on KH2's controller): KH2's dodge roll, guard and Quick Run run on
+    // KH1's roll, guard row and Quick Run state, its Aerial Dodge on KH1's air state; when none of
+    // those can take the press here (KH1's deep water for the roll, a slot not built), the press is
+    // KH1's as unmodded, as t630 left KH1 its Square and jump where no KH1 row plays KH2's move.
+    if borrow != NONE && super::addr::Build::current() == super::addr::Build::Steam {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::log(&format!(
+                "{}: no KH1 state of ours could take it here (KH1 state {}): the press is KH1's (no KH2-controller borrow)",
+                match borrow {
+                    SQUARE => "Square (KH2's dodge roll / guard / Quick Run)",
+                    AIR_JUMP => "the jump in the air (KH2's Aerial Dodge)",
+                    _ => "Square held through KH1's roll (KH2's Quick Run)",
+                },
+                s.state
+            ));
+        }
+        borrow = NONE;
+    }
     if borrow != NONE {
         BORROW.store(borrow, Ordering::Relaxed);
         // (The press is KH2's: KH1 sees none of the button this step.)

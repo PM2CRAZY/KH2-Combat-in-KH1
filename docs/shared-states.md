@@ -280,3 +280,26 @@ slot numbers.
   glides' direction, whether KH1's swing travel all goes through its ground step's
   displacement (if not, KH2's travel adds to KH1's), and KH1's roll's can-act frames.
 - KH2's physics on KH1's states: see `shared::physics`.
+
+## The last button borrows gone (what-is-still-missing m5 "(b)", Steam)
+
+`shared::control` still had three fallbacks to KH2's controller for base Sora, used when the
+native path refused the press: Square on the ground (KH2's dodge roll / guard / Quick Run, when
+`combomods::guard_press`, `roll_press` and `quickrun::start` all refused: KH1's deep water
+(`0x1402C16E0`, Steam, which also stops KH1's own roll), a slot not built), the jump in the air
+(KH2's Aerial Dodge, when `combomods::aerial_dodge` refused), and Square held through KH1's roll
+(KH2's Quick Run, when `quickrun::start` refused). On Steam none of them borrows any more: the press
+is KH1's as unmodded (KH1's own button rules then apply, as t630 left KH1 its Square and jump
+where no KH1 row can play KH2's move). Logged once each ("no KH1 state of ours could take it
+here"). Elsewhere (Epic, where KH1's states of ours aren't in) the borrows stay. **Checked
+(code)**; not checked in game.
+
+Still borrowing base Sora (plan in the what-is-still-missing thread, m6):
+- an Attack pressed during one of KH1's own moves (a KH1 spell's cut, an item, KH1's roll at
+  Base Combo KH2): KH2's controller starts the next swing (`takeover`'s hand-back with
+  `ATTACK_AFTER`, `FLY_PRESS_GROUND`);
+- a KH2 command in a state KH1 casts nothing in (KH1's `0x1402A3600` casts in states 0, 6, 0x18,
+  2 and 8 only), and a command chosen in KH1's jump, glide or roll (`stylejump::want_kh2`,
+  `styleroll::want_kh2`);
+- an Attack while flying (KH1 state 8): KH2's air combo (`FLY_ATTACK`);
+- the Drive (a form's entry) and everything in a form (the Drive Forms thread).
