@@ -118,3 +118,4 @@ go ahead
 
 ^m3
 
+I sent you the videos, both are titled by their games abbreviation kh1 and kh2 and are in the same folder as this thread. if your narrowing your search to just how magic is handled and can't find anything feel free to step outside and look for more answers in the kh2 c steam decomp. 
