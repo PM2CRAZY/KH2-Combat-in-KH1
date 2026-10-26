@@ -268,4 +268,8 @@ sora now disappears and gets all garbled when turning in glide. recorded a trace
 > Still open from before: should KH2's "blend from what's drawn" rule go to all of KH1's mid-blend changes (attacks, landings), (a) yes as its own version, or (b) glide only? I'd hold that until the glide version is solid.
 
 ^m9
+1. (b)
+2. will send
+3. yes it did
 
+once we get glide done I'll consider it. 
