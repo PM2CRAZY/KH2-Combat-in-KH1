@@ -1649,6 +1649,8 @@ unsafe fn refresh_kh2_numbers(base: usize) {
         fall_max: p.fall_max,
         air_keep: p.air_keep,
         air_drag: p.air_drag,
+        acceleration: p.acceleration,
+        brake: p.brake,
     });
 }
 

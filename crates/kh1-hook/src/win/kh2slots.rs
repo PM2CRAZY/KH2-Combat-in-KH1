@@ -370,7 +370,43 @@ pub struct FormSlots {
     ours: &'static [u16],
 }
 
-pub const FORM_SLOTS: [FormSlots; 1] = [FormSlots { kind: super::form::Kind::Valor, specs: &VALOR_SPECS, ours: &[] }];
+pub const FORM_SLOTS: [FormSlots; 2] = [
+    FormSlots { kind: super::form::Kind::Valor, specs: &VALOR_SPECS, ours: &[] },
+    // (Wisdom's Quick Run, its growth ability: its own 203 and its stop 204 on our Quick Run rows,
+    // `quickrun`.)
+    FormSlots { kind: super::form::Kind::Wisdom, specs: &WISDOM_SPECS, ours: &[super::quickrun::RUN_MOTION, super::quickrun::STOP_MOTION] },
+];
+
+/// Wisdom Form's motions on KH1's own requests (`FORM_SLOTS`; the tester, what-is-still-missing
+/// after m13: "finish valor and wisdom form"), each the same KH1 request and template as base
+/// Sora's move of that kind, from `P_EX100_MAGF.mset` (moveset 3, Checked (files)): its PTYA
+/// (Checked (files), `00battle.bin`) has row 5 (151, its shot) and row 3 (154, the finisher) on
+/// the ground and rows 1 / 9 / 40 (181, the air shot) in the air, no finisher in the air; its
+/// reactions 10..15, item use 9, jump 3, fall 4, landing 5. No recoils 41 / 43 and no High Jump
+/// 201 in its file: KH2's jump start plays 3 without High Jump (Steam KH2 `0x140422630` /
+/// `0x1403B59B0`, Checked (decomp) at t627), and Wisdom's growth is Quick Run, so both of KH1's
+/// takeoffs (0x4 / 0x9) play 3.
+const WISDOM_SPECS: [Spec; 19] = [
+    Spec { motion: 151, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
+    Spec { motion: 154, stands_for: 101, request: 0xCB, kind: Kind::GroundCombo },
+    Spec { motion: 181, stands_for: 102, request: 0xCC, kind: Kind::AirCombo },
+    Spec { motion: 181, stands_for: 103, request: 0xCD, kind: Kind::AirCombo },
+    Spec { motion: 181, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
+    reaction_spec(0),
+    reaction_spec(1),
+    reaction_spec(2),
+    reaction_spec(3),
+    reaction_spec(4),
+    reaction_spec(5),
+    item_spec(0),
+    item_spec(1),
+    FALL,
+    jump_spec(0),
+    Spec { motion: character_core::motion::JUMP, stands_for: 12, request: 0x9, kind: Kind::Jump },
+    LAND,
+];
 
 /// KH2's walk and run cycles as slots (Mr Bugs: "can you also bake the animations for kh2s walking
 /// and running cycles? its more easy for me to compare"). KH1's walk and run requests (1, 2) are
@@ -977,6 +1013,17 @@ pub unsafe fn no_gravity(actor: usize) -> bool {
     }
     let moving = clip.windows.iter().any(|w| matches!(w.kind, W::AllowMovement) && w.start == 0 && w.end.is_none());
     !moving && clip.has(t as u32, |k| matches!(k, W::NoGravity))
+}
+
+/// KH2's allow-movement range (range id 41, `WindowKind::AllowMovement`) of our slot playing on
+/// `actor` at KH1's time in it: `Some(open)` while one of our slots plays, `None` otherwise. A
+/// Drive Form with ground inertia steers with the stick there (`shared::physics`, Wisdom's shots).
+pub unsafe fn allow_movement(actor: usize) -> Option<bool> {
+    use character_core::WindowKind as W;
+    let m = current(actor)?;
+    let clip = clip_of(m)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    Some(t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::AllowMovement)))
 }
 
 /// KH2's root travel over the next `dt` 60 Hz frames of our slot playing on `actor`, while its

@@ -234,9 +234,25 @@ pub fn control(s: &Seen) -> u32 {
     // and no jump in the air past the rise (KH1's own glide). Square is Valor's own Square moves
     // (`combomods::valor_square`: its row 11 free on the ground, rows 12 / 38 in a combo), on
     // KH1's rows of ours.
-    if super::form::native_now() {
-        let _ = super::combomods::valor_square(s, square_fresh);
-        return KH1_ACTION_BIT | if air && !s.rising { KH1_JUMP_BITS } else { 0 };
+    // Wisdom Form on KH1's own states: KH2's action-button handler (Steam KH2 `0x1403A81F0`,
+    // Checked (decomp)) finds none of the glide (no glide growth), the Square rows 0x25 / 0x0C /
+    // 0x26 or row 11 (none in Wisdom's PTYA, moveset 3, Checked (files)), or the dodge roll (no
+    // roll growth), so Square is its Quick Run (growth kind 1): on the ground, from a free state,
+    // along the stick vector (at rest: his facing, `quickrun::start`), whether the stick is pushed
+    // or not. No guard, no Aerial Dodge, no glide: KH1 sees no Square, and no jump in the air past
+    // the rise (KH1's own glide), as in Valor.
+    match super::form::native_form() {
+        Some(super::form::Kind::Valor) => {
+            let _ = super::combomods::valor_square(s, square_fresh);
+            return KH1_ACTION_BIT | if air && !s.rising { KH1_JUMP_BITS } else { 0 };
+        }
+        Some(_) => {
+            if s.state == 0 && square_fresh && s.can_act {
+                let _ = unsafe { quick_run_on_stick("Square in Wisdom Form (its growth ability)") };
+            }
+            return KH1_ACTION_BIT | if air && !s.rising { KH1_JUMP_BITS } else { 0 };
+        }
+        None => {}
     }
     let roll_kh2 = styles::kh2(Kind::DodgeRoll);
     // KH2's ability moves out of KH1's own moves whatever the styles (`combomods`): a Square move
@@ -599,6 +615,10 @@ pub mod physics {
         pub fall_max: f32,
         pub air_keep: f32,
         pub air_drag: f32,
+        /// Ground inertia (`prty` acceleration / brake: base Sora 0 / 0, none; Wisdom Form 0.85 /
+        /// 0.97, Checked (files)), `ground_inertia`.
+        pub acceleration: f32,
+        pub brake: f32,
     }
     static NUMBERS: Mutex<Option<Numbers>> = Mutex::new(None);
 
@@ -1252,6 +1272,10 @@ pub mod physics {
         if let Ok(mut s) = SWING.try_lock() {
             *s = None;
         }
+        // A Drive Form with ground inertia (Wisdom): KH2's own ground velocity on KH1's step.
+        if ground_inertia(actor, disp) {
+            return r;
+        }
         // (KH1's walk and run only: not one of its actions, flag 4, an item's use.)
         if !kh2() || rd::<u32>(actor) & 4 != 0 {
             return r;
@@ -1271,6 +1295,91 @@ pub mod physics {
             d[2] *= k;
         }
         r
+    }
+
+    /// KH2's ground velocity (its player's `+0x20`) under a Drive Form's ground inertia, per 60 Hz
+    /// frame (KH1's x / z); `None` until his first ground step in such a form.
+    static GROUND_V: Mutex<Option<[f32; 2]>> = Mutex::new(None);
+
+    /// KH2's ground inertia on KH1's ground state for a Drive Form whose `prty` has one (Wisdom's
+    /// acceleration 0.85, brake 0.97, `P_EX100_MAGF` moveset 3, Checked (files)), the tester (what-is-
+    /// still-missing after m13): "finish valor and wisdom form ... 1:1 with kh2". KH2's free-state
+    /// move (Steam KH2 `0x140422350`, Checked (decomp)): with the inertia flag of its moveset it
+    /// takes `0x1403B7AD0 (player, out, dt, acceleration, brake)` (prty `+0x28` / `+0x2C` through
+    /// the player's `+0x148`), which with the stick pushed (`+0x1C` > 0) sets the velocity `+0x20`
+    /// to `target × (1 − acceleration) + velocity × acceleration` (`0x140141AE0`), the target the
+    /// stick's direction at the walk or run speed (`0x1403A8FA0`: run from 0.8 of tilt), and with
+    /// it at rest multiplies the velocity by the brake; the move is the velocity × dt. Checked
+    /// (decomp). Taken per KH2 physics tick, two 60 Hz frames (`dt / 2` of them a game frame, as
+    /// `air_step`'s air steering, from the same 30 Hz tick finding). So he slides to a stop in his
+    /// idle, and a turn eases round. KH1's choice of walk / run / idle (its animation) is kept; only
+    /// the move is KH2's. In one of KH1's actions on our slot (Wisdom's shots and casts): steered
+    /// the same way inside the clip's allow-movement range (range id 41, `kh2slots::allow_movement`),
+    /// braked outside it (**Assumption**: KH2's attack actions take the same velocity function with
+    /// the stick cleared outside the range, as the OG rewrite's action step does; the attack
+    /// action's caller wasn't traced). KH1's own travel (`+0x200`, the root) is added by KH1 after.
+    /// False (KH1's step as it is) for base Sora and forms with no inertia.
+    unsafe fn ground_inertia(actor: usize, disp: *mut [f32; 4]) -> bool {
+        let Some(n) = numbers().filter(|n| n.acceleration > 0.0 && super::super::form::native_form().is_some()) else {
+            if let Ok(mut g) = GROUND_V.try_lock() {
+                *g = None;
+            }
+            return false;
+        };
+        if !kh2() {
+            return false;
+        }
+        let dt = dt();
+        let per = |k: f32| if dt == 2.0 { k } else { k.powf(dt / 2.0) };
+        let (a, b) = (per(n.acceleration), per(n.brake));
+        let action = rd::<u32>(actor) & 4 != 0;
+        let Ok(mut g) = GROUND_V.try_lock() else { return false };
+        // (Coming onto the ground: KH1's sideways speed in its air state, `+0x3C0`, per 60 Hz frame;
+        // **Assumption** that KH1 still holds it on the landing frame, else 0.)
+        let mut v = g.unwrap_or_else(|| {
+            let h: [f32; 4] = rd(actor + VEL);
+            if h[0].is_finite() && h[2].is_finite() { [h[0], h[2]] } else { [0.0; 2] }
+        });
+        let d = &mut *disp;
+        // The stick's target: KH1's own walk / run direction outside its actions (its move this
+        // frame, `0x1402B1850`), the pad's stick in an allow-movement range (KH1 doesn't steer
+        // during its actions).
+        let target: Option<[f32; 2]> = if !action {
+            let speed: f32 = rd(actor + 0x2C);
+            let stats = super::super::pose::ptr(rd::<u32>(actor + 0x6C));
+            let len = d[0].hypot(d[2]);
+            if speed > 0.01 && stats > 0x10000 && len > 1e-4 {
+                let kh1_run: f32 = rd(stats + 8);
+                let s = if speed >= kh1_run - 0.01 { n.run } else { n.walk };
+                Some([d[0] / len * s, d[2] / len * s])
+            } else {
+                None
+            }
+        } else if super::super::kh2slots::allow_movement(actor) == Some(true) {
+            let st = super::super::takeover::stick_now(actor);
+            let tilt = st[0].hypot(st[1]);
+            if tilt > 1e-3 {
+                let s = if tilt >= 0.8 { n.run } else { n.walk };
+                Some([st[0] / tilt * s, st[1] / tilt * s])
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        v = match target {
+            Some(t) => [t[0] * (1.0 - a) + v[0] * a, t[1] * (1.0 - a) + v[1] * a],
+            None => [v[0] * b, v[1] * b],
+        };
+        if v[0].hypot(v[1]) < 1e-3 || !v.iter().all(|x| x.is_finite()) {
+            v = [0.0; 2];
+        }
+        *g = Some(v);
+        // (In an action KH1's own step moves him by nothing of the stick; outside, its walk or run
+        // is replaced by KH2's.)
+        d[0] = v[0] * dt + if action { d[0] } else { 0.0 };
+        d[2] = v[1] * dt + if action { d[2] } else { 0.0 };
+        true
     }
 
     /// KH2's edge stop factor: its ground mover sweeps the step lengthened by this times his

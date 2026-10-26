@@ -702,3 +702,63 @@ every form run on KH1's states (Checked (code)):
   drawn for a two-bladed form's slot (`Kind::two_blades`).
 - The change, the swap (`native_data`), the arrival, the revert, MP and look are already one path
   for every form (`form::native_start` / `native_arrive` / `native_revert` / `drain_step`).
+
+## 8. Wisdom Form on KH1's own states
+
+The tester (what-is-still-missing, after m13): "finish valor and wisdom form ... make sure when its
+in the new system that its 1:1 with kh2, our configs don't adjust anything on drive forms". Wisdom
+runs on the per-form path of §7.3 (`form::Kind::native_capable`), no KH2 controller step.
+
+### 8.1 Its moves, physics and Square
+
+**KH2's data (Checked (files): `P_EX100_MAGF.mset`, `00battle.bin`, `03system.bin`; moveset 3,
+form 2 in `kh2_data::sora::FORMS`):**
+- `prty` moveset 3: walk 2, run 12, jump 185, gravity 20/49, fall cap 16, air keep 0.9, drag 0.95,
+  **acceleration 0.85, brake 0.97** (base Sora's are 0 / 0).
+- PTYA: row 5 kind 3 motion 151 (the ground shot), row 3 kind 3 flag 0x4 motion 154 (the ground
+  finisher), rows 1 (kind 0), 9 (kind 3, air) and 40 (kind 0, air) motion 181 with a hop of 14 (the
+  air shot; no finisher in the air). No row 11 (no guard), no Square rows, no ability rows.
+- Its motions: idle 0 / 1 / 2 (no field variants), jump 3, fall 4, landing 5, item 9, reactions
+  10..19, Aerial Recovery 40, arrival 53, casts 56..73 (no 66 / 69), 151, 154, 181, Quick Run 203 /
+  204. No High Jump 201 and no recoils 41 / 43.
+- 151: allow movement 0..46, combo window from 36, shots (frame trigger 1) at 10 / 20 / 30. 154:
+  allow movement 10..80, Finishing Plus window 92..124. 181: allow movement all through, no gravity
+  16..40.
+
+**On KH1's states (`kh2slots::WISDOM_SPECS`, `FORM_SLOTS`):** 151 on KH1's ground combo requests
+0xC8..0xCA, 154 on 0xCB, 181 on 0xCC..0xCE; reactions, item use, fall, landing; jump 3 on both of
+KH1's takeoffs (0x4 / 0x9): KH2's jump start plays 201 only with High Jump (Steam KH2
+`0x140422630` / `0x1403B59B0`, Checked (decomp) at t627) and Wisdom's growth ability is Quick Run.
+Its plain combo rows and the Finishing Plus row (154) on our combo rows, its arrival 53 on ours,
+its Quick Run 203 / 204 on our Quick Run rows (`quickrun`). KH2's pick in KH1's picker reads
+Wisdom's PTYA (`form::native_data`). The slot cache's manifest notes Wisdom's files now
+(`pose::load_form_noting`): one rebake.
+
+**Physics** (`takeover::refresh_kh2_numbers`): the numbers above on KH1's states.
+**Ground inertia** (`shared::physics::ground_inertia`, new): KH2's free-state move (Steam KH2
+`0x140422350`) with the moveset's inertia flag calls `0x1403B7AD0 (player, out, dt, acceleration,
+brake)` (prty `+0x28` / `+0x2C` through the player's `+0x148`): stick pushed, velocity = target ×
+(1 − acceleration) + velocity × acceleration (`0x140141AE0`), target the stick's direction at the
+walk or run speed (`0x1403A8FA0`, run from 0.8); stick at rest, velocity × brake; move = velocity
+× dt. Checked (decomp). Taken per KH2 physics tick (two 60 Hz frames, as KH1's air steering here).
+KH1 keeps its walk / run / idle animation choice; the move is KH2's, so he slides to a stop in his
+idle. In KH1's actions on our slots (the shots, casts, landing) it steers inside the clip's
+allow-movement range (`kh2slots::allow_movement`) and brakes outside it. **Assumption**: KH2's
+attack actions use the same velocity function with the stick cleared outside range 41 (the caller
+in the attack action wasn't traced); KH1's air speed `+0x3C0` seeds the velocity on landing.
+
+**Square** (`shared::control`): KH2's action-button handler `0x1403A81F0` (Checked (decomp)) finds
+no glide, no Square rows, no row 11 and no dodge roll in Wisdom, so Square is Quick Run (growth kind
+1): on the ground from a free state, along the stick vector (none: his facing), stick pushed or not.
+On KH1's Quick Run state (`quickrun::start`) with Wisdom's level's numbers. KH1 sees no Square in
+Wisdom; in the air past the rise no jump (no Aerial Dodge, no glide).
+
+**Quick Run's level**: one level above Sora's own, MAX at most (`form::form_abilities`), the
+tester's rule for the forms' growth. **Assumption**: Sora's level is the equipped one KH1's menu
+gives (`menu::Growth`); KH2's own rule is the form's level (Lv 1 / 3 / 5 / 7 → LV1..MAX), which KH1
+has no form levels for.
+
+**Not done**: Aerial Recovery (40) isn't built for Wisdom (the native Aerial Recovery path isn't
+reached in a form, as in Valor). The no-gravity range of 181 is skipped because the clip allows
+movement all through (`kh2slots::no_gravity`, a main-branch rule from the user's s194, **not
+checked in KH2's decomp**).

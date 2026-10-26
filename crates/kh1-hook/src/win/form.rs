@@ -119,7 +119,7 @@ impl Kind {
     /// Runs on KH1's own states where it can (`native_ok`): its moves baked into KH1 slots
     /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others keep KH2's controller.
     pub fn native_capable(self) -> bool {
-        matches!(self, Kind::Valor)
+        matches!(self, Kind::Valor | Kind::Wisdom)
     }
     /// Its growth ability (KH2's form growth: Valor High Jump, Wisdom Quick Run, Final Glide).
     pub fn growth(self) -> &'static str {
@@ -429,7 +429,10 @@ fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abilities {
         // (Each form's growth ability at MAX: the user, Wisdom with Quick Run MAX; Valor's High
         // Jump the same.)
         high_jump: if kind == Kind::Valor { 4 } else { 0 },
-        quick_run: if kind == Kind::Wisdom { 4 } else { 0 },
+        // (Wisdom's Quick Run one level above Sora's own, at most MAX: the tester's rule for the
+        // forms' growth, what-is-still-missing after m13. Sora's level here is the one KH1's menu
+        // gives him equipped, `menu::Growth`.)
+        quick_run: if kind == Kind::Wisdom { (sora.quick_run + 1).min(4) } else { 0 },
         aerial_dodge: 0,
         // (Final's growth ability: Glide.)
         glide: if kind == Kind::Final { 4 } else { 0 },
@@ -598,6 +601,10 @@ pub fn abilities(d: &mut Drive, ch: &mut Character) {
             own.finishing_plus = f.sora.finishing_plus;
             own.negative_combo = f.sora.negative_combo;
             own.combo_master = f.sora.combo_master;
+            // (Wisdom's Quick Run follows Sora's, one level above, `form_abilities`.)
+            if f.kind == Kind::Wisdom {
+                own.quick_run = (f.sora.quick_run + 1).min(4);
+            }
             f.own = own.clone();
             ch.abilities = own;
         }

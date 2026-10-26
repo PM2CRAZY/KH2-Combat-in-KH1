@@ -655,7 +655,9 @@ pub fn load_kh2() {
             log!(Animation, "KH2 Sora loaded ({source:?} files): {} bones, {} motions ({} with field variants), in {:.1}s", rig.skeleton.len(), rig.motions.len(), rig.field_motions.len(), t.elapsed().as_secs_f32());
             let wisdom = if super::settings::get().drive {
                 let t = Instant::now();
-                match load_form(&install, source, kh2_data::sora::FORMS[1], rig.skeleton.len()) {
+                // (Its files noted for the slot cache: Wisdom's moves are baked into KH1 motion slots
+                // too, `kh2slots::FORM_SLOTS`, Wisdom Form native.)
+                match load_form_noting(&install, source, kh2_data::sora::FORMS[1], rig.skeleton.len(), true) {
                     Ok(f) => {
                         log!(Animation,
                             "KH2 Wisdom Form loaded: {} motions, {} combo rows, script {}, effects {}, in {:.1}s",
