@@ -12,6 +12,7 @@
 - [6. Assistant: Here's this round for (b) and the first part of (c). Each on](#^m6)
 - [7. Assistant: Here's this round:](#^m7)
 - [8. Assistant: Here's this round.](#^m8)
+- [9. Assistant: Thanks! Two versions this round:](#^m9)
 
 ---
 
@@ -249,9 +250,41 @@ go ahead
 
 ^m8
 
+
 for what your working on with glide and the command menu, make it a separate thread 
 
 1. (a) then make it a config in the tweaks config menu
 2. (a)
    
    go ahead
+> [!tip] Assistant
+> Thanks! Two versions this round:
+>
+> - **t656, casting out of the glide (answer 1).** Moved to its own thread as you asked: [Cast from Glide](../cast-from-glide/cast-from-glide.md). A KH2 spell picked while gliding now ends the glide and is cast in the air, as in KH2, with a Combat > Tweaks row "Cast from Glide" (Off | On, default On) to switch it. Details and what to test are there.
+>
+> - **t657, the loading screen (answer 2).** When the mod has something to build from your files (the first start, after an update, after a KH1 or KH2 file changes, or after changing `kh1_slots`, `kh1_leg_ik` or `keyblade_turn`), KH1 now waits just before it loads its title. While it waits, it shows what's being built in its own font, on its own frame:
+> - "KH2 Combat: building from your KH1 and KH2 files"
+> - "Building KH2 move 151 (12 of 96)", then "Saving the built moves"
+> - at the bottom: "This happens once, after an update or a change to your files"
+>
+> The title comes up on the frame the build finishes.
+>
+> How it's done: KH1's frame runs its game-mode machine first, and in state 2 that machine loads the title (`dktitle.rel`). While we're building, that one call is skipped. The rest of KH1's frame keeps running: window, pad, sound, task list, 2D work and present. The lines are drawn with KH1's own text routine (`0x1402CFBF0`, the one behind its own loading line), right after KH1's 2D work, where KH1 draws its own debug text. Once released, both call sites get KH1's original bytes back, so nothing of ours runs in KH1's frame after that.
+>
+> It can't get stuck. The hold ends when the loader ends, including when it fails or KH2 isn't installed, and after 90 s at the most (anything still unbuilt then carries on behind the title, as it did before). You can still close the game while it's held.
+>
+> One thing you'll notice: with a cache that matches, nothing is shown, but the title still waits on a black screen while the mod loads KH2 Sora and checks the cache. In your logs that load takes 0.2 to 0.7 s.
+>
+> Checked in the Steam KH1 decomp: the mode machine, that nothing else in KH1 reads or times state 2, the quit check and present carrying on, that no movie runs before the title, that the font table is loaded by then, and the text routine's arguments. Checked in the exe: both call sites' bytes and the state address. Not checked: in game; whether the font texture itself is ready by then (if it isn't, the lines would be missing but the hold still works); Epic (Steam only).
+>
+> Please test:
+> - Delete the `kh1-kh2-cache` folder next to the DLL and start the game. You should see the lines counting up, then the title. Log: "loading screen: KH1's title waits for the mod's loader", then "loading screen: title held N ms (F frames, shown); released: the build is done".
+> - Start again. No lines, title as usual. Log: "... (nothing shown) ..." with N under a second.
+> - Tell me if the screen goes white or freezes instead of black, or if the text is garbled or in the wrong place.
+>
+> Question:
+> 1. On starts where the cache matches, the title waits the fraction of a second it takes to check the cache. Should I (a) keep that wait (it's always this short), (b) not wait, so if a build turns out to be needed after the title has already started, it builds behind the title with no screen, or (c) show a short "Checking your files" line during that wait?
+
+^m9
+
+
