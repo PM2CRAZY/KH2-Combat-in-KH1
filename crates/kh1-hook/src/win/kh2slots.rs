@@ -1170,6 +1170,23 @@ pub unsafe fn air_root_form(actor: usize, dt: f32) -> Option<[f32; 3]> {
     root_travel(clip, t, dt, rd(actor + 0x3C))
 }
 
+/// A Drive Form's ground move playing on `actor` leaves the ground now: its clip in its no-gravity
+/// range (range id 3) with its root rising over the next `dt` 60 Hz frames. Valor's ground finisher
+/// 154: no gravity from 63 to its end, its root rising from 64 to 125 at 116 (Checked (files)
+/// `P_EX100_BTLF.mset`); KH2's mover keeps him off the floor in the range (`0x1403B9090` with
+/// `+0x18C` bit 5 set, `ground_hold`'s note, Checked (decomp)) and the root's rise carries him up.
+/// Base Sora's ground moves have no rising root but Finishing Leap's, entered in the air already
+/// (`kh1rows::Ours::rises`).
+pub unsafe fn lifts_off(actor: usize, dt: f32) -> bool {
+    let Some(m) = current(actor).filter(|m| m.form.is_some()) else { return false };
+    let Some(clip) = clip_of(m) else { return false };
+    if !no_gravity(actor) || !(dt > 0.0) {
+        return false;
+    }
+    let t: f32 = rd(actor + TIME_NOW);
+    root_travel(clip, t, dt, rd(actor + 0x3C)).is_some_and(|d| d[1] > 0.01)
+}
+
 /// A Drive Form's slot playing on `actor` is in its allow-movement range now (range id 41): KH2
 /// steers the air move with the stick there, as in a jump (`shared::physics`'s air step).
 pub unsafe fn form_air_steer(actor: usize) -> bool {

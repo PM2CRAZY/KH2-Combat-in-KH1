@@ -1350,6 +1350,8 @@ pub mod physics {
             ground_inertia(actor, disp);
             // KH2's edge stop in our slot's motion (either physics: it is the motion's own).
             edge_stop(actor, disp);
+            // A form's ground finisher that leaves the ground by its root (Valor's 154).
+            lift_off(actor);
             return r;
         }
         let r = f(actor, disp);
@@ -1467,6 +1469,42 @@ pub mod physics {
         d[0] = v[0] * dt + if action { d[0] } else { 0.0 };
         d[2] = v[1] * dt + if action { d[2] } else { 0.0 };
         true
+    }
+
+    /// KH1's state change (`0x1402AF7D0`, Steam via the map) and its air fields (`+0x3B0` air time,
+    /// `+0x3B4` the arc's base height, `+0x3B8` rise time, `+0x3BC` height, `+0x3D0` the landing
+    /// base), as KH1's own walk-off sets them for a fall from rest (`0x1402AF8F0 (actor, 0)`,
+    /// Checked (decomp), `quickrun::off_ledge`).
+    const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
+
+    /// A Drive Form's ground move rising by its root in its no-gravity range (`kh2slots::lifts_off`:
+    /// Valor's ground finisher 154 from frame 64): KH1's air state from here, the motion kept (its
+    /// action flag too), its arc at rest where he is, so KH1's air step holds him in the range and
+    /// the root's rise lifts him (`air_step`: `no_gravity` and `air_root`); after the move KH1's fall
+    /// (its queued idle turned into the fall, `kh1rows::queue_fall`), as KH2's move ends in the air
+    /// into its fall. The tester (drive-forms): "final finisher on ground doesn't put you in the air"
+    /// (KH1's ground state kept him on the floor: the bake keeps only the root's ground travel).
+    /// **Assumption**: KH1's state 2 with the swing's action flag runs the swing on to its end as in
+    /// state 0 (its air rows do).
+    unsafe fn lift_off(actor: usize) {
+        if rd::<i32>(actor + 0x70) != 0 || !super::super::kh2slots::lifts_off(actor, dt()) {
+            return;
+        }
+        let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base() + SET_STATE_RVA);
+        let y = rd::<[f32; 3]>(actor + 0x10)[1];
+        wr(actor + ARC_T, 0.0f32);
+        wr(actor + ARC_Y0, y);
+        wr(actor + ARC_UP_T, 0.0f32);
+        wr(actor + ARC_H, 0.0f32);
+        wr(actor + 0x3D0, 0u32);
+        set_state(actor, 2);
+        wr(actor, rd::<u32>(actor) & !0x1_0000);
+        wr(actor + 0x3C0, [0.0f32; 4]);
+        super::super::kh1rows::queue_fall(actor);
+        static N: AtomicU32 = AtomicU32::new(0);
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::super::log!(Takeover, "KH2 motion {:?} leaves the ground by its root (no-gravity range): KH1's air state from here, the move kept", super::super::kh2slots::playing_motion(actor));
+        }
     }
 
     /// KH2's edge stop factor: its ground mover sweeps the step lengthened by this times his
@@ -1891,8 +1929,14 @@ pub mod physics {
         wr(actor + VEL_Y, -up);
         d[0] = v[0] * dt;
         d[2] = v[1] * dt;
-        // (A Drive Form's air move: its root travel outside the hold too, `kh2slots::air_root_form`.)
-        if let Some(rt) = root.or_else(|| if held { None } else { super::super::kh2slots::air_root_form(actor, dt) }) {
+        // (A Drive Form's air move: its root travel outside the hold too, `kh2slots::air_root_form`.
+        // A form's move baked with its ground travel in its H10 (`kh2slots::moves_itself`: Valor's
+        // 154 lifted off, `lift_off`) has KH1 move him along by it still: only the root's height.)
+        if let Some(mut rt) = root.or_else(|| if held { None } else { super::super::kh2slots::air_root_form(actor, dt) }) {
+            if super::super::form::native_form().is_some() && super::super::kh2slots::moves_itself(actor) {
+                rt[0] = 0.0;
+                rt[2] = 0.0;
+            }
             add_root(actor, disp, rt);
         }
         r

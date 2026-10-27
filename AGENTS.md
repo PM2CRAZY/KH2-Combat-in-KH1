@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 740 (testing branch: Valor's ground finisher goes up)
+- **Valor's ground finisher goes up.** The tester (drive-forms): "final finisher on ground doesn't put you in the air". Checked (files): 154 has no gravity from 63 and its root rises 0 -> 125 over 64..116. `shared::physics::lift_off` puts him in KH1's air state 2 (`0x1402AF7D0` via the map) when a form's ground move rises by its root in its no-gravity range: motion kept, arc from rest, the queued idle becomes KH1's fall; with baked travel only the root's height is added in the air. Assumption: state 2 runs the swing to its end. Not checked in game.
+
 ### 2026-10-27: Stage 739 (testing branch: Valor's air finisher keeps its hop)
 - **Valor's air finisher keeps its hop.** The tester (drive-forms): "you drop a little bit before the hitboxes come out on final air finisher". Trace f14640: 184 started with no rise and fell ~50 before its hitboxes. 183's hold-end fall restart (KH2 `0x1403B4780`) measured the held frame and replaced 184's row hop of 14; a fresh hop is no longer restarted (`kh2_hop_as` clears the hold-last flag). Assumption: KH2's speed there is the hop's start speed (`+0xA3C` not traced). Not checked in game.
 
