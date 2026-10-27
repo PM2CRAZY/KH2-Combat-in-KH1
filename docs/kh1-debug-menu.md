@@ -87,6 +87,7 @@ the game".
 | Menus & Config | `log_menus` | `menu`, `config`, `shortcuts`, `equipmenu`, `gummi`, `styles` |
 | Debug Tools | `log_debug` | `debugmenu`, `frameadv`, `trace` |
 | Crash & Version | `log_crash` | `crash` (crash notes), panics, the version and game-build lines at start |
+| Cutscenes & Events | `log_cutscenes` | `cutscenelog` (KH1's scene prepares, event script runs, movie opens; t706) |
 
 Not changed: `kh1-kh2-other.log` (one line when another game in the folder loads the DLL; that
 process never reads the ini), the trace's own CSV files (debug tools), and

@@ -10,6 +10,7 @@ mod combomods;
 mod config;
 mod cosmetics;
 mod crash;
+mod cutscenelog;
 mod debugfont;
 mod debugmenu;
 mod drive;
@@ -130,10 +131,12 @@ pub enum LogCat {
     Debug,
     /// Crash notes, panics, and the version and game-build lines at the start.
     Crash,
+    /// KH1's cutscenes: scene prepares, event scripts, movies (`cutscenelog`).
+    Cutscenes,
 }
 
 impl LogCat {
-    pub const ALL: [LogCat; 14] = [
+    pub const ALL: [LogCat; 15] = [
         LogCat::General,
         LogCat::Loading,
         LogCat::Takeover,
@@ -148,6 +151,7 @@ impl LogCat {
         LogCat::Menus,
         LogCat::Debug,
         LogCat::Crash,
+        LogCat::Cutscenes,
     ];
 
     pub const fn bit(self) -> u32 {
@@ -171,6 +175,7 @@ impl LogCat {
             LogCat::Menus => "log_menus",
             LogCat::Debug => "log_debug",
             LogCat::Crash => "log_crash",
+            LogCat::Cutscenes => "log_cutscenes",
         }
     }
 
@@ -191,6 +196,7 @@ impl LogCat {
             LogCat::Menus => "Menus & Config",
             LogCat::Debug => "Debug Tools",
             LogCat::Crash => "Crash & Version",
+            LogCat::Cutscenes => "Cutscenes & Events",
         }
     }
 }
@@ -441,6 +447,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         debugmenu::install();
         if debug_on() {
             frameadv::install();
+            cutscenelog::install();
         }
         loadscreen::install();
         kh2sound::start();
