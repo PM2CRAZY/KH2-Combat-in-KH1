@@ -554,3 +554,6 @@ any fixes you find let me know.
 in the scene where phil gives you thunder, from a users stand point he doesn't have a question for you. it just gives you the item.
 
 go ahead
+
+update: I was actually wrong and loaded the wrong save file, ignore my message "the checks don't get restored if you auto reset and load your game, I went into merlin's house and bibby bobby boo was set to where I already had talked to her, even though on my reload that was my first time entering the room. same happened with the cheshire cat giving you blizzard early"
+
