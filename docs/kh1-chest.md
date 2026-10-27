@@ -99,6 +99,25 @@ contexts.
   treasure script: action 0x.. (argument ..) on Sora from function N done at once", "... its wait on
   Sora's motion (function 103 ...) goes on", "the open's time is over (...)" (Cutscenes & Events log).
 
+## KH2's own chest opening (round 2: what Sora does)
+
+- **KH2's Open** is command `0x1A5` in 03system's `cmd` table: execute 421 (its own id), action 0,
+  priority 100, no camera (Checked (files), the user's `03system.bin`). Reaction commands that play
+  a reaction on the player use execute 81 (119 entries, e.g. `0x1A7`); Assumption: that 81 is the
+  player-reaction path (not traced in the exe). The treasure box takes `0x1A5` as a message: its
+  handlers (Steam KH2 `0x140405ED0`, `0x140406020`) copy the box's prize data, play the box's own
+  motion `0x98` (the lid opening) with an 8-frame blend (`0x1403C86A0 (motion, 8.0, 0)`) and set its
+  state 6; set-up (`0x140402200`, `0x1404024E0`) picks `0x98` (opened) or `0x97` (closed). The item is
+  given by `trap_treasure_get` (BDX trap 1 / 362, `0x1404317F0`, its entry at `0x140756A10` of the 16-byte trap table).
+  KH2's player has no chest action: the action classes the exe's RTTI names (`ACTION_IDLE`,
+  `ACTION_JUMP`, `ACTION_GLIDE`, `ACTION_PRIZEBOX`, ...) have none for a chest (Checked (exe)).
+  So in KH2 Sora plays no open motion and isn't held: nothing to port for his side.
+- **KH2 setting.** KH1's handler asks for Sora's open motion (`0x900A6`); right after it, that pending
+  request is replaced by the motion Sora had before the Open (`+0x164`), with KH1's own request
+  `0x14029F980` (its third argument a float, XMM2; Checked (exe)). Line: "Chest Opening: KH1's open
+  motion request replaced by Sora's own motion 0x..". Assumption: re-asking for the motion already
+  playing doesn't restart it (`0x14029F7C0` compares the new motion with the one on).
+
 ## Not checked (Assumption)
 
 - KH2's own timings: KH2's treasure-box code (its BDX trap `trap_treasure_get`) wasn't in the

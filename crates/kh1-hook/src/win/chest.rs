@@ -79,6 +79,16 @@ const OPEN_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C,
 const ARG_KIND_STEAM: usize = 0x2DB7B30;
 const ARG_ITEM_STEAM: usize = 0x2DB7B34;
 const ARG_FULL_STEAM: usize = 0x2DB7B38;
+/// KH1's motion request `0x14029F980 (actor, request, f32 in XMM2)` (Steam, its first 10 bytes checked;
+/// Checked (decomp + exe): it replaces the one pending request, `+0x178` count 1, `+0x17C` the request) and the
+/// request the handler makes, the open motion (`0x900A6`, motion `0xA6`). The motion applied last is
+/// `+0x164` (low 16 bits).
+const REQUEST_STEAM: usize = 0x29F980;
+const REQUEST_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
+const OPEN_REQUEST: u32 = 0x900A6;
+const ACTOR_PENDING: usize = 0x178;
+const ACTOR_REQUEST: usize = 0x17C;
+const ACTOR_APPLIED: usize = 0x164;
 /// Sora's lock: actor `+0x444` bit 1 (the handler sets it; KH1's control step is skipped while it is).
 const ACTOR_LOCK: usize = 0x444;
 const LOCK_BIT: u32 = 2;
@@ -207,6 +217,7 @@ unsafe fn hook_in() {
 /// KH1's Open handler, then KH2's fast open for a plain chest.
 unsafe extern "system" fn open(sora: usize, chest: usize) {
     let orig: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_OPEN.load(Ordering::Acquire));
+    let before = if sora != 0 { rd::<u32>(sora + ACTOR_APPLIED) & 0xFFFF } else { 0 };
     orig(sora, chest);
     if !kh2() || sora == 0 {
         FAST_AT.store(0, Ordering::Relaxed);
@@ -232,6 +243,16 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
     // and lose them 132 frames later; he couldn't walk meanwhile): our call handler goes into KH1's
     // script machine for the open's time and gives the script's actions on Sora KH1's "no actor" path.
     call_handler_in(base);
+    // No open motion (the tester, answer 3 (b), as KH2: KH2's Open, command 0x1A5, is a message to the
+    // box, execute 421 / action 0 in 03system's cmd table, and the box plays its own lid motion 0x98;
+    // KH2's player has no open action): the handler's request for KH1's open motion is replaced by the
+    // motion Sora had, through KH1's own request.
+    let req = std::slice::from_raw_parts((base + REQUEST_STEAM) as *const u8, REQUEST_PROLOGUE.len());
+    if req == REQUEST_PROLOGUE && rd::<i32>(sora + ACTOR_PENDING) == 1 && rd::<u32>(sora + ACTOR_REQUEST) == OPEN_REQUEST {
+        let f: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
+        f(sora, before, 0.0);
+        log!(Cutscenes, "Chest Opening: KH1's open motion request replaced by Sora's own motion {before:#x}");
+    }
     let line = if kind == 3 {
         format!("{what} Munny")
     } else {
