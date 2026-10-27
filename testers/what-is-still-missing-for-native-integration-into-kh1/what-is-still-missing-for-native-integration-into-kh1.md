@@ -20,6 +20,7 @@
 - [14. Assistant: Thanks! I worked through Valor, then moved Wisdom over too. ](#^m14)
 - [15. Assistant: Thanks! All nine are in. 1 (a) and 5 (a) need no change: the](#^m15)
 - [16. Assistant: Thanks! Three versions this round. Two of your answers neede](#^m16)
+- [17. Assistant: Thanks! Four versions this round. Answers 1, 3 and 5 need no](#^m17)
 
 ---
 
@@ -742,6 +743,7 @@ go ahead
 
 ^m16
 
+
 1. (a) for now
 2. looks good but I wanna see how it looks with (b)
 3. (a)
@@ -752,3 +754,48 @@ go ahead
 8. if kh2's own air magic system takes a combo step then yes do it for all forms of magic when the magic combo setting is switched on. 
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! Four versions this round. Answers 1, 3 and 5 need no code now, and 6 needs a few answers first (below).
+>
+> **2, the left Keyblade through KH1's blend: t713**
+> - KH1 starts a blend between two motions with `0x140394080` (or `0x140393B30` if one is already running). Each blend frame it runs its blend pass `0x140392560` at a weight, and `0x140393F60` ends it. I checked all of this in the Steam KH1 decomp.
+> - The left Keyblade's holder now goes through those same KH1 functions, with Sora's weight, so the way the blade sits in his left hand blends over the same frames as his hand.
+> - To compare with t702's instant switch, set `left_blade_blend = off` in kh1-kh2.ini (on by default).
+>
+> **4, MP Haste: t714.** Wisdom LV6 now gives KH1's own MP Haste (off, with a "New Ability" box). It keeps KH1's effect for now. Once there's a KH2 MP system in the Config menu, it becomes MP Charge's MP Haste there; that's noted in docs/abilities.md. One catch: a save whose Wisdom already passed LV6 before t714 marked that reward as given, so it won't come.
+>
+> **7, AP: t715.** Every ability a form's level gave Sora (Combo Plus, Air Combo Plus, MP Rage, MP Haste) adds KH1's AP for it to his max AP while he has it, like the other gifts.
+>
+> **8, magic in the air: t716.** KH2's magic command (`0x1403D6FC0` → `0x1403D6CA0`) has no ground or air test, and the cast start measures the count against the air combo's length while he's airborne (`0x1403A9DD0` → `0x1403D7780`). So yes, in KH2 an air cast is the next step of the air combo, and the last one when it reaches the length. With Magic Combo at KH2:
+> - KH1's own air casts (Fire through Aero) take a step of the air combo.
+> - Wisdom's Gravity, Stop and Aero count as the combo's finisher on the ground, like base Sora's, and take a plain step in the air.
+> - KH2's air casts have no combo window of their own, so none was added. With Magic Combo at KH1 nothing changes.
+>
+> **1, 3, 5:** big recoil keeps taking a swing off; the Auto forms are on the list to build natively later; Form Boost waits for the Drive gauge.
+>
+> **6, vanilla progression.** Before I gut it, a few things change what I'd build, because the mod's progression isn't only extras:
+> - Most KH2-only abilities (Quick Run, Aerial Dodge, Upper Slash, Magnet Burst, Finishing Plus, Explosion, the other modifiers...) are only learned through the mod's own level and boss schedule. Take that out and nothing gives them.
+> - KH1's High Jump, Glide and Superglide are story abilities you need to get around, and KH2's growth for Dodge Roll and Aerial Dodge comes from Limit and Master, which aren't on KH1's states yet.
+>
+> Questions:
+> 1. How should base Sora get the KH2-only abilities once the custom schedule is gone? (a) KH2's own way: its level-up table (picked by your Dive choice, as KH2 picks by its Dawn choice) and its boss bonus table, with each KH2 boss bonus moved to the nearest KH1 boss; (b) keep only the KH2-only abilities on the mod's current level / boss schedule, and give KH1's own abilities back to vanilla; (c) something else you pick.
+> 2. "Its own custom ability slot": should the KH2 abilities get (a) a separate list of their own (new save bytes, shown after KH1's in the Abilities menu), so KH1's 48 slots are never touched and no KH1 ability is ever removed to make room; or (b) stay in KH1's 48 but never push a KH1 ability out?
+> 3. Growth only from form levels (answer 6 (b)): KH1's own High Jump and Glide stay KH1's story rewards. Should they count as (a) KH2's LV1 when KH1 gives them, rising only with Valor / Final levels (Superglide stays KH1's own Superglide); or (b) not count at all, so KH2's High Jump / Glide come only from the forms? And for Dodge Roll and Aerial Dodge, which in KH2 grow only with Limit and Master: (a) keep them at LV1 until those forms are native, or (b) keep the mod's growth for those two until then?
+> 4. Existing saves: should I (a) give back the KH1 abilities the mod took out or held back (they're listed in kh1-kh2-removed.txt and the log), or (b) leave saves as they are and only change new progress?
+> 5. The bonus AP for KH2 abilities: (a) keep it, or (b) go back to KH1's AP only?
+>
+> **Please test**
+> - **t713:** quick Valor chains (combo into finisher, attack out of a run, landing into an attack) and watch the left blade during the blends; then flip `left_blade_blend` off and on to compare. Also go back to the title and load a save, then check it still works (KH1 resets its memory there). Log lines: "its holder motion blended by KH1's own motion blend", "holder blend:", and after a reload "its local matrices made a block of KH1's heap".
+> - **t714 / t715:** Wisdom to LV6 should give MP Haste with a box; the AP log line now reads "... + n (form level abilities) = ...".
+> - **t716** (Magic Combo at KH2): two air swings, then a KH1 air spell, then Attack; an air spell as the third air step (it should end the combo); in Wisdom, a ground combo into Gravity, then Finishing Plus into another finisher, and Aero in the air. Log lines: "KH1's spell N in the air, Magic Combo KH2: step ..." and "the combo's finisher: step ...".
+>
+> Checked: the Steam KH1 and KH2 decomps for t713 and t716, the Steam exe for t713's hook bytes, your KH2 files (fmlv) for t714. Not checked: anything in game. Two assumptions are marked in AGENTS.md: the holder motions carry no IK chains, and Wisdom's clip 63 has a finisher range.
+>
+> Two smaller questions on t716:
+> 6. Wisdom's ground Gravity, Stop and Aero count as a finisher, like base Sora's KH1 spells. Should they (a) stay a finisher, or (b) be a plain step?
+> 7. KH2 also adds an air cast in a Finishing Plus window to the finisher count (`+0xD75`); ours doesn't yet (that's how air casts have worked since t486). Should I (a) add it, or (b) leave it?
+
+^m17
+
+
