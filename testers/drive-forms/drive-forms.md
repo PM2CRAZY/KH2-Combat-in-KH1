@@ -84,3 +84,19 @@ go ahead
 
 ^m2
 
+valor:
+1. sora doesn't properly grip the keyblades
+2. the 2nd keyblade is still disappearing when you move from one animation to the next. 
+3. I don't think the problem with the last finisher is because of how you coded valor but more because of sora' main physics/animation slots (guess) please look outside of valor to find the issue. 
+4. valors last ground finisher still doesn't bring you off the ground, it seems like a similar issue to how we fixed sora's square moves that send him off the ground so look at that.
+5. soras square finisher where he hits both keyblades on the ground are missing its effect that has a launch hitbox on it
+
+
+
+wisdom
+2. drive forms magic shouldn't be affected by the magic combo setting
+
+
+don't ask me for questions, just come back until you think its complete 
+
+go ahead
