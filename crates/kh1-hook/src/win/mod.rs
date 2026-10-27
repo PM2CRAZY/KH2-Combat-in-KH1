@@ -5,6 +5,7 @@
 mod addr;
 mod bodyhits;
 mod camera;
+mod chest;
 mod combat;
 mod combomods;
 mod config;
@@ -44,6 +45,7 @@ mod leftblade;
 mod lefthits;
 mod loadscreen;
 mod menu;
+mod kh2list;
 mod mpcost;
 mod model;
 mod pose;
@@ -427,6 +429,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         bodyhits::install();
         hurt::install();
         menu::install();
+        kh2list::install();
         camera::install();
         config::install();
         shortcuts::install();
@@ -443,6 +446,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         softreset::install();
         cutsceneskip::install();
         ingameskip::install();
+        chest::install();
         model::install();
         gates::install();
         // (Its voice group hook carries gameplay and always goes in; the log hooks only with the

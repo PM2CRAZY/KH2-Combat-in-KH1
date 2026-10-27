@@ -22,6 +22,7 @@
 - [16. Assistant: Thanks! Three versions this round. Two of your answers neede](#^m16)
 - [17. Assistant: Thanks! Four versions this round. Answers 1, 3 and 5 need no](#^m17)
 - [18. Assistant: Thanks! Three versions this round.](#^m18)
+- [19. Assistant: Thanks! I made the two new threads:](#^m19)
 
 ---
 
@@ -871,6 +872,7 @@ make soras base and any form that can do drive form magic this: aero is the same
 
 ^m18
 
+
 1. give kh2's its own ability list right next to sora, should be titled "KH2"
 2. (a)
 3. (b)
@@ -880,3 +882,15 @@ make soras base and any form that can do drive form magic this: aero is the same
 make a separate thread each for abilities and drive forms so we aren't getting clogged here.
 
 go ahead
+
+> [!tip] Assistant
+> Thanks! I made the two new threads:
+> - **Abilities** has t722 (your KH2 list) and t723 (Superglide as LV1), with what to test.
+> - **Drive Forms** lists where each form stands.
+>
+> The rest of your answers:
+> - **2 and 4:** no change needed. A form level waits for KH1's own High Jump or Glide, and Gravity and Aero keep Thunder's and Cure's cast animations.
+> - **5:** understood. If KH1's Thunder already plays its finisher on base animations, there's nothing to change, so I've left it.
+
+^m19
+

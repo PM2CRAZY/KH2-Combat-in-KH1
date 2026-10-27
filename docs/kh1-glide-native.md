@@ -10,7 +10,7 @@ reproduced here: plain-language notes only.
 - **Glide KH1**: KH1's own glide state 0x15 with KH1's own numbers, at either physics setting (t321).
   **Checked (code)**
 - **Glide KH2**: a *borrow* (`shared::GLIDE`, `takeover`): out of KH1's air, past the rise, a fresh Square with KH2's
-  Glide (our ability id 88, `growth::kh2_glide_level`) equipped and above KH2's start height hands Sora to KH2's
+  Glide (our ability id 88, `Kh1Sora::kh2_glide_now`: LV1, or Final's form level) equipped and above KH2's start height hands Sora to KH2's
   controller (`character-core`), which runs its own glide (speed, fall, turn, banking 206 / 207, hover 208, release
   into its fall), then gives him back to KH1's fall (`give_back`). KH2's stored launch speed (`LAUNCH`) is kept across
   the hand-back (t331). KH1 doesn't see its own glide inputs in the air at Glide KH2. **Checked (code)**

@@ -12,6 +12,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
 
 ## Contents
 
+- [Abilities](../testers/abilities/abilities.md)
+  - [1. Assistant: This is the abilities thread, split out of "What is still mi](../testers/abilities/abilities.md#^m1)
 - [Aerial Dodge native](../testers/aerial-dodge-native/aerial-dodge-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/aerial-dodge-native/aerial-dodge-native.md#^m1)
   - [2. Assistant: Thanks! For question 1 I went with (a), the fall at KH2's ap](../testers/aerial-dodge-native/aerial-dodge-native.md#^m2)
@@ -79,6 +81,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [3. Assistant: Done, one version each:](../testers/dodge-roll-guard-and-counterguard-native/dodge-roll-guard-and-counterguard-native.md#^m3)
 - [Drive Forms native](../testers/drive-forms-native/drive-forms-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/drive-forms-native/drive-forms-native.md#^m1)
+- [Drive Forms](../testers/drive-forms/drive-forms.md)
+  - [1. Assistant: This is the Drive Forms thread, split out of "What is still ](../testers/drive-forms/drive-forms.md#^m1)
 - [Frame advance in the debug menu](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md)
   - [1. Mr. Bugs: Can you add a frame advance feature into the debug menu? whe](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m1)
   - [2. Assistant: Sounds useful, and since it's a debug menu tool the match-KH](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m2)
@@ -127,6 +131,9 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [14. Assistant: t497 and t498. Your design note is now in docs/design-philos](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m14)
   - [15. Assistant: t522: L2 Stick Menu](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m15)
   - [16. Assistant: t601: the camera hold is on R2 now.](../testers/kh2-camera-fixes/kh2-camera-fixes.md#^m16)
+- [KH2 Chest](../testers/kh2-chest/kh2-chest.md)
+  - [1. Mr Bugs: I want to add a config in the tweaks menu that lets use quic](../testers/kh2-chest/kh2-chest.md#^m1)
+  - [2. Assistant: t724 adds a new row in Combat > Tweaks: Chest Opening (KH1  ](../testers/kh2-chest/kh2-chest.md#^m2)
 - [KH2 effects in KH1's own effect system](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md)
   - [1. Mr Bugs: from chat-history-log.md (kh2 moves hitbox effect bugs)](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m1)
   - [2. Assistant: t376](../testers/kh2-effects-in-kh1s-own-effect-system/kh2-effects-in-kh1s-own-effect-system.md#^m2)
@@ -315,6 +322,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [16. Assistant: Thanks! Three versions this round. Two of your answers neede](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m16)
   - [17. Assistant: Thanks! Four versions this round. Answers 1, 3 and 5 need no](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m17)
   - [18. Assistant: Thanks! Three versions this round.](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m18)
+  - [19. Assistant: Thanks! I made the two new threads:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m19)
 
 ---
 

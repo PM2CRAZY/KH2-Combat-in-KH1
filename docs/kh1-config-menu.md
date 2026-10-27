@@ -52,7 +52,9 @@ game before relying on it.
 | +0x2A | 2 × u8 | padding in the `12c` group, unused | | med |
 | +0x2C | i32 | Config row 6: **Mode** (Beginner / Standard / Proud), read-only in the menu (pressing it plays the buzzer) | 0..2, default 1; getter `0x1402F8BA0` (14 gameplay callers), set by the new-game screen (`0x1403095B0`, setter `0x1402F8E80`); end-of-game awards in `0x1401C7700` test it | high (storage), med (name) |
 | +0x30..+0x74 | | Journal flags and bitfields (`0x1402D90A0` clears them; `0x1402D9010` / `0x1402D92A0` bit arrays at `+0x3C`; `+0x6C` bit array; `+0x70` bit 0 = "new journal entry" marker on the pause menu; `+0x74` read by the journal) | | high |
-| +0x78..+0x3FF | | **unused, saved, zeroed at new game** | | med |
+| +0x78..+0x3BF | | **unused, saved, zeroed at new game** | | med |
+| +0x3C0..+0x3EF | 48 × u8 | **the mod's KH2 ability list** (`growth::KH2_LIST_OFF`, `docs/abilities.md` "The KH2 list"); Steam decomp re-checked: no access through `0x142E1F4D8` past `+0x74` | | med |
+| +0x3F0..+0x3FF | | unused, saved, zeroed at new game | | med |
 
 The menu reads and writes the rows only through `0x1402F8EC0(row)` and `0x1402F8F90(row,
 value)`. These map rows 0, 1, 2, 3, 4, 5 to `+0x00`, `+0x04`, `+0x08`, `+0x10`, `+0x14`,
@@ -469,3 +471,11 @@ The QoL list has a third row, Cutscene Skip (Off | Seen | All, ini `cutscene_ski
 ### 6.z5 In-game Scene Skip in QoL (t712)
 
 The QoL list has a fourth row, In-game Scene Skip (Off | On, ini `ingame_skip`, off by default): skips the in-game dialog scenes the pause menu can't skip, with KH1's own skip, so the items and flags they give are still given. Talks, shops, scenes with a choice and the pause menu's skippable cutscenes are left alone. New text ids `0x7F000221` / `0x7F000222`. How it works and what is checked: `docs/kh1-ingame-skip.md`.
+
+### 6.z6 Chest Opening in Tweaks
+
+The Tweaks list has a thirteenth row (after t721's Small Blows), Chest Opening (KH1 | KH2, ini `chest_style`, KH1 by default):
+at KH2 Sora is free as soon as a plain chest is opened and what it held shows in KH1's notice box,
+with no window to close. New text ids `0x7F000225` / `0x7F000226`. How it works and what is
+checked: `docs/kh1-chest.md`. **Assumption** until seen: thirteen rows at the list's smaller scale
+still clear the help box (`list_scale` sizes it).
