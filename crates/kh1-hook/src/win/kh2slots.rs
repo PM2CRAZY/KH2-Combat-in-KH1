@@ -1431,6 +1431,8 @@ fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: 
     // (Valor's keys as before: its model's name, "P_EX100_BTLF".)
     if let Some(k) = form {
         h.str(k.model());
+        // (The form's own Keyblade hold on KH1's grip, `pose::form_grip`: the forms' bakes once.)
+        h.str("form grip");
     }
     h.finish()
 }

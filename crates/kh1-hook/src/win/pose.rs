@@ -1213,6 +1213,52 @@ pub struct Baker {
     pub skeleton: Vec<kh2_formats::anim::Bone>,
     retarget: Retarget,
     secondary: kh1_data::secondary::Secondary,
+    /// Base Sora's grip: his Keyblade's root in his right hand's space (`W_EX010` motion 0, frame
+    /// 0), the hold KH1's rest grip stands for (`form_grip`).
+    base_grip: Option<Mat4>,
+}
+
+/// A Drive Form's own hold of its right Keyblade on KH1's grip bone (the tester, drive-forms:
+/// "sora doesn't spin his keyblade on the idle animation" in Wisdom). KH2 poses the Keyblade by
+/// the form's weapon motion (`W_EX010_MAGF` for Wisdom, `W_EX010_BTLF_R` for Valor) on the hand
+/// bone 178 (Checked (files): Wisdom's idle 0 turns the root 75..246 degrees from base Sora's
+/// hold over its 142 frames, the twirl; base Sora's own stays within 8 degrees of it in his idle and
+/// swings; Valor's 181 holds it some 95 degrees round). The bake kept KH1's rest grip for every
+/// motion, so the form's twirls and changes of hold never showed. Now the form's turn of its
+/// Keyblade root from base Sora's hold (`base_grip`), in model axes through KH2's hand, turns KH1's
+/// grip bone (280) and everything under it about the grip, and moves it by the root's shift; the
+/// keychain then hangs from it (`secondary`). Base Sora's bakes are unchanged. **Assumption**:
+/// KH1's rest grip stands for base Sora's KH2 hold (the two look alike in game), and KH1's hand
+/// faces as KH2's (the retarget aims the forearm and hand as KH2's); the shift is in KH2's units.
+fn form_grip(kh1: &mut [Mat4], parents: &[i16], hand: Mat4, root_in_hand: Mat4, base_grip: Mat4) {
+    let grip = kh1_data::retarget::GRIP_BONE;
+    if grip >= kh1.len() {
+        return;
+    }
+    let (_, hr, _) = hand.to_scale_rotation_translation();
+    let (_, now_r, now_t) = root_in_hand.to_scale_rotation_translation();
+    let (_, ref_r, ref_t) = base_grip.to_scale_rotation_translation();
+    let turn = hr * now_r * ref_r.inverse() * hr.inverse();
+    let shift = hr * (now_t - ref_t);
+    let g = kh1[grip].w_axis.truncate();
+    let x = Mat4::from_translation(g + shift) * Mat4::from_quat(turn.normalize()) * Mat4::from_translation(-g);
+    if !x.is_finite() {
+        return;
+    }
+    for i in grip..kh1.len().min(SORA_BONES as usize) {
+        let mut p = Some(i);
+        for _ in 0..24 {
+            match p {
+                Some(q) if q == grip => {
+                    kh1[i] = x * kh1[i];
+                    break;
+                }
+                Some(q) if q < grip => break,
+                Some(q) => p = parents.get(q).copied().filter(|x| *x >= 0).map(|x| x as usize),
+                None => break,
+            }
+        }
+    }
 }
 
 impl Baker {
@@ -1225,7 +1271,11 @@ impl Baker {
             retarget.set_rest_open(&m.apply(&skeleton, 0.0));
         }
         let secondary = kh1_data::secondary::Secondary::new(&skeleton, &kh2.rig.skeleton, kh2.rig.weapons.first().map(|w| w.skeleton.as_slice()));
-        Baker { skeleton, retarget, secondary }
+        let base_grip = kh2.rig.weapons.first().and_then(|w| {
+            let m = w.motions.get(&character_core::motion::IDLE)?;
+            kh2_anim::evaluate(&w.skeleton, m, kh2_anim::key_time(m, 0.0, true), kh2_anim::Options::default()).bones.first().copied()
+        });
+        Baker { skeleton, retarget, secondary, base_grip }
     }
 
     /// KH1's pose (model space) at each frame `0..=frames` of KH2's `motion`, as a tier A slot
@@ -1275,6 +1325,10 @@ impl Baker {
             // the keychain, as `check` does: the chain hangs from the turned pommel.
             if set.keyblade_turn {
                 turn_grip(&mut kh1, &parents);
+            }
+            // (A Drive Form's own hold of its Keyblade, `form_grip`.)
+            if let (Some(_), Some(base_grip), Some(root), Some(hand)) = (src.form, self.base_grip, weapon.first(), rig.weapons.first().and_then(|w| w.bone).and_then(|b| body.get(b))) {
+                form_grip(&mut kh1, &parents, *hand, hand.inverse() * *root, base_grip);
             }
             {
                 self.secondary.apply(&mut kh1, &body, (!weapon.is_empty()).then_some(weapon.as_slice()), kh1_data::secondary::Parts::ALL);

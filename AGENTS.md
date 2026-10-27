@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 734 (testing branch: A Drive Form's own Keyblade hold)
+- **A Drive Form's own Keyblade hold.** The tester (drive-forms): "sora doesn't spin his keyblade on the idle animation". Checked (files): `W_EX010_MAGF` motion 0's root turns 75..246 degrees from base Sora's hold (base Sora's within 8; Valor's about 95). `pose::form_grip`: form bakes turn bone 280's subtree by the form's root turn, in model axes through KH2's hand 178; form slot keys salted (one rebake). Assumption: KH1's rest grip stands for base Sora's KH2 hold. Not checked in game.
+
 ### 2026-10-27: Stage 733 (testing branch: Gravity's finisher back)
 - **Gravity's finisher back.** The tester (drive-forms): "gravity doesn't have a finisher". Trace f23582 and the log: 62 on every cast. t719's ground-role pick in `combat::command` was dropped by t721's commit (made from an older combat.rs); restored. Checked (code). Not checked in game.
 
