@@ -1053,13 +1053,12 @@ The tester: "build form levels into KH1" (KH2 uses the form's own level for its 
   413; Final Auto Final 388, Form Boost 398 twice (Limit 568 / 405 / 407, Master 387 / 163 twice:
   not on the testing branch).
   - **Growth** (`formlevel::sora_growth`, `formexp::base_growth`, `growth::FormGrowth`): base
-    Sora's High Jump / Quick Run / Glide level is the higher of the mod's own rule (his level,
-    bosses) and the form's level less one. KH2's swap only raises an entry he has, so a form never
-    lowers it. Without the ability, KH2 puts LV1 in an empty slot: here KH1's High Jump goes into
-    the shared list (on, as KH1's shared abilities come), our Quick Run into Sora's list (off, 2 AP,
-    whose AP joins the bonus AP), KH1's Glide for Final (the Glide style swaps it). Assumption: KH2
-    gives the growth entry equipped or not as its slot was (bit 15 kept); here they follow the
-    mod's own gifts.
+    Sora's High Jump / Quick Run / Glide level is the form's level less one, LV1 at least while he
+    has the ability; since the vanilla progression (the tester, what-is-still-missing after m16,
+    answer 6 (b), and after m17) his own level and bosses give none. KH2's swap only raises an
+    entry he has, so a form never lowers it. Without the ability, KH2 puts LV1 in an empty slot;
+    here a form's level no longer gives KH1's High Jump or Glide (KH1's list stays vanilla: they
+    count once KH1's story gives them), and Quick Run is his anyway (all of ours are).
   - **Abilities** (`formlevel::rewards_due`, `growth::kh1_reward`): KH1's own counterparts, off until
     equipped, each with a "New Ability" box: Combo Plus 162 → KH1's Combo Plus (6), Air Combo Plus
     163 → KH1's 7, MP Rage 412 → KH1's MP Rage (24: KH1's own effect, MP when hurt; Assumption that

@@ -509,7 +509,9 @@ unsafe fn time_kh1_spell(actor: usize, spell: u8, request: u32, started: u64) {
     if !(1..=6).contains(&spell) || started < 0x10000 || !anim_kh2(spell) || kh2_spell(spell) && spell <= 3 {
         return;
     }
-    let Some(motion) = super::kh2slots::cast_motion(request as usize) else { return };
+    // (The cast picked for the request, `kh2slots::cast_now`: Gravity's Thunder finisher cast 63
+    // when it is the combo's finisher.)
+    let Some(motion) = super::kh2slots::cast_now(request as usize) else { return };
     let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&motion)) else { return };
     let casts = |want: bool| clip.events.iter().find(|e| matches!(e.kind, character_core::EventKind::MagicCast(x) if !want || x as u16 == motion)).map(|e| e.frame as f32);
     let Some(upto) = casts(true).or_else(|| casts(false)).filter(|f| *f > 0.0) else { return };
@@ -572,10 +574,20 @@ pub unsafe fn note_step(actor: usize, air: bool) -> Option<(u8, bool)> {
     let stats = pose::ptr(rd::<u32>(actor + 0x6C));
     // The cast's step of the combo (KH2's `spell_slot`: in the air every step counts, KH2's
     // `swing_counts`), kept for its start (`kh1_spell_start`, the tester's answer 1 (a)).
+    // (Taken in Stop-as-Magnet's Finishing Plus window: KH2's `+0xD75` one more, `0x1403D6CA0`,
+    // though the cast it comes out of was no finisher.)
+    let magnet = magnet_window(actor) == Some(true);
     let step = (info >= 0x10000 && stats >= 0x10000).then(|| {
         let live = rd::<u32>(actor + 0x1CC) >> 22 & 1 != 0;
         let count = rd::<u8>(info + 0x41) as u32;
         let max = rd::<u8>(stats + if air { 0xD5 } else { 0xD4 }).max(1) as u32;
+        // (A new combo; or Magnet's window out of a mid-combo Stop. At the length Stop is noted as
+        // the combo's finisher and its window counts as a finisher's, `CHAINED`.)
+        if !live {
+            super::combomods::new_combo();
+        } else if magnet && count < max {
+            super::combomods::spend_finisher_window();
+        }
         // (KH2's magic command is checked with the window test on whatever hit, `0x1403D6FC0` →
         // `0x1403D6CA0 (actor, 1)`: in a combo or finisher window a cast always counts on; only
         // the Attack command needs the last move to have connected, `take_step`. Checked (decomp).)
@@ -624,7 +636,14 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
     }
     let (step, last) = ((v & 0xFF) as u8, v >> 8 & 1 != 0);
     let finisher = finisher && last && !air;
-    super::combomods::cast_step(step, request & 0xFFFF, finisher, chained, air);
+    // (An air cast taken in an air finisher's Finishing Plus window (the count already at the air
+    // length, `CHAINED`): KH2's `0x1403D6CA0` adds one to the finisher count `+0xD75` there for the
+    // magic command as for the Attack, whatever the cast plays (Checked (decomp)); noted as the next
+    // finisher of the combo (`combomods::cast_step` chained), though KH2 has no air finisher cast
+    // and so nothing follows it (its air cast has no window). The tester, what-is-still-missing
+    // m17 question 7: "add it".)
+    let air_chained = air && chained && last;
+    super::combomods::cast_step(step, request & 0xFFFF, finisher || air_chained, chained, air);
     let plus = finisher && super::combomods::finisher_left();
     wr(info + 0x41, if last && !plus { 0u8 } else { step });
     // (KH2 clears its "connected" flag, `+0x120` bit 0x2000000, as the cast is taken
@@ -639,6 +658,8 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
         "KH2 magic: the cast takes step {step} of KH1's combo{}",
         if plus {
             if chained { " (Finishing Plus's next finisher; another left)" } else { " (its finisher; Finishing Plus leaves another)" }
+        } else if air_chained {
+            " (in the air finisher's Finishing Plus window: counted as the next finisher; the air combo ends)"
         } else if last {
             " (its last: the combo ends)"
         } else {
@@ -720,9 +741,24 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     if sora && kh1_cast_step(spell) && KH1_WINDOW_REQUESTS.contains(&request) {
         take_step(actor, request, false, false);
     }
-    // (Gravity and Stop: the combo's finisher, `finisher_spell`; Wisdom's too at Magic Combo KH2.)
+    // (Gravity, Stop and Aero at Magic Combo KH1 with their animation rows at KH2: the combo's
+    // finisher, `finisher_spell`, t644 / t651.)
     if (sora || wisdom) && finisher_spell(request) {
         take_step(actor, request, true, false);
+    }
+    // (At Magic Combo KH2: KH2 Thunder's, Magnet's and Cure's roles, `ground_role`; their step
+    // noted at the command, `combat::command`. A finisher only as KH2's: Thunder's finisher cast
+    // 63 picked at the length (on KH2's animation), Magnet's cast at the length (its own clip is a
+    // finisher's, range id 50 only), Cure never.)
+    if sora || wisdom {
+        if let Some(role) = ground_role(request) {
+            let finisher = match role {
+                Role::Thunder => anim_kh2(4) && super::kh2slots::cast_now(request as usize) == Some(THUNDER_FINISHER),
+                Role::Magnet => true,
+                Role::Cure => false,
+            };
+            take_step(actor, request, finisher, false);
+        }
     }
     // (KH1's own air cast at Magic Combo KH2: its step of the air combo, as KH2's air casts take
     // one, `kh1_air_cast_step`; noted at the command, `combat::command`.)
@@ -770,8 +806,88 @@ pub unsafe fn kh1_air_cast_step(spell: i32) -> bool {
     !super::form::in_form()
 }
 
-/// KH1's ground Gravity (0x3A) and Stop (0x3B) cast requests (KH1's request table, Checked (files)).
+/// KH1's ground Gravity (0x3A), Stop (0x3B) and Aero (0x3C) cast requests (KH1's request table,
+/// Checked (files)).
 pub const FINISHER_SPELL_REQUESTS: [u32; 3] = [0x3A, 0x3B, 0x3C];
+
+/// KH2's spell whose part in the combo KH1's Gravity, Stop or Aero takes at Magic Combo KH2 (the
+/// tester, what-is-still-missing after m17: "make soras base and any form that can do drive form
+/// magic this: aero is the same as kh2 cure, gravity is the same as thunder, stop is a finisher
+/// like magnet").
+///
+/// **Checked (decomp)**, Steam KH2: the cast start `0x1403A9DD0` asks `0x1403D7780 (p, 0)` whether
+/// the count has reached the combo's length (no other per-spell rule) and hands that to
+/// `0x1403C5170 (p, spell, at_length)`, which on the ground plays the MAGC row's finisher motion
+/// (`+0x2C`) when at the length and the row has one, else its ground motion (`+0x28`); in the air
+/// always its air motion (`+0x30`). The count itself is the magic command's (`0x1403D6CA0`, one
+/// rule for every spell). So a spell's part in the combo is its MAGC motions and the windows on
+/// them. **Checked (files)**, `00battle.bin` MAGC (every level) and `P_EX100.mset` /
+/// `P_EX100_MAGF.mset`:
+/// - Thunder: 62 / finisher 63 / air 64. 62 has its combo window (range id 35 naming 62, from 42 of
+///   its 68 frames at 60 per second); 63 is the finisher cast (range id 50, 42..78; no combo window).
+/// - Cure: 65 / none / 67. 65 is Thunder's 62 animation (A364) with its ranges copied, so range id
+///   35 names 62, not 65: no combo window, no finisher window; at the length it is the last step and
+///   the combo ends.
+/// - Magnet: 68 / none / 70. 68 is Thunder's finisher animation (A365) with its ranges: only the
+///   Finishing Plus window (range id 50, 42..78) and no combo window. Its step is a plain one (the
+///   count one more, the finisher count `+0xD75` untouched), so mid-combo nothing follows it but
+///   Finishing Plus's window (`+0xD75`, 1 from a new combo, under 1 + Finishing Plus), and what
+///   follows there spends one Finishing Plus (`combomods::spend_finisher_window`).
+/// - Every air motion (64, 67, 70) is the same clip (A372 / Wisdom's C372) with no combo or
+///   finisher window: a plain step of the air combo, as `kh1_air_cast_step` takes it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Role {
+    Thunder,
+    Magnet,
+    Cure,
+}
+
+/// KH2's Thunder finisher cast (MAGC, Checked (files)).
+pub const THUNDER_FINISHER: u16 = 63;
+
+/// The ground requests and the role each takes (Gravity Thunder's, Stop Magnet's, Aero Cure's).
+const ROLE_REQUESTS: [(u32, Role); 3] = [(0x3A, Role::Thunder), (0x3B, Role::Magnet), (0x3C, Role::Cure)];
+
+/// KH2's roles for KH1's Gravity, Stop and Aero apply now: the Magic Combo row at KH2, base Sora on
+/// KH1's own states, or Wisdom on them (`wisdom_combo`); Valor has no magic and the forms on KH2's
+/// controller are left as they are.
+pub unsafe fn roles_on() -> bool {
+    super::shared::active() && super::styles::kh2(super::styles::Kind::MagicCombo) && (!super::form::in_form() || wisdom_combo())
+}
+
+/// The KH2 role (`Role`) of KH1's ground cast request `request` now (`roles_on`), if it is Gravity's,
+/// Stop's or Aero's.
+pub unsafe fn ground_role(request: u32) -> Option<Role> {
+    if !roles_on() {
+        return None;
+    }
+    ROLE_REQUESTS.iter().find(|r| r.0 == request).map(|r| r.1)
+}
+
+/// Stop as Magnet (`Role::Magnet`) playing on the ground on `actor`: whether its Finishing Plus
+/// window is open now (KH2's range id 50 on Magnet's 68, 42..78, with Finishing Plus's next
+/// finisher left, `combomods::finisher_left`). On our slot of 68 (its animation row at KH2) from the
+/// clip itself (`kh2slots::cast_finisher_open`); on KH1's own animation at the same share of KH1's
+/// motion (an **Assumption**, as every window placed on KH1's own casts). `None`: Stop as Magnet
+/// isn't playing.
+pub unsafe fn magnet_window(actor: usize) -> Option<bool> {
+    let request = rd::<u32>(actor + 0x164) & 0xFFFF;
+    if rd::<i32>(actor + 0x70) != 0 || ground_role(request) != Some(Role::Magnet) {
+        return None;
+    }
+    if super::kh2slots::cast_playing(actor) {
+        return Some(super::kh2slots::cast_finisher_open(actor));
+    }
+    if !super::combomods::finisher_left() {
+        return Some(false);
+    }
+    let Some((a, b)) = super::kh2slots::finisher_share(MAGNET_GROUND) else { return Some(false) };
+    let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
+    Some(t >= 0.0 && len > 0.0 && t / len >= a && t / len < b)
+}
+
+/// KH2's Magnet ground cast (MAGC, Checked (files)).
+const MAGNET_GROUND: u16 = 68;
 
 /// Gravity, Stop or Aero (Aero since t651, the tester, m30: "also forgot to add aero to the list";
 /// on KH2's animation each plays KH2's Thunder finisher cast 63, `kh2slots::CASTS`) cast on the
@@ -783,15 +899,17 @@ pub const FINISHER_SPELL_REQUESTS: [u32; 3] = [0x3A, 0x3B, 0x3C];
 /// animation row at KH2: KH2's Thunder cast 62 for Gravity, Cure's 65 for Stop) always, on KH1's
 /// own with the Magic Combo row at KH2. Base Sora on KH1's states; in a Drive Form only Wisdom's on
 /// KH1's own states, with the Magic Combo row at KH2 (`wisdom_combo`).
+///
+/// Since the tester's "aero is the same as kh2 cure, gravity is the same as thunder, stop is a
+/// finisher like magnet" (after m17), only at Magic Combo KH1: at KH2 the three take KH2's roles
+/// (`ground_role`). Wisdom never at KH1 (as before t716).
 pub unsafe fn finisher_spell(request: u32) -> bool {
     let Some(i) = FINISHER_SPELL_REQUESTS.iter().position(|&r| r == request) else { return false };
     let spell = 4 + i as u8;
-    // (Wisdom's, at Magic Combo KH2 only: Wisdom always plays its own cast motions, so `anim_kh2`
-    // is no test there; the tester, what-is-still-missing m16 answer 8.)
-    if super::form::in_form() {
-        return wisdom_combo();
+    if super::form::in_form() || super::styles::kh2(super::styles::Kind::MagicCombo) {
+        return false;
     }
-    super::shared::active() && (anim_kh2(spell) || super::styles::kh2(super::styles::Kind::MagicCombo))
+    super::shared::active() && anim_kh2(spell)
 }
 
 /// The finisher step of Gravity or Stop (`finisher_spell`), worked out at the command
@@ -814,7 +932,7 @@ pub unsafe fn note_finisher_step(actor: usize) -> Option<u8> {
 /// Gravity or Stop playing on the ground as the combo's finisher (`finisher_spell`; KH1's
 /// request `+0x164`): whether an Attack or a spell may follow now. Only in KH2's Finishing Plus
 /// window, placed at the same share of the motion as on KH2's own finisher cast of the cast
-/// animation it plays on (Gravity: Thunder's finisher cast 63, Stop: Cure's 68, both 42..78,
+/// animation it plays on (Gravity: Thunder's finisher cast 63, Stop: Magnet's 68 (MAGC; not Cure's), both 42..78,
 /// `kh2slots::finisher_share`; an **Assumption**: KH2 has no Gravity or Stop to read it from),
 /// while Finishing Plus leaves another finisher (`combomods::finisher_left`, KH2's count). `None`:
 /// neither plays.
@@ -878,11 +996,27 @@ pub unsafe fn kh1_cast_window(actor: usize) {
         }
         return;
     }
+    // (Stop as Magnet on KH1's own animation: Magnet's Finishing Plus window only, `magnet_window`;
+    // on our slot of 68 `kh2slots::finisher_window` opens it from the clip.)
+    if !super::kh2slots::cast_playing(actor) && magnet_window(actor) == Some(true) {
+        let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+        if inst >= 0x10000 {
+            wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
+            static M: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            if super::log_on(super::LogCat::Magic) && M.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Magic, "Stop as KH2's Magnet: Magnet's Finishing Plus window on KH1's cast (time {:.1}): KH1's combo window", rd::<f32>(actor + 0x16C));
+            }
+        }
+        return;
+    }
     if !kh1_cast_step(0) || rd::<i32>(actor + 0x70) != 0 {
         return;
     }
     let request = rd::<u32>(actor + 0x164) & 0xFFFF;
-    if !KH1_WINDOW_REQUESTS.contains(&request) || super::kh2slots::cast_playing(actor) {
+    // (Gravity as Thunder and Aero as Cure, `ground_role`, on KH1's own animation: what KH1's own
+    // Thunder and Cure get there, the tester's §4c.3 rule.)
+    let role = matches!(ground_role(request), Some(Role::Thunder | Role::Cure));
+    if !(KH1_WINDOW_REQUESTS.contains(&request) || role) || super::kh2slots::cast_playing(actor) {
         return;
     }
     let Some(share) = super::kh2slots::combo_share(56) else { return };

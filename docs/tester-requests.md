@@ -56,6 +56,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [30. booglechan: continue on from my config menu reorganization:](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m30)
   - [31. Assistant: t712 adds a new QoL row, In-game Scene Skip (Off  On, off by](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m31)
   - [32. Assistant: t717: Trinities now skip under the same row, In-game Scene S](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m32)
+  - [33. Assistant: Thanks for the correction on the reload. No version this rou](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m33)
 - [Baking the rest of the base animations](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m1)
   - [2. Assistant: Thanks! Three versions, one step of the plan each:](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m2)
@@ -313,6 +314,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [15. Assistant: Thanks! All nine are in. 1 (a) and 5 (a) need no change: the](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m15)
   - [16. Assistant: Thanks! Three versions this round. Two of your answers neede](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m16)
   - [17. Assistant: Thanks! Four versions this round. Answers 1, 3 and 5 need no](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m17)
+  - [18. Assistant: Thanks! Three versions this round.](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m18)
 
 ---
 

@@ -47,9 +47,9 @@ rows are `KH1_ABILITIES`, and ours are `MENU`.
 
 | Id | Ability | While KH2 has Sora |
 |---|---|---|
-| 1 | High Jump | `Kh2`: KH2's High Jump at Sora's growth level (LV2 at 30, LV3 at 44, MAX at 58) |
+| 1 | High Jump | `Kh2`: KH2's High Jump LV1, higher only from Valor's form level |
 | 2 | Mermaid Kick | `Kh1Own` (KH1's swimming) |
-| 3 | Glide | `Kh2`: KH2's Glide, LV2 at 40, LV3 at 52 |
+| 3 | Glide | `Kh2`: KH2's Glide LV1, higher only from Final's form level |
 | 4 | Superglide | `Kh2`: KH2's Glide MAX |
 | 5 | Treasure Magnet | `Kh1Own` |
 | 6 | Combo Plus | `Kh2`: Combo Plus, one per copy |
@@ -64,7 +64,7 @@ rows are `KH1_ABILITIES`, and ours are `MENU`.
 | 19 | Counterattack | `Hook` (was Counterguard) |
 | 20 | Blitz | `Hook` (was Finishing Leap) |
 | 21 | Guard | `Kh2`: Guard |
-| 22 | Dodge Roll | `Kh2`: KH2's Dodge Roll at Sora's growth level (LV2 at 19, LV3 at 37, MAX at 60) |
+| 22 | Dodge Roll | `Kh2`: KH2's Dodge Roll LV1 (KH2 grows it with Limit Form, not on KH1's states here) |
 | 23-28 | MP Haste, MP Rage, Second Chance, Berserk, Jackpot, Lucky Strike | `Kh1Own` |
 | 29-52 | Donald's, Goofy's and the guests' abilities | `Kh1Own` |
 | 53 | Slapshot | `Hook` (was KH2's Slapshot) |
@@ -86,36 +86,35 @@ for the same ability apply: KH2's arc, KH2's glide, KH2's roll level.
 On KH2's side, each one is its own KH2 value (`Kh2(effect)`). All of them are in Sora's own list,
 and use AP.
 
-| Id | Ability | AP | Learned | While KH1's states have Sora |
-|---|---|---|---|---|
-| 66 | Quick Run (LV by Sora's level: 12 / 20 / 32 / 45) | 2 | level 12 | `Hook` (KH1's roll at Dodge Roll KH1) |
-| 67 | Aerial Dodge (LV2 30, LV3 42, MAX 54) | 3 | Genie Jafar | `Borrow` (a double jump at Jump KH1 too) |
-| 68 | Aerial Recovery | 2 | level 4 | `Hook` |
-| 69 | Dodge Slash | 2 | level 10 | `Kh1Combo` |
-| 70 | Horizontal Slash | 2 | level 16 | `Kh1Combo` |
-| 71 | Negative Combo | 2 | level 20 | `Kh1Combo` |
-| 72 | Aerial Spiral | 2 | level 25 | `Kh1Combo` |
-| 73 | Upper Slash | 4 | Sabor | `Kh1Combo` |
-| 74 | Finishing Plus | 5 | level 34 | `Kh1Combo` |
-| 75 | Retaliating Slash | 3 | level 43 | `Hook` |
-| 76 | Aerial Dive | 2 | Cerberus | `Kh1Combo` |
-| 77 | Magnet Burst | 3 | Captain Hook | `Kh1Combo` |
-| 78 | Flash Step | 2 | Sabor, or with KH1's Vortex | `Kh1Combo` |
-| 79 | Aerial Sweep | 2 | level 28, Clayton, or with KH1's Aerial Sweep | `Kh1Combo` |
-| 80 | Counterguard | 4 | level 22, or with KH1's Counterattack | `Hook` |
-| 81 | Finishing Leap | 5 | level 48, or with KH1's Blitz | `Kh1Combo` |
-| 82 | Slapshot | 2 | with KH1's Slapshot | `Kh1Combo` |
-| 83 | Slide Dash | 2 | level 30, or with KH1's Sliding Dash | `Kh1Combo` |
-| 84 | Explosion | 3 | Dragon Maleficent, or with KH1's Hurricane Blast | `Kh1Combo` |
-| 85 | Vicinity Break | 2 | level 36, or with KH1's Ripple Drive | `Kh1Combo` |
-| 86 | Guard Break | 3 | Pot Centipede, or with KH1's Stun Impact | `Kh1Combo` |
-| 87 | Aerial Finish | 3 | Jafar, or with KH1's Gravity Break | `Kh1Combo` |
+| Id | Ability | AP | While KH1's states have Sora |
+|---|---|---|---|
+| 66 | Quick Run | 2 | `Hook` (KH1's roll at Dodge Roll KH1) |
+| 67 | Aerial Dodge | 3 | `Borrow` (a double jump at Jump KH1 too) |
+| 68 | Aerial Recovery | 2 | `Hook` |
+| 69 | Dodge Slash | 2 | `Kh1Combo` |
+| 70 | Horizontal Slash | 2 | `Kh1Combo` |
+| 71 | Negative Combo | 2 | `Kh1Combo` |
+| 72 | Aerial Spiral | 2 | `Kh1Combo` |
+| 73 | Upper Slash | 4 | `Kh1Combo` |
+| 74 | Finishing Plus | 5 | `Kh1Combo` |
+| 75 | Retaliating Slash | 3 | `Hook` |
+| 76 | Aerial Dive | 2 | `Kh1Combo` |
+| 77 | Magnet Burst | 3 | `Kh1Combo` |
+| 78 | Flash Step | 2 | `Kh1Combo` |
+| 79 | Aerial Sweep | 2 | `Kh1Combo` |
+| 80 | Counterguard | 4 | `Hook` |
+| 81 | Finishing Leap | 5 | `Kh1Combo` |
+| 82 | Slapshot | 2 | `Kh1Combo` |
+| 83 | Slide Dash | 2 | `Kh1Combo` |
+| 84 | Explosion | 3 | `Kh1Combo` |
+| 85 | Vicinity Break | 2 | `Kh1Combo` |
+| 86 | Guard Break | 3 | `Kh1Combo` |
+| 87 | Aerial Finish | 3 | `Kh1Combo` |
 
-The learn points for 78-87 are the same as the ones each had while it was a KH1 id. The mod's
-levels and bosses gave that KH1 id, and so did KH1's own level-ups. Now the mod's levels and
-bosses give the KH2 id, and KH1's own level-ups still give KH1's ability. When KH1's ability is
-learned, its KH2 namesake comes with it (`MenuAbility::with`). Slapshot never had a gift of the
-mod's, so KH1's Slapshot is its only learn point.
+All of them are Sora's from the start (the tester, what-is-still-missing after m17: "make it all
+vanilla, just give the player all the custom abilities we added"), off until equipped. Quick
+Run is LV1, higher from Wisdom's form level; Aerial Dodge stays LV1 (KH2 grows it with Master
+Form).
 
 The AP is KH2's, read from the user's KH2 `03system.bin` item table (ability number → AP:
 Flash Step 2, Aerial Sweep 2, Counterguard 4, Finishing Leap 5, Slapshot 2, Slide Dash 2,
@@ -138,29 +137,45 @@ starts with "KH2's" so that they can be told apart in the menu.
   indexes an array by ability id, so ids past 65 are only ever looked up in the table.
 - **KH2's values** (`Kh1Sora::kh2`). Every equipped ability whose KH2 side is `Kh2(effect)`,
   KH1's or ours, sets that value in `Abilities`. Two copies of Combo Plus give 2. Growth levels
-  take the highest: KH1's Glide gives LV3 at 52, and Superglide gives MAX.
+  take the highest: KH1's Glide gives LV1 (or Final's level), and Superglide gives MAX.
 - **The hooks** (`Kh1Sora::kh1_hooks`, `kh2_hooks`). An ability that is on but has no meaning on
   the side that has Sora is logged ("abilities on with nothing on the other side yet: ...").
-- **Learning** (`Kh1Sora::grants`). One of ours is learned at its level, when its boss is beaten
-  (by the world's story progress, `BOSS_GIFTS`), or with its KH1 namesake. It comes off, with a
-  "New Ability" box. When Sora's list is full, a KH1 ability that's off makes room (`make_room`,
-  as before). KH1's combo modifiers are never given up, because KH1's own combo uses them.
-- **From Drive Form levels** (the tester, what-is-still-missing after m15, answer 6 (c); KH2's
-  `0x1403E8380`, Checked (decomp)). A form's level gives base Sora its growth one under the
-  form's (Valor High Jump, Wisdom Quick Run, Final Glide: LV1 / 2 / 3 at form LV3 / 5 / 7,
-  `Kh1Sora::form_growth`); the higher of that and his own level's counts, and without the
-  ability it is learned (High Jump in the shared list, on; Quick Run off, its AP in the bonus).
-  The fmlv rows' abilities come as KH1's own: Combo Plus, Air Combo Plus, MP Rage, MP Haste
-  (Wisdom LV6, KH1's own MP Haste, t714; it becomes MP Charge's MP Haste once a KH2 MP system is
-  a Config setting) (off, "New Ability" box); each one he still has adds KH1's AP for it to his
-  max AP (t715, `formexp::rewards_given`, `menu::stats`). The Auto forms (to be built natively
-  later) and Form Boost (waits for the Drive gauge) have none yet. Details in
+- **Progression is KH1's vanilla one** (the tester, what-is-still-missing after m17: "make it all
+  vanilla, just give the player all the custom abilities we added, existing saves get updated,
+  remove extra ap for now"). KH1 gives its own abilities on its own schedule (level-up tables,
+  story rewards). The mod never holds one back, takes one out, renames it, keeps only one copy
+  or removes one to make room. Gone: the level schedule (`MenuAbility::level`) and the boss gifts (`BOSS_GIFTS`),
+  the per-level growth tables, `make_room`, `one_only` (spare High Jump / Glide / Superglide
+  copies), Aerial Dodge taken back until Genie Jafar, the bonus AP.
+- **Our KH2 abilities** (`Kh1Sora::grants`): every one of `MENU` in Sora's own list is his, off
+  until equipped, with KH2's AP out of KH1's AP (no bonus). Several at once get one box ("New
+  Abilities: n KH2 Abilities"). KH2's own Glide (88) only comes with the Glide style.
+- **KH1 first** (`growth::RESERVE`, `yield_one`). KH1 appends a new ability at the first 0 of the
+  48 bytes, so a full list would lose it. Ours always leave 2 places free; when KH1's own fill the
+  list past that, one of ours gives its place back (the last in `MENU` order that is off, else
+  on) and returns when there's room. Assumption: KH1 never gives more than 2 abilities within one
+  second (the check runs once a second). On a late-game list (KH1's own ~37 or more) not all 22
+  of ours fit: see "Not yet".
+- **Growth only from Drive Form levels** (the tester, after m16, answer 6 (b); KH2's
+  `0x1403E8380`, Checked (decomp)). An ability he has is LV1. Valor's, Wisdom's and Final's
+  levels raise High Jump, Quick Run and Glide to LV1 / 2 / 3 at form LV3 / 5 / 7
+  (`Kh1Sora::form_growth`). Sora's level and bosses give none. KH1's own High Jump and Glide count
+  as KH2's LV1 once KH1 has given them (Assumption taken: the tester's question 3 after m17
+  wasn't answered); a form's level no longer puts KH1's High Jump or Glide in his list (KH1's
+  list stays vanilla). KH1's Superglide is KH2's Glide MAX, and KH2's own Glide (88) is MAX past
+  Chernabog, where KH1 gives Superglide. Dodge Roll and Aerial Dodge stay LV1: in KH2 they grow
+  with Limit and Master, which aren't on KH1's states here. The debug menu's growth rows still
+  override all of this.
+- **The fmlv rows' abilities** (KH2's own form level-up rule, not the mod's progression; kept):
+  Combo Plus, Air Combo Plus, MP Rage, MP Haste (Wisdom LV6, KH1's own MP Haste, t714; it becomes
+  MP Charge's MP Haste once a KH2 MP system is a Config setting), as KH1's own, off, with a box.
+  With Sora's list full, one of ours gives its place. They no longer add AP (t715's AP is gone
+  with the bonus). The Auto forms and Form Boost have none yet. Details in
   `docs/kh1-drive-forms-native.md` §9. `abilities = kh1` only.
-- **Growth boxes.** KH1's High Jump, Glide and Dodge Roll keep KH1's names in the menu. When KH2's
-  level for them grows, an "Ability Up" box still says so ("High Jump LV2"). This is KH2's side
-  only.
-- **Bonus AP** (`bonus_ap`). Each KH2 ability Sora has earned (by level, boss or namesake) adds its
-  AP to his max AP, capped at KH1's 100, as before.
+- **Growth boxes.** KH1's High Jump keeps KH1's name in the menu. When KH2's level for it, Quick
+  Run's or KH2 Glide's grows (from a form's level), an "Ability Up" box says so.
+- **No bonus AP.** The `bonus_ap` ini key is gone (an old ini's line is ignored); Sora has
+  KH1's own AP only.
 
 ## The save
 
@@ -180,30 +195,39 @@ starts with "KH2's" so that they can be told apart in the menu.
   The whole block is the save data, so the mark goes with the save. Confidence is medium-high: a
   static scan can't see an access through a pointer computed elsewhere.
 
-## Old saves (`growth::migrate`)
+## Old saves
 
-A save is from before the split when it has no mark and holds any of the old ids 66-77. It is
-moved over once, the first time the game sees it with `abilities = kh1`:
+The layout mark (save `+0x48A`) is `0x4B03` (`growth::LAYOUT_VANILLA`) once a save is on the
+vanilla progression. A save without it is moved over once, the first time the game sees it with
+`abilities = kh1`:
 
-- **KH1's modifiers.** For each KH1 modifier Sora has (Hurricane Blast, Vortex, ...), its KH2
-  ability (Explosion, Flash Step, ...) is added. It is on if KH1's was on, so KH2's combo has the
-  same moves as before. KH1's copies are turned off, which frees their KH1 AP; KH2's AP is
-  covered by the bonus. KH1's abilities stay learned, and the user can turn them back on for
-  KH1's own combo.
-- **Superglide.** The old build turned Superglide into Glide or took it out. It comes back if
-  Chernabog is beaten (End of the World progress ≥ `0x33`), on if Glide is.
-- Each change goes to the log ("abilities: ...") and to `kh1-kh2-removed.txt`.
+1. **The split** (`growth::migrate`, only for a save from before testing s261, holding the old ids
+   66-77): each KH1 modifier Sora has brings its KH2 ability, on if KH1's was on (KH1's then off).
+   With no room beside KH1's own it comes later; it never takes a KH1 ability's place.
+2. **Vanilla back** (`growth::restore_vanilla`, only for a save the mod had changed: the split's
+   mark, the old ids, or any of ours in it). Everything `kh1-kh2-removed.txt` (next to the game)
+   noted as taken out, up to Sora's current level, comes back off, one per copy taken out: KH1's
+   abilities the older builds removed for room, their spare copies, Zantetsuken, and the shared
+   spares (High Jump, Glide, Superglide). Superglide comes back if Chernabog is beaten and KH2's own
+   Glide isn't standing for it. With the list full, ours give their places back. Every change is
+   in the log ("abilities: ..."). Then the rest of ours are given where there's room.
 
-**What isn't undone.** The old build gave some KH1 abilities early (Vortex for Sabor, Sliding
-Dash at 30, ...), and took out KH1's own later copies of them. Those early KH1 copies stay: they
-are learned KH1 abilities now. KH1's own level-ups may later give a second copy. Zantetsuken is no
-longer taken out (m22); one the mod took out earlier (its line "Zantetsuken taken out" in
-`kh1-kh2-removed.txt`) is given back once, off, making room if the list is full.
+A save the mod never changed (a new game) just gets the mark.
 
-A save without the old ids (a new game, or a plain KH1 save) just gets the mark. Its KH1
-modifiers stay as they are, and their KH2 namesakes come off.
+**What can't be undone.** The file is the install's, not the save's: with several saves, each
+gets back what was noted up to its own level (Assumption: in practice one main save). KH1 grants
+an older build held back without noting it (the KH1 level-up copies of abilities the mod had
+given early) aren't in the file and don't come back; neither do the old build's early KH1
+copies go (they're learned KH1 abilities). The equipped state of what comes back is off. The
+file is no longer written to: nothing is taken out any more.
 
 ## Not yet
+
+- **Room for all of ours.** KH1's list is 48 bytes and the next party record starts at `+0x74`, so
+  on a late-game list not every KH2 ability fits beside KH1's own. A list of our own (22 bytes
+  for the 22, in free save bytes, read by KH1's Abilities menu after KH1's 48: the menu's list
+  walk, its AP sums `0x1402E6220` / `0x1402E62D0` and the count `0x140282A70` would all need to
+  take it) is the native fix: asked first.
 
 - The `Hook`s: KH1's modifiers while KH2 has Sora (KH2 Sora with KH1's Hurricane Blast), and
   KH2's Quick Run, Aerial Recovery, Retaliating Slash and Counterguard while KH1's states have

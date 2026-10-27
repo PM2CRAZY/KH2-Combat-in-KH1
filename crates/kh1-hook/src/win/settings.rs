@@ -10,7 +10,7 @@ use std::sync::{Mutex, OnceLock};
 const INI: &str = "kh1-kh2.ini";
 const DEFAULT_INI: &str = "; kh1-kh2 settings (read when the game starts, and again whenever this file is saved)\r\n\
 ;\r\n\
-; abilities: kh1 = KH2's abilities from KH1's Ability menu, Sora's level and bosses (normal\r\n\
+; abilities: kh1 = KH1's vanilla progression, and every KH2 ability in KH1's Ability menu (normal\r\n\
 ; play); remove = take the KH2 abilities back out of your save (load it, save once, then\r\n\
 ; uninstall); test = every KH2 movement ability at MAX; all = everything, every modifier\r\n\
 abilities = kh1\r\n\
@@ -82,8 +82,6 @@ air_cast_fall = 1.0\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
 ; (battle_quotes, below, takes its place once set)\r\n\
 kh2_voice = off\r\n\
-; bonus_ap: on = (abilities = kh1) Sora's max AP grows by the AP of each KH2 ability he learns\r\n\
-bonus_ap = on\r\n\
 ; auto_aim: off = swings turn toward only KH1's target (the R1 lock or the small cursor);\r\n\
 ; on = KH2's own pick, the nearest enemy in reach\r\n\
 auto_aim = off\r\n\
@@ -356,7 +354,6 @@ pub struct Settings {
     /// (Read for `battle_quotes`'s default; `styles::Kind::BattleQuotes` is what plays.)
     #[allow(dead_code)]
     pub kh2_voice: bool,
-    pub bonus_ap: bool,
     pub auto_aim: bool,
     pub wall_clink: bool,
     /// A KH2 swing's Keyblade hit shows KH2's hit element (`combat::swing_spark`).
@@ -561,7 +558,6 @@ fn load(first: bool) -> Option<Settings> {
         glide_cast: on(&text, "glide_cast", "on", true),
         clash_count: on(&text, "clash_count", "kh2", true),
         kh2_voice: on(&text, "kh2_voice", "on", false),
-        bonus_ap: on(&text, "bonus_ap", "on", true),
         auto_aim: on(&text, "auto_aim", "on", false),
         wall_clink: on(&text, "wall_clink", "on", true),
         kh2_hit_sparks: on(&text, "kh2_hit_sparks", "on", true),
