@@ -111,6 +111,10 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [23. Assistant: t461 to t463. Thanks, you were right about that one. I went ](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m23)
   - [24. Assistant: t464 and t465. Found it. KH1 reads the pad every frame outsi](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m24)
   - [25. Assistant: t480. No problem, I went with what the check says for both:](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m25)
+- [Invulnerable frames native](../testers/invulnerable-frames-native/invulnerable-frames-native.md)
+  - [1. Assistant: This thread is split out of What is still missing(../what-is](../testers/invulnerable-frames-native/invulnerable-frames-native.md#^m1)
+- [Keyblade guard facing native](../testers/keyblade-guard-facing-native/keyblade-guard-facing-native.md)
+  - [1. Assistant: This thread is split out of What is still missing(../what-is](../testers/keyblade-guard-facing-native/keyblade-guard-facing-native.md#^m1)
 - [KH2 attack data and damage on KH1's swings](../testers/kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md#^m1)
   - [2. Assistant: Done, in two versions.](../testers/kh2-attack-data-and-damage-on-kh1s-swings/kh2-attack-data-and-damage-on-kh1s-swings.md#^m2)
@@ -326,6 +330,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [17. Assistant: Thanks! Four versions this round. Answers 1, 3 and 5 need no](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m17)
   - [18. Assistant: Thanks! Three versions this round.](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m18)
   - [19. Assistant: Thanks! I made the two new threads:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m19)
+  - [20. Assistant: I made two threads for that line:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m20)
 
 ---
 
