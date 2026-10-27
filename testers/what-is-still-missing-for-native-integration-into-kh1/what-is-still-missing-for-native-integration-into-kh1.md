@@ -894,3 +894,10 @@ go ahead
 
 ^m19
 
+create a new thread for both of these:
+
+"1. Sora's invulnerable frames (roll, Quick Run, Explosion, Aerial Recovery) and the Keyblade guard's facing are decided in our hit-pass hook, not by KH1's own no-damage timer and guard objects.
+   
+   have the agents do most native implementation 
+   
+   go ahead
