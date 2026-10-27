@@ -692,10 +692,31 @@ unsafe fn command_step(actor: usize, dir: usize) {
             let step = super::formmagic::note_step(actor, false);
             cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg}, Magic Combo KH2: step {:?} of the combo", step.map(|s| s.0)));
         }
-        // Gravity, Stop and Aero on the ground: the combo's finisher (`formmagic::finisher_spell`).
-        if !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && (4..=6).contains(&arg) && super::formmagic::finisher_spell(0x36 + arg as u32) {
-            let step = super::formmagic::note_finisher_step(actor);
-            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}"));
+        // Gravity, Stop and Aero on the ground. At Magic Combo KH2 the combo roles of KH2's
+        // Thunder, Magnet and Cure (`formmagic::ground_role`): a step of the combo as KH2's magic
+        // command counts one (`note_step`), and the cast KH2 plays for it: Thunder's finisher cast
+        // 63 when Gravity's step reaches the length, else the spell's own (62, 68, 65). At Magic
+        // Combo KH1 the combo's finisher (`formmagic::finisher_spell`) on KH2's Thunder finisher
+        // cast 63, as before.
+        // (t719's block, lost in t721's commit, which was made from an older combat.rs: the
+        // tester, drive-forms: "gravity doesn't have a finisher", their trace f23582: Gravity in
+        // Wisdom on 62 every time, never 63.)
+        if !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && (4..=6).contains(&arg) {
+            let request = 0x36 + arg as u32;
+            if let Some(role) = super::formmagic::ground_role(request) {
+                let step = super::formmagic::note_step(actor, false);
+                let finisher = role == super::formmagic::Role::Thunder && step.is_some_and(|s| s.1) && super::formmagic::anim_kh2(arg);
+                let m = super::kh2slots::pick_cast(request as usize, finisher);
+                cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, Magic Combo KH2 as KH2's {role:?}: step {step:?}, KH2 cast {m:?}"));
+            } else if super::formmagic::finisher_spell(request) {
+                let step = super::formmagic::note_finisher_step(actor);
+                let m = super::kh2slots::pick_cast(request as usize, true);
+                cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}, KH2 cast {m:?}"));
+            } else if (4..=6).contains(&arg) {
+                // (Neither: Wisdom at Magic Combo KH1, as before t716, on KH2's Thunder finisher
+                // cast it played then.)
+                super::kh2slots::pick_cast(request as usize, true);
+            }
         }
         // KH1's own air cast at the Magic Combo row KH2 (base Sora; Wisdom's Gravity, Stop and
         // Aero): its step of the air combo, as KH2's air casts take one (`formmagic::

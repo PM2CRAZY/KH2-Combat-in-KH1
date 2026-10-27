@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 733 (testing branch: Gravity's finisher back)
+- **Gravity's finisher back.** The tester (drive-forms): "gravity doesn't have a finisher". Trace f23582 and the log: 62 on every cast. t719's ground-role pick in `combat::command` was dropped by t721's commit (made from an older combat.rs); restored. Checked (code). Not checked in game.
+
 ### 2026-10-27: Stage 732 (testing branch: Wisdom's Square is its Quick Run)
 - **Wisdom's Square is its Quick Run.** The tester (drive-forms): "you dodge roll instead of quick run". Trace f17582: KH1's own roll (0xDC). `quickrun::built()` refused every Drive Form (a t501 rule), so KH1's menu step (Steam `0x1402937F0`, pressed `0x10` -> command `0x4000000`) led to KH1's roll in `0x1402A7B30` (ability bit 0x20 of `0x142D5EC10`, set by `0x1402A6380`) (Checked (decomp)). Native Wisdom now takes KH1's Quick Run state. Not checked in game.
 
