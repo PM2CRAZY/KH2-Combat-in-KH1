@@ -799,3 +799,12 @@ go ahead
 ^m17
 
 
+make it all vanilla, just give the player all the custom abilities we added, existing saves get updated, remove extra ap for now.
+
+go ahead
+
+make soras base and any form that can do drive form magic this: aero is the same as kh2 cure, gravity is the same as thunder, stop is a finisher like magnet (not in the game yet)
+
+7. add it
+   
+   go ahead
