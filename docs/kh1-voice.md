@@ -77,4 +77,36 @@ The mod plays clip 37 alone at the group's priority (3) as a Drive starts.
 clip 46 on the finisher (`kh1voice::DEFENSE_CLIP`; **Assumption** that 46 is "Defense!", the
 other Aero clip is 47). `docs/kh1-reflect-spell.md` "Reflect's voice".
 
-**Dodge roll**: a KH1 swing grunt (group 4, KH1's own random pick of its five clips).
+**Dodge roll**: a KH1 swing grunt (group 4, KH1's own random pick of its five clips). Correction
+below: this was the old KH2-controller path's choice (`takeover.rs` calling `kh1voice::dodge_roll`),
+not KH1's; KH1's own roll has no voice.
+
+## Where KH1's voices come from (the grunt research, after t726)
+
+The question: with a KH2 animation and Battle Quotes KH1, which KH1 voice should a move carry,
+taken from the KH1 motion it replaces? Read from KH1 Sora's `xa_ex_0010.mset` and the KH1 Steam
+decomp.
+
+- **KH1's motions carry no battle voice.** A sound key's `a` 0x19 (`kh1_data::slot`'s comment calls
+  it "voice") is a character sound effect: KH1's sound event handler (Steam `0x140295420`) adds `b`
+  to the character's sound base (its combat state `+0x20` -> `+0x34`) and plays it through the
+  positioned effect queue (`0x1402961F0`, `0x140179AC0`), like `a` 0. It never reaches the voice
+  calls (`0x1402901F0` group, `0x140290930` clip). **Checked (decomp)**. 41 of Sora's 118 motions
+  have such keys (the combo swings 98..104 at time 0, spells, ...); a baked slot already keeps them
+  from its template unless the row has `own_sounds`. **Checked (files)**
+- **KH1's battle voice is played by code only.** Every call of the group play (`0x1402901F0`): the
+  attack row start's voice byte (`0x1402A3980`, the row's `+0xF`), the spell command (`0x1402A3600`,
+  groups 7..13), the damage code (`0x14029BBD0`: groups 0 / 1, 2, 0x17; `0x14029CA60`), another hit
+  path (`0x1402C2B50`, 0x17), `0x1402BC7A0` (2), the party / guest scripts (`0x1401CDBD0`,
+  `0x1401CF570` .. `0x1401D07E0`, group 0x1A) and the summon sequences (`0x140395360`, `0x140396510`:
+  0x11; `0x140396760`: 0xF; `0x14039BF70`: 5). The clip play's only caller is the group play.
+  **Checked (decomp)**
+- **KH1's roll is silent.** Its start (Steam `0x1402C9E60`) sets the roll's timer and flag and asks
+  request 0xDC; no voice call. Its motion (slot 117) has only material sounds (`a` 5, 26, 1, 4) and
+  foot effects. **Checked (decomp + files)**
+- So KH1 has nothing to copy for the moves without an attack row: the roll, Quick Run (KH1 has
+  none), the Aerial Dodge, the glide hover, the guard, the jump takeoffs, items. Moves with a row
+  already get KH1's row voice (`holds_back` drops it only with Battle Quotes KH2, for the KH2
+  quote). KH2's own voices on a KH2 clip are its frame triggers 13 / 14, baked as `KH2_VOICE`
+  keys and played with Battle Quotes KH2.
+- Not checked: which of KH2's clips (the roll, Quick Run) carry a voice trigger.
