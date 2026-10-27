@@ -1124,6 +1124,9 @@ unsafe extern "system" fn trail_start(actor: usize, id: u32) {
 /// holder, whose trail bit is the left Keyblade's own (`left_trail_on`).
 unsafe extern "system" fn trail_step(actor: usize) {
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_TRAIL_STEP.load(Ordering::Acquire));
+    // (Cosmetics > Keyblade Trail: Always asks Sora's trail ahead of KH1's step; it hooks the step
+    // itself only when this hook isn't in.)
+    super::cosmetics::before_step(actor);
     f(actor);
     if actor == 0 || actor != super::takeover::sora_actor() || IN_TRAIL.load(Ordering::Relaxed) {
         return;
@@ -1135,7 +1138,15 @@ unsafe extern "system" fn trail_step(actor: usize) {
     if !shown && rd::<u64>(obj + OBJ_TRAIL) == 0 {
         return;
     }
-    let on = shown && left_trail_on(actor);
+    // (Always, Cosmetics > Keyblade Trail: the left Keyblade's trail wanted whenever it is out, and
+    // asked for as KH1's request would, with the id Sora's was asked with.)
+    let always = shown && super::cosmetics::always();
+    if always {
+        if let Some(id) = super::combat::swing_trail_id(actor) {
+            super::cosmetics::request(obj, id);
+        }
+    }
+    let on = shown && (always || left_trail_on(actor));
     TRAIL_ON.store(on, Ordering::Relaxed);
     let flags = rd::<u32>(holder + ACTOR_TRAIL_FLAGS);
     std::ptr::write_unaligned((holder + ACTOR_TRAIL_FLAGS) as *mut u32, if on { flags | TRAIL_FLAG } else { flags & !TRAIL_FLAG });
@@ -1148,6 +1159,11 @@ unsafe extern "system" fn trail_step(actor: usize) {
         static N: AtomicU32 = AtomicU32::new(0);
         log_n(&N, 12, || if now != 0 { format!("trail {now:#x} made by KH1's trail step (id {:#x})", rd::<u32>(obj + OBJ_TRAIL_ID)) } else { format!("trail {was:#x} ended by KH1's trail step") });
     }
+}
+
+/// KH1's trail step is hooked here (`cosmetics` leaves it to this hook).
+pub fn trail_step_hooked() -> bool {
+    ORIG_TRAIL_STEP.load(Ordering::Acquire) != 0
 }
 
 /// The left Keyblade is out (Valor's or Final's, its model in).

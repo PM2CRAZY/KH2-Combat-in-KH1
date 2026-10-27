@@ -10,12 +10,15 @@
 //! scale (answer 3a) so the ninth row fits. The button opens KH1 windows of our own, the way the
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
-//! - KH1 in KH2: Camera, Combat, Movement, Misc;
-//! - Camera: Camera Style, R2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals, Recoil, Magic, its own list, and Tweaks, its own list
+//! - KH1 in KH2: Camera, Combat, Movement, QoL, Cosmetics, Misc;
+//! - Camera: Camera Style, R2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Magic, its own list, and Tweaks, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
-//!   Battle Quotes, Gummi Routes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
-//!   (combo row selection m21, inside Combat m22), Enemy Weight, Cast from Glide, Clash Combo.
+//!   Battle Quotes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
+//!   (combo row selection m21, inside Combat m22), Enemy Weight, Cast from Glide, Clash Combo, and
+//!   (t704, the user) Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party
+//!   Criticals, Recoil, moved there from Combat; QoL (t704, the user): Gummi Routes, moved there
+//!   from Misc; Cosmetics (t704, the user): Keyblade Trail.
 //!
 //! Only the settings that were in the Config menu (answer 2a); "Default settings" leaves ours alone
 //! (answer 6b). Backing out of a list re-creates its parent with the cursor on the row it came
@@ -216,6 +219,8 @@ enum Row {
     GlideCast,
     /// Tweaks > Clash Combo (KH1 | KH2, `recoil::clash_count`).
     ClashCount,
+    /// Cosmetics > Keyblade Trail (Normal | Always, `cosmetics::always`).
+    TrailAlways,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -261,8 +266,13 @@ enum List {
     /// Tweaks: small changes to how KH1's own rules feel (the tester, combo row selection m21:
     /// "these will be in the gameplay config in a sub menu called Tweaks").
     Tweaks,
+    /// QoL: quality of life (the user, t704: "a qol section in the config menu, put gummi skip in
+    /// there").
+    QoL,
+    /// Cosmetics: how things look, not how they play (the user, t704).
+    Cosmetics,
 }
-const LISTS: [List; 8] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks];
+const LISTS: [List; 10] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics];
 
 impl List {
     fn index(self) -> usize {
@@ -296,6 +306,8 @@ impl List {
             }
             List::MagicAnim => &MAGIC_ANIM,
             List::Tweaks => &TWEAKS,
+            List::QoL => &QOL,
+            List::Cosmetics => &COSMETICS,
         }
     }
 }
@@ -304,34 +316,34 @@ const KH: [u32; 2] = [0x7F00_0002, 0x7F00_0003];
 const fn kh(label: u32, help: u32) -> [u32; 4] {
     [label, KH[0], KH[1], help]
 }
-const TOP: [Item; 4] = [
+const TOP: [Item; 6] = [
     Item::Open(0x7F00_0203, 0x7F00_0204, List::Camera),
     Item::Open(0x7F00_0205, 0x7F00_0206, List::Combat),
     Item::Open(0x7F00_0209, 0x7F00_020A, List::Movement),
+    Item::Open(0x7F00_0211, 0x7F00_0212, List::QoL),
+    Item::Open(0x7F00_0213, 0x7F00_0214, List::Cosmetics),
     Item::Open(0x7F00_020B, 0x7F00_020C, List::Misc),
 ];
+// (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
+// there".)
+const QOL: [Item; 1] = [Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi)];
+// (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
+// always have their trail on".)
+const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 0x7F00_0216], Row::TrailAlways)];
 // (Enemy Weight: the tester, kh2-knockback-on-enemies question 1: "(b) but make it a toggle in the
 // config menu".)
 // (Cast from Glide: the tester, what-is-still-missing m8: "1. (a) then make it a config in the
 // tweaks config menu".)
 // (Clash Combo: the tester, what-is-still-missing m15 answer 1: "make it a toggle in the config
 // menu under tweaks, you can either have the kh1 rule or the kh2 rule".)
-const TWEAKS: [Item; 4] = [
+// (Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals and Recoil
+// moved here from Combat: the user, t704: "put recoil, critical, party critical, kh2 damage, medium
+// hits, knock back numbers, and hit reactions into the tweaks section".)
+const TWEAKS: [Item; 11] = [
     Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
     Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
     Item::Set([0x7F00_0197, 0x7F00_011D, 0x7F00_011E, 0x7F00_0198], Row::GlideCast),
     Item::Set(kh(0x7F00_0199, 0x7F00_019A), Row::ClashCount),
-];
-const CAMERA: [Item; 3] = [
-    Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
-    Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
-    Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
-];
-// (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
-const COMBAT: [Item; 12] = [
-    Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
-    Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
-    Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
     Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
     Item::Pick([0x7F00_0142, 0x7F00_0002, 0x7F00_0144, 0x7F00_0003, 0x7F00_0143], Pick::KnockNumbers),
     Item::Set([0x7F00_0145, 0x7F00_0147, 0x7F00_0148, 0x7F00_0146], Row::MediumHits),
@@ -339,6 +351,17 @@ const COMBAT: [Item; 12] = [
     Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
     Item::Set([0x7F00_014B, 0x7F00_011D, 0x7F00_011E, 0x7F00_014C], Row::PartyCriticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
+];
+const CAMERA: [Item; 3] = [
+    Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
+    Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
+    Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
+];
+// (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
+const COMBAT: [Item; 5] = [
+    Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
+    Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
+    Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
     Item::Open(0x7F00_020F, 0x7F00_0210, List::Tweaks),
 ];
@@ -375,9 +398,9 @@ const MOVEMENT: [Item; 4] = [
     // (Player Model, off for now, s259, the user: "comment it out for now":)
     // Item::Set(kh(0x7F00_0117, 0x7F00_0118), Row::Style(Kind::PlayerModel)),
 ];
-const MISC: [Item; 3] = [
+// (Gummi Routes moved to QoL, t704.)
+const MISC: [Item; 2] = [
     Item::Set(kh(0x7F00_010F, 0x7F00_0110), Row::Style(Kind::BattleQuotes)),
-    Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi),
     Item::Set([0x7F00_011B, 0x7F00_011D, 0x7F00_011E, 0x7F00_011C], Row::Debug),
 ];
 
@@ -387,8 +410,8 @@ const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
-const MISC_HELP_NO_DEBUG: &str = "Battle quotes and Gummi routes.";
-const STRINGS: [(u32, &str); 96] = [
+const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
+const STRINGS: [(u32, &str); 104] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -421,9 +444,17 @@ const STRINGS: [(u32, &str); 96] = [
     (0x7F00_0209, "Movement"),
     (0x7F00_020A, "Choose KH1's or KH2's jump, glide, dodge roll and animations for Sora."),
     (0x7F00_020B, "Misc"),
-    (0x7F00_020C, "Battle quotes, Gummi routes and the debug menu."),
+    (0x7F00_020C, "Battle quotes and the debug menu."),
+    (0x7F00_0211, "QoL"),
+    (0x7F00_0212, "Quality of life: Gummi routes."),
+    (0x7F00_0213, "Cosmetics"),
+    (0x7F00_0214, "How things look, not how they play: Keyblade trails."),
+    (0x7F00_0215, "Keyblade Trail"),
+    (0x7F00_0216, "Normal: the trail shows on swings, as in KH1. Always: every\nKeyblade shows its trail whenever it is out."),
+    (0x7F00_0217, "Normal"),
+    (0x7F00_0218, "Always"),
     (0x7F00_020F, "Tweaks"),
-    (0x7F00_0210, "Small changes to how KH1's own rules play."),
+    (0x7F00_0210, "Hit reactions, damage, recoil and small changes to how KH1's own\nrules play."),
     (0x7F00_0191, "KH1 Ability Chance"),
     (0x7F00_0192, "On: KH1's 30 percent chance on Stun Impact, Gravity Break\nand Zantetsuken; when it fails, the next move that fits comes."),
     (0x7F00_0193, "Enemy Weight"),
@@ -506,6 +537,7 @@ fn value(what: Row) -> bool {
         Row::EnemyWeight => super::knockback::weight(),
         Row::GlideCast => super::glide::cast_out(),
         Row::ClashCount => super::recoil::clash_count(),
+        Row::TrailAlways => super::cosmetics::always(),
     }
 }
 
@@ -538,6 +570,7 @@ fn set(what: Row, v: bool) {
         Row::EnemyWeight => super::knockback::set_weight(v),
         Row::GlideCast => super::glide::set_cast_out(v),
         Row::ClashCount => super::recoil::set_clash_count(v),
+        Row::TrailAlways => super::cosmetics::set_always(v),
     }
 }
 

@@ -8,6 +8,7 @@ mod camera;
 mod combat;
 mod combomods;
 mod config;
+mod cosmetics;
 mod crash;
 mod debugfont;
 mod debugmenu;
@@ -429,6 +430,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         drive::install();
         tint::install();
         leftblade::install();
+        cosmetics::install();
         model::install();
         gates::install();
         // (Its voice group hook carries gameplay and always goes in; the log hooks only with the

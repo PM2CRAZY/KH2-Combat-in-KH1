@@ -415,6 +415,30 @@ the window's top) at 300 / its bottom, rounded down to a hundredth: Combat at 0.
 re-aimed through the same scale on the frames the cursor moves. Ours, not KH1's layout;
 **Assumption** until seen: the 85% text reads well and clears the help box.
 
+### 6.z QoL, Cosmetics, and the settings moved into Tweaks (t704)
+
+The user: "a qol (Quality of life) section in the config menu, put gummi skip in there, then put
+recoil, critical, party critical, kh2 damage, medium hits, knock back numbers, and hit reactions into
+the tweaks section. Then in the main sub menu make a new menu called cosmetics and put a setting in
+there for keyblades to always have their trail on." Layout now (`config.rs`):
+
+- KH1 in KH2: Camera, Combat, Movement, QoL, Cosmetics, Misc (`List::Top`, six rows at KH1's size).
+- Combat: Physics, Base Combo, Aerial Base Combo, Magic, Tweaks.
+- Combat > Tweaks (eleven rows, drawn at the scale `list_scale` gives so the last row clears the help
+  box): KH1 Ability Chance, Enemy Weight, Cast from Glide, Clash Combo, then the seven moved from
+  Combat in their old order: Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals,
+  Party Criticals, Recoil.
+- QoL (`List::QoL`): Gummi Routes, moved from Misc.
+- Cosmetics (`List::Cosmetics`): Keyblade Trail (Normal | Always).
+- Misc: Battle Quotes, Debug Menu (the debug row only with the debug tools, as before).
+
+Only where the rows are listed changed: each row keeps its setting, its ini key and its help text.
+The new lists are KH1 windows from the same copied definition as the others (new `LISTS` entries
+after Tweaks, parent the KH1 in KH2 list). New text ids `0x7F000211..0x7F000218`. **Assumption**
+until seen in game: the Tweaks list's eleven rows at the smaller scale read well and clear the help
+box (the scale is the same rule Combat's twelve rows were drawn with). The Keyblade Trail row's
+mechanism is in `docs/kh1-cosmetics.md`.
+
 ### 6.x A three-value row (Knock-back Numbers)
 
 KH1's Config rows all have two values. `config::Item::Pick` draws a row with three: the label as

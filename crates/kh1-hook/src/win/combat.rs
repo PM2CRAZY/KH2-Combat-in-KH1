@@ -968,6 +968,12 @@ struct Row {
     voice: i8,
 }
 
+/// The weapon trail id KH1's plain ground swing row asks for (`+2` of row 13, `kh1rows`; the
+/// weapon's own effect data gives the trail its look), for `cosmetics` (Keyblade Trail: Always).
+pub unsafe fn swing_trail_id(actor: usize) -> Option<u32> {
+    row_info(actor, 13).and_then(|r| (r.trail >= 0).then_some(r.trail as u32))
+}
+
 /// A row of Sora's attack table's motion request (its `+0`), for `combomods::picker`.
 pub unsafe fn row_motion(actor: usize, row: i32) -> Option<u32> {
     row_info(actor, row).map(|i| i.motion as u16 as u32)

@@ -225,6 +225,9 @@ battle_quotes = kh1\r\n\
 ; gummi: vanilla = fly the Gummi Ship between worlds; skip = land in the chosen world at once\r\n\
 ; (the Config menu's Gummi Routes row switches it in game too)\r\n\
 gummi = vanilla\r\n\
+; trail_always: off = Keyblade trails show on swings, as KH1 does; on = every Keyblade shows its\r\n\
+; trail whenever it is out (the Config menu's Cosmetics > Keyblade Trail row switches it in game too)\r\n\
+trail_always = off\r\n\
 ; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
@@ -384,6 +387,8 @@ pub struct Settings {
     pub medium_hits_flinch: bool,
     /// Skip the Gummi Ship's flights (`gummi = skip`, `gummi.rs`).
     pub gummi_skip: bool,
+    /// Every Keyblade shows its trail whenever it is out (`trail_always = on`, `cosmetics.rs`).
+    pub trail_always: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
     /// states per move style (its physics by `physics_rule`), KH2's controller only for KH2's own
     /// moves. Off: the old
@@ -628,6 +633,7 @@ fn load(first: bool) -> Option<Settings> {
         knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),
         medium_hits_flinch: on(&text, "medium_hits", "flinch", false),
         gummi_skip: on(&text, "gummi", "skip", false),
+        trail_always: on(&text, "trail_always", "on", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

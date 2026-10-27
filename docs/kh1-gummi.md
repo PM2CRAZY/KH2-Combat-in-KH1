@@ -40,7 +40,7 @@ then `0x140213B20 (world)`: KH1's landing list for the world (`0x14021CCA0` buil
 
 ## The skip
 
-`gummi = skip` (the Config menu's Gummi Routes row, Vanilla | Skip): `0x14020EF10` is hooked; for
+`gummi = skip` (the Config menu's Gummi Routes row, Vanilla | Skip, in the QoL list since t704): `0x14020EF10` is hooked; for
 a world the map chose (`0x140507C94`, 0..0x1B) it makes the cleared flight's calls at once
 (landing list, landing), skipping the flight. The route's results aren't recorded (no flight
 flown). Flights the story starts itself (`0x14020EEB0`) stay as they are.
