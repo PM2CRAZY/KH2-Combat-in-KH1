@@ -697,6 +697,13 @@ unsafe fn command_step(actor: usize, dir: usize) {
             let step = super::formmagic::note_finisher_step(actor);
             cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}"));
         }
+        // KH1's own air cast at the Magic Combo row KH2 (base Sora; Wisdom's Gravity, Stop and
+        // Aero): its step of the air combo, as KH2's air casts take one (`formmagic::
+        // kh1_air_cast_step`), taken at the spell's start.
+        if !native && !drive && kh1_air && super::formmagic::kh1_air_cast_step(arg as i32) {
+            let step = super::formmagic::note_step(actor, true);
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} in the air, Magic Combo KH2: step {:?} of the air combo", step.map(|s| s.0)));
+        }
     }
     // An item used in KH1's own states: its use drawn with KH2's motion at Misc Animations KH2
     // (`takeover::item_use_now`).

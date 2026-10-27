@@ -396,8 +396,41 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   (`Character::spell_slot`, still used by Master, Final, Limit and Anti) takes a step after a miss
   only in the air (`swing_counts`); on the ground it repeats the step (`count.max(1)`), and in a
   finisher window it needs the finisher to have counted. Left as it is.
-- **Open:** KH1's own spells in Wisdom (Gravity, Stop, Aero) and KH1's own air casts take no
-  combo step at Magic Combo KH2 (`kh1_cast_step` is base Sora, ground only), not what was asked.
+- **Done since (§4c.3.2):** KH1's own air casts and Wisdom's Gravity, Stop and Aero.
+
+#### 4c.3.2 Every kind of magic in the combo at Magic Combo KH2 (what-is-still-missing m16, answer 8)
+
+- The tester: "if kh2's own air magic system takes a combo step then yes do it for all forms of
+  magic when the magic combo setting is switched on".
+- **KH2's air cast takes a step, Checked (decomp)**, Steam KH2: the magic command (`0x1403D6FC0`,
+  row kind 2) always asks `0x1403D6CA0 (p, 1)`, which has no ground / air test: combo window
+  (`+0x18C` bit 10) the count `+0xD74` + 1; Finishing Plus window (`+0x194` bit 5, `+0xD75` under
+  `[+0x5C0] + 0x202`) the count and `+0xD75` + 1; free (`+0x18C & 0x1C`) `0x101`. One counter for
+  ground and air: the cast start `0x1403A9DD0` asks `0x1403D7780 (p, 0)` whether the count has
+  reached the length, `[+0x5C0] + 0x201` (air) while `0x1403BA9A0` says airborne, else `+0x200`
+  (ground; the same pair `0x1403D7480` / `0x1403D74A0` clamp the count by). So an air cast is a
+  step of the air combo, and the last one when the count reaches the air length.
+- Ours, all with the Magic Combo row at KH2 (at KH1 nothing changes):
+  - **KH1's own air casts, base Sora** (Fire .. Aero by KH1's script, KH1's air state 2 or 8;
+    KH2's spells already took one, `pick_cast`): `note_step (air)` at the command
+    (`combat::command`, against KH1's air combo length, stats `+0xD5`), `take_step (air)` at KH1's
+    spell start for the air requests 0x83..0x8A (`formmagic::kh1_air_cast_step`); the air combo's
+    last step sets KH1's count to 0. No combo window is added to KH1's air cast: KH2's air casts
+    have none (§4c.1, Checked (files)). The spell's hit sets "connected" on those requests too
+    (`spell_hit`).
+  - **Wisdom on KH1's own states, Gravity, Stop and Aero** (`formmagic::wisdom_combo`): on the
+    ground the combo's finisher, as base Sora's (§4c.4, `finisher_spell` now true for them in
+    Wisdom; Finishing Plus window by share of Wisdom's own clip 63, `kh2_moves` being the form's);
+    in the air a plain air step as above. Wisdom's Fire .. Cure are KH2's and took their step
+    already. Before, Wisdom's three took none, and their cast's follow-ups came from the clip's own
+    combo window.
+  - **Not changed:** Valor (no magic); Master, Final, Limit, Anti (KH2's controller, deprecated:
+    the tester's m15 answer 4).
+- **Kept as before (ours, to check):** a cast taken in an air finisher's Finishing Plus window
+  counts on past the length but is noted as no finisher (`take_step` with `air`), where KH2's
+  `0x1403D6CA0` also adds one to the finisher count `+0xD75`; the same as the native air casts
+  since t486. KH2 has no air finisher cast motion, so only Finishing Plus's count differs.
+- Not checked in game.
 
 ### 4c.4 Gravity and Stop as the combo's finisher (t644)
 

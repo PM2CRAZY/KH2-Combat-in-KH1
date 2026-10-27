@@ -660,7 +660,7 @@ pub unsafe fn spell_hit(actor: usize, attack: usize) {
         return;
     }
     let request = rd::<u32>(actor + 0x164) & 0xFFFF;
-    if !((0x36..=0x3D).contains(&request) || super::kh2slots::cast_playing(actor)) {
+    if !((0x36..=0x3D).contains(&request) || KH1_AIR_REQUESTS.contains(&request) || super::kh2slots::cast_playing(actor)) {
         SPELL_HITS.store(false, Ordering::Relaxed);
         return;
     }
@@ -705,7 +705,10 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     // (KH1's own spell on our slot of KH2's cast motion: timed to KH2's cast frame,
     // `time_kh1_spell`.)
     let sora = actor > 0x10000 && actor == super::takeover::sora_actor() && !super::form::in_form() && super::shared::active();
-    let count = if sora { rd::<u32>(actor + QUEUE_COUNT) } else { 0 };
+    // (Wisdom Form on KH1's own states, the Magic Combo row at KH2: KH1's own Gravity, Stop and Aero
+    // take their step too, `kh1_air_cast_step` / `finisher_spell`.)
+    let wisdom = actor > 0x10000 && actor == super::takeover::sora_actor() && wisdom_combo();
+    let count = if sora || wisdom { rd::<u32>(actor + QUEUE_COUNT) } else { 0 };
     let request = if (1..=8).contains(&count) { rd::<u32>(actor + QUEUE) & 0xFFFF } else { 0 };
     let f: unsafe extern "system" fn(usize, i32, usize) -> u64 = std::mem::transmute(ORIG_SPELL_START.load(Ordering::Acquire));
     let r = f(actor, spell, target);
@@ -717,11 +720,54 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     if sora && kh1_cast_step(spell) && KH1_WINDOW_REQUESTS.contains(&request) {
         take_step(actor, request, false, false);
     }
-    // (Gravity and Stop: the combo's finisher, `finisher_spell`.)
-    if sora && finisher_spell(request) {
+    // (Gravity and Stop: the combo's finisher, `finisher_spell`; Wisdom's too at Magic Combo KH2.)
+    if (sora || wisdom) && finisher_spell(request) {
         take_step(actor, request, true, false);
     }
+    // (KH1's own air cast at Magic Combo KH2: its step of the air combo, as KH2's air casts take
+    // one, `kh1_air_cast_step`; noted at the command, `combat::command`.)
+    if (sora || wisdom) && kh1_air_cast_step(spell) && KH1_AIR_REQUESTS.contains(&request) {
+        take_step(actor, request, false, true);
+    }
     r
+}
+
+/// KH1's air cast requests: `0x83 + spell` (Fire 0 .. Aero 6) and Fire's second part 0x8A (KH1's
+/// request table, `xa_ex_0010.mset`, Checked (files); the same as `kh2slots::CASTS`' air rows).
+const KH1_AIR_REQUESTS: std::ops::RangeInclusive<u32> = 0x83..=0x8A;
+
+/// Wisdom Form on KH1's own states with the Magic Combo row at KH2 (the tester, what-is-still-missing
+/// m16 answer 8: "do it for all forms of magic when the magic combo setting is switched on"): KH1's
+/// own spells there (Gravity, Stop, Aero; Fire .. Cure are KH2's, `wisdom_kh2_spell`, and take
+/// their step already) take a step of the combo as base Sora's do.
+pub unsafe fn wisdom_combo() -> bool {
+    super::form::native_form() == Some(super::form::Kind::Wisdom) && super::shared::active() && super::styles::kh2(super::styles::Kind::MagicCombo)
+}
+
+/// The Magic Combo row at KH2 (the tester, what-is-still-missing m16 answer 8: "if kh2's own air
+/// magic system takes a combo step then yes do it for all forms of magic"): KH1's own air cast of
+/// `spell` (Fire 0 .. Aero 6, KH1's script; KH1's air state 2 or 8) takes the next step of the
+/// combo, as KH2's air cast does. **Checked (decomp)**, Steam KH2: the magic command
+/// (`0x1403D6FC0`, row kind 2) always asks `0x1403D6CA0 (p, 1)`, which has no ground or air test:
+/// in a combo window (`+0x18C` bit 10) the count `+0xD74` one more, in a Finishing Plus window
+/// (`+0x194` bit 5) the count and the finisher count `+0xD75` one more, free (`+0x18C & 0x1C`) a new
+/// combo (`0x101`); the cast start `0x1403A9DD0` then asks `0x1403D7780 (p, 0)` whether the count
+/// has reached the combo's length, the air one (`[+0x5C0] + 0x201`) while airborne
+/// (`0x1403BA9A0`), the ground one (`+0x200`) else. So KH2's air cast is a step of the air combo
+/// on the same counter as the swings. Ours: `note_step (air)` at the command (against KH1's air
+/// combo length, stats `+0xD5`), `take_step (air)` at KH1's spell start (KH1's count `+0x41` at the
+/// step, 0 when it is the air combo's last; "connected" `+0x50` cleared, set by the spell's hit).
+/// No combo window is added on KH1's air cast: KH2's air casts have none (§4c.1, Checked (files)).
+/// Base Sora (not a KH2 spell, which takes its step already, `pick_cast`), and Wisdom's Gravity,
+/// Stop and Aero (`wisdom_combo`).
+pub unsafe fn kh1_air_cast_step(spell: i32) -> bool {
+    if !(0..=6).contains(&spell) || !super::shared::active() || !super::styles::kh2(super::styles::Kind::MagicCombo) {
+        return false;
+    }
+    if wisdom_combo() {
+        return (4..=6).contains(&spell);
+    }
+    !super::form::in_form()
 }
 
 /// KH1's ground Gravity (0x3A) and Stop (0x3B) cast requests (KH1's request table, Checked (files)).
@@ -735,11 +781,17 @@ pub const FINISHER_SPELL_REQUESTS: [u32; 3] = [0x3A, 0x3B, 0x3C];
 /// plus equipped you can combo into another finisher ... that would be applied for kh1 gravity
 /// and stop as well if the config is set to can combo"): on KH2's cast animation (their
 /// animation row at KH2: KH2's Thunder cast 62 for Gravity, Cure's 65 for Stop) always, on KH1's
-/// own with the Magic Combo row at KH2. Base Sora on KH1's states, not in a Drive Form.
+/// own with the Magic Combo row at KH2. Base Sora on KH1's states; in a Drive Form only Wisdom's on
+/// KH1's own states, with the Magic Combo row at KH2 (`wisdom_combo`).
 pub unsafe fn finisher_spell(request: u32) -> bool {
     let Some(i) = FINISHER_SPELL_REQUESTS.iter().position(|&r| r == request) else { return false };
     let spell = 4 + i as u8;
-    !super::form::in_form() && super::shared::active() && (anim_kh2(spell) || super::styles::kh2(super::styles::Kind::MagicCombo))
+    // (Wisdom's, at Magic Combo KH2 only: Wisdom always plays its own cast motions, so `anim_kh2`
+    // is no test there; the tester, what-is-still-missing m16 answer 8.)
+    if super::form::in_form() {
+        return wisdom_combo();
+    }
+    super::shared::active() && (anim_kh2(spell) || super::styles::kh2(super::styles::Kind::MagicCombo))
 }
 
 /// The finisher step of Gravity or Stop (`finisher_spell`), worked out at the command
