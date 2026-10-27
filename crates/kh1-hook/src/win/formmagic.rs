@@ -1093,6 +1093,7 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
     if v != 255 {
         super::kh2sound::voice(v as i16);
     }
+    kh1_cast_voice(actor, spell, finisher);
     log!(Magic,
         "KH2 magic {} (level {level}) in KH1's cast state: request {request:#x}, KH2 motion {motion}{}{}, cost {cost} units{}",
         SPELL_NAMES[spell as usize],
@@ -1101,6 +1102,22 @@ unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
         dropped.map_or(String::new(), |r| format!(", KH1's second part {r:#x} taken off its queue"))
     );
     true
+}
+
+/// A KH2 spell's voice with Battle Quotes KH1 (t744; the user: "when kh1 sora does any kh2 magic we
+/// need to make him grunt like kh2 sora until he gets to his finisher, then he plays one of his
+/// normal magic lines"): KH2's rule (MAGC: voice 7, a grunt, on every cast; the spell's own line on
+/// the finisher cast, Checked (files)) with KH1's lines, through KH1's own group play: a swing grunt
+/// (group 4) on a cast, the spell's group (`spell + 7`: Fire 7, Blizzard 8, Thunder 9, as KH1's
+/// command step picks it, Checked (decomp)) on the combo's finisher. Fire, Blizzard and Thunder only:
+/// KH2 casts Cure with no finisher, so Cure keeps KH1's own line (the command step's, `combat`).
+unsafe fn kh1_cast_voice(actor: usize, spell: u8, finisher: bool) {
+    if super::kh2sound::kh2_voice() || spell > 2 {
+        return;
+    }
+    let group = if finisher { spell as i32 + 7 } else { super::kh1voice::SWING_GROUP };
+    super::kh1voice::play(actor, group);
+    log!(Magic, "KH2 magic {} with Battle Quotes KH1: KH1's voice group {group} ({})", SPELL_NAMES[spell as usize], if finisher { "the finisher's spell line" } else { "a grunt" });
 }
 
 /// Whether Sora can pay for `spell` now: in a Drive Form KH1's 1 MP (`cost`); base Sora KH2's
@@ -1161,6 +1178,7 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
     if v != 255 {
         super::kh2sound::voice(v as i16);
     }
+    kh1_cast_voice(actor, spell, finisher);
     log!(Magic, "{} {} (level {level}) cast: motion {motion}{}", who(), SPELL_NAMES[spell as usize], if finisher { " (combo finisher)" } else { "" });
 }
 

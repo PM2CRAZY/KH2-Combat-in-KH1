@@ -195,6 +195,11 @@ pub fn start() {
             events.extend(REFLECT_VOICES.map(character_core::EventKind::Voice));
             spell = super::reflect::element_sounds();
         }
+        // (t746) Every spell's MAGC voices (cast, finisher, self: Fire / Blizzard / Thunder 7 and
+        // 11 / 12 / 13, Cure 22 / 23, Magnet 24, Checked (files)): KH2's cast code plays them, not a
+        // motion trigger, so only Reflect's were loaded and Fire's, Blizzard's and Thunder's
+        // finisher lines were never heard (`formmagic::kh1_spell_start` asked for voices not loaded).
+        events.extend(kh2.battle.magc.iter().filter(|m| m.world == 0).flat_map(|m| [m.voice, m.voice_finisher, m.voice_self]).filter(|v| *v != 255).map(|v| character_core::EventKind::Voice(v as i16)));
         // Wisdom Form's (its shots', `form`), and the revert's (Sora's elements, `form::revert_fx`).
         spell.extend(super::form::element_sounds(kh2));
         events.extend(super::form::REVERT_ELEMENTS.map(character_core::EventKind::Effect));
@@ -531,6 +536,53 @@ pub unsafe fn holds_back(actor: usize, group: i32, from: usize) -> bool {
         match said {
             Some(clip) => log!(Sound, "KH2 quotes: KH1's motion on row {row} (request {request:#x}): KH1's voice group {group} said as KH2's voice {v} (clip {clip})"),
             None => log!(Sound, "KH2 quotes: KH1's motion on row {row} (request {request:#x}): KH2's voice {v} not loaded, KH1's group {group} stays"),
+        }
+    }
+    said.is_some()
+}
+
+/// The return address of KH1's voice-group call in its command step (Steam `0x1402A3600`: a spell
+/// command with bit 25 plays group `spell + 7`, `0x1402901F0` at `0x1402A3661`, Checked (exe)).
+const SPELL_VOICE_RETURN_STEAM: usize = 0x2A3666;
+
+/// t746: KH1's spell line on Sora (its command step, a spell of KH1's: KH1's own rows, Gravity, Stop
+/// and Aero) with Battle Quotes KH2 (the user: "kh2 sora is missing his finisher grunts on magic, for
+/// aero can you give him the line where he says defense"; "for magnet just do a generic finisher
+/// line he does for his base finisher swing"): KH2's rule for its casts instead (MAGC, Checked
+/// (files)): voice 7, a grunt, on a cast; on the combo's finisher cast (its KH2 finisher motion
+/// picked for the ground request, `kh2slots::finisher_picked`; KH2 has none in the air) the spell's
+/// line: Fire 11, Blizzard 12, Thunder 13; Gravity and Stop, which KH2 doesn't have, KH2's base
+/// finisher swing line (voice 5); Aero KH1's own "Defense!" (`kh1voice::defense`, KH1's Aero clip).
+/// Cure: KH2's self-cure line (voice 23) on every cast. True when it was said in KH1's place.
+pub unsafe fn spell_line(actor: usize, group: i32, from: usize) -> bool {
+    if from != SPELL_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
+        return false;
+    }
+    if actor < 0x10000 || actor != super::takeover::sora_actor() || !(7..=13).contains(&group) {
+        return false;
+    }
+    let spell = (group - 7) as usize;
+    let air = matches!(std::ptr::read_unaligned((actor + 0x70) as *const i32), 2 | 8);
+    let finisher = !air && super::kh2slots::finisher_picked(0x36 + spell);
+    let v: i16 = match (spell, finisher) {
+        (3, _) => 23,
+        (6, true) => {
+            super::kh1voice::defense(actor);
+            log!(Sound, "KH2 quotes: KH1's Aero finisher: KH1's \"Defense!\" in place of KH1's group {group}");
+            return true;
+        }
+        (0, true) => 11,
+        (1, true) => 12,
+        (2, true) => 13,
+        (4 | 5, true) => 5,
+        _ => 7,
+    };
+    let said = LOADED.try_lock().ok().and_then(|g| g.as_ref().and_then(|l| l.voices.get(&v)).and_then(|c| c.say()));
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+        match said {
+            Some(clip) => log!(Sound, "KH2 quotes: KH1's spell {spell} ({}): KH2's voice {v} (clip {clip}) in place of KH1's group {group}", if finisher { "the combo's finisher" } else { "a cast" }),
+            None => log!(Sound, "KH2 quotes: KH1's spell {spell}: KH2's voice {v} not loaded, KH1's group {group} stays"),
         }
     }
     said.is_some()

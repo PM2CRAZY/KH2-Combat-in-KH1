@@ -2657,6 +2657,12 @@ pub unsafe fn pick_cast(request: usize, finisher: bool) -> Option<u16> {
     fin.map(|m| m.motion).or_else(|| cast_motion(request))
 }
 
+/// KH2's finisher cast is picked for KH1's spell request `request` now (`pick_cast` keeps a slot only
+/// for a finisher; t746, the spell voice, `kh2sound::spell_line`).
+pub fn finisher_picked(request: usize) -> bool {
+    CASTS.iter().position(|c| c.2 == request).is_some_and(|i| CAST_PICKED[i].load(Ordering::Relaxed) != usize::MAX)
+}
+
 /// KH2's motion our slot plays on KH1's spell request `request` now (its pick, else its own).
 pub fn cast_now(request: usize) -> Option<u16> {
     let i = CASTS.iter().position(|c| c.2 == request)?;

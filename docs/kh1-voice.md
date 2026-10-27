@@ -137,3 +137,24 @@ Not covered yet: KH1's roll (Dodge Roll style KH1) with Battle Quotes KH2. KH1 s
 voice call and its motion has no voice key, so there is no KH1 point to say KH2's voice 7 from but
 our own call of KH1's roll start (`takeover`) or a new hook on it. Spells with Battle Quotes KH2
 keep KH1's spell groups (7..13).
+
+## Spell voices and the Drive line (t744..t746)
+
+KH2's spell voices (MAGC in `00battle.bin`, world 0, Checked (files)): Fire, Blizzard, Thunder and
+Reflect cast with voice 7 (a grunt: clips 12, 9, 22, 21, 11) and their finisher cast says 11, 12, 13,
+25 (one clip each, the name calls / "Protect!"); Cure 22 (an ally's line) and 23 (self, clip 29), no
+finisher cast; Magnet 24, no finisher cast. KH2's Drive motion 52: voice 8 (clips 25, 32, 33).
+
+- **Battle Quotes KH1, a KH2 spell** (t744): a KH1 swing grunt (group 4) on a cast, KH1's spell group
+  (7 Fire, 8 Blizzard, 9 Thunder) on the combo's finisher (`formmagic::kh1_cast_voice`). Cure keeps
+  KH1's own line on every cast. Reflect as before (grunt, then "Defense!").
+- **Battle Quotes KH2, the Drive** (t745): KH2's voice 8 from the Drive motion; KH1's "Give me
+  strength!" only at Battle Quotes KH1 (`form::drive_voice`).
+- **Battle Quotes KH2, a KH2 spell** (t746): its MAGC voices, now loaded (only Reflect's were, so the
+  finisher name calls were silent).
+- **Battle Quotes KH2, a KH1 spell** (t746, `kh2sound::spell_line`, in place of KH1's command-step
+  line): voice 7 on a cast; on the combo's finisher Fire 11, Blizzard 12, Thunder 13, Gravity and
+  Stop 5 (KH2's base finisher swing line), Aero KH1's "Defense!" (clip 46); Cure 23 on every cast.
+
+Not covered yet: the summon call with Battle Quotes KH2 (KH2's summon line not found yet; KH1's
+summon sequences play KH1's groups 17, 15, 5).

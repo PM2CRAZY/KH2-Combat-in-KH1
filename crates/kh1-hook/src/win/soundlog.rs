@@ -166,8 +166,10 @@ unsafe extern "system" fn voice_group(actor: usize, group: i32, other: usize) ->
         }
         return 0;
     }
-    // (KH1's swing voice under KH2's quotes, `kh2sound::holds_back`.)
-    let held = super::kh2sound::holds_back(actor, group, caller_rva());
+    // (KH1's swing voice under KH2's quotes, `kh2sound::holds_back`; t746: KH1's spell line under
+    // them, `kh2sound::spell_line`.)
+    let from_rva = caller_rva();
+    let held = super::kh2sound::spell_line(actor, group, from_rva) || super::kh2sound::holds_back(actor, group, from_rva);
     if live() {
         let from = caller();
         let with = if other == 0 { String::new() } else { format!(", other {}", who(other)) };

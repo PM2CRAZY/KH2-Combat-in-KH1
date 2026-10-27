@@ -266,6 +266,19 @@ const HP_ADD_RVA: super::addr::Rva = super::addr::Rva(0x2A2790);
 
 /// Sora's HP back to full as a Drive starts (the user: "activating a drive form should restore
 /// soras health entirely", as KH2's does).
+/// Sora's line as a Drive starts (t745; the user: "hes also missing his drive transformation lines"):
+/// with Battle Quotes KH1, KH1's "Give me strength!" (clip 37 at priority 3, `kh1voice`); with
+/// Battle Quotes KH2, none of ours, so KH2's own line is heard: the Drive motion 52's voice 8 at
+/// frame 0 (VTBL: clips 25, 32, 33 at priority 2, Checked (files)), baked as a `KH2_VOICE` key and
+/// played on KH1's motion pass (seen firing in the user's t743 log). KH1's line, started a frame
+/// before at a higher priority, kept KH2's out by KH1's voice rule (**Assumption**: heard as
+/// missing, not logged).
+unsafe fn drive_voice(actor: usize) {
+    if !super::kh2sound::kh2_voice() {
+        super::kh1voice::give_me_strength(actor);
+    }
+}
+
 unsafe fn heal_full(sora: usize) {
     let stats = pose::ptr(rd::<u32>(sora + 0x6C));
     if stats < 0x10000 {
@@ -521,7 +534,8 @@ pub unsafe fn before_step(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim,
             heal_full(actor);
             // KH1's "Give me strength!" (the user: "add the battle quote from kh1 where he says
             // "give me strength" when your transforming into a drive").
-            super::kh1voice::give_me_strength(actor);
+            // (t745: with Battle Quotes KH2, KH2's own line, voice 8 on the Drive motion 52, `drive_voice`.)
+            drive_voice(actor);
             d.change = Some(0);
             d.changing_to = Some(kind);
             CHANGING.store(true, Ordering::Relaxed);
@@ -937,7 +951,7 @@ unsafe fn native_start(d: &mut Drive, actor: usize) {
     let before = mp(actor);
     super::reflect::pay_mp(actor, COST);
     heal_full(actor);
-    super::kh1voice::give_me_strength(actor);
+    drive_voice(actor);
     d.change = Some(0);
     d.changing_to = Some(kind);
     CHANGING.store(true, Ordering::Relaxed);

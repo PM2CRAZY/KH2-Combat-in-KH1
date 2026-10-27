@@ -630,7 +630,10 @@ unsafe fn command_step(actor: usize, dir: usize) {
             // (The command record's bit 25 has the command step play KH1's voice group for the
             // spell, `0x1402901F0 (actor, spell + 7, target)`: with KH2's battle quotes, KH2's
             // MAGC voice is the cast's, `formmagic::kh1_spell_start`.)
-            if super::kh2sound::kh2_voice() {
+            // (t744: Battle Quotes KH1, Fire / Blizzard / Thunder: KH2's rule with KH1's lines, a
+            // grunt per cast and the spell's line on the finisher, `formmagic::kh1_spell_start`;
+            // Cure, which KH2 casts with no finisher, keeps KH1's own line on every cast.)
+            if super::kh2sound::kh2_voice() || arg <= 2 {
                 wr(base + COMMAND_RVA, full & !0x0200_0000);
             }
             // KH2's finisher cast when this cast is the combo's finisher (`formmagic::pick_cast`).
