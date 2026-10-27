@@ -12,9 +12,11 @@
 //! entries made from a KH1 template entry, KH2's AP, and our own text (KH1's text codes: 0 ends,
 //! 1 space, 0x21.. digits, 0x2B.. A-Z, 0x45.. a-z), and `0x142D37748` points at the copy (again
 //! whenever KH1 reloads the table). KH1's own 65 keep KH1's entries untouched (the split,
-//! testing: KH1's names, help and AP). Sora learns ours by level, boss or KH1 namesake: added
-//! to his list, off until equipped. In the other modes they are taken back out of his lists,
-//! so a save stays KH1's own.
+//! testing: KH1's names, help and AP). KH1's own progression is vanilla (the tester, what-is-
+//! still-missing after m17: "make it all vanilla, just give the player all the custom abilities
+//! we added"): Sora simply has every one of ours, off until equipped, and they never take a KH1
+//! ability's place (`growth::RESERVE`, `growth::yield_one`). In the other modes they are taken
+//! back out of his lists, so a save stays KH1's own.
 //!
 //! KH1 counts an ability (`0x140282A70 (id, member)`) by scanning the list for the id, and its
 //! AP sums walk the 48 bytes (`0x1402E6220`, `0x1402E62D0`: `cmp 0x30`), so ours live in Sora's
@@ -154,7 +156,7 @@ pub unsafe fn glide_style_now(base: usize) {
     let changed = glide_style_list(save, &now, kh2);
     if let Some(after) = Growth::kh1(base) {
         if kh2 && growth::has(&after.shared, growth::ours::GLIDE) {
-            set_glide_name(growth::kh2_glide_level(after.level, &after.progress));
+            set_glide_name(growth::kh2_glide_level(&after.progress).max(after.form_growth.glide));
         }
         log!(Menus,
             "abilities: Glide style {} set in the Config menu: shared list {} now ({:?})",
@@ -260,8 +262,7 @@ const STATS_RVA: Rva = Rva(0x2A2FA0);
 const STATS_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x57, 0x41, 0x56, 0x41, 0x57];
 static ORIG_STATS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-/// Sora's max AP gets the AP of each KH2 ability he has learned (`growth::bonus_ap`); the save
-/// keeps KH1's own.
+/// KH1's party stats, with Valor's second Keyblade and the debug menu's locks on top.
 unsafe extern "system" fn stats(member: i32, out: usize) {
     stats_inner(member, out);
     // The debug menu's locked stats over everything (`debugmenu::lock_stats`).
@@ -273,34 +274,8 @@ unsafe fn stats_inner(member: i32, out: usize) {
     f(member, out);
     // Valor's second Keyblade's Strength and MP on Sora's (`valorstats`).
     super::valorstats::add(member, out);
-    let set = super::settings::get();
-    if member != 0 || out < 0x10000 || !set.bonus_ap || set.abilities != growth::Mode::Kh1 {
-        return;
-    }
-    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
-    let Some(sora) = Growth::kh1(base) else { return };
-    let bonus = growth::bonus_ap(&sora);
-    // The abilities the Drive Forms' levels gave him bring their own AP too (KH1's AP for each,
-    // byte +0 of its entry in KH1's ability table; the tester, after m16, answer 7 (a)), while he
-    // still has a copy of it.
-    let table = rd::<u64>(base + TABLE_PTR_RVA) as usize;
-    let mut forms = 0u32;
-    if table >= 0x10000 {
-        let mut left_a: Vec<u8> = sora.abilities.iter().map(|b| b & 0x7F).collect();
-        for id in super::formexp::rewards_given() {
-            if let Some(i) = left_a.iter().position(|b| *b == id) {
-                left_a[i] = 0;
-                forms += rd::<u8>(table + (id as usize - 1) * 12) as u32;
-            }
-        }
-    }
-    let ap = rd::<i32>(out + 0xE4);
-    let now = (ap + bonus as i32 + forms as i32).min(100);
-    std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
-    static LAST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
-    if LAST.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
-        log!(Menus, "Sora's AP: {ap} (KH1's) + {bonus} (KH2 abilities learned) + {forms} (form level abilities) = {now}");
-    }
+    // (No extra AP for the KH2 abilities any more, nor for the form levels' abilities: the
+    // tester, what-is-still-missing after m17, "remove extra ap for now". KH1's own AP only.)
 }
 
 // (KH1's reward-line hook, `0x1401B6990`, which hid Zantetsuken's "learned" line, is gone: the
@@ -412,36 +387,20 @@ unsafe fn add(list: usize, len: usize, byte: u8) -> bool {
     false
 }
 
-/// Notes a KH1 ability given up for one of ours in `kh1-kh2-removed.txt` next to the game (so
-/// it can be given back by hand).
-fn remember(line: &str) {
-    use std::io::Write;
-    let path = format!("{}\\kh1-kh2-removed.txt", super::exe_dir());
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-        let _ = writeln!(f, "{line}");
+/// Writes Sora's two lists back (48 and 10 bytes).
+unsafe fn write_lists(save: usize, abilities: &[u8], shared: &[u8]) {
+    for (k, b) in abilities.iter().enumerate().take(48) {
+        std::ptr::write((save + 0x44 + k) as *mut u8, *b);
+    }
+    for (k, b) in shared.iter().enumerate().take(10) {
+        std::ptr::write((save + 0x599 + k) as *mut u8, *b);
     }
 }
 
-/// KH1 abilities `kh1-kh2-removed.txt` says were given up that may no longer be (the user
-/// keeps Encounter Plus): their ids.
-fn given_back() -> Vec<u8> {
-    let path = format!("{}\\kh1-kh2-removed.txt", super::exe_dir());
-    let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
-    let mut ids = Vec::new();
-    for line in text.lines() {
-        // (Zantetsuken, which the mod took out of Sora's list before m22: "level N: Zantetsuken
-        // taken out (the mod has none)".)
-        if line.contains("Zantetsuken taken out") && !ids.contains(&growth::kh1::ZANTETSUKEN) {
-            ids.push(growth::kh1::ZANTETSUKEN);
-            continue;
-        }
-        let Some(i) = line.find("(id ") else { continue };
-        let Some(id) = line[i + 4..].split(')').next().and_then(|n| n.trim().parse::<u8>().ok()) else { continue };
-        if !growth::MAKE_ROOM.contains(&id) && !ids.contains(&id) {
-            ids.push(id);
-        }
-    }
-    ids
+/// Free places in Sora's own list now.
+unsafe fn free_now(save: usize) -> usize {
+    let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(save + 0x44 + i)).collect();
+    growth::free(&bytes)
 }
 
 /// Takes our abilities back out of a list (closing the gaps).
@@ -467,17 +426,15 @@ pub struct Growth {
     applied: bool,
     /// Abilities already reported as not fitting (once each).
     no_room: Vec<u8>,
-    /// Abilities given up before that no longer would be were given back (once a run).
-    gave_back: bool,
+    /// Our abilities that gave their place back to KH1's this run (no new box when they return).
+    yielded: Vec<u8>,
     /// "New ability" boxes waiting for KH1's prompt box to be free: (title, line, line).
     prompts: std::collections::VecDeque<(String, String, String)>,
     /// Frames KH1's prompt box has been free.
     idle: u32,
-    /// Quick Run's and Dodge Roll's levels last seen (None: not looked yet).
+    /// Quick Run's, High Jump's and KH2 Glide's levels last seen (None: not looked yet).
     qr_level: Option<u8>,
-    dr_level: Option<u8>,
     hj_level: Option<u8>,
-    ad_level: Option<u8>,
     gl_level: Option<u8>,
     /// The abilities last given before the debug menu's growth overrides (`debugmenu::
     /// growth_overrides`), and the overrides' count when they were applied.
@@ -493,7 +450,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), gave_back: false, prompts: Default::default(), idle: 0, qr_level: None, dr_level: None, hj_level: None, ad_level: None, gl_level: None, given: None, ov_gen: 0, names: [None; 3] }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, given: None, ov_gen: 0, names: [None; 3] }
     }
 
     /// Quick Run's (0), Glide's (1) or Aerial Dodge's (2) menu name at level `l` (his own), or at
@@ -579,32 +536,39 @@ impl Growth {
         // Sora learns KH2's abilities at their levels (`kh1`), or has them taken back out.
         if let Some(save) = save_block(base) {
             if self.mode == Mode::Kh1 {
-                // Given back once (the user: keep Encounter Plus), off, making room if needed.
-                if !self.gave_back {
-                    self.gave_back = true;
-                    for id in given_back() {
-                        if growth::has(&now.abilities, id) {
-                            continue;
+                // A save the mod's older builds changed is moved over once (the save's mark,
+                // `growth::LAYOUT_OFF`): the split (KH1's modifiers stood for KH2's before testing
+                // s261, `growth::migrate`), then KH1's vanilla progression put back (the tester,
+                // what-is-still-missing after m17: "make it all vanilla ... existing saves get
+                // updated", `growth::restore_vanilla`).
+                let mark = rd::<u16>(save + growth::LAYOUT_OFF);
+                if mark != growth::LAYOUT_VANILLA {
+                    let touched = mark == growth::LAYOUT_SPLIT || growth::old_layout(&now) || growth::MENU.iter().any(|ab| growth::has(&now.abilities, ab.id) || growth::has(&now.shared, ab.id));
+                    if mark != growth::LAYOUT_SPLIT && growth::old_layout(&now) {
+                        let m = growth::migrate(&now);
+                        write_lists(save, &m.abilities, &m.shared);
+                        log!(Menus, "abilities: a save from before the split, moved over ({} changes)", m.lines.len());
+                        for line in &m.lines {
+                            log!(Menus, "abilities: {line}");
                         }
-                        let list = save + 0x44;
-                        let mut done = add(list, 48, id | 0x80);
-                        if !done {
-                            let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
-                            if let Some(i) = growth::make_room(&bytes) {
-                                let gone = bytes[i];
-                                let mut kept = bytes.clone();
-                                kept.remove(i);
-                                kept.push(0);
-                                for (k, b) in kept.iter().enumerate() {
-                                    std::ptr::write((list + k) as *mut u8, *b);
-                                }
-                                remember(&format!("level {}: removed {} (id {}) to give back {}", now.level, growth::name(gone), gone & 0x7F, growth::name(id)));
-                                log!(Menus, "{} (off) made room to give back {}", growth::name(gone), growth::name(id));
-                                done = add(list, 48, id | 0x80);
-                            }
+                        if let Some(again) = Self::kh1(base) {
+                            now = again;
                         }
-                        log!(Menus, "{} given back to Sora{}", growth::name(id), if done { " (off)" } else { ": no room" });
                     }
+                    if touched {
+                        let path = format!("{}\\kh1-kh2-removed.txt", super::exe_dir());
+                        let text = std::fs::read_to_string(path).unwrap_or_default();
+                        let m = growth::restore_vanilla(&now, &text);
+                        write_lists(save, &m.abilities, &m.shared);
+                        log!(Menus, "abilities: back on KH1's vanilla progression ({} given back, {} of ours made room)", m.lines.len(), m.removed.len());
+                        for line in m.lines.iter().chain(&m.removed) {
+                            log!(Menus, "abilities: {line}");
+                        }
+                        self.yielded.extend(growth::MENU.iter().filter(|ab| growth::has(&now.abilities, ab.id) && !growth::has(&m.abilities, ab.id)).map(|ab| ab.id));
+                    } else {
+                        log!(Menus, "abilities: a save the mod hadn't changed: KH1's vanilla progression as it is");
+                    }
+                    std::ptr::write_unaligned((save + growth::LAYOUT_OFF) as *mut u16, growth::LAYOUT_VANILLA);
                     if let Some(again) = Self::kh1(base) {
                         now = again;
                     }
@@ -616,55 +580,8 @@ impl Growth {
                         now = again;
                     }
                 }
-                // One High Jump, one Glide (the user): spares go.
-                let (kept, spare) = growth::one_only(&now.shared);
-                if !spare.is_empty() {
-                    for (k, b) in kept.iter().enumerate() {
-                        std::ptr::write((save + 0x599 + k) as *mut u8, *b);
-                    }
-                    let names: Vec<String> = spare.iter().map(|id| growth::name(*id)).collect();
-                    log!(Menus, "spare shared abilities taken out (one of each counts): {}", names.join(", "));
-                    remember(&format!("level {}: spare shared abilities taken out (one of each counts): {}", now.level, names.join(", ")));
-                    now.shared = kept;
-                }
-                // (Superglide is KH1's own again since the split: KH2's Glide MAX while it is on.)
-                // (Zantetsuken stays in Sora's list now, the tester, combo row selection m22
-                // answer 3: "bring back zantetsuken". KH1's picker's finisher walk plays it by its
-                // KH1 rule, `combomods::finisher_walk`. A copy the mod took out before is given
-                // back once, off, `given_back`.)
-                // The split (testing): a save from before it, where KH1's modifiers stood for
-                // KH2's (Hurricane Blast was Explosion), is moved over once (`growth::migrate`),
-                // before KH1's namesakes bring KH2's abilities (off) below. Marked in the save's
-                // spare bytes (`growth::LAYOUT_OFF`) either way. (KH1's own later copies of its
-                // modifiers are no longer taken out: they are KH1's abilities.)
-                if rd::<u16>(save + growth::LAYOUT_OFF) != growth::LAYOUT_SPLIT {
-                    if growth::old_layout(&now) {
-                        let m = growth::migrate(&now);
-                        for (k, b) in m.abilities.iter().enumerate().take(48) {
-                            std::ptr::write((save + 0x44 + k) as *mut u8, *b);
-                        }
-                        for (k, b) in m.shared.iter().enumerate().take(10) {
-                            std::ptr::write((save + 0x599 + k) as *mut u8, *b);
-                        }
-                        log!(Menus, "abilities: a save from before the split, moved over ({} changes)", m.lines.len() + m.removed.len());
-                        for line in &m.lines {
-                            log!(Menus, "abilities: {line}");
-                            remember(&format!("level {}: split: {line}", now.level));
-                        }
-                        for line in &m.removed {
-                            log!(Menus, "abilities: {line}");
-                            remember(&format!("level {}: {line}", now.level));
-                        }
-                    } else {
-                        log!(Menus, "abilities: the save has the split ids (nothing from before it to move over)");
-                    }
-                    std::ptr::write_unaligned((save + growth::LAYOUT_OFF) as *mut u16, growth::LAYOUT_SPLIT);
-                    if let Some(again) = Self::kh1(base) {
-                        now = again;
-                    }
-                }
-                // Quick Run and Aerial Dodge moved from the shared list into Sora's (the user: with
-                // AP); one that was on stays on.
+                // Quick Run and Aerial Dodge moved from the shared list into Sora's (an older
+                // build had them there); one that was on stays on.
                 for ab in growth::MENU.iter().filter(|a| a.list == growth::List::Sora) {
                     let shared = save + 0x599;
                     let bytes: Vec<u8> = (0..10).map(|i| rd::<u8>(shared + i)).collect();
@@ -676,95 +593,70 @@ impl Growth {
                     for (k, b) in kept.iter().enumerate() {
                         std::ptr::write((shared + k) as *mut u8, *b);
                     }
-                    let moved = growth::has(&now.abilities, ab.id) || add(save + 0x44, 48, if on { ab.id } else { ab.id | 0x80 });
-                    log!(Menus, "{} moved from the shared abilities to Sora's ({}){}", ab.name, if on { "on" } else { "off" }, if moved { "" } else { ": his list is full, learned again when there's room" });
+                    let moved = growth::has(&now.abilities, ab.id) || (free_now(save) > growth::RESERVE && add(save + 0x44, 48, if on { ab.id } else { ab.id | 0x80 }));
+                    log!(Menus, "{} moved from the shared abilities to Sora's ({}){}", ab.name, if on { "on" } else { "off" }, if moved { "" } else { ": no room, given when there is" });
                     if let Some(again) = Self::kh1(base) {
                         now = again;
                     }
                 }
-                // Aerial Dodge is Genie Jafar's (the user; Riku's before): taken back out until he
-                // is beaten (given again then, with its box).
-                if !growth::BOSS_GIFTS.iter().any(|g| g.ability == AERIAL_DODGE && growth::beaten(&now.progress, g)) && super::debugmenu::ability_forced(AERIAL_DODGE) != Some(true) {
+                // KH1's own grants come first (the tester: no KH2 ability in a vanilla one's
+                // place): ours always leave `growth::RESERVE` places free for KH1's appends, and
+                // give theirs back when KH1's own fill the list.
+                while free_now(save) < growth::RESERVE {
                     let list = save + 0x44;
                     let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
-                    let end = bytes.iter().position(|b| *b == 0).unwrap_or(48);
-                    if let Some(i) = bytes[..end].iter().position(|b| b & 0x7F == AERIAL_DODGE) {
-                        let mut kept = bytes.clone();
-                        kept.remove(i);
-                        kept.push(0);
-                        for (k, b) in kept.iter().enumerate() {
-                            std::ptr::write((list + k) as *mut u8, *b);
-                        }
-                        log!(Menus, "Aerial Dodge taken back until Genie Jafar is beaten (Agrabah)");
-                        if let Some(again) = Self::kh1(base) {
-                            now = again;
-                        }
+                    let Some(i) = growth::yield_one(&bytes) else { break };
+                    let gone = bytes[i];
+                    let mut kept = bytes.clone();
+                    kept.remove(i);
+                    kept.push(0);
+                    for (k, b) in kept.iter().enumerate() {
+                        std::ptr::write((list + k) as *mut u8, *b);
+                    }
+                    if !self.yielded.contains(&(gone & 0x7F)) {
+                        self.yielded.push(gone & 0x7F);
+                    }
+                    log!(Menus, "Sora's list is nearly full of KH1's own: {} ({}) gives its place back (given again when there's room)", growth::name(gone), if gone & 0x80 == 0 { "was on" } else { "off" });
+                    if let Some(again) = Self::kh1(base) {
+                        now = again;
                     }
                 }
-                // KH2's abilities by level, boss (the user's list) or KH1 namesake, off until
-                // equipped, each with its box.
-                for (why, ab) in now.grants() {
+                // Every KH2 ability of ours is simply Sora's (the tester, after m17: "just give the
+                // player all the custom abilities we added"), off until equipped, while it leaves
+                // KH1 its reserve. One box for several at once.
+                let mut learned: Vec<&'static str> = Vec::new();
+                for ab in now.grants() {
                     // (Not one the debug menu took out this session.)
                     if super::debugmenu::ability_forced(ab.id) == Some(false) {
                         continue;
                     }
-                    let (list, len, byte) = match ab.list {
-                        growth::List::Shared => (save + 0x599, 10, ab.id),
-                        growth::List::Sora => (save + 0x44, 48, ab.id | 0x80),
-                    };
-                    let mut done = add(list, len, byte);
-                    // KH2's abilities first (the user): a KH1 ability that's off makes room.
-                    if !done && ab.list == growth::List::Sora {
-                        let bytes: Vec<u8> = (0..len).map(|i| rd::<u8>(list + i)).collect();
-                        if let Some(i) = growth::make_room(&bytes) {
-                            let gone = bytes[i];
-                            let mut kept = bytes.clone();
-                            kept.remove(i);
-                            kept.push(0);
-                            for (k, b) in kept.iter().enumerate() {
-                                std::ptr::write((list + k) as *mut u8, *b);
-                            }
-                            done = add(list, len, byte);
-                            let line = format!("Sora's list was full: {} (off) made room for {}", growth::name(gone), ab.name);
-                            log!(Menus, "{}", line);
-                            remember(&format!("level {}: removed {} (id {}) for {}", now.level, growth::name(gone), gone & 0x7F, ab.name));
+                    if free_now(save) > growth::RESERVE && add(save + 0x44, 48, ab.id | 0x80) {
+                        log!(Menus, "Sora is given {} (id {}, {} AP, off)", ab.name, ab.id, ab.ap);
+                        if !self.yielded.contains(&ab.id) {
+                            learned.push(ab.name);
                         }
-                    }
-                    if done {
-                        log!(Menus, "{why}: Sora learns {} (id {}, {} AP)", ab.name, ab.id, ab.ap);
-                        // The user: the game should say so.
-                        // Its name only (the user: no description needed).
-                        let shown = match ab.effect {
-                            growth::Effect::QuickRun => growth::quick_run_name(now.quick_run_now()),
-                            growth::Effect::AerialDodge => growth::aerial_dodge_name(growth::aerial_dodge_level(now.level)),
-                            _ => ab.name.to_string(),
-                        };
-                        self.prompts.push_back(("New Ability".to_string(), shown, String::new()));
                     } else if !self.no_room.contains(&ab.id) {
                         self.no_room.push(ab.id);
-                        log!(Menus, "{why}, but Sora can't learn {}: his ability list is full (48, KH1's most)", ab.name);
+                        log!(Menus, "no room for {} in Sora's list beside KH1's own (48, KH1's most, {} kept free for KH1): given when there's room", ab.name, growth::RESERVE);
                     }
                 }
-                // KH2's form level-ups (the tester, after m15, answer 6 (c)): the shared growth a
-                // form's level gives that he doesn't have (KH1's High Jump for Valor, on, as KH1's
-                // shared abilities are given; `growth::Kh1Sora::form_grants`) ...
-                for (why, id, l) in now.form_grants() {
-                    if super::debugmenu::ability_forced(id) == Some(false) {
-                        continue;
+                match learned.len() {
+                    0 => {}
+                    1 | 2 => {
+                        for n in learned {
+                            self.prompts.push_back(("New Ability".to_string(), n.to_string(), String::new()));
+                        }
                     }
-                    if add(save + 0x599, 10, id) {
-                        let shown = if id == growth::kh1::HIGH_JUMP { growth::high_jump_name(l) } else { growth::glide_name(l) };
-                        log!(Menus, "{why}: Sora learns {shown} (KH2's form level-up)");
-                        self.prompts.push_back(("New Ability".to_string(), shown, String::new()));
-                    } else if !self.no_room.contains(&id) {
-                        self.no_room.push(id);
-                        log!(Menus, "{why}, but Sora can't learn {}: his shared abilities are full", growth::name(id));
-                    }
+                    n => self.prompts.push_back(("New Abilities".to_string(), format!("{n} KH2 Abilities"), String::new())),
                 }
-                // ... and the fmlv rows' abilities (KH2's `0x1403C3F00`, `formexp::rewards_due`):
-                // KH1's own counterpart in his list, off until equipped, with its box. One without
-                // a counterpart yet is noted and passed (asked); a full list stops that form's
-                // until there's room.
+                if let Some(again) = Self::kh1(base) {
+                    now = again;
+                }
+                // The fmlv rows' abilities (KH2's own form level-up rule, `0x1403C3F00`,
+                // `formexp::rewards_due`): KH1's own counterpart in his list, off until equipped,
+                // with its box. With no room one of ours gives its place back; a list full of
+                // KH1's own stops that form's until there's room. One without a counterpart yet is
+                // noted and passed.
                 let mut stopped: Vec<super::form::Kind> = Vec::new();
                 for (kind, level, kh2_id) in super::formexp::rewards_due() {
                     if stopped.contains(&kind) {
@@ -777,10 +669,9 @@ impl Growth {
                         continue;
                     };
                     let list = save + 0x44;
-                    let mut done = add(list, 48, id | 0x80);
-                    if !done {
+                    if free_now(save) == 0 {
                         let bytes: Vec<u8> = (0..48).map(|i| rd::<u8>(list + i)).collect();
-                        if let Some(i) = growth::make_room(&bytes) {
+                        if let Some(i) = growth::yield_one(&bytes) {
                             let gone = bytes[i];
                             let mut kept = bytes.clone();
                             kept.remove(i);
@@ -788,12 +679,13 @@ impl Growth {
                             for (k, b) in kept.iter().enumerate() {
                                 std::ptr::write((list + k) as *mut u8, *b);
                             }
-                            done = add(list, 48, id | 0x80);
-                            log!(Menus, "Sora's list was full: {} (off) made room for {}", growth::name(gone), growth::name(id));
-                            remember(&format!("level {}: removed {} (id {}) for {} ({} LV{level})", now.level, growth::name(gone), gone & 0x7F, growth::name(id), kind.name()));
+                            if !self.yielded.contains(&(gone & 0x7F)) {
+                                self.yielded.push(gone & 0x7F);
+                            }
+                            log!(Menus, "{} gives its place back for {} ({} LV{level})", growth::name(gone), growth::name(id), kind.name());
                         }
                     }
-                    if done {
+                    if add(list, 48, id | 0x80) {
                         log!(Menus, "{} LV{level}: Sora learns {} (id {id}, KH2's {what}), off", kind.name(), growth::name(id));
                         self.prompts.push_back(("New Ability".to_string(), growth::name(id), String::new()));
                         super::formexp::rewarded(kind, level);
@@ -801,7 +693,7 @@ impl Growth {
                         stopped.push(kind);
                         if !self.no_room.contains(&id) {
                             self.no_room.push(id);
-                            log!(Menus, "{} LV{level}: Sora can't learn {}: his ability list is full (48, KH1's most)", kind.name(), growth::name(id));
+                            log!(Menus, "{} LV{level}: Sora can't learn {}: his ability list is full of KH1's own (48, KH1's most)", kind.name(), growth::name(id));
                         }
                     }
                 }
@@ -830,18 +722,8 @@ impl Growth {
                 }
                 self.qr_level = Some(l);
             }
-            // KH1's Dodge Roll, High Jump and Glide keep KH1's names (the split); the box says
-            // how far KH2's own grows with them.
-            let l = if growth::has(&now.abilities, growth::kh1::DODGE_ROLL) { growth::dodge_roll_level(now.level) } else { 0 };
-            if self.dr_level != Some(l) {
-                if let Some(old) = self.dr_level {
-                    if old > 0 && l > old {
-                        log!(Menus, "Dodge Roll grows: {}", growth::dodge_roll_name(l));
-                        self.prompts.push_back(("Ability Up".to_string(), growth::dodge_roll_name(l), String::new()));
-                    }
-                }
-                self.dr_level = Some(l);
-            }
+            // KH1's High Jump and Glide keep KH1's names (the split); the box says how far KH2's
+            // own grows with them (only from the Drive Forms' levels now).
             let l = if growth::has(&now.shared, growth::kh1::HIGH_JUMP) { now.high_jump_now() } else { 0 };
             if self.hj_level != Some(l) {
                 if let Some(old) = self.hj_level {
@@ -865,17 +747,9 @@ impl Growth {
                 }
                 self.gl_level = Some(l);
             }
-            let l = if growth::has(&now.abilities, AERIAL_DODGE) { growth::aerial_dodge_level(now.level) } else { 0 };
+            // Aerial Dodge stays LV1 (KH2 grows it with Master Form, not on KH1's states here).
+            let l = u8::from(growth::has(&now.abilities, AERIAL_DODGE));
             self.name(2, l);
-            if self.ad_level != Some(l) {
-                if let Some(old) = self.ad_level {
-                    if old > 0 && l > old {
-                        log!(Menus, "Aerial Dodge grows: {}", growth::aerial_dodge_name(l));
-                        self.prompts.push_back(("Ability Up".to_string(), growth::aerial_dodge_name(l), String::new()));
-                    }
-                }
-                self.ad_level = Some(l);
-            }
         }
         if self.seen.as_ref() == Some(&now) {
             return;

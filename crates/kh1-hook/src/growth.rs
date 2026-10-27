@@ -21,6 +21,13 @@
 //!
 //! Until the split (testing s261) KH1's combo modifiers stood for KH2's (Hurricane Blast was
 //! Explosion, renamed in the menu). A save from then is moved over once (`migrate`).
+//!
+//! Progression is KH1's vanilla one (the tester, what-is-still-missing after m17: "make it all
+//! vanilla, just give the player all the custom abilities we added, existing saves get updated,
+//! remove extra ap for now"): KH1 gives its own abilities on its own schedule and the mod never
+//! takes one out; every KH2 ability of ours is Sora's from the start (`Kh1Sora::grants`); KH2's
+//! growth levels come only from the Drive Forms' levels (`FormGrowth`); saves the older builds
+//! changed get KH1's abilities back once (`restore_vanilla`).
 
 use character_core::Abilities;
 
@@ -278,32 +285,28 @@ pub struct MenuAbility {
     pub help: &'static str,
     /// AP (KH2's, from its item table); shared abilities take none.
     pub ap: u8,
-    /// Sora's level it is learned at (`BOSS`: not by level).
-    pub level: u8,
     pub list: List,
     /// The KH1 ability whose table entry it is made from (its kind and place in the menu).
     pub template: u8,
     /// What it does for KH2's controller.
     pub effect: Effect,
-    /// The KH1 ability it is also learned with (0: none): KH1's namesake, which stood for it
-    /// before the split, so it keeps that learn point.
+    /// KH1's namesake (0: none), which stood for it before the split (`migrate` moves such a
+    /// save over).
     pub with: u8,
     /// While KH1's own states move Sora.
     pub on_kh1: Side,
 }
 
 #[allow(clippy::too_many_arguments)]
-const fn m(id: u8, name: &'static str, help: &'static str, ap: u8, level: u8, template: u8, effect: Effect, with: u8, on_kh1: Side) -> MenuAbility {
-    MenuAbility { id, name, help, ap, level, list: List::Sora, template, effect, with, on_kh1 }
+const fn m(id: u8, name: &'static str, help: &'static str, ap: u8, template: u8, effect: Effect, with: u8, on_kh1: Side) -> MenuAbility {
+    MenuAbility { id, name, help, ap, list: List::Sora, template, effect, with, on_kh1 }
 }
 
-/// `MenuAbility::level` for an ability not learned by level.
-pub const BOSS: u8 = 0;
-
-/// A boss's gift (the user's list; KH2 gives its moves for beating bosses too): the ability, once
-/// the world's story progress byte (`progress`, `Kh1Sora::progress`) reaches the value it has
+/// A story point: a world's story progress byte (`Kh1Sora::progress`) at or past the value it has
 /// once the boss is beaten (as the Archipelago KH1 client reads them: gaithern's KH-1FM-AP-LUA,
-/// MIT, after the RetroAchievements code notes).
+/// MIT, after the RetroAchievements code notes). Only Chernabog's is used now (`CHERNABOG`); the
+/// mod's own boss gifts are gone (vanilla progression, the tester, what-is-still-missing after
+/// m17: "make it all vanilla, just give the player all the custom abilities we added").
 #[derive(Clone, Copy, Debug)]
 pub struct BossGift {
     pub boss: &'static str,
@@ -312,24 +315,9 @@ pub struct BossGift {
     /// 10 Hollow Bastion, 11 End of the World).
     pub world: usize,
     pub progress: u8,
-    /// One of ours (`MENU`).
+    /// The ability KH1 gives there.
     pub ability: u8,
 }
-
-pub const BOSS_GIFTS: [BossGift; 9] = [
-    BossGift { boss: "Sabor", world: 1, progress: 0x42, ability: ours::UPPER_SLASH },
-    // Flash Step for Sabor too (the user; it was a level 42 gift).
-    BossGift { boss: "Sabor", world: 1, progress: 0x42, ability: ours::FLASH_STEP },
-    BossGift { boss: "Clayton", world: 1, progress: 0x56, ability: ours::AERIAL_SWEEP },
-    BossGift { boss: "Jafar", world: 4, progress: 0x49, ability: ours::AERIAL_FINISH },
-    BossGift { boss: "Pot Centipede", world: 4, progress: 0x35, ability: ours::GUARD_BREAK },
-    BossGift { boss: "Dragon Maleficent", world: 10, progress: 0x6E, ability: ours::EXPLOSION },
-    BossGift { boss: "Captain Hook", world: 9, progress: 0x56, ability: ours::MAGNET_BURST },
-    BossGift { boss: "Cerberus", world: 2, progress: 0x25, ability: ours::AERIAL_DIVE },
-    // Genie Jafar in Agrabah (the user; earlier Riku the first time): Agrabah's progress is 0x46
-    // during Jafar and 0x53 after Genie Jafar's cutscene (KH-1FM-AP-LUA's warp fixes).
-    BossGift { boss: "Genie Jafar", world: 4, progress: 0x53, ability: ours::AERIAL_DODGE },
-];
 
 /// The first id past KH1's own (65 entries in its table).
 pub const FIRST_ID: u8 = 66;
@@ -339,42 +327,39 @@ pub const MAX_ID: u8 = 0x7F;
 use Side::{Borrow, Kh1Combo};
 
 pub const MENU: [MenuAbility; 23] = [
-    // (The user: Quick Run from level 12, growing with Sora; both with AP in Sora's own
-    // list, not the shared one. AP as KH2's.)
-    m(66, "Quick Run", "Dash swiftly along the ground.", 2, 12, kh1::DODGE_ROLL, Effect::QuickRun, 0, Hook),
-    // (The user: Aerial Dodge for beating Genie Jafar, `BOSS_GIFTS`.)
-    m(67, "Aerial Dodge", "Leap once more in midair.", 3, BOSS, kh1::DODGE_ROLL, Effect::AerialDodge, 0, Borrow),
-    m(68, "Aerial Recovery", "Right yourself in midair after being knocked back.", 2, 4, kh1::COMBO_PLUS, Effect::AerialRecovery, 0, Hook),
-    m(69, "Dodge Slash", "Ground combo: strike nearby foes all around.", 2, 10, kh1::SLAPSHOT, Effect::Modifier(kh2::DODGE_SLASH), 0, Kh1Combo),
-    m(70, "Horizontal Slash", "Air combo: a powerful side slash with Square.", 2, 16, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH), 0, Kh1Combo),
-    m(71, "Negative Combo", "Shortens combos by one attack.", 2, 20, kh1::COMBO_PLUS, Effect::NegativeCombo, 0, Kh1Combo),
-    m(72, "Aerial Spiral", "Air combo: spin into foes in midair.", 2, 25, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_SPIRAL), 0, Kh1Combo),
-    m(73, "Upper Slash", "Combo: knock a foe into the air with Square.", 4, BOSS, kh1::SLAPSHOT, Effect::Modifier(kh2::UPPER_SLASH), 0, Kh1Combo),
-    m(74, "Finishing Plus", "Adds a finishing move to the combo.", 5, 34, kh1::COMBO_PLUS, Effect::FinishingPlus, 0, Kh1Combo),
-    m(75, "Retaliating Slash", "When knocked away, recover and strike back with Square.", 3, 43, kh1::SLAPSHOT, Effect::Modifier(kh2::RETALIATING_SLASH), 0, Hook),
-    m(76, "Aerial Dive", "From the ground: leap at a far airborne foe.", 2, BOSS, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE), 0, Kh1Combo),
-    m(77, "Magnet Burst", "Air combo finisher: pull in foes all around.", 3, BOSS, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST), 0, Kh1Combo),
+    // Every one of these is simply Sora's (off until equipped, with AP) since the tester's
+    // "make it all vanilla, just give the player all the custom abilities we added". AP as KH2's.
+    m(66, "Quick Run", "Dash swiftly along the ground.", 2, kh1::DODGE_ROLL, Effect::QuickRun, 0, Hook),
+    m(67, "Aerial Dodge", "Leap once more in midair.", 3, kh1::DODGE_ROLL, Effect::AerialDodge, 0, Borrow),
+    m(68, "Aerial Recovery", "Right yourself in midair after being knocked back.", 2, kh1::COMBO_PLUS, Effect::AerialRecovery, 0, Hook),
+    m(69, "Dodge Slash", "Ground combo: strike nearby foes all around.", 2, kh1::SLAPSHOT, Effect::Modifier(kh2::DODGE_SLASH), 0, Kh1Combo),
+    m(70, "Horizontal Slash", "Air combo: a powerful side slash with Square.", 2, kh1::SLAPSHOT, Effect::Modifier(kh2::HORIZONTAL_SLASH), 0, Kh1Combo),
+    m(71, "Negative Combo", "Shortens combos by one attack.", 2, kh1::COMBO_PLUS, Effect::NegativeCombo, 0, Kh1Combo),
+    m(72, "Aerial Spiral", "Air combo: spin into foes in midair.", 2, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_SPIRAL), 0, Kh1Combo),
+    m(73, "Upper Slash", "Combo: knock a foe into the air with Square.", 4, kh1::SLAPSHOT, Effect::Modifier(kh2::UPPER_SLASH), 0, Kh1Combo),
+    m(74, "Finishing Plus", "Adds a finishing move to the combo.", 5, kh1::COMBO_PLUS, Effect::FinishingPlus, 0, Kh1Combo),
+    m(75, "Retaliating Slash", "When knocked away, recover and strike back with Square.", 3, kh1::SLAPSHOT, Effect::Modifier(kh2::RETALIATING_SLASH), 0, Hook),
+    m(76, "Aerial Dive", "From the ground: leap at a far airborne foe.", 2, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE), 0, Kh1Combo),
+    m(77, "Magnet Burst", "Air combo finisher: pull in foes all around.", 3, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST), 0, Kh1Combo),
     // The split: KH2's modifiers that were KH1's ids, each placed after its KH1 namesake in the
-    // menu and learned with it, and at the level or boss the mod gave that KH1 id before (the
-    // user's: Counterguard at 22, Aerial Sweep at 28 or Clayton, Slide Dash at 30, Vicinity
-    // Break at 36, Finishing Leap at 48; Flash Step for Sabor, Aerial Finish for Jafar, Guard
-    // Break for Pot Centipede, Explosion for Dragon Maleficent). AP from KH2's item table.
-    m(78, "Flash Step", "Ground combo: dash to a distant foe and strike.", 2, BOSS, kh1::VORTEX, Effect::Modifier(kh2::FLASH_STEP), kh1::VORTEX, Kh1Combo),
-    m(79, "Aerial Sweep", "KH2's air combo: a spinning sweep at airborne foes.", 2, 28, kh1::AERIAL_SWEEP, Effect::Modifier(kh2::AERIAL_SWEEP), kh1::AERIAL_SWEEP, Kh1Combo),
-    m(80, "Counterguard", "Counter: strike right after guarding.", 4, 22, kh1::COUNTERATTACK, Effect::Modifier(kh2::COUNTERGUARD), kh1::COUNTERATTACK, Hook),
-    m(81, "Finishing Leap", "Finisher: end a combo with Square to leap and slam.", 5, 48, kh1::BLITZ, Effect::Modifier(kh2::FINISHING_LEAP), kh1::BLITZ, Kh1Combo),
-    m(82, "Slapshot", "KH2's ground combo: rapid strikes at a nearby foe.", 2, BOSS, kh1::SLAPSHOT, Effect::Modifier(kh2::SLAPSHOT), kh1::SLAPSHOT, Kh1Combo),
-    m(83, "Slide Dash", "Ground combo: dash at a distant foe.", 2, 30, kh1::SLIDING_DASH, Effect::Modifier(kh2::SLIDE_DASH), kh1::SLIDING_DASH, Kh1Combo),
-    m(84, "Explosion", "Finisher: unleash a blast around you.", 3, BOSS, kh1::HURRICANE_BLAST, Effect::Modifier(kh2::EXPLOSION), kh1::HURRICANE_BLAST, Kh1Combo),
-    m(85, "Vicinity Break", "Ground combo: hit foes all around.", 2, 36, kh1::RIPPLE_DRIVE, Effect::Modifier(kh2::VICINITY_BREAK), kh1::RIPPLE_DRIVE, Kh1Combo),
-    m(86, "Guard Break", "Finisher: break through a foe's guard.", 3, BOSS, kh1::STUN_IMPACT, Effect::Modifier(kh2::GUARD_BREAK), kh1::STUN_IMPACT, Kh1Combo),
-    m(87, "Aerial Finish", "Air finisher: a powerful spinning strike.", 3, BOSS, kh1::GRAVITY_BREAK, Effect::Modifier(kh2::AERIAL_FINISH), kh1::GRAVITY_BREAK, Kh1Combo),
+    // menu (`with`: the namesake, used by `migrate` for saves from before the split). AP from
+    // KH2's item table.
+    m(78, "Flash Step", "Ground combo: dash to a distant foe and strike.", 2, kh1::VORTEX, Effect::Modifier(kh2::FLASH_STEP), kh1::VORTEX, Kh1Combo),
+    m(79, "Aerial Sweep", "KH2's air combo: a spinning sweep at airborne foes.", 2, kh1::AERIAL_SWEEP, Effect::Modifier(kh2::AERIAL_SWEEP), kh1::AERIAL_SWEEP, Kh1Combo),
+    m(80, "Counterguard", "Counter: strike right after guarding.", 4, kh1::COUNTERATTACK, Effect::Modifier(kh2::COUNTERGUARD), kh1::COUNTERATTACK, Hook),
+    m(81, "Finishing Leap", "Finisher: end a combo with Square to leap and slam.", 5, kh1::BLITZ, Effect::Modifier(kh2::FINISHING_LEAP), kh1::BLITZ, Kh1Combo),
+    m(82, "Slapshot", "KH2's ground combo: rapid strikes at a nearby foe.", 2, kh1::SLAPSHOT, Effect::Modifier(kh2::SLAPSHOT), kh1::SLAPSHOT, Kh1Combo),
+    m(83, "Slide Dash", "Ground combo: dash at a distant foe.", 2, kh1::SLIDING_DASH, Effect::Modifier(kh2::SLIDE_DASH), kh1::SLIDING_DASH, Kh1Combo),
+    m(84, "Explosion", "Finisher: unleash a blast around you.", 3, kh1::HURRICANE_BLAST, Effect::Modifier(kh2::EXPLOSION), kh1::HURRICANE_BLAST, Kh1Combo),
+    m(85, "Vicinity Break", "Ground combo: hit foes all around.", 2, kh1::RIPPLE_DRIVE, Effect::Modifier(kh2::VICINITY_BREAK), kh1::RIPPLE_DRIVE, Kh1Combo),
+    m(86, "Guard Break", "Finisher: break through a foe's guard.", 3, kh1::STUN_IMPACT, Effect::Modifier(kh2::GUARD_BREAK), kh1::STUN_IMPACT, Kh1Combo),
+    m(87, "Aerial Finish", "Air finisher: a powerful spinning strike.", 3, kh1::GRAVITY_BREAK, Effect::Modifier(kh2::AERIAL_FINISH), kh1::GRAVITY_BREAK, Kh1Combo),
     // KH2's own Glide (t323, the user: "if glide is set to kh2 both glide and super glide need to
     // be removed from the shared abilities list and only the original kh2 growth glide should
     // appear again as its own custom ability"): a shared ability (no AP), not learned on its own
-    // (`earned` gives none): `glide_swap` puts it in place of KH1's Glide and Superglide at the
+    // (`grants` gives none): `glide_swap` puts it in place of KH1's Glide and Superglide at the
     // Glide style KH2, and back at KH1. Its KH1 side: KH2's glide is a borrow out of KH1's air.
-    MenuAbility { id: 88, name: "Glide", help: "Glide through the air. Grows with Sora.", ap: 0, level: BOSS, list: List::Shared, template: kh1::GLIDE, effect: Effect::Kh2Glide, with: 0, on_kh1: Borrow },
+    MenuAbility { id: 88, name: "Glide", help: "Glide through the air. Grows with Sora.", ap: 0, list: List::Shared, template: kh1::GLIDE, effect: Effect::Kh2Glide, with: 0, on_kh1: Borrow },
 ];
 
 /// Our Quick Run's ability id (`MENU`).
@@ -409,69 +394,31 @@ pub fn row(id: u8) -> Option<Row> {
     MENU.iter().find(|a| a.id == id).map(|a| Row { id, name: a.name, owner: Owner::Kh2, on_kh1: a.on_kh1, on_kh2: Kh2(a.effect) })
 }
 
-/// Quick Run's level by Sora's level (the user: it levels up with him, MAX 4): LV1 when learned.
-pub const QUICK_RUN_LEVELS: [(u8, u8); 4] = [(12, 1), (20, 2), (32, 3), (45, 4)];
+// Growth levels (the tester, what-is-still-missing after m16, answer 6 (b): base Sora's growth
+// only from the Drive Forms' levels, as in KH2; after m17: "make it all vanilla"). Nothing grows
+// with Sora's own level or with bosses any more. An ability he has is LV1; Valor's, Wisdom's and
+// Final's levels raise High Jump, Quick Run and Glide (`FormGrowth`, KH2's `0x1403E8380`). KH1's
+// own High Jump and Glide count as KH2's LV1 once KH1 has given them (Assumption taken for the
+// tester: their question 3 wasn't answered). Dodge Roll and Aerial Dodge stay LV1: in KH2 they
+// grow only with Limit and Master, which aren't on KH1's states here.
 
-/// Quick Run's level at Sora's level (0 before it is learned).
-pub fn quick_run_level(level: u8) -> u8 {
-    QUICK_RUN_LEVELS.iter().filter(|(at, _)| level >= *at).map(|(_, l)| *l).max().unwrap_or(0)
-}
-
-/// Its name in the menu and the level-up box ("Quick Run LV2", "Quick Run MAX").
+/// Quick Run's name in the menu and the level-up box ("Quick Run LV2", "Quick Run MAX").
 pub fn quick_run_name(l: u8) -> String {
-    if l >= 4 {
-        "Quick Run MAX".to_string()
-    } else {
-        format!("Quick Run LV{}", l.max(1))
-    }
+    level_name("Quick Run", l)
 }
-
-/// KH2's dodge roll level at Sora's level, with KH1's Dodge Roll equipped (`GROWTH`: LV2 at 19,
-/// LV3 at 37, MAX at 60).
-pub fn dodge_roll_level(level: u8) -> u8 {
-    GROWTH.iter().filter_map(|(at, g)| match g {
-        Growth::DodgeRoll(l) if level >= *at => Some(*l),
-        _ => None,
-    }).max().unwrap_or(1)
-}
-
-/// Its name in the "Ability Up" box ("Dodge Roll LV2", "Dodge Roll MAX"); KH1's menu keeps
-/// KH1's own name.
-pub fn dodge_roll_name(l: u8) -> String {
-    if l >= 4 {
-        "Dodge Roll MAX".to_string()
-    } else {
-        format!("Dodge Roll LV{}", l.max(1))
-    }
-}
-
-/// KH2's High Jump levels past LV1 with KH1's High Jump equipped, by Sora's level (the user:
-/// it levels up with him too, MAX 4): LV1 when Sora gets it, LV2 at 30, LV3 at 44, MAX at 58.
-pub const HIGH_JUMP_LEVELS: [u8; 3] = [30, 44, 58];
-
-/// Aerial Dodge's levels past LV1 (LV1 when Genie Jafar falls): LV2 at 30, LV3 at 42, MAX at 54
-/// (the user: its growth from 30).
-pub const AERIAL_DODGE_LEVELS: [u8; 3] = [30, 42, 54];
-
-/// KH2's Glide levels past LV1 with KH1's Glide equipped (LV1 from KH1's Glide, Neverland): LV2
-/// at 40, LV3 at 52. MAX is KH1's Superglide (Chernabog's reward).
-pub const GLIDE_LEVELS: [u8; 2] = [40, 52];
 
 /// Chernabog beaten: End of the World's progress (index 11) at 0x33, where KH1 gives Superglide
 /// (as the Archipelago KH1 client reads it, gaithern's KH-1FM-AP-LUA, MIT).
 pub const CHERNABOG: BossGift = BossGift { boss: "Chernabog", world: 11, progress: 0x33, ability: kh1::SUPERGLIDE };
 
-/// KH2's glide level at Sora's level, with KH1's Glide equipped.
-pub fn glide_level(level: u8) -> u8 {
-    1 + GLIDE_LEVELS.iter().filter(|at| level >= **at).count() as u8
-}
-
-/// KH2's own Glide's level (`ours::GLIDE`): by Sora's level, MAX once Chernabog is beaten.
-pub fn kh2_glide_level(level: u8, progress: &[u8]) -> u8 {
+/// KH2's own Glide's level (`ours::GLIDE`, which stands for KH1's Glide and Superglide at the
+/// Glide style KH2): LV1, MAX once Chernabog is beaten (where KH1 gives Superglide, which is
+/// KH2's Glide MAX, `Effect::GlideMax`).
+pub fn kh2_glide_level(progress: &[u8]) -> u8 {
     if beaten(progress, &CHERNABOG) {
         4
     } else {
-        glide_level(level)
+        1
     }
 }
 
@@ -525,20 +472,6 @@ pub fn glide_swap(shared: &[u8], kh2: bool, progress: &[u8]) -> (Vec<u8>, Vec<St
 
 pub fn glide_name(l: u8) -> String {
     level_name("Glide", l)
-}
-
-fn grown(level: u8, steps: &[u8; 3]) -> u8 {
-    1 + steps.iter().filter(|at| level >= **at).count() as u8
-}
-
-/// High Jump's level at Sora's level, once he has it.
-pub fn high_jump_level(level: u8) -> u8 {
-    grown(level, &HIGH_JUMP_LEVELS)
-}
-
-/// Aerial Dodge's level at Sora's level, once he has learned it.
-pub fn aerial_dodge_level(level: u8) -> u8 {
-    grown(level, &AERIAL_DODGE_LEVELS)
 }
 
 /// A growing ability's name with its level ("High Jump LV2", "High Jump MAX").
@@ -605,49 +538,6 @@ pub fn with_growth_override(a: &Abilities, ov: &[Option<u8>; 5]) -> Abilities {
     out
 }
 
-/// Growth levels past the first, by Sora's level.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Growth {
-    QuickRun(u8),
-    AerialDodge(u8),
-    /// The dodge roll's level, with KH1's Dodge Roll equipped.
-    DodgeRoll(u8),
-}
-
-/// (Quick Run, Aerial Dodge and High Jump have their own tables above.)
-pub const GROWTH: [(u8, Growth); 3] = [(19, Growth::DodgeRoll(2)), (37, Growth::DodgeRoll(3)), (60, Growth::DodgeRoll(4))];
-
-/// Shared abilities Sora keeps only one of (the user: one High Jump, one Glide, one
-/// Superglide).
-pub const ONE_ONLY: [u8; 4] = [kh1::HIGH_JUMP, kh1::GLIDE, kh1::SUPERGLIDE, ours::GLIDE];
-
-/// The shared list with the spare copies of `ONE_ONLY` taken out (an equipped copy is the one
-/// kept), and the ids taken out. The list keeps its length (zeros at the end).
-pub fn one_only(list: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    keep_one(list, &ONE_ONLY)
-}
-
-/// `list` with the spare copies of `ids` taken out (an equipped copy is the one kept), and the
-/// ids taken out. The list keeps its length (zeros at the end).
-pub fn keep_one(list: &[u8], ids: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let end = list.iter().position(|b| *b == 0).unwrap_or(list.len());
-    let mut keep: Vec<Option<usize>> = vec![None; ids.len()];
-    for (k, id) in ids.iter().enumerate() {
-        let at = |on: bool| list[..end].iter().position(|b| b & 0x7F == *id && (b & 0x80 == 0) == on);
-        keep[k] = at(true).or_else(|| at(false));
-    }
-    let mut out = Vec::with_capacity(list.len());
-    let mut removed = Vec::new();
-    for (i, b) in list[..end].iter().enumerate() {
-        match ids.iter().position(|id| *id == b & 0x7F) {
-            Some(k) if keep[k] != Some(i) => removed.push(b & 0x7F),
-            _ => out.push(*b),
-        }
-    }
-    out.resize(list.len(), 0);
-    (out, removed)
-}
-
 /// Whether a list has `id` in it at all (equipped or not).
 pub fn has(list: &[u8], id: u8) -> bool {
     list.iter().take_while(|b| **b != 0).any(|b| b & 0x7F == id)
@@ -658,68 +548,36 @@ pub fn name(id: u8) -> String {
     row(id).map_or(format!("ability {}", id & 0x7F), |r| r.name.to_string())
 }
 
-/// The user: KH2's abilities come first. When Sora's list (48, KH1's most) is full, KH1
-/// abilities that are learned but off make room, least missed first: a spare copy of one he
-/// has twice or more, then these, in order. Nothing equipped, nothing of ours, and not Guard,
-/// Dodge Roll, the specials or the combo modifiers.
-pub const MAKE_ROOM: [u8; 14] = [
-    16, // Cheer
-    10, // Scan
-    63, // Evolution
-    27, // Jackpot
-    28, // Lucky Strike
-    5,  // Treasure Magnet
-    9,  // Second Wind
-    60, // Tech Boost
-    62, // Leaf Bracer
-    23, // MP Haste
-    24, // MP Rage
-    26, // Berserk
-    8,  // Critical Plus
-    25, // Second Chance
-];
+/// Free places KH2's abilities always leave in Sora's list (48, KH1's most) for KH1's own grants
+/// (a level-up's ability, a story reward: KH1 appends at the first 0, `0x140282CA0`, and a full
+/// list would lose it). Assumption: KH1 never gives more than 2 abilities within one second
+/// (`menu::Growth::update` runs once a second).
+pub const RESERVE: usize = 2;
 
-/// Which entry of a full list gives up its place (its index), if any.
-pub fn make_room(list: &[u8]) -> Option<usize> {
-    let end = list.iter().position(|b| *b == 0).unwrap_or(list.len());
-    let l = &list[..end];
-    let ours = |b: u8| MENU.iter().any(|a| a.id == b & 0x7F);
-    let off = |b: u8| b & 0x80 != 0 && !ours(b);
-    // A spare copy that's off: of the ability with the most copies.
-    let copies = |id: u8| l.iter().filter(|b| *b & 0x7F == id).count();
-    if let Some(i) = (0..end).filter(|i| off(l[*i]) && copies(l[*i] & 0x7F) > 1).max_by_key(|i| (copies(l[*i] & 0x7F), *i)) {
-        return Some(i);
-    }
-    for id in MAKE_ROOM {
-        if let Some(i) = (0..end).rev().find(|i| off(l[*i]) && l[*i] & 0x7F == id) {
-            return Some(i);
-        }
-    }
-    // A full list of a finished game (the user's level 100 save: no Aerial Dodge, the list full
-    // of KH1's, most of them on): any other KH1 ability that's off, but never Guard, Dodge Roll,
-    // Combo Plus / Air Combo Plus, the specials or the combo modifiers...
-    if let Some(i) = (0..end).rev().find(|i| off(l[*i]) && !KEEP.contains(&(l[*i] & 0x7F))) {
-        return Some(i);
-    }
-    // ... then the least missed even when on.
-    for id in MAKE_ROOM {
-        if let Some(i) = (0..end).rev().find(|i| !ours(l[*i]) && l[*i] & 0x7F == id) {
-            return Some(i);
-        }
-    }
-    None
+/// Free places in a list (up to its first 0).
+pub fn free(list: &[u8]) -> usize {
+    list.len() - list.iter().position(|b| *b == 0).unwrap_or(list.len())
 }
 
-/// KH1 abilities never given up for room: Guard, Dodge Roll, Combo Plus, Air Combo Plus, the
-/// specials (Sonic Blade, Ars Arcanum, Strike Raid, Ragnarok, Trinity Limit), KH1's combo
-/// modifiers (its own combo uses them) and EXP Zero.
-const KEEP: [u8; 20] = [21, 22, 6, 7, 11, 12, 13, 14, 15, 17, 18, 19, 20, 53, 54, 55, 56, 57, 58, 64];
+/// Whether a list byte is one of our KH2 abilities.
+pub fn ours_byte(b: u8) -> bool {
+    b != 0 && MENU.iter().any(|a| a.id == b & 0x7F)
+}
+
+/// Which of our KH2 abilities gives its place back to KH1 (the tester: "if any custom ability is
+/// taking the slot of a vanilla ability revert it"): the last in `MENU`'s order that is off,
+/// else the last that is on. Never a KH1 ability. Its index in the list.
+pub fn yield_one(list: &[u8]) -> Option<usize> {
+    let end = list.iter().position(|b| *b == 0).unwrap_or(list.len());
+    let rank = |b: u8| MENU.iter().position(|a| a.id == b & 0x7F);
+    let pick = |off: bool| (0..end).filter(|i| ours_byte(list[*i]) && (list[*i] & 0x80 != 0) == off).max_by_key(|i| (rank(list[*i]), *i));
+    pick(true).or_else(|| pick(false))
+}
 
 /// Base Sora's growth levels from the Drive Forms' levels (KH2's form level-up, Steam KH2
 /// `0x1403E8380`, `formlevel::sora_growth`, Checked (decomp)): Valor's High Jump, Wisdom's Quick
-/// Run, Final's Glide (0: none). KH2 has no other source of them; here they join the levels
-/// Sora's own level and bosses give (`Kh1Sora::high_jump_now` ...): the higher counts, as KH2's
-/// swap only ever raises an entry he has.
+/// Run, Final's Glide (0: none). KH2 has no other source of them, and neither has the mod now:
+/// Sora's own level and bosses give none (the tester, after m16, answer 6 (b)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FormGrowth {
     pub high_jump: u8,
@@ -851,22 +709,22 @@ impl Kh1Sora {
             }
         };
         match e {
-            // (The user: one High Jump, growing with Sora to MAX; Glide growing to LV3, MAX with
-            // Superglide; the dodge roll and Quick Run / Aerial Dodge grow too.)
+            // (LV1 from the ability, higher only from the Drive Forms' levels; KH1's Superglide is
+            // KH2's Glide MAX.)
             Effect::HighJump => out.high_jump = out.high_jump.max(self.high_jump_now()),
-            Effect::Glide => out.glide = out.glide.max(glide_level(self.level).max(self.form_growth.glide)),
+            Effect::Glide => out.glide = out.glide.max(self.form_growth.glide.max(1)),
             Effect::GlideMax => out.glide = 4,
             Effect::Kh2Glide => out.glide = out.glide.max(self.kh2_glide_now()),
             Effect::Guard => {
                 out.guard = true;
                 push(out, kh2::GUARD);
             }
-            Effect::DodgeRoll => out.dodge_roll = out.dodge_roll.max(dodge_roll_level(self.level)),
+            Effect::DodgeRoll => out.dodge_roll = out.dodge_roll.max(1),
             Effect::ComboPlus => out.combo_plus = out.combo_plus.saturating_add(copies),
             Effect::AirComboPlus => out.air_combo_plus = out.air_combo_plus.saturating_add(copies),
             Effect::ComboMaster => out.combo_master = true,
             Effect::QuickRun => out.quick_run = out.quick_run.max(self.quick_run_now()),
-            Effect::AerialDodge => out.aerial_dodge = out.aerial_dodge.max(aerial_dodge_level(self.level)),
+            Effect::AerialDodge => out.aerial_dodge = out.aerial_dodge.max(1),
             Effect::AerialRecovery => out.aerial_recovery = true,
             Effect::FinishingPlus => out.finishing_plus = 1,
             Effect::NegativeCombo => out.negative_combo = 1,
@@ -874,35 +732,19 @@ impl Kh1Sora {
         }
     }
 
-    /// High Jump's level once he has it: by his level, or the level Valor's form level gives
-    /// (`FormGrowth`), the higher.
+    /// High Jump's level once he has it: LV1, or what Valor's form level gives (`FormGrowth`).
     pub fn high_jump_now(&self) -> u8 {
-        high_jump_level(self.level).max(self.form_growth.high_jump)
+        self.form_growth.high_jump.max(1)
     }
 
-    /// Quick Run's level once he has it: by his level (LV1 when learned), or Wisdom's.
+    /// Quick Run's level once he has it: LV1, or Wisdom's.
     pub fn quick_run_now(&self) -> u8 {
-        quick_run_level(self.level).max(1).max(self.form_growth.quick_run)
+        self.form_growth.quick_run.max(1)
     }
 
-    /// KH2's own Glide's level (`ours::GLIDE`): by his level and Chernabog, or Final's.
+    /// KH2's own Glide's level (`ours::GLIDE`): LV1 (MAX past Chernabog), or Final's.
     pub fn kh2_glide_now(&self) -> u8 {
-        kh2_glide_level(self.level, &self.progress).max(self.form_growth.glide)
-    }
-
-    /// The shared growth abilities a form's level has given him that his list doesn't hold
-    /// (KH2 puts LV1 in an empty slot, `0x1403E8380`): KH1's High Jump for Valor, KH1's Glide for
-    /// Final (the Glide style swaps it for KH2's own, `glide_swap`). Quick Run is one of ours,
-    /// learned through `earned`. (why, id, its level).
-    pub fn form_grants(&self) -> Vec<(String, u8, u8)> {
-        let mut out = Vec::new();
-        if self.form_growth.high_jump > 0 && !has(&self.shared, kh1::HIGH_JUMP) {
-            out.push(("Valor Form's level".to_string(), kh1::HIGH_JUMP, self.high_jump_now()));
-        }
-        if self.form_growth.glide > 0 && !has(&self.shared, kh1::GLIDE) && !has(&self.shared, kh1::SUPERGLIDE) && !has(&self.shared, ours::GLIDE) {
-            out.push(("Final Form's level".to_string(), kh1::GLIDE, glide_level(self.level).max(self.form_growth.glide)));
-        }
-        out
+        kh2_glide_level(&self.progress).max(self.form_growth.glide)
     }
 
     /// KH2's controller's abilities from KH1's menu and Sora's level: every equipped ability
@@ -938,28 +780,11 @@ impl Kh1Sora {
         MENU.iter().filter(|a| a.on_kh1 == Hook && equipped(self.list(a.list), a.id) > 0).map(|a| a.id).collect()
     }
 
-    /// Why Sora has earned `ab` now, if he has: his level, a boss beaten, or KH1's namesake
-    /// learned (`MenuAbility::with`).
-    pub fn earned(&self, ab: &MenuAbility) -> Option<String> {
-        if ab.level != BOSS && self.level >= ab.level {
-            return Some(format!("level {}", ab.level));
-        }
-        if let Some(g) = BOSS_GIFTS.iter().find(|g| g.ability == ab.id && beaten(&self.progress, g)) {
-            return Some(format!("{} beaten", g.boss));
-        }
-        if ab.with != 0 && has(&self.abilities, ab.with) {
-            return Some(format!("with KH1's {}", name(ab.with)));
-        }
-        // KH2's Wisdom level-up puts Quick Run LV1 in Sora's list (`0x1403E8380`).
-        if ab.effect == Effect::QuickRun && self.form_growth.quick_run > 0 {
-            return Some("Wisdom Form's level".to_string());
-        }
-        None
-    }
-
-    /// The menu abilities Sora has earned that his lists don't hold yet: (why, ability).
-    pub fn grants(&self) -> Vec<(String, MenuAbility)> {
-        MENU.iter().filter(|ab| !has(self.list(ab.list), ab.id)).filter_map(|ab| self.earned(ab).map(|why| (why, *ab))).collect()
+    /// Our KH2 abilities his lists don't hold yet (the tester, after m17: "just give the player
+    /// all the custom abilities we added"): every one of `MENU` in Sora's own list. KH2's own Glide
+    /// (shared) only comes with the Glide style (`glide_swap`).
+    pub fn grants(&self) -> Vec<MenuAbility> {
+        MENU.iter().filter(|ab| ab.list == List::Sora && !has(self.list(ab.list), ab.id)).copied().collect()
     }
 }
 
@@ -968,17 +793,14 @@ pub fn beaten(progress: &[u8], g: &BossGift) -> bool {
     progress.get(g.world).is_some_and(|p| *p >= g.progress)
 }
 
-/// The AP Sora gets on top of KH1's: each KH2 ability he has earned (`Kh1Sora::earned`) brings
-/// its own AP, so taking the KH2 abilities costs none of KH1's.
-pub fn bonus_ap(sora: &Kh1Sora) -> u8 {
-    MENU.iter().filter(|ab| sora.earned(ab).is_some()).map(|ab| ab.ap as u32).sum::<u32>().min(255) as u8
-}
-
 /// The save's ability-layout mark: a u16 at save `+0x48A` (the spare bytes after the ten party
 /// records, `docs/kh1-equipment.md` section 5; Valor's Keyblade uses `+0x488`). `LAYOUT_SPLIT`
 /// once the save has been moved over to the split ids (`migrate`), or was never on the old ones.
+/// `LAYOUT_VANILLA` once the save has also been put back on KH1's vanilla progression
+/// (`restore_vanilla`, the tester, what-is-still-missing after m17: "existing saves get updated").
 pub const LAYOUT_OFF: usize = 0x48A;
 pub const LAYOUT_SPLIT: u16 = 0x4B02;
+pub const LAYOUT_VANILLA: u16 = 0x4B03;
 
 /// Whether a save holds the old layout's ids: any of ours from before the split (66..=77), so
 /// KH1's modifiers in it stood for KH2's.
@@ -991,9 +813,9 @@ pub fn old_layout(s: &Kh1Sora) -> bool {
 pub struct Migrated {
     pub abilities: Vec<u8>,
     pub shared: Vec<u8>,
-    /// What changed, for the log and `kh1-kh2-removed.txt`.
+    /// What changed, for the log.
     pub lines: Vec<String>,
-    /// Lines of KH1 abilities given up for room (`(id n)`, as `kh1-kh2-removed.txt` takes them).
+    /// Our KH2 abilities that gave their place back to a KH1 one (`restore_vanilla`), for the log.
     pub removed: Vec<String>,
 }
 
@@ -1017,24 +839,16 @@ pub fn migrate(s: &Kh1Sora) -> Migrated {
     let mut a = s.abilities.clone();
     let mut sh = s.shared.clone();
     let mut lines = Vec::new();
-    let mut removed = Vec::new();
+    let removed = Vec::new();
     for ab in MENU.iter().filter(|ab| ab.with != 0) {
         if !has(&a, ab.with) || has(&a, ab.id) {
             continue;
         }
         let on = equipped(&a, ab.with) > 0;
         let byte = if on { ab.id } else { ab.id | 0x80 };
-        let mut done = push(&mut a, byte);
-        if !done {
-            if let Some(i) = make_room(&a) {
-                let gone = a.remove(i);
-                a.push(0);
-                removed.push(format!("removed {} (id {}) for {}", name(gone), gone & 0x7F, ab.name));
-                done = push(&mut a, byte);
-            }
-        }
-        if !done {
-            lines.push(format!("{}: no room for {} (learned again when there's room)", name(ab.with), ab.name));
+        // (Never in a KH1 ability's place: with no room it comes when there is, `grants`.)
+        if free(&a) <= RESERVE || !push(&mut a, byte) {
+            lines.push(format!("{}: no room for {} (given when there's room)", name(ab.with), ab.name));
             continue;
         }
         if on {
@@ -1053,6 +867,97 @@ pub fn migrate(s: &Kh1Sora) -> Migrated {
         }
     }
     Migrated { abilities: a, shared: sh, lines, removed }
+}
+
+/// What `kh1-kh2-removed.txt` (next to the game; every KH1 ability the mod's older builds took
+/// out of a save was noted there) says was taken out, up to Sora's level `level` (each line starts
+/// "level N:"; a line without it counts): Sora's own abilities (`(id N)` lines, Zantetsuken's
+/// "Zantetsuken taken out") and the shared ones (the "spare shared abilities taken out" lines, by
+/// name), one entry per copy taken out.
+pub fn removed_by_mod(text: &str, level: u8) -> (Vec<u8>, Vec<u8>) {
+    let mut sora = Vec::new();
+    let mut shared = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("level ") {
+            let n = rest.split(':').next().and_then(|n| n.trim().parse::<u16>().ok());
+            if n.is_some_and(|n| n > level as u16) {
+                continue;
+            }
+        }
+        if line.contains("Zantetsuken taken out") {
+            sora.push(kh1::ZANTETSUKEN);
+            continue;
+        }
+        if let Some(i) = line.find("spare shared abilities taken out") {
+            let names = line[i..].split_once(':').map_or("", |(_, n)| n);
+            for n in names.split(',').map(str::trim) {
+                if let Some(a) = KH1_ABILITIES.iter().find(|a| a.name == n && list_of(a.id) == List::Shared) {
+                    shared.push(a.id);
+                }
+            }
+            continue;
+        }
+        let mut rest = line;
+        while let Some(i) = rest.find("(id ") {
+            rest = &rest[i + 4..];
+            if let Some(id) = rest.split(')').next().and_then(|n| n.trim().parse::<u8>().ok()) {
+                if (1..=kh1::LAST).contains(&id) && list_of(id) == List::Sora {
+                    sora.push(id);
+                }
+            }
+        }
+    }
+    (sora, shared)
+}
+
+/// Puts a save the mod's older builds changed back on KH1's vanilla progression (once, by
+/// `LAYOUT_VANILLA`; the tester, after m17: "existing saves get updated"):
+/// - each KH1 ability `removed_by_mod` lists comes back, off, one copy per copy taken out (KH1's
+///   own abilities it took out for room, its spare copies, Zantetsuken), and the shared spares
+///   (High Jump, Glide, Superglide) the same way;
+/// - Superglide comes back if Chernabog is beaten and KH2's own Glide isn't standing for it;
+/// - with Sora's list full, one of our KH2 abilities gives its place back (`yield_one`): no KH1
+///   ability is ever left out for ours.
+///
+/// Assumption: `kh1-kh2-removed.txt` is one install's file, not one save's; with several saves
+/// each gets what was noted up to its own level.
+pub fn restore_vanilla(s: &Kh1Sora, removed_text: &str) -> Migrated {
+    let mut a = s.abilities.clone();
+    let mut sh = s.shared.clone();
+    let mut lines = Vec::new();
+    let mut gave_up = Vec::new();
+    let (sora_ids, shared_ids) = removed_by_mod(removed_text, s.level);
+    for id in sora_ids {
+        if free(&a) == 0 {
+            if let Some(i) = yield_one(&a) {
+                let gone = a.remove(i);
+                a.push(0);
+                gave_up.push(format!("{} gave its place back to KH1's {}", name(gone), name(id)));
+            }
+        }
+        if push(&mut a, id | 0x80) {
+            lines.push(format!("KH1's {} given back (off): the mod had taken it out", name(id)));
+        } else {
+            lines.push(format!("KH1's {} could not be given back: Sora's list is full of KH1's own", name(id)));
+        }
+    }
+    let kh2_glide = has(&sh, ours::GLIDE);
+    for id in shared_ids {
+        if kh2_glide && (id == kh1::GLIDE || id == kh1::SUPERGLIDE) {
+            continue;
+        }
+        if push(&mut sh, id | 0x80) {
+            lines.push(format!("KH1's {} given back to the shared abilities (off): a spare copy the mod had taken out", name(id)));
+        }
+    }
+    if beaten(&s.progress, &CHERNABOG) && !has(&sh, kh1::SUPERGLIDE) && !kh2_glide {
+        let on = equipped(&sh, kh1::GLIDE) > 0;
+        if push(&mut sh, if on { kh1::SUPERGLIDE } else { kh1::SUPERGLIDE | 0x80 }) {
+            lines.push(format!("Superglide given back (Chernabog beaten; {})", if on { "on" } else { "off" }));
+        }
+    }
+    Migrated { abilities: a, shared: sh, lines, removed: gave_up }
 }
 
 /// One line for the log.
@@ -1101,16 +1006,6 @@ mod tests {
         assert_eq!(growth_setting_level(5), Some(4));
     }
 
-    /// A tester's finished level 100 save (its log): 48 abilities, every one that's off is kept
-    /// (Combo Plus, the specials, the modifiers, ours), so room comes from the least missed even
-    /// though on (EXP Zero kept, the user): Cheer.
-    #[test]
-    fn full_finished_save_makes_room() {
-        let raw: [u8; 48] = [64, 22, 6 | 0x80, 7 | 0x80, 53, 54, 17 | 0x80, 10, 61, 26, 15 | 0x80, 21, 19, 8, 8, 18, 20 | 0x80, 55, 57 | 0x80, 59, 5, 5, 27, 28, 65, 56, 23, 24, 24, 11 | 0x80, 13, 12, 14 | 0x80, 25, 62, 8, 58, 66 | 0x80, 68 | 0x80, 69 | 0x80, 70 | 0x80, 71 | 0x80, 72 | 0x80, 74 | 0x80, 75 | 0x80, 73 | 0x80, 77 | 0x80, 76 | 0x80];
-        let i = make_room(&raw).expect("room");
-        assert_eq!(raw[i] & 0x7F, 10);
-    }
-
     use super::*;
 
     fn sora(level: u8, abilities: &[u8], shared: &[u8]) -> Kh1Sora {
@@ -1121,25 +1016,21 @@ mod tests {
         Kh1Sora { level, abilities: a, shared: s, progress: vec![0; 12], form_growth: FormGrowth::default() }
     }
 
-    /// Form levels give base Sora growth (KH2's `0x1403E8380`): the higher of it and his own
-    /// level's, and High Jump / Quick Run learned from them.
+    /// Growth only from form levels (KH2's `0x1403E8380`): LV1 from the ability, higher from the
+    /// form; his own level gives nothing, and nothing KH1 is given by a form.
     #[test]
-    fn form_levels_give_base_sora_growth() {
-        let mut s = sora(5, &[], &[]);
-        assert!(s.form_grants().is_empty());
-        assert!(s.grants().iter().all(|(_, ab)| ab.id != ours::QUICK_RUN));
-        s.form_growth = FormGrowth { high_jump: 2, quick_run: 1, glide: 0 };
-        assert_eq!(s.form_grants(), vec![("Valor Form's level".to_string(), kh1::HIGH_JUMP, 2)]);
-        assert!(s.grants().iter().any(|(why, ab)| ab.id == ours::QUICK_RUN && why == "Wisdom Form's level"));
-        // Equipped: KH2's controller gets the form's levels.
-        let s2 = Kh1Sora { shared: { let mut v = vec![kh1::HIGH_JUMP]; v.resize(10, 0); v }, abilities: { let mut v = vec![ours::QUICK_RUN]; v.resize(48, 0); v }, ..s.clone() };
-        let a = s2.kh2();
-        assert_eq!((a.high_jump, a.quick_run), (2, 1));
-        assert!(s2.form_grants().is_empty());
-        // His own level's growth wins when it is higher.
-        let s3 = Kh1Sora { level: 60, ..s2 };
-        let a = s3.kh2();
-        assert_eq!((a.high_jump, a.quick_run), (4, 4));
+    fn growth_only_from_form_levels() {
+        let mut s = sora(99, &[ours::QUICK_RUN, kh1::DODGE_ROLL, ours::AERIAL_DODGE], &[kh1::HIGH_JUMP, kh1::GLIDE]);
+        let a = s.kh2();
+        assert_eq!((a.high_jump, a.quick_run, a.glide, a.dodge_roll, a.aerial_dodge), (1, 1, 1, 1, 1));
+        s.form_growth = FormGrowth { high_jump: 2, quick_run: 3, glide: 1 };
+        let a = s.kh2();
+        assert_eq!((a.high_jump, a.quick_run, a.glide), (2, 3, 1));
+        // A form's level without KH1's High Jump gives none (KH1's list stays vanilla).
+        let mut bare = sora(5, &[], &[]);
+        bare.form_growth = FormGrowth { high_jump: 3, quick_run: 0, glide: 0 };
+        assert_eq!(bare.kh2().high_jump, 0);
+        assert!(bare.grants().iter().all(|a| a.list == List::Sora));
     }
 
     #[test]
@@ -1150,26 +1041,6 @@ mod tests {
         assert_eq!(KH1_ABILITIES[kh1::MP_RAGE as usize - 1].name, "MP Rage");
         assert_eq!(kh1_reward(385), None);
         assert_eq!(kh1_reward(413), Some(kh1::MP_HASTE));
-    }
-
-    #[test]
-    fn bonus_ap_follows_the_learned_abilities() {
-        assert_eq!(bonus_ap(&sora(1, &[], &[])), 0);
-        assert_eq!(bonus_ap(&sora(4, &[], &[])), 2);
-        assert_eq!(bonus_ap(&sora(10, &[], &[])), 4);
-        let mut all = sora(50, &[], &[]);
-        all.progress = vec![0xFF; 12];
-        let mut done = sora(100, &[], &[]);
-        done.progress = vec![0xFF; 12];
-        // Slapshot's only learn point is KH1's own Slapshot.
-        let slapshot = MENU.iter().find(|a| a.id == ours::SLAPSHOT).unwrap().ap;
-        assert_eq!(bonus_ap(&all), MENU.iter().map(|ab| ab.ap).sum::<u8>() - slapshot);
-        assert_eq!(bonus_ap(&all), bonus_ap(&done));
-        // Boss gifts' AP only once beaten: Upper Slash, Aerial Dive, Magnet Burst, Aerial Dodge,
-        // Flash Step, Explosion, Guard Break, Aerial Finish (Aerial Sweep comes at 28 too).
-        assert_eq!(bonus_ap(&done), bonus_ap(&sora(100, &[], &[])) + 4 + 2 + 3 + 3 + 2 + 3 + 3 + 3);
-        // KH1's namesake brings it too.
-        assert_eq!(bonus_ap(&sora(1, &[kh1::SLAPSHOT | 0x80, kh1::HURRICANE_BLAST], &[])), 2 + 3);
     }
 
     #[test]
@@ -1208,30 +1079,16 @@ mod tests {
     }
 
     #[test]
-    fn kh2_glide_grows_to_max_at_chernabog() {
-        let mut s = sora(39, &[], &[ours::GLIDE]);
+    fn kh2_glide_max_at_chernabog() {
+        let mut s = sora(99, &[], &[ours::GLIDE]);
         assert_eq!(s.kh2().glide, 1);
-        s.level = 52;
+        s.form_growth.glide = 3;
         assert_eq!(s.kh2().glide, 3);
         s.progress[11] = 0x33;
         assert_eq!(s.kh2().glide, 4);
-        // Off: nothing; and never learned on its own.
+        // Off: nothing; and never given on its own.
         assert_eq!(sora(60, &[], &[ours::GLIDE | 0x80]).kh2().glide, 0);
-        assert!(!sora(99, &[], &[kh1::GLIDE]).grants().iter().any(|(_, a)| a.id == ours::GLIDE));
-    }
-
-    #[test]
-    fn one_of_each_only() {
-        let hj = kh1::HIGH_JUMP;
-        let list = [hj, kh1::GLIDE, hj, kh1::SUPERGLIDE, hj | 0x80, kh1::SUPERGLIDE | 0x80, kh1::SUPERGLIDE | 0x80, 66 | 0x80, 67 | 0x80, 0];
-        let (out, removed) = one_only(&list);
-        assert_eq!(out, vec![hj, kh1::GLIDE, kh1::SUPERGLIDE, 66 | 0x80, 67 | 0x80, 0, 0, 0, 0, 0]);
-        assert_eq!(removed, vec![hj, hj, kh1::SUPERGLIDE, kh1::SUPERGLIDE]);
-        // An equipped copy is kept over an earlier unequipped one.
-        let (out, _) = one_only(&[kh1::SUPERGLIDE | 0x80, kh1::SUPERGLIDE, 0]);
-        assert_eq!(out, vec![kh1::SUPERGLIDE, 0, 0]);
-        // Nothing to do.
-        assert!(one_only(&[hj, 66, 0]).1.is_empty());
+        assert!(!sora(99, &[], &[kh1::GLIDE]).grants().iter().any(|a| a.id == ours::GLIDE));
     }
 
     #[test]
@@ -1260,10 +1117,8 @@ mod tests {
         assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 1, 1));
         // KH1's modifiers are KH1's own: nothing for KH2 (hooks).
         assert_eq!(a.equipped, vec![kh2::GUARD]);
-        // Glide grows with Sora (LV2 at 40, LV3 at 52); KH1's Superglide is MAX.
-        assert_eq!(sora(39, &[], &[kh1::GLIDE]).kh2().glide, 1);
-        assert_eq!(sora(40, &[], &[kh1::GLIDE]).kh2().glide, 2);
-        assert_eq!(sora(99, &[], &[kh1::GLIDE]).kh2().glide, 3);
+        // Glide doesn't grow with Sora's level; KH1's Superglide is MAX.
+        assert_eq!(sora(99, &[], &[kh1::GLIDE]).kh2().glide, 1);
         assert_eq!(sora(1, &[], &[kh1::GLIDE, kh1::SUPERGLIDE]).kh2().glide, 4);
         assert_eq!(sora(1, &[], &[kh1::GLIDE, kh1::SUPERGLIDE | 0x80]).kh2().glide, 1);
     }
@@ -1310,7 +1165,7 @@ mod tests {
     #[test]
     fn menu_abilities_work_when_equipped() {
         let a = sora(99, &[kh1::DODGE_ROLL, 68, 74, 69, 77 | 0x80, kh1::COMBO_MASTER, 66, 67], &[kh1::HIGH_JUMP, kh1::HIGH_JUMP, kh1::HIGH_JUMP]).kh2();
-        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (4, 4, 4, 4));
+        assert_eq!((a.quick_run, a.aerial_dodge, a.dodge_roll, a.high_jump), (1, 1, 1, 1));
         assert!(a.aerial_recovery && a.combo_master && a.finishing_plus == 1);
         assert!(a.equipped.contains(&kh2::DODGE_SLASH) && !a.equipped.contains(&kh2::MAGNET_BURST));
         // Learned but off: nothing.
@@ -1318,40 +1173,62 @@ mod tests {
         assert!(!off.aerial_recovery && off.quick_run == 0);
         // No KH1 Dodge Roll: no roll at any level.
         assert_eq!(sora(99, &[], &[]).kh2().dodge_roll, 0);
-        // Quick Run grows with Sora (LV1 at 12 .. MAX at 45).
-        assert_eq!(sora(12, &[66], &[]).kh2().quick_run, 1);
-        assert_eq!(sora(32, &[66], &[]).kh2().quick_run, 3);
         assert_eq!(quick_run_name(4), "Quick Run MAX");
-        assert_eq!((dodge_roll_level(18), dodge_roll_level(19), dodge_roll_level(60)), (1, 2, 4));
-        // High Jump and Aerial Dodge grow too (the user).
-        assert_eq!(sora(99, &[67], &[]).kh2().aerial_dodge, 4);
-        assert_eq!((aerial_dodge_level(29), aerial_dodge_level(30), aerial_dodge_level(42), aerial_dodge_level(54)), (1, 2, 3, 4));
-        assert_eq!((high_jump_level(29), high_jump_level(30), high_jump_level(44), high_jump_level(58)), (1, 2, 3, 4));
-        assert_eq!(sora(30, &[], &[kh1::HIGH_JUMP]).kh2().high_jump, 2);
         assert_eq!((high_jump_name(3), aerial_dodge_name(4)), ("High Jump LV3".to_string(), "Aerial Dodge MAX".to_string()));
     }
 
+    /// Every KH2 ability of Sora's own list is his at once, whatever his level or story.
     #[test]
-    fn grants_follow_level_bosses_and_namesakes() {
-        let ids = |s: &Kh1Sora| s.grants().iter().map(|(_, a)| a.id).collect::<Vec<u8>>();
-        // (Aerial Dodge is Genie Jafar's gift, not a level's.)
-        assert_eq!(ids(&sora(13, &[], &[kh1::HIGH_JUMP])), vec![66, 68, 69]);
-        // Already learned (even unequipped): not again.
-        assert_eq!(ids(&sora(13, &[68 | 0x80, 66 | 0x80], &[kh1::HIGH_JUMP])), vec![69]);
-        // Genie Jafar beaten: Aerial Dodge.
-        let mut jafar = sora(30, &[], &[]);
-        jafar.progress[4] = 0x52;
-        assert!(!ids(&jafar).contains(&ours::AERIAL_DODGE));
-        jafar.progress[4] = 0x53;
-        assert!(ids(&jafar).contains(&ours::AERIAL_DODGE));
-        assert!(sora(1, &[], &[]).grants().is_empty());
-        // KH1's Hurricane Blast (a level-up's, say) brings Explosion; Explosion leaves it alone.
-        let g = sora(1, &[kh1::HURRICANE_BLAST | 0x80], &[]).grants();
-        assert_eq!(g.iter().map(|(_, a)| a.id).collect::<Vec<_>>(), vec![ours::EXPLOSION]);
-        assert_eq!(g[0].0, "with KH1's Hurricane Blast");
-        // Level gifts at the old build's levels.
-        assert!(ids(&sora(22, &[], &[])).contains(&ours::COUNTERGUARD));
-        assert!(!ids(&sora(21, &[], &[])).contains(&ours::COUNTERGUARD));
+    fn grants_are_every_kh2_ability() {
+        let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Sora).map(|a| a.id).collect();
+        assert_eq!(all.len(), 22);
+        assert_eq!(sora(1, &[], &[]).grants().iter().map(|a| a.id).collect::<Vec<_>>(), all);
+        // Already there (even unequipped): not again.
+        let g = sora(1, &[66 | 0x80, 68], &[]).grants();
+        assert!(!g.iter().any(|a| a.id == 66 || a.id == 68));
+        assert_eq!(g.len(), 20);
+    }
+
+    /// Ours give their places back to KH1: the last in MENU order that is off, then on; never a
+    /// KH1 ability.
+    #[test]
+    fn ours_yield_to_kh1() {
+        let mut l = vec![16 | 0x80, 66 | 0x80, 87 | 0x80, 70, 6];
+        l.resize(48, 10);
+        assert_eq!(free(&l), 0);
+        assert_eq!(l[yield_one(&l).unwrap()], 87 | 0x80);
+        l[2] = 10;
+        assert_eq!(l[yield_one(&l).unwrap()], 66 | 0x80);
+        l[1] = 10;
+        assert_eq!(l[yield_one(&l).unwrap()], 70);
+        l[3] = 10;
+        assert_eq!(yield_one(&l), None);
+    }
+
+    /// An older build's removals come back from `kh1-kh2-removed.txt`, by level, one per copy.
+    #[test]
+    fn removed_abilities_come_back() {
+        let text = "level 30: removed Tech Boost (id 60) for Explosion\n\
+            level 31: Sora's list was full: x\n\
+            level 31: removed Tech Boost (id 60) for Slide Dash\n\
+            level 12: spare shared abilities taken out (one of each counts): High Jump, Glide\n\
+            level 40: Zantetsuken taken out (the mod has none)\n\
+            level 80: removed Cheer (id 16) for Aerial Finish\n\
+            level 33: removed Cheer (id 16) to give back Encounter Plus\n";
+        let (sora_ids, shared) = removed_by_mod(text, 50);
+        assert_eq!(sora_ids, vec![60, 60, 59, 16]);
+        assert_eq!(shared, vec![kh1::HIGH_JUMP, kh1::GLIDE]);
+        // A full list: ours make room, KH1's come back off.
+        let mut l = vec![60, 66 | 0x80, 67 | 0x80, 68 | 0x80];
+        l.resize(47, 10);
+        let mut s = sora(50, &l, &[kh1::HIGH_JUMP, kh1::GLIDE]);
+        s.progress[11] = 0x33;
+        let m = restore_vanilla(&s, text);
+        assert_eq!(m.abilities.iter().filter(|b| **b == 60 | 0x80).count(), 2);
+        assert!(m.abilities.contains(&(59 | 0x80)) && m.abilities.contains(&(16 | 0x80)));
+        assert!(!has(&m.abilities, 66) && !has(&m.abilities, 67) && !has(&m.abilities, 68));
+        assert_eq!(m.removed.len(), 3);
+        assert_eq!(m.shared[..5], [kh1::HIGH_JUMP, kh1::GLIDE, kh1::HIGH_JUMP | 0x80, kh1::GLIDE | 0x80, kh1::SUPERGLIDE]);
     }
 
     #[test]
@@ -1363,7 +1240,6 @@ mod tests {
         assert!(ids.iter().all(|i| *i >= FIRST_ID && *i <= MAX_ID));
         assert!(MENU.iter().all(|a| a.name.len() <= 24 && a.help.len() <= 60));
         assert!(MENU.iter().all(|a| a.template >= 1 && a.template <= kh1::LAST));
-        assert!(BOSS_GIFTS.iter().all(|g| g.ability >= FIRST_ID));
     }
 
     #[test]
@@ -1388,41 +1264,14 @@ mod tests {
         assert!(!old_layout(&sora(60, &[kh1::HURRICANE_BLAST], &[kh1::GLIDE])));
     }
 
+    /// The split's migration never takes a KH1 ability's place.
     #[test]
-    fn migration_makes_room_in_a_full_list() {
+    fn migration_never_takes_kh1_places() {
         let mut l = vec![kh1::HURRICANE_BLAST, ours::QUICK_RUN | 0x80];
         l.resize(48, 16 | 0x80); // Cheer, off, filling the list.
-        let s = sora(30, &l, &[]);
-        let m = migrate(&s);
-        assert!(m.abilities.contains(&ours::EXPLOSION));
-        assert_eq!(m.removed.len(), 1);
-        assert!(m.removed[0].contains("(id 16)"));
-    }
-
-    #[test]
-    fn room_comes_from_spare_copies_then_the_least_missed() {
-        // The user's level-51 list (full): four Tech Boosts off, two Treasure Magnets off, a
-        // Critical Plus on and one off.
-        let mut l = vec![10, 62, 25, 14 | 0x80, 24, 54, 60 | 0x80, 60 | 0x80, 8, 23, 13 | 0x80, 5 | 0x80, 53, 28 | 0x80, 60 | 0x80, 6, 26 | 0x80, 21 | 0x80, 5 | 0x80, 57, 11 | 0x80, 19, 6, 16 | 0x80, 60 | 0x80, 6, 59 | 0x80, 6, 18, 7, 20, 58, 65, 22, 12 | 0x80, 17, 56, 7, 8, 15 | 0x80, 55 | 0x80, 8 | 0x80, 27 | 0x80, 61 | 0x80, 68 | 0x80, 69 | 0x80, 70 | 0x80, 71 | 0x80];
-        assert_eq!(l.len(), 48);
-        let mut freed = Vec::new();
-        while let Some(i) = make_room(&l) {
-            freed.push(name(l[i]));
-            l.remove(i);
-            l.push(0);
-            if freed.len() == 8 {
-                break;
-            }
-        }
-        // Spares first (three Tech Boosts, a Treasure Magnet and a Critical Plus, those with
-        // the most copies first), then Encounter Plus, Cheer, Jackpot.
-        let mut spares = freed[..5].to_vec();
-        spares.sort();
-        assert_eq!(spares, ["Critical Plus", "Tech Boost", "Tech Boost", "Tech Boost", "Treasure Magnet"]);
-        assert_eq!(freed[5..], ["Cheer", "Jackpot", "Lucky Strike"]);
-        // Never Guard (off here), Encounter Plus (the user), the specials, ours, or anything
-        // equipped.
-        assert!(l.contains(&(61 | 0x80)) && l.contains(&(21 | 0x80)) && l.contains(&(11 | 0x80)) && l.contains(&(68 | 0x80)) && l.contains(&10));
+        let m = migrate(&sora(30, &l, &[]));
+        assert!(!m.abilities.contains(&ours::EXPLOSION));
+        assert_eq!(m.abilities, l);
     }
 
     #[test]

@@ -32,7 +32,6 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `kh2_voice` | `off` (default), `on` | `on`: Sora's KH2 battle voice on those moves; `off`: KH1's voice. |
 | `kh2_effects` | `magnet_explosion` (default), `all`, `off` | Which moves show KH2's own visual effects (its particle effects, from the KH2 install, played by KH1's own effect system). |
 | `flip_weapons` | KH1 item ids, `0x53` (default), `none` | Weapons KH2's grip holds the wrong way round, turned half round in his hand (the Dream Shield). |
-| `bonus_ap` | `on` (default), `off` | With `abilities = kh1`: Sora's max AP grows by the AP of each KH2 ability he learns (below). |
 | `auto_aim` | `off` (default), `on` | Off: KH2's swings turn toward and home in on only KH1's own target, the R1 lock or the small cursor's soft target. On: KH2's own pick, the nearest enemy in reach. |
 | `wall_clink` | `off` (default), `on` | On: a swing that meets a wall clinks off it (KH1's background ray) and bounces Sora back. Off: swings pass through walls. |
 | `camera` | `kh2` (default), `kh1` | KH2's field camera (follows behind, swings behind while running with Auto, right stick turns and zooms, R3 resets, KH2's lock-on framing) or KH1's own. The Config menu's new last row, Camera Style, switches it in game and writes it here. |
@@ -72,55 +71,14 @@ KH1's combo modifiers (Vortex, Aerial Sweep, Counterattack, Blitz, Slapshot, Sli
 Hurricane Blast, Ripple Drive, Stun Impact, Gravity Break) are KH1's: KH1's own combo runs
 them, and they do nothing for KH2's combo yet.
 
-KH2's abilities are in KH1's Ability menu as their own, off until equipped. Each one is learned
-at a level, for beating a boss, or together with its KH1 namesake; a "New Ability" box in KH1's
-level-up prompt style names it:
-
-| Ability | AP | Learned |
-|---|---|---|
-| Aerial Recovery | 2 | level 4 |
-| Dodge Slash | 2 | level 10 |
-| Quick Run (LV2 at 20, LV3 at 32, MAX at 45; its menu name shows the level) | 2 | level 12 |
-| Horizontal Slash | 2 | level 16 |
-| Negative Combo | 2 | level 20 |
-| Counterguard | 4 | level 22, or with KH1's Counterattack |
-| Aerial Spiral | 2 | level 25 |
-| Aerial Sweep | 2 | level 28, Clayton, or with KH1's Aerial Sweep |
-| Slide Dash | 2 | level 30, or with KH1's Sliding Dash |
-| Finishing Plus | 5 | level 34 |
-| Vicinity Break | 2 | level 36, or with KH1's Ripple Drive |
-| Retaliating Slash | 3 | level 43 |
-| Finishing Leap | 5 | level 48, or with KH1's Blitz |
-| Upper Slash | 4 | Sabor |
-| Flash Step | 2 | Sabor, or with KH1's Vortex |
-| Aerial Finish | 3 | Jafar, or with KH1's Gravity Break |
-| Guard Break | 3 | Pot Centipede, or with KH1's Stun Impact |
-| Explosion | 3 | Dragon Maleficent, or with KH1's Hurricane Blast |
-| Magnet Burst | 3 | Captain Hook |
-| Aerial Dive | 2 | Cerberus |
-| Aerial Dodge (LV2 at 30, LV3 at 42, MAX at 54) | 3 | Genie Jafar (Agrabah) |
-| Slapshot | 2 | with KH1's Slapshot |
-
-Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the KH2
-abilities take none of the AP KH1 gives him (KH1's cap of 100 still holds). The save keeps
-KH1's own AP; the bonus is added while the game runs.
-
-When KH2's level for KH1's High Jump, Glide or Dodge Roll grows, or Quick Run's or Aerial
-Dodge's, an "Ability Up" box says so. KH1's menu keeps KH1's names for KH1's own.
-Sora keeps one High Jump, one Glide and one Superglide: spare copies (a randomizer can give
-more) are taken out of the shared list when the game loads or he gets one, and noted in
-`kh1-kh2-removed.txt`.
-
-A save from before the split is moved over once (`docs/abilities.md`, "Old saves"). Each KH1
-modifier Sora has brings its KH2 ability, which is on if KH1's was on, and KH1's copy is
-turned off. Superglide comes back if Chernabog is beaten.
-
-Sora's ability list holds 48 (KH1's most). When it is full, KH2's abilities come first: a
-KH1 ability that is off gives up its place, a spare copy first (an ability he has more than
-once), then the least missed (EXP Zero, Cheer, Scan, Evolution, Jackpot, Lucky
-Strike, Treasure Magnet, ...). Equipped abilities, Guard, Dodge Roll, the specials and the
-combo modifiers are never removed. Each removal is written to `kh1-kh2-removed.txt` next to the
-game.
+KH2's abilities are in KH1's Ability menu as their own, off until equipped. Since the testing
+branch's vanilla progression (the tester, what-is-still-missing after m17: "make it all vanilla,
+just give the player all the custom abilities we added, existing saves get updated, remove extra
+ap for now") all of them are Sora's from the start, KH1 gives its own abilities on its own
+schedule, and no KH2 ability ever takes a KH1 one's place (2 places are always left for KH1's own
+grants; ours give theirs back when KH1's fill the list). There is no extra AP. KH2's growth
+levels come only from the Drive Forms' levels. The details, and how older saves are put back,
+are in `docs/abilities.md`.
 
 They live in an extended copy of KH1's ability table (ids 66 to 87), so a save holding them
 needs this mod to show them. To go back to a plain KH1 save: set `abilities = test`, load the

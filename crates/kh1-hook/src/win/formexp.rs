@@ -127,23 +127,6 @@ pub fn rewards_due() -> Vec<(Kind, u8, u16)> {
     out
 }
 
-/// The KH1 abilities the forms' levels have given Sora so far (KH2's fmlv rows up to each form's
-/// rewarded level, as `growth::kh1_reward` maps them), for the bonus AP (`menu::stats`; the
-/// tester, after m16, answer 7 (a)). In level order per form.
-pub fn rewards_given() -> Vec<u8> {
-    let Some(t) = table() else { return Vec::new() };
-    let mut out = Vec::new();
-    for kind in [Kind::Valor, Kind::Wisdom, Kind::Final] {
-        let rec = unsafe { record(kind) };
-        for l in 2..=rec.rewarded.min(rec.level) {
-            if let Some(id) = t.row(kh2_form(kind), l).and_then(|r| crate::growth::kh1_reward(r.reward)) {
-                out.push(id);
-            }
-        }
-    }
-    out
-}
-
 /// `kind`'s abilities up to `level` are given (or have no KH1 counterpart yet): the save's
 /// rewarded level.
 pub unsafe fn rewarded(kind: Kind, level: u8) {
