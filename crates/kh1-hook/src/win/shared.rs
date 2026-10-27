@@ -1410,7 +1410,20 @@ pub mod physics {
     }
 
     /// KH2's ground velocity (its player's `+0x20`) under a Drive Form's ground inertia, per 60 Hz
-    /// frame (KH1's x / z); `None` until his first ground step in such a form.
+    /// frame (KH1's x / z); `None` until his first ground step in such a form, and again from each
+    /// air step (t762), so the first ground step after a landing starts from KH1's air speed.
+    ///
+    /// The owner (drive-forms, after m3, traces f9084 / f9407): Wisdom "not following the stick
+    /// direction when he lands". Checked (trace): on all eight landings the slide on KH1's landing
+    /// (0xC, Wisdom's 5) was his ground velocity from before the jump, kept through the air: f8865
+    /// (-1.83, 6.48) before the takeoff, f8905 (-1.80, 6.38) on landing, though his air speed at
+    /// f8904 was (7.60, 4.10) toward the stick; the same at f8975, f9049, f9200, f9267, f9339. KH2
+    /// has one velocity (`+0x20`) for the air and the ground, so its landing goes on from the air
+    /// speed the stick steered. Through the landing's frames 0..11 KH2 clears the stick target
+    /// (`0x1403A89A0`: kept only with range ids 0 / 1 / 2 or 41; Wisdom's 5 has range 2 from 12
+    /// and 42 all through, Checked (files)), so the free move's inertia (`0x140422350` ->
+    /// `0x1403B7AD0`, range 42) brakes that speed and he doesn't turn until 12, as ours does.
+    /// Checked (decomp).
     static GROUND_V: Mutex<Option<[f32; 2]>> = Mutex::new(None);
 
     /// KH2's ground inertia on KH1's ground state for a Drive Form whose `prty` has one (Wisdom's
@@ -1742,6 +1755,13 @@ pub mod physics {
     unsafe extern "system" fn air_step(actor: usize, disp: *mut [f32; 4]) -> usize {
         let f: StepFn = std::mem::transmute(ORIG_AIR.load(Ordering::Acquire));
         let sora = is_sora(actor);
+        // (Off the ground a Drive Form's ground velocity is no longer his: the landing takes his air
+        // speed, `GROUND_V`, t762.)
+        if sora {
+            if let Ok(mut g) = GROUND_V.try_lock() {
+                *g = None;
+            }
+        }
         let v0: [f32; 4] = if sora { rd(actor + 0x3C0) } else { [0.0; 4] };
         // Whose physics move him this frame: the Air Physics row's while he casts in the air
         // (`cast_rule`, the tester's m19), else the Physics row's.

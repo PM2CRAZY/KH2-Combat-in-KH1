@@ -1192,3 +1192,9 @@ Not done this round:
   `form_grip` draws Valor's right Keyblade with those turns on KH1's grip, and the left one
   (`left_bones`) is KH2's left root on KH1's left hand with the right's KH2-to-KH1 turn: both follow
   KH2. No cause for a bad grip was found in the data or the maths; not seen in game.
+- **Wisdom's landing (t762).** The owner's traces f9084 / f9407 (Checked (trace)): every landing slid
+  with the ground velocity kept from before the takeoff (`shared::physics::GROUND_V` wasn't cleared in
+  the air). KH2 has one velocity `+0x20` for air and ground (Checked (decomp)), so the air speed
+  carries into the landing. Now cleared by each air step. During the landing's frames 0..11 KH2 clears
+  the stick target (`0x1403A89A0`; Wisdom's 5: range 2 from 12, 42 all through, Checked (files)), so
+  the inertia brakes and he turns from 12, unchanged.

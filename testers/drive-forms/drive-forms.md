@@ -7,6 +7,7 @@
 - [1. Assistant: This is the Drive Forms thread, split out of "What is still ](#^m1)
 - [2. Assistant: Thanks for the traces, they made this quick. Nine versions; ](#^m2)
 - [3. Assistant: Five versions this round, and you were right about the air f](#^m3)
+- [4. Assistant: t762, Wisdom lands with his air speed. Your traces showed th](#^m4)
 
 ---
 
@@ -138,4 +139,32 @@ go ahead
 > Notes are in `docs/kh1-drive-forms-native.md` §11.1.
 
 ^m3
+
+
+i've recorded a trace on wisdom, he's not following the stick direction when he lands
+
+trace_1793133757_f9084_select_triangle.csv
+trace_1793133763_f9407_select_triangle.csv
+
+go ahead
+
+> [!tip] Assistant
+> **t762, Wisdom lands with his air speed.** Your traces showed the cause on all eight landings: when he touched down, he slid with the ground speed he'd had before the jump, not the speed the stick gave him in the air. At f8865 he was running at (-1.8, 6.5); in the air the stick took him to (7.6, 4.1); on landing at f8905 he went back to (-1.8, 6.4). The form's ground momentum kept its old value through the whole jump. KH2 uses one speed for the air and the ground, so its landing carries on from the air. Ours does too now.
+>
+> **How I checked it**
+> - Your two traces, frame by frame (f8905, f8975, f9049, f9200, f9267, f9339 all show the old pre-jump speed coming back).
+> - The Steam KH2 decomp: one velocity for air and ground. During the landing's first 12 frames KH2 ignores the stick (Wisdom's landing only frees him from frame 12, checked in KH2's files), so he slides on and slows, then turns toward the stick from frame 12. Ours already did that part, so that's unchanged.
+> - Not checked in game.
+>
+> **Please test:**
+> 1. Wisdom: jump, steer in the air, land. He should carry on the way the stick took him, not snap back to the way he was running before the jump.
+> 2. Hold the stick a new way as he lands: he slides a little and turns after about 12 frames, as in KH2.
+> 3. Valor's landings: the same rule applies (it's every Drive Form on KH1's states with momentum; Valor has none, so it should be unchanged).
+>
+> **Still open on my side (no answer needed)**
+> - Everything from my last message here.
+>
+> Your traces are in `testers/drive-forms/`; notes in AGENTS.md (t762) and `docs/kh1-drive-forms-native.md` §11.1.
+
+^m4
 

@@ -86,6 +86,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. Assistant: This is the Drive Forms thread, split out of "What is still ](../testers/drive-forms/drive-forms.md#^m1)
   - [2. Assistant: Thanks for the traces, they made this quick. Nine versions; ](../testers/drive-forms/drive-forms.md#^m2)
   - [3. Assistant: Five versions this round, and you were right about the air f](../testers/drive-forms/drive-forms.md#^m3)
+  - [4. Assistant: t762, Wisdom lands with his air speed. Your traces showed th](../testers/drive-forms/drive-forms.md#^m4)
 - [Frame advance in the debug menu](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md)
   - [1. Mr. Bugs: Can you add a frame advance feature into the debug menu? whe](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m1)
   - [2. Assistant: Sounds useful, and since it's a debug menu tool the match-KH](../testers/frame-advance-in-the-debug-menu/frame-advance-in-the-debug-menu.md#^m2)
