@@ -264,8 +264,10 @@ unsafe fn affordable(base: usize, sora: usize) -> bool {
     if sora < 0x10000 || save < 0x10000 || rd::<u8>(base + MAGIC_SEAL_RVA) & 4 != 0 || rd::<u8>(save + 0x874) & 1 != 0 {
         return false;
     }
-    // (Base Sora: KH2's cost, 10 of 100, scaled onto KH1's MP, `mpcost`; Drive Forms 1 MP.)
-    if !super::form::in_form() {
+    // (Base Sora and Wisdom on KH1's own states: KH2's cost, 10 of 100, scaled onto KH1's MP,
+    // `mpcost`, as their other KH2 spells (KH2's costs are the same in Wisdom); the forms on KH2's
+    // controller 1 MP.)
+    if native_path() {
         return super::mpcost::units(sora, SPELL).is_some();
     }
     let check: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + MP_CHECK_RVA);
@@ -669,6 +671,18 @@ const FLIGHT_REQUEST: u32 = 0x4000_0075;
 const SET_MOTION_RVA: Rva = Rva(0x29D7F0);
 const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
 
+/// Reflect runs on KH1's own cast state (`cast_native`, `native_step`): base Sora, or Wisdom Form
+/// on KH1's own states, whose own clips of 71 / 72 / 73 play on our Reflect requests
+/// (`kh2slots::FORM_SLOTS`) at Wisdom's sub (+10, `form::magic_sub`). The tester (drive-forms):
+/// "reflect is playing the base animation", "air reflect is base soras reflect": in Wisdom it went
+/// to KH2's controller (the log, f26207: "command 0x2 (02000702) is KH2's: KH2 borrows him for
+/// it"), which drew base Sora's 71. KH2's Wisdom casts its own 71 / 72 / 73 (`P_EX100_MAGF.mset`
+/// has them, Checked (files)), its MAGC row the same for every form (`0x1403C5170`, t719, Checked
+/// (decomp)). Valor has no magic; the other forms stay on KH2's controller.
+fn native_path() -> bool {
+    !super::form::in_form() || super::form::native_form() == Some(super::form::Kind::Wisdom)
+}
+
 /// Our request for one of Reflect's cast motions, if it is built (`kh1rows`, `kh2slots`).
 fn request_of(motion: u16) -> Option<u32> {
     let n = super::kh1rows::by_motion(motion)?;
@@ -682,7 +696,7 @@ fn request_of(motion: u16) -> Option<u32> {
 /// ground cast in 0 / 6 / 0x18, its air cast in 2, `0x1402A3600`; its flight cast in 8,
 /// `0x1402A4150`, the tester's m6 answer 2 (a)), our request of the cast motion built.
 pub unsafe fn native_ok(actor: usize) -> bool {
-    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || super::form::in_form() || !super::shared::active() || actor < 0x10000 {
+    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || !native_path() || !super::shared::active() || actor < 0x10000 {
         return false;
     }
     match rd::<i32>(actor + 0x70) {
@@ -696,7 +710,7 @@ pub unsafe fn native_ok(actor: usize) -> bool {
 /// payable): KH2's glide is ended for it only then (`combat::command_step`, Cast from Glide), so a
 /// refused cast doesn't cut the glide.
 pub unsafe fn air_ready(actor: usize) -> bool {
-    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || super::form::in_form() || !super::shared::active() || actor < 0x10000 {
+    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || !native_path() || !super::shared::active() || actor < 0x10000 {
         return false;
     }
     let base = base();
@@ -1490,7 +1504,7 @@ pub fn kh1_frame() {
     let sora = unsafe { rd::<u64>(base() + PARTY_RVA) as usize };
     // Base Sora in KH1's own states (`shared`): a Reflect cast there runs on KH1's frames
     // (`native_step`); only with none in flight his flag and the barrier are put back here.
-    if super::shared::active() && !super::form::in_form() {
+    if super::shared::active() && native_path() {
         if !busy() {
             BARRIER.store(false, Ordering::Relaxed);
             unsafe { intangible(sora, false) };

@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 735 (testing branch: Wisdom's Reflect on KH1's cast state)
+- **Wisdom's Reflect on KH1's cast state.** The tester (drive-forms): "reflect is playing the base animation", "air reflect is base soras reflect". Log f26207: KH2's deprecated controller borrowed him and drew base 71. `reflect::native_path` now covers native Wisdom: its own 71 / 72 / 73 (Checked (files), MAGF) on our Reflect rows, sub +10, KH2's cost through mpcost. Not checked in game.
+
 ### 2026-10-27: Stage 734 (testing branch: A Drive Form's own Keyblade hold)
 - **A Drive Form's own Keyblade hold.** The tester (drive-forms): "sora doesn't spin his keyblade on the idle animation". Checked (files): `W_EX010_MAGF` motion 0's root turns 75..246 degrees from base Sora's hold (base Sora's within 8; Valor's about 95). `pose::form_grip`: form bakes turn bone 280's subtree by the form's root turn, in model axes through KH2's hand 178; form slot keys salted (one rebake). Assumption: KH1's rest grip stands for base Sora's KH2 hold. Not checked in game.
 

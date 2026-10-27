@@ -382,8 +382,12 @@ pub struct FormSlots {
 pub const FORM_SLOTS: [FormSlots; 2] = [
     FormSlots { kind: super::form::Kind::Valor, specs: &VALOR_SPECS, ours: &[] },
     // (Wisdom's Quick Run, its growth ability: its own 203 and its stop 204 on our Quick Run rows,
-    // `quickrun`.)
-    FormSlots { kind: super::form::Kind::Wisdom, specs: &WISDOM_SPECS, ours: &[super::quickrun::RUN_MOTION, super::quickrun::STOP_MOTION] },
+    // `quickrun`; its own Reflect 71 / 72 / 73 on our Reflect rows, `reflect::native_path`.)
+    FormSlots {
+        kind: super::form::Kind::Wisdom,
+        specs: &WISDOM_SPECS,
+        ours: &[super::quickrun::RUN_MOTION, super::quickrun::STOP_MOTION, super::reflect::GROUND_MOTION, super::reflect::FINISHER_MOTION, super::reflect::AIR_MOTION],
+    },
 ];
 
 /// Wisdom Form's motions on KH1's own requests (`FORM_SLOTS`; the tester, what-is-still-missing
