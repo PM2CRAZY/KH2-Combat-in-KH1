@@ -227,7 +227,12 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
     let kind = rd::<u32>(base + ARG_KIND_STEAM);
     let what = rd::<u32>(base + ARG_ITEM_STEAM);
     let full = rd::<u32>(base + ARG_FULL_STEAM);
-    if full != 0 || !(kind == 0 || kind == 3) {
+    // Kinds (KH1's chest table, Checked (exe + decomp)): 0 an item (KH1's handler gives it), 1 a gummi
+    // block (the handler gives it with `0x14020D3F0`; "full" when the hangar holds the most), 2 a set of
+    // Dalmatians (33 entries, contents 1..33: 99 puppies in threes; the handler gives nothing, the
+    // treasure script does, and it still runs whole here), 3 munny (none in the table), 5 an event chest
+    // (its own script entry), 7 a reward record (an item one becomes kind 0 in the handler).
+    if full != 0 || !matches!(kind, 0..=3) {
         FAST_AT.store(0, Ordering::Relaxed);
         log!(Cutscenes, "Chest Opening: KH1's open (kind {kind}, contents {what:#x}, stock full {full})");
         return;
@@ -255,6 +260,12 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
     }
     let line = if kind == 3 {
         format!("{what} Munny")
+    } else if kind == 1 {
+        "Gummi Block".to_string()
+    } else if kind == 2 {
+        // Assumption: set n holds puppies 3n-2 .. 3n (KH1's numbering of the 99).
+        let n = what.max(1) * 3;
+        format!("Dalmatians {:02}, {:02}, {:02}", n - 2, n - 1, n)
     } else {
         let name = if what < 0x100 { super::equip::item_name(base, what as u8) } else { None };
         match name {

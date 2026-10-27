@@ -118,6 +118,22 @@ contexts.
   motion request replaced by Sora's own motion 0x..". Assumption: re-asking for the motion already
   playing doesn't restart it (`0x14029F7C0` compares the new motion with the one on).
 
+## Gummi and Dalmatian chests (round 2)
+
+- KH1's chest table (`0x140528D60`, Steam exe) by kind over its first 600 entries: 425 kind 0 (items),
+  81 kind 7 (reward records), 45 kind 1, 33 kind 2, 13 kind 5, 2 kind 4, 1 kind 6, no kind 3.
+  Checked (exe). Kind 1's contents run 0x02..0x8A and the handler gives them with `0x14020D3F0`, the
+  gummi hangar's add (it caps a block at its record's `+0xB` count, 1 for 0x47..0x76) — gummi blocks.
+  Kind 2's contents are 1..0x21 in order, 33 entries: the Dalmatians (99 puppies, three a chest); the
+  handler gives nothing for kind 2, so the treasure script does. Checked (decomp + exe) for the
+  handler; that kind 2 is the Dalmatians is from the count and order (Assumption, strong).
+- t724 sent kinds 1 and 2 to KH1's open. Round 2 takes them the KH2 way too: the handler and the
+  treasure script run as before (so the Dalmatians' give, whatever function the script uses, still
+  runs), with only the windows skipped and the actions on Sora released. The notice reads "Gummi
+  Block" (Assumption: the gummi's own name isn't read yet) or "Dalmatians 01, 02, 03" (Assumption:
+  set n is puppies 3n-2 .. 3n). A full gummi hangar stays KH1's, as a full item stock does. Kinds 4,
+  5, 6 and non-item reward records stay KH1's.
+
 ## Not checked (Assumption)
 
 - KH2's own timings: KH2's treasure-box code (its BDX trap `trap_treasure_get`) wasn't in the
