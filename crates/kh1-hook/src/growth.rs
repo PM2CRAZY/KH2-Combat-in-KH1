@@ -41,6 +41,7 @@ pub mod kh1 {
     pub const BLITZ: u8 = 20;
     pub const GUARD: u8 = 21;
     pub const DODGE_ROLL: u8 = 22;
+    pub const MP_HASTE: u8 = 23;
     pub const MP_RAGE: u8 = 24;
     pub const SLAPSHOT: u8 = 53;
     pub const SLIDING_DASH: u8 = 54;
@@ -730,15 +731,18 @@ pub struct FormGrowth {
 /// tester, after m15, answer 6 (c)): KH2's Combo Plus (162) and Air Combo Plus (163) are KH1's
 /// Combo Plus / Air Combo Plus (their KH2 side is KH2's, `Effect::ComboPlus`); KH2's MP Rage
 /// (412) is KH1's MP Rage (KH1's own effect: MP when hurt; KH2's MP Rage is the same idea with
-/// other numbers, Assumption that it counts as its counterpart). None yet: the Auto forms (385
-/// Valor, 386 Wisdom, 387 Master, 388 Final, 568 Limit), MP Haste (413: KH2's shortens MP Charge,
-/// which KH1 has no system for; KH1's MP Haste is more MP per hit), Form Boost (398), Draw (405),
-/// Lucky Lucky (407) (asked).
+/// other numbers, Assumption that it counts as its counterpart). KH2's MP Haste (413, Wisdom
+/// LV6: KH2's shortens MP Charge, which KH1 has no system for) is KH1's own MP Haste (the tester,
+/// after m16, answer 4 (a); once a KH2 MP system is a Config setting, it becomes MP Charge's
+/// MP Haste there). None yet: the Auto forms (385 Valor, 386 Wisdom, 387 Master, 388 Final, 568
+/// Limit; to be built natively later, answer 3), Form Boost (398, waits for the Drive gauge,
+/// answer 5), Draw (405), Lucky Lucky (407).
 pub fn kh1_reward(kh2_id: u16) -> Option<u8> {
     match kh2_id {
         162 => Some(kh1::COMBO_PLUS),
         163 => Some(kh1::AIR_COMBO_PLUS),
         412 => Some(kh1::MP_RAGE),
+        413 => Some(kh1::MP_HASTE),
         _ => None,
     }
 }
@@ -1145,7 +1149,7 @@ mod tests {
         assert_eq!(kh1_reward(412), Some(kh1::MP_RAGE));
         assert_eq!(KH1_ABILITIES[kh1::MP_RAGE as usize - 1].name, "MP Rage");
         assert_eq!(kh1_reward(385), None);
-        assert_eq!(kh1_reward(413), None);
+        assert_eq!(kh1_reward(413), Some(kh1::MP_HASTE));
     }
 
     #[test]
