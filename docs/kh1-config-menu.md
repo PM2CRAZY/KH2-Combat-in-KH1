@@ -457,3 +457,7 @@ others in its other style; an arrow before each panel; the finger at the chosen 
 step it (wrapping on a fresh press at either end), confirm steps it right. **Assumption:** the
 panel call's width and text-centre arguments behave for a narrower panel as for KH1's (not seen
 in game yet).
+
+### 6.z3 Soft Reset in QoL (t707)
+
+The QoL list has a second row, Soft Reset (Off | On, ini `soft_reset`, off by default): the PS2's six-button reset (L1 + L2 + R1 + R2 + Start + Select) held for a second returns to the title screen. How it works and what is checked: `docs/kh1-softreset.md`.

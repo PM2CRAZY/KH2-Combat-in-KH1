@@ -221,6 +221,8 @@ enum Row {
     ClashCount,
     /// Cosmetics > Keyblade Trail (Normal | Always, `cosmetics::always`).
     TrailAlways,
+    /// Soft Reset (Off | On, `softreset`).
+    SoftReset,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -333,7 +335,12 @@ const TOP: [Item; 7] = [
 const COMMAND_MENU: [Item; 1] = [Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad)];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
 // there".)
-const QOL: [Item; 1] = [Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi)];
+// (Soft Reset: the user, t707: "in qol you can quick reset the game", then "the combo does not work in the pc
+// version so restore it".)
+const QOL: [Item; 2] = [
+    Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi),
+    Item::Set([0x7F00_021B, 0x7F00_011D, 0x7F00_011E, 0x7F00_021C], Row::SoftReset),
+];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
 // always have their trail on".)
 const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 0x7F00_0216], Row::TrailAlways)];
@@ -417,7 +424,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 106] = [
+const STRINGS: [(u32, &str); 108] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -454,7 +461,9 @@ const STRINGS: [(u32, &str); 106] = [
     (0x7F00_0219, "Command Menu"),
     (0x7F00_021A, "Options for the command menu."),
     (0x7F00_0211, "QoL"),
-    (0x7F00_0212, "Quality of life: Gummi routes."),
+    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset."),
+    (0x7F00_021B, "Soft Reset"),
+    (0x7F00_021C, "On: L1 + L2 + R1 + R2 + Start + Select held for a second return to the title screen."),
     (0x7F00_0213, "Cosmetics"),
     (0x7F00_0214, "How things look, not how they play: Keyblade trails."),
     (0x7F00_0215, "Keyblade Trail"),
@@ -546,6 +555,7 @@ fn value(what: Row) -> bool {
         Row::GlideCast => super::glide::cast_out(),
         Row::ClashCount => super::recoil::clash_count(),
         Row::TrailAlways => super::cosmetics::always(),
+        Row::SoftReset => super::softreset::enabled(),
     }
 }
 
@@ -579,6 +589,7 @@ fn set(what: Row, v: bool) {
         Row::GlideCast => super::glide::set_cast_out(v),
         Row::ClashCount => super::recoil::set_clash_count(v),
         Row::TrailAlways => super::cosmetics::set_always(v),
+        Row::SoftReset => super::softreset::set(v),
     }
 }
 

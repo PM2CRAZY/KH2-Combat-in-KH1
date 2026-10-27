@@ -228,6 +228,9 @@ gummi = vanilla\r\n\
 ; trail_always: off = Keyblade trails show on swings, as KH1 does; on = every Keyblade shows its\r\n\
 ; trail whenever it is out (the Config menu's Cosmetics > Keyblade Trail row switches it in game too)\r\n\
 trail_always = off\r\n\
+; soft_reset: off = nothing; on = L1 + L2 + R1 + R2 + Start + Select held for a second returns to the\r\n\
+; title screen, as the PS2's reset did (the Config menu's QoL > Soft Reset row switches it in game too)\r\n\
+soft_reset = off\r\n\
 ; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
@@ -391,6 +394,8 @@ pub struct Settings {
     pub gummi_skip: bool,
     /// Every Keyblade shows its trail whenever it is out (`trail_always = on`, `cosmetics.rs`).
     pub trail_always: bool,
+    /// L1 + L2 + R1 + R2 + Start + Select held a second returns to the title screen (`soft_reset = on`, `softreset.rs`).
+    pub soft_reset: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
     /// states per move style (its physics by `physics_rule`), KH2's controller only for KH2's own
     /// moves. Off: the old
@@ -636,6 +641,7 @@ fn load(first: bool) -> Option<Settings> {
         medium_hits_flinch: on(&text, "medium_hits", "flinch", false),
         gummi_skip: on(&text, "gummi", "skip", false),
         trail_always: on(&text, "trail_always", "on", false),
+        soft_reset: on(&text, "soft_reset", "on", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

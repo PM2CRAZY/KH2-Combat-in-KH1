@@ -279,6 +279,8 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     let (b_all, st_all) = merge_pads(out, b, st);
     super::takeover::RAW_BUTTONS.store(b_all as u32, Ordering::Relaxed);
     super::takeover::RAW_STICKS.store(u32::from_le_bytes(st_all), Ordering::Relaxed);
+    // Soft Reset (`softreset`): the six-button combo held a second.
+    super::softreset::pad(b_all);
     // Final Form's secret code (`form::pad`).
     super::form::pad(b_all);
     // L1 held: KH1's shortcuts (L1 + a face button cast the spells set there), so KH1 keeps

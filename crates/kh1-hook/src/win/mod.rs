@@ -49,6 +49,7 @@ mod model;
 mod pose;
 mod quickrun;
 mod settings;
+mod softreset;
 mod shared;
 mod shortcuts;
 mod soundlog;
@@ -437,6 +438,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         tint::install();
         leftblade::install();
         cosmetics::install();
+        softreset::install();
         model::install();
         gates::install();
         // (Its voice group hook carries gameplay and always goes in; the log hooks only with the
