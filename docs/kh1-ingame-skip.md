@@ -36,4 +36,41 @@ When the entry is back to 0, or KH1's skip mode has ended, the mod clears the bi
 - The item popup isn't shown (KH1 shows nothing in skip mode); the item is in the inventory.
 - How it looks: KH1's skip fades out, runs the scene in a few frames and fades in over a second.
 
+## Trinities
+
+The user: "currently works in traverse town, wasn't able to test it in other worlds, but can you also make it skip trinity animations?". They are on the same row (In-game Scene Skip): a Trinity is an event entry like the in-game scenes, so KH1's own skip runs it.
+
+### How a Trinity runs in KH1 (Steam)
+
+- **The mark is a context of the room's own script** (entry 0; its contexts at `0x142382AD0`, `0x360` each, count `0x14237F4E4`, the ones the script step `0x1401A2320` and `0x1401A4D00` use while `0x142382524` is 0). Checked (decomp).
+- **It offers the command through event function 454** (`0x1401AF530`, not a function in Ghidra's listing; read from the exe): it puts the context's actor and the two values pushed before it into the room's object table at `0x142382938` (8 slots of `0x20`: actor `+0`, command `+0xC`, flag `+0x14`). The Triangle-box scan's script path `0x1401A4D00` offers that command in slot 3 (`0x140293000`), and when it is used wakes the context's event 9 with the command in `0x142382A38`, which event function 455 (`0x1401AF640`) pushes back to the script. Checked (exe + decomp).
+- **The Trinity command is 0x53.** In the user's own room scripts (read locally from his install; nothing of them is in the repo) `push 0x53, push 1, call 454` appears in 17 rooms of six worlds (Traverse Town, Wonderland, Deep Jungle, Agrabah, Olympus Coliseum, Monstro), and every such context, when the command is used, starts (after holding the party, event function 593, and a few frames in the Traverse Town ones read in full) an event entry with event function 126 (`push N, call 126`; `0x1401A9D90` → `0x1401A38A0`), N = 50 in every room read, with the mark's number in a script variable. Checked (files). That KH1 shows it as "Trinity" is an Assumption (the message text wasn't decoded); the structure below is why.
+- **The started entry is the Trinity itself:** its first three threads bind to party members 0, 1 and 2 (Sora, Donald, Goofy) and place them 0, 120 and 240 degrees round the mark; the next threads are the marks, the last the controller. Checked (files).
+- **Why t712 didn't skip them:** some story versions of a room run the Trinity entry with no event mode (no event function 513 in it: Traverse Town's First and Second District in two of their versions), and t712 waited for event mode before judging; and a talk earlier in the room leaves `0x800` on until the room reloads, which t712 read as "the player started it". Checked (files) for the first; the second is t712's own rule. One Olympus version (Coliseum, `he02`) has the pause menu's skip (event function 139) in its Trinity entry: that one stays the Cutscene Skip row's.
+
+- **A mark can also live in an event entry.** In Olympus's Coliseum after the barrel game (`he02`, the version whose entry 1 is started by talking to Phil), entry 1's context 16 is a Trinity mark that starts entry 50 itself. Event function 126 run from an event entry puts the new entry's contexts over the old ones (`0x1423902D0`, `0x1401A38A0` with an entry other than 0), so that mark is gone by the time its Trinity runs. Checked (files + decomp).
+
+### What the mod does
+
+When an event entry starts, `ingameskip` reads the room script's contexts once (up to 64, 8192 instructions each) for one that both offers command 0x53 (`push 0x53, push 1, call 454`) and starts this entry (`push entry, call 126`), and reads the new entry's own contexts for marks the same way, noting the entries they start (up to 4) for the next entry (`crate::kh1script::trinity_call`, unit-tested). If one does, or the entry before noted it, the entry is judged at once, without waiting for event mode and without the talk rule; the rest is t712's: the pause skip's functions make it the Cutscene Skip row's, a choice, shop or menu makes it play, anything else gets bit 0 and the flag byte and KH1's script step runs its own skip. Event functions 454 and 126 are checked in the event table (`0x1404FA870`) with the others before use. Off: nothing more than t712's one load.
+
+Log (Cutscenes): `in-game skip: entry 50 is a Trinity (started by context N of the room's script, which offers command 0x53)` (or `... by a mark of the event entry before it ...`), then `... (a Trinity, n instructions read, flags ...) skipped ...`.
+
+### Not checked in game (Assumption)
+
+- That every Trinity type's result (the Jump's ledge, the Ladder, the Charge's broken wall, the Push, the Detect's chest, the journal's Trinity count, the mark going out) is set by the entry's own script steps, which skip mode runs; that Sora ends where the played Trinity leaves him (moves finish at once in skip mode).
+- That 0x53 is only ever the Trinity command (in the rooms read, every context offering it started such an entry).
+- Rooms not read (Neverland, Hollow Bastion, Halloween Town, Atlantica, End of the World, 100 Acre Wood): assumed the same.
+
+## Talks that lead into a scene (the Phil report)
+
+The tester: "talking to phil after the barrel mini game still plays the in game cutscene where he gives you thunder". His log (`testers/auto-cutscene-skipper/kh1-kh2.log`):
+
+- f43649: Triangle on Phil (world `0xb` room 1, the `he02` version with 6 entries) starts entry 1 with the talk bit `0x800` already on; f43651 event mode comes on and the row says "plays (a talk's bit is set ...)". Checked (trace).
+- Entry 1 of that version (17 threads) is Phil's whole after-barrel scene: Phil's thread (context 6) holds the talk lines and, in sub-script 14, a choice (event function 88 with its answer in variable `0x910`, then 89); context 16 is the Coliseum's Trinity mark (above). Checked (files). So even without the talk rule the row would have kept it for the choice.
+- f34971 and f35566 (entries 1 and 3 of the first `he02` version, also talks to Phil) played on the talk rule too, but the Cutscene Skip row skipped them a moment later (they turn on bit 0, event function 139). Checked (trace).
+- f32384 (Traverse Town, world 3 room `0x13`, entry 50 with the talk bit on) was a Trinity: the Trinity change above skips it now. Checked (trace + files).
+
+**No clean line in the data.** A plain talk in Traverse Town runs inside the room script (no entry starts; t709); Phil's talk starts its own event entry. That part is clean. But the entry Phil's talk starts mixes the reward lines with a choice and a Trinity mark, so whether a choice is reached on this visit depends on which sub-scripts run, which the code alone doesn't say (Assumption until the VM's wake-ups are traced). Skipping it would answer that choice with the variable's old value. Nothing is built for it; the tester picks (thread reply).
+
 Test with the Cutscenes log on (`in-game skip` lines): each scene says whether it was skipped and why not.

@@ -30,14 +30,30 @@
 //! and the flag byte, and KH1's next script step skips it. When the entry is back to 0 (or KH1's skip
 //! mode has ended) the mod clears the bit 0 it set. No hook; one atomic load in the pad read when off.
 //!
+//! Trinities (the user: "can you also make it skip trinity animations?"): a Trinity mark is a context of
+//! the room's own script (entry 0, contexts at `0x142382AD0`, count `0x14237F4E4`) that offers the
+//! Triangle command 0x53 through event function 454 (`push 0x53, push 1, call 454`: the object table at
+//! `0x142382938`, command `+0xC`, Checked (exe + files)) and, when it is used, starts an event entry
+//! through event function 126 (`push N, call 126`; N was 50 in every room read, Checked (files)). That
+//! entry is the Trinity itself (Sora, Donald and Goofy bound to its first three threads, placed 0, 120
+//! and 240 degrees round the mark, Checked (files)). Some story versions of a room run it without event
+//! mode (no event function 513), and a talk earlier in the room leaves `0x800` on, so the two rules above
+//! never let it through. An entry a Trinity mark starts is judged at once, `0x800` aside, and skipped by
+//! the same KH1 skip unless it has the pause skip (the Cutscene Skip row's) or a choice, shop or menu.
+//! Assumption (not run in game): that 0x53 is the "Trinity" command (it is offered in 17 rooms of six
+//! worlds, every one starting such an entry), and that every Trinity type's result (the jump's ledge,
+//! the ladder, the charged wall, the pushed object, the detected chest, the journal's count) is set by
+//! the entry's own script steps, which skip mode runs.
+//!
 //! Assumption (not run in game): the code read finds the pause-skip functions in every high-poly
 //! scene (the t709 / t710 logs only listed each entry's first thread); a scene chained from a skipped
 //! one is skipped too, as after the pause menu's skip; the item popup is not shown (KH1 doesn't in
 //! skip mode), the item is given.
 
 use super::addr::Build;
+use crate::kh1script::{trinity_call, Call, CMD_TRINITY, FN_OFFER, FN_START_ENTRY};
 use super::log;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
 
 static ON: AtomicBool = AtomicBool::new(false);
 static VERIFIED: AtomicBool = AtomicBool::new(false);
@@ -48,6 +64,13 @@ static JUDGED: AtomicI32 = AtomicI32::new(0);
 static FORCED: AtomicBool = AtomicBool::new(false);
 /// KH1's skip mode was seen on after the mod set the bit.
 static SAW_SKIP: AtomicBool = AtomicBool::new(false);
+/// The entry last checked for a Trinity (0: none), and whether it was one.
+static TRIN_ENTRY: AtomicI32 = AtomicI32::new(0);
+static TRIN_YES: AtomicBool = AtomicBool::new(false);
+/// The entries (one byte each, 0: none) the Trinity marks of the event entry now running start: a mark
+/// can be a context of an event entry too (Olympus's Coliseum after the barrel game: Phil's entry 1 has
+/// one), and its Trinity entry replaces that entry's contexts, so they are read beforehand.
+static NEXT_TRIN: AtomicU32 = AtomicU32::new(0);
 
 /// Steam: the entry in use, the second scene flag word, the pause menu's flag byte, the runner word
 /// (bit 0 skip mode), the event contexts and their count (Checked (decomp)).
@@ -57,11 +80,18 @@ const SKIP_FLAG_STEAM: usize = 0x232DF89;
 const RUNNER_STEAM: usize = 0x23AB2D0;
 const CONTEXTS_STEAM: usize = 0x23902D0;
 const COUNT_STEAM: usize = 0x237F4E8;
+/// The room's own script (entry 0): its contexts and their count (Checked (decomp): the script step
+/// `0x1401A2320` and `0x1401A4D00` take these when `0x142382524` is 0).
+const CONTEXTS0_STEAM: usize = 0x2382AD0;
+const COUNT0_STEAM: usize = 0x237F4E4;
 const CTX_SIZE: usize = 0x360;
 const CTX_CODE: usize = 0x80;
 const CTX_SUBS: usize = 0x88;
 const CLASS_END: u8 = 5;
 const CLASS_CALL: u8 = 0x18;
+/// Event functions 454 (offer a Triangle command) and 126 (start an event entry), where this exe has
+/// them (`crate::kh1script`).
+const TRINITY_FNS: [(u32, usize); 2] = [(FN_OFFER, 0x1AF530), (FN_START_ENTRY, 0x1A9D90)];
 /// The second word's bits: skippable, event mode, a talk.
 const BIT_SKIPPABLE: u32 = 1;
 const BIT_EVENT: u32 = 0x400;
@@ -158,7 +188,7 @@ unsafe fn verify() {
             return;
         }
     }
-    for (n, rva) in PAUSE_SKIP.iter().chain(PLAYS.iter()) {
+    for (n, rva) in PAUSE_SKIP.iter().chain(PLAYS.iter()).chain(TRINITY_FNS.iter()) {
         let entry = rd::<u64>(base + TABLE_STEAM + *n as usize * 8) as usize;
         if entry.wrapping_sub(base) != *rva {
             log!(Menus, "In-game Scene Skip: event function {n} is at {:#x}, not {rva:#x}, not used", entry.wrapping_sub(base));
@@ -193,22 +223,27 @@ unsafe fn step() {
     }
     if entry == 0 {
         JUDGED.store(0, Ordering::Relaxed);
+        TRIN_ENTRY.store(0, Ordering::Relaxed);
+        NEXT_TRIN.store(0, Ordering::Relaxed);
         return;
     }
     if JUDGED.load(Ordering::Relaxed) == entry {
         return;
     }
+    let trinity = trinity_entry(base, entry);
     let flags = rd::<u32>(base + FLAGS2_STEAM);
-    if flags & BIT_EVENT == 0 {
-        // (Not in event mode yet: the scene's first frame sets it, event function 513.)
+    if !trinity && flags & BIT_EVENT == 0 {
+        // (Not in event mode yet: the scene's first frame sets it, event function 513. A Trinity is
+        // judged at once: some story versions of a room run it without event mode.)
         return;
     }
     JUDGED.store(entry, Ordering::Relaxed);
+    let what = if trinity { "a Trinity" } else { "a scene" };
     if flags & BIT_SKIPPABLE != 0 {
-        log!(Cutscenes, "in-game skip: entry {entry} is a pause-skippable cutscene (the Cutscene Skip row's)");
+        log!(Cutscenes, "in-game skip: entry {entry} ({what}) is a pause-skippable cutscene (the Cutscene Skip row's)");
         return;
     }
-    if flags & BIT_TALK != 0 {
+    if !trinity && flags & BIT_TALK != 0 {
         log!(Cutscenes, "in-game skip: entry {entry} plays (a talk's bit is set, so the player may have started it)");
         return;
     }
@@ -218,16 +253,16 @@ unsafe fn step() {
             wr(base + SKIP_FLAG_STEAM, 1u8);
             SAW_SKIP.store(false, Ordering::Relaxed);
             FORCED.store(true, Ordering::Relaxed);
-            log!(Cutscenes, "in-game skip: entry {entry} ({n} instructions read) skipped: bit 0 and the flag byte set, KH1's script step runs its own skip");
+            log!(Cutscenes, "in-game skip: entry {entry} ({what}, {n} instructions read, flags {flags:#x}) skipped: bit 0 and the flag byte set, KH1's script step runs its own skip");
         }
         Scene::PauseSkip(f) => {
-            log!(Cutscenes, "in-game skip: entry {entry} has the pause menu's skip (event function {f}): the Cutscene Skip row's");
+            log!(Cutscenes, "in-game skip: entry {entry} ({what}) has the pause menu's skip (event function {f}): the Cutscene Skip row's");
         }
         Scene::Plays(f) => {
-            log!(Cutscenes, "in-game skip: entry {entry} plays (event function {f}: a choice, shop or menu)");
+            log!(Cutscenes, "in-game skip: entry {entry} ({what}) plays (event function {f}: a choice, shop or menu)");
         }
         Scene::Unread => {
-            log!(Cutscenes, "in-game skip: entry {entry} plays (its code couldn't be read)");
+            log!(Cutscenes, "in-game skip: entry {entry} ({what}) plays (its code couldn't be read)");
         }
     }
 }
@@ -257,6 +292,77 @@ enum Scene {
     PauseSkip(u32),
     Plays(u32),
     Unread,
+}
+
+/// Whether `entry` is a Trinity: a context that offers the Trinity command (`push 0x53, push 1, call
+/// 454`) starts it (`push entry, call 126`), in the room's own script or in the event entry that ran
+/// just before. Read once per entry; the marks of this entry are noted for the next one.
+unsafe fn trinity_entry(base: usize, entry: i32) -> bool {
+    if TRIN_ENTRY.load(Ordering::Relaxed) == entry {
+        return TRIN_YES.load(Ordering::Relaxed);
+    }
+    let e = entry as u32;
+    let room = marks(base, CONTEXTS0_STEAM, COUNT0_STEAM).into_iter().find(|&(_, n)| n == e);
+    let before = NEXT_TRIN.load(Ordering::Relaxed).to_le_bytes().contains(&(e as u8)) && e < 0x100;
+    let mut next = 0u32;
+    for (k, (_, n)) in marks(base, CONTEXTS_STEAM, COUNT_STEAM).into_iter().filter(|&(_, n)| n > 0 && n < 0x100).take(4).enumerate() {
+        next |= n << (k * 8);
+    }
+    NEXT_TRIN.store(next, Ordering::Relaxed);
+    let yes = room.is_some() || before;
+    TRIN_ENTRY.store(entry, Ordering::Relaxed);
+    TRIN_YES.store(yes, Ordering::Relaxed);
+    if let Some((ctx, _)) = room {
+        log!(Cutscenes, "in-game skip: entry {entry} is a Trinity (started by context {ctx} of the room's script, which offers command {CMD_TRINITY:#x})");
+    } else if before {
+        log!(Cutscenes, "in-game skip: entry {entry} is a Trinity (started by a mark of the event entry before it, which offers command {CMD_TRINITY:#x})");
+    }
+    yes
+}
+
+/// In a context array (the room's script or the event entry's), each context that offers the Trinity
+/// command, with every entry it starts: (context, entry).
+unsafe fn marks(base: usize, contexts: usize, count: usize) -> Vec<(usize, u32)> {
+    use super::crash::readable;
+    let mut out = Vec::new();
+    let count = rd::<i32>(base + count);
+    if !(1..=CTX_MAX).contains(&count) {
+        return out;
+    }
+    for i in 0..count as usize {
+        let ctx = base + contexts + i * CTX_SIZE;
+        let code = rd::<u64>(ctx + CTX_CODE) as usize;
+        let subs = rd::<i32>(ctx + CTX_SUBS);
+        if code < 0x10000 || !(0..=64).contains(&subs) {
+            continue;
+        }
+        let (mut ends, mut n) = (0, 0usize);
+        // The last three instructions read, newest last.
+        let mut last = [0u32; 3];
+        let mut offers = false;
+        let mut starts = Vec::new();
+        while ends < subs && n < SCAN_MAX {
+            let at = code + n * 4;
+            if !readable(at) || !readable(at + 3) {
+                break;
+            }
+            let w = rd::<u32>(at);
+            last = [last[1], last[2], w];
+            match trinity_call(&last) {
+                Some(Call::OfferTrinity) => offers = true,
+                Some(Call::StartEntry(e)) => starts.push(e),
+                None => {}
+            }
+            if (w >> 24) as u8 == CLASS_END {
+                ends += 1;
+            }
+            n += 1;
+        }
+        if offers {
+            out.extend(starts.into_iter().map(|e| (i, e)));
+        }
+    }
+    out
 }
 
 /// The event functions the scene's threads call, read once from their code.
@@ -303,3 +409,4 @@ unsafe fn read_scene(base: usize) -> Scene {
         None => Scene::Skip(total),
     }
 }
+
