@@ -563,12 +563,14 @@ pub unsafe fn spell_line(actor: usize, group: i32, from: usize) -> bool {
     }
     let spell = (group - 7) as usize;
     let air = matches!(std::ptr::read_unaligned((actor + 0x70) as *const i32), 2 | 8);
-    let finisher = !air && super::kh2slots::finisher_picked(0x36 + spell);
+    // (The combo's last step as noted for this cast, else KH2's finisher cast picked: t747.)
+    let finisher = super::formmagic::cast_last().unwrap_or(!air && super::kh2slots::finisher_picked(0x36 + spell));
     let v: i16 = match (spell, finisher) {
         (3, _) => 23,
-        (6, true) => {
+        // (t749: Aero isn't part of the combo, as Cure: "Defense!" on every cast.)
+        (6, _) => {
             super::kh1voice::defense(actor);
-            log!(Sound, "KH2 quotes: KH1's Aero finisher: KH1's \"Defense!\" in place of KH1's group {group}");
+            log!(Sound, "KH2 quotes: KH1's Aero: KH1's \"Defense!\" in place of KH1's group {group}");
             return true;
         }
         (0, true) => 11,
@@ -586,6 +588,34 @@ pub unsafe fn spell_line(actor: usize, group: i32, from: usize) -> bool {
         }
     }
     said.is_some()
+}
+
+/// t747: KH1's Gravity, Stop or Aero with its animation row at KH2 (`formmagic::anim_kh2`) and Battle
+/// Quotes KH1 (the user: "gravity is still playing its kh1 sounds before the finisher when on kh2
+/// magic settings"): KH2's rule with KH1's lines, as KH2's own spells at Battle Quotes KH1 (t744):
+/// KH1's swing grunt (group 4) in place of the command step's spell line on a cast; on the combo's
+/// finisher (its KH2 finisher cast picked for the ground request, `kh2slots::finisher_picked`) the
+/// spell's own group stays. The group to play instead, if any.
+pub unsafe fn kh1_spell_group(actor: usize, group: i32, from: usize) -> Option<i32> {
+    if from != SPELL_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || kh2_voice() {
+        return None;
+    }
+    // (t749: not Aero, which isn't part of the combo, as Cure: it keeps KH1's line on every cast.)
+    if actor < 0x10000 || actor != super::takeover::sora_actor() || !(11..=12).contains(&group) {
+        return None;
+    }
+    let spell = (group - 7) as u8;
+    if !super::formmagic::anim_kh2(spell) {
+        return None;
+    }
+    let air = matches!(std::ptr::read_unaligned((actor + 0x70) as *const i32), 2 | 8);
+    // (The combo's last step as noted for this cast, else KH2's finisher cast picked: t747.)
+    let finisher = super::formmagic::cast_last().unwrap_or(!air && super::kh2slots::finisher_picked(0x36 + spell as usize));
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+        log!(Sound, "KH1 quotes: KH1's spell {spell} on KH2's cast animation: {}", if finisher { "the combo's finisher, its own line" } else { "a cast, a swing grunt in place of its line" });
+    }
+    (!finisher).then_some(super::kh1voice::SWING_GROUP)
 }
 
 /// KH1's row voice groups and KH2's voices of the same kind (t743): Sora's combo swings (KH1 group
@@ -682,6 +712,23 @@ pub unsafe fn voice(v: i16) {
     let Ok(g) = LOADED.try_lock() else { return };
     if let Some(c) = g.as_ref().and_then(|l| l.voices.get(&v)) {
         c.say();
+    }
+}
+
+/// KH2's item-use voice (motion 9's frame trigger 14 at frame 0: voice 3, Sora's share of it clips
+/// 23 / 24, the -3 choice being a partner's line; Checked (files), `P_EX100.mset` and VTBL), t748
+/// (the user: "kh2 sora is missing item throw sound"): said as KH1's own item motion starts with
+/// Battle Quotes KH2, which has no KH2 key to fire it (KH1's motion carries only its item sound,
+/// 11003 / 11004 at 30.8, Checked (files)).
+pub const ITEM_VOICE: i16 = 3;
+pub unsafe fn item_voice() {
+    if !kh2_voice() {
+        return;
+    }
+    let Ok(g) = LOADED.try_lock() else { return };
+    match g.as_ref().and_then(|l| l.voices.get(&ITEM_VOICE)).and_then(|c| c.say()) {
+        Some(clip) => note_play(|| format!("item voice {ITEM_VOICE} (clip {clip}) on KH1's item motion")),
+        None => note_play(|| format!("item voice {ITEM_VOICE} not loaded or not Sora's")),
     }
 }
 

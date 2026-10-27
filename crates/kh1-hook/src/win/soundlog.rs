@@ -170,6 +170,9 @@ unsafe extern "system" fn voice_group(actor: usize, group: i32, other: usize) ->
     // them, `kh2sound::spell_line`.)
     let from_rva = caller_rva();
     let held = super::kh2sound::spell_line(actor, group, from_rva) || super::kh2sound::holds_back(actor, group, from_rva);
+    // (t747: KH1's Gravity, Stop and Aero on KH2's cast animation at Battle Quotes KH1: a grunt
+    // before the finisher, `kh2sound::kh1_spell_group`.)
+    let group = if held { group } else { super::kh2sound::kh1_spell_group(actor, group, from_rva).unwrap_or(group) };
     if live() {
         let from = caller();
         let with = if other == 0 { String::new() } else { format!(", other {}", who(other)) };

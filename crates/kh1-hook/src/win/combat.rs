@@ -734,6 +734,12 @@ unsafe fn command_step(actor: usize, dir: usize) {
     if actor == sora && kind == ITEM_COMMAND_TYPE && super::shared::active() {
         takeover::ITEM_COMMAND.store(true, Ordering::Relaxed);
         takeover::item_started();
+        // (t748: Battle Quotes KH2 on KH1's own item motion, Misc Animations KH1: KH2's item voice,
+        // which KH2's item use says at its frame 0 and our KH2 item slot carries as a key, is said
+        // as the use starts, `kh2sound::item_voice`.)
+        if super::styles::kh1_now(super::styles::Kind::MiscAnims) || !super::kh2slots::has(0x3E, super::kh2slots::KH2_ITEM_USE) {
+            super::kh2sound::item_voice();
+        }
     }
     if actor == sora && kind == 2 && super::drive::on() && (super::drive::FORM_ARG..super::drive::FORM_ARG + super::drive::FORMS.len() as u8).contains(&arg) {
         super::drive::chosen(actor, (arg - super::drive::FORM_ARG) as usize);

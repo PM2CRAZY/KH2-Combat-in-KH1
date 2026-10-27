@@ -154,7 +154,14 @@ finisher cast; Magnet 24, no finisher cast. KH2's Drive motion 52: voice 8 (clip
   finisher name calls were silent).
 - **Battle Quotes KH2, a KH1 spell** (t746, `kh2sound::spell_line`, in place of KH1's command-step
   line): voice 7 on a cast; on the combo's finisher Fire 11, Blizzard 12, Thunder 13, Gravity and
-  Stop 5 (KH2's base finisher swing line), Aero KH1's "Defense!" (clip 46); Cure 23 on every cast.
+  Stop 5 (KH2's base finisher swing line); Aero KH1's "Defense!" (clip 46) and Cure 23 on every cast
+  (t749: Aero isn't part of the combo).
+
+- **Battle Quotes KH1, KH1's Gravity or Stop on KH2's cast animation** (t747): a swing grunt
+  (group 4) on a cast, the spell's own group on the combo's finisher (`kh2sound::kh1_spell_group`).
+  Aero keeps KH1's own line on every cast (t749), as it isn't part of the combo.
+- **Battle Quotes KH2, an item on KH1's item motion** (t748): KH2's item voice 3 as the use starts
+  (`kh2sound::item_voice`); on KH2's item motion it fires from the slot's key as before.
 
 Not covered yet: the summon call with Battle Quotes KH2 (KH2's summon line not found yet; KH1's
 summon sequences play KH1's groups 17, 15, 5).

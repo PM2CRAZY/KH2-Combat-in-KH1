@@ -605,6 +605,15 @@ pub unsafe fn note_step(actor: usize, air: bool) -> Option<(u8, bool)> {
     step
 }
 
+/// Whether the cast KH1's command step is starting takes the combo's last step (`note_step`'s
+/// `CAST_STEP`, read before `take_step` consumes it); `None` when no step was noted for it. t747: the
+/// spell voice's finisher (`kh2sound::kh1_spell_group`, `spell_line`), so Stop, which KH2's combo
+/// plays as Magnet with no finisher cast, says its line on the combo's last step too.
+pub fn cast_last() -> Option<bool> {
+    let v = CAST_STEP.load(Ordering::Relaxed);
+    (v & 1 << 16 != 0).then_some(v >> 8 & 1 != 0)
+}
+
 /// The cast `note_step` worked out comes out of a finisher's Finishing Plus window (KH1's count
 /// already at the combo's length or past it).
 static CHAINED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
