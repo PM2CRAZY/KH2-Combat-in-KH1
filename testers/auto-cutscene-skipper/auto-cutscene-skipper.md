@@ -516,3 +516,6 @@ currently works in traverse town, wasn't able to test it in other worlds, but ca
 
 go ahead
 
+update: 
+
+I sent a log showing that talking to phil after the barrel mini game still plays the in game cutscene where he gives you thunder, in the same folder as this thread
