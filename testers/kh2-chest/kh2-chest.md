@@ -79,3 +79,10 @@ wasn't able to move when opening a chest, I stayed in idle for a bit. the other 
 
 ^m3
 
+(b)
+
+I sent a log and traces, still unable to move on the chests we've modified,  I also found another chest type which is the evidence boxes you find in alice's world
+
+do these changes without checking in, once you think you have a completed version upload it to github 
+
+go ahead
