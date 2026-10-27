@@ -735,8 +735,8 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     // (KH1's own spell on our slot of KH2's cast motion: timed to KH2's cast frame,
     // `time_kh1_spell`.)
     let sora = actor > 0x10000 && actor == super::takeover::sora_actor() && !super::form::in_form() && super::shared::active();
-    // (Wisdom Form on KH1's own states, the Magic Combo row at KH2: KH1's own Gravity, Stop and Aero
-    // take their step too, `kh1_air_cast_step` / `finisher_spell`.)
+    // (Wisdom Form on KH1's own states, whatever the Magic Combo row says since t757: KH1's own
+    // Gravity, Stop and Aero take their step too, `kh1_air_cast_step` / `ground_role`.)
     let wisdom = actor > 0x10000 && actor == super::takeover::sora_actor() && wisdom_combo();
     let count = if sora || wisdom { rd::<u32>(actor + QUEUE_COUNT) } else { 0 };
     let request = if (1..=8).contains(&count) { rd::<u32>(actor + QUEUE) & 0xFFFF } else { 0 };
@@ -781,12 +781,17 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
 /// request table, `xa_ex_0010.mset`, Checked (files); the same as `kh2slots::CASTS`' air rows).
 const KH1_AIR_REQUESTS: std::ops::RangeInclusive<u32> = 0x83..=0x8A;
 
-/// Wisdom Form on KH1's own states with the Magic Combo row at KH2 (the tester, what-is-still-missing
-/// m16 answer 8: "do it for all forms of magic when the magic combo setting is switched on"): KH1's
-/// own spells there (Gravity, Stop, Aero; Fire .. Cure are KH2's, `wisdom_kh2_spell`, and take
-/// their step already) take a step of the combo as base Sora's do.
+/// Wisdom Form on KH1's own states: KH1's own spells there (Gravity, Stop, Aero; Fire .. Cure are
+/// KH2's, `wisdom_kh2_spell`, and take their step already) take a step of the combo as base Sora's
+/// do at Magic Combo KH2, and take KH2's roles (`roles_on`).
+///
+/// Since t757 whatever the Magic Combo row says (the tester, drive-forms after m2: "drive forms
+/// magic shouldn't be affected by the magic combo setting"): a Drive Form is KH2's, and KH2's
+/// magic command counts every cast as a step of the combo (`0x1403D6CA0`, no setting, Checked
+/// (decomp)), so the form always casts by KH2's rules. The row covers base Sora only. Before
+/// t757 (m16 answer 8) Wisdom followed the row.
 pub unsafe fn wisdom_combo() -> bool {
-    super::form::native_form() == Some(super::form::Kind::Wisdom) && super::shared::active() && super::styles::kh2(super::styles::Kind::MagicCombo)
+    super::form::native_form() == Some(super::form::Kind::Wisdom) && super::shared::active()
 }
 
 /// The Magic Combo row at KH2 (the tester, what-is-still-missing m16 answer 8: "if kh2's own air
@@ -806,13 +811,14 @@ pub unsafe fn wisdom_combo() -> bool {
 /// Base Sora (not a KH2 spell, which takes its step already, `pick_cast`), and Wisdom's Gravity,
 /// Stop and Aero (`wisdom_combo`).
 pub unsafe fn kh1_air_cast_step(spell: i32) -> bool {
-    if !(0..=6).contains(&spell) || !super::shared::active() || !super::styles::kh2(super::styles::Kind::MagicCombo) {
+    if !(0..=6).contains(&spell) || !super::shared::active() {
         return false;
     }
+    // (Wisdom whatever the Magic Combo row says, t757: `wisdom_combo`.)
     if wisdom_combo() {
         return (4..=6).contains(&spell);
     }
-    !super::form::in_form()
+    super::styles::kh2(super::styles::Kind::MagicCombo) && !super::form::in_form()
 }
 
 /// KH1's ground Gravity (0x3A), Stop (0x3B) and Aero (0x3C) cast requests (KH1's request table,
@@ -857,11 +863,17 @@ pub const THUNDER_FINISHER: u16 = 63;
 /// The ground requests and the role each takes (Gravity Thunder's, Stop Magnet's, Aero Cure's).
 const ROLE_REQUESTS: [(u32, Role); 3] = [(0x3A, Role::Thunder), (0x3B, Role::Magnet), (0x3C, Role::Cure)];
 
-/// KH2's roles for KH1's Gravity, Stop and Aero apply now: the Magic Combo row at KH2, base Sora on
-/// KH1's own states, or Wisdom on them (`wisdom_combo`); Valor has no magic and the forms on KH2's
-/// controller are left as they are.
+/// KH2's roles for KH1's Gravity, Stop and Aero apply now: base Sora on KH1's own states with the
+/// Magic Combo row at KH2, or Wisdom on them whatever the row says (`wisdom_combo`, t757); Valor
+/// has no magic and the forms on KH2's controller are left as they are.
 pub unsafe fn roles_on() -> bool {
-    super::shared::active() && super::styles::kh2(super::styles::Kind::MagicCombo) && (!super::form::in_form() || wisdom_combo())
+    if !super::shared::active() {
+        return false;
+    }
+    if super::form::in_form() {
+        return wisdom_combo();
+    }
+    super::styles::kh2(super::styles::Kind::MagicCombo)
 }
 
 /// The KH2 role (`Role`) of KH1's ground cast request `request` now (`roles_on`), if it is Gravity's,

@@ -6,6 +6,7 @@
 
 - [1. Assistant: This is the Drive Forms thread, split out of "What is still ](#^m1)
 - [2. Assistant: Thanks for the traces, they made this quick. Nine versions; ](#^m2)
+- [3. Assistant: Five versions this round, and you were right about the air f](#^m3)
 
 ---
 
@@ -84,13 +85,13 @@ go ahead
 
 ^m2
 
+
 valor:
 1. sora doesn't properly grip the keyblades
 2. the 2nd keyblade is still disappearing when you move from one animation to the next. 
 3. I don't think the problem with the last finisher is because of how you coded valor but more because of sora' main physics/animation slots (guess) please look outside of valor to find the issue. 
 4. valors last ground finisher still doesn't bring you off the ground, it seems like a similar issue to how we fixed sora's square moves that send him off the ground so look at that.
 5. soras square finisher where he hits both keyblades on the ground are missing its effect that has a launch hitbox on it
-
 
 
 wisdom
@@ -100,3 +101,41 @@ wisdom
 don't ask me for questions, just come back until you think its complete 
 
 go ahead
+
+> [!tip] Assistant
+> Five versions this round, and you were right about the air finisher: it wasn't Valor's code.
+>
+> - **t757, form magic ignores Magic Combo.** Wisdom's Gravity, Stop and Aero always follow KH2's combo rules now (Thunder's, Magnet's and Cure's parts, a combo step in the air). The Magic Combo row only changes base Sora.
+> - **t758, Valor's ground finisher lifts off.** The switch to the air now happens where Finishing Leap's does, before KH1 moves him, so his rise starts the same frame.
+> - **t759, a hop out of a held move keeps its hop.** This is the air finisher drop, and it's the same kind of bug as the air-physics thread's fall. The new move's hop was written while KH1 still played the old move's hold, so that frame held him, and the next frame "the hold just ended" restarted his fall from rest and wiped the hop. It hit every move that hops out of a held one, base Sora's too.
+> - **t760, Valor's ground slam effect plays.** The slam's floor effect uses a particle program KH1 wasn't cleared to run yet. KH1's copy of it is the same as KH2's, so it plays now.
+> - **t761, the second Keyblade stays in his left hand.** Any frame without a fresh left-hand pose drew no left Keyblade. Now his left hand keeps the last hold until the next pose comes.
+>
+> **How I checked it**
+> - t757: the Steam KH2 decomp. KH2's magic command counts every cast with no setting.
+> - t758: the Steam KH1 decomp for the order of a frame (control step, then the state's step, then the physics). That the old switch landed him on the same frame is an assumption: there was no trace of t740.
+> - t759: your trace f14640, frame by frame. The hop of 14 is written at f14526, held that frame by 183's hold, then gone at f14527, and he's 52 down by 184's own hold at frame 16. Then the Steam KH2 decomp: KH2 starts the new move and its hop in the same frame.
+> - t760: the exes (both games' program tables) and both decomps (the two functions match). I also went through all of Valor's effects: only the arrival's light still needs programs KH1 doesn't have yet. The slam's launch is its two Keyblade hitboxes (a blow, reaction 11), which already land as KH1's airborne knock-back.
+> - t761: the code path, plus your t749 log (the holder poses and blends were running). Which case made it vanish for you is an assumption. A new log line now names the cause whenever the kept hold is used.
+> - Not checked in game: all five.
+>
+> **The grip (no change).** KH2's files show Valor holds the right Keyblade about 21 degrees tilted compared with base Sora, in every move. He reverses it in 181's first 30 frames, and the left one flips in 153 and 183. I measured this two ways (by the hand bone, and by the finger joints the retarget uses), and both blades are drawn that way through KH1's grip, so I couldn't find what's off.
+>
+> **Please test:**
+> 1. Wisdom with Magic Combo on KH1 and on KH2: Gravity, Stop and Aero should combo the same both ways (Gravity as a finisher at the combo's end, Stop going straight to the finisher).
+> 2. Base Sora with Magic Combo on KH1: unchanged.
+> 3. Valor's ground combo finisher: he should leave the ground with it, then fall.
+> 4. Valor's air combo into its last finisher, with and without Finishing Plus: a small hop, no drop before the hits.
+> 5. Base Sora's air finisher out of a Finishing Plus window, and an air cast's hover cut by an Attack: the hop should show.
+> 6. Valor's Square slam (both Keyblades on the ground): the floor effect at the hit, and enemies launched.
+> 7. The second Keyblade through animation changes (combo into idle, landing, jump, getting hit): it shouldn't vanish. If you turn on the Animation log, a line "no fresh holder pose" names the cause.
+>
+> **Still open on my side (no answer needed)**
+> - The grip: the data and the maths match KH2, so a screenshot next to KH2's would show me what's wrong.
+> - Valor's arrival light (elements 5 and 6) needs KH2's KeTh programs in KH1.
+> - Base Sora's Keyblade flip in his 153 swing (102 degrees at frame 20) isn't drawn, because his moves keep KH1's grip.
+>
+> Notes are in `docs/kh1-drive-forms-native.md` §11.1.
+
+^m3
+

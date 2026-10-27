@@ -716,8 +716,8 @@ unsafe fn command_step(actor: usize, dir: usize) {
                 let m = super::kh2slots::pick_cast(request as usize, true);
                 cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}, KH2 cast {m:?}"));
             } else if (4..=6).contains(&arg) {
-                // (Neither: Wisdom at Magic Combo KH1, as before t716, on KH2's Thunder finisher
-                // cast it played then.)
+                // (Neither: base Sora at Magic Combo KH1 on KH1's animation. Wisdom no longer
+                // comes here since t757: it takes KH2's roles whatever the row says.)
                 super::kh2slots::pick_cast(request as usize, true);
             }
         }

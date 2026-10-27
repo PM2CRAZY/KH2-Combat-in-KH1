@@ -1145,3 +1145,50 @@ Not done this round:
   state's `+0x38` bit 0, read as `+0x190` bit 0 by the free-state move `0x140422350` to pick the inertia
   path, Checked (decomp)) is on every Wisdom move; ours runs the inertia for all of Wisdom's actions,
   which matches.
+
+### 11.1 Second round (the tester's reply after m2; t757 to t761)
+
+- **A form's magic ignores the Magic Combo row (t757).** KH2's magic command counts every cast as a
+  step of the combo with no setting (Steam KH2 `0x1403D6CA0`, Checked (decomp)). `formmagic::
+  wisdom_combo` no longer reads the row: native Wisdom's Gravity, Stop and Aero always take KH2's
+  Thunder / Magnet / Cure roles on the ground and a step of the air combo in the air. The row is base
+  Sora's only.
+- **Valor's ground finisher lifts off (t758).** KH1's think (Steam `0x1402A3300`, Checked (decomp)):
+  `0x1402A43A0` (the motion for a state changed last frame, then flag `0x400` cleared), the control
+  step `0x1402A6220`, the state's step (table `0x142DB3858`), then the physics. t740 changed the state
+  inside the ground state's step, so the air state's step (ours: the no-gravity hold and the root's
+  rise) didn't run before the physics that frame. Assumption: the physics then set him down and KH1
+  played its landing (no trace of t740). Now from KH1's control step, as Finishing Leap's row
+  (`combat::exec`). 154's root rises about 3.5 a frame from 64 (Checked (files)).
+- **A row's hop isn't held by the move it cuts (t759).** Trace f14640 (Checked (trace)): row 7's hop
+  (14) for 184 is written at f14526 in the control step while KH1's slot still plays 183 at frame 48,
+  inside 183's no-gravity range (16..end); that frame's air step held him and set the hold flag, and
+  at f14527 (184's frame 0, no hold) the hold's end restarted his fall from rest (`kh2_fall_at`, KH2's
+  `0x1403B4780`): the hop was lost and he fell 52 before 184's own hold at 16. The same happens to any
+  hop started out of a held move (base Sora's air finishers out of Finishing Plus, a hop out of a cast
+  hover), which is why it wasn't Valor's. KH2 starts the row's motion and hop in the same think
+  (`0x1403D78D0` -> `0x1403CBB00`, Checked (decomp)). Now, on the frame a hop starts, the cut move
+  holds nothing (`shared::physics::HOP_FRAME`).
+- **Valor's ground slam effect (t760).** 155's element 15 (frame 42, effect 9 on the object root) runs
+  program 65 (pppRandDownFV), which `kh2dpx::KH1_SAME` didn't list, so it never played. KH1's table
+  entry 65 (`0x14054FF00` + 65 x 0x50, calc `0x14032D1C0`) and KH2's (`0x140779A00` + 65 x 0x50, calc
+  `0x1404C2840`): Checked (exe) for the tables, Checked (decomp) for the code, the same but for the
+  paused byte's offset and the random float and zero vector each calls (as RandFV, 63). All of
+  `P_EX100_BTLF.a.us` checked: only the arrival's elements 5 and 6 still need programs (pppKeThRes16,
+  pppKeDrct, pppMatrixLoc, pppKeThTp, pppKeThSft, pppKeTh). The slam's launch is its own hitboxes:
+  ATKP 197 / 198 (reaction 11, a blow; knock-back 60 / 5) on both Keyblades' group 3 (spheres of 140
+  at 100, 240, 380 along the blade) at 44..65 (Checked (files)).
+- **The left Keyblade between moves (t761).** `leftblade::left_draw` drew nothing on a frame with no
+  holder pose from the last 2 game frames (KH2's own left pose, the old fallback, isn't fed on KH1's
+  states since t702). Now the last good hold (the holder's bones from its left hand) is kept on his
+  left hand as drawn. A log line (Animation) says why a frame had no fresh holder pose.
+- **The grip, checked, no change.** KH2's files (`W_EX010_BTLF_R` / `_L` on `W_EX010`'s skeleton,
+  hands 178 / 86 from `sklt`): Valor's skeleton binds exactly as base Sora's (every arm bone within
+  0.1 degrees); measured both by the hand bone and by a hand frame built from the joint positions (the
+  retarget's), the right Keyblade sits about 21 degrees tilted along its blade from base Sora's hold
+  in Valor's idle, walk, run and swings, 3..18 in 154 / 183 / 184, reversed (166) in 181's first 30
+  frames; the left one 15..29, flipping in 153 (92..178) and 183 (141 from 40). Base Sora's own swings
+  turn it too (153's 102 at frame 20), which base Sora's bakes don't show (KH1's rest grip). t734's
+  `form_grip` draws Valor's right Keyblade with those turns on KH1's grip, and the left one
+  (`left_bones`) is KH2's left root on KH1's left hand with the right's KH2-to-KH1 turn: both follow
+  KH2. No cause for a bad grip was found in the data or the maths; not seen in game.

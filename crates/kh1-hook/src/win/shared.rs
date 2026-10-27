@@ -938,6 +938,9 @@ pub mod physics {
             return;
         }
         let vel = kh1phys::carried(vel);
+        // (The air step this frame takes the new row's hop, not the hold of the move it cuts:
+        // `HOP_FRAME`, t759.)
+        HOP_FRAME.store(game_frame().max(1), Ordering::Relaxed);
         let kh2_numbers = if kh2() { numbers() } else { None };
         let how = match kh2_numbers {
             Some(n) => {
@@ -976,6 +979,25 @@ pub mod physics {
             super::super::log!(Takeover, "KH2's hop on KH1's air state: {height:.0} high, {:.1}/frame sideways, {how}", vel[0].hypot(vel[1]));
         }
     }
+
+    /// The game frame a row's hop (`kh2_hop_as`) was last started, 0 none: KH1's air step that
+    /// frame holds nothing for the move being cut (`air_step`).
+    ///
+    /// The tester (drive-forms, after m2): Valor's last air finisher still dropped before its
+    /// hitboxes after t739, "look outside of valor to find the issue". Their trace f14640: the
+    /// hop of row 7 (14, 184 out of 183's Finishing Plus window) was written at f14526 in KH1's
+    /// control step (`combat::exec`), but KH1's slot still played 183 at its frame 48 there, in
+    /// 183's no-gravity range (16 to its end), so that frame's air step held him (no rise, the
+    /// arc's clock on) and set the hold flag again after t739 had cleared it; at f14527 184's
+    /// frame 0 has no hold, so the hold's end restarted his fall from rest (`kh2_fall_at`, KH2's
+    /// `0x1403B4780`) and the hop was gone: 50 down by 184's range at 16. Not Valor's: every row
+    /// with a hop started while a held move plays (base Sora's air finishers out of a Finishing
+    /// Plus window, a hop out of an air cast's hover) went the same way. KH2 starts the new row's
+    /// motion and its hop in the same think (`0x1403D78D0` -> `0x1403CBB00`, Checked (decomp)),
+    /// so the old motion's range never holds the hop. Now the frame a hop starts, the move being
+    /// cut holds nothing (its no-gravity range, KH1's cast hover); the rising rows' own hold
+    /// (`kh2slots::rise_start`) and the Drive's arrival are left.
+    static HOP_FRAME: AtomicU64 = AtomicU64::new(0);
 
     /// The game frame a held hop (`kh2_hop_held`) was started at physics KH1, 0 none.
     static HELD_JUMP_AT: AtomicU64 = AtomicU64::new(0);
@@ -1350,8 +1372,9 @@ pub mod physics {
             ground_inertia(actor, disp);
             // KH2's edge stop in our slot's motion (either physics: it is the motion's own).
             edge_stop(actor, disp);
-            // A form's ground finisher that leaves the ground by its root (Valor's 154).
-            lift_off(actor);
+            // (A form's ground finisher that leaves the ground by its root, Valor's 154: from
+            // KH1's control step since t758, `form_lift_off`, so KH1's air step has him the same
+            // frame.)
             return r;
         }
         let r = f(actor, disp);
@@ -1486,6 +1509,18 @@ pub mod physics {
     /// (KH1's ground state kept him on the floor: the bake keeps only the root's ground travel).
     /// **Assumption**: KH1's state 2 with the swing's action flag runs the swing on to its end as in
     /// state 0 (its air rows do).
+    ///
+    /// Since t758 from KH1's control step (`form_lift_off`, `takeover::shared_control`), not the
+    /// ground state's step. The tester (drive-forms, after m2): "valors last ground finisher still
+    /// doesn't bring you off the ground, it seems like a similar issue to how we fixed sora's square
+    /// moves that send him off the ground". KH1's think (Steam `0x1402A3300`, Checked (decomp)) runs
+    /// the control step, then the state's step (`0x142DB3858`), then the physics step
+    /// (`0x140297E10`), which sets an air state on the floor down at once. Changed in the ground
+    /// state's step (t740), the air state's step (ours, `air_step`: the no-gravity hold and the
+    /// root's rise) never ran before that physics step, so he was put down on the same frame and
+    /// KH1 played its landing, cutting the swing. Base Sora's Finishing Leap (t675) enters the air
+    /// state from the control step (KH1's row runner, `combat::exec`), so KH1's air step lifts him
+    /// by the root that frame: the same order now.
     unsafe fn lift_off(actor: usize) {
         if rd::<i32>(actor + 0x70) != 0 || !super::super::kh2slots::lifts_off(actor, dt()) {
             return;
@@ -1505,6 +1540,15 @@ pub mod physics {
         if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
             super::super::log!(Takeover, "KH2 motion {:?} leaves the ground by its root (no-gravity range): KH1's air state from here, the move kept", super::super::kh2slots::playing_motion(actor));
         }
+    }
+
+    /// After KH1's control step (`takeover::shared_control`), before the state's step: a Drive
+    /// Form's ground move that rises by its root now goes into KH1's air state (`lift_off`).
+    pub unsafe fn form_lift_off(actor: usize) {
+        if !is_sora(actor) || !super::super::form::native_now() {
+            return;
+        }
+        lift_off(actor);
     }
 
     /// KH2's edge stop factor: its ground mover sweeps the step lengthened by this times his
@@ -1718,7 +1762,10 @@ pub mod physics {
         // (A rising row's first frames, before its own no-gravity range: `kh2slots::rise_start`.)
         let rise = if air_ok { super::super::kh2slots::rise_start(actor, step_dt) } else { None };
         // (A Drive Form's arrival in the air: KH2's ACTION_FLY holds him, `form::arrival_held`.)
-        let held = air_ok && (kh1_hold || rise.is_some() || super::super::form::arrival_held(actor) || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
+        // (A row's hop started this frame: the move it cuts holds nothing, `HOP_FRAME`.)
+        let hop_now = sora && HOP_FRAME.load(Ordering::Relaxed) == game_frame().max(1);
+        let cut_hold = !hop_now && (kh1_hold || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
+        let held = air_ok && (rise.is_some() || super::super::form::arrival_held(actor) || cut_hold);
         // (Whether the hold was on at his last air step: KH2's fall restart when it ends, below.)
         let was_held = sora && HELD_LAST.swap(held, Ordering::Relaxed);
         if held {

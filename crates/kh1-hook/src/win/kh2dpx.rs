@@ -166,6 +166,11 @@ const KH1_SAME: &[u32] = &[
     36, 37, 38, 39, // Move, AngMove, SclMove, ColMove
     40, 41, 42, // Point, Angle, Scale
     51, 63, 66, // RandFloat, RandFV, RandIV
+    // (t760, Valor's 155 ground slam, its element 15 at frame 42: the tester, drive-forms after m2,
+    // "missing its effect".) KH1's `0x14032D1C0` and KH2's `0x1404C2840` (table entries 65, calc
+    // only in both): the same decompiles but for the paused byte's offset and the random float /
+    // zero vector they call, as RandFV's (63).
+    65, // RandDownFV
     84, 87, 90, 91, 94, 96, // SMatrix, MatrixXYZ, MatrixYXZ, MatrixZXY, MatrixScl, RyjMatrixNoRot
     105, 106, // ParMatrix, KeParMatR
     112, 113, 115, 116, 117, 120, // DrawMatrix, DrawMatrixFront, DrawMatrixWood, KeDMat, KeDMatFr, RyjDrawMatrixWorld

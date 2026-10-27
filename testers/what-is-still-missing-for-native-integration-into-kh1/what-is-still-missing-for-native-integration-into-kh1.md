@@ -23,6 +23,7 @@
 - [17. Assistant: Thanks! Four versions this round. Answers 1, 3 and 5 need no](#^m17)
 - [18. Assistant: Thanks! Three versions this round.](#^m18)
 - [19. Assistant: Thanks! I made the two new threads:](#^m19)
+- [20. Assistant: I made two threads for that line:](#^m20)
 
 ---
 
@@ -894,6 +895,7 @@ go ahead
 
 ^m19
 
+
 create a new thread for both of these:
 
 "1. Sora's invulnerable frames (roll, Quick Run, Explosion, Aerial Recovery) and the Keyblade guard's facing are decided in our hit-pass hook, not by KH1's own no-damage timer and guard objects.
@@ -901,3 +903,12 @@ create a new thread for both of these:
    have the agents do most native implementation 
    
    go ahead
+> [!tip] Assistant
+> I made two threads for that line:
+> - [Invulnerable frames native](../invulnerable-frames-native/invulnerable-frames-native.md): roll, Quick Run, Explosion and Aerial Recovery on KH1's own no-damage timer.
+> - [Keyblade guard facing native](../keyblade-guard-facing-native/keyblade-guard-facing-native.md): the guard press and the repel as KH1 directional guard objects.
+>
+> Each has where it stands now and the plan. Your go-ahead is noted in both. The PC couldn't be reached this round, so the code waits for the next round, when I can check it against the decomps.
+
+^m20
+

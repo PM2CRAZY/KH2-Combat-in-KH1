@@ -1152,6 +1152,9 @@ unsafe fn shared_control(base: usize, actor: usize, dir: usize, f: unsafe extern
     let words_masked = rd::<[u32; 6]>(st);
     f(actor, dir);
     super::shared::physics::kh1_held_jump(actor);
+    // (A Drive Form's ground move rising by its root, Valor's 154: KH1's air state before the
+    // state's step, as Finishing Leap's, `shared::physics::form_lift_off`, t758.)
+    super::shared::physics::form_lift_off(actor);
     let req_after = rd::<u32>(actor + 0x164);
     // (t320: KH1 asked for its glide motion (0x71..0x74) in this step; with what it saw, to find
     // the button word its glide reads when the dodge's press is meant to be hidden.)

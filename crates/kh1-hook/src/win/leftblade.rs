@@ -454,6 +454,10 @@ pub unsafe fn show(item: Option<u8>) {
 /// Back from Valor (`valor::ended`): not drawn; the model stays loaded.
 pub fn hide() {
     SHOWN.store(false, Ordering::Relaxed);
+    // (The next form starts from its own first pose, `LAST_HELD`.)
+    if let Ok(mut g) = LAST_HELD.lock() {
+        *g = None;
+    }
 }
 
 /// The left Keyblade's owner for KH1's own bindings (`kh2dpx`: KH2's second-weapon points 0x4004 /
@@ -1193,14 +1197,20 @@ unsafe fn heap_ok(h: usize) -> bool {
 /// they sit from the left hand, so each is put on Sora's left hand as drawn (his `+0x1B4`): his
 /// hand × the holder's hand⁻¹ × the holder's bone. (Through KH1's motion blends Sora's hand blends;
 /// the grip's hold on it is the new motion's from the blend's first frame.)
+///
+/// When there is no fresh holder pose (none posed in the last 2 frames, or one that isn't finite)
+/// while Valor's form is on KH1's states, the last good one (`LAST_HELD`) is kept on his left hand
+/// as drawn, so the blade never leaves it (t761). The tester (drive-forms, after m2): "the 2nd
+/// keyblade is still disappearing when you move from one animation to the next". Every frame
+/// without a fresh holder pose drew no left Keyblade (`left_draw` had nothing to draw): a frame
+/// KH1 posed no motion of ours with a holder (a slot of KH1's own between two moves), a holder
+/// blend refused by its heap check (`pose_holder` returns before posing), or a pose KH1's blend
+/// made of a stale side. In KH2 the left weapon is always on its hand bone (Steam KH2: the
+/// weapon objects follow their joint every frame, `sklt`, Checked (files)); KH1 has no second
+/// weapon, so its hand carries the last hold until a holder pose comes again.
 unsafe fn posed_left() -> Option<[Mat4; WEAPON_BONES]> {
     let h = HOLD.load(Ordering::Relaxed);
     if h == 0 || !super::form::native_now() {
-        return None;
-    }
-    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
-    let at = HOLD_FRAME.load(Ordering::Relaxed);
-    if at == u64::MAX || frame.saturating_sub(at) > 2 {
         return None;
     }
     let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
@@ -1212,14 +1222,46 @@ unsafe fn posed_left() -> Option<[Mat4; WEAPON_BONES]> {
         return None;
     }
     let mat = |base: usize, i: usize| Mat4::from_cols_array(&rd::<[f32; 16]>(base + i * 0x40));
-    let held = h + HOLD_WORLD;
-    let to_hand = mat(world, LEFT_HAND) * mat(held, LEFT_HAND).inverse();
-    let mut out = [Mat4::IDENTITY; WEAPON_BONES];
-    for (i, m) in out.iter_mut().enumerate() {
-        *m = to_hand * mat(held, GRIP + i);
+    let hand = mat(world, LEFT_HAND);
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let at = HOLD_FRAME.load(Ordering::Relaxed);
+    let fresh = at != u64::MAX && frame.saturating_sub(at) <= 2;
+    if fresh {
+        let held = h + HOLD_WORLD;
+        let from_hand = mat(held, LEFT_HAND).inverse();
+        let mut rel = [Mat4::IDENTITY; WEAPON_BONES];
+        for (i, m) in rel.iter_mut().enumerate() {
+            *m = from_hand * mat(held, GRIP + i);
+        }
+        if rel.iter().all(|m| m.is_finite()) {
+            if let Ok(mut g) = LAST_HELD.try_lock() {
+                *g = Some(rel);
+            }
+            let out = rel.map(|r| hand * r);
+            if out.iter().all(|m| m.is_finite()) {
+                return Some(out);
+            }
+        }
     }
-    out.iter().all(|m| m.is_finite()).then_some(out)
+    // (No fresh holder pose: the last hold on his hand as drawn.)
+    let rel = LAST_HELD.try_lock().ok().and_then(|g| *g)?;
+    let out = rel.map(|r| hand * r);
+    if !out.iter().all(|m| m.is_finite()) {
+        return None;
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    log_n(&N, 20, || {
+        let sora = super::takeover::sora_actor();
+        let slot = if readable(sora, ACTOR_SIZE) { rd::<u16>(sora + ACTOR_SLOT) as i32 } else { -1 };
+        format!("no fresh holder pose ({}; KH1's slot {slot}): the last hold kept on his left hand", if fresh { "the posed one isn't finite" } else if at == u64::MAX { "the slot playing has no holder motion" } else { "not posed in the last 2 frames" })
+    });
+    Some(out)
 }
+
+/// The left Keyblade's weapon bones from the left hand (the holder's hand⁻¹ × its bone) as last
+/// posed by KH1's pass, for the frames with no fresh holder pose (`posed_left`); cleared when
+/// Valor's form ends (`hide`).
+static LAST_HELD: Mutex<Option<[Mat4; WEAPON_BONES]>> = Mutex::new(None);
 
 // ---------------------------------------------------------------------------------------------
 // Drawing
