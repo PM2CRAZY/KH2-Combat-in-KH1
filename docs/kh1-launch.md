@@ -368,7 +368,7 @@ KH1's launch. Off: every KH2 blow is KH1's launch, as t602.
   record with KH1's knock-back; the user's log did not say.
 - Aerial Finish's spins (up 5, sideways -1) and Explosion's ticks are small blows too, now.
 
-## 6. Big bodies (t722)
+## 6. Big bodies (t725)
 
 KH2 rewrites a hit's reaction for a big target (the `patn` table in 00battle.bin, rows 7 and 8;
 Steam KH2 `0x1403EE9B0`; Checked (decomp + files)): 3 / 0x10 become 1 (push only), 4 / 0xF become
