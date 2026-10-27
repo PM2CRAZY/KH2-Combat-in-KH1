@@ -1,7 +1,8 @@
 # Abilities: KH1's ids and KH2's ids (testing branch)
 
 Code: `crates/kh1-hook/src/growth.rs` (the table, learning, migration), `crates/kh1-hook/src/win/menu.rs`
-(KH1's ability table, the save, the boxes). Ini: `abilities = kh1`.
+(KH1's ability table, the save, the boxes), `crates/kh1-hook/src/win/kh2list.rs` (the KH2 list in KH1's
+Abilities menu). Ini: `abilities = kh1`.
 
 ## The rule
 
@@ -83,8 +84,8 @@ for the same ability apply: KH2's arc, KH2's glide, KH2's roll level.
 
 ### KH2's abilities (owner KH2; ours)
 
-On KH2's side, each one is its own KH2 value (`Kh2(effect)`). All of them are in Sora's own list,
-and use AP.
+On KH2's side, each one is its own KH2 value (`Kh2(effect)`). All of them are in the KH2 list (its own
+list, a row "KH2" after Sora's in KH1's Abilities menu, see "The KH2 list"), and use Sora's AP.
 
 | Id | Ability | AP | While KH1's states have Sora |
 |---|---|---|---|
@@ -132,9 +133,10 @@ starts with "KH2's" so that they can be told apart in the menu.
   - each of ours is made from its template's entry (KH1's namesake for 78-87, so it sits next
     to it in the menu), with KH2's AP and our own name and help text.
 
-  KH1 counts an equipped ability with `0x140282A70 (id, member)`, which scans the list for the
-  id. The AP sums in `0x1402E6220` and `0x1402E62D0` walk the list's 48 bytes. Nothing in KH1
-  indexes an array by ability id, so ids past 65 are only ever looked up in the table.
+  KH1 counts an equipped ability with `0x140282A70 (id, member)` (Steam `0x140284BE0`), which
+  scans the list for the exact byte (equipped copies only). The AP sums (Steam `0x1402E8660` AP
+  left, `0x1402E8710` AP used) walk the list's 48 bytes. Nothing in KH1 indexes an array by
+  ability id, so ids past 65 are only ever looked up in the table.
 - **KH2's values** (`Kh1Sora::kh2`). Every equipped ability whose KH2 side is `Kh2(effect)`,
   KH1's or ours, sets that value in `Abilities`. Two copies of Combo Plus give 2. Growth levels
   take the highest: KH1's Glide gives LV1 (or Final's level), and Superglide gives MAX.
@@ -147,15 +149,12 @@ starts with "KH2's" so that they can be told apart in the menu.
   or removes one to make room. Gone: the level schedule (`MenuAbility::level`) and the boss gifts (`BOSS_GIFTS`),
   the per-level growth tables, `make_room`, `one_only` (spare High Jump / Glide / Superglide
   copies), Aerial Dodge taken back until Genie Jafar, the bonus AP.
-- **Our KH2 abilities** (`Kh1Sora::grants`): every one of `MENU` in Sora's own list is his, off
-  until equipped, with KH2's AP out of KH1's AP (no bonus). Several at once get one box ("New
-  Abilities: n KH2 Abilities"). KH2's own Glide (88) only comes with the Glide style.
-- **KH1 first** (`growth::RESERVE`, `yield_one`). KH1 appends a new ability at the first 0 of the
-  48 bytes, so a full list would lose it. Ours always leave 2 places free; when KH1's own fill the
-  list past that, one of ours gives its place back (the last in `MENU` order that is off, else
-  on) and returns when there's room. Assumption: KH1 never gives more than 2 abilities within one
-  second (the check runs once a second). On a late-game list (KH1's own ~37 or more) not all 22
-  of ours fit: see "Not yet".
+- **Our KH2 abilities** (`Kh1Sora::grants`): every one of `MENU` (but KH2's own Glide) is his, in
+  the KH2 list, off until equipped, with KH2's AP out of Sora's AP (no bonus). Several at once get
+  one box ("New Abilities: n KH2 Abilities"). KH2's own Glide (88) only comes with the Glide style
+  and stays in the shared list.
+- **KH1's 48 are KH1's alone** (the tester, after m18, answer 1). t718's `RESERVE` / `yield_one`
+  (ours leaving places free in Sora's list and giving them back) are gone: ours are never in it.
 - **Growth only from Drive Form levels** (the tester, after m16, answer 6 (b); KH2's
   `0x1403E8380`, Checked (decomp)). An ability he has is LV1. Valor's, Wisdom's and Final's
   levels raise High Jump, Quick Run and Glide to LV1 / 2 / 3 at form LV3 / 5 / 7
@@ -177,11 +176,73 @@ starts with "KH2's" so that they can be told apart in the menu.
 - **No bonus AP.** The `bonus_ap` ini key is gone (an old ini's line is ignored); Sora has
   KH1's own AP only.
 
+## The KH2 list
+
+The tester, what-is-still-missing after m18, answer 1: "give kh2's its own ability list right next
+to sora, should be titled "KH2"". Steam only (`win/kh2list.rs`).
+
+- **Storage.** 48 bytes in KH1's config block (save sub-block 5; its pointer Steam `0x142E1F4D8`,
+  Epic `0x142E1FE70`) at `+0x3C0..+0x3EF` (`growth::KH2_LIST_OFF`), in KH1's list format (id, bit 7
+  = not equipped, 0 ends it). The config block is part of the save slot (saved and loaded with it,
+  zeroed at a new game, `docs/kh1-config-menu.md` 1.1). Checked (decomp, Steam): every access
+  through `0x142E1F4D8` is below `+0x78` (the option ints, the journal bit arrays at `+0x30..+0x74`,
+  indexed by small bit numbers). Assumption: no access through a pointer computed elsewhere (a
+  static read can't see one); the offset is far past `+0x78` to keep clear of any bit array.
+- **KH1's own Abilities menu shows it** as a row "KH2" right after Sora's (Checked (decomp + exe),
+  Steam):
+  - The page: init `0x140311850` (the pause menu's page-init table `0x14052ADA0`, entry 2), its
+    main window `0x140310EF0`, the member picker `0x140310B60`, the list window `0x140310A90`
+    (`0x140311C20` for a member's list, `0x1403120F0` for the shared one), the header
+    `0x1403108E0` (name, AP left / max), the help line `0x140310AB0`, the sort window
+    `0x140310400`, the equip window `0x140310650`. Their definitions (`.data`, first qword the
+    update function): `0x1405490F0`, `0x1405490C0`, `0x140549090`, `0x140548FA0`, `0x140548F40`,
+    `0x140549030`, `0x140549060`.
+  - The picker's rows are the party slots, `save + 0x48E + row` (count `0x142E941D0`, set by
+    `0x1402E7EC0`: slots `+0x48E..+0x490` until 0xFF, one more for a guest in `+0x491`), then the
+    shared list. A member row's list is `save + 4 + member * 0x74 + 0x40` (48 bytes), counted at
+    page init into `0x142E9CBC8[row]` (4 ints); choosing it sets the row `0x142E9CB7C`, the member
+    `0x142E9CB80` and the record `0x142E9CB88`, which the equip (toggle bit 7) and sort windows use.
+  - Each of those eight update pointers is wrapped. For the length of KH1's own call the page sees
+    the party with our member (10; the save's records are 0..9) after Sora, and the KH2 list where
+    KH1's record arithmetic puts member 10's list, `save + 0x4CC`; after the call the list is
+    copied back to its own place and the bytes that were there (KH1's item counts
+    `save + 0x499 + item`, items 0x33..0x62, which the page doesn't read) are put back, with the
+    party, the count, and, with a guest (5 rows), the 5th row's count, which lands on
+    `0x142E9CBD8` (another page's window pointer, set by that page's own init) and is kept between
+    calls. The game's thread runs nothing else in between, so outside the page's own calls the
+    save is KH1's exactly.
+  - KH1's code then counts, draws, sorts, equips and refuses (AP) the KH2 list as a member's, with
+    its own windows and sounds.
+  - Re-made (RIP-relative, replaced outright): the member name `0x1402E86F0` (member 10 is "KH2";
+    the others KH1's name text `0x1402D1510 (id)` by the id table `0x1405452B8`), max AP
+    `0x1402E8560` (member 10 reads Sora's, stats copy `0x142E942C4 + member * 0x100`), the picker's
+    cursor clamp `0x1403119D0` (from the pause menu; clamps to the page's count with the KH2 row).
+  - KH1's party-stats refresh `0x1402E7EC0` (hooked) runs with the real party and items under it
+    when the page calls it, then the page's count is set again.
+- **AP.** KH1's AP left `0x1402E8660 (member)` and used `0x1402E8710 (member)` are hooked: for Sora
+  (and member 10) they add the AP of the KH2 list's equipped abilities (KH1's ability table `+0`,
+  our entries hold KH2's AP). So both lists share Sora's AP in every AP KH1 shows or checks
+  (Abilities, Status, the Equipment page's accessory check).
+- **What reads it.** `growth::Kh1Sora::kh2` (the KH2 values, hooks, grants; a copy of ours still in
+  Sora's own list counts too, so a save not moved over keeps working), the debug menu's Abilities
+  page (adds / takes ours there).
+- **Moving a save over** (`growth::move_to_kh2_list`, once, mark `0x4B04` = `growth::LAYOUT_KH2_LIST`
+  in the u16 at save `+0x48A`): the KH2 list is cleared first (its bytes were nobody's), every one
+  of ours in Sora's 48 moves to it as it was (on or off), KH1's keep their order with the gaps
+  closed. An older save's split (`migrate`) puts its KH2 abilities in the KH2 list, and ours move
+  out before `restore_vanilla` gives KH1's back, so they have the room. Log: "abilities: ... moved
+  to the KH2 list", "the KH2 abilities have their own list now".
+- **Other builds** (Epic), or a check that fails at install ("KH2 list: not installed" in the log):
+  ours stay in Sora's own list as in t718, given only while it has more than 2 places free
+  (`FALLBACK_RESERVE`), never in a KH1 ability's place.
+- Log lines: "KH2 list: installed", "KH2 list: Abilities menu shows a KH2 row at row 1 (party
+  [..] -> [..])", "KH1 Sora: ... KH2 list [..]", "Sora is given X (..., KH2 list)".
+
 ## The save
 
 - **Sora's abilities** stay in KH1's own lists: Sora's 48 bytes at save `+0x44`, and the shared
-  10 bytes at `+0x599`. KH1's menu shows and equips our ids there like its own. KH1's lists can't
-  grow: the menu walks 48, and the next party record starts at `+0x74`.
+  10 bytes at `+0x599`; ours in the KH2 list (above). KH1's lists can't grow: the menu walks 48,
+  and the next party record starts at `+0x74`.
 - **The layout mark**: the u16 at save `+0x48A` is `0x4B02` (`growth::LAYOUT_SPLIT`) once the save
   has been moved over, or once it was found with nothing to move. These bytes are free:
   - they are among the four spare bytes `+0x488..+0x48B` between the ten party records and
@@ -223,11 +284,8 @@ file is no longer written to: nothing is taken out any more.
 
 ## Not yet
 
-- **Room for all of ours.** KH1's list is 48 bytes and the next party record starts at `+0x74`, so
-  on a late-game list not every KH2 ability fits beside KH1's own. A list of our own (22 bytes
-  for the 22, in free save bytes, read by KH1's Abilities menu after KH1's 48: the menu's list
-  walk, its AP sums `0x1402E6220` / `0x1402E62D0` and the count `0x140282A70` would all need to
-  take it) is the native fix: asked first.
+- The KH2 list has not been tried in the game yet (layout of a sixth picker row with a guest,
+  the help line's text for the KH2 row).
 
 - The `Hook`s: KH1's modifiers while KH2 has Sora (KH2 Sora with KH1's Hurricane Blast), and
   KH2's Quick Run, Aerial Recovery, Retaliating Slash and Counterguard while KH1's states have

@@ -1124,22 +1124,27 @@ fn ability_ids() -> Vec<u8> {
     ids
 }
 
-/// An ability's list: (offset in the save, length, whether it's Sora's own with AP, where bit 7
-/// marks a copy that's off).
-fn list_of(id: u8) -> (usize, usize, bool) {
+/// An ability's list: (where it is, length, whether it has AP, where bit 7 marks a copy that's
+/// off): the shared `+0x599`, Sora's own `+0x44`, or the KH2 list for ours once the save is on it
+/// (`kh2list`).
+unsafe fn list_of(save: usize, id: u8) -> (usize, usize, bool) {
     use crate::growth::{kh1, List, MENU};
     let shared = id == kh1::HIGH_JUMP || id == kh1::MERMAID_KICK || MENU.iter().any(|a| a.id == id && a.list == List::Shared);
     if shared {
-        (0x599, 10, false)
-    } else {
-        (0x44, 48, true)
+        return (save + 0x599, 10, false);
     }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    if MENU.iter().any(|a| a.id == id && a.list == List::Kh2) && super::kh2list::active(base) {
+        if let Some(at) = super::kh2list::list_ptr(base) {
+            return (at, crate::growth::KH2_LIST_LEN, true);
+        }
+    }
+    (save + 0x44, 48, true)
 }
 
 /// The list's bytes up to its end (the first 0).
 unsafe fn list_bytes(save: usize, id: u8) -> (usize, usize, bool, Vec<u8>) {
-    let (off, len, sora) = list_of(id);
-    let at = save + off;
+    let (at, len, sora) = list_of(save, id);
     let bytes: Vec<u8> = (0..len).map(|i| rd::<u8>(at + i)).take_while(|b| *b != 0).collect();
     (at, len, sora, bytes)
 }

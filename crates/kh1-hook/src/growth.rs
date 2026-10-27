@@ -128,14 +128,26 @@ pub const MODIFIERS: [(u8, u16, &str); 10] = [
     (kh1::GRAVITY_BREAK, kh2::AERIAL_FINISH, "Gravity Break: Aerial Finish"),
 ];
 
-/// Which KH1 list a menu ability is in.
+/// Which list an ability is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum List {
     /// The shared abilities (`+0x599`: High Jump, Glide...), no AP.
     Shared,
-    /// Sora's abilities (`+0x44`), with AP.
+    /// Sora's abilities (`+0x44`), with AP: KH1's own.
     Sora,
+    /// The KH2 list (the tester, what-is-still-missing after m18, answer 1: "give kh2's its own
+    /// ability list right next to sora, should be titled "KH2""): 48 bytes of its own in the save
+    /// (`KH2_LIST_OFF` in KH1's config block), KH1's list format, shown by KH1's Abilities menu
+    /// as a row "KH2" after Sora's (`win/kh2list.rs`), equipped with Sora's AP.
+    Kh2,
 }
+
+/// The KH2 list's place: its offset in KH1's config block (save sub-block 5, `0x400` bytes,
+/// pointer Steam `0x142E1F4D8`), whose `+0x78..+0x3FF` KH1 never reads or writes beyond the
+/// new-game zeroing (`docs/kh1-config-menu.md` 1.1; Checked (decomp, Steam): every access through
+/// the pointer is below `+0x78`). 48 bytes, like Sora's own list.
+pub const KH2_LIST_OFF: usize = 0x3C0;
+pub const KH2_LIST_LEN: usize = 48;
 
 /// Whose ability an id is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -299,7 +311,7 @@ pub struct MenuAbility {
 
 #[allow(clippy::too_many_arguments)]
 const fn m(id: u8, name: &'static str, help: &'static str, ap: u8, template: u8, effect: Effect, with: u8, on_kh1: Side) -> MenuAbility {
-    MenuAbility { id, name, help, ap, list: List::Sora, template, effect, with, on_kh1 }
+    MenuAbility { id, name, help, ap, list: List::Kh2, template, effect, with, on_kh1 }
 }
 
 /// A story point: a world's story progress byte (`Kh1Sora::progress`) at or past the value it has
@@ -548,11 +560,6 @@ pub fn name(id: u8) -> String {
     row(id).map_or(format!("ability {}", id & 0x7F), |r| r.name.to_string())
 }
 
-/// Free places KH2's abilities always leave in Sora's list (48, KH1's most) for KH1's own grants
-/// (a level-up's ability, a story reward: KH1 appends at the first 0, `0x140282CA0`, and a full
-/// list would lose it). Assumption: KH1 never gives more than 2 abilities within one second
-/// (`menu::Growth::update` runs once a second).
-pub const RESERVE: usize = 2;
 
 /// Free places in a list (up to its first 0).
 pub fn free(list: &[u8]) -> usize {
@@ -562,16 +569,6 @@ pub fn free(list: &[u8]) -> usize {
 /// Whether a list byte is one of our KH2 abilities.
 pub fn ours_byte(b: u8) -> bool {
     b != 0 && MENU.iter().any(|a| a.id == b & 0x7F)
-}
-
-/// Which of our KH2 abilities gives its place back to KH1 (the tester: "if any custom ability is
-/// taking the slot of a vanilla ability revert it"): the last in `MENU`'s order that is off,
-/// else the last that is on. Never a KH1 ability. Its index in the list.
-pub fn yield_one(list: &[u8]) -> Option<usize> {
-    let end = list.iter().position(|b| *b == 0).unwrap_or(list.len());
-    let rank = |b: u8| MENU.iter().position(|a| a.id == b & 0x7F);
-    let pick = |off: bool| (0..end).filter(|i| ours_byte(list[*i]) && (list[*i] & 0x80 != 0) == off).max_by_key(|i| (rank(list[*i]), *i));
-    pick(true).or_else(|| pick(false))
 }
 
 /// Base Sora's growth levels from the Drive Forms' levels (KH2's form level-up, Steam KH2
@@ -632,6 +629,8 @@ pub struct Kh1Sora {
     pub abilities: Vec<u8>,
     /// The shared abilities (`+0x599`).
     pub shared: Vec<u8>,
+    /// The KH2 list (`List::Kh2`, 48 bytes; all 0 before a save is moved over to it).
+    pub kh2: Vec<u8>,
     /// The worlds' story progress bytes (save `+0x1504`, 12).
     pub progress: Vec<u8>,
     /// His growth from the Drive Forms' levels (`win/formexp.rs`).
@@ -698,7 +697,24 @@ impl Kh1Sora {
         match l {
             List::Shared => &self.shared,
             List::Sora => &self.abilities,
+            List::Kh2 => &self.kh2,
         }
+    }
+
+    /// Equipped copies of one of ours: in its list, plus any copy still in Sora's own (a save not
+    /// moved over to the KH2 list yet, `move_to_kh2_list`, keeps working).
+    fn ours_equipped(&self, ab: &MenuAbility) -> u8 {
+        let n = equipped(self.list(ab.list), ab.id);
+        if ab.list == List::Kh2 {
+            n.saturating_add(equipped(&self.abilities, ab.id))
+        } else {
+            n
+        }
+    }
+
+    /// Whether he has one of ours at all (on or off), in its list or still in Sora's own.
+    pub fn has_ours(&self, id: u8) -> bool {
+        MENU.iter().find(|a| a.id == id).is_some_and(|ab| has(self.list(ab.list), id) || (ab.list == List::Kh2 && has(&self.abilities, id)))
     }
 
     /// One equipped ability's effect on KH2's controller (`copies`: how many are equipped).
@@ -760,7 +776,7 @@ impl Kh1Sora {
             }
         }
         for ab in MENU {
-            let n = equipped(self.list(ab.list), ab.id);
+            let n = self.ours_equipped(&ab);
             if n > 0 {
                 self.apply(&mut out, ab.effect, n);
             }
@@ -777,14 +793,14 @@ impl Kh1Sora {
 
     /// Equipped KH2 abilities that mean nothing yet while KH1's own states move Sora (hooks).
     pub fn kh2_hooks(&self) -> Vec<u8> {
-        MENU.iter().filter(|a| a.on_kh1 == Hook && equipped(self.list(a.list), a.id) > 0).map(|a| a.id).collect()
+        MENU.iter().filter(|a| a.on_kh1 == Hook && self.ours_equipped(a) > 0).map(|a| a.id).collect()
     }
 
     /// Our KH2 abilities his lists don't hold yet (the tester, after m17: "just give the player
-    /// all the custom abilities we added"): every one of `MENU` in Sora's own list. KH2's own Glide
+    /// all the custom abilities we added"): every one of `MENU` in the KH2 list. KH2's own Glide
     /// (shared) only comes with the Glide style (`glide_swap`).
     pub fn grants(&self) -> Vec<MenuAbility> {
-        MENU.iter().filter(|ab| ab.list == List::Sora && !has(self.list(ab.list), ab.id)).copied().collect()
+        MENU.iter().filter(|ab| ab.list == List::Kh2 && !self.has_ours(ab.id)).copied().collect()
     }
 }
 
@@ -801,6 +817,9 @@ pub fn beaten(progress: &[u8], g: &BossGift) -> bool {
 pub const LAYOUT_OFF: usize = 0x48A;
 pub const LAYOUT_SPLIT: u16 = 0x4B02;
 pub const LAYOUT_VANILLA: u16 = 0x4B03;
+/// Once the save's KH2 abilities are in the KH2 list (`move_to_kh2_list`, the tester, after m18,
+/// answer 1), so Sora's own 48 are KH1's alone.
+pub const LAYOUT_KH2_LIST: u16 = 0x4B04;
 
 /// Whether a save holds the old layout's ids: any of ours from before the split (66..=77), so
 /// KH1's modifiers in it stood for KH2's.
@@ -813,9 +832,11 @@ pub fn old_layout(s: &Kh1Sora) -> bool {
 pub struct Migrated {
     pub abilities: Vec<u8>,
     pub shared: Vec<u8>,
+    /// The KH2 list.
+    pub kh2: Vec<u8>,
     /// What changed, for the log.
     pub lines: Vec<String>,
-    /// Our KH2 abilities that gave their place back to a KH1 one (`restore_vanilla`), for the log.
+    /// What couldn't be done, for the log.
     pub removed: Vec<String>,
 }
 
@@ -838,17 +859,18 @@ fn push(list: &mut [u8], byte: u8) -> bool {
 pub fn migrate(s: &Kh1Sora) -> Migrated {
     let mut a = s.abilities.clone();
     let mut sh = s.shared.clone();
+    let mut k2 = s.kh2.clone();
     let mut lines = Vec::new();
     let removed = Vec::new();
     for ab in MENU.iter().filter(|ab| ab.with != 0) {
-        if !has(&a, ab.with) || has(&a, ab.id) {
+        if !has(&a, ab.with) || has(&a, ab.id) || has(&k2, ab.id) {
             continue;
         }
         let on = equipped(&a, ab.with) > 0;
         let byte = if on { ab.id } else { ab.id | 0x80 };
-        // (Never in a KH1 ability's place: with no room it comes when there is, `grants`.)
-        if free(&a) <= RESERVE || !push(&mut a, byte) {
-            lines.push(format!("{}: no room for {} (given when there's room)", name(ab.with), ab.name));
+        // (In the KH2 list, never in a KH1 ability's place.)
+        if !push(&mut k2, byte) {
+            lines.push(format!("{}: no room for {} in the KH2 list", name(ab.with), ab.name));
             continue;
         }
         if on {
@@ -866,7 +888,37 @@ pub fn migrate(s: &Kh1Sora) -> Migrated {
             lines.push(format!("Superglide given back (Chernabog beaten; {})", if on { "on" } else { "off" }));
         }
     }
-    Migrated { abilities: a, shared: sh, lines, removed }
+    Migrated { abilities: a, shared: sh, kh2: k2, lines, removed }
+}
+
+/// Moves every one of ours (`List::Kh2`) out of Sora's own 48 into the KH2 list, as it was (on or
+/// off), once per save (`LAYOUT_KH2_LIST`; the tester, what-is-still-missing after m18, answer 1:
+/// "give kh2's its own ability list right next to sora"): Sora's 48 are KH1's alone after it, and
+/// keep their order with the gaps closed. A copy the KH2 list already holds isn't doubled (the
+/// spare is dropped).
+pub fn move_to_kh2_list(s: &Kh1Sora) -> Migrated {
+    let end = s.abilities.iter().position(|b| *b == 0).unwrap_or(s.abilities.len());
+    let mut k2 = s.kh2.clone();
+    let mut kept: Vec<u8> = Vec::new();
+    let mut lines = Vec::new();
+    let mut removed = Vec::new();
+    for &b in &s.abilities[..end] {
+        let ours = MENU.iter().any(|ab| ab.list == List::Kh2 && ab.id == b & 0x7F);
+        if !ours {
+            kept.push(b);
+            continue;
+        }
+        let on = if b & 0x80 == 0 { "on" } else { "off" };
+        if has(&k2, b & 0x7F) {
+            removed.push(format!("{} ({on}): a second copy, dropped (the KH2 list has it)", name(b)));
+        } else if push(&mut k2, b) {
+            lines.push(format!("{} ({on}) moved to the KH2 list", name(b)));
+        } else {
+            removed.push(format!("{} ({on}): the KH2 list is full, dropped", name(b)));
+        }
+    }
+    kept.resize(s.abilities.len(), 0);
+    Migrated { abilities: kept, shared: s.shared.clone(), kh2: k2, lines, removed }
 }
 
 /// What `kh1-kh2-removed.txt` (next to the game; every KH1 ability the mod's older builds took
@@ -916,9 +968,10 @@ pub fn removed_by_mod(text: &str, level: u8) -> (Vec<u8>, Vec<u8>) {
 /// - each KH1 ability `removed_by_mod` lists comes back, off, one copy per copy taken out (KH1's
 ///   own abilities it took out for room, its spare copies, Zantetsuken), and the shared spares
 ///   (High Jump, Glide, Superglide) the same way;
-/// - Superglide comes back if Chernabog is beaten and KH2's own Glide isn't standing for it;
-/// - with Sora's list full, one of our KH2 abilities gives its place back (`yield_one`): no KH1
-///   ability is ever left out for ours.
+/// - Superglide comes back if Chernabog is beaten and KH2's own Glide isn't standing for it.
+///
+/// Ours are in the KH2 list by then (`move_to_kh2_list` runs first), so they take none of Sora's
+/// places.
 ///
 /// Assumption: `kh1-kh2-removed.txt` is one install's file, not one save's; with several saves
 /// each gets what was noted up to its own level.
@@ -926,16 +979,9 @@ pub fn restore_vanilla(s: &Kh1Sora, removed_text: &str) -> Migrated {
     let mut a = s.abilities.clone();
     let mut sh = s.shared.clone();
     let mut lines = Vec::new();
-    let mut gave_up = Vec::new();
+    let gave_up = Vec::new();
     let (sora_ids, shared_ids) = removed_by_mod(removed_text, s.level);
     for id in sora_ids {
-        if free(&a) == 0 {
-            if let Some(i) = yield_one(&a) {
-                let gone = a.remove(i);
-                a.push(0);
-                gave_up.push(format!("{} gave its place back to KH1's {}", name(gone), name(id)));
-            }
-        }
         if push(&mut a, id | 0x80) {
             lines.push(format!("KH1's {} given back (off): the mod had taken it out", name(id)));
         } else {
@@ -957,7 +1003,7 @@ pub fn restore_vanilla(s: &Kh1Sora, removed_text: &str) -> Migrated {
             lines.push(format!("Superglide given back (Chernabog beaten; {})", if on { "on" } else { "off" }));
         }
     }
-    Migrated { abilities: a, shared: sh, lines, removed: gave_up }
+    Migrated { abilities: a, shared: sh, kh2: s.kh2.clone(), lines, removed: gave_up }
 }
 
 /// One line for the log.
@@ -1013,7 +1059,7 @@ mod tests {
         a.resize(48, 0);
         let mut s = shared.to_vec();
         s.resize(10, 0);
-        Kh1Sora { level, abilities: a, shared: s, progress: vec![0; 12], form_growth: FormGrowth::default() }
+        Kh1Sora { level, abilities: a, shared: s, kh2: vec![0; KH2_LIST_LEN], progress: vec![0; 12], form_growth: FormGrowth::default() }
     }
 
     /// Growth only from form levels (KH2's `0x1403E8380`): LV1 from the ability, higher from the
@@ -1030,7 +1076,7 @@ mod tests {
         let mut bare = sora(5, &[], &[]);
         bare.form_growth = FormGrowth { high_jump: 3, quick_run: 0, glide: 0 };
         assert_eq!(bare.kh2().high_jump, 0);
-        assert!(bare.grants().iter().all(|a| a.list == List::Sora));
+        assert!(bare.grants().iter().all(|a| a.list == List::Kh2));
     }
 
     #[test]
@@ -1180,7 +1226,7 @@ mod tests {
     /// Every KH2 ability of Sora's own list is his at once, whatever his level or story.
     #[test]
     fn grants_are_every_kh2_ability() {
-        let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Sora).map(|a| a.id).collect();
+        let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Kh2).map(|a| a.id).collect();
         assert_eq!(all.len(), 22);
         assert_eq!(sora(1, &[], &[]).grants().iter().map(|a| a.id).collect::<Vec<_>>(), all);
         // Already there (even unequipped): not again.
@@ -1189,20 +1235,25 @@ mod tests {
         assert_eq!(g.len(), 20);
     }
 
-    /// Ours give their places back to KH1: the last in MENU order that is off, then on; never a
-    /// KH1 ability.
+    /// The KH2 list (after m18, answer 1): ours move out of Sora's 48 as they were, KH1's keep
+    /// their order, a second copy isn't doubled; the KH2 list's copies count and grants see them.
     #[test]
-    fn ours_yield_to_kh1() {
-        let mut l = vec![16 | 0x80, 66 | 0x80, 87 | 0x80, 70, 6];
-        l.resize(48, 10);
-        assert_eq!(free(&l), 0);
-        assert_eq!(l[yield_one(&l).unwrap()], 87 | 0x80);
-        l[2] = 10;
-        assert_eq!(l[yield_one(&l).unwrap()], 66 | 0x80);
-        l[1] = 10;
-        assert_eq!(l[yield_one(&l).unwrap()], 70);
-        l[3] = 10;
-        assert_eq!(yield_one(&l), None);
+    fn ours_move_to_the_kh2_list() {
+        let mut s = sora(40, &[16 | 0x80, 66 | 0x80, 87, 6, 70 | 0x80, 21], &[]);
+        s.kh2[0] = 70;
+        let m = move_to_kh2_list(&s);
+        assert_eq!(m.abilities[..4], [16 | 0x80, 6, 21, 0]);
+        assert_eq!(m.abilities.len(), 48);
+        assert_eq!(m.kh2[..4], [70, 66 | 0x80, 87, 0]);
+        assert_eq!((m.lines.len(), m.removed.len()), (2, 1));
+        let after = Kh1Sora { abilities: m.abilities, kh2: m.kh2, ..s };
+        assert!(after.kh2().equipped.contains(&kh2::AERIAL_FINISH) && after.kh2().equipped.contains(&kh2::HORIZONTAL_SLASH));
+        assert!(after.has_ours(66) && !has(&after.abilities, 66));
+        assert!(!after.grants().iter().any(|a| [66, 70, 87].contains(&a.id)));
+        assert_eq!(after.grants().len(), 19);
+        // Nothing more to move.
+        let again = move_to_kh2_list(&after);
+        assert!(again.lines.is_empty() && again.abilities == after.abilities && again.kh2 == after.kh2);
     }
 
     /// An older build's removals come back from `kh1-kh2-removed.txt`, by level, one per copy.
@@ -1218,16 +1269,20 @@ mod tests {
         let (sora_ids, shared) = removed_by_mod(text, 50);
         assert_eq!(sora_ids, vec![60, 60, 59, 16]);
         assert_eq!(shared, vec![kh1::HIGH_JUMP, kh1::GLIDE]);
-        // A full list: ours make room, KH1's come back off.
+        // A nearly full list: ours move to the KH2 list first (as the menu does), then KH1's come
+        // back off in the places they freed.
         let mut l = vec![60, 66 | 0x80, 67 | 0x80, 68 | 0x80];
         l.resize(47, 10);
         let mut s = sora(50, &l, &[kh1::HIGH_JUMP, kh1::GLIDE]);
         s.progress[11] = 0x33;
+        let moved = move_to_kh2_list(&s);
+        let s = Kh1Sora { abilities: moved.abilities, kh2: moved.kh2, ..s };
         let m = restore_vanilla(&s, text);
         assert_eq!(m.abilities.iter().filter(|b| **b == 60 | 0x80).count(), 2);
         assert!(m.abilities.contains(&(59 | 0x80)) && m.abilities.contains(&(16 | 0x80)));
         assert!(!has(&m.abilities, 66) && !has(&m.abilities, 67) && !has(&m.abilities, 68));
-        assert_eq!(m.removed.len(), 3);
+        assert!(has(&m.kh2, 66) && has(&m.kh2, 67) && has(&m.kh2, 68));
+        assert!(m.removed.is_empty());
         assert_eq!(m.shared[..5], [kh1::HIGH_JUMP, kh1::GLIDE, kh1::HIGH_JUMP | 0x80, kh1::GLIDE | 0x80, kh1::SUPERGLIDE]);
     }
 
@@ -1250,9 +1305,9 @@ mod tests {
         s.progress[11] = 0x33;
         assert!(old_layout(&s));
         let m = migrate(&s);
-        let after = Kh1Sora { abilities: m.abilities.clone(), shared: m.shared.clone(), ..s.clone() };
-        assert!(after.abilities.contains(&ours::EXPLOSION) && after.abilities.contains(&(kh1::HURRICANE_BLAST | 0x80)));
-        assert!(after.abilities.contains(&(ours::FLASH_STEP | 0x80)) && after.abilities.contains(&(kh1::VORTEX | 0x80)));
+        let after = Kh1Sora { abilities: m.abilities.clone(), shared: m.shared.clone(), kh2: m.kh2.clone(), ..s.clone() };
+        assert!(after.kh2.contains(&ours::EXPLOSION) && after.abilities.contains(&(kh1::HURRICANE_BLAST | 0x80)));
+        assert!(after.kh2.contains(&(ours::FLASH_STEP | 0x80)) && after.abilities.contains(&(kh1::VORTEX | 0x80)));
         assert!(after.shared.contains(&kh1::SUPERGLIDE));
         // KH2 sees the same moves as before the split.
         assert!(after.kh2().equipped.contains(&kh2::EXPLOSION) && !after.kh2().equipped.contains(&kh2::FLASH_STEP));
@@ -1270,8 +1325,11 @@ mod tests {
         let mut l = vec![kh1::HURRICANE_BLAST, ours::QUICK_RUN | 0x80];
         l.resize(48, 16 | 0x80); // Cheer, off, filling the list.
         let m = migrate(&sora(30, &l, &[]));
-        assert!(!m.abilities.contains(&ours::EXPLOSION));
-        assert_eq!(m.abilities, l);
+        assert!(!m.abilities.contains(&ours::EXPLOSION) && m.kh2.contains(&ours::EXPLOSION));
+        // (KH1's Hurricane Blast is turned off for it, as before; nothing else changes.)
+        let mut want = l.clone();
+        want[0] |= 0x80;
+        assert_eq!(m.abilities, want);
     }
 
     #[test]
