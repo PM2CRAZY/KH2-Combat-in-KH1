@@ -47,3 +47,15 @@
 
 ^m2
 
+wasn't able to move when opening a chest, I stayed in idle for a bit. the other parts of the code played except for chests that have gummi's in it and Dalmatians 
+
+1. (b)
+2. (b) and move it in QOL
+3. (b)
+   
+   look into what you can remember the c steam decomp and you have access to kh2's files, sora still doesn't play his kh2 chest opening animation. fix all these problems so I can properly test; Sent a log and trace.
+   
+   go ahead
+   
+   
+
