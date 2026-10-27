@@ -283,6 +283,8 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     super::softreset::pad(b_all);
     // Cutscene Skip (`cutsceneskip`): follows the cutscene bit, one flag word read when on.
     super::cutsceneskip::pad();
+    // In-game Scene Skip (`ingameskip`): the low-poly event scenes through KH1's own skip, two words read when on.
+    super::ingameskip::pad();
     // Final Form's secret code (`form::pad`).
     super::form::pad(b_all);
     // L1 held: KH1's shortcuts (L1 + a face button cast the spells set there), so KH1 keeps

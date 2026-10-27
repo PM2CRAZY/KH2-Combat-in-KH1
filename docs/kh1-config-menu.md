@@ -465,3 +465,7 @@ The QoL list has a second row, Soft Reset (Off | On, ini `soft_reset`, off by de
 ### 6.z4 Cutscene Skip in QoL (t710)
 
 The QoL list has a third row, Cutscene Skip (Off | Seen | All, ini `cutscene_skip`, off by default): skips the story cutscenes the pause menu's Skip Cutscene can skip, a second after they start. Never talks, shops or the dialog scenes confirmed line by line. How it works and what is checked: `docs/kh1-cutscene-skip.md`.
+
+### 6.z5 In-game Scene Skip in QoL (t712)
+
+The QoL list has a fourth row, In-game Scene Skip (Off | On, ini `ingame_skip`, off by default): skips the in-game dialog scenes the pause menu can't skip, with KH1's own skip, so the items and flags they give are still given. Talks, shops, scenes with a choice and the pause menu's skippable cutscenes are left alone. New text ids `0x7F000221` / `0x7F000222`. How it works and what is checked: `docs/kh1-ingame-skip.md`.

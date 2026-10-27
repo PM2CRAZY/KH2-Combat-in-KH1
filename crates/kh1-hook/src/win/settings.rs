@@ -237,6 +237,10 @@ soft_reset = off\r\n\
 cutscene_skip = off\r\n\
 ; cutscene_seen: the scenes already watched, kept by the mod for the seen setting (delete the line to forget them)\r\n\
 cutscene_seen =\r\n\
+; ingame_skip: off = nothing; on = skip the in-game scenes (the low-poly dialog you confirm line by line, which the\r\n\
+; pause menu can't skip) with KH1's own skip: items, abilities and story flags the scene gives are still given.\r\n\
+; Talks, shops, scenes with a choice and the pause menu's skippable cutscenes are left alone (QoL > In-game Scene Skip)\r\n\
+ingame_skip = off\r\n\
 ; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
@@ -406,6 +410,8 @@ pub struct Settings {
     pub cutscene_skip: u8,
     /// The scenes already watched, as the mod keeps them (`cutscene_seen`).
     pub cutscene_seen: String,
+    /// Skips the in-game (low-poly) event scenes with KH1's own skip (`ingame_skip = on`, `ingameskip.rs`).
+    pub ingame_skip: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
     /// states per move style (its physics by `physics_rule`), KH2's controller only for KH2's own
     /// moves. Off: the old
@@ -658,6 +664,7 @@ fn load(first: bool) -> Option<Settings> {
             _ => 0,
         },
         cutscene_seen: setting(&text, "cutscene_seen").unwrap_or_default(),
+        ingame_skip: on(&text, "ingame_skip", "on", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

@@ -223,6 +223,8 @@ enum Row {
     TrailAlways,
     /// Soft Reset (Off | On, `softreset`).
     SoftReset,
+    /// QoL > In-game Scene Skip (Off | On, `ingameskip`).
+    IngameSkip,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -343,10 +345,13 @@ const COMMAND_MENU: [Item; 1] = [Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011
 // version so restore it".)
 // (Cutscene Skip: the user, t710: "an auto cutscene skipper in qol", then the rules: never talks, shops or the
 // dialog scenes you confirm line by line; skip the pause menu's skippable ones with the game's own function.)
-const QOL: [Item; 3] = [
+// (In-game Scene Skip: the user, t712: "you can make it a seperate config option in qol ... it skips that in game
+// cutscene fully, then if any flags give you an item the game gives you the item after the fact".)
+const QOL: [Item; 4] = [
     Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi),
     Item::Set([0x7F00_021B, 0x7F00_011D, 0x7F00_011E, 0x7F00_021C], Row::SoftReset),
     Item::Pick([0x7F00_021D, 0x7F00_011D, 0x7F00_021E, 0x7F00_021F, 0x7F00_0220], Pick::CutsceneSkip),
+    Item::Set([0x7F00_0221, 0x7F00_011D, 0x7F00_011E, 0x7F00_0222], Row::IngameSkip),
 ];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
 // always have their trail on".)
@@ -431,7 +436,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 112] = [
+const STRINGS: [(u32, &str); 114] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -468,13 +473,15 @@ const STRINGS: [(u32, &str); 112] = [
     (0x7F00_0219, "Command Menu"),
     (0x7F00_021A, "Options for the command menu."),
     (0x7F00_0211, "QoL"),
-    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip."),
+    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip, In-game Scene Skip."),
     (0x7F00_021B, "Soft Reset"),
     (0x7F00_021C, "On: L1 + L2 + R1 + R2 + Start + Select held for a second return to the title screen."),
     (0x7F00_021D, "Cutscene Skip"),
     (0x7F00_021E, "Seen"),
     (0x7F00_021F, "All"),
     (0x7F00_0220, "Skips the story cutscenes the pause menu can skip, a second after they\nstart. Seen: only ones you watched before. Talks, shops and dialog you\nconfirm line by line are never skipped."),
+    (0x7F00_0221, "In-game Scene Skip"),
+    (0x7F00_0222, "On: skips the in-game dialog scenes the pause menu can't skip, with\nKH1's own skip; items and flags they give are still given. Talks,\nshops and scenes with a choice always play."),
     (0x7F00_0213, "Cosmetics"),
     (0x7F00_0214, "How things look, not how they play: Keyblade trails."),
     (0x7F00_0215, "Keyblade Trail"),
@@ -567,6 +574,7 @@ fn value(what: Row) -> bool {
         Row::ClashCount => super::recoil::clash_count(),
         Row::TrailAlways => super::cosmetics::always(),
         Row::SoftReset => super::softreset::enabled(),
+        Row::IngameSkip => super::ingameskip::enabled(),
     }
 }
 
@@ -601,6 +609,7 @@ fn set(what: Row, v: bool) {
         Row::ClashCount => super::recoil::set_clash_count(v),
         Row::TrailAlways => super::cosmetics::set_always(v),
         Row::SoftReset => super::softreset::set(v),
+        Row::IngameSkip => super::ingameskip::set(v),
     }
 }
 

@@ -184,7 +184,8 @@ unsafe fn step(mode: u8) {
             NTH.store(0, Ordering::Relaxed);
         }
     }
-    let on = rd::<u32>(base + FLAGS2_STEAM) & 1 != 0;
+    // (t712: a bit 0 the In-game Scene Skip set is not a pause-skippable cutscene, `ingameskip.rs`.)
+    let on = rd::<u32>(base + FLAGS2_STEAM) & 1 != 0 && !super::ingameskip::forced();
     if !on {
         if ACTIVE.swap(false, Ordering::Relaxed) {
             // The scene is over: a flag byte that was written and not used is dropped, so it can't skip the next one.
