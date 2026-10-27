@@ -5,37 +5,37 @@
 ## Messages
 
 - [1. booglechan: can you add an auto cutscene skipper in qol section](#^m1)
-- [2. Assistant: I haven't built the cutscene skipper yet, and I haven't touched any co](#^m2)
-- [3. booglechan: go ahead, make sure the log is toggled in the debug menu so we don't b](#^m3)
-- [4. Assistant: **t706** is written to your testing branch. It only adds logging for c](#^m4)
-- [5. booglechan: before I can do this I need a soft reset in qol you can quick reset th](#^m5)
-- [6. Assistant: The reset is possible, but I haven't written any code. KH1 has no read](#^m6)
+- [2. Assistant: I haven't built the cutscene skipper yet, and I haven't touc](#^m2)
+- [3. booglechan: go ahead, make sure the log is toggled in the debug menu so ](#^m3)
+- [4. Assistant: t706 is written to your testing branch. It only adds logging](#^m4)
+- [5. booglechan: before I can do this I need a soft reset in qol you can quic](#^m5)
+- [6. Assistant: The reset is possible, but I haven't written any code. KH1 h](#^m6)
 - [7. booglechan: 1. (a)](#^m7)
-- [8. Assistant: Noted: Soft Reset will be an On/Off row, off by default.  I still need](#^m8)
+- [8. Assistant: Noted: Soft Reset will be an On/Off row, off by default.](#^m8)
 - [9. booglechan: 2. (a)](#^m9)
-- [10. Assistant: I haven't written any code, because KH1 may already have this reset. I](#^m10)
+- [10. Assistant: I haven't written any code, because KH1 may already have thi](#^m10)
 - [11. booglechan: L1+L2+R1+R2+Start+Select](#^m11)
-- [12. Assistant: Noted: the combo stays L1+L2+R1+R2+Start+Select.  I still can't tell w](#^m12)
-- [13. booglechan: the combo does not work in the pc version so restore it  go ahead](#^m13)
-- [14. Assistant: **t707** adds Soft Reset to the QoL list: an On/Off row, off by defaul](#^m14)
-- [15. booglechan: I got a log of cutscenes, these take place in traverse town right befo](#^m15)
-- [16. Assistant: I haven't built the skipper yet. Your log wasn't enough to tell a stor](#^m16)
-- [17. booglechan: Its been logged, you can also see my inputs to tell which ones are wha](#^m17)
-- [18. Assistant: I haven't built the skipper yet. Your log shows how these events are s](#^m18)
-- [19. booglechan: what I mean is in game when there's a cutscene with dialog that use's ](#^m19)
-- [20. Assistant: t709 is written to your testing branch. It only adds logging, so nothi](#^m20)
-- [21. booglechan: okay I started by talking to sid, talked to aireth and leon, then I we](#^m21)
-- [22. Assistant: This log has no story cutscene in it, so it shows what to leave alone ](#^m22)
+- [12. Assistant: Noted: the combo stays L1+L2+R1+R2+Start+Select.](#^m12)
+- [13. booglechan: the combo does not work in the pc version so restore it](#^m13)
+- [14. Assistant: t707 adds Soft Reset to the QoL list: an On/Off row, off by ](#^m14)
+- [15. booglechan: I got a log of cutscenes, these take place in traverse town ](#^m15)
+- [16. Assistant: I haven't built the skipper yet. Your log wasn't enough to t](#^m16)
+- [17. booglechan: Its been logged, you can also see my inputs to tell which on](#^m17)
+- [18. Assistant: I haven't built the skipper yet. Your log shows how these ev](#^m18)
+- [19. booglechan: what I mean is in game when there's a cutscene with dialog t](#^m19)
+- [20. Assistant: t709 is written to your testing branch. It only adds logging](#^m20)
+- [21. booglechan: okay I started by talking to sid, talked to aireth and leon,](#^m21)
+- [22. Assistant: This log has no story cutscene in it, so it shows what to le](#^m22)
 - [23. booglechan: update the log](#^m23)
-- [24. Assistant: The new log shows a clear difference between the cutscenes you can ski](#^m24)
-- [25. booglechan: 1. c 2.(b) 3.(b)  go ahead](#^m25)
-- [26. Assistant: t710 is on your testing branch: a new QoL row, Cutscene Skip (Off | Se](#^m26)
-- [27. booglechan: it worked for the high poly cutscenes but it waits awhile, it should s](#^m27)
-- [28. Assistant: t711 removes the wait. The skip now fires the moment KH1's cutscene bi](#^m28)
+- [24. Assistant: The new log shows a clear difference between the cutscenes y](#^m24)
+- [25. booglechan: 1. c](#^m25)
+- [26. Assistant: t710 is on your testing branch: a new QoL row, Cutscene Skip](#^m26)
+- [27. booglechan: it worked for the high poly cutscenes but it waits awhile, i](#^m27)
+- [28. Assistant: t711 removes the wait. The skip now fires the moment KH1's c](#^m28)
 - [29. booglechan: I meant the in game cutscene skip didn't work](#^m29)
-- [30. booglechan: continue on from my config menu reorganization:  you can make it a sep](#^m30)
-- [31. Assistant: **t712** adds a new QoL row, In-game Scene Skip (Off | On, off by defa](#^m31)
-- [32. Assistant: I committed t712 in my session's copy of the repo, but I haven't pushe](#^m32)
+- [30. booglechan: continue on from my config menu reorganization:](#^m30)
+- [31. Assistant: t712 adds a new QoL row, In-game Scene Skip (Off  On, off by](#^m31)
+- [32. Assistant: t717: Trinities now skip under the same row, In-game Scene S](#^m32)
 
 ---
 
@@ -512,6 +512,7 @@
 
 ^m31
 
+
 currently works in traverse town, wasn't able to test it in other worlds, but can you also make it skip trinity animations?
 
 go ahead
@@ -519,3 +520,30 @@ go ahead
 update: 
 
 I sent a log showing that talking to phil after the barrel mini game still plays the in game cutscene where he gives you thunder, in the same folder as this thread
+
+> [!tip] Assistant
+> **t717:** Trinities now skip under the same row, In-game Scene Skip, so there's no new setting.
+> - In KH1 each Trinity mark is part of a script (the room's, or a scene's). It offers the Trinity command in the Triangle box, and when you use it, it starts its own little scene with Sora, Donald and Goofy around the mark.
+> - The mod spots that scene the moment it starts and runs KH1's own skip on it, the same one the pause menu uses. So the game still runs the Trinity's steps itself, just instantly.
+> - A Trinity whose scene has the pause menu's skip (one Olympus version) stays with the Cutscene Skip row.
+>
+> **Why some didn't skip before:**
+> - In some story versions of Traverse Town's districts, the Trinity scene never switches on the "event" flag the row was waiting for.
+> - If you'd talked to someone in that room first, the row treated the next scene as one you started yourself. Your log has one of those: a Traverse Town Trinity that played.
+> - Trinity marks that sit inside another scene (Phil's after-barrel scene has the Coliseum's mark) weren't seen at all.
+>
+> **How I checked:** I read KH1's code for how the Triangle box offers and runs a mark's command, and your own game's room scripts locally (nothing copied into the repo). The same Trinity setup is in 17 rooms across Traverse Town, Wonderland, Deep Jungle, Agrabah, Olympus and Monstro. I didn't read Neverland, Hollow Bastion, Halloween Town, Atlantica, End of the World or the 100 Acre Wood, and nothing has been run in game.
+>
+> **About Phil and Thunder:** your log shows that talking to him after the barrel game starts a scene the row sees as one you started, so it plays. That scene also has a question from Phil in it, and the Coliseum's Trinity mark lives inside it too. If I skipped it, the game would answer the question for you with whatever it last held, and the game's data doesn't say whether a given visit reaches the question or goes straight to the Thunder reward. So I left talks alone for now. How would you like scenes like Phil's handled?
+> - (a) Scenes you start by talking always play, as now.
+> - (b) Skip scenes you start by talking when they have no question, shop or menu anywhere in them. This wouldn't catch Phil's, because his has a question.
+> - (c) Let me work out how the game picks which part of Phil's scene runs, so only the reward part is skipped and any question still plays. That needs another log with the Cutscenes log on: talk to Phil once before the barrel game and once after.
+>
+> **Please test** with the Cutscenes log on (look for "in-game skip: entry 50 is a Trinity" and "skipped"):
+> 1. One of each type if you can (Jump, Ladder, Charge, Push, Detect). After the fade, check that you end up where the Trinity normally puts you, and that its result is there: the ledge, the broken wall, the moved object or the revealed chest.
+> 2. Check that the mark is used up afterwards and Jiminy's Journal counts it.
+> 3. Talk to an NPC first, then use a Trinity in the same room: it should still skip.
+> 4. A world outside Traverse Town for the row's other scenes, since you couldn't test those yet.
+
+^m32
+
