@@ -1128,7 +1128,6 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
         // others): the user, nothing immovable is pulled or thrown.
         // Once big, always (the user: Dragon Maleficent was pulled into a wall: she is 615 tall
         // standing and under 600 with her head down); kept by actor and its object id.
-        static BIG: std::sync::Mutex<Vec<(usize, u32)>> = std::sync::Mutex::new(Vec::new());
         let key = (this, super::probe::object_id(this));
         let big_now = count > 8 || tall > 600.0 || radius > 300.0;
         let big = BIG.lock().map_or(big_now, |mut v| {
@@ -2874,6 +2873,28 @@ unsafe fn land_hit(sora: usize, part: &Part, at: &Shape, row: Row, power: u16, s
 /// attack data) takes KH2's numbers for its move's hit window as KH2's hits landed here do: its
 /// power, its Magic scaling, its launch (a blow that throws, `kh1rows::throws`, KH2's height and
 /// speed: its data's KH1 reaction is the launch already).
+/// Enemies measured as big bodies (`Body`'s `big_now`), kept by actor and its object id.
+static BIG: std::sync::Mutex<Vec<(usize, u32)>> = std::sync::Mutex::new(Vec::new());
+
+/// Whether `actor` has been measured as a big body (Assumption: KH1 has no armor / size flag we
+/// have checked, so KH2's "big target" condition is our size measure).
+fn is_big(actor: usize) -> bool {
+    actor > 0x10000 && BIG.lock().is_ok_and(|v| v.contains(&(actor, unsafe { super::probe::object_id(actor) })))
+}
+
+/// KH2's reaction rewrite for a big target (the `patn` table in 00battle.bin, rows 7 and 8, the
+/// same list; applied by Steam KH2 `0x1403EE9B0`; Checked (decomp + files)): a first swing
+/// (3) or a flinch-and-push (0x10) only pushes (1), a blow (4, 0xF) only pushes at half (0xC),
+/// the finisher's stagger (6, 7) becomes the half-push stagger (0xD). The rest stay.
+fn big_reaction(r: u8) -> u8 {
+    match r {
+        3 | 0x10 => 1,
+        4 | 0xF => 0xC,
+        6 | 7 => 0xD,
+        r => r,
+    }
+}
+
 pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     let own = if POWER.load(Ordering::Relaxed) == 0 { super::kh1rows::kh2_atkp(attack) } else { None };
     let p = own.as_ref().map_or(POWER.load(Ordering::Relaxed), |a| a.power.max(1) as u32);
@@ -2881,10 +2902,25 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
         return;
     }
     // KH2's numbers on this record for KH1's reactions to it (`knockback`).
-    if let Some(h) = own.as_ref().map(|a| super::knockback::Kh2Hit { reaction: a.enemy_reaction, k1: a.knockback_1, k2: a.knockback_2 }).or_else(|| if own.is_some() { None } else { super::knockback::current() }) {
+    let mut hit = own.as_ref().map(|a| super::knockback::Kh2Hit { reaction: a.enemy_reaction, k1: a.knockback_1, k2: a.knockback_2 }).or_else(|| if own.is_some() { None } else { super::knockback::current() });
+    // A big body takes KH2's rewritten reaction (`big_reaction`): Fire and a first swing only push it.
+    let mut softened = false;
+    if let Some(h) = hit.as_mut() {
+        let who = if own.is_some() { target } else { TARGET.load(Ordering::Relaxed) };
+        let m = big_reaction(h.reaction);
+        if m != h.reaction && is_big(who) {
+            static B: AtomicU32 = AtomicU32::new(0);
+            if super::log_on(super::LogCat::Combat) && B.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Combat, "KH2's big-target rewrite on {who:#x}: reaction {} -> {m} (record {rec:#x})", h.reaction);
+            }
+            h.reaction = m;
+            softened = true;
+        }
+    }
+    if let Some(h) = hit {
         super::knockback::note_record(rec, h);
     }
-    let own_launch = own.as_ref().filter(|a| super::kh1rows::throws(a)).and_then(|a| {
+    let own_launch = own.as_ref().filter(|a| !softened && super::kh1rows::throws(a)).and_then(|a| {
         let r = &pose::kh2()?.character.reaction;
         Some(Launch::kh2(a.knockback_1, a.knockback_2, r))
     });
@@ -2896,7 +2932,7 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     }
     // A KH2 launch: KH1's launch reaction (kind 5) with KH2's numbers once it runs. A blow with a
     // small arc (Small Blows on) is KH1's knock-back (kind 4) instead, with KH2's numbers once it runs.
-    if let Some(l) = own_launch.or_else(|| if own.is_some() { None } else { PENDING.lock().ok().and_then(|g| *g) }) {
+    if let Some(l) = own_launch.or_else(|| if own.is_some() || softened { None } else { PENDING.lock().ok().and_then(|g| *g) }) {
         let small = super::knockback::small_blows() && pose::kh2().is_some_and(|k| l.apex(&k.character.reaction).0 <= SMALL_BLOW_MAX);
         if small {
             wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 4);
@@ -2921,6 +2957,11 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
                 log!(Combat, "KH2 launch asked: record {rec:#x} made a launch (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
             }
         }
+    } else if let Some(h) = hit.filter(|_| softened) {
+        // The rewritten reaction on KH1's record: a push only is KH1's push-only kind 2, a stagger
+        // with a push its flinch, kind 3 (neither is KH1's knock-back or launch).
+        let kind = if character_core::reaction::category(h.reaction) == 1 { 2 } else { 3 };
+        wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | kind);
     } else if let Some(a) = own.as_ref().filter(|a| character_core::reaction::category(a.enemy_reaction) == 3) {
         // A KH2 flinch on one of our rows whose data is a launch (the move's first hit window
         // launches): KH1's flinch for it, not KH1's own launch.

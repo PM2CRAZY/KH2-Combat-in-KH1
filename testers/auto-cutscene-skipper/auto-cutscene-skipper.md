@@ -577,3 +577,9 @@ update: I was actually wrong and loaded the wrong save file, ignore my message "
 
 ^m33
 
+(a)
+
+sent a log showing the exact moment, its when you get thunder. if you do talk to phil again then he has a question for you but not during this part.
+
+go ahead
+

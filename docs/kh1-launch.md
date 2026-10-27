@@ -367,3 +367,13 @@ KH1's launch. Off: every KH2 blow is KH1's launch, as t602.
 - That a scripted enemy (actor kinds 4 / 5 / 9 / 10, its script gets the record) answers a kind-4
   record with KH1's knock-back; the user's log did not say.
 - Aerial Finish's spins (up 5, sideways -1) and Explosion's ticks are small blows too, now.
+
+## 6. Big bodies (t722)
+
+KH2 rewrites a hit's reaction for a big target (the `patn` table in 00battle.bin, rows 7 and 8;
+Steam KH2 `0x1403EE9B0`; Checked (decomp + files)): 3 / 0x10 become 1 (push only), 4 / 0xF become
+0xC (half push), 6 / 7 become 0xD (stagger with half push). Fire's hits (4) and the first swing (3)
+therefore only push a big body; the finisher (6 / 7) still staggers it. `combat::scale_record`
+applies it to an enemy `Body` measured big (Assumption: that measure stands for KH2's big flag),
+makes no launch or small blow, and sets KH1's record kind to 2 (push only) or 3 (flinch).
+Not checked in game: what kind 2 looks like on each big enemy; an enemy never measured counts small.
