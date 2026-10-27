@@ -36,6 +36,7 @@
 - [30. booglechan: continue on from my config menu reorganization:](#^m30)
 - [31. Assistant: t712 adds a new QoL row, In-game Scene Skip (Off  On, off by](#^m31)
 - [32. Assistant: t717: Trinities now skip under the same row, In-game Scene S](#^m32)
+- [33. Assistant: Thanks for the correction on the reload. No version this rou](#^m33)
 
 ---
 
@@ -547,6 +548,7 @@ I sent a log showing that talking to phil after the barrel mini game still plays
 
 ^m32
 
+
 the checks don't get restored if you auto reset and load your game, I went into merlin's house and bibby bobby boo was set to where I already had talked to her, even though on my reload that was my first time entering the room. same happened with the cheshire cat giving you blizzard early
 
 any fixes you find let me know.
@@ -556,4 +558,22 @@ in the scene where phil gives you thunder, from a users stand point he doesn't h
 go ahead
 
 update: I was actually wrong and loaded the wrong save file, ignore my message "the checks don't get restored if you auto reset and load your game, I went into merlin's house and bibby bobby boo was set to where I already had talked to her, even though on my reload that was my first time entering the room. same happened with the cheshire cat giving you blizzard early"
+
+
+> [!tip] Assistant
+> Thanks for the correction on the reload. No version this round: I couldn't find a safe change for Phil yet. I did check the reset side anyway and wrote it up in docs/kh1-softreset.md. Loading a save restores the game's whole save block, and every other bit of scene state is either in that block or wiped by the reset, so a soft reset and reload shouldn't carry anything over.
+>
+> **Phil:** the Phil talk that played in your first log is the one *before* the barrel game, not the Thunder one. It always asks a question: you moved the cursor down twice during it, and then you were in the barrel game. Your new log is Traverse Town and Wonderland, so the Thunder scene isn't in either log. After each barrel run, the lobby scene was already being skipped.
+>
+> **Why a question matters:** I checked KH1's code for this. When KH1 skips a scene it never shows the question. It quietly keeps whatever the answer was last time, and it can't stop skipping partway through. So I won't skip any scene that has a question in it.
+>
+> **What I need:** a log, with the Cutscenes log on, where you get Thunder from Phil (talk to him after finishing the barrel game). Then I can see whether that scene has a question anywhere in it. If it doesn't, it can be skipped like the others.
+>
+> **How should scenes you start by talking be handled?**
+> - (a) As now: any scene you start by talking plays.
+> - (b) Skip a scene you start by talking when it has no question, shop or menu anywhere in it. Plain talks with townsfolk don't start a separate scene, so they would still never be skipped.
+>
+> Trinities (t717) are still waiting for a test.
+
+^m33
 

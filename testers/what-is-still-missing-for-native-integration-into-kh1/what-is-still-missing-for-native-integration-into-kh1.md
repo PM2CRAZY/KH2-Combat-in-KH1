@@ -21,6 +21,7 @@
 - [15. Assistant: Thanks! All nine are in. 1 (a) and 5 (a) need no change: the](#^m15)
 - [16. Assistant: Thanks! Three versions this round. Two of your answers neede](#^m16)
 - [17. Assistant: Thanks! Four versions this round. Answers 1, 3 and 5 need no](#^m17)
+- [18. Assistant: Thanks! Three versions this round.](#^m18)
 
 ---
 
@@ -808,3 +809,65 @@ make soras base and any form that can do drive form magic this: aero is the same
 7. add it
    
    go ahead
+
+> [!tip] Assistant
+> Thanks! Three versions this round.
+>
+> **t718, vanilla progression.** KH1 now gives its own abilities exactly when and how vanilla KH1 does. The mod no longer:
+> - takes any out or makes room by removing them;
+> - keeps only one copy of High Jump, Glide or Superglide;
+> - hands out its own abilities on a level or boss schedule.
+>
+> What that means in game:
+> - **KH2 abilities:** every one we added is in Sora's list from the start, off, for you to equip with AP. There's one "New Abilities" box when they arrive.
+> - **KH1's slots:** our abilities never take a KH1 ability's place. Two slots always stay free for KH1's own rewards, and if KH1's own abilities fill the list, one of ours steps aside until there's room again.
+> - **Growth:** now only from form levels, as in KH2. Valor, Wisdom and Final raise High Jump, Quick Run and Glide at form LV3 / 5 / 7. KH1's own High Jump and Glide count as LV1 once the story gives them. Dodge Roll and Aerial Dodge stay LV1 until Limit and Master are native.
+> - **Old saves:** the first load gives back, off, every KH1 ability the old builds took out (from kh1-kh2-removed.txt, up to your save's level), and Superglide if Chernabog is beaten. Grants an older build held back without noting them can't be found again.
+> - **AP:** the extra AP is gone, including t715's. The form-level abilities (Combo Plus, MP Rage, MP Haste) still come, since that's KH2's own form rule.
+>
+> **t719, Gravity as Thunder, Stop as Magnet, Aero as Cure** (Magic Combo at KH2, base Sora and Wisdom). I checked KH2 first. It has no combo rule per spell: each spell counts one step, and what it does in a combo comes from its cast animation and that animation's windows.
+> - **Thunder** can be combo'd out of, and plays its finisher cast at the combo's length.
+> - **Cure** has no window, so nothing follows it.
+> - **Magnet's** cast is Thunder's finisher animation with only the Finishing Plus window. Mid-combo that window uses up one Finishing Plus.
+>
+> So on the ground:
+> - **Gravity** now plays Thunder's cast, and Thunder's finisher cast at the length.
+> - **Aero** plays Cure's cast.
+> - **Stop** plays Magnet's cast.
+> - In the air all three stay a plain air step.
+>
+> With Magic Combo at KH1 nothing changes: they're still the finisher on Thunder's finisher animation.
+>
+> **t720, air casts in Finishing Plus.** A spell cast in an air finisher's Finishing Plus window now counts as the next finisher, as KH2 does.
+>
+> **What I checked:**
+> - **t719 and t720:** the Steam KH2 decomp (cast start and combo counter), and your KH2 files (MAGC and the cast animations' windows, Sora's and Wisdom's).
+> - **t718:** the mod's own code only. My connection to your PC's decomps dropped during that part, so I added no new addresses there.
+> - **Not checked:** anything in game.
+> - **Assumption:** Stop's window on KH1's own animation is placed by share of Magnet's.
+> - The moved cast slots rebake once on first start.
+>
+> **Please test**
+> - **t718:**
+>   - Load your main save and look for the "abilities:" lines in the log.
+>   - In the Abilities menu: KH1's restored abilities should be off, all KH2 ones present, and max AP KH1's own.
+>   - Level up a few times and get a story ability on a nearly full list.
+>   - Start a new game and look for the one "New Abilities" box.
+>   - Raise Valor or Wisdom past LV3: High Jump / Quick Run should grow.
+> - **t719:**
+>   - **Gravity:** mid-combo, then Attack (the combo should go on). Then Gravity as the last step (Thunder's finisher animation), and with Finishing Plus, another finisher after it.
+>   - **Aero:** mid-combo. Nothing should follow it until it ends.
+>   - **Stop:** mid-combo without Finishing Plus (the combo ends). With Finishing Plus, press Attack in its window (the combo goes on), then check the next finisher has one Finishing Plus fewer.
+>   - The same in Wisdom, then Magic Combo at KH1 for comparison.
+>   - Log: "Magic Combo KH2 as KH2's Thunder/Magnet/Cure".
+> - **t720:** an air finisher, then a spell in its Finishing Plus window. Log: "counted as the next finisher".
+>
+> **Questions**
+> 1. Late in the game KH1's own abilities take about 37 or more of the 48 slots, so not all 22 KH2 abilities fit. Should I (a) give the KH2 abilities a list of their own (new save bytes, shown after KH1's in the Abilities menu; KH1's menu, AP sums and ability count would all need to read it), or (b) keep it as now, where the extra ones come when there's room?
+> 2. A form level reached before the story gives High Jump or Glide: should it (a) do nothing until KH1 gives the ability (as now, which keeps KH1's list vanilla), or (b) give KH1's High Jump / Glide the way KH2 does?
+> 3. Superglide: (a) keep it as KH2's Glide MAX (as now), or (b) treat it as LV1 so only Final raises Glide?
+> 4. Gravity and Aero now play Thunder's and Cure's normal cast animations at Magic Combo KH2, not the Thunder finisher animation they had before. That's because the animation is where KH2's windows come from. Should I (a) keep it this way, or (b) keep the finisher animation and give them Thunder's / Cure's role anyway?
+> 5. KH1's own Thunder on KH2's animation still never plays Thunder's finisher cast at the combo's length, though Gravity now does. Should I (a) make KH1's Thunder pick it too, or (b) leave it?
+
+^m18
+
